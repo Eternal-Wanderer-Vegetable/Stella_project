@@ -2,17 +2,17 @@
 .venv/
 .vscode/
 
-pi_agent_core/node_modules/
-pi_agent_core/package-lock.json
-pi_agent_core/package.json
-pi_agent_core/SYSTEM.md
+/pi_agent_core/node_modules/
+/pi_agent_core/package-lock.json
+/pi_agent_core/package.json
+/pi_agent_core/SYSTEM.md
 
-stella_project/plugins/bot_main/__pycache__/
-stella_project/plugins/bot_main/ai_db/
-stella_project/plugins/bot_main/fallback/
-stella_project/plugins/bot_main/test_folder/
-stella_project/plugins/bot_main/favorability.json
-stella_project/plugins/bot_main/model_all-MiniLM-L6-v2/
+/stella_project/plugins/bot_main/__pycache__/
+/stella_project/plugins/bot_main/ai_db/
+/stella_project/plugins/bot_main/fallback/
+/stella_project/plugins/bot_main/test_folder/
+/stella_project/plugins/bot_main/favorability.json
+/stella_project/plugins/bot_main/model_all-MiniLM-L6-v2/
 
 .env
 .env.dev
