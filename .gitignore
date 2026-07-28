@@ -6,6 +6,7 @@
 /pi_agent_core/package-lock.json
 /pi_agent_core/package.json
 /pi_agent_core/SYSTEM.md
+/pi_agent_core/agent_memory.db
 
 /stella_project/plugins/bot_main/__pycache__/
 /stella_project/plugins/bot_main/ai_db/
@@ -20,3 +21,4 @@
 pyproject.toml
 STARTCOMMAND.md
 stella_thought_logs.md
+check_db.py

@@ -2,8 +2,10 @@ import asyncio
 import os
 import sys
 import re
+import sqlite3
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 from nonebot import logger, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
 from nonebot.exception import FinishedException
@@ -19,9 +21,13 @@ while PROJECT_ROOT.parent != PROJECT_ROOT:
 
 PI_AGENT_DIR = str(PROJECT_ROOT / "pi_agent_core")
 SYSTEM_PROMPT_PATH = str(PROJECT_ROOT / "pi_agent_core" / "SYSTEM.md")
+DB_PATH = PROJECT_ROOT / "pi_agent_core" / "agent_memory.db"
 
 # 💡 指定 Markdown 思考日志文件的保存路径
 THOUGHT_LOG_PATH = PROJECT_ROOT / "stella_thought_logs.md"
+
+# 💡 配置支持 AI 服务的群号白名单
+ALLOWED_GROUPS = {263402786}
 
 # --- 2. 建立全局并发锁（并发控制）---
 model_lock = asyncio.Lock()
@@ -32,22 +38,21 @@ async def append_thought_to_markdown(user_id: int, user_msg: str, thought: str, 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     reply_str = " <br> ".join(reply_lines)
     
-    # 构造 Markdown 日志记录条目
+    thought_formatted = thought.replace('\n', '\n  > ')
+    
     log_entry = f"""### 🕒 [{now_str}] 用户: `{user_id}`
 - **📥 用户输入**: {user_msg}
 - **🧠 内部思考**: 
-  > {thought.replace('/n', '/n  > ')}
+  > {thought_formatted}
 - **⚙️ 判定动作**: `{action}`
 - **💬 最终台词**: {reply_str}
 
 ---
 """
     try:
-        # 如果文件不存在，先创建文件并写入标题
         if not THOUGHT_LOG_PATH.exists():
-            THOUGHT_LOG_PATH.write_text("# 🤖 Stella 思考过程与决策日志\n\n", encoding="utf-8")
+            THOUGHT_LOG_PATH.write_text("# 🤖 思考过程与决策日志\n\n", encoding="utf-8")
 
-        # 追加写入
         with open(THOUGHT_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(log_entry)
             
@@ -65,22 +70,18 @@ def parse_model_output(raw_text: str):
     action = "NONE"
     reply = ""
 
-    # 1. 提取 <thought>（支持未闭合情况）
     thought_match = re.search(r'<thought>(.*?)(?:</thought>|<action>|<reply>|$)', raw_text, re.DOTALL)
     if thought_match:
         thought = thought_match.group(1).strip()
 
-    # 2. 提取 <action>（支持未闭合情况）
     action_match = re.search(r'<action>(.*?)(?:</action>|<reply>|$)', raw_text, re.DOTALL)
     if action_match:
         action = action_match.group(1).strip()
 
-    # 3. 提取 <reply>（容错核心：匹配到 </reply> 或文本末尾）
     reply_match = re.search(r'<reply>(.*?)(?:</reply>|$)', raw_text, re.DOTALL)
     if reply_match:
         reply = reply_match.group(1).strip()
 
-    # 4. 极致兜底：如果模型完全没写 <reply> 标签，将剔除标签后的文本直接作为 reply
     if not reply:
         clean_text = re.sub(r'<[^>]+>.*?(?:</[^>]+>|$)', '', raw_text, flags=re.DOTALL).strip()
         if clean_text:
@@ -89,22 +90,67 @@ def parse_model_output(raw_text: str):
     return thought, action, reply
 
 
-async def call_pi_agent(prompt: str) -> str:
+def get_recent_group_chat_context(group_id: int, limit: int = 15) -> str:
+    """从数据库读取该群最新的聊天记录作为上下文"""
+    if not DB_PATH.exists():
+        return ""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT user_id, content FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+            (str(group_id), limit)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        if not rows:
+            return ""
+        
+        # 翻转为正序：旧 -> 新
+        rows.reverse()
+        chat_logs = [f"用户({r[0]}): {r[1]}" for r in rows]
+        return "\n".join(chat_logs)
+    except Exception as e:
+        logger.error(f"❌ [DB Read Exception]: {e}")
+        return ""
+
+
+async def call_pi_agent(user_msg: str, user_id: int, group_id: Optional[int] = None) -> str:
     """拉起 PI Agent CLI 子进程"""
     if not os.path.isdir(PI_AGENT_DIR):
         raise FileNotFoundError(f"PI Agent 目录无效: {PI_AGENT_DIR}")
 
     npx_cmd = "npx.cmd" if sys.platform == "win32" else "npx"
 
+    # 1. 动态获取群聊历史上下文
+    recent_context = ""
+    if group_id:
+        recent_context = get_recent_group_chat_context(group_id, limit=12)
+
+    # 2. 构建 Prompt
+    prompt_sections = []
+    if recent_context:
+        prompt_sections.append(f"--- 【近期群聊记录（你可以参考这些内容回答）】 ---\n{recent_context}\n----------------------------------")
+    
+    prompt_sections.append(f"当前说话的用户: {user_id}\n用户提问: {user_msg}")
+    
+    full_prompt = "\n\n".join(prompt_sections)
+
+    # 3. 严格校验绝对路径
+    system_prompt_path = (PROJECT_ROOT / "pi_agent_core" / "SYSTEM.md").resolve().as_posix()
+    extension_path = (PROJECT_ROOT / "pi_agent_core" / "extensions" / "memory_system" / "index.ts").resolve().as_posix()
+
+    # 💡 核心修复：把 -p 放在参数列表的最末尾，防止换行符打断后续标志的解析！
     cmd = [
         npx_cmd, "pi",
-        "-p", prompt,
         "--provider", "lm-studio",
         "--model", "stella-local",
-        "--system-prompt", SYSTEM_PROMPT_PATH,
-        "--tools", "",  # 👈 1. 禁用 pi 内置的 bash/read/write/edit 默认工具包
-        # "--extension", str(PROJECT_ROOT / "pi_agent_core" / "extensions" / "online_llm.ts")  # 👈 2. 以后有自定义扩展时加这一行即可
+        "--system-prompt", system_prompt_path,
+        "--extension", extension_path,
+        "-p", full_prompt  # 👈 关键！必须将 -p 移到参数数组的最后一位！
     ]
+
+    logger.info(f"🔍 [CMD DEBUG] 正在启动 PI Agent...")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -115,11 +161,18 @@ async def call_pi_agent(prompt: str) -> str:
 
     stdout, stderr = await proc.communicate()
 
+    err_msg = stderr.decode('utf-8', errors='ignore').strip()
+    out_msg = stdout.decode('utf-8', errors='ignore').strip()
+
+    if err_msg:
+        logger.warning(f"⚠️ [PI Agent Stderr]:\n{err_msg}")
+    logger.info(f"💡 [PI Agent Stdout Raw]:\n{out_msg}")
+
     if proc.returncode != 0:
-        logger.error(f"❌ [PI Agent Error]: {stderr.decode('utf-8', errors='ignore')}")
+        logger.error(f"❌ [PI Agent Error ReturnCode {proc.returncode}]")
         raise RuntimeError("PI Agent 引擎运行异常")
 
-    reply = stdout.decode("utf-8", errors="ignore").strip()
+    reply = out_msg
 
     # 破防/出戏/硬编码身份拦截
     bad_words = ["作为", "AI", "模型", "助手", "语言模型", "Gemma", "QQ用户", "qq用户"]
@@ -128,46 +181,104 @@ async def call_pi_agent(prompt: str) -> str:
 
     return reply
 
+def save_raw_message_to_db(user_id: int, group_id: int, text: str):
+    """同步写入 SQLite 数据库的短期记录表（在 executor 中异步运行）"""
+    if not DB_PATH.exists():
+        return
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT,
+                user_id TEXT,
+                content TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute(
+            "INSERT INTO group_messages (group_id, user_id, content) VALUES (?, ?, ?)",
+            (str(group_id), str(user_id), text)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"❌ [DB Writer Exception]: {e}")
+
+
+# --- 静默群聊监听器（带过滤器）---
+group_silent_listener = on_message(priority=99, block=False)
+
+@group_silent_listener.handle()
+async def record_group_chat(event: GroupMessageEvent):
+    group_id = event.group_id
+    
+    # 🛡️ 过滤器 1：如果不是允许的群，直接拦截忽略
+    if group_id not in ALLOWED_GROUPS:
+        return
+
+    user_msg = event.get_plaintext().strip()
+    
+    # 🛡️ 过滤器 2：忽略空文本或系统指令
+    if not user_msg or user_msg.startswith("/"):
+        return
+
+    user_id = event.user_id
+
+    # 异步抛给后台线程执行 SQLite 写入
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, save_raw_message_to_db, user_id, group_id, user_msg)
+
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
+    # 🛡️ 群过滤：不在白名单内的群，即便 @Bot 也不触发回复
+    if event.group_id not in ALLOWED_GROUPS:
+        return False
+
     if not event.is_tome():
         return False
+
     user_msg = event.get_plaintext().strip()
     return len(user_msg) > 0
 
 
 chat_handler = on_message(rule=Rule(is_chat_trigger), priority=1, block=True)
 
-
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     user_msg = event.get_plaintext().strip()
     user_id = event.user_id
+    group_id = event.group_id
     msg_id = event.message_id
     
-    logger.info(f"🤖 [AI Gateway] 收到来自用户 {user_id} 的对话请求: {user_msg}")
+    logger.info(f"🤖 [AI Gateway] 收到来自用户 {user_id} (群 {group_id}) 的对话请求: {user_msg}")
 
     raw_output = ""
     try:
         async with model_lock:
-            raw_output = await asyncio.wait_for(call_pi_agent(user_msg), timeout=45.0)
+            raw_output = await asyncio.wait_for(
+                call_pi_agent(user_msg=user_msg, user_id=user_id, group_id=group_id), 
+                timeout=45.0
+            )
 
     except FinishedException:
         raise
     except asyncio.TimeoutError:
         logger.error("❌ [AI Gateway] PI Agent 执行超时")
-        raw_output = "<thought>执行超时了，给个卡顿回应</thought><action>NONE</action><reply>……（稍等下，刚刚有点卡了）</reply>"
+        raw_output = "<thought>执行超时了，给个卡顿回应</thought><action>NONE</action><reply>......？</reply>"
     except Exception as e:
         logger.error(f"❌ [AI Gateway] 处理消息时发生错误: {e}")
-        raw_output = "<thought>系统发生异常</thought><action>NONE</action><reply>……</reply>"
+        raw_output = "<thought>系统发生异常</thought><action>NONE</action><reply>......？</reply>"
 
-    # 1. 解析统一格式 (此时返回 3 个值)
+    # 1. 解析统一格式
     thought, action, reply = parse_model_output(raw_output)
 
     # 2. 🧠 控制台日志记录
     logger.info("--------------------------------------------------")
-    logger.info(f"🧠 [Stella 内部思考过程]:\n{thought}")
-    logger.info(f"⚙️ [Stella 判定动作]: {action}")
+    logger.info(f"🧠 [内部思考过程]:\n{thought}")
+    logger.info(f"⚙️ [判定动作]: {action}")
     logger.info("--------------------------------------------------")
 
     # 3. 极速拆分短句
