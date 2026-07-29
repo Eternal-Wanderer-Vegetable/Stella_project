@@ -1,6 +1,3 @@
-下面是 `Stella_project` 的 `README.md` 完整内容，可直接复制到 GitHub 仓库根目录：
-
-```markdown
 # Stella Project
 
 > 基于 NoneBot2、OneBot v11、PI Coding Agent 和本地大语言模型的 QQ 群聊 AI 机器人。
@@ -677,4 +674,3 @@ git checkout v1.1.0
 ## 项目地址
 
 [https://github.com/Eternal-Wanderer-Vegetable/Stella_project](https://github.com/Eternal-Wanderer-Vegetable/Stella_project)
-```
