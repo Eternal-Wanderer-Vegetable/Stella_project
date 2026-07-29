@@ -1,132 +1,65 @@
 # Stella Project
 
-> 基于 NoneBot2、OneBot v11、PI Coding Agent 和本地大语言模型的 QQ 群聊 AI 机器人。
+> 面向 QQ 群聊的本地 AI 对话插件，基于 NoneBot2、OneBot v11、PI Coding Agent 和 LM Studio 构建。
 
-[![Latest Release](https://img.shields.io/github/v/release/Eternal-Wanderer-Vegetable/Stella_project?display_name=tag&sort=semver)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/Eternal-Wanderer-Vegetable/Stella_project)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/stargazers)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Node.js-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Latest Release](https://img.shields.io/github/v/release/Eternal-Wanderer-Vegetable/Stella_project?display_name=tag)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases)
+[![License](https://img.shields.io/badge/license-see%20repository%20files-lightgrey)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project)
 
 ## 项目简介
 
-Stella Project 是一个面向 QQ 群聊场景的本地化 AI 聊天机器人项目。
+Stella Project 是一个用于 QQ 群聊的本地 AI 对话插件。
 
-项目使用 NoneBot2 和 OneBot v11 接入 QQ 消息，通过 PI Coding Agent 管理 AI 会话，并调用本地 LM Studio 提供的大语言模型完成回复。机器人可以读取指定群聊的近期消息作为上下文，将对话记录保存到本地 SQLite 数据库，并把模型输出的思考、动作和最终回复写入 Markdown 日志。
+项目通过 NoneBot2 和 OneBot v11 接收群消息，在满足群号白名单和 `@机器人` 触发条件时，将当前问题以及近期群聊记录发送给 PI Coding Agent。PI Coding Agent 再通过 LM Studio 的 OpenAI 兼容接口调用本地大语言模型，最后由插件解析并发送回复。
 
-项目的主要目标：
+当前仓库主要包含：
 
-- 使用本地模型完成 QQ 群聊对话；
-- 支持自定义角色设定和系统提示词；
-- 为 AI 提供有限的群聊上下文；
-- 保留本地对话和运行日志；
-- 通过并发控制和超时机制提升运行稳定性；
-- 为后续记忆系统和 Agent 工具扩展预留接口。
+- NoneBot2 消息处理插件；
+- PI Coding Agent 调用桥接代码；
+- LM Studio 模型配置；
+- 记忆系统实验性扩展；
+- NapCat 看门狗代码。
 
-> 本项目仍处于持续开发阶段，配置方式和内部实现可能随版本变化。请以当前源码、`STARTCOMMAND.md` 和 Release 说明为准。
+> 当前仓库是插件和 Agent 扩展源码，不是一个包含完整 NoneBot 启动入口的独立应用工程。仓库中目前没有 `pyproject.toml`、`requirements.txt`、`.env` 模板或可直接执行的启动脚本，需要将代码接入已有的 NoneBot2 工程后使用。
 
-## 功能概览
+## 当前状态
 
-### QQ 群聊 AI 对话
+当前 `main` 分支包含以下源码：
 
-机器人监听 OneBot v11 群消息，仅在配置的群聊和触发条件满足时调用 AI：
+- QQ 群消息监听和 AI 回复；
+- 群聊白名单过滤；
+- 本地 SQLite 群聊记录；
+- 近期群聊上下文拼接；
+- PI Coding Agent 子进程调用；
+- LM Studio 本地模型配置；
+- AI 输出解析和回复分段发送；
+- 基于 SQLite 的记忆系统代码；
+- NapCat 空闲检测和重启逻辑。
 
-- 支持通过 `@机器人` 触发对话；
-- 对允许的群聊进行白名单过滤；
-- 忽略空消息和部分系统指令；
-- 将用户 ID、群号和问题传递给 AI Gateway；
-- 以回复消息的形式发送 AI 结果。
-
-### 本地大模型推理
-
-项目默认通过 LM Studio 提供 OpenAI 兼容的本地模型服务：
-
-- 对话默认在本地完成；
-- 支持在 LM Studio 中加载自定义模型；
-- 通过 PI Coding Agent 管理模型会话；
-- 通过 `models.json` 配置模型提供者；
-- 默认使用 `lm-studio` 提供者和 `stella-local` 模型配置。
-
-常见默认地址：
-
-```text
-http://127.0.0.1:1234/v1
-```
-
-具体地址和模型名称请以 LM Studio 与项目当前配置为准。
-
-### 群聊上下文
-
-机器人会从本地 SQLite 数据库中读取指定群聊的近期文本消息，并将其作为模型上下文的一部分。
-
-处理流程：
-
-1. 接收群消息；
-2. 过滤不符合条件的消息；
-3. 将消息写入本地 SQLite；
-4. 查询指定群聊最近的消息；
-5. 将历史消息与当前问题组合为 Prompt；
-6. 调用本地 PI Agent；
-7. 解析并发送模型回复。
-
-### 输出解析与容错
-
-AI Gateway 会尝试从模型输出中提取：
-
-- 思考内容；
-- 动作信息；
-- 最终回复。
-
-即使模型输出不完整，程序也会尝试提取可用文本。如果无法提取有效回复，则使用默认兜底文本，避免整个消息处理流程中断。
-
-### 并发与超时控制
-
-为避免多个请求同时调用本地 Agent，当前实现使用全局异步锁控制模型请求：
-
-- 同一时间只处理一个 AI 请求；
-- 单次请求设置超时限制；
-- Agent 执行失败时返回兜底消息；
-- 错误信息写入 NoneBot 日志；
-- 防止本地模型卡死导致消息处理器长期阻塞。
-
-### 运行日志
-
-项目会在运行过程中记录：
-
-- 用户输入；
-- 模型输出的思考内容；
-- 模型判定的动作；
-- 最终发送的回复；
-- Agent 标准输出和错误输出。
-
-默认思考日志文件为：
-
-```text
-stella_thought_logs.md
-```
-
-日志内容可能包含群聊消息、用户 ID 和模型输出，请妥善保护运行目录，不要直接上传日志文件。
+记忆系统目前仍处于开发阶段。虽然仓库包含用户画像、短期上下文和长期记忆的数据访问代码，但当前入口插件主要使用 `group_messages` 表保存近期群聊记录，记忆扩展中的部分能力尚未形成完整的自动调用流程。
 
 ## 系统架构
 
 ```text
-QQ 用户
+QQ 群聊
    │
    ▼
 NapCat / OneBot v11
    │
    ▼
-NoneBot2
+NoneBot2 宿主工程
    │
    ▼
 stella_project/plugins/bot_main
    │
-   ├── 群消息过滤与触发
-   ├── SQLite 群聊记录
+   ├── 群号白名单检查
+   ├── @机器人触发检查
+   ├── 群聊记录写入 SQLite
+   ├── 近期消息读取
    ├── Prompt 组装
-   ├── PI Agent 子进程调用
-   ├── 模型输出解析
-   ├── 日志写入
-   └── QQ 回复发送
+   ├── 启动 PI Coding Agent
+   ├── 解析模型输出
+   └── 发送 QQ 回复
    │
    ▼
 PI Coding Agent
@@ -138,16 +71,21 @@ LM Studio OpenAI-Compatible API
 本地大语言模型
 ```
 
-## 项目结构
+## 目录结构
 
 ```text
 Stella_project/
 ├── pi_agent_core/
 │   ├── agent_bridge.ts
 │   ├── models.json
-│   ├── extensions/
-│   │   └── memory_system/
-│   └── SYSTEM.md 或 prompt.txt
+│   └── extensions/
+│       └── memory_system/
+│           ├── consolidator.ts
+│           ├── consolidator_prompt.ts
+│           ├── db.ts
+│           ├── index.ts
+│           ├── llm_provider.ts
+│           └── types.ts
 │
 ├── stella_project/
 │   └── plugins/
@@ -155,521 +93,457 @@ Stella_project/
 │           ├── __init__.py
 │           ├── ai_gateway.py
 │           ├── config.py
-│           ├── memory.py
-│           ├── utils.py
 │           └── watchdog.py
 │
-├── .env.dev
-├── .env.prod
 ├── .gitignore
-├── pyproject.toml
-├── STARTCOMMAND.md
-├── README.md
-└── stella_thought_logs.md
+└── README.md
 ```
 
-### 主要模块
+### Python 插件
 
-| 模块 | 作用 |
+| 文件 | 作用 |
 | --- | --- |
-| `ai_gateway.py` | QQ 消息监听、群聊过滤、Prompt 组装、PI Agent 调用和回复发送 |
-| `config.py` | 插件配置和环境变量读取 |
-| `memory.py` | 记忆功能相关实现，具体行为以当前源码为准 |
-| `utils.py` | 文本处理和其他通用工具 |
-| `watchdog.py` | 机器人运行状态监控和恢复相关逻辑 |
-| `agent_bridge.ts` | PI Coding Agent 会话与本地模型调用桥接 |
-| `models.json` | PI Agent 模型提供者配置 |
-| `extensions/memory_system` | PI Agent 扩展能力和记忆相关接口 |
+| `ai_gateway.py` | 群消息监听、消息过滤、上下文读取、PI Agent 调用、输出解析和 QQ 回复 |
+| `config.py` | 插件配置入口，当前内容较少 |
+| `watchdog.py` | 监控消息事件，并在长时间无事件时尝试重启 NapCat |
+| `__init__.py` | NoneBot 插件入口和元数据 |
 
-## 运行环境
+### PI Agent 核心
 
-### 必需组件
+| 文件 | 作用 |
+| --- | --- |
+| `agent_bridge.ts` | 通过标准输入接收 JSON，创建 PI Agent 会话并调用本地模型 |
+| `models.json` | PI Agent 的 LM Studio 提供者和模型配置 |
 
-- Python 3.10 或更高版本；
-- Node.js 和 npm；
-- NoneBot2；
-- OneBot v11 适配器；
-- NapCat 或其他兼容 OneBot v11 的 QQ 接入端；
-- LM Studio；
-- 一个可由 LM Studio 加载的本地大语言模型。
+### 记忆系统扩展
 
-### 可选组件
+| 文件 | 作用 |
+| --- | --- |
+| `index.ts` | PI Agent 扩展入口，目前注册生命周期事件并清空 Agent 工具列表 |
+| `db.ts` | SQLite 记忆仓库，包含用户画像、短期上下文和长期记忆表 |
+| `types.ts` | 记忆系统数据类型 |
+| `llm_provider.ts` | 在线 OpenAI 兼容接口和本地 SLM 接口 |
+| `consolidator.ts` | 记忆整理相关逻辑 |
+| `consolidator_prompt.ts` | 记忆整理 Prompt |
 
-根据当前配置和启用模块，项目可能还会使用：
+## 功能说明
 
-- SQLite；
-- PI Coding Agent；
-- 向量数据库或文本嵌入模型；
-- APScheduler；
-- NapCat WebUI。
+### 群号白名单
 
-不同版本的依赖可能有所变化，建议优先检查：
+当前 AI 回复仅针对源码中配置的允许群号生效。
+
+在：
 
 ```text
-pyproject.toml
-STARTCOMMAND.md
-pi_agent_core/models.json
+stella_project/plugins/bot_main/ai_gateway.py
 ```
 
-## 安装
+中修改 `ALLOWED_GROUPS`，将目标群号加入集合。
 
-### 1. 获取项目
+建议不要把真实群号、账号信息和私人配置直接提交到公开仓库。
 
-```bash
-git clone https://github.com/Eternal-Wanderer-Vegetable/Stella_project.git
-cd Stella_project
-```
+### 触发条件
 
-使用稳定版本：
+AI 回复处理通常需要同时满足：
 
-```bash
-git checkout v1.1.0
-```
+1. 消息来自允许的群聊；
+2. 消息确实 `@` 机器人；
+3. 消息正文不为空。
 
-也可以直接使用最新开发分支，但开发分支的配置和行为可能发生变化。
+未满足条件的消息不会调用模型。
 
-### 2. 创建 Python 虚拟环境
+### 群聊上下文
 
-Linux/macOS：
+插件会将允许群聊中的普通文本消息写入 SQLite，并读取最近若干条消息作为上下文。
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Windows PowerShell：
-
-```powershell
-py -3 -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-### 3. 安装 Python 依赖
-
-如果仓库提供了依赖配置，优先根据 `pyproject.toml` 安装：
-
-```bash
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-如果当前版本提供 `requirements.txt`，也可以使用：
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-> 如果当前仓库没有 `requirements.txt`，请以 `pyproject.toml` 为准。
-
-### 4. 检查 Node.js
-
-```bash
-node --version
-npm --version
-```
-
-PI Agent 当前通过 `npx` 调用。首次运行时，npm 可能需要下载相应的 Agent 包。
-
-## 配置
-
-### LM Studio
-
-1. 安装并启动 LM Studio；
-2. 加载需要使用的本地模型；
-3. 启动 OpenAI 兼容 API 服务；
-4. 确认 API 地址和端口；
-5. 确认项目中的模型名称与 LM Studio 配置一致。
-
-常见默认地址：
+当前数据库路径由 `ai_gateway.py` 计算，默认位于：
 
 ```text
-http://127.0.0.1:1234/v1
+pi_agent_core/agent_memory.db
 ```
 
-### 模型配置
+数据库中可能包含：
 
-检查：
+- 群号；
+- 用户 ID；
+- 群聊文本；
+- 消息时间；
+- 其他运行时记录。
 
-```text
-pi_agent_core/models.json
-```
+该文件已被 `.gitignore` 忽略，不应上传到公开仓库。
 
-当前 Python Gateway 使用类似下面的参数调用 PI Agent：
+### Agent 调用
+
+Python 插件通过子进程调用 PI Coding Agent，核心参数包括：
 
 ```text
 --provider lm-studio
 --model stella-local
+--system-prompt <system prompt 路径>
+--extension <memory_system/index.ts 路径>
+-p <当前 Prompt>
 ```
 
-如果模型名称、提供者名称或服务地址发生变化，需要同步修改模型配置。
+调用时会设置工作目录为：
+
+```text
+pi_agent_core/
+```
+
+因此不要随意移动 `pi_agent_core` 目录，除非同步修改路径计算逻辑。
+
+### 输出解析
+
+插件会尝试从模型结果中提取：
+
+- 思考内容；
+- 动作内容；
+- 最终回复。
+
+如果模型输出格式不完整，代码会尝试使用剩余文本作为回复。回复还会经过简单清理，并最多分成若干段发送到 QQ。
+
+### 并发控制和超时
+
+当前实现使用全局异步锁控制 Agent 调用：
+
+- 同一时间只处理一个模型请求；
+- 单次 Agent 调用存在超时限制；
+- 调用失败时返回兜底文本；
+- 错误写入 NoneBot 日志。
+
+如果本地模型推理速度较慢，可能需要根据实际硬件调整超时和并发策略。
+
+## 本地模型配置
+
+当前 `pi_agent_core/models.json` 使用 LM Studio 的 OpenAI 兼容接口：
+
+```json
+{
+  "providers": {
+    "lm-studio": {
+      "name": "LM Studio Local",
+      "baseUrl": "http://127.0.0.1:1234/v1",
+      "api": "openai-completions",
+      "apiKey": "lm-studio",
+      "models": [
+        {
+          "id": "stella-local",
+          "name": "Stella Local Model",
+          "contextWindow": 32768,
+          "maxTokens": 4096
+        }
+      ]
+    }
+  }
+}
+```
+
+使用前需要：
+
+1. 安装并启动 LM Studio；
+2. 加载一个本地大语言模型；
+3. 启动 OpenAI 兼容 API 服务；
+4. 确认服务监听在 `127.0.0.1:1234`；
+5. 确认模型名称与配置一致。
+
+如果 LM Studio 使用其他端口或模型名称，需要同步修改：
+
+```text
+pi_agent_core/models.json
+stella_project/plugins/bot_main/ai_gateway.py
+```
+
+## `agent_bridge.ts`
+
+`agent_bridge.ts` 是一个独立的 TypeScript Agent 桥接入口。
+
+它从标准输入读取 JSON，例如：
+
+```json
+{
+  "prompt": "你好，介绍一下你自己"
+}
+```
+
+成功时输出类似：
+
+```json
+{
+  "status": "success",
+  "reply": "..."
+}
+```
+
+失败时输出类似：
+
+```json
+{
+  "status": "error",
+  "error": "..."
+}
+```
+
+该文件使用：
+
+- `@earendil-works/pi-coding-agent`；
+- `lm-studio` provider；
+- `stella-local` model；
+- `pi_agent_core/prompt.txt` 作为角色设定（如果文件存在）。
+
+当前仓库没有提交 `package.json` 或锁定的 Node.js 依赖配置，因此需要在宿主工程中自行准备对应的 Node.js/PI Agent 环境。
+
+## 记忆系统
+
+记忆系统代码位于：
+
+```text
+pi_agent_core/extensions/memory_system/
+```
+
+SQLite 数据库包含三类数据：
+
+### 用户画像
+
+```sql
+user_profiles
+```
+
+保存：
+
+- 用户 ID；
+- 昵称；
+- 性格特征；
+- Agent 对用户的态度；
+- 互动次数；
+- 更新时间。
+
+### 短期上下文
+
+```sql
+short_term_context
+```
+
+保存：
+
+- 群号；
+- 当前摘要；
+- 待处理话题；
+- 更新时间。
+
+### 长期记忆
+
+```sql
+long_term_memories
+```
+
+保存：
+
+- 群号；
+- 用户 ID；
+- 记忆摘要；
+- 重要程度；
+- 访问次数；
+- 最近访问时间。
+
+当前长期记忆查询使用关键词匹配和简单权重排序，不是向量数据库检索。代码注释中提到未来可以接入 `sqlite-vec`，但当前仓库没有实现该依赖。
+
+### 当前扩展入口的行为
+
+`memory_system/index.ts` 当前主要做以下事情：
+
+- 输出扩展加载日志；
+- 监听 Agent 生命周期事件；
+- 调用 `pi.setActiveTools([])` 清空 Agent 工具；
+- 返回一个没有工具的扩展定义。
+
+因此，记忆数据库代码和扩展生命周期代码目前并不等同于“已经完整接通的自动记忆功能”。
+
+## 接入 NoneBot2 宿主工程
+
+当前仓库没有完整的 NoneBot2 启动工程。使用时需要先准备一个已有的 NoneBot2 项目，并确保宿主工程包含：
+
+- Python 3.10 或更高版本；
+- NoneBot2；
+- OneBot v11 适配器；
+- `nonebot-plugin-apscheduler`；
+- `httpx`；
+- 可用的 Node.js 和 npm；
+- 可调用的 PI Coding Agent；
+- NapCat 或其他 OneBot v11 实现。
+
+将以下目录复制到宿主工程的插件目录，或通过 Python 包路径使其可被加载：
+
+```text
+stella_project/plugins/bot_main/
+```
+
+同时保留：
+
+```text
+pi_agent_core/
+```
+
+因为 `ai_gateway.py` 会通过项目路径查找该目录。
+
+宿主工程还需要自行提供：
+
+- NoneBot2 配置文件；
+- OneBot v11 连接配置；
+- QQ 登录和 NapCat 配置；
+- 插件加载配置；
+- 依赖安装方式；
+- 启动命令。
+
+本仓库当前没有提供通用的 `nb run` 启动入口，因此不能直接在仓库根目录执行：
+
+```bash
+nb run
+```
+
+除非你已经将它放入一个完整的 NoneBot2 宿主项目中。
+
+## NapCat 看门狗
+
+`watchdog.py` 使用 APScheduler 每分钟检查一次消息事件时间。
+
+当超过一段时间没有消息事件时，代码会尝试调用 NapCat WebUI 重启接口：
+
+```text
+http://127.0.0.1:6099/api/Process/Restart
+```
+
+重启接口属于高权限管理接口。部署前必须：
+
+- 确认 NapCat WebUI 地址；
+- 确认 API Token；
+- 不要把 Token 硬编码到公开仓库；
+- 将 Token 改为环境变量或宿主工程配置；
+- 确认机器人运行账户有合适的权限；
+- 先在测试账号和测试环境中验证重启逻辑。
+
+当前源码中的看门狗配置仍属于开发状态，建议在生产环境启用前重新设计认证、失败重试、冷却时间和健康检查逻辑。
+
+## 安全与隐私
+
+### 群聊数据
+
+插件会读取和保存允许群聊中的文本消息。使用前请确认：
+
+- 已获得群聊使用授权；
+- 已告知相关用户可能存在本地记录；
+- 数据库和日志目录权限受控；
+- 不要将数据库提交到 Git；
+- 不要将群聊内容上传到公共服务。
 
 ### 角色设定
 
-项目支持通过本地 Prompt 文件提供角色设定。相关文件可能包括：
+以下文件可能被用于角色设定：
 
 ```text
 pi_agent_core/SYSTEM.md
 pi_agent_core/prompt.txt
 ```
 
-请以当前源码实际读取的文件为准。
+这些文件可能包含：
 
-不要把包含个人信息、凭证或私人群聊内容的角色设定提交到公开仓库。
+- 人设 Prompt；
+- 内部规则；
+- 私人信息；
+- API 配置；
+- 运行环境信息。
 
-### QQ 接入
+不要把敏感内容提交到公开仓库。
 
-配置 NapCat 或其他 OneBot v11 实现：
+### 网络服务
 
-1. 登录专用 QQ 账号；
-2. 开启 OneBot v11 通信；
-3. 确认 NoneBot2 能够连接到 OneBot；
-4. 确认机器人可以接收群消息；
-5. 确认机器人可以发送群消息；
-6. 将允许使用 AI 功能的群号加入项目配置。
-
-建议使用独立 QQ 账号运行机器人。
-
-### 环境变量
-
-项目提供了不同环境配置文件作为参考：
+默认 LM Studio 地址为回环地址：
 
 ```text
-.env.dev
-.env.prod
+127.0.0.1
 ```
 
-启动前可以根据部署环境创建 `.env`：
+建议不要将 LM Studio 或 NapCat WebUI 直接暴露到公网。
 
-```bash
-cp .env.dev .env
-```
+### 凭证管理
 
-Windows PowerShell：
+不要将以下内容写入源码：
 
-```powershell
-Copy-Item .env.dev .env
-```
-
-请检查配置文件中的：
-
-- NoneBot2 运行配置；
-- OneBot v11 连接配置；
-- NapCat 地址和端口；
-- LM Studio 地址；
-- 模型名称；
-- 群聊白名单；
-- 日志或数据目录。
-
-不要提交包含以下内容的 `.env`：
-
+- NapCat Token；
 - QQ 登录凭证；
-- Access Token；
 - API Key；
 - WebUI 密码；
-- 内网地址；
 - 私人群号；
-- 其他敏感配置。
+- 内网地址；
+- 其他服务凭证。
 
-## 启动
-
-具体启动参数可能随版本变化，请优先阅读：
-
-```text
-STARTCOMMAND.md
-```
-
-常见的 NoneBot2 启动方式：
+仓库的 `.gitignore` 已忽略部分本地配置和数据文件，但使用者仍需检查提交内容：
 
 ```bash
-nb run
-```
-
-或者：
-
-```bash
-python -m nonebot
-```
-
-实际启动命令以当前仓库配置为准。
-
-启动前确认：
-
-- LM Studio API 已启动；
-- 本地模型已经加载；
-- NapCat 已登录；
-- OneBot v11 通信正常；
-- `.env` 配置正确；
-- Agent 配置文件存在；
-- 机器人账号已加入目标群聊。
-
-## 消息处理流程
-
-```text
-用户在群聊中 @机器人
-        │
-        ▼
-NoneBot2 接收 OneBot v11 事件
-        │
-        ▼
-检查群聊白名单和消息内容
-        │
-        ▼
-保存群聊消息到 SQLite
-        │
-        ▼
-读取近期群聊上下文
-        │
-        ▼
-拼接当前用户问题
-        │
-        ▼
-启动 PI Coding Agent
-        │
-        ▼
-调用 LM Studio 本地模型
-        │
-        ▼
-解析模型输出
-        │
-        ▼
-写入思考日志
-        │
-        ▼
-分段发送 QQ 回复
-```
-
-## 数据与日志
-
-项目运行时可能生成或使用：
-
-```text
-pi_agent_core/agent_memory.db
-stella_thought_logs.md
-```
-
-其中可能包含：
-
-- QQ 群号；
-- QQ 用户 ID；
-- 群聊文本；
-- AI 生成内容；
-- 模型思考或动作信息；
-- 时间戳；
-- 运行错误。
-
-建议：
-
-- 将运行数据放在独立目录；
-- 将日志和数据库加入 `.gitignore`；
-- 不要把生产日志上传到公开仓库；
-- 对外分享日志前进行脱敏；
-- 定期清理不再需要的历史记录。
-
-## 安全与隐私说明
-
-### 本地模型不等于绝对安全
-
-虽然推理请求默认发送到本地 LM Studio，但以下内容仍可能暴露在本机环境中：
-
-- 群聊消息；
-- 用户 ID；
-- 思考日志；
-- SQLite 数据库；
-- Agent 输出；
-- 系统日志。
-
-请确保运行机器的账户、磁盘和备份受到保护。
-
-### QQ 账号风险
-
-使用自动化 QQ 机器人可能受到平台规则、账号风控和网络环境影响。请：
-
-- 使用专用账号；
-- 控制消息频率；
-- 仅在明确授权的群聊中使用；
-- 不要用于骚扰、刷屏或自动化违规行为；
-- 遵守 QQ、NapCat、OneBot 和相关模型服务的使用规则。
-
-### Agent 权限
-
-当前项目通过子进程调用 PI Coding Agent。运行账号对文件系统、网络和进程的权限会影响整体安全性。
-
-建议：
-
-- 使用低权限系统用户运行；
-- 不要在生产服务器上直接运行；
-- 不要给机器人账号不必要的文件权限；
-- 将模型、机器人和日志运行在隔离环境中；
-- 本地服务默认只监听回环地址。
-
-## 开发
-
-### 修改 Python 插件
-
-Python 插件主要位于：
-
-```text
-stella_project/plugins/bot_main/
-```
-
-修改消息流程时，重点关注：
-
-- 事件过滤；
-- 群聊白名单；
-- 异步锁；
-- 子进程生命周期；
-- 超时处理；
-- 输出解析；
-- 日志写入；
-- QQ 消息发送。
-
-### 修改 Agent 桥接层
-
-TypeScript 桥接层位于：
-
-```text
-pi_agent_core/agent_bridge.ts
-```
-
-修改时应确认：
-
-- 输入是否为合法 JSON；
-- 模型提供者是否存在；
-- 模型名称是否正确；
-- system prompt 路径是否有效；
-- Agent 会话是否能够正常创建；
-- 输出是否始终返回可解析的 JSON；
-- 异常是否返回明确的错误状态。
-
-### 本地验证
-
-提交前建议执行：
-
-```bash
-python -m compileall stella_project
-```
-
-如果项目配置了测试命令，则进一步运行：
-
-```bash
-pytest
-```
-
-同时检查：
-
-```bash
-git diff
 git status
+git diff --cached
 ```
 
-不要提交运行产生的数据库、日志、缓存、模型文件或本地环境配置。
+## 开发与验证
 
-## 常见问题
-
-### 机器人没有回复
-
-请检查：
-
-1. QQ 账号是否已登录；
-2. NapCat 是否正常运行；
-3. OneBot v11 是否连接成功；
-4. 机器人是否在允许的群聊中；
-5. 消息是否正确 `@` 机器人；
-6. NoneBot2 是否正常启动；
-7. LM Studio API 是否可访问；
-8. 模型是否已经加载；
-9. `models.json` 中的模型名称是否正确；
-10. 控制台是否出现 Agent 错误。
-
-### Agent 调用失败
-
-检查：
+当前仓库没有测试目录、CI 配置或统一构建脚本。修改代码后，可以先执行基础语法检查：
 
 ```bash
-npx pi --help
+python -m py_compile \
+  stella_project/plugins/bot_main/__init__.py \
+  stella_project/plugins/bot_main/ai_gateway.py \
+  stella_project/plugins/bot_main/config.py \
+  stella_project/plugins/bot_main/watchdog.py
 ```
 
-并确认：
+如果宿主工程配置了 TypeScript 工具链，再对 Agent 代码执行对应的类型检查或编译。
 
-- Node.js 已安装；
-- npm 可以访问所需包；
-- PI Coding Agent 配置正确；
-- `pi_agent_core` 路径没有移动；
-- system prompt 文件存在；
-- LM Studio 服务已经启动。
+建议至少进行以下手动验证：
 
-### 回复超时
+1. NoneBot2 可以加载插件；
+2. 非白名单群聊不会触发回复；
+3. 未 `@` 机器人时不会触发 AI；
+4. 群聊记录可以写入 SQLite；
+5. 近期上下文能够正确读取；
+6. LM Studio API 可以访问；
+7. PI Agent 可以正常启动；
+8. 模型超时后程序仍能继续处理后续消息；
+9. NapCat 重启接口只在明确需要时启用；
+10. 日志和数据库不会被提交到仓库。
 
-本地模型推理时间受以下因素影响：
+## 已知限制
 
-- 模型规模；
-- 量化方式；
-- GPU 显存；
-- CPU 性能；
-- 上下文长度；
-- LM Studio 当前负载；
-- 同时运行的其他程序。
-
-可以先使用更小的模型验证完整链路，再逐步提高模型规模。
-
-### 日志或数据库越来越大
-
-项目会保存群聊记录和运行日志。请定期：
-
-- 备份重要数据；
-- 清理不需要的日志；
-- 归档或删除历史 SQLite 数据；
-- 检查磁盘空间；
-- 避免将日志目录同步到公共云盘。
-
-## 版本
-
-当前仓库公开的最新 Release：
-
-```text
-v1.1.0
-```
-
-查看发布页：
-
-[Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases)
-
-使用稳定版本：
-
-```bash
-git fetch --tags
-git checkout v1.1.0
-```
-
-开发分支可能包含尚未完成或未充分验证的功能。
+- 仓库没有独立的 Python 打包配置；
+- 仓库没有完整的 NoneBot2 启动入口；
+- 仓库没有固定的 Python 依赖文件；
+- 仓库没有固定的 Node.js `package.json`；
+- 记忆系统尚未完全接入主对话流程；
+- 当前长期记忆使用 SQLite 关键词匹配，不是向量检索；
+- Agent 工具在记忆扩展生命周期中会被清空；
+- 模型名称和 LM Studio 地址需要手动保持一致；
+- 群号白名单目前位于源码中；
+- NapCat 重启配置需要重新进行安全加固；
+- 当前仓库没有自动化测试和 CI 验证。
 
 ## 许可证
 
-使用、修改或再分发本项目之前，请以仓库中的正式 `LICENSE` 文件和对应 Release 说明为准。
+当前仓库目录中未发现明确的 `LICENSE` 文件。
 
-如果仓库没有提供明确的许可证文件，则默认不代表代码可以自由复制、修改或再分发。建议在项目正式发布前补充明确的开源许可证。
+在仓库补充正式许可证之前，不能默认代码可以被自由复制、修改或再分发。使用者应遵循仓库所有者的授权范围，并在项目发布前补充合适的开源许可证。
 
 ## 免责声明
 
 本项目仅用于学习、研究和个人实验。
 
-使用者需要自行承担以下风险：
+使用者需要自行承担：
 
-- QQ 账号登录和自动化运行风险；
-- 本地模型输出不准确或不符合预期的风险；
-- 日志、数据库和群聊内容泄露风险；
-- 第三方组件和平台政策变化带来的风险；
-- 错误配置导致的服务异常或数据损失。
+- QQ 账号自动化运行风险；
+- 平台规则和账号风控风险；
+- 本地数据库和群聊数据泄露风险；
+- 模型输出错误或不符合预期的风险；
+- NapCat 重启配置不当导致的服务中断风险；
+- 第三方软件和模型服务变化带来的兼容性风险。
 
-请在获得必要授权的前提下使用本项目，并遵守相关平台、软件和模型服务的使用条款。
-
-## 致谢
-
-- [NoneBot2](https://github.com/nonebot/nonebot2)
-- [OneBot](https://onebot.dev/)
-- [NapCat](https://github.com/NapNeko/NapCatQQ)
-- [LM Studio](https://lmstudio.ai/)
-- [PI Coding Agent](https://github.com/earendil-works/pi-coding-agent)
+请在获得必要授权并充分了解运行环境的前提下使用本项目。
 
 ## 项目地址
 
