@@ -1,0 +1,12 @@
+{
+  "pythonVersion": "3.13",
+  "venvPath": "E:\\stella\\stella_project\\.venv",
+  "venv": ".venv",
+  "include": [
+    "core",
+    "memory",
+    "config",
+    "extensions",
+    "stella_project/plugins/bot_main"
+  ]
+}

@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import asyncio
+from typing import Callable, Optional, Awaitable
+from nonebot import logger
+from core.context import ChatContext
+from core.llm.base import LLMBackend
+
+
+PreHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
+PostHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
+
+
+class Pipeline:
+    def __init__(self, timeout: float = 90.0):
+        self._pre_hooks: list[tuple[int, PreHook]] = []
+        self._post_hooks: list[tuple[int, PostHook]] = []
+        self._llm: Optional[LLMBackend] = None
+        self._lock = asyncio.Lock()
+        self._timeout = timeout
+        self.system_prompt: str = ""
+
+    def register_pre_hook(self, hook: PreHook, priority: int = 10):
+        self._pre_hooks.append((priority, hook))
+        self._pre_hooks.sort(key=lambda x: x[0], reverse=True)
+
+    def register_post_hook(self, hook: PostHook, priority: int = 10):
+        self._post_hooks.append((priority, hook))
+        self._post_hooks.sort(key=lambda x: x[0], reverse=True)
+
+    def set_llm_backend(self, backend: LLMBackend):
+        self._llm = backend
+
+    async def run(self, ctx: ChatContext) -> ChatContext:
+        for _, hook in self._pre_hooks:
+            result = await hook(ctx)
+            if result is not None:
+                ctx = result
+
+        if ctx.reply:
+            return ctx
+
+        if self._llm:
+            user_prompt = ctx.message
+            if ctx.context:
+                user_prompt = (
+                    f"--- 【群聊上下文】 ---\n{ctx.context}\n----------------------------------\n"
+                    f"{ctx.message}"
+                )
+
+            async with self._lock:
+                try:
+                    raw = await asyncio.wait_for(
+                        self._llm.generate(user_prompt, self.system_prompt),
+                        timeout=self._timeout,
+                    )
+                    ctx.raw_output = raw
+                except asyncio.TimeoutError:
+                    logger.error("LLM 执行超时")
+                    ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
+                except Exception as e:
+                    logger.error(f"LLM 执行异常: {e}")
+                    ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
+
+        for _, hook in self._post_hooks:
+            result = await hook(ctx)
+            if result is not None:
+                ctx = result
+
+        return ctx
