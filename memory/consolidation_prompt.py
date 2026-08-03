@@ -32,4 +32,5 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
 - user_profiles 只写有变化的用户
 - long_term_memories 只写重要的事（importance >= 5），没有就空数组
 - 没有相关内容填空数组或无
+- user_id 必须只写纯数字 QQ 号（例如 123456789），不要带"用户()"前缀，不要重复
 """

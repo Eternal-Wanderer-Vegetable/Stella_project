@@ -9,15 +9,22 @@ from nonebot.rule import Rule
 from config import (
     ALLOWED_GROUPS, SEND_INTERVAL, SYSTEM_PROMPT_PATH,
     LM_STUDIO_BASE_URL, LM_STUDIO_MODEL, LLM_TIMEOUT,
-    EXTENSIONS_DIR,
+    EXTENSIONS_DIR, FLEXIWEB_PROJECT_DIR, FLEXIWEB_BASE_URL, CONSOLIDATION_SITE,
+    CONSOLIDATION_BATCH_SIZE, FLEXIWEB_HEADLESS,
+    DB_CLEANUP_ON_START, DB_CLEANUP_CLEAR_MESSAGES,
+    PROACTIVE_ENABLED, PROACTIVE_COOLDOWN, PROACTIVE_CHECK_INTERVAL,
+    CONSOLIDATION_TRIGGER_NEW_MESSAGES,
 )
 from core.context import ChatContext
 from core.pipeline import Pipeline
 from core.llm.lm_studio import LMStudioBackend
+import core.llm.flexiweb as _flexiweb
+from core.llm.flexiweb import FlexiWebManager
 from extensions import load_extensions
 from memory.pre_processors import record_message, build_context, build_user_context
 from memory.post_processors import parse_output, bad_phrase_filter, split_lines, log_thought
-from memory.consolidator import maybe_consolidate
+from memory.consolidator import maybe_consolidate, get_consolidator
+from memory.proactive import get_proactive
 
 # ============================================================
 # Pipeline 构建
@@ -47,6 +54,33 @@ else:
 
 load_extensions(pipeline, EXTENSIONS_DIR)
 
+# ── 启动时数据库清理（测试期用，避免频繁重启注入脏记忆） ──
+if DB_CLEANUP_ON_START:
+    try:
+        from memory.db_cleaner import clean_db, print_summary
+        results = clean_db(
+            clear_short_term=True,
+            clear_long_term=True,
+            reset_checkpoint=True,
+            clear_messages=DB_CLEANUP_CLEAR_MESSAGES,
+        )
+        logger.info(f"🧹 启动清理完成（用户画像保留）: {results}")
+    except Exception as e:
+        logger.warning(f"⚠️ 数据库清理失败: {e}")
+
+# ── FlexiWeb 自动启动（后台，不影响 QQ 聊天响应） ──────
+if CONSOLIDATION_BATCH_SIZE > 0:
+    _flexiweb.global_manager = FlexiWebManager(
+        project_dir=FLEXIWEB_PROJECT_DIR,
+        base_url=FLEXIWEB_BASE_URL,
+        site=CONSOLIDATION_SITE,
+        headless=FLEXIWEB_HEADLESS,
+    )
+    try:
+        asyncio.get_running_loop().create_task(_flexiweb.global_manager.ensure_running())
+    except RuntimeError:
+        pass
+
 # ============================================================
 # QQ 事件监听
 # ============================================================
@@ -67,7 +101,9 @@ async def record_group_chat(event: GroupMessageEvent):
         message=text,
     )
     await record_message(ctx)
-    maybe_consolidate(ctx.group_id)
+    # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
+    # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
+    get_proactive().record_message(ctx.group_id)
 
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
@@ -90,6 +126,19 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         msg_id=event.message_id,
         message=event.get_plaintext().strip(),
     )
+
+    # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，
+    # 避免每次群消息都做无用总结，同时保证对话用到的短期记忆是最新的。
+    try:
+        consolidator = get_consolidator()
+        new_count = consolidator.has_new_messages_to_consolidate(
+            event.group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+        )
+        if new_count > 0:
+            logger.info(f"🧠 [Trigger] @对话触发短期记忆总结（新消息 {new_count} 条）")
+            maybe_consolidate(event.group_id, force=True)
+    except Exception as e:
+        logger.warning(f"⚠️ @触发总结异常（跳过）: {e}")
 
     try:
         ctx = await pipeline.run(ctx)
@@ -118,3 +167,74 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             await chat_handler.finish(msg)
         else:
             await chat_handler.send(msg)
+
+
+# ============================================================
+# 主动发言（基于群消息频率）
+# ============================================================
+try:
+    from nonebot_plugin_apscheduler import scheduler
+except Exception:
+    scheduler = None
+
+
+async def _proactive_speak_for_group(bot: Bot, group_id: int):
+    """对单个群尝试主动发言：概率命中时生成一句自然的话并发送。"""
+    proactive = get_proactive()
+    if not proactive.should_speak(group_id):
+        return
+
+    # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
+    try:
+        consolidator = get_consolidator()
+        new_count = consolidator.has_new_messages_to_consolidate(
+            group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+        )
+        if new_count > 0:
+            logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
+            maybe_consolidate(group_id, force=True)
+            await asyncio.sleep(1.0)
+    except Exception as e:
+        logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
+
+    # 构造一次"主动插话"的对话上下文
+    ctx = ChatContext(
+        user_id=0,
+        group_id=group_id,
+        msg_id=0,
+        message="（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）",
+        trigger="proactive",
+    )
+    try:
+        ctx = await pipeline.run(ctx)
+    except Exception as e:
+        logger.error(f"主动发言 Pipeline 异常: {e}")
+        return
+    if not ctx.lines:
+        return
+
+    proactive.mark_spoke(group_id)
+    text = " | ".join(ctx.lines)
+    logger.success(f"✨ [主动发言] 群 {group_id}: {text}")
+    try:
+        await bot.send_group_msg(group_id=group_id, message=text)
+    except Exception as e:
+        logger.error(f"主动发言发送失败: {e}")
+
+
+if scheduler is not None and PROACTIVE_ENABLED:
+    @scheduler.scheduled_job("interval", seconds=PROACTIVE_CHECK_INTERVAL, id="proactive_speak")
+    async def proactive_speak_job():
+        if not PROACTIVE_ENABLED:
+            return
+        try:
+            from nonebot import get_bot
+            bot = get_bot()
+        except Exception as e:
+            logger.debug(f"主动发言跳过：无可用 Bot（{e}）")
+            return
+        for group_id in ALLOWED_GROUPS:
+            try:
+                await _proactive_speak_for_group(bot, group_id)
+            except Exception as e:
+                logger.error(f"主动发言异常（群 {group_id}）: {e}")

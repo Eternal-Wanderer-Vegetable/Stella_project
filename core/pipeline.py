@@ -48,17 +48,28 @@ class Pipeline:
                     f"{ctx.message}"
                 )
 
+            # 记录 LLM 诊断信息
+            ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
+            ctx.llm_model = getattr(self._llm, "model", "") or getattr(self._llm, "site", "")
+            ctx.system_prompt_len = len(self.system_prompt)
+            ctx.prompt_log = user_prompt
+
             async with self._lock:
+                import time as _time
+                _t0 = _time.monotonic()
                 try:
                     raw = await asyncio.wait_for(
                         self._llm.generate(user_prompt, self.system_prompt),
                         timeout=self._timeout,
                     )
+                    ctx.llm_elapsed = _time.monotonic() - _t0
                     ctx.raw_output = raw
                 except asyncio.TimeoutError:
+                    ctx.llm_elapsed = _time.monotonic() - _t0
                     logger.error("LLM 执行超时")
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                 except Exception as e:
+                    ctx.llm_elapsed = _time.monotonic() - _t0
                     logger.error(f"LLM 执行异常: {e}")
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
 

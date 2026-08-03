@@ -64,8 +64,19 @@ async def log_thought(ctx: ChatContext) -> ChatContext:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     reply_str = " <br> ".join(ctx.lines)
     thought_formatted = ctx.thought.replace("\n", "\n  > ")
-    log_entry = f"""### 🕒 [{now_str}] 用户: `{ctx.user_id}`
+    raw_output_formatted = ctx.raw_output.replace("\n", "\n  > ") if ctx.raw_output else ""
+    trigger_str = {
+        "reply": "@回复触发",
+        "proactive": "主动发言",
+    }.get(ctx.trigger, ctx.trigger)
+    llm_info = f"{ctx.llm_backend or '未知'} / {ctx.llm_model or '未指定'}"
+    log_entry = f"""### 🕒 [{now_str}] {trigger_str} | 群: `{ctx.group_id}` | 用户: `{ctx.user_id}`
+- **🖥 模型**: `{llm_info}`（耗时 {ctx.llm_elapsed:.2f}s，系统提示词 {ctx.system_prompt_len} 字符）
 - **📥 用户输入**: {ctx.message}
+- **📤 完整 Prompt（发给 LLM）**:
+  > {ctx.prompt_log.replace(chr(10), chr(10) + "  > ") if ctx.prompt_log else "(空)"}
+- **📥 原始 LLM 输出（完整）**:
+  > {raw_output_formatted if raw_output_formatted else "(空)"}
 - **🧠 内部思考**:
   > {thought_formatted}
 - **⚙️ 判定动作**: `{ctx.action}`
