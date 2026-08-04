@@ -7,7 +7,7 @@
 """
 import argparse
 import sqlite3
-from config import DB_PATH
+from config import DB_PATH, MESSAGE_CLEANUP_KEEP_COUNT
 
 
 def clean_db(
@@ -57,6 +57,44 @@ def print_summary():
         except sqlite3.OperationalError:
             print(f"  {table}: (表不存在)")
     conn.close()
+
+
+def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[str, int]:
+    """定期清理 group_messages 表：每个群仅保留最近 keep_count 条消息。
+
+    返回 {"deleted": 总删除行数, "groups": 处理的群数}。
+    """
+    if not DB_PATH.exists():
+        return {"deleted": 0, "groups": 0}
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # 获取所有群 ID
+    cur.execute("SELECT DISTINCT group_id FROM group_messages")
+    group_ids = [row[0] for row in cur.fetchall()]
+
+    total_deleted = 0
+    for gid in group_ids:
+        # 找到该群第 keep_count 条消息的 id
+        cur.execute(
+            "SELECT id FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?",
+            (gid, keep_count - 1),
+        )
+        row = cur.fetchone()
+        if row is None:
+            # 该群消息不足 keep_count 条，无需清理
+            continue
+        cutoff_id = row[0]
+        cur.execute(
+            "DELETE FROM group_messages WHERE group_id = ? AND id <= ?",
+            (gid, cutoff_id),
+        )
+        total_deleted += cur.rowcount
+
+    conn.commit()
+    conn.close()
+    return {"deleted": total_deleted, "groups": len(group_ids)}
 
 
 if __name__ == "__main__":

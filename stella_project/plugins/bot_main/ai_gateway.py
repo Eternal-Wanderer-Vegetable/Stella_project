@@ -15,6 +15,7 @@ from config import (
     DB_CLEANUP_ON_START, DB_CLEANUP_CLEAR_MESSAGES,
     PROACTIVE_ENABLED, PROACTIVE_COOLDOWN, PROACTIVE_CHECK_INTERVAL,
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
+    MESSAGE_CLEANUP_ENABLED, MESSAGE_CLEANUP_HOUR,
 )
 from core.context import ChatContext
 from core.pipeline import Pipeline
@@ -247,3 +248,22 @@ if scheduler is not None and PROACTIVE_ENABLED:
                 await _proactive_speak_for_group(bot, group_id)
             except Exception as e:
                 logger.error(f"主动发言异常（群 {group_id}）: {e}")
+
+
+# ============================================================
+# 消息表定期清理（每天定时执行，防止数据库无限膨胀）
+# ============================================================
+if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
+    @scheduler.scheduled_job("cron", hour=MESSAGE_CLEANUP_HOUR, id="trim_group_messages")
+    async def trim_messages_job():
+        try:
+            from memory.db_cleaner import trim_group_messages
+            result = trim_group_messages()
+            deleted = result["deleted"]
+            groups = result["groups"]
+            if deleted > 0:
+                logger.info(f"🧹 [消息清理] 已清理 {deleted} 条旧消息（{groups} 个群）")
+            else:
+                logger.debug(f"🧹 [消息清理] 无需清理（{groups} 个群）")
+        except Exception as e:
+            logger.warning(f"⚠️ 消息清理异常: {e}")

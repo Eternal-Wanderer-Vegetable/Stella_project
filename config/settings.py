@@ -164,6 +164,14 @@ DB_CLEANUP_ON_START = _env("DB_CLEANUP_ON_START", "false").lower() in ("true", "
 # 清理时是否连原始群消息记录也一起删除（危险操作，默认关闭）
 DB_CLEANUP_CLEAR_MESSAGES = _env("DB_CLEANUP_CLEAR_MESSAGES", "false").lower() in ("true", "1", "yes")
 
+# ---------- 消息表定期清理 ----------
+# 是否启用 group_messages 定期清理（每天定时清理，保留最近 N 条）
+MESSAGE_CLEANUP_ENABLED = _env("MESSAGE_CLEANUP_ENABLED", "true").lower() in ("true", "1", "yes")
+# 每个群保留的最近消息条数（超出部分删除）
+MESSAGE_CLEANUP_KEEP_COUNT = _env_int("MESSAGE_CLEANUP_KEEP_COUNT", 1000)
+# 定时清理的执行时间（小时，24小时制），默认凌晨 4 点
+MESSAGE_CLEANUP_HOUR = _env_int("MESSAGE_CLEANUP_HOUR", 4)
+
 # ---------- 输出 ----------
 MAX_REPLY_LINES = _env_int("MAX_REPLY_LINES", 5)
 SEND_INTERVAL = _env_float("SEND_INTERVAL", 0.8)
