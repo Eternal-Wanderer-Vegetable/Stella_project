@@ -5,6 +5,7 @@ from typing import Callable, Optional, Awaitable
 from nonebot import logger
 from core.context import ChatContext
 from core.llm.base import LLMBackend
+from core.llm import llm_lock
 
 
 PreHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
@@ -16,7 +17,6 @@ class Pipeline:
         self._pre_hooks: list[tuple[int, PreHook]] = []
         self._post_hooks: list[tuple[int, PostHook]] = []
         self._llm: Optional[LLMBackend] = None
-        self._lock = asyncio.Lock()
         self._timeout = timeout
         self.system_prompt: str = ""
 
@@ -54,7 +54,7 @@ class Pipeline:
             ctx.system_prompt_len = len(self.system_prompt)
             ctx.prompt_log = user_prompt
 
-            async with self._lock:
+            async with llm_lock:
                 import time as _time
                 _t0 = _time.monotonic()
                 try:

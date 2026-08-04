@@ -22,7 +22,7 @@ from core.llm.lm_studio import LMStudioBackend
 import core.llm.flexiweb as _flexiweb
 from core.llm.flexiweb import FlexiWebManager
 from extensions import load_extensions
-from memory.pre_processors import record_message, build_context, build_user_context
+from memory.pre_processors import build_context, build_user_context
 from memory.post_processors import parse_output, bad_phrase_filter, split_lines, log_thought
 from memory.consolidator import maybe_consolidate, get_consolidator
 from memory.proactive import get_proactive
@@ -35,7 +35,6 @@ pipeline = Pipeline(timeout=LLM_TIMEOUT)
 # ── 每群互斥锁：@-回复与主动发言不可并发，避免管道竞争 ──
 _group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
-pipeline.register_pre_hook(record_message, priority=100)
 pipeline.register_pre_hook(build_context, priority=50)
 pipeline.register_pre_hook(build_user_context, priority=40)
 
@@ -82,8 +81,8 @@ if CONSOLIDATION_BATCH_SIZE > 0:
     )
     try:
         asyncio.get_running_loop().create_task(_flexiweb.global_manager.ensure_running())
-    except RuntimeError:
-        pass
+    except RuntimeError as e:
+        logger.warning(f"⚠️ FlexiWeb 启动异常（未在事件循环中）: {e}")
 
 # ============================================================
 # QQ 事件监听

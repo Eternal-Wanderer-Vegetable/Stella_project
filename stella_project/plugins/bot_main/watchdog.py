@@ -3,6 +3,8 @@ import httpx
 from nonebot import logger, on_message
 from nonebot_plugin_apscheduler import scheduler
 
+from config import NAPCAT_TOKEN, NAPCAT_API_URL
+
 last_event_time = time.time()
 
 msg_monitor = on_message(priority=1, block=False)
@@ -14,15 +16,16 @@ async def _():
 
 async def call_napcat_restart_api():
     """通过 NapCat WebUI API 触发重启"""
-    url = "http://127.0.0.1:6099/api/Process/Restart"
-    token = "ac889a86153e" 
+    if not NAPCAT_TOKEN:
+        logger.warning("[Watchdog] NAPCAT_TOKEN 未配置，跳过重启")
+        return
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}"
+        "Authorization": f"Bearer {NAPCAT_TOKEN}"
     }
     try:
         async with httpx.AsyncClient(trust_env=False) as client:
-            response = await client.post(url, headers=headers, timeout=10.0)
+            response = await client.post(NAPCAT_API_URL, headers=headers, timeout=10.0)
             if response.status_code == 200:
                 logger.success("[Watchdog] 已成功通过 API 触发 NapCat 重启指令")
             else:

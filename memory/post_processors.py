@@ -54,7 +54,8 @@ async def split_lines(ctx: ChatContext) -> ChatContext:
     if not ctx.reply:
         ctx.reply = "......？"
     ctx.reply = ctx.reply.replace("\\n", "\n")
-    ctx.reply = re.sub(r"[\（\(][^\）\)]*[\）\)]", "", ctx.reply).strip()
+    # 只删除半角括号 ()，保留中文括号（）和其他全角括号
+    ctx.reply = re.sub(r"\([^）\n]*\)", "", ctx.reply).strip()
     lines = [line.strip() for line in ctx.reply.split("\n") if line.strip()][:MAX_REPLY_LINES]
     ctx.lines = lines or ["......？"]
     return ctx

@@ -13,6 +13,7 @@ from config import (
     CONSOLIDATION_MAX_TOKENS, CONSOLIDATION_LOCAL_BATCH_SIZE, CONSOLIDATION_LOCAL_MAX_TOKENS,
 )
 from core.llm.lm_studio import LMStudioBackend
+from core.llm import llm_lock
 from memory.consolidation_prompt import CONSOLIDATION_PROMPT
 
 
@@ -23,7 +24,6 @@ class MemoryConsolidator:
     def __init__(self):
         self._backends = []
         self._online_cooldown_until = 0.0
-        self._lock = asyncio.Lock()
         self._build_backends()
 
     def _build_backends(self):
@@ -58,11 +58,10 @@ class MemoryConsolidator:
 
     def _online_available(self) -> bool:
         """FlexiWeb 是否在优先级链中且未处于冷却"""
-        for name, _ in self._backends:
-            if name == "flexiweb":
-                return time.monotonic() >= self._online_cooldown_until
+        has_flexiweb = any(name == "flexiweb" for name, _ in self._backends)
+        if not has_flexiweb:
             return False
-        return False
+        return time.monotonic() >= self._online_cooldown_until
 
     async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int]:
         """按优先级依次调用 LLM；在线 LLM 失败自动降级到本地 SLM（用小批次重建 prompt）。
@@ -127,17 +126,6 @@ class MemoryConsolidator:
         conn.close()
         return row[0] if row else 0
 
-    def _get_max_message_id(self, group_id: int) -> int:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT MAX(id) FROM group_messages WHERE group_id = ?",
-            (str(group_id),),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row and row[0] else 0
-
     def _count_new_messages(self, group_id: int, last_id: int) -> int:
         """统计 last_id 之后还有多少条未整合的消息"""
         conn = sqlite3.connect(DB_PATH)
@@ -164,8 +152,9 @@ class MemoryConsolidator:
         if not DB_PATH.exists():
             return
 
-        # 串行化：FlexiWeb 共享同一浏览器页面，并发打字会导致输入交错乱码
-        async with self._lock:
+        # 串行化：FlexiWeb 共享同一浏览器页面，并发打字会导致输入交错乱码；
+        # 同时与 Pipeline 共享同一把锁，防止整合与回复并发打本地小模型
+        async with llm_lock:
             try:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
@@ -182,7 +171,9 @@ class MemoryConsolidator:
 
                 parsed = self._parse_json(result)
                 if not parsed:
-                    logger.warning(f"⚠️ [Consolidator] JSON 解析失败: {result[:200]}")
+                    logger.warning(f"⚠️ [Consolidator] JSON 解析失败，跳过本批次: {result[:200]}")
+                    # 即使解析失败也推进 checkpoint，避免同一批消息反复重处理
+                    self._update_checkpoint(group_id, processed_end)
                     return
 
                 self._write_short_term(group_id, parsed.get("short_term"))
@@ -396,6 +387,10 @@ class MemoryConsolidator:
 
 # ── 外部接口 ────────────────────────────────────────────
 
+_consolidator_instance: Optional["MemoryConsolidator"] = None
+_consolidation_tasks: set[asyncio.Task] = set()
+
+
 def get_consolidator() -> MemoryConsolidator:
     global _consolidator_instance
     if _consolidator_instance is None:
@@ -405,4 +400,6 @@ def get_consolidator() -> MemoryConsolidator:
 
 def maybe_consolidate(group_id: int, force: bool = False):
     consolidator = get_consolidator()
-    asyncio.create_task(consolidator.consolidate_group(group_id, force=force))
+    task = asyncio.create_task(consolidator.consolidate_group(group_id, force=force))
+    _consolidation_tasks.add(task)
+    task.add_done_callback(_consolidation_tasks.discard)
