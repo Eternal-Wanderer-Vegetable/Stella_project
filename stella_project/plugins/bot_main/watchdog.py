@@ -21,7 +21,7 @@ async def call_napcat_restart_api():
         "Authorization": f"Bearer {token}"
     }
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             response = await client.post(url, headers=headers, timeout=10.0)
             if response.status_code == 200:
                 logger.success("[Watchdog] 已成功通过 API 触发 NapCat 重启指令")

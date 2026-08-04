@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 from typing import Optional
 from nonebot import logger
@@ -32,7 +33,7 @@ class LMStudioBackend(LLMBackend):
         last_error: Optional[Exception] = None
         for attempt in range(3):
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), trust_env=False) as client:
                     resp = await client.post(self.api_url, json=payload)
                     resp.raise_for_status()
                     data = resp.json()
@@ -43,11 +44,17 @@ class LMStudioBackend(LLMBackend):
                 last_error = RuntimeError("LM Studio 返回空回复")
                 logger.warning(f"[LM Studio] 第 {attempt + 1} 次尝试返回空回复，重试...")
             except httpx.HTTPStatusError as e:
+                status = e.response.status_code
                 body = e.response.text[:800]
-                logger.error(f"[LM Studio] HTTP {e.response.status_code}\n{body}")
+                logger.error(f"[LM Studio] HTTP {status}\n{body}")
                 last_error = e
-                break
+                # 4xx 是请求/配置问题，重试无意义；5xx（如瞬时 502）服务端暂不可用，退避后重试
+                if 400 <= status < 500 or attempt >= 2:
+                    break
+                await asyncio.sleep(1.0 * (attempt + 1))
             except Exception as e:
                 last_error = e
                 logger.warning(f"[LM Studio] 第 {attempt + 1} 次尝试异常: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(1.0 * (attempt + 1))
         raise last_error or RuntimeError("LM Studio 请求失败")

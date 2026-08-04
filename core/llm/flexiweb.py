@@ -55,7 +55,7 @@ class FlexiWebManager:
 
     async def _probe(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
                 r = await client.get(f"{self.base_url}/docs")
                 return r.status_code == 200
         except Exception:
@@ -185,7 +185,7 @@ class FlexiWebBackend(LLMBackend):
         url = f"{self.base_url}/api/ask_sync"
         async with self._lock:
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(180.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(180.0), trust_env=False) as client:
                     resp = await client.post(url, json={"site": self.site, "prompt": prompt})
                     resp.raise_for_status()
                     data = resp.json()
