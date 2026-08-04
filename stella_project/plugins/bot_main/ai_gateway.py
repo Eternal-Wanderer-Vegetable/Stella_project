@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 from nonebot import logger, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
 from nonebot.exception import FinishedException
@@ -30,6 +31,9 @@ from memory.proactive import get_proactive
 # Pipeline 构建
 # ============================================================
 pipeline = Pipeline(timeout=LLM_TIMEOUT)
+
+# ── 每群互斥锁：@-回复与主动发言不可并发，避免管道竞争 ──
+_group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 pipeline.register_pre_hook(record_message, priority=100)
 pipeline.register_pre_hook(build_context, priority=50)
@@ -120,53 +124,55 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=1, block=True)
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     _ = bot
-    ctx = ChatContext(
-        user_id=event.user_id,
-        group_id=event.group_id,
-        msg_id=event.message_id,
-        message=event.get_plaintext().strip(),
-    )
-
-    # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，
-    # 避免每次群消息都做无用总结，同时保证对话用到的短期记忆是最新的。
-    try:
-        consolidator = get_consolidator()
-        new_count = consolidator.has_new_messages_to_consolidate(
-            event.group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+    lock = _group_locks[event.group_id]
+    async with lock:
+        ctx = ChatContext(
+            user_id=event.user_id,
+            group_id=event.group_id,
+            msg_id=event.message_id,
+            message=event.get_plaintext().strip(),
         )
-        if new_count > 0:
-            logger.info(f"🧠 [Trigger] @对话触发短期记忆总结（新消息 {new_count} 条）")
-            maybe_consolidate(event.group_id, force=True)
-    except Exception as e:
-        logger.warning(f"⚠️ @触发总结异常（跳过）: {e}")
 
-    try:
-        ctx = await pipeline.run(ctx)
-    except FinishedException:
-        raise
-    except Exception as e:
-        logger.error(f"Pipeline 异常: {e}")
-        ctx.reply = "......？"
-        ctx.lines = ["......？"]
+        # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，
+        # 避免每次群消息都做无用总结，同时保证对话用到的短期记忆是最新的。
+        try:
+            consolidator = get_consolidator()
+            new_count = consolidator.has_new_messages_to_consolidate(
+                event.group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+            )
+            if new_count > 0:
+                logger.info(f"🧠 [Trigger] @对话触发短期记忆总结（新消息 {new_count} 条）")
+                maybe_consolidate(event.group_id, force=True)
+        except Exception as e:
+            logger.warning(f"⚠️ @触发总结异常（跳过）: {e}")
 
-    if not ctx.lines:
-        ctx.lines = ["......？"]
+        try:
+            ctx = await pipeline.run(ctx)
+        except FinishedException:
+            raise
+        except Exception as e:
+            logger.error(f"Pipeline 异常: {e}")
+            ctx.reply = "......？"
+            ctx.lines = ["......？"]
 
-    logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
+        if not ctx.lines:
+            ctx.lines = ["......？"]
 
-    reply_segment = MessageSegment.reply(event.message_id)
+        logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-    for i, line in enumerate(ctx.lines):
-        if i > 0:
-            await asyncio.sleep(SEND_INTERVAL)
-        if i == 0:
-            msg = Message([reply_segment, MessageSegment.text(line)])
-        else:
-            msg = Message(line)
-        if i == len(ctx.lines) - 1:
-            await chat_handler.finish(msg)
-        else:
-            await chat_handler.send(msg)
+        reply_segment = MessageSegment.reply(event.message_id)
+
+        for i, line in enumerate(ctx.lines):
+            if i > 0:
+                await asyncio.sleep(SEND_INTERVAL)
+            if i == 0:
+                msg = Message([reply_segment, MessageSegment.text(line)])
+            else:
+                msg = Message(line)
+            if i == len(ctx.lines) - 1:
+                await chat_handler.finish(msg)
+            else:
+                await chat_handler.send(msg)
 
 
 # ============================================================
@@ -184,44 +190,46 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
     if not proactive.should_speak(group_id):
         return
 
-    # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
-    try:
-        consolidator = get_consolidator()
-        new_count = consolidator.has_new_messages_to_consolidate(
-            group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+    lock = _group_locks[group_id]
+    async with lock:
+        # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
+        try:
+            consolidator = get_consolidator()
+            new_count = consolidator.has_new_messages_to_consolidate(
+                group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+            )
+            if new_count > 0:
+                logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
+                maybe_consolidate(group_id, force=True)
+                await asyncio.sleep(1.0)
+        except Exception as e:
+            logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
+
+        # 构造一次"主动插话"的对话上下文
+        ctx = ChatContext(
+            user_id=0,
+            group_id=group_id,
+            msg_id=0,
+            message="（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）",
+            trigger="proactive",
         )
-        if new_count > 0:
-            logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
-            maybe_consolidate(group_id, force=True)
-            await asyncio.sleep(1.0)
-    except Exception as e:
-        logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
+        try:
+            ctx = await pipeline.run(ctx)
+        except Exception as e:
+            logger.error(f"主动发言 Pipeline 异常: {e}")
+            return
+        if not ctx.lines:
+            return
 
-    # 构造一次"主动插话"的对话上下文
-    ctx = ChatContext(
-        user_id=0,
-        group_id=group_id,
-        msg_id=0,
-        message="（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）",
-        trigger="proactive",
-    )
-    try:
-        ctx = await pipeline.run(ctx)
-    except Exception as e:
-        logger.error(f"主动发言 Pipeline 异常: {e}")
-        return
-    if not ctx.lines:
-        return
-
-    proactive.mark_spoke(group_id)
-    logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
-    try:
-        for i, line in enumerate(ctx.lines):
-            if i > 0:
-                await asyncio.sleep(SEND_INTERVAL)
-            await bot.send_group_msg(group_id=group_id, message=line)
-    except Exception as e:
-        logger.error(f"主动发言发送失败: {e}")
+        proactive.mark_spoke(group_id)
+        logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
+        try:
+            for i, line in enumerate(ctx.lines):
+                if i > 0:
+                    await asyncio.sleep(SEND_INTERVAL)
+                await bot.send_group_msg(group_id=group_id, message=line)
+        except Exception as e:
+            logger.error(f"主动发言发送失败: {e}")
 
 
 if scheduler is not None and PROACTIVE_ENABLED:

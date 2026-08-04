@@ -1,9 +1,23 @@
+from __future__ import annotations
+
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # ============================================================
 # Stella Project — 集中配置
 # 修改此文件即可调整所有运行时参数，无需改动业务代码。
 # ============================================================
+
+# 加载 .env 文件（项目根目录，不覆盖已有环境变量）
+_project_root = Path(__file__).resolve().parent.parent
+load_dotenv(_project_root / ".env", override=False)
+
+
+def _env(key: str, default: str = "") -> str:
+    """读取环境变量，优先级高于默认值。"""
+    return os.getenv(key, default)
 
 # ---------- 项目路径（自动校准） ----------
 _CURRENT_FILE = Path(__file__).resolve()
@@ -21,24 +35,24 @@ THOUGHT_LOG_PATH = PROJECT_ROOT / "stella_thought_logs.md"
 EXTENSIONS_DIR = PROJECT_ROOT / "extensions"
 
 # ---------- QQ 群聊 ----------
-ALLOWED_GROUPS = {263402786}
+ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "263402786").split(",") if x.strip()}
 
 # ---------- 上下文 ----------
-RECENT_MESSAGE_LIMIT = 3
+RECENT_MESSAGE_LIMIT = int(_env("RECENT_MESSAGE_LIMIT", "3"))
 
 # ---------- 本地 LLM（LM Studio） ----------
-LM_STUDIO_BASE_URL = "http://127.0.0.1:1234"
-LM_STUDIO_MODEL = ""
+LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
+LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
 
 # LLM 调用超时（秒）
-LLM_TIMEOUT = 90.0
+LLM_TIMEOUT = float(_env("LLM_TIMEOUT", "90.0"))
 
 # ---------- 在线 LLM（FlexiWeb） ----------
-FLEXIWEB_BASE_URL = "http://127.0.0.1:8000"
-CONSOLIDATION_SITE = "deepseek"
+FLEXIWEB_BASE_URL = _env("FLEXIWEB_BASE_URL", "http://127.0.0.1:8000")
+CONSOLIDATION_SITE = _env("CONSOLIDATION_SITE", "deepseek")
 
 # FlexiWeb 项目路径（用于自动拉起子进程）
-FLEXIWEB_PROJECT_DIR = str(PROJECT_ROOT.parent / "FlexiWeb_Stream_Scraper")
+FLEXIWEB_PROJECT_DIR = _env("FLEXIWEB_PROJECT_DIR", str(PROJECT_ROOT.parent / "FlexiWeb_Stream_Scraper"))
 
 # FlexiWeb 启动模式：
 #   True  = 无头模式（不显示浏览器窗口，生产环境使用）
@@ -46,62 +60,62 @@ FLEXIWEB_PROJECT_DIR = str(PROJECT_ROOT.parent / "FlexiWeb_Stream_Scraper")
 # ⚠️ 首次使用：FlexiWeb 无登录数据，无头模式会卡在 DeepSeek 登录页。
 #    请设为 False 启动，手动登录一次 DeepSeek（会话保存在 browser_user_data），
 #    之后再改回 True 即可无头运行。
-FLEXIWEB_HEADLESS = False
+FLEXIWEB_HEADLESS = _env("FLEXIWEB_HEADLESS", "false").lower() in ("true", "1", "yes")
 
 # ---------- 记忆整合 ----------
 # LLM 优先级链，按顺序尝试，前一个失败自动降级到下一个。
 #   "flexiweb"  = 在线 LLM（Playwright 抓取 DeepSeek 网页，总结能力强）
 #   "lm_studio" = 本地 SLM（HTTP API，稳定快速，作为兜底）
-CONSOLIDATION_LLM_PRIORITY = ["flexiweb", "lm_studio"]
+CONSOLIDATION_LLM_PRIORITY = [s.strip() for s in _env("CONSOLIDATION_LLM_PRIORITY", "flexiweb,lm_studio").split(",") if s.strip()]
 
 # 在线 LLM 失败后的冷却时间（秒），避免频繁重试拖慢整合
-CONSOLIDATION_ONLINE_COOLDOWN = 300
+CONSOLIDATION_ONLINE_COOLDOWN = int(_env("CONSOLIDATION_ONLINE_COOLDOWN", "300"))
 
 # 在线 LLM（FlexiWeb/DeepSeek）的整合批量：
 # 批量太小会导致调用过于频繁，容易触发网站风控；批量大才能发挥大模型总结优势。
 # 注意：该批量会拼成较大的 prompt，只适合上下文窗口大的在线模型。
-CONSOLIDATION_BATCH_SIZE = 100
+CONSOLIDATION_BATCH_SIZE = int(_env("CONSOLIDATION_BATCH_SIZE", "100"))
 # 每次整合时向前回看多少条用于话题连续
-CONSOLIDATION_OVERLAP = 15
+CONSOLIDATION_OVERLAP = int(_env("CONSOLIDATION_OVERLAP", "15"))
 # 在线 LLM 最大生成 token 数
-CONSOLIDATION_MAX_TOKENS = 2000
+CONSOLIDATION_MAX_TOKENS = int(_env("CONSOLIDATION_MAX_TOKENS", "2000"))
 
 # 本地 SLM（LM Studio）兜底时的整合批量：
 # 本地小模型上下文窗口小（如 gemma-4-e4b），批次必须缩小，否则触发 400 Context exceeded
-CONSOLIDATION_LOCAL_BATCH_SIZE = 10
+CONSOLIDATION_LOCAL_BATCH_SIZE = int(_env("CONSOLIDATION_LOCAL_BATCH_SIZE", "10"))
 # 本地 SLM 最大生成 token 数
-CONSOLIDATION_LOCAL_MAX_TOKENS = 800
+CONSOLIDATION_LOCAL_MAX_TOKENS = int(_env("CONSOLIDATION_LOCAL_MAX_TOKENS", "800"))
 
 # ---------- 主动发言 ----------
 # 是否启用主动发言
-PROACTIVE_ENABLED = True
+PROACTIVE_ENABLED = _env("PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
 # 主动发言的最小冷却间隔（秒）：冷却期内绝不再主动发言
-PROACTIVE_COOLDOWN = 120
+PROACTIVE_COOLDOWN = int(_env("PROACTIVE_COOLDOWN", "120"))
 # 主动发言的定时检查间隔（秒）
-PROACTIVE_CHECK_INTERVAL = 30
+PROACTIVE_CHECK_INTERVAL = int(_env("PROACTIVE_CHECK_INTERVAL", "30"))
 # 消息频率估算窗口（取最近 N 条消息计算平均间隔）
-PROACTIVE_FREQ_WINDOW = 10
+PROACTIVE_FREQ_WINDOW = int(_env("PROACTIVE_FREQ_WINDOW", "10"))
 # 平均消息间隔 <= 此值（秒）视为高频（活跃群），主动发言概率低
-PROACTIVE_HIGH_FREQ_INTERVAL = 20.0
+PROACTIVE_HIGH_FREQ_INTERVAL = float(_env("PROACTIVE_HIGH_FREQ_INTERVAL", "20.0"))
 # 平均消息间隔 >= 此值（秒）视为低频（冷清群），主动发言概率高
-PROACTIVE_LOW_FREQ_INTERVAL = 180.0
+PROACTIVE_LOW_FREQ_INTERVAL = float(_env("PROACTIVE_LOW_FREQ_INTERVAL", "180.0"))
 # 低频时的最大主动发言概率（0~1），高频时的最小概率（不可为 0）
-PROACTIVE_MAX_PROB = 0.5
-PROACTIVE_MIN_PROB = 0.05
+PROACTIVE_MAX_PROB = float(_env("PROACTIVE_MAX_PROB", "0.5"))
+PROACTIVE_MIN_PROB = float(_env("PROACTIVE_MIN_PROB", "0.05"))
 # 主动发言前若累计新消息达到该数量，则触发一次短期记忆总结
-CONSOLIDATION_TRIGGER_NEW_MESSAGES = 10
+CONSOLIDATION_TRIGGER_NEW_MESSAGES = int(_env("CONSOLIDATION_TRIGGER_NEW_MESSAGES", "10"))
 
 # ---------- 数据库清理（测试期用） ----------
 # 程序启动时自动清理混乱的记忆数据（测试阶段频繁重启注入的脏数据）
 #   True = 每次启动都清理短期/长期记忆并重置整合 checkpoint（用户画像保留）
 #   测试结束后请改回 False，否则每次重启都会丢失记忆
-DB_CLEANUP_ON_START = False
+DB_CLEANUP_ON_START = _env("DB_CLEANUP_ON_START", "false").lower() in ("true", "1", "yes")
 # 清理时是否连原始群消息记录也一起删除（危险操作，默认关闭）
-DB_CLEANUP_CLEAR_MESSAGES = False
+DB_CLEANUP_CLEAR_MESSAGES = _env("DB_CLEANUP_CLEAR_MESSAGES", "false").lower() in ("true", "1", "yes")
 
 # ---------- 输出 ----------
-MAX_REPLY_LINES = 5
-SEND_INTERVAL = 0.8
+MAX_REPLY_LINES = int(_env("MAX_REPLY_LINES", "5"))
+SEND_INTERVAL = float(_env("SEND_INTERVAL", "0.8"))
 
 # ---------- 破防检测 ----------
 BAD_PHRASES = [

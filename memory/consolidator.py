@@ -168,22 +168,15 @@ class MemoryConsolidator:
         async with self._lock:
             try:
                 last_id = self._get_last_processed_id(group_id)
-
-                # 按当前可用后端决定批量阈值
-                threshold = CONSOLIDATION_BATCH_SIZE if self._online_available() else CONSOLIDATION_LOCAL_BATCH_SIZE
                 new_count = self._count_new_messages(group_id, last_id)
-                if new_count < threshold and not force:
-                    return
-                if force and new_count < CONSOLIDATION_LOCAL_BATCH_SIZE:
+
+                # force 路径只走本地小批量；非 force 路径按当前可用后端决定阈值
+                threshold = CONSOLIDATION_LOCAL_BATCH_SIZE if force else (
+                    CONSOLIDATION_BATCH_SIZE if self._online_available() else CONSOLIDATION_LOCAL_BATCH_SIZE
+                )
+                if new_count < threshold:
                     return
 
-                messages, batch_end = self._fetch_next_messages(group_id, last_id, threshold)
-                if not messages:
-                    return
-
-                logger.info(f"🧠 [Consolidator] 整合群 {group_id}：id {last_id} → {batch_end}（{threshold} 条）")
-                prompt = self._build_prompt(group_id, messages)
-                logger.info(f"📤 [Consolidator Prompt]\n{prompt}")
                 result, processed_end = await self._generate(group_id, last_id, force=force)
                 logger.info(f"📥 [Consolidator Response]\n{result}")
 
@@ -289,20 +282,49 @@ class MemoryConsolidator:
             uid = self._normalize_user_id(str(p.get("user_id", "")))
             if not uid:
                 continue
-            cursor.execute("SELECT interaction_count FROM user_profiles WHERE user_id = ?", (uid,))
+            cursor.execute(
+                "SELECT nickname, personality_traits, agent_attitude, interaction_count FROM user_profiles WHERE user_id = ?",
+                (uid,),
+            )
             row = cursor.fetchone()
-            count = (row[0] + 1) if row else 1
-            cursor.execute("""
-                INSERT INTO user_profiles (user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    personality_traits = excluded.personality_traits,
-                    agent_attitude = excluded.agent_attitude,
-                    interaction_count = excluded.interaction_count,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (uid, p.get("nickname", ""), p.get("personality_traits", ""), p.get("agent_attitude", ""), count))
+            if row:
+                old_nick, old_traits, old_attitude, old_count = row
+                new_nick = p.get("nickname", "") or old_nick
+                new_traits = self._merge_traits(old_traits, p.get("personality_traits", ""))
+                new_attitude = self._merge_traits(old_attitude, p.get("agent_attitude", ""))
+                cursor.execute("""
+                    UPDATE user_profiles
+                    SET nickname = ?, personality_traits = ?, agent_attitude = ?,
+                        interaction_count = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                """, (new_nick, new_traits, new_attitude, old_count + 1, uid))
+            else:
+                cursor.execute("""
+                    INSERT INTO user_profiles (user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
+                    VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                """, (uid, p.get("nickname", ""), p.get("personality_traits", ""), p.get("agent_attitude", "")))
         conn.commit()
         conn.close()
+
+    @staticmethod
+    def _merge_traits(old: str, new: str) -> str:
+        """合并两段特征描述：去重、去空、保留顺序。"""
+        old = (old or "").strip()
+        new = (new or "").strip()
+        if not old:
+            return new
+        if not new:
+            return old
+        old_parts = [s.strip() for s in re.split(r"[,，;；、\n]+", old) if s.strip()]
+        new_parts = [s.strip() for s in re.split(r"[,，;；、\n]+", new) if s.strip()]
+        seen = set()
+        merged = []
+        for part in old_parts + new_parts:
+            key = part.lower()
+            if key not in seen:
+                seen.add(key)
+                merged.append(part)
+        return "，".join(merged)
 
     def _write_long_term_memories(self, group_id: int, memories: list):
         if not memories:
@@ -316,10 +338,20 @@ class MemoryConsolidator:
             uid = self._normalize_user_id(str(m.get("user_id", "")))
             if not uid:
                 continue
+            summary = (m.get("summary", "") or "").strip()
+            if not summary:
+                continue
+            # 去重：同群、同用户、摘要完全相同则跳过
+            cursor.execute(
+                "SELECT id FROM long_term_memories WHERE group_id = ? AND user_id = ? AND summary = ?",
+                (str(group_id), uid, summary),
+            )
+            if cursor.fetchone():
+                continue
             cursor.execute("""
                 INSERT INTO long_term_memories (group_id, user_id, summary, importance, access_count, last_accessed_at)
                 VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-            """, (str(group_id), uid, m.get("summary", ""), importance))
+            """, (str(group_id), uid, summary, importance))
         conn.commit()
         conn.close()
 
