@@ -6,11 +6,8 @@ __pycache__/
 .venv/
 .vscode/
 
-# Deprecated code (old PI Agent — replaced by core/ pipeline)
+# Deprecated code (all legacy/obsolete files consolidated here)
 /_deprecated/
-
-# PI Agent legacy (kept for reference)
-/pi_agent_core/
 
 # FlexiWeb (external tool, cloned separately)
 FlexiWeb_Stream_Scraper/
@@ -18,14 +15,10 @@ FlexiWeb_Stream_Scraper/
 # Runtime data & logs
 stella_thought_logs.md
 memory/agent_memory.db
+memory/agent_memory.db-journal
 
-# Bot plugin — deprecated modules
+# Bot plugin — runtime data
 /stella_project/plugins/bot_main/__pycache__/
-/stella_project/plugins/bot_main/ai_db/
-/stella_project/plugins/bot_main/fallback/
-/stella_project/plugins/bot_main/test_folder/
-/stella_project/plugins/bot_main/favorability.json
-/stella_project/plugins/bot_main/model_all-MiniLM-L6-v2/
 
 # Environment
 .env
@@ -33,6 +26,4 @@ memory/agent_memory.db
 .env.prod
 
 # Misc
-pyproject.toml
 STARTCOMMAND.md
-check_db.py
