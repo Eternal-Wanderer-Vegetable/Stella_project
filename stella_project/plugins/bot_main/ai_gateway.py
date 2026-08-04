@@ -214,10 +214,12 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
         return
 
     proactive.mark_spoke(group_id)
-    text = " | ".join(ctx.lines)
-    logger.success(f"✨ [主动发言] 群 {group_id}: {text}")
+    logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
     try:
-        await bot.send_group_msg(group_id=group_id, message=text)
+        for i, line in enumerate(ctx.lines):
+            if i > 0:
+                await asyncio.sleep(SEND_INTERVAL)
+            await bot.send_group_msg(group_id=group_id, message=line)
     except Exception as e:
         logger.error(f"主动发言发送失败: {e}")
 
