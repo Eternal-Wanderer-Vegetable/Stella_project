@@ -81,6 +81,16 @@ ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "263402786").split(",")
 # ---------- 上下文 ----------
 RECENT_MESSAGE_LIMIT = _env_int("RECENT_MESSAGE_LIMIT", 3)
 
+# ---------- 长期记忆引用策略 ----------
+# 主动发言时引用的长期记忆条数（按 last_accessed_at 倒序取最近 N 条）
+PROACTIVE_LONG_TERM_LIMIT = _env_int("PROACTIVE_LONG_TERM_LIMIT", 10)
+# @-回复时引用的该用户近期长期记忆条数
+REPLY_LONG_TERM_LIMIT = _env_int("REPLY_LONG_TERM_LIMIT", 3)
+# @-回复时是否启用旧记忆话题匹配（对非该用户的旧记忆做关键词相关度筛选）
+LONG_TERM_RELEVANCE_ENABLED = _env("LONG_TERM_RELEVANCE_ENABLED", "true").lower() in ("true", "1", "yes")
+# 从用户消息中提取的关键词数量（用于匹配旧记忆摘要）
+LONG_TERM_RELEVANCE_KEYWORDS = _env_int("LONG_TERM_RELEVANCE_KEYWORDS", 5)
+
 # ---------- 本地 LLM（LM Studio） ----------
 LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
 LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
