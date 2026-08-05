@@ -23,7 +23,7 @@ from core.llm.lm_studio import LMStudioBackend
 import core.llm.flexiweb as _flexiweb
 from core.llm.flexiweb import FlexiWebManager
 from extensions import load_extensions
-from memory.pre_processors import build_context, build_user_context
+from memory.pre_processors import record_message, build_context, build_user_context
 from memory.post_processors import parse_output, bad_phrase_filter, split_lines, log_thought
 from memory.consolidator import maybe_consolidate, get_consolidator
 from memory.proactive import get_proactive
