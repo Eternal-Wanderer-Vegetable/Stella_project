@@ -72,6 +72,18 @@ if DB_CLEANUP_ON_START:
     except Exception as e:
         logger.warning(f"⚠️ 数据库清理失败: {e}")
 
+# ── 启动时检查消息清理（补执行因离线而错过的每日清理） ──
+if MESSAGE_CLEANUP_ENABLED:
+    try:
+        from memory.db_cleaner import needs_cleanup, trim_group_messages
+        if needs_cleanup():
+            logger.info("🧹 [消息清理] 距上次清理超过 24h，启动时补执行")
+            result = trim_group_messages()
+            if result["deleted"] > 0:
+                logger.info(f"🧹 [消息清理] 已清理 {result['deleted']} 条旧消息（{result['groups']} 个群）")
+    except Exception as e:
+        logger.warning(f"⚠️ 启动时消息清理异常: {e}")
+
 # ── FlexiWeb 自动启动（后台，不影响 QQ 聊天响应） ──────
 if CONSOLIDATION_BATCH_SIZE > 0:
     _flexiweb.global_manager = FlexiWebManager(

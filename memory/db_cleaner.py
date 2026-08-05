@@ -7,7 +7,12 @@
 """
 import argparse
 import sqlite3
+import time
+from pathlib import Path
 from config import DB_PATH, MESSAGE_CLEANUP_KEEP_COUNT
+
+# 上次消息清理的时间戳文件
+_LAST_CLEANUP_FILE = DB_PATH.parent / ".last_message_cleanup"
 
 
 def clean_db(
@@ -94,7 +99,27 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
 
     conn.commit()
     conn.close()
+    _mark_cleanup_done()
     return {"deleted": total_deleted, "groups": len(group_ids)}
+
+
+def needs_cleanup(max_age_hours: float = 24.0) -> bool:
+    """检查是否需要执行消息清理（距上次清理超过 max_age_hours 小时）。"""
+    if not _LAST_CLEANUP_FILE.exists():
+        return True
+    try:
+        last_ts = float(_LAST_CLEANUP_FILE.read_text().strip())
+        return (time.time() - last_ts) > max_age_hours * 3600
+    except (ValueError, OSError):
+        return True
+
+
+def _mark_cleanup_done():
+    """记录本次清理时间戳。"""
+    try:
+        _LAST_CLEANUP_FILE.write_text(str(time.time()))
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":
