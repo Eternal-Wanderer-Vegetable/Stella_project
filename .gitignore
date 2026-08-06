@@ -15,7 +15,10 @@ FlexiWeb_Stream_Scraper/
 # Runtime data & logs
 stella_thought_logs.md
 memory/agent_memory.db
+memory/.last_message_cleanup
 memory/agent_memory.db-journal
+memory_compressor_log.md
+test_compressor_trigger.py
 
 # Bot plugin — runtime data
 /stella_project/plugins/bot_main/__pycache__/

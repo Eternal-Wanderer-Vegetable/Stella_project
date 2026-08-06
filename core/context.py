@@ -22,3 +22,7 @@ class ChatContext:
     system_prompt_len: int = 0      # 系统提示词字符数
     prompt_log: str = ""            # 发给 LLM 的完整 prompt（含上下文拼接）
     llm_elapsed: float = 0.0        # LLM 调用耗时（秒）
+    # ---- 结构化上下文供 prompt_builder 使用 ----
+    short_term: str = ""
+    user_profile: str = ""
+    memories_for_prompt: list[dict] = field(default_factory=list)

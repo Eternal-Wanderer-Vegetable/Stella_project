@@ -164,6 +164,14 @@ DB_CLEANUP_ON_START = _env("DB_CLEANUP_ON_START", "false").lower() in ("true", "
 # 清理时是否连原始群消息记录也一起删除（危险操作，默认关闭）
 DB_CLEANUP_CLEAR_MESSAGES = _env("DB_CLEANUP_CLEAR_MESSAGES", "false").lower() in ("true", "1", "yes")
 
+# ---------- 记忆压缩（Compressor）配置 ----------
+# 轻量化压缩触发阈值（活动记忆条数，超过则考虑轻量触发）
+MEMORY_COMPRESS_LIGHT_THRESHOLD = _env_int("MEMORY_COMPRESS_LIGHT_THRESHOLD", 500)
+# 轻量化压缩冷却时间（秒），两次轻量化之间最小间隔
+MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS = _env_int("MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS", 3600)
+# 压缩器运行日志文件名（保存在项目根目录）
+MEMORY_COMPRESS_LOG_FILENAME = _env("MEMORY_COMPRESS_LOG_FILENAME", "memory_compressor_log.md")
+
 # ---------- 消息表定期清理 ----------
 # 是否启用 group_messages 定期清理（每天定时清理，保留最近 N 条）
 MESSAGE_CLEANUP_ENABLED = _env("MESSAGE_CLEANUP_ENABLED", "true").lower() in ("true", "1", "yes")

@@ -18,11 +18,15 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
       "agent_attitude": "对机器人态度（友好/中立/冷淡/敌对）"
     }}
   ],
-  "long_term_memories": [
+  "memory_candidates": [
     {{
       "user_id": "用户 ID",
-      "summary": "值得记住的事，10 字内",
-      "importance": 5
+      "type": "FACT/PREFERENCE/EVENT/PLAN/RELATION",
+      "content": "可长期记忆的事实或偏好描述",
+      "importance": 0.0,
+      "confidence": 0.0,
+      "evidence": "为何认为这条信息有价值",
+      "source_message_ids": []
     }}
   ]
 }}
@@ -30,7 +34,8 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
 要求：
 - short_term 必须输出
 - user_profiles 只写有变化的用户
-- long_term_memories 只写重要的事（importance >= 5），没有就空数组
-- 没有相关内容填空数组或无
+- memory_candidates 只写当前批次中值得长期记忆的候选，没有就空数组
+- source_message_ids 如果不知道可以填 []
 - user_id 必须只写纯数字 QQ 号（例如 123456789），不要带"用户()"前缀，不要重复
+- content 必须是可理解的自然语言，不要仅写关键词
 """

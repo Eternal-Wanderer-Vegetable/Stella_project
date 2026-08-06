@@ -32,19 +32,28 @@ def clean_db(
         cur.execute("DELETE FROM short_term_context")
         results["short_term_context"] = cur.rowcount
     if clear_long_term:
-        cur.execute("DELETE FROM long_term_memories")
-        results["long_term_memories"] = cur.rowcount
+        for table_name in ["long_term_memories", "memory_candidates", "memories", "atomic_facts"]:
+            try:
+                cur.execute(f"DELETE FROM {table_name}")
+                results[table_name] = cur.rowcount
+            except sqlite3.OperationalError:
+                results[table_name] = 0
     if reset_checkpoint:
         cur.execute("DELETE FROM consolidation_state")
         results["consolidation_state"] = cur.rowcount
     if clear_messages:
-        cur.execute("DELETE FROM group_messages")
-        results["group_messages"] = cur.rowcount
+        for table_name in ["group_messages", "messages"]:
+            try:
+                cur.execute(f"DELETE FROM {table_name}")
+                results[table_name] = cur.rowcount
+            except sqlite3.OperationalError:
+                results[table_name] = 0
         # 重置自增序列，否则新消息 id 从旧最大值继续，导致 checkpoint 无法匹配
-        try:
-            cur.execute("DELETE FROM sqlite_sequence WHERE name = 'group_messages'")
-        except sqlite3.OperationalError:
-            pass
+        for seq_name in ["group_messages", "messages"]:
+            try:
+                cur.execute("DELETE FROM sqlite_sequence WHERE name = ?", (seq_name,))
+            except sqlite3.OperationalError:
+                pass
     conn.commit()
     conn.close()
     return results
@@ -55,7 +64,7 @@ def print_summary():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     print(f"[DB] 数据库: {DB_PATH}")
-    for table in ["user_profiles", "short_term_context", "long_term_memories", "group_messages", "consolidation_state"]:
+    for table in ["user_profiles", "short_term_context", "memory_candidates", "memories", "atomic_facts", "long_term_memories", "group_messages", "consolidation_state"]:
         try:
             cur.execute(f"SELECT COUNT(*) FROM {table}")
             print(f"  {table}: {cur.fetchone()[0]} 条")
@@ -91,11 +100,15 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
             # 该群消息不足 keep_count 条，无需清理
             continue
         cutoff_id = row[0]
-        cur.execute(
-            "DELETE FROM group_messages WHERE group_id = ? AND id <= ?",
-            (gid, cutoff_id),
-        )
-        total_deleted += cur.rowcount
+        for table_name in ["group_messages", "messages"]:
+            try:
+                cur.execute(
+                    f"DELETE FROM {table_name} WHERE group_id = ? AND id <= ?",
+                    (gid, cutoff_id),
+                )
+                total_deleted += cur.rowcount
+            except sqlite3.OperationalError:
+                continue
 
     conn.commit()
     conn.close()

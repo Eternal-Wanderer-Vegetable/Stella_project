@@ -5,13 +5,13 @@ from core.context import ChatContext
 from config import (
     DB_PATH, RECENT_MESSAGE_LIMIT,
     PROACTIVE_LONG_TERM_LIMIT, REPLY_LONG_TERM_LIMIT,
-    LONG_TERM_RELEVANCE_ENABLED, LONG_TERM_RELEVANCE_KEYWORDS,
+    LONG_TERM_RELEVANCE_ENABLED,
 )
+from memory.retriever import get_group_memories, get_user_memories, get_related_memories
+from memory.prompt_builder import build_memory_context
 
 
 async def record_message(ctx: ChatContext) -> ChatContext:
-    if not DB_PATH.exists():
-        return ctx
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -25,7 +25,20 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             )
         """)
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT,
+                user_id TEXT,
+                content TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
             INSERT INTO group_messages (group_id, user_id, content)
+            VALUES (?, ?, ?)
+        """, (str(ctx.group_id), str(ctx.user_id), ctx.message))
+        cursor.execute("""
+            INSERT INTO messages (group_id, user_id, content)
             VALUES (?, ?, ?)
         """, (str(ctx.group_id), str(ctx.user_id), ctx.message))
         conn.commit()
@@ -60,14 +73,22 @@ async def build_context(ctx: ChatContext) -> ChatContext:
                 return ctx
 
         if RECENT_MESSAGE_LIMIT > 0:
-            cursor.execute(
-                "SELECT user_id, content FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
-                (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
-            )
+            try:
+                cursor.execute(
+                    "SELECT user_id, content FROM messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                    (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
+                )
+            except sqlite3.OperationalError:
+                cursor.execute(
+                    "SELECT user_id, content FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                    (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
+                )
             rows = cursor.fetchall()
             if rows:
                 rows.reverse()
-                ctx.context = "\n".join(f"用户({uid}): {content}" for uid, content in rows)
+                text = "\n".join(f"用户({uid}): {content}" for uid, content in rows)
+                ctx.context = text
+                ctx.short_term = text
                 logger.info(f"📝 [Context] 短期记忆为空，回退到最近{RECENT_MESSAGE_LIMIT}条原始消息")
 
         conn.close()
@@ -105,62 +126,58 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 
         # ── 长期记忆 ──
         if is_proactive:
-            # 主动发言：取本群最近 N 条（按时间倒序，不限用户）
-            cursor.execute(
-                "SELECT summary FROM long_term_memories WHERE group_id = ? "
-                "ORDER BY last_accessed_at DESC LIMIT ?",
-                (str(ctx.group_id), PROACTIVE_LONG_TERM_LIMIT),
-            )
-            memories = cursor.fetchall()
+            memories = get_group_memories(ctx.group_id, limit=PROACTIVE_LONG_TERM_LIMIT)
             if memories:
-                mem_texts = [m[0] for m in memories if m[0]]
-                parts.append("最近的记忆: " + " | ".join(mem_texts))
+                parts.append("最近的记忆回顾：\n" + build_memory_context(memories))
         else:
-            # @-回复：该用户近期记忆
-            cursor.execute(
-                "SELECT summary FROM long_term_memories WHERE user_id = ? AND group_id = ? "
-                "ORDER BY last_accessed_at DESC LIMIT ?",
-                (str(ctx.user_id), str(ctx.group_id), REPLY_LONG_TERM_LIMIT),
-            )
-            user_memories = [m[0] for m in cursor.fetchall() if m[0]]
-
-            # @-回复：旧记忆话题匹配（跨用户，按关键词相关度）
-            relevant_old: list[str] = []
-            if LONG_TERM_RELEVANCE_ENABLED and LONG_TERM_RELEVANCE_KEYWORDS > 0:
-                keywords = _extract_keywords(ctx.message, LONG_TERM_RELEVANCE_KEYWORDS)
-                if keywords:
-                    # 取该群所有非当前用户的记忆，在 Python 中做关键词匹配
-                    cursor.execute(
-                        "SELECT summary, user_id FROM long_term_memories "
-                        "WHERE group_id = ? AND user_id != ? "
-                        "ORDER BY last_accessed_at DESC",
-                        (str(ctx.group_id), str(ctx.user_id)),
-                    )
-                    all_old = cursor.fetchall()
-                    for summary, uid in all_old:
-                        if not summary:
-                            continue
-                        hits = sum(1 for kw in keywords if kw in summary)
-                        if hits > 0:
-                            relevant_old.append((hits, uid, summary))
-                    # 按命中数降序，最多取 3 条
-                    relevant_old.sort(key=lambda x: x[0], reverse=True)
-                    relevant_old = relevant_old[:3]
-
+            user_memories = get_user_memories(ctx.group_id, ctx.user_id, limit=REPLY_LONG_TERM_LIMIT)
             if user_memories:
-                parts.append(f"关于用户{ctx.user_id}的重要记忆: " + " | ".join(user_memories))
-            if relevant_old:
-                old_texts = [f"[用户{uid}] {s}" for _, uid, s in relevant_old]
-                parts.append("其他相关记忆: " + " | ".join(old_texts))
+                parts.append(
+                    f"关于用户{ctx.user_id}的重要记忆：\n" + build_memory_context(user_memories)
+                )
+
+            related = get_related_memories(ctx.group_id, ctx.user_id, ctx.message, limit=3)
+            if related:
+                parts.append("其他相关记忆：\n" + build_memory_context(related))
 
         conn.close()
 
         if parts:
             user_context = "\n".join(parts)
+            # 兼容旧字段同时设置结构化字段
             if ctx.context:
                 ctx.context = ctx.context + "\n\n" + user_context
             else:
                 ctx.context = user_context
+            # 如果包含用户画像片段，把它拆分为 user_profile；否则保留空串
+            # 这里优先把短期摘要放到 short_term，用户相关部分放到 user_profile
+            ctx.short_term = ctx.short_term or ""
+            # 尝试提取关于用户的段落作为 user_profile（以 '关于用户' 开头的段落）
+            up = ""
+            for p in parts:
+                if p.startswith(f"关于用户{ctx.user_id}") or p.startswith("关于用户") or p.startswith("关于当前用户"):
+                    up = p
+                    break
+            ctx.user_profile = up
+            # 构造用于 prompt 的 memories 列表（从之前检索得到的记忆片段）
+            memories: list[dict] = []
+            # 主动发言时 parts 中第一项为群记忆回顾（build_context 已把短期赋给 short_term）
+            if ctx.trigger == "proactive":
+                try:
+                    memories = get_group_memories(ctx.group_id, limit=PROACTIVE_LONG_TERM_LIMIT)
+                except Exception:
+                    memories = []
+            else:
+                try:
+                    user_memories = get_user_memories(ctx.group_id, ctx.user_id, limit=REPLY_LONG_TERM_LIMIT)
+                except Exception:
+                    user_memories = []
+                try:
+                    related = get_related_memories(ctx.group_id, ctx.user_id, ctx.message, limit=3)
+                except Exception:
+                    related = []
+                memories = (user_memories or []) + (related or [])
+            ctx.memories_for_prompt = memories
     except Exception as e:
         logger.warning(f"读取用户画像异常（跳过）: {e}")
     return ctx

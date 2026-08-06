@@ -3,6 +3,7 @@ import json
 import sqlite3
 import re
 import time
+import uuid
 from typing import Optional
 from nonebot import logger
 
@@ -15,6 +16,7 @@ from config import (
 from core.llm.lm_studio import LMStudioBackend
 from core.llm import llm_lock
 from memory.consolidation_prompt import CONSOLIDATION_PROMPT
+from memory.memory_manager import get_memory_manager
 
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
@@ -114,6 +116,85 @@ class MemoryConsolidator:
             )
         """)
 
+    def _ensure_common_tables(self, conn: sqlite3.Connection):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS short_term_context (
+                group_id TEXT PRIMARY KEY,
+                active_summary TEXT,
+                pending_topic TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT,
+                user_id TEXT,
+                content TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id TEXT PRIMARY KEY,
+                nickname TEXT,
+                personality_traits TEXT,
+                agent_attitude TEXT,
+                interaction_count INTEGER DEFAULT 0,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS memory_candidates (
+                id TEXT PRIMARY KEY,
+                group_id TEXT,
+                user_id TEXT,
+                type TEXT,
+                content TEXT,
+                importance REAL,
+                confidence REAL,
+                evidence TEXT,
+                status TEXT,
+                source_message_ids TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                group_id TEXT,
+                user_id TEXT,
+                type TEXT,
+                content TEXT,
+                content_raw TEXT,
+                importance REAL,
+                confidence REAL,
+                status TEXT,
+                confirmation_count INTEGER,
+                last_confirmed_at DATETIME,
+                last_accessed_at DATETIME,
+                compressed_at DATETIME,
+                compression_version INTEGER,
+                is_atomized INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS atomic_facts (
+                id TEXT PRIMARY KEY,
+                memory_id TEXT,
+                group_id TEXT,
+                subject TEXT,
+                predicate TEXT,
+                object TEXT,
+                confidence REAL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
     def _get_last_processed_id(self, group_id: int) -> int:
         conn = sqlite3.connect(DB_PATH)
         self._ensure_state_table(conn)
@@ -130,13 +211,22 @@ class MemoryConsolidator:
         """统计 last_id 之后还有多少条未整合的消息"""
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT COUNT(*) FROM group_messages WHERE group_id = ? AND id > ?",
-            (str(group_id), last_id),
-        )
-        n = cursor.fetchone()[0]
+        try:
+            table = self._get_message_table(cursor)
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE group_id = ? AND id > ?",
+                (str(group_id), last_id),
+            )
+            n = cursor.fetchone()[0]
+        except sqlite3.OperationalError:
+            n = 0
         conn.close()
         return n
+
+    def _get_message_table(self, cursor: sqlite3.Cursor) -> str:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('messages', 'group_messages')")
+        row = cursor.fetchone()
+        return row[0] if row else 'group_messages'
 
     def has_new_messages_to_consolidate(self, group_id: int, threshold: int = 0) -> int:
         """@ 触发时判断：距上次总结累积了多少条未整合消息。
@@ -178,7 +268,15 @@ class MemoryConsolidator:
 
                 self._write_short_term(group_id, parsed.get("short_term"))
                 self._write_user_profiles(parsed.get("user_profiles", []))
-                self._write_long_term_memories(group_id, parsed.get("long_term_memories", []))
+                candidates = parsed.get("memory_candidates")
+                if candidates is None:
+                    candidates = []
+                self._write_memory_candidates(group_id, candidates)
+                if candidates:
+                    get_memory_manager().process_new_candidates()
+                elif parsed.get("long_term_memories"):
+                    # 兼容旧版输出，将旧格式记忆暂时写入旧表，以免丢失历史信息。
+                    self._write_long_term_memories(group_id, parsed.get("long_term_memories", []))
                 self._update_checkpoint(group_id, processed_end)
 
                 logger.success(f"✅ [Consolidator] 群 {group_id} 整合完成，已处理至 id {processed_end}")
@@ -190,9 +288,10 @@ class MemoryConsolidator:
         返回 (文本, 本批次末尾的最大消息 id)。按实际行数取，可容忍 id 空洞。"""
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        message_table = self._get_message_table(cursor)
         # 先定位 last_id 之后 limit 条消息的真实 id 范围
         cursor.execute(
-            "SELECT id FROM group_messages WHERE group_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
+            f"SELECT id FROM {message_table} WHERE group_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
             (str(group_id), last_id, limit),
         )
         new_ids = [r[0] for r in cursor.fetchall()]
@@ -203,25 +302,29 @@ class MemoryConsolidator:
 
         fetch_from = max(0, last_id - CONSOLIDATION_OVERLAP)
         cursor.execute(
-            "SELECT user_id, content FROM group_messages WHERE group_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
+            f"SELECT id, user_id, content FROM {message_table} WHERE group_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
             (str(group_id), fetch_from, batch_end),
         )
         rows = cursor.fetchall()
         conn.close()
         if not rows:
             return "", last_id
-        return "\n".join(f"用户({uid}): {content}" for uid, content in rows), batch_end
+        return "\n".join(f"消息ID({mid}) 用户({uid}): {content}" for mid, uid, content in rows), batch_end
 
     def _fetch_current_summary(self, group_id: int) -> str:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT active_summary FROM short_term_context WHERE group_id = ?",
-            (str(group_id),),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row and row[0] else ""
+        try:
+            cursor.execute(
+                "SELECT active_summary FROM short_term_context WHERE group_id = ?",
+                (str(group_id),),
+            )
+            row = cursor.fetchone()
+            return row[0] if row and row[0] else ""
+        except sqlite3.OperationalError:
+            return ""
+        finally:
+            conn.close()
 
     # ── DB 写入 ─────────────────────────────────────────
     def _update_checkpoint(self, group_id: int, max_id: int):
@@ -243,6 +346,7 @@ class MemoryConsolidator:
             return
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        self._ensure_common_tables(conn)
         cursor.execute("""
             INSERT INTO short_term_context (group_id, active_summary, pending_topic, updated_at)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -269,6 +373,7 @@ class MemoryConsolidator:
             return
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        self._ensure_common_tables(conn)
         for p in profiles:
             uid = self._normalize_user_id(str(p.get("user_id", "")))
             if not uid:
@@ -316,6 +421,62 @@ class MemoryConsolidator:
                 seen.add(key)
                 merged.append(part)
         return "，".join(merged)
+
+    def _write_memory_candidates(self, group_id: int, candidates: list):
+        if not candidates:
+            return
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        self._ensure_common_tables(conn)
+        for c in candidates:
+            uid = self._normalize_user_id(str(c.get("user_id", "")))
+            if not uid:
+                continue
+            type_ = (str(c.get("type", "FACT")) or "FACT").strip().upper()
+            content = (c.get("content", "") or "").strip()
+            if not content:
+                continue
+            importance = float(c.get("importance", 0.0) or 0.0)
+            confidence = float(c.get("confidence", 0.0) or 0.0)
+            evidence = (c.get("evidence", "") or "").strip()
+            source_ids = c.get("source_message_ids", [])
+            if isinstance(source_ids, str):
+                try:
+                    source_ids = json.loads(source_ids)
+                except Exception:
+                    source_ids = []
+            if not isinstance(source_ids, list):
+                source_ids = []
+            source_ids = json.dumps([str(x) for x in source_ids if str(x).strip()], ensure_ascii=False)
+            candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
+            cursor.execute("""
+                INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    group_id = excluded.group_id,
+                    user_id = excluded.user_id,
+                    type = excluded.type,
+                    content = excluded.content,
+                    importance = excluded.importance,
+                    confidence = excluded.confidence,
+                    evidence = excluded.evidence,
+                    status = excluded.status,
+                    source_message_ids = excluded.source_message_ids,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (
+                candidate_id,
+                str(group_id),
+                uid,
+                type_,
+                content,
+                importance,
+                confidence,
+                evidence,
+                "NEW",
+                source_ids,
+            ))
+        conn.commit()
+        conn.close()
 
     def _write_long_term_memories(self, group_id: int, memories: list):
         if not memories:

@@ -24,6 +24,7 @@ import core.llm.flexiweb as _flexiweb
 from core.llm.flexiweb import FlexiWebManager
 from extensions import load_extensions
 from memory.pre_processors import record_message, build_context, build_user_context
+from memory.compressor import get_compressor
 from memory.post_processors import parse_output, bad_phrase_filter, split_lines, log_thought
 from memory.consolidator import maybe_consolidate, get_consolidator
 from memory.proactive import get_proactive
@@ -57,6 +58,18 @@ else:
     logger.warning(f"⚠️ 系统提示词文件不存在: {system_prompt_path}")
 
 load_extensions(pipeline, EXTENSIONS_DIR)
+
+# 启动时注册每周压缩任务（由 APScheduler 提供）
+try:
+    if scheduler is not None:
+        @scheduler.scheduled_job('interval', days=7, id='memory_compress_weekly')
+        async def weekly_compress():
+            try:
+                get_compressor().run_weekly()
+            except Exception as e:
+                logger.warning(f"🧹 [Startup] 周度记忆压缩失败: {e}")
+except Exception as e:
+    logger.debug(f"注册周度压缩任务失败: {e}")
 
 # ── 启动时数据库清理（测试期用，避免频繁重启注入脏记忆） ──
 if DB_CLEANUP_ON_START:

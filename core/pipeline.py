@@ -42,11 +42,12 @@ class Pipeline:
 
         if self._llm:
             user_prompt = ctx.message
-            if ctx.context:
-                user_prompt = (
-                    f"--- 【群聊上下文】 ---\n{ctx.context}\n----------------------------------\n"
-                    f"{ctx.message}"
-                )
+            # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
+            from memory.prompt_builder import build_prompt_context
+            short_term = getattr(ctx, "short_term", "") or ""
+            user_profile = getattr(ctx, "user_profile", "") or ""
+            memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
+            user_prompt = build_prompt_context(short_term, user_profile, memories_for_prompt) + "\n" + ctx.message
 
             # 记录 LLM 诊断信息
             ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
