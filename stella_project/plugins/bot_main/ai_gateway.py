@@ -15,6 +15,7 @@ from config import (
     DB_CLEANUP_ON_START, DB_CLEANUP_CLEAR_MESSAGES,
     PROACTIVE_ENABLED, PROACTIVE_COOLDOWN, PROACTIVE_CHECK_INTERVAL,
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
+    CONSOLIDATION_LLM_PRIORITY,
     MESSAGE_CLEANUP_ENABLED, MESSAGE_CLEANUP_HOUR,
 )
 from core.context import ChatContext
@@ -97,8 +98,8 @@ if MESSAGE_CLEANUP_ENABLED:
     except Exception as e:
         logger.warning(f"⚠️ 启动时消息清理异常: {e}")
 
-# ── FlexiWeb 自动启动（后台，不影响 QQ 聊天响应） ──────
-if CONSOLIDATION_BATCH_SIZE > 0:
+# ── FlexiWeb 自动启动（仅在优先级链启用 flexiweb 时，后台拉起） ──────
+if "flexiweb" in CONSOLIDATION_LLM_PRIORITY and CONSOLIDATION_BATCH_SIZE > 0:
     _flexiweb.global_manager = FlexiWebManager(
         project_dir=FLEXIWEB_PROJECT_DIR,
         base_url=FLEXIWEB_BASE_URL,

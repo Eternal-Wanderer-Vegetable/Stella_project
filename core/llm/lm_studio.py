@@ -7,11 +7,13 @@ from core.llm.base import LLMBackend
 
 class LMStudioBackend(LLMBackend):
     backend_name = "lm_studio"
+    is_local = True
 
-    def __init__(self, base_url: str, model: Optional[str] = None, max_tokens: int = 2000):
+    def __init__(self, base_url: str, model: Optional[str] = None, max_tokens: int = 2000, temperature: float = 0.7):
         self.api_url = f"{base_url.rstrip('/')}/v1/chat/completions"
         self.model = model or ""
         self.max_tokens = max_tokens
+        self.temperature = temperature
 
     async def generate(self, prompt: str, system_prompt: str = "") -> str:
         messages = []
@@ -21,7 +23,7 @@ class LMStudioBackend(LLMBackend):
 
         payload = {
             "messages": messages,
-            "temperature": 0.7,
+            "temperature": self.temperature,
             "max_tokens": self.max_tokens,
         }
         if self.model:

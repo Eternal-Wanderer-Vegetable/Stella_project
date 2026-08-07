@@ -115,9 +115,9 @@ FLEXIWEB_HEADLESS = _env("FLEXIWEB_HEADLESS", "false").lower() in ("true", "1", 
 
 # ---------- 记忆整合 ----------
 # LLM 优先级链，按顺序尝试，前一个失败自动降级到下一个。
-#   "flexiweb"  = 在线 LLM（Playwright 抓取 DeepSeek 网页，总结能力强）
-#   "lm_studio" = 本地 SLM（HTTP API，稳定快速，作为兜底）
-CONSOLIDATION_LLM_PRIORITY = [s.strip() for s in _env("CONSOLIDATION_LLM_PRIORITY", "flexiweb,lm_studio").split(",") if s.strip()]
+#   "lm_studio" = 本地模型（LM Studio，统一推理系统，数据整理默认后端）
+#   "flexiweb"  = 在线 LLM（Playwright 抓取 DeepSeek 网页，已默认关闭，保留代码可回退）
+CONSOLIDATION_LLM_PRIORITY = [s.strip() for s in _env("CONSOLIDATION_LLM_PRIORITY", "lm_studio").split(",") if s.strip()]
 
 # 在线 LLM 失败后的冷却时间（秒），避免频繁重试拖慢整合
 CONSOLIDATION_ONLINE_COOLDOWN = _env_int("CONSOLIDATION_ONLINE_COOLDOWN", 300)
@@ -131,11 +131,24 @@ CONSOLIDATION_OVERLAP = _env_int("CONSOLIDATION_OVERLAP", 15)
 # 在线 LLM 最大生成 token 数
 CONSOLIDATION_MAX_TOKENS = _env_int("CONSOLIDATION_MAX_TOKENS", 2000)
 
-# 本地 SLM（LM Studio）兜底时的整合批量：
-# 本地小模型上下文窗口小（如 gemma-4-e4b），批次必须缩小，否则触发 400 Context exceeded
-CONSOLIDATION_LOCAL_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_BATCH_SIZE", 10)
-# 本地 SLM 最大生成 token 数
-CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 800)
+# ---------- 本地整合（LM Studio） ----------
+# 数据整理任务由本地低阶模型执行，统一使用 LM Studio 作为推理系统，
+# 与主聊天模型 (gemma 27B) 分离，避免显存/推理竞争。
+# 可指向同一实例的多模型处理，也可指向独立端口/实例。
+CONSOLIDATION_LM_STUDIO_BASE_URL = _env("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
+# 注意：LM Studio 路由需要完整模型 ID（含 google/ 前缀），如 google/gemma-4-e4b
+CONSOLIDATION_LM_STUDIO_MODEL = _env("CONSOLIDATION_LM_STUDIO_MODEL", "google/gemma-4-e4b")
+# 整理任务偏低温度，保证 JSON 输出稳定
+CONSOLIDATION_LM_STUDIO_TEMPERATURE = _env_float("CONSOLIDATION_LM_STUDIO_TEMPERATURE", 0.3)
+
+# 本地整合批次（整合模型上下文窗口足够，可从旧值 10 放宽）
+CONSOLIDATION_LOCAL_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_BATCH_SIZE", 30)
+# force 路径（@触发/主动发言前）的小批次，尽快出结果
+CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE", 10)
+# 本地整合最大生成 token 数
+CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 1200)
+# 整合日志文件路径（可视化记录每次整合运行详情）
+CONSOLIDATION_LOG_PATH = PROJECT_ROOT / "memory_consolidation_log.md"
 
 # ---------- 主动发言 ----------
 # 是否启用主动发言

@@ -8,7 +8,6 @@ class ChatContext:
     msg_id: int
     message: str
 
-    context: str = ""
     raw_output: str = ""
     thought: str = ""
     action: str = "NONE"

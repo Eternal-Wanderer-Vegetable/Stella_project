@@ -4,18 +4,22 @@ import sqlite3
 import re
 import time
 import uuid
+from datetime import datetime
 from typing import Optional
 from nonebot import logger
 
 from config import DB_PATH, CONSOLIDATION_BATCH_SIZE, CONSOLIDATION_OVERLAP
 from config import (
     CONSOLIDATION_LLM_PRIORITY, CONSOLIDATION_ONLINE_COOLDOWN,
-    LM_STUDIO_BASE_URL, LM_STUDIO_MODEL,
-    CONSOLIDATION_MAX_TOKENS, CONSOLIDATION_LOCAL_BATCH_SIZE, CONSOLIDATION_LOCAL_MAX_TOKENS,
+    CONSOLIDATION_LM_STUDIO_BASE_URL, CONSOLIDATION_LM_STUDIO_MODEL,
+    CONSOLIDATION_LM_STUDIO_TEMPERATURE,
+    CONSOLIDATION_MAX_TOKENS, CONSOLIDATION_LOCAL_BATCH_SIZE,
+    CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE, CONSOLIDATION_LOCAL_MAX_TOKENS,
 )
 from core.llm.lm_studio import LMStudioBackend
-from core.llm import llm_lock
+from core.llm import consolidation_llm_lock
 from memory.consolidation_prompt import CONSOLIDATION_PROMPT
+from memory.consolidation_log import append_consolidation_log
 from memory.memory_manager import get_memory_manager
 
 
@@ -37,9 +41,10 @@ class MemoryConsolidator:
                     self._backends.append(("flexiweb", backend))
             elif name == "lm_studio":
                 backend = LMStudioBackend(
-                    base_url=LM_STUDIO_BASE_URL,
-                    model=LM_STUDIO_MODEL,
+                    base_url=CONSOLIDATION_LM_STUDIO_BASE_URL,
+                    model=CONSOLIDATION_LM_STUDIO_MODEL,
                     max_tokens=CONSOLIDATION_LOCAL_MAX_TOKENS,
+                    temperature=CONSOLIDATION_LM_STUDIO_TEMPERATURE,
                 )
                 self._backends.append(("lm_studio", backend))
 
@@ -65,19 +70,22 @@ class MemoryConsolidator:
             return False
         return time.monotonic() >= self._online_cooldown_until
 
-    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int]:
-        """按优先级依次调用 LLM；在线 LLM 失败自动降级到本地 SLM（用小批次重建 prompt）。
+    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str]:
+        """按优先级依次调用 LLM；在线 LLM 失败自动降级到本地（用小批次重建 prompt）。
         force=True 时只走本地小批量（用于 @触发/主动发言前的轻量总结）。
-        返回 (回复文本, 实际处理到的 batch_end)，用于准确推进 checkpoint。"""
+        返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名)，用于准确推进 checkpoint。"""
         last_error: Optional[Exception] = None
         for name, backend in self._backends:
-            if force and name != "lm_studio":
+            is_local = bool(getattr(backend, "is_local", False))
+            if force and not is_local:
                 continue
             if name == "flexiweb":
                 if time.monotonic() < self._online_cooldown_until:
                     logger.info("🕐 [Consolidator] FlexiWeb 冷却中，跳过在线 LLM")
                     continue
                 limit = CONSOLIDATION_BATCH_SIZE
+            elif force:
+                limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE
             else:
                 limit = CONSOLIDATION_LOCAL_BATCH_SIZE
 
@@ -87,14 +95,19 @@ class MemoryConsolidator:
                     raise RuntimeError("没有可整合的消息")
                 prompt = self._build_prompt(group_id, messages)
                 logger.info(f"🌐 [Consolidator] 尝试 LLM: {name}（{limit} 条）")
+                model_tag = getattr(backend, "model", "") or getattr(backend, "site", "") or name
                 result = await backend.generate(prompt)
-                return result, batch_end
+                append_consolidation_log(
+                    f"- **🧠 后端**: {name}（{model_tag}，批次 {limit} 条）\n"
+                    f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"
+                )
+                return result, batch_end, name
             except Exception as e:
                 last_error = e
                 logger.warning(f"⚠️ [Consolidator] LLM {name} 失败: {e}")
                 if name == "flexiweb":
                     self._online_cooldown_until = time.monotonic() + CONSOLIDATION_ONLINE_COOLDOWN
-                    logger.info(f"⏲ [Consolidator] FlexiWeb 进入冷却（{CONSOLIDATION_ONLINE_COOLDOWN}s），降级到本地 SLM")
+                    logger.info(f"⏲ [Consolidator] FlexiWeb 进入冷却（{CONSOLIDATION_ONLINE_COOLDOWN}s），降级到本地")
         if last_error:
             raise last_error
         raise RuntimeError("没有可用的 LLM 后端")
@@ -194,6 +207,19 @@ class MemoryConsolidator:
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 常用检索索引
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_group_user_status
+            ON memories (group_id, user_id, status)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_group_status_accessed
+            ON memories (group_id, status, last_accessed_at)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_group_id
+            ON messages (group_id, id)
+        """)
 
     def _get_last_processed_id(self, group_id: int) -> int:
         conn = sqlite3.connect(DB_PATH)
@@ -224,9 +250,15 @@ class MemoryConsolidator:
         return n
 
     def _get_message_table(self, cursor: sqlite3.Cursor) -> str:
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('messages', 'group_messages')")
-        row = cursor.fetchone()
-        return row[0] if row else 'group_messages'
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('messages', 'group_messages')"
+        )
+        tables = {row[0] for row in cursor.fetchall()}
+        if "group_messages" in tables:
+            return "group_messages"
+        if "messages" in tables:
+            return "messages"
+        return "group_messages"
 
     def has_new_messages_to_consolidate(self, group_id: int, threshold: int = 0) -> int:
         """@ 触发时判断：距上次总结累积了多少条未整合消息。
@@ -242,27 +274,34 @@ class MemoryConsolidator:
         if not DB_PATH.exists():
             return
 
-        # 串行化：FlexiWeb 共享同一浏览器页面，并发打字会导致输入交错乱码；
-        # 同时与 Pipeline 共享同一把锁，防止整合与回复并发打本地小模型
-        async with llm_lock:
+        # 整合使用独立的 LM Studio 配置（可指向低阶整合模型/独立实例），与聊天互不阻塞；
+        # 但整合自身仍需串行，避免多群并发打爆同一整合服务
+        async with consolidation_llm_lock:
             try:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
-                # force 路径只走本地小批量；非 force 路径按当前可用后端决定阈值
-                threshold = CONSOLIDATION_LOCAL_BATCH_SIZE if force else (
+                # force 路径走小批次；非 force 路径按当前可用后端决定阈值
+                threshold = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else (
                     CONSOLIDATION_BATCH_SIZE if self._online_available() else CONSOLIDATION_LOCAL_BATCH_SIZE
                 )
                 if new_count < threshold:
                     return
 
-                result, processed_end = await self._generate(group_id, last_id, force=force)
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                append_consolidation_log(
+                    f"### 🕒 [{now_str}] 群 `{group_id}` 开始整合"
+                    f"（force={force}，新消息 {new_count}，批次阈值 {threshold}）\n"
+                )
+
+                result, processed_end, backend_name = await self._generate(group_id, last_id, force=force)
                 logger.info(f"📥 [Consolidator Response]\n{result}")
 
                 parsed = self._parse_json(result)
                 if not parsed:
                     logger.warning(f"⚠️ [Consolidator] JSON 解析失败，跳过本批次: {result[:200]}")
                     # 即使解析失败也推进 checkpoint，避免同一批消息反复重处理
+                    append_consolidation_log("  > ⚠️ JSON 解析失败，已推进 checkpoint 避免重处理\n")
                     self._update_checkpoint(group_id, processed_end)
                     return
 
@@ -279,9 +318,14 @@ class MemoryConsolidator:
                     self._write_long_term_memories(group_id, parsed.get("long_term_memories", []))
                 self._update_checkpoint(group_id, processed_end)
 
+                append_consolidation_log(
+                    f"  > ✅ 整合完成（后端 {backend_name}，checkpoint {last_id} → {processed_end}，"
+                    f"记忆候选 {len(candidates)} 条）\n"
+                )
                 logger.success(f"✅ [Consolidator] 群 {group_id} 整合完成，已处理至 id {processed_end}")
             except Exception:
                 logger.exception(f"❌ [Consolidator] 群 {group_id} 整合失败")
+                append_consolidation_log("  > ❌ 整合失败（详见控制台日志）\n")
 
     def _fetch_next_messages(self, group_id: int, last_id: int, limit: int) -> tuple[str, int]:
         """取 last_id 之后最多 limit 条消息（含 overlap 上下文）。

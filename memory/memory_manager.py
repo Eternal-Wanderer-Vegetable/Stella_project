@@ -72,6 +72,15 @@ class MemoryManager:
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 常用检索索引
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_group_user_status
+            ON memories (group_id, user_id, status)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_group_status_accessed
+            ON memories (group_id, status, last_accessed_at)
+        """)
         conn.commit()
         conn.close()
 
@@ -87,6 +96,7 @@ class MemoryManager:
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
 
+        promoted = False
         for row in candidates:
             candidate = {
                 "id": row[0],
@@ -118,14 +128,18 @@ class MemoryManager:
                 "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 ("CONFIRMED", candidate["id"]),
             )
-            # 处理完一个 candidate 批次后尝试触发压缩器以维持长期记忆质量
+            # 只记录有晋升（CONFIRMED）的批次，用于提交后统一触发压缩
+            promoted = True
+        conn.commit()
+        conn.close()
+
+        # 提交并关闭连接后再触发压缩，避免对仍在写事务的连接产生 SQLite 锁冲突
+        if promoted:
             try:
-                # 轻量触发压缩（节流），避免每次写候选都执行重度压缩
+                # 轻量触发压缩（节流），避免每次都执行重度压缩
                 get_compressor().maybe_compress(reason="candidate_processed")
             except Exception as e:
                 logger.warning(f"🧹 [MemoryManager] 触发轻量压缩失败: {e}")
-        conn.commit()
-        conn.close()
 
     def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> Optional[str]:
         rows = cursor.execute(

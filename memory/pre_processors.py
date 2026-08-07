@@ -24,6 +24,7 @@ async def record_message(ctx: ChatContext) -> ChatContext:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # messages 表为旧版兼容（只读回退），新消息统一写入 group_messages
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,11 +35,11 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             )
         """)
         cursor.execute("""
-            INSERT INTO group_messages (group_id, user_id, content)
-            VALUES (?, ?, ?)
-        """, (str(ctx.group_id), str(ctx.user_id), ctx.message))
+            CREATE INDEX IF NOT EXISTS idx_group_messages_group_id
+            ON group_messages (group_id, id)
+        """)
         cursor.execute("""
-            INSERT INTO messages (group_id, user_id, content)
+            INSERT INTO group_messages (group_id, user_id, content)
             VALUES (?, ?, ?)
         """, (str(ctx.group_id), str(ctx.user_id), ctx.message))
         conn.commit()
@@ -66,8 +67,9 @@ async def build_context(ctx: ChatContext) -> ChatContext:
                 parts.append(f"对话摘要: {row[0]}")
             if row[1] and row[1] != "无":
                 parts.append(f"进行中的话题: {row[1]}")
-            ctx.context = "\n".join(parts) if parts else ""
-            if ctx.context:
+            summary_text = "\n".join(parts) if parts else ""
+            if summary_text:
+                ctx.short_term = summary_text
                 logger.info(f"🧠 [Context] 使用短期记忆摘要")
                 conn.close()
                 return ctx
@@ -75,19 +77,18 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         if RECENT_MESSAGE_LIMIT > 0:
             try:
                 cursor.execute(
-                    "SELECT user_id, content FROM messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                    "SELECT user_id, content FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
                     (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
                 )
             except sqlite3.OperationalError:
                 cursor.execute(
-                    "SELECT user_id, content FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                    "SELECT user_id, content FROM messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
                     (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
                 )
             rows = cursor.fetchall()
             if rows:
                 rows.reverse()
                 text = "\n".join(f"用户({uid}): {content}" for uid, content in rows)
-                ctx.context = text
                 ctx.short_term = text
                 logger.info(f"📝 [Context] 短期记忆为空，回退到最近{RECENT_MESSAGE_LIMIT}条原始消息")
 
@@ -143,14 +144,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
         conn.close()
 
         if parts:
-            user_context = "\n".join(parts)
-            # 兼容旧字段同时设置结构化字段
-            if ctx.context:
-                ctx.context = ctx.context + "\n\n" + user_context
-            else:
-                ctx.context = user_context
-            # 如果包含用户画像片段，把它拆分为 user_profile；否则保留空串
-            # 这里优先把短期摘要放到 short_term，用户相关部分放到 user_profile
+            # 结构化字段交给 prompt_builder 构建提示，不再写 ctx.context
             ctx.short_term = ctx.short_term or ""
             # 尝试提取关于用户的段落作为 user_profile（以 '关于用户' 开头的段落）
             up = ""
