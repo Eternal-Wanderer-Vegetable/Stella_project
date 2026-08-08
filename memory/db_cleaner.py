@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """数据库清理工具 —— 清理测试阶段因频繁重启产生的混乱记忆数据
 
 用户画像（user_profiles）默认保留，短期/长期记忆可清理。

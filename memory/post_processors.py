@@ -1,3 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""LLM 原始输出的后处理工具。
+
+解析模型返回的 ``<thought>``/``<action>``/``<reply>`` 三段标记文本，
+做行数收敛、坏语料过滤；当模型没给出可用回复时，兜底到底层
+FALLBACK_REPLY，并把每次思考过程写入 thought 日志供调试。
+"""
+
 from __future__ import annotations
 
 import re

@@ -1,3 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""
+消息整合（Consolidator）模块。
+
+本模块位于记忆工作流的“写入侧”：它把积累的群聊原始消息批量取出来，
+交给 LLM 总结为「短期上下文 + 用户画像更新 + 记忆候选」等结构化 JSON，
+再落库到 SQLite，并推进每群的 checkpoint（last_processed_id）保证每条消息只被处理一次。
+
+典型调用链（示例）：
+    新消息入表（pre_processors.record_message）
+    → maybe_consolidate() 启动后台任务
+    → consolidate_group() 读取 checkpoint 之后的新消息
+    → _generate() 按优先级调用 LLM（在线 FlexiWeb 失败自动降级本地 LM Studio）
+    → _parse_json() 容错解析 LLM 输出
+    → 写短期上下文 / 用户画像 / 记忆候选
+    → _update_checkpoint() 推进进度，避免重复处理
+"""
 import asyncio
 import json
 import sqlite3
@@ -27,19 +46,36 @@ _consolidator_instance: Optional["MemoryConsolidator"] = None
 
 
 class MemoryConsolidator:
+    """群聊消息整合器。
+
+    负责把「消息库」中积压的新消息批量总结为结构化记忆：
+    - 短期上下文（short_term_context）
+    - 用户画像（user_profiles）
+    - 记忆候选（memory_candidates，后续由 MemoryManager 晋升为长期记忆）
+
+    同时维护每群的 checkpoint，保证不重不漏地消费消息；后端具备在线→本地的降级能力。
+    单例通过 get_consolidator() 获取。
+    """
+
     def __init__(self):
+        # 后端列表：元素为 (名称, backend对象)，按优先级顺序，由 config 决定
         self._backends = []
+        # 在线后端（FlexiWeb）的冷却截止时刻（time.monotonic 时间戳），小于当前时间表明已过冷却期
         self._online_cooldown_until = 0.0
         self._build_backends()
 
     def _build_backends(self):
-        """按 CONSOLIDATION_LLM_PRIORITY 顺序构建 LLM 列表"""
+        """按 CONSOLIDATION_LLM_PRIORITY 顺序构建 LLM 列表
+        按优先级配置逐一实例化后端并存入 self._backends；
+        其中 flexiweb 为可选在线后端，构造失败（如管理器创建异常）时跳过。
+        """
         for name in CONSOLIDATION_LLM_PRIORITY:
             if name == "flexiweb":
                 backend = self._create_flexiweb_backend()
                 if backend is not None:
                     self._backends.append(("flexiweb", backend))
             elif name == "lm_studio":
+                # 本地后端：使用整合专用配置（可与聊天用模型隔离，避免互相阻塞）
                 backend = LMStudioBackend(
                     base_url=CONSOLIDATION_LM_STUDIO_BASE_URL,
                     model=CONSOLIDATION_LM_STUDIO_MODEL,
@@ -49,11 +85,13 @@ class MemoryConsolidator:
                 self._backends.append(("lm_studio", backend))
 
     def _create_flexiweb_backend(self):
+        """创建（或复用全局）FlexiWeb 在线后端；失败返回 None 表示不可用。"""
         from config import CONSOLIDATION_SITE, FLEXIWEB_BASE_URL, FLEXIWEB_PROJECT_DIR, FLEXIWEB_HEADLESS
         import core.llm.flexiweb as _flexiweb
         from core.llm.flexiweb import FlexiWebBackend, FlexiWebManager
         mgr = _flexiweb.global_manager
         if mgr is None:
+            # 全局管理器尚未初始化时，为整合用途创建一个独立管理器
             mgr = FlexiWebManager(
                 project_dir=FLEXIWEB_PROJECT_DIR,
                 base_url=FLEXIWEB_BASE_URL,
@@ -64,7 +102,9 @@ class MemoryConsolidator:
         return FlexiWebBackend(manager=mgr, base_url=FLEXIWEB_BASE_URL, site=CONSOLIDATION_SITE)
 
     def _online_available(self) -> bool:
-        """FlexiWeb 是否在优先级链中且未处于冷却"""
+        """FlexiWeb 是否在优先级链中且未处于冷却
+        返回 True 表示当前可用在线后端（在优先级链中且已经过了冷却截止时刻）。
+        """
         has_flexiweb = any(name == "flexiweb" for name, _ in self._backends)
         if not has_flexiweb:
             return False
@@ -76,15 +116,18 @@ class MemoryConsolidator:
         返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名)，用于准确推进 checkpoint。"""
         last_error: Optional[Exception] = None
         for name, backend in self._backends:
+            # 是否本地后端：本地后端用 is_local 标志区分，force 时必须走本地
             is_local = bool(getattr(backend, "is_local", False))
             if force and not is_local:
                 continue
             if name == "flexiweb":
+                # 在线后端若处于冷却期则直接跳过（不去调用，避免浪费请求）
                 if time.monotonic() < self._online_cooldown_until:
                     logger.info("🕐 [Consolidator] FlexiWeb 冷却中，跳过在线 LLM")
                     continue
                 limit = CONSOLIDATION_BATCH_SIZE
             elif force:
+                # force 小批次：固定使用较小批，用于 @触发 / 主动发言前的轻量总结
                 limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE
             else:
                 limit = CONSOLIDATION_LOCAL_BATCH_SIZE
@@ -101,11 +144,13 @@ class MemoryConsolidator:
                     f"- **🧠 后端**: {name}（{model_tag}，批次 {limit} 条）\n"
                     f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"
                 )
+                # 返回真实处理到的 batch_end 与后端名，供调用方准确推进 checkpoint
                 return result, batch_end, name
             except Exception as e:
                 last_error = e
                 logger.warning(f"⚠️ [Consolidator] LLM {name} 失败: {e}")
                 if name == "flexiweb":
+                    # 在线后端失败：设置冷却窗口，下次循环直接跳过它，实现“降级到本地”
                     self._online_cooldown_until = time.monotonic() + CONSOLIDATION_ONLINE_COOLDOWN
                     logger.info(f"⏲ [Consolidator] FlexiWeb 进入冷却（{CONSOLIDATION_ONLINE_COOLDOWN}s），降级到本地")
         if last_error:
@@ -113,6 +158,7 @@ class MemoryConsolidator:
         raise RuntimeError("没有可用的 LLM 后端")
 
     def _build_prompt(self, group_id: int, messages: str) -> str:
+        """用当前短期摘要 + 本批消息填充整合 prompt 模板。"""
         current_summary = self._fetch_current_summary(group_id)
         return CONSOLIDATION_PROMPT.format(
             messages=messages,
@@ -121,6 +167,7 @@ class MemoryConsolidator:
 
     # ── checkpoint 表 ──────────────────────────────────
     def _ensure_state_table(self, conn: sqlite3.Connection):
+        """确保 checkpoint 表存在：记录每群已处理到的最新消息 id。"""
         conn.execute("""
             CREATE TABLE IF NOT EXISTS consolidation_state (
                 group_id  TEXT PRIMARY KEY,
@@ -130,6 +177,7 @@ class MemoryConsolidator:
         """)
 
     def _ensure_common_tables(self, conn: sqlite3.Connection):
+        """确保整合落库所需的公共表（短期上下文 / 消息 / 用户画像 / 记忆候选 / 记忆等）存在。"""
         conn.execute("""
             CREATE TABLE IF NOT EXISTS short_term_context (
                 group_id TEXT PRIMARY KEY,
@@ -222,6 +270,7 @@ class MemoryConsolidator:
         """)
 
     def _get_last_processed_id(self, group_id: int) -> int:
+        """读取指定群的 checkpoint（已整合到的最大消息 id），无记录时返回 0。"""
         conn = sqlite3.connect(DB_PATH)
         self._ensure_state_table(conn)
         cursor = conn.cursor()
@@ -250,6 +299,7 @@ class MemoryConsolidator:
         return n
 
     def _get_message_table(self, cursor: sqlite3.Cursor) -> str:
+        """确定当前数据源的消息表名：优先 group_messages，回退到旧版 messages 表。"""
         cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('messages', 'group_messages')"
         )
@@ -271,6 +321,10 @@ class MemoryConsolidator:
 
     # ── 核心 ────────────────────────────────────────────
     async def consolidate_group(self, group_id: int, force: bool = False):
+        """整合指定群的消息：读取新消息→LLM 总结→解析 JSON→落库→推进 checkpoint。
+        force=True 表示走本地小批次轻量总结（用于 @触发/主动发言前的即时总结）。
+        副作用：更新 checkpoint、写入 short_term_context / user_profiles / memory_candidates。
+        """
         if not DB_PATH.exists():
             return
 
@@ -312,9 +366,10 @@ class MemoryConsolidator:
                     candidates = []
                 self._write_memory_candidates(group_id, candidates)
                 if candidates:
+                    # 有新候选记忆时同步触发 MemoryManager 晋升处理
                     get_memory_manager().process_new_candidates()
                 elif parsed.get("long_term_memories"):
-                    # 兼容旧版输出，将旧格式记忆暂时写入旧表，以免丢失历史信息。
+                    # 兼容旧版输出，将旧格式记忆写入旧表，以免丢失历史信息。
                     self._write_long_term_memories(group_id, parsed.get("long_term_memories", []))
                 self._update_checkpoint(group_id, processed_end)
 
@@ -356,6 +411,7 @@ class MemoryConsolidator:
         return "\n".join(f"消息ID({mid}) 用户({uid}): {content}" for mid, uid, content in rows), batch_end
 
     def _fetch_current_summary(self, group_id: int) -> str:
+        """读取当前群的短期摘要（active_summary），无记录或表不存在时返回空串。"""
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         try:
@@ -372,6 +428,7 @@ class MemoryConsolidator:
 
     # ── DB 写入 ─────────────────────────────────────────
     def _update_checkpoint(self, group_id: int, max_id: int):
+        """推进该群的 checkpoint（记录已处理到的最大消息 id），使用 upsert 保证幂等。"""
         conn = sqlite3.connect(DB_PATH)
         self._ensure_state_table(conn)
         cursor = conn.cursor()
@@ -386,6 +443,7 @@ class MemoryConsolidator:
         conn.close()
 
     def _write_short_term(self, group_id: int, data: Optional[dict]):
+        """写入短期上下文（摘要 + 进行中的话题），data 为空则跳过；使用 upsert。"""
         if not data:
             return
         conn = sqlite3.connect(DB_PATH)
@@ -405,7 +463,8 @@ class MemoryConsolidator:
     @staticmethod
     def _normalize_user_id(uid: str) -> str:
         """把 LLM 返回的 user_id 规范化为纯数字 QQ 号。
-        LLM 有时返回 '3089665724'，有时返回 '用户(3089665724)'，需统一。"""
+        LLM 有时返回 '3089665724'，有时返回 '用户(3089665724)'，需统一。
+        匹配失败时原样返回（保留可能的后缀，避免误吞数据）。"""
         uid = (uid or "").strip()
         m = re.match(r"^(?:用户\()?(\d+)\)?$", uid)
         if m:
@@ -413,6 +472,8 @@ class MemoryConsolidator:
         return uid
 
     def _write_user_profiles(self, profiles: list):
+        """把 LLM 给出的用户画像批量写入 user_profiles：已存在则合并特征并累计互动次数。
+        副作用：更新/插入 user_profiles 表；单条记录 user_id 非法（空）时跳过。"""
         if not profiles:
             return
         conn = sqlite3.connect(DB_PATH)
@@ -429,6 +490,7 @@ class MemoryConsolidator:
             row = cursor.fetchone()
             if row:
                 old_nick, old_traits, old_attitude, old_count = row
+                # 新值优先，缺失字段则保留旧值；特征合并去重
                 new_nick = p.get("nickname", "") or old_nick
                 new_traits = self._merge_traits(old_traits, p.get("personality_traits", ""))
                 new_attitude = self._merge_traits(old_attitude, p.get("agent_attitude", ""))
@@ -439,6 +501,7 @@ class MemoryConsolidator:
                     WHERE user_id = ?
                 """, (new_nick, new_traits, new_attitude, old_count + 1, uid))
             else:
+                # 新用户：直接插入，互动次数初始为 1
                 cursor.execute("""
                     INSERT INTO user_profiles (user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
                     VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
@@ -467,6 +530,9 @@ class MemoryConsolidator:
         return "，".join(merged)
 
     def _write_memory_candidates(self, group_id: int, candidates: list):
+        """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
+        数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
+        """
         if not candidates:
             return
         conn = sqlite3.connect(DB_PATH)
@@ -483,6 +549,7 @@ class MemoryConsolidator:
             importance = float(c.get("importance", 0.0) or 0.0)
             confidence = float(c.get("confidence", 0.0) or 0.0)
             evidence = (c.get("evidence", "") or "").strip()
+            # LLM 可能返回字符串形式的消息 id 列表，做一次容错反序列化
             source_ids = c.get("source_message_ids", [])
             if isinstance(source_ids, str):
                 try:
@@ -492,6 +559,7 @@ class MemoryConsolidator:
             if not isinstance(source_ids, list):
                 source_ids = []
             source_ids = json.dumps([str(x) for x in source_ids if str(x).strip()], ensure_ascii=False)
+            # 无 id 时生成本地候选 id
             candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
             cursor.execute("""
                 INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids)
@@ -523,6 +591,8 @@ class MemoryConsolidator:
         conn.close()
 
     def _write_long_term_memories(self, group_id: int, memories: list):
+        """兼容旧版整合输出：把旧格式的 long_term_memories 写入旧表 long_term_memories。
+        仅保留 importance>=5 且有摘要的记录；同群同用户同摘要去重。"""
         if not memories:
             return
         conn = sqlite3.connect(DB_PATH)
@@ -552,6 +622,13 @@ class MemoryConsolidator:
         conn.close()
 
     def _parse_json(self, text: str) -> Optional[dict]:
+        """容错解析 LLM 输出为 JSON 对象。
+
+        处理策略（依次尝试）：
+        1. 去除首尾的 ```json 代码块标记后直接 json.loads；
+        2. 失败则扫描文本，用括号配平逐段尝试提取第一个完整 JSON 对象
+           （模型常拼接多份输出或用散文包裹 JSON），全部失败返回 None。
+        """
         text = text.strip()
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
@@ -559,7 +636,7 @@ class MemoryConsolidator:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
-        # 提取第一个完整且平衡的 JSON 对象（模型可能拼接输出多份）
+        # 提取第一个完整且平衡的 JSON 对象（考虑字符串中的花括号与转义）
         start = text.find("{")
         while start != -1:
             depth = 0
@@ -568,6 +645,7 @@ class MemoryConsolidator:
             for i in range(start, len(text)):
                 ch = text[i]
                 if in_str:
+                    # 字符串内部：仅识别转义字符与结束引号，忽略花括号
                     if escape:
                         escape = False
                     elif ch == "\\":
@@ -582,6 +660,7 @@ class MemoryConsolidator:
                 elif ch == "}":
                     depth -= 1
                     if depth == 0:
+                        # 找到配平的 JSON 片段，尝试解析；失败则从下一个 { 重新扫描
                         try:
                             return json.loads(text[start:i + 1])
                         except json.JSONDecodeError:
@@ -597,6 +676,7 @@ _consolidation_tasks: set[asyncio.Task] = set()
 
 
 def get_consolidator() -> MemoryConsolidator:
+    """返回进程级单例 MemoryConsolidator（懒初始化）。"""
     global _consolidator_instance
     if _consolidator_instance is None:
         _consolidator_instance = MemoryConsolidator()
@@ -604,6 +684,8 @@ def get_consolidator() -> MemoryConsolidator:
 
 
 def maybe_consolidate(group_id: int, force: bool = False):
+    """异步触发一次群整合（后台任务），并登记以跟踪完成与否（不等待）。
+    force=True 走本地小批次轻量总结，适合 @触发 / 主动发言前调用。"""
     consolidator = get_consolidator()
     task = asyncio.create_task(consolidator.consolidate_group(group_id, force=force))
     _consolidation_tasks.add(task)

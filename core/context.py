@@ -1,17 +1,40 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+"""聊天上下文数据模型。
+
+定义 ChatContext：一次消息处理从进入 pipeline 到产出回复的“运行期载体”。
+它同时携带输入信息（谁、在哪个群、什么消息）、处理产物（原始 LLM 输出、
+thought/action/reply、多行回复）以及供日志与 prompt 构建用的诊断与结构化
+上下文。全程由 Pipeline 各钩子和 LLM 后端共同读写，是各模块间传递数据的唯一通道。
+"""
+
 from dataclasses import dataclass, field
 
 
 @dataclass
 class ChatContext:
+    """一次聊天处理会话的完整状态。
+
+    属性分组：
+    输入标识（user_id/group_id/msg_id/message）来自 OneBot 事件；
+    处理产物（raw_output/thought/action/reply/lines）由 pipeline 与解析钩子写入；
+    诊断信息（trigger/llm_* 系列）用于 thought 日志记录调试；
+    结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用。
+    """
+
+    # ---- 输入标识 ----
     user_id: int
     group_id: int
     msg_id: int
     message: str
 
+    # ---- 处理产物 ----
     raw_output: str = ""
     thought: str = ""
     action: str = "NONE"
     reply: str = ""
+    # 多行回复内容，供后续分条发送（受 MAX_REPLY_LINES 限制）
     lines: list[str] = field(default_factory=list)
 
     # ---- LLM 调用诊断信息（供 thought 日志记录） ----

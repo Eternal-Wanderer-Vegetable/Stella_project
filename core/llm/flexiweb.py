@@ -1,3 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""FlexiWeb 在线 LLM 接入实现。
+
+FlexiWeb 是一个本地子进程服务（基于 Playwright 抓取 DeepSeek 网页），
+本模块负责该子进程的生命周期管理（探测、拉起、停用）以及一个
+``FlexiWebBackend``，把其 /api/ask_sync 接口包装成 LLMBackend 协议供记忆整合使用。
+"""
+
 from __future__ import annotations
 
 import asyncio

@@ -1,3 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""主动发言调度：在群聊沉默一段时间后，优雅地把话题带回来。
+
+按配置的时间窗口（PROACTIVE_START/END + 随机上限）在合适时机以一定概率
+把近期要点总结成一句自然的话发出来。含节流：距上次主动发言不足一定秒数
+时会跳过，避免烦扰。
+"""
+
 from __future__ import annotations
 
 import random

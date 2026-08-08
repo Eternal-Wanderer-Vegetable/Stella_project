@@ -1,3 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+"""聊天主处理管线。
+
+Pipeline 定义了一次聊天消息的标准处理流程：先按优先级执行前置钩子（pre-hook，
+常用于权限校验、主动发言判定、短路等），随后调用 LLM 后端生成回复，最后执行
+后置钩子（post-hook，如输出解析、回复格式化、落库）。通过注册钩子与替换 LLM
+后端，插件可以在不修改管线本体的情况下扩展行为。
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +24,26 @@ PostHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
 
 
 class Pipeline:
+    """主处理管线：把"钩子 + LLM 后端"组装成一条可复用的消息处理链路。
+
+    使用方式：
+        pipeline = Pipeline(timeout=90.0)
+        pipeline.register_pre_hook(...)
+        pipeline.register_post_hook(...)
+        pipeline.set_llm_backend(backend)
+        ctx = await pipeline.run(ctx)
+
+    钩子按优先级（数字越大越先执行）排序；LLM 调用全程持有 chat_llm_lock，
+    串行访问共享的本地模型后端。
+    """
+
     def __init__(self, timeout: float = 90.0):
+        """初始化管线。
+
+        参数:
+            timeout: 单次 LLM 生成的超时时间（秒），超时按异常兜底处理。
+        """
+        # 钩子以 (priority, callable) 二元组存放，便于按优先级稳定排序
         self._pre_hooks: list[tuple[int, PreHook]] = []
         self._post_hooks: list[tuple[int, PostHook]] = []
         self._llm: Optional[LLMBackend] = None
@@ -21,22 +51,50 @@ class Pipeline:
         self.system_prompt: str = ""
 
     def register_pre_hook(self, hook: PreHook, priority: int = 10):
+        """注册前置钩子，并按其优先级降序排列。
+
+        参数:
+            hook: 接收 ChatContext、返回新的/修改后的 ChatContext 的协程函数；
+            priority: 越大越先执行。
+        """
         self._pre_hooks.append((priority, hook))
+        # 降序排序：priority 大的钩子先执行
         self._pre_hooks.sort(key=lambda x: x[0], reverse=True)
 
     def register_post_hook(self, hook: PostHook, priority: int = 10):
+        """注册后置钩子，并按其优先级降序排列。
+
+        参数:
+            hook: 接收 ChatContext、返回新的/修改后的 ChatContext 的协程函数；
+            priority: 越大越先执行。
+        """
         self._post_hooks.append((priority, hook))
+        # 降序排序：priority 大的钩子先执行
         self._post_hooks.sort(key=lambda x: x[0], reverse=True)
 
     def set_llm_backend(self, backend: LLMBackend):
+        """设置管线使用的 LLM 后端实现。
+
+        参数:
+            backend: 实现了 LLMBackend.generate 的实例（本地或在线）。
+        """
         self._llm = backend
 
     async def run(self, ctx: ChatContext) -> ChatContext:
+        """对一次聊天执行完整管线，返回处理完成的上下文。
+
+        参数:
+            ctx: 处理起点，携带事件输入与当前状态；
+        返回:
+            处理后的 ChatContext；若前置钩子已填好 reply（如已被拦截/已回复）
+            则提前返回，不再调用 LLM。
+        """
         for _, hook in self._pre_hooks:
             result = await hook(ctx)
             if result is not None:
                 ctx = result
 
+        # 钩子已生成回复（如重复消息去重、主动发言已被处理），无需再调 LLM
         if ctx.reply:
             return ctx
 
@@ -47,14 +105,19 @@ class Pipeline:
             short_term = getattr(ctx, "short_term", "") or ""
             user_profile = getattr(ctx, "user_profile", "") or ""
             memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
-            user_prompt = build_prompt_context(short_term, user_profile, memories_for_prompt) + "\n" + ctx.message
+            user_prompt = build_prompt_context(
+                short_term,
+                user_profile,
+                memories_for_prompt,
+            ) + "\n" + ctx.message
 
-            # 记录 LLM 诊断信息
+            # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
             ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
             ctx.llm_model = getattr(self._llm, "model", "") or getattr(self._llm, "site", "")
             ctx.system_prompt_len = len(self.system_prompt)
             ctx.prompt_log = user_prompt
 
+            # 全局锁：聊天主链路与整合共用同一 GPU 模型，必须先串行
             async with chat_llm_lock:
                 import time as _time
                 _t0 = _time.monotonic()
@@ -66,10 +129,12 @@ class Pipeline:
                     ctx.llm_elapsed = _time.monotonic() - _t0
                     ctx.raw_output = raw
                 except asyncio.TimeoutError:
+                    # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
                     ctx.llm_elapsed = _time.monotonic() - _t0
                     logger.error("LLM 执行超时")
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                 except Exception as e:
+                    # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
                     ctx.llm_elapsed = _time.monotonic() - _t0
                     logger.error(f"LLM 执行异常: {e}")
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"

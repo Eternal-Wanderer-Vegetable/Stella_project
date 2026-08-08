@@ -1,3 +1,25 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""长期记忆压缩器（memory.compressor）。
+
+负责把 memories 表里冗余/超长/低价值的内容做收敛处理，包含三类动作：
+1. 去重合并 _merge_duplicate_memories：内容相似（Jaccard ≥ 0.65 或互为子串）的记忆
+   合并成一条，保留更高的重要度/置信度、累加确认次数，被合并方标记为 archived；
+2. 原子化 _atomize_long_memories：把超过 80 字的记忆拆成若干“原子事实”
+   写入 atomic_facts 表（见 _split_into_fragments / _store_atomic_facts），原记忆打上 is_atomized=1；
+3. 低价值归档 _archive_low_value_memories：importance 低于阈值 且 长时间未访问（或从未访问）
+   的记忆批量转为 archived（不删除，只是不再参与 active 检索）。
+
+触发入口：
+- run_weekly()：周度全量压缩（合并 + 原子化 + 归档全部跑），由定时任务调用；
+- maybe_compress(reason)：轻量压缩——仅在活动记忆数达到阈值、距上次轻量压缩超过冷却期时，
+  对最近 2×阈值 条记录做合并与原子化（不归档），用于频繁写库时节的节流。
+
+统计与日志：每次运行会把 merged/atomized/archived 数量记入 compressor_stats，并追加一条人类可读日志。
+注意：所有操作都发生在调用方传入的同一连接/事务里，由调用方 commit（轻量/周度流程各自 commit）。
+"""
+
 from __future__ import annotations
 
 import sqlite3
@@ -5,12 +27,23 @@ import time
 import re
 import uuid
 from pathlib import Path
-from config import DB_PATH, PROJECT_ROOT, MEMORY_COMPRESS_LIGHT_THRESHOLD, MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS, MEMORY_COMPRESS_LOG_FILENAME
+from config import (
+    DB_PATH,
+    PROJECT_ROOT,
+    MEMORY_COMPRESS_LIGHT_THRESHOLD,
+    MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS,
+    MEMORY_COMPRESS_LOG_FILENAME,
+    MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD,
+    MEMORY_ARCHIVE_INACTIVE_DAYS,
+)
 from nonebot import logger
 
 
 class MemoryCompressor:
+    """记忆压缩器：把冗余记忆合并、长记忆原子化、低价值记忆归档。"""
+
     def __init__(self):
+        # 保证数据表存在后再开始，避免 create 失败导致后续 SQL 直接报错
         self._ensure_tables()
         # 轻量压缩的最小触发阈值（活动记忆数），可由配置覆盖
         self._light_threshold = MEMORY_COMPRESS_LIGHT_THRESHOLD
@@ -20,6 +53,7 @@ class MemoryCompressor:
         self._log_path = Path(PROJECT_ROOT) / MEMORY_COMPRESS_LOG_FILENAME
 
     def _ensure_tables(self) -> None:
+        """幂等地创建压缩用表：memories（主记忆表）与 compressor_stats（压缩统计表）。"""
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("""
@@ -63,6 +97,11 @@ class MemoryCompressor:
         conn.close()
 
     def run_weekly(self) -> None:
+        """周度全量压缩（重度运行）：合并 + 原子化 + 归档三管齐下，并记录统计与日志。
+
+        对 status='active' 的全部记忆排序后依次执行三步，最后把步进数字写入
+        compressor_stats 并追加一条人类可读日志；无活动记忆时提前退出。
+        """
         logger.info("🧹 [MemoryCompressor] 开始周度全量压缩任务（重度运行）")
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -96,6 +135,10 @@ class MemoryCompressor:
     def maybe_compress(self, reason: str = "auto") -> None:
         """轻量化触发：基于活动记忆数量与冷却判断是否运行小规模压缩。
         用于频繁发生写入时的节流触发，避免每次都做重度压缩。
+
+        触发条件（同时满足）：active 记忆数 ≥ 阈值，且距上次轻量运行 ≥ 冷却期。
+        只取最近 2×阈值 条记录做合并/原子化（不做归档），写完更新 last_light_run 时间戳。
+        整个流程被 try/except 包裹，任何失败只记录 warning，不影响调用方。
         """
         try:
             conn = sqlite3.connect(DB_PATH)
@@ -144,6 +187,17 @@ class MemoryCompressor:
             logger.warning(f"🧹 [MemoryCompressor] maybe_compress 失败: {e}")
 
     def _merge_duplicate_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> None:
+        """把内容相似（同群同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
+
+        合并规则：content 用 _merge_content（保留更完整一方或分号拼接）；
+        importance/confidence 取两者更大值；confirmation_count 累加（体现“多人/多次确认更可信”）；
+        存活方只更新字段、被合并方的 status 置为 'archived'（不删除，仅使其退出检索）。
+        返回被归档（合并掉）的记忆条数，供统计用。
+
+        :param cursor: 已连接的数据库游标（写操作由调用方统一 commit）
+        :param rows: 待检查的记忆行（含 id, content, importance, confidence, confirmation_count 等）
+        :return: 被归档的记忆条数
+        """
         seen = set()
         memories = [
             {
@@ -196,6 +250,16 @@ class MemoryCompressor:
         return len(seen)
 
     def _atomize_long_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> None:
+        """把长度 ≥ 80 字、尚未原子化（is_atomized=0）的记忆拆成“原子事实”。
+
+        对每行用 _split_into_fragments 切成片段，写入 atomic_facts 表
+        （INSERT OR IGNORE，以 uuid 作主键防重），随后把原记忆标记 is_atomized=1
+        并递增 compression_version，避免下次再切。返回新生成的原子事实条数。
+
+        :param cursor: 数据库游标
+        :param rows: 待处理的记忆行（含 id, group_id, user_id, content, is_atomized）
+        :return: 本次产生的新原子事实总数
+        """
         atomized_total = 0
         for row in rows:
             memory_id = row[0]
@@ -218,10 +282,23 @@ class MemoryCompressor:
         return atomized_total
 
     def _archive_low_value_memories(self, cursor: sqlite3.Cursor) -> None:
+        """把“重要度低 且 长期未访问（或从未访问）”的记忆归档（status='archived'）。
+
+        条件：importance < MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD，
+        且 (last_accessed_at 为空 或 距今超过 MEMORY_ARCHIVE_INACTIVE_DAYS 天)。
+        归档不删数据，只是让这些记忆退出 active 检索；返回受影响行数（cursor.rowcount）。
+
+        :param cursor: 数据库游标
+        :return: 被归档的记忆条数
+        """
         cursor.execute(
             "UPDATE memories SET status = 'archived', compressed_at = CURRENT_TIMESTAMP, compression_version = COALESCE(compression_version, 0) + 1, updated_at = CURRENT_TIMESTAMP "
-            "WHERE status = 'active' AND importance < 0.3 "
-            "AND (last_accessed_at IS NULL OR julianday('now') - julianday(last_accessed_at) > 180)"
+            "WHERE status = 'active' AND importance < ? "
+            "AND (last_accessed_at IS NULL OR julianday('now') - julianday(last_accessed_at) > ?)",
+            (
+                MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD,
+                MEMORY_ARCHIVE_INACTIVE_DAYS,
+            ),
         )
         count = cursor.rowcount
         if count > 0:
@@ -229,6 +306,14 @@ class MemoryCompressor:
         return count
 
     def _split_into_fragments(self, text: str) -> list[str]:
+        """把一段长文本切成“原子事实”候选片段。
+
+        先按句末标点（。！？；; 与换行）切开，随即去掉空白块；
+        超过 60 字的块再按 60 字滑窗切成小段，保证每条片段可独立入库。
+
+        :param text: 待切分文本
+        :return: 非空原子片段列表；输入为空返回空列表
+        """
         fragments = re.split(r"[。！？；;\n]+", text)
         fragments = [frag.strip() for frag in fragments if frag.strip()]
         atoms: list[str] = []
@@ -241,6 +326,19 @@ class MemoryCompressor:
         return [atom for atom in atoms if atom]
 
     def _store_atomic_facts(self, cursor: sqlite3.Cursor, memory_id: str, group_id: str, user_id: str, fragments: list[str]) -> None:
+        """把原子片段逐条写入 atomic_facts 表（INSERT OR IGNORE，靠随机 uuid 主键防重）。
+
+        subject 取“用户{user_id}”或“群{group_id}”（无 user_id 时用群名），
+        predicate 固定为“记忆片段”，object 为片段文本，confidence 初始为 0。
+        返回尝试插入的条数（注意 OR IGNORE 条件下实际落库数可能更少）。
+
+        :param cursor: 数据库游标
+        :param memory_id: 来源记忆的 id
+        :param group_id: 群 ID
+        :param user_id: 用户 ID（可为空）
+        :param fragments: 原子片段列表
+        :return: 尝试写入的片段数量
+        """
         inserted = 0
         for fragment in fragments:
             cursor.execute(
@@ -260,6 +358,13 @@ class MemoryCompressor:
         return inserted
 
     def _append_log(self, text: str) -> None:
+        """把一行压缩摘要追加到 _log_path 对应的日志文件（带时间标题）。
+
+        自动创建父目录，写入失败仅记录 warning 不抛出（不干扰压缩主流程）。
+
+        :param text: 要追加的人类可读摘要
+        :return: None
+        """
         try:
             header = f"\n## {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -271,11 +376,13 @@ class MemoryCompressor:
 
     # ---- 文本相似度与合并辅助 ----
     def _normalize_text(self, text: str) -> str:
+        """文本规范化：转小写、去非单词字符、多空白合并为单空格（用于相似度比较）。"""
         text = (text or "").strip().lower()
         text = re.sub(r"[\W_]+", " ", text)
         return " ".join(text.split())
 
     def _jaccard_similarity(self, a: set[str], b: set[str]) -> float:
+        """计算两个集合的 Jaccard 相似度：交集大小 / 并集大小（0~1，空集返回 0）。"""
         if not a or not b:
             return 0.0
         intersection = a & b
@@ -283,6 +390,10 @@ class MemoryCompressor:
         return len(intersection) / len(union)
 
     def _is_similar(self, a: str, b: str) -> bool:
+        """判断两条记忆是否“内容重复”：规范化后一方包含另一方，或词集合 Jaccard ≥ 0.65。
+
+        注意：这是去重合并的判定阈值，太高会漏合并、太低会误合并。
+        """
         if not a or not b:
             return False
         a_norm = self._normalize_text(a)
@@ -294,6 +405,10 @@ class MemoryCompressor:
         return self._jaccard_similarity(set(a_norm.split()), set(b_norm.split())) >= 0.65
 
     def _merge_content(self, old: str, new: str) -> str:
+        """合并两条记忆内容：保留更完整的一方；互不为子串则用中文分号拼接。
+
+        边界：任意一方为空时直接返回另一方，保证合并后非空。
+        """
         old = (old or "").strip()
         new = (new or "").strip()
         if not old:
@@ -311,6 +426,7 @@ _compressor_instance: MemoryCompressor | None = None
 
 
 def get_compressor() -> MemoryCompressor:
+    """返回全局唯一的 MemoryCompressor 实例（懒加载单例），供各模块复用。"""
     global _compressor_instance
     if _compressor_instance is None:
         _compressor_instance = MemoryCompressor()

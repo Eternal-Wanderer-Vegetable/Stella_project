@@ -1,3 +1,15 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+"""集中配置模块。
+
+本模块是 Stella 机器人的“配置中枢”：通过读取项目根目录下的 .env（及按
+ENVIRONMENT 区分的 .env.dev / .env.prod）环境变量，将全部运行时参数集中
+导出为模块级常量，供 memory/、core/ 等业务模块 import 使用。业务代码不改动
+此文件即可调整参数。环境变量解析统一走 _env / _env_int / _env_float 三个
+私有助手，保证类型安全并带默认值兜底。
+"""
+
 from __future__ import annotations
 
 import os
@@ -11,6 +23,8 @@ from dotenv import load_dotenv
 # ============================================================
 
 # ---------- 项目路径（自动校准） ----------
+# 从本文件所在目录向上逐级寻找包含 core/ 子目录的目录，即为项目根目录。
+# 这样无论包被安装在何处（源码目录/打包后/相对导入），都能准确定位根路径。
 _CURRENT_FILE = Path(__file__).resolve()
 _PROJECT_ROOT = _CURRENT_FILE.parent
 while _PROJECT_ROOT.parent != _PROJECT_ROOT:
@@ -31,12 +45,26 @@ elif _ENVIRONMENT in ("prod", "production"):
 
 
 def _env(key: str, default: str = "") -> str:
-    """读取环境变量，优先级高于默认值。"""
+    """读取字符串环境变量并按优先级返回。
+
+    参数:
+        key: 环境变量名。
+        default: 变量为空或未设置时返回的默认值。
+    返回:
+        key 对应的环境变量值；未设置时返回 default。
+    """
     return os.getenv(key, default)
 
 
 def _env_int(key: str, default: int = 0) -> int:
-    """安全读取 int 环境变量，解析失败时返回默认值。"""
+    """安全读取 int 环境变量，解析失败时返回默认值（避免直接 int() 抛异常）。
+
+    参数:
+        key: 环境变量名；
+        default: 空值或解析失败时使用的整数默认值。
+    返回:
+        解析成功返回整数；否则返回 default 并告警日志。
+    """
     raw = os.getenv(key, "")
     if not raw:
         return default
@@ -49,7 +77,14 @@ def _env_int(key: str, default: int = 0) -> int:
 
 
 def _env_float(key: str, default: float = 0.0) -> float:
-    """安全读取 float 环境变量，解析失败时返回默认值。"""
+    """安全读取 float 环境变量，解析失败时返回默认值。
+
+    参数:
+        key: 环境变量名；
+        default: 空值或解析失败时使用的浮点默认值。
+    返回:
+        浮点环境变量值；解析失败时返回 default 并告警日志。
+    """
     raw = os.getenv(key, "")
     if not raw:
         return default
@@ -61,6 +96,8 @@ def _env_float(key: str, default: float = 0.0) -> float:
         return default
 
 # ---------- 项目路径（自动校准） ----------
+# 与上文同样地向上定位项目根目录（以存在 core/ 目录为判据），
+# 确保后续 SYSTEM.md、数据库等相对路径都建立在根目录之上。
 _CURRENT_FILE = Path(__file__).resolve()
 _PROJECT_ROOT = _CURRENT_FILE.parent
 while _PROJECT_ROOT.parent != _PROJECT_ROOT:
@@ -70,12 +107,14 @@ while _PROJECT_ROOT.parent != _PROJECT_ROOT:
 PROJECT_ROOT = _PROJECT_ROOT
 
 # ---------- 目录与文件路径 ----------
+# 各路径均锚定 PROJECT_ROOT，保证在不同工作目录下启动都能正确定位文件。
 SYSTEM_PROMPT_PATH = PROJECT_ROOT / "memory" / "SYSTEM.md"
 DB_PATH = PROJECT_ROOT / "memory" / "agent_memory.db"
 THOUGHT_LOG_PATH = PROJECT_ROOT / "stella_thought_logs.md"
 EXTENSIONS_DIR = PROJECT_ROOT / "extensions"
 
 # ---------- QQ 群聊 ----------
+# 逗号分隔的群号字符串转为 int 集合；过滤空片段避免尾逗号导致 int('') 报错。
 ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "263402786").split(",") if x.strip()}
 
 # ---------- 上下文 ----------
@@ -90,6 +129,28 @@ REPLY_LONG_TERM_LIMIT = _env_int("REPLY_LONG_TERM_LIMIT", 3)
 LONG_TERM_RELEVANCE_ENABLED = _env("LONG_TERM_RELEVANCE_ENABLED", "true").lower() in ("true", "1", "yes")
 # 从用户消息中提取的关键词数量（用于匹配旧记忆摘要）
 LONG_TERM_RELEVANCE_KEYWORDS = _env_int("LONG_TERM_RELEVANCE_KEYWORDS", 5)
+# 相关记忆检索的候选数量上限
+LONG_TERM_RELEVANCE_CANDIDATE_LIMIT = _env_int("LONG_TERM_RELEVANCE_CANDIDATE_LIMIT", 20)
+# 相关记忆评分权重：关键词重叠、最近访问、重要性、置信度、用户相关性
+LONG_TERM_RELEVANCE_WEIGHT_KEYWORDS = _env_float("LONG_TERM_RELEVANCE_WEIGHT_KEYWORDS", 2.0)
+LONG_TERM_RELEVANCE_WEIGHT_RECENCY = _env_float("LONG_TERM_RELEVANCE_WEIGHT_RECENCY", 1.0)
+LONG_TERM_RELEVANCE_WEIGHT_IMPORTANCE = _env_float("LONG_TERM_RELEVANCE_WEIGHT_IMPORTANCE", 1.2)
+LONG_TERM_RELEVANCE_WEIGHT_CONFIDENCE = _env_float("LONG_TERM_RELEVANCE_WEIGHT_CONFIDENCE", 0.8)
+LONG_TERM_RELEVANCE_WEIGHT_USER_RELEVANCE = _env_float("LONG_TERM_RELEVANCE_WEIGHT_USER_RELEVANCE", 0.6)
+
+# ---------- RAG（检索增强生成）配置 ----------
+# 是否启用基于 SQLite 的 RAG 检索
+RAG_ENABLED = _env("RAG_ENABLED", "true").lower() in ("true", "1", "yes")
+# 每次检索时返回的相关记忆上限
+RAG_TOP_K = _env_int("RAG_TOP_K", 5)
+# 是否启用 SQLite FTS5 作为记忆检索索引
+RAG_SQLITE_FTS_ENABLED = _env("RAG_SQLITE_FTS_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# ---------- 记忆候选处理策略 ----------
+# 记忆候选晋升为长期记忆的最小重要性
+MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
+# 记忆候选晋升为长期记忆的最小置信度
+MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
 
 # ---------- 本地 LLM（LM Studio） ----------
 LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
@@ -126,7 +187,7 @@ CONSOLIDATION_ONLINE_COOLDOWN = _env_int("CONSOLIDATION_ONLINE_COOLDOWN", 300)
 # 批量太小会导致调用过于频繁，容易触发网站风控；批量大才能发挥大模型总结优势。
 # 注意：该批量会拼成较大的 prompt，只适合上下文窗口大的在线模型。
 CONSOLIDATION_BATCH_SIZE = _env_int("CONSOLIDATION_BATCH_SIZE", 100)
-# 每次整合时向前回看多少条用于话题连续
+# 每次整合时向前回看多少条用于话题连续（与上一批量重叠，保证话题不被切断）
 CONSOLIDATION_OVERLAP = _env_int("CONSOLIDATION_OVERLAP", 15)
 # 在线 LLM 最大生成 token 数
 CONSOLIDATION_MAX_TOKENS = _env_int("CONSOLIDATION_MAX_TOKENS", 2000)
@@ -182,6 +243,10 @@ DB_CLEANUP_CLEAR_MESSAGES = _env("DB_CLEANUP_CLEAR_MESSAGES", "false").lower() i
 MEMORY_COMPRESS_LIGHT_THRESHOLD = _env_int("MEMORY_COMPRESS_LIGHT_THRESHOLD", 500)
 # 轻量化压缩冷却时间（秒），两次轻量化之间最小间隔
 MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS = _env_int("MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS", 3600)
+# 低价值记忆归档阈值，低于该 importance 的记忆会被归档
+MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD = _env_float("MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD", 0.3)
+# 低价值记忆归档条件：距离上次访问超过多少天
+MEMORY_ARCHIVE_INACTIVE_DAYS = _env_int("MEMORY_ARCHIVE_INACTIVE_DAYS", 180)
 # 压缩器运行日志文件名（保存在项目根目录）
 MEMORY_COMPRESS_LOG_FILENAME = _env("MEMORY_COMPRESS_LOG_FILENAME", "memory_compressor_log.md")
 

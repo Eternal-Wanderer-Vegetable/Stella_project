@@ -1,3 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""记忆整合任务的系统 Prompt 模板。
+
+把一段新消息批次 + 当前短期摘要，要求本地/在线 LLM 一次性输出三样东西：
+短期摘要（short_term）、有变化的用户画像（user_profiles）以及值得长期
+记忆的候选（memory_candidates），全部以严格 JSON 结构返回。
+"""
 CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，用 JSON 格式输出。
 
 {current_summary}
