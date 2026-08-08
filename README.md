@@ -171,15 +171,12 @@ python bot.py
 
 - 我的父母给予了最重要的经济支持。没有他们，这一切都无从开始。
 - 灵感来源于和@t1mb2rg的讨论和@CST-Cat的争执中。感谢他们贡献了属于自己的想法。
-- @MIO-456开发的Lumi_Nox项目激励了本项目的开发。（https://github.com/MIO-456/Lumi_Nox）
+- @MIO-456开发的Lumi_Nox项目激励了本项目的开发。<https://github.com/MIO-456/Lumi_Nox>
 - 感谢@qian-o和他的伙伴们，以及@MIO-456和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 本项目开发中得到了来自如下组织的支持：
 -   模型提供商：Deepseek，OpenAI（chatGPT）和Google（Gemini）
--   开源代码库：
-        nonebot2（https://github.com/nonebot/nonebot2）,
-        NapCatQQ（https://github.com/NapNeko/NapCatQQ）,
-        以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
--   开发者社区：Linux Do（https://linux.do/）
+-   开源代码库：nonebot2 <https://github.com/nonebot/nonebot2>,NapCatQQ <https://github.com/NapNeko/NapCatQQ> ,以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
+-   开发者社区：Linux Do <https://linux.do>
 
 ## License
 
