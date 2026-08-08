@@ -170,13 +170,14 @@ python bot.py
 本项目在开发过程中得到了很多人和组织的鼓励和支持：
 
 - 我的父母给予了最重要的经济支持。没有他们，这一切都无从开始。
-- 灵感来源于和[@t1mb2rg](https://github.com/t1mb2rg)的讨论和@CST-Cat的争执中。感谢他们贡献了属于自己的想法。
-- @MIO-456开发的Lumi_Nox项目激励了本项目的开发。<https://github.com/MIO-456/Lumi_Nox>
-- 感谢@qian-o和他的伙伴们，以及@MIO-456和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
+- 灵感来源于和 [@t1mb2rg](https://github.com/t1mb2rg) 的讨论和 [@CST-Cat](https://github.com/CST-Cat) 的争执中。感谢他们贡献了属于自己的想法。
+- [@MIO-456](https://github.com/MIO-456) 开发的 [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) 项目激励了本项目的开发。
+- 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 本项目开发中得到了来自如下组织的支持：
--   模型提供商：Deepseek，OpenAI（chatGPT）和Google（Gemini）
--   开源代码库：nonebot2 <https://github.com/nonebot/nonebot2>,NapCatQQ <https://github.com/NapNeko/NapCatQQ> ,以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
--   开发者社区：Linux Do <https://linux.do>
+    模型提供商：Deepseek，OpenAI（chatGPT）和Google（Gemini）
+    开源代码库：[nonebot2](https://github.com/nonebot/nonebot2),[NapCatQQ](https://github.com/NapNeko/NapCatQQ),以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
+    开发者社区：[Linux Do](https://linux.do)
+- 特别致谢Freya，这是献给你的作品。我的探索之旅因你的馈赠而起，是时候交出一份并不完美的回礼了。 
 
 ## License
 
