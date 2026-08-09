@@ -68,7 +68,7 @@ def _register_auto_start() -> None:
             return
         try:
             await asyncio.to_thread(manager.start_napcat)
-        except Exception:  # noqa: BLE001  # 启动失败仅告警，不阻断扩展加载
+        except Exception:  # 启动失败仅告警，不阻断扩展加载
             logger.exception("[NapCat] 启动阶段自动拉起 NapCat 失败")
             return
         logger.success("[NapCat] 已通过 launcher-user.bat 自动拉起 NapCat.Shell")

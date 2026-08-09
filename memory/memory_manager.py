@@ -16,17 +16,18 @@
 """
 from __future__ import annotations
 
+import contextlib
 import re
 import sqlite3
 import uuid
-from typing import Optional
+
+from nonebot import logger
 
 from config import (
     DB_PATH,
-    MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE,
     MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE,
+    MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE,
 )
-from nonebot import logger
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
 from memory.schema import ensure_v2_schema
@@ -124,10 +125,8 @@ class MemoryManager:
         conn.commit()
         conn.close()
         # v2 记忆系统：基础表建好后，增量迁移补新字段/索引（幂等）
-        try:
+        with contextlib.suppress(Exception):
             ensure_v2_schema(DB_PATH)
-        except Exception:
-            pass
 
     def process_new_candidates(self) -> None:
         """处理全部待晋升的记忆候选（status ∈ {NEW, OBSERVING}），并把结果提交。
@@ -205,7 +204,7 @@ class MemoryManager:
             except Exception as e:
                 logger.warning(f"🧹 [MemoryManager] 触发轻量压缩失败: {e}")
 
-    def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> Optional[str]:
+    def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> str | None:
         """在同类型、状态为 active 的记忆中查找与候选内容相似的记忆 id；找不到返回 None。"""
         rows = cursor.execute(
             "SELECT id, content, type FROM memories WHERE status = 'active' AND type = ? ORDER BY last_accessed_at DESC",
@@ -321,7 +320,11 @@ class MemoryManager:
     @staticmethod
     def _merge_visibility(old, new) -> str:
         """合并可见性：候选若为更严格的 RESTRICTED/INTERNAL 则升级，否则保留旧值。"""
-        from memory.policy import VISIBILITY_INTERNAL, VISIBILITY_RESTRICTED, parse_visibility
+        from memory.policy import (
+            VISIBILITY_INTERNAL,
+            VISIBILITY_RESTRICTED,
+            parse_visibility,
+        )
 
         old_vis = parse_visibility(old)
         new_vis = parse_visibility(new)
@@ -449,7 +452,7 @@ class MemoryManager:
         return len(intersection) / len(union)
 
 
-_memory_manager_instance: Optional[MemoryManager] = None
+_memory_manager_instance: MemoryManager | None = None
 
 
 def get_memory_manager() -> MemoryManager:

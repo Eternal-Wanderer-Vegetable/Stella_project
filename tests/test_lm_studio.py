@@ -127,5 +127,5 @@ def test_generate_exhausts_retries_on_generic_error(monkeypatch):
         return _BoomClient()
 
     monkeypatch.setattr(httpx, "AsyncClient", _factory)
-    with pytest.raises(Exception):
+    with pytest.raises(httpx.ConnectError):
         asyncio.run(backend.generate("hi"))

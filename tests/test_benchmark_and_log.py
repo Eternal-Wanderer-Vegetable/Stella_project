@@ -4,9 +4,7 @@
 """memory.benchmark 与 memory.consolidation_log 的单元测试。"""
 
 import json
-from pathlib import Path
 
-import memory.benchmark as benchmark
 import memory.consolidation_log as cl
 from memory.benchmark import evaluate_case, load_cases, run_benchmark
 

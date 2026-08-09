@@ -22,7 +22,7 @@ import json
 import sqlite3
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from nonebot import logger
 
@@ -62,11 +62,11 @@ def record_trace(
     message: str,
     mode: str = "",
     trigger: str = "reply",
-    candidates: Optional[list[dict[str, Any]]] = None,
-    allowed: Optional[list[dict[str, Any]]] = None,
-    final: Optional[list[dict[str, Any]]] = None,
-    rejected: Optional[list[dict[str, Any]]] = None,
-    behavior: Optional[list[dict[str, Any]]] = None,
+    candidates: list[dict[str, Any]] | None = None,
+    allowed: list[dict[str, Any]] | None = None,
+    final: list[dict[str, Any]] | None = None,
+    rejected: list[dict[str, Any]] | None = None,
+    behavior: list[dict[str, Any]] | None = None,
     prompt_snapshot: str = "",
     output: str = "",
     debug: bool = False,
@@ -108,14 +108,14 @@ def record_trace(
         logger.debug(f"📊 [Trace] 写入决策追踪失败: {e}")
 
 
-def _dump_ids(memories: Optional[list[dict[str, Any]]]) -> str:
+def _dump_ids(memories: list[dict[str, Any]] | None) -> str:
     """把记忆列表的 id 序列化为 JSON 字符串。"""
     if not memories:
         return "[]"
     return json.dumps([m.get("id") for m in memories if m.get("id")], ensure_ascii=False)
 
 
-def _dump_scores(memories: Optional[list[dict[str, Any]]]) -> str:
+def _dump_scores(memories: list[dict[str, Any]] | None) -> str:
     """把记忆的 id→score 映射序列化为 JSON 字符串。"""
     if not memories:
         return "{}"
@@ -174,7 +174,7 @@ def _avg(groups) -> float:
     return (sum(values) / len(values)) if values else 0.0
 
 
-def _parse_ts(value: Any) -> Optional[float]:
+def _parse_ts(value: Any) -> float | None:
     if not value:
         return None
     try:

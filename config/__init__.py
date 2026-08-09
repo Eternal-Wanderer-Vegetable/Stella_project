@@ -8,4 +8,5 @@
 所有路径/环境变量解析的逻辑都集中在 config/settings.py 中。
 """
 
-from .settings import *
+# 本包仅为 settings 的再导出层，把所有公开配置常量原样暴露给业务代码。
+from .settings import *  # noqa: F403  # 星号导出为刻意设计（settings 全体公开常量）

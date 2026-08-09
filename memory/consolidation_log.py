@@ -21,7 +21,7 @@ def append_consolidation_log(entry: str) -> None:
         log_path = CONSOLIDATION_LOG_PATH
         if not log_path.exists():
             log_path.write_text("# 🤖 记忆整合日志\n\n", encoding="utf-8")
-        with open(log_path, "a", encoding="utf-8") as f:
+        with log_path.open("a", encoding="utf-8") as f:
             f.write(entry)
     except Exception as e:
         logger.error(f"整合日志写入失败: {e}")

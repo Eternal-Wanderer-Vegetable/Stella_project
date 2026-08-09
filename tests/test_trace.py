@@ -60,7 +60,7 @@ def test_record_trace_creates_table_and_inserts(tmp_path, monkeypatch):
     cols = [r[1] for r in conn.execute("PRAGMA table_info(memory_traces)")]
     conn.close()
     assert len(rows) == 2
-    row = dict(zip(cols, rows[0]))
+    row = dict(zip(cols, rows[0], strict=True))
     assert row["mode"] == "CASUAL_REPLY"
     assert json.loads(row["final_ids"]) == [1]
     assert json.loads(row["score_map"]) == {"1": 0.9}
@@ -112,7 +112,7 @@ def test_dump_and_parse_helpers():
 
 
 def test_memory_statistics(tmp_path, monkeypatch):
-    db_path = _trace_db(tmp_path, monkeypatch)
+    _trace_db(tmp_path, monkeypatch)
     record_trace(group_id="g", user_id="u", message="m", mode="CASUAL_REPLY",
                  final=[{"id": 1}, {"id": 2}])
     record_trace(group_id="g", user_id="u", message="m2", mode="ACTIVE_JOIN",
@@ -130,7 +130,7 @@ def test_memory_statistics_empty_and_missing_db(tmp_path, monkeypatch):
     monkeypatch.setattr(trace, "DB_PATH", missing)
     monkeypatch.setattr(trace, "MEMORY_TRACE_ENABLED", True)
     assert memory_statistics(days=1.0) == {}
-    db_path = _trace_db(tmp_path, monkeypatch)
+    _trace_db(tmp_path, monkeypatch)
     stats = memory_statistics(days=1.0)
     assert stats["total_traces"] == 0
     assert stats["avg_memories_per_reply"] == 0.0
@@ -156,7 +156,7 @@ def test_prune_traces_no_db():
 
 
 def test_statistics_on_broken_rows(tmp_path, monkeypatch):
-    db_path = _trace_db(tmp_path, monkeypatch)
+    _trace_db(tmp_path, monkeypatch)
     record_trace(group_id="g", user_id="u", message="m", mode="", final=[])
     stats = memory_statistics(days=0.0)
     assert stats["by_mode"]["UNKNOWN"] == 0.0

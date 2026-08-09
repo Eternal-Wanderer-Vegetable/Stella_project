@@ -20,31 +20,45 @@ NoneBot 单进程下天然复用；多 worker 场景需外部保证单实例。
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import math
 from collections import defaultdict
+
 from nonebot import logger, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
 from nonebot.exception import FinishedException
 from nonebot.rule import Rule
 
 from config import (
-    ALLOWED_GROUPS, SEND_INTERVAL, SYSTEM_PROMPT_PATH,
-    LM_STUDIO_BASE_URL, LM_STUDIO_MODEL, LLM_TIMEOUT,
-    EXTENSIONS_DIR,
-    DB_CLEANUP_ON_START, DB_CLEANUP_CLEAR_MESSAGES,
-    PROACTIVE_ENABLED, PROACTIVE_COOLDOWN, PROACTIVE_CHECK_INTERVAL,
-    PROACTIVE_MAX_LINES,
+    ALLOWED_GROUPS,
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
-    MESSAGE_CLEANUP_ENABLED, MESSAGE_CLEANUP_HOUR,
+    DB_CLEANUP_CLEAR_MESSAGES,
+    DB_CLEANUP_ON_START,
+    EXTENSIONS_DIR,
+    LLM_TIMEOUT,
+    LM_STUDIO_BASE_URL,
+    LM_STUDIO_MODEL,
+    MESSAGE_CLEANUP_ENABLED,
+    MESSAGE_CLEANUP_HOUR,
+    PROACTIVE_CHECK_INTERVAL,
+    PROACTIVE_ENABLED,
+    PROACTIVE_MAX_LINES,
+    SEND_INTERVAL,
+    SYSTEM_PROMPT_PATH,
 )
 from core.context import ChatContext
-from core.pipeline import Pipeline
 from core.llm.lm_studio import LMStudioBackend
+from core.pipeline import Pipeline
 from extensions import load_extensions
-from memory.pre_processors import record_message, build_context, build_user_context
 from memory.compressor import get_compressor
-from memory.post_processors import parse_output, bad_phrase_filter, split_lines, log_thought
-from memory.consolidator import maybe_consolidate, get_consolidator
+from memory.consolidator import get_consolidator, maybe_consolidate
+from memory.post_processors import (
+    bad_phrase_filter,
+    log_thought,
+    parse_output,
+    split_lines,
+)
+from memory.pre_processors import build_context, build_user_context, record_message
 from memory.proactive import get_proactive
 
 # ============================================================
@@ -93,6 +107,12 @@ else:
 load_extensions(pipeline, EXTENSIONS_DIR)
 
 # 启动时注册周度记忆压缩任务（每 7 天执行一次，由 APScheduler 调度）
+# APScheduler 全局调度器由 nonebot_plugin_apscheduler 插件提供；未安装时为 None。
+try:
+    from nonebot_plugin_apscheduler import scheduler
+except Exception:
+    scheduler = None
+
 try:
     if scheduler is not None:
         @scheduler.scheduled_job('interval', days=7, id='memory_compress_weekly')
@@ -120,7 +140,7 @@ except Exception as e:
 # 打开开关后，在插件装载阶段立即清空短期 / 长期记忆、重置检查点
 if DB_CLEANUP_ON_START:
     try:
-        from memory.db_cleaner import clean_db, print_summary
+        from memory.db_cleaner import clean_db
         results = clean_db(
             clear_short_term=True,
             clear_long_term=True,
@@ -229,10 +249,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             ctx.lines = ["......？"]
 
         # 把本次回复记入“已说过的话”，防止随后主动发言再重复刷屏
-        try:
+        with contextlib.suppress(Exception):
             get_proactive().record_spoken(event.group_id, ctx.lines)
-        except Exception:
-            pass
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
@@ -256,11 +274,6 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 # ============================================================
 # 主动发言（基于群消息频率）
 # ============================================================
-try:
-    from nonebot_plugin_apscheduler import scheduler
-except Exception:
-    scheduler = None
-
 _SENTENCE_ENDERS = "，。！？、；：;:?!.…\"\"''"
 
 

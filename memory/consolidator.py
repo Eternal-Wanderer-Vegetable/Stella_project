@@ -18,29 +18,33 @@
     → _update_checkpoint() 推进进度，避免重复处理
 """
 import asyncio
+import contextlib
 import json
-import sqlite3
 import re
+import sqlite3
 import uuid
 from datetime import datetime
 from typing import Optional
+
 from nonebot import logger
 
-from config import DB_PATH, CONSOLIDATION_OVERLAP
 from config import (
-    CONSOLIDATION_LM_STUDIO_BASE_URL, CONSOLIDATION_LM_STUDIO_MODEL,
+    CONSOLIDATION_LM_STUDIO_BASE_URL,
+    CONSOLIDATION_LM_STUDIO_MODEL,
     CONSOLIDATION_LM_STUDIO_TEMPERATURE,
     CONSOLIDATION_LOCAL_BATCH_SIZE,
-    CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE, CONSOLIDATION_LOCAL_MAX_TOKENS,
+    CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE,
+    CONSOLIDATION_LOCAL_MAX_TOKENS,
+    CONSOLIDATION_OVERLAP,
+    DB_PATH,
 )
-from core.llm.lm_studio import LMStudioBackend
 from core.llm import consolidation_llm_lock
-from memory.consolidation_prompt import format_consolidation_prompt
+from core.llm.lm_studio import LMStudioBackend
 from memory.consolidation_log import append_consolidation_log
+from memory.consolidation_prompt import format_consolidation_prompt
 from memory.memory_manager import get_memory_manager
 from memory.policy import validate_candidate
 from memory.schema import ensure_v2_schema
-
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
@@ -126,10 +130,8 @@ class MemoryConsolidator:
             )
         """)
         # 旧库升级：short_term_context 缺少 recent_exchanges 列时补上（幂等，失败说明已存在）
-        try:
+        with contextlib.suppress(sqlite3.OperationalError):
             conn.execute("ALTER TABLE short_term_context ADD COLUMN recent_exchanges TEXT")
-        except sqlite3.OperationalError:
-            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,10 +223,8 @@ class MemoryConsolidator:
             ON messages (group_id, id)
         """)
         # v2 记忆系统：基础表建好后，增量迁移补新字段/索引（幂等）
-        try:
+        with contextlib.suppress(Exception):
             ensure_v2_schema(DB_PATH)
-        except Exception:
-            pass
 
     def _get_last_processed_id(self, group_id: int) -> int:
         """读取指定群的 checkpoint（已整合到的最大消息 id），无记录时返回 0。"""
@@ -441,7 +441,7 @@ class MemoryConsolidator:
         conn.commit()
         conn.close()
 
-    def _write_short_term(self, group_id: int, data: Optional[dict]):
+    def _write_short_term(self, group_id: int, data: dict | None):
         """写入短期上下文（摘要 + 进行中的话题 + 关键发言），data 为空则跳过；使用 upsert。
 
         recent_exchanges 会以 JSON 数组落库（每条 {user_id, content}），
@@ -554,7 +554,7 @@ class MemoryConsolidator:
                 merged.append(part)
         return "，".join(merged)
 
-    def _write_memory_candidates(self, group_id: int, candidates: list, sender_ids: Optional[list] = None):
+    def _write_memory_candidates(self, group_id: int, candidates: list, sender_ids: list | None = None):
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
         每个候选先经过 Policy Validator（validate_candidate）审核，自动修正错误的
@@ -678,7 +678,7 @@ class MemoryConsolidator:
         conn.commit()
         conn.close()
 
-    def _parse_json(self, text: str) -> Optional[dict]:
+    def _parse_json(self, text: str) -> dict | None:
         """容错解析 LLM 输出为 JSON 对象。
 
         处理策略（依次尝试）：

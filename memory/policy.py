@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from config import (
     MEMORY_LIMIT_ACTIVE_JOIN,
@@ -220,7 +220,7 @@ _USAGE_TYPE_MATRIX: dict[str, frozenset[str]] = {
 
 # ── 第三张表：Visibility Access Matrix ───────────────────
 # 值域：True=完全允许；None=条件允许（△）；False=禁止
-_VISIBILITY_ACCESS: dict[str, dict[str, Optional[bool]]] = {
+_VISIBILITY_ACCESS: dict[str, dict[str, bool | None]] = {
     MODE_CASUAL_REPLY: {
         VISIBILITY_OPEN: True,
         VISIBILITY_CONTEXTUAL: True,
@@ -432,7 +432,7 @@ def usage_allowed(mode: str, memory: dict[str, Any]) -> tuple[bool, int]:
     return True, best
 
 
-def visibility_access(mode: str, visibility: str) -> Optional[bool]:
+def visibility_access(mode: str, visibility: str) -> bool | None:
     """查询某模式下某可见性的访问权：True 完全允许 / None 条件允许 / False 禁止。"""
     mode = normalize_mode(mode)
     vis = parse_visibility(visibility)
@@ -589,17 +589,20 @@ def validate_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
     vis = parse_visibility(cand.get("visibility"))
 
     # 敏感内容被误当作“聊天素材”
-    if content and any(k in content for k in _SENSITIVE_KEYWORDS):
-        if any(t in _FORBIDDEN_CHAT_USAGE for t in tags) or vis in (
-            VISIBILITY_OPEN,
-            VISIBILITY_CONTEXTUAL,
-        ):
-            tags = [USAGE_BOUNDARY_PROTECTION]
-            vis = VISIBILITY_RESTRICTED
-            cand["behavior_rule"] = (
-                cand.get("behavior_rule")
-                or f"避免主动针对相关用户进行涉及「{_short(content)}」的互动。"
-            )
+    if (
+        content
+        and any(k in content for k in _SENSITIVE_KEYWORDS)
+        and (
+            any(t in _FORBIDDEN_CHAT_USAGE for t in tags)
+            or vis in (VISIBILITY_OPEN, VISIBILITY_CONTEXTUAL)
+        )
+    ):
+        tags = [USAGE_BOUNDARY_PROTECTION]
+        vis = VISIBILITY_RESTRICTED
+        cand["behavior_rule"] = (
+            cand.get("behavior_rule")
+            or f"避免主动针对相关用户进行涉及「{_short(content)}」的互动。"
+        )
 
     # 行为约束缺失默认行为规则
     if (

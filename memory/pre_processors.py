@@ -15,15 +15,19 @@
 import json
 import re
 import sqlite3
+
 from nonebot import logger
-from core.context import ChatContext
+
 from config import (
-    DB_PATH, RECENT_MESSAGE_LIMIT,
-    PROACTIVE_LONG_TERM_LIMIT, REPLY_LONG_TERM_LIMIT,
+    DB_PATH,
     MEMORY_V2_ENABLED,
+    PROACTIVE_LONG_TERM_LIMIT,
+    RECENT_MESSAGE_LIMIT,
+    REPLY_LONG_TERM_LIMIT,
 )
-from memory.retriever import get_group_memories, get_user_memories, get_related_memories
+from core.context import ChatContext
 from memory.prompt_builder import build_memory_context
+from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 
 
 async def record_message(ctx: ChatContext) -> ChatContext:
@@ -118,7 +122,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             summary_text = "\n".join(parts) if parts else ""
             if summary_text:
                 ctx.short_term = summary_text
-                logger.info(f"🧠 [Context] 使用短期记忆摘要")
+                logger.info("🧠 [Context] 使用短期记忆摘要")
                 conn.close()
                 return ctx
 
@@ -223,7 +227,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
             # 尝试提取关于用户的段落作为 user_profile（以 '关于用户' 开头的段落）
             up = ""
             for p in parts:
-                if p.startswith(f"关于用户{ctx.user_id}") or p.startswith("关于用户") or p.startswith("关于当前用户"):
+                if p.startswith((f"关于用户{ctx.user_id}", "关于用户", "关于当前用户")):
                     up = p
                     break
             ctx.user_profile = up
@@ -319,9 +323,7 @@ def _read_stable_profile(group_id: int, user_id: int) -> str:
 
 # 中文停用词（高频无意义词，匹配时排除）
 _STOP_WORDS = frozenset(
-    "的 了 在 是 我 有 和 就 不 人 都 一 一个 上 也 很 到 说 要 去 你 会 着 没有 看 好 自己 这 "
-    "他 她 它 们 那 些 什么 怎么 如何 可以 可能 已经 还 但 而 且 或 虽然 因为 所以 如果 被 把 让 "
-    "从 对 为 与 向 以 及 等 之 其 此 该 本 中 里 后 前 时 年 月 日 个 些 多 少 更 最 ".split()
+    ["的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这", "他", "她", "它", "们", "那", "些", "什么", "怎么", "如何", "可以", "可能", "已经", "还", "但", "而", "且", "或", "虽然", "因为", "所以", "如果", "被", "把", "让", "从", "对", "为", "与", "向", "以", "及", "等", "之", "其", "此", "该", "本", "中", "里", "后", "前", "时", "年", "月", "日", "个", "些", "多", "少", "更", "最"]
 )
 
 

@@ -71,7 +71,7 @@ async def _external_restart() -> None:
         return
     try:
         await asyncio.to_thread(impl)
-    except Exception:  # noqa: BLE001  # 重启失败不拖垮看门狗循环
+    except Exception:  # 重启失败不拖垮看门狗循环
         logger.exception("[Watchdog] 外部重启 NapCat 失败")
 
 

@@ -12,16 +12,17 @@ Pipeline 定义了一次聊天消息的标准处理流程：先按优先级执�
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, Optional, Awaitable
+from collections.abc import Awaitable, Callable
+
 from nonebot import logger
-from core.context import ChatContext
-from core.llm.base import LLMBackend
-from core.llm import chat_llm_lock
+
 from config import MEMORY_V2_ENABLED
+from core.context import ChatContext
+from core.llm import chat_llm_lock
+from core.llm.base import LLMBackend
 
-
-PreHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
-PostHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
+PreHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
+PostHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
 
 
 class Pipeline:
@@ -47,7 +48,7 @@ class Pipeline:
         # 钩子以 (priority, callable) 二元组存放，便于按优先级稳定排序
         self._pre_hooks: list[tuple[int, PreHook]] = []
         self._post_hooks: list[tuple[int, PostHook]] = []
-        self._llm: Optional[LLMBackend] = None
+        self._llm: LLMBackend | None = None
         self._timeout = timeout
         self.system_prompt: str = ""
 

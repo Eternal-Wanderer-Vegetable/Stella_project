@@ -22,26 +22,28 @@ RAG 开关组合（决定走哪条路径）：
 
 from __future__ import annotations
 
+import contextlib
 import re
 import sqlite3
 import time
 from datetime import datetime
 from typing import Any
+
 from config import (
     DB_PATH,
-    PROACTIVE_LONG_TERM_LIMIT,
-    REPLY_LONG_TERM_LIMIT,
+    LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
     LONG_TERM_RELEVANCE_ENABLED,
     LONG_TERM_RELEVANCE_KEYWORDS,
-    LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
+    LONG_TERM_RELEVANCE_WEIGHT_CONFIDENCE,
+    LONG_TERM_RELEVANCE_WEIGHT_IMPORTANCE,
     LONG_TERM_RELEVANCE_WEIGHT_KEYWORDS,
     LONG_TERM_RELEVANCE_WEIGHT_RECENCY,
-    LONG_TERM_RELEVANCE_WEIGHT_IMPORTANCE,
-    LONG_TERM_RELEVANCE_WEIGHT_CONFIDENCE,
     LONG_TERM_RELEVANCE_WEIGHT_USER_RELEVANCE,
+    PROACTIVE_LONG_TERM_LIMIT,
     RAG_ENABLED,
-    RAG_TOP_K,
     RAG_SQLITE_FTS_ENABLED,
+    RAG_TOP_K,
+    REPLY_LONG_TERM_LIMIT,
 )
 
 
@@ -300,10 +302,8 @@ def _rebuild_fts_index(cursor: sqlite3.Cursor) -> None:
             records,
         )
     # 全量重建要立即提交，否则连接关闭后回滚，下次查询仍需重扫（且修复结果不落盘）
-    try:
+    with contextlib.suppress(Exception):
         cursor.connection.commit()
-    except Exception:
-        pass
 
 
 def _upsert_fts_record(cursor: sqlite3.Cursor, memory_id: str, group_id: str, user_id: str, content: str) -> None:
@@ -393,8 +393,7 @@ def _query_rag_results(
         query_sql += "AND f.content MATCH ? ORDER BY bm25(memories_fts) LIMIT ?"
         params.extend([query_tokens, limit])
 
-        rows = cursor.execute(query_sql, tuple(params)).fetchall()
-        return rows
+        return cursor.execute(query_sql, tuple(params)).fetchall()
     except sqlite3.OperationalError:
         return []
 

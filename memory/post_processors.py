@@ -12,12 +12,16 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+
 from nonebot import logger
-from core.context import ChatContext
+
 from config import (
-    THOUGHT_LOG_PATH, MAX_REPLY_LINES, BAD_PHRASES,
+    BAD_PHRASES,
     FALLBACK_REPLY,
+    MAX_REPLY_LINES,
+    THOUGHT_LOG_PATH,
 )
+from core.context import ChatContext
 
 
 def parse_raw_output(raw: str) -> tuple[str, str, str]:
@@ -87,7 +91,7 @@ async def log_thought(ctx: ChatContext) -> ChatContext:
 - **📤 完整 Prompt（发给 LLM）**:
   > {ctx.prompt_log.replace(chr(10), chr(10) + "  > ") if ctx.prompt_log else "(空)"}
 - **📥 原始 LLM 输出（完整）**:
-  > {raw_output_formatted if raw_output_formatted else "(空)"}
+  > {raw_output_formatted or "(空)"}
 - **🧠 内部思考**:
   > {thought_formatted}
 - **⚙️ 判定动作**: `{ctx.action}`
@@ -98,7 +102,7 @@ async def log_thought(ctx: ChatContext) -> ChatContext:
     try:
         if not THOUGHT_LOG_PATH.exists():
             THOUGHT_LOG_PATH.write_text("# 🤖 思考过程与决策日志\n\n", encoding="utf-8")
-        with open(THOUGHT_LOG_PATH, "a", encoding="utf-8") as f:
+        with THOUGHT_LOG_PATH.open("a", encoding="utf-8") as f:
             f.write(log_entry)
     except Exception as e:
         logger.error(f"日志写入失败: {e}")

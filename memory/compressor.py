@@ -22,22 +22,24 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
-import re
 import uuid
 from pathlib import Path
+
+from nonebot import logger
+
 from config import (
     DB_PATH,
-    PROJECT_ROOT,
-    MEMORY_COMPRESS_LIGHT_THRESHOLD,
-    MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS,
-    MEMORY_COMPRESS_LOG_FILENAME,
     MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD,
     MEMORY_ARCHIVE_INACTIVE_DAYS,
+    MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS,
+    MEMORY_COMPRESS_LIGHT_THRESHOLD,
+    MEMORY_COMPRESS_LOG_FILENAME,
     MEMORY_DECAY_DAYS,
+    PROJECT_ROOT,
 )
-from nonebot import logger
 
 
 class MemoryCompressor:
@@ -395,7 +397,7 @@ class MemoryCompressor:
         try:
             header = f"\n## {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._log_path, "a", encoding="utf-8") as f:
+            with self._log_path.open("a", encoding="utf-8") as f:
                 f.write(header)
                 f.write(text + "\n")
         except Exception as e:

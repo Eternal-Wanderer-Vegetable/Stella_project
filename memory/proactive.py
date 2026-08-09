@@ -15,14 +15,16 @@ from __future__ import annotations
 import random
 import re
 import time
-from typing import Optional
 
 from nonebot import logger
 
 from config import (
-    PROACTIVE_COOLDOWN, PROACTIVE_FREQ_WINDOW,
-    PROACTIVE_HIGH_FREQ_INTERVAL, PROACTIVE_LOW_FREQ_INTERVAL,
-    PROACTIVE_MAX_PROB, PROACTIVE_MIN_PROB,
+    PROACTIVE_COOLDOWN,
+    PROACTIVE_FREQ_WINDOW,
+    PROACTIVE_HIGH_FREQ_INTERVAL,
+    PROACTIVE_LOW_FREQ_INTERVAL,
+    PROACTIVE_MAX_PROB,
+    PROACTIVE_MIN_PROB,
 )
 
 
@@ -92,7 +94,7 @@ class ProactiveController:
         if len(lst) > PROACTIVE_FREQ_WINDOW:
             del lst[: len(lst) - PROACTIVE_FREQ_WINDOW]
 
-    def average_interval(self, group_id: int) -> Optional[float]:
+    def average_interval(self, group_id: int) -> float | None:
         """估算最近消息的平均间隔（秒）。消息不足两条时返回 None（视为频率过低）。"""
         lst = self._timestamps.get(group_id, [])
         if len(lst) < 2:
@@ -159,7 +161,7 @@ class ProactiveController:
 
 
 # 全局单例，供 ai_gateway 与 consolidator 共用
-_proactive_instance: Optional[ProactiveController] = None
+_proactive_instance: ProactiveController | None = None
 
 
 def get_proactive() -> ProactiveController:

@@ -21,7 +21,7 @@ import re
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from config import (
     DB_PATH,
@@ -77,7 +77,7 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
     行结构：id, group_id, user_id, type, content, importance, confidence,
             visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at
     """
-    memory = {
+    return {
         "id": row[0],
         "group_id": row[1],
         "user_id": row[2],
@@ -91,7 +91,6 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
         "behavior_rule": row[10],
         "last_accessed_at": row[11],
     }
-    return memory
 
 
 def _select_columns() -> str:
@@ -118,7 +117,7 @@ def _allowed_visibility_clause(mode: str) -> str:
 def _fetch_candidates(
     cursor: sqlite3.Cursor,
     group_id: int,
-    user_id: Optional[int],
+    user_id: int | None,
     mode: str,
     query: str,
     pool_limit: int,
@@ -166,7 +165,7 @@ def _fetch_candidates(
 def _fetch_candidates_legacy(
     cursor: sqlite3.Cursor,
     group_id: int,
-    user_id: Optional[int],
+    user_id: int | None,
     mode: str,
     pool_limit: int,
 ) -> list[dict[str, Any]]:
@@ -195,7 +194,7 @@ def _fetch_candidates_legacy(
 def _query_fts(
     cursor: sqlite3.Cursor,
     group_id: int,
-    user_id: Optional[int],
+    user_id: int | None,
     query: str,
     limit: int,
     mode: str,
@@ -302,7 +301,7 @@ def retrieve_memories(
     user_id: int,
     query: str,
     trigger: str = "reply",
-    mode: Optional[str] = None,
+    mode: str | None = None,
 ) -> RetrievalResult:
     """v2 记忆检索主入口。
 
@@ -331,7 +330,7 @@ def retrieve_memories(
     conn = _connect()
     cursor = conn.cursor()
     try:
-        include_user: Optional[int] = None if trigger == "proactive" else user_id
+        include_user: int | None = None if trigger == "proactive" else user_id
         candidates = _fetch_candidates(cursor, group_id, include_user, mode, query, pool_limit)
     finally:
         conn.close()

@@ -9,9 +9,10 @@ Pipeline 注册前置/后置钩子或替换 LLM 后端，无需改动业务主�
 """
 
 import importlib
-import pkgutil
 from pathlib import Path
+
 from nonebot import logger
+
 from core.pipeline import Pipeline
 
 

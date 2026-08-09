@@ -9,8 +9,10 @@
     或在 settings.py 中设置 DB_CLEANUP_ON_START = True 时，随程序启动自动清理。
 """
 import argparse
+import contextlib
 import sqlite3
 import time
+
 from config import DB_PATH, MESSAGE_CLEANUP_KEEP_COUNT
 
 # 上次消息清理的时间戳文件
@@ -52,10 +54,8 @@ def clean_db(
                 results[table_name] = 0
         # 重置自增序列，否则新消息 id 从旧最大值继续，导致 checkpoint 无法匹配
         for seq_name in ["group_messages", "messages"]:
-            try:
+            with contextlib.suppress(sqlite3.OperationalError):
                 cur.execute("DELETE FROM sqlite_sequence WHERE name = ?", (seq_name,))
-            except sqlite3.OperationalError:
-                pass
     conn.commit()
     conn.close()
     return results
@@ -131,10 +131,8 @@ def needs_cleanup(max_age_hours: float = 24.0) -> bool:
 
 def _mark_cleanup_done():
     """记录本次清理时间戳。"""
-    try:
+    with contextlib.suppress(OSError):
         _LAST_CLEANUP_FILE.write_text(str(time.time()))
-    except OSError:
-        pass
 
 
 if __name__ == "__main__":

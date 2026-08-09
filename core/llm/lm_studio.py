@@ -10,9 +10,10 @@
 """
 
 import asyncio
+
 import httpx
-from typing import Optional
 from nonebot import logger
+
 from core.llm.base import LLMBackend
 
 
@@ -21,7 +22,7 @@ class LMStudioBackend(LLMBackend):
     backend_name = "lm_studio"
     is_local = True
 
-    def __init__(self, base_url: str, model: Optional[str] = None, max_tokens: int = 2000, temperature: float = 0.7):
+    def __init__(self, base_url: str, model: str | None = None, max_tokens: int = 2000, temperature: float = 0.7):
         """初始化后端。
 
         参数:
@@ -61,7 +62,7 @@ class LMStudioBackend(LLMBackend):
         payload["reasoning_effort"] = "none"
 
         logger.info(f"[LM Studio] 发送请求（prompt {len(prompt)} 字符）")
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         # 最多 3 次尝试；trust_env=False 忽略系统代理，避免局域网地址被代理拦截
         for attempt in range(3):
             try:

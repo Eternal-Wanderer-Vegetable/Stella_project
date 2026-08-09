@@ -25,7 +25,13 @@ from pathlib import Path
 from typing import Any
 
 from config import MEMORY_BENCHMARK_DIR
-from memory.policy import rank_memories, mode_limit, detect_mode, normalize_mode, split_behavior_constraints
+from memory.policy import (
+    detect_mode,
+    mode_limit,
+    normalize_mode,
+    rank_memories,
+    split_behavior_constraints,
+)
 
 
 def _mem_dict(mid: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -104,7 +110,7 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
     total_forbidden = sum(len(r["forbidden"]) for r in results)
     total_activated_forbidden = sum(len(r["activated_forbidden"]) for r in results)
 
-    metrics = {
+    return {
         "cases_total": total,
         "cases_ok": ok_count,
         "cases_ok_rate": round(ok_count / total * 100, 1) if total else 0.0,
@@ -114,7 +120,6 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
         "forbidden_activations": total_activated_forbidden,
         "results": results,
     }
-    return metrics
 
 
 def main() -> None:

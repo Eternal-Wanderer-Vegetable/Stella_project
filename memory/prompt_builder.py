@@ -14,14 +14,15 @@ v2（记忆系统升级）新增分区拼接：聊天素材（Conversation Memor
 
 from __future__ import annotations
 
-from typing import Iterable
+import contextlib
+from collections.abc import Iterable
 
 from config import (
     MEMORY_BEHAVIOR_MAX_TOKENS,
     MEMORY_CONVERSATION_MAX_TOKENS,
     MEMORY_CONVERSATION_TECH_MAX_TOKENS,
 )
-from memory.policy import MODE_TECH_HELP, MODE_CONFLICT_AVOID
+from memory.policy import MODE_CONFLICT_AVOID, MODE_TECH_HELP
 
 
 def naturalize_memory(mem: dict) -> str:
@@ -40,15 +41,11 @@ def naturalize_memory(mem: dict) -> str:
     confidence = mem.get("confidence")
     meta = []
     if importance is not None:
-        try:
+        with contextlib.suppress(Exception):
             meta.append(f"重要性={float(importance):.2f}")
-        except Exception:
-            pass
     if confidence is not None:
-        try:
+        with contextlib.suppress(Exception):
             meta.append(f"置信度={float(confidence):.2f}")
-        except Exception:
-            pass
     meta_s = ("（" + ", ".join(meta) + "）") if meta else ""
     if type_ and type_ != "FACT":
         return f"记忆：用户{user_id} 的 {type_.lower()}：{content}{meta_s}。"

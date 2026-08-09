@@ -29,4 +29,3 @@ class LLMBackend(ABC):
         返回:
             模型生成的纯文本回复。
         """
-        pass
