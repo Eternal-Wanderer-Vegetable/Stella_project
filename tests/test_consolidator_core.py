@@ -1,0 +1,252 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""memory.consolidator 私有方法的单元测试。
+
+把 consolidator.DB_PATH monkeypatch 指向临时库，直接调用读写私有方法，
+覆盖：JSON 容错解析、user_id 规范化、特征合并、checkpoint、
+短期上下文/用户画像/候选/旧格式记忆写入、消息表选择与消息获取。
+"""
+
+import json
+import sqlite3
+from pathlib import Path
+
+import memory.consolidator as consolidator
+from memory.consolidator import MemoryConsolidator
+
+
+def _make_consolidator() -> MemoryConsolidator:
+    return MemoryConsolidator.__new__(MemoryConsolidator)
+
+
+def _provision(cons: MemoryConsolidator, db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path)
+    cons._ensure_common_tables(conn)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT, user_id TEXT, content TEXT,"
+        "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS long_term_memories ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT, user_id TEXT, summary TEXT,"
+        "importance REAL, access_count INTEGER DEFAULT 0, last_accessed_at TEXT)"
+    )
+    conn.commit()
+    return conn
+
+
+def test_parse_json_variants():
+    cons = _make_consolidator()
+    assert cons._parse_json("```json\n{\"a\": 1}\n```") == {"a": 1}
+    assert cons._parse_json("{\"a\": 1}") == {"a": 1}
+    assert cons._parse_json("散文前缀 {\"a\": {\"b\": \"x\"}} 尾巴") == {"a": {"b": "x"}}
+    assert cons._parse_json("完全没有 JSON") is None
+
+
+def test_normalize_user_id():
+    cons = _make_consolidator()
+    assert cons._normalize_user_id("3089665724") == "3089665724"
+    assert cons._normalize_user_id("用户(3089665724)") == "3089665724"
+    assert cons._normalize_user_id("") == ""
+    assert cons._normalize_user_id("xxx") == "xxx"
+
+
+def test_merge_traits_dedupes():
+    cons = _make_consolidator()
+    merged = cons._merge_traits("爱运动，乐观", "乐观，喜欢AI")
+    assert merged.count("乐观") == 1
+    assert "爱运动" in merged
+    assert "喜欢AI" in merged
+    assert cons._merge_traits("", "新") == "新"
+    assert cons._merge_traits("旧", "") == "旧"
+    assert cons._merge_traits("", "") == ""
+
+
+def test_checkpoint_and_state_table(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    conn.close()
+
+    assert cons._get_last_processed_id(1001) == 0
+    cons._update_checkpoint(1001, 42)
+    assert cons._get_last_processed_id(1001) == 42
+
+
+def test_fetch_next_messages_and_senders(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    monkeypatch.setattr(consolidator, "CONSOLIDATION_OVERLAP", 15)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    conn.executemany(
+        "INSERT INTO group_messages (group_id, user_id, content) VALUES (?, ?, ?)",
+        [
+            ("1001", "111", "第一条"),
+            ("1001", "112", "第二条"),
+            ("1001", "111", "第三条"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    text, batch_end, senders = cons._fetch_next_messages(1001, 0, 10)
+    assert batch_end == 3
+    assert "第一条" in text
+    assert senders == ["111", "112"]
+    assert cons._get_message_table(sqlite3.connect(db_path).cursor()) == "group_messages"
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("DROP TABLE group_messages")
+    conn.commit()
+    conn.close()
+    assert cons._get_message_table(sqlite3.connect(db_path).cursor()) == "messages"
+
+    text, batch_end, senders = cons._fetch_next_messages(1001, 100, 10)
+    assert batch_end == 100
+
+
+def test_count_new_messages_and_has_new(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    conn.executemany(
+        "INSERT INTO group_messages (group_id, user_id, content) VALUES (?, ?, ?)",
+        [("1001", "111", "a"), ("1001", "111", "b")],
+    )
+    conn.commit()
+    conn.close()
+    assert cons._count_new_messages(1001, 0) == 2
+    assert cons._count_new_messages(1001, 1) == 1
+    assert cons.has_new_messages_to_consolidate(1001, threshold=3) == 0
+    assert cons.has_new_messages_to_consolidate(1001) == 2
+
+
+def test_write_short_term_upsert(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    _provision(cons, db_path)
+
+    cons._write_short_term(
+        1001,
+        {
+            "active_summary": "摘要A",
+            "pending_topic": "话题",
+            "recent_exchanges": [
+                {"user_id": "111", "content": "说话"},
+                {"user_id": "用户(222)", "content": "说话2"},
+                {"user_id": "", "content": "无归属"},
+                "not-a-dict",
+            ],
+        },
+    )
+    cons._write_short_term(1001, {"active_summary": "摘要B", "pending_topic": "无"})
+
+
+def test_write_user_profiles_new_and_merge(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    _provision(cons, db_path)
+
+    cons._write_user_profiles(
+        [
+            {"user_id": "用户(111)", "nickname": "阿散", "personality_traits": "爱运动", "agent_attitude": "友好"},
+            {"user_id": "", "nickname": "无名", "personality_traits": "x"},
+        ]
+    )
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT personality_traits, interaction_count FROM user_profiles WHERE user_id='111'").fetchone()
+    assert row and "爱运动" in row[0]
+    assert row[1] == 1
+    assert conn.execute("SELECT COUNT(*) FROM user_profiles").fetchone()[0] == 1
+    conn.close()
+
+    cons._write_user_profiles(
+        [{"user_id": "111", "nickname": "", "personality_traits": "乐观", "agent_attitude": "更友好"}]
+    )
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT interaction_count, agent_attitude, personality_traits FROM user_profiles WHERE user_id='111'").fetchone()
+    conn.close()
+    assert row[0] == 2
+    assert "更友好" in row[1]
+    assert row[2].count("爱运动") == 1
+
+
+def test_write_memory_candidates_whitelist(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    _provision(cons, db_path)
+
+    cons._write_memory_candidates(
+        1001,
+        [
+            {"user_id": "111", "type": "fact", "content": "会写程序", "importance": "0.8", "confidence": "0.9", "source_message_ids": [1, 2]},
+            {"user_id": "999", "type": "FACT", "content": "不在白名单", "importance": 0.9, "confidence": 0.9, "source_message_ids": "not-json-["},
+            {"user_id": "222", "type": "", "content": "", "importance": 0.1, "confidence": 0.1},
+        ],
+        sender_ids=["111"],
+    )
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    count_in = cur.execute("SELECT COUNT(*) FROM memory_candidates").fetchone()[0]
+    bad = cur.execute("SELECT COUNT(*) FROM memory_candidates WHERE content LIKE '%不在白名单%'").fetchone()[0]
+    saved = cur.execute("SELECT type, source_message_ids, status FROM memory_candidates WHERE content='会写程序'").fetchone()
+    conn.close()
+    assert count_in == 1
+    assert bad == 0
+    assert saved is not None
+    assert saved[0] == "FACT"
+    assert json.loads(saved[1]) == ["1", "2"]
+    assert saved[2] == "NEW"
+
+
+def test_write_long_term_memories(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    _provision(cons, db_path)
+
+    cons._write_long_term_memories(
+        1001,
+        [
+            {"user_id": "111", "summary": "程序员", "importance": 8},
+            {"user_id": "111", "summary": "程序员", "importance": 7},
+            {"user_id": "222", "summary": "", "importance": 9},
+            {"user_id": "333", "summary": "低重要度", "importance": 2},
+        ],
+    )
+    conn = sqlite3.connect(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM long_term_memories").fetchone()[0]
+    conn.close()
+    assert count == 1
+
+
+def test_build_prompt_and_fetch_summary(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    _provision(cons, db_path)
+
+    assert cons._fetch_current_summary(1001) == ""
+    cons._write_short_term(
+        1001,
+        {
+            "active_summary": "在聊技术",
+            "pending_topic": "部署",
+            "recent_exchanges": [{"user_id": "111", "content": "我用Linux"}],
+        },
+    )
+    summary = cons._fetch_current_summary(1001)
+    assert "在聊技术" in summary
+    assert "用户(111)" in summary
+    prompt = cons._build_prompt(1001, "【消息】 hello")
+    assert "在聊技术" in prompt
+    assert "hello" in prompt

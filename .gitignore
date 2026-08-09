@@ -12,6 +12,10 @@ __pycache__/
 # FlexiWeb (external tool, cloned separately)
 FlexiWeb_Stream_Scraper/
 
+# Coverage data files
+.coverage
+.coverage-*
+
 # Runtime data & logs
 stella_thought_logs.md
 memory_consolidation_log.md

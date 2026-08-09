@@ -116,6 +116,8 @@ stella_project/
 
 ```bash
 python -m pytest tests -q
+# 覆盖率（目标 ≥ 80%）
+python -m pytest tests --cov=core --cov=memory --cov-report=term -q
 ```
 
 覆盖内容：
@@ -126,6 +128,11 @@ python -m pytest tests -q
 - 检索排序与回退（`tests/test_retriever.py`）
 - 短期记忆说话人归属（`tests/test_short_term_attribution.py`）
 - 全流程端到端：消息入库 → 上下文构建 → Pipeline 编排 → 输出解析/分行 → 整合 → 记忆晋升 + FTS（`tests/test_full_workflow.py`，全程 Dummy LLM、不触网）
+- 记忆策略 / 准入过滤 / 约束拆分（`tests/test_policy.py`、`tests/test_proactive_rules.py`、`tests/test_prompt_builder_v2.py`）
+- v2 记忆检索与分布式 Schema（`tests/test_retrieval_v2_and_schema.py`）
+- 决策追踪、内存评估基准、整合日志（`tests/test_trace.py`、`tests/test_benchmark_and_log.py`）
+- 记忆整合私有流程与越权候选隔离（`tests/test_consolidator_core.py`）
+- 压缩器（OpenAI / Ollama / Gemini）、DB 清理、LM Studio 客户端（`tests/test_compressor.py`、`tests/test_db_cleaner.py`、`tests/test_lm_studio.py`）
 
 CI 采用最小化配置（`.github/workflows/ci.yml`）：Ubuntu 上按 `requirements.txt` 安装全部运行依赖（nonebot2 / onebot 适配器 / apscheduler 插件 / httpx / dotenv / pydantic）+ pytest，然后 `pytest tests -q`；所有测试均使用临时 DB 与伪 LLM 后端，不依赖真实机器人、网络或 LM Studio 服务。
 
