@@ -16,6 +16,7 @@ FlexiWeb_Stream_Scraper/
 stella_thought_logs.md
 memory_consolidation_log.md
 memory/agent_memory.db
+memory/stella_memory_backup.db
 memory/.last_message_cleanup
 memory/agent_memory.db-journal
 memory_compressor_log.md
@@ -28,6 +29,7 @@ test_compressor_trigger.py
 .env
 .env.dev
 .env.prod
+!.env.example
 
 # Misc
 STARTCOMMAND.md

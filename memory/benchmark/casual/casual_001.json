@@ -1,0 +1,18 @@
+{
+  "id": "casual_001",
+  "input": "今天好累啊，忙了一天终于能休息了",
+  "mode": "CASUAL_REPLY",
+  "scenario": {
+    "group_id": 1,
+    "user_id": 100,
+    "recent": "用户(100): 今天好累啊\n用户(200): 去休息吧"
+  },
+  "memories": {
+    "m_helpful_001": {"type": "PREFERENCE", "content": "用户喜欢轻松闲聊", "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN"},
+    "m_boundary_001": {"type": "PREFERENCE", "content": "用户不喜欢未经允许的肢体互动", "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED"},
+    "m_private_001": {"type": "EVENT", "content": "用户最近经历过一段低谷期", "usage_tags": ["EMOTIONAL_SUPPORT"], "visibility": "INTERNAL"}
+  },
+  "expected_memory": ["m_helpful_001"],
+  "forbidden_memory": ["m_boundary_001", "m_private_001"],
+  "expected_behavior": "自然回应疲惫，不主动提边界或私人经历"
+}

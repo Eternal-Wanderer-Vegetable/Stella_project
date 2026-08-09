@@ -1,0 +1,18 @@
+{
+  "id": "tech_001",
+  "input": "为什么我的 CUDA 运行不了？报错说显存不足",
+  "mode": "TECH_HELP",
+  "scenario": {
+    "group_id": 2,
+    "user_id": 200,
+    "recent": "用户(200): 为什么我的 CUDA 运行不了？"
+  },
+  "memories": {
+    "m_device_001": {"type": "FACT", "content": "用户拥有 RTX5080 显卡，32GB 显存", "usage_tags": ["ANSWER_CONTEXT"], "visibility": "CONTEXTUAL"},
+    "m_game_001": {"type": "PREFERENCE", "content": "用户喜欢合作射击游戏", "usage_tags": ["RECOMMEND"], "visibility": "OPEN"},
+    "m_history_001": {"type": "EVENT", "content": "用户之前部署过本地AI模型，配置过CUDA，遇到过显存相关问题", "usage_tags": ["ANSWER_CONTEXT"], "visibility": "CONTEXTUAL"}
+  },
+  "expected_memory": ["m_device_001", "m_history_001"],
+  "forbidden_memory": ["m_game_001"],
+  "expected_behavior": "针对显存/驱动给出具体排查建议，不聊游戏"
+}

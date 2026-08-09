@@ -1,0 +1,18 @@
+{
+  "id": "recommend_001",
+  "input": "推荐一个适合和朋友一起玩的游戏呗",
+  "mode": "RECOMMEND",
+  "scenario": {
+    "group_id": 3,
+    "user_id": 300,
+    "recent": "用户(300): 推荐一个适合和朋友一起玩的游戏呗"
+  },
+  "memories": {
+    "m_pref_001": {"type": "PREFERENCE", "content": "用户喜欢合作类射击游戏，例如 Helldivers2", "usage_tags": ["RECOMMEND"], "visibility": "OPEN"},
+    "m_food_001": {"type": "PREFERENCE", "content": "用户不喜欢吃榴莲", "usage_tags": ["RECOMMEND"], "visibility": "CONTEXTUAL"},
+    "m_boundary_002": {"type": "PREFERENCE", "content": "用户不喜欢未经允许的摸头互动", "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED"}
+  },
+  "expected_memory": ["m_pref_001"],
+  "forbidden_memory": ["m_boundary_002"],
+  "expected_behavior": "推荐合作游戏并参考用户偏好，不提边界记忆"
+}

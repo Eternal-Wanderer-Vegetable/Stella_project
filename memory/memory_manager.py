@@ -16,10 +16,8 @@
 """
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
-import time
 import uuid
 from typing import Optional
 
@@ -31,6 +29,7 @@ from config import (
 from nonebot import logger
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
+from memory.schema import ensure_v2_schema
 
 
 class MemoryManager:
@@ -67,6 +66,10 @@ class MemoryManager:
                 evidence TEXT,
                 status TEXT,
                 source_message_ids TEXT,
+                usage_tags TEXT,
+                visibility TEXT DEFAULT 'OPEN',
+                trigger_data TEXT,
+                behavior_rule TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -88,6 +91,10 @@ class MemoryManager:
                 compressed_at DATETIME,
                 compression_version INTEGER,
                 is_atomized INTEGER,
+                usage_tags TEXT,
+                visibility TEXT DEFAULT 'OPEN',
+                trigger_data TEXT,
+                behavior_rule TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -116,6 +123,11 @@ class MemoryManager:
         """)
         conn.commit()
         conn.close()
+        # v2 记忆系统：基础表建好后，增量迁移补新字段/索引（幂等）
+        try:
+            ensure_v2_schema(DB_PATH)
+        except Exception:
+            pass
 
     def process_new_candidates(self) -> None:
         """处理全部待晋升的记忆候选（status ∈ {NEW, OBSERVING}），并把结果提交。
@@ -136,7 +148,7 @@ class MemoryManager:
 
         # 按创建时间先后处理，避免同批候选间的顺序抖动
         candidates = cursor.execute(
-            "SELECT id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids"
+            "SELECT id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
 
@@ -153,6 +165,9 @@ class MemoryManager:
                 "evidence": row[7] or "",
                 "status": row[8] or "NEW",
                 "source_message_ids": row[9] or "[]",
+                "usage_tags": row[10] or "[]",
+                "visibility": row[11] or "OPEN",
+                "behavior_rule": row[12] or "",
             }
 
             # OBSERVING 判定：双阈值都达不到时，暂不晋升，等更多证据
@@ -162,6 +177,9 @@ class MemoryManager:
                     ("OBSERVING", candidate["id"]),
                 )
                 continue
+
+            # 冲突解决（Conflict Resolution）：新候选与旧记忆矛盾时，标记旧记忆为 CONFLICT
+            self._resolve_conflicts(cursor, candidate)
 
             # 相似度合并：与已有的活跃同类型记忆比对，相似则合并而非重复新建
             existing_id = self._find_similar_memory(cursor, candidate)
@@ -199,13 +217,15 @@ class MemoryManager:
         return None
 
     def _create_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> None:
-        """新建长期记忆并同步写入 FTS 索引。内存记忆内容与原样都取 candidate.content。"""
+        """新建长期记忆并同步写入 FTS 索引。内存记忆内容与原样都取 candidate.content。
+        同时写入 v2 元字段（usage_tags / visibility / behavior_rule）。"""
         memory_id = uuid.uuid4().hex
         cursor.execute(
             "INSERT OR IGNORE INTO memories ("
             "id, group_id, user_id, type, content, content_raw, importance, confidence, status, "
-            "confirmation_count, last_confirmed_at, last_accessed_at, compressed_at, compression_version, is_atomized)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0)",
+            "confirmation_count, last_confirmed_at, last_accessed_at, compressed_at, compression_version, is_atomized, "
+            "usage_tags, visibility, behavior_rule)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?)",
             (
                 memory_id,
                 candidate["group_id"],
@@ -217,6 +237,9 @@ class MemoryManager:
                 candidate["confidence"],
                 "active",
                 1,
+                candidate.get("usage_tags") or "[]",
+                candidate.get("visibility") or "OPEN",
+                candidate.get("behavior_rule") or "",
             ),
         )
         _upsert_fts_record(
@@ -229,23 +252,29 @@ class MemoryManager:
         logger.info(f"🧠 [MemoryManager] 新增长期记忆 {memory_id} ({candidate['type']})")
 
     def _merge_into_memory(self, cursor: sqlite3.Cursor, memory_id: str, candidate: dict) -> None:
-        """把候选合并进已有记忆：合并内容块、重要度/置信度取最大值、累计确认次数，并同步 FTS。"""
+        """把候选合并进已有记忆：合并内容块、重要度/置信度取最大值、累计确认次数，并同步 FTS。
+        合并时同步吸收 v2 元字段（usage_tags 并集、behavior_rule 优先取候选值）。"""
         row = cursor.execute(
-            "SELECT content, content_raw, importance, confidence, confirmation_count FROM memories WHERE id = ?",
+            "SELECT content, content_raw, importance, confidence, confirmation_count, usage_tags, visibility, behavior_rule FROM memories WHERE id = ?",
             (memory_id,),
         ).fetchone()
         if not row:
             return
-        content, content_raw, importance, confidence, count = row
+        content, content_raw, importance, confidence, count = row[0], row[1], row[2], row[3], row[4]
         # 相似度合并：内容去重拼接（正文与原样都合并）
         merged_content = self._merge_content(content, candidate["content"])
         merged_content_raw = self._merge_content(content_raw or content, candidate["content"])
         # 合并时重要度/置信度取双方较大值，保留更强证据
         merged_importance = max(importance or 0.0, candidate["importance"])
         merged_confidence = max(confidence or 0.0, candidate["confidence"])
+        # v2 元字段：usage_tags 取并集；behavior_rule 优先取候选值（候选更可能是边界规则）
+        merged_usage = self._merge_usage_tags(row[5], candidate.get("usage_tags"))
+        merged_visibility = self._merge_visibility(row[6], candidate.get("visibility"))
+        merged_behavior = (candidate.get("behavior_rule") or "").strip() or (row[7] or "")
         cursor.execute(
             "UPDATE memories SET content = ?, content_raw = ?, importance = ?, confidence = ?, "
-            "confirmation_count = ?, last_confirmed_at = CURRENT_TIMESTAMP, last_accessed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+            "confirmation_count = ?, last_confirmed_at = CURRENT_TIMESTAMP, last_accessed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, "
+            "usage_tags = ?, visibility = ?, behavior_rule = ? "
             "WHERE id = ?",
             (
                 merged_content,
@@ -253,6 +282,9 @@ class MemoryManager:
                 merged_importance,
                 merged_confidence,
                 (count or 0) + 1,
+                merged_usage,
+                merged_visibility,
+                merged_behavior,
                 memory_id,
             ),
         )
@@ -265,6 +297,112 @@ class MemoryManager:
             merged_content,
         )
         logger.info(f"🧠 [MemoryManager] 合并入已有记忆 {memory_id}")
+
+    @staticmethod
+    def _merge_usage_tags(old: str, new) -> str:
+        """合并两批 usage_tags（JSON 数组），取并集、去重、保序。"""
+        import json as _json
+
+        def _parse(value) -> list[str]:
+            if isinstance(value, list):
+                return [str(x).strip().upper() for x in value if str(x).strip()]
+            try:
+                parsed = _json.loads(value or "[]")
+                return [str(x).strip().upper() for x in parsed if str(x).strip()]
+            except (ValueError, TypeError):
+                return []
+
+        merged: list[str] = []
+        for tag in _parse(old) + _parse(new):
+            if tag not in merged:
+                merged.append(tag)
+        return _json.dumps(merged, ensure_ascii=False)
+
+    @staticmethod
+    def _merge_visibility(old, new) -> str:
+        """合并可见性：候选若为更严格的 RESTRICTED/INTERNAL 则升级，否则保留旧值。"""
+        from memory.policy import VISIBILITY_INTERNAL, VISIBILITY_RESTRICTED, parse_visibility
+
+        old_vis = parse_visibility(old)
+        new_vis = parse_visibility(new)
+        order = {VISIBILITY_INTERNAL: 0, VISIBILITY_RESTRICTED: 1, "CONTEXTUAL": 2, "OPEN": 3}
+        return new_vis if order.get(new_vis, 3) <= order.get(old_vis, 3) else old_vis
+
+    def _resolve_conflicts(self, cursor: sqlite3.Cursor, candidate: dict) -> None:
+        """冲突解决（Conflict Resolution）：检测候选是否与已有活跃记忆矛盾。
+
+        矛盾判定：同用户、同类型，两者共享关键对象词，但情感极性相反
+        （旧=肯定、新=否定，反之亦然）。若新候选置信度更高，旧记忆标记为
+        CONFLICT（不再参与检索），新候选晋升；否则新候选压入 OBSERVING 等更多证据。
+        """
+        if not candidate["content"]:
+            return
+        rows = cursor.execute(
+            "SELECT id, content, confidence FROM memories WHERE status = 'active' AND group_id = ? AND user_id = ? AND type = ?",
+            (str(candidate["group_id"]), str(candidate["user_id"]), candidate["type"]),
+        ).fetchall()
+        for mem_id, old_content, old_confidence in rows:
+            if not old_content or old_content == candidate["content"]:
+                continue
+            if self._detect_contradiction(old_content, candidate["content"]):
+                old_conf = float(old_confidence or 0.0)
+                if candidate["confidence"] >= old_conf:
+                    cursor.execute(
+                        "UPDATE memories SET status = 'conflict', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (mem_id,),
+                    )
+                    logger.info(f"⚔️ [MemoryManager] 候选与旧记忆冲突，旧记忆标记 CONFLICT: {mem_id}")
+                else:
+                    cursor.execute(
+                        "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        ("OBSERVING", candidate["id"]),
+                    )
+                    logger.info("⚔️ [MemoryManager] 候选与旧记忆冲突但置信度更低，转为 OBSERVING")
+                return
+
+    @staticmethod
+    def _detect_contradiction(a: str, b: str) -> bool:
+        """启发式矛盾检测：两段内容共享关键词对象，但情感极性相反。"""
+        negation = (
+            "不喜欢", "不爱", "不想", "不常", "不愿意", "讨厌", "反感",
+            "拒绝", "不再", "停止", "禁止", "没兴趣",
+        )
+        affirmation = ("喜欢", "爱玩", "常玩", "经常", "愿意", "想玩", "感兴趣", "好")
+
+        def _polarity(text: str) -> int:
+            if any(w in text for w in negation):
+                return -1
+            if any(w in text for w in affirmation):
+                return 1
+            return 0
+
+        pa, pb = _polarity(a), _polarity(b)
+        if pa == 0 or pb == 0 or pa == pb:
+            return False
+        # 共享对象词：两段内容中都出现过的 2~4 字片段
+        common = MemoryManager._common_terms(a, b)
+        return bool(common)
+
+    @staticmethod
+    def _common_terms(a: str, b: str, min_len: int = 2) -> set[str]:
+        """提取两段文本共同的 2~4 字中文片段或英数词（用于判断是否谈论同一对象）。"""
+        import re as _re
+
+        def _segments(text: str) -> set[str]:
+            segs = _re.findall(r"[\u4e00-\u9fff]{2,8}", text or "")
+            out: set[str] = set()
+            for seg in segs:
+                if len(seg) <= 4:
+                    out.add(seg)
+                else:
+                    for size in (2, 3, 4):
+                        for i in range(len(seg) - size + 1):
+                            out.add(seg[i : i + size])
+            # 英数词（游戏名/型号等），如 Helldivers2 / RTX5080
+            out.update(_re.findall(r"[a-zA-Z0-9]+", text or ""))
+            return out
+
+        return _segments(a) & _segments(b)
 
     def _merge_content(self, old: str, new: str) -> str:
         """合并两段内容：去空白；若一段包含另一段则取较长者，否则以「；」连接。"""

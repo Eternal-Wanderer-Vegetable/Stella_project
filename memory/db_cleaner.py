@@ -11,7 +11,6 @@
 import argparse
 import sqlite3
 import time
-from pathlib import Path
 from config import DB_PATH, MESSAGE_CLEANUP_KEEP_COUNT
 
 # 上次消息清理的时间戳文件
@@ -35,7 +34,7 @@ def clean_db(
         cur.execute("DELETE FROM short_term_context")
         results["short_term_context"] = cur.rowcount
     if clear_long_term:
-        for table_name in ["long_term_memories", "memory_candidates", "memories", "atomic_facts"]:
+        for table_name in ["long_term_memories", "memory_candidates", "memories", "atomic_facts", "memory_traces"]:
             try:
                 cur.execute(f"DELETE FROM {table_name}")
                 results[table_name] = cur.rowcount

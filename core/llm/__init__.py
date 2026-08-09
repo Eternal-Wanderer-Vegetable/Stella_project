@@ -3,10 +3,10 @@
 # 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
 """LLM 后端包。
 
-导出两类后端实现（LMStudioBackend 本地、FlexiWebBackend 在线）的抽象基类
-LLMBackend，并在此集中声明两个全局 asyncio 锁：chat_llm_lock 用于串行化
-聊天主链路对共享本地模型的访问；consolidation_llm_lock 用于串行化记忆整合
-任务，避免多群并发打爆同一整合服务。
+导出 LLM 后端抽象基类 LLMBackend（本地 LM Studio 为唯一实现），并在此集中
+声明两个全局 asyncio 锁：chat_llm_lock 用于串行化聊天主链路对共享本地模型
+的访问；consolidation_llm_lock 用于串行化记忆整合任务，避免多群并发打爆
+同一整合服务。
 """
 
 import asyncio

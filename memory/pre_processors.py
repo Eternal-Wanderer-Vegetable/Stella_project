@@ -12,6 +12,7 @@
   主动发言时用群级记忆回顾；
 - _extract_keywords / _STOP_WORDS：中文停用词与关键词提取，供记忆话题匹配使用。
 """
+import json
 import re
 import sqlite3
 from nonebot import logger
@@ -19,7 +20,7 @@ from core.context import ChatContext
 from config import (
     DB_PATH, RECENT_MESSAGE_LIMIT,
     PROACTIVE_LONG_TERM_LIMIT, REPLY_LONG_TERM_LIMIT,
-    LONG_TERM_RELEVANCE_ENABLED,
+    MEMORY_V2_ENABLED,
 )
 from memory.retriever import get_group_memories, get_user_memories, get_related_memories
 from memory.prompt_builder import build_memory_context
@@ -82,18 +83,38 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # 短期摘要优先：取 short_term_context 的摘要与进行中话题
+        # 短期摘要优先：取 short_term_context 的摘要、进行中话题与关键发言（带说话人归属）
         cursor.execute(
             "SELECT active_summary, pending_topic FROM short_term_context WHERE group_id = ?",
             (str(ctx.group_id),),
         )
         row = cursor.fetchone()
-        if row and (row[0] or row[1]):
+        # 关键发言存在与否则单独读取：旧库可能没有该列，捕获后按空处理
+        exchanges: list[dict] = []
+        try:
+            cursor.execute(
+                "SELECT recent_exchanges FROM short_term_context WHERE group_id = ?",
+                (str(ctx.group_id),),
+            )
+            raw = cursor.fetchone()
+            if raw and raw[0]:
+                try:
+                    parsed = json.loads(raw[0])
+                    exchanges = [e for e in parsed if isinstance(e, dict) and e.get("user_id") and e.get("content")]
+                except (json.JSONDecodeError, TypeError):
+                    exchanges = []
+        except sqlite3.OperationalError:
+            exchanges = []
+
+        if row and (row[0] or row[1] or exchanges):
             parts = []
             if row[0]:
                 parts.append(f"对话摘要: {row[0]}")
             if row[1] and row[1] != "无":
                 parts.append(f"进行中的话题: {row[1]}")
+            if exchanges:
+                lines = [f"用户({e.get('user_id')}): {e.get('content')}" for e in exchanges]
+                parts.append("近期关键发言:\n" + "\n".join(lines))
             summary_text = "\n".join(parts) if parts else ""
             if summary_text:
                 ctx.short_term = summary_text
@@ -133,9 +154,17 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
     参数：ctx — 触发方式（ctx.trigger）决定走主动发言还是 @-回复路径；
     副作用：写入 ctx.user_profile（画像段落）与 ctx.memories_for_prompt（记忆列表）；
     返回：ctx。
+
+    v2：当 MEMORY_V2_ENABLED 时走记忆系统 v2 检索（Context-aware Memory Activation），
+    把结果写入 ctx.conversation_memories / ctx.behavior_constraints / ctx.memory_mode /
+    ctx.memory_trace，供 pipeline 做分区注入。
     """
     if not DB_PATH.exists():
         return ctx
+
+    if MEMORY_V2_ENABLED:
+        return await _build_user_context_v2(ctx)
+
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -229,6 +258,63 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
     except Exception as e:
         logger.warning(f"读取用户画像异常（跳过）: {e}")
     return ctx
+
+
+async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
+    """记忆系统 v2 的上下文组装：Policy 检索 + 分区记忆 + 决策轨迹。"""
+    from memory.retrieval_v2 import retrieve_memories
+
+    # 先组装稳定画像（只读稳定事实，过滤人格判断）
+    profile = _read_stable_profile(ctx.group_id, ctx.user_id)
+    ctx.user_profile = profile
+
+    # v2 检索（Context-aware Memory Activation）
+    result = retrieve_memories(
+        group_id=ctx.group_id,
+        user_id=ctx.user_id,
+        query=ctx.message,
+        trigger=ctx.trigger,
+    )
+    ctx.memory_mode = result.mode
+    ctx.conversation_memories = result.conversation_memories
+    ctx.behavior_constraints = result.behavior_constraints
+    ctx.memory_trace = result.trace
+    # 兼容旧字段（memories_for_prompt），供仍读取它的模块使用
+    ctx.memories_for_prompt = result.conversation_memories
+
+    if ctx.conversation_memories or ctx.behavior_constraints:
+        logger.info(
+            f"🧠 [Context v2] 模式={result.mode} 聊天素材={len(result.conversation_memories)} "
+            f"行为约束={len(result.behavior_constraints)}"
+        )
+    return ctx
+
+
+def _read_stable_profile(group_id: int, user_id: int) -> str:
+    """读取用户画像，只保留「稳定事实」（语言偏好/技术水平/可观察行为），
+    过滤人格判断与心理状态（见 Memory Policy / User Profile 治理方案）。"""
+    from memory.policy import stable_profile_facts
+
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT personality_traits, agent_attitude FROM user_profiles WHERE user_id = ?",
+            (str(user_id),),
+        )
+        row = cursor.fetchone()
+        conn.close()
+    except sqlite3.OperationalError:
+        return ""
+    if not row:
+        return ""
+    parts = []
+    traits = stable_profile_facts(row[0] or "")
+    if traits:
+        parts.append(f"关于用户{user_id}的可观察特征: {'，'.join(traits)}")
+    if row[1]:
+        parts.append(f"对bot态度: {row[1]}")
+    return "；".join(parts)
 
 
 # 中文停用词（高频无意义词，匹配时排除）

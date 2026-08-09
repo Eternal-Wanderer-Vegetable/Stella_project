@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""主动发言调度：在群聊沉默一段时间后，优雅地把话题带回来。
+"""主动发言调度：只在群聊有一定活跃度时，低调地插一句话。
 
-按配置的时间窗口（PROACTIVE_START/END + 随机上限）在合适时机以一定概率
-把近期要点总结成一句自然的话发出来。含节流：距上次主动发言不足一定秒数
-时会跳过，避免烦扰。
+主动发言强度由“群消息频率（平均间隔）”决定：
+- 消息频率过低（平均间隔过大 / 消息不足两条）时，完全不主动发言，
+  避免在冷清的群里自言自语、制造噪音；
+- 消息频率达到一定水平后，再按其高低复用既定概率（高频略低、中频较高），
+  且主动发言之间有硬性冷却，避免刷屏。
 """
 
 from __future__ import annotations
 
 import random
+import re
 import time
 from typing import Optional
 
@@ -23,10 +26,25 @@ from config import (
 )
 
 
+def _ngrams(text: str, n: int) -> list[str]:
+    """把文本切成一连串相邻字符片段（用于相似度去重）。"""
+    text = re.sub(r"\s+", "", text)
+    return [text[i : i + n] for i in range(max(0, len(text) - n + 1))]
+
+
+# 相似度去重阈值：新台词与上次发言的 4-gram 重叠率超过该比例即视为重复
+SIMILARITY_THRESHOLD = 0.5
+
+
 class ProactiveController:
-    """主动发言控制：基于群消息频率（平均间隔）估算活跃度，
-    高频群低概率主动发言（但非零），低频群高概率主动发言；
-    主动发言之间有硬性冷却时间。"""
+    """主动发言控制：基于群消息频率（平均间隔）估算活跃度。
+
+    规则：
+    1. 消息频率低于阈值（平均间隔 >= PROACTIVE_LOW_FREQ_INTERVAL）或消息不足
+       两条时，不主动发言（概率为 0），避免在冷清群自言自语；
+    2. 消息频率高于阈值（间隔更小）时，复用上一次的概率换算：高频群低概率、
+       相对低频但仍有活跃的群高一点，且主动发言之间有硬性冷却时间。
+    """
 
     def __init__(self):
         # group_id -> 最近消息时间戳列表（用于估算平均间隔）
@@ -34,6 +52,35 @@ class ProactiveController:
         # group_id -> 上次主动发言时间戳
         self._last_speak: dict[int, float] = {}
         self._last_check: dict[int, float] = {}
+        # group_id -> 最近说过的话（用于反重复刷屏）
+        self._spoken: dict[int, list[str]] = {}
+
+    # ── 反重复刷屏 ──────────────────────────────────────
+    def record_spoken(self, group_id: int, lines: list[str]):
+        """记录本群刚说过的话，用于判断要不要拦截几乎一样的重复内容"""
+        joined = "\n".join(lines)
+        self._spoken[group_id] = [joined]
+
+    def recently_spoken(self, group_id: int, lines: list[str]) -> bool:
+        """新台词与最近一次主动/回复台词高度相似时返回 True（用于防刷屏）。"""
+        prev = self._spoken.get(group_id)
+        if not prev or not lines:
+            return False
+        joined = "\n".join(lines).strip()
+        before = prev[0].strip()
+        if not joined or not before:
+            return False
+        # 分词成相邻子串，只要有较长片段重叠就视为重复
+        segments = [
+            _seg
+            for ln in lines
+            if ln.strip()
+            for _seg in _ngrams(ln.strip(), 4)
+        ]
+        if not segments:
+            return False
+        overlap = sum(1 for s in segments if s in before)
+        return overlap / len(segments) >= SIMILARITY_THRESHOLD
 
     # ── 频率统计 ────────────────────────────────────────
     def record_message(self, group_id: int):
@@ -46,7 +93,7 @@ class ProactiveController:
             del lst[: len(lst) - PROACTIVE_FREQ_WINDOW]
 
     def average_interval(self, group_id: int) -> Optional[float]:
-        """估算最近消息的平均间隔（秒）。消息不足两条时返回 None（按低频处理）。"""
+        """估算最近消息的平均间隔（秒）。消息不足两条时返回 None（视为频率过低）。"""
         lst = self._timestamps.get(group_id, [])
         if len(lst) < 2:
             return None
@@ -65,23 +112,31 @@ class ProactiveController:
     # ── 概率计算 ────────────────────────────────────────
     def speak_probability(self, group_id: int) -> float:
         """根据消息频率换算主动发言概率。
-        高频（间隔小）-> 概率低但非零；低频（间隔大）-> 概率高。"""
+
+        消息频率过低（平均间隔 >= PROACTIVE_LOW_FREQ_INTERVAL，或消息不足
+        两条使 interval 为 None）时返回 0，即不主动发言；否则复用上一次
+        逻辑：高频（间隔小）概率低，随间隔增大概率线性攀升。
+        """
         interval = self.average_interval(group_id)
         if interval is None:
-            # 消息太少，按低频（冷清）处理，概率较高
-            return PROACTIVE_MAX_PROB
+            # 消息太少（不足两条）即频率过低 → 不主动发言
+            return 0.0
+        if interval >= PROACTIVE_LOW_FREQ_INTERVAL:
+            # 平均间隔过大 → 消息频率过低 → 不主动发言
+            return 0.0
         if interval <= PROACTIVE_HIGH_FREQ_INTERVAL:
             return PROACTIVE_MIN_PROB
-        if interval >= PROACTIVE_LOW_FREQ_INTERVAL:
-            return PROACTIVE_MAX_PROB
-        # 线性插值：间隔越大概率越高
+        # 线性插值：间隔越大概率越高（复用过上一版逻辑）
         ratio = (interval - PROACTIVE_HIGH_FREQ_INTERVAL) / (
             PROACTIVE_LOW_FREQ_INTERVAL - PROACTIVE_HIGH_FREQ_INTERVAL
         )
         return PROACTIVE_MIN_PROB + ratio * (PROACTIVE_MAX_PROB - PROACTIVE_MIN_PROB)
 
     def should_speak(self, group_id: int) -> bool:
-        """是否应该主动发言：未冷却 + 概率命中"""
+        """是否应该主动发言：未冷却 + 概率命中。
+
+        概率为 0（消息频率过低）时，掷骰永远不会命中，保证冷清群不主动开口。
+        """
         if self.in_cooldown(group_id):
             return False
         prob = self.speak_probability(group_id)

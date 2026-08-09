@@ -17,6 +17,7 @@ from nonebot import logger
 from core.context import ChatContext
 from core.llm.base import LLMBackend
 from core.llm import chat_llm_lock
+from config import MEMORY_V2_ENABLED
 
 
 PreHook = Callable[[ChatContext], Awaitable[Optional[ChatContext]]]
@@ -101,15 +102,30 @@ class Pipeline:
         if self._llm:
             user_prompt = ctx.message
             # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
-            from memory.prompt_builder import build_prompt_context
-            short_term = getattr(ctx, "short_term", "") or ""
-            user_profile = getattr(ctx, "user_profile", "") or ""
-            memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
-            user_prompt = build_prompt_context(
-                short_term,
-                user_profile,
-                memories_for_prompt,
-            ) + "\n" + ctx.message
+            if MEMORY_V2_ENABLED:
+                # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
+                from memory.prompt_builder import build_v2_prompt_context
+
+                user_prompt = build_v2_prompt_context(
+                    getattr(ctx, "short_term", "") or "",
+                    getattr(ctx, "user_profile", "") or "",
+                    getattr(ctx, "conversation_memories", []) or [],
+                    getattr(ctx, "behavior_constraints", []) or [],
+                    current_user_id=ctx.user_id,
+                    mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
+                ) + "\n" + ctx.message
+            else:
+                from memory.prompt_builder import build_prompt_context
+
+                short_term = getattr(ctx, "short_term", "") or ""
+                user_profile = getattr(ctx, "user_profile", "") or ""
+                memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
+                user_prompt = build_prompt_context(
+                    short_term,
+                    user_profile,
+                    memories_for_prompt,
+                    current_user_id=ctx.user_id,
+                ) + "\n" + ctx.message
 
             # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
             ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
@@ -138,6 +154,34 @@ class Pipeline:
                     ctx.llm_elapsed = _time.monotonic() - _t0
                     logger.error(f"LLM 执行异常: {e}")
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
+
+        # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）
+        if MEMORY_V2_ENABLED:
+            try:
+                from memory.trace import record_trace
+
+                conv = getattr(ctx, "conversation_memories", []) or []
+                behavior = getattr(ctx, "behavior_constraints", []) or []
+                trace = getattr(ctx, "memory_trace", {}) or {}
+                record_trace(
+                    group_id=ctx.group_id,
+                    user_id=ctx.user_id,
+                    message=ctx.message,
+                    mode=trace.get("mode") or getattr(ctx, "memory_mode", ""),
+                    trigger=ctx.trigger,
+                    candidates=[
+                        {"id": cid} for cid in (trace.get("candidates") or [])
+                    ],
+                    final=conv,
+                    behavior=behavior,
+                    rejected=[
+                        {"id": cid} for cid in (trace.get("rejected_ids") or [])
+                    ],
+                    prompt_snapshot=ctx.prompt_log,
+                    output=ctx.raw_output,
+                )
+            except Exception as e:
+                logger.debug(f"📊 [Pipeline] 记录决策追踪失败: {e}")
 
         for _, hook in self._post_hooks:
             result = await hook(ctx)

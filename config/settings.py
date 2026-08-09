@@ -95,6 +95,17 @@ def _env_float(key: str, default: float = 0.0) -> float:
         logger.warning(f"⚠️ 配置项 {key}={raw!r} 不是有效浮点数，使用默认值 {default}")
         return default
 
+
+def _env_path(key: str, default: Path) -> Path:
+    """读取路径类环境变量，解析为 Path；未设置时返回 default。
+
+    路径统一解析为绝对路径，避免不同工作目录下相对路径漂移。
+    """
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return default
+    return Path(raw).expanduser().resolve()
+
 # ---------- 项目路径（自动校准） ----------
 # 与上文同样地向上定位项目根目录（以存在 core/ 目录为判据），
 # 确保后续 SYSTEM.md、数据库等相对路径都建立在根目录之上。
@@ -106,16 +117,18 @@ while _PROJECT_ROOT.parent != _PROJECT_ROOT:
     _PROJECT_ROOT = _PROJECT_ROOT.parent
 PROJECT_ROOT = _PROJECT_ROOT
 
-# ---------- 目录与文件路径 ----------
-# 各路径均锚定 PROJECT_ROOT，保证在不同工作目录下启动都能正确定位文件。
-SYSTEM_PROMPT_PATH = PROJECT_ROOT / "memory" / "SYSTEM.md"
-DB_PATH = PROJECT_ROOT / "memory" / "agent_memory.db"
-THOUGHT_LOG_PATH = PROJECT_ROOT / "stella_thought_logs.md"
-EXTENSIONS_DIR = PROJECT_ROOT / "extensions"
+# ---------- 目录与文件路径（可通过 .env 覆盖） ----------
+# 各路径均锚定 PROJECT_ROOT，保证在不同工作目录下启动都能正确定位文件；
+# 如需自定义，在 .env 里设置同名环境变量（绝对路径）。
+SYSTEM_PROMPT_PATH = _env_path("SYSTEM_PROMPT_PATH", PROJECT_ROOT / "memory" / "SYSTEM.md")
+DB_PATH = _env_path("DB_PATH", PROJECT_ROOT / "memory" / "agent_memory.db")
+THOUGHT_LOG_PATH = _env_path("THOUGHT_LOG_PATH", PROJECT_ROOT / "stella_thought_logs.md")
+EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
 
 # ---------- QQ 群聊 ----------
 # 逗号分隔的群号字符串转为 int 集合；过滤空片段避免尾逗号导致 int('') 报错。
-ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "263402786").split(",") if x.strip()}
+# 群号从 .env 的 ALLOWED_GROUPS 读取（用英文逗号分隔多个群号）。
+ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "").split(",") if x.strip()}
 
 # ---------- 上下文 ----------
 RECENT_MESSAGE_LIMIT = _env_int("RECENT_MESSAGE_LIMIT", 3)
@@ -152,6 +165,65 @@ MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE = _env_float("MEMORY_CANDIDATE_CONFIRM_M
 # 记忆候选晋升为长期记忆的最小置信度
 MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
 
+# ---------- 记忆系统 v2（Memory Policy / Retrieval v2） ----------
+# 总开关：False 时回退旧系统（旧 Consolidator 输出、旧 Retriever、旧 Prompt Builder）
+MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "yes")
+
+# 候选审核门槛（Gate 1：Confidence）
+#   confidence >= MEMORY_CONFIRM_HIGH_CONFIDENCE   → 直接进入长期记忆
+#   MEMORY_OBSERVE_LOW_CONFIDENCE <= confidence    → 进入观察区（OBSERVING）
+#   confidence < MEMORY_OBSERVE_LOW_CONFIDENCE     → 丢弃
+MEMORY_CONFIRM_HIGH_CONFIDENCE = _env_float("MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.85)
+MEMORY_OBSERVE_LOW_CONFIDENCE = _env_float("MEMORY_OBSERVE_LOW_CONFIDENCE", 0.6)
+
+# 检索排序权重（Memory Score =
+#   w1*Context Match + w2*Usage Match + w3*Semantic Similarity + w4*Confidence + w5*Importance）
+# 原则：Policy / Context 优先于 Similarity，避免“找错”而非“找不到”
+MEMORY_SCORE_W_CONTEXT = _env_float("MEMORY_SCORE_W_CONTEXT", 0.35)
+MEMORY_SCORE_W_USAGE = _env_float("MEMORY_SCORE_W_USAGE", 0.25)
+MEMORY_SCORE_W_SEMANTIC = _env_float("MEMORY_SCORE_W_SEMANTIC", 0.20)
+MEMORY_SCORE_W_CONFIDENCE = _env_float("MEMORY_SCORE_W_CONFIDENCE", 0.10)
+MEMORY_SCORE_W_IMPORTANCE = _env_float("MEMORY_SCORE_W_IMPORTANCE", 0.10)
+
+# 各模式最大记忆条数（动态上限，而不是固定 Top-K）
+MEMORY_LIMIT_CASUAL_REPLY = _env_int("MEMORY_LIMIT_CASUAL_REPLY", 3)
+MEMORY_LIMIT_ACTIVE_JOIN = _env_int("MEMORY_LIMIT_ACTIVE_JOIN", 3)
+MEMORY_LIMIT_HUMOR = _env_int("MEMORY_LIMIT_HUMOR", 3)
+MEMORY_LIMIT_TECH_HELP = _env_int("MEMORY_LIMIT_TECH_HELP", 5)
+MEMORY_LIMIT_RECOMMEND = _env_int("MEMORY_LIMIT_RECOMMEND", 5)
+MEMORY_LIMIT_EMOTIONAL = _env_int("MEMORY_LIMIT_EMOTIONAL", 3)
+MEMORY_LIMIT_CONFLICT_AVOID = _env_int("MEMORY_LIMIT_CONFLICT_AVOID", 10)
+MEMORY_LIMIT_GROUP_EVENT = _env_int("MEMORY_LIMIT_GROUP_EVENT", 5)
+
+# Prompt 长度控制（Gemma 27B 虽支持较长上下文，但记忆不是越多越好）
+#   Conversation Memory 上限（普通聊天）
+MEMORY_CONVERSATION_MAX_TOKENS = _env_int("MEMORY_CONVERSATION_MAX_TOKENS", 500)
+#   Behavior Constraint 上限
+MEMORY_BEHAVIOR_MAX_TOKENS = _env_int("MEMORY_BEHAVIOR_MAX_TOKENS", 150)
+#   技术场景 Conversation 上限
+MEMORY_CONVERSATION_TECH_MAX_TOKENS = _env_int("MEMORY_CONVERSATION_TECH_MAX_TOKENS", 1000)
+
+# 记忆类型生命周期（衰减用，天）；FACT 极慢 → GROUP_CONTEXT 很快
+MEMORY_DECAY_DAYS: dict[str, float] = {
+    "FACT": 730.0,
+    "STYLE": 365.0,
+    "PREFERENCE": 180.0,
+    "RELATION": 180.0,
+    "EVENT": 60.0,
+    "PLAN": 60.0,
+    "GROUP_CONTEXT": 30.0,
+}
+
+# 决策追踪（Evaluation & Debug：记录为什么调用/拒绝记忆）
+MEMORY_TRACE_ENABLED = _env("MEMORY_TRACE_ENABLED", "true").lower() in ("true", "1", "yes")
+# 决策追踪表名
+MEMORY_TRACE_TABLE = _env("MEMORY_TRACE_TABLE", "memory_traces")
+
+# Benchmark 数据集目录（Evaluation & Debug）
+MEMORY_BENCHMARK_DIR = _env_path(
+    "MEMORY_BENCHMARK_DIR", PROJECT_ROOT / "memory" / "benchmark"
+)
+
 # ---------- 本地 LLM（LM Studio） ----------
 LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
 LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
@@ -159,57 +231,25 @@ LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
 # LLM 调用超时（秒）
 LLM_TIMEOUT = _env_float("LLM_TIMEOUT", 90.0)
 
-# ---------- 在线 LLM（FlexiWeb） ----------
-FLEXIWEB_BASE_URL = _env("FLEXIWEB_BASE_URL", "http://127.0.0.1:8000")
-CONSOLIDATION_SITE = _env("CONSOLIDATION_SITE", "deepseek")
-
-# FlexiWeb 项目路径（用于自动拉起子进程）
-FLEXIWEB_PROJECT_DIR = _env("FLEXIWEB_PROJECT_DIR", str(PROJECT_ROOT.parent / "FlexiWeb_Stream_Scraper"))
-
-# FlexiWeb 启动模式：
-#   True  = 无头模式（不显示浏览器窗口，生产环境使用）
-#   False = 有头模式（显示浏览器窗口，调试用）
-# ⚠️ 首次使用：FlexiWeb 无登录数据，无头模式会卡在 DeepSeek 登录页。
-#    请设为 False 启动，手动登录一次 DeepSeek（会话保存在 browser_user_data），
-#    之后再改回 True 即可无头运行。
-FLEXIWEB_HEADLESS = _env("FLEXIWEB_HEADLESS", "false").lower() in ("true", "1", "yes")
-
 # ---------- 记忆整合 ----------
-# LLM 优先级链，按顺序尝试，前一个失败自动降级到下一个。
-#   "lm_studio" = 本地模型（LM Studio，统一推理系统，数据整理默认后端）
-#   "flexiweb"  = 在线 LLM（Playwright 抓取 DeepSeek 网页，已默认关闭，保留代码可回退）
-CONSOLIDATION_LLM_PRIORITY = [s.strip() for s in _env("CONSOLIDATION_LLM_PRIORITY", "lm_studio").split(",") if s.strip()]
-
-# 在线 LLM 失败后的冷却时间（秒），避免频繁重试拖慢整合
-CONSOLIDATION_ONLINE_COOLDOWN = _env_int("CONSOLIDATION_ONLINE_COOLDOWN", 300)
-
-# 在线 LLM（FlexiWeb/DeepSeek）的整合批量：
-# 批量太小会导致调用过于频繁，容易触发网站风控；批量大才能发挥大模型总结优势。
-# 注意：该批量会拼成较大的 prompt，只适合上下文窗口大的在线模型。
-CONSOLIDATION_BATCH_SIZE = _env_int("CONSOLIDATION_BATCH_SIZE", 100)
-# 每次整合时向前回看多少条用于话题连续（与上一批量重叠，保证话题不被切断）
-CONSOLIDATION_OVERLAP = _env_int("CONSOLIDATION_OVERLAP", 15)
-# 在线 LLM 最大生成 token 数
-CONSOLIDATION_MAX_TOKENS = _env_int("CONSOLIDATION_MAX_TOKENS", 2000)
-
-# ---------- 本地整合（LM Studio） ----------
-# 数据整理任务由本地低阶模型执行，统一使用 LM Studio 作为推理系统，
-# 与主聊天模型 (gemma 27B) 分离，避免显存/推理竞争。
-# 可指向同一实例的多模型处理，也可指向独立端口/实例。
+# 整合统一使用本地 LM Studio（在线整合流程已废弃，见 _deprecated/core_llm_flexiweb.py），
+# 数据整理任务与主聊天模型分离，避免显存/推理竞争；可指向同一实例的多模型或独立端口。
 CONSOLIDATION_LM_STUDIO_BASE_URL = _env("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
 # 注意：LM Studio 路由需要完整模型 ID（含 google/ 前缀），如 google/gemma-4-e4b
 CONSOLIDATION_LM_STUDIO_MODEL = _env("CONSOLIDATION_LM_STUDIO_MODEL", "google/gemma-4-e4b")
 # 整理任务偏低温度，保证 JSON 输出稳定
 CONSOLIDATION_LM_STUDIO_TEMPERATURE = _env_float("CONSOLIDATION_LM_STUDIO_TEMPERATURE", 0.3)
 
-# 本地整合批次（整合模型上下文窗口足够，可从旧值 10 放宽）
+# 整合批次大小（整合模型上下文窗口足够，可从旧值 10 放宽）
 CONSOLIDATION_LOCAL_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_BATCH_SIZE", 30)
 # force 路径（@触发/主动发言前）的小批次，尽快出结果
 CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE", 10)
-# 本地整合最大生成 token 数
+# 每次整合时向前回看多少条用于话题连续（与上一批量重叠，保证话题不被切断）
+CONSOLIDATION_OVERLAP = _env_int("CONSOLIDATION_OVERLAP", 15)
+# 整合最大生成 token 数
 CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 1200)
-# 整合日志文件路径（可视化记录每次整合运行详情）
-CONSOLIDATION_LOG_PATH = PROJECT_ROOT / "memory_consolidation_log.md"
+# 整合日志文件路径（可视化记录每次整合运行详情，可通过 .env 覆盖）
+CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", PROJECT_ROOT / "memory_consolidation_log.md")
 
 # ---------- 主动发言 ----------
 # 是否启用主动发言
@@ -222,11 +262,14 @@ PROACTIVE_CHECK_INTERVAL = _env_int("PROACTIVE_CHECK_INTERVAL", 30)
 PROACTIVE_FREQ_WINDOW = _env_int("PROACTIVE_FREQ_WINDOW", 10)
 # 平均消息间隔 <= 此值（秒）视为高频（活跃群），主动发言概率低
 PROACTIVE_HIGH_FREQ_INTERVAL = _env_float("PROACTIVE_HIGH_FREQ_INTERVAL", 20.0)
-# 平均消息间隔 >= 此值（秒）视为低频（冷清群），主动发言概率高
+# 平均消息间隔 >= 此值（秒）视为消息频率过低（冷清群）→ 完全不再主动发言，
+# 只有频率高于它（平均间隔更小）时才按概率插话
 PROACTIVE_LOW_FREQ_INTERVAL = _env_float("PROACTIVE_LOW_FREQ_INTERVAL", 180.0)
-# 低频时的最大主动发言概率（0~1），高频时的最小概率（不可为 0）
+# 主动发言的最大概率（0~1，高频区间的最小概率不可为 0）
 PROACTIVE_MAX_PROB = _env_float("PROACTIVE_MAX_PROB", 0.5)
 PROACTIVE_MIN_PROB = _env_float("PROACTIVE_MIN_PROB", 0.05)
+# 主动发言时每次最多发出的行数（主动插话宜简短，避免刷屏）
+PROACTIVE_MAX_LINES = _env_int("PROACTIVE_MAX_LINES", 1)
 # 主动发言前若累计新消息达到该数量，则触发一次短期记忆总结
 CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGES", 10)
 
@@ -262,9 +305,25 @@ MESSAGE_CLEANUP_HOUR = _env_int("MESSAGE_CLEANUP_HOUR", 4)
 MAX_REPLY_LINES = _env_int("MAX_REPLY_LINES", 5)
 SEND_INTERVAL = _env_float("SEND_INTERVAL", 0.8)
 
-# ---------- NapCat 看门狗 ----------
-NAPCAT_TOKEN = _env("NAPCAT_TOKEN", "")
-NAPCAT_API_URL = _env("NAPCAT_API_URL", "http://127.0.0.1:6099/api/Process/Restart")
+# ---------- NapCat 前端（NapCat.Shell）进程管理 ----------
+# NapCat.Shell 安装目录（需含 launcher-user.bat / NapCatWinBootMain.exe / napcat.mjs）
+# 默认取项目根目录上一级下的 NapCat.Shell，可用绝对路径覆盖
+NAPCAT_SHELL_PATH = _env_path("NAPCAT_SHELL_PATH", PROJECT_ROOT.parent / "NapCat.Shell")
+# 机器人启动时若 NapCat 未运行，是否自动经 launcher-user.bat 拉起
+NAPCAT_AUTO_START = _env("NAPCAT_AUTO_START", "true").lower() in ("true", "1", "yes")
+# 开机自动登录：写入子进程环境变量 NAPCAT_QUICK_ACCOUNT / NAPCAT_QUICK_PASSWORD。
+# NapCat 优先快速登录（历史会话），失效时用密码回退登录；MD5 优先于明文密码。
+NAPCAT_QQ_ACCOUNT = _env("NAPCAT_QQ_ACCOUNT", "")
+NAPCAT_QQ_PASSWORD = _env("NAPCAT_QQ_PASSWORD", "")
+NAPCAT_QQ_PASSWORD_MD5 = _env("NAPCAT_QQ_PASSWORD_MD5", "")
+
+# ---------- NapCat 消息流看门狗（外部重启，不再走 WebUI API） ----------
+# 超过该秒数无任何群消息进入，判定链路中断并外部重启 NapCat
+NAPCAT_WATCHDOG_TIMEOUT = _env_int("NAPCAT_WATCHDOG_TIMEOUT", 300)
+# 看门狗定时检查间隔（秒）
+NAPCAT_WATCHDOG_CHECK_INTERVAL = _env_int("NAPCAT_WATCHDOG_CHECK_INTERVAL", 60)
+# 重启后把最近消息时间拨后此秒数，给恢复留缓冲，避免反复触发
+NAPCAT_WATCHDOG_RESTART_COOLDOWN = _env_int("NAPCAT_WATCHDOG_RESTART_COOLDOWN", 120)
 
 # ---------- 破防检测 ----------
 BAD_PHRASES = [

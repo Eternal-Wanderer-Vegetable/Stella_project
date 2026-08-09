@@ -39,7 +39,7 @@ class ChatContext:
 
     # ---- LLM 调用诊断信息（供 thought 日志记录） ----
     trigger: str = "reply"          # reply=@回复 / proactive=主动发言
-    llm_backend: str = ""           # 实际调用的后端名（lm_studio / flexiweb）
+    llm_backend: str = ""           # 实际调用的后端名（lm_studio）
     llm_model: str = ""             # 实际使用的模型名/站点
     system_prompt_len: int = 0      # 系统提示词字符数
     prompt_log: str = ""            # 发给 LLM 的完整 prompt（含上下文拼接）
@@ -48,3 +48,8 @@ class ChatContext:
     short_term: str = ""
     user_profile: str = ""
     memories_for_prompt: list[dict] = field(default_factory=list)
+    # ---- 记忆系统 v2：模式 / 分区记忆 / 行为约束 / 决策轨迹 ----
+    memory_mode: str = "CASUAL_REPLY"          # Stella 行为模式
+    conversation_memories: list[dict] = field(default_factory=list)  # 聊天素材
+    behavior_constraints: list[dict] = field(default_factory=list)   # 行为约束
+    memory_trace: dict = field(default_factory=dict)                 # 决策轨迹

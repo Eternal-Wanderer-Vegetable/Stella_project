@@ -1,0 +1,18 @@
+{
+  "id": "emotion_001",
+  "input": "最近压力好大，感觉快撑不住了",
+  "mode": "EMOTIONAL",
+  "scenario": {
+    "group_id": 6,
+    "user_id": 400,
+    "recent": "用户(400): 最近压力好大，感觉快撑不住了"
+  },
+  "memories": {
+    "m_emotion_001": {"type": "EVENT", "content": "用户最近在准备重要的考试", "usage_tags": ["EMOTIONAL_SUPPORT"], "visibility": "CONTEXTUAL"},
+    "m_humor_001": {"type": "RELATION", "content": "用户经常和群友互相玩梗", "usage_tags": ["HUMOR"], "visibility": "OPEN"},
+    "m_recommend_001": {"type": "PREFERENCE", "content": "用户最近想买新耳机", "usage_tags": ["RECOMMEND"], "visibility": "OPEN"}
+  },
+  "expected_memory": ["m_emotion_001"],
+  "forbidden_memory": ["m_humor_001", "m_recommend_001"],
+  "expected_behavior": "先共情陪伴，不谈玩梗也不突然推销"
+}

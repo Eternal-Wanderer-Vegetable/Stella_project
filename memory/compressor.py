@@ -35,6 +35,7 @@ from config import (
     MEMORY_COMPRESS_LOG_FILENAME,
     MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD,
     MEMORY_ARCHIVE_INACTIVE_DAYS,
+    MEMORY_DECAY_DAYS,
 )
 from nonebot import logger
 
@@ -73,6 +74,10 @@ class MemoryCompressor:
                 compressed_at DATETIME,
                 compression_version INTEGER,
                 is_atomized INTEGER,
+                usage_tags TEXT,
+                visibility TEXT DEFAULT 'OPEN',
+                trigger_data TEXT,
+                behavior_rule TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -120,6 +125,7 @@ class MemoryCompressor:
         merged = self._merge_duplicate_memories(cursor, rows)
         atomized = self._atomize_long_memories(cursor, rows)
         archived = self._archive_low_value_memories(cursor)
+        decayed = self._apply_decay(cursor)
 
         # 记录统计与日志
         conn.commit()
@@ -129,7 +135,7 @@ class MemoryCompressor:
         )
         conn.commit()
         conn.close()
-        self._append_log(f"周度压缩：合并 {merged}，原子化 {atomized}，归档 {archived}")
+        self._append_log(f"周度压缩：合并 {merged}，原子化 {atomized}，归档 {archived}，衰减 {decayed}")
         logger.info("🧹 [MemoryCompressor] 周度压缩完成")
 
     def maybe_compress(self, reason: str = "auto") -> None:
@@ -186,7 +192,7 @@ class MemoryCompressor:
         except Exception as e:
             logger.warning(f"🧹 [MemoryCompressor] maybe_compress 失败: {e}")
 
-    def _merge_duplicate_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> None:
+    def _merge_duplicate_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> int:
         """把内容相似（同群同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
 
         合并规则：content 用 _merge_content（保留更完整一方或分号拼接）；
@@ -249,7 +255,7 @@ class MemoryCompressor:
         # 返回合并/归档的数量
         return len(seen)
 
-    def _atomize_long_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> None:
+    def _atomize_long_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> int:
         """把长度 ≥ 80 字、尚未原子化（is_atomized=0）的记忆拆成“原子事实”。
 
         对每行用 _split_into_fragments 切成片段，写入 atomic_facts 表
@@ -281,7 +287,7 @@ class MemoryCompressor:
             atomized_total += len(fragments)
         return atomized_total
 
-    def _archive_low_value_memories(self, cursor: sqlite3.Cursor) -> None:
+    def _archive_low_value_memories(self, cursor: sqlite3.Cursor) -> int:
         """把“重要度低 且 长期未访问（或从未访问）”的记忆归档（status='archived'）。
 
         条件：importance < MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD，
@@ -305,6 +311,27 @@ class MemoryCompressor:
             logger.info(f"🧹 [MemoryCompressor] 归档低价值记忆 {count} 条")
         return count
 
+    def _apply_decay(self, cursor: sqlite3.Cursor) -> int:
+        """按记忆类型生命周期做衰减归档（Memory Decay）。
+
+        每种类型有不同的“保质期”（见 MEMORY_DECAY_DAYS）：
+        FACT 极慢 → STYLE 慢 → PREFERENCE/RELATION 中 → EVENT/PLAN 快 → GROUP_CONTEXT 很快。
+        超过类型生命周期且近期未访问的记忆，转为 archived（不删除，只退出检索）。
+        """
+        total = 0
+        for mem_type, max_days in MEMORY_DECAY_DAYS.items():
+            cursor.execute(
+                "UPDATE memories SET status = 'archived', compressed_at = CURRENT_TIMESTAMP, "
+                "compression_version = COALESCE(compression_version, 0) + 1, updated_at = CURRENT_TIMESTAMP "
+                "WHERE status = 'active' AND type = ? "
+                "AND (last_accessed_at IS NULL OR julianday('now') - julianday(last_accessed_at) > ?)",
+                (mem_type, max_days),
+            )
+            total += cursor.rowcount
+        if total > 0:
+            logger.info(f"🧹 [MemoryCompressor] 按类型生命周期衰减归档 {total} 条")
+        return total
+
     def _split_into_fragments(self, text: str) -> list[str]:
         """把一段长文本切成“原子事实”候选片段。
 
@@ -325,7 +352,7 @@ class MemoryCompressor:
                     atoms.append(frag[i : i + 60].strip())
         return [atom for atom in atoms if atom]
 
-    def _store_atomic_facts(self, cursor: sqlite3.Cursor, memory_id: str, group_id: str, user_id: str, fragments: list[str]) -> None:
+    def _store_atomic_facts(self, cursor: sqlite3.Cursor, memory_id: str, group_id: str, user_id: str, fragments: list[str]) -> int:
         """把原子片段逐条写入 atomic_facts 表（INSERT OR IGNORE，靠随机 uuid 主键防重）。
 
         subject 取“用户{user_id}”或“群{group_id}”（无 user_id 时用群名），

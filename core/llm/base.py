@@ -4,8 +4,8 @@
 """LLM 后端抽象基类。
 
 定义所有 LLM 后端的统一接口 LLMBackend：任何实现只需提供 generate 异步方法，
-即可接入 Pipeline。抽象层的价值在于让上层调用只依赖接口，而不关心具体是
-本地 LM Studio 还是在线 FlexiWeb，方便在运行期按需切换/降级。
+即可接入 Pipeline。抽象层的价值在于让上层调用只依赖接口，而不关心具体实现，
+方便在运行期按需切换/降级。
 """
 
 from abc import ABC, abstractmethod

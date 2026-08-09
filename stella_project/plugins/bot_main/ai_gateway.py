@@ -20,6 +20,7 @@ NoneBot 单进程下天然复用；多 worker 场景需外部保证单实例。
 from __future__ import annotations
 
 import asyncio
+import math
 from collections import defaultdict
 from nonebot import logger, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
@@ -29,19 +30,16 @@ from nonebot.rule import Rule
 from config import (
     ALLOWED_GROUPS, SEND_INTERVAL, SYSTEM_PROMPT_PATH,
     LM_STUDIO_BASE_URL, LM_STUDIO_MODEL, LLM_TIMEOUT,
-    EXTENSIONS_DIR, FLEXIWEB_PROJECT_DIR, FLEXIWEB_BASE_URL, CONSOLIDATION_SITE,
-    CONSOLIDATION_BATCH_SIZE, FLEXIWEB_HEADLESS,
+    EXTENSIONS_DIR,
     DB_CLEANUP_ON_START, DB_CLEANUP_CLEAR_MESSAGES,
     PROACTIVE_ENABLED, PROACTIVE_COOLDOWN, PROACTIVE_CHECK_INTERVAL,
+    PROACTIVE_MAX_LINES,
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
-    CONSOLIDATION_LLM_PRIORITY,
     MESSAGE_CLEANUP_ENABLED, MESSAGE_CLEANUP_HOUR,
 )
 from core.context import ChatContext
 from core.pipeline import Pipeline
 from core.llm.lm_studio import LMStudioBackend
-import core.llm.flexiweb as _flexiweb
-from core.llm.flexiweb import FlexiWebManager
 from extensions import load_extensions
 from memory.pre_processors import record_message, build_context, build_user_context
 from memory.compressor import get_compressor
@@ -107,6 +105,17 @@ try:
 except Exception as e:
     logger.debug(f"注册周度压缩任务失败: {e}")
 
+# ── 启动时记忆系统 Schema 迁移（Additive Migration） ──
+# 只加字段/索引、绝不删数据；旧库升级为 v2（usage_tags/visibility/behavior_rule 等），
+# 首次迁移前自动备份为 stella_memory_backup.db
+try:
+    from memory.schema import ensure_v2_schema
+
+    if ensure_v2_schema():
+        logger.info("🔧 [Startup] 记忆系统 Schema 已升级到 v2")
+except Exception as e:
+    logger.warning(f"⚠️ 记忆系统 Schema 迁移失败: {e}")
+
 # ── 启动时数据库清理（测试期用，避免频繁重启注入脏记忆） ──
 # 打开开关后，在插件装载阶段立即清空短期 / 长期记忆、重置检查点
 if DB_CLEANUP_ON_START:
@@ -134,20 +143,6 @@ if MESSAGE_CLEANUP_ENABLED:
                 logger.info(f"🧹 [消息清理] 已清理 {result['deleted']} 条旧消息（{result['groups']} 个群）")
     except Exception as e:
         logger.warning(f"⚠️ 启动时消息清理异常: {e}")
-
-# ── FlexiWeb 自动启动（仅在优先级链启用 flexiweb 时，后台拉起） ──────
-# 只在 consolidation LLM 优先级链里含 flexiweb 且批次大小>0 时，才启动无头浏览器服务
-if "flexiweb" in CONSOLIDATION_LLM_PRIORITY and CONSOLIDATION_BATCH_SIZE > 0:
-    _flexiweb.global_manager = FlexiWebManager(
-        project_dir=FLEXIWEB_PROJECT_DIR,
-        base_url=FLEXIWEB_BASE_URL,
-        site=CONSOLIDATION_SITE,
-        headless=FLEXIWEB_HEADLESS,
-    )
-    try:
-        asyncio.get_running_loop().create_task(_flexiweb.global_manager.ensure_running())
-    except RuntimeError as e:
-        logger.warning(f"⚠️ FlexiWeb 启动异常（未在事件循环中）: {e}")
 
 # ============================================================
 # QQ 事件监听
@@ -233,6 +228,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         if not ctx.lines:
             ctx.lines = ["......？"]
 
+        # 把本次回复记入“已说过的话”，防止随后主动发言再重复刷屏
+        try:
+            get_proactive().record_spoken(event.group_id, ctx.lines)
+        except Exception:
+            pass
+
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
         # 第一条回复带引用原消息；多行之间间隔 SEND_INTERVAL 秒发送
@@ -259,6 +260,25 @@ try:
     from nonebot_plugin_apscheduler import scheduler
 except Exception:
     scheduler = None
+
+_SENTENCE_ENDERS = "，。！？、；：;:?!.…\"\"''"
+
+
+def _join_lines_naturally(lines: list[str]) -> str:
+    """把多行台词自然地合并为一句/段，去掉硬换行并补齐标点。
+
+    行间用“，”自然衔接：若上一行已经以标点结尾则直接相连，
+    否则补一个逗号，避免出现“救命\n感觉好无聊啊”这类生硬断句。
+    """
+    text = ""
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if text and text[-1] not in _SENTENCE_ENDERS:
+            text += "，"
+        text += line
+    return text
 
 
 async def _proactive_speak_for_group(bot: Bot, group_id: int):
@@ -306,8 +326,25 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
         if not ctx.lines:
             return
 
+        # 主动插话只保留 PROACTIVE_MAX_LINES 条以内的消息（避免刷屏），
+        # 超出的行按自然句读合并进前几行，而不是直接丢弃后半段（避免出现只发“救命”这类断句）
+        if PROACTIVE_MAX_LINES > 0 and len(ctx.lines) > PROACTIVE_MAX_LINES:
+            per_chunk = math.ceil(len(ctx.lines) / PROACTIVE_MAX_LINES)
+            ctx.lines = [
+                _join_lines_naturally(ctx.lines[i : i + per_chunk])
+                for i in range(0, len(ctx.lines), per_chunk)
+            ]
+        if not ctx.lines:
+            return
+
+        # 防刷屏：与最近一次主动/回复高度相似时，本次主动发言直接放弃
+        if get_proactive().recently_spoken(group_id, ctx.lines):
+            logger.info(f"🛑 [主动发言] 群 {group_id} 与已发言内容重复，跳过")
+            return
+
         # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
         proactive.mark_spoke(group_id)
+        get_proactive().record_spoken(group_id, ctx.lines)
         logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
         try:
             for i, line in enumerate(ctx.lines):
@@ -357,3 +394,11 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
                 logger.debug(f"🧹 [消息清理] 无需清理（{groups} 个群）")
         except Exception as e:
             logger.warning(f"⚠️ 消息清理异常: {e}")
+        # 同步清理过期的记忆决策追踪，防止 memory_traces 无限膨胀
+        try:
+            from memory.trace import prune_traces
+            pruned = prune_traces(keep_days=30.0)
+            if pruned > 0:
+                logger.info(f"📊 [Trace] 已清理 {pruned} 条过期决策追踪")
+        except Exception as e:
+            logger.debug(f"📊 [Trace] 决策追踪清理异常: {e}")

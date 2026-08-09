@@ -17,7 +17,7 @@ Stella 是一个面向私有部署、以 QQ 群聊为场景的记忆型聊天机
 - `@Bot` 触发的群聊问答
 - 本地 LM Studio 模型作为主聊天后端
 - 本地小模型参与短期记忆总结、记忆候选生成与记忆压缩
-- 可选 FlexiWeb 在线模型辅助记忆整合，在线不可用时自动降级
+- 记忆整合统一走本地 LM Studio（在线整合已废弃，归档于 `_deprecated/`）
 - 基于群聊活跃度的主动发言
 - 支持 Pipeline 前后置 Hook 扩展
 - SQLite 持久化、思考日志与记忆压缩日志
@@ -37,8 +37,7 @@ stella_project/
 │   ├── pipeline.py                # Pipeline 编排器，串联 pre/post hooks 与 LLM 调用
 │   └── llm/
 │       ├── base.py                # LLM 后端抽象接口
-│       ├── lm_studio.py           # LM Studio 本地模型后端
-│       └── flexiweb.py            # FlexiWeb 在线模型后端与管理器
+│       └── lm_studio.py           # LM Studio 本地模型后端
 ├── extensions/
 │   └── __init__.py                # 扩展自动加载入口（扫描 setup(pipeline)）
 ├── memory/
@@ -53,13 +52,12 @@ stella_project/
 │   ├── prompt_builder.py          # 把记忆与上下文拼成自然语言 Prompt
 │   ├── consolidation_prompt.py    # 整合任务 JSON 输出模板
 │   ├── consolidation_log.py       # 整合日志追加
-│   ├── online_llm.py              # 旧版在线 LLM 客户端（保留）
 │   └── db_cleaner.py              # 清理测试期脏数据 + 消息表定时裁剪
 ├── stella_project/plugins/bot_main/
 │   ├── ai_gateway.py              # QQ 事件监听、Pipeline 接入、主动发言与调度
 │   ├── watchdog.py                # NapCat 看门狗（消息流中断自动重启）
 │   └── config.py                  # 插件配置（pydantic）
-├── tests/                         # pytest 测试（记忆晋升、FTS 同步、RAG 开关、检索排序）
+├── tests/                         # pytest 测试（记忆晋升、FTS 同步、RAG 开关、全流程端到端）
 └── _deprecated/                   # 废弃/历史代码与旧数据库归档（gitignore）
 ```
 
@@ -99,10 +97,7 @@ stella_project/
 - 同一进程内使用异步锁保证不会同时打爆本地模型
 - 回复结果由 `memory/post_processors.py` 进行解析与清洗
 
-记忆整合支持双路径：
-
-- 优先使用 FlexiWeb 在线模型进行更大批量的摘要与记忆生成
-- 在线不可用、超时或进入冷却后，自动回退到本地小模型进行小批量处理
+记忆整合统一使用本地 LM Studio 的小模型进行小批量处理，与主聊天模型分离，避免显存/推理竞争。
 
 ### 5. 记忆写入与处理
 
@@ -129,6 +124,10 @@ python -m pytest tests -q
 - FTS 索引与 `memories` 表完全同步、过期索引自动重建（`tests/test_memory_manager_fts_sync.py`）
 - RAG 开关（`RAG_ENABLED` / `RAG_SQLITE_FTS_ENABLED` / `RAG_TOP_K`）的开关组合行为（`tests/test_rag_switches.py`）
 - 检索排序与回退（`tests/test_retriever.py`）
+- 短期记忆说话人归属（`tests/test_short_term_attribution.py`）
+- 全流程端到端：消息入库 → 上下文构建 → Pipeline 编排 → 输出解析/分行 → 整合 → 记忆晋升 + FTS（`tests/test_full_workflow.py`，全程 Dummy LLM、不触网）
+
+CI 采用最小化配置（`.github/workflows/ci.yml`）：Ubuntu 上按 `requirements.txt` 安装全部运行依赖（nonebot2 / onebot 适配器 / apscheduler 插件 / httpx / dotenv / pydantic）+ pytest，然后 `pytest tests -q`；所有测试均使用临时 DB 与伪 LLM 后端，不依赖真实机器人、网络或 LM Studio 服务。
 
 ## 运行方式
 
@@ -138,7 +137,6 @@ python -m pytest tests -q
 - NoneBot 2
 - OneBot V11 兼容适配器，如 NapCat
 - LM Studio 本地模型服务
-- 可选：FlexiWeb 用于在线记忆整合
 
 ### 启动步骤
 
@@ -152,15 +150,20 @@ python bot.py
 
 ### 旧数据库迁移说明
 
-为避免新旧表结构冲突，旧版 `memory/agent_memory.db` 已迁移至 `_deprecated/legacy_agent_memory.db` 归档；启动时会按当前 schema 在 `memory/` 下自动重建新库。
+为避免新旧表结构冲突，历史运行时数据库已从 `memory/` 迁移到 `_deprecated/` 归档：
+
+- `_deprecated/legacy_agent_memory.db`：早期版运行库；
+- `_deprecated/legacy_agent_memory_2026.db`：当前 schema 升级前的运行库。
+
+启动时会按当前 schema 在 `memory/` 下自动重建新库。
 
 ## 配置说明
 
-核心配置位于 [config/settings.py](config/settings.py)，包括：
+核心配置位于 [config/settings.py](config/settings.py)，敏感值与机器相关项（群号、令牌、路径）一律从 `.env` 读取，模板见 [.env.example](.env.example)，`settings.py` 中的默认值仅作兜底：
 
-- `ALLOWED_GROUPS`：限制可响应的群聊
+- `ALLOWED_GROUPS`：限制可响应的群聊（`.env` 中逗号分隔多个群号）
 - `LM_STUDIO_BASE_URL` / `LM_STUDIO_MODEL`：本地模型地址与模型名
-- `PROACTIVE_ENABLED`：是否启用主动发言
+- `PROACTIVE_ENABLED`：是否启用主动发言。消息频率过低（群平均间隔 ≥ `PROACTIVE_LOW_FREQ_INTERVAL`，或消息不足两条）时完全不主动发言；频率足够时按间隔高低以 `PROACTIVE_HIGH_FREQ_INTERVAL` / `PROACTIVE_LOW_FREQ_INTERVAL` 之间的线性概率复用历史逻辑，并通过 `PROACTIVE_COOLDOWN` 硬冷却与相似内容去重防刷屏
 - `RAG_ENABLED` / `RAG_TOP_K` / `RAG_SQLITE_FTS_ENABLED`：RAG 检索开关与参数
 - `MEMORY_COMPRESS_LIGHT_THRESHOLD`：轻量压缩触发阈值
 - `MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS`：轻量压缩冷却时间
@@ -174,9 +177,9 @@ python bot.py
 - [@MIO-456](https://github.com/MIO-456) 开发的 [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) 项目激励了本项目的开发。
 - 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 本项目开发中得到了来自如下组织的支持：
-    模型提供商：Deepseek，OpenAI（chatGPT）和Google（Gemini）
-    开源代码库：[nonebot2](https://github.com/nonebot/nonebot2),[NapCatQQ](https://github.com/NapNeko/NapCatQQ),以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
-    开发者社区：[Linux Do](https://linux.do)
+  - 模型提供商：Deepseek，OpenAI（chatGPT）和Google（Gemini）
+  - 开源代码库：[nonebot2](https://github.com/nonebot/nonebot2)，[NapCatQQ](https://github.com/NapNeko/NapCatQQ)，以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
+  - 开发者社区：[Linux Do](https://linux.do)
 - 特别致谢Freya，这是献给你的作品。我的探索之旅因你的馈赠而起，是时候交出一份并不完美的回礼了。 
 
 ## License
