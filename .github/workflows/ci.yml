@@ -92,7 +92,7 @@ jobs:
 
       - name: Run tests with coverage
         env:
-          COVERAGE_FILE: .coverage-${{ matrix.python-version }}
+          COVERAGE_FILE: cov-${{ matrix.python-version }}
         run: |
           pytest tests/ \
             -v \
@@ -106,7 +106,7 @@ jobs:
         with:
           name: coverage-${{ matrix.python-version }}
           path: |
-            .coverage-${{ matrix.python-version }}
+            cov-${{ matrix.python-version }}
 
       - name: Upload test results on failure
         uses: actions/upload-artifact@v4
@@ -139,7 +139,7 @@ jobs:
         run: pip install coverage
 
       - name: Combine coverage reports
-        run: coverage combine .coverage-*
+        run: coverage combine cov-*
 
       - name: Generate combined report
         run: |
