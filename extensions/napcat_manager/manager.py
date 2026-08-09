@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""NapCat.Shell 进程管理器（napcat_manager.manager）。
+"""NapCat.Shell 进程管理器（extensions.napcat_manager.manager）。
 
 在机器人进程之外以独立 OS 进程方式管理 NapCat.Shell 前端的完整生命周期：
 - 启动：通过官方 launcher-user.bat 拉起 NapCatWinBootMain.exe（注入 QQ NT）；

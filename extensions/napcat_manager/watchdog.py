@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""NapCat 消息流看门狗（napcat_manager.watchdog）。
+"""NapCat 消息流看门狗（extensions.napcat_manager.watchdog）。
 
 监控 QQ 群消息是否仍在正常流入：每收到任意一条群消息就刷新心跳时间；
 周期性任务检查心跳距今是否超过 NAPCAT_WATCHDOG_TIMEOUT（默认 300 秒），
-若超出则判定 NapCat 链路中断，改为在机器人进程之外外部重启 NapCat
+若超出则判定 NapCat 链路中断，在机器人进程之外触发外部重启
 （经 launcher-user.bat 拉起，取代原先走 WebUI API 的不可用重启路径），
 并把心跳时间拨后 NAPCAT_WATCHDOG_RESTART_COOLDOWN 秒避免恢复期间反复触发。
+
+与特定前端解耦：外部重启实现由 setup() 通过 set_restart_impl 注入，
+替换为其它前端（GoCQ / LLP 等）的重启器即可复用本看门狗逻辑。
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ class _Heartbeat:
 
 
 class _RestartState:
-    """外部重启实现入口容器；由 __init__ 注册为 manager.restart_napcat。"""
+    """外部重启实现入口容器；由 setup() 注册为 manager.restart_napcat。"""
 
     impl: Callable[[], None] | None = None
 
