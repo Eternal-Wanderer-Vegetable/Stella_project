@@ -96,6 +96,18 @@ allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "bot.py",                # 进程入口：import 即初始化 NoneBot，无法单元测试
+    "test_compressor_trigger.py",  # 根目录遗留脚本，非测试模块
+    "extensions/*",          # NapCat 集成需要真实机器人运行时，CI 无法覆盖
+]
+
 [tool.pyright]
 # For Pylance/Pyright configurations, see https://microsoft.github.io/pyright/#/configuration.
 pythonVersion = "3.10"
