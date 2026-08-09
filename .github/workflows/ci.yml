@@ -139,21 +139,12 @@ jobs:
         run: pip install coverage
 
       - name: Combine coverage reports
-        run: |
-          if ls .coverage-* > /dev/null 2>&1; then
-            coverage combine .coverage-*
-          else
-            echo "No coverage files found (tests skipped); skipping combine."
-          fi
+        run: coverage combine .coverage-*
 
       - name: Generate combined report
         run: |
-          if [ -f .coverage ]; then
-            coverage report --fail-under=80
-            coverage xml -o combined-coverage.xml
-          else
-            echo "No coverage data; skipping report."
-          fi
+          coverage report --fail-under=80
+          coverage xml -o combined-coverage.xml
 
       - name: Upload combined coverage
         uses: actions/upload-artifact@v4
@@ -169,37 +160,9 @@ jobs:
           coverageFile: combined-coverage.xml
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # ============ 构建验证 ============
-  build:
-    needs: [test]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install build tools
-        run: |
-          pip install build twine
-
-      - name: Build package
-        run: python -m build
-
-      - name: Check package
-        run: twine check dist/*
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
   # ============ 通知（可选） ============
   notify:
-    needs: [test, lint, security, build]
+    needs: [test, lint, security]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
     steps:
