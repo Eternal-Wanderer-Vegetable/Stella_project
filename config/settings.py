@@ -181,18 +181,27 @@ MEMORY_CONFIRM_HIGH_CONFIDENCE = _env_float("MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.
 MEMORY_OBSERVE_LOW_CONFIDENCE = _env_float("MEMORY_OBSERVE_LOW_CONFIDENCE", 0.6)
 
 # 检索排序权重（Memory Score =
-#   w1*Context Match + w2*Usage Match + w3*Semantic Similarity + w4*Confidence + w5*Importance）
-# 原则：Policy / Context 优先于 Similarity，避免“找错”而非“找不到”
-MEMORY_SCORE_W_CONTEXT = _env_float("MEMORY_SCORE_W_CONTEXT", 0.35)
-MEMORY_SCORE_W_USAGE = _env_float("MEMORY_SCORE_W_USAGE", 0.25)
-MEMORY_SCORE_W_SEMANTIC = _env_float("MEMORY_SCORE_W_SEMANTIC", 0.20)
+#   w1*Context Match + w2*Usage Match + w3*Semantic Similarity + w4*Recency + w5*Confidence + w6*Importance）
+# 原则：Policy / Context 优先于 Similarity，避免“找错”而非“找不到”。
+# 六维独立：Context=类型对当前模式的契合，Usage=usage 与该模式匹配，Semantic=词面，
+# Recency=时效（见 MEMORY_SCORE_W_RECENCY），Conf/Imp=记忆自带质量。
+MEMORY_SCORE_W_CONTEXT = _env_float("MEMORY_SCORE_W_CONTEXT", 0.20)
+MEMORY_SCORE_W_USAGE = _env_float("MEMORY_SCORE_W_USAGE", 0.20)
+MEMORY_SCORE_W_SEMANTIC = _env_float("MEMORY_SCORE_W_SEMANTIC", 0.30)
+# Recency：新记忆天然压过旧记忆（时效型 EVENT/PLAN 尤其），旧记忆除非语义强相关否则靠后
+MEMORY_SCORE_W_RECENCY = _env_float("MEMORY_SCORE_W_RECENCY", 0.10)
 MEMORY_SCORE_W_CONFIDENCE = _env_float("MEMORY_SCORE_W_CONFIDENCE", 0.10)
 MEMORY_SCORE_W_IMPORTANCE = _env_float("MEMORY_SCORE_W_IMPORTANCE", 0.10)
+
+# Recency 兜底半衰期（天）：记忆类型没有 MEMORY_DECAY_DAYS 条目时用此值
+MEMORY_RECENCY_HALF_LIFE_DAYS = _env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 120.0)
 
 # 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
 # rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
 # 一定填满 mode_limit”的超召回噪音（Retrieval Spec 第 7 节：不要固定 Top-K）。
-MEMORY_SCORE_MIN = _env_float("MEMORY_SCORE_MIN", 0.35)
+# 0.40 的经验依据：仅靠领域(1.0)+usage(5)＋默认 conf/imp、语义≈0 的“及格候选”
+# 得分 ≈0.42~0.45；而类型不兼容降权(<0.31)或低重要度噪音(<0.33)应被挡在门外。
+MEMORY_SCORE_MIN = _env_float("MEMORY_SCORE_MIN", 0.40)
 
 # 各模式最大记忆条数（动态上限，而不是固定 Top-K）
 MEMORY_LIMIT_CASUAL_REPLY = _env_int("MEMORY_LIMIT_CASUAL_REPLY", 3)

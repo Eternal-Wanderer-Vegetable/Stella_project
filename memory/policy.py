@@ -23,7 +23,11 @@ import json
 import re
 from typing import Any
 
+import time
+from datetime import datetime
+
 from config import (
+    MEMORY_DECAY_DAYS,
     MEMORY_LIMIT_ACTIVE_JOIN,
     MEMORY_LIMIT_CASUAL_REPLY,
     MEMORY_LIMIT_CONFLICT_AVOID,
@@ -32,9 +36,11 @@ from config import (
     MEMORY_LIMIT_HUMOR,
     MEMORY_LIMIT_RECOMMEND,
     MEMORY_LIMIT_TECH_HELP,
+    MEMORY_RECENCY_HALF_LIFE_DAYS,
     MEMORY_SCORE_W_CONFIDENCE,
     MEMORY_SCORE_W_CONTEXT,
     MEMORY_SCORE_W_IMPORTANCE,
+    MEMORY_SCORE_W_RECENCY,
     MEMORY_SCORE_W_SEMANTIC,
     MEMORY_SCORE_W_USAGE,
     MODE_DETECT_MIN_SCORE,
@@ -299,10 +305,17 @@ _RECOMMEND_KEYWORDS = (
     "推荐", "哪个好", "买什么", "选什么", "求推荐", "给我推荐",
     "选哪个", "怎么选", "值得买", "入手",
 )
-_EMOTIONAL_KEYWORDS = (
-    "累", "难过", "压力", "心情", "不开心", "烦", "哭", "焦虑", "抑郁",
-    "孤独", "撑不住", "好难", "难受",
+# 情绪关键词分三档：强信号（明确痛苦/求助）> 中信号（情绪状态）> 弱信号（日常高频，
+# “累/烦/哭”单独出现十有八九只是随口说说）。detect_mode 按档位给权重，
+# 避免“今天好累啊”这类日常吐槽被误判成 EMOTIONAL 而丢用户画像记忆。
+_EMOTIONAL_KEYWORDS_STRONG = (
+    "焦虑", "抑郁", "撑不住", "失眠", "崩溃", "绝望", "想哭", "大哭", "哭不出来",
+    "委屈", "自残", "想死", "没意思",
 )
+_EMOTIONAL_KEYWORDS_NORMAL = (
+    "压力", "心情", "难过", "不开心", "难受", "孤独", "好难", "情绪",
+)
+_EMOTIONAL_KEYWORDS_WEAK = ("累", "烦", "哭", "心累", "好累")
 # 冲突/边界检测：只保留强信号。“不喜欢/讨厌”这类日常吐槽（“这个配色我不喜欢”）
 # 会误开 CONFLICT_AVOID 的 RESTRICTED 闸门，已移出；它们仍然属于
 # consolidator._SENSITIVE_KEYWORDS，用于判断**记忆内容**而不是当前 mode。
@@ -324,15 +337,23 @@ _HUMOR_KEYWORDS = (
 
 # 各模式的信号关键词与权重（detect_mode 打分用）：
 #   冲突规避权重最高（安全优先）；技术/推荐词特异性强，误判率低；
-#   情绪词日常用法多（“累/烦”随口就能说）再降一档；玩梗词噪音最大。
+#   玩梗词噪音最大。
+# EMOTIONAL 特殊：关键词分三档（强/中/弱），强档最重、弱档最轻。混档消息
+# （“又累又烦，压力好大”）以档位分权重再加成，不会因多命中几个弱词而虚高。
 _MODE_SIGNALS: dict[str, tuple[tuple[str, ...], float]] = {
     MODE_CONFLICT_AVOID: (_CONFLICT_KEYWORDS, 1.5),
     MODE_TECH_HELP: (_TECH_KEYWORDS, 1.2),
     MODE_RECOMMEND: (_RECOMMEND_KEYWORDS, 1.2),
     MODE_GROUP_EVENT: (_GROUP_EVENT_KEYWORDS, 1.0),
-    MODE_EMOTIONAL: (_EMOTIONAL_KEYWORDS, 0.8),
+    MODE_EMOTIONAL: (_EMOTIONAL_KEYWORDS_STRONG, 1.2),
     MODE_HUMOR: (_HUMOR_KEYWORDS, 0.5),
 }
+
+# EMOTIONAL 中/弱档词各自加成的权重（强档已并入 _MODE_SIGNALS 的 1.2）
+_EMOTIONAL_TIER_WEIGHTS: tuple[tuple[tuple[str, ...], float], ...] = (
+    (_EMOTIONAL_KEYWORDS_NORMAL, 0.8),
+    (_EMOTIONAL_KEYWORDS_WEAK, 0.4),
+)
 
 
 def normalize_mode(mode: str) -> str:
@@ -371,6 +392,12 @@ def detect_mode(
             continue
         # 长关键词更特异（“编译”比“累”可靠得多），命中越多信号越强
         score = len(hits) * weight * (1 + max(len(k) for k in hits) / 10)
+        if mode == MODE_EMOTIONAL:
+            # 情绪词的中/弱档按档位加权：累命中次数再多也不如一个“撑不住”可靠
+            for tier, tier_weight in _EMOTIONAL_TIER_WEIGHTS:
+                tier_hits = [k for k in tier if k in text]
+                if tier_hits:
+                    score += len(tier_hits) * tier_weight * (1 + max(len(k) for k in tier_hits) / 10)
         if score > best_score:
             best_mode, best_score = mode, score
     return best_mode
@@ -501,15 +528,109 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
+def _context_match(mode: str, mem: dict[str, Any]) -> float:
+    """Context Match：当前 mode 的“领域”是否需要这条记忆——按 Memory Type 计算，
+    与这条记忆具体的 usage 打分解耦（usage 高 ≠ 类型一定契合，反之亦然）。
+
+    实现：把该 mode 允许的 usage 按分数排序（值域 1~5）。
+    ``_USAGE_TYPE_MATRIX`` 里与**强 usage（★ ≥4）**相关、且也是弱 usage 核心领域的
+    Memory Type 视作本 mode 的“核心类型”（Tier 1，context=1.0）；只被弱 usage（★≤4）
+    提及的作“次要类型”（Tier 2，context=0.5）；完全不沾的为 0。
+
+    分离 Context 与 Usage 的意义：TECH_HELP 里“喜欢合作射击游戏”（PREFERENCE）尽管
+    在 Usage 层给一点分，但类型不属于技术排查的核心领域，context 只给 0.5；
+    而“用户之前配置过CUDA”（EVENT→ANSWER_CONTEXT）类型正当，context=1.0。
+    """
+    mem_type = (mem.get("type") or TYPE_FACT).strip().upper()
+    mode_map = _MODE_USAGE_SCORE.get(mode, {})
+    # 核心领域：被 modal 强 usage（≥4）提及的类型集合（Tier 1）
+    core: set[str] = set()
+    for usage, weight in mode_map.items():
+        if weight >= 4:
+            core |= set(_USAGE_TYPE_MATRIX.get(usage, frozenset()))
+    if mem_type in core:
+        return 1.0
+    # 次要领域：只被 modal 弱 usage（≤4）提及
+    for usage, weight in mode_map.items():
+        if weight < 4 and mem_type in _USAGE_TYPE_MATRIX.get(usage, frozenset()):
+            return 0.5
+    return 0.0
+
+
+def _parse_ts(value: Any) -> float | None:
+    """把 last_accessed_at / created_at 解析为 epoch 秒；空值或解析失败返回 None。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    formats = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d")
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt).timestamp()
+        except (ValueError, TypeError):
+            continue
+    try:
+        return datetime.fromisoformat(text).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _mem_timestamp(mem: dict[str, Any]) -> float:
+    """取一条记忆的时间戳（last_accessed_at 优先，其次 created_at / updated_at）。
+    都没有则按“刚刚”处理（旧数据不因缺时间戳而被当成远古记忆）。"""
+    for key in ("last_accessed_at", "created_at", "updated_at"):
+        epoch = _parse_ts(mem.get(key))
+        if epoch is not None:
+            return epoch
+    return time.time()
+
+
+def _reference_timestamp(memories: list[dict[str, Any]]) -> float:
+    """排序参考时间：候选池最新一条记忆的访问时间（poll-anchored recency）。
+    以此代替“系统当前时间”作为年龄参照，避免 benchmark/快照数据的绝对时间
+    漂移：最新记忆 age=0、天然 decay=1.0，旧的按相对年龄衰减。"""
+    newest = max((_mem_timestamp(m) for m in memories), default=time.time())
+    # 参照不超前于真实当前时间：将来数据（时钟漂移）按 0 年龄处理
+    return min(newest, time.time())
+
+
+def _recency_factor(
+    reference: float,
+    age_days: float,
+    mem_type: str,
+) -> float:
+    """Recency Decay：按记忆类型的生命周期衰减（FACT 半衰期长，EVENT 短）。
+
+    ``MEMORY_DECAY_DAYS`` 是“半衰期”（天）：到点衰减一半；EVENT/PLAN 等时效型
+    记忆衰老快，FACT/STYLE 稳定型老一点也无妨。衰减贡献用 ``MEMORY_SCORE_W_RECENCY``
+    加权（0~1）。"""
+    half_life = MEMORY_DECAY_DAYS.get(mem_type, MEMORY_RECENCY_HALF_LIFE_DAYS)
+    if half_life <= 0:
+        if age_days <= MEMORY_RECENCY_HALF_LIFE_DAYS:
+            return 1.0 - age_days / (2 * MEMORY_RECENCY_HALF_LIFE_DAYS)
+        return MEMORY_RECENCY_HALF_LIFE_DAYS / (2 * age_days)
+    decay = 0.5 ** max(0.0, age_days) / half_life
+    return max(0.0, min(1.0, decay))
+
+
 def _rank_score(
+    mode: str,
     mem: dict[str, Any],
     usage_score: int,
     semantic: float,
+    recency: float,
 ) -> float:
-    """计算单条记忆的排序分（Context Match → Usage → Semantic → Conf/Imp）。"""
-    # Context Match：当前 mode 是否“需要”这类记忆（usage 兼容分归一化）
-    context_match = usage_score / 5.0
-    # Usage Match：usage 与模式匹配度
+    """计算单条记忆的排序分（Context Match → Usage → Semantic → Recency → Conf/Imp）。
+
+    六维相互独立（Context 按类型、Usage 按 usage、Semantic 按词面、Recency 按时效），
+    避免同一信号被两个权重重复计算。
+    """
+    # Context Match：mode 领域是否“需要”这类记忆（0/0.5/1）
+    context_match = _context_match(mode, mem)
+    # Usage Match：usage 与该模式的匹配度（归一化到 0~1）
     usage_match = usage_score / 5.0
     # Confidence / Importance
     confidence = _clamp_float(mem.get("confidence"), 0.0, 1.0, 0.7)
@@ -519,6 +640,7 @@ def _rank_score(
         MEMORY_SCORE_W_CONTEXT * context_match
         + MEMORY_SCORE_W_USAGE * usage_match
         + MEMORY_SCORE_W_SEMANTIC * semantic
+        + MEMORY_SCORE_W_RECENCY * recency
         + MEMORY_SCORE_W_CONFIDENCE * confidence
         + MEMORY_SCORE_W_IMPORTANCE * importance
     )
@@ -583,6 +705,7 @@ def rank_memories(
     """
     mode = normalize_mode(mode)
     scored: list[tuple[float, dict[str, Any]]] = []
+    reference = _reference_timestamp(memories)
     for mem in memories:
         allowed, usage_score = usage_allowed(mode, mem)
         if not allowed:
@@ -592,6 +715,10 @@ def rank_memories(
 
         # Semantic Similarity
         semantic = _semantic_similarity(query, mem.get("content", ""))
+
+        # RECENCY：记忆存活度（类型半衰期 × 距今相对年龄），新记忆天然占优
+        age_days = max(0.0, reference - _mem_timestamp(mem)) / 86400.0
+        recency = _recency_factor(reference, age_days, (mem.get("type") or TYPE_FACT).strip().upper())
 
         # CONTEXTUAL 需要主题匹配（Schema 4.4）：主题不匹配时即使分数高也不该被调用。
         # 两个豁免：usage 强命中（score==5，说明这条记忆就是为当前场景准备的）或
@@ -605,7 +732,7 @@ def rank_memories(
         ):
             continue
 
-        score = _rank_score(mem, usage_score, semantic)
+        score = _rank_score(mode, mem, usage_score, semantic, recency)
         mem = dict(mem)
         mem["_score"] = round(score, 4)
         scored.append((score, mem))
