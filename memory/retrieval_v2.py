@@ -23,6 +23,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from nonebot import logger
+
 from config import (
     DB_PATH,
     LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
@@ -303,6 +305,7 @@ def retrieve_memories(
     query: str,
     trigger: str = "reply",
     mode: str | None = None,
+    semantic_scores: dict[str, float] | None = None,
 ) -> RetrievalResult:
     """v2 记忆检索主入口。
 
@@ -311,6 +314,8 @@ def retrieve_memories(
     :param query: 当前消息/话题文本
     :param trigger: "reply"（@ 回复）或 "proactive"（主动插话）
     :param mode: 可显式指定行为模式；不传则自动检测
+    :param semantic_scores: 可选外部语义分（按记忆 id 索引，如 embedding 余弦分）；
+        不传则用规则版语义占位
     :return: RetrievalResult（含聊天素材、行为约束与决策轨迹）
     """
     if not MEMORY_V2_ENABLED or not DB_PATH.exists():
@@ -347,7 +352,7 @@ def retrieve_memories(
     trace["allowed_count"] = len(allowed)
 
     # 2) Ranking（Policy 权重）
-    ranked = rank_memories(allowed, mode, query=query)
+    ranked = rank_memories(allowed, mode, query=query, semantic_scores=semantic_scores)
     trace["ranked_ids"] = [m.get("id") for m in ranked[:10]]
 
     # 3) 同类合并
@@ -390,3 +395,59 @@ def retrieve_memories(
 RETRIEVAL_CACHE_TTL = 300.0  # 5 分钟
 _CACHE_MAX_ENTRIES = 128
 _CACHE: dict[tuple[str, str, str, str, str], tuple[float, RetrievalResult]] = {}
+
+
+async def retrieve_memories_emb(
+    group_id: int,
+    user_id: int,
+    query: str,
+    trigger: str = "reply",
+    mode: str | None = None,
+    service: Any = None,
+) -> RetrievalResult:
+    """Embedding 版检索：先用本地 LM Studio 编码查询与记忆、算余弦语义分，
+    再走生产核心路径 ``retrieve_memories``。服务/模型不可用时回退规则版，
+    保证主链路不因语义检索故障中断。
+
+    :param service: 可注入的 EmbeddingService（测试用）；缺省按 config 构建。
+    """
+    from config import (
+        MEMORY_EMBEDDING_BASE_URL,
+        MEMORY_EMBEDDING_MODEL,
+        MEMORY_EMBEDDING_TIMEOUT,
+    )
+    from memory.embeddings import EmbeddingService
+
+    resolved_mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
+    if service is None:
+        service = EmbeddingService(
+            MEMORY_EMBEDDING_BASE_URL,
+            MEMORY_EMBEDDING_MODEL,
+            MEMORY_EMBEDDING_TIMEOUT,
+        )
+
+    semantic_scores: dict[str, float] = {}
+    try:
+        conn = _connect()
+        cursor = conn.cursor()
+        try:
+            include_user: int | None = None if trigger == "proactive" else user_id
+            limit = mode_limit(resolved_mode)
+            pool_limit = max(LONG_TERM_RELEVANCE_CANDIDATE_LIMIT, limit * 5)
+            candidates = _fetch_candidates(cursor, group_id, include_user, resolved_mode, query, pool_limit)
+        finally:
+            conn.close()
+        for m in candidates:
+            mid = m.get("id")
+            if not mid:
+                continue
+            s = await service.similarity(query, m.get("content", ""))
+            if s is not None:
+                semantic_scores[mid] = s
+        if semantic_scores:
+            return retrieve_memories(
+                group_id, user_id, query, trigger=trigger, mode=resolved_mode, semantic_scores=semantic_scores
+            )
+    except Exception as e:
+        logger.warning(f"[Embedding] 语义检索失败，回退规则版: {e}")
+    return retrieve_memories(group_id, user_id, query, trigger=trigger, mode=resolved_mode)

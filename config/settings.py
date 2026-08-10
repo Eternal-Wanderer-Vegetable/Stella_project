@@ -196,6 +196,16 @@ MEMORY_SCORE_W_IMPORTANCE = _env_float("MEMORY_SCORE_W_IMPORTANCE", 0.10)
 # Recency 兜底半衰期（天）：记忆类型没有 MEMORY_DECAY_DAYS 条目时用此值
 MEMORY_RECENCY_HALF_LIFE_DAYS = _env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 120.0)
 
+# ---------- 记忆语义检索（可选，Embedding） ----------
+# 默认关闭：语义分用 memory.policy 的规则版（词面 Jaccard，离线、确定）。
+# 打开后走本地 LM Studio /v1/embeddings 计算查询与记忆的余弦相似度，语义分真正可区分；
+# 模型/服务不可用时自动回退规则版，保证链路不中断。
+MEMORY_EMBEDDING_ENABLED = _env("MEMORY_EMBEDDING_ENABLED", "false").lower() in ("true", "1", "yes")
+MEMORY_EMBEDDING_BASE_URL = _env("MEMORY_EMBEDDING_BASE_URL", "http://127.0.0.1:1234")
+MEMORY_EMBEDDING_MODEL = _env("MEMORY_EMBEDDING_MODEL", "")
+# 每次语义检索的超时（秒）
+MEMORY_EMBEDDING_TIMEOUT = _env_float("MEMORY_EMBEDDING_TIMEOUT", 10.0)
+
 # 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
 # rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
 # 一定填满 mode_limit”的超召回噪音（Retrieval Spec 第 7 节：不要固定 Top-K）。

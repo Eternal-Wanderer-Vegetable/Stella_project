@@ -1,0 +1,18 @@
+{
+  "id": "behavior-conflict-007",
+  "scenario": {"group_id": 7, "user_id": 507},
+  "input": "你再这样我真的要生气了，别太过分",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "B01": {"content": "用户507反感有人反复试探他的底线", "type": "RELATION",
+            "usage_tags": ["CONFLICT_AVOID"], "visibility": "OPEN",
+            "behavior_rule": "避免反复试探用户507的边界与底线",
+            "confidence": 0.88, "importance": 0.82},
+    "B02": {"content": "用户507最近想买新耳机", "type": "PREFERENCE",
+            "usage_tags": ["RECOMMEND"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.4}
+  },
+  "expected_behavior_memory": ["B01"],
+  "forbidden_memory": ["B02"],
+  "notes": "b7：行为约束的第三种入口——CONFLICT_AVOID usage 即使 visibility=OPEN 也由 usage 标签路由进行为约束（_is_behavior_only 看 usage），不泄漏进会话；RECOMMEND 在 CONFLICT_AVOID 模式被 usage 层挡掉"
+}

@@ -21,10 +21,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
-
 import time
 from datetime import datetime
+from typing import Any
 
 from config import (
     MEMORY_DECAY_DAYS,
@@ -612,7 +611,7 @@ def _recency_factor(
         if age_days <= MEMORY_RECENCY_HALF_LIFE_DAYS:
             return 1.0 - age_days / (2 * MEMORY_RECENCY_HALF_LIFE_DAYS)
         return MEMORY_RECENCY_HALF_LIFE_DAYS / (2 * age_days)
-    decay = 0.5 ** max(0.0, age_days) / half_life
+    decay = 0.5 ** (max(0.0, age_days) / half_life)
     return max(0.0, min(1.0, decay))
 
 
@@ -622,11 +621,12 @@ def _rank_score(
     usage_score: int,
     semantic: float,
     recency: float,
-) -> float:
+) -> tuple[float, dict[str, float]]:
     """计算单条记忆的排序分（Context Match → Usage → Semantic → Recency → Conf/Imp）。
 
     六维相互独立（Context 按类型、Usage 按 usage、Semantic 按词面、Recency 按时效），
-    避免同一信号被两个权重重复计算。
+    避免同一信号被两个权重重复计算。返回 ``(总分, 各维度加权贡献)``，后者供
+    ``_score_parts`` 诊断用——否则每次调权重都是盲调。
     """
     # Context Match：mode 领域是否“需要”这类记忆（0/0.5/1）
     context_match = _context_match(mode, mem)
@@ -636,14 +636,15 @@ def _rank_score(
     confidence = _clamp_float(mem.get("confidence"), 0.0, 1.0, 0.7)
     importance = _clamp_float(mem.get("importance"), 0.0, 1.0, 0.5)
 
-    return (
-        MEMORY_SCORE_W_CONTEXT * context_match
-        + MEMORY_SCORE_W_USAGE * usage_match
-        + MEMORY_SCORE_W_SEMANTIC * semantic
-        + MEMORY_SCORE_W_RECENCY * recency
-        + MEMORY_SCORE_W_CONFIDENCE * confidence
-        + MEMORY_SCORE_W_IMPORTANCE * importance
-    )
+    parts = {
+        "ctx": MEMORY_SCORE_W_CONTEXT * context_match,
+        "usg": MEMORY_SCORE_W_USAGE * usage_match,
+        "sem": MEMORY_SCORE_W_SEMANTIC * semantic,
+        "rec": MEMORY_SCORE_W_RECENCY * recency,
+        "conf": MEMORY_SCORE_W_CONFIDENCE * confidence,
+        "imp": MEMORY_SCORE_W_IMPORTANCE * importance,
+    }
+    return sum(parts.values()), parts
 
 
 def _trigger_topic_match(query: str, memory: dict[str, Any]) -> bool:
@@ -698,10 +699,14 @@ def rank_memories(
     memories: list[dict[str, Any]],
     mode: str,
     query: str = "",
+    semantic_scores: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """按 Policy 排序：Context Match → Usage Match → Semantic → Confidence → Importance。
 
     返回已排序、已去掉“禁止/不兼容/主题不匹配”项的记忆列表（不截断，由调用方按模式上限截断）。
+
+    ``semantic_scores`` 可注入外部语义分（如 embedding 余弦相似度，按记忆 id 索引）；
+    不传或该 id 缺失时退化为规则版 ``_semantic_similarity``。policy 本身保持纯逻辑。
     """
     mode = normalize_mode(mode)
     scored: list[tuple[float, dict[str, Any]]] = []
@@ -713,8 +718,12 @@ def rank_memories(
         if not visibility_allowed(mode, mem):
             continue
 
-        # Semantic Similarity
-        semantic = _semantic_similarity(query, mem.get("content", ""))
+        # Semantic Similarity（外部注入优先，如 embedding 余弦分；否则规则版占位）
+        mem_id = mem.get("id")
+        if semantic_scores and mem_id in semantic_scores:
+            semantic = max(0.0, min(1.0, float(semantic_scores[mem_id])))
+        else:
+            semantic = _semantic_similarity(query, mem.get("content", ""))
 
         # RECENCY：记忆存活度（类型半衰期 × 距今相对年龄），新记忆天然占优
         age_days = max(0.0, reference - _mem_timestamp(mem)) / 86400.0
@@ -732,9 +741,10 @@ def rank_memories(
         ):
             continue
 
-        score = _rank_score(mode, mem, usage_score, semantic, recency)
+        score, parts = _rank_score(mode, mem, usage_score, semantic, recency)
         mem = dict(mem)
         mem["_score"] = round(score, 4)
+        mem["_score_parts"] = {k: round(v, 3) for k, v in parts.items()}
         scored.append((score, mem))
 
     scored.sort(key=lambda item: item[0], reverse=True)

@@ -161,16 +161,16 @@ def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
     _create_v2_db(db_path)
     conn = sqlite3.connect(db_path)
     rows = [
-        # 强信号：保住
-        ("s", "1", "100", "EVENT", "最近在追一部剧", 0.5, 0.8, "[\"TOPIC_CONTINUE\"]", "OPEN"),
-        # 弱信号：类型不兼容被降权到 0.31，应被 0.35 门槛挡掉
-        ("w", "1", "100", "PREFERENCE", "偶尔熬夜", 0.2, 0.5, "[\"TOPIC_CONTINUE\"]", "OPEN"),
+        # 强信号 + 新鲜：保住
+        ("s", "1", "100", "EVENT", "最近在追一部剧", 0.5, 0.8, "[\"TOPIC_CONTINUE\"]", "OPEN", "2026-08-09 10:00:00"),
+        # 弱信号：类型不兼容被降权 + 很久没访问被 recency 衰减，应被 0.40 门槛挡掉
+        ("w", "1", "100", "PREFERENCE", "偶尔熬夜", 0.2, 0.5, "[\"TOPIC_CONTINUE\"]", "OPEN", "2025-06-01 10:00:00"),
     ]
-    for mid, g, u, typ, content, imp, conf, usage, vis in rows:
+    for mid, g, u, typ, content, imp, conf, usage, vis, lts in rows:
         conn.execute(
             "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
-            "status, usage_tags, visibility, last_accessed_at) VALUES (?,?,?,?,?,?,?,'active',?,?, '2026-08-09 10:00:00')",
-            (mid, g, u, typ, content, imp, conf, usage, vis),
+            "status, usage_tags, visibility, last_accessed_at) VALUES (?,?,?,?,?,?,?,'active',?,?, ?)",
+            (mid, g, u, typ, content, imp, conf, usage, vis, lts),
         )
     conn.commit()
     conn.close()
@@ -184,16 +184,24 @@ def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
 
     assert "s" in conversation_ids
     assert "w" not in conversation_ids
-    # "w" 只是被分数门槛挡住，排序阶段仍应给出 _score 供诊断
+    # "w" 只是被分数门槛（+ recency 衰减）挡掉，排序阶段仍应给出 _score 供诊断。
+    # 同池放入新鲜强信号，使 reference 落在新鲜侧，弱项被 recency 衰减到门槛下。
     ranked = policy.rank_memories(
         [
-            {"type": "PREFERENCE", "content": "偶尔熬夜", "usage_tags": ["TOPIC_CONTINUE"],
-             "visibility": "OPEN", "confidence": 0.5, "importance": 0.2},
+            {"id": "s", "type": "EVENT", "content": "最近在追一部剧", "usage_tags": ["TOPIC_CONTINUE"],
+             "visibility": "OPEN", "confidence": 0.8, "importance": 0.5,
+             "last_accessed_at": "2026-08-09 10:00:00"},
+            {"id": "w", "type": "PREFERENCE", "content": "偶尔熬夜", "usage_tags": ["TOPIC_CONTINUE"],
+             "visibility": "OPEN", "confidence": 0.5, "importance": 0.2,
+             "last_accessed_at": "2025-06-01 10:00:00"},
         ],
         "CASUAL_REPLY",
         query="一起玩游戏吧",
     )
-    assert ranked and ranked[0]["_score"] < 0.35
+    ids = [m["id"] for m in ranked]
+    assert ids.index("s") < ids.index("w")
+    assert next(m["_score"] for m in ranked if m["id"] == "w") < 0.40
+    assert next(m["_score"] for m in ranked if m["id"] == "s") >= 0.40
 
 
 def test_schema_migration_adds_columns(tmp_path, monkeypatch):

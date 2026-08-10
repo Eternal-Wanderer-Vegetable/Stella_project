@@ -266,19 +266,31 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 
 async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     """记忆系统 v2 的上下文组装：Policy 检索 + 分区记忆 + 决策轨迹。"""
+    from config import MEMORY_EMBEDDING_ENABLED
     from memory.retrieval_v2 import retrieve_memories
 
     # 先组装稳定画像（只读稳定事实，过滤人格判断）
     profile = _read_stable_profile(ctx.group_id, ctx.user_id)
     ctx.user_profile = profile
 
-    # v2 检索（Context-aware Memory Activation）
-    result = retrieve_memories(
-        group_id=ctx.group_id,
-        user_id=ctx.user_id,
-        query=ctx.message,
-        trigger=ctx.trigger,
-    )
+    # v2 检索（Context-aware Memory Activation）。
+    # 开启 MEMORY_EMBEDDING_ENABLED 时走 embedding 语义分（失败自动回退规则版）。
+    if MEMORY_EMBEDDING_ENABLED:
+        from memory.retrieval_v2 import retrieve_memories_emb
+
+        result = await retrieve_memories_emb(
+            group_id=ctx.group_id,
+            user_id=ctx.user_id,
+            query=ctx.message,
+            trigger=ctx.trigger,
+        )
+    else:
+        result = retrieve_memories(
+            group_id=ctx.group_id,
+            user_id=ctx.user_id,
+            query=ctx.message,
+            trigger=ctx.trigger,
+        )
     ctx.memory_mode = result.mode
     ctx.conversation_memories = result.conversation_memories
     ctx.behavior_constraints = result.behavior_constraints

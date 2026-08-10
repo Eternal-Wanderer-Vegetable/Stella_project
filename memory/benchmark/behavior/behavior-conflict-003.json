@@ -6,7 +6,7 @@
   "trigger": "reply",
   "memories": {
     "B01": {"content": "用户502不能接受拿他的口音开玩笑", "type": "PREFERENCE",
-            "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+            "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "OPEN",
             "behavior_rule": "避免针对用户502的口音或身份特征开玩笑",
             "confidence": 0.9, "importance": 0.85},
     "B02": {"content": "用户502经常玩梗", "type": "STYLE",
@@ -14,5 +14,5 @@
   },
   "expected_behavior_memory": ["B01"],
   "forbidden_memory": ["B02"],
-  "notes": "b3：CONFLICT_AVOID 下边界记忆必须进行为约束，玩梗记忆被挡在素材外"
+  "notes": "b3：行为约束的第二种入口——BOUNDARY_PROTECTION 即使 visibility=OPEN 也由 usage 标签路由进行为约束（_is_behavior_only 看 usage），不泄漏进会话；玩梗记忆被 usage 层挡掉"
 }

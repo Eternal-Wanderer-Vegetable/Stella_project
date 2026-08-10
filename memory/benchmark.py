@@ -202,6 +202,12 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
 
         # 会话记忆的排序分（用于 --verbose 观察期望/噪音分数分布，别拍脑袋定阈值）
         scores = {m["id"]: round(float(m.get("_score") or 0.0), 3) for m in conversation}
+        # 分量分解（ctx/usg/sem/rec/conf/imp）：判断“为什么这条记忆排这么高/低”
+        parts = {
+            m["id"]: m.get("_score_parts") or {}
+            for m in conversation
+            if m.get("_score_parts")
+        }
 
         return {
             "id": case.get("id", "?"),
@@ -213,6 +219,7 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
             "final": sorted(final_ids),
             "behavior": sorted(behavior_ids),
             "scores": scores,
+            "parts": parts,
             "found_expected": sorted(found_expected),
             "found_behavior": sorted(found_behavior),
             "behavior_leaked": sorted(behavior_leaked),
@@ -311,12 +318,17 @@ def main() -> None:
             over_flag = " ⚠️超召回" if r["over_recall"] else ""
             # 分数分布：期望记忆集中在高分、噪音被阈值挡在下方，说明 MEMORY_SCORE_MIN 定得准
             score_str = " ".join(f"{rid}:{r['scores'][rid]:.3f}" for rid in r["final"])
+            parts_str = " ".join(
+                f"{rid}[" + " ".join(f"{k}:{r['parts'][rid][k]:.3f}" for k in ("ctx", "usg", "sem", "rec", "conf", "imp")) + "]"
+                for rid in r["final"] if rid in r.get("parts", {})
+            )
             print(
                 f"{status} {r['id']} [{r['detected_mode']}] "
                 f"期望={r['expected']} 期望行为={r['expected_behavior']} 实际={r['final']} "
                 f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}"
                 f"{mode_flag}{over_flag}\n"
-                f"      scores={score_str or '—'}"
+                f"      scores={score_str or '—'}\n"
+                f"      parts={parts_str or '—'}"
             )
 
 
