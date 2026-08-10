@@ -6,32 +6,31 @@
 对应设计文档《Evaluation & Debug Specification v1.0》：
 - 读取 ``memory/benchmark/<category>/*.json`` 用例（每个用例标注 expected_memory /
   forbidden_memory / expected_behavior）；
-- 对每个用例用 v2 Policy 排序 + 可见性过滤跑一遍“记忆选择”，
-  对比实际选中的记忆与期望/禁止记忆；
-- 输出核心指标：Memory Precision、Forbidden Activation Rate、各模式召回量。
+- 对每个用例把记忆写入临时 SQLite，调 ``memory.retrieval_v2.retrieve_memories()``
+  走**生产检索路径**（含 SQL Visibility 预过滤 / Usage 过滤 / Ranking / Behavior Guard），
+  最后对比实际选中的记忆与期望/禁止记忆；
+- 输出核心指标：Memory Precision、Memory Recall、Forbidden Activation、
+  Memory Pollution Rate、Mode 检测准确率。
 
 核心指标：
-    Metric 1  Memory Precision        = 召回的期望记忆 / 召回的记忆（目标 ≥ 80%）
+    Metric 1  Memory Precision        = 找到的期望记忆 / 实际召回条数（目标 ≥ 80%）
     Metric 2  Memory Recall           = 找到的期望记忆 / 应该找到的记忆
     Metric 3  Forbidden Activation    = 被错误激活的禁止记忆次数（目标 ≈ 0）
-    Metric 4  Memory Pollution Rate   = Prompt 中无用记忆比例
+    Metric 4  Memory Pollution Rate   = 1 - Precision（Prompt 中无用记忆比例）
+    Metric 5  Mode Detection Accuracy = 检测到的 mode 与用例标注一致的占比
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from config import MEMORY_BENCHMARK_DIR
-from memory.policy import (
-    detect_mode,
-    mode_limit,
-    normalize_mode,
-    rank_memories,
-    split_behavior_constraints,
-)
+from memory.policy import detect_mode, normalize_mode
 
 
 def _mem_dict(mid: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -60,62 +59,174 @@ def load_cases(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> list[dict[str, Any
     return cases
 
 
-def evaluate_case(case: dict[str, Any]) -> dict[str, Any]:
-    """对单个用例跑记忆选择，返回期望/禁止/实际的命中情况。"""
-    memories = {mid: _mem_dict(mid, data) for mid, data in (case.get("memories") or {}).items()}
-    query = case.get("input") or ""
-    trigger = case.get("trigger", "proactive" if case.get("mode") == "ACTIVE_JOIN" else "reply")
-    declared_mode = normalize_mode(case.get("mode", "CASUAL_REPLY"))
-    # 用 Policy 排序（依赖 mode + visibility）
-    mode = detect_mode(query, trigger=trigger)
-    ranked = rank_memories(list(memories.values()), declared_mode, query=query)
-    behavior = split_behavior_constraints(ranked)
-    conversation = [m for m in ranked if m not in behavior]
-    limit = mode_limit(declared_mode)
-    final = conversation[:limit]
+def _scenario_ids(case: dict[str, Any]) -> tuple[int, int]:
+    """从用例 scenario 里取群/用户 ID（用于写临时库并启动检索）。"""
+    scenario = case.get("scenario") or {}
+    try:
+        group_id = int(scenario.get("group_id", 1))
+    except (TypeError, ValueError):
+        group_id = 1
+    try:
+        user_id = int(scenario.get("user_id", 0))
+    except (TypeError, ValueError):
+        user_id = 0
+    return group_id, user_id
 
-    final_ids = {m["id"] for m in final}
-    behavior_ids = {m["id"] for m in behavior}
-    expected = set(case.get("expected_memory") or [])
-    forbidden = set(case.get("forbidden_memory") or [])
 
-    found_expected = final_ids & expected
-    activated_forbidden = final_ids & forbidden
-    # 行为约束里的期望记忆也算“被找到”（Behavior Guard 生效）
-    found_expected |= behavior_ids & expected
+def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
+    """把用例记忆写进临时 SQLite（v2 schema），返回 (group_id, user_id)。
 
-    return {
-        "id": case.get("id", "?"),
-        "declared_mode": declared_mode,
-        "detected_mode": mode,
-        "expected": sorted(expected),
-        "forbidden": sorted(forbidden),
-        "final": sorted(final_ids),
-        "behavior": sorted(behavior_ids),
-        "found_expected": sorted(found_expected),
-        "activated_forbidden": sorted(activated_forbidden),
-        "ok": bool(found_expected == expected) and not activated_forbidden,
-    }
+    背景：evaluate_case 必须走生产路径，即 retrieval_v2._fetch_candidates 内的
+    SQL Visibility 预过滤（_allowed_visibility_clause）。否则 RESTRICTED 记忆会在
+    普通模式绕过 SQL 直接进 rank_memories，测的是一条比生产更宽松的路径。
+    这里复制 retrieval_v2 依赖的最小 v2 表结构（只保留检索用到的最小列）。
+    """
+    db_path.unlink(missing_ok=True)
+    group_id, user_id = _scenario_ids(case)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                group_id TEXT,
+                user_id TEXT,
+                type TEXT,
+                content TEXT,
+                importance REAL,
+                confidence REAL,
+                status TEXT,
+                usage_tags TEXT,
+                visibility TEXT,
+                trigger_data TEXT,
+                behavior_rule TEXT,
+                last_accessed_at DATETIME
+            )
+            """
+        )
+        for mid, data in (case.get("memories") or {}).items():
+            mem = _mem_dict(mid, data)
+            conn.execute(
+                "INSERT INTO memories (id, group_id, user_id, type, content, importance, "
+                "confidence, status, usage_tags, visibility, trigger_data, behavior_rule, "
+                "last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+                (
+                    mid,
+                    str(group_id),
+                    str(user_id),
+                    mem.get("type") or "FACT",
+                    mem.get("content") or "",
+                    0.5 if mem.get("importance") is None else mem["importance"],
+                    0.7 if mem.get("confidence") is None else mem["confidence"],
+                    json.dumps(mem.get("usage_tags") or [], ensure_ascii=False),
+                    mem.get("visibility") or "OPEN",
+                    mem.get("trigger_data"),
+                    mem.get("behavior_rule"),
+                    "2026-08-09 10:00:00",
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return group_id, user_id
+
+
+def evaluate_case(case: dict[str, Any], work_dir: Path | None = None) -> dict[str, Any]:
+    """对单个用例跑生产检索路径，返回期望/禁止/实际的命中情况。
+
+    生产路径：写入临时库后调 memory.retrieval_v2.retrieve_memories()，
+    真实走一遍 SQL Visibility 预过滤 + Usage 过滤 + Ranking + Behavior Guard。
+    mode 由检索入口自行检测，检测结果用于排序（不再用用例标注的 declared_mode）。
+    """
+    import memory.retrieval_v2 as retrieval_v2
+
+    manager: Any = None
+    if work_dir is None:
+        manager = tempfile.TemporaryDirectory(prefix="stella_benchmark_")
+        work_dir = Path(manager.name)
+    try:
+        db_path = work_dir / f"{case.get('id', 'case')}.db"
+        group_id, user_id = _write_case_db(db_path, case)
+        query = case.get("input") or ""
+        trigger = case.get("trigger", "proactive" if case.get("mode") == "ACTIVE_JOIN" else "reply")
+        declared_mode = normalize_mode(case.get("mode", "CASUAL_REPLY"))
+
+        # 临时把 retrieval_v2 指向本用例的临时库，结束后恢复现场
+        old_db, old_v2, old_rag = (
+            retrieval_v2.DB_PATH,
+            retrieval_v2.MEMORY_V2_ENABLED,
+            retrieval_v2.RAG_ENABLED,
+        )
+        try:
+            retrieval_v2.DB_PATH = db_path
+            retrieval_v2.MEMORY_V2_ENABLED = True
+            retrieval_v2.RAG_ENABLED = False
+            result = retrieval_v2.retrieve_memories(group_id, user_id, query, trigger=trigger)
+        finally:
+            retrieval_v2.DB_PATH = old_db
+            retrieval_v2.MEMORY_V2_ENABLED = old_v2
+            retrieval_v2.RAG_ENABLED = old_rag
+
+        detected_mode = result.mode or detect_mode(query, trigger=trigger)
+        conversation = result.conversation_memories
+        behavior = result.behavior_constraints
+
+        final_ids = {m["id"] for m in conversation}
+        behavior_ids = {m["id"] for m in behavior}
+        expected = set(case.get("expected_memory") or [])
+        forbidden = set(case.get("forbidden_memory") or [])
+
+        found_expected = final_ids & expected
+        activated_forbidden = final_ids & forbidden
+        # 行为约束里的期望记忆也算“被找到”（Behavior Guard 生效）
+        found_expected |= behavior_ids & expected
+
+        return {
+            "id": case.get("id", "?"),
+            "declared_mode": declared_mode,
+            "detected_mode": detected_mode,
+            "expected": sorted(expected),
+            "forbidden": sorted(forbidden),
+            "final": sorted(final_ids),
+            "behavior": sorted(behavior_ids),
+            "found_expected": sorted(found_expected),
+            "activated_forbidden": sorted(activated_forbidden),
+            "ok": bool(found_expected == expected) and not activated_forbidden,
+        }
+    finally:
+        if manager is not None:
+            manager.cleanup()
 
 
 def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
     """运行全部用例，汇总核心指标。"""
     cases = load_cases(benchmark_dir)
-    results = [evaluate_case(c) for c in cases]
+    with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
+        work_dir = Path(tmp)
+        results = [evaluate_case(c, work_dir) for c in cases]
 
     total = len(results)
     ok_count = sum(1 for r in results if r["ok"])
     total_expected = sum(len(r["expected"]) for r in results)
     total_found_expected = sum(len(r["found_expected"]) for r in results)
+    total_retrieved = sum(len(r["final"]) for r in results)
     total_forbidden = sum(len(r["forbidden"]) for r in results)
     total_activated_forbidden = sum(len(r["activated_forbidden"]) for r in results)
+    mode_correct = sum(1 for r in results if r["declared_mode"] == r["detected_mode"])
+
+    # Precision 的分母是“实际召回条数”，Recall 的分母才是“期望条数”
+    precision_pct = round(total_found_expected / max(1, total_retrieved) * 100, 1)
 
     return {
         "cases_total": total,
         "cases_ok": ok_count,
         "cases_ok_rate": round(ok_count / total * 100, 1) if total else 0.0,
-        "memory_precision": round(total_found_expected / max(1, total_expected) * 100, 1),
+        "memory_precision": precision_pct,
         "memory_recall": round(total_found_expected / max(1, total_expected) * 100, 1),
+        # Metric 4 Memory Pollution Rate = 1 - Precision（Prompt 中无用记忆比例）
+        "memory_pollution_rate": round(max(0.0, 100.0 - precision_pct), 1),
+        # Metric 5 Mode Detection Accuracy：检测到的 mode 是否与用例标注一致
+        "mode_accuracy": round(mode_correct / total * 100, 1) if total else 0.0,
         "forbidden_activation_rate": round(total_activated_forbidden / max(1, total_forbidden) * 100, 1),
         "forbidden_activations": total_activated_forbidden,
         "results": results,
@@ -135,6 +246,8 @@ def main() -> None:
     print(f"  通过用例       : {metrics['cases_ok']}/{metrics['cases_total']} ({metrics['cases_ok_rate']}%)")
     print(f"  Memory Precision : {metrics['memory_precision']}%  （目标 ≥ 80%）")
     print(f"  Memory Recall    : {metrics['memory_recall']}%")
+    print(f"  Pollution Rate   : {metrics['memory_pollution_rate']}%")
+    print(f"  Mode 检测准确率  : {metrics['mode_accuracy']}%")
     print(f"  Forbidden 激活   : {metrics['forbidden_activation_rate']}% ({metrics['forbidden_activations']} 次)  （目标 ≈ 0%）")
     print("=" * 56)
     if args.verbose:
