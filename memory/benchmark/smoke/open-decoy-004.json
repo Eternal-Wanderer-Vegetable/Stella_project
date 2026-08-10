@@ -1,0 +1,16 @@
+{
+  "id": "open-decoy-004",
+  "scenario": {"group_id": 1, "user_id": 1001},
+  "input": "推荐个好用的耳机",
+  "mode": "RECOMMEND",
+  "trigger": "reply",
+  "memories": {
+    "G01": {"content": "用户喜欢头戴式耳机", "type": "PREFERENCE",
+            "usage_tags": ["RECOMMEND"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+    "D01": {"content": "上次推荐的游戏他不喜欢", "type": "PREFERENCE",
+            "usage_tags": ["CONFLICT_AVOID"], "visibility": "OPEN", "confidence": 0.85, "importance": 0.5}
+  },
+  "expected_memory": ["G01"],
+  "forbidden_memory": ["D01"],
+  "notes": "OPEN 诱饵：usage=CONFLICT_AVOID 在 RECOMMEND 模式被 _MODE_FORBIDDEN_USAGE 挡在 usage 层（而不是 SQL visibility 层）。用来测 forbidden 的另一条代码路径，避免全部 forbidden 样本都只走 _allowed_visibility_clause"
+}

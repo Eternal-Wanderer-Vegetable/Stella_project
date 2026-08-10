@@ -153,6 +153,49 @@ def test_retrieval_v2_fts_path_returns_qualified_columns(tmp_path, monkeypatch):
     assert "m1" in conversation_ids
 
 
+def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
+    """/MEMORY_SCORE_MIN：低于分数门槛的合法候选不进最终会话（动态数量而非固定 Top-K）。"""
+    import memory.policy as policy
+
+    db_path = tmp_path / "agent_memory.db"
+    _create_v2_db(db_path)
+    conn = sqlite3.connect(db_path)
+    rows = [
+        # 强信号：保住
+        ("s", "1", "100", "EVENT", "最近在追一部剧", 0.5, 0.8, "[\"TOPIC_CONTINUE\"]", "OPEN"),
+        # 弱信号：类型不兼容被降权到 0.31，应被 0.35 门槛挡掉
+        ("w", "1", "100", "PREFERENCE", "偶尔熬夜", 0.2, 0.5, "[\"TOPIC_CONTINUE\"]", "OPEN"),
+    ]
+    for mid, g, u, typ, content, imp, conf, usage, vis in rows:
+        conn.execute(
+            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "status, usage_tags, visibility, last_accessed_at) VALUES (?,?,?,?,?,?,?,'active',?,?, '2026-08-09 10:00:00')",
+            (mid, g, u, typ, content, imp, conf, usage, vis),
+        )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(retrieval_v2, "DB_PATH", db_path)
+    monkeypatch.setattr(retrieval_v2, "MEMORY_V2_ENABLED", True)
+    monkeypatch.setattr(retrieval_v2, "RAG_ENABLED", False)
+
+    result = retrieval_v2.retrieve_memories(1, 100, "一起玩游戏吧", trigger="reply")
+    conversation_ids = [m["id"] for m in result.conversation_memories]
+
+    assert "s" in conversation_ids
+    assert "w" not in conversation_ids
+    # "w" 只是被分数门槛挡住，排序阶段仍应给出 _score 供诊断
+    ranked = policy.rank_memories(
+        [
+            {"type": "PREFERENCE", "content": "偶尔熬夜", "usage_tags": ["TOPIC_CONTINUE"],
+             "visibility": "OPEN", "confidence": 0.5, "importance": 0.2},
+        ],
+        "CASUAL_REPLY",
+        query="一起玩游戏吧",
+    )
+    assert ranked and ranked[0]["_score"] < 0.35
+
+
 def test_schema_migration_adds_columns(tmp_path, monkeypatch):
     """迁移给旧表补上 v2 列，并创建索引；幂等重跑不重复加列。"""
     db_path = tmp_path / "agent_memory.db"

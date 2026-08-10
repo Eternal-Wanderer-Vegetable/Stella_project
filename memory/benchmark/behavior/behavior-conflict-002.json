@@ -1,0 +1,18 @@
+{
+  "id": "behavior-conflict-002",
+  "scenario": {"group_id": 7, "user_id": 501},
+  "input": "我警告过你别碰我的东西，再碰别怪我生气",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "B01": {"content": "用户501不喜欢别人动他的私人物品", "type": "PREFERENCE",
+            "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+            "behavior_rule": "避免主动触碰或讨论用户501的私人物品",
+            "confidence": 0.95, "importance": 0.9},
+    "B02": {"content": "用户501平时爱开玩笑", "type": "RELATION",
+            "usage_tags": ["HUMOR"], "visibility": "OPEN", "confidence": 0.7, "importance": 0.3}
+  },
+  "expected_behavior_memory": ["B01"],
+  "forbidden_memory": ["B02"],
+  "notes": "CONFLICT_AVOID 下 RESTRICTED+BOUNDARY 必须进入行为约束且不得泄漏进会话；OPEN+HUMOR 诱饵被 usage 层挡掉（HUMOR 在 CONFLICT_AVOID 禁列）"
+}

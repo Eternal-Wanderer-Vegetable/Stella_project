@@ -101,6 +101,32 @@ def test_run_benchmark_sums_metrics(tmp_path):
     assert metrics["forbidden_activation_rate"] >= 0.0
 
 
+def test_evaluate_case_over_recall_respects_max_retrieved():
+    """超召回判定：用例可声明 max_retrieved；未声明时退化为期望数 × 2。"""
+    base = {
+        "input": "聊点轻松的吧",
+        "mode": "CASUAL_REPLY",
+        "memories": {
+            "m1": {"content": "最近在追一部剧", "type": "EVENT", "usage_tags": ["TOPIC_CONTINUE"],
+                   "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+            "m2": {"content": "喜欢合作射击游戏", "type": "EVENT", "usage_tags": ["TOPIC_CONTINUE"],
+                   "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+            "m3": {"content": "喜欢打乒乓球", "type": "EVENT", "usage_tags": ["TOPIC_CONTINUE"],
+                   "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+        },
+    }
+    # 声明容忍上限：期望 1 条但最多据 2 条 → 超召回
+    res = evaluate_case({**base, "expected_memory": ["m1"], "max_retrieved": 2})
+    assert res["over_recall"] is True
+    assert res["ok"] is False
+    # 未声明时退化为 期望数×2=2，3 条同样超召回
+    res = evaluate_case({**base, "expected_memory": ["m1"]})
+    assert res["over_recall"] is True
+    # 期望数 2 时默认容忍=4，3 条不超
+    res = evaluate_case({**base, "expected_memory": ["m1", "m2"]})
+    assert res["over_recall"] is False
+
+
 def test_consolidation_log_append_and_create(tmp_path, monkeypatch):
     log_path = tmp_path / "memory_consolidation_log.md"
     monkeypatch.setattr(cl, "CONSOLIDATION_LOG_PATH", log_path)

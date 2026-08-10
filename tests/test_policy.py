@@ -19,6 +19,7 @@ from memory.policy import (
     USAGE_GROUP_CONTEXT,
     USAGE_HUMOR,
     USAGE_RECOMMEND,
+    VISIBILITY_CONTEXTUAL,
     VISIBILITY_OPEN,
     VISIBILITY_RESTRICTED,
 )
@@ -81,6 +82,84 @@ def test_detect_mode_proactive():
     """主动插话默认 ACTIVE_JOIN；话题带玩梗意味时进入 HUMOR。"""
     assert policy.detect_mode("（没人@你）", trigger="proactive") == MODE_ACTIVE_JOIN
     assert policy.detect_mode("（没人@你）", trigger="proactive", recent_topic="大家玩摸头梗") == MODE_HUMOR
+
+
+def test_detect_mode_echo_noise_stays_casual():
+    """"哈哈哈"是群聊最高频噪音：不该把 mode 推进 HUMOR、丢用户画像记忆。"""
+    assert policy.detect_mode("哈哈哈") == MODE_CASUAL_REPLY
+    assert policy.detect_mode("笑死我了") == MODE_CASUAL_REPLY
+
+
+def test_detect_mode_ignore_daily_grumbling_conflict():
+    """"不喜欢/不能"从冲突词表移除：日常吐槽不该误开 CONFLICT_AVOID 的边界闸门。"""
+    assert policy.detect_mode("我不喜欢这个配色") == MODE_CASUAL_REPLY
+    assert policy.detect_mode("这个不能跑") == MODE_CASUAL_REPLY
+    # 但真正的身体边界表达仍能命中（"碰我"补位）
+    assert policy.detect_mode("别开这种玩笑，我不喜欢别人这样碰我") == MODE_CONFLICT_AVOID
+
+
+def test_detect_mode_scoring_beats_priority_chain():
+    """打分制：强特异信号（技术词）能压过高频弱信号（情绪词），而非短路 if 的先后。"""
+    assert policy.detect_mode("显卡报错有点烦") == MODE_TECH_HELP
+    assert policy.detect_mode("有什么好聊的话题吗") == MODE_CASUAL_REPLY
+
+
+def test_rank_contextual_blocked_when_unrelated():
+    """CONTEXTUAL 记忆在无 usage 强命中（score=3）、无 trigger 主题、语义≈0 时被过滤。"""
+    mem = _mem(
+        id="c1",
+        content="用户不吃榴莲",
+        visibility=VISIBILITY_CONTEXTUAL,
+        usage_tags=[USAGE_ANSWER_CONTEXT],
+        type="FACT",
+    )
+    ranked = policy.rank_memories([mem], MODE_RECOMMEND, query="有什么游戏推荐吗")
+    assert ranked == []
+
+
+def test_rank_contextual_exempted_by_strong_usage():
+    """CONTEXTUAL 豁免第 2 条：usage 在当前 mode 是 5 分项（RECOMMEND+RECOMMEND）时，
+    不再用词面相似度二次否决——这正是 rank-recommend-001 转绿的修法。"""
+    mem = _mem(id="c1", content="不喜欢恐怖题材", visibility=VISIBILITY_CONTEXTUAL)
+    ranked = policy.rank_memories([mem], MODE_RECOMMEND, query="有什么游戏推荐吗")
+    assert [m["id"] for m in ranked] == ["c1"]
+
+
+def test_rank_contextual_exempted_by_trigger_topic():
+    """CONTEXTUAL 豁免第 1 条：usage 非强命中（score=3）但 trigger_data.topics 主题命中
+    （game→"游戏"）时不拦——独立验证 trigger_data 路径而非 usage 豁免路径。"""
+    mem = _mem(
+        id="c2",
+        content="不喜欢恐怖题材",
+        visibility=VISIBILITY_CONTEXTUAL,
+        usage_tags=[USAGE_ANSWER_CONTEXT],
+        type="FACT",
+    )
+    # 无 trigger_data：veto 生效（usage_score=3 < 5）
+    assert policy.rank_memories([dict(mem)], MODE_RECOMMEND, query="有什么游戏推荐吗") == []
+    # 有 trigger_data.topics=["game"]：豁免
+    mem["trigger_data"] = {"topics": ["game"], "keywords": ["恐怖"]}
+    ranked = policy.rank_memories([mem], MODE_RECOMMEND, query="有什么游戏推荐吗")
+    assert [m["id"] for m in ranked] == ["c2"]
+
+
+def test_trigger_topic_match_keywords_and_topics():
+    """trigger_data 主题匹配：keywords 字面命中 / topics 经同义词表命中。"""
+    mem = {"trigger_data": {"keywords": ["摸头"], "topics": ["game"]}}
+    assert policy._trigger_topic_match("别摸头了好不好", mem) is True     # keywords
+    assert policy._trigger_topic_match("有什么游戏推荐吗", mem) is True   # topics→game→"游戏"
+    assert policy._trigger_topic_match("今天天气不错", mem) is False
+    assert policy._trigger_topic_match("有什么游戏推荐吗", {"trigger_data": None}) is False
+
+
+def test_rank_memories_attaches_score():
+    """排序结果应携带 _score，供检索端做 MEMORY_SCORE_MIN 分数截断。"""
+    ranked = policy.rank_memories(
+        [_mem(id="m1", usage_tags=[USAGE_ANSWER_CONTEXT], type="FACT", content="用户有RTX5080")],
+        MODE_TECH_HELP,
+        query="显卡",
+    )
+    assert ranked and isinstance(ranked[0].get("_score"), float)
 
 
 def test_rank_places_mode_matched_higher():

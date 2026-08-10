@@ -1,0 +1,18 @@
+{
+  "id": "behavior-conflict-006",
+  "scenario": {"group_id": 7, "user_id": 505},
+  "input": "别闹了，你过分了，再说我真忍不了了",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "B01": {"content": "用户505反感过火的玩笑", "type": "PREFERENCE",
+            "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+            "behavior_rule": "避免对用户505开过火的玩笑",
+            "confidence": 0.92, "importance": 0.85},
+    "B02": {"content": "用户505喜欢合作射击游戏", "type": "PREFERENCE",
+            "usage_tags": ["RECOMMEND"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.4}
+  },
+  "expected_behavior_memory": ["B01"],
+  "forbidden_memory": ["B02"],
+  "notes": "b6：RESTRICTED+BOUNDARY 进行为约束；RECOMMEND 在 CONFLICT_AVOID 模式被 usage 层挡掉"
+}

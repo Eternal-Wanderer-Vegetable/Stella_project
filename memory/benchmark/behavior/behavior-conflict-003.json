@@ -1,0 +1,18 @@
+{
+  "id": "behavior-conflict-003",
+  "scenario": {"group_id": 7, "user_id": 502},
+  "input": "你这样说我真的很冒犯，请尊重我",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "B01": {"content": "用户502不能接受拿他的口音开玩笑", "type": "PREFERENCE",
+            "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+            "behavior_rule": "避免针对用户502的口音或身份特征开玩笑",
+            "confidence": 0.9, "importance": 0.85},
+    "B02": {"content": "用户502经常玩梗", "type": "STYLE",
+            "usage_tags": ["HUMOR"], "visibility": "OPEN", "confidence": 0.6, "importance": 0.3}
+  },
+  "expected_behavior_memory": ["B01"],
+  "forbidden_memory": ["B02"],
+  "notes": "b3：CONFLICT_AVOID 下边界记忆必须进行为约束，玩梗记忆被挡在素材外"
+}

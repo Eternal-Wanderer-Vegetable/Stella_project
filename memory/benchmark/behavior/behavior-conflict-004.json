@@ -1,0 +1,18 @@
+{
+  "id": "behavior-conflict-004",
+  "scenario": {"group_id": 7, "user_id": 503},
+  "input": "你越界了，请自重，别太过分",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "B01": {"content": "用户503非常在意个人空间，反感被打听收入", "type": "PREFERENCE",
+            "usage_tags": ["CONFLICT_AVOID"], "visibility": "RESTRICTED",
+            "behavior_rule": "避免询问或讨论用户503的收入与隐私",
+            "confidence": 0.9, "importance": 0.8},
+    "B02": {"content": "用户503最近准备考试", "type": "EVENT",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.7, "importance": 0.4}
+  },
+  "expected_behavior_memory": ["B01"],
+  "forbidden_memory": ["B02"],
+  "notes": "b4：usage=CONFLICT_AVOID 的 RESTRICTED 记忆进行为约束；TOPIC_CONTINUE 在 CONFLICT_AVOID 模式被 usage 禁列挡掉"
+}

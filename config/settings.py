@@ -169,6 +169,10 @@ MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE = _env_float("MEMORY_CANDIDATE_CONFIRM_M
 # 总开关：False 时回退旧系统（旧 Consolidator 输出、旧 Retriever、旧 Prompt Builder）
 MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "yes")
 
+# Mode 检测的最低调用分数：detect_mode 打分制下，得分低于该值的信号不足以把
+# 模式从 CASUAL_REPLY 改判为其他模式。可调、可 benchmark（越高越保守）。
+MODE_DETECT_MIN_SCORE = _env_float("MODE_DETECT_MIN_SCORE", 0.5)
+
 # 候选审核门槛（Gate 1：Confidence）
 #   confidence >= MEMORY_CONFIRM_HIGH_CONFIDENCE   → 直接进入长期记忆
 #   MEMORY_OBSERVE_LOW_CONFIDENCE <= confidence    → 进入观察区（OBSERVING）
@@ -184,6 +188,11 @@ MEMORY_SCORE_W_USAGE = _env_float("MEMORY_SCORE_W_USAGE", 0.25)
 MEMORY_SCORE_W_SEMANTIC = _env_float("MEMORY_SCORE_W_SEMANTIC", 0.20)
 MEMORY_SCORE_W_CONFIDENCE = _env_float("MEMORY_SCORE_W_CONFIDENCE", 0.10)
 MEMORY_SCORE_W_IMPORTANCE = _env_float("MEMORY_SCORE_W_IMPORTANCE", 0.10)
+
+# 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
+# rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
+# 一定填满 mode_limit”的超召回噪音（Retrieval Spec 第 7 节：不要固定 Top-K）。
+MEMORY_SCORE_MIN = _env_float("MEMORY_SCORE_MIN", 0.35)
 
 # 各模式最大记忆条数（动态上限，而不是固定 Top-K）
 MEMORY_LIMIT_CASUAL_REPLY = _env_int("MEMORY_LIMIT_CASUAL_REPLY", 3)

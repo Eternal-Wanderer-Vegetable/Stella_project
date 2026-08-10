@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -36,6 +37,7 @@ from config import (
     MEMORY_SCORE_W_IMPORTANCE,
     MEMORY_SCORE_W_SEMANTIC,
     MEMORY_SCORE_W_USAGE,
+    MODE_DETECT_MIN_SCORE,
 )
 
 # ── 枚举常量 ─────────────────────────────────────────────
@@ -284,31 +286,53 @@ _MODE_LIMITS: dict[str, int] = {
 }
 
 # ── Mode 检测（规则，不依赖 LLM，高频操作） ──────────────
+# 词表里的词分两种：强势的“主词”（技术/推荐/冲突词，日常误命中率低）与
+# 弱势的“噪音词”（哈哈/笑死/累/烦 等日常高频，误命中率高）。detect_mode
+# 用“命中数 × 权重 × 长词加成”打分而非短路链，避免“谁先写谁赢”。
+# 注：单个字的日常词（如“累”）权重被刻意压低，仍可能误判，这是预期取舍。
 _TECH_KEYWORDS = (
     "cuda", "gpu", "显卡", "显存", "rtx", "显卡驱动", "报错", "error", "代码",
     "python", "pip", "conda", "模型", "部署", "训练", "服务器", "linux", "windows",
     "安装", "配置", "为什么不能", "运行不了", "编译",
 )
 _RECOMMEND_KEYWORDS = (
-    "推荐", "哪个好", "买什么", "选什么", "有什么好", "求推荐", "给我推荐",
+    "推荐", "哪个好", "买什么", "选什么", "求推荐", "给我推荐",
     "选哪个", "怎么选", "值得买", "入手",
 )
 _EMOTIONAL_KEYWORDS = (
     "累", "难过", "压力", "心情", "不开心", "烦", "哭", "焦虑", "抑郁",
     "孤独", "撑不住", "好难", "难受",
 )
+# 冲突/边界检测：只保留强信号。“不喜欢/讨厌”这类日常吐槽（“这个配色我不喜欢”）
+# 会误开 CONFLICT_AVOID 的 RESTRICTED 闸门，已移出；它们仍然属于
+# consolidator._SENSITIVE_KEYWORDS，用于判断**记忆内容**而不是当前 mode。
+# 补上“碰我/摸我”这类身体边界短句，保住“别开这种玩笑…别碰我”这类真冲突。
 _CONFLICT_KEYWORDS = (
-    "冒犯", "生气", "别这样", "停下", "不喜欢", "讨厌", "边界", "别碰",
-    "过分", "忍不了", "别开玩笑", "自重",
+    "冒犯", "生气", "别这样", "停下", "讨厌", "边界", "别碰", "碰我",
+    "摸我", "过分", "忍不了", "别开玩笑", "自重",
 )
 _GROUP_EVENT_KEYWORDS = (
     "活动", "组织", "比赛", "聚会", "开黑", "组队", "拼车", "团建", "报名",
     "下周", "约一下",
 )
+# “哈哈/笑死”从模式信号里删除：它们是群聊最高频的字符串，命中即把 mode 推入
+# HUMOR，而 HUMOR 的 usage 表不含 PERSONALIZE，会让全部用户画像记忆失效。
 _HUMOR_KEYWORDS = (
-    "梗", "玩笑", "哈哈", "笑死", "演", "戏精", "玩梗", "段子", "沙雕",
+    "梗", "玩笑", "演", "戏精", "玩梗", "段子", "沙雕",
     "偶像剧",
 )
+
+# 各模式的信号关键词与权重（detect_mode 打分用）：
+#   冲突规避权重最高（安全优先）；技术/推荐词特异性强，误判率低；
+#   情绪词日常用法多（“累/烦”随口就能说）再降一档；玩梗词噪音最大。
+_MODE_SIGNALS: dict[str, tuple[tuple[str, ...], float]] = {
+    MODE_CONFLICT_AVOID: (_CONFLICT_KEYWORDS, 1.5),
+    MODE_TECH_HELP: (_TECH_KEYWORDS, 1.2),
+    MODE_RECOMMEND: (_RECOMMEND_KEYWORDS, 1.2),
+    MODE_GROUP_EVENT: (_GROUP_EVENT_KEYWORDS, 1.0),
+    MODE_EMOTIONAL: (_EMOTIONAL_KEYWORDS, 0.8),
+    MODE_HUMOR: (_HUMOR_KEYWORDS, 0.5),
+}
 
 
 def normalize_mode(mode: str) -> str:
@@ -324,6 +348,12 @@ def detect_mode(
 ) -> str:
     """根据当前消息与触发方式判断 Stella 行为模式（规则 + 小模型，高频）。
 
+    采用“打分制”而非短路 if：每个模式的关键词带权重，命中后按
+    ``命中数 × 权重 × (1 + 最长命中词长 / 10)`` 计分，得分超过
+    ``MODE_DETECT_MIN_SCORE`` 且最高者胜出；都不够则回退 CASUAL_REPLY。
+    相比短路链，长词/强信号词能自然压过高频弱信号（如“哈哈/累”），
+    阈值进 config 可调、可 benchmark。
+
     ACTIVE_JOIN（主动插话）优先：主动发言的目的是“找一个自然切入口”，
     而不是回答问题，因此单独走最特殊的路径。
     """
@@ -334,24 +364,16 @@ def detect_mode(
         return MODE_ACTIVE_JOIN
 
     text = (message or "").lower()
-
-    def _hit(keywords: tuple[str, ...]) -> bool:
-        return any(k in text for k in keywords)
-
-    # 冲突规避优先级最高（安全优先）：宁可先保护边界
-    if _hit(_CONFLICT_KEYWORDS):
-        return MODE_CONFLICT_AVOID
-    if _hit(_EMOTIONAL_KEYWORDS):
-        return MODE_EMOTIONAL
-    if _hit(_TECH_KEYWORDS):
-        return MODE_TECH_HELP
-    if _hit(_RECOMMEND_KEYWORDS):
-        return MODE_RECOMMEND
-    if _hit(_GROUP_EVENT_KEYWORDS):
-        return MODE_GROUP_EVENT
-    if _hit(_HUMOR_KEYWORDS):
-        return MODE_HUMOR
-    return MODE_CASUAL_REPLY
+    best_mode, best_score = MODE_CASUAL_REPLY, MODE_DETECT_MIN_SCORE
+    for mode, (keywords, weight) in _MODE_SIGNALS.items():
+        hits = [k for k in keywords if k in text]
+        if not hits:
+            continue
+        # 长关键词更特异（“编译”比“累”可靠得多），命中越多信号越强
+        score = len(hits) * weight * (1 + max(len(k) for k in hits) / 10)
+        if score > best_score:
+            best_mode, best_score = mode, score
+    return best_mode
 
 
 # ── 可见性 / Usage 解析 ─────────────────────────────────
@@ -479,6 +501,77 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
+def _rank_score(
+    mem: dict[str, Any],
+    usage_score: int,
+    semantic: float,
+) -> float:
+    """计算单条记忆的排序分（Context Match → Usage → Semantic → Conf/Imp）。"""
+    # Context Match：当前 mode 是否“需要”这类记忆（usage 兼容分归一化）
+    context_match = usage_score / 5.0
+    # Usage Match：usage 与模式匹配度
+    usage_match = usage_score / 5.0
+    # Confidence / Importance
+    confidence = _clamp_float(mem.get("confidence"), 0.0, 1.0, 0.7)
+    importance = _clamp_float(mem.get("importance"), 0.0, 1.0, 0.5)
+
+    return (
+        MEMORY_SCORE_W_CONTEXT * context_match
+        + MEMORY_SCORE_W_USAGE * usage_match
+        + MEMORY_SCORE_W_SEMANTIC * semantic
+        + MEMORY_SCORE_W_CONFIDENCE * confidence
+        + MEMORY_SCORE_W_IMPORTANCE * importance
+    )
+
+
+def _trigger_topic_match(query: str, memory: dict[str, Any]) -> bool:
+    """trigger_data 主题匹配（Schema 4.5, 4.6）：记忆声明了触发条件且与查询命中。
+
+    两种命中方式：
+    1. ``keywords`` 直接出现在查询词面里（“摸头”出现在消息中）；
+    2. ``topics`` 是语义主题（game / boundary / tech…），经同义词表映射到查询词面
+       （M03「不喜欢恐怖题材」标 topics=["game"]，查询“有什么游戏推荐吗”→“游戏”）。
+    用于给 CONTEXTUAL 记忆开“主题匹配豁免”的口子，替代词面 Jaccard 的局限。
+    """
+    if not query:
+        return False
+    raw = memory.get("trigger_data")
+    if raw is None or raw == "":
+        return False
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return False
+    elif isinstance(raw, dict):
+        data = raw
+    else:
+        return False
+    q = (query or "").lower()
+    for kw in (data.get("keywords") or []):
+        if kw and str(kw).lower() in q:
+            return True
+    for topic in (data.get("topics") or []):
+        for synonym in _TOPIC_SYNONYMS.get(str(topic).lower(), ()):
+            if synonym in q:
+                return True
+    return False
+
+
+# trigger_data.topics → 查询命中词（Schema 4.5 的主题是语义标签，词面比对不上，
+# 这里给常见主题一张映射表。可在配置扩展；缺省 topics 无表则退化为字面匹配失败）
+_TOPIC_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "game": ("游戏", "game", "玩", "开黑", "联机", "steam"),
+    "tech": ("代码", "报错", "显存", "显卡", "cuda", "gpu", "部署", "模型",
+             "python", "pip", "linux", "服务器", "训练", "编译", "运行"),
+    "emotion": ("累", "压力", "难过", "心情", "焦虑", "撑不住", "抑郁", "哭", "烦"),
+    "boundary": ("碰", "摸", "别碰", "边界", "冒犯", "玩笑", "要求"),
+    "event": ("活动", "聚会", "比赛", "报名", "开黑", "团建", "下周", "组织"),
+    "food": ("吃", "榴莲", "辣", "菜", "饭", "奶茶", "咖啡"),
+    "group": ("群", "群友", "大家", "群里"),
+}
+
+
 def rank_memories(
     memories: list[dict[str, Any]],
     mode: str,
@@ -500,25 +593,19 @@ def rank_memories(
         # Semantic Similarity
         semantic = _semantic_similarity(query, mem.get("content", ""))
 
-        # CONTEXTUAL 需要主题匹配（Schema 4.4）：主题不匹配时即使分数高也不该被调用
-        if parse_visibility(mem.get("visibility")) == VISIBILITY_CONTEXTUAL and semantic < CONTEXTUAL_MIN_SIMILARITY:
+        # CONTEXTUAL 需要主题匹配（Schema 4.4）：主题不匹配时即使分数高也不该被调用。
+        # 两个豁免：usage 强命中（score==5，说明这条记忆就是为当前场景准备的）或
+        # trigger_data 主题命中时，不再用词面相似度二次否决（比如「不喜欢恐怖题材」
+        # 在“有什么游戏推荐吗”下使用其对应 RECOMMEND usage，语义却≈0）。
+        if (
+            parse_visibility(mem.get("visibility")) == VISIBILITY_CONTEXTUAL
+            and usage_score < 5
+            and not _trigger_topic_match(query, mem)
+            and semantic < CONTEXTUAL_MIN_SIMILARITY
+        ):
             continue
 
-        # Context Match：当前 mode 是否“需要”这类记忆（取 usage 兼容分归一化）
-        context_match = usage_score / 5.0
-        # Usage Match：usage 与模式匹配度
-        usage_match = usage_score / 5.0
-        # Confidence / Importance
-        confidence = _clamp_float(mem.get("confidence"), 0.0, 1.0, 0.7)
-        importance = _clamp_float(mem.get("importance"), 0.0, 1.0, 0.5)
-
-        score = (
-            MEMORY_SCORE_W_CONTEXT * context_match
-            + MEMORY_SCORE_W_USAGE * usage_match
-            + MEMORY_SCORE_W_SEMANTIC * semantic
-            + MEMORY_SCORE_W_CONFIDENCE * confidence
-            + MEMORY_SCORE_W_IMPORTANCE * importance
-        )
+        score = _rank_score(mem, usage_score, semantic)
         mem = dict(mem)
         mem["_score"] = round(score, 4)
         scored.append((score, mem))

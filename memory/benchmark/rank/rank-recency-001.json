@@ -24,5 +24,6 @@
   },
   "expected_memory": ["R_new"],
   "forbidden_memory": [],
-  "notes": "CASUAL_REPLY 上限 3：S1/S2 高分占前 2，R_new 与 R_old 排序分完全相同（同 usage/conf/importance、语义 0）。两个同分记忆的先后由候选池顺序决定（last_accessed_at DESC），R_new 更新必须压过 R_old 进入第 3 位"
+  "max_retrieved": 3,
+  "notes": "CASUAL_REPLY 上限 3：S1/S2 高分占前 2，R_new 与 R_old 排序分完全相同（同 usage/conf/importance、语义 0）。两个同分记忆的先后由候选池顺序决定（last_accessed_at DESC），R_new 更新必须压过 R_old 进入第 3 位。本用例测的是『新压旧』，S1/S2 进会话属预期，故声明 max_retrieved=3 免于超召回误判"
 }

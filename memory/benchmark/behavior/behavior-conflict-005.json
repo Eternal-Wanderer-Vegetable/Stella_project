@@ -1,0 +1,18 @@
+{
+  "id": "behavior-conflict-005",
+  "scenario": {"group_id": 7, "user_id": 504},
+  "input": "停下，不许这样，我真的很讨厌这种行为",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "B01": {"content": "用户504讨厌被突然打断发言", "type": "PREFERENCE",
+            "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+            "behavior_rule": "避免打断用户504发言，先等他说完",
+            "confidence": 0.85, "importance": 0.8},
+    "B02": {"content": "用户504最近在学做饭", "type": "EVENT",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.7, "importance": 0.3}
+  },
+  "expected_behavior_memory": ["B01"],
+  "forbidden_memory": ["B02"],
+  "notes": "b5：RESTRICTED+BOUNDARY 进行为约束；TOPIC_CONTINUE 在 CONFLICT_AVOID 模式被挡"
+}

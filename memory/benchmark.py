@@ -105,6 +105,11 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
         schema.create_memories_table(conn)
         for mid, data in (case.get("memories") or {}).items():
             mem = _mem_dict(mid, data)
+            # trigger_data 在 schema 里是 TEXT(JSON)，用例里写成对象时自动序列化，
+            # 保证 rank_memories._trigger_topic_match 能读到统一形态。
+            trigger_data = mem.get("trigger_data")
+            if isinstance(trigger_data, (dict, list)):
+                trigger_data = json.dumps(trigger_data, ensure_ascii=False)
             conn.execute(
                 "INSERT INTO memories (id, group_id, user_id, type, content, importance, "
                 "confidence, status, usage_tags, visibility, trigger_data, behavior_rule, "
@@ -119,7 +124,7 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
                     0.7 if mem.get("confidence") is None else mem["confidence"],
                     json.dumps(mem.get("usage_tags") or [], ensure_ascii=False),
                     mem.get("visibility") or "OPEN",
-                    mem.get("trigger_data"),
+                    trigger_data,
                     mem.get("behavior_rule"),
                     mem.get("last_accessed_at") or "2026-08-09 10:00:00",
                 ),
@@ -187,6 +192,17 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
         behavior_leaked = final_ids & expected_behavior
         activated_forbidden = final_ids & forbidden
 
+        # 超召回容忍度：用例可声明 max_retrieved 精确控制容忍上限；未声明时
+        # 退化为“期望数 × 2”（只对带期望记忆的用例生效，行为约束用例不计）。
+        # 防止“把所有合法候选都塞进去”式的刷 metrics 行为。
+        over_recall = False
+        if expected:
+            max_retrieved = int(case.get("max_retrieved") or (len(expected) * 2))
+            over_recall = len(final_ids) > max_retrieved
+
+        # 会话记忆的排序分（用于 --verbose 观察期望/噪音分数分布，别拍脑袋定阈值）
+        scores = {m["id"]: round(float(m.get("_score") or 0.0), 3) for m in conversation}
+
         return {
             "id": case.get("id", "?"),
             "declared_mode": declared_mode,
@@ -196,15 +212,18 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
             "forbidden": sorted(forbidden),
             "final": sorted(final_ids),
             "behavior": sorted(behavior_ids),
+            "scores": scores,
             "found_expected": sorted(found_expected),
             "found_behavior": sorted(found_behavior),
             "behavior_leaked": sorted(behavior_leaked),
             "activated_forbidden": sorted(activated_forbidden),
+            "over_recall": over_recall,
             "ok": bool(
                 found_expected == expected
                 and found_behavior == expected_behavior
                 and not behavior_leaked
                 and not activated_forbidden
+                and not over_recall
             ),
         }
     finally:
@@ -289,10 +308,15 @@ def main() -> None:
                 "" if r["declared_mode"] == r["detected_mode"]
                 else f" ⚠️mode: 标注={r['declared_mode']} 实测={r['detected_mode']}"
             )
+            over_flag = " ⚠️超召回" if r["over_recall"] else ""
+            # 分数分布：期望记忆集中在高分、噪音被阈值挡在下方，说明 MEMORY_SCORE_MIN 定得准
+            score_str = " ".join(f"{rid}:{r['scores'][rid]:.3f}" for rid in r["final"])
             print(
                 f"{status} {r['id']} [{r['detected_mode']}] "
                 f"期望={r['expected']} 期望行为={r['expected_behavior']} 实际={r['final']} "
-                f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}{mode_flag}"
+                f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}"
+                f"{mode_flag}{over_flag}\n"
+                f"      scores={score_str or '—'}"
             )
 
 

@@ -26,6 +26,7 @@ from typing import Any
 from config import (
     DB_PATH,
     LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
+    MEMORY_SCORE_MIN,
     MEMORY_V2_ENABLED,
     RAG_ENABLED,
     RAG_TOP_K,
@@ -359,7 +360,13 @@ def retrieve_memories(
     trace["behavior_count"] = len(behavior)
 
     # 5) 动态上限：安全优先（CONFLICT_AVOID 上限更大）
-    conversation = conversation[:limit]
+    #    同时加分数门槛（宁缺毋滥）：低于 MEMORY_SCORE_MIN 的记忆不进 Prompt，
+    #    避免“合法候选足够多就填满 mode_limit”的超召回噪音（动态数量而非固定 Top-K）。
+    conversation = [
+        m
+        for m in conversation
+        if (m.get("_score") or 0.0) >= MEMORY_SCORE_MIN
+    ][:limit]
     trace["final_ids"] = [m.get("id") for m in conversation]
     trace["rejected_ids"] = [m.get("id") for m in candidates if m.get("id") not in {x.get("id") for x in conversation}]
 

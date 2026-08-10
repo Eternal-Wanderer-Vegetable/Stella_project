@@ -24,5 +24,6 @@
   },
   "expected_memory": ["C01", "C02", "C03"],
   "forbidden_memory": [],
-  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。C01-C03 是话题延续相关，C04-C08 是干扰。若 C04 等挤掉 C01-C03，说明排序权重失衡"
+  "max_retrieved": 3,
+  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。C01-C03 是话题延续相关，C04-C08 是干扰。本用例故意放进 C04（PERSONALIZE+STYLE、conf 0.98/imp 0.9）这类高置信诱导项：按当前 policy（CASUAL_REPLY 下 PERSONALIZE 与 TOPIC_CONTINUE 同为 ★★★★★）它必然高分，TOPIC_CONTINUE 又把 PREFERENCE 排除在兼容类型外，导致 C01/C03 被压制。这是『标注期望 vs 政策矩阵』的张力探针，留红是信号而非 bug"
 }
