@@ -1,0 +1,19 @@
+{
+  "id": "semantic-only-001",
+  "scenario": {"group_id": 8, "user_id": 600},
+  "input": "有什么好玩的射击游戏",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "P1": {"content": "喜欢合作射击游戏", "type": "PREFERENCE",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN",
+           "confidence": 0.8, "importance": 0.5, "last_accessed_at": "2026-08-09 10:00:00"},
+    "P2": {"content": "喜欢吃辣的川菜", "type": "PREFERENCE",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN",
+           "confidence": 0.8, "importance": 0.5, "last_accessed_at": "2026-08-09 10:00:00"}
+  },
+  "expected_memory": ["P1"],
+  "forbidden_memory": [],
+  "max_retrieved": 2,
+  "notes": "embedding 有效性的干净证明：P1 与 P2 的 usage_tags/visibility/confidence/importance/last_accessed_at 完全相同，唯一区别是内容语义。query「有什么好玩的射击游戏」只与 P1（合作射击游戏）语义相关，与 P2（川菜）无关。rule-only 下两记忆词面 Jaccard 都是 0、平局；embedding 下 P1 语义分必高于 P2，P1 胜出。CASUAL_REPLY 上限 3 ≥ 2，期望 P1 进结果、P2 是否进无妨（若 P2 也进则靠排序区分，见 final 顺序）"
+}

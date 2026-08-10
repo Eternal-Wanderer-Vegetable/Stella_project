@@ -20,13 +20,14 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from datetime import datetime
 from typing import Any
 
 from config import (
-    MEMORY_DECAY_DAYS,
+    MEMORY_EMBEDDING_CONTEXTUAL_MIN,
     MEMORY_LIMIT_ACTIVE_JOIN,
     MEMORY_LIMIT_CASUAL_REPLY,
     MEMORY_LIMIT_CONFLICT_AVOID,
@@ -35,7 +36,6 @@ from config import (
     MEMORY_LIMIT_HUMOR,
     MEMORY_LIMIT_RECOMMEND,
     MEMORY_LIMIT_TECH_HELP,
-    MEMORY_RECENCY_HALF_LIFE_DAYS,
     MEMORY_SCORE_W_CONFIDENCE,
     MEMORY_SCORE_W_CONTEXT,
     MEMORY_SCORE_W_IMPORTANCE,
@@ -599,20 +599,17 @@ def _reference_timestamp(memories: list[dict[str, Any]]) -> float:
 def _recency_factor(
     reference: float,
     age_days: float,
-    mem_type: str,
+    mem_type: str = "",
 ) -> float:
-    """Recency Decay：按记忆类型的生命周期衰减（FACT 半衰期长，EVENT 短）。
+    """Recency Decay：``exp(-Δdays / τ)``，τ 取 30 天。
 
-    ``MEMORY_DECAY_DAYS`` 是“半衰期”（天）：到点衰减一半；EVENT/PLAN 等时效型
-    记忆衰老快，FACT/STYLE 稳定型老一点也无妨。衰减贡献用 ``MEMORY_SCORE_W_RECENCY``
-    加权（0~1）。"""
-    half_life = MEMORY_DECAY_DAYS.get(mem_type, MEMORY_RECENCY_HALF_LIFE_DAYS)
-    if half_life <= 0:
-        if age_days <= MEMORY_RECENCY_HALF_LIFE_DAYS:
-            return 1.0 - age_days / (2 * MEMORY_RECENCY_HALF_LIFE_DAYS)
-        return MEMORY_RECENCY_HALF_LIFE_DAYS / (2 * age_days)
-    decay = 0.5 ** (max(0.0, age_days) / half_life)
-    return max(0.0, min(1.0, decay))
+    新记忆 recency≈1（贡献满格），一个月后≈0.37，三个月后≈0.05，近乎归零。
+    相比半衰期式衰减，指数衰减对新旧差异更敏感，能显著拉开“新压旧”，
+    且不区分类型、参数单一（τ=30）。衰减贡献用 ``MEMORY_SCORE_W_RECENCY`` 加权。
+    """
+    _ = mem_type  # 保留入参以兼容旧调用；衰减不区分类型
+    tau_days = 30.0
+    return max(0.0, min(1.0, math.exp(-max(0.0, age_days) / tau_days)))
 
 
 def _rank_score(
@@ -720,12 +717,13 @@ def rank_memories(
 
         # Semantic Similarity（外部注入优先，如 embedding 余弦分；否则规则版占位）
         mem_id = mem.get("id")
-        if semantic_scores and mem_id in semantic_scores:
+        embedding_path = semantic_scores is not None
+        if embedding_path and mem_id in semantic_scores:
             semantic = max(0.0, min(1.0, float(semantic_scores[mem_id])))
         else:
             semantic = _semantic_similarity(query, mem.get("content", ""))
 
-        # RECENCY：记忆存活度（类型半衰期 × 距今相对年龄），新记忆天然占优
+        # RECENCY：记忆存活度（指数衰减，τ=30 天），新记忆天然占优
         age_days = max(0.0, reference - _mem_timestamp(mem)) / 86400.0
         recency = _recency_factor(reference, age_days, (mem.get("type") or TYPE_FACT).strip().upper())
 
@@ -733,11 +731,14 @@ def rank_memories(
         # 两个豁免：usage 强命中（score==5，说明这条记忆就是为当前场景准备的）或
         # trigger_data 主题命中时，不再用词面相似度二次否决（比如「不喜欢恐怖题材」
         # 在“有什么游戏推荐吗”下使用其对应 RECOMMEND usage，语义却≈0）。
+        # 阈值分路：embedding 路径用余弦阈值 MEMORY_EMBEDDING_CONTEXTUAL_MIN（0.25），
+        # rule-only 路径用词面阈值 CONTEXTUAL_MIN_SIMILARITY（0.05），不共用。
+        contextual_min = MEMORY_EMBEDDING_CONTEXTUAL_MIN if embedding_path else CONTEXTUAL_MIN_SIMILARITY
         if (
             parse_visibility(mem.get("visibility")) == VISIBILITY_CONTEXTUAL
             and usage_score < 5
             and not _trigger_topic_match(query, mem)
-            and semantic < CONTEXTUAL_MIN_SIMILARITY
+            and semantic < contextual_min
         ):
             continue
 

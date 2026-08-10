@@ -135,13 +135,20 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     return group_id, user_id
 
 
-def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int = 0) -> dict[str, Any]:
+def evaluate_case(
+    case: dict[str, Any],
+    work_dir: Path | None = None,
+    seq: int = 0,
+    semantic_scores: dict[str, float] | None = None,
+) -> dict[str, Any]:
     """对单个用例跑生产检索路径，返回期望/禁止/实际的命中情况。
 
     生产路径：写入临时库后调 memory.retrieval_v2.retrieve_memories()，
     真实走一遍 SQL Visibility 预过滤 + Usage 过滤 + Ranking + Behavior Guard。
     mode 由检索入口自行检测，检测结果用于排序（不再用用例标注的 declared_mode）。
     seq 用于保证 temp 库文件名唯一，避免 id 缺失/重名的用例共用同一 db 路径。
+    ``semantic_scores`` 为可选外部语义分（如从 embedding fixture 计算的余弦分），
+    传给 retrieve_memories 走 embedding 路径；缺省为规则版。
     """
     import memory.retrieval_v2 as retrieval_v2
 
@@ -170,7 +177,9 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
             # _CACHE 按 (db 路径, 群, 用户, trigger, mode) 全局缓存 5 分钟，
             # 用例之间必须清空，否则同名/缺失 id 的用例会吃到上一用例的缓存。
             retrieval_v2._CACHE.clear()
-            result = retrieval_v2.retrieve_memories(group_id, user_id, query, trigger=trigger)
+            result = retrieval_v2.retrieve_memories(
+                group_id, user_id, query, trigger=trigger, semantic_scores=semantic_scores
+            )
         finally:
             retrieval_v2.DB_PATH = old_db
             retrieval_v2.MEMORY_V2_ENABLED = old_v2
@@ -208,6 +217,27 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
             for m in conversation
             if m.get("_score_parts")
         }
+        # 全部进入排序的候选（含被 mode_limit 截断的）：id → (score, cut, parts)
+        ranked_all = {
+            item["id"]: item
+            for item in (result.trace or {}).get("ranked_all") or []
+            if item.get("id")
+        }
+
+        # 正/噪音综合分间隔（separation_margin）：按用例算
+        # “正样本最低综合分 − 噪音最高综合分”，取最差；只对进入排序的候选统计。
+        def _label(mid: str) -> str:
+            if mid in expected or mid in expected_behavior:
+                return "positive"
+            if mid in forbidden:
+                return "forbidden"
+            return "noise"
+
+        pos_scores = [item["score"] for mid, item in ranked_all.items() if _label(mid) == "positive"]
+        noise_scores = [item["score"] for mid, item in ranked_all.items() if _label(mid) == "noise"]
+        separation_margin = None
+        if pos_scores and noise_scores:
+            separation_margin = round(min(pos_scores) - max(noise_scores), 4)
 
         return {
             "id": case.get("id", "?"),
@@ -220,6 +250,8 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
             "behavior": sorted(behavior_ids),
             "scores": scores,
             "parts": parts,
+            "ranked_all": ranked_all,
+            "separation_margin": separation_margin,
             "found_expected": sorted(found_expected),
             "found_behavior": sorted(found_behavior),
             "behavior_leaked": sorted(behavior_leaked),
@@ -238,12 +270,29 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
             manager.cleanup()
 
 
-def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
-    """运行全部用例，汇总核心指标。"""
+def run_benchmark(
+    benchmark_dir: Path = MEMORY_BENCHMARK_DIR,
+    embedding_fixture: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """运行全部用例，汇总核心指标。
+
+    ``embedding_fixture`` 不为 None 时，用 fixture 里的向量算查询↔记忆余弦分
+    （embedding 路径）；缺省走规则版语义分。
+    """
     cases = load_cases(benchmark_dir)
     with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
         work_dir = Path(tmp)
-        results = [evaluate_case(c, work_dir, i) for i, c in enumerate(cases)]
+        results = [
+            evaluate_case(
+                c,
+                work_dir,
+                i,
+                semantic_scores=(
+                    fixture_semantic_scores(c, embedding_fixture) if embedding_fixture else None
+                ),
+            )
+            for i, c in enumerate(cases)
+        ]
 
     total = len(results)
     ok_count = sum(1 for r in results if r["ok"])
@@ -262,6 +311,10 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
 
     # Precision 的分母是“实际召回条数”，Recall 的分母才是“期望条数”
     precision_pct = round(total_found_expected / max(1, total_retrieved) * 100, 1)
+
+    # separation_margin：所有带正/噪音对照的用例里，最差的“正最低 − 噪音最高”
+    margins = [r["separation_margin"] for r in results if r["separation_margin"] is not None]
+    separation_margin = min(margins) if margins else None
 
     return {
         "cases_total": total,
@@ -284,19 +337,65 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
         "behavior_leaks": total_behavior_leaked,
         "forbidden_activation_rate": round(total_activated_forbidden / max(1, total_forbidden) * 100, 1),
         "forbidden_activations": total_activated_forbidden,
+        "separation_margin": separation_margin,
         "results": results,
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Stella Memory Benchmark")
-    parser.add_argument("--dir", type=Path, default=MEMORY_BENCHMARK_DIR, help="benchmark 数据集目录")
-    parser.add_argument("--verbose", action="store_true", help="打印每个用例的明细")
-    args = parser.parse_args()
+def _text_digest(text: str) -> str:
+    """文本的 sha256（与 build_embedding_fixture 一致，作 fixture 向量索引）。"""
+    import hashlib
 
-    metrics = run_benchmark(args.dir)
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def fixture_semantic_scores(case: dict[str, Any], fixture: dict[str, Any]) -> dict[str, float]:
+    """从 fixture 查 query 与每条记忆的向量，返回 {mem_id: 余弦分}。
+
+    fixture 结构：{model, dim, dtype, normalized, keys, data: {sha256: base64(float16)}}。
+    缺失向量的记忆跳过（rule-only 兜底）。
+    """
+    import base64
+
+    import numpy as np
+
+    vecs = fixture.get("_vecs")
+    if vecs is None:
+        vecs = {}
+        raw = fixture.get("data") or {}
+        for key, b64 in raw.items():
+            vecs[key] = np.frombuffer(base64.b64decode(b64), dtype=np.float16).astype(np.float32)
+        fixture["_vecs"] = vecs
+
+    qv = vecs.get(_text_digest(case.get("input") or ""))
+    if qv is None:
+        return {}
+    qn = float(np.linalg.norm(qv))
+    scores: dict[str, float] = {}
+    for mid, mem in (case.get("memories") or {}).items():
+        mv = vecs.get(_text_digest(mem.get("content") or ""))
+        if mv is None:
+            continue
+        nn = float(np.linalg.norm(mv))
+        if qn == 0.0 or nn == 0.0:
+            continue
+        s = float(np.dot(qv, mv) / (qn * nn))
+        scores[mid] = max(0.0, min(1.0, s))
+    return scores
+
+
+def load_embedding_fixture(path: Path) -> dict[str, Any]:
+    """读取 embedding fixture JSON，返回含 _vecs 的 dict。"""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or "data" not in data:
+        raise ValueError(f"非法 embedding fixture: {path}")
+    return data
+
+
+def _print_summary(metrics: dict[str, Any], label: str = "") -> None:
+    """打印汇总指标（label 注明是 rule-only 还是 embedding）。"""
     print("=" * 56)
-    print(f"Memory Benchmark {metrics['cases_total']} 个用例（{metrics['cases_with_expected']} 个带期望）")
+    print(f"Memory Benchmark {metrics['cases_total']} 个用例（{metrics['cases_with_expected']} 个带期望） {label}")
     print("=" * 56)
     print(f"  通过用例       : {metrics['cases_ok']}/{metrics['cases_total']} ({metrics['cases_ok_rate']}%)")
     print(f"  Memory Precision : {metrics['memory_precision']}%")
@@ -304,32 +403,90 @@ def main() -> None:
     print(f"  Pollution Rate   : {metrics['memory_pollution_rate']}%")
     print(f"  Behavior Guard   : {metrics['behavior_guard_hit_rate']}%")
     print(f"  Mode 检测准确率  : {metrics['mode_accuracy']}%")
-    print(f"  Forbidden 激活   : {metrics['forbidden_activation_rate']}% ({metrics['forbidden_activations']} 次)  （目标 ≈ 0%）")
+    print(f"  Forbidden 激活   : {metrics['forbidden_activation_rate']}% "
+          f"({metrics['forbidden_activations']} 次)  （目标 ≈ 0%）")
+    if metrics.get("separation_margin") is not None:
+        print(f"  Separation Margin: {metrics['separation_margin']:+.4f}  （正最低 − 噪音最高，最差用例）")
     print(f"  样本分母        : 期望 {metrics['total_expected']}（行为 {metrics['total_expected_behavior']}）"
           f" / 召回 {metrics['total_retrieved']} / 禁止 {metrics['total_forbidden']}")
     print("=" * 56)
+
+
+def _print_verbose(results: list[dict[str, Any]]) -> None:
+    """打印每个用例明细：全部进入排序的候选 + 截断标记 + _score_parts。"""
+    for r in results:
+        status = "✅" if r["ok"] else "❌"
+        mode_flag = (
+            "" if r["declared_mode"] == r["detected_mode"]
+            else f" ⚠️mode: 标注={r['declared_mode']} 实测={r['detected_mode']}"
+        )
+        over_flag = " ⚠️超召回" if r["over_recall"] else ""
+        # 全部进入排序的候选（含被截断的），按分数降序，带 ✓/✗cut 标记
+        cands = sorted(r["ranked_all"].values(), key=lambda x: x["score"], reverse=True)
+        lines = []
+        for item in cands:
+            mid = item["id"]
+            mark = "✓" if not item["cut"] else "✗cut"
+            parts = item.get("parts") or {}
+            parts_str = "[" + " ".join(f"{k}:{parts.get(k, 0):.3f}" for k in ("ctx", "usg", "sem", "rec", "conf", "imp")) + "]"
+            lines.append(f"      {mid:<12} {item['score']:+.4f} {mark} {parts_str}")
+        print(
+            f"{status} {r['id']} [{r['detected_mode']}] "
+            f"期望={r['expected']} 期望行为={r['expected_behavior']} 实际={r['final']} "
+            f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}"
+            f"{mode_flag}{over_flag}"
+            + (f"\n  间隔 {r['separation_margin']:+.4f}" if r["separation_margin"] is not None else "")
+        )
+        print("\n".join(lines) if lines else "      （无候选）")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Stella Memory Benchmark")
+    parser.add_argument("--dir", type=Path, default=MEMORY_BENCHMARK_DIR, help="benchmark 数据集目录")
+    parser.add_argument("--verbose", action="store_true", help="打印每个用例的明细")
+    parser.add_argument("--embedding-fixture", type=Path, default=None,
+                        help="从 fixture 取向量算语义分（embedding 路径，不发 HTTP），缺省 rule-only")
+    parser.add_argument("--compare", action="store_true",
+                        help="同一套用例跑 rule-only 与 embedding 两遍，输出对照表")
+    args = parser.parse_args()
+
+    if args.embedding_fixture is not None:
+        fixture = load_embedding_fixture(args.embedding_fixture)
+        metrics_emb = run_benchmark(args.dir, embedding_fixture=fixture)
+        _print_summary(metrics_emb, f"[embedding {fixture.get('model', '?')}]")
+        if args.verbose:
+            _print_verbose(metrics_emb["results"])
+        return
+
+    if args.compare:
+        fixture = None
+        metrics_rule = run_benchmark(args.dir)
+        _print_summary(metrics_rule, "[rule-only]")
+        print("\n")
+        # 尝试找默认 fixture；找不到就只跑 rule-only 并提示
+        default_fixtures = sorted((Path(__file__).resolve().parent / "benchmark" / "_fixtures").glob("embeddings_*.json"))
+        if not default_fixtures:
+            print("⚠️ 未找到 embedding fixture（先运行 scripts/build_embedding_fixture.py）。仅输出 rule-only。")
+            if args.verbose:
+                _print_verbose(metrics_rule["results"])
+            return
+        fixture = load_embedding_fixture(default_fixtures[0])
+        metrics_emb = run_benchmark(args.dir, embedding_fixture=fixture)
+        _print_summary(metrics_emb, f"[embedding {fixture.get('model', '?')}]")
+        print("\n────── 对照表（rule-only vs embedding） ──────")
+        rmap = {r["id"]: r for r in metrics_rule["results"]}
+        for r in metrics_emb["results"]:
+            rr = rmap.get(r["id"], {})
+            print(f"  {r['id']:<22} rule={'✅' if rr.get('ok') else '❌'}  "
+                  f"emb={'✅' if r['ok'] else '❌'}  "
+                  f"margin rule={rr.get('separation_margin')!s:>8}  "
+                  f"emb={r['separation_margin']!s:>8}")
+        return
+
+    metrics = run_benchmark(args.dir)
+    _print_summary(metrics)
     if args.verbose:
-        for r in metrics["results"]:
-            status = "✅" if r["ok"] else "❌"
-            mode_flag = (
-                "" if r["declared_mode"] == r["detected_mode"]
-                else f" ⚠️mode: 标注={r['declared_mode']} 实测={r['detected_mode']}"
-            )
-            over_flag = " ⚠️超召回" if r["over_recall"] else ""
-            # 分数分布：期望记忆集中在高分、噪音被阈值挡在下方，说明 MEMORY_SCORE_MIN 定得准
-            score_str = " ".join(f"{rid}:{r['scores'][rid]:.3f}" for rid in r["final"])
-            parts_str = " ".join(
-                f"{rid}[" + " ".join(f"{k}:{r['parts'][rid][k]:.3f}" for k in ("ctx", "usg", "sem", "rec", "conf", "imp")) + "]"
-                for rid in r["final"] if rid in r.get("parts", {})
-            )
-            print(
-                f"{status} {r['id']} [{r['detected_mode']}] "
-                f"期望={r['expected']} 期望行为={r['expected_behavior']} 实际={r['final']} "
-                f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}"
-                f"{mode_flag}{over_flag}\n"
-                f"      scores={score_str or '—'}\n"
-                f"      parts={parts_str or '—'}"
-            )
+        _print_verbose(metrics["results"])
 
 
 if __name__ == "__main__":

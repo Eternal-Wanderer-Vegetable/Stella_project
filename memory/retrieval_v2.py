@@ -374,6 +374,18 @@ def retrieve_memories(
     ][:limit]
     trace["final_ids"] = [m.get("id") for m in conversation]
     trace["rejected_ids"] = [m.get("id") for m in candidates if m.get("id") not in {x.get("id") for x in conversation}]
+    # 全部进入排序的候选（合并后、截断前）及其分数/是否被截断，供 benchmark 诊断用：
+    # 上次 C01/C03 误诊成“continue 丢失”，就是因为只看 final 看不到被 mode_limit 截断的项。
+    final_id_set = {m.get("id") for m in conversation}
+    trace["ranked_all"] = [
+        {
+            "id": m.get("id"),
+            "score": round(float(m.get("_score") or 0.0), 4),
+            "cut": m.get("id") not in final_id_set,
+            "parts": m.get("_score_parts") or {},
+        }
+        for m in ranked
+    ]
 
     result = RetrievalResult(
         mode=mode,

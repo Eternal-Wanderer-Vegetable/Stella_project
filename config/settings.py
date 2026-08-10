@@ -205,6 +205,11 @@ MEMORY_EMBEDDING_BASE_URL = _env("MEMORY_EMBEDDING_BASE_URL", "http://127.0.0.1:
 MEMORY_EMBEDDING_MODEL = _env("MEMORY_EMBEDDING_MODEL", "")
 # 每次语义检索的超时（秒）
 MEMORY_EMBEDDING_TIMEOUT = _env_float("MEMORY_EMBEDDING_TIMEOUT", 10.0)
+# embedding 路径下 CONTEXTUAL 记忆的“主题匹配”阈值（余弦相似度）。
+# 依据实测：正样本余弦 min ≈0.222，取 0.25 留余量；宁松勿严，后面还有 usage 层
+# 与分数门槛（MEMORY_SCORE_MIN）兜底。仅作用于 embedding 路径，
+# rule-only 路径仍用 policy.CONTEXTUAL_MIN_SIMILARITY（0.05），两条路径阈值不共用。
+MEMORY_EMBEDDING_CONTEXTUAL_MIN = _env_float("MEMORY_EMBEDDING_CONTEXTUAL_MIN", 0.25)
 
 # 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
 # rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
