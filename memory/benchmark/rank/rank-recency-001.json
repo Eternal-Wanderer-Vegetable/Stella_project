@@ -1,0 +1,28 @@
+{
+  "id": "rank-recency-001",
+  "scenario": {"group_id": 3, "user_id": 300},
+  "input": "今天天气真不错",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "S1": {"content": "今天要去见客户", "type": "EVENT",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.95, "importance": 0.95},
+    "S2": {"content": "明天去爬山吧", "type": "PLAN",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.95},
+    "R_new": {"content": "最近在学做菜", "type": "EVENT",
+              "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.5,
+              "last_accessed_at": "2026-08-09 12:00:00"},
+    "R_old": {"content": "喜欢养猫", "type": "PREFERENCE",
+              "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.5,
+              "last_accessed_at": "2026-01-01 00:00:00"},
+    "D1": {"content": "喜欢轻松闲聊", "type": "PREFERENCE",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.6, "importance": 0.3},
+    "D2": {"content": "常玩合作射击", "type": "PREFERENCE",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.6, "importance": 0.3},
+    "D3": {"content": "偶尔熬夜", "type": "FACT",
+           "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.5, "importance": 0.3}
+  },
+  "expected_memory": ["R_new"],
+  "forbidden_memory": [],
+  "notes": "CASUAL_REPLY 上限 3：S1/S2 高分占前 2，R_new 与 R_old 排序分完全相同（同 usage/conf/importance、语义 0）。两个同分记忆的先后由候选池顺序决定（last_accessed_at DESC），R_new 更新必须压过 R_old 进入第 3 位"
+}

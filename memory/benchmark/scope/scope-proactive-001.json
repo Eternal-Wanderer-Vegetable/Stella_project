@@ -1,0 +1,16 @@
+{
+  "id": "scope-proactive-001",
+  "scenario": {"group_id": 1, "user_id": 0},
+  "input": "（主动找个话题聊）",
+  "mode": "ACTIVE_JOIN",
+  "trigger": "proactive",
+  "memories": {
+    "M001": {"content": "用户1001喜欢合作射击游戏", "type": "PREFERENCE",
+             "user_id": 1001, "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN"},
+    "M002": {"content": "用户1002讨厌恐怖游戏", "type": "PREFERENCE",
+             "user_id": 1002, "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN"}
+  },
+  "expected_memory": ["M001", "M002"],
+  "forbidden_memory": [],
+  "notes": "主动发言走群级检索：不按 user 过滤，M001/M002 都应进入最终候选（与 scope-reply-001 对照验证两种触发的作用域）"
+}

@@ -4,21 +4,26 @@
 """Memory Benchmark 运行器（Evaluation & Debug）。
 
 对应设计文档《Evaluation & Debug Specification v1.0》：
-- 读取 ``memory/benchmark/<category>/*.json`` 用例（每个用例标注 expected_memory /
-  forbidden_memory / expected_behavior）；
+- 读取 ``memory/benchmark/<category>/*.json`` 用例。每个用例可标注：
+  ``expected_memory``（必须进会话 / conversation）、``expected_behavior_memory``
+  （必须进行为约束 / behavior，且不得进会话）、``forbidden_memory``（绝不能激活）；
 - 对每个用例把记忆写入临时 SQLite，调 ``memory.retrieval_v2.retrieve_memories()``
   走**生产检索路径**（含 SQL Visibility 预过滤 / Usage 过滤 / Ranking / Behavior Guard），
   最后对比实际选中的记忆与期望/禁止记忆；
 - 输出核心指标：Memory Precision、Memory Recall、Forbidden Activation、
-  Memory Pollution Rate、Mode 检测准确率。
+  Memory Pollution Rate、Mode 检测准确率、Behavior Guard Hit。
+
+期望记忆分两种"正确"，不能混淆（进 conversation 与进 behavior 语义完全不同）：
+  ``expected_memory`` 进会话才算命中；``expected_behavior_memory`` 进行为约束才算命中，
+  且一旦泄漏进会话（behavior_leaked）即判失败。
 
 核心指标：
-    Metric 1  Memory Precision        = 找到的期望记忆 /（会话召回 + 行为约束召回）（目标 ≥ 80%）
+    Metric 1  Memory Precision        = 找到的期望记忆 /（会话召回 + 行为约束召回）
     Metric 2  Memory Recall           = 找到的期望记忆 / 应该找到的记忆
     Metric 3  Forbidden Activation    = 被错误激活的禁止记忆次数（目标 ≈ 0）
-    Metric 4  Memory Pollution Rate   = 1 - Precision（Prompt 中无用记忆比例）
+    Metric 4  Memory Pollution Rate   = 1 - Precision（会话中无用记忆比例）
     Metric 5  Mode Detection Accuracy = 检测到的 mode 与用例标注一致的占比
-    Metric 6  Behavior Guard Hit      = 期望记忆中经 Behavior Guard 命中的比例
+    Metric 6  Behavior Guard Hit      = 期望行为约束记忆被 Behavior Guard 命中（且未泄漏）的比例
 """
 
 from __future__ import annotations
@@ -86,6 +91,10 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     SQL Visibility 预过滤（_allowed_visibility_clause）。否则 RESTRICTED 记忆会在
     普通模式绕过 SQL 直接进 rank_memories，测的是一条比生产更宽松的路径。
     memories 表直接复用 memory.schema 的规范 DDL，避免与生产 schema 漂移。
+
+    单条记忆可覆盖 scenario 的归属与访问时间：
+      ``group_id`` / ``user_id`` → 模拟"这条记忆属于别人"（测跨用户泄漏）；
+      ``last_accessed_at``       → 测"新记忆压过旧记忆"的排序维度。
     """
     db_path.unlink(missing_ok=True)
     group_id, user_id = _scenario_ids(case)
@@ -102,8 +111,8 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
                 "last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
                 (
                     mid,
-                    str(group_id),
-                    str(user_id),
+                    str(mem.get("group_id", group_id)),
+                    str(mem.get("user_id", user_id)),
                     mem.get("type") or "FACT",
                     mem.get("content") or "",
                     0.5 if mem.get("importance") is None else mem["importance"],
@@ -112,7 +121,7 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
                     mem.get("visibility") or "OPEN",
                     mem.get("trigger_data"),
                     mem.get("behavior_rule"),
-                    "2026-08-09 10:00:00",
+                    mem.get("last_accessed_at") or "2026-08-09 10:00:00",
                 ),
             )
         conn.commit()
@@ -169,24 +178,34 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int =
         final_ids = {m["id"] for m in conversation}
         behavior_ids = {m["id"] for m in behavior}
         expected = set(case.get("expected_memory") or [])
+        expected_behavior = set(case.get("expected_behavior_memory") or [])
         forbidden = set(case.get("forbidden_memory") or [])
 
+        # 期望记忆必须进会话；期望行为约束记忆必须进行为约束、且不得泄漏进会话
         found_expected = final_ids & expected
+        found_behavior = behavior_ids & expected_behavior
+        behavior_leaked = final_ids & expected_behavior
         activated_forbidden = final_ids & forbidden
-        # 行为约束里的期望记忆也算“被找到”（Behavior Guard 生效）
-        found_expected |= behavior_ids & expected
 
         return {
             "id": case.get("id", "?"),
             "declared_mode": declared_mode,
             "detected_mode": detected_mode,
             "expected": sorted(expected),
+            "expected_behavior": sorted(expected_behavior),
             "forbidden": sorted(forbidden),
             "final": sorted(final_ids),
             "behavior": sorted(behavior_ids),
             "found_expected": sorted(found_expected),
+            "found_behavior": sorted(found_behavior),
+            "behavior_leaked": sorted(behavior_leaked),
             "activated_forbidden": sorted(activated_forbidden),
-            "ok": bool(found_expected == expected) and not activated_forbidden,
+            "ok": bool(
+                found_expected == expected
+                and found_behavior == expected_behavior
+                and not behavior_leaked
+                and not activated_forbidden
+            ),
         }
     finally:
         if manager is not None:
@@ -202,12 +221,15 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
 
     total = len(results)
     ok_count = sum(1 for r in results if r["ok"])
-    total_expected = sum(len(r["expected"]) for r in results)
-    total_found_expected = sum(len(r["found_expected"]) for r in results)
+    cases_with_expected = sum(1 for r in results if r["expected"])
+    total_expected = sum(len(r["expected"]) + len(r["expected_behavior"]) for r in results)
+    total_expected_behavior = sum(len(r["expected_behavior"]) for r in results)
+    total_found_expected = sum(len(r["found_expected"]) + len(r["found_behavior"]) for r in results)
+    total_found_behavior = sum(len(r["found_behavior"]) for r in results)
     # 分母 = 会话召回 + 行为约束召回：行为约束里的期望记忆是“正确激活”（Behavior Guard），
     # 不能只算分子不算分母，否则会把 precision 虚高甚至推到 100% 以上。
     total_retrieved = sum(len(r["final"]) + len(r["behavior"]) for r in results)
-    total_behavior_hits = sum(len(set(r["behavior"]) & set(r["expected"])) for r in results)
+    total_behavior_leaked = sum(len(r["behavior_leaked"]) for r in results)
     total_forbidden = sum(len(r["forbidden"]) for r in results)
     total_activated_forbidden = sum(len(r["activated_forbidden"]) for r in results)
     mode_correct = sum(1 for r in results if r["declared_mode"] == r["detected_mode"])
@@ -219,14 +241,21 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
         "cases_total": total,
         "cases_ok": ok_count,
         "cases_ok_rate": round(ok_count / total * 100, 1) if total else 0.0,
+        # 分母透出：不显示样本量的百分比会误导（空召回用例对 recall 贡献为 0）
+        "cases_with_expected": cases_with_expected,
+        "total_expected": total_expected,
+        "total_expected_behavior": total_expected_behavior,
+        "total_retrieved": total_retrieved,
+        "total_forbidden": total_forbidden,
         "memory_precision": precision_pct,
         "memory_recall": round(total_found_expected / max(1, total_expected) * 100, 1),
-        # Metric 4 Memory Pollution Rate = 1 - Precision（Prompt 中无用记忆比例）
+        # Metric 4 Memory Pollution Rate = 1 - Precision（会话中无用记忆比例）
         "memory_pollution_rate": round(max(0.0, 100.0 - precision_pct), 1),
         # Metric 5 Mode Detection Accuracy：检测到的 mode 是否与用例标注一致
         "mode_accuracy": round(mode_correct / total * 100, 1) if total else 0.0,
-        # Metric 6 Behavior Guard Hit：期望记忆中靠 Behavior Guard 命中的比例
-        "behavior_guard_hit_rate": round(total_behavior_hits / max(1, total_expected) * 100, 1),
+        # Metric 6 Behavior Guard Hit：期望行为约束记忆被命中（且未泄漏）的比例
+        "behavior_guard_hit_rate": round(total_found_behavior / max(1, total_expected_behavior) * 100, 1),
+        "behavior_leaks": total_behavior_leaked,
         "forbidden_activation_rate": round(total_activated_forbidden / max(1, total_forbidden) * 100, 1),
         "forbidden_activations": total_activated_forbidden,
         "results": results,
@@ -241,23 +270,29 @@ def main() -> None:
 
     metrics = run_benchmark(args.dir)
     print("=" * 56)
-    print(f"Memory Benchmark（{metrics['cases_total']} 个用例）")
+    print(f"Memory Benchmark {metrics['cases_total']} 个用例（{metrics['cases_with_expected']} 个带期望）")
     print("=" * 56)
     print(f"  通过用例       : {metrics['cases_ok']}/{metrics['cases_total']} ({metrics['cases_ok_rate']}%)")
-    print(f"  Memory Precision : {metrics['memory_precision']}%  （目标 ≥ 80%）")
+    print(f"  Memory Precision : {metrics['memory_precision']}%")
     print(f"  Memory Recall    : {metrics['memory_recall']}%")
     print(f"  Pollution Rate   : {metrics['memory_pollution_rate']}%")
     print(f"  Behavior Guard   : {metrics['behavior_guard_hit_rate']}%")
     print(f"  Mode 检测准确率  : {metrics['mode_accuracy']}%")
     print(f"  Forbidden 激活   : {metrics['forbidden_activation_rate']}% ({metrics['forbidden_activations']} 次)  （目标 ≈ 0%）")
+    print(f"  样本分母        : 期望 {metrics['total_expected']}（行为 {metrics['total_expected_behavior']}）"
+          f" / 召回 {metrics['total_retrieved']} / 禁止 {metrics['total_forbidden']}")
     print("=" * 56)
     if args.verbose:
         for r in metrics["results"]:
             status = "✅" if r["ok"] else "❌"
+            mode_flag = (
+                "" if r["declared_mode"] == r["detected_mode"]
+                else f" ⚠️mode: 标注={r['declared_mode']} 实测={r['detected_mode']}"
+            )
             print(
-                f"{status} {r['id']} [{r['declared_mode']}] "
-                f"期望={r['expected']} 实际={r['final']} "
-                f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}"
+                f"{status} {r['id']} [{r['detected_mode']}] "
+                f"期望={r['expected']} 期望行为={r['expected_behavior']} 实际={r['final']} "
+                f"行为约束={r['behavior']} 违规激活={r['activated_forbidden']}{mode_flag}"
             )
 
 

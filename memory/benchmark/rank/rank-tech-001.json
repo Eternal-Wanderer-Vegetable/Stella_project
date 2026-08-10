@@ -1,0 +1,28 @@
+{
+  "id": "rank-tech-001",
+  "scenario": {"group_id": 2, "user_id": 200},
+  "input": "CUDA 报错显存不足怎么排查",
+  "mode": "TECH_HELP",
+  "trigger": "reply",
+  "memories": {
+    "T01": {"content": "用户之前配置过CUDA，遇到过显存不足", "type": "EVENT",
+            "usage_tags": ["ANSWER_CONTEXT"], "visibility": "CONTEXTUAL", "confidence": 0.9, "importance": 0.8},
+    "T02": {"content": "RTX5080 32GB 显存", "type": "FACT",
+            "usage_tags": ["ANSWER_CONTEXT"], "visibility": "OPEN", "confidence": 0.95, "importance": 0.7},
+    "T03": {"content": "喜欢合作射击游戏", "type": "PREFERENCE",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+    "T04": {"content": "最近在学Rust", "type": "EVENT",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.5},
+    "T05": {"content": "语言偏好中文", "type": "STYLE",
+            "usage_tags": ["PERSONALIZE"], "visibility": "OPEN", "confidence": 0.98, "importance": 0.9},
+    "T06": {"content": "和某群友关系不错", "type": "RELATION",
+            "usage_tags": ["RELATION_CONTEXT"], "visibility": "OPEN", "confidence": 0.6, "importance": 0.3},
+    "T07": {"content": "常在晚上上线", "type": "FACT",
+            "usage_tags": ["PERSONALIZE"], "visibility": "OPEN", "confidence": 0.7, "importance": 0.3},
+    "T08": {"content": "喜欢轻松的闲聊", "type": "PREFERENCE",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.4}
+  },
+  "expected_memory": ["T01", "T02"],
+  "forbidden_memory": [],
+  "notes": "TECH_HELP 上限 5 条。T01/T02 是排查相关，其余是干扰。T05 高置信度 PERSONALIZE，若挤掉 T01/T02，说明 USAGE/CONTEXT 权重不足"
+}

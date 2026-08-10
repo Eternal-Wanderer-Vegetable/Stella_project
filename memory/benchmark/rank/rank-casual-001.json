@@ -1,0 +1,28 @@
+{
+  "id": "rank-casual-001",
+  "scenario": {"group_id": 1, "user_id": 100},
+  "input": "今天有什么好聊的话题吗",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "C01": {"content": "用户喜欢轻松闲聊", "type": "PREFERENCE",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+    "C02": {"content": "最近在追一部剧", "type": "EVENT",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.5},
+    "C03": {"content": "喜欢合作射击游戏", "type": "PREFERENCE",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.85, "importance": 0.5},
+    "C04": {"content": "语言偏好中文", "type": "STYLE",
+            "usage_tags": ["PERSONALIZE"], "visibility": "OPEN", "confidence": 0.98, "importance": 0.9},
+    "C05": {"content": "常在晚上上线", "type": "FACT",
+            "usage_tags": ["PERSONALIZE"], "visibility": "OPEN", "confidence": 0.7, "importance": 0.3},
+    "C06": {"content": "爱吃辣的", "type": "PREFERENCE",
+            "usage_tags": ["TOPIC_START"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.4},
+    "C07": {"content": "和某群友关系不错", "type": "RELATION",
+            "usage_tags": ["RELATION_CONTEXT"], "visibility": "OPEN", "confidence": 0.6, "importance": 0.3},
+    "C08": {"content": "偶尔会玩梗", "type": "STYLE",
+            "usage_tags": ["HUMOR"], "visibility": "OPEN", "confidence": 0.7, "importance": 0.3}
+  },
+  "expected_memory": ["C01", "C02", "C03"],
+  "forbidden_memory": [],
+  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。C01-C03 是话题延续相关，C04-C08 是干扰。若 C04 等挤掉 C01-C03，说明排序权重失衡"
+}
