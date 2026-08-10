@@ -140,6 +140,40 @@ _INDEXES: list[tuple[str, str, str]] = [
 ]
 
 
+# 记忆主表（memories）的规范 DDL：所有业务模块与该表打交道的建表/取数必须用它定义，
+# 避免各处手抄一份导致加字段时漂移（benchmark 临时库也复用它）。
+MEMORIES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY,
+    group_id TEXT,
+    user_id TEXT,
+    type TEXT,
+    content TEXT,
+    content_raw TEXT,
+    importance REAL,
+    confidence REAL,
+    status TEXT,
+    confirmation_count INTEGER,
+    last_confirmed_at DATETIME,
+    last_accessed_at DATETIME,
+    compressed_at DATETIME,
+    compression_version INTEGER,
+    is_atomized INTEGER,
+    usage_tags TEXT,
+    visibility TEXT DEFAULT 'OPEN',
+    trigger_data TEXT,
+    behavior_rule TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_memories_table(conn: sqlite3.Connection) -> None:
+    """确保 memories 表存在（幂等）。benchmark 临时库等场景复用规范 DDL。"""
+    conn.execute(MEMORIES_TABLE_DDL)
+
+
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     """判断表是否存在。"""
     cursor.execute(

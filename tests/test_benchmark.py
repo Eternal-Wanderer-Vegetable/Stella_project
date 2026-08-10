@@ -11,7 +11,7 @@ def test_benchmark_loads_cases():
     """benchmark 目录下的用例应全部能被加载。"""
     cases = benchmark.load_cases()
     assert len(cases) >= 6
-    assert all(c.get("expected_memory") for c in cases)
+    assert all("expected_memory" in c for c in cases)
 
 
 def test_benchmark_run_metrics_within_targets():

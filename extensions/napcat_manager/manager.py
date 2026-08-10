@@ -13,6 +13,12 @@
 NAPCAT_QUICK_PASSWORD（或 NAPCAT_QUICK_PASSWORD_MD5），NapCat 启动时会
 自动尝试快速登录，历史会话失效时用密码回退登录，从而在外部重启后自动上线。
 
+注意：部分 NapCat.Shell 版本的启动链（NapCatWinBootMain.exe -> QQ -> node）
+不会把外部进程注入的 NAPCAT_QUICK_* 环境变量透传到 WebUI/登录进程，导致
+自动登录退化为二维码。为兼容此类版本，启动前会把登录变量同步写入
+NapCat.Shell/config/.env（NapCat 启动时会把该文件直接读入自身 process.env），
+作为环境变量注入的可靠兜底。
+
 本模块仅提供同步函数；在异步上下文（看门狗等）请用 asyncio.to_thread 调用。
 """
 
@@ -46,6 +52,7 @@ class NapCatNotInstalledError(RuntimeError):
     def __init__(self, shell_path: str) -> None:
         super().__init__(f"NapCat.Shell 未安装（缺少启动组件）: {shell_path}")
 
+
 # 终止进程树后等待端口/会话释放的时间
 _RESTART_WAIT_SECONDS = 2.0
 
@@ -78,6 +85,7 @@ def start_napcat() -> None:
     if not is_installed():
         logger.warning(f"[NapCat] 缺少启动组件，目录: {NAPCAT_SHELL_PATH}")
         raise NapCatNotInstalledError(str(NAPCAT_SHELL_PATH))
+    _write_login_env_file()
     launcher = NAPCAT_SHELL_PATH / LAUNCHER_NAME
     creationflags = 0
     if os.name == "nt":
@@ -131,6 +139,32 @@ def _build_login_env() -> dict[str, str]:
     elif account and NAPCAT_QQ_PASSWORD:
         env["NAPCAT_QUICK_PASSWORD"] = NAPCAT_QQ_PASSWORD
     return env
+
+
+def _write_login_env_file() -> None:
+    """把登录变量同步写入 NapCat.Shell/config/.env。
+
+    兼容部分 NapCat.Shell 版本（其启动链不会透传外部进程环境变量到登录进程）：
+    该类版本启动时会读取 NapCat.Shell/config/.env 并写入自身 process.env，
+    因此启动前维护该文件，可保证 NAPCAT_QUICK_* 一定对自动登录可见。
+    """
+    account = NAPCAT_QQ_ACCOUNT.strip()
+    password_md5 = NAPCAT_QQ_PASSWORD_MD5.strip()
+    lines: list[str] = []
+    if account:
+        lines.append(f"NAPCAT_QUICK_ACCOUNT={account}")
+    if password_md5:
+        lines.append(f"NAPCAT_QUICK_PASSWORD_MD5={password_md5}")
+    elif account and NAPCAT_QQ_PASSWORD:
+        lines.append(f"NAPCAT_QUICK_PASSWORD={NAPCAT_QQ_PASSWORD}")
+    if not lines:
+        logger.warning("[NapCat] 未配置 QQ 账号/密码，跳过 config/.env 写入")
+        return
+    config_dir = NAPCAT_SHELL_PATH / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    target = config_dir / ".env"
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info(f"[NapCat] 已同步登录变量到 {target}")
 
 
 def _napcat_pids() -> list[int]:

@@ -13,11 +13,12 @@
   Memory Pollution Rate、Mode 检测准确率。
 
 核心指标：
-    Metric 1  Memory Precision        = 找到的期望记忆 / 实际召回条数（目标 ≥ 80%）
+    Metric 1  Memory Precision        = 找到的期望记忆 /（会话召回 + 行为约束召回）（目标 ≥ 80%）
     Metric 2  Memory Recall           = 找到的期望记忆 / 应该找到的记忆
     Metric 3  Forbidden Activation    = 被错误激活的禁止记忆次数（目标 ≈ 0）
     Metric 4  Memory Pollution Rate   = 1 - Precision（Prompt 中无用记忆比例）
     Metric 5  Mode Detection Accuracy = 检测到的 mode 与用例标注一致的占比
+    Metric 6  Behavior Guard Hit      = 期望记忆中经 Behavior Guard 命中的比例
 """
 
 from __future__ import annotations
@@ -50,12 +51,17 @@ def load_cases(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> list[dict[str, Any
     for path in sorted(benchmark_dir.rglob("*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                cases.extend(data)
-            else:
-                cases.append(data)
+            items = data if isinstance(data, list) else [data]
+            cases.extend(items)
         except (ValueError, OSError) as e:
             print(f"⚠️ 用例解析失败 {path}: {e}")
+    # id 重复是标注事故：尽早报错，避免静默把不同用例的期望/禁止混在一起
+    seen: set[str] = set()
+    for c in cases:
+        cid = c.get("id", "?")
+        if cid in seen:
+            raise ValueError(f"benchmark 用例 id 重复: {cid!r}")
+        seen.add(cid)
     return cases
 
 
@@ -74,36 +80,20 @@ def _scenario_ids(case: dict[str, Any]) -> tuple[int, int]:
 
 
 def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
-    """把用例记忆写进临时 SQLite（v2 schema），返回 (group_id, user_id)。
+    """把用例记忆写进临时 SQLite，返回 (group_id, user_id)。
 
     背景：evaluate_case 必须走生产路径，即 retrieval_v2._fetch_candidates 内的
     SQL Visibility 预过滤（_allowed_visibility_clause）。否则 RESTRICTED 记忆会在
     普通模式绕过 SQL 直接进 rank_memories，测的是一条比生产更宽松的路径。
-    这里复制 retrieval_v2 依赖的最小 v2 表结构（只保留检索用到的最小列）。
+    memories 表直接复用 memory.schema 的规范 DDL，避免与生产 schema 漂移。
     """
     db_path.unlink(missing_ok=True)
     group_id, user_id = _scenario_ids(case)
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS memories (
-                id TEXT PRIMARY KEY,
-                group_id TEXT,
-                user_id TEXT,
-                type TEXT,
-                content TEXT,
-                importance REAL,
-                confidence REAL,
-                status TEXT,
-                usage_tags TEXT,
-                visibility TEXT,
-                trigger_data TEXT,
-                behavior_rule TEXT,
-                last_accessed_at DATETIME
-            )
-            """
-        )
+        from memory import schema
+
+        schema.create_memories_table(conn)
         for mid, data in (case.get("memories") or {}).items():
             mem = _mem_dict(mid, data)
             conn.execute(
@@ -131,12 +121,13 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     return group_id, user_id
 
 
-def evaluate_case(case: dict[str, Any], work_dir: Path | None = None) -> dict[str, Any]:
+def evaluate_case(case: dict[str, Any], work_dir: Path | None = None, seq: int = 0) -> dict[str, Any]:
     """对单个用例跑生产检索路径，返回期望/禁止/实际的命中情况。
 
     生产路径：写入临时库后调 memory.retrieval_v2.retrieve_memories()，
     真实走一遍 SQL Visibility 预过滤 + Usage 过滤 + Ranking + Behavior Guard。
     mode 由检索入口自行检测，检测结果用于排序（不再用用例标注的 declared_mode）。
+    seq 用于保证 temp 库文件名唯一，避免 id 缺失/重名的用例共用同一 db 路径。
     """
     import memory.retrieval_v2 as retrieval_v2
 
@@ -145,7 +136,7 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None) -> dict[st
         manager = tempfile.TemporaryDirectory(prefix="stella_benchmark_")
         work_dir = Path(manager.name)
     try:
-        db_path = work_dir / f"{case.get('id', 'case')}.db"
+        db_path = work_dir / f"case_{seq}_{case.get('id', 'case')}.db"
         group_id, user_id = _write_case_db(db_path, case)
         query = case.get("input") or ""
         trigger = case.get("trigger", "proactive" if case.get("mode") == "ACTIVE_JOIN" else "reply")
@@ -160,7 +151,11 @@ def evaluate_case(case: dict[str, Any], work_dir: Path | None = None) -> dict[st
         try:
             retrieval_v2.DB_PATH = db_path
             retrieval_v2.MEMORY_V2_ENABLED = True
+            # 故意关掉 RAG/FTS：保证 benchmark 结果可复现（注意 FTS 分支是盲区）
             retrieval_v2.RAG_ENABLED = False
+            # _CACHE 按 (db 路径, 群, 用户, trigger, mode) 全局缓存 5 分钟，
+            # 用例之间必须清空，否则同名/缺失 id 的用例会吃到上一用例的缓存。
+            retrieval_v2._CACHE.clear()
             result = retrieval_v2.retrieve_memories(group_id, user_id, query, trigger=trigger)
         finally:
             retrieval_v2.DB_PATH = old_db
@@ -203,13 +198,16 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
     cases = load_cases(benchmark_dir)
     with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
         work_dir = Path(tmp)
-        results = [evaluate_case(c, work_dir) for c in cases]
+        results = [evaluate_case(c, work_dir, i) for i, c in enumerate(cases)]
 
     total = len(results)
     ok_count = sum(1 for r in results if r["ok"])
     total_expected = sum(len(r["expected"]) for r in results)
     total_found_expected = sum(len(r["found_expected"]) for r in results)
-    total_retrieved = sum(len(r["final"]) for r in results)
+    # 分母 = 会话召回 + 行为约束召回：行为约束里的期望记忆是“正确激活”（Behavior Guard），
+    # 不能只算分子不算分母，否则会把 precision 虚高甚至推到 100% 以上。
+    total_retrieved = sum(len(r["final"]) + len(r["behavior"]) for r in results)
+    total_behavior_hits = sum(len(set(r["behavior"]) & set(r["expected"])) for r in results)
     total_forbidden = sum(len(r["forbidden"]) for r in results)
     total_activated_forbidden = sum(len(r["activated_forbidden"]) for r in results)
     mode_correct = sum(1 for r in results if r["declared_mode"] == r["detected_mode"])
@@ -227,6 +225,8 @@ def run_benchmark(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> dict[str, Any]:
         "memory_pollution_rate": round(max(0.0, 100.0 - precision_pct), 1),
         # Metric 5 Mode Detection Accuracy：检测到的 mode 是否与用例标注一致
         "mode_accuracy": round(mode_correct / total * 100, 1) if total else 0.0,
+        # Metric 6 Behavior Guard Hit：期望记忆中靠 Behavior Guard 命中的比例
+        "behavior_guard_hit_rate": round(total_behavior_hits / max(1, total_expected) * 100, 1),
         "forbidden_activation_rate": round(total_activated_forbidden / max(1, total_forbidden) * 100, 1),
         "forbidden_activations": total_activated_forbidden,
         "results": results,
@@ -247,6 +247,7 @@ def main() -> None:
     print(f"  Memory Precision : {metrics['memory_precision']}%  （目标 ≥ 80%）")
     print(f"  Memory Recall    : {metrics['memory_recall']}%")
     print(f"  Pollution Rate   : {metrics['memory_pollution_rate']}%")
+    print(f"  Behavior Guard   : {metrics['behavior_guard_hit_rate']}%")
     print(f"  Mode 检测准确率  : {metrics['mode_accuracy']}%")
     print(f"  Forbidden 激活   : {metrics['forbidden_activation_rate']}% ({metrics['forbidden_activations']} 次)  （目标 ≈ 0%）")
     print("=" * 56)

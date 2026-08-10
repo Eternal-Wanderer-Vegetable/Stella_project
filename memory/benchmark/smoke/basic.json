@@ -1,0 +1,50 @@
+[
+  {
+    "id": "smoke-open-001",
+    "scenario": {"group_id": 1, "user_id": 1001},
+    "input": "推荐个游戏",
+    "mode": "RECOMMEND",
+    "trigger": "reply",
+    "memories": {
+      "M001": {"content": "喜欢合作射击游戏", "type": "PREFERENCE",
+               "usage_tags": ["RECOMMEND", "TOPIC_START"],
+               "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+      "M002": {"content": "不喜欢未经允许的摸头互动", "type": "PREFERENCE",
+               "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+               "behavior_rule": "避免相关互动", "confidence": 0.95, "importance": 0.9}
+    },
+    "expected_memory": ["M001"],
+    "forbidden_memory": ["M002"]
+  },
+  {
+    "id": "smoke-restricted-002",
+    "scenario": {"group_id": 1, "user_id": 1001},
+    "input": "群里在玩摸头梗",
+    "mode": "ACTIVE_JOIN",
+    "trigger": "proactive",
+    "memories": {
+      "M001": {"content": "群里最近常玩摸头梗", "type": "GROUP_CONTEXT",
+               "usage_tags": ["GROUP_CONTEXT", "HUMOR"], "visibility": "OPEN",
+               "confidence": 0.9, "importance": 0.5},
+      "M002": {"content": "不喜欢未经允许的摸头互动", "type": "PREFERENCE",
+               "usage_tags": ["BOUNDARY_PROTECTION"], "visibility": "RESTRICTED",
+               "confidence": 0.95, "importance": 0.9}
+    },
+    "expected_memory": ["M001"],
+    "forbidden_memory": ["M002"]
+  },
+  {
+    "id": "smoke-empty-003",
+    "scenario": {"group_id": 1, "user_id": 1001},
+    "input": "哈哈哈",
+    "mode": "CASUAL_REPLY",
+    "trigger": "reply",
+    "memories": {
+      "M001": {"content": "拥有RTX5080", "type": "FACT",
+               "usage_tags": ["ANSWER_CONTEXT"], "visibility": "CONTEXTUAL",
+               "confidence": 0.95, "importance": 0.7}
+    },
+    "expected_memory": [],
+    "forbidden_memory": []
+  }
+]
