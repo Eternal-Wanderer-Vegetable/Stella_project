@@ -1,0 +1,19 @@
+{
+  "id": "contextual-lure-001",
+  "scenario": {"group_id": 9, "user_id": 700},
+  "input": "今天有点累，想找人轻松聊聊天",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "L01": {"content": "用户A讨厌别人拿他的私事开玩笑，会觉得被冒犯", "type": "RELATION",
+            "usage_tags": ["CONFLICT_AVOID"], "visibility": "CONTEXTUAL",
+            "confidence": 0.95, "importance": 0.8},
+    "N01": {"content": "用户平时喜欢轻松的闲聊", "type": "PREFERENCE",
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN",
+            "confidence": 0.9, "importance": 0.6}
+  },
+  "expected_memory": ["N01"],
+  "forbidden_memory": ["L01"],
+  "max_retrieved": 2,
+  "notes": "CONTEXTUAL 语义诱饵：L01 内容与 query（轻松聊聊天）语义高度相关，embedding 路径下余弦分会很高（MEMORY_EMBEDDING_CONTEXTUAL_MIN=0.25 设得很松，可能放行 CONTEXTUAL 主题门槛），但 usage=CONFLICT_AVOID 在 CASUAL_REPLY 被 _MODE_FORBIDDEN_USAGE 挡在 usage 层。专门测『高语义分 + 禁止 usage』这条泄漏路径——现有 forbidden 样本大多走 RESTRICTED 的 SQL 预过滤，CONTEXTUAL 借语义分翻上来这条无人测试。query 避开「玩笑」等 HUMOR 信号词，保证 mode 稳定在 CASUAL_REPLY"
+}

@@ -367,21 +367,40 @@ def retrieve_memories(
     # 5) 动态上限：安全优先（CONFLICT_AVOID 上限更大）
     #    同时加分数门槛（宁缺毋滥）：低于 MEMORY_SCORE_MIN 的记忆不进 Prompt，
     #    避免“合法候选足够多就填满 mode_limit”的超召回噪音（动态数量而非固定 Top-K）。
+    #    先按分数门槛切分（thresh cut），再按 mode_limit 截断（limit cut），
+    #    供 benchmark 区分两种淘汰原因。
+    conversation_pool = conversation
+    threshold_cut_ids = {
+        m.get("id")
+        for m in conversation_pool
+        if (m.get("_score") or 0.0) < MEMORY_SCORE_MIN
+    }
     conversation = [
         m
-        for m in conversation
+        for m in conversation_pool
         if (m.get("_score") or 0.0) >= MEMORY_SCORE_MIN
     ][:limit]
     trace["final_ids"] = [m.get("id") for m in conversation]
     trace["rejected_ids"] = [m.get("id") for m in candidates if m.get("id") not in {x.get("id") for x in conversation}]
-    # 全部进入排序的候选（合并后、截断前）及其分数/是否被截断，供 benchmark 诊断用：
+    # 全部进入排序的候选（合并后、截断前）及其分数/淘汰原因，供 benchmark 诊断用：
     # 上次 C01/C03 误诊成“continue 丢失”，就是因为只看 final 看不到被 mode_limit 截断的项。
     final_id_set = {m.get("id") for m in conversation}
+    behavior_id_set = {m.get("id") for m in behavior}
     trace["ranked_all"] = [
         {
             "id": m.get("id"),
             "score": round(float(m.get("_score") or 0.0), 4),
-            "cut": m.get("id") not in final_id_set,
+            # cut 区分淘汰原因：""（进会话）/ "limit"（超 mode_limit 截断）/
+            # "thresh"（低于 MEMORY_SCORE_MIN 被切掉）/ "behavior"（被路由为行为约束）
+            "cut": (
+                ""
+                if m.get("id") in final_id_set
+                else "behavior"
+                if m.get("id") in behavior_id_set
+                else "thresh"
+                if m.get("id") in threshold_cut_ids
+                else "limit"
+            ),
             "parts": m.get("_score_parts") or {},
         }
         for m in ranked

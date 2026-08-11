@@ -88,7 +88,7 @@ def test_rank_memories_uses_injected_semantic_scores():
     # 注入让 b 语义更高 → b 应排在 a 前
     ranked = policy.rank_memories(mems, "CASUAL_REPLY", "一起玩游戏吧", semantic_scores={"a": 0.1, "b": 0.9})
     assert [m["id"] for m in ranked] == ["b", "a"]
-    assert abs(ranked[0]["_score_parts"]["sem"] - 0.30 * 0.9) < 0.02
+    assert abs(ranked[0]["_score_parts"]["sem"] - 0.35 * 0.9) < 0.02
     # 注入缺失的 id 退化规则版（此处两记忆语义相同，排序只受注入影响）
     ranked2 = policy.rank_memories(mems, "CASUAL_REPLY", "一起玩游戏吧", semantic_scores={"b": 0.9})
     assert ranked2[0]["id"] == "b"
@@ -114,7 +114,7 @@ def _make_db(tmp_path, rows):
     conn.execute(
         "CREATE TABLE memories (id TEXT PRIMARY KEY, group_id TEXT, user_id TEXT, type TEXT, "
         "content TEXT, importance REAL, confidence REAL, status TEXT, usage_tags TEXT, "
-        "visibility TEXT, behavior_rule TEXT, last_accessed_at DATETIME)"
+        "visibility TEXT, trigger_data TEXT, behavior_rule TEXT, last_accessed_at DATETIME)"
     )
     for mid, content, imp, conf in rows:
         conn.execute(
@@ -160,8 +160,9 @@ def test_retrieve_memories_emb_routes_semantic_scores(tmp_path, monkeypatch):
 
     result = _run(retrieval_v2.retrieve_memories_emb(1, 100, "有什么游戏推荐吗", service=_StubService()))
     ids = [m["id"] for m in result.conversation_memories]
-    assert ids == ["rel", "irr"] or ids[0] == "rel"
-    assert result.conversation_memories[0]["_score_parts"]["sem"] > result.conversation_memories[1]["_score_parts"]["sem"]
+    # 语义强的 rel 必须进入会话并排前；语义≈0 的 irr 在新权重（conf/imp 只当
+    # tie-breaker）下被 MEMORY_SCORE_MIN 挡掉，属「宁缺毋滥」的预期行为。
+    assert ids and ids[0] == "rel"
 
 
 def test_retrieve_memories_emb_falls_back_on_service_failure(tmp_path, monkeypatch):

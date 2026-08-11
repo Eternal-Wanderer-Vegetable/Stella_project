@@ -54,16 +54,23 @@ def load_cases(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> list[dict[str, Any
     if not benchmark_dir.exists():
         return cases
     for path in sorted(benchmark_dir.rglob("*.json")):
+        # _fixtures 目录放向量/文本数据，不是用例（否则 fixture 会被当成一条
+        # id="?" 的伪用例混进对照表与指标）
+        if "_fixtures" in path.parts:
+            continue
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             items = data if isinstance(data, list) else [data]
             cases.extend(items)
         except (ValueError, OSError) as e:
             print(f"⚠️ 用例解析失败 {path}: {e}")
-    # id 重复是标注事故：尽早报错，避免静默把不同用例的期望/禁止混在一起
+    # id 缺失/重复是标注事故：尽早报错，避免静默 fallback 成 "?" 后把不同用例的
+    # 期望/禁止混在一起，或与其他用例在对照表里撞 id
     seen: set[str] = set()
     for c in cases:
-        cid = c.get("id", "?")
+        cid = c.get("id")
+        if not cid:
+            raise ValueError(f"benchmark 用例缺少 id: {c!r}")
         if cid in seen:
             raise ValueError(f"benchmark 用例 id 重复: {cid!r}")
         seen.add(cid)
@@ -126,7 +133,7 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
                     mem.get("visibility") or "OPEN",
                     trigger_data,
                     mem.get("behavior_rule"),
-                    mem.get("last_accessed_at") or "2026-08-09 10:00:00",
+                    mem.get("last_accessed_at", "2026-08-09 10:00:00"),
                 ),
             )
         conn.commit()
@@ -421,12 +428,20 @@ def _print_verbose(results: list[dict[str, Any]]) -> None:
             else f" ⚠️mode: 标注={r['declared_mode']} 实测={r['detected_mode']}"
         )
         over_flag = " ⚠️超召回" if r["over_recall"] else ""
-        # 全部进入排序的候选（含被截断的），按分数降序，带 ✓/✗cut 标记
+        # 全部进入排序的候选（含被截断的），按分数降序，带 ✓ / ✗limit / ✗thresh / →beh 标记
         cands = sorted(r["ranked_all"].values(), key=lambda x: x["score"], reverse=True)
         lines = []
         for item in cands:
             mid = item["id"]
-            mark = "✓" if not item["cut"] else "✗cut"
+            c = item.get("cut")
+            if c in (False, "", None):
+                mark = "✓"
+            elif c == "thresh":
+                mark = "✗thresh"  # 低于 MEMORY_SCORE_MIN
+            elif c == "behavior":
+                mark = "→beh"  # 被路由为行为约束
+            else:
+                mark = "✗limit"  # 超 mode_limit 截断
             parts = item.get("parts") or {}
             parts_str = "[" + " ".join(f"{k}:{parts.get(k, 0):.3f}" for k in ("ctx", "usg", "sem", "rec", "conf", "imp")) + "]"
             lines.append(f"      {mid:<12} {item['score']:+.4f} {mark} {parts_str}")

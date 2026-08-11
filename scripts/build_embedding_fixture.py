@@ -25,6 +25,9 @@ import json
 import sys
 from pathlib import Path
 
+# 允许直接 `python scripts/build_embedding_fixture.py` 运行：把项目根加入 sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import httpx
 import numpy as np
 

@@ -6,11 +6,13 @@
   "trigger": "reply",
   "memories": {
     "C01": {"content": "用户喜欢轻松闲聊", "type": "PREFERENCE",
-            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.6},
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.6,
+            "trigger_data": {"topics": ["game", "chat"], "keywords": ["一起玩", "玩点什么"]}},
     "C02": {"content": "最近在追一部剧", "type": "EVENT",
             "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.8, "importance": 0.5},
     "C03": {"content": "喜欢合作射击游戏", "type": "PREFERENCE",
-            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.85, "importance": 0.5},
+            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.85, "importance": 0.5,
+            "trigger_data": {"topics": ["game", "chat"], "keywords": ["一起玩", "玩点什么"]}},
     "C04": {"content": "语言偏好中文", "type": "STYLE",
             "usage_tags": ["PERSONALIZE"], "visibility": "OPEN", "confidence": 0.98, "importance": 0.9},
     "C05": {"content": "常在晚上上线", "type": "FACT",
@@ -25,5 +27,5 @@
   "expected_memory": ["C01", "C02", "C03"],
   "forbidden_memory": [],
   "max_retrieved": 3,
-  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。query 从「今天有什么好聊的话题吗」改为「晚上一起玩点什么」，让期望项（尤其 C03 合作射击游戏）在语义方向上不弱于噪音项——embedding 路径下 C01/C02/C03 与「晚上一起玩」的语义相关性应高于 C04-C08 这类画像噪音。C04（PERSONALIZE+STYLE、conf 0.98/imp 0.9）仍是高置信诱导项，用来检验语义分能否把它的 usg+conf 优势压下去"
+  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。query 从「今天有什么好聊的话题吗」改为「晚上一起玩点什么」，让期望项（尤其 C03 合作射击游戏）在语义方向上不弱于噪音项——embedding 路径下 C01/C02/C03 与「晚上一起玩」的语义相关性应高于 C04-C08 这类画像噪音。C01/C03 补 trigger_data（topics=game/chat）：PREFERENCE+TOPIC_CONTINUE 在 type 兼容矩阵里被降权一半（usage=2），context 会因此只有 0.1，触发主题命中后 context 恢复满分。C04（PERSONALIZE+STYLE、conf 0.98/imp 0.9）仍是高置信诱导项，用来检验语义分能否把它的 usg+conf 优势压下去"
 }

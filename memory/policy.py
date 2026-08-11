@@ -214,7 +214,7 @@ _MODE_FORBIDDEN_USAGE: dict[str, frozenset[str]] = {
 # ── 第二张表：Usage → Memory Type 兼容 ───────────────────
 _USAGE_TYPE_MATRIX: dict[str, frozenset[str]] = {
     USAGE_TOPIC_START: frozenset({TYPE_GROUP_CONTEXT, TYPE_PREFERENCE, TYPE_EVENT}),
-    USAGE_TOPIC_CONTINUE: frozenset({TYPE_EVENT, TYPE_GROUP_CONTEXT, TYPE_PLAN}),
+    USAGE_TOPIC_CONTINUE: frozenset({TYPE_EVENT, TYPE_GROUP_CONTEXT, TYPE_PLAN, TYPE_PREFERENCE}),
     USAGE_ANSWER_CONTEXT: frozenset({TYPE_FACT, TYPE_EVENT, TYPE_PLAN}),
     USAGE_RECOMMEND: frozenset({TYPE_PREFERENCE, TYPE_FACT, TYPE_EVENT}),
     USAGE_PERSONALIZE: frozenset({TYPE_STYLE, TYPE_PREFERENCE}),
@@ -527,33 +527,18 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
-def _context_match(mode: str, mem: dict[str, Any]) -> float:
-    """Context Match：当前 mode 的“领域”是否需要这条记忆——按 Memory Type 计算，
-    与这条记忆具体的 usage 打分解耦（usage 高 ≠ 类型一定契合，反之亦然）。
+def _context_match(mem: dict[str, Any], usage_score: int, query: str = "") -> float:
+    """Context Match：当前查询/场景是否需要这条记忆。
 
-    实现：把该 mode 允许的 usage 按分数排序（值域 1~5）。
-    ``_USAGE_TYPE_MATRIX`` 里与**强 usage（★ ≥4）**相关、且也是弱 usage 核心领域的
-    Memory Type 视作本 mode 的“核心类型”（Tier 1，context=1.0）；只被弱 usage（★≤4）
-    提及的作“次要类型”（Tier 2，context=0.5）；完全不沾的为 0。
-
-    分离 Context 与 Usage 的意义：TECH_HELP 里“喜欢合作射击游戏”（PREFERENCE）尽管
-    在 Usage 层给一点分，但类型不属于技术排查的核心领域，context 只给 0.5；
-    而“用户之前配置过CUDA”（EVENT→ANSWER_CONTEXT）类型正当，context=1.0。
+    优先读 ``trigger_data.topics/keywords``：命中 query 视为「触发即该用」→ 满分 1.0。
+    Trigger 是比 Memory Type 更直接的当前意图信号（M03「不喜欢恐怖题材」标注
+    topics=["game"] 后，在「有什么游戏推荐吗」下即为满分，替代词面 Jaccard 的局限）。
+    无触发命中时按 usage 契合度折算（usage_score/5），使 ctx 分量能随记忆与当前
+    场景的契合度拉开差距，而不是靠 Memory Type 得出一批近似常数。
     """
-    mem_type = (mem.get("type") or TYPE_FACT).strip().upper()
-    mode_map = _MODE_USAGE_SCORE.get(mode, {})
-    # 核心领域：被 modal 强 usage（≥4）提及的类型集合（Tier 1）
-    core: set[str] = set()
-    for usage, weight in mode_map.items():
-        if weight >= 4:
-            core |= set(_USAGE_TYPE_MATRIX.get(usage, frozenset()))
-    if mem_type in core:
+    if query and _trigger_topic_match(query, mem):
         return 1.0
-    # 次要领域：只被 modal 弱 usage（≤4）提及
-    for usage, weight in mode_map.items():
-        if weight < 4 and mem_type in _USAGE_TYPE_MATRIX.get(usage, frozenset()):
-            return 0.5
-    return 0.0
+    return min(1.0, usage_score / 5.0)
 
 
 def _parse_ts(value: Any) -> float | None:
@@ -613,20 +598,25 @@ def _recency_factor(
 
 
 def _rank_score(
-    mode: str,
     mem: dict[str, Any],
     usage_score: int,
     semantic: float,
     recency: float,
+    context_match: float,
+    w_ctx: float,
+    w_usg: float,
+    w_sem: float,
+    w_rec: float,
+    w_conf: float,
+    w_imp: float,
 ) -> tuple[float, dict[str, float]]:
     """计算单条记忆的排序分（Context Match → Usage → Semantic → Recency → Conf/Imp）。
 
-    六维相互独立（Context 按类型、Usage 按 usage、Semantic 按词面、Recency 按时效），
-    避免同一信号被两个权重重复计算。返回 ``(总分, 各维度加权贡献)``，后者供
-    ``_score_parts`` 诊断用——否则每次调权重都是盲调。
+    六维相互独立（Context 按触发/usage、Usage 按 usage、Semantic 按词面、Recency 按时效），
+    避免同一信号被两个权重重复计算。权重由调用方注入：rule-only 时丢弃不可靠的词面
+    语义维并把剩余权重重归一化（见 ``rank_memories``）。返回 ``(总分, 各维度加权贡献)``，
+    后者供 ``_score_parts`` 诊断用——否则每次调权重都是盲调。
     """
-    # Context Match：mode 领域是否“需要”这类记忆（0/0.5/1）
-    context_match = _context_match(mode, mem)
     # Usage Match：usage 与该模式的匹配度（归一化到 0~1）
     usage_match = usage_score / 5.0
     # Confidence / Importance
@@ -634,12 +624,12 @@ def _rank_score(
     importance = _clamp_float(mem.get("importance"), 0.0, 1.0, 0.5)
 
     parts = {
-        "ctx": MEMORY_SCORE_W_CONTEXT * context_match,
-        "usg": MEMORY_SCORE_W_USAGE * usage_match,
-        "sem": MEMORY_SCORE_W_SEMANTIC * semantic,
-        "rec": MEMORY_SCORE_W_RECENCY * recency,
-        "conf": MEMORY_SCORE_W_CONFIDENCE * confidence,
-        "imp": MEMORY_SCORE_W_IMPORTANCE * importance,
+        "ctx": w_ctx * context_match,
+        "usg": w_usg * usage_match,
+        "sem": w_sem * semantic,
+        "rec": w_rec * recency,
+        "conf": w_conf * confidence,
+        "imp": w_imp * importance,
     }
     return sum(parts.values()), parts
 
@@ -704,8 +694,40 @@ def rank_memories(
 
     ``semantic_scores`` 可注入外部语义分（如 embedding 余弦相似度，按记忆 id 索引）；
     不传或该 id 缺失时退化为规则版 ``_semantic_similarity``。policy 本身保持纯逻辑。
+
+    rule-only（``semantic_scores is None``）时词面语义不可靠：丢弃 sem 维并把剩余
+    权重按比例归一化到总和 1.0，避免 ``W_SEMANTIC`` 变大后降级路径的排序质量断崖。
     """
     mode = normalize_mode(mode)
+    if semantic_scores is None:
+        # rule-only：跳过词面语义维，剩余权重归一化（scale>1 是预期的，保证降级
+        # 路径的排序与 embedding 路径可比，而不是 1/3 分数作废）
+        base = (
+            MEMORY_SCORE_W_CONTEXT
+            + MEMORY_SCORE_W_USAGE
+            + MEMORY_SCORE_W_RECENCY
+            + MEMORY_SCORE_W_CONFIDENCE
+            + MEMORY_SCORE_W_IMPORTANCE
+        )
+        scale = 1.0 / base
+        w_ctx, w_usg, w_sem, w_rec, w_conf, w_imp = (
+            MEMORY_SCORE_W_CONTEXT * scale,
+            MEMORY_SCORE_W_USAGE * scale,
+            0.0,
+            MEMORY_SCORE_W_RECENCY * scale,
+            MEMORY_SCORE_W_CONFIDENCE * scale,
+            MEMORY_SCORE_W_IMPORTANCE * scale,
+        )
+    else:
+        w_ctx, w_usg, w_sem, w_rec, w_conf, w_imp = (
+            MEMORY_SCORE_W_CONTEXT,
+            MEMORY_SCORE_W_USAGE,
+            MEMORY_SCORE_W_SEMANTIC,
+            MEMORY_SCORE_W_RECENCY,
+            MEMORY_SCORE_W_CONFIDENCE,
+            MEMORY_SCORE_W_IMPORTANCE,
+        )
+
     scored: list[tuple[float, dict[str, Any]]] = []
     reference = _reference_timestamp(memories)
     for mem in memories:
@@ -742,7 +764,11 @@ def rank_memories(
         ):
             continue
 
-        score, parts = _rank_score(mode, mem, usage_score, semantic, recency)
+        score, parts = _rank_score(
+            mem, usage_score, semantic, recency,
+            _context_match(mem, usage_score, query),
+            w_ctx, w_usg, w_sem, w_rec, w_conf, w_imp,
+        )
         mem = dict(mem)
         mem["_score"] = round(score, 4)
         mem["_score_parts"] = {k: round(v, 3) for k, v in parts.items()}

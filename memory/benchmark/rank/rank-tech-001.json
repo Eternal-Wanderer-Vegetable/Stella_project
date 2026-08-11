@@ -24,5 +24,6 @@
   },
   "expected_memory": ["T01", "T02"],
   "forbidden_memory": [],
-  "notes": "TECH_HELP 上限 5 条。T01/T02 是排查相关，其余是干扰。T05 高置信度 PERSONALIZE，若挤掉 T01/T02，说明 USAGE/CONTEXT 权重不足"
+  "max_retrieved": 5,
+  "notes": "TECH_HELP 上限 5 条，max_retrieved 与之一致（本用例测的是排序质量而非超召回：T01/T02 必须排进会话，T04/T05 等在 5 条上限内进入是可接受的污染容忍度）。T01/T02 是排查相关，其余是干扰。T05 高置信度 PERSONALIZE，若挤掉 T01/T02，说明 USAGE/CONTEXT 权重不足"
 }
