@@ -177,10 +177,11 @@ python bot.py
 
 ## 项目开发中使用到的本地部署模型
 
-语言模型：google/gemma-4-26b-a4b-qat，google/gemma-4-e4b
-向量检索模型：text-embedding-qwen3-embedding-0.6b
+- 语言模型：google/gemma-4-26b-a4b-qat，google/gemma-4-e4b
+- 向量检索模型：text-embedding-qwen3-embedding-0.6b
 
 > 注1.：这些模型是开发者基于自身设备的配置，只能作为现有代码库信息的补充，不能构成对您进行二次开发的配置建议。如果您探索出了更好的配置方案，欢迎提交PR和issue。
+
 > 注2.：开发过程中模型可能会变更测试使用的模型（视输出情况而定）。开发者会在release界面详细说明现阶段测试所使用的模型（如果此处有多组模型并列）。
 
 ## 致谢
