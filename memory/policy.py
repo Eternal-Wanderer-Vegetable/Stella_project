@@ -43,6 +43,7 @@ from config import (
     MEMORY_SCORE_W_SEMANTIC,
     MEMORY_SCORE_W_USAGE,
     MODE_DETECT_MIN_SCORE,
+    USAGE_TYPE_MISMATCH_PENALTY,
 )
 
 # ── 枚举常量 ─────────────────────────────────────────────
@@ -212,6 +213,13 @@ _MODE_FORBIDDEN_USAGE: dict[str, frozenset[str]] = {
 }
 
 # ── 第二张表：Usage → Memory Type 兼容 ───────────────────
+# 每个 usage 列出“主要来源”类型（不是硬排除，兼容时全分，不兼容时按
+# USAGE_TYPE_MISMATCH_PENALTY 降权）。审查记录（A3）：
+#   - TOPIC_CONTINUE 补 PREFERENCE（A1）：与 TOPIC_START 对齐，开启/延续话题都能用偏好；
+#   - HUMOR 补 STYLE（A3）：STYLE=交流方式，常玩梗/爱开玩笑是玩梗模式的主要来源，缺它会让
+#     这类记忆被静默降权；
+#   - 新增 GROUP_CONTEXT 行（A3）：该 usage 被 ACTIVE_JOIN/HUMOR/GROUP_EVENT 三个模式使用，
+#     原矩阵没有它的行 → 类型兼容检查整体跳过，太宽松且不自洽；来源取 群状态/群事件/群内关系。
 _USAGE_TYPE_MATRIX: dict[str, frozenset[str]] = {
     USAGE_TOPIC_START: frozenset({TYPE_GROUP_CONTEXT, TYPE_PREFERENCE, TYPE_EVENT}),
     USAGE_TOPIC_CONTINUE: frozenset({TYPE_EVENT, TYPE_GROUP_CONTEXT, TYPE_PLAN, TYPE_PREFERENCE}),
@@ -219,7 +227,8 @@ _USAGE_TYPE_MATRIX: dict[str, frozenset[str]] = {
     USAGE_RECOMMEND: frozenset({TYPE_PREFERENCE, TYPE_FACT, TYPE_EVENT}),
     USAGE_PERSONALIZE: frozenset({TYPE_STYLE, TYPE_PREFERENCE}),
     USAGE_RELATION_CONTEXT: frozenset({TYPE_RELATION, TYPE_EVENT}),
-    USAGE_HUMOR: frozenset({TYPE_RELATION, TYPE_GROUP_CONTEXT, TYPE_EVENT}),
+    USAGE_HUMOR: frozenset({TYPE_RELATION, TYPE_GROUP_CONTEXT, TYPE_EVENT, TYPE_STYLE}),
+    USAGE_GROUP_CONTEXT: frozenset({TYPE_GROUP_CONTEXT, TYPE_EVENT, TYPE_RELATION}),
     USAGE_EMOTIONAL_SUPPORT: frozenset({TYPE_EVENT, TYPE_RELATION, TYPE_STYLE}),
     USAGE_BOUNDARY_PROTECTION: frozenset({TYPE_PREFERENCE, TYPE_RELATION}),
     USAGE_CONFLICT_AVOID: frozenset({TYPE_RELATION, TYPE_EVENT, TYPE_PREFERENCE}),
@@ -470,10 +479,11 @@ def usage_allowed(mode: str, memory: dict[str, Any]) -> tuple[bool, int]:
         allowed_any = True
         score = mode_score_map.get(tag, 0)
         # Usage 与 Memory Type 兼容性（第二张表是“主要来源”指引，不是硬排除）：
-        # 类型兼容 → 全分；类型不兼容 → 降权一半，仍可能被调用（避免过度过滤）
+        # 类型兼容 → 全分；类型不兼容 → 按 USAGE_TYPE_MISMATCH_PENALTY 降权，仍可能被
+        # 调用（避免过度过滤）。不取整保留浮点，否则 int(5*0.75)=3 会丢精度。
         compat_types = _USAGE_TYPE_MATRIX.get(tag, frozenset())
         if compat_types and mem_type not in compat_types:
-            score = int(score * 0.5)
+            score = score * USAGE_TYPE_MISMATCH_PENALTY
         best = max(best, score)
     if not allowed_any:
         return False, 0

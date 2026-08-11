@@ -163,8 +163,9 @@ def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
     rows = [
         # 强信号 + 新鲜：保住
         ("s", "1", "100", "EVENT", "最近在追一部剧", 0.5, 0.8, "[\"TOPIC_CONTINUE\"]", "OPEN", "2026-08-09 10:00:00"),
-        # 弱信号：类型不兼容被降权 + 很久没访问被 recency 衰减，应被 0.40 门槛挡掉
-        ("w", "1", "100", "STYLE", "偶尔熬夜", 0.2, 0.5, "[\"TOPIC_CONTINUE\"]", "OPEN", "2025-06-01 10:00:00"),
+        # 弱信号：usage 基础分低(TOPIC_START=3) + 类型不兼容(0.75) + 很久没访问被 recency
+        # 衰减，应被 0.40 门槛挡掉
+        ("w", "1", "100", "STYLE", "偶尔熬夜", 0.2, 0.5, "[\"TOPIC_START\"]", "OPEN", "2025-06-01 10:00:00"),
     ]
     for mid, g, u, typ, content, imp, conf, usage, vis, lts in rows:
         conn.execute(
@@ -191,7 +192,7 @@ def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
             {"id": "s", "type": "EVENT", "content": "最近在追一部剧", "usage_tags": ["TOPIC_CONTINUE"],
              "visibility": "OPEN", "confidence": 0.8, "importance": 0.5,
              "last_accessed_at": "2026-08-09 10:00:00"},
-            {"id": "w", "type": "STYLE", "content": "偶尔熬夜", "usage_tags": ["TOPIC_CONTINUE"],
+            {"id": "w", "type": "STYLE", "content": "偶尔熬夜", "usage_tags": ["TOPIC_START"],
              "visibility": "OPEN", "confidence": 0.5, "importance": 0.2,
              "last_accessed_at": "2025-06-01 10:00:00"},
         ],

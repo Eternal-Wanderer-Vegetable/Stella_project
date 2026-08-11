@@ -27,5 +27,5 @@
   "expected_memory": ["C01", "C02", "C03"],
   "forbidden_memory": [],
   "max_retrieved": 3,
-  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。query 从「今天有什么好聊的话题吗」改为「晚上一起玩点什么」，让期望项（尤其 C03 合作射击游戏）在语义方向上不弱于噪音项——embedding 路径下 C01/C02/C03 与「晚上一起玩」的语义相关性应高于 C04-C08 这类画像噪音。C01/C03 补 trigger_data（topics=game/chat）：PREFERENCE+TOPIC_CONTINUE 在 type 兼容矩阵里被降权一半（usage=2），context 会因此只有 0.1，触发主题命中后 context 恢复满分。C04（PERSONALIZE+STYLE、conf 0.98/imp 0.9）仍是高置信诱导项，用来检验语义分能否把它的 usg+conf 优势压下去"
+  "notes": "CASUAL_REPLY 上限 3 条，8 条合法候选。query 从「今天有什么好聊的话题吗」改为「晚上一起玩点什么」，让期望项（尤其 C03 合作射击游戏）在语义方向上不弱于噪音项——embedding 路径下 C01/C02/C03 与「晚上一起玩」的语义相关性应高于 C04-C08 这类画像噪音。C01/C03 补 trigger_data（topics=game/chat）：A1 修复后 PREFERENCE+TOPIC_CONTINUE 是兼容组合、usage=5，context 本可到 1.0；trigger_data 作为 context_match 的补充入口（话题/关键词命中即满分），比裸 usage 折算更精确，还能让 rule-only 下语义中立项也有区分度。C04（PERSONALIZE+STYLE、conf 0.98/imp 0.9）仍是高置信诱导项，用来检验语义分能否把它的 usg+conf 优势压下去"
 }

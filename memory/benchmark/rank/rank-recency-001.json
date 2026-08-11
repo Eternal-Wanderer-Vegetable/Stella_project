@@ -5,10 +5,10 @@
   "mode": "CASUAL_REPLY",
   "trigger": "reply",
   "memories": {
-    "S1": {"content": "用户平时喜欢听歌", "type": "STYLE",
+    "S1": {"content": "用户平时喜欢听歌", "type": "PREFERENCE",
            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.9, "importance": 0.85,
            "last_accessed_at": "2026-08-09 10:00:00"},
-    "S2": {"content": "用户常去健身房锻炼", "type": "STYLE",
+    "S2": {"content": "用户常去健身房锻炼", "type": "PREFERENCE",
            "usage_tags": ["TOPIC_CONTINUE"], "visibility": "OPEN", "confidence": 0.88, "importance": 0.8,
            "last_accessed_at": "2026-08-09 10:00:00"},
     "R_new": {"content": "最近在学做菜", "type": "EVENT",
@@ -27,5 +27,5 @@
   "expected_memory": ["R_new"],
   "forbidden_memory": [],
   "max_retrieved": 3,
-  "notes": "只测 recency，不测 semantic：R_new「最近在学做菜」与 R_old「以前在学做菜」语义、usage、conf、imp 完全一致，仅 last_accessed_at 不同（新 vs 旧）。R_new 必须靠 recency 分量压过 R_old 进入第 3 位。S1/S2 是语义中性、新鲜的高分噪音（占前 2），类型取 STYLE（不在 TOPIC_CONTINUE 兼容集，usage 降半）避免在 rule-only 下反超 R_new；D1-D3 是低分噪音。query「最近在忙什么」与 R_new/R_old 语义接近，但与 S1/S2 无强相关，避免噪音靠语义上位"
+  "notes": "只测 recency，不测 semantic：R_new「最近在学做菜」与 R_old「以前在学做菜」语义、usage、conf、imp 完全一致，仅 last_accessed_at 不同（新 vs 旧）。R_new 必须靠 recency 分量压过 R_old 进入第 3 位。S1/S2 是语义中性、新鲜的高分噪音（占前 2），PREFERENCE+TOPIC_CONTINUE 在 A1 修复后是兼容组合（usage 满分），是真正的等分对手——recency 得真刀真枪赢，赢不了说明 W_RECENCY 权重不够。D1-D3 是低分噪音。query「最近在忙什么」与 R_new/R_old 语义接近，但与 S1/S2 无强相关，避免噪音靠语义上位"
 }
