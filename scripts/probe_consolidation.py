@@ -178,6 +178,25 @@ def stability_of(repeats: list[dict]) -> dict:
 
 # ── 输出 ────────────────────────────────────────────────
 
+def print_summary(results: list[dict], repeat: int) -> None:
+    """多窗口汇总：总候选/平均、空输出率、候选数分布。"""
+    if not results:
+        return
+    # 多窗口用各自第一次运行的候选数（与候选展示口径一致）
+    counts = [r["candidate_count"] for r in results]
+    n = len(counts)
+    total = sum(counts)
+    avg = round(total / n, 2) if n else 0.0
+    empty = sum(1 for c in counts if c == 0)
+    empty_pct = round(empty / n * 100, 1) if n else 0.0
+    dist = {k: counts.count(k) for k in sorted(set(counts))}
+    dist_str = "  ".join(f"{k}条:{v}" for k, v in dist.items()) or "（无）"
+    print(f"── 汇总（{n} 个窗口，重复 {repeat} 次）", file=sys.stderr)
+    print(f"窗口 {n} 个，总候选 {total} 条，平均 {avg} 条/窗口", file=sys.stderr)
+    print(f"空输出窗口：{empty} 个（{empty_pct}%）", file=sys.stderr)
+    print(f"候选数分布：{dist_str}", file=sys.stderr)
+
+
 def render_window_text(window: list[dict]) -> str:
     """窗口原文：前 5 条 + 后 5 条，中间省略。"""
     if len(window) <= 10:
@@ -272,6 +291,8 @@ async def _amain() -> None:
     consolidator = MemoryConsolidator()
 
     if a.window_index is not None:
+        if not 0 <= a.window_index < len(windows):
+            sys.exit(f"❌ --window-index {a.window_index} 越界：窗口范围是 0~{len(windows) - 1}")
         indices = [a.window_index]
     else:
         indices = list(range(len(windows)))
@@ -294,6 +315,7 @@ async def _amain() -> None:
 
     sorted_pairs = sorted(zip(indices, results), key=lambda p: p[0])
     md = render_markdown(windows, [r for _, r in sorted_pairs], a.repeat)
+    print_summary([r for _, r in sorted_pairs], a.repeat)
     OUT_MD.write_text(md, encoding="utf-8")
     OUT_JSON.write_text(json.dumps(
         {"windows": [{i: json.dumps(windows[i], ensure_ascii=False)} for i, _ in sorted_pairs],
