@@ -33,6 +33,10 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
 群聊消息：
 {messages}
 
+先判断：这段记录里有没有「某个具体用户亲口说出的、关于他自己的、稳定的」信息？
+- 没有 → memory_candidates 填 []
+- 有 → 只输出这些，不要补充推断
+
 【重要】memory_candidates 允许为空数组。
 绝大多数群聊窗口不包含值得长期记住的信息。以下情况必须返回空数组：
 - 窗口主要由图片、表情、单字回复、附和构成
@@ -51,35 +55,35 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
       {{"user_id": "用户QQ号", "content": "最近关键的发言原话或要点"}}
     ]
   }},
-  "user_profiles": [
-    {{
-      "user_id": "用户 ID",
-      "personality_traits": "只写该用户亲口说过或可观察到的稳定行为特征（如'经常聊游戏'），严禁臆测人格（如'温柔/乐观'）",
-      "agent_attitude": "对机器人态度（友好/中立/冷淡/敌对）"
-    }}
-  ],
-  "memory_candidates": [
-    {{
-      "user_id": "用户 ID",
-      "type": "{types}",
-      "content": "可长期记忆的事实或偏好描述",
-      "usage_tags": ["{usages}"],
-      "visibility": "{visibilities}",
-      "behavior_rule": "若涉及边界/行为约束，写明 Stella 应该如何改变行为；否则可省略",
-      "importance": 0.0,
-      "confidence": 0.0,
-      "evidence": "为何认为这条信息有价值",
-      "source_message_ids": []
-    }}
-  ]
+  "user_profiles": [],
+  "memory_candidates": []
 }}
+
+负例一（刷屏，应返回空）：
+消息ID(1) 用户(1001): [图片]
+消息ID(2) 用户(1002): 哈哈哈
+消息ID(3) 用户(1001): 确实
+消息ID(4) 用户(1003): [图片]
+→ {{"short_term": {{"active_summary": "群里刷图闲聊", "pending_topic": "无", "recent_exchanges": [{{"user_id": "1002", "content": "哈哈哈"}}]}}, "user_profiles": [], "memory_candidates": []}}
+
+负例二（讨论第三方，应返回空）：
+消息ID(1) 用户(1001): 某品牌新笔记本才798g
+消息ID(2) 用户(1002): 这么轻
+消息ID(3) 用户(1001): 官方拆机视频里说的
+→ {{"short_term": {{"active_summary": "讨论某品牌笔记本重量", "pending_topic": "无", "recent_exchanges": [{{"user_id": "1001", "content": "某品牌新笔记本才798g"}}]}}, "user_profiles": [], "memory_candidates": []}}
+
+负例三（技术问答，有话题无稳定属性，应返回空）：
+消息ID(1) 用户(1001): 这个报错怎么解决
+消息ID(2) 用户(1002): 你试试重装依赖
+消息ID(3) 用户(1001): 好了谢谢
+→ {{"short_term": {{"active_summary": "排查报错并解决", "pending_topic": "无", "recent_exchanges": [{{"user_id": "1002", "content": "你试试重装依赖"}}]}}, "user_profiles": [], "memory_candidates": []}}
 
 要求：
 - short_term 必须输出
 - short_term.recent_exchanges：列出最近 2~5 条对继续对话最关键、最能体现"谁说了什么"的发言；
   每条必须带上实际发送者的 user_id，尽量保留原话；严禁改换说话人、严禁把多人的话合并成一条
 - user_profiles 只写有变化的用户；**禁止保存人格判断、心理状态、价值判断**
-- memory_candidates 只写当前批次中值得长期记忆的候选，没有就空数组；
+- memory_candidates 默认为空数组；只有「某个具体用户亲口说出的、关于他自己的、稳定的」信息才有候选；
   user_id 必须是该消息实际的发送者，严禁把 A 的发言归属给 B
 - **memory_candidates 分类规则（极其重要）**：
   - 记忆类型必须且只能选一个：FACT=稳定事实 / PREFERENCE=明确喜欢或讨厌 / EVENT=重要事件 /
@@ -96,18 +100,19 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
 - content 必须是可理解的自然语言，不要仅写关键词
 - 群聊记录格式为「消息ID(id) 用户(QQ号): 内容」，所有输出里的 user_id 都必须沿用其中的 QQ 号归属，严禁张冠李戴
 
-负例（应返回空数组）：
-消息ID(1) 用户(1001): [图片]
-消息ID(2) 用户(1002): 哈哈哈
-消息ID(3) 用户(1001): 确实
-消息ID(4) 用户(1003): [图片]
-→ {{"memory_candidates": []}}
-
-讨论第三方事物（应返回空数组）：
-消息ID(1) 用户(1001): 某品牌新笔记本才798g
-消息ID(2) 用户(1002): 这么轻
-消息ID(3) 用户(1001): 官方拆机视频里说的
-→ {{"memory_candidates": []}}   # 转发信息不构成用户属性
+若确实需要输出候选（少数情况），每条结构如下：
+{{
+  "user_id": "纯数字QQ号",
+  "type": "{types}",
+  "content": "可长期记忆的事实或偏好描述",
+  "usage_tags": ["{usages}"],
+  "visibility": "{visibilities}",
+  "behavior_rule": "涉及边界/行为约束时写明；否则省略",
+  "importance": 0.0,
+  "confidence": 0.0,
+  "evidence": "为何认为这条信息有价值",
+  "source_message_ids": []
+}}
 """
 
 

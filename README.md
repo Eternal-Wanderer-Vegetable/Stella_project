@@ -175,6 +175,14 @@ python bot.py
 - `MEMORY_COMPRESS_LIGHT_THRESHOLD`：轻量压缩触发阈值
 - `MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS`：轻量压缩冷却时间
 
+## 项目开发中使用到的本地部署模型
+
+语言模型：google/gemma-4-26b-a4b-qat，google/gemma-4-e4b
+向量检索模型：text-embedding-qwen3-embedding-0.6b
+
+> 注1.：这些模型是开发者基于自身设备的配置，只能作为现有代码库信息的补充，不能构成对您进行二次开发的配置建议。如果您探索出了更好的配置方案，欢迎提交PR和issue。
+> 注2.：开发过程中模型可能会变更测试使用的模型（视输出情况而定）。开发者会在release界面详细说明现阶段测试所使用的模型（如果此处有多组模型并列）。
+
 ## 致谢
 
 本项目在开发过程中得到了很多人和组织的鼓励和支持：
@@ -184,7 +192,7 @@ python bot.py
 - [@MIO-456](https://github.com/MIO-456) 开发的 [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) 项目激励了本项目的开发。
 - 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 本项目开发中得到了来自如下组织的支持：
-  - 模型提供商：Deepseek，OpenAI（chatGPT）和Google（Gemini）
+  - 模型提供商：Deepseek，OpenAI（chatGPT），Google（Gemini，Gemma）和通义千问（text-embedding-qwen3-embedding-0.6b）。没有他们的优秀模型作为基础，这个项目不可能诞生。
   - 开源代码库：[nonebot2](https://github.com/nonebot/nonebot2)，[NapCatQQ](https://github.com/NapNeko/NapCatQQ)，以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。
   - 开发者社区：[Linux Do](https://linux.do)
 - 特别致谢Freya，这是献给你的作品。我的探索之旅因你的馈赠而起，是时候交出一份并不完美的回礼了。 
