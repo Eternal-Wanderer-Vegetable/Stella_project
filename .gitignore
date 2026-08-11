@@ -29,6 +29,13 @@ test_compressor_trigger.py
 # Benchmark 采样输出（含真实群消息数据，禁止入库）
 windows_raw.json
 
+# 整合探针输出（含真实群聊内容，禁止入库）
+consolidation_probe.md
+consolidation_probe*.json
+
+# 用例脱敏映射表（真实 ID → 占位符，含敏感映射关系，禁止入库）
+sanitize_map.json
+
 # Bot plugin — runtime data
 /stella_project/plugins/bot_main/__pycache__/
 

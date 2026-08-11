@@ -16,6 +16,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
+# 允许直接 `python scripts/sample_windows.py` 运行：把项目根加入 sys.path，
+# 否则 `import config` 会命中 site-packages 里的第三方 config 包。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from config import CONSOLIDATION_LOCAL_BATCH_SIZE as B
 from config import DB_PATH
 

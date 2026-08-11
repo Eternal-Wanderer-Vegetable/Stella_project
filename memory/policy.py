@@ -420,7 +420,11 @@ def parse_visibility(value: Any) -> str:
 
 
 def parse_usage_tags(value: Any) -> list[str]:
-    """把 usage_tags（JSON 数组或字符串数组）解析为合法的 usage 列表（去重保序）。"""
+    """把 usage_tags（JSON 数组或字符串数组）解析为合法的 usage 列表（去重保序）。
+
+    LLM 偶发把多个标签写成单元素（如 "TOPIC_START / HUMOR"），因此除逗号外，
+    还按 / 与分号切分，容忍这类噪音。
+    """
     if value is None:
         return []
     tags: list[str] = []
@@ -442,9 +446,10 @@ def parse_usage_tags(value: Any) -> list[str]:
     else:
         return []
     for t in raw:
-        u = str(t).strip().upper()
-        if u in ALL_USAGES and u not in tags:
-            tags.append(u)
+        for piece in re.split(r"[,;/]", str(t)):
+            u = piece.strip().upper()
+            if u in ALL_USAGES and u not in tags:
+                tags.append(u)
     return tags
 
 
