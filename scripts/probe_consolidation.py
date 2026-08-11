@@ -52,6 +52,7 @@ from memory.policy import validate_candidate
 DEFAULT_INPUT = Path("windows_raw.json")
 OUT_MD = Path("consolidation_probe.md")
 OUT_JSON = Path("consolidation_probe.json")
+POSITIVE_FIXTURE = Path("memory/benchmark/_fixtures/consolidation_positive.json")
 
 
 def read_windows(path: Path) -> list[list[dict]]:
@@ -130,6 +131,36 @@ async def run_window(consolidator: MemoryConsolidator, backend: LMStudioBackend,
         "candidate_count": len(candidates),
         "candidates": candidates,
     }
+
+
+async def run_positive(consolidator: MemoryConsolidator, backend: LMStudioBackend, fixture_path: Path) -> int:
+    """跑正例回归基准，返回退出码（0=通过）。"""
+    case = json.loads(fixture_path.read_text(encoding="utf-8"))
+    window = case["messages"]
+    r = await run_window(consolidator, backend, window)
+
+    got = r["candidates"]
+    missed, matched = [], []
+    for exp in case["expect"]:
+        hit = next(
+            (c for c in got
+             if c["user_id"] == exp["user_id"]
+             and all(k in c["content"] for k in exp["content_contains"])),
+            None,
+        )
+        (matched if hit else missed).append((exp, hit))
+
+    print(f"── 正例回归 {case['id']}：命中 {len(matched)}/{case['expect_count']}", file=sys.stderr)
+    for exp, hit in matched:
+        print(f"  ✅ user={exp['user_id']} type={hit['type']} 「{hit['content']}」", file=sys.stderr)
+    for exp, _ in missed:
+        print(f"  ❌ 未命中 user={exp['user_id']} 需含 {exp['content_contains']}", file=sys.stderr)
+    extra = len(got) - len(matched)
+    if extra > 0:
+        print(f"  ⚠️ 另有 {extra} 条额外候选（不判失败，但请人工确认不是过度生成）", file=sys.stderr)
+        for c in got:
+            print(f"     user={c['user_id']} type={c['type']} 「{c['content']}」", file=sys.stderr)
+    return 0 if not missed else 1
 
 
 def candidate_key(c: dict) -> tuple:
@@ -273,13 +304,10 @@ async def _amain() -> None:
     ap.add_argument("--window-index", type=int, default=None, help="只重跑某个窗口")
     ap.add_argument("--repeat", type=int, default=1, help="同一窗口重复次数（稳定性观察，默认 1）")
     ap.add_argument("--temperature", type=float, default=None, help="覆盖采样温度（默认用配置值）")
+    ap.add_argument("--positive", action="store_true",
+                    help="跑正例回归基准（memory/benchmark/_fixtures/consolidation_positive.json），未达标非零退出")
+    ap.add_argument("--positive-fixture", type=Path, default=POSITIVE_FIXTURE)
     a = ap.parse_args()
-
-    if not a.input.exists():
-        sys.exit(f"❌ 找不到 {a.input}，请先运行 scripts/sample_windows.py")
-    windows = read_windows(a.input)
-    if not windows:
-        sys.exit("❌ windows_raw.json 为空")
 
     # 复用生产后端构造参数，temperature 可被探针显式覆盖（不改生产代码）
     backend = LMStudioBackend(
@@ -289,6 +317,16 @@ async def _amain() -> None:
         temperature=a.temperature if a.temperature is not None else CONSOLIDATION_LM_STUDIO_TEMPERATURE,
     )
     consolidator = MemoryConsolidator()
+
+    # 必须在 windows_raw.json 存在性检查之前短路：正例回归不依赖采样窗口
+    if a.positive:
+        sys.exit(await run_positive(consolidator, backend, a.positive_fixture))
+
+    if not a.input.exists():
+        sys.exit(f"❌ 找不到 {a.input}，请先运行 scripts/sample_windows.py")
+    windows = read_windows(a.input)
+    if not windows:
+        sys.exit("❌ windows_raw.json 为空")
 
     if a.window_index is not None:
         if not 0 <= a.window_index < len(windows):
