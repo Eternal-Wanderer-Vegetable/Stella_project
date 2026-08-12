@@ -112,6 +112,32 @@ def _normalize_candidate(consolidator: MemoryConsolidator, raw: dict) -> dict | 
     }
 
 
+def audit_candidate(cand: dict, window: list[dict]) -> list[str]:
+    """审计一条候选是否可能是编造的，返回问题标签列表（空=通过）。
+
+    捕获层放宽后，合格标准从「空输出率」换成「编造率」：条数多不再是缺陷，
+    但候选必须有出处、归属必须正确。这里做机器可查的部分——
+    「内容是否确实来自该用户的发言」仍需人工判断。
+    """
+    problems: list[str] = []
+    if not cand["in_senders"]:
+        problems.append("归属不在窗口发送者内")
+
+    # 内容里的关键词元是否在该用户的发言中出现过（弱检查：只查数字与英文词，
+    # 如型号/年份/技术名——中文改写幅度大，词面比对会误报）
+    import re
+
+    own_text = " ".join(
+        (m.get("content") or "") for m in window if str(m.get("user") or "") == cand["user_id"]
+    ).lower()
+    tokens = set(re.findall(r"[a-zA-Z0-9]{2,}", (cand["content"] or "").lower()))
+    missing = [t for t in tokens if t not in own_text]
+    if missing:
+        problems.append(f"内容含该用户未提过的词元 {missing}")
+
+    return problems
+
+
 async def run_window(consolidator: MemoryConsolidator, backend: LMStudioBackend, window: list[dict]) -> dict:
     """跑单个窗口的生产整合链路，返回结构化探针结果。"""
     messages = format_messages(window)
@@ -128,6 +154,7 @@ async def run_window(consolidator: MemoryConsolidator, backend: LMStudioBackend,
             if c is None:
                 continue
             c["in_senders"] = c["user_id"] in senders
+            c["audit"] = audit_candidate(c, window)
             candidates.append(c)
 
     return {
@@ -303,7 +330,11 @@ def print_summary(results: list[dict], repeat: int) -> None:
     dist_str = "  ".join(f"{k}条:{v}" for k, v in dist.items()) or "（无）"
     print(f"── 汇总（{n} 个窗口，重复 {repeat} 次）", file=sys.stderr)
     print(f"窗口 {n} 个，总候选 {total} 条，平均 {avg} 条/窗口", file=sys.stderr)
-    print(f"空输出窗口：{empty} 个（{empty_pct}%）", file=sys.stderr)
+    flagged = sum(1 for r in results for c in r["candidates"] if c.get("audit"))
+    total_cands = sum(r["candidate_count"] for r in results)
+    rate = round(flagged / total_cands * 100, 1) if total_cands else 0.0
+    print(f"审计可疑候选：{flagged}/{total_cands}（{rate}%）— 目标 ≈ 0%", file=sys.stderr)
+    print(f"空输出窗口：{empty} 个（{empty_pct}%）— 捕获层放宽后此项下降属预期，非缺陷", file=sys.stderr)
     parse_failed = sum(1 for r in results if not r["parsed_ok"])
     print(f"JSON 解析失败：{parse_failed} 个（这些窗口的 0 候选是缺陷，不是正确的空输出）", file=sys.stderr)
     print(f"候选数分布：{dist_str}", file=sys.stderr)
@@ -318,16 +349,20 @@ def render_window_text(window: list[dict]) -> str:
     return "\n".join(f"用户({m.get('user')}) {m.get('ts', '')}: {m.get('content')}" for m in rows)
 
 
-def render_candidates(c: list[dict]) -> list[str]:
+def render_candidates(c: list[dict], window: list[dict]) -> list[str]:
     lines = []
     for cand in c:
         tag = "" if cand["in_senders"] else " ⚠️归属不在窗口发送者内"
-        lines.append(
+        line = (
             f"- user={cand['user_id']} type={cand['type']} "
             f"usage={cand['usage_tags']} vis={cand['visibility']} "
             f"conf={cand['confidence']}{tag}\n  「{cand['content']}」"
             + (f"\n  behavior_rule={cand['behavior_rule']}" if cand["behavior_rule"] else "")
         )
+        audit = cand.get("audit") or audit_candidate(cand, window)
+        if audit:
+            line += "\n  ⚠️ 审计: " + "；".join(audit)
+        lines.append(line)
     return lines
 
 
@@ -368,7 +403,7 @@ def render_markdown(windows: list[list[dict]], results: list[dict], repeat: int)
             md.append(f"每次条数 {st.get('per_run_counts')}")
         md.append("### 解析并过 validate_candidate 后的候选")
         md.append(f"候选 {r['candidate_count']} 条，JSON 解析 {'✓' if r['parsed_ok'] else '✗'}")
-        lines = render_candidates(r["candidates"]) if r["candidates"] else ["（无候选）"]
+        lines = render_candidates(r["candidates"], w) if r["candidates"] else ["（无候选）"]
         md.extend(lines)
         md.append("")
         md.append("---")
