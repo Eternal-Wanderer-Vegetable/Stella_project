@@ -50,3 +50,7 @@ sanitize_map.json
 
 # Misc
 STARTCOMMAND.md
+
+# 临时文件
+positive_reordered.json
+prompt_now.txt

@@ -70,10 +70,23 @@ class LMStudioBackend(LLMBackend):
                     resp = await client.post(self.api_url, json=payload)
                     resp.raise_for_status()
                     data = resp.json()
-                    reply = data["choices"][0]["message"]["content"]
-                if reply:
-                    logger.info(f"[LM Studio] 收到回复（{len(reply)} 字符）")
-                    return reply
+                    choice = data["choices"][0]
+                    reply = choice["message"]["content"]
+                    finish = choice.get("finish_reason") or ""
+                    usage = data.get("usage") or {}
+                    if finish == "length":
+                        # 输出被 max_tokens 截断：JSON 类任务会因此解析失败，
+                        # 且调用方（Consolidator）会推进 checkpoint 导致该批消息永久丢失
+                        logger.warning(
+                            f"[LM Studio] 输出被 max_tokens={self.max_tokens} 截断"
+                            f"（finish_reason=length, completion_tokens={usage.get('completion_tokens')}）"
+                        )
+                    if reply:
+                        logger.info(
+                            f"[LM Studio] 收到回复（{len(reply)} 字符，finish={finish or '?'}，"
+                            f"completion_tokens={usage.get('completion_tokens', '?')}）"
+                        )
+                        return reply
                 last_error = RuntimeError("LM Studio 返回空回复")
                 logger.warning(f"[LM Studio] 第 {attempt + 1} 次尝试返回空回复，重试...")
             except httpx.HTTPStatusError as e:

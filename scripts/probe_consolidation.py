@@ -140,34 +140,106 @@ async def run_window(consolidator: MemoryConsolidator, backend: LMStudioBackend,
     }
 
 
-async def run_positive(consolidator: MemoryConsolidator, backend: LMStudioBackend, fixture_path: Path) -> int:
-    """跑正例回归基准，返回退出码（0=通过）。"""
-    case = json.loads(fixture_path.read_text(encoding="utf-8"))
-    window = case["messages"]
-    r = await run_window(consolidator, backend, window)
+async def run_positive(
+    consolidator: MemoryConsolidator,
+    backend: LMStudioBackend,
+    fixture_path: Path,
+    repeat: int = 1,
+    print_prompt: bool = False,
+) -> int:
+    """跑正例回归基准，返回退出码（0=通过）。
 
-    got = r["candidates"]
-    missed, matched = [], []
-    for exp in case["expect"]:
-        hit = next(
-            (c for c in got
-             if c["user_id"] == exp["user_id"]
-             and all(k in c["content"] for k in exp["content_contains"])),
-            None,
-        )
-        (matched if hit else missed).append((exp, hit))
+    repeat > 1 时重复跑并按「最差一次」判定，同时报告逐条稳定命中情况
+    （temperature 非 0 时单次运行不构成测量）。
+    print_prompt=True 时只打印将要发送的 prompt 并退出、不调用 LLM，
+    用于离线比对 format_messages 是否被来源标记污染。
+    """
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    cases = data if isinstance(data, list) else [data]
 
-    print(f"── 正例回归 {case['id']}：命中 {len(matched)}/{case['expect_count']}", file=sys.stderr)
-    for exp, hit in matched:
-        print(f"  ✅ user={exp['user_id']} type={hit['type']} 「{hit['content']}」", file=sys.stderr)
-    for exp, _ in missed:
-        print(f"  ❌ 未命中 user={exp['user_id']} 需含 {exp['content_contains']}", file=sys.stderr)
-    extra = len(got) - len(matched)
-    if extra > 0:
-        print(f"  ⚠️ 另有 {extra} 条额外候选（不判失败，但请人工确认不是过度生成）", file=sys.stderr)
-        for c in got:
-            print(f"     user={c['user_id']} type={c['type']} 「{c['content']}」", file=sys.stderr)
-    return 0 if not missed else 1
+    if print_prompt:
+        for case in cases:
+            print(f"===== {case['id']} =====")
+            print(format_consolidation_prompt("（无）", format_messages(case["messages"])))
+        return 0
+
+    all_results: list[tuple[str, list[int], int]] = []
+    dumps: list[str] = []
+    for case in cases:
+        window = case["messages"]
+        expects = case["expect"]
+        expect_count = case.get("expect_count") or len(expects)
+
+        print(f"── 用例 {case['id']}", file=sys.stderr)
+
+        runs: list[tuple[list[dict | None], list[dict]]] = []
+        runs_raw: list[tuple[str, bool]] = []
+        for i in range(max(1, repeat)):
+            r = await run_window(consolidator, backend, window)
+            got = r["candidates"]
+
+            hits: list[dict | None] = []
+            for exp in expects:
+                hit = next(
+                    (c for c in got
+                     if c["user_id"] == exp["user_id"]
+                     and all(k in c["content"] for k in exp["content_contains"])),
+                    None,
+                )
+                hits.append(hit)
+
+            matched = [h for h in hits if h is not None]
+            # extras 只列「没被任何 expect 命中的」候选，避免把已命中项重复报成额外候选
+            extras = [c for c in got if all(c is not h for h in matched)]
+            runs.append((hits, extras))
+            runs_raw.append((r["raw_output"], r["parsed_ok"]))
+
+            raw_len = len(r["raw_output"] or "")
+            parse_flag = "✓" if r["parsed_ok"] else "✗ JSON解析失败"
+            print(f"── 第 {i + 1}/{max(1, repeat)} 次：命中 {len(matched)}/{expect_count}"
+                  f"（候选 {r['candidate_count']} 条，解析 {parse_flag}，原始输出 {raw_len} 字符）",
+                  file=sys.stderr)
+            for exp, hit in zip(expects, hits, strict=False):
+                if hit is not None:
+                    print(f"  ✅ user={exp['user_id']} type={hit['type']} 「{hit['content']}」", file=sys.stderr)
+                else:
+                    print(f"  ❌ 未命中 user={exp['user_id']} 需含 {exp['content_contains']}", file=sys.stderr)
+                    # 期望词出现在原始输出里（通常在 short_term.recent_exchanges）但没进候选
+                    # → 模型读到了信息、主动判定不值得长期记忆（prompt 规则过严），
+                    #   而不是没注意到。两者的修法完全不同。
+                    raw_all = " ".join(r["raw_output"] if isinstance(r["raw_output"], list) else [r["raw_output"] or ""])
+                    if all(k in raw_all for k in exp["content_contains"]):
+                        print("     ↳ 该信息出现在原始输出中但未进候选（模型主动弃掉，非未察觉）",
+                              file=sys.stderr)
+            if extras:
+                print(f"  ⚠️ 另有 {len(extras)} 条额外候选（不判失败，但请人工确认不是过度生成）", file=sys.stderr)
+                for c in extras:
+                    print(f"     user={c['user_id']} type={c['type']} 「{c['content']}」", file=sys.stderr)
+
+        per_run = [sum(1 for h in hits if h is not None) for hits, _ in runs]
+        all_results.append((case["id"], per_run, expect_count))
+        print(f"── 用例汇总 {case['id']}：各次命中 {per_run}（判定取最差 {min(per_run)}/{expect_count}）",
+              file=sys.stderr)
+        for idx, exp in enumerate(expects):
+            n = sum(1 for hits, _ in runs if hits[idx] is not None)
+            flag = "稳定" if n == len(runs) else ("从未" if n == 0 else "不稳定")
+            print(f"  {flag} {n}/{len(runs)} user={exp['user_id']} 需含 {exp['content_contains']}", file=sys.stderr)
+
+        # 原始输出落盘，便于人工看截断发生在哪（fixture 是合成数据，无隐私问题）
+        dumps.append("\n\n".join(
+            f"## {case['id']} 第 {i + 1} 次（解析 {'✓' if runs_raw[i][1] else '✗'}，{len(runs_raw[i][0] or '')} 字符）\n"
+            f"```json\n{(runs_raw[i][0] or '').strip()}\n```"
+            for i in range(len(runs_raw))
+        ))
+
+    out_positive = Path("consolidation_positive_probe.md")
+    out_positive.write_text("\n\n".join(dumps), encoding="utf-8")
+
+    print("── 总汇总", file=sys.stderr)
+    for cid, per_run, expect_count in all_results:
+        print(f"  {'✅' if min(per_run) == expect_count else '❌'} {cid}: 各次命中 {per_run}/{expect_count}",
+              file=sys.stderr)
+    return 0 if all(min(p) == c for _, p, c in all_results) else 1
 
 
 def candidate_key(c: dict) -> tuple:
@@ -232,6 +304,8 @@ def print_summary(results: list[dict], repeat: int) -> None:
     print(f"── 汇总（{n} 个窗口，重复 {repeat} 次）", file=sys.stderr)
     print(f"窗口 {n} 个，总候选 {total} 条，平均 {avg} 条/窗口", file=sys.stderr)
     print(f"空输出窗口：{empty} 个（{empty_pct}%）", file=sys.stderr)
+    parse_failed = sum(1 for r in results if not r["parsed_ok"])
+    print(f"JSON 解析失败：{parse_failed} 个（这些窗口的 0 候选是缺陷，不是正确的空输出）", file=sys.stderr)
     print(f"候选数分布：{dist_str}", file=sys.stderr)
 
 
@@ -314,6 +388,8 @@ async def _amain() -> None:
     ap.add_argument("--positive", action="store_true",
                     help="跑正例回归基准（memory/benchmark/_fixtures/consolidation_positive.json），未达标非零退出")
     ap.add_argument("--positive-fixture", type=Path, default=POSITIVE_FIXTURE)
+    ap.add_argument("--print-prompt", action="store_true",
+                    help="只打印将发送的 prompt 并退出，不调 LLM（比对格式化是否被来源标记污染）")
     a = ap.parse_args()
 
     # 复用生产后端构造参数，temperature 可被探针显式覆盖（不改生产代码）
@@ -327,7 +403,8 @@ async def _amain() -> None:
 
     # 必须在 windows_raw.json 存在性检查之前短路：正例回归不依赖采样窗口
     if a.positive:
-        sys.exit(await run_positive(consolidator, backend, a.positive_fixture))
+        sys.exit(await run_positive(consolidator, backend, a.positive_fixture,
+                                    repeat=a.repeat, print_prompt=a.print_prompt))
 
     if not a.input.exists():
         sys.exit(f"❌ 找不到 {a.input}，请先运行 scripts/sample_windows.py")

@@ -1,21 +1,45 @@
-{
-  "id": "consolidation-positive-001",
-  "kind": "consolidation",
-  "note": "唯一验证「该记的时候记得住」的回归基准。任何 consolidation_prompt.py 改动后必须仍产出 3 条。依据见 design_docs/check_point/check_point#1.md；messages 取自 windows_probe_positive.json 原文",
-  "current_summary": "（无）",
-  "messages": [
-    {"user": "1001", "content": "我的显卡是RTX5080，跑27B模型有点吃力"},
-    {"user": "1002", "content": "那确实，显存不够"},
-    {"user": "1001", "content": "我不吃香菜，每次点外卖都要备注"},
-    {"user": "1003", "content": "哈哈同款"},
-    {"user": "1001", "content": "我在杭州工作，做后端开发三年了"},
-    {"user": "1002", "content": "那你应该挺熟Java吧"},
-    {"user": "1001", "content": "主要写Go，Java只是会看"}
-  ],
-  "expect_count": 3,
-  "expect": [
-    {"user_id": "1001", "type": "FACT", "content_contains": ["5080"]},
-    {"user_id": "1001", "type": "FACT", "content_contains": ["香菜"]},
-    {"user_id": "1001", "type": "FACT", "content_contains": ["后端"]}
-  ]
-}
+[
+  {
+    "id": "consolidation-positive-001-hardware",
+    "kind": "consolidation",
+    "note": "显卡型号：TECH_HELP 的 ANSWER_CONTEXT 主要来源。依据 check_point#1「明确的显卡型号」。",
+    "current_summary": "（无）",
+    "messages": [
+      {"user": "1001", "content": "我的显卡是RTX5080，跑27B模型有点吃力"},
+      {"user": "1002", "content": "那确实，显存不够"}
+    ],
+    "expect_count": 1,
+    "expect": [
+      {"user_id": "1001", "content_contains": ["5080"]}
+    ]
+  },
+  {
+    "id": "consolidation-positive-002-diet",
+    "kind": "consolidation",
+    "note": "饮食禁忌：RECOMMEND 主要来源。依据 check_point#1「饮食禁忌」。",
+    "current_summary": "（无）",
+    "messages": [
+      {"user": "1001", "content": "我不吃香菜，每次点外卖都要备注"},
+      {"user": "1003", "content": "哈哈同款"}
+    ],
+    "expect_count": 1,
+    "expect": [
+      {"user_id": "1001", "content_contains": ["香菜"]}
+    ]
+  },
+  {
+    "id": "consolidation-positive-003-occupation",
+    "kind": "consolidation",
+    "note": "职业与技术栈。依据 check_point#1「职业」。",
+    "current_summary": "（无）",
+    "messages": [
+      {"user": "1001", "content": "我在杭州工作，做后端开发三年了"},
+      {"user": "1002", "content": "那你应该挺熟Java吧"},
+      {"user": "1001", "content": "主要写Go，Java只是会看"}
+    ],
+    "expect_count": 1,
+    "expect": [
+      {"user_id": "1001", "content_contains": ["后端"]}
+    ]
+  }
+]
