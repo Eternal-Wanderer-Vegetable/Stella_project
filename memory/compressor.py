@@ -195,7 +195,7 @@ class MemoryCompressor:
             logger.warning(f"🧹 [MemoryCompressor] maybe_compress 失败: {e}")
 
     def _merge_duplicate_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> int:
-        """把内容相似（同群同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
+        """把内容相似（同群同用户同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
 
         合并规则：content 用 _merge_content（保留更完整一方或分号拼接）；
         importance/confidence 取两者更大值；confirmation_count 累加（体现“多人/多次确认更可信”）；
@@ -226,7 +226,14 @@ class MemoryCompressor:
             for other in memories[i + 1 :]:
                 if other["id"] in seen:
                     continue
-                if memory["group_id"] != other["group_id"] or memory["type"] != other["type"]:
+                # 必须同群 + 同用户 + 同类型才允许合并。跨用户合并会把 A 的事实
+                # 并入 B 的记忆并把 A 那条置 archived，且发生在周度定时任务里，
+                # 数据不可恢复（与 memory_manager._find_similar_memory 的约束一致）。
+                if (
+                    memory["group_id"] != other["group_id"]
+                    or memory["user_id"] != other["user_id"]
+                    or memory["type"] != other["type"]
+                ):
                     continue
                 if self._is_similar(memory["content"], other["content"]):
                     merged_content = self._merge_content(memory["content"], other["content"])

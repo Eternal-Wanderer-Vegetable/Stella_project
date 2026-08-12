@@ -235,12 +235,20 @@ def _query_fts(
 
 
 def _merge_similar(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """同类记忆合并（Selection Rule 1）：同一 type 且内容高度相似的记忆合并为一条。"""
+    """同类记忆合并（Selection Rule 1）：同一用户、同一 type 且内容高度相似的记忆合并为一条。
+
+    必须比对 user_id：主动发言路径（include_user=None）取的是全群记忆，
+    不比归属会把不同人的记忆合并成一条送进 Prompt，导致回复张冠李戴。
+    """
     merged: list[dict[str, Any]] = []
     for mem in memories:
         target = None
         for existing in merged:
-            if existing["type"] == mem["type"] and _is_similar(existing["content"], mem["content"]):
+            if (
+                existing["type"] == mem["type"]
+                and existing.get("user_id") == mem.get("user_id")
+                and _is_similar(existing["content"], mem["content"])
+            ):
                 target = existing
                 break
         if target is None:

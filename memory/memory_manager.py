@@ -207,12 +207,19 @@ class MemoryManager:
                 logger.warning(f"🧹 [MemoryManager] 触发轻量压缩失败: {e}")
 
     def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> str | None:
-        """在同类型、状态为 active 的记忆中查找与候选内容相似的记忆 id；找不到返回 None。"""
+        """在同群、同用户、同类型的 active 记忆中查找与候选内容相似的记忆 id；找不到返回 None。
+
+        **必须按 group_id + user_id 过滤**：只比 type 会把用户 A 的候选合并进
+        用户 B 的记忆（_merge_content 用「；」把两人的内容拼在一起），造成
+        不可恢复的归属污染。与 _resolve_conflicts 的过滤条件保持一致。
+        """
         rows = cursor.execute(
-            "SELECT id, content, type FROM memories WHERE status = 'active' AND type = ? ORDER BY last_accessed_at DESC",
-            (candidate["type"],),
+            "SELECT id, content FROM memories WHERE status = 'active' "
+            "AND group_id = ? AND user_id = ? AND type = ? "
+            "ORDER BY last_accessed_at DESC",
+            (str(candidate["group_id"]), str(candidate["user_id"]), candidate["type"]),
         ).fetchall()
-        for mem_id, content, _ in rows:
+        for mem_id, content in rows:
             if self._is_similar(candidate["content"], content):
                 return mem_id
         return None
