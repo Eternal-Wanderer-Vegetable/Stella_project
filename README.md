@@ -119,13 +119,13 @@ stella_project/
 
 ### 5. 记忆写入与晋升（两层过滤）
 
-- -捕获层（宽）-：整合阶段产出短期摘要、用户画像与记忆候选。这一层不做置信度。不确定的信息也允许进入候选，但必须如实标注 `confidence`，且严禁编造；候选必须有出处、归属必须是消息的实际发送者（代码层还有发送者白名单兜底）。
+- **捕获层（宽）**：整合阶段产出短期摘要、用户画像与记忆候选。这一层不做置信度。不确定的信息也允许进入候选，但必须如实标注 `confidence`，且严禁编造；候选必须有出处、归属必须是消息的实际发送者（代码层还有发送者白名单兜底）。
 
 > 理由：在 prompt 里过滤不可审计、不留数据、无法改进。把判断推迟到有数据的一层。
 
-- -候选强化（交叉验证）-：`memory/consolidator.py` 写入候选时，同群同用户同类型且内容相似的待处理候选不重复插入，而是累积证据——`occurrence_count` +1、置信度加`MEMORY_CANDIDATE_REOCCURRENCE_BONUS`、`source_kinds` 取并集、状态回到 `NEW`，重新参与评估。超过 `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` 仍未获新证据的候选标记`REJECTED`（不删除，保留供审计）。
+- **候选强化（交叉验证）**：`memory/consolidator.py` 写入候选时，同群同用户同类型且内容相似的待处理候选不重复插入，而是累积证据——`occurrence_count` +1、置信度加`MEMORY_CANDIDATE_REOCCURRENCE_BONUS`、`source_kinds` 取并集、状态回到 `NEW`，重新参与评估。超过 `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` 仍未获新证据的候选标记`REJECTED`（不删除，保留供审计）。
 
-- -晋升层（严）-：`memory/memory_manager.py` 的 Gate 1 三档：
+- **晋升层（严）**：`memory/memory_manager.py` 的 Gate 1 三档：
 
 | 置信度 | 判定 |
 |---|---|
