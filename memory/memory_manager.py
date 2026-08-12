@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import contextlib
-import re
 import sqlite3
 import uuid
 
@@ -31,6 +30,7 @@ from config import (
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
 from memory.schema import ensure_v2_schema
+from memory.text_similarity import is_similar, merge_content
 
 
 class MemoryManager:
@@ -220,7 +220,7 @@ class MemoryManager:
             (str(candidate["group_id"]), str(candidate["user_id"]), candidate["type"]),
         ).fetchall()
         for mem_id, content in rows:
-            if self._is_similar(candidate["content"], content):
+            if is_similar(candidate["content"], content):
                 return mem_id
         return None
 
@@ -270,8 +270,8 @@ class MemoryManager:
             return
         content, content_raw, importance, confidence, count = row[0], row[1], row[2], row[3], row[4]
         # 相似度合并：内容去重拼接（正文与原样都合并）
-        merged_content = self._merge_content(content, candidate["content"])
-        merged_content_raw = self._merge_content(content_raw or content, candidate["content"])
+        merged_content = merge_content(content, candidate["content"])
+        merged_content_raw = merge_content(content_raw or content, candidate["content"])
         # 合并时重要度/置信度取双方较大值，保留更强证据
         merged_importance = max(importance or 0.0, candidate["importance"])
         merged_confidence = max(confidence or 0.0, candidate["confidence"])
@@ -415,50 +415,6 @@ class MemoryManager:
             return out
 
         return _segments(a) & _segments(b)
-
-    def _merge_content(self, old: str, new: str) -> str:
-        """合并两段内容：去空白；若一段包含另一段则取较长者，否则以「；」连接。"""
-        old = old.strip()
-        new = new.strip()
-        if not old:
-            return new
-        if not new:
-            return old
-        # 新增内容已包含旧内容（或相反）时，不重复存储
-        if new in old:
-            return old
-        if old in new:
-            return new
-        return old + "；" + new
-
-    def _normalize_text(self, text: str) -> str:
-        """文本归一化：小写、替换非字母数字字符为空格、去多余空白，供相似度比较。"""
-        text = (text or "").strip().lower()
-        text = re.sub(r"[\W_]+", " ", text)
-        return " ".join(text.split())
-
-    def _is_similar(self, a: str, b: str) -> bool:
-        """判断两段内容是否语义相近：先做归一化，子串包含即相似，
-        否则用 Jaccard 相似度 >=0.65 判定。"""
-        if not a or not b:
-            return False
-        a_norm = self._normalize_text(a)
-        b_norm = self._normalize_text(b)
-        if not a_norm or not b_norm:
-            return False
-        # 归一化后短文本互相包含，视为同一记忆，直接返回相似
-        if a_norm in b_norm or b_norm in a_norm:
-            return True
-        # 词集合的 Jaccard 相似度达到阈值即判定相似
-        return self._jaccard_similarity(set(a_norm.split()), set(b_norm.split())) >= 0.65
-
-    def _jaccard_similarity(self, a: set[str], b: set[str]) -> float:
-        """计算两词集合的 Jaccard 相似度 = 交集大小 / 并集大小（任一方为空返回 0）。"""
-        if not a or not b:
-            return 0.0
-        intersection = a & b
-        union = a | b
-        return len(intersection) / len(union)
 
 
 _memory_manager_instance: MemoryManager | None = None

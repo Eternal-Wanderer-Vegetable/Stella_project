@@ -45,13 +45,7 @@ from config import (
     RAG_TOP_K,
     REPLY_LONG_TERM_LIMIT,
 )
-
-
-def _normalize_text(text: str) -> str:
-    """把文本小写化、去非词字符后统一为空格连接的词串（用于词级比对）。"""
-    text = (text or "").strip().lower()
-    text = re.sub(r"[\W_]+", " ", text)
-    return " ".join(text.split())
+from memory.text_similarity import normalize_text
 
 
 def _extract_keywords(text: str, max_keywords: int) -> list[str]:
@@ -86,8 +80,8 @@ def _compute_overlap(query: str, text: str) -> int:
     """计算 query 与 text 在规范化后词集中的交集大小（重叠词数，用于补充关键词分）。"""
     if not query or not text:
         return 0
-    query_words = set(_normalize_text(query).split())
-    text_words = set(_normalize_text(text).split())
+    query_words = set(normalize_text(query).split())
+    text_words = set(normalize_text(text).split())
     if not query_words or not text_words:
         return 0
     return len(query_words & text_words)
@@ -251,7 +245,7 @@ def _segment_text(text: str) -> str:
     与 _extract_keywords 类似，但结果用于全文索引的 content 列（写入时）和 MATCH 查询词。
     会去掉重复片段（dict.fromkeys 保序去重），避免同一词在索引里重复膨胀。
     """
-    normalized = _normalize_text(text)
+    normalized = normalize_text(text)
     segments = re.findall(r"[\u4e00-\u9fff]{2,8}", normalized)
     tokens: list[str] = []
     for seg in segments:

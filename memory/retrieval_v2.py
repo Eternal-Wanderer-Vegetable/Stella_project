@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -45,6 +44,7 @@ from memory.policy import (
     split_behavior_constraints,
     usage_allowed,
 )
+from memory.text_similarity import is_similar, merge_content
 
 
 @dataclass
@@ -247,7 +247,7 @@ def _merge_similar(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if (
                 existing["type"] == mem["type"]
                 and existing.get("user_id") == mem.get("user_id")
-                and _is_similar(existing["content"], mem["content"])
+                and is_similar(existing["content"], mem["content"])
             ):
                 target = existing
                 break
@@ -255,46 +255,10 @@ def _merge_similar(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
             merged.append(dict(mem))
         else:
             # 合并内容：取更完整的一方；置信度/重要度取较大值
-            target["content"] = _merge_content(target["content"], mem["content"])
+            target["content"] = merge_content(target["content"], mem["content"])
             target["confidence"] = _max_float(target.get("confidence"), mem.get("confidence"))
             target["importance"] = _max_float(target.get("importance"), mem.get("importance"))
     return merged
-
-
-def _merge_content(old: str, new: str) -> str:
-    old = (old or "").strip()
-    new = (new or "").strip()
-    if not old:
-        return new
-    if not new:
-        return old
-    if new in old:
-        return old
-    if old in new:
-        return new
-    return old + "；" + new
-
-
-def _normalize_text(text: str) -> str:
-    text = (text or "").strip().lower()
-    text = re.sub(r"[\W_]+", " ", text)
-    return " ".join(text.split())
-
-
-def _is_similar(a: str, b: str) -> bool:
-    if not a or not b:
-        return False
-    a_norm = _normalize_text(a)
-    b_norm = _normalize_text(b)
-    if not a_norm or not b_norm:
-        return False
-    if a_norm in b_norm or b_norm in a_norm:
-        return True
-    a_set, b_set = set(a_norm.split()), set(b_norm.split())
-    if not a_set or not b_set:
-        return False
-    inter = a_set & b_set
-    return len(inter) / len(a_set | b_set) >= 0.65
 
 
 def _max_float(a: Any, b: Any) -> float:

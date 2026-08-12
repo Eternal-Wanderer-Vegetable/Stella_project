@@ -195,18 +195,3 @@ def test_split_into_fragments_and_store(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
     assert n == 2
-
-
-def test_similarity_helpers(tmp_path, monkeypatch):
-    db_path = tmp_path / "agent_memory.db"
-    _patch_paths(monkeypatch, tmp_path, db_path)
-    comp = MemoryCompressor()
-    assert comp._is_similar("用户喜欢打篮球", "用户喜欢打篮球") is True
-    assert comp._is_similar("用户喜欢打篮球", "用户喜欢踢足球") is False
-    assert comp._is_similar("", "用户喜欢") is False
-    assert comp._merge_content("A", "A") == "A"
-    assert comp._merge_content("A", "B") == "A；B"
-    assert comp._merge_content("", "B") == "B"
-    assert comp._merge_content("A", "") == "A"
-    assert comp._normalize_text("Hello World!") == "hello world"
-    assert comp._jaccard_similarity(set("ab"), set()) == 0.0

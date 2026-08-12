@@ -40,6 +40,7 @@ from config import (
     MEMORY_DECAY_DAYS,
     PROJECT_ROOT,
 )
+from memory.text_similarity import is_similar, merge_content
 
 
 class MemoryCompressor:
@@ -235,8 +236,8 @@ class MemoryCompressor:
                     or memory["type"] != other["type"]
                 ):
                     continue
-                if self._is_similar(memory["content"], other["content"]):
-                    merged_content = self._merge_content(memory["content"], other["content"])
+                if is_similar(memory["content"], other["content"]):
+                    merged_content = merge_content(memory["content"], other["content"])
                     merged_importance = max(memory["importance"], other["importance"])
                     merged_confidence = max(memory["confidence"], other["confidence"])
                     merged_count = memory["confirmation_count"] + other["confirmation_count"]
@@ -409,53 +410,6 @@ class MemoryCompressor:
                 f.write(text + "\n")
         except Exception as e:
             logger.warning(f"🧹 [MemoryCompressor] 写日志失败: {e}")
-
-    # ---- 文本相似度与合并辅助 ----
-    def _normalize_text(self, text: str) -> str:
-        """文本规范化：转小写、去非单词字符、多空白合并为单空格（用于相似度比较）。"""
-        text = (text or "").strip().lower()
-        text = re.sub(r"[\W_]+", " ", text)
-        return " ".join(text.split())
-
-    def _jaccard_similarity(self, a: set[str], b: set[str]) -> float:
-        """计算两个集合的 Jaccard 相似度：交集大小 / 并集大小（0~1，空集返回 0）。"""
-        if not a or not b:
-            return 0.0
-        intersection = a & b
-        union = a | b
-        return len(intersection) / len(union)
-
-    def _is_similar(self, a: str, b: str) -> bool:
-        """判断两条记忆是否“内容重复”：规范化后一方包含另一方，或词集合 Jaccard ≥ 0.65。
-
-        注意：这是去重合并的判定阈值，太高会漏合并、太低会误合并。
-        """
-        if not a or not b:
-            return False
-        a_norm = self._normalize_text(a)
-        b_norm = self._normalize_text(b)
-        if not a_norm or not b_norm:
-            return False
-        if a_norm in b_norm or b_norm in a_norm:
-            return True
-        return self._jaccard_similarity(set(a_norm.split()), set(b_norm.split())) >= 0.65
-
-    def _merge_content(self, old: str, new: str) -> str:
-        """合并两条记忆内容：保留更完整的一方；互不为子串则用中文分号拼接。
-
-        边界：任意一方为空时直接返回另一方，保证合并后非空。
-        """
-        old = (old or "").strip()
-        new = (new or "").strip()
-        if not old:
-            return new
-        if not new:
-            return old
-        if new in old:
-            return old
-        if old in new:
-            return new
-        return old + "；" + new
 
 
 _compressor_instance: MemoryCompressor | None = None
