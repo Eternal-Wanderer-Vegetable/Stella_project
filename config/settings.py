@@ -165,6 +165,16 @@ MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE = _env_float("MEMORY_CANDIDATE_CONFIRM_M
 # 记忆候选晋升为长期记忆的最小置信度
 MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
 
+# ---------- 候选强化（交叉验证） ----------
+# 同一事实被再次独立观察到时的置信度增益。这是「暂存 → 交叉验证 → 逐步强化」
+# 的核心：单次陈述不足以晋升，复现才是证据。取 0.12 使 0.5 起步的候选
+# 约 2 次复现后跨过 MEMORY_OBSERVE_LOW_CONFIDENCE(0.6)。
+MEMORY_CANDIDATE_REOCCURRENCE_BONUS = _env_float("MEMORY_CANDIDATE_REOCCURRENCE_BONUS", 0.12)
+# 候选在 OBSERVING 停留的最长天数，超期未获新证据即标 REJECTED（不删除，保留供审计）
+MEMORY_CANDIDATE_MAX_OBSERVING_DAYS = _env_int("MEMORY_CANDIDATE_MAX_OBSERVING_DAYS", 30)
+# evidence 字段累积上限（字符）。多次复现会不断追加证据，需防止无界增长
+MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS = _env_int("MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS", 800)
+
 # ---------- 记忆系统 v2（Memory Policy / Retrieval v2） ----------
 # 总开关：False 时回退旧系统（旧 Consolidator 输出、旧 Retriever、旧 Prompt Builder）
 MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "yes")

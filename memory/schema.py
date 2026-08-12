@@ -9,7 +9,9 @@
    （memory_type / usage_tags / visibility / trigger_data / behavior_rule / confidence / status）；
 3. 新增常用检索索引（group_id / user_id / memory_type / visibility / status）；
 4. v3 为 ``group_messages`` / ``memory_candidates`` / ``memories`` 补 ``source_kind``
-   列（消息来源分级：AT_MENTION / PASSIVE），并新增按来源归因的审计索引。
+   列（消息来源分级：AT_MENTION / PASSIVE），并新增按来源归因的审计索引；
+5. v4 为 ``memory_candidates`` 补候选强化字段（occurrence_count / first_seen_at /
+   source_kinds），支撑「暂存 → 交叉验证 → 逐步强化」的累计证据语义。
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -27,8 +29,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v3：消息来源分级 source_kind）
-SCHEMA_VERSION = 3
+# 当前 Schema 版本（v4：候选强化 occurrence_count / first_seen_at / source_kinds）
+SCHEMA_VERSION = 4
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -130,6 +132,22 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "source_kind",
         "ALTER TABLE memories ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'",
     ),
+    # v4：候选强化（交叉验证）——同一事实累积证据而非重复插入
+    (
+        "memory_candidates",
+        "occurrence_count",
+        "ALTER TABLE memory_candidates ADD COLUMN occurrence_count INTEGER DEFAULT 1",
+    ),
+    (
+        "memory_candidates",
+        "first_seen_at",
+        "ALTER TABLE memory_candidates ADD COLUMN first_seen_at DATETIME",
+    ),
+    (
+        "memory_candidates",
+        "source_kinds",
+        "ALTER TABLE memory_candidates ADD COLUMN source_kinds TEXT DEFAULT '[\"PASSIVE\"]'",
+    ),
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -164,6 +182,12 @@ _INDEXES: list[tuple[str, str, str]] = [
         "idx_group_messages_source_kind",
         "group_messages",
         "CREATE INDEX IF NOT EXISTS idx_group_messages_source_kind ON group_messages (group_id, source_kind, id)",
+    ),
+    (
+        "idx_candidates_group_user_type_status",
+        "memory_candidates",
+        "CREATE INDEX IF NOT EXISTS idx_candidates_group_user_type_status "
+        "ON memory_candidates (group_id, user_id, type, status)",
     ),
 ]
 

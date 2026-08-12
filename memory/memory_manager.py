@@ -72,6 +72,9 @@ class MemoryManager:
                 trigger_data TEXT,
                 behavior_rule TEXT,
                 source_kind TEXT DEFAULT 'PASSIVE',
+                occurrence_count INTEGER DEFAULT 1,
+                first_seen_at DATETIME,
+                source_kinds TEXT DEFAULT '["PASSIVE"]',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )

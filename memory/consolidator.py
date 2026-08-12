@@ -37,6 +37,8 @@ from config import (
     CONSOLIDATION_LOCAL_MAX_TOKENS,
     CONSOLIDATION_OVERLAP,
     DB_PATH,
+    MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
+    MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
     MEMORY_SOURCE_KIND_ENABLED,
 )
 from core.llm import consolidation_llm_lock
@@ -46,6 +48,7 @@ from memory.consolidation_prompt import format_consolidation_prompt
 from memory.memory_manager import get_memory_manager
 from memory.policy import validate_candidate
 from memory.schema import ensure_v2_schema
+from memory.text_similarity import is_similar, merge_content
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
@@ -169,6 +172,9 @@ class MemoryConsolidator:
                 trigger_data TEXT,
                 behavior_rule TEXT,
                 source_kind TEXT DEFAULT 'PASSIVE',
+                occurrence_count INTEGER DEFAULT 1,
+                first_seen_at DATETIME,
+                source_kinds TEXT DEFAULT '["PASSIVE"]',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -584,6 +590,42 @@ class MemoryConsolidator:
                 merged.append(part)
         return "，".join(merged)
 
+    @staticmethod
+    def _merge_source_kinds(old, new_kind: str) -> str:
+        """把本次来源并入历次来源集合（JSON 数组，去重保序）。
+
+        晋升判定看的是「历次证据里有没有 AT_MENTION」，因此必须累积而非覆盖：
+        一条事实先在群聊被动提到、后来用户又直接对 Bot 说过，两次证据的
+        权重不同，只保留最后一次会丢失关键信息。
+        """
+        kinds: list[str] = []
+        try:
+            parsed = json.loads(old or "[]")
+            if isinstance(parsed, list):
+                kinds = [str(k).strip().upper() for k in parsed if str(k).strip()]
+        except (ValueError, TypeError):
+            kinds = []
+        kind = (new_kind or "PASSIVE").strip().upper()
+        if kind not in kinds:
+            kinds.append(kind)
+        return json.dumps(kinds or ["PASSIVE"], ensure_ascii=False)
+
+    @staticmethod
+    def _merge_source_ids(old: str, new: str) -> str:
+        """合并两批 source_message_ids（JSON 数组），取并集去重保序。"""
+        def _parse(value) -> list[str]:
+            try:
+                parsed = json.loads(value or "[]")
+                return [str(x) for x in parsed if str(x).strip()] if isinstance(parsed, list) else []
+            except (ValueError, TypeError):
+                return []
+
+        merged: list[str] = []
+        for mid in _parse(old) + _parse(new):
+            if mid not in merged:
+                merged.append(mid)
+        return json.dumps(merged, ensure_ascii=False)
+
     def _write_memory_candidates(self, group_id: int, candidates: list, sender_ids: list | None = None, at_senders: list | None = None):
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
@@ -594,6 +636,11 @@ class MemoryConsolidator:
         防止 LLM 把 A 的发言归属给 B 造成长期记忆张冠李戴。
         at_senders 为 AT_MENTION 来源发送者列表：候选的 user_id 在其中时标记 source_kind
         为 AT_MENTION，否则为 PASSIVE。
+
+        候选强化（交叉验证）：同群同用户同类型且内容相似的待处理候选（NEW/OBSERVING）
+        不重复插入，改为累积证据——occurrence_count +1、confidence 加
+        MEMORY_CANDIDATE_REOCCURRENCE_BONUS、source_kinds 并集、status 回 NEW。
+        这是「单次陈述不足以晋升，复现才是证据」的实现基础（见 MemoryManager Gate 1）。
         """
         if not candidates:
             return
@@ -627,8 +674,6 @@ class MemoryConsolidator:
             if not isinstance(source_ids, list):
                 source_ids = []
             source_ids = json.dumps([str(x) for x in source_ids if str(x).strip()], ensure_ascii=False)
-            # 无 id 时生成本地候选 id
-            candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
 
             # ── v2：Policy Validator 审核（Gate 3），修正 usage/visibility/behavior_rule ──
             validated = validate_candidate({
@@ -646,9 +691,71 @@ class MemoryConsolidator:
             confidence = float(validated.get("confidence", confidence))
             importance = float(validated.get("importance", importance))
 
+            # ── 候选强化（交叉验证）：先找同群同用户同类型的待处理候选 ──
+            # 命中则累积证据（occurrence_count +1、confidence 加成、status 回 NEW
+            # 重新参与晋升评估），而不是插入新行。否则同一事实会反复以新 uuid
+            # 落库、各自卡在 OBSERVING，交叉验证永远不成立。
+            existing = None
+            for row in cursor.execute(
+                "SELECT id, content, confidence, importance, evidence, occurrence_count, "
+                "source_message_ids, source_kinds FROM memory_candidates "
+                "WHERE group_id = ? AND user_id = ? AND type = ? AND status IN ('NEW', 'OBSERVING')",
+                (str(group_id), uid, type_),
+            ).fetchall():
+                if is_similar(content, row[1] or ""):
+                    existing = row
+                    break
+
+            if existing is not None:
+                (
+                    existing_id,
+                    old_content,
+                    old_conf,
+                    old_imp,
+                    old_evidence,
+                    old_count,
+                    old_source_ids,
+                    old_source_kinds,
+                ) = existing
+                merged_confidence = min(
+                    1.0,
+                    max(float(old_conf or 0.0), confidence) + MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
+                )
+                merged_evidence = merge_content(old_evidence or "", evidence)
+                if len(merged_evidence) > MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS:
+                    merged_evidence = merged_evidence[:MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS] + "…"
+                new_count = int(old_count or 1) + 1
+                cursor.execute(
+                    "UPDATE memory_candidates SET content = ?, confidence = ?, importance = ?, "
+                    "evidence = ?, occurrence_count = ?, source_message_ids = ?, source_kinds = ?, "
+                    "usage_tags = ?, visibility = ?, behavior_rule = ?, source_kind = ?, "
+                    "status = 'NEW', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (
+                        merge_content(old_content or "", content),
+                        merged_confidence,
+                        max(float(old_imp or 0.0), importance),
+                        merged_evidence,
+                        new_count,
+                        self._merge_source_ids(old_source_ids, source_ids),
+                        self._merge_source_kinds(old_source_kinds, source_kind),
+                        usage_tags,
+                        visibility,
+                        behavior_rule,
+                        source_kind,
+                        existing_id,
+                    ),
+                )
+                logger.info(
+                    f"🔁 [Consolidator] 候选获得新证据 {existing_id}（第 {new_count} 次，"
+                    f"conf {float(old_conf or 0.0):.2f} → {merged_confidence:.2f}，来源 {source_kind}）"
+                )
+                continue
+
+            # 无 id 时生成本地候选 id
+            candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
             cursor.execute("""
-                INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, occurrence_count, first_seen_at, source_kinds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     group_id = excluded.group_id,
                     user_id = excluded.user_id,
@@ -679,6 +786,7 @@ class MemoryConsolidator:
                 visibility,
                 behavior_rule,
                 source_kind,
+                self._merge_source_kinds("[]", source_kind),
             ))
         conn.commit()
         conn.close()
