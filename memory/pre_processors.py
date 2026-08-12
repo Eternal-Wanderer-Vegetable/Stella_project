@@ -12,6 +12,7 @@
   主动发言时用群级记忆回顾；
 - _extract_keywords / _STOP_WORDS：中文停用词与关键词提取，供记忆话题匹配使用。
 """
+import contextlib
 import json
 import re
 import sqlite3
@@ -33,6 +34,8 @@ from memory.retriever import get_group_memories, get_related_memories, get_user_
 async def record_message(ctx: ChatContext) -> ChatContext:
     """把本条消息写入群消息表（group_messages），供后续整合器消费。
 
+    source_kind 由调用方（ai_gateway）按 event.is_tome() 决定。
+
     参数：ctx — 拥有 group_id / user_id / message 的上下文字段；
     副作用：插入一条群消息记录并建表（幂等）；
     返回：原样的 ctx（调用方无需依赖返回值做后续处理）。
@@ -46,9 +49,14 @@ async def record_message(ctx: ChatContext) -> ChatContext:
                 group_id TEXT,
                 user_id TEXT,
                 content TEXT,
+                source_kind TEXT DEFAULT 'PASSIVE',
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 老库的 group_messages 已存在且 ensure_v2_schema 可能晚于首条消息执行，
+        # 这里自补一次 source_kind 列（失败即说明列已存在）
+        with contextlib.suppress(sqlite3.OperationalError):
+            cursor.execute("ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'")
         # messages 表为旧版兼容（只读回退），新消息统一写入 group_messages
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -64,9 +72,10 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             ON group_messages (group_id, id)
         """)
         cursor.execute("""
-            INSERT INTO group_messages (group_id, user_id, content)
-            VALUES (?, ?, ?)
-        """, (str(ctx.group_id), str(ctx.user_id), ctx.message))
+            INSERT INTO group_messages (group_id, user_id, content, source_kind)
+            VALUES (?, ?, ?, ?)
+        """, (str(ctx.group_id), str(ctx.user_id), ctx.message,
+              ctx.source_kind if ctx.source_kind in ("AT_MENTION", "PASSIVE") else "PASSIVE"))
         conn.commit()
         conn.close()
     except Exception as e:

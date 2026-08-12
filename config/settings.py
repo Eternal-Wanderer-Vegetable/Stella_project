@@ -205,6 +205,15 @@ USAGE_TYPE_MISMATCH_PENALTY = _env_float("USAGE_TYPE_MISMATCH_PENALTY", 0.75)
 # Recency 兜底半衰期（天）：记忆类型没有 MEMORY_DECAY_DAYS 条目时用此值
 MEMORY_RECENCY_HALF_LIFE_DAYS = _env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 120.0)
 
+# ---------- 消息来源分级（source_kind） ----------
+# @ 对话是唯一稳定的用户信息源（依据 check_point#1：群聊主体为角色扮演，
+# 被动摄入的可提取信息极少）。开关关闭时退回「所有消息等权」的旧行为：
+# prompt 不标注来源、候选不加置信度奖励；schema 字段仍然写入（无害，便于审计）。
+MEMORY_SOURCE_KIND_ENABLED = _env("MEMORY_SOURCE_KIND_ENABLED", "true").lower() in ("true", "1", "yes")
+# AT_MENTION 来源候选的置信度奖励。仅作微调，不足以让低置信候选越过
+# consolidation_prompt 的 0.7 门槛或 MEMORY_OBSERVE_LOW_CONFIDENCE。
+MEMORY_AT_MENTION_CONFIDENCE_BONUS = _env_float("MEMORY_AT_MENTION_CONFIDENCE_BONUS", 0.05)
+
 # ---------- 记忆语义检索（可选，Embedding） ----------
 # 默认关闭：语义分用 memory.policy 的规则版（词面 Jaccard，离线、确定）。
 # 打开后走本地 LM Studio /v1/embeddings 计算查询与记忆的余弦相似度，语义分真正可区分；

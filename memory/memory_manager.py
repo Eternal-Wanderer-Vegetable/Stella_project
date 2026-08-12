@@ -71,6 +71,7 @@ class MemoryManager:
                 visibility TEXT DEFAULT 'OPEN',
                 trigger_data TEXT,
                 behavior_rule TEXT,
+                source_kind TEXT DEFAULT 'PASSIVE',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -96,6 +97,7 @@ class MemoryManager:
                 visibility TEXT DEFAULT 'OPEN',
                 trigger_data TEXT,
                 behavior_rule TEXT,
+                source_kind TEXT DEFAULT 'PASSIVE',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )

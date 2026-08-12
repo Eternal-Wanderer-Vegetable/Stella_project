@@ -126,13 +126,13 @@ except Exception as e:
     logger.debug(f"注册周度压缩任务失败: {e}")
 
 # ── 启动时记忆系统 Schema 迁移（Additive Migration） ──
-# 只加字段/索引、绝不删数据；旧库升级为 v2（usage_tags/visibility/behavior_rule 等），
+# 只加字段/索引、绝不删数据；旧库升级到 v3（source_kind 等），
 # 首次迁移前自动备份为 stella_memory_backup.db
 try:
     from memory.schema import ensure_v2_schema
 
     if ensure_v2_schema():
-        logger.info("🔧 [Startup] 记忆系统 Schema 已升级到 v2")
+        logger.info("🔧 [Startup] 记忆系统 Schema 已升级到 v3")
 except Exception as e:
     logger.warning(f"⚠️ 记忆系统 Schema 迁移失败: {e}")
 
@@ -184,6 +184,8 @@ async def record_group_chat(event: GroupMessageEvent):
         group_id=event.group_id,
         msg_id=event.message_id,
         message=text,
+        # @ 到 Bot 的消息是最可靠的用户信息源，落库时标记来源以供整合/审计
+        source_kind="AT_MENTION" if event.is_tome() else "PASSIVE",
     )
     await record_message(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；

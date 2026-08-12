@@ -93,10 +93,12 @@ def test_fetch_next_messages_and_senders(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    text, batch_end, senders = cons._fetch_next_messages(1001, 0, 10)
+    text, batch_end, senders, at_senders = cons._fetch_next_messages(1001, 0, 10)
     assert batch_end == 3
     assert "第一条" in text
     assert senders == ["111", "112"]
+    # 表中无 source_kind 列时回退旧查询，全部视为 PASSIVE
+    assert at_senders == []
     assert cons._get_message_table(sqlite3.connect(db_path).cursor()) == "group_messages"
 
     conn = sqlite3.connect(db_path)
@@ -106,8 +108,36 @@ def test_fetch_next_messages_and_senders(tmp_path, monkeypatch):
     conn.close()
     assert cons._get_message_table(sqlite3.connect(db_path).cursor()) == "messages"
 
-    text, batch_end, senders = cons._fetch_next_messages(1001, 100, 10)
+    text, batch_end, senders, at_senders = cons._fetch_next_messages(1001, 100, 10)
     assert batch_end == 100
+
+
+def test_fetch_next_messages_source_kind_at_mention(tmp_path, monkeypatch):
+    """带 source_kind 列时，AT_MENTION 消息被标注 [对Bot说]，且 at_senders 正确收集。"""
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    monkeypatch.setattr(consolidator, "CONSOLIDATION_OVERLAP", 15)
+    monkeypatch.setattr(consolidator, "MEMORY_SOURCE_KIND_ENABLED", True)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    conn.execute("ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'")
+    conn.executemany(
+        "INSERT INTO group_messages (group_id, user_id, content, source_kind) VALUES (?, ?, ?, ?)",
+        [
+            ("1001", "111", "普通一句", "PASSIVE"),
+            ("1001", "112", "@你 这是什么", "AT_MENTION"),
+            ("1001", "111", "又一句", "PASSIVE"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    text, batch_end, senders, at_senders = cons._fetch_next_messages(1001, 0, 10)
+    assert batch_end == 3
+    assert "消息ID(1) 用户(111): 普通一句" in text
+    assert "消息ID(2) 用户(112) [对Bot说]: @你 这是什么" in text
+    assert senders == ["111", "112"]
+    assert at_senders == ["112"]
 
 
 def test_count_new_messages_and_has_new(tmp_path, monkeypatch):

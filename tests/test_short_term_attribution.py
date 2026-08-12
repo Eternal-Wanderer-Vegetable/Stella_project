@@ -198,6 +198,7 @@ def test_consolidate_group_unpacks_senders(tmp_path, monkeypatch):
             2,
             "lm_studio",
             ["111", "222"],
+            ["111"],
         )
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)

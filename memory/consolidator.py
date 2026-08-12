@@ -37,6 +37,7 @@ from config import (
     CONSOLIDATION_LOCAL_MAX_TOKENS,
     CONSOLIDATION_OVERLAP,
     DB_PATH,
+    MEMORY_SOURCE_KIND_ENABLED,
 )
 from core.llm import consolidation_llm_lock
 from core.llm.lm_studio import LMStudioBackend
@@ -75,16 +76,16 @@ class MemoryConsolidator:
             )
         ]
 
-    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str, list]:
+    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str, list, list]:
         """调用本地 LM Studio 后端生成整合输出。
 
         force=True 时走小批次（用于 @触发/主动发言前的轻量总结）。
-        返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名, 本批发送者 QQ 号列表)，
-        供调用方准确推进 checkpoint 并对记忆候选做发送者白名单校验。
+        返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名, 本批发送者 QQ 号列表, AT_MENTION 来源发送者列表)，
+        供调用方准确推进 checkpoint 并对记忆候选做发送者白名单校验与来源分级。
         """
         backend_name, backend = self._backends[0]
         limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
-        messages, batch_end, senders = self._fetch_next_messages(group_id, last_id, limit)
+        messages, batch_end, senders, at_senders = self._fetch_next_messages(group_id, last_id, limit)
         if not messages:
             raise RuntimeError("没有可整合的消息")
         prompt = self._build_prompt(group_id, messages)
@@ -96,7 +97,7 @@ class MemoryConsolidator:
             f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"
         )
         # 返回真实处理到的 batch_end、后端名与发送者列表，供调用方准确推进 checkpoint
-        return result, batch_end, backend_name, senders
+        return result, batch_end, backend_name, senders, at_senders
 
     def _build_prompt(self, group_id: int, messages: str) -> str:
         """用当前短期摘要 + 本批消息填充整合 prompt 模板。"""
@@ -167,6 +168,7 @@ class MemoryConsolidator:
                 visibility TEXT DEFAULT 'OPEN',
                 trigger_data TEXT,
                 behavior_rule TEXT,
+                source_kind TEXT DEFAULT 'PASSIVE',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -192,6 +194,7 @@ class MemoryConsolidator:
                 visibility TEXT DEFAULT 'OPEN',
                 trigger_data TEXT,
                 behavior_rule TEXT,
+                source_kind TEXT DEFAULT 'PASSIVE',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -303,7 +306,7 @@ class MemoryConsolidator:
                     f"（force={force}，新消息 {new_count}，批次阈值 {threshold}）\n"
                 )
 
-                result, processed_end, backend_name, senders = await self._generate(group_id, last_id, force=force)
+                result, processed_end, backend_name, senders, at_senders = await self._generate(group_id, last_id, force=force)
                 logger.info(f"📥 [Consolidator Response]\n{result}")
 
                 parsed = self._parse_json(result)
@@ -319,7 +322,7 @@ class MemoryConsolidator:
                 candidates = parsed.get("memory_candidates")
                 if candidates is None:
                     candidates = []
-                self._write_memory_candidates(group_id, candidates, sender_ids=senders)
+                self._write_memory_candidates(group_id, candidates, sender_ids=senders, at_senders=at_senders)
                 if candidates:
                     # 有新候选记忆时同步触发 MemoryManager 晋升处理
                     get_memory_manager().process_new_candidates()
@@ -328,19 +331,27 @@ class MemoryConsolidator:
                     self._write_long_term_memories(group_id, parsed.get("long_term_memories", []))
                 self._update_checkpoint(group_id, processed_end)
 
+                at_sender_set = set(at_senders or [])
+                at_count = sum(
+                    1 for c in candidates
+                    if self._normalize_user_id(str(c.get("user_id", ""))) in at_sender_set
+                )
                 append_consolidation_log(
                     f"  > ✅ 整合完成（后端 {backend_name}，checkpoint {last_id} → {processed_end}，"
-                    f"记忆候选 {len(candidates)} 条）\n"
+                    f"记忆候选 {len(candidates)} 条，其中 AT_MENTION 来源 {at_count} 条）\n"
                 )
                 logger.success(f"✅ [Consolidator] 群 {group_id} 整合完成，已处理至 id {processed_end}")
             except Exception:
                 logger.exception(f"❌ [Consolidator] 群 {group_id} 整合失败")
                 append_consolidation_log("  > ❌ 整合失败（详见控制台日志）\n")
 
-    def _fetch_next_messages(self, group_id: int, last_id: int, limit: int) -> tuple[str, int, list]:
+    def _fetch_next_messages(self, group_id: int, last_id: int, limit: int) -> tuple[str, int, list, list]:
         """取 last_id 之后最多 limit 条消息（含 overlap 上下文）。
-        返回 (文本, 本批次末尾的最大消息 id, 本批次的发送者 QQ 号列表)。
-        按实际行数取，可容忍 id 空洞。"""
+        返回 (文本, 本批次末尾的最大消息 id, 本批次的发送者 QQ 号列表, AT_MENTION 来源的发送者列表)。
+        按实际行数取，可容忍 id 空洞。
+        消息文本拼装：MEMORY_SOURCE_KIND_ENABLED 且该行为 AT_MENTION 时用「[对Bot说]」标注来源，
+        否则保持原格式；旧 messages 表没有 source_kind 列时回退到旧查询，全部视为 PASSIVE。
+        """
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         message_table = self._get_message_table(cursor)
@@ -352,21 +363,40 @@ class MemoryConsolidator:
         new_ids = [r[0] for r in cursor.fetchall()]
         if not new_ids:
             conn.close()
-            return "", last_id, []
+            return "", last_id, [], []
 
         batch_end = new_ids[-1]
         fetch_from = max(0, last_id - CONSOLIDATION_OVERLAP)
-        cursor.execute(
-            f"SELECT id, user_id, content FROM {message_table} WHERE group_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
-            (str(group_id), fetch_from, batch_end),
-        )
-        rows = cursor.fetchall()
+        try:
+            cursor.execute(
+                f"SELECT id, user_id, content, source_kind FROM {message_table} WHERE group_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
+                (str(group_id), fetch_from, batch_end),
+            )
+            rows = cursor.fetchall()
+        except sqlite3.OperationalError:
+            # 旧 messages 表没有 source_kind 列，回退到旧查询，全部视为 PASSIVE
+            cursor.execute(
+                f"SELECT id, user_id, content FROM {message_table} WHERE group_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
+                (str(group_id), fetch_from, batch_end),
+            )
+            rows = [(mid, uid, content, "PASSIVE") for mid, uid, content in cursor.fetchall()]
         conn.close()
         if not rows:
-            return "", last_id, []
-        text = "\n".join(f"消息ID({mid}) 用户({uid}): {content}" for mid, uid, content in rows)
-        senders = list(dict.fromkeys(str(uid) for _, uid, _ in rows))
-        return text, batch_end, senders
+            return "", last_id, [], []
+        lines = []
+        for mid, uid, content, source_kind in rows:
+            if MEMORY_SOURCE_KIND_ENABLED and source_kind == "AT_MENTION":
+                lines.append(f"消息ID({mid}) 用户({uid}) [对Bot说]: {content}")
+            else:
+                lines.append(f"消息ID({mid}) 用户({uid}): {content}")
+        text = "\n".join(lines)
+        senders = list(dict.fromkeys(str(uid) for _, uid, _, _ in rows))
+        at_senders = list(
+            dict.fromkeys(
+                str(uid) for _, uid, _, source_kind in rows if source_kind == "AT_MENTION"
+            )
+        )
+        return text, batch_end, senders, at_senders
 
     def _fetch_current_summary(self, group_id: int) -> str:
         """读取当前群的短期摘要（active_summary）及其关键发言，无记录或表不存在时返回空串。
@@ -554,7 +584,7 @@ class MemoryConsolidator:
                 merged.append(part)
         return "，".join(merged)
 
-    def _write_memory_candidates(self, group_id: int, candidates: list, sender_ids: list | None = None):
+    def _write_memory_candidates(self, group_id: int, candidates: list, sender_ids: list | None = None, at_senders: list | None = None):
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
         每个候选先经过 Policy Validator（validate_candidate）审核，自动修正错误的
@@ -562,12 +592,15 @@ class MemoryConsolidator:
         BOUNDARY_PROTECTION + RESTRICTED）。
         sender_ids 为当前批次的实际发送者 QQ 号白名单：候选的 user_id 不在名单内一律丢弃，
         防止 LLM 把 A 的发言归属给 B 造成长期记忆张冠李戴。
+        at_senders 为 AT_MENTION 来源发送者列表：候选的 user_id 在其中时标记 source_kind
+        为 AT_MENTION，否则为 PASSIVE。
         """
         if not candidates:
             return
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         self._ensure_common_tables(conn)
+        at_sender_set = set(at_senders or [])
         for c in candidates:
             uid = self._normalize_user_id(str(c.get("user_id", "")))
             if not uid:
@@ -576,6 +609,7 @@ class MemoryConsolidator:
             if sender_ids and uid not in set(sender_ids):
                 logger.warning(f"⚠️ [Consolidator] 丢弃归属不明的记忆候选（user_id={uid} 不在本批发送者中）")
                 continue
+            source_kind = "AT_MENTION" if uid in at_sender_set else "PASSIVE"
             type_ = (str(c.get("type", "FACT")) or "FACT").strip().upper()
             content = (c.get("content", "") or "").strip()
             if not content:
@@ -613,8 +647,8 @@ class MemoryConsolidator:
             importance = float(validated.get("importance", importance))
 
             cursor.execute("""
-                INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     group_id = excluded.group_id,
                     user_id = excluded.user_id,
@@ -628,6 +662,7 @@ class MemoryConsolidator:
                     usage_tags = excluded.usage_tags,
                     visibility = excluded.visibility,
                     behavior_rule = excluded.behavior_rule,
+                    source_kind = excluded.source_kind,
                     updated_at = CURRENT_TIMESTAMP
             """, (
                 candidate_id,
@@ -643,6 +678,7 @@ class MemoryConsolidator:
                 usage_tags,
                 visibility,
                 behavior_rule,
+                source_kind,
             ))
         conn.commit()
         conn.close()

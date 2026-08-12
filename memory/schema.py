@@ -7,7 +7,9 @@
 1. 首次迁移前把数据库备份为 ``stella_memory_backup.db``；
 2. 为 ``long_term_memories`` / ``memory_candidates`` / ``memories`` 增加 v2 字段
    （memory_type / usage_tags / visibility / trigger_data / behavior_rule / confidence / status）；
-3. 新增常用检索索引（group_id / user_id / memory_type / visibility / status）。
+3. 新增常用检索索引（group_id / user_id / memory_type / visibility / status）；
+4. v3 为 ``group_messages`` / ``memory_candidates`` / ``memories`` 补 ``source_kind``
+   列（消息来源分级：AT_MENTION / PASSIVE），并新增按来源归因的审计索引。
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -25,8 +27,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v2 记忆系统的里程碑）
-SCHEMA_VERSION = 2
+# 当前 Schema 版本（v3：消息来源分级 source_kind）
+SCHEMA_VERSION = 3
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -112,6 +114,22 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "behavior_rule",
         "ALTER TABLE memories ADD COLUMN behavior_rule TEXT",
     ),
+    # v3：消息来源分级（source_kind）——@ 对话 vs 被动摄入
+    (
+        "group_messages",
+        "source_kind",
+        "ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'",
+    ),
+    (
+        "memory_candidates",
+        "source_kind",
+        "ALTER TABLE memory_candidates ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'",
+    ),
+    (
+        "memories",
+        "source_kind",
+        "ALTER TABLE memories ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'",
+    ),
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -136,6 +154,16 @@ _INDEXES: list[tuple[str, str, str]] = [
         "idx_longterm_group_user_type",
         "long_term_memories",
         "CREATE INDEX IF NOT EXISTS idx_longterm_group_user_type ON long_term_memories (group_id, user_id, memory_type)",
+    ),
+    (
+        "idx_memories_group_source_kind",
+        "memories",
+        "CREATE INDEX IF NOT EXISTS idx_memories_group_source_kind ON memories (group_id, source_kind, status)",
+    ),
+    (
+        "idx_group_messages_source_kind",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_source_kind ON group_messages (group_id, source_kind, id)",
     ),
 ]
 
@@ -163,6 +191,7 @@ CREATE TABLE IF NOT EXISTS memories (
     visibility TEXT DEFAULT 'OPEN',
     trigger_data TEXT,
     behavior_rule TEXT,
+    source_kind TEXT DEFAULT 'PASSIVE',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -320,7 +349,7 @@ def ensure_v2_schema(db_path: Path = DB_PATH) -> bool:
             missing = _missing_v2_columns(conn)
             if not missing:
                 return False
-            logger.warning(f"⚠️ [Schema] 版本已到 v2 但缺列，正在修补: {missing}")
+            logger.warning(f"⚠️ [Schema] 版本已到 v{SCHEMA_VERSION} 但缺列，正在修补: {missing}")
         # 首次迁移才备份，避免每次启动都生成多余备份
         if _get_schema_version(conn) < SCHEMA_VERSION:
             backup_database(db_path)
@@ -329,7 +358,7 @@ def ensure_v2_schema(db_path: Path = DB_PATH) -> bool:
         _set_schema_version(conn, SCHEMA_VERSION)
         conn.commit()
         if changes:
-            logger.info(f"🔧 [Schema] 记忆系统已补齐到 v2（变更 {changes} 项）")
+            logger.info(f"🔧 [Schema] 记忆系统已补齐到 v{SCHEMA_VERSION}（变更 {changes} 项）")
         return changes > 0
     except Exception as e:
         logger.warning(f"⚠️ [Schema] 迁移失败（回滚重试）: {e}")

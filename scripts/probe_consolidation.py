@@ -62,12 +62,19 @@ def read_windows(path: Path) -> list[list[dict]]:
 
 
 def format_messages(window: list[dict]) -> str:
-    """按生产格式拼消息文本（与 MemoryConsolidator._fetch_next_messages 同格式）。"""
+    """按生产格式拼消息文本（与 MemoryConsolidator._fetch_next_messages 同格式）。
+    支持 source_kind 字段：AT_MENTION 时标注 [对Bot说]。
+    """
+    from config import MEMORY_SOURCE_KIND_ENABLED
     lines = []
     for i, m in enumerate(window, start=1):
         uid = (m.get("user") or "").strip()
         content = (m.get("content") or "").strip()
-        lines.append(f"消息ID({i}) 用户({uid}): {content}")
+        source_kind = m.get("source_kind", "PASSIVE")
+        if MEMORY_SOURCE_KIND_ENABLED and source_kind == "AT_MENTION":
+            lines.append(f"消息ID({i}) 用户({uid}) [对Bot说]: {content}")
+        else:
+            lines.append(f"消息ID({i}) 用户({uid}): {content}")
     return "\n".join(lines)
 
 

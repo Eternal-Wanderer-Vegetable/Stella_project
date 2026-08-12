@@ -17,7 +17,7 @@ class ChatContext:
     """一次聊天处理会话的完整状态。
 
     属性分组：
-    输入标识（user_id/group_id/msg_id/message）来自 OneBot 事件；
+    输入标识（user_id/group_id/msg_id/message/source_kind）来自 OneBot 事件；
     处理产物（raw_output/thought/action/reply/lines）由 pipeline 与解析钩子写入；
     诊断信息（trigger/llm_* 系列）用于 thought 日志记录调试；
     结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用。
@@ -28,6 +28,8 @@ class ChatContext:
     group_id: int
     msg_id: int
     message: str
+    # 消息来源：AT_MENTION=用户直接对 Bot 说 / PASSIVE=被动摄入的群聊
+    source_kind: str = "PASSIVE"
 
     # ---- 处理产物 ----
     raw_output: str = ""
