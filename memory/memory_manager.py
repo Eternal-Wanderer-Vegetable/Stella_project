@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import sqlite3
 import uuid
 
@@ -24,8 +25,12 @@ from nonebot import logger
 
 from config import (
     DB_PATH,
-    MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE,
-    MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE,
+    MEMORY_CANDIDATE_MAX_OBSERVING_DAYS,
+    MEMORY_CONFIRM_HIGH_CONFIDENCE,
+    MEMORY_OBSERVE_LOW_CONFIDENCE,
+    MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT,
+    MEMORY_PROMOTE_MIN_IMPORTANCE,
+    MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE,
 )
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
@@ -38,7 +43,7 @@ class MemoryManager:
 
     职责：
     - 读取 memory_candidates 中 NEW / OBSERVING 状态的候选；
-    - 依据「置信度 + 重要度」双阈值决定候选取向（观察或晋升）；
+    - 依据 Gate 1 三档（置信度 × 证据充分度）决定候选取向（观察 / 晋升 / 超期淘汰）；
     - 晋升时与已有相似记忆合并，避免重复记忆堆积；
     - 维护 memories 表与 FTS 全文索引的同步（_upsert_fts_record）。
     """
@@ -137,8 +142,8 @@ class MemoryManager:
         """处理全部待晋升的记忆候选（status ∈ {NEW, OBSERVING}），并把结果提交。
 
         关键逻辑：
-        1. OBSERVING 判定：候选的置信度和重要度都低于阈值时，标记为 OBSERVING，
-           等待后续批次带来更多证据，而不是直接晋升；
+        1. Gate 1 三档判定：先淘汰超期 OBSERVING 候选，再按置信度 × 证据充分度
+           （来源等级 / 复现次数）决定观察或晋升；
         2. 相似度合并：命中已有相似记忆则合并进入该记忆，否则新建记忆；
         3. 新旧都同步 FTS 索引；
         4. 提交后驱动轻量压缩（见注释）。
@@ -150,9 +155,14 @@ class MemoryManager:
         cursor = conn.cursor()
         self._ensure_tables()
 
+        # 先淘汰超期候选，避免它们参与本轮评估
+        self._reject_stale_candidates(cursor)
+
         # 按创建时间先后处理，避免同批候选间的顺序抖动
         candidates = cursor.execute(
-            "SELECT id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule"
+            "SELECT id, group_id, user_id, type, content, importance, confidence, evidence, status, "
+            "source_message_ids, usage_tags, visibility, behavior_rule, "
+            "occurrence_count, source_kinds, source_kind"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
 
@@ -172,13 +182,20 @@ class MemoryManager:
                 "usage_tags": row[10] or "[]",
                 "visibility": row[11] or "OPEN",
                 "behavior_rule": row[12] or "",
+                "occurrence_count": int(row[13] or 1),
+                "source_kinds": row[14] or '["PASSIVE"]',
+                "source_kind": row[15] or "PASSIVE",
             }
 
-            # OBSERVING 判定：双阈值都达不到时，暂不晋升，等更多证据
-            if candidate["confidence"] < MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE and candidate["importance"] < MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE:
+            # ── Gate 1 三档判定：置信度 + 证据充分度（来源等级 / 复现次数） ──
+            should_promote, reason = self._decide_promotion(candidate)
+            if not should_promote:
                 cursor.execute(
                     "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     ("OBSERVING", candidate["id"]),
+                )
+                logger.debug(
+                    f"👀 [MemoryManager] 候选转 OBSERVING {candidate['id']}：{reason}"
                 )
                 continue
 
@@ -191,6 +208,8 @@ class MemoryManager:
                 self._merge_into_memory(cursor, existing_id, candidate)
             else:
                 self._create_memory(cursor, candidate)
+
+            logger.info(f"⬆️ [MemoryManager] 候选晋升 {candidate['id']}：{reason}")
 
             cursor.execute(
                 "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -208,6 +227,86 @@ class MemoryManager:
                 get_compressor().maybe_compress(reason="candidate_processed")
             except Exception as e:
                 logger.warning(f"🧹 [MemoryManager] 触发轻量压缩失败: {e}")
+
+    @staticmethod
+    def _has_at_mention(source_kinds: str | None) -> bool:
+        """历次证据中是否包含 AT_MENTION（用户直接对 Bot 说过）。
+
+        看的是 source_kinds（历次来源集合）而非 source_kind（最近一次）：
+        一条事实先在群聊被动提到、后来用户又直接确认过，那次直接确认
+        不应因为后续又有被动观察而失效。
+        """
+        try:
+            kinds = json.loads(source_kinds or "[]")
+        except (ValueError, TypeError):
+            return False
+        return isinstance(kinds, list) and any(
+            str(k).strip().upper() == "AT_MENTION" for k in kinds
+        )
+
+    @staticmethod
+    def _decide_promotion(candidate: dict) -> tuple[bool, str]:
+        """Gate 1 三档判定：返回 (是否晋升, 原因说明)。
+
+        档位（依据 Memory Consolidation Spec 的 Gate 1）：
+          conf >= HIGH(0.85)  → 晋升。用户明确直接陈述，无需额外佐证。
+          conf >= LOW(0.6)    → 看证据充分度：
+                                  历次来源含 AT_MENTION 且开关开 → 晋升（高密度证据）
+                                  occurrence_count >= MIN_OCCURRENCE_PASSIVE → 晋升（交叉验证通过）
+                                  否则 → OBSERVING，等复现
+          conf <  LOW(0.6)    → OBSERVING。置信度不足，无论来源都要等更多证据。
+
+        另设 importance 下限：低于 MEMORY_PROMOTE_MIN_IMPORTANCE 的候选一律
+        不晋升（过于琐碎），但仍保留在 OBSERVING 中等待——它可能后续被证明重要。
+
+        与旧逻辑的区别：旧判定为 `conf < 0.5 AND imp < 0.5` 才观察，即
+        importance 单独达标就能晋升。importance 是 LLM 自评、最不可靠的一项，
+        不应单独构成晋升依据。
+        """
+        conf = candidate["confidence"]
+        imp = candidate["importance"]
+        occurrence = candidate["occurrence_count"]
+
+        if imp < MEMORY_PROMOTE_MIN_IMPORTANCE:
+            return False, f"重要度不足（imp={imp:.2f} < {MEMORY_PROMOTE_MIN_IMPORTANCE}）"
+
+        if conf >= MEMORY_CONFIRM_HIGH_CONFIDENCE:
+            return True, f"高置信直接晋升（conf={conf:.2f}）"
+
+        if conf >= MEMORY_OBSERVE_LOW_CONFIDENCE:
+            if MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT and MemoryManager._has_at_mention(
+                candidate["source_kinds"]
+            ):
+                return True, f"AT_MENTION 高密度证据单次晋升（conf={conf:.2f}）"
+            if occurrence >= MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE:
+                return True, f"交叉验证通过（conf={conf:.2f}，观察 {occurrence} 次）"
+            return False, (
+                f"置信度中等但证据不足（conf={conf:.2f}，观察 {occurrence} 次 < "
+                f"{MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE}，无 AT_MENTION）"
+            )
+
+        return False, f"置信度不足（conf={conf:.2f} < {MEMORY_OBSERVE_LOW_CONFIDENCE}）"
+
+    def _reject_stale_candidates(self, cursor: sqlite3.Cursor) -> int:
+        """把超期未获新证据的 OBSERVING 候选标记为 REJECTED（不删除，保留供审计）。
+
+        没有这一步，OBSERVING 会变成只进不出的死胡同：一条永远等不到复现的
+        候选会被无限次重新评估、反复失败，把候选表堆大并拖慢每轮晋升。
+        以 first_seen_at 为锚点（不是 updated_at，后者每次复现都会刷新）。
+        """
+        cursor.execute(
+            "UPDATE memory_candidates SET status = 'REJECTED', updated_at = CURRENT_TIMESTAMP "
+            "WHERE status = 'OBSERVING' AND first_seen_at IS NOT NULL "
+            "AND julianday('now') - julianday(first_seen_at) > ?",
+            (MEMORY_CANDIDATE_MAX_OBSERVING_DAYS,),
+        )
+        rejected = cursor.rowcount
+        if rejected > 0:
+            logger.info(
+                f"🗑️ [MemoryManager] {rejected} 条候选超过 "
+                f"{MEMORY_CANDIDATE_MAX_OBSERVING_DAYS} 天未获新证据，标记 REJECTED"
+            )
+        return rejected
 
     def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> str | None:
         """在同群、同用户、同类型的 active 记忆中查找与候选内容相似的记忆 id；找不到返回 None。
@@ -235,8 +334,8 @@ class MemoryManager:
             "INSERT OR IGNORE INTO memories ("
             "id, group_id, user_id, type, content, content_raw, importance, confidence, status, "
             "confirmation_count, last_confirmed_at, last_accessed_at, compressed_at, compression_version, is_atomized, "
-            "usage_tags, visibility, behavior_rule)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?)",
+            "usage_tags, visibility, behavior_rule, source_kind)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?, ?)",
             (
                 memory_id,
                 candidate["group_id"],
@@ -251,6 +350,7 @@ class MemoryManager:
                 candidate.get("usage_tags") or "[]",
                 candidate.get("visibility") or "OPEN",
                 candidate.get("behavior_rule") or "",
+                candidate.get("source_kind") or "PASSIVE",
             ),
         )
         _upsert_fts_record(
@@ -312,13 +412,12 @@ class MemoryManager:
     @staticmethod
     def _merge_usage_tags(old: str, new) -> str:
         """合并两批 usage_tags（JSON 数组），取并集、去重、保序。"""
-        import json as _json
 
         def _parse(value) -> list[str]:
             if isinstance(value, list):
                 return [str(x).strip().upper() for x in value if str(x).strip()]
             try:
-                parsed = _json.loads(value or "[]")
+                parsed = json.loads(value or "[]")
                 return [str(x).strip().upper() for x in parsed if str(x).strip()]
             except (ValueError, TypeError):
                 return []
@@ -327,7 +426,7 @@ class MemoryManager:
         for tag in _parse(old) + _parse(new):
             if tag not in merged:
                 merged.append(tag)
-        return _json.dumps(merged, ensure_ascii=False)
+        return json.dumps(merged, ensure_ascii=False)
 
     @staticmethod
     def _merge_visibility(old, new) -> str:

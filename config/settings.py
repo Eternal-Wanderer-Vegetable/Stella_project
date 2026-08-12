@@ -160,9 +160,11 @@ RAG_TOP_K = _env_int("RAG_TOP_K", 5)
 RAG_SQLITE_FTS_ENABLED = _env("RAG_SQLITE_FTS_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # ---------- 记忆候选处理策略 ----------
-# 记忆候选晋升为长期记忆的最小重要性
+# ⚠️ 废弃（DEPRECATED）：MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE / _MIN_IMPORTANCE
+# 已被 Gate 1 三档判定取代（见下：MEMORY_CONFIRM_HIGH_CONFIDENCE /
+# MEMORY_OBSERVE_LOW_CONFIDENCE / MEMORY_PROMOTE_*）。这两个键**保留定义仅供 .env
+# 兼容**——已有 .env 里配过它们的人不该静默失去配置项，但代码不再读取、不产生任何效果。
 MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
-# 记忆候选晋升为长期记忆的最小置信度
 MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
 
 # ---------- 候选强化（交叉验证） ----------
@@ -175,6 +177,17 @@ MEMORY_CANDIDATE_MAX_OBSERVING_DAYS = _env_int("MEMORY_CANDIDATE_MAX_OBSERVING_D
 # evidence 字段累积上限（字符）。多次复现会不断追加证据，需防止无界增长
 MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS = _env_int("MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS", 800)
 
+# ---------- 晋升门槛（Gate 1 三档分级） ----------
+# 晋升所需的最低独立观察次数（纯 PASSIVE 来源）。被动摄入的群聊信息密度低，
+# 单次陈述不足以构成长期记忆依据；复现才是证据。
+MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE = _env_int("MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE", 2)
+# AT_MENTION（用户直接对 Bot 说）是高密度、高意图证据，单次即可晋升。
+# 关闭后 AT_MENTION 与 PASSIVE 同等对待（仍需复现）。
+MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT = _env("MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT", "true").lower() in ("true", "1", "yes")
+# 晋升所需的最低重要度：importance 由 LLM 自评、可靠性最低，
+# 因此只作为「淘汰过于琐碎的信息」的下限，不单独构成晋升依据。
+MEMORY_PROMOTE_MIN_IMPORTANCE = _env_float("MEMORY_PROMOTE_MIN_IMPORTANCE", 0.3)
+
 # ---------- 记忆系统 v2（Memory Policy / Retrieval v2） ----------
 # 总开关：False 时回退旧系统（旧 Consolidator 输出、旧 Retriever、旧 Prompt Builder）
 MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -183,10 +196,10 @@ MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "
 # 模式从 CASUAL_REPLY 改判为其他模式。可调、可 benchmark（越高越保守）。
 MODE_DETECT_MIN_SCORE = _env_float("MODE_DETECT_MIN_SCORE", 0.5)
 
-# 候选审核门槛（Gate 1：Confidence）
-#   confidence >= MEMORY_CONFIRM_HIGH_CONFIDENCE   → 直接进入长期记忆
-#   MEMORY_OBSERVE_LOW_CONFIDENCE <= confidence    → 进入观察区（OBSERVING）
-#   confidence < MEMORY_OBSERVE_LOW_CONFIDENCE     → 丢弃
+# 候选审核门槛（Gate 1：Confidence 三档）—— 由 MemoryManager.process_new_candidates 使用
+# confidence >= MEMORY_CONFIRM_HIGH_CONFIDENCE → 直接晋升（用户明确直接陈述）
+# confidence >= MEMORY_OBSERVE_LOW_CONFIDENCE  → 看证据充分度（来源等级 / 复现次数）
+# confidence <  MEMORY_OBSERVE_LOW_CONFIDENCE  → OBSERVING，等待更多证据
 MEMORY_CONFIRM_HIGH_CONFIDENCE = _env_float("MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.85)
 MEMORY_OBSERVE_LOW_CONFIDENCE = _env_float("MEMORY_OBSERVE_LOW_CONFIDENCE", 0.6)
 

@@ -28,8 +28,7 @@ def test_conflict_marks_old_memory(tmp_path, monkeypatch):
     db_path = _create_temp_db(tmp_path)
     monkeypatch.setattr(memory_manager, "DB_PATH", db_path)
     monkeypatch.setattr(memory_manager, "get_compressor", lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})())
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
+    monkeypatch.setattr(memory_manager, "MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.5)
 
     manager = MemoryManager()
     # 先插入旧记忆
@@ -68,8 +67,7 @@ def test_candidate_meta_fields_persisted(tmp_path, monkeypatch):
     db_path = _create_temp_db(tmp_path)
     monkeypatch.setattr(memory_manager, "DB_PATH", db_path)
     monkeypatch.setattr(memory_manager, "get_compressor", lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})())
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
+    monkeypatch.setattr(memory_manager, "MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.5)
 
     manager = MemoryManager()
     conn = sqlite3.connect(db_path)

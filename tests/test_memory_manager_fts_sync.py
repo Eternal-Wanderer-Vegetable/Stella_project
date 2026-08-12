@@ -22,8 +22,7 @@ def _prepare_db(tmp_path: Path, monkeypatch, *, fts_enabled: bool = True) -> Pat
     # MemoryManager 侧配置
     monkeypatch.setattr(memory_manager, "DB_PATH", db)
     monkeypatch.setattr(memory_manager, "get_compressor", _dummy_compressor)
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
+    monkeypatch.setattr(memory_manager, "MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.5)
     # retriever 侧配置（_upsert_fts_record / _query_rag_results 读取的是 retriever 模块全局量）
     monkeypatch.setattr(retriever, "DB_PATH", db)
     monkeypatch.setattr(retriever, "RAG_ENABLED", True)

@@ -13,6 +13,7 @@ import sqlite3
 import pytest
 
 from memory.consolidator import MemoryConsolidator
+from memory.memory_manager import MemoryManager
 
 CANDIDATE = {
     "user_id": "1001",
@@ -134,3 +135,111 @@ def test_confidence_capped_at_one(db):
     rows = _rows(db)
     assert len(rows) == 1
     assert rows[0][3] <= 1.0
+
+
+def _cand(**kw):
+    base = {
+        "confidence": 0.5,
+        "importance": 0.5,
+        "occurrence_count": 1,
+        "source_kinds": '["PASSIVE"]',
+    }
+    base.update(kw)
+    return base
+
+
+def test_gate1_high_confidence_promotes_immediately():
+    ok, reason = MemoryManager._decide_promotion(_cand(confidence=0.9))
+    assert ok and "高置信" in reason
+
+
+def test_gate1_mid_confidence_passive_single_observation_waits():
+    """置信中等 + 纯被动 + 仅一次观察 → 等复现。"""
+    ok, reason = MemoryManager._decide_promotion(_cand(confidence=0.7))
+    assert not ok and "证据不足" in reason
+
+
+def test_gate1_mid_confidence_promotes_after_reoccurrence():
+    ok, reason = MemoryManager._decide_promotion(
+        _cand(confidence=0.7, occurrence_count=2)
+    )
+    assert ok and "交叉验证" in reason
+
+
+def test_gate1_at_mention_promotes_single_shot():
+    ok, reason = MemoryManager._decide_promotion(
+        _cand(confidence=0.7, source_kinds='["PASSIVE", "AT_MENTION"]')
+    )
+    assert ok and "AT_MENTION" in reason
+
+
+def test_gate1_low_confidence_never_promotes_even_with_at_mention():
+    """置信度不足时，来源等级也救不了——先要证据可信，再谈来源。"""
+    ok, _ = MemoryManager._decide_promotion(
+        _cand(confidence=0.4, occurrence_count=5, source_kinds='["AT_MENTION"]'),
+    )
+    assert not ok
+
+
+def test_gate1_importance_alone_does_not_promote():
+    """回归：旧逻辑下 imp=0.6/conf=0.3 会直接晋升，现在必须被拦住。"""
+    ok, reason = MemoryManager._decide_promotion(
+        _cand(confidence=0.3, importance=0.6)
+    )
+    assert not ok and "置信度不足" in reason
+
+
+def test_gate1_trivial_importance_blocked():
+    ok, reason = MemoryManager._decide_promotion(
+        _cand(confidence=0.95, importance=0.1)
+    )
+    assert not ok and "重要度不足" in reason
+
+
+def test_has_at_mention_tolerates_garbage():
+    assert not MemoryManager._has_at_mention("not json")
+    assert not MemoryManager._has_at_mention("")
+    assert not MemoryManager._has_at_mention(None)
+    assert MemoryManager._has_at_mention('["at_mention"]')  # 大小写不敏感
+
+
+def test_reoccurrence_eventually_promotes_end_to_end(db):
+    """端到端：conf 0.5 的候选写两次 → 加成后跨过 0.6 且 occurrence=2 → 晋升。"""
+    c = MemoryConsolidator()
+    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+
+    manager = MemoryManager()
+    manager.process_new_candidates()
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
+    assert conn.execute(
+        "SELECT status FROM memory_candidates"
+    ).fetchone()[0] == "OBSERVING"
+    conn.close()
+
+    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    manager.process_new_candidates()
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 1
+    assert conn.execute("SELECT status FROM memory_candidates").fetchone()[0] == "CONFIRMED"
+    conn.close()
+
+
+def test_stale_observing_candidate_rejected(db):
+    """超期未获新证据的 OBSERVING 候选被标记 REJECTED。"""
+    c = MemoryConsolidator()
+    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "UPDATE memory_candidates SET status = 'OBSERVING', first_seen_at = '2020-01-01 00:00:00'"
+    )
+    conn.commit()
+    conn.close()
+
+    MemoryManager().process_new_candidates()
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT status FROM memory_candidates").fetchone()[0] == "REJECTED"
+    conn.close()

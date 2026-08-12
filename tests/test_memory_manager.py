@@ -29,8 +29,7 @@ def test_low_value_candidate_goes_to_observing(tmp_path, monkeypatch):
     db_path = _create_temp_db(tmp_path)
     monkeypatch.setattr(memory_manager, "DB_PATH", db_path)
     monkeypatch.setattr(memory_manager, "get_compressor", lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})())
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.7)
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.7)
+    monkeypatch.setattr(memory_manager, "MEMORY_OBSERVE_LOW_CONFIDENCE", 0.7)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -77,8 +76,7 @@ def test_high_value_candidate_becomes_confirmed_memory(tmp_path, monkeypatch):
     db_path = _create_temp_db(tmp_path)
     monkeypatch.setattr(memory_manager, "DB_PATH", db_path)
     monkeypatch.setattr(memory_manager, "get_compressor", lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})())
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
-    monkeypatch.setattr(memory_manager, "MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
+    monkeypatch.setattr(memory_manager, "MEMORY_CONFIRM_HIGH_CONFIDENCE", 0.5)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
