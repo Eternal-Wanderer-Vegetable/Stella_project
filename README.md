@@ -18,11 +18,16 @@ Stella 是一个面向私有部署、以 QQ 群聊为场景的记忆型聊天机
 - 本地 LM Studio 模型作为主聊天后端
 - 本地小模型参与短期记忆总结、记忆候选生成与记忆压缩
 - 记忆整合统一走本地 LM Studio（在线整合已废弃，归档于 `_deprecated/`）
+- 两层记忆过滤：捕获层宽（允许不确定信息进入候选，如实标注置信度）、晋升层严（Gate 1 三档 + 交叉验证 + 每用户配额）
+- 候选强化：同一事实反复被观察时累积证据（`occurrence_count` / 置信度增益 / 来源集合），而非重复插入；超期未获新证据的候选自动淘汰
+- 消息来源分级：`AT_MENTION`（用户直接对 Bot 说）视为高密度证据，单次即可晋升；`PASSIVE`（被动摄入群聊）需要复现才能晋升
+- 每用户记忆配额：单用户 active 记忆封顶，超额时竞争性淘汰最弱记忆（默认关闭，先观察）
 - 基于群聊活跃度的主动发言
 - 支持 Pipeline 前后置 Hook 扩展
 - SQLite 持久化、思考日志与记忆压缩日志
 - SQLite FTS5 记忆全文索引 + 关键词/权重综合排序的 RAG 检索（可开关）
-- pytest 自动化测试覆盖记忆晋升、FTS 索引同步与 RAG 开关行为
+- 可选的 embedding 语义检索（本地 `/v1/embeddings`，失败自动回退规则版）
+- pytest 自动化测试覆盖记忆晋升、跨用户隔离、候选强化、FTS 索引同步与 RAG 开关行为
 
 ## 项目结构
 
@@ -42,11 +47,19 @@ stella_project/
 │   └── __init__.py                # 扩展自动加载入口（扫描 setup(pipeline)）
 ├── memory/
 │   ├── SYSTEM.md                  # 机器人系统提示词
-│   ├── consolidator.py            # 记忆整合与候选记忆写入（含 checkpoint）
-│   ├── memory_manager.py          # 记忆候选处理：晋升、合并、去重（同步 FTS 索引）
+│   ├── schema.py                  # Schema 迁移（Additive，当前 v4）
+│   ├── text_similarity.py         # 内容相似度与合并（单一真相源，三处共用）
+│   ├── consolidator.py            # 记忆整合与候选写入（含 checkpoint、候选强化）
+│   ├── memory_manager.py          # 候选晋升：Gate 1 三档、配额淘汰、FTS 同步
+│   ├── policy.py                  # Memory Policy：Mode 检测、三层过滤、排序、Gate 3 校验
+│   ├── retrieval_v2.py            # v2 检索（Context-aware Memory Activation）
+│   ├── retriever.py               # 旧检索：RAG(FTS5) + 加权回退排序
+│   ├── embeddings.py              # 本地 embedding 服务客户端（可选语义分）
 │   ├── compressor.py              # 记忆压缩与轻量/周度压缩调度
-│   ├── retriever.py               # 检索：RAG(FTS5) + 加权回退排序
-│   ├── pre_processors.py          # 记录消息、构造短期上下文与用户上下文
+│   ├── benchmark.py               # Memory Benchmark 运行器（Evaluation & Debug）
+│   ├── benchmark/                 # 检索层用例 + _fixtures（含整合正例回归基准）
+│   ├── trace.py                   # 记忆决策追踪
+│   ├── pre_processors.py          # 记录消息（含来源标记）、构造短期/用户上下文
 │   ├── post_processors.py         # 解析回复、过滤破防语句、分行输出与日志
 │   ├── proactive.py               # 主动发言概率与冷却控制
 │   ├── prompt_builder.py          # 把记忆与上下文拼成自然语言 Prompt
@@ -57,6 +70,11 @@ stella_project/
 │   ├── ai_gateway.py              # QQ 事件监听、Pipeline 接入、主动发言与调度
 │   ├── watchdog.py                # NapCat 看门狗（消息流中断自动重启）
 │   └── config.py                  # 插件配置（pydantic）
+├── scripts/
+│   ├── probe_consolidation.py     # 整合探针：跑生产链路观察 LLM 行为 / 正例回归基准
+│   ├── sample_windows.py          # 从真实库采样消息窗口
+│   ├── probe_embedding.py         # embedding 服务探针
+│   └── build_embedding_fixture.py # 构建 benchmark 用向量 fixture
 ├── tests/                         # pytest 测试（记忆晋升、FTS 同步、RAG 开关、全流程端到端）
 └── _deprecated/                   # 废弃/历史代码与旧数据库归档（gitignore）
 ```
@@ -97,11 +115,29 @@ stella_project/
 - 同一进程内使用异步锁保证不会同时打爆本地模型
 - 回复结果由 `memory/post_processors.py` 进行解析与清洗
 
-记忆整合统一使用本地 LM Studio 的小模型进行小批量处理，与主聊天模型分离，避免显存/推理竞争。
+记忆整合统一使用本地 LM Studio 的小模型进行小批量处理，与主聊天模型分离，且使用全CPU推理，避免显存/推理竞争。
 
-### 5. 记忆写入与处理
+### 5. 记忆写入与晋升（两层过滤）
 
-记忆整合阶段会产出短期上下文摘要、用户画像与记忆候选，写入 SQLite；随后 `memory/memory_manager.py` 判断是否合并、更新或归档，并在写入 / 合并时同步维护 FTS5 索引，保证 `memories_fts` 与 `memories` 完全一致。
+- -捕获层（宽）-：整合阶段产出短期摘要、用户画像与记忆候选。这一层不做置信度。不确定的信息也允许进入候选，但必须如实标注 `confidence`，且严禁编造；候选必须有出处、归属必须是消息的实际发送者（代码层还有发送者白名单兜底）。
+
+> 理由：在 prompt 里过滤不可审计、不留数据、无法改进。把判断推迟到有数据的一层。
+
+- -候选强化（交叉验证）-：`memory/consolidator.py` 写入候选时，同群同用户同类型且内容相似的待处理候选不重复插入，而是累积证据——`occurrence_count` +1、置信度加`MEMORY_CANDIDATE_REOCCURRENCE_BONUS`、`source_kinds` 取并集、状态回到 `NEW`，重新参与评估。超过 `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` 仍未获新证据的候选标记`REJECTED`（不删除，保留供审计）。
+
+- -晋升层（严）-：`memory/memory_manager.py` 的 Gate 1 三档：
+
+| 置信度 | 判定 |
+|---|---|
+| ≥ `MEMORY_CONFIRM_HIGH_CONFIDENCE`(0.85) | 直接晋升 |
+| ≥ `MEMORY_OBSERVE_LOW_CONFIDENCE`(0.6) | 看证据充分度：历次来源含 `AT_MENTION` → 晋升；`occurrence_count` 达标 → 晋升；否则 `OBSERVING` |
+| < 0.6 | `OBSERVING`，等更多证据 |
+
+另设 `importance` 下限（`MEMORY_PROMOTE_MIN_IMPORTANCE`）淘汰过于琐碎的信息。`importance` 由 LLM 自评、可靠性最低，因此不单独构成晋升依据。
+
+晋升时与同群同用户同类型的相似记忆合并（跨用户合并会造成不可恢复的归属污染，`memory_manager` / `compressor` / `retrieval_v2` 三处合并路径都必须按归属过滤），并同步维护 FTS5 索引。
+
+- -配额（呈现层封顶）-：新建记忆后检查该群该用户的 active 记忆是否超过`MEMORY_USER_QUOTA`，超额时按「重要度 × 确认次数 × 近期访问」竞争性淘汰最弱者（置 `archived`，不删除）。`MEMORY_QUOTA_ENFORCE` 默认关闭，先以 dry-run 观察它想淘汰什么。
 
 ### 6. 记忆压缩
 
@@ -133,6 +169,19 @@ python -m pytest tests --cov=core --cov=memory --cov-report=term -q
 - 决策追踪、内存评估基准、整合日志（`tests/test_trace.py`、`tests/test_benchmark_and_log.py`）
 - 记忆整合私有流程与越权候选隔离（`tests/test_consolidator_core.py`）
 - 压缩器（OpenAI / Ollama / Gemini）、DB 清理、LM Studio 客户端（`tests/test_compressor.py`、`tests/test_db_cleaner.py`、`tests/test_lm_studio.py`）
+- 跨用户记忆隔离：候选晋升 / 周度压缩 / v2 检索三条合并路径都不得跨用户（`tests/test_cross_user_isolation.py`）
+- 候选强化与 Gate 1 三档：累积证据、来源分级、超期淘汰、配额竞争（`tests/test_candidate_reinforcement.py`）
+- 整合 prompt 的防编造条款护栏（`tests/test_consolidation_prompt.py`）
+- 内容相似度与合并的行为基线（`tests/test_text_similarity.py`）
+
+整合链路的模型侧验证不走 pytest（需要真实本地模型），用探针脚本：
+
+```shell
+# 正例回归基准：验证「该记的时候记得住」，改动 consolidation_prompt.py 后必须仍全绿
+python scripts/probe_consolidation.py --positive --repeat 3
+# 真实窗口观察：看编造率（目标 ≈ 0）与解析成功率
+python scripts/probe_consolidation.py --limit 20
+```
 
 CI 采用最小化配置（`.github/workflows/ci.yml`）：Ubuntu 上按 `requirements.txt` 安装全部运行依赖（nonebot2 / onebot 适配器 / apscheduler 插件 / httpx / dotenv / pydantic）+ pytest，然后 `pytest tests -q`；所有测试均使用临时 DB 与伪 LLM 后端，不依赖真实机器人、网络或 LM Studio 服务。
 
@@ -157,12 +206,16 @@ python bot.py
 
 ### 旧数据库迁移说明
 
-为避免新旧表结构冲突，历史运行时数据库已从 `memory/` 迁移到 `_deprecated/` 归档：
+```markdown
+为避免新旧表结构冲突与历史脏数据干扰观察，每次大重构后运行时数据库都会归档：
 
-- `_deprecated/legacy_agent_memory.db`：早期版运行库；
-- `_deprecated/legacy_agent_memory_2026.db`：当前 schema 升级前的运行库。
+- `_deprecated/legacy_agent_memory.db`：早期版运行库
+- `_deprecated/legacy_agent_memory_2026.db`：v2 schema 升级前的运行库
+- `_deprecated/legacy_agent_memory_pre_v4.db`：两层过滤重构（Gate 1 三档 / 候选强化 /
+  配额）之前的运行库
 
-启动时会按当前 schema 在 `memory/` 下自动重建新库。
+启动时会按当前 schema（v4）在 `memory/` 下自动重建新库。
+```
 
 ## 配置说明
 
@@ -174,6 +227,18 @@ python bot.py
 - `RAG_ENABLED` / `RAG_TOP_K` / `RAG_SQLITE_FTS_ENABLED`：RAG 检索开关与参数
 - `MEMORY_COMPRESS_LIGHT_THRESHOLD`：轻量压缩触发阈值
 - `MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS`：轻量压缩冷却时间
+
+两层过滤相关：
+
+- `MEMORY_SOURCE_KIND_ENABLED`：是否启用消息来源分级（`AT_MENTION` / `PASSIVE`）
+- `MEMORY_CANDIDATE_REOCCURRENCE_BONUS`：同一事实复现时的置信度增益
+- `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS`：候选在观察区停留的最长天数
+- `MEMORY_CONFIRM_HIGH_CONFIDENCE` / `MEMORY_OBSERVE_LOW_CONFIDENCE`：Gate 1 三档阈值
+- `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`：被动来源晋升所需的最低观察次数
+- `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT`：`AT_MENTION` 来源是否单次即可晋升
+- `MEMORY_PROMOTE_MIN_IMPORTANCE`：晋升所需的最低重要度
+- `MEMORY_USER_QUOTA` / `MEMORY_QUOTA_ENFORCE`：每用户记忆配额与是否真正执行淘汰
+- `MEMORY_EMBEDDING_ENABLED`：是否启用向量语义检索（失败自动回退规则版）
 
 ## 项目开发中使用到的本地部署模型
 
