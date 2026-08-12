@@ -293,8 +293,8 @@ def stability_of(repeats: list[dict]) -> dict:
     同时给出「主题身份」（归属+类型）与「逐字内容」两个层面的比值：
     主题稳定但措辞漂移 → 主题比高、逐字比低，是同一主题的复述而非不稳定。
     返回 (主题交集, 主题并集, 主题比, 逐字比, 各次条数, 《出现于哪几次》逐条明细)。"""
-    per_run = [set(candidate_key(c) for c in r["candidates"]) for r in repeats]
-    per_theme = [set(theme_key(c) for c in r["candidates"]) for r in repeats]
+    per_run = [{candidate_key(c) for c in r["candidates"]} for r in repeats]
+    per_theme = [{theme_key(c) for c in r["candidates"]} for r in repeats]
     counts: Counter = Counter()
     for s in per_run:
         counts.update(s)
@@ -345,7 +345,11 @@ def render_window_text(window: list[dict]) -> str:
     if len(window) <= 10:
         rows = window
     else:
-        rows = window[:5] + [{"user": "…", "content": f"（中间省略 {len(window) - 10} 条）", "ts": ""}] + window[-5:]
+        rows = [
+            *window[:5],
+            {"user": "…", "content": f"（中间省略 {len(window) - 10} 条）", "ts": ""},
+            *window[-5:],
+        ]
     return "\n".join(f"用户({m.get('user')}) {m.get('ts', '')}: {m.get('content')}" for m in rows)
 
 
@@ -371,7 +375,7 @@ def render_markdown(windows: list[list[dict]], results: list[dict], repeat: int)
         "# Consolidation Probe（真实数据，禁止入库）",
         "",
         f"- 窗口数：{len(windows)}，重复次数：{repeat}",
-        f"- 路径：`scripts/probe_consolidation.py`（生产链路：同一 prompt 模板 / 同一解析 / 同 validate_candidate）",
+        "- 路径：`scripts/probe_consolidation.py`（生产链路：同一 prompt 模板 / 同一解析 / 同 validate_candidate）",
         "- ⚠️ 本文件含真实群聊内容，仅供本地人工检查，禁止提交。",
         "",
     ]
@@ -470,7 +474,7 @@ async def _amain() -> None:
         else:
             results.append(await run_window(consolidator, backend, w))
 
-    sorted_pairs = sorted(zip(indices, results), key=lambda p: p[0])
+    sorted_pairs = sorted(zip(indices, results, strict=True), key=lambda p: p[0])
     md = render_markdown(windows, [r for _, r in sorted_pairs], a.repeat)
     print_summary([r for _, r in sorted_pairs], a.repeat)
     OUT_MD.write_text(md, encoding="utf-8")
