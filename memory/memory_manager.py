@@ -31,6 +31,12 @@ from config import (
     MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT,
     MEMORY_PROMOTE_MIN_IMPORTANCE,
     MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE,
+    MEMORY_QUOTA_CONFIRMATION_CAP,
+    MEMORY_QUOTA_ENFORCE,
+    MEMORY_QUOTA_W_CONFIRMATION,
+    MEMORY_QUOTA_W_IMPORTANCE,
+    MEMORY_QUOTA_W_RECENCY,
+    MEMORY_USER_QUOTA,
 )
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
@@ -46,6 +52,7 @@ class MemoryManager:
     - 依据 Gate 1 三档（置信度 × 证据充分度）决定候选取向（观察 / 晋升 / 超期淘汰）；
     - 晋升时与已有相似记忆合并，避免重复记忆堆积；
     - 维护 memories 表与 FTS 全文索引的同步（_upsert_fts_record）。
+    - 维护每用户记忆配额（MEMORY_USER_QUOTA）：超额时竞争性淘汰最弱记忆。
     """
 
     def __init__(self):
@@ -208,6 +215,10 @@ class MemoryManager:
                 self._merge_into_memory(cursor, existing_id, candidate)
             else:
                 self._create_memory(cursor, candidate)
+                # 新建才可能突破配额；合并不增加条数
+                self._enforce_user_quota(
+                    cursor, candidate["group_id"], candidate["user_id"]
+                )
 
             logger.info(f"⬆️ [MemoryManager] 候选晋升 {candidate['id']}：{reason}")
 
@@ -361,6 +372,101 @@ class MemoryManager:
             candidate["content"],
         )
         logger.info(f"🧠 [MemoryManager] 新增长期记忆 {memory_id} ({candidate['type']})")
+
+    @staticmethod
+    def _quota_score(importance, confirmation_count, last_accessed_at) -> float:
+        """配额竞争分：越低越先被淘汰。
+
+        三维加权：importance（信息本身的重要度）、confirmation_count（被独立确认
+        的次数，最硬的证据，按 MEMORY_QUOTA_CONFIRMATION_CAP 归一化）、
+        recency（最近是否仍被触达，指数衰减 τ=30 天，与 policy._recency_factor 一致）。
+
+        用 last_accessed_at 而非 created_at：一条老但仍被频繁调用的记忆比一条新
+        却从未被用过的更有价值。
+        """
+        import math
+        import time
+        from datetime import datetime
+
+        imp = 0.0
+        try:
+            imp = max(0.0, min(1.0, float(importance or 0.0)))
+        except (TypeError, ValueError):
+            imp = 0.0
+
+        conf_count = 0
+        try:
+            conf_count = int(confirmation_count or 0)
+        except (TypeError, ValueError):
+            conf_count = 0
+        confirmation = min(1.0, conf_count / max(1, MEMORY_QUOTA_CONFIRMATION_CAP))
+
+        # recency：解析失败或从未访问按「最旧」处理（recency=0），优先淘汰
+        recency = 0.0
+        if last_accessed_at:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    epoch = datetime.strptime(str(last_accessed_at).strip(), fmt).timestamp()
+                    age_days = max(0.0, (time.time() - epoch) / 86400.0)
+                    recency = math.exp(-age_days / 30.0)
+                    break
+                except (ValueError, TypeError):
+                    continue
+
+        return (
+            MEMORY_QUOTA_W_IMPORTANCE * imp
+            + MEMORY_QUOTA_W_CONFIRMATION * confirmation
+            + MEMORY_QUOTA_W_RECENCY * recency
+        )
+
+    def _enforce_user_quota(self, cursor: sqlite3.Cursor, group_id, user_id) -> int:
+        """把该群该用户的 active 记忆压回 MEMORY_USER_QUOTA 条以内（竞争性淘汰）。
+
+        超额时按 _quota_score 升序把最弱的若干条置 archived（不删除，仅退出
+        active 检索，可人工恢复）。返回被淘汰的条数。
+
+        MEMORY_QUOTA_ENFORCE=False 时只记录「本来会淘汰谁」的日志、不实际执行，
+        用于上线前观察配额在真实库上的行为——25 条这个数在具体库上会淘汰什么，
+        必须先看过再打开。
+
+        注意：只统计 status='active'。archived / conflict 不占配额。
+        """
+        rows = cursor.execute(
+            "SELECT id, content, importance, confirmation_count, last_accessed_at "
+            "FROM memories WHERE status = 'active' AND group_id = ? AND user_id = ?",
+            (str(group_id), str(user_id)),
+        ).fetchall()
+        if len(rows) <= MEMORY_USER_QUOTA:
+            return 0
+
+        scored = sorted(
+            (
+                (self._quota_score(r[2], r[3], r[4]), r[0], r[1] or "")
+                for r in rows
+            ),
+            key=lambda item: item[0],
+        )
+        overflow = len(rows) - MEMORY_USER_QUOTA
+        victims = scored[:overflow]
+
+        if not MEMORY_QUOTA_ENFORCE:
+            for score, mem_id, content in victims:
+                logger.info(
+                    f"📊 [Quota dry-run] 用户 {user_id} 超额（{len(rows)}/{MEMORY_USER_QUOTA}），"
+                    f"本来会淘汰 {mem_id}（分 {score:.3f}）「{content[:40]}」"
+                )
+            return 0
+
+        for score, mem_id, content in victims:
+            cursor.execute(
+                "UPDATE memories SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (mem_id,),
+            )
+            logger.info(
+                f"📦 [Quota] 用户 {user_id} 超额（{len(rows)}/{MEMORY_USER_QUOTA}），"
+                f"归档最弱记忆 {mem_id}（分 {score:.3f}）「{content[:40]}」"
+            )
+        return len(victims)
 
     def _merge_into_memory(self, cursor: sqlite3.Cursor, memory_id: str, candidate: dict) -> None:
         """把候选合并进已有记忆：合并内容块、重要度/置信度取最大值、累计确认次数，并同步 FTS。

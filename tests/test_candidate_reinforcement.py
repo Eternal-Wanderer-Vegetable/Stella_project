@@ -243,3 +243,102 @@ def test_stale_observing_candidate_rejected(db):
     conn = sqlite3.connect(db)
     assert conn.execute("SELECT status FROM memory_candidates").fetchone()[0] == "REJECTED"
     conn.close()
+
+
+def test_quota_score_prefers_confirmed_and_recent():
+    """配额分：被反复确认 + 近期访问 > 高重要度但从未确认/久未访问。"""
+    strong = MemoryManager._quota_score(0.5, 3, "2026-08-12 10:00:00")
+    weak = MemoryManager._quota_score(0.9, 0, "2020-01-01 00:00:00")
+    assert strong > weak
+
+
+def test_quota_score_handles_garbage():
+    """脏数据不得抛异常，且按最弱处理（优先淘汰）。"""
+    assert MemoryManager._quota_score(None, None, None) == 0.0
+    assert MemoryManager._quota_score("bad", "bad", "not-a-date") == 0.0
+
+
+def test_quota_dry_run_does_not_archive(db, monkeypatch):
+    """MEMORY_QUOTA_ENFORCE=False 时只记日志、不改数据。"""
+    monkeypatch.setattr("memory.memory_manager.MEMORY_QUOTA_ENFORCE", False)
+    monkeypatch.setattr("memory.memory_manager.MEMORY_USER_QUOTA", 3)
+
+    manager = MemoryManager()
+    conn = sqlite3.connect(db)
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO memories (id, group_id, user_id, type, content, importance, "
+            "confidence, status, confirmation_count, last_accessed_at) "
+            "VALUES (?, '1', '1001', 'FACT', ?, 0.5, 0.8, 'active', 1, '2026-08-12 10:00:00')",
+            (f"m{i}", f"事实{i}"),
+        )
+    conn.commit()
+    cursor = conn.cursor()
+
+    assert manager._enforce_user_quota(cursor, "1", "1001") == 0
+    conn.commit()
+    assert conn.execute(
+        "SELECT COUNT(*) FROM memories WHERE status = 'active'"
+    ).fetchone()[0] == 5
+    conn.close()
+
+
+def test_quota_enforce_archives_weakest(db, monkeypatch):
+    """开启后淘汰最弱的那条，总数回到配额上限。"""
+    monkeypatch.setattr("memory.memory_manager.MEMORY_QUOTA_ENFORCE", True)
+    monkeypatch.setattr("memory.memory_manager.MEMORY_USER_QUOTA", 2)
+
+    manager = MemoryManager()
+    conn = sqlite3.connect(db)
+    # m-weak：从未确认、久未访问 → 应被淘汰
+    conn.execute(
+        "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+        "status, confirmation_count, last_accessed_at) VALUES "
+        "('m-weak', '1', '1001', 'FACT', '弱记忆', 0.3, 0, 'active', 0, '2020-01-01 00:00:00')"
+    )
+    for i in range(2):
+        conn.execute(
+            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "status, confirmation_count, last_accessed_at) VALUES "
+            f"('m-strong{i}', '1', '1001', 'FACT', '强记忆{i}', 0.8, 0.9, 'active', 3, '2026-08-12 10:00:00')"
+        )
+    conn.commit()
+    cursor = conn.cursor()
+
+    assert manager._enforce_user_quota(cursor, "1", "1001") == 1
+    conn.commit()
+
+    statuses = dict(conn.execute("SELECT id, status FROM memories").fetchall())
+    assert statuses["m-weak"] == "archived"
+    assert statuses["m-strong0"] == "active"
+    assert statuses["m-strong1"] == "active"
+    conn.close()
+
+
+def test_quota_is_per_user_and_per_group(db, monkeypatch):
+    """配额按 (群, 用户) 独立计算，不能因为别人记忆多就淘汰自己的。"""
+    monkeypatch.setattr("memory.memory_manager.MEMORY_QUOTA_ENFORCE", True)
+    monkeypatch.setattr("memory.memory_manager.MEMORY_USER_QUOTA", 2)
+
+    manager = MemoryManager()
+    conn = sqlite3.connect(db)
+    for i in range(3):
+        conn.execute(
+            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "status, confirmation_count, last_accessed_at) VALUES "
+            f"('other{i}', '1', '1002', 'FACT', '别人的{i}', 0.5, 0.8, 'active', 1, '2026-08-12 10:00:00')"
+        )
+    conn.execute(
+        "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+        "status, confirmation_count, last_accessed_at) VALUES "
+        "('mine', '1', '1001', 'FACT', '我的', 0.5, 0.8, 'active', 1, '2026-08-12 10:00:00')"
+    )
+    conn.commit()
+    cursor = conn.cursor()
+
+    assert manager._enforce_user_quota(cursor, "1", "1001") == 0
+    conn.commit()
+    assert conn.execute(
+        "SELECT status FROM memories WHERE id = 'mine'"
+    ).fetchone()[0] == "active"
+    conn.close()

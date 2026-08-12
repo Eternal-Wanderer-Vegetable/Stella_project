@@ -188,6 +188,23 @@ MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT = _env("MEMORY_PROMOTE_AT_MENTION_SINGLE_S
 # 因此只作为「淘汰过于琐碎的信息」的下限，不单独构成晋升依据。
 MEMORY_PROMOTE_MIN_IMPORTANCE = _env_float("MEMORY_PROMOTE_MIN_IMPORTANCE", 0.3)
 
+# ---------- 每用户记忆配额（宁缺毋滥的硬约束） ----------
+# 是否真正执行淘汰。**默认关闭**：先以 dry-run 观察它想淘汰什么，
+# 确认合理后再打开。打开后会把超额记忆置 archived（不删除，但退出检索）。
+MEMORY_QUOTA_ENFORCE = _env("MEMORY_QUOTA_ENFORCE", "false").lower() in ("true", "1", "yes")
+# 单用户在单群的 active 记忆上限。到顶后新记忆必须挤掉现存最弱的一条。
+# 依据：一个用户真正有价值的稳定事实数量有限；上限封顶使呈现层总量可控，
+# 天然对抗捕获层放宽带来的膨胀。
+MEMORY_USER_QUOTA = _env_int("MEMORY_USER_QUOTA", 25)
+# 配额淘汰的排序权重（得分最低者先被挤掉）。三项含义：
+# importance=这条信息本身多重要；confirmation=被反复确认过几次（最硬的证据）；
+# recency=最近是否还被用到（久未触达的记忆价值衰减）。
+MEMORY_QUOTA_W_IMPORTANCE = _env_float("MEMORY_QUOTA_W_IMPORTANCE", 0.4)
+MEMORY_QUOTA_W_CONFIRMATION = _env_float("MEMORY_QUOTA_W_CONFIRMATION", 0.3)
+MEMORY_QUOTA_W_RECENCY = _env_float("MEMORY_QUOTA_W_RECENCY", 0.3)
+# confirmation_count 的归一化上限：达到该次数即视为「充分确认」（满分）
+MEMORY_QUOTA_CONFIRMATION_CAP = _env_int("MEMORY_QUOTA_CONFIRMATION_CAP", 3)
+
 # ---------- 记忆系统 v2（Memory Policy / Retrieval v2） ----------
 # 总开关：False 时回退旧系统（旧 Consolidator 输出、旧 Retriever、旧 Prompt Builder）
 MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "yes")
