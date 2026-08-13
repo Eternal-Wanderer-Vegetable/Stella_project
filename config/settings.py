@@ -352,18 +352,60 @@ PROACTIVE_COOLDOWN = _env_int("PROACTIVE_COOLDOWN", 120)
 PROACTIVE_CHECK_INTERVAL = _env_int("PROACTIVE_CHECK_INTERVAL", 30)
 # 消息频率估算窗口（取最近 N 条消息计算平均间隔）
 PROACTIVE_FREQ_WINDOW = _env_int("PROACTIVE_FREQ_WINDOW", 10)
-# 平均消息间隔 <= 此值（秒）视为高频（活跃群），主动发言概率低
+# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
 PROACTIVE_HIGH_FREQ_INTERVAL = _env_float("PROACTIVE_HIGH_FREQ_INTERVAL", 20.0)
-# 平均消息间隔 >= 此值（秒）视为消息频率过低（冷清群）→ 完全不再主动发言，
-# 只有频率高于它（平均间隔更小）时才按概率插话
+# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
 PROACTIVE_LOW_FREQ_INTERVAL = _env_float("PROACTIVE_LOW_FREQ_INTERVAL", 180.0)
-# 主动发言的最大概率（0~1，高频区间的最小概率不可为 0）
+# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
 PROACTIVE_MAX_PROB = _env_float("PROACTIVE_MAX_PROB", 0.5)
+# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
 PROACTIVE_MIN_PROB = _env_float("PROACTIVE_MIN_PROB", 0.05)
 # 主动发言时每次最多发出的行数（主动插话宜简短，避免刷屏）
 PROACTIVE_MAX_LINES = _env_int("PROACTIVE_MAX_LINES", 1)
 # 主动发言前若累计新消息达到该数量，则触发一次短期记忆总结
 CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGES", 10)
+
+# ---------- 主动发言 v2：话题参与概率曲线（双锚点插值） ----------
+# 同一条曲线通过参数即可表达两种意图，无需模式开关：
+#   「热闹时插话」（新默认）：PROB_AT_FAST=0.35, PROB_AT_SLOW=0.0
+#   「热闹时闭嘴」（旧行为）：PROB_AT_FAST=0.05, PROB_AT_SLOW=0.5
+#   完全关闭：两个锚点都设 0
+# 群性质差异大（闲聊群 vs 技术群），因此这条曲线必须现场可调。
+PROACTIVE_INTERVAL_FAST = _env_float("PROACTIVE_INTERVAL_FAST", 20.0)
+PROACTIVE_INTERVAL_SLOW = _env_float("PROACTIVE_INTERVAL_SLOW", 180.0)
+PROACTIVE_PROB_AT_FAST = _env_float("PROACTIVE_PROB_AT_FAST", 0.35)
+PROACTIVE_PROB_AT_SLOW = _env_float("PROACTIVE_PROB_AT_SLOW", 0.0)
+# 曲线整形指数：1.0 线性；>1 把高概率压缩到最活跃一端（更保守）；<1 更平坦
+PROACTIVE_PROB_GAMMA = _env_float("PROACTIVE_PROB_GAMMA", 1.0)
+# 话题预热：话题刚开始时模型总结不出主题，贸然插话会答非所问
+PROACTIVE_TOPIC_WARMUP_SECONDS = _env_float("PROACTIVE_TOPIC_WARMUP_SECONDS", 45.0)
+
+# ---------- 主动发言 v2：每用户 @ 配额 ----------
+# 主动 @ 是侵入性最强的行为，必须有硬上限。基础 2 次/天，高频发言者小幅上浮：
+# 依据是双向的——高频用户信息产出多、值得多问，且对群内消息容忍度更高。
+# 但奖励幅度必须小，上限封顶在 BASE + BONUS_MAX，杜绝「越活跃越被骚扰」。
+PROACTIVE_AT_ENABLED = _env("PROACTIVE_AT_ENABLED", "true").lower() in ("true", "1", "yes")
+PROACTIVE_AT_QUOTA_BASE = _env_int("PROACTIVE_AT_QUOTA_BASE", 2)
+PROACTIVE_AT_QUOTA_BONUS_MAX = _env_int("PROACTIVE_AT_QUOTA_BONUS_MAX", 2)
+PROACTIVE_AT_BONUS_MSGS_LOW = _env_int("PROACTIVE_AT_BONUS_MSGS_LOW", 20)
+PROACTIVE_AT_BONUS_MSGS_HIGH = _env_int("PROACTIVE_AT_BONUS_MSGS_HIGH", 100)
+# 同一用户两次主动 @ 的最小间隔（秒），默认 2 小时
+PROACTIVE_AT_USER_COOLDOWN = _env_float("PROACTIVE_AT_USER_COOLDOWN", 7200.0)
+# 判定「正在活跃」的时间窗（秒）：只对刚说过话的人主动搭话
+PROACTIVE_AT_ACTIVE_WITHIN = _env_float("PROACTIVE_AT_ACTIVE_WITHIN", 300.0)
+# 连续无回应上限：超过则暂停对该用户的主动 @（自动退避，避免对不想聊的人反复搭话）
+PROACTIVE_MAX_NO_REPLY = _env_int("PROACTIVE_MAX_NO_REPLY", 2)
+# 回应检测窗口（秒）：发出提问后该用户在此窗口内有任何发言即视为有回应
+PROACTIVE_REPLY_WINDOW_SECONDS = _env_float("PROACTIVE_REPLY_WINDOW_SECONDS", 300.0)
+# 冷启动话题清单（无候选可验证时用，逗号分隔）
+PROACTIVE_COLDSTART_TOPICS = [
+    t.strip()
+    for t in _env(
+        "PROACTIVE_COLDSTART_TOPICS",
+        "最近在玩什么游戏,平时喜欢吃什么,今天天气怎么样,最近在忙什么,平时用什么设备",
+    ).split(",")
+    if t.strip()
+]
 
 # ---------- 数据库清理（测试期用） ----------
 # 程序启动时自动清理混乱的记忆数据（测试阶段频繁重启注入的脏数据）

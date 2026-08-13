@@ -3,11 +3,11 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """主动发言调度：只在群聊有一定活跃度时，低调地插一句话。
 
-主动发言强度由“群消息频率（平均间隔）”决定：
-- 消息频率过低（平均间隔过大 / 消息不足两条）时，完全不主动发言，
-  避免在冷清的群里自言自语、制造噪音；
-- 消息频率达到一定水平后，再按其高低复用既定概率（高频略低、中频较高），
-  且主动发言之间有硬性冷却，避免刷屏。
+主动发言强度由“群消息频率（平均间隔）”决定，走双锚点插值曲线：
+- 消息不足两条时无法估算频率，完全不主动发言；
+- 间隔处于 [FAST, SLOW] 之间时按 t**GAMMA 幂次插值——锚点参数决定了
+  「热闹时插话」还是「热闹时闭嘴」，同一条曲线两种意图；
+- 主动发言之间有硬性冷却，且高度相似的重复内容会被去重，避免刷屏。
 """
 
 from __future__ import annotations
@@ -21,10 +21,11 @@ from nonebot import logger
 from config import (
     PROACTIVE_COOLDOWN,
     PROACTIVE_FREQ_WINDOW,
-    PROACTIVE_HIGH_FREQ_INTERVAL,
-    PROACTIVE_LOW_FREQ_INTERVAL,
-    PROACTIVE_MAX_PROB,
-    PROACTIVE_MIN_PROB,
+    PROACTIVE_INTERVAL_FAST,
+    PROACTIVE_INTERVAL_SLOW,
+    PROACTIVE_PROB_AT_FAST,
+    PROACTIVE_PROB_AT_SLOW,
+    PROACTIVE_PROB_GAMMA,
 )
 
 
@@ -41,11 +42,11 @@ SIMILARITY_THRESHOLD = 0.5
 class ProactiveController:
     """主动发言控制：基于群消息频率（平均间隔）估算活跃度。
 
-    规则：
-    1. 消息频率低于阈值（平均间隔 >= PROACTIVE_LOW_FREQ_INTERVAL）或消息不足
-       两条时，不主动发言（概率为 0），避免在冷清群自言自语；
-    2. 消息频率高于阈值（间隔更小）时，复用上一次的概率换算：高频群低概率、
-       相对低频但仍有活跃的群高一点，且主动发言之间有硬性冷却时间。
+    规则（双锚点插值曲线，见 memory/proactive.py speak_probability）：
+    1. 消息不足两条无法估算频率时，不主动发言（概率为 0）；
+    2. 平均间隔处于 [FAST, SLOW] 时按 t**GAMMA 幂次插值——「热闹时插话」
+       与「热闹时闭嘴」只是锚点参数差异，同一条曲线覆盖；
+    3. 主动发言之间有硬性冷却时间，且复用「与最近发言高度相似则去重」防刷屏。
 
     时间戳按用户分组存储，群级统计由各用户聚合得出。
     """
@@ -153,26 +154,35 @@ class ProactiveController:
 
     # ── 概率计算 ────────────────────────────────────────
     def speak_probability(self, group_id: int) -> float:
-        """根据消息频率换算主动发言概率。
+        """按群消息频率换算话题参与概率（双锚点插值 + 幂次整形）。
 
-        消息频率过低（平均间隔 >= PROACTIVE_LOW_FREQ_INTERVAL，或消息不足
-        两条使 interval 为 None）时返回 0，即不主动发言；否则复用上一次
-        逻辑：高频（间隔小）概率低，随间隔增大概率线性攀升。
+        interval <= FAST  → PROB_AT_FAST
+        interval >= SLOW  → PROB_AT_SLOW
+        中间              → t = (SLOW - interval) / (SLOW - FAST)   # t: 0=慢, 1=快
+                            prob = SLOW + (FAST - SLOW) * t**GAMMA
+
+        「热闹时插话」与「热闹时闭嘴」只是参数差异，同一条曲线覆盖，
+        不需要模式分支。消息不足两条时返回 0——无法估算频率就不主动开口。
         """
         interval = self.average_interval(group_id)
         if interval is None:
-            # 消息太少（不足两条）即频率过低 → 不主动发言
             return 0.0
-        if interval >= PROACTIVE_LOW_FREQ_INTERVAL:
-            # 平均间隔过大 → 消息频率过低 → 不主动发言
-            return 0.0
-        if interval <= PROACTIVE_HIGH_FREQ_INTERVAL:
-            return PROACTIVE_MIN_PROB
-        # 线性插值：间隔越大概率越高（复用过上一版逻辑）
-        ratio = (interval - PROACTIVE_HIGH_FREQ_INTERVAL) / (
-            PROACTIVE_LOW_FREQ_INTERVAL - PROACTIVE_HIGH_FREQ_INTERVAL
-        )
-        return PROACTIVE_MIN_PROB + ratio * (PROACTIVE_MAX_PROB - PROACTIVE_MIN_PROB)
+
+        fast, slow = PROACTIVE_INTERVAL_FAST, PROACTIVE_INTERVAL_SLOW
+        p_fast, p_slow = PROACTIVE_PROB_AT_FAST, PROACTIVE_PROB_AT_SLOW
+
+        if interval <= fast:
+            return max(0.0, min(1.0, p_fast))
+        if interval >= slow:
+            return max(0.0, min(1.0, p_slow))
+        # 锚点配置异常（slow <= fast）时退化为慢端概率，避免除零
+        if slow <= fast:
+            return max(0.0, min(1.0, p_slow))
+
+        t = (slow - interval) / (slow - fast)
+        gamma = PROACTIVE_PROB_GAMMA if PROACTIVE_PROB_GAMMA > 0 else 1.0
+        prob = p_slow + (p_fast - p_slow) * (t**gamma)
+        return max(0.0, min(1.0, prob))
 
     def should_speak(self, group_id: int) -> bool:
         """是否应该主动发言：未冷却 + 概率命中。

@@ -1,0 +1,200 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""主动 @ 的目标选择与配额（Memory Verification Loop §4.2、§5-D2）。
+
+职责：决定「该不该主动 @ 某人」以及「@ 谁、为什么」。不生成台词、不发消息，
+只输出决策结果，便于单测与审计。
+
+
+选人优先级：
+  1. 有 OBSERVING 候选且 confidence 最接近晋升线的活跃用户 —— 验证一次即可
+     跨过门槛，收益最高；
+  2. 无候选但近期活跃、配额未用尽的用户 —— 冷启动，从日常话题切入；
+  3. 都没有 → 不发言。
+
+
+排除条件：当日配额已满、处于用户级冷却内、连续无回应超限。
+"""
+from __future__ import annotations
+
+import random
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
+
+from nonebot import logger
+
+from config import (
+    DB_PATH,
+    MEMORY_CONFIRM_HIGH_CONFIDENCE,
+    MEMORY_OBSERVE_LOW_CONFIDENCE,
+    PROACTIVE_AT_ACTIVE_WITHIN,
+    PROACTIVE_AT_BONUS_MSGS_HIGH,
+    PROACTIVE_AT_BONUS_MSGS_LOW,
+    PROACTIVE_AT_ENABLED,
+    PROACTIVE_AT_QUOTA_BASE,
+    PROACTIVE_AT_QUOTA_BONUS_MAX,
+    PROACTIVE_AT_USER_COOLDOWN,
+    PROACTIVE_COLDSTART_TOPICS,
+    PROACTIVE_MAX_NO_REPLY,
+)
+from memory.proactive import get_proactive
+from memory.proactive_state import count_user_messages_24h, get_state
+
+
+@dataclass
+class ProactiveTarget:
+    """一次主动 @ 的决策结果。"""
+
+    user_id: int
+    mode: str  # "verify"（验证候选）或 "coldstart"（冷启动话题）
+    candidate_id: str = ""
+    candidate_content: str = ""
+    candidate_type: str = ""
+    topic: str = ""  # coldstart 模式下的话题
+    reason: str = ""  # 供日志与审计
+
+
+def at_quota(group_id: int, user_id: int) -> int:
+    """该用户当日的主动 @ 配额上限：基础 + 按 24h 发言量的小幅奖励。
+
+    msgs <= LOW  → BASE
+    msgs >= HIGH → BASE + BONUS_MAX
+    中间         → 线性插值后四舍五入
+
+    奖励幅度刻意压小：高频用户信息产出多、容忍度也高，但「越活跃越被骚扰」
+    是必须避免的失控模式，因此硬封顶在 BASE + BONUS_MAX。
+    """
+    msgs = count_user_messages_24h(group_id, user_id)
+    low, high = PROACTIVE_AT_BONUS_MSGS_LOW, PROACTIVE_AT_BONUS_MSGS_HIGH
+    if high <= low:
+        t = 1.0 if msgs >= high else 0.0
+    else:
+        t = max(0.0, min(1.0, (msgs - low) / (high - low)))
+    return PROACTIVE_AT_QUOTA_BASE + round(PROACTIVE_AT_QUOTA_BONUS_MAX * t)
+
+
+def _cooldown_elapsed(last_at_at: str | None) -> bool:
+    """距上次主动 @ 该用户是否已超过 PROACTIVE_AT_USER_COOLDOWN。
+
+    用 DB 里的墙钟时间（不是 time.monotonic），保证重启后仍然有效。
+    解析失败时保守放行——宁可多等一轮，不如因脏数据永久卡死。
+    """
+    if not last_at_at:
+        return True
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+        try:
+            elapsed = (datetime.now() - datetime.strptime(str(last_at_at), fmt)).total_seconds()
+            return elapsed >= PROACTIVE_AT_USER_COOLDOWN
+        except (ValueError, TypeError):
+            continue
+    return True
+
+
+def can_at_user(group_id: int, user_id: int) -> tuple[bool, str]:
+    """判断能否主动 @ 该用户，返回 (是否可以, 原因)。"""
+    if not PROACTIVE_AT_ENABLED:
+        return False, "主动 @ 已关闭"
+
+    state = get_state(group_id, user_id)
+
+    if state["consecutive_no_reply"] >= PROACTIVE_MAX_NO_REPLY:
+        return False, f"连续 {state['consecutive_no_reply']} 次未获回应，已退避"
+
+    quota = at_quota(group_id, user_id)
+    if state["at_count_today"] >= quota:
+        return False, f"当日配额已满（{state['at_count_today']}/{quota}）"
+
+    if not _cooldown_elapsed(state["last_at_at"]):
+        return False, "用户级冷却中"
+
+    return True, f"可以（今日 {state['at_count_today']}/{quota}）"
+
+
+def _fetch_observing_candidate(group_id: int, user_id: int) -> tuple[str, str, str, float] | None:
+    """取该用户 confidence 最接近晋升线的 OBSERVING 候选。
+
+    返回 (id, content, type, confidence)；无则 None。
+
+    只取 confidence 在 [LOW-0.2, HIGH) 区间内的：太低的候选证据本身可疑，
+    问了也难以定论；已达 HIGH 的会自动晋升、无需验证。
+    """
+    lower = max(0.0, MEMORY_OBSERVE_LOW_CONFIDENCE - 0.2)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        row = conn.execute(
+            "SELECT id, content, type, confidence FROM memory_candidates "
+            "WHERE group_id = ? AND user_id = ? AND status = 'OBSERVING' "
+            "AND confidence >= ? AND confidence < ? AND content != '' "
+            "ORDER BY confidence DESC LIMIT 1",
+            (str(group_id), str(user_id), lower, MEMORY_CONFIRM_HIGH_CONFIDENCE),
+        ).fetchone()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.warning(f"⚠️ [ProactiveTarget] 读取候选失败: {e}")
+        return None
+    if not row:
+        return None
+    return str(row[0]), str(row[1] or ""), str(row[2] or "FACT"), float(row[3] or 0.0)
+
+
+def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> ProactiveTarget | None:
+    """挑选本次主动 @ 的对象；无合适目标时返回 None。
+
+    exclude_user_ids 用于排除 Bot 自身等不该被搭话的账号。
+    """
+    if not PROACTIVE_AT_ENABLED:
+        return None
+
+    excluded = exclude_user_ids or set()
+    actives = [
+        uid
+        for uid in get_proactive().active_users(group_id, PROACTIVE_AT_ACTIVE_WITHIN)
+        if uid not in excluded
+    ]
+    if not actives:
+        return None
+
+    eligible: list[int] = []
+    for uid in actives:
+        ok, reason = can_at_user(group_id, uid)
+        if ok:
+            eligible.append(uid)
+        else:
+            logger.debug(f"[ProactiveTarget] 跳过用户 {uid}：{reason}")
+    if not eligible:
+        return None
+
+    # 优先级 1：有可验证候选的用户（按 confidence 降序，最接近晋升线的先问）
+    verify_pool: list[tuple[float, int, tuple[str, str, str, float]]] = []
+    for uid in eligible:
+        found = _fetch_observing_candidate(group_id, uid)
+        if found:
+            verify_pool.append((found[3], uid, found))
+    if verify_pool:
+        verify_pool.sort(key=lambda item: item[0], reverse=True)
+        _, uid, (cid, content, ctype, conf) = verify_pool[0]
+        return ProactiveTarget(
+            user_id=uid,
+            mode="verify",
+            candidate_id=cid,
+            candidate_content=content,
+            candidate_type=ctype,
+            reason=f"验证候选（conf={conf:.2f}，距晋升线 {MEMORY_CONFIRM_HIGH_CONFIDENCE}）",
+        )
+
+    # 优先级 2：冷启动——取最近发言的那位（actives 已按时间倒序）
+    if not PROACTIVE_COLDSTART_TOPICS:
+        return None
+    uid = eligible[0]
+    state = get_state(group_id, uid)
+    # 避开上次问过的话题，避免连续两次问同一件事
+    topics = [t for t in PROACTIVE_COLDSTART_TOPICS if t != state["last_asked_topic"]]
+    topic = random.choice(topics or PROACTIVE_COLDSTART_TOPICS)
+    return ProactiveTarget(
+        user_id=uid,
+        mode="coldstart",
+        topic=topic,
+        reason="无可验证候选，冷启动获取初始信息",
+    )

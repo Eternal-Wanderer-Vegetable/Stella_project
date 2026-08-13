@@ -3,14 +3,17 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """主动发言规则的回归测试。
 
-覆盖新规则：
-1. 消息频率过低（平均间隔 >= PROACTIVE_LOW_FREQ_INTERVAL，或消息不足两条）
-   时不主动发言（概率为 0），避免在冷清群自言自语；
-2. 消息频率足够（平均间隔更小）时复用上一版概率换算；
-3. 与最近一次主动/回复高度相似的内容会被去重跳过，防止刷屏。
+覆盖：
+1. 消息不足两条（无法估算频率）时不主动发言（概率为 0）；
+2. 双锚点插值曲线（FAST/SLOW 两锚点 + GAMMA 整形）：区间端点取值、中点插值、
+   GAMMA 对概率的压缩方向、锚点异常不抛异常；
+3. 与最近一次主动/回复高度相似的内容会被去重跳过，防止刷屏；
+4. 按用户追踪活跃度：群级间隔聚合、active_users 时间窗过滤与倒序、用户级间隔。
 
 全程不触网，也不导入 ai_gateway（避免拉起 NoneBot 事件监听）。
 """
+
+import pytest
 
 from memory import proactive
 from memory.proactive import ProactiveController, _ngrams
@@ -20,10 +23,12 @@ def _reset_config(monkeypatch):
     """把关键配置收紧/固定，让断言不依赖 .env 里的真实值。"""
     monkeypatch.setattr(proactive, "PROACTIVE_COOLDOWN", 0)
     monkeypatch.setattr(proactive, "PROACTIVE_FREQ_WINDOW", 10)
-    monkeypatch.setattr(proactive, "PROACTIVE_HIGH_FREQ_INTERVAL", 20.0)
-    monkeypatch.setattr(proactive, "PROACTIVE_LOW_FREQ_INTERVAL", 180.0)
-    monkeypatch.setattr(proactive, "PROACTIVE_MAX_PROB", 0.5)
-    monkeypatch.setattr(proactive, "PROACTIVE_MIN_PROB", 0.05)
+    # 双锚点插值曲线参数（旧 MIN/MAX/HIGH/LOW 已废弃，仅保留定义兼容 .env）
+    monkeypatch.setattr(proactive, "PROACTIVE_INTERVAL_FAST", 20.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_INTERVAL_SLOW", 180.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_AT_FAST", 0.35)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_AT_SLOW", 0.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_GAMMA", 1.0)
 
 
 def _faketicks():
@@ -49,29 +54,13 @@ def test_silent_group_never_speaks(monkeypatch):
 
 
 def test_too_low_frequency_never_speaks(monkeypatch):
-    """平均间隔超过 PROACTIVE_LOW_FREQ_INTERVAL（冷清群）时概率为 0。"""
+    """平均间隔超过 SLOW 锚点（冷清群）时概率回到慢端锚点（默认 0，不主动发言）。"""
     _reset_config(monkeypatch)
     c = ProactiveController()
-    # 两条消息相隔 200s > 180s → 频率过低
+    # 两条消息相隔 200s > SLOW(180) → 概率为慢端锚点
     monkeypatch.setattr(c, "average_interval", lambda _gid: 200.0)
-    assert c.speak_probability(1) == 0.0
+    assert c.speak_probability(1) == proactive.PROACTIVE_PROB_AT_SLOW
     assert c.should_speak(1) is False
-
-
-def test_active_group_reuses_previous_logic(monkeypatch):
-    """消息频率高于阈值（平均间隔 < PROACTIVE_LOW_FREQ_INTERVAL）时复用旧概率。
-
-    - 平均间隔 <= PROACTIVE_HIGH_FREQ_INTERVAL → MIN_PROB；
-    - 平均间隔介于 HIGH 与 LOW 之间 → MIN→MAX 线性插值。
-    """
-    _reset_config(monkeypatch)
-    c = ProactiveController()
-    monkeypatch.setattr(c, "average_interval", lambda _gid: 10.0)  # 高频
-    assert c.speak_probability(1) == proactive.PROACTIVE_MIN_PROB
-
-    monkeypatch.setattr(c, "average_interval", lambda _gid: 100.0)  # 中频
-    p = c.speak_probability(1)
-    assert proactive.PROACTIVE_MIN_PROB < p < proactive.PROACTIVE_MAX_PROB
 
 
 def test_previous_logic_still_respects_cooldown(monkeypatch):
@@ -149,3 +138,65 @@ def test_user_average_interval_requires_two(monkeypatch):
     assert c.user_average_interval(1, 9999) is None
     c.record_message(1, 1001)
     assert c.user_average_interval(1, 1001) is not None
+
+
+# ── 双锚点插值曲线（D2a） ────────────────────────────────
+
+def _reset_curve(monkeypatch):
+    """把双锚点曲线参数固定，让断言不依赖 .env 里的真实值。"""
+    monkeypatch.setattr(proactive, "PROACTIVE_INTERVAL_FAST", 20.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_INTERVAL_SLOW", 180.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_AT_FAST", 0.35)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_AT_SLOW", 0.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_GAMMA", 1.0)
+
+
+def test_curve_at_fast_anchor(monkeypatch):
+    """interval <= FAST → PROB_AT_FAST。"""
+    _reset_curve(monkeypatch)
+    c = ProactiveController()
+    monkeypatch.setattr(c, "average_interval", lambda _gid: 5.0)
+    assert c.speak_probability(1) == proactive.PROACTIVE_PROB_AT_FAST
+
+
+def test_curve_at_slow_anchor(monkeypatch):
+    """interval >= SLOW → PROB_AT_SLOW。"""
+    _reset_curve(monkeypatch)
+    c = ProactiveController()
+    monkeypatch.setattr(c, "average_interval", lambda _gid: 300.0)
+    assert c.speak_probability(1) == proactive.PROACTIVE_PROB_AT_SLOW
+
+
+def test_curve_midpoint_between_anchors(monkeypatch):
+    """区间中点（GAMMA=1）落在两个锚点之间。"""
+    _reset_curve(monkeypatch)
+    c = ProactiveController()
+    mid_interval = (proactive.PROACTIVE_INTERVAL_FAST + proactive.PROACTIVE_INTERVAL_SLOW) / 2
+    monkeypatch.setattr(c, "average_interval", lambda _gid: mid_interval)
+    p = c.speak_probability(1)
+    low, high = sorted([proactive.PROACTIVE_PROB_AT_FAST, proactive.PROACTIVE_PROB_AT_SLOW])
+    assert low <= p <= high
+    # GAMMA=1 时 t=0.5 → p_slow + (p_fast-p_slow)*0.5 = 两锚点均值
+    assert p == pytest.approx((proactive.PROACTIVE_PROB_AT_FAST + proactive.PROACTIVE_PROB_AT_SLOW) / 2)
+
+
+def test_curve_gamma_2_lower_than_gamma_1(monkeypatch):
+    """同一间隔下 GAMMA=2 的概率低于 GAMMA=1（更保守地倾向活跃端）。"""
+    _reset_curve(monkeypatch)
+    c1 = ProactiveController()
+    monkeypatch.setattr(c1, "average_interval", lambda _gid: 100.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_GAMMA", 1.0)
+    p1 = c1.speak_probability(1)
+    monkeypatch.setattr(proactive, "PROACTIVE_PROB_GAMMA", 2.0)
+    p2 = c1.speak_probability(1)
+    assert p2 < p1
+
+
+def test_curve_bad_anchor_no_error(monkeypatch):
+    """锚点异常（SLOW <= FAST）不抛异常，退化到慢端概率或插值。"""
+    _reset_curve(monkeypatch)
+    monkeypatch.setattr(proactive, "PROACTIVE_INTERVAL_SLOW", 10.0)  # <= FAST(20)
+    c = ProactiveController()
+    monkeypatch.setattr(c, "average_interval", lambda _gid: 50.0)
+    p = c.speak_probability(1)
+    assert 0.0 <= p <= 1.0
