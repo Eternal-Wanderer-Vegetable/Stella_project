@@ -54,6 +54,15 @@ OUT_MD = Path("consolidation_probe.md")
 OUT_JSON = Path("consolidation_probe.json")
 POSITIVE_FIXTURE = Path("memory/benchmark/_fixtures/consolidation_positive.json")
 
+# 信号密度分层在 windows_raw.json 里的索引范围
+# （对应 scripts/sample_windows.py 的构造次序：前 12 高信号 / 中间 8 中等 / 末 10 刷屏）
+STRATA = {
+    "all": slice(None),     # 不切片
+    "high": slice(0, 12),   # 信息密集：该产候选
+    "mid": slice(12, 20),   # 中等
+    "low": slice(20, 30),   # 刷屏：该产 0 条
+}
+
 
 def read_windows(path: Path) -> list[list[dict]]:
     """读采样窗口：样本脚本产出的是 [{user, content, ts}] 列表的列表。"""
@@ -315,10 +324,18 @@ def stability_of(repeats: list[dict]) -> dict:
 
 # ── 输出 ────────────────────────────────────────────────
 
-def print_summary(results: list[dict], repeat: int) -> None:
+def print_summary(results: list[dict], repeat: int, stratum: str = "all") -> None:
     """多窗口汇总：总候选/平均、空输出率、候选数分布。"""
     if not results:
         return
+    stratum_label = {
+        "high": "高信号层（前 12）",
+        "mid": "中等信号层（12~20）",
+        "low": "低信号/刷屏层（20~30）",
+        "all": "全部层",
+    }[stratum]
+    print(f"── 当前层：{stratum_label} — 本层产出率不代表生产分布（按信号密度分层抽样，生产词分布不同）",
+          file=sys.stderr)
     # 多窗口用各自第一次运行的候选数（与候选展示口径一致）
     counts = [r["candidate_count"] for r in results]
     n = len(counts)
@@ -421,6 +438,10 @@ async def _amain() -> None:
     ap = argparse.ArgumentParser(description="整合器探针：对真实窗口跑生产整合链路")
     ap.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="windows_raw.json 路径")
     ap.add_argument("--limit", type=int, default=0, help="只跑前 N 个窗口（0=全部）")
+    ap.add_argument("--stratum", choices=["high", "mid", "low", "all"], default="all",
+                    help="只跑某个信号密度层（windows_raw.json 的构造顺序：前 12 高信号 / "
+                         "中间 8 中等 / 末 10 刷屏）。默认 all——注意 --limit N 会截断到高信号层，"
+                         "其产出率不可外推到生产")
     ap.add_argument("--window-index", type=int, default=None, help="只重跑某个窗口")
     ap.add_argument("--repeat", type=int, default=1, help="同一窗口重复次数（稳定性观察，默认 1）")
     ap.add_argument("--temperature", type=float, default=None, help="覆盖采样温度（默认用配置值）")
@@ -456,7 +477,7 @@ async def _amain() -> None:
             sys.exit(f"❌ --window-index {a.window_index} 越界：窗口范围是 0~{len(windows) - 1}")
         indices = [a.window_index]
     else:
-        indices = list(range(len(windows)))
+        indices = list(range(len(windows)))[STRATA[a.stratum]]
         if a.limit:
             indices = indices[: a.limit]
 
@@ -476,7 +497,7 @@ async def _amain() -> None:
 
     sorted_pairs = sorted(zip(indices, results, strict=True), key=lambda p: p[0])
     md = render_markdown(windows, [r for _, r in sorted_pairs], a.repeat)
-    print_summary([r for _, r in sorted_pairs], a.repeat)
+    print_summary([r for _, r in sorted_pairs], a.repeat, stratum=a.stratum)
     OUT_MD.write_text(md, encoding="utf-8")
     OUT_JSON.write_text(json.dumps(
         {"windows": [{i: json.dumps(windows[i], ensure_ascii=False)} for i, _ in sorted_pairs],
