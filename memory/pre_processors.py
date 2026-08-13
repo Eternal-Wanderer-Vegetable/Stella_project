@@ -29,12 +29,14 @@ from config import (
 from core.context import ChatContext
 from memory.prompt_builder import build_memory_context
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
+from memory.schema import normalize_source_kind
 
 
 async def record_message(ctx: ChatContext) -> ChatContext:
     """把本条消息写入群消息表（group_messages），供后续整合器消费。
 
-    source_kind 由调用方（ai_gateway）按 event.is_tome() 决定。
+    source_kind 由调用方（ai_gateway）按 event.is_tome() 决定：
+    AT_MENTION=用户直接对 Bot 说，Bot 自己的发言传 BOT_SELF，其余为 PASSIVE。
 
     参数：ctx — 拥有 group_id / user_id / message 的上下文字段；
     副作用：插入一条群消息记录并建表（幂等）；
@@ -75,7 +77,7 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             INSERT INTO group_messages (group_id, user_id, content, source_kind)
             VALUES (?, ?, ?, ?)
         """, (str(ctx.group_id), str(ctx.user_id), ctx.message,
-              ctx.source_kind if ctx.source_kind in ("AT_MENTION", "PASSIVE") else "PASSIVE"))
+              normalize_source_kind(ctx.source_kind)))
         conn.commit()
         conn.close()
     except Exception as e:

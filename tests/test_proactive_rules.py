@@ -26,6 +26,18 @@ def _reset_config(monkeypatch):
     monkeypatch.setattr(proactive, "PROACTIVE_MIN_PROB", 0.05)
 
 
+def _faketicks():
+    """注入可控的递增 time.monotonic，让「最近发言排序」可确定地断言。"""
+    tick = [100.0]
+
+    def _next() -> float:
+        v = tick[0]
+        tick[0] += 1.0
+        return v
+
+    return _next
+
+
 def test_silent_group_never_speaks(monkeypatch):
     """消息不足两条（interval 为 None）时概率必须为 0。"""
     _reset_config(monkeypatch)
@@ -90,3 +102,50 @@ def test_ngrams_is_reasonable():
     segs = _ngrams("好想吃西瓜", 4)
     assert "好吃西瓜" in segs or "好想吃西" in segs
     assert all(" " not in s for s in segs)
+
+
+# ── 按用户追踪活跃度（D1-②） ────────────────────────────
+
+def test_group_interval_aggregated_across_users(monkeypatch):
+    """record_message 带 user_id 后，群级平均间隔由各用户时间戳聚合，行为不变。"""
+    _reset_config(monkeypatch)
+    c = ProactiveController()
+    c.record_message(1, 1001)
+    c.record_message(1, 1002)
+    c.record_message(1, 1003)
+    interval = c.average_interval(1)
+    assert interval is not None
+    assert interval >= 0.0
+    # 每用户各只有一条 → 用户级间隔不足两条，返回 None
+    assert c.user_average_interval(1, 1001) is None
+
+
+def test_active_users_filters_window_and_sorts_desc(monkeypatch):
+    """active_users 只返回窗口内发过言的用户，按最近发言倒序，排除伪用户 0。"""
+    _reset_config(monkeypatch)
+    # Windows 的 time.monotonic 在一个时钟片内可能返回相同值，注入可控时间保证排序可断言
+    import time as _time
+
+    monkeypatch.setattr(_time, "monotonic", _faketicks())
+    c = ProactiveController()
+    c.record_message(1, 1001)  # t=100
+    c.record_message(1, 1002)  # t=101，最近 → 排前面
+    c.record_message(1)        # t=102，伪用户 0（旧调用兜底）
+    c.record_message(2, 1001)  # t=103，另一个群，不影响群 1
+
+    users = c.active_users(1, within_seconds=3600)
+    assert 0 not in users
+    assert users == [1002, 1001]
+    # 窗口收紧到 0 → 无人在窗口内
+    assert c.active_users(1, within_seconds=0) == []
+
+
+def test_user_average_interval_requires_two(monkeypatch):
+    """user_average_interval 不足两条返回 None。"""
+    _reset_config(monkeypatch)
+    c = ProactiveController()
+    c.record_message(1, 1001)
+    assert c.user_average_interval(1, 1001) is None
+    assert c.user_average_interval(1, 9999) is None
+    c.record_message(1, 1001)
+    assert c.user_average_interval(1, 1001) is not None

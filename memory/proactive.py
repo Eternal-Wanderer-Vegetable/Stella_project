@@ -46,11 +46,13 @@ class ProactiveController:
        两条时，不主动发言（概率为 0），避免在冷清群自言自语；
     2. 消息频率高于阈值（间隔更小）时，复用上一次的概率换算：高频群低概率、
        相对低频但仍有活跃的群高一点，且主动发言之间有硬性冷却时间。
+
+    时间戳按用户分组存储，群级统计由各用户聚合得出。
     """
 
     def __init__(self):
-        # group_id -> 最近消息时间戳列表（用于估算平均间隔）
-        self._timestamps: dict[int, list[float]] = {}
+        # group_id -> user_id -> 最近发言时间戳列表（估算群级与用户级活跃度）
+        self._timestamps: dict[int, dict[int, list[float]]] = {}
         # group_id -> 上次主动发言时间戳
         self._last_speak: dict[int, float] = {}
         self._last_check: dict[int, float] = {}
@@ -85,21 +87,59 @@ class ProactiveController:
         return overlap / len(segments) >= SIMILARITY_THRESHOLD
 
     # ── 频率统计 ────────────────────────────────────────
-    def record_message(self, group_id: int):
-        """收到群消息时调用，记录时间戳用于估算频率"""
+    def record_message(self, group_id: int, user_id: int | None = None):
+        """收到群消息时调用，按用户记录时间戳用于估算群级/用户级活跃度。
+
+        user_id 为 None 时归入伪用户 0（兼容旧调用；群级统计不受影响）。
+        """
         now = time.monotonic()
-        lst = self._timestamps.setdefault(group_id, [])
+        uid = int(user_id) if user_id is not None else 0
+        per_user = self._timestamps.setdefault(group_id, {})
+        lst = per_user.setdefault(uid, [])
         lst.append(now)
-        # 只保留窗口内最近的消息
         if len(lst) > PROACTIVE_FREQ_WINDOW:
             del lst[: len(lst) - PROACTIVE_FREQ_WINDOW]
 
     def average_interval(self, group_id: int) -> float | None:
-        """估算最近消息的平均间隔（秒）。消息不足两条时返回 None（视为频率过低）。"""
-        lst = self._timestamps.get(group_id, [])
+        """估算全群最近消息的平均间隔（秒）。消息不足两条时返回 None。"""
+        merged = sorted(
+            ts for lst in self._timestamps.get(group_id, {}).values() for ts in lst
+        )
+        if len(merged) < 2:
+            return None
+        window = merged[-PROACTIVE_FREQ_WINDOW:]
+        if len(window) < 2:
+            return None
+        return (window[-1] - window[0]) / (len(window) - 1)
+
+    def user_average_interval(self, group_id: int, user_id: int) -> float | None:
+        """该用户自身的发言平均间隔（秒）；不足两条返回 None。"""
+        lst = self._timestamps.get(group_id, {}).get(int(user_id), [])
         if len(lst) < 2:
             return None
         return (lst[-1] - lst[0]) / (len(lst) - 1)
+
+    def active_users(self, group_id: int, within_seconds: float) -> list[int]:
+        """返回 within_seconds 内发过言的用户，按最近发言时间倒序（D2 的选人依据）。
+
+        排除伪用户 0（旧调用兜底）与 Bot 自身不在此处处理——调用方按需过滤。
+        """
+        now = time.monotonic()
+        recent = [
+            (uid, lst[-1])
+            for uid, lst in self._timestamps.get(group_id, {}).items()
+            if uid and lst and (now - lst[-1]) <= within_seconds
+        ]
+        recent.sort(key=lambda item: item[1], reverse=True)
+        return [uid for uid, _ in recent]
+
+    def user_message_count(self, group_id: int, user_id: int) -> int:
+        """该用户在当前统计窗口内的发言条数（窗口受 PROACTIVE_FREQ_WINDOW 限制）。
+
+        注意：这是内存窗口内的计数，不等于 24h 总量。配额奖励用的 24h 计数
+        走 memory.proactive_state.count_user_messages_24h（读 DB，重启不丢）。
+        """
+        return len(self._timestamps.get(group_id, {}).get(int(user_id), []))
 
     # ── 冷却管理 ────────────────────────────────────────
     def mark_spoke(self, group_id: int):

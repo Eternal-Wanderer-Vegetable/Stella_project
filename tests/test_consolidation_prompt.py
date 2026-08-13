@@ -32,6 +32,12 @@ def test_attribution_clause_present():
     assert "user_id 必须是该消息实际的发送者" in CONSOLIDATION_PROMPT
 
 
+def test_bot_self_clause_present():
+    """[我说] 只作上下文——缺了这条，Bot 会把自己的话记成用户属性。"""
+    assert "[我说]" in CONSOLIDATION_PROMPT
+    assert "严禁从其中提取任何关于用户的信息" in CONSOLIDATION_PROMPT
+
+
 def test_empty_array_permission_present():
     """「没有就是没有」：放宽捕获不等于强行产出，空数组仍是合法且正确的输出。"""
     assert "memory_candidates 允许为空数组" in CONSOLIDATION_PROMPT

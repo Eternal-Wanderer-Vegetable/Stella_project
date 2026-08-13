@@ -176,6 +176,9 @@ async def record_group_chat(event: GroupMessageEvent):
     """记录群聊消息到短期记忆（静默侧，不触发总结/推理）。"""
     if event.group_id not in ALLOWED_GROUPS:
         return
+    # 防止 OneBot 回显自身消息造成重复入库（自身发言会经 _record_bot_lines 单独落库）
+    if event.user_id == event.self_id:
+        return
     text = event.get_plaintext().strip()
     if not text or text.startswith("/"):
         return
@@ -190,7 +193,7 @@ async def record_group_chat(event: GroupMessageEvent):
     await record_message(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
-    get_proactive().record_message(ctx.group_id)
+    get_proactive().record_message(ctx.group_id, ctx.user_id)
 
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
@@ -256,6 +259,10 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
+        # 发送前先把 Bot 自己的台词落库（source_kind=BOT_SELF），给下一轮整合提供语境。
+        # 必须放在发送前：最后一行走 chat_handler.finish() 会抛 FinishedException，后续代码不执行。
+        await _record_bot_lines(event.self_id, event.group_id, ctx.lines)
+
         # 第一条回复带引用原消息；多行之间间隔 SEND_INTERVAL 秒发送
         reply_segment = MessageSegment.reply(event.message_id)
 
@@ -294,6 +301,31 @@ def _join_lines_naturally(lines: list[str]) -> str:
             text += "，"
         text += line
     return text
+
+
+async def _record_bot_lines(self_id: int, group_id: int, lines: list[str]) -> None:
+    """把 Bot 自己发出的台词写入 group_messages（source_kind=BOT_SELF）。
+
+    目的：让下一轮整合能看到「我问了什么」，否则用户回答「对」「是的」时
+    整合模型缺少语境，只能放弃或自行编造。BOT_SELF 只作上下文，
+    consolidator 已保证它不进候选发送者白名单。
+    """
+    for line in lines:
+        text = (line or "").strip()
+        if not text:
+            continue
+        try:
+            await record_message(
+                ChatContext(
+                    user_id=self_id,
+                    group_id=group_id,
+                    msg_id=0,
+                    message=text,
+                    source_kind="BOT_SELF",
+                )
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ 记录 Bot 自身发言失败（跳过）: {e}")
 
 
 async def _proactive_speak_for_group(bot: Bot, group_id: int):
@@ -361,6 +393,7 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
         proactive.mark_spoke(group_id)
         get_proactive().record_spoken(group_id, ctx.lines)
         logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
+        await _record_bot_lines(int(bot.self_id), group_id, ctx.lines)
         try:
             for i, line in enumerate(ctx.lines):
                 if i > 0:

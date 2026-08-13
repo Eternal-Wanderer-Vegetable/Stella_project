@@ -355,8 +355,15 @@ class MemoryConsolidator:
         """取 last_id 之后最多 limit 条消息（含 overlap 上下文）。
         返回 (文本, 本批次末尾的最大消息 id, 本批次的发送者 QQ 号列表, AT_MENTION 来源的发送者列表)。
         按实际行数取，可容忍 id 空洞。
-        消息文本拼装：MEMORY_SOURCE_KIND_ENABLED 且该行为 AT_MENTION 时用「[对Bot说]」标注来源，
-        否则保持原格式；旧 messages 表没有 source_kind 列时回退到旧查询，全部视为 PASSIVE。
+        消息文本拼装（MEMORY_SOURCE_KIND_ENABLED 开启时）：
+        - BOT_SELF   → 「[我说]」标注，只作上下文，绝不作为候选来源；
+        - AT_MENTION → 「[对Bot说]」标注来源；
+        - PASSIVE    → 保持原格式不带标记。
+        关闭时全部退回「消息ID(id) 用户(QQ号): 内容」原格式。
+        两个发送者列表都排除 BOT_SELF：senders 是 _write_memory_candidates 的
+        发送者白名单，Bot 的 QQ 号一旦进入名单，「Bot 把自己说的话记成用户属性」
+        就无法被代码层拦截。旧 messages 表没有 source_kind 列时回退到旧查询，
+        全部视为 PASSIVE。
         """
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -391,12 +398,22 @@ class MemoryConsolidator:
             return "", last_id, [], []
         lines = []
         for mid, uid, content, source_kind in rows:
-            if MEMORY_SOURCE_KIND_ENABLED and source_kind == "AT_MENTION":
+            if not MEMORY_SOURCE_KIND_ENABLED:
+                lines.append(f"消息ID({mid}) 用户({uid}): {content}")
+            elif source_kind == "BOT_SELF":
+                # Bot 自己的发言：给出语境（否则用户的「对」「是的」无从理解），
+                # 但绝不能成为候选来源
+                lines.append(f"消息ID({mid}) [我说]: {content}")
+            elif source_kind == "AT_MENTION":
                 lines.append(f"消息ID({mid}) 用户({uid}) [对Bot说]: {content}")
             else:
                 lines.append(f"消息ID({mid}) 用户({uid}): {content}")
         text = "\n".join(lines)
-        senders = list(dict.fromkeys(str(uid) for _, uid, _, _ in rows))
+        senders = list(
+            dict.fromkeys(
+                str(uid) for _, uid, _, kind in rows if kind != "BOT_SELF"
+            )
+        )
         at_senders = list(
             dict.fromkeys(
                 str(uid) for _, uid, _, source_kind in rows if source_kind == "AT_MENTION"

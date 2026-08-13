@@ -11,7 +11,9 @@
 4. v3 为 ``group_messages`` / ``memory_candidates`` / ``memories`` 补 ``source_kind``
    列（消息来源分级：AT_MENTION / PASSIVE），并新增按来源归因的审计索引；
 5. v4 为 ``memory_candidates`` 补候选强化字段（occurrence_count / first_seen_at /
-   source_kinds），支撑「暂存 → 交叉验证 → 逐步强化」的累计证据语义。
+   source_kinds），支撑「暂存 → 交叉验证 → 逐步强化」的累计证据语义；
+6. v5 新增 ``proactive_state`` 表（主动发言的持久化状态：每用户 @ 配额计数、
+   上次追问内容、连续无回应次数）。
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -22,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sqlite3
 from pathlib import Path
 
@@ -29,10 +32,23 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v4：候选强化 occurrence_count / first_seen_at / source_kinds）
-SCHEMA_VERSION = 4
+# 当前 Schema 版本（v5：新增 proactive_state 主动发言状态表）
+SCHEMA_VERSION = 5
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
+
+# 消息来源分级（source_kind）的合法取值——存储层的单一真相源。
+# AT_MENTION：用户直接对 Bot 说（高密度证据，单次可晋升）
+# PASSIVE   ：被动摄入的群聊（需复现才可晋升）
+# BOT_SELF  ：Bot 自己的发言（**只作上下文，绝不产出候选**）
+SOURCE_KINDS = frozenset({"AT_MENTION", "PASSIVE", "BOT_SELF"})
+DEFAULT_SOURCE_KIND = "PASSIVE"
+
+
+def normalize_source_kind(value: str | None) -> str:
+    """把任意值规范为合法 source_kind；非法/缺省回退 PASSIVE。"""
+    kind = (value or "").strip().upper()
+    return kind if kind in SOURCE_KINDS else DEFAULT_SOURCE_KIND
 
 
 # ── 表结构定义 ──────────────────────────────────────────
@@ -227,6 +243,33 @@ def create_memories_table(conn: sqlite3.Connection) -> None:
     conn.execute(MEMORIES_TABLE_DDL)
 
 
+# 主动发言状态的持久化表：每用户 @ 配额计数、上次追问内容、连续无回应次数。
+# 独立于 additive column 体系（新表而非加列），升级路径见 _migrate。
+PROACTIVE_STATE_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS proactive_state (
+    group_id TEXT,
+    user_id TEXT,
+    at_count_today INTEGER DEFAULT 0,
+    at_count_date TEXT,
+    last_at_at DATETIME,
+    last_asked_topic TEXT,
+    last_asked_candidate_id TEXT,
+    consecutive_no_reply INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, user_id)
+)
+"""
+
+
+def create_proactive_state_table(conn: sqlite3.Connection) -> None:
+    """确保 proactive_state 表存在（幂等）。
+
+    主动发言状态必须落库：内存态用 time.monotonic()，重启后基准漂移无法持久化，
+    而「问过谁什么」丢失会导致重启后重复追问同一个人同一件事。
+    """
+    conn.execute(PROACTIVE_STATE_TABLE_DDL)
+
+
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     """判断表是否存在。"""
     cursor.execute(
@@ -307,6 +350,10 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     """
     cursor = conn.cursor()
     changes = 0
+    # v5：主动发言状态表（新表，不属于 additive column 范畴）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(PROACTIVE_STATE_TABLE_DDL)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue
