@@ -119,6 +119,31 @@ def test_can_at_user_quota_full(tmp_path, monkeypatch):
     assert "配额已满" in reason
 
 
+def test_can_at_user_quota_with_record_at_flow(tmp_path, monkeypatch):
+    """D2a 判定与 D2c 记账串起来：record_at 两次达配额后 can_at_user 拒绝。
+
+    把 24h 发言 monkeypatch 成 0 使配额固定为 BASE=2，然后按真实链路
+    record_at 两次（发出即计数）——此时该用户当日配额已满，不能再 @。
+    """
+    _setup_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(pt, "PROACTIVE_AT_QUOTA_BASE", 2)
+    monkeypatch.setattr(pt, "PROACTIVE_AT_QUOTA_BONUS_MAX", 2)
+    monkeypatch.setattr(pt, "count_user_messages_24h", lambda g, u: 0)
+
+    # 配额未满时允许
+    ok, reason = can_at_user(1, 2001)
+    assert ok is True
+
+    proactive_state.record_at(1, 2001)
+    proactive_state.record_at(1, 2001)
+    ok, reason = can_at_user(1, 2001)
+    assert ok is False
+    assert "配额已满" in reason
+    # 第二个用户不受影响
+    ok, _ = can_at_user(1, 2002)
+    assert ok is True
+
+
 def test_can_at_user_no_reply_backoff(tmp_path, monkeypatch):
     """连续无回应达上限 → 拒绝且理由含「退避」。"""
     _setup_db(monkeypatch, tmp_path)

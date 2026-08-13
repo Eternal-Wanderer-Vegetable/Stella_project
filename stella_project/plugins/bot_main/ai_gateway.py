@@ -8,6 +8,7 @@
 2. QQ 事件监听：
    - group_silent_listener（静默监听，priority 99）：只记录群消息到短期记忆，不触发总结；
    - chat_handler（@ 触发，priority 1）：当机器人被 @ 且发出非空消息时才会走完整推理；
+   - 主动 @ 用户（获取/验证记忆，受每用户日配额与冷却约束）——见 _proactive_at_user；
    - 主动发言（基于群消息频率的定时任务）——见 _proactive_speak_for_group；
 3. 定时任务（借 NoneBot APScheduler）：
    - 周度记忆压缩（run_weekly）、主动发言检查（proactive_speak_job）、每日消息清理（trim_messages_job）；
@@ -22,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import math
+import time
 from collections import defaultdict
 
 from nonebot import logger, on_message
@@ -40,9 +42,11 @@ from config import (
     LM_STUDIO_MODEL,
     MESSAGE_CLEANUP_ENABLED,
     MESSAGE_CLEANUP_HOUR,
+    PROACTIVE_AT_ENABLED,
     PROACTIVE_CHECK_INTERVAL,
     PROACTIVE_ENABLED,
     PROACTIVE_MAX_LINES,
+    PROACTIVE_REPLY_WINDOW_SECONDS,
     SEND_INTERVAL,
     SYSTEM_PROMPT_PATH,
 )
@@ -60,6 +64,9 @@ from memory.post_processors import (
 )
 from memory.pre_processors import build_context, build_user_context, record_message
 from memory.proactive import get_proactive
+from memory.proactive_prompt import build_instruction
+from memory.proactive_state import record_at, record_reply_result
+from memory.proactive_target import pick_target
 
 # ============================================================
 # Pipeline 构建
@@ -71,6 +78,10 @@ pipeline = Pipeline(timeout=LLM_TIMEOUT)
 # defaultdict 保证每个群首次访问时自动生成一把锁；锁内串行执行 Pipeline =
 # 同一群人同一时刻只跑一次推理，防止并发写同一条上下文造成状态混乱
 _group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+# 回应检测的后台任务集合：asyncio.create_task 的返回值必须持有引用，
+# 否则任务可能在完成前被 GC 回收
+_reply_check_tasks: set[asyncio.Task] = set()
 
 # pre-hook 按 priority 升序执行（数值越小越先）：
 # 50 -> build_context（构造群长期记忆上下文）
@@ -328,6 +339,137 @@ async def _record_bot_lines(self_id: int, group_id: int, lines: list[str]) -> No
             logger.warning(f"⚠️ 记录 Bot 自身发言失败（跳过）: {e}")
 
 
+async def _resolve_nickname(bot: Bot, group_id: int, user_id: int) -> str:
+    """取群名片/昵称用于自然称呼；失败时回退「对方」。
+
+    只用于生成台词的措辞，取不到不影响功能，因此所有异常都吞掉。
+    """
+    try:
+        info = await bot.get_group_member_info(
+            group_id=group_id, user_id=user_id, no_cache=False
+        )
+        return (info.get("card") or info.get("nickname") or "").strip() or "对方"
+    except Exception:
+        return "对方"
+
+
+async def _check_reply_later(group_id: int, user_id: int, asked_at: float) -> None:
+    """延迟检查主动 @ 是否获得回应，据此更新退避计数。
+
+    判定标准：在 PROACTIVE_REPLY_WINDOW_SECONDS 内该用户是否有过任何发言
+    （用内存中的活跃度时间戳，不查库——只需要知道「有没有说话」）。
+
+    无回应即累计 consecutive_no_reply，达到 PROACTIVE_MAX_NO_REPLY 后
+    can_at_user 会拒绝继续追问该用户，这是对「不想聊的人」的自动退避。
+    """
+    try:
+        await asyncio.sleep(PROACTIVE_REPLY_WINDOW_SECONDS)
+        last = get_proactive().last_spoke_ts(group_id, user_id)
+        replied = last is not None and last > asked_at
+        record_reply_result(group_id, user_id, replied)
+        logger.info(
+            f"{'✅' if replied else '🔇'} [主动@] 群 {group_id} 用户 {user_id} "
+            f"{'已回应' if replied else '未回应'}（窗口 {PROACTIVE_REPLY_WINDOW_SECONDS:.0f}s）"
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.warning(f"⚠️ [主动@] 回应检测异常（跳过）: {e}")
+
+
+async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
+    """尝试主动 @ 一位活跃用户以获取/验证记忆；返回是否已发言。
+
+    与话题插话互斥：本函数返回 True 时调用方不再尝试话题插话，
+    同一轮只做一件事，避免连续两次发言。
+
+    流程：选目标（配额/冷却/退避过滤）→ 生成指令 → 跑 Pipeline →
+    发送（带 @ 段）→ 记账（发出即计数）→ 起延迟任务检测回应。
+    """
+    if not PROACTIVE_AT_ENABLED:
+        return False
+
+    proactive = get_proactive()
+    if proactive.in_cooldown(group_id):
+        return False
+
+    # 排除 Bot 自身，避免自问自答
+    try:
+        self_id = int(bot.self_id)
+    except (TypeError, ValueError):
+        self_id = 0
+    target = pick_target(group_id, exclude_user_ids={self_id, 0})
+    if target is None:
+        return False
+
+    target.nickname = await _resolve_nickname(bot, group_id, target.user_id)
+    logger.info(
+        f"🎯 [主动@] 群 {group_id} 选定用户 {target.user_id}"
+        f"（{target.nickname}，mode={target.mode}）：{target.reason}"
+    )
+
+    lock = _group_locks[group_id]
+    async with lock:
+        ctx = ChatContext(
+            user_id=target.user_id,
+            group_id=group_id,
+            msg_id=0,
+            message=build_instruction(target),
+            # trigger 用 reply：主动 @ 是「对着某个具体人说话」，
+            # 需要该用户的画像与记忆参与上下文构建（proactive 走的是群级检索）
+            trigger="reply",
+        )
+        try:
+            ctx = await pipeline.run(ctx)
+        except Exception as e:
+            logger.error(f"主动 @ Pipeline 异常: {e}")
+            return False
+
+        if not ctx.lines:
+            return False
+
+        # 主动 @ 只发一句：追问必须简短，多行会像连续质询
+        line = _join_lines_naturally(ctx.lines) if len(ctx.lines) > 1 else ctx.lines[0].strip()
+        if not line:
+            return False
+
+        if proactive.recently_spoken(group_id, [line]):
+            logger.info(f"🛑 [主动@] 群 {group_id} 与已发言内容重复，跳过")
+            return False
+
+        proactive.mark_spoke(group_id)
+        proactive.record_spoken(group_id, [line])
+        logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {line}")
+
+        await _record_bot_lines(self_id, group_id, [line])
+
+        try:
+            await bot.send_group_msg(
+                group_id=group_id,
+                message=Message([MessageSegment.at(target.user_id), MessageSegment.text(" " + line)]),
+            )
+        except Exception as e:
+            logger.error(f"主动 @ 发送失败: {e}")
+            return False
+
+    # 发出即计数（不论是否获得回应），否则无回应的追问不占配额，
+    # 会导致对同一个人连续搭话
+    record_at(
+        group_id,
+        target.user_id,
+        topic=target.topic,
+        candidate_id=target.candidate_id,
+    )
+
+    # 起后台任务检测回应；登记到集合防止被 GC 回收
+    task = asyncio.create_task(
+        _check_reply_later(group_id, target.user_id, time.monotonic())
+    )
+    _reply_check_tasks.add(task)
+    task.add_done_callback(_reply_check_tasks.discard)
+    return True
+
+
 async def _proactive_speak_for_group(bot: Bot, group_id: int):
     """对单个群尝试主动发言：概率命中时生成一句自然的话并发送。
 
@@ -419,6 +561,11 @@ if scheduler is not None and PROACTIVE_ENABLED:
         # 逐个群尝试主动发言；单个群失败不拖垮其他群
         for group_id in ALLOWED_GROUPS:
             try:
+                # 主动 @ 优先：它有明确目的（获取/验证记忆），
+                # 且已受每用户配额与冷却约束。命中即跳过本轮话题插话，
+                # 同一轮只发一次言。
+                if await _proactive_at_user(bot, group_id):
+                    continue
                 await _proactive_speak_for_group(bot, group_id)
             except Exception as e:
                 logger.error(f"主动发言异常（群 {group_id}）: {e}")

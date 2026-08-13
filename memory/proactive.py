@@ -142,6 +142,14 @@ class ProactiveController:
         """
         return len(self._timestamps.get(group_id, {}).get(int(user_id), []))
 
+    def last_spoke_ts(self, group_id: int, user_id: int) -> float | None:
+        """该用户最后一次发言的 monotonic 时间戳；无记录返回 None。
+
+        供主动 @ 的回应检测判断「提问之后有没有说话」。
+        """
+        lst = self._timestamps.get(group_id, {}).get(int(user_id), [])
+        return lst[-1] if lst else None
+
     # ── 冷却管理 ────────────────────────────────────────
     def mark_spoke(self, group_id: int):
         self._last_speak[group_id] = time.monotonic()
