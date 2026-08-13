@@ -6,10 +6,12 @@
 import base64
 import hashlib
 
-import numpy as np
+import pytest
 
 import memory.benchmark as benchmark
 from config import MEMORY_BENCHMARK_DIR
+
+np = pytest.importorskip("numpy", reason="embedding fixture 的向量计算依赖 numpy（见 requirements-dev.txt）")
 
 
 def _synthetic_fixture():

@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
-from datetime import datetime
 from typing import Any
 
 from nonebot import logger
@@ -175,12 +174,10 @@ def _avg(groups) -> float:
 
 
 def _parse_ts(value: Any) -> float | None:
-    if not value:
-        return None
-    try:
-        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").timestamp()
-    except ValueError:
-        return None
+    from memory.timeutil import parse_db_timestamp
+
+
+    return parse_db_timestamp(value)
 
 
 def prune_traces(keep_days: float = 30.0) -> int:

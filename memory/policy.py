@@ -23,7 +23,6 @@ import json
 import math
 import re
 import time
-from datetime import datetime
 from typing import Any
 
 from config import (
@@ -557,24 +556,11 @@ def _context_match(mem: dict[str, Any], usage_score: int, query: str = "") -> fl
 
 
 def _parse_ts(value: Any) -> float | None:
-    """把 last_accessed_at / created_at 解析为 epoch 秒；空值或解析失败返回 None。"""
-    if value is None or value == "":
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    text = str(value).strip()
-    if not text:
-        return None
-    formats = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d")
-    for fmt in formats:
-        try:
-            return datetime.strptime(text, fmt).timestamp()
-        except (ValueError, TypeError):
-            continue
-    try:
-        return datetime.fromisoformat(text).timestamp()
-    except (ValueError, TypeError):
-        return None
+    """把 last_accessed_at / created_at 解析为 epoch 秒（UTC 基准）。"""
+    from memory.timeutil import parse_db_timestamp
+
+
+    return parse_db_timestamp(value)
 
 
 def _mem_timestamp(mem: dict[str, Any]) -> float:

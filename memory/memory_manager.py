@@ -385,8 +385,8 @@ class MemoryManager:
         却从未被用过的更有价值。
         """
         import math
-        import time
-        from datetime import datetime
+
+        from memory.timeutil import seconds_since
 
         imp = 0.0
         try:
@@ -403,15 +403,10 @@ class MemoryManager:
 
         # recency：解析失败或从未访问按「最旧」处理（recency=0），优先淘汰
         recency = 0.0
-        if last_accessed_at:
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
-                try:
-                    epoch = datetime.strptime(str(last_accessed_at).strip(), fmt).timestamp()
-                    age_days = max(0.0, (time.time() - epoch) / 86400.0)
-                    recency = math.exp(-age_days / 30.0)
-                    break
-                except (ValueError, TypeError):
-                    continue
+        elapsed = seconds_since(last_accessed_at) if last_accessed_at else None
+        if elapsed is not None:
+            age_days = max(0.0, elapsed / 86400.0)
+            recency = math.exp(-age_days / 30.0)
 
         return (
             MEMORY_QUOTA_W_IMPORTANCE * imp

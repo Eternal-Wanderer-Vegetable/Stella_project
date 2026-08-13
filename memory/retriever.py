@@ -26,7 +26,6 @@ import contextlib
 import re
 import sqlite3
 import time
-from datetime import datetime
 from typing import Any
 
 from config import (
@@ -109,31 +108,17 @@ def _memories_from_rows(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
 
 
 def _parse_timestamp(value: Any) -> float:
-    """把 last_accessed_at 等时间字段解析为 epoch 秒（float）。
+    """把 last_accessed_at 等时间字段解析为 epoch 秒（float，UTC 基准）。
 
     兼容三种形态：
     - 数值（epoch 秒）
     - 'YYYY-MM-DD HH:MM:SS' / 'YYYY-MM-DD HH:MM:SS.ffffff' / 'YYYY-MM-DD'
     - 空值 / 无法解析 → 返回 0.0
     """
-    if not value:
-        return 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return 0.0
-        try:
-            return float(text)
-        except ValueError:
-            pass
-        for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(text, fmt).timestamp()
-            except ValueError:
-                continue
-    return 0.0
+    from memory.timeutil import parse_db_timestamp
+
+
+    return parse_db_timestamp(value) or 0.0
 
 
 def _recency_score(value: Any, max_days: float = 30.0) -> float:

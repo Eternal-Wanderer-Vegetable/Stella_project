@@ -21,7 +21,6 @@ from __future__ import annotations
 import random
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
 
 from nonebot import logger
 
@@ -79,18 +78,18 @@ def at_quota(group_id: int, user_id: int) -> int:
 def _cooldown_elapsed(last_at_at: str | None) -> bool:
     """距上次主动 @ 该用户是否已超过 PROACTIVE_AT_USER_COOLDOWN。
 
-    用 DB 里的墙钟时间（不是 time.monotonic），保证重启后仍然有效。
+
+    必须用 UTC 解析：last_at_at 由 SQLite CURRENT_TIMESTAMP 写入（UTC），
+    此前用 datetime.now()（本地时间）比较导致该冷却在 UTC+8 下永不生效。
     解析失败时保守放行——宁可多等一轮，不如因脏数据永久卡死。
     """
+    from memory.timeutil import seconds_since
+
+
     if not last_at_at:
         return True
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-        try:
-            elapsed = (datetime.now() - datetime.strptime(str(last_at_at), fmt)).total_seconds()
-            return elapsed >= PROACTIVE_AT_USER_COOLDOWN
-        except (ValueError, TypeError):
-            continue
-    return True
+    elapsed = seconds_since(last_at_at)
+    return True if elapsed is None else elapsed >= PROACTIVE_AT_USER_COOLDOWN
 
 
 def can_at_user(group_id: int, user_id: int) -> tuple[bool, str]:

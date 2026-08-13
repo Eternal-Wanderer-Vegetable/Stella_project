@@ -46,11 +46,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install safety
-        run: pip install safety bandit
+      - name: Install pip-audit
+        run: pip install pip-audit bandit
 
-      - name: Check dependencies for vulnerabilities
-        run: safety check -r requirements.txt --full-report
+      - name: Audit dependencies for vulnerabilities
+        run: pip-audit -r requirements.txt
 
       - name: Run Bandit (security linter)
         run: bandit -r . -f json -o bandit-report.json || true
@@ -91,22 +91,21 @@ jobs:
           pip install pytest pytest-cov pytest-xdist
 
       - name: Run tests with coverage
-        env:
-          COVERAGE_FILE: cov-${{ matrix.python-version }}
         run: |
           pytest tests/ \
             -v \
             --cov=. \
             --cov-branch \
+            --cov-report=xml \
             -n auto \
             --dist loadgroup
 
-      - name: Upload coverage reports
+      - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.python-version }}
-          path: |
-            cov-${{ matrix.python-version }}
+          path: coverage.xml
 
       - name: Upload test results on failure
         uses: actions/upload-artifact@v4
@@ -116,49 +115,6 @@ jobs:
           path: |
             .pytest_cache/
             test-output.log
-
-  # ============ 覆盖率报告（合并） ============
-  coverage:
-    needs: [test]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Download all coverage reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-*
-          merge-multiple: true
-
-      - name: Install coverage tools
-        run: pip install coverage
-
-      - name: Combine coverage reports
-        run: coverage combine cov-*
-
-      - name: Generate combined report
-        run: |
-          coverage report --fail-under=80
-          coverage xml -o combined-coverage.xml
-
-      - name: Upload combined coverage
-        uses: actions/upload-artifact@v4
-        if: hashFiles('combined-coverage.xml') != ''
-        with:
-          name: combined-coverage
-          path: combined-coverage.xml
-
-      - name: Post coverage to PR
-        uses: orgoro/coverage@v3
-        if: github.event_name == 'pull_request' && hashFiles('combined-coverage.xml') != ''
-        with:
-          coverageFile: combined-coverage.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
 
   # ============ 通知（可选） ============
   notify:

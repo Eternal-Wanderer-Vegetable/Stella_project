@@ -155,6 +155,22 @@ def test_can_at_user_no_reply_backoff(tmp_path, monkeypatch):
     assert "退避" in reason
 
 
+def test_can_at_user_right_after_record_at_is_cooldown(tmp_path, monkeypatch):
+    """record_at 之后立刻 can_at_user 必须拒绝（冷却未过），且理由含「冷却」。
+
+    关键回归（2026-08-14）：last_at_at 由 SQLite CURRENT_TIMESTAMP 写入（UTC），
+    冷却判定必须按 UTC 解析——旧代码用 datetime.now()（本地时间）比较，在
+    UTC+8 下 elapsed 恒 > 7200s，冷却形同虚设，本用例直接失败。
+    该断言在任何运行环境时区下都应成立。
+    """
+    _setup_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(pt, "count_user_messages_24h", lambda g, u: 0)
+    proactive_state.record_at(1, 2001)
+    ok, reason = can_at_user(1, 2001)
+    assert ok is False
+    assert "冷却" in reason
+
+
 def test_can_at_user_disabled(monkeypatch):
     """PROACTIVE_AT_ENABLED=False → 一律拒绝。"""
     monkeypatch.setattr(pt, "PROACTIVE_AT_ENABLED", False)
@@ -212,9 +228,17 @@ def test_pick_target_verify_prefers_highest_confidence(tmp_path, monkeypatch):
 
 
 def test_pick_target_coldstart_avoids_last_topic(tmp_path, monkeypatch):
-    """无候选 → mode=coldstart，且 topic 不等于 last_asked_topic。"""
+    """无候选 → mode=coldstart，且 topic 不等于 last_asked_topic。
+
+    注意：record_at 会把 last_at_at 写成 CURRENT_TIMESTAMP（UTC），立即处于
+    PROACTIVE_AT_USER_COOLDOWN 冷却内（这正是 2026-08-14 修复后的正确行为，
+    旧代码在 UTC+8 下因时区偏差恒判「已过」）。本用例只测冷启动避让逻辑，
+    因此把冷却压到 0 让用户可被选中；冷却判定本身由
+    test_can_at_user_right_after_record_at_is_cooldown 单独覆盖。
+    """
     _setup_db(monkeypatch, tmp_path)
     monkeypatch.setattr(pt, "PROACTIVE_COLDSTART_TOPICS", ["游戏话题", "美食话题"])
+    monkeypatch.setattr(pt, "PROACTIVE_AT_USER_COOLDOWN", 0.0)
     monkeypatch.setattr(proactive.time, "monotonic", _faketicks())
     c = proactive.ProactiveController()
     monkeypatch.setattr(pt, "get_proactive", lambda: c)

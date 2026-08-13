@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date
 
 from nonebot import logger
 
@@ -126,7 +126,9 @@ def count_user_messages_24h(group_id: int, user_id: int) -> int:
     用于 @ 配额的频率奖励。只统计用户自己的发言，AT_MENTION 与 PASSIVE 都算，
     BOT_SELF 不算（那不是用户说的）。
     """
-    since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    from memory.timeutil import db_timestamp_str
+
+    since = db_timestamp_str(offset_hours=-24)
     try:
         conn = sqlite3.connect(DB_PATH)
         row = conn.execute(
