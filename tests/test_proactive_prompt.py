@@ -47,6 +47,15 @@ def test_no_placeholder_left():
         assert "{" not in out and "}" not in out
 
 
+def test_context_role_clause_present():
+    """上下文只作语气素材——缺了这条，模型会去回应尾巴里的对话而非执行指令。"""
+    for out in (
+        build_verify_instruction("某件事"),
+        build_coldstart_instruction("某话题"),
+    ):
+        assert "不要去回应下面的任何一句话" in out
+
+
 class _Target:
     def __init__(self, mode, **kw):
         self.mode = mode

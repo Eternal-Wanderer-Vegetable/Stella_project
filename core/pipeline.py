@@ -24,6 +24,24 @@ from core.llm.base import LLMBackend
 PreHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
 PostHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
 
+# 这些 intent 下 ctx.message 是**任务指令**而非用户输入，必须放在上下文之前。
+# 否则模型会把上下文尾部的最近对话当成「当前要回应的内容」，转而去接那句话
+# 而不是执行指令（2026-08-13 接错话 bug 的变体）。
+_INSTRUCTION_INTENTS = frozenset({"proactive_at"})
+
+
+def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
+    """把上下文段落与 ctx.message 按正确顺序拼成最终 user prompt。
+
+    普通对话：上下文 → 用户这句话（用户输入在最后，模型自然去回应它）。
+    指令型（见 _INSTRUCTION_INTENTS）：指令 → 上下文（上下文只是语气素材，
+    不是待回应的内容）。
+    """
+    context_text = context_text or ""
+    if ctx.intent in _INSTRUCTION_INTENTS:
+        return f"{ctx.message}\n\n{context_text}" if context_text else ctx.message
+    return f"{context_text}\n{ctx.message}" if context_text else ctx.message
+
 
 class Pipeline:
     """主处理管线：把"钩子 + LLM 后端"组装成一条可复用的消息处理链路。
@@ -90,6 +108,9 @@ class Pipeline:
         返回:
             处理后的 ChatContext；若前置钩子已填好 reply（如已被拦截/已回复）
             则提前返回，不再调用 LLM。
+
+        指令型 intent（如 proactive_at：见 _INSTRUCTION_INTENTS）下 ctx.message
+        是任务指令而非用户输入，会被 _compose_prompt 前置到上下文之前。
         """
         for _, hook in self._pre_hooks:
             result = await hook(ctx)
@@ -107,26 +128,32 @@ class Pipeline:
                 # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
                 from memory.prompt_builder import build_v2_prompt_context
 
-                user_prompt = build_v2_prompt_context(
-                    getattr(ctx, "short_term", "") or "",
-                    getattr(ctx, "user_profile", "") or "",
-                    getattr(ctx, "conversation_memories", []) or [],
-                    getattr(ctx, "behavior_constraints", []) or [],
-                    current_user_id=ctx.user_id,
-                    mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
-                ) + "\n" + ctx.message
+                user_prompt = _compose_prompt(
+                    build_v2_prompt_context(
+                        getattr(ctx, "short_term", "") or "",
+                        getattr(ctx, "user_profile", "") or "",
+                        getattr(ctx, "conversation_memories", []) or [],
+                        getattr(ctx, "behavior_constraints", []) or [],
+                        current_user_id=ctx.user_id,
+                        mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
+                    ),
+                    ctx,
+                )
             else:
                 from memory.prompt_builder import build_prompt_context
 
                 short_term = getattr(ctx, "short_term", "") or ""
                 user_profile = getattr(ctx, "user_profile", "") or ""
                 memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
-                user_prompt = build_prompt_context(
-                    short_term,
-                    user_profile,
-                    memories_for_prompt,
-                    current_user_id=ctx.user_id,
-                ) + "\n" + ctx.message
+                user_prompt = _compose_prompt(
+                    build_prompt_context(
+                        short_term,
+                        user_profile,
+                        memories_for_prompt,
+                        current_user_id=ctx.user_id,
+                    ),
+                    ctx,
+                )
 
             # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
             ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)

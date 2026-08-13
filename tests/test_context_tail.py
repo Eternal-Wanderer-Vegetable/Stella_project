@@ -128,17 +128,15 @@ def test_tail_in_time_order(tmp_path, monkeypatch):
     assert pos_first < pos_second < pos_third
 
 
-def test_regression_bot_self_before_user_reply(tmp_path, monkeypatch):
-    """回归：Bot 问「你平时用手机还是电脑」，紧接着用户回「手机」——
-    「我: 你平时用手机还是电脑」必须出现在「用户(...): 手机」之前。"""
+def test_bot_question_precedes_user_reply(tmp_path, monkeypatch):
+    """回归 2026-08-13：Bot 的提问必须出现在用户回答之前，否则模型会接错话题。"""
     db = tmp_path / "ctx.db"
     _make_db(
         db,
-        [("1", "1000", "你平时用手机还是电脑", "BOT_SELF"), ("1", "2001", "手机", "PASSIVE")],
+        [("1", "1000", "你平时是用手机玩游戏还是电脑呀", "BOT_SELF"), ("1", "1001", "手机", "PASSIVE")],
     )
     monkeypatch.setattr(pre_processors_mod, "DB_PATH", db)
     ctx = asyncio.run(build_context(ChatContext(user_id=1000, group_id=1, msg_id=0, message="手机")))
 
-    assert "我: 你平时用手机还是电脑" in ctx.short_term
-    assert "用户(2001): 手机" in ctx.short_term
-    assert ctx.short_term.index("我: 你平时用手机还是电脑") < ctx.short_term.index("用户(2001): 手机")
+    st = ctx.short_term
+    assert st.index("我: 你平时是用手机玩游戏还是电脑呀") < st.index("用户(1001): 手机")

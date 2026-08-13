@@ -140,7 +140,11 @@ RECENT_MESSAGE_LIMIT = _env_int("RECENT_MESSAGE_LIMIT", 3)
 # 短期摘要由整合器产出，按设计滞后（需累积 CONSOLIDATION_TRIGGER_NEW_MESSAGES 条
 # 才更新），因此最近几轮对话必须以原始消息补足——否则 Bot 看不到自己刚说过什么，
 # 用户的「手机」「对」这类简短回应会被接到上一个话题上去。
-RECENT_TAIL_LIMIT = _env_int("RECENT_TAIL_LIMIT", 8)
+# 太小：活跃群里刷屏会把 Bot 自己的提问挤出窗口，简短回应（「手机」「对」）
+#       重新被接到上一个话题（2026-08-13 bug 的成因）；
+# 太大：无关历史会干扰模型，且每次回复的 prompt 变长。
+# 12 是起点，需按真实群的刷屏速度调整。
+RECENT_TAIL_LIMIT = _env_int("RECENT_TAIL_LIMIT", 12)
 
 # ---------- 长期记忆引用策略 ----------
 # 主动发言时引用的长期记忆条数（按 last_accessed_at 倒序取最近 N 条）

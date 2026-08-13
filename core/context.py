@@ -19,7 +19,7 @@ class ChatContext:
     属性分组：
     输入标识（user_id/group_id/msg_id/message/source_kind）来自 OneBot 事件；
     处理产物（raw_output/thought/action/reply/lines）由 pipeline 与解析钩子写入；
-    诊断信息（trigger/llm_* 系列）用于 thought 日志记录调试；
+    诊断信息（trigger/intent/llm_* 系列）用于 thought 日志记录调试；
     结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用。
     """
 
@@ -41,8 +41,13 @@ class ChatContext:
 
     # ---- LLM 调用诊断信息（供 thought 日志记录） ----
     trigger: str = "reply"          # reply=@回复 / proactive=主动发言
-    intent: str = ""                # 纯诊断字段：区分 trigger 下的细分意图
-                                    # （如 proactive_at=主动 @，trigger 仍为 reply）
+    # 本次调用的意图（诊断 + prompt 组装用），不参与检索/模式判断：
+    #   ""               普通对话
+    #   "proactive_at"   主动 @ 某位用户（ctx.message 是任务指令，不是用户输入）
+    #   "proactive_join" 主动插话
+    # 不新增 trigger 取值：detect_mode / build_user_context / retrieval_v2
+    # 三处都在判断 trigger == "proactive"，扩充它的取值集合容易漏改。
+    intent: str = ""
     llm_backend: str = ""           # 实际调用的后端名（lm_studio）
     llm_model: str = ""             # 实际使用的模型名/站点
     system_prompt_len: int = 0      # 系统提示词字符数

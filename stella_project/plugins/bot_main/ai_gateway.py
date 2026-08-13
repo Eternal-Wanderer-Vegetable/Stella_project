@@ -323,7 +323,8 @@ async def _record_bot_lines(self_id: int, group_id: int, lines: list[str]) -> No
     """
     for line in lines:
         text = (line or "").strip()
-        if not text:
+        # 纯标点/单字兜底行（如 "......？"）无信息量，只会占用上下文尾巴窗口
+        if len(text) < 2 or not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
             continue
         try:
             await record_message(
@@ -508,6 +509,7 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
             msg_id=0,
             message="（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）",
             trigger="proactive",
+            intent="proactive_join",
         )
         try:
             ctx = await pipeline.run(ctx)
