@@ -84,6 +84,10 @@ async def log_thought(ctx: ChatContext) -> ChatContext:
         "reply": "@回复触发",
         "proactive": "主动发言",
     }.get(ctx.trigger, ctx.trigger)
+    # intent 是纯诊断字段：主动 @ 时 trigger 仍为 reply（走用户级检索），
+    # 但日志必须与「用户 @ 我」区分开，否则排查时混为一谈
+    if ctx.intent == "proactive_at":
+        trigger_str = "主动@用户"
     llm_info = f"{ctx.llm_backend or '未知'} / {ctx.llm_model or '未指定'}"
     log_entry = f"""### 🕒 [{now_str}] {trigger_str} | 群: `{ctx.group_id}` | 用户: `{ctx.user_id}`
 - **🖥 模型**: `{llm_info}`（耗时 {ctx.llm_elapsed:.2f}s，系统提示词 {ctx.system_prompt_len} 字符）

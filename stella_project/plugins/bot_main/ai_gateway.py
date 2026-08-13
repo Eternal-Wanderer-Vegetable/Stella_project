@@ -418,6 +418,8 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             # trigger 用 reply：主动 @ 是「对着某个具体人说话」，
             # 需要该用户的画像与记忆参与上下文构建（proactive 走的是群级检索）
             trigger="reply",
+            # 纯诊断字段：日志据此区分「用户 @ 我」与「我主动 @ 人」
+            intent="proactive_at",
         )
         try:
             ctx = await pipeline.run(ctx)

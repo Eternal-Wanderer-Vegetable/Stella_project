@@ -6,8 +6,8 @@
 
 本模块位于记忆工作流的“读取侧 + 写入侧入口”：
 - record_message：把每条群聊消息落库（group_messages，新消息统一写此，messages 为旧版回退）；
-- build_context：为每次回复组装短期上下文——优先取整合器写出的短期摘要（short_term_context），
-  为空时回退到最近 RECENT_MESSAGE_LIMIT 条原始消息；
+- build_context：为每次回复组装短期上下文——话题层摘要 + 最近 RECENT_TAIL_LIMIT 条
+  原始消息尾巴（可并存，recent_exchanges 仅在无尾巴时兜底）；
 - build_user_context：组装用户画像与长期记忆——@-回复时读用户画像 + 该用户相关记忆，
   主动发言时用群级记忆回顾；
 - _extract_keywords / _STOP_WORDS：中文停用词与关键词提取，供记忆话题匹配使用。
@@ -23,7 +23,7 @@ from config import (
     DB_PATH,
     MEMORY_V2_ENABLED,
     PROACTIVE_LONG_TERM_LIMIT,
-    RECENT_MESSAGE_LIMIT,
+    RECENT_TAIL_LIMIT,
     REPLY_LONG_TERM_LIMIT,
 )
 from core.context import ChatContext
@@ -86,7 +86,7 @@ async def record_message(ctx: ChatContext) -> ChatContext:
 
 
 async def build_context(ctx: ChatContext) -> ChatContext:
-    """组装短期上下文：优先用整合器产出的短期摘要，摘要缺失时回退到最近原始消息。
+    """组装短期上下文：话题层摘要 + 最近原始消息尾巴（可同时存在）。
 
     参数：ctx — 会被写入 ctx.short_term；
     副作用：向 ctx.short_term 写入文本（读取 DB，不写库）；
@@ -98,69 +98,109 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # 短期摘要优先：取 short_term_context 的摘要、进行中话题与关键发言（带说话人归属）
-        cursor.execute(
-            "SELECT active_summary, pending_topic FROM short_term_context WHERE group_id = ?",
-            (str(ctx.group_id),),
-        )
-        row = cursor.fetchone()
-        # 关键发言存在与否则单独读取：旧库可能没有该列，捕获后按空处理
-        exchanges: list[dict] = []
+        # ── 1) 短期摘要：只取「话题层」信息（active_summary / pending_topic） ──
+        active_summary = pending_topic = ""
         try:
             cursor.execute(
-                "SELECT recent_exchanges FROM short_term_context WHERE group_id = ?",
+                "SELECT active_summary, pending_topic FROM short_term_context WHERE group_id = ?",
                 (str(ctx.group_id),),
             )
-            raw = cursor.fetchone()
-            if raw and raw[0]:
-                try:
-                    parsed = json.loads(raw[0])
-                    exchanges = [e for e in parsed if isinstance(e, dict) and e.get("user_id") and e.get("content")]
-                except (json.JSONDecodeError, TypeError):
-                    exchanges = []
+            row = cursor.fetchone()
+            if row:
+                active_summary, pending_topic = (row[0] or ""), (row[1] or "")
         except sqlite3.OperationalError:
-            exchanges = []
+            pass
 
-        if row and (row[0] or row[1] or exchanges):
-            parts = []
-            if row[0]:
-                parts.append(f"对话摘要: {row[0]}")
-            if row[1] and row[1] != "无":
-                parts.append(f"进行中的话题: {row[1]}")
-            if exchanges:
-                lines = [f"用户({e.get('user_id')}): {e.get('content')}" for e in exchanges]
-                parts.append("近期关键发言:\n" + "\n".join(lines))
-            summary_text = "\n".join(parts) if parts else ""
-            if summary_text:
-                ctx.short_term = summary_text
-                logger.info("🧠 [Context] 使用短期记忆摘要")
-                conn.close()
-                return ctx
+        # ── 2) 最近原始消息（含 Bot 自己的发言，带来源标注） ──
+        tail = _fetch_recent_tail(cursor, ctx.group_id, RECENT_TAIL_LIMIT)
 
-        # 原始消息回退：无摘要时才取最近 RECENT_MESSAGE_LIMIT 条群消息（时间倒序→正序）
-        if RECENT_MESSAGE_LIMIT > 0:
-            try:
-                cursor.execute(
-                    "SELECT user_id, content FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
-                    (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
-                )
-            except sqlite3.OperationalError:
-                # 旧库只有 messages 表时回退读取它
-                cursor.execute(
-                    "SELECT user_id, content FROM messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
-                    (str(ctx.group_id), RECENT_MESSAGE_LIMIT),
-                )
-            rows = cursor.fetchall()
-            if rows:
-                rows.reverse()
-                text = "\n".join(f"用户({uid}): {content}" for uid, content in rows)
-                ctx.short_term = text
-                logger.info(f"📝 [Context] 短期记忆为空，回退到最近{RECENT_MESSAGE_LIMIT}条原始消息")
+        # ── 3) recent_exchanges 只在没有原始尾巴时兜底 ──
+        # 它是整合器产出的滞后快照，与原始尾巴并存会出现同一段对话的两个版本，
+        # 模型会以摘要为准从而接错话题（2026-08-13 bug）。
+        exchanges_text = "" if tail else _fetch_recent_exchanges_text(cursor, ctx.group_id)
 
         conn.close()
+
+        parts: list[str] = []
+        if active_summary:
+            parts.append(f"对话摘要: {active_summary}")
+        if pending_topic and pending_topic != "无":
+            parts.append(f"进行中的话题: {pending_topic}")
+        if exchanges_text:
+            parts.append("近期关键发言:\n" + exchanges_text)
+        if tail:
+            parts.append("最近的对话（时间正序，「我」是你自己说过的话）:\n" + tail)
+
+        if parts:
+            ctx.short_term = "\n".join(parts)
+            logger.info(
+                f"🧠 [Context] 摘要={'有' if active_summary else '无'} "
+                f"原始尾巴={len(tail.splitlines()) if tail else 0} 条"
+            )
     except Exception as e:
         logger.warning(f"读取上下文异常（跳过）: {e}")
     return ctx
+
+
+def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str:
+    """取最近 limit 条原始消息，按时间正序拼成文本。
+
+    Bot 自己的发言（source_kind=BOT_SELF）渲染为「我」，让聊天模型知道自己
+    刚说过什么——否则用户的简短回应（「手机」「对」）会被接到上一个话题上。
+    旧库没有 source_kind 列时回退为全部按用户渲染。
+    """
+    if limit <= 0:
+        return ""
+    try:
+        rows = cursor.execute(
+            "SELECT user_id, content, source_kind FROM group_messages "
+            "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+            (str(group_id), limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        try:
+            rows = [
+                (uid, content, "PASSIVE")
+                for uid, content in cursor.execute(
+                    "SELECT user_id, content FROM group_messages "
+                    "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                    (str(group_id), limit),
+                ).fetchall()
+            ]
+        except sqlite3.OperationalError:
+            return ""
+    if not rows:
+        return ""
+    rows.reverse()
+    lines = [
+        f"我: {content}" if kind == "BOT_SELF" else f"用户({uid}): {content}"
+        for uid, content, kind in rows
+        if (content or "").strip()
+    ]
+    return "\n".join(lines)
+
+
+def _fetch_recent_exchanges_text(cursor: sqlite3.Cursor, group_id: int) -> str:
+    """读整合器产出的 recent_exchanges（带说话人归属），拼成文本；无则空串。"""
+    try:
+        raw = cursor.execute(
+            "SELECT recent_exchanges FROM short_term_context WHERE group_id = ?",
+            (str(group_id),),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return ""
+    if not raw or not raw[0]:
+        return ""
+    try:
+        parsed = json.loads(raw[0])
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    lines = [
+        f"用户({e.get('user_id')}): {e.get('content')}"
+        for e in parsed
+        if isinstance(e, dict) and e.get("user_id") and e.get("content")
+    ]
+    return "\n".join(lines)
 
 
 async def build_user_context(ctx: ChatContext) -> ChatContext:

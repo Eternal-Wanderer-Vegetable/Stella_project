@@ -131,7 +131,16 @@ EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
 ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "").split(",") if x.strip()}
 
 # ---------- 上下文 ----------
+# ⚠️ 废弃（DEPRECATED）：RECENT_MESSAGE_LIMIT 已被 RECENT_TAIL_LIMIT 取代——
+# build_context 现在总是附加最近原始消息尾巴，recent_exchanges 仅在无尾巴时兜底，
+# RECENT_MESSAGE_LIMIT 不再被读取。保留定义仅供既有 .env 兼容（无效但不报错）。
 RECENT_MESSAGE_LIMIT = _env_int("RECENT_MESSAGE_LIMIT", 3)
+
+# 每次回复时附加的最近原始消息条数（含 Bot 自己的发言）。
+# 短期摘要由整合器产出，按设计滞后（需累积 CONSOLIDATION_TRIGGER_NEW_MESSAGES 条
+# 才更新），因此最近几轮对话必须以原始消息补足——否则 Bot 看不到自己刚说过什么，
+# 用户的「手机」「对」这类简短回应会被接到上一个话题上去。
+RECENT_TAIL_LIMIT = _env_int("RECENT_TAIL_LIMIT", 8)
 
 # ---------- 长期记忆引用策略 ----------
 # 主动发言时引用的长期记忆条数（按 last_accessed_at 倒序取最近 N 条）

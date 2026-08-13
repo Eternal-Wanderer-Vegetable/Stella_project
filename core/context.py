@@ -41,6 +41,8 @@ class ChatContext:
 
     # ---- LLM 调用诊断信息（供 thought 日志记录） ----
     trigger: str = "reply"          # reply=@回复 / proactive=主动发言
+    intent: str = ""                # 纯诊断字段：区分 trigger 下的细分意图
+                                    # （如 proactive_at=主动 @，trigger 仍为 reply）
     llm_backend: str = ""           # 实际调用的后端名（lm_studio）
     llm_model: str = ""             # 实际使用的模型名/站点
     system_prompt_len: int = 0      # 系统提示词字符数

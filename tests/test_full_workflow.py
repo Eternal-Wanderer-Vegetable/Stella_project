@@ -254,12 +254,17 @@ def test_full_workflow_summary_feeds_next_reply(tmp_path, monkeypatch):
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
     asyncio.run(c.consolidate_group(1001))
 
-    # 下一轮对话：build_context 应命中短期摘要而非原始消息回退
+    # 下一轮对话：build_context 应命中短期摘要（话题层）并附加原始尾巴；
+    # recent_exchanges 是摘要的滞后快照，有原始尾巴时被丢弃（2026-08-13 bug 修复）
     ctx = ChatContext(user_id=112, group_id=1001, msg_id=3, message="你们在聊什么")
     asyncio.run(pre_processors.build_context(ctx))
 
     assert "对话摘要: 在聊格斗训练" in ctx.short_term
-    assert "用户(111): 今天练过三年散打" in ctx.short_term
+    assert "进行中的话题: 练散打经历" in ctx.short_term
+    assert "近期关键发言" not in ctx.short_term
+    # 原始尾巴补足最近几轮：整合器产出的 recent_exchanges（「今天练过三年散打」）被丢弃，
+    # 实际消息以原始形式呈现
+    assert "用户(111): 我以前练过三年散打" in ctx.short_term
 
 
 def test_full_workflow_force_consolidation_small_batch(tmp_path, monkeypatch):
