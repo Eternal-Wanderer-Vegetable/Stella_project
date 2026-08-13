@@ -4,7 +4,9 @@
 """主动 @ 配额与选人策略（memory.proactive_target）的单元测试。
 
 覆盖 D2a：at_quota 配额插值、can_at_user 排除规则、_cooldown_elapsed 解析、
-pick_target 的 verify / coldstart 两种选人路径与 exclude 过滤。全部纯逻辑，不触网。
+pick_target 的 verify / coldstart 两种选人路径与 exclude 过滤。
+覆盖 D2b：_topic_covered 关键词避让、ProactiveTarget.nickname 默认值。
+全部纯逻辑，不触网。
 """
 import sqlite3
 from datetime import datetime, timedelta
@@ -16,6 +18,7 @@ from memory.proactive_target import (
     ProactiveTarget,
     _cooldown_elapsed,
     _fetch_observing_candidate,
+    _topic_covered,
     at_quota,
     can_at_user,
     pick_target,
@@ -235,3 +238,24 @@ def test_fetch_observing_candidate_window(tmp_path, monkeypatch):
     found = _fetch_observing_candidate(1, 2001)
     assert found is not None
     assert found[0] == "right"
+
+
+# ── D2b：冷启动关键词避让与昵称 ──────────────────────────
+
+def test_topic_covered_variants():
+    """_topic_covered：空 known → False；全部词元命中 → True；部分命中 → False。"""
+    assert _topic_covered("RTX5080", "") is False
+    assert _topic_covered("RTX5080", "他有一张 RTX5080 显卡") is True
+    assert _topic_covered("RTX5080", "他有一张 4090 显卡") is False
+    # 要求全部关键词都命中——部分命中不算已知（宁可多问一次）
+    assert _topic_covered("RTX5080 显卡", "他有一张 RTX5080") is False
+    assert _topic_covered("RTX5080 显卡", "他有一张 RTX5080 显卡") is True
+
+
+def test_target_nickname_default():
+    """ProactiveTarget.nickname 默认值为「对方」。"""
+    t = ProactiveTarget(user_id=2001, mode="coldstart")
+    assert t.nickname == "对方"
+    # 可变 dataclass：ai_gateway 拿到 target 后可直接赋值
+    t.nickname = "小明"
+    assert t.nickname == "小明"

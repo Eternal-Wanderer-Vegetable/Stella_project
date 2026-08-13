@@ -49,6 +49,7 @@ class ProactiveTarget:
 
     user_id: int
     mode: str  # "verify"（验证候选）或 "coldstart"（冷启动话题）
+    nickname: str = "对方"  # 群名片/昵称，用于生成自然的称呼
     candidate_id: str = ""
     candidate_content: str = ""
     candidate_type: str = ""
@@ -139,6 +140,41 @@ def _fetch_observing_candidate(group_id: int, user_id: int) -> tuple[str, str, s
     return str(row[0]), str(row[1] or ""), str(row[2] or "FACT"), float(row[3] or 0.0)
 
 
+def _known_topics(group_id: int, user_id: int) -> str:
+    """该用户已有的 active 记忆内容（拼成一段），用于避免冷启动重复提问。
+
+    只取内容文本，不含元信息——它只是用来做关键词避让，不进 prompt。
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT content FROM memories WHERE group_id = ? AND user_id = ? "
+            "AND status = 'active' LIMIT 50",
+            (str(group_id), str(user_id)),
+        ).fetchall()
+        conn.close()
+    except sqlite3.Error:
+        return ""
+    return " ".join((r[0] or "") for r in rows)
+
+
+def _topic_covered(topic: str, known: str) -> bool:
+    """该话题是否已被现有记忆覆盖（粗判：话题里的关键词元已出现在记忆中）。
+
+    用 text_similarity 的分词做交集，命中即认为已知。宁可漏判（多问一次）
+    也不要误判（把没问过的话题当成已知），因此要求全部关键词都命中。
+    """
+    if not known:
+        return False
+    from memory.text_similarity import normalize_text
+
+    words = [w for w in normalize_text(topic).split() if len(w) >= 2]
+    if not words:
+        return False
+    known_norm = normalize_text(known)
+    return all(w in known_norm for w in words)
+
+
 def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> ProactiveTarget | None:
     """挑选本次主动 @ 的对象；无合适目标时返回 None。
 
@@ -189,8 +225,13 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
         return None
     uid = eligible[0]
     state = get_state(group_id, uid)
-    # 避开上次问过的话题，避免连续两次问同一件事
-    topics = [t for t in PROACTIVE_COLDSTART_TOPICS if t != state["last_asked_topic"]]
+    known = _known_topics(group_id, uid)
+    # 依次避开：上次问过的话题、已经知道答案的话题（关键词出现在已有记忆里）
+    topics = [
+        t
+        for t in PROACTIVE_COLDSTART_TOPICS
+        if t != state["last_asked_topic"] and not _topic_covered(t, known)
+    ]
     topic = random.choice(topics or PROACTIVE_COLDSTART_TOPICS)
     return ProactiveTarget(
         user_id=uid,
