@@ -38,6 +38,7 @@ from config import (
     DB_CLEANUP_ON_START,
     EXTENSIONS_DIR,
     LLM_TIMEOUT,
+    LM_STUDIO_API_KEY,
     LM_STUDIO_BASE_URL,
     LM_STUDIO_MODEL,
     MESSAGE_CLEANUP_ENABLED,
@@ -104,6 +105,7 @@ pipeline.register_post_hook(log_thought, priority=40)
 pipeline.set_llm_backend(LMStudioBackend(
     base_url=LM_STUDIO_BASE_URL,
     model=LM_STUDIO_MODEL,
+    api_key=LM_STUDIO_API_KEY,
 ))
 
 # 读取系统提示词文件（若存在则注入，否则只警告不中断）

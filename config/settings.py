@@ -332,6 +332,8 @@ MEMORY_BENCHMARK_DIR = _env_path(
 # ---------- 本地 LLM（LM Studio） ----------
 LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
 LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
+# 远程 OpenAI 兼容 API 的 Bearer Token；本地 LM Studio 留空
+LM_STUDIO_API_KEY = _env("LM_STUDIO_API_KEY", "")
 
 # LLM 调用超时（秒）
 LLM_TIMEOUT = _env_float("LLM_TIMEOUT", 90.0)
@@ -340,6 +342,8 @@ LLM_TIMEOUT = _env_float("LLM_TIMEOUT", 90.0)
 # 整合统一使用本地 LM Studio（在线整合流程已废弃，见 _deprecated/core_llm_flexiweb.py），
 # 数据整理任务与主聊天模型分离，避免显存/推理竞争；可指向同一实例的多模型或独立端口。
 CONSOLIDATION_LM_STUDIO_BASE_URL = _env("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
+# 记忆整合用的 API key（默认与主聊天共用；远程 API 时填写）
+CONSOLIDATION_LM_STUDIO_API_KEY = _env("CONSOLIDATION_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
 # 注意：LM Studio 路由需要完整模型 ID（含 google/ 前缀），如 google/gemma-4-e4b
 CONSOLIDATION_LM_STUDIO_MODEL = _env("CONSOLIDATION_LM_STUDIO_MODEL", "google/gemma-4-e4b")
 # 整理任务偏低温度，保证 JSON 输出稳定

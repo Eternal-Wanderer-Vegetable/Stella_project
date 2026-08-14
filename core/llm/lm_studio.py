@@ -22,20 +22,23 @@ class LMStudioBackend(LLMBackend):
     backend_name = "lm_studio"
     is_local = True
 
-    def __init__(self, base_url: str, model: str | None = None, max_tokens: int = 2000, temperature: float = 0.7):
+    def __init__(self, base_url: str, model: str | None = None, max_tokens: int = 2000, temperature: float = 0.7, api_key: str = ""):
         """初始化后端。
 
         参数:
-            base_url: LM Studio 服务地址，如 http://127.0.0.1:1234；
+            base_url: LLM 服务地址，如本地 LM Studio http://127.0.0.1:1234，
+                或远程 OpenAI 兼容 API；
             model: 模型 ID，留空则由服务端默认路由；部分路由要求完整 ID（含前缀）；
             max_tokens: 单次生成的最大 token 数；
-            temperature: 采样温度，值越低输出越稳定。
+            temperature: 采样温度，值越低输出越稳定；
+            api_key: 远程 API 的 Bearer Token（本地 LM Studio 留空）。
         """
         # 统一去掉末尾斜杠再拼路径，避免 base_url 带/导致 URL 出现双斜杠
         self.api_url = f"{base_url.rstrip('/')}/v1/chat/completions"
         self.model = model or ""
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.api_key = api_key
 
     async def generate(self, prompt: str, system_prompt: str = "") -> str:
         """生成回复；对瞬时故障最多重试 3 次，最终仍失败则抛异常。
@@ -58,16 +61,19 @@ class LMStudioBackend(LLMBackend):
         }
         if self.model:
             payload["model"] = self.model
-        # 推理模型（如 gemma-4-e4b）会把 token 全耗在思维链上导致 content 为空，禁用推理
-        payload["reasoning_effort"] = "none"
+        # 本地模型（如 gemma-4-e4b）推理时会把 token 全耗在思维链上导致 content 为空，禁用推理；
+        # 远程 OpenAI 兼容 API 不认识该参数，不发送
+        if not self.api_key:
+            payload["reasoning_effort"] = "none"
 
         logger.info(f"[LM Studio] 发送请求（prompt {len(prompt)} 字符）")
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         last_error: Exception | None = None
         # 最多 3 次尝试；trust_env=False 忽略系统代理，避免局域网地址被代理拦截
         for attempt in range(3):
             try:
                 async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), trust_env=False) as client:
-                    resp = await client.post(self.api_url, json=payload)
+                    resp = await client.post(self.api_url, json=payload, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
                     choice = data["choices"][0]

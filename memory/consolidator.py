@@ -29,6 +29,7 @@ from typing import Optional
 from nonebot import logger
 
 from config import (
+    CONSOLIDATION_LM_STUDIO_API_KEY,
     CONSOLIDATION_LM_STUDIO_BASE_URL,
     CONSOLIDATION_LM_STUDIO_MODEL,
     CONSOLIDATION_LM_STUDIO_TEMPERATURE,
@@ -75,6 +76,7 @@ class MemoryConsolidator:
                     model=CONSOLIDATION_LM_STUDIO_MODEL,
                     max_tokens=CONSOLIDATION_LOCAL_MAX_TOKENS,
                     temperature=CONSOLIDATION_LM_STUDIO_TEMPERATURE,
+                    api_key=CONSOLIDATION_LM_STUDIO_API_KEY,
                 ),
             )
         ]

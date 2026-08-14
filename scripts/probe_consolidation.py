@@ -39,6 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (
+    CONSOLIDATION_LM_STUDIO_API_KEY,
     CONSOLIDATION_LM_STUDIO_BASE_URL,
     CONSOLIDATION_LM_STUDIO_MODEL,
     CONSOLIDATION_LM_STUDIO_TEMPERATURE,
@@ -458,6 +459,7 @@ async def _amain() -> None:
         model=CONSOLIDATION_LM_STUDIO_MODEL,
         max_tokens=CONSOLIDATION_LOCAL_MAX_TOKENS,
         temperature=a.temperature if a.temperature is not None else CONSOLIDATION_LM_STUDIO_TEMPERATURE,
+        api_key=CONSOLIDATION_LM_STUDIO_API_KEY,
     )
     consolidator = MemoryConsolidator()
 
