@@ -464,13 +464,22 @@ NAPCAT_QQ_ACCOUNT = _env("NAPCAT_QQ_ACCOUNT", "")
 NAPCAT_QQ_PASSWORD = _env("NAPCAT_QQ_PASSWORD", "")
 NAPCAT_QQ_PASSWORD_MD5 = _env("NAPCAT_QQ_PASSWORD_MD5", "")
 
-# ---------- NapCat 消息流看门狗（外部重启，不再走 WebUI API） ----------
-# 超过该秒数无任何群消息进入，判定链路中断并外部重启 NapCat
+# ---------- NapCat 链路看门狗（外部重启，不再走 WebUI API） ----------
+# 距上次收到**任何** OneBot 事件（含 NapCat 周期性发送的心跳元事件）超过该秒数，
+# **且主动探活（get_status）失败**，才判定链路中断并外部重启 NapCat
 NAPCAT_WATCHDOG_TIMEOUT = _env_int("NAPCAT_WATCHDOG_TIMEOUT", 300)
 # 看门狗定时检查间隔（秒）
 NAPCAT_WATCHDOG_CHECK_INTERVAL = _env_int("NAPCAT_WATCHDOG_CHECK_INTERVAL", 60)
-# 重启后把最近消息时间拨后此秒数，给恢复留缓冲，避免反复触发
+# 重启后把最近心跳时间拨后此秒数，给恢复留缓冲，避免反复触发
 NAPCAT_WATCHDOG_RESTART_COOLDOWN = _env_int("NAPCAT_WATCHDOG_RESTART_COOLDOWN", 120)
+# 连续外部重启的最大次数（连接恢复后清零）。达到上限即停止自动重启：
+# 重启换不回连接时（如自动登录退化为扫码），继续重启只会持续把 bot 踢下线，
+# 且高频登录尝试可能触发 QQ 风控。
+NAPCAT_WATCHDOG_MAX_RESTARTS = _env_int("NAPCAT_WATCHDOG_MAX_RESTARTS", 3)
+# NapCat 启动输出的日志文件（原先丢进 DEVNULL，导致重启后完全无法诊断）
+NAPCAT_LAUNCH_LOG_PATH = _env_path("NAPCAT_LAUNCH_LOG_PATH", PROJECT_ROOT / "napcat_launch.log")
+# 是否显示 NapCat 控制台窗口（调试期建议 true，便于直接看到登录界面/扫码提示）
+NAPCAT_SHOW_WINDOW = _env("NAPCAT_SHOW_WINDOW", "false").lower() in ("true", "1", "yes")
 
 # ---------- 破防检测 ----------
 BAD_PHRASES = [

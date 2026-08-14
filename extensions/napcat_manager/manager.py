@@ -33,10 +33,12 @@ import time
 from nonebot import logger
 
 from config import (
+    NAPCAT_LAUNCH_LOG_PATH,
     NAPCAT_QQ_ACCOUNT,
     NAPCAT_QQ_PASSWORD,
     NAPCAT_QQ_PASSWORD_MD5,
     NAPCAT_SHELL_PATH,
+    NAPCAT_SHOW_WINDOW,
 )
 
 # launcher-user.bat 启动时需要用到的组件
@@ -79,28 +81,43 @@ def is_running() -> bool:
 def start_napcat() -> None:
     """通过 launcher-user.bat 在机器人进程之外启动 NapCat。
 
-    用 cmd /c 拉起批处理，隐藏控制台窗口；QQ 账号/密码经环境变量注入，
-    使 NapCat 启动后自动登录。启动器返回前 NapCatWinBootMain 已独立运行。
+    用 cmd /c 拉起批处理，按 NAPCAT_SHOW_WINDOW 决定是否隐藏控制台窗口；
+    QQ 账号/密码经环境变量注入，使 NapCat 启动后自动登录。启动器返回前
+    NapCatWinBootMain 已独立运行。输出写到 NAPCAT_LAUNCH_LOG_PATH（追加），
+    便于重启后回溯启动过程。
     """
     if not is_installed():
         logger.warning(f"[NapCat] 缺少启动组件，目录: {NAPCAT_SHELL_PATH}")
         raise NapCatNotInstalledError(str(NAPCAT_SHELL_PATH))
+    if is_running():
+        logger.warning(
+            "[NapCat] 已有 NapCatWinBootMain 存活，跳过启动（避免多实例抢占同一账号/端口）"
+        )
+        return
     _write_login_env_file()
     launcher = NAPCAT_SHELL_PATH / LAUNCHER_NAME
+    log_path = NAPCAT_LAUNCH_LOG_PATH
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    # 追加模式 + 分隔标记：多次重启的输出叠在同一文件里，便于回溯
+    log_file = log_path.open("a", encoding="utf-8", errors="replace")
+    log_file.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} 启动 NapCat =====\n")
+    log_file.flush()
+
     creationflags = 0
     if os.name == "nt":
-        creationflags = (
-            subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
-        )
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        if not NAPCAT_SHOW_WINDOW:
+            creationflags |= subprocess.CREATE_NO_WINDOW
+
     subprocess.Popen(
         ["cmd.exe", "/c", str(launcher)],
         cwd=str(NAPCAT_SHELL_PATH),
         env=_build_login_env(),
         creationflags=creationflags,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
     )
-    logger.info(f"[NapCat] 已通过 {LAUNCHER_NAME} 外部启动，等待 QQ 自动登录")
+    logger.info(f"[NapCat] 已通过 {LAUNCHER_NAME} 外部启动（输出见 {log_path}）")
 
 
 def stop_napcat() -> None:
@@ -125,6 +142,15 @@ def restart_napcat() -> None:
     stop_napcat()
     time.sleep(_RESTART_WAIT_SECONDS)
     start_napcat()
+    # launcher 返回不代表 NapCatWinBootMain 存活；轮询确认。
+    # 注意这只验证进程，**不验证登录**——登录状态只能靠 watchdog 的
+    # on_bot_connect 事件判断（重启后长时间没有 connect 基本就是卡在扫码）。
+    for _ in range(10):
+        time.sleep(1.0)
+        if is_running():
+            logger.info("[NapCat] 重启后进程已确认存活")
+            return
+    logger.error("[NapCat] 重启后未检测到 NapCatWinBootMain 进程，启动可能失败")
 
 
 def _build_login_env() -> dict[str, str]:
