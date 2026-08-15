@@ -79,12 +79,17 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `RECENT_TAIL_LIMIT` | `12` | 每次回复附加的最近原始消息条数（含 Bot 自己的发言） |
+| `RECENT_TAIL_MAX_AGE_MINUTES` | `45.0` | 尾巴时间窗（分钟）：超出时长的消息不再算「最近的对话」；`0` 不做时间过滤 |
+| `RECENT_TAIL_GAP_MARK_MINUTES` | `15.0` | 相邻消息间隔超过该分钟数时在尾巴里插入断层标记；`0` 关闭 |
+| `SHORT_TERM_SUMMARY_STALE_MINUTES` | `60.0` | 摘要超时未更新则标题改为「之前的话题」并注明时长；`0` 关闭 |
 | `MAX_REPLY_LINES` | `5` | 单次回复最大行数 |
 | `SEND_INTERVAL` | `0.8` | 多行之间的发送间隔（秒） |
 | `FALLBACK_REPLY` | `......？` | 兜底回复 |
 | `BAD_PHRASES` | 见 settings.py | 破防语句清单，命中即替换为兜底回复 |
 
 > **`RECENT_TAIL_LIMIT` 的权衡**：太小会让活跃群的刷屏把 Bot 自己的提问挤出窗口，用户的简短回应（「手机」「对」）会被接到上一个话题上；太大则无关历史干扰模型且 prompt 变长。12 是起点，需按群的刷屏速度调整。
+
+> **尾巴的时间窗与断层标记**：仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生的事（2026-08-15 缺陷）。`RECENT_TAIL_MAX_AGE_MINUTES` 过滤掉超时消息；窗口内部相邻消息间隔超过 `RECENT_TAIL_GAP_MARK_MINUTES` 时插入一行「（……中间隔了 X……）」标记，让模型知道「之前聊过但已经过去很久」，而非直接失忆。
 
 `RECENT_MESSAGE_LIMIT` 已废弃（被 `RECENT_TAIL_LIMIT` 取代），保留定义以兼容既有 `.env`。
 
@@ -386,6 +391,8 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | 记错事 | 升 `MEMORY_CONFIRM_HIGH_CONFIDENCE`；升 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；关闭 `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` |
 | 回复提到不相关的旧事 | 升 `MEMORY_SCORE_MIN`；降各 `MEMORY_LIMIT_*` |
 | 接错话题 | 升 `RECENT_TAIL_LIMIT` |
+| 把几小时前的旧对话当成当前话题 | 降 `RECENT_TAIL_MAX_AGE_MINUTES` |
+| 尾巴里断层太多/太少 | 调整 `RECENT_TAIL_GAP_MARK_MINUTES` |
 | 记忆库膨胀 | 开启 `MEMORY_QUOTA_ENFORCE`（先看 dry-run）；降 `MEMORY_USER_QUOTA` |
 | 整合太慢 | 降 `CONSOLIDATION_LOCAL_BATCH_SIZE`；换更小的整合模型 |
 

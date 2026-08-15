@@ -146,6 +146,17 @@ RECENT_MESSAGE_LIMIT = _env_int("RECENT_MESSAGE_LIMIT", 3)
 # 12 是起点，需按真实群的刷屏速度调整。
 RECENT_TAIL_LIMIT = _env_int("RECENT_TAIL_LIMIT", 12)
 
+# 原始尾巴的时间窗（分钟）：超出该时长的消息不再算作「最近的对话」。
+# 停机数小时后重启时，仅按 id 取最近 N 条会把几小时前的对话当成刚刚发生的事
+# （2026-08-15 缺陷）。0 表示不做时间过滤。
+RECENT_TAIL_MAX_AGE_MINUTES = _env_float("RECENT_TAIL_MAX_AGE_MINUTES", 45.0)
+# 相邻两条消息间隔超过该分钟数时，在尾巴里插入一行断层标记。
+# 比直接丢弃更好：让模型知道「之前聊过但已经过去很久」，而不是完全失忆。
+RECENT_TAIL_GAP_MARK_MINUTES = _env_float("RECENT_TAIL_GAP_MARK_MINUTES", 15.0)
+# 话题摘要超过该分钟数未更新时，标题改为「之前的话题」并注明时长。
+# 摘要由整合器产出、按设计滞后，不标注新鲜度会让模型以为那是当前话题。
+SHORT_TERM_SUMMARY_STALE_MINUTES = _env_float("SHORT_TERM_SUMMARY_STALE_MINUTES", 60.0)
+
 # ---------- 长期记忆引用策略 ----------
 # 主动发言时引用的长期记忆条数（按 last_accessed_at 倒序取最近 N 条）
 PROACTIVE_LONG_TERM_LIMIT = _env_int("PROACTIVE_LONG_TERM_LIMIT", 10)

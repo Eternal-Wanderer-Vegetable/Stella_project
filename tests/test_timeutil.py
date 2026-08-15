@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from memory.timeutil import (
     db_timestamp_str,
+    humanize_duration,
     parse_db_timestamp,
     seconds_since,
     utc_now,
@@ -57,3 +58,11 @@ def test_utc_now_is_aware_utc():
     now = utc_now()
     assert now.tzinfo is not None
     assert now.utcoffset() == timezone.utc.utcoffset(None)
+
+
+def test_humanize_duration_edges():
+    """humanize_duration 的粗粒度量级边界。"""
+    assert humanize_duration(30) == "不到一分钟"
+    assert humanize_duration(90) == "约 2 分钟"
+    assert "小时" in humanize_duration(5400)  # 1.5 小时
+    assert humanize_duration(172800) == "约 2 天"

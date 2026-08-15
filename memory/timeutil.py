@@ -63,3 +63,26 @@ def seconds_since(value) -> float | None:
     """距该 DB 时间戳过去了多少秒；无法解析返回 None。"""
     epoch = parse_db_timestamp(value)
     return None if epoch is None else utc_now().timestamp() - epoch
+
+
+def humanize_duration(seconds: float) -> str:
+    """把秒数转成中文近似时长（供 prompt 里的断层标记与新鲜度标注使用）。
+
+    刻意粗粒度：模型需要的是「久不久」的量级感，不是精确值。
+    """
+    seconds = max(0.0, float(seconds))
+    if seconds < 60:
+        return "不到一分钟"
+    minutes = seconds / 60.0
+    if minutes < 60:
+        return f"约 {round(minutes)} 分钟"
+    hours = minutes / 60.0
+    if hours < 24:
+        return f"约 {hours:.1f} 小时".replace(".0", "")
+    return f"约 {round(hours / 24.0)} 天"
+
+
+def humanize_age(value) -> str | None:
+    """DB 时间戳距今多久（人类可读）；无法解析返回 None。"""
+    elapsed = seconds_since(value)
+    return None if elapsed is None else humanize_duration(elapsed)

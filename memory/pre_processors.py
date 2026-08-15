@@ -6,8 +6,8 @@
 
 本模块位于记忆工作流的“读取侧 + 写入侧入口”：
 - record_message：把每条群聊消息落库（group_messages，新消息统一写此，messages 为旧版回退）；
-- build_context：为每次回复组装短期上下文——话题层摘要 + 最近 RECENT_TAIL_LIMIT 条
-  原始消息尾巴（可并存，recent_exchanges 仅在无尾巴时兜底）；
+- build_context：为每次回复组装短期上下文——话题层摘要（过期时标注时长）+ 最近
+  RECENT_TAIL_LIMIT 条原始消息尾巴（按时间窗过滤、内部空白处标注断层）；
 - build_user_context：组装用户画像与长期记忆——@-回复时读用户画像 + 该用户相关记忆，
   主动发言时用群级记忆回顾；
 - _extract_keywords / _STOP_WORDS：中文停用词与关键词提取，供记忆话题匹配使用。
@@ -23,13 +23,22 @@ from config import (
     DB_PATH,
     MEMORY_V2_ENABLED,
     PROACTIVE_LONG_TERM_LIMIT,
+    RECENT_TAIL_GAP_MARK_MINUTES,
     RECENT_TAIL_LIMIT,
+    RECENT_TAIL_MAX_AGE_MINUTES,
     REPLY_LONG_TERM_LIMIT,
+    SHORT_TERM_SUMMARY_STALE_MINUTES,
 )
 from core.context import ChatContext
 from memory.prompt_builder import build_memory_context
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
+from memory.timeutil import (
+    humanize_duration,
+    parse_db_timestamp,
+    seconds_since,
+    utc_now,
+)
 
 
 async def record_message(ctx: ChatContext) -> ChatContext:
@@ -88,6 +97,9 @@ async def record_message(ctx: ChatContext) -> ChatContext:
 async def build_context(ctx: ChatContext) -> ChatContext:
     """组装短期上下文：话题层摘要 + 最近原始消息尾巴（可同时存在）。
 
+    摘要过期时改用「之前的话题」标题并注明时长；尾巴按时间窗过滤并在
+    内部空白处插入断层标记。
+
     参数：ctx — 会被写入 ctx.short_term；
     副作用：向 ctx.short_term 写入文本（读取 DB，不写库）；
     返回：ctx。
@@ -100,14 +112,25 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 
         # ── 1) 短期摘要：只取「话题层」信息（active_summary / pending_topic） ──
         active_summary = pending_topic = ""
+        summary_age: str | None = None
         try:
             cursor.execute(
-                "SELECT active_summary, pending_topic FROM short_term_context WHERE group_id = ?",
+                "SELECT active_summary, pending_topic, updated_at FROM short_term_context "
+                "WHERE group_id = ?",
                 (str(ctx.group_id),),
             )
             row = cursor.fetchone()
             if row:
                 active_summary, pending_topic = (row[0] or ""), (row[1] or "")
+                # 摘要由整合器产出、按设计滞后。不标注新鲜度会让模型
+                # 把几小时前的话题当成当前话题。
+                elapsed = seconds_since(row[2]) if len(row) > 2 else None
+                if (
+                    elapsed is not None
+                    and SHORT_TERM_SUMMARY_STALE_MINUTES > 0
+                    and elapsed > SHORT_TERM_SUMMARY_STALE_MINUTES * 60.0
+                ):
+                    summary_age = humanize_duration(elapsed)
         except sqlite3.OperationalError:
             pass
 
@@ -123,9 +146,14 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 
         parts: list[str] = []
         if active_summary:
-            parts.append(f"对话摘要: {active_summary}")
+            if summary_age:
+                parts.append(f"之前的话题（{summary_age}前）: {active_summary}")
+            else:
+                parts.append(f"对话摘要: {active_summary}")
         if pending_topic and pending_topic != "无":
-            parts.append(f"进行中的话题: {pending_topic}")
+            # 摘要已过期时，「进行中的话题」同样不再是进行中
+            label = "之前未聊完的话题" if summary_age else "进行中的话题"
+            parts.append(f"{label}: {pending_topic}")
         if exchanges_text:
             parts.append("近期关键发言:\n" + exchanges_text)
         if tail:
@@ -134,8 +162,8 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         if parts:
             ctx.short_term = "\n".join(parts)
             logger.info(
-                f"🧠 [Context] 摘要={'有' if active_summary else '无'} "
-                f"原始尾巴={len(tail.splitlines()) if tail else 0} 条"
+                f"🧠 [Context] 摘要={'过期' if summary_age else '有' if active_summary else '无'} "
+                f"原始尾巴={len(tail.splitlines()) if tail else 0} 行"
             )
     except Exception as e:
         logger.warning(f"读取上下文异常（跳过）: {e}")
@@ -145,39 +173,94 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str:
     """取最近 limit 条原始消息，按时间正序拼成文本。
 
-    Bot 自己的发言（source_kind=BOT_SELF）渲染为「我」，让聊天模型知道自己
-    刚说过什么——否则用户的简短回应（「手机」「对」）会被接到上一个话题上。
-    旧库没有 source_kind 列时回退为全部按用户渲染。
+    三件事：
+
+    1. **来源渲染**：Bot 自己的发言（BOT_SELF）渲染为「我」，让聊天模型知道
+       自己刚说过什么——否则用户的简短回应（「手机」「对」）会被接到上一个话题上；
+    2. **时间窗过滤**：超过 RECENT_TAIL_MAX_AGE_MINUTES 的消息不进尾巴。
+       仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生
+       （2026-08-15 缺陷）；
+    3. **断层标记**：相邻消息间隔超过 RECENT_TAIL_GAP_MARK_MINUTES 时插入一行
+       说明。比直接丢弃更好——让模型知道「之前聊过但已经过去很久」。
+
+    旧库没有 source_kind 列时回退为全部按用户渲染、且无时间信息。
     """
     if limit <= 0:
         return ""
+
+    rows = _query_tail_rows(cursor, group_id, limit)
+    if not rows:
+        return ""
+    rows.reverse()  # id 倒序 → 时间正序
+
+    now = utc_now().timestamp()
+    max_age = RECENT_TAIL_MAX_AGE_MINUTES * 60.0
+    gap_threshold = RECENT_TAIL_GAP_MARK_MINUTES * 60.0
+
+    lines: list[str] = []
+    prev_epoch: float | None = None
+    for uid, content, kind, ts in rows:
+        text = (content or "").strip()
+        if not text:
+            continue
+
+        epoch = parse_db_timestamp(ts)
+        # 时间窗过滤：解析失败的消息（旧库无 timestamp）不过滤，保留原有行为
+        if max_age > 0 and epoch is not None and (now - epoch) > max_age:
+            continue
+
+        # 断层标记：两条消息之间隔了很久，明确告诉模型中间有空白
+        if (
+            gap_threshold > 0
+            and prev_epoch is not None
+            and epoch is not None
+            and (epoch - prev_epoch) > gap_threshold
+        ):
+            lines.append(f"（……中间隔了{humanize_duration(epoch - prev_epoch)}……）")
+
+        lines.append(f"我: {text}" if kind == "BOT_SELF" else f"用户({uid}): {text}")
+        if epoch is not None:
+            prev_epoch = epoch
+
+    return "\n".join(lines)
+
+
+def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[tuple]:
+    """取尾巴原始行（id 倒序），带 source_kind 与 timestamp；旧库自动降级。
+
+    返回 (user_id, content, source_kind, timestamp) 四元组列表。
+    """
     try:
-        rows = cursor.execute(
-            "SELECT user_id, content, source_kind FROM group_messages "
+        return cursor.execute(
+            "SELECT user_id, content, source_kind, timestamp FROM group_messages "
             "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
             (str(group_id), limit),
         ).fetchall()
     except sqlite3.OperationalError:
-        try:
-            rows = [
-                (uid, content, "PASSIVE")
-                for uid, content in cursor.execute(
-                    "SELECT user_id, content FROM group_messages "
-                    "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
-                    (str(group_id), limit),
-                ).fetchall()
-            ]
-        except sqlite3.OperationalError:
-            return ""
-    if not rows:
-        return ""
-    rows.reverse()
-    lines = [
-        f"我: {content}" if kind == "BOT_SELF" else f"用户({uid}): {content}"
-        for uid, content, kind in rows
-        if (content or "").strip()
-    ]
-    return "\n".join(lines)
+        pass
+    # 旧库缺 source_kind（或连 timestamp 都没有）时逐级降级
+    try:
+        return [
+            (uid, content, "PASSIVE", ts)
+            for uid, content, ts in cursor.execute(
+                "SELECT user_id, content, timestamp FROM group_messages "
+                "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                (str(group_id), limit),
+            ).fetchall()
+        ]
+    except sqlite3.OperationalError:
+        pass
+    try:
+        return [
+            (uid, content, "PASSIVE", None)
+            for uid, content in cursor.execute(
+                "SELECT user_id, content FROM group_messages "
+                "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                (str(group_id), limit),
+            ).fetchall()
+        ]
+    except sqlite3.OperationalError:
+        return []
 
 
 def _fetch_recent_exchanges_text(cursor: sqlite3.Cursor, group_id: int) -> str:

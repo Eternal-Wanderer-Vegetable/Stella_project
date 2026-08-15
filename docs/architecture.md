@@ -150,8 +150,8 @@ build_user_context (40)  → ctx.user_profile / conversation_memories / behavior
 
 **`build_context`** 组装两部分并存的短期上下文：
 
-- **话题层摘要**：`short_term_context.active_summary` / `pending_topic`，由整合器产出，按设计滞后
-- **原始尾巴**：最近 `RECENT_TAIL_LIMIT` 条原始消息，含 Bot 自己的发言（渲染为「我」）
+- **话题层摘要**：`short_term_context.active_summary` / `pending_topic`，由整合器产出，按设计滞后；超过 `SHORT_TERM_SUMMARY_STALE_MINUTES` 未更新时标题改为「之前的话题」并注明时长
+- **原始尾巴**：最近 `RECENT_TAIL_LIMIT` 条原始消息，含 Bot 自己的发言（渲染为「我」）。超出 `RECENT_TAIL_MAX_AGE_MINUTES` 时间窗的旧消息被过滤（2026-08-15 修复），窗口内部相邻消息间隔超过 `RECENT_TAIL_GAP_MARK_MINUTES` 时插入断层标记「（……中间隔了 X……）」
 
 两者必须并存。摘要要累积到阈值才更新，只靠它会看不到最近几轮对话——Bot 会把用户的简短回应接到上一个话题上去。
 
