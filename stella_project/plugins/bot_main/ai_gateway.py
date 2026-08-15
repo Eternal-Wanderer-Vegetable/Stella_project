@@ -8,10 +8,13 @@
 2. QQ 事件监听：
    - group_silent_listener（静默监听，priority 99）：只记录群消息到短期记忆，不触发总结；
    - chat_handler（@ 触发，priority 1）：当机器人被 @ 且发出非空消息时才会走完整推理；
+   - toggle_handler（运行时开关，priority 0）：管理员 @ 机器人说「安静」/「恢复」时
+     临时关闭或恢复本群主动发言（必须早于 chat_handler，否则会被当成普通对话）；
    - 主动 @ 用户（获取/验证记忆，受每用户日配额与冷却约束）——见 _proactive_at_user；
    - 主动发言（基于群消息频率的定时任务）——见 _proactive_speak_for_group；
 3. 定时任务（借 NoneBot APScheduler）：
-   - 周度记忆压缩（run_weekly）、主动发言检查（proactive_speak_job）、每日消息清理（trim_messages_job）；
+   - 周度记忆压缩（run_weekly）、主动发言检查（proactive_speak_job，含睡眠/苏醒播报）、
+     每日消息清理（trim_messages_job）；
 4. 并发控制：_group_locks 每群一把 asyncio.Lock，防止同一群内 @ 回复与主动发言同时跑 Pipeline。
 
 依赖注入注意：模块级 pipeline / _group_locks 在 import 阶段创建，
@@ -23,8 +26,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import math
+import random
 import time
 from collections import defaultdict
+from datetime import date
 
 from nonebot import logger, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
@@ -43,11 +48,15 @@ from config import (
     LM_STUDIO_MODEL,
     MESSAGE_CLEANUP_ENABLED,
     MESSAGE_CLEANUP_HOUR,
-    PROACTIVE_AT_ENABLED,
     PROACTIVE_CHECK_INTERVAL,
     PROACTIVE_ENABLED,
     PROACTIVE_MAX_LINES,
     PROACTIVE_REPLY_WINDOW_SECONDS,
+    PROACTIVE_RUNTIME_TOGGLE_ENABLED,
+    PROACTIVE_SLEEP_ANNOUNCE,
+    PROACTIVE_SLEEP_MESSAGES,
+    PROACTIVE_TOGGLE_ADMINS,
+    PROACTIVE_WAKEUP_MESSAGES,
     SEND_INTERVAL,
     SYSTEM_PROMPT_PATH,
 )
@@ -65,8 +74,15 @@ from memory.post_processors import (
 )
 from memory.pre_processors import build_context, build_user_context, record_message
 from memory.proactive import get_proactive
+from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
 from memory.proactive_prompt import build_instruction
-from memory.proactive_state import record_at, record_reply_result
+from memory.proactive_state import (
+    get_runtime_state,
+    mark_announced,
+    record_at,
+    record_reply_result,
+    set_proactive_muted,
+)
 from memory.proactive_target import pick_target
 
 # ============================================================
@@ -294,6 +310,53 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
 
 # ============================================================
+# 运行时开关（管理员临时关闭/恢复主动发言）
+# ============================================================
+
+_MUTE_KEYWORDS = ("安静", "闭嘴", "别说话", "停止主动发言")
+_UNMUTE_KEYWORDS = ("恢复", "醒醒", "可以说话", "开启主动发言")
+
+
+async def is_toggle_command(event: GroupMessageEvent) -> bool:
+    """触发规则：已启用群 + @ 机器人 + 文本命中开关关键词。"""
+    if not PROACTIVE_RUNTIME_TOGGLE_ENABLED:
+        return False
+    if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+        return False
+    text = event.get_plaintext().strip()
+    return any(k in text for k in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS)
+
+
+# priority=0 必须高于 chat_handler(priority=1, block=True)，
+# 否则「安静」这类命令会被当成普通对话交给 LLM
+toggle_handler = on_message(rule=Rule(is_toggle_command), priority=0, block=True)
+
+
+@toggle_handler.handle()
+async def handle_toggle(bot: Bot, event: GroupMessageEvent):
+    """管理员运行时开关：临时关闭/恢复本群主动发言。
+
+    权限：PROACTIVE_TOGGLE_ADMINS 白名单，或群主/管理员。
+    静音只影响主动发言，被 @ 时仍照常回复。
+    非管理员触发时不做任何改动、也不回复——避免被当作可用命令反复尝试。
+    """
+    user_id = event.user_id
+    role = getattr(getattr(event, "sender", None), "role", "") or ""
+    if user_id not in PROACTIVE_TOGGLE_ADMINS and role not in ("owner", "admin"):
+        logger.info(f"[Toggle] 群 {event.group_id} 用户 {user_id} 无权操作主动发言开关")
+        return
+
+    mute = any(k in event.get_plaintext() for k in _MUTE_KEYWORDS)
+    set_proactive_muted(event.group_id, mute, operator_id=user_id)
+
+    reply = "好，我不主动说话了，被 @ 还是会回的" if mute else "好，我继续正常参与聊天"
+    await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
+    await toggle_handler.finish(
+        Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
+    )
+
+
+# ============================================================
 # 主动发言（基于群消息频率）
 # ============================================================
 _SENTENCE_ENDERS = "，。！？、；：;:?!.…\"\"''"
@@ -389,14 +452,11 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
     流程：选目标（配额/冷却/退避过滤）→ 生成指令 → 跑 Pipeline →
     发送（带 @ 段）→ 记账（发出即计数）→ 起延迟任务检测回应。
     """
-    if not PROACTIVE_AT_ENABLED:
+    allowed, reason = can_speak(group_id, "at")
+    if not allowed:
+        logger.debug(f"[主动@] 群 {group_id} 跳过：{reason}")
         return False
-
     proactive = get_proactive()
-    if proactive.in_cooldown(group_id):
-        return False
-    if not proactive.has_enough_new_messages(group_id):
-        return False
 
     # 排除 Bot 自身，避免自问自答
     try:
@@ -477,6 +537,43 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
     return True
 
 
+async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
+    """检测睡眠状态跃变并播报一句（每日每类最多一次）。
+
+    去重靠 group_runtime_state 的 last_*_announce_date：播报由定时任务触发，
+    不记录已播报日期的话，睡眠期内重启会重复播报「我去睡了」。
+
+    播报绕过 Pipeline（不需要 LLM），但仍写入 group_messages（BOT_SELF），
+    让下一轮整合知道自己说过这句话。
+    """
+    if not PROACTIVE_SLEEP_ANNOUNCE:
+        return
+
+    kind = note_sleep_transition(group_id, is_sleeping())
+    if kind is None:
+        return
+
+    today = date.today().isoformat()
+    field = "last_sleep_announce_date" if kind == "sleep" else "last_wakeup_announce_date"
+    if get_runtime_state(group_id)[field] == today:
+        return
+
+    pool = PROACTIVE_SLEEP_MESSAGES if kind == "sleep" else PROACTIVE_WAKEUP_MESSAGES
+    if not pool:
+        return
+    line = random.choice(pool)
+
+    try:
+        await bot.send_group_msg(group_id=group_id, message=line)
+    except Exception as e:
+        logger.warning(f"⚠️ [{kind}] 播报发送失败: {e}")
+        return
+
+    mark_announced(group_id, kind, today)
+    await _record_bot_lines(int(bot.self_id), group_id, [line])
+    logger.info(f"{'🌙' if kind == 'sleep' else '☀️'} [{kind}] 群 {group_id}: {line}")
+
+
 async def _proactive_speak_for_group(bot: Bot, group_id: int):
     """对单个群尝试主动发言：概率命中时生成一句自然的话并发送。
 
@@ -484,8 +581,13 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
     :param group_id: 目标群号
     :return: None；命中时发送若干条群消息并记录“已发言”
     """
-    # 先判断该群是否到了“可以主动发言”的时机（消息频率 / 冷却判定）
+    # 先判断该群是否到了“可以主动发言”的时机（统一闸门判定）
+    allowed, reason = can_speak(group_id, "join")
+    if not allowed:
+        logger.debug(f"[主动发言] 群 {group_id} 跳过：{reason}")
+        return
     proactive = get_proactive()
+    # gate 通过后再掷概率骰：概率是话题插话独有的（主动 @ 由配额与冷却约束，不掷骰）
     if not proactive.should_speak(group_id):
         return
 
@@ -568,6 +670,12 @@ if scheduler is not None and PROACTIVE_ENABLED:
             return
         # 逐个群尝试主动发言；单个群失败不拖垮其他群
         for group_id in ALLOWED_GROUPS:
+            try:
+                # 睡眠/苏醒播报独立于主动发言：即使 gate 拒绝发言也要播报
+                await _announce_sleep_transition(bot, group_id)
+            except Exception as e:
+                logger.warning(f"⚠️ 睡眠播报异常（群 {group_id}）: {e}")
+
             try:
                 # 主动 @ 优先：它有明确目的（获取/验证记忆），
                 # 且已受每用户配额与冷却约束。命中即跳过本轮话题插话，
