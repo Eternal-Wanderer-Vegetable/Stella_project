@@ -13,6 +13,8 @@ import contextlib
 import sqlite3
 import time
 
+from nonebot import logger
+
 from config import DB_PATH, MESSAGE_CLEANUP_KEEP_COUNT
 
 # 上次消息清理的时间戳文件
@@ -56,6 +58,11 @@ def clean_db(
         for seq_name in ["group_messages", "messages"]:
             with contextlib.suppress(sqlite3.OperationalError):
                 cur.execute("DELETE FROM sqlite_sequence WHERE name = ?", (seq_name,))
+    # 清空消息但保留 checkpoint 时（reset_checkpoint=False + clear_messages=True），
+    # checkpoint 会大于新的最大 id（sqlite_sequence 已重置），整合将永远不再触发。
+    # 无论是否重置 checkpoint 都统一对齐一次，保证两者一致。
+    for (gid,) in cur.execute("SELECT group_id FROM consolidation_state").fetchall():
+        _align_checkpoint(cur, gid)
     conn.commit()
     conn.close()
     return results
@@ -75,8 +82,62 @@ def print_summary():
     conn.close()
 
 
+def _align_checkpoint(cur: sqlite3.Cursor, group_id: str) -> int:
+    """把该群的 checkpoint 夹到消息表的实际 id 范围内。
+
+    checkpoint（consolidation_state.last_processed_id）与 group_messages 必须
+    一起维护，否则会出现两种相反的故障：
+
+    - checkpoint 指向**已被删除**的旧 id → `id > checkpoint` 命中全部剩余消息，
+      整合器把已处理过的消息重新整理一遍（2026-08-15 实测 1487 条）；
+    - checkpoint 大于表内最大 id（清空消息并重置 sqlite_sequence 后）→
+      `id > checkpoint` 永远为空，整合彻底停摆。
+
+    对齐规则：低于最小 id 时抬到 `min_id - 1`（表示「最旧的那条还没处理」）；
+    高于最大 id 时压到 `max_id`（表示「都处理完了」）。表为空时归零。
+    返回调整后的值（未调整则返回原值）。
+    """
+    row = cur.execute(
+        "SELECT last_processed_id FROM consolidation_state WHERE group_id = ?",
+        (group_id,),
+    ).fetchone()
+    if row is None:
+        return 0
+    checkpoint = int(row[0] or 0)
+
+    bounds = cur.execute(
+        "SELECT MIN(id), MAX(id) FROM group_messages WHERE group_id = ?",
+        (group_id,),
+    ).fetchone()
+    min_id, max_id = (bounds or (None, None))
+
+    if min_id is None:
+        # 该群消息已被清空：checkpoint 归零，等新消息进来重新开始
+        target = 0
+    elif checkpoint < min_id - 1:
+        target = min_id - 1
+    elif checkpoint > max_id:
+        target = max_id
+    else:
+        return checkpoint
+
+    cur.execute(
+        "UPDATE consolidation_state SET last_processed_id = ?, updated_at = CURRENT_TIMESTAMP "
+        "WHERE group_id = ?",
+        (target, group_id),
+    )
+    logger.warning(
+        f"🔧 [DBCleaner] 群 {group_id} checkpoint 越界，已对齐: {checkpoint} → {target}"
+        f"（消息 id 范围 {min_id}~{max_id}）"
+    )
+    return target
+
+
 def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[str, int]:
     """定期清理 group_messages 表：每个群仅保留最近 keep_count 条消息。
+
+    删除旧消息后会把该群的整合 checkpoint 对齐到剩余消息范围，避免
+    `id > checkpoint` 命中全部剩余消息导致重复整理。
 
     返回 {"deleted": 总删除行数, "groups": 处理的群数}。
     """
@@ -111,11 +172,39 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
                 total_deleted += cur.rowcount
             except sqlite3.OperationalError:
                 continue
+        # 删掉旧消息后 checkpoint 可能指向已不存在的 id，必须立即对齐，
+        # 否则 `id > checkpoint` 会命中全部剩余消息，导致重复整理
+        _align_checkpoint(cur, gid)
 
     conn.commit()
     conn.close()
     _mark_cleanup_done()
     return {"deleted": total_deleted, "groups": len(group_ids)}
+
+
+def align_all_checkpoints() -> int:
+    """把所有群的 checkpoint 夹到消息表实际范围内；返回调整的群数。
+
+    启动时调用，修正历史遗留的错位（如清理与 checkpoint 未对齐的旧库）。
+    幂等：已对齐的群不产生任何写入。
+    """
+    if not DB_PATH.exists():
+        return 0
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT group_id, last_processed_id FROM consolidation_state"
+        ).fetchall()
+        adjusted = 0
+        for gid, before in rows:
+            if _align_checkpoint(cur, gid) != int(before or 0):
+                adjusted += 1
+        conn.commit()
+        conn.close()
+        return adjusted
+    except sqlite3.OperationalError:
+        return 0
 
 
 def needs_cleanup(max_age_hours: float = 24.0) -> bool:

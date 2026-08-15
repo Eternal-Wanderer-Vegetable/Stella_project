@@ -186,6 +186,19 @@ if DB_CLEANUP_ON_START:
     except Exception as e:
         logger.warning(f"⚠️ 数据库清理失败: {e}")
 
+# ── 启动时对齐整合 checkpoint ──
+# 消息清理会删除旧消息，但 checkpoint 不会随之调整，导致 `id > checkpoint`
+# 命中全部剩余消息、把已整理过的内容重新整理一遍（2026-08-15 实测 1487 条）。
+# 这里在任何整合触发之前修正历史遗留的错位。
+try:
+    from memory.db_cleaner import align_all_checkpoints
+
+    adjusted = align_all_checkpoints()
+    if adjusted:
+        logger.info(f"🔧 [Startup] 已对齐 {adjusted} 个群的整合 checkpoint")
+except Exception as e:
+    logger.warning(f"⚠️ 启动时对齐 checkpoint 失败: {e}")
+
 # ── 启动时检查消息清理（补执行因离线而错过的每日清理） ──
 # 若距上次清理已超 24h（如机器人昨晚关机漏跑），启动时补做一次，防止消息表无限膨胀
 if MESSAGE_CLEANUP_ENABLED:

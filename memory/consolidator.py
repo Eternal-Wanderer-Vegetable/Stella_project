@@ -303,6 +303,15 @@ class MemoryConsolidator:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
+                # 防御：new_count 远超单批容量说明 checkpoint 可能越界
+                # （消息被清理但 checkpoint 未对齐）。只记录告警，不阻断——
+                # 整合本身是按批次推进的，最终会消化完，但这条日志能让问题可见。
+                if new_count > CONSOLIDATION_LOCAL_BATCH_SIZE * 20:
+                    logger.warning(
+                        f"⚠️ [Consolidator] 群 {group_id} 待整合消息异常多（{new_count} 条），"
+                        f"checkpoint={last_id}，可能存在 checkpoint 越界"
+                    )
+
                 # force 路径走小批次；非 force 路径按本地批次大小决定阈值
                 threshold = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
                 if new_count < threshold:
