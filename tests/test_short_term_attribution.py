@@ -156,6 +156,14 @@ def test_prompt_builder_attributes_current_user(tmp_path):
     assert "当前与你对话的用户" not in prompt_proactive
 
 
+def test_build_prompt_context_time_section_first():
+    """v1 路径同样注入当前时间段落，且位于最前。"""
+    short_term = "对话摘要: 聊散打"
+    prompt = build_prompt_context(short_term, "", [], current_user_id=0)
+    assert prompt.startswith("现在是 ")
+    assert "星期" in prompt
+
+
 def test_consolidate_group_unpacks_senders(tmp_path, monkeypatch):
     """整合主流程应把 _generate 返回的发送者列表正确解包，并用它对记忆候选做白名单校验。
 

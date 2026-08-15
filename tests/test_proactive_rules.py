@@ -200,3 +200,55 @@ def test_curve_bad_anchor_no_error(monkeypatch):
     monkeypatch.setattr(c, "average_interval", lambda _gid: 50.0)
     p = c.speak_probability(1)
     assert 0.0 <= p <= 1.0
+
+
+# ── 消息数门槛（A-1：新消息足够才开口） ──────────────────
+
+def test_messages_since_spoke_counts_resets(monkeypatch):
+    """record_message 三次后计数为 3；mark_spoke 快照后归零；再收两条为 2。"""
+    _reset_config(monkeypatch)
+    c = ProactiveController()
+    c.record_message(1)
+    c.record_message(1)
+    c.record_message(1)
+    assert c.messages_since_spoke(1) == 3
+    c.mark_spoke(1)
+    assert c.messages_since_spoke(1) == 0
+    c.record_message(1)
+    c.record_message(1)
+    assert c.messages_since_spoke(1) == 2
+
+
+def test_has_enough_new_messages_threshold(monkeypatch):
+    """门槛设 5：4 条时 False，5 条时 True。"""
+    _reset_config(monkeypatch)
+    monkeypatch.setattr(proactive, "PROACTIVE_MIN_MESSAGES_SINCE_SPOKE", 5)
+    c = ProactiveController()
+    for _ in range(4):
+        c.record_message(1)
+    assert c.has_enough_new_messages(1) is False
+    c.record_message(1)
+    assert c.has_enough_new_messages(1) is True
+
+
+def test_has_enough_new_messages_zero_threshold(monkeypatch):
+    """门槛设 0 → 恒为 True（不限制）。"""
+    _reset_config(monkeypatch)
+    monkeypatch.setattr(proactive, "PROACTIVE_MIN_MESSAGES_SINCE_SPOKE", 0)
+    c = ProactiveController()
+    assert c.has_enough_new_messages(1) is True
+    c.record_message(1)
+    assert c.has_enough_new_messages(1) is True
+
+
+def test_no_snapshot_does_not_block_forever(monkeypatch):
+    """未 mark_spoke 过（模拟重启）：快照缺失时差值等于累计数，不会永久 False。"""
+    _reset_config(monkeypatch)
+    monkeypatch.setattr(proactive, "PROACTIVE_MIN_MESSAGES_SINCE_SPOKE", 5)
+    c = ProactiveController()
+    for _ in range(4):
+        c.record_message(1)
+    assert c.messages_since_spoke(1) == 4
+    assert c.has_enough_new_messages(1) is False
+    c.record_message(1)
+    assert c.has_enough_new_messages(1) is True

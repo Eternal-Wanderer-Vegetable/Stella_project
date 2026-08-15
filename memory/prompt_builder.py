@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Iterable
+from datetime import datetime
 
 from config import (
     MEMORY_BEHAVIOR_MAX_TOKENS,
@@ -23,6 +24,19 @@ from config import (
     MEMORY_CONVERSATION_TECH_MAX_TOKENS,
 )
 from memory.policy import MODE_CONFLICT_AVOID, MODE_TECH_HELP
+
+_WEEKDAYS = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+
+
+def build_time_section() -> str:
+    """当前时间段落。
+
+    用**本地时间**：它描述的是人类作息，与数据库时间戳（UTC）无关。
+    模型此前完全没有时间概念，既无法判断上下文里的对话是多久前的，
+    也无法回答「今天星期几」这类基本问题。
+    """
+    now = datetime.now()
+    return f"现在是 {now.strftime('%Y-%m-%d %H:%M')}，{_WEEKDAYS[now.weekday()]}。"
 
 
 def naturalize_memory(mem: dict) -> str:
@@ -71,6 +85,8 @@ def build_prompt_context(
 ) -> str:
     """把三层上下文（短期摘要 / 用户画像 / 长期记忆）拼成最终的 prompt。
 
+    首段为当前时间（本地时区），先于任何对话内容。
+
     参数:
         short_term: 最近的对话摘要或原始消息回退文本；
         user_profile: 关于当前用户的长期画像描述；
@@ -80,6 +96,8 @@ def build_prompt_context(
         组装好的上下文文本；各部分之间以空行分隔。
     """
     parts: list[str] = []
+    # 环境事实：当前时间应当先于任何对话内容。
+    parts.append(build_time_section())
     # 明确当前说话人身份，避免模型把摘要/记忆中其他用户的发言归属到当前用户
     if current_user_id not in (None, 0):
         parts.append(
@@ -175,6 +193,8 @@ def build_v2_prompt_context(
 ) -> str:
     """v2 分区版 Prompt 组装：对话摘要 / 用户画像 / 聊天背景 / 行为约束 四区分离。
 
+    首段为当前时间（本地时区），先于任何对话内容。
+
     :param short_term: 短期摘要或最近消息回退文本；
     :param user_profile: 关于当前用户的稳定画像（仅稳定事实）；
     :param conversation_memories: 已按 Policy 过滤并排序的聊天素材记忆；
@@ -183,6 +203,8 @@ def build_v2_prompt_context(
     :param mode: Stella 行为模式（决定聊天素材 token 预算）。
     """
     parts: list[str] = []
+    # 环境事实：当前时间应当先于任何对话内容。
+    parts.append(build_time_section())
     if current_user_id not in (None, 0):
         parts.append(
             f"当前与你对话的用户 QQ 号：{current_user_id}。"

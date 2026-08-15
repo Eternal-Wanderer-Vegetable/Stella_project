@@ -363,10 +363,15 @@ CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", PROJECT_ROOT / "mem
 # ---------- 主动发言 ----------
 # 是否启用主动发言
 PROACTIVE_ENABLED = _env("PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
-# 主动发言的最小冷却间隔（秒）：冷却期内绝不再主动发言
-PROACTIVE_COOLDOWN = _env_int("PROACTIVE_COOLDOWN", 120)
+# 群级硬冷却（秒）：两次主动发言之间的最小间隔。
+# 120s 配合 CHECK_INTERVAL=30s / PROB_AT_FAST=0.35 时实测约每 3~4 分钟发言一次，过于频繁。
+PROACTIVE_COOLDOWN = _env_int("PROACTIVE_COOLDOWN", 600)
+# 距上次自己发言，群里至少要有多少条新消息才允许再开口。
+# 比纯时间冷却更贴合语义：冷清群里「自己说完等 10 分钟又自己说」是时间冷却
+# 无法拦住的，而消息数门槛能保证「话题真的往前走了」才插话。0 表示不限制。
+PROACTIVE_MIN_MESSAGES_SINCE_SPOKE = _env_int("PROACTIVE_MIN_MESSAGES_SINCE_SPOKE", 15)
 # 主动发言的定时检查间隔（秒）
-PROACTIVE_CHECK_INTERVAL = _env_int("PROACTIVE_CHECK_INTERVAL", 30)
+PROACTIVE_CHECK_INTERVAL = _env_int("PROACTIVE_CHECK_INTERVAL", 60)
 # 消息频率估算窗口（取最近 N 条消息计算平均间隔）
 PROACTIVE_FREQ_WINDOW = _env_int("PROACTIVE_FREQ_WINDOW", 10)
 # 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
@@ -390,7 +395,7 @@ CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGE
 # 群性质差异大（闲聊群 vs 技术群），因此这条曲线必须现场可调。
 PROACTIVE_INTERVAL_FAST = _env_float("PROACTIVE_INTERVAL_FAST", 20.0)
 PROACTIVE_INTERVAL_SLOW = _env_float("PROACTIVE_INTERVAL_SLOW", 180.0)
-PROACTIVE_PROB_AT_FAST = _env_float("PROACTIVE_PROB_AT_FAST", 0.35)
+PROACTIVE_PROB_AT_FAST = _env_float("PROACTIVE_PROB_AT_FAST", 0.15)
 PROACTIVE_PROB_AT_SLOW = _env_float("PROACTIVE_PROB_AT_SLOW", 0.0)
 # 曲线整形指数：1.0 线性；>1 把高概率压缩到最活跃一端（更保守）；<1 更平坦
 PROACTIVE_PROB_GAMMA = _env_float("PROACTIVE_PROB_GAMMA", 1.0)

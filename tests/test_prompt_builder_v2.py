@@ -53,6 +53,13 @@ def test_tech_mode_has_larger_conversation_budget():
     assert prompt_builder.estimate_tokens(tech) > prompt_builder.estimate_tokens(casual)
 
 
+def test_time_section_present_and_first():
+    """当前时间必须出现且位于最前——它是环境事实，应先于任何对话内容。"""
+    out = prompt_builder.build_v2_prompt_context("摘要", "画像", [], [], current_user_id=1001)
+    assert out.startswith("现在是 ")
+    assert "星期" in out
+
+
 def test_trace_records_and_statistics(tmp_path, monkeypatch):
     """决策追踪：写入 memory_traces 表并产出统计。"""
     db_path = tmp_path / "agent_memory.db"

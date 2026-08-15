@@ -23,6 +23,7 @@ from config import (
     PROACTIVE_FREQ_WINDOW,
     PROACTIVE_INTERVAL_FAST,
     PROACTIVE_INTERVAL_SLOW,
+    PROACTIVE_MIN_MESSAGES_SINCE_SPOKE,
     PROACTIVE_PROB_AT_FAST,
     PROACTIVE_PROB_AT_SLOW,
     PROACTIVE_PROB_GAMMA,
@@ -59,6 +60,10 @@ class ProactiveController:
         self._last_check: dict[int, float] = {}
         # group_id -> 最近说过的话（用于反重复刷屏）
         self._spoken: dict[int, list[str]] = {}
+        # group_id -> 累计收到的消息数（单调递增，仅用于差值比较）
+        self._msg_count: dict[int, int] = {}
+        # group_id -> 上次自己发言时的消息计数快照
+        self._count_at_speak: dict[int, int] = {}
 
     # ── 反重复刷屏 ──────────────────────────────────────
     def record_spoken(self, group_id: int, lines: list[str]):
@@ -100,6 +105,8 @@ class ProactiveController:
         lst.append(now)
         if len(lst) > PROACTIVE_FREQ_WINDOW:
             del lst[: len(lst) - PROACTIVE_FREQ_WINDOW]
+
+        self._msg_count[group_id] = self._msg_count.get(group_id, 0) + 1
 
     def average_interval(self, group_id: int) -> float | None:
         """估算全群最近消息的平均间隔（秒）。消息不足两条时返回 None。"""
@@ -152,13 +159,30 @@ class ProactiveController:
 
     # ── 冷却管理 ────────────────────────────────────────
     def mark_spoke(self, group_id: int):
+        """记录本群刚主动发言过：刷新时间与消息计数快照。"""
         self._last_speak[group_id] = time.monotonic()
+        self._count_at_speak[group_id] = self._msg_count.get(group_id, 0)
 
     def last_spoke_at(self, group_id: int) -> float:
         return self._last_speak.get(group_id, 0.0)
 
     def in_cooldown(self, group_id: int) -> bool:
         return (time.monotonic() - self.last_spoke_at(group_id)) < PROACTIVE_COOLDOWN
+
+    def messages_since_spoke(self, group_id: int) -> int:
+        """距上次自己主动发言，群里新增了多少条消息。
+
+        计数是进程内的：重启后 _count_at_speak 为空，此时返回当前累计数
+        （即视为「新消息足够」），不会因重启而永久卡住主动发言。
+        """
+        current = self._msg_count.get(group_id, 0)
+        return current - self._count_at_speak.get(group_id, 0)
+
+    def has_enough_new_messages(self, group_id: int) -> bool:
+        """新消息数是否达到 PROACTIVE_MIN_MESSAGES_SINCE_SPOKE 门槛。"""
+        if PROACTIVE_MIN_MESSAGES_SINCE_SPOKE <= 0:
+            return True
+        return self.messages_since_spoke(group_id) >= PROACTIVE_MIN_MESSAGES_SINCE_SPOKE
 
     # ── 概率计算 ────────────────────────────────────────
     def speak_probability(self, group_id: int) -> float:
@@ -193,11 +217,16 @@ class ProactiveController:
         return max(0.0, min(1.0, prob))
 
     def should_speak(self, group_id: int) -> bool:
-        """是否应该主动发言：未冷却 + 概率命中。
+        """是否应该主动发言：未冷却 + 新消息足够 + 概率命中。
 
         概率为 0（消息频率过低）时，掷骰永远不会命中，保证冷清群不主动开口。
         """
         if self.in_cooldown(group_id):
+            return False
+        if not self.has_enough_new_messages(group_id):
+            logger.debug(
+                f"[Proactive] 群 {group_id} 距上次发言仅 {self.messages_since_spoke(group_id)} 条新消息，跳过"
+            )
             return False
         prob = self.speak_probability(group_id)
         roll = random.random()

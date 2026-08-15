@@ -395,6 +395,8 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
     proactive = get_proactive()
     if proactive.in_cooldown(group_id):
         return False
+    if not proactive.has_enough_new_messages(group_id):
+        return False
 
     # 排除 Bot 自身，避免自问自答
     try:
