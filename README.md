@@ -45,7 +45,7 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 | Python | 3.10+ |
 | 框架 | [NoneBot 2](https://nonebot.dev/) |
 | QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现 |
-| 模型服务 | [LM Studio](https://lmstudio.ai/)（需 OpenAI 兼容接口） |
+| 模型服务 | [LM Studio](https://lmstudio.ai/)（需 OpenAI 兼容接口，也可以提供APIkey接入在线LLM） |
 
 ### 安装
 
