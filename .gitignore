@@ -25,6 +25,7 @@ memory/.last_message_cleanup
 memory/agent_memory.db-journal
 memory_compressor_log.md
 test_compressor_trigger.py
+napcat_launch.log
 
 # Benchmark 采样输出（含真实群消息数据，禁止入库）
 windows_raw.json
