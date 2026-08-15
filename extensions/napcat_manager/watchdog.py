@@ -29,7 +29,9 @@ from nonebot.message import event_preprocessor
 from nonebot_plugin_apscheduler import scheduler
 
 from config import (
+    NAPCAT_LAUNCH_LOG_PATH,
     NAPCAT_WATCHDOG_CHECK_INTERVAL,
+    NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS,
     NAPCAT_WATCHDOG_MAX_RESTARTS,
     NAPCAT_WATCHDOG_RESTART_COOLDOWN,
     NAPCAT_WATCHDOG_TIMEOUT,
@@ -117,19 +119,34 @@ async def watchdog_task() -> None:
     try:
         from nonebot import get_bot
 
-        await get_bot().get_status()
-        heartbeat.last_event_time = time.time()
-        logger.debug("[Watchdog] 心跳超时但主动探活成功，链路正常")
-        return
+        bot = get_bot()
     except Exception as e:
-        logger.warning(f"[Watchdog] 心跳超时且主动探活失败（{e}），准备外部重启 ...")
+        # 没有任何 Bot 连接：协议端未连上来。可能是 NapCat 挂了（重启有用），
+        # 也可能是 NapCat 活着但 QQ 卡在扫码（重启无用，需人工介入）。
+        # 后者靠 NAPCAT_WATCHDOG_MAX_RESTARTS 兜底。
+        logger.warning(f"[Watchdog] 无可用 Bot 连接（{e}），准备外部重启 ...")
+    else:
+        try:
+            await bot.get_status()
+            heartbeat.last_event_time = time.time()
+            logger.debug("[Watchdog] 心跳超时但主动探活成功，链路正常")
+            return
+        except Exception as e:
+            logger.warning(f"[Watchdog] Bot 已连接但 API 无响应（{e}），准备外部重启 ...")
 
     if restart_state.consecutive >= NAPCAT_WATCHDOG_MAX_RESTARTS:
         logger.error(
-            f"[Watchdog] 连续 {restart_state.consecutive} 次重启仍未恢复，停止自动重启。"
-            "请人工检查 QQ 登录状态（可能已退化为扫码或触发风控）"
+            f"[Watchdog] 连续 {restart_state.consecutive} 次重启仍未恢复，停止自动重启。\n"
+            f"  排查步骤：\n"
+            f"  1. 查看 {NAPCAT_LAUNCH_LOG_PATH}，确认是否出现「请扫描下面的二维码」；\n"
+            f"  2. 若是，QQ 登录态已失效（快速登录过期 + 密码登录被要求验证码），"
+            f"需人工打开 WebUI 扫码登录一次；\n"
+            f"  3. 扫码后快速登录票据会刷新，届时重启机器人即可恢复自动登录。"
         )
-        heartbeat.last_event_time = time.time()
+        # 拨远心跳：达到上限后不再每个检查周期都刷同样的 error。
+        # 人工扫码完成后 on_bot_connect 会清零 consecutive 并重置心跳，
+        # 因此这里不需要重启机器人也能自动恢复。
+        heartbeat.last_event_time = time.time() + NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS
         return
 
     restart_state.consecutive += 1

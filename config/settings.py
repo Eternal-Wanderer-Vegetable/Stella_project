@@ -562,6 +562,9 @@ NAPCAT_WATCHDOG_RESTART_COOLDOWN = _env_int("NAPCAT_WATCHDOG_RESTART_COOLDOWN", 
 # 重启换不回连接时（如自动登录退化为扫码），继续重启只会持续把 bot 踢下线，
 # 且高频登录尝试可能触发 QQ 风控。
 NAPCAT_WATCHDOG_MAX_RESTARTS = _env_int("NAPCAT_WATCHDOG_MAX_RESTARTS", 3)
+# 达到重启上限后的静默时长（秒）：避免每个检查周期都刷同样的 error。
+# 期间若人工完成登录，on_bot_connect 会自动清零重启计数并恢复正常。
+NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS = _env_int("NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS", 3600)
 # NapCat 启动输出的日志文件（原先丢进 DEVNULL，导致重启后完全无法诊断）
 NAPCAT_LAUNCH_LOG_PATH = _env_path("NAPCAT_LAUNCH_LOG_PATH", PROJECT_ROOT / "napcat_launch.log")
 # 是否显示 NapCat 控制台窗口（调试期建议 true，便于直接看到登录界面/扫码提示）
