@@ -9,6 +9,11 @@
 
 所有函数都自建表、自开连接，容忍表不存在（返回保守默认值），不抛异常打断
 主动发言链路。
+
+本模块还保存群级运行时状态（group_runtime_state）：管理员的静音开关与
+睡眠/苏醒播报的每日去重锚点。二者同样属于「丢了会造成用户可见错误」的状态——
+静音开关丢失会让 Bot 在管理员关闭后重启时又开始主动说话；播报锚点丢失会导致
+睡眠期内重启时重复播报「我去睡了」。
 """
 from __future__ import annotations
 
@@ -18,7 +23,7 @@ from datetime import date
 from nonebot import logger
 
 from config import DB_PATH
-from memory.schema import create_proactive_state_table
+from memory.schema import create_group_runtime_state_table, create_proactive_state_table
 
 
 def _connect() -> sqlite3.Connection:
@@ -140,3 +145,90 @@ def count_user_messages_24h(group_id: int, user_id: int) -> int:
         return int(row[0]) if row else 0
     except sqlite3.Error:
         return 0
+
+
+# ── 群级运行时状态（运行时静音开关 / 播报去重） ──────────────
+
+def _connect_runtime() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    create_group_runtime_state_table(conn)
+    return conn
+
+
+def get_runtime_state(group_id: int) -> dict:
+    """读取群级运行时状态；无记录时返回默认值（未静音、无播报记录）。"""
+    try:
+        conn = _connect_runtime()
+        row = conn.execute(
+            "SELECT proactive_muted, muted_by, muted_at, last_sleep_announce_date, "
+            "last_wakeup_announce_date FROM group_runtime_state WHERE group_id = ?",
+            (str(group_id),),
+        ).fetchone()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.warning(f"⚠️ [ProactiveState] 读取群运行时状态失败（按默认值处理）: {e}")
+        row = None
+
+    if not row:
+        return {
+            "proactive_muted": False,
+            "muted_by": "",
+            "muted_at": None,
+            "last_sleep_announce_date": "",
+            "last_wakeup_announce_date": "",
+        }
+    return {
+        "proactive_muted": bool(row[0]),
+        "muted_by": row[1] or "",
+        "muted_at": row[2],
+        "last_sleep_announce_date": row[3] or "",
+        "last_wakeup_announce_date": row[4] or "",
+    }
+
+
+def set_proactive_muted(group_id: int, muted: bool, operator_id: int = 0) -> None:
+    """设置群级主动发言静音开关（持久化，重启后仍生效）。
+
+    静音只影响主动发言（话题插话 + 主动 @）；被 @ 时仍照常回复。
+    """
+    try:
+        conn = _connect_runtime()
+        conn.execute(
+            "INSERT INTO group_runtime_state (group_id, proactive_muted, muted_by, muted_at, updated_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(group_id) DO UPDATE SET "
+            "proactive_muted = excluded.proactive_muted, "
+            "muted_by = excluded.muted_by, "
+            "muted_at = CURRENT_TIMESTAMP, "
+            "updated_at = CURRENT_TIMESTAMP",
+            (str(group_id), 1 if muted else 0, str(operator_id) if operator_id else ""),
+        )
+        conn.commit()
+        conn.close()
+        logger.info(
+            f"{'🔇' if muted else '🔊'} [ProactiveState] 群 {group_id} 主动发言"
+            f"{'已静音' if muted else '已恢复'}（操作者 {operator_id or '未知'}）"
+        )
+    except sqlite3.Error as e:
+        logger.warning(f"⚠️ [ProactiveState] 设置静音开关失败: {e}")
+
+
+def mark_announced(group_id: int, kind: str, date_str: str) -> None:
+    """记录某类播报（``sleep`` / ``wakeup``）已在 date_str 当日完成。
+
+    kind 是代码内枚举值，不是外部输入，因此列名可安全参与 SQL 拼接。
+    """
+    column = "last_sleep_announce_date" if kind == "sleep" else "last_wakeup_announce_date"
+    try:
+        conn = _connect_runtime()
+        conn.execute(
+            f"INSERT INTO group_runtime_state (group_id, {column}, updated_at) "
+            f"VALUES (?, ?, CURRENT_TIMESTAMP) "
+            f"ON CONFLICT(group_id) DO UPDATE SET "
+            f"{column} = excluded.{column}, updated_at = CURRENT_TIMESTAMP",
+            (str(group_id), date_str),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.warning(f"⚠️ [ProactiveState] 记录播报失败: {e}")

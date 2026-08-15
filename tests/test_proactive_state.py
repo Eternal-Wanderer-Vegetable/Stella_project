@@ -9,7 +9,25 @@ count_user_messages_24h 排除 BOT_SELF、表不存在时返回默认值不抛�
 """
 import sqlite3
 
+import pytest
+
 from memory import proactive_state
+from memory.proactive_state import (
+    get_runtime_state,
+    mark_announced,
+    set_proactive_muted,
+)
+
+
+@pytest.fixture
+def db(tmp_path, monkeypatch):
+    """临时库：把 proactive_state 与 schema 的 DB_PATH 一起指向它。"""
+    path = tmp_path / "runtime.db"
+    monkeypatch.setattr(proactive_state, "DB_PATH", path)
+    import memory.schema as schema
+
+    monkeypatch.setattr(schema, "DB_PATH", path)
+    return path
 
 
 def test_at_count_increments(tmp_path, monkeypatch):
@@ -98,3 +116,51 @@ def test_missing_table_returns_defaults_without_error(tmp_path, monkeypatch):
     assert state["last_asked_topic"] == ""
     # count_user_messages_24h 读表缺失 → 0，不打断主动发言链路
     assert proactive_state.count_user_messages_24h(1, 2001) == 0
+
+
+# ── 群级运行时状态（静音开关 / 播报去重） ──────────────
+
+def test_runtime_state_defaults_without_record(db):
+    """无记录时返回默认值：未静音、无播报记录。"""
+    state = get_runtime_state(1)
+    assert state["proactive_muted"] is False
+    assert state["last_sleep_announce_date"] == ""
+    assert state["last_wakeup_announce_date"] == ""
+
+
+def test_set_proactive_muted_persists(db):
+    """静音开关落库，可跨调用读取；恢复后写回 False。"""
+    set_proactive_muted(1, True, operator_id=1001)
+    state = get_runtime_state(1)
+    assert state["proactive_muted"] is True
+    assert state["muted_by"] == "1001"
+    assert state["muted_at"] is not None
+
+    set_proactive_muted(1, False, operator_id=1001)
+    assert get_runtime_state(1)["proactive_muted"] is False
+
+
+def test_muted_is_per_group(db):
+    """静音按群独立，不互相影响。"""
+    set_proactive_muted(1, True)
+    assert get_runtime_state(1)["proactive_muted"] is True
+    assert get_runtime_state(2)["proactive_muted"] is False
+
+
+def test_mark_announced_writes_matching_column(db):
+    """sleep / wakeup 分别写入各自的列，互不覆盖。"""
+    mark_announced(1, "sleep", "2026-08-15")
+    state = get_runtime_state(1)
+    assert state["last_sleep_announce_date"] == "2026-08-15"
+    assert state["last_wakeup_announce_date"] == ""
+
+    mark_announced(1, "wakeup", "2026-08-16")
+    state = get_runtime_state(1)
+    assert state["last_sleep_announce_date"] == "2026-08-15"
+    assert state["last_wakeup_announce_date"] == "2026-08-16"
+
+
+def test_runtime_state_survives_missing_table(tmp_path, monkeypatch):
+    """DB 文件不存在时不抛异常，返回默认值。"""
+    monkeypatch.setattr("memory.proactive_state.DB_PATH", tmp_path / "nonexistent.db")
+    assert get_runtime_state(1)["proactive_muted"] is False
