@@ -178,6 +178,8 @@ SESSION_SUMMARY_MAX_TOKENS = _env_int("SESSION_SUMMARY_MAX_TOKENS", 300)
 SESSION_COMPACT_MAX_MESSAGES = _env_int("SESSION_COMPACT_MAX_MESSAGES", 60)
 # 空闲多久视为会话结束（秒）：结束时清空摘要并触发一次完整整合
 SESSION_IDLE_TIMEOUT_SECONDS = _env_float("SESSION_IDLE_TIMEOUT_SECONDS", 900.0)
+# 空闲会话的检查间隔（秒）。不需要很频繁——它只负责收尾。
+SESSION_IDLE_CHECK_INTERVAL = _env_int("SESSION_IDLE_CHECK_INTERVAL", 300)
 
 # ---------- 长期记忆引用策略 ----------
 # 主动发言时引用的长期记忆条数（按 last_accessed_at 倒序取最近 N 条）

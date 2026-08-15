@@ -14,7 +14,7 @@
    - 主动发言（基于群消息频率的定时任务）——见 _proactive_speak_for_group；
 3. 定时任务（借 NoneBot APScheduler）：
    - 周度记忆压缩（run_weekly）、主动发言检查（proactive_speak_job，含睡眠/苏醒播报）、
-     每日消息清理（trim_messages_job）；
+     每日消息清理（trim_messages_job）、会话空闲检查（session_idle_check_job，结束会话并触发整合）；
 4. 并发控制：_group_locks 每群一把 asyncio.Lock，防止同一群内 @ 回复与主动发言同时跑 Pipeline。
 
 依赖注入注意：模块级 pipeline / _group_locks 在 import 阶段创建，
@@ -58,6 +58,8 @@ from config import (
     PROACTIVE_TOGGLE_ADMINS,
     PROACTIVE_WAKEUP_MESSAGES,
     SEND_INTERVAL,
+    SESSION_CONTEXT_ENABLED,
+    SESSION_IDLE_CHECK_INTERVAL,
     SYSTEM_PROMPT_PATH,
 )
 from core.context import ChatContext
@@ -84,6 +86,10 @@ from memory.proactive_state import (
     set_proactive_muted,
 )
 from memory.proactive_target import pick_target
+from memory.session_compact import schedule_compact
+from memory.session_context import end_session
+from memory.session_context import idle_groups as idle_session_groups
+from memory.session_context import touch as session_touch
 
 # ============================================================
 # Pipeline 构建
@@ -223,6 +229,8 @@ async def record_group_chat(event: GroupMessageEvent):
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
     get_proactive().record_message(ctx.group_id, ctx.user_id)
+    # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
+    session_touch(ctx.group_id)
 
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
@@ -291,6 +299,10 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 发送前先把 Bot 自己的台词落库（source_kind=BOT_SELF），给下一轮整合提供语境。
         # 必须放在发送前：最后一行走 chat_handler.finish() 会抛 FinishedException，后续代码不执行。
         await _record_bot_lines(event.self_id, event.group_id, ctx.lines)
+
+        # 压缩放在回复之后：不阻塞本次回复，摘要从下一轮开始生效
+        if ctx.tail_start_id:
+            schedule_compact(event.group_id, ctx.tail_start_id)
 
         # 第一条回复带引用原消息；多行之间间隔 SEND_INTERVAL 秒发送
         reply_segment = MessageSegment.reply(event.message_id)
@@ -510,6 +522,10 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
 
         await _record_bot_lines(self_id, group_id, [line])
 
+        # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
+        if ctx.tail_start_id:
+            schedule_compact(group_id, ctx.tail_start_id)
+
         try:
             await bot.send_group_msg(
                 group_id=group_id,
@@ -646,6 +662,11 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
         get_proactive().record_spoken(group_id, ctx.lines)
         logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
         await _record_bot_lines(int(bot.self_id), group_id, ctx.lines)
+
+        # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
+        if ctx.tail_start_id:
+            schedule_compact(group_id, ctx.tail_start_id)
+
         try:
             for i, line in enumerate(ctx.lines):
                 if i > 0:
@@ -685,6 +706,30 @@ if scheduler is not None and PROACTIVE_ENABLED:
                 await _proactive_speak_for_group(bot, group_id)
             except Exception as e:
                 logger.error(f"主动发言异常（群 {group_id}）: {e}")
+
+
+# ============================================================
+# 会话空闲检查（结束会话并触发一次完整整合）
+# ============================================================
+
+if scheduler is not None and SESSION_CONTEXT_ENABLED:
+
+    @scheduler.scheduled_job(
+        "interval", seconds=SESSION_IDLE_CHECK_INTERVAL, id="session_idle_check"
+    )
+    async def session_idle_check_job():
+        """空闲超时的会话：清空压缩状态并触发一次完整整合。
+
+        会话结束时整合的理由：这一场对话的内容此前只以「压缩摘要」形式存在于
+        内存，重启即失。结束时整合一次，把它沉淀为长期记忆的候选。
+        """
+        for group_id in idle_session_groups():
+            try:
+                if end_session(group_id):
+                    logger.info(f"💤 [Session] 群 {group_id} 会话空闲结束，触发整合")
+                    maybe_consolidate(group_id)
+            except Exception as e:
+                logger.warning(f"⚠️ 会话收尾异常（群 {group_id}）: {e}")
 
 
 # ============================================================

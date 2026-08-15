@@ -33,6 +33,8 @@ from core.context import ChatContext
 from memory.prompt_builder import build_memory_context
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
+from memory.session_context import ensure_initialized as session_ensure_initialized
+from memory.session_context import get_summary as get_session_summary
 from memory.timeutil import (
     humanize_duration,
     parse_db_timestamp,
@@ -135,7 +137,16 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             pass
 
         # ── 2) 最近原始消息（含 Bot 自己的发言，带来源标注） ──
-        tail = _fetch_recent_tail(cursor, ctx.group_id, RECENT_TAIL_LIMIT)
+        tail, tail_start_id = _fetch_recent_tail(cursor, ctx.group_id, RECENT_TAIL_LIMIT)
+
+        # ── 2.5) 会话摘要：覆盖已滚出尾巴窗口的较早内容 ──
+        # 先对齐起点再取摘要：首次使用时把已压缩位置对齐到尾巴起点，
+        # 避免把整个历史当成待压缩内容。
+        if tail_start_id > 0:
+            session_ensure_initialized(ctx.group_id, tail_start_id)
+        session_summary = get_session_summary(ctx.group_id)
+        # 供 post 侧触发压缩（回复发出后异步进行，不阻塞本次回复）
+        ctx.tail_start_id = tail_start_id
 
         # ── 3) recent_exchanges 只在没有原始尾巴时兜底 ──
         # 它是整合器产出的滞后快照，与原始尾巴并存会出现同一段对话的两个版本，
@@ -156,6 +167,8 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             parts.append(f"{label}: {pending_topic}")
         if exchanges_text:
             parts.append("近期关键发言:\n" + exchanges_text)
+        if session_summary:
+            parts.append("本场对话较早的内容（已压缩）:\n" + session_summary)
         if tail:
             parts.append("最近的对话（时间正序，「我」是你自己说过的话）:\n" + tail)
 
@@ -164,14 +177,19 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             logger.info(
                 f"🧠 [Context] 摘要={'过期' if summary_age else '有' if active_summary else '无'} "
                 f"原始尾巴={len(tail.splitlines()) if tail else 0} 行"
+                f"{' 会话摘要=有' if session_summary else ''}"
             )
     except Exception as e:
         logger.warning(f"读取上下文异常（跳过）: {e}")
     return ctx
 
 
-def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str:
+def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tuple[str, int]:
     """取最近 limit 条原始消息，按时间正序拼成文本。
+
+    返回 ``(文本, 尾巴起点消息 id)``。起点 id 供会话压缩计算不重叠的待压缩
+    区间——摘要必须严格覆盖尾巴之前的内容（见 memory/session_context.py）。
+    无消息时返回 ``("", 0)``。
 
     三件事：
 
@@ -186,11 +204,11 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str
     旧库没有 source_kind 列时回退为全部按用户渲染、且无时间信息。
     """
     if limit <= 0:
-        return ""
+        return "", 0
 
     rows = _query_tail_rows(cursor, group_id, limit)
     if not rows:
-        return ""
+        return "", 0
     rows.reverse()  # id 倒序 → 时间正序
 
     now = utc_now().timestamp()
@@ -199,7 +217,8 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str
 
     lines: list[str] = []
     prev_epoch: float | None = None
-    for uid, content, kind, ts in rows:
+    tail_start_id = 0
+    for mid, uid, content, kind, ts in rows:
         text = (content or "").strip()
         if not text:
             continue
@@ -208,6 +227,10 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str
         # 时间窗过滤：解析失败的消息（旧库无 timestamp）不过滤，保留原有行为
         if max_age > 0 and epoch is not None and (now - epoch) > max_age:
             continue
+
+        # 起点取「第一条真正进入尾巴」的消息 id：被时间窗过滤掉的不算
+        if tail_start_id == 0:
+            tail_start_id = int(mid)
 
         # 断层标记：两条消息之间隔了很久，明确告诉模型中间有空白
         if (
@@ -222,28 +245,27 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> str
         if epoch is not None:
             prev_epoch = epoch
 
-    return "\n".join(lines)
+    return "\n".join(lines), tail_start_id
 
 
 def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[tuple]:
-    """取尾巴原始行（id 倒序），带 source_kind 与 timestamp；旧库自动降级。
+    """取尾巴原始行（id 倒序），带 id / source_kind / timestamp；旧库自动降级。
 
-    返回 (user_id, content, source_kind, timestamp) 四元组列表。
+    返回 (id, user_id, content, source_kind, timestamp) 五元组列表。
     """
     try:
         return cursor.execute(
-            "SELECT user_id, content, source_kind, timestamp FROM group_messages "
+            "SELECT id, user_id, content, source_kind, timestamp FROM group_messages "
             "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
             (str(group_id), limit),
         ).fetchall()
     except sqlite3.OperationalError:
         pass
-    # 旧库缺 source_kind（或连 timestamp 都没有）时逐级降级
     try:
         return [
-            (uid, content, "PASSIVE", ts)
-            for uid, content, ts in cursor.execute(
-                "SELECT user_id, content, timestamp FROM group_messages "
+            (mid, uid, content, "PASSIVE", ts)
+            for mid, uid, content, ts in cursor.execute(
+                "SELECT id, user_id, content, timestamp FROM group_messages "
                 "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
                 (str(group_id), limit),
             ).fetchall()
@@ -252,9 +274,9 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
         pass
     try:
         return [
-            (uid, content, "PASSIVE", None)
-            for uid, content in cursor.execute(
-                "SELECT user_id, content FROM group_messages "
+            (mid, uid, content, "PASSIVE", None)
+            for mid, uid, content in cursor.execute(
+                "SELECT id, user_id, content FROM group_messages "
                 "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
                 (str(group_id), limit),
             ).fetchall()

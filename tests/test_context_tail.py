@@ -289,3 +289,63 @@ def test_timestamp_unparseable_not_filtered(tmp_path, monkeypatch):
     monkeypatch.setattr(pre_processors_mod, "DB_PATH", db)
 
     assert "无时间戳的消息" in asyncio.run(build_context(_make_ctx(1, 1001))).short_term
+
+
+def test_tail_start_id_returned(tmp_path):
+    """尾巴起点 id 用于会话压缩的区间计算，必须是第一条真正进入尾巴的消息。"""
+    db = tmp_path / "ctx.db"
+    _make_db(db, [])
+    conn = sqlite3.connect(db)
+    for i in range(1, 6):
+        _insert_message(conn, 1, 1001, f"第{i}句", "PASSIVE", 1)
+    conn.commit()
+    cursor = conn.cursor()
+
+    from memory.pre_processors import _fetch_recent_tail
+
+    text, start_id = _fetch_recent_tail(cursor, 1, limit=3)
+    assert start_id == 3           # 取最近 3 条 → id 3,4,5
+    assert "第3句" in text and "第2句" not in text
+    conn.close()
+
+
+def test_tail_start_id_skips_filtered_messages(tmp_path, monkeypatch):
+    """被时间窗过滤掉的消息不算尾巴起点——它们应归入待压缩区间。"""
+    monkeypatch.setattr("memory.pre_processors.RECENT_TAIL_MAX_AGE_MINUTES", 45.0)
+    db = tmp_path / "ctx.db"
+    _make_db(db, [])
+    conn = sqlite3.connect(db)
+    _insert_message(conn, 1, 1001, "很久以前", "PASSIVE", 300)
+    _insert_message(conn, 1, 1001, "刚刚", "PASSIVE", 1)
+    conn.commit()
+    cursor = conn.cursor()
+
+    from memory.pre_processors import _fetch_recent_tail
+
+    _, start_id = _fetch_recent_tail(cursor, 1, limit=10)
+    assert start_id == 2
+    conn.close()
+
+
+def test_session_summary_precedes_tail(tmp_path, monkeypatch):
+    """会话摘要必须出现在尾巴之前（与时间顺序一致）。"""
+    from memory import session_context as sc
+
+    sc.reset_state()
+    monkeypatch.setattr(sc, "SESSION_CONTEXT_ENABLED", True)
+
+    db = tmp_path / "ctx.db"
+    _make_db(db, [])
+    conn = sqlite3.connect(db)
+    _insert_message(conn, 1, 1001, "最近的一句", "PASSIVE", 1)
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(pre_processors_mod, "DB_PATH", db)
+
+    sc.ensure_initialized(1, 1)
+    sc.apply_summary(1, "之前聊过显卡", up_to_id=1)
+
+    st = asyncio.run(build_context(_make_ctx(1, 1001))).short_term
+    assert "本场对话较早的内容" in st
+    assert st.index("之前聊过显卡") < st.index("最近的一句")
+    sc.reset_state()

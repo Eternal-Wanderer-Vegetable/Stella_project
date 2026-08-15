@@ -62,3 +62,8 @@ class ChatContext:
     conversation_memories: list[dict] = field(default_factory=list)  # 聊天素材
     behavior_constraints: list[dict] = field(default_factory=list)   # 行为约束
     memory_trace: dict = field(default_factory=dict)                 # 决策轨迹
+
+    # ---- 会话上下文压缩 ----
+    # 尾巴起点消息 id：会话压缩用它计算不与尾巴重叠的待压缩区间。
+    # 0 表示无尾巴（新群或全部消息都超出时间窗）。
+    tail_start_id: int = 0
