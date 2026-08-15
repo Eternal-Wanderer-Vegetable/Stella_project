@@ -217,20 +217,21 @@ interval >= SLOW → PROB_AT_SLOW
 | `PROACTIVE_ENABLED` | `true` | 主动发言总开关 |
 | `PROACTIVE_INTERVAL_FAST` | `20.0` | 视为「高频」的平均间隔上界（秒） |
 | `PROACTIVE_INTERVAL_SLOW` | `180.0` | 视为「冷清」的平均间隔下界（秒） |
-| `PROACTIVE_PROB_AT_FAST` | `0.35` | 高频端概率 |
+| `PROACTIVE_PROB_AT_FAST` | `0.15` | 高频端概率 |
 | `PROACTIVE_PROB_AT_SLOW` | `0.0` | 冷清端概率 |
 | `PROACTIVE_PROB_GAMMA` | `1.0` | 曲线整形指数，>1 更保守 |
 | `PROACTIVE_TOPIC_WARMUP_SECONDS` | `45.0` | 话题预热时长，不足则不参与 |
-| `PROACTIVE_COOLDOWN` | `120` | 群级硬冷却（秒） |
-| `PROACTIVE_CHECK_INTERVAL` | `30` | 定时检查间隔（秒） |
+| `PROACTIVE_COOLDOWN` | `600` | 群级硬冷却（秒） |
+| `PROACTIVE_CHECK_INTERVAL` | `60` | 定时检查间隔（秒） |
 | `PROACTIVE_FREQ_WINDOW` | `10` | 频率估算窗口（最近 N 条消息） |
 | `PROACTIVE_MAX_LINES` | `1` | 主动插话最大行数 |
+| `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE` | `15` | 距上次自己发言，群里至少要有多少条新消息才允许再开口。0 表示不限制 |
 
 **三种预设**：
 
 ```env
 # 热闹时插话（默认，适合闲聊群）
-PROACTIVE_PROB_AT_FAST=0.35
+PROACTIVE_PROB_AT_FAST=0.15
 PROACTIVE_PROB_AT_SLOW=0.0
 
 # 热闹时闭嘴（旧行为，适合技术群）
@@ -241,6 +242,10 @@ PROACTIVE_PROB_AT_SLOW=0.5
 PROACTIVE_PROB_AT_FAST=0.0
 PROACTIVE_PROB_AT_SLOW=0.0
 ```
+
+**为什么需要消息数门槛**：纯时间冷却在冷清群里会造成「自己说完等 10 分钟又自己说」。消息数门槛能保证「话题真的往前走了」才插话。该计数是进程内的，重启后视为「新消息足够」，不会因重启而永久卡住主动发言。
+
+三种预设的实际频率参考（`CHECK_INTERVAL=60`）：`PROB_AT_FAST=0.15` 时活跃群命中期望约 6.7 分钟，叠加 `COOLDOWN=600` 与消息门槛后，实际发言间隔通常在 10 分钟以上。
 
 `PROACTIVE_MIN_PROB` / `PROACTIVE_MAX_PROB` / `PROACTIVE_HIGH_FREQ_INTERVAL` / `PROACTIVE_LOW_FREQ_INTERVAL` 已废弃（被双锚点曲线取代），保留定义以兼容既有 `.env`。
 
@@ -262,6 +267,50 @@ PROACTIVE_PROB_AT_SLOW=0.0
 配额上限硬封顶在 `BASE + BONUS_MAX`（默认 4 次/天）。**「越活跃越被骚扰」是必须避免的失控模式**，因此奖励幅度不建议调大。
 
 配额为「发出即计数」，不论用户是否回应——否则无回应的追问不占配额，会导致对同一人连续搭话。
+
+### 睡眠时段
+
+模拟人类作息：睡眠期间关闭一切主动发言（话题插话 + 主动 @），但**被 @ 时照常回复**。
+
+不在睡眠期停止回复的理由：用户主动叫它却不回应看起来像掉线，且 `AT_MENTION` 是当前唯一的记忆来源，睡眠期不回复等于每天损失数小时的采集。被动信息收集（消息落库、整合）在睡眠期照常进行。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `PROACTIVE_SLEEP_ENABLED` | `true` | 睡眠时段总开关 |
+| `PROACTIVE_SLEEP_START` | `23:30` | 入睡时刻（`HH:MM`，**本地时间**） |
+| `PROACTIVE_SLEEP_END` | `07:30` | 苏醒时刻（`HH:MM`，**本地时间**） |
+| `PROACTIVE_WAKEUP_GRACE_SECONDS` | `900.0` | 醒来缓冲：苏醒后多久内仍不主动发言 |
+| `PROACTIVE_SLEEP_ANNOUNCE` | `true` | 是否在入睡/苏醒时播报一句 |
+| `PROACTIVE_SLEEP_MESSAGES` | 见 settings.py | 入睡播报台词（逗号分隔，随机选一条） |
+| `PROACTIVE_WAKEUP_MESSAGES` | 见 settings.py | 苏醒播报台词 |
+
+支持跨午夜区间（`START > END` 时视为跨天）。`START == END` 视为不睡眠。时间格式非法时回退到默认值并输出警告——配置笔误不应让 Bot 通宵说话。
+
+**这里用本地时间而非 UTC**：它描述的是人类作息，与数据库时间戳无关。这是全项目唯一该用本地时间的地方。
+
+**醒来缓冲的必要性**：积压一夜的活跃度统计会让 Bot 一睁眼就连发几句。缓冲期从「检测到苏醒跃变」开始计时。
+
+播报按「每群每类每日最多一次」去重（记录在 `group_runtime_state`）。播报由定时任务触发，不去重的话睡眠期内重启会重复播报「我去睡了」。播报不经过 Pipeline（无需 LLM），但会写入 `group_messages`（`BOT_SELF`）供下一轮整合理解语境。
+
+### 运行时开关
+
+管理员可在群内临时关闭主动发言，作为配置级开关之外的另一道闸门。便于部署者在群成员反馈后即时调整。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `PROACTIVE_RUNTIME_TOGGLE_ENABLED` | `true` | 是否启用运行时开关命令 |
+| `PROACTIVE_TOGGLE_ADMINS` | 空 | 额外授权的 QQ 号（逗号分隔）。留空则仅群主/管理员可操作 |
+
+用法：@ 机器人并说出关键词。
+
+| 动作 | 关键词 |
+|---|---|
+| 静音 | 安静、闭嘴、别说话、停止主动发言 |
+| 恢复 | 恢复、醒醒、可以说话、开启主动发言 |
+
+静音状态**持久化在 `group_runtime_state` 表，重启后仍生效**——管理员关掉它通常是因为出了问题，重启不该把它悄悄打开。
+
+静音只影响主动发言，被 @ 时仍照常回复。非管理员触发时不做任何改动也不回复。
 
 ## 记忆压缩
 
@@ -329,8 +378,10 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 | 想要的效果 | 调整方向 |
 |---|---|
-| Bot 太吵 | 降 `PROACTIVE_PROB_AT_FAST`；升 `PROACTIVE_COOLDOWN`；降 `PROACTIVE_AT_QUOTA_BASE` |
+| Bot 太吵 | 降 `PROACTIVE_PROB_AT_FAST`；升 `PROACTIVE_COOLDOWN` 与 `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`；降 `PROACTIVE_AT_QUOTA_BASE`；或让管理员在群内说「安静」临时关闭 |
 | Bot 太安静 | 升 `PROACTIVE_PROB_AT_FAST`；降 `PROACTIVE_TOPIC_WARMUP_SECONDS` |
+| 深夜还在说话 | 确认 `PROACTIVE_SLEEP_ENABLED=true`，检查 `PROACTIVE_SLEEP_START/END` 是否覆盖目标时段 |
+| 一觉醒来连发几句 | 升 `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | 记不住事 | 降 `MEMORY_OBSERVE_LOW_CONFIDENCE`；降 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；确认 `PROACTIVE_AT_ENABLED=true`（被动摄入的产出接近零） |
 | 记错事 | 升 `MEMORY_CONFIRM_HIGH_CONFIDENCE`；升 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；关闭 `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` |
 | 回复提到不相关的旧事 | 升 `MEMORY_SCORE_MIN`；降各 `MEMORY_LIMIT_*` |

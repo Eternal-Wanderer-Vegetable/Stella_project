@@ -38,7 +38,7 @@ Stella_project/
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
-│   ├── schema.py                   # Schema 迁移（Additive，当前 v5）+ 来源枚举
+│   ├── schema.py                   # Schema 迁移（Additive，当前 v6）+ 来源枚举
 │   ├── timeutil.py                 # DB 时间戳统一按 UTC 解析
 │   ├── text_similarity.py          # 内容相似度与合并（单一真相源）
 │   │
@@ -59,6 +59,7 @@ Stella_project/
 │   │
 │   ├── proactive.py                # 活跃度统计与发言概率曲线
 │   ├── proactive_state.py          # 主动发言的持久化状态（配额/冷却/退避）
+│   ├── proactive_gate.py           # 主动发言的统一准入闸门（六道条件）
 │   ├── proactive_target.py         # 主动 @ 的目标选择与配额判定
 │   ├── proactive_prompt.py         # 主动 @ 的任务指令模板
 │   │
@@ -118,10 +119,25 @@ Stella_project/
 | @ 回复 | 群在白名单 + 被 @ + 有文本 | `reply` | `""` |
 | 主动 @ | 定时检查命中，选中活跃用户 | `reply` | `proactive_at` |
 | 主动插话 | 定时检查命中，概率曲线通过 | `proactive` | `proactive_join` |
+| 运行时开关 | 管理员 @ 机器人 + 命中开关关键词 | — | — |
 
 三条路径共用同一个 Pipeline，靠 `ChatContext` 的字段区分行为。每群一把 `asyncio.Lock`，保证同一群同时只跑一次推理。
 
 主动 @ 与主动插话**互斥**：定时任务先尝试主动 @，命中即跳过插话，同一轮只发一次言。
+
+主动路径（主动 @ / 主动插话）的准入判定统一走 `memory/proactive_gate.py` 的 `can_speak(group_id, kind)`，按顺序检查六项：
+
+```
+总开关 → 分路开关 → 运行时静音 → 睡眠时段 → 醒来缓冲 → 群级冷却 → 新消息门槛
+```
+
+返回值带原因字符串，便于排查「为什么这次没说话」。收敛到单一入口是有原因的：这些条件原先散在 `proactive_speak_job` / `_proactive_at_user` / `should_speak` 三处，每加一个条件都要改三个调用点。
+
+话题插话的**概率掷骰不在 gate 内** —— 那是 join 路径独有的，由调用方在 gate 通过后自行掷骰（主动 @ 有配额与用户级冷却约束，不掷骰）。
+
+**@ 回复不经过 gate。** 睡眠或静音期间被 @ 照常回复。
+
+运行时开关 handler 的 `priority=0`，必须早于 `chat_handler(priority=1, block=True)`，否则「安静」这类命令会被当成普通对话交给 LLM。
 
 ### 3. 上下文构建（pre hooks）
 
@@ -201,7 +217,7 @@ log_thought        (40)  → 写 stella_thought_logs.md
 
 | 任务 | 周期 | 作用 |
 |---|---|---|
-| 主动发言检查 | `PROACTIVE_CHECK_INTERVAL` | 尝试主动 @ 或主动插话 |
+| 主动发言检查 | `PROACTIVE_CHECK_INTERVAL` | 睡眠/苏醒播报 → 尝试主动 @ → 尝试主动插话 |
 | NapCat 看门狗 | `NAPCAT_WATCHDOG_CHECK_INTERVAL` | 心跳超时 + 探活失败 → 外部重启 |
 | 消息表裁剪 | 每日 `MESSAGE_CLEANUP_HOUR` 点 | 每群保留最近 N 条，同时清理过期追踪 |
 | 周度压缩 | 每 7 天 | 全量去重、原子化、归档、衰减 |
@@ -232,6 +248,7 @@ log_thought        (40)  → 写 stella_thought_logs.md
 | `memories_fts` | FTS5 全文索引（按 `mem_id` 与 `memories` 同步） |
 | `user_profiles` | 用户稳定画像（人格判断已被过滤） |
 | `proactive_state` | 主动 @ 的配额、冷却、退避状态 |
+| `group_runtime_state` | 群级运行时状态：主动发言静音开关、睡眠/苏醒播报去重 |
 | `memory_traces` | 记忆决策追踪 |
 | `atomic_facts` | 长记忆拆分出的原子事实 |
 | `compressor_stats` / `compressor_state` | 压缩统计与节流状态 |
