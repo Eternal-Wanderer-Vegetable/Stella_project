@@ -14,6 +14,8 @@
    source_kinds），支撑「暂存 → 交叉验证 → 逐步强化」的累计证据语义；
 6. v5 新增 ``proactive_state`` 表（主动发言的持久化状态：每用户 @ 配额计数、
    上次追问内容、连续无回应次数）。
+7. v6 新增 ``group_runtime_state`` 表（主动发言的运行时静音开关与
+   睡眠/苏醒播报的每日去重锚点）。
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -32,8 +34,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v5：新增 proactive_state 主动发言状态表）
-SCHEMA_VERSION = 5
+# 当前 Schema 版本（v6：新增 group_runtime_state 群级运行时状态表）
+SCHEMA_VERSION = 6
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -270,6 +272,32 @@ def create_proactive_state_table(conn: sqlite3.Connection) -> None:
     conn.execute(PROACTIVE_STATE_TABLE_DDL)
 
 
+GROUP_RUNTIME_STATE_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS group_runtime_state (
+    group_id TEXT PRIMARY KEY,
+    proactive_muted INTEGER DEFAULT 0,
+    muted_by TEXT,
+    muted_at DATETIME,
+    last_sleep_announce_date TEXT,
+    last_wakeup_announce_date TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_group_runtime_state_table(conn: sqlite3.Connection) -> None:
+    """确保 group_runtime_state 表存在（幂等）。
+
+    保存两类必须跨重启存活的群级状态：
+
+    - ``proactive_muted``：管理员的运行时静音开关。管理员关掉它通常是因为
+      出了问题，重启不该把它悄悄打开；
+    - ``last_*_announce_date``：睡眠/苏醒播报的去重锚点。播报由定时任务触发，
+      不记录已播报日期的话，睡眠期内重启会重复播报「我去睡了」。
+    """
+    conn.execute(GROUP_RUNTIME_STATE_TABLE_DDL)
+
+
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     """判断表是否存在。"""
     cursor.execute(
@@ -354,6 +382,10 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(PROACTIVE_STATE_TABLE_DDL)
+    # v6：群级运行时状态表（新表，不属于 additive column 范畴）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(GROUP_RUNTIME_STATE_TABLE_DDL)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

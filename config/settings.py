@@ -387,6 +387,48 @@ PROACTIVE_MAX_LINES = _env_int("PROACTIVE_MAX_LINES", 1)
 # 主动发言前若累计新消息达到该数量，则触发一次短期记忆总结
 CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGES", 10)
 
+# ---------- 主动发言：睡眠时段 ----------
+# 模拟人类作息：睡眠期间关闭一切主动发言（话题插话 + 主动 @），
+# 但**被 @ 时照常回复**——用户主动叫它却不回应看起来像掉线，
+# 且 AT_MENTION 是当前唯一的记忆来源，睡眠期不回复等于每天损失数小时采集。
+# 被动信息收集（消息落库、整合）在睡眠期照常进行。
+PROACTIVE_SLEEP_ENABLED = _env("PROACTIVE_SLEEP_ENABLED", "true").lower() in ("true", "1", "yes")
+# 睡眠起止（HH:MM，**本地时间**——它描述人类作息，与 DB 时间戳的 UTC 无关）。
+# 支持跨午夜：START > END 时视为跨天区间。
+PROACTIVE_SLEEP_START = _env("PROACTIVE_SLEEP_START", "23:30")
+PROACTIVE_SLEEP_END = _env("PROACTIVE_SLEEP_END", "07:30")
+# 醒来缓冲（秒）：苏醒后不立刻恢复主动发言。
+# 积压一夜的活跃度统计会让它一睁眼就连发几句。
+PROACTIVE_WAKEUP_GRACE_SECONDS = _env_float("PROACTIVE_WAKEUP_GRACE_SECONDS", 900.0)
+# 是否在入睡/苏醒时向群里播报一句
+PROACTIVE_SLEEP_ANNOUNCE = _env("PROACTIVE_SLEEP_ANNOUNCE", "true").lower() in ("true", "1", "yes")
+# 播报台词（逗号分隔多条，随机选一条；留空则不播报对应时段）
+PROACTIVE_SLEEP_MESSAGES = [
+    t.strip()
+    for t in _env(
+        "PROACTIVE_SLEEP_MESSAGES",
+        "我先去睡了，晚安~,有点困了，明天聊,睡觉去了，你们别聊太晚",
+    ).split(",")
+    if t.strip()
+]
+PROACTIVE_WAKEUP_MESSAGES = [
+    t.strip()
+    for t in _env(
+        "PROACTIVE_WAKEUP_MESSAGES",
+        "早，我回来了,睡醒了，早上好,起床了~",
+    ).split(",")
+    if t.strip()
+]
+
+# ---------- 主动发言：运行时开关 ----------
+# 管理员可在群内临时关闭主动发言（配置级开关之外的另一道闸门），
+# 便于部署者在群成员反馈后即时调整，避免未知问题打扰正常聊天。
+# 运行时开关持久化在 group_runtime_state 表，重启后仍生效——
+# 管理员关掉它通常是因为出了问题，重启不该把它悄悄打开。
+PROACTIVE_RUNTIME_TOGGLE_ENABLED = _env("PROACTIVE_RUNTIME_TOGGLE_ENABLED", "true").lower() in ("true", "1", "yes")
+# 允许操作运行时开关的用户（QQ 号，逗号分隔）。留空则仅群主/管理员可操作。
+PROACTIVE_TOGGLE_ADMINS = {int(x) for x in _env("PROACTIVE_TOGGLE_ADMINS", "").split(",") if x.strip()}
+
 # ---------- 主动发言 v2：话题参与概率曲线（双锚点插值） ----------
 # 同一条曲线通过参数即可表达两种意图，无需模式开关：
 #   「热闹时插话」（新默认）：PROB_AT_FAST=0.35, PROB_AT_SLOW=0.0
