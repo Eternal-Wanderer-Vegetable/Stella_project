@@ -123,8 +123,9 @@ def compact_message_limit() -> int:
 def apply_summary(group_id: int, summary: str, up_to_id: int, message_count: int = 0) -> None:
     """写入新摘要并推进已压缩位置。
 
-    summary 为空时**不推进** up_to_id：压缩失败或模型判定无可摘要内容时，
-    这批消息应当留待下次重试，而不是被静默跳过。
+    summary 为空时**不推进** up_to_id：LLM 调用失败时，这批消息应当留待下次重试，
+    而不是被静默跳过。模型判定「这段无可摘要内容」的情形请调用
+    ``skip_range()`` 推进位置（两者区别处理，否则噪音消息会永远堆在待压缩区间）。
     """
     if not SESSION_CONTEXT_ENABLED:
         return
@@ -141,6 +142,25 @@ def apply_summary(group_id: int, summary: str, up_to_id: int, message_count: int
         f"🗜️ [Session] 群 {group_id} 会话压缩完成"
         f"（第 {state.compact_count} 次，累计 {state.compacted_messages} 条，"
         f"摘要 {estimate_tokens(text)} tokens，已压缩至消息 {state.summarized_up_to_id}）"
+    )
+
+
+def skip_range(group_id: int, up_to_id: int, message_count: int = 0) -> None:
+    """跳过一段无可摘要内容的消息：推进位置但保留原摘要。
+
+    与 ``apply_summary("")`` 的区别是**故意的**：
+    - 模型判定「这段全是寒暄/刷屏，没什么可留的」→ 本函数，推进位置；
+    - LLM 调用失败 → apply_summary 传空，不推进，留待下次重试。
+    两者都当成不推进的话，噪音消息会永远堆在待压缩区间里反复触发压缩。
+    """
+    if not SESSION_CONTEXT_ENABLED:
+        return
+    state = _state(group_id)
+    state.summarized_up_to_id = max(state.summarized_up_to_id, up_to_id)
+    state.compacted_messages += max(0, message_count)
+    logger.debug(
+        f"[Session] 群 {group_id} 跳过 {message_count} 条无摘要价值的消息"
+        f"（已压缩至 {state.summarized_up_to_id}）"
     )
 
 

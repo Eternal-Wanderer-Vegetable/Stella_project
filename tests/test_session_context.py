@@ -106,6 +106,25 @@ def test_sessions_are_per_group():
     assert sc.get_summary(2) == ""
 
 
+def test_skip_range_advances_keeps_summary():
+    """模型判定无可摘要内容 → 推进位置但保留原摘要。"""
+    sc.ensure_initialized(1, 100)
+    sc.apply_summary(1, "先前的摘要", up_to_id=100)
+    sc.skip_range(1, up_to_id=140, message_count=30)
+    assert sc.get_summary(1) == "先前的摘要"
+    assert sc.session_stats(1)["summarized_up_to_id"] == 140
+
+
+def test_skip_range_does_not_bump_compact_count():
+    """跳过不算一次压缩：compact_count 只在真正产出摘要时递增。"""
+    sc.ensure_initialized(1, 100)
+    sc.apply_summary(1, "第一段", up_to_id=140)
+    sc.skip_range(1, up_to_id=200, message_count=20)
+    stats = sc.session_stats(1)
+    assert stats["compact_count"] == 1
+    assert stats["compacted_messages"] == 20
+
+
 def test_disabled_switch_short_circuits(monkeypatch):
     monkeypatch.setattr(sc, "SESSION_CONTEXT_ENABLED", False)
     sc.touch(1)
