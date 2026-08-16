@@ -33,14 +33,25 @@ _INSTRUCTION_INTENTS = frozenset({"proactive_at"})
 def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
     """把上下文段落与 ctx.message 按正确顺序拼成最终 user prompt。
 
-    普通对话：上下文 → 用户这句话（用户输入在最后，模型自然去回应它）。
+    普通对话：上下文 → 当前输入。当前输入必须**显式标记**——它被拼在尾巴
+    之后只是一行裸文本，模型无从判断其特殊地位，会转而回应尾巴里信号更强的
+    话题（2026-08-16 实测：用户说「要玩应该先去玩边狱」，Bot 回了尾巴里
+    别人在聊的周边毛绒玩偶）。
+
     指令型（见 _INSTRUCTION_INTENTS）：指令 → 上下文（上下文只是语气素材，
     不是待回应的内容）。
     """
     context_text = context_text or ""
     if ctx.intent in _INSTRUCTION_INTENTS:
         return f"{ctx.message}\n\n{context_text}" if context_text else ctx.message
-    return f"{context_text}\n{ctx.message}" if context_text else ctx.message
+    if not context_text:
+        return ctx.message
+    speaker = f"用户({ctx.user_id})" if ctx.user_id else "对方"
+    return (
+        f"{context_text}\n\n"
+        f"【现在 {speaker} 对你说】{ctx.message}\n"
+        f"请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。"
+    )
 
 
 class Pipeline:
