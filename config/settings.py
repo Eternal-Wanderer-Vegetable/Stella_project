@@ -395,6 +395,23 @@ CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 1200
 # 整合日志文件路径（可视化记录每次整合运行详情，可通过 .env 覆盖）
 CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", PROJECT_ROOT / "memory_consolidation_log.md")
 
+# ---------- 记忆候选提取（两阶段整合的第二阶段） ----------
+# 整合拆两步：阶段1（E4B）出短期摘要+用户画像+自我披露判断；阶段2（本段配置的
+# 模型）只做一件高精度的事——从消息里精确提取「用户亲口说的、关于自己的稳定信息」。
+# 依据（log_2026_8_16_1717）：E4B 能总结主题，却系统性地把候选提取判空
+# （7 批全空，且明确「读到了信息但主动弃掉」）。候选提取是高精度抽取任务，
+# 交给主聊天用的 27B。默认全部继承主聊天配置（即 27B），保留独立键便于将来替换。
+MEMORY_EXTRACT_LM_STUDIO_BASE_URL = _env("MEMORY_EXTRACT_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
+MEMORY_EXTRACT_LM_STUDIO_API_KEY = _env("MEMORY_EXTRACT_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
+MEMORY_EXTRACT_LM_STUDIO_MODEL = _env("MEMORY_EXTRACT_LM_STUDIO_MODEL", LM_STUDIO_MODEL)
+# 提取偏低温度保证 JSON 稳定；比整合的 0.3 再低一点，抽取任务不需要发散
+MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE = _env_float("MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE", 0.2)
+# 提取只输出 memory_candidates 数组，不需要很大；但要容纳多条候选
+MEMORY_EXTRACT_MAX_TOKENS = _env_int("MEMORY_EXTRACT_MAX_TOKENS", 1000)
+# 阶段2 总开关。关闭时退回单阶段（E4B 一次性出全部，即 af60473 之前的行为），
+# 用于对照与回退。
+MEMORY_EXTRACT_ENABLED = _env("MEMORY_EXTRACT_ENABLED", "true").lower() in ("true", "1", "yes")
+
 # ---------- 整合调度 ----------
 # 定时整合的检查间隔（秒）。整合此前只在 @ 触发与主动发言前进行，
 # 被动摄入速度超过整合速度时会无界积压（2026-08-16 实测积压 1004 条，

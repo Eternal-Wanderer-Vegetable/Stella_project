@@ -69,6 +69,7 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
     ]
   }},
   "user_profiles": [],
+  "has_self_disclosure": false,
   "memory_candidates": []
 }}
 
@@ -79,6 +80,10 @@ CONSOLIDATION_PROMPT = """以下是一段群聊记录，请帮我分析一下，
 - recent_exchanges 里的 user_id 必须是纯数字 QQ 号；机器人自己发送的消息（标注为「不属于任何用户」）
   绝不能出现在 recent_exchanges 里，更不能把「我说」「机器人」等文字当作 user_id
 - user_profiles 只写有变化的用户；**禁止保存人格判断、心理状态、价值判断**
+- has_self_disclosure：这段记录里是否有「某个具体用户亲口说出的、关于他自己的」信息
+  （拥有什么、能不能吃什么、住哪、职业、作息、身体状况等）。有填 true，没有填 false。
+  只是图片/表情/单字附和/刷屏、或只在讨论第三方事物（新闻/产品/他人），填 false。
+  这个判断只需二选一，不必自己提取内容——提取由后续步骤完成。
 - memory_candidates 默认为空数组；只有「某个具体用户亲口说出的、关于他自己的、稳定的」信息才有候选；
   user_id 必须是该消息实际的发送者，严禁把 A 的发言归属给 B
 - **memory_candidates 分类规则（极其重要）**：
