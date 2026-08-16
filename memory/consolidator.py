@@ -400,7 +400,7 @@ class MemoryConsolidator:
         返回 (文本, 本批次末尾的最大消息 id, 本批次的发送者 QQ 号列表, AT_MENTION 来源的发送者列表)。
         按实际行数取，可容忍 id 空洞。
         消息文本拼装（MEMORY_SOURCE_KIND_ENABLED 开启时）：
-        - BOT_SELF   → 「[我说]」标注，只作上下文，绝不作为候选来源；
+        - BOT_SELF   → 「不属于任何用户」标注，只作上下文，绝不作为候选来源；
         - AT_MENTION → 「[对Bot说]」标注来源；
         - PASSIVE    → 保持原格式不带标记。
         关闭时全部退回「消息ID(id) 用户(QQ号): 内容」原格式。
@@ -446,8 +446,11 @@ class MemoryConsolidator:
                 lines.append(f"消息ID({mid}) 用户({uid}): {content}")
             elif source_kind == "BOT_SELF":
                 # Bot 自己的发言：给出语境（否则用户的「对」「是的」无从理解），
-                # 但绝不能成为候选来源
-                lines.append(f"消息ID({mid}) [我说]: {content}")
+                # 但绝不能成为候选来源。
+                # 用完整中文标签而非「我说」——「[我说]:」这种没有 QQ 号的格式会让
+                # 小模型把「我说」当成 user_id 填进 recent_exchanges（见 log_2026_8_16_1717），
+                # 换成结构上不可能被误当作 QQ 号的显式说明。
+                lines.append(f"消息ID({mid}) [这是机器人自己发送的消息，不属于任何用户]: {content}")
             elif source_kind == "AT_MENTION":
                 lines.append(f"消息ID({mid}) 用户({uid}) [对Bot说]: {content}")
             else:

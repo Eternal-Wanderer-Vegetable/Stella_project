@@ -5,7 +5,7 @@
 
 覆盖 D1-①：
 1. record_message 落库 BOT_SELF；
-2. 整合器 _fetch_next_messages 对 BOT_SELF 用「[我说]」标注（不带用户号），
+2. 整合器 _fetch_next_messages 对 BOT_SELF 用「不属于任何用户」标注（不带用户号），
    且该 uid 被排除出 senders 白名单（防止把 Bot 自己的话记成用户属性）；
 3. 混合窗口三种来源各自正确标注，at_senders 只含 AT_MENTION 用户；
 4. _write_memory_candidates 里 user_id 为 Bot QQ 号、sender_ids 不含它的候选被丢弃。
@@ -69,7 +69,7 @@ def test_record_message_persists_bot_self(tmp_path, monkeypatch):
 
 
 def test_fetch_next_messages_bot_self_marked_and_excluded(tmp_path, monkeypatch):
-    """BOT_SELF 行输出「[我说]」（不含用户号），且 uid 不在 senders 白名单。"""
+    """BOT_SELF 行输出「不属于任何用户」（不含用户号），且 uid 不在 senders 白名单。"""
     db = tmp_path / "probe.db"
     _make_db(db, [
         ("1", "1000", "我在问你问题", "BOT_SELF"),
@@ -82,7 +82,7 @@ def test_fetch_next_messages_bot_self_marked_and_excluded(tmp_path, monkeypatch)
     text, batch_end, senders, at_senders = _make_consolidator()._fetch_next_messages(1, 0, 10)
 
     assert batch_end == 2
-    assert "消息ID(1) [我说]: 我在问你问题" in text
+    assert "消息ID(1) [这是机器人自己发送的消息，不属于任何用户]: 我在问你问题" in text
     assert "用户(1000)" not in text
     assert "消息ID(2) 用户(2001): 对" in text
     assert senders == ["2001"]
@@ -104,7 +104,7 @@ def test_mixed_window_three_markers(tmp_path, monkeypatch):
     text, _, senders, at_senders = _make_consolidator()._fetch_next_messages(1, 0, 10)
 
     assert "消息ID(1) 用户(2001) [对Bot说]: 我显卡是5080" in text
-    assert "消息ID(2) [我说]: 我在问你" in text
+    assert "消息ID(2) [这是机器人自己发送的消息，不属于任何用户]: 我在问你" in text
     assert "消息ID(3) 用户(2002): 普通发言" in text
     assert senders == ["2001", "2002"]
     assert at_senders == ["2001"]

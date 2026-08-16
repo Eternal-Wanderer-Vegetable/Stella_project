@@ -33,8 +33,8 @@ def test_attribution_clause_present():
 
 
 def test_bot_self_clause_present():
-    """[我说] 只作上下文——缺了这条，Bot 会把自己的话记成用户属性。"""
-    assert "[我说]" in CONSOLIDATION_PROMPT
+    """Bot 自我发言只作上下文——缺了这条，Bot 会把自己的话记成用户属性。"""
+    assert "不属于任何用户" in CONSOLIDATION_PROMPT
     assert "严禁从其中提取任何关于用户的信息" in CONSOLIDATION_PROMPT
 
 
