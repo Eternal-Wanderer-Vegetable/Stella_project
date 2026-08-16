@@ -14,7 +14,8 @@
    - 主动发言（基于群消息频率的定时任务）——见 _proactive_speak_for_group；
 3. 定时任务（借 NoneBot APScheduler）：
    - 周度记忆压缩（run_weekly）、主动发言检查（proactive_speak_job，含睡眠/苏醒播报）、
-     每日消息清理（trim_messages_job）、会话空闲检查（session_idle_check_job，结束会话并触发整合）；
+     每日消息清理（trim_messages_job）、会话空闲检查（session_idle_check_job，结束会话并触发整合）、
+     定时整合（consolidation_drain_job，排空各群的整合积压）；
 4. 并发控制：_group_locks 每群一把 asyncio.Lock，防止同一群内 @ 回复与主动发言同时跑 Pipeline。
 
 依赖注入注意：模块级 pipeline / _group_locks 在 import 阶段创建，
@@ -38,6 +39,9 @@ from nonebot.rule import Rule
 
 from config import (
     ALLOWED_GROUPS,
+    CONSOLIDATION_LOCAL_BATCH_SIZE,
+    CONSOLIDATION_MAX_ROUNDS_PER_RUN,
+    CONSOLIDATION_SCHEDULE_INTERVAL,
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
     DB_CLEANUP_CLEAR_MESSAGES,
     DB_CLEANUP_ON_START,
@@ -743,6 +747,39 @@ if scheduler is not None and SESSION_CONTEXT_ENABLED:
                     maybe_consolidate(group_id)
             except Exception as e:
                 logger.warning(f"⚠️ 会话收尾异常（群 {group_id}）: {e}")
+
+
+# ============================================================
+# 定时整合（排空积压）
+# ============================================================
+
+if scheduler is not None:
+
+    @scheduler.scheduled_job(
+        "interval", seconds=CONSOLIDATION_SCHEDULE_INTERVAL, id="consolidation_drain"
+    )
+    async def consolidation_drain_job():
+        """定期排空各群的整合积压。
+
+        整合此前只在 @ 触发与主动发言前进行，被动摄入速度超过整合速度时会
+        无界积压，超过 MESSAGE_CLEANUP_KEEP_COUNT 后未整合消息会被清理丢弃。
+        """
+        consolidator = get_consolidator()
+        for group_id in ALLOWED_GROUPS:
+            try:
+                pending = consolidator.backlog(group_id)
+                if pending < CONSOLIDATION_LOCAL_BATCH_SIZE:
+                    continue
+                rounds = await consolidator.drain_group(
+                    group_id, max_rounds=CONSOLIDATION_MAX_ROUNDS_PER_RUN
+                )
+                if rounds:
+                    logger.info(
+                        f"🧠 [Drain] 群 {group_id} 整合 {rounds} 批，"
+                        f"剩余积压 {consolidator.backlog(group_id)} 条"
+                    )
+            except Exception as e:
+                logger.warning(f"⚠️ 定时整合异常（群 {group_id}）: {e}")
 
 
 # ============================================================

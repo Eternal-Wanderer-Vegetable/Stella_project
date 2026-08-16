@@ -15,7 +15,11 @@ import time
 
 from nonebot import logger
 
-from config import DB_PATH, MESSAGE_CLEANUP_KEEP_COUNT
+from config import (
+    DB_PATH,
+    MESSAGE_CLEANUP_KEEP_COUNT,
+    MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED,
+)
 
 # 上次消息清理的时间戳文件
 _LAST_CLEANUP_FILE = DB_PATH.parent / ".last_message_cleanup"
@@ -138,6 +142,8 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
 
     删除旧消息后会把该群的整合 checkpoint 对齐到剩余消息范围，避免
     `id > checkpoint` 命中全部剩余消息导致重复整理。
+    启用 MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED 时，清理边界不会超过
+    checkpoint——积压中的未整合消息不会被删（否则内容永远进不了记忆系统）。
 
     返回 {"deleted": 总删除行数, "groups": 处理的群数}。
     """
@@ -163,6 +169,24 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
             # 该群消息不足 keep_count 条，无需清理
             continue
         cutoff_id = row[0]
+
+        # 保护未整合的消息：只删 checkpoint 之前的部分。
+        # 积压超过 keep_count 时，按条数算出的 cutoff 会落在未整合区间内，
+        # 那些消息一旦删除就永远不会进入记忆系统。
+        if MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED:
+            ck_row = cur.execute(
+                "SELECT last_processed_id FROM consolidation_state WHERE group_id = ?",
+                (gid,),
+            ).fetchone()
+            checkpoint = int(ck_row[0] or 0) if ck_row else 0
+            if checkpoint and checkpoint < cutoff_id:
+                logger.warning(
+                    f"⚠️ [DBCleaner] 群 {gid} 存在未整合积压，清理边界从 {cutoff_id} "
+                    f"收紧到 checkpoint {checkpoint}（保留未整合消息）"
+                )
+                cutoff_id = checkpoint
+            if cutoff_id <= 0:
+                continue
         for table_name in ["group_messages", "messages"]:
             try:
                 cur.execute(

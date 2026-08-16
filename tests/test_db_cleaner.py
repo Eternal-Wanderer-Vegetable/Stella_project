@@ -140,6 +140,8 @@ def test_trim_aligns_checkpoint(tmp_path, monkeypatch):
     _create_full_db(db_path)
     monkeypatch.setattr(db_cleaner, "DB_PATH", db_path)
     monkeypatch.setattr(db_cleaner, "_LAST_CLEANUP_FILE", tmp_path / ".last_message_cleanup")
+    # 关闭保护以覆盖「按条数裁剪 → 对齐 checkpoint」的原路径
+    monkeypatch.setattr(db_cleaner, "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", False)
 
     conn = sqlite3.connect(db_path)
     _insert_messages(conn, "2", 100)
@@ -260,3 +262,93 @@ def test_align_all_checkpoints_missing_db(tmp_path, monkeypatch):
     """数据库不存在时返回 0。"""
     monkeypatch.setattr(db_cleaner, "DB_PATH", tmp_path / "not_exist.db")
     assert db_cleaner.align_all_checkpoints() == 0
+
+
+def test_trim_protects_unconsolidated_messages(tmp_path, monkeypatch):
+    """积压超过 keep_count 时，清理边界被收紧到 checkpoint，未整合消息保留。"""
+    db_path = tmp_path / "agent_memory.db"
+    _create_full_db(db_path)
+    monkeypatch.setattr(db_cleaner, "DB_PATH", db_path)
+    monkeypatch.setattr(db_cleaner, "_LAST_CLEANUP_FILE", tmp_path / ".last_message_cleanup")
+    monkeypatch.setattr(db_cleaner, "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", True)
+
+    conn = sqlite3.connect(db_path)
+    _insert_messages(conn, "6", 20)
+    conn.execute("INSERT INTO consolidation_state (group_id, last_processed_id) VALUES ('6', 5)")
+    conn.commit()
+    conn.close()
+
+    db_cleaner.trim_group_messages(keep_count=15)
+
+    conn = sqlite3.connect(db_path)
+    min_id = conn.execute(
+        "SELECT MIN(id) FROM group_messages WHERE group_id = '6'"
+    ).fetchone()[0]
+    remaining = conn.execute(
+        "SELECT COUNT(*) FROM group_messages WHERE group_id = '6'"
+    ).fetchone()[0]
+    checkpoint_after = _read_checkpoint(conn, "6")
+    conn.close()
+
+    # 按条数 cutoff=6 落在未整合区间（checkpoint=5）内 → 收紧到 5，id 6~20 全部保留
+    assert min_id == 6
+    assert remaining == 15
+    assert checkpoint_after == 5
+
+
+def test_trim_without_protection_deletes_unconsolidated(tmp_path, monkeypatch):
+    """MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED=False 时按原逻辑删除。"""
+    db_path = tmp_path / "agent_memory.db"
+    _create_full_db(db_path)
+    monkeypatch.setattr(db_cleaner, "DB_PATH", db_path)
+    monkeypatch.setattr(db_cleaner, "_LAST_CLEANUP_FILE", tmp_path / ".last_message_cleanup")
+    monkeypatch.setattr(db_cleaner, "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", False)
+
+    conn = sqlite3.connect(db_path)
+    _insert_messages(conn, "7", 20)
+    conn.execute("INSERT INTO consolidation_state (group_id, last_processed_id) VALUES ('7', 5)")
+    conn.commit()
+    conn.close()
+
+    db_cleaner.trim_group_messages(keep_count=15)
+
+    conn = sqlite3.connect(db_path)
+    min_id = conn.execute(
+        "SELECT MIN(id) FROM group_messages WHERE group_id = '7'"
+    ).fetchone()[0]
+    remaining = conn.execute(
+        "SELECT COUNT(*) FROM group_messages WHERE group_id = '7'"
+    ).fetchone()[0]
+    conn.close()
+
+    # 原逻辑：cutoff=6，删除 id ≤ 6（含未整合的 id 6）
+    assert min_id == 7
+    assert remaining == 14
+
+
+def test_trim_protection_keeps_boundary_when_no_backlog(tmp_path, monkeypatch):
+    """checkpoint 大于按条数算出的 cutoff 时，边界不变（无需收紧）。"""
+    db_path = tmp_path / "agent_memory.db"
+    _create_full_db(db_path)
+    monkeypatch.setattr(db_cleaner, "DB_PATH", db_path)
+    monkeypatch.setattr(db_cleaner, "_LAST_CLEANUP_FILE", tmp_path / ".last_message_cleanup")
+    monkeypatch.setattr(db_cleaner, "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", True)
+
+    conn = sqlite3.connect(db_path)
+    _insert_messages(conn, "8", 20)
+    conn.execute("INSERT INTO consolidation_state (group_id, last_processed_id) VALUES ('8', 15)")
+    conn.commit()
+    conn.close()
+
+    db_cleaner.trim_group_messages(keep_count=10)
+
+    conn = sqlite3.connect(db_path)
+    min_id = conn.execute(
+        "SELECT MIN(id) FROM group_messages WHERE group_id = '8'"
+    ).fetchone()[0]
+    checkpoint_after = _read_checkpoint(conn, "8")
+    conn.close()
+
+    # cutoff=11 < checkpoint=15，无需收紧，按原规则删 id ≤ 11；checkpoint 保持 15
+    assert min_id == 12
+    assert checkpoint_after == 15

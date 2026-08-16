@@ -8,6 +8,7 @@
 短期上下文/用户画像/候选/旧格式记忆写入、消息表选择与消息获取。
 """
 
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
@@ -18,6 +19,13 @@ from memory.consolidator import MemoryConsolidator
 
 def _make_consolidator() -> MemoryConsolidator:
     return MemoryConsolidator.__new__(MemoryConsolidator)
+
+
+def _insert_group_messages(conn: sqlite3.Connection, group_id: str, count: int) -> None:
+    conn.executemany(
+        "INSERT INTO group_messages (group_id, user_id, content) VALUES (?, ?, ?)",
+        [(group_id, "111", "m" + str(i)) for i in range(count)],
+    )
 
 
 def _provision(cons: MemoryConsolidator, db_path: Path) -> sqlite3.Connection:
@@ -280,3 +288,94 @@ def test_build_prompt_and_fetch_summary(tmp_path, monkeypatch):
     prompt = cons._build_prompt(1001, "【消息】 hello")
     assert "在聊技术" in prompt
     assert "hello" in prompt
+
+
+# ── 整合积压（backlog / drain_group） ────────────────────
+
+def test_backlog_counts_unprocessed(tmp_path, monkeypatch):
+    """backlog() 返回 checkpoint 之后的未整合消息数。"""
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    _insert_group_messages(conn, "1001", 5)
+    conn.commit()
+    conn.close()
+
+    assert cons.backlog(1001) == 5
+    cons._update_checkpoint(1001, 3)
+    assert cons.backlog(1001) == 2
+    cons._update_checkpoint(1001, 5)
+    assert cons.backlog(1001) == 0
+
+
+def test_drain_group_processes_up_to_max_rounds(tmp_path, monkeypatch):
+    """积压 3 批以上时 drain_group(max_rounds=3) 恰好完成 3 批、checkpoint 推进 3 批。"""
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    monkeypatch.setattr(consolidator, "CONSOLIDATION_LOCAL_BATCH_SIZE", 10)
+    monkeypatch.setattr(consolidator, "append_consolidation_log", lambda entry: None)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    _insert_group_messages(conn, "1001", 35)
+    conn.commit()
+    conn.close()
+
+    async def fake_generate(self, group_id, last_id, force=False):
+        _, batch_end, senders, _ = cons._fetch_next_messages(group_id, last_id, 10)
+        return "{}", batch_end, "fake", senders, []
+
+    monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
+
+    rounds = asyncio.run(cons.drain_group(1001, max_rounds=3))
+    assert rounds == 3
+    assert cons._get_last_processed_id(1001) == 30
+    assert cons.backlog(1001) == 5
+
+
+def test_drain_group_skips_when_below_batch(tmp_path, monkeypatch):
+    """积压不足一批时返回 0 且不调用 LLM。"""
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    monkeypatch.setattr(consolidator, "CONSOLIDATION_LOCAL_BATCH_SIZE", 10)
+    monkeypatch.setattr(consolidator, "append_consolidation_log", lambda entry: None)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    _insert_group_messages(conn, "1001", 5)
+    conn.commit()
+    conn.close()
+
+    called: list[bool] = []
+
+    async def fake_generate(self, group_id, last_id, force=False):
+        called.append(True)
+        raise AssertionError("积压不足一批不应调用 LLM")
+
+    monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
+
+    rounds = asyncio.run(cons.drain_group(1001, max_rounds=3))
+    assert rounds == 0
+    assert called == []
+
+
+def test_drain_group_stops_when_checkpoint_not_advancing(tmp_path, monkeypatch):
+    """某批 checkpoint 未推进（后端抛异常模拟）时提前停止本轮排空。"""
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    monkeypatch.setattr(consolidator, "CONSOLIDATION_LOCAL_BATCH_SIZE", 10)
+    monkeypatch.setattr(consolidator, "append_consolidation_log", lambda entry: None)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    _insert_group_messages(conn, "1001", 20)
+    conn.commit()
+    conn.close()
+
+    async def fake_generate(self, group_id, last_id, force=False):
+        raise RuntimeError("后端不可用")
+
+    monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
+
+    rounds = asyncio.run(cons.drain_group(1001, max_rounds=3))
+    assert rounds == 0
+    # checkpoint 未推进
+    assert cons._get_last_processed_id(1001) == 0

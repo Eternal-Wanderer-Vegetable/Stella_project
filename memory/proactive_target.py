@@ -32,6 +32,7 @@ from config import (
     PROACTIVE_AT_BONUS_MSGS_HIGH,
     PROACTIVE_AT_BONUS_MSGS_LOW,
     PROACTIVE_AT_ENABLED,
+    PROACTIVE_AT_EXCLUDE_USERS,
     PROACTIVE_AT_QUOTA_BASE,
     PROACTIVE_AT_QUOTA_BONUS_MAX,
     PROACTIVE_AT_USER_COOLDOWN,
@@ -177,12 +178,14 @@ def _topic_covered(topic: str, known: str) -> bool:
 def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> ProactiveTarget | None:
     """挑选本次主动 @ 的对象；无合适目标时返回 None。
 
-    exclude_user_ids 用于排除 Bot 自身等不该被搭话的账号。
+    exclude_user_ids 用于排除 Bot 自身等不该被搭话的账号；
+    排除名单同时来自调用方传入与 PROACTIVE_AT_EXCLUDE_USERS 配置。
     """
     if not PROACTIVE_AT_ENABLED:
         return None
 
-    excluded = exclude_user_ids or set()
+    # 调用方传入的排除项（Bot 自身）+ 配置的排除名单（其他 AI 等）
+    excluded = set(exclude_user_ids or set()) | PROACTIVE_AT_EXCLUDE_USERS
     actives = [
         uid
         for uid in get_proactive().active_users(group_id, PROACTIVE_AT_ACTIVE_WITHIN)

@@ -2,7 +2,7 @@
 
 # 🌟 Stella
 
-**一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人 —— 完全本地运行，不外传任何聊天内容**
+*一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人 —— 完全本地运行，不外传任何聊天内容*
 
 [![CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
@@ -61,7 +61,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-至少需要填写这几项：
+至少需要填写如下数据：
 
 ```env
 ALLOWED_GROUPS=123456789          # 允许响应的群号，多个用逗号分隔
@@ -110,7 +110,7 @@ graph LR
 三条设计原则：
 
 1. **捕获宽，晋升严。** 允许不确定的信息先进入候选并如实标注置信度，但只有经过复现或高密度证据确认的才成为长期记忆。在 prompt 里做过滤不可审计、不留数据、无法改进。且小模型会根据过滤要求设定的正面提示词/负面提示词做出过度反应，不具备任何实用价值。
-2. **有价值的信息不会很多。** 每个用户的长期记忆有数量上限，到顶后新记忆必须挤掉最弱的一条。
+2. **有价值的信息不会很多。** 每个用户的长期记忆有明确且可调整的数量上限，到顶后新记忆必须挤掉最弱的一条。
 3. **相关 ≠ 应该使用。** 检索到的记忆还要经过模式匹配、用途兼容、可见性三层过滤才能进入回复。
 
 > 细节见 [记忆系统文档](docs/memory-system.md)。
@@ -141,7 +141,7 @@ ruff check .
 
 ## 📄 License
 
-本项目基于 **[GNU Affero General Public License v3.0](LICENSE)** 发布。详见 LICENSE 文件与各源文件头部的版权声明。
+本项目基于 **[GNU Affero General Public License v3.0](LICENSE)** （AGPL v3.0）发布。详见 LICENSE 文件与各源文件头部的版权声明。
 
 ## 💛 致谢
 
@@ -160,4 +160,4 @@ ruff check .
 
 ## ⚠️ 免责声明
 
-**在使用本项目的部分或者全部代码时，请遵守您所在国家/地区的相关法律和您所接入相关平台的用户协议中的相关条款。全体开发者无法且没有任何义务承担使用者使用该项目所造成的任何直接/间接后果**（包括但不限于账号封禁，任何直接/间接的经济损失，任何的民事/刑事责任等）。
+**在使用本项目的部分或者全部代码时，请遵守您所在国家/地区的相关法律和您所接入相关平台的用户协议中的相关条款。全体开发者无法且没有任何义务为使用者使用该项目所造成的任何直接/间接后果负责**（包括但不限于账号封禁，任何直接/间接的经济损失，任何的民事/刑事责任等）。

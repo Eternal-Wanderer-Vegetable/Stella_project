@@ -395,6 +395,17 @@ CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 1200
 # 整合日志文件路径（可视化记录每次整合运行详情，可通过 .env 覆盖）
 CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", PROJECT_ROOT / "memory_consolidation_log.md")
 
+# ---------- 整合调度 ----------
+# 定时整合的检查间隔（秒）。整合此前只在 @ 触发与主动发言前进行，
+# 被动摄入速度超过整合速度时会无界积压（2026-08-16 实测积压 1004 条，
+# 且超过 MESSAGE_CLEANUP_KEEP_COUNT 后未整合消息会被清理直接丢弃）。
+CONSOLIDATION_SCHEDULE_INTERVAL = _env_int("CONSOLIDATION_SCHEDULE_INTERVAL", 120)
+# 单次定时任务最多连续整合几批。CPU 小模型单批 20~60 秒：
+# 批次太多会长时间占用整合模型，太少则追不上积压。
+CONSOLIDATION_MAX_ROUNDS_PER_RUN = _env_int("CONSOLIDATION_MAX_ROUNDS_PER_RUN", 3)
+# 积压超过该条数时日志提升为 warning（可观测性，不改变行为）
+CONSOLIDATION_BACKLOG_WARN = _env_int("CONSOLIDATION_BACKLOG_WARN", 300)
+
 # ---------- 主动发言 ----------
 # 是否启用主动发言
 PROACTIVE_ENABLED = _env("PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -505,6 +516,11 @@ PROACTIVE_COLDSTART_TOPICS = [
     ).split(",")
     if t.strip()
 ]
+# 主动 @ 的排除名单（QQ 号，逗号分隔）：这些账号不会被选为主动搭话对象。
+# 主要用途是群内其他 AI ——互相 @ 会触发无终止的循环对话。
+# 注意：被排除的账号仍会被动收集信息（消息照常落库与整合），
+# 只是不主动向它们提问。
+PROACTIVE_AT_EXCLUDE_USERS = {int(x) for x in _env("PROACTIVE_AT_EXCLUDE_USERS", "").split(",") if x.strip()}
 
 # ---------- 数据库清理（测试期用） ----------
 # 程序启动时自动清理混乱的记忆数据（测试阶段频繁重启注入的脏数据）
@@ -533,6 +549,12 @@ MESSAGE_CLEANUP_ENABLED = _env("MESSAGE_CLEANUP_ENABLED", "true").lower() in ("t
 MESSAGE_CLEANUP_KEEP_COUNT = _env_int("MESSAGE_CLEANUP_KEEP_COUNT", 1000)
 # 定时清理的执行时间（小时，24小时制），默认凌晨 4 点
 MESSAGE_CLEANUP_HOUR = _env_int("MESSAGE_CLEANUP_HOUR", 4)
+# 清理时是否保护未整合的消息（checkpoint 之后的消息不删除）。
+# 关闭会导致积压超过 MESSAGE_CLEANUP_KEEP_COUNT 时未整合消息被永久丢弃，
+# 那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
+MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED = _env(
+    "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", "true"
+).lower() in ("true", "1", "yes")
 
 # ---------- 输出 ----------
 MAX_REPLY_LINES = _env_int("MAX_REPLY_LINES", 5)

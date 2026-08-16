@@ -274,6 +274,33 @@ def test_pick_target_exclude_user_ids(tmp_path, monkeypatch):
     assert target.candidate_id == "cand-1"
 
 
+def test_pick_target_exclude_users_config(tmp_path, monkeypatch):
+    """PROACTIVE_AT_EXCLUDE_USERS 生效：配置名单里的活跃用户不被选中，
+    名单外的用户仍可被选中。"""
+    _setup_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(proactive.time, "monotonic", _faketicks())
+    c = proactive.ProactiveController()
+    monkeypatch.setattr(pt, "get_proactive", lambda: c)
+    c.record_message(1, 2001)  # t=100
+    c.record_message(1, 2002)  # t=101
+    _provision_candidates(tmp_path / "ps.db", [
+        ("cand-1", "1", "2001", "FACT", "候选一", 0.7, "OBSERVING"),
+        ("cand-2", "1", "2002", "FACT", "候选二", 0.8, "OBSERVING"),
+    ])
+
+    # 不排除时选最高置信的 2002
+    assert pick_target(1).user_id == 2002
+    # 配置排除 2002 后只剩 2001 可选
+    monkeypatch.setattr(pt, "PROACTIVE_AT_EXCLUDE_USERS", {2002})
+    target = pick_target(1)
+    assert target is not None
+    assert target.user_id == 2001
+    assert target.candidate_id == "cand-1"
+    # 名单外的用户仍可被选中：两个都排除则无目标
+    monkeypatch.setattr(pt, "PROACTIVE_AT_EXCLUDE_USERS", {2001, 2002})
+    assert pick_target(1) is None
+
+
 def test_fetch_observing_candidate_window(tmp_path, monkeypatch):
     """OBSERVING 候选按 confidence 区间筛选：过低/已达标/其他状态不取。"""
     db = tmp_path / "ps.db"

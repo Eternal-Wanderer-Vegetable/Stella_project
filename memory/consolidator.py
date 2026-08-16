@@ -16,6 +16,9 @@
     → _parse_json() 容错解析 LLM 输出
     → 写短期上下文 / 用户画像 / 记忆候选
     → _update_checkpoint() 推进进度，避免重复处理
+    定时整合任务（ai_gateway 定时调度，排空积压）
+    → drain_group() 多批排空（每批内部仍走 consolidate_group）
+    → backlog() 读取剩余积压用于日志与可观测性
 """
 import asyncio
 import contextlib
@@ -29,6 +32,7 @@ from typing import Optional
 from nonebot import logger
 
 from config import (
+    CONSOLIDATION_BACKLOG_WARN,
     CONSOLIDATION_LM_STUDIO_API_KEY,
     CONSOLIDATION_LM_STUDIO_BASE_URL,
     CONSOLIDATION_LM_STUDIO_MODEL,
@@ -303,13 +307,14 @@ class MemoryConsolidator:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
-                # 防御：new_count 远超单批容量说明 checkpoint 可能越界
-                # （消息被清理但 checkpoint 未对齐）。只记录告警，不阻断——
-                # 整合本身是按批次推进的，最终会消化完，但这条日志能让问题可见。
-                if new_count > CONSOLIDATION_LOCAL_BATCH_SIZE * 20:
+                # 积压可观测性：checkpoint 已由 db_cleaner 保证在范围内，
+                # 因此这里的大数是「整合跟不上摄入」而非越界。
+                if new_count > CONSOLIDATION_BACKLOG_WARN:
                     logger.warning(
-                        f"⚠️ [Consolidator] 群 {group_id} 待整合消息异常多（{new_count} 条），"
-                        f"checkpoint={last_id}，可能存在 checkpoint 越界"
+                        f"⚠️ [Consolidator] 群 {group_id} 整合积压 {new_count} 条"
+                        f"（checkpoint={last_id}）。定时整合会逐批排空；"
+                        f"若持续增长请调大 CONSOLIDATION_LOCAL_BATCH_SIZE "
+                        f"或缩短 CONSOLIDATION_SCHEDULE_INTERVAL"
                     )
 
                 # force 路径走小批次；非 force 路径按本地批次大小决定阈值
@@ -361,6 +366,34 @@ class MemoryConsolidator:
             except Exception:
                 logger.exception(f"❌ [Consolidator] 群 {group_id} 整合失败")
                 append_consolidation_log("  > ❌ 整合失败（详见控制台日志）\n")
+
+    async def drain_group(self, group_id: int, max_rounds: int = 1) -> int:
+        """连续整合该群的积压消息，最多 max_rounds 批；返回实际完成的批数。
+
+        整合按批次推进（每批 CONSOLIDATION_LOCAL_BATCH_SIZE 条），单次 @ 触发
+        只能消化一批。积压较多时靠定时任务多批排空——否则积压会一直增长，
+        直到超过 MESSAGE_CLEANUP_KEEP_COUNT 被清理丢弃。
+
+        每批之间重新读取 checkpoint：consolidate_group 会推进它，
+        因此循环天然是增量的。任一批未达阈值即停止（说明已排空）。
+        """
+        rounds = 0
+        for _ in range(max(1, max_rounds)):
+            last_id = self._get_last_processed_id(group_id)
+            if self._count_new_messages(group_id, last_id) < CONSOLIDATION_LOCAL_BATCH_SIZE:
+                break
+            before = last_id
+            await self.consolidate_group(group_id)
+            # checkpoint 未推进说明这批失败了（解析失败已自行推进，此处指异常）
+            if self._get_last_processed_id(group_id) <= before:
+                logger.warning(f"⚠️ [Consolidator] 群 {group_id} 批次未推进，停止本轮排空")
+                break
+            rounds += 1
+        return rounds
+
+    def backlog(self, group_id: int) -> int:
+        """该群当前积压的未整合消息数。"""
+        return self._count_new_messages(group_id, self._get_last_processed_id(group_id))
 
     def _fetch_next_messages(self, group_id: int, last_id: int, limit: int) -> tuple[str, int, list, list]:
         """取 last_id 之后最多 limit 条消息（含 overlap 上下文）。
