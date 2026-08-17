@@ -231,6 +231,52 @@ def align_all_checkpoints() -> int:
         return 0
 
 
+def log_source_kind_distribution() -> None:
+    """输出各群消息的 source_kind 分布；某群 AT_MENTION=0 而 BOT_SELF>0 时告警。
+
+    分布形如 ``📊 [Messages] 群 263402786: PASSIVE=530 AT_MENTION=42 BOT_SELF=88``。
+    告警依据：AT_MENTION 是设计上唯一稳定的用户信息源（见 check_point#1），
+    它长期为 0 与「Bot 有发言」是矛盾的——这个矛盾是 2026-08-17 缺陷
+    （@ 消息因监听器优先级被拦截而从不入库）唯一可自动发现的信号。
+    表不存在 / 查询失败 → 静默返回（不影响启动）。
+    """
+    if not DB_PATH.exists():
+        return
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        rows = cur.execute(
+            "SELECT group_id, source_kind, COUNT(*) FROM group_messages "
+            "GROUP BY group_id, source_kind"
+        ).fetchall()
+        conn.close()
+    except sqlite3.OperationalError:
+        return
+    if not rows:
+        return
+
+    by_group: dict[str, dict[str, int]] = {}
+    for gid, kind, count in rows:
+        by_group.setdefault(str(gid), {})[str(kind)] = int(count)
+
+    # 固定展示顺序：PASSIVE / AT_MENTION / BOT_SELF，其余来源按字母序附后
+    known_kinds = ("PASSIVE", "AT_MENTION", "BOT_SELF")
+
+    def _kind_key(k: str) -> tuple[int, str]:
+        return (known_kinds.index(k) if k in known_kinds else len(known_kinds), k)
+
+    for gid, kinds in by_group.items():
+        parts = " ".join(
+            f"{k}={v}" for k, v in sorted(kinds.items(), key=lambda kv: _kind_key(kv[0]))
+        )
+        logger.info(f"📊 [Messages] 群 {gid}: {parts}")
+        if kinds.get("AT_MENTION", 0) == 0 and kinds.get("BOT_SELF", 0) > 0:
+            logger.warning(
+                f"⚠️ [Messages] 群 {gid} 有 Bot 发言但无 AT_MENTION 记录，"
+                "@ 消息可能未入库（检查监听器优先级）"
+            )
+
+
 def needs_cleanup(max_age_hours: float = 24.0) -> bool:
     """检查是否需要执行消息清理（距上次清理超过 max_age_hours 小时）。"""
     if not _LAST_CLEANUP_FILE.exists():

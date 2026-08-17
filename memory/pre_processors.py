@@ -43,6 +43,10 @@ from memory.timeutil import (
     utc_now,
 )
 
+# 尾巴中 Bot 自己发言的占比告警阈值（诊断用经验值，不进 config）：
+# 尾巴里几乎全是「我」= 用户消息疑似未入库（2026-08-17 缺陷的表现）
+_BOT_SELF_RATIO_WARN = 0.7
+
 
 async def record_message(ctx: ChatContext) -> ChatContext:
     """把本条消息写入群消息表（group_messages），供后续整合器消费。
@@ -192,7 +196,7 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
     区间——摘要必须严格覆盖尾巴之前的内容（见 memory/session_context.py）。
     无消息时返回 ``("", 0)``。
 
-    三件事：
+    四件事：
 
     1. **来源渲染**：Bot 自己的发言（BOT_SELF）渲染为「我」，让聊天模型知道
        自己刚说过什么——否则用户的简短回应（「手机」「对」）会被接到上一个话题上；
@@ -200,7 +204,10 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
        仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生
        （2026-08-15 缺陷）；
     3. **断层标记**：相邻消息间隔超过 RECENT_TAIL_GAP_MARK_MINUTES 时插入一行
-       说明。比直接丢弃更好——让模型知道「之前聊过但已经过去很久」。
+       说明。比直接丢弃更好——让模型知道「之前聊过但已经过去很久」；
+    4. **BOT_SELF 占比告警**：尾巴里 Bot 自己的发言占比超过阈值时告警。
+       2026-08-17 的外在表现正是尾巴 12 行里 6 行是「我」——这通常意味着
+       用户消息没有正常入库（如 @ 消息被监听器优先级拦截）。
 
     旧库没有 source_kind 列时回退为全部按用户渲染、且无时间信息。
     """
@@ -219,6 +226,8 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
     lines: list[str] = []
     prev_epoch: float | None = None
     tail_start_id = 0
+    tail_total = 0
+    tail_bot_self = 0
     for mid, uid, content, kind, ts in rows:
         text = (content or "").strip()
         if not text:
@@ -233,6 +242,11 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
         if tail_start_id == 0:
             tail_start_id = int(mid)
 
+        # 只统计真正进入尾巴的行（时间窗过滤之后）——别用 rows 的原始长度
+        tail_total += 1
+        if kind == "BOT_SELF":
+            tail_bot_self += 1
+
         # 断层标记：两条消息之间隔了很久，明确告诉模型中间有空白
         if (
             gap_threshold > 0
@@ -245,6 +259,18 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
         lines.append(f"我: {text}" if kind == "BOT_SELF" else f"用户({uid}): {text}")
         if epoch is not None:
             prev_epoch = epoch
+
+    # BOT_SELF 占比告警：尾巴里几乎全是 Bot 自己的发言 = 用户消息疑似未入库
+    if (
+        tail_total >= 5
+        and tail_bot_self > 0
+        and tail_bot_self / tail_total > _BOT_SELF_RATIO_WARN
+    ):
+        ratio = round(tail_bot_self / tail_total * 100)
+        logger.warning(
+            f"⚠️ [Tail] 尾巴 {tail_total} 行中 Bot 自己的发言占 {ratio}%，"
+            "看起来像在自言自语；若持续出现请检查用户消息是否正常入库"
+        )
 
     return "\n".join(lines), tail_start_id
 

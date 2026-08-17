@@ -6,10 +6,10 @@
 本模块负责：
 1. Pipeline 装配：注册 pre/post hooks（见下）、设置 LLM 后端（LM Studio）、加载扩展、加载系统提示词；
 2. QQ 事件监听：
-   - group_silent_listener（静默监听，priority 99）：只记录群消息到短期记忆，不触发总结；
-   - chat_handler（@ 触发，priority 1）：当机器人被 @ 且发出非空消息时才会走完整推理；
-   - toggle_handler（运行时开关，priority 0）：管理员 @ 机器人说「安静」/「恢复」时
+   - group_silent_listener（静默监听，priority 0）：只记录群消息到短期记忆，不触发总结；
+   - toggle_handler（运行时开关，priority 1）：管理员 @ 机器人说「安静」/「恢复」时
      临时关闭或恢复本群主动发言（必须早于 chat_handler，否则会被当成普通对话）；
+   - chat_handler（@ 触发，priority 2）：当机器人被 @ 且发出非空消息时才会走完整推理；
    - 主动 @ 用户（获取/验证记忆，受每用户日配额与冷却约束）——见 _proactive_at_user；
    - 主动发言（基于群消息频率的定时任务）——见 _proactive_speak_for_group；
 3. 定时任务（借 NoneBot APScheduler）：
@@ -203,6 +203,14 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ 启动时对齐 checkpoint 失败: {e}")
 
+# ── 启动时统计各群 source_kind 分布 ──
+# AT_MENTION 长期为 0 而 BOT_SELF>0 是 @ 消息未入库的退化信号（2026-08-17 缺陷）。
+# 表缺失 / 查询失败时函数内部静默返回，不影响启动。
+with contextlib.suppress(Exception):
+    from memory.db_cleaner import log_source_kind_distribution
+
+    log_source_kind_distribution()
+
 # ── 启动时检查消息清理（补执行因离线而错过的每日清理） ──
 # 若距上次清理已超 24h（如机器人昨晚关机漏跑），启动时补做一次，防止消息表无限膨胀
 if MESSAGE_CLEANUP_ENABLED:
@@ -219,8 +227,11 @@ if MESSAGE_CLEANUP_ENABLED:
 # ============================================================
 # QQ 事件监听
 # ============================================================
-# 静默监听：优先级最低(99)、不阻断其他处理器，负责把每条群聊写进短期记忆
-group_silent_listener = on_message(priority=99, block=False)
+# 静默监听：必须是最高优先级（priority=0、不阻断其他处理器）——它是唯一的落库入口，
+# 若排在 block=True 的处理器之后，@ 消息会被拦截而永不入库
+# （2026-08-17 实测：13 批整合、270 条消息，AT_MENTION 计数全为 0，@ 对话的内容从未
+#   进入记忆系统）。职责顺序是「先落库，再决定要不要回复」。
+group_silent_listener = on_message(priority=0, block=False)
 
 
 @group_silent_listener.handle()
@@ -259,8 +270,9 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     return len(event.get_plaintext().strip()) > 0
 
 
-# 对话入口：只有命中以上规则才会进入（priority=1 最高优先级、命中即 block）
-chat_handler = on_message(rule=Rule(is_chat_trigger), priority=1, block=True)
+# 对话入口：只有命中以上规则才会进入（priority=2、命中即 block）。
+# 它 block=True，因此任何需要看到全部消息的处理器（如落库监听）都必须排在它之前。
+chat_handler = on_message(rule=Rule(is_chat_trigger), priority=2, block=True)
 
 
 @chat_handler.handle()
@@ -356,9 +368,19 @@ async def is_toggle_command(event: GroupMessageEvent) -> bool:
     return any(k in text for k in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS)
 
 
-# priority=0 必须高于 chat_handler(priority=1, block=True)，
+# priority=1 必须高于 chat_handler(priority=2, block=True)，
 # 否则「安静」这类命令会被当成普通对话交给 LLM
-toggle_handler = on_message(rule=Rule(is_toggle_command), priority=0, block=True)
+toggle_handler = on_message(rule=Rule(is_toggle_command), priority=1, block=True)
+
+# ── 监听器优先级不变量断言 ──
+# 落库监听必须早于 block=True 的对话入口，否则 @ 消息会被拦截而永不入库
+# （见 2026-08-17 缺陷）。属性名按 NoneBot Matcher 实际字段取，取不到则跳过。
+with contextlib.suppress(Exception):
+    if group_silent_listener.priority >= chat_handler.priority:
+        logger.critical(
+            "❌ 监听器优先级错误：落库监听必须早于 block=True 的对话入口，"
+            "否则 @ 消息不会入库（见 2026-08-17 缺陷）"
+        )
 
 
 @toggle_handler.handle()
@@ -800,6 +822,11 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
                 logger.debug(f"🧹 [消息清理] 无需清理（{groups} 个群）")
         except Exception as e:
             logger.warning(f"⚠️ 消息清理异常: {e}")
+        # 清理后复查各群 source_kind 分布，捕捉 @ 消息未入库的退化（每日复查）
+        with contextlib.suppress(Exception):
+            from memory.db_cleaner import log_source_kind_distribution
+
+            log_source_kind_distribution()
         # 同步清理过期的记忆决策追踪，防止 memory_traces 无限膨胀
         try:
             from memory.trace import prune_traces

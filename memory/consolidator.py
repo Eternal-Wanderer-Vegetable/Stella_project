@@ -511,6 +511,15 @@ class MemoryConsolidator:
                 str(uid) for _, uid, _, source_kind in rows if source_kind == "AT_MENTION"
             )
         )
+        # AT_MENTION 缺失告警：本批有 Bot 发言却没有任何 AT_MENTION 来源，
+        # 说明 @ 消息可能未入库（2026-08-17 缺陷的表现）。放这里而不是
+        # consolidate_group，因为 rows 在此处可用、无需改函数签名。
+        bot_self_count = sum(1 for _, _, _, kind in rows if kind == "BOT_SELF")
+        if bot_self_count > 0 and not at_senders:
+            logger.warning(
+                f"⚠️ [Consolidator] 群 {group_id} 本批有 {bot_self_count} 条 Bot 发言"
+                "但无 AT_MENTION 来源，@ 消息可能未入库"
+            )
         return text, batch_end, senders, at_senders
 
     def _fetch_current_summary(self, group_id: int) -> str:
