@@ -42,11 +42,17 @@ from config import (
     CONSOLIDATION_LOCAL_MAX_TOKENS,
     CONSOLIDATION_OVERLAP,
     DB_PATH,
+    MEMORY_EXTRACT_ENABLED,
+    MEMORY_EXTRACT_LM_STUDIO_API_KEY,
+    MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
+    MEMORY_EXTRACT_LM_STUDIO_MODEL,
+    MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
+    MEMORY_EXTRACT_MAX_TOKENS,
     MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
     MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
     MEMORY_SOURCE_KIND_ENABLED,
 )
-from core.llm import consolidation_llm_lock
+from core.llm import chat_llm_lock, consolidation_llm_lock
 from core.llm.lm_studio import LMStudioBackend
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
@@ -84,13 +90,43 @@ class MemoryConsolidator:
                 ),
             )
         ]
+        # 阶段2 候选提取后端：默认 27B（继承主聊天配置）。
+        # E4B 能总结主题却系统性把候选提取判空（log_2026_8_16_1717：7 批全空，
+        # 且信息明确出现在 active_summary 里——是「读到了但主动弃掉」而非没看到）。
+        # 候选提取是高精度抽取任务，交给 27B；仅在阶段1 判定有自我披露时唤醒。
+        self._extract_backend: tuple[str, LMStudioBackend] = (
+            "lm_studio_extract",
+            LMStudioBackend(
+                base_url=MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
+                model=MEMORY_EXTRACT_LM_STUDIO_MODEL,
+                max_tokens=MEMORY_EXTRACT_MAX_TOKENS,
+                temperature=MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
+                api_key=MEMORY_EXTRACT_LM_STUDIO_API_KEY,
+            ),
+        )
+        # 群级锁：保证同一群「读 checkpoint → 整合 → 推进 checkpoint」不被并发打断。
+        # 必须与模型锁分离——若整段整合都占着 consolidation_llm_lock，
+        # 群A 等 27B（chat_llm_lock）时会把群B 的 E4B 阶段一起堵死，
+        # 使两个模型退化为串行（多群部署下尤其明显）。
+        self._group_locks: dict[str, asyncio.Lock] = {}
 
-    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str, list, list]:
+    def _get_group_lock(self, group_id: int) -> asyncio.Lock:
+        """取该群的整合锁（懒建）。asyncio.Lock 的等待队列是 FIFO，
+        因此同群多次触发天然按「先来后到」一次处理一个。"""
+        key = str(group_id)
+        lock = self._group_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._group_locks[key] = lock
+        return lock
+
+    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str, list, list, str]:
         """调用本地 LM Studio 后端生成整合输出。
 
         force=True 时走小批次（用于 @触发/主动发言前的轻量总结）。
-        返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名, 本批发送者 QQ 号列表, AT_MENTION 来源发送者列表)，
-        供调用方准确推进 checkpoint 并对记忆候选做发送者白名单校验与来源分级。
+        返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名, 本批发送者 QQ 号列表,
+        AT_MENTION 来源发送者列表, 本批消息文本)，供调用方准确推进 checkpoint、
+        对记忆候选做发送者白名单校验与来源分级，并把同一份消息文本交给阶段2 提取。
         """
         backend_name, backend = self._backends[0]
         limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
@@ -100,13 +136,17 @@ class MemoryConsolidator:
         prompt = self._build_prompt(group_id, messages)
         logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
         model_tag = getattr(backend, "model", "") or backend_name
-        result = await backend.generate(prompt)
+        # 只在真正调用 E4B 的这一刻持锁：DB 读取与 prompt 拼装不占锁，
+        # 且绝不与 chat_llm_lock 同时持有（防止跨模型队头阻塞）。
+        async with consolidation_llm_lock:
+            result = await backend.generate(prompt)
         append_consolidation_log(
             f"- **🧠 后端**: {backend_name}（{model_tag}，批次 {limit} 条）\n"
             f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"
         )
-        # 返回真实处理到的 batch_end、后端名与发送者列表，供调用方准确推进 checkpoint
-        return result, batch_end, backend_name, senders, at_senders
+        # 返回真实处理到的 batch_end、后端名、发送者列表与本批消息文本，
+        # 供调用方准确推进 checkpoint 并做发送者白名单校验与阶段2 提取
+        return result, batch_end, backend_name, senders, at_senders, messages
 
     def _build_prompt(self, group_id: int, messages: str) -> str:
         """用当前短期摘要 + 本批消息填充整合 prompt 模板。"""
@@ -115,6 +155,51 @@ class MemoryConsolidator:
             current_summary=current_summary or "（无）",
             messages=messages,
         )
+
+    @staticmethod
+    def _has_self_disclosure(parsed: dict) -> bool:
+        """读取阶段1 输出的 has_self_disclosure（容错字符串/缺失）。
+        缺失时保守返回 False——旧模型或异常输出不该误唤醒 27B。"""
+        v = parsed.get("has_self_disclosure", False)
+        if isinstance(v, bool):
+            return v
+        return str(v).strip().lower() in ("true", "1", "yes")
+
+    async def _extract_candidates(self, messages_text: str) -> list | None:
+        """阶段2：用 27B 从消息里精确提取 memory_candidates。
+
+        只在调用 27B 的那一刻持有 chat_llm_lock（与聊天、会话压缩共用同一 GPU
+        模型，应用层 FIFO 串行，聊天不会被并发推理拖慢）。此时绝不持有
+        consolidation_llm_lock，因此别的群可同时跑 E4B 阶段1。
+
+        返回候选列表；调用异常或 JSON 解析失败返回 None，表示「阶段2 未成功，
+        回退阶段1 候选」——与「成功但无候选」（返回 []，即 27B 复核认为确实
+        没有）区别处理。
+        """
+        from memory.extraction_prompt import format_extraction_prompt
+
+        name, backend = self._extract_backend
+        model_tag = getattr(backend, "model", "") or name
+        prompt = format_extraction_prompt(messages_text)
+        logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
+        try:
+            async with chat_llm_lock:
+                result = await backend.generate(prompt)
+        except Exception:
+            logger.exception("❌ [Extractor] 阶段2 提取调用失败，回退阶段1 候选")
+            append_consolidation_log(" > ❌ 阶段2（提取）调用失败，回退阶段1 候选\n")
+            return None
+        append_consolidation_log(
+            f"- **🎯 阶段2 提取**: {name}（{model_tag}）\n"
+            f" > 原始输出：\n > {result.replace(chr(10), chr(10) + ' > ')}\n"
+        )
+        parsed = self._parse_json(result)
+        if not parsed:
+            logger.warning(f"⚠️ [Extractor] 阶段2 JSON 解析失败，回退阶段1 候选: {result[:200]}")
+            append_consolidation_log(" > ⚠️ 阶段2 JSON 解析失败，回退阶段1 候选\n")
+            return None
+        extracted = parsed.get("memory_candidates")
+        return extracted if isinstance(extracted, list) else []
 
     # ── checkpoint 表 ──────────────────────────────────
     def _ensure_state_table(self, conn: sqlite3.Connection):
@@ -300,9 +385,10 @@ class MemoryConsolidator:
         if not DB_PATH.exists():
             return
 
-        # 整合使用独立的 LM Studio 配置（可指向低阶整合模型/独立实例），与聊天互不阻塞；
-        # 但整合自身仍需串行，避免多群并发打爆同一整合服务
-        async with consolidation_llm_lock:
+        # 群级串行（不再整段持有 consolidation_llm_lock）：模型锁只在各自的
+        # generate 调用处短暂持有，两把模型锁从不同时持有，因此 E4B 与 27B
+        # 可真正并行，且同一模型上的任务仍是 FIFO 一次一个。
+        async with self._get_group_lock(group_id):
             try:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
@@ -328,7 +414,7 @@ class MemoryConsolidator:
                     f"（force={force}，新消息 {new_count}，批次阈值 {threshold}）\n"
                 )
 
-                result, processed_end, backend_name, senders, at_senders = await self._generate(group_id, last_id, force=force)
+                result, processed_end, backend_name, senders, at_senders, messages_text = await self._generate(group_id, last_id, force=force)
                 logger.info(f"📥 [Consolidator Response]\n{result}")
 
                 parsed = self._parse_json(result)
@@ -344,6 +430,17 @@ class MemoryConsolidator:
                 candidates = parsed.get("memory_candidates")
                 if candidates is None:
                     candidates = []
+
+                # ── 阶段2：候选精确提取（27B）──
+                # 仅在阶段1 判定 has_self_disclosure 为真时唤醒，节约 27B 占用。
+                # 成功时其结果覆盖阶段1 候选——包括返回空数组的情况：
+                # 那是 27B 复核认为确实没有，正好纠正 E4B 的误判。
+                # 调用失败/解析失败返回 None，此时回退阶段1 候选。
+                if MEMORY_EXTRACT_ENABLED and self._has_self_disclosure(parsed):
+                    extracted = await self._extract_candidates(messages_text)
+                    if extracted is not None:
+                        candidates = extracted
+
                 self._write_memory_candidates(group_id, candidates, sender_ids=senders, at_senders=at_senders)
                 if candidates:
                     # 有新候选记忆时同步触发 MemoryManager 晋升处理
@@ -938,6 +1035,9 @@ class MemoryConsolidator:
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 _consolidation_tasks: set[asyncio.Task] = set()
+# 每群已在排队/执行中的整合任务标记：防止活跃群每条消息都触发、堆出一长串
+# 等同一把群级锁的任务（每群最多 1 个在途，最大排队数 = 群数）。
+_pending_groups: set[str] = set()
 
 
 def get_consolidator() -> MemoryConsolidator:
@@ -950,8 +1050,25 @@ def get_consolidator() -> MemoryConsolidator:
 
 def maybe_consolidate(group_id: int, force: bool = False):
     """异步触发一次群整合（后台任务），并登记以跟踪完成与否（不等待）。
-    force=True 走本地小批次轻量总结，适合 @触发 / 主动发言前调用。"""
+
+    force=True 走本地小批次轻量总结，适合 @触发 / 主动发言前调用。
+
+
+    同群合并：该群已有整合任务在排队或执行时直接跳过。否则活跃群里每条消息
+    都触发一次，会堆出一长串等同一把群级锁的任务——既浪费，也让「先来后到」
+    失去意义：排在后面的任务醒来时 checkpoint 早已被前面的推进，无事可做。
+    """
+    key = str(group_id)
+    if key in _pending_groups:
+        logger.debug(f"⏭️ [Consolidator] 群 {group_id} 已有整合任务在途，跳过本次触发")
+        return
+    _pending_groups.add(key)
     consolidator = get_consolidator()
     task = asyncio.create_task(consolidator.consolidate_group(group_id, force=force))
     _consolidation_tasks.add(task)
-    task.add_done_callback(_consolidation_tasks.discard)
+
+    def _done(t: asyncio.Task):
+        _consolidation_tasks.discard(t)
+        _pending_groups.discard(key)
+
+    task.add_done_callback(_done)
