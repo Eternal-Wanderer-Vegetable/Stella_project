@@ -112,7 +112,10 @@ async def acquire(
     state.total_acquired += 1
     state.waiting -= 1
     state.holder = tag
-    state.holder_since = time.monotonic()
+    # 持有时长用局部变量记录，finally 不依赖共享状态（holder_since 可能被
+    # 其他路径改写）；holder_since 仍同步写入，供排队者告警读取持有时长。
+    hold_start = time.monotonic()
+    state.holder_since = hold_start
     if wait_seconds > LLM_SCHEDULER_WAIT_WARN_SECONDS:
         logger.warning(
             f"⚠️ [Scheduler] 资源 {resource} 排队等待 {wait_seconds:.1f}s 才获得"
@@ -121,7 +124,7 @@ async def acquire(
     try:
         yield
     finally:
-        hold_seconds = time.monotonic() - state.holder_since
+        hold_seconds = time.monotonic() - hold_start
         state.total_hold_seconds += hold_seconds
         if hold_seconds > LLM_SCHEDULER_HOLD_WARN_SECONDS:
             # 后端（LMStudioBackend）内含 3 次重试（每次 timeout 120s），
@@ -129,7 +132,7 @@ async def acquire(
             # 而是调用本身卡住了。
             logger.warning(
                 f"⚠️ [Scheduler] 资源 {resource} 持有 {hold_seconds:.1f}s"
-                f"（tag={state.holder or '-'}，阈值 {LLM_SCHEDULER_HOLD_WARN_SECONDS:.0f}s）"
+                f"（tag={tag or '-'}，阈值 {LLM_SCHEDULER_HOLD_WARN_SECONDS:.0f}s）"
             )
         state.holder = ""
         state.holder_since = None
