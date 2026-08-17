@@ -270,6 +270,11 @@ async def run_positive(
         for case in cases:
             print(f"===== {case['id']} =====")
             print(format_consolidation_prompt("（无）", format_messages(case["messages"])))
+            # 两阶段时把阶段2 prompt 也打出来，便于离线检查提取模板
+            if runner is not None:
+                from memory.extraction_prompt import format_extraction_prompt
+                print(f"----- {case['id']} 阶段2 提取 prompt -----")
+                print(format_extraction_prompt(format_messages(case["messages"])))
         return 0
 
     all_results: list[tuple[str, list[int], int]] = []
@@ -561,7 +566,7 @@ async def _amain() -> None:
     if a.positive:
         sys.exit(await run_positive(consolidator, backend, a.positive_fixture,
                                     repeat=a.repeat, print_prompt=a.print_prompt,
-                                    runner=_runner))
+                                    runner=_runner if a.two_stage else None))
 
     if not a.input.exists():
         sys.exit(f"❌ 找不到 {a.input}，请先运行 scripts/sample_windows.py")
