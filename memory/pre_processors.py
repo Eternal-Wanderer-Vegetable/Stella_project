@@ -335,9 +335,10 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 
         if not is_proactive:
             # ── @-回复：读取用户画像（性格 + 对 bot 态度） ──
+            # 按群隔离：同一人在不同群是不同画像（v7 user_profiles 主键 (group_id, user_id)）
             cursor.execute(
-                "SELECT personality_traits, agent_attitude FROM user_profiles WHERE user_id = ?",
-                (str(ctx.user_id),),
+                "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_id = ? AND user_id = ?",
+                (str(ctx.group_id), str(ctx.user_id)),
             )
             row = cursor.fetchone()
             if row:
@@ -464,15 +465,16 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
 
 def _read_stable_profile(group_id: int, user_id: int) -> str:
     """读取用户画像，只保留「稳定事实」（语言偏好/技术水平/可观察行为），
-    过滤人格判断与心理状态（见 Memory Policy / User Profile 治理方案）。"""
+    过滤人格判断与心理状态（见 Memory Policy / User Profile 治理方案）。
+    按群隔离——同一人在不同群是不同画像（v7 user_profiles 主键 (group_id, user_id)）。"""
     from memory.policy import stable_profile_facts
 
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT personality_traits, agent_attitude FROM user_profiles WHERE user_id = ?",
-            (str(user_id),),
+            "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_id = ? AND user_id = ?",
+            (str(group_id), str(user_id)),
         )
         row = cursor.fetchone()
         conn.close()

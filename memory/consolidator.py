@@ -58,7 +58,7 @@ from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
 from memory.memory_manager import get_memory_manager
 from memory.policy import validate_candidate
-from memory.schema import ensure_v2_schema
+from memory.schema import create_user_profiles_table, ensure_v2_schema
 from memory.text_similarity import is_similar, merge_content
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
@@ -236,16 +236,9 @@ class MemoryConsolidator:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS user_profiles (
-                user_id TEXT PRIMARY KEY,
-                nickname TEXT,
-                personality_traits TEXT,
-                agent_attitude TEXT,
-                interaction_count INTEGER DEFAULT 0,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # 用户画像表：复用 schema 的规范 DDL（v7 主键 (group_id, user_id)），
+        # 避免建表语句手抄两份导致加字段时漂移
+        create_user_profiles_table(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS memory_candidates (
                 id TEXT PRIMARY KEY,
@@ -426,7 +419,7 @@ class MemoryConsolidator:
                     return
 
                 self._write_short_term(group_id, parsed.get("short_term"))
-                self._write_user_profiles(parsed.get("user_profiles", []))
+                self._write_user_profiles(group_id, parsed.get("user_profiles", []))
                 candidates = parsed.get("memory_candidates")
                 if candidates is None:
                     candidates = []
@@ -688,9 +681,10 @@ class MemoryConsolidator:
             return m.group(1)
         return uid
 
-    def _write_user_profiles(self, profiles: list):
+    def _write_user_profiles(self, group_id: int, profiles: list):
         """把 LLM 给出的用户画像批量写入 user_profiles：已存在则合并特征并累计互动次数。
         写入前用 stable_profile_facts 过滤人格判断/心理状态，只保留稳定事实（User Profile 治理）。
+        画像按 (group_id, user_id) 隔离，同一人在不同群独立积累；interaction_count 也分群计数。
         副作用：更新/插入 user_profiles 表；单条记录 user_id 非法（空）时跳过。"""
         from memory.policy import stable_profile_facts
 
@@ -706,8 +700,9 @@ class MemoryConsolidator:
             # 只保留稳定事实，过滤人格/心理/价值判断
             traits = "，".join(stable_profile_facts(p.get("personality_traits", "")))
             cursor.execute(
-                "SELECT nickname, personality_traits, agent_attitude, interaction_count FROM user_profiles WHERE user_id = ?",
-                (uid,),
+                "SELECT nickname, personality_traits, agent_attitude, interaction_count "
+                "FROM user_profiles WHERE group_id = ? AND user_id = ?",
+                (str(group_id), uid),
             )
             row = cursor.fetchone()
             if row:
@@ -720,14 +715,14 @@ class MemoryConsolidator:
                     UPDATE user_profiles
                     SET nickname = ?, personality_traits = ?, agent_attitude = ?,
                         interaction_count = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = ?
-                """, (new_nick, new_traits, new_attitude, old_count + 1, uid))
+                    WHERE group_id = ? AND user_id = ?
+                """, (new_nick, new_traits, new_attitude, old_count + 1, str(group_id), uid))
             else:
                 # 新用户：直接插入，互动次数初始为 1
                 cursor.execute("""
-                    INSERT INTO user_profiles (user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
-                    VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-                """, (uid, p.get("nickname", ""), traits, p.get("agent_attitude", "")))
+                    INSERT INTO user_profiles (group_id, user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                """, (str(group_id), uid, p.get("nickname", ""), traits, p.get("agent_attitude", "")))
         conn.commit()
         conn.close()
 

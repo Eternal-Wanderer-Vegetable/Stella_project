@@ -16,6 +16,12 @@
    上次追问内容、连续无回应次数）。
 7. v6 新增 ``group_runtime_state`` 表（主动发言的运行时静音开关与
    睡眠/苏醒播报的每日去重锚点）。
+8. v7 ``user_profiles`` 主键改为 ``(group_id, user_id)``：同一个人在技术群与
+   闲聊群应当是不同画像，共用一份会让 _merge_traits 把两个群的特征混在一起，
+   使「群A 一个形象、群B 另一个形象」在认知层面无法成立。
+   **本版不做数据迁移**：SQLite 无法直接改主键，且旧库画像在严苛筛选下几乎为空，
+   直接新建数据库比写一套只用一次的迁移代码更可靠（决策记录 2026-08-17）。
+   旧库如需保留请手动改名后让程序重建。
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -34,8 +40,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v6：新增 group_runtime_state 群级运行时状态表）
-SCHEMA_VERSION = 6
+# 当前 Schema 版本（v7：user_profiles 主键改为 (group_id, user_id)）
+SCHEMA_VERSION = 7
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -298,6 +304,34 @@ def create_group_runtime_state_table(conn: sqlite3.Connection) -> None:
     conn.execute(GROUP_RUNTIME_STATE_TABLE_DDL)
 
 
+# 用户画像表（v7 起）：主键改为 (group_id, user_id)。
+# 同一个人在技术群与闲聊群应当是不同画像——共用一份会让 _merge_traits 把
+# 两个群的特征混在一起，使「群A 一个形象、群B 另一个形象」在认知层面无法成立；
+# interaction_count（互动次数）也应分群计数。
+USER_PROFILES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS user_profiles (
+    group_id TEXT,
+    user_id TEXT,
+    nickname TEXT,
+    personality_traits TEXT,
+    agent_attitude TEXT,
+    interaction_count INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, user_id)
+)
+"""
+
+
+def create_user_profiles_table(conn: sqlite3.Connection) -> None:
+    """确保 user_profiles 表存在（幂等）。
+
+    v7 起画像按 (group_id, user_id) 隔离：同一人在不同群是不同画像，
+    交互计数（interaction_count）也应分群统计。独立于 additive column
+    体系（新表而非加列），升级路径见 _migrate。
+    """
+    conn.execute(USER_PROFILES_TABLE_DDL)
+
+
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     """判断表是否存在。"""
     cursor.execute(
@@ -378,6 +412,17 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     """
     cursor = conn.cursor()
     changes = 0
+    # v7：旧库检测——user_profiles 已存在但没有 group_id 列时给出明确告警。
+    # v7 不做自动迁移（SQLite 无法直接改主键，且旧库画像在严苛筛选下几乎为空，
+    # 直接新建库比写一次性迁移代码更可靠），继续运行会因主键不匹配导致画像写入失败。
+    # 有明确报错比静默失败好得多：别人（或几个月后的自己）拿旧库跑起来时不会
+    # 看着画像「写不进去」而毫无头绪。
+    if _table_exists(cursor, "user_profiles") and not _column_exists(cursor, "user_profiles", "group_id"):
+        logger.error(
+            "检测到旧版 user_profiles（无 group_id 列）。v7 不做自动迁移——"
+            "请停止程序、将 DB_PATH 对应文件改名备份，重启后程序会建立 v7 新库。"
+            "当前运行会因主键不匹配导致画像写入失败。"
+        )
     # v5：主动发言状态表（新表，不属于 additive column 范畴）
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
@@ -386,6 +431,11 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(GROUP_RUNTIME_STATE_TABLE_DDL)
+    # v7：用户画像表（新表，不属于 additive column 范畴；规范 DDL 与
+    # consolidator 建表共用，避免手抄两份造成字段漂移）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(USER_PROFILES_TABLE_DDL)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue
