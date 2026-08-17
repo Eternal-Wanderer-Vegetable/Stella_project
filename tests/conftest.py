@@ -23,3 +23,18 @@ def _force_v1_memory_path(monkeypatch):
     monkeypatch.setattr(core.pipeline, "MEMORY_V2_ENABLED", False)
     monkeypatch.setattr(memory.pre_processors, "MEMORY_V2_ENABLED", False)
     monkeypatch.setattr(memory.retrieval_v2, "MEMORY_V2_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_space_config(tmp_path, monkeypatch):
+    """把共享空间的自动命名账本与 TOML 目录隔离到每个用例独立的临时目录。
+
+    否则测试里 ChatContext.__post_init__ / consolidate_group 触发 resolve_space
+    自动分配时，会往仓库真实 memory/ 下写 .space_assignments.json。每用例独立 +
+    reload() 清空缓存，保证命名确定性且互不串扰。
+    """
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "_AUTO_FILE", tmp_path / ".space_assignments.json")
+    monkeypatch.setattr(spaces, "SPACES_DIR", tmp_path / "spaces")
+    spaces.reload()
