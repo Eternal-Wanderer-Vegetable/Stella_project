@@ -42,17 +42,17 @@ from config import (
     CONSOLIDATION_LOCAL_MAX_TOKENS,
     CONSOLIDATION_OVERLAP,
     DB_PATH,
+    MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
+    MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
     MEMORY_EXTRACT_ENABLED,
     MEMORY_EXTRACT_LM_STUDIO_API_KEY,
     MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
     MEMORY_EXTRACT_LM_STUDIO_MODEL,
     MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
     MEMORY_EXTRACT_MAX_TOKENS,
-    MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
-    MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
     MEMORY_SOURCE_KIND_ENABLED,
 )
-from core.llm import chat_llm_lock, consolidation_llm_lock
+from core.llm import RESOURCE_CHAT, RESOURCE_CONSOLIDATION, acquire
 from core.llm.lm_studio import LMStudioBackend
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
@@ -105,8 +105,8 @@ class MemoryConsolidator:
             ),
         )
         # 群级锁：保证同一群「读 checkpoint → 整合 → 推进 checkpoint」不被并发打断。
-        # 必须与模型锁分离——若整段整合都占着 consolidation_llm_lock，
-        # 群A 等 27B（chat_llm_lock）时会把群B 的 E4B 阶段一起堵死，
+        # 必须与模型锁分离——若整段整合都占着 consolidation 闸门，
+        # 群A 等 27B（chat 闸门）时会把群B 的 E4B 阶段一起堵死，
         # 使两个模型退化为串行（多群部署下尤其明显）。
         self._group_locks: dict[str, asyncio.Lock] = {}
 
@@ -136,9 +136,9 @@ class MemoryConsolidator:
         prompt = self._build_prompt(group_id, messages)
         logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
         model_tag = getattr(backend, "model", "") or backend_name
-        # 只在真正调用 E4B 的这一刻持锁：DB 读取与 prompt 拼装不占锁，
-        # 且绝不与 chat_llm_lock 同时持有（防止跨模型队头阻塞）。
-        async with consolidation_llm_lock:
+        # 只在真正调用 E4B 的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
+        # 且绝不与 chat 闸门同时持有（防止跨模型队头阻塞）。
+        async with acquire(RESOURCE_CONSOLIDATION, tag=f"consolidate:{group_id}"):
             result = await backend.generate(prompt)
         append_consolidation_log(
             f"- **🧠 后端**: {backend_name}（{model_tag}，批次 {limit} 条）\n"
@@ -165,12 +165,12 @@ class MemoryConsolidator:
             return v
         return str(v).strip().lower() in ("true", "1", "yes")
 
-    async def _extract_candidates(self, messages_text: str) -> list | None:
+    async def _extract_candidates(self, group_id: int, messages_text: str) -> list | None:
         """阶段2：用 27B 从消息里精确提取 memory_candidates。
 
-        只在调用 27B 的那一刻持有 chat_llm_lock（与聊天、会话压缩共用同一 GPU
+        只在调用 27B 的那一刻持有 chat 闸门（与聊天、会话压缩共用同一 GPU
         模型，应用层 FIFO 串行，聊天不会被并发推理拖慢）。此时绝不持有
-        consolidation_llm_lock，因此别的群可同时跑 E4B 阶段1。
+        consolidation 闸门，因此别的群可同时跑 E4B 阶段1。
 
         返回候选列表；调用异常或 JSON 解析失败返回 None，表示「阶段2 未成功，
         回退阶段1 候选」——与「成功但无候选」（返回 []，即 27B 复核认为确实
@@ -183,7 +183,7 @@ class MemoryConsolidator:
         prompt = format_extraction_prompt(messages_text)
         logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
         try:
-            async with chat_llm_lock:
+            async with acquire(RESOURCE_CHAT, tag=f"extract:{group_id}"):
                 result = await backend.generate(prompt)
         except Exception:
             logger.exception("❌ [Extractor] 阶段2 提取调用失败，回退阶段1 候选")
@@ -385,8 +385,8 @@ class MemoryConsolidator:
         if not DB_PATH.exists():
             return
 
-        # 群级串行（不再整段持有 consolidation_llm_lock）：模型锁只在各自的
-        # generate 调用处短暂持有，两把模型锁从不同时持有，因此 E4B 与 27B
+        # 群级串行（不再整段持有 consolidation 闸门）：模型闸门只在各自的
+        # generate 调用处短暂持有，两把闸门从不同时持有，因此 E4B 与 27B
         # 可真正并行，且同一模型上的任务仍是 FIFO 一次一个。
         async with self._get_group_lock(group_id):
             try:
@@ -437,7 +437,7 @@ class MemoryConsolidator:
                 # 那是 27B 复核认为确实没有，正好纠正 E4B 的误判。
                 # 调用失败/解析失败返回 None，此时回退阶段1 候选。
                 if MEMORY_EXTRACT_ENABLED and self._has_self_disclosure(parsed):
-                    extracted = await self._extract_candidates(messages_text)
+                    extracted = await self._extract_candidates(group_id, messages_text)
                     if extracted is not None:
                         candidates = extracted
 

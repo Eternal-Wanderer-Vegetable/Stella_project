@@ -18,7 +18,7 @@ from nonebot import logger
 
 from config import MEMORY_V2_ENABLED
 from core.context import ChatContext
-from core.llm import chat_llm_lock
+from core.llm import PRIORITY_INTERACTIVE, RESOURCE_CHAT, acquire
 from core.llm.base import LLMBackend
 
 PreHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
@@ -64,8 +64,8 @@ class Pipeline:
         pipeline.set_llm_backend(backend)
         ctx = await pipeline.run(ctx)
 
-    钩子按优先级（数字越大越先执行）排序；LLM 调用全程持有 chat_llm_lock，
-    串行访问共享的本地模型后端。
+    钩子按优先级（数字越大越先执行）排序；LLM 调用经调度器
+    acquire(RESOURCE_CHAT) 串行访问共享的本地模型后端。
     """
 
     def __init__(self, timeout: float = 90.0):
@@ -172,8 +172,11 @@ class Pipeline:
             ctx.system_prompt_len = len(self.system_prompt)
             ctx.prompt_log = user_prompt
 
-            # 全局锁：聊天主链路与整合共用同一 GPU 模型，必须先串行
-            async with chat_llm_lock:
+            # 全局闸门：聊天主链路与压缩/候选提取共用同一 27B，经调度器 FIFO 串行。
+            # 交互回复标记为高优先级意图（当前优先级未启用，仅按 FIFO 处理）。
+            async with acquire(
+                RESOURCE_CHAT, tag=f"reply:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
+            ):
                 import time as _time
                 _t0 = _time.monotonic()
                 try:

@@ -21,13 +21,18 @@
    ``None``，调用方回退到规则版语义分，绝不让语义检索成为主链路的硬依赖；
 2. **缓存**：key 含模型名、维度与文本哈希，避免不同模型/维度互相污染；
 3. **纯向量工具与网络分离**：cosine / 归一化是纯函数，可离线单测；
-   EmbeddingService 才持有 httpx 客户端与缓存。
+   EmbeddingService 才持有 httpx 客户端与缓存；
+4. **与主聊天共享闸门**：默认与主聊天同一 LM Studio 实例，而一次检索要编码
+   20+ 条文本（query + 每条候选）；LM Studio 不限并发，不串行会出现间歇性
+   变慢且难以定位，因此每次编码经 ``_maybe_gate()`` 走 chat 闸门（tag="embed"）。
+   批量编码（``input`` 支持数组，一次请求只抢一次锁）是将来的优化方向。
 """
 
 from __future__ import annotations
 
 import hashlib
 import math
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -70,6 +75,24 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return max(0.0, min(1.0, dot / (na * nb)))
 
 
+@asynccontextmanager
+async def _maybe_gate():
+    """embedding 与主聊天共用同一 LM Studio 实例时，走 chat 闸门串行化。
+
+    配置关闭（``LLM_SCHEDULER_GATE_EMBEDDING=false``，如独立 embedding 实例）
+    时为空操作。config 与 core.llm 都在函数内延迟 import，保持纯向量工具
+    （cosine / normalize）可离线单测。
+    """
+    from config import LLM_SCHEDULER_GATE_EMBEDDING
+    from core.llm import RESOURCE_CHAT, acquire
+
+    if not LLM_SCHEDULER_GATE_EMBEDDING:
+        yield
+        return
+    async with acquire(RESOURCE_CHAT, tag="embed"):
+        yield
+
+
 class EmbeddingService:
     """调用 LM Studio /v1/embeddings 的语义编码服务（带缓存与降级）。"""
 
@@ -107,14 +130,18 @@ class EmbeddingService:
         if self.model:
             payload["model"] = self.model
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(self.timeout), trust_env=False) as client:
+            # 网络请求在闸门内（少占锁），向量解析移到闸门外（少占锁时间）
+            async with (
+                _maybe_gate(),
+                httpx.AsyncClient(timeout=httpx.Timeout(self.timeout), trust_env=False) as client,
+            ):
                 resp = await client.post(self.api_url, json=payload)
                 resp.raise_for_status()
                 data = resp.json()
-                vector = data["data"][0]["embedding"]
-                if not isinstance(vector, list) or not vector:
-                    raise ValueError("embedding 返回为空")
-                vector = [float(v) for v in vector]
+            vector = data["data"][0]["embedding"]
+            if not isinstance(vector, list) or not vector:
+                raise ValueError("embedding 返回为空")
+            vector = [float(v) for v in vector]
         except Exception as e:
             logger.warning(f"[Embedding] 编码失败（{text[:20]}…）: {e}")
             self._cache[key] = None

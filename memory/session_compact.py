@@ -8,7 +8,7 @@
 
 **用主聊天模型而非整合模型**：整合模型跑在 CPU 上，单次 20~60 秒，
 压缩必须快（它在每次回复之后异步触发）。27B 在 GPU 上约 2 秒，可接受。
-调用持有 chat_llm_lock，与主聊天串行共享同一模型。
+调用经调度器 acquire(RESOURCE_CHAT) 与主聊天串行共享同一模型。
 
 压缩 prompt 沿用捕获层的**防编造原则**：压不出内容就输出「无」，
 宁可丢上下文也不能编造对话里没出现过的内容。
@@ -26,7 +26,7 @@ from config import (
     LM_STUDIO_MODEL,
     SESSION_SUMMARY_MAX_TOKENS,
 )
-from core.llm import chat_llm_lock
+from core.llm import RESOURCE_CHAT, acquire
 from core.llm.lm_studio import LMStudioBackend
 from memory import session_context as sc
 
@@ -163,7 +163,7 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
     logger.info(f"🗜️ [Compact] 群 {group_id} 开始压缩 {count} 条消息（至 id {max_id}）")
 
     try:
-        async with chat_llm_lock:
+        async with acquire(RESOURCE_CHAT, tag=f"compact:{group_id}"):
             result = await _get_backend().generate(prompt)
     except Exception as e:
         # 调用失败**不推进**位置，这批消息留待下次重试

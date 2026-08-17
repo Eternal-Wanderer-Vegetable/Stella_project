@@ -169,8 +169,8 @@ SHORT_TERM_SUMMARY_STALE_MINUTES = _env_float("SHORT_TERM_SUMMARY_STALE_MINUTES"
 # （2026-08-13 缺陷的成因）。
 SESSION_CONTEXT_ENABLED = _env("SESSION_CONTEXT_ENABLED", "true").lower() in ("true", "1", "yes")
 # 待压缩文本超过该 token 估算值才触发压缩。
-# 不是每轮都压缩：27B 在 GPU 上约 2 秒，但每轮多一次调用会让 chat_llm_lock
-# 的串行等待明显放大。
+# 不是每轮都压缩：27B 在 GPU 上约 2 秒，但每轮多一次调用会让 chat 闸门的
+# 串行等待明显放大。
 SESSION_COMPACT_THRESHOLD_TOKENS = _env_int("SESSION_COMPACT_THRESHOLD_TOKENS", 600)
 # 摘要自身的 token 预算：超过则连同新内容重新压缩一次（摘要的摘要）
 SESSION_SUMMARY_MAX_TOKENS = _env_int("SESSION_SUMMARY_MAX_TOKENS", 300)
@@ -372,6 +372,27 @@ LM_STUDIO_API_KEY = _env("LM_STUDIO_API_KEY", "")
 
 # LLM 调用超时（秒）
 LLM_TIMEOUT = _env_float("LLM_TIMEOUT", 90.0)
+
+# ---------- LLM 调度器（应用层闸门） ----------
+# LM Studio 本身不限并发，应用层必须手动串行访问共享模型，否则并发推理会
+# 互相拖慢且难以定位。调度器为两种资源（chat=27B / consolidation=E4B）各自
+# 维护 FIFO 队列，两种资源彼此并行；调用方绝不能同时持有两把锁（否则跨模型
+# 队头阻塞——这正是 consolidate_group 用独立群级锁的原因）。
+# 等待/持有超阈值打 warning，配合 snapshot() 做可观测性；优先级暂未实现。
+# 排队等待超过该秒数才告警。实测阶段2 提取占 27B 约 20 秒（1617 prompt tokens
+# + 280 生成 @19 tok/s），30 秒意味着前面已排了一个以上后台任务。
+LLM_SCHEDULER_WAIT_WARN_SECONDS = _env_float("LLM_SCHEDULER_WAIT_WARN_SECONDS", 30.0)
+# 持有超过该秒数才告警。后端内含 3 次重试（每次 timeout 120s），单次持有上界
+# 远大于一次正常请求；90 秒足以覆盖正常生成又能抓卡死。
+LLM_SCHEDULER_HOLD_WARN_SECONDS = _env_float("LLM_SCHEDULER_HOLD_WARN_SECONDS", 90.0)
+# 排队数（不含持有者）达到该深度时打 warning
+LLM_SCHEDULER_QUEUE_WARN_DEPTH = _env_int("LLM_SCHEDULER_QUEUE_WARN_DEPTH", 3)
+# 优先级排队**尚未实现**，保留开关：先以 FIFO + snapshot() 积累真实排队数据，
+# 多群上线后据数据再决定是否偏离 FIFO。
+LLM_SCHEDULER_PRIORITY_ENABLED = _env("LLM_SCHEDULER_PRIORITY_ENABLED", "false").lower() in ("true", "1", "yes")
+# embedding 默认与主聊天同实例（一次检索可编码 20+ 条），需走 chat 闸门；
+# 独立实例部署（与聊天模型隔离）时可关闭。
+LLM_SCHEDULER_GATE_EMBEDDING = _env("LLM_SCHEDULER_GATE_EMBEDDING", "true").lower() in ("true", "1", "yes")
 
 # ---------- 记忆整合 ----------
 # 整合统一使用本地 LM Studio（在线整合流程已废弃，见 _deprecated/core_llm_flexiweb.py），
