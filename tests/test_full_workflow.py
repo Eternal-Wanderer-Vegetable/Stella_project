@@ -92,7 +92,7 @@ def test_full_workflow_chat_message_to_reply(tmp_path, monkeypatch):
 
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "INSERT INTO user_profiles (group_id, user_id, nickname, personality_traits) VALUES (?, ?, ?, ?)",
+        "INSERT INTO user_profiles (group_shared_space, user_id, nickname, personality_traits) VALUES (?, ?, ?, ?)",
         ("1001", "111", "阿散", "性格外向，爱运动"),
     )
     conn.commit()
@@ -196,7 +196,7 @@ def test_full_workflow_consolidation_promotes_memory(tmp_path, monkeypatch):
 
     # 用户画像已合并写入
     profile = cur.execute(
-        "SELECT personality_traits FROM user_profiles WHERE group_id = '1001' AND user_id = '111'"
+        "SELECT personality_traits FROM user_profiles WHERE group_shared_space = '1001' AND user_id = '111'"
     ).fetchone()
     assert profile and "散打" in profile[0]
 

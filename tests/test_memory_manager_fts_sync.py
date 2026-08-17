@@ -55,7 +55,7 @@ def _seed_candidate(
     """写入一条 NEW 状态候选记忆。"""
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, status) "
+        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, status) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (cid, group, user, "FACT", content, importance, confidence, "NEW"),
     )
@@ -119,7 +119,7 @@ def test_fts_rebuilds_when_index_is_stale(tmp_path, monkeypatch):
     # 手动写一条 memories 记录，但不走 MemoryManager（此时 FTS 为空 → 索引过期）
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count) "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count) "
         "VALUES ('m_direct', '3', '300', 'FACT', '散步时路过了新开的羽毛球馆', '散步时路过了新开的羽毛球馆', 0.8, 0.9, 'active', 1)",
     )
     conn.commit()

@@ -49,8 +49,8 @@ def _rows(db):
 def test_same_fact_accumulates_instead_of_duplicating(db):
     """同一事实写两次 → 一行、occurrence_count=2、confidence 提升。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
 
 
     rows = _rows(db)
@@ -63,9 +63,9 @@ def test_same_fact_accumulates_instead_of_duplicating(db):
 def test_similar_wording_counts_as_same_fact(db):
     """措辞不同但内容相似 → 视为同一事实（复现），不新增行。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     c._write_memory_candidates(
-        1, [dict(CANDIDATE, content="使用RTX5080显卡，跑27B模型吃力")], sender_ids=["1001"]
+        "1", [dict(CANDIDATE, content="使用RTX5080显卡，跑27B模型吃力")], sender_ids=["1001"]
     )
 
     rows = _rows(db)
@@ -78,9 +78,9 @@ def test_similar_wording_counts_as_same_fact(db):
 def test_unrelated_facts_stay_separate(db):
     """内容无关的候选各自独立成行。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     c._write_memory_candidates(
-        1, [dict(CANDIDATE, content="在杭州做后端开发")], sender_ids=["1001"]
+        "1", [dict(CANDIDATE, content="在杭州做后端开发")], sender_ids=["1001"]
     )
 
     assert len(_rows(db)) == 2
@@ -89,9 +89,9 @@ def test_unrelated_facts_stay_separate(db):
 def test_same_content_different_users_stay_separate(db):
     """不同用户说了同一句话 → 两条独立候选（归属不可混同）。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     c._write_memory_candidates(
-        1, [dict(CANDIDATE, user_id="1002")], sender_ids=["1002"]
+        "1", [dict(CANDIDATE, user_id="1002")], sender_ids=["1002"]
     )
 
     rows = _rows(db)
@@ -102,9 +102,9 @@ def test_same_content_different_users_stay_separate(db):
 def test_source_kinds_accumulate_across_observations(db):
     """先 PASSIVE 后 AT_MENTION → source_kinds 保留两者（晋升判定要看历次证据）。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     c._write_memory_candidates(
-        1, [dict(CANDIDATE)], sender_ids=["1001"], at_senders=["1001"]
+        "1", [dict(CANDIDATE)], sender_ids=["1001"], at_senders=["1001"]
     )
 
     rows = _rows(db)
@@ -115,12 +115,12 @@ def test_source_kinds_accumulate_across_observations(db):
 def test_first_seen_at_not_refreshed_on_reoccurrence(db):
     """first_seen_at 是超期淘汰的锚点，复现时不得被刷新。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     first = _rows(db)[0][7]
     assert first is not None
 
 
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     assert _rows(db)[0][7] == first
 
 
@@ -129,7 +129,7 @@ def test_confidence_capped_at_one(db):
     c = MemoryConsolidator()
     for _ in range(8):
         c._write_memory_candidates(
-            1, [dict(CANDIDATE, confidence=0.9)], sender_ids=["1001"]
+            "1", [dict(CANDIDATE, confidence=0.9)], sender_ids=["1001"]
         )
 
     rows = _rows(db)
@@ -206,7 +206,7 @@ def test_has_at_mention_tolerates_garbage():
 def test_reoccurrence_eventually_promotes_end_to_end(db):
     """端到端：conf 0.5 的候选写两次 → 加成后跨过 0.6 且 occurrence=2 → 晋升。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
 
     manager = MemoryManager()
     manager.process_new_candidates()
@@ -217,7 +217,7 @@ def test_reoccurrence_eventually_promotes_end_to_end(db):
     ).fetchone()[0] == "OBSERVING"
     conn.close()
 
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     manager.process_new_candidates()
 
     conn = sqlite3.connect(db)
@@ -229,7 +229,7 @@ def test_reoccurrence_eventually_promotes_end_to_end(db):
 def test_stale_observing_candidate_rejected(db):
     """超期未获新证据的 OBSERVING 候选被标记 REJECTED。"""
     c = MemoryConsolidator()
-    c._write_memory_candidates(1, [dict(CANDIDATE)], sender_ids=["1001"])
+    c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
 
     conn = sqlite3.connect(db)
     conn.execute(
@@ -267,7 +267,7 @@ def test_quota_dry_run_does_not_archive(db, monkeypatch):
     conn = sqlite3.connect(db)
     for i in range(5):
         conn.execute(
-            "INSERT INTO memories (id, group_id, user_id, type, content, importance, "
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, "
             "confidence, status, confirmation_count, last_accessed_at) "
             "VALUES (?, '1', '1001', 'FACT', ?, 0.5, 0.8, 'active', 1, '2026-08-12 10:00:00')",
             (f"m{i}", f"事实{i}"),
@@ -292,13 +292,13 @@ def test_quota_enforce_archives_weakest(db, monkeypatch):
     conn = sqlite3.connect(db)
     # m-weak：从未确认、久未访问 → 应被淘汰
     conn.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, "
         "status, confirmation_count, last_accessed_at) VALUES "
         "('m-weak', '1', '1001', 'FACT', '弱记忆', 0.3, 0, 'active', 0, '2020-01-01 00:00:00')"
     )
     for i in range(2):
         conn.execute(
-            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, "
             "status, confirmation_count, last_accessed_at) VALUES "
             f"('m-strong{i}', '1', '1001', 'FACT', '强记忆{i}', 0.8, 0.9, 'active', 3, '2026-08-12 10:00:00')"
         )
@@ -324,12 +324,12 @@ def test_quota_is_per_user_and_per_group(db, monkeypatch):
     conn = sqlite3.connect(db)
     for i in range(3):
         conn.execute(
-            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, "
             "status, confirmation_count, last_accessed_at) VALUES "
             f"('other{i}', '1', '1002', 'FACT', '别人的{i}', 0.5, 0.8, 'active', 1, '2026-08-12 10:00:00')"
         )
     conn.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, "
         "status, confirmation_count, last_accessed_at) VALUES "
         "('mine', '1', '1001', 'FACT', '我的', 0.5, 0.8, 'active', 1, '2026-08-12 10:00:00')"
     )

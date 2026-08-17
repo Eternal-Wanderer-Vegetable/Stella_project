@@ -20,12 +20,12 @@ from memory.retrieval_v2 import _merge_similar
 SAME_CONTENT = "喜欢玩合作类游戏"
 
 
-def _insert_memory(conn, mem_id, group_id, user_id, content, mem_type="PREFERENCE"):
+def _insert_memory(conn, mem_id, group_shared_space, user_id, content, mem_type="PREFERENCE"):
     conn.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, "
         "importance, confidence, status, confirmation_count, last_accessed_at) "
         "VALUES (?, ?, ?, ?, ?, ?, 0.6, 0.8, 'active', 1, '2026-08-12 10:00:00')",
-        (mem_id, str(group_id), str(user_id), mem_type, content, content),
+        (mem_id, str(group_shared_space), str(user_id), mem_type, content, content),
     )
 
 
@@ -53,7 +53,7 @@ def test_candidate_promotion_does_not_merge_across_users(patched_db):
 
 
     other_user = {
-        "group_id": "1",
+        "group_shared_space": "1",
         "user_id": "1002",
         "type": "PREFERENCE",
         "content": SAME_CONTENT,
@@ -67,7 +67,7 @@ def test_candidate_promotion_does_not_merge_across_users(patched_db):
     assert manager._find_similar_memory(cursor, same_user) == "mem-user-1001"
 
 
-    other_group = dict(other_user, user_id="1001", group_id="2")
+    other_group = dict(other_user, user_id="1001", group_shared_space="2")
     assert manager._find_similar_memory(cursor, other_group) is None
 
 
@@ -85,7 +85,7 @@ def test_compressor_does_not_merge_across_users(patched_db):
 
 
     rows = cursor.execute(
-        "SELECT id, group_id, user_id, type, content, importance, confidence, "
+        "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
         "confirmation_count, compressed_at, is_atomized FROM memories "
         "WHERE status = 'active' ORDER BY last_accessed_at DESC"
     ).fetchall()
@@ -115,7 +115,7 @@ def test_compressor_still_merges_same_user(patched_db):
 
 
     rows = cursor.execute(
-        "SELECT id, group_id, user_id, type, content, importance, confidence, "
+        "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
         "confirmation_count, compressed_at, is_atomized FROM memories "
         "WHERE status = 'active' ORDER BY last_accessed_at DESC"
     ).fetchall()

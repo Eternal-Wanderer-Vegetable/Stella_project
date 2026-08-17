@@ -40,7 +40,12 @@ from config import (
 )
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
-from memory.schema import ensure_v2_schema
+from memory.schema import (
+    create_atomic_facts_table,
+    create_memories_table,
+    create_memory_candidates_table,
+    ensure_v2_schema,
+)
 from memory.text_similarity import is_similar, merge_content
 
 
@@ -64,80 +69,24 @@ class MemoryManager:
 
     def _ensure_tables(self) -> None:
         """确保记忆相关表存在：memory_candidates（候选）、memories（长期记忆）、
-        atomic_facts（原子事实，备用），并创建常用检索索引。"""
+        atomic_facts（原子事实，备用），并创建常用检索索引。
+
+        v8 起统一复用 schema 规范 DDL（group_shared_space 归属），
+        不再手抄一份建表语句。
+        """
         conn = self._connect()
         cursor = conn.cursor()
+        create_memory_candidates_table(conn)
+        create_memories_table(conn)
+        create_atomic_facts_table(conn)
+        # 常用检索索引（memories 按空间维度）
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS memory_candidates (
-                id TEXT PRIMARY KEY,
-                group_id TEXT,
-                user_id TEXT,
-                type TEXT,
-                content TEXT,
-                importance REAL,
-                confidence REAL,
-                evidence TEXT,
-                status TEXT,
-                source_message_ids TEXT,
-                usage_tags TEXT,
-                visibility TEXT DEFAULT 'OPEN',
-                trigger_data TEXT,
-                behavior_rule TEXT,
-                source_kind TEXT DEFAULT 'PASSIVE',
-                occurrence_count INTEGER DEFAULT 1,
-                first_seen_at DATETIME,
-                source_kinds TEXT DEFAULT '["PASSIVE"]',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
+            CREATE INDEX IF NOT EXISTS idx_memories_space_user_status
+            ON memories (group_shared_space, user_id, status)
         """)
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS memories (
-                id TEXT PRIMARY KEY,
-                group_id TEXT,
-                user_id TEXT,
-                type TEXT,
-                content TEXT,
-                content_raw TEXT,
-                importance REAL,
-                confidence REAL,
-                status TEXT,
-                confirmation_count INTEGER,
-                last_confirmed_at DATETIME,
-                last_accessed_at DATETIME,
-                compressed_at DATETIME,
-                compression_version INTEGER,
-                is_atomized INTEGER,
-                usage_tags TEXT,
-                visibility TEXT DEFAULT 'OPEN',
-                trigger_data TEXT,
-                behavior_rule TEXT,
-                source_kind TEXT DEFAULT 'PASSIVE',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS atomic_facts (
-                id TEXT PRIMARY KEY,
-                memory_id TEXT,
-                group_id TEXT,
-                subject TEXT,
-                predicate TEXT,
-                object TEXT,
-                confidence REAL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        # 常用检索索引
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_memories_group_user_status
-            ON memories (group_id, user_id, status)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_memories_group_status_accessed
-            ON memories (group_id, status, last_accessed_at)
+            CREATE INDEX IF NOT EXISTS idx_memories_space_status_accessed
+            ON memories (group_shared_space, status, last_accessed_at)
         """)
         conn.commit()
         conn.close()
@@ -167,7 +116,7 @@ class MemoryManager:
 
         # 按创建时间先后处理，避免同批候选间的顺序抖动
         candidates = cursor.execute(
-            "SELECT id, group_id, user_id, type, content, importance, confidence, evidence, status, "
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, "
             "source_message_ids, usage_tags, visibility, behavior_rule, "
             "occurrence_count, source_kinds, source_kind"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
@@ -177,7 +126,7 @@ class MemoryManager:
         for row in candidates:
             candidate = {
                 "id": row[0],
-                "group_id": row[1],
+                "group_shared_space": row[1],
                 "user_id": row[2],
                 "type": row[3] or "FACT",
                 "content": row[4] or "",
@@ -217,7 +166,7 @@ class MemoryManager:
                 self._create_memory(cursor, candidate)
                 # 新建才可能突破配额；合并不增加条数
                 self._enforce_user_quota(
-                    cursor, candidate["group_id"], candidate["user_id"]
+                    cursor, candidate["group_shared_space"], candidate["user_id"]
                 )
 
             logger.info(f"⬆️ [MemoryManager] 候选晋升 {candidate['id']}：{reason}")
@@ -320,17 +269,17 @@ class MemoryManager:
         return rejected
 
     def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> str | None:
-        """在同群、同用户、同类型的 active 记忆中查找与候选内容相似的记忆 id；找不到返回 None。
+        """在同空间、同用户、同类型的 active 记忆中查找与候选内容相似的记忆 id；找不到返回 None。
 
-        **必须按 group_id + user_id 过滤**：只比 type 会把用户 A 的候选合并进
+        **必须按 group_shared_space + user_id 过滤**：只比 type 会把用户 A 的候选合并进
         用户 B 的记忆（_merge_content 用「；」把两人的内容拼在一起），造成
         不可恢复的归属污染。与 _resolve_conflicts 的过滤条件保持一致。
         """
         rows = cursor.execute(
             "SELECT id, content FROM memories WHERE status = 'active' "
-            "AND group_id = ? AND user_id = ? AND type = ? "
+            "AND group_shared_space = ? AND user_id = ? AND type = ? "
             "ORDER BY last_accessed_at DESC",
-            (str(candidate["group_id"]), str(candidate["user_id"]), candidate["type"]),
+            (str(candidate["group_shared_space"]), str(candidate["user_id"]), candidate["type"]),
         ).fetchall()
         for mem_id, content in rows:
             if is_similar(candidate["content"], content):
@@ -343,13 +292,13 @@ class MemoryManager:
         memory_id = uuid.uuid4().hex
         cursor.execute(
             "INSERT OR IGNORE INTO memories ("
-            "id, group_id, user_id, type, content, content_raw, importance, confidence, status, "
+            "id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, "
             "confirmation_count, last_confirmed_at, last_accessed_at, compressed_at, compression_version, is_atomized, "
             "usage_tags, visibility, behavior_rule, source_kind)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?, ?)",
             (
                 memory_id,
-                candidate["group_id"],
+                candidate["group_shared_space"],
                 candidate["user_id"],
                 candidate["type"],
                 candidate["content"],
@@ -367,7 +316,7 @@ class MemoryManager:
         _upsert_fts_record(
             cursor,
             memory_id,
-            str(candidate["group_id"]),
+            str(candidate["group_shared_space"]),
             str(candidate["user_id"]),
             candidate["content"],
         )
@@ -414,11 +363,15 @@ class MemoryManager:
             + MEMORY_QUOTA_W_RECENCY * recency
         )
 
-    def _enforce_user_quota(self, cursor: sqlite3.Cursor, group_id, user_id) -> int:
-        """把该群该用户的 active 记忆压回 MEMORY_USER_QUOTA 条以内（竞争性淘汰）。
+    def _enforce_user_quota(self, cursor: sqlite3.Cursor, group_shared_space, user_id) -> int:
+        """把该空间该用户的 active 记忆压回 MEMORY_USER_QUOTA 条以内（竞争性淘汰）。
 
         超额时按 _quota_score 升序把最弱的若干条置 archived（不删除，仅退出
         active 检索，可人工恢复）。返回被淘汰的条数。
+
+        ⚠️ 语义变化（v8）：MEMORY_USER_QUOTA 现在是「每空间每用户」的上限，
+        不再是「每 QQ 群」。多个群组成一个空间时配额实际收紧了——这符合设计
+        （同一个人在同一空间就是一份认知），但调参时要知道。
 
         MEMORY_QUOTA_ENFORCE=False 时只记录「本来会淘汰谁」的日志、不实际执行，
         用于上线前观察配额在真实库上的行为——25 条这个数在具体库上会淘汰什么，
@@ -428,8 +381,8 @@ class MemoryManager:
         """
         rows = cursor.execute(
             "SELECT id, content, importance, confirmation_count, last_accessed_at "
-            "FROM memories WHERE status = 'active' AND group_id = ? AND user_id = ?",
-            (str(group_id), str(user_id)),
+            "FROM memories WHERE status = 'active' AND group_shared_space = ? AND user_id = ?",
+            (str(group_shared_space), str(user_id)),
         ).fetchall()
         if len(rows) <= MEMORY_USER_QUOTA:
             return 0
@@ -504,7 +457,7 @@ class MemoryManager:
         _upsert_fts_record(
             cursor,
             memory_id,
-            str(candidate["group_id"]),
+            str(candidate["group_shared_space"]),
             str(candidate["user_id"]),
             merged_content,
         )
@@ -553,8 +506,8 @@ class MemoryManager:
         if not candidate["content"]:
             return
         rows = cursor.execute(
-            "SELECT id, content, confidence FROM memories WHERE status = 'active' AND group_id = ? AND user_id = ? AND type = ?",
-            (str(candidate["group_id"]), str(candidate["user_id"]), candidate["type"]),
+            "SELECT id, content, confidence FROM memories WHERE status = 'active' AND group_shared_space = ? AND user_id = ? AND type = ?",
+            (str(candidate["group_shared_space"]), str(candidate["user_id"]), candidate["type"]),
         ).fetchall()
         for mem_id, old_content, old_confidence in rows:
             if not old_content or old_content == candidate["content"]:

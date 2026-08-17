@@ -37,7 +37,7 @@ def test_low_value_candidate_goes_to_observing(tmp_path, monkeypatch):
         """
         CREATE TABLE IF NOT EXISTS memory_candidates (
             id TEXT PRIMARY KEY,
-            group_id TEXT,
+            group_shared_space TEXT,
             user_id TEXT,
             type TEXT,
             content TEXT,
@@ -53,7 +53,7 @@ def test_low_value_candidate_goes_to_observing(tmp_path, monkeypatch):
     )
     conn.commit()
     cursor.execute(
-        "INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         ("c1", "1", "100", "FACT", "测试候选", 0.5, 0.6, "NEW"),
     )
     conn.commit()
@@ -84,7 +84,7 @@ def test_high_value_candidate_becomes_confirmed_memory(tmp_path, monkeypatch):
         """
         CREATE TABLE IF NOT EXISTS memory_candidates (
             id TEXT PRIMARY KEY,
-            group_id TEXT,
+            group_shared_space TEXT,
             user_id TEXT,
             type TEXT,
             content TEXT,
@@ -100,7 +100,7 @@ def test_high_value_candidate_becomes_confirmed_memory(tmp_path, monkeypatch):
     )
     conn.commit()
     cursor.execute(
-        "INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         ("c2", "1", "200", "FACT", "高质量候选", 0.8, 0.9, "NEW"),
     )
     conn.commit()

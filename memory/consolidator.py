@@ -52,13 +52,20 @@ from config import (
     MEMORY_EXTRACT_MAX_TOKENS,
     MEMORY_SOURCE_KIND_ENABLED,
 )
+from config.spaces import resolve_space
 from core.llm import RESOURCE_CHAT, RESOURCE_CONSOLIDATION, acquire
 from core.llm.lm_studio import LMStudioBackend
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
 from memory.memory_manager import get_memory_manager
 from memory.policy import validate_candidate
-from memory.schema import create_user_profiles_table, ensure_v2_schema
+from memory.schema import (
+    create_atomic_facts_table,
+    create_memories_table,
+    create_memory_candidates_table,
+    create_user_profiles_table,
+    ensure_v2_schema,
+)
 from memory.text_similarity import is_similar, merge_content
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
@@ -236,80 +243,21 @@ class MemoryConsolidator:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # 用户画像表：复用 schema 的规范 DDL（v7 主键 (group_id, user_id)），
+        # 用户画像表：复用 schema 的规范 DDL（v8 主键 (group_shared_space, user_id)），
         # 避免建表语句手抄两份导致加字段时漂移
         create_user_profiles_table(conn)
+        # 记忆候选 / 长期记忆 / 原子事实：v8 起统一走 schema 规范 DDL（group_shared_space）
+        create_memory_candidates_table(conn)
+        create_memories_table(conn)
+        create_atomic_facts_table(conn)
+        # 常用检索索引（memories 按空间维度；messages 仍按 QQ 群）
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS memory_candidates (
-                id TEXT PRIMARY KEY,
-                group_id TEXT,
-                user_id TEXT,
-                type TEXT,
-                content TEXT,
-                importance REAL,
-                confidence REAL,
-                evidence TEXT,
-                status TEXT,
-                source_message_ids TEXT,
-                usage_tags TEXT,
-                visibility TEXT DEFAULT 'OPEN',
-                trigger_data TEXT,
-                behavior_rule TEXT,
-                source_kind TEXT DEFAULT 'PASSIVE',
-                occurrence_count INTEGER DEFAULT 1,
-                first_seen_at DATETIME,
-                source_kinds TEXT DEFAULT '["PASSIVE"]',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
+            CREATE INDEX IF NOT EXISTS idx_memories_space_user_status
+            ON memories (group_shared_space, user_id, status)
         """)
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS memories (
-                id TEXT PRIMARY KEY,
-                group_id TEXT,
-                user_id TEXT,
-                type TEXT,
-                content TEXT,
-                content_raw TEXT,
-                importance REAL,
-                confidence REAL,
-                status TEXT,
-                confirmation_count INTEGER,
-                last_confirmed_at DATETIME,
-                last_accessed_at DATETIME,
-                compressed_at DATETIME,
-                compression_version INTEGER,
-                is_atomized INTEGER,
-                usage_tags TEXT,
-                visibility TEXT DEFAULT 'OPEN',
-                trigger_data TEXT,
-                behavior_rule TEXT,
-                source_kind TEXT DEFAULT 'PASSIVE',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS atomic_facts (
-                id TEXT PRIMARY KEY,
-                memory_id TEXT,
-                group_id TEXT,
-                subject TEXT,
-                predicate TEXT,
-                object TEXT,
-                confidence REAL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        # 常用检索索引
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_memories_group_user_status
-            ON memories (group_id, user_id, status)
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_memories_group_status_accessed
-            ON memories (group_id, status, last_accessed_at)
+            CREATE INDEX IF NOT EXISTS idx_memories_space_status_accessed
+            ON memories (group_shared_space, status, last_accessed_at)
         """)
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_group_id
@@ -374,6 +322,9 @@ class MemoryConsolidator:
         """整合指定群的消息：读取新消息→LLM 总结→解析 JSON→落库→推进 checkpoint。
         force=True 表示走本地小批次轻量总结（用于 @触发/主动发言前的即时总结）。
         副作用：更新 checkpoint、写入 short_term_context / user_profiles / memory_candidates。
+
+        两层归属（见 config/spaces.py）：checkpoint / 短期上下文按 **QQ 群**；
+        画像 / 候选 / 长期记忆按 **共享空间**（group_shared_space）。
         """
         if not DB_PATH.exists():
             return
@@ -383,6 +334,8 @@ class MemoryConsolidator:
         # 可真正并行，且同一模型上的任务仍是 FIFO 一次一个。
         async with self._get_group_lock(group_id):
             try:
+                # 空间归属：多个 QQ 群可映射到同一共享空间（隐式空间=群号字符串）
+                group_shared_space = resolve_space(group_id)
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
@@ -403,7 +356,7 @@ class MemoryConsolidator:
 
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 append_consolidation_log(
-                    f"### 🕒 [{now_str}] 群 `{group_id}` 开始整合"
+                    f"### 🕒 [{now_str}] 群 `{group_id}`（空间 `{group_shared_space}`）开始整合"
                     f"（force={force}，新消息 {new_count}，批次阈值 {threshold}）\n"
                 )
 
@@ -419,7 +372,7 @@ class MemoryConsolidator:
                     return
 
                 self._write_short_term(group_id, parsed.get("short_term"))
-                self._write_user_profiles(group_id, parsed.get("user_profiles", []))
+                self._write_user_profiles(group_shared_space, parsed.get("user_profiles", []))
                 candidates = parsed.get("memory_candidates")
                 if candidates is None:
                     candidates = []
@@ -434,13 +387,13 @@ class MemoryConsolidator:
                     if extracted is not None:
                         candidates = extracted
 
-                self._write_memory_candidates(group_id, candidates, sender_ids=senders, at_senders=at_senders)
+                self._write_memory_candidates(group_shared_space, candidates, sender_ids=senders, at_senders=at_senders)
                 if candidates:
                     # 有新候选记忆时同步触发 MemoryManager 晋升处理
                     get_memory_manager().process_new_candidates()
                 elif parsed.get("long_term_memories"):
                     # 兼容旧版输出，将旧格式记忆写入旧表，以免丢失历史信息。
-                    self._write_long_term_memories(group_id, parsed.get("long_term_memories", []))
+                    self._write_long_term_memories(group_shared_space, parsed.get("long_term_memories", []))
                 self._update_checkpoint(group_id, processed_end)
 
                 at_sender_set = set(at_senders or [])
@@ -452,7 +405,7 @@ class MemoryConsolidator:
                     f"  > ✅ 整合完成（后端 {backend_name}，checkpoint {last_id} → {processed_end}，"
                     f"记忆候选 {len(candidates)} 条，其中 AT_MENTION 来源 {at_count} 条）\n"
                 )
-                logger.success(f"✅ [Consolidator] 群 {group_id} 整合完成，已处理至 id {processed_end}")
+                logger.success(f"✅ [Consolidator] 群 {group_id}（空间 {group_shared_space}）整合完成，已处理至 id {processed_end}")
             except Exception:
                 logger.exception(f"❌ [Consolidator] 群 {group_id} 整合失败")
                 append_consolidation_log("  > ❌ 整合失败（详见控制台日志）\n")
@@ -681,10 +634,11 @@ class MemoryConsolidator:
             return m.group(1)
         return uid
 
-    def _write_user_profiles(self, group_id: int, profiles: list):
+    def _write_user_profiles(self, group_shared_space: str, profiles: list):
         """把 LLM 给出的用户画像批量写入 user_profiles：已存在则合并特征并累计互动次数。
         写入前用 stable_profile_facts 过滤人格判断/心理状态，只保留稳定事实（User Profile 治理）。
-        画像按 (group_id, user_id) 隔离，同一人在不同群独立积累；interaction_count 也分群计数。
+        画像按 (group_shared_space, user_id) 隔离——同一空间内的多个 QQ 群共享一份画像，
+        不同空间彼此独立；interaction_count 也分空间计数。
         副作用：更新/插入 user_profiles 表；单条记录 user_id 非法（空）时跳过。"""
         from memory.policy import stable_profile_facts
 
@@ -701,8 +655,8 @@ class MemoryConsolidator:
             traits = "，".join(stable_profile_facts(p.get("personality_traits", "")))
             cursor.execute(
                 "SELECT nickname, personality_traits, agent_attitude, interaction_count "
-                "FROM user_profiles WHERE group_id = ? AND user_id = ?",
-                (str(group_id), uid),
+                "FROM user_profiles WHERE group_shared_space = ? AND user_id = ?",
+                (group_shared_space, uid),
             )
             row = cursor.fetchone()
             if row:
@@ -715,14 +669,14 @@ class MemoryConsolidator:
                     UPDATE user_profiles
                     SET nickname = ?, personality_traits = ?, agent_attitude = ?,
                         interaction_count = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE group_id = ? AND user_id = ?
-                """, (new_nick, new_traits, new_attitude, old_count + 1, str(group_id), uid))
+                    WHERE group_shared_space = ? AND user_id = ?
+                """, (new_nick, new_traits, new_attitude, old_count + 1, group_shared_space, uid))
             else:
                 # 新用户：直接插入，互动次数初始为 1
                 cursor.execute("""
-                    INSERT INTO user_profiles (group_id, user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
+                    INSERT INTO user_profiles (group_shared_space, user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
                     VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-                """, (str(group_id), uid, p.get("nickname", ""), traits, p.get("agent_attitude", "")))
+                """, (group_shared_space, uid, p.get("nickname", ""), traits, p.get("agent_attitude", "")))
         conn.commit()
         conn.close()
 
@@ -782,7 +736,7 @@ class MemoryConsolidator:
                 merged.append(mid)
         return json.dumps(merged, ensure_ascii=False)
 
-    def _write_memory_candidates(self, group_id: int, candidates: list, sender_ids: list | None = None, at_senders: list | None = None):
+    def _write_memory_candidates(self, group_shared_space: str, candidates: list, sender_ids: list | None = None, at_senders: list | None = None):
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
         每个候选先经过 Policy Validator（validate_candidate）审核，自动修正错误的
@@ -793,7 +747,7 @@ class MemoryConsolidator:
         at_senders 为 AT_MENTION 来源发送者列表：候选的 user_id 在其中时标记 source_kind
         为 AT_MENTION，否则为 PASSIVE。
 
-        候选强化（交叉验证）：同群同用户同类型且内容相似的待处理候选（NEW/OBSERVING）
+        候选强化（交叉验证）：同空间同用户同类型且内容相似的待处理候选（NEW/OBSERVING）
         不重复插入，改为累积证据——occurrence_count +1、confidence 加
         MEMORY_CANDIDATE_REOCCURRENCE_BONUS、source_kinds 并集、status 回 NEW。
         这是「单次陈述不足以晋升，复现才是证据」的实现基础（见 MemoryManager Gate 1）。
@@ -810,7 +764,7 @@ class MemoryConsolidator:
                 continue
             # 发送者白名单校验：只接受本批消息中真实出现过的人
             if sender_ids and uid not in set(sender_ids):
-                logger.warning(f"⚠️ [Consolidator] 丢弃归属不明的记忆候选（user_id={uid} 不在本批发送者中）")
+                logger.warning(f"⚠️ [Consolidator] 丢弃归属不明的记忆候选（空间 {group_shared_space}，user_id={uid} 不在本批发送者中）")
                 continue
             source_kind = "AT_MENTION" if uid in at_sender_set else "PASSIVE"
             type_ = (str(c.get("type", "FACT")) or "FACT").strip().upper()
@@ -847,7 +801,7 @@ class MemoryConsolidator:
             confidence = float(validated.get("confidence", confidence))
             importance = float(validated.get("importance", importance))
 
-            # ── 候选强化（交叉验证）：先找同群同用户同类型的待处理候选 ──
+            # ── 候选强化（交叉验证）：先找同空间同用户同类型的待处理候选 ──
             # 命中则累积证据（occurrence_count +1、confidence 加成、status 回 NEW
             # 重新参与晋升评估），而不是插入新行。否则同一事实会反复以新 uuid
             # 落库、各自卡在 OBSERVING，交叉验证永远不成立。
@@ -855,8 +809,8 @@ class MemoryConsolidator:
             for row in cursor.execute(
                 "SELECT id, content, confidence, importance, evidence, occurrence_count, "
                 "source_message_ids, source_kinds FROM memory_candidates "
-                "WHERE group_id = ? AND user_id = ? AND type = ? AND status IN ('NEW', 'OBSERVING')",
-                (str(group_id), uid, type_),
+                "WHERE group_shared_space = ? AND user_id = ? AND type = ? AND status IN ('NEW', 'OBSERVING')",
+                (group_shared_space, uid, type_),
             ).fetchall():
                 if is_similar(content, row[1] or ""):
                     existing = row
@@ -910,10 +864,10 @@ class MemoryConsolidator:
             # 无 id 时生成本地候选 id
             candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
             cursor.execute("""
-                INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, occurrence_count, first_seen_at, source_kinds)
+                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, occurrence_count, first_seen_at, source_kinds)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    group_id = excluded.group_id,
+                    group_shared_space = excluded.group_shared_space,
                     user_id = excluded.user_id,
                     type = excluded.type,
                     content = excluded.content,
@@ -929,7 +883,7 @@ class MemoryConsolidator:
                     updated_at = CURRENT_TIMESTAMP
             """, (
                 candidate_id,
-                str(group_id),
+                group_shared_space,
                 uid,
                 type_,
                 content,
@@ -947,9 +901,14 @@ class MemoryConsolidator:
         conn.commit()
         conn.close()
 
-    def _write_long_term_memories(self, group_id: int, memories: list):
+    def _write_long_term_memories(self, group_shared_space: str, memories: list):
         """兼容旧版整合输出：把旧格式的 long_term_memories 写入旧表 long_term_memories。
-        仅保留 importance>=5 且有摘要的记录；同群同用户同摘要去重。"""
+        仅保留 importance>=5 且有摘要的记录；同空间同用户同摘要去重。
+
+        ⚠️ 本表为待废弃的旧兼容表：列名仍是 ``group_id``（不给将淘汰的表做重命名），
+        但写入的值是**空间标识**（group_shared_space）——与检索侧一致，
+        retriever 的兜底查询会用 space 去查它。新记忆一律走 memories 表。
+        """
         if not memories:
             return
         conn = sqlite3.connect(DB_PATH)
@@ -964,17 +923,17 @@ class MemoryConsolidator:
             summary = (m.get("summary", "") or "").strip()
             if not summary:
                 continue
-            # 去重：同群、同用户、摘要完全相同则跳过
+            # 去重：同空间、同用户、摘要完全相同则跳过
             cursor.execute(
                 "SELECT id FROM long_term_memories WHERE group_id = ? AND user_id = ? AND summary = ?",
-                (str(group_id), uid, summary),
+                (group_shared_space, uid, summary),
             )
             if cursor.fetchone():
                 continue
             cursor.execute("""
                 INSERT INTO long_term_memories (group_id, user_id, summary, importance, access_count, last_accessed_at)
                 VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-            """, (str(group_id), uid, summary, importance))
+            """, (group_shared_space, uid, summary, importance))
         conn.commit()
         conn.close()
 

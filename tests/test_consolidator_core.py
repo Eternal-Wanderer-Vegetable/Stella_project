@@ -194,25 +194,25 @@ def test_write_user_profiles_new_and_merge(tmp_path, monkeypatch):
     _provision(cons, db_path)
 
     cons._write_user_profiles(
-        1001,
+        "1001",
         [
             {"user_id": "用户(111)", "nickname": "阿散", "personality_traits": "爱运动", "agent_attitude": "友好"},
             {"user_id": "", "nickname": "无名", "personality_traits": "x"},
         ],
     )
     conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT personality_traits, interaction_count FROM user_profiles WHERE group_id='1001' AND user_id='111'").fetchone()
+    row = conn.execute("SELECT personality_traits, interaction_count FROM user_profiles WHERE group_shared_space='1001' AND user_id='111'").fetchone()
     assert row and "爱运动" in row[0]
     assert row[1] == 1
     assert conn.execute("SELECT COUNT(*) FROM user_profiles").fetchone()[0] == 1
     conn.close()
 
     cons._write_user_profiles(
-        1001,
+        "1001",
         [{"user_id": "111", "nickname": "", "personality_traits": "乐观", "agent_attitude": "更友好"}],
     )
     conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT interaction_count, agent_attitude, personality_traits FROM user_profiles WHERE group_id='1001' AND user_id='111'").fetchone()
+    row = conn.execute("SELECT interaction_count, agent_attitude, personality_traits FROM user_profiles WHERE group_shared_space='1001' AND user_id='111'").fetchone()
     conn.close()
     assert row[0] == 2
     assert "更友好" in row[1]
@@ -226,7 +226,7 @@ def test_write_memory_candidates_whitelist(tmp_path, monkeypatch):
     _provision(cons, db_path)
 
     cons._write_memory_candidates(
-        1001,
+        "1001",
         [
             {"user_id": "111", "type": "fact", "content": "会写程序", "importance": "0.8", "confidence": "0.9", "source_message_ids": [1, 2]},
             {"user_id": "999", "type": "FACT", "content": "不在白名单", "importance": 0.9, "confidence": 0.9, "source_message_ids": "not-json-["},
@@ -255,7 +255,7 @@ def test_write_long_term_memories(tmp_path, monkeypatch):
     _provision(cons, db_path)
 
     cons._write_long_term_memories(
-        1001,
+        "1001",
         [
             {"user_id": "111", "summary": "程序员", "importance": 8},
             {"user_id": "111", "summary": "程序员", "importance": 7},

@@ -35,7 +35,7 @@ def test_conflict_marks_old_memory(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, status) "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, status) "
         "VALUES ('old1', '1', '100', 'PREFERENCE', '用户喜欢Helldivers2', 0.8, 0.7, 'active')"
     )
     conn.commit()
@@ -46,7 +46,7 @@ def test_conflict_marks_old_memory(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, status, usage_tags, visibility, behavior_rule) "
+        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, status, usage_tags, visibility, behavior_rule) "
         "VALUES ('c1', '1', '100', 'PREFERENCE', '用户不喜欢Helldivers2', 0.9, 0.9, 'NEW', '[]', 'OPEN', '')"
     )
     conn.commit()
@@ -72,7 +72,7 @@ def test_candidate_meta_fields_persisted(tmp_path, monkeypatch):
     manager = MemoryManager()
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "INSERT INTO memory_candidates (id, group_id, user_id, type, content, importance, confidence, status, usage_tags, visibility, behavior_rule) "
+        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, status, usage_tags, visibility, behavior_rule) "
         "VALUES ('c1', '1', '100', 'PREFERENCE', '用户喜欢合作游戏', 0.9, 0.9, 'NEW', "
         " '[\"RECOMMEND\"]', 'RESTRICTED', '避免推荐单机游戏')"
     )

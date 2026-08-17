@@ -40,6 +40,7 @@ from config import (
     MEMORY_DECAY_DAYS,
     PROJECT_ROOT,
 )
+from memory.schema import create_memories_table
 from memory.text_similarity import is_similar, merge_content
 
 
@@ -57,34 +58,10 @@ class MemoryCompressor:
         self._log_path = Path(PROJECT_ROOT) / MEMORY_COMPRESS_LOG_FILENAME
 
     def _ensure_tables(self) -> None:
-        """幂等地创建压缩用表：memories（主记忆表）与 compressor_stats（压缩统计表）。"""
+        """幂等地创建压缩用表：memories（主记忆表，复用 schema 规范 DDL）与 compressor_stats（压缩统计表）。"""
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS memories (
-                id TEXT PRIMARY KEY,
-                group_id TEXT,
-                user_id TEXT,
-                type TEXT,
-                content TEXT,
-                content_raw TEXT,
-                importance REAL,
-                confidence REAL,
-                status TEXT,
-                confirmation_count INTEGER,
-                last_confirmed_at DATETIME,
-                last_accessed_at DATETIME,
-                compressed_at DATETIME,
-                compression_version INTEGER,
-                is_atomized INTEGER,
-                usage_tags TEXT,
-                visibility TEXT DEFAULT 'OPEN',
-                trigger_data TEXT,
-                behavior_rule TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        create_memories_table(conn)
         conn.commit()
         conn.close()
         # 统计表：记录每次压缩运行的汇总信息
@@ -116,7 +93,7 @@ class MemoryCompressor:
         self._ensure_tables()
 
         rows = cursor.execute(
-            "SELECT id, group_id, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
             "FROM memories WHERE status = 'active' ORDER BY last_accessed_at DESC"
         ).fetchall()
         if not rows:
@@ -175,7 +152,7 @@ class MemoryCompressor:
                 logger.info(f"🧹 [MemoryCompressor] 触发轻量压缩（原因={reason}，active={total_active}）")
                 # 只对最近一部分进行轻量合并与原子化
                 rows = cursor.execute(
-                    "SELECT id, group_id, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
+                    "SELECT id, group_shared_space, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
                     "FROM memories WHERE status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
                     (self._light_threshold * 2,)
                 ).fetchall()
@@ -196,7 +173,7 @@ class MemoryCompressor:
             logger.warning(f"🧹 [MemoryCompressor] maybe_compress 失败: {e}")
 
     def _merge_duplicate_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> int:
-        """把内容相似（同群同用户同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
+        """把内容相似（同空间同用户同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
 
         合并规则：content 用 _merge_content（保留更完整一方或分号拼接）；
         importance/confidence 取两者更大值；confirmation_count 累加（体现“多人/多次确认更可信”）；
@@ -211,7 +188,7 @@ class MemoryCompressor:
         memories = [
             {
                 "id": row[0],
-                "group_id": row[1],
+                "group_shared_space": row[1],
                 "user_id": row[2],
                 "type": row[3],
                 "content": row[4] or "",
@@ -227,11 +204,11 @@ class MemoryCompressor:
             for other in memories[i + 1 :]:
                 if other["id"] in seen:
                     continue
-                # 必须同群 + 同用户 + 同类型才允许合并。跨用户合并会把 A 的事实
+                # 必须同空间 + 同用户 + 同类型才允许合并。跨用户合并会把 A 的事实
                 # 并入 B 的记忆并把 A 那条置 archived，且发生在周度定时任务里，
                 # 数据不可恢复（与 memory_manager._find_similar_memory 的约束一致）。
                 if (
-                    memory["group_id"] != other["group_id"]
+                    memory["group_shared_space"] != other["group_shared_space"]
                     or memory["user_id"] != other["user_id"]
                     or memory["type"] != other["type"]
                 ):
@@ -273,13 +250,13 @@ class MemoryCompressor:
         并递增 compression_version，避免下次再切。返回新生成的原子事实条数。
 
         :param cursor: 数据库游标
-        :param rows: 待处理的记忆行（含 id, group_id, user_id, content, is_atomized）
+        :param rows: 待处理的记忆行（含 id, group_shared_space, user_id, content, is_atomized）
         :return: 本次产生的新原子事实总数
         """
         atomized_total = 0
         for row in rows:
             memory_id = row[0]
-            group_id = row[1]
+            group_shared_space = row[1]
             user_id = row[2]
             content = row[4] or ""
             is_atomized = bool(row[9])
@@ -288,7 +265,7 @@ class MemoryCompressor:
             fragments = self._split_into_fragments(content)
             if not fragments:
                 continue
-            self._store_atomic_facts(cursor, memory_id, group_id, user_id, fragments)
+            self._store_atomic_facts(cursor, memory_id, group_shared_space, user_id, fragments)
             cursor.execute(
                 "UPDATE memories SET is_atomized = 1, compressed_at = CURRENT_TIMESTAMP, compression_version = COALESCE(compression_version, 0) + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (memory_id,),
@@ -362,16 +339,16 @@ class MemoryCompressor:
                     atoms.append(frag[i : i + 60].strip())
         return [atom for atom in atoms if atom]
 
-    def _store_atomic_facts(self, cursor: sqlite3.Cursor, memory_id: str, group_id: str, user_id: str, fragments: list[str]) -> int:
+    def _store_atomic_facts(self, cursor: sqlite3.Cursor, memory_id: str, group_shared_space: str, user_id: str, fragments: list[str]) -> int:
         """把原子片段逐条写入 atomic_facts 表（INSERT OR IGNORE，靠随机 uuid 主键防重）。
 
-        subject 取“用户{user_id}”或“群{group_id}”（无 user_id 时用群名），
+        subject 取“用户{user_id}”或“空间{group_shared_space}”（无 user_id 时用空间标识），
         predicate 固定为“记忆片段”，object 为片段文本，confidence 初始为 0。
         返回尝试插入的条数（注意 OR IGNORE 条件下实际落库数可能更少）。
 
         :param cursor: 数据库游标
         :param memory_id: 来源记忆的 id
-        :param group_id: 群 ID
+        :param group_shared_space: 空间标识
         :param user_id: 用户 ID（可为空）
         :param fragments: 原子片段列表
         :return: 尝试写入的片段数量
@@ -379,13 +356,13 @@ class MemoryCompressor:
         inserted = 0
         for fragment in fragments:
             cursor.execute(
-                "INSERT OR IGNORE INTO atomic_facts (id, memory_id, group_id, subject, predicate, object, confidence) "
+                "INSERT OR IGNORE INTO atomic_facts (id, memory_id, group_shared_space, subject, predicate, object, confidence) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     uuid.uuid4().hex,
                     memory_id,
-                    group_id,
-                    f"用户{user_id}" if user_id else f"群{group_id}",
+                    group_shared_space,
+                    f"用户{user_id}" if user_id else f"空间{group_shared_space}",
                     "记忆片段",
                     fragment,
                     0.0,

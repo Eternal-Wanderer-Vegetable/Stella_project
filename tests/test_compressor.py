@@ -41,7 +41,7 @@ def _insert(
     mid: str,
     content: str,
     *,
-    group_id: str = "1",
+    group_shared_space: str = "1",
     user_id: str = "100",
     type_: str = "FACT",
     importance: float = 0.6,
@@ -53,11 +53,11 @@ def _insert(
 ):
     conn.execute(
         """
-        INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance,
+        INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance,
         confidence, status, confirmation_count, last_accessed_at, is_atomized)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (mid, group_id, user_id, type_, content, content, importance, confidence,
+        (mid, group_shared_space, user_id, type_, content, content, importance, confidence,
          status, confirmation_count, last_accessed_at, is_atomized),
     )
 
@@ -107,7 +107,7 @@ def test_weekly_atomizes_long_memory(tmp_path, monkeypatch):
         """
         CREATE TABLE IF NOT EXISTS atomic_facts (
             id TEXT PRIMARY KEY,
-            memory_id TEXT, group_id TEXT, subject TEXT, predicate TEXT,
+            memory_id TEXT, group_shared_space TEXT, subject TEXT, predicate TEXT,
             object TEXT, confidence REAL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -179,7 +179,7 @@ def test_split_into_fragments_and_store(tmp_path, monkeypatch):
         """
         CREATE TABLE IF NOT EXISTS atomic_facts (
             id TEXT PRIMARY KEY,
-            memory_id TEXT, group_id TEXT, subject TEXT, predicate TEXT,
+            memory_id TEXT, group_shared_space TEXT, subject TEXT, predicate TEXT,
             object TEXT, confidence REAL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
