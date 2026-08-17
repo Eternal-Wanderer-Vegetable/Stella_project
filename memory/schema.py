@@ -22,6 +22,13 @@
    **本版不做数据迁移**：SQLite 无法直接改主键，且旧库画像在严苛筛选下几乎为空，
    直接新建数据库比写一套只用一次的迁移代码更可靠（决策记录 2026-08-17）。
    旧库如需保留请手动改名后让程序重建。
+9. v8 把 ``memories`` / ``memory_candidates`` / ``atomic_facts`` / ``user_profiles``
+   / ``memories_fts`` 的 ``group_id`` 改名为 ``group_shared_space``：多个 QQ 群
+   可以组成一个「群组共享空间」，共享画像、记忆与人格；而消息尾巴、checkpoint、
+   短期话题、静音开关、@ 配额仍按真实 QQ 群归属（那些是「当下这场对话的状态」，
+   混群会让 Bot 在 A 群回应 B 群）。列名改名而非复用 ``group_id``，是为了让两层
+   归属在代码里不可混淆——同一个名字有时指 QQ 群、有时指空间，是必然踩坑的歧义。
+   **本版不做数据迁移**（同 v7）：库为空，归档旧库重建即可。
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -40,8 +47,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v7：user_profiles 主键改为 (group_id, user_id)）
-SCHEMA_VERSION = 7
+# 当前 Schema 版本（v8：记忆/画像表按 group_shared_space 归属）
+SCHEMA_VERSION = 8
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -178,14 +185,14 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
 # 结构：(索引名, 所在表名, DDL)
 _INDEXES: list[tuple[str, str, str]] = [
     (
-        "idx_memories_group_type_status",
+        "idx_memories_space_type_status",
         "memories",
-        "CREATE INDEX IF NOT EXISTS idx_memories_group_type_status ON memories (group_id, type, status)",
+        "CREATE INDEX IF NOT EXISTS idx_memories_space_type_status ON memories (group_shared_space, type, status)",
     ),
     (
-        "idx_memories_group_visibility_status",
+        "idx_memories_space_visibility_status",
         "memories",
-        "CREATE INDEX IF NOT EXISTS idx_memories_group_visibility_status ON memories (group_id, visibility, status)",
+        "CREATE INDEX IF NOT EXISTS idx_memories_space_visibility_status ON memories (group_shared_space, visibility, status)",
     ),
     (
         "idx_candidates_status",
@@ -198,9 +205,9 @@ _INDEXES: list[tuple[str, str, str]] = [
         "CREATE INDEX IF NOT EXISTS idx_longterm_group_user_type ON long_term_memories (group_id, user_id, memory_type)",
     ),
     (
-        "idx_memories_group_source_kind",
+        "idx_memories_space_source_kind",
         "memories",
-        "CREATE INDEX IF NOT EXISTS idx_memories_group_source_kind ON memories (group_id, source_kind, status)",
+        "CREATE INDEX IF NOT EXISTS idx_memories_space_source_kind ON memories (group_shared_space, source_kind, status)",
     ),
     (
         "idx_group_messages_source_kind",
@@ -208,10 +215,10 @@ _INDEXES: list[tuple[str, str, str]] = [
         "CREATE INDEX IF NOT EXISTS idx_group_messages_source_kind ON group_messages (group_id, source_kind, id)",
     ),
     (
-        "idx_candidates_group_user_type_status",
+        "idx_candidates_space_user_type_status",
         "memory_candidates",
-        "CREATE INDEX IF NOT EXISTS idx_candidates_group_user_type_status "
-        "ON memory_candidates (group_id, user_id, type, status)",
+        "CREATE INDEX IF NOT EXISTS idx_candidates_space_user_type_status "
+        "ON memory_candidates (group_shared_space, user_id, type, status)",
     ),
 ]
 
@@ -221,7 +228,7 @@ _INDEXES: list[tuple[str, str, str]] = [
 MEMORIES_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
-    group_id TEXT,
+    group_shared_space TEXT,
     user_id TEXT,
     type TEXT,
     content TEXT,
@@ -304,20 +311,20 @@ def create_group_runtime_state_table(conn: sqlite3.Connection) -> None:
     conn.execute(GROUP_RUNTIME_STATE_TABLE_DDL)
 
 
-# 用户画像表（v7 起）：主键改为 (group_id, user_id)。
-# 同一个人在技术群与闲聊群应当是不同画像——共用一份会让 _merge_traits 把
-# 两个群的特征混在一起，使「群A 一个形象、群B 另一个形象」在认知层面无法成立；
-# interaction_count（互动次数）也应分群计数。
+# 用户画像表（v8 起）：按群组共享空间隔离——同一空间内的多个 QQ 群共享一份画像，
+# 不同空间彼此独立；共用一份会让 _merge_traits 把两个空间的特征混在一起，
+# 使「群A 一个形象、群B 另一个形象」在认知层面无法成立；interaction_count
+# （互动次数）也应分空间计数。
 USER_PROFILES_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS user_profiles (
-    group_id TEXT,
+    group_shared_space TEXT,
     user_id TEXT,
     nickname TEXT,
     personality_traits TEXT,
     agent_attitude TEXT,
     interaction_count INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (group_id, user_id)
+    PRIMARY KEY (group_shared_space, user_id)
 )
 """
 
@@ -325,11 +332,76 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 def create_user_profiles_table(conn: sqlite3.Connection) -> None:
     """确保 user_profiles 表存在（幂等）。
 
-    v7 起画像按 (group_id, user_id) 隔离：同一人在不同群是不同画像，
-    交互计数（interaction_count）也应分群统计。独立于 additive column
-    体系（新表而非加列），升级路径见 _migrate。
+    v8 起画像按 (group_shared_space, user_id) 隔离：同一空间内的多个 QQ 群共享
+    一份画像，不同空间彼此独立；交互计数（interaction_count）也应分空间统计。
+    独立于 additive column 体系（新表而非加列），升级路径见 _migrate。
     """
     conn.execute(USER_PROFILES_TABLE_DDL)
+
+
+# 记忆候选表（v8 起）：以 group_shared_space 归属。
+# 此前在 consolidator 与 memory_manager 各手抄一份（字段易漂移），v8 起以本处为
+# 单一真相源，建表一律从这里走。
+MEMORY_CANDIDATES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS memory_candidates (
+    id TEXT PRIMARY KEY,
+    group_shared_space TEXT,
+    user_id TEXT,
+    type TEXT,
+    content TEXT,
+    importance REAL,
+    confidence REAL,
+    evidence TEXT,
+    status TEXT,
+    source_message_ids TEXT,
+    usage_tags TEXT,
+    visibility TEXT DEFAULT 'OPEN',
+    trigger_data TEXT,
+    behavior_rule TEXT,
+    source_kind TEXT DEFAULT 'PASSIVE',
+    occurrence_count INTEGER DEFAULT 1,
+    first_seen_at DATETIME,
+    source_kinds TEXT DEFAULT '["PASSIVE"]',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_memory_candidates_table(conn: sqlite3.Connection) -> None:
+    """确保 memory_candidates 表存在（幂等）。
+
+    字段与 consolidator / memory_manager 手抄版本一致，仅 ``group_id`` 改名为
+    ``group_shared_space``。v8 起本处为单一真相源。
+    """
+    conn.execute(MEMORY_CANDIDATES_TABLE_DDL)
+
+
+# 原子事实表（v8 起）：以 group_shared_space 归属。
+# 此前在 consolidator 与 memory_manager 各手抄一份（字段易漂移），v8 起以本处为
+# 单一真相源，建表一律从这里走。
+ATOMIC_FACTS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS atomic_facts (
+    id TEXT PRIMARY KEY,
+    memory_id TEXT,
+    group_shared_space TEXT,
+    subject TEXT,
+    predicate TEXT,
+    object TEXT,
+    confidence REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_atomic_facts_table(conn: sqlite3.Connection) -> None:
+    """确保 atomic_facts 表存在（幂等）。
+
+    字段与 consolidator / memory_manager 手抄版本一致，仅 ``group_id`` 改名为
+    ``group_shared_space``。v8 起本处为单一真相源。
+    """
+    conn.execute(ATOMIC_FACTS_TABLE_DDL)
 
 
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
@@ -412,16 +484,20 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     """
     cursor = conn.cursor()
     changes = 0
-    # v7：旧库检测——user_profiles 已存在但没有 group_id 列时给出明确告警。
-    # v7 不做自动迁移（SQLite 无法直接改主键，且旧库画像在严苛筛选下几乎为空，
-    # 直接新建库比写一次性迁移代码更可靠），继续运行会因主键不匹配导致画像写入失败。
+    # v8：旧库检测——记忆/画像表仍使用 group_id 列时给出明确告警。
+    # v8 不做自动迁移（同 v7），继续运行会因列名不匹配导致记忆读写失败。
+    # 注意 _column_exists 在表不存在时返回 True，必须先 _table_exists 再判断。
     # 有明确报错比静默失败好得多：别人（或几个月后的自己）拿旧库跑起来时不会
-    # 看着画像「写不进去」而毫无头绪。
-    if _table_exists(cursor, "user_profiles") and not _column_exists(cursor, "user_profiles", "group_id"):
+    # 看着记忆「读不到、写不进」而毫无头绪。
+    if (
+        _table_exists(cursor, "memories") and _column_exists(cursor, "memories", "group_id")
+    ) or (
+        _table_exists(cursor, "user_profiles") and _column_exists(cursor, "user_profiles", "group_id")
+    ):
         logger.error(
-            "检测到旧版 user_profiles（无 group_id 列）。v7 不做自动迁移——"
-            "请停止程序、将 DB_PATH 对应文件改名备份，重启后程序会建立 v7 新库。"
-            "当前运行会因主键不匹配导致画像写入失败。"
+            "检测到 v8 之前的旧库（记忆表仍使用 `group_id` 列）。v8 不做自动迁移——"
+            "请停止程序、把 `DB_PATH` 对应文件与 `stella_memory_backup.db` 一起归档，"
+            "重启后程序会建立 v8 新库。当前运行会因列名不匹配导致记忆读写失败。"
         )
     # v5：主动发言状态表（新表，不属于 additive column 范畴）
     if not dry_run:
@@ -436,6 +512,15 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(USER_PROFILES_TABLE_DDL)
+    # v8：记忆/画像表统一按 group_shared_space 归属（新库直接建新列名；
+    # 旧库见上方旧库检测告警）。create_memories_table 一并加上——memories 表
+    # 目前由业务模块惰性建，schema 迁移时顺手保证存在更稳。
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            create_user_profiles_table(conn)
+            create_memory_candidates_table(conn)
+            create_atomic_facts_table(conn)
+            create_memories_table(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

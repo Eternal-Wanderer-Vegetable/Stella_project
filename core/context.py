@@ -30,6 +30,10 @@ class ChatContext:
     message: str
     # 消息来源：AT_MENTION=用户直接对 Bot 说 / PASSIVE=被动摄入的群聊
     source_kind: str = "PASSIVE"
+    # 记忆与画像的归属空间。group_id 始终是真实 QQ 群号；group_shared_space 是
+    # 「当下这场对话的状态」之外的长期认知归属（见 config/spaces.py 两层归属的
+    # 分界线），二者不可混用。留空时按群号自动解析（隐式空间 = 群号字符串）。
+    group_shared_space: str = ""
 
     # ---- 处理产物 ----
     raw_output: str = ""
@@ -67,3 +71,14 @@ class ChatContext:
     # 尾巴起点消息 id：会话压缩用它计算不与尾巴重叠的待压缩区间。
     # 0 表示无尾巴（新群或全部消息都超出时间窗）。
     tail_start_id: int = 0
+
+    def __post_init__(self) -> None:
+        """自动解析共享空间归属，不要求调用方逐个传参。
+
+        ``resolve_space`` 延迟导入：避免 core 在 import 阶段依赖 config 子模块
+        （与 settings.py 对 nonebot logger 的延迟导入同理）。
+        """
+        if not self.group_shared_space and self.group_id:
+            from config.spaces import resolve_space
+
+            self.group_shared_space = resolve_space(self.group_id)
