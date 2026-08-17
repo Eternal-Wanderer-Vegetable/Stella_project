@@ -1,9 +1,9 @@
-## consolidation-positive-001-hardware 第 1 次（解析 ✓，1132 字符）
+## consolidation-positive-001-hardware 第 1 次（解析 ✓，1086 字符）
 ```json
 {
   "short_term": {
-    "active_summary": "讨论运行大型模型时显卡性能和显存不足的问题。",
-    "pending_topic": "AI模型推理的硬件资源需求（显存/显卡型号）",
+    "active_summary": "讨论运行大型模型时显卡性能和显存问题",
+    "pending_topic": "模型运行的硬件资源需求",
     "recent_exchanges": [
       {
         "user_id": "1001",
@@ -21,15 +21,14 @@
     {
       "user_id": "1001",
       "type": "FACT",
-      "content": "拥有RTX5080显卡，在运行27B模型时会感到吃力。",
+      "content": "拥有RTX5080显卡，运行27B模型时会吃力。",
       "usage_tags": [
         "TOPIC_START",
         "ANSWER_CONTEXT"
       ],
       "visibility": "OPEN",
-      "importance": 0.9,
       "confidence": 1.0,
-      "evidence": "用户明确陈述了自己拥有的硬件设备型号和使用场景下的性能感受。"
+      "evidence": "用户明确陈述了自己拥有的硬件和使用场景的困难。"
     }
   ]
 }
@@ -40,14 +39,14 @@
     {
       "user_id": "1001",
       "type": "FACT",
-      "content": "拥有一张RTX5080显卡，运行27B参数规模的模型时性能略显吃力",
+      "content": "拥有一张 RTX5080 显卡，运行 27B 参数规模的模型时性能表现吃力",
       "usage_tags": [
         "ANSWER_CONTEXT",
         "PERSONALIZE"
       ],
       "visibility": "OPEN",
       "importance": 0.5,
-      "confidence": 1.0,
+      "confidence": 0.9,
       "evidence": "用户直接陈述了自己的硬件设备及使用该设备时的性能表现",
       "source_message_ids": [
         "1"
@@ -57,11 +56,11 @@
 }
 ```
 
-## consolidation-positive-002-diet 第 1 次（解析 ✓，1086 字符）
+## consolidation-positive-002-diet 第 1 次（解析 ✓，1082 字符）
 ```json
 {
   "short_term": {
-    "active_summary": "讨论了对香菜的个人饮食偏好。",
+    "active_summary": "讨论外卖备注和个人饮食偏好",
     "pending_topic": "无",
     "recent_exchanges": [
       {
@@ -80,14 +79,14 @@
     {
       "user_id": "1001",
       "type": "PREFERENCE",
-      "content": "不吃香菜，每次点外卖都要备注。",
+      "content": "不吃香菜，点外卖时需要备注。",
       "usage_tags": [
         "TOPIC_START",
         "ANSWER_CONTEXT"
       ],
       "visibility": "OPEN",
       "confidence": 0.9,
-      "evidence": "用户明确陈述了自己不能吃香菜的饮食习惯。"
+      "evidence": "用户明确陈述了自己不吃香菜的饮食偏好。"
     }
   ]
 }
@@ -104,8 +103,8 @@
         "CONFLICT_AVOID"
       ],
       "visibility": "RESTRICTED",
-      "behavior_rule": "在涉及饮食建议或点餐场景时，应避免推荐含香菜的食物",
-      "importance": 0.8,
+      "behavior_rule": "在涉及饮食建议或点餐场景时，应避开含有香菜的食物",
+      "importance": 0.7,
       "confidence": 1.0,
       "evidence": "用户直接陈述自己的饮食忌口",
       "source_message_ids": [
@@ -116,12 +115,12 @@
 }
 ```
 
-## consolidation-positive-003-occupation 第 1 次（解析 ✓，1861 字符）
+## consolidation-positive-003-occupation 第 1 次（解析 ✓，1856 字符）
 ```json
 {
   "short_term": {
-    "active_summary": "讨论后端开发技术栈，从Java到Go的侧重。",
-    "pending_topic": "当前的技术栈偏好（Go vs Java）",
+    "active_summary": "讨论开发语言，用户自述主要使用Go语言",
+    "pending_topic": "技术栈偏好（Java vs Go）",
     "recent_exchanges": [
       {
         "user_id": "1002",
@@ -139,7 +138,7 @@
     {
       "user_id": "1001",
       "type": "FACT",
-      "content": "在杭州工作，后端开发有三年的经验。",
+      "content": "在杭州工作，是一名后端开发，有三年的经验。",
       "usage_tags": [
         "TOPIC_START",
         "PERSONALIZE"
@@ -155,15 +154,15 @@
     {
       "user_id": "1001",
       "type": "FACT",
-      "content": "主要使用Go语言进行开发，Java仅停留在了解的层面。",
+      "content": "主要使用Go语言进行开发，Java仅停留在了解层面。",
       "usage_tags": [
         "TOPIC_CONTINUE",
         "PERSONALIZE"
       ],
       "visibility": "OPEN",
-      "importance": 0.9,
+      "importance": 0.8,
       "confidence": 1.0,
-      "evidence": "用户明确说明了主要技术栈和次要技能。",
+      "evidence": "用户明确陈述了自己主要的开发语言栈。",
       "source_message_ids": [
         "消息ID(3)"
       ]
@@ -193,15 +192,15 @@
     {
       "user_id": "1001",
       "type": "FACT",
-      "content": "主要使用 Go 语言进行开发，了解 Java 但不作为主要开发语言",
+      "content": "主要使用 Go 语言进行开发，熟悉 Java 但不作为主要开发语言",
       "usage_tags": [
         "ANSWER_CONTEXT",
         "PERSONALIZE"
       ],
       "visibility": "OPEN",
-      "importance": 0.7,
+      "importance": 0.8,
       "confidence": 1.0,
-      "evidence": "用户明确说明了自己的技术栈偏好与掌握程度",
+      "evidence": "用户直接陈述了自己的编程语言技能情况",
       "source_message_ids": [
         "3"
       ]
@@ -210,11 +209,11 @@
 }
 ```
 
-## insomnia_breakfast 第 1 次（解析 ✓，1847 字符）
+## insomnia_breakfast 第 1 次（解析 ✓，1730 字符）
 ```json
 {
   "short_term": {
-    "active_summary": "讨论失眠、早餐和一些网络感悟。",
+    "active_summary": "讨论失眠、早餐和一些随机的感慨。",
     "pending_topic": "无",
     "recent_exchanges": [
       {
@@ -237,32 +236,26 @@
     {
       "user_id": "3089665724",
       "type": "FACT",
-      "content": "偶尔会失眠，导致醒得很早。",
+      "content": "有失眠的习惯，经常醒得很早。",
       "usage_tags": [
-        "TOPIC_START"
+        "TOPIC_START",
+        "EMOTIONAL_SUPPORT"
       ],
       "visibility": "OPEN",
-      "importance": 0.8,
-      "confidence": 1.0,
-      "evidence": "用户明确陈述了自身的作息习惯（失眠、早醒）。",
-      "source_message_ids": [
-        "消息ID(1)"
-      ]
+      "confidence": 0.9,
+      "evidence": "用户主动提及了自身生理状态（失眠、早醒）。"
     },
     {
       "user_id": "3089665724",
       "type": "FACT",
       "content": "早餐通常是自己家做的馒头。",
       "usage_tags": [
-        "TOPIC_START"
+        "TOPIC_START",
+        "PERSONALIZE"
       ],
       "visibility": "OPEN",
-      "importance": 0.8,
-      "confidence": 1.0,
-      "evidence": "用户明确陈述了自身的日常饮食习惯（早餐）。",
-      "source_message_ids": [
-        "消息ID(3)"
-      ]
+      "confidence": 0.9,
+      "evidence": "用户描述了自身日常的饮食习惯。"
     }
   ]
 }
@@ -305,11 +298,11 @@
 }
 ```
 
-## insomnia_breakfast_noisy 第 1 次（解析 ✓，1346 字符）
+## insomnia_breakfast_noisy 第 1 次（解析 ✓，1375 字符）
 ```json
 {
   "short_term": {
-    "active_summary": "从祝福到失眠、早餐的日常闲聊。",
+    "active_summary": "群友间互相祝福和日常聊天，话题分散。",
     "pending_topic": "无",
     "recent_exchanges": [
       {
@@ -328,13 +321,14 @@
     {
       "user_id": "3089665724",
       "type": "FACT",
-      "content": "用户早餐一般是自己家做的馒头。",
+      "content": "用户早餐一般吃自己家做的馒头。",
       "usage_tags": [
-        "TOPIC_CONTINUE"
+        "TOPIC_CONTINUE",
+        "ANSWER_CONTEXT"
       ],
       "visibility": "OPEN",
       "confidence": 0.9,
-      "evidence": "用户明确描述了自己日常的早餐情况。"
+      "evidence": "用户明确描述了自身日常的饮食习惯。"
     }
   ]
 }
