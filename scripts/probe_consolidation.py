@@ -78,15 +78,23 @@ def read_windows(path: Path) -> list[list[dict]]:
 
 def format_messages(window: list[dict]) -> str:
     """按生产格式拼消息文本（与 MemoryConsolidator._fetch_next_messages 同格式）。
-    支持 source_kind 字段：AT_MENTION 时标注 [对Bot说]。
+
+    支持 source_kind：AT_MENTION 标注 [对Bot说]，BOT_SELF 标注为
+    「不属于任何用户」（与生产完全一致——Bot 自己的寒暄是生产窗口里最主要的
+    噪音来源，probe 若把它渲染成普通用户消息，就无法复现真实的稀释效应）。
     """
     from config import MEMORY_SOURCE_KIND_ENABLED
+
     lines = []
     for i, m in enumerate(window, start=1):
         uid = (m.get("user") or "").strip()
         content = (m.get("content") or "").strip()
         source_kind = m.get("source_kind", "PASSIVE")
-        if MEMORY_SOURCE_KIND_ENABLED and source_kind == "AT_MENTION":
+        if not MEMORY_SOURCE_KIND_ENABLED:
+            lines.append(f"消息ID({i}) 用户({uid}): {content}")
+        elif source_kind == "BOT_SELF":
+            lines.append(f"消息ID({i}) [这是机器人自己发送的消息，不属于任何用户]: {content}")
+        elif source_kind == "AT_MENTION":
             lines.append(f"消息ID({i}) 用户({uid}) [对Bot说]: {content}")
         else:
             lines.append(f"消息ID({i}) 用户({uid}): {content}")
@@ -94,8 +102,13 @@ def format_messages(window: list[dict]) -> str:
 
 
 def window_senders(window: list[dict]) -> list[str]:
-    """窗口内出现过的发送者（去重保序），用于候选归属白名单检查。"""
-    return list(dict.fromkeys(str(m.get("user") or "").strip() for m in window if (m.get("user") or "").strip()))
+    """窗口内出现过的发送者（去重保序），用于候选归属白名单检查。
+    排除 BOT_SELF——与生产一致，Bot 自己绝不能进发送者白名单。"""
+    return list(dict.fromkeys(
+        str(m.get("user") or "").strip()
+        for m in window
+        if (m.get("user") or "").strip() and m.get("source_kind") != "BOT_SELF"
+    ))
 
 
 def _normalize_candidate(consolidator: MemoryConsolidator, raw: dict) -> dict | None:

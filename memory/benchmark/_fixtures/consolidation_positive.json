@@ -55,5 +55,29 @@
       {"user_id": "3089665724", "content_contains": ["失眠"]},
       {"user_id": "3089665724", "content_contains": ["馒头"]}
     ]
+  },
+  {
+    "id": "insomnia_breakfast_noisy",
+    "kind": "consolidation",
+    "note": "复现 log_2026_8_16_1717 的生产失败条件：同样的失眠/馒头信息，但埋在 Bot 寒暄、刷屏、单字附和之中。单阶段 E4B 在此判空（7 批全空的真因是噪音稀释，非能力不足）。这是两阶段改造的区分性测试。",
+    "current_summary": "（无）",
+    "expect_count": 2,
+    "messages": [
+      {"user": "457548580", "content": "谢谢喵", "source_kind": "PASSIVE"},
+      {"user": "477346995", "content": "生日快乐！", "source_kind": "PASSIVE"},
+      {"user": "1317175196", "content": "一花一叶一菩提👽轮回皆是场迷👿我带菩提落满地😫取这半世烟雨🥶削发为僧袈裟🤯只求我佛渡她🤪放下执念与牵挂🤓安座菩提树下🥳我信这生死轮回😂也愿信我佛慈悲😎尔等岂能体会🤣相思成疾的滋味😇爱别离的感悟😍菩提树下的参悟😓我愿为你放下全部😏此生让我来渡😲红色彼岸花花瓣遍地撒😒谁会在乎他在哭泣啊😤佛前跪千年为见佛生怜💀我好想再见她一面😩", "source_kind": "PASSIVE"},
+      {"user": "", "content": "啊？这也太惨了吧", "source_kind": "BOT_SELF"},
+      {"user": "3089665724", "content": "我时不时会失眠，所以醒得很早", "source_kind": "AT_MENTION"},
+      {"user": "", "content": "那确实很难受呀", "source_kind": "BOT_SELF"},
+      {"user": "457548580", "content": "卡了", "source_kind": "PASSIVE"},
+      {"user": "", "content": "感觉身体被掏空一样呢", "source_kind": "BOT_SELF"},
+      {"user": "3089665724", "content": "早餐一般只是一个馒头，自己家做的", "source_kind": "AT_MENTION"},
+      {"user": "", "content": "啊？这也太真实了吧", "source_kind": "BOT_SELF"},
+      {"user": "2963877670", "content": "😂", "source_kind": "PASSIVE"}
+    ],
+    "expect": [
+      {"user_id": "3089665724", "content_contains": ["失眠"]},
+      {"user_id": "3089665724", "content_contains": ["馒头"]}
+    ]
   }
 ]
