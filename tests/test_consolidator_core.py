@@ -325,7 +325,7 @@ def test_drain_group_processes_up_to_max_rounds(tmp_path, monkeypatch):
 
     async def fake_generate(self, group_id, last_id, force=False):
         _, batch_end, senders, _ = cons._fetch_next_messages(group_id, last_id, 10)
-        return "{}", batch_end, "fake", senders, []
+        return "{}", batch_end, "fake", senders, [], ""
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
 

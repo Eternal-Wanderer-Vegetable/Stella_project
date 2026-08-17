@@ -70,6 +70,13 @@ from memory.text_similarity import is_similar, merge_content
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
+# 群级整合锁（模块级）：保证同一群「读 checkpoint → 整合 → 推进 checkpoint」不被
+# 并发打断。必须与模型闸门分离——若整段整合都占着 consolidation 闸门，群A 等 27B
+# （chat 闸门）时会把群B 的 E4B 阶段一起堵死，使两个模型退化为串行。
+# 放模块级而非实例属性：consolidator 是进程级单例，锁本就该跨实例共享；且测试会用
+# __new__ 绕过 __init__ 构造实例（避免真实 LLM 配置），实例属性会缺失。
+_group_locks: dict[str, asyncio.Lock] = {}
+
 
 class MemoryConsolidator:
     """群聊消息整合器。
@@ -111,20 +118,15 @@ class MemoryConsolidator:
                 api_key=MEMORY_EXTRACT_LM_STUDIO_API_KEY,
             ),
         )
-        # 群级锁：保证同一群「读 checkpoint → 整合 → 推进 checkpoint」不被并发打断。
-        # 必须与模型锁分离——若整段整合都占着 consolidation 闸门，
-        # 群A 等 27B（chat 闸门）时会把群B 的 E4B 阶段一起堵死，
-        # 使两个模型退化为串行（多群部署下尤其明显）。
-        self._group_locks: dict[str, asyncio.Lock] = {}
 
     def _get_group_lock(self, group_id: int) -> asyncio.Lock:
-        """取该群的整合锁（懒建）。asyncio.Lock 的等待队列是 FIFO，
+        """取该群的整合锁（懒建，模块级共享）。asyncio.Lock 的等待队列是 FIFO，
         因此同群多次触发天然按「先来后到」一次处理一个。"""
         key = str(group_id)
-        lock = self._group_locks.get(key)
+        lock = _group_locks.get(key)
         if lock is None:
             lock = asyncio.Lock()
-            self._group_locks[key] = lock
+            _group_locks[key] = lock
         return lock
 
     async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str, list, list, str]:
