@@ -44,6 +44,11 @@ from config import (
     CONSOLIDATION_LM_STUDIO_MODEL,
     CONSOLIDATION_LM_STUDIO_TEMPERATURE,
     CONSOLIDATION_LOCAL_MAX_TOKENS,
+    MEMORY_EXTRACT_LM_STUDIO_API_KEY,
+    MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
+    MEMORY_EXTRACT_LM_STUDIO_MODEL,
+    MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
+    MEMORY_EXTRACT_MAX_TOKENS,
 )
 from core.llm.lm_studio import LMStudioBackend
 from memory.consolidation_prompt import format_consolidation_prompt
@@ -177,12 +182,74 @@ async def run_window(consolidator: MemoryConsolidator, backend: LMStudioBackend,
     }
 
 
+async def run_window_two_stage(
+    consolidator: MemoryConsolidator,
+    stage1_backend: LMStudioBackend,
+    extract_backend: LMStudioBackend,
+    window: list[dict],
+) -> dict:
+    """跑生产的两阶段链路：阶段1（E4B 出摘要+has_self_disclosure）→ 阶段2（27B 提取候选）。
+
+    与 run_window（单阶段）的区别：候选来自阶段2，且仅在阶段1 判定
+    has_self_disclosure 为真时才调用阶段2——与 consolidate_group 的逻辑一致。
+    阶段2 未成功（解析失败）时回退阶段1 候选，同样与生产一致。
+    """
+    from memory.extraction_prompt import format_extraction_prompt
+
+    messages = format_messages(window)
+    senders = window_senders(window)
+
+    # 阶段1
+    stage1_prompt = format_consolidation_prompt("（无）", messages)
+    stage1_raw = await stage1_backend.generate(stage1_prompt)
+    stage1_parsed = consolidator._parse_json(stage1_raw)
+    disclosed = bool(stage1_parsed) and consolidator._has_self_disclosure(stage1_parsed)
+
+    # 阶段1 的候选（回退用）
+    raw_cands = (stage1_parsed or {}).get("memory_candidates") or []
+    stage2_raw = ""
+    stage2_used = False
+
+    # 阶段2：仅在阶段1 判定有自我披露时
+    if disclosed:
+        stage2_used = True
+        stage2_prompt = format_extraction_prompt(messages)
+        stage2_raw = await extract_backend.generate(stage2_prompt)
+        stage2_parsed = consolidator._parse_json(stage2_raw)
+        if stage2_parsed is not None:
+            extracted = stage2_parsed.get("memory_candidates")
+            if isinstance(extracted, list):
+                raw_cands = extracted
+
+    candidates = []
+    for rc in raw_cands:
+        c = _normalize_candidate(consolidator, rc)
+        if c is None:
+            continue
+        c["in_senders"] = c["user_id"] in senders
+        c["audit"] = audit_candidate(c, window)
+        candidates.append(c)
+
+    return {
+        "prompt_messages": messages,
+        "senders": senders,
+        # raw_output 同时收录两阶段，便于人工看是哪一阶段出的问题
+        "raw_output": stage1_raw + (f"\n\n──── 阶段2 提取 ────\n{stage2_raw}" if stage2_used else ""),
+        "parsed_ok": stage1_parsed is not None,
+        "has_self_disclosure": disclosed,
+        "stage2_used": stage2_used,
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+    }
+
+
 async def run_positive(
     consolidator: MemoryConsolidator,
     backend: LMStudioBackend,
     fixture_path: Path,
     repeat: int = 1,
     print_prompt: bool = False,
+    runner=None,          # 新增：跑单窗口的协程函数，默认单阶段
 ) -> int:
     """跑正例回归基准，返回退出码（0=通过）。
 
@@ -191,6 +258,11 @@ async def run_positive(
     print_prompt=True 时只打印将要发送的 prompt 并退出、不调用 LLM，
     用于离线比对 format_messages 是否被来源标记污染。
     """
+    # runner 默认单阶段（向后兼容）；--two-stage 时传入两阶段版本
+    if runner is None:
+        async def runner(w):
+            return await run_window(consolidator, backend, w)
+
     data = json.loads(fixture_path.read_text(encoding="utf-8"))
     cases = data if isinstance(data, list) else [data]
 
@@ -212,7 +284,7 @@ async def run_positive(
         runs: list[tuple[list[dict | None], list[dict]]] = []
         runs_raw: list[tuple[str, bool]] = []
         for i in range(max(1, repeat)):
-            r = await run_window(consolidator, backend, window)
+            r = await runner(window)
             got = r["candidates"]
 
             hits: list[dict | None] = []
@@ -236,6 +308,9 @@ async def run_positive(
             print(f"── 第 {i + 1}/{max(1, repeat)} 次：命中 {len(matched)}/{expect_count}"
                   f"（候选 {r['candidate_count']} 条，解析 {parse_flag}，原始输出 {raw_len} 字符）",
                   file=sys.stderr)
+            if "stage2_used" in r:
+                print(f"   阶段1 has_self_disclosure={r.get('has_self_disclosure')}，"
+                      f"阶段2 {'已调用' if r['stage2_used'] else '未调用'}", file=sys.stderr)
             for exp, hit in zip(expects, hits, strict=False):
                 if hit is not None:
                     print(f"  ✅ user={exp['user_id']} type={hit['type']} 「{hit['content']}」", file=sys.stderr)
@@ -451,6 +526,10 @@ async def _amain() -> None:
     ap.add_argument("--positive-fixture", type=Path, default=POSITIVE_FIXTURE)
     ap.add_argument("--print-prompt", action="store_true",
                     help="只打印将发送的 prompt 并退出，不调 LLM（比对格式化是否被来源标记污染）")
+    ap.add_argument("--two-stage", action="store_true",
+                    help="跑生产的两阶段链路（阶段1 E4B 出 has_self_disclosure，"
+                         "阶段2 用 MEMORY_EXTRACT_* 配置的模型提取候选）。"
+                         "不加则跑旧的单阶段链路（仅阶段1 模型），用于对照")
     a = ap.parse_args()
 
     # 复用生产后端构造参数，temperature 可被探针显式覆盖（不改生产代码）
@@ -461,12 +540,28 @@ async def _amain() -> None:
         temperature=a.temperature if a.temperature is not None else CONSOLIDATION_LM_STUDIO_TEMPERATURE,
         api_key=CONSOLIDATION_LM_STUDIO_API_KEY,
     )
+
+    # 阶段2 提取后端（默认继承主聊天配置，即 27B）
+    extract_backend = LMStudioBackend(
+        base_url=MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
+        model=MEMORY_EXTRACT_LM_STUDIO_MODEL,
+        max_tokens=MEMORY_EXTRACT_MAX_TOKENS,
+        temperature=a.temperature if a.temperature is not None else MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
+        api_key=MEMORY_EXTRACT_LM_STUDIO_API_KEY,
+    )
+
+    async def _runner(w):
+        if a.two_stage:
+            return await run_window_two_stage(consolidator, backend, extract_backend, w)
+        return await run_window(consolidator, backend, w)
+
     consolidator = MemoryConsolidator()
 
     # 必须在 windows_raw.json 存在性检查之前短路：正例回归不依赖采样窗口
     if a.positive:
         sys.exit(await run_positive(consolidator, backend, a.positive_fixture,
-                                    repeat=a.repeat, print_prompt=a.print_prompt))
+                                    repeat=a.repeat, print_prompt=a.print_prompt,
+                                    runner=_runner))
 
     if not a.input.exists():
         sys.exit(f"❌ 找不到 {a.input}，请先运行 scripts/sample_windows.py")
@@ -488,14 +583,14 @@ async def _amain() -> None:
         w = windows[idx]
         print(f"── 窗口 {idx}（{len(w)} 条），重复 {a.repeat} 次", file=sys.stderr)
         if a.repeat > 1:
-            repeats = [await run_window(consolidator, backend, w) for _ in range(a.repeat)]
+            repeats = [await _runner(w) for _ in range(a.repeat)]
             base = dict(repeats[0])
             base["stability"] = stability_of(repeats)
             base["raw_output"] = [r["raw_output"] for r in repeats]
             base["candidates"] = repeats[0]["candidates"]
             results.append(base)
         else:
-            results.append(await run_window(consolidator, backend, w))
+            results.append(await _runner(w))
 
     sorted_pairs = sorted(zip(indices, results, strict=True), key=lambda p: p[0])
     md = render_markdown(windows, [r for _, r in sorted_pairs], a.repeat)

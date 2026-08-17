@@ -41,5 +41,19 @@
     "expect": [
       {"user_id": "1001", "content_contains": ["后端"]}
     ]
+  },
+  {
+    "id": "insomnia_breakfast",
+    "expect_count": 2,
+    "messages": [
+      {"user": "3089665724", "content": "我时不时会失眠，所以醒得很早", "source_kind": "AT_MENTION"},
+      {"user": "457548580", "content": "好东西😋", "source_kind": "PASSIVE"},
+      {"user": "3089665724", "content": "早餐一般只是一个馒头，自己家做的", "source_kind": "AT_MENTION"},
+      {"user": "1317175196", "content": "一花一叶一菩提👽轮回皆是场迷👿我带菩提落满地😫", "source_kind": "PASSIVE"}
+    ],
+    "expect": [
+      {"user_id": "3089665724", "content_contains": ["失眠"]},
+      {"user_id": "3089665724", "content_contains": ["馒头"]}
+    ]
   }
 ]
