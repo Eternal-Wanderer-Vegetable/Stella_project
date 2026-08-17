@@ -18,6 +18,7 @@ Candidate / Policy / Ranking / Prompt。全部落到 SQLite 表 ``memory_traces`
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import time
@@ -29,13 +30,20 @@ from config import DB_PATH, MEMORY_TRACE_ENABLED, MEMORY_TRACE_TABLE
 
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
-    """确保 memory_traces 表存在（幂等）。"""
+    """确保 memory_traces 表存在（幂等），并为旧表补齐 v8 新增列。
+
+    group_id 是触发这次回复的真实 QQ 群；group_shared_space 是记忆检索所用的
+    共享空间（config.spaces.resolve_space(group_id)）。排查时两者都需要，
+    因此都落库。旧表没有 group_shared_space 列时用 ALTER 补上（追踪数据有
+    诊断价值，重建会丢）；列已存在时 ALTER 会抛 OperationalError，静默跳过。
+    """
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {MEMORY_TRACE_TABLE} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts DATETIME DEFAULT CURRENT_TIMESTAMP,
             group_id TEXT,
+            group_shared_space TEXT,
             user_id TEXT,
             message TEXT,
             mode TEXT,
@@ -52,11 +60,15 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # 旧表兼容：v8 之前的 memory_traces 没有 group_shared_space 列 → 补列（幂等）
+    with contextlib.suppress(sqlite3.OperationalError):
+        conn.execute(f"ALTER TABLE {MEMORY_TRACE_TABLE} ADD COLUMN group_shared_space TEXT")
 
 
 def record_trace(
     *,
     group_id: Any,
+    group_shared_space: Any = "",
     user_id: Any,
     message: str,
     mode: str = "",
@@ -70,7 +82,11 @@ def record_trace(
     output: str = "",
     debug: bool = False,
 ) -> None:
-    """把一次记忆决策写入 memory_traces 表；开关关闭或异常时静默跳过。"""
+    """把一次记忆决策写入 memory_traces 表；开关关闭或异常时静默跳过。
+
+    group_id 是触发这次回复的真实 QQ 群；group_shared_space 是记忆检索所用的
+    共享空间；两者分别落库，排查时都需要。
+    """
     if not MEMORY_TRACE_ENABLED or not DB_PATH.exists():
         return
     try:
@@ -79,13 +95,14 @@ def record_trace(
         conn.execute(
             f"""
             INSERT INTO {MEMORY_TRACE_TABLE} (
-                group_id, user_id, message, mode, trigger,
+                group_id, group_shared_space, user_id, message, mode, trigger,
                 candidate_ids, filtered_ids, final_ids, rejected_ids, behavior_ids,
                 score_map, prompt_snapshot, output, debug
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(group_id),
+                str(group_shared_space),
                 str(user_id),
                 (message or "")[:500],
                 mode,

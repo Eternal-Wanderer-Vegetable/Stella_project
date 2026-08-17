@@ -112,13 +112,13 @@ def _make_db(tmp_path, rows):
     db_path = tmp_path / "agent_memory.db"
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "CREATE TABLE memories (id TEXT PRIMARY KEY, group_id TEXT, user_id TEXT, type TEXT, "
+        "CREATE TABLE memories (id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT, "
         "content TEXT, importance REAL, confidence REAL, status TEXT, usage_tags TEXT, "
         "visibility TEXT, trigger_data TEXT, behavior_rule TEXT, last_accessed_at DATETIME)"
     )
     for mid, content, imp, conf in rows:
         conn.execute(
-            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, "
             "status, usage_tags, visibility, last_accessed_at) VALUES (?,?,?,?,?,?,?,'active',?,?,'2026-08-09 10:00:00')",
             (mid, "1", "100", "EVENT", content, imp, conf, '["TOPIC_CONTINUE"]', "OPEN"),
         )
@@ -158,7 +158,7 @@ def test_retrieve_memories_emb_routes_semantic_scores(tmp_path, monkeypatch):
     monkeypatch.setattr(retrieval_v2, "RAG_ENABLED", False)
     retrieval_v2._CACHE.clear()
 
-    result = _run(retrieval_v2.retrieve_memories_emb(1, 100, "有什么游戏推荐吗", service=_StubService()))
+    result = _run(retrieval_v2.retrieve_memories_emb("1", 100, "有什么游戏推荐吗", service=_StubService()))
     ids = [m["id"] for m in result.conversation_memories]
     # 语义强的 rel 必须进入会话并排前；语义≈0 的 irr 在新权重（conf/imp 只当
     # tie-breaker）下被 MEMORY_SCORE_MIN 挡掉，属「宁缺毋滥」的预期行为。
@@ -179,6 +179,6 @@ def test_retrieve_memories_emb_falls_back_on_service_failure(tmp_path, monkeypat
         async def similarity(self, q, c):
             return None
 
-    result = _run(retrieval_v2.retrieve_memories_emb(1, 100, "有什么游戏推荐吗", service=_Broken()))
+    result = _run(retrieval_v2.retrieve_memories_emb("1", 100, "有什么游戏推荐吗", service=_Broken()))
     assert [m["id"] for m in result.conversation_memories] == ["m1"]
 

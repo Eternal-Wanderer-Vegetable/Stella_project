@@ -4,9 +4,12 @@
 """长期记忆检索模块（memory.retriever）。
 
 本模块对外提供三个取记忆的入口：
-- get_group_memories   —— 某群的活动记忆（主动发言/闲聊上下文用）；
-- get_user_memories    —— 某用户在指定群中的记忆（@ 回复上下文用）；
+- get_group_memories   —— 某群组共享空间的活动记忆（主动发言/闲聊上下文用）；
+- get_user_memories    —— 某用户在指定群组共享空间中的记忆（@ 回复上下文用）；
 - get_related_memories —— “别人（≠ user_id）”的相关记忆（查无此人时的兜底/安抚）。
+
+三个入口的归属参数都是 ``group_shared_space``（群组共享空间），由
+``config.spaces.resolve_space(qq_group_id)`` 得到；同一空间内的多个 QQ 群共享记忆。
 
 检索有两级路径，都是先试 FTS5 全文索引，失败再回退到多维权重排序：
 - FTS 命中（RAG 开关全开时）：走 memories_fts 虚拟表 + bm25() 排序；
@@ -247,13 +250,23 @@ def _segment_text(text: str) -> str:
 def _ensure_fts_table(cursor: sqlite3.Cursor) -> bool:
     """确保 FTS5 虚拟表 memories_fts 已创建（幂等）；失败（如 SQLite 未编译 FTS5）返回 False。
 
-    FTS5 建表本身幂等（IF NOT EXISTS），不会重建已有数据，只是 Lazy 保障索引存在。
+    v8 起 memories_fts 的归属列改名为 ``group_shared_space``。FTS5 虚拟表无法
+    ALTER 加列/改列名，因此探测到旧结构（无 ``group_shared_space`` 列）时直接
+    DROP 重建——索引可从主表全量重建，无数据损失。否则后续按新列名查询会抛
+    OperationalError 而被 _query_rag_results 静默吞掉，表现为「检索永远无 FTS
+    命中、静默降级」（新库无此问题，但测试库与旧库会遇到）。
     """
+    fts_ddl = (
+        "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5("
+        "mem_id UNINDEXED, content, group_shared_space UNINDEXED, user_id UNINDEXED)"
+    )
     try:
-        cursor.execute(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5("
-            "mem_id UNINDEXED, content, group_id UNINDEXED, user_id UNINDEXED)"
-        )
+        cursor.execute(fts_ddl)
+        columns = [row[1] for row in cursor.execute("PRAGMA table_info(memories_fts)").fetchall()]
+        if "group_shared_space" not in columns:
+            # 旧结构（group_id）→ 重建为新结构
+            cursor.execute("DROP TABLE memories_fts")
+            cursor.execute(fts_ddl)
         return True
     except sqlite3.OperationalError:
         return False
@@ -267,17 +280,17 @@ def _rebuild_fts_index(cursor: sqlite3.Cursor) -> None:
     """
     cursor.execute("DELETE FROM memories_fts")
     rows = cursor.execute(
-        "SELECT id, group_id, user_id, content FROM memories WHERE status = 'active' AND content IS NOT NULL"
+        "SELECT id, group_shared_space, user_id, content FROM memories WHERE status = 'active' AND content IS NOT NULL"
     ).fetchall()
     records = []
-    for memory_id, group_id, user_id, content in rows:
+    for memory_id, group_shared_space, user_id, content in rows:
         text = _segment_text(content)
         if not text:
             continue
-        records.append((memory_id, text, group_id, user_id))
+        records.append((memory_id, text, group_shared_space, user_id))
     if records:
         cursor.executemany(
-            "INSERT INTO memories_fts (mem_id, content, group_id, user_id) VALUES (?, ?, ?, ?)",
+            "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id) VALUES (?, ?, ?, ?)",
             records,
         )
     # 全量重建要立即提交，否则连接关闭后回滚，下次查询仍需重扫（且修复结果不落盘）
@@ -285,7 +298,7 @@ def _rebuild_fts_index(cursor: sqlite3.Cursor) -> None:
         cursor.connection.commit()
 
 
-def _upsert_fts_record(cursor: sqlite3.Cursor, memory_id: str, group_id: str, user_id: str, content: str) -> None:
+def _upsert_fts_record(cursor: sqlite3.Cursor, memory_id: str, group_shared_space: str, user_id: str, content: str) -> None:
     """把单条记忆写入 FTS5 索引。
 
     关键点：FTS5 表没有唯一约束，重复 INSERT 会累积多行 → 检索时出现重复。
@@ -306,14 +319,14 @@ def _upsert_fts_record(cursor: sqlite3.Cursor, memory_id: str, group_id: str, us
         (memory_id,),
     )
     cursor.execute(
-        "INSERT INTO memories_fts (mem_id, content, group_id, user_id) VALUES (?, ?, ?, ?)",
-        (memory_id, text, group_id, user_id),
+        "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id) VALUES (?, ?, ?, ?)",
+        (memory_id, text, group_shared_space, user_id),
     )
 
 
 def _query_rag_results(
     cursor: sqlite3.Cursor,
-    group_id: int,
+    group_shared_space: str,
     query: str,
     limit: int,
     include_user_id: str | None = None,
@@ -323,7 +336,8 @@ def _query_rag_results(
 
     逻辑：
     1. 前置开关检查（RAG_ENABLED / RAG_SQLITE_FTS_ENABLED）不满足 → 返回空；
-    2. 确保索引存在，并把查询也走一遍 _segment_text 得到 MATCH 词串；
+    2. 确保索引存在（_ensure_fts_table 会处理旧版结构重建），并把查询也走一遍
+       _segment_text 得到 MATCH 词串；
     3. 若索引空 或 索引行数与 memories active 行数不一致 → 全量重建；
     4. 构造 JOIN 查询：先到 FTS 表（memories_fts f）匹配，再 JOIN 主表取完整字段，
        通过 include_user_id / exclude_user_id 控制是否限定具体用户；
@@ -331,7 +345,7 @@ def _query_rag_results(
        虚拟表的真实表名，不能传别名（如 f），否则报 "no such column" 错误。
 
     :param cursor: 数据库游标
-    :param group_id: 目标群
+    :param group_shared_space: 群组共享空间标识（由 config.spaces.resolve_space 得到）
     :param query: 用户查询文本
     :param limit: 返回行数上限
     :param include_user_id: 若非空，只取该用户的记忆
@@ -359,9 +373,9 @@ def _query_rag_results(
             "SELECT m.content, m.user_id, m.type, m.last_accessed_at, m.importance, m.confidence "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
-            "WHERE f.group_id = ? AND m.status = 'active' "
+            "WHERE f.group_shared_space = ? AND m.status = 'active' "
         )
-        params: list[Any] = [str(group_id)]
+        params: list[Any] = [group_shared_space]
         if include_user_id is not None:
             query_sql += "AND m.user_id = ? "
             params.append(include_user_id)
@@ -378,21 +392,24 @@ def _query_rag_results(
 
 
 def get_group_memories(
-    group_id: int,
+    group_shared_space: str,
     query: str | None = None,
     limit: int = PROACTIVE_LONG_TERM_LIMIT,
 ) -> list[dict[str, Any]]:
-    """取某群的活动记忆；若传入 query 则优先走 RAG 全文检索，无命中时回退加权排序。
+    """取某群组共享空间的活动记忆；若传入 query 则优先走 RAG 全文检索，无命中时回退加权排序。
+
+    ``group_shared_space`` 为群组共享空间标识，由 ``config.spaces.resolve_space(qq_group_id)``
+    得到；同一空间内的多个 QQ 群共享记忆。
 
     路径：
     1. 有 query 且 RAG 开 → _query_rag_results（取 max(limit, RAG_TOP_K) 候选）；
     2. FTS 无结果 → 回退从 memories 表按访问时间倒序取候选池
        （有 query 时放宽到 LONG_TERM_RELEVANCE_CANDIDATE_LIMIT），
-       仍无 → 回退 long_term_memories；
+       仍无 → 回退 long_term_memories（该表列名仍为 group_id，但写/查的都是空间标识）；
     3. 有 query → _rank_fallback_rows 在内存里按多维权重排序（群场景 user_id=0，不用用户相关性）；
        无 query → 直接按访问时间返回前 limit 条。
 
-    :param group_id: 群 ID
+    :param group_shared_space: 群组共享空间标识（str）
     :param query: 查询关键词，可为 None（此时走纯时间倒序）
     :param limit: 返回条数上限
     :return: 记忆 dict 列表
@@ -405,7 +422,7 @@ def get_group_memories(
     if query and RAG_ENABLED:
         rows = _query_rag_results(
             cursor,
-            group_id,
+            group_shared_space,
             query,
             max(limit, RAG_TOP_K),
             include_user_id=None,
@@ -418,15 +435,17 @@ def get_group_memories(
         rows = _fetch_table(
             cursor,
             "SELECT content, user_id, type, last_accessed_at, importance, confidence FROM memories "
-            "WHERE group_id = ? AND status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
-            (str(group_id), pool_limit),
+            "WHERE group_shared_space = ? AND status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
+            (group_shared_space, pool_limit),
         )
         if not rows:
+            # long_term_memories 是待废弃的旧兼容表：列名仍为 group_id，
+            # 但值已按空间写入（见 M2.5-2），此处同样传空间标识。
             rows = _fetch_table(
                 cursor,
                 "SELECT summary, user_id, 'FACT', last_accessed_at, importance, 1.0 FROM long_term_memories "
                 "WHERE group_id = ? ORDER BY rowid DESC LIMIT ?",
-                (str(group_id), pool_limit),
+                (group_shared_space, pool_limit),
             )
     conn.close()
     if query and rows:
@@ -436,17 +455,21 @@ def get_group_memories(
 
 
 def get_user_memories(
-    group_id: int,
+    group_shared_space: str,
     user_id: int,
     query: str | None = None,
     limit: int = REPLY_LONG_TERM_LIMIT,
 ) -> list[dict[str, Any]]:
-    """取某用户在指定群中的活动记忆（回复时使用），逻辑同 get_group_memories 但限定用户。
+    """取某用户在指定群组共享空间中的活动记忆（回复时使用），逻辑同 get_group_memories 但限定用户。
+
+    ``group_shared_space`` 为群组共享空间标识，由 ``config.spaces.resolve_space(qq_group_id)``
+    得到；同一空间内的多个 QQ 群共享记忆。
 
     区别：FTS 查询传 include_user_id=str(user_id)；回退 SQL 也会带 user_id 过滤；
     有 query 时最终用 _rank_fallback_rows 排序（此时 user_id 有实际意义，会加用户相关性分）。
+    long_term_memories 兜底：列名仍为 group_id，但传的是空间标识。
 
-    :param group_id: 群 ID
+    :param group_shared_space: 群组共享空间标识（str）
     :param user_id: 目标用户 ID
     :param query: 查询关键词，可为 None
     :param limit: 返回条数上限
@@ -460,7 +483,7 @@ def get_user_memories(
     if query and RAG_ENABLED:
         rows = _query_rag_results(
             cursor,
-            group_id,
+            group_shared_space,
             query,
             max(limit, RAG_TOP_K),
             include_user_id=str(user_id),
@@ -470,15 +493,15 @@ def get_user_memories(
         rows = _fetch_table(
             cursor,
             "SELECT content, user_id, type, last_accessed_at, importance, confidence FROM memories "
-            "WHERE group_id = ? AND user_id = ? AND status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
-            (str(group_id), str(user_id), pool_limit),
+            "WHERE group_shared_space = ? AND user_id = ? AND status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
+            (group_shared_space, str(user_id), pool_limit),
         )
         if not rows:
             rows = _fetch_table(
                 cursor,
                 "SELECT summary, user_id, 'FACT', last_accessed_at, importance, 1.0 FROM long_term_memories "
                 "WHERE group_id = ? AND user_id = ? ORDER BY rowid DESC LIMIT ?",
-                (str(group_id), str(user_id), pool_limit),
+                (group_shared_space, str(user_id), pool_limit),
             )
     conn.close()
     if query and rows:
@@ -486,15 +509,19 @@ def get_user_memories(
     return _memories_from_rows(rows[:limit])
 
 
-def get_related_memories(group_id: int, user_id: int, query: str, limit: int = 3) -> list[dict[str, Any]]:
+def get_related_memories(group_shared_space: str, user_id: int, query: str, limit: int = 3) -> list[dict[str, Any]]:
     """找"其他人"（排除 user_id 自己的）之中与 query 相关的记忆，返回给用作“你信她还说”的联想。
+
+    ``group_shared_space`` 为群组共享空间标识，由 ``config.spaces.resolve_space(qq_group_id)``
+    得到；同一空间内的多个 QQ 群共享记忆。
 
     前提：LONG_TERM_RELEVANCE_ENABLED 开启且 query 非空；
     流程：优先走 _query_rag_results（exclude_user_id=str(user_id)）用 bm25 拿结果；
     若无命中则抽取关键词、扫其他人记忆，在内存里用 _score_memory 打分后取前 limit 个，
     并把返回字典的 type 统一标记为 "RELATED"。
+    long_term_memories 兜底：列名仍为 group_id，但传的是空间标识。
 
-    :param group_id: 群 ID
+    :param group_shared_space: 群组共享空间标识（str）
     :param user_id: 当前用户（要排除的人）
     :param query: 查询文本
     :param limit: 返回条数上限
@@ -510,7 +537,7 @@ def get_related_memories(group_id: int, user_id: int, query: str, limit: int = 3
 
     rag_rows = _query_rag_results(
         cursor,
-        group_id,
+        group_shared_space,
         query,
         max(limit, RAG_TOP_K),
         exclude_user_id=str(user_id),
@@ -536,15 +563,15 @@ def get_related_memories(group_id: int, user_id: int, query: str, limit: int = 3
     rows = _fetch_table(
         cursor,
         "SELECT content, user_id, type, last_accessed_at, importance, confidence FROM memories "
-        "WHERE group_id = ? AND user_id != ? AND status = 'active'",
-        (str(group_id), str(user_id)),
+        "WHERE group_shared_space = ? AND user_id != ? AND status = 'active'",
+        (group_shared_space, str(user_id)),
     )
     if not rows:
         rows = _fetch_table(
             cursor,
             "SELECT summary, user_id, 'FACT', CURRENT_TIMESTAMP, importance, confidence FROM long_term_memories "
             "WHERE group_id = ? AND user_id != ?",
-            (str(group_id), str(user_id)),
+            (group_shared_space, str(user_id)),
         )
     conn.close()
 

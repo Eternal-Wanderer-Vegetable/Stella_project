@@ -100,7 +100,8 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     memories 表直接复用 memory.schema 的规范 DDL，避免与生产 schema 漂移。
 
     单条记忆可覆盖 scenario 的归属与访问时间：
-      ``group_id`` / ``user_id`` → 模拟"这条记忆属于别人"（测跨用户泄漏）；
+      ``group_shared_space`` / ``group_id`` → 模拟"这条记忆属于别的空间/群"（测跨空间泄漏）；
+        用例可用 ``group_shared_space`` 或（兼容）``group_id`` 覆盖归属；
       ``last_accessed_at``       → 测"新记忆压过旧记忆"的排序维度。
     """
     db_path.unlink(missing_ok=True)
@@ -118,12 +119,12 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
             if isinstance(trigger_data, (dict, list)):
                 trigger_data = json.dumps(trigger_data, ensure_ascii=False)
             conn.execute(
-                "INSERT INTO memories (id, group_id, user_id, type, content, importance, "
+                "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, "
                 "confidence, status, usage_tags, visibility, trigger_data, behavior_rule, "
                 "last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
                 (
                     mid,
-                    str(mem.get("group_id", group_id)),
+                    str(mem.get("group_shared_space", mem.get("group_id", group_id))),
                     str(mem.get("user_id", user_id)),
                     mem.get("type") or "FACT",
                     mem.get("content") or "",
@@ -185,7 +186,13 @@ def evaluate_case(
             # 用例之间必须清空，否则同名/缺失 id 的用例会吃到上一用例的缓存。
             retrieval_v2._CACHE.clear()
             result = retrieval_v2.retrieve_memories(
-                group_id, user_id, query, trigger=trigger, semantic_scores=semantic_scores
+                # 用例的 group_id 直接当作空间标识（等价于隐式空间），因为用例测的是
+                # 检索逻辑，不涉及多群映射——不需要走 config.spaces.resolve_space。
+                str(group_id),
+                user_id,
+                query,
+                trigger=trigger,
+                semantic_scores=semantic_scores,
             )
         finally:
             retrieval_v2.DB_PATH = old_db

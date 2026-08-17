@@ -17,7 +17,7 @@ def _create_v2_db(db_path: Path):
         """
         CREATE TABLE IF NOT EXISTS memories (
             id TEXT PRIMARY KEY,
-            group_id TEXT,
+            group_shared_space TEXT,
             user_id TEXT,
             type TEXT,
             content TEXT,
@@ -47,7 +47,7 @@ def _create_v2_db(db_path: Path):
 def _insert_memory(db_path: Path, mid: str, content: str, usage: str, visibility: str, behavior: str = "", owner: str = "100"):
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, status, usage_tags, visibility, behavior_rule, last_accessed_at) "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, status, usage_tags, visibility, behavior_rule, last_accessed_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (mid, "1", owner, "PREFERENCE", content, 0.8, 0.9, "active", usage, visibility, behavior, "2026-08-09 10:00:00"),
     )
@@ -74,7 +74,7 @@ def test_retrieval_v2_filters_restricted_in_casual(tmp_path, monkeypatch):
     monkeypatch.setattr(retrieval_v2, "MEMORY_V2_ENABLED", True)
     monkeypatch.setattr(retrieval_v2, "RAG_ENABLED", False)
 
-    result = retrieval_v2.retrieve_memories(1, 100, "一起玩游戏吧", trigger="reply")
+    result = retrieval_v2.retrieve_memories("1", 100, "一起玩游戏吧", trigger="reply")
     conversation_ids = [m["id"] for m in result.conversation_memories]
     behavior_ids = [m["id"] for m in result.behavior_constraints]
 
@@ -101,7 +101,7 @@ def test_retrieval_v2_conflict_mode_activates_behavior_guard(tmp_path, monkeypat
     monkeypatch.setattr(retrieval_v2, "MEMORY_V2_ENABLED", True)
     monkeypatch.setattr(retrieval_v2, "RAG_ENABLED", False)
 
-    result = retrieval_v2.retrieve_memories(1, 235, "你别开这种玩笑，我不喜欢别人这样碰我", trigger="reply")
+    result = retrieval_v2.retrieve_memories("1", 235, "你别开这种玩笑，我不喜欢别人这样碰我", trigger="reply")
     behavior_ids = [m["id"] for m in result.behavior_constraints]
     conversation_ids = [m["id"] for m in result.conversation_memories]
 
@@ -122,7 +122,7 @@ def test_retrieval_v2_proactive_uses_group_memories(tmp_path, monkeypatch):
     monkeypatch.setattr(retrieval_v2, "MEMORY_V2_ENABLED", True)
     monkeypatch.setattr(retrieval_v2, "RAG_ENABLED", False)
 
-    result = retrieval_v2.retrieve_memories(1, 0, "（想自然插一句话）", trigger="proactive")
+    result = retrieval_v2.retrieve_memories("1", 0, "（想自然插一句话）", trigger="proactive")
     conversation_ids = [m["id"] for m in result.conversation_memories]
     assert "g1" in conversation_ids
     assert "b1" not in conversation_ids
@@ -142,13 +142,13 @@ def test_retrieval_v2_fts_path_returns_qualified_columns(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     conn.execute(
         "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5("
-        "mem_id UNINDEXED, content, group_id UNINDEXED, user_id UNINDEXED)"
+        "mem_id UNINDEXED, content, group_shared_space UNINDEXED, user_id UNINDEXED)"
     )
-    conn.execute("INSERT INTO memories_fts (mem_id, content, group_id, user_id) VALUES ('m1', '用户喜欢打乒乓球', '1', '100')")
+    conn.execute("INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id) VALUES ('m1', '用户喜欢打乒乓球', '1', '100')")
     conn.commit()
     conn.close()
 
-    result = retrieval_v2.retrieve_memories(1, 100, "乒乓球", trigger="reply")
+    result = retrieval_v2.retrieve_memories("1", 100, "乒乓球", trigger="reply")
     conversation_ids = [m["id"] for m in result.conversation_memories]
     assert "m1" in conversation_ids
 
@@ -169,7 +169,7 @@ def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
     ]
     for mid, g, u, typ, content, imp, conf, usage, vis, lts in rows:
         conn.execute(
-            "INSERT INTO memories (id, group_id, user_id, type, content, importance, confidence, "
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, confidence, "
             "status, usage_tags, visibility, last_accessed_at) VALUES (?,?,?,?,?,?,?,'active',?,?, ?)",
             (mid, g, u, typ, content, imp, conf, usage, vis, lts),
         )
@@ -180,7 +180,7 @@ def test_retrieval_v2_score_floor_filters_noise(tmp_path, monkeypatch):
     monkeypatch.setattr(retrieval_v2, "MEMORY_V2_ENABLED", True)
     monkeypatch.setattr(retrieval_v2, "RAG_ENABLED", False)
 
-    result = retrieval_v2.retrieve_memories(1, 100, "一起玩游戏吧", trigger="reply")
+    result = retrieval_v2.retrieve_memories("1", 100, "一起玩游戏吧", trigger="reply")
     conversation_ids = [m["id"] for m in result.conversation_memories]
 
     assert "s" in conversation_ids
@@ -210,7 +210,7 @@ def test_schema_migration_adds_columns(tmp_path, monkeypatch):
     db_path = tmp_path / "agent_memory.db"
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "CREATE TABLE memories (id TEXT PRIMARY KEY, group_id TEXT, content TEXT, status TEXT)"
+        "CREATE TABLE memories (id TEXT PRIMARY KEY, group_shared_space TEXT, content TEXT, status TEXT)"
     )
     conn.execute(
         "CREATE TABLE long_term_memories (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT, user_id TEXT, summary TEXT)"
@@ -240,10 +240,10 @@ def test_schema_migration_does_not_touch_existing_data(tmp_path, monkeypatch):
     db_path = tmp_path / "agent_memory.db"
     conn = sqlite3.connect(db_path)
     conn.execute(
-        "CREATE TABLE memories (id TEXT PRIMARY KEY, group_id TEXT, content TEXT, status TEXT)"
+        "CREATE TABLE memories (id TEXT PRIMARY KEY, group_shared_space TEXT, content TEXT, status TEXT)"
     )
     conn.execute(
-        "INSERT INTO memories (id, group_id, content, status) VALUES ('m1', '1', '旧记忆', 'active')"
+        "INSERT INTO memories (id, group_shared_space, content, status) VALUES ('m1', '1', '旧记忆', 'active')"
     )
     conn.commit()
     conn.close()

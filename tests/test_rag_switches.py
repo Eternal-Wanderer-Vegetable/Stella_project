@@ -17,7 +17,7 @@ def _new_db(tmp_path: Path, monkeypatch) -> Path:
         """
         CREATE TABLE memories (
             id TEXT PRIMARY KEY,
-            group_id TEXT, user_id TEXT, type TEXT, content TEXT, content_raw TEXT,
+            group_shared_space TEXT, user_id TEXT, type TEXT, content TEXT, content_raw TEXT,
             importance REAL, confidence REAL, status TEXT, confirmation_count INTEGER,
             last_confirmed_at DATETIME, last_accessed_at DATETIME, compressed_at DATETIME,
             compression_version INTEGER, is_atomized INTEGER,
@@ -42,7 +42,7 @@ def _new_db(tmp_path: Path, monkeypatch) -> Path:
 def _insert_memory(db: Path, mid: str, group: str, user: str, content: str, importance: float, accessed: str) -> None:
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) "
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) "
         "VALUES (?, ?, ?, 'FACT', ?, ?, ?, 0.9, 'active', 1, ?)",
         (mid, group, user, content, content, importance, accessed),
     )
@@ -60,7 +60,7 @@ def test_rag_disabled_uses_weighted_fallback_ranking(tmp_path, monkeypatch):
     _insert_memory(db, "m1", "1", "100", "我在练习羽毛球发球", 0.9, "2026-08-08 12:00:00")
     _insert_memory(db, "m2", "1", "100", "今天和大家吃了火锅", 0.9, "2026-08-08 13:00:00")
 
-    results = retriever.get_group_memories(1, query="羽毛球", limit=2)
+    results = retriever.get_group_memories("1", query="羽毛球", limit=2)
     assert results[0]["content"] == "我在练习羽毛球发球"
 
 
@@ -73,7 +73,7 @@ def test_fts_disabled_minnes_total_also_digit_ranking(tmp_path, monkeypatch):
     _insert_memory(db, "m1", "1", "100", "我喜欢打网球", 0.9, "2026-08-08 09:00:00")
     _insert_memory(db, "m2", "1", "100", "最近在学编程", 0.9, "2026-08-08 12:00:00")
 
-    results = retriever.get_user_memories(1, 100, query="网球", limit=2)
+    results = retriever.get_user_memories("1", 100, query="网球", limit=2)
     assert results[0]["content"] == "我喜欢打网球"
 
 
@@ -87,7 +87,7 @@ def test_get_user_memories_query_scopes_to_user(tmp_path, monkeypatch):
     _insert_memory(db, "m1", "2", "100", "用户100喜欢篮球", 0.9, "2026-08-08 09:00:00")
     _insert_memory(db, "m2", "2", "200", "用户200喜欢篮球", 0.9, "2026-08-08 09:00:00")
 
-    results = retriever.get_user_memories(2, 100, query="篮球", limit=5)
+    results = retriever.get_user_memories("2", 100, query="篮球", limit=5)
     assert len(results) == 1
     assert results[0]["content"] == "用户100喜欢篮球"
 
@@ -100,7 +100,7 @@ def test_rag_disabled_does_not_create_fts_table(tmp_path, monkeypatch):
 
     _insert_memory(db, "m1", "3", "100", "看球真有意思", 0.8, "2026-08-08 09:00:00")
 
-    retriever.get_group_memories(3, query="球", limit=5)
+    retriever.get_group_memories("3", query="球", limit=5)
 
     conn = sqlite3.connect(db)
     table_count = conn.execute(
@@ -125,12 +125,12 @@ def test_rag_top_k_sets_candidate_pool_floor(tmp_path, monkeypatch):
 
     # RAG_TOP_K=3：即便限流 limit=1，也可拿满 2 条候选
     monkeypatch.setattr(retriever, "RAG_TOP_K", 3)
-    pool_big = retriever._query_rag_results(cursor, 4, "篮球", limit=max(1, retriever.RAG_TOP_K))
+    pool_big = retriever._query_rag_results(cursor, "4", "篮球", limit=max(1, retriever.RAG_TOP_K))
     assert len(pool_big) == 2
 
     # RAG_TOP_K=1：候选池被压到 1 条
     monkeypatch.setattr(retriever, "RAG_TOP_K", 1)
-    pool_small = retriever._query_rag_results(cursor, 4, "篮球", limit=max(1, retriever.RAG_TOP_K))
+    pool_small = retriever._query_rag_results(cursor, "4", "篮球", limit=max(1, retriever.RAG_TOP_K))
     assert len(pool_small) == 1
 
     conn.close()

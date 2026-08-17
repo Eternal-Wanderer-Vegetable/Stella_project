@@ -29,6 +29,7 @@ from config import (
     REPLY_LONG_TERM_LIMIT,
     SHORT_TERM_SUMMARY_STALE_MINUTES,
 )
+from config.spaces import resolve_space
 from core.context import ChatContext
 from memory.prompt_builder import build_memory_context
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
@@ -325,6 +326,9 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
     if MEMORY_V2_ENABLED:
         return await _build_user_context_v2(ctx)
 
+    # 共享空间：同一空间内的多个 QQ 群共享画像与记忆（M2.5-1 的 __post_init__ 应已填好，or 只是防御）
+    space = ctx.group_shared_space or resolve_space(ctx.group_id)
+
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -335,10 +339,10 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 
         if not is_proactive:
             # ── @-回复：读取用户画像（性格 + 对 bot 态度） ──
-            # 按群隔离：同一人在不同群是不同画像（v7 user_profiles 主键 (group_id, user_id)）
+            # 按共享空间隔离：同一空间内的多个 QQ 群共享一份画像
             cursor.execute(
-                "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_id = ? AND user_id = ?",
-                (str(ctx.group_id), str(ctx.user_id)),
+                "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_shared_space = ? AND user_id = ?",
+                (space, str(ctx.user_id)),
             )
             row = cursor.fetchone()
             if row:
@@ -351,10 +355,10 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
                     parts.append(f"关于用户{ctx.user_id}的了解: {'，'.join(traits)}")
 
         # ── 长期记忆 ──
-        # 主动发言：回顾全群记忆；@-回复：检索该用户相关记忆 + 其他相关记忆
+        # 主动发言：回顾全空间记忆；@-回复：检索该用户相关记忆 + 其他相关记忆
         if is_proactive:
             memories = get_group_memories(
-                ctx.group_id,
+                space,
                 query=ctx.message,
                 limit=PROACTIVE_LONG_TERM_LIMIT,
             )
@@ -362,7 +366,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
                 parts.append("最近的记忆回顾：\n" + build_memory_context(memories))
         else:
             user_memories = get_user_memories(
-                ctx.group_id,
+                space,
                 ctx.user_id,
                 query=ctx.message,
                 limit=REPLY_LONG_TERM_LIMIT,
@@ -372,7 +376,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
                     f"关于用户{ctx.user_id}的重要记忆：\n" + build_memory_context(user_memories)
                 )
 
-            related = get_related_memories(ctx.group_id, ctx.user_id, ctx.message, limit=3)
+            related = get_related_memories(space, ctx.user_id, ctx.message, limit=3)
             if related:
                 parts.append("其他相关记忆：\n" + build_memory_context(related))
 
@@ -394,7 +398,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
             if ctx.trigger == "proactive":
                 try:
                     memories = get_group_memories(
-                        ctx.group_id,
+                        space,
                         query=ctx.message,
                         limit=PROACTIVE_LONG_TERM_LIMIT,
                     )
@@ -403,7 +407,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
             else:
                 try:
                     user_memories = get_user_memories(
-                        ctx.group_id,
+                        space,
                         ctx.user_id,
                         query=ctx.message,
                         limit=REPLY_LONG_TERM_LIMIT,
@@ -411,7 +415,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
                 except Exception:
                     user_memories = []
                 try:
-                    related = get_related_memories(ctx.group_id, ctx.user_id, ctx.message, limit=3)
+                    related = get_related_memories(space, ctx.user_id, ctx.message, limit=3)
                 except Exception:
                     related = []
                 memories = (user_memories or []) + (related or [])
@@ -426,24 +430,27 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     from config import MEMORY_EMBEDDING_ENABLED
     from memory.retrieval_v2 import retrieve_memories
 
+    # 共享空间：同一空间内的多个 QQ 群共享画像与记忆（M2.5-1 的 __post_init__ 应已填好，or 只是防御）
+    space = ctx.group_shared_space or resolve_space(ctx.group_id)
+
     # 先组装稳定画像（只读稳定事实，过滤人格判断）
-    profile = _read_stable_profile(ctx.group_id, ctx.user_id)
+    profile = _read_stable_profile(space, ctx.user_id)
     ctx.user_profile = profile
 
-    # v2 检索（Context-aware Memory Activation）。
+    # v2 检索（Context-aware Memory Activation），按群组共享空间检索。
     # 开启 MEMORY_EMBEDDING_ENABLED 时走 embedding 语义分（失败自动回退规则版）。
     if MEMORY_EMBEDDING_ENABLED:
         from memory.retrieval_v2 import retrieve_memories_emb
 
         result = await retrieve_memories_emb(
-            group_id=ctx.group_id,
+            group_shared_space=space,
             user_id=ctx.user_id,
             query=ctx.message,
             trigger=ctx.trigger,
         )
     else:
         result = retrieve_memories(
-            group_id=ctx.group_id,
+            group_shared_space=space,
             user_id=ctx.user_id,
             query=ctx.message,
             trigger=ctx.trigger,
@@ -457,24 +464,25 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
 
     if ctx.conversation_memories or ctx.behavior_constraints:
         logger.info(
-            f"🧠 [Context v2] 模式={result.mode} 聊天素材={len(result.conversation_memories)} "
+            f"🧠 [Context v2] 空间={space} 模式={result.mode} 聊天素材={len(result.conversation_memories)} "
             f"行为约束={len(result.behavior_constraints)}"
         )
     return ctx
 
 
-def _read_stable_profile(group_id: int, user_id: int) -> str:
+def _read_stable_profile(group_shared_space: str, user_id: int) -> str:
     """读取用户画像，只保留「稳定事实」（语言偏好/技术水平/可观察行为），
     过滤人格判断与心理状态（见 Memory Policy / User Profile 治理方案）。
-    按群隔离——同一人在不同群是不同画像（v7 user_profiles 主键 (group_id, user_id)）。"""
+    按共享空间隔离——同一空间内的多个 QQ 群共享一份画像（v8 user_profiles 主键
+    (group_shared_space, user_id)）。"""
     from memory.policy import stable_profile_facts
 
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_id = ? AND user_id = ?",
-            (str(group_id), str(user_id)),
+            "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_shared_space = ? AND user_id = ?",
+            (group_shared_space, str(user_id)),
         )
         row = cursor.fetchone()
         conn.close()

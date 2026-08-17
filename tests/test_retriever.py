@@ -26,7 +26,7 @@ def _create_temp_db(tmp_path: Path):
         """
         CREATE TABLE IF NOT EXISTS memories (
             id TEXT PRIMARY KEY,
-            group_id TEXT,
+            group_shared_space TEXT,
             user_id TEXT,
             type TEXT,
             content TEXT,
@@ -71,7 +71,7 @@ def test_related_memories_are_ranked_by_relevance_and_recency(tmp_path, monkeypa
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m1",
             "1",
@@ -87,7 +87,7 @@ def test_related_memories_are_ranked_by_relevance_and_recency(tmp_path, monkeypa
         ),
     )
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m2",
             "1",
@@ -103,7 +103,7 @@ def test_related_memories_are_ranked_by_relevance_and_recency(tmp_path, monkeypa
         ),
     )
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m3",
             "1",
@@ -121,7 +121,7 @@ def test_related_memories_are_ranked_by_relevance_and_recency(tmp_path, monkeypa
     conn.commit()
     conn.close()
 
-    results = retriever.get_related_memories(1, 99, "篮球训练", limit=2)
+    results = retriever.get_related_memories("1", 99, "篮球训练", limit=2)
 
     assert results[0]["content"] == "我在学习篮球战术"
     assert results[0]["type"] == "RELATED"
@@ -138,7 +138,7 @@ def test_related_memories_use_sqlite_rag_index(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m_rag",
             "1",
@@ -156,7 +156,7 @@ def test_related_memories_use_sqlite_rag_index(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    results = retriever.get_related_memories(1, 99, "篮球训练", limit=1)
+    results = retriever.get_related_memories("1", 99, "篮球训练", limit=1)
 
     assert len(results) == 1
     assert results[0]["content"] == "今晚我在篮球馆训练了罚球"
@@ -170,7 +170,7 @@ def test_group_memories_prefer_recent_and_important_entries(tmp_path, monkeypatc
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m1",
             "2",
@@ -186,7 +186,7 @@ def test_group_memories_prefer_recent_and_important_entries(tmp_path, monkeypatc
         ),
     )
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m2",
             "2",
@@ -204,7 +204,7 @@ def test_group_memories_prefer_recent_and_important_entries(tmp_path, monkeypatc
     conn.commit()
     conn.close()
 
-    results = retriever.get_group_memories(2, limit=2)
+    results = retriever.get_group_memories("2", limit=2)
 
     assert results[0]["content"] == "新重要记忆"
 
@@ -220,7 +220,7 @@ def test_group_memories_query_prefers_rag_results(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m4",
             "3",
@@ -238,7 +238,7 @@ def test_group_memories_query_prefers_rag_results(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    results = retriever.get_group_memories(3, query="篮球比赛", limit=1)
+    results = retriever.get_group_memories("3", query="篮球比赛", limit=1)
 
     assert len(results) == 1
     assert results[0]["content"] == "今天我们去篮球场打球"
@@ -255,7 +255,7 @@ def test_user_memories_query_prefers_rag_results(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO memories (id, group_id, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, confirmation_count, last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             "m5",
             "4",
@@ -273,7 +273,7 @@ def test_user_memories_query_prefers_rag_results(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    results = retriever.get_user_memories(4, 30, query="乒乓球", limit=1)
+    results = retriever.get_user_memories("4", 30, query="乒乓球", limit=1)
 
     assert len(results) == 1
     assert results[0]["content"] == "用户30喜欢打乒乓球"

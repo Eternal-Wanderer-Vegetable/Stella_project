@@ -77,12 +77,12 @@ def _parse_usage_tags(value: Any) -> list[str]:
 def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
     """把 v2 检索 SQL 行转成记忆 dict。
 
-    行结构：id, group_id, user_id, type, content, importance, confidence,
+    行结构：id, group_shared_space, user_id, type, content, importance, confidence,
             visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at
     """
     return {
         "id": row[0],
-        "group_id": row[1],
+        "group_shared_space": row[1],
         "user_id": row[2],
         "type": row[3] or "FACT",
         "content": row[4] or "",
@@ -98,7 +98,7 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
 
 def _select_columns() -> str:
     return (
-        "id, group_id, user_id, type, content, importance, confidence, "
+        "id, group_shared_space, user_id, type, content, importance, confidence, "
         "visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at"
     )
 
@@ -119,7 +119,7 @@ def _allowed_visibility_clause(mode: str) -> str:
 
 def _fetch_candidates(
     cursor: sqlite3.Cursor,
-    group_id: int,
+    group_shared_space: str,
     user_id: int | None,
     mode: str,
     query: str,
@@ -127,17 +127,18 @@ def _fetch_candidates(
 ) -> list[dict[str, Any]]:
     """拉取候选记忆行（先按 Visibility 过滤，再按访问时间倒序）。
 
-    include_user 为 None 表示群级（主动发言）；否则限定该用户（@ 回复）。
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+    include_user 为 None 表示空间级（主动发言）；否则限定该用户（@ 回复）。
     这是“Policy 优先于 Similarity”的第一步：在合法范围内取候选。
     """
     where = "m.status = 'active'"
     params: list[Any] = []
     if user_id is None:
-        where += " AND m.group_id = ?"
-        params.append(str(group_id))
+        where += " AND m.group_shared_space = ?"
+        params.append(group_shared_space)
     else:
-        where += " AND m.group_id = ? AND m.user_id = ?"
-        params.extend([str(group_id), str(user_id)])
+        where += " AND m.group_shared_space = ? AND m.user_id = ?"
+        params.extend([group_shared_space, str(user_id)])
 
     # Visibility 预过滤
     where += f" AND ({_allowed_visibility_clause(mode)})"
@@ -150,7 +151,7 @@ def _fetch_candidates(
     # 有关键词时优先走 FTS（语义/关键词混合）
     rows: list[tuple[Any, ...]] = []
     if query and RAG_ENABLED:
-        rows = _query_fts(cursor, group_id, user_id, query, max(pool_limit, RAG_TOP_K), mode)
+        rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode)
     if not rows:
         sql = (
             f"SELECT {_select_columns()} FROM memories m WHERE {where} "
@@ -161,33 +162,33 @@ def _fetch_candidates(
             rows = cursor.execute(sql, tuple(params)).fetchall()
         except sqlite3.OperationalError:
             # 旧库可能还没有 v2 列：退化为不带新列的查询
-            return _fetch_candidates_legacy(cursor, group_id, user_id, mode, pool_limit)
+            return _fetch_candidates_legacy(cursor, group_shared_space, user_id, mode, pool_limit)
     return [_row_to_memory(r) for r in rows]
 
 
 def _fetch_candidates_legacy(
     cursor: sqlite3.Cursor,
-    group_id: int,
+    group_shared_space: str,
     user_id: int | None,
     mode: str,
     pool_limit: int,
 ) -> list[dict[str, Any]]:
-    """旧库（无 v2 列）回退：只按 status/group/user 取，不按 Visibility 过滤。"""
+    """旧库（无 v2 列）回退：只按 status/空间/用户取，不按 Visibility 过滤。"""
     if user_id is None:
         sql = (
-            "SELECT id, group_id, user_id, type, content, importance, confidence, "
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
             "'OPEN', NULL, NULL, NULL, last_accessed_at FROM memories m "
-            "WHERE m.group_id = ? AND m.status = 'active' ORDER BY m.last_accessed_at DESC LIMIT ?"
+            "WHERE m.group_shared_space = ? AND m.status = 'active' ORDER BY m.last_accessed_at DESC LIMIT ?"
         )
-        params: list[Any] = [str(group_id), pool_limit]
+        params: list[Any] = [group_shared_space, pool_limit]
     else:
         sql = (
-            "SELECT id, group_id, user_id, type, content, importance, confidence, "
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
             "'OPEN', NULL, NULL, NULL, last_accessed_at FROM memories m "
-            "WHERE m.group_id = ? AND m.user_id = ? AND m.status = 'active' "
+            "WHERE m.group_shared_space = ? AND m.user_id = ? AND m.status = 'active' "
             "ORDER BY m.last_accessed_at DESC LIMIT ?"
         )
-        params = [str(group_id), str(user_id), pool_limit]
+        params = [group_shared_space, str(user_id), pool_limit]
     try:
         return [_row_to_memory(r) for r in cursor.execute(sql, tuple(params)).fetchall()]
     except sqlite3.OperationalError:
@@ -196,13 +197,16 @@ def _fetch_candidates_legacy(
 
 def _query_fts(
     cursor: sqlite3.Cursor,
-    group_id: int,
+    group_shared_space: str,
     user_id: int | None,
     query: str,
     limit: int,
     mode: str,
 ) -> list[tuple[Any, ...]]:
-    """FTS5 语义检索候选（复用 memories_fts 索引，并做 Visibility 预过滤）。"""
+    """FTS5 语义检索候选（复用 memories_fts 索引，并做 Visibility 预过滤）。
+
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+    """
     from memory.retriever import _ensure_fts_table, _segment_text
 
     if not _ensure_fts_table(cursor):
@@ -212,13 +216,13 @@ def _query_fts(
         return []
     try:
         sql = (
-            "SELECT m.id, m.group_id, m.user_id, m.type, m.content, m.importance, m.confidence, "
+            "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance, m.confidence, "
             "m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule, m.last_accessed_at "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
-            "WHERE f.group_id = ? AND m.status = 'active' "
+            "WHERE f.group_shared_space = ? AND m.status = 'active' "
         )
-        params: list[Any] = [str(group_id)]
+        params: list[Any] = [group_shared_space]
         if user_id is not None:
             sql += "AND m.user_id = ? "
             params.append(str(user_id))
@@ -272,7 +276,7 @@ def _max_float(a: Any, b: Any) -> float:
 
 
 def retrieve_memories(
-    group_id: int,
+    group_shared_space: str,
     user_id: int,
     query: str,
     trigger: str = "reply",
@@ -281,7 +285,9 @@ def retrieve_memories(
 ) -> RetrievalResult:
     """v2 记忆检索主入口。
 
-    :param group_id: 群 ID
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+
+    :param group_shared_space: 群组共享空间标识（str，由 config.spaces.resolve_space 得到）
     :param user_id: 当前用户 ID（主动发言时传 0）
     :param query: 当前消息/话题文本
     :param trigger: "reply"（@ 回复）或 "proactive"（主动插话）
@@ -295,8 +301,9 @@ def retrieve_memories(
 
     mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
 
-    # 短期缓存：5 分钟内同一群同一触发方式的检索结果直接复用，避免每句话重新检索
-    cache_key = (str(DB_PATH), str(group_id), str(user_id), trigger, mode)
+    # 短期缓存：5 分钟内同一空间同一触发方式的检索结果直接复用，避免每句话重新检索。
+    # 缓存 key 必须用空间（而非 QQ 群）——否则同空间的两个群各自缓存，白跑检索。
+    cache_key = (str(DB_PATH), group_shared_space, str(user_id), trigger, mode)
     cached = _CACHE.get(cache_key)
     if cached is not None and (time.monotonic() - cached[0]) < RETRIEVAL_CACHE_TTL:
         _CACHE[cache_key] = cached  # 简单 LRU：命中即刷新计时
@@ -309,7 +316,7 @@ def retrieve_memories(
     cursor = conn.cursor()
     try:
         include_user: int | None = None if trigger == "proactive" else user_id
-        candidates = _fetch_candidates(cursor, group_id, include_user, mode, query, pool_limit)
+        candidates = _fetch_candidates(cursor, group_shared_space, include_user, mode, query, pool_limit)
     finally:
         conn.close()
 
@@ -401,7 +408,7 @@ _CACHE: dict[tuple[str, str, str, str, str], tuple[float, RetrievalResult]] = {}
 
 
 async def retrieve_memories_emb(
-    group_id: int,
+    group_shared_space: str,
     user_id: int,
     query: str,
     trigger: str = "reply",
@@ -412,6 +419,9 @@ async def retrieve_memories_emb(
     再走生产核心路径 ``retrieve_memories``。服务/模型不可用时回退规则版，
     保证主链路不因语义检索故障中断。
 
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+
+    :param group_shared_space: 群组共享空间标识（str）
     :param service: 可注入的 EmbeddingService（测试用）；缺省按 config 构建。
     """
     from config import (
@@ -437,7 +447,7 @@ async def retrieve_memories_emb(
             include_user: int | None = None if trigger == "proactive" else user_id
             limit = mode_limit(resolved_mode)
             pool_limit = max(LONG_TERM_RELEVANCE_CANDIDATE_LIMIT, limit * 5)
-            candidates = _fetch_candidates(cursor, group_id, include_user, resolved_mode, query, pool_limit)
+            candidates = _fetch_candidates(cursor, group_shared_space, include_user, resolved_mode, query, pool_limit)
         finally:
             conn.close()
         for m in candidates:
@@ -449,8 +459,8 @@ async def retrieve_memories_emb(
                 semantic_scores[mid] = s
         if semantic_scores:
             return retrieve_memories(
-                group_id, user_id, query, trigger=trigger, mode=resolved_mode, semantic_scores=semantic_scores
+                group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode, semantic_scores=semantic_scores
             )
     except Exception as e:
         logger.warning(f"[Embedding] 语义检索失败，回退规则版: {e}")
-    return retrieve_memories(group_id, user_id, query, trigger=trigger, mode=resolved_mode)
+    return retrieve_memories(group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode)

@@ -207,6 +207,7 @@ class Pipeline:
                 trace = getattr(ctx, "memory_trace", {}) or {}
                 record_trace(
                     group_id=ctx.group_id,
+                    group_shared_space=getattr(ctx, "group_shared_space", ""),
                     user_id=ctx.user_id,
                     message=ctx.message,
                     mode=trace.get("mode") or getattr(ctx, "memory_mode", ""),

@@ -73,7 +73,7 @@ def test_fts_index_stays_in_sync_after_promotion(tmp_path, monkeypatch):
     assert _count(db, "SELECT COUNT(*) FROM memories_fts") == 1
     assert _count(db, "SELECT COUNT(*) FROM memories WHERE status = 'active'") == 1
 
-    results = retriever.get_group_memories(1, query="羽毛球", limit=5)
+    results = retriever.get_group_memories("1", query="羽毛球", limit=5)
     assert len(results) == 1
     assert "羽毛球" in results[0]["content"]
 
@@ -95,7 +95,7 @@ def test_fts_index_sync_after_merge_updates_content(tmp_path, monkeypatch):
     assert _count(db, "SELECT COUNT(*) FROM memories WHERE status = 'active'") == 1
 
     # 合并后的内容应能被“游泳”检索命中
-    results = retriever.get_group_memories(1, query="游泳", limit=5)
+    results = retriever.get_group_memories("1", query="游泳", limit=5)
     assert results and "游泳" in results[0]["content"]
 
 
@@ -109,7 +109,7 @@ def test_fts_disabled_means_no_index_and_query_falls_back(tmp_path, monkeypatch)
     assert _count(db, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='memories_fts'") == 0
 
     # 检索（FTS 关闭 → 走内存回退排序）仍能返回该记忆
-    results = retriever.get_user_memories(2, 200, query="网球", limit=5)
+    results = retriever.get_user_memories("2", 200, query="网球", limit=5)
     assert results and "网球" in results[0]["content"]
 
 
@@ -128,7 +128,7 @@ def test_fts_rebuilds_when_index_is_stale(tmp_path, monkeypatch):
     assert _count(db, "SELECT COUNT(*) FROM memories_fts") == 0
 
     # 检索触发自动重建（fts_count(0) != active_count(1)）后命中
-    results = retriever.get_group_memories(3, query="羽毛球馆", limit=5)
+    results = retriever.get_group_memories("3", query="羽毛球馆", limit=5)
     assert len(results) == 1
     assert "羽毛球馆" in results[0]["content"]
     # 重建后 FTS 已补齐
