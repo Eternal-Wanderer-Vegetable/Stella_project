@@ -64,4 +64,7 @@ STARTCOMMAND.md
 positive_reordered.json
 prompt_now.txt
 
+# start.bat 首次运行下载的嵌入式 Python 运行时
+runtime/
+
 /memory/.space_assignments.json

@@ -42,6 +42,14 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 
 ## 🚀 快速开始
 
+### 📦 下载（普通用户）
+
+**不需要 clone、不需要自己装 Python。** 到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后双击 `start.bat` 即可。
+
+首次运行 `start.bat` 会自动下载约 100MB 的嵌入式 Python 并安装依赖，然后进入配置向导，全程无需手动安装任何环境。
+
+> **杀软提示**：`start.bat` 会下载并运行 Python，部分杀软可能拦截，需将目录加入信任列表。
+
 ### 环境要求
 
 | 组件 | 要求 |
@@ -52,6 +60,10 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 | 模型服务 | [LM Studio](https://lmstudio.ai/)（需 OpenAI 兼容接口，也可以提供APIkey接入在线LLM） |
 
 ### 安装
+
+**普通用户**：见上方「下载」——下载 Release 的 zip，解压后双击 `start.bat` 即可，无需自行安装 Python。
+
+**开发者**（clone 源码调试）：
 
 ```bash
 git clone https://github.com/Eternal-Wanderer-Vegetable/Stella_project.git

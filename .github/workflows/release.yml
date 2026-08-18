@@ -1,0 +1,88 @@
+name: Release
+
+# 打 v* tag 触发；也支持手工触发（填版本号即可，不带 v 前缀）
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '打包版本号（不带 v 前缀，如 0.3.0），用于手工测试打包流程'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 防止忘改 pyproject.toml 版本号：tag v0.3.0 必须与 version = "0.3.0" 一致
+      - name: 校验版本号一致
+        run: |
+          VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG=${GITHUB_REF_NAME#v}
+          else
+            TAG="${{ inputs.version }}"
+            TAG=${TAG#v}
+          fi
+          echo "pyproject.toml version: ${VERSION}"
+          echo "tag（去 v 前缀）: ${TAG}"
+          if [ -z "${VERSION}" ]; then
+            echo "::error::无法从 pyproject.toml 解析版本号"
+            exit 1
+          fi
+          if [ "${VERSION}" != "${TAG}" ]; then
+            echo "::error::pyproject.toml 版本（${VERSION}）与 tag（${TAG}）不一致，请先更新版本号"
+            exit 1
+          fi
+          echo "RELEASE_REF=v${TAG}" >> "$GITHUB_ENV"
+
+      - name: 构造发布目录（排除测试与开发文件）
+        run: |
+          mkdir -p dist/Stella
+          rsync -a \
+            --exclude-from=.gitignore \
+            --exclude 'tests' \
+            --exclude 'design_docs' \
+            --exclude 'scripts' \
+            --exclude '_deprecated' \
+            --exclude '.github' \
+            --exclude '.git' \
+            --exclude 'release_assets' \
+            --exclude 'memory/benchmark' \
+            --exclude 'memory/*.db' \
+            --exclude 'requirements-dev.txt' \
+            --exclude '.pytest_cache' \
+            --exclude '.ruff_cache' \
+            --exclude '.mypy_cache' \
+            ./ dist/Stella/
+          cp release_assets/start.bat release_assets/doctor.bat \
+             release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
+
+      # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF
+      - name: 确保 bat 与 txt 为 CRLF
+        run: |
+          sed -i 's/\r$//' dist/Stella/start.bat dist/Stella/doctor.bat \
+            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
+          sed -i 's/$/\r/' dist/Stella/start.bat dist/Stella/doctor.bat \
+            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
+
+      - name: 打包 zip
+        run: |
+          cd dist
+          zip -q -r "Stella-${RELEASE_REF}-win64.zip" Stella
+          ls -lh "Stella-${RELEASE_REF}-win64.zip"
+
+      - name: 发布 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${RELEASE_REF}" \
+            "dist/Stella-${RELEASE_REF}-win64.zip" \
+            --title "Stella ${RELEASE_REF}" \
+            --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md

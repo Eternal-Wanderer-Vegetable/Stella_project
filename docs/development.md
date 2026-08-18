@@ -298,6 +298,40 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 `pip-audit` 是阻塞的，某个上游依赖爆出 CVE 时 CI 会红。若判断为不可立即修复的上游问题，可临时在该步骤加 `|| true`，但应记录原因。
 
+## 发布流程
+
+打 tag 后 CI（`.github/workflows/release.yml`）自动打包并发布，产出 `Stella-vX.Y.Z-win64.zip`。
+
+### 打 tag 前的检查清单
+
+1. `python -m pytest tests -q` 全绿
+2. `ruff check .` 无警告
+3. `pyproject.toml` 版本号已更新（CI 会把 tag 与它比对，不一致直接 fail）
+4. 改过配置项 → `.env.example` 与 `docs/configuration.md` 已同步
+5. `release_assets/RELEASE_NOTES_TEMPLATE.md` 已更新为本版本说明，**破坏性变更必须列明**（例如本次：废弃全部 `NAPCAT_*` 配置、schema v8 需归档旧库让程序重建）
+
+然后：
+
+```bash
+git tag v0.x.0
+git push origin v0.x.0
+```
+
+CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`design_docs/`、`scripts/`、`_deprecated/`、`.github/`、`memory/benchmark/` 等）→ 拷入 `release_assets/` 的四个文件并把 bat/txt 转成 CRLF → 打 zip → 创建 GitHub Release。
+
+### 升级嵌入式 Python 时的注意事项
+
+`release_assets/start.bat` 里**硬编码**了：
+
+- `PY_VER`（如 `3.12.8`）
+- `PY_ZIP`（embed-amd64 包文件名，随 `PY_VER` 变）
+- `PY_SHA256`（python.org 下载页的官方校验值，写错会导致安装永远失败）
+- 段 6 里 `python*._pth` 的通配符（`python312._pth` 里的 `312` 对应主次版本，换 Python 时若文件名不再匹配要同步改）
+
+升级 Python 版本时这四处要一并更新，并在本地完整跑一遍 `start.bat` 验证（会产生 `runtime/` 目录，已加入 `.gitignore`）。
+
+> **编码约定**：`release_assets/` 里的 `.bat` 是 **GBK(CP936)** 编码（不是 UTF-8），`README-快速开始.txt` 是 UTF-8 with BOM。别把 bat 转回 UTF-8——实测 cmd 在 UTF-8+`chcp 65001` 下解析会随机错位（部分多字节字符所在行被当成命令执行，输出「is not recognized」）；GBK 文件在中文 Windows 默认控制台（936）下显示正常且解析稳定。在 UTF-8 编辑器里打开 bat 看到乱码是正常的，改文件后记得存回 GBK。
+
 ## 代码约定
 
 **Lint / 格式**：ruff（配置在 `pyproject.toml`）。未使用 black —— 不要引入 black 格式化，会造成大面积无意义 diff。
