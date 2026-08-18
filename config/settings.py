@@ -598,37 +598,20 @@ MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED = _env(
 MAX_REPLY_LINES = _env_int("MAX_REPLY_LINES", 5)
 SEND_INTERVAL = _env_float("SEND_INTERVAL", 0.8)
 
-# ---------- NapCat 前端（NapCat.Shell）进程管理 ----------
-# NapCat.Shell 安装目录（需含 launcher-user.bat / NapCatWinBootMain.exe / napcat.mjs）
-# 默认取项目根目录上一级下的 NapCat.Shell，可用绝对路径覆盖
-NAPCAT_SHELL_PATH = _env_path("NAPCAT_SHELL_PATH", PROJECT_ROOT.parent / "NapCat.Shell")
-# 机器人启动时若 NapCat 未运行，是否自动经 launcher-user.bat 拉起
-NAPCAT_AUTO_START = _env("NAPCAT_AUTO_START", "true").lower() in ("true", "1", "yes")
-# 开机自动登录：写入子进程环境变量 NAPCAT_QUICK_ACCOUNT / NAPCAT_QUICK_PASSWORD。
-# NapCat 优先快速登录（历史会话），失效时用密码回退登录；MD5 优先于明文密码。
-NAPCAT_QQ_ACCOUNT = _env("NAPCAT_QQ_ACCOUNT", "")
-NAPCAT_QQ_PASSWORD = _env("NAPCAT_QQ_PASSWORD", "")
-NAPCAT_QQ_PASSWORD_MD5 = _env("NAPCAT_QQ_PASSWORD_MD5", "")
-
-# ---------- NapCat 链路看门狗（外部重启，不再走 WebUI API） ----------
-# 距上次收到**任何** OneBot 事件（含 NapCat 周期性发送的心跳元事件）超过该秒数，
-# **且主动探活（get_status）失败**，才判定链路中断并外部重启 NapCat
-NAPCAT_WATCHDOG_TIMEOUT = _env_int("NAPCAT_WATCHDOG_TIMEOUT", 300)
-# 看门狗定时检查间隔（秒）
-NAPCAT_WATCHDOG_CHECK_INTERVAL = _env_int("NAPCAT_WATCHDOG_CHECK_INTERVAL", 60)
-# 重启后把最近心跳时间拨后此秒数，给恢复留缓冲，避免反复触发
-NAPCAT_WATCHDOG_RESTART_COOLDOWN = _env_int("NAPCAT_WATCHDOG_RESTART_COOLDOWN", 120)
-# 连续外部重启的最大次数（连接恢复后清零）。达到上限即停止自动重启：
-# 重启换不回连接时（如自动登录退化为扫码），继续重启只会持续把 bot 踢下线，
-# 且高频登录尝试可能触发 QQ 风控。
-NAPCAT_WATCHDOG_MAX_RESTARTS = _env_int("NAPCAT_WATCHDOG_MAX_RESTARTS", 3)
-# 达到重启上限后的静默时长（秒）：避免每个检查周期都刷同样的 error。
-# 期间若人工完成登录，on_bot_connect 会自动清零重启计数并恢复正常。
-NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS = _env_int("NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS", 3600)
-# NapCat 启动输出的日志文件（原先丢进 DEVNULL，导致重启后完全无法诊断）
-NAPCAT_LAUNCH_LOG_PATH = _env_path("NAPCAT_LAUNCH_LOG_PATH", PROJECT_ROOT / "napcat_launch.log")
-# 是否显示 NapCat 控制台窗口（调试期建议 true，便于直接看到登录界面/扫码提示）
-NAPCAT_SHOW_WINDOW = _env("NAPCAT_SHOW_WINDOW", "false").lower() in ("true", "1", "yes")
+# ---------- OneBot 链路监测 ----------
+# 只监测、不重启。Bot 不再管理 NapCat 进程——QQ 的登录风控会把自动登录退化为
+# 扫码（见 design_docs/deprecated_napcat_manager.md），登录必须有人在场，
+# 进程管理因此没有收益。用户用 NapCatQQ Desktop 装好并登录 NapCat，
+# Bot 只连接现成的 OneBot WS 端点（连接方式配置在 .env 顶部：HOST/PORT 或 ONEBOT_WS_URLS）。
+LINK_MONITOR_ENABLED = _env("LINK_MONITOR_ENABLED", "true").lower() in ("true", "1", "yes")
+# 距上次收到**任何** OneBot 事件（含 NapCat 周期性心跳元事件，默认 15s 一次）
+# 超过该秒数，才做一次主动探活。静默 ≠ 断线：群里没人说话时心跳仍在，
+# 只挂 on_message 会把安静的群误判为链路中断（2026-08-14 重启循环的成因）。
+LINK_MONITOR_TIMEOUT = _env_int("LINK_MONITOR_TIMEOUT", 300)
+# 定时检查间隔（秒）
+LINK_MONITOR_CHECK_INTERVAL = _env_int("LINK_MONITOR_CHECK_INTERVAL", 60)
+# 告警节流（秒）：断线期间不重复刷同样的 error
+LINK_MONITOR_ALERT_INTERVAL = _env_int("LINK_MONITOR_ALERT_INTERVAL", 300)
 
 # ---------- 破防检测 ----------
 BAD_PHRASES = [

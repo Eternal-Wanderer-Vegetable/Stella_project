@@ -78,9 +78,7 @@ Stella_project/
 │
 ├── extensions/                     # 自动加载的扩展（扫描 setup(pipeline)）
 │   ├── __init__.py                 # 扩展加载器
-│   └── napcat_manager/             # NapCat 进程管理
-│       ├── manager.py              # 启动/停止/重启 NapCat.Shell 进程树
-│       └── watchdog.py             # 链路看门狗（心跳 + 主动探活 + 重启上限）
+│   └── link_monitor/               # OneBot 链路监测（心跳 + 主动探活，只告警）
 │
 ├── stella_project/plugins/bot_main/
 │   ├── ai_gateway.py               # QQ 事件监听、Pipeline 装配、主动发言调度
@@ -119,7 +117,7 @@ Stella_project/
 
 `BOT_SELF` 是必需的：没有它，用户回答「对」「手机」这类简短回应时，整合模型看不到 Bot 问了什么，只能放弃或自行编造语境。
 
-同一个监听器还负责刷新 NapCat 看门狗心跳（通过 `event_preprocessor`，任何 OneBot 事件都算，包括协议端的心跳元事件）。
+链路监测由**独立的** `event_preprocessor` 刷新心跳（任何 OneBot 事件都算，包括协议端的心跳元事件），不是 `group_silent_listener` 的职责。
 
 > **落库监听器必须是最高优先级（0）**，且必须排在所有 `block=True` 的处理器之前。
 >
@@ -279,7 +277,7 @@ log_thought        (40)  → 写 stella_thought_logs.md
 | 任务 | 周期 | 作用 |
 |---|---|---|
 | 主动发言检查 | `PROACTIVE_CHECK_INTERVAL` | 睡眠/苏醒播报 → 尝试主动 @ → 尝试主动插话 |
-| NapCat 看门狗 | `NAPCAT_WATCHDOG_CHECK_INTERVAL` | 心跳超时 + 探活失败 → 外部重启 |
+| 链路监测 | `LINK_MONITOR_CHECK_INTERVAL` | 事件超时后主动探活，失败则告警（不重启） |
 | 消息表裁剪 | 每日 `MESSAGE_CLEANUP_HOUR` 点 | 每群保留最近 N 条，同时清理过期追踪 |
 | 周度压缩 | 每 7 天 | 全量去重、原子化、归档、衰减 |
 | 定时整合排空 | `CONSOLIDATION_SCHEDULE_INTERVAL` | 逐批消化各群的整合积压 |
@@ -337,7 +335,7 @@ python -m memory.schema --backup    # 仅备份
 
 `extensions/` 下的每个模块/包若提供 `setup(pipeline)`，启动时会被自动加载。扩展可以注册 Hook、注入实现、启动自己的定时任务。
 
-`napcat_manager` 是参考实现：它通过 `set_restart_impl()` 把具体的重启逻辑注入看门狗，因此换成其他 OneBot 协议端只需替换实现，看门狗逻辑可直接复用。
+`link_monitor` 是参考实现：它在 import 时注册一个 `event_preprocessor`（任何 OneBot 事件刷新心跳）、两个 driver 钩子（`on_bot_connect` / `on_bot_disconnect`）与一个自己的定时任务（事件超时后主动探活，探活失败只告警不重启）。扩展无需改动业务主程序即可接入。
 
 ## 时间处理约定
 

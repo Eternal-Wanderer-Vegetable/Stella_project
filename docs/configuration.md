@@ -497,35 +497,37 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 > 关闭 `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` 会导致积压超过 `MESSAGE_CLEANUP_KEEP_COUNT` 时未整合消息被永久丢弃，那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
 
-## NapCat 进程管理
+## OneBot 连接
+
+Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用
+[NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并完成 QQ 登录，
+Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必须有人在场
+（见 `design_docs/deprecated_napcat_manager.md`）。
+
+| 方式 | Bot 侧（`.env`） | NapCat 侧（WebUI 网络配置） |
+|---|---|---|
+| 反向 WS（推荐） | `HOST` + `PORT`（NoneBot 默认 `0.0.0.0:8080`），反向 WS 端点固定 `/onebot/v11/ws` | 添加「WebSocket 客户端」，URL 填 `ws://<Bot地址>:<PORT>/onebot/v11/ws` |
+| 正向 WS | `ONEBOT_V11_WS_URLS`（JSON 数组）+ `ONEBOT_V11_ACCESS_TOKEN` | 开启「WS 服务端」，记下监听地址与 token |
+
+若两侧都配了 access token，两边的值必须一致。相关环境变量见 `.env.example` 顶部。
+
+## 链路监测
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
-| `NAPCAT_SHELL_PATH` | `../NapCat.Shell` | NapCat.Shell 安装目录 |
-| `NAPCAT_AUTO_START` | `true` | 启动时若 NapCat 未运行则自动拉起 |
-| `NAPCAT_QQ_ACCOUNT` | 空 | 自动登录账号 |
-| `NAPCAT_QQ_PASSWORD` | 空 | 明文密码 |
-| `NAPCAT_QQ_PASSWORD_MD5` | 空 | MD5 密码（优先于明文） |
-| `NAPCAT_LAUNCH_LOG_PATH` | `napcat_launch.log` | NapCat 启动输出日志 |
-| `NAPCAT_SHOW_WINDOW` | `false` | 是否显示 NapCat 控制台窗口 |
+| `LINK_MONITOR_ENABLED` | `true` | 是否启用链路监测 |
+| `LINK_MONITOR_TIMEOUT` | `300` | 距上次收到**任何** OneBot 事件（含心跳元事件）超过该秒数，才做一次主动探活 |
+| `LINK_MONITOR_CHECK_INTERVAL` | `60` | 定时检查间隔（秒） |
+| `LINK_MONITOR_ALERT_INTERVAL` | `300` | 告警节流（秒）：断线期间不重复刷同样的 error |
 
-登录变量会同时通过环境变量注入与写入 `NapCat.Shell/config/.env`——部分 NapCat 版本的启动链不透传外部环境变量，后者是可靠兜底。
+**只告警、不重启。** 登录风控使自动重启无效（自动登录会退化为扫码），进程管理因此
+没有收益（见 `design_docs/deprecated_napcat_manager.md`）。Bot 只负责监测链路并给出
+排查提示，NapCat 的启停与登录由 NapCatQQ Desktop 人工完成。
 
-> 调试期建议 `NAPCAT_SHOW_WINDOW=true`，掉线时能直接看到窗口里发生了什么（是否退化为扫码），而不必事后推断。
-
-### 链路看门狗
-
-| 配置项 | 默认值 | 说明 |
-|---|---|---|
-| `NAPCAT_WATCHDOG_TIMEOUT` | `300` | 距上次收到**任何** OneBot 事件（含心跳元事件）超过该秒数，**且主动探活失败**，才判定链路中断 |
-| `NAPCAT_WATCHDOG_CHECK_INTERVAL` | `60` | 检查间隔（秒） |
-| `NAPCAT_WATCHDOG_RESTART_COOLDOWN` | `120` | 重启后把心跳拨后的秒数，给恢复留缓冲 |
-| `NAPCAT_WATCHDOG_MAX_RESTARTS` | `3` | 连续重启上限，连接恢复后清零 |
-| `NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS` | `3600` | 达到重启上限后的静默时长（秒），避免每个检查周期都刷同样的 error |
-
-期间若人工完成登录，`on_bot_connect` 会自动清零重启计数并恢复正常。
-
-> `NAPCAT_WATCHDOG_MAX_RESTARTS` 是**安全项而非优化项**。若重启换不回连接（如自动登录退化为扫码），无上限的重启会持续把 Bot 踢下线，且高频登录尝试可能触发 QQ 风控。
+> **静默 ≠ 断线。** NapCat 周期性发 `meta_event.heartbeat`（默认 15s），群里没人
+> 说话时心跳仍在。判定超时后 Bot 会主动调用一次 `get_status()` 二次确认：探活成功
+> 只说明「没人说话」，探活失败才是真断开。只挂 `on_message` 会把安静的群误判为
+> 链路中断（2026-08-14 重启循环的成因）。
 
 ## 调参建议
 
@@ -546,5 +548,6 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | @ 对话完全学不到东西 | 查 `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明 @ 消息未入库（见 development.md 排查表） |
 | 记忆晋升过快、配额压力大 | `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` 生效后 @ 对话单次即可晋升，属预期；先看 `MEMORY_QUOTA_ENFORCE=false` 的 dry-run 日志再决定是否收紧 |
 | 回复变慢、日志出现 Scheduler 告警 | 27B 上排队较重（聊天 + 压缩 + 提取共用）；可临时关 `MEMORY_EXTRACT_ENABLED` 或调大 `CONSOLIDATION_SCHEDULE_INTERVAL` |
+| 链路掉线 / 收不到消息 | 看日志里的 `[LinkMonitor]` 告警，按告警文案的排查步骤检查（Bot 只告警不重启，NapCat 侧需人工处理） |
 
 改动阈值前建议先跑一次探针验证，见 [开发指南](development.md)。

@@ -80,6 +80,7 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_full_workflow.py` | 端到端：消息入库 → 上下文 → Pipeline → 输出 → 整合 → 晋升 + FTS |
 | `test_spaces.py` | 空间解析：显式配置、隐式分配持久化、冲突处理 |
 | `test_session_compact.py` / `test_session_context.py` | 会话压缩的区间不重叠、空结果与失败的区别处理 |
+| `test_link_monitor.py` | 链路监测：心跳判活、主动探活、告警节流 |
 
 ### 写测试的两个约定
 
@@ -315,7 +316,7 @@ else:
 | 记忆被误删 | `memory_compressor_log.md` + `compressor_stats` 表 |
 | 检索选错记忆 | `memory_traces` 表（候选 / 过滤 / 最终 / 拒绝），或 `python -m memory.benchmark --verbose` |
 | 主动发言异常 | 日志里的 `🎯 [主动@]` / `🔇 未回应`；`proactive_state` 表 |
-| NapCat 掉线 | `napcat_launch.log`、`NapCat.Shell/logs/`、日志里的 `[Watchdog]` |
+| 链路掉线 / 收不到消息 | 日志里的 `[LinkMonitor]` 告警（含排查步骤）；NapCatQQ Desktop 日志确认账号是否掉线 |
 | 整合输出被截断 | 日志里的 `finish_reason=length` 告警 |
 | @ 对话完全学不到东西 | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明落库监听器被 `block=True` 拦截（priority 必须为 0） |
 | 主动 @ 永远走冷启动 | 日志里 `mode=coldstart` 恒定，或 `[ProactiveTarget] 读取候选失败`；说明候选查询的空间列名不匹配 |
@@ -385,7 +386,7 @@ ORDER BY ts DESC LIMIT 20;
 - 记忆晋升的阈值或判定逻辑
 - prompt 中的防编造条款
 - 三条合并路径的归属过滤
-- 看门狗的重启判据
+- 链路监测的判活 / 告警逻辑（心跳 + 主动探活，只告警不重启）
 - 监听器的优先级与 block 关系
 - 两层归属（QQ 群 / 共享空间）的划分
 

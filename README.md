@@ -48,7 +48,7 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 |---|---|
 | Python | 3.10+ |
 | 框架 | [NoneBot 2](https://nonebot.dev/) |
-| QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现 |
+| QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |
 | 模型服务 | [LM Studio](https://lmstudio.ai/)（需 OpenAI 兼容接口，也可以提供APIkey接入在线LLM） |
 
 ### 安装
@@ -81,9 +81,12 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model  # 记忆整理模型（建议 CP
 ### 启动
 
 ```bash
-# 1. 启动 LM Studio，确认 /v1/chat/completions 可访问
-# 2. 启动 NapCat 并完成 QQ 登录
-# 3. 启动 Stella
+# 1. 用 NapCatQQ Desktop 安装并登录 NapCat（完成 QQ 登录）
+# 2. 在 NapCat WebUI 的网络配置里添加「WebSocket 客户端」指向 Bot（反向 WS）：
+#    ws://127.0.0.1:8080/onebot/v11/ws
+#    （若用正向 WS 则改在 .env 里配 ONEBOT_V11_WS_URLS）
+# 3. 配置 .env（cp .env.example .env，至少填 ALLOWED_GROUPS 与 LM Studio 相关项）
+# 4. 启动 Stella
 python bot.py
 ```
 
