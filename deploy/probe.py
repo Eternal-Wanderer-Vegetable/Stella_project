@@ -101,7 +101,7 @@ def _probe_env_file() -> tuple[bool, list[str]]:
 
 def _extract_ws_url(values: dict) -> str | None:
     """从 dotenv_values 结果里取出第一个正向 WS URL（JSON 数组或裸 URL）。"""
-    for key in ("ONEBOT_V11_WS_URLS", "ONEBOT_WS_URLS"):
+    for key in ("ONEBOT_WS_URLS", "ONEBOT_V11_WS_URLS"):
         raw = (values.get(key) or "").strip()
         if not raw:
             continue
@@ -189,21 +189,34 @@ def _probe_onebot() -> dict:
     return result
 
 
+def fetch_loaded_models(base_url: str = "") -> tuple[list[str], str]:
+    """查询 LM Studio 已加载模型 ID 列表。
+
+    返回 ``(模型列表, 错误信息)``，错误信息为空表示成功。
+    ``base_url`` 为空时用配置的 ``LM_STUDIO_BASE_URL``。
+    doctor 与 init 向导共用，避免重复实现 HTTP 请求。
+    """
+    try:
+        url = (base_url or LM_STUDIO_BASE_URL).rstrip("/")
+        resp = httpx.get(f"{url}/v1/models", timeout=5.0, trust_env=False)
+        resp.raise_for_status()
+        data = resp.json()
+        models = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
+        return models, ""
+    except Exception as e:
+        return [], str(e)[:300]
+
+
 def _probe_lm_studio() -> dict:
     """探测 LM Studio /v1/models：可达性 + 已加载模型 ID 列表。"""
     result = {"lm_reachable": None, "lm_error": "", "lm_models": []}
-    try:
-        base_url = LM_STUDIO_BASE_URL.rstrip("/")
-        resp = httpx.get(f"{base_url}/v1/models", timeout=5.0, trust_env=False)
-        resp.raise_for_status()
-        data = resp.json()
-        result["lm_models"] = [
-            m.get("id") for m in (data.get("data") or []) if m.get("id")
-        ]
-        result["lm_reachable"] = True
-    except Exception as e:
+    models, err = fetch_loaded_models()
+    if err:
         result["lm_reachable"] = False
-        result["lm_error"] = str(e)[:300]
+        result["lm_error"] = err
+    else:
+        result["lm_reachable"] = True
+        result["lm_models"] = models
     return result
 
 

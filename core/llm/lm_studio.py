@@ -99,6 +99,14 @@ class LMStudioBackend(LLMBackend):
                 status = e.response.status_code
                 body = e.response.text[:800]
                 logger.error(f"[LM Studio] HTTP {status}\n{body}")
+                if status == 400 and "model_not_found" in body:
+                    # 模型 ID 写错是最常见的配置错误，但表现为兜底回复「......？」，
+                    # 真因埋在 LM Studio 返回的 JSON 里，普通用户不会去翻日志。
+                    logger.error(
+                        f"[LM Studio] 模型 ID 配置错误：{self.model!r} 不存在。"
+                        "LM Studio 要求完整 ID（含 google/ 之类前缀）。"
+                        "运行 python -m deploy doctor 可列出当前已加载的模型。"
+                    )
                 last_error = e
                 # 4xx 是请求/配置问题，重试无意义；5xx（如瞬时 502）服务端暂不可用，退避后重试
                 if 400 <= status < 500 or attempt >= 2:

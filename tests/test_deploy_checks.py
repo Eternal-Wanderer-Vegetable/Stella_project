@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from deploy import checks
-from deploy.models import CheckResult, Snapshot
+from deploy.models import Snapshot
 
 _LEVEL_ORDER = {"error": 0, "warn": 1, "ok": 2}
 
@@ -81,6 +81,7 @@ def test_healthy_snapshot_is_all_ok():
         {"db_writable": False},
         {"schema_version": 3, "code_schema_version": 8},
         {"source_kind_counts": {"": 5}},
+        {"source_kind_counts": {"AT_MENTION": 0, "BOT_SELF": 5}},
         {"space_conflicts": [{"group_id": 1, "spaces": ["a", "b"]}]},
         {"persona_exists": False},
         {"disk_free_mb": 100.0},
@@ -277,11 +278,22 @@ def test_db_writable_unknown_is_warn():
     assert r is not None and r.level == "warn"
 
 
-def test_schema_mismatch_is_error():
+def test_schema_lower_is_warn():
     r = checks.check_schema_version(
         _healthy_snapshot(schema_version=3, code_schema_version=8)
     )
+    assert r is not None and r.level == "warn"
+
+
+def test_schema_higher_is_error():
+    r = checks.check_schema_version(
+        _healthy_snapshot(schema_version=9, code_schema_version=8)
+    )
     assert r is not None and r.level == "error"
+
+
+def test_schema_matching_is_ok():
+    assert checks.check_schema_version(_healthy_snapshot()) is None
 
 
 def test_schema_unknown_is_warn():
@@ -289,11 +301,13 @@ def test_schema_unknown_is_warn():
     assert r is not None and r.level == "warn"
 
 
-def test_legacy_group_id_tables_warn():
+def test_legacy_group_id_tables_is_error():
     r = checks.check_legacy_group_id_tables(
         _healthy_snapshot(legacy_group_id_tables=["memories"])
     )
-    assert r is not None and r.level == "warn"
+    assert r is not None and r.level == "error"
+    assert "v8 之前的旧结构" in r.title
+    assert "agent_memory.db" in r.fix_hint
 
 
 def test_source_kind_all_empty_is_error():
@@ -303,6 +317,22 @@ def test_source_kind_all_empty_is_error():
 
 def test_source_kind_normal_ok():
     assert checks.check_source_kind(_healthy_snapshot()) is None
+
+
+def test_at_mention_health_flagged():
+    r = checks.check_at_mention_health(
+        _healthy_snapshot(source_kind_counts={"BOT_SELF": 5, "AT_MENTION": 0})
+    )
+    assert r is not None and r.level == "warn"
+    assert "AT_MENTION" in r.detail
+
+
+def test_at_mention_health_ok():
+    assert checks.check_at_mention_health(_healthy_snapshot()) is None
+
+
+def test_at_mention_health_no_data():
+    assert checks.check_at_mention_health(_healthy_snapshot(source_kind_counts={})) is None
 
 
 # ── 群组空间 ──
@@ -329,9 +359,9 @@ def test_space_assignment_mismatch_is_warn():
 # ── 其它 ──
 
 
-def test_persona_missing_is_error():
+def test_persona_missing_is_warn():
     r = checks.check_persona_file(_healthy_snapshot(persona_exists=False))
-    assert r is not None and r.level == "error"
+    assert r is not None and r.level == "warn"
 
 
 def test_persona_empty_is_warn():
@@ -364,12 +394,12 @@ def test_db_cleanup_on_start_warn():
 # ── 废弃环境变量 ──
 
 
-def test_deprecated_env_single_secret_returns_single():
+def test_deprecated_env_single_secret_returns_both():
     r = checks.check_deprecated_env_keys(
         _healthy_snapshot(deprecated_env_keys=["NAPCAT_QQ_PASSWORD"])
     )
-    assert isinstance(r, CheckResult)
-    assert r.id == "deprecated_env_secrets"
+    assert isinstance(r, list) and len(r) == 2
+    assert {x.id for x in r} == {"deprecated_env_keys", "deprecated_env_secrets"}
 
 
 def test_deprecated_env_with_secret_returns_two():

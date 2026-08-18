@@ -15,6 +15,11 @@ from deploy.models import Snapshot
 
 
 def test_extract_ws_url_json_array():
+    values = {"ONEBOT_WS_URLS": '["ws://127.0.0.1:3001"]'}
+    assert probe._extract_ws_url(values) == "ws://127.0.0.1:3001"
+
+
+def test_extract_ws_url_legacy_v11_alias():
     values = {"ONEBOT_V11_WS_URLS": '["ws://127.0.0.1:3001"]'}
     assert probe._extract_ws_url(values) == "ws://127.0.0.1:3001"
 

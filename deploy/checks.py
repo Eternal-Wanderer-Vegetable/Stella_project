@@ -115,7 +115,7 @@ def check_onebot_mode(snap: Snapshot) -> CheckResult | None:
             title="无法确定 OneBot 连接方式",
             detail="既没有配置正向 WS 地址，也没有可用的 HOST/PORT。",
             fix_hint="在 .env 顶部二选一：反向 WS 用 HOST/PORT（默认 0.0.0.0:8080），"
-            "正向 WS 用 ONEBOT_V11_WS_URLS。参考 .env.example 顶部注释。",
+            "正向 WS 用 ONEBOT_WS_URLS。参考 .env.example 顶部注释。",
         )
     return None
 
@@ -153,7 +153,7 @@ def check_onebot_forward(snap: Snapshot) -> CheckResult | None:
             id="onebot_forward",
             level="error",
             title="正向 WS 地址不可达",
-            detail="TCP 连接 ONEBOT_V11_WS_URLS 失败。",
+            detail="TCP 连接 ONEBOT_WS_URLS 失败。",
             fix_hint="确认 NapCat 已开启「WS 服务端」且监听地址、端口与配置一致。",
         )
     if snap.onebot_forward_reachable is None:
@@ -162,7 +162,7 @@ def check_onebot_forward(snap: Snapshot) -> CheckResult | None:
             level="warn",
             title="无法探测正向 WS 地址",
             detail="URL 解析失败，无法做 TCP 探测。",
-            fix_hint="检查 .env 里 ONEBOT_V11_WS_URLS 是否为合法 ws:// 或 wss:// 地址。",
+            fix_hint="检查 .env 里 ONEBOT_WS_URLS 是否为合法 ws:// 或 wss:// 地址。",
         )
     return None
 
@@ -320,7 +320,7 @@ def check_database_writable(snap: Snapshot) -> CheckResult | None:
 
 
 def check_schema_version(snap: Snapshot) -> CheckResult | None:
-    """schema 不匹配 → error；无法读出版本 → warn。"""
+    """版本偏低 → warn（启动时自动迁移）；版本偏高 → error（代码需升级）。"""
     if snap.schema_version is None:
         return CheckResult(
             id="schema_version",
@@ -329,29 +329,53 @@ def check_schema_version(snap: Snapshot) -> CheckResult | None:
             detail="无法读取数据库 schema 版本。",
             fix_hint="若功能正常可忽略；异常时删除旧库重建。",
         )
-    if snap.schema_version != snap.code_schema_version:
+    if snap.schema_version < snap.code_schema_version:
+        return CheckResult(
+            id="schema_version",
+            level="warn",
+            title="数据库版本偏低，启动时自动迁移",
+            detail=(
+                f"数据库版本 {snap.schema_version}，代码需要 "
+                f"{snap.code_schema_version}。"
+            ),
+            fix_hint=(
+                "Additive Migration（只加字段不删数据），首次迁移前自动备份，"
+                "无需手动处理。"
+            ),
+        )
+    if snap.schema_version > snap.code_schema_version:
         return CheckResult(
             id="schema_version",
             level="error",
-            title="数据库 schema 版本不匹配",
-            detail=f"数据库版本 {snap.schema_version}，代码需要 {snap.code_schema_version}。",
-            fix_hint="通常升级版本后首次启动会自动迁移；若报迁移失败，"
-            "备份数据库后联系维护者。",
+            title="数据库版本比代码新",
+            detail=(
+                f"数据库版本 {snap.schema_version}，代码只支持 "
+                f"{snap.code_schema_version}。"
+            ),
+            fix_hint="数据库比代码新，说明代码需要升级；用旧代码跑新库可能读不到新字段。",
         )
     return None
 
 
 def check_legacy_group_id_tables(snap: Snapshot) -> CheckResult | None:
-    """存在遗留 group_id 列的表 → warn（列早已废弃）。"""
+    """含遗留 group_id 列 → error（v8 之前的旧库，记忆读写会静默失败）。"""
     if snap.legacy_group_id_tables:
         return CheckResult(
             id="legacy_group_id_tables",
-            level="warn",
-            title="数据库含遗留 group_id 列",
-            detail="这些表仍带已废弃的 group_id 列："
-            + "、".join(snap.legacy_group_id_tables)
-            + "。列已被淘汰，不再写入。",
-            fix_hint="不影响运行；如需清理可在备份后手动删列。",
+            level="error",
+            title="数据库为 v8 之前的旧结构",
+            detail=(
+                "这些表仍使用已废弃的 group_id 列："
+                + "、".join(snap.legacy_group_id_tables)
+                + "。v8 起记忆按 group_shared_space 归属，"
+                "旧结构会让全部记忆读写抛 no such column 并被静默吞掉——"
+                "表现为「机器人一切正常但什么都不记」（2026-08-17 实测）。"
+            ),
+            fix_hint=(
+                "v8 不做自动迁移。请停止程序，把 memory/agent_memory.db "
+                "与 memory/stella_memory_backup.db 一起移出（两个都要，"
+                "留着备份会让下次迁移跳过备份），重启后程序会建立 v8 新库。"
+            ),
         )
     return None
 
@@ -369,7 +393,39 @@ def check_source_kind(snap: Snapshot) -> CheckResult | None:
             level="error",
             title="历史记忆全部缺失来源类型",
             detail=f"group_messages 有 {total} 条记录，但 source_kind 全部为空。",
-            fix_hint="运行迁移脚本 backfill_source_kind.py（见 migrations 目录）。",
+            fix_hint=(
+                "历史数据从未写入 source_kind；若需修复可手动 "
+                "UPDATE group_messages SET source_kind=... 补齐，或清库重建。"
+            ),
+        )
+    return None
+
+
+def check_at_mention_health(snap: Snapshot) -> CheckResult | None:
+    """AT_MENTION 为 0 而 BOT_SELF > 0 → warn。
+
+    这是「@ 消息未入库」唯一能自动发现的信号。2026-08-17 实测：落库监听器
+    priority 排在 chat_handler(block=True) 之后时，@ 消息被拦截而永不入库——
+    普通群聊正常记录，唯独最有价值的 @ 对话全部丢失，13 批整合共 270 条消息
+    的 AT_MENTION 计数全为 0。这个错误不抛异常、不影响回复，只让记忆系统
+    静默地学不到东西。
+    """
+    counts = snap.source_kind_counts or {}
+    if not counts:
+        return None
+    if counts.get("AT_MENTION", 0) == 0 and counts.get("BOT_SELF", 0) > 0:
+        return CheckResult(
+            id="at_mention_health",
+            level="warn",
+            title="没有任何 AT_MENTION 消息记录",
+            detail=(
+                f"BOT_SELF={counts.get('BOT_SELF', 0)} 条但 AT_MENTION=0 条。"
+                "Bot 在说话却没有任何「用户对它说」的记录，@ 消息可能未入库。"
+            ),
+            fix_hint=(
+                "检查 ai_gateway.py 中 group_silent_listener 的 priority 是否为 0 "
+                "且小于所有 block=True 的处理器；启动日志里的优先级自检会报这个问题。"
+            ),
         )
     return None
 
@@ -410,11 +466,11 @@ def check_space_assignment_mismatch(snap: Snapshot) -> CheckResult | None:
 
 
 def check_persona_file(snap: Snapshot) -> CheckResult | None:
-    """人格文件不存在 → error；存在但为空 → warn。"""
+    """人格文件缺失或为空 → warn（与 ai_gateway 行为一致：warning + 继续运行）。"""
     if not snap.persona_exists:
         return CheckResult(
             id="persona_file",
-            level="error",
+            level="warn",
             title="人格文件缺失",
             detail="SYSTEM_PROMPT_PATH 指向的文件不存在。",
             fix_hint="创建该文件并写入人格设定，或修正 SYSTEM_PROMPT_PATH。",
@@ -475,29 +531,29 @@ def check_db_cleanup_on_start(snap: Snapshot) -> CheckResult | None:
 def check_deprecated_env_keys(
     snap: Snapshot,
 ) -> CheckResult | Sequence[CheckResult] | None:
-    """废弃键存在 → warn；含密码类键时追加一条 secrets warn。"""
+    """废弃键存在 → 通用 warn；含密码类键时再追加一条 secrets warn。
+
+    结构统一为「总是返回通用条 + 有密码时追加 secrets 条」，两个分支
+    行为一致，测试也好写。
+    """
     keys = snap.deprecated_env_keys
     if not keys:
         return None
     secret_keys = [k for k in keys if "PASSWORD" in k.upper()]
-    if len(keys) == 1 and secret_keys:
-        return CheckResult(
-            id="deprecated_env_secrets",
-            level="warn",
-            title="检测到已废弃的密码配置",
-            detail=f"{secret_keys[0]} 已不再使用。",
-            fix_hint="从 .env 删除；若它仍生效说明有旧进程在跑。",
-        )
-    return [
+    results: list[CheckResult] = [
         CheckResult(
             id="deprecated_env_keys",
             level="warn",
             title="检测到已废弃的环境变量",
             detail="已废弃：" + "、".join(keys),
-            fix_hint="从 .env 删除这些键；影响已在新方案中说明（见 README 迁移记录）。",
-        ),
-    ] + (
-        [
+            fix_hint=(
+                "从 .env 删除这些键；影响已在新方案中说明"
+                "（见 design_docs/deprecated_napcat_manager.md）。"
+            ),
+        )
+    ]
+    if secret_keys:
+        results.append(
             CheckResult(
                 id="deprecated_env_secrets",
                 level="warn",
@@ -505,10 +561,8 @@ def check_deprecated_env_keys(
                 detail="密码相关键：" + "、".join(secret_keys) + "。",
                 fix_hint="从 .env 删除；若仍生效说明有旧进程在跑。",
             )
-        ]
-        if secret_keys
-        else []
-    )
+        )
+    return results
 
 
 _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | None], ...] = (
@@ -529,6 +583,7 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_schema_version,
     check_legacy_group_id_tables,
     check_source_kind,
+    check_at_mention_health,
     check_spaces_conflicts,
     check_space_assignment_mismatch,
     check_persona_file,

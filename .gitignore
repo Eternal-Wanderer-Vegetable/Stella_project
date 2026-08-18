@@ -48,6 +48,11 @@ sanitize_map.json
 .env.dev
 .env.prod
 !.env.example
+.env.backup
+
+# deploy init 的应答文件（含群号等个人配置）与 --force 的备份
+deploy.answers.toml
+.env.bak
 
 # Misc
 STARTCOMMAND.md

@@ -13,6 +13,21 @@ pip install -r requirements-dev.txt
 
 `requirements-dev.txt` 包含 pytest、ruff、numpy 等开发期依赖。numpy 只被 embedding fixture 的向量计算用到，缺失时相关测试会跳过而非报错。
 
+## 部署工具
+
+`deploy/` 是「检查逻辑全在 Python 侧、GUI 只是渲染器」的部署工具：doctor 输出结构化 JSON，
+桌面安装器（Tauri）调用它并渲染，换 GUI 框架不用重写逻辑。三个子命令：
+
+| 命令 | 用途 |
+|---|---|
+| `python -m deploy doctor [--json]` | 环境自检；`--json` 输出结构化结果（id/level/title/detail/fix_hint），供 GUI 做图标与本地化映射 |
+| `python -m deploy init [--answers PATH] [--force] [--dry-run]` | 交互式生成 `.env`（基于 `.env.example` 逐行替换，模型 ID 从 LM Studio 拉列表选编号）；`--answers` 复用上次的 `deploy.answers.toml`，换机器重装 / CI 冒烟 / 将来 GUI 复用同一份答案 |
+| `python -m deploy start [--force]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py` |
+
+分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
+检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
+doctor 也就报 warn），避免「明明能跑却提示 error」。
+
 ## 提交前检查
 
 ```bash
@@ -81,6 +96,8 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_spaces.py` | 空间解析：显式配置、隐式分配持久化、冲突处理 |
 | `test_session_compact.py` / `test_session_context.py` | 会话压缩的区间不重叠、空结果与失败的区别处理 |
 | `test_link_monitor.py` | 链路监测：心跳判活、主动探活、告警节流 |
+| `test_deploy_checks.py` | doctor 判断层：健康快照全 ok、非 ok 必有 fix_hint、run_all 排序 |
+| `test_deploy_init.py` | 向导校验与渲染（含「模板注释原样保留」反回归） |
 
 ### 写测试的两个约定
 
@@ -377,7 +394,7 @@ ORDER BY ts DESC LIMIT 20;
 - `ruff check .` 无警告
 - 改了 prompt → 跑过双向闸门（正例回归 + 真实窗口）
 - 改了 schema → `python -m memory.schema --dry-run` 输出符合预期
-- 改了配置项 → `.env.example` 同步，`docs/configuration.md` 同步
+- 改了配置项 → `.env.example` 同步（`deploy init` 基于它渲染，漏改会让新配置项不出现在生成的 `.env` 里），`docs/configuration.md` 同步
 - 改了监听器 priority / 新增 block=True 的处理器 → 确认落库监听器仍是最高优先级，且发一条 @ 消息验证 `AT_MENTION` 入库
 - 改了记忆表的 SQL → 确认用的是 `group_shared_space` 而非 `group_id`（两层归属见 architecture.md）
 

@@ -61,6 +61,15 @@ pip install -r requirements.txt
 
 ### 配置
 
+推荐用向导生成 `.env`——只需回答 5 个必答项（群号、连接方式、地址、两个模型 ID），
+**模型 ID 会从 LM Studio 拉列表让你选编号**，从根上避免手打完整 ID 漏掉 `google/` 前缀：
+
+```bash
+python -m deploy init
+```
+
+若偏好手工配置，也可复制模板后自行修改：
+
 ```bash
 cp .env.example .env
 ```
@@ -81,13 +90,16 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model  # 记忆整理模型（建议 CP
 ### 启动
 
 ```bash
-# 1. 用 NapCatQQ Desktop 安装并登录 NapCat（完成 QQ 登录）
-# 2. 在 NapCat WebUI 的网络配置里添加「WebSocket 客户端」指向 Bot（反向 WS）：
+# 1. 安装依赖
+pip install -r requirements.txt
+# 2. 生成配置
+python -m deploy init
+# 3. 用 NapCatQQ Desktop 安装并登录 NapCat（需扫码，必须人工），
+#    在 NapCat WebUI 的网络配置里添加「WebSocket 客户端」指向 Bot（反向 WS）：
 #    ws://127.0.0.1:8080/onebot/v11/ws
-#    （若用正向 WS 则改在 .env 里配 ONEBOT_V11_WS_URLS）
-# 3. 配置 .env（cp .env.example .env，至少填 ALLOWED_GROUPS 与 LM Studio 相关项）
-# 4. 启动 Stella
-python bot.py
+#    （若用正向 WS 则改在 .env 里配 ONEBOT_WS_URLS）
+# 4. 启动 Stella（会先跑一遍 doctor 自检）
+python -m deploy start
 ```
 
 在群里 @ 机器人即可开始对话。

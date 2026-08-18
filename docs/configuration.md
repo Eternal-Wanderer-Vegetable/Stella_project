@@ -1,5 +1,12 @@
 # 配置参考
 
+**首次配置推荐用向导** `python -m deploy init`：只需回答 5 个必答项（群号、连接方式、
+地址、两个模型 ID），模型 ID 会从 LM Studio 拉列表让你选编号，避免手打完整 ID
+漏掉 `google/` 前缀；它会基于 `.env.example` 逐行生成 `.env`，模板里的注释（尤其
+OneBot 连接那段跨 NapCat 的说明书）会原样保留。也可用 `--answers` 保存/复用答案。
+
+本文是完整配置参考，用于调参。
+
 配置集中在 [`config/settings.py`](../config/settings.py)，通过读取项目根目录的 `.env` 导出模块级常量。业务代码不需要改动该文件即可调参。
 
 ```bash
@@ -507,7 +514,7 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 | 方式 | Bot 侧（`.env`） | NapCat 侧（WebUI 网络配置） |
 |---|---|---|
 | 反向 WS（推荐） | `HOST` + `PORT`（NoneBot 默认 `0.0.0.0:8080`），反向 WS 端点固定 `/onebot/v11/ws` | 添加「WebSocket 客户端」，URL 填 `ws://<Bot地址>:<PORT>/onebot/v11/ws` |
-| 正向 WS | `ONEBOT_V11_WS_URLS`（JSON 数组）+ `ONEBOT_V11_ACCESS_TOKEN` | 开启「WS 服务端」，记下监听地址与 token |
+| 正向 WS | `ONEBOT_WS_URLS`（JSON 数组）+ `ONEBOT_ACCESS_TOKEN` | 开启「WS 服务端」，记下监听地址与 token |
 
 若两侧都配了 access token，两边的值必须一致。相关环境变量见 `.env.example` 顶部。
 

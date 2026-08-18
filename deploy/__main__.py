@@ -4,7 +4,7 @@
 """doctor / init / start 三个子命令的入口。
 
 用法：python -m deploy doctor [--json]
-      python -m deploy init
+      python -m deploy init [--answers PATH] [--force] [--dry-run]
       python -m deploy start [--force]
 """
 
@@ -12,9 +12,21 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import subprocess
 import sys
+from pathlib import Path
+
+from config import PROJECT_ROOT
 
 from . import checks, probe, report
+from .init_wizard import (
+    load_answers,
+    print_next_steps,
+    render_env,
+    run_interactive,
+    save_answers,
+    validate_answers,
+)
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -28,7 +40,50 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    print("init 向导将在下一步实现（生成 .env / 初始化数据库）。")
+    env_path = PROJECT_ROOT / ".env"
+    template_path = PROJECT_ROOT / ".env.example"
+
+    if env_path.exists() and not args.force:
+        print(f"{env_path} 已存在。确认覆盖请加 --force（会先备份为 .env.bak）。")
+        return 1
+    if not template_path.exists():
+        print(f"缺少模板 {template_path}，无法生成 .env。")
+        return 1
+
+    answers = load_answers(Path(args.answers)) if args.answers else run_interactive()
+
+    problems = validate_answers(answers)
+    if problems:
+        print("配置有误：")
+        for p in problems:
+            print(f"  - {p}")
+        return 1
+
+    rendered = render_env(answers, template_path.read_text(encoding="utf-8"))
+
+    if args.dry_run:
+        print(rendered)
+        return 0
+
+    if env_path.exists():
+        backup = PROJECT_ROOT / ".env.bak"
+        env_path.replace(backup)
+        print(f"已备份原配置到 {backup}")
+    env_path.write_text(rendered, encoding="utf-8")
+    print(f"已写入 {env_path}")
+
+    if not args.answers:
+        answers_path = PROJECT_ROOT / "deploy.answers.toml"
+        save_answers(answers, answers_path)
+        print(f"应答已保存到 {answers_path}（下次可用 --answers 跳过提问）")
+
+    # 自动跑一次 doctor，用户立刻知道还差什么
+    snapshot = probe.collect()
+    results = checks.run_all(snapshot)
+    print()
+    print(report.to_terminal(results))
+
+    print_next_steps(answers)
     return 0
 
 
@@ -41,7 +96,12 @@ def _cmd_start(args: argparse.Namespace) -> int:
             print("存在阻塞性问题。确认原因后可用 python -m deploy start --force 忽略。")
             return 1
         print("[跳过] 发现阻塞性问题，但 --force 已指定，继续启动。")
-    return 0
+    bot_path = PROJECT_ROOT / "bot.py"
+    if not bot_path.exists():
+        print(f"缺少入口 {bot_path}，无法启动。")
+        return 1
+    print(f"启动 Stella：{sys.executable} bot.py")
+    return subprocess.call([sys.executable, str(bot_path)])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,7 +121,16 @@ def main(argv: list[str] | None = None) -> int:
     p_doctor.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
     p_doctor.set_defaults(func=_cmd_doctor)
 
-    p_init = sub.add_parser("init", help="初始化配置")
+    p_init = sub.add_parser("init", help="交互式生成 .env（基于 .env.example）")
+    p_init.add_argument(
+        "--answers", help="从 TOML 应答文件读取答案（跳过提问）"
+    )
+    p_init.add_argument(
+        "--force", action="store_true", help="覆盖已存在的 .env（先备份为 .env.bak）"
+    )
+    p_init.add_argument(
+        "--dry-run", action="store_true", help="只打印生成的 .env，不落盘"
+    )
     p_init.set_defaults(func=_cmd_init)
 
     p_start = sub.add_parser("start", help="启动（先跑 doctor）")
