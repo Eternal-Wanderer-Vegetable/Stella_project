@@ -78,6 +78,8 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_db_cleaner.py` | 脏数据清理与消息裁剪 |
 | `test_lm_studio.py` | LM Studio 客户端（重试、4xx 放弃、空回复） |
 | `test_full_workflow.py` | 端到端：消息入库 → 上下文 → Pipeline → 输出 → 整合 → 晋升 + FTS |
+| `test_spaces.py` | 空间解析：显式配置、隐式分配持久化、冲突处理 |
+| `test_session_compact.py` / `test_session_context.py` | 会话压缩的区间不重叠、空结果与失败的区别处理 |
 
 ### 写测试的两个约定
 
@@ -111,6 +113,12 @@ python scripts/probe_consolidation.py --window-index 3 --repeat 3
 
 # 覆盖采样温度
 python scripts/probe_consolidation.py --positive --repeat 3 --temperature 0.0
+
+# 两阶段链路（生产行为）：阶段1 出 has_self_disclosure，阶段2 提取候选
+python scripts/probe_consolidation.py --positive --two-stage
+
+# 单阶段对照（旧行为，用于确认两阶段的增益）
+python scripts/probe_consolidation.py --positive
 ```
 
 **改动 `memory/consolidation_prompt.py` 后必须跑双向闸门**：
@@ -121,6 +129,24 @@ python scripts/probe_consolidation.py --limit 20              # 编造率必须 
 ```
 
 两条都过才算成功。只看一边会漏掉另一边的退化——放宽捕获时正例会变好但可能开始编造，收紧时编造率归零但会漏掉合法事实。
+
+> **两阶段的区分性测试**。`insomnia_breakfast_noisy` 用例把同样的自我披露信息埋在 Bot 寒暄、彼岸花刷屏与单字附和之中，复现生产的失败条件：
+>
+> | 路径 | 结果 |
+> |---|---|
+> | 单阶段（整合模型） | ❌ 1/2（漏掉「失眠」） |
+> | 两阶段（整合模型 → 主聊天模型） | ✅ 2/2 |
+>
+> 其余 4 个干净用例两条路径都通过——**只有噪音用例有区分度**。改动 `extraction_prompt.py` 或调整阶段 2 模型后，这个用例必须保持 2/2，否则两阶段就白做了。
+>
+> 输出里的这两行是失败归因的关键：
+>
+> ```
+> 阶段1 has_self_disclosure=True/False，阶段2 已调用/未调用
+> ↳ 该信息出现在原始输出中但未进候选（模型主动弃掉，非未察觉）
+> ```
+>
+> 第一行区分「小模型布尔判错」（阶段 2 根本没被唤醒 → 改 `consolidation_prompt.py`）与「大模型提取失败」（唤醒了但没提出来 → 改 `extraction_prompt.py`）；第二行区分「没看到」与「看到了但主动弃掉」，两者修法完全不同。
 
 ### 采样真实窗口
 
@@ -152,6 +178,21 @@ python scripts/build_embedding_fixture.py    # 构建向量 fixture（需 embedd
 python scripts/probe_embedding.py            # 探测 embedding 服务可用性
 ```
 
+### 探针的盲区
+
+> 探针**直接把窗口消息拼成文本喂给模型**，不经过 `record_message` / `group_messages`。因此它能验证「模型能不能从消息里提取」，**不能验证「消息有没有被记录进库」**。
+>
+> 2026-08-17 的缺陷正落在这个盲区里：@ 消息因监听器优先级被 `block=True` 拦截而从未入库，5 个正例探针全绿，线上却一条 `AT_MENTION` 都没有、@ 对话的内容完全学不到。
+>
+> 入库链路只能靠两件事验证：
+>
+> ```sql
+> -- 启动日志也会输出这个分布
+> SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind;
+> ```
+>
+> 以及真实对话后检查整合日志里的 `AT_MENTION 来源 N 条`。若 `AT_MENTION` 长期为 0 而 `BOT_SELF` 大于 0，说明落库被拦截。
+
 ## 数据库
 
 ```bash
@@ -172,6 +213,18 @@ python -m memory.schema --backup     # 仅备份
 第 4 步是历史踩坑点：`memories` 表的建表语句曾在 `schema.py` / `consolidator.py` / `memory_manager.py` / `compressor.py` 四处各有一份，加 `source_kind` 时漏了 compressor 那份。现在统一走 `schema.create_memories_table(conn)`，新增表也应照此办理。
 
 SQLite 的 `ALTER TABLE ADD COLUMN` **不接受非常量默认值**，`DEFAULT CURRENT_TIMESTAMP` 会失败，需留空由代码写入。
+
+### 改列名/主键的做法
+
+> SQLite **无法** ALTER 主键或重命名列，只能「建新表 → 拷数据 → 换名」。本项目 v7（画像分群）与 v8（记忆表改按空间归属）都选择**不写一次性迁移代码，而是归档旧库让程序重建**：
+>
+> - 一次性迁移代码只用一次，却要长期维护并测试
+> - 当时库内数据量很小（严苛筛选下画像近乎为空）
+> - 重建后结构确定，不会留下半迁移状态
+>
+> 代价是必须有**旧库检测**，否则拿旧库跑新代码会静默失败。`_migrate` 里检测「记忆表是否仍有 `group_id` 列」，命中则输出 error 提示归档重建。
+>
+> 若将来数据量变大到不能重建，就必须写迁移脚本，并且**同时迁移 5 张表**：`memories` / `memory_candidates` / `user_profiles` / `atomic_facts` / `memories_fts`（FTS5 表无法 ALTER，只能 DROP 后从主表全量重建）。
 
 ### 时间处理
 
@@ -238,6 +291,19 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 **逻辑不要有第二份副本**。`memory/text_similarity.py` 的存在就是因为相似度判定曾在三个模块各有一份，跨用户合并 bug 需要修三次而漏了两次。
 
+**静默降级必须留痕**。项目里大量 `except sqlite3.OperationalError` 是为了容忍「表还不存在」（惰性建表），这个设计是对的。但它同时会吞掉「列名不匹配」这类致命错误——2026-08-17 的两次故障（记忆表列名遗漏、@ 消息不入库）都因此持续数小时无人察觉。
+
+约定：捕获 SQLite 异常时按消息内容分级。
+
+```python
+if "no such table" in str(e):
+    logger.debug(...)   # 惰性建表的正常情况
+else:
+    logger.warning(...)  # 尤其 no such column，必须可见
+```
+
+同理，任何「失败时返回空结果继续跑」的路径都要留下 warning。功能静默失效比崩溃难查得多。
+
 **Prompt 改动需要护栏**。`tests/test_consolidation_prompt.py`、`tests/test_proactive_prompt.py` 对关键条款做字符串断言，包括反向断言（确认已移除的条款没被写回来）。这类条款删掉后功能仍「正常工作」但效果立刻变差，只能靠断言锁住。
 
 ## 排查问题
@@ -251,6 +317,10 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 | 主动发言异常 | 日志里的 `🎯 [主动@]` / `🔇 未回应`；`proactive_state` 表 |
 | NapCat 掉线 | `napcat_launch.log`、`NapCat.Shell/logs/`、日志里的 `[Watchdog]` |
 | 整合输出被截断 | 日志里的 `finish_reason=length` 告警 |
+| @ 对话完全学不到东西 | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明落库监听器被 `block=True` 拦截（priority 必须为 0） |
+| 主动 @ 永远走冷启动 | 日志里 `mode=coldstart` 恒定，或 `[ProactiveTarget] 读取候选失败`；说明候选查询的空间列名不匹配 |
+| 某个模型排队严重 / 回复变慢 | 日志里 `[Scheduler]` 的等待/持有/队列深度告警；`core.llm.snapshot()` 导出累计统计 |
+| 记忆读写静默无效 | 启动日志有无 v8 旧库告警；`PRAGMA table_info(memories)` 是否为 `group_shared_space` |
 
 ### 常用 SQL
 
@@ -264,8 +334,8 @@ SELECT user_id, content, confidence, occurrence_count, source_kinds, first_seen_
 FROM memory_candidates WHERE status = 'OBSERVING' ORDER BY occurrence_count DESC;
 
 -- 每用户记忆数（配额观察）
-SELECT group_id, user_id, COUNT(*) FROM memories
-WHERE status = 'active' GROUP BY group_id, user_id ORDER BY 3 DESC;
+SELECT group_shared_space, user_id, COUNT(*) FROM memories
+WHERE status = 'active' GROUP BY group_shared_space, user_id ORDER BY 3 DESC;
 
 -- 记忆的来源分布（审计：哪条路径产生的）
 SELECT source_kind, COUNT(*) FROM memories WHERE status = 'active' GROUP BY source_kind;
@@ -278,6 +348,22 @@ SELECT * FROM consolidation_state;
 
 -- Schema 版本
 SELECT * FROM schema_meta;
+
+-- 消息来源分布（AT_MENTION 为 0 而 BOT_SELF > 0 说明落库被拦截）
+SELECT group_id, source_kind, COUNT(*) FROM group_messages
+GROUP BY group_id, source_kind;
+
+-- 候选的来源构成（AT_MENTION 来源应单次即可晋升）
+SELECT source_kind, source_kinds, status, COUNT(*) FROM memory_candidates
+GROUP BY source_kind, source_kinds, status;
+
+-- 空间归属核对：QQ 群维度的表应是群号，记忆维度的表应是空间名
+SELECT DISTINCT 'consolidation_state' AS t, group_id AS id FROM consolidation_state
+UNION ALL SELECT DISTINCT 'memories', group_shared_space FROM memories;
+
+-- 决策追踪：同时看触发群与检索空间
+SELECT group_id, group_shared_space, mode, trigger, ts FROM memory_traces
+ORDER BY ts DESC LIMIT 20;
 ```
 
 ## 提交与贡献
@@ -291,6 +377,8 @@ SELECT * FROM schema_meta;
 - 改了 prompt → 跑过双向闸门（正例回归 + 真实窗口）
 - 改了 schema → `python -m memory.schema --dry-run` 输出符合预期
 - 改了配置项 → `.env.example` 同步，`docs/configuration.md` 同步
+- 改了监听器 priority / 新增 block=True 的处理器 → 确认落库监听器仍是最高优先级，且发一条 @ 消息验证 `AT_MENTION` 入库
+- 改了记忆表的 SQL → 确认用的是 `group_shared_space` 而非 `group_id`（两层归属见 architecture.md）
 
 **改动涉及以下内容时请在 PR 描述里说明理由**：
 
@@ -298,6 +386,8 @@ SELECT * FROM schema_meta;
 - prompt 中的防编造条款
 - 三条合并路径的归属过滤
 - 看门狗的重启判据
+- 监听器的优先级与 block 关系
+- 两层归属（QQ 群 / 共享空间）的划分
 
 这些地方都有过实测依据（记录在 `design_docs/check_point/` 与 `bug_report/`），改动前建议先读相关记录。
 

@@ -35,6 +35,54 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 
 路径类配置若在 `.env` 中设置，会被解析为绝对路径。
 
+## 群组共享空间
+
+多个 QQ 群可以归入同一个**群组共享空间**，共享用户画像、长期记忆与人格；而「当下这场对话的状态」仍按真实 QQ 群隔离。
+
+### 两层归属
+
+| 数据 | 归属 | 理由 |
+|---|---|---|
+| 消息尾巴、整合 checkpoint、短期话题、会话压缩 | **QQ 群** | 混群会让 Bot 在 A 群回应 B 群的对话 |
+| 静音开关、主动 @ 配额 | **QQ 群** | 打扰程度是针对具体群的 |
+| 用户画像、长期记忆、原子事实 | **共享空间** | 同一个人在同一空间就是一份认知 |
+| 人格（system prompt）、发言策略 | **共享空间** | 同一形象应有同一套行为 |
+
+### 配置方式
+
+空间配置**不在 `.env` 里**，而是 `config/spaces/` 下的 TOML 文件，**文件名即空间名**：
+
+```toml
+# config/spaces/casual.toml —— 空间名为 "casual"
+qq_groups = [123456789, 987654321]
+```
+
+目前只解析 `qq_groups`。`persona` 与 `[proactive]` 等字段是为将来的人格分群与群级配置预留的，当前会被忽略。
+
+### 隐式空间
+
+未被任何 TOML 收录的群会**自动分配**一个空间名（`space_1` / `space_2` …），并持久化在数据库目录下的 `.space_assignments.json`。单群部署零配置即可工作。
+
+编号必须持久化而不是现算：若按群号排序的下标计算，加入一个群号更小的新群会让所有编号平移，原有记忆的归属随之错位且无声无息。
+
+### 改名的代价
+
+把一个已运行的群从自动分配的 `space_1` 改成显式的 `casual` 时，**历史记忆仍挂在 `space_1` 下**。程序会输出告警并提示需要手工迁移：
+
+```sql
+UPDATE memories          SET group_shared_space='casual' WHERE group_shared_space='space_1';
+UPDATE memory_candidates SET group_shared_space='casual' WHERE group_shared_space='space_1';
+UPDATE user_profiles     SET group_shared_space='casual' WHERE group_shared_space='space_1';
+UPDATE atomic_facts      SET group_shared_space='casual' WHERE group_shared_space='space_1';
+UPDATE memories_fts      SET group_shared_space='casual' WHERE group_shared_space='space_1';
+```
+
+因此**建议在正式积累记忆之前就定好空间名**。
+
+### 冲突处理
+
+同一个群出现在多个 TOML 里时，按文件名排序取先者并输出 error 日志。静默取后者会让记忆在两次启动间落到不同空间，这种错乱事后极难发现。
+
 ## 模型服务
 
 ### 主聊天模型
@@ -62,6 +110,43 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 
 > **注意 `CONSOLIDATION_LOCAL_MAX_TOKENS`**：批次 30 + overlap 15 意味着单次最多喂入 45 条消息，输出被截断会导致 JSON 解析失败，而解析失败时 checkpoint **仍会推进**（防止同批反复重跑），那批消息就永久丢失了。`core/llm/lm_studio.py` 会在 `finish_reason=length` 时输出告警，建议运行一段后检查日志有无该告警。
 
+### 整合调度
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `CONSOLIDATION_SCHEDULE_INTERVAL` | `120` | 定时整合的检查间隔（秒） |
+| `CONSOLIDATION_MAX_ROUNDS_PER_RUN` | `3` | 单次定时任务最多连续整合几批 |
+| `CONSOLIDATION_BACKLOG_WARN` | `300` | 积压超过该条数时日志提升为 warning |
+
+> **为什么需要定时整合**：整合此前只在 @ 触发与主动发言前进行，被动摄入速度超过整合速度时会无界积压（2026-08-16 实测积压 1004 条），且超过 `MESSAGE_CLEANUP_KEEP_COUNT` 后未整合消息会被清理直接丢弃。
+>
+> 单次批数不宜过多：CPU 小模型单批 20~60 秒，批次太多会长时间占用整合模型，太少则追不上积压。
+
+### 记忆候选提取（阶段 2）
+
+整合分两阶段执行：
+
+| 阶段 | 任务 | 模型 |
+|---|---|---|
+| 阶段 1 | 短期摘要 + 用户画像 + `has_self_disclosure` 布尔判断 | 整合模型（CPU 小模型） |
+| 阶段 2 | 精确提取 `memory_candidates` | 本段配置的模型（默认继承主聊天模型） |
+
+阶段 2 **只在阶段 1 判定本批含用户自我披露时才唤醒**（软门槛）。这样日常刷屏、寒暄、第三方讨论只花小模型的算力。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `MEMORY_EXTRACT_ENABLED` | `true` | 关闭则退回单阶段（整合模型一次性出全部） |
+| `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` | 同 `LM_STUDIO_BASE_URL` | 提取服务地址 |
+| `MEMORY_EXTRACT_LM_STUDIO_MODEL` | 同 `LM_STUDIO_MODEL` | 默认继承主聊天模型 |
+| `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | 抽取任务不需要发散，比整合的 0.3 更低 |
+| `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | 只输出候选数组，不需要很大 |
+
+**为什么要拆**：小模型能总结主题，却在噪音环境下系统性地把候选提取判空。2026-08-16 实测 7 批整合全部返回空候选，而信息明确出现在它自己写的摘要里——是「读到了但主动弃掉」，不是没看到。候选提取是高精度抽取任务，交给大模型。
+
+`probe_consolidation.py` 的 `insomnia_breakfast_noisy` 用例锁住了这个差异：同样的信息埋在 Bot 寒暄与刷屏之中，单阶段命中 1/2、两阶段命中 2/2。
+
+**代价**：实测提取单次占用主聊天模型约 20 秒（1600 prompt tokens + 280 生成 @19 tok/s）。它与聊天走同一道闸门、FIFO 串行，因此聊天期间发起的提取会排在后面，反之亦然。
+
 ### 向量语义检索（可选）
 
 | 配置项 | 默认值 | 说明 |
@@ -73,6 +158,31 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 | `MEMORY_EMBEDDING_CONTEXTUAL_MIN` | `0.25` | embedding 路径下 `CONTEXTUAL` 记忆的主题匹配余弦阈值 |
 
 服务或模型不可用时**自动回退规则版**，链路不中断。
+
+### LLM 资源调度
+
+LM Studio **不限制并发**：多个请求同时打到同一模型时服务端不会排队，只会把并发推理挤在一起，让每个请求都变慢且难以定位是谁在抢算力。因此应用层必须为共享模型加闸门。
+
+两种资源各自独立，同一资源内 FIFO 严格串行，不同资源之间可真正并行：
+
+| 资源 | 模型 | 使用者 |
+|---|---|---|
+| `chat` | 主聊天模型 | 聊天回复、会话压缩、候选提取、embedding 编码 |
+| `consolidation` | 整合模型 | 两阶段整合的阶段 1 |
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `LLM_SCHEDULER_WAIT_WARN_SECONDS` | `30.0` | 排队等待超过该秒数则告警 |
+| `LLM_SCHEDULER_HOLD_WARN_SECONDS` | `90.0` | 单次持有超过该秒数则告警 |
+| `LLM_SCHEDULER_QUEUE_WARN_DEPTH` | `3` | 排队深度达到该值即告警 |
+| `LLM_SCHEDULER_PRIORITY_ENABLED` | `false` | **尚未实现**，保留开关 |
+| `LLM_SCHEDULER_GATE_EMBEDDING` | `true` | embedding 编码是否也走 chat 闸门 |
+
+持有告警的阈值考虑了后端的 3 次重试（每次超时 120 秒），因此单次持有的上界远大于一次正常请求；持续超阈值说明不是排队，而是调用本身卡住了。
+
+`LLM_SCHEDULER_GATE_EMBEDDING` 默认开启的原因：`MEMORY_EMBEDDING_BASE_URL` 默认与主聊天同一个实例，而一次检索要对每条候选记忆各编码一次（候选池可达 20+），不串行会出现间歇性变慢且极难定位。若把 embedding 部署在独立实例，可关闭本项避免不必要的串行。
+
+**优先级为什么没实现**：多群下严格 FIFO 会让 @ 回复排在后台任务之后。但后台任务每群最多 1 个在途、数量有界，实际影响需要真实排队数据才能判断。先积累 `core.llm.snapshot()` 的观测数据，再决定是否偏离 FIFO。
 
 ## 上下文
 
@@ -92,6 +202,33 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 > **尾巴的时间窗与断层标记**：仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生的事（2026-08-15 缺陷）。`RECENT_TAIL_MAX_AGE_MINUTES` 过滤掉超时消息；窗口内部相邻消息间隔超过 `RECENT_TAIL_GAP_MARK_MINUTES` 时插入一行「（……中间隔了 X……）」标记，让模型知道「之前聊过但已经过去很久」，而非直接失忆。
 
 `RECENT_MESSAGE_LIMIT` 已废弃（被 `RECENT_TAIL_LIMIT` 取代），保留定义以兼容既有 `.env`。
+
+### 会话上下文压缩
+
+短时连续对话中，早期消息会滚出尾巴窗口而彻底消失。本机制把滚出的部分压缩成一段回顾，使 Bot 在长对话里保持连贯（类似 coding agent 的 compact）。
+
+**三层上下文按消息 id 划分，绝不重叠**：
+
+| 层 | 范围 |
+|---|---|
+| 会话摘要 | `summarized_up_to_id` → 尾巴起点（较早部分，已压缩） |
+| 原始尾巴 | 最近 `RECENT_TAIL_LIMIT` 条（原文） |
+| 话题摘要 | 整合器产出的跨会话背景 |
+
+重叠会导致同一段对话出现两个版本，模型以摘要为准从而接错话题（2026-08-13 缺陷的成因）。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `SESSION_CONTEXT_ENABLED` | `true` | 会话压缩总开关 |
+| `SESSION_COMPACT_THRESHOLD_TOKENS` | `600` | 待压缩文本超过该 token 估算值才触发 |
+| `SESSION_SUMMARY_MAX_TOKENS` | `300` | 摘要自身的预算，超过则连同新内容重新压缩 |
+| `SESSION_COMPACT_MAX_MESSAGES` | `60` | 单次压缩最多喂入的消息条数 |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | `900.0` | 空闲多久视为会话结束（结束时清空摘要并触发一次完整整合） |
+| `SESSION_IDLE_CHECK_INTERVAL` | `300` | 空闲检查间隔（秒） |
+
+压缩用**主聊天模型**而非整合模型：整合模型跑 CPU、单次 20~60 秒，而压缩在每次回复之后异步触发，必须快。压缩不阻塞当前回复，摘要从下一轮开始生效。
+
+会话结束时整合一次的理由：这一场对话的内容此前只以压缩摘要形式存在于内存，重启即失；结束时整合把它沉淀为长期记忆的候选。
 
 ## 记忆：捕获与晋升
 
@@ -124,13 +261,15 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `MEMORY_QUOTA_ENFORCE` | **`false`** | 关闭时只输出 dry-run 日志，不实际淘汰 |
-| `MEMORY_USER_QUOTA` | `25` | 单用户在单群的 active 记忆上限 |
+| `MEMORY_USER_QUOTA` | `25` | 单用户在**单个共享空间**的 active 记忆上限 |
 | `MEMORY_QUOTA_W_IMPORTANCE` | `0.4` | 竞争分权重：重要度 |
 | `MEMORY_QUOTA_W_CONFIRMATION` | `0.3` | 竞争分权重：被确认次数 |
 | `MEMORY_QUOTA_W_RECENCY` | `0.3` | 竞争分权重：近期访问 |
 | `MEMORY_QUOTA_CONFIRMATION_CAP` | `3` | 确认次数归一化上限 |
 
 > **开启前先观察**。`MEMORY_QUOTA_ENFORCE=false` 时日志会输出 `[Quota dry-run] ... 本来会淘汰 xxx`，确认淘汰对象合理后再开启。淘汰是置 `archived` 而非删除，但恢复需要手工 SQL。
+
+> 多个 QQ 群归入同一空间时配额实际收紧了（同一个人在同一空间只有一份认知）。这符合设计，但调参时需要知道。
 
 ## 记忆：检索与排序
 
@@ -268,6 +407,9 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `PROACTIVE_MAX_NO_REPLY` | `2` | 连续无回应上限，超过则暂停追问 |
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | 回应检测窗口（秒） |
 | `PROACTIVE_COLDSTART_TOPICS` | 见 settings.py | 冷启动话题清单，逗号分隔 |
+| `PROACTIVE_AT_EXCLUDE_USERS` | 空 | 不会被选为主动搭话对象的 QQ 号（逗号分隔） |
+
+排除名单的主要用途是**群内其他 AI** —— 互相 @ 会触发无终止的循环对话。被排除的账号仍会被动收集信息（消息照常落库与整合），只是不主动向它们提问。
 
 配额上限硬封顶在 `BASE + BONUS_MAX`（默认 4 次/天）。**「越活跃越被骚扰」是必须避免的失控模式**，因此奖励幅度不建议调大。
 
@@ -347,10 +489,13 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `MESSAGE_CLEANUP_ENABLED` | `true` | 是否启用消息表定期清理 |
 | `MESSAGE_CLEANUP_KEEP_COUNT` | `1000` | 每群保留的最近消息条数 |
 | `MESSAGE_CLEANUP_HOUR` | `4` | 每日清理时间（24 小时制） |
+| `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` | `true` | 清理时保护未整合的消息（checkpoint 之后的不删除） |
 | `DB_CLEANUP_ON_START` | `false` | **测试期用**：启动时清空短期/长期记忆并重置 checkpoint |
 | `DB_CLEANUP_CLEAR_MESSAGES` | `false` | 清理时是否连原始消息一起删除（危险） |
 
 > `DB_CLEANUP_ON_START=true` 会在每次启动时丢失记忆并重置整合进度。测试结束后务必改回 `false`。
+
+> 关闭 `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` 会导致积压超过 `MESSAGE_CLEANUP_KEEP_COUNT` 时未整合消息被永久丢弃，那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
 
 ## NapCat 进程管理
 
@@ -376,6 +521,9 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `NAPCAT_WATCHDOG_CHECK_INTERVAL` | `60` | 检查间隔（秒） |
 | `NAPCAT_WATCHDOG_RESTART_COOLDOWN` | `120` | 重启后把心跳拨后的秒数，给恢复留缓冲 |
 | `NAPCAT_WATCHDOG_MAX_RESTARTS` | `3` | 连续重启上限，连接恢复后清零 |
+| `NAPCAT_WATCHDOG_GIVEUP_QUIET_SECONDS` | `3600` | 达到重启上限后的静默时长（秒），避免每个检查周期都刷同样的 error |
+
+期间若人工完成登录，`on_bot_connect` 会自动清零重启计数并恢复正常。
 
 > `NAPCAT_WATCHDOG_MAX_RESTARTS` 是**安全项而非优化项**。若重启换不回连接（如自动登录退化为扫码），无上限的重启会持续把 Bot 踢下线，且高频登录尝试可能触发 QQ 风控。
 
@@ -395,5 +543,8 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | 尾巴里断层太多/太少 | 调整 `RECENT_TAIL_GAP_MARK_MINUTES` |
 | 记忆库膨胀 | 开启 `MEMORY_QUOTA_ENFORCE`（先看 dry-run）；降 `MEMORY_USER_QUOTA` |
 | 整合太慢 | 降 `CONSOLIDATION_LOCAL_BATCH_SIZE`；换更小的整合模型 |
+| @ 对话完全学不到东西 | 查 `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明 @ 消息未入库（见 development.md 排查表） |
+| 记忆晋升过快、配额压力大 | `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` 生效后 @ 对话单次即可晋升，属预期；先看 `MEMORY_QUOTA_ENFORCE=false` 的 dry-run 日志再决定是否收紧 |
+| 回复变慢、日志出现 Scheduler 告警 | 27B 上排队较重（聊天 + 压缩 + 提取共用）；可临时关 `MEMORY_EXTRACT_ENABLED` 或调大 `CONSOLIDATION_SCHEDULE_INTERVAL` |
 
 改动阈值前建议先跑一次探针验证，见 [开发指南](development.md)。
