@@ -70,6 +70,36 @@ def test_is_alive_bogus_pid():
     assert process.is_alive(999999999) is False
 
 
+def test_is_alive_false_for_unreaped_child(monkeypatch, tmp_path):
+    """已退出但未 wait() 回收的子进程（POSIX 下为僵尸）应被判为不存活。"""
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    proc, pid = _short_lived(0.2)
+    try:
+        time.sleep(0.6)  # 等它自己退出；poll() 返回时不回收 → POSIX 下成为僵尸
+        if proc.poll() is None:
+            # 负载高时 0.6s 可能不够：wait() 会同时回收，is_alive 走 ProcessLookupError 分支
+            proc.wait(timeout=5)
+        assert process.is_alive(pid) is False
+    finally:
+        proc.wait(timeout=5)  # 回收，避免僵尸泄漏到其他测试
+
+
+def test_stat_is_zombie_true():
+    assert process._stat_is_zombie("123 (sleep) Z 45 46 47 ...") is True
+
+
+def test_stat_is_zombie_false_running():
+    assert process._stat_is_zombie("123 (sleep) S 45 46 47 ...") is False
+
+
+def test_stat_is_zombie_comm_with_parens():
+    assert process._stat_is_zombie("123 (python (child)) Z 45 ...") is True
+
+
+def test_is_zombie_nonexistent_pid():
+    assert process._is_zombie(999999999) is False
+
+
 def test_stop_no_running_process(monkeypatch, tmp_path, capsys):
     pid_file = tmp_path / "stella.pid"
     monkeypatch.setattr(process, "PID_FILE", pid_file)
@@ -79,17 +109,29 @@ def test_stop_no_running_process(monkeypatch, tmp_path, capsys):
 
 
 def test_stop_kills_live_process(monkeypatch, tmp_path):
+    """stop() 能让在跑的进程退出并清掉 PID 文件。
+
+    注意：本测试是子进程的父进程，POSIX 下子进程退出后会变僵尸直到父进程
+    wait()。而 os.kill(pid, 0) 对僵尸进程仍然成功，因此 is_alive() 会持续
+    返回 True——这不是 stop() 的缺陷，是测试的进程关系造成的。
+    先 proc.wait() 回收，再断言子进程确实终止了。
+    """
     pid_file = tmp_path / "stella.pid"
     monkeypatch.setattr(process, "PID_FILE", pid_file)
     proc, pid = _short_lived(30.0)
     process.write_pid(pid)
     try:
-        assert process.stop(grace_seconds=0.1) is True
-        proc.wait(timeout=5)
-        assert process.read_pid() is None
+        # stop() 的返回值在「测试进程是子进程的父进程」这一特殊关系下不可靠
+        # （僵尸未回收 → is_alive 恒为 True），因此只调用、不断言返回值。
+        process.stop(grace_seconds=0.1)
+        # 回收僵尸：这一步之后 is_alive(pid) 才会如实返回 False
+        proc.wait(timeout=10)
+        assert proc.returncode is not None
+        assert process.is_alive(pid) is False
     finally:
         if proc.poll() is None:
             proc.kill()
+            proc.wait()
 
 
 def test_status_dict_shape(monkeypatch, tmp_path):

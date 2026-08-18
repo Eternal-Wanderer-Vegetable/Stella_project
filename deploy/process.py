@@ -24,6 +24,7 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from config import PROJECT_ROOT, SHUTDOWN_GRACE_SECONDS
 
@@ -68,7 +69,28 @@ def is_alive(pid: int) -> bool:
         return True
     except OSError:
         return False
-    return True
+    # 僵尸进程（已退出但父进程未 wait）在进程表里仍存在，os.kill(pid, 0) 会成功。
+    # 生产中 Bot 不是 deploy stop 的子进程、由 init 回收，因此不会出现；
+    # 但父子关系下（如 GUI 直接 spawn Bot）需要区分，否则会把已死进程当成活的。
+    return not _is_zombie(pid)
+
+
+def _is_zombie(pid: int) -> bool:
+    """读 /proc/{pid}/stat 判断是否为僵尸态（Z）。非 Linux 或读取失败按「非僵尸」处理。"""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        return _stat_is_zombie(stat)
+    except (OSError, ValueError, IndexError):
+        return False
+
+
+def _stat_is_zombie(stat: str) -> bool:
+    """从 /proc/{pid}/stat 原始文本判断状态是否为 Z（僵尸）。
+
+    格式：pid (comm) state ...；comm 可能含空格与括号，因此从最后一个 ')'
+    之后取状态字符，而不是按空格 split。
+    """
+    return stat[stat.rindex(")") + 2] == "Z"
 
 
 def _windows_is_alive(pid: int) -> bool:
