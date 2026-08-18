@@ -231,7 +231,18 @@ if MESSAGE_CLEANUP_ENABLED:
 # 若排在 block=True 的处理器之后，@ 消息会被拦截而永不入库
 # （2026-08-17 实测：13 批整合、270 条消息，AT_MENTION 计数全为 0，@ 对话的内容从未
 #   进入记忆系统）。职责顺序是「先落库，再决定要不要回复」。
-group_silent_listener = on_message(priority=0, block=False)
+# ── 监听器优先级不变量（启动期自检用常量，避免依赖 NoneBot Matcher 内部属性） ──
+# 落库监听必须早于所有 block=True 的处理器，否则 @ 消息会被拦截而永不入库。
+# 2026-08-17 实测：落库监听器为 priority 99 时，13 批整合共消费 270 条消息，
+# AT_MENTION 计数全为 0 —— @ 对话（设计上唯一稳定的用户信息源）的内容从未进入
+# 记忆系统，且连带 AT_MENTION 单次晋升、主动 @ 的候选验证模式全部空转。
+# 这个错误不会抛异常、不会影响回复，只会让记忆系统静默地什么都学不到，
+# 因此必须在启动时主动断言。
+_PRIORITY_SILENT = 0
+_PRIORITY_TOGGLE = 1
+_PRIORITY_CHAT = 2
+
+group_silent_listener = on_message(priority=_PRIORITY_SILENT, block=False)
 
 
 @group_silent_listener.handle()
@@ -272,7 +283,7 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
 
 # 对话入口：只有命中以上规则才会进入（priority=2、命中即 block）。
 # 它 block=True，因此任何需要看到全部消息的处理器（如落库监听）都必须排在它之前。
-chat_handler = on_message(rule=Rule(is_chat_trigger), priority=2, block=True)
+chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, block=True)
 
 
 @chat_handler.handle()
@@ -370,17 +381,30 @@ async def is_toggle_command(event: GroupMessageEvent) -> bool:
 
 # priority=1 必须高于 chat_handler(priority=2, block=True)，
 # 否则「安静」这类命令会被当成普通对话交给 LLM
-toggle_handler = on_message(rule=Rule(is_toggle_command), priority=1, block=True)
+toggle_handler = on_message(rule=Rule(is_toggle_command), priority=_PRIORITY_TOGGLE, block=True)
 
-# ── 监听器优先级不变量断言 ──
-# 落库监听必须早于 block=True 的对话入口，否则 @ 消息会被拦截而永不入库
-# （见 2026-08-17 缺陷）。属性名按 NoneBot Matcher 实际字段取，取不到则跳过。
-with contextlib.suppress(Exception):
-    if group_silent_listener.priority >= chat_handler.priority:
-        logger.critical(
-            "❌ 监听器优先级错误：落库监听必须早于 block=True 的对话入口，"
-            "否则 @ 消息不会入库（见 2026-08-17 缺陷）"
-        )
+# ── 监听器优先级不变量（启动期自检） ──
+def _assert_listener_priorities() -> None:
+    """校验落库监听器优先级最高；违反时输出 critical 日志（不中断启动）。"""
+    for name, priority in (
+        ("toggle_handler", _PRIORITY_TOGGLE),
+        ("chat_handler", _PRIORITY_CHAT),
+    ):
+        if priority <= _PRIORITY_SILENT:
+            logger.critical(
+                f"❌ 监听器优先级错误：group_silent_listener(priority={_PRIORITY_SILENT}) "
+                f"必须小于 {name}(priority={priority}, block=True)，"
+                f"否则 @ 消息会被拦截而永不入库（见 2026-08-17 缺陷）。"
+                f"请检查 ai_gateway.py 中三个监听器的 priority。"
+            )
+            return
+    logger.debug(
+        f"✅ 监听器优先级正常（落库 {_PRIORITY_SILENT} < toggle "
+        f"{_PRIORITY_TOGGLE} < chat {_PRIORITY_CHAT}）"
+    )
+
+
+_assert_listener_priorities()
 
 
 @toggle_handler.handle()

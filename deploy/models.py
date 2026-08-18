@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""doctor 的数据模型：单项检查结论与整机环境快照。
+
+两个 dataclass 都不做 IO、不 import 业务模块，供 probe / checks / report
+与测试共用。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """单项检查的结论。
+
+    id 是稳定标识（GUI 用它做图标与本地化映射），改名等于破坏前端兼容。
+    level != "ok" 时 fix_hint 必须非空——只报告问题不给解法对用户没有价值，
+    这条由测试断言强制。
+    """
+
+    id: str
+    level: str  # "ok" / "warn" / "error"
+    title: str
+    detail: str = ""
+    fix_hint: str = ""
+
+
+@dataclass
+class Snapshot:
+    """环境快照：只装「采集到的事实」，不含任何判断。
+
+    两个约定：
+    1. 采集失败用 None 表示「无法确定」，检查层必须把 None 与 False 区别处理——
+       「探测不到」应是 warn，「确定有问题」才是 error；
+    2. 所有字段都有默认值（健康态），测试构造时只需覆盖关心的那一项。
+    """
+
+    # ── Python 与依赖 ──
+    python_version: tuple[int, int, int] = (3, 12, 0)
+    missing_packages: list[str] = field(default_factory=list)
+
+    # ── 配置文件 ──
+    env_exists: bool = True
+    deprecated_env_keys: list[str] = field(default_factory=list)
+    allowed_groups: list[int] = field(default_factory=lambda: [123456789])
+    db_cleanup_on_start: bool = False
+
+    # ── OneBot 连接 ──
+    onebot_mode: str = "reverse"  # "forward" / "reverse" / "unknown"
+    onebot_host: str = "0.0.0.0"
+    onebot_port: int = 8080
+    onebot_port_in_use: bool | None = False
+    onebot_forward_reachable: bool | None = None
+
+    # ── LM Studio ──
+    lm_reachable: bool | None = True
+    lm_error: str = ""
+    lm_models: list[str] = field(default_factory=lambda: ["model-a", "model-b"])
+    lm_model_chat: str = "model-a"
+    lm_model_consolidation: str = "model-a"
+    lm_model_extract: str = "model-a"
+    lm_model_embedding: str = "model-a"
+    embedding_enabled: bool = False
+
+    # ── 数据库 ──
+    db_exists: bool = True
+    db_path: str = "memory/agent_memory.db"
+    db_writable: bool | None = True
+    schema_version: int | None = 8
+    code_schema_version: int = 8
+    legacy_group_id_tables: list[str] = field(default_factory=list)
+    source_kind_counts: dict[str, int] = field(
+        default_factory=lambda: {"AT_MENTION": 1, "PASSIVE": 1, "BOT_SELF": 1}
+    )
+
+    # ── 群组空间 ──
+    space_conflicts: list[dict] = field(default_factory=list)
+    space_assignment_mismatch: list[dict] = field(default_factory=list)
+
+    # ── 其它 ──
+    persona_exists: bool = True
+    persona_size: int = 1024
+    disk_free_mb: float | None = 1024.0
