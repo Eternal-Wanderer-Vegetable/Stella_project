@@ -1013,6 +1013,11 @@ def get_consolidator() -> MemoryConsolidator:
     return _consolidator_instance
 
 
+def pending_tasks() -> set[asyncio.Task]:
+    """返回在途整合任务集合的副本（供优雅停止等待收尾）。"""
+    return set(_consolidation_tasks)
+
+
 def maybe_consolidate(group_id: int, force: bool = False):
     """异步触发一次群整合（后台任务），并登记以跟踪完成与否（不等待）。
 

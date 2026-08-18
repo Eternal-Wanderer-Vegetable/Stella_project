@@ -12,6 +12,11 @@
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
+# 结构化 JSON 日志（供 GUI tail）：必须在任何插件加载/打日志之前注册
+from core.logging_sink import setup_json_sink
+
+setup_json_sink()
+
 nonebot.init()
 
 driver = nonebot.get_driver()

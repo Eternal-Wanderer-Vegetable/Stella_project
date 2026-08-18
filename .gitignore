@@ -54,6 +54,9 @@ sanitize_map.json
 deploy.answers.toml
 .env.bak
 
+# 结构化 JSON 日志（GUI 消费）与进程 PID 文件
+logs/
+
 # Misc
 STARTCOMMAND.md
 

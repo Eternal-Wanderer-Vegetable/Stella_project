@@ -1,24 +1,27 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""doctor / init / start 三个子命令的入口。
+"""doctor / init / start / status / stop 子命令的入口。
 
 用法：python -m deploy doctor [--json]
       python -m deploy init [--answers PATH] [--force] [--dry-run]
-      python -m deploy start [--force]
+      python -m deploy start [--force] [--detach]
+      python -m deploy status [--json]
+      python -m deploy stop
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 from config import PROJECT_ROOT
 
-from . import checks, probe, report
+from . import checks, probe, process, report
 from .init_wizard import (
     load_answers,
     print_next_steps,
@@ -69,6 +72,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
         backup = PROJECT_ROOT / ".env.bak"
         env_path.replace(backup)
         print(f"已备份原配置到 {backup}")
+        print("注意：向导只管理 5 个必答项，其余保持模板默认值。")
+        print("若你此前手工调过阈值类配置（如 PROACTIVE_* / MEMORY_*），请从 .env.bak 里对照恢复。")
     env_path.write_text(rendered, encoding="utf-8")
     print(f"已写入 {env_path}")
 
@@ -96,12 +101,34 @@ def _cmd_start(args: argparse.Namespace) -> int:
             print("存在阻塞性问题。确认原因后可用 python -m deploy start --force 忽略。")
             return 1
         print("[跳过] 发现阻塞性问题，但 --force 已指定，继续启动。")
+    if args.detach:
+        return process.start_detached()
     bot_path = PROJECT_ROOT / "bot.py"
     if not bot_path.exists():
         print(f"缺少入口 {bot_path}，无法启动。")
         return 1
     print(f"启动 Stella：{sys.executable} bot.py")
     return subprocess.call([sys.executable, str(bot_path)])
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    data = process.status()
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        if data["alive"]:
+            print(f"Stella 正在运行（PID {data['pid']}）。")
+        else:
+            print("Stella 未在运行。")
+        if data["recent_log"]:
+            recent = data["recent_log"]
+            print(f"最近日志 [{recent.get('level', '?')}] {recent.get('message', '')[:120]}")
+        print("提示：link_status 在 Bot 进程内，外部只能报进程存活与最近日志。")
+    return 0
+
+
+def _cmd_stop(args: argparse.Namespace) -> int:
+    return 0 if process.stop() else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -135,7 +162,15 @@ def main(argv: list[str] | None = None) -> int:
 
     p_start = sub.add_parser("start", help="启动（先跑 doctor）")
     p_start.add_argument("--force", action="store_true", help="忽略阻塞问题继续启动")
+    p_start.add_argument("--detach", action="store_true", help="后台启动并写 PID 文件")
     p_start.set_defaults(func=_cmd_start)
+
+    p_status = sub.add_parser("status", help="查看进程状态")
+    p_status.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
+    p_status.set_defaults(func=_cmd_status)
+
+    p_stop = sub.add_parser("stop", help="优雅停止（等后台任务收尾后强杀）")
+    p_stop.set_defaults(func=_cmd_stop)
 
     args = parser.parse_args(argv)
     return args.func(args)

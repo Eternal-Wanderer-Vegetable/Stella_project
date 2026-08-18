@@ -32,7 +32,7 @@ import time
 from collections import defaultdict
 from datetime import date
 
-from nonebot import logger, on_message
+from nonebot import get_driver, logger, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
 from nonebot.exception import FinishedException
 from nonebot.rule import Rule
@@ -64,11 +64,13 @@ from config import (
     SEND_INTERVAL,
     SESSION_CONTEXT_ENABLED,
     SESSION_IDLE_CHECK_INTERVAL,
+    SHUTDOWN_GRACE_SECONDS,
     SYSTEM_PROMPT_PATH,
 )
 from core.context import ChatContext
 from core.llm.lm_studio import LMStudioBackend
 from core.pipeline import Pipeline
+from core.shutdown import wait_for_tasks
 from extensions import load_extensions
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
@@ -859,3 +861,27 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
                 logger.info(f"📊 [Trace] 已清理 {pruned} 条过期决策追踪")
         except Exception as e:
             logger.debug(f"📊 [Trace] 决策追踪清理异常: {e}")
+
+
+# ============================================================
+# 优雅停止：等待在途后台任务收尾，避免整合被中途 kill
+# ============================================================
+@get_driver().on_shutdown
+async def _graceful_shutdown() -> None:
+    """等整合/压缩收尾后再退出，避免 checkpoint 与消息表不一致。
+
+    三类在途任务：整合（consolidator）、会话压缩（session_compact）、
+    主动 @ 的回应检测（_reply_check_tasks）。前两类必须等——整合中途退出
+    会让那批消息的候选丢失（checkpoint 未推进，下次会重跑，数据不会坏，
+    但白跑一次 LLM）；回应检测只是 sleep，直接取消。
+
+    超时上界取 SHUTDOWN_GRACE_SECONDS，超时后放弃等待并告警。
+    """
+    from memory.consolidator import pending_tasks as pending_consolidations
+    from memory.session_compact import pending_tasks as pending_compactions
+
+    await wait_for_tasks(
+        _reply_check_tasks,
+        list(pending_consolidations()) + list(pending_compactions()),
+        SHUTDOWN_GRACE_SECONDS,
+    )

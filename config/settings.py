@@ -630,3 +630,15 @@ BAD_PHRASES = [
 
 # ---------- 兜底回复 ----------
 FALLBACK_REPLY = "......？"
+
+# ---------- 结构化日志（供 GUI / 前端消费） ----------
+# 与人类可读日志并存：这份是给程序读的，GUI 靠它做级别过滤与错误复制。
+STELLA_JSON_LOG_ENABLED = _env("STELLA_JSON_LOG_ENABLED", "true").lower() in ("true", "1", "yes")
+STELLA_JSON_LOG_PATH = _env_path("STELLA_JSON_LOG_PATH", PROJECT_ROOT / "logs" / "stella.jsonl")
+# 单条消息的截断长度：prompt 全文动辄数千字符，进结构化日志只会让文件暴涨
+STELLA_JSON_LOG_MAX_MESSAGE = _env_int("STELLA_JSON_LOG_MAX_MESSAGE", 500)
+
+# ---------- 优雅停止 ----------
+# 停止时等待在途后台任务（整合/压缩）收尾的上限（秒）。
+# LLM 单次调用最长 120s×3 次重试，无限等待会让「停止」看起来卡死。
+SHUTDOWN_GRACE_SECONDS = _env_float("SHUTDOWN_GRACE_SECONDS", 30.0)

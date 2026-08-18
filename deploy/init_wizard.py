@@ -241,20 +241,27 @@ def run_interactive() -> Answers:
 
     groups = _ask_groups()
 
-    mode = _ask("连接方式（reverse=反向 WS / forward=正向 WS）", "reverse").lower()
-    if mode not in _VALID_MODES:
-        mode = "reverse"
+    while True:
+        mode = _ask("连接方式（reverse=反向 WS / forward=正向 WS）", "reverse").lower()
+        if mode in _VALID_MODES:
+            break
+        print(f"只能填 {' 或 '.join(_VALID_MODES)}，请重新输入。")
 
     host = "127.0.0.1"
     port = 8080
     ws_urls: list[str] = []
     if mode == "reverse":
         host = _ask("监听地址（HOST）", "127.0.0.1")
-        try:
-            port = int(_ask("监听端口（PORT）", "8080"))
-        except ValueError:
-            print("端口不是数字，使用默认 8080。")
-            port = 8080
+        while True:
+            raw_port = _ask("监听端口（PORT）", "8080")
+            try:
+                port = int(raw_port)
+            except ValueError:
+                print("端口必须是数字，请重新输入。")
+                continue
+            if 1 <= port <= 65535:
+                break
+            print("端口需在 1~65535 之间。")
     else:
         raw_ws = _ask("NapCat WS 服务端地址（多个用逗号分隔）", "ws://127.0.0.1:3001")
         ws_urls = [u.strip() for u in raw_ws.replace("，", ",").split(",") if u.strip()]

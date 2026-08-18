@@ -22,7 +22,9 @@ pip install -r requirements-dev.txt
 |---|---|
 | `python -m deploy doctor [--json]` | 环境自检；`--json` 输出结构化结果（id/level/title/detail/fix_hint），供 GUI 做图标与本地化映射 |
 | `python -m deploy init [--answers PATH] [--force] [--dry-run]` | 交互式生成 `.env`（基于 `.env.example` 逐行替换，模型 ID 从 LM Studio 拉列表选编号）；`--answers` 复用上次的 `deploy.answers.toml`，换机器重装 / CI 冒烟 / 将来 GUI 复用同一份答案 |
-| `python -m deploy start [--force]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py` |
+| `python -m deploy start [--force] [--detach]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py`；`--detach` 后台启动并写 PID 到 `logs/stella.pid`（GUI 用） |
+| `python -m deploy status [--json]` | 读 PID 文件报进程是否存活，并从 JSON 日志尾部推断最近状态（`link_status` 在 Bot 进程内，外部读不到） |
+| `python -m deploy stop` | 优雅停止：发信号（Windows 用 `CTRL_BREAK_EVENT`，uvicorn 0.52+ 会走优雅关闭并触发 `on_shutdown`）→ 等 `SHUTDOWN_GRACE_SECONDS + 5s` → 仍存活则强杀 |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
@@ -98,6 +100,9 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_link_monitor.py` | 链路监测：心跳判活、主动探活、告警节流 |
 | `test_deploy_checks.py` | doctor 判断层：健康快照全 ok、非 ok 必有 fix_hint、run_all 排序 |
 | `test_deploy_init.py` | 向导校验与渲染（含「模板注释原样保留」反回归） |
+| `test_deploy_process.py` | PID 文件读写、进程存活判断、stop 边界（用短命子进程） |
+| `test_logging_sink.py` | 结构化 JSON 日志：每行合法 JSON、字段完整、超长消息截断 |
+| `test_graceful_shutdown.py` | 优雅停止：等收尾、超时放弃、回应检测任务被取消 |
 
 ### 写测试的两个约定
 

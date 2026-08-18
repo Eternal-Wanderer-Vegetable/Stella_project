@@ -41,6 +41,11 @@ _in_flight: set[int] = set()
 _tasks: set[asyncio.Task] = set()
 
 
+def pending_tasks() -> set[asyncio.Task]:
+    """返回在途压缩任务集合的副本（供优雅停止等待收尾）。"""
+    return set(_tasks)
+
+
 COMPACT_PROMPT = """以下是一段群聊对话的较早部分。请把它压缩成一段简短的回顾，供你稍后继续对话时参考。
 {existing}
 对话内容：
