@@ -67,6 +67,22 @@ async def _refresh_on_any_event() -> None:
 driver = get_driver()
 
 
+def _ws_hint() -> str:
+    """从 NoneBot 配置拼出反向 WS 的实际地址，供排查提示使用。
+
+    取不到就退回占位说明——告警本身不能因为拿不到配置而失败。
+    """
+    try:
+        cfg = get_driver().config
+        host = getattr(cfg, "host", None)
+        port = getattr(cfg, "port", None)
+        if not host or not port:
+            return "ws://[Bot地址]:[端口]/onebot/v11/ws"
+        return f"ws://{host}:{port}/onebot/v11/ws"
+    except Exception:
+        return "ws://[Bot地址]:[端口]/onebot/v11/ws"
+
+
 @driver.on_bot_connect
 async def _on_bot_connect(bot) -> None:
     """连接建立即视为健康，并清零告警节流，恢复后允许再次告警。"""
@@ -108,7 +124,7 @@ def _alert(reason: str, elapsed: float | None = None) -> None:
         f"{elapsed_line}"
         f"   请依次检查：\n"
         f"   1. NapCat 是否仍在运行、账号是否掉线 —— 用 NapCatQQ Desktop 查看日志\n"
-        f"   2. NapCat 的 WebSocket 客户端是否指向 ws://<Bot地址>:<PORT>/onebot/v11/ws\n"
+        f"   2. NapCat 的 WebSocket 客户端是否指向 {_ws_hint()}\n"
         f"      （反向 WS；若用正向 WS 则检查 ONEBOT_WS_URLS 是否可达）\n"
         f"   3. 若两侧配了 access token，是否一致\n"
         f"   4. 端口是否被防火墙拦截或被其他程序占用\n"
@@ -124,7 +140,12 @@ async def link_monitor_task() -> None:
         return
 
     if not state.connected:
-        _alert("协议端未连接")
+        elapsed = (
+            None
+            if state.last_event_time is None
+            else time.time() - state.last_event_time
+        )
+        _alert("协议端未连接", elapsed)
         return
 
     if state.last_event_time is None:
