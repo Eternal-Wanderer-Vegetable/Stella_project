@@ -67,10 +67,15 @@ if errorlevel 1 (
 )
 
 REM ---------- 段 6：启用 site-packages（嵌入式 Python 的关键坑） ----------
-REM 嵌入式 Python 默认禁用 site-packages（python3xx._pth 里 import site 被注释），
-REM 不取消注释则 pip 装的包 import 不到——这是嵌入式包最常见的坑。
+REM 嵌入式 Python 的 ._pth 有两处必改：
+REM 1) 默认注释掉了 import site，不取消则 pip 装到 Lib\site-packages 的包 import 不到；
+REM 2) ._pth 存在时 Python 只按该文件构建 sys.path（等价于带上 -E -s），
+REM    且其中的相对路径是相对 python.exe 所在目录解析的——那个 "." 指向 runtime\
+REM    而非项目根，因此 "runtime\python.exe -m deploy" 会报
+REM    No module named deploy（2026-08-18 实测）。追加 ".." 把项目根加进 sys.path。
 for %%f in ("%RUNTIME_DIR%\python*._pth") do (
-    powershell -NoProfile -Command "(Get-Content '%%f') -replace '^#import site','import site' | Set-Content '%%f'"
+    powershell -NoProfile -Command ^
+      "$p='%%~f'; $c=Get-Content $p; $c = $c -replace '^#import site','import site'; if ($c -notcontains '..') { $c += '..' }; Set-Content $p $c"
 )
 
 REM ---------- 段 7：安装 pip ----------

@@ -122,7 +122,17 @@ jobs:
           fi
           echo "✅ 敏感文件检查通过"
 
+      # 这次的教训：CI 验证了文件清单，但没验证「能不能 import」。
+      # 本步只验证包结构完整，不验证嵌入式 Python 的路径问题——后者是 Windows
+      # 特有的 ._pth 行为，只能在真实 Windows 上实测（2026-08-18 实测踩过：
+      # deploy 目录打包正确，但 ._pth 里的 "." 指向 runtime\ 而非项目根）。
+      - name: 校验发布包可 import
+        run: |
+          cd dist/Stella
+          python -c "import config, core, memory, deploy, extensions; print('import 检查通过')"
+
       - name: 发布 Release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -130,3 +140,13 @@ jobs:
             "dist/Stella-${RELEASE_REF}-win64.zip" \
             --title "Stella ${RELEASE_REF}" \
             --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md
+
+      # 手工触发只产出可下载的 artifact，不污染 Releases 页面——
+      # 否则每次测试打包都会留下一个假 Release 需要手工删除。
+      - name: 上传 artifact（手工触发时用于验证产物）
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stella-release-preview
+          path: dist/*.zip
+          retention-days: 7

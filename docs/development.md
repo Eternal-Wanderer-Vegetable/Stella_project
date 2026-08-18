@@ -325,7 +325,7 @@ CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`desig
 
 `release_assets/start.bat` 里**硬编码**了：
 
-- `PY_VER`（如 `3.12.8`）
+- `PY_VER`（如 `3.12.10`）
 - `PY_ZIP`（embed-amd64 包文件名，随 `PY_VER` 变）
 - `PY_SHA256`（python.org 下载页的官方校验值，写错会导致安装永远失败）
 - 段 6 里 `python*._pth` 的通配符（`python312._pth` 里的 `312` 对应主次版本，换 Python 时若文件名不再匹配要同步改）
@@ -333,6 +333,26 @@ CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`desig
 升级 Python 版本时这四处要一并更新，并在本地完整跑一遍 `start.bat` 验证（会产生 `runtime/` 目录，已加入 `.gitignore`）。
 
 > **编码约定**：`release_assets/` 里的 `.bat` 是 **GBK(CP936)** 编码（不是 UTF-8），`README-快速开始.txt` 是 UTF-8 with BOM。别把 bat 转回 UTF-8——实测 cmd 在 UTF-8+`chcp 65001` 下解析会随机错位（部分多字节字符所在行被当成命令执行，输出「is not recognized」）；GBK 文件在中文 Windows 默认控制台（936）下显示正常且解析稳定。在 UTF-8 编辑器里打开 bat 看到乱码是正常的，改文件后记得存回 GBK。
+
+### 嵌入式 Python 的两处必改
+
+Release 包用 Python Embeddable Package 作运行时，它有两个与常规 Python 不同的行为，
+`start.bat` 必须处理：
+
+1. **`import site` 默认被注释**（`python3xx._pth` 里）。不取消注释则 pip 装到
+   `Lib\site-packages` 的依赖全部 import 不到；
+2. **`._pth` 存在时 Python 只按该文件构建 `sys.path`**，等价于带上 `-E -s`，
+   且其中的相对路径是**相对 `python.exe` 所在目录**解析的。默认的 `.` 指向
+   `runtime\` 而非项目根，因此 `runtime\python.exe -m deploy` 会报
+   `No module named deploy`（2026-08-18 实测）。需要追加一行 `..`。
+
+两处都在 `start.bat` 的「启用 site-packages」段处理，用 `python*._pth` 通配匹配
+文件名，避免升级 Python 主次版本时漏改。
+
+**这类问题 CI 挡不住**：ubuntu runner 上的 import 校验只能验证目录完整性，
+`._pth` 的路径行为只在真实 Windows 的嵌入式运行时里出现。因此每次改动
+`start.bat` 后，必须在**全新解压的目录**里实测一遍（不要复用已装好的目录，
+它的 `._pth` 可能已被上一次运行修正过，会掩盖问题）。
 
 ## 代码约定
 
