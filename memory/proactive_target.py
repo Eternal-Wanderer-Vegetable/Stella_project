@@ -39,6 +39,7 @@ from config import (
     PROACTIVE_COLDSTART_TOPICS,
     PROACTIVE_MAX_NO_REPLY,
 )
+from config.spaces import resolve_space
 from memory.proactive import get_proactive
 from memory.proactive_state import count_user_messages_24h, get_state
 
@@ -113,10 +114,11 @@ def can_at_user(group_id: int, user_id: int) -> tuple[bool, str]:
     return True, f"可以（今日 {state['at_count_today']}/{quota}）"
 
 
-def _fetch_observing_candidate(group_id: int, user_id: int) -> tuple[str, str, str, float] | None:
+def _fetch_observing_candidate(group_shared_space: str, user_id: int) -> tuple[str, str, str, float] | None:
     """取该用户 confidence 最接近晋升线的 OBSERVING 候选。
 
     返回 (id, content, type, confidence)；无则 None。
+    候选按共享空间归属（``memory_candidates.group_shared_space``）。
 
     只取 confidence 在 [LOW-0.2, HIGH) 区间内的：太低的候选证据本身可疑，
     问了也难以定论；已达 HIGH 的会自动晋升、无需验证。
@@ -126,10 +128,10 @@ def _fetch_observing_candidate(group_id: int, user_id: int) -> tuple[str, str, s
         conn = sqlite3.connect(DB_PATH)
         row = conn.execute(
             "SELECT id, content, type, confidence FROM memory_candidates "
-            "WHERE group_id = ? AND user_id = ? AND status = 'OBSERVING' "
+            "WHERE group_shared_space = ? AND user_id = ? AND status = 'OBSERVING' "
             "AND confidence >= ? AND confidence < ? AND content != '' "
             "ORDER BY confidence DESC LIMIT 1",
-            (str(group_id), str(user_id), lower, MEMORY_CONFIRM_HIGH_CONFIDENCE),
+            (group_shared_space, str(user_id), lower, MEMORY_CONFIRM_HIGH_CONFIDENCE),
         ).fetchone()
         conn.close()
     except sqlite3.Error as e:
@@ -140,20 +142,24 @@ def _fetch_observing_candidate(group_id: int, user_id: int) -> tuple[str, str, s
     return str(row[0]), str(row[1] or ""), str(row[2] or "FACT"), float(row[3] or 0.0)
 
 
-def _known_topics(group_id: int, user_id: int) -> str:
+def _known_topics(group_shared_space: str, user_id: int) -> str:
     """该用户已有的 active 记忆内容（拼成一段），用于避免冷启动重复提问。
 
     只取内容文本，不含元信息——它只是用来做关键词避让，不进 prompt。
+    记忆按共享空间归属（``memories.group_shared_space``）。
     """
     try:
         conn = sqlite3.connect(DB_PATH)
         rows = conn.execute(
-            "SELECT content FROM memories WHERE group_id = ? AND user_id = ? "
+            "SELECT content FROM memories WHERE group_shared_space = ? AND user_id = ? "
             "AND status = 'active' LIMIT 50",
-            (str(group_id), str(user_id)),
+            (group_shared_space, str(user_id)),
         ).fetchall()
         conn.close()
-    except sqlite3.Error:
+    except sqlite3.Error as e:
+        # 静默 return "" 让避让逻辑失效却毫无痕迹——这正是本函数漏了按空间查、
+        # 长期未被发现的原因，必须留痕
+        logger.warning(f"⚠️ [ProactiveTarget] 读取已知话题失败: {e}")
         return ""
     return " ".join((r[0] or "") for r in rows)
 
@@ -180,9 +186,17 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
 
     exclude_user_ids 用于排除 Bot 自身等不该被搭话的账号；
     排除名单同时来自调用方传入与 PROACTIVE_AT_EXCLUDE_USERS 配置。
+
+    归属分界：候选与已知话题（memory_candidates / memories）按**共享空间**查
+    （``resolve_space(group_id)``）；活跃度、配额、冷却（active_users /
+    can_at_user / get_state）仍按真实 **QQ 群**——前者是「对人的长期认知」，
+    后者是「当下这场对话的状态」。
     """
     if not PROACTIVE_AT_ENABLED:
         return None
+
+    # 候选/已知话题按共享空间归属，只解析一次；其余仍用 group_id
+    space = resolve_space(group_id)
 
     # 调用方传入的排除项（Bot 自身）+ 配置的排除名单（其他 AI 等）
     excluded = set(exclude_user_ids or set()) | PROACTIVE_AT_EXCLUDE_USERS
@@ -207,7 +221,7 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
     # 优先级 1：有可验证候选的用户（按 confidence 降序，最接近晋升线的先问）
     verify_pool: list[tuple[float, int, tuple[str, str, str, float]]] = []
     for uid in eligible:
-        found = _fetch_observing_candidate(group_id, uid)
+        found = _fetch_observing_candidate(space, uid)
         if found:
             verify_pool.append((found[3], uid, found))
     if verify_pool:
@@ -227,7 +241,7 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
         return None
     uid = eligible[0]
     state = get_state(group_id, uid)
-    known = _known_topics(group_id, uid)
+    known = _known_topics(space, uid)
     # 依次避开：上次问过的话题、已经知道答案的话题（关键词出现在已有记忆里）
     topics = [
         t

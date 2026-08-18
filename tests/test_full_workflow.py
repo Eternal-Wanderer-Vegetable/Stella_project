@@ -26,9 +26,9 @@ import memory.memory_manager as memory_manager_mod
 import memory.post_processors as post_processors
 import memory.pre_processors as pre_processors
 import memory.retriever as retriever
+from config.spaces import resolve_space
 from core.context import ChatContext
 from core.pipeline import Pipeline
-from config.spaces import resolve_space
 from memory.consolidator import MemoryConsolidator
 
 

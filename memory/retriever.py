@@ -48,6 +48,7 @@ from config import (
     REPLY_LONG_TERM_LIMIT,
 )
 from memory.text_similarity import normalize_text
+from memory.timeutil import log_sqlite_error
 
 
 def _extract_keywords(text: str, max_keywords: int) -> list[str]:
@@ -90,10 +91,15 @@ def _compute_overlap(query: str, text: str) -> int:
 
 
 def _fetch_table(cursor: sqlite3.Cursor, sql: str, params: tuple[Any, ...]) -> list[tuple[Any, ...]]:
-    """执行一条查询并把结果行取出；表尚不存在等 OperationalError 时返回空列表，避免异常穿透调用方。"""
+    """执行一条查询并把结果行取出；表尚不存在等 OperationalError 时返回空列表，避免异常穿透调用方。
+
+    表不存在是惰性建表的正常情况（debug）；列名不匹配等其余错误必须可见
+    （warning），否则检索会无声降级成空结果（见 2026-08-17 列名遗漏）。
+    """
     try:
         return cursor.execute(sql, params).fetchall()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        log_sqlite_error("Retriever._fetch_table", e)
         return []
 
 
@@ -387,7 +393,10 @@ def _query_rag_results(
         params.extend([query_tokens, limit])
 
         return cursor.execute(query_sql, tuple(params)).fetchall()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        # FTS 查询静默降级成空结果会表现为「检索永远无命中」，必须留痕分级：
+        # no such table → 索引未建（正常）；其余（如列名不匹配）→ warning
+        log_sqlite_error("Retriever._query_rag_results", e)
         return []
 
 

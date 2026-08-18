@@ -8,7 +8,6 @@
 用例独立的临时目录（不写仓库真实目录）。
 """
 
-import json
 from pathlib import Path
 
 import nonebot

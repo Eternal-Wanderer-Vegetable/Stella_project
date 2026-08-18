@@ -45,6 +45,7 @@ from memory.policy import (
     usage_allowed,
 )
 from memory.text_similarity import is_similar, merge_content
+from memory.timeutil import log_sqlite_error
 
 
 @dataclass
@@ -160,8 +161,10 @@ def _fetch_candidates(
         params.append(pool_limit)
         try:
             rows = cursor.execute(sql, tuple(params)).fetchall()
-        except sqlite3.OperationalError:
-            # 旧库可能还没有 v2 列：退化为不带新列的查询
+        except sqlite3.OperationalError as e:
+            # 旧库可能还没有 v2 列：退化为不带新列的查询。表缺失是惰性建表的
+            # 正常情况（debug）；若连旧列都没有/其他原因，则必须告警留痕
+            log_sqlite_error("RetrievalV2._fetch_candidates", e)
             return _fetch_candidates_legacy(cursor, group_shared_space, user_id, mode, pool_limit)
     return [_row_to_memory(r) for r in rows]
 
@@ -191,7 +194,9 @@ def _fetch_candidates_legacy(
         params = [group_shared_space, str(user_id), pool_limit]
     try:
         return [_row_to_memory(r) for r in cursor.execute(sql, tuple(params)).fetchall()]
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        # 旧库回退路径同样不留痕：no such table → debug，其余 → warning
+        log_sqlite_error("RetrievalV2._fetch_candidates_legacy", e)
         return []
 
 
@@ -234,7 +239,9 @@ def _query_fts(
         sql += "AND f.content MATCH ? ORDER BY bm25(memories_fts) LIMIT ?"
         params.extend([tokens, limit])
         return cursor.execute(sql, tuple(params)).fetchall()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        # FTS 查询静默降级成空结果会表现为「检索永远无命中」，必须留痕分级
+        log_sqlite_error("RetrievalV2._query_fts", e)
         return []
 
 

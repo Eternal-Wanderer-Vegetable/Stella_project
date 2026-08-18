@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""数据库时间戳的统一解析（UTC 基准）。
+"""数据库时间戳的统一解析（UTC 基准）与 SQLite 异常分级日志。
 
+前者为本模块主业，后者是被多个 memory 子模块共用的最小公共位置，放这里
+避免为一行函数新建模块。
 
 背景：SQLite 的 CURRENT_TIMESTAMP 写入的是 **UTC**，而 Python 侧此前用
 datetime.now()（本地时间）与之比较，在非 UTC 时区下产生固定偏移。
@@ -19,8 +21,24 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from nonebot import logger
+
 # SQLite CURRENT_TIMESTAMP 的格式，以及常见变体
 _FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d")
+
+
+def log_sqlite_error(where: str, e: Exception) -> None:
+    """SQLite 异常分级日志：表不存在是惰性建表的正常情况，其余（尤其列名不匹配）
+    必须可见——静默降级让 2026-08-17 的列名遗漏持续了数小时无人察觉。
+
+    :param where: 调用方标识（如 "Retriever"），用于日志前缀
+    :param e: 捕获到的 sqlite3.Error / Exception
+    """
+    msg = str(e)
+    if "no such table" in msg:
+        logger.debug(f"[{where}] 表尚不存在，跳过: {msg}")
+    else:
+        logger.warning(f"⚠️ [{where}] SQL 执行失败: {msg}")
 
 
 def utc_now() -> datetime:

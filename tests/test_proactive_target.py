@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 import memory.proactive as proactive
 import memory.proactive_target as pt
+from config.spaces import resolve_space
 from memory import proactive_state
 from memory.proactive_target import (
     ProactiveTarget,
@@ -38,12 +39,16 @@ def _faketicks():
 
 
 def _provision_candidates(db, rows):
-    """建最小 memory_candidates 表（供 _fetch_observing_candidate 查询）并插入行。"""
+    """建最小 memory_candidates 表（供 _fetch_observing_candidate 查询）并插入行。
+
+    候选按共享空间归属：行首的归属列是 ``group_shared_space``（用 resolve_space 得到），
+    不再用 ``group_id``——否则 ``WHERE group_shared_space = ?`` 会因缺列被吞成空结果。
+    """
     conn = sqlite3.connect(db)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS memory_candidates (
             id TEXT PRIMARY KEY,
-            group_id TEXT,
+            group_shared_space TEXT,
             user_id TEXT,
             type TEXT,
             content TEXT,
@@ -53,7 +58,7 @@ def _provision_candidates(db, rows):
     """)
     conn.executemany(
         "INSERT OR REPLACE INTO memory_candidates "
-        "(id, group_id, user_id, type, content, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "(id, group_shared_space, user_id, type, content, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()
@@ -196,7 +201,7 @@ def test_pick_target_verify_mode(tmp_path, monkeypatch):
     monkeypatch.setattr(pt, "get_proactive", lambda: c)
     c.record_message(1, 2001)
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", "1", "2001", "FACT", "他的显卡是5080", 0.8, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "FACT", "他的显卡是5080", 0.8, "OBSERVING"),
     ])
 
     target = pick_target(1)
@@ -217,8 +222,8 @@ def test_pick_target_verify_prefers_highest_confidence(tmp_path, monkeypatch):
     c.record_message(1, 2001)  # t=100
     c.record_message(1, 2002)  # t=101
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-low", "1", "2001", "FACT", "低置信候选", 0.65, "OBSERVING"),
-        ("cand-high", "1", "2002", "FACT", "高置信候选", 0.8, "OBSERVING"),
+        ("cand-low", resolve_space(1), "2001", "FACT", "低置信候选", 0.65, "OBSERVING"),
+        ("cand-high", resolve_space(1), "2002", "FACT", "高置信候选", 0.8, "OBSERVING"),
     ])
 
     target = pick_target(1)
@@ -261,8 +266,8 @@ def test_pick_target_exclude_user_ids(tmp_path, monkeypatch):
     c.record_message(1, 2001)  # t=100
     c.record_message(1, 2002)  # t=101
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", "1", "2001", "FACT", "候选一", 0.7, "OBSERVING"),
-        ("cand-2", "1", "2002", "FACT", "候选二", 0.8, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "FACT", "候选一", 0.7, "OBSERVING"),
+        ("cand-2", resolve_space(1), "2002", "FACT", "候选二", 0.8, "OBSERVING"),
     ])
 
     # 不排除时选最高置信的 2002
@@ -284,8 +289,8 @@ def test_pick_target_exclude_users_config(tmp_path, monkeypatch):
     c.record_message(1, 2001)  # t=100
     c.record_message(1, 2002)  # t=101
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", "1", "2001", "FACT", "候选一", 0.7, "OBSERVING"),
-        ("cand-2", "1", "2002", "FACT", "候选二", 0.8, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "FACT", "候选一", 0.7, "OBSERVING"),
+        ("cand-2", resolve_space(1), "2002", "FACT", "候选二", 0.8, "OBSERVING"),
     ])
 
     # 不排除时选最高置信的 2002
@@ -305,13 +310,14 @@ def test_fetch_observing_candidate_window(tmp_path, monkeypatch):
     """OBSERVING 候选按 confidence 区间筛选：过低/已达标/其他状态不取。"""
     db = tmp_path / "ps.db"
     monkeypatch.setattr(pt, "DB_PATH", db)
+    space = resolve_space(1)
     _provision_candidates(db, [
-        ("too-low", "1", "2001", "FACT", "太低的", 0.2, "OBSERVING"),
-        ("too-high", "1", "2001", "FACT", "已达标", 0.95, "OBSERVING"),
-        ("rejected", "1", "2001", "FACT", "已拒绝", 0.7, "REJECTED"),
-        ("right", "1", "2001", "FACT", "可验证", 0.7, "OBSERVING"),
+        ("too-low", space, "2001", "FACT", "太低的", 0.2, "OBSERVING"),
+        ("too-high", space, "2001", "FACT", "已达标", 0.95, "OBSERVING"),
+        ("rejected", space, "2001", "FACT", "已拒绝", 0.7, "REJECTED"),
+        ("right", space, "2001", "FACT", "可验证", 0.7, "OBSERVING"),
     ])
-    found = _fetch_observing_candidate(1, 2001)
+    found = _fetch_observing_candidate(space, 2001)
     assert found is not None
     assert found[0] == "right"
 

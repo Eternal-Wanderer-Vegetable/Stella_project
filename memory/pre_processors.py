@@ -38,6 +38,7 @@ from memory.session_context import ensure_initialized as session_ensure_initiali
 from memory.session_context import get_summary as get_session_summary
 from memory.timeutil import (
     humanize_duration,
+    log_sqlite_error,
     parse_db_timestamp,
     seconds_since,
     utc_now,
@@ -138,8 +139,9 @@ async def build_context(ctx: ChatContext) -> ChatContext:
                     and elapsed > SHORT_TERM_SUMMARY_STALE_MINUTES * 60.0
                 ):
                     summary_age = humanize_duration(elapsed)
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as e:
+            # 摘要表尚不存在（新群首条消息）→ debug；列名不匹配等 → warning
+            log_sqlite_error("PreProcessors.build_context", e)
 
         # ── 2) 最近原始消息（含 Bot 自己的发言，带来源标注） ──
         tail, tail_start_id = _fetch_recent_tail(cursor, ctx.group_id, RECENT_TAIL_LIMIT)
@@ -286,8 +288,9 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
             "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
             (str(group_id), limit),
         ).fetchall()
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as e:
+        # 前两级是刻意的向下兼容降级（新库→旧库→更旧库），debug 即可
+        logger.debug(f"[PreProcessors._query_tail_rows] 新表结构不可用，尝试旧查询: {e}")
     try:
         return [
             (mid, uid, content, "PASSIVE", ts)
@@ -297,8 +300,8 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
                 (str(group_id), limit),
             ).fetchall()
         ]
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as e:
+        logger.debug(f"[PreProcessors._query_tail_rows] 旧表结构不可用，尝试最旧查询: {e}")
     try:
         return [
             (mid, uid, content, "PASSIVE", None)
@@ -308,7 +311,9 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
                 (str(group_id), limit),
             ).fetchall()
         ]
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        # 三级全部失败：不是降级而是真问题（表被删/列被改），必须 warning
+        logger.warning(f"⚠️ [PreProcessors._query_tail_rows] 全部查询均失败: {e}")
         return []
 
 
@@ -319,7 +324,8 @@ def _fetch_recent_exchanges_text(cursor: sqlite3.Cursor, group_id: int) -> str:
             "SELECT recent_exchanges FROM short_term_context WHERE group_id = ?",
             (str(group_id),),
         ).fetchone()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        log_sqlite_error("PreProcessors._fetch_recent_exchanges_text", e)
         return ""
     if not raw or not raw[0]:
         return ""
@@ -512,7 +518,9 @@ def _read_stable_profile(group_shared_space: str, user_id: int) -> str:
         )
         row = cursor.fetchone()
         conn.close()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        # user_profiles 表尚不存在（新库）→ debug；列名不匹配等 → warning
+        log_sqlite_error("PreProcessors._read_stable_profile", e)
         return ""
     if not row:
         return ""

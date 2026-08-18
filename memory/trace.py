@@ -27,6 +27,7 @@ from typing import Any
 from nonebot import logger
 
 from config import DB_PATH, MEMORY_TRACE_ENABLED, MEMORY_TRACE_TABLE
+from memory.timeutil import log_sqlite_error
 
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
@@ -121,7 +122,9 @@ def record_trace(
         conn.commit()
         conn.close()
     except Exception as e:
-        logger.debug(f"📊 [Trace] 写入决策追踪失败: {e}")
+        # 追踪是诊断数据，失败不该拖垮主链路，但也不能彻底无声——表未建时 debug，
+        # 列名不匹配等其余错误 warning（列名遗漏曾让写入持续失败而无痕迹）
+        log_sqlite_error("Trace.record_trace", e)
 
 
 def _dump_ids(memories: list[dict[str, Any]] | None) -> str:
