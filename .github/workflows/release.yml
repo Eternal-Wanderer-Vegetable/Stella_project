@@ -42,24 +42,45 @@ jobs:
           fi
           echo "RELEASE_REF=v${TAG}" >> "$GITHUB_ENV"
 
+      # 不复用 .gitignore：两者语义不同（rsync 的 --exclude-from 不支持 ! 否定模式，
+      # 锚定 / 的含义也有差异），且 .gitignore 将来会因开发需要增删——那些改动
+      # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
       - name: 构造发布目录（排除测试与开发文件）
         run: |
           mkdir -p dist/Stella
           rsync -a \
-            --exclude-from=.gitignore \
             --exclude 'tests' \
             --exclude 'design_docs' \
             --exclude 'scripts' \
             --exclude '_deprecated' \
             --exclude '.github' \
             --exclude '.git' \
+            --exclude '.gitignore' \
             --exclude 'release_assets' \
             --exclude 'memory/benchmark' \
-            --exclude 'memory/*.db' \
             --exclude 'requirements-dev.txt' \
+            --exclude 'pyrightconfig.json' \
             --exclude '.pytest_cache' \
             --exclude '.ruff_cache' \
             --exclude '.mypy_cache' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude '.env' \
+            --exclude '.env.bak' \
+            --exclude '.env.dev' \
+            --exclude '.env.prod' \
+            --exclude 'deploy.answers.toml' \
+            --exclude 'logs' \
+            --exclude 'runtime' \
+            --exclude '*.db' \
+            --exclude '*.jsonl' \
+            --exclude '*.log' \
+            --exclude 'consolidation_probe*' \
+            --exclude 'consolidation_positive_probe.md' \
+            --exclude 'windows_raw.json' \
+            --exclude 'stella_thought_logs.md' \
+            --exclude 'memory_consolidation_log.md' \
+            --exclude 'memory_compressor_log.md' \
             ./ dist/Stella/
           cp release_assets/start.bat release_assets/doctor.bat \
              release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
@@ -77,6 +98,29 @@ jobs:
           cd dist
           zip -q -r "Stella-${RELEASE_REF}-win64.zip" Stella
           ls -lh "Stella-${RELEASE_REF}-win64.zip"
+
+      # 纵深防御：排除清单必然会有遗漏（将来加新的配置/日志文件时容易忘），
+      # 这一步在发布前对成品做最后检查。含真实群聊内容或凭据的文件一旦发布
+      # 就无法收回——GitHub Release 的资产会被立刻镜像与抓取。
+      - name: 校验 zip 未包含敏感文件
+        run: |
+          ZIP="dist/Stella-${RELEASE_REF}-win64.zip"
+          echo "=== 发布包内容 ==="
+          unzip -l "$ZIP"
+          echo "=================="
+          # 注意不能裸匹配 probe / consolidation_log：deploy/probe.py 与
+          # memory/consolidation_log.py 是必需模块，会正常出现在包内；
+          # .env.example 也需保留（deploy init 的模板），因此 .env 只匹配
+          # 带敏感后缀的变体（.dev/.prod/.bak/.backup）与根目录 .env。
+          if unzip -l "$ZIP" | grep -Ei '(/\.env(\.(dev|prod|bak|backup))?$|answers\.toml|\.db$|\.jsonl$|\.log$|stella_thought_logs|memory_consolidation_log|memory_compressor_log|windows_raw|_probe|sanitize_map)'; then
+            echo "::error::发布包含敏感或运行期文件，已中止发布"
+            exit 1
+          fi
+          if unzip -l "$ZIP" | grep -E '(tests/|design_docs/|_deprecated/)'; then
+            echo "::error::发布包含开发目录，已中止发布"
+            exit 1
+          fi
+          echo "✅ 敏感文件检查通过"
 
       - name: 发布 Release
         env:

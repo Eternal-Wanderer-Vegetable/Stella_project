@@ -309,6 +309,8 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 3. `pyproject.toml` 版本号已更新（CI 会把 tag 与它比对，不一致直接 fail）
 4. 改过配置项 → `.env.example` 与 `docs/configuration.md` 已同步
 5. `release_assets/RELEASE_NOTES_TEMPLATE.md` 已更新为本版本说明，**破坏性变更必须列明**（例如本次：废弃全部 `NAPCAT_*` 配置、schema v8 需归档旧库让程序重建）
+6. Release 的排除清单独立于 `.gitignore` 维护（见 `release.yml` 的注释）；新增运行期产物或配置文件时，需同时更新排除清单与敏感文件校验的正则
+7. `release_assets/start.bat` 里硬编码了 Python 版本与 SHA256；升级 Python patch 版本时需同步更新两处，主次版本变更时还要确认 `python*._pth` 的处理
 
 然后：
 

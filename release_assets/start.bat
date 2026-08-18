@@ -14,10 +14,11 @@ REM ============================================================
 
 REM ---------- 段 1：常量定义 ----------
 REM PY_SHA256 取自 python.org 下载页的官方校验值，必须准确，写错会导致每次安装都失败。
-REM 更换 Python 版本时，PY_VER / PY_ZIP / PY_SHA256 与段 6 的 python*._pth 需一并更新。
-set PY_VER=3.12.8
+REM 固定 3.12 系列。升级 patch 版本时需同步改 PY_VER 与 PY_SHA256；
+REM 主次版本（3.12 → 3.13）变更时，python*._pth 已用通配符匹配，无需改动。
+set PY_VER=3.12.10
 set PY_ZIP=python-%PY_VER%-embed-amd64.zip
-set PY_SHA256=8D3F33BE9EB810F23C102F08475AF2854E50484B8E4E06275E937BE61CE3D2FB
+set PY_SHA256=4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3
 set RUNTIME_DIR=runtime
 set PY=%RUNTIME_DIR%\python.exe
 
