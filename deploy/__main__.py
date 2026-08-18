@@ -82,11 +82,22 @@ def _cmd_init(args: argparse.Namespace) -> int:
         save_answers(answers, answers_path)
         print(f"应答已保存到 {answers_path}（下次可用 --answers 跳过提问）")
 
-    # 自动跑一次 doctor，用户立刻知道还差什么
-    snapshot = probe.collect()
-    results = checks.run_all(snapshot)
+    # 必须用子进程跑 doctor，不能在本进程内调 probe.collect()：
+    # config/settings.py 在 import 时执行 load_dotenv()，而本模块顶部就
+    # from config import PROJECT_ROOT——.env 尚不存在时 config 已被导入，
+    # 全部常量冻结为默认值（空）。向导写出 .env 后，同一进程里读到的仍是
+    # 那批空值，于是 doctor 谎报「ALLOWED_GROUPS 为空」「未配置模型 ID」
+    # （2026-08-18 实测：首次配置后必现，第二次启动就消失）。
+    # 重新 import 也救不了——各模块都是 from config import X，已绑定旧值。
+    # 新进程是唯一能保证「读到刚写入的 .env」的方式。
     print()
-    print(report.to_terminal(results))
+    print("正在检查环境（数据库相关项会在首次启动后才就绪）...")
+    print()
+    subprocess.run(
+        [sys.executable, "-m", "deploy", "doctor"],
+        cwd=str(PROJECT_ROOT),
+        check=False,   # doctor 退出码 1 表示「有阻塞问题」，不代表 init 失败
+    )
 
     print_next_steps(answers)
     return 0

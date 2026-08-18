@@ -205,7 +205,7 @@ def _check_lm_model(
         return CheckResult(
             id=check_id,
             level="warn",
-            title="未配置模型 ID",
+            title=f"未配置模型 ID（{env_key}）",
             detail=f"{env_key} 为空，将由服务端默认路由。",
             fix_hint="建议在 .env 里显式填写完整模型 ID。",
         )
@@ -246,7 +246,15 @@ def check_lm_model_consolidation(snap: Snapshot) -> CheckResult | None:
 
 
 def check_lm_model_extract(snap: Snapshot) -> CheckResult | None:
-    """提取模型：不匹配 → warn（阶段 2 会静默回退阶段 1 候选）。"""
+    """提取模型：不匹配 → warn（阶段 2 会静默回退阶段 1 候选）。
+
+    为空时不报告：MEMORY_EXTRACT_LM_STUDIO_MODEL 默认继承 LM_STUDIO_MODEL，
+    因此它为空只可能是聊天模型也为空——那已由 check_lm_model_chat 报出，
+    再报一条是把同一个根因说两遍（不级联原则，与 lm_reachable 为假时
+    跳过全部模型检查同理）。
+    """
+    if not snap.lm_model_extract:
+        return None
     return _check_lm_model(
         snap,
         check_id="lm_model_extract",
@@ -286,15 +294,14 @@ def check_lm_model_embedding(snap: Snapshot) -> CheckResult | None:
 
 
 def check_database_exists(snap: Snapshot) -> CheckResult | None:
-    """数据库文件不存在 → warn（首次启动自动建库，不阻塞）。"""
-    if not snap.db_exists:
-        return CheckResult(
-            id="db_exists",
-            level="warn",
-            title="数据库不存在",
-            detail=f"{snap.db_path} 尚未创建（首次启动会自动建库）。",
-            fix_hint="无需处理；启动后自动创建。若已有旧库请确认路径配置无误。",
-        )
+    """数据库不存在时不报告——首次启动会自动建库，这是 100% 新用户的正常状态。
+
+    一个对所有正确用法都会触发的警告，定义上就是噪音。真正的风险（目录不可写、
+    路径配错）由 check_database_writable 覆盖：那一项会在无法创建 DB 时报 error。
+
+    保留空实现而非删除函数：id 为 db_exists 的结果曾出现在输出里，
+    GUI 侧可能已按它做过映射；留个函数体也便于将来需要时恢复判据。
+    """
     return None
 
 
@@ -320,7 +327,11 @@ def check_database_writable(snap: Snapshot) -> CheckResult | None:
 
 
 def check_schema_version(snap: Snapshot) -> CheckResult | None:
-    """版本偏低 → warn（启动时自动迁移）；版本偏高 → error（代码需升级）。"""
+    """schema 版本不匹配 → error；DB 不存在 → 跳过（由 check_database_exists 负责）。"""
+    # DB 还没建立时「版本未知」是必然的，不该再报一次——同一件事报两次
+    # 会让首次配置的用户以为出了两个问题。
+    if not snap.db_exists:
+        return None
     if snap.schema_version is None:
         return CheckResult(
             id="schema_version",

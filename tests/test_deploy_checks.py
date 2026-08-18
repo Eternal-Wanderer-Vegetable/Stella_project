@@ -243,6 +243,13 @@ def test_lm_model_extract_not_loaded_is_warn():
     assert r is not None and r.level == "warn"
 
 
+def test_lm_model_extract_empty_skipped():
+    # 修 4b：提取模型为空不单独报——MEMORY_EXTRACT_LM_STUDIO_MODEL 默认继承
+    # LM_STUDIO_MODEL，它为空只可能是聊天模型也为空（那已由 check_lm_model_chat
+    # 报出），再报一条是把同一个根因说两遍。
+    assert checks.check_lm_model_extract(_healthy_snapshot(lm_model_extract="")) is None
+
+
 def test_lm_model_embedding_disabled_skipped():
     assert checks.check_lm_model_embedding(_healthy_snapshot()) is None
 
@@ -263,9 +270,11 @@ def test_suggest_model_close_match():
 # ── 数据库 ──
 
 
-def test_db_missing_is_warn():
-    r = checks.check_database_exists(_healthy_snapshot(db_exists=False))
-    assert r is not None and r.level == "warn"
+def test_db_missing_returns_none():
+    # 修 3：首次安装时「数据库不存在」不是问题——首次启动会自动建库。
+    # 保留空实现而非删除 check_database_exists：id 为 db_exists 的结果曾出现在
+    # 输出里，GUI 侧可能已按它做过映射（见函数 docstring）。
+    assert checks.check_database_exists(_healthy_snapshot(db_exists=False)) is None
 
 
 def test_db_not_writable_is_error():
@@ -299,6 +308,32 @@ def test_schema_matching_is_ok():
 def test_schema_unknown_is_warn():
     r = checks.check_schema_version(_healthy_snapshot(schema_version=None))
     assert r is not None and r.level == "warn"
+
+
+def test_schema_version_skipped_when_db_missing():
+    # 修 2：DB 还没建立时「版本未知」是必然的，不该再报一次——同一件事报两次
+    # 会让首次配置的用户以为出了两个问题。
+    assert checks.check_schema_version(_healthy_snapshot(db_exists=False)) is None
+
+
+def test_all_empty_config_has_no_noise_ids():
+    # 修 5（回归锚点）：首次 init 后「全空配置」场景——群号、三个模型 ID 全空、
+    # DB 尚未建立。此时不该出现 schema_version / db_exists / lm_model_extract
+    # 这三条噪音；而真正的根因（聊天模型为空、群号为空）必须仍然报出。
+    snap = _healthy_snapshot(
+        allowed_groups=[],
+        lm_model_chat="",
+        lm_model_consolidation="",
+        lm_model_extract="",
+        db_exists=False,
+    )
+    ids = {r.id for r in checks.run_all(snap)}
+    assert "schema_version" not in ids
+    assert "db_exists" not in ids
+    assert "lm_model_extract" not in ids
+    # 反向断言：根因必须还在，防止把该报的错误一起吞掉。
+    assert "lm_model_chat" in ids
+    assert "allowed_groups" in ids
 
 
 def test_legacy_group_id_tables_is_error():
