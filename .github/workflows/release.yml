@@ -122,12 +122,65 @@ jobs:
           fi
           echo "✅ 敏感文件检查通过"
 
-      # 这次的教训：CI 验证了文件清单，但没验证「能不能 import」。
-      # 本步只验证包结构完整，不验证嵌入式 Python 的路径问题——后者是 Windows
-      # 特有的 ._pth 行为，只能在真实 Windows 上实测（2026-08-18 实测踩过：
-      # deploy 目录打包正确，但 ._pth 里的 "." 指向 runtime\ 而非项目根）。
-      - name: 校验发布包可 import
+      # import 检查覆盖不到非 Python 资产：SYSTEM.md 缺失时 import 一切正常，
+      # 但用户拿到的 Bot 没有人格；.env.example 缺失则 deploy init 无法渲染。
+      # 这类文件只能显式列举校验。
+      - name: 校验发布包必需文件齐全
         run: |
+          cd dist/Stella
+          MISSING=0
+          for f in \
+            bot.py \
+            requirements.txt \
+            .env.example \
+            pyproject.toml \
+            LICENSE \
+            README.md \
+            start.bat \
+            doctor.bat \
+            stop.bat \
+            "README-快速开始.txt" \
+            config/settings.py \
+            config/spaces.py \
+            core/pipeline.py \
+            core/logging_sink.py \
+            core/llm/scheduler.py \
+            core/llm/lm_studio.py \
+            memory/SYSTEM.md \
+            memory/schema.py \
+            memory/consolidator.py \
+            memory/extraction_prompt.py \
+            deploy/__main__.py \
+            deploy/checks.py \
+            deploy/probe.py \
+            deploy/process.py \
+            deploy/init_wizard.py \
+            extensions/__init__.py \
+            extensions/link_monitor/__init__.py \
+            docs/configuration.md \
+          ; do
+            if [ ! -f "$f" ]; then
+              echo "::error::缺少必需文件: $f"
+              MISSING=1
+            fi
+          done
+          [ "$MISSING" -eq 0 ] && echo "✅ 必需文件齐全"
+          exit "$MISSING"
+
+      # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
+      - name: 准备校验用 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # 装依赖不只是为了 import 检查——它同时验证了 requirements.txt 本身可安装。
+      # 若某个 pin 写错或上游撤版，用户会在 start.bat 的 pip 步骤失败，
+      # 那时排查成本远高于在这里拦住。
+      - name: 校验发布包依赖可安装且模块可 import
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r dist/Stella/requirements.txt
           cd dist/Stella
           python -c "import config, core, memory, deploy, extensions; print('import 检查通过')"
 
