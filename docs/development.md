@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 | `python -m deploy init [--answers PATH] [--force] [--dry-run]` | 交互式生成 `.env`（基于 `.env.example` 逐行替换，模型 ID 从 LM Studio 拉列表选编号）；`--answers` 复用上次的 `deploy.answers.toml`，换机器重装 / CI 冒烟 / 将来 GUI 复用同一份答案 |
 | `python -m deploy start [--force] [--detach]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py`；`--detach` 后台启动并写 PID 到 `logs/stella.pid`（GUI 用） |
 | `python -m deploy status [--json]` | 读 PID 文件报进程是否存活，并从 JSON 日志尾部推断最近状态（`link_status` 在 Bot 进程内，外部读不到） |
-| `python -m deploy stop` | 优雅停止：发信号（Windows 用 `CTRL_BREAK_EVENT`，uvicorn 0.52+ 会走优雅关闭并触发 `on_shutdown`）→ 等 `SHUTDOWN_GRACE_SECONDS + 5s` → 仍存活则强杀 |
+| `python -m deploy stop` | 优雅停止：发信号，Windows 信号无效时快速结束进程树；Tauri 安装器与 `bot.py` 位于同一发布目录 |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，

@@ -15,7 +15,54 @@ permissions:
   contents: write
 
 jobs:
+  # Tauri 的 Windows WebView/Rust 产物必须在 Windows runner 上构建。
+  # 这里只构建便携 exe，不构建 NSIS/MSI：最终发布包仍是解压即用的 Stella ZIP，
+  # 且安装器需要和 bot.py 位于同一个项目根目录才能调用 deploy。
+  build-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析发布版本
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push') {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          } else {
+            $version = '${{ inputs.version }}' -replace '^v', ''
+          }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: 同步 Tauri 版本号
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_VERSION
+          $cargo = Get-Content 'stella-installer/src-tauri/Cargo.toml' -Raw
+          $cargo = $cargo -replace '(?m)^version = "[^"]+"', ('version = "' + $version + '"')
+          Set-Content 'stella-installer/src-tauri/Cargo.toml' $cargo -NoNewline
+
+          $tauri = Get-Content 'stella-installer/src-tauri/tauri.conf.json' -Raw
+          $tauri = $tauri -replace '(?m)"version": "[^"]+"', ('"version": "' + $version + '"')
+          Set-Content 'stella-installer/src-tauri/tauri.conf.json' $tauri -NoNewline
+
+      - name: 安装 Tauri CLI
+        shell: pwsh
+        run: cargo install tauri-cli --version '^2' --locked
+
+      - name: 构建便携版安装器
+        shell: pwsh
+        working-directory: stella-installer/src-tauri
+        run: cargo tauri build --no-bundle
+
+      - name: 上传安装器
+        uses: actions/upload-artifact@v4
+        with:
+          name: stella-installer
+          path: stella-installer/src-tauri/target/release/stella-installer.exe
+          if-no-files-found: error
+
   build:
+    needs: build-installer
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +133,15 @@ jobs:
           cp release_assets/start.bat release_assets/doctor.bat \
              release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
 
+      - name: 放入 Tauri 安装器
+        uses: actions/download-artifact@v4
+        with:
+          name: stella-installer
+          path: dist/Stella
+
+      - name: 校验安装器位于项目根目录
+        run: test -s dist/Stella/stella-installer.exe
+
       # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF
       - name: 确保 bat 与 txt 为 CRLF
         run: |
@@ -140,6 +196,7 @@ jobs:
             start.bat \
             doctor.bat \
             stop.bat \
+            stella-installer.exe \
             "README-快速开始.txt" \
             config/settings.py \
             config/spaces.py \
