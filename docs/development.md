@@ -343,7 +343,7 @@ CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`desig
 
 升级 Python 版本时这四处要一并更新，并在本地完整跑一遍 `start.bat` 验证（会产生 `runtime/` 目录，已加入 `.gitignore`）。
 
-> **编码约定**：`release_assets/` 里的 `.bat` 是 **GBK(CP936)** 编码（不是 UTF-8），`README-快速开始.txt` 是 UTF-8 with BOM。别把 bat 转回 UTF-8——实测 cmd 在 UTF-8+`chcp 65001` 下解析会随机错位（部分多字节字符所在行被当成命令执行，输出「is not recognized」）；GBK 文件在中文 Windows 默认控制台（936）下显示正常且解析稳定。在 UTF-8 编辑器里打开 bat 看到乱码是正常的，改文件后记得存回 GBK。
+> **编码约定**：`release_assets/` 里的 `.bat` 使用纯 ASCII，内部注释与输出统一使用英文；发布时仍统一转换为 CRLF，确保 Windows `cmd` 稳定解析。面向用户的 `README-快速开始.txt` 可继续使用 UTF-8 with BOM。
 
 ### 嵌入式 Python 的两处必改
 

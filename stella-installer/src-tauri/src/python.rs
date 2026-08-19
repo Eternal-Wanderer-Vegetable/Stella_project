@@ -10,7 +10,10 @@
 //! 3. **Windows 下必须抑制控制台窗口** —— 否则每次调用都会闪一个黑框。
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+
+#[cfg(windows)]
+static RUNTIME_PREPARE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// 定位 Stella 项目根目录（含 bot.py 与 deploy/ 的那一层）。
 ///
@@ -59,6 +62,51 @@ pub fn find_python(root: &Path) -> PathBuf {
     PathBuf::from("python")
 }
 
+/// 首次从 GUI 使用时复用发布包的引导脚本准备 Python 和依赖。
+///
+/// `start.bat` 是发布流程中唯一的运行时安装实现，不能在 Rust 侧再复制一份
+/// 下载、校验、pip 安装逻辑。准备完成后写入 marker，状态轮询不会重复执行它。
+#[cfg(windows)]
+fn prepare_runtime(root: &Path) -> Result<(), String> {
+    let _lock = RUNTIME_PREPARE_LOCK
+        .lock()
+        .map_err(|_| "Python 运行时准备锁异常".to_owned())?;
+    let ready = root.join("runtime").join(".stella-deps-ready");
+    if ready.is_file() {
+        return Ok(());
+    }
+
+    let script = root.join("start.bat");
+    if !script.is_file() {
+        // 开发环境可能没有发布版 start.bat，此时继续使用 PATH 中的 Python。
+        return Ok(());
+    }
+
+    let command = format!("\"{}\" --prepare", script.display());
+    let status = Command::new("cmd.exe")
+        .arg("/D")
+        .arg("/C")
+        .arg(command)
+        .current_dir(root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| format!("无法运行 Python 安装引导：{error}"))?;
+    if !status.success() {
+        return Err(format!(
+            "Python 运行时准备失败（退出码 {}），请先双击 start.bat 完成首次安装。",
+            status.code().unwrap_or(-1)
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn prepare_runtime(_root: &Path) -> Result<(), String> {
+    Ok(())
+}
+
 /// 执行 `python -m deploy <args>`，返回 `(stdout, stderr, 退出码)`。
 ///
 /// 退出码语义交给调用方判断：`doctor` 的 1 是「发现阻塞问题」的正常结果，
@@ -69,6 +117,7 @@ pub fn find_python(root: &Path) -> PathBuf {
 /// 不该让整个调用失败。
 pub fn run_deploy(args: &[&str]) -> Result<(String, String, i32), String> {
     let root = project_root();
+    prepare_runtime(&root)?;
     let python = find_python(&root);
 
     let mut cmd = Command::new(&python);
