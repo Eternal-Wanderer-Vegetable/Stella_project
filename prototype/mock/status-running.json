@@ -1,0 +1,22 @@
+{
+  "pid": 18432,
+  "alive": true,
+  "log_file": "logs/stella.jsonl",
+  "recent_log": {
+    "ts": "2026-08-19T08:52:14.331000+08:00",
+    "level": "SUCCESS",
+    "module": "memory.consolidator",
+    "message": "✅ [Consolidator] 群 263402786 整合完成，已处理至 id 1284"
+  },
+  "link": {
+    "enabled": true,
+    "connected": true,
+    "bot_self_id": "3213194821",
+    "connected_seconds": 4127.5,
+    "last_event_seconds_ago": 12.3,
+    "last_probe_ok": null,
+    "last_probe_seconds_ago": null,
+    "timeout": 300,
+    "healthy": true
+  }
+}

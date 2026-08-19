@@ -1,0 +1,17 @@
+{
+  "pid": 18432,
+  "alive": true,
+  "log_file": "logs/stella.jsonl",
+  "recent_log": null,
+  "link": {
+    "enabled": true,
+    "connected": false,
+    "bot_self_id": "3213194821",
+    "connected_seconds": 0,
+    "last_event_seconds_ago": null,
+    "last_probe_ok": false,
+    "last_probe_seconds_ago": 84.1,
+    "timeout": 300,
+    "healthy": false
+  }
+}

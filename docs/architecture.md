@@ -331,6 +331,18 @@ python -m memory.schema --backup    # 仅备份
 >
 > 归档旧库时**连 `stella_memory_backup.db` 一起移走**，否则 `backup_database()` 见备份已存在即跳过，会留下「看起来有备份、实际备份错了」的状态。
 
+## 本地状态接口
+
+`deploy status` 与桌面 GUI 需要读到进程内状态（`link_status()`、调度器排队深度），外部进程拿不到。
+
+**为什么用 HTTP 而不是状态文件**：状态文件有陈旧问题——Bot 崩了之后文件仍在，读到的「运行中」是假的。HTTP 端点天然「连不上就是没运行」，还顺带覆盖了「进程在但 HTTP 服务没起来」的中间态（`api_reachable=false`，GUI 据此显示「正在启动…」）。
+
+**为什么不新增端口**：NoneBot 本就跑着 FastAPI/uvicorn，反向 WS 端点 `/onebot/v11/ws` 就是它提供的。状态路由直接挂在同一个 app 上（`GET /stella/status`），Stella 仍然只有一个监听端口（`PORT`）。
+
+**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 聚合 `link_status()`、`core.llm.snapshot()` 与版本/进程信息，返回 `{version, pid, uptime_seconds, allowed_group_count, link, scheduler}`。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI。
+
+**安全约束**：`HOST` 可能是 `0.0.0.0`（NapCat 在另一台机器时必须如此），此时路由暴露到局域网。两道防护：① 只接受回环地址的请求，其余返回 403；② 响应体不含凭据与群聊内容——`allowed_group_count` 只给数量不给群号。
+
 ## 扩展机制
 
 `extensions/` 下的每个模块/包若提供 `setup(pipeline)`，启动时会被自动加载。扩展可以注册 Hook、注入实现、启动自己的定时任务。

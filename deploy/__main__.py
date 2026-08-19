@@ -129,12 +129,25 @@ def _cmd_status(args: argparse.Namespace) -> int:
     else:
         if data["alive"]:
             print(f"Stella 正在运行（PID {data['pid']}）。")
+            if not data.get("api_reachable"):
+                # 进程在但 HTTP 服务未就绪：启动中，或 uvicorn 异常
+                print("  状态接口暂不可达（可能仍在启动中）。")
+            link = data.get("link")
+            if link:
+                print(f"  链路：{'健康' if link['healthy'] else '异常'}"
+                      f"（已连接 {link.get('connected_seconds', 0):.0f}s，"
+                      f"最近事件 {link.get('last_event_seconds_ago', 0):.0f}s 前）")
+            sched = data.get("scheduler") or {}
+            for name, s in sched.items():
+                if s.get("waiting"):
+                    print(f"  资源 {name}：排队 {s['waiting']} 个"
+                          f"（持有者 {s.get('holder') or '—'}）")
         else:
             print("Stella 未在运行。")
         if data["recent_log"]:
             recent = data["recent_log"]
             print(f"最近日志 [{recent.get('level', '?')}] {recent.get('message', '')[:120]}")
-        print("提示：link_status 在 Bot 进程内，外部只能报进程存活与最近日志。")
+        print("提示：link/scheduler 来自 Bot 进程内的状态接口，接口不可达时无法显示。")
     return 0
 
 

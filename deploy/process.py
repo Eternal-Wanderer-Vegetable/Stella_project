@@ -26,6 +26,9 @@ import sys
 import time
 from pathlib import Path
 
+import httpx
+from dotenv import dotenv_values
+
 from config import PROJECT_ROOT, SHUTDOWN_GRACE_SECONDS
 
 PID_FILE = PROJECT_ROOT / "logs" / "stella.pid"
@@ -174,11 +177,43 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
     return True
 
 
+def _fetch_live_status(timeout: float = 1.0) -> dict | None:
+    """查询 Bot 进程内的状态接口；不可达返回 None。
+
+    HOST/PORT 从 .env 读（dotenv_values 而非 os.getenv——避免受当前进程
+    环境变量干扰，与 probe 的做法一致）。HOST 为 0.0.0.0 / :: 时改连
+    127.0.0.1：那是「监听所有地址」的写法，不是可连接的目标地址。
+
+    超时取 1 秒：status 是交互命令（GUI 每 1.5 秒轮询一次），
+    宁可少一块信息也不能卡住。
+    """
+    env = dotenv_values(PROJECT_ROOT / ".env")
+    host = (env.get("HOST") or "127.0.0.1").strip() or "127.0.0.1"
+    port = (env.get("PORT") or "8080").strip() or "8080"
+    path = (env.get("STELLA_STATUS_API_PATH") or "/stella/status").strip()
+    if not path:
+        path = "/stella/status"
+    if host in ("0.0.0.0", "::", "::0"):
+        host = "127.0.0.1"
+    url = f"http://{host}:{port}{path}"
+    try:
+        resp = httpx.get(url, timeout=timeout, trust_env=False)
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        return resp.json()
+    except Exception:
+        return None
+
+
 def status() -> dict:
     """返回状态字典（供 ``status [--json]``）。
 
-    限制：``link_status()`` 是 Bot 进程内的状态，外部进程读不到。这里只能报
-    「进程是否存活」+ 从 JSON 日志尾部推断最近状态。
+    两个信号源：PID 文件（进程是否存活）+ 状态接口（进程内状态）。
+    ``api_reachable`` 区分「进程在但 HTTP 服务没起来」（启动中，或 uvicorn
+    崩了）——GUI 据此显示「正在启动…」而不是直接报「运行中」。
     """
     pid = read_pid()
     alive = pid is not None and is_alive(pid)
@@ -194,10 +229,16 @@ def status() -> dict:
                 recent = json.loads(lines[-1])
     except Exception:
         recent = None
+    live = _fetch_live_status()
     return {
         "pid": pid,
         "alive": alive,
         "log_file": str(LOG_FILE),
         "recent_log": recent,
-        "note": "link_status 在 Bot 进程内，外部只能报进程存活与最近日志",
+        "api_reachable": live is not None,
+        # 以下来自进程内状态接口；接口不可达时为 None
+        "link": (live or {}).get("link"),
+        "scheduler": (live or {}).get("scheduler"),
+        "uptime_seconds": (live or {}).get("uptime_seconds"),
+        "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null",
     }

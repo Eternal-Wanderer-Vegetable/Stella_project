@@ -202,3 +202,138 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   font-size: 12px;
 }
 .footer-hint a { color: var(--accent); text-decoration: none; }
+
+
+/* ── 状态卡 ── */
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+
+/* 呼吸灯：运行中缓慢脉动，让「活着」这件事有视觉存在感 */
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.dot.running { background: var(--ok); animation: pulse 2.4s ease-in-out infinite; }
+.dot.degraded { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+.dot.stopped { background: var(--text-faint); }
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 0.55; box-shadow: 0 0 0 5px transparent; }
+}
+
+
+.status-main { flex: 1; min-width: 0; }
+.status-line { font-size: 15px; font-weight: 600; }
+.status-sub {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: var(--mono);
+  margin-top: 3px;
+}
+.status-card .ops { display: flex; gap: 8px; flex-shrink: 0; }
+
+
+/* ── 链路细节（一行紧凑指标） ── */
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 16px;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.link-row .item { display: flex; gap: 6px; }
+.link-row .k { color: var(--text-faint); }
+.link-row .v { font-family: var(--mono); }
+.link-row .v.good { color: var(--ok); }
+.link-row .v.bad { color: var(--error); }
+
+
+/* ── 日志区 ── */
+.log-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.log-bar h2 { font-size: 14px; font-weight: 600; margin: 0; }
+.log-bar .spacer { flex: 1; }
+
+
+/* 级别过滤：小胶囊，选中态用对应颜色描边 */
+.lv-filter { display: flex; gap: 4px; }
+.lv-filter button {
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: var(--mono);
+  border-radius: 20px;
+  background: transparent;
+}
+.lv-filter button[data-on="1"] { background: var(--bg-hover); border-color: #4a515e; }
+.lv-filter button[data-lv="ERROR"][data-on="1"] { color: var(--error); border-color: var(--error); }
+.lv-filter button[data-lv="WARNING"][data-on="1"] { color: var(--warn); border-color: var(--warn); }
+
+
+.log-view {
+  background: #0f1115;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  height: 340px;
+  overflow-y: auto;
+  padding: 10px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.75;
+  user-select: text;
+}
+.log-line {
+  display: flex;
+  gap: 10px;
+  padding: 1px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.log-line:hover { background: rgba(255, 255, 255, 0.03); }
+.log-line .t { color: var(--text-faint); flex-shrink: 0; }
+.log-line .lv { flex-shrink: 0; width: 52px; }
+.log-line .mod { color: var(--text-faint); flex-shrink: 0; }
+.log-line .msg { flex: 1; min-width: 0; }
+
+
+.log-line.ERROR .lv { color: var(--error); }
+.log-line.ERROR .msg { color: #ffb0b3; }
+.log-line.WARNING .lv { color: var(--warn); }
+.log-line.SUCCESS .lv { color: var(--ok); }
+.log-line.INFO .lv { color: var(--accent); }
+.log-line.DEBUG { color: var(--text-faint); }
+.log-line.DEBUG .lv { color: var(--text-faint); }
+
+
+.log-empty { text-align: center; color: var(--text-faint); padding: 36px; }
+
+
+/* 自动滚动开关：跟随时高亮 */
+.follow-tag {
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.follow-tag input { accent-color: var(--accent); }

@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE.
+"""本地状态接口（plugins.bot_main.status_api）纯函数测试。
+
+只测不依赖 NoneBot 运行时的部分：回环判断与 payload 组装。
+setup_status_api 涉及 FastAPI app 注册，留给真实启动验证。
+
+import 方式：bot_main/__init__.py 会 ``from . import ai_gateway``——那会建
+Pipeline、跑 schema 迁移等副作用，单元测试不需要。这里先占位 plugins.bot_main
+跳过 __init__，再按包路径导入 status_api。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+import types
+from pathlib import Path
+
+_PROJ = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJ / "stella_project"))
+
+_fake_bot_main = types.ModuleType("plugins.bot_main")
+_fake_bot_main.__path__ = [str(_PROJ / "stella_project" / "plugins" / "bot_main")]
+sys.modules.setdefault("plugins.bot_main", _fake_bot_main)
+
+from plugins.bot_main import status_api
+
+
+def test_is_loopback_true():
+    for host in ("127.0.0.1", "::1", "127.0.0.5", "localhost"):
+        assert status_api._is_loopback(host) is True
+
+
+def test_is_loopback_false():
+    for host in ("192.168.1.10", "0.0.0.0", "abc", ""):
+        assert status_api._is_loopback(host) is False
+
+
+def test_build_payload_fields_complete():
+    link = {"healthy": True}
+    sched = {"chat": {"waiting": 2}}
+    payload = status_api.build_payload(link, sched, pid=123, started_at=time.time())
+    assert set(payload) == {
+        "version",
+        "pid",
+        "uptime_seconds",
+        "allowed_group_count",
+        "link",
+        "scheduler",
+    }
+    assert payload["pid"] == 123
+    assert payload["link"] is link
+    assert payload["scheduler"] is sched
+    assert isinstance(payload["version"], str) and payload["version"]
+
+
+def test_build_payload_omits_secrets(monkeypatch):
+    """安全护栏：序列化后的 JSON 不得出现凭据或具体群号。"""
+    monkeypatch.setattr(status_api, "ALLOWED_GROUPS", {123456789, 987654321})
+    monkeypatch.setenv("ONEBOT_ACCESS_TOKEN", "super-secret-token")
+    text = json.dumps(
+        status_api.build_payload({}, {}, pid=1, started_at=time.time()),
+        ensure_ascii=False,
+    )
+    assert "super-secret-token" not in text
+    assert "123456789" not in text
+    assert "987654321" not in text
+
+
+def test_build_payload_accepts_none_link():
+    """扩展未加载时 link 为 None，不崩。"""
+    payload = status_api.build_payload(None, {}, pid=1, started_at=time.time())
+    assert payload["link"] is None
+    assert payload["scheduler"] == {}
+    assert payload["allowed_group_count"] >= 0
+
+
+def test_build_payload_reports_group_count(monkeypatch):
+    monkeypatch.setattr(status_api, "ALLOWED_GROUPS", {1, 2, 3})
+    payload = status_api.build_payload(None, {}, pid=1, started_at=time.time())
+    assert payload["allowed_group_count"] == 3

@@ -1,10 +1,43 @@
 @echo off
-chcp 936 >nul
 cd /d "%~dp0"
-echo 原型预览：http://localhost:8765
-echo 关闭本窗口即停止。
+
+
+REM Dev-only preview server. ASCII-only on purpose: bat encoding vs code page
+REM mismatch garbles output and breaks the parser (UTF-8 file + chcp 936 makes
+REM the parser lose bytes and execute fragments of comment lines).
+set "PY="
+if exist "..\runtime\python.exe" set "PY=..\runtime\python.exe"
+if not defined PY (
+    where python >nul 2>nul && set "PY=python"
+)
+if not defined PY (
+    where py >nul 2>nul && set "PY=py"
+)
+
+
+if not defined PY (
+    echo [ERROR] No usable Python found.
+    echo   1. Run this script from an activated conda/venv shell
+    echo   2. Or run start.bat once in the project root to fetch runtime\
+    echo   3. Or add Python to PATH
+    pause
+    exit /b 1
+)
+
+
+echo Using Python: %PY%
+echo Preview: http://localhost:8765
+echo Close this window to stop.
 echo.
-REM ES module 与 fetch 需要真实 origin，file:// 下会被 CORS 拦住导致脚本不执行。
-REM Tauri 通过自定义协议提供前端，因此移植后无此问题——只有本地预览需要起服务。
+
+
+REM ES module + fetch need a real origin; file:// is blocked by CORS, which makes
+REM the module script never run (only static HTML shows, #root stays empty).
+REM Tauri serves the frontend over a custom protocol, so this is preview-only.
 start "" http://localhost:8765
-python -m http.server 8765
+"%PY%" -m http.server 8765
+
+
+echo.
+echo Server stopped.
+pause

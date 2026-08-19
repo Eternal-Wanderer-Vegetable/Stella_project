@@ -147,6 +147,16 @@ else:
 # 加载插件目录下所有扩展（扩展可再向 pipeline 注册钩子/资源）
 load_extensions(pipeline, EXTENSIONS_DIR)
 
+# 本地状态接口：挂在 NoneBot 已有的 ASGI app 上（不新增端口）。
+# 放在扩展加载之后：link_status 来自扩展（虽是延迟导入，顺序清晰些更好）。
+# 注册失败只告警——状态接口是加分项，缺了只是 GUI 少一块信息，不该阻断启动。
+try:
+    from .status_api import setup_status_api
+
+    setup_status_api()
+except Exception as e:
+    logger.warning(f"⚠️ 本地状态接口注册失败: {e}")
+
 # 启动时注册周度记忆压缩任务（每 7 天执行一次，由 APScheduler 调度）
 # APScheduler 全局调度器由 nonebot_plugin_apscheduler 插件提供；未安装时为 None。
 try:

@@ -518,6 +518,29 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 
 若两侧都配了 access token，两边的值必须一致。相关环境变量见 `.env.example` 顶部。
 
+## 端口占用一览
+
+**Stella 只监听一个端口**——反向 WS 端点与状态接口复用同一个 HTTP 服务器（NoneBot 的 FastAPI app），不新增端口。排查网络问题时先确认这张表：
+
+| 端口 | 归属 | 谁在监听 | 配置项 |
+|---|---|---|---|
+| 8080 | **Stella 唯一的监听端口** | 本项目 | `PORT` |
+| 1234 | LM Studio | 外部程序 | `LM_STUDIO_BASE_URL` |
+| 6099 | NapCat WebUI | 外部程序 | NapCat 侧 |
+| 3001 | NapCat 正向 WS 服务端 | 外部程序（仅 forward 模式） | `ONEBOT_WS_URLS` |
+| 8765 | 原型预览 | 开发期 `serve.bat` | 不进 Release |
+
+## 本地状态接口
+
+`deploy status` 与桌面 GUI 通过 `http://HOST:PORT/stella/status` 读取**进程内**状态（链路健康度、调度器排队深度、启动时长）——那些数据外部进程拿不到，HTTP 端点则天然「连不上就是没运行」。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `STELLA_STATUS_API_ENABLED` | `true` | 是否注册状态路由 |
+| `STELLA_STATUS_API_PATH` | `/stella/status` | 路由路径（与将来的其他路由冲突时再改） |
+
+**只接受回环地址的请求**（`127.0.0.1` / `::1`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
+
 ## 链路监测
 
 | 配置项 | 默认值 | 说明 |

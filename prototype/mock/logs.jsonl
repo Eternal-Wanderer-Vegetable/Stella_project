@@ -1,0 +1,27 @@
+{"ts":"2026-08-19T08:50:00.012000+08:00","level":"DEBUG","module":"core.llm.scheduler","message":"[Scheduler] 持有资源 chat，tag=reply:263402786"}
+{"ts":"2026-08-19T08:50:01.118000+08:00","level":"INFO","module":"extensions.link_monitor","message":"[LinkMonitor] Bot 3213194821 已连接"}
+{"ts":"2026-08-19T08:50:02.230000+08:00","level":"SUCCESS","module":"extensions","message":"✅ [扩展] link_monitor 已加载"}
+{"ts":"2026-08-19T08:50:02.601000+08:00","level":"INFO","module":"bot_main","message":"Bot 启动完成，监听 QQ 群 263402786"}
+{"ts":"2026-08-19T08:50:03.890000+08:00","level":"DEBUG","module":"memory.retriever","message":"[Retriever] 无候选，跳过检索（query 为空）"}
+{"ts":"2026-08-19T08:50:05.112000+08:00","level":"INFO","module":"memory.pre_processors","message":"🧠 [Context] 摘要=有 原始尾巴=12 行 会话摘要=有"}
+{"ts":"2026-08-19T08:50:05.402000+08:00","level":"INFO","module":"core.llm.lm_studio","message":"[LM Studio] 开始请求（model=google/gemma-4-26b-a4b-qat，max_tokens=512）"}
+{"ts":"2026-08-19T08:50:07.831000+08:00","level":"INFO","module":"core.llm.lm_studio","message":"[LM Studio] 收到回复（218 字符，finish=stop，completion_tokens=94）"}
+{"ts":"2026-08-19T08:50:08.005000+08:00","level":"SUCCESS","module":"bot_main","message":"✨ [即将发送给 QQ 的台词]: 诶？这也太敷衍了吧 | 你就不能吃点好吃的犒劳一下自己嘛"}
+{"ts":"2026-08-19T08:50:09.213000+08:00","level":"DEBUG","module":"memory.memory_manager","message":"[Memory] 无高信号消息，候选不更新"}
+{"ts":"2026-08-19T08:50:12.331000+08:00","level":"INFO","module":"extensions.link_monitor","message":"[LinkMonitor] 心跳正常，最近事件 3 秒前"}
+{"ts":"2026-08-19T08:50:14.556000+08:00","level":"DEBUG","module":"core.llm.scheduler","message":"[Scheduler] 释放资源 chat，持有时长 4.1s"}
+{"ts":"2026-08-19T08:50:16.901000+08:00","level":"INFO","module":"memory.pre_processors","message":"🧠 [Context] 摘要=有 原始尾巴=9 行 会话摘要=无"}
+{"ts":"2026-08-19T08:50:18.112000+08:00","level":"INFO","module":"core.llm.lm_studio","message":"[LM Studio] 收到回复（342 字符，finish=stop，completion_tokens=156）"}
+{"ts":"2026-08-19T08:50:18.980000+08:00","level":"SUCCESS","module":"bot_main","message":"✨ [即将发送给 QQ 的台词]: 我刚去看了下群公告，好像真的可以哦"}
+{"ts":"2026-08-19T08:50:20.442000+08:00","level":"WARNING","module":"core.llm.scheduler","message":"⚠️ [Scheduler] 资源 chat 排队深度 3（tag=extract:263402786），当前持有者 reply:263402786 已持有 8.2s"}
+{"ts":"2026-08-19T08:50:22.107000+08:00","level":"INFO","module":"memory.consolidator","message":"[Consolidator] 群 263402786 开始整合，窗口 14 条消息"}
+{"ts":"2026-08-19T08:50:24.330000+08:00","level":"DEBUG","module":"memory.consolidator","message":"[Consolidator] 阶段1 无自我披露，跳过阶段2"}
+{"ts":"2026-08-19T08:50:26.558000+08:00","level":"SUCCESS","module":"memory.consolidator","message":"✅ [Consolidator] 群 263402786 整合完成，已处理至 id 1284"}
+{"ts":"2026-08-19T08:50:28.003000+08:00","level":"ERROR","module":"core.llm.lm_studio","message":"[LM Studio] 模型 ID 配置错误：'/gemma-4-e4b' 不存在。LM Studio 要求完整 ID（含 google/ 之类前缀）。运行 python -m deploy doctor 可列出当前已加载的模型。"}
+{"ts":"2026-08-19T08:50:30.112000+08:00","level":"WARNING","module":"extensions.link_monitor","message":"⚠️ [LinkMonitor] 最近事件 45 秒前，超过半程阈值（timeout 300s）"}
+{"ts":"2026-08-19T08:50:32.451000+08:00","level":"DEBUG","module":"core.llm.scheduler","message":"[Scheduler] 资源 chat 排队深度回落至 1"}
+{"ts":"2026-08-19T08:50:34.778000+08:00","level":"INFO","module":"memory.pre_processors","message":"🧠 [Context] 摘要=无 原始尾巴=5 行 会话摘要=有"}
+{"ts":"2026-08-19T08:50:36.902000+08:00","level":"INFO","module":"core.llm.lm_studio","message":"[LM Studio] 开始请求（model=google/gemma-4-26b-a4b-qat，max_tokens=512）"}
+{"ts":"2026-08-19T08:50:39.540000+08:00","level":"INFO","module":"core.llm.lm_studio","message":"[LM Studio] 收到回复（166 字符，finish=stop，completion_tokens=72）"}
+{"ts":"2026-08-19T08:50:40.005000+08:00","level":"SUCCESS","module":"bot_main","message":"✨ [即将发送给 QQ 的台词]: 晚安啦，明天再聊~"}
+{"ts":"2026-08-19T08:50:42.118000+08:00","level":"DEBUG","module":"memory.timeutil","message":"[TimeUtil] 心跳任务：清理过期会话 0 条"}

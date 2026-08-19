@@ -138,8 +138,89 @@ def test_status_dict_shape(monkeypatch, tmp_path):
     pid_file = tmp_path / "stella.pid"
     monkeypatch.setattr(process, "PID_FILE", pid_file)
     monkeypatch.setattr(process, "LOG_FILE", tmp_path / "stella.jsonl")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
     data = process.status()
-    assert set(data) == {"pid", "alive", "log_file", "recent_log", "note"}
+    assert set(data) == {
+        "pid",
+        "alive",
+        "log_file",
+        "recent_log",
+        "api_reachable",
+        "link",
+        "scheduler",
+        "uptime_seconds",
+        "note",
+    }
     assert data["pid"] is None
     assert data["alive"] is False
     assert data["recent_log"] is None
+    assert data["api_reachable"] is False
+
+
+def test_status_api_unreachable(monkeypatch, tmp_path):
+    """status() 在状态接口不可达时：link/scheduler 为 None、api_reachable False，不抛异常。"""
+    pid_file = tmp_path / "stella.pid"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "LOG_FILE", tmp_path / "stella.jsonl")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
+    data = process.status()
+    assert data["alive"] is False
+    assert data["api_reachable"] is False
+    assert data["link"] is None
+    assert data["scheduler"] is None
+    assert data["uptime_seconds"] is None
+
+
+def test_fetch_live_status_maps_wildcard_host(monkeypatch):
+    """HOST=0.0.0.0 是「监听所有地址」的写法，不是可连接的目标——应改连 127.0.0.1。"""
+
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"uptime_seconds": 42.0}
+
+    calls: list[tuple[str, dict]] = []
+
+    class _FakeHttpx:
+        def get(self, url, **kwargs):
+            calls.append((url, kwargs))
+            return _FakeResp()
+
+    monkeypatch.setattr(process, "dotenv_values", lambda _p: {"HOST": "0.0.0.0", "PORT": "8080"})
+    monkeypatch.setattr(process, "httpx", _FakeHttpx())
+    data = process._fetch_live_status()
+    assert data == {"uptime_seconds": 42.0}
+    assert calls[0][0] == "http://127.0.0.1:8080/stella/status"
+    assert calls[0][1]["timeout"] == 1.0
+    assert calls[0][1]["trust_env"] is False
+
+
+def test_fetch_live_status_unreachable_returns_none(monkeypatch):
+    """连接失败时返回 None，status() 不因此崩溃。"""
+
+    class _FakeHttpx:
+        def get(self, url, **kwargs):
+            raise OSError("connection refused")
+
+    monkeypatch.setattr(process, "dotenv_values", lambda _p: {})
+    monkeypatch.setattr(process, "httpx", _FakeHttpx())
+    assert process._fetch_live_status() is None
+
+
+def test_fetch_live_status_non_200_returns_none(monkeypatch):
+    """非 200 响应同样视为不可达。"""
+
+    class _FakeResp:
+        status_code = 403
+
+        def json(self):
+            return {}
+
+    class _FakeHttpx:
+        def get(self, url, **kwargs):
+            return _FakeResp()
+
+    monkeypatch.setattr(process, "dotenv_values", lambda _p: {})
+    monkeypatch.setattr(process, "httpx", _FakeHttpx())
+    assert process._fetch_live_status() is None

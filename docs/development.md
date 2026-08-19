@@ -310,7 +310,8 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 4. 改过配置项 → `.env.example` 与 `docs/configuration.md` 已同步
 5. `release_assets/RELEASE_NOTES_TEMPLATE.md` 已更新为本版本说明，**破坏性变更必须列明**（例如本次：废弃全部 `NAPCAT_*` 配置、schema v8 需归档旧库让程序重建）
 6. Release 的排除清单独立于 `.gitignore` 维护（见 `release.yml` 的注释）；新增运行期产物或配置文件时，需同时更新排除清单与敏感文件校验的正则
-7. `release_assets/start.bat` 里硬编码了 Python 版本与 SHA256；升级 Python patch 版本时需同步更新两处，主次版本变更时还要确认 `python*._pth` 的处理
+7. **新增顶层目录必须判断该不该进 Release**：开发原型（如 `prototype/`）、工具脚本等不能打进用户安装包，需加进 `release.yml` 的 rsync 排除清单与「校验开发目录」的正则，并跑一次手工打包验证
+8. `release_assets/start.bat` 里硬编码了 Python 版本与 SHA256；升级 Python patch 版本时需同步更新两处，主次版本变更时还要确认 `python*._pth` 的处理
 
 然后：
 
@@ -400,6 +401,7 @@ else:
 | 主动 @ 永远走冷启动 | 日志里 `mode=coldstart` 恒定，或 `[ProactiveTarget] 读取候选失败`；说明候选查询的空间列名不匹配 |
 | 某个模型排队严重 / 回复变慢 | 日志里 `[Scheduler]` 的等待/持有/队列深度告警；`core.llm.snapshot()` 导出累计统计 |
 | 记忆读写静默无效 | 启动日志有无 v8 旧库告警；`PRAGMA table_info(memories)` 是否为 `group_shared_space` |
+| GUI 显示不出链路状态 | 检查 `STELLA_STATUS_API_ENABLED`，用 `curl http://127.0.0.1:8080/stella/status` 直接验证；进程在但接口 403 说明路由被误暴露限制、连不上说明 uvicorn 未起来 |
 
 ### 常用 SQL
 

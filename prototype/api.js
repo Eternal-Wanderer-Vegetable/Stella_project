@@ -22,10 +22,46 @@ export async function runDoctor(scenario = "mixed") {
 }
 
 
-/** 进程状态。对应 `python -m deploy status --json`。 */
-export async function getStatus() {
+/** 进程与链路状态。对应 `python -m deploy status --json`。 */
+export async function getStatus(scenario = "running") {
   await delay(200);
-  return { pid: null, alive: false, log_file: "logs/stella.jsonl", recent_log: null };
+  const res = await fetch(`./mock/status-${scenario}.json`);
+  return await res.json();
+}
+
+
+/** 读日志尾部 N 行（每行一个 JSON 对象）。Rust 侧读 logs/stella.jsonl。 */
+export async function readLogTail(lines = 200) {
+  await delay(150);
+  const res = await fetch("./mock/logs.jsonl");
+  const text = await res.text();
+  return text
+    .split("\n")
+    .filter((l) => l.trim())
+    .slice(-lines)
+    .map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        // 轮转瞬间可能读到半行，跳过而非崩溃
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+
+/** 启动 Bot（后台）。对应 `deploy start --detach`。 */
+export async function startBot() {
+  await delay(1200);
+  return { ok: true };
+}
+
+
+/** 优雅停止。对应 `deploy stop`。 */
+export async function stopBot() {
+  await delay(1500);
+  return { ok: true };
 }
 
 
