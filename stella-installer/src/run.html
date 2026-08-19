@@ -10,10 +10,9 @@
     <header>
       <h1>运行状态</h1>
       <span class="ver">v2.4.0</span>
-      <nav class="page-nav">
-        <a href="./index.html">环境自检</a>
-        <a class="current" href="./run.html">运行状态</a>
-      </nav>
+      <!-- 自检是排查工具而非日常页面，降级为角落里的次要入口。
+           出问题时由界面主动提示用户点它（见 renderError / 状态提示条）。 -->
+      <a class="nav-secondary" href="./doctor.html">环境自检</a>
     </header>
     <p class="subtitle">启动、停止与实时日志。遇到问题时点「复制诊断信息」，内容可直接贴进 issue。</p>
     <div id="root"></div>
@@ -193,8 +192,16 @@
       try {
         const st = await getStatus();
         logs = await readLogTail(st.log_file);
-        lastStatus = st; lastError = null; render(st);
-      } catch (e) { lastError = String(e); renderError(); }
+        lastStatus = st; lastError = null;
+        document.querySelector(".nav-secondary")?.classList.remove("alert");
+        render(st);
+      } catch (e) {
+        lastError = String(e);
+        renderError();
+        // 状态获取失败往往是环境问题（Python 挂了、deploy 模块坏了），
+        // 主动把自检入口点亮，而不是让用户自己想到去哪儿排查。
+        document.querySelector(".nav-secondary")?.classList.add("alert");
+      }
     }
 
     refresh();

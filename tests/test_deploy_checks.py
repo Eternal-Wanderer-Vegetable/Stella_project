@@ -34,6 +34,7 @@ def _healthy_snapshot(**overrides) -> Snapshot:
         "onebot_port": 8080,
         "onebot_port_in_use": False,
         "onebot_forward_reachable": None,
+        "status_api_reachable": False,
         "lm_reachable": True,
         "lm_error": "",
         "lm_models": ["google/gemma-4-e4b", "stella-chat", "stella-embed"],
@@ -199,6 +200,21 @@ def test_onebot_reverse_port_busy_is_warn():
         _healthy_snapshot(onebot_mode="reverse", onebot_port_in_use=True)
     )
     assert r is not None and r.level == "warn"
+    assert "不是 Stella 自己" in r.detail
+
+
+def test_onebot_reverse_port_busy_but_self_is_ok():
+    """状态接口可达 = 端口是自己占的：这是运行中的正常状态，不报告。"""
+    assert (
+        checks.check_onebot_reverse_port(
+            _healthy_snapshot(
+                onebot_mode="reverse",
+                onebot_port_in_use=True,
+                status_api_reachable=True,
+            )
+        )
+        is None
+    )
 
 
 def test_onebot_reverse_port_free_ok():

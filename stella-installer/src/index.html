@@ -2,187 +2,46 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>Stella 环境自检</title>
+  <title>Stella</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="app">
-    <header>
-      <h1>环境自检</h1>
-      <span class="ver">v2.4.0</span>
-      <nav class="page-nav">
-        <a class="current" href="./index.html">环境自检</a>
-        <a href="./run.html">运行状态</a>
-      </nav>
-    </header>
-    <p class="subtitle">启动前检查配置、模型与数据库状态。发现问题时会给出具体的修复方法。</p>
-
-
-    <div id="root"></div>
-
-
-    <div class="footer-hint">
-      修不好？点「复制检查报告」，把内容贴到
-      <a href="#" id="issue-link">GitHub Issues</a> —— 报告里已包含环境信息，不含你的群号与密钥。
+    <div class="boot">
+      <div class="boot-title">Stella</div>
+      <div class="boot-status" id="st">正在检查环境…</div>
     </div>
   </div>
 
-
   <script type="module">
-    import { runDoctor, copyText } from "./api.js";
+    import { runDoctor } from "./api.js";
 
+    const st = document.getElementById("st");
 
-    const root = document.getElementById("root");
-    const ICONS = { error: "✕", warn: "!", ok: "✓" };
-
-
-    // 后端 JSON schema 版本。将来后端改结构时 bump 它，前端就能明确报
-    // 「版本不匹配，请更新安装器」，而不是渲染出一片空白。
-    const EXPECTED_SCHEMA = 1;
-
-
-    function verdict(s) {
-      // blocking 由后端判定（report.has_blocking 的同一套逻辑），
-      // 前端不重复实现——两处判据漂移会导致「界面说可以启动、start 却拒绝」。
-      if (s.blocking) return { cls: "blocked", text: "存在阻塞问题，建议修复后再启动" };
-      if (s.warn > 0) return { cls: "warned", text: "可以启动，但有几处值得注意" };
-      return { cls: "clean", text: "一切就绪" };
-    }
-
-
-    /** fix_hint 里的路径/命令/配置名自动转 <code>，提升可读性。
-        真实数据里这些片段没有标记，只能靠启发式识别。 */
-    function markup(text) {
-      const esc = text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-      return esc
-        // 全大写配置项名（含下划线）
-        .replace(/\b([A-Z][A-Z0-9_]{4,})\b/g, "<code>$1</code>")
-        // 路径与命令（含 / 或 \ 或以 python 开头）
-        .replace(/\b((?:python |netstat |memory\/|config\/)[^\s，。；]+)/g, "<code>$1</code>");
-    }
-
-
-    function render(data) {
-      if (data.version !== EXPECTED_SCHEMA) {
-        throw new Error(
-          `后端返回的 schema 版本为 ${data.version}，本界面支持 ${EXPECTED_SCHEMA}。` +
-          `请更新安装器或 Stella 本体到匹配的版本。`
-        );
-      }
-      // 后端字段名为 items（不是 checks）；summary.blocking 由后端直接给出，
-      // 前端不再自己判断「有没有 error」。
-      const items = data.items || [];
-      const v = verdict(data.summary);
-      const hasIssues = items.length > 0;
-
-
-      root.innerHTML = `
-        <div class="summary">
-          <span class="verdict ${v.cls}">${v.text}</span>
-          <div class="counts">
-            <span class="c-error">错误 <b>${data.summary.error}</b></span>
-            <span class="c-warn">警告 <b>${data.summary.warn}</b></span>
-            <span class="c-ok">通过 <b>${data.summary.ok}/${data.summary.total}</b></span>
-          </div>
-        </div>
-
-
-        <div class="actions">
-          <button class="primary" id="btn-recheck">重新检查</button>
-          <button id="btn-copy" ${hasIssues ? "" : "disabled"}>复制检查报告</button>
-        </div>
-
-
-        ${hasIssues
-          ? `<div class="checks">${items.map(checkHTML).join("")}</div>`
-          : `<div class="all-clear">
-               <div class="big">✓</div>
-               <div>全部 ${data.summary.ok} 项检查通过，可以启动了。</div>
-             </div>`}
-      `;
-
-
-      // 整行点击展开
-      root.querySelectorAll(".check-head").forEach(h => {
-        h.onclick = () => h.parentElement.classList.toggle("open");
-      });
-      root.querySelector("#btn-recheck").onclick = load;
-      root.querySelector("#btn-copy").onclick = () => copyReport(data);
-    }
-
-
-    function checkHTML(c) {
-      // error 默认展开：阻塞项的修复方法应该直接可见，不该多一次点击。
-      // warn 保持折叠——它们数量可能较多，全展开会把页面推得很长。
-      const openClass = c.level === "error" ? " open" : "";
-      return `
-        <div class="check ${c.level}${openClass}">
-          <div class="check-head">
-            <span class="icon">${ICONS[c.level]}</span>
-            <span class="check-title">${c.title}</span>
-            <span class="check-id">${c.id}</span>
-            <span class="chevron">▶</span>
-          </div>
-          <div class="check-body">
-            <p class="detail">${markup(c.detail)}</p>
-            ${c.fix_hint ? `<div class="fix">
-              <span class="label">怎么修</span>${markup(c.fix_hint)}
-            </div>` : ""}
-          </div>
-        </div>`;
-    }
-
-
-    /** 报告格式面向「贴进 issue」：带环境信息、只列问题、不含敏感值。 */
-    async function copyReport(data) {
-      const lines = [
-        "### Stella 环境自检报告",
-        "",
-        `- 版本：v2.4.0`,
-        `- 汇总：错误 ${data.summary.error} / 警告 ${data.summary.warn} / 通过 ${data.summary.ok}`,
-        "",
-      ];
-      for (const c of data.items || []) {
-        lines.push(`**[${c.level.toUpperCase()}] ${c.title}** \`${c.id}\``);
-        lines.push(`- 详情：${c.detail}`);
-        if (c.fix_hint) lines.push(`- 提示：${c.fix_hint}`);
-        lines.push("");
-      }
-      await copyText(lines.join("\n"));
-      const btn = root.querySelector("#btn-copy");
-      btn.textContent = "已复制";
-      setTimeout(() => (btn.textContent = "复制检查报告"), 1600);
-    }
-
-
-    async function load() {
-      root.innerHTML = `<div class="loading">正在检查…</div>`;
+    /**
+     * 启动路由：每次启动都自检一次，通过则直接进运行页。
+     *
+     * 为什么不缓存「已通过」的结果：用户可能改了 .env、换了模型、旧库没重建，
+     * 那些都会让上次的结论失效。自检本身只要一两秒，用它换「坏了能立刻发现」
+     * 是值得的——而这个项目最难查的几个缺陷（记忆静默失效、@ 消息不入库）
+     * 恰恰都属于「看起来正常但实际坏了」。
+     */
+    (async () => {
       try {
-        render(await runDoctor());
+        const data = await runDoctor();
+        if (data.summary?.blocking) {
+          st.textContent = "发现需要处理的问题，正在打开环境自检…";
+          setTimeout(() => location.replace("./doctor.html"), 700);
+        } else {
+          location.replace("./run.html");
+        }
       } catch (e) {
-        // 不捕获异常时 loading 会永久停留，真实错误只在 Console 里——
-        // 用户看到的是「卡住了」，无法自助排查也无法提交有效 issue。
-        root.innerHTML = `
-          <div class="check error open">
-            <div class="check-head">
-              <span class="icon">✕</span>
-              <span class="check-title">无法完成检查</span>
-              <span class="check-id">frontend</span>
-            </div>
-            <div class="check-body">
-              <p class="detail">${String(e).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p>
-              <div class="fix">
-                <span class="label">怎么排查</span>
-                窗口内右键 → 检查元素 → Console 看完整报错；
-                或在项目根目录手工执行 <code>python -m deploy doctor --json</code> 对比。
-              </div>
-            </div>
-          </div>`;
+        // 自检本身失败（Python 找不到、deploy 模块坏了）也要能进自检页——
+        // 那里有完整的错误展示与排查提示，比停在启动页有用。
+        st.textContent = "环境检查失败，正在打开详情…";
+        setTimeout(() => location.replace("./doctor.html"), 700);
       }
-    }
-
-
-    load();
+    })();
   </script>
 </body>
 </html>

@@ -121,17 +121,27 @@ def check_onebot_mode(snap: Snapshot) -> CheckResult | None:
 
 
 def check_onebot_reverse_port(snap: Snapshot) -> CheckResult | None:
-    """仅反向 WS：端口被占 → warn；探测失败 → warn。"""
+    """仅反向 WS：端口被占 → warn；探测失败 → warn。
+
+    Bot 自己在运行时端口必然被占用，这是最常见的情况——把它报成警告会
+    误导用户去排查一个不存在的问题（2026-08-19 反馈）。状态接口可达即可
+    确认占用者是 Stella 自己：接口挂在同一个 HTTP 服务器上，能连上就说明
+    监听者就是它。
+    """
     if snap.onebot_mode != "reverse":
+        return None
+    # 端口被自己占用：正常状态，不报告
+    if snap.status_api_reachable:
         return None
     if snap.onebot_port_in_use is True:
         return CheckResult(
             id="onebot_port",
             level="warn",
-            title="反向 WS 端口可能被占用",
-            detail=f"端口 {snap.onebot_port} 当前无法 bind。",
-            fix_hint="若 Bot 正在运行，端口被自己占用属正常；"
-            f"否则用 netstat -ano | findstr :{snap.onebot_port} 排查占用进程。",
+            title="反向 WS 端口被其他程序占用",
+            detail=f"端口 {snap.onebot_port} 无法 bind，且 Stella 的状态接口不可达"
+            "——说明占用者不是 Stella 自己。",
+            fix_hint=f"用 netstat -ano | findstr :{snap.onebot_port} 找出占用进程，"
+            "或在 .env 里改 PORT（改后记得同步修改 NapCat 侧的 WS 客户端地址）。",
         )
     if snap.onebot_port_in_use is None:
         return CheckResult(

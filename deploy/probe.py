@@ -352,6 +352,22 @@ def _probe_misc() -> dict:
     return result
 
 
+def _probe_status_api() -> bool:
+    """状态接口是否可达。
+
+    复用 process 里的实现：它已处理 HOST=0.0.0.0 → 127.0.0.1 的映射与
+    .env 读取，重复一份必然漂移。延迟 import：probe 与 process 目前互不
+    依赖，但将来 process 若反向 import probe，模块级 import 会形成环。
+    """
+    try:
+        from .process import _fetch_live_status
+
+        # 超时略短于 process 的 1.0s：doctor 是交互命令，多一项探测不该拖慢
+        return _fetch_live_status(timeout=0.8) is not None
+    except Exception:
+        return False
+
+
 def collect() -> Snapshot:
     """采集全部环境事实并组装 Snapshot。
 
@@ -386,6 +402,10 @@ def collect() -> Snapshot:
         misc = _probe_misc()
     except Exception:
         misc = {}
+    try:
+        status_api_reachable = _probe_status_api()
+    except Exception:
+        status_api_reachable = False
     return Snapshot(
         python_version=python_version,
         missing_packages=missing,
@@ -398,6 +418,7 @@ def collect() -> Snapshot:
         onebot_port=onebot.get("port", 8080),
         onebot_port_in_use=onebot.get("port_in_use"),
         onebot_forward_reachable=onebot.get("forward_reachable"),
+        status_api_reachable=status_api_reachable,
         lm_reachable=lm.get("lm_reachable"),
         lm_error=lm.get("lm_error", ""),
         lm_models=lm.get("lm_models", []),
