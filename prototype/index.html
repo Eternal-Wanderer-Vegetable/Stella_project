@@ -103,8 +103,11 @@
 
 
     function checkHTML(c) {
+      // error 默认展开：阻塞项的修复方法应该直接可见，不该多一次点击。
+      // warn 保持折叠——它们数量可能较多，全展开会把页面推得很长。
+      const openClass = c.level === "error" ? " open" : "";
       return `
-        <div class="check ${c.level}">
+        <div class="check ${c.level}${openClass}">
           <div class="check-head">
             <span class="icon">${ICONS[c.level]}</span>
             <span class="check-title">${c.title}</span>
