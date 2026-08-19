@@ -37,7 +37,8 @@ body {
 
 
 .app {
-  max-width: 760px;
+  /* 桌面窗口放大时继续利用可用空间，同时限制超宽屏下的行长。 */
+  width: min(100%, 1200px);
   margin: 0 auto;
   padding: 24px 20px 40px;
 }
@@ -372,7 +373,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   background: #0f1115;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  height: 340px;
+  /* 日志是最需要额外空间的区域，随窗口高度增长。 */
+  height: max(340px, calc(100vh - 380px));
   overflow-y: auto;
   padding: 10px 0;
   font-family: var(--mono);

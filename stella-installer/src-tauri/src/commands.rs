@@ -12,8 +12,12 @@ use std::io::{Read, Seek, SeekFrom};
 /// doctor 的退出码 1 表示「发现阻塞性问题」，不是调用失败——这里必须放行，
 /// 否则有 error 时前端会收到错误而不是检查结果。
 #[tauri::command]
-pub fn run_doctor() -> Result<String, String> {
-    let (stdout, stderr, code) = python::run_deploy(&["doctor", "--json"])?;
+pub async fn run_doctor() -> Result<String, String> {
+    let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
+        python::run_deploy(&["doctor", "--json"])
+    })
+    .await
+    .map_err(|e| format!("自检任务未能完成：{e}"))??;
     // doctor 的退出码 1 表示「发现阻塞性问题」，是正常结果而非调用失败。
     // 其他非零码才是异常（Python 崩了、模块 import 失败等）。
     if code != 0 && code != 1 {
@@ -33,8 +37,12 @@ pub fn run_doctor() -> Result<String, String> {
 ///
 /// status 只报告状态，不判断成败，因此非零退出码才是异常。
 #[tauri::command]
-pub fn get_status() -> Result<String, String> {
-    let (stdout, stderr, code) = python::run_deploy(&["status", "--json"])?;
+pub async fn get_status() -> Result<String, String> {
+    let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
+        python::run_deploy(&["status", "--json"])
+    })
+    .await
+    .map_err(|e| format!("状态任务未能完成：{e}"))??;
     if code != 0 {
         return Err(format!(
             "deploy status 异常退出（code {code}）：\n{}",
@@ -48,12 +56,16 @@ pub fn get_status() -> Result<String, String> {
 
 /// 后台启动 Bot。对应 `deploy start --detach`。
 #[tauri::command]
-pub fn start_bot(force: bool) -> Result<String, String> {
-    let mut args = vec!["start", "--detach"];
-    if force {
-        args.push("--force");
-    }
-    let (stdout, stderr, code) = python::run_deploy(&args)?;
+pub async fn start_bot(force: bool) -> Result<String, String> {
+    let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(move || {
+        let mut args = vec!["start", "--detach"];
+        if force {
+            args.push("--force");
+        }
+        python::run_deploy(&args)
+    })
+    .await
+    .map_err(|e| format!("启动任务未能完成：{e}"))??;
     if code != 0 {
         return Err(format!(
             "启动失败（code {code}）：\n{}",
@@ -65,8 +77,12 @@ pub fn start_bot(force: bool) -> Result<String, String> {
 
 /// 优雅停止。对应 `deploy stop`，可能等待在途任务收尾。
 #[tauri::command]
-pub fn stop_bot() -> Result<String, String> {
-    let (stdout, stderr, code) = python::run_deploy(&["stop"])?;
+pub async fn stop_bot() -> Result<String, String> {
+    let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
+        python::run_deploy(&["stop"])
+    })
+    .await
+    .map_err(|e| format!("停止任务未能完成：{e}"))??;
     if code != 0 {
         return Err(format!(
             "停止失败（code {code}）：\n{}",
@@ -81,36 +97,40 @@ pub fn stop_bot() -> Result<String, String> {
 /// 直接读文件而不是调用 Python，且只读取尾部有限字节，避免高频轮询把整个日志
 /// 文件载入内存。开头不完整的半行会被丢弃，前端负责逐行 JSON 容错。
 #[tauri::command]
-pub fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<String, String> {
-    let path = path
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| python::project_root().join("logs").join("stella.jsonl"));
-    let mut file = match File::open(&path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
-        Err(error) => return Err(format!("无法读取日志 {}：{error}", path.display())),
-    };
-    if max_bytes == 0 {
-        return Ok(String::new());
-    }
-    let size = file
-        .metadata()
-        .map_err(|error| format!("无法读取日志 {} 的大小：{error}", path.display()))?
-        .len();
-    let start = size.saturating_sub(max_bytes as u64);
-    file.seek(SeekFrom::Start(start))
-        .map_err(|error| format!("无法定位日志 {}：{error}", path.display()))?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .map_err(|error| format!("无法读取日志 {}：{error}", path.display()))?;
-    if start > 0 {
-        if let Some(newline) = bytes.iter().position(|byte| *byte == b'\n') {
-            bytes.drain(..=newline);
-        } else {
-            bytes.clear();
+pub async fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = path
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| python::project_root().join("logs").join("stella.jsonl"));
+        let mut file = match File::open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+            Err(error) => return Err(format!("无法读取日志 {}：{error}", path.display())),
+        };
+        if max_bytes == 0 {
+            return Ok(String::new());
         }
-    }
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+        let size = file
+            .metadata()
+            .map_err(|error| format!("无法读取日志 {} 的大小：{error}", path.display()))?
+            .len();
+        let start = size.saturating_sub(max_bytes as u64);
+        file.seek(SeekFrom::Start(start))
+            .map_err(|error| format!("无法定位日志 {}：{error}", path.display()))?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|error| format!("无法读取日志 {}：{error}", path.display()))?;
+        if start > 0 {
+            if let Some(newline) = bytes.iter().position(|byte| *byte == b'\n') {
+                bytes.drain(..=newline);
+            } else {
+                bytes.clear();
+            }
+        }
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    })
+    .await
+    .map_err(|e| format!("日志读取任务未能完成：{e}"))?
 }
 
 /// 从混杂输出里提取第一个完整的 JSON 对象。

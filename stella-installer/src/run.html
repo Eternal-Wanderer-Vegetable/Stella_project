@@ -26,8 +26,9 @@
     let lastStatus = null;
     let lastError = null;
     const levelOn = { ERROR: true, WARNING: true, SUCCESS: true, INFO: true, DEBUG: false };
-    let follow = true;
-    let busy = false;
+      let follow = true;
+      let busy = false;
+      let timer = null;
 
     function fmtDur(sec) {
       if (sec == null) return "—";
@@ -169,23 +170,42 @@
       setTimeout(() => (b.textContent = "复制诊断信息"), 1600);
     }
 
+    function pausePolling() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    function resumePolling() {
+      timer = setInterval(() => { if (!busy) refresh(); }, 1500);
+    }
+
     async function onStart() {
+      pausePolling();
       busy = true; if (lastStatus) render(lastStatus);
-      try { await startBot(false); }
-      catch (e) {
+      try {
+        await startBot(false);
+      } catch (e) {
         busy = false;
         if (confirm(`启动被拒绝：\n\n${e}\n\n仍要强制启动吗？`)) {
           busy = true; if (lastStatus) render(lastStatus);
           try { await startBot(true); } catch (e2) { alert(`强制启动也失败了：\n${e2}`); }
         }
+      } finally {
+        busy = false;
+        await refresh();
+        resumePolling();
       }
-      busy = false; await refresh();
     }
 
     async function onStop() {
+      pausePolling();
       busy = true; if (lastStatus) render(lastStatus);
       try { await stopBot(); } catch (e) { alert(`停止失败：\n${e}`); }
-      busy = false; await refresh();
+      finally {
+        busy = false;
+        await refresh();
+        resumePolling();
+      }
     }
 
     async function refresh() {
@@ -205,7 +225,7 @@
     }
 
     refresh();
-    setInterval(() => { if (!busy) refresh(); }, 1500);
+    resumePolling();
   </script>
 </body>
 </html>
