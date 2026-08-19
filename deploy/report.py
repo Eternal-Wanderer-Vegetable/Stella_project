@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sys
 
+from . import checks
 from .models import CheckResult
 
 
@@ -37,11 +38,21 @@ def to_json(results: list[CheckResult]) -> str:
 
 
 def _summarize(results: list[CheckResult]) -> dict:
-    counts = {"ok": 0, "warn": 0, "error": 0}
-    for r in results:
-        counts[r.level] = counts.get(r.level, 0) + 1
-    counts["blocking"] = has_blocking(results)
-    return counts
+    total = checks.total_checks()
+    n_error = sum(1 for r in results if r.level == "error")
+    n_warn = sum(1 for r in results if r.level == "warn")
+    # ok 用「总数 − 有问题的项数」推算。注意两点误差：
+    # ① 不适用而跳过的检查（如 embedding 未启用）也算进 ok；
+    # ② 单个检查可能产出多条结果（deprecated_env_keys），会让 ok 偏小。
+    # 这两点对「让用户知道确实检查过一批项目」的目的无影响，不值得为精确
+    # 而让每个检查都返回 ok 结果（那要改全部检查函数）。
+    return {
+        "ok": max(0, total - n_error - n_warn),
+        "warn": n_warn,
+        "error": n_error,
+        "blocking": has_blocking(results),
+        "total": total,
+    }
 
 
 def has_blocking(results: list[CheckResult]) -> bool:

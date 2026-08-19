@@ -67,6 +67,37 @@ def test_healthy_snapshot_is_all_ok():
     assert all(r.level == "ok" for r in results)
 
 
+def test_total_checks_positive_and_consistent():
+    # GUI 契约：summary.ok 由「总数 − 有问题的项数」推算（通过即 None、不产生
+    # CheckResult，无法从结果列表反推分母），total 必须与 _ALL_CHECKS 一致。
+    assert checks.total_checks() == len(checks._ALL_CHECKS)
+    assert checks.total_checks() > 0
+
+
+def test_report_summary_derives_ok_from_total():
+    from deploy import report
+
+    s = report._summarize(checks.run_all(_healthy_snapshot()))
+    assert s["total"] == checks.total_checks()
+    assert s["ok"] == checks.total_checks()  # 健康快照全部跳过 → 全部计为 ok
+    assert s["error"] == 0 and s["warn"] == 0
+    assert s["blocking"] is False
+
+
+def test_to_json_gui_contract():
+    import json
+
+    from deploy import report
+
+    snap = _healthy_snapshot(allowed_groups=[])
+    doc = json.loads(report.to_json(checks.run_all(snap)))
+    assert doc["version"] == 1
+    assert isinstance(doc["items"], list)
+    assert doc["summary"]["total"] == checks.total_checks()
+    assert doc["summary"]["error"] >= 1
+    assert doc["summary"]["blocking"] is True
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

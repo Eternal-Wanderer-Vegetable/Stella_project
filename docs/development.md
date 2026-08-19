@@ -30,6 +30,16 @@ pip install -r requirements-dev.txt
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
 doctor 也就报 warn），避免「明明能跑却提示 error」。
 
+**每次改 `checks.py` 或 `report.py`，顺手重新导出一次 mock**（前端/安装器用真实结构预览，
+避免结构与后端漂移）：
+
+```bash
+python -m deploy doctor --json > stella-installer/src/mock/doctor-clean.json
+```
+
+`doctor-mixed.json`（带 items 的场景）需要手工构造，保持字段结构与 `doctor-clean.json` 一致、
+`summary.ok = total - error - warn` 自洽。
+
 ## 提交前检查
 
 ```bash
@@ -310,7 +320,7 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 4. 改过配置项 → `.env.example` 与 `docs/configuration.md` 已同步
 5. `release_assets/RELEASE_NOTES_TEMPLATE.md` 已更新为本版本说明，**破坏性变更必须列明**（例如本次：废弃全部 `NAPCAT_*` 配置、schema v8 需归档旧库让程序重建）
 6. Release 的排除清单独立于 `.gitignore` 维护（见 `release.yml` 的注释）；新增运行期产物或配置文件时，需同时更新排除清单与敏感文件校验的正则
-7. **新增顶层目录必须判断该不该进 Release**：开发原型（如 `prototype/`）、工具脚本等不能打进用户安装包，需加进 `release.yml` 的 rsync 排除清单与「校验开发目录」的正则，并跑一次手工打包验证
+7. **新增顶层目录必须判断该不该进 Release**：开发工具（如 `stella-installer/`，独立分发的 Tauri 安装器）、工具脚本等不能打进用户安装包，需加进 `release.yml` 的 rsync 排除清单与「校验开发目录」的正则，并跑一次手工打包验证
 8. `release_assets/start.bat` 里硬编码了 Python 版本与 SHA256；升级 Python patch 版本时需同步更新两处，主次版本变更时还要确认 `python*._pth` 的处理
 
 然后：

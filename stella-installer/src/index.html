@@ -30,12 +30,17 @@
 
     const root = document.getElementById("root");
     const ICONS = { error: "✕", warn: "!", ok: "✓" };
-    // 原型用：切换场景看不同界面。移植时删掉这一行与下面的 <select>
-    let scenario = "mixed";
+
+
+    // 后端 JSON schema 版本。将来后端改结构时 bump 它，前端就能明确报
+    // 「版本不匹配，请更新安装器」，而不是渲染出一片空白。
+    const EXPECTED_SCHEMA = 1;
 
 
     function verdict(s) {
-      if (s.error > 0) return { cls: "blocked", text: "存在阻塞问题，建议修复后再启动" };
+      // blocking 由后端判定（report.has_blocking 的同一套逻辑），
+      // 前端不重复实现——两处判据漂移会导致「界面说可以启动、start 却拒绝」。
+      if (s.blocking) return { cls: "blocked", text: "存在阻塞问题，建议修复后再启动" };
       if (s.warn > 0) return { cls: "warned", text: "可以启动，但有几处值得注意" };
       return { cls: "clean", text: "一切就绪" };
     }
@@ -54,8 +59,17 @@
 
 
     function render(data) {
+      if (data.version !== EXPECTED_SCHEMA) {
+        throw new Error(
+          `后端返回的 schema 版本为 ${data.version}，本界面支持 ${EXPECTED_SCHEMA}。` +
+          `请更新安装器或 Stella 本体到匹配的版本。`
+        );
+      }
+      // 后端字段名为 items（不是 checks）；summary.blocking 由后端直接给出，
+      // 前端不再自己判断「有没有 error」。
+      const items = data.items || [];
       const v = verdict(data.summary);
-      const hasIssues = data.checks.length > 0;
+      const hasIssues = items.length > 0;
 
 
       root.innerHTML = `
@@ -64,7 +78,7 @@
           <div class="counts">
             <span class="c-error">错误 <b>${data.summary.error}</b></span>
             <span class="c-warn">警告 <b>${data.summary.warn}</b></span>
-            <span class="c-ok">通过 <b>${data.summary.ok}</b></span>
+            <span class="c-ok">通过 <b>${data.summary.ok}/${data.summary.total}</b></span>
           </div>
         </div>
 
@@ -72,15 +86,11 @@
         <div class="actions">
           <button class="primary" id="btn-recheck">重新检查</button>
           <button id="btn-copy" ${hasIssues ? "" : "disabled"}>复制检查报告</button>
-          <select id="sel-scenario" style="margin-left:auto">
-            <option value="mixed">场景：有问题</option>
-            <option value="clean">场景：全通过</option>
-          </select>
         </div>
 
 
         ${hasIssues
-          ? `<div class="checks">${data.checks.map(checkHTML).join("")}</div>`
+          ? `<div class="checks">${items.map(checkHTML).join("")}</div>`
           : `<div class="all-clear">
                <div class="big">✓</div>
                <div>全部 ${data.summary.ok} 项检查通过，可以启动了。</div>
@@ -94,11 +104,6 @@
       });
       root.querySelector("#btn-recheck").onclick = load;
       root.querySelector("#btn-copy").onclick = () => copyReport(data);
-      root.querySelector("#sel-scenario").value = scenario;
-      root.querySelector("#sel-scenario").onchange = (e) => {
-        scenario = e.target.value;
-        load();
-      };
     }
 
 
@@ -133,7 +138,7 @@
         `- 汇总：错误 ${data.summary.error} / 警告 ${data.summary.warn} / 通过 ${data.summary.ok}`,
         "",
       ];
-      for (const c of data.checks) {
+      for (const c of data.items || []) {
         lines.push(`**[${c.level.toUpperCase()}] ${c.title}** \`${c.id}\``);
         lines.push(`- 详情：${c.detail}`);
         if (c.fix_hint) lines.push(`- 提示：${c.fix_hint}`);
@@ -148,7 +153,28 @@
 
     async function load() {
       root.innerHTML = `<div class="loading">正在检查…</div>`;
-      render(await runDoctor(scenario));
+      try {
+        render(await runDoctor());
+      } catch (e) {
+        // 不捕获异常时 loading 会永久停留，真实错误只在 Console 里——
+        // 用户看到的是「卡住了」，无法自助排查也无法提交有效 issue。
+        root.innerHTML = `
+          <div class="check error open">
+            <div class="check-head">
+              <span class="icon">✕</span>
+              <span class="check-title">无法完成检查</span>
+              <span class="check-id">frontend</span>
+            </div>
+            <div class="check-body">
+              <p class="detail">${String(e).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p>
+              <div class="fix">
+                <span class="label">怎么排查</span>
+                窗口内右键 → 检查元素 → Console 看完整报错；
+                或在项目根目录手工执行 <code>python -m deploy doctor --json</code> 对比。
+              </div>
+            </div>
+          </div>`;
+      }
     }
 
 

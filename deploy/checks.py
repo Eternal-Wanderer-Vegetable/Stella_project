@@ -604,6 +604,13 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
 )
 
 
+def total_checks() -> int:
+    """检查项总数。report 层用它推算通过数：
+    检查通过时返回 None（不产生 CheckResult），因此「通过了多少项」
+    无法从结果列表反推，必须由这里提供分母。"""
+    return len(_ALL_CHECKS)
+
+
 def run_all(snapshot: Snapshot) -> list[CheckResult]:
     """跑全部检查，按 error→warn→ok 排序（同级保持稳定顺序）。"""
     results: list[CheckResult] = []

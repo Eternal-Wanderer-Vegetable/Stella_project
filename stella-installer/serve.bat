@@ -31,11 +31,12 @@ echo Close this window to stop.
 echo.
 
 
+REM Serve src\ as document root so ./mock\... and ./api.js resolve.
 REM ES module + fetch need a real origin; file:// is blocked by CORS, which makes
 REM the module script never run (only static HTML shows, #root stays empty).
 REM Tauri serves the frontend over a custom protocol, so this is preview-only.
 start "" http://localhost:8765
-"%PY%" -m http.server 8765
+"%PY%" -m http.server 8765 --directory src
 
 
 echo.

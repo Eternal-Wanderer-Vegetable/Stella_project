@@ -528,7 +528,7 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 | 1234 | LM Studio | 外部程序 | `LM_STUDIO_BASE_URL` |
 | 6099 | NapCat WebUI | 外部程序 | NapCat 侧 |
 | 3001 | NapCat 正向 WS 服务端 | 外部程序（仅 forward 模式） | `ONEBOT_WS_URLS` |
-| 8765 | 原型预览 | 开发期 `serve.bat` | 不进 Release |
+| 8765 | 安装器前端预览 | 开发期 `stella-installer/serve.bat` | 不进 Release |
 
 ## 本地状态接口
 

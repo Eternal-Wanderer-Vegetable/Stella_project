@@ -1,4 +1,11 @@
 {
-  "summary": { "ok": 23, "warn": 0, "error": 0 },
-  "checks": []
+  "version": 1,
+  "summary": {
+    "ok": 24,
+    "warn": 0,
+    "error": 0,
+    "blocking": false,
+    "total": 24
+  },
+  "items": []
 }

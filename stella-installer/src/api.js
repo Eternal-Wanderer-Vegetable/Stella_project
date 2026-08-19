@@ -8,8 +8,19 @@
 const USE_MOCK = false;
 
 
-// withGlobalTauri: true 时可直接用 window.__TAURI__，无需 npm 包
-const invoke = window.__TAURI__?.core?.invoke;
+// withGlobalTauri: true 时前端可直接用 window.__TAURI__，无需 npm 包。
+// 但 invoke 的位置在 Tauri 2.x 的不同 patch 版本间有过调整
+// （曾在 window.__TAURI__.invoke，后移到 window.__TAURI__.core.invoke），
+// 因此两处都探测，取不到才退回 mock。
+const invoke =
+  window.__TAURI__?.core?.invoke ??
+  window.__TAURI__?.invoke ??
+  null;
+
+
+// 启动时打一行，便于确认走的是真实调用还是 mock
+console.log("[api] invoke =", invoke ? "已就绪" : "不可用（将使用 mock）",
+            "window.__TAURI__ =", window.__TAURI__);
 
 
 const MOCK_DELAY = 600; // 模拟真实调用耗时，便于看 loading 状态
@@ -20,7 +31,12 @@ function delay(ms) {
 }
 
 
-/** 环境自检。对应 `python -m deploy doctor --json`。 */
+/**
+ * 环境自检。对应 `python -m deploy doctor --json`。
+ *
+ * scenario 只在 mock 模式下生效（切换 doctor-*.json 看不同界面状态）；
+ * 走真实后端时它被忽略——检查结果由环境决定，不是前端能选的。
+ */
 export async function runDoctor(scenario = "mixed") {
   if (USE_MOCK || !invoke) {
     await delay(MOCK_DELAY);
