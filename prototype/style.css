@@ -264,6 +264,25 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .link-row .v.bad { color: var(--error); }
 
 
+/* ── 调度器摘要 ── */
+.sched-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 16px;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.sched-label { color: var(--text-faint); flex-shrink: 0; }
+.sched-item { font-family: var(--mono); }
+.sched-item .w { color: var(--warn); }
+.sched-empty { color: var(--text-faint); font-family: var(--mono); }
+
+
 /* ── 日志区 ── */
 .log-bar {
   display: flex;

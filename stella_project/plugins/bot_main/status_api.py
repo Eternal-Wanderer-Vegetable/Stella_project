@@ -22,6 +22,13 @@ import os
 import time
 from importlib.metadata import PackageNotFoundError, version
 
+# fastapi 必须在模块级导入：本文件启用了 from __future__ import annotations，
+# 所有标注变成字符串，而 FastAPI 靠运行时解析标注来识别依赖注入——它只在
+# **模块全局命名空间**里查找类型名。若 Request 只存在于函数局部作用域，
+# FastAPI 找不到它，会把 request 当成必需的查询参数，请求返回 422。
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 from config import ALLOWED_GROUPS, STELLA_STATUS_API_ENABLED, STELLA_STATUS_API_PATH
 
 # 进程启动时刻：模块 import 即执行（ai_gateway 在插件加载时导入本模块）。
@@ -93,11 +100,12 @@ def setup_status_api() -> None:
     if app is None:
         return
 
-    from fastapi import Request
-    from fastapi.responses import JSONResponse
-
     @app.get(STELLA_STATUS_API_PATH)
     async def _status_endpoint(request: Request):
+        # request.client.host 是直连对端地址。若将来置于反向代理之后，
+        # 这里会拿到代理的地址（通常也是回环）——那时回环校验会失效，
+        # 需要改为校验 X-Forwarded-For 或干脆禁用本接口。
+        # 当前部署形态是直连，无此问题。
         host = request.client.host if request.client else None
         if not _is_loopback(host):
             return JSONResponse({"error": "forbidden"}, status_code=403)

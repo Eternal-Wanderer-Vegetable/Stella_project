@@ -211,12 +211,24 @@ def _fetch_live_status(timeout: float = 1.0) -> dict | None:
 def status() -> dict:
     """返回状态字典（供 ``status [--json]``）。
 
-    两个信号源：PID 文件（进程是否存活）+ 状态接口（进程内状态）。
-    ``api_reachable`` 区分「进程在但 HTTP 服务没起来」（启动中，或 uvicorn
-    崩了）——GUI 据此显示「正在启动…」而不是直接报「运行中」。
+    存活判据有两个来源，优先级明确：
+    1. **状态接口可达** —— 最强证据，说明进程活着且 HTTP 服务已就绪；
+    2. PID 文件 + 进程存活 —— 仅在接口不可达时兜底（进程刚启动、HTTP 还没起来，
+       或用户关掉了 STELLA_STATUS_API_ENABLED）。
+
+    为什么不能只看 PID 文件：它只由 ``deploy start --detach`` 写入。用
+    ``python bot.py`` 或 ``deploy start``（前台）启动时没有 PID 文件，
+    但进程明明在跑——2026-08-19 实测出现「api_reachable=true 却报未在运行」。
     """
     pid = read_pid()
-    alive = pid is not None and is_alive(pid)
+    pid_alive = pid is not None and is_alive(pid)
+    live = _fetch_live_status()
+
+    # 接口可达即视为运行中；它同时能补上 PID（进程自己报的，比文件可靠）
+    alive = live is not None or pid_alive
+    if live is not None and live.get("pid"):
+        pid = live["pid"]
+
     recent: dict | None = None
     try:
         if LOG_FILE.exists():
@@ -229,13 +241,13 @@ def status() -> dict:
                 recent = json.loads(lines[-1])
     except Exception:
         recent = None
-    live = _fetch_live_status()
     return {
         "pid": pid,
         "alive": alive,
+        "pid_file_present": pid_alive,   # GUI 据此判断进程是否由 deploy stop 管得了
+        "api_reachable": live is not None,
         "log_file": str(LOG_FILE),
         "recent_log": recent,
-        "api_reachable": live is not None,
         # 以下来自进程内状态接口；接口不可达时为 None
         "link": (live or {}).get("link"),
         "scheduler": (live or {}).get("scheduler"),

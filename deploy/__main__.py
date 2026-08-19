@@ -128,10 +128,14 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print(json.dumps(data, ensure_ascii=False, indent=2))
     else:
         if data["alive"]:
-            print(f"Stella 正在运行（PID {data['pid']}）。")
+            pid_txt = f"（PID {data['pid']}）" if data.get("pid") else ""
+            print(f"Stella 正在运行{pid_txt}。")
             if not data.get("api_reachable"):
-                # 进程在但 HTTP 服务未就绪：启动中，或 uvicorn 异常
-                print("  状态接口暂不可达（可能仍在启动中）。")
+                # PID 文件说活着但接口不可达：仍在启动中，或状态接口被关闭
+                print("  状态接口不可达 —— 可能仍在启动，或 STELLA_STATUS_API_ENABLED=false。")
+            elif not data.get("pid_file_present"):
+                # 接口可达但无 PID 文件：不是 deploy start --detach 启动的
+                print("  未找到 PID 文件 —— 该进程可能是手工启动的（deploy stop 无法停止它）。")
             link = data.get("link")
             if link:
                 print(f"  链路：{'健康' if link['healthy'] else '异常'}"

@@ -1,6 +1,8 @@
 {
   "pid": 18432,
   "alive": true,
+  "pid_file_present": true,
+  "api_reachable": true,
   "log_file": "logs/stella.jsonl",
   "recent_log": {
     "ts": "2026-08-19T08:52:14.331000+08:00",
@@ -18,5 +20,27 @@
     "last_probe_seconds_ago": null,
     "timeout": 300,
     "healthy": true
-  }
+  },
+  "scheduler": {
+    "chat": {
+      "waiting": 2,
+      "holder": "reply:263402786",
+      "held_seconds": 8.2,
+      "acquired": 341,
+      "avg_wait": 0.41,
+      "avg_hold": 3.2,
+      "peak_waiting": 4
+    },
+    "consolidation": {
+      "waiting": 0,
+      "holder": null,
+      "held_seconds": 0.0,
+      "acquired": 27,
+      "avg_wait": 1.05,
+      "avg_hold": 12.6,
+      "peak_waiting": 1
+    }
+  },
+  "uptime_seconds": 4127.5,
+  "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null"
 }

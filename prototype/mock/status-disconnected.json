@@ -1,17 +1,22 @@
 {
   "pid": 18432,
   "alive": true,
+  "pid_file_present": true,
+  "api_reachable": true,
   "log_file": "logs/stella.jsonl",
   "recent_log": null,
   "link": {
     "enabled": true,
     "connected": false,
     "bot_self_id": "3213194821",
-    "connected_seconds": 0,
+    "connected_seconds": null,
     "last_event_seconds_ago": null,
     "last_probe_ok": false,
     "last_probe_seconds_ago": 84.1,
     "timeout": 300,
     "healthy": false
-  }
+  },
+  "scheduler": {},
+  "uptime_seconds": 4127.5,
+  "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null"
 }

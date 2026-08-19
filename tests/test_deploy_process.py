@@ -143,9 +143,10 @@ def test_status_dict_shape(monkeypatch, tmp_path):
     assert set(data) == {
         "pid",
         "alive",
+        "pid_file_present",
+        "api_reachable",
         "log_file",
         "recent_log",
-        "api_reachable",
         "link",
         "scheduler",
         "uptime_seconds",
@@ -153,6 +154,7 @@ def test_status_dict_shape(monkeypatch, tmp_path):
     }
     assert data["pid"] is None
     assert data["alive"] is False
+    assert data["pid_file_present"] is False
     assert data["recent_log"] is None
     assert data["api_reachable"] is False
 
@@ -166,9 +168,55 @@ def test_status_api_unreachable(monkeypatch, tmp_path):
     data = process.status()
     assert data["alive"] is False
     assert data["api_reachable"] is False
+    assert data["pid_file_present"] is False
     assert data["link"] is None
     assert data["scheduler"] is None
     assert data["uptime_seconds"] is None
+
+
+def test_status_api_reachable_without_pid_file(monkeypatch, tmp_path):
+    """接口可达是比 PID 文件更强的存活证据：无 PID 文件也报运行中，pid 从接口取。"""
+
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"pid": 99999, "link": {"healthy": True}, "scheduler": {}, "uptime_seconds": 12.0}
+
+    class _FakeHttpx:
+        def get(self, url, **kwargs):
+            return _FakeResp()
+
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "LOG_FILE", tmp_path / "stella.jsonl")
+    monkeypatch.setattr(process, "dotenv_values", lambda _p: {})
+    monkeypatch.setattr(process, "httpx", _FakeHttpx())
+    data = process.status()
+    assert data["alive"] is True
+    assert data["api_reachable"] is True
+    assert data["pid_file_present"] is False
+    assert data["pid"] == 99999
+    assert data["link"] == {"healthy": True}
+
+
+def test_status_pid_file_fallback_when_api_unreachable(monkeypatch, tmp_path):
+    """接口不可达但有 PID 文件：PID 文件兜底，仍报运行中（进程刚启动 / 状态接口被关）。"""
+    pid_file = tmp_path / "stella.pid"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "LOG_FILE", tmp_path / "stella.jsonl")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
+    proc, pid = _short_lived(5.0)
+    try:
+        process.write_pid(pid)
+        data = process.status()
+        assert data["alive"] is True
+        assert data["api_reachable"] is False
+        assert data["pid_file_present"] is True
+        assert data["pid"] == pid
+        assert data["link"] is None
+    finally:
+        proc.terminate()
+        proc.wait()
 
 
 def test_fetch_live_status_maps_wildcard_host(monkeypatch):

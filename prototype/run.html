@@ -100,6 +100,12 @@
         </div>` : ""}
 
 
+        <div class="sched-row">
+          <span class="sched-label">调度器</span>
+          ${schedHTML(st.scheduler)}
+        </div>
+
+
         <div class="log-bar">
           <h2>日志</h2>
           <div class="lv-filter">
@@ -169,6 +175,22 @@
 
     function escapeHTML(s) {
       return s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+
+
+    /** 调度器摘要：有排队时突出显示；空 dict（懒建资源从未 acquire 过）给兜底文案。 */
+    function schedHTML(sched) {
+      const s = sched || {};
+      const names = Object.keys(s);
+      if (!names.length) return `<span class="sched-empty">暂无调度记录</span>`;
+      return names.map(name => {
+        const d = s[name];
+        const wait = d.waiting
+          ? `<span class="w">排队 ${d.waiting} 个</span>`
+          : "空闲";
+        const holder = d.holder ? ` · ${d.holder}` : "";
+        return `<span class="sched-item">${name}：${wait}${holder}</span>`;
+      }).join("");
     }
 
 
