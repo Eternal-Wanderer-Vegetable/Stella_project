@@ -68,3 +68,4 @@ prompt_now.txt
 runtime/
 
 /memory/.space_assignments.json
+/release_backup/

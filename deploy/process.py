@@ -135,7 +135,7 @@ def start_detached() -> int:
 
 
 def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
-    """优雅停止：发信号 → 等 ``grace+5s`` → 仍存活则强杀。
+    """优雅停止：发信号 → 等待收尾 → 仍存活则强杀。
 
     返回 True 表示进程已退出（或本来就没在跑）。
 
@@ -162,7 +162,10 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
             os.kill(pid, signal.SIGTERM)
     except (OSError, ValueError) as e:
         print(f"发送信号失败: {e}，等待后强杀。")
-    deadline = time.monotonic() + grace_seconds + 5.0
+    # Tauri/Windows 下 CTRL_BREAK 可能因进程没有控制台而完全无效。不要把
+    # 配置中的后台任务收尾上限再额外加 5 秒，否则停止按钮会长时间无响应。
+    wait_seconds = min(grace_seconds, 3.0) if os.name == "nt" else grace_seconds
+    deadline = time.monotonic() + wait_seconds
     while time.monotonic() < deadline:
         if not is_alive(pid):
             print("Stella 已优雅退出。")
@@ -178,7 +181,7 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
     else:
         with contextlib.suppress(ProcessLookupError):
             os.kill(pid, signal.SIGKILL)
-    time.sleep(1.0)
+    time.sleep(0.2)
     if is_alive(pid):
         print("强杀后进程仍存活，请手动检查。")
         return False

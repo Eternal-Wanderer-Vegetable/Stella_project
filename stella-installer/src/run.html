@@ -57,6 +57,9 @@
     function render(st) {
       const ph = phase(st);
       const lk = st.link;
+      // render() 会重建日志节点；保留用户在关闭跟随时手动滚到的位置。
+      const previousLogView = root.querySelector("#log-view");
+      const previousScrollTop = previousLogView?.scrollTop ?? 0;
       // 进程活着但无 PID 文件，说明不是 deploy start --detach 启动的。
       const orphan = st.alive && st.api_reachable && !st.pid_file_present;
       const opsHTML = st.alive
@@ -119,7 +122,7 @@
         <div class="log-view" id="log-view">${logHTML()}</div>`;
 
       const lv = root.querySelector("#log-view");
-      if (follow) lv.scrollTop = lv.scrollHeight;
+      lv.scrollTop = follow ? lv.scrollHeight : previousScrollTop;
       lv.onscroll = () => {
         const atBottom = lv.scrollHeight - lv.scrollTop - lv.clientHeight < 30;
         if (!atBottom && follow) { follow = false; root.querySelector("#chk-follow").checked = false; }
