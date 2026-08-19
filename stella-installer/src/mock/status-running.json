@@ -1,0 +1,27 @@
+{
+  "pid": 36244,
+  "alive": true,
+  "pid_file_present": false,
+  "api_reachable": true,
+  "log_file": "E:\\stella\\stella_project\\logs\\stella.jsonl",
+  "recent_log": {
+    "ts": "2026-08-19T10:24:35.569851+08:00",
+    "level": "INFO",
+    "module": "uvicorn",
+    "message": "127.0.0.1:62152 - \"GET /stella/status HTTP/1.1\" 200"
+  },
+  "link": {
+    "enabled": true,
+    "connected": true,
+    "bot_self_id": "1694717255",
+    "connected_seconds": 13.726841449737549,
+    "last_event_seconds_ago": 6.730143070220947,
+    "last_probe_ok": null,
+    "last_probe_seconds_ago": null,
+    "timeout": 300,
+    "healthy": true
+  },
+  "scheduler": {},
+  "uptime_seconds": 259.91937708854675,
+  "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null"
+}

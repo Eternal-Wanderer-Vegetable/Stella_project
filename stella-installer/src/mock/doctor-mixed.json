@@ -1,0 +1,40 @@
+{
+  "summary": { "ok": 18, "warn": 3, "error": 2 },
+  "checks": [
+    {
+      "id": "lm_model_chat",
+      "level": "error",
+      "title": "模型未加载",
+      "detail": "配置的 LM_STUDIO_MODEL=/gemma-4-26b-a4b-qat 不在 LM Studio 已加载列表。",
+      "fix_hint": "在 LM Studio 中加载该模型，或修正 LM_STUDIO_MODEL。你可能想写的是：google/gemma-4-26b-a4b-qat"
+    },
+    {
+      "id": "legacy_group_id_tables",
+      "level": "error",
+      "title": "数据库为 v8 之前的旧结构",
+      "detail": "这些表仍使用已废弃的 group_id 列：memories、user_profiles。v8 起记忆按 group_shared_space 归属，旧结构会让全部记忆读写抛 no such column 并被静默吞掉——表现为「机器人一切正常但什么都不记」。",
+      "fix_hint": "v8 不做自动迁移。请停止程序，把 memory/agent_memory.db 与 memory/stella_memory_backup.db 一起移出（两个都要），重启后程序会建立 v8 新库。"
+    },
+    {
+      "id": "onebot_port",
+      "level": "warn",
+      "title": "反向 WS 端口可能被占用",
+      "detail": "端口 8080 当前无法 bind。",
+      "fix_hint": "若 Bot 正在运行，端口被自己占用属正常；否则用 netstat -ano | findstr :8080 排查占用进程。"
+    },
+    {
+      "id": "at_mention_health",
+      "level": "warn",
+      "title": "没有任何 AT_MENTION 消息记录",
+      "detail": "BOT_SELF=88 条但 AT_MENTION=0 条。Bot 在说话却没有任何「用户对它说」的记录，@ 消息可能未入库。",
+      "fix_hint": "检查 ai_gateway.py 中 group_silent_listener 的 priority 是否为 0 且小于所有 block=True 的处理器。"
+    },
+    {
+      "id": "db_cleanup",
+      "level": "warn",
+      "title": "启动时清库已开启",
+      "detail": "DB_CLEANUP_ON_START=true，每次启动会清空数据库。",
+      "fix_hint": "生产环境建议设为 false；若已积累记忆，请先备份再考虑关闭。"
+    }
+  ]
+}
