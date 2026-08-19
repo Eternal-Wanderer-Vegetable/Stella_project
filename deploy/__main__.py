@@ -122,6 +122,23 @@ def _cmd_start(args: argparse.Namespace) -> int:
     return subprocess.call([sys.executable, str(bot_path)])
 
 
+def _fmt_secs(value: float | None) -> str:
+    """秒数 → 可读字符串；None 显示为「—」。
+
+    dict.get(key, 0) 的默认值只在**键不存在**时生效，而 link_status() 里
+    connected_seconds / last_event_seconds_ago 在未连接时是显式的 None——
+    键存在、值为 None，默认值不会生效，直接进 :.0f 会 TypeError
+    （2026-08-19 实测：未连 NapCat 时 status 必崩）。
+    """
+    if value is None:
+        return "—"
+    if value < 60:
+        return f"{value:.0f} 秒"
+    if value < 3600:
+        return f"{value / 60:.0f} 分钟"
+    return f"{value / 3600:.1f} 小时"
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     data = process.status()
     if args.json:
@@ -138,9 +155,18 @@ def _cmd_status(args: argparse.Namespace) -> int:
                 print("  未找到 PID 文件 —— 该进程可能是手工启动的（deploy stop 无法停止它）。")
             link = data.get("link")
             if link:
-                print(f"  链路：{'健康' if link['healthy'] else '异常'}"
-                      f"（已连接 {link.get('connected_seconds', 0):.0f}s，"
-                      f"最近事件 {link.get('last_event_seconds_ago', 0):.0f}s 前）")
+                if not link.get("enabled"):
+                    print("  链路监测已关闭（LINK_MONITOR_ENABLED=false）。")
+                elif link.get("connected"):
+                    print(
+                        f"  链路：{'健康' if link.get('healthy') else '异常'}"
+                        f"（QQ {link.get('bot_self_id') or '?'}，"
+                        f"已连接 {_fmt_secs(link.get('connected_seconds'))}，"
+                        f"最近事件 {_fmt_secs(link.get('last_event_seconds_ago'))}前）"
+                    )
+                else:
+                    # 进程活着但协议端没连上来：最常见的是 NapCat 未启动或未登录
+                    print("  链路：协议端未连接 —— 检查 NapCat 是否运行并已登录。")
             sched = data.get("scheduler") or {}
             for name, s in sched.items():
                 if s.get("waiting"):

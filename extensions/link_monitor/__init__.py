@@ -196,6 +196,12 @@ def link_status() -> dict:
 
     healthy 是给调用方的单一布尔（已连接 且（事件新鲜 或 最近探活成功）），
     避免每个消费方各自拼判断逻辑。
+
+    注意本契约的坑：connected_seconds / last_event_seconds_ago 等在未连接时是
+    **显式的 None**（键存在、值为 None）。消费方不要用 dict.get(key, 0) 这种
+    「默认值只在键不存在时生效」的写法，否则 None 会直接进 :.0f 崩掉
+    （2026-08-19 实测两次）。若将来消费方变多，考虑在这里就生成一个
+    summary_text 人类可读字段，让消费方直接用、不再各自格式化。
     """
     now = time.time()
     last_event_seconds_ago = (

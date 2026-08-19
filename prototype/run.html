@@ -86,7 +86,7 @@
         </div>
 
 
-        ${lk ? `
+        ${lk ? (lk.connected ? `
         <div class="link-row">
           <div class="item"><span class="k">链路</span>
             <span class="v ${lk.healthy ? "good" : "bad"}">${lk.healthy ? "健康" : "异常"}</span></div>
@@ -97,7 +97,13 @@
           ${lk.last_probe_ok !== null ? `
           <div class="item"><span class="k">最近探活</span>
             <span class="v ${lk.last_probe_ok ? "good" : "bad"}">${lk.last_probe_ok ? "成功" : "失败"}</span></div>` : ""}
-        </div>` : ""}
+        </div>` : `
+        <div class="link-row">
+          <div class="item"><span class="k">链路</span>
+            <span class="v bad">协议端未连接</span></div>
+          <div class="item"><span class="k">检查</span>
+            <span class="v">NapCat 是否运行并已登录</span></div>
+        </div>`) : ""}
 
 
         <div class="sched-row">
@@ -182,7 +188,7 @@
     function schedHTML(sched) {
       const s = sched || {};
       const names = Object.keys(s);
-      if (!names.length) return `<span class="sched-empty">暂无调度记录</span>`;
+      if (!names.length) return `<span class="sched-empty">暂无排队</span>`;
       return names.map(name => {
         const d = s[name];
         const wait = d.waiting
