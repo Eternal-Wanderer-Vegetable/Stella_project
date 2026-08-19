@@ -52,6 +52,9 @@ header {
 }
 header h1 { font-size: 19px; font-weight: 600; margin: 0; }
 header .ver { color: var(--text-faint); font-size: 12px; font-family: var(--mono); }
+.page-nav { display: flex; gap: 12px; margin-left: auto; font-size: 13px; }
+.page-nav a { color: var(--text-dim); text-decoration: none; }
+.page-nav a.current { color: var(--accent); }
 .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 20px; }
 
 
@@ -356,3 +359,43 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   cursor: pointer;
 }
 .follow-tag input { accent-color: var(--accent); }
+
+
+/* ── 提示条：解释状态而非报错，语气比 warn 更轻 ── */
+.notice {
+  display: flex;
+  gap: 10px;
+  background: rgba(91, 140, 255, 0.07);
+  border: 1px solid rgba(91, 140, 255, 0.22);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  user-select: text;
+}
+.notice-error { border-color: rgba(242, 85, 90, 0.45); }
+.notice-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 18px;
+}
+.notice-error .notice-icon { background: var(--error); }
+.notice-sub {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-top: 5px;
+  line-height: 1.7;
+}
+.notice code {
+  font-family: var(--mono);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}

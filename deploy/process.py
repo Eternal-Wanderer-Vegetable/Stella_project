@@ -138,9 +138,19 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
     """优雅停止：发信号 → 等 ``grace+5s`` → 仍存活则强杀。
 
     返回 True 表示进程已退出（或本来就没在跑）。
+
+    没有 PID 文件时会查询状态接口：若接口可达，说明 Bot 确实在运行但不是
+    ``deploy start --detach`` 启动的，本函数无法定位并停止它，返回 False。
     """
     pid = read_pid()
     if pid is None or not is_alive(pid):
+        live = _fetch_live_status()
+        if live is not None:
+            print("检测到 Stella 正在运行，但没有 PID 文件——它不是用")
+            print("  python -m deploy start --detach 启动的，因此无法从这里停止。")
+            print(f"  进程 PID（由状态接口自报）：{live.get('pid', '?')}")
+            print("  请在启动它的终端按 Ctrl+C，或用任务管理器结束该 PID。")
+            return False
         print("未发现运行中的 Stella 进程。")
         clear_pid()
         return True

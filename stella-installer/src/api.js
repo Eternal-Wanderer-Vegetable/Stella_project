@@ -50,21 +50,33 @@ export async function runDoctor(scenario = "mixed") {
 
 /** 进程与链路状态。对应 `python -m deploy status --json`。 */
 export async function getStatus(scenario = "running") {
-  await delay(200);
-  const res = await fetch(`./mock/status-${scenario}.json`);
-  return await res.json();
+  if (USE_MOCK || !invoke) {
+    await delay(200);
+    const res = await fetch(`./mock/status-${scenario}.json`);
+    return await res.json();
+  }
+  return JSON.parse(await invoke("get_status"));
 }
 
 
-/** 读日志尾部 N 行（每行一个 JSON 对象）。Rust 侧读 logs/stella.jsonl。 */
-export async function readLogTail(lines = 200) {
-  await delay(150);
-  const res = await fetch("./mock/logs.jsonl");
-  const text = await res.text();
+/**
+ * 读日志尾部。Rust 侧直读文件（不经 Python）——更快，且 Bot 崩了之后
+ * 仍能读到崩溃前的日志。
+ *
+ * path 来自 getStatus() 的 log_file 字段：日志路径由 STELLA_JSON_LOG_PATH
+ * 配置决定，硬编码会在用户改过配置时读错文件。
+ */
+export async function readLogTail(path = null, maxBytes = 262144) {
+  let text;
+  if (USE_MOCK || !invoke) {
+    await delay(150);
+    text = await (await fetch("./mock/logs.jsonl")).text();
+  } else {
+    text = await invoke("read_log_tail", { path, maxBytes });
+  }
   return text
     .split("\n")
     .filter((l) => l.trim())
-    .slice(-lines)
     .map((l) => {
       try {
         return JSON.parse(l);
@@ -77,17 +89,23 @@ export async function readLogTail(lines = 200) {
 }
 
 
-/** 启动 Bot（后台）。对应 `deploy start --detach`。 */
-export async function startBot() {
-  await delay(1200);
-  return { ok: true };
+/** 启动 Bot（后台）。force=true 时忽略 doctor 的阻塞问题。 */
+export async function startBot(force = false) {
+  if (USE_MOCK || !invoke) {
+    await delay(1200);
+    return { ok: true };
+  }
+  return { ok: true, message: await invoke("start_bot", { force }) };
 }
 
 
-/** 优雅停止。对应 `deploy stop`。 */
+/** 优雅停止。可能耗时较久（等在途任务收尾）。 */
 export async function stopBot() {
-  await delay(1500);
-  return { ok: true };
+  if (USE_MOCK || !invoke) {
+    await delay(1500);
+    return { ok: true };
+  }
+  return { ok: true, message: await invoke("stop_bot") };
 }
 
 

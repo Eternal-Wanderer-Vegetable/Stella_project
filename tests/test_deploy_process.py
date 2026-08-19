@@ -103,9 +103,27 @@ def test_is_zombie_nonexistent_pid():
 def test_stop_no_running_process(monkeypatch, tmp_path, capsys):
     pid_file = tmp_path / "stella.pid"
     monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
     assert process.stop(grace_seconds=0.1) is True
     assert "未发现运行中的 Stella" in capsys.readouterr().out
     assert process.read_pid() is None
+
+
+def test_stop_without_pid_but_api_reachable(monkeypatch, tmp_path, capsys):
+    """手工启动的进程没有 PID 文件，状态接口可达时不能假装停止成功。"""
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: {"pid": 999})
+    assert process.stop(grace_seconds=0.1) is False
+    out = capsys.readouterr().out
+    assert "无法从这里停止" in out
+    assert "999" in out
+
+
+def test_stop_without_pid_and_api_unreachable(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
+    assert process.stop(grace_seconds=0.1) is True
+    assert "未发现运行中的 Stella" in capsys.readouterr().out
 
 
 def test_stop_kills_live_process(monkeypatch, tmp_path):
