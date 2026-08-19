@@ -1,0 +1,204 @@
+/* 深色为主。安装器多在夜间/初次配置时使用，且与 NapCatQQ Desktop 观感一致。
+   用 CSS 变量集中管理颜色，方便你改主题。 */
+:root {
+  --bg: #16181d;
+  --bg-elev: #1e2128;
+  --bg-hover: #262a33;
+  --border: #2f343d;
+  --text: #e4e6eb;
+  --text-dim: #9aa0aa;
+  --text-faint: #6b717c;
+
+
+  --error: #f2555a;
+  --error-bg: rgba(242, 85, 90, 0.08);
+  --warn: #e8a33d;
+  --warn-bg: rgba(232, 163, 61, 0.08);
+  --ok: #3fbf7f;
+
+
+  --accent: #5b8cff;
+  --radius: 8px;
+  --mono: "Cascadia Code", "Consolas", "Microsoft YaHei Mono", monospace;
+}
+
+
+* { box-sizing: border-box; }
+
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  /* 桌面应用不需要选中大段文本；但检查详情要能选中复制，所以只禁用容器 */
+  user-select: none;
+}
+
+
+.app {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+}
+
+
+/* ── 顶部标题 ── */
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+header h1 { font-size: 19px; font-weight: 600; margin: 0; }
+header .ver { color: var(--text-faint); font-size: 12px; font-family: var(--mono); }
+.subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 20px; }
+
+
+/* ── 汇总条 ── */
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.summary .verdict { font-size: 15px; font-weight: 600; }
+.summary .verdict.blocked { color: var(--error); }
+.summary .verdict.warned { color: var(--warn); }
+.summary .verdict.clean { color: var(--ok); }
+.summary .counts { display: flex; gap: 12px; margin-left: auto; font-size: 12px; }
+.summary .counts span { color: var(--text-dim); font-family: var(--mono); }
+.summary .counts b { font-weight: 600; }
+.counts .c-error b { color: var(--error); }
+.counts .c-warn b { color: var(--warn); }
+.counts .c-ok b { color: var(--ok); }
+
+
+/* ── 操作区 ── */
+.actions { display: flex; gap: 8px; margin-bottom: 20px; }
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+button:hover { background: var(--bg-hover); border-color: #3d434e; }
+button:active { transform: translateY(1px); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: #6d99ff; }
+button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+
+/* ── 检查项列表 ── */
+.checks { display: flex; flex-direction: column; gap: 8px; }
+
+
+.check {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.check.error { border-left-color: var(--error); background: var(--error-bg); }
+.check.warn  { border-left-color: var(--warn);  background: var(--warn-bg); }
+
+
+/* 整行可点击展开 */
+.check-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.check-head:hover { background: rgba(255, 255, 255, 0.02); }
+
+
+.icon { width: 16px; text-align: center; font-size: 13px; flex-shrink: 0; }
+.check.error .icon { color: var(--error); }
+.check.warn  .icon { color: var(--warn); }
+
+
+.check-title { font-weight: 500; }
+.check-id {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.chevron {
+  color: var(--text-faint);
+  font-size: 10px;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.check.open .chevron { transform: rotate(90deg); }
+
+
+/* 展开区：detail 与 fix_hint 需要能选中复制 */
+.check-body {
+  display: none;
+  padding: 0 14px 14px 40px;
+  user-select: text;
+}
+.check.open .check-body { display: block; }
+
+
+.check-body .detail {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+.check-body .fix {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.check-body .fix .label {
+  display: block;
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+}
+/* fix_hint 里常含命令与路径，等宽显示更易读、也更容易看出空格 */
+.check-body .fix code {
+  font-family: var(--mono);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+
+/* ── 全部通过 ── */
+.all-clear {
+  text-align: center;
+  padding: 44px 20px;
+  color: var(--text-dim);
+}
+.all-clear .big { font-size: 34px; color: var(--ok); margin-bottom: 10px; }
+
+
+/* ── 加载中 ── */
+.loading { text-align: center; padding: 44px; color: var(--text-dim); }
+
+
+/* ── 底部提示 ── */
+.footer-hint {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.footer-hint a { color: var(--accent); text-decoration: none; }

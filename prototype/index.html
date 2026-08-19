@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stella 环境自检</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>环境自检</h1>
+      <span class="ver">v2.4.0</span>
+    </header>
+    <p class="subtitle">启动前检查配置、模型与数据库状态。发现问题时会给出具体的修复方法。</p>
+
+
+    <div id="root"></div>
+
+
+    <div class="footer-hint">
+      修不好？点「复制检查报告」，把内容贴到
+      <a href="#" id="issue-link">GitHub Issues</a> —— 报告里已包含环境信息，不含你的群号与密钥。
+    </div>
+  </div>
+
+
+  <script type="module">
+    import { runDoctor, copyText } from "./api.js";
+
+
+    const root = document.getElementById("root");
+    const ICONS = { error: "✕", warn: "!", ok: "✓" };
+    // 原型用：切换场景看不同界面。移植时删掉这一行与下面的 <select>
+    let scenario = "mixed";
+
+
+    function verdict(s) {
+      if (s.error > 0) return { cls: "blocked", text: "存在阻塞问题，建议修复后再启动" };
+      if (s.warn > 0) return { cls: "warned", text: "可以启动，但有几处值得注意" };
+      return { cls: "clean", text: "一切就绪" };
+    }
+
+
+    /** fix_hint 里的路径/命令/配置名自动转 <code>，提升可读性。
+        真实数据里这些片段没有标记，只能靠启发式识别。 */
+    function markup(text) {
+      const esc = text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      return esc
+        // 全大写配置项名（含下划线）
+        .replace(/\b([A-Z][A-Z0-9_]{4,})\b/g, "<code>$1</code>")
+        // 路径与命令（含 / 或 \ 或以 python 开头）
+        .replace(/\b((?:python |netstat |memory\/|config\/)[^\s，。；]+)/g, "<code>$1</code>");
+    }
+
+
+    function render(data) {
+      const v = verdict(data.summary);
+      const hasIssues = data.checks.length > 0;
+
+
+      root.innerHTML = `
+        <div class="summary">
+          <span class="verdict ${v.cls}">${v.text}</span>
+          <div class="counts">
+            <span class="c-error">错误 <b>${data.summary.error}</b></span>
+            <span class="c-warn">警告 <b>${data.summary.warn}</b></span>
+            <span class="c-ok">通过 <b>${data.summary.ok}</b></span>
+          </div>
+        </div>
+
+
+        <div class="actions">
+          <button class="primary" id="btn-recheck">重新检查</button>
+          <button id="btn-copy" ${hasIssues ? "" : "disabled"}>复制检查报告</button>
+          <select id="sel-scenario" style="margin-left:auto">
+            <option value="mixed">场景：有问题</option>
+            <option value="clean">场景：全通过</option>
+          </select>
+        </div>
+
+
+        ${hasIssues
+          ? `<div class="checks">${data.checks.map(checkHTML).join("")}</div>`
+          : `<div class="all-clear">
+               <div class="big">✓</div>
+               <div>全部 ${data.summary.ok} 项检查通过，可以启动了。</div>
+             </div>`}
+      `;
+
+
+      // 整行点击展开
+      root.querySelectorAll(".check-head").forEach(h => {
+        h.onclick = () => h.parentElement.classList.toggle("open");
+      });
+      root.querySelector("#btn-recheck").onclick = load;
+      root.querySelector("#btn-copy").onclick = () => copyReport(data);
+      root.querySelector("#sel-scenario").value = scenario;
+      root.querySelector("#sel-scenario").onchange = (e) => {
+        scenario = e.target.value;
+        load();
+      };
+    }
+
+
+    function checkHTML(c) {
+      return `
+        <div class="check ${c.level}">
+          <div class="check-head">
+            <span class="icon">${ICONS[c.level]}</span>
+            <span class="check-title">${c.title}</span>
+            <span class="check-id">${c.id}</span>
+            <span class="chevron">▶</span>
+          </div>
+          <div class="check-body">
+            <p class="detail">${markup(c.detail)}</p>
+            ${c.fix_hint ? `<div class="fix">
+              <span class="label">怎么修</span>${markup(c.fix_hint)}
+            </div>` : ""}
+          </div>
+        </div>`;
+    }
+
+
+    /** 报告格式面向「贴进 issue」：带环境信息、只列问题、不含敏感值。 */
+    async function copyReport(data) {
+      const lines = [
+        "### Stella 环境自检报告",
+        "",
+        `- 版本：v2.4.0`,
+        `- 汇总：错误 ${data.summary.error} / 警告 ${data.summary.warn} / 通过 ${data.summary.ok}`,
+        "",
+      ];
+      for (const c of data.checks) {
+        lines.push(`**[${c.level.toUpperCase()}] ${c.title}** \`${c.id}\``);
+        lines.push(`- 详情：${c.detail}`);
+        if (c.fix_hint) lines.push(`- 提示：${c.fix_hint}`);
+        lines.push("");
+      }
+      await copyText(lines.join("\n"));
+      const btn = root.querySelector("#btn-copy");
+      btn.textContent = "已复制";
+      setTimeout(() => (btn.textContent = "复制检查报告"), 1600);
+    }
+
+
+    async function load() {
+      root.innerHTML = `<div class="loading">正在检查…</div>`;
+      render(await runDoctor(scenario));
+    }
+
+
+    load();
+  </script>
+</body>
+</html>
