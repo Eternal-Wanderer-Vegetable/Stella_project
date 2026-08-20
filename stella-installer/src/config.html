@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stella 初始配置</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>初始配置</h1>
+      <span class="ver">v2.4.0</span>
+      <a class="nav-secondary" href="./doctor.html">环境自检</a>
+    </header>
+    <p class="subtitle">填写启动 Stella 所需的连接和模型信息。配置会写入项目根目录的 .env。</p>
+    <div id="root"><div class="loading">正在读取配置…</div></div>
+  </div>
+
+  <script type="module">
+    import { getConfig, saveConfig, listModels, runDoctor } from "./api.js";
+
+    const root = document.getElementById("root");
+    let config = null;
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function render() {
+      root.innerHTML = `
+        <div class="config-card">
+          <h2>Stella 配置</h2>
+          <p class="config-help">群号和模型 ID 必须填写；模型列表可从本机 LM Studio 自动读取，也可以手工输入。</p>
+          <form id="config-form">
+            <div class="config-grid">
+              <div class="config-field full">
+                <label for="allowed_groups">允许响应的 QQ 群号（逗号分隔）</label>
+                <input id="allowed_groups" value="${esc(config.allowed_groups)}" placeholder="123456789,987654321" required />
+              </div>
+              <div class="config-field">
+                <label for="onebot_mode">OneBot 连接方式</label>
+                <select id="onebot_mode">
+                  <option value="reverse" ${config.onebot_mode === "reverse" ? "selected" : ""}>反向 WS：Stella 监听端口</option>
+                  <option value="forward" ${config.onebot_mode === "forward" ? "selected" : ""}>正向 WS：连接 NapCat 服务端</option>
+                </select>
+              </div>
+              <div class="config-field">
+                <label for="access_token">OneBot access token（可留空）</label>
+                <input id="access_token" type="password" value="${esc(config.access_token)}" />
+              </div>
+              <div class="config-field reverse-only">
+                <label for="host">监听地址</label>
+                <input id="host" value="${esc(config.host)}" />
+              </div>
+              <div class="config-field reverse-only">
+                <label for="port">监听端口</label>
+                <input id="port" type="number" min="1" max="65535" value="${esc(config.port)}" />
+              </div>
+              <div class="config-field full forward-only">
+                <label for="ws_urls">NapCat WS 服务端地址（逗号分隔）</label>
+                <textarea id="ws_urls" placeholder="ws://127.0.0.1:3001">${esc(config.ws_urls)}</textarea>
+              </div>
+              <div class="config-field full">
+                <label for="lm_base_url">LM Studio 地址</label>
+                <input id="lm_base_url" value="${esc(config.lm_base_url)}" placeholder="http://127.0.0.1:1234" />
+              </div>
+              <div class="config-field">
+                <label for="chat_model">主聊天模型 ID</label>
+                <input id="chat_model" list="model-list" value="${esc(config.chat_model)}" placeholder="例如 google/gemma-3-27b" required />
+              </div>
+              <div class="config-field">
+                <label for="consolidation_model">记忆整合模型 ID</label>
+                <input id="consolidation_model" list="model-list" value="${esc(config.consolidation_model)}" placeholder="例如 google/gemma-3-4b" required />
+              </div>
+              <datalist id="model-list"></datalist>
+            </div>
+            <div class="config-actions">
+              <button type="submit" class="primary" id="btn-save">保存并检查</button>
+              <button type="button" id="btn-models">读取 LM Studio 模型</button>
+              <span class="config-status" id="status"></span>
+            </div>
+            <div class="config-error" id="error"></div>
+          </form>
+        </div>`;
+
+      const mode = root.querySelector("#onebot_mode");
+      const updateMode = () => {
+        root.querySelectorAll(".reverse-only").forEach(e => e.style.display = mode.value === "reverse" ? "" : "none");
+        root.querySelectorAll(".forward-only").forEach(e => e.style.display = mode.value === "forward" ? "" : "none");
+      };
+      mode.onchange = updateMode;
+      updateMode();
+      root.querySelector("#btn-models").onclick = loadModels;
+      root.querySelector("#config-form").onsubmit = save;
+    }
+
+    function collect() {
+      const value = id => root.querySelector(`#${id}`).value.trim();
+      return {
+        allowed_groups: value("allowed_groups"),
+        onebot_mode: value("onebot_mode"),
+        host: value("host"),
+        port: Number(value("port")),
+        ws_urls: value("ws_urls"),
+        access_token: value("access_token"),
+        lm_base_url: value("lm_base_url"),
+        chat_model: value("chat_model"),
+        consolidation_model: value("consolidation_model"),
+      };
+    }
+
+    async function loadModels() {
+      const button = root.querySelector("#btn-models");
+      const status = root.querySelector("#status");
+      button.disabled = true;
+      status.textContent = "正在读取…";
+      try {
+        const models = await listModels(root.querySelector("#lm_base_url").value.trim());
+        root.querySelector("#model-list").innerHTML = models.map(m => `<option value="${esc(m)}"></option>`).join("");
+        status.textContent = models.length ? `已读取 ${models.length} 个模型` : "未发现已加载模型，可手工输入";
+      } catch (e) {
+        status.textContent = `读取失败：${e}`;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function save(event) {
+      event.preventDefault();
+      const button = root.querySelector("#btn-save");
+      const status = root.querySelector("#status");
+      const error = root.querySelector("#error");
+      button.disabled = true;
+      error.textContent = "";
+      status.textContent = "正在保存并检查…首次配置可能需要一点时间。";
+      try {
+        await saveConfig(collect());
+        const doctor = await runDoctor();
+        if (doctor.summary?.blocking) {
+          location.replace("./doctor.html");
+        } else {
+          location.replace("./run.html");
+        }
+      } catch (e) {
+        error.textContent = String(e);
+        status.textContent = "保存失败";
+        button.disabled = false;
+      }
+    }
+
+    try {
+      config = await getConfig();
+      render();
+    } catch (e) {
+      root.innerHTML = `<div class="notice notice-error">无法读取配置：<code>${esc(e)}</code></div>`;
+    }
+  </script>
+</body>
+</html>

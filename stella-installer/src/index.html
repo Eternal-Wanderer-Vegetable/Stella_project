@@ -14,7 +14,7 @@
   </div>
 
   <script type="module">
-    import { runDoctor } from "./api.js";
+    import { getConfig, runDoctor } from "./api.js";
 
     const st = document.getElementById("st");
 
@@ -28,6 +28,12 @@
      */
     (async () => {
       try {
+        const config = await getConfig();
+        if (!config.configured) {
+          st.textContent = "尚未完成配置，正在打开配置向导…";
+          setTimeout(() => location.replace("./config.html"), 300);
+          return;
+        }
         const data = await runDoctor();
         if (data.summary?.blocking) {
           st.textContent = "发现需要处理的问题，正在打开环境自检…";

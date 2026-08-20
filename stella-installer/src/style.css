@@ -150,6 +150,41 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.primary:hover { background: #6d99ff; }
 button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
+.config-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+.config-card h2 { margin: 0 0 6px; font-size: 18px; }
+.config-help { color: var(--text-dim); font-size: 13px; margin: 0 0 20px; }
+.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+.config-field { display: flex; flex-direction: column; gap: 6px; }
+.config-field.full { grid-column: 1 / -1; }
+.config-field label { color: var(--text-dim); font-size: 12px; }
+.config-field input, .config-field select, .config-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.config-field textarea { min-height: 62px; resize: vertical; }
+.config-field input:focus, .config-field select:focus, .config-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.config-actions { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+.config-status { color: var(--text-dim); font-size: 12px; }
+.config-error { color: var(--error); white-space: pre-wrap; font-size: 12px; }
+@media (max-width: 650px) {
+  .config-grid { grid-template-columns: 1fr; }
+  .config-field.full { grid-column: auto; }
+}
+
 
 /* ── 检查项列表 ── */
 .checks { display: flex; flex-direction: column; gap: 8px; }

@@ -108,6 +108,36 @@ export async function stopBot() {
   return { ok: true, message: await invoke("stop_bot") };
 }
 
+/** 读取 GUI 配置向导的当前值。 */
+export async function getConfig() {
+  if (USE_MOCK || !invoke) {
+    return {
+      configured: false,
+      allowed_groups: "",
+      onebot_mode: "reverse",
+      host: "127.0.0.1",
+      port: 8080,
+      ws_urls: "",
+      access_token: "",
+      lm_base_url: "http://127.0.0.1:1234",
+      chat_model: "",
+      consolidation_model: "",
+    };
+  }
+  return JSON.parse(await invoke("get_config"));
+}
+
+/** 保存 GUI 配置，实际校验和 .env 渲染由 deploy init 完成。 */
+export async function saveConfig(config) {
+  if (USE_MOCK || !invoke) return { ok: true };
+  return await invoke("save_config", { config });
+}
+
+export async function listModels(baseUrl) {
+  if (USE_MOCK || !invoke) return [];
+  return JSON.parse(await invoke("list_models", { baseUrl }));
+}
+
 
 /** 复制到剪贴板。 */
 export async function copyText(text) {
