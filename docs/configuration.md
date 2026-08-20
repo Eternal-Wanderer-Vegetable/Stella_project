@@ -208,8 +208,6 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 
 > **尾巴的时间窗与断层标记**：仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生的事（2026-08-15 缺陷）。`RECENT_TAIL_MAX_AGE_MINUTES` 过滤掉超时消息；窗口内部相邻消息间隔超过 `RECENT_TAIL_GAP_MARK_MINUTES` 时插入一行「（……中间隔了 X……）」标记，让模型知道「之前聊过但已经过去很久」，而非直接失忆。
 
-`RECENT_MESSAGE_LIMIT` 已废弃（被 `RECENT_TAIL_LIMIT` 取代），保留定义以兼容既有 `.env`。
-
 ### 会话上下文压缩
 
 短时连续对话中，早期消息会滚出尾巴窗口而彻底消失。本机制把滚出的部分压缩成一段回顾，使 Bot 在长对话里保持连贯（类似 coding agent 的 compact）。
@@ -260,8 +258,6 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 | `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE` | `2` | 被动来源晋升所需的最低观察次数 |
 | `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` | `true` | `AT_MENTION` 来源是否单次即可晋升 |
 | `MEMORY_PROMOTE_MIN_IMPORTANCE` | `0.3` | 晋升所需的最低重要度（下限，不单独构成依据） |
-
-`MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE` / `MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE` 已废弃（被三档取代），保留定义以兼容既有 `.env`。
 
 ### 每用户配额
 
@@ -397,8 +393,6 @@ PROACTIVE_PROB_AT_SLOW=0.0
 **为什么需要消息数门槛**：纯时间冷却在冷清群里会造成「自己说完等 10 分钟又自己说」。消息数门槛能保证「话题真的往前走了」才插话。该计数是进程内的，重启后视为「新消息足够」，不会因重启而永久卡住主动发言。
 
 三种预设的实际频率参考（`CHECK_INTERVAL=60`）：`PROB_AT_FAST=0.15` 时活跃群命中期望约 6.7 分钟，叠加 `COOLDOWN=600` 与消息门槛后，实际发言间隔通常在 10 分钟以上。
-
-`PROACTIVE_MIN_PROB` / `PROACTIVE_MAX_PROB` / `PROACTIVE_HIGH_FREQ_INTERVAL` / `PROACTIVE_LOW_FREQ_INTERVAL` 已废弃（被双锚点曲线取代），保留定义以兼容既有 `.env`。
 
 ### 主动 @ 用户
 

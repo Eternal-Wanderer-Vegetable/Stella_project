@@ -345,8 +345,23 @@ pub fn find_python(root: &Path) -> PathBuf {
 /// UTF-8，但 stderr 可能混入其他编码（如 Windows 的系统错误消息），非法字节
 /// 不该让整个调用失败。
 pub fn run_deploy(args: &[&str]) -> Result<(String, String, i32), String> {
+    run_deploy_inner(args, true)
+}
+
+/// 执行无需准备 Python 的命令。关闭窗口时使用它，避免用户只打开界面后
+/// 关闭窗口却触发首次运行时下载。
+pub fn run_deploy_without_prepare(args: &[&str]) -> Result<(String, String, i32), String> {
+    run_deploy_inner(args, false)
+}
+
+fn run_deploy_inner(
+    args: &[&str],
+    prepare: bool,
+) -> Result<(String, String, i32), String> {
     let root = project_root();
-    prepare_runtime(&root)?;
+    if prepare {
+        prepare_runtime(&root)?;
+    }
     let python = find_python(&root);
 
     let mut cmd = Command::new(&python);

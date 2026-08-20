@@ -120,7 +120,7 @@ PROJECT_ROOT = _PROJECT_ROOT
 # ---------- 目录与文件路径（可通过 .env 覆盖） ----------
 # 各路径均锚定 PROJECT_ROOT，保证在不同工作目录下启动都能正确定位文件；
 # 如需自定义，在 .env 里设置同名环境变量（绝对路径）。
-SYSTEM_PROMPT_PATH = _env_path("SYSTEM_PROMPT_PATH", PROJECT_ROOT / "memory" / "SYSTEM.md")
+SYSTEM_PROMPT_PATH = _env_path("SYSTEM_PROMPT_PATH", PROJECT_ROOT / "system_prompts" / "default.md")
 DB_PATH = _env_path("DB_PATH", PROJECT_ROOT / "memory" / "agent_memory.db")
 THOUGHT_LOG_PATH = _env_path("THOUGHT_LOG_PATH", PROJECT_ROOT / "stella_thought_logs.md")
 EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
@@ -131,11 +131,6 @@ EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
 ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "").split(",") if x.strip()}
 
 # ---------- 上下文 ----------
-# ⚠️ 废弃（DEPRECATED）：RECENT_MESSAGE_LIMIT 已被 RECENT_TAIL_LIMIT 取代——
-# build_context 现在总是附加最近原始消息尾巴，recent_exchanges 仅在无尾巴时兜底，
-# RECENT_MESSAGE_LIMIT 不再被读取。保留定义仅供既有 .env 兼容（无效但不报错）。
-RECENT_MESSAGE_LIMIT = _env_int("RECENT_MESSAGE_LIMIT", 3)
-
 # 每次回复时附加的最近原始消息条数（含 Bot 自己的发言）。
 # 短期摘要由整合器产出，按设计滞后（需累积 CONSOLIDATION_TRIGGER_NEW_MESSAGES 条
 # 才更新），因此最近几轮对话必须以原始消息补足——否则 Bot 看不到自己刚说过什么，
@@ -206,14 +201,6 @@ RAG_ENABLED = _env("RAG_ENABLED", "true").lower() in ("true", "1", "yes")
 RAG_TOP_K = _env_int("RAG_TOP_K", 5)
 # 是否启用 SQLite FTS5 作为记忆检索索引
 RAG_SQLITE_FTS_ENABLED = _env("RAG_SQLITE_FTS_ENABLED", "true").lower() in ("true", "1", "yes")
-
-# ---------- 记忆候选处理策略 ----------
-# ⚠️ 废弃（DEPRECATED）：MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE / _MIN_IMPORTANCE
-# 已被 Gate 1 三档判定取代（见下：MEMORY_CONFIRM_HIGH_CONFIDENCE /
-# MEMORY_OBSERVE_LOW_CONFIDENCE / MEMORY_PROMOTE_*）。这两个键**保留定义仅供 .env
-# 兼容**——已有 .env 里配过它们的人不该静默失去配置项，但代码不再读取、不产生任何效果。
-MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_IMPORTANCE", 0.5)
-MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE = _env_float("MEMORY_CANDIDATE_CONFIRM_MIN_CONFIDENCE", 0.5)
 
 # ---------- 候选强化（交叉验证） ----------
 # 同一事实被再次独立观察到时的置信度增益。这是「暂存 → 交叉验证 → 逐步强化」
@@ -458,14 +445,6 @@ PROACTIVE_MIN_MESSAGES_SINCE_SPOKE = _env_int("PROACTIVE_MIN_MESSAGES_SINCE_SPOK
 PROACTIVE_CHECK_INTERVAL = _env_int("PROACTIVE_CHECK_INTERVAL", 60)
 # 消息频率估算窗口（取最近 N 条消息计算平均间隔）
 PROACTIVE_FREQ_WINDOW = _env_int("PROACTIVE_FREQ_WINDOW", 10)
-# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
-PROACTIVE_HIGH_FREQ_INTERVAL = _env_float("PROACTIVE_HIGH_FREQ_INTERVAL", 20.0)
-# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
-PROACTIVE_LOW_FREQ_INTERVAL = _env_float("PROACTIVE_LOW_FREQ_INTERVAL", 180.0)
-# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
-PROACTIVE_MAX_PROB = _env_float("PROACTIVE_MAX_PROB", 0.5)
-# 已由 PROACTIVE_PROB_AT_* 双锚点曲线取代，保留定义以兼容既有 .env
-PROACTIVE_MIN_PROB = _env_float("PROACTIVE_MIN_PROB", 0.05)
 # 主动发言时每次最多发出的行数（主动插话宜简短，避免刷屏）
 PROACTIVE_MAX_LINES = _env_int("PROACTIVE_MAX_LINES", 1)
 # 主动发言前若累计新消息达到该数量，则触发一次短期记忆总结

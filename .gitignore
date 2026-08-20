@@ -69,3 +69,4 @@ runtime/
 
 /memory/.space_assignments.json
 /release_backup/
+/config/spaces/

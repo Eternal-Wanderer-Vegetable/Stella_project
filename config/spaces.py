@@ -48,10 +48,11 @@ try:
 except ImportError:  # pragma: no cover - Python 3.10 需要 tomli 兜底（pyproject requires-python >=3.10）
     import tomli as tomllib
 
-from config.settings import ALLOWED_GROUPS, DB_PATH, PROJECT_ROOT
+from config.settings import ALLOWED_GROUPS, DB_PATH, PROJECT_ROOT, SYSTEM_PROMPT_PATH
 
 # 共享空间配置文件目录：config/spaces/*.toml
 SPACES_DIR = PROJECT_ROOT / "config" / "spaces"
+PROMPTS_DIR = PROJECT_ROOT / "system_prompts"
 # 自动命名账本（程序自己的状态文件，放在 DB 旁边，不是人/前端编辑的 TOML 配置）。
 # 结构：{"263402786": "space_1", "987654321": "space_2"}
 _AUTO_FILE = DB_PATH.parent / ".space_assignments.json"
@@ -59,6 +60,7 @@ _AUTO_FILE = DB_PATH.parent / ".space_assignments.json"
 # 模块级缓存：群号 → 空间名 / 空间名 → 群号列表
 _qq_to_space: dict[int, str] | None = None
 _space_to_qq: dict[str, list[int]] = {}
+_space_to_prompt: dict[str, str] = {}
 # 自动账本缓存 + 最近一次加载是否失败（失败时不得分配新名）
 _auto_ledger: dict[int, str] | None = None
 _auto_load_failed: bool = False
@@ -72,12 +74,14 @@ def _load() -> None:
     """
     from nonebot import logger
 
-    global _qq_to_space, _space_to_qq
+    global _qq_to_space, _space_to_qq, _space_to_prompt
     qq_to_space: dict[int, str] = {}
     space_to_qq: dict[str, list[int]] = {}
+    space_to_prompt: dict[str, str] = {}
     if not SPACES_DIR.is_dir():
         _qq_to_space = qq_to_space
         _space_to_qq = space_to_qq
+        _space_to_prompt = space_to_prompt
         return
     # 排序保证冲突处理确定性：同群出现在多个文件时采用文件名排序靠前的那个
     for path in sorted(SPACES_DIR.glob("*.toml")):
@@ -92,6 +96,9 @@ def _load() -> None:
         if not isinstance(qq_groups, list):
             logger.warning(f"⚠️ [Spaces] {path.name} 缺少 qq_groups 列表，跳过该文件")
             continue
+        prompt = data.get("system_prompt")
+        if isinstance(prompt, str) and prompt.strip():
+            space_to_prompt[space] = prompt.strip()
         for g in qq_groups:
             if not isinstance(g, int):
                 logger.warning(f"⚠️ [Spaces] {path.name} 中 {g!r} 不是整数群号，跳过")
@@ -108,6 +115,27 @@ def _load() -> None:
             space_to_qq.setdefault(space, []).append(g)
     _qq_to_space = qq_to_space
     _space_to_qq = space_to_qq
+    _space_to_prompt = space_to_prompt
+
+
+def prompt_path(space: str) -> Path:
+    """返回空间 prompt 路径；未指定或不存在时回退旧默认人格文件。"""
+    prompt = _space_to_prompt.get(space)
+    if prompt:
+        candidate = (PROMPTS_DIR / prompt).resolve()
+        if candidate.parent == PROMPTS_DIR.resolve() and candidate.is_file():
+            return candidate
+    if SYSTEM_PROMPT_PATH.is_file():
+        return SYSTEM_PROMPT_PATH
+    return PROJECT_ROOT / "memory" / "SYSTEM.md"
+
+
+def prompt_text(space: str) -> str:
+    path = prompt_path(space)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def _load_auto() -> dict[int, str]:
@@ -268,8 +296,9 @@ def reload() -> None:
 
     供测试与将来的前端热重载使用。
     """
-    global _qq_to_space, _space_to_qq, _auto_ledger, _auto_load_failed
+    global _qq_to_space, _space_to_qq, _space_to_prompt, _auto_ledger, _auto_load_failed
     _qq_to_space = None
     _space_to_qq = {}
+    _space_to_prompt = {}
     _auto_ledger = None
     _auto_load_failed = False

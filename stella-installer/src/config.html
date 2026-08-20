@@ -2,25 +2,35 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>Stella 初始配置</title>
+  <title>Stella 配置</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="app">
     <header>
-      <h1>初始配置</h1>
+      <h1>配置</h1>
       <span class="ver">v2.4.0</span>
-      <a class="nav-secondary" href="./doctor.html">环境自检</a>
+      <nav class="top-nav">
+        <a class="nav-secondary" href="./run.html">运行状态</a>
+        <a class="nav-secondary" href="./config.html">配置</a>
+        <a class="nav-secondary" href="./persona.html">人格设定</a>
+        <a class="nav-secondary" href="./doctor.html">环境自检</a>
+      </nav>
     </header>
     <p class="subtitle">填写启动 Stella 所需的连接和模型信息。配置会写入项目根目录的 .env。</p>
     <div id="root"><div class="loading">正在读取配置…</div></div>
   </div>
 
   <script type="module">
-    import { getConfig, saveConfig, listModels, runDoctor } from "./api.js";
+    import { getConfig, saveConfig, listModels, runDoctor, getVersion, installCloseOverlay } from "./api.js";
 
     const root = document.getElementById("root");
+    installCloseOverlay();
+    getVersion().then(v => { document.querySelector(".ver").textContent = `v${v}`; }).catch(() => {});
     let config = null;
+    let schemaFields = [];
+    let advancedValues = {};
+    const managedKeys = new Set(["ALLOWED_GROUPS", "HOST", "PORT", "ONEBOT_WS_URLS", "ONEBOT_ACCESS_TOKEN", "LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL", "CONSOLIDATION_LM_STUDIO_MODEL", "MEMORY_EMBEDDING_MODEL"]);
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -33,10 +43,6 @@
           <p class="config-help">群号和模型 ID 必须填写；模型列表可从本机 LM Studio 自动读取，也可以手工输入。</p>
           <form id="config-form">
             <div class="config-grid">
-              <div class="config-field full">
-                <label for="allowed_groups">允许响应的 QQ 群号（逗号分隔）</label>
-                <input id="allowed_groups" value="${esc(config.allowed_groups)}" placeholder="123456789,987654321" required />
-              </div>
               <div class="config-field">
                 <label for="onebot_mode">OneBot 连接方式</label>
                 <select id="onebot_mode">
@@ -72,14 +78,31 @@
                 <label for="consolidation_model">记忆整合模型 ID</label>
                 <input id="consolidation_model" list="model-list" value="${esc(config.consolidation_model)}" placeholder="例如 google/gemma-3-4b" required />
               </div>
+              <div class="config-field">
+                <label for="embedding_model">记忆语义检索模型 ID</label>
+                <input id="embedding_model" list="model-list" value="${esc(config.embedding_model)}" placeholder="例如 text-embedding-model" />
+              </div>
+              <div class="config-field full">
+                <label>共享空间</label>
+                <div id="space-rows"></div>
+                <button type="button" id="btn-add-space">+ 创建共享空间</button>
+                <span class="config-status">每个空间包含：空间名 → system prompt 文件 → 具体群号。同一空间共享长期记忆和人格。</span>
+              </div>
               <datalist id="model-list"></datalist>
             </div>
+            <div id="primary-groups"></div>
             <div class="config-actions">
               <button type="submit" class="primary" id="btn-save">保存并检查</button>
               <button type="button" id="btn-models">读取 LM Studio 模型</button>
               <span class="config-status" id="status"></span>
             </div>
             <div class="config-error" id="error"></div>
+            <details class="config-advanced">
+              <summary>高级配置（settings.py 中的全部运行参数）</summary>
+              <p class="config-help">默认折叠。这里对应项目的完整 .env 模板，适合熟悉 Stella 参数的用户编辑。基础配置项以页面上方表单为准。</p>
+              <button type="button" id="btn-reset-defaults">重置高级配置为默认值</button>
+              <div id="advanced-groups"></div>
+            </details>
           </form>
         </div>`;
 
@@ -90,14 +113,20 @@
       };
       mode.onchange = updateMode;
       updateMode();
+      renderSpaceRows();
+      schemaFields = config.schema?.fields || [];
+      advancedValues = { ...(config.advanced_values || {}) };
+      renderAdvanced();
+      root.querySelector("#btn-add-space").onclick = () => addSpaceRow();
       root.querySelector("#btn-models").onclick = loadModels;
+      root.querySelector("#btn-reset-defaults").onclick = resetDefaults;
       root.querySelector("#config-form").onsubmit = save;
     }
 
     function collect() {
       const value = id => root.querySelector(`#${id}`).value.trim();
       return {
-        allowed_groups: value("allowed_groups"),
+        allowed_groups: "",
         onebot_mode: value("onebot_mode"),
         host: value("host"),
         port: Number(value("port")),
@@ -106,7 +135,83 @@
         lm_base_url: value("lm_base_url"),
         chat_model: value("chat_model"),
         consolidation_model: value("consolidation_model"),
+        embedding_model: value("embedding_model"),
+        spaces: [...root.querySelectorAll(".space-row")].map(row => {
+          const fields = row.querySelectorAll("input");
+          return `${fields[0].value.trim()} | ${fields[1].value.trim()} | ${fields[2].value.trim()}`;
+        }).filter(line => line.replace(/[|\s]/g, "").length > 0).join("\n"),
+        advanced_env: buildAdvancedEnv(),
       };
+    }
+
+    function parseSpaces(raw) {
+      return raw.split("\n").map(line => line.trim()).filter(Boolean).map(line => {
+        if (line.includes("|")) {
+          const parts = line.split("|").map(v => v.trim());
+          return [parts[0] || "", parts[1] || "", parts[2] || ""];
+        }
+        const [name, groups = ""] = line.split(":");
+        return [name.trim(), "", groups.trim()];
+      });
+    }
+
+    function renderSpaceRows() {
+      const rows = root.querySelector("#space-rows");
+      rows.innerHTML = "";
+      parseSpaces(config.spaces || "").forEach(values => addSpaceRow(values));
+    }
+
+    function addSpaceRow(values = ["", "", ""]) {
+      const row = document.createElement("div");
+      row.className = "space-row";
+      row.innerHTML = `<input placeholder="空间名" value="${esc(values[0])}" /><input placeholder="prompt.md" value="${esc(values[1])}" /><input placeholder="群号，逗号分隔" value="${esc(values[2])}" /><button type="button" class="space-remove">删除</button>`;
+      row.querySelector(".space-remove").onclick = () => row.remove();
+      root.querySelector("#space-rows").appendChild(row);
+    }
+
+    function parseAdvanced() {
+      const groups = new Map();
+      for (const field of schemaFields) {
+        if (managedKeys.has(field.key)) continue;
+        const section = field.section || "其他设置";
+        if (!groups.has(section)) groups.set(section, { title: section, items: [] });
+        groups.get(section).items.push({
+          key: field.key,
+          value: advancedValues[field.key] ?? field.default ?? "",
+          description: field.description || "",
+        });
+      }
+      return [...groups.values()];
+    }
+
+    function renderAdvanced() {
+      const groups = parseAdvanced();
+      root.querySelector("#primary-groups").innerHTML = "";
+      root.querySelector("#advanced-groups").innerHTML = groups.filter(group => group.items.length).map(group => groupHTML(group, true)).join("");
+    }
+
+    function groupHTML(group, folded) {
+      const body = `<div class="advanced-fields">${group.items.map(item => `
+        <div class="advanced-field">
+          <label>${esc(item.key)}${item.description ? `<small>${esc(item.description)}</small>` : ""}</label>
+          <input data-adv-key="${esc(item.key)}" value="${esc(item.value)}" />
+        </div>`).join("")}</div>`;
+      return folded ? `<details class="advanced-group"><summary>${esc(group.title)} <span>${group.items.length} 项</span></summary>${body}</details>` : `<section class="primary-config-group"><h3>${esc(group.title)}</h3>${body}</section>`;
+    }
+
+    function resetDefaults() {
+      advancedValues = Object.fromEntries(schemaFields.map(field => [field.key, field.default ?? ""]));
+      renderAdvanced();
+      root.querySelector("#status").textContent = "已恢复高级配置默认值，点击保存后生效。";
+    }
+
+    function buildAdvancedEnv() {
+      const values = { ...advancedValues };
+      root.querySelectorAll("[data-adv-key]").forEach(input => { values[input.dataset.advKey] = input.value; });
+      const known = new Set(schemaFields.map(field => field.key));
+      const lines = schemaFields.map(field => `${field.key}=${values[field.key] ?? field.default ?? ""}`);
+      for (const [key, value] of Object.entries(values)) if (!known.has(key)) lines.push(`${key}=${value}`);
+      return lines.join("\n");
     }
 
     async function loadModels() {

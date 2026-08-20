@@ -71,6 +71,7 @@ from core.context import ChatContext
 from core.llm.lm_studio import LMStudioBackend
 from core.pipeline import Pipeline
 from core.shutdown import wait_for_tasks
+from config.spaces import prompt_text, resolve_space
 from extensions import load_extensions
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
@@ -143,6 +144,18 @@ if system_prompt_path.exists():
     logger.success(f"✅ 加载系统提示词 ({len(pipeline.system_prompt)} 字符)")
 else:
     logger.warning(f"⚠️ 系统提示词文件不存在: {system_prompt_path}")
+
+
+def _space_system_prompt(ctx: ChatContext) -> str:
+    """按共享空间选择人格；空间 prompt 不可用时由 config.spaces 回退默认文件。"""
+    try:
+        return prompt_text(resolve_space(int(ctx.group_id))) or pipeline.system_prompt
+    except Exception as e:
+        logger.warning(f"⚠️ 读取空间人格失败，使用默认人格: {e}")
+        return pipeline.system_prompt
+
+
+pipeline.system_prompt_resolver = _space_system_prompt
 
 # 加载插件目录下所有扩展（扩展可再向 pipeline 注册钩子/资源）
 load_extensions(pipeline, EXTENSIONS_DIR)

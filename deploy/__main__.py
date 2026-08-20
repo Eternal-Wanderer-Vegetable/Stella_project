@@ -21,7 +21,7 @@ from pathlib import Path
 
 from config import PROJECT_ROOT
 
-from . import checks, probe, process, report
+from . import checks, env_schema, probe, process, report
 from .init_wizard import (
     load_answers,
     print_next_steps,
@@ -185,6 +185,12 @@ def _cmd_stop(args: argparse.Namespace) -> int:
     return 0 if process.stop() else 1
 
 
+def _cmd_config_schema(args: argparse.Namespace) -> int:
+    data = env_schema.build_schema(PROJECT_ROOT / "config" / "settings.py")
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # 固定 UTF-8：Windows 下 stdout 被重定向（GUI 读管道/PS 管道）时
     # Python 会改用 ANSI 代码页，导致中文变乱码。强制 UTF-8 后
@@ -225,6 +231,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p_stop = sub.add_parser("stop", help="优雅停止（等后台任务收尾后强杀）")
     p_stop.set_defaults(func=_cmd_stop)
+
+    p_schema = sub.add_parser("config-schema", help="输出 settings.py 的配置 schema（供 GUI 使用）")
+    p_schema.add_argument("--json", action="store_true", help="兼容 GUI 调用")
+    p_schema.set_defaults(func=_cmd_config_schema)
 
     args = parser.parse_args(argv)
     return args.func(args)

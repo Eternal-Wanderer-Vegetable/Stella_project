@@ -80,6 +80,7 @@ class Pipeline:
         self._llm: LLMBackend | None = None
         self._timeout = timeout
         self.system_prompt: str = ""
+        self.system_prompt_resolver = None
 
     def register_pre_hook(self, hook: PreHook, priority: int = 10):
         """注册前置钩子，并按其优先级降序排列。
@@ -169,7 +170,10 @@ class Pipeline:
             # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
             ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
             ctx.llm_model = getattr(self._llm, "model", "") or getattr(self._llm, "site", "")
-            ctx.system_prompt_len = len(self.system_prompt)
+            system_prompt = self.system_prompt
+            if self.system_prompt_resolver is not None:
+                system_prompt = self.system_prompt_resolver(ctx)
+            ctx.system_prompt_len = len(system_prompt)
             ctx.prompt_log = user_prompt
 
             # 全局闸门：聊天主链路与压缩/候选提取共用同一 27B，经调度器 FIFO 串行。
@@ -181,7 +185,7 @@ class Pipeline:
                 _t0 = _time.monotonic()
                 try:
                     raw = await asyncio.wait_for(
-                        self._llm.generate(user_prompt, self.system_prompt),
+                        self._llm.generate(user_prompt, system_prompt),
                         timeout=self._timeout,
                     )
                     ctx.llm_elapsed = _time.monotonic() - _t0

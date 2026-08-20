@@ -122,6 +122,11 @@ export async function getConfig() {
       lm_base_url: "http://127.0.0.1:1234",
       chat_model: "",
       consolidation_model: "",
+      embedding_model: "",
+      spaces: "",
+      advanced_env: "",
+      advanced_values: {},
+      schema: { version: 1, fields: [] },
     };
   }
   return JSON.parse(await invoke("get_config"));
@@ -136,6 +141,33 @@ export async function saveConfig(config) {
 export async function listModels(baseUrl) {
   if (USE_MOCK || !invoke) return [];
   return JSON.parse(await invoke("list_models", { baseUrl }));
+}
+
+export async function getVersion() {
+  if (USE_MOCK || !invoke) return "2.4.0";
+  return await invoke("get_version");
+}
+
+export async function getPersonas() {
+  if (USE_MOCK || !invoke) return [];
+  return JSON.parse(await invoke("get_personas"));
+}
+
+export async function savePersona(space, promptFile, content) {
+  if (USE_MOCK || !invoke) return "已保存";
+  return await invoke("save_persona", { space, promptFile, content });
+}
+
+export async function installCloseOverlay() {
+  const listen = window.__TAURI__?.event?.listen;
+  if (!listen) return;
+  await listen("close-requested", () => {
+    if (document.getElementById("close-overlay")) return;
+    const overlay = document.createElement("div");
+    overlay.id = "close-overlay";
+    overlay.innerHTML = `<div class="close-card"><div class="close-spinner"></div><strong>正在安全关闭 Stella</strong><span>正在等待 Bot 完成退出，请勿强制关闭窗口。</span></div>`;
+    document.body.appendChild(overlay);
+  });
 }
 
 
