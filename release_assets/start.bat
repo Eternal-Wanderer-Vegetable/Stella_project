@@ -1,10 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-if defined STELLA_ROOT (
-    cd /d "%STELLA_ROOT%"
-) else (
-    cd /d "%~dp0"
-)
+cd /d "%~dp0"
 
 rem Stella runtime bootstrap and launcher.
 rem --prepare installs Python and dependencies without starting the bot.

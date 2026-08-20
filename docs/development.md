@@ -343,6 +343,8 @@ CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`desig
 
 升级 Python 版本时这四处要一并更新，并在本地完整跑一遍 `start.bat` 验证（会产生 `runtime/` 目录，已加入 `.gitignore`）。
 
+> **注意**：Tauri 安装器的首次安装逻辑在 `stella-installer/src-tauri/src/python.rs`（`runtime_bootstrap`）里用纯 Rust 复刻了同一流程，`PY_VER` / `PY_SHA256` / 下载镜像常量与 `start.bat` 必须同步修改——安装器不依赖 `start.bat`，它只是备用手动安装方式。
+
 > **编码约定**：`release_assets/` 里的 `.bat` 使用纯 ASCII，内部注释与输出统一使用英文；发布时仍统一转换为 CRLF，确保 Windows `cmd` 稳定解析。面向用户的 `README-快速开始.txt` 可继续使用 UTF-8 with BOM。
 
 ### 嵌入式 Python 的两处必改
