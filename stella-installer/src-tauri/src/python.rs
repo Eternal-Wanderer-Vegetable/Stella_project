@@ -76,18 +76,26 @@ fn prepare_runtime(root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    let script = root.join("start.bat");
-    if !script.is_file() {
+    let (script, script_root) = if root.join("start.bat").is_file() {
+        (root.join("start.bat"), root.to_path_buf())
+    } else if root.join("release_assets").join("start.bat").is_file() {
+        // This keeps `cargo tauri dev` usable from the source tree. Release
+        // packages use the first branch because start.bat is copied to root.
+        (root.join("release_assets").join("start.bat"), root.to_path_buf())
+    } else {
         // 开发环境可能没有发布版 start.bat，此时继续使用 PATH 中的 Python。
         return Ok(());
-    }
+    };
 
-    let command = format!("\"{}\" --prepare", script.display());
+    // `call` is required for reliable execution of a .bat file through cmd.exe,
+    // especially when the release directory contains spaces.
+    let command = format!("call \"{}\" --prepare", script.display());
     let status = Command::new("cmd.exe")
         .arg("/D")
         .arg("/C")
         .arg(command)
-        .current_dir(root)
+        .current_dir(&script_root)
+        .env("STELLA_ROOT", &script_root)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

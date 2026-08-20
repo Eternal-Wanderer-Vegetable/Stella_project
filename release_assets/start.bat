@@ -1,6 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
-cd /d "%~dp0"
+if defined STELLA_ROOT (
+    cd /d "%STELLA_ROOT%"
+) else (
+    cd /d "%~dp0"
+)
 
 rem Stella runtime bootstrap and launcher.
 rem --prepare installs Python and dependencies without starting the bot.
@@ -23,7 +27,7 @@ if errorlevel 1 call :try_download_ps "https://www.python.org/ftp/python/%PY_VER
 if errorlevel 1 call :try_download_ps "https://mirrors.huaweicloud.com/python/%PY_VER%/%PY_ZIP%" "%PY_ZIP%"
 if errorlevel 1 (
     echo [ERROR] Failed to download the Python runtime.
-    pause
+    if /i not "%~1"=="--prepare" pause
     exit /b 1
 )
 
@@ -36,7 +40,7 @@ set "HASH=!HASH: =!"
 if /i not "!HASH!"=="%PY_SHA256%" (
     echo [ERROR] Python runtime checksum verification failed.
     del "%PY_ZIP%" 2>nul
-    pause
+    if /i not "%~1"=="--prepare" pause
     exit /b 1
 )
 
@@ -45,7 +49,7 @@ powershell -NoProfile -Command "Expand-Archive -Path '%PY_ZIP%' -DestinationPath
 if errorlevel 1 (
     echo [ERROR] Failed to extract the Python runtime.
     del "%PY_ZIP%" 2>nul
-    pause
+    if /i not "%~1"=="--prepare" pause
     exit /b 1
 )
 
@@ -66,14 +70,14 @@ if not exist get-pip.py (
     "%PY%" -m ensurepip --upgrade
     if errorlevel 1 (
         echo [ERROR] Failed to install pip.
-        pause
+        if /i not "%~1"=="--prepare" pause
         exit /b 1
     )
 ) else (
     "%PY%" get-pip.py --no-warn-script-location
     if errorlevel 1 (
         echo [ERROR] Failed to install pip.
-        pause
+        if /i not "%~1"=="--prepare" pause
         exit /b 1
     )
 )
@@ -87,7 +91,7 @@ if errorlevel 1 (
 )
 if errorlevel 1 (
     echo [ERROR] Failed to install Python dependencies.
-    pause
+    if /i not "%~1"=="--prepare" pause
     exit /b 1
 )
 
