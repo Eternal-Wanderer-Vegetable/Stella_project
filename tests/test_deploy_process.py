@@ -29,6 +29,29 @@ def _short_lived(seconds: float = 5.0):
     return proc, proc.pid
 
 
+def _stubborn_child(seconds: float = 30.0):
+    """起一个忽略 SIGTERM/SIGBREAK 的子进程——降级信号杀不掉它，硬杀才会生效。
+
+    用于验证 stop() 的降级信号阶段不会抢在硬杀之前把进程结束掉。
+    """
+    code = (
+        "import signal, time\n"
+        "try: signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "except Exception: pass\n"
+        "try: signal.signal(signal.SIGBREAK, signal.SIG_IGN)\n"
+        "except Exception: pass\n"
+        f"time.sleep({seconds})"
+    )
+    flags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+    proc = subprocess.Popen(
+        [sys.executable, "-c", code],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+    )
+    return proc, proc.pid
+
+
 def test_pid_roundtrip(monkeypatch, tmp_path):
     pid_file = tmp_path / "stella.pid"
     monkeypatch.setattr(process, "PID_FILE", pid_file)
@@ -124,6 +147,51 @@ def test_stop_without_pid_and_api_unreachable(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
     assert process.stop(grace_seconds=0.1) is True
     assert "未发现运行中的 Stella" in capsys.readouterr().out
+
+
+def test_stop_writes_sentinel_before_hard_kill(monkeypatch, tmp_path):
+    """stop() 先写哨兵请求，硬杀只发生在请求与等待之后。"""
+    events: list[str] = []
+
+    def fake_request_stop(reason=""):
+        events.append("request")
+
+    def fake_hard_kill(pid):
+        events.append("hard_kill")
+        return True
+
+    pid_file = tmp_path / "stella.pid"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "request_stop", fake_request_stop)
+    monkeypatch.setattr(process, "_hard_kill", fake_hard_kill)
+    proc, pid = _stubborn_child(30.0)
+    process.write_pid(pid)
+    try:
+        assert process.stop(grace_seconds=0.1) is True
+        assert events[0] == "request"
+        assert "hard_kill" in events
+        assert events.index("request") < events.index("hard_kill")
+    finally:
+        proc.terminate()
+        proc.wait()
+
+
+def test_stop_clears_sentinel_on_exit(monkeypatch, tmp_path):
+    """stop() 返回后哨兵文件被清除（无论退出路径），避免下次启动自杀。"""
+    import core.stop_signal
+
+    sentinel = tmp_path / "stop-request"
+    pid_file = tmp_path / "stella.pid"
+    monkeypatch.setattr(core.stop_signal, "_sentinel_path", lambda: sentinel)
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    proc, pid = _short_lived(0.5)
+    process.write_pid(pid)
+    try:
+        assert process.stop(grace_seconds=0.1) is True
+    finally:
+        proc.terminate()
+        proc.wait()
+    assert not sentinel.exists()
 
 
 def test_stop_kills_live_process(monkeypatch, tmp_path):

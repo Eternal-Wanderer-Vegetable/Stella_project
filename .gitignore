@@ -57,6 +57,9 @@ deploy.answers.toml
 # 结构化 JSON 日志（GUI 消费）与进程 PID 文件
 logs/
 
+# 停止请求哨兵（deploy stop 写入，Bot 启动时清除）及其 .tmp 临时名
+.stella-stop-request*
+
 # Misc
 STARTCOMMAND.md
 

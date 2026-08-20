@@ -165,7 +165,7 @@ export async function installCloseOverlay() {
     if (document.getElementById("close-overlay")) return;
     const overlay = document.createElement("div");
     overlay.id = "close-overlay";
-    overlay.innerHTML = `<div class="close-card"><div class="close-spinner"></div><strong>正在安全关闭 Stella</strong><span>正在等待 Bot 完成退出，请勿强制关闭窗口。</span></div>`;
+    overlay.innerHTML = `<div class="close-card"><div class="close-spinner"></div><strong>正在安全关闭 Stella</strong><span>正在等待 Bot 完成退出……若有未完成的记忆整合，可能需要数十秒，请勿强制关闭窗口。</span></div>`;
     document.body.appendChild(overlay);
   });
 }

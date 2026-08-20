@@ -535,6 +535,16 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 
 **只接受回环地址的请求**（`127.0.0.1` / `::1`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
 
+## 优雅停止
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `SHUTDOWN_GRACE_SECONDS` | `30.0` | Bot 侧停止时等待在途任务（整合/压缩）收尾的上限（秒） |
+| `STELLA_STOP_SENTINEL` | `.stella-stop-request` | 停止请求哨兵路径（deploy stop 写入、Bot 内 watcher 观察后自行退出）；项目目录只读时可改到可写位置 |
+| `STOP_WATCH_INTERVAL_SECONDS` | `0.5` | 哨兵轮询间隔（秒） |
+
+停止链路：deploy 写哨兵 → Bot 内 watcher 观察到后触发 uvicorn 优雅关闭（走 `on_shutdown` → 整合收尾）→ 超时降级信号 → 硬杀兜底。不用 `POST /shutdown`：status_api 只读，加写接口就多一个无鉴权、局域网可触发的远程关机。详见 development.md 的「停止链路（哨兵优先）」。
+
 ## 链路监测
 
 | 配置项 | 默认值 | 说明 |

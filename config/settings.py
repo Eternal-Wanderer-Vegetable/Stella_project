@@ -630,3 +630,13 @@ STELLA_STATUS_API_PATH = _env("STELLA_STATUS_API_PATH", "/stella/status")
 # 停止时等待在途后台任务（整合/压缩）收尾的上限（秒）。
 # LLM 单次调用最长 120s×3 次重试，无限等待会让「停止」看起来卡死。
 SHUTDOWN_GRACE_SECONDS = _env_float("SHUTDOWN_GRACE_SECONDS", 30.0)
+# 停止请求哨兵：deploy stop 写入该文件，进程内的 watcher 观察到后自行触发退出。
+# 不能依赖控制台信号：GUI 用 CREATE_NO_WINDOW(0x08000000) 启动 Bot，子进程根本
+# 没有控制台，GenerateConsoleCtrlEvent 发的 CTRL_BREAK 永远送不到（实测）。
+# 文件哨兵是跨平台、不依赖控制台、不开新端口的唯一选项。
+# 路径可覆盖：项目目录只读时指到可写位置。
+# 不用 POST /shutdown：status_api 只读，加写接口就多一个无鉴权的写接口，
+# HOST=0.0.0.0 时就是局域网可触发的远程关机。哨兵靠文件系统权限天然只限本机用户。
+STELLA_STOP_SENTINEL = _env_path("STELLA_STOP_SENTINEL", PROJECT_ROOT / ".stella-stop-request")
+# watcher 轮询间隔（秒）：轮询过于频繁只是空转，0.5s 足够让停止按钮几乎即时响应
+STOP_WATCH_INTERVAL_SECONDS = _env_float("STOP_WATCH_INTERVAL_SECONDS", 0.5)

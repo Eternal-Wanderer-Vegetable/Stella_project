@@ -24,7 +24,7 @@ pip install -r requirements-dev.txt
 | `python -m deploy init [--answers PATH] [--force] [--dry-run]` | 交互式生成 `.env`（基于 `.env.example` 逐行替换，模型 ID 从 LM Studio 拉列表选编号）；`--answers` 复用上次的 `deploy.answers.toml`，换机器重装 / CI 冒烟 / 将来 GUI 复用同一份答案 |
 | `python -m deploy start [--force] [--detach]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py`；`--detach` 后台启动并写 PID 到 `logs/stella.pid`（GUI 用） |
 | `python -m deploy status [--json]` | 读 PID 文件报进程是否存活，并从 JSON 日志尾部推断最近状态（`link_status` 在 Bot 进程内，外部读不到） |
-| `python -m deploy stop` | 优雅停止：发信号，Windows 信号无效时快速结束进程树；Tauri 安装器与 `bot.py` 位于同一发布目录 |
+| `python -m deploy stop` | 优雅停止：写停止哨兵 → 轮询等待 → 降级信号 → 硬杀兜底（见下）；Tauri 安装器与 `bot.py` 位于同一发布目录 |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
@@ -39,6 +39,32 @@ python -m deploy doctor --json > stella-installer/src/mock/doctor-clean.json
 
 `doctor-mixed.json`（带 items 的场景）需要手工构造，保持字段结构与 `doctor-clean.json` 一致、
 `summary.ok = total - error - warn` 自洽。
+
+### 停止链路（哨兵优先）
+
+1. **Windows 下 GUI 与 Bot 不共享控制台**：安装器用 `CREATE_NO_WINDOW(0x08000000)` 启动
+   Bot，子进程根本没有控制台，`GenerateConsoleCtrlEvent` 发的 `CTRL_BREAK` 永远送不到
+   （实测）。任何依赖控制台事件的停止方案在 GUI 场景必然失效——停止链路的唯一可靠入口是
+   文件哨兵（`core/stop_signal.py`，默认路径项目根 `.stella-stop-request`）。
+2. **哨兵文件的三方契约**：deploy 写（`deploy/process.py` 的 `stop()`）→ Bot 读并自杀
+   （`ai_gateway.watch_stop_request()` 观察到后触发 uvicorn 优雅关闭）→ Bot 启动时先清残留
+   （`_start_stop_watcher` 里最早执行）。三者缺一则要么停不了，要么一启动就自杀。
+3. **deploy 侧等待 = grace + 缓冲**：Bot 侧 `_graceful_shutdown()` 最长等
+   `SHUTDOWN_GRACE_SECONDS(30)`。deploy 的等待窗口必须严格大于它（`STOP_WAIT_BUFFER_SECONDS`，
+   与 grace 成比例），否则会在 Bot 收尾的瞬间硬杀，白等一场。
+
+设计取舍：不用 `POST /shutdown`——status_api 只读，加写接口就多一个无鉴权的写接口，
+`HOST=0.0.0.0` 时就是局域网可触发的远程关机；哨兵靠文件系统权限天然只限本机用户。
+哨兵文件是运行期产物，已加入 `.gitignore` 与 `release.yml` 的排除清单与敏感文件校验。
+
+**前端契约**：`deploy doctor --json` 与 `deploy config-schema --json` 是 GUI 的数据契约，
+改结构要 bump schema 的 `version` 字段并同步 `stella-installer/src/mock/`。
+
+**GUI 依赖的两处格式约定**：
+- `config/spaces/*.toml` 由安装器写入的文件以 `# Managed by Stella installer` 开头，
+  改写该头或格式会影响 GUI 的「是否由安装器管理」判断；
+- `config/settings.py` 的章节注释（`# ---------- 标题 ----------`）决定配置分组，写新配置
+  项时保持该格式，GUI 才能正确归类（`deploy config-schema --json` 是分组结果的唯一事实来源）。
 
 ## 提交前检查
 

@@ -36,6 +36,7 @@
     const levelOn = { ERROR: true, WARNING: true, SUCCESS: true, INFO: true, DEBUG: false };
       let follow = true;
       let busy = false;
+      let busySince = 0;
       let timer = null;
 
     function fmtDur(sec) {
@@ -70,10 +71,13 @@
       const previousScrollTop = previousLogView?.scrollTop ?? 0;
       // 进程活着但无 PID 文件，说明不是 deploy start --detach 启动的。
       const orphan = st.alive && st.api_reachable && !st.pid_file_present;
+      const stoppingText = busy && Date.now() - busySince > 5000
+        ? "停止中（正在收尾记忆整合）…"
+        : "停止中…";
       const opsHTML = st.alive
         ? (orphan
             ? `<button disabled title="该进程不是本工具启动的，无法从这里停止">停止</button>`
-            : `<button id="btn-stop" ${busy ? "disabled" : ""}>${busy ? "停止中…" : "停止"}</button>`)
+            : `<button id="btn-stop" ${busy ? "disabled" : ""}>${busy ? stoppingText : "停止"}</button>`)
         : `<button class="primary" id="btn-start" ${busy ? "disabled" : ""}>${busy ? "启动中…" : "启动"}</button>`;
       const orphanNote = orphan ? `
         <div class="notice">
@@ -210,10 +214,15 @@
 
     async function onStop() {
       pausePolling();
+      busySince = Date.now();
       busy = true; if (lastStatus) render(lastStatus);
+      // 停止可能真等数十秒（在途整合收尾）；超过 5 秒把按钮文案换成提示，
+      // 用户就不会以为卡死。轮询已暂停，这里手动触发一次渲染。
+      setTimeout(() => { if (busy && lastStatus) render(lastStatus); }, 5000);
       try { await stopBot(); } catch (e) { alert(`停止失败：\n${e}`); }
       finally {
         busy = false;
+        busySince = 0;
         await refresh();
         resumePolling();
       }

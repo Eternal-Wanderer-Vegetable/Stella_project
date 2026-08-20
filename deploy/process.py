@@ -3,13 +3,14 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """deploy 的进程管理：``start --detach`` / ``status`` / ``stop``。
 
-跨平台说明（Windows 没有 SIGTERM）：
-- ``start --detach`` 用 ``CREATE_NEW_PROCESS_GROUP`` 启动，写成独立进程组，
-  这样 ``stop`` 才能把 ``CTRL_BREAK_EVENT`` 只发给它而不波及启动器；
-- ``stop`` 用 ``os.kill(pid, CTRL_BREAK_EVENT)``。uvicorn 0.52+ 在 Windows 上
-  注册了 SIGBREAK 处理器（``HANDLED_SIGNALS`` 含 ``SIGBREAK``），收到后走
-  优雅关闭并触发 NoneBot 的 ``on_shutdown`` 钩子——因此这个信号方案能拿到
-  优雅停止。POSIX 下用 ``SIGTERM``，同样走优雅关闭。
+停止链路（哨兵优先，信号降级，硬杀兜底）：
+- ``stop`` 第一阶写停止哨兵文件，Bot 进程内的 watcher 观察到后自行走完整
+  优雅关闭（含 on_shutdown → _graceful_shutdown 的整合收尾）。这绕开了
+  「GUI 用 CREATE_NO_WINDOW 启动、子进程没有控制台、控制台信号永远送不到」
+  的问题——文件不依赖控制台，Windows 与 POSIX 行为一致。
+- 超时后降级发 ``CTRL_BREAK_EVENT``（Windows）/ ``SIGTERM``（POSIX）：
+  手动 ``--detach`` 启动（有控制台）时有效；GUI 场景大概无效，但保留。
+- 仍不退出则硬杀（Windows ``taskkill /F /T``，POSIX ``SIGKILL``）。
 
 注意：``os.kill(pid, 0)`` 在 Windows 上会调用 TerminateProcess 把进程杀掉，
 不能用来探活。这里用 ``OpenProcess + GetExitCodeProcess`` 判断存活。
@@ -30,10 +31,21 @@ import httpx
 from dotenv import dotenv_values
 
 from config import PROJECT_ROOT, SHUTDOWN_GRACE_SECONDS
+from core.stop_signal import clear_stop_request, request_stop
 
 PID_FILE = PROJECT_ROOT / "logs" / "stella.pid"
 BOT_ENTRY = PROJECT_ROOT / "bot.py"
 LOG_FILE = PROJECT_ROOT / "logs" / "stella.jsonl"
+
+# 停止等待缓冲：必须严格大于 Bot 侧 SHUTDOWN_GRACE_SECONDS 里真正在跑的时间。
+# 与 grace 成比例而非固定值——grace 很小（测试/快速关闭）时不该白白多等，
+# grace=30 时缓冲也够足。它和旧的「信号后 +5 死等」不是一回事：哨兵保证会被
+# watcher 观察到，缓冲只花在真有在途任务收尾的场景。
+STOP_WAIT_BUFFER_SECONDS = 5.0
+# 降级信号发出后再等多久（秒）
+_STAGE_SIGNAL_WAIT_SECONDS = 3.0
+# 轮询间隔（秒）
+_POLL_INTERVAL = 0.3
 
 
 def read_pid() -> int | None:
@@ -135,9 +147,14 @@ def start_detached() -> int:
 
 
 def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
-    """优雅停止：发信号 → 等待收尾 → 仍存活则强杀。
+    """优雅停止：写哨兵 → 轮询收尾 → 降级信号 → 硬杀。
 
     返回 True 表示进程已退出（或本来就没在跑）。
+
+    第一阶写停止哨兵文件，Bot 进程内的 watcher 观察到后自行走完整优雅关闭
+    （含 on_shutdown → _graceful_shutdown 的整合收尾），绕开控制台信号送不到
+    的问题。第二阶轮询等待 ``grace + 缓冲``；第三阶降级发 CTRL_BREAK/SIGTERM
+    （GUI 场景大概无效，但手动 --detach 启动时有效）；第四阶硬杀兜底。
 
     没有 PID 文件时会查询状态接口：若接口可达，说明 Bot 确实在运行但不是
     ``deploy start --detach`` 启动的，本函数无法定位并停止它，返回 False。
@@ -154,25 +171,66 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
         print("未发现运行中的 Stella 进程。")
         clear_pid()
         return True
-    print(f"发送停止信号给 PID {pid}...")
+
+    # 缓冲与 grace 成比例：grace 很小（测试）时不该白白多等，grace=30 时给足 5 秒
+    buffer = min(STOP_WAIT_BUFFER_SECONDS, grace_seconds * 0.2)
     try:
-        if os.name == "nt":
-            os.kill(pid, signal.CTRL_BREAK_EVENT)
-        else:
-            os.kill(pid, signal.SIGTERM)
-    except (OSError, ValueError) as e:
-        print(f"发送信号失败: {e}，等待后强杀。")
-    # Tauri/Windows 下 CTRL_BREAK 可能因进程没有控制台而完全无效。不要把
-    # 配置中的后台任务收尾上限再额外加 5 秒，否则停止按钮会长时间无响应。
-    wait_seconds = min(grace_seconds, 3.0) if os.name == "nt" else grace_seconds
-    deadline = time.monotonic() + wait_seconds
-    while time.monotonic() < deadline:
-        if not is_alive(pid):
-            print("Stella 已优雅退出。")
-            clear_pid()
-            return True
-        time.sleep(0.5)
-    print("等待超时，强制终止...")
+        # 第 1 阶：写哨兵，请 Bot 自己走完整优雅关闭
+        request_stop(reason="deploy stop")
+        print(f"已发出停止请求给 PID {pid}，等待在途任务收尾…")
+
+        # 第 2 阶：轮询等待 Bot 收到哨兵后自行退出
+        deadline = time.monotonic() + grace_seconds + buffer
+        started = time.monotonic()
+        last_report = started
+        while time.monotonic() < deadline:
+            if not is_alive(pid):
+                print("Stella 已优雅退出。")
+                clear_pid()
+                return True
+            now = time.monotonic()
+            if now - last_report >= 5.0:
+                print(f"仍在等待（已等 {now - started:.0f}s）…")
+                last_report = now
+            time.sleep(_POLL_INTERVAL)
+
+        # 第 3 阶：降级信号（GUI 场景大概无效，但手动 --detach 启动时有效）
+        print("等待超时，发送降级信号…")
+        try:
+            if os.name == "nt":
+                os.kill(pid, signal.CTRL_BREAK_EVENT)
+            else:
+                os.kill(pid, signal.SIGTERM)
+        except (OSError, ValueError) as e:
+            print(f"发送信号失败: {e}")
+        signal_deadline = time.monotonic() + _STAGE_SIGNAL_WAIT_SECONDS
+        while time.monotonic() < signal_deadline:
+            if not is_alive(pid):
+                print("Stella 已优雅退出。")
+                clear_pid()
+                return True
+            time.sleep(_POLL_INTERVAL)
+
+        # 第 4 阶：硬杀。此刻在途整合大概率被中断——这是用户了解数据可能
+        # 不一致的唯一渠道，必须明确告警。
+        print("警告：进程未在限时内退出，正在强制终止——在途整合可能未完成。")
+        if not _hard_kill(pid):
+            print("强杀后进程仍存活，请手动检查。")
+            return False
+        print("Stella 已被强制终止。")
+        clear_pid()
+        return True
+    finally:
+        # 无论哪条路径退出都不留哨兵，避免下次启动自杀
+        clear_stop_request()
+
+
+def _hard_kill(pid: int) -> bool:
+    """硬杀进程；返回进程是否已退出（成功或本来就不存在）。
+
+    与 stop() 分开以便测试 monkeypatch。Windows 用 ``taskkill /F /T``（含子进程
+    树），POSIX 用 ``SIGKILL``。
+    """
     if os.name == "nt":
         subprocess.run(
             ["taskkill", "/F", "/T", "/PID", str(pid)],
@@ -182,12 +240,7 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
         with contextlib.suppress(ProcessLookupError):
             os.kill(pid, signal.SIGKILL)
     time.sleep(0.2)
-    if is_alive(pid):
-        print("强杀后进程仍存活，请手动检查。")
-        return False
-    print("Stella 已被强制终止。")
-    clear_pid()
-    return True
+    return not is_alive(pid)
 
 
 def _fetch_live_status(timeout: float = 1.0) -> dict | None:

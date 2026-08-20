@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import math
+import os
 import random
 import time
 from collections import defaultdict
@@ -65,6 +67,7 @@ from config import (
     SESSION_CONTEXT_ENABLED,
     SESSION_IDLE_CHECK_INTERVAL,
     SHUTDOWN_GRACE_SECONDS,
+    STOP_WATCH_INTERVAL_SECONDS,
     SYSTEM_PROMPT_PATH,
 )
 from config.spaces import prompt_text, resolve_space
@@ -72,6 +75,7 @@ from core.context import ChatContext
 from core.llm.lm_studio import LMStudioBackend
 from core.pipeline import Pipeline
 from core.shutdown import wait_for_tasks
+from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from extensions import load_extensions
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
@@ -887,6 +891,92 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
 
 
 # ============================================================
+# 停止请求哨兵：deploy 写文件 → watcher 观察到 → 触发优雅关闭
+# ============================================================
+# asyncio.create_task 的返回值必须持有引用，否则任务可能在完成前被 GC 回收
+_stop_watcher_task: asyncio.Task | None = None
+
+
+@get_driver().on_startup
+async def _start_stop_watcher() -> None:
+    """启动时清残留哨兵并拉起 watcher。
+
+    清残留必须放在最前面：上次硬杀可能留下文件，不清会导致新进程一启动就
+    自杀——这是整个方案最致命的失败模式。
+    """
+    clear_stop_request()
+    global _stop_watcher_task
+    _stop_watcher_task = asyncio.create_task(watch_stop_request())
+
+
+async def watch_stop_request() -> None:
+    """轮询哨兵文件；发现请求后触发优雅关闭并退出循环。
+
+    watcher 自己挂了而静默，比不停更糟糕——异常时记录后继续监控。
+    """
+    while True:
+        try:
+            await asyncio.sleep(STOP_WATCH_INTERVAL_SECONDS)
+            if not is_stop_requested():
+                continue
+            info = read_stop_request() or {}
+            source = f"来自 PID {info['pid']}" if info.get("pid") else "来自未知来源"
+            reason = f"，原因：{info['reason']}" if info.get("reason") else ""
+            logger.info(f"[StopSignal] 收到停止请求（{source}{reason}）")
+            await _trigger_shutdown()
+            break
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception("[StopSignal] watcher 异常，继续监控")
+
+
+def _find_uvicorn_server():
+    """在 driver 对象上找 uvicorn Server 实例（不同 nonebot 版本属性名可能不同）。"""
+    driver = get_driver()
+    for name in ("_server", "server"):
+        obj = getattr(driver, name, None)
+        if obj is not None and hasattr(obj, "should_exit"):
+            return obj
+    for name in dir(driver):
+        obj = getattr(driver, name, None)
+        if obj is not None and hasattr(obj, "should_exit"):
+            return obj
+    return None
+
+
+async def _trigger_shutdown() -> None:
+    """触发 uvicorn 的优雅关闭（走完整 lifespan → on_shutdown → _graceful_shutdown）。
+
+    首选：把 uvicorn Server 的 should_exit 置真，uvicorn 会自动走 lifespan
+    shutdown，NoneBot 的全部 on_shutdown 钩子（含 _graceful_shutdown 的整合
+    收尾）都会执行。
+
+    不用 os.kill(os.getpid(), signal.SIGINT)：Windows 上 os.kill 对非
+    CTRL_C/CTRL_BREAK 的信号值会直接 TerminateProcess（硬杀），且没有控制台的
+    子进程收不到控制台事件——这正是哨兵方案要绕开的坑。signal.raise_signal 在
+    事件循环协程里触发 SIGINT 只会把 KeyboardInterrupt 抛进当前任务，不会走
+    uvicorn 的收尾。2026-08-20：本机未实测，若 nonebot 内部结构变化导致找不到
+    server，会走下方兜底直接跑 on_shutdown 钩子后退出进程。
+    """
+    server = _find_uvicorn_server()
+    if server is not None:
+        server.should_exit = True
+        return
+    # 兜底：直接跑全部 on_shutdown 钩子（含 _graceful_shutdown）后强制退出。
+    # 跳过 uvicorn 的其余收尾，但数据一致性目标（整合收尾）已达成。
+    driver = get_driver()
+    for hook in getattr(driver, "_on_shutdown", []):
+        try:
+            result = hook()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:
+            logger.warning(f"[StopSignal] 兜底执行 on_shutdown 钩子失败: {e}")
+    os._exit(0)
+
+
+# ============================================================
 # 优雅停止：等待在途后台任务收尾，避免整合被中途 kill
 # ============================================================
 @get_driver().on_shutdown
@@ -900,6 +990,8 @@ async def _graceful_shutdown() -> None:
 
     超时上界取 SHUTDOWN_GRACE_SECONDS，超时后放弃等待并告警。
     """
+    if _stop_watcher_task is not None:
+        _stop_watcher_task.cancel()
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions
 

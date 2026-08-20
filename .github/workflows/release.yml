@@ -118,6 +118,7 @@ jobs:
             --exclude '.env.dev' \
             --exclude '.env.prod' \
             --exclude 'deploy.answers.toml' \
+            --exclude '.stella-stop-request*' \
             --exclude 'logs' \
             --exclude 'runtime' \
             --exclude '*.db' \
@@ -169,7 +170,7 @@ jobs:
           # memory/consolidation_log.py 是必需模块，会正常出现在包内；
           # .env.example 也需保留（deploy init 的模板），因此 .env 只匹配
           # 带敏感后缀的变体（.dev/.prod/.bak/.backup）与根目录 .env。
-          if unzip -l "$ZIP" | grep -Ei '(/\.env(\.(dev|prod|bak|backup))?$|answers\.toml|\.db$|\.jsonl$|\.log$|stella_thought_logs|memory_consolidation_log|memory_compressor_log|windows_raw|_probe|sanitize_map)'; then
+          if unzip -l "$ZIP" | grep -Ei '(/\.env(\.(dev|prod|bak|backup))?$|answers\.toml|\.stella-stop-request|\.db$|\.jsonl$|\.log$|stella_thought_logs|memory_consolidation_log|memory_compressor_log|windows_raw|_probe|sanitize_map)'; then
             echo "::error::发布包含敏感或运行期文件，已中止发布"
             exit 1
           fi
