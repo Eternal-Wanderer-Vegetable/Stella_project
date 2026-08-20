@@ -9,6 +9,8 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![NoneBot2](https://img.shields.io/badge/NoneBot-2-ea5252)](https://nonebot.dev/)
 [![OneBot V11](https://img.shields.io/badge/OneBot-V11-black)](https://onebot.dev/)
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app/)
 
 </div>
 
@@ -166,7 +168,11 @@ graph LR
 
 ## 🛠 技术栈
 
-`NoneBot 2` · `OneBot V11` · `SQLite (FTS5)` · `LM Studio` · `APScheduler` · `httpx` · `pytest` · `ruff`
+**Bot 后端**：`NoneBot 2` · `OneBot V11` · `SQLite (FTS5)` · `LM Studio` · `APScheduler` · `httpx`
+
+**桌面安装器**：`Tauri 2` · `Rust`（`stella-installer/`，原生 HTML/JS 前端，无前端构建步骤）
+
+**开发与验证**：`pytest` · `ruff` · `pyright`
 
 ### 开发中使用的本地模型
 
