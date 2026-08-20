@@ -38,30 +38,31 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 
 - **🔌 可扩展** —— Pipeline 前后置 Hook 机制，扩展目录自动加载
 
-- **🧪 可验证** —— 320+ 单元测试覆盖记忆晋升、跨用户隔离、两层归属、防编造护栏；另有探针脚本对真实模型做回归验证（含一个专门复现「噪音环境下漏掉信息」的用例）
+- **🧪 可验证** —— 490+ 单元测试覆盖记忆晋升、跨用户隔离、两层归属、防编造护栏；另有探针脚本对真实模型做回归验证（含一个专门复现「噪音环境下漏掉信息」的用例）
 
 ## 🚀 快速开始
 
 ### 📦 下载（普通用户）
 
-**不需要 clone、不需要自己装 Python。** 到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后双击 `start.bat` 即可。
+**不需要 clone、不需要自己装 Python。** 到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后有两种启动方式：
 
-首次运行 `start.bat` 会自动下载约 100MB 的嵌入式 Python 并安装依赖，然后进入配置向导，全程无需手动安装任何环境。
+- **图形界面（推荐）**：双击 `Stella.exe`，首次运行会自动下载约 100MB 的嵌入式 Python 并安装依赖；之后每次启动自动跑一遍环境自检——尚未配置会打开「配置」页，有阻塞问题会打开「环境自检」页，一切正常则直接进入「运行状态」页。
+- **命令行**：双击 `start.bat`，同样会自动下载 Python 并安装依赖，然后进入配置向导并启动 Bot。
 
-> **杀软提示**：`start.bat` 会下载并运行 Python，部分杀软可能拦截，需将目录加入信任列表。
+> **杀软提示**：首次运行会下载并运行 Python，部分杀软可能拦截，需将目录加入信任列表。
 
 ### 环境要求
 
 | 组件 | 要求 |
 |---|---|
-| Python | 3.10+ |
+| Python | 3.10+（Release 包内置嵌入式 Python，无需自装） |
 | 框架 | [NoneBot 2](https://nonebot.dev/) |
 | QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |
 | 模型服务 | [LM Studio](https://lmstudio.ai/)（需 OpenAI 兼容接口，也可以提供APIkey接入在线LLM） |
 
 ### 安装
 
-**普通用户**：见上方「下载」——下载 Release 的 zip，解压后双击 `start.bat` 即可，无需自行安装 Python。
+**普通用户**：见上方「下载」——下载 Release 的 zip，解压后双击 `Stella.exe` 或 `start.bat` 即可，无需自行安装 Python。
 
 **开发者**（clone 源码调试）：
 
@@ -73,8 +74,10 @@ pip install -r requirements.txt
 
 ### 配置
 
-推荐用向导生成 `.env`——只需回答 5 个必答项（群号、连接方式、地址、两个模型 ID），
-**模型 ID 会从 LM Studio 拉列表让你选编号**，从根上避免手打完整 ID 漏掉 `google/` 前缀：
+**普通用户（推荐）**：在 `Stella.exe` 的「配置」页填写群号、连接方式、地址与两个模型 ID，保存后写入项目根目录的 `.env`；模型列表可从本机 LM Studio 自动读取（也可手工输入），避免手打完整 ID 漏掉 `google/` 前缀。
+
+**开发者**：可用交互式向导生成 `.env`——只需回答 5 个必答项（群号、连接方式、地址、两个模型 ID），
+**模型 ID 会从 LM Studio 拉列表让你选编号**：
 
 ```bash
 python -m deploy init
@@ -100,6 +103,10 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model  # 记忆整理模型（建议 CP
 完整配置项见 **[配置文档](docs/configuration.md)**。
 
 ### 启动
+
+**普通用户**：在 `Stella.exe` 的「运行状态」页点「启动」（会先跑一遍 doctor 自检）；或双击 `start.bat` 走命令行流程。
+
+**开发者**：
 
 ```bash
 # 1. 安装依赖
