@@ -67,11 +67,11 @@ from config import (
     SHUTDOWN_GRACE_SECONDS,
     SYSTEM_PROMPT_PATH,
 )
+from config.spaces import prompt_text, resolve_space
 from core.context import ChatContext
 from core.llm.lm_studio import LMStudioBackend
 from core.pipeline import Pipeline
 from core.shutdown import wait_for_tasks
-from config.spaces import prompt_text, resolve_space
 from extensions import load_extensions
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
