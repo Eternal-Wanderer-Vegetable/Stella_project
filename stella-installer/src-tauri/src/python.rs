@@ -35,6 +35,7 @@ mod runtime_bootstrap {
         "https://mirrors.huaweicloud.com/python/3.12.10/python-3.12.10-embed-amd64.zip",
     ];
     const GET_PIP_URL: &str = "https://bootstrap.pypa.io/get-pip.py";
+    const PYPI_INDEX: &str = "https://pypi.org/simple";
     const PIP_MIRROR: &str = "https://pypi.tuna.tsinghua.edu.cn/simple";
     const DEPS_MARKER: &str = ".stella-deps-ready";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
@@ -161,21 +162,41 @@ mod runtime_bootstrap {
 
     fn ensure_pip(root: &Path, python: &Path) -> Result<(), String> {
         let get_pip = root.join("get-pip.py");
-        let mut used = false;
+        let mut fallback_reason: Option<String> = None;
+        let mut installed = false;
         if download(GET_PIP_URL, &get_pip).is_ok() {
             let size = fs::metadata(&get_pip).map(|m| m.len()).unwrap_or(0);
             if size >= MIN_GET_PIP_SIZE {
-                used = true;
-                run(python, &["get-pip.py", "--no-warn-script-location"], root)
-                    .map_err(|e| format!("pip 安装失败：{e}"))?;
+                // get-pip.py 会用本机 pip 配置的索引；显式指定官方源，
+                // 避免用户全局配置指向不可用的镜像导致 bootstrap 失败。
+                let args = [
+                    "get-pip.py",
+                    "--no-warn-script-location",
+                    "--index-url",
+                    PYPI_INDEX,
+                ];
+                match run(python, &args, root) {
+                    Ok(_) => installed = true,
+                    Err(e) => fallback_reason = Some(e),
+                }
+            } else {
+                fallback_reason = Some("get-pip.py 下载不完整".to_owned());
             }
+        } else {
+            fallback_reason = Some(format!("get-pip.py 下载失败：{GET_PIP_URL}"));
         }
         fs::remove_file(&get_pip).ok();
-        if !used {
-            run(python, &["-m", "ensurepip", "--upgrade"], root)
-                .map_err(|e| format!("pip 安装失败：{e}"))?;
+
+        if installed {
+            return Ok(());
         }
-        Ok(())
+        // ensurepip 使用随附的本地 wheel，不依赖网络索引。
+        let hint = fallback_reason
+            .map(|r| format!("\n（get-pip 未成功：{r}）"))
+            .unwrap_or_default();
+        run(python, &["-m", "ensurepip", "--upgrade"], root)
+            .map(|_| ())
+            .map_err(|e| format!("pip 安装失败：{e}{hint}"))
     }
 
     fn install_deps(root: &Path, python: &Path) -> Result<(), String> {
@@ -184,7 +205,8 @@ mod runtime_bootstrap {
             return Err(format!("缺少 {}", requirements.display()));
         }
         let primary = [
-            "-m", "pip", "install", "-r", "requirements.txt", "--no-warn-script-location",
+            "-m", "pip", "install", "-r", "requirements.txt",
+            "--no-warn-script-location", "-i", PYPI_INDEX,
         ];
         match run(python, &primary, root) {
             Ok(_) => Ok(()),
