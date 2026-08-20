@@ -58,7 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stella-installer
-          path: stella-installer/src-tauri/target/release/stella-installer.exe
+          path: stella-installer/src-tauri/target/release/Stella.exe
           if-no-files-found: error
 
   build:
@@ -140,7 +140,7 @@ jobs:
           path: dist/Stella
 
       - name: 校验安装器位于项目根目录
-        run: test -s dist/Stella/stella-installer.exe
+        run: test -s dist/Stella/Stella.exe
 
       # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF
       - name: 确保 bat 与 txt 为 CRLF
@@ -196,7 +196,7 @@ jobs:
             start.bat \
             doctor.bat \
             stop.bat \
-            stella-installer.exe \
+            Stella.exe \
             "README-快速开始.txt" \
             config/settings.py \
             config/spaces.py \
