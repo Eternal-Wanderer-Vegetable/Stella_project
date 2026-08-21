@@ -38,6 +38,8 @@
       let busy = false;
       let busySince = 0;
       let timer = null;
+      let lastLogSig = "";
+      let lastStatusSig = "";
 
     function fmtDur(sec) {
       if (sec == null) return "—";
@@ -63,13 +65,61 @@
       running: "运行中",
     };
 
-    function render(st) {
+    function ensureSkeleton() {
+      if (root.querySelector("#status-area")) return;
+      root.innerHTML = `
+        <div id="status-area"></div>
+        <div id="link-area"></div>
+        <div id="sched-area"><div class="sched-row"><span class="sched-label">调度器</span><span id="sched-content"></span></div></div>
+        <div id="logs-area">
+          <div class="log-bar">
+            <h2>日志</h2>
+            <div class="lv-filter">${Object.keys(levelOn).map(lv => `<button data-lv="${lv}" data-on="${levelOn[lv] ? 1 : 0}">${lv}</button>`).join("")}</div>
+            <span class="spacer"></span>
+            <label class="follow-tag"><input type="checkbox" id="chk-follow" ${follow ? "checked" : ""} />跟随最新</label>
+          </div>
+          <div class="log-view" id="log-view"></div>
+        </div>`;
+      // 级别过滤：只绑定一次，避免每次刷新重建导致选中态丢失
+      root.querySelectorAll(".lv-filter button").forEach(b => {
+        b.onclick = () => {
+          levelOn[b.dataset.lv] = !levelOn[b.dataset.lv];
+          b.dataset.on = levelOn[b.dataset.lv] ? "1" : "0";
+          renderLogs();
+        };
+      });
+      const chk = root.querySelector("#chk-follow");
+      if (chk) chk.onchange = e => {
+        follow = e.target.checked;
+        if (follow) {
+          const lv = root.querySelector("#log-view");
+          if (lv) lv.scrollTop = lv.scrollHeight;
+        }
+      };
+      const lv = root.querySelector("#log-view");
+      if (lv) {
+        lv.onscroll = () => {
+          const atBottom = lv.scrollHeight - lv.scrollTop - lv.clientHeight < 30;
+          if (!atBottom && follow) { follow = false; const c = root.querySelector("#chk-follow"); if (c) c.checked = false; }
+        };
+      }
+    }
+
+    function statusSig(st) {
+      try {
+        return JSON.stringify([st.alive, st.pid, st.api_reachable, st.pid_file_present, st.link, st.scheduler, busy, busySince, lastError]);
+      } catch { return String(Date.now()); }
+    }
+
+    function renderStatus(st) {
+      ensureSkeleton();
+      const sig = statusSig(st);
+      // 忙碌文案每 5 秒会变，跳过签名短路以便更新“停止中…”提示
+      const needForce = busy && Date.now() - busySince > 5000;
+      if (!needForce && sig === lastStatusSig) return;
+      lastStatusSig = sig;
       const ph = phase(st);
       const lk = st.link;
-      // render() 会重建日志节点；保留用户在关闭跟随时手动滚到的位置。
-      const previousLogView = root.querySelector("#log-view");
-      const previousScrollTop = previousLogView?.scrollTop ?? 0;
-      // 进程活着但无 PID 文件，说明不是 deploy start --detach 启动的。
       const orphan = st.alive && st.api_reachable && !st.pid_file_present;
       const stoppingText = busy && Date.now() - busySince > 5000
         ? "停止中（正在收尾记忆整合）…"
@@ -104,7 +154,9 @@
           </div>
         </div>` : "";
 
-      root.innerHTML = `
+      const statusArea = root.querySelector("#status-area");
+      // 状态卡 + 通知条：与日志区解耦，更新状态时不再重建日志节点，保留用户选区
+      statusArea.innerHTML = `
         <div class="status-card">
           <span class="dot ${ph}"></span>
           <div class="status-main">
@@ -113,46 +165,77 @@
           </div>
           <div class="ops">${opsHTML}<button id="btn-copy">复制诊断信息</button></div>
         </div>
-        ${errorNote}${orphanNote}${stalePidNote}
+        ${errorNote}${orphanNote}${stalePidNote}`;
 
-        ${lk ? (lk.connected ? `
+      const linkArea = root.querySelector("#link-area");
+      if (lk) {
+        if (lk.connected) {
+          linkArea.innerHTML = `
         <div class="link-row">
           <div class="item"><span class="k">链路</span><span class="v ${lk.healthy ? "good" : "bad"}">${lk.healthy ? "健康" : "异常"}</span></div>
           <div class="item"><span class="k">最近事件</span><span class="v">${fmtDur(lk.last_event_seconds_ago)}前</span></div>
           <div class="item"><span class="k">超时阈值</span><span class="v">${lk.timeout ?? "—"} 秒</span></div>
           ${lk.last_probe_ok !== null ? `<div class="item"><span class="k">最近探活</span><span class="v ${lk.last_probe_ok ? "good" : "bad"}">${lk.last_probe_ok ? "成功" : "失败"}</span></div>` : ""}
-        </div>` : `
-        <div class="link-row"><div class="item"><span class="k">链路</span><span class="v bad">协议端未连接</span></div><div class="item"><span class="k">检查</span><span class="v">NapCat 是否运行并已登录</span></div></div>`) : ""}
+        </div>`;
+        } else {
+          linkArea.innerHTML = `<div class="link-row"><div class="item"><span class="k">链路</span><span class="v bad">协议端未连接</span></div><div class="item"><span class="k">检查</span><span class="v">NapCat 是否运行并已登录</span></div></div>`;
+        }
+      } else {
+        linkArea.innerHTML = ``;
+      }
 
-        <div class="sched-row"><span class="sched-label">调度器</span>${schedHTML(st.scheduler)}</div>
-        <div class="log-bar">
-          <h2>日志</h2>
-          <div class="lv-filter">${Object.keys(levelOn).map(lv => `<button data-lv="${lv}" data-on="${levelOn[lv] ? 1 : 0}">${lv}</button>`).join("")}</div>
-          <span class="spacer"></span>
-          <label class="follow-tag"><input type="checkbox" id="chk-follow" ${follow ? "checked" : ""} />跟随最新</label>
-        </div>
-        <div class="log-view" id="log-view">${logHTML()}</div>`;
+      const schedContent = root.querySelector("#sched-content");
+      if (schedContent) schedContent.innerHTML = schedHTML(st.scheduler);
 
-      const lv = root.querySelector("#log-view");
-      lv.scrollTop = follow ? lv.scrollHeight : previousScrollTop;
-      lv.onscroll = () => {
-        const atBottom = lv.scrollHeight - lv.scrollTop - lv.clientHeight < 30;
-        if (!atBottom && follow) { follow = false; root.querySelector("#chk-follow").checked = false; }
-      };
-      root.querySelectorAll(".lv-filter button").forEach(b => {
-        b.onclick = () => { levelOn[b.dataset.lv] = !levelOn[b.dataset.lv]; render(st); };
-      });
-      root.querySelector("#chk-follow").onchange = e => { follow = e.target.checked; };
-      const bs = root.querySelector("#btn-start");
+      // 仅在状态区内绑定按钮，避免触碰日志区
+      const bs = statusArea.querySelector("#btn-start");
       if (bs) bs.onclick = onStart;
-      const bt = root.querySelector("#btn-stop");
+      const bt = statusArea.querySelector("#btn-stop");
       if (bt) bt.onclick = onStop;
-      root.querySelector("#btn-copy").onclick = () => copyDiag(st);
+      const bc = statusArea.querySelector("#btn-copy");
+      if (bc) bc.onclick = () => copyDiag(st);
+    }
+
+    function logSig() {
+      // 签名：过滤状态 + 日志尾部指纹；未变化时跳过 innerHTML 重建以保留选区
+      const last = logs[logs.length - 1];
+      const first = logs[0];
+      return `${logs.length}|${first?.ts ?? ""}|${last?.ts ?? ""}|${last?.message?.slice(0,32) ?? ""}|${JSON.stringify(levelOn)}`;
+    }
+
+    function renderLogs() {
+      ensureSkeleton();
+      const sig = logSig();
+      if (sig === lastLogSig) return;
+      lastLogSig = sig;
+      const lv = root.querySelector("#log-view");
+      if (!lv) return;
+      const atBottom = lv.scrollHeight - lv.scrollTop - lv.clientHeight < 30;
+      const prevTop = lv.scrollTop;
+      const shouldFollow = follow || atBottom;
+      lv.innerHTML = logHTML();
+      // 恢复滚动：跟随开启时贴底，否则保持原位置，避免每 1.5s 打断用户复制
+      if (shouldFollow) lv.scrollTop = lv.scrollHeight;
+      else lv.scrollTop = prevTop;
+      // 同步过滤按钮选中态（不重建节点，仅改属性）
+      root.querySelectorAll(".lv-filter button").forEach(b => {
+        b.dataset.on = levelOn[b.dataset.lv] ? "1" : "0";
+      });
+      const chk = root.querySelector("#chk-follow");
+      if (chk) chk.checked = follow;
+    }
+
+    // 兼容旧调用：render 拆为两个子渲染，日志侧带签名短路
+    function render(st) {
+      renderStatus(st);
+      renderLogs();
     }
 
     function renderError() {
       if (lastStatus) { render(lastStatus); return; }
       root.innerHTML = `<div class="notice notice-error"><span class="notice-icon">!</span><div>无法获取状态：<code>${escapeHTML(lastError)}</code><div class="notice-sub">请确认 Python 环境可用，或手工执行 <code>python -m deploy status --json</code>。</div></div></div>`;
+      lastLogSig = "";
+      lastStatusSig = "";
     }
 
     function logHTML() {
@@ -166,11 +249,20 @@
       const names = Object.keys(s);
       if (!names.length) return `<span class="sched-empty">暂无排队</span>`;
       return names.map(name => {
-        const d = s[name];
-        const wait = d.waiting ? `<span class="w">排队 ${d.waiting} 个</span>` : "空闲";
-        const holder = d.holder ? ` · ${escapeHTML(d.holder)}` : "";
-        return `<span class="sched-item">${escapeHTML(name)}：${wait}${holder}</span>`;
-      }).join("");
+        const d = s[name] || {};
+        // 七键：waiting / holder / held_seconds / acquired / avg_wait / avg_hold / peak_waiting
+        const waiting = d.waiting ?? 0;
+        const holder = d.holder ?? null;
+        const held = d.held_seconds ?? 0;
+        const acquired = d.acquired ?? 0;
+        const avgWait = d.avg_wait ?? 0;
+        const avgHold = d.avg_hold ?? 0;
+        const peak = d.peak_waiting ?? 0;
+        const waitPart = waiting ? `<span class="w">排队 ${waiting}</span>` : `空闲`;
+        const holderPart = holder ? ` · 持有者 ${escapeHTML(String(holder))} · 已持有 ${fmtDur(held)}` : (held > 0.5 ? ` · 已持有 ${fmtDur(held)}` : "");
+        const statsPart = ` · 累计 ${acquired}次 · 均等待 ${Number(avgWait).toFixed(1)}s · 均持有 ${Number(avgHold).toFixed(1)}s · 峰值 ${peak}`;
+        return `<span class="sched-item" title="${escapeHTML(name)}：waiting=${waiting} holder=${holder ?? "-"} held=${held}s acquired=${acquired} avg_wait=${avgWait}s avg_hold=${avgHold}s peak=${peak}">${escapeHTML(name)}：${waitPart}${holderPart}${statsPart}</span>`;
+      }).join(" · ");
     }
 
     async function copyDiag(st) {
@@ -181,8 +273,7 @@
       for (const l of bad) lines.push(`${fmtTime(l.ts)} [${l.level}] ${l.module} | ${l.message}`);
       lines.push("```", "", "> 提示：如需完整日志，见 logs/stella.jsonl；贴出前请确认其中没有你不想公开的群聊内容。");
       await copyText(lines.join("\n"));
-      const b = root.querySelector("#btn-copy"); b.textContent = "已复制";
-      setTimeout(() => (b.textContent = "复制诊断信息"), 1600);
+      const b = root.querySelector("#btn-copy"); if (b) { b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制诊断信息"), 1600); }
     }
 
     function pausePolling() {
@@ -196,13 +287,13 @@
 
     async function onStart() {
       pausePolling();
-      busy = true; if (lastStatus) render(lastStatus);
+      busy = true; if (lastStatus) renderStatus(lastStatus);
       try {
         await startBot(false);
       } catch (e) {
         busy = false;
         if (confirm(`启动被拒绝：\n\n${e}\n\n仍要强制启动吗？`)) {
-          busy = true; if (lastStatus) render(lastStatus);
+          busy = true; if (lastStatus) renderStatus(lastStatus);
           try { await startBot(true); } catch (e2) { alert(`强制启动也失败了：\n${e2}`); }
         }
       } finally {
@@ -215,10 +306,10 @@
     async function onStop() {
       pausePolling();
       busySince = Date.now();
-      busy = true; if (lastStatus) render(lastStatus);
+      busy = true; if (lastStatus) renderStatus(lastStatus);
       // 停止可能真等数十秒（在途整合收尾）；超过 5 秒把按钮文案换成提示，
       // 用户就不会以为卡死。轮询已暂停，这里手动触发一次渲染。
-      setTimeout(() => { if (busy && lastStatus) render(lastStatus); }, 5000);
+      setTimeout(() => { if (busy && lastStatus) renderStatus(lastStatus); }, 5000);
       try { await stopBot(); } catch (e) { alert(`停止失败：\n${e}`); }
       finally {
         busy = false;
@@ -231,10 +322,12 @@
     async function refresh() {
       try {
         const st = await getStatus();
-        logs = await readLogTail(st.log_file);
+        const nextLogs = await readLogTail(st.log_file);
+        logs = nextLogs;
         lastStatus = st; lastError = null;
         document.querySelector(".nav-secondary")?.classList.remove("alert");
-        render(st);
+        renderStatus(st);
+        renderLogs();
       } catch (e) {
         lastError = String(e);
         renderError();

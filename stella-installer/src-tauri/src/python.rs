@@ -18,15 +18,17 @@ use std::process::Command;
 
 #[cfg(windows)]
 mod runtime_bootstrap {
-    use std::fs::{self, File};
-    use std::io;
+    use std::fs::{self, File, OpenOptions};
+    use std::io::{self, Read, Write};
     use std::path::Path;
     use std::process::{Command, Stdio};
     use std::sync::Mutex;
+    use std::time::{Duration, Instant};
 
     use sha2::{Digest, Sha256};
 
     /// 与 `release_assets/start.bat` 保持同步。
+    /// **修改 PY_VER / PY_SHA256 时必须同步更新 start.bat，同值校验见 tests::python_runtime_constants_sync_with_start_bat**
     const PY_VER: &str = "3.12.10";
     const PY_SHA256: &str =
         "4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3";
@@ -38,10 +40,32 @@ mod runtime_bootstrap {
     const PYPI_INDEX: &str = "https://pypi.org/simple";
     const PIP_MIRROR: &str = "https://pypi.tuna.tsinghua.edu.cn/simple";
     const DEPS_MARKER: &str = ".stella-deps-ready";
+    const PROGRESS_FILE: &str = ".bootstrap-progress";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
     const MIN_GET_PIP_SIZE: u64 = 500_000;
 
     static PREPARE_LOCK: Mutex<()> = Mutex::new(());
+
+    fn emit_progress(root: &Path, msg: &str) {
+        // 控制台可见（终端用户）+ 进度文件（GUI 可轮询）
+        eprintln!("[runtime] {msg}");
+        let runtime = root.join("runtime");
+        // 进度文件写入失败不影响主流程
+        let _ = fs::create_dir_all(&runtime);
+        let _ = fs::write(runtime.join(PROGRESS_FILE), msg);
+    }
+
+    fn clear_progress(root: &Path) {
+        let _ = fs::remove_file(root.join("runtime").join(PROGRESS_FILE));
+    }
+
+    fn cleanup_partial_runtime(runtime: &Path) {
+        // 解压失败会残留半个 runtime/，下次启动会误判 python.exe 已存在而跳过下载
+        // 导致“校验失败后永远起不来”。因此解压/校验失败时回滚整个目录。
+        if runtime.is_dir() {
+            let _ = fs::remove_dir_all(runtime);
+        }
+    }
 
     /// 准备嵌入式 Python 运行时与依赖，等价于 `start.bat` 的安装段。
     ///
@@ -58,54 +82,158 @@ mod runtime_bootstrap {
         }
 
         let python = runtime.join("python.exe");
-        if !python.is_file() {
-            let zip_path = root.join(format!("python-{PY_VER}-embed-amd64.zip"));
-            download_and_verify(&zip_path)?;
-            extract_zip(&zip_path, &runtime)?;
-            fs::remove_file(&zip_path).ok();
-        }
-        patch_pth(&runtime)?;
-        ensure_pip(root, &python)?;
-        install_deps(root, &python)?;
+        let is_fresh_runtime = !python.is_file();
 
-        fs::write(runtime.join(DEPS_MARKER), "ready\n").map_err(|e| e.to_string())?;
-        Ok(())
+        emit_progress(root, "正在准备 Python 运行时…");
+        let result: Result<(), String> = (|| {
+            if !python.is_file() {
+                let zip_path = root.join(format!("python-{PY_VER}-embed-amd64.zip"));
+                emit_progress(root, &format!("正在下载 Python {PY_VER}（约 15MB）…"));
+                download_and_verify(root, &zip_path).map_err(|e| {
+                    // 下载/校验失败：删除残留的 zip，避免下次误用
+                    let _ = fs::remove_file(&zip_path);
+                    e
+                })?;
+                emit_progress(root, "正在校验并解压运行时…");
+                if let Err(e) = extract_zip(&zip_path, &runtime) {
+                    cleanup_partial_runtime(&runtime);
+                    let _ = fs::remove_file(&zip_path);
+                    return Err(e);
+                }
+                let _ = fs::remove_file(&zip_path);
+            }
+            emit_progress(root, "正在配置 site-packages…");
+            patch_pth(&runtime)?;
+            emit_progress(root, "正在安装 pip…");
+            ensure_pip(root, &python)?;
+            emit_progress(root, "正在安装依赖（首次约 1-2 分钟）…");
+            install_deps(root, &python)?;
+
+            fs::write(runtime.join(DEPS_MARKER), "ready\n").map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+
+        if let Err(ref e) = result {
+            // 仅当全新安装且在解压/校验阶段失败时回滚，避免误删已可用的旧 runtime
+            if is_fresh_runtime && (e.contains("校验失败") || e.contains("解压") || e.contains("压缩包")) {
+                cleanup_partial_runtime(&runtime);
+            }
+            emit_progress(root, &format!("准备失败：{e}"));
+        } else {
+            clear_progress(root);
+            emit_progress(root, "运行时准备完成");
+            clear_progress(root);
+        }
+        result
     }
 
-    fn download_and_verify(zip_path: &Path) -> Result<(), String> {
+    fn download_and_verify(root: &Path, zip_path: &Path) -> Result<(), String> {
+        let mut last_err = String::new();
         for url in PY_MIRRORS {
-            fs::remove_file(zip_path).ok();
-            if download(url, zip_path).is_err() {
-                continue;
+            // 断点续传：保留已有部分，由 download() 内部决定是否 Range 续传
+            match download(root, url, zip_path) {
+                Ok(()) => {},
+                Err(e) => {
+                    last_err = e;
+                    continue;
+                }
             }
             let size = fs::metadata(zip_path).map(|m| m.len()).unwrap_or(0);
             if size < MIN_ZIP_SIZE {
+                last_err = format!("{url} 下载不完整（{size} 字节）");
                 continue;
             }
             let actual = sha256_hex(zip_path)?;
             if actual != PY_SHA256 {
                 fs::remove_file(zip_path).ok();
+                // 校验失败需回滚：runtime 可能已有半解压内容
+                let runtime = root.join("runtime");
+                cleanup_partial_runtime(&runtime);
                 return Err(format!(
-                    "Python 运行时校验失败\n期望: {PY_SHA256}\n实际: {actual}"
+                    "Python 运行时校验失败\n期望: {PY_SHA256}\n实际: {actual}\n已清理残留文件，请重试。"
                 ));
             }
             return Ok(());
         }
         Err(format!(
-            "下载 Python 运行时失败（所有镜像均不可用）：{}",
+            "下载 Python 运行时失败（所有镜像均不可用）：{}\n最后错误：{last_err}\n请检查网络后重试，或手动运行 start.bat。",
             zip_path.display()
         ))
     }
 
-    fn download(url: &str, dest: &Path) -> Result<(), String> {
-        let response = ureq::get(url)
-            .timeout(std::time::Duration::from_secs(120))
-            .call()
-            .map_err(|e| format!("{url}: {e}"))?;
-        let mut reader = response.into_reader();
-        let mut file =
-            File::create(dest).map_err(|e| format!("创建 {} 失败：{e}", dest.display()))?;
-        io::copy(&mut reader, &mut file).map_err(|e| format!("写入 {} 失败：{e}", dest.display()))?;
+    fn download(root: &Path, url: &str, dest: &Path) -> Result<(), String> {
+        let existing = fs::metadata(dest).map(|m| m.len()).unwrap_or(0);
+        // 断点续传：已有部分且大小合理时尝试 Range
+        let mut req = ureq::get(url).timeout(Duration::from_secs(120));
+        let resume_from = if existing > 0 && existing < 50 * 1024 * 1024 {
+            req = req.set("Range", &format!("bytes={existing}-"));
+            Some(existing)
+        } else {
+            if existing > 0 {
+                let _ = fs::remove_file(dest);
+            }
+            None
+        };
+
+        let resp = req.call().map_err(|e| format!("{url}: {e}"))?;
+        let status = resp.status();
+        let is_partial = status == 206;
+        // 206 时 Content-Length 是剩余部分，需加上已有部分才是总量
+        let remaining: u64 = resp
+            .header("Content-Length")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let total = if is_partial { existing + remaining } else { remaining };
+
+        let mut reader = resp.into_reader();
+        let mut file: File = if is_partial {
+            OpenOptions::new()
+                .append(true)
+                .open(dest)
+                .map_err(|e| format!("打开 {} 失败：{e}", dest.display()))?
+        } else {
+            if resume_from.is_some() {
+                // 服务器不支持 Range，回退为全量重下
+                let _ = fs::remove_file(dest);
+            }
+            File::create(dest).map_err(|e| format!("创建 {} 失败：{e}", dest.display()))?
+        };
+
+        let mut buf = [0u8; 8192];
+        let mut downloaded = if is_partial { existing } else { 0 };
+        let mut last_emit = Instant::now();
+        let mut last_emit_bytes = downloaded;
+        loop {
+            let n = reader.read(&mut buf).map_err(|e| format!("读取 {url} 失败：{e}"))?;
+            if n == 0 {
+                break;
+            }
+            file.write_all(&buf[..n])
+                .map_err(|e| format!("写入 {} 失败：{e}", dest.display()))?;
+            downloaded += n as u64;
+            // 每 500ms 或 512KB 刷新一次进度，避免刷屏
+            if last_emit.elapsed() >= Duration::from_millis(500)
+                || downloaded - last_emit_bytes >= 512 * 1024
+            {
+                if total > 0 {
+                    let pct = downloaded as f64 / total as f64 * 100.0;
+                    emit_progress(
+                        root,
+                        &format!("下载中 {pct:.1}% ({downloaded}/{total} 字节) {url}"),
+                    );
+                } else {
+                    emit_progress(root, &format!("已下载 {downloaded} 字节 {url}"));
+                }
+                last_emit = Instant::now();
+                last_emit_bytes = downloaded;
+            }
+        }
+        if total > 0 {
+            emit_progress(
+                root,
+                &format!("下载完成 {downloaded}/{total} 字节 {url}"),
+            );
+        }
         Ok(())
     }
 
@@ -118,7 +246,7 @@ mod runtime_bootstrap {
 
     fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
         let file = File::open(zip_path).map_err(|e| e.to_string())?;
-        let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("解压失败：{e}"))?;
         for index in 0..archive.len() {
             let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
             let name = entry.name().replace('\\', "/");
@@ -164,7 +292,8 @@ mod runtime_bootstrap {
         let get_pip = root.join("get-pip.py");
         let mut fallback_reason: Option<String> = None;
         let mut installed = false;
-        if download(GET_PIP_URL, &get_pip).is_ok() {
+        // get-pip.py 也走带进度与断点续传的下载
+        if download(root, GET_PIP_URL, &get_pip).is_ok() {
             let size = fs::metadata(&get_pip).map(|m| m.len()).unwrap_or(0);
             if size >= MIN_GET_PIP_SIZE {
                 // get-pip.py 会用本机 pip 配置的索引；显式指定官方源，
@@ -275,6 +404,37 @@ mod runtime_bootstrap {
                 "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
             );
             fs::remove_dir_all(&dir).ok();
+        }
+
+        #[test]
+        fn python_runtime_constants_sync_with_start_bat() {
+            let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("release_assets")
+                .join("start.bat");
+            // 开发环境可能没有 release_assets/start.bat（如 CI 精简检出），此时跳过
+            if !bat_path.is_file() {
+                return;
+            }
+            let bat = fs::read_to_string(&bat_path).expect("无法读取 start.bat");
+            assert!(
+                bat.contains(PY_VER),
+                "PY_VER {PY_VER} 未在 start.bat 中找到，请同步修改"
+            );
+            assert!(
+                bat.contains(PY_SHA256),
+                "PY_SHA256 未在 start.bat 中找到，请同步修改 start.bat 与 python.rs"
+            );
+            // 进一步校验 bat 中的 SHA256 行格式正确
+            let sha_line = bat
+                .lines()
+                .find(|l| l.contains("PY_SHA256"))
+                .unwrap_or("");
+            assert!(
+                sha_line.contains(PY_SHA256),
+                "start.bat 的 PY_SHA256 与 python.rs 不一致"
+            );
         }
     }
 }

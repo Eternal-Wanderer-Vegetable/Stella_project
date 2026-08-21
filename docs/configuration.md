@@ -537,7 +537,31 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 | `STELLA_STATUS_API_ENABLED` | `true` | 是否注册状态路由 |
 | `STELLA_STATUS_API_PATH` | `/stella/status` | 路由路径（与将来的其他路由冲突时再改） |
 
-**只接受回环地址的请求**（`127.0.0.1` / `::1`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
+**只接受回环地址的请求**（`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
+
+### 安全实测：`HOST=0.0.0.0` 时仍仅回环可访问
+
+`HOST=0.0.0.0` 会让 Stella 监听所有网卡，但 `/stella/status` 在应用层校验 `request.client.host` 是否为回环地址，非回环一律返回 `403 {"error":"forbidden"}`（实现见 `stella_project/plugins/bot_main/status_api.py:_is_loopback`）。
+
+实测（`PORT=8080`，`HOST=0.0.0.0`）：
+
+```bash
+# 本机回环 → 200
+curl -i http://127.0.0.1:8080/stella/status
+# HTTP/1.1 200 OK
+# {"version":"2.6.0","pid":1234,"uptime_seconds":...}
+
+# 同机通过局域网 IP 访问 → 403（模拟局域网其他机器）
+curl -i http://192.168.1.20:8080/stella/status
+# HTTP/1.1 403 Forbidden
+# {"error":"forbidden"}
+
+# IPv6 回环 → 200
+curl -i http://[::1]:8080/stella/status
+# HTTP/1.1 200 OK
+```
+
+因此即使 `HOST=0.0.0.0` 暴露到局域网，外部机器也无法通过状态接口探测运行信息或凭据；`deploy status` 与 GUI 始终通过 `127.0.0.1` 访问，不受影响。
 
 ## 优雅停止
 
