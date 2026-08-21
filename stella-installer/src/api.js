@@ -144,7 +144,7 @@ export async function listModels(baseUrl) {
 }
 
 export async function getVersion() {
-  if (USE_MOCK || !invoke) return "2.4.0";
+  if (USE_MOCK || !invoke) return "2.6.0";
   return await invoke("get_version");
 }
 
@@ -167,6 +167,11 @@ export async function installCloseOverlay() {
     overlay.id = "close-overlay";
     overlay.innerHTML = `<div class="close-card"><div class="close-spinner"></div><strong>正在安全关闭 Stella</strong><span>正在等待 Bot 完成退出……若有未完成的记忆整合，可能需要数十秒，请勿强制关闭窗口。</span></div>`;
     document.body.appendChild(overlay);
+  });
+  await listen("close-failed", (event) => {
+    document.getElementById("close-overlay")?.remove();
+    const msg = event?.payload ?? event;
+    alert(`安全关闭失败：\n${msg}\n\n可再次尝试关闭窗口，或手动执行 stop.bat / python -m deploy stop。`);
   });
 }
 

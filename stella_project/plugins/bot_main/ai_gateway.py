@@ -946,33 +946,80 @@ def _find_uvicorn_server():
 
 
 async def _trigger_shutdown() -> None:
-    """触发 uvicorn 的优雅关闭（走完整 lifespan → on_shutdown → _graceful_shutdown）。
+    """触发优雅关闭，保证 _graceful_shutdown 的整合收尾一定执行。
 
-    首选：把 uvicorn Server 的 should_exit 置真，uvicorn 会自动走 lifespan
-    shutdown，NoneBot 的全部 on_shutdown 钩子（含 _graceful_shutdown 的整合
-    收尾）都会执行。
+    nonebot2 fastapi Driver.run() 调的是模块级 ``uvicorn.run(...)``，从不把
+    Server 实例挂到 driver 上，因此 ``_find_uvicorn_server()`` 在当前版本恒为
+    None（2026-08-22 精读 drivers/fastapi.py 确认）。兜底也不能读
+    ``driver._on_shutdown``——2.5 的钩子实际在 ``driver._lifespan._shutdown_funcs``
+    里。
 
-    不用 os.kill(os.getpid(), signal.SIGINT)：Windows 上 os.kill 对非
-    CTRL_C/CTRL_BREAK 的信号值会直接 TerminateProcess（硬杀），且没有控制台的
-    子进程收不到控制台事件——这正是哨兵方案要绕开的坑。signal.raise_signal 在
-    事件循环协程里触发 SIGINT 只会把 KeyboardInterrupt 抛进当前任务，不会走
-    uvicorn 的收尾。2026-08-20：本机未实测，若 nonebot 内部结构变化导致找不到
-    server，会走下方兜底直接跑 on_shutdown 钩子后退出进程。
+    三档从上到下试，任一成功即返回；全失败才 ``os._exit(0)`` 硬退：
+    1. ``driver._lifespan.shutdown()``——复用框架逻辑，最省事；
+    2. 手工 reversed 遍历 ``_shutdown_funcs``——按 Lifespan 语义；
+    3. 直接 ``await _graceful_shutdown()``——不依赖任何私有属性。
+
+    不用 ``os.kill(getpid(), SIGINT)``：Windows 上对非 CTRL_C/BREAK 的信号值会
+    直接 TerminateProcess（硬杀），且 CREATE_NO_WINDOW 的子进程收不到控制台事件。
     """
+    # 0. 尝试 uvicorn Server.should_exit（当前版本恒为 None，保留以兼容将来）
     server = _find_uvicorn_server()
     if server is not None:
         server.should_exit = True
         return
-    # 兜底：直接跑全部 on_shutdown 钩子（含 _graceful_shutdown）后强制退出。
-    # 跳过 uvicorn 的其余收尾，但数据一致性目标（整合收尾）已达成。
+
+    # 1/2. 走 Lifespan
     driver = get_driver()
-    for hook in getattr(driver, "_on_shutdown", []):
-        try:
-            result = hook()
-            if inspect.isawaitable(result):
-                await result
-        except Exception as e:
-            logger.warning(f"[StopSignal] 兜底执行 on_shutdown 钩子失败: {e}")
+    ls = getattr(driver, "_lifespan", None)
+    if ls is not None:
+        # 首选：复用框架的 shutdown（含全部 on_shutdown 钩子）
+        shutdown = getattr(ls, "shutdown", None)
+        if callable(shutdown):
+            try:
+                await shutdown()
+                return
+            except Exception:
+                logger.exception("[StopSignal] Lifespan.shutdown 失败，尝试手工执行钩子")
+        # 次选：按 Lifespan 语义手工 reversed 执行
+        funcs = getattr(ls, "_shutdown_funcs", None)
+        if funcs is None:
+            funcs = getattr(ls, "shutdown_funcs", None)
+        if funcs is None:
+            # 兼容旧版 driver._on_shutdown
+            funcs = getattr(driver, "_on_shutdown", None)
+        if funcs:
+            try:
+                seq = list(funcs)  # 转列表避免遍历时被修改
+            except Exception:
+                seq = []
+            for f in reversed(seq):
+                try:
+                    r = f()
+                    if inspect.isawaitable(r):
+                        await r
+                except Exception:
+                    logger.exception("[StopSignal] 手工执行 shutdown 钩子失败，继续下一个")
+            return
+
+    # 3. 最保守：直接跑整合收尾
+    try:
+        await _graceful_shutdown()
+        return
+    except Exception:
+        logger.exception("[StopSignal] 直接执行 _graceful_shutdown 失败")
+
+    # 三档全失败：flush 日志后硬退
+    try:
+        import sys
+
+        sys.stdout.flush()
+        sys.stderr.flush()
+        complete = getattr(logger, "complete", None)
+        if callable(complete):
+            with contextlib.suppress(Exception):
+                complete()
+    except Exception:
+        pass
     os._exit(0)
 
 
@@ -990,7 +1037,7 @@ async def _graceful_shutdown() -> None:
 
     超时上界取 SHUTDOWN_GRACE_SECONDS，超时后放弃等待并告警。
     """
-    if _stop_watcher_task is not None:
+    if _stop_watcher_task is not None and _stop_watcher_task is not asyncio.current_task():
         _stop_watcher_task.cancel()
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions

@@ -2,7 +2,7 @@
 
 # 🌟 Stella
 
-*一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人 —— 完全本地运行，不外传任何聊天内容*
+*一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人 —— 可完全本地运行，不外传任何聊天内容*
 
 [![CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
@@ -44,14 +44,34 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 
 ## 🚀 快速开始
 
-### 📦 下载（普通用户）
+### 📦 下载 & 安装（普通用户）
 
-**不需要 clone、不需要自己装 Python。** 到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后有两种启动方式：
+- 第一步：下载如下必须依赖：
 
-- **图形界面（推荐）**：双击 `Stella.exe`，首次运行会自动下载约 100MB 的嵌入式 Python 并安装依赖；之后每次启动自动跑一遍环境自检——尚未配置会打开「配置」页，有阻塞问题会打开「环境自检」页，一切正常则直接进入「运行状态」页。
-- **命令行**：双击 `start.bat`，同样会自动下载 Python 并安装依赖，然后进入配置向导并启动 Bot。
+  - [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)并按照其中的指示配置**反向websocket链接**。记录下您配置的端口号并打开链接。
+  - [LM Studio](https://lmstudio.ai/)，安装后在软件内部下载必须模型（见[开发中使用的本地模型](#开发中使用的本地模型)）并加载模型，且打开LM Studio的远程服务端口。
 
-> **杀软提示**：首次运行会下载并运行 Python，部分杀软可能拦截，需将目录加入信任列表。
+- 第二步：到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后有两种启动方式：
+
+  - **图形界面（推荐）**：双击 `Stella.exe` ，首次运行会自动下载约 100MB 的嵌入式 Python 并安装依赖；之后每次启动自动跑一遍环境自检——尚未配置会打开「配置」页，有阻塞问题会打开「环境自检」页，一切正常则直接进入「运行状态」页。
+  - **命令行**：双击 `start.bat`，同样会自动下载 Python 并安装依赖，然后进入配置向导并启动 Bot。
+
+> **小提示**：首次运行会下载并运行 Python，此行为可能会被您电脑上的安全防护软件报告为可疑操作并拦截，需加入信任列表。
+
+- 第三步：
+  - 1.在首次打开 `Stella.exe` 后会出现配置界面，按照指示填写您在第一步配置的两个端口号。
+  - 2.在同一界面，单击“读取LM Studio模型”，之后选择您加载的模型即可。
+  - 3.配置完成后，单击“保存并检查”，程序会自动跳转至“运行状态”界面。单击“启动”即可。
+
+> **遇到了问题？**你可以加入开发者所在的QQ群：263402786，在群里@开发者Eternal-Wanderer-Vegetable。
+
+### 开发者测试
+
+```bash
+git clone https://github.com/Eternal-Wanderer-Vegetable/Stella_project.git
+cd Stella_project
+pip install -r requirements.txt
+```
 
 ### 环境要求
 
@@ -62,47 +82,11 @@ Stella 不只是把消息丢给大模型换一句回复。它把群聊里零散�
 | QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |
 | 模型服务 | [LM Studio](https://lmstudio.ai/)（需 OpenAI 兼容接口，也可以提供APIkey接入在线LLM） |
 
-### 安装
-
-**普通用户**：见上方「下载」——下载 Release 的 zip，解压后双击 `Stella.exe` 或 `start.bat` 即可，无需自行安装 Python。
-
-**开发者**（clone 源码调试）：
-
-```bash
-git clone https://github.com/Eternal-Wanderer-Vegetable/Stella_project.git
-cd Stella_project
-pip install -r requirements.txt
-```
-
 ### 配置
 
-**普通用户（推荐）**：在 `Stella.exe` 的「配置」页填写群号、连接方式、地址与两个模型 ID，保存后写入项目根目录的 `.env`；模型列表可从本机 LM Studio 自动读取（也可手工输入），避免手打完整 ID 漏掉 `google/` 前缀。
+建议使用 `Stella.exe` 中内置的“高级选项”表单来进行修改。**不建议手动修改.env。**
 
-**开发者**：可用交互式向导生成 `.env`——只需回答 5 个必答项（群号、连接方式、地址、两个模型 ID），
-**模型 ID 会从 LM Studio 拉列表让你选编号**：
-
-```bash
-python -m deploy init
-```
-
-若偏好手工配置，也可复制模板后自行修改：
-
-```bash
-cp .env.example .env
-```
-
-至少需要填写如下数据：
-
-```env
-ALLOWED_GROUPS=123456789          # 允许响应的群号，多个用逗号分隔
-LM_STUDIO_BASE_URL=http://127.0.0.1:1234
-LM_STUDIO_MODEL=your-chat-model    # 主聊天模型
-CONSOLIDATION_LM_STUDIO_MODEL=your-small-model  # 记忆整理模型（建议 CPU 推理）
-```
-
-多群部署若需要共享画像与记忆，另见 `config/spaces/`（[配置文档](docs/configuration.md) 的「群组共享空间」一节）。单群部署无需配置，程序会自动分配空间标识。
-
-完整配置项见 **[配置文档](docs/configuration.md)**。
+完整配置项及其说明见 **[配置文档](docs/configuration.md)**。
 
 ### 启动
 

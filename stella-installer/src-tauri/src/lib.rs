@@ -19,7 +19,11 @@ pub fn run() {
                 let _ = window.emit("close-requested", ());
                 let window = window.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = commands::stop_bot().await;
+                    if let Err(e) = commands::stop_bot().await {
+                        CLOSE_IN_PROGRESS.store(false, Ordering::Release);
+                        let _ = window.emit("close-failed", e);
+                        return;
+                    }
                     let _ = window.destroy();
                 });
             }
