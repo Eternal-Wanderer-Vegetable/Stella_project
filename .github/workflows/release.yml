@@ -10,6 +10,11 @@ on:
         description: '打包版本号（不带 v 前缀，如 0.3.0），用于手工测试打包流程'
         required: true
         type: string
+      overwrite_release:
+        description: '若同版本 Release 已存在，是否覆盖其 asset（true 时会新建或更新 Release）'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -243,18 +248,67 @@ jobs:
           cd dist/Stella
           python -c "import config, core, memory, deploy, extensions; print('import 检查通过')"
 
-      - name: 发布 Release
+      # —— 核心改进：支持在同版本 Release 已存在时覆盖 asset ——
+      # 旧逻辑仅执行 `gh release create`，若 Release 已存在则直接报错失败，
+      # 无法实现“同版本重发/补丁包”场景。本步骤改为幂等逻辑：
+      #   - 若 Release 已存在：用 `gh release upload --clobber` 覆盖同名 zip
+      #   - 若不存在：用 `gh release create` 新建
+      # 覆盖时会保留原 Release 的 tag/发布时间，仅替换资产，适合紧急修复。
+      - name: 发布 Release（新建或覆盖同版本 asset）
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${RELEASE_REF}" \
-            "dist/Stella-${RELEASE_REF}-win64.zip" \
-            --title "Stella ${RELEASE_REF}" \
-            --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md
+          set -e
+          ZIP="dist/Stella-${RELEASE_REF}-win64.zip"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::找不到发布包 $ZIP"
+            exit 1
+          fi
+          if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
+            gh release upload "${RELEASE_REF}" "$ZIP" --clobber
+            echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
+          else
+            echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
+            gh release create "${RELEASE_REF}" "$ZIP" \
+              --title "Stella ${RELEASE_REF}" \
+              --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md
+            echo "✅ 已创建 Release ${RELEASE_REF}"
+          fi
+          echo "--- 当前 Release 资产 ---"
+          gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
 
-      # 手工触发只产出可下载的 artifact，不污染 Releases 页面——
+      # 手工触发的覆盖发布：仅当显式勾选 overwrite_release 时才触及 Releases，
+      # 否则保持旧行为（仅上传 artifact，不污染 Releases 页面）。
+      - name: 发布 Release（手工覆盖同版本）
+        if: github.event_name == 'workflow_dispatch' && inputs.overwrite_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          ZIP="dist/Stella-${RELEASE_REF}-win64.zip"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::找不到发布包 $ZIP"
+            exit 1
+          fi
+          if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
+            gh release upload "${RELEASE_REF}" "$ZIP" --clobber
+            echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
+          else
+            echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
+            gh release create "${RELEASE_REF}" "$ZIP" \
+              --title "Stella ${RELEASE_REF}" \
+              --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md
+            echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
+          fi
+          echo "--- 当前 Release 资产 ---"
+          gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
+
+      # 手工触发默认只产出可下载的 artifact，不污染 Releases 页面——
       # 否则每次测试打包都会留下一个假 Release 需要手工删除。
+      # 若勾选了 overwrite_release，上一步已完成 Release 覆盖，本步仍保留 artifact 便于下载验证。
       - name: 上传 artifact（手工触发时用于验证产物）
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
