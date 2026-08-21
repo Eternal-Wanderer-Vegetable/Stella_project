@@ -55,6 +55,8 @@ if __name__ == "__main__":
             host=str(cfg.host),
             port=cfg.port,
             log_config=_LOGGING_CONFIG,
+            # 必须保留：uvicorn 默认无界等待在途连接关闭。NapCat 反向 WS 若不主动 close，
+            # 优雅停止会挂死并退化到 CTRL_BREAK / 硬杀，在途记忆整合就丢了。重构勿删。
             timeout_graceful_shutdown=5,
         )
     )

@@ -325,7 +325,7 @@
         const nextLogs = await readLogTail(st.log_file);
         logs = nextLogs;
         lastStatus = st; lastError = null;
-        document.querySelector(".nav-secondary")?.classList.remove("alert");
+        document.querySelector('.top-nav a[href="./doctor.html"]')?.classList.remove("alert");
         renderStatus(st);
         renderLogs();
       } catch (e) {
@@ -333,7 +333,7 @@
         renderError();
         // 状态获取失败往往是环境问题（Python 挂了、deploy 模块坏了），
         // 主动把自检入口点亮，而不是让用户自己想到去哪儿排查。
-        document.querySelector(".nav-secondary")?.classList.add("alert");
+        document.querySelector('.top-nav a[href="./doctor.html"]')?.classList.add("alert");
       }
     }
 
