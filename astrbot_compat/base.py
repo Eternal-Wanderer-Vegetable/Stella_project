@@ -8,10 +8,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .context import Context
+from .context import Context
 
 from .exceptions import StellaCompatNotSupported
 
@@ -128,5 +125,4 @@ class StarTools:
         raise StellaCompatNotSupported("StarTools.register_web_api")
 
 
-# 兼容导出：部分上游代码从 star 模块直接 import Context
-__all__ = ["Star", "StarTools"]
+__all__ = ["Star", "StarTools", "Context"]

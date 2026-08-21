@@ -255,7 +255,7 @@ def command(
         md.event_filters.append(filt)
         try:
             sig = inspect.signature(func, eval_str=True)  # type: ignore[call-arg]
-        except TypeError:
+        except Exception:
             sig = inspect.signature(func)
         params = list(sig.parameters.values())
         remaining = params[2:] if len(params) >= 2 else []
@@ -356,6 +356,12 @@ def custom_filter(custom_filter_cls: type[HandlerFilter], *args: Any, **kwargs: 
 
 def llm_tool(name: str | None = None) -> Callable:
     """注册为 llm_tool（仅注册，不分发）。"""
+
+    # 支持 @filter.llm_tool 裸用（不带括号）
+    if callable(name):
+        func = name  # type: ignore[assignment]
+        _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent)
+        return func  # type: ignore[return-value]
 
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent)

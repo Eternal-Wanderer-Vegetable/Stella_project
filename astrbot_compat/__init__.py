@@ -6,6 +6,8 @@ AstrBot, AGPL-3.0, AstrBotDevs），未拷贝其实现代码。本项目与 Astr
 隐含关系，不保证全量插件可用。"""
 
 from .base import Star, StarTools
+from .config import AstrBotConfig
+from .context import Context, get_context
 from .exceptions import StellaCompatError, StellaCompatNotSupported
 from .registry import (
     EventType,
@@ -17,10 +19,14 @@ from .registry import (
     star_registry,
 )
 from .shim import install_shim, uninstall_shim
+from .loader import get_failed_plugins, initialize_plugins, load_all_plugins, terminate_plugins
 
 __all__ = [
     "Star",
     "StarTools",
+    "AstrBotConfig",
+    "Context",
+    "get_context",
     "StellaCompatError",
     "StellaCompatNotSupported",
     "EventType",
@@ -32,4 +38,8 @@ __all__ = [
     "star_registry",
     "install_shim",
     "uninstall_shim",
+    "load_all_plugins",
+    "initialize_plugins",
+    "terminate_plugins",
+    "get_failed_plugins",
 ]

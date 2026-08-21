@@ -17,6 +17,10 @@ from core.logging_sink import setup_json_sink
 
 setup_json_sink()
 
+from astrbot_compat import install_shim
+
+install_shim()
+
 nonebot.init()
 
 driver = nonebot.get_driver()
@@ -24,6 +28,12 @@ driver.register_adapter(OneBotV11Adapter)
 
 nonebot.load_builtin_plugins("echo", "single_session")
 nonebot.load_from_toml("pyproject.toml")
+
+from astrbot_compat import initialize_plugins, load_all_plugins, terminate_plugins
+
+load_all_plugins()
+driver.on_startup(initialize_plugins)
+driver.on_shutdown(terminate_plugins)
 
 SERVER = None  # 供 ai_gateway 哨兵触发时取 uvicorn Server 实例（Driver.run 不落地）
 

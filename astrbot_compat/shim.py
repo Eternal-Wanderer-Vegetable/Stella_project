@@ -55,6 +55,8 @@ def _make_placeholder(api_name: str) -> type:
 
     class _Meta(type):
         def __getattr__(cls, name: str) -> Any:  # type: ignore[override]
+            if name.startswith("__") and name.endswith("__"):
+                raise AttributeError(name)
             raise StellaCompatNotSupported(f"{api_name}.{name}")
 
     class _Placeholder(metaclass=_Meta):
@@ -62,6 +64,8 @@ def _make_placeholder(api_name: str) -> type:
             raise StellaCompatNotSupported(api_name)
 
         def __getattr__(self, name: str) -> Any:
+            if name.startswith("__") and name.endswith("__"):
+                raise AttributeError(name)
             raise StellaCompatNotSupported(f"{api_name}.{name}")
 
     _Placeholder.__name__ = short
@@ -71,14 +75,17 @@ def _make_placeholder(api_name: str) -> type:
 
 def _make_deprecated_register() -> Any:
     def _register(*args: Any, **kwargs: Any) -> Any:
-        # @register 不带括号
+        # @register 不带括号：@register
         if len(args) == 1 and callable(args[0]) and not kwargs:
             cls = args[0]
             logger.warning("[astrbot_compat] @register 装饰器已废弃，继承 Star 即可自动注册")
+            cls.__astrbot_register_meta__ = {"args": (), "kwargs": {}}  # type: ignore[attr-defined]
             return cls
 
         def decorator(cls: Any) -> Any:
             logger.warning("[astrbot_compat] @register 装饰器已废弃，继承 Star 即可自动注册")
+            # 存储元数据供 loader 回退（name/author/desc/version/repo）
+            cls.__astrbot_register_meta__ = {"args": args, "kwargs": kwargs}  # type: ignore[attr-defined]
             return cls
 
         return decorator
@@ -118,7 +125,9 @@ def install_shim() -> None:
     star_mod.StarTools = StarTools  # type: ignore[attr-defined]
     star_mod.StarMetadata = StarMetadata  # type: ignore[attr-defined]
     star_mod.register = _make_deprecated_register()  # type: ignore[attr-defined]
-    star_mod.Context = _make_placeholder("astrbot.api.star.Context")  # type: ignore[attr-defined]
+    from .context import Context as _Context
+
+    star_mod.Context = _Context  # type: ignore[attr-defined]
 
     # --- astrbot.api.event.filter：把 filters 模块的公开名字全部搬过去
     from . import filters as _f
@@ -175,7 +184,10 @@ def install_shim() -> None:
 
     # --- astrbot.api
     api.logger = logging.getLogger("astrbot_compat.plugin")  # type: ignore[attr-defined]
-    api.AstrBotConfig = _make_placeholder("astrbot.api.AstrBotConfig")  # type: ignore[attr-defined]
+    from .config import AstrBotConfig as _AstrBotConfig
+
+    api.AstrBotConfig = _AstrBotConfig  # type: ignore[attr-defined]
+    star_mod.AstrBotConfig = _AstrBotConfig  # type: ignore[attr-defined]
     for _aname, _aapi in (
         ("sp", "astrbot.api.sp"),
         ("html_renderer", "astrbot.api.html_renderer"),
@@ -233,4 +245,13 @@ def uninstall_shim() -> None:
     global _INSTALLED
     for name in reversed(_MODULE_NAMES):
         sys.modules.pop(name, None)
+    # 清注册表，避免单测之间互相污染
+    try:
+        from .registry import star_handlers_registry, star_map, star_registry
+
+        star_registry.clear()
+        star_map.clear()
+        star_handlers_registry.clear()
+    except Exception:
+        pass
     _INSTALLED = False
