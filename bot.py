@@ -55,6 +55,7 @@ if __name__ == "__main__":
             host=str(cfg.host),
             port=cfg.port,
             log_config=_LOGGING_CONFIG,
+            timeout_graceful_shutdown=5,
         )
     )
     SERVER.run()
