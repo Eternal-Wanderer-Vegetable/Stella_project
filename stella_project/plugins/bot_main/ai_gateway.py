@@ -932,64 +932,58 @@ async def watch_stop_request() -> None:
 
 
 def _find_uvicorn_server():
-    """在 driver 对象上找 uvicorn Server 实例（不同 nonebot 版本属性名可能不同）。"""
-    driver = get_driver()
-    for name in ("_server", "server"):
-        obj = getattr(driver, name, None)
-        if obj is not None and hasattr(obj, "should_exit"):
-            return obj
-    for name in dir(driver):
-        obj = getattr(driver, name, None)
-        if obj is not None and hasattr(obj, "should_exit"):
-            return obj
+    """从 bot 模块取 uvicorn Server 实例（bot.py 自持，Driver 不落地）。
+
+    ``python bot.py`` 时模块名为 ``__main__``，``python -m bot`` 或被
+    import 时为 ``bot``，两处都试。原来遍历 ``dir(driver)`` 的实现会触发
+    抛异常的 property，且已确认肯定找不到。
+    """
+    import sys
+
+    for mod_name in ("__main__", "bot"):
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        srv = getattr(mod, "SERVER", None)
+        if srv is not None and hasattr(srv, "should_exit"):
+            return srv
     return None
 
 
 async def _trigger_shutdown() -> None:
-    """触发优雅关闭，保证 _graceful_shutdown 的整合收尾一定执行。
+    """触发优雅关闭，保证 _graceful_shutdown 的整合收尾后进程一定退出。
 
-    nonebot2 fastapi Driver.run() 调的是模块级 ``uvicorn.run(...)``，从不把
-    Server 实例挂到 driver 上，因此 ``_find_uvicorn_server()`` 在当前版本恒为
-    None（2026-08-22 精读 drivers/fastapi.py 确认）。兜底也不能读
-    ``driver._on_shutdown``——2.5 的钩子实际在 ``driver._lifespan._shutdown_funcs``
-    里。
+    阻塞缺陷（c099d0b）：前三档都只跑收尾、不让进程退出，导致 ``deploy stop``
+    永远拖到第 4 阶硬杀。``await ls.shutdown()`` 更会 ``cancel_scope.cancel()``
+    掉 watcher 自己所在的 task group，并把 ``_task_group`` 置 ``None``，使 uvicorn
+    真退出时二次 ``shutdown()`` 抛 ``RuntimeError`` 且钩子被跑两遍。
 
-    三档从上到下试，任一成功即返回；全失败才 ``os._exit(0)`` 硬退：
-    1. ``driver._lifespan.shutdown()``——复用框架逻辑，最省事；
-    2. 手工 reversed 遍历 ``_shutdown_funcs``——按 Lifespan 语义；
-    3. 直接 ``await _graceful_shutdown()``——不依赖任何私有属性。
-
-    不用 ``os.kill(getpid(), SIGINT)``：Windows 上对非 CTRL_C/BREAK 的信号值会
-    直接 TerminateProcess（硬杀），且 CREATE_NO_WINDOW 的子进程收不到控制台事件。
+    正确语义：能拿到 ``uvicorn.Server`` 就让 uvicorn 自己收尾（它会跑
+    ``lifespan.shutdown`` → ``_graceful_shutdown``）；拿不到才手工跑钩子，
+    且**必须** ``os._exit(0)``，否则端口继续监听、QQ 还能回消息。
     """
-    # 0. 尝试 uvicorn Server.should_exit（当前版本恒为 None，保留以兼容将来）
+    # 0. 优先：让 uvicorn 自己收尾（会走完整 lifespan shutdown）
     server = _find_uvicorn_server()
     if server is not None:
         server.should_exit = True
         return
 
-    # 1/2. 走 Lifespan
+    # 拿不到 server：降级为手工钩子 + 硬退（否则进程不死）
+    logger.warning("[StopSignal] 未找到 uvicorn Server，降级为手工钩子 + 硬退")
     driver = get_driver()
     ls = getattr(driver, "_lifespan", None)
+    _ran_via_funcs = False
     if ls is not None:
-        # 首选：复用框架的 shutdown（含全部 on_shutdown 钩子）
-        shutdown = getattr(ls, "shutdown", None)
-        if callable(shutdown):
-            try:
-                await shutdown()
-                return
-            except Exception:
-                logger.exception("[StopSignal] Lifespan.shutdown 失败，尝试手工执行钩子")
-        # 次选：按 Lifespan 语义手工 reversed 执行
+        # 不直接 await ls.shutdown()：会 cancel 自己所在 task group
+        # 且二次调用抛 RuntimeError。只手工 reversed 跑 _shutdown_funcs。
         funcs = getattr(ls, "_shutdown_funcs", None)
         if funcs is None:
             funcs = getattr(ls, "shutdown_funcs", None)
         if funcs is None:
-            # 兼容旧版 driver._on_shutdown
             funcs = getattr(driver, "_on_shutdown", None)
         if funcs:
             try:
-                seq = list(funcs)  # 转列表避免遍历时被修改
+                seq = list(funcs)
             except Exception:
                 seq = []
             for f in reversed(seq):
@@ -999,16 +993,16 @@ async def _trigger_shutdown() -> None:
                         await r
                 except Exception:
                     logger.exception("[StopSignal] 手工执行 shutdown 钩子失败，继续下一个")
-            return
+            _ran_via_funcs = True
 
-    # 3. 最保守：直接跑整合收尾
-    try:
-        await _graceful_shutdown()
-        return
-    except Exception:
-        logger.exception("[StopSignal] 直接执行 _graceful_shutdown 失败")
+    if not _ran_via_funcs:
+        # 既无 _shutdown_funcs 又无 server，直接跑整合收尾
+        try:
+            await _graceful_shutdown()
+        except Exception:
+            logger.exception("[StopSignal] 直接执行 _graceful_shutdown 失败")
 
-    # 三档全失败：flush 日志后硬退
+    # 手工路径必须硬退：否则只是跑完钩子、进程继续服务
     try:
         import sys
 

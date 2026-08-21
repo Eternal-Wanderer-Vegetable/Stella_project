@@ -25,5 +25,36 @@ driver.register_adapter(OneBotV11Adapter)
 nonebot.load_builtin_plugins("echo", "single_session")
 nonebot.load_from_toml("pyproject.toml")
 
+SERVER = None  # 供 ai_gateway 哨兵触发时取 uvicorn Server 实例（Driver.run 不落地）
+
+
 if __name__ == "__main__":
-    nonebot.run()
+    import uvicorn
+
+    cfg = driver.config
+    # 照搬 nonebot/drivers/fastapi.py 的 LOGGING_CONFIG，保证日志链路一致
+    _LOGGING_CONFIG = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "default": {
+                "class": "nonebot.log.LoguruHandler",
+            },
+        },
+        "loggers": {
+            "uvicorn.error": {"handlers": ["default"], "level": "INFO"},
+            "uvicorn.access": {
+                "handlers": ["default"],
+                "level": "INFO",
+            },
+        },
+    }
+    SERVER = uvicorn.Server(
+        uvicorn.Config(
+            nonebot.get_asgi(),
+            host=str(cfg.host),
+            port=cfg.port,
+            log_config=_LOGGING_CONFIG,
+        )
+    )
+    SERVER.run()
