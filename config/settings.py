@@ -640,3 +640,22 @@ SHUTDOWN_GRACE_SECONDS = _env_float("SHUTDOWN_GRACE_SECONDS", 30.0)
 STELLA_STOP_SENTINEL = _env_path("STELLA_STOP_SENTINEL", PROJECT_ROOT / ".stella-stop-request")
 # watcher 轮询间隔（秒）：轮询过于频繁只是空转，0.5s 足够让停止按钮几乎即时响应
 STOP_WATCH_INTERVAL_SECONDS = _env_float("STOP_WATCH_INTERVAL_SECONDS", 0.5)
+
+# ---------- AstrBot 插件兼容层 ----------
+# 将 AstrBot 生态的第三方插件直接放入 data/plugins/<插件目录>/ 即可。
+# 仅支持不依赖大模型能力的功能类插件；依赖模型的插件需官方移植。
+ASTRBOT_COMPAT_ENABLED = _env("ASTRBOT_COMPAT_ENABLED", "true").lower() in ("true", "1", "yes")
+# 对外声称兼容的 AstrBot 版本（注入日志与插件自检用，仅声明，不代表完全兼容）
+ASTRBOT_COMPAT_VERSION = _env("ASTRBOT_COMPAT_VERSION", "4.27.0")
+# 第三方插件源码目录（每个子目录为一个插件，需含 metadata.yaml）
+ASTRBOT_PLUGINS_DIR = _env_path("ASTRBOT_PLUGINS_DIR", PROJECT_ROOT / "data" / "plugins")
+# 插件配置持久化目录（AstrBot 侧为 data/config）
+ASTRBOT_PLUGIN_CONFIG_DIR = _env_path("ASTRBOT_PLUGIN_CONFIG_DIR", PROJECT_ROOT / "data" / "config")
+# 插件运行时数据目录（StarTools.get_data_dir 返回的根目录）
+ASTRBOT_PLUGIN_DATA_DIR = _env_path("ASTRBOT_PLUGIN_DATA_DIR", PROJECT_ROOT / "data" / "plugin_data")
+# 是否自动安装插件声明的依赖（requirements.txt）；默认关闭，避免任意代码执行
+ASTRBOT_AUTO_INSTALL_REQUIREMENTS = _env("ASTRBOT_AUTO_INSTALL_REQUIREMENTS", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)

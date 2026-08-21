@@ -73,3 +73,9 @@ runtime/
 /memory/.space_assignments.json
 /release_backup/
 /config/spaces/
+
+# AstrBot 兼容层：第三方插件、其配置与运行期数据（禁止入库）
+/data/plugins/*
+!/data/plugins/.gitkeep
+/data/config/
+/data/plugin_data/

@@ -144,6 +144,15 @@ class PlatformAdapterTypeFilter(HandlerFilter):
 
 
 class CustomFilter(HandlerFilter):
+    """供插件继承的自定义过滤器基类。"""
+
+    def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
+        raise NotImplementedError
+
+
+class _CustomFilterWrapper(HandlerFilter):
+    """内部包装器：持有插件传进来的 custom_filter_cls 实例信息。"""
+
     def __init__(self, custom_filter_cls: type[HandlerFilter], *args: Any, **kwargs: Any) -> None:
         self.custom_filter_cls = custom_filter_cls
         self.args = args
@@ -193,54 +202,16 @@ def _append_filter(func: Callable, event_type: EventType, filter_obj: HandlerFil
     return func
 
 
-def _dual_usage_decorator(event_type: EventType) -> Callable:
-    """生成支持 @dec 与 @dec() 两种用法的钩子装饰器工厂。"""
-
-    def _decorator(_func: Callable | None = None, *, priority: int = 0) -> Callable:
-        # 直接当装饰器用：@filter.on_xxx  (可调用对象作为第一个位置参数)
-        if callable(_func):
-            func = _func  # type: ignore[assignment]
-            md = _get_or_create_handler_md(func, event_type)
-            if priority:
-                md.extras_configs["priority"] = priority
-            return func
-
-        # 带括号调用：@filter.on_xxx() 或 @filter.on_xxx(priority=5)
-        def wrapper(func: Callable) -> Callable:
-            md = _get_or_create_handler_md(func, event_type)
-            if priority:
-                md.extras_configs["priority"] = priority
-            return func
-
-        return wrapper
-
-    return _decorator
-
-
-# 为了支持 @filter.on_xxx 不带括号时，Python 会把函数直接传给装饰器，
-# 上述 _decorator 的签名需要同时兼容 func 作为位置参数且带 priority 关键字。
-# 上游部分钩子既支持 @filter.on_xxx 也支持 @filter.on_xxx()，因此每个钩子
-# 都用下面这个更宽容的包装：第一个位置参数若为 callable 则视为直接装饰。
 def _make_hook(event_type: EventType) -> Callable:
     def hook(*args: Any, **kwargs: Any) -> Any:
-        # 情况1：@hook      -> args=(func,), kwargs={}
-        # 情况2：@hook()    -> args=(), kwargs={}
-        # 情况3：@hook(priority=5) -> args=(), kwargs={priority:5}
-        # 情况4：@hook(func, priority=5) 理论上不会出现，但兼容
         priority = kwargs.pop("priority", 0)
-        # 若还有其他未消费 kwargs，忽略（保持宽容）
         if args and callable(args[0]) and not kwargs:
-            # 直接装饰
             func = args[0]
-            # 若同时传了 priority 作为位置参数？不处理
             md = _get_or_create_handler_md(func, event_type)  # type: ignore[arg-type]
             if priority:
                 md.extras_configs["priority"] = priority
             return func
-        # 带括号的调用，返回真正的装饰器
-        # 支持 priority 以关键字或位置传入（上游未用位置，但兼容）
         if args and isinstance(args[0], int) and not kwargs:
-            # 极端情况：@hook(5) 视为 priority=5
             priority = int(args[0])
 
         def decorator(func: Callable) -> Callable:
@@ -265,7 +236,6 @@ def command(
     priority: int = 0,
     desc: str | None = None,
 ) -> Callable:
-    # alias 统一归一为 set
     if alias is None:
         alias_set: set[str] = set()
     elif isinstance(alias, str):
@@ -277,25 +247,21 @@ def command(
 
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
-        md.extras_configs["priority"] = priority
+        if priority:
+            md.extras_configs["priority"] = priority
         if desc is not None:
             md.desc = desc
         filt = CommandFilter(name, alias_set, priority, desc)
         md.event_filters.append(filt)
-        # 解析参数填充 handler_params（跳过 self, event）
         try:
             sig = inspect.signature(func, eval_str=True)  # type: ignore[call-arg]
         except TypeError:
             sig = inspect.signature(func)
         params = list(sig.parameters.values())
-        # 跳过前两个（self, event），若不足两个则不跳
         remaining = params[2:] if len(params) >= 2 else []
         for idx, p in enumerate(remaining):
             ann = p.annotation if p.annotation is not inspect.Parameter.empty else None
             default = p.default if p.default is not inspect.Parameter.empty else None
-            # GreedyStr 必须在最后
-            # 需要处理 annotation 可能是 str（from __future__ import annotations）的情况
-            # 但 eval_str=True 已求值，若仍为字符串则直接比较名字
             is_greedy = False
             if ann is GreedyStr:
                 is_greedy = True
@@ -325,7 +291,8 @@ def command_group(
 
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
-        md.extras_configs["priority"] = priority
+        if priority:
+            md.extras_configs["priority"] = priority
         filt = CommandGroupFilter(name, alias_set, priority)
         md.event_filters.append(filt)
         return func
@@ -336,7 +303,8 @@ def command_group(
 def regex(pattern: str, flags: int = 0, priority: int = 0) -> Callable:
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
-        md.extras_configs["priority"] = priority
+        if priority:
+            md.extras_configs["priority"] = priority
         filt = RegexFilter(pattern, flags, priority)
         md.event_filters.append(filt)
         return func
@@ -347,7 +315,8 @@ def regex(pattern: str, flags: int = 0, priority: int = 0) -> Callable:
 def event_message_type(event_type: EventMessageType, priority: int = 0) -> Callable:
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
-        md.extras_configs["priority"] = priority
+        if priority:
+            md.extras_configs["priority"] = priority
         filt = EventMessageTypeFilter(event_type, priority)
         md.event_filters.append(filt)
         return func
@@ -358,7 +327,6 @@ def event_message_type(event_type: EventMessageType, priority: int = 0) -> Calla
 def permission_type(permission_type: PermissionType, raise_error: bool = True) -> Callable:  # noqa: A001
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
-        # permission_type 不覆盖 priority（若未传入），保持已有值
         filt = PermissionTypeFilter(permission_type, raise_error)
         md.event_filters.append(filt)
         return func
@@ -379,7 +347,7 @@ def platform_adapter_type(platform_adapter_type: PlatformAdapterType) -> Callabl
 def custom_filter(custom_filter_cls: type[HandlerFilter], *args: Any, **kwargs: Any) -> Callable:
     def decorator(func: Callable) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
-        filt = CustomFilter(custom_filter_cls, *args, **kwargs)
+        filt = _CustomFilterWrapper(custom_filter_cls, *args, **kwargs)
         md.event_filters.append(filt)
         return func
 
@@ -393,7 +361,6 @@ def llm_tool(name: str | None = None) -> Callable:
         md = _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent)
         if name is not None:
             md.extras_configs["tool_name"] = name
-        # 不额外添加 filter，仅注册
         return func
 
     return decorator

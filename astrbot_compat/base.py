@@ -40,12 +40,19 @@ class Star:
     def __init_subclass__(cls, **kwargs) -> None:  # type: ignore[override]
         super().__init_subclass__(**kwargs)
         # 此时还读不到 metadata.yaml，只能建占位 StarMetadata
-        from .registry import StarMetadata, star_map, star_registry
+        from .registry import StarMetadata, star_handlers_registry, star_map, star_registry
 
         module_path = cls.__module__
         if module_path in star_map:
             existing = star_map[module_path]
             existing.star_cls_type = cls
+            # 类体内的装饰器先执行，__init_subclass__ 后执行；
+            # 此时装饰器已把 handler 注册到 star_handlers_registry，
+            # 需回填到 StarMetadata。
+            existing.star_handler_full_names = [
+                h.handler_full_name
+                for h in star_handlers_registry.get_handlers_by_module_name(module_path)
+            ]
         else:
             md = StarMetadata(
                 name="",
@@ -54,7 +61,10 @@ class Star:
                 version="",
                 star_cls_type=cls,
                 module_path=module_path,
-                star_handler_full_names=[],
+                star_handler_full_names=[
+                    h.handler_full_name
+                    for h in star_handlers_registry.get_handlers_by_module_name(module_path)
+                ],
             )
             star_map[module_path] = md
             star_registry.append(md)
@@ -69,13 +79,13 @@ class StarTools:
 
         上游靠 sys._getframe 回溯调用栈，从 module 字面量 data.plugins.<dir> 取目录名。
         """
-        # 解析 ASTRBOT_PLUGIN_DATA_DIR
+        # 解析 ASTRBOT_PLUGIN_DATA_DIR（插件运行时数据，不与源码同目录）
         try:
-            from config.settings import PROJECT_ROOT
+            from config.settings import ASTRBOT_PLUGIN_DATA_DIR
 
-            base = PROJECT_ROOT / "data" / "plugins"
+            base = ASTRBOT_PLUGIN_DATA_DIR
         except Exception:
-            base = Path(__file__).resolve().parent.parent / "data" / "plugins"
+            base = Path(__file__).resolve().parent.parent / "data" / "plugin_data"
 
         dir_name: str | None = None
         if plugin_name:
@@ -84,13 +94,10 @@ class StarTools:
             try:
                 frame = sys._getframe(1)
                 mod_name: str = frame.f_globals.get("__name__", "")
-                # 按 "." 切开，如果以 "data.plugins." 开头则取第 3 段
                 if mod_name.startswith("data.plugins."):
                     parts = mod_name.split(".")
                     if len(parts) >= 3 and parts[2]:
                         dir_name = parts[2]
-                # 兼容部分插件直接位于 data.plugins.<dir> 的子模块
-                # 上游逻辑是硬取第 3 段，这里已覆盖
             except (ValueError, AttributeError):
                 dir_name = None
 
