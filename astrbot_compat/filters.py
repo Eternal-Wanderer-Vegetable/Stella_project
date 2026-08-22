@@ -83,11 +83,25 @@ class CommandFilter(HandlerFilter):
         alias: set[str] | None = None,
         priority: int = 0,
         desc: str | None = None,
+        parent_names: list[str] | None = None,
     ) -> None:
         self.name = name
         self.alias = alias or set()
         self.priority = priority
         self.desc = desc
+        self.parent_names = parent_names
+        # 完整指令名列表
+        if parent_names:
+            base = [name] + sorted(self.alias)
+            # parent_names 已是完整路径
+            self.full_names: list[str] = []
+            for p in parent_names:
+                for c in base:
+                    self.full_names.append(f"{p} {c}")
+        else:
+            self.full_names = [name] + sorted(self.alias)
+        # 按长度降序，优先匹配更长指令（二级指令优先）
+        self.full_names.sort(key=len, reverse=True)
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
         try:
@@ -99,15 +113,14 @@ class CommandFilter(HandlerFilter):
             s = s[1:].lstrip()
         if not s:
             return False
-        parts = s.split(None, 1)
-        token = parts[0]
-        rest = parts[1] if len(parts) > 1 else ""
-        if token == self.name or token in self.alias:
-            try:
-                event.set_extra("__cmd_args__", rest)
-            except Exception:
-                pass
-            return True
+        for fn in self.full_names:
+            if s == fn or s.startswith(fn + " "):
+                rest = s[len(fn):].strip()
+                try:
+                    event.set_extra("__cmd_args__", rest)
+                except Exception:
+                    pass
+                return True
         return False
 
 
@@ -117,10 +130,24 @@ class CommandGroupFilter(HandlerFilter):
         name: str,
         alias: set[str] | None = None,
         priority: int = 0,
+        parent_names: list[str] | None = None,
     ) -> None:
         self.name = name
         self.alias = alias or set()
         self.priority = priority
+        self.parent_names = parent_names
+        if parent_names:
+            base = [name] + sorted(self.alias)
+            self.full_names: list[str] = []
+            for p in parent_names:
+                for c in base:
+                    self.full_names.append(f"{p} {c}")
+        else:
+            self.full_names = [name] + sorted(self.alias)
+        self.full_names.sort(key=len, reverse=True)
+
+    def get_complete_names(self) -> list[str]:
+        return list(self.full_names)
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
         try:
@@ -132,8 +159,10 @@ class CommandGroupFilter(HandlerFilter):
             s = s[1:].lstrip()
         if not s:
             return False
-        token = s.split(None, 1)[0]
-        return token == self.name or token in self.alias
+        for fn in self.full_names:
+            if s == fn or s.startswith(fn + " "):
+                return True
+        return False
 
 
 class RegexFilter(HandlerFilter):
@@ -165,24 +194,13 @@ class EventMessageTypeFilter(HandlerFilter):
         self.priority = priority
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        # ALL 直接通过
         if self.event_type == EventMessageType.ALL:
             return True
-        # 判断当前事件类型
         try:
             is_private = event.is_private_chat() if hasattr(event, "is_private_chat") else False
         except Exception:
             is_private = False
-        if is_private:
-            need = EventMessageType.PRIVATE_MESSAGE
-        else:
-            # 群聊
-            # 若事件既非私聊则视为群聊（其他类型按群聊处理）
-            need = EventMessageType.GROUP_MESSAGE
-            # 若原 filter 要求 OTHER_MESSAGE，也允许群聊以外的？简化：仅 GROUP/PRIVATE
-            if self.event_type & EventMessageType.OTHER_MESSAGE:
-                # 当事件既不是私聊也不是群聊时才命中 OTHER，这里无法精确，返回 False
-                return False
+        need = EventMessageType.PRIVATE_MESSAGE if is_private else EventMessageType.GROUP_MESSAGE
         return bool(self.event_type & need)
 
 
@@ -197,7 +215,6 @@ class PermissionTypeFilter(HandlerFilter):
                 return bool(event.is_admin() if hasattr(event, "is_admin") else False)
             except Exception:
                 return False
-        # MEMBER 恒 True
         return True
 
 
@@ -206,7 +223,6 @@ class PlatformAdapterTypeFilter(HandlerFilter):
         self.platform_adapter_type = platform_adapter_type
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        # Stella 唯一支持 AIOCQHTTP，ALL 包含 AIOCQHTTP 故也通过
         return bool(self.platform_adapter_type & PlatformAdapterType.AIOCQHTTP)
 
 
@@ -244,10 +260,6 @@ class _CustomFilterWrapper(HandlerFilter):
 
 
 def _get_or_create_handler_md(func: Callable, event_type: EventType) -> StarHandlerMetadata:
-    """获取或创建与 func 关联的 StarHandlerMetadata。
-
-    关键：同一个函数只能对应一条 metadata，装饰器叠加时复用同一条。
-    """
     existing = getattr(func, "__astrbot_handler_md__", None)
     if existing is not None:
         return existing  # type: ignore[return-value]
@@ -263,7 +275,6 @@ def _get_or_create_handler_md(func: Callable, event_type: EventType) -> StarHand
         handler_params={},
         desc="",
     )
-    # 挂在函数上，避免二次创建
     try:
         setattr(func, "__astrbot_handler_md__", md)
     except AttributeError:
@@ -282,8 +293,29 @@ def _resort() -> None:
     star_handlers_registry.sort(key=lambda m: m.get_priority(), reverse=True)
 
 
+def _parse_handler_params(func: Callable, md: StarHandlerMetadata) -> None:
+    try:
+        sig = inspect.signature(func, eval_str=True)  # type: ignore[call-arg]
+    except Exception:
+        sig = inspect.signature(func)
+    params = list(sig.parameters.values())
+    remaining = params[2:] if len(params) >= 2 else []
+    for idx, p in enumerate(remaining):
+        ann = p.annotation if p.annotation is not inspect.Parameter.empty else None
+        default = p.default
+        is_greedy = False
+        if ann is GreedyStr:
+            is_greedy = True
+        elif isinstance(ann, str) and ann == "GreedyStr":
+            is_greedy = True
+        if is_greedy and idx != len(remaining) - 1:
+            raise ValueError("GreedyStr 必须是最后一个参数")
+        md.handler_params[p.name] = (ann, default)
+
+
 def _make_hook(event_type: EventType) -> Callable:
     def hook(*args: Any, **kwargs: Any) -> Any:
+        # 先判 callable，再处理 int 位置参数（优先级）
         priority = kwargs.pop("priority", 0)
         if args and callable(args[0]) and not kwargs:
             func = args[0]
@@ -336,26 +368,78 @@ def command(
             md.desc = desc
         filt = CommandFilter(name, alias_set, priority, desc)
         md.event_filters.append(filt)
-        try:
-            sig = inspect.signature(func, eval_str=True)  # type: ignore[call-arg]
-        except Exception:
-            sig = inspect.signature(func)
-        params = list(sig.parameters.values())
-        remaining = params[2:] if len(params) >= 2 else []
-        for idx, p in enumerate(remaining):
-            ann = p.annotation if p.annotation is not inspect.Parameter.empty else None
-            default = p.default  # 保留 Parameter.empty 哨兵以区分“无默认值”
-            is_greedy = False
-            if ann is GreedyStr:
-                is_greedy = True
-            elif isinstance(ann, str) and ann == "GreedyStr":
-                is_greedy = True
-            if is_greedy and idx != len(remaining) - 1:
-                raise ValueError("GreedyStr 必须是最后一个参数")
-            md.handler_params[p.name] = (ann, default)
+        _parse_handler_params(func, md)
         return func
 
     return decorator
+
+
+class _RegisteringCommandable:
+    def __init__(self, group_filter: CommandGroupFilter):
+        self.group_filter = group_filter
+
+    def command(
+        self,
+        name: str,
+        alias: set[str] | list[str] | str | None = None,
+        priority: int = 0,
+        desc: str | None = None,
+    ) -> Callable:
+        if alias is None:
+            alias_set: set[str] = set()
+        elif isinstance(alias, str):
+            alias_set = {alias}
+        elif isinstance(alias, (list, set, tuple)):
+            alias_set = set(alias)
+        else:
+            alias_set = {str(alias)}
+
+        def decorator(func: Callable) -> Callable:
+            md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
+            if priority:
+                md.extras_configs["priority"] = priority
+                _resort()
+            if desc is not None:
+                md.desc = desc
+            filt = CommandFilter(
+                name, alias_set, priority, desc, parent_names=self.group_filter.get_complete_names()
+            )
+            md.event_filters.append(filt)
+            _parse_handler_params(func, md)
+            return func
+
+        return decorator
+
+    def group(
+        self,
+        name: str,
+        alias: set[str] | list[str] | str | None = None,
+        priority: int = 0,
+    ) -> Any:
+        if alias is None:
+            alias_set: set[str] = set()
+        elif isinstance(alias, str):
+            alias_set = {alias}
+        elif isinstance(alias, (list, set, tuple)):
+            alias_set = set(alias)
+        else:
+            alias_set = {str(alias)}
+        filt = CommandGroupFilter(name, alias_set, priority, parent_names=self.group_filter.get_complete_names())
+
+        # 创建桩的 md（不执行）
+        def _stub(func: Callable) -> _RegisteringCommandable:
+            md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
+            md.extras_configs["is_group_stub"] = True
+            if priority:
+                md.extras_configs["priority"] = priority
+                _resort()
+            md.event_filters.append(filt)
+            return _RegisteringCommandable(filt)
+
+        # 为了支持 @group 加括号的两种写法，这里返回一个可调用对象
+        # 上游是直接 decorator 返回对象，本实现简化：group() 必须带括号
+        # 但为了兼容 @math_g.group 不带参数的错误用法，返回 _stub 作为装饰器
+        return _stub
 
 
 def command_group(
@@ -372,14 +456,15 @@ def command_group(
     else:
         alias_set = {str(alias)}
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable) -> Any:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
+        md.extras_configs["is_group_stub"] = True
         if priority:
             md.extras_configs["priority"] = priority
             _resort()
         filt = CommandGroupFilter(name, alias_set, priority)
         md.event_filters.append(filt)
-        return func
+        return _RegisteringCommandable(filt)
 
     return decorator
 
@@ -443,7 +528,6 @@ def custom_filter(custom_filter_cls: type[HandlerFilter], *args: Any, **kwargs: 
 def llm_tool(name: str | None = None) -> Callable:
     """注册为 llm_tool（仅注册，不分发）。"""
 
-    # 支持 @filter.llm_tool 裸用（不带括号）
     if callable(name):
         func = name  # type: ignore[assignment]
         _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent)

@@ -178,6 +178,7 @@ class AstrMessageEvent:
     ) -> None:
         self._nb_event = nb_event
         self._bot = bot
+        self.bot = bot  # 公开别名，供插件 await event.bot.call_action(...)
         self.message_str = message_str
         self.message_obj = message_obj
         self.platform_meta = platform_meta or _AIOCQHTTP_META
@@ -252,6 +253,9 @@ class AstrMessageEvent:
 
     def get_platform_id(self) -> str:
         return "aiocqhttp"
+
+    def get_message_type(self) -> str:
+        return self.message_obj.type
 
     @property
     def unified_msg_origin(self) -> str:
