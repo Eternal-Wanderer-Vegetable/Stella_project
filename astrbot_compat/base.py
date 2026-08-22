@@ -19,9 +19,14 @@ class Star:
     name: str = ""
     author: str = ""
     plugin_id: str = ""
+    version: str = ""
+    desc: str = ""
 
-    def __init__(self, context: Context) -> None:
+    def __init__(self, context: Context, config: Any | None = None) -> None:
         self.context = context
+        self.config = config
+        # KV 简易内存存储（插件常用 get_data/set_data 语义）
+        self._kv_store: dict[str, Any] = {}
         # 上游做日志容错：有插件把 logger 定义成只读 property
         try:
             self.logger = logging.getLogger(self.__class__.__module__)
@@ -33,6 +38,27 @@ class Star:
 
     async def terminate(self) -> None:
         pass
+
+    # --- KV 简易实现（内存 + 可选持久化由插件自行 via StarTools.get_data_dir） ---
+    def get_data(self, key: str, default: Any | None = None) -> Any:
+        return self._kv_store.get(key, default)
+
+    def set_data(self, key: str, value: Any) -> None:
+        self._kv_store[key] = value
+
+    def save_data(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        # 兼容旧插件调用 save_data，无需持久化
+        return None
+
+    # --- 渲染方法（暂不支持，转可识别异常） ---
+    def html_render(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        raise StellaCompatNotSupported("Star.html_render")
+
+    def text_to_image(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        raise StellaCompatNotSupported("Star.text_to_image")
+
+    def t2i(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        raise StellaCompatNotSupported("Star.t2i")
 
     def __init_subclass__(cls, **kwargs) -> None:  # type: ignore[override]
         super().__init_subclass__(**kwargs)

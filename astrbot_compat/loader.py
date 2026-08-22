@@ -181,6 +181,15 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
     md.module_path = module_name
     md.root_dir_name = dir_name
     md.module = mod  # type: ignore[assignment]
+    # 注入到 Star 类（供插件通过 self.name / self.plugin_id 读取，与上游一致）
+    try:
+        star_cls.name = resolved["name"]  # type: ignore[attr-defined]
+        star_cls.author = resolved["author"]  # type: ignore[attr-defined]
+        star_cls.version = resolved["version"]  # type: ignore[attr-defined]
+        star_cls.desc = resolved["desc"]  # type: ignore[attr-defined]
+        star_cls.plugin_id = f"{resolved['author'].lower()}/{resolved['name'].lower()}".replace("/", "_")  # type: ignore[attr-defined]
+    except Exception:
+        pass
     # h
     schema = load_conf_schema(plugin_dir)
     if schema:

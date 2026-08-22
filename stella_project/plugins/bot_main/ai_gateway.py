@@ -269,7 +269,8 @@ if MESSAGE_CLEANUP_ENABLED:
 # 因此必须在启动时主动断言。
 _PRIORITY_SILENT = 0
 _PRIORITY_TOGGLE = 1
-_PRIORITY_CHAT = 2
+_PRIORITY_PLUGIN = 2
+_PRIORITY_CHAT = 3
 
 group_silent_listener = on_message(priority=_PRIORITY_SILENT, block=False)
 
@@ -310,7 +311,26 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     return len(event.get_plaintext().strip()) > 0
 
 
-# 对话入口：只有命中以上规则才会进入（priority=2、命中即 block）。
+# AstrBot 插件入口：@ 消息先过插件管道（priority=2），命中则不再走 Stella LLM（priority=3）。
+# plugin_handler block=False 保证未命中时仍能落到 chat_handler；命中时通过事件标记让 chat 跳过。
+plugin_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_PLUGIN, block=False)
+
+
+@plugin_handler.handle()
+async def handle_plugin(bot: Bot, event: GroupMessageEvent):
+    """AstrBot 插件分发（@ 触发）。"""
+    try:
+        from astrbot_compat.pipeline import dispatch
+
+        handled = await dispatch(event, bot)
+        if handled:
+            # 标记已由插件处理，供 chat_handler 跳过 LLM
+            setattr(event, "_astrbot_handled", True)
+    except Exception as e:
+        logger.warning(f"[plugin] dispatch 异常: {e}")
+
+
+# 对话入口：只有命中以上规则才会进入（priority=3、命中即 block）。
 # 它 block=True，因此任何需要看到全部消息的处理器（如落库监听）都必须排在它之前。
 chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, block=True)
 
@@ -318,6 +338,9 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
+    if getattr(event, "_astrbot_handled", False):
+        logger.debug(f"[chat] 已由插件处理，跳过 LLM (group {event.group_id})")
+        return
     _ = bot
     lock = _group_locks[event.group_id]
     async with lock:
@@ -408,8 +431,8 @@ async def is_toggle_command(event: GroupMessageEvent) -> bool:
     return any(k in text for k in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS)
 
 
-# priority=1 必须高于 chat_handler(priority=2, block=True)，
-# 否则「安静」这类命令会被当成普通对话交给 LLM
+# priority=1 必须高于 plugin_handler(priority=2) 与 chat_handler(priority=3, block=True)，
+# 否则「安静」这类命令会被当成普通对话交给 LLM/插件
 toggle_handler = on_message(rule=Rule(is_toggle_command), priority=_PRIORITY_TOGGLE, block=True)
 
 # ── 监听器优先级不变量（启动期自检） ──
@@ -417,6 +440,7 @@ def _assert_listener_priorities() -> None:
     """校验落库监听器优先级最高；违反时输出 critical 日志（不中断启动）。"""
     for name, priority in (
         ("toggle_handler", _PRIORITY_TOGGLE),
+        ("plugin_handler", _PRIORITY_PLUGIN),
         ("chat_handler", _PRIORITY_CHAT),
     ):
         if priority <= _PRIORITY_SILENT:

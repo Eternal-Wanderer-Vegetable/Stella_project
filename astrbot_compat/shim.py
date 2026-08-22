@@ -21,9 +21,14 @@ _MODULE_NAMES = (
     "astrbot.api.message_components",
     "astrbot.api.platform",
     "astrbot.api.provider",
+    "astrbot.core",
+    "astrbot.core.message",
+    "astrbot.core.message.components",
 )
 
-_PACKAGE_NAMES = frozenset({"astrbot", "astrbot.api", "astrbot.api.event"})
+_PACKAGE_NAMES = frozenset(
+    {"astrbot", "astrbot.api", "astrbot.api.event", "astrbot.core", "astrbot.core.message"}
+)
 
 _INSTALLED = False
 
@@ -116,6 +121,7 @@ def install_shim() -> None:
     provider_mod = sys.modules["astrbot.api.provider"]
     message_components_mod = sys.modules["astrbot.api.message_components"]
     platform_mod = sys.modules["astrbot.api.platform"]
+    core_components_mod = sys.modules["astrbot.core.message.components"]
 
     # --- astrbot.api.star
     from .base import Star, StarTools
@@ -170,17 +176,24 @@ def install_shim() -> None:
     ):
         setattr(filter_mod, _name, getattr(_f, _name))
 
-    # --- astrbot.api.event：此刻只能绑 filter 与占位
+    # --- astrbot.api.event：绑定真类
     event_mod.filter = filter_mod  # type: ignore[attr-defined]
-    for _ename, _eapi in (
-        ("AstrMessageEvent", "astrbot.api.event.AstrMessageEvent"),
-        ("MessageChain", "astrbot.api.event.MessageChain"),
-        ("MessageEventResult", "astrbot.api.event.MessageEventResult"),
-        ("EventResultType", "astrbot.api.event.EventResultType"),
-        ("ResultContentType", "astrbot.api.event.ResultContentType"),
-        ("CommandResult", "astrbot.api.event.CommandResult"),
-    ):
-        setattr(event_mod, _ename, _make_placeholder(_eapi))
+    from .events import (
+        AstrMessageEvent as _AstrMessageEvent,
+    )
+    from .events import MessageChain as _MessageChain
+    from .events import MessageEventResult as _MessageEventResult
+    from .events import EventResultType as _EventResultType
+    from .events import ResultContentType as _ResultContentType
+
+    event_mod.AstrMessageEvent = _AstrMessageEvent  # type: ignore[attr-defined]
+    event_mod.MessageChain = _MessageChain  # type: ignore[attr-defined]
+    event_mod.MessageEventResult = _MessageEventResult  # type: ignore[attr-defined]
+    event_mod.EventResultType = _EventResultType  # type: ignore[attr-defined]
+    event_mod.ResultContentType = _ResultContentType  # type: ignore[attr-defined]
+    event_mod.CommandResult = _MessageEventResult  # type: ignore[attr-defined]
+    # 兼容别名
+    event_mod.EventResult = _MessageEventResult  # type: ignore[attr-defined]
 
     # --- astrbot.api
     api.logger = logging.getLogger("astrbot_compat.plugin")  # type: ignore[attr-defined]
@@ -199,18 +212,36 @@ def install_shim() -> None:
     ):
         setattr(api, _aname, _make_placeholder(_aapi))
 
-    # --- astrbot.api.message_components
-    for _mname, _mapi in (
-        ("Plain", "astrbot.api.message_components.Plain"),
-        ("Image", "astrbot.api.message_components.Image"),
-        ("At", "astrbot.api.message_components.At"),
-        ("AtAll", "astrbot.api.message_components.AtAll"),
-        ("Face", "astrbot.api.message_components.Face"),
-        ("Reply", "astrbot.api.message_components.Reply"),
-        ("Forward", "astrbot.api.message_components.Forward"),
-        ("Json", "astrbot.api.message_components.Json"),
-    ):
-        setattr(message_components_mod, _mname, _make_placeholder(_mapi))
+    # --- astrbot.api.message_components + astrbot.core.message.components 真类
+    from .components import (
+        At as _At,
+    )
+    from .components import AtAll as _AtAll
+    from .components import Face as _Face
+    from .components import Image as _Image
+    from .components import Node as _Node
+    from .components import Nodes as _Nodes
+    from .components import Plain as _Plain
+    from .components import Record as _Record
+    from .components import Reply as _Reply
+
+    for mod in (message_components_mod, core_components_mod):
+        mod.Plain = _Plain  # type: ignore[attr-defined]
+        mod.Image = _Image  # type: ignore[attr-defined]
+        mod.At = _At  # type: ignore[attr-defined]
+        mod.AtAll = _AtAll  # type: ignore[attr-defined]
+        mod.Record = _Record  # type: ignore[attr-defined]
+        mod.Reply = _Reply  # type: ignore[attr-defined]
+        mod.Face = _Face  # type: ignore[attr-defined]
+        mod.Node = _Node  # type: ignore[attr-defined]
+        mod.Nodes = _Nodes  # type: ignore[attr-defined]
+        # 剩余 Forward/Json 仍 placeholder
+        mod.Forward = _make_placeholder("astrbot.api.message_components.Forward")  # type: ignore[attr-defined]
+        mod.Json = _make_placeholder("astrbot.api.message_components.Json")  # type: ignore[attr-defined]
+        # 兼容部分插件 from astrbot.core.message.components import Plain 等
+        mod.BaseMessageComponent = _Plain.__bases__[0]  # type: ignore[attr-defined]
+    # 同时让 astrbot.core.message 指向 components
+    sys.modules["astrbot.core.message"].components = core_components_mod  # type: ignore[attr-defined]
 
     # --- astrbot.api.platform
     for _pname, _papi in (
