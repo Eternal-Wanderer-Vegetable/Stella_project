@@ -30,6 +30,8 @@ class Context:
         from .registry import star_registry
 
         for md in star_registry:
+            if not md.activated:
+                continue
             if md.name == star_name:
                 return md
         return None
@@ -37,7 +39,7 @@ class Context:
     def get_all_stars(self) -> list[Any]:
         from .registry import star_registry
 
-        return list(star_registry)
+        return [md for md in star_registry if md.activated]
 
     def get_config(self) -> dict:
         return self._config
@@ -65,7 +67,15 @@ class Context:
         logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool({name}) -> False")
         return False
 
-    def send_message(self, session: str, message_chain: Any) -> bool:  # noqa: ARG002
+    async def activate_llm_tool_async(self, name: str) -> bool:  # noqa: ARG002
+        logger.debug(f"[astrbot_compat] Context.activate_llm_tool_async({name}) -> False")
+        return False
+
+    async def deactivate_llm_tool_async(self, name: str) -> bool:  # noqa: ARG002
+        logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool_async({name}) -> False")
+        return False
+
+    async def send_message(self, session: str, message_chain: Any) -> bool:  # noqa: ARG002
         logger.warning("[astrbot_compat] Context.send_message 尚未接入 OneBot，返回 False")
         # TODO(step3): 接入 OneBot 发送
         return False
@@ -84,6 +94,9 @@ _LLM_METHODS = (
     "get_llm_tool_manager",
 )
 
+# 注意：_LLM_PROPS 用 property 实现，hasattr(ctx, "conversation_manager") 会因
+# property getter 抛 StellaCompatNotSupported 而被 hasattr 捕获返回 False（优雅降级），
+# 而直接访问 ctx.conversation_manager 则会抛 StellaCompatNotSupported（可被分流处理）。
 _LLM_PROPS = (
     "persona_manager",
     "conversation_manager",

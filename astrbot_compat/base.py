@@ -67,8 +67,21 @@ class Star:
             star_registry.append(md)
 
 
-class StarTools:
+class _StarToolsMeta(type):
+    def __getattr__(cls, name: str):  # type: ignore[override]
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        raise StellaCompatNotSupported(f"StarTools.{name}")
+
+
+class StarTools(metaclass=_StarToolsMeta):
     """插件工具集（仅 get_data_dir 本步可用，其余抛 NotSupported）。"""
+
+    _context = None
+
+    @classmethod
+    def initialize(cls, context) -> None:  # type: ignore[no-untyped-def]
+        cls._context = context
 
     @classmethod
     def get_data_dir(cls, plugin_name: str | None = None) -> Path:

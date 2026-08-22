@@ -49,7 +49,7 @@ class AstrBotConfig(dict):
                 self[key] = spec["default"]
                 continue
             t = spec.get("type", "string")
-            if t == "string":
+            if t in ("string", "text", "editor"):
                 self[key] = ""
             elif t == "int":
                 self[key] = 0
@@ -81,9 +81,9 @@ class AstrBotConfig(dict):
                 data = json.load(f)
         except Exception as e:
             logger.error(f"[astrbot_compat] 配置文件读取失败 {self._path}: {e}")
-            # 坏文件 rename 为 .bak，绝不阻死插件加载
+            # 坏文件 rename 为 .bak，绝不阻死插件加载（with_suffix 对多点名反直觉，用字符串拼接）
             try:
-                bak = self._path.with_suffix(".json.bak")
+                bak = self._path.with_name(self._path.name + ".bak")
                 self._path.rename(bak)
                 logger.warning(f"[astrbot_compat] 已将坏配置文件重命名为 {bak}")
             except Exception:
@@ -96,9 +96,9 @@ class AstrBotConfig(dict):
         if replace_config is not None:
             self.clear()
             self.update(replace_config)
-        # 原子写：先 .tmp 再 replace
+        # 原子写：先 .tmp 再 replace（with_suffix 对多点名反直觉，用字符串拼接）
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(".tmp")
+        tmp = self._path.with_name(self._path.name + ".tmp")
         try:
             with tmp.open("w", encoding="utf-8") as f:
                 json.dump(dict(self), f, ensure_ascii=False, indent=2)

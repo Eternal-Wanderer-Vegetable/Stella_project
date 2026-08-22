@@ -202,6 +202,10 @@ def _append_filter(func: Callable, event_type: EventType, filter_obj: HandlerFil
     return func
 
 
+def _resort() -> None:
+    star_handlers_registry.sort(key=lambda m: m.get_priority(), reverse=True)
+
+
 def _make_hook(event_type: EventType) -> Callable:
     def hook(*args: Any, **kwargs: Any) -> Any:
         priority = kwargs.pop("priority", 0)
@@ -210,6 +214,7 @@ def _make_hook(event_type: EventType) -> Callable:
             md = _get_or_create_handler_md(func, event_type)  # type: ignore[arg-type]
             if priority:
                 md.extras_configs["priority"] = priority
+                _resort()
             return func
         if args and isinstance(args[0], int) and not kwargs:
             priority = int(args[0])
@@ -218,6 +223,7 @@ def _make_hook(event_type: EventType) -> Callable:
             md = _get_or_create_handler_md(func, event_type)
             if priority:
                 md.extras_configs["priority"] = priority
+                _resort()
             return func
 
         return decorator
@@ -249,6 +255,7 @@ def command(
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
         if priority:
             md.extras_configs["priority"] = priority
+            _resort()
         if desc is not None:
             md.desc = desc
         filt = CommandFilter(name, alias_set, priority, desc)
@@ -293,6 +300,7 @@ def command_group(
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
         if priority:
             md.extras_configs["priority"] = priority
+            _resort()
         filt = CommandGroupFilter(name, alias_set, priority)
         md.event_filters.append(filt)
         return func
@@ -305,6 +313,7 @@ def regex(pattern: str, flags: int = 0, priority: int = 0) -> Callable:
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
         if priority:
             md.extras_configs["priority"] = priority
+            _resort()
         filt = RegexFilter(pattern, flags, priority)
         md.event_filters.append(filt)
         return func
@@ -317,6 +326,7 @@ def event_message_type(event_type: EventMessageType, priority: int = 0) -> Calla
         md = _get_or_create_handler_md(func, EventType.AdapterMessageEvent)
         if priority:
             md.extras_configs["priority"] = priority
+            _resort()
         filt = EventMessageTypeFilter(event_type, priority)
         md.event_filters.append(filt)
         return func

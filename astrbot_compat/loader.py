@@ -89,7 +89,6 @@ def _resolve_metadata(
     dir_name: str, meta: dict | None, star_cls: type
 ) -> dict[str, Any]:
     """优先 metadata.yaml，否则 @register，最后回退。"""
-    # 从 metadata.yaml 取
     name = None
     author = None
     desc = None
@@ -101,12 +100,10 @@ def _resolve_metadata(
         desc = meta.get("desc") or meta.get("description")
         version = meta.get("version")
         repo = meta.get("repo")
-    # 回退到 @register
     reg_meta = getattr(star_cls, "__astrbot_register_meta__", None)
     if reg_meta:
         args = reg_meta.get("args", ())
         kwargs = reg_meta.get("kwargs", {})
-        # 位置：name/author/desc/version/repo
         keys = ["name", "author", "desc", "version", "repo"]
         for i, k in enumerate(keys):
             val = None
@@ -114,7 +111,6 @@ def _resolve_metadata(
                 val = args[i]
             elif k in kwargs:
                 val = kwargs[k]
-            # 仅在还没取到时回退
             if k == "name" and not name and val:
                 name = val
             elif k == "author" and not author and val:
@@ -125,7 +121,6 @@ def _resolve_metadata(
                 version = val
             elif k == "repo" and not repo and val:
                 repo = val
-    # 最终回退
     if not name:
         name = dir_name
     if not author:
@@ -135,6 +130,12 @@ def _resolve_metadata(
     if not version:
         version = "0.0.0"
     return {"name": name, "author": author, "desc": desc, "version": version, "repo": repo}
+
+
+def _failed_key(md: StarMetadata | None, fallback_dir: str = "") -> str:
+    if md is not None:
+        return md.root_dir_name or md.module_path or md.plugin_id or fallback_dir
+    return fallback_dir
 
 
 def load_plugin(plugin_dir: Path) -> StarMetadata | None:
@@ -152,9 +153,7 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
     meta_raw = _read_metadata(plugin_dir)
     if meta_raw is not None:
         _check_version(meta_raw, dir_name)
-    # d
-    before = len(star_handlers_registry)
-    # e
+    # 移除旧的 before = len(...)，改用 module_name 精确定位
     module_name = f"data.plugins.{dir_name}.main"
     try:
         mod = importlib.import_module(module_name)
@@ -167,11 +166,11 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
     if md is None:
         logger.warning(f"[astrbot_compat] 插件 {dir_name} 未继承 Star，已跳过")
         return None
-    # g: 回填
-    # star_cls 取自 md.star_cls_type（由 __init_subclass__ 写入）
+    # g
     star_cls = md.star_cls_type
     if star_cls is None:
         logger.warning(f"[astrbot_compat] 插件 {dir_name} star_cls_type 为空")
+        md.activated = False
         return None
     resolved = _resolve_metadata(dir_name, meta_raw, star_cls)
     md.name = resolved["name"]
@@ -193,7 +192,7 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
     else:
         cfg = None
     md.config = cfg
-    # i: 实例化
+    # i
     from .context import get_context
 
     ctx = get_context()
@@ -202,16 +201,17 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
         try:
             inst = star_cls(ctx, cfg)  # type: ignore[call-arg]
         except TypeError:
-            # 仅签名不匹配回退；其它异常往外抛交给上层
             try:
                 inst = star_cls(ctx)  # type: ignore[call-arg]
             except Exception as e2:
                 _failed[dir_name] = repr(e2)
                 logger.exception(f"[astrbot_compat] 插件 {dir_name} 实例化失败: {e2}")
+                md.activated = False
                 return None
         except Exception as e:
             _failed[dir_name] = repr(e)
             logger.exception(f"[astrbot_compat] 插件 {dir_name} 实例化失败: {e}")
+            md.activated = False
             return None
     else:
         try:
@@ -219,10 +219,12 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
         except Exception as e:
             _failed[dir_name] = repr(e)
             logger.exception(f"[astrbot_compat] 插件 {dir_name} 实例化失败: {e}")
+            md.activated = False
             return None
     md.star_cls = inst
-    # j: handler 重绑定
-    for h in list(star_handlers_registry[before:]):
+    # j: handler 重绑定 —— 一律靠 module_name 查，绝不靠下标区间（避免 sort 串位）
+    own_handlers = star_handlers_registry.get_handlers_by_module_name(module_name)
+    for h in own_handlers:
         try:
             raw = h.handler
             if isinstance(raw, functools.partial):
@@ -230,11 +232,7 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
             h.handler = functools.partial(raw, inst)  # type: ignore[assignment]
         except Exception as e:
             logger.warning(f"[astrbot_compat] 插件 {dir_name} handler 重绑定失败 {h.handler_name}: {e}")
-    # also update star_handler_full_names in metadata (已在 __init_subclass__ 填过一次，但新增 handler 可能在 import 后才出现 —— 这里补齐)
-    md.star_handler_full_names = [
-        hh.handler_full_name
-        for hh in star_handlers_registry.get_handlers_by_module_name(module_name)
-    ]
+    md.star_handler_full_names = [hh.handler_full_name for hh in own_handlers]
     # k
     logger.info(f"[astrbot_compat] 已加载插件 {md.name} v{md.version} ({md.plugin_id})")
     _loaded_dirs.add(dir_name)
@@ -275,7 +273,6 @@ def load_all_plugins() -> list[StarMetadata]:
             return []
     except Exception:
         pass
-    # sys.path 兜底
     try:
         from config.settings import PROJECT_ROOT
 
@@ -303,6 +300,8 @@ async def initialize_plugins() -> None:
     from .exceptions import StellaCompatNotSupported
 
     for md in list(star_registry):
+        if not md.activated:
+            continue
         inst = md.star_cls
         if inst is None:
             continue
@@ -312,11 +311,13 @@ async def initialize_plugins() -> None:
             logger.warning(f"[astrbot_compat] 插件 {md.plugin_id} 依赖未实现能力 {e}，已标记为受限")
             md.activated = False
             _MODEL_DEPENDENT_PLUGINS.add(md.plugin_id)
-            _failed[md.root_dir_name] = f"StellaCompatNotSupported: {e}"
+            key = _failed_key(md, md.root_dir_name)
+            _failed[key] = f"StellaCompatNotSupported: {e}"
         except Exception as e:
             logger.exception(f"[astrbot_compat] 插件 {md.plugin_id} initialize 失败: {e}")
             md.activated = False
-            _failed[md.root_dir_name] = repr(e)
+            key = _failed_key(md, md.root_dir_name)
+            _failed[key] = repr(e)
 
 
 async def terminate_plugins() -> None:
@@ -327,7 +328,6 @@ async def terminate_plugins() -> None:
         if inst is None:
             continue
         try:
-            # 每个插件 5 秒超时，避免卡死停止流程
             await asyncio.wait_for(inst.terminate(), timeout=5.0)
         except asyncio.TimeoutError:
             logger.warning(f"[astrbot_compat] 插件 {md.plugin_id} terminate 超时")
