@@ -99,12 +99,20 @@ class MessageEventResult(MessageChain):
     def __init__(
         self,
         chain: list[BaseMessageComponent] | None = None,
-        result_type: ResultContentType = ResultContentType.GENERAL_RESULT,
+        result_type: EventResultType | ResultContentType = EventResultType.CONTINUE,
+        result_content_type: ResultContentType = ResultContentType.GENERAL_RESULT,
         use_t2i_: bool | None = None,
         async_stream: Any | None = None,  # noqa: ARG002
     ) -> None:
         super().__init__(chain=chain or [])
-        self.result_type = result_type
+        # 兼容旧调用：result_type 传入的是 ResultContentType 时，视为 result_content_type
+        if isinstance(result_type, ResultContentType):
+            result_content_type = result_type
+            result_type = EventResultType.CONTINUE
+        self.result_type: EventResultType = result_type  # type: ignore[assignment]
+        self.result_content_type: ResultContentType = result_content_type
+        # 保留旧字段别名（插件若直接读 result_type 期望 ResultContentType，仍可通过 result_content_type 访问）
+        # 为了兼容，将已废弃的 result_type 别名保留为 result_content_type 的镜像？不，保持分离
         self.use_t2i_ = use_t2i_
         self.async_stream = async_stream
 
@@ -113,14 +121,14 @@ class MessageEventResult(MessageChain):
         return self
 
     def set_result_content_type(self, t: ResultContentType) -> MessageEventResult:
-        self.result_type = t
+        self.result_content_type = t
         return self
 
     def is_llm_result(self) -> bool:
-        return self.result_type == ResultContentType.LLM_RESULT
+        return self.result_content_type == ResultContentType.LLM_RESULT
 
     def is_general_result(self) -> bool:
-        return self.result_type == ResultContentType.GENERAL_RESULT
+        return self.result_content_type == ResultContentType.GENERAL_RESULT
 
 
 # ============================================================
@@ -344,9 +352,20 @@ class AstrMessageEvent:
     # ---------- 事件流控制 ----------
     def stop_event(self) -> None:
         self._stopped = True
+        # 同步写入 result 的 result_type，保持与上游一致
+        if self._result is not None:
+            try:
+                self._result.result_type = EventResultType.STOP
+            except Exception:
+                pass
 
     def continue_event(self) -> None:
         self._stopped = False
+        if self._result is not None:
+            try:
+                self._result.result_type = EventResultType.CONTINUE
+            except Exception:
+                pass
 
     def is_stopped(self) -> bool:
         return self._stopped
@@ -355,6 +374,14 @@ class AstrMessageEvent:
         if flag is not None:
             self._should_call_llm = flag
         return self._should_call_llm
+
+    @property
+    def call_llm(self) -> bool | None:
+        return self._should_call_llm
+
+    @call_llm.setter
+    def call_llm(self, value: bool | None) -> None:
+        self._should_call_llm = value
 
     # ---------- LLM / extra ----------
     def get_extra(self, key: str, default: Any = None) -> Any:

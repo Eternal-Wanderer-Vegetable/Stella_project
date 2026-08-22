@@ -30,11 +30,15 @@ def _passes_filters(handler_md: Any, event: AstrMessageEvent) -> bool:
     return True
 
 
-def _build_params(handler_md: Any, event: AstrMessageEvent) -> dict[str, Any] | None:
-    """按 handler_params 顺序切分 __cmd_args__，缺必需参数则返回 None 跳过."""
+def _build_params(handler_md: Any, event: AstrMessageEvent) -> tuple[dict[str, Any] | None, str | None]:
+    """按 handler_params 顺序切分 __cmd_args__，返回 (params, error)。"""
     params_spec: dict[str, Any] = getattr(handler_md, "handler_params", {}) or {}
     if not params_spec:
-        return {}
+        try:
+            event.set_extra("parsed_params", {})
+        except Exception:
+            pass
+        return {}, None
     try:
         rest: str = event.get_extra("__cmd_args__", "") or ""
     except Exception:
@@ -84,14 +88,12 @@ def _build_params(handler_md: Any, event: AstrMessageEvent) -> dict[str, Any] | 
                     try:
                         val = int(raw)
                     except Exception:
-                        logger.debug(f"[pipeline] 参数 {pname} int 转换失败: {raw}")
-                        return None
+                        return None, f"参数 {pname} 需要为整数， got '{raw}'"
                 elif ann is float:
                     try:
                         val = float(raw)
                     except Exception:
-                        logger.debug(f"[pipeline] 参数 {pname} float 转换失败: {raw}")
-                        return None
+                        return None, f"参数 {pname} 需要为数字， got '{raw}'"
                 else:
                     val = raw
                 result[pname] = val
@@ -99,9 +101,12 @@ def _build_params(handler_md: Any, event: AstrMessageEvent) -> dict[str, Any] | 
                 if has_default:
                     result[pname] = default
                 else:
-                    logger.debug(f"[pipeline] 参数 {pname} 缺失且无默认值，跳过 handler {handler_md.handler_name}")
-                    return None
-    return result
+                    return None, f"缺少必需参数 {pname}"
+    try:
+        event.set_extra("parsed_params", dict(result))
+    except Exception:
+        pass
+    return result, None
 
 
 async def _emit(event: AstrMessageEvent, r: Any) -> None:
@@ -201,7 +206,14 @@ async def dispatch(nb_event: Any, bot: Any) -> bool:
         if not _passes_filters(handler_md, event):
             continue
 
-        params = _build_params(handler_md, event)
+        params, err = _build_params(handler_md, event)
+        if err is not None:
+            try:
+                await event.send(MessageChain().message(f"参数错误：{err}"))
+            except Exception:
+                pass
+            handled = True
+            continue
         if params is None:
             continue
 
