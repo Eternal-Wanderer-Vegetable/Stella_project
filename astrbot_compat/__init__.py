@@ -9,6 +9,12 @@ from .base import Star, StarTools
 from .config import AstrBotConfig
 from .context import Context, get_context
 from .exceptions import StellaCompatError, StellaCompatNotSupported
+from .loader import (
+    get_failed_plugins,
+    initialize_plugins,
+    load_all_plugins,
+    terminate_plugins,
+)
 from .registry import (
     EventType,
     StarHandlerMetadata,
@@ -19,27 +25,26 @@ from .registry import (
     star_registry,
 )
 from .shim import install_shim, uninstall_shim
-from .loader import get_failed_plugins, initialize_plugins, load_all_plugins, terminate_plugins
 
 __all__ = [
-    "Star",
-    "StarTools",
     "AstrBotConfig",
     "Context",
-    "get_context",
-    "StellaCompatError",
-    "StellaCompatNotSupported",
     "EventType",
+    "Star",
     "StarHandlerMetadata",
     "StarHandlerRegistry",
     "StarMetadata",
+    "StarTools",
+    "StellaCompatError",
+    "StellaCompatNotSupported",
+    "get_context",
+    "get_failed_plugins",
+    "initialize_plugins",
+    "install_shim",
+    "load_all_plugins",
     "star_handlers_registry",
     "star_map",
     "star_registry",
-    "install_shim",
-    "uninstall_shim",
-    "load_all_plugins",
-    "initialize_plugins",
     "terminate_plugins",
-    "get_failed_plugins",
+    "uninstall_shim",
 ]

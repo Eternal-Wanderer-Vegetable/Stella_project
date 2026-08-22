@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import ModuleType
-from typing import Callable
+from typing import Any
 
 
 class EventType(enum.Enum):
@@ -36,16 +37,18 @@ class EventType(enum.Enum):
 class StarMetadata:
     """插件元数据（占位 / 完整）。"""
 
-    name: str
-    author: str
-    desc: str
-    version: str
+    name: str = ""
+    author: str = ""
+    desc: str = ""
+    version: str = ""
     repo: str | None = None
     display_name: str | None = None
     short_desc: str | None = None
     support_platforms: list[str] = field(default_factory=list)
     astrbot_version: str | None = None
-    pages: list | None = None
+    logo_path: str | None = None
+    i18n: dict[str, dict] = field(default_factory=dict)
+    pages: list[dict] = field(default_factory=list)
     star_cls_type: type | None = None
     star_cls: object | None = None
     module_path: str = ""
@@ -58,10 +61,16 @@ class StarMetadata:
 
     @property
     def plugin_id(self) -> str:
-        return f"{(self.author or '').lower()}/{(self.name or '').lower()}".replace("/", "_")
+        """`author/name`。与上游一致：只把 name/author 内部的斜杠换掉，保留分隔符。"""
+        p_name = (self.name or "unknown").lower().replace("/", "_")
+        p_author = (self.author or "unknown").lower().replace("/", "_")
+        return f"{p_author}/{p_name}"
 
     def __str__(self) -> str:
-        return f"{self.name}({self.author}) v{self.version}"
+        return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 @dataclass
@@ -75,11 +84,17 @@ class StarHandlerMetadata:
     handler: Callable
     event_filters: list = field(default_factory=list)
     extras_configs: dict = field(default_factory=dict)
-    handler_params: dict = field(default_factory=dict)
     desc: str = ""
+    enabled: bool = True
 
     def get_priority(self) -> int:
-        return int(self.extras_configs.get("priority", 0) or 0)
+        try:
+            return int(self.extras_configs.get("priority", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def __lt__(self, other: StarHandlerMetadata) -> bool:
+        return self.get_priority() < other.get_priority()
 
 
 class StarHandlerRegistry(list):
@@ -88,26 +103,51 @@ class StarHandlerRegistry(list):
     与 NoneBot 相反：数值越大优先级越高，先执行。
     """
 
-    def append(self, md: StarHandlerMetadata) -> None:  # type: ignore[override]
+    def __init__(self, *args: Any) -> None:
+        super().__init__(*args)
+        self._by_full_name: dict[str, StarHandlerMetadata] = {}
+
+    def append(self, md: StarHandlerMetadata) -> None:
+        md.extras_configs.setdefault("priority", 0)
         super().append(md)
+        self._by_full_name[md.handler_full_name] = md
+        self.resort()
+
+    def resort(self) -> None:
         self.sort(key=lambda m: m.get_priority(), reverse=True)
 
-    def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata | None:
-        for md in self:
-            if md.handler_full_name == full_name:
-                return md
-        return None
+    def clear(self) -> None:
+        super().clear()
+        self._by_full_name.clear()
 
-    def get_handlers_by_event_type(self, event_type: EventType) -> list[StarHandlerMetadata]:
-        """只返回 activated 插件的 handler。"""
+    def remove(self, md: StarHandlerMetadata) -> None:
+        self._by_full_name.pop(md.handler_full_name, None)
+        with_removed = [h for h in self if h is not md]
+        super().clear()
+        super().extend(with_removed)
+
+    def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata | None:
+        return self._by_full_name.get(full_name)
+
+    def get_handlers_by_event_type(
+        self,
+        event_type: EventType,
+        only_activated: bool = True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata]:
+        """按事件类型取 handler，默认只返回已启用插件的已启用 handler。"""
         result: list[StarHandlerMetadata] = []
         for md in self:
-            if md.event_type != event_type:
+            if md.event_type != event_type or not md.enabled:
                 continue
-            # 通过 module_path 查插件是否 activated
             meta = star_map.get(md.handler_module_path)
-            if meta is not None and not meta.activated:
+            if only_activated and not (meta is not None and meta.activated):
                 continue
+            if plugins_name is not None and plugins_name != ["*"]:
+                if meta is None:
+                    continue
+                if meta.name not in plugins_name and not meta.reserved:
+                    continue
             result.append(md)
         return result
 

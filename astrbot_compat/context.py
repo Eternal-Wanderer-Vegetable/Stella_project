@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from pathlib import Path
 from typing import Any
 
-from .exceptions import StellaCompatNotSupported
+from .exceptions import StellaCompatNotSupported, StellaCompatUnsupportedAttribute
 
 _MODEL_DEPENDENT_PLUGINS: set[str] = set()
 logger = logging.getLogger("astrbot_compat.context")
@@ -18,21 +18,21 @@ logger = logging.getLogger("astrbot_compat.context")
 class Context:
     """AstrBot 插件上下文（Stella 兼容实现）。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        _ = (args, kwargs)
         self._config: dict = {}
         self._registered_web_apis: list = []
+        self._tasks: list[asyncio.Task] = []
         self.provider_manager = None
         self.platform_manager = None
 
-    # --- 必须真实实现的方法 ---
+    # --- 插件注册表 ---
 
     def get_registered_star(self, star_name: str) -> Any | None:
         from .registry import star_registry
 
         for md in star_registry:
-            if not md.activated:
-                continue
-            if md.name == star_name:
+            if md.activated and md.name == star_name:
                 return md
         return None
 
@@ -41,8 +41,143 @@ class Context:
 
         return [md for md in star_registry if md.activated]
 
-    def get_config(self) -> dict:
+    def get_config(self, umo: str | None = None) -> dict:
+        _ = umo
         return self._config
+
+    # --- 平台能力 ---
+
+    async def send_message(self, session: Any, message_chain: Any) -> bool:
+        """按 `platform:MessageType:id` 主动发消息。"""
+        try:
+            target_type, target_id = self._parse_session(str(session))
+            lst = self._normalize(message_chain)
+            bot = self._get_bot()
+            if bot is None:
+                logger.error("[astrbot_compat] Context.send_message 无可用 Bot")
+                return False
+            return await self._deliver(bot, target_type, target_id, lst)
+        except Exception as e:
+            logger.error(f"[astrbot_compat] Context.send_message 失败: {e}", exc_info=True)
+            return False
+
+    @staticmethod
+    def _parse_session(session: str) -> tuple[str, str]:
+        parts = session.split(":")
+        if len(parts) >= 3:
+            return parts[1], parts[-1]
+        return "GroupMessage", session
+
+    @staticmethod
+    def _normalize(message_chain: Any) -> list:
+        from .components import BaseMessageComponent
+        from .events import MessageChain
+
+        if isinstance(message_chain, MessageChain):
+            return list(message_chain.chain)
+        if isinstance(message_chain, list):
+            return list(message_chain)
+        if isinstance(message_chain, BaseMessageComponent):
+            return [message_chain]
+        if isinstance(message_chain, str):
+            return [message_chain]
+        return [str(message_chain)]
+
+    @staticmethod
+    def _get_bot() -> Any:
+        from nonebot import get_bot, get_bots
+
+        try:
+            return get_bot()
+        except Exception:
+            bots = get_bots()
+            return next(iter(bots.values())) if bots else None
+
+    @staticmethod
+    async def _deliver(bot: Any, target_type: str, target_id: str, lst: list) -> bool:
+        from .components import split_forward_nodes, to_onebot_message
+
+        is_group = target_type != "FriendMessage"
+        forwards, rest = split_forward_nodes(lst)
+        sent = False
+        for nodes in forwards:
+            payload = await nodes.to_dict()
+            if is_group:
+                payload["group_id"] = int(target_id)
+                await bot.call_action("send_group_forward_msg", **payload)
+            else:
+                payload["user_id"] = int(target_id)
+                await bot.call_action("send_private_forward_msg", **payload)
+            sent = True
+        if rest:
+            msg = to_onebot_message(rest)
+            if msg:
+                if is_group:
+                    await bot.send_group_msg(group_id=int(target_id), message=msg)
+                else:
+                    await bot.send_private_msg(user_id=int(target_id), message=msg)
+                sent = True
+        if not sent:
+            logger.debug("[astrbot_compat] Context.send_message 空消息跳过")
+        return sent
+
+    def get_platform(self, platform_type: Any) -> Any | None:
+        _ = platform_type
+        logger.debug("[astrbot_compat] Context.get_platform 暂不支持，返回 None")
+        return None
+
+    def get_platform_inst(self, platform_id: str) -> Any | None:
+        _ = platform_id
+        logger.debug("[astrbot_compat] Context.get_platform_inst 暂不支持，返回 None")
+        return None
+
+    def register_task(self, task: Any, desc: str = "") -> None:
+        """登记一个后台任务，进程退出时统一取消。"""
+        try:
+            t = asyncio.ensure_future(task)
+        except (TypeError, RuntimeError) as e:
+            logger.warning(f"[astrbot_compat] register_task({desc}) 失败: {e}")
+            return
+        self._tasks.append(t)
+        t.add_done_callback(lambda fut: self._tasks.remove(fut) if fut in self._tasks else None)
+
+    def cancel_tasks(self) -> None:
+        for t in list(self._tasks):
+            if not t.done():
+                t.cancel()
+        self._tasks.clear()
+
+    # --- 兼容占位 ---
+
+    def register_commands(self, *args: Any, **kwargs: Any) -> None:
+        _ = (args, kwargs)
+        logger.debug("[astrbot_compat] Context.register_commands 已废弃，仅作兼容")
+
+    def register_provider(self, *args: Any, **kwargs: Any) -> None:
+        _ = (args, kwargs)
+        logger.warning("[astrbot_compat] Context.register_provider 暂不支持，仅作兼容")
+
+    def register_platform_adapter(self, *args: Any, **kwargs: Any) -> None:
+        _ = (args, kwargs)
+        logger.warning("[astrbot_compat] Context.register_platform_adapter 暂不支持，仅作兼容")
+
+    def register_web_api(self, *args: Any, **kwargs: Any) -> None:
+        _ = (args, kwargs)
+        logger.warning("[astrbot_compat] Context.register_web_api 暂不支持，仅作兼容")
+
+    def activate_llm_tool(self, name: str) -> bool:
+        logger.debug(f"[astrbot_compat] Context.activate_llm_tool({name}) -> False")
+        return False
+
+    def deactivate_llm_tool(self, name: str) -> bool:
+        logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool({name}) -> False")
+        return False
+
+    async def activate_llm_tool_async(self, name: str) -> bool:
+        return self.activate_llm_tool(name)
+
+    async def deactivate_llm_tool_async(self, name: str) -> bool:
+        return self.deactivate_llm_tool(name)
 
     def get_db(self) -> Any:
         raise StellaCompatNotSupported("Context.get_db")
@@ -50,102 +185,33 @@ class Context:
     def get_event_queue(self) -> Any:
         raise StellaCompatNotSupported("Context.get_event_queue")
 
-    def register_commands(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-        logger.debug("[astrbot_compat] Context.register_commands 已废弃，仅作兼容")
-
-    def register_provider(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-        logger.warning("[astrbot_compat] Context.register_provider 暂不支持，仅作兼容")
-
-    def register_platform_adapter(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-        logger.warning("[astrbot_compat] Context.register_platform_adapter 暂不支持，仅作兼容")
-
-    def activate_llm_tool(self, name: str) -> bool:  # noqa: ARG002
-        logger.debug(f"[astrbot_compat] Context.activate_llm_tool({name}) -> False")
-        return False
-
-    def deactivate_llm_tool(self, name: str) -> bool:  # noqa: ARG002
-        logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool({name}) -> False")
-        return False
-
-    async def activate_llm_tool_async(self, name: str) -> bool:  # noqa: ARG002
-        logger.debug(f"[astrbot_compat] Context.activate_llm_tool_async({name}) -> False")
-        return False
-
-    async def deactivate_llm_tool_async(self, name: str) -> bool:  # noqa: ARG002
-        logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool_async({name}) -> False")
-        return False
-
-    async def send_message(self, session: str, message_chain: Any) -> bool:
-        try:
-            # 解析 session "aiocqhttp:GroupMessage:<id>" 或 "aiocqhttp:FriendMessage:<id>"
-            parts = session.split(":")
-            if len(parts) >= 3:
-                typ = parts[1]
-                target_id = parts[-1]
-            else:
-                # 兼容仅传 id
-                typ = "GroupMessage"
-                target_id = session
-            # 组装 OneBot 消息
-            from .components import BaseMessageComponent, to_onebot_message
-            from .events import MessageChain as MC
-
-            if isinstance(message_chain, MC):
-                lst = message_chain.chain
-            elif isinstance(message_chain, list):
-                lst = message_chain
-            elif isinstance(message_chain, BaseMessageComponent):
-                lst = [message_chain]
-            elif isinstance(message_chain, str):
-                lst = [message_chain]
-            else:
-                lst = [str(message_chain)]
-            msg = to_onebot_message(lst)
-            if not msg:
-                logger.debug("[astrbot_compat] Context.send_message 空消息跳过")
-                return False
-            from nonebot import get_bot
-
-            try:
-                bot = get_bot()
-            except Exception:
-                # 尝试 get_bots 兼容
-                from nonebot import get_bots
-
-                bots = get_bots()
-                bot = next(iter(bots.values())) if bots else None
-            if bot is None:
-                logger.error("[astrbot_compat] Context.send_message 无可用 Bot")
-                return False
-            if typ == "GroupMessage":
-                await bot.send_group_msg(group_id=int(target_id), message=msg)
-            elif typ == "FriendMessage":
-                await bot.send_private_msg(user_id=int(target_id), message=msg)
-            else:
-                # 默认按群处理
-                await bot.send_group_msg(group_id=int(target_id), message=msg)
-            return True
-        except Exception as e:
-            logger.error(f"[astrbot_compat] Context.send_message 失败: {e}", exc_info=True)
-            return False
-
 
 # LLM 相关：必须存在但不实现（用循环批量挂，避免闭包坑）
 _LLM_METHODS = (
     "llm_generate",
     "tool_loop_agent",
+    "get_current_chat_provider_id",
     "get_using_provider",
     "get_using_provider_async",
     "get_all_providers",
     "get_provider_by_id",
     "get_using_tts_provider",
+    "get_using_tts_provider_async",
     "get_using_stt_provider",
+    "get_using_stt_provider_async",
+    "get_all_tts_providers",
+    "get_all_stt_providers",
+    "get_all_embedding_providers",
     "get_llm_tool_manager",
+    "add_llm_tools",
+    "register_llm_tool",
+    "unregister_llm_tool",
 )
 
-# 注意：_LLM_PROPS 用 property 实现，hasattr(ctx, "conversation_manager") 会因
-# property getter 抛 StellaCompatNotSupported 而被 hasattr 捕获返回 False（优雅降级），
-# 而直接访问 ctx.conversation_manager 则会抛 StellaCompatNotSupported（可被分流处理）。
+# 注意：_LLM_PROPS 用 property 实现。hasattr() 只吞 AttributeError，所以这些 getter
+# 抛的是 StellaCompatUnsupportedAttribute（同时是 StellaCompatNotSupported 和
+# AttributeError）：hasattr(ctx, "conversation_manager") 返回 False（插件特性探测优雅
+# 降级），而直接访问 ctx.conversation_manager 仍抛 StellaCompatNotSupported（可分流）。
 _LLM_PROPS = (
     "persona_manager",
     "conversation_manager",
@@ -156,23 +222,24 @@ _LLM_PROPS = (
 
 
 def _make_unsupported(api: str) -> Any:
-    def _m(self: Any, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+    def _m(self: Any, *args: Any, **kwargs: Any) -> Any:
+        _ = (self, args, kwargs)
         raise StellaCompatNotSupported(api)
 
     _m.__name__ = api.rsplit(".", 1)[-1]
     return _m
 
 
-for _name in _LLM_METHODS:
-    setattr(Context, _name, _make_unsupported(f"Context.{_name}"))
-
-
 def _make_unsupported_prop(api: str) -> property:
-    def _get(self: Any) -> Any:  # noqa: ARG002
-        raise StellaCompatNotSupported(api)
+    def _get(self: Any) -> Any:
+        _ = self
+        raise StellaCompatUnsupportedAttribute(api)
 
     return property(_get)
 
+
+for _name in _LLM_METHODS:
+    setattr(Context, _name, _make_unsupported(f"Context.{_name}"))
 
 for _pname in _LLM_PROPS:
     setattr(Context, _pname, _make_unsupported_prop(f"Context.{_pname}"))

@@ -1,262 +1,268 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
-"""AstrBot 插件分发管道（按 priority 降序）。"""
+"""AstrBot 插件分发管道。
+
+唤醒判定照搬上游 `WakingCheckStage`：对**每一条**消息都跑一遍 handler 的 filter，
+任一 filter 组通过即视为唤醒。因此 `@filter.regex` / `@filter.event_message_type`
+这类不依赖 @ 的监听器能正常工作，而 `CommandFilter` 自己会检查 `is_at_or_wake_command`。
+"""
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import inspect
 import logging
 from typing import Any
 
-from .events import AstrMessageEvent, MessageChain, MessageEventResult, build_event
+from .events import AstrMessageEvent, MessageChain, build_event
 from .exceptions import StellaCompatNotSupported
-from .registry import EventType, star_handlers_registry, star_map
+from .filters import CommandGroupFilter, PermissionTypeFilter
+from .registry import EventType, StarHandlerMetadata, star_handlers_registry, star_map
 
 logger = logging.getLogger("astrbot_compat.pipeline")
 
 
-def _passes_filters(handler_md: Any, event: AstrMessageEvent) -> bool:
-    filters = getattr(handler_md, "event_filters", []) or []
-    for f in filters:
-        try:
-            res = f.filter(event, None)
-            if not res:
-                return False
-        except Exception as e:
-            logger.warning(f"[pipeline] filter {f} 异常，已视为不命中: {e}")
-            return False
-    return True
+def _plugin_name(handler_md: StarHandlerMetadata) -> str:
+    meta = star_map.get(handler_md.handler_module_path)
+    if meta is not None and meta.name:
+        return meta.name
+    return handler_md.handler_module_path or handler_md.handler_full_name
 
 
-def _build_params(handler_md: Any, event: AstrMessageEvent) -> tuple[dict[str, Any] | None, str | None]:
-    """按 handler_params 顺序切分 __cmd_args__，返回 (params, error)。"""
-    params_spec: dict[str, Any] = getattr(handler_md, "handler_params", {}) or {}
-    if not params_spec:
-        try:
-            event.set_extra("parsed_params", {})
-        except Exception:
-            pass
-        return {}, None
-    try:
-        rest: str = event.get_extra("__cmd_args__", "") or ""
-    except Exception:
-        rest = ""
-    rest = rest.strip()
-    try:
-        from .filters import GreedyStr
-    except Exception:
-        GreedyStr = None  # type: ignore
-
-    items = list(params_spec.items())
-    result: dict[str, Any] = {}
-    tokens: list[str] = rest.split() if rest else []
-    token_idx = 0
-    for idx, (pname, pinfo) in enumerate(items):
-        if isinstance(pinfo, tuple):
-            if len(pinfo) == 2:
-                ann, default = pinfo
-            else:
-                ann, default = pinfo[0], pinfo[1]
-        else:
-            ann, default = None, inspect.Parameter.empty
-        has_default = default is not inspect.Parameter.empty
-        is_greedy = False
-        if GreedyStr is not None and ann is GreedyStr:
-            is_greedy = True
-        elif isinstance(ann, str) and ann == "GreedyStr":
-            is_greedy = True
-        elif ann is not None and getattr(ann, "__name__", "") == "GreedyStr":
-            is_greedy = True
-
-        if is_greedy:
-            if token_idx < len(tokens):
-                val: Any = " ".join(tokens[token_idx:])
-                token_idx = len(tokens)
-            else:
-                if has_default:
-                    val = default
-                else:
-                    val = ""
-            result[pname] = val
-        else:
-            if token_idx < len(tokens):
-                raw = tokens[token_idx]
-                token_idx += 1
-                if ann is int:
-                    try:
-                        val = int(raw)
-                    except Exception:
-                        return None, f"参数 {pname} 需要为整数， got '{raw}'"
-                elif ann is float:
-                    try:
-                        val = float(raw)
-                    except Exception:
-                        return None, f"参数 {pname} 需要为数字， got '{raw}'"
-                else:
-                    val = raw
-                result[pname] = val
-            else:
-                if has_default:
-                    result[pname] = default
-                else:
-                    return None, f"缺少必需参数 {pname}"
-    try:
-        event.set_extra("parsed_params", dict(result))
-    except Exception:
-        pass
-    return result, None
+def _plugin_id(handler_md: StarHandlerMetadata) -> str:
+    meta = star_map.get(handler_md.handler_module_path)
+    if meta is not None:
+        return meta.plugin_id
+    return handler_md.handler_module_path or handler_md.handler_full_name
 
 
 async def _emit(event: AstrMessageEvent, r: Any) -> None:
+    """把 handler 的返回值 / yield 值发出去。"""
     if r is None:
         return
-    if isinstance(r, MessageEventResult):
+    if isinstance(r, (MessageChain, str, list)):
         await event.send(r)
-    elif isinstance(r, MessageChain):
+        return
+    if hasattr(r, "chain"):
         await event.send(r)
-    elif isinstance(r, str):
-        await event.send(MessageChain().message(r))
-    elif isinstance(r, list):
-        await event.send(r)
-    elif hasattr(r, "chain"):
-        try:
-            await event.send(r)  # type: ignore[arg-type]
-        except Exception as e:
-            logger.debug(f"[pipeline] _emit 忽略未知类型 {type(r)}: {e}")
-    else:
-        logger.debug(f"[pipeline] _emit 忽略未知返回类型 {type(r)}: {r!r}")
+        return
+    logger.debug(f"[pipeline] 忽略未知返回类型 {type(r)}: {r!r}")
 
 
 async def _flush_result(event: AstrMessageEvent) -> None:
+    """把 handler 通过 set_result 挂上的结果发出去。"""
     r = event.get_result()
     if r is None:
         return
     event.clear_result()
-    chain = getattr(r, "chain", None)
-    if not chain:
+    if not getattr(r, "chain", None):
         return
     await event.send(r)
 
 
-async def _invoke(handler_md: Any, event: AstrMessageEvent, params: dict[str, Any]) -> Any:
+async def _invoke(
+    handler_md: StarHandlerMetadata,
+    event: AstrMessageEvent,
+    params: dict[str, Any],
+) -> None:
     h = handler_md.handler
     func = h.func if isinstance(h, functools.partial) else h
-    try:
-        if inspect.isasyncgenfunction(func):
-            async for r in h(event, **params):
-                await _emit(event, r)
-                await _flush_result(event)
-        elif inspect.iscoroutinefunction(func):
-            r = await h(event, **params)
+    if inspect.isasyncgenfunction(func):
+        async for r in h(event, **params):
             await _emit(event, r)
             await _flush_result(event)
-        else:
-            r = h(event, **params)
-            if inspect.isawaitable(r):
-                r = await r
-                await _emit(event, r)
-                await _flush_result(event)
-            elif inspect.isasyncgen(r):
-                async for rr in r:
-                    await _emit(event, rr)
-                    await _flush_result(event)
-            else:
-                await _emit(event, r)
-                await _flush_result(event)
-        # 兜住只 set_result 的写法
+    elif inspect.iscoroutinefunction(func):
+        await _emit(event, await h(event, **params))
         await _flush_result(event)
-    except Exception:
-        raise
+    else:
+        r = h(event, **params)
+        if inspect.isawaitable(r):
+            await _emit(event, await r)
+        elif inspect.isasyncgen(r):
+            async for rr in r:
+                await _emit(event, rr)
+                await _flush_result(event)
+        else:
+            await _emit(event, r)
+    # 兜住只 set_result 不 yield 的写法
+    await _flush_result(event)
+
+
+async def _run_filters(
+    handler_md: StarHandlerMetadata,
+    event: AstrMessageEvent,
+) -> tuple[bool, str | None]:
+    """跑一个 handler 的全部 filter（AND）。
+
+    返回 (是否通过, 需要回复给用户的提示)。提示非空时表示应中止整条事件。
+    """
+    permission_not_pass = False
+    permission_raise_error = False
+    for f in handler_md.event_filters:
+        try:
+            if isinstance(f, PermissionTypeFilter):
+                if not f.filter(event, None):
+                    permission_not_pass = True
+                    permission_raise_error = f.raise_error
+                continue
+            if not f.filter(event, None):
+                return False, None
+        except Exception as e:
+            # 上游把 filter 抛出的异常（多为参数校验失败）回显给用户并终止事件
+            return False, f"插件 {_plugin_name(handler_md)}: {e}"
+    if permission_not_pass:
+        if not permission_raise_error:
+            return False, None
+        return False, (
+            f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。"
+        )
+    return True, None
+
+
+def _is_group_stub(handler_md: StarHandlerMetadata) -> bool:
+    if handler_md.extras_configs.get("is_group_stub"):
+        return True
+    return any(isinstance(f, CommandGroupFilter) for f in handler_md.event_filters)
+
+
+async def collect_handlers(
+    event: AstrMessageEvent,
+) -> list[tuple[StarHandlerMetadata, dict[str, Any]]]:
+    """按上游 WakingCheckStage 的语义挑出该事件应执行的 handler 及其参数。
+
+    副作用：命中任一 handler 时把 `event.is_wake` 置 True；权限不足或 filter 抛错时
+    会向用户发送提示并 `stop_event()`。
+    """
+    activated: list[tuple[StarHandlerMetadata, dict[str, Any]]] = []
+    for handler_md in star_handlers_registry.get_handlers_by_event_type(
+        EventType.AdapterMessageEvent,
+        plugins_name=event.plugins_name,
+    ):
+        if not handler_md.event_filters:
+            continue
+        event._extras.pop("parsed_params", None)
+        passed, notice = await _run_filters(handler_md, event)
+        if notice is not None:
+            with contextlib.suppress(Exception):
+                await event.send(MessageChain().message(notice))
+            event.stop_event()
+            return []
+        if not passed:
+            continue
+        event.is_wake = True
+        if _is_group_stub(handler_md):
+            continue
+        activated.append((handler_md, dict(event.get_extra("parsed_params", {}) or {})))
+    event._extras.pop("parsed_params", None)
+    return activated
 
 
 async def dispatch(nb_event: Any, bot: Any) -> bool:
-    """主入口：OneBot 事件 -> AstrBot 插件分发，返回是否向用户产出了回应."""
+    """主入口：OneBot 事件 -> AstrBot 插件分发，返回是否已向用户产出回应。"""
+    if not star_handlers_registry.get_handlers_by_event_type(
+        EventType.AdapterMessageEvent,
+    ):
+        return False
+
     try:
-        is_tome = nb_event.is_tome() if hasattr(nb_event, "is_tome") else False
-        if not is_tome:
-            return False
-    except Exception:
+        event = await build_event(nb_event, bot)
+    except Exception as e:
+        logger.warning(f"[pipeline] 构造事件失败: {e}")
         return False
 
-    handlers = star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent)
-    if not handlers:
-        return False
-
-    event = await build_event(nb_event, bot)
-
-    if not event.is_at_or_wake_command:
+    activated = await collect_handlers(event)
+    if event.is_stopped():
+        # 权限提示 / filter 报错已经回复过用户，视为已接管
+        return True
+    if not activated:
         return False
 
     handled = False
     warned_pids: set[str] = set()
 
-    for handler_md in handlers:
+    for handler_md, params in activated:
         if event.is_stopped():
             break
-        # ⑦ 清理上一个 handler 残留的 __cmd_args__
-        try:
-            event.set_extra("__cmd_args__", "")
-        except Exception:
-            pass
-        # 跳过指令组桩
-        if handler_md.extras_configs.get("is_group_stub"):
-            continue
-        if not _passes_filters(handler_md, event):
-            continue
-
-        params, err = _build_params(handler_md, event)
-        if err is not None:
-            try:
-                await event.send(MessageChain().message(f"参数错误：{err}"))
-            except Exception:
-                pass
-            handled = True
-            continue
-        if params is None:
-            continue
-
-        pid = ""
-        try:
-            mp = getattr(handler_md, "handler_module_path", "")
-            md = star_map.get(mp) if mp else None
-            if md is not None:
-                pid = md.plugin_id or mp
-            else:
-                pid = mp or getattr(handler_md, "handler_full_name", "")
-        except Exception:
-            pid = getattr(handler_md, "handler_full_name", "")
-
+        event.set_extra("parsed_params", params)
+        pid = _plugin_id(handler_md)
         try:
             await _invoke(handler_md, event, params)
-            if getattr(event, "_has_send_oper", False):
-                handled = True
-            # ⑤ 显式 stop / should_call_llm(False) 也算接管
-            if event.is_stopped() or event.should_call_llm() is False:
+            if event._has_send_oper or event.is_stopped() or event.call_llm is False:
                 handled = True
         except StellaCompatNotSupported as e:
             logger.warning(f"[astrbot_compat] 插件 {pid} 依赖大模型能力：{e}")
-            try:
+            with contextlib.suppress(Exception):
                 from .context import _MODEL_DEPENDENT_PLUGINS
 
                 _MODEL_DEPENDENT_PLUGINS.add(pid)
-            except Exception:
-                pass
             if pid not in warned_pids:
                 warned_pids.add(pid)
-                try:
-                    await event.send(MessageChain().message("这个插件需要依赖大模型能力，Stella 暂不支持"))
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    await event.send(
+                        MessageChain().message("这个插件需要依赖大模型能力，Stella 暂不支持"),
+                    )
             handled = True
         except Exception:
             logger.exception(f"[astrbot_compat] 插件 {pid} handler 执行异常")
+            await _notify_plugin_error(event, handler_md)
         finally:
             # 防止残留 result 被下一个 handler 重复发出
-            try:
+            with contextlib.suppress(Exception):
                 event.clear_result()
-            except Exception:
-                pass
 
     return handled
+
+
+async def _notify_plugin_error(
+    event: AstrMessageEvent,
+    handler_md: StarHandlerMetadata,
+) -> None:
+    """触发 OnPluginErrorEvent 钩子，让插件有机会自行处理报错。"""
+    import traceback
+
+    hooks = star_handlers_registry.get_handlers_by_event_type(
+        EventType.OnPluginErrorEvent,
+    )
+    if not hooks:
+        return
+    tb = traceback.format_exc()
+    for hook in hooks:
+        with contextlib.suppress(Exception):
+            await _call_hook(
+                hook,
+                event,
+                _plugin_name(handler_md),
+                handler_md.handler_name,
+                None,
+                tb,
+            )
+
+
+async def _call_hook(hook: StarHandlerMetadata, *args: Any) -> None:
+    """尽力而为地调用一个钩子：按其签名截断多余参数。"""
+    h = hook.handler
+    func = h.func if isinstance(h, functools.partial) else h
+    try:
+        sig = inspect.signature(func)
+        # partial 已绑定 self，参数表要跳过它
+        n = len(sig.parameters) - (1 if isinstance(h, functools.partial) else 0)
+    except (TypeError, ValueError):
+        n = len(args)
+    call_args = args[: max(n, 0)]
+    r = h(*call_args)
+    if inspect.isasyncgen(r):
+        async for _ in r:
+            pass
+    elif inspect.isawaitable(r):
+        await r
+
+
+async def emit_hook(event_type: EventType, *args: Any) -> None:
+    """对外暴露的生命周期钩子触发入口（on_astrbot_loaded 等）。"""
+    for hook in star_handlers_registry.get_handlers_by_event_type(event_type):
+        try:
+            await _call_hook(hook, *args)
+        except Exception as e:
+            logger.warning(f"[pipeline] 钩子 {hook.handler_full_name} 执行异常: {e}")

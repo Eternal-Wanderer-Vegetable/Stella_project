@@ -9,7 +9,9 @@
    - group_silent_listener（静默监听，priority 0）：只记录群消息到短期记忆，不触发总结；
    - toggle_handler（运行时开关，priority 1）：管理员 @ 机器人说「安静」/「恢复」时
      临时关闭或恢复本群主动发言（必须早于 chat_handler，否则会被当成普通对话）；
-   - chat_handler（@ 触发，priority 2）：当机器人被 @ 且发出非空消息时才会走完整推理；
+   - plugin_handler（AstrBot 插件，priority 2）：对所有消息跑一遍插件过滤器，
+     是否唤醒由过滤器自己决定（指令受 "/" 前缀与 @ 约束，正则/全量监听不受约束）；
+   - chat_handler（@ 触发，priority 3）：当机器人被 @ 且发出非空消息时才会走完整推理；
    - 主动 @ 用户（获取/验证记忆，受每用户日配额与冷却约束）——见 _proactive_at_user；
    - 主动发言（基于群消息频率的定时任务）——见 _proactive_speak_for_group；
 3. 定时任务（借 NoneBot APScheduler）：
@@ -35,12 +37,19 @@ from collections import OrderedDict, defaultdict
 from datetime import date
 
 from nonebot import get_driver, logger, on_message
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    Message,
+    MessageEvent,
+    MessageSegment,
+)
 from nonebot.exception import FinishedException
 from nonebot.rule import Rule
 
 from config import (
     ALLOWED_GROUPS,
+    ASTRBOT_COMPAT_ALLOW_PRIVATE,
     CONSOLIDATION_LOCAL_BATCH_SIZE,
     CONSOLIDATION_MAX_ROUNDS_PER_RUN,
     CONSOLIDATION_SCHEDULE_INTERVAL,
@@ -314,14 +323,31 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     return len(event.get_plaintext().strip()) > 0
 
 
-# AstrBot 插件入口：@ 消息先过插件管道（priority=2），命中则不再走 Stella LLM（priority=3）。
-# plugin_handler block=False 保证未命中时仍能落到 chat_handler；命中时通过事件标记让 chat 跳过。
-plugin_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_PLUGIN, block=False)
+async def is_plugin_trigger(event: MessageEvent) -> bool:
+    """AstrBot 插件的触发规则——刻意比 is_chat_trigger 宽。
+
+    上游 AstrBot 对**每一条**消息都跑一遍插件 filter，是否唤醒由 filter 自己决定：
+    @filter.command 受唤醒前缀（默认 "/"）与 @ 约束，而 @filter.regex /
+    @filter.event_message_type 明确不受约束。若在这里就要求 is_tome()，
+    正则监听、全量监听、以及群里直接打 "/xxx" 的标准用法会全部失效。
+    实际的唤醒判定在 astrbot_compat.pipeline.collect_handlers 内完成。
+    """
+    if isinstance(event, GroupMessageEvent):
+        if event.group_id not in ALLOWED_GROUPS:
+            return False
+    elif not ASTRBOT_COMPAT_ALLOW_PRIVATE:
+        return False
+    return len(event.get_plaintext().strip()) > 0
+
+
+# AstrBot 插件入口（priority=2）：命中则不再走 Stella LLM（priority=3）。
+# block=False 保证未命中时仍能落到 chat_handler；命中时通过 _plugin_handled_msgs 让 chat 跳过。
+plugin_handler = on_message(rule=Rule(is_plugin_trigger), priority=_PRIORITY_PLUGIN, block=False)
 
 
 @plugin_handler.handle()
-async def handle_plugin(bot: Bot, event: GroupMessageEvent):
-    """AstrBot 插件分发（@ 触发）。"""
+async def handle_plugin(bot: Bot, event: MessageEvent):
+    """AstrBot 插件分发。无插件安装时 dispatch 会立即返回，开销可忽略。"""
     try:
         from astrbot_compat.pipeline import dispatch
 

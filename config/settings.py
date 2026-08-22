@@ -659,3 +659,14 @@ ASTRBOT_AUTO_INSTALL_REQUIREMENTS = _env("ASTRBOT_AUTO_INSTALL_REQUIREMENTS", "f
     "1",
     "yes",
 )
+# 指令唤醒前缀（逗号分隔）。AstrBot 上游默认为 "/"，插件的 @filter.command 依赖它：
+# 群里直接打 "/help" 就能触发，不必先 @ 机器人。留空表示只认 @ / 引用 / 私聊。
+ASTRBOT_WAKE_PREFIXES = [
+    p for p in (s.strip() for s in _env("ASTRBOT_WAKE_PREFIXES", "/").split(",")) if p
+]
+# 是否允许私聊触发插件。上游私聊默认无需唤醒前缀即可命中指令。
+ASTRBOT_COMPAT_ALLOW_PRIVATE = _env("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
