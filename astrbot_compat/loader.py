@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import functools
 import importlib
@@ -182,6 +183,19 @@ def _failed_key(md: StarMetadata | None, fallback_dir: str = "") -> str:
     return fallback_dir
 
 
+def _import_plugin_module(module_name: str) -> Any:
+    """导入插件模块。找不到时先清一次导入缓存再重试。
+
+    `data` / `data.plugins` 是命名空间包，导入系统会缓存其目录清单；插件目录若在本
+    进程启动之后才出现（热装、并行测试），首次导入会假性 ModuleNotFoundError。
+    """
+    try:
+        return importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        importlib.invalidate_caches()
+        return importlib.import_module(module_name)
+
+
 def _instantiate(star_cls: type, ctx: Any, cfg: Any) -> Any:
     """先按 (context, config) 试，插件若只接受 context 则退化。"""
     if cfg is not None:
@@ -209,7 +223,7 @@ def load_plugin(plugin_dir: Path) -> StarMetadata | None:
 
     module_name = f"data.plugins.{dir_name}.main"
     try:
-        mod = importlib.import_module(module_name)
+        mod = _import_plugin_module(module_name)
     except Exception as e:
         _failed[dir_name] = repr(e)
         logger.exception(f"[astrbot_compat] 插件 {dir_name} import 失败: {e}")
@@ -294,11 +308,22 @@ def discover_plugins() -> list[Path]:
         with contextlib.suppress(OSError):
             plugins_dir.mkdir(parents=True, exist_ok=True)
         return []
-    result = [
-        p
-        for p in plugins_dir.iterdir()
-        if p.is_dir() and not p.name.startswith((".", "_"))
-    ]
+    result: list[Path] = []
+    try:
+        entries = list(plugins_dir.iterdir())
+    except OSError as e:
+        logger.warning(f"[astrbot_compat] 插件目录 {plugins_dir} 扫描失败: {e}")
+        return []
+    for p in entries:
+        if p.name.startswith((".", "_")):
+            continue
+        # 目录可能在扫描过程中被删除（并行测试、用户手动清理），is_dir 会抛 OSError
+        try:
+            if not p.is_dir():
+                continue
+        except OSError:
+            continue
+        result.append(p)
     result.sort(key=lambda x: x.name)
     return result
 
@@ -319,6 +344,10 @@ def load_all_plugins() -> list[StarMetadata]:
         root_str = str(PROJECT_ROOT)
         if root_str not in sys.path:
             sys.path.insert(0, root_str)
+
+    # data / data.plugins 是命名空间包，导入系统会缓存目录清单。若 data/plugins/
+    # 在本进程启动后才出现新插件目录，不清缓存会 ModuleNotFoundError。
+    importlib.invalidate_caches()
 
     # 让 StarTools.send_message 等类方法拿到上下文
     with contextlib.suppress(Exception):
@@ -375,8 +404,6 @@ async def initialize_plugins() -> None:
 
 
 async def terminate_plugins() -> None:
-    import asyncio
-
     from .pipeline import emit_hook
 
     for md in reversed(list(star_registry)):
@@ -384,7 +411,9 @@ async def terminate_plugins() -> None:
             continue
         try:
             await asyncio.wait_for(md.star_cls.terminate(), timeout=5.0)
-        except TimeoutError:
+        # 必须写 asyncio.TimeoutError：Python 3.10 下它与内置 TimeoutError 是两个
+        # 不相干的类（3.11 起才合并），写内置的会在 3.10 上漏接、退化成「异常」分支。
+        except asyncio.TimeoutError:
             logger.warning(f"[astrbot_compat] 插件 {md.plugin_id} terminate 超时")
         except Exception as e:
             logger.warning(f"[astrbot_compat] 插件 {md.plugin_id} terminate 异常: {e}")

@@ -96,6 +96,11 @@ keep-runtime-typing = true
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    # CI 以 `-n auto --dist loadgroup` 并行执行；共享进程外资源（如 data/plugins/
+    # 这种被模块路径写死的目录）的用例必须打上同一个组，才能落到同一个 worker。
+    "xdist_group: 把用例固定到同一个 xdist worker",
+]
 
 [tool.coverage.run]
 branch = true
