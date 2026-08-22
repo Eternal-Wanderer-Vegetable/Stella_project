@@ -82,13 +82,8 @@ class Image(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path: str) -> Image:  # noqa: N802
-        # 本地路径转 file://
         try:
-            p = Path(path)
-            if not p.is_absolute():
-                # 相对路径按项目根解析不安全，直接 resolve
-                pass
-            uri = p.resolve().as_uri()
+            uri = Path(path).resolve().as_uri()
             return Image(file=uri)
         except Exception:
             return Image(file=path)

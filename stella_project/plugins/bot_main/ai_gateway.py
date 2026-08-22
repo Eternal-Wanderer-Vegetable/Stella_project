@@ -31,7 +31,7 @@ import math
 import os
 import random
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import date
 
 from nonebot import get_driver, logger, on_message
@@ -116,6 +116,9 @@ _group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 # 回应检测的后台任务集合：asyncio.create_task 的返回值必须持有引用，
 # 否则任务可能在完成前被 GC 回收
 _reply_check_tasks: set[asyncio.Task] = set()
+
+# 插件已处理标记：message_id -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
+_plugin_handled_msgs: OrderedDict[int, float] = OrderedDict()
 
 # pre-hook 按 priority 升序执行（数值越小越先）：
 # 50 -> build_context（构造群长期记忆上下文）
@@ -324,8 +327,9 @@ async def handle_plugin(bot: Bot, event: GroupMessageEvent):
 
         handled = await dispatch(event, bot)
         if handled:
-            # 标记已由插件处理，供 chat_handler 跳过 LLM
-            setattr(event, "_astrbot_handled", True)
+            _plugin_handled_msgs[event.message_id] = time.time()
+            if len(_plugin_handled_msgs) > 256:
+                _plugin_handled_msgs.popitem(last=False)
     except Exception as e:
         logger.warning(f"[plugin] dispatch 异常: {e}")
 
@@ -338,7 +342,8 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
-    if getattr(event, "_astrbot_handled", False):
+    if event.message_id in _plugin_handled_msgs:
+        _plugin_handled_msgs.pop(event.message_id, None)
         logger.debug(f"[chat] 已由插件处理，跳过 LLM (group {event.group_id})")
         return
     _ = bot
@@ -453,7 +458,7 @@ def _assert_listener_priorities() -> None:
             return
     logger.debug(
         f"✅ 监听器优先级正常（落库 {_PRIORITY_SILENT} < toggle "
-        f"{_PRIORITY_TOGGLE} < chat {_PRIORITY_CHAT}）"
+        f"{_PRIORITY_TOGGLE} < plugin {_PRIORITY_PLUGIN} < chat {_PRIORITY_CHAT}）"
     )
 
 

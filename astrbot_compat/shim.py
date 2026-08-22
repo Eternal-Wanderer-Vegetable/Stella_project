@@ -208,15 +208,15 @@ def install_shim() -> None:
         ("ToolSet", "astrbot.api.ToolSet"),
         ("BaseFunctionToolExecutor", "astrbot.api.BaseFunctionToolExecutor"),
         ("agent", "astrbot.api.agent"),
-        ("llm_tool", "astrbot.api.llm_tool"),
     ):
         setattr(api, _aname, _make_placeholder(_aapi))
+    # llm_tool 必须指向真实现（硬约束）
+    api.llm_tool = _f.llm_tool  # type: ignore[attr-defined]
 
     # --- astrbot.api.message_components + astrbot.core.message.components 真类
-    from .components import (
-        At as _At,
-    )
+    from .components import At as _At
     from .components import AtAll as _AtAll
+    from .components import BaseMessageComponent as _BaseMessageComponent
     from .components import Face as _Face
     from .components import Image as _Image
     from .components import Node as _Node
@@ -235,11 +235,10 @@ def install_shim() -> None:
         mod.Face = _Face  # type: ignore[attr-defined]
         mod.Node = _Node  # type: ignore[attr-defined]
         mod.Nodes = _Nodes  # type: ignore[attr-defined]
+        mod.BaseMessageComponent = _BaseMessageComponent  # type: ignore[attr-defined]
         # 剩余 Forward/Json 仍 placeholder
         mod.Forward = _make_placeholder("astrbot.api.message_components.Forward")  # type: ignore[attr-defined]
         mod.Json = _make_placeholder("astrbot.api.message_components.Json")  # type: ignore[attr-defined]
-        # 兼容部分插件 from astrbot.core.message.components import Plain 等
-        mod.BaseMessageComponent = _Plain.__bases__[0]  # type: ignore[attr-defined]
     # 同时让 astrbot.core.message 指向 components
     sys.modules["astrbot.core.message"].components = core_components_mod  # type: ignore[attr-defined]
 

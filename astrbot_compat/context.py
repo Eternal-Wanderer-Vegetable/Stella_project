@@ -75,10 +75,59 @@ class Context:
         logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool_async({name}) -> False")
         return False
 
-    async def send_message(self, session: str, message_chain: Any) -> bool:  # noqa: ARG002
-        logger.warning("[astrbot_compat] Context.send_message 尚未接入 OneBot，返回 False")
-        # TODO(step3): 接入 OneBot 发送
-        return False
+    async def send_message(self, session: str, message_chain: Any) -> bool:
+        try:
+            # 解析 session "aiocqhttp:GroupMessage:<id>" 或 "aiocqhttp:FriendMessage:<id>"
+            parts = session.split(":")
+            if len(parts) >= 3:
+                typ = parts[1]
+                target_id = parts[-1]
+            else:
+                # 兼容仅传 id
+                typ = "GroupMessage"
+                target_id = session
+            # 组装 OneBot 消息
+            from .components import BaseMessageComponent, to_onebot_message
+            from .events import MessageChain as MC
+
+            if isinstance(message_chain, MC):
+                lst = message_chain.chain
+            elif isinstance(message_chain, list):
+                lst = message_chain
+            elif isinstance(message_chain, BaseMessageComponent):
+                lst = [message_chain]
+            elif isinstance(message_chain, str):
+                lst = [message_chain]
+            else:
+                lst = [str(message_chain)]
+            msg = to_onebot_message(lst)
+            if not msg:
+                logger.debug("[astrbot_compat] Context.send_message 空消息跳过")
+                return False
+            from nonebot import get_bot
+
+            try:
+                bot = get_bot()
+            except Exception:
+                # 尝试 get_bots 兼容
+                from nonebot import get_bots
+
+                bots = get_bots()
+                bot = next(iter(bots.values())) if bots else None
+            if bot is None:
+                logger.error("[astrbot_compat] Context.send_message 无可用 Bot")
+                return False
+            if typ == "GroupMessage":
+                await bot.send_group_msg(group_id=int(target_id), message=msg)
+            elif typ == "FriendMessage":
+                await bot.send_private_msg(user_id=int(target_id), message=msg)
+            else:
+                # 默认按群处理
+                await bot.send_group_msg(group_id=int(target_id), message=msg)
+            return True
+        except Exception as e:
+            logger.error(f"[astrbot_compat] Context.send_message 失败: {e}", exc_info=True)
+            return False
 
 
 # LLM 相关：必须存在但不实现（用循环批量挂，避免闭包坑）

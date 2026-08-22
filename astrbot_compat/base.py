@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
+from typing import Any
+
 from .context import Context
 
 from .exceptions import StellaCompatNotSupported
@@ -39,7 +42,15 @@ class Star:
     async def terminate(self) -> None:
         pass
 
-    # --- KV 简易实现（内存 + 可选持久化由插件自行 via StarTools.get_data_dir） ---
+    def _get_plugin_dir(self) -> str:
+        mod = getattr(self.__class__, "__module__", "")
+        if mod.startswith("data.plugins."):
+            parts = mod.split(".")
+            if len(parts) >= 3 and parts[2]:
+                return parts[2]
+        return "_unknown"
+
+    # --- KV 简易实现（内存 + 持久化） ---
     def get_data(self, key: str, default: Any | None = None) -> Any:
         return self._kv_store.get(key, default)
 
@@ -47,8 +58,54 @@ class Star:
         self._kv_store[key] = value
 
     def save_data(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-        # 兼容旧插件调用 save_data，无需持久化
         return None
+
+    async def put_kv_data(self, key: str, value: Any) -> None:
+        self._kv_store[key] = value
+        try:
+            p = StarTools.get_data_dir(self._get_plugin_dir()) / "kv.json"
+            data: dict[str, Any] = {}
+            if p.exists():
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                    if not isinstance(data, dict):
+                        data = {}
+                except Exception:
+                    data = {}
+            data[key] = value
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    async def get_kv_data(self, key: str, default: Any | None = None) -> Any:
+        if key in self._kv_store:
+            return self._kv_store[key]
+        try:
+            p = StarTools.get_data_dir(self._get_plugin_dir()) / "kv.json"
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and key in data:
+                    self._kv_store[key] = data[key]
+                    return data[key]
+        except Exception:
+            pass
+        return default
+
+    async def delete_kv_data(self, key: str) -> None:
+        self._kv_store.pop(key, None)
+        try:
+            p = StarTools.get_data_dir(self._get_plugin_dir()) / "kv.json"
+            if p.exists():
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    data = {}
+                if isinstance(data, dict) and key in data:
+                    data.pop(key, None)
+                    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     # --- 渲染方法（暂不支持，转可识别异常） ---
     def html_render(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002

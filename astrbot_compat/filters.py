@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import enum
 import inspect
+import re
 from typing import Any, Callable
 
 
@@ -89,7 +90,25 @@ class CommandFilter(HandlerFilter):
         self.desc = desc
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        return True
+        try:
+            msg = event.get_message_str() if hasattr(event, "get_message_str") else str(getattr(event, "message_str", ""))
+        except Exception:
+            msg = ""
+        s = msg.strip()
+        if s.startswith("/"):
+            s = s[1:].lstrip()
+        if not s:
+            return False
+        parts = s.split(None, 1)
+        token = parts[0]
+        rest = parts[1] if len(parts) > 1 else ""
+        if token == self.name or token in self.alias:
+            try:
+                event.set_extra("__cmd_args__", rest)
+            except Exception:
+                pass
+            return True
+        return False
 
 
 class CommandGroupFilter(HandlerFilter):
@@ -104,7 +123,17 @@ class CommandGroupFilter(HandlerFilter):
         self.priority = priority
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        return True
+        try:
+            msg = event.get_message_str() if hasattr(event, "get_message_str") else str(getattr(event, "message_str", ""))
+        except Exception:
+            msg = ""
+        s = msg.strip()
+        if s.startswith("/"):
+            s = s[1:].lstrip()
+        if not s:
+            return False
+        token = s.split(None, 1)[0]
+        return token == self.name or token in self.alias
 
 
 class RegexFilter(HandlerFilter):
@@ -112,9 +141,22 @@ class RegexFilter(HandlerFilter):
         self.pattern = pattern
         self.flags = flags
         self.priority = priority
+        try:
+            self._compiled = re.compile(pattern, flags)
+        except Exception:
+            self._compiled = None
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        return True
+        try:
+            msg = event.get_message_str() if hasattr(event, "get_message_str") else str(getattr(event, "message_str", ""))
+        except Exception:
+            msg = ""
+        if self._compiled is None:
+            try:
+                return bool(re.search(self.pattern, msg, self.flags))
+            except Exception:
+                return False
+        return bool(self._compiled.search(msg))
 
 
 class EventMessageTypeFilter(HandlerFilter):
@@ -123,7 +165,25 @@ class EventMessageTypeFilter(HandlerFilter):
         self.priority = priority
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        return True
+        # ALL 直接通过
+        if self.event_type == EventMessageType.ALL:
+            return True
+        # 判断当前事件类型
+        try:
+            is_private = event.is_private_chat() if hasattr(event, "is_private_chat") else False
+        except Exception:
+            is_private = False
+        if is_private:
+            need = EventMessageType.PRIVATE_MESSAGE
+        else:
+            # 群聊
+            # 若事件既非私聊则视为群聊（其他类型按群聊处理）
+            need = EventMessageType.GROUP_MESSAGE
+            # 若原 filter 要求 OTHER_MESSAGE，也允许群聊以外的？简化：仅 GROUP/PRIVATE
+            if self.event_type & EventMessageType.OTHER_MESSAGE:
+                # 当事件既不是私聊也不是群聊时才命中 OTHER，这里无法精确，返回 False
+                return False
+        return bool(self.event_type & need)
 
 
 class PermissionTypeFilter(HandlerFilter):
@@ -132,6 +192,12 @@ class PermissionTypeFilter(HandlerFilter):
         self.raise_error = raise_error
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
+        if self.permission_type == PermissionType.ADMIN:
+            try:
+                return bool(event.is_admin() if hasattr(event, "is_admin") else False)
+            except Exception:
+                return False
+        # MEMBER 恒 True
         return True
 
 
@@ -140,7 +206,8 @@ class PlatformAdapterTypeFilter(HandlerFilter):
         self.platform_adapter_type = platform_adapter_type
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        return True
+        # Stella 唯一支持 AIOCQHTTP，ALL 包含 AIOCQHTTP 故也通过
+        return bool(self.platform_adapter_type & PlatformAdapterType.AIOCQHTTP)
 
 
 class CustomFilter(HandlerFilter):
@@ -157,9 +224,18 @@ class _CustomFilterWrapper(HandlerFilter):
         self.custom_filter_cls = custom_filter_cls
         self.args = args
         self.kwargs = kwargs
+        try:
+            self._inst = custom_filter_cls(*args, **kwargs)
+        except Exception:
+            self._inst = None
 
     def filter(self, event: Any, cfg: Any = None) -> bool:  # noqa: ARG002
-        return True
+        if self._inst is None:
+            return False
+        try:
+            return bool(self._inst.filter(event, cfg))
+        except Exception:
+            return False
 
 
 # ============================================================
@@ -268,7 +344,7 @@ def command(
         remaining = params[2:] if len(params) >= 2 else []
         for idx, p in enumerate(remaining):
             ann = p.annotation if p.annotation is not inspect.Parameter.empty else None
-            default = p.default if p.default is not inspect.Parameter.empty else None
+            default = p.default  # 保留 Parameter.empty 哨兵以区分“无默认值”
             is_greedy = False
             if ann is GreedyStr:
                 is_greedy = True

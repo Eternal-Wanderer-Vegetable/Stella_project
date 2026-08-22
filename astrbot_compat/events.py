@@ -15,6 +15,21 @@ from .exceptions import StellaCompatNotSupported
 
 logger = logging.getLogger("astrbot_compat.events")
 
+_ADMINS: set[int] | None = None
+
+
+def _get_admins() -> set[int]:
+    global _ADMINS
+    if _ADMINS is not None:
+        return _ADMINS
+    try:
+        from config import PROACTIVE_TOGGLE_ADMINS
+
+        _ADMINS = set(PROACTIVE_TOGGLE_ADMINS)
+    except Exception:
+        _ADMINS = set()
+    return _ADMINS
+
 
 # ============================================================
 # 结果对象
@@ -168,16 +183,12 @@ class AstrMessageEvent:
         self.platform_meta = platform_meta or _AIOCQHTTP_META
         self.session_id = session_id or message_obj.session_id
         self.role = "member"
-        # 管理员判定：尝试取 sender.role
         try:
             r = getattr(getattr(nb_event, "sender", None), "role", "")
             if r in ("owner", "admin"):
                 self.role = "admin"
             else:
-                # 再查 PROACTIVE_TOGGLE_ADMINS 白名单
-                from config import PROACTIVE_TOGGLE_ADMINS
-
-                if int(getattr(nb_event, "user_id", 0)) in PROACTIVE_TOGGLE_ADMINS:
+                if int(getattr(nb_event, "user_id", 0)) in _get_admins():
                     self.role = "admin"
         except Exception:
             pass
@@ -316,6 +327,7 @@ class AstrMessageEvent:
 
             msg = to_onebot_message(lst)
             if not msg:
+                logger.debug("[events] send 跳过空消息（可能仅含不支持段）")
                 return
             await self._bot.send(self._nb_event, msg)
             self._has_send_oper = True
