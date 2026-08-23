@@ -47,8 +47,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v8：记忆/画像表按 group_shared_space 归属）
-SCHEMA_VERSION = 8
+# 当前 Schema 版本（v9：AstrBot 插件兼容层的会话与偏好表）
+SCHEMA_VERSION = 9
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -219,6 +219,12 @@ _INDEXES: list[tuple[str, str, str]] = [
         "memory_candidates",
         "CREATE INDEX IF NOT EXISTS idx_candidates_space_user_type_status "
         "ON memory_candidates (group_shared_space, user_id, type, status)",
+    ),
+    (
+        "idx_astrbot_conversations_user",
+        "astrbot_conversations",
+        "CREATE INDEX IF NOT EXISTS idx_astrbot_conversations_user "
+        "ON astrbot_conversations (user_id, updated_at DESC)",
     ),
 ]
 
@@ -404,6 +410,50 @@ def create_atomic_facts_table(conn: sqlite3.Connection) -> None:
     conn.execute(ATOMIC_FACTS_TABLE_DDL)
 
 
+# AstrBot 插件兼容层的对话表（v9 起）。
+# 刻意与 Stella 自己的记忆系统隔离：插件的多轮对话不参与记忆整合，也不会被记忆
+# 压缩任务动到。user_id 存的是 unified_msg_origin（platform:type:session_id），
+# 与上游 AstrBot 的语义一致。content 是 JSON 字符串而非 list——上游 Conversation
+# 的 history 字段就是字符串，插件里到处 json.loads(conv.history)。
+ASTRBOT_CONVERSATIONS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS astrbot_conversations (
+    cid TEXT PRIMARY KEY,
+    platform_id TEXT,
+    user_id TEXT,
+    content TEXT,
+    title TEXT,
+    persona_id TEXT,
+    token_usage INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT 0,
+    updated_at INTEGER DEFAULT 0
+)
+"""
+
+
+def create_astrbot_conversations_table(conn: sqlite3.Connection) -> None:
+    """确保 astrbot_conversations 表存在（幂等）。"""
+    conn.execute(ASTRBOT_CONVERSATIONS_TABLE_DDL)
+
+
+# AstrBot 插件兼容层的偏好表（v9 起），对应上游的 sp（SharedPreferences）。
+# 三段主键与上游一致：scope（umo / plugin / global）、scope_id、key。
+ASTRBOT_PREFERENCES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS astrbot_preferences (
+    scope TEXT NOT NULL,
+    scope_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    updated_at INTEGER DEFAULT 0,
+    PRIMARY KEY (scope, scope_id, key)
+)
+"""
+
+
+def create_astrbot_preferences_table(conn: sqlite3.Connection) -> None:
+    """确保 astrbot_preferences 表存在（幂等）。"""
+    conn.execute(ASTRBOT_PREFERENCES_TABLE_DDL)
+
+
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     """判断表是否存在。"""
     cursor.execute(
@@ -521,6 +571,11 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
             create_memory_candidates_table(conn)
             create_atomic_facts_table(conn)
             create_memories_table(conn)
+    # v9：AstrBot 插件兼容层的会话与偏好表（新表，与记忆系统隔离）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            create_astrbot_conversations_table(conn)
+            create_astrbot_preferences_table(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

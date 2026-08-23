@@ -187,7 +187,12 @@ def test_handler_exception_does_not_break_others(register_plugin, make_event, fa
     assert fake_bot.sent == ["still here"]
 
 
-def test_llm_dependent_plugin_is_reported(register_plugin, make_event, fake_bot):
+def test_llm_dependent_plugin_is_reported(register_plugin, make_event, fake_bot, monkeypatch):
+    """LLM 关掉时，直接调 context.llm_generate() 的插件不该静默失败。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False, raising=False)
+
     class LLMDemo(Star):
         @filter.command("ask")
         async def ask(self, event):

@@ -88,15 +88,32 @@ def test_star_tools_data_dir_creates_directory(monkeypatch, tmp_path):
     assert p.is_dir()
 
 
-def test_context_llm_methods_raise_but_exist():
+def test_context_llm_surface_is_implemented(monkeypatch):
+    """LLM 接入面已实装：管理器可直接取，关掉开关才退回可识别异常。"""
+    from config import settings
+
     ctx = Context()
     assert hasattr(ctx, "llm_generate")
+    # conversation_manager / persona_manager 已是真实现，不再抛异常
+    assert ctx.conversation_manager is not None
+    assert ctx.persona_manager is not None
+    assert ctx.get_using_provider() is not None
+
+    # ASTRBOT_LLM_ENABLED=false 时没有 provider，插件一调就拿到可识别异常，
+    # 管道据此提示用户（见 test_dispatch.py::test_llm_dependent_plugin_is_reported）
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False, raising=False)
+    assert ctx.get_using_provider() is None
     with pytest.raises(StellaCompatNotSupported):
-        asyncio.run(ctx.llm_generate())
-    # property 形态：hasattr 优雅降级为 False，直接访问才抛
-    assert hasattr(ctx, "conversation_manager") is False
-    with pytest.raises(StellaCompatNotSupported):
-        _ = ctx.conversation_manager
+        asyncio.run(ctx.llm_generate(prompt="hi"))
+
+
+def test_context_still_unsupported_props_raise():
+    """未实装的能力：hasattr 优雅降级为 False，直接访问才抛。"""
+    ctx = Context()
+    for name in ("kb_manager", "subagent_orchestrator", "knowledge_db_manager"):
+        assert hasattr(ctx, name) is False
+        with pytest.raises(StellaCompatNotSupported):
+            getattr(ctx, name)
 
 
 def test_context_star_registry_views():

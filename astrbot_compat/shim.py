@@ -27,6 +27,17 @@ _MODULE_NAMES = (
     "astrbot.core.star",
     "astrbot.core.star.filter",
     "astrbot.core.platform",
+    "astrbot.core.provider",
+    "astrbot.core.provider.entities",
+    # 上游拼写错误的历史模块，老插件在 import 它
+    "astrbot.core.provider.entites",
+    "astrbot.core.agent",
+    "astrbot.core.agent.tool",
+    "astrbot.core.agent.message",
+    "astrbot.core.agent.run_context",
+    "astrbot.core.agent.hooks",
+    "astrbot.core.db",
+    "astrbot.core.db.po",
 )
 
 _PACKAGE_NAMES = frozenset(
@@ -37,6 +48,9 @@ _PACKAGE_NAMES = frozenset(
         "astrbot.core",
         "astrbot.core.message",
         "astrbot.core.star",
+        "astrbot.core.provider",
+        "astrbot.core.agent",
+        "astrbot.core.db",
     },
 )
 
@@ -271,34 +285,105 @@ def _install_platform(*mods: ModuleType) -> None:
 
 def _install_api(api: ModuleType) -> None:
     from . import filters as _f
+    from . import llm as _l
     from .config import AstrBotConfig
+    from .preferences import sp
 
     api.logger = logging.getLogger("astrbot_compat.plugin")
     api.AstrBotConfig = AstrBotConfig
+    api.sp = sp
+    api.FunctionTool = _l.FunctionTool
+    api.ToolSet = _l.ToolSet
+    api.BaseFunctionToolExecutor = _l.BaseFunctionToolExecutor
     for attr, api_name in (
-        ("sp", "astrbot.api.sp"),
         ("html_renderer", "astrbot.api.html_renderer"),
-        ("FunctionTool", "astrbot.api.FunctionTool"),
-        ("ToolSet", "astrbot.api.ToolSet"),
-        ("BaseFunctionToolExecutor", "astrbot.api.BaseFunctionToolExecutor"),
         ("agent", "astrbot.api.agent"),
     ):
         setattr(api, attr, _make_placeholder(api_name))
-    # llm_tool 必须指向真实现（硬约束：注册要成功，只是不分发）
+    # llm_tool 必须指向真实现（硬约束：注册要成功）
     api.llm_tool = _f.llm_tool
 
 
-def _install_provider(provider_mod: ModuleType) -> None:
-    for name in (
+def _install_provider(provider_mod: ModuleType, *core_mods: ModuleType) -> None:
+    """astrbot.api.provider 与 astrbot.core.provider.entities 的真类。"""
+    from . import llm as _l
+    from .po import Personality
+
+    names = (
         "Provider",
+        "AbstractProvider",
+        "STTProvider",
+        "TTSProvider",
+        "EmbeddingProvider",
+        "RerankProvider",
         "ProviderRequest",
+        "ProviderMeta",
         "ProviderMetaData",
         "ProviderType",
         "LLMResponse",
-        "STTProvider",
-        "Personality",
+        "TokenUsage",
+        "ToolCallsResult",
+        "RerankResult",
+        "AssistantMessageSegment",
+        "ToolCallMessageSegment",
+    )
+    for mod in (provider_mod, *core_mods):
+        for name in names:
+            setattr(mod, name, getattr(_l, name))
+        mod.Personality = Personality
+    # llm_tools 是全局注册表单例，只挂在 core.provider 下（与上游一致）
+    for mod in core_mods:
+        mod.llm_tools = _l.llm_tools
+
+
+def _install_agent(
+    agent_mod: ModuleType,
+    tool_mod: ModuleType,
+    message_mod: ModuleType,
+    run_context_mod: ModuleType,
+    hooks_mod: ModuleType,
+) -> None:
+    from . import llm as _l
+
+    for name in (
+        "FunctionTool",
+        "FuncTool",
+        "ToolSet",
+        "ToolSchema",
+        "FunctionToolManager",
+        "FuncCall",
+        "BaseFunctionToolExecutor",
     ):
-        setattr(provider_mod, name, _make_placeholder(f"astrbot.api.provider.{name}"))
+        setattr(tool_mod, name, getattr(_l, name))
+        setattr(agent_mod, name, getattr(_l, name))
+
+    for name in (
+        "ContentPart",
+        "TextPart",
+        "ThinkPart",
+        "ImageURLPart",
+        "Message",
+        "ToolCall",
+        "AssistantMessageSegment",
+        "ToolCallMessageSegment",
+        "UserMessageSegment",
+        "SystemMessageSegment",
+    ):
+        setattr(message_mod, name, getattr(_l, name))
+
+    run_context_mod.ContextWrapper = _l.ContextWrapper
+    run_context_mod.NoContext = _l.ContextWrapper
+    hooks_mod.BaseAgentRunHooks = _l.BaseAgentRunHooks
+    agent_mod.BaseAgentRunHooks = _l.BaseAgentRunHooks
+    agent_mod.ContextWrapper = _l.ContextWrapper
+
+
+def _install_db(db_mod: ModuleType, po_mod: ModuleType) -> None:
+    from .po import Conversation, Personality
+
+    po_mod.Conversation = Conversation
+    po_mod.Personality = Personality
+    db_mod.po = po_mod
 
 
 def install_shim() -> None:
@@ -328,11 +413,32 @@ def install_shim() -> None:
     )
     _install_platform(m["astrbot.api.platform"], m["astrbot.core.platform"])
     _install_api(m["astrbot.api"])
-    _install_provider(m["astrbot.api.provider"])
+    _install_provider(
+        m["astrbot.api.provider"],
+        m["astrbot.core.provider"],
+        m["astrbot.core.provider.entities"],
+        # 上游的历史拼写错误，老插件在 import
+        m["astrbot.core.provider.entites"],
+    )
+    _install_agent(
+        m["astrbot.core.agent"],
+        m["astrbot.core.agent.tool"],
+        m["astrbot.core.agent.message"],
+        m["astrbot.core.agent.run_context"],
+        m["astrbot.core.agent.hooks"],
+    )
+    _install_db(m["astrbot.core.db"], m["astrbot.core.db.po"])
 
     # astrbot.core.message.components 也挂到 astrbot.core.message 上
     m["astrbot.core.message"].components = m["astrbot.core.message.components"]
     m["astrbot.core"].message_components = m["astrbot.api.message_components"]
+    # 上游把 sp / logger 也挂在 astrbot.core 与顶层 astrbot 上
+    from .preferences import sp as _sp
+
+    m["astrbot.core"].sp = _sp
+    m["astrbot"].sp = _sp
+    m["astrbot"].logger = m["astrbot.api"].logger
+    m["astrbot.core"].logger = m["astrbot.api"].logger
 
     _INSTALLED = True
     try:

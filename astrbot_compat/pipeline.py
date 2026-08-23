@@ -13,12 +13,20 @@ from __future__ import annotations
 import contextlib
 import functools
 import inspect
+import json
 import logging
 from typing import Any
 
-from .events import AstrMessageEvent, MessageChain, build_event
+from .events import (
+    AstrMessageEvent,
+    MessageChain,
+    MessageEventResult,
+    ResultContentType,
+    build_event,
+)
 from .exceptions import StellaCompatNotSupported
 from .filters import CommandGroupFilter, PermissionTypeFilter
+from .llm.entities import ProviderRequest
 from .registry import EventType, StarHandlerMetadata, star_handlers_registry, star_map
 
 logger = logging.getLogger("astrbot_compat.pipeline")
@@ -42,6 +50,11 @@ async def _emit(event: AstrMessageEvent, r: Any) -> None:
     """把 handler 的返回值 / yield 值发出去。"""
     if r is None:
         return
+    if isinstance(r, ProviderRequest):
+        # 插件 yield 出 LLM 请求：交给 agent 执行（复刻上游 ProcessStage 的分流）
+        event.set_extra("provider_request", r)
+        await run_provider_request(event, r)
+        return
     if isinstance(r, (MessageChain, str, list)):
         await event.send(r)
         return
@@ -49,6 +62,98 @@ async def _emit(event: AstrMessageEvent, r: Any) -> None:
         await event.send(r)
         return
     logger.debug(f"[pipeline] 忽略未知返回类型 {type(r)}: {r!r}")
+
+
+async def run_provider_request(event: AstrMessageEvent, req: ProviderRequest) -> bool:
+    """执行一个 ProviderRequest，把模型回复发给用户。返回是否真的发了东西。
+
+    钩子顺序照抄上游：OnWaitingLLMRequest → OnLLMRequest → (工具循环，内部触发
+    OnAgentBegin / OnUsingLLMTool / OnLLMToolRespond / OnLLMResponse / OnAgentDone)
+    → OnDecoratingResult。任一钩子里 stop_event() 都会中断。
+    """
+    from .llm.agent import call_event_hook, response_to_chain, run_tool_loop
+    from .llm.manager import get_provider_manager
+
+    provider = get_provider_manager().provider
+    if provider is None:
+        logger.warning("[pipeline] 插件请求 LLM，但 ASTRBOT_LLM_ENABLED=false")
+        with contextlib.suppress(Exception):
+            await event.send(MessageChain().message("插件需要大模型能力，但当前未启用"))
+        return True
+
+    if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+        return True
+    # 上游：req.conversation 存在时用它的历史作为上下文
+    _apply_conversation_history(req)
+    if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+        return True
+
+    try:
+        resp = await run_tool_loop(provider, req, event)
+    except StellaCompatNotSupported:
+        raise
+    except Exception as e:
+        logger.exception("[pipeline] LLM 请求失败")
+        with contextlib.suppress(Exception):
+            await event.send(MessageChain().message(f"大模型请求失败：{e}"))
+        return True
+
+    if event.is_stopped():
+        return True
+
+    chain = response_to_chain(resp)
+    if chain.chain:
+        event.set_result(
+            MessageEventResult(chain=list(chain.chain)).set_result_content_type(
+                ResultContentType.LLM_RESULT,
+            ),
+        )
+    if await call_event_hook(event, EventType.OnDecoratingResultEvent):
+        return True
+    await _flush_result(event)
+    await _persist_conversation(event, req, resp)
+    return True
+
+
+def _apply_conversation_history(req: ProviderRequest) -> None:
+    """挂了 conversation 时，用它的历史当上下文（上游 build_main_agent 的行为）。"""
+    if req.conversation is None or req.contexts:
+        return
+    try:
+        history = json.loads(req.conversation.history or "[]")
+    except (ValueError, TypeError):
+        history = []
+    if isinstance(history, list):
+        req.contexts = history
+
+
+async def _persist_conversation(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    resp: Any,
+) -> None:
+    """把这一轮追加进 conversation。
+
+    与上游一致：**没挂 conversation 就不落库**——插件自己 yield 的请求默认不带
+    conversation，历史由插件自行管理。
+
+    注意 `req.contexts` 在 run_tool_loop 里已经并入了本轮的用户消息，这里只补
+    assistant 那条，别重复追加 prompt。
+    """
+    if req.conversation is None:
+        return
+    with contextlib.suppress(Exception):
+        from .conversation import get_conversation_manager
+
+        history = list(req.contexts or [])
+        text = getattr(resp, "completion_text", "") or ""
+        if text:
+            history.append({"role": "assistant", "content": text})
+        await get_conversation_manager().update_conversation(
+            event.unified_msg_origin,
+            req.conversation.cid,
+            history=history,
+        )
 
 
 async def _flush_result(event: AstrMessageEvent) -> None:
@@ -211,6 +316,13 @@ async def dispatch(nb_event: Any, bot: Any) -> bool:
             # 防止残留 result 被下一个 handler 重复发出
             with contextlib.suppress(Exception):
                 event.clear_result()
+
+    if handled:
+        # 上游在 respond 阶段发完消息后触发这个钩子
+        with contextlib.suppress(Exception):
+            from .llm.agent import call_event_hook
+
+            await call_event_hook(event, EventType.OnAfterMessageSentEvent)
 
     return handled
 

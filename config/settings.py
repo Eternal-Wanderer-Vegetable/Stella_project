@@ -670,3 +670,35 @@ ASTRBOT_COMPAT_ALLOW_PRIVATE = _env("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true").lowe
     "1",
     "yes",
 )
+
+# ---------- AstrBot 插件的 LLM 服务 ----------
+# 插件通过 context.get_using_provider_async() / event.request_llm() 调模型时走这里。
+# 与 Stella 主聊天链路（core/llm/lm_studio.py）**共用同一个本地模型**，
+# 但走独立的 OpenAI 兼容客户端（core/llm/openai_client.py），因为插件需要
+# messages 数组 / function calling / 图片，而主链路的 generate() 表达不了这些。
+# 所有插件调用都经 core.llm.scheduler 的 chat 闸门排队，与主对话 FIFO 串行。
+ASTRBOT_LLM_ENABLED = _env("ASTRBOT_LLM_ENABLED", "true").lower() in ("true", "1", "yes")
+ASTRBOT_LLM_BASE_URL = _env("ASTRBOT_LLM_BASE_URL", LM_STUDIO_BASE_URL)
+ASTRBOT_LLM_MODEL = _env("ASTRBOT_LLM_MODEL", LM_STUDIO_MODEL)
+ASTRBOT_LLM_API_KEY = _env("ASTRBOT_LLM_API_KEY", LM_STUDIO_API_KEY)
+ASTRBOT_LLM_TEMPERATURE = _env_float("ASTRBOT_LLM_TEMPERATURE", 0.7)
+# 插件专属人格：插件没给 system_prompt 时注入这一句。
+# 刻意不用 Stella 的人格——插件的回复不该带 Stella 的语气，否则用户分不清是谁在说话；
+# 但完全不给 system 消息又会让本地模型的输出风格漂移，所以给一句最小的锚。
+# 设为空串则彻底不发 system 消息。
+ASTRBOT_LLM_SYSTEM_PROMPT = _env(
+    "ASTRBOT_LLM_SYSTEM_PROMPT",
+    "你是一个简单的机器人助手，请直接、简短地回答，不要扮演角色。",
+)
+# 单次回复的生成预算
+ASTRBOT_LLM_MAX_TOKENS = _env_int("ASTRBOT_LLM_MAX_TOKENS", 1024)
+# 送出前的上下文预算（估算值）。超出时从最早的非 system 消息开始丢弃。
+# 本地 8192 窗口的模型请保持默认；换更大窗口的模型时调大这里。
+ASTRBOT_LLM_MAX_CONTEXT_TOKENS = _env_int("ASTRBOT_LLM_MAX_CONTEXT_TOKENS", 8192)
+# 单次请求最多携带多少个函数工具。每个工具的 JSON schema 约 60~120 token，
+# 装满插件时这一项很容易吃掉上下文，超出即截断并告警。
+ASTRBOT_LLM_MAX_TOOLS = _env_int("ASTRBOT_LLM_MAX_TOOLS", 32)
+# 单个工具调用的超时（秒）
+ASTRBOT_LLM_TOOL_TIMEOUT = _env_float("ASTRBOT_LLM_TOOL_TIMEOUT", 120.0)
+# 工具调用循环的最大轮数，防止模型反复调用工具打转
+ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)

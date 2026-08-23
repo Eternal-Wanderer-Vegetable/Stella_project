@@ -716,9 +716,49 @@ class AstrMessageEvent:
         )
 
     # ---------- LLM ----------
-    def request_llm(self, *args: Any, **kwargs: Any) -> Any:
-        _ = (args, kwargs)
-        raise StellaCompatNotSupported("AstrMessageEvent.request_llm")
+    def request_llm(
+        self,
+        prompt: str,
+        func_tool_manager: Any = None,
+        tool_set: Any = None,
+        session_id: str = "",
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        contexts: list | None = None,
+        system_prompt: str = "",
+        conversation: Any = None,
+    ) -> Any:
+        """构造一个 LLM 请求，`yield` 出去即由管道执行。
+
+        两处照抄上游的行为，看着像 bug 但改了会与上游不一致：
+
+        - `func_tool_manager` 被**静默丢弃**（上游把那行注释掉了，只认 `tool_set`）。
+          插件写 `request_llm(prompt, func_tool_manager=...)` 在上游 4.27.4 也拿不到工具。
+        - `contexts` 非空时清掉 `conversation`，两者只能二选一。
+        """
+        from .llm.entities import ProviderRequest
+
+        if func_tool_manager is not None and tool_set is None:
+            logger.debug(
+                "[events] request_llm 的 func_tool_manager 参数已废弃且不生效，"
+                "请改用 tool_set=（与上游 4.27.4 行为一致）",
+            )
+        image_urls = list(image_urls or [])
+        audio_urls = list(audio_urls or [])
+        contexts = list(contexts or [])
+        if len(contexts) > 0 and conversation:
+            conversation = None
+
+        return ProviderRequest(
+            prompt=prompt,
+            session_id=session_id,
+            image_urls=image_urls,
+            audio_urls=audio_urls,
+            func_tool=tool_set,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            conversation=conversation,
+        )
 
 
 # ============================================================

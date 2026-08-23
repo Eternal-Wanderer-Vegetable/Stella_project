@@ -207,6 +207,33 @@ python scripts/probe_consolidation.py --limit 20              # 编造率必须 
 >
 > 第一行区分「小模型布尔判错」（阶段 2 根本没被唤醒 → 改 `consolidation_prompt.py`）与「大模型提取失败」（唤醒了但没提出来 → 改 `extraction_prompt.py`）；第二行区分「没看到」与「看到了但主动弃掉」，两者修法完全不同。
 
+### 插件 LLM 探针
+
+`astrbot_compat` 的 LLM 接入面（插件调模型、函数工具、多轮会话）在 pytest 里
+`chat_completion` 是打桩的，**「能不能真的问到模型」「小模型会不会真的调工具」只有这个探针能答**：
+
+```bash
+python scripts/probe_astrbot_llm.py                     # 全部小节
+python scripts/probe_astrbot_llm.py chat tools          # 只跑指定小节
+```
+
+| 小节 | 验证什么 |
+|---|---|
+| `chat` | `provider.text_chat()` 能拿到非空回复，并打印 usage |
+| `persona` | 人格三态：插件给了用插件的、没给注入插件专属人格、配置为空串则不发 system |
+| `stream` | `text_chat_stream()` 中途是分片、最后一次 yield 是完整文本 |
+| `tools` | `run_tool_loop()` 是否真的触发函数调用并把结果复述给用户 |
+| `budget` | 超预算的上下文被成对裁掉最早的几条，而不是被服务端拒 |
+| `conversation` | `ConversationManager` 落库往返（不需要模型） |
+
+它跑的是生产链路：`core/llm/scheduler` 的 chat 闸门 → `core/llm/openai_client.py` →
+`StellaChatProvider` → `run_tool_loop`。会话与偏好读写指向临时库，**不会碰 `DB_PATH`
+对应的真实数据库**。
+
+`tools` 小节失败时要先分清是链路问题还是模型能力问题：日志里出现
+`请求估算 N token（消息 x 条，工具 1 个）` 说明工具已随请求送出，此时模型仍不调用
+就是本地小模型 function calling 能力不足，换更大的模型再试。
+
 ### 采样真实窗口
 
 ```bash

@@ -23,7 +23,7 @@ class Context:
         self._config: dict = {}
         self._registered_web_apis: list = []
         self._tasks: list[asyncio.Task] = []
-        self.provider_manager = None
+        self._provider_manager_override = None
         self.platform_manager = None
 
     # --- 插件注册表 ---
@@ -166,12 +166,14 @@ class Context:
         logger.warning("[astrbot_compat] Context.register_web_api 暂不支持，仅作兼容")
 
     def activate_llm_tool(self, name: str) -> bool:
-        logger.debug(f"[astrbot_compat] Context.activate_llm_tool({name}) -> False")
-        return False
+        from .llm.tool import llm_tools
+
+        return llm_tools.activate_llm_tool(name)
 
     def deactivate_llm_tool(self, name: str) -> bool:
-        logger.debug(f"[astrbot_compat] Context.deactivate_llm_tool({name}) -> False")
-        return False
+        from .llm.tool import llm_tools
+
+        return llm_tools.deactivate_llm_tool(name)
 
     async def activate_llm_tool_async(self, name: str) -> bool:
         return self.activate_llm_tool(name)
@@ -185,36 +187,191 @@ class Context:
     def get_event_queue(self) -> Any:
         raise StellaCompatNotSupported("Context.get_event_queue")
 
+    # --- LLM ---
 
-# LLM 相关：必须存在但不实现（用循环批量挂，避免闭包坑）
-_LLM_METHODS = (
-    "llm_generate",
-    "tool_loop_agent",
-    "get_current_chat_provider_id",
-    "get_using_provider",
-    "get_using_provider_async",
-    "get_all_providers",
-    "get_provider_by_id",
-    "get_using_tts_provider",
-    "get_using_tts_provider_async",
-    "get_using_stt_provider",
-    "get_using_stt_provider_async",
-    "get_all_tts_providers",
-    "get_all_stt_providers",
-    "get_all_embedding_providers",
-    "get_llm_tool_manager",
-    "add_llm_tools",
-    "register_llm_tool",
-    "unregister_llm_tool",
-)
+    @property
+    def provider_manager(self) -> Any:
+        # 上游这是普通属性，插件（尤其是测试替身）会直接赋值覆盖，所以尊重覆盖值
+        if self._provider_manager_override is not None:
+            return self._provider_manager_override
+        from .llm.manager import get_provider_manager
+
+        return get_provider_manager()
+
+    @provider_manager.setter
+    def provider_manager(self, value: Any) -> None:
+        self._provider_manager_override = value
+
+    @property
+    def conversation_manager(self) -> Any:
+        from .conversation import get_conversation_manager
+
+        return get_conversation_manager()
+
+    @property
+    def persona_manager(self) -> Any:
+        from .persona import get_persona_manager
+
+        return get_persona_manager()
+
+    def get_llm_tool_manager(self) -> Any:
+        from .llm.tool import llm_tools
+
+        return llm_tools
+
+    def get_provider_by_id(self, provider_id: str) -> Any:
+        _ = provider_id
+        return self.provider_manager.provider
+
+    def get_all_providers(self) -> list[Any]:
+        return self.provider_manager.provider_insts
+
+    def get_all_tts_providers(self) -> list[Any]:
+        return []
+
+    def get_all_stt_providers(self) -> list[Any]:
+        return []
+
+    def get_all_embedding_providers(self) -> list[Any]:
+        return []
+
+    def get_using_provider(self, umo: str | None = None) -> Any:
+        _ = umo
+        return self.provider_manager.provider
+
+    async def get_using_provider_async(self, umo: str | None = None) -> Any:
+        return self.get_using_provider(umo)
+
+    def get_using_tts_provider(self, umo: str | None = None) -> Any:
+        _ = umo
+        return None
+
+    async def get_using_tts_provider_async(self, umo: str | None = None) -> Any:
+        _ = umo
+        return None
+
+    def get_using_stt_provider(self, umo: str | None = None) -> Any:
+        _ = umo
+        return None
+
+    async def get_using_stt_provider_async(self, umo: str | None = None) -> Any:
+        _ = umo
+        return None
+
+    async def get_current_chat_provider_id(self, umo: str) -> str:
+        provider = await self.get_using_provider_async(umo)
+        if provider is None:
+            raise StellaCompatNotSupported("Context.get_current_chat_provider_id（LLM 未启用）")
+        return provider.meta().id
+
+    def add_llm_tools(self, *tools: Any) -> None:
+        """把插件自建的 FunctionTool 挂进全局工具表。"""
+        from .llm.tool import llm_tools
+
+        for tool in tools:
+            if tool.handler_module_path is None:
+                tool.handler_module_path = getattr(tool.handler, "__module__", None)
+            if llm_tools.get_tool(tool.name) is not None:
+                llm_tools.remove_tool(tool.name)
+            llm_tools.add_tool(tool)
+            logger.info(f"[astrbot_compat] 已注册函数工具 {tool.name}")
+
+    async def llm_generate(
+        self,
+        *,
+        chat_provider_id: str = "",
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        tools: Any = None,
+        system_prompt: str | None = None,
+        contexts: list | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """直接问模型，**不会**自动执行工具调用（与上游一致）。
+
+        要跑工具循环请用 `tool_loop_agent()`。
+        """
+        provider = self.get_provider_by_id(chat_provider_id)
+        if provider is None:
+            raise StellaCompatNotSupported("Context.llm_generate（LLM 未启用）")
+        return await provider.text_chat(
+            prompt=prompt,
+            image_urls=image_urls,
+            audio_urls=audio_urls,
+            func_tool=tools,
+            system_prompt=system_prompt,
+            contexts=contexts,
+            **kwargs,
+        )
+
+    async def tool_loop_agent(
+        self,
+        *,
+        event: Any,
+        chat_provider_id: str = "",
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        tools: Any = None,
+        system_prompt: str | None = None,
+        contexts: list | None = None,
+        max_steps: int = 30,
+        tool_call_timeout: int = 120,
+        **kwargs: Any,
+    ) -> Any:
+        """带工具循环地问模型，返回最终的 LLMResponse。"""
+        _ = (audio_urls, kwargs)
+        from .llm.agent import run_tool_loop
+        from .llm.entities import ProviderRequest
+
+        provider = self.get_provider_by_id(chat_provider_id)
+        if provider is None:
+            raise StellaCompatNotSupported("Context.tool_loop_agent（LLM 未启用）")
+        req = ProviderRequest(
+            prompt=prompt,
+            session_id=getattr(event, "unified_msg_origin", ""),
+            image_urls=list(image_urls or []),
+            func_tool=tools,
+            contexts=list(contexts or []),
+            system_prompt=system_prompt or "",
+        )
+        return await run_tool_loop(
+            provider,
+            req,
+            event,
+            max_steps=max_steps,
+            tool_timeout=tool_call_timeout,
+        )
+
+    def register_llm_tool(
+        self,
+        name: str,
+        func_args: list,
+        desc: str,
+        func_obj: Any,
+    ) -> None:
+        """上游已废弃的旧式注册接口。"""
+        from .llm.tool import llm_tools
+
+        llm_tools.add_func(name, func_args, desc, func_obj)
+
+    def unregister_llm_tool(self, name: str) -> None:
+        from .llm.tool import llm_tools
+
+        llm_tools.remove_tool(name)
+
+
+# 仍未实现的能力：必须存在（插件 import 得到）但一碰就抛可识别异常。
+# LLM 相关方法已在 Context 类里真实现，不再出现在这里。
+_LLM_METHODS: tuple[str, ...] = ()
 
 # 注意：_LLM_PROPS 用 property 实现。hasattr() 只吞 AttributeError，所以这些 getter
 # 抛的是 StellaCompatUnsupportedAttribute（同时是 StellaCompatNotSupported 和
 # AttributeError）：hasattr(ctx, "conversation_manager") 返回 False（插件特性探测优雅
 # 降级），而直接访问 ctx.conversation_manager 仍抛 StellaCompatNotSupported（可分流）。
+# conversation_manager / persona_manager 已真实现（见类定义），不在此列。
 _LLM_PROPS = (
-    "persona_manager",
-    "conversation_manager",
     "kb_manager",
     "subagent_orchestrator",
     "knowledge_db_manager",

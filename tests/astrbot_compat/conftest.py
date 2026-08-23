@@ -120,6 +120,137 @@ def _clean_registry():
     star_registry.clear()
 
 
+@pytest.fixture(autouse=True)
+def _clean_llm_state():
+    """清掉全局工具表与 provider 单例，避免用例之间串味。"""
+    from astrbot_compat.llm.manager import reset_provider_manager
+    from astrbot_compat.llm.tool import llm_tools
+
+    llm_tools.tools.clear()
+    reset_provider_manager()
+    yield
+    llm_tools.tools.clear()
+    reset_provider_manager()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_llm(monkeypatch):
+    """兜底：任何用例都不许发真实 HTTP 请求。
+
+    LLM 现在默认是**开启**的（ASTRBOT_LLM_ENABLED=true），所以忘了用 fake_llm 的
+    用例会直接打到本机 LM Studio——本机跑着模型时它会"通过"，CI 上则挂掉。
+    这里先把两个出口换成会炸的桩，需要假响应的用例再请求 fake_llm 夹具覆盖它
+    （非 autouse 夹具在 autouse 之后建立，patch 会后来者胜出）。
+    """
+    import core.llm.openai_client as oc
+
+    def _boom(*args: Any, **kwargs: Any):
+        raise AssertionError(
+            "测试里发生了真实的 chat-completions 调用。"
+            "请用 fake_llm 夹具打桩，或把 ASTRBOT_LLM_ENABLED 设为 False。",
+        )
+
+    monkeypatch.setattr(oc, "chat_completion", _boom)
+    monkeypatch.setattr(oc, "chat_completion_stream", _boom)
+
+
+class FakeLLM:
+    """假的 chat_completion。记录每次请求，按脚本返回响应。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self._queue: list[dict] = []
+        self.default_text = "好的。"
+
+    def push(self, raw: dict) -> None:
+        """排一个原始响应。用完队列后回落到 default_text。"""
+        self._queue.append(raw)
+
+    def push_text(self, text: str) -> None:
+        self.push(
+            {
+                "id": "resp",
+                "choices": [{"message": {"role": "assistant", "content": text}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    def push_tool_call(self, name: str, arguments: str, call_id: str = "call_1") -> None:
+        self.push(
+            {
+                "id": "resp",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {"name": name, "arguments": arguments},
+                                },
+                            ],
+                        },
+                    },
+                ],
+                "usage": {},
+            },
+        )
+
+    async def __call__(self, messages: list[dict], **kwargs: Any) -> dict:
+        self.calls.append({"messages": messages, **kwargs})
+        if self._queue:
+            return self._queue.pop(0)
+        return {
+            "id": "resp",
+            "choices": [{"message": {"role": "assistant", "content": self.default_text}}],
+            "usage": {},
+        }
+
+    @property
+    def last_messages(self) -> list[dict]:
+        return self.calls[-1]["messages"]
+
+    @property
+    def last_tools(self) -> list[dict] | None:
+        return self.calls[-1].get("tools")
+
+
+@pytest.fixture
+def fake_llm(monkeypatch) -> FakeLLM:
+    """把 LLM 打桩在 HTTP 层，全程不发真实请求。
+
+    provider 里是在方法内 `from core.llm.openai_client import chat_completion`，
+    这种写法在调用时才查模块属性，所以 patch 模块属性就能覆盖。
+    """
+    import core.llm.openai_client as oc
+
+    stub = FakeLLM()
+    monkeypatch.setattr(oc, "chat_completion", stub)
+    return stub
+
+
+@pytest.fixture
+def llm_db(tmp_path, monkeypatch):
+    """把兼容层的会话 / 偏好表指到临时库，并清掉进程内缓存。
+
+    沿用项目惯例：patch 各模块自己绑定的 DB_PATH，而不是 config.DB_PATH
+    （每个模块在 import 时就把值绑死了）。
+    """
+    from astrbot_compat import conversation as conv_mod
+    from astrbot_compat import preferences as pref_mod
+
+    db = tmp_path / "astrbot_compat.db"
+    monkeypatch.setattr(pref_mod, "DB_PATH", db)
+    monkeypatch.setattr(conv_mod, "DB_PATH", db)
+    pref_mod.sp.reset_cache()
+    conv_mod.get_conversation_manager().reset_cache()
+    yield db
+    pref_mod.sp.reset_cache()
+    conv_mod.get_conversation_manager().reset_cache()
+
+
 @pytest.fixture
 def register_plugin():
     """把一个 Star 子类登记成「已加载插件」：填元数据、实例化、重绑定 handler。"""

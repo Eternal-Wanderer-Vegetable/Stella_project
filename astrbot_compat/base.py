@@ -299,13 +299,15 @@ class StarTools(metaclass=_StarToolsMeta):
 
     @classmethod
     def activate_llm_tool(cls, name: str) -> bool:
-        logger.debug(f"[astrbot_compat] StarTools.activate_llm_tool({name}) -> False")
-        return False
+        from .llm.tool import llm_tools
+
+        return llm_tools.activate_llm_tool(name)
 
     @classmethod
     def deactivate_llm_tool(cls, name: str) -> bool:
-        logger.debug(f"[astrbot_compat] StarTools.deactivate_llm_tool({name}) -> False")
-        return False
+        from .llm.tool import llm_tools
+
+        return llm_tools.deactivate_llm_tool(name)
 
     @classmethod
     async def activate_llm_tool_async(cls, name: str) -> bool:
@@ -336,14 +338,23 @@ class StarTools(metaclass=_StarToolsMeta):
         raise StellaCompatNotSupported("StarTools.register_web_api")
 
     @classmethod
-    def register_llm_tool(cls, *args: Any, **kwargs: Any) -> Any:
-        _ = (args, kwargs)
-        raise StellaCompatNotSupported("StarTools.register_llm_tool")
+    def register_llm_tool(
+        cls,
+        name: str,
+        func_args: list,
+        desc: str,
+        func_obj: Any,
+    ) -> None:
+        """上游已废弃的旧式注册接口（与 Context.register_llm_tool 同一张表）。"""
+        from .llm.tool import llm_tools
+
+        llm_tools.add_func(name, func_args, desc, func_obj)
 
     @classmethod
-    def unregister_llm_tool(cls, *args: Any, **kwargs: Any) -> Any:
-        _ = (args, kwargs)
-        raise StellaCompatNotSupported("StarTools.unregister_llm_tool")
+    def unregister_llm_tool(cls, name: str) -> None:
+        from .llm.tool import llm_tools
+
+        llm_tools.remove_tool(name)
 
 
 __all__ = ["CommandParserMixin", "CommandTokens", "Context", "PluginKVStoreMixin", "Star", "StarTools"]

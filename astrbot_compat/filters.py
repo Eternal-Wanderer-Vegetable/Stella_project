@@ -13,6 +13,7 @@ import contextlib
 import enum
 import functools
 import inspect
+import logging
 import re
 import types
 import typing
@@ -21,6 +22,8 @@ from collections.abc import Callable
 from typing import Any
 
 from .registry import EventType, StarHandlerMetadata, star_handlers_registry
+
+logger = logging.getLogger("astrbot_compat.filters")
 
 # ============================================================
 # 枚举与 GreedyStr
@@ -727,20 +730,144 @@ def custom_filter(custom_type_filter: Any, *args: Any, **kwargs: Any) -> Callabl
     return decorator
 
 
+# ============================================================
+# llm_tool：docstring -> JSON schema
+# ============================================================
+
+# 上游把 Python 类型名映射到 JSON Schema 类型
+_PY_TO_JSON_TYPE = {
+    "string": "string",
+    "str": "string",
+    "number": "number",
+    "float": "number",
+    "int": "integer",
+    "integer": "integer",
+    "boolean": "boolean",
+    "bool": "boolean",
+    "object": "object",
+    "dict": "object",
+    "array": "array",
+    "list": "array",
+}
+
+_ARG_LINE = re.compile(r"^\s*(\w+)\s*\(([^)]+)\)\s*:\s*(.*)$")
+_ARGS_HEADER = re.compile(r"^\s*(Args|Arguments|参数)\s*:\s*$", re.IGNORECASE)
+_OTHER_HEADER = re.compile(
+    r"^\s*(Returns?|Raises?|Examples?|Note|Notes|Yields?|返回|异常|示例)\s*:\s*$",
+    re.IGNORECASE,
+)
+
+
+def _json_type(raw: str) -> tuple[str, dict | None]:
+    """把 `string` / `list[string]` 这类标注转成 JSON Schema 的 type（+ items）。"""
+    raw = raw.strip().lower()
+    m = re.match(r"^(list|array)\s*\[\s*(\w+)\s*\]$", raw)
+    if m:
+        inner = _PY_TO_JSON_TYPE.get(m.group(2), "string")
+        return "array", {"type": inner}
+    return _PY_TO_JSON_TYPE.get(raw, "string"), None
+
+
+def parse_tool_docstring(doc: str | None) -> tuple[str, list[dict]]:
+    """解析 llm_tool 的 docstring，返回 (描述, 参数列表)。
+
+    只认上游文档规定的这一种格式，所以不引 docstring_parser 依赖::
+
+        \"\"\"获取天气信息。
+
+        Args:
+            location(string): 地点
+            days(list[string]): 哪几天
+        \"\"\"
+    """
+    if not doc:
+        return "", []
+    lines = doc.strip().splitlines()
+    desc_lines: list[str] = []
+    args: list[dict] = []
+    in_args = False
+    seen_header = False
+    for line in lines:
+        if _ARGS_HEADER.match(line):
+            in_args = True
+            seen_header = True
+            continue
+        if _OTHER_HEADER.match(line):
+            in_args = False
+            seen_header = True
+            continue
+        if not in_args:
+            # 描述只取第一个段标题之前的内容，Returns/Raises 段不算描述
+            if not seen_header:
+                desc_lines.append(line.strip())
+            continue
+        m = _ARG_LINE.match(line)
+        if m is None:
+            continue
+        name, type_raw, description = m.groups()
+        json_type, items = _json_type(type_raw)
+        spec: dict[str, Any] = {
+            "name": name,
+            "type": json_type,
+            "description": description.strip(),
+        }
+        if items:
+            spec["items"] = items
+        args.append(spec)
+    return "\n".join(desc_lines).strip(), args
+
+
 def llm_tool(name: str | None = None, **kwargs: Any) -> Callable:
-    """注册为 llm_tool（仅登记，Stella 不做分发）。"""
+    """把一个方法注册成 LLM 函数工具。
+
+    工具函数的签名是 `async def tool(self, event, <llm 参数...>)`，参数类型必须写在
+    docstring 的 Args 段里（见 `parse_tool_docstring`）。返回 str 会回喂给模型；
+    返回 None 表示"没有返回值或已直接回复用户"。
+    """
     if callable(name):
         func = name
-        _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent)
+        _register_llm_tool(func, None)
         return func
 
     def decorator(func: Callable) -> Callable:
-        md = _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent, **kwargs)
-        if name is not None:
-            md.extras_configs["tool_name"] = name
+        _register_llm_tool(func, name, **kwargs)
         return func
 
     return decorator
+
+
+def _register_llm_tool(func: Callable, name: str | None, **kwargs: Any) -> None:
+    from .llm.tool import llm_tools
+
+    md = _get_or_create_handler_md(func, EventType.OnCallingFuncToolEvent, **kwargs)
+    tool_name = name or func.__name__
+    if name is not None:
+        md.extras_configs["tool_name"] = name
+    desc, args = parse_tool_docstring(func.__doc__)
+    # handler 现在还是未绑定函数，loader 稍后会 functools.partial(self) 重绑；
+    # 这里存 md 的引用，注册时取 md.handler，保证拿到的是最终那一个。
+    llm_tools.add_func(tool_name, args, desc or tool_name, _LateBoundHandler(md))
+    logger.debug(f"[astrbot_compat] 已登记函数工具 {tool_name}: {args}")
+
+
+class _LateBoundHandler:
+    """转发到 StarHandlerMetadata.handler。
+
+    工具在**类体执行时**注册，那时 handler 还是未绑定函数；loader 加载插件时才会
+    用 functools.partial(inst) 重绑。直接存函数会导致调用时缺 self，所以存元数据、
+    调用时再取。
+    """
+
+    def __init__(self, md: StarHandlerMetadata) -> None:
+        self._md = md
+        self.__name__ = md.handler_name
+        self.__module__ = md.handler_module_path
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._md.handler(*args, **kwargs)
+
+    def __repr__(self) -> str:
+        return f"<LateBound {self._md.handler_full_name}>"
 
 
 # ============================================================
