@@ -240,15 +240,20 @@ async def collect_handlers(
     副作用：命中任一 handler 时把 `event.is_wake` 置 True；权限不足或 filter 抛错时
     会向用户发送提示并 `stop_event()`。
     """
-    activated: list[tuple[StarHandlerMetadata, dict[str, Any]]] = []
-    for handler_md in star_handlers_registry.get_handlers_by_event_type(
+    all_handlers = star_handlers_registry.get_handlers_by_event_type(
         EventType.AdapterMessageEvent,
         plugins_name=event.plugins_name,
-    ):
+    )
+    logger.info(f"[pipeline_debug] collect_handlers message_str={event.message_str!r} total_handlers={len(all_handlers)} waiting_filters={len([h for h in all_handlers if h.event_filters])}")
+    for h in all_handlers:
+        logger.info(f"[pipeline_debug] handler={h.handler_full_name} filters={len(h.event_filters)} types={[type(f).__name__ for f in h.event_filters]}")
+    activated: list[tuple[StarHandlerMetadata, dict[str, Any]]] = []
+    for handler_md in all_handlers:
         if not handler_md.event_filters:
             continue
         event._extras.pop("parsed_params", None)
         passed, notice = await _run_filters(handler_md, event)
+        logger.info(f"[pipeline_debug] filter handler={handler_md.handler_full_name} passed={passed} notice={notice!r}")
         if notice is not None:
             with contextlib.suppress(Exception):
                 await event.send(MessageChain().message(notice))
@@ -258,17 +263,22 @@ async def collect_handlers(
             continue
         event.is_wake = True
         if _is_group_stub(handler_md):
+            logger.info(f"[pipeline_debug] handler {handler_md.handler_full_name} is group stub, skipped")
             continue
         activated.append((handler_md, dict(event.get_extra("parsed_params", {}) or {})))
     event._extras.pop("parsed_params", None)
+    logger.info(f"[pipeline_debug] activated={len(activated)} {[h.handler_full_name for h,_ in activated]}")
     return activated
 
 
 async def dispatch(nb_event: Any, bot: Any) -> bool:
     """主入口：OneBot 事件 -> AstrBot 插件分发，返回是否已向用户产出回应。"""
+    total = len(star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent))
+    logger.info(f"[pipeline_debug] dispatch total_handlers={total} registry_len={len(star_handlers_registry)}")
     if not star_handlers_registry.get_handlers_by_event_type(
         EventType.AdapterMessageEvent,
     ):
+        logger.info("[pipeline_debug] no handlers, return False")
         return False
 
     try:

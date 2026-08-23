@@ -31,7 +31,65 @@ nonebot.load_from_toml("pyproject.toml")
 
 from astrbot_compat import initialize_plugins, load_all_plugins, terminate_plugins
 
-load_all_plugins()
+# --- 诊断：显式打印插件发现与加载结果（启动期必落盘） ---
+import logging as _py_logging
+
+_diag_logger = _py_logging.getLogger("astrbot_compat.boot")
+_diag_path = None
+try:
+    from pathlib import Path as _P
+
+    _diag_path = _P(__file__).resolve().parent / "boot_debug.log"
+    _diag_path.write_text("", encoding="utf-8")
+except Exception:
+    pass
+
+def _diag_log(msg: str) -> None:
+    try:
+        _py_logging.getLogger("astrbot_compat.boot").warning(msg)
+    except Exception:
+        pass
+    try:
+        import nonebot as _nb
+
+        _nb.logger.warning(msg)
+    except Exception:
+        pass
+    try:
+        print(msg, flush=True)
+    except Exception:
+        pass
+    try:
+        if _diag_path is not None:
+            with open(_diag_path, "a", encoding="utf-8") as _f:
+                _f.write(msg + "\n")
+    except Exception:
+        pass
+
+try:
+    from astrbot_compat.loader import discover_plugins, get_failed_plugins
+    from config.settings import ASTRBOT_PLUGINS_DIR, PROJECT_ROOT
+
+    _discovered = discover_plugins()
+    _diag_log(f"[astrbot_compat][boot] PROJECT_ROOT={PROJECT_ROOT} ASTRBOT_PLUGINS_DIR={ASTRBOT_PLUGINS_DIR} discovered={[p.name for p in _discovered]}")
+except Exception as _e:
+    _diag_log(f"[astrbot_compat][boot] discover 异常: {_e}")
+
+try:
+    _loaded = load_all_plugins()
+    from astrbot_compat.loader import get_failed_plugins as _gfp
+    from astrbot_compat.registry import star_handlers_registry, star_registry
+
+    _diag_log(f"[astrbot_compat][boot] load_all_plugins -> success={len(_loaded)} failed={_gfp()} registry={len(star_registry)} handlers={len(star_handlers_registry)}")
+    for _md in _loaded:
+        _diag_log(f"[astrbot_compat][boot]   loaded {_md.plugin_id} handlers={len(_md.star_handler_full_names)}")
+    if not _loaded:
+        _diag_log(f"[astrbot_compat][boot] 没有加载到插件，discovered={[p.name for p in _discovered]} ASTRBOT_COMPAT_ENABLED={getattr(__import__('config.settings', fromlist=['ASTRBOT_COMPAT_ENABLED']), 'ASTRBOT_COMPAT_ENABLED', 'unknown')}")
+except Exception as _e:
+    import traceback
+
+    _diag_log(f"[astrbot_compat][boot] load_all_plugins 异常: {_e}\n{traceback.format_exc()}")
+
 driver.on_startup(initialize_plugins)
 driver.on_shutdown(terminate_plugins)
 

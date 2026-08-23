@@ -316,6 +316,10 @@ async def record_group_chat(event: GroupMessageEvent):
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     """触发规则：(1) 属于已启用群 (2) 有人 @ 机器人 (3) 附带非空文本。"""
+    _tome = event.is_tome()
+    _txt = event.get_plaintext().strip()
+    _gid_ok = event.group_id in ALLOWED_GROUPS
+    logger.info(f"[chat_debug] is_chat_trigger gid={event.group_id} gid_ok={_gid_ok} is_tome={_tome} text={_txt!r} self_id={event.self_id} raw={event.get_message()!r}")
     if event.group_id not in ALLOWED_GROUPS:
         return False
     if not event.is_tome():
@@ -351,13 +355,15 @@ async def handle_plugin(bot: Bot, event: MessageEvent):
     try:
         from astrbot_compat.pipeline import dispatch
 
+        logger.info(f"[plugin_debug] handle_plugin event={event.get_plaintext()!r} msg_id={event.message_id}")
         handled = await dispatch(event, bot)
+        logger.info(f"[plugin_debug] dispatch handled={handled} msg_id={event.message_id}")
         if handled:
             _plugin_handled_msgs[event.message_id] = time.time()
             if len(_plugin_handled_msgs) > 256:
                 _plugin_handled_msgs.popitem(last=False)
     except Exception as e:
-        logger.warning(f"[plugin] dispatch 异常: {e}")
+        logger.warning(f"[plugin] dispatch 异常: {e}", exc_info=True)
 
 
 # 对话入口：只有命中以上规则才会进入（priority=3、命中即 block）。

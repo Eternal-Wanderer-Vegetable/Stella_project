@@ -79,3 +79,4 @@ runtime/
 !/data/plugins/.gitkeep
 /data/config/
 /data/plugin_data/
+/boot_debug.log
