@@ -45,12 +45,20 @@ class AstrAgentContext:
     event: Any
     extra: dict[str, str] = field(default_factory=dict)
 
+    # 允许插件写 AstrAgentContext[...]（上游泛型写法）
+    def __class_getitem__(cls, _item: Any) -> Any:
+        return cls
+
 
 @dataclass
 class ContextWrapper:
     context: Any
     messages: list = field(default_factory=list)
     tool_call_timeout: int = 120
+
+    # 允许插件写 ContextWrapper[AstrAgentContext]（上游泛型写法）
+    def __class_getitem__(cls, _item: Any) -> Any:
+        return cls
 
 
 AgentContextWrapper = ContextWrapper

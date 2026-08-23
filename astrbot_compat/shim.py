@@ -21,11 +21,19 @@ _MODULE_NAMES = (
     "astrbot.api.message_components",
     "astrbot.api.platform",
     "astrbot.api.provider",
+    # 上游官方推荐的通配导入入口，插件常写 from astrbot.api.all import *
+    "astrbot.api.all",
     "astrbot.core",
     "astrbot.core.message",
     "astrbot.core.message.components",
     "astrbot.core.star",
     "astrbot.core.star.filter",
+    # 上游 filter 实现所在的子模块，插件常直接 from astrbot.core.star.filter.command import GreedyStr
+    "astrbot.core.star.filter.command",
+    "astrbot.core.star.filter.regex",
+    "astrbot.core.star.filter.event_message_type",
+    "astrbot.core.star.filter.permission_type",
+    "astrbot.core.star.filter.custom_filter",
     "astrbot.core.platform",
     "astrbot.core.provider",
     "astrbot.core.provider.entities",
@@ -33,6 +41,8 @@ _MODULE_NAMES = (
     "astrbot.core.provider.entites",
     "astrbot.core.agent",
     "astrbot.core.agent.tool",
+    # 上游 agent 运行上下文真类所在模块，插件常直接 from ...astr_agent_context import AstrAgentContext
+    "astrbot.core.astr_agent_context",
     "astrbot.core.agent.message",
     "astrbot.core.agent.run_context",
     "astrbot.core.agent.hooks",
@@ -48,6 +58,7 @@ _PACKAGE_NAMES = frozenset(
         "astrbot.core",
         "astrbot.core.message",
         "astrbot.core.star",
+        "astrbot.core.star.filter",
         "astrbot.core.provider",
         "astrbot.core.agent",
         "astrbot.core.db",
@@ -238,9 +249,49 @@ def _install_star(star_mod: ModuleType, core_star_mod: ModuleType) -> None:
 def _install_filters(filter_mod: ModuleType, core_filter_mod: ModuleType) -> None:
     from . import filters as _f
 
-    for mod in (filter_mod, core_filter_mod):
+    core_submodules = tuple(
+        sys.modules[f"astrbot.core.star.filter.{leaf}"]
+        for leaf in (
+            "command",
+            "regex",
+            "event_message_type",
+            "permission_type",
+            "custom_filter",
+        )
+    )
+    for mod in (filter_mod, core_filter_mod, *core_submodules):
         for name in _FILTER_EXPORTS:
             setattr(mod, name, getattr(_f, name))
+    # core 包上同名子模块属性优先于装饰器：插件写 from astrbot.core.star.filter.command import GreedyStr
+    # 时需要拿到模块；装饰器仍从 astrbot.api.event.filter 导入（上游插件的惯用路径）。
+    for sub in core_submodules:
+        setattr(core_filter_mod, sub.__name__.rsplit(".", 1)[-1], sub)
+
+
+def _install_api_all(all_mod: ModuleType) -> None:
+    """astrbot.api.all：聚合各公开子模块的全部非下划线属性。
+
+    必须在其他 _install_* 之后调用，保证聚合到的是最终对象。
+    """
+    sources = (
+        "astrbot.api",
+        "astrbot.api.star",
+        "astrbot.api.event",
+        "astrbot.api.event.filter",
+        "astrbot.api.message_components",
+        "astrbot.api.platform",
+        "astrbot.api.provider",
+    )
+    exported: list[str] = []
+    for src_name in sources:
+        src = sys.modules[src_name]
+        for name, value in vars(src).items():
+            if name.startswith("_") or isinstance(value, ModuleType):
+                continue
+            if not hasattr(all_mod, name):
+                setattr(all_mod, name, value)
+                exported.append(name)
+    all_mod.__all__ = exported
 
 
 def _install_events(event_mod: ModuleType, filter_mod: ModuleType) -> None:
@@ -378,6 +429,14 @@ def _install_agent(
     agent_mod.ContextWrapper = _l.ContextWrapper
 
 
+def _install_astr_agent_context(aac_mod: ModuleType) -> None:
+    from . import llm as _l
+
+    aac_mod.AstrAgentContext = _l.AstrAgentContext
+    aac_mod.ContextWrapper = _l.ContextWrapper
+    aac_mod.AgentContextWrapper = _l.AgentContextWrapper
+
+
 def _install_db(db_mod: ModuleType, po_mod: ModuleType) -> None:
     from .po import Conversation, Personality
 
@@ -428,6 +487,10 @@ def install_shim() -> None:
         m["astrbot.core.agent.hooks"],
     )
     _install_db(m["astrbot.core.db"], m["astrbot.core.db.po"])
+    _install_astr_agent_context(m["astrbot.core.astr_agent_context"])
+    _install_api_all(m["astrbot.api.all"])
+    # 上游 astrbot.api.all 挂在 astrbot.api 下
+    m["astrbot.api"].all = m["astrbot.api.all"]
 
     # astrbot.core.message.components 也挂到 astrbot.core.message 上
     m["astrbot.core.message"].components = m["astrbot.core.message.components"]
