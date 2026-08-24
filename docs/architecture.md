@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述 Stella 的目录结构、模块职责与一次消息的完整处理流程。记忆系统的设计理由见 [记忆系统](memory-system.md)，配置项见 [配置参考](configuration.md)。
+本文描述 Stella 的目录结构、模块职责与一次消息的完整处理流程。记忆系统的设计理由见 [记忆系统](memory-system.md)，能力路由与工具执行见 [能力系统](capability-system.md)，配置项见 [配置参考](configuration.md)。
 
 ## 分层概览
 
@@ -11,12 +11,15 @@ stella_project/plugins/bot_main/ai_gateway.py     ← 事件接入层
     ↓
 core/pipeline.py                                  ← 编排层（pre hooks → LLM → post hooks）
     ↓
+capability/*                                      ← 能力层（Router 判定 / Comes 执行工具）
 memory/*                                          ← 记忆层（写入 / 晋升 / 检索 / 压缩）
     ↓
 SQLite（memory/agent_memory.db）
 ```
 
-四层各自独立：接入层只做协议适配与调度，编排层不含业务逻辑，记忆层不感知 QQ，存储层由 `memory/schema.py` 统一管理迁移。
+五层各自独立：接入层只做协议适配与调度，编排层不含业务逻辑，能力层不感知人格与记忆内容，记忆层不感知 QQ，存储层由 `memory/schema.py` 统一管理迁移。
+
+能力层与记忆层是**并列**的两条分支，都由编排层的同一个前置钩子激活，彼此之间只通过 `ChatContext` 通信、不互相调用。
 
 > 存储层有**两层归属维度**：`group_id` 是真实 QQ 群，`group_shared_space` 是群组共享空间。前者承载「当下这场对话的状态」，后者承载「对人的长期认知」。详见下文「主要数据表」。
 
@@ -31,15 +34,34 @@ Stella_project/
 ├── config/
 │   ├── settings.py         # 集中配置：读 .env，导出模块级常量
 │   ├── spaces.py           # 群组共享空间解析（config/spaces/*.toml）
-│   └── spaces/             # 空间配置（文件名即空间名，不进 .env）
+│   ├── spaces/             # 空间配置（文件名即空间名，不进 .env）
+│   └── capabilities/       # 能力声明（文件名即 domain，可选；见 *.example）
 │
 ├── core/                           # 与业务无关的编排骨架
 │   ├── context.py                  # ChatContext：一次处理的运行期载体
+│   ├── tasks.py                    # Task / Result / TaskGraph 协议（四模块共用）
 │   ├── pipeline.py                  # Pipeline 编排器 + prompt 拼装顺序
 │   └── llm/
 │       ├── base.py                 # LLM 后端抽象接口
 │       ├── lm_studio.py            # LM Studio 后端（含重试与截断告警）
+│       ├── openai_client.py        # 完整 chat-completions 客户端（tools / 图片 / 流式）
 │       └── scheduler.py    # 模型级资源闸门（FIFO 串行 + 排队可观测性）
+│
+├── capability/                     # 能力层（详见 docs/capability-system.md）
+│   ├── registry.py                 # Capability / Provider / 注册表单例 + 健康度退避
+│   ├── loader.py                   # config/capabilities/*.toml → 注册表
+│   ├── hooks.py                    # activate_capabilities 前置钩子（管线接入点）
+│   ├── router/                     # 三级路由
+│   │   ├── types.py                # Route / CapabilityHit
+│   │   ├── rules.py                # Level 0：关键词规则（零延迟）
+│   │   ├── semantic.py             # Level 1：Embedding 原型匹配
+│   │   ├── fallback.py             # Level 2：更强模型兜底（默认关闭）
+│   │   └── benchmark.py            # 路由准确率基准（决定能否开记忆门控）
+│   ├── comes/                      # 工具执行层
+│   │   ├── executor.py             # Capability → Provider → Tool → Result
+│   │   └── summarizer.py           # Result.data → Result.summary
+│   └── adapters/
+│       └── astrbot.py              # llm_tools → Provider 自动派生 + bootstrap
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
@@ -169,8 +191,8 @@ Stella_project/
 Pipeline 的 pre hook 按 priority **降序**执行：
 
 ```
-build_context      (50)  → ctx.short_term
-build_user_context (40)  → ctx.user_profile / conversation_memories / behavior_constraints
+build_context          (50)  → ctx.short_term
+activate_capabilities  (45)  → ctx.route，并行激活 {长期记忆检索, Comes 工具执行}
 ```
 
 **`build_context`** 组装三层并存的短期上下文：
@@ -191,6 +213,24 @@ build_user_context (40)  → ctx.user_profile / conversation_memories / behavior
 
 三层必须并存。摘要要累积到阈值才更新，只靠它会看不到最近几轮对话——Bot 会把用户的简短回应接到上一个话题上去。
 
+**`activate_capabilities`** 做两件事：先由 Router 判定本次需要哪些能力，再**并行**激活记忆检索与工具执行（详见 [能力系统](capability-system.md)）。
+
+```
+capability.router.route(消息)              ← 三级级联：规则 → Embedding → 模型兜底
+  → ctx.route（判定快照，写进 thought 日志与决策轨迹）
+  ↓
+asyncio.gather(
+    build_user_context(ctx),               ← 长期记忆检索（下方）
+    run_comes(ctx, route),                 ← 工具执行，仅 route.tool 时
+)
+```
+
+`build_user_context` **不再单独注册为钩子**，已被本钩子接管：Memory 与 Comes 必须并行，两个独立钩子只能串行。
+
+`build_context` 保持无条件执行——短期上下文是对话素材，与「要不要检索长期记忆」无关。
+
+> **记忆门控默认关闭**（`ROUTER_GATE_MEMORY=false`）：Router 照常判定与记录，但记忆检索仍无条件执行。误判 `memory=False` 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 `AT_MENTION` 全为 0 的缺陷同一类型。要打开先跑 `python -m capability.router.benchmark` 确认记忆假阴为 0。
+
 **`build_user_context`** 走 v2 检索（`MEMORY_V2_ENABLED`）：
 
 画像与记忆按**共享空间**检索（`resolve_space(ctx.group_id)`），而非按 QQ 群。
@@ -207,21 +247,25 @@ detect_mode(消息, 触发方式)                     ← 判定行为模式
 
 ### 4. LLM 调用
 
-`core/pipeline.py` 把上下文与消息拼成最终 prompt。**拼装顺序取决于 `intent`**：
+`core/pipeline.py` 把上下文、工具结果与消息拼成最终 prompt。**拼装顺序取决于 `intent`**：
 
 | intent | 顺序 | 原因 |
 |---|---|---|
-| 普通 | 上下文 → 用户消息 | 用户输入在最后，模型自然去回应它 |
-| `proactive_at` | **任务指令 → 上下文** | `ctx.message` 是指令而非用户输入；若放在最后，模型会去接上下文尾部的对话而不是执行指令 |
+| 普通 | 上下文 → 工具结果 → 用户消息 | 用户输入在最后，模型自然去回应它 |
+| `proactive_at` | **任务指令 → 工具结果 → 上下文** | `ctx.message` 是指令而非用户输入；若放在最后，模型会去接上下文尾部的对话而不是执行指令 |
+
+工具结果段落只吃 `ctx.tool_summaries`（压缩后的一句话），**`Result.data` 全程不进 prompt**——一次搜索能返回几千字，原样拼进来会把记忆与对话上下文一起挤出窗口。它夹在上下文与当前输入之间：工具结果是「回答这句话的证据」，必须离当前输入近，而「请回应这句话」必须留在最后一行。
 
 > 调用经 `core/llm/scheduler.py` 的资源闸门串行。**LM Studio 不限制并发**，多请求同时打到同一模型会并发推理、互相拖慢，因此应用层必须为每个共享模型设一道闸门：
 >
 > | 资源 | 模型 | 使用者 |
 > |---|---|---|
-> | `chat` | 主聊天模型 | 聊天回复、会话压缩、候选提取、embedding 编码 |
+> | `chat` | 主聊天模型 | 聊天回复、会话压缩、候选提取、embedding 编码、Comes 工具循环、Router Level 2 |
 > | `consolidation` | 整合模型 | 两阶段整合的阶段 1 |
 >
 > 同一资源内严格 FIFO（`asyncio.Lock` 的等待队列本就是 FIFO），不同资源之间可真正并行。
+>
+> 这也是「Memory 与 Comes 并行」的边界：两者的**模型调用**仍在 `chat` 闸门里 FIFO 串行，`gather` 换来的是 Memory 的 SQL/FTS 查询与 Comes 的 HTTP 等待互相重叠。不是假并行，但也不是两块 GPU。
 >
 > **调用方绝不能同时持有两把闸门**：若先持 consolidation 再等 chat（或反之），会发生跨模型队头阻塞——一个资源空闲时却在等另一个资源的队头任务释放，把两条队一起堵死。这正是 `consolidate_group` 用独立的群级锁、把阶段 1 与阶段 2 拆成两个互不嵌套的持有窗口的原因。
 >
@@ -296,8 +340,14 @@ log_thought        (40)  → 写 stella_thought_logs.md
 | 诊断 | `trigger` `intent` `intent_detail` `llm_backend` `llm_model` `llm_elapsed` `prompt_log` |
 | 结构化上下文 | `short_term` `user_profile` `memories_for_prompt` `tail_start_id` |
 | 记忆 v2 | `memory_mode` `conversation_memories` `behavior_constraints` `memory_trace` |
+| 任务调度 | `route` `task_results` `tool_summaries` |
+| 平台句柄 | `raw_event` `bot` |
 
 `group_id` 始终是真实 QQ 群号；`group_shared_space` 由 `config.spaces.resolve_space()` 自动填入，是记忆与画像的归属标识。两者不可混用。
+
+`raw_event` / `bot` 是**不透明句柄**：Comes 调 AstrBot 工具时，工具 handler 内部会用 `event.send()` / `event.bot.call_action()`，必须是真实对象，构造不出等价替身。`core` 不解释它们的类型、也不碰任何方法，只负责从接入层传递到能力层。两者都标了 `repr=False`——OneBot 事件的 `repr` 会把整条消息与 sender 全展开，日志里 `ChatContext` 一旦被 `repr` 就会刷屏。
+
+`route` 的类型标注是 `Any` 而非 `Route`：`core` 是「与业务无关的编排骨架」，不该 import `capability`，反向依赖会成环。
 
 ### 主要数据表
 

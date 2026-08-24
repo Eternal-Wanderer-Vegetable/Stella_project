@@ -47,6 +47,7 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.exception import FinishedException
 from nonebot.rule import Rule
 
+from capability.hooks import register as register_capability_hook
 from config import (
     ALLOWED_GROUPS,
     ASTRBOT_COMPAT_ALLOW_PRIVATE,
@@ -94,7 +95,7 @@ from memory.post_processors import (
     parse_output,
     split_lines,
 )
-from memory.pre_processors import build_context, build_user_context, record_message
+from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
 from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
 from memory.proactive_prompt import build_instruction
@@ -129,12 +130,15 @@ _reply_check_tasks: set[asyncio.Task] = set()
 # 插件已处理标记：message_id -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
 _plugin_handled_msgs: OrderedDict[int, float] = OrderedDict()
 
-# pre-hook 按 priority 升序执行（数值越小越先）：
-# 50 -> build_context（构造群长期记忆上下文）
-# 40 -> build_user_context（叠加用户短期记忆）—— priority 更小所以先于 build_context？
-# 实际排序由 Pipeline 决定，这里只保证注册关系，具体先后以 implementation 为准
+# pre-hook 按 priority 降序执行（数值越大越先）：
+# 50 -> build_context（组装短期上下文：话题摘要 + 原始尾巴 + 会话摘要）
+# 45 -> activate_capabilities（Router 判定 → 并行跑 {长期记忆检索, Comes 工具执行}）
+#
+# build_user_context **不再单独注册**：它已被 activate_capabilities 接管。
+# 方案第 17 节要求 Memory 与 Comes 并行，两个独立钩子只能串行，必须收进同一个
+# gather。这里再注册一次会让记忆检索跑两遍（一次串行、一次在 gather 里）。
 pipeline.register_pre_hook(build_context, priority=50)
-pipeline.register_pre_hook(build_user_context, priority=40)
+register_capability_hook(pipeline)
 
 # post-hook 同样按 priority 升序执行：
 # 100 -> parse_output（解析 LLM 输出为结构化结果）
@@ -378,7 +382,6 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         _plugin_handled_msgs.pop(event.message_id, None)
         logger.debug(f"[chat] 已由插件处理，跳过 LLM (group {event.group_id})")
         return
-    _ = bot
     lock = _group_locks[event.group_id]
     async with lock:
         ctx = ChatContext(
@@ -386,6 +389,11 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             group_id=event.group_id,
             msg_id=event.message_id,
             message=event.get_plaintext().strip(),
+            # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
+            # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
+            # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
+            raw_event=event,
+            bot=bot,
         )
 
         # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，

@@ -1,0 +1,48 @@
+# 能力声明示例（information 域）
+#
+# 把这个文件复制成 config/capabilities/<域名>.toml 并按你装的插件改写即可。
+# **文件名就是 domain**，这里叫 information，能力的 domain 字段自动填 "information"。
+#
+# 声明文件是**可选**的：不写也能用——启动时 capability/adapters/astrbot.py 会把每个
+# 插件工具自动派生成 tool.<工具名>。写它的收益全在路由质量上：
+#
+#   examples  → Level 1 语义匹配的原型语料。写自然的中文句子。
+#               插件的英文工具描述（"get weather forecast"）在中文群聊里跨语言
+#               匹配准确率明显偏低，几条中文 examples 就能显著改善。
+#   keywords  → Level 0 字面匹配。写名词。命中即零延迟拍板，不用调 embedding。
+#               **绝不从 examples 里猜关键词**：中文没有词边界，从「会不会下雨」
+#               切出来的候选里既有「下雨」也有「不会」，后者会命中几乎任何句子。
+#
+# providers 里写的是 llm_tools 里的**工具名**（插件用 @llm_tool 注册的那个名字），
+# 不是插件名。查当前有哪些工具：启动日志里 [astrbot_compat] 已登记函数工具 <名字>。
+#
+# 显式声明**优先于**自动派生：被这里认领的工具不会再被派生成 tool.<名字>。
+# 这条依赖装配顺序（先读声明、再派生），由 adapters/astrbot.py 的 bootstrap 保证。
+
+[[capability]]
+id = "weather.query"
+description = "查询天气信息"
+examples = [
+    "明天天气怎么样",
+    "会不会下雨",
+    "东京温度多少",
+    "这周末适合出门吗",
+]
+keywords = ["天气", "气温", "下雨", "降雨", "温度"]
+providers = ["get_weather"]
+
+[[capability]]
+id = "web.search"
+description = "联网搜索获取实时信息"
+examples = [
+    "搜一下这个是什么",
+    "帮我查查最近的新闻",
+    "网上怎么说",
+]
+keywords = ["搜索", "百度", "谷歌"]
+# 表形式：同一能力有多个实现时用 priority 排序（越大越优先）。
+# 失败会被自动退避（见 COMES_PROVIDER_FAILURE_THRESHOLD），届时由次优的顶上。
+providers = [
+    { tool = "bing_search", priority = 10 },
+    { tool = "duckduckgo_search" },
+]

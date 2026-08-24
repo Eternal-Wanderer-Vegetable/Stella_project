@@ -93,6 +93,31 @@ except Exception as _e:
 driver.on_startup(initialize_plugins)
 driver.on_shutdown(terminate_plugins)
 
+
+async def _bootstrap_capabilities() -> None:
+    """装配能力注册表：先读 config/capabilities/*.toml，再自动派生剩余插件工具。
+
+    **必须注册在 initialize_plugins 之后**：``@llm_tool`` 装饰器在插件 import 期
+    就登记了工具，但插件也可以在自己的 ``initialize()`` 里调 ``add_llm_tools``。
+    先跑就会漏掉后者，而那表现为「插件装了但 Stella 路由不到它」——不报错，
+    只是功能静默缺失。
+
+    失败只告警：能力层是增量功能，装配不上的后果应该是「这次没有工具能力」，
+    而不是 Bot 起不来。
+    """
+    try:
+        from capability.adapters.astrbot import bootstrap
+
+        stats = bootstrap()
+        _diag_log(f"[capability][boot] 能力装配完成: {stats}")
+    except Exception as _e:
+        import traceback
+
+        _diag_log(f"[capability][boot] 能力装配失败（跳过）: {_e}\n{traceback.format_exc()}")
+
+
+driver.on_startup(_bootstrap_capabilities)
+
 SERVER = None  # 供 ai_gateway 哨兵触发时取 uvicorn Server 实例（Driver.run 不落地）
 
 

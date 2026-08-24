@@ -30,25 +30,52 @@ PostHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
 _INSTRUCTION_INTENTS = frozenset({"proactive_at"})
 
 
+def _tool_result_section(ctx: ChatContext) -> str:
+    """把 Comes 的结果摘要渲染成一个 prompt 段落；无结果返回空串。
+
+    只吃 ``ctx.tool_summaries``（已压缩），**绝不碰 Result.data**。
+    方案第 3.1 节说「工具描述会污染聊天上下文」——几千字的工具原始返回同样会，
+    原样拼进来会把记忆与对话上下文一起挤出 8192 的工作窗口。
+
+    措辞要点：明确标注这是**刚刚查到的真实数据**。不标注的话，模型会把它当成
+    上下文里又一段别人说的话，进而复述、质疑甚至反驳它。
+    """
+    summaries = [s.strip() for s in (getattr(ctx, "tool_summaries", None) or []) if s and s.strip()]
+    if not summaries:
+        return ""
+    if len(summaries) == 1:
+        body = summaries[0]
+    else:
+        body = "\n".join(f"- {s}" for s in summaries)
+    return f"【刚刚查到的信息（真实数据，回答时以此为准）】\n{body}"
+
+
 def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
     """把上下文段落与 ctx.message 按正确顺序拼成最终 user prompt。
 
-    普通对话：上下文 → 当前输入。当前输入必须**显式标记**——它被拼在尾巴
-    之后只是一行裸文本，模型无从判断其特殊地位，会转而回应尾巴里信号更强的
+    普通对话：上下文 → 工具结果 → 当前输入。当前输入必须**显式标记**——它被拼在
+    尾巴之后只是一行裸文本，模型无从判断其特殊地位，会转而回应尾巴里信号更强的
     话题（2026-08-16 实测：用户说「要玩应该先去玩边狱」，Bot 回了尾巴里
     别人在聊的周边毛绒玩偶）。
 
-    指令型（见 _INSTRUCTION_INTENTS）：指令 → 上下文（上下文只是语气素材，
-    不是待回应的内容）。
+    指令型（见 _INSTRUCTION_INTENTS）：指令 → 工具结果 → 上下文（上下文只是语气
+    素材，不是待回应的内容）。
+
+    工具结果（见 _tool_result_section）夹在上下文与当前输入之间：它是「回答这句话
+    的证据」，必须离当前输入近；而「请回应这句话」的指令必须留在最后一行，
+    否则模型会把它当成又一段背景而不是本次任务。
     """
     context_text = context_text or ""
+    tool_text = _tool_result_section(ctx)
     if ctx.intent in _INSTRUCTION_INTENTS:
-        return f"{ctx.message}\n\n{context_text}" if context_text else ctx.message
-    if not context_text:
+        parts = [ctx.message, tool_text, context_text]
+        return "\n\n".join(p for p in parts if p)
+    if not context_text and not tool_text:
         return ctx.message
     speaker = f"用户({ctx.user_id})" if ctx.user_id else "对方"
+    head = "\n\n".join(p for p in (context_text, tool_text) if p)
     return (
-        f"{context_text}\n\n"
+        f"{head}\n\n"
         f"【现在 {speaker} 对你说】{ctx.message}\n"
         f"请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。"
     )

@@ -702,3 +702,67 @@ ASTRBOT_LLM_MAX_TOOLS = _env_int("ASTRBOT_LLM_MAX_TOOLS", 32)
 ASTRBOT_LLM_TOOL_TIMEOUT = _env_float("ASTRBOT_LLM_TOOL_TIMEOUT", 120.0)
 # 工具调用循环的最大轮数，防止模型反复调用工具打转
 ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
+
+# ---------- Capability Router（能力路由） ----------
+# 判断一次请求需要哪些能力（聊天 / 记忆 / 工具），避免把所有插件工具的 schema
+# 都塞进 Stella 的聊天上下文——8192 的工作窗口装不下几十个工具描述，且工具描述
+# 会干扰正常聊天。设计见 design_docs/Capability Router 与 Comes 落地方案 v1.0.md。
+CAPABILITY_ROUTER_ENABLED = _env("CAPABILITY_ROUTER_ENABLED", "true").lower() in ("true", "1", "yes")
+# Level 0：关键词规则快速判断。零延迟、不调模型，处理高置信度请求。
+ROUTER_RULE_ENABLED = _env("ROUTER_RULE_ENABLED", "true").lower() in ("true", "1", "yes")
+# Level 1：Embedding 语义路由。用消息与各能力原型向量的余弦相似度判定。
+# 复用 MEMORY_EMBEDDING_* 的服务地址与模型（同一个本地 embedding 实例）。
+ROUTER_SEMANTIC_ENABLED = _env("ROUTER_SEMANTIC_ENABLED", "true").lower() in ("true", "1", "yes")
+# Level 2：更强模型兜底。默认**关闭**——方案第 8 节明确要求避免浪费 27B 推理资源，
+# 先靠 L0/L1 跑一段时间、用 router benchmark 量出准确率再决定是否打开。
+ROUTER_FALLBACK_ENABLED = _env("ROUTER_FALLBACK_ENABLED", "false").lower() in ("true", "1", "yes")
+# 语义路由命中某能力的最低余弦相似度。
+# 0.35 的依据与 MEMORY_EMBEDDING_CONTEXTUAL_MIN(0.25) 同源：短中文文本正样本余弦
+# 下限约 0.22，但路由误判的代价（凭空调一次工具）高于记忆漏召，故取更严的门槛。
+ROUTER_SEMANTIC_THRESHOLD = _env_float("ROUTER_SEMANTIC_THRESHOLD", 0.35)
+# 判定 tool=true 所需的最高分置信线。低于它但高于 ROUTER_UNCERTAIN_FLOOR 的落入
+# 「不确定带」，只有此时才考虑 Level 2。
+ROUTER_TOOL_THRESHOLD = _env_float("ROUTER_TOOL_THRESHOLD", 0.45)
+# 不确定带下界：最高分低于它就是「确定不需要工具」，不进 Level 2。
+ROUTER_UNCERTAIN_FLOOR = _env_float("ROUTER_UNCERTAIN_FLOOR", 0.25)
+# 单次请求最多路由几个能力。每个能力在 Comes 里是一次独立的受限 agent 调用，
+# 都走 chat 闸门串行，不设上限会让一条消息卡住整个群的回复。
+ROUTER_MAX_CAPABILITIES = _env_int("ROUTER_MAX_CAPABILITIES", 3)
+# 是否真的按 route.memory 门控长期记忆检索。
+# **默认关闭**：Router 误判 memory=false 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、
+# 不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 AT_MENTION 全为 0 的缺陷
+# 同一类型（静默、难察觉、后果严重）。先用 router benchmark 量出准确率再打开。
+ROUTER_GATE_MEMORY = _env("ROUTER_GATE_MEMORY", "false").lower() in ("true", "1", "yes")
+# 单次路由判定的超时（秒）。超时按降级处理（chat+memory，不调工具），不阻塞回复。
+ROUTER_TIMEOUT = _env_float("ROUTER_TIMEOUT", 8.0)
+
+# ---------- Comes（工具执行层） ----------
+# Comes 只负责「能力 → 找 Provider → 调 Tool → 返回 Result」，不理解用户、不管人格。
+# 它用一个**受限 agent**驱动工具：请求里只有 COMES_SYSTEM_PROMPT + 任务目标 +
+# 本次命中能力的 1~3 个工具 schema，既没有 Stella 的人格也没有聊天上下文。
+COMES_ENABLED = _env("COMES_ENABLED", "true").lower() in ("true", "1", "yes")
+# Comes 的执行器人格。刻意不用 Stella 的人格（与 ASTRBOT_LLM_SYSTEM_PROMPT 同一考量）：
+# 它的输出只是给 Stella 看的中间结果，不该带语气。
+COMES_SYSTEM_PROMPT = _env(
+    "COMES_SYSTEM_PROMPT",
+    "你是一个工具执行器。根据给定的任务目标，选择合适的工具并填好参数。"
+    "只调用工具，不要闲聊，不要扮演角色。拿到工具结果后用一句中文陈述事实即可。",
+)
+# 单个任务的工具调用最大轮数。比 ASTRBOT_LLM_MAX_TOOL_STEPS(10) 小：
+# Comes 的任务是单一能力的定向执行，需要 5 轮以上通常意味着模型在打转。
+COMES_MAX_TOOL_STEPS = _env_int("COMES_MAX_TOOL_STEPS", 5)
+# 单个工具调用的超时（秒）。比 ASTRBOT_LLM_TOOL_TIMEOUT(120) 短得多——
+# Comes 挂在聊天主链路上，用户在等回复，不能为一个工具等两分钟。
+COMES_TOOL_TIMEOUT = _env_float("COMES_TOOL_TIMEOUT", 60.0)
+# 单个任务的总超时（秒），含模型往返与工具执行。超时按 failed 处理并照常回复。
+COMES_TASK_TIMEOUT = _env_float("COMES_TASK_TIMEOUT", 90.0)
+# 进 Stella prompt 的结果摘要长度上限（字符）。Result.data 全程不进 prompt，
+# 只有 summary 进——工具结果同样不该污染聊天上下文。
+COMES_SUMMARY_MAX_CHARS = _env_int("COMES_SUMMARY_MAX_CHARS", 300)
+# 命中能力只有一个 provider、且其工具没有必填参数时，跳过 LLM 直接调工具。
+# 省一次 27B 往返，且不可能填错参数。
+COMES_DIRECT_CALL_NO_ARGS = _env("COMES_DIRECT_CALL_NO_ARGS", "true").lower() in ("true", "1", "yes")
+# 连续失败多少次后临时禁用一个 provider（健康度退避）。0 表示不退避。
+COMES_PROVIDER_FAILURE_THRESHOLD = _env_int("COMES_PROVIDER_FAILURE_THRESHOLD", 3)
+# 被退避的 provider 多久后恢复（秒）。
+COMES_PROVIDER_RECOVER_SECONDS = _env_float("COMES_PROVIDER_RECOVER_SECONDS", 600.0)

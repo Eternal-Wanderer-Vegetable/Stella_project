@@ -74,3 +74,80 @@ def test_instruction_intent_unaffected():
     out = _compose_prompt("背景对话", ctx)
     assert out.startswith("生成一句搭话")
     assert "请回应这句话" not in out
+
+
+# ============================================================
+# 工具结果段落（Capability Router / Comes）
+# ============================================================
+
+
+def test_tool_result_sits_between_context_and_current_input():
+    """工具结果是「回答这句话的证据」，必须离当前输入近；
+
+    而「请回应这句话」的指令必须留在最后一行，否则模型会把它当成又一段背景。
+    """
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="帮我查一下东京天气")
+    ctx.tool_summaries = ["东京明天 27℃，晴，降雨概率 10%。"]
+    out = _compose_prompt("用户(2): 昨天好热", ctx)
+
+    assert out.index("昨天好热") < out.index("刚刚查到的信息")
+    assert out.index("刚刚查到的信息") < out.index("【现在")
+    assert out.rstrip().endswith("不要去回应其中的其他内容。")
+
+
+def test_tool_result_is_marked_as_authoritative():
+    """不标注「真实数据」的话，模型会把它当成上下文里又一段别人说的话，进而复述或反驳。"""
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="东京天气")
+    ctx.tool_summaries = ["东京 27℃"]
+    out = _compose_prompt("", ctx)
+    assert "真实数据" in out
+    assert "以此为准" in out
+
+
+def test_multiple_tool_results_are_listed():
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="查天气和番剧")
+    ctx.tool_summaries = ["东京 27℃", "第 3 集本周五更新"]
+    out = _compose_prompt("", ctx)
+    assert "- 东京 27℃" in out
+    assert "- 第 3 集本周五更新" in out
+
+
+def test_tool_result_without_context_still_marks_current_input():
+    """只有工具结果、没有对话上下文时，当前输入仍必须显式标记。
+
+    否则用户的问题与工具结果就成了两段并列的裸文本，模型会去评论工具结果。
+    """
+    ctx = ChatContext(user_id=7, group_id=1, msg_id=0, message="东京天气")
+    ctx.tool_summaries = ["东京 27℃"]
+    out = _compose_prompt("", ctx)
+    assert "【现在 用户(7) 对你说】东京天气" in out
+
+
+def test_no_tool_results_keeps_prompt_identical():
+    """回归护栏：没有工具结果时，prompt 必须与接入能力层之前逐字一致。"""
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="水")
+    assert _compose_prompt("", ctx) == "水"
+    assert _compose_prompt("摘要", ctx) == (
+        "摘要\n\n"
+        "【现在 用户(1) 对你说】水\n"
+        "请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。"
+    )
+
+
+def test_blank_tool_summaries_are_ignored():
+    """空串/空白摘要不该产出一个空的「刚刚查到的信息」段落。"""
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="水")
+    ctx.tool_summaries = ["", "   "]
+    assert _compose_prompt("", ctx) == "水"
+
+
+def test_instruction_intent_puts_tool_result_after_instruction():
+    """指令型：指令 → 工具结果 → 上下文。指令仍必须在最前。"""
+    ctx = ChatContext(
+        user_id=2, group_id=1, msg_id=0, message="说出那句确认的话", intent="proactive_at",
+    )
+    ctx.tool_summaries = ["东京 27℃"]
+    out = _compose_prompt("背景对话", ctx)
+    assert out.startswith("说出那句确认的话")
+    assert out.index("说出那句确认的话") < out.index("东京 27℃")
+    assert out.index("东京 27℃") < out.index("背景对话")

@@ -117,7 +117,7 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_rag_switches.py` | RAG 开关组合行为 |
 | `test_embeddings.py` | embedding 客户端、语义分注入、失败降级 |
 | `test_prompt_builder_v2.py` | 分区注入与 token 预算 |
-| `test_pipeline_compose.py` | prompt 拼装顺序（指令型 intent 前置） |
+| `test_pipeline_compose.py` | prompt 拼装顺序（指令型 intent 前置、工具结果段落位置） |
 | `test_proactive_rules.py` | 活跃度统计、概率曲线 |
 | `test_proactive_state.py` | 配额计数、跨日重置、退避 |
 | `test_proactive_target.py` | 目标选择、配额算法、冷却判定 |
@@ -140,6 +140,22 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_logging_sink.py` | 结构化 JSON 日志：每行合法 JSON、字段完整、超长消息截断 |
 | `test_graceful_shutdown.py` | 优雅停止：等收尾、超时放弃、回应检测任务被取消 |
 
+能力层（`tests/capability/`）：
+
+| 文件 | 覆盖内容 |
+|---|---|
+| `test_tasks.py` | Task / Result 协议、TaskGraph 成环与悬空依赖必须抛错、拓扑分层 |
+| `test_registry.py` | 注册表合并（不覆盖）、工具归属先到先得、版本号失效、单例不被包入口遮蔽 |
+| `test_capability_loader.py` | `config/capabilities/*.toml` 解析与容错（坏文件只跳过该文件） |
+| `test_router_rules.py` | Level 0：关键词只认显式声明、寒暄整句匹配、工具意图不等于能力已定 |
+| `test_router_semantic.py` | Level 1：原型取均值、按注册表版本/模型失效、None 与低分是两种情形 |
+| `test_router_cascade.py` | 三级级联与降级：超时/异常/空注册表都回落到 chat+memory |
+| `test_router_benchmark.py` | 内置用例集回归、四类错误分开计数、Provider 健康度退避 |
+| `test_comes_summarizer.py` | 摘要压缩：失败与「无返回值」条目不进摘要、多工具均分预算 |
+| `test_comes_executor.py` | **上下文隔离**（只有命中能力的工具进请求）、status 判定、无参直调、健康度记账 |
+| `test_astrbot_adapter.py` | 自动派生、显式声明优先、bootstrap 顺序不可交换 |
+| `test_capability_hooks.py` | 记忆门控、两条分支并行且互不拖累、绝不抛异常 |
+
 ### 写测试的两个约定
 
 **用 `monkeypatch` 而非 `.env`。** 测试不能依赖环境配置：
@@ -148,6 +164,10 @@ python -m pytest tests -n auto --dist loadgroup
 monkeypatch.setattr("memory.memory_manager.MEMORY_QUOTA_ENFORCE", True)
 monkeypatch.setattr("memory.memory_manager.DB_PATH", tmp_path / "test.db")
 ```
+
+> 能力层与 astrbot 兼容层的配置要 patch **`config.settings` 的属性**，不能 patch `config.X`：`config/__init__.py` 是 `from .settings import *`，名字在 import 时就绑死了。相应地这些模块内部一律用 `_settings().X` 在调用时取值，而不是 `from config import X`。
+>
+> 测试文件的 basename 必须全仓唯一（`tests/` 下没有 `__init__.py`），否则 pytest 收集时报模块名冲突——这就是能力层的加载测试叫 `test_capability_loader.py` 而不是 `test_loader.py` 的原因。
 
 **约束型测试必须配反向用例。** 只测「不该发生的没发生」是不够的——把条件写成永假也能通过，功能会静默失效。`test_cross_user_isolation.py` 的每条「不得跨用户合并」都配了一条「同用户仍要合并」。
 
@@ -525,6 +545,9 @@ ORDER BY ts DESC LIMIT 20;
 - 改了配置项 → `.env.example` 同步（`deploy init` 基于它渲染，漏改会让新配置项不出现在生成的 `.env` 里），`docs/configuration.md` 同步
 - 改了监听器 priority / 新增 block=True 的处理器 → 确认落库监听器仍是最高优先级，且发一条 @ 消息验证 `AT_MENTION` 入库
 - 改了记忆表的 SQL → 确认用的是 `group_shared_space` 而非 `group_id`（两层归属见 architecture.md）
+- 改了 Router 规则 / 能力声明 → `python -m capability.router.benchmark --rules-only` 的记忆假阴与工具假阳仍为 0
+- 打算打开 `ROUTER_GATE_MEMORY` → 跑全链路 benchmark（需 embedding 服务）并确认退出码为 0；这是唯一能验证「不会悄悄丢记忆」的手段
+- 新增能力 Provider 类型（MCP / API / native）→ 在 `capability/comes/executor.py::resolve_tools` 里实现对应分支，别让它静默落进 `missing`
 
 **改动涉及以下内容时请在 PR 描述里说明理由**：
 

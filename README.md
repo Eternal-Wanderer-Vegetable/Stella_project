@@ -115,6 +115,7 @@ python -m deploy start
 |---|---|
 | [架构说明](docs/architecture.md) | 目录结构、消息处理流程、模块职责 |
 | [记忆系统](docs/memory-system.md) | 两层过滤的设计理由、晋升规则、检索策略 |
+| [能力系统](docs/capability-system.md) | Capability Router 与 Comes：工具如何在聊天上下文之外执行 |
 | [配置参考](docs/configuration.md) | 全部配置项与调参建议 |
 | [开发指南](docs/development.md) | 测试、探针脚本、CI、贡献流程 |
 

@@ -10,6 +10,7 @@ thought/action/reply、多行回复）以及供日志与 prompt 构建用的诊�
 """
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -20,7 +21,8 @@ class ChatContext:
     输入标识（user_id/group_id/msg_id/message/source_kind）来自 OneBot 事件；
     处理产物（raw_output/thought/action/reply/lines）由 pipeline 与解析钩子写入；
     诊断信息（trigger/intent/llm_* 系列）用于 thought 日志记录调试；
-    结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用。
+    结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用；
+    任务调度（route/task_results/tool_summaries）由 Capability 层写入。
     """
 
     # ---- 输入标识 ----
@@ -71,6 +73,25 @@ class ChatContext:
     # 尾巴起点消息 id：会话压缩用它计算不与尾巴重叠的待压缩区间。
     # 0 表示无尾巴（新群或全部消息都超出时间窗）。
     tail_start_id: int = 0
+
+    # ---- Capability Router / Comes（任务调度层） ----
+    # Router 的判定结论（capability.router.types.Route）。类型写 Any 是刻意的：
+    # core 是「与业务无关的编排骨架」，不该 import capability——反向依赖会成环。
+    route: Any = None
+    # Comes 产出的 Result 列表。**data 字段不进 prompt**，只用于日志与调试。
+    task_results: list = field(default_factory=list)
+    # 压缩后的工具结果摘要，是唯一会被拼进 Stella prompt 的部分
+    # （工具结果同样不该污染聊天上下文，见 core/pipeline.py 的 _tool_result_section）。
+    tool_summaries: list[str] = field(default_factory=list)
+
+    # ---- 平台原始句柄（opaque） ----
+    # Comes 调 AstrBot 工具时，工具 handler 内部会用 event.send() /
+    # event.bot.call_action()，必须是真实对象，构造不出等价替身。core 不解释它们的
+    # 类型、也不碰它们的任何方法，只负责从接入层传递到 Capability 层。
+    # repr=False：OneBot 事件的 repr 会把整条消息与 sender 全展开，
+    # 日志里 ChatContext 一旦被 repr 就会刷屏。
+    raw_event: Any = field(default=None, repr=False)
+    bot: Any = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """自动解析共享空间归属，不要求调用方逐个传参。

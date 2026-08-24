@@ -75,6 +75,53 @@ async def split_lines(ctx: ChatContext) -> ChatContext:
     return ctx
 
 
+def _route_log_line(ctx: ChatContext) -> str:
+    """渲染 Router 判定与 Comes 结果。
+
+    没有路由信息时返回空串——旧路径（能力层未启用/未跑到）的日志格式保持原样。
+
+    这一行是排查「为什么这次没调工具」的唯一手段：判定级别、命中的能力与分数、
+    降级原因，线上只能靠它复盘。缺了就只能靠猜。
+    """
+    route = getattr(ctx, "route", None)
+    if route is None:
+        return ""
+    try:
+        snap = route.to_dict()
+    except Exception:
+        return ""
+
+    labels = "+".join(
+        name for name in ("chat", "memory", "tool") if snap.get(name)
+    )
+    caps = ", ".join(snap.get("capabilities") or []) or "无"
+    lines = [
+        f"- **🧭 路由判定**: `{labels}` via `{snap.get('level')}`"
+        f"（能力: {caps}，最高分 {snap.get('top_score')}，"
+        f"{float(snap.get('elapsed') or 0.0) * 1000:.0f}ms）—— {snap.get('reason') or ''}",
+    ]
+
+    results = getattr(ctx, "task_results", None) or []
+    if results:
+        for r in results:
+            meta = getattr(r, "metadata", None) or {}
+            status = getattr(getattr(r, "status", None), "value", "?")
+            summary = (getattr(r, "summary", "") or "").replace("\n", " ")
+            detail = (
+                f"{meta.get('capability', '?')} → `{status}`"
+                f"（{meta.get('steps', 0)} 次工具调用"
+                f"{'，直调' if meta.get('direct_call') else ''}"
+                f"，{meta.get('elapsed', 0)}s）"
+            )
+            reason = meta.get("reason")
+            if reason:
+                detail += f" 原因: {reason}"
+            lines.append(f"- **🔧 工具执行**: {detail}")
+            if summary:
+                lines.append(f"  > {summary}")
+    return "\n".join(lines) + "\n"
+
+
 async def log_thought(ctx: ChatContext) -> ChatContext:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     reply_str = " <br> ".join(ctx.lines)
@@ -92,7 +139,7 @@ async def log_thought(ctx: ChatContext) -> ChatContext:
     log_entry = f"""### 🕒 [{now_str}] {trigger_str} | 群: `{ctx.group_id}` | 用户: `{ctx.user_id}`
 - **🖥 模型**: `{llm_info}`（耗时 {ctx.llm_elapsed:.2f}s，系统提示词 {ctx.system_prompt_len} 字符）
 - **📥 用户输入**: {ctx.message}
-- **📤 完整 Prompt（发给 LLM）**:
+{_route_log_line(ctx)}- **📤 完整 Prompt（发给 LLM）**:
   > {ctx.prompt_log.replace(chr(10), chr(10) + "  > ") if ctx.prompt_log else "(空)"}
 - **📥 原始 LLM 输出（完整）**:
   > {raw_output_formatted or "(空)"}

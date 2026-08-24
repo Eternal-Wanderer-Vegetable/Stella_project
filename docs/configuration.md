@@ -502,6 +502,72 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 > 关闭 `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` 会导致积压超过 `MESSAGE_CLEANUP_KEEP_COUNT` 时未整合消息被永久丢弃，那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
 
+## 能力路由与工具执行
+
+判断一次请求需要哪些能力（聊天 / 记忆 / 工具），并让工具在 Stella 的聊天上下文**之外**执行。设计与排查手册见 [能力系统](capability-system.md)。
+
+### Router
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `CAPABILITY_ROUTER_ENABLED` | `true` | 总开关。关闭后等同于「照常聊天、照常读记忆、不调工具」 |
+| `ROUTER_RULE_ENABLED` | `true` | Level 0 关键词规则（零延迟、不调模型） |
+| `ROUTER_SEMANTIC_ENABLED` | `true` | Level 1 Embedding 语义路由，复用 `MEMORY_EMBEDDING_*` 的服务与模型 |
+| `ROUTER_FALLBACK_ENABLED` | `false` | Level 2 模型兜底。只在 L1 落入不确定带时触发 |
+| `ROUTER_SEMANTIC_THRESHOLD` | `0.35` | 命中某能力的最低余弦相似度 |
+| `ROUTER_TOOL_THRESHOLD` | `0.45` | 判定 `tool=true` 所需的最高分置信线 |
+| `ROUTER_UNCERTAIN_FLOOR` | `0.25` | 不确定带下界。低于它就是「确定不需要工具」，不进 Level 2 |
+| `ROUTER_MAX_CAPABILITIES` | `3` | 单次最多路由几个能力 |
+| `ROUTER_GATE_MEMORY` | `false` | 是否真的按 `route.memory` 门控长期记忆检索 |
+| `ROUTER_TIMEOUT` | `8.0` | 单次判定超时（秒）。超时按降级处理，不阻塞回复 |
+
+`ROUTER_SEMANTIC_THRESHOLD=0.35` 的依据与 `MEMORY_EMBEDDING_CONTEXTUAL_MIN=0.25` 同源（短中文正样本余弦下限约 0.22），但取值更严：路由误判的代价（凭空调一次工具，可能真的改变外部状态）高于记忆漏召。
+
+`ROUTER_MAX_CAPABILITIES` 是延迟阀门——每个命中能力在 Comes 里是一次独立的受限 agent 调用，都走 `chat` 闸门串行。不设上限会让一条消息卡住整个群的回复。
+
+> **`ROUTER_GATE_MEMORY` 默认关闭，不要随手打开。** Router 误判 `memory=false` 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 `AT_MENTION` 全为 0 的缺陷同一类型（静默、难察觉、后果严重）。打开前先跑 benchmark 确认**记忆假阴为 0**：
+>
+> ```bash
+> python -m capability.router.benchmark              # 全链路（需要 embedding 服务）
+> python -m capability.router.benchmark --rules-only # 只测 Level 0，可进 CI
+> ```
+>
+> 退出码 0 表示可以打开。报告把四类错误分开计数，刻意不合成单一准确率——合成会把高代价错误藏在平均值里。
+
+`ROUTER_FALLBACK_ENABLED` 默认关闭是为了省 27B 推理资源：Level 2 与主聊天共用同一个模型，且经同一道 `chat` 闸门排队。先靠 L0/L1 跑一段时间、用 benchmark 量出准确率再决定。
+
+### Comes
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `COMES_ENABLED` | `true` | 工具执行总开关 |
+| `COMES_SYSTEM_PROMPT` | 见 `.env.example` | 执行器人格。刻意不用 Stella 的人格 |
+| `COMES_MAX_TOOL_STEPS` | `5` | 单任务工具调用最大轮数 |
+| `COMES_TOOL_TIMEOUT` | `60` | 单个工具调用超时（秒） |
+| `COMES_TASK_TIMEOUT` | `90` | 单任务总超时（秒），含模型往返 |
+| `COMES_SUMMARY_MAX_CHARS` | `300` | 进 Stella prompt 的摘要长度上限 |
+| `COMES_DIRECT_CALL_NO_ARGS` | `true` | 单个无参工具时跳过 LLM 直接调用 |
+| `COMES_PROVIDER_FAILURE_THRESHOLD` | `3` | 连续失败多少次后退避一个 provider。`0` 表示不退避 |
+| `COMES_PROVIDER_RECOVER_SECONDS` | `600` | 退避恢复时间（秒） |
+
+`COMES_MAX_TOOL_STEPS=5` 比 `ASTRBOT_LLM_MAX_TOOL_STEPS=10` 小：Comes 是单一能力的定向执行，需要 5 轮以上通常意味着模型在打转。`COMES_TOOL_TIMEOUT=60` 比 `ASTRBOT_LLM_TOOL_TIMEOUT=120` 短得多：Comes 挂在聊天主链路上，用户在等回复，不能为一个工具等两分钟。
+
+provider 退避是**时间窗**而非永久禁用：插件依赖的外部 API 抖动是常态，永久禁用会让一次网络波动永久关掉一个能力，而这不报错、只表现为「这个功能后来就不好使了」。
+
+### 能力声明
+
+`config/capabilities/*.toml`，**文件名即 domain**。声明是**可选**的——不写也能用，启动时会把每个插件工具自动派生成 `tool.<工具名>`。格式与逐项说明见 `config/capabilities/information.toml.example`。
+
+写声明的收益全在路由质量上：
+
+| 字段 | 服务于 | 怎么写 |
+|---|---|---|
+| `examples` | Level 1 语义匹配的原型语料 | 自然的中文句子。插件的英文工具描述在中文群聊里跨语言匹配准确率明显偏低 |
+| `keywords` | Level 0 字面匹配 | 名词。命中即零延迟拍板，不用调 embedding |
+| `providers` | Comes 执行 | `llm_tools` 里的**工具名**（不是插件名）。启动日志的「已登记函数工具」能查到 |
+
+> `keywords` **绝不从 `examples` 里猜**。中文没有词边界，从「会不会下雨」切出来的候选里既有「下雨」也有「不会」，后者会命中几乎任何句子（「我不会用这个软件」→ 去查天气）。Level 0 的职责是处理高置信度请求，猜出来的词达不到这个标准。
+
 ## OneBot 连接
 
 Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用
@@ -611,5 +677,11 @@ curl -i http://[::1]:8080/stella/status
 | 记忆晋升过快、配额压力大 | `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` 生效后 @ 对话单次即可晋升，属预期；先看 `MEMORY_QUOTA_ENFORCE=false` 的 dry-run 日志再决定是否收紧 |
 | 回复变慢、日志出现 Scheduler 告警 | 27B 上排队较重（聊天 + 压缩 + 提取共用）；可临时关 `MEMORY_EXTRACT_ENABLED` 或调大 `CONSOLIDATION_SCHEDULE_INTERVAL` |
 | 链路掉线 / 收不到消息 | 看日志里的 `[LinkMonitor]` 告警，按告警文案的排查步骤检查（Bot 只告警不重启，NapCat 侧需人工处理） |
+| 插件装了但从不被调用 | 看启动日志 `[capability][boot] 能力装配完成` 的 `derived` 数；再确认工具是否 `active`（见 [能力系统](capability-system.md#排查)） |
+| 声明的 `examples` 好像没生效 | 确认工具归属：应指向你声明的能力 id，而不是 `tool.<工具名>`；装配顺序要求先读声明再自动派生 |
+| 凭空调用工具 / 调错工具 | 升 `ROUTER_TOOL_THRESHOLD`；检查 `keywords` 里有没有过泛的词；降 `ROUTER_MAX_CAPABILITIES` |
+| 该调工具却没调 | 给能力补中文 `examples` 与 `keywords`；降 `ROUTER_SEMANTIC_THRESHOLD` / `ROUTER_TOOL_THRESHOLD` |
+| 开了工具后回复明显变慢 | 每个命中能力都是一次独立的受限 agent 调用、都走 `chat` 闸门串行；降 `ROUTER_MAX_CAPABILITIES` 或 `COMES_MAX_TOOL_STEPS` |
+| 「它突然不记得我了」 | 先查 `ROUTER_GATE_MEMORY` 是否被打开；跑 `python -m capability.router.benchmark` 看记忆假阴 |
 
 改动阈值前建议先跑一次探针验证，见 [开发指南](development.md)。
