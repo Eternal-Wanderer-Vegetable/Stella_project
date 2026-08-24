@@ -248,29 +248,51 @@ def test_failed_results_do_not_reach_the_prompt(
 
 
 def test_both_branches_run_concurrently(stub_route, monkeypatch, fake_bot, fake_nb_event):
-    """方案第 17 节：Memory 与 Comes 并行。两条各睡 150ms，串行会到 300ms。"""
+    """方案第 17 节：Memory 与 Comes 并行。
+
+    断言的是**交错**而不是墙钟耗时：两条分支都必须在任一条结束之前就已经开始。
+    墙钟阈值（「总耗时应小于 X」）在 CI 上不可靠——2 核 runner 叠加 coverage 行级
+    追踪与 xdist 多 worker 抢占，串行与并行的耗时区间会重叠，于是这个用例既可能
+    漏过真的串行化，也可能在代码没问题时随机变红。交错顺序是确定的。
+    """
     import capability.comes as comes_pkg
     import memory.pre_processors as pre
 
-    async def slow_memory(ctx):
-        await asyncio.sleep(0.15)
+    events: list[str] = []
+    # 两条分支各自等对方开跑：真并行才能同时越过这道栅栏，串行会直接超时。
+    both_started = asyncio.Event()
+    started_count = 0
+
+    async def _barrier(name: str):
+        nonlocal started_count
+        events.append(f"{name}:start")
+        started_count += 1
+        if started_count == 2:
+            both_started.set()
+        # 串行执行时第二条分支永远不会开始，这里会超时 → 用例失败并指出串行化
+        await asyncio.wait_for(both_started.wait(), timeout=2.0)
+        events.append(f"{name}:end")
+
+    async def memory_branch(ctx):
+        await _barrier("memory")
         return ctx
 
-    async def slow_comes(tasks, *, event, target=None, tool_manager=None):
-        await asyncio.sleep(0.15)
+    async def comes_branch(tasks, *, event, target=None, tool_manager=None):
+        await _barrier("comes")
         return [Result(task_id="t1", status=ResultStatus.SUCCESS, summary="ok", metadata={})]
 
-    monkeypatch.setattr(pre, "build_user_context", slow_memory)
-    monkeypatch.setattr(comes_pkg, "execute_all", slow_comes)
+    monkeypatch.setattr(pre, "build_user_context", memory_branch)
+    monkeypatch.setattr(comes_pkg, "execute_all", comes_branch)
     stub_route(Route(tool=True, capabilities=[CapabilityHit("a", 0.8)]))
 
-    async def _timed():
-        started = asyncio.get_running_loop().time()
-        await activate_capabilities(_ctx(raw_event=fake_nb_event, bot=fake_bot))
-        return asyncio.get_running_loop().time() - started
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    _run(activate_capabilities(ctx))
 
-    elapsed = _run(_timed())
-    assert elapsed < 0.25, f"两条分支似乎串行了（耗时 {elapsed:.3f}s）"
+    # 两个 start 必须都排在第一个 end 之前
+    assert events[:2] == ["memory:start", "comes:start"], f"分支未并行启动: {events}"
+    assert set(events[2:]) == {"memory:end", "comes:end"}, f"分支未都完成: {events}"
+    # 两条分支的结果都拿到了
+    assert ctx.tool_summaries == ["ok"]
 
 
 def test_memory_failure_does_not_kill_comes(

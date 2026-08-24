@@ -29,45 +29,41 @@ driver.register_adapter(OneBotV11Adapter)
 nonebot.load_builtin_plugins("echo", "single_session")
 nonebot.load_from_toml("pyproject.toml")
 
-from astrbot_compat import initialize_plugins, load_all_plugins, terminate_plugins
-
 # --- 诊断：显式打印插件发现与加载结果（启动期必落盘） ---
+# 这一段是排查「插件明明放进 data/plugins 却没被加载」的唯一手段：它把发现结果、
+# 加载成败与失败原因同时写到 logging、nonebot logger、stdout 与 boot_debug.log 四处，
+# 因为启动早期这四条通路里任意一条都可能还没就绪。每一步都单独 try/except：
+# 诊断代码自己绝不能让 Bot 起不来。
+import contextlib
 import logging as _py_logging
+from pathlib import Path
+
+from astrbot_compat import initialize_plugins, load_all_plugins, terminate_plugins
 
 _diag_logger = _py_logging.getLogger("astrbot_compat.boot")
 _diag_path = None
-try:
-    from pathlib import Path as _P
-
-    _diag_path = _P(__file__).resolve().parent / "boot_debug.log"
+with contextlib.suppress(Exception):
+    _diag_path = Path(__file__).resolve().parent / "boot_debug.log"
     _diag_path.write_text("", encoding="utf-8")
-except Exception:
-    pass
+
 
 def _diag_log(msg: str) -> None:
-    try:
+    with contextlib.suppress(Exception):
         _py_logging.getLogger("astrbot_compat.boot").warning(msg)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         import nonebot as _nb
 
         _nb.logger.warning(msg)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         print(msg, flush=True)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         if _diag_path is not None:
-            with open(_diag_path, "a", encoding="utf-8") as _f:
+            with _diag_path.open("a", encoding="utf-8") as _f:
                 _f.write(msg + "\n")
-    except Exception:
-        pass
+
 
 try:
-    from astrbot_compat.loader import discover_plugins, get_failed_plugins
+    from astrbot_compat.loader import discover_plugins
     from config.settings import ASTRBOT_PLUGINS_DIR, PROJECT_ROOT
 
     _discovered = discover_plugins()
