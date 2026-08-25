@@ -80,3 +80,5 @@ runtime/
 /data/config/
 /data/plugin_data/
 /boot_debug.log
+
+start_claude_command.txt

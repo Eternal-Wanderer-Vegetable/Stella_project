@@ -23,13 +23,21 @@
 ## 用法
 
 ```bash
-python -m capability.router.benchmark              # 跑内置用例集
+python -m capability.router.benchmark              # 内置用例 + benchmark/*.json
 python -m capability.router.benchmark --rules-only # 只测 Level 0（不需要 embedding 服务）
 python -m capability.router.benchmark --cases my.json
 ```
 
 用例文件是 JSON 数组，每项 ``{"message": ..., "memory": bool, "tool": bool,
 "capability": "可选，期望命中的能力 id"}``。
+
+**跑全链路（不加 --rules-only）时，能力注册表决定结果。** ``_main`` 里的
+``bootstrap()`` 只读得到 ``config/capabilities/*.toml``——独立进程里插件没加载，
+``llm_tools`` 是空的，所以自动派生为 0。这正好是标定阈值想要的条件：
+量的是**声明**的路由质量，不受装了哪些插件影响。
+
+``--rules-only`` 下所有靠 Level 1 的工具用例都会记成「工具假阴」——那是如实的
+（Level 0 本来就判不了它们），且属低代价错误，不影响退出码。
 """
 
 from __future__ import annotations
@@ -162,11 +170,20 @@ class Report:
 
 
 def load_cases(path: Path | None = None) -> list[Case]:
-    """载入用例。缺省合并 ``benchmark/*.json``；目录不存在时返回内置用例。"""
+    """载入用例。
+
+    - 传 ``path``：只用这个文件（调用方明确想跑自己那一组）；
+    - 不传：内置用例集 **加上** ``benchmark/*.json`` 里的全部用例。
+
+    内置集是**规则表的回归地板**（记忆信号、寒暄整句匹配、切词坏词护栏），
+    它必须始终参与。这里用「合并」而不是「有外部文件就用外部文件」：
+    后者会让「加一个领域用例文件」这个动作静默地把地板整个撤掉——
+    表现是 benchmark 依然通过，但已经不再检查规则表了。
+    """
     if path is not None:
         return _parse_cases(json.loads(path.read_text(encoding="utf-8")))
 
-    cases: list[Case] = []
+    cases: list[Case] = list(BUILTIN_CASES)
     if CASES_DIR.is_dir():
         for file in sorted(CASES_DIR.glob("*.json")):
             try:
@@ -174,7 +191,7 @@ def load_cases(path: Path | None = None) -> list[Case]:
             except Exception as e:
                 # 单个用例文件坏掉不该中断整轮（照 config/spaces.py 的容错惯例）
                 print(f"跳过 {file.name}: {e}")
-    return cases or list(BUILTIN_CASES)
+    return cases
 
 
 def _parse_cases(raw: Any) -> list[Case]:

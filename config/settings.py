@@ -708,6 +708,23 @@ ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
 # 都塞进 Stella 的聊天上下文——8192 的工作窗口装不下几十个工具描述，且工具描述
 # 会干扰正常聊天。设计见 design_docs/Capability Router 与 Comes 落地方案 v1.0.md。
 CAPABILITY_ROUTER_ENABLED = _env("CAPABILITY_ROUTER_ENABLED", "true").lower() in ("true", "1", "yes")
+# 自动派生的能力（``tool.<工具名>``，即没有被任何 config/capabilities/*.toml 认领的
+# 插件工具）是否参与 Router 的能力竞争。**默认关闭：声明优先。**
+#
+# 依据是 2026-08-24 的首轮实测（design_docs/logs/log_2026_8_25_1303.md）。自动派生的
+# 原型语料只有插件的工具描述，而工具描述是写给「看着全部工具做选择」的决策器的指令句
+# （"当用户询问 X 时调用"），与用户的问句不同构；同一语域的几个工具因此几乎没有区分度。
+# 实测（5 个 bilibili/bgm 工具，12 条用例，真实 embedding）：
+#   自动派生：工具假阳 1、首位选错 2/5、无关工具被执行 13 次，
+#             负样本阈值余量 -0.024（「这个游戏怎么样」拿到 0.474 > 0.45 直接触发工具）
+#   显式声明：见 docs/capability-system.md 的对照表
+# 工具假阳在 docs 的错误代价表里是**高**严重度（凭空调工具、可能改变外部状态、
+# 且结果会被贴上「真实数据，回答时以此为准」送进 prompt）。
+#
+# 关闭后未声明的工具仍然照常注册（启动日志会点名），只是不参与语义路由；
+# 要让它可被聊天触发，就给它写一份声明——那是几行 TOML 的一次性成本。
+# 设为 true 可恢复「装上插件就能路由」的旧行为（零配置，代价是上面这些数）。
+ROUTER_ROUTE_AUTO_CAPABILITIES = _env("ROUTER_ROUTE_AUTO_CAPABILITIES", "false").lower() in ("true", "1", "yes")
 # Level 0：关键词规则快速判断。零延迟、不调模型，处理高置信度请求。
 ROUTER_RULE_ENABLED = _env("ROUTER_RULE_ENABLED", "true").lower() in ("true", "1", "yes")
 # Level 1：Embedding 语义路由。用消息与各能力原型向量的余弦相似度判定。
@@ -716,15 +733,39 @@ ROUTER_SEMANTIC_ENABLED = _env("ROUTER_SEMANTIC_ENABLED", "true").lower() in ("t
 # Level 2：更强模型兜底。默认**关闭**——方案第 8 节明确要求避免浪费 27B 推理资源，
 # 先靠 L0/L1 跑一段时间、用 router benchmark 量出准确率再决定是否打开。
 ROUTER_FALLBACK_ENABLED = _env("ROUTER_FALLBACK_ENABLED", "false").lower() in ("true", "1", "yes")
-# 语义路由命中某能力的最低余弦相似度。
-# 0.35 的依据与 MEMORY_EMBEDDING_CONTEXTUAL_MIN(0.25) 同源：短中文文本正样本余弦
-# 下限约 0.22，但路由误判的代价（凭空调一次工具）高于记忆漏召，故取更严的门槛。
-ROUTER_SEMANTIC_THRESHOLD = _env_float("ROUTER_SEMANTIC_THRESHOLD", 0.35)
+# ---- 下面四个阈值是一组，2026-08-25 用真实 embedding（qwen3-embedding-0.6b）在 12 条
+# ---- 用例上标定，前提是**能力带中文 examples**（即 ROUTER_ROUTE_AUTO_CAPABILITIES=false）。
+# ---- 复现：python -m capability.router.benchmark --cases capability/router/benchmark/acg.json
+# ----
+# ---- ⚠️ 与 ROUTER_ROUTE_AUTO_CAPABILITIES 强耦合。自动派生能力（原型语料是英文/指令句式
+# ---- 的工具描述）的打分整体比带 examples 的能力低约 0.2，实测正样本只到 0.61~0.71。
+# ---- 若把它设成 true 又不同时下调这里的阈值，工具会**静默地永远不触发**。
+#
+# 语义路由命中某能力的最低余弦相似度（能力进入候选列表的绝对地板）。
+# 实测：带 examples 时负样本最高 0.559、正样本最低 0.851，真正起作用的是下面的
+# ROUTER_CAPABILITY_MARGIN，本项只用来压掉日志里的长尾噪声。
+ROUTER_SEMANTIC_THRESHOLD = _env_float("ROUTER_SEMANTIC_THRESHOLD", 0.50)
 # 判定 tool=true 所需的最高分置信线。低于它但高于 ROUTER_UNCERTAIN_FLOOR 的落入
 # 「不确定带」，只有此时才考虑 Level 2。
-ROUTER_TOOL_THRESHOLD = _env_float("ROUTER_TOOL_THRESHOLD", 0.45)
+# 0.70 取自实测两个分布的中点（负样本上界 0.559 / 正样本下界 0.851），两侧余量
+# +0.141 / +0.151，基本对称。样本里只有 1 条是线上真实用户消息，其余是构造的，
+# 所以没有按「工具假阳代价更高」进一步上调——上调会先牺牲真实用户的召回。
+ROUTER_TOOL_THRESHOLD = _env_float("ROUTER_TOOL_THRESHOLD", 0.70)
+# 命中能力允许比最高分低多少（相对间距裁剪）。0 表示不裁剪。
+#
+# 这一项治的是首轮实测里最实在的问题：一旦 tool=true，所有过了绝对地板的能力都会
+# **各自执行一次**，于是「帮我推荐一些新番」同时调了每日放送和 B 站热门视频，
+# 无关结果被贴上「真实数据，回答时以此为准」送进 prompt。
+# 绝对地板解决不了它：实测正确能力的分数是 0.851~0.911，而搭车能力是 0.616~0.743，
+# 后者高于任何一个能用的地板值（地板要低于 0.851 才不误杀正样本）。
+# 只有相对间距能把两者分开——正确能力与第二名的实测落差是 0.155~0.336。
+# 0.12 落在 0.08~0.15 这个平台的中间（该区间内搭车数恒为 0，0.20 起开始漏进搭车）。
+ROUTER_CAPABILITY_MARGIN = _env_float("ROUTER_CAPABILITY_MARGIN", 0.12)
 # 不确定带下界：最高分低于它就是「确定不需要工具」，不进 Level 2。
-ROUTER_UNCERTAIN_FLOOR = _env_float("ROUTER_UNCERTAIN_FLOOR", 0.25)
+# 0.55 紧贴实测负样本上界（0.559），于是不确定带 = 0.55~0.70，只覆盖真正含混的那一小段
+# （首轮实测里「主管，这是？」的 0.559 正好落在这儿）。Level 2 默认关闭，本项暂无实际效果，
+# 但必须跟着上面一起标定，否则将来打开 L2 会发现它对几乎所有消息都开火。
+ROUTER_UNCERTAIN_FLOOR = _env_float("ROUTER_UNCERTAIN_FLOOR", 0.55)
 # 单次请求最多路由几个能力。每个能力在 Comes 里是一次独立的受限 agent 调用，
 # 都走 chat 闸门串行，不设上限会让一条消息卡住整个群的回复。
 ROUTER_MAX_CAPABILITIES = _env_int("ROUTER_MAX_CAPABILITIES", 3)

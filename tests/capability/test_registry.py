@@ -174,6 +174,46 @@ def test_routable_requires_provider_and_prototype():
     assert [c.id for c in reg.routable()] == ["ok"]
 
 
+def test_routable_excludes_route_disabled():
+    """``route_enabled=False`` 的能力被排除在所有路由级别之外，但仍留在注册表里。
+
+    这是「声明优先」策略的唯一执行点：未声明的插件工具照常注册（Comes 仍能按 id
+    执行），只是不参与能力竞争。
+    """
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="declared", providers=[_provider("t1", "declared")]))
+    reg.register(
+        _capability(id="auto", providers=[_provider("t2", "auto")], route_enabled=False),
+    )
+    assert [c.id for c in reg.routable()] == ["declared"]
+    assert reg.get("auto") is not None
+    assert len(reg) == 2
+
+
+def test_register_merge_lets_declaration_win_route_enabled():
+    """声明（参与路由）碰上自动派生（不参与）时，声明赢。
+
+    取「或」而不是「后者覆盖」：装配顺序是先声明后派生，若派生能把 route_enabled
+    改回 False，精心写的声明会被静默停用。
+    """
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="c", providers=[_provider("t", "c")], route_enabled=False))
+    reg.register(_capability(id="c", providers=[], route_enabled=True))
+    assert reg.get("c").route_enabled is True
+    assert [x.id for x in reg.routable()] == ["c"]
+
+
+def test_register_merge_keeps_disabled_on_idempotent_resync():
+    """重复同步同一批自动能力不该把它们变成可路由（sync_astrbot_tools 是幂等的）。"""
+    reg = CapabilityRegistry()
+    for _ in range(2):
+        reg.register(
+            _capability(id="c", providers=[_provider("t", "c")], route_enabled=False),
+        )
+    assert reg.get("c").route_enabled is False
+    assert reg.routable() == []
+
+
 def test_version_bumps_on_every_mutation():
     """Router 的原型向量缓存靠它失效——不自增会让新装插件永远路由不到。"""
     reg = CapabilityRegistry()

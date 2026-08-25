@@ -1,0 +1,81 @@
+# ACG / 视频域的能力声明（对应 data/plugins/astrbot_plugin_bilibili 的 5 个 llm_tool）
+#
+# **文件名即 domain**，所以这五项能力的 domain 都是 entertainment。
+#
+# 为什么必须写这个文件：插件的工具描述是写给「看着全部工具做选择」的决策器的指令句
+# （"当用户询问 X 时调用"），而 Router 拿它和用户的**问句**算余弦——两种用途要求的
+# 文本形态不同。2026-08-24 首轮实测（design_docs/logs/log_2026_8_25_1303.md）里，
+# 这 5 个工具对一句「主管，这是？」给出 0.44/0.41/0.39/0.39/0.39，彼此差不到 0.05；
+# 而「这个游戏怎么样」拿到 0.474，直接越过了 0.45 的工具置信线。
+#
+# 下面 examples 全部写成**用户会怎么问**，这是 Level 1 的原型语料。
+# keywords 只给「说出来就没有歧义」的名词短语，命中即零延迟拍板（Level 0，不调
+# embedding，省掉实测约 2.5s 的一次编码）。宁缺勿滥——keywords 命中会直接执行工具，
+# 而工具假阳是高代价错误。需要参数才能执行的能力（anime.search 要关键词、
+# video.dynamics 要 UID）一律不给 keywords：L0 拿不到参数，拍板了也只能空转。
+
+[[capability]]
+id = "anime.recommend"
+description = "推荐近期热门或值得一看的动画、番剧、ACG 作品"
+examples = [
+    "有什么新番推荐吗",
+    "帮我推荐几部动画",
+    "最近有什么好看的番",
+    "最近热门的番剧是哪些",
+    "推荐一些最近值得看的动漫",
+    "有什么值得追的新番吗",
+]
+keywords = ["番剧推荐", "新番推荐", "动画推荐", "动漫推荐"]
+providers = ["bgm_recommend_hot_subjects"]
+
+[[capability]]
+id = "anime.schedule"
+description = "查询某一天放送、更新哪些动画（每日放送表）"
+examples = [
+    "今天更新什么动画",
+    "今天有哪些番剧更新",
+    "星期一放送哪些番",
+    "明天有什么番更新",
+    "这部番是周几更新的",
+]
+keywords = ["放送", "更新表"]
+providers = ["get_bgm_daily_schedule"]
+
+[[capability]]
+id = "anime.search"
+description = "按关键词、年份、标签、评分、排名等条件检索具体的 ACG 作品信息"
+examples = [
+    "帮我查一下这部动画的评分",
+    "搜一下这部番的信息",
+    "2024 年有哪些科幻动画",
+    "这部动漫排名多少",
+    "有没有评分 8 分以上的战斗番",
+]
+# 不给 keywords：本能力必须带检索关键词才能执行（工具的 keyword 是必填参数），
+# Level 0 无法从字面里取出那个关键词，拍板了也只是让 Comes 去猜。交给 Level 1。
+providers = ["bgm_search_subjects_advanced"]
+
+[[capability]]
+id = "video.hot"
+description = "查询哔哩哔哩的热门视频、热榜、近期高热内容"
+examples = [
+    "B站现在有什么热门视频",
+    "看看 B 站热榜",
+    "最近 B 站上什么视频火",
+    "哔哩哔哩热门视频有哪些",
+]
+# 大小写在字面匹配里是敏感的（registry 用的是 in 判断），所以 B/b 两种都列。
+keywords = ["B站热门", "b站热门", "B站热榜", "b站热榜", "全站热门", "哔哩哔哩热门"]
+providers = ["bili_search_hot_videos"]
+
+[[capability]]
+id = "video.dynamics"
+description = "查询某个哔哩哔哩 UP 主最近发布的动态内容"
+examples = [
+    "看看这个 UP 主最近发了什么",
+    "查一下这个 up 的动态",
+    "这个 UID 最近更新了什么",
+    "帮我总结一下这个 UP 主最近的动态",
+]
+# 不给 keywords：工具的 uid 是必填参数，没有 UID 就执行不了（同 anime.search）。
+providers = ["bili_get_user_dynamics"]

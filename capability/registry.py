@@ -123,13 +123,18 @@ class Capability:
         domain: 能力域（``information`` / ``entertainment`` …），取自声明文件名；
         description: 能力描述，进 Router 的原型语料；
         examples: 典型用户说法。**Router 的 Level 1 语义匹配主要靠它**——
-            工具描述大多是英文短句，只靠它做中文语义匹配准确率会明显偏低；
+            工具描述是写给「看着全部工具做选择」的决策器的指令句（"当用户询问 X 时调用"），
+            与用户的**问句**不同构；只靠它做语义匹配，同域工具之间几乎没有区分度；
         keywords: 触发本能力的**确定性关键词**，供 Router 的 Level 0 字面匹配。
             只认显式声明，不从 examples 里猜——中文没有词边界，从「会不会下雨」
             切出来的候选里既有「下雨」也有「不会」，后者会命中几乎任何句子。
             Level 0 的职责是「处理高置信度请求」，猜出来的词达不到这个标准；
         input_schema: 输入契约（可选，给 Comes 做槽位提示）；
-        providers: 实现方式列表。
+        providers: 实现方式列表；
+        route_enabled: 是否参与 Router 的能力选择。``False`` 时能力照常注册、
+            照常可被显式指定执行，但不进 ``routable()``，因此不参与 Level 0/1/2 的
+            任何竞争。自动派生的能力按 ``ROUTER_ROUTE_AUTO_CAPABILITIES`` 落到这里，
+            理由见 ``capability/adapters/astrbot.py``。
     """
 
     id: str
@@ -139,6 +144,7 @@ class Capability:
     keywords: list[str] = field(default_factory=list)
     input_schema: dict[str, Any] = field(default_factory=dict)
     providers: list[CapabilityProvider] = field(default_factory=list)
+    route_enabled: bool = True
 
     @property
     def is_auto(self) -> bool:
@@ -172,7 +178,8 @@ class Capability:
     def __repr__(self) -> str:
         return (
             f"Capability({self.id} domain={self.domain} "
-            f"examples={len(self.examples)} providers={[p.tool_name for p in self.providers]})"
+            f"examples={len(self.examples)} providers={[p.tool_name for p in self.providers]}"
+            f"{'' if self.route_enabled else ' 不参与路由'})"
         )
 
 
@@ -208,6 +215,11 @@ class CapabilityRegistry:
         existing.domain = existing.domain or capability.domain
         existing.description = existing.description or capability.description
         existing.input_schema = existing.input_schema or capability.input_schema
+        # route_enabled 取「或」：一旦有任一次注册认为它该参与路由，就参与。
+        # 语义是「显式声明优先」——声明（route_enabled=True）碰上自动派生
+        # （可能为 False）时，声明赢；而重复同步同一批自动能力时两边都是 False，
+        # 结果不变（sync_astrbot_tools 是幂等的）。
+        existing.route_enabled = existing.route_enabled or capability.route_enabled
         for example in capability.examples:
             if example not in existing.examples:
                 existing.examples.append(example)
@@ -261,12 +273,20 @@ class CapabilityRegistry:
         return sorted(self._capabilities)
 
     def routable(self) -> list[Capability]:
-        """可被路由的能力：至少有一个可用 provider，且有原型语料。
+        """可被路由的能力：``route_enabled`` 且至少有一个可用 provider，且有原型语料。
 
         没有 provider 的能力路由到了也执行不了（Comes 会直接 failed），
         提前排除掉可以少一次无用的 27B 往返。
+
+        ``route_enabled=False`` 的能力被排除在**所有**路由级别之外（L0 关键词、
+        L1 语义、L2 兜底），因为三者都以本方法为候选集来源。这是「声明优先」策略的
+        唯一执行点：未声明的插件工具不参与能力竞争。
         """
-        return [c for c in self.all() if c.enabled_providers() and c.prototype_texts()]
+        return [
+            c
+            for c in self.all()
+            if c.route_enabled and c.enabled_providers() and c.prototype_texts()
+        ]
 
     def find_providers(self, capability_id: str) -> list[CapabilityProvider]:
         """取某能力的可用 provider（按 priority 降序）；能力不存在返回空列表。"""

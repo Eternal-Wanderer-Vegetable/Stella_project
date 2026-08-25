@@ -2,22 +2,39 @@
 #
 # 把这个文件复制成 config/capabilities/<域名>.toml 并按你装的插件改写即可。
 # **文件名就是 domain**，这里叫 information，能力的 domain 字段自动填 "information"。
+# 随仓库还发了一份真实声明可以照抄：config/capabilities/entertainment.toml。
 #
-# 声明文件是**可选**的：不写也能用——启动时 capability/adapters/astrbot.py 会把每个
-# 插件工具自动派生成 tool.<工具名>。写它的收益全在路由质量上：
+# 声明**不是可选的**（ROUTER_ROUTE_AUTO_CAPABILITIES=false 起，即默认）：没有声明的
+# 插件工具照常注册、仍可被显式执行，但**不参与语义路由**，聊天里不会被触发。
+# 启动日志会打一条 WARNING 点名有哪些工具处于这个状态。
 #
-#   examples  → Level 1 语义匹配的原型语料。写自然的中文句子。
-#               插件的英文工具描述（"get weather forecast"）在中文群聊里跨语言
-#               匹配准确率明显偏低，几条中文 examples 就能显著改善。
-#   keywords  → Level 0 字面匹配。写名词。命中即零延迟拍板，不用调 embedding。
-#               **绝不从 examples 里猜关键词**：中文没有词边界，从「会不会下雨」
-#               切出来的候选里既有「下雨」也有「不会」，后者会命中几乎任何句子。
+# 为什么不能只靠插件自带的工具描述：那句描述是写给「看着全部工具做选择」的决策器的
+# 指令句（"当用户询问 X 时调用"），而 Router 拿它去和用户的**问句**算余弦——两种用途
+# 要求的文本形态不同。2026-08-24 实测（5 个同域工具）对一句「主管，这是？」给出
+# 0.44/0.41/0.39/0.39/0.39，彼此差不到 0.06，几乎没有区分度。
+#
+#   examples  → Level 1 语义匹配的原型语料。写**用户会怎么问**，中文问句。
+#               这是路由质量的主要来源：实测换成中文问句 examples 后，
+#               工具假阳 1→0、首位选错 2/5→0、无关工具执行 13 次→0。
+#   keywords  → Level 0 字面匹配。写名词短语。命中即零延迟拍板，省掉一次 embedding
+#               编码（实测约 2.5s）。**绝不从 examples 里猜**：中文没有词边界，
+#               从「会不会下雨」切出来的候选里既有「下雨」也有「不会」，
+#               后者会命中几乎任何句子。
+#               两条实测经验：
+#               - 宁缺勿滥。keywords 命中会直接执行工具，而工具假阳是高代价错误。
+#                 用 4 字短语（「番剧推荐」）而不是 2 字词（「新番」），否则
+#                 「我最近在追新番」会被直接拍板去查。
+#               - 需要参数才能执行的能力干脆不给 keywords（见下面 web.search 的注释）。
 #
 # providers 里写的是 llm_tools 里的**工具名**（插件用 @llm_tool 注册的那个名字），
 # 不是插件名。查当前有哪些工具：启动日志里 [astrbot_compat] 已登记函数工具 <名字>。
 #
 # 显式声明**优先于**自动派生：被这里认领的工具不会再被派生成 tool.<名字>。
 # 这条依赖装配顺序（先读声明、再派生），由 adapters/astrbot.py 的 bootstrap 保证。
+#
+# 改完声明后跑一遍 benchmark 再上线：
+#   python -m capability.router.benchmark
+# 阈值（ROUTER_TOOL_THRESHOLD 等）是按「带中文 examples」标定的，见 docs/configuration.md。
 
 [[capability]]
 id = "weather.query"
@@ -39,6 +56,8 @@ examples = [
     "帮我查查最近的新闻",
     "网上怎么说",
 ]
+# keywords 给得很少是刻意的：搜索必须带检索词，而 Level 0 取不出那个词。
+# 「搜索」这类动词留着是因为它后面几乎一定跟着检索内容，交给 Comes 从原话里取。
 keywords = ["搜索", "百度", "谷歌"]
 # 表形式：同一能力有多个实现时用 priority 排序（越大越优先）。
 # 失败会被自动退避（见 COMES_PROVIDER_FAILURE_THRESHOLD），届时由次优的顶上。

@@ -1,0 +1,122 @@
+[
+  {
+    "message": "帮我推荐一些新番可以吗？",
+    "memory": true,
+    "tool": true,
+    "capability": "anime.recommend",
+    "note": "线上真实消息（2026-08-24 19:56）。自动派生时首位选成了每日放送，是首轮实测里的能力选错案例"
+  },
+  {
+    "message": "今天更新什么番",
+    "memory": true,
+    "tool": true,
+    "capability": "anime.schedule",
+    "note": "与 anime.recommend 最容易互相吸走的一对，必须分得开"
+  },
+  {
+    "message": "今天的放送表",
+    "memory": true,
+    "tool": true,
+    "capability": "anime.schedule",
+    "note": "keywords 存在的理由：L1 只给 0.64（低于置信线，会漏），靠 Level 0 的「放送」零延迟拍板"
+  },
+  {
+    "message": "有没有什么番剧推荐",
+    "memory": true,
+    "tool": true,
+    "capability": "anime.recommend",
+    "note": "Level 0 关键词「番剧推荐」命中"
+  },
+  {
+    "message": "B站现在什么视频最火",
+    "memory": true,
+    "tool": true,
+    "capability": "video.hot"
+  },
+  {
+    "message": "看看B站热榜",
+    "memory": true,
+    "tool": true,
+    "capability": "video.hot",
+    "note": "Level 0 关键词「B站热榜」命中"
+  },
+  {
+    "message": "帮我查一下这部动画的评分",
+    "memory": true,
+    "tool": true,
+    "capability": "anime.search",
+    "note": "该能力的工具有必填 keyword，走受限 agent 而非无参直调"
+  },
+  {
+    "message": "看看这个UP主最近发了什么",
+    "memory": true,
+    "tool": true,
+    "capability": "video.dynamics",
+    "note": "该能力的工具有必填 uid，走受限 agent"
+  },
+  {
+    "message": "主管，这是？",
+    "memory": true,
+    "tool": false,
+    "note": "线上真实消息。自动派生时拿到 0.443，距 0.45 的旧置信线只差 0.007——旧标定几乎踩线"
+  },
+  {
+    "message": "真的要看尼古喵喵吗😨",
+    "memory": true,
+    "tool": false,
+    "note": "线上真实消息。提到了番名但不是请求"
+  },
+  {
+    "message": "这个不行啦，真的不行啦😧",
+    "memory": true,
+    "tool": false,
+    "note": "线上真实消息"
+  },
+  {
+    "message": "这个游戏怎么样",
+    "memory": true,
+    "tool": false,
+    "note": "自动派生时得 0.474，越过旧置信线并连带执行了 3 个工具——首轮实测唯一的工具假阳"
+  },
+  {
+    "message": "我不会用这个软件",
+    "memory": true,
+    "tool": false,
+    "note": "切词坏词护栏（与内置用例集同源）"
+  },
+  {
+    "message": "今天心情不太好",
+    "memory": true,
+    "tool": false,
+    "note": "带「今天」但与放送表无关"
+  },
+  {
+    "message": "你觉得我该换工作吗",
+    "memory": true,
+    "tool": false
+  },
+  {
+    "message": "这季度的番好像都不太行",
+    "memory": true,
+    "tool": false,
+    "note": "陈述而非请求，且正好在置信线下方（0.649）"
+  },
+  {
+    "message": "我最近在追新番",
+    "memory": true,
+    "tool": false,
+    "note": "已知失败：0.835 会误判成需要工具。余弦分不开「陈述 X」和「请求 X」，而它与 examples 里的「有什么值得追的新番吗」高度相似。抬阈值治不了（正样本下界 0.851，只剩 0.016 余量），这是 Level 2 该接的活。keywords 特意写「新番推荐」而不是「新番」，就是为了不让 Level 0 也踩进来"
+  },
+  {
+    "message": "帮我查一下今天的天气",
+    "memory": true,
+    "tool": false,
+    "note": "有明确工具意图但没有对应能力（没装天气插件）。护栏：Router 不能因为「帮我查」就硬凑一个能力出来"
+  },
+  {
+    "message": "晚安",
+    "memory": false,
+    "tool": false,
+    "note": "纯寒暄，Level 0 直接判定不需要记忆也不需要工具"
+  }
+]

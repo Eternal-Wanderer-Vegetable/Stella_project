@@ -89,6 +89,9 @@ except Exception as _e:
 driver.on_startup(initialize_plugins)
 driver.on_shutdown(terminate_plugins)
 
+# Router 原型预热任务的引用。留着只为防 GC（见 _bootstrap_capabilities），跑完自动清空。
+_WARMUP_TASK = None
+
 
 async def _bootstrap_capabilities() -> None:
     """装配能力注册表：先读 config/capabilities/*.toml，再自动派生剩余插件工具。
@@ -97,6 +100,11 @@ async def _bootstrap_capabilities() -> None:
     就登记了工具，但插件也可以在自己的 ``initialize()`` 里调 ``add_llm_tools``。
     先跑就会漏掉后者，而那表现为「插件装了但 Stella 路由不到它」——不报错，
     只是功能静默缺失。
+
+    装配完在**后台**预热 Router 的原型向量：不预热的话首条被路由的消息要现场
+    编码全部能力的语料（声明里每个能力 4~6 句），等待时间直接落在那个用户头上，
+    而且外面套着 ROUTER_TIMEOUT。放后台是因为启动不该等它——预热失败的后果
+    只是首条消息慢一点。
 
     失败只告警：能力层是增量功能，装配不上的后果应该是「这次没有工具能力」，
     而不是 Bot 起不来。
@@ -110,6 +118,27 @@ async def _bootstrap_capabilities() -> None:
         import traceback
 
         _diag_log(f"[capability][boot] 能力装配失败（跳过）: {_e}\n{traceback.format_exc()}")
+        return
+
+    try:
+        from config import CAPABILITY_ROUTER_ENABLED, ROUTER_SEMANTIC_ENABLED
+
+        if not (CAPABILITY_ROUTER_ENABLED and ROUTER_SEMANTIC_ENABLED):
+            return
+        import asyncio as _asyncio
+
+        from capability.router.semantic import warmup
+
+        async def _warm() -> None:
+            n = await warmup()
+            _diag_log(f"[capability][boot] Router 原型预热完成: {n} 个")
+
+        # 必须留引用：只有局部变量的话 task 可能在跑完前被 GC 掉（RUF006）
+        global _WARMUP_TASK
+        _WARMUP_TASK = _asyncio.create_task(_warm())
+        _WARMUP_TASK.add_done_callback(lambda _t: globals().__setitem__("_WARMUP_TASK", None))
+    except Exception as _e:
+        _diag_log(f"[capability][boot] Router 原型预热未启动（跳过）: {_e}")
 
 
 driver.on_startup(_bootstrap_capabilities)

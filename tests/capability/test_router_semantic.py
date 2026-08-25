@@ -11,6 +11,10 @@ EmbeddingService 全程打桩（``FakeEmbedding``），不发真实 HTTP 请求�
 1. **原型向量取均值**——个别跑偏的 example 不该把整个能力的召回拉歪；
 2. **原型缓存按注册表版本失效**——不失效会让新装的插件永远路由不到（静默）；
 3. **None 与「打了分但都很低」是两种情形**——前者降级，后者是有效结论。
+
+外加 2026-08-25 标定后新增的两组：
+4. **相对间距裁剪**——绝对地板治不了「搭车能力」，只有相对间距能（见 select_hits）；
+5. **原型缓存增量落盘**——整轮才写会在超时时丢掉全部进度。
 """
 
 import asyncio
@@ -24,8 +28,10 @@ from capability.router.semantic import (
     reset_prototype_cache,
     route_semantic,
     score_capabilities,
+    select_hits,
+    warmup,
 )
-from capability.router.types import LEVEL_SEMANTIC
+from capability.router.types import LEVEL_SEMANTIC, CapabilityHit
 
 
 def _run(coro):
@@ -227,12 +233,12 @@ def test_route_semantic_threshold_is_configurable(monkeypatch):
     from config import settings
 
     reg = _registry(_cap("hit", ["h"]))
-    # 余弦 ≈ 0.7071，默认 TOOL_THRESHOLD=0.45 会命中
-    svc = FakeEmbedding({"h": [1.0, 0.0], "q": [0.7071, 0.7071]})
+    svc = FakeEmbedding({"h": [1.0, 0.0], "q": [1.0, 0.0]})
+    monkeypatch.setattr(settings, "ROUTER_TOOL_THRESHOLD", 0.5)
     assert _run(route_semantic("q", target=reg, service=svc)).tool is True
 
     reset_prototype_cache()
-    monkeypatch.setattr(settings, "ROUTER_TOOL_THRESHOLD", 0.9)
+    monkeypatch.setattr(settings, "ROUTER_TOOL_THRESHOLD", 1.5)
     assert _run(route_semantic("q", target=reg, service=svc)).tool is False
 
 
@@ -249,3 +255,168 @@ def test_route_semantic_returns_none_when_unusable():
     reg = _registry(_cap("hit", ["h"]))
     svc = FakeEmbedding({"h": [1.0, 0.0]})  # query 编码失败
     assert _run(route_semantic("q", target=reg, service=svc)) is None
+
+
+# ---------- 相对间距裁剪（搭车能力） ----------
+
+
+class _S:
+    """最小化的配置替身，只带 select_hits 用到的四项。"""
+
+    def __init__(self, floor=0.5, margin=0.12, cap=3):
+        self.ROUTER_SEMANTIC_THRESHOLD = floor
+        self.ROUTER_CAPABILITY_MARGIN = margin
+        self.ROUTER_MAX_CAPABILITIES = cap
+
+
+def _hits(*pairs):
+    return [CapabilityHit(capability_id=c, score=s) for c, s in pairs]
+
+
+def test_select_hits_drops_passengers_by_margin():
+    """首轮实测的核心问题：搭车能力会各自执行一次并把结果当「真实数据」送进 prompt。
+
+    分数取自 2026-08-24 的实测形状（正确能力 0.91，搭车 0.69/0.68）。
+    """
+    out = select_hits(_hits(("right", 0.91), ("rider1", 0.69), ("rider2", 0.68)), _S())
+    assert [h.capability_id for h in out] == ["right"]
+
+
+def test_select_hits_keeps_genuine_multi_capability_request():
+    """两个意图都强的句子本来就该都执行——间距裁剪不能把它也砍掉。"""
+    out = select_hits(_hits(("a", 0.88), ("b", 0.85)), _S())
+    assert [h.capability_id for h in out] == ["a", "b"]
+
+
+def test_select_hits_margin_cannot_be_replaced_by_absolute_floor():
+    """回归：绝对地板治不了搭车——搭车分数(0.69)高于任何不误杀正样本(0.85)的地板。"""
+    hits = _hits(("right", 0.91), ("rider", 0.69))
+    # 地板必须低于正样本才不误杀，此时地板放过了搭车
+    assert len(select_hits(hits, _S(floor=0.60, margin=0))) == 2
+    # 换成间距就分开了
+    assert len(select_hits(hits, _S(floor=0.60, margin=0.12))) == 1
+
+
+def test_select_hits_margin_zero_disables_cut():
+    hits = _hits(("a", 0.91), ("b", 0.69))
+    assert len(select_hits(hits, _S(margin=0.0))) == 2
+
+
+def test_select_hits_absolute_floor_still_applies():
+    """间距放过的低分仍要被绝对地板拦住。"""
+    out = select_hits(_hits(("a", 0.55), ("b", 0.49)), _S(floor=0.5, margin=0.2))
+    assert [h.capability_id for h in out] == ["a"]
+
+
+def test_select_hits_respects_max_capabilities():
+    out = select_hits(_hits(("a", 0.9), ("b", 0.9), ("c", 0.9), ("d", 0.9)), _S(cap=2))
+    assert len(out) == 2
+
+
+def test_select_hits_empty():
+    assert select_hits([], _S()) == []
+
+
+def test_route_semantic_applies_margin(monkeypatch):
+    """端到端：间距裁剪要真的作用在 Route.capabilities 上。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ROUTER_TOOL_THRESHOLD", 0.5)
+    monkeypatch.setattr(settings, "ROUTER_SEMANTIC_THRESHOLD", 0.3)
+    monkeypatch.setattr(settings, "ROUTER_CAPABILITY_MARGIN", 0.2)
+    reg = _registry(_cap("right", ["h"]), _cap("rider", ["r"]))
+    # query 与 right 完全同向(1.0)、与 rider 夹角 45°(≈0.707)，落差 0.29 > 0.2
+    svc = FakeEmbedding(
+        {"h": [1.0, 0.0], "r": [0.0, 1.0], "q": [0.9239, 0.3827]},
+    )
+    route = _run(route_semantic("q", target=reg, service=svc))
+    assert route is not None
+    assert route.tool is True
+    assert route.capability_ids == ["right"]
+
+
+def test_no_tool_route_lists_hits_without_margin_cut(monkeypatch):
+    """不执行时列表是诊断用的——裁掉就看不出第二三名离得有多近。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ROUTER_TOOL_THRESHOLD", 1.5)
+    monkeypatch.setattr(settings, "ROUTER_SEMANTIC_THRESHOLD", 0.3)
+    monkeypatch.setattr(settings, "ROUTER_CAPABILITY_MARGIN", 0.05)
+    reg = _registry(_cap("a", ["h"]), _cap("b", ["r"]))
+    svc = FakeEmbedding({"h": [1.0, 0.0], "r": [0.0, 1.0], "q": [0.9239, 0.3827]})
+    route = _run(route_semantic("q", target=reg, service=svc))
+    assert route is not None
+    assert route.tool is False
+    assert len(route.capabilities) == 2
+
+
+# ---------- 原型缓存的增量落盘 ----------
+
+
+def test_prototypes_written_incrementally_survive_cancellation():
+    """回归：整轮算完才写缓存的话，被 ROUTER_TIMEOUT 取消就一条都不留，
+    下一条消息从零重来——表现为「工具连续好几轮不触发」且不报错。
+
+    声明文件把原型语料从每个能力 1 句涨到 4~6 句，这个窗口被放大了约 5 倍。
+    """
+    reg = _registry(_cap("a", ["e1"]), _cap("b", ["e2"]), _cap("c", ["e3"]))
+    table = {"e1": [1.0, 0.0], "e2": [0.0, 1.0], "e3": [1.0, 1.0]}
+
+    class SlowThenCancel(FakeEmbedding):
+        async def embed(self, text: str):
+            if text == "e3":
+                raise asyncio.CancelledError
+            return await super().embed(text)
+
+    svc = SlowThenCancel(table)
+    with pytest.raises(asyncio.CancelledError):
+        _run(build_prototypes(reg, svc))
+
+    # 前两个已经落盘：换一个正常的服务接着算，只需要补 e3
+    svc2 = FakeEmbedding(table)
+    protos = _run(build_prototypes(reg, svc2))
+    assert set(protos) == {"a", "b", "c"}
+    assert svc2.calls == ["e3"]
+
+
+def test_failed_capability_is_retried_next_time():
+    """编码失败不该被当成「这一版算完了」——否则服务恢复后它永远匹配不上。"""
+    reg = _registry(_cap("ok", ["good"]), _cap("bad", ["missing"]))
+    svc = FakeEmbedding({"good": [1.0, 0.0]})
+    assert set(_run(build_prototypes(reg, svc))) == {"ok"}
+
+    svc2 = FakeEmbedding({"good": [1.0, 0.0], "missing": [0.0, 1.0]})
+    assert set(_run(build_prototypes(reg, svc2))) == {"ok", "bad"}
+    # 已成功的没有重算
+    assert svc2.calls == ["missing"]
+
+
+# ---------- 预热 ----------
+
+
+def test_warmup_fills_cache():
+    reg = _registry(_cap("a", ["e1"]))
+    svc = FakeEmbedding({"e1": [1.0, 0.0]})
+    assert _run(warmup(reg, svc)) == 1
+
+
+def test_warmup_never_raises_on_timeout():
+    """预热失败只是首条消息慢一点，绝不能拖累启动。"""
+    reg = _registry(_cap("a", ["e1"]))
+
+    class Hang(FakeEmbedding):
+        async def embed(self, text: str):
+            await asyncio.sleep(10)
+            return [1.0, 0.0]
+
+    assert _run(warmup(reg, Hang({}), timeout=0.01)) == 0
+
+
+def test_warmup_never_raises_on_error():
+    reg = _registry(_cap("a", ["e1"]))
+
+    class Boom(FakeEmbedding):
+        async def embed(self, text: str):
+            raise RuntimeError("embedding 服务炸了")
+
+    assert _run(warmup(reg, Boom({}))) == 0

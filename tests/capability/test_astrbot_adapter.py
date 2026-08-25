@@ -231,9 +231,71 @@ def test_bootstrap_with_no_declarations_is_all_auto(tmp_path, monkeypatch):
     assert stats["derived"] == 1
 
 
-def test_derived_capability_is_routable():
-    """零配置的终点：装上插件就能被 Router 找到。"""
+def test_derived_capability_is_registered_but_not_routable():
+    """声明优先：自动派生的能力照常注册、可被显式执行，但默认不参与路由竞争。
+
+    依据是 2026-08-24 首轮实测——工具描述是写给决策器的指令句，拿它当语义原型时
+    同域工具之间几乎没有区分度，代价是「工具假阳」（高）。见 registry.Capability.route_enabled。
+    """
+    _register_tool("get_weather", "get weather forecast")
+    reg = CapabilityRegistry()
+    sync_astrbot_tools(reg)
+
+    cap = reg.get("tool.get_weather")
+    assert cap is not None            # 注册了：Comes 仍能按 id 执行它
+    assert cap.route_enabled is False
+    assert reg.routable() == []       # 但不进任何路由级别的候选集
+
+
+def test_auto_capabilities_route_when_opted_in():
+    """``ROUTER_ROUTE_AUTO_CAPABILITIES=true`` 恢复「装上插件就能路由」的旧行为。"""
+    _register_tool("get_weather", "get weather forecast")
+    reg = CapabilityRegistry()
+    sync_astrbot_tools(reg, route_enabled=True)
+    assert [c.id for c in reg.routable()] == ["tool.get_weather"]
+
+
+def test_auto_route_policy_reads_settings(monkeypatch):
+    """缺省不传 route_enabled 时要读配置，而不是硬编码 False。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ROUTER_ROUTE_AUTO_CAPABILITIES", True, raising=False)
     _register_tool("get_weather", "get weather forecast")
     reg = CapabilityRegistry()
     sync_astrbot_tools(reg)
     assert [c.id for c in reg.routable()] == ["tool.get_weather"]
+
+
+def test_bootstrap_reports_routable_count(tmp_path, monkeypatch):
+    """``routable`` 才是决定 Router 行为的数；declared/derived 只说明注册表里有什么。
+
+    声明的能力进 routable，未声明的工具不进——两者都注册了，数上要能区分开。
+    """
+    import capability.loader as loader_mod
+
+    (tmp_path / "information.toml").write_text(
+        """
+[[capability]]
+id = "weather.query"
+description = "查询天气信息"
+examples = ["明天天气怎么样"]
+providers = ["get_weather"]
+""",
+        encoding="utf-8",
+    )
+    real_load = loader_mod.load_capabilities
+    monkeypatch.setattr(
+        loader_mod,
+        "load_capabilities",
+        lambda directory=None, target=None: real_load(tmp_path, target),
+    )
+
+    _register_tool("get_weather", "get weather forecast")
+    _register_tool("roll_dice", "roll a dice")
+    reg = CapabilityRegistry()
+
+    stats = bootstrap(reg)
+    assert stats["declared"] == 1
+    assert stats["derived"] == 1          # roll_dice 被派生了
+    assert stats["routable"] == 1         # 但只有声明的 weather.query 参与路由
+    assert [c.id for c in reg.routable()] == ["weather.query"]

@@ -170,6 +170,61 @@ def test_load_cases_falls_back_to_builtin(monkeypatch, tmp_path):
     assert load_cases() == list(BUILTIN_CASES)
 
 
+def test_load_cases_merges_builtin_with_files(monkeypatch, tmp_path):
+    """回归：加一个领域用例文件不能把内置集（规则表的回归地板）静默撤掉。
+
+    合并前的写法是「有外部文件就只用外部文件」，于是新增 acg.json 之后
+    记忆信号、寒暄整句匹配、切词坏词这些护栏就再也不被检查了——benchmark 依然
+    通过，但已经不测规则表。
+    """
+    import capability.router.benchmark as bm
+
+    (tmp_path / "domain.json").write_text(
+        json.dumps([{"message": "领域用例", "tool": True}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bm, "CASES_DIR", tmp_path)
+    messages = [c.message for c in load_cases()]
+    assert "领域用例" in messages
+    for builtin in BUILTIN_CASES:
+        assert builtin.message in messages
+
+
+def test_explicit_path_does_not_merge_builtin(tmp_path):
+    """显式 --cases 时调用方明确只想跑自己那一组。"""
+    path = tmp_path / "only.json"
+    path.write_text(
+        json.dumps([{"message": "只有我"}], ensure_ascii=False), encoding="utf-8",
+    )
+    assert [c.message for c in load_cases(path)] == ["只有我"]
+
+
+def test_shipped_acg_cases_are_wellformed():
+    """随仓库发的用例文件必须能被解析，且期望命中的能力 id 要真的在声明里。
+
+    对不上的话 benchmark 会一直报「能力选错」，而人会以为是路由变差了。
+    """
+    from pathlib import Path
+
+    import capability.router.benchmark as bm
+    from capability.loader import load_capability_file
+
+    path = bm.CASES_DIR / "acg.json"
+    if not path.is_file():
+        pytest.skip("本部署没有 acg.json")
+    cases = load_cases(path)
+    assert cases
+
+    reg = CapabilityRegistry()
+    decl_dir = Path(__file__).resolve().parents[2] / "config" / "capabilities"
+    for toml in sorted(decl_dir.glob("*.toml")):
+        load_capability_file(toml, reg)
+    declared = set(reg.ids())
+    for case in cases:
+        if case.capability:
+            assert case.capability in declared, f"{case.message!r} 期望的能力未声明"
+
+
 # ---------- Provider 健康度退避 ----------
 
 
