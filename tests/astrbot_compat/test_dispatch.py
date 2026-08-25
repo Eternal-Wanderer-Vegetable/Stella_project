@@ -15,6 +15,14 @@ from astrbot_compat.filters import EventMessageType, GreedyStr, PermissionType
 from astrbot_compat.pipeline import dispatch
 
 
+def make_ev(text: str, segs: list | None = None, **kw):
+    """非夹具版事件构造器：should_dispatch 是纯函数，不需要夹具。"""
+    from tests.astrbot_compat.conftest import FakeEvent, seg
+
+    built = segs if segs is not None else [seg("text", text=text)]
+    return FakeEvent(text, built, **kw)
+
+
 def _run(nb_event, bot):
     return asyncio.run(dispatch(nb_event, bot))
 
@@ -215,3 +223,88 @@ def test_forward_message_uses_forward_action(register_plugin, make_event, fake_b
     assert _run(make_event("/fwd"), fake_bot) is True
     assert fake_bot.actions[0][0] == "send_group_forward_msg"
     assert fake_bot.actions[0][1]["group_id"] == 1
+
+
+# ---------- should_dispatch：哪些平台事件该进插件管道 ----------
+# 这条规则曾把手机端分享的小程序卡片整条挡在管道外（2026-08-25 bug_report#1）：
+# 卡片只有一个 json 段，get_plaintext() 返回空串，而当时的门槛是「有纯文本」。
+# 后果是 @event_message_type(ALL) 这类专门处理非文本消息的 handler 永远收不到事件。
+
+
+def _json_card(**kw):
+    from tests.astrbot_compat.conftest import FakeEvent, seg
+
+    payload = (
+        '{"meta":{"detail_1":{"title":"哔哩哔哩",'
+        '"desc":"某视频","qqdocurl":"https://b23.tv/abc"}}}'
+    )
+    return FakeEvent("", [seg("json", data=payload)], **kw)
+
+
+def test_should_dispatch_accepts_text():
+    from astrbot_compat.pipeline import should_dispatch
+
+    assert should_dispatch(make_ev("hi"), allowed_groups={1}) is True
+
+
+def test_should_dispatch_accepts_json_card_without_plaintext():
+    """回归 bug_report#2026-08-25#1：卡片没有纯文本，但必须进管道。"""
+    from astrbot_compat.pipeline import should_dispatch
+
+    event = _json_card()
+    assert event.get_plaintext() == ""
+    assert should_dispatch(event, allowed_groups={1}) is True
+
+
+def test_should_dispatch_rejects_empty_message():
+    from astrbot_compat.pipeline import should_dispatch
+    from tests.astrbot_compat.conftest import FakeEvent
+
+    assert should_dispatch(FakeEvent("", []), allowed_groups={1}) is False
+
+
+def test_should_dispatch_rejects_self_echo():
+    """插件可以在回复里带链接/卡片，让它再被自己的 handler 解析就会自激。"""
+    from astrbot_compat.pipeline import should_dispatch
+
+    assert should_dispatch(make_ev("hi", user_id=9, self_id=9), allowed_groups={1}) is False
+
+
+def test_should_dispatch_respects_group_allowlist():
+    from astrbot_compat.pipeline import should_dispatch
+
+    assert should_dispatch(make_ev("hi", group_id=2), allowed_groups={1}) is False
+
+
+def test_should_dispatch_private_gated():
+    from astrbot_compat.pipeline import should_dispatch
+
+    ev = make_ev("hi", group_id=None)
+    assert should_dispatch(ev, allowed_groups={1}, allow_private=False) is False
+    assert should_dispatch(ev, allowed_groups={1}, allow_private=True) is True
+
+
+def test_should_dispatch_survives_broken_event():
+    """规则是 NoneBot Rule，抛异常会让整个 matcher 挂掉——宁可判 False。"""
+    import types
+
+    from astrbot_compat.pipeline import should_dispatch
+
+    broken = types.SimpleNamespace(user_id=1, self_id=9, group_id=1)
+    assert should_dispatch(broken, allowed_groups={1}) is False
+
+
+def test_json_card_reaches_all_message_handler(register_plugin, fake_bot):
+    """端到端：只有 json 段的消息要能唤醒 event_message_type(ALL) 的 handler。"""
+    seen: list[str] = []
+
+    class CardDemo(Star):
+        @filter.event_message_type(EventMessageType.ALL)
+        async def parse_card(self, event):
+            for el in event.message_obj.message:
+                if getattr(el, "type", "") == "Json":
+                    seen.append("json")
+
+    register_plugin(CardDemo)
+    _run(_json_card(), fake_bot)
+    assert seen == ["json"]

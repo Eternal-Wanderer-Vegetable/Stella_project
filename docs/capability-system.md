@@ -291,7 +291,7 @@ python -m capability.router.benchmark --cases my.json
 
 ## 排查
 
-线上判断「为什么这次没调工具」只看 `stella_thought_logs.md` 的这两行：
+线上判断「为什么这次没调工具」只看 `logs/stella_thought_logs.md` 的这两行：
 
 ```
 - **🧭 路由判定**: `chat+memory` via `semantic`（能力: 无，最高分 0.31，42ms）—— 最高分 0.31 未达工具置信线 0.70

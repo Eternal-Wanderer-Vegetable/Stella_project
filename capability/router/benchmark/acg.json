@@ -55,10 +55,43 @@
     "note": "该能力的工具有必填 uid，走受限 agent"
   },
   {
+    "message": "查一下29233734的最近三条动态",
+    "memory": true,
+    "tool": true,
+    "capability": "video.dynamics",
+    "note": "线上真实消息（2026-08-25 21:41）。语义层只给 0.612 → 漏判，是 Level 0 关键词「条动态」接住的。补 examples 也救不了：它涨到 0.681 的同时「查一下我们上次说的那个事」跟着涨到 0.659，两者仍分不开"
+  },
+  {
+    "message": "查一下 946974 最近3条动态",
+    "memory": true,
+    "tool": true,
+    "capability": "video.dynamics",
+    "note": "同上，语义层 0.630。裸数字对 embedding 几乎没有语义重量"
+  },
+  {
+    "message": "帮我看看UID 29233734 最近发了什么",
+    "memory": true,
+    "tool": true,
+    "capability": "video.dynamics",
+    "note": "不含「动态」二字，Level 0 接不到；靠补的 UID examples 把语义分从 0.696 抬到 0.755 跨过置信线"
+  },
+  {
     "message": "主管，这是？",
     "memory": true,
     "tool": false,
     "note": "线上真实消息。自动派生时拿到 0.443，距 0.45 的旧置信线只差 0.007——旧标定几乎踩线"
+  },
+  {
+    "message": "查一下我们上次说的那个事",
+    "memory": true,
+    "tool": false,
+    "note": "护栏：带「查一下」的记忆类问句。它在 video.dynamics 上得 0.659，比真实的「查一下 946974 最近3条动态」(0.630) 还高——所以不能靠「有工具意图就放低阈值」来救那两条漏判，只能靠字面关键词。keywords 特意写「条动态/的动态」而不是「动态」，这句两个都不含"
+  },
+  {
+    "message": "给我换个动态壁纸",
+    "memory": true,
+    "tool": false,
+    "note": "护栏：含「动态」但不含「条动态/的动态」，Level 0 不该命中 video.dynamics"
   },
   {
     "message": "真的要看尼古喵喵吗😨",

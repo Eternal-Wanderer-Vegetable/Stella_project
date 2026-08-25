@@ -97,6 +97,8 @@ jobs:
       # 不复用 .gitignore：两者语义不同（rsync 的 --exclude-from 不支持 ! 否定模式，
       # 锚定 / 的含义也有差异），且 .gitignore 将来会因开发需要增删——那些改动
       # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
+      # 日志只需 --exclude 'logs'：2026-08-25 起全部运行期日志都落在 logs/
+      # （config 的 LOG_DIR）。此前思考/整合/压缩日志散在项目根目录，要逐个列名。
       - name: 构造发布目录（排除测试与开发文件）
         run: |
           mkdir -p dist/Stella
@@ -132,9 +134,6 @@ jobs:
             --exclude 'consolidation_probe*' \
             --exclude 'consolidation_positive_probe.md' \
             --exclude 'windows_raw.json' \
-            --exclude 'stella_thought_logs.md' \
-            --exclude 'memory_consolidation_log.md' \
-            --exclude 'memory_compressor_log.md' \
             ./ dist/Stella/
           cp release_assets/start.bat release_assets/doctor.bat \
              release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/

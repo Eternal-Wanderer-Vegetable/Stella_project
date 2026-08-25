@@ -281,7 +281,7 @@ detect_mode(消息, 触发方式)                     ← 判定行为模式
 parse_output      (100)  → 解析 thought / action / reply
 bad_phrase_filter  (80)  → 破防语句兜底
 split_lines        (60)  → 拆分为可逐条发送的多行
-log_thought        (40)  → 写 stella_thought_logs.md
+log_thought        (40)  → 写 logs/stella_thought_logs.md
 ```
 
 发送前先把 Bot 自己的台词写入 `group_messages`（`BOT_SELF`）。**必须在发送前**：最后一行走 `finish()` 会抛 `FinishedException`，之后的代码不执行。

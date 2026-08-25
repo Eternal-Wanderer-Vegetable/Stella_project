@@ -26,7 +26,6 @@ import re
 import sqlite3
 import time
 import uuid
-from pathlib import Path
 
 from nonebot import logger
 
@@ -36,9 +35,8 @@ from config import (
     MEMORY_ARCHIVE_INACTIVE_DAYS,
     MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS,
     MEMORY_COMPRESS_LIGHT_THRESHOLD,
-    MEMORY_COMPRESS_LOG_FILENAME,
+    MEMORY_COMPRESS_LOG_PATH,
     MEMORY_DECAY_DAYS,
-    PROJECT_ROOT,
 )
 from memory.schema import create_memories_table
 from memory.text_similarity import is_similar, merge_content
@@ -54,8 +52,8 @@ class MemoryCompressor:
         self._light_threshold = MEMORY_COMPRESS_LIGHT_THRESHOLD
         # 轻量压缩最小间隔（秒）——避免频繁触发
         self._light_cooldown = MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS
-        # 日志文件路径（项目根）
-        self._log_path = Path(PROJECT_ROOT) / MEMORY_COMPRESS_LOG_FILENAME
+        # 日志文件路径（默认 LOG_DIR/memory_compressor_log.md，见 config/settings.py）
+        self._log_path = MEMORY_COMPRESS_LOG_PATH
 
     def _ensure_tables(self) -> None:
         """幂等地创建压缩用表：memories（主记忆表，复用 schema 规范 DDL）与 compressor_stats（压缩统计表）。"""

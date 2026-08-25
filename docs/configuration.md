@@ -39,12 +39,29 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 | `ALLOWED_GROUPS` | 空 | 允许响应的群号，逗号分隔。**留空则不响应任何群** |
 | `SYSTEM_PROMPT_PATH` | `memory/SYSTEM.md` | 系统提示词文件 |
 | `DB_PATH` | `memory/agent_memory.db` | SQLite 数据库 |
-| `THOUGHT_LOG_PATH` | `stella_thought_logs.md` | 思考过程日志 |
 | `EXTENSIONS_DIR` | `extensions/` | 扩展自动加载目录 |
-| `CONSOLIDATION_LOG_PATH` | `memory_consolidation_log.md` | 整合过程日志 |
 | `MEMORY_BENCHMARK_DIR` | `memory/benchmark` | Benchmark 用例目录 |
 
 路径类配置若在 `.env` 中设置，会被解析为绝对路径。
+
+## 日志
+
+**所有运行期日志都落在 `LOG_DIR`（默认 `logs/`）。** 改这一个变量就能把全部日志搬走；单个文件仍可用各自的 `*_PATH` 单独覆盖。目录由写入方按需创建，不必手工建。
+
+| 配置项 | 默认值 | 内容 |
+|---|---|---|
+| `LOG_DIR` | `logs/` | 所有日志的根目录 |
+| `STELLA_JSON_LOG_PATH` | `logs/stella.jsonl` | 结构化日志，给程序读（GUI 的日志面板、`deploy status`） |
+| `THOUGHT_LOG_PATH` | `logs/stella_thought_logs.md` | 思考/决策日志：每轮的完整 prompt、原始输出、路由判定、工具结果 |
+| `CONSOLIDATION_LOG_PATH` | `logs/memory_consolidation_log.md` | 每批记忆整合的运行摘要与 LLM 原文 |
+| `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | 每次记忆压缩的合并/原子化/归档计数 |
+| `BOOT_DIAG_LOG_PATH` | `logs/boot_debug.log` | 启动诊断：插件发现与加载、能力装配、原型预热。**每次启动清空重写** |
+
+同目录下还有 `logs/stella.pid`（`deploy start --detach` 写的进程号，不是日志）。
+
+> **只有 `stella.jsonl` 有轮转与保留策略**（10 MB 轮转、保留 5 份，由 loguru 提供）。三个 Markdown 日志与 `boot_debug.log` 都是无上限追加——`boot_debug.log` 每次启动清空所以不会涨，另外三个会一直长（实测思考日志跑一个月约 3.5 MB）。需要的话自己定期清，或把 `LOG_DIR` 指到有清理策略的位置。
+
+> 2026-08-25 之前这些文件散在项目根目录（`stella_thought_logs.md` 等），排查时要在一堆源码里翻，每加一个日志还要多一条 `.gitignore`。迁移后 `.gitignore` 只需 `logs/` 一条。旧的 `MEMORY_COMPRESS_LOG_FILENAME` 已废弃（它是**文件名**不是路径，只能落在项目根），改用 `MEMORY_COMPRESS_LOG_PATH`；旧键留在 `.env` 里不报错但完全不生效，`python -m deploy doctor` 会提示。
 
 ## 群组共享空间
 
@@ -472,7 +489,7 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS` | `3600` | 轻量压缩冷却（秒） |
 | `MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD` | `0.3` | 低价值归档的重要度阈值 |
 | `MEMORY_ARCHIVE_INACTIVE_DAYS` | `180` | 低价值归档的未访问天数 |
-| `MEMORY_COMPRESS_LOG_FILENAME` | `memory_compressor_log.md` | 压缩日志 |
+| `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | 压缩日志（见[日志](#日志)） |
 | `MEMORY_RECENCY_HALF_LIFE_DAYS` | `120.0` | Recency 兜底半衰期（天） |
 
 `MEMORY_DECAY_DAYS` 是代码内的字典（不走 `.env`），定义各类型记忆的生命周期：

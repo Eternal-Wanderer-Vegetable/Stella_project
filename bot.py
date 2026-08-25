@@ -36,14 +36,18 @@ nonebot.load_from_toml("pyproject.toml")
 # 诊断代码自己绝不能让 Bot 起不来。
 import contextlib
 import logging as _py_logging
-from pathlib import Path
 
 from astrbot_compat import initialize_plugins, load_all_plugins, terminate_plugins
 
 _diag_logger = _py_logging.getLogger("astrbot_compat.boot")
 _diag_path = None
 with contextlib.suppress(Exception):
-    _diag_path = Path(__file__).resolve().parent / "boot_debug.log"
+    # 路径来自配置（默认 LOG_DIR/boot_debug.log）。config 在本行之前已经被
+    # core.logging_sink 间接导入过，这里读它是安全的。
+    from config.settings import BOOT_DIAG_LOG_PATH
+
+    _diag_path = BOOT_DIAG_LOG_PATH
+    _diag_path.parent.mkdir(parents=True, exist_ok=True)
     _diag_path.write_text("", encoding="utf-8")
 
 

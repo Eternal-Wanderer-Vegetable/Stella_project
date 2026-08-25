@@ -122,8 +122,24 @@ PROJECT_ROOT = _PROJECT_ROOT
 # 如需自定义，在 .env 里设置同名环境变量（绝对路径）。
 SYSTEM_PROMPT_PATH = _env_path("SYSTEM_PROMPT_PATH", PROJECT_ROOT / "system_prompts" / "default.md")
 DB_PATH = _env_path("DB_PATH", PROJECT_ROOT / "memory" / "agent_memory.db")
-THOUGHT_LOG_PATH = _env_path("THOUGHT_LOG_PATH", PROJECT_ROOT / "stella_thought_logs.md")
 EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
+
+# ---------- 日志目录 ----------
+# **所有运行期日志的唯一落点。** 改这一个就能把全部日志搬走（含结构化 JSON 日志、
+# 思考日志、整合日志、压缩日志、启动诊断），单个文件仍可用各自的 *_PATH 单独覆盖。
+#
+# 2026-08-25 之前这些文件散在项目根目录（stella_thought_logs.md /
+# memory_consolidation_log.md / memory_compressor_log.md / boot_debug.log），
+# 排查时要在根目录一堆源码里翻，而且每加一个日志就多一条 .gitignore。
+#
+# 写日志的代码**必须自己 mkdir**：LOG_DIR 可能被指到不存在的路径，而且日志写入
+# 失败不该影响主链路，所以不能依赖「启动时有人建过这个目录」。
+LOG_DIR = _env_path("LOG_DIR", PROJECT_ROOT / "logs")
+# 人读的思考/决策日志（每轮的完整 prompt、原始输出、路由判定、工具结果）
+THOUGHT_LOG_PATH = _env_path("THOUGHT_LOG_PATH", LOG_DIR / "stella_thought_logs.md")
+# 启动期诊断（插件发现/加载结果、能力装配、原型预热）。每次启动清空重写——
+# 它回答的是「这一次启动为什么没加载上插件」，保留历史反而要翻。
+BOOT_DIAG_LOG_PATH = _env_path("BOOT_DIAG_LOG_PATH", LOG_DIR / "boot_debug.log")
 
 # ---------- QQ 群聊 ----------
 # 逗号分隔的群号字符串转为 int 集合；过滤空片段避免尾逗号导致 int('') 报错。
@@ -400,8 +416,8 @@ CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_FORCE_BATCH
 CONSOLIDATION_OVERLAP = _env_int("CONSOLIDATION_OVERLAP", 15)
 # 整合最大生成 token 数
 CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 1200)
-# 整合日志文件路径（可视化记录每次整合运行详情，可通过 .env 覆盖）
-CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", PROJECT_ROOT / "memory_consolidation_log.md")
+# 整合日志文件路径（可视化记录每次整合运行详情，可通过 .env 覆盖）。默认落在 LOG_DIR。
+CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", LOG_DIR / "memory_consolidation_log.md")
 
 # ---------- 记忆候选提取（两阶段整合的第二阶段） ----------
 # 整合拆两步：阶段1（E4B）出短期摘要+用户画像+自我披露判断；阶段2（本段配置的
@@ -556,8 +572,12 @@ MEMORY_COMPRESS_LIGHT_COOLDOWN_SECONDS = _env_int("MEMORY_COMPRESS_LIGHT_COOLDOW
 MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD = _env_float("MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD", 0.3)
 # 低价值记忆归档条件：距离上次访问超过多少天
 MEMORY_ARCHIVE_INACTIVE_DAYS = _env_int("MEMORY_ARCHIVE_INACTIVE_DAYS", 180)
-# 压缩器运行日志文件名（保存在项目根目录）
-MEMORY_COMPRESS_LOG_FILENAME = _env("MEMORY_COMPRESS_LOG_FILENAME", "memory_compressor_log.md")
+# 压缩器运行日志路径。默认落在 LOG_DIR。
+# 2026-08-25 之前这一项叫 MEMORY_COMPRESS_LOG_FILENAME，是个**文件名**而不是路径
+# （由 memory/compressor.py 拼到 PROJECT_ROOT 上），因此无法指到别处、也不像其他
+# 日志项那样支持绝对路径。统一成 _env_path 后写法与 THOUGHT_LOG_PATH 一致；
+# 旧键名已登记在 deploy/probe.py 的 _DEPRECATED_KEYS 里，`deploy doctor` 会提示改名。
+MEMORY_COMPRESS_LOG_PATH = _env_path("MEMORY_COMPRESS_LOG_PATH", LOG_DIR / "memory_compressor_log.md")
 
 # ---------- 消息表定期清理 ----------
 # 是否启用 group_messages 定期清理（每天定时清理，保留最近 N 条）
@@ -613,7 +633,7 @@ FALLBACK_REPLY = "......？"
 # ---------- 结构化日志（供 GUI / 前端消费） ----------
 # 与人类可读日志并存：这份是给程序读的，GUI 靠它做级别过滤与错误复制。
 STELLA_JSON_LOG_ENABLED = _env("STELLA_JSON_LOG_ENABLED", "true").lower() in ("true", "1", "yes")
-STELLA_JSON_LOG_PATH = _env_path("STELLA_JSON_LOG_PATH", PROJECT_ROOT / "logs" / "stella.jsonl")
+STELLA_JSON_LOG_PATH = _env_path("STELLA_JSON_LOG_PATH", LOG_DIR / "stella.jsonl")
 # 单条消息的截断长度：prompt 全文动辄数千字符，进结构化日志只会让文件暴涨
 STELLA_JSON_LOG_MAX_MESSAGE = _env_int("STELLA_JSON_LOG_MAX_MESSAGE", 500)
 

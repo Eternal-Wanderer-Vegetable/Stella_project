@@ -151,6 +151,9 @@ async def log_thought(ctx: ChatContext) -> ChatContext:
 ---
 """
     try:
+        # LOG_DIR 可能还不存在（默认 logs/ 被 .gitignore，新克隆里没有这个目录），
+        # 而日志写入失败不该影响回复，所以由写入方自己建目录而不是依赖启动期
+        THOUGHT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         if not THOUGHT_LOG_PATH.exists():
             THOUGHT_LOG_PATH.write_text("# 🤖 思考过程与决策日志\n\n", encoding="utf-8")
         with THOUGHT_LOG_PATH.open("a", encoding="utf-8") as f:

@@ -17,15 +17,20 @@ FlexiWeb_Stream_Scraper/
 .coverage-*
 
 # Runtime data & logs
-stella_thought_logs.md
-memory_consolidation_log.md
+# 所有运行期日志统一落在 logs/（见 config/settings.py 的 LOG_DIR），由下面的 logs/ 一条覆盖：
+#   logs/stella.jsonl              结构化日志（GUI 消费，10MB 轮转、保留 5 份）
+#   logs/stella_thought_logs.md    思考/决策日志
+#   logs/memory_consolidation_log.md 整合日志
+#   logs/memory_compressor_log.md  压缩日志
+#   logs/boot_debug.log            启动诊断
+#   logs/stella.pid                进程 PID（不是日志，但同目录）
+# 2026-08-25 之前这些散在项目根目录，各占一条 ignore；迁移后不再需要逐个列。
+logs/
 memory/agent_memory.db
 memory/stella_memory_backup.db
 memory/.last_message_cleanup
 memory/agent_memory.db-journal
-memory_compressor_log.md
 test_compressor_trigger.py
-napcat_launch.log
 
 # Benchmark 采样输出（含真实群消息数据，禁止入库）
 windows_raw.json
@@ -54,8 +59,7 @@ sanitize_map.json
 deploy.answers.toml
 .env.bak
 
-# 结构化 JSON 日志（GUI 消费）与进程 PID 文件
-logs/
+# 结构化 JSON 日志（GUI 消费）与进程 PID 文件 —— 已合并到顶部的 logs/ 一条
 
 # 停止请求哨兵（deploy stop 写入，Bot 启动时清除）及其 .tmp 临时名
 .stella-stop-request*
@@ -79,6 +83,5 @@ runtime/
 !/data/plugins/.gitkeep
 /data/config/
 /data/plugin_data/
-/boot_debug.log
 
 start_claude_command.txt

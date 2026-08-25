@@ -4,7 +4,7 @@
 """结构化 JSON 日志（供 GUI / Web 前端消费）。
 
 这份 JSON 日志是**给程序读的**（GUI / 将来的 Web 前端），不是给人读的。
-人看 ``stella_thought_logs.md`` 与终端输出。
+人看 ``logs/stella_thought_logs.md`` 与终端输出。
 
 为什么不让 GUI 直接捕获 stdout：loguru 的彩色转义码需要剥离，多行异常栈
 需要重组，按级别过滤需要解析文本格式——这些在 GUI 侧做既脆弱又要跨语言

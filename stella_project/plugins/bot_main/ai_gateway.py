@@ -332,20 +332,19 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
 
 
 async def is_plugin_trigger(event: MessageEvent) -> bool:
-    """AstrBot 插件的触发规则——刻意比 is_chat_trigger 宽。
+    """AstrBot 插件的触发规则——实现在 ``astrbot_compat.pipeline.should_dispatch``。
 
-    上游 AstrBot 对**每一条**消息都跑一遍插件 filter，是否唤醒由 filter 自己决定：
-    @filter.command 受唤醒前缀（默认 "/"）与 @ 约束，而 @filter.regex /
-    @filter.event_message_type 明确不受约束。若在这里就要求 is_tome()，
-    正则监听、全量监听、以及群里直接打 "/xxx" 的标准用法会全部失效。
-    实际的唤醒判定在 astrbot_compat.pipeline.collect_handlers 内完成。
+    判定逻辑放在兼容层里：「哪些平台事件该进插件管道」是兼容层的语义（它要对齐上游
+    ``WakingCheckStage``），而这里只负责把 Stella 侧的两项配置传进去。这样那条规则
+    也能被单测覆盖——ai_gateway 在测试里 import 不进来（import 期就 ``get_driver()``）。
     """
-    if isinstance(event, GroupMessageEvent):
-        if event.group_id not in ALLOWED_GROUPS:
-            return False
-    elif not ASTRBOT_COMPAT_ALLOW_PRIVATE:
-        return False
-    return len(event.get_plaintext().strip()) > 0
+    from astrbot_compat.pipeline import should_dispatch
+
+    return should_dispatch(
+        event,
+        allowed_groups=ALLOWED_GROUPS,
+        allow_private=ASTRBOT_COMPAT_ALLOW_PRIVATE,
+    )
 
 
 # AstrBot 插件入口（priority=2）：命中则不再走 Stella LLM（priority=3）。

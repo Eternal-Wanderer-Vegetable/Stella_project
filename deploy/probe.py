@@ -55,6 +55,10 @@ _DEPRECATED_KEYS = frozenset(
         "NAPCAT_QQ_PASSWORD_MD5",
         "NAPCAT_LAUNCH_LOG_PATH",
         "NAPCAT_SHOW_WINDOW",
+        # 2026-08-25 日志统一到 LOG_DIR 时改名：原来是「文件名」（拼到 PROJECT_ROOT 上），
+        # 现在是完整路径 MEMORY_COMPRESS_LOG_PATH。旧键仍留在 .env 里不会报错，
+        # 只是完全不生效——必须提示，否则用户以为自己改了日志位置。
+        "MEMORY_COMPRESS_LOG_FILENAME",
     }
 )
 # 已废弃的 .env 键：前缀匹配

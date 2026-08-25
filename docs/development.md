@@ -473,11 +473,14 @@ else:
 
 ## 排查问题
 
+**所有运行期日志都在 `logs/`**（由 `LOG_DIR` 决定，见[配置参考](configuration.md#日志)）。排查基本上就是在这个目录里翻。
+
 | 现象 | 查看 |
 |---|---|
-| 回复内容不对 | `stella_thought_logs.md`（完整 prompt / 原始输出 / 内部思考） |
-| 记忆没生成 | `memory_consolidation_log.md`（每批整合的原始输出与候选数） |
-| 记忆被误删 | `memory_compressor_log.md` + `compressor_stats` 表 |
+| 回复内容不对 | `logs/stella_thought_logs.md`（完整 prompt / 原始输出 / 内部思考） |
+| 插件没加载 / 能力没注册 | `logs/boot_debug.log`（每次启动清空重写，只反映最近一次启动） |
+| 记忆没生成 | `logs/memory_consolidation_log.md`（每批整合的原始输出与候选数） |
+| 记忆被误删 | `logs/memory_compressor_log.md` + `compressor_stats` 表 |
 | 检索选错记忆 | `memory_traces` 表（候选 / 过滤 / 最终 / 拒绝），或 `python -m memory.benchmark --verbose` |
 | 主动发言异常 | 日志里的 `🎯 [主动@]` / `🔇 未回应`；`proactive_state` 表 |
 | 链路掉线 / 收不到消息 | 日志里的 `[LinkMonitor]` 告警（含排查步骤）；NapCatQQ Desktop 日志确认账号是否掉线 |

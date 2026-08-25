@@ -20,11 +20,21 @@ from memory.compressor import MemoryCompressor
 
 def _patch_paths(monkeypatch, tmp_path: Path, db_path: Path):
     monkeypatch.setattr(compressor, "DB_PATH", db_path)
+    # 日志路径必须也重定向：__init__ 里 self._log_path = MEMORY_COMPRESS_LOG_PATH
+    # 读的是模块全局，不重定向的话用例会往仓库真实的 logs/ 里追加
+    # （2026-08-25 发现：跑一次测试就会在 logs/memory_compressor_log.md 留下
+    # 「周度压缩/轻量压缩（test）」四条记录）。
+    monkeypatch.setattr(compressor, "MEMORY_COMPRESS_LOG_PATH", tmp_path / "compressor_log.md")
+
     class _Compressor(MemoryCompressor):
         def _append_log(self, text: str) -> None:
             return None
+
     monkeypatch.setattr(compressor, "MemoryCompressor", _Compressor)
-    monkeypatch.setattr(compressor.MemoryCompressor, "_append_log", lambda self, text: None)
+    # 必须打在**本模块 import 进来的那个类**上：用例里的 `MemoryCompressor()` 绑定的是
+    # 顶部 import 的原类，而不是上面刚被替换的模块属性；打在 compressor.MemoryCompressor
+    # 上只会命中 _Compressor 子类，原类的 _append_log 照样会真写文件。
+    monkeypatch.setattr(MemoryCompressor, "_append_log", lambda self, text: None)
 
 
 def _create_db(db_path: Path) -> sqlite3.Connection:

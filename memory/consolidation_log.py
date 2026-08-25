@@ -3,7 +3,8 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """整合日志：记录每次记忆整合的运行摘要与 LLM 调用详情，便于可视化管理。
 
-日志文件路径由 CONSOLIDATION_LOG_PATH 配置，默认项目根目录 memory_consolidation_log.md。
+日志文件路径由 CONSOLIDATION_LOG_PATH 配置，默认 LOG_DIR（`logs/`）下的
+memory_consolidation_log.md。
 """
 from nonebot import logger
 
@@ -19,6 +20,8 @@ def append_consolidation_log(entry: str) -> None:
     """
     try:
         log_path = CONSOLIDATION_LOG_PATH
+        # LOG_DIR 默认被 .gitignore，新克隆里不存在；由写入方自己建
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         if not log_path.exists():
             log_path.write_text("# 🤖 记忆整合日志\n\n", encoding="utf-8")
         with log_path.open("a", encoding="utf-8") as f:

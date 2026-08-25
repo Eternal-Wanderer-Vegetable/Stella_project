@@ -32,6 +32,49 @@ from .registry import EventType, StarHandlerMetadata, star_handlers_registry, st
 logger = logging.getLogger("astrbot_compat.pipeline")
 
 
+def should_dispatch(
+    event: Any,
+    *,
+    allowed_groups: Any = (),
+    allow_private: bool = False,
+) -> bool:
+    """这条平台事件该不该进插件管道。
+
+    刻意比「Stella 要不要回复」宽得多：上游 AstrBot 对**每一条**消息都跑一遍
+    handler 的 filter，是否唤醒由 filter 自己决定（``@filter.command`` 受唤醒前缀与
+    @ 约束，``@filter.regex`` / ``@filter.event_message_type`` 明确不受约束）。
+    在这里提前收紧，等于让那两类监听器永久失效。
+
+    三条判断，都有实测依据：
+
+    1. **自身回显直接挡掉。** 插件可以在回复里带链接/卡片，让它再被自己的正则或
+       卡片 handler 解析一遍就会自激。
+    2. **群白名单**照 Stella 的配置；私聊由 ``allow_private`` 决定。
+    3. **门槛是「消息里有段」而不是「有纯文本」**（2026-08-25 bug_report#1）：
+       手机端分享的 QQ 小程序卡片只有一个 json 段，``get_plaintext()`` 返回空串。
+       按纯文本判的话整条消息被挡在管道之外，于是
+       ``@event_message_type(EventMessageType.ALL)`` 这类**专门为非文本消息存在**的
+       handler 永远收不到事件——实测分享 B 站小程序卡片时 plugin_handler 一次都没跑。
+
+    参数:
+        event: NoneBot 事件（鸭子类型：user_id / self_id / get_message，群事件带 group_id）；
+        allowed_groups: 已启用的群号集合。群事件不在其中则拒；
+        allow_private: 是否允许私聊进入插件管道。
+    """
+    if getattr(event, "user_id", None) == getattr(event, "self_id", object()):
+        return False
+    group_id = getattr(event, "group_id", None)
+    if group_id is not None:
+        if group_id not in (allowed_groups or ()):
+            return False
+    elif not allow_private:
+        return False
+    try:
+        return len(event.get_message()) > 0
+    except Exception:
+        return False
+
+
 def _plugin_name(handler_md: StarHandlerMetadata) -> str:
     meta = star_map.get(handler_md.handler_module_path)
     if meta is not None and meta.name:

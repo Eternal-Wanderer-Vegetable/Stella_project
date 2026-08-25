@@ -30,12 +30,15 @@ from pathlib import Path
 import httpx
 from dotenv import dotenv_values
 
-from config import PROJECT_ROOT, SHUTDOWN_GRACE_SECONDS
+from config import LOG_DIR, PROJECT_ROOT, SHUTDOWN_GRACE_SECONDS, STELLA_JSON_LOG_PATH
 from core.stop_signal import clear_stop_request, request_stop
 
-PID_FILE = PROJECT_ROOT / "logs" / "stella.pid"
+PID_FILE = LOG_DIR / "stella.pid"
 BOT_ENTRY = PROJECT_ROOT / "bot.py"
-LOG_FILE = PROJECT_ROOT / "logs" / "stella.jsonl"
+# 必须读配置而不是自己拼 logs/stella.jsonl：Bot 侧的 sink 由 STELLA_JSON_LOG_PATH
+# 决定，两边各拼一份的话，用户一改配置 `deploy status` 就开始读一个空文件
+# （而它只会显示「暂无日志」，不会报错）。
+LOG_FILE = STELLA_JSON_LOG_PATH
 
 # 停止等待缓冲：必须严格大于 Bot 侧 SHUTDOWN_GRACE_SECONDS 里真正在跑的时间。
 # 与 grace 成比例而非固定值——grace 很小（测试/快速关闭）时不该白白多等，
