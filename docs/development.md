@@ -16,7 +16,7 @@ pip install -r requirements-dev.txt
 ## 部署工具
 
 `deploy/` 是「检查逻辑全在 Python 侧、GUI 只是渲染器」的部署工具：doctor 输出结构化 JSON，
-桌面安装器（Tauri）调用它并渲染，换 GUI 框架不用重写逻辑。五个子命令：
+桌面安装器（Tauri）调用它并渲染，换 GUI 框架不用重写逻辑。六个子命令：
 
 | 命令 | 用途 |
 |---|---|
@@ -25,6 +25,7 @@ pip install -r requirements-dev.txt
 | `python -m deploy start [--force] [--detach]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py`；`--detach` 后台启动并写 PID 到 `logs/stella.pid`（GUI 用） |
 | `python -m deploy status [--json]` | 读 PID 文件报进程是否存活，并从 JSON 日志尾部推断最近状态（`link_status` 在 Bot 进程内，外部读不到） |
 | `python -m deploy stop` | 优雅停止：写停止哨兵 → 轮询等待 → 降级信号 → 硬杀兜底（见下）；Tauri 安装器与 `bot.py` 位于同一发布目录 |
+| `python -m deploy config-schema --json` | 输出 `settings.py` 的配置 schema（分组、默认值、注释），GUI 的「高级选项」表单据此生成 |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
@@ -139,6 +140,13 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_deploy_process.py` | PID 文件读写、进程存活判断、stop 边界（用短命子进程） |
 | `test_logging_sink.py` | 结构化 JSON 日志：每行合法 JSON、字段完整、超长消息截断 |
 | `test_graceful_shutdown.py` | 优雅停止：等收尾、超时放弃、回应检测任务被取消 |
+| `test_log_paths.py` | 日志落点统一：全部在 `LOG_DIR` 下、读写两侧共用同一配置、废弃键仍被 doctor 点名 |
+| `test_deploy_probe.py` | doctor 采集层：探测失败一律不抛异常、渲染后端探测 |
+| `test_deploy_cli.py` | `python -m deploy` 各子命令的出参结构（GUI 的数据契约） |
+| `test_env_schema.py` | `settings.py` → GUI 配置表单 schema 的分组与默认值 |
+| `test_status_api.py` | 本地状态接口：回环判断与 payload 组装 |
+| `test_stop_signal.py` | 停止哨兵的写入/清除与残留清理 |
+| `test_proactive_gate.py` | 主动发言准入闸门六道条件与原因字符串 |
 
 能力层（`tests/capability/`）：
 
@@ -155,6 +163,23 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_comes_executor.py` | **上下文隔离**（只有命中能力的工具进请求）、status 判定、无参直调、健康度记账 |
 | `test_astrbot_adapter.py` | 自动派生、显式声明优先、bootstrap 顺序不可交换 |
 | `test_capability_hooks.py` | 记忆门控、两条分支并行且互不拖累、绝不抛异常 |
+
+AstrBot 兼容层（`tests/astrbot_compat/`）：
+
+| 文件 | 覆盖内容 |
+|---|---|
+| `test_loader.py` | 插件发现与加载、metadata 解析、坏插件只跳过自己 |
+| `test_shim_modules.py` / `test_shim_llm.py` | 伪造的 `astrbot.*` 模块树可 import，未实现处抛 NotSupported |
+| `test_filters.py` | `@command` / `@regex` / 权限 / 唤醒前缀的判定 |
+| `test_events.py` | OneBot 事件 → AstrMessageEvent、唤醒与管理员判定 |
+| `test_components.py` | 消息段双向转换（含 `Json` 卡片、合并转发） |
+| `test_dispatch.py` | 唤醒模型、handler 执行、**`should_dispatch`**（卡片无纯文本也要进管道、挡自身回显） |
+| `test_render.py` | HTML → 图片：options 映射、产物目录上限、渠道回退、按需安装只跑一次且有冷却、失败一律返回 None |
+| `test_base.py` | Star 基类、KV 存储、渲染入口不可用时返回空串而非抛异常 |
+| `test_llm_provider.py` / `test_llm_tools.py` / `test_llm_hooks.py` / `test_llm_budget.py` | 插件侧 LLM：Provider、函数工具循环、生命周期钩子、预算裁剪 |
+| `test_request_llm.py` / `test_conversation.py` / `test_config.py` | `event.request_llm()`、会话历史、插件配置 schema |
+
+> **渲染测试全程给浏览器打桩**（`_FakeBrowser`），不启真 Chromium——CI 里没有内核，而要测的是编排与降级，不是 Chromium 的截图质量。真实出图靠人工验收，见 `design_docs/test_checklist/`。
 
 ### 写测试的两个约定
 

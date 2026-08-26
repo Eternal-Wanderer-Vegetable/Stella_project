@@ -21,6 +21,8 @@ SQLite（memory/agent_memory.db）
 
 能力层与记忆层是**并列**的两条分支，都由编排层的同一个前置钩子激活，彼此之间只通过 `ChatContext` 通信、不互相调用。
 
+`astrbot_compat/*` 是横在旁边的第六块：它把 AstrBot 插件生态接进来，既供能力层执行工具（Comes → `llm_tools`），也自己走一条独立的分发通路（`plugin_handler`）响应插件指令。它**不参与**记忆与人格，见下文[兼容层](#astrbot-插件兼容层)。
+
 > 存储层有**两层归属维度**：`group_id` 是真实 QQ 群，`group_shared_space` 是群组共享空间。前者承载「当下这场对话的状态」，后者承载「对人的长期认知」。详见下文「主要数据表」。
 
 ## 目录结构
@@ -102,9 +104,42 @@ Stella_project/
 │   ├── __init__.py                 # 扩展加载器
 │   └── link_monitor/               # OneBot 链路监测（心跳 + 主动探活，只告警）
 │
+├── astrbot_compat/                 # AstrBot 插件兼容层（见下文）
+│   ├── shim.py                     # 伪造 astrbot.* 模块树，让插件 import 得通
+│   ├── loader.py                   # 发现并加载 data/plugins/* 下的插件
+│   ├── base.py                     # Star 基类 / StarTools（含 html_render 入口）
+│   ├── registry.py                 # 插件与 handler 注册表（模块级单例）
+│   ├── filters.py                  # @command / @regex / @event_message_type 等装饰器
+│   ├── events.py                   # OneBot 事件 → AstrMessageEvent，含唤醒判定
+│   ├── components.py               # 消息段（Plain/Image/Json/Node…）双向转换
+│   ├── pipeline.py                 # should_dispatch + 唤醒检查 + handler 执行
+│   ├── render.py                   # HTML → 图片（本地 Chromium，见下文）
+│   └── llm/                        # 插件侧 LLM：Provider / ToolSet / 工具循环
+│
+├── deploy/                         # 部署 CLI（python -m deploy ...）
+│   ├── probe.py                    # doctor 的采集层（只探测，不判断）
+│   ├── checks.py                   # doctor 的判断层（纯函数，每项一个）
+│   ├── process.py                  # start --detach / status / stop
+│   ├── init.py                     # 配置向导
+│   └── env_schema.py               # settings.py → GUI 配置表单 schema
+│
 ├── stella_project/plugins/bot_main/
 │   ├── ai_gateway.py               # QQ 事件监听、Pipeline 装配、主动发言调度
+│   ├── status_api.py               # 本地状态接口（回环，供 deploy status / GUI）
 │   └── config.py                   # 插件配置（pydantic）
+│
+├── data/                           # 运行期数据（全部 gitignore）
+│   ├── plugins/                    # 第三方 AstrBot 插件
+│   ├── plugin_data/                # 插件自己的 KV / 数据目录
+│   └── render_cache/               # HTML 渲染产物（要发出去的图片，不是日志）
+│
+├── logs/                           # 全部运行期日志（LOG_DIR，gitignore）
+│   ├── stella.jsonl                # 结构化日志（GUI 消费，10MB 轮转、留 5 份）
+│   ├── stella_thought_logs.md      # 思考/决策日志
+│   ├── memory_consolidation_log.md # 整合日志
+│   ├── memory_compressor_log.md    # 压缩日志
+│   ├── boot_debug.log              # 启动诊断（每次启动清空重写）
+│   └── stella.pid                  # 进程号（不是日志，但同目录）
 │
 ├── scripts/                        # 开发期工具（不进 CI）
 │   ├── probe_consolidation.py      # 整合探针 / 正例回归基准
@@ -112,9 +147,10 @@ Stella_project/
 │   ├── probe_embedding.py          # embedding 服务探针
 │   └── build_embedding_fixture.py  # 构建 benchmark 向量 fixture
 │
+├── stella-installer/               # 桌面安装器（Tauri 2 + Rust，原生 HTML/JS）
 ├── tests/                          # pytest 测试
 ├── docs/                           # 使用文档
-├── design_docs/                    # 设计过程记录（规范/检查点/缺陷报告/日志）
+├── design_docs/                    # 设计过程记录（规范/检查点/缺陷报告/日志/测试清单）
 └── _deprecated/                    # 废弃代码与旧数据库归档（gitignore）
 ```
 
@@ -158,9 +194,12 @@ Stella_project/
 | @ 回复 | 群在白名单 + 被 @ + 有文本 | `reply` | `""` |
 | 主动 @ | 定时检查命中，选中活跃用户 | `reply` | `proactive_at` |
 | 主动插话 | 定时检查命中，概率曲线通过 | `proactive` | `proactive_join` |
+| 插件分发 | 群在白名单 + 非自身回显 + 消息非空 | — | — |
 | 运行时开关 | 管理员 @ 机器人 + 命中开关关键词 | — | — |
 
-三条路径共用同一个 Pipeline，靠 `ChatContext` 的字段区分行为。每群一把 `asyncio.Lock`，保证同一群同时只跑一次推理。
+三条对话路径共用同一个 Pipeline，靠 `ChatContext` 的字段区分行为。每群一把 `asyncio.Lock`，保证同一群同时只跑一次推理。
+
+插件分发的门槛刻意比 @ 回复宽得多（判定在 `astrbot_compat.pipeline.should_dispatch`）：上游 AstrBot 对每一条消息都跑一遍插件 filter，是否唤醒由 filter 自己决定。门槛是「消息里有段」而**不是**「有纯文本」——手机端分享的小程序卡片只有一个 `json` 段，按纯文本判会把整条消息挡在插件层外，于是 `@event_message_type(ALL)` 这类专为非文本消息存在的 handler 永远收不到事件（2026-08-25 实测）。
 
 主动 @ 与主动插话**互斥**：定时任务先尝试主动 @，命中即跳过插话，同一轮只发一次言。
 
@@ -176,15 +215,18 @@ Stella_project/
 
 **@ 回复不经过 gate。** 睡眠或静音期间被 @ 照常回复。
 
-> 三个监听器的优先级关系（数字越小越先执行）：
+> 四个监听器的优先级关系（数字越小越先执行）：
 >
 > | 监听器 | priority | block | 职责 |
 > |---|---|---|---|
 > | `group_silent_listener` | 0 | 否 | 落库（必须最先，见上文） |
 > | `toggle_handler` | 1 | 是 | 运行时开关命令 |
-> | `chat_handler` | 2 | 是 | @ 回复主流程 |
+> | `plugin_handler` | 2 | 否 | AstrBot 插件分发（见[兼容层](#astrbot-插件兼容层)） |
+> | `chat_handler` | 3 | 是 | @ 回复主流程 |
 >
 > `toggle_handler` 必须早于 `chat_handler`，否则「安静」这类命令会被当成普通对话交给 LLM。
+>
+> `plugin_handler` 用 `block=False`：没命中任何插件时事件要能继续落到 `chat_handler`。命中时它把 `message_id` 记进 `_plugin_handled_msgs`，由 `chat_handler` 自己跳过——用 block 会连带把「插件只是顺手记了点东西、并没有回复」的情况也拦掉。
 
 ### 3. 上下文构建（pre hooks）
 
@@ -380,6 +422,39 @@ python -m memory.schema --backup    # 仅备份
 > **列名变更是例外**。SQLite 无法 ALTER 主键或重命名列，v7（画像分群）与 v8（记忆表改按空间归属）都选择**不写一次性迁移代码，而是归档旧库让程序重建**——一次性迁移代码只用一次却要长期维护，且当时的库数据量很小。`_migrate` 里保留了旧库检测：发现记忆表仍有 `group_id` 列时输出 error 提示归档重建。
 >
 > 归档旧库时**连 `stella_memory_backup.db` 一起移走**，否则 `backup_database()` 见备份已存在即跳过，会留下「看起来有备份、实际备份错了」的状态。
+
+## AstrBot 插件兼容层
+
+`astrbot_compat/` 让 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的插件在 Stella 里**不改源码**直接跑。做法是 `shim.py` 伪造出一整棵 `astrbot.*` 模块树，把插件的 `import` 指向兼容层的真实现。插件放进 `data/plugins/` 即被发现并加载。
+
+它有两条独立的通路，别混起来看：
+
+| 通路 | 入口 | 用途 |
+|---|---|---|
+| **指令分发** | `plugin_handler`（priority 2） | `@command` / `@regex` / `@event_message_type` 这类插件自己响应的场景 |
+| **工具执行** | Comes → `llm_tools` | 插件用 `@llm_tool` 注册的函数工具，由能力层按需调用 |
+
+分发通路的唤醒判定照搬上游 `WakingCheckStage`：对每一条消息都跑一遍 handler 的 filter，是否唤醒由 filter 自己决定。是否进管道由 `should_dispatch()` 把关（群白名单 + 挡自身回显 + 消息非空）。
+
+**兼容层不参与人格与记忆。** 插件拿不到 Stella 的系统提示词与记忆内容；反过来插件工具的结果经 Comes 压缩成一句 `summary` 才进 Stella 的 prompt。理由与能力层的上下文隔离同源，见 [能力系统](capability-system.md)。
+
+未实现的上游能力一律抛 `StellaCompatNotSupported`（而不是静默返回假值），插件报错时能直接看出缺的是哪个接口。
+
+### HTML → 图片渲染
+
+大量插件把结果卡片做成 Jinja2 模板 + CSS，靠 `Star.html_render` 出图。实现在 `astrbot_compat/render.py`，后端是**本地 Chromium**（playwright）。
+
+**为什么不用远程服务**：上游 AstrBot 默认把 HTML 发到远程 t2i 服务。模板里填的是群友昵称、动态正文、头像 URL，属于聊天内容；本项目其他环节（对话模型、embedding、记忆整合）全部在本地，渲染没有理由成为唯一出网的一环。
+
+**为什么必须是浏览器内核**：插件模板普遍用 flexbox、线性渐变、border-radius、box-shadow（实测一个插件的三个模板各 350~460 行 CSS）。weasyprint 之类缺完整 flex 支持，出图会错版——而错版比降级更糟，因为它看起来「成功了」。
+
+依赖分两层：`playwright` 的 pip 包进 `requirements.txt`（几 MB）；浏览器内核约 270MB，**首次真正需要渲染时**才后台下载，期间插件照常降级为纯文本，装好后自动生效、不用重启。只装 headless shell 是刻意的——永远只截图，不需要带界面的浏览器。
+
+渲染不可用时返回**空串而不抛异常**：插件普遍在 `if img_path:` 上分支降级（上游的远程服务也会挂），抛异常只会被它的 `except` 吞掉再重试。
+
+浏览器单实例复用（冷启一次 1~2 秒，而这是主链路上的同步等待），`bot.py` 注册了 `on_shutdown` 关闭它——playwright 起的是独立的 node + chromium 子进程，Python 退出不会带走它们。
+
+配置项见 [配置参考](configuration.md#html--图片渲染插件卡片)。
 
 ## 本地状态接口
 

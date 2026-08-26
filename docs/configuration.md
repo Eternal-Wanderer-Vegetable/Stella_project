@@ -37,7 +37,7 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `ALLOWED_GROUPS` | 空 | 允许响应的群号，逗号分隔。**留空则不响应任何群** |
-| `SYSTEM_PROMPT_PATH` | `memory/SYSTEM.md` | 系统提示词文件 |
+| `SYSTEM_PROMPT_PATH` | `system_prompts/default.md` | 系统提示词文件（人格）。多空间可各配一份，见[群组共享空间](#群组共享空间) |
 | `DB_PATH` | `memory/agent_memory.db` | SQLite 数据库 |
 | `EXTENSIONS_DIR` | `extensions/` | 扩展自动加载目录 |
 | `MEMORY_BENCHMARK_DIR` | `memory/benchmark` | Benchmark 用例目录 |

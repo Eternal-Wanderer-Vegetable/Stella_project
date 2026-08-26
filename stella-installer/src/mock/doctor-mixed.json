@@ -2,10 +2,10 @@
   "version": 1,
   "summary": {
     "ok": 19,
-    "warn": 3,
+    "warn": 4,
     "error": 2,
     "blocking": true,
-    "total": 24
+    "total": 25
   },
   "items": [
     {
@@ -42,6 +42,13 @@
       "title": "没有任何 AT_MENTION 消息记录",
       "detail": "BOT_SELF=5 条但 AT_MENTION=0 条。Bot 在说话却没有任何「用户对它说」的记录，@ 消息可能未入库。",
       "fix_hint": "检查 ai_gateway.py 中 group_silent_listener 的 priority 是否为 0 且小于所有 block=True 的处理器；启动日志里的优先级自检会报这个问题。"
+    },
+    {
+      "id": "render_backend",
+      "level": "warn",
+      "title": "Chromium 内核未下载，插件卡片暂时无法出图",
+      "detail": "playwright 已装但缺浏览器内核（headless shell 约 270MB）。RENDER_AUTO_INSTALL=true 时首次需要渲染会自动后台下载，期间照常降级为纯文本。",
+      "fix_hint": "想立刻装好：python -m playwright install chromium-headless-shell"
     }
   ]
 }
