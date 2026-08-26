@@ -83,5 +83,7 @@ runtime/
 !/data/plugins/.gitkeep
 /data/config/
 /data/plugin_data/
+# HTML → 图片的渲染产物（要发给 QQ 的图片，不是日志，所以不放 logs/）
+/data/render_cache/
 
 start_claude_command.txt

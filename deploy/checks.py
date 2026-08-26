@@ -549,6 +549,48 @@ def check_db_cleanup_on_start(snap: Snapshot) -> CheckResult | None:
     return None
 
 
+def check_render_backend(snap: Snapshot) -> CheckResult | None:
+    """渲染后端缺失 → warn（不是 error：只影响卡片类插件，主链路照常）。
+
+    这条检查存在的理由是**降级是静默的**：插件收不到图就发纯文本，用户只会觉得
+    「这插件的图怎么没了」，不会想到是浏览器没装。2026-08-25 之前 html_render 干脆
+    没实现，实测每次都回「渲染图片失败了」+ 纯文本，查了很久才定位到兼容层。
+    """
+    if not snap.render_enabled:
+        return None
+    if not snap.playwright_installed:
+        return CheckResult(
+            id="render_backend",
+            level="warn",
+            title="未安装 playwright，插件卡片无法出图",
+            detail=(
+                "依赖 Star.html_render 的插件（B 站卡片、动态推送等）会降级为纯文本。"
+                "主链路对话不受影响。"
+            ),
+            fix_hint="pip install -r requirements.txt（playwright 已在其中）",
+        )
+    if snap.chromium_installed is False:
+        return CheckResult(
+            id="render_backend",
+            level="warn",
+            title="Chromium 内核未下载，插件卡片暂时无法出图",
+            detail=(
+                "playwright 已装但缺浏览器内核（headless shell 约 270MB）。RENDER_AUTO_INSTALL=true 时"
+                "首次需要渲染会自动后台下载，期间照常降级为纯文本。"
+            ),
+            fix_hint="想立刻装好：python -m playwright install chromium-headless-shell",
+        )
+    if snap.chromium_installed is None:
+        return CheckResult(
+            id="render_backend",
+            level="warn",
+            title="无法确认 Chromium 内核是否已下载",
+            detail="按浏览器缓存目录启发式判断，本机取不到该目录。渲染本身失败即降级，不影响主链路。",
+            fix_hint="不确定时直接跑一次：python -m playwright install chromium-headless-shell（已装则秒退）",
+        )
+    return None
+
+
 def check_deprecated_env_keys(
     snap: Snapshot,
 ) -> CheckResult | Sequence[CheckResult] | None:
@@ -610,6 +652,7 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_persona_file,
     check_disk_space,
     check_db_cleanup_on_start,
+    check_render_backend,
     check_deprecated_env_keys,
 )
 

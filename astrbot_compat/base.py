@@ -194,7 +194,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             data.update(self._kv_store)
             self._write_kv(data)
 
-    # --- 渲染（依赖浏览器/模板服务，Stella 暂不提供） ---
+    # --- 渲染（本地 Chromium，见 astrbot_compat/render.py） ---
     async def html_render(
         self,
         tmpl: str,
@@ -202,16 +202,37 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         return_url: bool = True,
         options: dict | None = None,
     ) -> str:
-        _ = (tmpl, data, return_url, options)
-        raise StellaCompatNotSupported("Star.html_render")
+        """Jinja2 模板 + 数据 → 图片，返回**本地文件路径**。
+
+        ``return_url`` 被刻意忽略：上游那个 True 分支返回的是远程 t2i 服务的 URL，
+        而 Stella 不把聊天内容发出去（见 render.py 的模块 docstring），本地也没有
+        对外的图片站。插件拿到路径后走 ``file_image`` / ``image_result`` 都正常——
+        后者会自己判断是路径还是 URL。只有直接调 ``url_image(...)`` 的插件会不适应，
+        那种情况会在 url_image 里以 ValueError 明确报出来，不会静默发一条坏图。
+
+        渲染不可用（没装浏览器 / 正在后台下载 / 模板报错）时返回空串，**不抛异常**：
+        插件普遍有降级分支，抛异常只会被它的 except 吞掉再重试。
+        """
+        from .render import render_template
+
+        if return_url:
+            logger.debug(
+                "html_render(return_url=True) 返回本地路径：Stella 不使用远程渲染服务",
+            )
+        path = await render_template(tmpl, data, options)
+        return str(path) if path else ""
 
     async def text_to_image(self, text: str, return_url: bool = True) -> str:
-        _ = (text, return_url)
-        raise StellaCompatNotSupported("Star.text_to_image")
+        """纯文本 → 图片，返回本地文件路径（``return_url`` 同 html_render 说明）。"""
+        from .render import render_text
+
+        _ = return_url
+        path = await render_text(text)
+        return str(path) if path else ""
 
     async def t2i(self, *args: Any, **kwargs: Any) -> str:
-        _ = (args, kwargs)
-        raise StellaCompatNotSupported("Star.t2i")
+        """``text_to_image`` 的别名（上游两个名字都有插件在用）。"""
+        return await self.text_to_image(*args, **kwargs)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

@@ -691,6 +691,32 @@ ASTRBOT_COMPAT_ALLOW_PRIVATE = _env("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true").lowe
     "yes",
 )
 
+# ---------- HTML → 图片渲染（插件卡片） ----------
+# 大量 AstrBot 插件把结果卡片做成 Jinja2 模板 + CSS，靠 Star.html_render 出图。
+# 后端是**本地 Chromium**（playwright）：模板里填的是群友昵称、动态正文、头像 URL，
+# 属于聊天内容；上游默认把 HTML 发到远程 t2i 服务，Stella 不走那条路——其他环节
+# （对话模型、embedding、整合）全在本地，渲染没理由成为唯一出网的一环。
+# 实现见 astrbot_compat/render.py。
+RENDER_ENABLED = _env("RENDER_ENABLED", "true").lower() in ("true", "1", "yes")
+# 浏览器缺失时是否自动后台下载浏览器内核（headless shell，约 270MB，几分钟）。
+# 下载期间照常降级（插件回纯文本），装好后自动生效、不需要重启。
+# 关掉它就得手工跑：<python> -m playwright install chromium-headless-shell
+RENDER_AUTO_INSTALL = _env("RENDER_AUTO_INSTALL", "true").lower() in ("true", "1", "yes")
+# 自动安装失败后多久才再试（秒）。必须有冷却——否则每条带链接的消息都会重新拉一次几百 MB。
+RENDER_INSTALL_RETRY_SECONDS = _env_float("RENDER_INSTALL_RETRY_SECONDS", 3600.0)
+# 渲染产物目录。**不放 LOG_DIR**：这是要发出去的图片，不是日志。
+RENDER_CACHE_DIR = _env_path("RENDER_CACHE_DIR", PROJECT_ROOT / "data" / "render_cache")
+# 保留最近多少张渲染产物。每张几百 KB，不清理会无声涨到几个 G。
+RENDER_CACHE_KEEP = _env_int("RENDER_CACHE_KEEP", 50)
+# 同时最多渲染几张。每个页面都是一份 Chromium 渲染进程的内存开销，
+# 而卡片渲染挂在聊天主链路上，并发高了不会更快，只会一起变慢。
+RENDER_MAX_CONCURRENCY = _env_int("RENDER_MAX_CONCURRENCY", 2)
+# 页面 load 完之后再等多少毫秒截图。给 Web 字体与 CSS 动画留出稳定时间——
+# 少了它偶发会截到字体回退（方框字）或渐变未完成的中间态。
+RENDER_SETTLE_MS = _env_int("RENDER_SETTLE_MS", 300)
+# text_to_image / t2i 的图片宽度（像素）
+RENDER_TEXT_WIDTH = _env_int("RENDER_TEXT_WIDTH", 800)
+
 # ---------- AstrBot 插件的 LLM 服务 ----------
 # 插件通过 context.get_using_provider_async() / event.request_llm() 调模型时走这里。
 # 与 Stella 主聊天链路（core/llm/lm_studio.py）**共用同一个本地模型**，

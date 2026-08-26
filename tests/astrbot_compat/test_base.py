@@ -44,10 +44,18 @@ def test_render_methods_are_async(plugin):
     # 上游是 async；同步实现会让 `await self.text_to_image(...)` 语义不同
     assert inspect.iscoroutinefunction(Star.text_to_image)
     assert inspect.iscoroutinefunction(Star.html_render)
-    with pytest.raises(StellaCompatNotSupported):
-        asyncio.run(plugin.text_to_image("hi"))
-    with pytest.raises(StellaCompatNotSupported):
-        asyncio.run(plugin.html_render("<b></b>", {}))
+
+
+def test_render_degrades_to_empty_string_when_unavailable(plugin):
+    """渲染不可用时返回空串而**不是抛异常**。
+
+    插件普遍在 `if img_path:` 上分支降级（上游的远程渲染服务也会挂），抛异常只会被
+    它的 except 吞掉再重试——2026-08-25 实测 bilibili 插件为此白等了 3×2s。
+    本机没装 playwright，所以这条用例走的正是「后端缺失」那条路。
+    """
+    assert asyncio.run(plugin.text_to_image("hi")) == ""
+    assert asyncio.run(plugin.html_render("<b>{{ x }}</b>", {"x": 1})) == ""
+    assert asyncio.run(plugin.t2i("hi")) == ""
 
 
 def test_kv_store_persists(plugin, tmp_path):

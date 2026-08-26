@@ -519,6 +519,42 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 > 关闭 `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` 会导致积压超过 `MESSAGE_CLEANUP_KEEP_COUNT` 时未整合消息被永久丢弃，那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
 
+## HTML → 图片渲染（插件卡片）
+
+大量 AstrBot 插件把结果卡片做成 Jinja2 模板 + CSS，靠 `Star.html_render` 出图。实现见 `astrbot_compat/render.py`。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `RENDER_ENABLED` | `true` | 总开关。关闭后卡片类插件一律走它们自己的纯文本降级 |
+| `RENDER_AUTO_INSTALL` | `true` | 浏览器内核缺失时首次渲染前自动后台下载 |
+| `RENDER_INSTALL_RETRY_SECONDS` | `3600` | 自动安装失败后的冷却（秒） |
+| `RENDER_CACHE_DIR` | `data/render_cache` | 渲染产物目录。**不放 `logs/`**——这是要发出去的图片，不是日志 |
+| `RENDER_CACHE_KEEP` | `50` | 保留最近多少张产物 |
+| `RENDER_MAX_CONCURRENCY` | `2` | 同时最多渲染几张 |
+| `RENDER_SETTLE_MS` | `300` | 页面 `load` 之后再等多少毫秒截图 |
+| `RENDER_TEXT_WIDTH` | `800` | `text_to_image` / `t2i` 出图宽度（像素） |
+
+**后端是本地 Chromium（playwright），不是远程服务。** 上游 AstrBot 默认把 HTML 发到远程 t2i 服务出图，Stella 不走那条路：模板里填的是群友昵称、动态正文、头像 URL，属于聊天内容，而本项目其他环节（对话模型、embedding、记忆整合）全部在本地，渲染没有理由成为唯一出网的一环。
+
+**依赖分两层**：`playwright` 的 pip 包在 `requirements.txt` 里（几 MB）；浏览器内核约 270MB，**首次真正需要渲染时**才后台下载。下载期间插件照常降级为纯文本，装好后自动生效、不用重启。
+
+只装 headless shell 是刻意的——我们永远只截图，不需要带界面的浏览器：
+
+```bash
+python -m playwright install chromium-headless-shell   # 约 270MB
+python -m playwright install chromium                  # 约 700MB，含用不到的完整浏览器
+```
+
+启动时会按 `chromium-headless-shell` → 默认 `chromium` 的顺序尝试，所以已经装了完整版的机器也能直接跑。
+
+> 部分国内 pip 镜像不收录 `playwright`（实测清华源装不上）。装不上时换官方源：`pip install playwright -i https://pypi.org/simple`。
+
+> `pillow` 也是必需的：插件普遍在拿到图后用 PIL 校验一遍（bilibili 插件的 `_validate_image`），缺了它渲染会以「图片验证失败」的形式静默失效。它已显式写进 `requirements.txt`——此前只是 `qrcode` 的传递依赖恰好带了进来。
+
+**渲染不可用时返回空串而不是抛异常。** 插件普遍在 `if img_path:` 上分支降级（上游的远程服务也会挂），抛异常只会被它的 `except` 吞掉再重试——2026-08-25 实测 bilibili 插件为此白等 3×2s。
+
+`deploy doctor` 会检查渲染后端并给出安装命令；缺失只报 warn，因为它只影响卡片类插件，主链路对话不受影响。
+
 ## 能力路由与工具执行
 
 判断一次请求需要哪些能力（聊天 / 记忆 / 工具），并让工具在 Stella 的聊天上下文**之外**执行。设计与排查手册见 [能力系统](capability-system.md)。

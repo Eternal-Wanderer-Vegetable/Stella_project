@@ -93,6 +93,21 @@ except Exception as _e:
 driver.on_startup(initialize_plugins)
 driver.on_shutdown(terminate_plugins)
 
+
+async def _shutdown_renderer() -> None:
+    """关掉 HTML 渲染用的 Chromium。
+
+    不关会留下孤儿浏览器进程：playwright 启的是独立的 node + chromium 子进程，
+    Python 退出不会带走它们，反复重启 Bot 就会攒出一堆几百 MB 的僵尸浏览器。
+    """
+    with contextlib.suppress(Exception):
+        from astrbot_compat.render import shutdown as _render_shutdown
+
+        await _render_shutdown()
+
+
+driver.on_shutdown(_shutdown_renderer)
+
 # Router 原型预热任务的引用。留着只为防 GC（见 _bootstrap_capabilities），跑完自动清空。
 _WARMUP_TASK = None
 

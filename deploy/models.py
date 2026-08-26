@@ -83,6 +83,12 @@ class Snapshot:
     space_conflicts: list[dict] = field(default_factory=list)
     space_assignment_mismatch: list[dict] = field(default_factory=list)
 
+    # ── HTML → 图片渲染（插件卡片） ──
+    render_enabled: bool = True
+    playwright_installed: bool = True
+    # Chromium 内核是否已下载。None = 探测不到（按目录启发式判断，见 probe）
+    chromium_installed: bool | None = True
+
     # ── 其它 ──
     persona_exists: bool = True
     persona_size: int = 1024

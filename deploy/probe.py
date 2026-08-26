@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,8 @@ import shutil
 import socket
 import sqlite3
 import sys
+from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -39,6 +42,7 @@ from config import (
     MEMORY_EMBEDDING_MODEL,
     MEMORY_EXTRACT_LM_STUDIO_MODEL,
     PROJECT_ROOT,
+    RENDER_ENABLED,
     SYSTEM_PROMPT_PATH,
 )
 from memory.schema import SCHEMA_VERSION
@@ -73,6 +77,45 @@ def _probe_python() -> tuple[tuple[int, int, int], list[str]]:
         required.append("tomli")
     missing = [pkg for pkg in required if importlib.util.find_spec(pkg) is None]
     return version, missing
+
+
+def _browsers_root() -> Path | None:
+    """playwright 存放浏览器内核的目录。取不到返回 None。"""
+    override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if override and override not in ("0", "1"):
+        return Path(override)
+    home = Path.home()
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA")
+        return Path(base) / "ms-playwright" if base else None
+    if sys.platform == "darwin":
+        return home / "Library" / "Caches" / "ms-playwright"
+    return home / ".cache" / "ms-playwright"
+
+
+def _probe_render() -> dict[str, Any]:
+    """渲染能力：pip 包是否装了 + Chromium 内核是否下载过。
+
+    内核用**目录启发式**判断而不是真去启动浏览器：启动一次要 1~2 秒，而 doctor
+    是个一次性 CLI，不值得为一条提示付这个钱。判断错的后果只是提示不准，
+    不影响任何行为（真正的可用性判断在 astrbot_compat/render.py 里，失败即降级）。
+    """
+    out: dict[str, Any] = {
+        "playwright_installed": importlib.util.find_spec("playwright") is not None,
+        "chromium_installed": None,
+    }
+    if not out["playwright_installed"]:
+        out["chromium_installed"] = False
+        return out
+    root = _browsers_root()
+    if root is None:
+        return out
+    with contextlib.suppress(OSError):
+        out["chromium_installed"] = root.is_dir() and any(
+            child.is_dir() and child.name.startswith("chromium")
+            for child in root.iterdir()
+        )
+    return out
 
 
 def _probe_env_file() -> tuple[bool, list[str]]:
@@ -403,6 +446,10 @@ def collect() -> Snapshot:
         status_api_reachable = _probe_status_api()
     except Exception:
         status_api_reachable = False
+    try:
+        render = _probe_render()
+    except Exception:
+        render = {}
     return Snapshot(
         python_version=python_version,
         missing_packages=missing,
@@ -436,4 +483,7 @@ def collect() -> Snapshot:
         persona_exists=misc.get("persona_exists", False),
         persona_size=misc.get("persona_size", 0),
         disk_free_mb=misc.get("disk_free_mb"),
+        render_enabled=RENDER_ENABLED,
+        playwright_installed=bool(render.get("playwright_installed")),
+        chromium_installed=render.get("chromium_installed"),
     )

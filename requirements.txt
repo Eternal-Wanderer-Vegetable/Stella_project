@@ -20,3 +20,12 @@ brotli>=1.2.0
 qrcode>=8.2
 qrcode_terminal>=0.8
 jinja2>=3.1.6
+# HTML → 图片渲染（插件卡片，astrbot_compat/render.py）。
+# pip 包只有几 MB；浏览器内核约 270MB，首次真正需要渲染时才按需下载
+# （RENDER_AUTO_INSTALL），或手工跑 `python -m playwright install chromium-headless-shell`。
+# 注意：部分国内 pip 镜像不收录 playwright，装不上时改用官方源 -i https://pypi.org/simple。
+playwright>=1.45
+# 插件侧校验渲染产物用（bilibili 插件的 _validate_image）。
+# 之前只是 qrcode 的传递依赖恰好带进来了——一旦解析结果变化，渲染会以
+# 「图片验证失败」的形式静默失效，所以显式钉住。
+pillow>=10.0
