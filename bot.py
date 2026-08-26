@@ -66,31 +66,54 @@ def _diag_log(msg: str) -> None:
                 _f.write(msg + "\n")
 
 
-try:
-    from astrbot_compat.loader import discover_plugins
-    from config.settings import ASTRBOT_PLUGINS_DIR, PROJECT_ROOT
+async def _bootstrap_astrbot_plugins() -> None:
+    """在事件循环里装载 AstrBot 插件，随后跑它们的 initialize()。
 
-    _discovered = discover_plugins()
-    _diag_log(f"[astrbot_compat][boot] PROJECT_ROOT={PROJECT_ROOT} ASTRBOT_PLUGINS_DIR={ASTRBOT_PLUGINS_DIR} discovered={[p.name for p in _discovered]}")
-except Exception as _e:
-    _diag_log(f"[astrbot_compat][boot] discover 异常: {_e}")
+    **不能在 import 期装**：上游 AstrBot 的插件加载整条链路是异步的，所以插件在
+    ``__init__`` 里 ``asyncio.create_task(...)`` 起后台任务是官方插件的常规写法
+    （astrbot_plugin_bilibili 就这么写）。import 期没有运行中的事件循环，那种插件
+    会以 ``RuntimeError: no running event loop`` 加载失败——用户只能去改插件源码，
+    与「现成插件不改源码直接跑」正相反。
 
-try:
-    _loaded = load_all_plugins()
-    from astrbot_compat.loader import get_failed_plugins as _gfp
-    from astrbot_compat.registry import star_handlers_registry, star_registry
+    **必须是 async 函数**：同步启动钩子会被 nonebot 丢进线程池执行（``run_sync``），
+    那里同样没有运行中的事件循环，等于没修。
 
-    _diag_log(f"[astrbot_compat][boot] load_all_plugins -> success={len(_loaded)} failed={_gfp()} registry={len(star_registry)} handlers={len(star_handlers_registry)}")
-    for _md in _loaded:
-        _diag_log(f"[astrbot_compat][boot]   loaded {_md.plugin_id} handlers={len(_md.star_handler_full_names)}")
-    if not _loaded:
-        _diag_log(f"[astrbot_compat][boot] 没有加载到插件，discovered={[p.name for p in _discovered]} ASTRBOT_COMPAT_ENABLED={getattr(__import__('config.settings', fromlist=['ASTRBOT_COMPAT_ENABLED']), 'ASTRBOT_COMPAT_ENABLED', 'unknown')}")
-except Exception as _e:
-    import traceback
+    **必须注册在 _bootstrap_capabilities 之前**：启动钩子按注册顺序**串行**执行
+    （``nonebot.internal.driver._lifespan.Lifespan._run_lifespan_func``），能力装配
+    要读插件登记的工具表。
+    """
+    try:
+        from astrbot_compat.loader import discover_plugins, unextracted_archives
+        from config.settings import ASTRBOT_PLUGINS_DIR, PROJECT_ROOT
 
-    _diag_log(f"[astrbot_compat][boot] load_all_plugins 异常: {_e}\n{traceback.format_exc()}")
+        _discovered = discover_plugins()
+        _diag_log(f"[astrbot_compat][boot] PROJECT_ROOT={PROJECT_ROOT} ASTRBOT_PLUGINS_DIR={ASTRBOT_PLUGINS_DIR} discovered={[p.name for p in _discovered]}")
+        _archives = unextracted_archives()
+        if _archives:
+            _diag_log(f"[astrbot_compat][boot] 插件目录里有未解压的压缩包 {_archives}：压缩包不会被加载，请解压成 <插件目录>/main.py 后重启")
+    except Exception as _e:
+        _discovered = []
+        _diag_log(f"[astrbot_compat][boot] discover 异常: {_e}")
 
-driver.on_startup(initialize_plugins)
+    try:
+        _loaded = load_all_plugins()
+        from astrbot_compat.loader import get_failed_plugins as _gfp
+        from astrbot_compat.registry import star_handlers_registry, star_registry
+
+        _diag_log(f"[astrbot_compat][boot] load_all_plugins -> success={len(_loaded)} failed={_gfp()} registry={len(star_registry)} handlers={len(star_handlers_registry)}")
+        for _md in _loaded:
+            _diag_log(f"[astrbot_compat][boot]   loaded {_md.plugin_id} dir={_md.root_dir_name} module={_md.module_path} handlers={len(_md.star_handler_full_names)}")
+        if not _loaded:
+            _diag_log(f"[astrbot_compat][boot] 没有加载到插件，discovered={[p.name for p in _discovered]} ASTRBOT_COMPAT_ENABLED={getattr(__import__('config.settings', fromlist=['ASTRBOT_COMPAT_ENABLED']), 'ASTRBOT_COMPAT_ENABLED', 'unknown')}")
+    except Exception as _e:
+        import traceback
+
+        _diag_log(f"[astrbot_compat][boot] load_all_plugins 异常: {_e}\n{traceback.format_exc()}")
+
+    await initialize_plugins()
+
+
+driver.on_startup(_bootstrap_astrbot_plugins)
 driver.on_shutdown(terminate_plugins)
 
 

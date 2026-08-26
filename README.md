@@ -125,6 +125,8 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 重启 Stella
 ```
 
+目录名不用改：GitHub「Download ZIP」解出来的 `xxx-master` / `xxx-main` 后缀照样能装。但**压缩包本身要先解压**——`data/plugins/` 下的 `.zip` 不会被加载。
+
 启动后看 `logs/boot_debug.log`，里面会写清发现了哪些插件、加载成功还是失败、失败原因。
 
 插件的 `@command` 指令（默认前缀 `/`）装完就能用。但插件用 `@llm_tool` 注册的**函数工具**还需要一步：在 `config/capabilities/<域名>.toml` 里给它写一条能力声明，Stella 才会在聊天里主动调用它。仓库里有一份真实样例（`config/capabilities/entertainment.toml`）可以照抄，格式说明见 `config/capabilities/information.toml.example`。

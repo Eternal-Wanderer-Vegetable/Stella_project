@@ -440,6 +440,14 @@ python -m memory.schema --backup    # 仅备份
 
 未实现的上游能力一律抛 `StellaCompatNotSupported`（而不是静默返回假值），插件报错时能直接看出缺的是哪个接口。
 
+### 加载时机与目录名
+
+**插件在事件循环里装载**，入口是 `bot.py` 的 `on_startup` 钩子 `_bootstrap_astrbot_plugins()`（装载 + `initialize_plugins()`）。这不是随便放的：上游 AstrBot 的插件加载整条链路是异步的，因此插件在 `__init__` 里 `asyncio.create_task(...)` 起后台任务是**官方插件的常规写法**（`astrbot_plugin_bilibili` 即是）。放回 import 期同步装，这类插件会以 `RuntimeError: no running event loop` 加载失败——而用户唯一的出路是改插件源码，与「不改源码直接跑」正相反。两条约束别破：钩子必须是 `async def`（同步钩子被 nonebot 丢进线程池，那里同样没有运行中的循环），且必须注册在 `_bootstrap_capabilities` 之前（启动钩子按注册顺序**串行**执行）。
+
+**目录名不必是合法的 Python 模块名**。`data/plugins/<目录>` 装不进 `import data.plugins.<目录>.main` 时（GitHub「Download ZIP」解出来的 `-master` / `-main` 后缀最常见，上游 git clone 装插件所以撞不到），`loader.py` 把目录归一化成合法模块名，再按文件路径挂成包（`__path__` 指回真实目录），插件内部的 `from .x` / `from ..y` 照常解析。两个目录归一化后同名时，第二个加短摘要后缀区分，绝不互相顶替。`ASTRBOT_PLUGINS_DIR` 指到项目外时走同一条挂载路径。
+
+元数据里的 `root_dir_name` 始终是磁盘上的真实目录名，而插件数据目录按 metadata 的 `name` 走——所以用户事后把 `xxx-master` 改名成 `xxx`，订阅数据不会丢。
+
 ### HTML → 图片渲染
 
 大量插件把结果卡片做成 Jinja2 模板 + CSS，靠 `Star.html_render` 出图。实现在 `astrbot_compat/render.py`，后端是**本地 Chromium**（playwright）。

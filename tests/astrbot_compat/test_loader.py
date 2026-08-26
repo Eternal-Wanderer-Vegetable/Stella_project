@@ -235,19 +235,13 @@ def test_data_dir_uses_declared_plugin_name(install_plugin, tmp_path):
     assert path.is_dir()
 
 
-def test_bad_directory_name_is_reported(tmp_path, monkeypatch):
-    from config import settings
+def test_default_location_keeps_the_plain_module_path(install_plugin):
+    """装在 data/plugins/ 下、目录名合法时，模块路径必须还是老样子（不走挂载）。"""
+    p = install_plugin()
+    md = loader.load_plugin(p.path)
 
-    plugins_dir = tmp_path / "plugins"
-    (plugins_dir / "not-an-identifier").mkdir(parents=True)
-    (plugins_dir / "not-an-identifier" / "main.py").write_text("", encoding="utf-8")
-    monkeypatch.setattr(settings, "ASTRBOT_PLUGINS_DIR", plugins_dir, raising=False)
-    monkeypatch.setattr(settings, "ASTRBOT_COMPAT_ENABLED", True, raising=False)
-    loader._failed.clear()
-
-    assert loader.load_all_plugins() == []
-    assert "not-an-identifier" in loader.get_failed_plugins()
-    loader._failed.clear()
+    assert md.module_path == p.module_name
+    assert f"data.plugins.{p.dir_name}" not in loader._alias_dirs
 
 
 def test_disabled_compat_skips_loading(monkeypatch):
@@ -333,3 +327,269 @@ def test_plugin_created_after_namespace_import_is_loadable(install_plugin):
     importlib.import_module("data.plugins")
     p = install_plugin()
     assert loader.load_plugin(p.path) is not None
+
+
+# ---------------------------------------------------------------------------
+# 目录名不是合法模块名：GitHub「Download ZIP」解出来的目录带 -master / -main
+# 后缀，`import data.plugins.<目录名>.main` 这条路走不通，得按文件路径挂载
+# ---------------------------------------------------------------------------
+
+MAIN_PY_RELATIVE = '''
+from astrbot.api.star import Star
+from astrbot.api.event import filter
+
+from .helper import GREETING
+from .pkg.deep import DEEP
+
+
+class SelfTest(Star):
+    @filter.command("{command}")
+    async def selftest(self, event):
+        """自检指令"""
+        yield event.plain_result(f"{{GREETING}}-{{DEEP}}")
+'''
+
+
+MAIN_PY_TASK_IN_INIT = '''
+import asyncio
+
+from astrbot.api.star import Star
+from astrbot.api.event import filter
+
+TRACE = []
+
+
+async def _forever():
+    TRACE.append("task")
+    await asyncio.sleep(3600)
+
+
+class SelfTest(Star):
+    def __init__(self, context, config=None):
+        super().__init__(context, config)
+        # 上游 AstrBot 在事件循环里加载插件，官方插件普遍这样起后台任务
+        self.task = asyncio.create_task(_forever())
+
+    async def terminate(self):
+        self.task.cancel()
+
+    @filter.command("{command}")
+    async def selftest(self, event):
+        """自检指令"""
+        yield event.plain_result("ok")
+'''
+
+MAIN_PY_MISSING_DEP = '''
+import definitely_not_installed_pkg  # noqa: F401
+
+from astrbot.api.star import Star
+
+
+class SelfTest(Star):
+    pass
+'''
+
+
+@pytest.fixture
+def install_plugin_at(tmp_path, monkeypatch):
+    """把插件装到指定目录名下（含相对导入），用来验证目录名归一化。
+
+    与 install_plugin 不同：插件放在 tmp_path 里，不占用真实的 data/plugins/。
+    目录名不合法或插件目录不在项目内时，加载器会按文件路径挂载，模块路径不再
+    由磁盘位置决定，所以搬得动。
+    """
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_PLUGIN_CONFIG_DIR", tmp_path / "cfg", raising=False)
+    monkeypatch.setattr(settings, "ASTRBOT_PLUGIN_DATA_DIR", tmp_path / "pdata", raising=False)
+    monkeypatch.setattr(settings, "ASTRBOT_COMPAT_ENABLED", True, raising=False)
+    # 测试绝不许真的跑 pip
+    monkeypatch.setattr(settings, "ASTRBOT_AUTO_INSTALL_REQUIREMENTS", False, raising=False)
+    loader._failed.clear()
+    loader._loaded_dirs.clear()
+
+    plugins_dir = tmp_path / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "ASTRBOT_PLUGINS_DIR", plugins_dir, raising=False)
+    created: list[InstalledPlugin] = []
+
+    def _install(
+        name_template: str = "{token}-master",
+        with_init: bool = True,
+        dir_token: str | None = None,
+        main_py: str = MAIN_PY_RELATIVE,
+    ) -> InstalledPlugin:
+        token = uuid.uuid4().hex[:12]
+        dir_name = name_template.format(token=dir_token or f"selftest_{token}")
+        plugin_name = f"selftest_{token}"
+        command = f"selftest{token}"
+        path = plugins_dir / dir_name
+        (path / "pkg").mkdir(parents=True)
+        if with_init:
+            (path / "__init__.py").write_text('"""plugin package."""\n', encoding="utf-8")
+        (path / "main.py").write_text(main_py.format(command=command), encoding="utf-8")
+        (path / "helper.py").write_text('GREETING = "hi"\n', encoding="utf-8")
+        (path / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+        # 上一层的相对导入（`..`）是 AstrBot 插件里最常见的写法，必须一起验
+        (path / "pkg" / "deep.py").write_text(
+            "from ..helper import GREETING\n\nDEEP = GREETING.upper()\n",
+            encoding="utf-8",
+        )
+        (path / "metadata.yaml").write_text(
+            METADATA_YAML.format(name=plugin_name),
+            encoding="utf-8",
+        )
+        installed = InstalledPlugin(path, dir_name, plugin_name, command)
+        created.append(installed)
+        return installed
+
+    yield _install
+
+    paths = {i.path for i in created}
+    for pkg, plugin_dir in list(loader._alias_dirs.items()):
+        if plugin_dir not in paths:
+            continue
+        for mod in [m for m in sys.modules if m == pkg or m.startswith(f"{pkg}.")]:
+            sys.modules.pop(mod, None)
+        loader._alias_dirs.pop(pkg, None)
+    loader._failed.clear()
+    loader._loaded_dirs.clear()
+
+
+@pytest.mark.parametrize(
+    ("dir_name", "expected"),
+    [
+        ("astrbot_plugin_bilibili-master", "astrbot_plugin_bilibili_master"),
+        ("astrbot_plugin_x-main", "astrbot_plugin_x_main"),
+        ("plugin v1.2", "plugin_v1_2"),
+        ("2048-game", "p_2048_game"),
+        ("class", "class_"),
+        ("-foo-", "foo"),
+        ("!!!", "plugin"),
+    ],
+)
+def test_sanitize_module_name_maps_to_a_legal_identifier(dir_name, expected):
+    got = loader._sanitize_module_name(dir_name)
+
+    assert got == expected
+    assert got.isidentifier()
+
+
+@pytest.mark.parametrize("with_init", [True, False])
+def test_zip_suffixed_directory_loads(install_plugin_at, with_init):
+    """`<插件>-master` 这种目录名要能直接加载，不再报「非合法标识符」。"""
+    p = install_plugin_at(with_init=with_init)
+    md = loader.load_plugin(p.path)
+
+    assert md is not None
+    assert loader.get_failed_plugins() == {}
+    assert md.root_dir_name == p.dir_name  # 元数据里仍是磁盘上的真实目录名
+    assert md.module_path == f"data.plugins.{p.dir_name.replace('-', '_')}.main"
+    assert md.name == p.plugin_name
+
+
+def test_zip_suffixed_directory_keeps_relative_imports_working(
+    install_plugin_at,
+    make_event,
+    fake_bot,
+):
+    """插件内部的 `from .x` / `from ..x` 必须照常解析：挂载的包 __path__ 指回真实目录。"""
+    from astrbot_compat.pipeline import dispatch
+
+    p = install_plugin_at()
+    loader.load_plugin(p.path)
+
+    assert asyncio.run(dispatch(make_event(f"/{p.command}"), fake_bot)) is True
+    assert fake_bot.sent == ["hi-HI"]
+
+
+def test_load_all_plugins_picks_up_zip_suffixed_directory(install_plugin_at):
+    p = install_plugin_at()
+
+    assert [md.name for md in loader.load_all_plugins()] == [p.plugin_name]
+    assert loader.get_failed_plugins() == {}
+
+
+def test_directory_outside_project_root_is_loadable(install_plugin_at):
+    """ASTRBOT_PLUGINS_DIR 指到项目外时，合法目录名也得能加载（模块路径找不到磁盘）。"""
+    p = install_plugin_at(name_template="{token}")
+
+    md = loader.load_plugin(p.path)
+
+    assert md is not None
+    assert md.module_path == f"data.plugins.{p.dir_name}.main"
+
+
+def test_two_directories_normalizing_to_one_name_do_not_collide(install_plugin_at):
+    """同时装着 foo_x 与 foo-x：归一化后同名，不能互相顶替。"""
+    shared = f"selftest_{uuid.uuid4().hex[:12]}"
+    plain = install_plugin_at(name_template="{token}_x", dir_token=shared)
+    hyphen = install_plugin_at(name_template="{token}-x", dir_token=shared)
+
+    loaded = loader.load_all_plugins()
+
+    assert loader.get_failed_plugins() == {}
+    by_dir = {md.root_dir_name: md.module_path for md in loaded}
+    assert set(by_dir) == {plain.dir_name, hyphen.dir_name}
+    # 干净的名字归目录名本来就合法的那个，另一个加短摘要后缀区分
+    assert by_dir[plain.dir_name] == f"data.plugins.{plain.dir_name}.main"
+    assert by_dir[hyphen.dir_name] != by_dir[plain.dir_name]
+    assert by_dir[hyphen.dir_name].startswith(f"data.plugins.{plain.dir_name}_")
+
+
+def test_unextracted_archive_is_reported_not_loaded(install_plugin_at):
+    """压缩包直接丢进插件目录（没解压）是最常见的「装了却没被发现」。"""
+    p = install_plugin_at()
+    (p.path.parent / "astrbot_plugin_demo.zip").write_bytes(b"PK\x03\x04")
+
+    assert loader.unextracted_archives() == ["astrbot_plugin_demo.zip"]
+    assert [d.name for d in loader.discover_plugins()] == [p.dir_name]
+
+
+# ---------------------------------------------------------------------------
+# 插件在 __init__ 里起后台任务（上游在事件循环里加载插件，官方插件常这么写）
+# ---------------------------------------------------------------------------
+
+
+def test_plugin_creating_tasks_in_init_loads_inside_the_loop(install_plugin_at):
+    """在事件循环里加载时，构造函数里的 asyncio.create_task 必须能起来。"""
+    p = install_plugin_at(main_py=MAIN_PY_TASK_IN_INIT)
+
+    async def _load():
+        md = loader.load_plugin(p.path)
+        await asyncio.sleep(0)  # 让后台任务真正跑一轮
+        await loader.terminate_plugins()  # 收掉它，别泄漏到别的用例
+        return md
+
+    md = asyncio.run(_load())
+
+    assert md is not None
+    assert loader.get_failed_plugins() == {}
+    assert sys.modules[md.module_path].TRACE == ["task"]
+
+
+@pytest.mark.filterwarnings("ignore:coroutine .* was never awaited:RuntimeWarning")
+def test_plugin_creating_tasks_in_init_reports_the_missing_loop(install_plugin_at):
+    """没有事件循环时（例如在 import 期加载），失败原因要指向调用方而不是插件。"""
+    p = install_plugin_at(main_py=MAIN_PY_TASK_IN_INIT)
+
+    assert loader.load_plugin(p.path) is None
+    assert "事件循环" in loader.get_failed_plugins()[p.dir_name]
+
+
+def test_missing_dependency_failure_says_what_to_install(install_plugin_at):
+    """插件缺第三方依赖时，日志要写清缺哪个、怎么装（AstrBot 插件常不声明依赖）。"""
+    p = install_plugin_at(main_py=MAIN_PY_MISSING_DEP)
+
+    assert loader.load_plugin(p.path) is None
+    reason = loader.get_failed_plugins()[p.dir_name]
+    assert "definitely_not_installed_pkg" in reason
+    assert "pip install" in reason
+
+
+def test_missing_dependency_failure_points_at_requirements_when_present(install_plugin_at):
+    p = install_plugin_at(main_py=MAIN_PY_MISSING_DEP)
+    (p.path / "requirements.txt").write_text("definitely-not-installed-pkg\n", encoding="utf-8")
+
+    assert loader.load_plugin(p.path) is None
+    assert "pip install -r" in loader.get_failed_plugins()[p.dir_name]

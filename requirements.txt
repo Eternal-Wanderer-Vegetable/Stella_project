@@ -29,3 +29,8 @@ playwright>=1.45
 # 之前只是 qrcode 的传递依赖恰好带进来了——一旦解析结果变化，渲染会以
 # 「图片验证失败」的形式静默失效，所以显式钉住。
 pillow>=10.0
+# AstrBot 核心把 aiohttp 当自带依赖，因此生态插件普遍直接 `import aiohttp`
+# 而不写进自己的 requirements.txt（bilibili 插件的 bili_client.py 就是）。
+# 开发机上它是别的包的传递依赖，发布包按本文件装依赖则没有它——插件会在
+# import 阶段以 ModuleNotFoundError 挂掉。同 pillow 的教训，显式声明。
+aiohttp>=3.9
