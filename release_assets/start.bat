@@ -79,6 +79,17 @@ if not exist get-pip.py (
 )
 del get-pip.py 2>nul
 
+rem 装 setuptools/wheel：嵌入式 Python 只带标准库，而现在的 get-pip.py 只装 pip。
+rem 少了它们，任何「只发源码包、不发 wheel」的依赖都会以
+rem   BackendUnavailable: Cannot import 'setuptools.build_meta'
+rem 失败（v3.0.0 预发布就是被 qrcode_terminal 这么卡住的）。
+rem 失败不阻断：绝大多数依赖有 wheel，真缺了下一步会报更具体的错。
+echo Installing build tools...
+"%PY%" -m pip install setuptools wheel --no-warn-script-location
+if errorlevel 1 (
+    "%PY%" -m pip install setuptools wheel --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+)
+
 echo Installing Python dependencies. This may take a few minutes.
 "%PY%" -m pip install -r requirements.txt --no-warn-script-location
 if errorlevel 1 (

@@ -445,25 +445,41 @@ CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`desig
 
 > **编码约定**：`release_assets/` 里的 `.bat` 使用纯 ASCII，内部注释与输出统一使用英文；发布时仍统一转换为 CRLF，确保 Windows `cmd` 稳定解析。面向用户的 `README-快速开始.txt` 可继续使用 UTF-8 with BOM。
 
-### 嵌入式 Python 的两处必改
+### 嵌入式 Python 的三处必改
 
-Release 包用 Python Embeddable Package 作运行时，它有两个与常规 Python 不同的行为，
-`start.bat` 必须处理：
+Release 包用 Python Embeddable Package 作运行时，它有三个与常规 Python 不同的行为，
+两条 bootstrap 路径（命令行的 `start.bat`、GUI 的 `stella-installer/src-tauri/src/python.rs`）
+都必须处理：
 
 1. **`import site` 默认被注释**（`python3xx._pth` 里）。不取消注释则 pip 装到
    `Lib\site-packages` 的依赖全部 import 不到；
 2. **`._pth` 存在时 Python 只按该文件构建 `sys.path`**，等价于带上 `-E -s`，
    且其中的相对路径是**相对 `python.exe` 所在目录**解析的。默认的 `.` 指向
    `runtime\` 而非项目根，因此 `runtime\python.exe -m deploy` 会报
-   `No module named deploy`（2026-08-18 实测）。需要追加一行 `..`。
+   `No module named deploy`（2026-08-18 实测）。需要追加一行 `..`；
+3. **只带标准库，没有 `setuptools` / `wheel`**，而现在的 `get-pip.py` 只装 pip
+   （setuptools/wheel 早就从它的默认项里去掉了）。于是任何**只发 sdist、不发 wheel**
+   的依赖都装不上——pip 要构建它就得 import `setuptools.build_meta`，报
+   `BackendUnavailable: Cannot import 'setuptools.build_meta'`，整条依赖安装退出码 2。
+   必须在装 `requirements.txt` **之前**先 `pip install setuptools wheel`。
 
-两处都在 `start.bat` 的「启用 site-packages」段处理，用 `python*._pth` 通配匹配
-文件名，避免升级 Python 主次版本时漏改。
+前两处在「启用 site-packages」段处理，用 `python*._pth` 通配匹配文件名，避免升级
+Python 主次版本时漏改；第三处是 `start.bat` 的 `Installing build tools` 段与
+`python.rs` 的 `ensure_build_tools()`，两边由
+`tests::both_bootstrap_paths_install_build_tools` 钉住不许漂移。
+
+> 第 3 条是 2026-08-26 v3.0.0 预发布的真实事故：`qrcode_terminal` 在 PyPI 上只有源码包，
+> 全新解压的发布包装依赖必然失败。**开发机完全不复现**——那里的 `runtime/` 早年被老版
+> `get-pip.py` 带上过 `setuptools`，一直沿用至今。
 
 **这类问题 CI 挡不住**：ubuntu runner 上的 import 校验只能验证目录完整性，
-`._pth` 的路径行为只在真实 Windows 的嵌入式运行时里出现。因此每次改动
-`start.bat` 后，必须在**全新解压的目录**里实测一遍（不要复用已装好的目录，
-它的 `._pth` 可能已被上一次运行修正过，会掩盖问题）。
+`._pth` 的路径行为与「缺 setuptools」都只在真实 Windows 的嵌入式运行时里出现。因此每次改动
+`start.bat` 或 `python.rs` 后，必须在**全新解压的目录**里实测一遍（不要复用已装好的目录，
+它的 `._pth` 可能已被上一次运行修正过、`site-packages` 里也可能早就有 setuptools，
+两者都会掩盖问题）。
+
+> 想在开发机上复现「全新运行时」：把 `runtime\Lib\site-packages` 下的 `setuptools*`、
+> `wheel*`、`_distutils_hack`、`distutils-precedence.pth` 临时改名，再跑一次装依赖。
 
 ## 代码约定
 

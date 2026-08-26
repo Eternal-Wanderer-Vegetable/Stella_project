@@ -106,6 +106,8 @@ mod runtime_bootstrap {
             patch_pth(&runtime)?;
             emit_progress(root, "正在安装 pip…");
             ensure_pip(root, &python)?;
+            emit_progress(root, "正在安装构建工具…");
+            ensure_build_tools(root, &python)?;
             emit_progress(root, "正在安装依赖（首次约 1-2 分钟）…");
             install_deps(root, &python)?;
 
@@ -328,6 +330,36 @@ mod runtime_bootstrap {
             .map_err(|e| format!("pip 安装失败：{e}{hint}"))
     }
 
+    /// 安装 setuptools + wheel。
+    ///
+    /// **必需，不是可选优化。** 嵌入式 Python 只带标准库，而现在的 `get-pip.py`
+    /// 只装 pip（setuptools/wheel 早就从它的默认项里去掉了）。于是任何**只发 sdist、
+    /// 不发 wheel** 的依赖都装不上——pip 要构建它，就得 import `setuptools.build_meta`，
+    /// 报 `BackendUnavailable: Cannot import 'setuptools.build_meta'` 直接退出码 2。
+    ///
+    /// 2026-08-26 的 v3.0.0 预发布就是这样炸的：`qrcode_terminal` 在 PyPI 上只有
+    /// 源码包，全新解压的发布包装依赖必然失败。开发机不复现，因为那里的 runtime 早年
+    /// 被老版 get-pip 带上过 setuptools。
+    ///
+    /// 失败**不阻断**：多数依赖有 wheel，缺构建工具只影响 sdist 那几个，
+    /// 真需要时会在 install_deps 里报出来，那条错误信息比这里更具体。
+    fn ensure_build_tools(root: &Path, python: &Path) -> Result<(), String> {
+        let args = [
+            "-m", "pip", "install", "--no-warn-script-location",
+            "-i", PYPI_INDEX, "setuptools", "wheel",
+        ];
+        if run(python, &args, root).is_ok() {
+            return Ok(());
+        }
+        let mirror = [
+            "-m", "pip", "install", "--no-warn-script-location",
+            "-i", PIP_MIRROR, "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
+            "setuptools", "wheel",
+        ];
+        let _ = run(python, &mirror, root);
+        Ok(())
+    }
+
     fn install_deps(root: &Path, python: &Path) -> Result<(), String> {
         let requirements = root.join("requirements.txt");
         if !requirements.is_file() {
@@ -434,6 +466,49 @@ mod runtime_bootstrap {
             assert!(
                 sha_line.contains(PY_SHA256),
                 "start.bat 的 PY_SHA256 与 python.rs 不一致"
+            );
+        }
+
+        /// 两条 bootstrap 路径（GUI 的 python.rs 与命令行的 start.bat）都必须装构建工具。
+        ///
+        /// 少了它，任何只发 sdist 的依赖都会以
+        /// `BackendUnavailable: Cannot import 'setuptools.build_meta'` 装不上
+        /// ——v3.0.0 预发布被 qrcode_terminal 卡住就是这个。开发机不复现（那里的
+        /// runtime 早年被老版 get-pip 带上过 setuptools），所以只能靠这条断言防回归。
+        #[test]
+        fn both_bootstrap_paths_install_build_tools() {
+            let src = fs::read_to_string(Path::new(file!())).expect("无法读取 python.rs");
+            assert!(
+                src.contains("fn ensure_build_tools"),
+                "python.rs 必须装 setuptools/wheel，否则 sdist 依赖装不上"
+            );
+            assert!(
+                src.contains("ensure_build_tools(root, &python)?"),
+                "ensure_build_tools 必须在 bootstrap 序列里被真的调用"
+            );
+
+            let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("release_assets")
+                .join("start.bat");
+            if !bat_path.is_file() {
+                return;
+            }
+            let bat = fs::read_to_string(&bat_path).expect("无法读取 start.bat");
+            assert!(
+                bat.contains("pip install setuptools wheel"),
+                "start.bat 必须在装依赖之前装 setuptools/wheel"
+            );
+            let tools_at = bat
+                .find("pip install setuptools wheel")
+                .expect("上一步已断言存在");
+            let reqs_at = bat
+                .find("pip install -r requirements.txt")
+                .expect("start.bat 应当安装 requirements.txt");
+            assert!(
+                tools_at < reqs_at,
+                "构建工具必须先装：装依赖时才需要它来构建 sdist"
             );
         }
     }
