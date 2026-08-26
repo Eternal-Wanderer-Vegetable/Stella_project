@@ -5,6 +5,9 @@
 pytest>=8.0.0
 pytest-cov>=5.0.0
 pytest-xdist>=3.5.0
+# 把「测试卡死」变成「测试失败」。2026-08-26 有一次 CI 因为测试里 spawn 了
+# 后台下载进程而彻底挂住：既不报错也不通过，白等到 job 超时。
+pytest-timeout>=2.3.0
 numpy>=1.26,<3
 ruff>=0.3.0
 black>=24.0.0

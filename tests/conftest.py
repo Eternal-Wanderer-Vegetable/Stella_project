@@ -38,3 +38,31 @@ def _isolate_space_config(tmp_path, monkeypatch):
     monkeypatch.setattr(spaces, "_AUTO_FILE", tmp_path / ".space_assignments.json")
     monkeypatch.setattr(spaces, "SPACES_DIR", tmp_path / "spaces")
     spaces.reload()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_browser(monkeypatch):
+    """测试**永远**不许碰真实的渲染后端。
+
+    2026-08-26 的 CI 卡死就出在这里：``playwright`` 在 requirements.txt 里，所以 CI
+    装了它，但浏览器内核没装。于是 test_base 的降级用例会真的去起 playwright 驱动
+    （spawn 一个 node 进程）→ 启动浏览器失败 → 判定「内核缺失」→ 后台 spawn
+    ``playwright install`` 去拉 270MB。事件循环结束时 task 被取消，但**已经 spawn
+    出去的下载进程不会被带走**，它继续占着继承来的管道，xdist worker 于是永远退不掉：
+    既不报错也不通过。3.10 侥幸通过只是因为那个 task 常在跑第一步之前就被取消了
+    ——纯粹的时序运气。
+
+    两道锁：
+    1. ``RENDER_AUTO_INSTALL=False``——任何情况下测试都不许触发下载；
+    2. 断开 import seam，让 ``_get_browser`` 确定性地走「没装 playwright」分支，
+       于是连驱动进程都不会起。
+
+    需要测编排的用例自己打桩 ``_get_browser``（见 tests/astrbot_compat/test_render.py
+    的 fake_browser），需要测 ``_get_browser`` 本身的用例直接注入 ``_playwright``
+    ——两者都不经过这个 seam，所以不受影响。
+    """
+    from astrbot_compat import render
+    from config import settings
+
+    monkeypatch.setattr(settings, "RENDER_AUTO_INSTALL", False, raising=False)
+    monkeypatch.setattr(render, "_load_async_playwright", lambda: None)

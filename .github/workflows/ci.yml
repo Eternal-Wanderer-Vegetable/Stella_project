@@ -88,7 +88,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt 2>/dev/null || true  # 开发依赖可选
-          pip install pytest pytest-cov pytest-xdist
+          pip install pytest pytest-cov pytest-xdist pytest-timeout
 
       - name: Run tests with coverage
         run: |
@@ -98,7 +98,9 @@ jobs:
             --cov-branch \
             --cov-report=xml \
             -n auto \
-            --dist loadgroup
+            --dist loadgroup \
+            --timeout=120 \
+            --timeout-method=thread
 
       - name: Upload coverage report
         if: always()

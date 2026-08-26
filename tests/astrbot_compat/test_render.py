@@ -430,3 +430,117 @@ def test_install_respects_cooldown(monkeypatch):
     monkeypatch.setattr(render, "_install_blocked_until", _t.time() + 999)
     render._maybe_start_install()
     assert render._install_task is None
+
+
+# ============================================================
+# 后台安装的进程生命周期（2026-08-26 CI 卡死的回归）
+# ============================================================
+# 症状：CI 的 3.11 / 3.12 job 卡在某个测试上，既不报错也不通过；3.10 侥幸通过。
+# 成因：playwright 在 requirements.txt 里 → CI 装了它，但浏览器内核没装。
+# 于是降级用例会真的起驱动、判定内核缺失、后台 spawn `playwright install` 拉 270MB。
+# 事件循环结束时 task 被取消，但**已 spawn 的下载进程不会被带走**，它继续占着继承来的
+# 管道，xdist worker 永远退不掉。3.10 只是常在 task 跑第一步之前就取消了——时序运气。
+
+
+def _sleep_command(seconds: int = 30) -> list[str]:
+    import sys as _sys
+
+    return [_sys.executable, "-c", f"import time; time.sleep({seconds})"]
+
+
+def test_install_kills_child_on_cancel(monkeypatch):
+    """取消安装 task 必须把已经 spawn 的子进程一起杀掉。"""
+    monkeypatch.setattr(render, "_install_command", lambda: _sleep_command(30))
+    spawned: list = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def _spy(*a, **kw):
+        proc = await real_exec(*a, **kw)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spy)
+
+    async def scenario():
+        task = asyncio.create_task(render._install_browser())
+        # 让它真的跑到 spawn
+        while not spawned:
+            await asyncio.sleep(0.02)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        # 给 kill 一点落地时间
+        for _ in range(100):
+            if spawned[0].returncode is not None:
+                break
+            await asyncio.sleep(0.02)
+        return spawned[0].returncode
+
+    rc = _run(scenario())
+    assert rc is not None, "取消后下载子进程仍在运行——CI 会因此卡死"
+
+
+def test_shutdown_cancels_pending_install(monkeypatch):
+    """进程退出前 shutdown() 要收掉在跑的下载，而不是留个孤儿。"""
+    monkeypatch.setattr(render, "_install_command", lambda: _sleep_command(30))
+    spawned: list = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def _spy(*a, **kw):
+        proc = await real_exec(*a, **kw)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spy)
+
+    async def scenario():
+        render._install_task = asyncio.create_task(render._install_browser())
+        while not spawned:
+            await asyncio.sleep(0.02)
+        await render.shutdown()
+        assert render._install_task is None
+        for _ in range(100):
+            if spawned[0].returncode is not None:
+                break
+            await asyncio.sleep(0.02)
+        return spawned[0].returncode
+
+    assert _run(scenario()) is not None
+
+
+def test_driver_is_stopped_when_no_browser_launches(monkeypatch):
+    """一个浏览器都起不来时别留着驱动——那是个独立的 node 进程。"""
+    chromium = _FakeChromium(fail_channels={"chromium-headless-shell", None}, error="权限不足")
+    stopped: list[int] = []
+
+    class _Pw(_FakePlaywright):
+        async def stop(self) -> None:
+            stopped.append(1)
+
+    monkeypatch.setattr(render, "_playwright", _Pw(chromium))
+    assert _run(render._get_browser()) is None
+    assert stopped == [1]
+    assert render._playwright is None
+
+
+def test_driver_start_failure_clears_cache(monkeypatch):
+    """驱动起不来时要把缓存清掉，否则后续调用会拿着 None 去 .chromium。"""
+
+    class _Boom:
+        async def start(self):
+            raise RuntimeError("驱动炸了")
+
+    monkeypatch.setattr(render, "_load_async_playwright", lambda: _Boom)
+    assert _run(render._get_browser()) is None
+    assert render._playwright is None
+
+
+def test_global_guard_blocks_real_backend_in_tests():
+    """护栏本体的回归：全局 conftest 必须把测试与真实后端断开。
+
+    只要有人不小心去掉那个 autouse 夹具，这条就会挂——而不是等到 CI 卡死几小时。
+    """
+    from config import settings
+
+    assert settings.RENDER_AUTO_INSTALL is False, "测试里绝不许触发内核下载"
+    assert render._load_async_playwright() is None, "测试里绝不许真的 import playwright"

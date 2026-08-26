@@ -237,6 +237,11 @@ def _is_missing_browser(exc: BaseException) -> bool:
     return any(marker in text for marker in _MISSING_BROWSER_MARKERS)
 
 
+def _install_command() -> list[str]:
+    """内核安装命令。单独拆出来是测试的注入点（真跑会拉 270MB）。"""
+    return [sys.executable, "-m", "playwright", "install", _INSTALL_TARGET]
+
+
 async def _install_browser() -> None:
     """后台跑 ``playwright install chromium-headless-shell``（约 270MB，几分钟）。
 
@@ -246,13 +251,18 @@ async def _install_browser() -> None:
 
     期间渲染继续降级；装完下一次渲染自动生效，不用重启。
     失败要记冷却——否则每条带链接的消息都会重新拉一次几百 MB。
+
+    **被取消时必须把子进程一起杀掉。** 取消这个 task 不会带走已经 spawn 出去的
+    下载进程：它会继续跑、继续占着继承来的管道，于是父进程退不掉——2026-08-26 的
+    CI 卡死就是这个（事件循环关闭后下载还在跑，worker 永远等不到结束）。
     """
     global _install_blocked_until
-    cmd = [sys.executable, "-m", "playwright", "install", _INSTALL_TARGET]
+    cmd = _install_command()
     logger.warning(
         "🖼 [Render] 首次渲染：正在后台下载浏览器内核（约 270MB，视网络几分钟）。"
         "期间卡片类插件继续走纯文本降级，装好后自动生效，无需重启。",
     )
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -267,9 +277,21 @@ async def _install_browser() -> None:
         logger.error(
             f"❌ [Render] 浏览器内核安装失败（退出码 {proc.returncode}）: {' / '.join(tail)}",
         )
+    except asyncio.CancelledError:
+        _terminate(proc)
+        raise
     except Exception as e:
+        _terminate(proc)
         logger.error(f"❌ [Render] 浏览器内核安装未能启动: {e}")
     _install_blocked_until = time.time() + _settings().RENDER_INSTALL_RETRY_SECONDS
+
+
+def _terminate(proc: Any) -> None:
+    """尽力杀掉一个子进程。已退出/已回收都当成功，绝不抛异常。"""
+    if proc is None or proc.returncode is not None:
+        return
+    with contextlib.suppress(Exception):
+        proc.kill()
 
 
 def _maybe_start_install() -> None:
@@ -283,6 +305,21 @@ def _maybe_start_install() -> None:
         return
     with contextlib.suppress(RuntimeError):
         _install_task = asyncio.get_running_loop().create_task(_install_browser())
+
+
+def _load_async_playwright() -> Any:
+    """import ``playwright.async_api.async_playwright``；没装返回 None。
+
+    单独拆成函数是为了给测试一个**明确的断开点**：CI 里 playwright 是装了的
+    （它在 requirements.txt 里）但浏览器内核没装，于是这条路会真的去起驱动、
+    再触发内核下载。测试必须能确定性地走「没装」分支，而不是看环境脸色
+    ——2026-08-26 的 CI 卡死正是这种环境相关的不确定性造成的。
+    """
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return None
+    return async_playwright
 
 
 async def _get_browser() -> Any:
@@ -299,9 +336,8 @@ async def _get_browser() -> Any:
         # 驱动已经起过就别再 import：驱动在手时 import 结果无关紧要，
         # 而且这样单测可以直接注入一个假 _playwright（本机不装 playwright 也能测编排）。
         if _playwright is None:
-            try:
-                from playwright.async_api import async_playwright
-            except ImportError:
+            factory = _load_async_playwright()
+            if factory is None:
                 if not _warned_unavailable:
                     _warned_unavailable = True
                     logger.warning(
@@ -310,8 +346,9 @@ async def _get_browser() -> Any:
                     )
                 return None
             try:
-                _playwright = await async_playwright().start()
+                _playwright = await factory().start()
             except Exception as e:
+                _playwright = None
                 if not _warned_unavailable:
                     _warned_unavailable = True
                     logger.warning(f"🖼 [Render] playwright 驱动启动失败，渲染降级: {e}")
@@ -339,19 +376,41 @@ async def _get_browser() -> Any:
         elif last_error is not None and not _warned_unavailable:
             _warned_unavailable = True
             logger.warning(f"🖼 [Render] 浏览器启动失败，渲染降级: {last_error}")
+        # 一个浏览器都起不来，就别留着驱动：``async_playwright().start()`` spawn 的是
+        # 独立的 node 进程，缓存它只是为了复用，而这里已经确定这一轮用不上了。
+        # 留着的话内核缺失期间每次渲染都白占一个 node（且进程退出后还会刷
+        # BaseSubprocessTransport.__del__ 的 "Event loop is closed"）。
+        await _stop_driver()
         return None
 
 
+async def _stop_driver() -> None:
+    """停掉 playwright 驱动进程并清空缓存。绝不抛异常。"""
+    global _playwright
+    if _playwright is None:
+        return
+    driver, _playwright = _playwright, None
+    with contextlib.suppress(Exception):
+        await driver.stop()
+
+
 async def shutdown() -> None:
-    """关掉浏览器与 playwright 驱动。进程退出前必须调，否则会留下孤儿进程。"""
-    global _playwright, _browser
+    """关掉浏览器与 playwright 驱动，并取消在跑的内核下载。
+
+    进程退出前必须调，否则留下孤儿：playwright 起的是独立的 node + chromium
+    子进程，而内核下载是另一个 spawn 出去的 pip 子进程——Python 退出都不会带走它们。
+    """
+    global _browser, _install_task
+    task, _install_task = _install_task, None
+    if task is not None and not task.done():
+        task.cancel()
+        with contextlib.suppress(BaseException):
+            await task
     with contextlib.suppress(Exception):
         if _browser is not None:
             await _browser.close()
-    with contextlib.suppress(Exception):
-        if _playwright is not None:
-            await _playwright.stop()
-    _browser = _playwright = None
+    _browser = None
+    await _stop_driver()
 
 
 # ============================================================
