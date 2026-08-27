@@ -23,14 +23,35 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 
 def _release_excludes() -> set[str]:
-    """release.yml 里 rsync 的 --exclude 值。"""
+    """release.yml 里 rsync 的 --exclude 值。
+
+    顺序要紧：先去掉 YAML 折行用的续行反斜杠，**再**脱引号。反过来写的话，
+    ``--exclude 'logs' \\`` 会因为末尾是 ``\\`` 而不是引号，导致 ``strip("'\\"")``
+    只脱掉开头那个引号，解析结果变成 ``logs'``——一整份排除清单全带着尾引号，
+    于是任何「某路径是否已被排除」的断言都会静默失配。
+    """
     text = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     excludes = set()
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("--exclude "):
-            excludes.add(stripped.removeprefix("--exclude ").strip().strip("'\"").rstrip("\\").strip())
+            value = stripped.removeprefix("--exclude ").strip()
+            value = value.rstrip("\\").strip()  # 先摘掉续行反斜杠
+            excludes.add(value.strip("'\""))  # 再脱引号
     return excludes
+
+
+def test_release_excludes_are_parsed_without_stray_quotes():
+    """解析器自身的回归测试。
+
+    这份清单是另外两个测试的**判据**：它悄悄解析错了，那两个测试就会退化成
+    「只靠 .gitignore 兜底」还照样显示通过——正是这个缺陷让 StellaData 漏检到 CI。
+    """
+    excludes = _release_excludes()
+    assert excludes, "没有解析到任何 --exclude，release.yml 的格式可能变了"
+    assert not [e for e in excludes if e.startswith(("'", '"')) or e.endswith(("'", '"', "\\"))]
+    # 几个已知一定在清单里的值，按原样出现
+    assert {"logs", "tests", "runtime", "*.db"} <= excludes
 
 
 def _gitignore_entries() -> set[str]:
