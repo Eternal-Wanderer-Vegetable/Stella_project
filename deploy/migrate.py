@@ -149,21 +149,43 @@ def looks_like_install(path: Path) -> bool:
     """像不像一个装过 Stella 的目录：有记忆库或有 .env，且有 bot.py。
 
     只认「有用户数据」的目录——一个刚解压、还没配置过的目录没有任何可导入的东西。
+
+    **任何 OSError 一律判为「不是」**：探测会走到用户机器上的任意目录，其中必然有读不了的
+    （Linux 的 ``/boot/lost+found`` 是 root 0700、Windows 有系统保留目录、还有断链的网络盘）。
+    在一个「像不像」的判断里让异常逃出去，等于让一个无关目录的权限问题炸掉整个导入流程。
     """
-    if not path.is_dir() or not (path / "bot.py").is_file():
+    try:
+        if not path.is_dir() or not (path / "bot.py").is_file():
+            return False
+        return (path / "memory" / "agent_memory.db").is_file() or (path / ".env").is_file()
+    except OSError:
         return False
-    return (path / "memory" / "agent_memory.db").is_file() or (path / ".env").is_file()
 
 
 def _data_mtime(path: Path) -> float:
     """用记忆库（其次 .env）的修改时间代表「这份安装有多新」。"""
     for candidate in (path / "memory" / "agent_memory.db", path / ".env"):
-        if candidate.is_file():
-            try:
+        try:
+            if candidate.is_file():
                 return candidate.stat().st_mtime
-            except OSError:
-                continue
+        except OSError:
+            continue
     return 0.0
+
+
+def _scan_roots(target: Path) -> list[Path]:
+    """要扫的几处起点。
+
+    盘根（``target.anchor``）是为 Windows 准备的：``D:\\Stella-3.0.0`` 是常见解压位置。
+    但在 POSIX 上 anchor 恒为 ``/``，扫它意味着走遍 ``/boot`` ``/proc`` ``/sys`` ``/dev``
+    ——既慢又全是读不了的路径，而没有人会把 Stella 解压到文件系统根目录下。
+    """
+    home = Path.home()
+    roots = [target.parent, target.parent.parent, home / "Desktop", home / "Downloads"]
+    anchor = target.anchor
+    if anchor and anchor != "/":
+        roots.append(Path(anchor))
+    return roots
 
 
 def detect_sources(target: Path, *, limit: int = 400) -> list[Path]:
@@ -172,28 +194,26 @@ def detect_sources(target: Path, *, limit: int = 400) -> list[Path]:
     只扫「兄弟目录、伯父目录、桌面/下载、盘根」这几处的两层深度：用户解压时几乎
     总落在这些地方（``Downloads/Stella-v3.0.0/Stella/`` 这种嵌套所以要两层）。
     刻意不做全盘扫描——那会慢到让人以为程序卡死，而且会翻出备份副本造成误导。
+
+    **本函数不抛异常**：探测失败最多是「没找到」，由用户手工指定 ``--from``；
+    绝不该因为路上某个目录读不了就让导入无法进行。
     """
-    target = target.resolve()
-    home = Path.home()
-    roots = [
-        target.parent,
-        target.parent.parent,
-        home / "Desktop",
-        home / "Downloads",
-        Path(target.anchor) if target.anchor else None,
-    ]
+    target = _resolve(target)
     seen: set[Path] = set()
     found: list[Path] = []
     scanned = 0
-    for root in roots:
-        if root is None or not root.is_dir():
+    for root in _scan_roots(target):
+        try:
+            if not root.is_dir():
+                continue
+        except OSError:
             continue
         for child in _iter_dirs(root):
             if scanned >= limit:
                 break
             scanned += 1
             for candidate in (child, *_iter_dirs(child)):
-                resolved = candidate.resolve()
+                resolved = _resolve(candidate)
                 if resolved == target or resolved in seen:
                     continue
                 seen.add(resolved)
@@ -202,14 +222,30 @@ def detect_sources(target: Path, *, limit: int = 400) -> list[Path]:
     return sorted(found, key=_data_mtime, reverse=True)
 
 
-def _iter_dirs(root: Path):
-    """安全列子目录：权限不足/路径过长直接跳过，不能让探测炸掉整个流程。"""
+def _resolve(path: Path) -> Path:
+    """``resolve()`` 的不抛版本：解析不了就用原路径（比让探测崩掉强）。"""
     try:
-        for entry in root.iterdir():
-            if entry.is_dir() and not entry.name.startswith("."):
-                yield entry
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _iter_dirs(root: Path):
+    """安全列子目录：权限不足/路径过长直接跳过，不能让探测炸掉整个流程。
+
+    ``is_dir()`` 也要逐个兜住：能列出目录项，不代表能 stat 每一项（断链的符号链接、
+    权限受限的挂载点都会在这一步抛）。
+    """
+    try:
+        entries = list(root.iterdir())
     except OSError:
         return
+    for entry in entries:
+        try:
+            if entry.is_dir() and not entry.name.startswith("."):
+                yield entry
+        except OSError:
+            continue
 
 
 # ── 文件搬迁 ────────────────────────────────────────────

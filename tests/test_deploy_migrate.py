@@ -264,6 +264,43 @@ def test_autodetect_picks_the_used_install(install_pair):
     assert fresh.resolve() not in found
 
 
+def test_autodetect_survives_unreadable_directories(install_pair, monkeypatch):
+    """探测路上有读不了的目录时，照常返回结果而不是抛 PermissionError。
+
+    真实触发场景（CI 上炸过）：临时目录的 anchor 是 ``/``，扫盘根就会走进
+    ``/boot/lost+found`` 这类 root 0700 的目录——能列出目录项，却 stat 不了里面的
+    ``bot.py``。用户机器上同样有的是这种目录（系统保留目录、断链的网络盘）。
+    """
+    old, new = install_pair
+    forbidden = old.parent / "forbidden"
+    forbidden.mkdir()
+
+    real_is_file = Path.is_file
+
+    def fake_is_file(self):
+        if forbidden in self.parents:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", fake_is_file)
+
+    found = migrate.detect_sources(new)
+
+    assert old.resolve() in found
+
+
+def test_autodetect_skips_posix_filesystem_root(tmp_path):
+    """POSIX 上不扫 ``/``：没人把 Stella 解压到根目录，扫它只会走遍 /proc /sys /boot。"""
+    target = tmp_path / "Stella-3.1.0"
+    _write(target / "bot.py", "# new\n")
+
+    roots = migrate._scan_roots(target.resolve())
+
+    assert Path("/") not in roots
+    # 兄弟目录这些真正有用的起点必须还在
+    assert target.resolve().parent in roots
+
+
 def test_refuses_when_source_is_not_an_install(tmp_path):
     """指了个不是安装目录的路径 → 明确报错，不做任何事。"""
     new = tmp_path / "new"
