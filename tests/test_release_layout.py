@@ -82,6 +82,33 @@ def test_every_user_data_path_is_kept_out_of_the_release():
     )
 
 
+def test_data_dir_is_excluded_everywhere():
+    """整个用户数据目录必须被三层同时挡住：.gitignore、rsync 排除、发布前布局校验。
+
+    开发机上 ``config/home.py`` 的便携模式会命中 ``<仓库>/StellaData``，里面是开发者
+    真实的 ``.env`` 与记忆库。漏掉任何一层，这些内容都可能随发布包出门——而 GitHub
+    Release 的资产会被立刻镜像抓取，发出去就收不回来。
+    """
+    from config import home
+
+    name = home.DEFAULT_DIR_NAME
+    assert name in _gitignore_entries(), f"{name}/ 不在 .gitignore 里"
+    assert name in _release_excludes(), f"{name} 不在 release.yml 的 rsync 排除清单里"
+
+
+def test_release_layout_check_rejects_a_packaged_data_dir(tmp_path):
+    """布局校验脚本要能真的拦下混进发布包的数据目录。"""
+    from check_release_layout import check
+
+    from config import home
+
+    release = tmp_path / "Stella"
+    (release / home.DEFAULT_DIR_NAME).mkdir(parents=True)
+    problems = check(release)
+
+    assert any(home.DEFAULT_DIR_NAME in p for p in problems)
+
+
 def test_never_migrate_paths_are_excluded_from_release():
     """日志与缓存也不该进发布包。"""
     excludes = _release_excludes()

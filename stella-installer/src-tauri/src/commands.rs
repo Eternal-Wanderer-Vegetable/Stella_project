@@ -183,7 +183,6 @@ pub async fn get_config() -> Result<String, String> {
 #[tauri::command]
 pub async fn save_config(config: ConfigInput) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let root = python::data_root();
         let answers_path = python::project_root().join(".stella-installer.answers.toml");
         let ws_urls = parse_list(&config.ws_urls);
         let spaces = parse_spaces(&config.spaces)?;
@@ -224,10 +223,15 @@ pub async fn save_config(config: ConfigInput) -> Result<String, String> {
         let answer_arg = answers_path.to_string_lossy().into_owned();
         let result = python::run_deploy(&["init", "--answers", &answer_arg, "--force"]);
         let _ = std::fs::remove_file(&answers_path);
+        // init 会在首次运行时 mkdir 数据目录并写指针文件——数据目录的位置可能刚刚才
+        // 确定下来。必须先失效缓存再取 root，否则下面的空间配置与高级 .env 会被写进
+        // init 之前的旧位置（用户看到的是「保存成功，但设置没生效」）。
+        python::invalidate_data_root();
         let (stdout, stderr, code) = result?;
         if code != 0 {
             return Err(if stderr.trim().is_empty() { stdout } else { stderr });
         }
+        let root = python::data_root();
         write_spaces(&root, &spaces)?;
         apply_advanced_env(&root, &config.advanced_env, &config, &groups)?;
         Ok(stdout)
@@ -445,7 +449,13 @@ pub async fn run_migrate(source: Option<String>, dry_run: bool) -> Result<String
             args.push("--dry-run".to_owned());
         }
         let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
-        python::run_deploy(&borrowed)
+        let result = python::run_deploy(&borrowed);
+        // deploy migrate（非预演）会 mkdir 数据目录并写指针文件，也就是**改变了
+        // data_root 的答案**。不在这里失效缓存，后续 get_config / save_config 会继续
+        // 读写导入之前的旧位置——v3.1.0 的「导入成功但配置是空的」就是这么来的。
+        // 预演不落盘，但失效一次也无害（顶多多跑一次 deploy paths）。
+        python::invalidate_data_root();
+        result
     })
     .await
     .map_err(|e| format!("导入任务未能完成：{e}"))??;

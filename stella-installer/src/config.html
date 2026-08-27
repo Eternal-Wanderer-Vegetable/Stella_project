@@ -15,7 +15,6 @@
         <a class="nav-secondary" href="./config.html">配置</a>
         <a class="nav-secondary" href="./persona.html">人格设定</a>
         <a class="nav-secondary" href="./doctor.html">环境自检</a>
-        <a class="nav-secondary" href="./migrate.html">从旧版本导入</a>
       </nav>
     </header>
     <p class="subtitle">填写启动 Stella 所需的连接和模型信息。配置会写入项目根目录的 .env。</p>
@@ -105,6 +104,16 @@
               <div id="advanced-groups"></div>
             </details>
           </form>
+        </div>
+        <div class="card">
+          <label>从旧版本导入配置</label>
+          <span class="config-status" id="migrate-hint">
+            有 3.0.0 或更早的安装？可以把配置、记忆、人格和插件数据一次性搬过来。
+            全程只读旧目录，导入前会自动备份数据库。
+          </span>
+          <div class="config-actions">
+            <button type="button" id="btn-migrate">打开配置导入</button>
+          </div>
         </div>`;
 
       const mode = root.querySelector("#onebot_mode");
@@ -121,6 +130,10 @@
       root.querySelector("#btn-add-space").onclick = () => addSpaceRow();
       root.querySelector("#btn-models").onclick = loadModels;
       root.querySelector("#btn-reset-defaults").onclick = resetDefaults;
+      // 导入是一次性动作，所以不放顶栏，而是挂在配置页表单**下方**：新用户的主线是
+      // 填配置，存量用户才需要导入。未配置且探测到旧安装时，index.html 会直接把人
+      // 送进导入页，那条路径不受这里影响。
+      root.querySelector("#btn-migrate").onclick = () => { location.href = "./migrate.html"; };
       root.querySelector("#config-form").onsubmit = save;
     }
 

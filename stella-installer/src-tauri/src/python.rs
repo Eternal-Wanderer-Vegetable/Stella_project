@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
 #[cfg(windows)]
 mod runtime_bootstrap {
@@ -620,31 +620,59 @@ pub fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 
+/// [`data_root`] 的缓存。`None` = 尚未解析或已失效。
+static DATA_ROOT_CACHE: RwLock<Option<PathBuf>> = RwLock::new(None);
+
 /// 用户数据目录（``STELLA_HOME``）：``.env``、空间配置、人格、记忆库都在这里。
 ///
 /// **判据只有 ``config/home.py`` 一份**，所以这里问 Python 要（`deploy paths`），
 /// 不在 Rust 里重写一遍定位逻辑。两处各写一套的后果是「一边读旧目录、一边写新目录」，
 /// 用户会看到「保存成功但没生效」这种最难查的症状。
 ///
-/// 取不到就退回程序目录 = 退回旧布局，界面照常可用。结果缓存：进程运行期间数据目录
-/// 不会变，而每次文件操作都起一个 Python 子进程太慢。
+/// 取不到就退回程序目录 = 退回旧布局，界面照常可用。
+///
+/// **缓存的不变量**：结果会被缓存（每次文件操作都起一个 Python 子进程太慢），但数据
+/// 目录**会在进程运行期间变化**——`deploy migrate` 与 `deploy init` 都会在首次运行时
+/// mkdir 数据目录并写指针文件。因此：
+///
+/// > 任何可能建数据目录或写指针文件的命令跑完之后，必须调用 [`invalidate_data_root`]。
+///
+/// 这条不变量曾经被违反过（v3.1.0）：当时用的是 `OnceLock`，而 GUI 启动时
+/// `index.html` 先调 `get_config`（此刻数据目录还不存在）把值定死，导入完成后所有
+/// 读写仍指向旧位置——表现为「导入成功但配置是空的，重启才好」，且导入后保存配置会
+/// 写进错误的目录。注释写在缓存本身上而不是调用点上，就是为了让下一个加命令的人看见。
 pub fn data_root() -> PathBuf {
-    static CACHE: OnceLock<PathBuf> = OnceLock::new();
-    CACHE
-        .get_or_init(|| {
-            run_deploy_without_prepare(&["paths"])
-                .ok()
-                .filter(|(_, _, code)| *code == 0)
-                .and_then(|(stdout, _, _)| {
-                    serde_json::from_str::<serde_json::Value>(extract_json_str(&stdout)?)
-                        .ok()?
-                        .get("stella_home")?
-                        .as_str()
-                        .map(PathBuf::from)
-                })
-                .unwrap_or_else(project_root)
+    if let Some(cached) = DATA_ROOT_CACHE.read().ok().and_then(|c| c.clone()) {
+        return cached;
+    }
+    let resolved = resolve_data_root();
+    if let Ok(mut cache) = DATA_ROOT_CACHE.write() {
+        *cache = Some(resolved.clone());
+    }
+    resolved
+}
+
+/// 丢弃 [`data_root`] 的缓存，下次调用重新问一次 Python。
+///
+/// 见 [`data_root`] 的不变量：`migrate` / `init` 之后必须调用。
+pub fn invalidate_data_root() {
+    if let Ok(mut cache) = DATA_ROOT_CACHE.write() {
+        *cache = None;
+    }
+}
+
+fn resolve_data_root() -> PathBuf {
+    run_deploy_without_prepare(&["paths"])
+        .ok()
+        .filter(|(_, _, code)| *code == 0)
+        .and_then(|(stdout, _, _)| {
+            serde_json::from_str::<serde_json::Value>(extract_json_str(&stdout)?)
+                .ok()?
+                .get("stella_home")?
+                .as_str()
+                .map(PathBuf::from)
         })
-        .clone()
+        .unwrap_or_else(project_root)
 }
 
 /// 从可能夹带日志的 stdout 里截出 JSON 对象（与 commands.rs 的 extract_json 同源）。

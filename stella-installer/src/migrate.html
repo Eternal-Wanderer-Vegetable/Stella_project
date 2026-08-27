@@ -8,14 +8,13 @@
 <body>
   <div class="app">
     <header>
-      <h1>从旧版本导入</h1>
+      <h1>配置导入</h1>
       <span class="ver">v3.0.0</span>
       <nav class="top-nav">
         <a class="nav-secondary" href="./run.html">运行状态</a>
         <a class="nav-secondary" href="./config.html">配置</a>
         <a class="nav-secondary" href="./persona.html">人格设定</a>
         <a class="nav-secondary" href="./doctor.html">环境自检</a>
-        <a class="nav-secondary" href="./migrate.html">从旧版本导入</a>
       </nav>
     </header>
     <p class="subtitle">
@@ -37,7 +36,7 @@
   </div>
 
   <script type="module">
-    import { runMigrate, getVersion, installCloseOverlay } from "./api.js";
+    import { runMigrate, getConfig, getVersion, installCloseOverlay } from "./api.js";
 
     const root = document.getElementById("root");
     const hint = document.getElementById("hint");
@@ -88,7 +87,18 @@
       try {
         const report = await runMigrate({ source: src.value, dryRun: false });
         show(report);
-        hint.textContent = "导入完成，报告已存为 migration_report.md。可以去「运行状态」启动了。";
+        // 导入会新建数据目录并写指针文件，也就是**换了 .env 的位置**。这里主动重新拉
+        // 一次配置：一来让「刚导入的值」立刻可见，二来确认后端已经指向新位置——
+        // v3.1.0 的缺陷正是「导入成功但配置还是空的，重启才好」。
+        let landed = false;
+        try {
+          landed = Boolean((await getConfig()).configured);
+        } catch (e) {
+          landed = false;
+        }
+        hint.textContent = landed
+          ? "导入完成，配置已生效（报告已存为 migration_report.md）。可以去「运行状态」启动了。"
+          : "导入完成（报告已存为 migration_report.md），但配置看起来仍不完整，请到「配置」页检查。";
       } catch (e) {
         root.innerHTML = `<div class="notice notice-error">导入失败：${esc(e)}</div>`;
         hint.textContent = "旧目录未被改动，修好问题后可以重试。";

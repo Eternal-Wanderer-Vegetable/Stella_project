@@ -21,6 +21,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from config import home
 from deploy import manifest
 from deploy.migrate import NEVER_MIGRATE, SHIPPED_EDITABLE, USER_DATA
 
@@ -59,6 +60,15 @@ def check(release_dir: Path) -> list[str]:
     for relative in NEVER_MIGRATE:
         if _has_user_content(release_dir / relative.rstrip("/")):
             problems.append(f"{relative} 是运行期产物，不该出现在发布包里")
+
+    # 1b) 整个数据目录更不该入包。开发机上 config/home.py 的便携模式会命中
+    #     <仓库>/StellaData，它装着开发者的真实 .env 与记忆库——漏掉这一条，
+    #     发布包会直接带着开发机的数据和聊天记录出门，且发出去就收不回来。
+    if (release_dir / home.DEFAULT_DIR_NAME).exists():
+        problems.append(
+            f"{home.DEFAULT_DIR_NAME}/ 是用户数据目录（config/home.py），"
+            f"不该出现在发布包里；请在 release.yml 的 rsync 排除清单里加上它"
+        )
 
     # 2) 清单必须完整且是最新的：漏一个文件，升级时就无法判断用户改没改过它
     #    （会退化为「一律保留旧文件」，用户永远拿不到新默认值）

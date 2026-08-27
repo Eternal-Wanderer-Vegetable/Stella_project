@@ -245,7 +245,7 @@ def test_report_is_written_and_readable(install_pair):
     path = migrate.write_report(new, report)
 
     text = path.read_text(encoding="utf-8")
-    assert "# 从旧版本导入" in text
+    assert "# 配置导入" in text
     assert "memory/agent_memory.db" in text
     assert "配置文件（.env）" in text
     assert "数据库迁移" in text

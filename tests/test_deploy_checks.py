@@ -419,6 +419,27 @@ def test_stella_home_legacy_layout_is_ok():
     assert "deploy migrate" in r.detail
 
 
+def test_stella_home_portable_mode_is_ok_but_warns_about_the_cost():
+    """便携模式（数据在程序目录内）是合法选择，但代价必须说清楚。
+
+    程序目录是升级时被整体替换、也会被用户当「旧版本」删掉的那个——不提醒，
+    这个布局迟早会吃掉某个用户的全部记忆。
+    """
+    r = checks.check_stella_home(
+        _healthy_snapshot(
+            stella_home="D:/Stella-3.1.0/StellaData",
+            program_root="D:/Stella-3.1.0",
+            stella_home_source="便携模式：安装目录内的 StellaData",
+            home_pointer_exists=False,
+        )
+    )
+    assert r is not None and r.level == "ok"
+    assert "便携" in r.title
+    # 缺指针在便携模式下是正常的，不该被报成「找不到数据」那条警告
+    assert "指针" not in r.detail
+    assert "migrate" in r.fix_hint
+
+
 def test_version_marks_downgrade_is_warn():
     """旧代码打开新版本写过的库：schema 更高、列更多，报错方式毫无提示性，必须先说破。"""
     r = checks.check_version_marks(

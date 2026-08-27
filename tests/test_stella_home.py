@@ -65,6 +65,46 @@ def test_default_is_sibling_data_dir_and_not_created(install):
     assert not resolved.path.exists()  # 没有 create=True 就不许落盘
 
 
+def test_portable_data_dir_inside_install_is_used(install):
+    """便携模式：安装目录里显式建了 StellaData → 用它，而不是同级的那个。
+
+    仓库自身走的就是这条（开发数据在 <repo>/StellaData），所以仓库、发布包、运行期
+    的相对布局是一致的「数据都在 StellaData/ 里」。
+    """
+    inside = install / "StellaData"
+    inside.mkdir()
+    resolved = home.resolve(install)
+    assert resolved.path == inside.resolve()
+    assert "便携" in resolved.source
+
+
+def test_portable_mode_loses_to_legacy_layout(install):
+    """旧安装的数据在安装目录根上，不该被一个恰好同名的空目录抢走。"""
+    (install / ".env").write_text("ALLOWED_GROUPS=1\n", encoding="utf-8")
+    (install / "StellaData").mkdir()
+    assert home.resolve(install).path == install
+
+
+def test_portable_mode_loses_to_pointer(install, tmp_path):
+    """指针文件仍然优先：用户已经有一份在用的数据目录，不能被便携目录顶掉。"""
+    data = tmp_path / "Elsewhere"
+    data.mkdir()
+    home.write_pointer(data)
+    (install / "StellaData").mkdir()
+    assert home.resolve(install).path == data
+
+
+def test_default_stays_outside_when_no_portable_dir(install):
+    """没显式建 StellaData 时，默认仍落在**安装目录之外**。
+
+    这是本项目最贵的一条不变量：程序目录是升级时被整体替换、也会被用户当「旧版本」
+    删掉的那个。默认放进去，就等于把「删掉旧版本文件夹」变成不可逆的数据丢失。
+    """
+    resolved = home.resolve(install)
+    assert resolved.path == (install.parent / "StellaData").resolve()
+    assert install not in resolved.path.parents
+
+
 def test_create_writes_pointer_file(install):
     """create=True 才建目录并写指针文件——指针在程序目录之外，是「升级一步走」的基础。"""
     resolved = home.resolve(install, create=True)

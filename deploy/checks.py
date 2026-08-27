@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import difflib
+from pathlib import Path
 from collections.abc import Callable, Sequence
 
 from config import state
@@ -517,6 +518,20 @@ def check_persona_file(snap: Snapshot) -> CheckResult | None:
     return None
 
 
+def _is_inside(child: str, parent: str) -> bool:
+    """``child`` 是否在 ``parent`` 目录之内（纯字符串路径比较，不碰磁盘）。
+
+    doctor 的所有检查都只读 Snapshot、不做 IO——这样它们在测试里可以用构造的快照
+    穷举每个分支，也不会因为某个路径此刻不存在而给出不同结论。
+    """
+    if not child or not parent:
+        return False
+    try:
+        return Path(parent).resolve() in Path(child).resolve().parents
+    except (OSError, ValueError):
+        return False
+
+
 def check_stella_home(snap: Snapshot) -> CheckResult | None:
     """用户数据目录的位置与可发现性。
 
@@ -534,6 +549,23 @@ def check_stella_home(snap: Snapshot) -> CheckResult | None:
             detail=(
                 f"数据目录：{snap.stella_home}（{snap.stella_home_source}）。"
                 "升级到新目录时用 python -m deploy migrate 把数据带过去。"
+            ),
+        )
+    if _is_inside(snap.stella_home, snap.program_root):
+        # 便携模式：用户显式在程序目录里建了 StellaData。这不是错误配置，但代价必须说清楚
+        # ——程序目录是升级时被整体替换、也会被当作「旧版本」删掉的那个。这里刻意**不**
+        # 提指针文件：便携副本绝不该去改写机器级指针，那会让它劫持本机的正常安装。
+        return CheckResult(
+            id="stella_home",
+            level="ok",
+            title="用户数据在程序目录内（便携模式）",
+            detail=(
+                f"数据目录：{snap.stella_home}（{snap.stella_home_source}）。"
+                "整个目录可以拷走，但它会跟着程序目录一起被替换或删除。"
+            ),
+            fix_hint=(
+                "升级前先用 python -m deploy migrate 把数据导入新版本，或手工备份该目录；"
+                "不想要这个行为就删掉它，程序会改用程序目录同级的 StellaData。"
             ),
         )
     if not snap.home_pointer_exists:

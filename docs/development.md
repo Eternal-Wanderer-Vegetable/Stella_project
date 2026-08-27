@@ -13,6 +13,30 @@ pip install -r requirements-dev.txt
 
 `requirements-dev.txt` 包含 pytest、ruff、numpy 等开发期依赖。numpy 只被 embedding fixture 的向量计算用到，缺失时相关测试会跳过而非报错。
 
+### 开发机的用户数据放在 `StellaData/`
+
+仓库根目录下的 `StellaData/`（整体 gitignore）是本机的**用户数据目录**（`STELLA_HOME`）：
+
+```text
+Stella_project/
+  StellaData/          ← 你的 .env、记忆库、空间配置、人格、插件数据、日志
+    .env  deploy.answers.toml
+    memory/  config/spaces/  system_prompts/  data/  logs/
+  bot.py  config/  deploy/  memory/  …   ← 代码
+```
+
+`config/home.py` 的第 4 条（便携模式）会命中它，于是**仓库、发布包、运行期的相对布局是同一套**
+——都是「数据在 `StellaData/` 里」，区别只在这个目录挂在哪一级。
+
+已有的老工作副本（数据散在仓库根上）不受影响：`config/home.py` 的第 3 条会认出「旧布局」并就地使用。
+想迁过来的话，把 `.env`、`deploy.answers.toml`、`memory/`、`config/spaces/`、`system_prompts/`、
+`data/`、`logs/` 移进 `StellaData/` 即可，路径常量全部跟着 `STELLA_HOME` 走，不用改代码。
+`python -m deploy paths` 会告诉你当前解析到了哪里、走的是哪一条规则。
+
+**不要把数据目录提交进仓库**：`.gitignore` 里有 `StellaData/`，`release.yml` 的 rsync
+排除清单里也有，`scripts/check_release_layout.py` 会在发布前再拦一道。三层都是刻意的——
+这个目录装着真实的 `.env` 与聊天记录，一旦随发布包出门就收不回来。
+
 ## 部署工具
 
 `deploy/` 是「检查逻辑全在 Python 侧、GUI 只是渲染器」的部署工具：doctor 输出结构化 JSON，

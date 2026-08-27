@@ -16,7 +16,15 @@
    只需一步」的实现基础；
 3. 安装目录本身像是用过的旧布局（有 ``.env`` 或 ``memory/agent_memory.db``）→ 就地使用，
    3.0.0 及更早的安装原地继续工作，零改动；
-4. 都没有 → ``<安装目录>/../StellaData``（便携、用户看得见、可整体拷走）。
+4. ``<安装目录>/StellaData`` 已存在 → 用它（**便携模式**）。想把程序连数据整个拷进 U 盘、
+   或希望仓库/发布包/运行期的布局完全一致时，建一个这样的子目录即可。开发仓库走的就是
+   这条；
+5. 都没有 → ``<安装目录>/../StellaData``（便携、用户看得见、可整体拷走）。
+
+**为什么默认是「同级」而不是「内部」**（第 5 条 vs 第 4 条）：程序目录是升级时被整体
+替换、也会被用户当作「旧版本」删掉的那个目录。数据放进去，就等于把「删掉旧版本文件夹」
+变成一个不可逆的数据丢失操作——而那是个再自然不过的清理动作。所以默认在外，
+只有用户**显式**建了 ``StellaData`` 子目录才认为他要的是自包含布局。
 
 **永不抛异常**：任何一步出错都退回安装目录，也就是退回 2026-08-27 之前的行为。
 定位失败不该让 Bot 起不来。
@@ -122,6 +130,12 @@ def _resolve(install_root: Path, *, create: bool) -> HomeResolution:
 
     if looks_used(install_root):
         return HomeResolution(path=install_root, source="旧布局：数据在安装目录内")
+
+    # 便携模式：用户显式在安装目录里建了 StellaData，就用它。放在默认值之前判断，
+    # 但排在「旧布局」之后——旧安装的数据在安装目录根上，不该被一个恰好同名的空目录抢走。
+    inside = install_root / DEFAULT_DIR_NAME
+    if inside.is_dir():
+        return HomeResolution(path=inside.resolve(), source="便携模式：安装目录内的 StellaData")
 
     home = (install_root.parent / DEFAULT_DIR_NAME).resolve()
     if create:

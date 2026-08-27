@@ -127,6 +127,7 @@ jobs:
             --exclude 'deploy.answers.toml' \
             --exclude '.stella-stop-request*' \
             --exclude 'logs' \
+            --exclude 'StellaData' \
             --exclude 'runtime' \
             --exclude '*.db' \
             --exclude '*.jsonl' \
@@ -185,11 +186,16 @@ jobs:
       - name: 校验发布包布局（用户数据未入包 / 自带可改文件已登记）
         run: python scripts/check_release_layout.py dist/Stella
 
+      # zip 内**不再包一层 Stella/**：Windows 资源管理器解压时默认会建一个与 zip
+      # 同名的文件夹，再套一层就成了 Stella-v3.1.0-win64\Stella\——多出来的这一级会把
+      # config/home.py 的「安装目录的同级」顶成「版本文件夹的内部」，用户数据于是落在
+      # Stella-v3.1.0-win64\StellaData，升级后清理旧版本文件夹＝删掉自己的全部记忆。
+      # 打平之后：解压得到 Stella-v3.1.0-win64\（程序），数据在其同级 StellaData\。
       - name: 打包 zip
         run: |
-          cd dist
-          zip -q -r "Stella-${RELEASE_REF}-win64.zip" Stella
-          ls -lh "Stella-${RELEASE_REF}-win64.zip"
+          cd dist/Stella
+          zip -q -r "../Stella-${RELEASE_REF}-win64.zip" .
+          ls -lh "../Stella-${RELEASE_REF}-win64.zip"
 
       # 纵深防御：排除清单必然会有遗漏（将来加新的配置/日志文件时容易忘），
       # 这一步在发布前对成品做最后检查。含真实群聊内容或凭据的文件一旦发布
@@ -204,7 +210,9 @@ jobs:
           # memory/consolidation_log.py 是必需模块，会正常出现在包内；
           # .env.example 也需保留（deploy init 的模板），因此 .env 只匹配
           # 带敏感后缀的变体（.dev/.prod/.bak/.backup）与根目录 .env。
-          if unzip -l "$ZIP" | grep -Ei '(/\.env(\.(dev|prod|bak|backup))?$|answers\.toml|\.stella-stop-request|\.db$|\.jsonl$|\.log$|stella_thought_logs|memory_consolidation_log|memory_compressor_log|windows_raw|_probe|sanitize_map)'; then
+          # 根目录 .env 必须用 (^|[ /]) 起头而不是裸 /：zip 打平后它在包内就叫 ".env"，
+          # 前面没有斜杠，只写 /\.env$ 会让这条最该拦的规则静默失效。
+          if unzip -l "$ZIP" | grep -Ei '((^|[ /])\.env(\.(dev|prod|bak|backup))?$|answers\.toml|\.stella-stop-request|\.db$|\.jsonl$|\.log$|stella_thought_logs|memory_consolidation_log|memory_compressor_log|windows_raw|_probe|sanitize_map)'; then
             echo "::error::发布包含敏感或运行期文件，已中止发布"
             exit 1
           fi

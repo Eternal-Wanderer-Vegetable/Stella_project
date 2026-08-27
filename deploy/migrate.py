@@ -15,7 +15,7 @@
    新版本，覆盖等于毁掉他这段时间的记忆——那种情况只报告、不动手。
    ``.env`` 是唯一例外：它走合并（新模板骨架 + 旧值），不是覆盖。
 
-用户视角就两步：解压新版 → 双击启动后点「从旧版本导入」（GUI 调的就是本命令）。
+用户视角就两步：解压新版 → 双击启动后点「配置导入」（GUI 调的就是本命令）。
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ class MigrateReport:
         self.items.append(ItemResult(path=path, action=action, detail=detail))
 
     def to_markdown(self) -> str:
-        title = "# 从旧版本导入" + ("（预演，未落盘）" if self.dry_run else "")
+        title = "# 配置导入" + ("（预演，未落盘）" if self.dry_run else "")
         lines = [title, ""]
         lines.append(f"- 来源目录：`{self.source}`" if self.source else "- 来源目录：未找到")
         if self.source_version:

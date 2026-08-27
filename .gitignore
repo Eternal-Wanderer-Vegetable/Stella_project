@@ -16,6 +16,11 @@ FlexiWeb_Stream_Scraper/
 .coverage
 .coverage-*
 
+# 用户数据目录（STELLA_HOME）。开发机上 config/home.py 的「便携模式」会命中这里，
+# 于是仓库、发布包、运行期的相对布局统一为「数据都在 StellaData/ 里」。
+# 下面那些逐条规则**刻意保留**：还没把数据迁进 StellaData/ 的开发机仍靠它们兜底。
+StellaData/
+
 # Runtime data & logs
 # 所有运行期日志统一落在 logs/（见 config/settings.py 的 LOG_DIR），由下面的 logs/ 一条覆盖：
 #   logs/stella.jsonl              结构化日志（GUI 消费，10MB 轮转、保留 5 份）
