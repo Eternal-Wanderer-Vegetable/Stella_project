@@ -92,6 +92,13 @@ def _short_digest(text: str) -> str:
 
 
 def _default_plugins_dir() -> Path:
+    """``<程序目录>/data/plugins``——**能被 ``import data.plugins.X`` 找到的那个位置**。
+
+    刻意锚在程序目录而不是 ``ASTRBOT_PLUGINS_DIR``：这个函数只服务
+    ``_is_default_location``，而「能不能按包路径 import」取决于目录是否在 sys.path
+    的项目根下，与用户把插件目录配到哪里无关。2026-08-27 起用户数据目录可能整体在
+    程序目录之外（STELLA_HOME），那种情况下**所有**插件都只能按文件路径挂载。
+    """
     try:
         from config.settings import PROJECT_ROOT
 

@@ -19,16 +19,20 @@
 8. v7 ``user_profiles`` 主键改为按群隔离（v8 起为 ``(group_shared_space, user_id)``）：
    同一个人在技术群与闲聊群应当是不同画像，共用一份会让 _merge_traits 把两个群的特征混在一起，
    使「群A 一个形象、群B 另一个形象」在认知层面无法成立。
-   **本版不做数据迁移**：SQLite 无法直接改主键，且旧库画像在严苛筛选下几乎为空，
-   直接新建数据库比写一套只用一次的迁移代码更可靠（决策记录 2026-08-17）。
-   旧库如需保留请手动改名后让程序重建。
 9. v8 把 ``memories`` / ``memory_candidates`` / ``atomic_facts`` / ``user_profiles``
    / ``memories_fts`` 的 ``group_id`` 改名为 ``group_shared_space``：多个 QQ 群
    可以组成一个「群组共享空间」，共享画像、记忆与人格；而消息尾巴、checkpoint、
    短期话题、静音开关、@ 配额仍按真实 QQ 群归属（那些是「当下这场对话的状态」，
    混群会让 Bot 在 A 群回应 B 群）。列名改名而非复用 ``group_id``，是为了让两层
    归属在代码里不可混淆——同一个名字有时指 QQ 群、有时指空间，是必然踩坑的歧义。
-   **本版不做数据迁移**（同 v7）：库为空，归档旧库重建即可。
+10. v10 为按空间归属的表增加溯源列 ``origin_group_id``：记住这一行原本来自哪个真实
+   QQ 群，让空间合并可以回退（合并本身不可逆），也让「这条记忆来自哪个群」不用猜。
+
+**v7 / v8 的数据迁移已在 2026-08-27 补齐**（`memory/migrations.py`）。此前两版都声明
+「本版不做数据迁移、归档旧库重建」，而公开发布的 2.x 全是 schema v2/v5（带 ``group_id``
+列），等于让所有存量用户丢掉全部记忆。现在 v5 → v10 全自动：列改名 + 值重写为空间名 +
+主键重建 + FTS 重建 + 校验，失败整级回滚。**新规矩：``SCHEMA_VERSION`` 每 +1 必须同时
+提交 ``migrate_vN`` 与一个旧库夹具回归测试，禁止再出现「本版不做数据迁移」。**
 
 迁移以 ``schema_meta`` 表记录版本号，幂等；所有 ALTER 都经过 ``PRAGMA table_info``
 探测，绝不对已存在的列重复添加。任何情况都不删除旧数据。
@@ -41,14 +45,15 @@ from __future__ import annotations
 import argparse
 import contextlib
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v9：AstrBot 插件兼容层的会话与偏好表）
-SCHEMA_VERSION = 9
+# 当前 Schema 版本（v10：按空间归属的表增加 origin_group_id 溯源列）
+SCHEMA_VERSION = 10
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -179,6 +184,29 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "source_kinds",
         "ALTER TABLE memory_candidates ADD COLUMN source_kinds TEXT DEFAULT '[\"PASSIVE\"]'",
     ),
+    # v10：溯源列。空间合并（多个群并进一个空间）本身不可逆——合并后没有任何信息
+    # 能把两个群的记忆拆回来。这一列记住行的原始归属，让拆分成为可做的操作，
+    # 也让「这条记忆来自哪个群」不必靠 memory_traces 反查（后者只覆盖有 trace 的部分）。
+    (
+        "memories",
+        "origin_group_id",
+        "ALTER TABLE memories ADD COLUMN origin_group_id TEXT",
+    ),
+    (
+        "memory_candidates",
+        "origin_group_id",
+        "ALTER TABLE memory_candidates ADD COLUMN origin_group_id TEXT",
+    ),
+    (
+        "atomic_facts",
+        "origin_group_id",
+        "ALTER TABLE atomic_facts ADD COLUMN origin_group_id TEXT",
+    ),
+    (
+        "user_profiles",
+        "origin_group_id",
+        "ALTER TABLE user_profiles ADD COLUMN origin_group_id TEXT",
+    ),
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -253,6 +281,7 @@ CREATE TABLE IF NOT EXISTS memories (
     trigger_data TEXT,
     behavior_rule TEXT,
     source_kind TEXT DEFAULT 'PASSIVE',
+    origin_group_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -329,6 +358,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     personality_traits TEXT,
     agent_attitude TEXT,
     interaction_count INTEGER DEFAULT 0,
+    origin_group_id TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (group_shared_space, user_id)
 )
@@ -368,6 +398,7 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     occurrence_count INTEGER DEFAULT 1,
     first_seen_at DATETIME,
     source_kinds TEXT DEFAULT '["PASSIVE"]',
+    origin_group_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -395,6 +426,7 @@ CREATE TABLE IF NOT EXISTS atomic_facts (
     predicate TEXT,
     object TEXT,
     confidence REAL,
+    origin_group_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -534,21 +566,6 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     """
     cursor = conn.cursor()
     changes = 0
-    # v8：旧库检测——记忆/画像表仍使用 group_id 列时给出明确告警。
-    # v8 不做自动迁移（同 v7），继续运行会因列名不匹配导致记忆读写失败。
-    # 注意 _column_exists 在表不存在时返回 True，必须先 _table_exists 再判断。
-    # 有明确报错比静默失败好得多：别人（或几个月后的自己）拿旧库跑起来时不会
-    # 看着记忆「读不到、写不进」而毫无头绪。
-    if (
-        _table_exists(cursor, "memories") and _column_exists(cursor, "memories", "group_id")
-    ) or (
-        _table_exists(cursor, "user_profiles") and _column_exists(cursor, "user_profiles", "group_id")
-    ):
-        logger.error(
-            "检测到 v8 之前的旧库（记忆表仍使用 `group_id` 列）。v8 不做自动迁移——"
-            "请停止程序、把 `DB_PATH` 对应文件与 `stella_memory_backup.db` 一起归档，"
-            "重启后程序会建立 v8 新库。当前运行会因列名不匹配导致记忆读写失败。"
-        )
     # v5：主动发言状态表（新表，不属于 additive column 范畴）
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
@@ -562,8 +579,9 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(USER_PROFILES_TABLE_DDL)
-    # v8：记忆/画像表统一按 group_shared_space 归属（新库直接建新列名；
-    # 旧库见上方旧库检测告警）。create_memories_table 一并加上——memories 表
+    # v8：记忆/画像表统一按 group_shared_space 归属。旧库（仍是 group_id）的
+    # 列改名与值重写由 memory/migrations.py 的 migrate_v8 负责，在本函数之前跑完；
+    # 这里的建表只对「表还不存在」生效。create_memories_table 一并加上——memories 表
     # 目前由业务模块惰性建，schema 迁移时顺手保证存在更稳。
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
@@ -625,40 +643,130 @@ def _missing_v2_columns(conn: sqlite3.Connection) -> list[str]:
     ]
 
 
+def backup_snapshot(db_path: Path, tag: str) -> Path | None:
+    """把库另存为 ``<库名>.<tag>-<时间戳>.bak``。失败只 warning 并返回 None。
+
+    刻意不复用 ``stella_memory_backup.db``：后者「已存在就跳过」（保留第一次的原始
+    库），在多次升级/合并的场景下拿不到「这次操作前」的状态。备份失败不该阻止操作，
+    但报告里要说清楚。
+    """
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = db_path.with_name(f"{db_path.name}.{tag}-{stamp}.bak")
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            dst = sqlite3.connect(backup)
+            try:
+                conn.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"⚠️ [Schema] 备份失败（{tag}）: {e}")
+        return None
+    logger.info(f"📦 [Schema] 已备份到 {backup}")
+    return backup
+
+
+def backup_before_migration(db_path: Path, target_version: int) -> Path | None:
+    """迁移前的时间戳备份 ``<库名>.pre-v<版本>-<时间戳>.bak``。"""
+    return backup_snapshot(db_path, f"pre-v{target_version}")
+
+
+def migrate_to_latest(db_path: Path = DB_PATH, ctx=None, *, dry_run: bool = False):
+    """把库升到 ``SCHEMA_VERSION`` 并校验，返回 ``MigrationReport``。
+
+    ``deploy migrate`` 与运行时共用这一条路径，判据只有一份。``dry_run`` 在库的
+    **临时副本**上真跑一遍（含校验）——比「猜要改什么」准确得多，也绝不会碰原库。
+    """
+    from memory import migrations
+
+    if not db_path.exists():
+        # 新库：没有任何要迁移的东西，建表交给业务模块与 _migrate
+        return migrations.MigrationReport(
+            from_version=SCHEMA_VERSION, to_version=SCHEMA_VERSION, dry_run=dry_run
+        )
+    if dry_run:
+        import shutil
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="stella-migrate-dry-") as td:
+            copy = Path(td) / db_path.name
+            shutil.copy2(db_path, copy)
+            return _migrate_db(copy, ctx, dry_run=True)
+    return _migrate_db(db_path, ctx, dry_run=False)
+
+
+def _migrate_db(db_path: Path, ctx, *, dry_run: bool):
+    """真正执行：版本化迁移 → 收尾加列/建表/建索引 → 校验。"""
+    from memory import migrations
+
+    conn = sqlite3.connect(db_path)
+    try:
+        current = _get_schema_version(conn)
+        report = migrations.MigrationReport(
+            from_version=current, to_version=SCHEMA_VERSION, dry_run=dry_run
+        )
+        if ctx is None:
+            ctx = migrations.runtime_context()
+        if current < SCHEMA_VERSION and not dry_run:
+            # 两份备份各有用途：stella_memory_backup.db 是「有史以来第一份原始库」
+            # （已存在就跳过），.pre-vN-<时间戳>.bak 是「这次迁移前的状态」。
+            backup_database(db_path)
+            report.backup_path = backup_before_migration(db_path, SCHEMA_VERSION)
+        before = migrations.snapshot_row_counts(conn)
+        try:
+            report.steps = migrations.run_migrations(conn, current, SCHEMA_VERSION, ctx)
+            report.additive_changes = _migrate(conn, dry_run=False)
+            conn.commit()
+            _set_schema_version(conn, SCHEMA_VERSION)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            report.error = f"{type(e).__name__}: {e}"
+            logger.error(f"⚠️ [Schema] 迁移失败，已回滚: {report.error}")
+            return report
+        report.problems = migrations.verify_after_migration(conn, before, ctx)
+        for problem in report.problems:
+            logger.error(f"⚠️ [Schema] 迁移校验未通过: {problem}")
+        return report
+    finally:
+        conn.close()
+
+
 def ensure_v2_schema(db_path: Path = DB_PATH) -> bool:
-    """幂等地把数据库升级到 v2 Schema；返回是否发生了实际迁移。
+    """幂等地把数据库升级到当前 Schema 版本；返回是否发生了实际迁移。
 
     - 数据库不存在 → 直接返回 False（由各业务模块建表即可）；
-    - 已经是 v2 → 跳过，返回 False；
-    - 首次迁移 → 先备份，再加列/建索引，最后写版本号，返回 True。
+    - 已是最新且不缺列 → 跳过，返回 False；
+    - 否则 → 先备份，跑版本化迁移（``memory/migrations.py``）+ 加列/建索引。
+
+    运行时（Bot 启动、consolidator、memory_manager）走这个入口，所以**旧库在启动时
+    就会被自动迁移**——不再要求用户手工归档旧库重建。迁移失败时返回 False 并已回滚，
+    库停留在迁移前的状态（备份文件仍在），启动流程照常继续，由 doctor 报告问题。
     """
     if not db_path.exists():
         return False
     conn = sqlite3.connect(db_path)
     try:
-        changes = 0
-        # 版本已到位但实际缺列（历史脏库：旧建表语句没带 v2 列）→ 仍然补齐
-        if _get_schema_version(conn) >= SCHEMA_VERSION:
+        current = _get_schema_version(conn)
+        if current >= SCHEMA_VERSION:
             missing = _missing_v2_columns(conn)
             if not missing:
                 return False
             logger.warning(f"⚠️ [Schema] 版本已到 v{SCHEMA_VERSION} 但缺列，正在修补: {missing}")
-        # 首次迁移才备份，避免每次启动都生成多余备份
-        if _get_schema_version(conn) < SCHEMA_VERSION:
-            backup_database(db_path)
-        changes = _migrate(conn, dry_run=False)
-        conn.commit()
-        _set_schema_version(conn, SCHEMA_VERSION)
-        conn.commit()
-        if changes:
-            logger.info(f"🔧 [Schema] 记忆系统已补齐到 v{SCHEMA_VERSION}（变更 {changes} 项）")
-        return changes > 0
-    except Exception as e:
-        logger.warning(f"⚠️ [Schema] 迁移失败（回滚重试）: {e}")
-        conn.rollback()
-        return False
     finally:
         conn.close()
+    report = _migrate_db(db_path, None, dry_run=False)
+    if report.error:
+        return False
+    if report.changed_rows or report.additive_changes:
+        logger.info(
+            f"🔧 [Schema] 记忆系统已升到 v{SCHEMA_VERSION}"
+            f"（改动 {report.changed_rows} 行、加列/索引 {report.additive_changes} 项）"
+        )
+    return bool(report.changed_rows or report.additive_changes)
 
 
 def dry_run_report(db_path: Path = DB_PATH) -> None:

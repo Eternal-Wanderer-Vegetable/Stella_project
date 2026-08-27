@@ -30,7 +30,13 @@ from pathlib import Path
 import httpx
 from dotenv import dotenv_values
 
-from config import LOG_DIR, PROJECT_ROOT, SHUTDOWN_GRACE_SECONDS, STELLA_JSON_LOG_PATH
+from config import (
+    LOG_DIR,
+    PROJECT_ROOT,
+    SHUTDOWN_GRACE_SECONDS,
+    STELLA_HOME,
+    STELLA_JSON_LOG_PATH,
+)
 from core.stop_signal import clear_stop_request, request_stop
 
 PID_FILE = LOG_DIR / "stella.pid"
@@ -256,7 +262,7 @@ def _fetch_live_status(timeout: float = 1.0) -> dict | None:
     超时取 1 秒：status 是交互命令（GUI 每 1.5 秒轮询一次），
     宁可少一块信息也不能卡住。
     """
-    env = dotenv_values(PROJECT_ROOT / ".env")
+    env = dotenv_values(STELLA_HOME / ".env")
     host = (env.get("HOST") or "127.0.0.1").strip() or "127.0.0.1"
     port = (env.get("PORT") or "8080").strip() or "8080"
     path = (env.get("STELLA_STATUS_API_PATH") or "/stella/status").strip()

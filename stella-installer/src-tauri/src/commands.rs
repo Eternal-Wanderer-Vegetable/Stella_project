@@ -113,7 +113,7 @@ pub struct ConfigInput {
 #[tauri::command]
 pub async fn get_config() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        let path = python::project_root().join(".env");
+        let path = python::data_root().join(".env");
         let values = if path.is_file() {
             parse_env(&std::fs::read_to_string(&path).map_err(|e| e.to_string())?)
         } else {
@@ -148,12 +148,13 @@ pub async fn get_config() -> Result<String, String> {
                     .unwrap_or_else(|_| raw.clone())
             })
             .unwrap_or_default();
-        let root = python::project_root();
+        let root = python::data_root();
         let mut spaces = read_spaces(&root);
         let allowed_groups = values.get("ALLOWED_GROUPS").cloned().unwrap_or_default();
         spaces = merge_default_spaces(&root, &spaces, &allowed_groups);
+        // .env 在用户数据目录，模板 .env.example 随发布包在程序目录
         let advanced_env = std::fs::read_to_string(root.join(".env"))
-            .or_else(|_| std::fs::read_to_string(root.join(".env.example")))
+            .or_else(|_| std::fs::read_to_string(python::project_root().join(".env.example")))
             .unwrap_or_default();
         serde_json::to_string(&serde_json::json!({
             "configured": configured,
@@ -182,8 +183,8 @@ pub async fn get_config() -> Result<String, String> {
 #[tauri::command]
 pub async fn save_config(config: ConfigInput) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let root = python::project_root();
-        let answers_path = root.join(".stella-installer.answers.toml");
+        let root = python::data_root();
+        let answers_path = python::project_root().join(".stella-installer.answers.toml");
         let ws_urls = parse_list(&config.ws_urls);
         let spaces = parse_spaces(&config.spaces)?;
         let space_groups: Vec<i64> = spaces
@@ -284,8 +285,10 @@ pub async fn get_version() -> Result<String, String> {
 #[tauri::command]
 pub async fn get_personas() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        let root = python::project_root();
-        let fallback_path = root.join("memory").join("SYSTEM.md");
+        let root = python::data_root();
+        let program = python::project_root();
+        // 兜底人格随发布包出厂，始终在程序目录
+        let fallback_path = program.join("memory").join("SYSTEM.md");
         let fallback = std::fs::read_to_string(&fallback_path).unwrap_or_default();
         let mut personas = Vec::new();
         let env = std::fs::read_to_string(root.join(".env")).unwrap_or_default();
@@ -296,10 +299,16 @@ pub async fn get_personas() -> Result<String, String> {
             values.get("ALLOWED_GROUPS").map(String::as_str).unwrap_or_default(),
         );
         for (name, prompt, groups) in parse_spaces(&spaces).unwrap_or_default() {
+            // 用户改过的人格在数据目录，发布包自带的默认人格在程序目录：用户的优先
             let custom_path = if prompt.is_empty() {
                 None
             } else {
-                Some(root.join("system_prompts").join(&prompt))
+                let in_data = root.join("system_prompts").join(&prompt);
+                if in_data.is_file() {
+                    Some(in_data)
+                } else {
+                    Some(program.join("system_prompts").join(&prompt))
+                }
             };
             let custom = custom_path
                 .as_ref()
@@ -345,7 +354,7 @@ pub async fn save_persona(
         {
             return Err("人格文件名必须是 system_prompts 根目录下的 .md 文件".to_owned());
         }
-        let root = python::project_root();
+        let root = python::data_root();
         let dir = root.join("system_prompts");
         std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建人格目录：{e}"))?;
         std::fs::write(dir.join(&file), content).map_err(|e| format!("无法保存人格：{e}"))?;
@@ -385,7 +394,7 @@ pub async fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<Str
     tauri::async_runtime::spawn_blocking(move || {
         let path = path
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| python::project_root().join("logs").join("stella.jsonl"));
+            .unwrap_or_else(|| python::data_root().join("logs").join("stella.jsonl"));
         let mut file = match File::open(&path) {
             Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
@@ -415,6 +424,41 @@ pub async fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<Str
     })
     .await
     .map_err(|e| format!("日志读取任务未能完成：{e}"))?
+}
+
+/// 从旧版本安装目录导入用户数据。对应 `deploy migrate`。
+///
+/// 返回的是 Markdown 报告原文（不是 JSON）：这份报告同时会被写成
+/// `migration_report.md` 给用户留档，两处内容必须一致，所以只生成一次。
+///
+/// `dry_run` 既是预览也是探测：找不到旧目录时 Python 侧以 code 1 返回，报告里
+/// 写明原因。code 0/1 都是「有结论」，其余才是异常（Python 崩了等）。
+#[tauri::command]
+pub async fn run_migrate(source: Option<String>, dry_run: bool) -> Result<String, String> {
+    let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(move || {
+        let mut args: Vec<String> = vec!["migrate".to_owned()];
+        if let Some(dir) = source.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            args.push("--from".to_owned());
+            args.push(dir.to_owned());
+        }
+        if dry_run {
+            args.push("--dry-run".to_owned());
+        }
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        python::run_deploy(&borrowed)
+    })
+    .await
+    .map_err(|e| format!("导入任务未能完成：{e}"))??;
+    if code != 0 && code != 1 {
+        return Err(format!(
+            "deploy migrate 异常退出（code {code}）：\n{}",
+            if stderr.trim().is_empty() { stdout.clone() } else { stderr }
+        ));
+    }
+    if stdout.trim().is_empty() {
+        return Err(format!("deploy migrate 没有输出报告。\nstderr: {stderr}"));
+    }
+    Ok(stdout)
 }
 
 fn parse_env(text: &str) -> std::collections::HashMap<String, String> {

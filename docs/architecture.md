@@ -419,9 +419,15 @@ python -m memory.schema             # 执行
 python -m memory.schema --backup    # 仅备份
 ```
 
-> **列名变更是例外**。SQLite 无法 ALTER 主键或重命名列，v7（画像分群）与 v8（记忆表改按空间归属）都选择**不写一次性迁移代码，而是归档旧库让程序重建**——一次性迁移代码只用一次却要长期维护，且当时的库数据量很小。`_migrate` 里保留了旧库检测：发现记忆表仍有 `group_id` 列时输出 error 提示归档重建。
+> **改结构与改数据在另一个模块**：`memory/migrations.py` 按版本注册（`migrate_v7` / `v8` / …），
+> 每版一个函数、一个事务，成功后才推进 `schema_meta.version`；`schema._migrate()` 的加列/建表
+> 作为每次迁移的收尾步骤。v7（画像分群）与 v8（记忆表改按空间归属）的数据迁移已于 2026-08-27
+> 补齐，v5 → 最新版全自动：列改名 + 值重写为空间名 + 画像主键重建 + FTS 重建 + 校验，
+> 失败整级回滚。**新规矩：`SCHEMA_VERSION` 每 +1 必须同时提交 `migrate_vN` 与旧库夹具测试。**
 >
-> 归档旧库时**连 `stella_memory_backup.db` 一起移走**，否则 `backup_database()` 见备份已存在即跳过，会留下「看起来有备份、实际备份错了」的状态。
+> 每次迁移写一份 `agent_memory.db.pre-vN-<时间戳>.bak`（这次迁移前的状态）；
+> `stella_memory_backup.db` 是「有史以来第一份原始库」，见备份已存在即跳过——封存旧库时
+> 要连它一起移走，否则会留下「看起来有备份、实际备份错了」的状态。
 
 ## AstrBot 插件兼容层
 

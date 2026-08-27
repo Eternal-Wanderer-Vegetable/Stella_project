@@ -73,7 +73,11 @@ def test_compress_log_setting_is_a_path_not_a_filename():
 
 
 def test_deprecated_compress_log_key_is_flagged():
-    """旧键留在 .env 里不会报错、也完全不生效，必须由 deploy doctor 点名。"""
-    from deploy.probe import _DEPRECATED_KEYS
+    """旧键留在 .env 里不会报错、也完全不生效，必须由 deploy doctor 点名。
 
-    assert "MEMORY_COMPRESS_LOG_FILENAME" in _DEPRECATED_KEYS
+    登记表只有一份（deploy/env_keys.py）：doctor 的提示与升级时的 .env 合并器共用，
+    否则会给出互相矛盾的建议。
+    """
+    from deploy import env_keys
+
+    assert env_keys.deprecation_reason("MEMORY_COMPRESS_LOG_FILENAME")

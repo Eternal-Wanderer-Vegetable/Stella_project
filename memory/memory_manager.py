@@ -118,7 +118,7 @@ class MemoryManager:
         candidates = cursor.execute(
             "SELECT id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, "
             "source_message_ids, usage_tags, visibility, behavior_rule, "
-            "occurrence_count, source_kinds, source_kind"
+            "occurrence_count, source_kinds, source_kind, origin_group_id"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
 

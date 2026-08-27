@@ -15,6 +15,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 #[cfg(windows)]
 mod runtime_bootstrap {
@@ -77,7 +78,11 @@ mod runtime_bootstrap {
             .map_err(|_| "运行时准备锁异常".to_owned())?;
 
         let runtime = root.join("runtime");
-        if runtime.join(DEPS_MARKER).is_file() {
+        // 依赖就绪标记里存的是 requirements.txt 的 sha256，不是一个空文件/固定字符串。
+        // 为什么：升级时用户会把整个 runtime/ 复用过来（省 100MB 下载），旧的空标记
+        // 跟着过来就等于「依赖已就绪」，新版本新增的依赖于是永远装不上。存哈希后
+        // requirements.txt 一变就自动重装。判据必须与 release_assets/start.bat 一致。
+        if deps_marker_matches(root, &runtime) {
             return Ok(());
         }
 
@@ -111,7 +116,9 @@ mod runtime_bootstrap {
             emit_progress(root, "正在安装依赖（首次约 1-2 分钟）…");
             install_deps(root, &python)?;
 
-            fs::write(runtime.join(DEPS_MARKER), "ready\n").map_err(|e| e.to_string())?;
+            // 标记里存 requirements.txt 的哈希，而不是一句 "ready"：详见 deps_marker_matches
+            let marked = requirements_hash(root).unwrap_or_else(|| "ready".to_owned());
+            fs::write(runtime.join(DEPS_MARKER), marked + "\n").map_err(|e| e.to_string())?;
             Ok(())
         })();
 
@@ -237,6 +244,26 @@ mod runtime_bootstrap {
             );
         }
         Ok(())
+    }
+
+    /// `requirements.txt` 的 sha256（大写十六进制）。读不到时返回 None。
+    fn requirements_hash(root: &Path) -> Option<String> {
+        sha256_hex(&root.join("requirements.txt")).ok()
+    }
+
+    /// 依赖就绪标记是否与当前 `requirements.txt` 匹配。
+    ///
+    /// 兼容旧标记：3.0.0 及更早写的是 `ready`，内容对不上 → 判为未就绪 → 重跑一次
+    /// pip（幂等，已满足的依赖会被跳过），之后标记就自动升级成哈希了。
+    fn deps_marker_matches(root: &Path, runtime: &Path) -> bool {
+        let Ok(recorded) = fs::read_to_string(runtime.join(DEPS_MARKER)) else {
+            return false;
+        };
+        match requirements_hash(root) {
+            // 没有 requirements.txt 时退化为「有标记就算就绪」
+            None => true,
+            Some(expected) => recorded.trim().eq_ignore_ascii_case(&expected),
+        }
     }
 
     fn sha256_hex(path: &Path) -> Result<String, String> {
@@ -511,6 +538,46 @@ mod runtime_bootstrap {
                 "构建工具必须先装：装依赖时才需要它来构建 sdist"
             );
         }
+
+        /// 依赖就绪标记必须两边都按 requirements.txt 的哈希判定。
+        ///
+        /// 升级时用户会把整个 runtime/ 复用过来省下 100MB 下载。旧实现的标记是个
+        /// 空文件，跟着复用过去就等于「依赖已就绪」，新版本新增的依赖永远装不上，
+        /// 而且报错发生在 import 阶段，看起来完全不像升级引起的。
+        #[test]
+        fn deps_marker_is_content_based_on_both_paths() {
+            let src = fs::read_to_string(Path::new(file!())).expect("无法读取 python.rs");
+            assert!(
+                src.contains("fn deps_marker_matches"),
+                "python.rs 必须按内容判定依赖就绪，而不是「标记文件存在」"
+            );
+            assert!(
+                src.contains("fn requirements_hash"),
+                "判据必须是 requirements.txt 的哈希"
+            );
+
+            let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("release_assets")
+                .join("start.bat");
+            if !bat_path.is_file() {
+                return;
+            }
+            let bat = fs::read_to_string(&bat_path).expect("无法读取 start.bat");
+            assert!(
+                bat.contains(":req_hash"),
+                "start.bat 必须计算 requirements.txt 的哈希"
+            );
+            assert!(
+                bat.contains("hashfile \"requirements.txt\" SHA256"),
+                "start.bat 必须用 certutil 算 requirements.txt 的 SHA256"
+            );
+            assert!(
+                !bat.contains("echo ready"),
+                "start.bat 不能再写固定内容的就绪标记（复用 runtime 时会漏装依赖）"
+            );
+        }
     }
 }
 
@@ -551,6 +618,44 @@ pub fn project_root() -> PathBuf {
     }
     // 形态二（开发兜底）：CARGO_MANIFEST_DIR 是 src-tauri/，向上两级即项目根
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
+}
+
+/// 用户数据目录（``STELLA_HOME``）：``.env``、空间配置、人格、记忆库都在这里。
+///
+/// **判据只有 ``config/home.py`` 一份**，所以这里问 Python 要（`deploy paths`），
+/// 不在 Rust 里重写一遍定位逻辑。两处各写一套的后果是「一边读旧目录、一边写新目录」，
+/// 用户会看到「保存成功但没生效」这种最难查的症状。
+///
+/// 取不到就退回程序目录 = 退回旧布局，界面照常可用。结果缓存：进程运行期间数据目录
+/// 不会变，而每次文件操作都起一个 Python 子进程太慢。
+pub fn data_root() -> PathBuf {
+    static CACHE: OnceLock<PathBuf> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            run_deploy_without_prepare(&["paths"])
+                .ok()
+                .filter(|(_, _, code)| *code == 0)
+                .and_then(|(stdout, _, _)| {
+                    serde_json::from_str::<serde_json::Value>(extract_json_str(&stdout)?)
+                        .ok()?
+                        .get("stella_home")?
+                        .as_str()
+                        .map(PathBuf::from)
+                })
+                .unwrap_or_else(project_root)
+        })
+        .clone()
+}
+
+/// 从可能夹带日志的 stdout 里截出 JSON 对象（与 commands.rs 的 extract_json 同源）。
+fn extract_json_str(text: &str) -> Option<&str> {
+    let start = text.find('{')?;
+    let end = text.rfind('}')?;
+    if end > start {
+        Some(&text[start..=end])
+    } else {
+        None
+    }
 }
 
 /// 优先用 Release 包自带的运行时，回退到 PATH 里的 python。

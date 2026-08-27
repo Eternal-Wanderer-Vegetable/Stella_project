@@ -14,9 +14,25 @@
   </div>
 
   <script type="module">
-    import { getConfig, runDoctor } from "./api.js";
+    import { getConfig, runDoctor, runMigrate } from "./api.js";
 
     const st = document.getElementById("st");
+
+    /**
+     * 尚未配置时，先看看有没有上一个版本的安装。
+     *
+     * 有就直接进导入页——存量用户的正确起点是「把旧数据搬过来」，而不是从零填一遍
+     * 配置。判据用 migrate --dry-run：它会真的预演一遍（含数据库），所以「能导入」
+     * 这个结论是可信的，不是猜的。探测失败一律当作没有旧版本，不能挡住新用户。
+     */
+    async function hasImportableInstall() {
+      try {
+        const report = await runMigrate({ dryRun: true });
+        return !report.includes("**导入失败**");
+      } catch (e) {
+        return false;
+      }
+    }
 
     /**
      * 启动路由：每次启动都自检一次，通过则直接进运行页。
@@ -30,6 +46,12 @@
       try {
         const config = await getConfig();
         if (!config.configured) {
+          st.textContent = "正在查找上一个版本的数据…";
+          if (await hasImportableInstall()) {
+            st.textContent = "找到了旧版本，正在打开导入向导…";
+            setTimeout(() => location.replace("./migrate.html"), 300);
+            return;
+          }
           st.textContent = "尚未完成配置，正在打开配置向导…";
           setTimeout(() => location.replace("./config.html"), 300);
           return;

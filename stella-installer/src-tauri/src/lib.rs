@@ -40,6 +40,7 @@ pub fn run() {
             commands::get_version,
             commands::get_personas,
             commands::save_persona,
+            commands::run_migrate,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

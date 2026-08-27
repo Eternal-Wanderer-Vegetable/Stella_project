@@ -535,3 +535,38 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   padding: 1px 5px;
   border-radius: 3px;
 }
+
+
+/* ── 从旧版本导入：一块输入区 + 一份 Markdown 报告 ──
+   报告刻意用等宽 <pre> 原样呈现：它同时会被写成 migration_report.md 给用户留档，
+   两处长得一样，用户贴进 issue 时也不会丢格式。 */
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.card > label {
+  display: block;
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.card .persona-actions input { width: 100%; }
+.hint {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 10px 0 0;
+}
+pre.report {
+  margin: 0;
+  max-height: 52vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px/1.75 var(--mono);
+  color: var(--text);
+  user-select: text;
+}

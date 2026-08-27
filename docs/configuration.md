@@ -37,12 +37,35 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `ALLOWED_GROUPS` | 空 | 允许响应的群号，逗号分隔。**留空则不响应任何群** |
-| `SYSTEM_PROMPT_PATH` | `system_prompts/default.md` | 系统提示词文件（人格）。多空间可各配一份，见[群组共享空间](#群组共享空间) |
-| `DB_PATH` | `memory/agent_memory.db` | SQLite 数据库 |
-| `EXTENSIONS_DIR` | `extensions/` | 扩展自动加载目录 |
-| `MEMORY_BENCHMARK_DIR` | `memory/benchmark` | Benchmark 用例目录 |
+| `STELLA_HOME` | 自动定位 | **用户数据根目录**（见下）。只能用真环境变量设置，不能写在 `.env` 里 |
+| `SYSTEM_PROMPT_PATH` | `<数据目录>/system_prompts/default.md` | 系统提示词文件（人格）。数据目录里没有时用发布包自带的那份 |
+| `DB_PATH` | `<数据目录>/memory/agent_memory.db` | SQLite 数据库 |
+| `EXTENSIONS_DIR` | `<程序目录>/extensions/` | 扩展自动加载目录（程序代码，随版本替换） |
+| `MEMORY_BENCHMARK_DIR` | `<程序目录>/memory/benchmark` | Benchmark 用例目录 |
 
 路径类配置若在 `.env` 中设置，会被解析为绝对路径。
+
+### 两个根目录：程序目录与数据目录
+
+2026-08-27 起用户数据可以放在安装目录之外，这样**升级只需替换程序目录**：
+
+| | 内容 | 升级时 |
+|---|---|---|
+| 程序目录（`PROJECT_ROOT`） | 代码、`.env.example`、`extensions/`、发布包自带的默认人格与能力配置、`runtime/` | 整体被新版本替换 |
+| 数据目录（`STELLA_HOME`） | `.env`、`memory/`（记忆库与账本）、`config/spaces/`、`system_prompts/`、`data/plugins` 等、`logs/` | **不动** |
+
+定位顺序（判据在 `config/home.py`，**不读 `.env`**——否则会形成「要读 `.env` 才知道 `.env` 在哪」的死循环）：
+
+1. 环境变量 `STELLA_HOME`；
+2. 机器级指针文件（Windows `%LOCALAPPDATA%\Stella\home.txt`，其他平台 `~/.config/stella/home.txt`）。它在程序目录之外，所以任何一份新解压的程序都能立刻接上老数据；
+3. 安装目录本身有 `.env` 或 `memory/agent_memory.db` → **就地使用**（旧布局，3.0.0 及更早的安装零改动继续工作）；
+4. 都没有 → 安装目录**同级**的 `StellaData/`。
+
+数据目录内部的相对布局与旧安装完全一致，所以「旧布局」只是「数据目录恰好等于安装目录」的一个特例。
+用 `python -m deploy paths` 查看当前解析结果（`deploy doctor` 也会显示）。
+
+既随发布包出厂、又允许用户改的文件（`system_prompts/default.md`、`config/capabilities/*.toml`）
+按「数据目录优先、否则用程序目录里出厂的那份」解析：新版本的默认值能随升级到达，用户的修改不会被覆盖。
 
 ## 日志
 
@@ -93,19 +116,22 @@ qq_groups = [123456789, 987654321]
 
 编号必须持久化而不是现算：若按群号排序的下标计算，加入一个群号更小的新群会让所有编号平移，原有记忆的归属随之错位且无声无息。
 
-### 改名的代价
+### 改名与合并
 
-把一个已运行的群从自动分配的 `space_1` 改成显式的 `casual` 时，**历史记忆仍挂在 `space_1` 下**。程序会输出告警并提示需要手工迁移：
+把一个已运行的群从自动分配的 `space_1` 改成显式的 `casual` 时，**历史记忆仍挂在 `space_1` 下**
+（改名不会自动跟随）。程序会输出告警并给出一条命令：
 
-```sql
-UPDATE memories          SET group_shared_space='casual' WHERE group_shared_space='space_1';
-UPDATE memory_candidates SET group_shared_space='casual' WHERE group_shared_space='space_1';
-UPDATE user_profiles     SET group_shared_space='casual' WHERE group_shared_space='space_1';
-UPDATE atomic_facts      SET group_shared_space='casual' WHERE group_shared_space='space_1';
-UPDATE memories_fts      SET group_shared_space='casual' WHERE group_shared_space='space_1';
+```bash
+python -m deploy space-merge --from space_1 --to casual --dry-run   # 先看预览
+python -m deploy space-merge --from space_1 --to casual
 ```
 
-因此**建议在正式积累记忆之前就定好空间名**。
+它会改写全部按空间归属的表（含列名仍叫 `group_id` 的 `long_term_memories`）、重建 FTS 索引、
+更新账本，并在 `user_profiles` 撞主键时保留互动次数多的那份（冲突写进报告）。操作前自动备份。
+
+**不做「启动时自动跟随配置改名」**是刻意的：合并会撞画像主键、需要明确的合并语义，而且
+**不可逆**——合并后只能靠 `origin_group_id` 溯源列或备份还原。让用户改一行 toml 就静默触发
+一次跨群画像合并，风险与收益不对称。因此仍**建议在正式积累记忆之前就定好空间名**。
 
 ### 冲突处理
 

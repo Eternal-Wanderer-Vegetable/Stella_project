@@ -10,9 +10,20 @@ set "PY_ZIP=python-%PY_VER%-embed-amd64.zip"
 set "PY_SHA256=4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3"
 set "RUNTIME_DIR=runtime"
 set "PY=%RUNTIME_DIR%\python.exe"
+set "DEPS_MARKER=%RUNTIME_DIR%\.stella-deps-ready"
 
+rem The deps marker stores the sha256 of requirements.txt, not a fixed string.
+rem Upgrades reuse the whole runtime/ directory to avoid a 100MB download; a
+rem content-free marker would then mean "deps ready" forever and new
+rem dependencies would never be installed. Keep this rule in sync with
+rem stella-installer/src-tauri/src/python.rs (deps_marker_matches).
 if not exist "%PY%" goto :download
-if exist "%RUNTIME_DIR%\.stella-deps-ready" goto :run
+call :req_hash
+if not exist "%DEPS_MARKER%" goto :install
+set "MARKED="
+set /p MARKED=<"%DEPS_MARKER%"
+if /i "!MARKED!"=="!REQ_HASH!" goto :run
+echo Dependencies changed since the last run. Reinstalling...
 goto :install
 
 :download
@@ -104,12 +115,36 @@ if errorlevel 1 (
 
 del "%PY_ZIP%" 2>nul
 
+rem Record which requirements.txt these dependencies were installed from.
+call :req_hash
+> "%DEPS_MARKER%" echo !REQ_HASH!
+
 :run
 if /i "%~1"=="--prepare" (
-    > "%RUNTIME_DIR%\.stella-deps-ready" echo ready
     exit /b 0
 )
-if not exist ".env" (
+rem Where the user's .env lives is decided by config/home.py (STELLA_HOME may point
+rem outside this directory), so ask Python instead of assuming ".\.env".
+set "ENV_FILE=.env"
+for /f "usebackq delims=" %%p in (`"%PY%" -m deploy paths --env-file 2^>nul`) do set "ENV_FILE=%%p"
+
+rem First run in a freshly extracted directory: offer to import from the previous
+rem installation instead of making the user copy files by hand. The dry run also
+rem verifies the whole import (including the database upgrade) before we ask.
+if not exist "!ENV_FILE!" (
+    echo Looking for a previous Stella installation...
+    "%PY%" -m deploy migrate --dry-run >nul 2>&1
+    if not errorlevel 1 (
+        echo.
+        echo A previous installation with your configuration and memories was found.
+        set "IMPORT_CHOICE="
+        set /p IMPORT_CHOICE="Import it now? [Y/n] "
+        if /i not "!IMPORT_CHOICE!"=="n" (
+            "%PY%" -m deploy migrate
+        )
+    )
+)
+if not exist "!ENV_FILE!" (
     echo No configuration file found. Starting the configuration wizard...
     "%PY%" -m deploy init
     if errorlevel 1 (
@@ -121,6 +156,18 @@ if not exist ".env" (
 "%PY%" -m deploy start
 pause
 exit /b %errorlevel%
+
+:req_hash
+rem SHA256 of requirements.txt into REQ_HASH ("none" when the file is missing).
+set "REQ_HASH=none"
+if not exist "requirements.txt" exit /b 0
+for /f "skip=1 tokens=* delims=" %%h in ('certutil -hashfile "requirements.txt" SHA256') do (
+    set "REQ_HASH=%%h"
+    goto :req_hash_done
+)
+:req_hash_done
+set "REQ_HASH=!REQ_HASH: =!"
+exit /b 0
 
 :try_download
 curl.exe -L --fail --connect-timeout 15 --retry 2 -o "%~2" "%~1"

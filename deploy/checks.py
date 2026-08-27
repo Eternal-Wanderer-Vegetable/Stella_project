@@ -22,6 +22,8 @@ from __future__ import annotations
 import difflib
 from collections.abc import Callable, Sequence
 
+from config import state
+
 from .models import CheckResult, Snapshot
 
 
@@ -379,23 +381,31 @@ def check_schema_version(snap: Snapshot) -> CheckResult | None:
 
 
 def check_legacy_group_id_tables(snap: Snapshot) -> CheckResult | None:
-    """含遗留 group_id 列 → error（v8 之前的旧库，记忆读写会静默失败）。"""
+    """含遗留 group_id 列 → warn（启动时会自动迁移，但迁移前不该跑业务）。
+
+    2026-08-27 之前这里是 error，修复提示是「把 db 移出去让程序重建」——等于让存量
+    用户丢掉全部记忆。现在 v5 → 最新版全自动（`memory/migrations.py`），所以降级为
+    warn：告诉用户会自动迁移、以及怎样先看预览。
+    """
     if snap.legacy_group_id_tables:
         return CheckResult(
             id="legacy_group_id_tables",
-            level="error",
-            title="数据库为 v8 之前的旧结构",
+            level="warn",
+            title="数据库是 v8 之前的旧结构，将自动迁移",
             detail=(
-                "这些表仍使用已废弃的 group_id 列："
+                "这些表仍使用旧的 group_id 列："
                 + "、".join(snap.legacy_group_id_tables)
-                + "。v8 起记忆按 group_shared_space 归属，"
-                "旧结构会让全部记忆读写抛 no such column 并被静默吞掉——"
-                "表现为「机器人一切正常但什么都不记」（2026-08-17 实测）。"
+                + "。v8 起记忆按 group_shared_space（共享空间）归属，"
+                "启动时会自动完成列改名与值重写（并在迁移前备份为 "
+                "agent_memory.db.pre-vN-<时间戳>.bak）。"
+                "迁移完成前不要让 Bot 处理消息——旧结构下记忆读写会抛 "
+                "no such column 并被静默吞掉，表现为「机器人一切正常但什么都不记」"
+                "（2026-08-17 实测）。"
             ),
             fix_hint=(
-                "v8 不做自动迁移。请停止程序，把 memory/agent_memory.db "
-                "与 memory/stella_memory_backup.db 一起移出（两个都要，"
-                "留着备份会让下次迁移跳过备份），重启后程序会建立 v8 新库。"
+                "想先看预览：python -m deploy migrate --dry-run"
+                "（在 agent_memory.db 的副本上真跑一遍并出报告，不动原库）；"
+                "直接升级：启动 Stella 即自动迁移，或运行 python -m deploy migrate。"
             ),
         )
     return None
@@ -505,6 +515,110 @@ def check_persona_file(snap: Snapshot) -> CheckResult | None:
             fix_hint="向文件写入人格设定内容。",
         )
     return None
+
+
+def check_stella_home(snap: Snapshot) -> CheckResult | None:
+    """用户数据目录的位置与可发现性。
+
+    数据目录搬出安装目录之后，「我的记忆库在哪」必须能一眼看到——用户要备份、要
+    排查、要确认升级有没有接上老数据。而更要紧的是**可发现性**：新解压的程序靠机器级
+    指针文件找到数据目录，指针没了就只能靠环境变量或手工指定，「升级只需一步」当场失效。
+    """
+    if not snap.stella_home:
+        return None
+    if snap.stella_home == snap.program_root:
+        return CheckResult(
+            id="stella_home",
+            level="ok",
+            title="用户数据在安装目录内（旧布局）",
+            detail=(
+                f"数据目录：{snap.stella_home}（{snap.stella_home_source}）。"
+                "升级到新目录时用 python -m deploy migrate 把数据带过去。"
+            ),
+        )
+    if not snap.home_pointer_exists:
+        return CheckResult(
+            id="stella_home",
+            level="warn",
+            title="用户数据目录缺少指针文件",
+            detail=(
+                f"数据目录：{snap.stella_home}（{snap.stella_home_source}），"
+                "但机器级指针文件不存在。下次把新版本解压到别处时，程序将找不到这份数据。"
+            ),
+            fix_hint="运行 python -m deploy init 或 python -m deploy migrate 会重写指针文件。",
+        )
+    return CheckResult(
+        id="stella_home",
+        level="ok",
+        title="用户数据目录已与程序分离",
+        detail=(
+            f"数据目录：{snap.stella_home}（{snap.stella_home_source}）；"
+            f"程序目录：{snap.program_root}。升级时只替换程序目录即可。"
+        ),
+    )
+
+
+def check_version_marks(snap: Snapshot) -> CheckResult | None:
+    """版本标记：这份数据上次是被哪个版本跑过的。
+
+    只看当前版本号看不出「用户刚换了包」——那个事实只存在于「上次运行版本」与
+    「当前版本」的差值里（见 ``config/state.py``）。doctor 把它显示出来，是为了让
+    两类静默故障变得可见：
+
+    - **降级**：新版本写过的库被旧代码打开（schema 更高、列更多），表现为莫名其妙的
+      报错，用户完全不会想到是自己解压错了目录；
+    - **数据没接上**：解压新版后 doctor 显示「首次运行」，就说明这份数据目录是全新的，
+      老记忆还留在旧目录里，此时应该去跑 ``deploy migrate`` 而不是直接开聊。
+    """
+    if snap.state_file_error:
+        return CheckResult(
+            id="version_marks",
+            level="warn",
+            title="版本标记读取失败",
+            detail=snap.state_file_error,
+            fix_hint=(
+                "不影响运行，但升级判定会失效。删除 STELLA_HOME/.stella-state.json "
+                "后重新启动一次即可重建。"
+            ),
+        )
+    if not snap.program_version:
+        return None
+    if snap.version_transition == state.DOWNGRADE:
+        return CheckResult(
+            id="version_marks",
+            level="warn",
+            title="当前版本低于上次运行的版本",
+            detail=(
+                f"这份数据上次由 v{snap.last_run_version} 运行，当前程序是 "
+                f"v{snap.program_version}。数据可能已被新版本改写（schema 更高），"
+                "旧代码读它可能报错或行为异常。"
+            ),
+            fix_hint=f"改用 v{snap.last_run_version} 或更新的程序目录启动。",
+        )
+    if snap.version_transition == state.FIRST_RUN:
+        return CheckResult(
+            id="version_marks",
+            level="ok",
+            title=f"首次在此数据目录运行（v{snap.program_version}）",
+            detail=(
+                "这份数据目录还没有被任何版本跑过。若你是从旧版本升级过来的，"
+                "老数据还留在旧目录里。"
+            ),
+            fix_hint="有旧安装目录的话，运行 python -m deploy migrate 把数据导入过来。",
+        )
+    if snap.version_transition == state.UPGRADE:
+        return CheckResult(
+            id="version_marks",
+            level="ok",
+            title=f"已从 v{snap.last_run_version} 升级到 v{snap.program_version}",
+            detail="数据目录已接上，schema 迁移会在启动时自动完成。",
+        )
+    return CheckResult(
+        id="version_marks",
+        level="ok",
+        title=f"版本未变（v{snap.program_version}）",
+        detail=f"数据目录：上次运行版本 v{snap.last_run_version or snap.program_version}。",
+    )
 
 
 def check_disk_space(snap: Snapshot) -> CheckResult | None:
@@ -650,6 +764,8 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_spaces_conflicts,
     check_space_assignment_mismatch,
     check_persona_file,
+    check_stella_home,
+    check_version_marks,
     check_disk_space,
     check_db_cleanup_on_start,
     check_render_backend,

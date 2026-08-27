@@ -155,6 +155,36 @@ jobs:
           sed -i 's/$/\r/' dist/Stella/start.bat dist/Stella/doctor.bat \
             dist/Stella/stop.bat dist/Stella/README-快速开始.txt
 
+      # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
+      - name: 准备校验用 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # 装依赖不只是为了 import 检查——它同时验证了 requirements.txt 本身可安装。
+      # 若某个 pin 写错或上游撤版，用户会在 start.bat 的 pip 步骤失败，
+      # 那时排查成本远高于在这里拦住。
+      - name: 校验发布包依赖可安装且模块可 import
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r dist/Stella/requirements.txt
+          cd dist/Stella
+          python -c "import config, core, memory, deploy, extensions; print('import 检查通过')"
+
+      # 清单是「用户有没有改过发布包自带文件」的唯一判据（见 deploy/manifest.py）。
+      # 没有它，升级时只能二选一：覆盖用户改过的人格，或让用户永远拿不到新默认值。
+      - name: 生成发布包清单
+        run: |
+          cd dist/Stella
+          python -m deploy manifest --write
+          cat .stella-manifest.json
+
+      # 纵深防御之二：USER_DATA 清单（deploy/migrate.py）与 rsync 排除清单是两份，
+      # 迟早会对不上。这一步让「对不上」在发布前失败，而不是等用户升级时丢数据。
+      - name: 校验发布包布局（用户数据未入包 / 自带可改文件已登记）
+        run: python scripts/check_release_layout.py dist/Stella
+
       - name: 打包 zip
         run: |
           cd dist
@@ -205,12 +235,15 @@ jobs:
             "README-快速开始.txt" \
             config/settings.py \
             config/spaces.py \
+            config/space_map.py \
             core/pipeline.py \
             core/logging_sink.py \
             core/llm/scheduler.py \
             core/llm/lm_studio.py \
             memory/SYSTEM.md \
             memory/schema.py \
+            memory/migrations.py \
+            memory/space_merge.py \
             memory/consolidator.py \
             memory/extraction_prompt.py \
             deploy/__main__.py \
@@ -218,9 +251,14 @@ jobs:
             deploy/probe.py \
             deploy/process.py \
             deploy/init_wizard.py \
+            deploy/migrate.py \
+            deploy/env_merge.py \
+            deploy/env_keys.py \
+            deploy/manifest.py \
             extensions/__init__.py \
             extensions/link_monitor/__init__.py \
             docs/configuration.md \
+            .stella-manifest.json \
           ; do
             if [ ! -f "$f" ]; then
               echo "::error::缺少必需文件: $f"
@@ -229,23 +267,6 @@ jobs:
           done
           [ "$MISSING" -eq 0 ] && echo "✅ 必需文件齐全"
           exit "$MISSING"
-
-      # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
-      - name: 准备校验用 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      # 装依赖不只是为了 import 检查——它同时验证了 requirements.txt 本身可安装。
-      # 若某个 pin 写错或上游撤版，用户会在 start.bat 的 pip 步骤失败，
-      # 那时排查成本远高于在这里拦住。
-      - name: 校验发布包依赖可安装且模块可 import
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r dist/Stella/requirements.txt
-          cd dist/Stella
-          python -c "import config, core, memory, deploy, extensions; print('import 检查通过')"
 
       # —— 核心改进：支持在同版本 Release 已存在时覆盖 asset ——
       # 旧逻辑仅执行 `gh release create`，若 Release 已存在则直接报错失败，

@@ -43,30 +43,14 @@ from config import (
     MEMORY_EXTRACT_LM_STUDIO_MODEL,
     PROJECT_ROOT,
     RENDER_ENABLED,
+    STELLA_HOME,
+    STELLA_HOME_SOURCE,
     SYSTEM_PROMPT_PATH,
 )
 from memory.schema import SCHEMA_VERSION
 
+from . import env_keys
 from .models import Snapshot
-
-# 已废弃的 .env 键：精确匹配
-_DEPRECATED_KEYS = frozenset(
-    {
-        "NAPCAT_SHELL_PATH",
-        "NAPCAT_AUTO_START",
-        "NAPCAT_QQ_ACCOUNT",
-        "NAPCAT_QQ_PASSWORD",
-        "NAPCAT_QQ_PASSWORD_MD5",
-        "NAPCAT_LAUNCH_LOG_PATH",
-        "NAPCAT_SHOW_WINDOW",
-        # 2026-08-25 日志统一到 LOG_DIR 时改名：原来是「文件名」（拼到 PROJECT_ROOT 上），
-        # 现在是完整路径 MEMORY_COMPRESS_LOG_PATH。旧键仍留在 .env 里不会报错，
-        # 只是完全不生效——必须提示，否则用户以为自己改了日志位置。
-        "MEMORY_COMPRESS_LOG_FILENAME",
-    }
-)
-# 已废弃的 .env 键：前缀匹配
-_DEPRECATED_PREFIXES = ("NAPCAT_WATCHDOG_",)
 
 
 def _probe_python() -> tuple[tuple[int, int, int], list[str]]:
@@ -120,7 +104,7 @@ def _probe_render() -> dict[str, Any]:
 
 def _probe_env_file() -> tuple[bool, list[str]]:
     """.env 是否存在 + 废弃键列表（读文本、忽略注释行）。"""
-    env_path = PROJECT_ROOT / ".env"
+    env_path = STELLA_HOME / ".env"
     try:
         exists = env_path.exists()
         deprecated: list[str] = []
@@ -130,9 +114,9 @@ def _probe_env_file() -> tuple[bool, list[str]]:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key = line.split("=", 1)[0].strip()
-                if key in _DEPRECATED_KEYS or any(
-                    key.startswith(p) for p in _DEPRECATED_PREFIXES
-                ):
+                # 废弃登记表只有一份（deploy/env_keys.py）：doctor 的提示与升级时的
+                # .env 合并器必须用同一份判据，否则会给出互相矛盾的建议。
+                if env_keys.deprecation_reason(key):
                     deprecated.append(key)
         return exists, sorted(set(deprecated))
     except Exception:
@@ -204,7 +188,7 @@ def _probe_onebot() -> dict:
         "forward_reachable": None,
     }
     try:
-        env_path = PROJECT_ROOT / ".env"
+        env_path = STELLA_HOME / ".env"
         if not env_path.exists():
             return result
         values = dotenv_values(env_path)
@@ -320,7 +304,7 @@ def _probe_spaces() -> dict:
     """群号冲突 + 账本与显式 toml 不一致（不复用 config.spaces._load）。"""
     result = {"space_conflicts": [], "space_assignment_mismatch": []}
     explicit: dict[int, str] = {}
-    spaces_dir = PROJECT_ROOT / "config" / "spaces"
+    spaces_dir = STELLA_HOME / "config" / "spaces"
     try:
         if spaces_dir.is_dir():
             for path in sorted(spaces_dir.glob("*.toml")):
@@ -408,6 +392,49 @@ def _probe_status_api() -> bool:
         return False
 
 
+def _home_pointer_exists() -> bool:
+    """机器级指针文件是否存在。
+
+    数据目录在安装目录之外、却没有指针文件时，换一份新解压的程序就找不到数据了
+    （只能靠环境变量或手工指定）——这正是「升级只需一步」会失效的场景，必须报出来。
+    """
+    try:
+        from config import home
+
+        return home.pointer_path().is_file()
+    except Exception:
+        return True
+
+
+def _version_marks() -> dict[str, str]:
+    """读 ``STELLA_HOME/.stella-state.json`` 的版本标记（**只读，不写**）。
+
+    doctor 是诊断命令，跑一次不该改变「上次运行的是哪个版本」——那是 ``record_run``
+    的职责（Bot 启动与 ``deploy start`` 才调）。若 doctor 顺手写了标记，紧接着的第一次
+    启动就会把「刚升级」判成「版本未变」，升级提示永远看不到。
+
+    读不出一律降级为空串：版本标记是辅助信息，缺了不该让 doctor 崩。
+    """
+    try:
+        from config import state
+
+        current = state.program_version(PROJECT_ROOT) or ""
+        loaded = state.load(STELLA_HOME)
+        return {
+            "program_version": current,
+            "last_run_version": loaded.last_run_version or "",
+            "version_transition": state.classify(loaded.last_run_version, current),
+            "state_file_error": loaded.error or "",
+        }
+    except Exception as e:
+        return {
+            "program_version": "",
+            "last_run_version": "",
+            "version_transition": "",
+            "state_file_error": f"版本标记读取失败: {type(e).__name__}: {e}",
+        }
+
+
 def collect() -> Snapshot:
     """采集全部环境事实并组装 Snapshot。
 
@@ -480,6 +507,11 @@ def collect() -> Snapshot:
         source_kind_counts=db.get("source_kind_counts", {}),
         space_conflicts=spaces.get("space_conflicts", []),
         space_assignment_mismatch=spaces.get("space_assignment_mismatch", []),
+        stella_home=str(STELLA_HOME),
+        stella_home_source=STELLA_HOME_SOURCE,
+        program_root=str(PROJECT_ROOT),
+        home_pointer_exists=_home_pointer_exists(),
+        **_version_marks(),
         persona_exists=misc.get("persona_exists", False),
         persona_size=misc.get("persona_size", 0),
         disk_free_mb=misc.get("disk_free_mb"),

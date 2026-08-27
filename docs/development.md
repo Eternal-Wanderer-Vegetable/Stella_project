@@ -26,6 +26,10 @@ pip install -r requirements-dev.txt
 | `python -m deploy status [--json]` | 读 PID 文件报进程是否存活，并从 JSON 日志尾部推断最近状态（`link_status` 在 Bot 进程内，外部读不到） |
 | `python -m deploy stop` | 优雅停止：写停止哨兵 → 轮询等待 → 降级信号 → 硬杀兜底（见下）；Tauri 安装器与 `bot.py` 位于同一发布目录 |
 | `python -m deploy config-schema --json` | 输出 `settings.py` 的配置 schema（分组、默认值、注释），GUI 的「高级选项」表单据此生成 |
+| `python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]` | 从旧版本安装目录导入用户数据并升级数据库；只读旧目录，报告写 `migration_report.md` |
+| `python -m deploy space-merge --from a,b --to c [--dry-run]` | 合并共享空间（记忆 + 画像 + FTS + 账本），替代过去要用户手搓的一串 UPDATE |
+| `python -m deploy paths [--env-file]` | 输出解析后的程序目录 / 用户数据目录等路径；`--env-file` 只打印 `.env` 路径（`start.bat` 用） |
+| `python -m deploy manifest [--write]` | 生成发布包清单 `.stella-manifest.json`（升级时据此判断用户是否改过自带文件），release CI 调用 |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
@@ -58,8 +62,14 @@ python -m deploy doctor --json > stella-installer/src/mock/doctor-clean.json
 `HOST=0.0.0.0` 时就是局域网可触发的远程关机；哨兵靠文件系统权限天然只限本机用户。
 哨兵文件是运行期产物，已加入 `.gitignore` 与 `release.yml` 的排除清单与敏感文件校验。
 
-**前端契约**：`deploy doctor --json` 与 `deploy config-schema --json` 是 GUI 的数据契约，
-改结构要 bump schema 的 `version` 字段并同步 `stella-installer/src/mock/`。
+**前端契约**：`deploy doctor --json`、`deploy config-schema --json` 与 `deploy paths` 是 GUI 的
+数据契约，改结构要 bump schema 的 `version` 字段并同步 `stella-installer/src/mock/`。
+`deploy migrate` 返回的是 Markdown 报告原文（同一份内容也会写进 `migration_report.md`，
+只生成一次就不会两处不一致），GUI 直接以等宽文本渲染。
+
+**GUI 不自己判断用户数据目录在哪**：`python::data_root()` 去问 `deploy paths`。判据只有
+`config/home.py` 一份——两处各写一套会出现「一边读旧目录、一边写新目录」，症状是
+「保存成功但没生效」。
 
 **GUI 依赖的两处格式约定**：
 - `config/spaces/*.toml` 由安装器写入的文件以 `# Managed by Stella installer` 开头，
@@ -347,15 +357,49 @@ SQLite 的 `ALTER TABLE ADD COLUMN` **不接受非常量默认值**，`DEFAULT C
 
 ### 改列名/主键的做法
 
-> SQLite **无法** ALTER 主键或重命名列，只能「建新表 → 拷数据 → 换名」。本项目 v7（画像分群）与 v8（记忆表改按空间归属）都选择**不写一次性迁移代码，而是归档旧库让程序重建**：
->
-> - 一次性迁移代码只用一次，却要长期维护并测试
-> - 当时库内数据量很小（严苛筛选下画像近乎为空）
-> - 重建后结构确定，不会留下半迁移状态
->
-> 代价是必须有**旧库检测**，否则拿旧库跑新代码会静默失败。`_migrate` 里检测「记忆表是否仍有 `group_id` 列」，命中则输出 error 提示归档重建。
->
-> 若将来数据量变大到不能重建，就必须写迁移脚本，并且**同时迁移 5 张表**：`memories` / `memory_candidates` / `user_profiles` / `atomic_facts` / `memories_fts`（FTS5 表无法 ALTER，只能 DROP 后从主表全量重建）。
+**新规矩（2026-08-27）：`SCHEMA_VERSION` 每 +1，必须同时提交 `memory/migrations.py` 里的
+`migrate_vN` 与一个旧库夹具回归测试。禁止再出现「本版不做数据迁移、归档旧库重建」。**
+
+此前 v7（画像分群）与 v8（记忆表改按空间归属）都声明不迁移，理由是「库内数据量很小」。
+但公开发布过的 2.x 全是 schema v2/v5（带 `group_id` 列），于是所有存量用户升级即被告知
+丢掉全部记忆——这是本项目最贵的一次决策失误。现在 v5 → 最新版全自动。
+
+分工：
+
+| 模块 | 负责 |
+|---|---|
+| `memory/schema.py` 的 `_migrate()` | 加列 + 建表 + 建索引。幂等、与版本号无关，作为每次迁移的收尾步骤 |
+| `memory/migrations.py` | 改结构 + 改数据。每版一个函数、一个事务，成功后才推进 `schema_meta.version` |
+
+写迁移时必须知道的三件事：
+
+1. **逐表判定归属**。v8 的语义变化是归属列的值从「真实 QQ 群号」变成「空间名」，所以
+   不能写「凡是 `group_id` 就改名」的脚本。三类表见 `migrations.py` 顶部的常量：
+   改名 + 改值的 4 张（`memories` / `memory_candidates` / `atomic_facts` / `user_profiles`，
+   外加不能 ALTER、只能 DROP 重建的 `memories_fts`）；**只改值不改名**的
+   `long_term_memories`（列名至今仍叫 `group_id`，值早已是空间名）；一个字都不能动的
+   6 张按真实群归属的表。
+2. **空间名必须与运行时一致**。迁移写进去的名字必须等于 `config.spaces.resolve_space()`
+   对该群返回的值，否则检索 `WHERE group_shared_space='casual'` 而行里存着 `'space_1'`
+   ——查不到、不报错、不抛异常。判据只能复用 `config/space_map.py`。
+3. **事务要真的能回滚 DDL**。Python `sqlite3` 默认只在 DML 前隐式开事务，DDL 走
+   autocommit；`run_migrations` 因此把 `isolation_level` 设为 None 自己管 BEGIN/COMMIT。
+
+改主键仍是「建新表 → 拷数据 → 换名」，DDL 从 `schema.py` 的规范常量取（如
+`USER_PROFILES_TABLE_DDL`），不要手抄。
+
+### 空间合并
+
+用户把两个群划进同一个 toml 之后，历史记忆还挂在旧空间名下。**不要让用户手搓 UPDATE**：
+
+```bash
+python -m deploy space-merge --from space_1,space_2 --to casual --dry-run
+python -m deploy space-merge --from space_1,space_2 --to casual
+```
+
+它会改写全部按空间归属的表、重建 FTS、更新账本，并处理 `user_profiles` 撞主键
+（保留 `interaction_count` 大的那份，冲突进报告）。合并**不可逆**，靠 `origin_group_id`
+溯源列与操作前备份兜底。
 
 ### 时间处理
 
@@ -382,6 +426,9 @@ SQL 内部的比较（`julianday('now')` vs `julianday(col)`）两侧同为 UTC�
 启动时会按当前 schema 在 `memory/` 下自动重建新库。
 
 > 封存旧库时**连 `stella_memory_backup.db` 一起移走**。`backup_database()` 见备份已存在即跳过，留着它会导致新库将来迁移时不生成新备份——一个看起来有备份、实际备份错了的状态。
+>
+> 每次版本化迁移另外会写一份 `agent_memory.db.pre-vN-<时间戳>.bak`（`schema.backup_snapshot`），
+> 它才是「这次迁移前的状态」；`stella_memory_backup.db` 是「有史以来第一份原始库」。
 
 ## CI
 
@@ -416,7 +463,7 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 2. `ruff check .` 无警告
 3. `pyproject.toml` 版本号已更新（CI 会把 tag 与它比对，不一致直接 fail）
 4. 改过配置项 → `.env.example` 与 `docs/configuration.md` 已同步
-5. `release_assets/RELEASE_NOTES_TEMPLATE.md` 已更新为本版本说明，**破坏性变更必须列明**（例如本次：废弃全部 `NAPCAT_*` 配置、schema v8 需归档旧库让程序重建）
+5. `release_assets/RELEASE_NOTES_TEMPLATE.md` 已更新为本版本说明，**破坏性变更必须列明**（例如废弃全部 `NAPCAT_*` 配置）。注意「让用户丢数据」不再是一种合法的升级方式：schema 每 +1 都必须带自动迁移
 6. Release 的排除清单独立于 `.gitignore` 维护（见 `release.yml` 的注释）；新增运行期产物或配置文件时，需同时更新排除清单与敏感文件校验的正则
 7. **新增顶层目录必须判断该不该进 Release**：开发工具（如 `stella-installer/`，独立分发的 Tauri 安装器）、工具脚本等不能打进用户安装包，需加进 `release.yml` 的 rsync 排除清单与「校验开发目录」的正则，并跑一次手工打包验证
 8. `release_assets/start.bat` 里硬编码了 Python 版本与 SHA256；升级 Python patch 版本时需同步更新两处，主次版本变更时还要确认 `python*._pth` 的处理

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stella</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>从旧版本导入</h1>
+      <span class="ver">v3.0.0</span>
+      <nav class="top-nav">
+        <a class="nav-secondary" href="./run.html">运行状态</a>
+        <a class="nav-secondary" href="./config.html">配置</a>
+        <a class="nav-secondary" href="./persona.html">人格设定</a>
+        <a class="nav-secondary" href="./doctor.html">环境自检</a>
+        <a class="nav-secondary" href="./migrate.html">从旧版本导入</a>
+      </nav>
+    </header>
+    <p class="subtitle">
+      把上一个版本的配置、记忆、人格与插件搬到这里，并把数据库升级到当前版本。
+      全程只读旧目录：无论成败，你的旧安装都还在原地能跑。
+    </p>
+
+    <div class="card">
+      <label for="src">旧版本目录（留空则自动查找）</label>
+      <div class="persona-actions">
+        <input id="src" placeholder="例如 D:\Stella-2.2.0" />
+        <button type="button" id="btn-preview">预览</button>
+        <button class="primary" id="btn-apply" disabled>开始导入</button>
+      </div>
+      <p class="hint" id="hint">先预览一遍：预览会在数据库副本上真跑一次迁移，不改动任何文件。</p>
+    </div>
+
+    <div id="root"><div class="loading">正在查找旧版本…</div></div>
+  </div>
+
+  <script type="module">
+    import { runMigrate, getVersion, installCloseOverlay } from "./api.js";
+
+    const root = document.getElementById("root");
+    const hint = document.getElementById("hint");
+    const btnPreview = document.getElementById("btn-preview");
+    const btnApply = document.getElementById("btn-apply");
+    const src = document.getElementById("src");
+
+    installCloseOverlay();
+    getVersion().then(v => { document.querySelector(".ver").textContent = `v${v}`; }).catch(() => {});
+
+    const esc = value => String(value ?? "").replace(/[&<>"']/g, c =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    /** 报告是 Markdown 原文。这里只做最小渲染：报告本身就是给人读的纯文本。 */
+    function show(markdown) {
+      root.innerHTML = `<div class="card"><pre class="report">${esc(markdown)}</pre></div>`;
+    }
+
+    /** 报告里出现「导入失败」说明没找到旧目录或前提不满足 → 不给按导入。 */
+    function looksUsable(markdown) {
+      return !markdown.includes("**导入失败**");
+    }
+
+    async function preview() {
+      btnPreview.disabled = true;
+      btnApply.disabled = true;
+      root.innerHTML = `<div class="loading">正在预演（会在数据库副本上真跑一遍）…</div>`;
+      try {
+        const report = await runMigrate({ source: src.value, dryRun: true });
+        show(report);
+        const usable = looksUsable(report);
+        btnApply.disabled = !usable;
+        hint.textContent = usable
+          ? "预览无误后点「开始导入」。导入前会自动备份数据库。"
+          : "没找到可导入的旧版本目录，请手动填写路径后再预览。";
+      } catch (e) {
+        root.innerHTML = `<div class="notice notice-error">预演失败：${esc(e)}</div>`;
+        hint.textContent = "预演本身出错了，请把上面的信息附在 issue 里。";
+      } finally {
+        btnPreview.disabled = false;
+      }
+    }
+
+    async function apply() {
+      btnApply.disabled = true;
+      btnPreview.disabled = true;
+      root.innerHTML = `<div class="loading">正在导入（数据库较大时需要几十秒）…</div>`;
+      try {
+        const report = await runMigrate({ source: src.value, dryRun: false });
+        show(report);
+        hint.textContent = "导入完成，报告已存为 migration_report.md。可以去「运行状态」启动了。";
+      } catch (e) {
+        root.innerHTML = `<div class="notice notice-error">导入失败：${esc(e)}</div>`;
+        hint.textContent = "旧目录未被改动，修好问题后可以重试。";
+      } finally {
+        btnPreview.disabled = false;
+      }
+    }
+
+    btnPreview.onclick = preview;
+    btnApply.onclick = apply;
+    preview();
+  </script>
+</body>
+</html>

@@ -30,6 +30,8 @@ memory/agent_memory.db
 memory/stella_memory_backup.db
 memory/.last_message_cleanup
 memory/agent_memory.db-journal
+# schema 迁移前的时间戳备份（memory/schema.py:backup_snapshot）。整库副本，是用户数据。
+memory/*.bak
 test_compressor_trigger.py
 
 # Benchmark 采样输出（含真实群消息数据，禁止入库）

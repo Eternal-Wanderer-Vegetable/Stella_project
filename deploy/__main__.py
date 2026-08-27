@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""doctor / init / start / status / stop 子命令的入口。
+"""doctor / init / start / status / stop / migrate 等子命令的入口。
 
 用法：python -m deploy doctor [--json]
       python -m deploy init [--answers PATH] [--force] [--dry-run]
       python -m deploy start [--force] [--detach]
       python -m deploy status [--json]
       python -m deploy stop
+      python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]
+      python -m deploy space-merge --from space_1,space_2 --to casual [--dry-run]
+      python -m deploy manifest [--write]
 """
 
 from __future__ import annotations
@@ -15,15 +18,17 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from config import PROJECT_ROOT
+from config import PROJECT_ROOT, STELLA_HOME, STELLA_HOME_SOURCE, home
 
-from . import checks, env_schema, probe, process, report
+from . import checks, env_merge, env_schema, migrate, probe, process, report
 from .init_wizard import (
     load_answers,
+    managed_keys,
     print_next_steps,
     render_env,
     run_interactive,
@@ -43,8 +48,12 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    env_path = PROJECT_ROOT / ".env"
+    # 用户数据目录此刻才真正需要存在（import config 时刻意不创建，避免副作用）
+    resolved = home.resolve(PROJECT_ROOT, create=True)
+    env_path = resolved.path / ".env"
     template_path = PROJECT_ROOT / ".env.example"
+    if resolved.path != PROJECT_ROOT:
+        print(f"用户数据目录：{resolved.path}（{resolved.source}）")
 
     if env_path.exists() and not args.force:
         print(f"{env_path} 已存在。确认覆盖请加 --force（会先备份为 .env.bak）。")
@@ -64,27 +73,43 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
     rendered = render_env(answers, template_path.read_text(encoding="utf-8"))
 
+    # 覆盖已有配置时，把旧文件里的其它键合并回来。2026-08-27 之前这里只写向导管理的
+    # 5 个键，然后提示「请从 .env.bak 里对照恢复」——那等于让用户人工比对两个 27KB
+    # 的文件。向导答案优先（用户刚答过），其余键沿用旧值，废弃键顺手清掉。
+    merge_report = None
+    if env_path.exists():
+        rendered, merge_report = env_merge.merge_env(
+            env_path.read_text(encoding="utf-8"),
+            rendered,
+            schema_keys=env_merge.settings_keys(PROJECT_ROOT / "config" / "settings.py"),
+            prefer_template=managed_keys(answers),
+        )
+
     if args.dry_run:
         print(rendered)
+        if merge_report:
+            print()
+            print(merge_report.to_markdown())
         return 0
 
     if env_path.exists():
-        backup = PROJECT_ROOT / ".env.bak"
-        env_path.replace(backup)
+        backup = env_path.parent / ".env.bak"
+        shutil.copy2(env_path, backup)
         print(f"已备份原配置到 {backup}")
-        print("注意：向导只管理 5 个必答项，其余保持模板默认值。")
-        print("若你此前手工调过阈值类配置（如 PROACTIVE_* / MEMORY_*），请从 .env.bak 里对照恢复。")
     env_path.write_text(rendered, encoding="utf-8")
     print(f"已写入 {env_path}")
+    if merge_report:
+        print()
+        print(merge_report.to_markdown())
 
     if not args.answers:
-        answers_path = PROJECT_ROOT / "deploy.answers.toml"
+        answers_path = env_path.parent / "deploy.answers.toml"
         save_answers(answers, answers_path)
         print(f"应答已保存到 {answers_path}（下次可用 --answers 跳过提问）")
 
     # 必须用子进程跑 doctor，不能在本进程内调 probe.collect()：
     # config/settings.py 在 import 时执行 load_dotenv()，而本模块顶部就
-    # from config import PROJECT_ROOT——.env 尚不存在时 config 已被导入，
+    # from config import PROJECT_ROOT, STELLA_HOME, STELLA_HOME_SOURCE, home——.env 尚不存在时 config 已被导入，
     # 全部常量冻结为默认值（空）。向导写出 .env 后，同一进程里读到的仍是
     # 那批空值，于是 doctor 谎报「ALLOWED_GROUPS 为空」「未配置模型 ID」
     # （2026-08-18 实测：首次配置后必现，第二次启动就消失）。
@@ -191,6 +216,83 @@ def _cmd_config_schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_migrate(args: argparse.Namespace) -> int:
+    """从旧版本安装目录导入用户数据并升级数据库。"""
+    source = Path(args.source).expanduser() if args.source else None
+    # 预演不该创建任何东西；真正导入时才把用户数据目录建出来
+    resolved = home.resolve(PROJECT_ROOT, create=not args.dry_run)
+    result = migrate.run(
+        PROJECT_ROOT,
+        source,
+        data_root=resolved.path,
+        dry_run=args.dry_run,
+        reuse_runtime=not args.fresh_runtime,
+    )
+    print(result.to_markdown())
+    if not args.dry_run and not result.error:
+        path = migrate.write_report(resolved.path, result)
+        print()
+        print(f"报告已写入 {path}")
+    return 0 if result.ok else 1
+
+
+def _cmd_paths(args: argparse.Namespace) -> int:
+    """输出解析后的关键路径（供 GUI 与排查使用）。
+
+    GUI 不自己判断用户数据目录在哪：判据只有 ``config/home.py`` 一份，两处各写一遍
+    必然漂移（一边读旧目录、一边写新目录，用户会看到「保存了但没生效」）。
+    """
+    from config import DB_PATH, LOG_DIR, STELLA_JSON_LOG_PATH
+
+    if args.env_file:
+        # start.bat 用它判断「配置过了没有」——路径判据同样只能有一份
+        print(STELLA_HOME / ".env")
+        return 0
+    data = {
+        "version": 1,
+        "project_root": str(PROJECT_ROOT),
+        "stella_home": str(STELLA_HOME),
+        "stella_home_source": STELLA_HOME_SOURCE,
+        "env_file": str(STELLA_HOME / ".env"),
+        "env_template": str(PROJECT_ROOT / ".env.example"),
+        "answers_file": str(STELLA_HOME / "deploy.answers.toml"),
+        "spaces_dir": str(STELLA_HOME / "config" / "spaces"),
+        "prompts_dir": str(STELLA_HOME / "system_prompts"),
+        "shipped_prompts_dir": str(PROJECT_ROOT / "system_prompts"),
+        "db_path": str(DB_PATH),
+        "log_dir": str(LOG_DIR),
+        "json_log_path": str(STELLA_JSON_LOG_PATH),
+        "pointer_file": str(home.pointer_path()),
+    }
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_space_merge(args: argparse.Namespace) -> int:
+    """把若干空间合并成一个（替代过去要用户手搓的那串 UPDATE）。"""
+    from memory import space_merge
+
+    sources = [s.strip() for s in args.source.replace("，", ",").split(",") if s.strip()]
+    if not sources:
+        print("--from 至少要给一个空间名。")
+        return 1
+    result = space_merge.merge_spaces(sources, args.to, dry_run=args.dry_run)
+    print(result.to_markdown())
+    return 0 if not result.error else 1
+
+
+def _cmd_manifest(args: argparse.Namespace) -> int:
+    """生成发布包清单（release CI 用；升级时据此判断用户是否改过自带文件）。"""
+    from . import manifest
+
+    if args.write:
+        path = manifest.write_manifest(PROJECT_ROOT)
+        print(f"已写入 {path}")
+        return 0
+    print(json.dumps(manifest.build_manifest(PROJECT_ROOT), ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # 固定 UTF-8：Windows 下 stdout 被重定向（GUI 读管道/PS 管道）时
     # Python 会改用 ANSI 代码页，导致中文变乱码。强制 UTF-8 后
@@ -235,6 +337,42 @@ def main(argv: list[str] | None = None) -> int:
     p_schema = sub.add_parser("config-schema", help="输出 settings.py 的配置 schema（供 GUI 使用）")
     p_schema.add_argument("--json", action="store_true", help="兼容 GUI 调用")
     p_schema.set_defaults(func=_cmd_config_schema)
+
+    p_migrate = sub.add_parser("migrate", help="从旧版本目录导入用户数据并升级数据库")
+    p_migrate.add_argument(
+        "--from", dest="source", help="旧版本安装目录（省略则自动探测）"
+    )
+    p_migrate.add_argument(
+        "--dry-run", action="store_true", help="只预演并出报告，不写入任何文件"
+    )
+    p_migrate.add_argument(
+        "--fresh-runtime",
+        action="store_true",
+        help="不复用旧目录的 runtime（默认复用，省一次约 100MB 的下载）",
+    )
+    p_migrate.add_argument(
+        "--keep-runtime",
+        action="store_true",
+        help="显式要求复用旧 runtime（默认行为，保留此开关便于脚本自文档）",
+    )
+    p_migrate.set_defaults(func=_cmd_migrate)
+
+    p_merge = sub.add_parser("space-merge", help="把若干共享空间合并为一个（含记忆与画像）")
+    p_merge.add_argument("--from", dest="source", required=True, help="源空间名，逗号分隔")
+    p_merge.add_argument("--to", required=True, help="目标空间名")
+    p_merge.add_argument("--dry-run", action="store_true", help="只预演，不写入")
+    p_merge.set_defaults(func=_cmd_space_merge)
+
+    p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
+    p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")
+    p_manifest.set_defaults(func=_cmd_manifest)
+
+    p_paths = sub.add_parser("paths", help="输出解析后的路径（程序目录 / 用户数据目录等）")
+    p_paths.add_argument("--json", action="store_true", help="兼容 GUI 调用（默认就是 JSON）")
+    p_paths.add_argument(
+        "--env-file", action="store_true", help="只打印 .env 的完整路径（供 start.bat 判断）"
+    )
+    p_paths.set_defaults(func=_cmd_paths)
 
     args = parser.parse_args(argv)
     return args.func(args)

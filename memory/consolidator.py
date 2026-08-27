@@ -374,7 +374,9 @@ class MemoryConsolidator:
                     return
 
                 self._write_short_term(group_id, parsed.get("short_term"))
-                self._write_user_profiles(group_shared_space, parsed.get("user_profiles", []))
+                self._write_user_profiles(
+                    group_shared_space, parsed.get("user_profiles", []), origin_group_id=group_id
+                )
                 candidates = parsed.get("memory_candidates")
                 if candidates is None:
                     candidates = []
@@ -389,7 +391,13 @@ class MemoryConsolidator:
                     if extracted is not None:
                         candidates = extracted
 
-                self._write_memory_candidates(group_shared_space, candidates, sender_ids=senders, at_senders=at_senders)
+                self._write_memory_candidates(
+                    group_shared_space,
+                    candidates,
+                    sender_ids=senders,
+                    at_senders=at_senders,
+                    origin_group_id=group_id,
+                )
                 if candidates:
                     # 有新候选记忆时同步触发 MemoryManager 晋升处理
                     get_memory_manager().process_new_candidates()
@@ -645,7 +653,9 @@ class MemoryConsolidator:
             return m.group(1)
         return uid
 
-    def _write_user_profiles(self, group_shared_space: str, profiles: list):
+    def _write_user_profiles(
+        self, group_shared_space: str, profiles: list, origin_group_id: int | None = None
+    ):
         """把 LLM 给出的用户画像批量写入 user_profiles：已存在则合并特征并累计互动次数。
         写入前用 stable_profile_facts 过滤人格判断/心理状态，只保留稳定事实（User Profile 治理）。
         画像按 (group_shared_space, user_id) 隔离——同一空间内的多个 QQ 群共享一份画像，
@@ -685,9 +695,17 @@ class MemoryConsolidator:
             else:
                 # 新用户：直接插入，互动次数初始为 1
                 cursor.execute("""
-                    INSERT INTO user_profiles (group_shared_space, user_id, nickname, personality_traits, agent_attitude, interaction_count, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-                """, (group_shared_space, uid, p.get("nickname", ""), traits, p.get("agent_attitude", "")))
+                    INSERT INTO user_profiles (group_shared_space, user_id, nickname, personality_traits, agent_attitude, interaction_count, origin_group_id, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
+                """, (
+                    group_shared_space,
+                    uid,
+                    p.get("nickname", ""),
+                    traits,
+                    p.get("agent_attitude", ""),
+                    # 溯源列：记住这份画像最初来自哪个真实群，让空间合并可回退
+                    str(origin_group_id) if origin_group_id else None,
+                ))
         conn.commit()
         conn.close()
 
@@ -747,7 +765,14 @@ class MemoryConsolidator:
                 merged.append(mid)
         return json.dumps(merged, ensure_ascii=False)
 
-    def _write_memory_candidates(self, group_shared_space: str, candidates: list, sender_ids: list | None = None, at_senders: list | None = None):
+    def _write_memory_candidates(
+        self,
+        group_shared_space: str,
+        candidates: list,
+        sender_ids: list | None = None,
+        at_senders: list | None = None,
+        origin_group_id: int | None = None,
+    ):
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
         每个候选先经过 Policy Validator（validate_candidate）审核，自动修正错误的
@@ -875,8 +900,8 @@ class MemoryConsolidator:
             # 无 id 时生成本地候选 id
             candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
             cursor.execute("""
-                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, occurrence_count, first_seen_at, source_kinds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
+                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, origin_group_id, occurrence_count, first_seen_at, source_kinds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     group_shared_space = excluded.group_shared_space,
                     user_id = excluded.user_id,
@@ -907,6 +932,8 @@ class MemoryConsolidator:
                 visibility,
                 behavior_rule,
                 source_kind,
+                # 溯源列：记住这条候选来自哪个真实 QQ 群，让空间合并可回退
+                str(origin_group_id) if origin_group_id else None,
                 self._merge_source_kinds("[]", source_kind),
             ))
         conn.commit()

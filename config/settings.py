@@ -3,11 +3,23 @@
 # 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
 """集中配置模块。
 
-本模块是 Stella 机器人的“配置中枢”：通过读取项目根目录下的 .env（及按
+本模块是 Stella 机器人的“配置中枢”：通过读取用户数据目录下的 .env（及按
 ENVIRONMENT 区分的 .env.dev / .env.prod）环境变量，将全部运行时参数集中
 导出为模块级常量，供 memory/、core/ 等业务模块 import 使用。业务代码不改动
 此文件即可调整参数。环境变量解析统一走 _env / _env_int / _env_float 三个
 私有助手，保证类型安全并带默认值兜底。
+
+两个根目录必须分清（2026-08-27 起）：
+
+- ``PROJECT_ROOT``：**程序目录**（bot.py 所在处）。升级时整体被新版本替换，
+  代码、``.env.example``、发布包自带的默认人格与能力配置都在这里。
+- ``STELLA_HOME``：**用户数据目录**（``config/home.py`` 定位）。升级时不动，
+  ``.env``、记忆库、空间配置、自定义人格、第三方插件、日志都在这里。
+
+新增配置项时按这条准则选基准：**用户会改的、丢了心疼的 → STELLA_HOME；
+随发布包一起替换的 → PROJECT_ROOT**。选错的后果是升级时数据被覆盖或读不到。
+旧布局（STELLA_HOME == PROJECT_ROOT）下两者等价，所以本地跑不出差别——
+只有真正升级时才暴露，这也是为什么这条准则要写在这里。
 """
 
 from __future__ import annotations
@@ -16,6 +28,8 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from . import home
 
 # ============================================================
 # Stella Project — 集中配置
@@ -33,15 +47,27 @@ while _PROJECT_ROOT.parent != _PROJECT_ROOT:
     _PROJECT_ROOT = _PROJECT_ROOT.parent
 PROJECT_ROOT = _PROJECT_ROOT
 
-# 加载 .env 文件（项目根目录，不覆盖已有环境变量）
-load_dotenv(PROJECT_ROOT / ".env", override=False)
+# ---------- 用户数据根目录（STELLA_HOME） ----------
+# PROJECT_ROOT 是**程序目录**（升级时整体替换），STELLA_HOME 是**用户数据目录**
+# （升级时不动）。定位顺序见 config/home.py：环境变量 → 机器级指针文件 →
+# 旧布局（数据就在安装目录内）→ 安装目录同级的 StellaData。
+#
+# 旧布局下 STELLA_HOME == PROJECT_ROOT，所有路径与 2026-08-27 之前完全一致，
+# 存量安装原地继续工作。刻意在这里不创建目录：import config 不该有副作用，
+# 真正落盘由 deploy init / deploy migrate 显式触发。
+_HOME = home.resolve(PROJECT_ROOT)
+STELLA_HOME = _HOME.path
+STELLA_HOME_SOURCE = _HOME.source
+
+# 加载 .env（在用户数据目录里；不覆盖已有环境变量）
+load_dotenv(STELLA_HOME / ".env", override=False)
 
 # 根据 ENVIRONMENT 加载环境覆盖文件（覆盖 .env 中的值）
 _ENVIRONMENT = os.getenv("ENVIRONMENT", "").strip().lower()
 if _ENVIRONMENT in ("dev", "development"):
-    load_dotenv(PROJECT_ROOT / ".env.dev", override=True)
+    load_dotenv(STELLA_HOME / ".env.dev", override=True)
 elif _ENVIRONMENT in ("prod", "production"):
-    load_dotenv(PROJECT_ROOT / ".env.prod", override=True)
+    load_dotenv(STELLA_HOME / ".env.prod", override=True)
 
 
 def _env(key: str, default: str = "") -> str:
@@ -117,11 +143,32 @@ while _PROJECT_ROOT.parent != _PROJECT_ROOT:
     _PROJECT_ROOT = _PROJECT_ROOT.parent
 PROJECT_ROOT = _PROJECT_ROOT
 
+
+def _user_path(relative: str) -> Path:
+    """用户数据路径：``STELLA_HOME/relative``。"""
+    return STELLA_HOME / relative
+
+
+def _shipped_or_user(relative: str) -> Path:
+    """既随发布包出厂、又允许用户改的文件（默认人格、能力配置）。
+
+    优先用 ``STELLA_HOME`` 里的那份（用户改过的）；那里没有就用程序目录里出厂的那份。
+    这样新版本的默认值能随升级到达，而用户的修改不会被覆盖。
+    """
+    candidate = STELLA_HOME / relative
+    if candidate.exists():
+        return candidate
+    return PROJECT_ROOT / relative
+
+
 # ---------- 目录与文件路径（可通过 .env 覆盖） ----------
-# 各路径均锚定 PROJECT_ROOT，保证在不同工作目录下启动都能正确定位文件；
+# 用户数据锚定 STELLA_HOME（升级不动），程序资源锚定 PROJECT_ROOT（随版本替换）；
 # 如需自定义，在 .env 里设置同名环境变量（绝对路径）。
-SYSTEM_PROMPT_PATH = _env_path("SYSTEM_PROMPT_PATH", PROJECT_ROOT / "system_prompts" / "default.md")
-DB_PATH = _env_path("DB_PATH", PROJECT_ROOT / "memory" / "agent_memory.db")
+SYSTEM_PROMPT_PATH = _env_path(
+    "SYSTEM_PROMPT_PATH", _shipped_or_user("system_prompts/default.md")
+)
+DB_PATH = _env_path("DB_PATH", _user_path("memory/agent_memory.db"))
+# 扩展是程序代码而不是用户数据：随发布包一起替换
 EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
 
 # ---------- 日志目录 ----------
@@ -134,7 +181,7 @@ EXTENSIONS_DIR = _env_path("EXTENSIONS_DIR", PROJECT_ROOT / "extensions")
 #
 # 写日志的代码**必须自己 mkdir**：LOG_DIR 可能被指到不存在的路径，而且日志写入
 # 失败不该影响主链路，所以不能依赖「启动时有人建过这个目录」。
-LOG_DIR = _env_path("LOG_DIR", PROJECT_ROOT / "logs")
+LOG_DIR = _env_path("LOG_DIR", _user_path("logs"))
 # 人读的思考/决策日志（每轮的完整 prompt、原始输出、路由判定、工具结果）
 THOUGHT_LOG_PATH = _env_path("THOUGHT_LOG_PATH", LOG_DIR / "stella_thought_logs.md")
 # 启动期诊断（插件发现/加载结果、能力装配、原型预热）。每次启动清空重写——
@@ -657,7 +704,7 @@ SHUTDOWN_GRACE_SECONDS = _env_float("SHUTDOWN_GRACE_SECONDS", 30.0)
 # 路径可覆盖：项目目录只读时指到可写位置。
 # 不用 POST /shutdown：status_api 只读，加写接口就多一个无鉴权的写接口，
 # HOST=0.0.0.0 时就是局域网可触发的远程关机。哨兵靠文件系统权限天然只限本机用户。
-STELLA_STOP_SENTINEL = _env_path("STELLA_STOP_SENTINEL", PROJECT_ROOT / ".stella-stop-request")
+STELLA_STOP_SENTINEL = _env_path("STELLA_STOP_SENTINEL", _user_path(".stella-stop-request"))
 # watcher 轮询间隔（秒）：轮询过于频繁只是空转，0.5s 足够让停止按钮几乎即时响应
 STOP_WATCH_INTERVAL_SECONDS = _env_float("STOP_WATCH_INTERVAL_SECONDS", 0.5)
 
@@ -668,11 +715,11 @@ ASTRBOT_COMPAT_ENABLED = _env("ASTRBOT_COMPAT_ENABLED", "true").lower() in ("tru
 # 对外声称兼容的 AstrBot 版本（注入日志与插件自检用，仅声明，不代表完全兼容）
 ASTRBOT_COMPAT_VERSION = _env("ASTRBOT_COMPAT_VERSION", "4.27.0")
 # 第三方插件源码目录（每个子目录为一个插件，需含 metadata.yaml）
-ASTRBOT_PLUGINS_DIR = _env_path("ASTRBOT_PLUGINS_DIR", PROJECT_ROOT / "data" / "plugins")
+ASTRBOT_PLUGINS_DIR = _env_path("ASTRBOT_PLUGINS_DIR", _user_path("data/plugins"))
 # 插件配置持久化目录（AstrBot 侧为 data/config）
-ASTRBOT_PLUGIN_CONFIG_DIR = _env_path("ASTRBOT_PLUGIN_CONFIG_DIR", PROJECT_ROOT / "data" / "config")
+ASTRBOT_PLUGIN_CONFIG_DIR = _env_path("ASTRBOT_PLUGIN_CONFIG_DIR", _user_path("data/config"))
 # 插件运行时数据目录（StarTools.get_data_dir 返回的根目录）
-ASTRBOT_PLUGIN_DATA_DIR = _env_path("ASTRBOT_PLUGIN_DATA_DIR", PROJECT_ROOT / "data" / "plugin_data")
+ASTRBOT_PLUGIN_DATA_DIR = _env_path("ASTRBOT_PLUGIN_DATA_DIR", _user_path("data/plugin_data"))
 # 是否自动安装插件声明的依赖（requirements.txt）；默认关闭，避免任意代码执行
 ASTRBOT_AUTO_INSTALL_REQUIREMENTS = _env("ASTRBOT_AUTO_INSTALL_REQUIREMENTS", "false").lower() in (
     "true",
@@ -705,7 +752,7 @@ RENDER_AUTO_INSTALL = _env("RENDER_AUTO_INSTALL", "true").lower() in ("true", "1
 # 自动安装失败后多久才再试（秒）。必须有冷却——否则每条带链接的消息都会重新拉一次几百 MB。
 RENDER_INSTALL_RETRY_SECONDS = _env_float("RENDER_INSTALL_RETRY_SECONDS", 3600.0)
 # 渲染产物目录。**不放 LOG_DIR**：这是要发出去的图片，不是日志。
-RENDER_CACHE_DIR = _env_path("RENDER_CACHE_DIR", PROJECT_ROOT / "data" / "render_cache")
+RENDER_CACHE_DIR = _env_path("RENDER_CACHE_DIR", _user_path("data/render_cache"))
 # 保留最近多少张渲染产物。每张几百 KB，不清理会无声涨到几个 G。
 RENDER_CACHE_KEEP = _env_int("RENDER_CACHE_KEEP", 50)
 # 同时最多渲染几张。每个页面都是一份 Chromium 渲染进程的内存开销，

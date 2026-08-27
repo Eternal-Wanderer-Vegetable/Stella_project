@@ -196,9 +196,13 @@ def load_capabilities(
     排序遍历保证多文件间的注册顺序确定。
     """
     if directory is None:
-        from config import PROJECT_ROOT
+        # 能力声明既随发布包出厂、又允许用户改：用户数据目录里的那份优先，
+        # 没有就用程序目录里出厂的（升级时新默认值能到达，用户的修改不被覆盖）。
+        from config import PROJECT_ROOT, STELLA_HOME
 
-        directory = PROJECT_ROOT / "config" / "capabilities"
+        directory = STELLA_HOME / "config" / "capabilities"
+        if not directory.is_dir():
+            directory = PROJECT_ROOT / "config" / "capabilities"
     if not directory.is_dir():
         return 0
 

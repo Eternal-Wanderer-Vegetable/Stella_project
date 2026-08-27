@@ -34,14 +34,14 @@ def test_extract_ws_url_missing():
 
 
 def test_probe_env_file_missing(monkeypatch, tmp_path):
-    monkeypatch.setattr(probe, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
     exists, keys = probe._probe_env_file()
     assert exists is False
     assert keys == []
 
 
 def test_probe_env_file_deprecated_keys(monkeypatch, tmp_path):
-    monkeypatch.setattr(probe, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
     (tmp_path / ".env").write_text(
         "ALLOWED_GROUPS=123\n"
         "NAPCAT_QQ_PASSWORD=x\n"
@@ -54,7 +54,7 @@ def test_probe_env_file_deprecated_keys(monkeypatch, tmp_path):
 
 
 def test_probe_env_file_ignores_comments(monkeypatch, tmp_path):
-    monkeypatch.setattr(probe, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
     (tmp_path / ".env").write_text(
         "# NAPCAT_QQ_PASSWORD=x\nALLOWED_GROUPS=1\n", encoding="utf-8"
     )
@@ -81,3 +81,21 @@ def test_collect_never_raises(monkeypatch):
     snap = probe.collect()
     assert isinstance(snap, Snapshot)
     assert snap.lm_reachable is False
+
+
+def test_version_marks_does_not_write_state_file(tmp_path, monkeypatch):
+    """doctor 只读版本标记。
+
+    若 doctor 顺手写了 ``last_run_version``，紧接着的第一次真正启动就会把「刚升级」
+    判成「版本未变」——升级提示、一次性迁移动作全部静默失效。
+    """
+    from config import state
+
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    marks = probe._version_marks()
+
+    assert not state.state_path(tmp_path).exists()
+    # 空目录里没有上次运行记录，因此必然被判为首次运行
+    assert marks["version_transition"] == state.FIRST_RUN
+    assert marks["last_run_version"] == ""
+    assert not marks["state_file_error"]

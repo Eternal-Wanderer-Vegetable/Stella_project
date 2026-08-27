@@ -120,3 +120,37 @@ def test_cmd_status_json_branch(monkeypatch, capsys):
     assert rc == 0
     assert '"alive": true' in out
     assert '"link": null' in out
+
+
+def test_migrate_subcommand_is_registered(capsys):
+    """升级路径的四个子命令必须在 CLI 里存在——GUI 与 start.bat 都靠它们。"""
+    import contextlib
+    import io
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.suppress(SystemExit):
+        deploy_main.main(["--help"])
+    helptext = buffer.getvalue()
+    for command in ("migrate", "space-merge", "manifest", "paths"):
+        assert command in helptext, command
+
+
+def test_paths_env_file_prints_single_path(capsys):
+    """start.bat 靠 `paths --env-file` 判断配置过没有：必须只输出一行路径。"""
+    rc = deploy_main._cmd_paths(argparse.Namespace(json=False, env_file=True))
+    out = capsys.readouterr().out.strip().splitlines()
+    assert rc == 0
+    assert len(out) == 1
+    assert out[0].endswith(".env")
+
+
+def test_paths_json_exposes_both_roots(capsys):
+    """GUI 靠这份 JSON 找用户数据目录，两个根目录都必须在。"""
+    import json
+
+    rc = deploy_main._cmd_paths(argparse.Namespace(json=True, env_file=False))
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert data["project_root"] and data["stella_home"]
+    assert data["stella_home_source"]
+    assert data["db_path"].endswith("agent_memory.db")

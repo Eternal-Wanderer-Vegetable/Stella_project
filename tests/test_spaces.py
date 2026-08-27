@@ -65,14 +65,17 @@ def test_toml_conflict_takes_first_by_filename(tmp_path, monkeypatch):
 
 
 def test_explicit_vs_ledger_conflict_warns(tmp_path, monkeypatch):
-    """显式名与账本名冲突：先自动分配，再配显式空间 → error 告警提示手工迁移。"""
+    """显式名与账本名冲突：先自动分配，再配显式空间 → error 告警并指向 space-merge。"""
     errors: list[str] = []
     monkeypatch.setattr(nonebot.logger, "error", lambda m: errors.append(str(m)))
     assert spaces.resolve_space(1001) == "space_1"
     _make_toml(tmp_path, "casual", [1001])
     spaces.reload()
     assert spaces.resolve_space(1001) == "casual"
-    assert any("需手工迁移" in e and "space_1" in e and "casual" in e for e in errors)
+    # 提示必须是可执行的命令，而不是让用户手搓 UPDATE
+    assert any(
+        "space-merge" in e and "space_1" in e and "casual" in e for e in errors
+    )
 
 
 def test_list_spaces_uses_auto_names(tmp_path, monkeypatch):

@@ -158,6 +158,22 @@ export async function savePersona(space, promptFile, content) {
   return await invoke("save_persona", { space, promptFile, content });
 }
 
+
+/**
+ * 从旧版本导入用户数据。对应 `python -m deploy migrate`。
+ *
+ * 返回 Markdown 报告原文——同一份内容也会写进 migration_report.md 给用户留档，
+ * 只生成一次就不会两处不一致。dryRun=true 既是预览也是探测：没找到旧目录时
+ * 报告里会写明，界面据此决定要不要显示导入按钮。
+ */
+export async function runMigrate({ source = null, dryRun = true } = {}) {
+  if (USE_MOCK || !invoke) {
+    await delay(MOCK_DELAY);
+    return await (await fetch("./mock/migrate-report.md")).text();
+  }
+  return await invoke("run_migrate", { source, dryRun });
+}
+
 export async function installCloseOverlay() {
   const listen = window.__TAURI__?.event?.listen;
   if (!listen) return;

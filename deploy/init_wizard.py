@@ -109,6 +109,11 @@ def _managed_values(a: Answers) -> dict[str, str]:
     return values
 
 
+def managed_keys(a: Answers) -> set[str]:
+    """向导直接管理的键。升级/覆盖时它们以向导答案为准，不被旧 ``.env`` 盖回去。"""
+    return set(_managed_values(a))
+
+
 def render_env(a: Answers, template: str) -> str:
     """逐行扫描模板，把向导管理的键替换为答案值。
 

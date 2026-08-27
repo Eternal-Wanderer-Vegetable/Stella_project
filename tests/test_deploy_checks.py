@@ -383,13 +383,98 @@ def test_all_empty_config_has_no_noise_ids():
     assert "allowed_groups" in ids
 
 
-def test_legacy_group_id_tables_is_error():
+def test_stella_home_reports_split_layout():
+    """数据目录与程序分离时，doctor 要把两个目录都说清楚（用户得知道去哪备份）。"""
+    r = checks.check_stella_home(
+        _healthy_snapshot(
+            stella_home="D:/StellaData",
+            program_root="D:/Stella-3.1.0",
+            stella_home_source="指针文件",
+            home_pointer_exists=True,
+        )
+    )
+    assert r is not None and r.level == "ok"
+    assert "D:/StellaData" in r.detail and "D:/Stella-3.1.0" in r.detail
+
+
+def test_stella_home_without_pointer_is_warn():
+    """指针文件丢了 → 换一份新解压的程序就找不到数据，「升级一步走」失效。"""
+    r = checks.check_stella_home(
+        _healthy_snapshot(
+            stella_home="D:/StellaData",
+            program_root="D:/Stella-3.1.0",
+            home_pointer_exists=False,
+        )
+    )
+    assert r is not None and r.level == "warn"
+    assert "deploy" in r.fix_hint
+
+
+def test_stella_home_legacy_layout_is_ok():
+    """旧布局（数据在安装目录内）不是问题，但要提示升级时用 migrate 带过去。"""
+    r = checks.check_stella_home(
+        _healthy_snapshot(stella_home="D:/Stella", program_root="D:/Stella")
+    )
+    assert r is not None and r.level == "ok"
+    assert "deploy migrate" in r.detail
+
+
+def test_version_marks_downgrade_is_warn():
+    """旧代码打开新版本写过的库：schema 更高、列更多，报错方式毫无提示性，必须先说破。"""
+    r = checks.check_version_marks(
+        _healthy_snapshot(
+            program_version="3.0.0",
+            last_run_version="3.1.0",
+            version_transition="downgrade",
+        )
+    )
+    assert r is not None and r.level == "warn"
+    assert "3.1.0" in r.detail and r.fix_hint
+
+
+def test_version_marks_first_run_points_to_migrate():
+    """新数据目录 + 用户其实是升上来的 = 老记忆还在旧目录，这时该去跑 migrate。"""
+    r = checks.check_version_marks(
+        _healthy_snapshot(program_version="3.1.0", version_transition="first-run")
+    )
+    assert r is not None and r.level == "ok"
+    assert "deploy migrate" in r.fix_hint
+
+
+def test_version_marks_upgrade_is_reported():
+    r = checks.check_version_marks(
+        _healthy_snapshot(
+            program_version="3.1.0",
+            last_run_version="3.0.0",
+            version_transition="upgrade",
+        )
+    )
+    assert r is not None and r.level == "ok"
+    assert "3.0.0" in r.title and "3.1.0" in r.title
+
+
+def test_version_marks_read_error_is_warn():
+    """标记读不出来不影响运行，但升级判定失效——降级为 warn 并给出重建方法。"""
+    r = checks.check_version_marks(_healthy_snapshot(state_file_error="JSON 解析失败"))
+    assert r is not None and r.level == "warn"
+    assert r.fix_hint
+
+
+def test_version_marks_absent_when_version_unknown():
+    """读不到 pyproject.toml 版本号时不产生结论，而不是报一条「未知」噪音。"""
+    assert checks.check_version_marks(_healthy_snapshot()) is None
+
+
+def test_legacy_group_id_tables_is_warn_and_points_to_migrate():
+    """旧结构不再是「丢记忆」的死路：降级为 warn，并给出可执行的迁移命令。"""
     r = checks.check_legacy_group_id_tables(
         _healthy_snapshot(legacy_group_id_tables=["memories"])
     )
-    assert r is not None and r.level == "error"
-    assert "v8 之前的旧结构" in r.title
-    assert "agent_memory.db" in r.fix_hint
+    assert r is not None and r.level == "warn"
+    assert "自动迁移" in r.title
+    assert "deploy migrate" in r.fix_hint
+    # 绝不能再出现「把库移走让程序重建」这类等于丢记忆的建议
+    assert "移出" not in r.fix_hint and "重建新库" not in r.fix_hint
 
 
 def test_source_kind_all_empty_is_error():

@@ -23,10 +23,12 @@ B 群的对话——这比记忆串味严重得多。
 下标），否则加入一个群号更小的新群会让所有编号平移，全部记忆归属错位且无声无息。
 账本文件是程序自己的账本（不是人/前端编辑的 TOML 配置）。
 
-硬约束：**显式配置改名不自动迁移记忆**。若某群先在账本里拿到 ``space_N``、后来
-又被显式配置改名，历史记忆仍挂在旧名下——resolve_space 会打 error 告警，需按提示
-手工跑 ``UPDATE memories SET group_shared_space=...``（同理 memory_candidates /
-user_profiles / atomic_facts / memories_fts）。改名是无声丢记忆的最大来源。
+硬约束：**显式配置改名不自动跟随**。若某群先在账本里拿到 ``space_N``、后来又被显式
+配置改名，历史记忆仍挂在旧名下——resolve_space 会打 error 告警，并提示执行
+``python -m deploy space-merge --from space_N --to <新名>``（该命令会备份、改写全部
+按空间归属的表、重建 FTS 索引、更新账本）。不做「启动时自动跟随」是刻意的：合并会撞
+``user_profiles`` 的主键、需要明确的合并语义，且不可逆——让用户改一行 toml 就静默触发
+一次跨群画像合并，风险与收益不对称。改名是无声丢记忆的最大来源。
 
 配置示例（``persona`` / ``[proactive]`` 预告 M3/M4 会用，现在不解析，但先定下
 格式避免将来要改已写好的文件）：:
@@ -40,23 +42,25 @@ user_profiles / atomic_facts / memories_fts）。改名是无声丢记忆的最�
 
 from __future__ import annotations
 
-import json
-import re
 from pathlib import Path
 
-try:
-    import tomllib
-except ImportError:  # pragma: no cover - Python 3.10 需要 tomli 兜底（pyproject requires-python >=3.10）
-    import tomli as tomllib
+from config import space_map
+from config.settings import (
+    ALLOWED_GROUPS,
+    DB_PATH,
+    PROJECT_ROOT,
+    STELLA_HOME,
+    SYSTEM_PROMPT_PATH,
+)
 
-from config.settings import ALLOWED_GROUPS, DB_PATH, PROJECT_ROOT, SYSTEM_PROMPT_PATH
-
-# 共享空间配置文件目录：config/spaces/*.toml
-SPACES_DIR = PROJECT_ROOT / "config" / "spaces"
-PROMPTS_DIR = PROJECT_ROOT / "system_prompts"
+# 共享空间配置文件目录：<用户数据目录>/config/spaces/*.toml（纯用户配置，不随发布包出厂）
+SPACES_DIR = STELLA_HOME / "config" / "spaces"
+# 人格文件目录：用户自己写的放数据目录，发布包自带的默认人格在程序目录，两处都要找
+PROMPTS_DIR = STELLA_HOME / "system_prompts"
+SHIPPED_PROMPTS_DIR = PROJECT_ROOT / "system_prompts"
 # 自动命名账本（程序自己的状态文件，放在 DB 旁边，不是人/前端编辑的 TOML 配置）。
 # 结构：{"263402786": "space_1", "987654321": "space_2"}
-_AUTO_FILE = DB_PATH.parent / ".space_assignments.json"
+_AUTO_FILE = DB_PATH.parent / space_map.LEDGER_FILENAME
 
 # 模块级缓存：群号 → 空间名 / 空间名 → 群号列表
 _qq_to_space: dict[int, str] | None = None
@@ -70,62 +74,36 @@ _auto_load_failed: bool = False
 def _load() -> None:
     """扫描 ``config/spaces/*.toml``，构建群号→空间与空间→群号两张映射。
 
-    目录不存在或无 ``.toml`` 时正常返回（全自动/隐式命名）。排序遍历保证冲突
-    处理确定性；单个文件解析失败只跳过该文件，不中断其余加载。
+    解析判据在 ``config.space_map``（纯函数，迁移与运行时共用）；本函数只负责
+    把结果接到模块级缓存与 nonebot 日志上。冲突必须显式报错：静默取后者会让
+    记忆在两次启动间落到不同空间，这种错乱事后极难发现。
     """
     from nonebot import logger
 
     global _qq_to_space, _space_to_qq, _space_to_prompt
-    qq_to_space: dict[int, str] = {}
-    space_to_qq: dict[str, list[int]] = {}
-    space_to_prompt: dict[str, str] = {}
-    if not SPACES_DIR.is_dir():
-        _qq_to_space = qq_to_space
-        _space_to_qq = space_to_qq
-        _space_to_prompt = space_to_prompt
-        return
-    # 排序保证冲突处理确定性：同群出现在多个文件时采用文件名排序靠前的那个
-    for path in sorted(SPACES_DIR.glob("*.toml")):
-        space = path.stem
-        try:
-            with path.open("rb") as f:
-                data = tomllib.load(f)
-        except Exception as e:
-            logger.error(f"⚠️ [Spaces] 解析 {path.name} 失败，跳过该文件: {e}")
-            continue
-        qq_groups = data.get("qq_groups")
-        if not isinstance(qq_groups, list):
-            logger.warning(f"⚠️ [Spaces] {path.name} 缺少 qq_groups 列表，跳过该文件")
-            continue
-        prompt = data.get("system_prompt")
-        if isinstance(prompt, str) and prompt.strip():
-            space_to_prompt[space] = prompt.strip()
-        for g in qq_groups:
-            if not isinstance(g, int):
-                logger.warning(f"⚠️ [Spaces] {path.name} 中 {g!r} 不是整数群号，跳过")
-                continue
-            if g in qq_to_space:
-                # 静默取后者会让记忆在两次启动间落到不同空间，这种错乱事后极难发现，
-                # 因此冲突必须显式报错，且采用文件名排序靠前的那个保证结果确定性。
-                logger.error(
-                    f"⚠️ [Spaces] 群 {g} 同时出现在空间 {qq_to_space[g]} 与 {space}，"
-                    f"采用先者 {qq_to_space[g]}（按文件名排序）"
-                )
-                continue
-            qq_to_space[g] = space
-            space_to_qq.setdefault(space, []).append(g)
-    _qq_to_space = qq_to_space
-    _space_to_qq = space_to_qq
-    _space_to_prompt = space_to_prompt
+    parsed = space_map.load_explicit_spaces(SPACES_DIR)
+    for message in parsed.parse_errors:
+        logger.warning(f"⚠️ [Spaces] {message}")
+    for message in parsed.conflicts:
+        logger.error(f"⚠️ [Spaces] {message}")
+    _qq_to_space = parsed.qq_to_space
+    _space_to_qq = parsed.space_to_qq
+    _space_to_prompt = parsed.space_to_prompt
 
 
 def prompt_path(space: str) -> Path:
-    """返回空间 prompt 路径；未指定或不存在时回退旧默认人格文件。"""
+    """返回空间 prompt 路径；未指定或不存在时回退旧默认人格文件。
+
+    两个目录都找：用户自己写的人格在 ``STELLA_HOME/system_prompts``，发布包自带的
+    默认人格在程序目录里同名位置（升级时会被新版本替换）。用户的那份优先。
+    ``resolve()`` 后校验父目录，防止 toml 里写 ``../`` 跳出人格目录。
+    """
     prompt = _space_to_prompt.get(space)
     if prompt:
-        candidate = (PROMPTS_DIR / prompt).resolve()
-        if candidate.parent == PROMPTS_DIR.resolve() and candidate.is_file():
-            return candidate
+        for directory in (PROMPTS_DIR, SHIPPED_PROMPTS_DIR):
+            candidate = (directory / prompt).resolve()
+            if candidate.parent == directory.resolve() and candidate.is_file():
+                return candidate
     if SYSTEM_PROMPT_PATH.is_file():
         return SYSTEM_PROMPT_PATH
     return PROJECT_ROOT / "memory" / "SYSTEM.md"
@@ -149,38 +127,22 @@ def _load_auto() -> dict[int, str]:
     from nonebot import logger
 
     global _auto_load_failed
-    if not _AUTO_FILE.exists():
-        _auto_load_failed = False
-        return {}
-    try:
-        raw = _AUTO_FILE.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        mapping: dict[int, str] = {}
-        if isinstance(data, dict):
-            for k, v in data.items():
-                try:
-                    mapping[int(k)] = str(v)
-                except (TypeError, ValueError):
-                    continue
-        _auto_load_failed = False
-        return mapping
-    except Exception as e:
+    mapping, error = space_map.load_ledger(_AUTO_FILE)
+    if error:
         _auto_load_failed = True
-        logger.error(f"⚠️ [Spaces] 自动命名账本 {_AUTO_FILE} 读取失败，本次不分配新名: {e}")
+        logger.error(f"⚠️ [Spaces] {error}；本次不分配新名")
         return {}
+    _auto_load_failed = False
+    return mapping
 
 
 def _save_auto(mapping: dict[int, str]) -> None:
     """把自动命名账本原子写盘（先写 ``.tmp`` 再 ``replace``），失败只打 warning。"""
     from nonebot import logger
 
-    try:
-        payload = {str(k): v for k, v in mapping.items()}
-        tmp = _AUTO_FILE.with_suffix(_AUTO_FILE.suffix + ".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(_AUTO_FILE)
-    except Exception as e:
-        logger.warning(f"⚠️ [Spaces] 自动命名账本写入失败: {e}")
+    error = space_map.save_ledger(_AUTO_FILE, mapping)
+    if error:
+        logger.warning(f"⚠️ [Spaces] {error}")
 
 
 def _get_auto_ledger() -> dict[int, str]:
@@ -192,13 +154,8 @@ def _get_auto_ledger() -> dict[int, str]:
 
 
 def _allocate_new(ledger: dict[int, str]) -> str:
-    """分配下一个自动命名 ``space_N``：N = 账本里已有 space_N 的最大 N + 1。"""
-    max_n = 0
-    for name in ledger.values():
-        m = re.match(r"^space_(\d+)$", str(name))
-        if m:
-            max_n = max(max_n, int(m.group(1)))
-    return f"space_{max_n + 1}"
+    """分配下一个自动命名 ``space_N``（判据见 ``config.space_map``）。"""
+    return space_map.allocate_space_name(ledger)
 
 
 def resolve_space(qq_group_id: int) -> str:
@@ -224,13 +181,14 @@ def resolve_space(qq_group_id: int) -> str:
     if explicit is not None:
         recorded = _get_auto_ledger().get(qq_group_id)
         if recorded is not None and recorded != explicit:
-            # 改名是无声丢记忆的最大来源：历史记忆还挂在旧名下，必须显式告警
+            # 改名是无声丢记忆的最大来源：历史记忆还挂在旧名下，必须显式报错。
+            # 修法是一条命令（会备份、重建 FTS、更新账本），不再让用户手搓 SQL。
             logger.error(
                 f"⚠️ [Spaces] 群 {qq_group_id} 的空间已从 `{recorded}` 改为 `{explicit}`，"
-                f"历史记忆仍挂在 `{recorded}` 下，需手工迁移："
-                f"UPDATE memories SET group_shared_space='{explicit}' "
-                f"WHERE group_shared_space='{recorded}'"
-                f"（同理 memory_candidates / user_profiles / atomic_facts / memories_fts）"
+                f"历史记忆仍挂在 `{recorded}` 下。请停止程序后执行："
+                f"python -m deploy space-merge --from {recorded} --to {explicit}"
+                f"（先跑 --dry-run 看预览；该命令会一并处理 memories / memory_candidates / "
+                f"user_profiles / atomic_facts / long_term_memories / memories_fts）"
             )
         return explicit
 

@@ -89,6 +89,22 @@ class Snapshot:
     # Chromium 内核是否已下载。None = 探测不到（按目录启发式判断，见 probe）
     chromium_installed: bool | None = True
 
+    # ── 用户数据目录（STELLA_HOME） ──
+    # 数据目录与程序目录分开后，「我的数据在哪」必须能一眼看到——否则用户找不到
+    # 自己的记忆库，也无法判断升级后有没有接上老数据。
+    stella_home: str = ""
+    stella_home_source: str = ""
+    program_root: str = ""
+    home_pointer_exists: bool = True
+
+    # ── 版本标记（STELLA_HOME/.stella-state.json） ──
+    # 「上次跑这份数据的是哪个版本」是升级判定的唯一依据：只看当前版本号看不出
+    # 用户刚换了包（见 config/state.py）。
+    program_version: str = ""
+    last_run_version: str = ""
+    version_transition: str = ""
+    state_file_error: str = ""
+
     # ── 其它 ──
     persona_exists: bool = True
     persona_size: int = 1024

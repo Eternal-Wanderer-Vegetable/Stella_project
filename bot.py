@@ -21,6 +21,22 @@ from astrbot_compat import install_shim
 
 install_shim()
 
+# 版本标记：记下「这份数据被当前版本跑过」。必须在启动早期做，且必须整段容错——
+# 它只是给升级判定/破坏性变更提示提供依据（见 config/state.py），坏掉不该拦住启动。
+import contextlib as _contextlib
+
+with _contextlib.suppress(Exception):
+    from config import PROJECT_ROOT as _PROJECT_ROOT
+    from config import STELLA_HOME as _STELLA_HOME
+    from config import state as _state
+    from memory.schema import SCHEMA_VERSION as _SCHEMA_VERSION
+
+    _TRANSITION = _state.record_run(
+        _STELLA_HOME, _PROJECT_ROOT, schema_version=_SCHEMA_VERSION
+    )
+    if _TRANSITION.is_upgrade or _TRANSITION.is_downgrade:
+        print(f"[stella] {_TRANSITION.describe()}", flush=True)
+
 nonebot.init()
 
 driver = nonebot.get_driver()
