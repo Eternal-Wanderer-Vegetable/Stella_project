@@ -20,8 +20,8 @@
 from __future__ import annotations
 
 import difflib
-from pathlib import Path
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 from config import state
 
