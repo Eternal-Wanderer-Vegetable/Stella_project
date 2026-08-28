@@ -48,6 +48,23 @@ class LMStudioBackend(LLMBackend):
             system_prompt: 系统提示词，非空时才加入 messages。
         返回:
             模型回复的纯文本；空回复按失败处理并重试。
+
+        需要区分「输出被截断」与「模型确实这么答」的调用方请用
+        :meth:`generate_detailed`——本方法的 ``-> str`` 签名是 LLMBackend
+        的统一接口，插件兼容层等多处依赖，不做改动。
+        """
+        reply, _ = await self.generate_detailed(prompt, system_prompt)
+        return reply
+
+    async def generate_detailed(self, prompt: str, system_prompt: str = "") -> tuple[str, str]:
+        """同 :meth:`generate`，但额外返回 ``finish_reason``。
+
+        返回 ``(回复文本, finish_reason)``；``finish_reason`` 取自服务端响应，
+        取不到时为空串。``"length"`` 表示输出被 ``max_tokens`` 截断。
+
+        为什么不用「把 finish_reason 存到 self 上供调用方读」：后端实例是按角色
+        共享的单例，闸门只在 generate 期间持有，调用方读取时可能已被另一个群的
+        调用覆盖。用返回值传递才没有竞态。
         """
         messages = []
         if system_prompt:
@@ -81,8 +98,9 @@ class LMStudioBackend(LLMBackend):
                     finish = choice.get("finish_reason") or ""
                     usage = data.get("usage") or {}
                     if finish == "length":
-                        # 输出被 max_tokens 截断：JSON 类任务会因此解析失败，
-                        # 且调用方（Consolidator）会推进 checkpoint 导致该批消息永久丢失
+                        # 输出被 max_tokens 截断：JSON 类任务会因此解析失败。
+                        # 调用方若用 generate_detailed 就能据此不推进 checkpoint；
+                        # 只用 generate 的调用方看不到，仍靠这条日志排查。
                         logger.warning(
                             f"[LM Studio] 输出被 max_tokens={self.max_tokens} 截断"
                             f"（finish_reason=length, completion_tokens={usage.get('completion_tokens')}）"
@@ -92,7 +110,7 @@ class LMStudioBackend(LLMBackend):
                             f"[LM Studio] 收到回复（{len(reply)} 字符，finish={finish or '?'}，"
                             f"completion_tokens={usage.get('completion_tokens', '?')}）"
                         )
-                        return reply
+                        return reply, finish
                 last_error = RuntimeError("LM Studio 返回空回复")
                 logger.warning(f"[LM Studio] 第 {attempt + 1} 次尝试返回空回复，重试...")
             except httpx.HTTPStatusError as e:

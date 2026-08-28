@@ -22,6 +22,7 @@ from nonebot import logger
 
 from config import (
     DB_PATH,
+    LM_STUDIO_API_KEY,
     LM_STUDIO_BASE_URL,
     LM_STUDIO_MODEL,
     SESSION_SUMMARY_MAX_TOKENS,
@@ -46,10 +47,12 @@ def pending_tasks() -> set[asyncio.Task]:
     return set(_tasks)
 
 
-COMPACT_PROMPT = """以下是一段群聊对话的较早部分。请把它压缩成一段简短的回顾，供你稍后继续对话时参考。
-{existing}
-对话内容：
-{messages}
+# 前缀缓存约束（2026-08-28 起）：可变的 {existing} / {messages} 必须排在最后。
+# {max_chars} 由 SESSION_SUMMARY_MAX_TOKENS 推导、每次调用相同，属于固定前缀。
+# 数据之后只保留一行输出格式提醒——它不进缓存，但只有十几个 token，
+# 换来「最后一条指令」的位置优势，避免模型在回顾前加「好的，这是回顾：」之类前缀。
+# 理由与守卫详见 memory/consolidation_prompt.py 的同名说明。
+COMPACT_PROMPT = """你的任务：把一段群聊对话的较早部分压缩成一段简短的回顾，供你稍后继续对话时参考。
 
 
 要求：
@@ -62,6 +65,10 @@ COMPACT_PROMPT = """以下是一段群聊对话的较早部分。请把它压缩
 - 如果这段对话确实没有任何值得保留的内容，只输出一个字：无
 - 控制在 {max_chars} 字以内
 
+===== 以上为固定规则；以下是本次待压缩的数据 =====
+{existing}
+对话内容：
+{messages}
 
 直接输出回顾文本，不要任何解释或前缀。"""
 
@@ -84,7 +91,15 @@ def build_compact_prompt(messages: str, existing_summary: str = "") -> str:
 
 
 def _get_backend() -> LMStudioBackend:
-    """主聊天模型后端（懒初始化单例）。"""
+    """主聊天模型后端（懒初始化单例）。
+
+    ``api_key`` 必须跟着 base_url 一起传：切到在线 OpenAI 兼容端点后，
+    缺 Authorization 头会直接 401，而压缩是异步后台任务，失败只留一行 warning，
+    表现为「摘要永远不更新」而非明显报错。
+
+    P1 会把这里改指向「记忆域端点」（D2：会话压缩归记忆整合 key，以便与整合、
+    提取共用同一份缓存前缀），届时这三个参数一起换成记忆域的配置项。
+    """
     global _backend
     if _backend is None:
         _backend = LMStudioBackend(
@@ -92,6 +107,7 @@ def _get_backend() -> LMStudioBackend:
             model=LM_STUDIO_MODEL,
             max_tokens=SESSION_SUMMARY_MAX_TOKENS * _COMPACT_MAX_TOKENS_FACTOR,
             temperature=_COMPACT_TEMPERATURE,
+            api_key=LM_STUDIO_API_KEY,
         )
     return _backend
 

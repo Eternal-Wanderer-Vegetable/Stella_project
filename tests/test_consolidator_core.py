@@ -13,6 +13,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 import memory.consolidator as consolidator
 from memory.consolidator import MemoryConsolidator
 
@@ -381,3 +383,99 @@ def test_drain_group_stops_when_checkpoint_not_advancing(tmp_path, monkeypatch):
     assert rounds == 0
     # checkpoint 未推进
     assert cons._get_last_processed_id(1001) == 0
+
+
+# ── 输出截断（finish_reason=length）不许丢消息 ──────────────────────
+class _FakeBackend:
+    """按预设的 finish_reason 序列应答，并记录每次收到的 prompt。"""
+
+    def __init__(self, finishes, reply: str = "{}"):
+        self.model = "fake-model"
+        self._finishes = list(finishes)
+        self.reply = reply
+        self.prompts: list[str] = []
+
+    async def generate_detailed(self, prompt: str, system_prompt: str = ""):
+        self.prompts.append(prompt)
+        finish = self._finishes[min(len(self.prompts) - 1, len(self._finishes) - 1)]
+        return self.reply, finish
+
+
+def test_batch_ladder_halves_down_to_floor():
+    """退让阶梯：逐级减半、下界 _TRUNCATION_MIN_BATCH、级数不超过上限。
+
+    在线端点下每一级都是一次真实计费调用，所以级数必须有上限。
+    """
+    assert consolidator._batch_ladder(30) == [30, 15, 7]
+    assert consolidator._batch_ladder(10) == [10, 5]
+    assert consolidator._batch_ladder(5) == [5]
+    assert consolidator._batch_ladder(1) == [1]
+    for base in (1, 5, 10, 30, 100):
+        ladder = consolidator._batch_ladder(base)
+        assert len(ladder) <= consolidator._TRUNCATION_MAX_ATTEMPTS
+        assert ladder == sorted(ladder, reverse=True)
+        assert ladder[-1] >= min(base, consolidator._TRUNCATION_MIN_BATCH)
+
+
+def _prepare_generate(tmp_path, monkeypatch, finishes, count: int = 30):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    monkeypatch.setattr(consolidator, "CONSOLIDATION_LOCAL_BATCH_SIZE", 30)
+    monkeypatch.setattr(consolidator, "append_consolidation_log", lambda entry: None)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    _insert_group_messages(conn, "1001", count)
+    conn.commit()
+    conn.close()
+    backend = _FakeBackend(finishes)
+    cons._backends = [("fake", backend)]
+    return cons, backend
+
+
+def test_generate_shrinks_batch_when_output_truncated(tmp_path, monkeypatch):
+    """截断后缩小批次重试：第二次成功，checkpoint 只推进实际整合过的那一段。
+
+    截断的 JSON 必然解析不完整，而解析失败路径会推进 checkpoint 防同批重跑——
+    若不在这里拦住，那批消息就永久丢了。
+    """
+    cons, backend = _prepare_generate(tmp_path, monkeypatch, ["length", "stop"])
+
+    result, batch_end, name, senders, _at_senders, messages = asyncio.run(
+        cons._generate(1001, 0)
+    )
+
+    assert result == "{}"
+    assert len(backend.prompts) == 2, "截断后应当再试一次"
+    assert len(backend.prompts[1]) < len(backend.prompts[0]), "重试的 prompt 必须更短"
+    # 第二次只取 15 条（30 的一半），checkpoint 相应只推进到第 15 条
+    assert batch_end == 15
+    assert name == "fake"
+    assert senders and messages
+
+
+def test_generate_raises_when_still_truncated_at_floor(tmp_path, monkeypatch):
+    """退到底仍截断 → 抛 OutputTruncatedError（配置问题，重试解决不了）。"""
+    cons, backend = _prepare_generate(tmp_path, monkeypatch, ["length"])
+
+    with pytest.raises(consolidator.OutputTruncatedError):
+        asyncio.run(cons._generate(1001, 0))
+    assert len(backend.prompts) == len(consolidator._batch_ladder(30))
+
+
+def test_consolidate_group_keeps_checkpoint_when_truncated(tmp_path, monkeypatch):
+    """截断到底时 checkpoint 必须停在原地，这批消息完整留待重跑。"""
+    cons, _ = _prepare_generate(tmp_path, monkeypatch, ["length"])
+
+    asyncio.run(cons.consolidate_group(1001))
+
+    assert cons._get_last_processed_id(1001) == 0
+
+
+def test_consolidate_group_advances_checkpoint_on_unparsable_output(tmp_path, monkeypatch):
+    """对照组：非截断的 JSON 解析失败仍推进 checkpoint（模型胡言乱语，重跑无益）。"""
+    cons, _ = _prepare_generate(tmp_path, monkeypatch, ["stop"])
+    cons._backends[0][1].reply = "完全没有 JSON"
+
+    asyncio.run(cons.consolidate_group(1001))
+
+    assert cons._get_last_processed_id(1001) == 30

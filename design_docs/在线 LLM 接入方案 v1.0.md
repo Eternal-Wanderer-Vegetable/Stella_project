@@ -60,6 +60,10 @@
 
 这四个都不是新功能引入的，但全部压在本方案的必经之路上。**其中 P0-3 直接决定 R1 有没有意义。**
 
+> **状态：这四项已于 2026-08-28 全部落地**（连同本节末尾 P1 清单里的 `session_compact` api_key）。
+> 每项「修法」后新增的「已落地」小节记录**实际实现与原计划的差异**；汇总、验证结果与遗留项见 §10.1。
+> 缺陷描述里的行号都是**修复前**的位置，作为问题记录保留，不再与当前代码对应。
+
 ### P0-1 `_env` 空值不回落默认值，导致 GUI 把「继承」写死成空
 
 `config/settings.py:73-82`：
@@ -102,6 +106,13 @@ ASTRBOT_LLM_BASE_URL / _MODEL / _API_KEY
 
 > 不建议直接把 `_env` 改成「空值即回落」：`LM_STUDIO_API_KEY=` 这类键的空值是**有意义的**（表示"无 key"），一刀切会让用户无法表达「整合端点故意不带 key」。
 
+**已落地**——三处协同全部按上述修法实现：
+
+- `config/settings.py`：新增 `_env_inherit()`，8 个键改用它。`_env()` 的语义**刻意不动**，上面那条理由依然成立。
+- `deploy/env_schema.py`：识别 `_env_inherit`，输出 `{"inherits": 父键名, "default": ""}`。当前 schema 共 209 个字段，其中恰好 8 个带 `inherits`，父键与上表逐一对应。
+- `stella-installer/src/config.html`：带 `inherits` 的字段渲染成 placeholder「继承 XXX」+ 小字提示，`buildAdvancedEnv()` 在其为空时**整行不写**。这些键**没有**加进 `managedKeys`——加进去会让它们在 GUI 里彻底消失，与「渲染成 placeholder 输入框」正好相反。
+- 开发机 `.env` 上验证：`MEMORY_EXTRACT_LM_STUDIO_BASE_URL` 等三个键与 `CONSOLIDATION_LM_STUDIO_API_KEY` 原本都是「有这一行但值为空」，现在全部解析到父键值；显式覆盖仍然生效，且首尾空白会被 strip。**阶段2 提取因此恢复工作。** `.env.example` 无需改动（这些键在那里本来就是注释掉的）。
+
 ### P0-2 schema 因注释里出现「废弃」二字，把一个在用的键整个丢掉
 
 `deploy/env_schema.py:89` 的判据是「描述里包含『废弃』」子串。而：
@@ -120,6 +131,10 @@ CONSOLIDATION_LM_STUDIO_BASE_URL = _env("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_S
 
 - （推荐）在 `deploy/env_keys.py` 的 `DEPRECATED` 里登记——那里已经是「这个键还算不算数」的单一真相源，`env_schema` 直接查表；
 - 或改用行内标记 `# @deprecated`，不再对自然语言做子串匹配。
+
+**已落地**：取推荐方案——`deploy/env_schema.py` 只查 `deploy/env_keys.deprecation_reason(key)`，不再对注释做任何子串匹配。
+
+顺带发现**第二个**同类误伤：`MEMORY_COMPRESS_LOG_PATH`。它的注释里提到「旧键已登记在 `_DEPRECATED_KEYS`」，而它自己恰恰是**替换旧键的那个新键**。两个键现在都回到 schema 里，同时也没有任何真正废弃的键漏进去——`tests/test_env_schema.py` 两头都守。
 
 ### P0-3 三个 prompt 模板把可变内容放在最前，可缓存前缀 ≈ 0
 
@@ -142,6 +157,22 @@ CONSOLIDATION_LM_STUDIO_BASE_URL = _env("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_S
 1. 固定前缀必须**逐字节稳定**——不得含时间戳、群号、随机排序的 dict 键；
 2. 前缀长度要**舒服地越过厂商的最小可缓存长度**（各家不同，有的要 1024 token 级），重排后约 1000~1200 token 是"刚好压线"，建议把 few-shot 也并进前缀把它推到安全区；
 3. `system_prompt` 与 user message 的边界固定。注意整合链路目前是 `backend.generate(prompt)` 单参调用（无 system message），保持现状即可。
+
+**已落地**：三个模板都改成「固定指令 + JSON schema + few-shot → `===== 以上为固定规则；以下是本次待分析的数据 =====` → 可变数据」，逻辑一行未动。分隔线之后只留一行输出格式提醒——这十几个 token 进不了缓存，换来「最后一条指令」的位置优势，是有意的取舍。
+
+实测可缓存前缀（分隔线之前的固定部分；token 按 `memory/prompt_builder.estimate_tokens` 估算，非厂商实测）：
+
+| 模板 | 固定前缀字符数 | 估算 token |
+|---|---|---|
+| `memory/consolidation_prompt.py` | 2871 | ≈ 2094 |
+| `memory/extraction_prompt.py` | 2475 | ≈ 1538 |
+| `memory/session_compact.py` | 268 | ≈ 331 |
+
+配套约束 1、3 已满足（前缀里没有时间戳/群号；整合链路仍是单参调用）。约束 2 对整合与提取达标：2000/1500 token 舒服地越过 1024 级门槛，few-shot 已在前缀内，不必再额外堆料。
+
+**但会话压缩不达标**：它的固定部分总共才 ≈331 token，低于常见厂商 1024 token 的起步门槛，重排对它没有实际收益（模板短，本来也不贵）。注意 D2「压缩归记忆整合 key」**救不了**这一点——前缀缓存按**前缀内容**命中，不按 key 命中，共用 key 不会让压缩蹭到整合的缓存；D2 的价值在于把记忆域流量与主聊天流量隔开，避免互相挤掉缓存。P1 若想让压缩也吃上缓存，只有让它复用整合模板的前缀，或者接受它没有缓存。
+
+`tests/test_prompt_cache_prefix.py` 守住位置约束：把 `{messages}` 挪回模板开头，用例立刻红。
 
 ### P0-4 输出截断 → JSON 解析失败 → 推进 checkpoint → 该批消息永久丢失
 
@@ -168,9 +199,18 @@ if not parsed:
 
 这需要后端把 `finish_reason` 暴露出来——与第 4.2 节的 usage 上报是同一处改动。
 
+**已落地，且比原计划保守一档**：
+
+- `core/llm/lm_studio.py` 新增 `generate_detailed() -> tuple[str, str]`，返回 `(回复, finish_reason)`；`generate()` 保留 `-> str` 并委托它——`-> str` 是 `LLMBackend` 的统一接口，插件兼容层等多处依赖，不动。**`finish_reason` 只经返回值传递，绝不挂到 `self` 上**：后端实例按角色共享，闸门只在单次调用期间持有，挂在 `self` 上会被另一个群的调用覆盖。
+- 原计划写的是「按更小批量重试一次」，实际实现为**批量阶梯**：`_batch_ladder()` 生成最多 3 档（如 `30 → 15 → 7`，下限 5 条）。为什么不止一次：对折一次未必够；为什么不无限：在线端点每一档都是一次真实计费调用。
+- 退到底仍截断 → 抛 `OutputTruncatedError`；`consolidate_group()` 在通用 `except` **之前**单独捕获它，只记 error 日志，**checkpoint 停在原地**等人改配置。非截断的 JSON 解析失败仍按毒批次推进 checkpoint（原行为保留，并在注释里注明截断不走这条路）。
+- `_generate()` **保持 6 元组返回**，截断靠异常 + 内部重试传达。加第 7 个元素会打断 `test_consolidator_core.py` / `test_full_workflow.py` / `test_short_term_attribution.py` 里 5 处 monkeypatch 假后端。
+- 阶段2 提取的截断只影响它自己：记日志 + 返回 `None`，回退阶段1 候选。checkpoint 由阶段1 掌管，不受影响。
+- 与 §4.2 的 usage 上报**没有一起做**：P0 只暴露 `finish_reason`，usage / 命中率上报留给 P1 的 registry 改造（`prompt_tokens` 等目前仅写日志）。
+
 ### P1（非阻塞，建议一并处理）
 
-- **`session_compact.py:90` 不传 `api_key`**：切在线后会话压缩直接 401。D2 要求它归记忆域，此处必须补上。
+- **`session_compact.py:90` 不传 `api_key`**：切在线后会话压缩直接 401。D2 要求它归记忆域，此处必须补上。**✅ 已在 P0 一并补上**——`_get_backend()` 现在传 `LM_STUDIO_API_KEY`；P1 改指记忆域端点时，base_url / model / api_key 三个参数一起换。
 - **`consolidator.py:479` 的 overlap 是 id 减法**：`fetch_from = max(0, last_id - CONSOLIDATION_OVERLAP)`。`messages` 表 id 是跨群全局自增，所以「回看 15」实际回看到本群多少条，取决于**其它群的插入速度**——热闹时可能只回看 1~2 条，冷清时 15 条。重叠量不确定 → 在线计费不可预测。第 5.2 节直接把原文重叠改掉，此项随之消解。
 
 ---
@@ -618,10 +658,11 @@ LLM_BUDGET_EXHAUSTED_ACTION=pause_memory # pause_memory | pause_all | warn_only
 | 文件 | 覆盖 |
 |---|---|
 | `tests/test_llm_registry.py`（新） | 角色→端点解析、`none`/非法槽名/在线缺 key 的校验、`describe()` 输出、三个场景配置的解析结果 |
-| `tests/test_env_inherit.py`（新） | **P0-1 回归**：`KEY=` 空值必须回落父键值；schema 输出 `inherits`；GUI 空值不写入 |
-| `tests/test_env_schema.py`（改） | **P0-2 回归**：注释含「废弃」二字的在用键不得被剔除；废弃判定改走 `env_keys` 后仍正确 |
-| `tests/test_prompt_cache_prefix.py`（新） | **P0-3 回归**：三个模板的占位符位置必须在固定指令之后；固定前缀长度下限 |
-| `tests/test_consolidator_core.py`（改） | **P0-4 回归**：`finish_reason=length` 时**不得**推进 checkpoint；其它解析失败仍推进 |
+| `tests/test_env_inherit.py`（新，✅ 13 用例） | **P0-1 回归**：`KEY=` 空值必须回落父键值；schema 输出 `inherits`。GUI 空值不写入这一半**没有**自动化覆盖（无 JS 测试框架），改由 §9.2 第 6 项人工验证。3 个用例在父键自身为空时 skip |
+| `tests/test_env_schema.py`（改，✅ 7 用例） | **P0-2 回归**：注释含「废弃」二字的在用键不得被剔除；废弃判定改走 `env_keys` 后仍正确；反向也守——真正登记废弃的键不得漏进 schema |
+| `tests/test_prompt_cache_prefix.py`（新，✅ 6 用例） | **P0-3 回归**：三个模板的占位符位置必须在固定指令之后；枚举占位符须留在前缀内；分隔线之后的固定文本不超过一行 |
+| `tests/test_consolidator_core.py`（改，✅ 21 用例） | **P0-4 回归**：`finish_reason=length` 时缩批重试、退到底抛 `OutputTruncatedError` 且**不得**推进 checkpoint；对照组——不可解析但未截断的输出仍推进 |
+| `tests/test_lm_studio.py`（改，✅ 8 用例） | **P0-4 回归**：`generate_detailed()` 用返回值交出 `finish_reason`；`generate()` 保持 `-> str` 签名不变 |
 | `tests/test_scheduler_concurrency.py`（新） | `concurrency=1` 与今天的 Lock 行为等价；`>1` 时真并发；跨端点不互相阻塞 |
 | `tests/test_llm_compat.py`（新） | `reasoning_effort` 只在 `kind=local` 时发送；`max_completion_tokens` / `temperature` 的错误自适应各生效一次且只重试一次 |
 | `tests/test_openai_contract.py`（新） | **厂商中立守卫**，见下 |
@@ -653,6 +694,7 @@ LLM_BUDGET_EXHAUSTED_ACTION=pause_memory # pause_memory | pause_all | warn_only
 | 3 | **至少两家在线厂商 + 本地 LM Studio 跑同一套配置** | DeepSeek 为指定参考厂商；**第二家任选**（任何 OpenAI 兼容端点均可）。判据是「换厂商只改 `.env` 的 base_url/key/model，不改一行代码」——这是 Q1 那条硬要求的人工兜底，与 9.1 的自动守卫互补 |
 | 4 | 插件链路（tools / 流式 / 图片）在在线端点下的兼容性 | **必须用未经修改的原版插件验证**：`data/plugins/` 是 gitignore 的，开发机副本可能被手工改过，兼容层缺口会因此漏到 release |
 | 5 | 廉价模型的 JSON 遵循度 | 见 §11 Q3。`TEMPERATURE=0.3` 是为本地 E4B 标定的，在线廉价模型需重新标定 |
+| 6 | **GUI「留空即继承」路径** | `stella-installer/` 下没有 JS 测试框架，P0-1 的前端半边只能人工验证：在 GUI 里把 8 个继承键留空并保存，确认 `.env` 里**没有**这 8 行（而不是写成 `KEY=`）；再填上值保存，确认写入且覆盖生效 |
 
 ---
 
@@ -660,12 +702,34 @@ LLM_BUDGET_EXHAUSTED_ACTION=pause_memory # pause_memory | pause_all | warn_only
 
 | 期 | 内容 | 交付判据 |
 |---|---|---|
-| **P0** | 修四个阻塞缺陷（`_env_inherit` + schema 废弃判定 + 三个 prompt 重排 + 截断不推进 checkpoint）；补 `session_compact` 的 api_key | 纯本地行为不变；阶段2 提取恢复工作（当前是坏的）；缓存前缀长度达标 |
+| **P0** ✅ 已交付<br>（2026-08-28） | 修四个阻塞缺陷（`_env_inherit` + schema 废弃判定 + 三个 prompt 重排 + 截断不推进 checkpoint）；补 `session_compact` 的 api_key | 纯本地行为不变；阶段2 提取恢复工作（当前是坏的）；缓存前缀长度达标 → 落地情况与偏差见 §10.1 |
 | **P1** | 端点×角色配置模型 + `core/llm/registry.py` + 六处构造点改造 + 闸门改并发度 + 参数兼容层 | 三个场景可通过手改 `.env` 跑通；纯本地逐字等价今天；**§9.1 契约测试进 CI 并通过**；DeepSeek + 第二家厂商各跑通一轮（只改 `.env`） |
 | **P2** | GUI「模型服务」分区（端点卡片 + 角色矩阵 + 三个预设 + 测试连接）；doctor 新检查项；迁移逻辑 | 全程 GUI 完成本地↔在线切换，存量 `.env` 自动迁移 |
 | **P3** | 成本控制：Tier 0 剩余项 + Tier 1 预筛 + Tier 2 记账/预算 + 用量面板 + 降级链 | 缓存命中率与用量可见；日预算生效；超额只停记忆域 |
 
 P0 可独立发布（它修的是现存 bug）。P1 之后功能已可用，P2 让它好用，P3 让它省钱。
+
+### 10.1 P0 落地记录（2026-08-28）
+
+| 项 | 状态 | 与原计划的差异 |
+|---|---|---|
+| P0-1 `_env_inherit` | ✅ | 无。settings + env_schema + config.html 三处协同，8 个继承键全部生效 |
+| P0-2 废弃判定 | ✅ | 取推荐方案（查 `env_keys` 登记表）。顺带救回第二个误伤键 `MEMORY_COMPRESS_LOG_PATH` |
+| P0-3 prompt 重排 | ✅ | 整合 ≈2094 / 提取 ≈1538 估算 token 可缓存；**会话压缩 ≈331 token 不达门槛**，且共用 key 也救不了，理由见 P0-3「已落地」小节 |
+| P0-4 截断不推进 checkpoint | ✅ | 「重试一次」改为最多 3 档批量阶梯 + `OutputTruncatedError`；`finish_reason` 走 `generate_detailed()` 的返回值。usage 上报**未**一起做，留 P1 |
+| §2 P1 清单：`session_compact` api_key | ✅ | 无 |
+
+**交付判据对照**
+
+- *纯本地行为不变*：全量 `pytest tests -q` → 1130 passed / 3 skipped（补测试前是 1103）；`ruff check .` 全绿；pyright 对四个改动模块 0 error。
+- *阶段2 提取恢复工作*：`.env` 里三个空值键现已解析到父端点，`LMStudioBackend(base_url="")` 那条 `UnsupportedProtocol` 路径消失。
+- *缓存前缀长度达标*：整合与提取达标；**压缩不达标，且不在 P0 解决**。
+
+**遗留项（不阻塞 P1）**
+
+1. `config.html` 的「留空即继承」路径**没有自动化守卫**——`stella-installer/` 下没有 JS 测试框架，本次只做了代码走读。已登记为 §9.2 第 6 项人工验证。
+2. `scripts/probe_consolidation.py --positive` **尚未跑**。`memory/consolidation_prompt.py` 自己的注释规定「修改本模板前必须先跑」，本次改了模板（纯重排），需在有 LM Studio 的机器上补跑，确认防编造条款与正例提取能力没有回归。
+3. `pyrightconfig.json` 仍指向不存在的 `.venv`（本机走 conda 环境）。与本方案无关的既有环境问题，未改。
 
 ---
 

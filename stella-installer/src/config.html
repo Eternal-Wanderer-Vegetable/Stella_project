@@ -193,6 +193,8 @@
           key: field.key,
           value: advancedValues[field.key] ?? field.default ?? "",
           description: field.description || "",
+          // 继承型配置项：schema 给不出字面默认值，只给「留空即继承谁」
+          inherits: field.inherits || "",
         });
       }
       return [...groups.values()];
@@ -207,8 +209,8 @@
     function groupHTML(group, folded) {
       const body = `<div class="advanced-fields">${group.items.map(item => `
         <div class="advanced-field">
-          <label>${esc(item.key)}${item.description ? `<small>${esc(item.description)}</small>` : ""}</label>
-          <input data-adv-key="${esc(item.key)}" value="${esc(item.value)}" />
+          <label>${esc(item.key)}${item.description ? `<small>${esc(item.description)}</small>` : ""}${item.inherits ? `<small>留空即继承 ${esc(item.inherits)}</small>` : ""}</label>
+          <input data-adv-key="${esc(item.key)}" value="${esc(item.value)}"${item.inherits ? ` placeholder="继承 ${esc(item.inherits)}"` : ""} />
         </div>`).join("")}</div>`;
       return folded ? `<details class="advanced-group"><summary>${esc(group.title)} <span>${group.items.length} 项</span></summary>${body}</details>` : `<section class="primary-config-group"><h3>${esc(group.title)}</h3>${body}</section>`;
     }
@@ -223,7 +225,14 @@
       const values = { ...advancedValues };
       root.querySelectorAll("[data-adv-key]").forEach(input => { values[input.dataset.advKey] = input.value; });
       const known = new Set(schemaFields.map(field => field.key));
-      const lines = schemaFields.map(field => `${field.key}=${values[field.key] ?? field.default ?? ""}`);
+      // 继承型配置项留空时**不写入** .env。写成 `KEY=` 会让读取方拿到空串，
+      // 继承链被静默切断——2026-08-28 之前 MEMORY_EXTRACT_LM_STUDIO_BASE_URL
+      // 正是这样变成空串，使阶段2 候选提取每次都拼出无协议 URL 而失败。
+      // 修复是三处协同的：config/settings.py 的 _env_inherit（空值回落）、
+      // deploy/env_schema.py 输出 inherits 标记、以及这里的「留空不落盘」。
+      const lines = schemaFields
+        .filter(field => !(field.inherits && !String(values[field.key] ?? "").trim()))
+        .map(field => `${field.key}=${values[field.key] ?? field.default ?? ""}`);
       for (const [key, value] of Object.entries(values)) if (!known.has(key)) lines.push(`${key}=${value}`);
       return lines.join("\n");
     }

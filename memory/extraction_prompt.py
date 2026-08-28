@@ -23,6 +23,10 @@
 
 format 转义规则同 consolidation_prompt：字面花括号写 {{ }}，
 {messages} / {types} / {usages} / {visibilities} 为占位符。
+
+
+前缀缓存约束（2026-08-28 起）：``{messages}`` 必须留在模板最末尾，
+理由与守卫同 consolidation_prompt.py，不再重复。
 """
 
 
@@ -34,11 +38,7 @@ _USAGES = (
 _VISIBILITIES = "OPEN / CONTEXTUAL / RESTRICTED / INTERNAL"
 
 
-EXTRACTION_PROMPT = """下面是一段群聊记录。已经有初步判断认为：这段记录里包含「某个具体用户亲口说出的、关于他自己的」信息。你的任务是把这些信息准确地提取成记忆候选，用 JSON 输出。
-
-
-群聊消息：
-{messages}
+EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认为：这段记录里包含「某个具体用户亲口说出的、关于他自己的」信息。你的任务是把这些信息准确地提取成记忆候选，用 JSON 输出。
 
 
 你的目标是「不漏」：把每一条用户亲口说出的、关于自己的稳定信息都提取出来。
@@ -110,6 +110,11 @@ EXTRACTION_PROMPT = """下面是一段群聊记录。已经有初步判断认为
   "evidence": "这条信息的依据",
   "source_message_ids": []
 }}
+
+===== 以上为固定规则；以下是本次待分析的数据 =====
+
+群聊消息：
+{messages}
 """
 
 

@@ -77,6 +77,36 @@ _consolidator_instance: Optional["MemoryConsolidator"] = None
 # __new__ 绕过 __init__ 构造实例（避免真实 LLM 配置），实例属性会缺失。
 _group_locks: dict[str, asyncio.Lock] = {}
 
+# ── 输出截断的批次退让（勿把下面两个常量调成 1 次尝试）─────────────────
+# 整合输出被 max_tokens 截断时 JSON 必然解析不完整，而解析失败路径会**推进**
+# checkpoint（防同批反复重跑），那批消息就永久丢失。缩小批次让 prompt 变短是
+# 唯一不丢消息又能自愈的办法：批次减半后输出多半能一次说完。
+# 减到 _TRUNCATION_MIN_BATCH 仍截断说明 CONSOLIDATION_LOCAL_MAX_TOKENS 配得太小，
+# 那不是重试能解决的，改抛异常让 checkpoint 停在原地等人改配置。
+_TRUNCATION_MIN_BATCH = 5
+_TRUNCATION_MAX_ATTEMPTS = 3
+
+
+class OutputTruncatedError(RuntimeError):
+    """整合输出被 max_tokens 截断，且缩小批次后仍然截断。
+
+    与普通 JSON 解析失败区别对待：解析失败可能是模型胡言乱语（同批重跑也没用，
+    推进 checkpoint 是对的），而截断是**配置问题**，重跑一定能成功——前提是
+    别把消息丢了。因此这条路径要求调用方不推进 checkpoint。
+    """
+
+
+def _batch_ladder(base_limit: int) -> list[int]:
+    """生成批次退让阶梯：``[base, base/2, base/4…]``，下界 ``_TRUNCATION_MIN_BATCH``。
+
+    最多 ``_TRUNCATION_MAX_ATTEMPTS`` 级——在线端点下每级都是一次真实计费调用，
+    不能无限退让。
+    """
+    ladder = [max(1, base_limit)]
+    while ladder[-1] > _TRUNCATION_MIN_BATCH and len(ladder) < _TRUNCATION_MAX_ATTEMPTS:
+        ladder.append(max(_TRUNCATION_MIN_BATCH, ladder[-1] // 2))
+    return ladder
+
 
 class MemoryConsolidator:
     """群聊消息整合器。
@@ -136,26 +166,54 @@ class MemoryConsolidator:
         返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名, 本批发送者 QQ 号列表,
         AT_MENTION 来源发送者列表, 本批消息文本)，供调用方准确推进 checkpoint、
         对记忆候选做发送者白名单校验与来源分级，并把同一份消息文本交给阶段2 提取。
+
+        输出被截断（``finish_reason == "length"``）时不返回，而是按 ``_batch_ladder``
+        缩小批次重试；退到底仍截断则抛 :class:`OutputTruncatedError`。理由见该异常
+        与 ``_TRUNCATION_MIN_BATCH`` 处的说明。批次缩小后 ``batch_end`` 同步变小，
+        checkpoint 只推进实际整合过的那一段，剩下的留给下一批。
         """
         backend_name, backend = self._backends[0]
-        limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
-        messages, batch_end, senders, at_senders = self._fetch_next_messages(group_id, last_id, limit)
-        if not messages:
-            raise RuntimeError("没有可整合的消息")
-        prompt = self._build_prompt(group_id, messages)
-        logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
-        model_tag = getattr(backend, "model", "") or backend_name
-        # 只在真正调用 E4B 的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
-        # 且绝不与 chat 闸门同时持有（防止跨模型队头阻塞）。
-        async with acquire(RESOURCE_CONSOLIDATION, tag=f"consolidate:{group_id}"):
-            result = await backend.generate(prompt)
-        append_consolidation_log(
-            f"- **🧠 后端**: {backend_name}（{model_tag}，批次 {limit} 条）\n"
-            f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"
-        )
-        # 返回真实处理到的 batch_end、后端名、发送者列表与本批消息文本，
-        # 供调用方准确推进 checkpoint 并做发送者白名单校验与阶段2 提取
-        return result, batch_end, backend_name, senders, at_senders, messages
+        base_limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
+        ladder = _batch_ladder(base_limit)
+        for attempt, limit in enumerate(ladder):
+            messages, batch_end, senders, at_senders = self._fetch_next_messages(group_id, last_id, limit)
+            if not messages:
+                raise RuntimeError("没有可整合的消息")
+            prompt = self._build_prompt(group_id, messages)
+            logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
+            model_tag = getattr(backend, "model", "") or backend_name
+            # 只在真正调用 E4B 的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
+            # 且绝不与 chat 闸门同时持有（防止跨模型队头阻塞）。
+            async with acquire(RESOURCE_CONSOLIDATION, tag=f"consolidate:{group_id}"):
+                result, finish = await backend.generate_detailed(prompt)
+            append_consolidation_log(
+                f"- **🧠 后端**: {backend_name}（{model_tag}，批次 {limit} 条）\n"
+                f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"
+            )
+            if finish != "length":
+                # 返回真实处理到的 batch_end、后端名、发送者列表与本批消息文本，
+                # 供调用方准确推进 checkpoint 并做发送者白名单校验与阶段2 提取
+                return result, batch_end, backend_name, senders, at_senders, messages
+
+            if attempt + 1 < len(ladder):
+                logger.warning(
+                    f"⚠️ [Consolidator] 群 {group_id} 输出被截断（批次 {limit} 条），"
+                    f"缩小到 {ladder[attempt + 1]} 条重试"
+                )
+                append_consolidation_log(
+                    f"  > ⚠️ 输出被 max_tokens 截断，批次 {limit} → {ladder[attempt + 1]} 重试\n"
+                )
+                continue
+
+            append_consolidation_log(
+                f"  > ❌ 批次已缩到 {limit} 条仍被截断，**不推进 checkpoint**"
+                f"（请调大 CONSOLIDATION_LOCAL_MAX_TOKENS）\n"
+            )
+            raise OutputTruncatedError(
+                f"群 {group_id} 整合输出被 max_tokens={CONSOLIDATION_LOCAL_MAX_TOKENS} 截断，"
+                f"批次已缩到 {limit} 条仍不够；请调大 CONSOLIDATION_LOCAL_MAX_TOKENS"
+            )
+        raise RuntimeError("没有可整合的消息")
 
     def _build_prompt(self, group_id: int, messages: str) -> str:
         """用当前短期摘要 + 本批消息填充整合 prompt 模板。"""
@@ -193,7 +251,7 @@ class MemoryConsolidator:
         logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
         try:
             async with acquire(RESOURCE_CHAT, tag=f"extract:{group_id}"):
-                result = await backend.generate(prompt)
+                result, finish = await backend.generate_detailed(prompt)
         except Exception:
             logger.exception("❌ [Extractor] 阶段2 提取调用失败，回退阶段1 候选")
             append_consolidation_log(" > ❌ 阶段2（提取）调用失败，回退阶段1 候选\n")
@@ -202,6 +260,18 @@ class MemoryConsolidator:
             f"- **🎯 阶段2 提取**: {name}（{model_tag}）\n"
             f" > 原始输出：\n > {result.replace(chr(10), chr(10) + ' > ')}\n"
         )
+        if finish == "length":
+            # 阶段2 截断不像阶段1 那样会丢消息（checkpoint 由阶段1 决定），
+            # 因此只回退阶段1 候选，不阻断整批。但要显式记一笔：
+            # 否则表现为「候选莫名其妙变少」，排查时找不到原因。
+            logger.warning(
+                f"⚠️ [Extractor] 阶段2 输出被 MEMORY_EXTRACT_MAX_TOKENS="
+                f"{MEMORY_EXTRACT_MAX_TOKENS} 截断，回退阶段1 候选"
+            )
+            append_consolidation_log(
+                " > ⚠️ 阶段2 输出被 MEMORY_EXTRACT_MAX_TOKENS 截断，回退阶段1 候选\n"
+            )
+            return None
         parsed = self._parse_json(result)
         if not parsed:
             logger.warning(f"⚠️ [Extractor] 阶段2 JSON 解析失败，回退阶段1 候选: {result[:200]}")
@@ -368,7 +438,9 @@ class MemoryConsolidator:
                 parsed = self._parse_json(result)
                 if not parsed:
                     logger.warning(f"⚠️ [Consolidator] JSON 解析失败，跳过本批次: {result[:200]}")
-                    # 即使解析失败也推进 checkpoint，避免同一批消息反复重处理
+                    # 即使解析失败也推进 checkpoint，避免同一批消息反复重处理。
+                    # 「输出被截断」不走这条路——那种情况 _generate 已缩批重试并在
+                    # 退到底时抛 OutputTruncatedError，checkpoint 停在原地等人改配置。
                     append_consolidation_log("  > ⚠️ JSON 解析失败，已推进 checkpoint 避免重处理\n")
                     self._update_checkpoint(group_id, processed_end)
                     return
@@ -416,6 +488,10 @@ class MemoryConsolidator:
                     f"记忆候选 {len(candidates)} 条，其中 AT_MENTION 来源 {at_count} 条）\n"
                 )
                 logger.success(f"✅ [Consolidator] 群 {group_id}（空间 {group_shared_space}）整合完成，已处理至 id {processed_end}")
+            except OutputTruncatedError as e:
+                # 截断细节已在 _generate 里记过；这里只强调后果：checkpoint 停在原地，
+                # 这批消息完整保留，改大 max_tokens 后下一轮定时整合会重跑。
+                logger.error(f"❌ [Consolidator] 群 {group_id} 整合中止（未推进 checkpoint）: {e}")
             except Exception:
                 logger.exception(f"❌ [Consolidator] 群 {group_id} 整合失败")
                 append_consolidation_log("  > ❌ 整合失败（详见控制台日志）\n")

@@ -75,11 +75,39 @@ def _env(key: str, default: str = "") -> str:
 
     参数:
         key: 环境变量名。
-        default: 变量为空或未设置时返回的默认值。
+        default: 变量**未设置**时返回的默认值。
     返回:
         key 对应的环境变量值；未设置时返回 default。
+
+    注意「未设置」与「设为空」是两回事：``KEY=`` 会返回空字符串而不是 default。
+    这是有意的——``LM_STUDIO_API_KEY=`` 的空值本身就有意义（表示「不带 key」），
+    一刀切回落会让用户无法表达它。**默认值需要继承另一个配置项时，用
+    ``_env_inherit``**，那里空值才等同未设置。
     """
     return os.getenv(key, default)
+
+
+def _env_inherit(key: str, inherited: str) -> str:
+    """读取「默认继承另一个配置项」的字符串环境变量；**空值等同未设置**。
+
+    参数:
+        key: 环境变量名；
+        inherited: 未设置或设为空时继承的父项值（传入父项常量本身，
+            变量名必须与父项的环境变量名一致——``deploy/env_schema.py``
+            靠这个名字告诉 GUI「这一项继承自谁」）。
+    返回:
+        去除首尾空白后的环境变量值；为空则返回 inherited。
+
+    **为什么不能直接用 ``_env``**：GUI 的高级配置页会把 schema 里每个键都写成
+    ``KEY=值`` 一行，而继承型默认值在 AST 里不是字面量、schema 只能给出空串，
+    于是 ``.env`` 里落下 ``KEY=``。``_env`` 把它读成 ``""``，继承链就被静默切断了
+    ——2026-08-28 之前 ``MEMORY_EXTRACT_LM_STUDIO_BASE_URL`` 正是这样变成空串，
+    使阶段2 候选提取每次调用都拼出 ``/v1/chat/completions`` 这种无协议 URL 而失败，
+    再静默回退阶段1 候选。修复是三处协同的，缺一不可：
+    本函数（空值回落）、``env_schema`` 输出 ``inherits`` 标记、GUI 对这类字段留空时
+    **不写入** ``.env``。
+    """
+    return os.getenv(key, "").strip() or inherited
 
 
 def _env_int(key: str, default: int = 0) -> int:
@@ -445,11 +473,15 @@ LLM_SCHEDULER_PRIORITY_ENABLED = _env("LLM_SCHEDULER_PRIORITY_ENABLED", "false")
 LLM_SCHEDULER_GATE_EMBEDDING = _env("LLM_SCHEDULER_GATE_EMBEDDING", "true").lower() in ("true", "1", "yes")
 
 # ---------- 记忆整合 ----------
-# 整合统一使用本地 LM Studio（在线整合流程已废弃，见 _deprecated/core_llm_flexiweb.py），
 # 数据整理任务与主聊天模型分离，避免显存/推理竞争；可指向同一实例的多模型或独立端口。
-CONSOLIDATION_LM_STUDIO_BASE_URL = _env("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
+# 留空则继承主聊天配置。
+# 历史注记：_deprecated/core_llm_flexiweb.py 那套「用 Playwright 抓网页充当在线模型」的
+# 整合流程已弃用，**与本项无关**——本项一直在用。（这句话里的「弃用」曾让
+# deploy/env_schema.py 的注释子串匹配把本项误判为废弃键、从 GUI 里整个丢掉；
+# 现判据已改走 deploy/env_keys.py 的显式登记表，不再猜注释。）
+CONSOLIDATION_LM_STUDIO_BASE_URL = _env_inherit("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
 # 记忆整合用的 API key（默认与主聊天共用；远程 API 时填写）
-CONSOLIDATION_LM_STUDIO_API_KEY = _env("CONSOLIDATION_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
+CONSOLIDATION_LM_STUDIO_API_KEY = _env_inherit("CONSOLIDATION_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
 # 注意：LM Studio 路由需要完整模型 ID（含 google/ 前缀），如 google/gemma-4-e4b
 CONSOLIDATION_LM_STUDIO_MODEL = _env("CONSOLIDATION_LM_STUDIO_MODEL", "google/gemma-4-e4b")
 # 整理任务偏低温度，保证 JSON 输出稳定
@@ -472,9 +504,9 @@ CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", LOG_DIR / "memory_c
 # 依据（log_2026_8_16_1717）：E4B 能总结主题，却系统性地把候选提取判空
 # （7 批全空，且明确「读到了信息但主动弃掉」）。候选提取是高精度抽取任务，
 # 交给主聊天用的 27B。默认全部继承主聊天配置（即 27B），保留独立键便于将来替换。
-MEMORY_EXTRACT_LM_STUDIO_BASE_URL = _env("MEMORY_EXTRACT_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
-MEMORY_EXTRACT_LM_STUDIO_API_KEY = _env("MEMORY_EXTRACT_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
-MEMORY_EXTRACT_LM_STUDIO_MODEL = _env("MEMORY_EXTRACT_LM_STUDIO_MODEL", LM_STUDIO_MODEL)
+MEMORY_EXTRACT_LM_STUDIO_BASE_URL = _env_inherit("MEMORY_EXTRACT_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
+MEMORY_EXTRACT_LM_STUDIO_API_KEY = _env_inherit("MEMORY_EXTRACT_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
+MEMORY_EXTRACT_LM_STUDIO_MODEL = _env_inherit("MEMORY_EXTRACT_LM_STUDIO_MODEL", LM_STUDIO_MODEL)
 # 提取偏低温度保证 JSON 稳定；比整合的 0.3 再低一点，抽取任务不需要发散
 MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE = _env_float("MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE", 0.2)
 # 提取只输出 memory_candidates 数组，不需要很大；但要容纳多条候选
@@ -623,7 +655,7 @@ MEMORY_ARCHIVE_INACTIVE_DAYS = _env_int("MEMORY_ARCHIVE_INACTIVE_DAYS", 180)
 # 2026-08-25 之前这一项叫 MEMORY_COMPRESS_LOG_FILENAME，是个**文件名**而不是路径
 # （由 memory/compressor.py 拼到 PROJECT_ROOT 上），因此无法指到别处、也不像其他
 # 日志项那样支持绝对路径。统一成 _env_path 后写法与 THOUGHT_LOG_PATH 一致；
-# 旧键名已登记在 deploy/probe.py 的 _DEPRECATED_KEYS 里，`deploy doctor` 会提示改名。
+# 旧键名已登记在 deploy/env_keys.py 的 DEPRECATED 表里，`deploy doctor` 会提示改名。
 MEMORY_COMPRESS_LOG_PATH = _env_path("MEMORY_COMPRESS_LOG_PATH", LOG_DIR / "memory_compressor_log.md")
 
 # ---------- 消息表定期清理 ----------
@@ -771,9 +803,9 @@ RENDER_TEXT_WIDTH = _env_int("RENDER_TEXT_WIDTH", 800)
 # messages 数组 / function calling / 图片，而主链路的 generate() 表达不了这些。
 # 所有插件调用都经 core.llm.scheduler 的 chat 闸门排队，与主对话 FIFO 串行。
 ASTRBOT_LLM_ENABLED = _env("ASTRBOT_LLM_ENABLED", "true").lower() in ("true", "1", "yes")
-ASTRBOT_LLM_BASE_URL = _env("ASTRBOT_LLM_BASE_URL", LM_STUDIO_BASE_URL)
-ASTRBOT_LLM_MODEL = _env("ASTRBOT_LLM_MODEL", LM_STUDIO_MODEL)
-ASTRBOT_LLM_API_KEY = _env("ASTRBOT_LLM_API_KEY", LM_STUDIO_API_KEY)
+ASTRBOT_LLM_BASE_URL = _env_inherit("ASTRBOT_LLM_BASE_URL", LM_STUDIO_BASE_URL)
+ASTRBOT_LLM_MODEL = _env_inherit("ASTRBOT_LLM_MODEL", LM_STUDIO_MODEL)
+ASTRBOT_LLM_API_KEY = _env_inherit("ASTRBOT_LLM_API_KEY", LM_STUDIO_API_KEY)
 ASTRBOT_LLM_TEMPERATURE = _env_float("ASTRBOT_LLM_TEMPERATURE", 0.7)
 # 插件专属人格：插件没给 system_prompt 时注入这一句。
 # 刻意不用 Stella 的人格——插件的回复不该带 Stella 的语气，否则用户分不清是谁在说话；

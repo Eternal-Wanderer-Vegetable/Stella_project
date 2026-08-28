@@ -129,3 +129,36 @@ def test_generate_exhausts_retries_on_generic_error(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", _factory)
     with pytest.raises(httpx.ConnectError):
         asyncio.run(backend.generate("hi"))
+
+
+def test_generate_detailed_returns_finish_reason(monkeypatch):
+    """generate_detailed 把 finish_reason 一并交给调用方（用返回值而非实例属性）。
+
+    后端实例按角色共享，闸门只在单次调用期间持有；若把 finish_reason 存到 self 上，
+    调用方读取时可能已被另一个群的调用覆盖。
+    """
+    backend = LMStudioBackend("http://127.0.0.1:1234")
+    _fake_async_client(
+        monkeypatch,
+        [({"choices": [{"message": {"content": "半句话"}, "finish_reason": "length"}]}, 200)],
+    )
+    reply, finish = asyncio.run(backend.generate_detailed("hi"))
+    assert reply == "半句话"
+    assert finish == "length"
+
+
+def test_generate_detailed_finish_reason_empty_when_absent(monkeypatch):
+    backend = LMStudioBackend("http://127.0.0.1:1234")
+    _fake_async_client(monkeypatch, [({"choices": [{"message": {"content": "好的"}}]}, 200)])
+    reply, finish = asyncio.run(backend.generate_detailed("hi"))
+    assert (reply, finish) == ("好的", "")
+
+
+def test_generate_keeps_str_signature(monkeypatch):
+    """generate() 的 -> str 是 LLMBackend 统一接口，多处依赖，不许改成元组。"""
+    backend = LMStudioBackend("http://127.0.0.1:1234")
+    _fake_async_client(
+        monkeypatch,
+        [({"choices": [{"message": {"content": "好的"}, "finish_reason": "stop"}]}, 200)],
+    )
+    assert asyncio.run(backend.generate("hi")) == "好的"
