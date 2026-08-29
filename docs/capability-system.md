@@ -197,7 +197,7 @@ Level 2  更强模型兜底     默认关闭，只处理极少量请求
 
 `tool=false` 时的 `capabilities` 列表**不做间距裁剪**：那时它纯粹是诊断信息（「差多少才会调工具」），裁掉就看不出第二三名离得有多近。
 
-复用 `memory/embeddings.py` 的 `EmbeddingService`（缓存、L2 归一化、经 chat 闸门串行、失败返回 `None` 让调用方降级），不另建客户端。
+复用 `memory/embeddings.py` 的 `EmbeddingService`（缓存、L2 归一化、按 `MEMORY_EMBEDDING_GATE` 归属的闸门串行、失败返回 `None` 让调用方降级），不另建客户端。
 
 > `Route.top_score` 是**过滤之前**的最高分，必须单独记录。`capabilities` 已被 `ROUTER_SEMANTIC_THRESHOLD` 过滤过；从它推最高分会让 `(ROUTER_UNCERTAIN_FLOOR, ROUTER_SEMANTIC_THRESHOLD)` 区间内的分数一律读成 0，Level 2 的触发区间被无声地缩窄。
 
@@ -308,7 +308,7 @@ python -m capability.router.benchmark --cases my.json
 | 路由判定总是 `default` | embedding 服务是否可用（`MEMORY_EMBEDDING_BASE_URL`）；注册表是否为空 |
 | 工具调了但 Stella 不提结果 | `Result.status` 是否 `failed`（失败不产出 summary）；或工具直接给用户发了图片（成功但无可转述内容） |
 | 一次调了好几个工具，有的明显无关 | 这是**搭车**不是选错——降 `ROUTER_CAPABILITY_MARGIN`。日志的「语义命中」里能看到各自分数 |
-| 回复变慢 | 每个命中能力都是一次独立的受限 agent 调用，都走 chat 闸门串行；降 `ROUTER_MAX_CAPABILITIES` |
+| 回复变慢 | 每个命中能力都是一次独立的受限 agent 调用，都排 `PLUGIN` 角色所绑端点的那道闸门（纯本地时与聊天同一道）；降 `ROUTER_MAX_CAPABILITIES`，或把 `LLM_ROLE_PLUGIN_ENDPOINT` 指到在线槽 |
 | 每条消息都多了约 2 秒 | Router 的那次 embedding 编码。编码本身实测约 70ms；2.5s 是它与 27B 聊天模型共用同一个 LM Studio 实例时的模型换入换出，把 embedding 指到独立实例/端口即可 |
 
 配置项清单见 [配置参考](configuration.md#能力路由与工具执行)。

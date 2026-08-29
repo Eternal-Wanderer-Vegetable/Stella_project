@@ -709,7 +709,7 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `RENDER_SETTLE_MS` | `300` | 页面 `load` 之后再等多少毫秒截图 |
 | `RENDER_TEXT_WIDTH` | `800` | `text_to_image` / `t2i` 出图宽度（像素） |
 
-**后端是本地 Chromium（playwright），不是远程服务。** 上游 AstrBot 默认把 HTML 发到远程 t2i 服务出图，Stella 不走那条路：模板里填的是群友昵称、动态正文、头像 URL，属于聊天内容，而本项目其他环节（对话模型、embedding、记忆整合）全部在本地，渲染没有理由成为唯一出网的一环。
+**后端是本地 Chromium（playwright），不是远程服务。** 上游 AstrBot 默认把 HTML 发到远程 t2i 服务出图，Stella 不走那条路：模板里填的是群友昵称、动态正文、头像 URL，属于聊天内容。全本地部署下其他环节都在本机，渲染没有理由成为唯一出网的一环；接了在线模型的部署也一样——出网的对象是用户自己挑定的服务商，不该再多一个他没选过的渲染服务。
 
 **依赖分两层**：`playwright` 的 pip 包在 `requirements.txt` 里（几 MB）；浏览器内核约 270MB，**首次真正需要渲染时**才后台下载。下载期间插件照常降级为纯文本，装好后自动生效、不用重启。
 
@@ -772,7 +772,7 @@ python -m capability.router.benchmark --cases capability/router/benchmark/acg.js
 
 `ROUTER_CAPABILITY_MARGIN` 治的是「搭车能力」：一旦 `tool=true`，所有过了绝对地板的能力都会**各自执行一次**，并把结果贴上「真实数据，回答时以此为准」送进 prompt——首轮实测里「帮我推荐一些新番」因此同时调了每日放送和 B 站热门视频。**绝对地板替代不了它**：正确能力实测 0.851~0.911，搭车能力 0.616~0.743，后者高于任何不误杀正样本的地板值。只有相对间距能分开（正确能力与第二名的落差实测 0.155~0.336）。
 
-`ROUTER_MAX_CAPABILITIES` 是延迟阀门——每个命中能力在 Comes 里是一次独立的受限 agent 调用，都走 `chat` 闸门串行。不设上限会让一条消息卡住整个群的回复。
+`ROUTER_MAX_CAPABILITIES` 是延迟阀门——每个命中能力在 Comes 里是一次独立的受限 agent 调用，都排在 `PLUGIN` 角色所绑端点的那道闸门后面（纯本地时是 `LOCAL`，与聊天同一道，见 [LLM 资源调度](#llm-资源调度)）。不设上限会让一条消息卡住整个群的回复。
 
 > **一类假阳只有 Level 2 能治。** 余弦分不开「陈述 X」和「请求 X」：实测「我最近在追新番」得 0.835，与 examples 里的「有什么值得追的新番吗」高度相似。抬阈值治不了（正样本下界 0.851，只剩 0.016 余量）。这条留在 `capability/router/benchmark/acg.json` 里作为已知失败项。
 
@@ -785,7 +785,7 @@ python -m capability.router.benchmark --cases capability/router/benchmark/acg.js
 >
 > 退出码 0 表示可以打开。报告把四类错误分开计数，刻意不合成单一准确率——合成会把高代价错误藏在平均值里。
 
-`ROUTER_FALLBACK_ENABLED` 默认关闭是为了省 27B 推理资源：Level 2 与主聊天共用同一个模型，且经同一道 `chat` 闸门排队。先靠 L0/L1 跑一段时间、用 benchmark 量出准确率再决定。
+`ROUTER_FALLBACK_ENABLED` 默认关闭是为了省 27B 推理资源：纯本地默认配置下 Level 2（`ROUTER` 角色）与主聊天绑在同一个 `LOCAL` 端点槽上，用同一个模型、排同一道闸门。先靠 L0/L1 跑一段时间、用 benchmark 量出准确率再决定。把 `ROUTER` 单独指到廉价的在线端点可以消掉这层顾虑。
 
 ### Comes
 
@@ -937,8 +937,8 @@ curl -i http://[::1]:8080/stella/status
 | 声明的 `examples` 好像没生效 | 确认工具归属：应指向你声明的能力 id，而不是 `tool.<工具名>`；装配顺序要求先读声明再自动派生 |
 | 凭空调用工具 / 调错工具 | 升 `ROUTER_TOOL_THRESHOLD`；检查 `keywords` 里有没有过泛的词；**同时执行了无关工具**则降 `ROUTER_CAPABILITY_MARGIN`（这是搭车能力，不是选错） |
 | 该调工具却没调 | 给能力补中文问句 `examples` 与 `keywords`；降 `ROUTER_TOOL_THRESHOLD`。改完跑一次 benchmark 再定 |
-| 开了工具后回复明显变慢 | 每个命中能力都是一次独立的受限 agent 调用、都走 `chat` 闸门串行；降 `ROUTER_MAX_CAPABILITIES` 或 `COMES_MAX_TOOL_STEPS` |
-| 每条消息都比以前慢 2 秒左右 | Router 的一次 embedding 编码。实测本身只要约 70ms，2.5s 是 embedding 与 27B 聊天模型共用同一个 LM Studio 实例时的模型换入换出；把 `MEMORY_EMBEDDING_BASE_URL` 指到独立实例/端口，或关 `LLM_SCHEDULER_GATE_EMBEDDING` |
+| 开了工具后回复明显变慢 | 每个命中能力都是一次独立的受限 agent 调用、都排 `PLUGIN` 角色那道闸门（纯本地时与聊天同一道）；降 `ROUTER_MAX_CAPABILITIES` 或 `COMES_MAX_TOOL_STEPS`，或把 `LLM_ROLE_PLUGIN_ENDPOINT` 指到在线槽 |
+| 每条消息都比以前慢 2 秒左右 | Router 的一次 embedding 编码。实测本身只要约 70ms，2.5s 是 embedding 与 27B 聊天模型共用同一个 LM Studio 实例时的模型换入换出；把 `MEMORY_EMBEDDING_BASE_URL` 指到独立实例/端口，或设 `MEMORY_EMBEDDING_GATE=none` 让它不排队 |
 | 「它突然不记得我了」 | 先查 `ROUTER_GATE_MEMORY` 是否被打开；跑 `python -m capability.router.benchmark` 看记忆假阴 |
 
 改动阈值前建议先跑一次探针验证，见 [开发指南](development.md)。

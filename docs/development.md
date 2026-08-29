@@ -165,6 +165,10 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_benchmark.py` / `test_benchmark_and_log.py` | Benchmark 运行器与整合日志 |
 | `test_db_cleaner.py` | 脏数据清理与消息裁剪 |
 | `test_lm_studio.py` | LM Studio 客户端（重试、4xx 放弃、空回复） |
+| `test_llm_registry.py` | 端点 × 角色注册表：四槽解析、模型三档解析、闸门归属、`describe()` 绝不带出 API key |
+| `test_openai_contract.py` | **厂商中立契约**：默认请求体只含最小合规字段（多一个就被替身端点 400）、自适应重试至多一次且不占正常重试预算 |
+| `test_llm_compat.py` | 参数差异自适应按**错误措辞关键词**命中，不含任何厂商名——退化成厂商白名单即红；含 `\uXXXX` 转义体那条路 |
+| `test_scheduler_concurrency.py` | 闸门并发度：`1` 与改造前的 `asyncio.Lock` 逐字等价、不同端点槽真并行、解析不出来一律退回 `1` |
 | `test_full_workflow.py` | 端到端：消息入库 → 上下文 → Pipeline → 输出 → 整合 → 晋升 + FTS |
 | `test_spaces.py` | 空间解析：显式配置、隐式分配持久化、冲突处理 |
 | `test_session_compact.py` / `test_session_context.py` | 会话压缩的区间不重叠、空结果与失败的区别处理 |
@@ -178,6 +182,9 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_deploy_probe.py` | doctor 采集层：探测失败一律不抛异常、渲染后端探测 |
 | `test_deploy_cli.py` | `python -m deploy` 各子命令的出参结构（GUI 的数据契约） |
 | `test_env_schema.py` | `settings.py` → GUI 配置表单 schema 的分组与默认值 |
+| `test_env_inherit.py` | 继承型配置项：`KEY=`（空值）必须回落父键，而 `_env` 不许跟着改——`LM_STUDIO_API_KEY=` 的空值是有意义的 |
+| `test_env_merge.py` | `.env` 合并：`SUPERSEDED` 换算（`LLM_SCHEDULER_GATE_EMBEDDING` → `MEMORY_EMBEDDING_GATE`）、优先级与重复合并幂等 |
+| `test_prompt_cache_prefix.py` | 前缀缓存守卫：三个记忆链路模板的可变占位符必须排在全部固定指令之后 |
 | `test_status_api.py` | 本地状态接口：回环判断与 payload 组装 |
 | `test_stop_signal.py` | 停止哨兵的写入/清除与残留清理 |
 | `test_proactive_gate.py` | 主动发言准入闸门六道条件与原因字符串 |

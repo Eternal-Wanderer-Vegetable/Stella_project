@@ -45,8 +45,11 @@ Stella_project/
 │   ├── pipeline.py                  # Pipeline 编排器 + prompt 拼装顺序
 │   └── llm/
 │       ├── base.py                 # LLM 后端抽象接口
+│       ├── registry.py             # 端点 × 角色注册表：全项目唯一的后端构造入口
+│       ├── compat.py               # OpenAI 兼容端点的参数差异自适应（不用厂商白名单）
 │       ├── lm_studio.py            # LM Studio 后端（含重试与截断告警）
 │       ├── openai_client.py        # 完整 chat-completions 客户端（tools / 图片 / 流式）
+│       ├── usage_sink.py           # 用量上报口（截断信号 / token 聚合 / 缓存命中率）
 │       └── scheduler.py    # 模型级资源闸门（FIFO 串行 + 排队可观测性）
 │
 ├── capability/                     # 能力层（详见 docs/capability-system.md）
@@ -462,7 +465,7 @@ python -m memory.schema --backup    # 仅备份
 
 大量插件把结果卡片做成 Jinja2 模板 + CSS，靠 `Star.html_render` 出图。实现在 `astrbot_compat/render.py`，后端是**本地 Chromium**（playwright）。
 
-**为什么不用远程服务**：上游 AstrBot 默认把 HTML 发到远程 t2i 服务。模板里填的是群友昵称、动态正文、头像 URL，属于聊天内容；本项目其他环节（对话模型、embedding、记忆整合）全部在本地，渲染没有理由成为唯一出网的一环。
+**为什么不用远程服务**：上游 AstrBot 默认把 HTML 发到远程 t2i 服务。模板里填的是群友昵称、动态正文、头像 URL，属于聊天内容。全本地部署下其他环节都在本机，渲染没有理由成为唯一出网的一环；接了在线模型的部署也一样——出网的对象是用户自己挑并且付了钱的服务商，没有理由再多搭一个他没选过的渲染服务。
 
 **为什么必须是浏览器内核**：插件模板普遍用 flexbox、线性渐变、border-radius、box-shadow（实测一个插件的三个模板各 350~460 行 CSS）。weasyprint 之类缺完整 flex 支持，出图会错版——而错版比降级更糟，因为它看起来「成功了」。
 
