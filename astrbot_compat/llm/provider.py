@@ -261,9 +261,22 @@ class StellaChatProvider(Provider):
             "key": [s.ASTRBOT_LLM_API_KEY] if s.ASTRBOT_LLM_API_KEY else [""],
         }
         super().__init__(cfg, {})
-        self.model_name = s.ASTRBOT_LLM_MODEL
+        # 取角色配置的模型 ID（留空则继承 ASTRBOT_LLM_MODEL）。插件可通过
+        # set_model() 覆盖它，实际请求用 `model or self.model_name`，
+        # 因此这里必须是角色配置而不是旧键——否则角色配的模型永远轮不到。
+        self.model_name = _plugin_model_default()
 
     def get_current_key(self) -> str:
+        """当前 API key。**刻意仍读旧键、不返回 PLUGIN 端点的 key。**
+
+        这是给第三方插件代码看的字段（有些插件拿它自建客户端）。把在线端点的
+        付费 key 交出去，等于让任意插件都能拿它去发别的请求；插件要调模型走
+        ``text_chat`` 即可，那条路上的 key 由本模块自己填。
+
+        代价是「插件自建客户端」的用法在插件绑到独立端点后会 401——那是显式
+        失败，比把 key 散出去好；且 ``ASTRBOT_LLM_BASE_URL`` 与本地端点不一致时
+        doctor 会警告。
+        """
         return _settings().ASTRBOT_LLM_API_KEY
 
     def set_key(self, key: str) -> None:
@@ -343,7 +356,9 @@ class StellaChatProvider(Provider):
     def _apply_budget(self, messages: list[dict], tools: list[dict] | None) -> list[dict]:
         s = _settings()
         tool_cost = _estimate_tools_tokens(tools or [])
-        reply_budget = s.ASTRBOT_LLM_MAX_TOKENS
+        # 回复预留必须与实际发出去的 max_tokens 一致，否则「上下文+回复」会
+        # 一起超窗：实际值由 LLM_ROLE_PLUGIN_MAX_TOKENS 给出（留空继承旧键）
+        reply_budget = _plugin_reply_budget()
         kept, dropped = trim_messages(
             messages,
             s.ASTRBOT_LLM_MAX_CONTEXT_TOKENS,
@@ -413,7 +428,7 @@ class StellaChatProvider(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式输出。最后一次 yield 是完整结果（与上游一致）。"""
         _ = (audio_urls, request_max_retries)
-        from core.llm import PRIORITY_INTERACTIVE, RESOURCE_CHAT, acquire
+        from core.llm import PRIORITY_INTERACTIVE, ROLE_PLUGIN, acquire, gate_of
         from core.llm.openai_client import chat_completion_stream
 
         messages = await self._build_messages(
@@ -426,24 +441,19 @@ class StellaChatProvider(Provider):
         )
         tools = self._prepare_tools(func_tool)
         messages = self._apply_budget(messages, tools)
-        s = _settings()
 
         buffer = ""
         async with acquire(
-            RESOURCE_CHAT,
+            gate_of(ROLE_PLUGIN),
             tag=f"plugin-llm-stream:{session_id or '-'}",
             priority=PRIORITY_INTERACTIVE,
         ):
             async for chunk in chat_completion_stream(
                 messages,
-                base_url=s.ASTRBOT_LLM_BASE_URL,
-                model=model or self.model_name,
-                api_key=s.ASTRBOT_LLM_API_KEY,
                 tools=tools,
                 tool_choice=tool_choice,
-                temperature=s.ASTRBOT_LLM_TEMPERATURE,
-                max_tokens=s.ASTRBOT_LLM_MAX_TOKENS,
                 extra_body=kwargs.get("extra_body"),
+                **_plugin_call_args(model or self.model_name),
             ):
                 delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
                 piece = delta.get("content") or ""
@@ -464,29 +474,99 @@ class StellaChatProvider(Provider):
     ) -> dict:
         """经调度器排队后发请求。
 
-        走 chat 闸门是硬要求：本地只有一块 GPU，主聊天 / 记忆压缩 / 插件调用
-        必须 FIFO 串行，否则插件一调用就和主对话抢显存。
+        走 PLUGIN 角色的闸门是硬要求：纯本地部署下只有一块 GPU，主聊天 /
+        记忆压缩 / 插件调用绑同一个端点、必须 FIFO 串行，否则插件一调用就和
+        主对话抢显存。把插件绑到独立端点后同一行代码自动变成真并行。
         """
-        from core.llm import PRIORITY_INTERACTIVE, RESOURCE_CHAT, acquire
+        from core.llm import PRIORITY_INTERACTIVE, ROLE_PLUGIN, acquire, gate_of
         from core.llm.openai_client import chat_completion
 
-        s = _settings()
         async with acquire(
-            RESOURCE_CHAT,
+            gate_of(ROLE_PLUGIN),
             tag=f"plugin-llm:{session_id or '-'}",
             priority=PRIORITY_INTERACTIVE,
         ):
             return await chat_completion(
                 messages,
-                base_url=s.ASTRBOT_LLM_BASE_URL,
-                model=model or self.model_name,
-                api_key=s.ASTRBOT_LLM_API_KEY,
                 tools=tools,
                 tool_choice=tool_choice,
-                temperature=s.ASTRBOT_LLM_TEMPERATURE,
-                max_tokens=s.ASTRBOT_LLM_MAX_TOKENS,
                 extra_body=kwargs.get("extra_body"),
+                **_plugin_call_args(model or self.model_name),
             )
+
+
+def _plugin_call_args(model: str) -> dict:
+    """PLUGIN 角色的端点 + 参数，直接铺进 ``chat_completion(**...)``。
+
+    ``ASTRBOT_LLM_BASE_URL`` / ``_API_KEY`` / ``_TEMPERATURE`` / ``_MAX_TOKENS``
+    不再在这里读：它们现在只作为角色配置留空时的继承来源（见
+    ``config/settings.py`` 的 ``LLM_ROLE_PLUGIN_*``）。两处都读会出现
+    「GUI 上把插件切到在线端点、实际还发往本地」的分裂状态。
+
+    角色未绑定端点时抛异常而不是回落到旧键：回落等于悄悄恢复第二个真相源，
+    而插件调用失败只影响这一次调用，比发错地方好查得多。
+
+    参数:
+        model: 调用方已解析好的模型 ID（插件单次指定 > provider.set_model()
+            > 角色配置），空串则交给服务端默认路由。
+    """
+    from core.llm import ROLE_PLUGIN, endpoint_of
+    from core.llm.registry import binding
+
+    ep = endpoint_of(ROLE_PLUGIN)
+    b = binding(ROLE_PLUGIN)
+    if ep is None or b is None:
+        raise RuntimeError(
+            "PLUGIN 角色没有可用端点（LLM_ROLE_PLUGIN_ENDPOINT 指向的槽未配 BASE_URL）；"
+            "运行 python -m deploy doctor 查看解析结果"
+        )
+    return {
+        "base_url": ep.base_url,
+        "api_key": ep.api_key,
+        "kind": ep.kind,
+        "slot": ep.slot,
+        "role": ROLE_PLUGIN,
+        "timeout": ep.timeout,
+        "model": model,
+        "temperature": b.temperature,
+        "max_tokens": b.max_tokens,
+    }
+
+
+def _plugin_model_default() -> str:
+    """PLUGIN 角色配置的模型 ID；解析不出来时回落到旧键。
+
+    只用于初始化 ``self.model_name``（AstrBot 契约里插件可读可改的字段）。
+    这里**不能**抛异常：provider 在插件加载期构造，抛了会连带整个插件加载失败。
+    """
+    try:
+        from core.llm import ROLE_PLUGIN
+        from core.llm.registry import binding
+
+        b = binding(ROLE_PLUGIN)
+        if b is not None and b.model:
+            return b.model
+    except Exception as e:  # pragma: no cover - 配置异常不该阻断插件加载
+        logger.warning(f"[astrbot_llm] 读取 PLUGIN 角色模型失败，回落 ASTRBOT_LLM_MODEL: {e}")
+    return _settings().ASTRBOT_LLM_MODEL
+
+
+def _plugin_reply_budget() -> int:
+    """PLUGIN 角色实际生效的 max_tokens；解析不出来时回落到旧键。
+
+    与 ``_plugin_model_default`` 同理不抛异常：预算估算只是日志与裁剪依据，
+    为它中断一次插件调用不值得。
+    """
+    try:
+        from core.llm import ROLE_PLUGIN
+        from core.llm.registry import binding
+
+        b = binding(ROLE_PLUGIN)
+        if b is not None and b.max_tokens > 0:
+            return b.max_tokens
+    except Exception:  # pragma: no cover - 同上
+        pass
+    return _settings().ASTRBOT_LLM_MAX_TOKENS
 
 
 def _response_from_raw(raw: dict) -> LLMResponse:

@@ -59,9 +59,6 @@ from config import (
     DB_CLEANUP_ON_START,
     EXTENSIONS_DIR,
     LLM_TIMEOUT,
-    LM_STUDIO_API_KEY,
-    LM_STUDIO_BASE_URL,
-    LM_STUDIO_MODEL,
     MESSAGE_CLEANUP_ENABLED,
     MESSAGE_CLEANUP_HOUR,
     PROACTIVE_CHECK_INTERVAL,
@@ -82,7 +79,8 @@ from config import (
 )
 from config.spaces import prompt_text, resolve_space
 from core.context import ChatContext
-from core.llm.lm_studio import LMStudioBackend
+from core.llm import ROLE_CHAT, backend_for
+from core.llm.registry import log_summary as log_llm_summary
 from core.pipeline import Pipeline
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
@@ -150,12 +148,22 @@ pipeline.register_post_hook(bad_phrase_filter, priority=80)
 pipeline.register_post_hook(split_lines, priority=60)
 pipeline.register_post_hook(log_thought, priority=40)
 
-# 指定 LLM 后端（LM Studio 本地模型）
-pipeline.set_llm_backend(LMStudioBackend(
-    base_url=LM_STUDIO_BASE_URL,
-    model=LM_STUDIO_MODEL,
-    api_key=LM_STUDIO_API_KEY,
-))
+# 指定 LLM 后端：由 core.llm.registry 按「角色 → 端点」解析（见 .env 的 LLM_ROLE_CHAT_*）。
+# 这里不再直接读 LM_STUDIO_*，否则「切到在线模型」又变成要改代码。
+_chat_backend = backend_for(ROLE_CHAT)
+if _chat_backend is None:
+    # 返回 None 说明 CHAT 角色绑的端点槽没配地址。不在这里抛异常：整个插件加载
+    # 失败会连 GUI 与 doctor 一起带走，用户就再也没有把配置改回来的入口了。
+    logger.error(
+        "❌ CHAT 角色没有可用端点（LLM_ROLE_CHAT_ENDPOINT 指向的槽未配 BASE_URL），"
+        "主聊天链路只能走兜底回复。运行 python -m deploy doctor 查看解析结果。"
+    )
+else:
+    pipeline.set_llm_backend(_chat_backend)
+
+# 启动日志打一张「角色 → 端点 → 模型 → 闸门」表，并把解析问题一次性报出来。
+# 「无缝切换」要能被信任，前提是切完能一眼确认到底切没切成。
+log_llm_summary()
 
 # 读取系统提示词文件（若存在则注入，否则只警告不中断）
 system_prompt_path = SYSTEM_PROMPT_PATH.resolve()

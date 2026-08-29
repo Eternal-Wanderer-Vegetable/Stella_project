@@ -67,6 +67,7 @@ def test_schema_marks_inherited_defaults():
     schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
     fields = {field["key"]: field for field in schema["fields"]}
     expected = {
+        # ── 早于 P1 的继承链（旧键之间） ──
         "CONSOLIDATION_LM_STUDIO_BASE_URL": "LM_STUDIO_BASE_URL",
         "CONSOLIDATION_LM_STUDIO_API_KEY": "LM_STUDIO_API_KEY",
         "MEMORY_EXTRACT_LM_STUDIO_BASE_URL": "LM_STUDIO_BASE_URL",
@@ -75,6 +76,24 @@ def test_schema_marks_inherited_defaults():
         "ASTRBOT_LLM_BASE_URL": "LM_STUDIO_BASE_URL",
         "ASTRBOT_LLM_MODEL": "LM_STUDIO_MODEL",
         "ASTRBOT_LLM_API_KEY": "LM_STUDIO_API_KEY",
+        # ── P1 端点槽：新键继承旧键，纯本地部署逐字等价于改造前 ──
+        "LLM_ENDPOINT_LOCAL_BASE_URL": "LM_STUDIO_BASE_URL",
+        "LLM_ENDPOINT_LOCAL_API_KEY": "LM_STUDIO_API_KEY",
+        "LLM_ENDPOINT_EXTRA_BASE_URL": "CONSOLIDATION_LM_STUDIO_BASE_URL",
+        "LLM_ENDPOINT_EXTRA_API_KEY": "CONSOLIDATION_LM_STUDIO_API_KEY",
+        # ── P1 角色：每个角色的 model/temperature/max_tokens 继承它原来的那个键 ──
+        "LLM_ROLE_CHAT_MODEL": "LM_STUDIO_MODEL",
+        "LLM_ROLE_ROUTER_MODEL": "LM_STUDIO_MODEL",
+        "LLM_ROLE_PLUGIN_MODEL": "ASTRBOT_LLM_MODEL",
+        "LLM_ROLE_PLUGIN_TEMPERATURE": "ASTRBOT_LLM_TEMPERATURE",
+        "LLM_ROLE_PLUGIN_MAX_TOKENS": "ASTRBOT_LLM_MAX_TOKENS",
+        "LLM_ROLE_COMPACT_MODEL": "LM_STUDIO_MODEL",
+        "LLM_ROLE_CONSOLIDATION_MODEL": "CONSOLIDATION_LM_STUDIO_MODEL",
+        "LLM_ROLE_CONSOLIDATION_TEMPERATURE": "CONSOLIDATION_LM_STUDIO_TEMPERATURE",
+        "LLM_ROLE_CONSOLIDATION_MAX_TOKENS": "CONSOLIDATION_LOCAL_MAX_TOKENS",
+        "LLM_ROLE_EXTRACT_MODEL": "MEMORY_EXTRACT_LM_STUDIO_MODEL",
+        "LLM_ROLE_EXTRACT_TEMPERATURE": "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE",
+        "LLM_ROLE_EXTRACT_MAX_TOKENS": "MEMORY_EXTRACT_MAX_TOKENS",
     }
     for child, parent in expected.items():
         assert fields[child].get("inherits") == parent, f"{child} 缺 inherits 标记"

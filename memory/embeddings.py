@@ -77,19 +77,23 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 @asynccontextmanager
 async def _maybe_gate():
-    """embedding 与主聊天共用同一 LM Studio 实例时，走 chat 闸门串行化。
+    """embedding 与某个 chat 端点共用同一 LM Studio 实例时，走那个端点的闸门串行化。
 
-    配置关闭（``LLM_SCHEDULER_GATE_EMBEDDING=false``，如独立 embedding 实例）
-    时为空操作。config 与 core.llm 都在函数内延迟 import，保持纯向量工具
+    资源名由 ``MEMORY_EMBEDDING_GATE`` 解析（``auto`` = 找地址相同的本地槽、
+    ``<槽名>`` = 指定槽、``none`` = 不排队）；解析结果为空串即不排队，
+    例如独立的 embedding 实例。R2 要求 embedding 恒定本地，因此这里永远
+    不会排到在线端点上。
+
+    config 与 core.llm 都在函数内延迟 import，保持纯向量工具
     （cosine / normalize）可离线单测。
     """
-    from config import LLM_SCHEDULER_GATE_EMBEDDING
-    from core.llm import RESOURCE_CHAT, acquire
+    from core.llm import acquire, embedding_gate
 
-    if not LLM_SCHEDULER_GATE_EMBEDDING:
+    resource = embedding_gate()
+    if not resource:
         yield
         return
-    async with acquire(RESOURCE_CHAT, tag="embed"):
+    async with acquire(resource, tag="embed"):
         yield
 
 

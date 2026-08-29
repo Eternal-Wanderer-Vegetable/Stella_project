@@ -703,7 +703,7 @@ LLM_BUDGET_EXHAUSTED_ACTION=pause_memory # pause_memory | pause_all | warn_only
 | 期 | 内容 | 交付判据 |
 |---|---|---|
 | **P0** ✅ 已交付<br>（2026-08-28） | 修四个阻塞缺陷（`_env_inherit` + schema 废弃判定 + 三个 prompt 重排 + 截断不推进 checkpoint）；补 `session_compact` 的 api_key | 纯本地行为不变；阶段2 提取恢复工作（当前是坏的）；缓存前缀长度达标 → 落地情况与偏差见 §10.1 |
-| **P1** | 端点×角色配置模型 + `core/llm/registry.py` + 六处构造点改造 + 闸门改并发度 + 参数兼容层 | 三个场景可通过手改 `.env` 跑通；纯本地逐字等价今天；**§9.1 契约测试进 CI 并通过**；DeepSeek + 第二家厂商各跑通一轮（只改 `.env`） |
+| **P1** 🟡 代码完成<br>（2026-08-28，离线验证跑过一轮、修完待复跑；厂商实测未做） | 端点×角色配置模型 + `core/llm/registry.py` + 六处构造点改造 + 闸门改并发度 + 参数兼容层 | 三个场景可通过手改 `.env` 跑通；纯本地逐字等价今天；**§9.1 契约测试进 CI 并通过**；DeepSeek + 第二家厂商各跑通一轮（只改 `.env`） → 落地情况、偏差、首轮 5 处缺陷与**仍欠的判据**见 §10.2 |
 | **P2** | GUI「模型服务」分区（端点卡片 + 角色矩阵 + 三个预设 + 测试连接）；doctor 新检查项；迁移逻辑 | 全程 GUI 完成本地↔在线切换，存量 `.env` 自动迁移 |
 | **P3** | 成本控制：Tier 0 剩余项 + Tier 1 预筛 + Tier 2 记账/预算 + 用量面板 + 降级链 | 缓存命中率与用量可见；日预算生效；超额只停记忆域 |
 
@@ -730,6 +730,83 @@ P0 可独立发布（它修的是现存 bug）。P1 之后功能已可用，P2 �
 1. `config.html` 的「留空即继承」路径**没有自动化守卫**——`stella-installer/` 下没有 JS 测试框架，本次只做了代码走读。已登记为 §9.2 第 6 项人工验证。
 2. `scripts/probe_consolidation.py --positive` **尚未跑**。`memory/consolidation_prompt.py` 自己的注释规定「修改本模板前必须先跑」，本次改了模板（纯重排），需在有 LM Studio 的机器上补跑，确认防编造条款与正例提取能力没有回归。
 3. `pyrightconfig.json` 仍指向不存在的 `.venv`（本机走 conda 环境）。与本方案无关的既有环境问题，未改。
+
+### 10.2 P1 落地记录（2026-08-28）
+
+**状态：代码完成；离线验证（ruff + pytest）已由用户代跑一轮，5 处缺陷已修，待复跑确认；真实厂商实测仍未做。** 本轮开发机的 shell 执行被环境拦住（只读命令可用，任何执行代码的命令一律拒绝），所以 `ruff` / `pytest` 不是我跑的——是用户在网络中断期间代跑的，日志见 `design_docs/bug_report/bug_report_2026_8_28#1.md`。这件事本身值得记一笔：**「代码走读通过」和「跑绿」之间那 5 处缺陷，靠走读一个都没抓到**。判据对照一节逐条写明了哪些是「已验证」、哪些还欠着。
+
+| 项 | 状态 | 与原计划的差异 |
+|---|---|---|
+| P1-1 端点×角色配置模型 | ✅ 代码完成 | 4 个端点槽（`LOCAL` / `ONLINE_CHAT` / `ONLINE_MEMORY` / `EXTRA`）× 6 个角色（`CHAT` / `ROUTER` / `PLUGIN` / `COMPACT` / `CONSOLIDATION` / `EXTRACT`）**全部静态声明**。槽位数写死是硬约束，不是保守：`deploy/env_schema.py` 用 AST 扫 `config/settings.py` 里的字面量 `_env*("KEY", ...)` 调用，动态命名的端点永远不会出现在 GUI 上 |
+| P1-2 `core/llm/registry.py` | ✅ 代码完成 | 无。解析一次并缓存；`reset_state()` 清缓存；`validate()` 只返回 `error` / `warn` 两级 |
+| P1-3 六处构造点 | ✅ 代码完成 | 无。`ai_gateway` / `session_compact` / `router/fallback` / `consolidator`×2 / `astrbot_compat/llm/provider` 全部改成 `backend_for(ROLE_*)` |
+| P1-4 闸门改并发度 | ✅ 代码完成 | 见偏差 ①。资源单位从「两把命名锁」变成「每个端点槽一个 `Semaphore(concurrency)`」；「绝不同时持有两把闸门」的铁律不变 |
+| P1-5 参数兼容层 | ✅ 代码完成 | 无。`core/llm/compat.py` 按错误体关键词自适应 + 记住结果，每请求最多**一次**自适应重试且**不占**原有 3 次尝试预算 |
+| P0-4 遗留的 usage 上报 | ✅ 代码完成 | 见偏差 ⑤。新增 `core/llm/usage_sink.py`，P1 只做上报口子，落库在 P3 |
+| §9.1 契约测试 | ⚠️ 已跑一轮，修完待复跑 | 4 个新文件，见下「新增测试」与「验证记录」 |
+
+**新增测试（4 个文件，共 +160 用例）**
+
+| 文件 | 守什么 |
+|---|---|
+| `tests/test_openai_contract.py` | §9.1 契约：最小合规请求体、一次自适应重试、`tools` 透传、不依赖 `response_format` |
+| `tests/test_llm_compat.py` | 差异自适应只按**措辞关键词**命中，不含任何厂商名——退化成厂商白名单就会被这组用例抓住 |
+| `tests/test_scheduler_concurrency.py` | 并发度 1 与改造前的 `asyncio.Lock` 逐字等价；`LOCAL` 与 `EXTRA` 真正并行；解析不出来一律退回 1 |
+| `tests/test_llm_registry.py` | 纯本地闸门拓扑等价、每条 `validate()` 分支、R1 同 key 告警、fallback 冷却、`embedding_gate()` 四态、**「日志与 `describe()` 里绝不出现 key 的值」** |
+
+**与原计划的偏差**
+
+① **§4.1 闸门命名**：方案写的资源名是 `chat` / `consolidation`（按用途命名），落地改为**按端点槽命名**（`LOCAL` / `ONLINE_CHAT` / `ONLINE_MEMORY` / `EXTRA`）。理由：闸门的物理意义是「此刻最多几个请求打到同一个端点上」，而端点才是那个被保护的资源；按用途命名在「两个角色绑同一个端点」时会立刻分裂成两把闸门，把本地那块显存放开成并发 2。`scheduler.RESOURCE_CHAT` / `RESOURCE_CONSOLIDATION` 保留为别名并注明「新代码不要用」。
+
+② **§8.1 的 `LLM_TIMEOUT` 行**：方案原写端点 `TIMEOUT` 继承 `LLM_TIMEOUT`。落地**不继承**：`LLM_TIMEOUT`（=90.0）是**每轮管线预算**，而端点超时是单次 HTTP 请求的上限，两者语义不同且前者更短——继承会让在线整合（20~60 秒起）无谓超时。端点 `TIMEOUT` 默认写成字面量 `120.0`，与 `LMStudioBackend` 今天的默认值一致。
+
+③ **`LLM_ROLE_COMPACT_MAX_TOKENS` 的 0 = 派生**：会话压缩的输出上限本就该跟着摘要字数上限走，多一个要手动对齐的键就是多一个会不一致的地方。落地取 `SESSION_SUMMARY_MAX_TOKENS × 3`（300 → 900），并保证派生结果永不为 0；显式填非 0 值时以显式值为准。其余 5 个角色的 `MAX_TOKENS` 填 0 仍是**错误**（回退 1024 并报 error）——只有 COMPACT 这一个键的 0 有特殊含义。
+
+④ **新增 `_env_int_inherit` / `_env_float_inherit`**：P0 只做了字符串版的 `_env_inherit`。角色的 `TEMPERATURE`（float）与 `MAX_TOKENS`（int）也要「留空即继承它原来的那个旧键」（如 `LLM_ROLE_PLUGIN_TEMPERATURE` ← `ASTRBOT_LLM_TEMPERATURE`），否则 GUI 上留空会被读成 0——温度 0 与 max_tokens 0 都是有含义的合法值，靠 `_env_int` 分不出「留空」和「填 0」。端点的 `CONCURRENCY` / `TIMEOUT` **没有**用继承版：它们没有对应的旧键可继承，默认值就是字面量（并发度 1/4/2/1、超时 120.0）。
+
+⑤ **新增 `core/llm/usage_sink.py`**：P0-4 明确把 usage 上报留给 P1。做成独立的 sink 模块（默认空实现）而不是直接写库：`core/llm` 不该 import `memory`，而 P3 的记账要落到 SQLite。P1 只保证 `usage` 被取出来并递给 sink。
+
+⑥ **`LLMBackend.generate_detailed()` 给了非抽象默认实现**（转发 `generate()`，`finish_reason` 补空串）。它在 P0 是抽象方法，但那会让所有第三方/测试替身后端一升级就崩——项目里现存大量只实现 `generate()` 的替身。
+
+⑦ **`MEMORY_EMBEDDING_GATE` 三态枚举替代布尔**：原 `LLM_SCHEDULER_GATE_EMBEDDING`（bool）在「embedding 与哪个槽共用闸门」这个问题上无法表达。新键取 `auto | <槽名> | none`，`auto` = 「与某个 `KIND=local` 且 `BASE_URL` 等于 `MEMORY_EMBEDDING_BASE_URL` 的槽共用闸门，找不到就不排队」。**兼容处理**：显式为假的旧布尔仍然表示「不排队」；显式写槽名时槽名优先。R2（embedding 恒本地）因此在配置层就是可检查的。
+
+⑧ **纯本地等价靠「`EXTRA` 就是原来的 consolidation 闸门」实现**：`EXTRA` 的 `BASE_URL` 继承 `CONSOLIDATION_LM_STUDIO_BASE_URL`（与 `LOCAL` 同址）但**持有独立闸门**，且 `LLM_ROLE_CONSOLIDATION_ENDPOINT` 默认 `EXTRA`。改造后拓扑与今天逐字相同：CHAT/ROUTER/PLUGIN/COMPACT/EXTRACT → `LOCAL`（27B/GPU，串行），CONSOLIDATION → `EXTRA`（E4B/CPU，串行），embedding `auto` → `LOCAL`。只是改了名字。
+
+⑨ **`scheduler.set_concurrency_resolver(fn)` 间接注入**：避开 `scheduler → registry → settings` 的导入环。代价是「谁来装解析器」变成了隐式的（`core.llm.registry` 模块底部的一行 import 副作用）——删掉它不会报任何错，只会让所有闸门静默退成并发 1。`tests/test_scheduler_concurrency.py::test_registry_installs_the_resolver_on_import` 是那行代码的唯一守卫。
+
+⑩ **`astrbot_compat/llm/provider.py::get_current_key()` 仍返回 legacy `ASTRBOT_LLM_API_KEY`，不返回 `PLUGIN` 端点的 key**（安全决策，不是漏改）。这个函数是给第三方插件代码调的；把付费在线 key 递给它等于把 key 交给未审计的第三方代码。函数上方已就此写了注释。
+
+⑪ **§4.3 ② 的关键词匹配前多了一步「反转义」**（`core/llm/compat.py::_searchable`）。方案只说「按错误体关键词匹配」，落地发现这一句在中文厂商上直接不成立：不少后端用 `ensure_ascii=True` 序列化 JSON，中文错误信息到线上是一串 `\uXXXX`，中文关键词一条都命中不了。做法是**追加**一份反转义副本（原文保留，反转义失败就只用原文），于是 ASCII 与中文两条路都通。这不是白名单——反转义是纯编码层动作，与是哪一家无关。若少了这一步，D5 的「换了也要跑得通」在中文厂商（含测试厂商 DeepSeek）上是假的。
+
+**验证记录（用户于 2026-08-28 代跑 `ruff check` + `pytest tests -q`）**
+
+首轮结果：`ruff` 3 errors，`pytest` **2 failed, 1290 passed, 3 skipped**（P0 基线 1130 passed / 3 skipped，+160 来自新增 4 个文件）。5 处缺陷逐条：
+
+| # | 报告项 | 真因 | 修法 |
+|---|---|---|---|
+| 1 | `SIM105` `core/llm/openai_client.py:214` | `_record()` 里用了 `try/except/pass` | 改 `contextlib.suppress(KeyError, IndexError, TypeError)`，并把「上报是旁路，绝不能把请求本身弄失败」写进注释 |
+| 2 | `I001` `tests/test_openai_contract.py:23` | 单行 import 超长未拆 | 拆成括号多行 |
+| 3 | `F841` `tests/test_openai_contract.py:383` | `ep = _install(...)` 未使用 | 去掉赋值（同文件另一处的 `ep` 后面真的用到，保留） |
+| 4 | `test_env_schema.py::test_schema_marks_inherited_defaults` | P1 新增 16 对继承项，没同步这个**手写基线**（用例自己的报错信息就写着「新增继承项请同步本用例」） | `expected` 补齐到 24 对，按「P1 前 / 端点槽 / 角色」分三组注释 |
+| 5 | `test_llm_compat.py::test_learns_to_omit_temperature[中文用例]` | **不是实现缺陷，是用例的 helper 有问题**：`_TEMPERATURE_UNSUPPORTED_HINTS` 里本来就有「不支持」，但 `_body()` 用 `json.dumps` 默认的 `ensure_ascii=True` 把中文转成了 `\uXXXX`，关键词自然落空 | `_body()` 改 `ensure_ascii=False`（它模拟的本来就是原样返回 UTF-8 的后端）；**同时**给实现补 `_searchable()`（见偏差 ⑪）并新增 `test_learns_from_ascii_escaped_body` 守转义那条路——只改用例等于把一个真实厂商形状下的失效藏起来 |
+
+顺手收的一项：`tests/test_env_inherit.py` 的 `INHERIT_PAIRS` 原是手抄的 8 对，而它的注释写着「全部继承型配置项」——P1 之后这句话是假的。改成**从 `build_schema()` 现算**，新增继承项自动进参数化，并加 `test_inherit_pairs_were_actually_discovered` 兜住「派生参数化塌成空集就静默不跑了」这个自毁风险。手写基线只留 `test_env_schema.py` 一份，两处分工：那边守「关系有没有被改错」，这边守「关系在运行时真解析出了值」。
+
+**交付判据对照**
+
+| 判据 | 状态 |
+|---|---|
+| 三个场景可通过手改 `.env` 跑通 | ❌ **未验证**（需要真实在线 key） |
+| 纯本地逐字等价今天 | ⚠️ **代码走读 + 用例已跑**。拓扑等价的论证见偏差 ⑧，用例见 `test_llm_registry.py` 的「纯本地拓扑」组与 `test_scheduler_concurrency.py`，这两组在 2026-08-28 那轮里是绿的。**但「等价」的最终判据是真机对比，不是用例** |
+| §9.1 契约测试进 CI 并通过 | ⚠️ **已跑一轮，修完待复跑**。文件落在 `tests/` 下即自动进 CI（`testpaths=["tests"]`）；首轮 2 failed 已修，期望复跑为 **1293 passed / 3 skipped**（1290 + 修好的 2 + 新增的 `test_learns_from_ascii_escaped_body`；`test_inherit_pairs_were_actually_discovered` 与 `test_env_inherit` 参数化的 +16 条会再往上加，具体数以复跑为准） |
+| DeepSeek + 第二家厂商各跑通一轮 | ❌ **未验证**（需要真实 key，且必须在两家上各跑一轮才算 D5 的「换了也跑得通」成立） |
+
+**遗留项（阻塞 P1 收尾，不阻塞 P2 开工）**
+
+1. **复跑确认**：`ruff check .` 应为 0 error；`pytest tests -q` 应无 failed。首轮（2026-08-28）是 3 error / 2 failed，5 处缺陷已按上表修完，但**修完之后没人再跑过**——这一条不勾掉，P1 不算收口。
+2. **两家厂商实测**未做，见上表。这是 D5 硬要求「不能出现换了就跑不通」的唯一验证手段。
+3. **文档键表更新推迟到 P2**（与 `env_keys.RENAMED` 一起改，避免改两遍）：`docs/configuration.md:242,246,801`、`docs/capability-system.md:239`、`.env.example:104`。
+4. P0 遗留的三项（`config.html` 继承路径人工验证、`probe_consolidation.py --positive`、`pyrightconfig.json` 指向不存在的 `.venv`）**仍未消**。
 
 ---
 

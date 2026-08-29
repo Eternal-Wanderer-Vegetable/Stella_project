@@ -33,10 +33,6 @@ from nonebot import logger
 
 from config import (
     CONSOLIDATION_BACKLOG_WARN,
-    CONSOLIDATION_LM_STUDIO_API_KEY,
-    CONSOLIDATION_LM_STUDIO_BASE_URL,
-    CONSOLIDATION_LM_STUDIO_MODEL,
-    CONSOLIDATION_LM_STUDIO_TEMPERATURE,
     CONSOLIDATION_LOCAL_BATCH_SIZE,
     CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE,
     CONSOLIDATION_LOCAL_MAX_TOKENS,
@@ -45,16 +41,12 @@ from config import (
     MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
     MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
     MEMORY_EXTRACT_ENABLED,
-    MEMORY_EXTRACT_LM_STUDIO_API_KEY,
-    MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
-    MEMORY_EXTRACT_LM_STUDIO_MODEL,
-    MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
     MEMORY_EXTRACT_MAX_TOKENS,
     MEMORY_SOURCE_KIND_ENABLED,
 )
 from config.spaces import resolve_space
-from core.llm import RESOURCE_CHAT, RESOURCE_CONSOLIDATION, acquire
-from core.llm.lm_studio import LMStudioBackend
+from core.llm import ROLE_CONSOLIDATION, ROLE_EXTRACT, acquire, backend_for, gate_of
+from core.llm.base import LLMBackend
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
 from memory.memory_manager import get_memory_manager
@@ -71,8 +63,8 @@ from memory.text_similarity import is_similar, merge_content
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
 # 群级整合锁（模块级）：保证同一群「读 checkpoint → 整合 → 推进 checkpoint」不被
-# 并发打断。必须与模型闸门分离——若整段整合都占着 consolidation 闸门，群A 等 27B
-# （chat 闸门）时会把群B 的 E4B 阶段一起堵死，使两个模型退化为串行。
+# 并发打断。必须与模型闸门分离——若整段整合都占着阶段1 的闸门，群A 等阶段2 端点
+# 时会把群B 的阶段1 一起堵死，使两个端点退化为串行。
 # 放模块级而非实例属性：consolidator 是进程级单例，锁本就该跨实例共享；且测试会用
 # __new__ 绕过 __init__ 构造实例（避免真实 LLM 配置），实例属性会缺失。
 _group_locks: dict[str, asyncio.Lock] = {}
@@ -116,37 +108,27 @@ class MemoryConsolidator:
     - 用户画像（user_profiles）
     - 记忆候选（memory_candidates，后续由 MemoryManager 晋升为长期记忆）
 
-    同时维护每群的 checkpoint，保证不重不漏地消费消息；整合固定使用本地
-    LM Studio 后端（在线整合流程已废弃）。单例通过 get_consolidator() 获取。
+    同时维护每群的 checkpoint，保证不重不漏地消费消息；两个阶段的后端各自由
+    角色配置决定（``CONSOLIDATION`` / ``EXTRACT``），本类不关心它们是本地还是
+    在线。单例通过 get_consolidator() 获取。
     """
 
     def __init__(self):
-        # 唯一后端：本地 LM Studio（使用整合专用配置，可与聊天用模型隔离，避免互相阻塞）
-        self._backends: list[tuple[str, LMStudioBackend]] = [
-            (
-                "lm_studio",
-                LMStudioBackend(
-                    base_url=CONSOLIDATION_LM_STUDIO_BASE_URL,
-                    model=CONSOLIDATION_LM_STUDIO_MODEL,
-                    max_tokens=CONSOLIDATION_LOCAL_MAX_TOKENS,
-                    temperature=CONSOLIDATION_LM_STUDIO_TEMPERATURE,
-                    api_key=CONSOLIDATION_LM_STUDIO_API_KEY,
-                ),
-            )
-        ]
-        # 阶段2 候选提取后端：默认 27B（继承主聊天配置）。
+        # 阶段1 后端：角色 CONSOLIDATION。纯本地默认指向整合专用端点（E4B/CPU，
+        # 与聊天模型隔离、闸门独立，两者不互相阻塞）；切在线后归记忆域 key。
+        # 名字串保持 "lm_studio" 不变：它进整合日志，改了会让历史日志无法对比；
+        # 真正在跑哪个模型看紧随其后的 model_tag。
+        consolidation = backend_for(ROLE_CONSOLIDATION)
+        self._backends: list[tuple[str, LLMBackend]] = (
+            [("lm_studio", consolidation)] if consolidation is not None else []
+        )
+        # 阶段2 候选提取后端：角色 EXTRACT，纯本地默认继承主聊天端点（27B）。
         # E4B 能总结主题却系统性把候选提取判空（log_2026_8_16_1717：7 批全空，
         # 且信息明确出现在 active_summary 里——是「读到了但主动弃掉」而非没看到）。
         # 候选提取是高精度抽取任务，交给 27B；仅在阶段1 判定有自我披露时唤醒。
-        self._extract_backend: tuple[str, LMStudioBackend] = (
-            "lm_studio_extract",
-            LMStudioBackend(
-                base_url=MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
-                model=MEMORY_EXTRACT_LM_STUDIO_MODEL,
-                max_tokens=MEMORY_EXTRACT_MAX_TOKENS,
-                temperature=MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
-                api_key=MEMORY_EXTRACT_LM_STUDIO_API_KEY,
-            ),
+        extract = backend_for(ROLE_EXTRACT)
+        self._extract_backend: tuple[str, LLMBackend] | None = (
+            ("lm_studio_extract", extract) if extract is not None else None
         )
 
     def _get_group_lock(self, group_id: int) -> asyncio.Lock:
@@ -172,6 +154,12 @@ class MemoryConsolidator:
         与 ``_TRUNCATION_MIN_BATCH`` 处的说明。批次缩小后 ``batch_end`` 同步变小，
         checkpoint 只推进实际整合过的那一段，剩下的留给下一批。
         """
+        if not self._backends:
+            raise RuntimeError(
+                "CONSOLIDATION 角色没有可用端点"
+                "（LLM_ROLE_CONSOLIDATION_ENDPOINT 指向的槽未配 BASE_URL）；"
+                "运行 python -m deploy doctor 查看解析结果"
+            )
         backend_name, backend = self._backends[0]
         base_limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
         ladder = _batch_ladder(base_limit)
@@ -182,9 +170,9 @@ class MemoryConsolidator:
             prompt = self._build_prompt(group_id, messages)
             logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
             model_tag = getattr(backend, "model", "") or backend_name
-            # 只在真正调用 E4B 的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
-            # 且绝不与 chat 闸门同时持有（防止跨模型队头阻塞）。
-            async with acquire(RESOURCE_CONSOLIDATION, tag=f"consolidate:{group_id}"):
+            # 只在真正调用模型的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
+            # 且绝不与别的闸门同时持有（防止跨资源队头阻塞）。
+            async with acquire(gate_of(ROLE_CONSOLIDATION), tag=f"consolidate:{group_id}"):
                 result, finish = await backend.generate_detailed(prompt)
             append_consolidation_log(
                 f"- **🧠 后端**: {backend_name}（{model_tag}，批次 {limit} 条）\n"
@@ -205,13 +193,18 @@ class MemoryConsolidator:
                 )
                 continue
 
+            # 报「实际生效的上限」而不是 CONSOLIDATION_LOCAL_MAX_TOKENS：上限现在由
+            # LLM_ROLE_CONSOLIDATION_MAX_TOKENS 给出（留空才继承前者），照旧键去调
+            # 会出现「改了没效果」。
+            effective = getattr(backend, "max_tokens", CONSOLIDATION_LOCAL_MAX_TOKENS)
             append_consolidation_log(
                 f"  > ❌ 批次已缩到 {limit} 条仍被截断，**不推进 checkpoint**"
-                f"（请调大 CONSOLIDATION_LOCAL_MAX_TOKENS）\n"
+                f"（请调大 LLM_ROLE_CONSOLIDATION_MAX_TOKENS，当前 {effective}）\n"
             )
             raise OutputTruncatedError(
-                f"群 {group_id} 整合输出被 max_tokens={CONSOLIDATION_LOCAL_MAX_TOKENS} 截断，"
-                f"批次已缩到 {limit} 条仍不够；请调大 CONSOLIDATION_LOCAL_MAX_TOKENS"
+                f"群 {group_id} 整合输出被 max_tokens={effective} 截断，"
+                f"批次已缩到 {limit} 条仍不够；请调大 LLM_ROLE_CONSOLIDATION_MAX_TOKENS"
+                "（留空则继承 CONSOLIDATION_LOCAL_MAX_TOKENS）"
             )
         raise RuntimeError("没有可整合的消息")
 
@@ -233,24 +226,31 @@ class MemoryConsolidator:
         return str(v).strip().lower() in ("true", "1", "yes")
 
     async def _extract_candidates(self, group_id: int, messages_text: str) -> list | None:
-        """阶段2：用 27B 从消息里精确提取 memory_candidates。
+        """阶段2：从消息里精确提取 memory_candidates（角色 ``EXTRACT``，纯本地默认 27B）。
 
-        只在调用 27B 的那一刻持有 chat 闸门（与聊天、会话压缩共用同一 GPU
-        模型，应用层 FIFO 串行，聊天不会被并发推理拖慢）。此时绝不持有
-        consolidation 闸门，因此别的群可同时跑 E4B 阶段1。
+        只在真正调用的那一刻持有 EXTRACT 端点的闸门（纯本地默认与聊天、会话压缩
+        共用同一 GPU 模型，应用层 FIFO 串行，聊天不会被并发推理拖慢）。此时绝不
+        持有阶段1 的闸门，因此别的群可同时跑阶段1。
 
         返回候选列表；调用异常或 JSON 解析失败返回 None，表示「阶段2 未成功，
-        回退阶段1 候选」——与「成功但无候选」（返回 []，即 27B 复核认为确实
-        没有）区别处理。
+        回退阶段1 候选」——与「成功但无候选」（返回 []，即复核认为确实没有）
+        区别处理。
         """
         from memory.extraction_prompt import format_extraction_prompt
 
+        if self._extract_backend is None:
+            logger.warning(
+                "⚠️ [Extractor] EXTRACT 角色没有可用端点"
+                "（LLM_ROLE_EXTRACT_ENDPOINT 指向的槽未配 BASE_URL），回退阶段1 候选"
+            )
+            append_consolidation_log(" > ⚠️ 阶段2（提取）无可用端点，回退阶段1 候选\n")
+            return None
         name, backend = self._extract_backend
         model_tag = getattr(backend, "model", "") or name
         prompt = format_extraction_prompt(messages_text)
         logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
         try:
-            async with acquire(RESOURCE_CHAT, tag=f"extract:{group_id}"):
+            async with acquire(gate_of(ROLE_EXTRACT), tag=f"extract:{group_id}"):
                 result, finish = await backend.generate_detailed(prompt)
         except Exception:
             logger.exception("❌ [Extractor] 阶段2 提取调用失败，回退阶段1 候选")
@@ -264,12 +264,14 @@ class MemoryConsolidator:
             # 阶段2 截断不像阶段1 那样会丢消息（checkpoint 由阶段1 决定），
             # 因此只回退阶段1 候选，不阻断整批。但要显式记一笔：
             # 否则表现为「候选莫名其妙变少」，排查时找不到原因。
+            # 同样报「实际生效的上限」：现在由 LLM_ROLE_EXTRACT_MAX_TOKENS 给出
+            effective = getattr(backend, "max_tokens", MEMORY_EXTRACT_MAX_TOKENS)
             logger.warning(
-                f"⚠️ [Extractor] 阶段2 输出被 MEMORY_EXTRACT_MAX_TOKENS="
-                f"{MEMORY_EXTRACT_MAX_TOKENS} 截断，回退阶段1 候选"
+                f"⚠️ [Extractor] 阶段2 输出被 max_tokens={effective} 截断，回退阶段1 候选"
+                "（请调大 LLM_ROLE_EXTRACT_MAX_TOKENS）"
             )
             append_consolidation_log(
-                " > ⚠️ 阶段2 输出被 MEMORY_EXTRACT_MAX_TOKENS 截断，回退阶段1 候选\n"
+                " > ⚠️ 阶段2 输出被 LLM_ROLE_EXTRACT_MAX_TOKENS 截断，回退阶段1 候选\n"
             )
             return None
         parsed = self._parse_json(result)
@@ -401,9 +403,9 @@ class MemoryConsolidator:
         if not DB_PATH.exists():
             return
 
-        # 群级串行（不再整段持有 consolidation 闸门）：模型闸门只在各自的
-        # generate 调用处短暂持有，两把闸门从不同时持有，因此 E4B 与 27B
-        # 可真正并行，且同一模型上的任务仍是 FIFO 一次一个。
+        # 群级串行（不再整段持有阶段1 闸门）：模型闸门只在各自的 generate 调用处
+        # 短暂持有，两把闸门从不同时持有，因此阶段1 与阶段2 的端点可真正并行，
+        # 且同一端点上的任务仍按其并发度排队（本地默认 1，即 FIFO 一次一个）。
         async with self._get_group_lock(group_id):
             try:
                 # 空间归属：多个 QQ 群可映射到同一共享空间（隐式空间=群号字符串）

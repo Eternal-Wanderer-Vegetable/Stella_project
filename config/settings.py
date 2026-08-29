@@ -110,6 +110,31 @@ def _env_inherit(key: str, inherited: str) -> str:
     return os.getenv(key, "").strip() or inherited
 
 
+def _env_int_inherit(key: str, inherited: int) -> int:
+    """读取「默认继承另一个配置项」的整数环境变量；**空值等同未设置**。
+
+    参数:
+        key: 环境变量名；
+        inherited: 未设置或设为空时继承的父项值（传入父项常量本身，变量名
+            必须与父项的环境变量名一致，理由同 :func:`_env_inherit`）。
+    返回:
+        解析成功返回整数；空值或解析失败返回 inherited。
+
+    行为与 :func:`_env_int` 完全一致——独立命名只为让 ``deploy/env_schema.py``
+    输出 ``inherits`` 标记：继承型默认值在 AST 里不是字面量，schema 拿不到数值，
+    GUI 必须知道「留空即继承谁」才能渲染提示、并在留空时**不写入** ``.env``。
+    """
+    return _env_int(key, inherited)
+
+
+def _env_float_inherit(key: str, inherited: float) -> float:
+    """读取「默认继承另一个配置项」的浮点环境变量；**空值等同未设置**。
+
+    与 :func:`_env_int_inherit` 同理，见那里的说明。
+    """
+    return _env_float(key, inherited)
+
+
 def _env_int(key: str, default: int = 0) -> int:
     """安全读取 int 环境变量，解析失败时返回默认值（避免直接 int() 抛异常）。
 
@@ -387,6 +412,14 @@ MEMORY_AT_MENTION_CONFIDENCE_BONUS = _env_float("MEMORY_AT_MENTION_CONFIDENCE_BO
 MEMORY_EMBEDDING_ENABLED = _env("MEMORY_EMBEDDING_ENABLED", "false").lower() in ("true", "1", "yes")
 MEMORY_EMBEDDING_BASE_URL = _env("MEMORY_EMBEDDING_BASE_URL", "http://127.0.0.1:1234")
 MEMORY_EMBEDDING_MODEL = _env("MEMORY_EMBEDDING_MODEL", "")
+# embedding 走哪个端点槽的闸门：auto | <端点槽名> | none。取代旧的布尔键
+# LLM_SCHEDULER_GATE_EMBEDDING（true→auto、false→none，旧键仍被兼容读取）。
+# auto 的判定是确定性的、doctor 会打印结果：**若存在 KIND=local 且 BASE_URL 与
+# MEMORY_EMBEDDING_BASE_URL 相同的端点槽 → 共用该槽闸门；否则独立不排队。**
+# 为什么不能沿用旧的布尔默认值：旧默认把 embedding 挂在「主聊天」闸门上，理由是
+# 「embedding 默认与主聊天同实例」。一旦对话切到在线端点，这个前提就不成立了，
+# 本地 embedding 会去排在线调用的队、白白串行。
+MEMORY_EMBEDDING_GATE = _env("MEMORY_EMBEDDING_GATE", "auto")
 # 每次语义检索的超时（秒）
 MEMORY_EMBEDDING_TIMEOUT = _env_float("MEMORY_EMBEDDING_TIMEOUT", 10.0)
 # embedding 路径下 CONTEXTUAL 记忆的“主题匹配”阈值（余弦相似度）。
@@ -443,6 +476,9 @@ MEMORY_BENCHMARK_DIR = _env_path(
 )
 
 # ---------- 本地 LLM（LM Studio） ----------
+# 本段是**旧键**，保留为「LLM 端点 / LLM 角色」两节的默认继承来源：未迁移的 .env
+# 只填这三个键也能照旧跑（LOCAL 槽与 CHAT/ROUTER/COMPACT 角色都默认继承它们）。
+# 新配置请直接写 LLM_ENDPOINT_* / LLM_ROLE_*，见本文件末尾那两节。
 LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
 LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
 # 远程 OpenAI 兼容 API 的 Bearer Token；本地 LM Studio 留空
@@ -468,7 +504,9 @@ LLM_SCHEDULER_QUEUE_WARN_DEPTH = _env_int("LLM_SCHEDULER_QUEUE_WARN_DEPTH", 3)
 # 优先级排队**尚未实现**，保留开关：先以 FIFO + snapshot() 积累真实排队数据，
 # 多群上线后据数据再决定是否偏离 FIFO。
 LLM_SCHEDULER_PRIORITY_ENABLED = _env("LLM_SCHEDULER_PRIORITY_ENABLED", "false").lower() in ("true", "1", "yes")
-# embedding 默认与主聊天同实例（一次检索可编码 20+ 条），需走 chat 闸门；
+# **已被 MEMORY_EMBEDDING_GATE 取代**，保留仅为兼容未迁移的 .env：
+# 未显式设置 MEMORY_EMBEDDING_GATE 时，本键 false 等价于 GATE=none、true 等价于 auto。
+# 旧语义：embedding 默认与主聊天同实例（一次检索可编码 20+ 条），需走 chat 闸门；
 # 独立实例部署（与聊天模型隔离）时可关闭。
 LLM_SCHEDULER_GATE_EMBEDDING = _env("LLM_SCHEDULER_GATE_EMBEDDING", "true").lower() in ("true", "1", "yes")
 
@@ -827,6 +865,134 @@ ASTRBOT_LLM_MAX_TOOLS = _env_int("ASTRBOT_LLM_MAX_TOOLS", 32)
 ASTRBOT_LLM_TOOL_TIMEOUT = _env_float("ASTRBOT_LLM_TOOL_TIMEOUT", 120.0)
 # 工具调用循环的最大轮数，防止模型反复调用工具打转
 ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
+
+# ---------- LLM 端点（Endpoint） ----------
+# 端点 = 一组连接参数：地址 + API key + 类型 + 并发度 + 超时。
+# 它同时是**两样东西的归属单位**：
+#   ① API key —— 不同 key 就是不同的前缀缓存域。对话域与记忆域各用一个 key，
+#      两者的固定前缀才不会互相挤出缓存（这是「双 key」要求的落点）。
+#   ② 闸门资源 —— core/llm/scheduler.py 按端点槽名建闸门，并发度即该端点的上限。
+# 槽位数量**固定为 4**：deploy/env_schema.py 用 AST 扫本文件里字面量
+# _env*("KEY", ...) 调用来生成 GUI，动态命名的端点在界面上根本不会出现。
+# 需要第 5 个端点时在这里照抄 5 行——这是静态声明约束下的显式取舍。
+#
+# 「哪个角色用哪个端点、用什么模型」见下一节「LLM 角色」。
+# embedding **不在**本体系内：它恒定本地，闸门归属见 MEMORY_EMBEDDING_GATE。
+
+# 槽 LOCAL：本地 LM Studio。三个连接键默认继承旧的 LM_STUDIO_*，
+# 因此未迁移的 .env 行为与改造前一致。
+LLM_ENDPOINT_LOCAL_BASE_URL = _env_inherit("LLM_ENDPOINT_LOCAL_BASE_URL", LM_STUDIO_BASE_URL)
+# 本地服务通常不校验 key；少数本地网关要求填 dummy key，那时填这里。
+LLM_ENDPOINT_LOCAL_API_KEY = _env_inherit("LLM_ENDPOINT_LOCAL_API_KEY", LM_STUDIO_API_KEY)
+# local | online。**显式声明，不再靠「有没有 api_key」猜**——那个启发式在两个
+# 方向上都会错：本地网关要求 dummy key 时漏发 reasoning_effort=none（本地推理
+# 模型会把 token 全耗在思维链上、content 为空），在线服务不要 key 时误发
+# （有厂商直接 400）。厂商中立的代价就是不许猜。
+LLM_ENDPOINT_LOCAL_KIND = _env("LLM_ENDPOINT_LOCAL_KIND", "local")
+# 闸门并发度。本地=1：共享同一份模型权重，并发推理只会一起变慢。
+LLM_ENDPOINT_LOCAL_CONCURRENCY = _env_int("LLM_ENDPOINT_LOCAL_CONCURRENCY", 1)
+# 单次 HTTP 请求超时（秒）。这一项接管了 core/llm/lm_studio.py 里原先硬编码的
+# 120 秒，**与 LLM_TIMEOUT 不是一回事**：后者是 core/pipeline.py 的整轮回复预算。
+LLM_ENDPOINT_LOCAL_TIMEOUT = _env_float("LLM_ENDPOINT_LOCAL_TIMEOUT", 120.0)
+
+# 槽 ONLINE_CHAT：在线·对话域。持有「对话生成」那把 key。
+LLM_ENDPOINT_ONLINE_CHAT_BASE_URL = _env("LLM_ENDPOINT_ONLINE_CHAT_BASE_URL", "")
+# 在线端点必须有 key（registry 启动校验会拦），且**不要与记忆域填同一个 key**：
+# 同 key 会让两个域共享一个缓存空间、互相驱逐彼此的固定前缀。
+LLM_ENDPOINT_ONLINE_CHAT_API_KEY = _env("LLM_ENDPOINT_ONLINE_CHAT_API_KEY", "")
+LLM_ENDPOINT_ONLINE_CHAT_KIND = _env("LLM_ENDPOINT_ONLINE_CHAT_KIND", "online")
+# 在线端点并发度按厂商限流填。默认 4 是个保守值，不是厂商上限。
+LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY", 4)
+LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT", 120.0)
+
+# 槽 ONLINE_MEMORY：在线·记忆域。持有「记忆整合」那把 key（整合 / 压缩 / 提取共用）。
+LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL = _env("LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL", "")
+LLM_ENDPOINT_ONLINE_MEMORY_API_KEY = _env("LLM_ENDPOINT_ONLINE_MEMORY_API_KEY", "")
+LLM_ENDPOINT_ONLINE_MEMORY_KIND = _env("LLM_ENDPOINT_ONLINE_MEMORY_KIND", "online")
+# 记忆域是后台任务，并发度比对话域低：它不该抢对话的限流额度。
+LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY", 2)
+LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT", 120.0)
+
+# 槽 EXTRA：备用槽。**默认充当「本地记忆域」**——地址与 LOCAL 相同（继承旧的
+# CONSOLIDATION_LM_STUDIO_*），但闸门独立，于是整合与聊天能真正并行。
+# 这正是改造前 chat / consolidation 两把锁分离的原因（27B 跑 GPU、E4B 跑 CPU），
+# 所以 LLM_ROLE_CONSOLIDATION_ENDPOINT 默认指向本槽而不是 LOCAL。
+# 混合部署或调试时也可把它指向第三个服务。
+LLM_ENDPOINT_EXTRA_BASE_URL = _env_inherit("LLM_ENDPOINT_EXTRA_BASE_URL", CONSOLIDATION_LM_STUDIO_BASE_URL)
+LLM_ENDPOINT_EXTRA_API_KEY = _env_inherit("LLM_ENDPOINT_EXTRA_API_KEY", CONSOLIDATION_LM_STUDIO_API_KEY)
+LLM_ENDPOINT_EXTRA_KIND = _env("LLM_ENDPOINT_EXTRA_KIND", "local")
+LLM_ENDPOINT_EXTRA_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_CONCURRENCY", 1)
+LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
+
+# ---------- LLM 角色（Role） ----------
+# 角色 = 一个调用场景。每个角色引用一个端点槽，并带自己的模型 / 温度 / max_tokens。
+# ENDPOINT 取 LOCAL | ONLINE_CHAT | ONLINE_MEMORY | EXTRA | none；
+# none = 停用该角色，所有调用点必须优雅退化而不是抛异常（沿用
+# capability/router/fallback.py 里「构造失败返回 None 即降级」的惯例）。
+#
+# 六个角色的默认值都对齐改造前的实际行为，所以**未迁移的 .env 逐项等价今天**：
+# CHAT/ROUTER/PLUGIN/COMPACT/EXTRACT 在 LOCAL 槽（= 改造前的 chat 闸门），
+# CONSOLIDATION 在 EXTRA 槽（= 改造前的 consolidation 闸门）。
+# 模型 / 温度 / max_tokens 则继承各自原来的旧键；没有旧键的（CHAT/ROUTER/COMPACT）
+# 写死成改造前 LMStudioBackend 的构造默认值。
+#
+# FALLBACK_ENDPOINT 留空 = 不降级。降级只在鉴权失败 / 限流 / 5xx 重试耗尽 /
+# 连接超时时触发；400（请求体错误）**不降级**——那是配置问题，降级只会掩盖它。
+
+# 主对话生成。改造前：ai_gateway.py 用 LM_STUDIO_* 构造，温度/长度取构造默认值。
+LLM_ROLE_CHAT_ENDPOINT = _env("LLM_ROLE_CHAT_ENDPOINT", "LOCAL")
+LLM_ROLE_CHAT_MODEL = _env_inherit("LLM_ROLE_CHAT_MODEL", LM_STUDIO_MODEL)
+LLM_ROLE_CHAT_TEMPERATURE = _env_float("LLM_ROLE_CHAT_TEMPERATURE", 0.7)
+LLM_ROLE_CHAT_MAX_TOKENS = _env_int("LLM_ROLE_CHAT_MAX_TOKENS", 2000)
+LLM_ROLE_CHAT_FALLBACK_ENDPOINT = _env("LLM_ROLE_CHAT_FALLBACK_ENDPOINT", "")
+
+# Router Level 2 兜底判定。任务是「要不要工具」的二分类，在线时可用廉价模型。
+LLM_ROLE_ROUTER_ENDPOINT = _env("LLM_ROLE_ROUTER_ENDPOINT", "LOCAL")
+LLM_ROLE_ROUTER_MODEL = _env_inherit("LLM_ROLE_ROUTER_MODEL", LM_STUDIO_MODEL)
+LLM_ROLE_ROUTER_TEMPERATURE = _env_float("LLM_ROLE_ROUTER_TEMPERATURE", 0.7)
+LLM_ROLE_ROUTER_MAX_TOKENS = _env_int("LLM_ROLE_ROUTER_MAX_TOKENS", 2000)
+LLM_ROLE_ROUTER_FALLBACK_ENDPOINT = _env("LLM_ROLE_ROUTER_FALLBACK_ENDPOINT", "")
+
+# AstrBot 插件的 LLM 调用（messages 数组 / function calling / 图片）。
+# 走 core/llm/openai_client.py，不是 LMStudioBackend。
+LLM_ROLE_PLUGIN_ENDPOINT = _env("LLM_ROLE_PLUGIN_ENDPOINT", "LOCAL")
+LLM_ROLE_PLUGIN_MODEL = _env_inherit("LLM_ROLE_PLUGIN_MODEL", ASTRBOT_LLM_MODEL)
+LLM_ROLE_PLUGIN_TEMPERATURE = _env_float_inherit("LLM_ROLE_PLUGIN_TEMPERATURE", ASTRBOT_LLM_TEMPERATURE)
+LLM_ROLE_PLUGIN_MAX_TOKENS = _env_int_inherit("LLM_ROLE_PLUGIN_MAX_TOKENS", ASTRBOT_LLM_MAX_TOKENS)
+LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT = _env("LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT", "")
+
+# 会话压缩：把较早的对话压成回顾。**在线时归记忆域**（与整合共用同一把 key），
+# 让记忆域的流量与对话域的缓存互不干扰。
+LLM_ROLE_COMPACT_ENDPOINT = _env("LLM_ROLE_COMPACT_ENDPOINT", "LOCAL")
+LLM_ROLE_COMPACT_MODEL = _env_inherit("LLM_ROLE_COMPACT_MODEL", LM_STUDIO_MODEL)
+LLM_ROLE_COMPACT_TEMPERATURE = _env_float("LLM_ROLE_COMPACT_TEMPERATURE", 0.3)
+# **0 = 按 SESSION_SUMMARY_MAX_TOKENS × 3 推导**（改造前 session_compact.py 的算法）。
+# 不写死数值，是为了让调大摘要长度的用户不必同时改这里。
+LLM_ROLE_COMPACT_MAX_TOKENS = _env_int("LLM_ROLE_COMPACT_MAX_TOKENS", 0)
+LLM_ROLE_COMPACT_FALLBACK_ENDPOINT = _env("LLM_ROLE_COMPACT_FALLBACK_ENDPOINT", "")
+
+# 记忆整合 阶段1：出短期摘要 + 用户画像 + 自我披露判断。是「总结 + 二分类」任务，
+# 在线时用廉价模型即可。默认端点是 EXTRA 而非 LOCAL，理由见 EXTRA 槽的说明。
+LLM_ROLE_CONSOLIDATION_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_ENDPOINT", "EXTRA")
+LLM_ROLE_CONSOLIDATION_MODEL = _env_inherit("LLM_ROLE_CONSOLIDATION_MODEL", CONSOLIDATION_LM_STUDIO_MODEL)
+LLM_ROLE_CONSOLIDATION_TEMPERATURE = _env_float_inherit("LLM_ROLE_CONSOLIDATION_TEMPERATURE", CONSOLIDATION_LM_STUDIO_TEMPERATURE)
+LLM_ROLE_CONSOLIDATION_MAX_TOKENS = _env_int_inherit("LLM_ROLE_CONSOLIDATION_MAX_TOKENS", CONSOLIDATION_LOCAL_MAX_TOKENS)
+LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT", "")
+
+# 记忆整合 阶段2：从消息里精确提取「用户亲口说的、关于自己的稳定信息」。
+# 高精度抽取任务，但只在阶段1 判定 has_self_disclosure=true 时才唤醒，频次低。
+LLM_ROLE_EXTRACT_ENDPOINT = _env("LLM_ROLE_EXTRACT_ENDPOINT", "LOCAL")
+LLM_ROLE_EXTRACT_MODEL = _env_inherit("LLM_ROLE_EXTRACT_MODEL", MEMORY_EXTRACT_LM_STUDIO_MODEL)
+LLM_ROLE_EXTRACT_TEMPERATURE = _env_float_inherit("LLM_ROLE_EXTRACT_TEMPERATURE", MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE)
+LLM_ROLE_EXTRACT_MAX_TOKENS = _env_int_inherit("LLM_ROLE_EXTRACT_MAX_TOKENS", MEMORY_EXTRACT_MAX_TOKENS)
+LLM_ROLE_EXTRACT_FALLBACK_ENDPOINT = _env("LLM_ROLE_EXTRACT_FALLBACK_ENDPOINT", "")
+
+# 降级总开关。关掉后主端点失败就是失败（各调用点自行退化），不会切到备用端点。
+LLM_FALLBACK_ENABLED = _env("LLM_FALLBACK_ENABLED", "true").lower() in ("true", "1", "yes")
+# 降级后多少秒再试探性回归主端点。太短会在厂商限流期间反复撞墙，
+# 太长则厂商恢复了还在用备用端点。
+LLM_FALLBACK_COOLDOWN = _env_int("LLM_FALLBACK_COOLDOWN", 300)
+
 
 # ---------- Capability Router（能力路由） ----------
 # 判断一次请求需要哪些能力（聊天 / 记忆 / 工具），避免把所有插件工具的 schema

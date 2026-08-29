@@ -29,3 +29,13 @@ class LLMBackend(ABC):
         返回:
             模型生成的纯文本回复。
         """
+
+    async def generate_detailed(self, prompt: str, system_prompt: str = "") -> tuple[str, str]:
+        """同 :meth:`generate`，但额外返回 ``finish_reason``。
+
+        默认实现转调 ``generate`` 并把 ``finish_reason`` 补成空串：不是抽象方法，
+        否则每个测试替身都得实现一遍。返回空串意味着「拿不到截断信息」，调用方
+        （如记忆整合）据此**不能**断定输出完整——所以判据要写成 ``== "length"``
+        而不是 ``!= "stop"``。
+        """
+        return await self.generate(prompt, system_prompt), ""

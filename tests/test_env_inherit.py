@@ -13,21 +13,21 @@ GUI 高级配置页把 schema 里每个键都写成 ``KEY=`` 一行落进 ``.env
 """
 import pytest
 
-from config import settings
+from config import PROJECT_ROOT, settings
 from config.settings import _env, _env_inherit
+from deploy.env_schema import build_schema
 
-# 全部继承型配置项及其父项（与 config/settings.py 的调用一致，
-# deploy/env_schema.py 会把同一份关系输出成 schema 的 inherits 字段）
-INHERIT_PAIRS = [
-    ("CONSOLIDATION_LM_STUDIO_BASE_URL", "LM_STUDIO_BASE_URL"),
-    ("CONSOLIDATION_LM_STUDIO_API_KEY", "LM_STUDIO_API_KEY"),
-    ("MEMORY_EXTRACT_LM_STUDIO_BASE_URL", "LM_STUDIO_BASE_URL"),
-    ("MEMORY_EXTRACT_LM_STUDIO_API_KEY", "LM_STUDIO_API_KEY"),
-    ("MEMORY_EXTRACT_LM_STUDIO_MODEL", "LM_STUDIO_MODEL"),
-    ("ASTRBOT_LLM_BASE_URL", "LM_STUDIO_BASE_URL"),
-    ("ASTRBOT_LLM_MODEL", "LM_STUDIO_MODEL"),
-    ("ASTRBOT_LLM_API_KEY", "LM_STUDIO_API_KEY"),
-]
+# 全部继承型配置项及其父项，**从 schema 现算**而不是手抄一份：
+# P1 一口气加了 16 对继承项，手抄的清单当场就过期了（而它的 docstring 还写着
+# 「全部」）。这里直接问 deploy/env_schema.py——它读的就是 config/settings.py
+# 里那些 _env*_inherit 调用，新增继承项自动进入本文件的参数化。
+# 「这份关系对不对」由 tests/test_env_schema.py 的手写基线守，两处各管一头：
+# 那边守「关系有没有被改错」，这边守「关系在运行时真的解析出了非空值」。
+INHERIT_PAIRS = sorted(
+    (field["key"], field["inherits"])
+    for field in build_schema(PROJECT_ROOT / "config" / "settings.py")["fields"]
+    if "inherits" in field
+)
 
 
 def test_unset_falls_back_to_parent(monkeypatch):
@@ -59,13 +59,24 @@ def test_env_still_distinguishes_unset_from_empty(monkeypatch):
     assert _env("SOME_KEY", "fallback") == ""
 
 
+def test_inherit_pairs_were_actually_discovered():
+    """派生参数化的自毁风险：schema 提取一坏，参数化变空，下面那条就静默不跑了。
+
+    数量下限是个软基线（2026-08-28 是 24 对），只为把「一条都没找到」这种
+    静默失效变成红灯，不是为了钉死具体条数。
+    """
+    assert len(INHERIT_PAIRS) >= 20, f"只发现 {len(INHERIT_PAIRS)} 对继承项，schema 提取大概坏了"
+
+
 @pytest.mark.parametrize(("child", "parent"), INHERIT_PAIRS)
 def test_resolved_settings_never_empty_when_parent_is_set(child, parent):
-    """已解析的模块常量：父项非空时子项不许是空串。
+    """已解析的模块常量：父项有值时子项不许是空值。
 
     这是那个线上 bug 的直接断言——它当时的表现就是子项空串、父项正常。
+    P1 起继承项还包括 int / float（角色的 temperature 与 max_tokens），
+    判据统一成「真值」：父项本身是 0 / 空串时没有可验的继承，跳过。
     """
     parent_value = getattr(settings, parent)
     if not parent_value:
-        pytest.skip(f"父项 {parent} 本身为空（本机 .env 显式清空），无继承可验")
-    assert getattr(settings, child), f"{child} 为空串，继承 {parent} 失败"
+        pytest.skip(f"父项 {parent} 本身无值（默认为 0 或本机 .env 显式清空），无继承可验")
+    assert getattr(settings, child), f"{child} 是空值，继承 {parent} 失败"

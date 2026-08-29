@@ -18,8 +18,10 @@ from . import env_keys
 
 # 继承型默认值的助手名：第二个实参不是字面量，而是「父配置项」的变量。
 # 这类项的 default 无法静态求值，必须改用 inherits 告诉 GUI「留空即继承谁」。
-_INHERIT_FUNC = "_env_inherit"
-_ENV_FUNCS = frozenset({"_env", "_env_int", "_env_float", "_env_path", _INHERIT_FUNC})
+# int / float 版与 _env_int / _env_float 行为完全相同，独立命名的唯一目的就是
+# 让这里能识别出「这一项是继承型」——见 config/settings.py 里 _env_int_inherit。
+_INHERIT_FUNCS = frozenset({"_env_inherit", "_env_int_inherit", "_env_float_inherit"})
+_ENV_FUNCS = frozenset({"_env", "_env_int", "_env_float", "_env_path"}) | _INHERIT_FUNCS
 
 
 def build_schema(settings_path: Path) -> dict:
@@ -126,8 +128,9 @@ def _inherits_from(call: ast.Call) -> str:
 
     ``_env_inherit(\"子键\", 父键常量)`` 的第二个实参是 ``config/settings.py`` 里的
     模块级变量，而该文件里变量名与环境变量名一一对应，因此直接取变量名即是父键名。
+    ``_env_int_inherit`` / ``_env_float_inherit`` 同理。
     """
-    if not isinstance(call.func, ast.Name) or call.func.id != _INHERIT_FUNC:
+    if not isinstance(call.func, ast.Name) or call.func.id not in _INHERIT_FUNCS:
         return ""
     if len(call.args) < 2 or not isinstance(call.args[1], ast.Name):
         return ""

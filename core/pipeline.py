@@ -18,7 +18,7 @@ from nonebot import logger
 
 from config import MEMORY_V2_ENABLED
 from core.context import ChatContext
-from core.llm import PRIORITY_INTERACTIVE, RESOURCE_CHAT, acquire
+from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
 from core.llm.base import LLMBackend
 
 PreHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
@@ -92,7 +92,8 @@ class Pipeline:
         ctx = await pipeline.run(ctx)
 
     钩子按优先级（数字越大越先执行）排序；LLM 调用经调度器
-    acquire(RESOURCE_CHAT) 串行访问共享的本地模型后端。
+    acquire(gate_of(ROLE_CHAT)) 排队——纯本地时那把闸门并发度 1，即串行访问
+    共享的本地模型后端。
     """
 
     def __init__(self, timeout: float = 90.0):
@@ -203,10 +204,12 @@ class Pipeline:
             ctx.system_prompt_len = len(system_prompt)
             ctx.prompt_log = user_prompt
 
-            # 全局闸门：聊天主链路与压缩/候选提取共用同一 27B，经调度器 FIFO 串行。
-            # 交互回复标记为高优先级意图（当前优先级未启用，仅按 FIFO 处理）。
+            # 闸门资源名 = CHAT 角色绑定的端点槽：纯本地部署下压缩/候选提取绑同一
+            # 个槽，于是与主链路 FIFO 串行共用 27B；把它们分到不同端点后同一行
+            # 代码自动变成并行。交互回复标记为高优先级意图（当前优先级未启用，
+            # 仅按 FIFO 处理）。
             async with acquire(
-                RESOURCE_CHAT, tag=f"reply:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
+                gate_of(ROLE_CHAT), tag=f"reply:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
             ):
                 import time as _time
                 _t0 = _time.monotonic()

@@ -230,7 +230,12 @@ def test_plugin_llm_still_goes_through_the_scheduler(
     make_event,
     monkeypatch,
 ):
-    """本地只有一块 GPU，插件调用必须和主对话走同一个闸门排队。"""
+    """纯本地部署只有一块 GPU，插件调用必须和主对话走同一个闸门排队。
+
+    断言的是「闸门资源名 = PLUGIN 角色绑定的端点槽」而不是写死 RESOURCE_CHAT：
+    默认配置下两者都解析到 LOCAL 槽（因此本用例仍在验证「和主对话同一把闸门」），
+    但把插件绑到独立端点后这里应该跟着变——写死常量就测不出那种回归。
+    """
     acquired: list[str] = []
     import core.llm as core_llm
 
@@ -250,4 +255,6 @@ def test_plugin_llm_still_goes_through_the_scheduler(
     register_plugin(Demo)
     fake_llm.push_text("ok")
     _dispatch(make_event("/q"), fake_bot)
-    assert acquired == [core_llm.RESOURCE_CHAT]
+    assert acquired == [core_llm.gate_of(core_llm.ROLE_PLUGIN)]
+    # 默认（纯本地）配置下它就是主聊天那把闸门
+    assert acquired == [core_llm.gate_of(core_llm.ROLE_CHAT)]

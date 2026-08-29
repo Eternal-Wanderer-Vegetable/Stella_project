@@ -43,18 +43,7 @@ from pathlib import Path
 # 允许直接 `python scripts/probe_consolidation.py` 运行：把项目根加入 sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import (
-    CONSOLIDATION_LM_STUDIO_API_KEY,
-    CONSOLIDATION_LM_STUDIO_BASE_URL,
-    CONSOLIDATION_LM_STUDIO_MODEL,
-    CONSOLIDATION_LM_STUDIO_TEMPERATURE,
-    CONSOLIDATION_LOCAL_MAX_TOKENS,
-    MEMORY_EXTRACT_LM_STUDIO_API_KEY,
-    MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
-    MEMORY_EXTRACT_LM_STUDIO_MODEL,
-    MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
-    MEMORY_EXTRACT_MAX_TOKENS,
-)
+from core.llm import ROLE_CONSOLIDATION, ROLE_EXTRACT
 from core.llm.lm_studio import LMStudioBackend
 from memory.consolidation_prompt import format_consolidation_prompt
 from memory.consolidator import MemoryConsolidator
@@ -64,6 +53,34 @@ DEFAULT_INPUT = Path("windows_raw.json")
 OUT_MD = Path("consolidation_probe.md")
 OUT_JSON = Path("consolidation_probe.json")
 POSITIVE_FIXTURE = Path("memory/benchmark/_fixtures/consolidation_positive.json")
+
+
+def _probe_backend(role: str, temperature: float | None) -> LMStudioBackend:
+    """按生产的角色配置构造后端，``temperature`` 可被探针覆盖。
+
+    走 registry 拿端点与绑定、不自己读 config 键：探针的全部价值在于「跑的就是
+    生产链路」，自己读一套键就会在配置模型演进后与生产静默分叉。
+    """
+    from core.llm.registry import binding
+
+    b = binding(role)
+    if b is None or b.endpoint is None:
+        raise SystemExit(
+            f"角色 {role} 没有可用端点（LLM_ROLE_{role.upper()}_ENDPOINT 指向的槽未配 "
+            "BASE_URL）；先运行 python -m deploy doctor"
+        )
+    ep = b.endpoint
+    return LMStudioBackend(
+        base_url=ep.base_url,
+        model=b.model,
+        max_tokens=b.max_tokens,
+        temperature=b.temperature if temperature is None else temperature,
+        api_key=ep.api_key,
+        kind=ep.kind,
+        slot=ep.slot,
+        role=role,
+        timeout=ep.timeout,
+    )
 
 # 信号密度分层在 windows_raw.json 里的索引范围
 # （对应 scripts/sample_windows.py 的构造次序：前 12 高信号 / 中间 8 中等 / 末 10 刷屏）
@@ -555,23 +572,11 @@ async def _amain() -> None:
                          "不加则跑旧的单阶段链路（仅阶段1 模型），用于对照")
     a = ap.parse_args()
 
-    # 复用生产后端构造参数，temperature 可被探针显式覆盖（不改生产代码）
-    backend = LMStudioBackend(
-        base_url=CONSOLIDATION_LM_STUDIO_BASE_URL,
-        model=CONSOLIDATION_LM_STUDIO_MODEL,
-        max_tokens=CONSOLIDATION_LOCAL_MAX_TOKENS,
-        temperature=a.temperature if a.temperature is not None else CONSOLIDATION_LM_STUDIO_TEMPERATURE,
-        api_key=CONSOLIDATION_LM_STUDIO_API_KEY,
-    )
+    # 复用生产的角色配置构造后端，temperature 可被探针显式覆盖（不改生产代码）
+    backend = _probe_backend(ROLE_CONSOLIDATION, a.temperature)
 
-    # 阶段2 提取后端（默认继承主聊天配置，即 27B）
-    extract_backend = LMStudioBackend(
-        base_url=MEMORY_EXTRACT_LM_STUDIO_BASE_URL,
-        model=MEMORY_EXTRACT_LM_STUDIO_MODEL,
-        max_tokens=MEMORY_EXTRACT_MAX_TOKENS,
-        temperature=a.temperature if a.temperature is not None else MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE,
-        api_key=MEMORY_EXTRACT_LM_STUDIO_API_KEY,
-    )
+    # 阶段2 提取后端（角色 EXTRACT，纯本地默认继承主聊天配置，即 27B）
+    extract_backend = _probe_backend(ROLE_EXTRACT, a.temperature)
 
     async def _runner(w):
         if a.two_stage:

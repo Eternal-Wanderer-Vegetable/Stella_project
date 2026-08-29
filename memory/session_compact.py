@@ -6,9 +6,15 @@
 与 memory/session_context.py 的分工：后者管状态与判定（纯逻辑、可离线单测），
 本模块负责取待压缩消息、调 LLM、把结果写回状态。
 
-**用主聊天模型而非整合模型**：整合模型跑在 CPU 上，单次 20~60 秒，
-压缩必须快（它在每次回复之后异步触发）。27B 在 GPU 上约 2 秒，可接受。
-调用经调度器 acquire(RESOURCE_CHAT) 与主聊天串行共享同一模型。
+**用哪个模型由配置决定**（角色 ``COMPACT``，见 core/llm/registry.py）：
+
+- 纯本地默认绑到主聊天端点。压缩必须快——它在每次回复之后异步触发——而整合
+  模型跑在 CPU 上单次 20~60 秒，27B 在 GPU 上约 2 秒。这也是改造前的行为。
+- 切在线后按 D2 绑到**记忆域端点**，与整合、提取共用同一个 API key，
+  于是共用同一份前缀缓存。
+
+闸门跟着端点绑定走（``gate_of(ROLE_COMPACT)``）：绑主聊天端点就与主聊天串行
+共享同一块显存，绑独立的在线端点就真正并行——这条不需要本模块做任何判断。
 
 压缩 prompt 沿用捕获层的**防编造原则**：压不出内容就输出「无」，
 宁可丢上下文也不能编造对话里没出现过的内容。
@@ -22,21 +28,17 @@ from nonebot import logger
 
 from config import (
     DB_PATH,
-    LM_STUDIO_API_KEY,
-    LM_STUDIO_BASE_URL,
-    LM_STUDIO_MODEL,
     SESSION_SUMMARY_MAX_TOKENS,
 )
-from core.llm import RESOURCE_CHAT, acquire
-from core.llm.lm_studio import LMStudioBackend
+from core.llm import ROLE_COMPACT, acquire, backend_for, gate_of
+from core.llm.base import LLMBackend
 from memory import session_context as sc
 
-# 压缩任务偏低温度：这是信息提炼而非创作，稳定优先
-_COMPACT_TEMPERATURE = 0.3
-# 生成上限留出余量：prompt 里已按字数约束，这里防止极端情况下无限生成
-_COMPACT_MAX_TOKENS_FACTOR = 3
+# 温度与生成上限现在是端点×角色配置的一部分：
+# LLM_ROLE_COMPACT_TEMPERATURE（默认 0.3，信息提炼而非创作，稳定优先）、
+# LLM_ROLE_COMPACT_MAX_TOKENS（默认 0 = 由 SESSION_SUMMARY_MAX_TOKENS 推导，
+# prompt 里已按字数约束，上限只防极端情况下无限生成）。
 
-_backend: LMStudioBackend | None = None
 # 正在压缩的群：同一群不并发压缩，否则两次调用会基于同一起点各自推进
 _in_flight: set[int] = set()
 _tasks: set[asyncio.Task] = set()
@@ -90,26 +92,17 @@ def build_compact_prompt(messages: str, existing_summary: str = "") -> str:
     return COMPACT_PROMPT.format(existing=existing, messages=messages, max_chars=max_chars)
 
 
-def _get_backend() -> LMStudioBackend:
-    """主聊天模型后端（懒初始化单例）。
+def _get_backend() -> LLMBackend | None:
+    """压缩用的后端；角色 ``COMPACT`` 没绑到可用端点时返回 ``None``。
 
-    ``api_key`` 必须跟着 base_url 一起传：切到在线 OpenAI 兼容端点后，
-    缺 Authorization 头会直接 401，而压缩是异步后台任务，失败只留一行 warning，
-    表现为「摘要永远不更新」而非明显报错。
+    不在本模块缓存实例：``core.llm.registry`` 已按角色缓存，再存一份会在
+    ``registry.reset_state()``（改配置后重载）之后继续用旧端点——那种 bug
+    表现为「GUI 改完保存了但摘要还发去旧地址」，极难查。
 
-    P1 会把这里改指向「记忆域端点」（D2：会话压缩归记忆整合 key，以便与整合、
-    提取共用同一份缓存前缀），届时这三个参数一起换成记忆域的配置项。
+    返回 ``None`` 而不是抛异常：压缩是异步后台任务，抛异常只会变成一行
+    warning，反而不如显式判空后给一条能照着改的日志。
     """
-    global _backend
-    if _backend is None:
-        _backend = LMStudioBackend(
-            base_url=LM_STUDIO_BASE_URL,
-            model=LM_STUDIO_MODEL,
-            max_tokens=SESSION_SUMMARY_MAX_TOKENS * _COMPACT_MAX_TOKENS_FACTOR,
-            temperature=_COMPACT_TEMPERATURE,
-            api_key=LM_STUDIO_API_KEY,
-        )
-    return _backend
+    return backend_for(ROLE_COMPACT)
 
 
 def fetch_pending_messages(
@@ -183,9 +176,18 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
     prompt = build_compact_prompt(messages, existing)
     logger.info(f"🗜️ [Compact] 群 {group_id} 开始压缩 {count} 条消息（至 id {max_id}）")
 
+    backend = _get_backend()
+    if backend is None:
+        logger.warning(
+            f"⚠️ [Compact] 群 {group_id} 跳过压缩：COMPACT 角色没有可用端点"
+            "（LLM_ROLE_COMPACT_ENDPOINT 指向的槽未配 BASE_URL）。"
+            "运行 python -m deploy doctor 查看解析结果。"
+        )
+        return False
+
     try:
-        async with acquire(RESOURCE_CHAT, tag=f"compact:{group_id}"):
-            result = await _get_backend().generate(prompt)
+        async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
+            result = await backend.generate(prompt)
     except Exception as e:
         # 调用失败**不推进**位置，这批消息留待下次重试
         logger.warning(f"⚠️ [Compact] 群 {group_id} 压缩失败（保留待重试）: {e}")

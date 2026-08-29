@@ -13,8 +13,9 @@
 - 只问一个封闭问题（在给定能力清单里选，或答「无」），不做开放生成——
   输出空间越小，本地小模型越不容易跑偏，也越容易解析。
 
-它与主聊天共用同一个 27B，因此必须经 ``RESOURCE_CHAT`` 闸门排队
-（见 docs/architecture.md「调用方绝不能同时持有两把闸门」）。
+它经 ``ROUTER`` 角色绑定的端点闸门（``gate_of(ROLE_ROUTER)``）排队：纯本地默认
+与主聊天绑同一个槽、共用那块显存，因此必须串行；绑到独立端点后同一行代码自动
+变成并行（见 docs/architecture.md「调用方绝不能同时持有两把闸门」）。
 """
 
 from __future__ import annotations
@@ -134,10 +135,13 @@ async def route_fallback(
 
     prompt = _PROMPT.format(catalog=catalog, message=text)
     try:
-        from core.llm import PRIORITY_INTERACTIVE, RESOURCE_CHAT, acquire
+        from core.llm import PRIORITY_INTERACTIVE, ROLE_ROUTER, acquire, gate_of
 
-        # 与主聊天共用 27B，必须经闸门排队（不可与其它闸门嵌套持有）
-        async with acquire(RESOURCE_CHAT, tag="router-fallback", priority=PRIORITY_INTERACTIVE):
+        # 与绑同一端点的角色（默认即主聊天 27B）共用闸门，必须排队；
+        # 不可与其它闸门嵌套持有
+        async with acquire(
+            gate_of(ROLE_ROUTER), tag="router-fallback", priority=PRIORITY_INTERACTIVE
+        ):
             raw = await backend.generate(prompt, "")
     except Exception as e:
         _logger().warning(f"⚠️ [Router] Level 2 兜底调用失败，降级: {e}")
@@ -168,16 +172,11 @@ async def route_fallback(
 
 
 def _default_backend():
-    """主聊天后端。构造失败返回 None（兜底不可用即降级，不影响回复）。"""
+    """ROUTER 角色的后端。取不到返回 None（兜底不可用即降级，不影响回复）。"""
     try:
-        from core.llm.lm_studio import LMStudioBackend
+        from core.llm import ROLE_ROUTER, backend_for
 
-        s = _settings()
-        return LMStudioBackend(
-            base_url=s.LM_STUDIO_BASE_URL,
-            model=s.LM_STUDIO_MODEL,
-            api_key=s.LM_STUDIO_API_KEY,
-        )
+        return backend_for(ROLE_ROUTER)
     except Exception as e:
         _logger().warning(f"⚠️ [Router] Level 2 后端构造失败: {e}")
         return None
