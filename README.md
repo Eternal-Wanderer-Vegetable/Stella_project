@@ -3,6 +3,7 @@
 # 🌟 Stella
 
 *一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人*
+
 *——为 8K 上下文窗口而设计，本地小模型与在线 API 均可兼容*
 
 [![CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml)
@@ -25,7 +26,8 @@ Stella 的设计前提是上下文窗口很小 —— 基准是 **8192 tokens**�
 - **全本地**：聊天用 GPU 上的模型，记忆整理用 CPU 上的小模型，互不抢占资源，没有任何一条群聊内容离开你的机器。
 - **全在线**：填一个 OpenAI 兼容的 API 就能跑，不需要显卡。
 - **混合**：把对话生成交给在线模型，记忆整合、会话压缩这类高频低难度的活留在本地，只有需要强推理的那一步出网。
-选全本地时，不出网是彻底的：需要联网的工具（查天气、查番剧）由插件自己发请求，而判断该不该用工具、把结果压缩成一句话、把插件卡片渲染成图片，全部在本地完成。
+
+> 注：选全本地时，不出网是彻底的：需要联网的工具（查天气、查番剧）由插件自己发请求，而判断该不该用工具、把结果压缩成一句话、把插件卡片渲染成图片，全部在本地完成。
 
 ## 🔌 三种部署模式
 
