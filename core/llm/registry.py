@@ -7,13 +7,18 @@
 「换成在线模型」意味着六处都要动、且每处读的配置键都不一样。本模块把这件事
 收成两层：
 
-- **端点（Endpoint）** = ``base_url`` + ``api_key`` + ``kind`` + 并发上限 + 超时。
+- **端点（Endpoint）** = ``base_url`` + ``api_key`` + ``kind`` + **默认模型** + 并发上限
+  + 超时。
   它同时是两个东西的单位：**API key 的归属单位**（不同 key = 不同前缀缓存域，
   这是「对话域与记忆域各用一把 key」能提高缓存命中率的前提）与**闸门资源单位**
   （见 ``core.llm.scheduler``）。共四个**静态**槽位：
   ``LOCAL`` / ``ONLINE_CHAT`` / ``ONLINE_MEMORY`` / ``EXTRA``。
-- **角色（Role）** = 引用某个端点槽 + 自己的 ``model`` / ``temperature`` /
-  ``max_tokens`` / 降级端点。共六个角色，对应改造前的六处构造点。
+- **角色（Role）** = 引用某个端点槽 + ``temperature`` / ``max_tokens`` / 降级端点，
+  以及一个**可选的**模型覆盖。共六个角色，对应改造前的六处构造点。
+
+模型 ID 归端点而不是归角色：一个端点通常只对应一家服务商的一份模型清单，
+「换服务商」应当只改一处，而不是在六个角色上各写一遍同一个字符串。角色仍能覆盖
+（同一端点上某个角色要用更便宜的那档模型），三档解析顺序见 :func:`_resolve_role_model`。
 
 **为什么槽位是固定四个而不是动态列表**：``deploy/env_schema.py`` 用 AST 扫
 ``config/settings.py`` 里的字面量 ``_env*("KEY", ...)`` 调用来生成 GUI 表单，
@@ -105,6 +110,10 @@ class Endpoint:
     kind: str
     concurrency: int
     timeout: float
+    # 本槽默认的模型 ID。放在端点上而不是每个角色上重复一遍：一个端点通常只对应
+    # 一家服务商的一份模型清单，"换服务商" 就该只改一处。角色仍可覆盖，见
+    # _resolve_role_model。
+    model: str = ""
 
     @property
     def is_local(self) -> bool:
@@ -121,6 +130,7 @@ class Endpoint:
             "slot": self.slot,
             "base_url": self.base_url,
             "kind": self.kind,
+            "model": self.model,
             "has_api_key": bool(self.api_key),
             "concurrency": self.concurrency,
             "timeout": self.timeout,
@@ -183,6 +193,7 @@ def _endpoint_from_settings(slot: str) -> Endpoint:
     prefix = f"LLM_ENDPOINT_{slot}_"
     base_url = str(getattr(s, prefix + "BASE_URL", "") or "").strip()
     api_key = str(getattr(s, prefix + "API_KEY", "") or "").strip()
+    model = str(getattr(s, prefix + "MODEL", "") or "").strip()
     kind = str(getattr(s, prefix + "KIND", "") or "").strip().lower()
     if kind not in (KIND_LOCAL, KIND_ONLINE):
         if kind:
@@ -227,6 +238,7 @@ def _endpoint_from_settings(slot: str) -> Endpoint:
         kind=kind,
         concurrency=concurrency,
         timeout=timeout,
+        model=model,
     )
 
 
@@ -292,6 +304,64 @@ def _role_max_tokens(role: str, raw: Any) -> int:
     return 1024
 
 
+# 角色 MODEL 留空时继承的那个旧键（与 ``config/settings.py`` 里的 ``_env_inherit``
+# 声明一一对应）。registry 需要这张表来回答一个 settings 层答不上来的问题：
+# **用户到底有没有为这个角色单独指定模型**——``_env_inherit`` 在 settings 层就把
+# 留空折叠成了旧键的值，两者到这里已经分不开。拿角色值与旧键值比一下就能分开：
+# 相等 = 没单独指定（走端点的模型），不等 = 单独指定了（角色覆盖端点）。
+_ROLE_MODEL_LEGACY_KEY: dict[str, str] = {
+    ROLE_CHAT: "LM_STUDIO_MODEL",
+    ROLE_ROUTER: "LM_STUDIO_MODEL",
+    ROLE_PLUGIN: "ASTRBOT_LLM_MODEL",
+    ROLE_COMPACT: "LM_STUDIO_MODEL",
+    ROLE_CONSOLIDATION: "CONSOLIDATION_LM_STUDIO_MODEL",
+    ROLE_EXTRACT: "MEMORY_EXTRACT_LM_STUDIO_MODEL",
+}
+
+# 每个旧键「归属」的端点槽——GUI 里那张卡的模型输入框绑的就是这个旧键
+# （LOCAL 卡的模型 = LM_STUDIO_MODEL，EXTRA 卡的模型 = CONSOLIDATION_LM_STUDIO_MODEL），
+# 所以哪怕用户把这张卡指到在线服务商，旧键里的值也是他**为这张卡**填的，仍然算数。
+# 反过来，角色被挪到别的槽（尤其两个在线槽）时旧键就不算了：那里的值是本机模型名。
+_LEGACY_MODEL_HOME_SLOT: dict[str, str] = {
+    "LM_STUDIO_MODEL": SLOT_LOCAL,
+    "ASTRBOT_LLM_MODEL": SLOT_LOCAL,
+    "MEMORY_EXTRACT_LM_STUDIO_MODEL": SLOT_LOCAL,
+    "CONSOLIDATION_LM_STUDIO_MODEL": SLOT_EXTRA,
+}
+
+
+def _resolve_role_model(role: str, prefix: str, ep: Endpoint | None) -> str:
+    """角色最终用的模型 ID。顺序：**角色显式 MODEL → 端点 MODEL → 角色旧键**。
+
+    三档的理由各不相同：
+
+    1. 角色显式 MODEL 最高，因为「同一个端点上某个角色换个模型」是真实需求
+       （兜底判定挑更便宜的那档），而这是唯一能表达它的地方；
+    2. 端点 MODEL 第二，因为模型清单是随服务商走的——换端点就该换模型，
+       而不是让人在六个角色上各写一遍同一个字符串（GUI 的端点卡片即本档）；
+    3. 角色旧键垫底，保证存量 ``.env`` 逐字等价：只填了
+       ``MEMORY_EXTRACT_LM_STUDIO_MODEL`` 的用户，其 EXTRACT 角色仍用那个小模型。
+
+    为什么第 3 档不能排在第 2 档前面，以及为什么它在在线槽上会被整个跳过：旧键
+    大多默认继承 ``LM_STUDIO_MODEL``，也就是**本机模型名**。把本机模型名发给在线
+    服务商一律 400，而各家的报错文案还都不一样——远不如在 ``validate()`` 里直接说
+    「这张卡没填模型」。所以第 3 档只在两种情况下生效：端点是本机的，或者端点正是
+    这个旧键归属的那张卡（见 ``_LEGACY_MODEL_HOME_SLOT``，例如 EXTRA 卡被指到在线
+    服务商、模型 ID 就填在 GUI 的「记忆整合模型 ID」里）。
+    """
+    s = _settings()
+    role_model = str(getattr(s, prefix + "MODEL", "") or "").strip()
+    legacy_key = _ROLE_MODEL_LEGACY_KEY.get(role, "")
+    inherited = str(getattr(s, legacy_key, "") or "").strip() if legacy_key else ""
+    if role_model and role_model != inherited:
+        return role_model
+    if ep is not None and ep.model:
+        return ep.model
+    if ep is None or ep.kind == KIND_LOCAL or ep.slot == _LEGACY_MODEL_HOME_SLOT.get(legacy_key, ""):
+        return role_model
+    return ""
+
+
 def _binding_from_settings(role: str) -> RoleBinding:
     """按 ``LLM_ROLE_<ROLE>_*`` 读一个角色。"""
     s = _settings()
@@ -312,11 +382,18 @@ def _binding_from_settings(role: str) -> RoleBinding:
             ("error", f"角色 {role} 绑到端点槽 {slot}，但该槽没配 BASE_URL，调用会失败")
         )
 
-    model = str(getattr(s, prefix + "MODEL", "") or "").strip()
+    model = _resolve_role_model(role, prefix, ep)
     # 在线端点必须显式给模型 ID：本地 LM Studio 留空由服务端默认路由，
     # 在线厂商留空一律 400，而且报错文案各家都不一样，不如启动就说清楚。
     if ep is not None and ep.kind == KIND_ONLINE and not model:
-        _issues.append(("error", f"角色 {role} 用的是在线端点 {ep.slot}，但没配 MODEL"))
+        _issues.append(
+            (
+                "error",
+                f"角色 {role} 用的是在线端点 {ep.slot}，但没配 MODEL"
+                f"（在 LLM_ENDPOINT_{ep.slot}_MODEL 里给该端点配一个，"
+                f"或单独写 {prefix}MODEL）",
+            )
+        )
 
     try:
         temperature = float(getattr(s, prefix + "TEMPERATURE", 0.7))

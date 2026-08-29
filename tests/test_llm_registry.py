@@ -43,21 +43,25 @@ _SECRET = "sk-do-not-leak-0123456789"
 _BASELINE: dict[str, object] = {
     "LLM_ENDPOINT_LOCAL_BASE_URL": _LOCAL_URL,
     "LLM_ENDPOINT_LOCAL_API_KEY": "",
+    "LLM_ENDPOINT_LOCAL_MODEL": "",
     "LLM_ENDPOINT_LOCAL_KIND": "local",
     "LLM_ENDPOINT_LOCAL_CONCURRENCY": 1,
     "LLM_ENDPOINT_LOCAL_TIMEOUT": 120.0,
     "LLM_ENDPOINT_ONLINE_CHAT_BASE_URL": "",
     "LLM_ENDPOINT_ONLINE_CHAT_API_KEY": "",
+    "LLM_ENDPOINT_ONLINE_CHAT_MODEL": "",
     "LLM_ENDPOINT_ONLINE_CHAT_KIND": "online",
     "LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY": 4,
     "LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT": 120.0,
     "LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL": "",
     "LLM_ENDPOINT_ONLINE_MEMORY_API_KEY": "",
+    "LLM_ENDPOINT_ONLINE_MEMORY_MODEL": "",
     "LLM_ENDPOINT_ONLINE_MEMORY_KIND": "online",
     "LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY": 2,
     "LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT": 120.0,
     "LLM_ENDPOINT_EXTRA_BASE_URL": _LOCAL_URL,
     "LLM_ENDPOINT_EXTRA_API_KEY": "",
+    "LLM_ENDPOINT_EXTRA_MODEL": "",
     "LLM_ENDPOINT_EXTRA_KIND": "local",
     "LLM_ENDPOINT_EXTRA_CONCURRENCY": 1,
     "LLM_ENDPOINT_EXTRA_TIMEOUT": 120.0,
@@ -99,6 +103,13 @@ _BASELINE: dict[str, object] = {
     "SESSION_SUMMARY_MAX_TOKENS": 300,
     # 旧键：与 LOCAL 同址，纯本地用户不该看到「旧键已失效」告警
     "MEMORY_EXTRACT_LM_STUDIO_BASE_URL": _LOCAL_URL,
+    # 四个模型旧键钉成空串：_resolve_role_model 拿「角色值 == 旧键值」判断
+    # 「用户有没有为这个角色单独指定模型」，不钉住就会读到开发机 .env 里的值，
+    # 用例结果随机器而变。
+    "LM_STUDIO_MODEL": "",
+    "ASTRBOT_LLM_MODEL": "",
+    "CONSOLIDATION_LM_STUDIO_MODEL": "",
+    "MEMORY_EXTRACT_LM_STUDIO_MODEL": "",
     # 继承主键：LLM_ENDPOINT_LOCAL_* / EXTRA_* 留空时都从它继承，
     # 而 _local_slot_override_warning() 直接读它。不钉住就会读开发机的 .env。
     "LM_STUDIO_BASE_URL": _LOCAL_URL,
@@ -358,6 +369,105 @@ def test_online_role_without_a_model_is_an_error(env):
 def test_local_role_without_a_model_is_fine(env):
     env(LLM_ROLE_CHAT_MODEL="")
     assert not any("MODEL" in m for m in _issues("error"))
+
+
+# ---------- 模型 ID 的三档解析 ----------
+# 顺序是「角色显式 MODEL → 端点 MODEL → 角色旧键」，判据见 registry
+# 的 _resolve_role_model。这一组用例守的是「模型写在端点卡片上、六个角色不用
+# 重复写一遍」这个界面约定，以及它不能改变存量本地配置的行为。
+
+
+def test_endpoint_model_is_used_when_the_role_only_inherited_one(env):
+    """角色 MODEL 只是从旧键继承来的（值相等）→ 视为没写，用端点上的。"""
+    env(
+        LM_STUDIO_MODEL="local-27b",
+        LLM_ROLE_CHAT_MODEL="local-27b",  # _env_inherit 的产物，不是用户写的
+        LLM_ENDPOINT_LOCAL_MODEL="slot-model",
+    )
+    b = registry.binding(registry.ROLE_CHAT)
+    assert b is not None
+    assert b.model == "slot-model"
+
+
+def test_an_explicit_role_model_beats_the_endpoint_model(env):
+    """同一端点上让某个角色用别的模型——这是角色级 MODEL 唯一还需要的用途。"""
+    env(
+        LM_STUDIO_MODEL="local-27b",
+        LLM_ROLE_ROUTER_MODEL="cheap-router",
+        LLM_ENDPOINT_LOCAL_MODEL="slot-model",
+    )
+    b = registry.binding(registry.ROLE_ROUTER)
+    assert b is not None
+    assert b.model == "cheap-router"
+
+
+def test_an_explicit_legacy_key_survives_an_empty_endpoint_model(env):
+    """存量配置：只写了 MEMORY_EXTRACT_LM_STUDIO_MODEL 挑个小模型。
+
+    端点 MODEL 留空时必须回落到它，否则「升级后抽取悄悄换成了 27B」——
+    这类静默变化比报错难查得多。
+    """
+    env(
+        LM_STUDIO_MODEL="local-27b",
+        MEMORY_EXTRACT_LM_STUDIO_MODEL="local-e4b",
+        LLM_ROLE_EXTRACT_MODEL="local-e4b",  # _env_inherit 的产物
+        LLM_ENDPOINT_LOCAL_MODEL="",
+    )
+    b = registry.binding(registry.ROLE_EXTRACT)
+    assert b is not None
+    assert b.model == "local-e4b"
+
+
+def test_moving_a_role_online_takes_the_card_model_not_the_local_one(env):
+    """本机模型名发给在线服务商一律 400，所以第二档必须先于第三档。"""
+    env(
+        LM_STUDIO_MODEL="local-27b",
+        LLM_ROLE_CHAT_MODEL="local-27b",  # _env_inherit 的产物
+        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_ONLINE_CHAT_MODEL="deepseek-chat",
+        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+    )
+    b = registry.binding(registry.ROLE_CHAT)
+    assert b is not None
+    assert b.model == "deepseek-chat"
+    assert _issues("error") == []
+
+
+def test_the_extra_card_model_still_counts_when_that_card_goes_online(env):
+    """EXTRA 卡指到在线服务商时，模型 ID 仍然读 GUI 的「记忆整合模型 ID」。
+
+    那个输入框绑的就是 CONSOLIDATION_LM_STUDIO_MODEL，用户填的是在线模型名——
+    「在线槽不认旧键」这条规则不能把自己这张卡的输入框也一起否掉。
+    """
+    env(
+        LLM_ENDPOINT_EXTRA_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_EXTRA_API_KEY=_SECRET,
+        LLM_ENDPOINT_EXTRA_KIND="online",
+        LLM_ENDPOINT_EXTRA_MODEL="",
+        CONSOLIDATION_LM_STUDIO_MODEL="deepseek-chat",
+        LLM_ROLE_CONSOLIDATION_MODEL="deepseek-chat",  # _env_inherit 的产物
+    )
+    b = registry.binding(registry.ROLE_CONSOLIDATION)
+    assert b is not None
+    assert b.model == "deepseek-chat"
+    assert _issues("error") == []
+
+
+def test_the_missing_online_model_error_names_the_endpoint_key(env):
+    """报错要指向「该去哪填」。端点键在前，因为那才是界面上的那个框。"""
+    env(
+        LM_STUDIO_MODEL="local-27b",
+        LLM_ROLE_CHAT_MODEL="local-27b",
+        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_ONLINE_CHAT_MODEL="",
+        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+    )
+    msgs = [m for m in _issues("error") if "没配 MODEL" in m]
+    assert msgs, _issues("error")
+    assert "LLM_ENDPOINT_ONLINE_CHAT_MODEL" in msgs[0]
+    assert "LLM_ROLE_CHAT_MODEL" in msgs[0]
 
 
 @pytest.mark.parametrize("value", ["", "none", "NONE"])
@@ -926,6 +1036,9 @@ def test_endpoint_describe_reports_only_whether_a_key_exists(env):
     described = ep.describe()
     assert described["has_api_key"] is True
     assert "api_key" not in described
+    # 端点默认模型是给人看的（doctor 报告里要能认出这张卡配的是哪个模型），
+    # 与 key 不同，它不敏感。
+    assert described["model"] == ""
     assert _SECRET not in json.dumps(described, ensure_ascii=False)
 
 

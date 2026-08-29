@@ -884,6 +884,11 @@ ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
 LLM_ENDPOINT_LOCAL_BASE_URL = _env_inherit("LLM_ENDPOINT_LOCAL_BASE_URL", LM_STUDIO_BASE_URL)
 # 本地服务通常不校验 key；少数本地网关要求填 dummy key，那时填这里。
 LLM_ENDPOINT_LOCAL_API_KEY = _env_inherit("LLM_ENDPOINT_LOCAL_API_KEY", LM_STUDIO_API_KEY)
+# 端点级模型 ID：绑到本槽的角色自己没写 MODEL 时用它（解析顺序见 core/llm/registry
+# 的 _resolve_role_model）。**本机槽留空即可**——留空时每个角色回落到自己的旧键
+# （LM_STUDIO_MODEL / ASTRBOT_LLM_MODEL / MEMORY_EXTRACT_LM_STUDIO_MODEL 等），
+# 那正是改造前的行为；填了这里就等于「本机槽统一用这一个模型」，会盖掉那些旧键。
+LLM_ENDPOINT_LOCAL_MODEL = _env("LLM_ENDPOINT_LOCAL_MODEL", "")
 # local | online。**显式声明，不再靠「有没有 api_key」猜**——那个启发式在两个
 # 方向上都会错：本地网关要求 dummy key 时漏发 reasoning_effort=none（本地推理
 # 模型会把 token 全耗在思维链上、content 为空），在线服务不要 key 时误发
@@ -900,6 +905,10 @@ LLM_ENDPOINT_ONLINE_CHAT_BASE_URL = _env("LLM_ENDPOINT_ONLINE_CHAT_BASE_URL", ""
 # 在线端点必须有 key（registry 启动校验会拦），且**不要与记忆域填同一个 key**：
 # 同 key 会让两个域共享一个缓存空间、互相驱逐彼此的固定前缀。
 LLM_ENDPOINT_ONLINE_CHAT_API_KEY = _env("LLM_ENDPOINT_ONLINE_CHAT_API_KEY", "")
+# 在线槽的模型 ID **写在这里**，不必在每个角色上重复一遍：切到在线时，绑到本槽的
+# 角色默认全用它。个别角色要用别的模型（例如兜底判定挑一个更便宜的），再单独写
+# 那个角色的 LLM_ROLE_<角色>_MODEL 覆盖。
+LLM_ENDPOINT_ONLINE_CHAT_MODEL = _env("LLM_ENDPOINT_ONLINE_CHAT_MODEL", "")
 LLM_ENDPOINT_ONLINE_CHAT_KIND = _env("LLM_ENDPOINT_ONLINE_CHAT_KIND", "online")
 # 在线端点并发度按厂商限流填。默认 4 是个保守值，不是厂商上限。
 LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY", 4)
@@ -908,6 +917,7 @@ LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT"
 # 槽 ONLINE_MEMORY：在线·记忆域。持有「记忆整合」那把 key（整合 / 压缩 / 提取共用）。
 LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL = _env("LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL", "")
 LLM_ENDPOINT_ONLINE_MEMORY_API_KEY = _env("LLM_ENDPOINT_ONLINE_MEMORY_API_KEY", "")
+LLM_ENDPOINT_ONLINE_MEMORY_MODEL = _env("LLM_ENDPOINT_ONLINE_MEMORY_MODEL", "")
 LLM_ENDPOINT_ONLINE_MEMORY_KIND = _env("LLM_ENDPOINT_ONLINE_MEMORY_KIND", "online")
 # 记忆域是后台任务，并发度比对话域低：它不该抢对话的限流额度。
 LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY", 2)
@@ -920,6 +930,9 @@ LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_MEMORY_TIME
 # 混合部署或调试时也可把它指向第三个服务。
 LLM_ENDPOINT_EXTRA_BASE_URL = _env_inherit("LLM_ENDPOINT_EXTRA_BASE_URL", CONSOLIDATION_LM_STUDIO_BASE_URL)
 LLM_ENDPOINT_EXTRA_API_KEY = _env_inherit("LLM_ENDPOINT_EXTRA_API_KEY", CONSOLIDATION_LM_STUDIO_API_KEY)
+# 留空即可：CONSOLIDATION 角色回落到 CONSOLIDATION_LM_STUDIO_MODEL（GUI 里的
+# 「记忆整合模型 ID」），与改造前一致。指向第三个服务时才需要填这里。
+LLM_ENDPOINT_EXTRA_MODEL = _env("LLM_ENDPOINT_EXTRA_MODEL", "")
 LLM_ENDPOINT_EXTRA_KIND = _env("LLM_ENDPOINT_EXTRA_KIND", "local")
 LLM_ENDPOINT_EXTRA_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_CONCURRENCY", 1)
 LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
@@ -935,6 +948,14 @@ LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
 # CONSOLIDATION 在 EXTRA 槽（= 改造前的 consolidation 闸门）。
 # 模型 / 温度 / max_tokens 则继承各自原来的旧键；没有旧键的（CHAT/ROUTER/COMPACT）
 # 写死成改造前 LMStudioBackend 的构造默认值。
+#
+# **MODEL 通常不用填**：模型 ID 的正常出处是端点槽的 LLM_ENDPOINT_<槽>_MODEL
+# （GUI 的端点卡片就是它），这里只是**角色级覆盖**，给「同一个端点上，某个角色要用
+# 另一个模型」的场景（例如兜底判定挑一个更便宜的）。完整解析顺序见
+# core/llm/registry.py 的 _resolve_role_model：
+#   角色显式 MODEL → 该角色所绑端点的 MODEL → 角色自己的旧键（下面每行标出的那个）。
+# 「显式」的判据是「值与它继承的旧键不同」——只写了旧键的存量 .env 因此仍走第三档，
+# 与改造前逐字等价；而把角色切到在线槽时，本机模型名不会被误带到在线服务商去。
 #
 # FALLBACK_ENDPOINT 留空 = 不降级。降级只在鉴权失败 / 限流 / 5xx 重试耗尽 /
 # 连接超时时触发；400（请求体错误）**不降级**——那是配置问题，降级只会掩盖它。

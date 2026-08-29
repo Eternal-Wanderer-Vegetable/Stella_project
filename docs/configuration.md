@@ -36,23 +36,21 @@ CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 ALLOWED_GROUPS=123456789
 LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=https://api.example.com
 LLM_ENDPOINT_ONLINE_CHAT_API_KEY=sk-对话专用
+LLM_ENDPOINT_ONLINE_CHAT_MODEL=vendor/chat-model
 LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL=https://api.example.com
 LLM_ENDPOINT_ONLINE_MEMORY_API_KEY=sk-记忆专用
+LLM_ENDPOINT_ONLINE_MEMORY_MODEL=vendor/cheap-model
 LLM_ROLE_CHAT_ENDPOINT=ONLINE_CHAT
-LLM_ROLE_CHAT_MODEL=vendor/chat-model
 LLM_ROLE_ROUTER_ENDPOINT=ONLINE_CHAT
-LLM_ROLE_ROUTER_MODEL=vendor/cheap-model
 LLM_ROLE_PLUGIN_ENDPOINT=ONLINE_CHAT
-LLM_ROLE_PLUGIN_MODEL=vendor/cheap-model
 LLM_ROLE_COMPACT_ENDPOINT=ONLINE_MEMORY
-LLM_ROLE_COMPACT_MODEL=vendor/cheap-model
 LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY
-LLM_ROLE_CONSOLIDATION_MODEL=vendor/cheap-model
 LLM_ROLE_EXTRACT_ENDPOINT=ONLINE_MEMORY
+# 可选：让阶段 2 提取在同一个端点上换用强模型（角色级覆盖，不填就用端点的模型）
 LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
 ```
 
-两把 key 必须不同，原因见[为什么必须两把在线 key](#为什么必须两把在线-key)。用安装器的「配置 → 模型服务」分区点一下「纯在线（双 key）」预设，等价于上面这段。
+模型 ID 写在**端点**上，指到该端点的角色默认都用它——不必在六个角色上各写一遍同一个字符串。两把 key 必须不同，原因见[为什么必须两把在线 key](#为什么必须两把在线-key)。用安装器的「配置 → 模型服务」分区点一下「纯在线（双 key）」预设，等价于上面这段。
 
 ---
 
@@ -176,8 +174,10 @@ python -m deploy space-merge --from space_1 --to casual
 
 Stella 的模型配置分两层：
 
-- **端点（Endpoint）** = 一个 OpenAI 兼容服务：地址、API key、类型、并发闸门、超时。它是「一把 API key 的归属单位」，也是「一道排队闸门的归属单位」。
-- **角色（Role）** = 一次具体调用：用哪个端点、哪个模型、什么温度、多少 max_tokens。
+- **端点（Endpoint）** = 一个 OpenAI 兼容服务：地址、API key、类型、**默认模型**、并发闸门、超时。它是「一把 API key 的归属单位」，也是「一道排队闸门的归属单位」。
+- **角色（Role）** = 一次具体调用：用哪个端点、什么温度、多少 max_tokens，外加一个**可选的**模型覆盖。
+
+模型 ID 挂在端点上而不是每个角色上重复一遍：一个端点通常只对应一家服务商的一份模型清单，「换服务商」就该只改一处。
 
 共 4 个端点槽 × 6 个角色。「对话走在线、整合留本地」这类组合因此只是改几个 `LLM_ROLE_*_ENDPOINT`，不需要碰代码，也不需要为某家服务商写适配。
 
@@ -185,7 +185,7 @@ Stella 的模型配置分两层：
 
 ### 端点（Endpoint）
 
-键名形如 `LLM_ENDPOINT_<槽名>_<字段>`，字段有 `BASE_URL` / `API_KEY` / `KIND` / `CONCURRENCY` / `TIMEOUT`。
+键名形如 `LLM_ENDPOINT_<槽名>_<字段>`，字段有 `BASE_URL` / `API_KEY` / `MODEL` / `KIND` / `CONCURRENCY` / `TIMEOUT`。
 
 | 槽名 | 用途 | 默认 `KIND` | 默认 `CONCURRENCY` | 默认 `TIMEOUT` |
 |---|---|---|---|---|
@@ -194,7 +194,8 @@ Stella 的模型配置分两层：
 | `ONLINE_MEMORY` | 在线服务商 · 记忆域 | `online` | `2` | `120.0` |
 | `EXTRA` | 备用槽 / 第二个本机实例 | `local` | `1` | `120.0` |
 
-- `KIND` 只有 `local` / `online` 两个值，它是判据而非注释：`online` 端点没填 API key、或指向它的角色没显式给模型，都会被 `registry.validate()` 判成 **error**（`python -m deploy doctor` 会打出来）。
+- `MODEL` 是该槽的默认模型 ID，指到本槽的角色都用它（角色仍可单独覆盖，见下节）。
+- `KIND` 只有 `local` / `online` 两个值，它是判据而非注释：`online` 端点没填 API key、或指向它的角色最终没有模型可用，都会被 `registry.validate()` 判成 **error**（`python -m deploy doctor` 会打出来）。GUI 的端点卡片**不给这一项控件**（卡头的徽标只显示结果）：两个 `ONLINE_*` 槽固定 `online`，`LOCAL` 与 `EXTRA` 按地址推导（`127.*` / `10.*` / `192.168.*` / `172.16-31.*` / `localhost` / 裸主机名 / 留空算 `local`，其余算 `online`），保存时按推导值落盘。手工编辑 `.env` 可以写任意值，但下次在 GUI 里保存会被推导值覆盖。若你的部署是「跑在 `127.0.0.1` 的中转网关、按上游厂商计费」，请把它填进两张在线卡，而不是改本机卡的类型——那种地址在本机、钱是真花的情况，按地址推导一定判错。
 - `CONCURRENCY` 是该槽闸门的并发上限，同槽内 FIFO 严格串行。本机 LM Studio **不排队**，并发请求只会互相拖慢且难以归因，所以本地槽保持 `1`；在线端点可以放大到服务商允许的并发。
 - `TIMEOUT` 是单次请求超时，**与 `LLM_TIMEOUT` 不是一回事**——后者是 `core/pipeline.py` 的整轮回复预算。
 
@@ -206,6 +207,8 @@ Stella 的模型配置分两层：
 | `LLM_ENDPOINT_LOCAL_API_KEY` | `LM_STUDIO_API_KEY` |
 | `LLM_ENDPOINT_EXTRA_BASE_URL` | `CONSOLIDATION_LM_STUDIO_BASE_URL`（它再继承 `LM_STUDIO_BASE_URL`） |
 | `LLM_ENDPOINT_EXTRA_API_KEY` | `CONSOLIDATION_LM_STUDIO_API_KEY` |
+
+`MODEL` 不走这套继承，而是「留空则由角色各自回落到自己的旧键」（见下节的解析顺序）：`LLM_ENDPOINT_LOCAL_MODEL` 留空时，绑在 `LOCAL` 上的角色仍分别用 `LM_STUDIO_MODEL` / `ASTRBOT_LLM_MODEL` / `MEMORY_EXTRACT_LM_STUDIO_MODEL`，与改造前逐字一致；填上它就等于「本机槽统一用这一个模型」，会盖掉那些旧键。GUI 的本机卡片与备用卡片上那个「模型 ID」输入框写的是旧键（`LM_STUDIO_MODEL` / `CONSOLIDATION_LM_STUDIO_MODEL`），`LLM_ENDPOINT_LOCAL_MODEL` / `LLM_ENDPOINT_EXTRA_MODEL` 留在高级配置里当逃生口。
 
 > 纯本地部署下 `EXTRA` 与 `LOCAL` 同址，它的作用只是给整合一道**独立的闸门**：整合是长任务，与聊天共用闸门会让 @ 回复排在它后面。
 
@@ -222,7 +225,13 @@ Stella 的模型配置分两层：
 | `CONSOLIDATION` | 两阶段整合的阶段 1 | `EXTRA` | 继承 `CONSOLIDATION_LM_STUDIO_TEMPERATURE` | 继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` |
 | `EXTRACT` | 阶段 2 记忆候选提取 | `LOCAL` | 继承 `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | 继承 `MEMORY_EXTRACT_MAX_TOKENS` |
 
-`MODEL` 全部是继承型：`CHAT` / `ROUTER` / `COMPACT` 继承 `LM_STUDIO_MODEL`，`PLUGIN` 继承 `ASTRBOT_LLM_MODEL`，`CONSOLIDATION` 继承 `CONSOLIDATION_LM_STUDIO_MODEL`，`EXTRACT` 继承 `MEMORY_EXTRACT_LM_STUDIO_MODEL`。
+**`MODEL` 通常不用填。** 模型 ID 的正常出处是上一节的 `LLM_ENDPOINT_<槽名>_MODEL`（GUI 的端点卡片就是它），角色级 `MODEL` 只是**覆盖项**，用于「同一个端点上，某个角色要用另一个模型」——例如兜底判定挑一档更便宜的。GUI 的角色矩阵里「模型」一列因此是只读显示（显示最终结果与它的出处），要覆盖请改高级配置里的 `LLM_ROLE_<角色>_MODEL`。
+
+完整解析顺序（`core/llm/registry.py::_resolve_role_model`）：
+
+1. **角色显式 `MODEL`** —— 判据是「值与它继承的旧键不同」。`MODEL` 全部是继承型（`CHAT` / `ROUTER` / `COMPACT` 继承 `LM_STUDIO_MODEL`，`PLUGIN` 继承 `ASTRBOT_LLM_MODEL`，`CONSOLIDATION` 继承 `CONSOLIDATION_LM_STUDIO_MODEL`，`EXTRACT` 继承 `MEMORY_EXTRACT_LM_STUDIO_MODEL`），所以「只写了旧键」的存量 `.env` 落在第 3 档，行为与改造前逐字相同；
+2. **该角色所绑端点的 `MODEL`**；
+3. **角色自己的旧键**（第 1 档括号里那个）。这一档在**在线**端点上只对「这个旧键归属的那张卡」生效：`LM_STUDIO_MODEL` 归 `LOCAL`、`CONSOLIDATION_LM_STUDIO_MODEL` 归 `EXTRA`。把角色挪到 `ONLINE_CHAT` / `ONLINE_MEMORY` 而端点没填模型时，本机模型名不会被误带到在线服务商去（那一律是 400），而是当场报「该端点没填模型」。
 
 > **「留空即继承」要求真的留空。** 继承型键写成 `KEY=`（等号后什么都没有）与「整行不存在」**不等价**：空串会被当成显式值，把继承链就地切断。2026-08-28 之前 `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` 正是这样变成空串，使阶段 2 每次都拼出无协议 URL 而失败。手改 `.env` 时请**删掉整行**而不是清空等号右边；GUI 已经代你处理（留空的继承型键不写进 `.env`）。
 
@@ -271,7 +280,7 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 
 ### 主聊天模型
 
-本节与下面的「记忆整理模型」「记忆候选提取」三段的键**仍然是配置的主入口**（向导与 GUI 基础配置写的就是它们），同时充当上面角色键的继承上游——`LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` 留空时都取 `LM_STUDIO_MODEL`。只有要让某个角色**不同于**本机默认时，才需要填对应的 `LLM_ROLE_*`。
+本节与下面的「记忆整理模型」「记忆候选提取」三段的键**仍然是配置的主入口**（向导写的就是它们，GUI 里本机与备用两张端点卡片上的「模型 ID」也是它们），同时充当上面角色键的继承上游——`LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` 留空时都取 `LM_STUDIO_MODEL`。只有要让某个角色**不同于**本机默认时，才需要填对应的 `LLM_ROLE_*`。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
@@ -294,7 +303,7 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 | `CONSOLIDATION_LOCAL_MAX_TOKENS` | `1200` | 整合最大生成 token |
 | `CONSOLIDATION_TRIGGER_NEW_MESSAGES` | `10` | 累积多少新消息才触发一次整合 |
 
-> `CONSOLIDATION_LM_STUDIO_BASE_URL` 现在还是 `EXTRA` 端点槽的继承上游，`CONSOLIDATION_LM_STUDIO_MODEL` / `_TEMPERATURE` / `CONSOLIDATION_LOCAL_MAX_TOKENS` 则是 `LLM_ROLE_CONSOLIDATION_*` 的上游。**不要因为改用了角色键就删掉它们**——删掉会把 `EXTRA` 槽的地址一起清空。整合改走在线只需设 `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY` 与 `LLM_ROLE_CONSOLIDATION_MODEL`。
+> `CONSOLIDATION_LM_STUDIO_BASE_URL` 现在还是 `EXTRA` 端点槽的继承上游，`CONSOLIDATION_LM_STUDIO_MODEL` / `_TEMPERATURE` / `CONSOLIDATION_LOCAL_MAX_TOKENS` 则是 `LLM_ROLE_CONSOLIDATION_*` 的上游。**不要因为改用了角色键就删掉它们**——删掉会把 `EXTRA` 槽的地址一起清空。整合改走在线只需设 `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY`，模型填在 `LLM_ENDPOINT_ONLINE_MEMORY_MODEL` 上。
 
 > **注意 `CONSOLIDATION_LOCAL_MAX_TOKENS`**：批次 30 + overlap 15 意味着单次最多喂入 45 条消息，输出被截断会导致 JSON 解析失败，而解析失败时 checkpoint **仍会推进**（防止同批反复重跑），那批消息就永久丢失了。`core/llm/lm_studio.py` 会在 `finish_reason=length` 时输出告警，建议运行一段后检查日志有无该告警。
 
@@ -329,7 +338,7 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 | `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | 抽取任务不需要发散，比整合的 0.3 更低 |
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | 只输出候选数组，不需要很大 |
 
-> 这四个 `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` 是 `LLM_ROLE_EXTRACT_*` 的继承上游。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 与 `LLM_ROLE_EXTRACT_MODEL` 即可，本节的键不用动。
+> 这四个 `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` 是 `LLM_ROLE_EXTRACT_*` 的继承上游。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 即可（模型取该端点的 `MODEL`；要与同端点其他角色用不同的模型才需要写 `LLM_ROLE_EXTRACT_MODEL`），本节的键不用动。
 
 **为什么要拆**：小模型能总结主题，却在噪音环境下系统性地把候选提取判空。2026-08-16 实测 7 批整合全部返回空候选，而信息明确出现在它自己写的摘要里——是「读到了但主动弃掉」，不是没看到。候选提取是高精度抽取任务，交给大模型。
 

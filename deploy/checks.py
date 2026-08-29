@@ -905,9 +905,10 @@ def check_llm_role_model(
                 id=f"llm_role_model_{role}",
                 level="warn",
                 title=f"角色 {role} 的模型 ID 可能写错了",
-                detail=f"LLM_ROLE_{role.upper()}_MODEL={model} 不在端点 {slot} "
-                f"列出的模型里。{_suggest_model(model, listed)}",
-                fix_hint=f"核对服务商文档里的模型 ID 并修正 LLM_ROLE_{role.upper()}_MODEL；"
+                detail=f"模型 ID {model} 不在端点 {slot} 列出的模型里。"
+                f"{_suggest_model(model, listed)}",
+                fix_hint=f"核对服务商文档里的模型 ID，改 LLM_ENDPOINT_{slot}_MODEL"
+                f"（GUI 的端点卡片），或改角色级覆盖 LLM_ROLE_{role.upper()}_MODEL；"
                 "若该服务商的 /v1/models 本就不列全，本条可以忽略。",
             )
         )

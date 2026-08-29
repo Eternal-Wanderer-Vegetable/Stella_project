@@ -173,7 +173,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   font: inherit;
 }
 .config-field textarea { min-height: 62px; resize: vertical; }
-.space-row { display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 8px; margin-bottom: 8px; }
+/* 列名行与数据行共用同一个 template，最后一列钉成 56px（删除按钮的宽度）——
+   写 auto 的话空列名行会塌成 0，三个列名就跟下面的框错开半个按钮。 */
+.space-head, .space-row { display: grid; grid-template-columns: 1fr 1fr 2fr 56px; gap: 8px; }
+.space-head { margin-bottom: 4px; color: var(--text-faint); font-size: 11px; }
+/* 作者样式的 display:grid 会盖掉浏览器给 [hidden] 的 display:none（作者层优先于
+   UA 层，跟选择器权重无关），所以这条必须显式写出来，否则「没有行时收起列名」不生效。 */
+.space-head[hidden] { display: none; }
+.space-row { margin-bottom: 8px; }
 .space-row input { min-width: 0; }
 .space-row .space-remove { padding: 5px 9px; color: var(--error); }
 #btn-add-space { margin-top: 4px; padding: 5px 9px; font-size: 12px; }
@@ -203,22 +210,36 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .advanced-field input { width: 100%; padding: 7px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; font: 12px var(--mono); }
 /* ── 模型服务分区（端点卡片 + 角色矩阵） ──
    矩阵有 6 列，窄窗口下不折行而是整块横向滚动：折成一列会让「哪个值属于哪个角色」
-   彻底失去参照，横滚至少还看得懂。 */
+   彻底失去参照，横滚至少还看得懂。
+   卡片则相反，一行一张：每张卡的说明文字有两三行（尤其两个在线槽要交代「为什么必须
+   用两把 key」和「群聊原文会出本机」），挤成两列会把它们压成一条竖窄缝。 */
 .svc { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
 .svc-head { display: flex; flex-direction: column; gap: 4px; }
 .svc-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
 .svc-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; color: var(--text-dim); font-size: 12px; }
 .svc-presets button { padding: 5px 10px; font-size: 12px; }
-.svc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 12px; }
+.svc-cards { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .svc-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); }
 .svc-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
 .svc-card-head code { color: var(--text-faint); font: 11px var(--mono); }
 .svc-tag { color: var(--warn); background: var(--warn-bg); border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+/* 类型徽标：卡片里不再放「类型」下拉——槽名与地址已经决定了类型，让用户再选一遍
+   只会选错（把在线卡选成 local 就绕过了「在线必须有 key」的拦截）。这里只做展示，
+   所以刻意不做成 input 的样子：有边框没边框的差别就是「能不能改」。 */
+.svc-kind { border-radius: 4px; padding: 1px 6px; font-size: 11px; white-space: nowrap; }
+.svc-kind-local { color: var(--ok); background: rgba(63, 191, 127, 0.10); }
+.svc-kind-online { color: var(--accent); background: rgba(91, 140, 255, 0.12); }
 .svc-note { color: var(--text-faint); font-size: 11px; line-height: 1.6; }
-.svc-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.svc-card-grid label:first-child { grid-column: 1 / -1; }
-.svc-card-grid label:nth-child(2) { grid-column: 1 / -1; }
-.svc-card-grid label { display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); font-size: 11px; }
+/* 卡片占满整行后，字段固定排成两行：地址 | 模型 ID ／ API key | 并发度 | 超时。
+   用 10 列网格而不是 flex-wrap：换行点由列数钉死，不随窗口宽度和内容长度乱跳
+   （flex 下窗口一窄就会把「超时」甩到第三行，或把 key 压成一条窄缝）。
+   API key 给 6/10：sk- 开头那串要能一眼核对，比一半还多一点才够；两个数值框
+   各 2/10，只放三五位数字，够了。 */
+.svc-card-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; }
+.svc-card-grid label { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--text-dim); font-size: 11px; }
+.svc-card-grid .svc-f-url, .svc-card-grid .svc-f-model { grid-column: span 5; }
+.svc-card-grid .svc-f-key { grid-column: span 6; }
+.svc-card-grid .svc-f-num { grid-column: span 2; }
 .svc-card-foot { display: flex; align-items: center; gap: 8px; }
 .svc-card-foot button { padding: 5px 9px; font-size: 12px; }
 .svc-card-foot .config-status { min-width: 0; word-break: break-word; }
@@ -228,6 +249,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .svc-role { display: flex; flex-direction: column; gap: 2px; font-size: 13px; padding-right: 8px; }
 .svc-role small { color: var(--text-faint); font: 11px/1.5 "Segoe UI", sans-serif; }
 .svc-fixed { color: var(--text-faint); font-size: 12px; text-align: center; }
+/* 角色行的模型列是算出来的只读文本，不是输入框：模型在端点卡片上填。 */
+.svc-model { display: flex; flex-direction: column; gap: 1px; min-width: 0; font: 12px/1.4 var(--mono); color: var(--text); word-break: break-all; }
+.svc-model small { color: var(--text-faint); font: 10px/1.4 "Segoe UI", sans-serif; }
+.svc-model-empty i { color: var(--text-faint); font: 11px/1.4 "Segoe UI", sans-serif; font-style: normal; }
 .svc-row-embed { color: var(--text-dim); background: rgba(255, 255, 255, 0.02); }
 .svc-row-embed .svc-fixed:first-of-type { color: var(--text-dim); border: 1px dashed var(--border); border-radius: 5px; padding: 6px 4px; }
 .svc-foot { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
@@ -272,7 +297,13 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 @media (max-width: 650px) {
   .config-grid { grid-template-columns: 1fr; }
   .config-field.full { grid-column: auto; }
+  /* 一列时列名行没有对应关系了，直接收起来，靠 placeholder 认框。 */
+  .space-head { display: none; }
   .space-row { grid-template-columns: 1fr; }
+  /* 窄窗：地址、模型、key 各占满一行，两个数值框仍并排。 */
+  .svc-card-grid { grid-template-columns: 1fr 1fr; }
+  .svc-card-grid .svc-f-url, .svc-card-grid .svc-f-model, .svc-card-grid .svc-f-key { grid-column: span 2; }
+  .svc-card-grid .svc-f-num { grid-column: span 1; }
 }
 
 
