@@ -99,6 +99,9 @@ _BASELINE: dict[str, object] = {
     "SESSION_SUMMARY_MAX_TOKENS": 300,
     # 旧键：与 LOCAL 同址，纯本地用户不该看到「旧键已失效」告警
     "MEMORY_EXTRACT_LM_STUDIO_BASE_URL": _LOCAL_URL,
+    # 继承主键：LLM_ENDPOINT_LOCAL_* / EXTRA_* 留空时都从它继承，
+    # 而 _local_slot_override_warning() 直接读它。不钉住就会读开发机的 .env。
+    "LM_STUDIO_BASE_URL": _LOCAL_URL,
     "ASTRBOT_LLM_BASE_URL": _LOCAL_URL,
 }
 
@@ -610,6 +613,65 @@ def test_no_warning_once_the_role_has_moved_off_local(env):
 def test_trailing_slashes_do_not_trigger_a_false_warning(env):
     env(MEMORY_EXTRACT_LM_STUDIO_BASE_URL=_LOCAL_URL + "/")
     assert not any("MEMORY_EXTRACT_LM_STUDIO_BASE_URL" in m for m in _issues("warn"))
+
+
+def _override_warns() -> list[str]:
+    """只挑 _local_slot_override_warning() 那一条。
+
+    不能按 ``"LM_STUDIO_BASE_URL" in m`` 筛：改了 LOCAL 地址会同时触发上面那条
+    ``MEMORY_EXTRACT_LM_STUDIO_BASE_URL`` 旧键告警（键名里也含这个子串），
+    否定用例会被它假通过。
+    """
+    return [m for m in _issues("warn") if "被显式改成" in m]
+
+
+def test_overriding_only_the_local_slot_address_warns_that_extra_stayed_behind(env):
+    """只改 LLM_ENDPOINT_LOCAL_BASE_URL：聊天跟着走了，整合还打在旧地址。
+
+    这是 GUI 隐患 #4：两个地址长得几乎一样，表现是「聊天好了、整合全失败」，
+    肉眼对不出来——没有这条告警就只能靠看日志里的连接失败反推。
+    """
+    env(LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL)
+    warns = _override_warns()
+    assert warns, "改了 LOCAL 没改主键，必须报"
+    # 告警要把两个地址都报出来，否则用户无法确认到底差在哪
+    assert any(_OTHER_URL in m and _LOCAL_URL in m for m in warns)
+    # 以及可执行的出路：改主键，或把 EXTRA 一并改掉
+    assert any("LLM_ENDPOINT_EXTRA_BASE_URL" in m for m in warns)
+
+
+def test_no_override_warning_when_extra_was_changed_too(env):
+    """两边都改了就不是「忘了跟着改」，不该打扰。"""
+    env(
+        LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL,
+        LLM_ENDPOINT_EXTRA_BASE_URL=_OTHER_URL,
+    )
+    assert not _override_warns()
+
+
+def test_no_override_warning_on_the_factory_local_config():
+    """出厂配置里两者同址（留空即继承的等价形式），不能先吓人一跳。"""
+    assert not _override_warns()
+
+
+def test_no_override_warning_when_extra_points_at_a_third_machine(env):
+    """把整合挤到第三台机器是正当用法，不是漏改。"""
+    env(
+        LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL,
+        LLM_ENDPOINT_EXTRA_BASE_URL="http://192.168.1.50:1234",
+    )
+    assert not _override_warns()
+
+
+def test_no_override_warning_when_extra_has_moved_online(env):
+    """EXTRA 已经是在线端点时，本地地址怎么改都与它无关。"""
+    env(
+        LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL,
+        LLM_ENDPOINT_EXTRA_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_EXTRA_KIND="online",
+        LLM_ENDPOINT_EXTRA_API_KEY=_SECRET,
+    )
+    assert not _override_warns()
 
 
 # ============================================================

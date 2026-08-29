@@ -61,12 +61,33 @@ class Snapshot:
     # ── LM Studio ──
     lm_reachable: bool | None = True
     lm_error: str = ""
+    lm_base_url: str = "http://127.0.0.1:1234"
     lm_models: list[str] = field(default_factory=lambda: ["model-a", "model-b"])
     lm_model_chat: str = "model-a"
     lm_model_consolidation: str = "model-a"
     lm_model_extract: str = "model-a"
     lm_model_embedding: str = "model-a"
     embedding_enabled: bool = False
+    # embedding 的地址单独记：R2「embedding 恒定本地」是硬要求，而这条只能靠
+    # 「它指到哪」来验证——指向在线端点时必须报出来。
+    embedding_base_url: str = "http://127.0.0.1:1234"
+
+    # ── LLM 端点与角色（core/llm/registry 的解析结果） ──
+    # 结构就是 ``registry.describe()`` 的输出，doctor **不自己再解析一遍配置**：
+    # 那必然与运行时漂移，而 doctor 的全部价值就在于「看到的和运行时一样」。
+    # 默认空 dict = 拿不到解析结果，相关检查一律跳过（测试构造健康快照时同理）。
+    llm_endpoints: dict[str, dict] = field(default_factory=dict)
+    llm_roles: dict[str, dict] = field(default_factory=dict)
+    # registry.validate() 的原样输出：[{"level": "error"/"warn", "message": ...}]
+    llm_issues: list[dict] = field(default_factory=list)
+    llm_embedding_gate: str = "none"
+    # 槽名 → 该端点 /v1/models 的探测结果。None = 没探（槽未配置或探测异常）。
+    # 分槽存而不是只留一份：切到在线后「哪个地址不通」才是有用的信息。
+    llm_endpoint_reachable: dict[str, bool | None] = field(default_factory=dict)
+    llm_endpoint_error: dict[str, str] = field(default_factory=dict)
+    llm_endpoint_models: dict[str, list[str]] = field(default_factory=dict)
+    # .env 里仍留着的、已被新键取代的键（env_keys.SUPERSEDED）
+    superseded_env_keys: list[str] = field(default_factory=list)
 
     # ── 数据库 ──
     db_exists: bool = True

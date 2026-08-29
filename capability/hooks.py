@@ -16,10 +16,13 @@ Comes 并行，而两个独立钩子只能串行，必须收进同一个 ``gathe
 ## 关于并行的诚实说明
 
 纯本地部署下 Comes 的 LLM 调用与 Memory 的 embedding 编码落在同一把闸门上
-（前者 ``gate_of(ROLE_CHAT)``、后者 ``embedding_gate()`` 解析到同一个本地槽），
+（前者 ``gate_of(ROLE_PLUGIN)``、后者 ``embedding_gate()`` 都解析到 ``LOCAL`` 槽），
 两者的**模型调用**仍会 FIFO 串行（见 docs/architecture.md 的资源闸门一节）。
 ``gather`` 拿到的是真实收益的那部分：Memory 的 SQL/FTS 查询与 Comes 的 HTTP
 等待互相重叠。这不是假并行，但也不是两块 GPU。
+
+把 PLUGIN 角色改绑在线端点后这道串行就消失了（embedding 始终留在本机），此时
+``gather`` 才是两条真并行的模型调用。
 
 ## 记忆门控默认关闭
 

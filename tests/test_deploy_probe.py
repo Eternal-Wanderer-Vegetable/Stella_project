@@ -35,9 +35,10 @@ def test_extract_ws_url_missing():
 
 def test_probe_env_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
-    exists, keys = probe._probe_env_file()
+    exists, keys, superseded = probe._probe_env_file()
     assert exists is False
     assert keys == []
+    assert superseded == []
 
 
 def test_probe_env_file_deprecated_keys(monkeypatch, tmp_path):
@@ -48,9 +49,10 @@ def test_probe_env_file_deprecated_keys(monkeypatch, tmp_path):
         "NAPCAT_WATCHDOG_INTERVAL=10\n",
         encoding="utf-8",
     )
-    exists, keys = probe._probe_env_file()
+    exists, keys, superseded = probe._probe_env_file()
     assert exists is True
     assert keys == ["NAPCAT_QQ_PASSWORD", "NAPCAT_WATCHDOG_INTERVAL"]
+    assert superseded == []
 
 
 def test_probe_env_file_ignores_comments(monkeypatch, tmp_path):
@@ -58,9 +60,23 @@ def test_probe_env_file_ignores_comments(monkeypatch, tmp_path):
     (tmp_path / ".env").write_text(
         "# NAPCAT_QQ_PASSWORD=x\nALLOWED_GROUPS=1\n", encoding="utf-8"
     )
-    exists, keys = probe._probe_env_file()
+    exists, keys, superseded = probe._probe_env_file()
     assert exists is True
     assert keys == []
+    assert superseded == []
+
+
+def test_probe_env_file_reports_superseded_keys(monkeypatch, tmp_path):
+    """被新键取代的键要与废弃键分开报：前者代码还在读，提示的动作不一样。"""
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        "LLM_SCHEDULER_GATE_EMBEDDING=false\nNAPCAT_QQ_PASSWORD=x\n",
+        encoding="utf-8",
+    )
+    exists, keys, superseded = probe._probe_env_file()
+    assert exists is True
+    assert keys == ["NAPCAT_QQ_PASSWORD"]
+    assert superseded == ["LLM_SCHEDULER_GATE_EMBEDDING"]
 
 
 def test_port_in_use_free_port():

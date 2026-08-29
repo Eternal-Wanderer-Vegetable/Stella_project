@@ -4,8 +4,10 @@
 """``init`` 向导：生成一份可用的 ``.env``。
 
 设计原则：
-1. **必答项收窄到 5 个**（群号、连接方式、地址、两个模型 ID），其余全部用
-   默认值。``.env.example`` 已是完整参考，向导不重复它；
+1. **必答项收窄到 3 个**（群号、连接方式、地址），其余全部用默认值。
+   两个模型 ID 仍会问，但允许留空——纯在线部署由 GUI 的「模型服务」分区给出
+   角色模型，本机模型 ID 用不到（判据见 ``validate_answers``）。
+   ``.env.example`` 已是完整参考，向导不重复它；
 2. **模型 ID 从 LM Studio 拉列表让用户选编号**，而不是让人手打——这从根上
    消灭「漏掉 ``google/`` 前缀」这类错误（实测该错误的表现是兜底回复
    「......？」，真因埋在日志的 JSON 里）；
@@ -84,10 +86,18 @@ def validate_answers(a: Answers) -> list[str]:
     if not a.lm_base_url.startswith(("http://", "https://")):
         problems.append(f"LM Studio 地址：{a.lm_base_url!r} 必须以 http:// 或 https:// 开头。")
 
-    if not a.chat_model:
-        problems.append("主聊天模型：不能为空。")
-    if not a.consolidation_model:
-        problems.append("整合模型：不能为空。")
+    # 两个本机模型 ID **允许留空**，这与 2026-08-29 之前相反。原因：模型 ID 现在
+    # 有两个出处——本机模型（LM_STUDIO_MODEL / CONSOLIDATION_LM_STUDIO_MODEL）与
+    # GUI「模型服务」分区里的角色模型（LLM_ROLE_*_MODEL，写在同一份 .env 的另一段）。
+    # 纯在线部署的角色模型全部指向在线端点，本机模型 ID 根本不需要填；向导看不到
+    # 角色那一段，在这里拦死就等于「配了在线也过不了向导」，与 P2 的验收标准
+    # 「全程 GUI 完成本地↔在线切换」直接冲突。
+    #
+    # 留空的后果由**唯一的配置判据** registry.validate() 判（doctor 的
+    # check_llm_config_issues 渲染它，且 deploy init 写完 .env 就会跑一次 doctor）：
+    #   · 角色走在线端点而模型为空 → error（在线端点必须显式给模型）；
+    #   · 角色走本地端点而模型为空 → warn（LM Studio 会路由到已加载模型，确实能跑）。
+    # 分级比这里的一刀切更准，也不会两处判据漂移。
 
     return problems
 

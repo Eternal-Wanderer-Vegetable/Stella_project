@@ -30,7 +30,25 @@
     let config = null;
     let schemaFields = [];
     let advancedValues = {};
-    const managedKeys = new Set(["ALLOWED_GROUPS", "HOST", "PORT", "ONEBOT_WS_URLS", "ONEBOT_ACCESS_TOKEN", "LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL", "CONSOLIDATION_LM_STUDIO_MODEL", "MEMORY_EMBEDDING_MODEL"]);
+    const ROLE_NAMES = ["CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT"];
+    const SLOT_NAMES = ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"];
+    // 主表单与「模型服务」分区管的键不能再出现在「高级配置」里：同一个键摆两个控件，
+    // 用户改了其中一个、保存时另一个的旧值又盖回去，表现就是「改了没反应」。
+    // 刻意**不**列入 LLM_ENDPOINT_LOCAL_BASE_URL / _API_KEY：它们是「留空即继承
+    // LM_STUDIO_*」的覆盖项，本机端点的地址与 key 只在基础配置里各有一个控件，
+    // 覆盖项留在高级配置里当逃生口（真要指到另一台机器时才用）。
+    const managedKeys = new Set([
+      "ALLOWED_GROUPS", "HOST", "PORT", "ONEBOT_WS_URLS", "ONEBOT_ACCESS_TOKEN",
+      "LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL", "CONSOLIDATION_LM_STUDIO_MODEL",
+      "MEMORY_EMBEDDING_MODEL",
+      "LM_STUDIO_API_KEY", "MEMORY_EMBEDDING_GATE", "LLM_FALLBACK_ENABLED",
+      ...SLOT_NAMES.flatMap(slot => ["KIND", "CONCURRENCY", "TIMEOUT"].map(f => `LLM_ENDPOINT_${slot}_${f}`)),
+      ...SLOT_NAMES.filter(slot => slot !== "LOCAL")
+        .flatMap(slot => [`LLM_ENDPOINT_${slot}_BASE_URL`, `LLM_ENDPOINT_${slot}_API_KEY`]),
+      ...ROLE_NAMES.flatMap(role =>
+        ["ENDPOINT", "MODEL", "TEMPERATURE", "MAX_TOKENS", "FALLBACK_ENDPOINT"]
+          .map(f => `LLM_ROLE_${role}_${f}`)),
+    ]);
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -40,7 +58,7 @@
       root.innerHTML = `
         <div class="config-card">
           <h2>Stella 配置</h2>
-          <p class="config-help">群号和模型 ID 必须填写；模型列表可从本机 LM Studio 自动读取，也可以手工输入。</p>
+          <p class="config-help">群号必填。本机模型 ID 只在有角色跑本机时需要填（纯在线部署留空即可，角色模型在下面的「模型服务」里给）；模型列表可从本机 LM Studio 自动读取，也可以手工输入。</p>
           <form id="config-form">
             <div class="config-grid">
               <div class="config-field">
@@ -72,11 +90,11 @@
               </div>
               <div class="config-field">
                 <label for="chat_model">主聊天模型 ID</label>
-                <input id="chat_model" list="model-list" value="${esc(config.chat_model)}" placeholder="例如 google/gemma-3-27b" required />
+                <input id="chat_model" list="model-list" value="${esc(config.chat_model)}" placeholder="例如 google/gemma-3-27b" />
               </div>
               <div class="config-field">
                 <label for="consolidation_model">记忆整合模型 ID</label>
-                <input id="consolidation_model" list="model-list" value="${esc(config.consolidation_model)}" placeholder="例如 google/gemma-3-4b" required />
+                <input id="consolidation_model" list="model-list" value="${esc(config.consolidation_model)}" placeholder="例如 google/gemma-3-4b" />
               </div>
               <div class="config-field">
                 <label for="embedding_model">记忆语义检索模型 ID</label>
@@ -90,6 +108,7 @@
               </div>
               <datalist id="model-list"></datalist>
             </div>
+            <section class="svc" id="model-service"></section>
             <div id="primary-groups"></div>
             <div class="config-actions">
               <button type="submit" class="primary" id="btn-save">保存并检查</button>
@@ -127,6 +146,15 @@
       schemaFields = config.schema?.fields || [];
       advancedValues = { ...(config.advanced_values || {}) };
       renderAdvanced();
+      renderModelService();
+      // 「模型服务」里 LOCAL 的地址和 embedding 的模型是只读镜像：同一个键只有一个
+      // 真控件（在基础配置里），镜像跟着它变，免得用户在两处看到不一样的值。
+      for (const id of ["lm_base_url", "embedding_model"]) {
+        root.querySelector(`#${id}`).addEventListener("input", () => {
+          root.querySelectorAll(`[data-svc-mirror="${id}"]`).forEach(m => { m.value = mainValue(id); });
+          refreshServiceWarnings();
+        });
+      }
       root.querySelector("#btn-add-space").onclick = () => addSpaceRow();
       root.querySelector("#btn-models").onclick = loadModels;
       root.querySelector("#btn-reset-defaults").onclick = resetDefaults;
@@ -183,6 +211,315 @@
       root.querySelector("#space-rows").appendChild(row);
     }
 
+    // ── 模型服务：端点 × 角色 ──
+    //
+    // 本分区的每个控件都带 data-adv-key，因此走的是「高级配置」那条既有链路：
+    // buildAdvancedEnv() 收集 → advanced_env 文本 → Rust apply_advanced_env 落盘。
+    // 复用而不另开一条的关键理由：「继承型字段留空就不写入 .env」这条规则只写在
+    // buildAdvancedEnv 一处，而角色模型（LLM_ROLE_*_MODEL）留空必须继续继承本机
+    // 模型 ID —— 写成 `KEY=` 会把继承链静默切断（2026-08-28 那个 bug 的根因）。
+
+    const SLOT_LABEL = {
+      LOCAL: "本机 LM Studio",
+      ONLINE_CHAT: "在线 · 对话生成",
+      ONLINE_MEMORY: "在线 · 记忆整合",
+      EXTRA: "备用 / 第二个本机实例",
+    };
+    const SLOT_NOTE = {
+      LOCAL: "地址与两个本机模型 ID 在上方基础配置里填 —— 同一个键只放一个控件。",
+      ONLINE_CHAT: "对话生成专用 key。必须与「在线 · 记忆整合」用不同的一把：两边的提示词前缀分属不同缓存域，共用一把 key 会互相打断缓存，省钱的前提就没了。",
+      ONLINE_MEMORY: "记忆整合与会话压缩专用 key。请知悉：整合会把群聊原文发送到这家服务商。",
+      EXTRA: "留空即沿用 CONSOLIDATION_LM_STUDIO_BASE_URL（它再继承本机地址）。纯本地场景下它与本机同址，作用只是让整合有独立的并发闸门。",
+    };
+    const ROLES = [
+      { role: "CHAT", label: "对话生成", help: "回复群友的主模型，质量优先。" },
+      { role: "ROUTER", label: "兜底判定", help: "判断「这条要不要回」。二分类任务，廉价模型足够。" },
+      { role: "PLUGIN", label: "插件调用", help: "第三方插件借用的 LLM。插件代码拿不到这里的 key。" },
+      { role: "COMPACT", label: "会话压缩", help: "把较早的对话压成回顾。默认归记忆域，与整合共用缓存以省钱。" },
+      { role: "CONSOLIDATION", label: "记忆整合", help: "阶段 1 总结。量大而低频，廉价模型足够。" },
+      { role: "EXTRACT", label: "记忆提取", help: "阶段 2 高精度抽取。频次低，值得用强模型。" },
+    ];
+    // 三个预设只动「角色 → 端点」这一列：地址与 key 是用户填进去的，预设不该清掉，
+    // 否则点一下预设就把 key 弄丢了。MEMORY_EMBEDDING_GATE 在三个场景里都是 auto
+    // （auto 自己会解析成「共用本地槽闸门」或「不排队」），所以也不在预设范围内。
+    const PRESETS = {
+      local: { name: "纯本地", map: { CHAT: "LOCAL", ROUTER: "LOCAL", PLUGIN: "LOCAL", COMPACT: "LOCAL", CONSOLIDATION: "EXTRA", EXTRACT: "LOCAL" } },
+      online: { name: "纯在线（双 key）", map: { CHAT: "ONLINE_CHAT", ROUTER: "ONLINE_CHAT", PLUGIN: "ONLINE_CHAT", COMPACT: "ONLINE_MEMORY", CONSOLIDATION: "ONLINE_MEMORY", EXTRACT: "ONLINE_MEMORY" } },
+      mixed: { name: "混合（对话在线 · 整合本地）", map: { CHAT: "ONLINE_CHAT", ROUTER: "ONLINE_CHAT", PLUGIN: "ONLINE_CHAT", COMPACT: "LOCAL", CONSOLIDATION: "LOCAL", EXTRACT: "LOCAL" } },
+    };
+
+    function fieldMeta(key) { return schemaFields.find(field => field.key === key) || {}; }
+    function advValue(key) { return String(advancedValues[key] ?? fieldMeta(key).default ?? ""); }
+    function advPlaceholder(key) {
+      const meta = fieldMeta(key);
+      return meta.inherits ? `继承 ${meta.inherits}` : String(meta.default ?? "");
+    }
+    function urlKeyOf(slot) { return slot === "LOCAL" ? "LM_STUDIO_BASE_URL" : `LLM_ENDPOINT_${slot}_BASE_URL`; }
+    function apiKeyOf(slot) { return slot === "LOCAL" ? "LM_STUDIO_API_KEY" : `LLM_ENDPOINT_${slot}_API_KEY`; }
+    function mainValue(id) { return root.querySelector(`#${id}`)?.value.trim() ?? ""; }
+
+    /** 端点真正会用到的地址：把 settings.py 里那条继承链走完，与运行时一致。 */
+    function effectiveUrl(slot) {
+      if (slot === "LOCAL") return advValue("LLM_ENDPOINT_LOCAL_BASE_URL").trim() || mainValue("lm_base_url");
+      if (slot === "EXTRA") {
+        return advValue("LLM_ENDPOINT_EXTRA_BASE_URL").trim()
+          || advValue("CONSOLIDATION_LM_STUDIO_BASE_URL").trim()
+          || mainValue("lm_base_url");
+      }
+      return advValue(urlKeyOf(slot)).trim();
+    }
+    /** 同上，但取 key。只在「测试连接」的请求头里用掉，不显示、不落别处。 */
+    function effectiveApiKey(slot) {
+      if (slot === "LOCAL") return advValue("LLM_ENDPOINT_LOCAL_API_KEY").trim() || advValue("LM_STUDIO_API_KEY").trim();
+      if (slot === "EXTRA") return advValue("LLM_ENDPOINT_EXTRA_API_KEY").trim() || advValue("CONSOLIDATION_LM_STUDIO_API_KEY").trim();
+      return advValue(apiKeyOf(slot)).trim();
+    }
+    function slotKind(slot) { return advValue(`LLM_ENDPOINT_${slot}_KIND`).trim().toLowerCase() || "local"; }
+    function roleSlot(role) {
+      const raw = advValue(`LLM_ROLE_${role}_ENDPOINT`).trim();
+      return raw || (role === "CONSOLIDATION" ? "EXTRA" : "LOCAL");
+    }
+
+    /** 槽名下拉。.env 里若写着未知槽名，作为一个显式选项保留——静默改成 LOCAL
+     *  等于替用户改配置，而 registry.validate() 本来就会把非法槽名报成 error。 */
+    function slotOptions(current, blankLabel = "") {
+      const names = SLOT_NAMES.includes(current) || !current ? SLOT_NAMES : [...SLOT_NAMES, current];
+      const head = blankLabel ? `<option value="" ${current ? "" : "selected"}>${esc(blankLabel)}</option>` : "";
+      return head + names.map(slot => {
+        const label = SLOT_LABEL[slot] ? `${slot} · ${SLOT_LABEL[slot]}` : `${slot}（未知槽名）`;
+        return `<option value="${esc(slot)}" ${slot === current ? "selected" : ""}>${esc(label)}</option>`;
+      }).join("");
+    }
+
+    function endpointCardHTML(slot) {
+      const urlKey = urlKeyOf(slot);
+      const keyKey = apiKeyOf(slot);
+      const isLocal = slot === "LOCAL";
+      const override = isLocal ? advValue("LLM_ENDPOINT_LOCAL_BASE_URL").trim() : "";
+      // LOCAL 的地址不给第二个控件：它就是上方「LM Studio 地址」那一个键（镜像 + readonly）。
+      const urlField = isLocal
+        ? `<input data-svc-mirror="lm_base_url" value="${esc(effectiveUrl("LOCAL"))}" readonly title="在上方「LM Studio 地址」里修改" />`
+        : `<input data-adv-key="${esc(urlKey)}" data-svc-url="${esc(slot)}" value="${esc(advValue(urlKey))}"
+                 placeholder="${esc(advPlaceholder(urlKey) || "https://api.example.com（填服务根地址，不要带 /v1）")}" />`;
+      const kindKey = `LLM_ENDPOINT_${slot}_KIND`;
+      const kind = slotKind(slot);
+      return `
+        <div class="svc-card" data-slot="${esc(slot)}">
+          <div class="svc-card-head">
+            <b>${esc(SLOT_LABEL[slot])}</b><code>${esc(slot)}</code>
+            ${override ? `<span class="svc-tag">已被高级配置覆盖到 ${esc(override)}</span>` : ""}
+          </div>
+          <span class="svc-note">${esc(SLOT_NOTE[slot])}</span>
+          <div class="svc-card-grid">
+            <label>地址${urlField}</label>
+            <label>API key
+              <input type="password" data-adv-key="${esc(keyKey)}" data-svc-key="${esc(slot)}"
+                     value="${esc(advValue(keyKey))}"
+                     placeholder="${esc(advPlaceholder(keyKey) || (isLocal ? "本机一般不校验，可留空" : "在线端点必填"))}" />
+            </label>
+            <label>类型
+              <select data-adv-key="${esc(kindKey)}" data-svc-kind="${esc(slot)}">
+                <option value="local" ${kind === "local" ? "selected" : ""}>local · 本机，不计费</option>
+                <option value="online" ${kind === "online" ? "selected" : ""}>online · 在线服务商，按量计费</option>
+              </select>
+            </label>
+            <label>并发度
+              <input inputmode="numeric" data-adv-key="LLM_ENDPOINT_${esc(slot)}_CONCURRENCY"
+                     value="${esc(advValue(`LLM_ENDPOINT_${slot}_CONCURRENCY`))}" />
+            </label>
+            <label>超时（秒）
+              <input inputmode="numeric" data-adv-key="LLM_ENDPOINT_${esc(slot)}_TIMEOUT"
+                     value="${esc(advValue(`LLM_ENDPOINT_${slot}_TIMEOUT`))}" />
+            </label>
+          </div>
+          <div class="svc-card-foot">
+            <button type="button" data-svc-test="${esc(slot)}">测试连接</button>
+            <span class="config-status" data-svc-status="${esc(slot)}"></span>
+          </div>
+          <datalist id="svc-models-${esc(slot)}"></datalist>
+        </div>`;
+    }
+
+    // 数值列刻意用 text + inputmode 而非 type="number"：number 控件读到 .env 里
+    // 已有的非法值会把 value 变成空串，syncAdvanced 一收就静默清空了用户配置。
+    function roleRowHTML(entry) {
+      const key = suffix => `LLM_ROLE_${entry.role}_${suffix}`;
+      const slot = roleSlot(entry.role);
+      const num = suffix => `<input inputmode="decimal" data-adv-key="${esc(key(suffix))}"
+             value="${esc(advValue(key(suffix)))}" placeholder="${esc(advPlaceholder(key(suffix)))}" />`;
+      return `
+        <div class="svc-row" data-role="${esc(entry.role)}">
+          <span class="svc-role"><b>${esc(entry.label)}</b><small>${esc(entry.help)}</small></span>
+          <select data-adv-key="${esc(key("ENDPOINT"))}" data-role-endpoint="${esc(entry.role)}">${slotOptions(slot)}</select>
+          <input data-adv-key="${esc(key("MODEL"))}" data-role-model="${esc(entry.role)}" list="svc-models-${esc(slot)}"
+                 value="${esc(advValue(key("MODEL")))}" placeholder="${esc(advPlaceholder(key("MODEL")))}" />
+          ${num("TEMPERATURE")}
+          ${num("MAX_TOKENS")}
+          <select data-adv-key="${esc(key("FALLBACK_ENDPOINT"))}">${slotOptions(advValue(key("FALLBACK_ENDPOINT")).trim(), "不回退")}</select>
+        </div>`;
+    }
+
+    /** Embedding 行：端点列固定灰显。向量维度随模型变，换一次整库都要重算，
+     *  所以它**不随 LLM 一起切到在线**（方案 §11.3 R2）。 */
+    function embeddingRowHTML() {
+      return `
+        <div class="svc-row svc-row-embed">
+          <span class="svc-role"><b>语义检索 embedding</b><small>换模型等于换向量维度，整库都要重算，所以不随 LLM 切换。</small></span>
+          <span class="svc-fixed" title="本地专用，不随 LLM 切换">本机（固定）</span>
+          <input data-svc-mirror="embedding_model" value="${esc(mainValue("embedding_model"))}" readonly
+                 title="在上方「记忆语义检索模型 ID」里修改" />
+          <span class="svc-fixed">—</span>
+          <span class="svc-fixed">—</span>
+          <span class="svc-fixed">—</span>
+        </div>`;
+    }
+
+    function renderModelService() {
+      const host = root.querySelector("#model-service");
+      const gate = advValue("MEMORY_EMBEDDING_GATE").trim() || "auto";
+      const gateOptions = ["auto", "none", ...SLOT_NAMES];
+      const fallback = advValue("LLM_FALLBACK_ENABLED").trim().toLowerCase() !== "false";
+      host.innerHTML = `
+        <div class="svc-head">
+          <h3>模型服务</h3>
+          <span class="config-status">先在端点卡片里填地址和 key，再把 6 个角色分别指到端点。改完点下面的「保存并检查」。</span>
+        </div>
+        <div class="svc-presets">
+          <span>一键预设：</span>
+          ${Object.entries(PRESETS).map(([id, preset]) =>
+            `<button type="button" data-svc-preset="${esc(id)}">${esc(preset.name)}</button>`).join("")}
+          <span class="config-status" id="svc-preset-status">预设只改「角色 → 端点」，不会动你填的地址和 key。</span>
+        </div>
+        <div class="svc-cards">${SLOT_NAMES.map(endpointCardHTML).join("")}</div>
+        <div class="svc-matrix">
+          <div class="svc-row svc-row-head">
+            <span>角色</span><span>端点</span><span>模型</span><span>温度</span><span>max_tokens</span><span>失败回退</span>
+          </div>
+          ${ROLES.map(roleRowHTML).join("")}
+          ${embeddingRowHTML()}
+        </div>
+        <div class="svc-foot">
+          <label>端点失败时回退
+            <select data-adv-key="LLM_FALLBACK_ENABLED">
+              <option value="true" ${fallback ? "selected" : ""}>开启</option>
+              <option value="false" ${fallback ? "" : "selected"}>关闭</option>
+            </select>
+          </label>
+          <label>embedding 排队闸门
+            <select data-adv-key="MEMORY_EMBEDDING_GATE">
+              ${gateOptions.map(v => `<option value="${esc(v)}" ${v === gate ? "selected" : ""}>${esc(v)}</option>`).join("")}
+            </select>
+          </label>
+          <span class="config-status">回退只在角色选了「失败回退」端点时才生效；冷却时间见高级配置 LLM_FALLBACK_COOLDOWN。</span>
+        </div>
+        <div class="svc-warn" id="svc-warn"></div>`;
+
+      host.querySelectorAll("[data-svc-preset]").forEach(button => {
+        button.onclick = () => applyPreset(button.dataset.svcPreset);
+      });
+      host.querySelectorAll("[data-svc-test]").forEach(button => {
+        button.onclick = () => testEndpoint(button.dataset.svcTest);
+      });
+      // 角色换端点 → 模型候选列表跟着换，否则会拿本机模型名去填在线端点。
+      host.querySelectorAll("[data-role-endpoint]").forEach(select => {
+        select.onchange = () => {
+          const input = host.querySelector(`[data-role-model="${select.dataset.roleEndpoint}"]`);
+          if (input) input.setAttribute("list", `svc-models-${select.value}`);
+          refreshServiceWarnings();
+        };
+      });
+      host.querySelectorAll("[data-adv-key]").forEach(input => {
+        input.addEventListener("change", refreshServiceWarnings);
+      });
+      refreshServiceWarnings();
+    }
+
+    function applyPreset(id) {
+      const preset = PRESETS[id];
+      if (!preset) return;
+      syncAdvanced();  // 先收编辑中的值，否则重绘会把用户刚打的字冲掉
+      for (const [role, slot] of Object.entries(preset.map)) advancedValues[`LLM_ROLE_${role}_ENDPOINT`] = slot;
+      renderModelService();
+      root.querySelector("#svc-preset-status").textContent = `已套用「${preset.name}」，点保存后生效。`;
+    }
+
+    async function testEndpoint(slot) {
+      const host = root.querySelector("#model-service");
+      const button = host.querySelector(`[data-svc-test="${slot}"]`);
+      const status = host.querySelector(`[data-svc-status="${slot}"]`);
+      syncAdvanced();
+      const url = effectiveUrl(slot);
+      if (!url) {
+        status.textContent = "还没有地址可测：填上面的「地址」，或让它继承到一个非空地址。";
+        return;
+      }
+      const apiKey = effectiveApiKey(slot);
+      if (slotKind(slot) === "online" && !apiKey) {
+        status.textContent = "在线端点必须填 API key。";
+        return;
+      }
+      button.disabled = true;
+      status.textContent = `正在连 ${url} …`;
+      try {
+        const models = await listModels(url, apiKey);
+        const options = models.map(m => `<option value="${esc(m)}"></option>`).join("");
+        host.querySelector(`#svc-models-${slot}`).innerHTML = options;
+        // 本机端点顺手把基础配置那几个模型 ID 的候选也填上，省一次「读取 LM Studio 模型」。
+        if (slot === "LOCAL") root.querySelector("#model-list").innerHTML = options;
+        status.textContent = models.length ? `连通，${models.length} 个可用模型已进候选` : "连通，但端点没报告任何模型";
+      } catch (e) {
+        status.textContent = `失败：${e}`;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    /** 保存前必须拦下的（方案 §6.1「在线端点若 API key 为空 → 前端即时拦截」）。
+     *  这里只拦「一定跑不起来」的三类，其余交给保存后那次 doctor —— 判据集中在
+     *  registry.validate() 一处，两边分级漂移比漏报更难查。 */
+    function modelServiceProblems() {
+      syncAdvanced();
+      const problems = [];
+      for (const slot of SLOT_NAMES) {
+        if (slotKind(slot) === "online" && !effectiveApiKey(slot)) {
+          problems.push(`端点 ${slot}（${SLOT_LABEL[slot]}）类型是 online 但没填 API key。`);
+        }
+      }
+      for (const slot of new Set(ROLES.map(entry => roleSlot(entry.role)))) {
+        if (!SLOT_NAMES.includes(slot)) { problems.push(`有角色指向未知端点 ${slot}。`); continue; }
+        if (!effectiveUrl(slot)) problems.push(`端点 ${slot}（${SLOT_LABEL[slot]}）有角色在用，但地址为空。`);
+      }
+      return problems;
+    }
+
+    /** 拦不住但值得当场说的：都是「存得下、跑起来才炸」的那类。 */
+    function refreshServiceWarnings() {
+      syncAdvanced();
+      const box = root.querySelector("#svc-warn");
+      if (!box) return;
+      const lines = modelServiceProblems().map(text => ({ level: "error", text }));
+      const chatKey = effectiveApiKey("ONLINE_CHAT");
+      const memoryKey = effectiveApiKey("ONLINE_MEMORY");
+      if (chatKey && chatKey === memoryKey) {
+        lines.push({ level: "warn", text: "两个在线端点用了同一把 API key：两边的提示词前缀会互相打断缓存，省钱的前提就没了。" });
+      }
+      for (const entry of ROLES) {
+        if (slotKind(roleSlot(entry.role)) !== "online") continue;
+        if (!advValue(`LLM_ROLE_${entry.role}_MODEL`).trim()) {
+          lines.push({ level: "warn", text: `${entry.label}走在线端点但模型留空，会继承本机模型 ID —— 在线服务商大概率不认这个名字。` });
+        }
+      }
+      box.innerHTML = lines.map(line => `<div class="svc-warn-line svc-${line.level}">${esc(line.text)}</div>`).join("");
+    }
+
+    /** 把所有 data-adv-key 控件的当前值收进 advancedValues。重绘前必须先调它，
+     *  否则用户编辑中的值会被上一轮的旧值盖回去。 */
+    function syncAdvanced() {
+      root.querySelectorAll("[data-adv-key]").forEach(input => {
+        advancedValues[input.dataset.advKey] = input.value;
+      });
+    }
+
     function parseAdvanced() {
       const groups = new Map();
       for (const field of schemaFields) {
@@ -218,12 +555,13 @@
     function resetDefaults() {
       advancedValues = Object.fromEntries(schemaFields.map(field => [field.key, field.default ?? ""]));
       renderAdvanced();
+      renderModelService();
       root.querySelector("#status").textContent = "已恢复高级配置默认值，点击保存后生效。";
     }
 
     function buildAdvancedEnv() {
+      syncAdvanced();
       const values = { ...advancedValues };
-      root.querySelectorAll("[data-adv-key]").forEach(input => { values[input.dataset.advKey] = input.value; });
       const known = new Set(schemaFields.map(field => field.key));
       // 继承型配置项留空时**不写入** .env。写成 `KEY=` 会让读取方拿到空串，
       // 继承链被静默切断——2026-08-28 之前 MEMORY_EXTRACT_LM_STUDIO_BASE_URL
@@ -260,6 +598,14 @@
       const error = root.querySelector("#error");
       button.disabled = true;
       error.textContent = "";
+      // 先做前端拦截：这几类问题存下去也只是让 doctor 再报一次，不如当场说清楚。
+      const problems = modelServiceProblems();
+      if (problems.length) {
+        error.innerHTML = ["模型服务还有问题，先修好再保存：", ...problems.map(t => `· ${esc(t)}`)].join("<br />");
+        status.textContent = "未保存";
+        button.disabled = false;
+        return;
+      }
       status.textContent = "正在保存并检查…首次配置可能需要一点时间。";
       try {
         await saveConfig(collect());

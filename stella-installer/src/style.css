@@ -201,6 +201,54 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .advanced-field label { color: var(--text-dim); font: 12px var(--mono); }
 .advanced-field label small { display: block; color: var(--text-faint); font: 11px/1.4 "Segoe UI", sans-serif; margin-top: 2px; }
 .advanced-field input { width: 100%; padding: 7px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; font: 12px var(--mono); }
+/* ── 模型服务分区（端点卡片 + 角色矩阵） ──
+   矩阵有 6 列，窄窗口下不折行而是整块横向滚动：折成一列会让「哪个值属于哪个角色」
+   彻底失去参照，横滚至少还看得懂。 */
+.svc { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 16px; }
+.svc-head { display: flex; flex-direction: column; gap: 4px; }
+.svc-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.svc-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; color: var(--text-dim); font-size: 12px; }
+.svc-presets button { padding: 5px 10px; font-size: 12px; }
+.svc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 12px; }
+.svc-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); }
+.svc-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.svc-card-head code { color: var(--text-faint); font: 11px var(--mono); }
+.svc-tag { color: var(--warn); background: var(--warn-bg); border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+.svc-note { color: var(--text-faint); font-size: 11px; line-height: 1.6; }
+.svc-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.svc-card-grid label:first-child { grid-column: 1 / -1; }
+.svc-card-grid label:nth-child(2) { grid-column: 1 / -1; }
+.svc-card-grid label { display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); font-size: 11px; }
+.svc-card-foot { display: flex; align-items: center; gap: 8px; }
+.svc-card-foot button { padding: 5px 9px; font-size: 12px; }
+.svc-card-foot .config-status { min-width: 0; word-break: break-word; }
+.svc-matrix { margin-top: 14px; overflow-x: auto; }
+.svc-row { display: grid; grid-template-columns: minmax(190px, 1.7fr) 148px minmax(140px, 1.3fr) 74px 98px 128px; gap: 8px; align-items: center; min-width: 820px; padding: 7px 0; border-top: 1px solid var(--border); }
+.svc-row-head { color: var(--text-faint); font-size: 11px; border-top: 0; }
+.svc-role { display: flex; flex-direction: column; gap: 2px; font-size: 13px; padding-right: 8px; }
+.svc-role small { color: var(--text-faint); font: 11px/1.5 "Segoe UI", sans-serif; }
+.svc-fixed { color: var(--text-faint); font-size: 12px; text-align: center; }
+.svc-row-embed { color: var(--text-dim); background: rgba(255, 255, 255, 0.02); }
+.svc-row-embed .svc-fixed:first-of-type { color: var(--text-dim); border: 1px dashed var(--border); border-radius: 5px; padding: 6px 4px; }
+.svc-foot { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+.svc-foot label { display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); font-size: 12px; }
+.svc-warn { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.svc-warn-line { border-radius: 5px; padding: 6px 9px; font-size: 12px; line-height: 1.6; }
+.svc-warn-line.svc-error { color: var(--error); background: var(--error-bg); }
+.svc-warn-line.svc-warn { color: var(--warn); background: var(--warn-bg); }
+.svc input, .svc select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: 12px var(--mono);
+}
+.svc input:focus, .svc select:focus { outline: none; border-color: var(--accent); }
+.svc input[readonly] { color: var(--text-faint); background: var(--bg-hover); cursor: not-allowed; }
 .persona-editor { display: grid; grid-template-columns: 190px 1fr; min-height: 560px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .persona-sidebar { border-right: 1px solid var(--border); padding: 10px; background: #191b20; }
 .persona-sidebar-title { color: var(--text-faint); font-size: 11px; text-transform: uppercase; padding: 6px 8px 10px; }

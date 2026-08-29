@@ -298,18 +298,22 @@ detect_mode(消息, 触发方式)                     ← 判定行为模式
 
 工具结果段落只吃 `ctx.tool_summaries`（压缩后的一句话），**`Result.data` 全程不进 prompt**——一次搜索能返回几千字，原样拼进来会把记忆与对话上下文一起挤出窗口。它夹在上下文与当前输入之间：工具结果是「回答这句话的证据」，必须离当前输入近，而「请回应这句话」必须留在最后一行。
 
-> 调用经 `core/llm/scheduler.py` 的资源闸门串行。**LM Studio 不限制并发**，多请求同时打到同一模型会并发推理、互相拖慢，因此应用层必须为每个共享模型设一道闸门：
+> 调用经 `core/llm/scheduler.py` 的资源闸门串行。**LM Studio 不限制并发**，多请求同时打到同一模型会并发推理、互相拖慢，因此应用层必须为每个共享模型设一道闸门。
 >
-> | 资源 | 模型 | 使用者 |
+> **闸门资源名就是端点槽名**：`acquire(gate_of(role))`，并发度取该槽的 `LLM_ENDPOINT_<槽>_CONCURRENCY`。因此「哪些调用会互相排队」由角色绑到哪个槽决定，纯本地默认配置下是：
+>
+> | 闸门（槽） | 并发度 | 使用者 |
 > |---|---|---|
-> | `chat` | 主聊天模型 | 聊天回复、会话压缩、候选提取、embedding 编码、Comes 工具循环、Router Level 2 |
-> | `consolidation` | 整合模型 | 两阶段整合的阶段 1 |
+> | `LOCAL` | 1 | 聊天回复、会话压缩、候选提取、Comes 工具循环、Router Level 2、embedding 编码（`MEMORY_EMBEDDING_GATE=auto`） |
+> | `EXTRA` | 1 | 两阶段整合的阶段 1 |
 >
-> 同一资源内严格 FIFO（`asyncio.Lock` 的等待队列本就是 FIFO），不同资源之间可真正并行。
+> 同一资源内严格 FIFO（`asyncio.Lock` 的等待队列本就是 FIFO），不同资源之间可真正并行。把某个角色改绑到在线槽（例如 `LLM_ROLE_CHAT_ENDPOINT=ONLINE_CHAT`，默认并发度 4）后，它就从 `LOCAL` 那条队里出去了——这是在线化带来的吞吐收益的来源。配置方式见 [configuration.md · 端点与角色](configuration.md#端点与角色两层配置)。
 >
-> 这也是「Memory 与 Comes 并行」的边界：两者的**模型调用**仍在 `chat` 闸门里 FIFO 串行，`gather` 换来的是 Memory 的 SQL/FTS 查询与 Comes 的 HTTP 等待互相重叠。不是假并行，但也不是两块 GPU。
+> 这也是「Memory 与 Comes 并行」的边界：纯本地时两者的**模型调用**仍在同一把 `LOCAL` 闸门里 FIFO 串行，`gather` 换来的是 Memory 的 SQL/FTS 查询与 Comes 的 HTTP 等待互相重叠。不是假并行，但也不是两块 GPU；把 PLUGIN 角色挪到在线槽后这道串行才真正消失。
 >
-> **调用方绝不能同时持有两把闸门**：若先持 consolidation 再等 chat（或反之），会发生跨模型队头阻塞——一个资源空闲时却在等另一个资源的队头任务释放，把两条队一起堵死。这正是 `consolidate_group` 用独立的群级锁、把阶段 1 与阶段 2 拆成两个互不嵌套的持有窗口的原因。
+> `scheduler.py` 里的 `RESOURCE_CHAT` / `RESOURCE_CONSOLIDATION` 是旧资源名常量，项目内已无调用点，保留只为不破坏外部 import。用它们 acquire 会建出一把与任何端点都不对应的独立闸门，起不到串行保护作用。
+>
+> **调用方绝不能同时持有两把闸门**：若先持 `EXTRA` 再等 `LOCAL`（或反之），会发生跨端点队头阻塞——一个资源空闲时却在等另一个资源的队头任务释放，把两条队一起堵死。这正是 `consolidate_group` 用独立的群级锁、把阶段 1 与阶段 2 拆成两个互不嵌套的持有窗口的原因。
 >
 > 每次获取都记录等待时长、持有时长与队列深度，超阈值告警；`core.llm.snapshot()` 可导出各资源的累计统计。多群部署下这是判断「延迟来自哪个资源、谁在排队」的唯一手段。
 >

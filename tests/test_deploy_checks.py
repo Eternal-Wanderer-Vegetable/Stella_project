@@ -97,6 +97,99 @@ def test_to_json_gui_contract():
     assert doc["summary"]["total"] == checks.total_checks()
     assert doc["summary"]["error"] >= 1
     assert doc["summary"]["blocking"] is True
+    assert "llm" not in doc  # 不传 snapshot 时结构不变（老 GUI 不该看到多出来的键）
+
+
+def _llm_snapshot(**overrides):
+    return _healthy_snapshot(
+        llm_endpoints={
+            "LOCAL": {
+                "slot": "LOCAL",
+                "base_url": "http://127.0.0.1:1234",
+                "kind": "local",
+                "has_api_key": False,
+                "concurrency": 1,
+                "timeout": 120.0,
+            },
+            "ONLINE_CHAT": {
+                "slot": "ONLINE_CHAT",
+                "base_url": "https://api.example.com",
+                "kind": "online",
+                "has_api_key": True,
+                "concurrency": 4,
+                "timeout": 60.0,
+            },
+            "EXTRA": {"slot": "EXTRA", "base_url": "", "kind": "local"},
+        },
+        llm_roles={
+            "chat": {
+                "role": "chat",
+                "slot": "ONLINE_CHAT",
+                "model": "deepseek-chat",
+                "gate": "ONLINE_CHAT",
+                "kind": "online",
+            },
+            "extract": {
+                "role": "extract",
+                "slot": "LOCAL",
+                "model": "stella-chat",
+                "gate": "LOCAL",
+                "kind": "local",
+            },
+        },
+        llm_endpoint_reachable={"LOCAL": True, "ONLINE_CHAT": None},
+        llm_endpoint_models={"LOCAL": ["stella-chat"]},
+        llm_embedding_gate="LOCAL",
+        **overrides,
+    )
+
+
+def test_to_json_llm_section_shows_effective_routing():
+    """GUI 的模型服务面板照这段渲染：它必须是「当前生效的」而非 .env 的字面值。"""
+    import json
+
+    from deploy import report
+
+    snap = _llm_snapshot()
+    doc = json.loads(report.to_json(checks.run_all(snap), snap))
+    assert doc["llm"]["roles"]["chat"]["slot"] == "ONLINE_CHAT"
+    assert doc["llm"]["endpoints"]["ONLINE_CHAT"]["reachable"] is None
+    assert doc["llm"]["endpoints"]["LOCAL"]["models"] == ["stella-chat"]
+    assert "EXTRA" not in doc["llm"]["endpoints"]  # 没配地址的槽不列
+    assert doc["llm"]["embedding_gate"] == "LOCAL"
+
+
+def test_to_json_llm_section_never_carries_api_key_values():
+    """端点段只搬 describe() 的输出，因此只有 has_api_key 布尔，没有 key 本身。
+
+    doctor 的 --json 会被贴进 issue、被 GUI 存进日志，漏一次就是泄一次。
+    """
+    from deploy import report
+
+    snap = _llm_snapshot()
+    text = report.to_json(checks.run_all(snap), snap)
+    assert "has_api_key" in text
+    assert '"api_key"' not in text
+
+
+def test_to_terminal_prints_role_to_endpoint_table():
+    """「无缝切换」要能被信任，前提是用户能一眼看到请求实际走了谁。"""
+    from deploy import report
+
+    snap = _llm_snapshot()
+    text = report.to_terminal(checks.run_all(snap), snap)
+    assert "模型服务" in text
+    assert "deepseek-chat" in text
+    assert "ONLINE_CHAT" in text
+    assert "未探测" in text  # reachable=None 要显式说明是「没探」，不是「不通」
+    assert "恒定本地" in text
+
+
+def test_to_terminal_without_snapshot_is_unchanged():
+    from deploy import report
+
+    results = checks.run_all(_healthy_snapshot(allowed_groups=[]))
+    assert "模型服务" not in report.to_terminal(results)
 
 
 @pytest.mark.parametrize(
@@ -120,6 +213,28 @@ def test_to_json_gui_contract():
         {"db_cleanup_on_start": True},
         {"deprecated_env_keys": ["NAPCAT_QQ_PASSWORD", "NAPCAT_SHELL_PATH"]},
         {"embedding_enabled": True, "lm_model_embedding": ""},
+        {"superseded_env_keys": ["LLM_SCHEDULER_GATE_EMBEDDING"]},
+        {"llm_issues": [{"level": "error", "message": "端点 ONLINE_CHAT 没配 API_KEY"}]},
+        {
+            "llm_endpoints": {
+                "ONLINE_CHAT": {"base_url": "https://api.example.com", "kind": "online"}
+            },
+            "llm_endpoint_reachable": {"ONLINE_CHAT": False},
+            "llm_endpoint_error": {"ONLINE_CHAT": "timeout"},
+        },
+        {
+            "llm_roles": {
+                "chat": {"kind": "online", "slot": "ONLINE_CHAT", "model": "typo-model"}
+            },
+            "llm_endpoint_models": {"ONLINE_CHAT": ["real-model"]},
+        },
+        {
+            "embedding_enabled": True,
+            "embedding_base_url": "https://api.example.com",
+            "llm_endpoints": {
+                "ONLINE_CHAT": {"base_url": "https://api.example.com", "kind": "online"}
+            },
+        },
     ],
 )
 def test_all_non_ok_results_have_fix_hint(overrides: dict):
@@ -610,3 +725,198 @@ def test_deprecated_env_plain_returns_one():
 
 def test_deprecated_env_none():
     assert checks.check_deprecated_env_keys(_healthy_snapshot()) is None
+
+
+# ── LLM 端点与角色 ──
+
+
+def test_superseded_env_keys_names_the_replacement():
+    """只说「这个键过时了」没用——用户需要知道改成哪个键。"""
+    r = checks.check_superseded_env_keys(
+        _healthy_snapshot(superseded_env_keys=["LLM_SCHEDULER_GATE_EMBEDDING"])
+    )
+    assert r is not None and r.level == "warn"
+    assert "MEMORY_EMBEDDING_GATE" in r.detail
+    assert "migrate" in r.fix_hint
+
+
+def test_superseded_env_keys_none_when_clean():
+    assert checks.check_superseded_env_keys(_healthy_snapshot()) is None
+
+
+def test_llm_config_issues_are_grouped_by_level():
+    """registry 的问题按级别各合成一条：一次写错常冒出好几条，逐条列会淹没别的检查。"""
+    r = checks.check_llm_config_issues(
+        _healthy_snapshot(
+            llm_issues=[
+                {"level": "error", "message": "端点 ONLINE_CHAT 是 online 但没配 API_KEY"},
+                {"level": "error", "message": "角色 chat 用的是在线端点，但没配 MODEL"},
+                {"level": "warn", "message": "端点 LOCAL 是本地服务但并发上限 4>1"},
+            ]
+        )
+    )
+    assert isinstance(r, list) and len(r) == 2
+    by_id = {x.id: x for x in r}
+    assert by_id["llm_config"].level == "error"
+    assert "API_KEY" in by_id["llm_config"].detail
+    assert "MODEL" in by_id["llm_config"].detail  # 同级别的多条合进一条 detail
+    assert by_id["llm_config_warn"].level == "warn"
+
+
+def test_llm_config_issues_none_when_clean():
+    assert checks.check_llm_config_issues(_healthy_snapshot()) is None
+
+
+def _endpoint_snapshot(kind: str, reachable: bool | None, **extra):
+    return _healthy_snapshot(
+        llm_endpoints={"ONLINE_CHAT": {"base_url": "https://api.example.com", "kind": kind}},
+        llm_endpoint_reachable={"ONLINE_CHAT": reachable},
+        llm_endpoint_error={"ONLINE_CHAT": "Connection refused"},
+        **extra,
+    )
+
+
+def test_llm_endpoint_online_unreachable_is_only_warn():
+    """在线端点探不到只能是 warn：/v1/models 是可选接口，不少服务商压根不开放。"""
+    r = checks.check_llm_endpoint_reachable(_endpoint_snapshot("online", False))
+    assert isinstance(r, list) and len(r) == 1
+    assert r[0].id == "llm_endpoint_online_chat"
+    assert r[0].level == "warn"
+    assert "Connection refused" in r[0].detail
+
+
+def test_llm_endpoint_local_unreachable_is_error():
+    """本地端点探不到就是真的没起来——地址是自己机器上的，不存在「不开放」这回事。"""
+    r = checks.check_llm_endpoint_reachable(_endpoint_snapshot("local", False))
+    assert isinstance(r, list) and r[0].level == "error"
+
+
+def test_llm_endpoint_unprobed_is_not_reported():
+    """None = 没探（槽未配置或探测本身异常），不能当成「不通」报出来。"""
+    assert checks.check_llm_endpoint_reachable(_endpoint_snapshot("online", None)) is None
+    assert checks.check_llm_endpoint_reachable(_endpoint_snapshot("online", True)) is None
+
+
+def test_llm_endpoint_sharing_lm_studio_address_is_not_reported_twice():
+    """与 LM Studio 同地址的槽由 check_lm_studio_reachable 报——同一个服务没起来，
+    说两遍会让用户以为有两个问题。"""
+    snap = _healthy_snapshot(
+        lm_base_url="http://127.0.0.1:1234",
+        llm_endpoints={"LOCAL": {"base_url": "http://127.0.0.1:1234/", "kind": "local"}},
+        llm_endpoint_reachable={"LOCAL": False},
+    )
+    assert checks.check_llm_endpoint_reachable(snap) is None
+
+
+def _role_snapshot(model: str, listed: list[str], **extra):
+    return _healthy_snapshot(
+        llm_roles={"chat": {"kind": "online", "slot": "ONLINE_CHAT", "model": model}},
+        llm_endpoint_models={"ONLINE_CHAT": listed},
+        **extra,
+    )
+
+
+def test_llm_role_model_not_listed_is_warn_with_suggestion():
+    r = checks.check_llm_role_model(_role_snapshot("deepseek-chatt", ["deepseek-chat"]))
+    assert isinstance(r, list) and len(r) == 1
+    assert r[0].id == "llm_role_model_chat"
+    assert r[0].level == "warn"  # 服务商未必列全模型，判 error 会误伤能用的配置
+    assert "deepseek-chat" in r[0].detail
+
+
+def test_llm_role_model_ok_when_listed():
+    assert checks.check_llm_role_model(_role_snapshot("deepseek-chat", ["deepseek-chat"])) is None
+
+
+def test_llm_role_model_skipped_when_endpoint_lists_nothing():
+    """拿不到模型列表时无从比对——空列表不等于「一个模型都没有」。"""
+    assert checks.check_llm_role_model(_role_snapshot("deepseek-chat", [])) is None
+
+
+def test_llm_role_model_empty_is_left_to_registry():
+    """模型 ID 为空已由 registry.validate() 记成 error，这里再报一条是同一根因说两遍。"""
+    assert checks.check_llm_role_model(_role_snapshot("", ["deepseek-chat"])) is None
+
+
+def test_llm_role_model_ignores_local_roles():
+    """本地角色的模型由 check_lm_model_* 那三条负责（它们读的是 LM Studio 已加载列表）。"""
+    snap = _healthy_snapshot(
+        llm_roles={"chat": {"kind": "local", "slot": "LOCAL", "model": "whatever"}},
+        llm_endpoint_models={"LOCAL": ["stella-chat"]},
+    )
+    assert checks.check_llm_role_model(snap) is None
+
+
+@pytest.mark.parametrize(
+    ("role", "check_name", "overrides"),
+    [
+        ("chat", "check_lm_model_chat", {"lm_model_chat": "not-loaded"}),
+        (
+            "consolidation",
+            "check_lm_model_consolidation",
+            {"lm_model_consolidation": "not-loaded"},
+        ),
+        ("extract", "check_lm_model_extract", {"lm_model_extract": "not-loaded"}),
+    ],
+)
+def test_legacy_lm_model_check_skipped_when_role_moved_online(role, check_name, overrides):
+    """角色切到在线后，LM_STUDIO_MODEL 那一族键的值已经不被使用。
+
+    还拿「LM Studio 里没加载这个模型」去报错就是纯噪音——真正该看的是在线端点
+    那边的模型 ID，由 check_llm_role_model 负责。
+    """
+    check = getattr(checks, check_name)
+    assert check(_healthy_snapshot(**overrides)) is not None  # 本地时照旧报
+    online = _healthy_snapshot(
+        llm_roles={role: {"kind": "online", "slot": "ONLINE_CHAT", "model": "x"}},
+        **overrides,
+    )
+    assert check(online) is None
+
+
+def test_embedding_locality_online_endpoint_is_warn():
+    """R2：embedding 恒定本地。指到在线端点时每次语义检索都会把提问原文发出去。"""
+    r = checks.check_embedding_locality(
+        _healthy_snapshot(
+            embedding_enabled=True,
+            embedding_base_url="https://api.example.com/",
+            llm_endpoints={
+                "ONLINE_MEMORY": {"base_url": "https://api.example.com", "kind": "online"}
+            },
+        )
+    )
+    assert r is not None and r.level == "warn"
+    assert "ONLINE_MEMORY" in r.detail
+
+
+def test_embedding_locality_local_address_is_ok():
+    snap = _healthy_snapshot(
+        embedding_enabled=True,
+        embedding_base_url="http://127.0.0.1:1234",
+        llm_endpoints={
+            "LOCAL": {"base_url": "http://127.0.0.1:1234", "kind": "local"},
+            "ONLINE_CHAT": {"base_url": "https://api.example.com", "kind": "online"},
+        },
+    )
+    assert checks.check_embedding_locality(snap) is None
+
+
+def test_embedding_locality_skipped_when_disabled():
+    snap = _healthy_snapshot(
+        embedding_base_url="https://api.example.com",
+        llm_endpoints={
+            "ONLINE_CHAT": {"base_url": "https://api.example.com", "kind": "online"}
+        },
+    )
+    assert checks.check_embedding_locality(snap) is None
+
+
+def test_embedding_model_check_skipped_when_pointing_elsewhere():
+    """已加载列表来自 LM_STUDIO_BASE_URL；embedding 在另一个实例上时无从比对。"""
+    snap = _healthy_snapshot(
+        embedding_enabled=True,
+        lm_base_url="http://127.0.0.1:1234",
+        embedding_base_url="http://127.0.0.1:5678",
+        lm_model_embedding="bge-m3",  # 不在 lm_models 里，但那是另一台实例的事
+    )
+    assert checks.check_lm_model_embedding(snap) is None

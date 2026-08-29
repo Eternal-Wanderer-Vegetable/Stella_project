@@ -10,7 +10,9 @@
 - 用户手工调过的阈值（PROACTIVE_* / MEMORY_* 等）必须沿用——2026-08-27 之前
   ``deploy init --force`` 的提示是「请从 .env.bak 里对照恢复」，那等于让用户
   拿两个 27KB 的文件人工比对；
-- 已废弃的键要**主动移除并说明原因**，否则用户的配置里永远留着不生效的行。
+- 已废弃的键要**主动移除并说明原因**，否则用户的配置里永远留着不生效的行；
+- 被新键取代的键（``env_keys.SUPERSEDED``）要**换算成新键的值**再移除——只删不换
+  等于把用户原来的选择改回默认值，而那种改动在报告里看不出来。
 
 逐行替换的思路来自 ``init_wizard.render_env``（它只管向导那 5 个键），这里把
 「要替换的键」泛化成「旧文件里出现过的所有键」。
@@ -39,6 +41,8 @@ class EnvMergeReport:
     removed: list[tuple[str, str]] = field(default_factory=list)
     unknown: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    # (旧键, 新键, 换算后的值)。值已按敏感键规则脱敏，可直接打印。
+    migrated: list[tuple[str, str, str]] = field(default_factory=list)
 
     def to_markdown(self, max_list: int = 12) -> str:
         def _fmt(keys: list[str]) -> str:
@@ -52,6 +56,7 @@ class EnvMergeReport:
             f"- 沿用旧值：{len(self.kept)} 项",
             f"- 新版新增、走默认值：{len(self.missing)} 项",
             f"- 已废弃、已移除：{len(self.removed)} 项",
+            f"- 已被新键取代、值已换算：{len(self.migrated)} 项",
             f"- 无法识别、保留在文件末尾：{len(self.unknown)} 项",
         ]
         if self.appended:
@@ -59,6 +64,11 @@ class EnvMergeReport:
         if self.removed:
             lines += ["", "**已移除的废弃配置**："]
             lines += [f"- `{key}`：{reason}" for key, reason in self.removed]
+        if self.migrated:
+            lines += ["", "**已换算到新键**："]
+            lines += [
+                f"- `{old}` → `{new}={value}`" for old, new, value in self.migrated
+            ]
         if self.unknown:
             lines += ["", f"**无法识别（原样保留在末尾）**：{_fmt(self.unknown)}"]
         if self.missing:
@@ -111,6 +121,10 @@ def merge_env(
 
     ``prefer_template`` 里的键以模板为准、忽略旧值。``deploy init --force`` 用它：
     用户刚在向导里回答过的那几项，理应盖掉旧文件里的老答案。
+
+    被新键取代的旧键（``env_keys.SUPERSEDED``）按「换算 + 移除」处理，优先级是
+    **向导答案 > 用户显式写的新键 > 旧键换算值**。重复合并是幂等的：第二遍时
+    旧键已经不在文件里，什么都不会发生。
     """
     report = EnvMergeReport()
     known = schema_keys or set()
@@ -118,6 +132,7 @@ def merge_env(
     old_values = parse_env(old_env)
 
     pending: dict[str, str] = {}
+    superseded: list[tuple[str, str, str]] = []
     for key, value in old_values.items():
         reason = env_keys.deprecation_reason(key)
         if reason:
@@ -125,10 +140,29 @@ def merge_env(
             continue
         if key in prefer:
             continue
+        migrated = env_keys.migrate_value(key, value)
+        if migrated is not None:
+            # 旧键已被新键取代：换算成新键的值，旧键那行随之消失。先攒着不入
+            # pending——用户可能**同时**显式写了新键，谁优先要等这一轮扫完才知道。
+            superseded.append((key, *migrated))
+            continue
         target = env_keys.RENAMED.get(key, key)
         if target != key:
             report.removed.append((key, f"已改名为 {target}，值已自动沿用"))
         pending[target] = value
+
+    # 换算值只在新键既没被用户显式设置、也不是本次向导答案时才生效。
+    # 判断放在主循环之后：旧键在新键之前还是之后出现取决于用户的文件顺序，
+    # 靠 dict 的插入顺序碰运气会一半的情况出错。
+    for old, target, new_value in superseded:
+        if target in prefer:
+            report.removed.append((old, f"已被 {target} 取代（新值来自本次向导）"))
+        elif target in pending:
+            report.removed.append((old, f"已被 {target} 取代，而 {target} 已显式设置"))
+        else:
+            pending[target] = new_value
+            shown = "（值不打印）" if env_keys.is_sensitive(target) else new_value
+            report.migrated.append((old, target, shown))
 
     replaced: set[str] = set()
     output: list[str] = []

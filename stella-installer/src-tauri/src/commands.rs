@@ -138,8 +138,13 @@ pub async fn get_config() -> Result<String, String> {
                 .cloned()
                 .unwrap_or_else(|| fallback.to_owned())
         };
+        // 「配置过了没有」不能只看本机模型：纯在线部署（角色全绑在线端点）根本
+        // 不需要填 LM_STUDIO_MODEL，只认它会把这类用户永久判成「未配置」，
+        // index.html 于是每次启动都把人送回向导。对话角色填了模型就算配过。
+        let empty = String::new();
         let configured = path.is_file()
-            && !values.get("LM_STUDIO_MODEL").unwrap_or(&String::new()).is_empty();
+            && (!values.get("LM_STUDIO_MODEL").unwrap_or(&empty).is_empty()
+                || !values.get("LLM_ROLE_CHAT_MODEL").unwrap_or(&empty).is_empty());
         let ws_urls = values
             .get("ONEBOT_WS_URLS")
             .map(|raw| {
@@ -240,22 +245,38 @@ pub async fn save_config(config: ConfigInput) -> Result<String, String> {
     .map_err(|e| format!("保存配置任务未能完成：{e}"))?
 }
 
-/// 从 LM Studio 的 OpenAI 兼容接口读取已加载模型。
+/// 从任意 OpenAI 兼容端点读取模型列表（本机 LM Studio 与在线服务商共用一条路径）。
+///
+/// `api_key` 可空：本机 LM Studio 通常不校验，在线端点必填——所以带 key 时挂
+/// `Authorization: Bearer`，不带就照旧发裸请求。**key 只作为请求头用掉，不落盘、
+/// 不进任何返回值**，错误信息里也只说 HTTP 状态码而不回显 key（报告与日志都可能
+/// 被贴进 issue）。
 #[tauri::command]
-pub async fn list_models(base_url: String) -> Result<String, String> {
+pub async fn list_models(base_url: String, api_key: Option<String>) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
-        let response = ureq::get(&url)
-            .timeout(std::time::Duration::from_secs(5))
-            .call()
-            .map_err(|e| format!("无法连接 LM Studio：{e}"))?;
+        // 在线服务商跨公网，5 秒会在正常网络下就误报「连不上」
+        let mut request = ureq::get(&url).timeout(std::time::Duration::from_secs(10));
+        if let Some(key) = api_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
+            request = request.set("Authorization", &format!("Bearer {key}"));
+        }
+        let response = request.call().map_err(|e| match e {
+            ureq::Error::Status(code @ (401 | 403), _) => {
+                format!("端点拒绝了这把 API key（HTTP {code}）：检查 key 是否填对、账户是否可用。")
+            }
+            ureq::Error::Status(404, _) => {
+                "端点没有 /v1/models（HTTP 404）：地址应填服务根地址，不要带 /v1。".to_owned()
+            }
+            ureq::Error::Status(code, _) => format!("端点返回 HTTP {code}。"),
+            other => format!("无法连接端点：{other}"),
+        })?;
         let mut body = String::new();
         response
             .into_reader()
             .read_to_string(&mut body)
-            .map_err(|e| format!("读取 LM Studio 响应失败：{e}"))?;
+            .map_err(|e| format!("读取端点响应失败：{e}"))?;
         let data: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| format!("LM Studio 返回数据无效：{e}"))?;
+            .map_err(|e| format!("端点返回数据无效：{e}"))?;
         let models: Vec<String> = data["data"]
             .as_array()
             .into_iter()

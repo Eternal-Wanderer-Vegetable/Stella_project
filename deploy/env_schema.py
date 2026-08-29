@@ -7,6 +7,9 @@
 ``CONSOLIDATION_LM_STUDIO_BASE_URL``（注释提到 FlexiWeb 流程已弃用）与
 ``MEMORY_COMPRESS_LOG_PATH``（注释提到旧键登记在 ``_DEPRECATED_KEYS`` 里）——
 后者恰恰是替换旧键的那个**新**键。被剔除的键在 GUI 里完全不可见，用户改不到。
+
+两类键不进 schema：``DEPRECATED``（代码已不读）与 ``SUPERSEDED``（代码还兼容读，
+但界面上只该出现新键）。
 """
 
 from __future__ import annotations
@@ -59,6 +62,10 @@ def build_schema(settings_path: Path) -> dict:
         # 废弃与否只认 env_keys 的登记表：注释是写给人看的自然语言，
         # 拿它做子串匹配会把「提到废弃」和「本身废弃」混为一谈。
         if env_keys.deprecation_reason(key):
+            continue
+        # 已被新键取代的键代码还在读（兼容未迁移的 .env），但不该出现在界面上：
+        # 同一件事摆两个控件，用户改了旧的、新的又优先，那就成了「改了没反应」。
+        if env_keys.superseded_by(key):
             continue
         field = {
             "key": key,

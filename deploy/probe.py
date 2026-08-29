@@ -38,6 +38,7 @@ from config import (
     DB_PATH,
     LM_STUDIO_BASE_URL,
     LM_STUDIO_MODEL,
+    MEMORY_EMBEDDING_BASE_URL,
     MEMORY_EMBEDDING_ENABLED,
     MEMORY_EMBEDDING_MODEL,
     MEMORY_EXTRACT_LM_STUDIO_MODEL,
@@ -102,12 +103,13 @@ def _probe_render() -> dict[str, Any]:
     return out
 
 
-def _probe_env_file() -> tuple[bool, list[str]]:
-    """.env 是否存在 + 废弃键列表（读文本、忽略注释行）。"""
+def _probe_env_file() -> tuple[bool, list[str], list[str]]:
+    """.env 是否存在 + 废弃键列表 + 已被取代的键列表（读文本、忽略注释行）。"""
     env_path = STELLA_HOME / ".env"
     try:
         exists = env_path.exists()
         deprecated: list[str] = []
+        superseded: list[str] = []
         if exists:
             for line in env_path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
@@ -118,9 +120,11 @@ def _probe_env_file() -> tuple[bool, list[str]]:
                 # .env 合并器必须用同一份判据，否则会给出互相矛盾的建议。
                 if env_keys.deprecation_reason(key):
                     deprecated.append(key)
-        return exists, sorted(set(deprecated))
+                elif env_keys.superseded_by(key):
+                    superseded.append(key)
+        return exists, sorted(set(deprecated)), sorted(set(superseded))
     except Exception:
-        return False, []
+        return False, [], []
 
 
 def _extract_ws_url(values: dict) -> str | None:
@@ -213,6 +217,30 @@ def _probe_onebot() -> dict:
     return result
 
 
+def fetch_endpoint_models(base_url: str, api_key: str = "") -> tuple[list[str], str]:
+    """查询任意 OpenAI 兼容端点的 ``/v1/models``，返回 ``(模型列表, 错误信息)``。
+
+    带上 ``Authorization`` 是因为在线服务商几乎都要求鉴权才肯列模型；本地
+    LM Studio 不校验，多带一个头也无害。``trust_env=False`` 是刻意的：探测结果
+    要反映 Bot 自己会走的路径，而 Bot 的 httpx 客户端同样不吃系统代理变量。
+
+    在线端点的 ``/v1/models`` 未必开放、也未必列出全部模型，所以本函数只负责
+    「问到了什么」，「问不到算不算问题」由 checks 层按 kind 判定。
+    """
+    try:
+        url = base_url.rstrip("/")
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        resp = httpx.get(
+            f"{url}/v1/models", headers=headers, timeout=5.0, trust_env=False
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        models = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
+        return models, ""
+    except Exception as e:
+        return [], str(e)[:300]
+
+
 def fetch_loaded_models(base_url: str = "") -> tuple[list[str], str]:
     """查询 LM Studio 已加载模型 ID 列表。
 
@@ -220,15 +248,7 @@ def fetch_loaded_models(base_url: str = "") -> tuple[list[str], str]:
     ``base_url`` 为空时用配置的 ``LM_STUDIO_BASE_URL``。
     doctor 与 init 向导共用，避免重复实现 HTTP 请求。
     """
-    try:
-        url = (base_url or LM_STUDIO_BASE_URL).rstrip("/")
-        resp = httpx.get(f"{url}/v1/models", timeout=5.0, trust_env=False)
-        resp.raise_for_status()
-        data = resp.json()
-        models = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
-        return models, ""
-    except Exception as e:
-        return [], str(e)[:300]
+    return fetch_endpoint_models(base_url or LM_STUDIO_BASE_URL)
 
 
 def _probe_lm_studio() -> dict:
@@ -242,6 +262,55 @@ def _probe_lm_studio() -> dict:
         result["lm_reachable"] = True
         result["lm_models"] = models
     return result
+
+
+def _probe_llm_registry() -> dict:
+    """端点 / 角色的解析结果 + 每个已配置端点的 ``/v1/models`` 探测。
+
+    解析一律走 ``core.llm.registry``，**doctor 不自己读一遍 LLM_* 键**：
+    doctor 的价值就在于「它看到的与运行时一样」，重写一份判定逻辑必然漂移，
+    到时候 doctor 说没问题而 Bot 起不来，比没有 doctor 更糟。
+
+    逐槽探测而不是只探一个地址：切到在线之后「哪个地址不通」才是有用的信息。
+    在线端点的 ``/v1/models`` 未必开放、也未必列出全部模型，所以这里只采集事实，
+    「探不到算不算问题」交给 checks 层按 kind 分别判定。
+    """
+    out: dict[str, Any] = {
+        "llm_endpoints": {},
+        "llm_roles": {},
+        "llm_issues": [],
+        "llm_embedding_gate": "none",
+        "llm_endpoint_reachable": {},
+        "llm_endpoint_error": {},
+        "llm_endpoint_models": {},
+    }
+    try:
+        from core.llm import registry
+    except Exception:
+        return out
+    try:
+        info = registry.describe()
+    except Exception:
+        return out
+    out["llm_endpoints"] = info.get("endpoints", {})
+    out["llm_roles"] = info.get("roles", {})
+    out["llm_issues"] = info.get("issues", [])
+    out["llm_embedding_gate"] = info.get("embedding_gate", "none")
+
+    # 探测要用真 key，而 describe() 刻意只给 has_api_key（它的输出会进快照、进 GUI）。
+    # 所以这里另取一份解析对象：key 只活在本函数的局部变量里，绝不写进 Snapshot。
+    try:
+        resolved = registry.endpoints()
+    except Exception:
+        return out
+    for slot, ep in resolved.items():
+        if not ep.configured:
+            continue  # 没启用的槽不探，免得每次 doctor 都白等一个超时
+        models, err = fetch_endpoint_models(ep.base_url, ep.api_key)
+        out["llm_endpoint_reachable"][slot] = not err
+        out["llm_endpoint_error"][slot] = err
+        out["llm_endpoint_models"][slot] = models
+    return out
 
 
 def _probe_database() -> dict:
@@ -446,9 +515,9 @@ def collect() -> Snapshot:
     except Exception:
         python_version, missing = (0, 0, 0), []
     try:
-        env_exists, deprecated_keys = _probe_env_file()
+        env_exists, deprecated_keys, superseded_keys = _probe_env_file()
     except Exception:
-        env_exists, deprecated_keys = False, []
+        env_exists, deprecated_keys, superseded_keys = False, [], []
     try:
         onebot = _probe_onebot()
     except Exception:
@@ -457,6 +526,10 @@ def collect() -> Snapshot:
         lm = _probe_lm_studio()
     except Exception:
         lm = {}
+    try:
+        llm = _probe_llm_registry()
+    except Exception:
+        llm = {}
     try:
         db = _probe_database()
     except Exception:
@@ -492,12 +565,22 @@ def collect() -> Snapshot:
         status_api_reachable=status_api_reachable,
         lm_reachable=lm.get("lm_reachable"),
         lm_error=lm.get("lm_error", ""),
+        lm_base_url=LM_STUDIO_BASE_URL,
         lm_models=lm.get("lm_models", []),
         lm_model_chat=LM_STUDIO_MODEL,
         lm_model_consolidation=CONSOLIDATION_LM_STUDIO_MODEL,
         lm_model_extract=MEMORY_EXTRACT_LM_STUDIO_MODEL,
         lm_model_embedding=MEMORY_EMBEDDING_MODEL,
         embedding_enabled=MEMORY_EMBEDDING_ENABLED,
+        embedding_base_url=MEMORY_EMBEDDING_BASE_URL,
+        superseded_env_keys=superseded_keys,
+        llm_endpoints=llm.get("llm_endpoints", {}),
+        llm_roles=llm.get("llm_roles", {}),
+        llm_issues=llm.get("llm_issues", []),
+        llm_embedding_gate=llm.get("llm_embedding_gate", "none"),
+        llm_endpoint_reachable=llm.get("llm_endpoint_reachable", {}),
+        llm_endpoint_error=llm.get("llm_endpoint_error", {}),
+        llm_endpoint_models=llm.get("llm_endpoint_models", {}),
         db_exists=db.get("db_exists", False),
         db_path=db.get("db_path", ""),
         db_writable=db.get("db_writable"),

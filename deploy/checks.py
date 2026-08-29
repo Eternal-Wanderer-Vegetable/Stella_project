@@ -25,6 +25,7 @@ from pathlib import Path
 
 from config import state
 
+from . import env_keys
 from .models import CheckResult, Snapshot
 
 
@@ -234,7 +235,9 @@ def _check_lm_model(
 
 
 def check_lm_model_chat(snap: Snapshot) -> CheckResult | None:
-    """聊天模型：不在已加载列表 → error + 模糊匹配建议。"""
+    """聊天模型：不在已加载列表 → error + 模糊匹配建议。切在线后跳过。"""
+    if _role_is_online(snap, "chat"):
+        return None
     return _check_lm_model(
         snap,
         check_id="lm_model_chat",
@@ -246,7 +249,9 @@ def check_lm_model_chat(snap: Snapshot) -> CheckResult | None:
 
 
 def check_lm_model_consolidation(snap: Snapshot) -> CheckResult | None:
-    """整合模型：不在已加载列表 → error。"""
+    """整合模型：不在已加载列表 → error。切在线后跳过。"""
+    if _role_is_online(snap, "consolidation"):
+        return None
     return _check_lm_model(
         snap,
         check_id="lm_model_consolidation",
@@ -266,7 +271,7 @@ def check_lm_model_extract(snap: Snapshot) -> CheckResult | None:
     再报一条是把同一个根因说两遍（不级联原则，与 lm_reachable 为假时
     跳过全部模型检查同理）。
     """
-    if not snap.lm_model_extract:
+    if not snap.lm_model_extract or _role_is_online(snap, "extract"):
         return None
     return _check_lm_model(
         snap,
@@ -280,10 +285,17 @@ def check_lm_model_extract(snap: Snapshot) -> CheckResult | None:
 
 
 def check_lm_model_embedding(snap: Snapshot) -> CheckResult | None:
-    """embedding：开关关 → None；ID 空或不在列表 → error。"""
+    """embedding：开关关 → None；ID 空或不在列表 → error。
+
+    「已加载列表」来自 ``LM_STUDIO_BASE_URL``，所以 embedding 被指到另一个地址时
+    这个比对不成立，直接跳过——那种配置的可用性由 check_embedding_locality 与
+    实际调用负责，拿别的实例的模型列表去判「未加载」只会误报。
+    """
     if not snap.embedding_enabled:
         return None
     if snap.lm_reachable is not True:
+        return None
+    if snap.embedding_base_url.strip().rstrip("/") != snap.lm_base_url.strip().rstrip("/"):
         return None
     if not snap.lm_model_embedding:
         return CheckResult(
@@ -774,6 +786,186 @@ def check_deprecated_env_keys(
     return results
 
 
+def _role_kind(snap: Snapshot, role: str) -> str:
+    """角色绑定的端点是本地还是在线（``local`` / ``online``；空串 = 没绑上）。"""
+    return str((snap.llm_roles.get(role) or {}).get("kind") or "")
+
+
+def _role_is_online(snap: Snapshot, role: str) -> bool:
+    """角色是否已切到在线端点。
+
+    三条旧的 LM Studio 模型检查（聊天 / 整合 / 提取）读的是 ``LM_STUDIO_MODEL``
+    那一族旧键，只有在该角色仍走本地时才成立。角色切到在线之后，那些键的值
+    不再被使用，还拿「LM Studio 里没加载这个模型」去报错就是纯噪音——真正该
+    检查的是在线端点那边的模型 ID，由 :func:`check_llm_role_model` 负责。
+    """
+    return _role_kind(snap, role) == "online"
+
+
+def check_llm_config_issues(
+    snap: Snapshot,
+) -> CheckResult | Sequence[CheckResult] | None:
+    """把 ``registry.validate()` 的结论原样搬进 doctor（error / warn 各汇总一条）。
+
+    doctor **不自己再判一遍**端点/角色配置：解析规则只该有一份，
+    重写必然漂移，到时候 doctor 说没问题而 Bot 起不来，比没有 doctor 更糟。
+    一个级别合成一条而不是一条条列：同一个 .env 写错时往往一次冒出好几条，
+    27 项检查里塞进十几条同类结论，用户就再也看不到别的问题了。
+    """
+    if not snap.llm_issues:
+        return None
+    specs = (
+        ("error", "llm_config", "端点 / 角色配置有错"),
+        ("warn", "llm_config_warn", "端点 / 角色配置有隐患"),
+    )
+    results: list[CheckResult] = []
+    for level, check_id, title in specs:
+        msgs = [
+            str(issue.get("message") or "")
+            for issue in snap.llm_issues
+            if str(issue.get("level") or "") == level
+        ]
+        msgs = [m for m in msgs if m]
+        if not msgs:
+            continue
+        results.append(
+            CheckResult(
+                id=check_id,
+                level=level,
+                title=title,
+                detail="；".join(msgs),
+                fix_hint="按上面每条的说明改 .env 里的 LLM_ENDPOINT_* / LLM_ROLE_* "
+                "然后重启（配置在进程启动时解析一次，改完必须重启才生效）。",
+            )
+        )
+    return results or None
+
+
+def check_llm_endpoint_reachable(
+    snap: Snapshot,
+) -> CheckResult | Sequence[CheckResult] | None:
+    """逐槽报「地址不通」：本地 → error，在线 → warn。
+
+    在线端点刻意只到 warn：``/v1/models`` 是可选接口，不少服务商压根不开放、
+    或者要另一种鉴权，探不到并不代表 chat 调用不通。为一条探测失败拦住一个
+    其实能用的部署，比漏报更糟。
+
+    与 :func:`check_lm_studio_reachable` 同地址的槽跳过——那是同一个服务没起来，
+    说两遍只会让用户以为有两个问题。
+    """
+    results: list[CheckResult] = []
+    for slot, ep in snap.llm_endpoints.items():
+        base = str(ep.get("base_url") or "").strip()
+        if not base or snap.llm_endpoint_reachable.get(slot) is not False:
+            continue  # 没启用、探通了、或没探（None）都不报
+        if base.rstrip("/") == snap.lm_base_url.rstrip("/"):
+            continue
+        local = str(ep.get("kind") or "") == "local"
+        err = snap.llm_endpoint_error.get(slot, "")
+        detail = f"{base} 的 /v1/models 请求失败。" + (f"错误：{err}" if err else "")
+        results.append(
+            CheckResult(
+                id=f"llm_endpoint_{slot.lower()}",
+                level="error" if local else "warn",
+                title=f"端点 {slot} 不可达",
+                detail=detail,
+                fix_hint=(
+                    f"确认该本地服务已启动，或修正 LLM_ENDPOINT_{slot}_BASE_URL。"
+                    if local
+                    else f"确认 LLM_ENDPOINT_{slot}_BASE_URL 与 API_KEY 正确、网络可达。"
+                    "若该服务商本就不开放 /v1/models，本条可以忽略——"
+                    "真正的验证是发一次对话。"
+                ),
+            )
+        )
+    return results or None
+
+
+def check_llm_role_model(
+    snap: Snapshot,
+) -> CheckResult | Sequence[CheckResult] | None:
+    """在线角色的模型 ID 不在该端点列出的模型里 → warn。
+
+    只到 warn 且只在拿到了模型列表时才报：``/v1/models`` 未必列全（有的服务商
+    只列你已开通的、有的按套餐过滤），据此判 error 会误伤能用的配置。
+    模型 ID 为空的情况不在这里报——``registry.validate()` 已经把它记成 error 了，
+    再报一条是同一个根因说两遍。
+    """
+    results: list[CheckResult] = []
+    for role, binding in snap.llm_roles.items():
+        if str(binding.get("kind") or "") != "online":
+            continue
+        model = str(binding.get("model") or "").strip()
+        slot = str(binding.get("slot") or "")
+        listed = snap.llm_endpoint_models.get(slot) or []
+        if not model or not listed or model in listed:
+            continue
+        results.append(
+            CheckResult(
+                id=f"llm_role_model_{role}",
+                level="warn",
+                title=f"角色 {role} 的模型 ID 可能写错了",
+                detail=f"LLM_ROLE_{role.upper()}_MODEL={model} 不在端点 {slot} "
+                f"列出的模型里。{_suggest_model(model, listed)}",
+                fix_hint=f"核对服务商文档里的模型 ID 并修正 LLM_ROLE_{role.upper()}_MODEL；"
+                "若该服务商的 /v1/models 本就不列全，本条可以忽略。",
+            )
+        )
+    return results or None
+
+
+def check_embedding_locality(snap: Snapshot) -> CheckResult | None:
+    """R2：embedding 恒定本地。地址指到在线端点 → warn。
+
+    这不只是省钱：语义检索会把**用户的原始提问**逐条发出去，而且量远大于对话
+    （每次检索都要算一次向量）。切端点的人往往只想换对话模型，顺手把 embedding
+    也指过去时不会意识到这一层。
+    """
+    if not snap.embedding_enabled:
+        return None
+    embed = snap.embedding_base_url.strip().rstrip("/")
+    if not embed:
+        return None
+    for slot, ep in snap.llm_endpoints.items():
+        if str(ep.get("kind") or "") != "online":
+            continue
+        if str(ep.get("base_url") or "").strip().rstrip("/") != embed:
+            continue
+        return CheckResult(
+            id="embedding_locality",
+            level="warn",
+            title="embedding 指向了在线端点",
+            detail=f"MEMORY_EMBEDDING_BASE_URL={snap.embedding_base_url} "
+            f"与在线端点槽 {slot} 是同一个地址。",
+            fix_hint="按设计 embedding 应恒定本地：把 MEMORY_EMBEDDING_BASE_URL 改回"
+            "本机地址（默认 http://127.0.0.1:1234）。确实想用在线向量服务时"
+            "请注意每次语义检索都会把提问原文发给该服务商。",
+        )
+    return None
+
+
+def check_superseded_env_keys(snap: Snapshot) -> CheckResult | None:
+    """.env 里仍留着已被新键取代的键 → warn，并点名新键。
+
+    与 :func:`check_deprecated_env_keys` 分开报：废弃键是「代码已经不读了，删掉即可」，
+    而这些键**代码还在读**，留着不会立刻出错，但它和新键说的是同一件事，
+    以后改新键会出现「改了没反应」。``deploy migrate`` 会自动换算，
+    手工升级的用户则需要这条提示。
+    """
+    keys = snap.superseded_env_keys
+    if not keys:
+        return None
+    pairs = [f"{key} → {env_keys.superseded_by(key) or '新键'}" for key in keys]
+    return CheckResult(
+        id="superseded_env_keys",
+        level="warn",
+        title="检测到已被新键取代的环境变量",
+        detail="、".join(pairs),
+        fix_hint="改用箭头右侧的新键后删掉旧键；或直接跑 deploy migrate，"
+        "它会把旧键的值自动换算过去。",
+    )
+
+
 _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | None], ...] = (
     check_python_version,
     check_dependencies,
@@ -802,6 +994,11 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_db_cleanup_on_start,
     check_render_backend,
     check_deprecated_env_keys,
+    check_superseded_env_keys,
+    check_llm_config_issues,
+    check_llm_endpoint_reachable,
+    check_llm_role_model,
+    check_embedding_locality,
 )
 
 

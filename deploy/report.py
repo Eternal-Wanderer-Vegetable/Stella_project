@@ -12,29 +12,53 @@ import json
 import sys
 
 from . import checks
-from .models import CheckResult
+from .models import CheckResult, Snapshot
 
 
-def to_json(results: list[CheckResult]) -> str:
-    """序列化为结构化 JSON。id 供 GUI 做图标/本地化映射。"""
-    return json.dumps(
-        {
-            "version": 1,
-            "summary": _summarize(results),
-            "items": [
-                {
-                    "id": r.id,
-                    "level": r.level,
-                    "title": r.title,
-                    "detail": r.detail,
-                    "fix_hint": r.fix_hint,
-                }
-                for r in results
-            ],
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
+def to_json(results: list[CheckResult], snapshot: Snapshot | None = None) -> str:
+    """序列化为结构化 JSON。id 供 GUI 做图标/本地化映射。
+
+    传了 ``snapshot`` 时额外带一段 ``llm``：那不是「检查结论」而是「事实」——
+    GUI 的模型服务面板要照它渲染当前生效的角色→端点→模型，用户才能确认
+    自己那一套端点配置真的被读进来了。**只搬 describe() 的输出，因此不含 key 值。**
+    """
+    doc: dict = {
+        "version": 1,
+        "summary": _summarize(results),
+        "items": [
+            {
+                "id": r.id,
+                "level": r.level,
+                "title": r.title,
+                "detail": r.detail,
+                "fix_hint": r.fix_hint,
+            }
+            for r in results
+        ],
+    }
+    if snapshot is not None:
+        doc["llm"] = _llm_section(snapshot)
+    return json.dumps(doc, ensure_ascii=False, indent=2)
+
+
+def _llm_section(snap: Snapshot) -> dict:
+    """端点 / 角色的事实汇总（含探测结果）。没配地址的槽不列，免得四个空卡片。"""
+    endpoints = {}
+    for slot, ep in snap.llm_endpoints.items():
+        if not str(ep.get("base_url") or "").strip():
+            continue
+        endpoints[slot] = {
+            **ep,
+            "reachable": snap.llm_endpoint_reachable.get(slot),
+            "error": snap.llm_endpoint_error.get(slot, ""),
+            "models": snap.llm_endpoint_models.get(slot, []),
+        }
+    return {
+        "endpoints": endpoints,
+        "roles": snap.llm_roles,
+        "embedding_gate": snap.llm_embedding_gate,
+        "embedding_base_url": snap.embedding_base_url,
+    }
 
 
 def _summarize(results: list[CheckResult]) -> dict:
@@ -60,10 +84,49 @@ def has_blocking(results: list[CheckResult]) -> bool:
     return any(r.level == "error" for r in results)
 
 
-def to_terminal(results: list[CheckResult]) -> str:
-    """人类可读文本。颜色用 ANSI，检测不到终端时自动降级。"""
+_REACHABLE_TEXT = {True: "可达", False: "不可达", None: "未探测"}
+
+
+def _llm_overview(snap: Snapshot) -> list[str]:
+    """「角色 → 端点 → 模型」与端点清单两张小表。拿不到解析结果时返回空列表。"""
+    if not snap.llm_roles and not snap.llm_endpoints:
+        return []
+    lines = ["模型服务", "  角色         端点            模型                     闸门"]
+    for role, rb in snap.llm_roles.items():
+        slot = str(rb.get("slot") or "") or "（未绑定）"
+        model = str(rb.get("model") or "") or "（服务端默认）"
+        lines.append(
+            f"  {role:<12} {slot:<15} {model:<24} {rb.get('gate') or ''}"
+        )
+    listed = [
+        (slot, ep) for slot, ep in snap.llm_endpoints.items() if ep.get("base_url")
+    ]
+    if listed:
+        lines.append("  端点：")
+        for slot, ep in listed:
+            reach = _REACHABLE_TEXT.get(snap.llm_endpoint_reachable.get(slot), "未探测")
+            key = "有 key" if ep.get("has_api_key") else "无 key"
+            lines.append(
+                f"    {slot:<13} {ep.get('base_url')}  "
+                f"{ep.get('kind')}  {key}  并发 {ep.get('concurrency')}  {reach}"
+            )
+    gate = snap.llm_embedding_gate or "none"
+    lines.append(f"  embedding：{snap.embedding_base_url}（闸门 {gate}，恒定本地）")
+    lines.append("")
+    return lines
+
+
+def to_terminal(results: list[CheckResult], snapshot: Snapshot | None = None) -> str:
+    """人类可读文本。颜色用 ANSI，检测不到终端时自动降级。
+
+    传了 ``snapshot`` 时先打一张「角色 → 端点 → 模型」的表。这张表本身不是
+    检查结论，但「无缝切换」要能被信任，前提就是用户能一眼看到当前到底在用谁——
+    尤其是配了在线端点却忘了改角色绑定时，表里一看就知道请求还在走本地。
+    """
     use_color = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     lines: list[str] = []
+    if snapshot is not None:
+        lines += _llm_overview(snapshot)
     levels = {"error": "错误", "warn": "警告", "ok": "通过"}
     styles = {
         "error": ("31", "1"),

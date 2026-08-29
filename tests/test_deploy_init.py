@@ -92,9 +92,15 @@ def test_validate_forward_http_url():
     assert problems and any("ws://" in p for p in problems)
 
 
-def test_validate_models_empty():
-    problems = validate_answers(_valid_answers(chat_model="", consolidation_model=""))
-    assert problems and any("模型" in p for p in problems)
+def test_validate_allows_empty_local_models():
+    """本机模型 ID 留空要放行——否则纯在线部署过不了向导。
+
+    角色模型（LLM_ROLE_*_MODEL）写在 .env 的另一段，向导看不到；把「本机模型为空」
+    判成致命错误，等于让「全程 GUI 切到在线」这条路走不通。为空的后果由
+    registry.validate() 分级判（在线角色为空 → error，本地角色为空 → warn），
+    deploy init 写完 .env 紧接着跑的那次 doctor 会把结论打出来。
+    """
+    assert validate_answers(_valid_answers(chat_model="", consolidation_model="")) == []
 
 
 def test_validate_bad_mode():

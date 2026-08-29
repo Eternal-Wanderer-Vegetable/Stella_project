@@ -605,6 +605,8 @@ def _legacy_key_warnings() -> list[tuple[str, str]]:
 
     ``CONSOLIDATION`` 不在此列：``EXTRA`` 槽默认就继承
     ``CONSOLIDATION_LM_STUDIO_BASE_URL``，地址是跟着走的。
+
+    另加一条**反方向**的告警，见 :func:`_local_slot_override_warning`。
     """
     s = _settings()
     local = endpoints()[SLOT_LOCAL]
@@ -630,7 +632,42 @@ def _legacy_key_warnings() -> list[tuple[str, str]]:
                     f"若确实要用另一台机器，请把 {role} 绑到 {SLOT_EXTRA} 槽",
                 )
             )
-    return out
+    return out + _local_slot_override_warning()
+
+
+def _local_slot_override_warning() -> list[tuple[str, str]]:
+    """``LLM_ENDPOINT_LOCAL_BASE_URL`` 被显式改成与 ``LM_STUDIO_BASE_URL`` 不同的地址。
+
+    这一条是上面那些告警的反方向，而且更容易踩到：``LLM_ENDPOINT_LOCAL_BASE_URL``
+    留空即继承 ``LM_STUDIO_BASE_URL``，所以**换本地地址的正确做法是改后者**。
+    只改前者的话，聊天立刻跟着走了，但仍由 ``LM_STUDIO_BASE_URL`` 继承下来的那一支
+    ——``CONSOLIDATION_LM_STUDIO_BASE_URL`` → ``EXTRA`` 槽（整合 / 会话压缩）——
+    还指着旧地址，表现是「聊天好了、整合全失败」，而两处地址长得几乎一样，
+    肉眼对不出来。
+
+    只在两者**都非空且不同**、且 ``EXTRA`` 确实还是个本地槽且没跟着改时才报：
+    留空是正常的继承状态，把 EXTRA 指向第三台机器也是正常用法，都不该打扰。
+    """
+    s = _settings()
+    override = str(getattr(s, "LLM_ENDPOINT_LOCAL_BASE_URL", "") or "").strip().rstrip("/")
+    master = str(getattr(s, "LM_STUDIO_BASE_URL", "") or "").strip().rstrip("/")
+    if not override or not master or override == master:
+        return []
+    extra = endpoints()[SLOT_EXTRA]
+    if not extra.configured or not extra.is_local:
+        return []
+    if extra.base_url.rstrip("/") != master:
+        return []  # EXTRA 已被显式改到别处，不是「忘了跟着改」
+    return [
+        (
+            "warn",
+            f"端点槽 {SLOT_LOCAL} 的地址被显式改成 {override}，但 "
+            f"LM_STUDIO_BASE_URL 仍是 {master}，由它继承的 {SLOT_EXTRA} 槽"
+            f"（整合 / 会话压缩）没跟着改，会打到旧地址。"
+            f"换本地地址请直接改 LM_STUDIO_BASE_URL，"
+            f"或把 LLM_ENDPOINT_EXTRA_BASE_URL 一并改掉",
+        )
+    ]
 
 
 def log_summary() -> None:

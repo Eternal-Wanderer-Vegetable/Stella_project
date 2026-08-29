@@ -236,7 +236,9 @@ pre hook 按 priority **降序**执行：
 
 `build_context` 保持无条件执行：短期上下文是对话素材，与「要不要检索长期记忆」无关。
 
-> **关于并行的诚实说明**：Comes 的 LLM 调用与 Memory 的 embedding 编码共用 `RESOURCE_CHAT` 闸门，两者的**模型调用**仍会 FIFO 串行。`gather` 拿到的是真实收益的那部分：Memory 的 SQL/FTS 查询与 Comes 的 HTTP 等待互相重叠。这不是假并行，但也不是两块 GPU。
+> **关于并行的诚实说明**：闸门资源名现在就是端点槽名（`registry.gate_of(role)`）。纯本地默认配置下 Comes 的 LLM 调用（`gate_of(ROLE_PLUGIN)`）与 Memory 的 embedding 编码（`embedding_gate()` 为 `auto`，解析到本地槽）落在同一把 `LOCAL` 闸门上，两者的**模型调用**仍会 FIFO 串行。`gather` 拿到的是真实收益的那部分：Memory 的 SQL/FTS 查询与 Comes 的 HTTP 等待互相重叠。这不是假并行，但也不是两块 GPU。
+>
+> 把 PLUGIN 角色改绑到在线端点（`LLM_ROLE_PLUGIN_ENDPOINT=ONLINE_CHAT`）之后这道串行就消失了：embedding 按设计始终留在本机，两者不再共用闸门，`gather` 变成两条真并行的模型调用。配置方式见 [configuration.md · 端点与角色](configuration.md#端点与角色两层配置)。
 
 钩子**绝不抛异常**，两条分支互不拖累（`return_exceptions=True`）。能力层是增量功能，它坏掉的后果应该是「这轮没用上工具」，而不是「Stella 不说话了」。
 

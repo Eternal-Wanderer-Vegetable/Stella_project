@@ -30,6 +30,30 @@ LM_STUDIO_MODEL=your-chat-model
 CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
 ```
 
+纯在线部署（不跑本机 LM Studio）的最小集换成端点与角色，本机模型 ID 可以完全留空——详见 [模型服务 · 端点与角色](#端点与角色两层配置)：
+
+```env
+ALLOWED_GROUPS=123456789
+LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=https://api.example.com
+LLM_ENDPOINT_ONLINE_CHAT_API_KEY=sk-对话专用
+LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL=https://api.example.com
+LLM_ENDPOINT_ONLINE_MEMORY_API_KEY=sk-记忆专用
+LLM_ROLE_CHAT_ENDPOINT=ONLINE_CHAT
+LLM_ROLE_CHAT_MODEL=vendor/chat-model
+LLM_ROLE_ROUTER_ENDPOINT=ONLINE_CHAT
+LLM_ROLE_ROUTER_MODEL=vendor/cheap-model
+LLM_ROLE_PLUGIN_ENDPOINT=ONLINE_CHAT
+LLM_ROLE_PLUGIN_MODEL=vendor/cheap-model
+LLM_ROLE_COMPACT_ENDPOINT=ONLINE_MEMORY
+LLM_ROLE_COMPACT_MODEL=vendor/cheap-model
+LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY
+LLM_ROLE_CONSOLIDATION_MODEL=vendor/cheap-model
+LLM_ROLE_EXTRACT_ENDPOINT=ONLINE_MEMORY
+LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
+```
+
+两把 key 必须不同，原因见[为什么必须两把在线 key](#为什么必须两把在线-key)。用安装器的「配置 → 模型服务」分区点一下「纯在线（双 key）」预设，等价于上面这段。
+
 ---
 
 ## 群聊与路径
@@ -148,7 +172,106 @@ python -m deploy space-merge --from space_1 --to casual
 
 ## 模型服务
 
+### 端点与角色：两层配置
+
+Stella 的模型配置分两层：
+
+- **端点（Endpoint）** = 一个 OpenAI 兼容服务：地址、API key、类型、并发闸门、超时。它是「一把 API key 的归属单位」，也是「一道排队闸门的归属单位」。
+- **角色（Role）** = 一次具体调用：用哪个端点、哪个模型、什么温度、多少 max_tokens。
+
+共 4 个端点槽 × 6 个角色。「对话走在线、整合留本地」这类组合因此只是改几个 `LLM_ROLE_*_ENDPOINT`，不需要碰代码，也不需要为某家服务商写适配。
+
+安装器「配置 → 模型服务」分区是这两层的图形界面（端点卡片 + 角色矩阵 + 三个一键预设），手改 `.env` 与用 GUI 等价。**槽名和角色名都是静态声明的**：`deploy/env_schema.py` 靠 AST 扫描 `config/settings.py` 里的字面量 `_env*("KEY", …)` 调用来生成 GUI 表单，动态拼出来的键名不会出现在界面上。
+
+### 端点（Endpoint）
+
+键名形如 `LLM_ENDPOINT_<槽名>_<字段>`，字段有 `BASE_URL` / `API_KEY` / `KIND` / `CONCURRENCY` / `TIMEOUT`。
+
+| 槽名 | 用途 | 默认 `KIND` | 默认 `CONCURRENCY` | 默认 `TIMEOUT` |
+|---|---|---|---|---|
+| `LOCAL` | 本机 LM Studio | `local` | `1` | `120.0` |
+| `ONLINE_CHAT` | 在线服务商 · 对话生成域 | `online` | `4` | `120.0` |
+| `ONLINE_MEMORY` | 在线服务商 · 记忆域 | `online` | `2` | `120.0` |
+| `EXTRA` | 备用槽 / 第二个本机实例 | `local` | `1` | `120.0` |
+
+- `KIND` 只有 `local` / `online` 两个值，它是判据而非注释：`online` 端点没填 API key、或指向它的角色没显式给模型，都会被 `registry.validate()` 判成 **error**（`python -m deploy doctor` 会打出来）。
+- `CONCURRENCY` 是该槽闸门的并发上限，同槽内 FIFO 严格串行。本机 LM Studio **不排队**，并发请求只会互相拖慢且难以归因，所以本地槽保持 `1`；在线端点可以放大到服务商允许的并发。
+- `TIMEOUT` 是单次请求超时，**与 `LLM_TIMEOUT` 不是一回事**——后者是 `core/pipeline.py` 的整轮回复预算。
+
+`LOCAL` 与 `EXTRA` 的地址和 key 留空即继承旧键，因此**未迁移的 `.env` 行为与升级前完全一致**，不需要任何手工迁移：
+
+| 新键 | 留空时继承 |
+|---|---|
+| `LLM_ENDPOINT_LOCAL_BASE_URL` | `LM_STUDIO_BASE_URL` |
+| `LLM_ENDPOINT_LOCAL_API_KEY` | `LM_STUDIO_API_KEY` |
+| `LLM_ENDPOINT_EXTRA_BASE_URL` | `CONSOLIDATION_LM_STUDIO_BASE_URL`（它再继承 `LM_STUDIO_BASE_URL`） |
+| `LLM_ENDPOINT_EXTRA_API_KEY` | `CONSOLIDATION_LM_STUDIO_API_KEY` |
+
+> 纯本地部署下 `EXTRA` 与 `LOCAL` 同址，它的作用只是给整合一道**独立的闸门**：整合是长任务，与聊天共用闸门会让 @ 回复排在它后面。
+
+### 角色（Role）
+
+键名形如 `LLM_ROLE_<角色>_<字段>`，字段有 `ENDPOINT` / `MODEL` / `TEMPERATURE` / `MAX_TOKENS` / `FALLBACK_ENDPOINT`。
+
+| 角色 | 干什么 | 默认端点 | 默认温度 | 默认 max_tokens |
+|---|---|---|---|---|
+| `CHAT` | 回复群友的主模型，质量优先 | `LOCAL` | `0.7` | `2000` |
+| `ROUTER` | 判断「这条要不要回」，二分类任务 | `LOCAL` | `0.7` | `2000` |
+| `PLUGIN` | 第三方插件借用的 LLM | `LOCAL` | 继承 `ASTRBOT_LLM_TEMPERATURE` | 继承 `ASTRBOT_LLM_MAX_TOKENS` |
+| `COMPACT` | 会话压缩：把较早的对话压成回顾 | `LOCAL` | `0.3` | `0`（= `SESSION_SUMMARY_MAX_TOKENS × 3`） |
+| `CONSOLIDATION` | 两阶段整合的阶段 1 | `EXTRA` | 继承 `CONSOLIDATION_LM_STUDIO_TEMPERATURE` | 继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` |
+| `EXTRACT` | 阶段 2 记忆候选提取 | `LOCAL` | 继承 `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | 继承 `MEMORY_EXTRACT_MAX_TOKENS` |
+
+`MODEL` 全部是继承型：`CHAT` / `ROUTER` / `COMPACT` 继承 `LM_STUDIO_MODEL`，`PLUGIN` 继承 `ASTRBOT_LLM_MODEL`，`CONSOLIDATION` 继承 `CONSOLIDATION_LM_STUDIO_MODEL`，`EXTRACT` 继承 `MEMORY_EXTRACT_LM_STUDIO_MODEL`。
+
+> **「留空即继承」要求真的留空。** 继承型键写成 `KEY=`（等号后什么都没有）与「整行不存在」**不等价**：空串会被当成显式值，把继承链就地切断。2026-08-28 之前 `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` 正是这样变成空串，使阶段 2 每次都拼出无协议 URL 而失败。手改 `.env` 时请**删掉整行**而不是清空等号右边；GUI 已经代你处理（留空的继承型键不写进 `.env`）。
+
+### 三个典型场景
+
+只需要改 6 个 `LLM_ROLE_*_ENDPOINT`，GUI 里对应三个一键预设。三个场景的 `MEMORY_EMBEDDING_GATE` 都保持 `auto`。
+
+| 角色 | A 纯本地 | B 纯在线（双 key） | C 混合：对话在线 · 整合本地 |
+|---|---|---|---|
+| `CHAT` | `LOCAL` | `ONLINE_CHAT` | `ONLINE_CHAT` |
+| `ROUTER` | `LOCAL` | `ONLINE_CHAT`（挑廉价模型） | `ONLINE_CHAT`（挑廉价模型） |
+| `PLUGIN` | `LOCAL` | `ONLINE_CHAT` | `ONLINE_CHAT` |
+| `COMPACT` | `LOCAL` | `ONLINE_MEMORY` | `LOCAL` |
+| `CONSOLIDATION` | `EXTRA` | `ONLINE_MEMORY` | `LOCAL` |
+| `EXTRACT` | `LOCAL` | `ONLINE_MEMORY`（挑强模型） | `LOCAL` |
+
+场景 C 是省钱与隐私的折中：只有对话生成出网，群聊原文不发给在线服务商。
+
+### 为什么必须两把在线 key
+
+`ONLINE_CHAT` 与 `ONLINE_MEMORY` **必须填不同的 API key**。在线服务商的提示词缓存按 key 划分缓存域，而这两类调用的提示词前缀完全不同（对话带人格与上下文，整合带整合指令与群聊原文）。共用一把 key 会让两边不断互相打断对方的前缀缓存，缓存命中率塌到接近 0，省钱的前提就没了。
+
+GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它作为 warn 写进 doctor 报告。
+
+### 失败回退
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `LLM_FALLBACK_ENABLED` | `true` | 全局开关 |
+| `LLM_FALLBACK_COOLDOWN` | `300` | 端点失败后冷却多少秒再重试它 |
+| `LLM_ROLE_<角色>_FALLBACK_ENDPOINT` | 空 | 该角色失败时改用哪个端点槽 |
+
+**回退只在角色显式写了 `FALLBACK_ENDPOINT` 时才发生**，全局开关本身不会替你选备用端点。典型用法：在线对话回退到 `LOCAL`，网络抖动或额度耗尽时降级而不是不说话。
+
+### embedding 不随 LLM 上线
+
+`MEMORY_EMBEDDING_*` 恒定指向本机，**不参与端点/角色体系**。换 embedding 模型等于换向量维度，整库向量都要重算，不能随「今天用在线」这种决定一起漂。GUI 的角色矩阵里 embedding 那一行端点列固定灰显。
+
+它只需要决定排队闸门归属：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `MEMORY_EMBEDDING_GATE` | `auto` | `auto` = 与本地 LLM 槽共用闸门（没有本地 LLM 端点时等于不排队）；`<槽名>` = 指定共用哪个槽的闸门；`none` = 不排队 |
+
+`auto` 的两种解析结果都是对的：本地槽存在时共用闸门可避免 embedding 与聊天抢同一个 LM Studio；纯在线部署下没有本地 LLM 端点，embedding 独占本机，排队只会白等。
+
 ### 主聊天模型
+
+本节与下面的「记忆整理模型」「记忆候选提取」三段的键**仍然是配置的主入口**（向导与 GUI 基础配置写的就是它们），同时充当上面角色键的继承上游——`LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` 留空时都取 `LM_STUDIO_MODEL`。只有要让某个角色**不同于**本机默认时，才需要填对应的 `LLM_ROLE_*`。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
@@ -170,6 +293,8 @@ python -m deploy space-merge --from space_1 --to casual
 | `CONSOLIDATION_OVERLAP` | `15` | 向前回看条数，保证话题不被批次边界切断 |
 | `CONSOLIDATION_LOCAL_MAX_TOKENS` | `1200` | 整合最大生成 token |
 | `CONSOLIDATION_TRIGGER_NEW_MESSAGES` | `10` | 累积多少新消息才触发一次整合 |
+
+> `CONSOLIDATION_LM_STUDIO_BASE_URL` 现在还是 `EXTRA` 端点槽的继承上游，`CONSOLIDATION_LM_STUDIO_MODEL` / `_TEMPERATURE` / `CONSOLIDATION_LOCAL_MAX_TOKENS` 则是 `LLM_ROLE_CONSOLIDATION_*` 的上游。**不要因为改用了角色键就删掉它们**——删掉会把 `EXTRA` 槽的地址一起清空。整合改走在线只需设 `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY` 与 `LLM_ROLE_CONSOLIDATION_MODEL`。
 
 > **注意 `CONSOLIDATION_LOCAL_MAX_TOKENS`**：批次 30 + overlap 15 意味着单次最多喂入 45 条消息，输出被截断会导致 JSON 解析失败，而解析失败时 checkpoint **仍会推进**（防止同批反复重跑），那批消息就永久丢失了。`core/llm/lm_studio.py` 会在 `finish_reason=length` 时输出告警，建议运行一段后检查日志有无该告警。
 
@@ -204,11 +329,13 @@ python -m deploy space-merge --from space_1 --to casual
 | `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | 抽取任务不需要发散，比整合的 0.3 更低 |
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | 只输出候选数组，不需要很大 |
 
+> 这四个 `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` 是 `LLM_ROLE_EXTRACT_*` 的继承上游。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 与 `LLM_ROLE_EXTRACT_MODEL` 即可，本节的键不用动。
+
 **为什么要拆**：小模型能总结主题，却在噪音环境下系统性地把候选提取判空。2026-08-16 实测 7 批整合全部返回空候选，而信息明确出现在它自己写的摘要里——是「读到了但主动弃掉」，不是没看到。候选提取是高精度抽取任务，交给大模型。
 
 `probe_consolidation.py` 的 `insomnia_breakfast_noisy` 用例锁住了这个差异：同样的信息埋在 Bot 寒暄与刷屏之中，单阶段命中 1/2、两阶段命中 2/2。
 
-**代价**：实测提取单次占用主聊天模型约 20 秒（1600 prompt tokens + 280 生成 @19 tok/s）。它与聊天走同一道闸门、FIFO 串行，因此聊天期间发起的提取会排在后面，反之亦然。
+**代价**：实测提取单次占用主聊天模型约 20 秒（1600 prompt tokens + 280 生成 @19 tok/s）。默认配置下（EXTRACT 与 CHAT 都绑在 `LOCAL` 槽）它与聊天走同一道闸门、FIFO 串行，因此聊天期间发起的提取会排在后面，反之亦然。把两者拆到不同端点槽（例如 EXTRACT 走 `ONLINE_MEMORY`）后这道串行就消失了，见 [LLM 资源调度](#llm-资源调度)。
 
 ### 向量语义检索（可选）
 
@@ -226,12 +353,16 @@ python -m deploy space-merge --from space_1 --to casual
 
 LM Studio **不限制并发**：多个请求同时打到同一模型时服务端不会排队，只会把并发推理挤在一起，让每个请求都变慢且难以定位是谁在抢算力。因此应用层必须为共享模型加闸门。
 
-两种资源各自独立，同一资源内 FIFO 严格串行，不同资源之间可真正并行：
+**闸门就是端点槽**：一个角色排在哪道闸门后面，取决于它的 `LLM_ROLE_<角色>_ENDPOINT` 指向哪个槽，并发上限取该槽的 `LLM_ENDPOINT_<槽名>_CONCURRENCY`。同槽内 FIFO 严格串行，不同槽之间真正并行。默认（纯本地）落成两道：
 
-| 资源 | 模型 | 使用者 |
+| 闸门（槽） | 谁在用 | 默认并发 |
 |---|---|---|
-| `chat` | 主聊天模型 | 聊天回复、会话压缩、候选提取、embedding 编码 |
-| `consolidation` | 整合模型 | 两阶段整合的阶段 1 |
+| `LOCAL` | 聊天回复、兜底判定、插件、会话压缩、候选提取，以及 `MEMORY_EMBEDDING_GATE=auto` 下的 embedding 编码 | `1` |
+| `EXTRA` | 两阶段整合的阶段 1 | `1` |
+
+把对话切到 `ONLINE_CHAT` 之后，聊天与本地整合就落在不同槽上，不再互相排队——这是切在线除省显存之外的另一个收益。
+
+> `core/llm/scheduler.py` 里的 `RESOURCE_CHAT` / `RESOURCE_CONSOLIDATION` 两个常量是旧资源名，项目内已无调用点，保留只为不破坏外部 import。用它们 acquire 会建出一把**与任何端点都不对应**的独立闸门，起不到串行保护作用；新代码请用 `registry.gate_of(role)`。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
@@ -239,11 +370,11 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 | `LLM_SCHEDULER_HOLD_WARN_SECONDS` | `90.0` | 单次持有超过该秒数则告警 |
 | `LLM_SCHEDULER_QUEUE_WARN_DEPTH` | `3` | 排队深度达到该值即告警 |
 | `LLM_SCHEDULER_PRIORITY_ENABLED` | `false` | **尚未实现**，保留开关 |
-| `LLM_SCHEDULER_GATE_EMBEDDING` | `true` | embedding 编码是否也走 chat 闸门 |
+| `LLM_SCHEDULER_GATE_EMBEDDING` | `true` | **已废弃**，被 `MEMORY_EMBEDDING_GATE` 取代（本键 `true`→`auto`、`false`→`none`）。仅在未显式设置新键时仍被读取 |
 
 持有告警的阈值考虑了后端的 3 次重试（每次超时 120 秒），因此单次持有的上界远大于一次正常请求；持续超阈值说明不是排队，而是调用本身卡住了。
 
-`LLM_SCHEDULER_GATE_EMBEDDING` 默认开启的原因：`MEMORY_EMBEDDING_BASE_URL` 默认与主聊天同一个实例，而一次检索要对每条候选记忆各编码一次（候选池可达 20+），不串行会出现间歇性变慢且极难定位。若把 embedding 部署在独立实例，可关闭本项避免不必要的串行。
+`MEMORY_EMBEDDING_GATE` 默认 `auto` 的原因：`MEMORY_EMBEDDING_BASE_URL` 默认与主聊天同一个实例，而一次检索要对每条候选记忆各编码一次（候选池可达 20+），不串行会出现间歇性变慢且极难定位。若把 embedding 部署在独立实例，设 `none` 可避免不必要的串行。`python -m deploy doctor` 会把 `LLM_SCHEDULER_GATE_EMBEDDING` 提示为旧键。
 
 **优先级为什么没实现**：多群下严格 FIFO 会让 @ 回复排在后台任务之后。但后台任务每群最多 1 个在途、数量有界，实际影响需要真实排队数据才能判断。先积累 `core.llm.snapshot()` 的观测数据，再决定是否偏离 FIFO。
 

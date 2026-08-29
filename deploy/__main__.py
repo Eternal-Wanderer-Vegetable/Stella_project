@@ -41,9 +41,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     snapshot = probe.collect()
     results = checks.run_all(snapshot)
     if args.json:
-        print(report.to_json(results))
+        print(report.to_json(results, snapshot))
     else:
-        print(report.to_terminal(results))
+        print(report.to_terminal(results, snapshot))
     return 1 if report.has_blocking(results) else 0
 
 

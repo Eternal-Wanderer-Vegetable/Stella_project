@@ -305,7 +305,7 @@ python scripts/probe_astrbot_llm.py chat tools          # 只跑指定小节
 | `budget` | 超预算的上下文被成对裁掉最早的几条，而不是被服务端拒 |
 | `conversation` | `ConversationManager` 落库往返（不需要模型） |
 
-它跑的是生产链路：`core/llm/scheduler` 的 chat 闸门 → `core/llm/openai_client.py` →
+它跑的是生产链路：`core/llm/scheduler` 里 PLUGIN 角色所属端点槽的闸门（纯本地默认 `LOCAL`）→ `core/llm/openai_client.py` →
 `StellaChatProvider` → `run_tool_loop`。会话与偏好读写指向临时库，**不会碰 `DB_PATH`
 对应的真实数据库**。
 

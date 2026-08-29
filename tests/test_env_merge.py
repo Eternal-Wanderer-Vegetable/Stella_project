@@ -119,6 +119,86 @@ def test_report_never_prints_secret_values():
     assert "敏感项已沿用" in markdown
 
 
+SUPERSEDED_TEMPLATE = """\
+# ---------- 记忆语义检索 ----------
+# MEMORY_EMBEDDING_GATE=auto
+
+# ---------- 向导会问的项 ----------
+LM_STUDIO_MODEL=
+"""
+
+
+def test_superseded_key_value_is_converted_not_dropped():
+    """被新键取代的旧键要**换算**再移除；只删不换等于把用户的选择改回默认值。
+
+    ``LLM_SCHEDULER_GATE_EMBEDDING=false`` 的用户是主动关掉排队的，
+    换算成 ``MEMORY_EMBEDDING_GATE=none`` 才逐字等价；若丢掉这一行，
+    新键会走默认的 ``auto``、排队悄悄被打开。
+    """
+    rendered, report = env_merge.merge_env(
+        "LLM_SCHEDULER_GATE_EMBEDDING=false\n", SUPERSEDED_TEMPLATE
+    )
+    values = env_merge.parse_env(rendered)
+
+    assert "LLM_SCHEDULER_GATE_EMBEDDING" not in values
+    assert values["MEMORY_EMBEDDING_GATE"] == "none"
+    assert report.migrated == [
+        ("LLM_SCHEDULER_GATE_EMBEDDING", "MEMORY_EMBEDDING_GATE", "none")
+    ]
+    assert "已换算到新键" in report.to_markdown()
+
+
+def test_superseded_true_maps_to_auto():
+    """``true`` → ``auto`` 而不是 ``LOCAL``：旧键的前提「embedding 与主聊天同实例」
+    在对话可以切在线之后不再成立，auto 才是与端点无关的等价表达。"""
+    rendered, _ = env_merge.merge_env(
+        "LLM_SCHEDULER_GATE_EMBEDDING=true\n", SUPERSEDED_TEMPLATE
+    )
+    assert env_merge.parse_env(rendered)["MEMORY_EMBEDDING_GATE"] == "auto"
+
+
+def test_explicit_new_key_beats_converted_old_value_in_both_orders():
+    """用户同时写了新旧两个键时，显式写的新键赢——且不许依赖两行的先后顺序。
+
+    换算值若用「先到先得」实现，旧键在前时就会覆盖用户显式设的新键。
+    """
+    for old_env in (
+        "LLM_SCHEDULER_GATE_EMBEDDING=true\nMEMORY_EMBEDDING_GATE=LOCAL\n",
+        "MEMORY_EMBEDDING_GATE=LOCAL\nLLM_SCHEDULER_GATE_EMBEDDING=true\n",
+    ):
+        rendered, report = env_merge.merge_env(old_env, SUPERSEDED_TEMPLATE)
+        values = env_merge.parse_env(rendered)
+        assert values["MEMORY_EMBEDDING_GATE"] == "LOCAL", old_env
+        assert "LLM_SCHEDULER_GATE_EMBEDDING" not in values
+        assert report.migrated == []
+        assert dict(report.removed)["LLM_SCHEDULER_GATE_EMBEDDING"]
+
+
+def test_superseded_migration_is_idempotent():
+    """合并结果再合并一次不该继续变化——升级路径要能重复走。"""
+    first, _ = env_merge.merge_env(
+        "LLM_SCHEDULER_GATE_EMBEDDING=false\n", SUPERSEDED_TEMPLATE
+    )
+    second, report = env_merge.merge_env(first, SUPERSEDED_TEMPLATE)
+
+    assert env_merge.parse_env(second)["MEMORY_EMBEDDING_GATE"] == "none"
+    assert report.migrated == []
+
+
+def test_superseded_key_is_absent_from_gui_schema():
+    """旧键代码还在读，但界面上只该出现新键：同一件事摆两个控件，
+    用户改了旧的、新的又优先，那就成了「改了没反应」。"""
+    from config import PROJECT_ROOT
+    from deploy.env_schema import build_schema
+
+    keys = {
+        f["key"]
+        for f in build_schema(PROJECT_ROOT / "config" / "settings.py")["fields"]
+    }
+    assert "LLM_SCHEDULER_GATE_EMBEDDING" not in keys
+    assert "MEMORY_EMBEDDING_GATE" in keys
+
+
 def test_missing_old_file_falls_back_to_template(tmp_path):
     """旧文件不存在时等价于「直接用模板」，不该抛异常。"""
     template = tmp_path / ".env.example"
@@ -142,5 +222,47 @@ def test_real_env_example_round_trips():
 
     assert values["ALLOWED_GROUPS"] == "123456"
     assert values["LM_STUDIO_MODEL"] == "demo/model"
+    assert report.unknown == []
+
+
+def test_real_env_example_carries_the_new_keys():
+    """模板是合并器的骨架：新键不在模板里，换算值只能追加到文件末尾——
+    功能上还生效，但它会脱离所属章节的说明文字，用户看不懂那一行是干什么的。
+
+    这里顺带守住 P1 端点/角色键进模板：``deploy init`` 生成的 ``.env`` 若没有
+    这些行，用户就只能靠翻文档才知道有这些开关。
+    """
+    from config import PROJECT_ROOT
+
+    template = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    keys = env_merge.template_keys(template)
+
+    assert "MEMORY_EMBEDDING_GATE" in keys
+    assert "LLM_SCHEDULER_GATE_EMBEDDING" not in keys, "旧键不该再出现在模板里"
+    for slot in ("LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"):
+        for suffix in ("BASE_URL", "API_KEY", "KIND", "CONCURRENCY", "TIMEOUT"):
+            assert f"LLM_ENDPOINT_{slot}_{suffix}" in keys
+    for role in ("CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT"):
+        for suffix in (
+            "ENDPOINT",
+            "MODEL",
+            "TEMPERATURE",
+            "MAX_TOKENS",
+            "FALLBACK_ENDPOINT",
+        ):
+            assert f"LLM_ROLE_{role}_{suffix}" in keys
+
+
+def test_real_env_example_migrates_the_superseded_gate_key_in_place():
+    """真实模板下换算值必须**替换模板那一行**，而不是落到末尾的追加块。"""
+    from config import PROJECT_ROOT
+
+    template = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    rendered, report = env_merge.merge_env(
+        "LLM_SCHEDULER_GATE_EMBEDDING=false\n", template
+    )
+
+    assert env_merge.parse_env(rendered)["MEMORY_EMBEDDING_GATE"] == "none"
+    assert report.appended == []
     assert report.unknown == []
 

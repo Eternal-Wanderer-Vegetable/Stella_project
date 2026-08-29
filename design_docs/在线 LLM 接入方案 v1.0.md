@@ -704,7 +704,7 @@ LLM_BUDGET_EXHAUSTED_ACTION=pause_memory # pause_memory | pause_all | warn_only
 |---|---|---|
 | **P0** ✅ 已交付<br>（2026-08-28） | 修四个阻塞缺陷（`_env_inherit` + schema 废弃判定 + 三个 prompt 重排 + 截断不推进 checkpoint）；补 `session_compact` 的 api_key | 纯本地行为不变；阶段2 提取恢复工作（当前是坏的）；缓存前缀长度达标 → 落地情况与偏差见 §10.1 |
 | **P1** 🟡 代码完成<br>（2026-08-28，离线验证跑过一轮、修完待复跑；厂商实测未做） | 端点×角色配置模型 + `core/llm/registry.py` + 六处构造点改造 + 闸门改并发度 + 参数兼容层 | 三个场景可通过手改 `.env` 跑通；纯本地逐字等价今天；**§9.1 契约测试进 CI 并通过**；DeepSeek + 第二家厂商各跑通一轮（只改 `.env`） → 落地情况、偏差、首轮 5 处缺陷与**仍欠的判据**见 §10.2 |
-| **P2** | GUI「模型服务」分区（端点卡片 + 角色矩阵 + 三个预设 + 测试连接）；doctor 新检查项；迁移逻辑 | 全程 GUI 完成本地↔在线切换，存量 `.env` 自动迁移 |
+| **P2** 🟡 代码完成<br>（2026-08-29，离线验证跑绿；GUI 点击验证未做） | GUI「模型服务」分区（端点卡片 + 角色矩阵 + 三个预设 + 测试连接）；doctor 新检查项（+5，共 32）；迁移逻辑；文档键表 | 全程 GUI 完成本地↔在线切换，存量 `.env` 自动迁移 → 落地情况、偏差与**仍欠的判据**见 §10.3 |
 | **P3** | 成本控制：Tier 0 剩余项 + Tier 1 预筛 + Tier 2 记账/预算 + 用量面板 + 降级链 | 缓存命中率与用量可见；日预算生效；超额只停记忆域 |
 
 P0 可独立发布（它修的是现存 bug）。P1 之后功能已可用，P2 让它好用，P3 让它省钱。
@@ -805,8 +805,70 @@ P0 可独立发布（它修的是现存 bug）。P1 之后功能已可用，P2 �
 
 1. **复跑确认**：`ruff check .` 应为 0 error；`pytest tests -q` 应无 failed。首轮（2026-08-28）是 3 error / 2 failed，5 处缺陷已按上表修完，但**修完之后没人再跑过**——这一条不勾掉，P1 不算收口。
 2. **两家厂商实测**未做，见上表。这是 D5 硬要求「不能出现换了就跑不通」的唯一验证手段。
-3. **文档键表更新推迟到 P2**（与 `env_keys.RENAMED` 一起改，避免改两遍）：`docs/configuration.md:242,246,801`、`docs/capability-system.md:239`、`.env.example:104`。
+3. ~~**文档键表更新推迟到 P2**（与 `env_keys.RENAMED` 一起改，避免改两遍）：`docs/configuration.md:242,246,801`、`docs/capability-system.md:239`、`.env.example:104`。~~ → P2-e 已做，实际改动范围比这条列的更大（见 §10.3 偏差 ⑨）；`RENAMED` 最终没有改（偏差 ①）。
 4. P0 遗留的三项（`config.html` 继承路径人工验证、`probe_consolidation.py --positive`、`pyrightconfig.json` 指向不存在的 `.venv`）**仍未消**。
+
+### 10.3 P2 落地记录（2026-08-29）
+
+**状态：代码完成，离线验证已跑绿（`ruff check .` 0 error；`pytest tests -q` 1350 passed / 5 skipped；`cargo check` 干净；`config.html` 的 ES 模块 `node --check` 通过）。GUI 的实际点击验证与两家厂商实测仍未做**——本机没有 LM Studio 也没有在线 key，这两项只能在用户的机器上做，见「遗留项」。
+
+分五步做，每步独立可回滚：P2-a `.env.example` → P2-b 迁移 → P2-c doctor → P2-d GUI → P2-e 文档。
+
+| 项 | 状态 | 与原计划的差异 |
+|---|---|---|
+| P2-a `.env.example` 键表 | ✅ | 无。新增端点/角色两段（+144 行），继承型键**一律写成注释行**而不是 `KEY=`——写成空值会切断继承链（P0 那个缺陷的成因） |
+| P2-b 迁移 | ✅ 但做法不同 | 见偏差 ①②③④。`env_keys.RENAMED` 仍为空；新增 `SUPERSEDED` + `migrate_value()`，目前只有一条 `LLM_SCHEDULER_GATE_EMBEDDING` → `MEMORY_EMBEDDING_GATE`（`true`→`auto`、`false`→`none`） |
+| P2-c doctor 检查项 | ✅ | 见偏差 ⑤。新增 5 项：`llm_config`（error/warn 各汇总一条）、`llm_endpoint_reachable`、`llm_role_model`、`embedding_locality`、`superseded_env_keys`。检查项总数 27 → 32 |
+| P2-d GUI「模型服务」分区 | ✅ 代码完成 | 见偏差 ⑥⑦⑧。端点卡片 ×4 + 角色矩阵 6×6 + 三个一键预设 + 每槽「测试连接」；`config.html` +356 行、`style.css` +48 行、`commands.rs` +39 行 |
+| P2-e 文档 | ✅ | 见偏差 ⑨。`docs/configuration.md` 新增「端点与角色：两层配置」整节并重写「LLM 资源调度」；`docs/architecture.md` 与 `docs/capability-system.md` 的闸门表/并行说明一并改（它们写的还是 `chat`/`consolidation` 两资源） |
+
+**与原计划的偏差**
+
+① **§8.1 那张 13 行 `RENAMED` 表整张没有落地**，`env_keys.RENAMED` 至今是空的。原因是合并器的「改名」语义是「把值搬到新键、旧键那行恢复模板默认」，而 `LM_STUDIO_BASE_URL` / `_MODEL` / `_API_KEY` 每个都有 4~5 个子键继承它——改一次名就等于把那 4~5 个子键静默重置回默认地址。改用「新键继承旧键」后，未迁移的 `.env` 行为与升级前逐字相同，**用户不需要迁移**，这比迁移得漂亮更重要。代价：键名新旧并存，靠文档和 doctor 说清谁是谁的上游。
+
+② **§8.1「不能进 RENAMED 的第 1 类」（三个 `*_BASE_URL` 按槽归属重写）没有实现**。它要在 `env_merge.py` 里判断三个旧地址键是否分歧、再决定写进哪个槽——那是把 `settings.py` 的继承规则在合并器里重写一遍，两处判据必然漂移。改为运行时继承 + `registry._legacy_key_warnings()` / `_local_slot_override_warning()` 把「地址分歧」报成 warn，由用户决定怎么改。
+
+③ **§8.1 第 3 项（给存量纯本地用户填上 `EXTRA` 的地址并写 `CONSOLIDATION_ENDPOINT=EXTRA`）改为由 `settings.py` 的默认值实现**，不往已有 `.env` 里写任何一行。副作用是 `deploy migrate --dry-run` 的报告里看不到这一项——因为确实什么都没改。
+
+④ **§6.3 最后一条（把 `CONSOLIDATION_LM_STUDIO_BASE_URL` 登记进 `env_keys.DEPRECATED`）没有做，且**不应该**做**：它现在是 `EXTRA` 槽的继承上游，标成废弃等于让用户去删一个仍然生效的键，删掉会把 `EXTRA` 的地址一起清空。文档里改为反向说明：「不要因为改用了角色键就删掉它」。
+
+⑤ **§7 的三项没有各自成为一条 `checks.py` 检查项**：
+- 「缓存前缀健康度」由 `tests/test_prompt_cache_prefix.py` 守（前缀长度是代码属性，不是环境属性，跑一次单测就够，放进 doctor 只会让每次自检都重算一遍固定值）；
+- 双 key 检查落在 `registry._check_key_sharing()`，经 `check_llm_config_issues` 进 doctor——**配置判据只该有一份**，doctor 自己再判一遍就会出现「doctor 说没问题而 Bot 起不来」；
+- 预算/记账检查按计划留到 P3（那些键还不存在）。
+
+⑥ **角色矩阵有第 6 列「失败回退」**，而 §6.1 只列了四列。理由：`registry` 只在角色显式写了 `FALLBACK_ENDPOINT` 时才回退，没有这一列，护栏 B 从 GUI 里根本不可达，全局的 `LLM_FALLBACK_ENABLED` 也就是个空开关。`LLM_FALLBACK_ENABLED` 与 `MEMORY_EMBEDDING_GATE` 两个全局项放在分区页脚，不塞进 embedding 那一行。
+
+⑦ **主表单的两个本机模型 ID 去掉了 `required`**，`deploy/init_wizard.validate_answers()` 也不再要求它们；`get_config` 判断「是否已配置」时额外接受非空的 `LLM_ROLE_CHAT_MODEL`。不改的话纯在线用户会被永久挡在向导里，与 P2 的交付判据「全程 GUI 完成本地↔在线切换」直接冲突。留空的后果改由 `registry.validate()` 分级判（在线角色空模型 = error，本地 = warn）。
+
+⑧ **数值列刻意用 `text` + `inputmode` 而不是 `type="number"`**：`number` 控件读到 `.env` 里已有的非法值会把 `value` 变成空串，面板保存前的 `syncAdvanced()` 一收就把用户那个键静默清空了。这是走读时发现的，没有触发过。
+
+⑨ **文档改动范围超出 §10.2 遗留项第 3 条列的四处**。那条只列了 `docs/configuration.md:242,246,801`、`docs/capability-system.md:239`、`.env.example:104`；实际还必须改 `docs/architecture.md` 的资源闸门表（写的是 `chat`/`consolidation` 两行）和 `capability/hooks.py` 的「关于并行的诚实说明」（写的是 `gate_of(ROLE_CHAT)`，而 Comes 的 LLM 调用实际走 `ROLE_PLUGIN`）。漏掉它们会留下三份互相矛盾的闸门说明。
+
+**新增/改动测试**
+
+| 文件 | 守什么 |
+|---|---|
+| `tests/test_deploy_checks.py`（+310 行） | 5 项新检查各自的触发与不触发条件；在线端点不通只到 warn；同地址不重复报；模型 ID 为空**不**在 `llm_role_model` 里报（同一根因不说两遍） |
+| `tests/test_env_merge.py`（+122 行） | `SUPERSEDED` 的换算与移除、优先级（向导答案 > 用户显式新键 > 旧键换算值）、重复合并幂等、报告里旧键→新键那行 |
+| `tests/test_deploy_probe.py` | 新增的端点/角色探测字段；**key 不进 Snapshot** |
+| `tests/test_llm_registry.py`（+62 行） | 新增的 legacy 键告警与 LOCAL 槽覆盖告警 |
+| `tests/test_deploy_init.py` | `validate_answers` 允许两个本机模型 ID 留空（偏差 ⑦） |
+
+**交付判据对照**
+
+| 判据 | 状态 |
+|---|---|
+| 全程 GUI 完成本地↔在线切换 | ⚠️ **代码完成，未点过**。`stella-installer/` 下没有 JS 测试框架，本轮只做了代码走读 + 一段脚本核对：面板绑定的 51 个键全部存在于 schema、且都在 `managedKeys` 里（既没有键出现两个控件，也没有键被孤立）。真正的判据是在装了 Tauri 的机器上点一遍 |
+| 存量 `.env` 自动迁移 | ✅ **成立，但含义与原计划不同**：靠「新键继承旧键」做到**不需要迁移**（偏差 ①②③），需要换算的只有 `LLM_SCHEDULER_GATE_EMBEDDING` 一个键，由 `deploy migrate` 自动完成，`test_env_merge.py` 守住 |
+| 离线验证 | ✅ `ruff check .` 0 error；`pytest tests -q` **1350 passed / 5 skipped**（P1 复跑基线一致）；`cargo check --quiet` 干净；`node --check` 通过 |
+
+**遗留项**
+
+1. **GUI 手工点击验证**（含 P0 就遗留的「留空即继承」路径）——需要能跑 Tauri 的机器。这是 P2 唯一还欠的交付判据。
+2. **两家厂商实测**（P1 的判据，D5 硬要求）仍未做：DeepSeek + 第二家各跑通一轮，且只改 `.env`。P2 之后这一项在 GUI 上也能做了（改预设 + 填两把 key + 点「测试连接」）。
+3. `scripts/probe_consolidation.py --positive` 仍未跑（P0 遗留）。
+4. `pyrightconfig.json` 仍指向不存在的 `.venv`（P0 遗留，与本方案无关）。
 
 ---
 

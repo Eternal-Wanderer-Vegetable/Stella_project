@@ -138,9 +138,15 @@ export async function saveConfig(config) {
   return await invoke("save_config", { config });
 }
 
-export async function listModels(baseUrl) {
+/**
+ * 读某个 OpenAI 兼容端点的模型列表（`/v1/models`）。
+ *
+ * apiKey 可留空：本机 LM Studio 一般不校验，在线端点必须带。key 只在这一次
+ * 请求里当 Authorization 头用掉，不写盘、不进任何返回值。
+ */
+export async function listModels(baseUrl, apiKey = "") {
   if (USE_MOCK || !invoke) return [];
-  return JSON.parse(await invoke("list_models", { baseUrl }));
+  return JSON.parse(await invoke("list_models", { baseUrl, apiKey }));
 }
 
 export async function getVersion() {
