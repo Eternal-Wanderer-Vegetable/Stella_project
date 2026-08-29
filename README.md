@@ -2,7 +2,7 @@
 
 # 🌟 Stella
 
-*一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人 —— 为 8K 上下文窗口而设计，本地小模型与在线 API 都能跑*
+*一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人 —— 为 8K 上下文窗口而设计，本地小模型与在线 API 均可兼容*
 
 [![CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
@@ -78,10 +78,10 @@ Stella 的设计前提是上下文窗口很小——基准是 **8192 tokens**。
 
 - 第一步：下载如下必须依赖：
 
-  - [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)并按照其中的指示配置**反向websocket链接**。记录下您配置的端口号并打开链接。
+  - [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)，并按照其中的指示配置**反向websocket链接**。记录下您配置的端口号并打开链接。
   - [LM Studio](https://lmstudio.ai/)，安装后在软件内部下载必须模型（见[开发中使用的本地模型](#开发中使用的本地模型)）并加载模型，且打开LM Studio的远程服务端口。
 
-    **只想用在线 API 的话这一项可以跳过**：在配置界面的在线端点卡片里填服务商地址与 API key 即可，不需要显卡。见[三种部署模式](#-三种部署模式)。
+> 注：如果使用全部在线的方案，也需要下载LM Studio来加载本地embedding模型。
 
 - 第二步：到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后有两种启动方式：
 
@@ -97,7 +97,7 @@ Stella 的设计前提是上下文窗口很小——基准是 **8192 tokens**。
     - **全在线 / 混合** → 点「纯在线（双 key）」或「混合（对话在线 · 整合本地）」，在两张在线卡片里各填一次服务商地址、API key 与模型 ID。**两把 key 要填不同的**，原因见[三种部署模式](#-三种部署模式)。
   - 3.配置完成后，单击“保存并检查”，程序会自动跳转至“运行状态”界面。单击“启动”即可。
 
-> 遇到了问题？你可以加入开发者所在的QQ群：263402786，在群里@开发者Eternal-Wanderer-Vegetable。
+> 遇到了问题？你可以加入开发者所在的QQ群：263402786，在群里@（目前唯一的）开发者Eternal-Wanderer-Vegetable。
 
 ### ⬆️ 从旧版本升级
 
@@ -294,7 +294,7 @@ ruff check .
 - [@MIO-456](https://github.com/MIO-456) 开发的 [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) 项目激励了本项目的开发。
 - 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 本项目开发中得到了来自如下组织的支持：
-  - **模型提供商**：Deepseek，OpenAI（ChatGPT），Google（Gemini，Gemma）和通义千问（text-embedding-qwen3-embedding-0.6b）。没有他们的优秀模型作为基础，这个项目不可能诞生。
+  - **模型提供商**：Deepseek，OpenAI（ChatGPT），Google（Gemini，Gemma），通义千问（text-embedding-qwen3-embedding-0.6b）和~~Anthropic~~。没有他们的优秀模型作为基础，这个项目不可能诞生。
   - **Coding Agent**：[Opencode](https://github.com/anomalyco/opencode)，感谢 Opencode 对本项目的大力支持。
   - **开源代码库**：[nonebot2](https://github.com/nonebot/nonebot2)，[NapCatQQ](https://github.com/NapNeko/NapCatQQ)，以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。此外本项目也是为了向 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 与 [MaiBot](https://github.com/Mai-with-u/MaiBot) 两位前辈看齐，创造一个真正的、能够完整本地循环、不必把群聊信息和个人隐私交出去的 AI 朋友。
   - **开发者社区**：[Linux Do](https://linux.do)
