@@ -21,6 +21,8 @@
 
 ---
 
+> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
+
 Stella does more than send messages to a large model and return a reply. It turns scattered information from group chats into **searchable, verifiable, and forgetful memories**, and proactively speaks up to learn about you at the right time.
 
 Stella is designed around a small context window: the baseline limit is **8192 tokens**. Personality, memories, conversation history, and tool results all have to coexist within that small budget, so simply piling on prompts is not viable. The budget is therefore divided: memories are filtered in the database before being injected, tools run outside the chat context and return only a single conclusion, and conversations that roll out of the window are automatically compressed into a recap. **No matter how many plugins you install, they do not consume the conversation window.** A small window works, and a larger one naturally gives you more room; the reverse is not true: an architecture that assumes an unlimited window will fall apart on 8K.

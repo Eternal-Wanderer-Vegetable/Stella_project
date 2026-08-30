@@ -2,6 +2,8 @@
 
 [中文](development.md) | English
 
+> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
+
 This document covers testing, probe scripts, CI, and the contribution workflow. See the [architecture guide](architecture.en.md) for architecture and the [configuration reference](configuration.en.md) for configuration.
 
 ## Environment Setup

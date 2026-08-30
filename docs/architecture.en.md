@@ -2,6 +2,8 @@
 
 [中文](architecture.md) | English
 
+> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
+
 This document describes Stella's directory structure, module responsibilities, and the complete processing flow for a message. The design rationale for the memory system is in [Memory System](memory-system.en.md), capability routing and tool execution are in [Capability System](capability-system.en.md), and configuration options are in [Configuration Reference](configuration.en.md).
 
 ## Layered Overview

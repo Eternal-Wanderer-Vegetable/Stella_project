@@ -2,6 +2,8 @@
 
 [中文](memory-system.md) | English
 
+> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
+
 This document explains **why Stella's memory system is designed this way** and the specific rules for each gate. See the [architecture documentation](architecture.en.md) for the directory structure and processing flow, and the [configuration reference](configuration.en.md) for configuration options.
 
 ## Three Design Principles

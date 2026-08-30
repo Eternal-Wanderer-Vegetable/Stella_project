@@ -2,6 +2,8 @@
 
 [中文](configuration.md) | English
 
+> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
+
 **Regular users (Release package)**: For first-time setup, use the `Configuration` page in `Stella.exe`: enter the group number, connection method, address, and model ID, then save to write them to `.env` in the project root. The model list can be read automatically from the local LM Studio, or entered manually.
 
 **Developers**: Use the wizard `python -m deploy init`: answer only 5 required items (group number, connection method, address, and two model IDs). The wizard retrieves the model list from LM Studio and lets you choose by number, avoiding the common mistake of typing a complete ID but omitting the `google/` prefix. It generates `.env` line by line from `.env.example`, preserving the template comments exactly, especially the cross-NapCat OneBot connection instructions. You can also use `--answers` to save and reuse answers.
