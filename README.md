@@ -1,7 +1,5 @@
 <div align="center">
 
-[中文](README.md) | [English](README.en.md)
-
 # 🌟 Stella
 
 **一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人**
@@ -15,6 +13,8 @@
 [![OneBot V11](https://img.shields.io/badge/OneBot-V11-black)](https://onebot.dev/)
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app/)
+
+[中文](README.md) | [English](README.en.md)
 
 </div>
 
