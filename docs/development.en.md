@@ -1,6 +1,6 @@
 # Development Guide
 
-[中文](development.md) | [English](development.en.md)
+[中文](development.md) | English
 
 This document covers testing, probe scripts, CI, and the contribution workflow. See the [architecture guide](architecture.en.md) for architecture and the [configuration reference](configuration.en.md) for configuration.
 

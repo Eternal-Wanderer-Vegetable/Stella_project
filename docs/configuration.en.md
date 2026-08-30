@@ -1,6 +1,6 @@
 # Configuration Reference
 
-[中文](configuration.md) | [English](configuration.en.md)
+[中文](configuration.md) | English
 
 **Regular users (Release package)**: For first-time setup, use the `Configuration` page in `Stella.exe`: enter the group number, connection method, address, and model ID, then save to write them to `.env` in the project root. The model list can be read automatically from the local LM Studio, or entered manually.
 

@@ -1,6 +1,6 @@
 # Capability System (Capability Router and Comes)
 
-[中文](capability-system.md) | [English](capability-system.en.md)
+[中文](capability-system.md) | English
 
 This document describes Stella's task scheduling layer: the Router determines what capabilities are needed, Comes executes tools, and the two exchange only tasks and results with chat and memory. The design process is documented in `design_docs/Stella 智能机器人架构升级方案：基于 Capability Router 与 Comes 工具执行层的任务调度系统.md` and `design_docs/Capability Router 与 Comes 落地方案 v1.0.md`.
 

@@ -1,6 +1,6 @@
 # 配置参考
 
-[中文](configuration.md) | [English](configuration.en.md)
+中文 | [English](configuration.en.md)
 
 **普通用户（Release 包）**：推荐用 `Stella.exe` 的「配置」页完成首次配置——填写群号、
 连接方式、地址与模型 ID，保存后写入项目根目录的 `.env`；模型列表可从本机 LM Studio

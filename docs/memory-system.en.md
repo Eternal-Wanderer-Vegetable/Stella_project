@@ -1,6 +1,6 @@
 # Memory System
 
-[中文](memory-system.md) | [English](memory-system.en.md)
+[中文](memory-system.md) | English
 
 This document explains **why Stella's memory system is designed this way** and the specific rules for each gate. See the [architecture documentation](architecture.en.md) for the directory structure and processing flow, and the [configuration reference](configuration.en.md) for configuration options.
 
