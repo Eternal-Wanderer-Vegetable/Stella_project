@@ -1,5 +1,7 @@
 # 开发指南
 
+[中文](development.md) | [English](development.en.md)
+
 本文覆盖测试、探针脚本、CI 与贡献流程。架构见 [架构说明](architecture.md)，配置见 [配置参考](configuration.md)。
 
 ## 环境准备

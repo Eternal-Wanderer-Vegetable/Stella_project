@@ -1,5 +1,7 @@
 # 能力系统（Capability Router 与 Comes）
 
+[中文](capability-system.md) | [English](capability-system.en.md)
+
 本文描述 Stella 的任务调度层：Router 判断需要什么能力，Comes 执行工具，两者与聊天、记忆之间只传递任务与结果。设计过程见 `design_docs/Stella 智能机器人架构升级方案：基于 Capability Router 与 Comes 工具执行层的任务调度系统.md` 与 `design_docs/Capability Router 与 Comes 落地方案 v1.0.md`。
 
 ## 为什么需要它

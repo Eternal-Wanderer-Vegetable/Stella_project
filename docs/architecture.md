@@ -1,5 +1,7 @@
 # 架构说明
 
+[中文](architecture.md) | [English](architecture.en.md)
+
 本文描述 Stella 的目录结构、模块职责与一次消息的完整处理流程。记忆系统的设计理由见 [记忆系统](memory-system.md)，能力路由与工具执行见 [能力系统](capability-system.md)，配置项见 [配置参考](configuration.md)。
 
 ## 分层概览

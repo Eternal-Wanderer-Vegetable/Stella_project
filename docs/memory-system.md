@@ -1,5 +1,7 @@
 # 记忆系统
 
+[中文](memory-system.md) | [English](memory-system.en.md)
+
 本文说明 Stella 的记忆系统**为什么这样设计**，以及各道闸门的具体规则。目录结构与处理流程见 [架构说明](architecture.md)，配置项见 [配置参考](configuration.md)。
 
 ## 三条设计原则

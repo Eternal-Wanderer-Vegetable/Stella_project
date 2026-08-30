@@ -1,5 +1,7 @@
 <div align="center">
 
+[中文](README.md) | [English](README.en.md)
+
 # 🌟 Stella
 
 **一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人**
