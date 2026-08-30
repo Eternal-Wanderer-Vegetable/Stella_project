@@ -89,6 +89,18 @@ class Snapshot:
     # .env 里仍留着的、已被新键取代的键（env_keys.SUPERSEDED）
     superseded_env_keys: list[str] = field(default_factory=list)
 
+    # ── LLM 用量与预算（core/llm/usage_store.usage_snapshot 的输出） ──
+    # 只有计数与比率，绝不含 prompt / 模型输出 / 凭据——这份数据会进 doctor 的
+    # JSON 输出与 GUI，泄漏面必须为零。
+    # 默认 ``{}`` = 「没采到」而不是「一切正常」：相关检查一律跳过，
+    # 健康快照因此一条不报（tests/test_deploy_checks.py 的全局不变量）。
+    llm_usage: dict = field(default_factory=dict)
+    # 记账表存在且可写吗。None = 没探（记账关着，或探测本身失败）。
+    llm_usage_table_writable: bool | None = None
+    # 角色 → ``RoleBackend.runtime_state()``。**运行期**降级状态，只能从活着的
+    # Bot 进程取——doctor 自己的进程里没有构造过任何后端，本地算必然是空的。
+    llm_fallback_states: dict[str, dict] = field(default_factory=dict)
+
     # ── 数据库 ──
     db_exists: bool = True
     db_path: str = "memory/agent_memory.db"

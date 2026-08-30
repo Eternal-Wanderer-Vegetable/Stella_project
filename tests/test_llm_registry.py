@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 
+import httpx
 import pytest
 
 import core.llm.registry as registry
@@ -982,6 +983,99 @@ def test_a_healthy_primary_never_touches_the_fallback():
     rb = _role_backend(primary, fallback)
     assert asyncio.run(rb.generate("hi")) == "主端点回复"
     assert fallback.calls == 0
+
+
+class _Status:
+    """按指定 HTTP 状态码失败的后端（模拟 httpx.HTTPStatusError 的形状）。"""
+
+    def __init__(self, status: int):
+        self.status = status
+        self.calls = 0
+
+    async def generate_detailed(self, _prompt, _system_prompt=""):
+        self.calls += 1
+        raise httpx.HTTPStatusError(
+            f"HTTP {self.status}",
+            request=httpx.Request("POST", "http://x/v1/chat/completions"),
+            response=httpx.Response(self.status, text="{}"),
+        )
+
+    async def generate(self, prompt, system_prompt=""):
+        return await self.generate_detailed(prompt, system_prompt)
+
+
+@pytest.mark.parametrize("status", [400, 404, 422])
+def test_config_errors_do_not_fall_back(status, clock):
+    """400 一类是请求体/配置错：换端点也一样错，降级只会掩盖它。
+
+    契约写在 config/settings.py 与 core/llm/lm_studio.py 的注释里，
+    这里是它的回归守卫。
+    """
+    primary, fallback = _Status(status), _Echo("兜底回复")
+    rb = _role_backend(primary, fallback, cooldown=300.0)
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(rb.generate("hi"))
+    assert fallback.calls == 0, "配置类错误不该降级"
+    # 也不该进冷却：下一次仍然直奔主端点，让用户马上再看到同一个错
+    assert rb.runtime_state()["degraded"] is False
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(rb.generate("hi again"))
+    assert primary.calls == 2
+
+
+@pytest.mark.parametrize("status", [401, 402, 403, 429, 500, 502, 503])
+def test_transient_and_credential_errors_fall_back(status, clock):
+    """鉴权失败 / 额度用尽 / 限流 / 5xx 都是「换个端点可能就成了」，该降级。"""
+    primary, fallback = _Status(status), _Echo("兜底回复")
+    rb = _role_backend(primary, fallback, cooldown=300.0)
+    assert asyncio.run(rb.generate("hi")) == "兜底回复"
+    assert fallback.calls == 1
+
+
+def test_network_errors_fall_back():
+    """连接失败/超时没有状态码，按可降级处理（那是端点侧故障，不是配置错）。"""
+    assert registry.fallback_worthy(httpx.ConnectError("connection refused")) is True
+    assert registry.fallback_worthy(httpx.ReadTimeout("timed out")) is True
+    assert registry.fallback_worthy(RuntimeError("LLM 返回空回复")) is True
+
+
+def test_runtime_state_reports_the_cooldown_countdown(clock):
+    """面板要能区分「配了降级」（配置态）与「正在降级」（此刻的事实）。"""
+    rb = _role_backend(_Boom(), _Echo(), cooldown=300.0)
+    assert rb.runtime_state()["degraded"] is False
+    assert rb.runtime_state()["cooldown_remaining"] == 0.0
+
+    asyncio.run(rb.generate("hi"))
+    state = rb.runtime_state()
+    assert state["degraded"] is True
+    assert state["cooldown_remaining"] == 300.0
+    assert state["cooldown"] == 300.0
+
+    clock.now += 120
+    assert rb.runtime_state()["cooldown_remaining"] == 180.0
+    clock.now += 200
+    assert rb.runtime_state()["degraded"] is False
+
+
+def test_fallback_states_only_reports_roles_that_have_a_fallback(env, monkeypatch):
+    """没配降级链的角色不出现在结果里——「不在结果里」就是「没有降级链」。"""
+    registry.reset_state()
+    monkeypatch.setattr(registry, "_backends", {}, raising=False)
+    assert registry.fallback_states() == {}
+
+    rb = _role_backend(_Boom(), _Echo(), cooldown=300.0)
+    registry._backends["chat"] = rb
+    registry._backends["router"] = _Echo()  # 裸后端，没有降级链
+    states = registry.fallback_states()
+    assert set(states) == {"chat"}
+    assert states["chat"]["degraded"] is False
+
+
+def test_runtime_state_carries_no_credentials():
+    rb = _role_backend(_Echo(), _Echo(), cooldown=300.0)
+    flat = repr(rb.runtime_state())
+    for banned in ("api_key", "Bearer", "http://", "https://"):
+        assert banned not in flat
 
 
 def test_the_wrapper_proxies_identity_to_the_primary():

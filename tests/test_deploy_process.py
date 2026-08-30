@@ -235,6 +235,7 @@ def test_status_dict_shape(monkeypatch, tmp_path):
         "recent_log",
         "link",
         "scheduler",
+        "usage",
         "uptime_seconds",
         "note",
     }
@@ -257,6 +258,7 @@ def test_status_api_unreachable(monkeypatch, tmp_path):
     assert data["pid_file_present"] is False
     assert data["link"] is None
     assert data["scheduler"] is None
+    assert data["usage"] is None
     assert data["uptime_seconds"] is None
 
 

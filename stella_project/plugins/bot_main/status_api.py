@@ -67,12 +67,34 @@ def _is_loopback(host: str | None) -> bool:
         return False
 
 
-def build_payload(link: dict | None, sched: dict, *, pid: int, started_at: float) -> dict:
+def _fallback_states() -> dict:
+    """各角色此刻的降级状态（配了降级链的角色才有）。取不到就当空。"""
+    try:
+        from core.llm import fallback_states
+
+        return fallback_states()
+    except Exception:
+        return {}
+
+
+def build_payload(
+    link: dict | None,
+    sched: dict,
+    *,
+    pid: int,
+    started_at: float,
+    usage: dict | None = None,
+) -> dict:
     """组装状态响应。
 
     刻意不包含的字段：ONEBOT_ACCESS_TOKEN、ALLOWED_GROUPS 的具体群号、
     任何消息内容。即使路由被误暴露，泄漏面也仅限「有个机器人在运行」。
     allowed_groups 只给数量——GUI 需要它来提示「未配置任何群」。
+
+    ``usage`` 是 ``core.llm.usage_store.usage_snapshot()``，**只有计数与比率**：
+    今日 token 按角色/端点/模型、缓存命中率、预算余量、正在降级的角色。
+    绝不含 prompt / 模型输出 / base_url / api_key——这条与上面那串同等重要，
+    用量面板是给用户看成本的，不是给它一个泄漏通道。
     """
     return {
         "version": _project_version(),
@@ -81,6 +103,7 @@ def build_payload(link: dict | None, sched: dict, *, pid: int, started_at: float
         "allowed_group_count": len(ALLOWED_GROUPS),
         "link": link,          # link_status() 原样，或 None（扩展未加载时）
         "scheduler": sched,    # core.llm.snapshot()
+        "usage": usage,        # usage_store.usage_snapshot()，或 None（取数失败）
     }
 
 
@@ -122,7 +145,17 @@ def setup_status_api() -> None:
             sched = snapshot()
         except Exception:
             sched = {}
-        return build_payload(link, sched, pid=os.getpid(), started_at=_STARTED_AT)
+        try:
+            from core.llm.usage_store import usage_snapshot
+
+            usage = usage_snapshot()
+            usage["fallback_states"] = _fallback_states()
+        except Exception:
+            # 取数失败只让面板少一块，绝不让状态接口 500
+            usage = None
+        return build_payload(
+            link, sched, pid=os.getpid(), started_at=_STARTED_AT, usage=usage
+        )
 
     try:
         from nonebot import get_driver

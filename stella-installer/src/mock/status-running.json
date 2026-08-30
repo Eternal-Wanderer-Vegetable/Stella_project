@@ -22,6 +22,83 @@
     "healthy": true
   },
   "scheduler": {},
+  "usage": {
+    "accounting": true,
+    "date": "2026-08-30",
+    "budget": 200000,
+    "scope": "online",
+    "action": "pause_memory",
+    "used_tokens": 168420,
+    "remaining_tokens": 31580,
+    "over_budget": false,
+    "paused_roles": [],
+    "totals": {
+      "calls": 214,
+      "failures": 2,
+      "truncated": 1,
+      "prompt_tokens": 152300,
+      "completion_tokens": 16120,
+      "cached_tokens": 96940,
+      "cache_hit_rate": 0.6364
+    },
+    "by_key": {
+      "consolidation@ONLINE_MEMORY:deepseek-chat": {
+        "role": "consolidation",
+        "slot": "ONLINE_MEMORY",
+        "model": "deepseek-chat",
+        "kind": "online",
+        "calls": 96,
+        "failures": 2,
+        "truncated": 1,
+        "prompt_tokens": 118400,
+        "completion_tokens": 9820,
+        "cached_tokens": 82300,
+        "cache_hit_rate": 0.6951
+      },
+      "extract@ONLINE_MEMORY:deepseek-chat": {
+        "role": "extract",
+        "slot": "ONLINE_MEMORY",
+        "model": "deepseek-chat",
+        "kind": "online",
+        "calls": 41,
+        "failures": 0,
+        "truncated": 0,
+        "prompt_tokens": 21400,
+        "completion_tokens": 3100,
+        "cached_tokens": 14640,
+        "cache_hit_rate": 0.6841
+      },
+      "chat@LOCAL:google/gemma-4-26b-a4b-qat": {
+        "role": "chat",
+        "slot": "LOCAL",
+        "model": "google/gemma-4-26b-a4b-qat",
+        "kind": "local",
+        "calls": 77,
+        "failures": 0,
+        "truncated": 0,
+        "prompt_tokens": 12500,
+        "completion_tokens": 3200,
+        "cached_tokens": 0,
+        "cache_hit_rate": 0.0
+      }
+    },
+    "fallback_states": {
+      "chat": {
+        "degraded": false,
+        "cooldown": 300.0,
+        "cooldown_remaining": 0.0,
+        "primary_slot": "ONLINE_CHAT",
+        "fallback_slot": "LOCAL"
+      },
+      "consolidation": {
+        "degraded": true,
+        "cooldown": 300.0,
+        "cooldown_remaining": 182.4,
+        "primary_slot": "ONLINE_MEMORY",
+        "fallback_slot": "LOCAL"
+      }
+    }
+  },
   "uptime_seconds": 259.91937708854675,
-  "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null"
+  "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null"
 }

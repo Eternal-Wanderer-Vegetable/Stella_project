@@ -469,6 +469,20 @@ def gate_of(role: str) -> str:
     return ep.slot if ep is not None else GATE_UNBOUND
 
 
+def role_is_online(role: str) -> bool:
+    """角色当前是否落在**在线**端点上。
+
+    成本控制那一档有三处要问这件事（整合的批量/重叠窗口按端点类型分档、
+    预算域 ``online`` 的过滤、doctor 的提示措辞），所以判据只放这一份——
+    散着写 ``endpoint_of(x).kind == "online"`` 迟早有一处漏掉「角色未绑定」
+    或「槽未配置」这两种 None 情形。
+
+    未绑定 / 槽未配置 → False：拿不到端点就谈不上在线，按本地那套保守参数走。
+    """
+    ep = endpoint_of(role)
+    return ep is not None and ep.configured and ep.kind == KIND_ONLINE
+
+
 def concurrency_of(resource: str) -> int:
     """闸门资源名 → 并发上限。装到 ``scheduler`` 上当解析器用。
 
@@ -520,6 +534,32 @@ def embedding_gate() -> str:
 # ---------- 后端构造 ----------
 
 
+# 「换个端点就可能成功」的 4xx。其余 4xx 是请求体/配置问题，换端点也一样错。
+# 402（余额不足）刻意算在内：那正是最该降到本地端点的情形。
+_FALLBACK_STATUSES = frozenset({401, 402, 403, 408, 409, 425, 429})
+
+
+def fallback_worthy(exc: BaseException) -> bool:
+    """这个异常该不该触发降级。
+
+    降级只对**换个端点就可能成功**的故障有意义：鉴权失败 / 额度用尽 / 限流 /
+    5xx / 连接失败与超时。请求体本身错了（400，以及 404 模型名写错这类配置错误）
+    换到降级端点一样错，降级只会把配置问题掩盖成「偶尔变慢」——
+    ``config/settings.py`` 与 ``core/llm/lm_studio.py`` 的注释里写的契约就是
+    「400 不降级」，这个函数是它的执行者。
+
+    非 HTTP 异常（连接失败、超时、``LLM 返回空回复``）一律可降级：
+    那些都是端点侧的瞬时故障，不是配置错。
+    """
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        if status in _FALLBACK_STATUSES or status >= 500:
+            return True
+        if 400 <= status < 500:
+            return False
+    return True
+
+
 class RoleBackend(LLMBackend):
     """带降级链的角色后端：主端点失败时切到降级端点。
 
@@ -567,6 +607,15 @@ class RoleBackend(LLMBackend):
         except Exception as e:
             if degraded:
                 raise
+            if not fallback_worthy(e):
+                # 配置类错误（400 请求体错、404 模型名错…）**不降级**：
+                # 换端点也一样错，降级只会掩盖它，用户看到的是「有时慢一点」
+                # 而不是「模型名填错了」。原样抛出，让真因冒到日志最上层。
+                logger.error(
+                    f"❌ [LLM] 角色 {self.role} 主端点返回配置类错误（{e}），"
+                    f"按契约**不降级**——请按上面的 HTTP 响应体修正模型名或参数。"
+                )
+                raise
             # 主端点失败 → 立刻用降级端点重试一次，并进入冷却期，避免每条消息
             # 都先去撞一次已经挂掉的主端点（那等于给每次回复都加上一整个超时）。
             self._cool_until = time.monotonic() + self.cooldown
@@ -579,6 +628,26 @@ class RoleBackend(LLMBackend):
             # 冷却期内成功走的是降级端点，冷却到期后自动回主端点，不需要额外探活。
             logger.debug(f"[LLM] 角色 {self.role} 正在使用降级端点")
         return result
+
+    def runtime_state(self) -> dict:
+        """**运行期**降级状态：当前是否降级中、冷却还剩多少秒。
+
+        与 ``RoleBinding.describe()`` 分工明确：那里是配置态（配了哪个降级槽），
+        这里是此刻的事实。面板要区分「配了降级」与「正在降级」——前者是常态，
+        后者是需要用户去看一眼的异常。
+
+        只含计数与槽名，不含 base_url / api_key。
+        """
+        remaining = 0.0
+        if self.cooldown > 0:
+            remaining = max(0.0, self._cool_until - time.monotonic())
+        return {
+            "degraded": remaining > 0,
+            "cooldown": self.cooldown,
+            "cooldown_remaining": round(remaining, 1),
+            "primary_slot": str(getattr(self.primary, "slot", "") or ""),
+            "fallback_slot": str(getattr(self.fallback, "slot", "") or ""),
+        }
 
 
 async def _detailed(backend: LLMBackend, prompt: str, system_prompt: str) -> tuple[str, str]:
@@ -646,6 +715,21 @@ def describe() -> dict:
         "fallback_enabled": _fallback_enabled(),
         "issues": [{"level": level, "message": msg} for level, msg in validate()],
     }
+
+
+def fallback_states() -> dict[str, dict]:
+    """**已构造过**的角色后端里，此刻的降级状态（角色 → runtime_state()）。
+
+    刻意只看 ``_backends`` 缓存、绝不新建后端：这个函数供状态面板与 doctor 轮询，
+    新建后端会在「用户还没调用过任何 LLM」时凭空产出实例，也会把解析期的 issue
+    重复记进 ``_issues``。没配降级端点的角色拿到的是裸后端，不在结果里——
+    「不在结果里」正确地表示「这个角色没有降级链」。
+    """
+    states: dict[str, dict] = {}
+    for role, backend in _backends.items():
+        if isinstance(backend, RoleBackend):
+            states[role] = backend.runtime_state()
+    return states
 
 
 def validate() -> list[tuple[str, str]]:
@@ -813,8 +897,11 @@ __all__ = [
     "endpoint",
     "endpoint_of",
     "endpoints",
+    "fallback_states",
+    "fallback_worthy",
     "gate_of",
     "log_summary",
     "reset_state",
+    "role_is_online",
     "validate",
 ]

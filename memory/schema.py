@@ -52,8 +52,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v10：按空间归属的表增加 origin_group_id 溯源列）
-SCHEMA_VERSION = 10
+# 当前 Schema 版本（v11：LLM 用量日账表 llm_usage_daily，供成本控制与预算判据）
+SCHEMA_VERSION = 11
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -486,6 +486,41 @@ def create_astrbot_preferences_table(conn: sqlite3.Connection) -> None:
     conn.execute(ASTRBOT_PREFERENCES_TABLE_DDL)
 
 
+# LLM 用量日账表（v11 起）：成本控制的落库层，与记忆系统完全隔离。
+#
+# 归属：**不按群、也不按共享空间**。用量是端点/API key 维度的成本事实，跟哪个群产生
+# 无关；因此它不在 GROUP_SCOPED_TABLES 里，空间合并与群迁移都不该碰它。
+#
+# 主键四段 (date, role, slot, model) 是「一天里某个角色打在某端点某模型上」的聚合粒度，
+# 写入走 UPSERT 累加。四段全部 NOT NULL 且缺省填 '-'：SQLite 允许非 INTEGER 主键列存
+# NULL，而 NULL 之间比较不相等，一旦 model 为空就会每次插出一行新记录、UPSERT 去重失效。
+#
+# date 是**本地时区**的 'YYYY-MM-DD' 日期键，不是计时器——跨天靠日期变化自然翻滚，
+# 进程重启不会把当天累计清零（预算因此重启不失效）。
+LLM_USAGE_DAILY_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS llm_usage_daily (
+    date TEXT NOT NULL,
+    role TEXT NOT NULL,
+    slot TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '-',
+    kind TEXT NOT NULL DEFAULT '-',
+    calls INTEGER NOT NULL DEFAULT 0,
+    failures INTEGER NOT NULL DEFAULT 0,
+    truncated INTEGER NOT NULL DEFAULT 0,
+    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_tokens INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (date, role, slot, model)
+)
+"""
+
+
+def create_llm_usage_daily_table(conn: sqlite3.Connection) -> None:
+    """确保 llm_usage_daily 表存在（幂等）。"""
+    conn.execute(LLM_USAGE_DAILY_TABLE_DDL)
+
+
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     """判断表是否存在。"""
     cursor.execute(
@@ -594,6 +629,10 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
         with contextlib.suppress(sqlite3.OperationalError):
             create_astrbot_conversations_table(conn)
             create_astrbot_preferences_table(conn)
+    # v11：LLM 用量日账表（新表，不按群/空间归属，见 DDL 上方注释）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            create_llm_usage_daily_table(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

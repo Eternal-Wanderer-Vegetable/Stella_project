@@ -8,7 +8,8 @@ User Message → Embedding → Capability Prototype Matching → Capability Scor
 ```
 
 复用 ``memory/embeddings.py`` 的 ``EmbeddingService``：它已经具备缓存
-（``model:dim:sha256``）、L2 归一化、经 chat 闸门串行、以及**任何一步失败都返回
+（``model:dim:sha256``）、L2 归一化、经 ``MEMORY_EMBEDDING_GATE`` 指定的那道闸门
+串行（默认 ``auto`` = 与本地 LLM 槽共用）、以及**任何一步失败都返回
 None 让调用方降级**的契约。这里不另建客户端。
 
 **原型向量 = 该能力全部 prototype_texts 编码后的均值（再归一化）**。

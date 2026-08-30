@@ -7,6 +7,7 @@
   "recent_log": null,
   "link": null,
   "scheduler": null,
+  "usage": null,
   "uptime_seconds": null,
-  "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null"
+  "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null"
 }

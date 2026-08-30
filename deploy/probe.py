@@ -445,20 +445,81 @@ def _probe_misc() -> dict:
     return result
 
 
-def _probe_status_api() -> bool:
-    """状态接口是否可达。
+def _probe_status_api() -> dict | None:
+    """活着的 Bot 进程的状态接口响应；不可达时 ``None``（= 可达性判据）。
 
     复用 process 里的实现：它已处理 HOST=0.0.0.0 → 127.0.0.1 的映射与
     .env 读取，重复一份必然漂移。延迟 import：probe 与 process 目前互不
     依赖，但将来 process 若反向 import probe，模块级 import 会形成环。
+
+    返回整份响应而不是一个 bool：运行期降级状态只存在于 Bot 进程的内存里
+    （doctor 自己的进程从没构造过任何后端），只能从这里取。
     """
     try:
         from .process import _fetch_live_status
 
         # 超时略短于 process 的 1.0s：doctor 是交互命令，多一项探测不该拖慢
-        return _fetch_live_status(timeout=0.8) is not None
+        return _fetch_live_status(timeout=0.8)
+    except Exception:
+        return None
+
+
+def _probe_llm_usage(live: dict | None) -> dict:
+    """今日用量 / 预算 / 运行期降级状态。
+
+    两个来源分工明确：
+
+    - **用量与预算**优先取 Bot 进程的快照（含尚未落盘的增量），Bot 没运行时
+      退回本地从 ``llm_usage_daily`` 表算——doctor 在 Bot 停着时也该能回答
+      「今天花了多少」。
+    - **降级状态**只能来自 Bot 进程：``registry.fallback_states()`` 读的是
+      ``_backends`` 缓存，doctor 自己的进程里那是空的，本地算永远得 ``{}``。
+    """
+    out: dict[str, Any] = {
+        "llm_usage": {},
+        "llm_usage_table_writable": None,
+        "llm_fallback_states": {},
+    }
+    usage = (live or {}).get("usage") or {}
+    if not usage:
+        try:
+            from core.llm.usage_store import usage_snapshot
+
+            usage = usage_snapshot()
+        except Exception:
+            usage = {}
+    out["llm_usage"] = usage
+    states = usage.get("fallback_states")
+    out["llm_fallback_states"] = states if isinstance(states, dict) else {}
+    if usage.get("accounting") is True:
+        out["llm_usage_table_writable"] = _usage_table_writable()
+    return out
+
+
+def _usage_table_writable() -> bool | None:
+    """``llm_usage_daily`` 存在且可写吗。None = 判断不了（库都打不开）。
+
+    用一个立刻回滚的事务探写：既能验证「表在」也能验证「库没被只读挂载 / 没被
+    别的进程长期锁住」，又不留下任何一行脏数据。
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=1.0)
+    except Exception:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'llm_usage_daily'"
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute("BEGIN IMMEDIATE")
+        conn.rollback()
+        return True
     except Exception:
         return False
+    finally:
+        with contextlib.suppress(Exception):
+            conn.close()
 
 
 def _home_pointer_exists() -> bool:
@@ -543,9 +604,14 @@ def collect() -> Snapshot:
     except Exception:
         misc = {}
     try:
-        status_api_reachable = _probe_status_api()
+        live_status = _probe_status_api()
     except Exception:
-        status_api_reachable = False
+        live_status = None
+    status_api_reachable = live_status is not None
+    try:
+        usage = _probe_llm_usage(live_status)
+    except Exception:
+        usage = {}
     try:
         render = _probe_render()
     except Exception:
@@ -574,6 +640,9 @@ def collect() -> Snapshot:
         embedding_enabled=MEMORY_EMBEDDING_ENABLED,
         embedding_base_url=MEMORY_EMBEDDING_BASE_URL,
         superseded_env_keys=superseded_keys,
+        llm_usage=usage.get("llm_usage", {}),
+        llm_usage_table_writable=usage.get("llm_usage_table_writable"),
+        llm_fallback_states=usage.get("llm_fallback_states", {}),
         llm_endpoints=llm.get("llm_endpoints", {}),
         llm_roles=llm.get("llm_roles", {}),
         llm_issues=llm.get("llm_issues", []),

@@ -58,6 +58,10 @@ def _llm_section(snap: Snapshot) -> dict:
         "roles": snap.llm_roles,
         "embedding_gate": snap.llm_embedding_gate,
         "embedding_base_url": snap.embedding_base_url,
+        # 今日用量与运行期降级状态：同样是「事实」而不是「结论」。
+        # 都来自 usage_snapshot() / runtime_state()，只有计数、比率与槽名。
+        "usage": snap.llm_usage,
+        "fallback_states": snap.llm_fallback_states,
     }
 
 
@@ -112,8 +116,25 @@ def _llm_overview(snap: Snapshot) -> list[str]:
             )
     gate = snap.llm_embedding_gate or "none"
     lines.append(f"  embedding：{snap.embedding_base_url}（闸门 {gate}，恒定本地）")
+    lines += _usage_overview(snap)
     lines.append("")
     return lines
+
+
+def _usage_overview(snap: Snapshot) -> list[str]:
+    """今日用量一行。缓存命中率单独给出——它是验证前缀缓存有没有生效的唯一手段。"""
+    usage = snap.llm_usage
+    if usage.get("accounting") is not True:
+        return []
+    totals = usage.get("totals") or {}
+    budget = usage.get("budget") or 0
+    used = usage.get("used_tokens") or 0
+    quota = f"{used}/{budget} token" if budget else f"{used} token（预算不限）"
+    rate = (totals.get("cache_hit_rate") or 0.0) * 100
+    return [
+        f"  今日用量：{quota}，调用 {totals.get('calls', 0)} 次，"
+        f"缓存命中率 {rate:.1f}%"
+    ]
 
 
 def to_terminal(results: list[CheckResult], snapshot: Snapshot | None = None) -> str:

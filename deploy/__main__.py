@@ -164,6 +164,39 @@ def _fmt_secs(value: float | None) -> str:
     return f"{value / 3600:.1f} 小时"
 
 
+def _print_usage(usage: dict | None) -> None:
+    """把今日用量摘成三行以内。
+
+    只打计数与比率——这份数据来自 ``usage_snapshot()``，本来就不含 prompt 与凭据。
+    缓存命中率单独占一行：它是验证前缀缓存到底有没有生效的唯一手段，
+    数字一直是 0 就说明 prompt 前缀被什么东西破坏了。
+    """
+    if not usage:
+        return
+    if usage.get("accounting") is False:
+        print("  用量记账：已关闭（LLM_USAGE_ACCOUNTING=false）。")
+        return
+    totals = usage.get("totals") or {}
+    used = usage.get("used_tokens") or 0
+    budget = usage.get("budget") or 0
+    quota = f"{used}/{budget} token" if budget > 0 else f"{used} token（预算不限）"
+    print(
+        f"  今日用量：{quota}，调用 {totals.get('calls', 0)} 次"
+        f"（失败 {totals.get('failures', 0)}，截断 {totals.get('truncated', 0)}）"
+    )
+    print(f"  缓存命中率：{(totals.get('cache_hit_rate') or 0.0) * 100:.1f}%")
+    paused = usage.get("paused_roles") or []
+    if paused:
+        print(f"  已因预算暂停的角色：{'、'.join(paused)}（动作={usage.get('action')}）")
+    degraded = [
+        role
+        for role, st in (usage.get("fallback_states") or {}).items()
+        if st.get("degraded")
+    ]
+    if degraded:
+        print(f"  正在降级中的角色：{'、'.join(degraded)} —— 主端点故障，走的是降级端点。")
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     data = process.status()
     if args.json:
@@ -197,12 +230,13 @@ def _cmd_status(args: argparse.Namespace) -> int:
                 if s.get("waiting"):
                     print(f"  资源 {name}：排队 {s['waiting']} 个"
                           f"（持有者 {s.get('holder') or '—'}）")
+            _print_usage(data.get("usage"))
         else:
             print("Stella 未在运行。")
         if data["recent_log"]:
             recent = data["recent_log"]
             print(f"最近日志 [{recent.get('level', '?')}] {recent.get('message', '')[:120]}")
-        print("提示：link/scheduler 来自 Bot 进程内的状态接口，接口不可达时无法显示。")
+        print("提示：link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时无法显示。")
     return 0
 
 

@@ -81,6 +81,7 @@ from config.spaces import prompt_text, resolve_space
 from core.context import ChatContext
 from core.llm import ROLE_CHAT, backend_for
 from core.llm.registry import log_summary as log_llm_summary
+from core.llm.usage_store import budget_blocked
 from core.pipeline import Pipeline
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
@@ -227,6 +228,19 @@ try:
         logger.info("🔧 [Startup] 记忆系统 Schema 已升级到 v3")
 except Exception as e:
     logger.warning(f"⚠️ 记忆系统 Schema 迁移失败: {e}")
+
+# ── 启动时挂上 LLM 用量记账 ──
+# 必须在 Schema 迁移**之后**：记账要写 llm_usage_daily，那张表由迁移建出来；
+# 挂早了会在库还没升级时先 connect 出一个半成品文件。
+# 记账关闭时 install() 直接返回 False，一次也不碰数据库。
+try:
+    from core.llm import usage_store
+
+    if usage_store.install():
+        logger.info("💰 [Startup] LLM 用量记账已启用（llm_usage_daily）")
+except Exception as e:
+    # 记账是旁路，挂不上就不记，绝不能拖垮插件加载
+    logger.warning(f"⚠️ LLM 用量记账挂载失败（不影响运行）: {e}")
 
 # ── 启动时数据库清理（测试期用，避免频繁重启注入脏记忆） ──
 # 打开开关后，在插件装载阶段立即清空短期 / 长期记忆、重置检查点
@@ -417,6 +431,19 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 maybe_consolidate(event.group_id, force=True)
         except Exception as e:
             logger.warning(f"⚠️ @触发总结异常（跳过）: {e}")
+
+        # 每日 token 预算：只有 pause_all 会拦到这里（默认 pause_memory 放行对话，
+        # 上面那次整合触发本身也已按 CONSOLIDATION 角色单独判过）。
+        # pause_all 的语义是「一分钱都别再花」，所以这里**静默不回**：
+        # 不发提示句（那也要过一次 LLM 之外的发送链路，且撞破预算后每条 @ 都要发一句
+        # 更吵）、也不回落到本地端点（回落会让「全停」名不副实，纯在线部署下更是无处可落）。
+        # 走 NoneBot 的正常「不回复」返回路径，不抛异常。
+        chat_blocked = budget_blocked(ROLE_CHAT)
+        if chat_blocked:
+            logger.warning(
+                f"⚠️ [Budget] 群 {event.group_id} 的 @ 对话被预算拦下，静默不回（{chat_blocked}）"
+            )
+            return
 
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
@@ -1117,3 +1144,11 @@ async def _graceful_shutdown() -> None:
         list(pending_consolidations()) + list(pending_compactions()),
         SHUTDOWN_GRACE_SECONDS,
     )
+
+    # 最后把没落盘的用量增量写出去：节流机制下最多攒了 16 条 / 60 秒，
+    # 不 flush 就丢这一小段，重启后今日累计比实际偏低、预算被悄悄放宽。
+    # 放在等任务之后：那些任务还会继续产生用量。
+    with contextlib.suppress(Exception):
+        from core.llm import usage_store
+
+        usage_store.flush()

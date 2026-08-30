@@ -50,6 +50,7 @@ def test_build_payload_fields_complete():
         "allowed_group_count",
         "link",
         "scheduler",
+        "usage",
     }
     assert payload["pid"] == 123
     assert payload["link"] is link
@@ -82,3 +83,39 @@ def test_build_payload_reports_group_count(monkeypatch):
     monkeypatch.setattr(status_api, "ALLOWED_GROUPS", {1, 2, 3})
     payload = status_api.build_payload(None, {}, pid=1, started_at=time.time())
     assert payload["allowed_group_count"] == 3
+
+
+def test_build_payload_usage_defaults_to_none():
+    """取数失败时 usage 为 None——面板据此整块隐藏，而不是显示一堆 0。"""
+    payload = status_api.build_payload(None, {}, pid=1, started_at=time.time())
+    assert payload["usage"] is None
+
+
+def test_build_payload_passes_usage_through():
+    usage = {"accounting": True, "used_tokens": 120, "budget": 1000}
+    payload = status_api.build_payload(
+        None, {}, pid=1, started_at=time.time(), usage=usage
+    )
+    assert payload["usage"] is usage
+
+
+def test_usage_snapshot_shape_carries_no_credentials_or_chat_content():
+    """约束：用量面板只暴露计数与比率。
+
+    这里直接拿 ``usage_snapshot()`` 的真实输出过一遍序列化——status_api 是它
+    唯一的出口，字段一旦长出 prompt / base_url / key，泄漏就是全网可见的
+    （虽然接口只绑回环，但诊断包会被用户贴到 issue 里）。
+    """
+    import core.llm.usage_store as store
+
+    store.reset_state()
+    try:
+        snap = store.usage_snapshot()
+        text = json.dumps(
+            status_api.build_payload(None, {}, pid=1, started_at=time.time(), usage=snap),
+            ensure_ascii=False,
+        )
+        for banned in ("api_key", "Bearer", "sk-", "prompt_text", "http://", "https://"):
+            assert banned not in text
+    finally:
+        store.reset_state()

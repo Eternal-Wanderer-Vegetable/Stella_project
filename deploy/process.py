@@ -326,6 +326,7 @@ def status() -> dict:
         # 以下来自进程内状态接口；接口不可达时为 None
         "link": (live or {}).get("link"),
         "scheduler": (live or {}).get("scheduler"),
+        "usage": (live or {}).get("usage"),
         "uptime_seconds": (live or {}).get("uptime_seconds"),
-        "note": "link/scheduler 来自 Bot 进程内的状态接口，接口不可达时为 null",
+        "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null",
     }

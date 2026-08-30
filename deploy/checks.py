@@ -967,6 +967,102 @@ def check_superseded_env_keys(snap: Snapshot) -> CheckResult | None:
     )
 
 
+def check_llm_usage_accounting(snap: Snapshot) -> CheckResult | None:
+    """记账开着却写不进 ``llm_usage_daily`` → warn。
+
+    记账失效不影响聊天（``core/llm/usage_sink`` 全程吞异常），但**预算会跟着失效**：
+    没有用量数据就无从判断超额，``LLM_DAILY_TOKEN_BUDGET`` 变成一个不生效的数字。
+    用户以为有上限、实际没有，这正是需要提前说一声的情形。
+
+    表不存在最常见的原因是库还没迁到 v11 —— 那由 :func:`check_schema_version`
+    单独报，这里只给一句「跑 deploy migrate」。
+    """
+    if snap.llm_usage.get("accounting") is not True:
+        return None  # 没采到 / 用户显式关掉了记账：都不是问题
+    if snap.llm_usage_table_writable is not False:
+        return None  # True = 正常；None = 探不出来，不拿「没测出来」当问题
+    return CheckResult(
+        id="llm_usage_accounting",
+        level="warn",
+        title="用量记账表不可用",
+        detail=f"LLM_USAGE_ACCOUNTING=true，但 {snap.db_path} 里的 "
+        "llm_usage_daily 不存在或不可写。",
+        fix_hint="跑一次 deploy migrate 建表。记账失效不影响聊天，但 "
+        "LLM_DAILY_TOKEN_BUDGET 会一起失效（没有用量数据就无从判断超额）——"
+        "确实不需要记账的话把 LLM_USAGE_ACCOUNTING 设为 false，这条提示就不再出现。",
+    )
+
+
+def check_llm_daily_budget(snap: Snapshot) -> CheckResult | None:
+    """今日 token 用量接近（≥80%）或已超每日预算 → warn。
+
+    **刻意不是 error**：超额的默认动作是 ``pause_memory``，对话链路照常可用，
+    拿它阻塞启动等于把「记忆暂时不更新」升级成「Bot 起不来」，方向完全错了。
+    """
+    usage = snap.llm_usage
+    if usage.get("accounting") is not True:
+        return None
+    try:
+        budget = int(usage.get("budget") or 0)
+        used = int(usage.get("used_tokens") or 0)
+    except (TypeError, ValueError):
+        return None
+    if budget <= 0:
+        return None  # 0 = 不限，没有可比的对象
+    if used < budget * 0.8:
+        return None
+    paused = [str(r) for r in (usage.get("paused_roles") or [])]
+    action = str(usage.get("action") or "")
+    over = used >= budget
+    detail = f"今日已用 {used}/{budget} token（域={usage.get('scope') or 'online'}）"
+    if paused:
+        detail += f"，已暂停的角色：{'、'.join(paused)}（动作={action}）"
+    return CheckResult(
+        id="llm_daily_budget",
+        level="warn",
+        title="今日 token 预算已超额" if over else "今日 token 预算即将用尽",
+        detail=detail,
+        fix_hint="预算按本地日期在零点自然翻滚，什么都不做也会恢复。"
+        "想现在就继续：调高 LLM_DAILY_TOKEN_BUDGET，或把 "
+        "LLM_BUDGET_EXHAUSTED_ACTION 改成 warn_only（只告警不拦）。"
+        "用量一直涨得太快，则先看用量面板里哪个角色最贵——"
+        "记忆域三个角色可以靠加大 CONSOLIDATION_ONLINE_BATCH_SIZE 摊薄成本。",
+    )
+
+
+def check_llm_fallback_state(snap: Snapshot) -> CheckResult | None:
+    """有角色正处在降级冷却里 → warn，点名角色与剩余秒数。
+
+    「配了降级链」是常态（``RoleBinding.describe()`` 里那个 fallback_slot），
+    「正在走降级链」是异常：主端点此刻是坏的，而降级把它掩成了「回复稍慢一点」。
+    不报出来，用户会一直以为在线端点在正常工作。
+
+    只在 Bot 活着时有数据——运行期状态只存在于 Bot 进程的内存里。
+    """
+    degraded = [
+        (role, st)
+        for role, st in sorted(snap.llm_fallback_states.items())
+        if isinstance(st, dict) and st.get("degraded")
+    ]
+    if not degraded:
+        return None
+    parts = [
+        f"{role}：{st.get('primary_slot') or '?'} → {st.get('fallback_slot') or '?'}"
+        f"（冷却剩余 {st.get('cooldown_remaining') or 0} 秒）"
+        for role, st in degraded
+    ]
+    return CheckResult(
+        id="llm_fallback_state",
+        level="warn",
+        title="有角色正在走降级端点",
+        detail="、".join(parts),
+        fix_hint="主端点刚刚失败过（鉴权、限流、5xx 或连不上），冷却期内的请求都走"
+        "降级端点。看 Bot 日志里同角色最近一条 ❌ [LLM] 找真因："
+        "401/403 是 key 或权限，402 是余额，429 是限流，5xx 是服务商侧。"
+        "冷却结束后会自动试回主端点，不需要重启。",
+    )
+
+
 _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | None], ...] = (
     check_python_version,
     check_dependencies,
@@ -1000,6 +1096,9 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_llm_endpoint_reachable,
     check_llm_role_model,
     check_embedding_locality,
+    check_llm_usage_accounting,
+    check_llm_daily_budget,
+    check_llm_fallback_state,
 )
 
 

@@ -920,3 +920,146 @@ def test_embedding_model_check_skipped_when_pointing_elsewhere():
         lm_model_embedding="bge-m3",  # 不在 lm_models 里，但那是另一台实例的事
     )
     assert checks.check_lm_model_embedding(snap) is None
+
+
+# ── 用量记账与预算（P3） ──
+
+
+def _usage(**over) -> dict:
+    """一份「记账开着、什么都正常」的用量快照，按需覆盖单项。"""
+    base = {
+        "accounting": True,
+        "date": "2026-08-30",
+        "budget": 0,
+        "scope": "online",
+        "action": "pause_memory",
+        "used_tokens": 0,
+        "remaining_tokens": None,
+        "over_budget": False,
+        "paused_roles": [],
+    }
+    base.update(over)
+    return base
+
+
+def test_usage_accounting_unwritable_table_is_warn():
+    snap = _healthy_snapshot(llm_usage=_usage(), llm_usage_table_writable=False)
+    r = checks.check_llm_usage_accounting(snap)
+    assert r is not None and r.level == "warn"
+    assert "migrate" in r.fix_hint
+
+
+def test_usage_accounting_ok_when_table_writable():
+    snap = _healthy_snapshot(llm_usage=_usage(), llm_usage_table_writable=True)
+    assert checks.check_llm_usage_accounting(snap) is None
+
+
+def test_usage_accounting_skipped_when_probe_failed():
+    """探不出来（None）不算问题——「我没测出来」不该报成「有问题」。"""
+    snap = _healthy_snapshot(llm_usage=_usage(), llm_usage_table_writable=None)
+    assert checks.check_llm_usage_accounting(snap) is None
+
+
+def test_usage_accounting_skipped_when_turned_off():
+    snap = _healthy_snapshot(
+        llm_usage={"accounting": False}, llm_usage_table_writable=False
+    )
+    assert checks.check_llm_usage_accounting(snap) is None
+
+
+def test_budget_unlimited_is_never_reported():
+    snap = _healthy_snapshot(llm_usage=_usage(budget=0, used_tokens=10**9))
+    assert checks.check_llm_daily_budget(snap) is None
+
+
+def test_budget_below_eighty_percent_is_quiet():
+    snap = _healthy_snapshot(llm_usage=_usage(budget=1000, used_tokens=799))
+    assert checks.check_llm_daily_budget(snap) is None
+
+
+def test_budget_at_eighty_percent_warns_early():
+    snap = _healthy_snapshot(llm_usage=_usage(budget=1000, used_tokens=800))
+    r = checks.check_llm_daily_budget(snap)
+    assert r is not None and r.level == "warn"
+    assert "即将用尽" in r.title
+
+
+def test_budget_over_is_warn_not_error():
+    """超额只停记忆域，对话照常可用——拿它阻塞启动方向就错了。"""
+    snap = _healthy_snapshot(
+        llm_usage=_usage(
+            budget=1000,
+            used_tokens=1200,
+            over_budget=True,
+            paused_roles=["CONSOLIDATION", "COMPACT", "EXTRACT"],
+        )
+    )
+    r = checks.check_llm_daily_budget(snap)
+    assert r is not None
+    assert r.level == "warn", "超额不该阻塞启动：默认动作下群里照常能说话"
+    assert "超额" in r.title
+    assert "CONSOLIDATION" in r.detail
+
+
+def test_budget_survives_garbage_values():
+    snap = _healthy_snapshot(llm_usage=_usage(budget="很多", used_tokens=None))
+    assert checks.check_llm_daily_budget(snap) is None
+
+
+def test_fallback_state_reports_only_active_degradation():
+    """配了降级链是常态，正在走降级才是要报的事。"""
+    snap = _healthy_snapshot(
+        llm_fallback_states={
+            "CHAT": {
+                "degraded": False,
+                "cooldown": 300.0,
+                "cooldown_remaining": 0.0,
+                "primary_slot": "ONLINE_CHAT",
+                "fallback_slot": "LOCAL",
+            },
+            "CONSOLIDATION": {
+                "degraded": True,
+                "cooldown": 300.0,
+                "cooldown_remaining": 182.5,
+                "primary_slot": "ONLINE_MEMORY",
+                "fallback_slot": "LOCAL",
+            },
+        }
+    )
+    r = checks.check_llm_fallback_state(snap)
+    assert r is not None and r.level == "warn"
+    assert "CONSOLIDATION" in r.detail and "182.5" in r.detail
+    assert "CHAT" not in r.detail
+
+
+def test_fallback_state_quiet_when_nothing_is_degraded():
+    snap = _healthy_snapshot(
+        llm_fallback_states={"CHAT": {"degraded": False, "cooldown_remaining": 0.0}}
+    )
+    assert checks.check_llm_fallback_state(snap) is None
+
+
+def test_usage_checks_carry_no_credentials():
+    """这三条会进 doctor 的 JSON 输出：detail/fix_hint 里不许出现地址与凭据。"""
+    snap = _healthy_snapshot(
+        llm_usage=_usage(budget=100, used_tokens=500, over_budget=True),
+        llm_usage_table_writable=False,
+        llm_fallback_states={
+            "CHAT": {
+                "degraded": True,
+                "cooldown_remaining": 9.0,
+                "primary_slot": "ONLINE_CHAT",
+                "fallback_slot": "LOCAL",
+            }
+        },
+    )
+    for fn in (
+        checks.check_llm_usage_accounting,
+        checks.check_llm_daily_budget,
+        checks.check_llm_fallback_state,
+    ):
+        r = fn(snap)
+        assert r is not None
+        flat = f"{r.title}{r.detail}{r.fix_hint}"
+        for banned in ("api_key", "Bearer", "http://", "https://", "sk-"):
+            assert banned not in flat, f"{r.id} 泄漏了 {banned}"

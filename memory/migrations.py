@@ -596,11 +596,25 @@ def migrate_v10(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v11(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v11：LLM 用量日账表 ``llm_usage_daily``（新表，成本控制的落库层）。
+
+    与记忆系统完全隔离，也**不按群/空间归属**——用量是端点维度的成本事实，
+    因此不进 ``GROUP_SCOPED_TABLES``，空间合并与群迁移都不该碰它。
+    没有数据要搬：旧库里本来就没有用量记录，历史用量无从追溯。
+    """
+    from memory.schema import create_llm_usage_daily_table
+
+    create_llm_usage_daily_table(conn)
+    return MigrationResult(version=11, notes=["llm_usage_daily 已就绪"])
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
     9: migrate_v9,
     10: migrate_v10,
+    11: migrate_v11,
 }
 
 

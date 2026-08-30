@@ -148,6 +148,8 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_short_term_attribution.py` | 短期记忆的说话人归属 |
 | `test_policy.py` | Mode 检测、三层过滤、排序、候选校验 |
 | `test_retrieval_v2_and_schema.py` | v2 检索与 Schema 迁移 |
+| `test_migrations.py` | 旧库迁移回归：v5（2.2.0）与 v9（3.0.0）两条真实起点必须常绿，`SCHEMA_VERSION` 每 +1 都要在这里加一个起点用例 |
+| `test_space_merge.py` | 空间合并：每张归属表都被改写、画像冲突取更活跃的一方、`origin_group_id` 保留以便撤销、FTS 重建 |
 | `test_retriever.py` | 检索排序与回退 |
 | `test_rag_switches.py` | RAG 开关组合行为 |
 | `test_embeddings.py` | embedding 客户端、语义分注入、失败降级 |
@@ -181,10 +183,15 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_log_paths.py` | 日志落点统一：全部在 `LOG_DIR` 下、读写两侧共用同一配置、废弃键仍被 doctor 点名 |
 | `test_deploy_probe.py` | doctor 采集层：探测失败一律不抛异常、渲染后端探测 |
 | `test_deploy_cli.py` | `python -m deploy` 各子命令的出参结构（GUI 的数据契约） |
+| `test_deploy_migrate.py` | 安装器升级：`.env` 是合并而非覆盖、库升到当前 schema、被用户改过的随包文件保留原样、runtime 复用与标记清除 |
+| `test_stella_home.py` | 数据目录定位：环境变量优先、旧布局原地不动（也认库文件）、默认取安装目录的同级 `data` 且不预先创建 |
+| `test_release_layout.py` | 发布物布局：排除项解析不带多余引号、**任何用户数据路径都不许进包**、`data/` 处处排除、打进包就红 |
 | `test_env_schema.py` | `settings.py` → GUI 配置表单 schema 的分组与默认值 |
 | `test_env_inherit.py` | 继承型配置项：`KEY=`（空值）必须回落父键，而 `_env` 不许跟着改——`LM_STUDIO_API_KEY=` 的空值是有意义的 |
 | `test_env_merge.py` | `.env` 合并：`SUPERSEDED` 换算（`LLM_SCHEDULER_GATE_EMBEDDING` → `MEMORY_EMBEDDING_GATE`）、优先级与重复合并幂等 |
 | `test_prompt_cache_prefix.py` | 前缀缓存守卫：三个记忆链路模板的可变占位符必须排在全部固定指令之后 |
+| `test_usage_accounting.py` | 用量记账与预算：UPSERT 幂等、日期键跨天翻滚、临界与超额判据、`pause_memory` 只停记忆域而聊天不受影响、`pause_all` 静默返回不抛异常、`warn_only` 从不拦、记账关闭时零写库、**库不存在时 sink 也不抛异常** |
+| `test_cost_gates.py` | 前置过滤：跳过路径**绝不推进 checkpoint**、@ 切片保留上下文、词面判据兜住向量不可用、连跳到上限强制整合一次、在线/本地键选择正确 |
 | `test_status_api.py` | 本地状态接口：回环判断与 payload 组装 |
 | `test_stop_signal.py` | 停止哨兵的写入/清除与残留清理 |
 | `test_proactive_gate.py` | 主动发言准入闸门六道条件与原因字符串 |

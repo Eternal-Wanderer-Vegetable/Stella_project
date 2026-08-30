@@ -32,6 +32,7 @@ from config import (
 )
 from core.llm import ROLE_COMPACT, acquire, backend_for, gate_of
 from core.llm.base import LLMBackend
+from core.llm.usage_store import budget_blocked
 from memory import session_context as sc
 
 # 温度与生成上限现在是端点×角色配置的一部分：
@@ -155,6 +156,13 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
 
     调用方无需判断时机——本函数内部会检查区间与阈值，不满足直接返回 False。
     """
+    # 每日 token 预算：撞破之后不再花钱做压缩。返回 False 即「未推进压缩位置」，
+    # 这批消息留在待压缩区间等下一个预算周期——与「端点未配置」同一条降级路径。
+    blocked = budget_blocked(ROLE_COMPACT)
+    if blocked:
+        logger.warning(f"⚠️ [Compact] 群 {group_id} 跳过压缩：已被预算拦下（{blocked}）")
+        return False
+
     bounds = sc.pending_bounds(group_id, tail_start_id)
     if bounds is None:
         return False

@@ -280,8 +280,9 @@ SHORT_TERM_SUMMARY_STALE_MINUTES = _env_float("SHORT_TERM_SUMMARY_STALE_MINUTES"
 # （2026-08-13 缺陷的成因）。
 SESSION_CONTEXT_ENABLED = _env("SESSION_CONTEXT_ENABLED", "true").lower() in ("true", "1", "yes")
 # 待压缩文本超过该 token 估算值才触发压缩。
-# 不是每轮都压缩：27B 在 GPU 上约 2 秒，但每轮多一次调用会让 chat 闸门的
-# 串行等待明显放大。
+# 不是每轮都压缩：27B 在 GPU 上约 2 秒，但每轮多一次调用会让 COMPACT 角色所在
+# 那道闸门（纯本地默认是 LOCAL 槽，与聊天同一道）的串行等待明显放大。
+# COMPACT 改绑到在线槽后这项的成本含义就变了：不再是等待，而是账单。
 SESSION_COMPACT_THRESHOLD_TOKENS = _env_int("SESSION_COMPACT_THRESHOLD_TOKENS", 600)
 # 摘要自身的 token 预算：超过则连同新内容重新压缩一次（摘要的摘要）
 SESSION_SUMMARY_MAX_TOKENS = _env_int("SESSION_SUMMARY_MAX_TOKENS", 300)
@@ -535,6 +536,34 @@ CONSOLIDATION_OVERLAP = _env_int("CONSOLIDATION_OVERLAP", 15)
 CONSOLIDATION_LOCAL_MAX_TOKENS = _env_int("CONSOLIDATION_LOCAL_MAX_TOKENS", 1200)
 # 整合日志文件路径（可视化记录每次整合运行详情，可通过 .env 覆盖）。默认落在 LOG_DIR。
 CONSOLIDATION_LOG_PATH = _env_path("CONSOLIDATION_LOG_PATH", LOG_DIR / "memory_consolidation_log.md")
+
+# ---------- 整合成本控制（在线端点专用批量 + 预筛兜底） ----------
+# 上面那组 CONSOLIDATION_LOCAL_* 是**本地**端点的取值：本地推理不计费，代价只是
+# 时间，所以批量小、重叠多、force 路径尽快出结果都是对的。切到在线端点后这些
+# 取值全部变成「每批都在重复付固定成本」，因此另给一组在线取值，
+# 只在 CONSOLIDATION 角色实际落在在线端点上时生效（core.llm.registry.role_is_online）。
+#
+# ⚠️ 省钱只能靠**加大批量**，绝不能靠拉长 CONSOLIDATION_SCHEDULE_INTERVAL：
+# 厂商前缀缓存是分钟级 TTL，间隔一旦超过 TTL，固定部分就从缓存价回到全价，
+# 反而更贵。间隔请保持 ≤ 4 分钟。
+
+# 在线端点下的常规整合批次。默认 60（本地 30 的两倍）：固定 prompt 成本按批摊薄，
+# 批量翻倍就等于把每条消息摊到的固定成本砍半。
+CONSOLIDATION_ONLINE_BATCH_SIZE = _env_int("CONSOLIDATION_ONLINE_BATCH_SIZE", 60)
+# 在线端点下 force 路径（@触发/主动发言前）的批次。本地是 10，即用 1/3 的批量付
+# 同一份固定成本——全链路单位成本最高的一条路径。默认 30 与本地常规批量对齐。
+# 代价只是摘要新鲜度稍滞后：force 整合走 asyncio.create_task 的 fire-and-forget，
+# 不在 @ 回复的关键路径上，加大批量不会让 @ 变慢。
+CONSOLIDATION_ONLINE_FORCE_BATCH_SIZE = _env_int("CONSOLIDATION_ONLINE_FORCE_BATCH_SIZE", 30)
+# 在线端点下向前回看的重叠条数。默认 0 = 不重叠：重叠消息每批都要重复计费，
+# 而话题连续性已经由每批都在传的 current_summary（阶段1 输出的 active_summary）承担。
+# 填成与 CONSOLIDATION_OVERLAP 相同的值即可恢复重叠。
+CONSOLIDATION_ONLINE_OVERLAP = _env_int("CONSOLIDATION_ONLINE_OVERLAP", 0)
+# 连续跳过上限（memory/cost_gates.py 的预筛兜底）。预筛跳过时**不推进 checkpoint**，
+# 消息留着攒到下一轮；但如果某个群持续只有图片刷屏，它就会无限滞留。
+# 连续跳过达到这个次数就强制整合一次并清零，保证「最坏情况下也只是延迟，不是丢失」。
+# 设为 0 = 不兜底（不建议）。
+CONSOLIDATION_MAX_SKIP_STREAK = _env_int("CONSOLIDATION_MAX_SKIP_STREAK", 3)
 
 # ---------- 记忆候选提取（两阶段整合的第二阶段） ----------
 # 整合拆两步：阶段1（E4B）出短期摘要+用户画像+自我披露判断；阶段2（本段配置的
@@ -839,7 +868,8 @@ RENDER_TEXT_WIDTH = _env_int("RENDER_TEXT_WIDTH", 800)
 # 与 Stella 主聊天链路（core/llm/lm_studio.py）**共用同一个本地模型**，
 # 但走独立的 OpenAI 兼容客户端（core/llm/openai_client.py），因为插件需要
 # messages 数组 / function calling / 图片，而主链路的 generate() 表达不了这些。
-# 所有插件调用都经 core.llm.scheduler 的 chat 闸门排队，与主对话 FIFO 串行。
+# 插件调用经 core.llm.scheduler 上 PLUGIN 角色所属端点槽的那道闸门排队；
+# 纯本地默认（PLUGIN 在 LOCAL 槽）下与主对话 FIFO 串行，改绑到在线槽后这道串行消失。
 ASTRBOT_LLM_ENABLED = _env("ASTRBOT_LLM_ENABLED", "true").lower() in ("true", "1", "yes")
 ASTRBOT_LLM_BASE_URL = _env_inherit("ASTRBOT_LLM_BASE_URL", LM_STUDIO_BASE_URL)
 ASTRBOT_LLM_MODEL = _env_inherit("ASTRBOT_LLM_MODEL", LM_STUDIO_MODEL)
@@ -1015,6 +1045,35 @@ LLM_FALLBACK_ENABLED = _env("LLM_FALLBACK_ENABLED", "true").lower() in ("true", 
 LLM_FALLBACK_COOLDOWN = _env_int("LLM_FALLBACK_COOLDOWN", 300)
 
 
+# ---------- LLM 成本控制（用量记账与预算） ----------
+# 在线端点按 token 计费，而记忆域（整合 / 压缩 / 提取）是高频后台任务：不记账就不知道
+# 钱花在哪，没有预算就没有上限。用量按「日期 × 角色 × 端点槽 × 模型」累加进
+# llm_usage_daily 表，日期键取**本地时区**——用日期而不是计时器，进程重启当天的累计
+# 不清零（否则「每日预算」会变成「每次启动后 24 小时」）。日账保留 90 天后自动清理，
+# 这个天数写死不给配置项：一天最多几十行，没有需要用户调的理由。
+#
+# 用量与缓存命中率在 GUI 的「运行状态」页可见。**缓存命中率是验证前缀缓存是否真的
+# 生效的唯一手段**，分母是输入 token 而不是调用次数。
+
+# 是否把 LLM 用量落库。关掉则完全不挂记账钩子、一次也不碰数据库——
+# 代价是**预算随之失效**（没有用量数据，预算无从判断），GUI 用量面板同时留白。
+LLM_USAGE_ACCOUNTING = _env("LLM_USAGE_ACCOUNTING", "true").lower() in ("true", "1", "yes")
+# 每日 token 预算（输入 + 输出之和）。**0 = 不限**。
+# 撞破之后做什么由 LLM_BUDGET_EXHAUSTED_ACTION 决定，默认只停记忆域、对话照常。
+LLM_DAILY_TOKEN_BUDGET = _env_int("LLM_DAILY_TOKEN_BUDGET", 0)
+# 预算算哪些端点的用量：online = 只算在线端点（默认，本地模型不花钱）；all = 全算。
+# 纯本地部署设成 all 才有意义——那时它是「算力预算」而不是账单预算。
+LLM_BUDGET_SCOPE = _env("LLM_BUDGET_SCOPE", "online").strip().lower()
+# 撞破预算之后做什么：
+#   pause_memory（默认）= 只停记忆域三个角色（整合 / 压缩 / 提取），对话照常可用；
+#   pause_all           = 连对话一起停，被拦下的消息**静默不回**（只写 warn 日志，
+#                         不发提示句、也不回落到本地端点——回落会让「全停」名不副实，
+#                         而纯在线部署本来就没有本地端点可落）；
+#   warn_only           = 只在日志里告警一次，从不拦任何调用。
+# 认不出的值按最保守的 pause_memory 处理。
+LLM_BUDGET_EXHAUSTED_ACTION = _env("LLM_BUDGET_EXHAUSTED_ACTION", "pause_memory").strip().lower()
+
+
 # ---------- Capability Router（能力路由） ----------
 # 判断一次请求需要哪些能力（聊天 / 记忆 / 工具），避免把所有插件工具的 schema
 # 都塞进 Stella 的聊天上下文——8192 的工作窗口装不下几十个工具描述，且工具描述
@@ -1079,7 +1138,7 @@ ROUTER_CAPABILITY_MARGIN = _env_float("ROUTER_CAPABILITY_MARGIN", 0.12)
 # 但必须跟着上面一起标定，否则将来打开 L2 会发现它对几乎所有消息都开火。
 ROUTER_UNCERTAIN_FLOOR = _env_float("ROUTER_UNCERTAIN_FLOOR", 0.55)
 # 单次请求最多路由几个能力。每个能力在 Comes 里是一次独立的受限 agent 调用，
-# 都走 chat 闸门串行，不设上限会让一条消息卡住整个群的回复。
+# 都排 PLUGIN 角色那道闸门（纯本地默认与聊天同一道），不设上限会让一条消息卡住整个群的回复。
 ROUTER_MAX_CAPABILITIES = _env_int("ROUTER_MAX_CAPABILITIES", 3)
 # 是否真的按 route.memory 门控长期记忆检索。
 # **默认关闭**：Router 误判 memory=false 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、

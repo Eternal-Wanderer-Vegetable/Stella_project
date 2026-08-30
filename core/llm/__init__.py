@@ -25,7 +25,9 @@ from core.llm.registry import (
     backend_for,
     embedding_gate,
     endpoint_of,
+    fallback_states,
     gate_of,
+    role_is_online,
 )
 from core.llm.scheduler import (
     PRIORITY_BACKGROUND,
@@ -53,7 +55,9 @@ __all__ = [
     "consolidation_llm_lock",
     "embedding_gate",
     "endpoint_of",
+    "fallback_states",
     "gate_of",
+    "role_is_online",
     "snapshot",
 ]
 

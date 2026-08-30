@@ -36,6 +36,10 @@ from config import (
     CONSOLIDATION_LOCAL_BATCH_SIZE,
     CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE,
     CONSOLIDATION_LOCAL_MAX_TOKENS,
+    CONSOLIDATION_MAX_SKIP_STREAK,
+    CONSOLIDATION_ONLINE_BATCH_SIZE,
+    CONSOLIDATION_ONLINE_FORCE_BATCH_SIZE,
+    CONSOLIDATION_ONLINE_OVERLAP,
     CONSOLIDATION_OVERLAP,
     DB_PATH,
     MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
@@ -45,10 +49,25 @@ from config import (
     MEMORY_SOURCE_KIND_ENABLED,
 )
 from config.spaces import resolve_space
-from core.llm import ROLE_CONSOLIDATION, ROLE_EXTRACT, acquire, backend_for, gate_of
+from core.llm import (
+    ROLE_CONSOLIDATION,
+    ROLE_EXTRACT,
+    acquire,
+    backend_for,
+    gate_of,
+    role_is_online,
+)
 from core.llm.base import LLMBackend
+from core.llm.usage_store import budget_blocked
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
+from memory.cost_gates import (
+    AT_MENTION_MARKER,
+    BOT_SELF_MARKER,
+    at_mention_slice,
+    should_skip_by_novelty,
+    should_skip_by_source_ratio,
+)
 from memory.memory_manager import get_memory_manager
 from memory.policy import validate_candidate
 from memory.schema import (
@@ -86,6 +105,38 @@ class OutputTruncatedError(RuntimeError):
     推进 checkpoint 是对的），而截断是**配置问题**，重跑一定能成功——前提是
     别把消息丢了。因此这条路径要求调用方不推进 checkpoint。
     """
+
+
+def _consolidation_is_online() -> bool:
+    """CONSOLIDATION 角色当前是否落在在线端点上（判不出就当本地）。
+
+    唯一判据来源是 ``core.llm.registry.role_is_online``——「这个角色是不是在线」
+    的解析规则只该有一份。异常一律当本地：本地取值批量小、有重叠，是保守的一侧，
+    配置读不出来时宁可多花本地算力也不要悄悄改变在线计费行为。
+    """
+    try:
+        return role_is_online(ROLE_CONSOLIDATION)
+    except Exception:
+        return False
+
+
+def _batch_size(force: bool) -> int:
+    """本批取多少条消息 / 攒够多少条才整合。
+
+    在线端点用 ``CONSOLIDATION_ONLINE_*``（批量更大，摊薄每批的固定 prompt 成本），
+    本地端点用 ``CONSOLIDATION_LOCAL_*``（本地不计费，小批量换低延迟）。
+    """
+    if _consolidation_is_online():
+        return (
+            CONSOLIDATION_ONLINE_FORCE_BATCH_SIZE if force else CONSOLIDATION_ONLINE_BATCH_SIZE
+        )
+    return CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
+
+
+def _overlap() -> int:
+    """向前回看的重叠条数。在线默认 0：重叠部分每批都要重复计费，
+    而话题连续性已由每批都在传的 current_summary 承担。"""
+    return CONSOLIDATION_ONLINE_OVERLAP if _consolidation_is_online() else CONSOLIDATION_OVERLAP
 
 
 def _batch_ladder(base_limit: int) -> list[int]:
@@ -161,7 +212,7 @@ class MemoryConsolidator:
                 "运行 python -m deploy doctor 查看解析结果"
             )
         backend_name, backend = self._backends[0]
-        base_limit = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
+        base_limit = _batch_size(force)
         ladder = _batch_ladder(base_limit)
         for attempt, limit in enumerate(ladder):
             messages, batch_end, senders, at_senders = self._fetch_next_messages(group_id, last_id, limit)
@@ -238,6 +289,14 @@ class MemoryConsolidator:
         """
         from memory.extraction_prompt import format_extraction_prompt
 
+        # 每日 token 预算：阶段2 是纯增益步骤，被拦下就回退阶段1 候选，
+        # 与「没有可用端点」走同一条降级路径（返回 None）。
+        blocked = budget_blocked(ROLE_EXTRACT)
+        if blocked:
+            logger.warning(f"⚠️ [Extractor] 阶段2 已被预算拦下（{blocked}），回退阶段1 候选")
+            append_consolidation_log(f" > ⚠️ 阶段2（提取）被预算拦下（{blocked}），回退阶段1 候选\n")
+            return None
+
         if self._extract_backend is None:
             logger.warning(
                 "⚠️ [Extractor] EXTRACT 角色没有可用端点"
@@ -247,7 +306,17 @@ class MemoryConsolidator:
             return None
         name, backend = self._extract_backend
         model_tag = getattr(backend, "model", "") or name
-        prompt = format_extraction_prompt(messages_text)
+        # T1-2：阶段2 的任务定义是「用户亲口说的、关于自己的稳定信息」，
+        # 被动刷屏对它没用却全额计费。所以只喂 AT_MENTION 行 + 前后各 2 行上下文
+        # （上下文必须留：用户的「对，就是这个」只有配上上一句才有意义）。
+        # 本批没有任何 AT_MENTION 行时 at_mention_slice 返回原文，不会把输入掐空。
+        sliced = at_mention_slice(messages_text)
+        if len(sliced) < len(messages_text):
+            logger.debug(
+                f"[Extractor] 阶段2 输入按 AT_MENTION 切片："
+                f"{len(messages_text)} → {len(sliced)} 字"
+            )
+        prompt = format_extraction_prompt(sliced)
         logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
         try:
             async with acquire(gate_of(ROLE_EXTRACT), tag=f"extract:{group_id}"):
@@ -289,9 +358,17 @@ class MemoryConsolidator:
             CREATE TABLE IF NOT EXISTS consolidation_state (
                 group_id  TEXT PRIMARY KEY,
                 last_processed_id INTEGER NOT NULL DEFAULT 0,
+                skip_streak INTEGER NOT NULL DEFAULT 0,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 旧库升级：缺少 skip_streak 列时补上（幂等，失败说明已存在）。
+        # 成本闸门的「连续跳过次数」必须落库：跳过不推进 checkpoint，
+        # 计数丢在内存里的话，重启后某个群可能永远攒不够、消息无限滞留。
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(
+                "ALTER TABLE consolidation_state ADD COLUMN skip_streak INTEGER NOT NULL DEFAULT 0"
+            )
 
     def _ensure_common_tables(self, conn: sqlite3.Connection):
         """确保整合落库所需的公共表（短期上下文 / 消息 / 用户画像 / 记忆候选 / 记忆等）存在。
@@ -370,6 +447,119 @@ class MemoryConsolidator:
         conn.close()
         return n
 
+    def _peek_batch(self, group_id: int, last_id: int, limit: int) -> tuple[list[str], list[str]]:
+        """只读地窥一眼下一批消息，返回 (非 Bot 发言的正文列表, AT_MENTION 发送者列表)。
+
+        供成本闸门在**调 LLM 之前**判断这批值不值得整合。刻意做成加法式的新方法
+        而不是给 ``_fetch_next_messages`` 加返回值：那个 4 元组被 8 处测试按位解包，
+        动它就是无谓的回归风险。代价是多一次本地 SQLite 读（几十行），可忽略。
+
+        Bot 自己的发言不计入正文：它是上下文，不是「用户说的话」，
+        算进去会让「本批全是废话」永远判不成立。
+        任何读取异常都返回 ``([], [])`` —— 闸门因此不跳过，绝不成为整合的失败点。
+        """
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            table = self._get_message_table(cursor)
+            try:
+                cursor.execute(
+                    f"SELECT user_id, content, source_kind FROM {table} "
+                    "WHERE group_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
+                    (str(group_id), last_id, limit),
+                )
+                rows = cursor.fetchall()
+            except sqlite3.OperationalError:
+                # 旧 messages 表没有 source_kind 列：全部视为 PASSIVE
+                cursor.execute(
+                    f"SELECT user_id, content FROM {table} "
+                    "WHERE group_id = ? AND id > ? ORDER BY id ASC LIMIT ?",
+                    (str(group_id), last_id, limit),
+                )
+                rows = [(uid, content, "PASSIVE") for uid, content in cursor.fetchall()]
+            conn.close()
+        except sqlite3.Error:
+            return [], []
+        lines = [content or "" for _, content, kind in rows if kind != "BOT_SELF"]
+        at_senders = list(
+            dict.fromkeys(str(uid) for uid, _, kind in rows if kind == "AT_MENTION")
+        )
+        return lines, at_senders
+
+    def _get_skip_streak(self, group_id: int) -> int:
+        """该群连续被成本闸门跳过了多少次（读不到按 0）。"""
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            self._ensure_state_table(conn)
+            row = conn.execute(
+                "SELECT skip_streak FROM consolidation_state WHERE group_id = ?",
+                (str(group_id),),
+            ).fetchone()
+            conn.close()
+        except sqlite3.Error:
+            return 0
+        return int(row[0] or 0) if row else 0
+
+    def _set_skip_streak(self, group_id: int, value: int) -> None:
+        """写入连续跳过次数。**只动 skip_streak，绝不碰 last_processed_id**。
+
+        跳过是攒批不是丢弃：这里要是顺手推进了 checkpoint，
+        被跳过的那批消息就永久没人整合了（P0-4「消息永久丢失」的另一种形态）。
+        UPSERT 里显式不写 last_processed_id，插入时靠列默认值 0。
+        计数落库而不是留在内存：重启后清零的话，某个群可能永远攒不够、无限滞留。
+        """
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            self._ensure_state_table(conn)
+            conn.execute(
+                """
+                INSERT INTO consolidation_state (group_id, skip_streak, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(group_id) DO UPDATE SET
+                    skip_streak = excluded.skip_streak,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (str(group_id), max(0, int(value))),
+            )
+            conn.commit()
+            conn.close()
+        except sqlite3.Error as e:
+            logger.warning(f"⚠️ [Consolidator] 群 {group_id} 写入 skip_streak 失败: {e}")
+
+    def _fetch_active_summary(self, group_id: int) -> str:
+        """只取 active_summary，用于语义新颖度对比；无记录或表不存在返回空串。
+
+        不复用 ``_fetch_current_summary``：那个函数还会带上 recent_exchanges
+        （原话摘录）。拿原话去跟原文比重复率，会把重复率虚高成必然跳过。
+        """
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                row = conn.execute(
+                    "SELECT active_summary FROM short_term_context WHERE group_id = ?",
+                    (str(group_id),),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                return ""
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            return ""
+        return (row[0] or "") if row else ""
+
+    async def _cost_gate_reason(self, group_id: int, last_id: int, limit: int) -> str | None:
+        """成本闸门（Tier 1 本地免费预筛）：这批消息该不该跳过。
+
+        跳过时返回可直接写进日志的原因，否则 ``None``。判据本身在
+        ``memory/cost_gates.py``（纯逻辑、可离线单测），本方法只负责取数据。
+        """
+        lines, at_senders = self._peek_batch(group_id, last_id, limit)
+        reason = should_skip_by_source_ratio(at_senders, lines)
+        if reason:
+            return reason
+        batch_text = "\n".join(lines)
+        return await should_skip_by_novelty(batch_text, self._fetch_active_summary(group_id))
+
     def _get_message_table(self, cursor: sqlite3.Cursor) -> str:
         """确定当前数据源的消息表名：优先 group_messages，回退到旧版 messages 表。"""
         cursor.execute(
@@ -419,14 +609,62 @@ class MemoryConsolidator:
                     logger.warning(
                         f"⚠️ [Consolidator] 群 {group_id} 整合积压 {new_count} 条"
                         f"（checkpoint={last_id}）。定时整合会逐批排空；"
-                        f"若持续增长请调大 CONSOLIDATION_LOCAL_BATCH_SIZE "
+                        f"若持续增长请调大 CONSOLIDATION_LOCAL_BATCH_SIZE"
+                        f"（在线端点是 CONSOLIDATION_ONLINE_BATCH_SIZE）"
                         f"或缩短 CONSOLIDATION_SCHEDULE_INTERVAL"
                     )
 
-                # force 路径走小批次；非 force 路径按本地批次大小决定阈值
-                threshold = CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE if force else CONSOLIDATION_LOCAL_BATCH_SIZE
+                # force 路径走小批次；非 force 路径按批次大小决定阈值。
+                # 取值随端点类型走（在线批量更大，见 _batch_size）——这就是 T1-5
+                # 「攒批门槛」：新消息不足 N 条不整合，直接摊薄每批的固定成本。
+                threshold = _batch_size(force)
                 if new_count < threshold:
                     return
+
+                # 每日 token 预算：撞破之后不再花钱做整合。
+                # **只 return，绝不推进 checkpoint**——跳过是攒批，不是丢弃；
+                # 推进了这批消息就永久没人整合了（P0-4 的另一种形态）。
+                blocked = budget_blocked(ROLE_CONSOLIDATION)
+                if blocked:
+                    logger.warning(
+                        f"⚠️ [Consolidator] 群 {group_id} 整合已被预算拦下（{blocked}），"
+                        f"{new_count} 条消息留在 checkpoint {last_id} 之后等下一个预算周期"
+                    )
+                    return
+
+                # ── 成本闸门（Tier 1 本地免费预筛）──
+                # 只筛非 force 路径：force 是 @ 触发/主动发言前的即时总结，
+                # 那时一定有人刚对 Bot 说过话，拦它只会让回复用上过期的摘要。
+                # **跳过只 return，绝不推进 checkpoint**——跳过是攒批，不是丢弃。
+                # 兜底是连续跳过上限：达到上限就强制整合一次，
+                # 保证最坏情况下也只是「延迟」，不会变成「某个群的消息永远不整合」。
+                if not force:
+                    streak = self._get_skip_streak(group_id)
+                    if CONSOLIDATION_MAX_SKIP_STREAK > 0 and streak >= CONSOLIDATION_MAX_SKIP_STREAK:
+                        logger.info(
+                            f"💸 [Consolidator] 群 {group_id} 已连续跳过 {streak} 次"
+                            f"（上限 {CONSOLIDATION_MAX_SKIP_STREAK}），本轮强制整合"
+                        )
+                        append_consolidation_log(
+                            f"  > 💸 连续跳过 {streak} 次达上限，强制整合本批\n"
+                        )
+                    else:
+                        gate = await self._cost_gate_reason(group_id, last_id, threshold)
+                        if gate:
+                            self._set_skip_streak(group_id, streak + 1)
+                            logger.info(
+                                f"💸 [Consolidator] 群 {group_id} 跳过本批整合（{gate}），"
+                                f"{new_count} 条消息留在 checkpoint {last_id} 之后攒批"
+                                f"（连续跳过 {streak + 1}/{CONSOLIDATION_MAX_SKIP_STREAK}）"
+                            )
+                            append_consolidation_log(
+                                f"### 💸 群 `{group_id}` 跳过本批整合：{gate}"
+                                f"（未推进 checkpoint {last_id}，连续跳过 {streak + 1}）\n"
+                            )
+                            return
+                    # 走到这里说明本轮真的要整合：计数清零，重新开始攒
+                    if streak:
+                        self._set_skip_streak(group_id, 0)
 
                 now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 append_consolidation_log(
@@ -501,7 +739,7 @@ class MemoryConsolidator:
     async def drain_group(self, group_id: int, max_rounds: int = 1) -> int:
         """连续整合该群的积压消息，最多 max_rounds 批；返回实际完成的批数。
 
-        整合按批次推进（每批 CONSOLIDATION_LOCAL_BATCH_SIZE 条），单次 @ 触发
+        整合按批次推进（每批 _batch_size(False) 条，本地/在线各有一组键），单次 @ 触发
         只能消化一批。积压较多时靠定时任务多批排空——否则积压会一直增长，
         直到超过 MESSAGE_CLEANUP_KEEP_COUNT 被清理丢弃。
 
@@ -511,7 +749,7 @@ class MemoryConsolidator:
         rounds = 0
         for _ in range(max(1, max_rounds)):
             last_id = self._get_last_processed_id(group_id)
-            if self._count_new_messages(group_id, last_id) < CONSOLIDATION_LOCAL_BATCH_SIZE:
+            if self._count_new_messages(group_id, last_id) < _batch_size(False):
                 break
             before = last_id
             await self.consolidate_group(group_id)
@@ -554,7 +792,7 @@ class MemoryConsolidator:
             return "", last_id, [], []
 
         batch_end = new_ids[-1]
-        fetch_from = max(0, last_id - CONSOLIDATION_OVERLAP)
+        fetch_from = max(0, last_id - _overlap())
         try:
             cursor.execute(
                 f"SELECT id, user_id, content, source_kind FROM {message_table} WHERE group_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
@@ -581,9 +819,9 @@ class MemoryConsolidator:
                 # 用完整中文标签而非「我说」——「[我说]:」这种没有 QQ 号的格式会让
                 # 小模型把「我说」当成 user_id 填进 recent_exchanges（见 log_2026_8_16_1717），
                 # 换成结构上不可能被误当作 QQ 号的显式说明。
-                lines.append(f"消息ID({mid}) [这是机器人自己发送的消息，不属于任何用户]: {content}")
+                lines.append(f"消息ID({mid}) {BOT_SELF_MARKER}: {content}")
             elif source_kind == "AT_MENTION":
-                lines.append(f"消息ID({mid}) 用户({uid}) [对Bot说]: {content}")
+                lines.append(f"消息ID({mid}) 用户({uid}) {AT_MENTION_MARKER}: {content}")
             else:
                 lines.append(f"消息ID({mid}) 用户({uid}): {content}")
         text = "\n".join(lines)

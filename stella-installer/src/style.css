@@ -649,3 +649,26 @@ pre.report {
   color: var(--text);
   user-select: text;
 }
+
+
+/* ── 用量明细（角色@端点:模型 一行一条） ── */
+.usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 16px;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.usage-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-family: var(--mono);
+}
+.usage-item .ukey { min-width: 240px; }
+.usage-item .ukind { color: var(--text-faint); }
+.usage-item .unum { color: var(--text-faint); }

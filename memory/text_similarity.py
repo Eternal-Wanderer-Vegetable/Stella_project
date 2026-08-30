@@ -40,6 +40,34 @@ def jaccard_similarity(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(a | b)
 
 
+def char_ngrams(text: str | None, n: int = 2) -> set[str]:
+    """归一化后的字符级 n-gram 集合（去掉分隔空白）。
+
+    中文没有空格分词，:func:`jaccard_similarity` 的词集合会退化成「整段算一个词」——
+    两段不同的中文对话相似度恒为 0。字符 n-gram 是零依赖的替代品，不引入分词器。
+    """
+    norm = normalize_text(text).replace(" ", "")
+    if not norm:
+        return set()
+    if len(norm) <= n:
+        return {norm}
+    return {norm[i : i + n] for i in range(len(norm) - n + 1)}
+
+
+def coverage_ratio(new: str | None, existing: str | None, n: int = 2) -> float:
+    """``new`` 有多大比例的字符 n-gram 已经出现在 ``existing`` 里（0~1）。
+
+    与 :func:`jaccard_similarity` 的关键区别是**非对称**：分母只有 ``new`` 一侧。
+    判「这批新消息是否已被旧摘要说完」时必须用它——摘要总比原文短得多，
+    Jaccard 会被这个长度差压到很低，永远判不出重复。
+    """
+    a = char_ngrams(new, n)
+    b = char_ngrams(existing, n)
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a)
+
+
 def is_similar(a: str | None, b: str | None, threshold: float = SIMILARITY_THRESHOLD) -> bool:
     """判断两段内容是否指同一件事：归一化后互为子串，或词集合 Jaccard ≥ 阈值。空值视为不相似。"""
     if not a or not b:

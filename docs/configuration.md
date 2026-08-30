@@ -266,6 +266,41 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 
 **回退只在角色显式写了 `FALLBACK_ENDPOINT` 时才发生**，全局开关本身不会替你选备用端点。典型用法：在线对话回退到 `LOCAL`，网络抖动或额度耗尽时降级而不是不说话。
 
+### 成本控制：用量记账与每日预算
+
+在线端点按 token 计费，记忆域（整合 / 压缩 / 提取）又是高频后台任务——**不记账就不知道钱花在哪，没有预算就没有上限**。用量按「日期 × 角色 × 端点槽 × 模型」累加进 `llm_usage_daily` 表，在 GUI「运行状态」页与 `python -m deploy status` 里可见。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `LLM_USAGE_ACCOUNTING` | `true` | 是否把用量落库。关掉则完全不挂钩子、不建表、不写库 |
+| `LLM_DAILY_TOKEN_BUDGET` | `0` | 每日 token 预算（输入 + 输出之和），**0 = 不限** |
+| `LLM_BUDGET_SCOPE` | `online` | 预算算哪些端点：`online` 只算在线（本地不花钱）／`all` 全算 |
+| `LLM_BUDGET_EXHAUSTED_ACTION` | `pause_memory` | 撞破预算之后做什么，三档见下 |
+
+撞破预算之后的三档动作：
+
+| 值 | 行为 |
+|---|---|
+| `pause_memory`（默认） | 只停记忆域三个角色（整合 / 压缩 / 提取），**群里照常能说话** |
+| `pause_all` | 连对话一起停：被拦下的消息**静默不回**，只写一条 warn 日志。不发提示句、也不回落到本地端点——回落会让「全停」名不副实，而纯在线部署本来就没有本地端点可落 |
+| `warn_only` | 只在日志里告警一次，从不拦任何调用 |
+
+认不出的值按最保守的 `pause_memory` 处理。
+
+三条容易踩的点：
+
+- **预算按本地日期在零点自然翻滚**，用的是日期键而不是计时器；进程重启当天的累计从表里读回，不清零（否则「每日预算」会变成「每次启动后 24 小时」）。
+- **关掉记账等于关掉预算**：没有用量数据，超额无从判断。`LLM_DAILY_TOKEN_BUDGET` 会变成一个不生效的数字，doctor 会为此报 warn。
+- **超额只是 warn，不阻塞启动**：默认动作下对话仍然可用，拿它拦住启动等于把「记忆暂时不更新」升级成「Bot 起不来」。
+
+日账保留 90 天后在读回时自动清理，这个天数写死不给配置项——一天最多几十行，没有需要调的理由；真要长期留存应该导出，而不是让库无限长。
+
+#### 缓存命中率：唯一能验证前缀缓存生效的手段
+
+用量面板里的**缓存命中率分母是输入 token 而不是调用次数**（一次长请求命中一半，与两次短请求各命中全部，省下来的钱完全不同）。
+
+这个数字长期是 0，说明提示词的固定前缀被破坏了，前缀缓存根本没生效——最常见的原因是前缀里混进了每次都变的内容（时间戳、随机排序的记忆列表），或者 `ONLINE_CHAT` 与 `ONLINE_MEMORY` 共用了同一把 key（见上一节）。在线部署跑上半小时后应当去看一眼这个数。
+
 ### embedding 不随 LLM 上线
 
 `MEMORY_EMBEDDING_*` 恒定指向本机，**不参与端点/角色体系**。换 embedding 模型等于换向量维度，整库向量都要重算，不能随「今天用在线」这种决定一起漂。GUI 的角色矩阵里 embedding 那一行端点列固定灰显。
@@ -303,6 +338,22 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 | `CONSOLIDATION_LOCAL_MAX_TOKENS` | `1200` | 整合最大生成 token |
 | `CONSOLIDATION_TRIGGER_NEW_MESSAGES` | `10` | 累积多少新消息才触发一次整合 |
 
+#### 整合走在线时的另一组批量
+
+上面那组 `CONSOLIDATION_LOCAL_*` 是**本地**端点的取值：本地推理不计费，代价只是时间，所以批量小、重叠多、force 路径尽快出结果都是对的。切到在线端点后同一组取值就变成「每批都在重复付固定成本」，因此另给一组在线取值，**只在 CONSOLIDATION 角色实际落在在线端点上时生效**（`LLM_ROLE_CONSOLIDATION_ENDPOINT` 指向 `ONLINE_*`）。填成与本地键相同的值即可关掉对应行为。
+
+| 配置项 | 默认值 | 对应的本地键 | 说明 |
+|---|---|---|---|
+| `CONSOLIDATION_ONLINE_BATCH_SIZE` | `60` | `CONSOLIDATION_LOCAL_BATCH_SIZE`（30） | 固定 prompt 成本按批摊薄，批量翻倍等于把每条消息摊到的固定成本砍半 |
+| `CONSOLIDATION_ONLINE_FORCE_BATCH_SIZE` | `30` | `CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE`（10） | force 路径本来用 1/3 的批量付同一份固定成本，是全链路单位成本最高的一条路径 |
+| `CONSOLIDATION_ONLINE_OVERLAP` | `0` | `CONSOLIDATION_OVERLAP`（15） | 0 = 不重叠。重叠消息每批都要重复计费，而话题连续性已经由每批都在传的 `current_summary` 承担 |
+
+> ⚠️ **省钱只能靠加大批量，绝不能靠拉长 `CONSOLIDATION_SCHEDULE_INTERVAL`。** 厂商的前缀缓存是分钟级 TTL，间隔一旦超过 TTL，固定前缀就从缓存价回到全价，反而更贵。间隔请保持 ≤ 4 分钟——这与「减少调用次数」的直觉相反，但账单上是这么算的。
+
+> 把 force 批量从 10 提到 30 只会让摘要新鲜度稍滞后，不会让 @ 变慢：force 整合走 `asyncio.create_task` 的 fire-and-forget，不在 @ 回复的关键路径上。
+
+> **在线端点建议同时收紧 `LLM_ROLE_CONSOLIDATION_MAX_TOKENS`**（默认继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` 的 1200）。在线模型的输出单价通常是输入的 3~4 倍，而整合阶段 1 的实际输出很少超过 800 token；填 `800` 能砍掉一截纯粹白付的余量。**不要压到 600 以下**——输出被截断会导致 JSON 解析失败，见上一条注意事项。默认值刻意不动：本地推理不计费，没有收紧的理由。
+
 > `CONSOLIDATION_LM_STUDIO_BASE_URL` 现在还是 `EXTRA` 端点槽的继承上游，`CONSOLIDATION_LM_STUDIO_MODEL` / `_TEMPERATURE` / `CONSOLIDATION_LOCAL_MAX_TOKENS` 则是 `LLM_ROLE_CONSOLIDATION_*` 的上游。**不要因为改用了角色键就删掉它们**——删掉会把 `EXTRA` 槽的地址一起清空。整合改走在线只需设 `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY`，模型填在 `LLM_ENDPOINT_ONLINE_MEMORY_MODEL` 上。
 
 > **注意 `CONSOLIDATION_LOCAL_MAX_TOKENS`**：批次 30 + overlap 15 意味着单次最多喂入 45 条消息，输出被截断会导致 JSON 解析失败，而解析失败时 checkpoint **仍会推进**（防止同批反复重跑），那批消息就永久丢失了。`core/llm/lm_studio.py` 会在 `finish_reason=length` 时输出告警，建议运行一段后检查日志有无该告警。
@@ -314,10 +365,13 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 | `CONSOLIDATION_SCHEDULE_INTERVAL` | `120` | 定时整合的检查间隔（秒） |
 | `CONSOLIDATION_MAX_ROUNDS_PER_RUN` | `3` | 单次定时任务最多连续整合几批 |
 | `CONSOLIDATION_BACKLOG_WARN` | `300` | 积压超过该条数时日志提升为 warning |
+| `CONSOLIDATION_MAX_SKIP_STREAK` | `3` | 预筛连续跳过多少次后强制整合一次（`0` = 不兜底，不建议） |
 
 > **为什么需要定时整合**：整合此前只在 @ 触发与主动发言前进行，被动摄入速度超过整合速度时会无界积压（2026-08-16 实测积压 1004 条），且超过 `MESSAGE_CLEANUP_KEEP_COUNT` 后未整合消息会被清理直接丢弃。
 >
 > 单次批数不宜过多：CPU 小模型单批 20~60 秒，批次太多会长时间占用整合模型，太少则追不上积压。
+
+**`CONSOLIDATION_MAX_SKIP_STREAK` 兜的是什么**：整合前有一道**纯本地、零成本**的预筛（图片刷屏、单字应答、@ 占比过低、与上一批语义高度重复），命中就跳过这一轮，把消息攒到下一轮——**跳过时不推进 checkpoint，所以跳过是攒批，不是丢弃**。但如果某个群长期只有图片刷屏，它会无限滞留下去；连续跳过达到这个次数就强制整合一次并清零，保证最坏情况下只是延迟，不是丢失。
 
 ### 记忆候选提取（阶段 2）
 
@@ -852,14 +906,14 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 
 ## 本地状态接口
 
-`deploy status` 与桌面 GUI 通过 `http://HOST:PORT/stella/status` 读取**进程内**状态（链路健康度、调度器排队深度、启动时长）——那些数据外部进程拿不到，HTTP 端点则天然「连不上就是没运行」。
+`deploy status` 与桌面 GUI 通过 `http://HOST:PORT/stella/status` 读取**进程内**状态（链路健康度、调度器排队深度、今日 token 用量、启动时长）——那些数据外部进程拿不到，HTTP 端点则天然「连不上就是没运行」。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `STELLA_STATUS_API_ENABLED` | `true` | 是否注册状态路由 |
 | `STELLA_STATUS_API_PATH` | `/stella/status` | 路由路径（与将来的其他路由冲突时再改） |
 
-**只接受回环地址的请求**（`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
+**只接受回环地址的请求**（`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号，`usage` 只给计数与比率、绝不含 prompt 与模型输出）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
 
 ### 安全实测：`HOST=0.0.0.0` 时仍仅回环可访问
 
@@ -929,6 +983,10 @@ curl -i http://[::1]:8080/stella/status
 | 尾巴里断层太多/太少 | 调整 `RECENT_TAIL_GAP_MARK_MINUTES` |
 | 记忆库膨胀 | 开启 `MEMORY_QUOTA_ENFORCE`（先看 dry-run）；降 `MEMORY_USER_QUOTA` |
 | 整合太慢 | 降 `CONSOLIDATION_LOCAL_BATCH_SIZE`；换更小的整合模型 |
+| 在线账单比预想的高 | 先看用量面板的**缓存命中率**：长期为 0 说明前缀缓存没生效（见[缓存命中率](#缓存命中率唯一能验证前缀缓存生效的手段)）。命中率正常则升 `CONSOLIDATION_ONLINE_BATCH_SIZE`、把 `CONSOLIDATION_ONLINE_OVERLAP` 保持 0、收紧 `LLM_ROLE_CONSOLIDATION_MAX_TOKENS`。**不要拉长 `CONSOLIDATION_SCHEDULE_INTERVAL`** |
+| 想给账单加个硬上限 | 设 `LLM_DAILY_TOKEN_BUDGET`；默认动作 `pause_memory` 只停记忆域，群里照常能说话 |
+| 记忆突然不更新了，但对话正常 | 大概率撞破了每日预算（`python -m deploy doctor` 会 warn，用量面板也会点名被暂停的角色）；其次查预筛是否连续跳过（升或清空 `CONSOLIDATION_MAX_SKIP_STREAK`） |
+| 用量面板整块不显示 | Bot 没在运行，或状态接口不可达；显示「已关闭」则是 `LLM_USAGE_ACCOUNTING=false`（此时预算也不生效） |
 | @ 对话完全学不到东西 | 查 `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明 @ 消息未入库（见 development.md 排查表） |
 | 记忆晋升过快、配额压力大 | `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` 生效后 @ 对话单次即可晋升，属预期；先看 `MEMORY_QUOTA_ENFORCE=false` 的 dry-run 日志再决定是否收紧 |
 | 回复变慢、日志出现 Scheduler 告警 | 27B 上排队较重（聊天 + 压缩 + 提取共用）；可临时关 `MEMORY_EXTRACT_ENABLED` 或调大 `CONSOLIDATION_SCHEDULE_INTERVAL` |

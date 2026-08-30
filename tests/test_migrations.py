@@ -381,3 +381,65 @@ def test_unknown_space_name_is_reported(tmp_path):
 
 
 
+
+
+def test_v10_db_only_gains_the_usage_table(tmp_path):
+    """schema v10 旧库升级：只多出 ``llm_usage_daily``，记忆数据一行不动。
+
+    ``SCHEMA_VERSION`` 每 +1 都要配一个旧库夹具回归测试（memory/schema.py 的硬规矩）——
+    v11 加的是新表，最容易出的错是「顺手动了别的表」或「行数不守恒」。
+    """
+    path = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(schema.MEMORIES_TABLE_DDL)
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, content, status)"
+            " VALUES ('m1','casual','u1','喜欢猫','active')"
+        )
+        conn.execute(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER,"
+            " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 10)")
+        conn.commit()
+    finally:
+        conn.close()
+    spaces_dir = tmp_path / "spaces"
+    spaces_dir.mkdir()
+    (spaces_dir / "casual.toml").write_text("qq_groups = [1001]\n", encoding="utf-8")
+    ctx = migrations.context_from_paths(spaces_dir, tmp_path / "ledger.json", (1001,))
+
+    report = schema.migrate_to_latest(path, ctx)
+
+    assert report.error is None
+    assert report.problems == []
+    assert report.to_version == schema.SCHEMA_VERSION == 11
+    # 记忆数据原样保留
+    assert _rows(path, "SELECT content, group_shared_space FROM memories") == [
+        ("喜欢猫", "casual")
+    ]
+    # 新表建好了，且是空的（历史用量无从追溯）
+    assert _rows(path, "SELECT COUNT(*) FROM llm_usage_daily") == [(0,)]
+    cols = _columns(path, "llm_usage_daily")
+    for col in ("date", "role", "slot", "model", "kind", "calls", "failures",
+                "truncated", "prompt_tokens", "completion_tokens", "cached_tokens"):
+        assert col in cols
+
+
+def test_v11_usage_table_upserts_on_its_composite_key(tmp_path):
+    """回归：(date, role, slot, model) 必须是主键，否则日账会插出重复行。"""
+    path = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(path)
+    try:
+        schema.create_llm_usage_daily_table(conn)
+        for _ in range(2):
+            conn.execute(
+                "INSERT INTO llm_usage_daily (date, role, slot, model, kind, calls) "
+                "VALUES ('2026-08-30','CONSOLIDATION','ONLINE_MEMORY','m','online',1) "
+                "ON CONFLICT(date, role, slot, model) DO UPDATE SET calls = calls + 1"
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    assert _rows(path, "SELECT calls FROM llm_usage_daily") == [(2,)]
