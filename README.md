@@ -14,7 +14,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app/)
 
-中文| [English](README.en.md)
+中文 | [English](README.en.md)
 
 </div>
 
