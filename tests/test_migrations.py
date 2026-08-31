@@ -384,10 +384,13 @@ def test_unknown_space_name_is_reported(tmp_path):
 
 
 def test_v10_db_only_gains_the_usage_table(tmp_path):
-    """schema v10 旧库升级：只多出 ``llm_usage_daily``，记忆数据一行不动。
+    """schema v10 旧库升级：多出 ``llm_usage_daily``，记忆的内容与归属一行不动。
 
     ``SCHEMA_VERSION`` 每 +1 都要配一个旧库夹具回归测试（memory/schema.py 的硬规矩）——
     v11 加的是新表，最容易出的错是「顺手动了别的表」或「行数不守恒」。
+
+    注意本用例断言的是「内容与归属不变」而非「整行不变」：v12 会回填
+    ``importance``（见 test_v11_db_backfills_zero_importance），那是有意的写入。
     """
     path = tmp_path / "agent_memory.db"
     conn = sqlite3.connect(path)
@@ -414,7 +417,8 @@ def test_v10_db_only_gains_the_usage_table(tmp_path):
 
     assert report.error is None
     assert report.problems == []
-    assert report.to_version == schema.SCHEMA_VERSION == 11
+    # 不写死版本号：每个版本各有自己的夹具用例，这里只要求确实升到了最新
+    assert report.to_version == schema.SCHEMA_VERSION
     # 记忆数据原样保留
     assert _rows(path, "SELECT content, group_shared_space FROM memories") == [
         ("喜欢猫", "casual")
@@ -443,3 +447,79 @@ def test_v11_usage_table_upserts_on_its_composite_key(tmp_path):
     finally:
         conn.close()
     assert _rows(path, "SELECT calls FROM llm_usage_daily") == [(2,)]
+
+
+def test_v11_db_backfills_zero_importance(tmp_path):
+    """schema v11 旧库升级：``importance`` 为 0/NULL 的候选与记忆被回填。
+
+    ``SCHEMA_VERSION`` 每 +1 都要配一个旧库夹具回归测试（memory/schema.py 的硬规矩）。
+    v12 是本仓第一个**改数据值**而非改结构的迁移，最容易出的错是「改多了」——
+    把模型正常评估过的 importance 一并抹平，那等于丢掉全部重要度判断。
+    因此本用例的重点是那条反向断言。
+
+    起因见 design_docs/bug_report/bug_report_2026_8_31#1.md：整合 prompt 没定义
+    importance，模型照抄示例里的 0.0，而它是 _decide_promotion 的第一道检查，
+    这批候选于是永远晋升不了、又被主动验证反复挑中追问。
+    """
+    from config import MEMORY_CANDIDATE_DEFAULT_IMPORTANCE
+
+    path = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(schema.MEMORIES_TABLE_DDL)
+        conn.execute(schema.MEMORY_CANDIDATES_TABLE_DDL)
+        # 三种起始状态：被缺陷卡住的 0、老库遗留的 NULL、模型正常评估过的值
+        conn.execute(
+            "INSERT INTO memory_candidates (id, group_shared_space, user_id, type,"
+            " content, importance, confidence, status)"
+            " VALUES ('c_stuck','casual','u1','FACT','听到地震预警',0.0,0.7,'OBSERVING')"
+        )
+        conn.execute(
+            "INSERT INTO memory_candidates (id, group_shared_space, user_id, type,"
+            " content, confidence, status)"
+            " VALUES ('c_null','casual','u1','FACT','没有 importance 的老候选',0.7,'OBSERVING')"
+        )
+        conn.execute(
+            "INSERT INTO memory_candidates (id, group_shared_space, user_id, type,"
+            " content, importance, confidence, status)"
+            " VALUES ('c_ok','casual','u1','FACT','模型评过分的候选',0.8,0.7,'OBSERVING')"
+        )
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, content,"
+            " importance, status) VALUES ('m_stuck','casual','u1','喜欢猫',0.0,'active')"
+        )
+        conn.execute(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER,"
+            " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 11)")
+        conn.commit()
+    finally:
+        conn.close()
+    spaces_dir = tmp_path / "spaces"
+    spaces_dir.mkdir()
+    (spaces_dir / "casual.toml").write_text("qq_groups = [1001]\n", encoding="utf-8")
+    ctx = migrations.context_from_paths(spaces_dir, tmp_path / "ledger.json", (1001,))
+
+    report = schema.migrate_to_latest(path, ctx)
+
+    assert report.error is None
+    assert report.problems == []
+    assert report.to_version == schema.SCHEMA_VERSION
+
+    got = dict(_rows(path, "SELECT id, importance FROM memory_candidates"))
+    assert got["c_stuck"] == pytest.approx(MEMORY_CANDIDATE_DEFAULT_IMPORTANCE)
+    assert got["c_null"] == pytest.approx(MEMORY_CANDIDATE_DEFAULT_IMPORTANCE)
+    # 反向断言：只回填 0/NULL，模型自己评过的分一律不许动
+    assert got["c_ok"] == pytest.approx(0.8)
+
+    # memories 表同样要回填：0 值记忆在配额竞争分里恒定垫底，会被优先淘汰
+    assert _rows(path, "SELECT importance FROM memories") == [
+        (pytest.approx(MEMORY_CANDIDATE_DEFAULT_IMPORTANCE),)
+    ]
+    # 内容与归属不受影响
+    assert _rows(path, "SELECT content, group_shared_space FROM memories") == [
+        ("喜欢猫", "casual")
+    ]
+    # 行数守恒：回填是 UPDATE，不该增删任何行
+    assert _rows(path, "SELECT COUNT(*) FROM memory_candidates") == [(3,)]

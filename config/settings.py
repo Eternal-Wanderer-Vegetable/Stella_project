@@ -328,6 +328,12 @@ MEMORY_CANDIDATE_REOCCURRENCE_BONUS = _env_float("MEMORY_CANDIDATE_REOCCURRENCE_
 MEMORY_CANDIDATE_MAX_OBSERVING_DAYS = _env_int("MEMORY_CANDIDATE_MAX_OBSERVING_DAYS", 30)
 # evidence 字段累积上限（字符）。多次复现会不断追加证据，需防止无界增长
 MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS = _env_int("MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS", 800)
+# 模型没给 importance 时的兜底值。**不能是 0**：0 会被 MEMORY_PROMOTE_MIN_IMPORTANCE
+# 一票否决，候选从此永远卡在 OBSERVING、被主动验证反复追问却永远晋升不了
+# （见 design_docs/bug_report/bug_report_2026_8_31#1.md）。取中位值让
+# confidence 与复现次数继续决定去留——「importance 不单独构成晋升依据」这条
+# 设计意图，本来就该同时意味着它不能单独让候选失败。
+MEMORY_CANDIDATE_DEFAULT_IMPORTANCE = _env_float("MEMORY_CANDIDATE_DEFAULT_IMPORTANCE", 0.5)
 
 # ---------- 晋升门槛（Gate 1 三档分级） ----------
 # 晋升所需的最低独立观察次数（纯 PASSIVE 来源）。被动摄入的群聊信息密度低，

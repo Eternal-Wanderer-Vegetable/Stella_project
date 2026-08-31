@@ -42,6 +42,7 @@ from config import (
     CONSOLIDATION_ONLINE_OVERLAP,
     CONSOLIDATION_OVERLAP,
     DB_PATH,
+    MEMORY_CANDIDATE_DEFAULT_IMPORTANCE,
     MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS,
     MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
     MEMORY_EXTRACT_ENABLED,
@@ -1124,6 +1125,13 @@ class MemoryConsolidator:
             if not content:
                 continue
             importance = float(c.get("importance", 0.0) or 0.0)
+            # importance 缺省/为 0 时兜底为中位值。**不能让 0 落库**：
+            # MEMORY_PROMOTE_MIN_IMPORTANCE 是 _decide_promotion 的第一道检查，
+            # 0 会在读 confidence 之前一票否决，候选从此永远卡在 OBSERVING，
+            # 而主动验证仍会反复挑中它去追问同一个人同一件事
+            # （见 design_docs/bug_report/bug_report_2026_8_31#1.md）。
+            if importance <= 0.0:
+                importance = MEMORY_CANDIDATE_DEFAULT_IMPORTANCE
             confidence = float(c.get("confidence", 0.0) or 0.0)
             evidence = (c.get("evidence", "") or "").strip()
             # LLM 可能返回字符串形式的消息 id 列表，做一次容错反序列化

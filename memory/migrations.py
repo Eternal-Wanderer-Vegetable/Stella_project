@@ -609,12 +609,57 @@ def migrate_v11(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return MigrationResult(version=11, notes=["llm_usage_daily 已就绪"])
 
 
+def migrate_v12(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v12：回填 ``importance = 0`` 的存量候选与记忆（解除晋升死锁）。
+
+    起因见 design_docs/bug_report/bug_report_2026_8_31#1.md：整合 prompt 从未
+    定义 ``importance``，模型照抄 JSON 示例里的字面量 ``0.0``，而
+    ``_decide_promotion`` 的**第一道**检查就是 ``imp < MEMORY_PROMOTE_MIN_IMPORTANCE``。
+    于是这批候选无论 confidence 多高、复现多少次都晋升不了，却仍会被主动验证
+    反复挑中去追问同一个人同一件事。
+
+    prompt 与代码兜底只能救**新**候选，库里已经躺着的那批必须在这里回填，
+    否则它们会继续复读到 ``MEMORY_CANDIDATE_MAX_OBSERVING_DAYS`` 超期为止。
+
+    只动 ``importance <= 0`` 的行：模型正常填过的值一律不碰。回填值取
+    ``MEMORY_CANDIDATE_DEFAULT_IMPORTANCE``（中位），让 confidence 与复现次数
+    继续决定去留，而不是直接把它们推过门槛。
+
+    ``memories`` 表同样回填：0 值记忆在配额竞争分（``_quota_score``）里恒定垫底，
+    会被优先淘汰——同一个缺陷的另一个出口。
+    """
+    result = MigrationResult(version=12)
+    try:
+        from config.settings import MEMORY_CANDIDATE_DEFAULT_IMPORTANCE as default_imp
+    except Exception:  # pragma: no cover - 配置不可用时用同一个兜底常量
+        default_imp = 0.5
+
+    cursor = conn.cursor()
+    for table in ("memory_candidates", "memories"):
+        if "importance" not in _columns(cursor, table):
+            continue
+        cursor.execute(
+            f"UPDATE {table} SET importance = ? "
+            f"WHERE importance IS NULL OR importance <= 0",
+            (default_imp,),
+        )
+        if cursor.rowcount:
+            result.changed_rows += cursor.rowcount
+            result.notes.append(
+                f"{table}: {cursor.rowcount} 行 importance=0 回填为 {default_imp}"
+            )
+    if not result.changed_rows:
+        result.notes.append("没有 importance=0 的存量行，无需回填")
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
     9: migrate_v9,
     10: migrate_v10,
     11: migrate_v11,
+    12: migrate_v12,
 }
 
 

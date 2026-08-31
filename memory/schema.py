@@ -52,8 +52,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v11：LLM 用量日账表 llm_usage_daily，供成本控制与预算判据）
-SCHEMA_VERSION = 11
+# 当前 Schema 版本（v12：回填 importance=0 的存量候选/记忆，解除晋升死锁）
+SCHEMA_VERSION = 12
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 

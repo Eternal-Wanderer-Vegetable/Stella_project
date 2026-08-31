@@ -114,7 +114,9 @@ def can_at_user(group_id: int, user_id: int) -> tuple[bool, str]:
     return True, f"可以（今日 {state['at_count_today']}/{quota}）"
 
 
-def _fetch_observing_candidate(group_shared_space: str, user_id: int) -> tuple[str, str, str, float] | None:
+def _fetch_observing_candidate(
+    group_shared_space: str, user_id: int, exclude_id: str = ""
+) -> tuple[str, str, str, float] | None:
     """取该用户 confidence 最接近晋升线的 OBSERVING 候选。
 
     返回 (id, content, type, confidence)；无则 None。
@@ -122,6 +124,11 @@ def _fetch_observing_candidate(group_shared_space: str, user_id: int) -> tuple[s
 
     只取 confidence 在 [LOW-0.2, HIGH) 区间内的：太低的候选证据本身可疑，
     问了也难以定论；已达 HIGH 的会自动晋升、无需验证。
+
+    ``exclude_id`` 排除上次已经问过这个人的那条候选（``proactive_state.
+    last_asked_candidate_id``）。没有这层排除，一条晋升不了的候选会在每一轮
+    都以最高 confidence 胜出，于是对同一个人反复问同一个问题——正是
+    design_docs/bug_report/bug_report_2026_8_31#1.md 记录的复读现象。
     """
     lower = max(0.0, MEMORY_OBSERVE_LOW_CONFIDENCE - 0.2)
     try:
@@ -130,8 +137,15 @@ def _fetch_observing_candidate(group_shared_space: str, user_id: int) -> tuple[s
             "SELECT id, content, type, confidence FROM memory_candidates "
             "WHERE group_shared_space = ? AND user_id = ? AND status = 'OBSERVING' "
             "AND confidence >= ? AND confidence < ? AND content != '' "
+            "AND id != ? "
             "ORDER BY confidence DESC LIMIT 1",
-            (group_shared_space, str(user_id), lower, MEMORY_CONFIRM_HIGH_CONFIDENCE),
+            (
+                group_shared_space,
+                str(user_id),
+                lower,
+                MEMORY_CONFIRM_HIGH_CONFIDENCE,
+                exclude_id or "",
+            ),
         ).fetchone()
         conn.close()
     except sqlite3.Error as e:
@@ -219,9 +233,12 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
         return None
 
     # 优先级 1：有可验证候选的用户（按 confidence 降序，最接近晋升线的先问）
+    # 每人排除上次已经问过的那条候选，否则同一条候选会在每轮都胜出 → 复读
     verify_pool: list[tuple[float, int, tuple[str, str, str, float]]] = []
     for uid in eligible:
-        found = _fetch_observing_candidate(space, uid)
+        found = _fetch_observing_candidate(
+            space, uid, exclude_id=get_state(group_id, uid)["last_asked_candidate_id"]
+        )
         if found:
             verify_pool.append((found[3], uid, found))
     if verify_pool:

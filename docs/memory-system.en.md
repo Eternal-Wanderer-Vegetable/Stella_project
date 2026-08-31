@@ -115,6 +115,22 @@ There is also a lower bound of `MEMORY_PROMOTE_MIN_IMPORTANCE` for `importance`,
 
 **`importance` is not independently a basis for promotion**: it is self-assessed by the LLM and is the least reliable of all metrics. The early version used the rule "observe only when **both** confidence and importance are below their thresholds," which meant a candidate with `confidence=0.3 / importance=0.6` would directly become a long-term memory.
 
+### `importance = 0` is a trap that must be sealed
+
+This lower bound is the **first** check in `_decide_promotion`, evaluated before `confidence` is even read. That means a candidate with `importance = 0` is vetoed outright — full confidence, an `AT_MENTION` source, and 99 reoccurrences cannot save it. It stays stuck in `OBSERVING` until it expires as `REJECTED`.
+
+And before 2026-08-31, the consolidation prompt never defined what `importance` meant (it appeared only as the literal `0.0` inside the JSON structure example), so the model simply copied `0.0`. The result: those candidates could never be promoted, yet were continuously selected by proactive verification — asking the same person the same question over and over. See [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md).
+
+There are now three layers of protection:
+
+| Layer | Measure |
+|---|---|
+| Prompt | `importance` now has full value guidance just like `confidence`, and explicitly forbids copying the `0.0` from the example |
+| Code | `consolidator` backfills any value `<= 0` to `MEMORY_CANDIDATE_DEFAULT_IMPORTANCE` (0.5) before writing |
+| Migration | Schema v12 backfills existing zero-valued rows — the prompt and the code fallback only rescue *new* candidates |
+
+**Design lesson**: "metric X is not independently a basis for promotion" should equally mean "X cannot independently cause failure." Placing the least reliable metric at the first hard gate effectively grants it veto power.
+
 ## Conflict Resolution
 
 When a new candidate conflicts with an existing memory (same user and type, shared key object words, opposite emotional polarity):
@@ -269,9 +285,12 @@ Exclusion conditions: the daily quota is full, the user is within the user-level
 | User-level cooldown | Minimum interval between two proactive @-mentions of the same user (2 hours by default) |
 | Consecutive no-response backoff | Stop follow-up questions to the user after reaching `PROACTIVE_MAX_NO_REPLY` |
 | Count on sending | Consumes quota regardless of whether a response is received, otherwise the system would repeatedly address the same person |
-| Persist state | After a restart, the system does not ask the same person the same thing again |
+| Candidate deduplication | Target selection excludes `last_asked_candidate_id`, so the same candidate is never asked about twice in a row |
+| Persist state | Quota, the last candidate asked about, and the no-response counter all live in the database and survive a restart |
 
 "The more active someone is, the more they are harassed" is the runaway behavior that must be avoided, so the frequency reward is deliberately kept small.
+
+> **The candidate-deduplication layer was missing for a long time.** `last_asked_candidate_id` had always been written, but had no reader whatsoever — the write was complete, comments and documentation existed, only the consumer was absent. Defects of this kind raise no error; they simply make behavior diverge from documentation. Both directions are now guarded by `tests/test_memory_promotion_deadlock.py` (the exclusion takes effect, and an empty exclusion must not filter anything out).
 
 ### Question-Answer Association
 
@@ -292,6 +311,13 @@ The system also requires "do not respond to any sentence in the context, includi
 - **`MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE = 2` is almost never satisfied on the passive path**. Whether to lower it should be reassessed after the proactive path has accumulated data
 - **Deduplication of cold-start topics is weak**. Keyword avoidance for Chinese topics depends on segmentation, which is currently largely ineffective for Chinese; when the topic list is short, the cost of repeated questions is acceptable
 - **During proactive @-mentions, Mode detection and the retrieval query use the full task-instruction text**, which has a poor signal-to-noise ratio. This has no visible impact when the memory store is empty; after data exists, an independent `retrieval_query` should be introduced
+
+The following four items were identified by [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (that report classifies them as P1/P2):
+
+- **The whole pipeline is blind to time sensitivity**. The candidate layer has no TTL concept at all: `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` is a uniform 30 days across every type, and `_fetch_observing_candidate` does not filter by `type` either. So an `EVENT` ("heard an earthquake warning") is just as eligible for repeated "verification" as a stable `FACT` — but verifying an event that has already passed is semantically wrong
+- **The 60-day lifetime for `EVENT` / `PLAN` is too long**; a one-off event lingers in the retrieval pool for two months
+- **Response detection checks "did they say anything in the window" rather than "did they reply to the bot"**. In an active group this is almost always true, so `consecutive_no_reply` is continuously reset and the `PROACTIVE_MAX_NO_REPLY` backoff essentially never fires
+- **`last_accessed_at` does not mean what the documentation says**. The retrieval path never refreshes it (only candidate reinforcement and compression merges write to it), so in practice it means "last time this was confirmed." This defeats the ranking intent that "an old memory still frequently used is more valuable," and creates an inverse effect: the more often a memory is asked about, the more often its decay clock is reset
 
 ## Further Reading
 
