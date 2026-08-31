@@ -1,5 +1,7 @@
 <div align="center">
 
+![Title Image](docs/pic/Title_Image(Second_Edition).jpg)
+
 
 # 🌟 Stella
 
@@ -303,8 +305,9 @@ This project received encouragement and support from many people and organizatio
 - The inspiration came from discussions with [@t1mb2rg](https://github.com/t1mb2rg) and arguments with [@CST-Cat](https://github.com/CST-Cat). Thank you for contributing your own ideas.
 - The [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) project developed by [@MIO-456](https://github.com/MIO-456) inspired the development of this project.
 - Thanks to [@qian-o](https://github.com/qian-o) and their companions, as well as [@MIO-456](https://github.com/MIO-456) and their companions. Without their encouragement, there would have been no motivation to start developing this project.
+- Thanks to the Bilibili video creator [Ruuuuusty](https://space.bilibili.com/650991829) for turning my and chat-GPT's ideas about the Stella logo into reality.
 - This project received support from the following organizations during development:
-  - **Model providers**: Deepseek, OpenAI (ChatGPT), Google (Gemini, Gemma), Tongyi Qianwen (text-embedding-qwen3-embedding-0.6b), and ~~Anthropic~~. This project could not have been created without their excellent models as a foundation.
+  - **Model providers**: Deepseek, OpenAI (ChatGPT), Google (Gemini, Gemma), Tongyi Qianwen (text-embedding-qwen3-embedding-0.6b), and ~~ Anthropic ~~. This project could not have been created without their excellent models as a foundation.
   - **Coding Agent**: [Opencode](https://github.com/anomalyco/opencode), thank you to Opencode for its tremendous support of this project.
   - **Open-source repositories**: [nonebot2](https://github.com/nonebot/nonebot2), [NapCatQQ](https://github.com/NapNeko/NapCatQQ), and all third-party libraries referenced in the source code. Salute to all developers and maintainers involved. This project also aims to follow in the footsteps of [AstrBot](https://github.com/AstrBotDevs/AstrBot) and [MaiBot](https://github.com/Mai-with-u/MaiBot), creating a genuine AI friend that can complete the entire loop locally without handing over group-chat information and personal privacy.
   - **Developer community**: [Linux Do](https://linux.do)
