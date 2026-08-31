@@ -56,19 +56,18 @@ def test_quota_is_per_user(db):
     assert get_state(1, 1002)["at_count_today"] == 1
 
 
-def test_last_spoke_ts_detects_reply():
-    """回应检测的时间戳比较：提问后发言才算回应。"""
+def test_last_spoke_ts_tracks_any_message():
+    """last_spoke_ts 记的是「发过任意消息」，不是「回应了 Bot」。
+
+    回应检测已改用 last_tome_ts（见 tests/test_reply_detection.py）：这里只保留
+    活跃度时间戳本身的语义断言，免得再有人把它当成回应判据。
+    """
     # 用独立实例，不污染全局单例（真实 monotonic 值会干扰其他用例的假时钟）
     proactive = ProactiveController()
 
     assert proactive.last_spoke_ts(1, 1001) is None
 
     proactive.record_message(1, 1001)
-    asked_at_before = 0.0
-    assert proactive.last_spoke_ts(1, 1001) > asked_at_before
-
-    # 提问时间晚于最后发言 → 未回应
-    import time
-
-    asked_at_after = time.monotonic() + 1.0
-    assert not (proactive.last_spoke_ts(1, 1001) > asked_at_after)
+    assert proactive.last_spoke_ts(1, 1001) > 0.0
+    # 反向断言：发言不得被记成「对 Bot 说话」
+    assert proactive.last_tome_ts(1, 1001) is None

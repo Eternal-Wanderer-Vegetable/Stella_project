@@ -294,7 +294,7 @@ SESSION_IDLE_TIMEOUT_SECONDS = _env_float("SESSION_IDLE_TIMEOUT_SECONDS", 900.0)
 SESSION_IDLE_CHECK_INTERVAL = _env_int("SESSION_IDLE_CHECK_INTERVAL", 300)
 
 # ---------- 长期记忆引用策略 ----------
-# 主动发言时引用的长期记忆条数（按 last_accessed_at 倒序取最近 N 条）
+# 主动发言时引用的长期记忆条数（按证据新鲜度倒序取最近 N 条）
 PROACTIVE_LONG_TERM_LIMIT = _env_int("PROACTIVE_LONG_TERM_LIMIT", 10)
 # @-回复时引用的该用户近期长期记忆条数
 REPLY_LONG_TERM_LIMIT = _env_int("REPLY_LONG_TERM_LIMIT", 3)

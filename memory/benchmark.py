@@ -102,7 +102,10 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     单条记忆可覆盖 scenario 的归属与访问时间：
       ``group_shared_space`` / ``group_id`` → 模拟"这条记忆属于别的空间/群"（测跨空间泄漏）；
         用例可用 ``group_shared_space`` 或（兼容）``group_id`` 覆盖归属；
-      ``last_accessed_at``       → 测"新记忆压过旧记忆"的排序维度。
+      ``last_accessed_at``       → 测"新记忆压过旧记忆"的排序维度。同一个值会同时
+        写入 ``last_confirmed_at``：排序读的是证据新鲜度（policy._mem_timestamp
+        优先 last_confirmed_at），而 last_accessed_at 会被检索命中刷新
+        （retrieval_v2._touch_accessed），只写它会让同一用例跑第二遍时新鲜度变了。
     """
     db_path.unlink(missing_ok=True)
     group_id, user_id = _scenario_ids(case)
@@ -121,7 +124,8 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
             conn.execute(
                 "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, "
                 "confidence, status, usage_tags, visibility, trigger_data, behavior_rule, "
-                "last_accessed_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+                "last_accessed_at, last_confirmed_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)",
                 (
                     mid,
                     str(mem.get("group_shared_space", mem.get("group_id", group_id))),
@@ -134,6 +138,7 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
                     mem.get("visibility") or "OPEN",
                     trigger_data,
                     mem.get("behavior_rule"),
+                    mem.get("last_accessed_at", "2026-08-09 10:00:00"),
                     mem.get("last_accessed_at", "2026-08-09 10:00:00"),
                 ),
             )

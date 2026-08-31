@@ -168,6 +168,13 @@ Score = W_IMPORTANCE × importance
 
 Use `last_accessed_at` rather than `created_at`: an old memory that is still frequently retrieved is more valuable than a new one that has never been used.
 
+That intent only became real once retrieval started recording accesses. Previously `last_accessed_at` was written only by candidate reinforcement and compression merges — the retrieval path never refreshed it — so it was effectively identical to `last_confirmed_at`, and this term was double-counting the same signal as the confirmation term. The two timestamps now have distinct jobs:
+
+| Timestamp | Meaning | Written by | Read by |
+|---|---|---|---|
+| `last_confirmed_at` | The last time this fact was observed | Candidate reinforcement, compression merges | The ranking freshness dimension, type decay, the ordering used to pick which memory absorbs new evidence |
+| `last_accessed_at` | The last time this memory actually entered a prompt | Retrieval (both partitions count) | The recency term in quota competition, low-value archiving |
+
 `MEMORY_QUOTA_ENFORCE` is **disabled by default**; in that case, the system only outputs a `[Quota dry-run]` log explaining "who would have been evicted." It is recommended to observe for a while and confirm the behavior before enabling it—there is no way to know what 25 items will evict in a specific database without looking at the logs.
 
 ## Retrieval: Policy Before Similarity
@@ -254,6 +261,11 @@ The reason is that descriptions such as "gentle, humorous, sensitive" are largel
 
 Type lifespans: `FACT` 730 days → `STYLE` 365 → `PREFERENCE`/`RELATION` 180 → `EVENT`/`PLAN` 60 → `GROUP_CONTEXT` 30.
 
+The last two rows read **two different clocks**, and they are not interchangeable:
+
+- **Type decay** asks "is this fact still fresh?" and reads `last_confirmed_at`. Reading `last_accessed_at` instead would let an `EVENT` live forever as long as it is retrieved once a week, making type lifespans meaningless
+- **Low-value archiving** asks "does anyone still have a use for it?" and reads `last_accessed_at`. A memory whose evidence is long stale but which is still cited repeatedly is useful to the conversation at hand
+
 All "deletions" are `status = 'archived'`; the data only leaves retrieval and is retained.
 
 ## Proactive Acquisition: Why It Is Essential
@@ -289,7 +301,8 @@ The verification pool only draws **non-time-sensitive** candidates. The quota is
 |---|---|
 | Daily quota | 2 by default, with up to 2 additional attempts for frequent speakers; hard cap |
 | User-level cooldown | Minimum interval between two proactive @-mentions of the same user (2 hours by default) |
-| Consecutive no-response backoff | Stop follow-up questions to the user after reaching `PROACTIVE_MAX_NO_REPLY` |
+| Consecutive no-response backoff | Stop follow-up questions to the user after reaching `PROACTIVE_MAX_NO_REPLY`; "responded" counts only an @-mention of the bot, a reply to one of its messages, or being addressed by nickname — not merely saying something in the group |
+| Backoff self-healing | Any time that user addresses the bot, the counter resets to zero — with the stricter criterion, someone who habitually answers in plain text would be miscounted, and this counter has no natural decay over time, so once it fills up there would otherwise be no way back |
 | Count on sending | Consumes quota regardless of whether a response is received, otherwise the system would repeatedly address the same person |
 | Candidate deduplication | Target selection excludes `last_asked_candidate_id`, so the same candidate is never asked about twice in a row |
 | No follow-ups on time-sensitive types | `PROACTIVE_VERIFY_EXCLUDE_TYPES` (`EVENT` / `PLAN` / `GROUP_CONTEXT` by default) never enters the verification pool |
@@ -319,12 +332,10 @@ The system also requires "do not respond to any sentence in the context, includi
 - **Deduplication of cold-start topics is weak**. Keyword avoidance for Chinese topics depends on segmentation, which is currently largely ineffective for Chinese; when the topic list is short, the cost of repeated questions is acceptable
 - **During proactive @-mentions, Mode detection and the retrieval query use the full task-instruction text**, which has a poor signal-to-noise ratio. This has no visible impact when the memory store is empty; after data exists, an independent `retrieval_query` should be introduced
 
-The following four items were identified by [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (the P0 and P1 items in the same report have been fixed: the promotion deadlock, follow-up deduplication, per-type candidate TTLs, and excluding time-sensitive types from verification):
+The following two items were identified by [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (the P0/P1/P2 items in the same report have been fixed: the promotion deadlock, follow-up deduplication, per-type candidate TTLs, excluding time-sensitive types from verification, response detection now counting only messages addressed to the bot, and the split between the two timestamps' semantics):
 
 - **The ranking layer's recency decay still ignores type**. `_recency_factor` (`memory/policy.py`) uses a uniform τ=30 days for every type; the `mem_type` parameter is kept only for compatibility with older calls and takes no part in the computation. So an `EVENT` from last week and a stable `FACT` recorded last week score identically on the freshness dimension. The candidate layer and the proactive-verification side are now tiered by type (fixed in P1); the ranking side is not
 - **The 60-day lifetime for `EVENT` / `PLAN` is too long**; a one-off event lingers in the retrieval pool for two months
-- **Response detection checks "did they say anything in the window" rather than "did they reply to the bot"**. In an active group this is almost always true, so `consecutive_no_reply` is continuously reset and the `PROACTIVE_MAX_NO_REPLY` backoff essentially never fires
-- **`last_accessed_at` does not mean what the documentation says**. The retrieval path never refreshes it (only candidate reinforcement and compression merges write to it), so in practice it means "last time this was confirmed." This defeats the ranking intent that "an old memory still frequently used is more valuable," and creates an inverse effect: the more often a memory is asked about, the more often its decay clock is reset
 
 ## Further Reading
 

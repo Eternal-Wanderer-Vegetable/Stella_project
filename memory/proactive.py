@@ -64,6 +64,11 @@ class ProactiveController:
         self._msg_count: dict[int, int] = {}
         # group_id -> 上次自己发言时的消息计数快照
         self._count_at_speak: dict[int, int] = {}
+        # group_id -> user_id -> 上次「对 Bot 说话」（@ / 回复 Bot / 昵称呼叫）的时间戳。
+        # 与 _timestamps 分开存：这里是「有没有回应 Bot」，那里是「群里有没有人在说话」，
+        # 混用会让活跃群里的回应判定恒为真（见 design_docs/bug_report/
+        # bug_report_2026_8_31#1.md §5.1）。
+        self._last_tome: dict[int, dict[int, float]] = {}
 
     # ── 反重复刷屏 ──────────────────────────────────────
     def record_spoken(self, group_id: int, lines: list[str]):
@@ -108,6 +113,14 @@ class ProactiveController:
 
         self._msg_count[group_id] = self._msg_count.get(group_id, 0) + 1
 
+    def record_tome(self, group_id: int, user_id: int) -> None:
+        """该用户「对 Bot 说话」了（@ Bot、回复 Bot 的消息、或以昵称呼叫）。
+
+        由消息入库侧在 source_kind == AT_MENTION 时调用，供主动 @ 的回应检测使用。
+        与 record_message 并列调用而非取代它：活跃度统计要算上所有消息。
+        """
+        self._last_tome.setdefault(group_id, {})[int(user_id)] = time.monotonic()
+
     def average_interval(self, group_id: int) -> float | None:
         """估算全群最近消息的平均间隔（秒）。消息不足两条时返回 None。"""
         merged = sorted(
@@ -150,12 +163,21 @@ class ProactiveController:
         return len(self._timestamps.get(group_id, {}).get(int(user_id), []))
 
     def last_spoke_ts(self, group_id: int, user_id: int) -> float | None:
-        """该用户最后一次发言的 monotonic 时间戳；无记录返回 None。
+        """该用户最后一次发言（任意消息）的 monotonic 时间戳；无记录返回 None。
 
-        供主动 @ 的回应检测判断「提问之后有没有说话」。
+        **不要**用它做主动 @ 的回应检测——「窗口内说过话」在活跃群里几乎恒为真，
+        退避计数会被持续归零。回应检测走 last_tome_ts。
         """
         lst = self._timestamps.get(group_id, {}).get(int(user_id), [])
         return lst[-1] if lst else None
+
+    def last_tome_ts(self, group_id: int, user_id: int) -> float | None:
+        """该用户最后一次「对 Bot 说话」的 monotonic 时间戳；无记录返回 None。
+
+        供主动 @ 的回应检测判断「提问之后有没有回应 Bot」。判据只认 @ / 回复 /
+        昵称呼叫（OneBot 的 to_me），不认在群里随便说了句话。
+        """
+        return self._last_tome.get(group_id, {}).get(int(user_id))
 
     # ── 冷却管理 ────────────────────────────────────────
     def mark_spoke(self, group_id: int):

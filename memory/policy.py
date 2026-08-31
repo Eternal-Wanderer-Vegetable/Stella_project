@@ -556,7 +556,7 @@ def _context_match(mem: dict[str, Any], usage_score: int, query: str = "") -> fl
 
 
 def _parse_ts(value: Any) -> float | None:
-    """把 last_accessed_at / created_at 解析为 epoch 秒（UTC 基准）。"""
+    """把 last_confirmed_at / created_at 等时间戳解析为 epoch 秒（UTC 基准）。"""
     from memory.timeutil import parse_db_timestamp
 
 
@@ -564,9 +564,17 @@ def _parse_ts(value: Any) -> float | None:
 
 
 def _mem_timestamp(mem: dict[str, Any]) -> float:
-    """取一条记忆的时间戳（last_accessed_at 优先，其次 created_at / updated_at）。
-    都没有则按“刚刚”处理（旧数据不因缺时间戳而被当成远古记忆）。"""
-    for key in ("last_accessed_at", "created_at", "updated_at"):
+    """取一条记忆的**证据新鲜度**时间戳（last_confirmed_at 优先）。
+
+    回退顺序 last_confirmed_at → last_accessed_at → created_at → updated_at，
+    都没有则按“刚刚”处理（旧数据不因缺时间戳而被当成远古记忆）。
+
+    2026-08-31 起 last_accessed_at 会在检索命中时刷新，因此它不能再排在第一位：
+    否则「取过一次 → 时间戳变新 → recency 更高 → 更容易再被取」会自我强化，
+    排序维度退化成「最近用过什么」。留在回退链里只为兼容仅有该列的旧库与
+    benchmark 夹具。新鲜度要的是「这条事实最后一次被观察到是多久以前」。
+    """
+    for key in ("last_confirmed_at", "last_accessed_at", "created_at", "updated_at"):
         epoch = _parse_ts(mem.get(key))
         if epoch is not None:
             return epoch
@@ -574,7 +582,7 @@ def _mem_timestamp(mem: dict[str, Any]) -> float:
 
 
 def _reference_timestamp(memories: list[dict[str, Any]]) -> float:
-    """排序参考时间：候选池最新一条记忆的访问时间（poll-anchored recency）。
+    """排序参考时间：候选池里最新一条记忆的确认时间（poll-anchored recency）。
     以此代替“系统当前时间”作为年龄参照，避免 benchmark/快照数据的绝对时间
     漂移：最新记忆 age=0、天然 decay=1.0，旧的按相对年龄衰减。"""
     newest = max((_mem_timestamp(m) for m in memories), default=time.time())

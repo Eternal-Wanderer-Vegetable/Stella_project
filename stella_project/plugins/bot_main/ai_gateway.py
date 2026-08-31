@@ -103,6 +103,7 @@ from memory.proactive_state import (
     mark_announced,
     record_at,
     record_reply_result,
+    reset_no_reply,
     set_proactive_muted,
 )
 from memory.proactive_target import pick_target
@@ -336,6 +337,11 @@ async def record_group_chat(event: GroupMessageEvent):
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
     get_proactive().record_message(ctx.group_id, ctx.user_id)
+    if ctx.source_kind == "AT_MENTION":
+        # 主动 @ 的回应检测只认「对 Bot 说话」，所以这个时间戳必须单独记
+        get_proactive().record_tome(ctx.group_id, ctx.user_id)
+        # 只要还愿意跟 Bot 说话就不算「不想聊」，顺手解除退避（自愈，见 reset_no_reply）
+        reset_no_reply(ctx.group_id, ctx.user_id)
     # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
     session_touch(ctx.group_id)
 
@@ -629,15 +635,22 @@ async def _resolve_nickname(bot: Bot, group_id: int, user_id: int) -> str:
 async def _check_reply_later(group_id: int, user_id: int, asked_at: float) -> None:
     """延迟检查主动 @ 是否获得回应，据此更新退避计数。
 
-    判定标准：在 PROACTIVE_REPLY_WINDOW_SECONDS 内该用户是否有过任何发言
-    （用内存中的活跃度时间戳，不查库——只需要知道「有没有说话」）。
+    判定标准：在 PROACTIVE_REPLY_WINDOW_SECONDS 内该用户是否**对 Bot 说过话**
+    （@ / 回复 Bot 的消息 / 昵称呼叫，即 OneBot 的 to_me）。用内存中的时间戳，不查库。
+
+    此前判的是「窗口内有没有说话」，在活跃群里几乎恒为真：被追问的人本来就是
+    「近期活跃用户」，随后必然还会在群里说话，于是 consecutive_no_reply 一直被
+    清零、PROACTIVE_MAX_NO_REPLY 的自动退避形同虚设（bug_report_2026_8_31#1 §5.1）。
+
+    代价是纯文本接话（不 @、不回复）会被判为未回应。这类漏判由 reset_no_reply
+    在下一次「对 Bot 说话」时归零来兜底，不会把人永久踢出验证池。
 
     无回应即累计 consecutive_no_reply，达到 PROACTIVE_MAX_NO_REPLY 后
     can_at_user 会拒绝继续追问该用户，这是对「不想聊的人」的自动退避。
     """
     try:
         await asyncio.sleep(PROACTIVE_REPLY_WINDOW_SECONDS)
-        last = get_proactive().last_spoke_ts(group_id, user_id)
+        last = get_proactive().last_tome_ts(group_id, user_id)
         replied = last is not None and last > asked_at
         record_reply_result(group_id, user_id, replied)
         logger.info(

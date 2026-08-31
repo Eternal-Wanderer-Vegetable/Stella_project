@@ -2,7 +2,7 @@
 
 日期：2026-08-31
 分析范围：`memory/` 记忆链路（整合 → 候选 → 晋升 → 主动验证 → 衰减）
-状态：P0、P1 已修复并落地（见 §7），P2 待办
+状态：P0、P1、P2 已修复并落地（见 §7）；§4.c 与 §4.e 仍未修复
 
 ---
 
@@ -214,8 +214,8 @@ replied = last is not None and last > asked_at
 | **P0** | verify 分支排除 `last_asked_candidate_id` | `memory/proactive_target.py` | ✅ 已修 |
 | P1 | `_fetch_observing_candidate` 排除 EVENT/PLAN 等时效型，或给它们单独的短 TTL | `memory/proactive_target.py` | ✅ 已修（两者都做了） |
 | P1 | 候选按类型设 TTL，EVENT 不应沿用 30 天 | `memory/memory_manager.py`、`config/settings.py` | ✅ 已修 |
-| P2 | 回应判定改为「窗口内是否 @ 了 Bot / 回复了那条消息」 | `stella_project/plugins/bot_main/ai_gateway.py` | ⬜ 待办 |
-| P2 | 明确 `last_accessed_at` 语义：要么检索时刷新（则 decay 改用 `created_at`），要么改名 | `memory/retrieval_v2.py`、`memory/compressor.py` | ⬜ 待办 |
+| P2 | 回应判定改为「窗口内是否 @ 了 Bot / 回复了那条消息」 | `stella_project/plugins/bot_main/ai_gateway.py` | ✅ 已修 |
+| P2 | 明确 `last_accessed_at` 语义：要么检索时刷新（则 decay 改用 `created_at`），要么改名 | `memory/retrieval_v2.py`、`memory/compressor.py` | ✅ 已修（decay 锚点取 `last_confirmed_at`，不是 `created_at`，理由见 §7） |
 
 ### 设计教训
 
@@ -259,6 +259,45 @@ replied = last is not None and last > asked_at
 
 护栏：`tests/test_time_sensitive_candidates.py`（25 例）。用例**成对出现**——一条断言时效型被压下去，一条反向断言稳定型没被连带压下去。只测前者的话，「一律不追问」「TTL 一律 3 天」也能通过，而那会把 `FACT` 的采集一起毁掉。阈值全部从 `_observing_ttl_days` / 配置反推，不写死 3/14/7/30。
 
+### P2-1（2026-08-31）：回应判定改为只认「对 Bot 说话」
+
+§5.1 的问题是判据错位：`_check_reply_later` 读的是 `last_spoke_ts`（「群里有没有人在说话」），在活跃群里几乎恒为真，于是 `consecutive_no_reply` 一直被清零，`PROACTIVE_MAX_NO_REPLY` 的自动退避从来没有真正触发过。
+
+改法是新开一条时间线而不是改写旧的：`memory/proactive.py` 增加 `_last_tome` / `record_tome()` / `last_tome_ts()`，与 `record_message` / `last_spoke_ts` 并列。入库侧（`ai_gateway.record_group_chat`）在 `source_kind == "AT_MENTION"` 时两者都记——OneBot 的 `is_tome()` 已经覆盖 @ Bot、回复 Bot 的消息、以昵称呼叫三种情况，正是这里要的正信号。活跃度统计仍然要算上所有消息，所以 `record_message` 不能被取代。
+
+一个必须同时做掉的副作用：**判据收紧会把纯文本接话的人误判为「没回应」**，而 `consecutive_no_reply` 没有任何按时间的自然衰减，攒满 `PROACTIVE_MAX_NO_REPLY` 就再没有归零的机会——这个人会被永久踢出验证池。既然「主动 @ 是主要的记忆来源」（见 `docs/memory-system.md`），把人永久排除的代价远高于多问一次。因此新增 `proactive_state.reset_no_reply()`，在该用户任意一次「对 Bot 说话」时归零，让退避自愈。
+
+护栏：`tests/test_reply_detection.py`（9 例）。三段成对断言——纯文本发言不得算作回应／`record_tome` 之后必须算；归零只影响目标用户、且归零之后计数仍能重新累积；退避先按预期触发、再被一次「对 Bot 说话」解除。阈值取自 `PROACTIVE_MAX_NO_REPLY` 而非写死。`tests/test_proactive_at_flow.py` 里那条名字带 `detects_reply` 的旧用例同步改名为 `tracks_any_message`，并补一条反向断言（`last_tome_ts` 此时应为 `None`）——名字留着会让人以为回应检测仍由它守着。
+
+### P2-2（2026-08-31）：拆开 `last_accessed_at` 与 `last_confirmed_at` 的语义
+
+§4.d 的现象是「文档说的和代码做的不一致」，但根因是**两件事被同一个列表达**：检索路径从不写 `last_accessed_at`，只有候选强化与压缩合并写，而它们同时也写 `last_confirmed_at`。两列长期同步变动，于是「最后一次被用到」和「最后一次被证实」是同一个数。
+
+落地后的分工：
+
+| 时间戳 | 含义 | 写 | 读 |
+|---|---|---|---|
+| `last_confirmed_at` | 这条事实最后一次被观察到 | 候选强化（`memory_manager._merge_into_memory`）、压缩合并（`compressor._merge_duplicate_memories`） | `policy._mem_timestamp`（排序新鲜度维）、`compressor._apply_decay`（类型衰减）、候选池取数与相似记忆归并的 `ORDER BY` |
+| `last_accessed_at` | 这条记忆最后一次真正进了 Prompt | `retrieval_v2._touch_accessed` | `memory_manager._quota_score`（配额竞争的 recency 项）、`compressor._archive_low_value_memories`（低价值归档） |
+
+**与报告原文的偏离，需要明确记录：decay 锚点取 `last_confirmed_at` 而不是 §6 表格里写的 `created_at`。** `created_at` 会把再确认的证据整个丢掉——一条 `FACT` 上周才被第三个人重复讲过一次，用 `created_at` 算它照样是「两年前的老记忆」。类型生命周期问的是「这条事实还新鲜吗」，答案应该由最后一次观察决定。
+
+**执行顺序是这次改动的关键。** 直接给检索加刷新，会立刻在三个地方制造「富者愈富」：`policy._mem_timestamp` 的新鲜度维、候选池的 `ORDER BY last_accessed_at DESC`、以及 `_apply_decay` 的衰减时钟——取用一次就把时钟重置，越被反复引用的记忆越不会过期。所以先把所有「证据新鲜度」读取方改指 `last_confirmed_at`，再打开检索侧的记账。因为两列此前一直同步写入，这一轮重指向在今天的数据上是**行为无变化**的，这正是随后加刷新时不会引入回归的原因。
+
+几个刻意的取舍：
+
+- **不做 schema 迁移。** 两列一直同步写，所以库里没有一行数据是错的——错的只有读取方。所有新增读取都用 `COALESCE(last_confirmed_at, last_accessed_at)`，既覆盖存量 NULL，也覆盖只有 `last_accessed_at` 一列的旧库与 benchmark 夹具。
+- **`_fetch_candidates_legacy` 刻意不改。** 走到那个回退分支就说明主查询的列缺失，`last_confirmed_at` 很可能也不存在，再引用它会把最后一条退路一起打空。这条退路本身也不是无损的：它没有 Visibility 过滤，静默退化进去是真实的正确性损失——`tests/test_embeddings.py` 的夹具当时就因为缺 `last_confirmed_at` 而整体落到回退路径，两例随即失败（已给夹具补上该列）。
+- **`_create_memory` 仍然给 `last_accessed_at` 写建库时间。** 语义上新记忆还没被检索过，但置 NULL 会让 `_archive_low_value_memories` 的「从未访问」分支立刻归档低重要度的新记忆，等于不给宽限期。
+- **两处合并只刷 `last_confirmed_at`，不再顺手刷 `last_accessed_at`。** 合并是新证据，不是被读取；一并刷会让配额竞争的 recency 项与 confirmation 项重复计同一个信号，也会让「长期未访问」的归档判定永远不成立。
+- **缓存命中不记账。** 5 分钟内的重复检索不重复写库。归档与配额判定都是天粒度的，一次对话把访问时间钉在「现在」没有意义，还要为每句话付一次写库。
+- **只有真正进 Prompt 的才记账**（聊天素材与行为约束两个分区都算）。若刷新整个候选池，「有没有人用得上它」就退化成「有没有被查出来过」，`_archive_low_value_memories` 会再也归档不掉任何东西。
+- **不新增索引。** `idx_memories_space_status_accessed` 保持原样：`COALESCE` 本来就用不上该列的索引，而 `(group_shared_space, status)` 前缀仍然有效，当前数据量下没有必要为此重建索引。
+- **`retriever.py`（v1 回退）里的行 dict 键改叫 `freshness_at`。** 同一个槽位在 `memories` 上取的是确认时间，在待废弃的 `long_term_memories` 上只有 `last_accessed_at` 可取，继续叫 `last_accessed_at` 会误导；`long_term_memories` 的两条 UNION 分支保持原样，那张表没有 `last_confirmed_at` 可 `COALESCE`。
+- **benchmark 夹具把同一个值同时写进两列。** 用例里的 `last_accessed_at` 覆盖是用来测「新记忆压过旧记忆」的，而排序读的是确认时间，且访问时间会被检索刷新——只写一列会让同一用例跑第二遍时新鲜度变了。
+
+护栏：`tests/test_access_semantics.py`（15 例），四段成对断言——进了 Prompt 的记账／被过滤掉的不记账；排序优先 `last_confirmed_at`／旧库仅有 `last_accessed_at` 时回退链仍要给出可用时间戳；过期的 `EVENT` 即使刚被取用过也照样衰减归档／生命周期内有新证据的不得被归档，同时低价值归档反过来要放过刚被取用的低重要度记忆；两处合并只前移确认时间／访问时间保持原样。
+
 ### 仍未修复
 
-§4.c（`EVENT` / `PLAN` 晋升后 60 天生命周期）与 §4.e（`_recency_factor` 显式忽略类型）不在 P0/P1 范围内，仍记录在 `docs/memory-system.md` 的「已知限制」中。
+§4.c（`EVENT` / `PLAN` 晋升后 60 天生命周期）与 §4.e（`_recency_factor` 显式忽略类型）不在本轮范围内，仍记录在 `docs/memory-system.md` 的「已知限制」中。§4.d（衰减锚点语义与自持循环）已由 P2-2 解决。

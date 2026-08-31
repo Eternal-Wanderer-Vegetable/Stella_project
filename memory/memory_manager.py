@@ -342,7 +342,10 @@ class MemoryManager:
         rows = cursor.execute(
             "SELECT id, content FROM memories WHERE status = 'active' "
             "AND group_shared_space = ? AND user_id = ? AND type = ? "
-            "ORDER BY last_accessed_at DESC",
+            # 证据新鲜度倒序：同类相似记忆有多条时并入最近被确认过的那条。
+            # 不用 last_accessed_at——它现在由检索命中刷新，会让「最近被引用过的」
+            # 而不是「最近被证实过的」持续吸收新证据。
+            "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC",
             (str(candidate["group_shared_space"]), str(candidate["user_id"]), candidate["type"]),
         ).fetchall()
         for mem_id, content in rows:
@@ -357,6 +360,9 @@ class MemoryManager:
         cursor.execute(
             "INSERT OR IGNORE INTO memories ("
             "id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, "
+            # last_accessed_at 在建库时也写当前时间：它的语义是「最后一次被用到」，
+            # 新记忆还没被检索过，但置 NULL 会让 _archive_low_value_memories 的
+            # 「从未访问」分支立刻把低重要度的新记忆归档，等于不给宽限期。
             "confirmation_count, last_confirmed_at, last_accessed_at, compressed_at, compression_version, is_atomized, "
             "usage_tags, visibility, behavior_rule, source_kind)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?, ?)",
@@ -395,7 +401,10 @@ class MemoryManager:
         recency（最近是否仍被触达，指数衰减 τ=30 天，与 policy._recency_factor 一致）。
 
         用 last_accessed_at 而非 created_at：一条老但仍被频繁调用的记忆比一条新
-        却从未被用过的更有价值。
+        却从未被用过的更有价值。这条意图直到 2026-08-31 才真正成立——此前
+        last_accessed_at 只跟着「确认」写，检索从不刷新它，于是本项实际算的是
+        「最后一次被确认」，与 confirmation 项重复计分（bug_report_2026_8_31#1 §4.e）。
+        现在它由 retrieval_v2._touch_accessed 刷新，两项才各自独立。
         """
         import math
 
@@ -502,7 +511,10 @@ class MemoryManager:
         merged_behavior = (candidate.get("behavior_rule") or "").strip() or (row[7] or "")
         cursor.execute(
             "UPDATE memories SET content = ?, content_raw = ?, importance = ?, confidence = ?, "
-            "confirmation_count = ?, last_confirmed_at = CURRENT_TIMESTAMP, last_accessed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, "
+            # 只刷 last_confirmed_at：候选强化是新证据，不是「这条记忆被用到了」。
+            # 一并刷 last_accessed_at 会让配额竞争里的 recency 项与 confirmation 项
+            # 重复计同一个信号，也会让「长期未访问」的归档判定永远不成立。
+            "confirmation_count = ?, last_confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, "
             "usage_tags = ?, visibility = ?, behavior_rule = ? "
             "WHERE id = ?",
             (

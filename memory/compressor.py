@@ -41,6 +41,12 @@ from config import (
 from memory.schema import create_memories_table
 from memory.text_similarity import is_similar, merge_content
 
+# 「这条事实最后一次被观察到」的 SQL 表达式：证据新鲜度用 last_confirmed_at，
+# 只有仅存该列的旧库/夹具才回退到 last_accessed_at。
+# 不能直接用 last_accessed_at——它自 2026-08-31 起在检索命中时刷新（见
+# retrieval_v2._touch_accessed），拿它当衰减时钟等于「还在被引用就永不过期」。
+_FRESHNESS = "COALESCE(last_confirmed_at, last_accessed_at)"
+
 
 class MemoryCompressor:
     """记忆压缩器：把冗余记忆合并、长记忆原子化、低价值记忆归档。"""
@@ -92,7 +98,8 @@ class MemoryCompressor:
 
         rows = cursor.execute(
             "SELECT id, group_shared_space, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
-            "FROM memories WHERE status = 'active' ORDER BY last_accessed_at DESC"
+            "FROM memories WHERE status = 'active' "
+            f"ORDER BY {_FRESHNESS} DESC"
         ).fetchall()
         if not rows:
             logger.info("🧹 [MemoryCompressor] 无可压缩的活动记忆")
@@ -151,7 +158,8 @@ class MemoryCompressor:
                 # 只对最近一部分进行轻量合并与原子化
                 rows = cursor.execute(
                     "SELECT id, group_shared_space, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
-                    "FROM memories WHERE status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
+                    "FROM memories WHERE status = 'active' "
+                    f"ORDER BY {_FRESHNESS} DESC LIMIT ?",
                     (self._light_threshold * 2,)
                 ).fetchall()
                 merged = self._merge_duplicate_memories(cursor, rows)
@@ -218,7 +226,10 @@ class MemoryCompressor:
                     merged_count = memory["confirmation_count"] + other["confirmation_count"]
                     cursor.execute(
                         "UPDATE memories SET content = ?, content_raw = ?, importance = ?, confidence = ?, "
-                        "confirmation_count = ?, last_confirmed_at = CURRENT_TIMESTAMP, last_accessed_at = CURRENT_TIMESTAMP, "
+                        # 只刷 last_confirmed_at：合并同类记忆是又一次确认，不是被读取。
+                        # 顺手刷 last_accessed_at 会让「从未被检索过」的记忆看起来刚被用过，
+                        # 把 _archive_low_value_memories 的「长期未访问」判定永久推后。
+                        "confirmation_count = ?, last_confirmed_at = CURRENT_TIMESTAMP, "
                         "compressed_at = CURRENT_TIMESTAMP, compression_version = COALESCE(compression_version, 0) + 1, updated_at = CURRENT_TIMESTAMP "
                         "WHERE id = ?",
                         (
@@ -277,6 +288,10 @@ class MemoryCompressor:
 
         条件：importance < MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD，
         且 (last_accessed_at 为空 或 距今超过 MEMORY_ARCHIVE_INACTIVE_DAYS 天)。
+
+        这里刻意仍用 last_accessed_at：本函数问的正是「有没有人用得上它」，而
+        2026-08-31 起该列由检索命中刷新，语义终于名副其实（此前它跟着确认时间走，
+        于是「长期未访问」实际判的是「长期没有新证据」，与 _apply_decay 重复）。
         归档不删数据，只是让这些记忆退出 active 检索；返回受影响行数（cursor.rowcount）。
 
         :param cursor: 数据库游标
@@ -301,7 +316,11 @@ class MemoryCompressor:
 
         每种类型有不同的“保质期”（见 MEMORY_DECAY_DAYS）：
         FACT 极慢 → STYLE 慢 → PREFERENCE/RELATION 中 → EVENT/PLAN 快 → GROUP_CONTEXT 很快。
-        超过类型生命周期且近期未访问的记忆，转为 archived（不删除，只退出检索）。
+        超过类型生命周期且**近期没有新证据**的记忆，转为 archived（不删除，只退出检索）。
+
+        判据是 last_confirmed_at 而不是 last_accessed_at：后者自 2026-08-31 起在
+        检索命中时刷新，用它当衰减时钟意味着「只要还在被引用就永不过期」——一条
+        EVENT 只要每周被取用一次就能无限续命，类型生命周期形同虚设。
         """
         total = 0
         for mem_type, max_days in MEMORY_DECAY_DAYS.items():
@@ -309,7 +328,8 @@ class MemoryCompressor:
                 "UPDATE memories SET status = 'archived', compressed_at = CURRENT_TIMESTAMP, "
                 "compression_version = COALESCE(compression_version, 0) + 1, updated_at = CURRENT_TIMESTAMP "
                 "WHERE status = 'active' AND type = ? "
-                "AND (last_accessed_at IS NULL OR julianday('now') - julianday(last_accessed_at) > ?)",
+                f"AND ({_FRESHNESS} IS NULL "
+                f"OR julianday('now') - julianday({_FRESHNESS}) > ?)",
                 (mem_type, max_days),
             )
             total += cursor.rowcount

@@ -79,7 +79,11 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
     """把 v2 检索 SQL 行转成记忆 dict。
 
     行结构：id, group_shared_space, user_id, type, content, importance, confidence,
-            visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at
+            visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at,
+            last_confirmed_at
+
+    两个时间戳都带上：排序的新鲜度维度读 last_confirmed_at（证据有多新），
+    last_accessed_at 只在旧库缺 last_confirmed_at 时作为回退（见 policy._mem_timestamp）。
     """
     return {
         "id": row[0],
@@ -94,14 +98,22 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
         "trigger_data": row[9],
         "behavior_rule": row[10],
         "last_accessed_at": row[11],
+        "last_confirmed_at": row[12] if len(row) > 12 else None,
     }
 
 
 def _select_columns() -> str:
     return (
         "id, group_shared_space, user_id, type, content, importance, confidence, "
-        "visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at"
+        "visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at, "
+        "last_confirmed_at"
     )
+
+
+# 候选池排序用的新鲜度表达式：证据新鲜度优先，旧库/测试夹具只有 last_accessed_at 时回退。
+# 不用 last_accessed_at 本身——它自 2026-08-31 起在检索命中时刷新，用它排序会让
+# 「被取过一次的记忆」永久占住候选池（富者愈富），新记忆反而进不来。
+_FRESHNESS = "COALESCE(m.last_confirmed_at, m.last_accessed_at)"
 
 
 def _allowed_visibility_clause(mode: str) -> str:
@@ -126,7 +138,7 @@ def _fetch_candidates(
     query: str,
     pool_limit: int,
 ) -> list[dict[str, Any]]:
-    """拉取候选记忆行（先按 Visibility 过滤，再按访问时间倒序）。
+    """拉取候选记忆行（先按 Visibility 过滤，再按证据新鲜度倒序）。
 
     检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
     include_user 为 None 表示空间级（主动发言）；否则限定该用户（@ 回复）。
@@ -156,7 +168,7 @@ def _fetch_candidates(
     if not rows:
         sql = (
             f"SELECT {_select_columns()} FROM memories m WHERE {where} "
-            "ORDER BY m.last_accessed_at DESC LIMIT ?"
+            f"ORDER BY {_FRESHNESS} DESC LIMIT ?"
         )
         params.append(pool_limit)
         try:
@@ -176,12 +188,17 @@ def _fetch_candidates_legacy(
     mode: str,
     pool_limit: int,
 ) -> list[dict[str, Any]]:
-    """旧库（无 v2 列）回退：只按 status/空间/用户取，不按 Visibility 过滤。"""
+    """旧库（无 v2 列）回退：只按 status/空间/用户取，不按 Visibility 过滤。
+
+    这里只能用 last_accessed_at 排序：走到本函数就说明主查询的列缺失，
+    last_confirmed_at 很可能也不存在，再引用它会连回退路径一起打空。
+    """
     if user_id is None:
         sql = (
             "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
             "'OPEN', NULL, NULL, NULL, last_accessed_at FROM memories m "
-            "WHERE m.group_shared_space = ? AND m.status = 'active' ORDER BY m.last_accessed_at DESC LIMIT ?"
+            "WHERE m.group_shared_space = ? AND m.status = 'active' "
+            "ORDER BY m.last_accessed_at DESC LIMIT ?"
         )
         params: list[Any] = [group_shared_space, pool_limit]
     else:
@@ -198,6 +215,37 @@ def _fetch_candidates_legacy(
         # 旧库回退路径同样不留痕：no such table → debug，其余 → warning
         log_sqlite_error("RetrievalV2._fetch_candidates_legacy", e)
         return []
+
+
+def _touch_accessed(ids: list[str]) -> None:
+    """把这批记忆的 last_accessed_at 刷成当前时间（"被检索命中并送进 Prompt"）。
+
+    在此之前 last_accessed_at 是与 last_confirmed_at 一起写的（建库、合并、复现
+    强化各写一次），检索路径从不刷新它——于是这一列实际记录的是「最后一次被确认
+    的时间」，与列名及 _quota_score 的注释都不符（bug_report_2026_8_31#1 §4.e）。
+
+    刷新它的前提是先把所有「证据有多新」的读取方改读 last_confirmed_at，否则
+    「用过一次 → 更新 → 排更前 → 更容易再被用」会形成正反馈。改完之后只剩两个
+    读取方，两者要的都是真正的访问时间：
+      - memory_manager._quota_score 的 recency 项（老但仍被频繁调用 > 新但从未被用）
+      - compressor._archive_low_value_memories（重要度低且长期没被用到 → 归档）
+
+    只写 last_accessed_at，不动 updated_at / compressed_at：被读取不是对记忆内容
+    的修改。失败只告警——刷新访问时间失败不该让整次检索失败。
+    """
+    if not ids:
+        return
+    holes = ",".join("?" * len(ids))
+    try:
+        conn = _connect()
+        conn.execute(
+            f"UPDATE memories SET last_accessed_at = CURRENT_TIMESTAMP WHERE id IN ({holes})",
+            tuple(ids),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        log_sqlite_error("RetrievalV2._touch_accessed", e)
 
 
 def _query_fts(
@@ -222,7 +270,8 @@ def _query_fts(
     try:
         sql = (
             "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance, m.confidence, "
-            "m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule, m.last_accessed_at "
+            "m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule, m.last_accessed_at, "
+            "m.last_confirmed_at "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
             "WHERE f.group_shared_space = ? AND m.status = 'active' "
@@ -391,6 +440,11 @@ def retrieve_memories(
         }
         for m in ranked
     ]
+
+    # 记账：真正进了 Prompt 的（两个分区都算）才算「被访问」。
+    # 命中缓存的那条 return 不走到这里 —— 5 分钟内的重复检索不重复计访问，
+    # 对天粒度的归档/配额判定无影响，也省掉每句话一次写库。
+    _touch_accessed([str(m.get("id")) for m in conversation + behavior if m.get("id")])
 
     result = RetrievalResult(
         mode=mode,

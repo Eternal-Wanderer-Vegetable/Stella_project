@@ -114,7 +114,10 @@ def _make_db(tmp_path, rows):
     conn.execute(
         "CREATE TABLE memories (id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT, "
         "content TEXT, importance REAL, confidence REAL, status TEXT, usage_tags TEXT, "
-        "visibility TEXT, trigger_data TEXT, behavior_rule TEXT, last_accessed_at DATETIME)"
+        "visibility TEXT, trigger_data TEXT, behavior_rule TEXT, last_accessed_at DATETIME, "
+        # last_confirmed_at 是排序的新鲜度锚点（policy._mem_timestamp 优先读它）；
+        # 夹具缺这一列会让 v2 检索整体退到无 Visibility 过滤的旧库回退路径
+        "last_confirmed_at DATETIME)"
     )
     for mid, content, imp, conf in rows:
         conn.execute(

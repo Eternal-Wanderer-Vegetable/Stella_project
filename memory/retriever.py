@@ -104,20 +104,27 @@ def _fetch_table(cursor: sqlite3.Cursor, sql: str, params: tuple[Any, ...]) -> l
 
 
 def _memories_from_rows(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
-    """把标准行结构（content, user_id, [type], [last_accessed_at]）转成记忆 dict 列表。"""
+    """把标准行结构（content, user_id, [type], [freshness_at]）转成记忆 dict 列表。
+
+    第 4 列是**证据新鲜度**（``COALESCE(last_confirmed_at, last_accessed_at)``），
+    键名用中性的 freshness_at：memories 表取的是「最后一次被确认」，而待废弃的
+    long_term_memories 只有 last_accessed_at 一个时间列，两者混在同一个键里，
+    叫 last_accessed_at 会误导——它自 2026-08-31 起在检索命中时刷新，拿它排序
+    等于「取过一次就永久占住候选池」（bug_report_2026_8_31#1 §4.e）。
+    """
     return [
         {
             "content": row[0],
             "user_id": row[1],
             "type": row[2] if len(row) > 2 else "FACT",
-            "last_accessed_at": row[3] if len(row) > 3 else None,
+            "freshness_at": row[3] if len(row) > 3 else None,
         }
         for row in rows
     ]
 
 
 def _parse_timestamp(value: Any) -> float:
-    """把 last_accessed_at 等时间字段解析为 epoch 秒（float，UTC 基准）。
+    """把 last_confirmed_at 等时间字段解析为 epoch 秒（float，UTC 基准）。
 
     兼容三种形态：
     - 数值（epoch 秒）
@@ -152,12 +159,12 @@ def _score_memory(query: str, memory: dict[str, Any], user_id: int) -> float:
     分数 = 关键词命中分 + 词重叠分 + 近期度分 + 重要度分 + 置信度分 + 用户相关分。
     - 关键词命中：用 _extract_keywords 抽到的关键词在内容中出现的次数 × 权重；
     - 词重叠：query 与 content 规范化后词集合交集大小（区分覆盖程度）；
-    - 近期度：_recency_score(last_accessed_at) × 权重；
+    - 近期度：_recency_score(freshness_at) × 权重；
     - 重要度 / 置信度：直接数值乘权重（无法解析的按 0 计）；
     - 用户相关：记忆所属 user_id 与请求 user_id 一致时给予固定加分。
 
     :param query: 用户查询文本
-    :param memory: 一条记忆的 dict（含 content / importance / confidence / last_accessed_at / user_id）
+    :param memory: 一条记忆的 dict（含 content / importance / confidence / freshness_at / user_id）
     :param user_id: 当前请求的用户 ID（0 表示不关心具体用户）
     :return: 综合分数，分数越高越相关
     """
@@ -174,7 +181,7 @@ def _score_memory(query: str, memory: dict[str, Any], user_id: int) -> float:
     keyword_score += overlap * 0.5
 
     recency_score = LONG_TERM_RELEVANCE_WEIGHT_RECENCY * _recency_score(
-        memory.get("last_accessed_at")
+        memory.get("freshness_at")
     )
 
     importance = memory.get("importance")
@@ -209,9 +216,9 @@ def _rank_fallback_rows(
 ) -> list[dict[str, Any]]:
     """对 query 检索无 FTS 命中时回退得到的行（或直接回退扫描的行）做更细粒度的排序。
 
-    行结构：content, user_id, type, last_accessed_at, importance, confidence
+    行结构：content, user_id, type, freshness_at, importance, confidence
     排序依据 `_score_memory` 的综合权重（关键词 + 近期度衰减 + 重要度 + 置信度 + 用户相关），
-    分数相同则保持 SQL 返回顺序（SQL 已按 last_accessed_at DESC），保证稳定。
+    分数相同则保持 SQL 返回顺序（SQL 已按证据新鲜度 DESC），保证稳定。
     """
     scored: list[tuple[float, dict[str, Any]]] = []
     for row in rows:
@@ -222,7 +229,7 @@ def _rank_fallback_rows(
             "content": content,
             "user_id": row[1],
             "type": row[2] if len(row) > 2 else "FACT",
-            "last_accessed_at": row[3] if len(row) > 3 else None,
+            "freshness_at": row[3] if len(row) > 3 else None,
             "importance": row[4] if len(row) > 4 else None,
             "confidence": row[5] if len(row) > 5 else None,
         }
@@ -356,7 +363,7 @@ def _query_rag_results(
     :param limit: 返回行数上限
     :param include_user_id: 若非空，只取该用户的记忆
     :param exclude_user_id: 若非空，排除该用户的记忆（与 include 二选一）
-    :return: 行列表（content, user_id, type, last_accessed_at, importance, confidence）
+    :return: 行列表（content, user_id, type, 证据新鲜度, importance, confidence）
     """
     if not RAG_ENABLED or not RAG_SQLITE_FTS_ENABLED:
         return []
@@ -376,7 +383,8 @@ def _query_rag_results(
             _rebuild_fts_index(cursor)
 
         query_sql = (
-            "SELECT m.content, m.user_id, m.type, m.last_accessed_at, m.importance, m.confidence "
+            "SELECT m.content, m.user_id, m.type, "
+            "COALESCE(m.last_confirmed_at, m.last_accessed_at), m.importance, m.confidence "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
             "WHERE f.group_shared_space = ? AND m.status = 'active' "
@@ -443,13 +451,17 @@ def get_group_memories(
         pool_limit = max(limit, LONG_TERM_RELEVANCE_CANDIDATE_LIMIT) if query else limit
         rows = _fetch_table(
             cursor,
-            "SELECT content, user_id, type, last_accessed_at, importance, confidence FROM memories "
-            "WHERE group_shared_space = ? AND status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
+            "SELECT content, user_id, type, COALESCE(last_confirmed_at, last_accessed_at), "
+            "importance, confidence FROM memories "
+            "WHERE group_shared_space = ? AND status = 'active' "
+            "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC LIMIT ?",
             (group_shared_space, pool_limit),
         )
         if not rows:
             # long_term_memories 是待废弃的旧兼容表：列名仍为 group_id，
             # 但值已按空间写入（见 M2.5-2），此处同样传空间标识。
+            # 这张表只有 last_accessed_at 一个时间列，没有 last_confirmed_at
+            # 可 COALESCE，只能原样取——它本身也不参与检索时的访问记账。
             rows = _fetch_table(
                 cursor,
                 "SELECT summary, user_id, 'FACT', last_accessed_at, importance, 1.0 FROM long_term_memories "
@@ -501,8 +513,10 @@ def get_user_memories(
         pool_limit = max(limit, LONG_TERM_RELEVANCE_CANDIDATE_LIMIT) if query else limit
         rows = _fetch_table(
             cursor,
-            "SELECT content, user_id, type, last_accessed_at, importance, confidence FROM memories "
-            "WHERE group_shared_space = ? AND user_id = ? AND status = 'active' ORDER BY last_accessed_at DESC LIMIT ?",
+            "SELECT content, user_id, type, COALESCE(last_confirmed_at, last_accessed_at), "
+            "importance, confidence FROM memories "
+            "WHERE group_shared_space = ? AND user_id = ? AND status = 'active' "
+            "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC LIMIT ?",
             (group_shared_space, str(user_id), pool_limit),
         )
         if not rows:
@@ -534,7 +548,7 @@ def get_related_memories(group_shared_space: str, user_id: int, query: str, limi
     :param user_id: 当前用户（要排除的人）
     :param query: 查询文本
     :param limit: 返回条数上限
-    :return: RELATED 记忆 dict 列表（不含 last_accessed_at）
+    :return: RELATED 记忆 dict 列表（不含时间字段）
     """
     if not DB_PATH.exists() or not LONG_TERM_RELEVANCE_ENABLED:
         return []
@@ -571,7 +585,8 @@ def get_related_memories(group_shared_space: str, user_id: int, query: str, limi
 
     rows = _fetch_table(
         cursor,
-        "SELECT content, user_id, type, last_accessed_at, importance, confidence FROM memories "
+        "SELECT content, user_id, type, COALESCE(last_confirmed_at, last_accessed_at), "
+        "importance, confidence FROM memories "
         "WHERE group_shared_space = ? AND user_id != ? AND status = 'active'",
         (group_shared_space, str(user_id)),
     )
@@ -593,7 +608,7 @@ def get_related_memories(group_shared_space: str, user_id: int, query: str, limi
             "content": content,
             "user_id": row[1],
             "type": row[2] if len(row) > 2 else "FACT",
-            "last_accessed_at": row[3] if len(row) > 3 else None,
+            "freshness_at": row[3] if len(row) > 3 else None,
             "importance": row[4] if len(row) > 4 else None,
             "confidence": row[5] if len(row) > 5 else None,
         }

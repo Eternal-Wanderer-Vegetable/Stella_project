@@ -102,23 +102,43 @@ def record_at(group_id: int, user_id: int, topic: str = "", candidate_id: str = 
         logger.warning(f"⚠️ [ProactiveState] 记录主动 @ 失败: {e}")
 
 
-def record_reply_result(group_id: int, user_id: int, replied: bool) -> None:
-    """记录追问是否获得回应：有回应归零，无回应 +1（用于自动退避）。"""
+def reset_no_reply(group_id: int, user_id: int) -> None:
+    """把该用户的连续无回应计数归零。
+
+    两个调用方：确认获得回应时（record_reply_result），以及该用户任意一次
+    「对 Bot 说话」时（AT_MENTION 入库路径）。
+
+    后者是退避的自愈阀门。回应判定改为只认 @ / 回复 Bot 之后，一个习惯用纯文本
+    接话的人会连续攒够 PROACTIVE_MAX_NO_REPLY 而被永久排除——而 consecutive_no_reply
+    此前没有任何按时间的自然衰减，一旦攒满就再无归零机会。既然「主动 @ 是主要的
+    记忆来源」，把人永久踢出验证池的代价远高于多问一次。
+    """
     try:
         conn = _connect()
-        if replied:
-            conn.execute(
-                "UPDATE proactive_state SET consecutive_no_reply = 0, "
-                "updated_at = CURRENT_TIMESTAMP WHERE group_id = ? AND user_id = ?",
-                (str(group_id), str(user_id)),
-            )
-        else:
-            conn.execute(
-                "UPDATE proactive_state SET consecutive_no_reply = "
-                "COALESCE(consecutive_no_reply, 0) + 1, updated_at = CURRENT_TIMESTAMP "
-                "WHERE group_id = ? AND user_id = ?",
-                (str(group_id), str(user_id)),
-            )
+        conn.execute(
+            "UPDATE proactive_state SET consecutive_no_reply = 0, "
+            "updated_at = CURRENT_TIMESTAMP WHERE group_id = ? AND user_id = ?",
+            (str(group_id), str(user_id)),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.warning(f"⚠️ [ProactiveState] 归零无回应计数失败: {e}")
+
+
+def record_reply_result(group_id: int, user_id: int, replied: bool) -> None:
+    """记录追问是否获得回应：有回应归零，无回应 +1（用于自动退避）。"""
+    if replied:
+        reset_no_reply(group_id, user_id)
+        return
+    try:
+        conn = _connect()
+        conn.execute(
+            "UPDATE proactive_state SET consecutive_no_reply = "
+            "COALESCE(consecutive_no_reply, 0) + 1, updated_at = CURRENT_TIMESTAMP "
+            "WHERE group_id = ? AND user_id = ?",
+            (str(group_id), str(user_id)),
+        )
         conn.commit()
         conn.close()
     except sqlite3.Error as e:
