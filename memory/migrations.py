@@ -630,7 +630,9 @@ def migrate_v12(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     """
     result = MigrationResult(version=12)
     try:
-        from config.settings import MEMORY_CANDIDATE_DEFAULT_IMPORTANCE as default_imp
+        from config.settings import MEMORY_CANDIDATE_DEFAULT_IMPORTANCE
+
+        default_imp = float(MEMORY_CANDIDATE_DEFAULT_IMPORTANCE)
     except Exception:  # pragma: no cover - 配置不可用时用同一个兜底常量
         default_imp = 0.5
 

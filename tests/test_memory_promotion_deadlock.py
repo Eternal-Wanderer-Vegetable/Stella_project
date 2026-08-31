@@ -26,7 +26,6 @@ from memory.consolidation_prompt import CONSOLIDATION_PROMPT
 from memory.extraction_prompt import EXTRACTION_PROMPT
 from memory.memory_manager import MemoryManager
 
-
 # ── 1. prompt 侧：importance 必须有取值指引 ──────────────────
 
 
