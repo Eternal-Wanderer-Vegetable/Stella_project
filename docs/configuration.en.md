@@ -487,10 +487,12 @@ The reason for consolidating once when a session ends is that the conversation's
 | `MEMORY_SOURCE_KIND_ENABLED` | `true` | When disabled, all messages have equal weight and the prompt does not label their sources |
 | `MEMORY_AT_MENTION_CONFIDENCE_BONUS` | `0.05` | Confidence bonus for candidates from the `AT_MENTION` source |
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | Confidence gain when the same fact recurs |
-| `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | Maximum time in the observation area; mark as `REJECTED` after expiry (do not delete) |
+| `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | Maximum time in the observation area; mark as `REJECTED` after expiry (do not delete). Time-sensitive types have shorter tiers; see below |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | Maximum accumulated `evidence` |
 
 The value `0.12` means a candidate starting at 0.5 crosses the 0.6 threshold after approximately 2 recurrences.
+
+The observation limit is **tiered by type**. The tier table is the code-level constant `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE` (`config/settings.py`) and is not read from `.env`: 3 days for `EVENT`, 7 for `GROUP_CONTEXT`, 14 for `PLAN`; any type not listed falls back to the global value above. Like `MEMORY_DECAY_DAYS`, it is a semantic judgment about "how long this kind of information is still worth waiting for a second piece of evidence," not a deployment parameter.
 
 ### Gate 1: Three Tiers
 
@@ -652,8 +654,11 @@ For a practical frequency reference for the three presets (`CHECK_INTERVAL=60`):
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | Response-detection window (seconds) |
 | `PROACTIVE_COLDSTART_TOPICS` | see settings.py | Cold-start topic list, comma-separated |
 | `PROACTIVE_AT_EXCLUDE_USERS` | empty | QQ numbers that will not be selected for proactive conversation (comma-separated) |
+| `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | Candidate types that are never verified via a proactive follow-up (comma-separated; empty = any type may be asked about) |
 
 The exclusion list is primarily for **other AIs in the group**: mutually @-mentioning them can trigger an endless conversational loop. Excluded accounts are still passively collected (messages are stored and consolidated normally); the Bot simply does not ask them questions proactively.
+
+`PROACTIVE_VERIFY_EXCLUDE_TYPES` excludes **candidate types**, not people. The quota is extremely scarce (2 per user per day by default), and verification exists to push a candidate past the promotion line into **long-term** memory — time-sensitive information has already expired by the time it is confirmed, and asking "did you hear the earthquake warning" a week later is absurd. These candidates are still stored and can still be promoted by `AT_MENTION` or passive reoccurrence; the Bot simply will not bother a user about them.
 
 The quota is hard-capped at `BASE + BONUS_MAX` (4 times per day by default). **“The more active a user is, the more they are harassed” is a failure mode that must be avoided**, so increasing the bonus is not recommended.
 

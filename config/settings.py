@@ -326,6 +326,22 @@ RAG_SQLITE_FTS_ENABLED = _env("RAG_SQLITE_FTS_ENABLED", "true").lower() in ("tru
 MEMORY_CANDIDATE_REOCCURRENCE_BONUS = _env_float("MEMORY_CANDIDATE_REOCCURRENCE_BONUS", 0.12)
 # 候选在 OBSERVING 停留的最长天数，超期未获新证据即标 REJECTED（不删除，保留供审计）
 MEMORY_CANDIDATE_MAX_OBSERVING_DAYS = _env_int("MEMORY_CANDIDATE_MAX_OBSERVING_DAYS", 30)
+# 按类型覆盖上面的 TTL（天）；未列出的类型沿用全局值。与 MEMORY_DECAY_DAYS 同为
+# 代码级常量而非 .env 键——它是「这类信息多久之后不再值得等第二次证据」的语义
+# 判断，不是部署参数。
+#
+# 为什么必须分类型：TTL 的含义是「愿意为这条信息等多久复现」。一条 EVENT
+# （「听到地震预警」）如果三天内没被再提一次，它既没重要到会被反复说起，也已经
+# 不是「当下」；统一 30 天只会让它一直占着候选池并被反复挑中去验证
+# （见 design_docs/bug_report/bug_report_2026_8_31#1.md 现象 2）。
+#   EVENT 3 天：够覆盖「周末说的事、周一还有人提」，再长就没有语义价值；
+#   PLAN 14 天：计划有执行窗口，两周内无人再提，多半已作废或已完成；
+#   GROUP_CONTEXT 7 天：群层面的上下文变化最快（它的衰减期本就是最短的 30 天）。
+MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE: dict[str, float] = {
+    "EVENT": 3.0,
+    "PLAN": 14.0,
+    "GROUP_CONTEXT": 7.0,
+}
 # evidence 字段累积上限（字符）。多次复现会不断追加证据，需防止无界增长
 MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS = _env_int("MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS", 800)
 # 模型没给 importance 时的兜底值。**不能是 0**：0 会被 MEMORY_PROMOTE_MIN_IMPORTANCE
@@ -706,6 +722,19 @@ PROACTIVE_COLDSTART_TOPICS = [
 # 注意：被排除的账号仍会被动收集信息（消息照常落库与整合），
 # 只是不主动向它们提问。
 PROACTIVE_AT_EXCLUDE_USERS = {int(x) for x in _env("PROACTIVE_AT_EXCLUDE_USERS", "").split(",") if x.strip()}
+# 不参与「主动验证」的候选类型（逗号分隔；留空表示所有类型都可验证）。
+# 主动 @ 的配额极其稀缺（默认每人每天 2 次），而验证的目的是把候选推过晋升线、
+# 变成**长期**记忆。对时效型信息这笔配额本身就花错了：等确认下来，信息已经过期。
+# 语义上也说不通——「你住在 X 吗」隔一周仍然成立，「你听到地震预警了吗」隔一周
+# 就是荒谬的（见 design_docs/bug_report/bug_report_2026_8_31#1.md 现象 2）。
+# GROUP_CONTEXT 另有一层理由：它归属于群而不是人，向某个人验证群层面的事本身错位。
+# 注意：排除的只是**主动追问**这一条路径。这些候选照常落库、照常可以凭 AT_MENTION
+# 单次晋升或靠被动复现晋升，只是不会为它们去打扰用户。
+PROACTIVE_VERIFY_EXCLUDE_TYPES = {
+    t.strip().upper()
+    for t in _env("PROACTIVE_VERIFY_EXCLUDE_TYPES", "EVENT,PLAN,GROUP_CONTEXT").split(",")
+    if t.strip()
+}
 
 # ---------- 数据库清理（测试期用） ----------
 # 程序启动时自动清理混乱的记忆数据（测试阶段频繁重启注入的脏数据）

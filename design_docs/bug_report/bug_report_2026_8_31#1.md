@@ -2,7 +2,7 @@
 
 日期：2026-08-31
 分析范围：`memory/` 记忆链路（整合 → 候选 → 晋升 → 主动验证 → 衰减）
-状态：已定位，P0 修复见文末
+状态：P0、P1 已修复并落地（见 §7），P2 待办
 
 ---
 
@@ -208,17 +208,57 @@ replied = last is not None and last > asked_at
 
 ## 6. 修复优先级
 
-| 优先级 | 修复项 | 位置 |
-|---|---|---|
-| **P0** | consolidation_prompt 补 `importance` 的定义与取值指引（照 extraction_prompt 的写法）；consolidator 给非 0 兜底，否则库中现存候选仍然卡死 | `memory/consolidation_prompt.py`、`memory/consolidator.py` |
-| **P0** | verify 分支排除 `last_asked_candidate_id` | `memory/proactive_target.py` |
-| P1 | `_fetch_observing_candidate` 排除 EVENT/PLAN 等时效型，或给它们单独的短 TTL | `memory/proactive_target.py` |
-| P1 | 候选按类型设 TTL，EVENT 不应沿用 30 天 | `memory/memory_manager.py`、`config/settings.py` |
-| P2 | 回应判定改为「窗口内是否 @ 了 Bot / 回复了那条消息」 | `stella_project/plugins/bot_main/ai_gateway.py` |
-| P2 | 明确 `last_accessed_at` 语义：要么检索时刷新（则 decay 改用 `created_at`），要么改名 | `memory/retrieval_v2.py`、`memory/compressor.py` |
+| 优先级 | 修复项 | 位置 | 状态 |
+|---|---|---|---|
+| **P0** | consolidation_prompt 补 `importance` 的定义与取值指引（照 extraction_prompt 的写法）；consolidator 给非 0 兜底，否则库中现存候选仍然卡死 | `memory/consolidation_prompt.py`、`memory/consolidator.py` | ✅ 已修 |
+| **P0** | verify 分支排除 `last_asked_candidate_id` | `memory/proactive_target.py` | ✅ 已修 |
+| P1 | `_fetch_observing_candidate` 排除 EVENT/PLAN 等时效型，或给它们单独的短 TTL | `memory/proactive_target.py` | ✅ 已修（两者都做了） |
+| P1 | 候选按类型设 TTL，EVENT 不应沿用 30 天 | `memory/memory_manager.py`、`config/settings.py` | ✅ 已修 |
+| P2 | 回应判定改为「窗口内是否 @ 了 Bot / 回复了那条消息」 | `stella_project/plugins/bot_main/ai_gateway.py` | ⬜ 待办 |
+| P2 | 明确 `last_accessed_at` 语义：要么检索时刷新（则 decay 改用 `created_at`），要么改名 | `memory/retrieval_v2.py`、`memory/compressor.py` | ⬜ 待办 |
 
 ### 设计教训
 
 1. **prompt 模板里的字面量会被模型当作答案照抄。** JSON 示例中的占位值必须与「要求」段落的字段说明一一对应，缺一项就等于给了一个默认答案。
 2. **闸门的检查顺序即优先级。** 把最不可靠的指标（LLM 自评的 importance）放在第一道硬门槛，等于让它一票否决所有其他证据——这与 `docs/memory-system.md:114` 「importance 不单独构成晋升依据」的设计意图正好相反：它现在不能单独让候选**通过**，却能单独让候选**永久失败**。
 3. **写入而不读取的状态字段是沉默的缺陷。** `last_asked_candidate_id` 写得很完整，连注释和文档都写了，唯独没有消费方。这类缺陷不会报错，只会表现为行为不符合文档。
+
+---
+
+## 7. 落地记录
+
+### P0（2026-08-31）
+
+| 改动 | 位置 |
+|---|---|
+| `importance` 补全定义、取值区间（0.7-1.0 / 0.1-0.4）、「与 confidence 无关」、「不要照抄示例值」 | `memory/consolidation_prompt.py`、`memory/extraction_prompt.py` |
+| 落库兜底：模型给 0 时回填 `MEMORY_CANDIDATE_DEFAULT_IMPORTANCE`，模型给了值则原样保留 | `memory/consolidator.py`、`config/settings.py` |
+| 存量解锁：v12 迁移回填 `importance <= 0` 的候选（幂等） | `memory/migrations.py`、`memory/schema.py` |
+| verify 分支排除 `last_asked_candidate_id` | `memory/proactive_target.py` |
+
+护栏：`tests/test_memory_promotion_deadlock.py`。
+
+### P1（2026-08-31）
+
+**候选 TTL 按类型分档。** 新增 `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE = {"EVENT": 3.0, "GROUP_CONTEXT": 7.0, "PLAN": 14.0}`（`config/settings.py`），未列出的类型沿用全局 30 天。淘汰逻辑（`memory/memory_manager.py`）拆成三块：`_observing_ttl_days()` 负责查档、`_reject_stale_candidates()` 负责分类型遍历、`_reject_stale_batch()` 负责执行一次 UPDATE。
+
+几个刻意的取舍：
+
+- **代码级常量而非 `.env` 键**，与 `MEMORY_DECAY_DAYS` 同例。「这类信息多久之后不再值得等第二次证据」是语义判断，不是部署参数。
+- **分类型逐条 UPDATE 而不是一条 CASE。** 超期淘汰是完全不可见的后台动作，按类型分行记日志才能事后看出淘汰的是哪一类；可审计性优先于少一次 UPDATE。
+- **脏 `type` 一律走全局值。** SQL 侧用 `UPPER(COALESCE(type, 'FACT'))` 归一，所以类型缺失不会让候选永久豁免淘汰；查档侧则宁可多留几天，不因一个拼错的类型名提前丢弃候选。
+- **不需要 schema 迁移。** `_reject_stale_candidates` 在每轮 `process_new_candidates` 开头执行，库里已经超期的 EVENT 会在下一轮自动被扫掉。
+
+**主动验证排除时效型。** 新增 `PROACTIVE_VERIFY_EXCLUDE_TYPES`（默认 `EVENT,PLAN,GROUP_CONTEXT`），`_fetch_observing_candidate` 的 SQL 加一段 `NOT IN` 过滤（`memory/proactive_target.py`）。
+
+- **这个做成了 `.env` 键**，与 `PROACTIVE_AT_EXCLUDE_USERS` 同例——运维想重新允许追问某一类，不该去改代码。
+- **留空 = 所有类型都可验证。** `NOT IN ()` 在 SQLite 里是语法错误，所以空配置必须返回空片段，不能顺手塞一个默认类型进去。
+- **排除的只是追问这一条路径。** 这些候选照常落库，也照常可以凭 `AT_MENTION` 单次晋升或靠被动复现晋升——不为它们花配额，不等于不记它们。
+- SQL 文本里只有占位符个数，类型名一律参数绑定。
+- `GROUP_CONTEXT` 另有一层理由：它归属于群而不是人，向某个人验证群层面的事本身就错位。
+
+护栏：`tests/test_time_sensitive_candidates.py`（25 例）。用例**成对出现**——一条断言时效型被压下去，一条反向断言稳定型没被连带压下去。只测前者的话，「一律不追问」「TTL 一律 3 天」也能通过，而那会把 `FACT` 的采集一起毁掉。阈值全部从 `_observing_ttl_days` / 配置反推，不写死 3/14/7/30。
+
+### 仍未修复
+
+§4.c（`EVENT` / `PLAN` 晋升后 60 天生命周期）与 §4.e（`_recency_factor` 显式忽略类型）不在 P0/P1 范围内，仍记录在 `docs/memory-system.md` 的「已知限制」中。

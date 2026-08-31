@@ -38,6 +38,7 @@ from config import (
     PROACTIVE_AT_USER_COOLDOWN,
     PROACTIVE_COLDSTART_TOPICS,
     PROACTIVE_MAX_NO_REPLY,
+    PROACTIVE_VERIFY_EXCLUDE_TYPES,
 )
 from config.spaces import resolve_space
 from memory.proactive import get_proactive
@@ -114,6 +115,20 @@ def can_at_user(group_id: int, user_id: int) -> tuple[bool, str]:
     return True, f"可以（今日 {state['at_count_today']}/{quota}）"
 
 
+def _exclude_types_clause() -> tuple[str, tuple[str, ...]]:
+    """构造「不验证时效型候选」的 SQL 片段与绑定参数。
+
+    配置为空时必须返回空片段：``NOT IN ()`` 在 SQLite 里是语法错误，而
+    「留空」的语义是「所有类型都可以验证」，不能顺手塞一个默认类型进去。
+    类型名一律走参数绑定，只有占位符个数进 SQL 文本。
+    """
+    types = tuple(sorted({str(t).strip().upper() for t in PROACTIVE_VERIFY_EXCLUDE_TYPES if str(t).strip()}))
+    if not types:
+        return "", ()
+    holes = ",".join("?" * len(types))
+    return f"AND UPPER(COALESCE(type, 'FACT')) NOT IN ({holes}) ", types
+
+
 def _fetch_observing_candidate(
     group_shared_space: str, user_id: int, exclude_id: str = ""
 ) -> tuple[str, str, str, float] | None:
@@ -129,8 +144,14 @@ def _fetch_observing_candidate(
     last_asked_candidate_id``）。没有这层排除，一条晋升不了的候选会在每一轮
     都以最高 confidence 胜出，于是对同一个人反复问同一个问题——正是
     design_docs/bug_report/bug_report_2026_8_31#1.md 记录的复读现象。
+
+    ``PROACTIVE_VERIFY_EXCLUDE_TYPES`` 里的类型（默认 EVENT / PLAN /
+    GROUP_CONTEXT）一律不取：验证的目的是把候选推过晋升线变成**长期**记忆，
+    而时效信息等确认下来时本身已经过期，这笔极稀缺的配额就花错了；语义上
+    「你听到地震预警了吗」隔一周问也是荒谬的（同一份报告的现象 2）。
     """
     lower = max(0.0, MEMORY_OBSERVE_LOW_CONFIDENCE - 0.2)
+    type_clause, type_params = _exclude_types_clause()
     try:
         conn = sqlite3.connect(DB_PATH)
         row = conn.execute(
@@ -138,6 +159,7 @@ def _fetch_observing_candidate(
             "WHERE group_shared_space = ? AND user_id = ? AND status = 'OBSERVING' "
             "AND confidence >= ? AND confidence < ? AND content != '' "
             "AND id != ? "
+            f"{type_clause}"
             "ORDER BY confidence DESC LIMIT 1",
             (
                 group_shared_space,
@@ -145,6 +167,7 @@ def _fetch_observing_candidate(
                 lower,
                 MEMORY_CONFIRM_HIGH_CONFIDENCE,
                 exclude_id or "",
+                *type_params,
             ),
         ).fetchone()
         conn.close()

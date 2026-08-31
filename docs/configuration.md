@@ -496,10 +496,12 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 | `MEMORY_SOURCE_KIND_ENABLED` | `true` | 关闭后所有消息等权，prompt 不标注来源 |
 | `MEMORY_AT_MENTION_CONFIDENCE_BONUS` | `0.05` | `AT_MENTION` 来源候选的置信度奖励 |
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | 同一事实复现时的置信度增益 |
-| `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | 观察区停留上限，超期标 `REJECTED`（不删除） |
+| `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | 观察区停留上限，超期标 `REJECTED`（不删除）。时效型类型另有更短的档位，见下 |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | `evidence` 累积上限 |
 
 `0.12` 的取值使 0.5 起步的候选约 2 次复现后跨过 0.6 门槛。
+
+停留上限**按类型分档**，档位表是代码级常量 `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE`（`config/settings.py`），不走 `.env`：`EVENT` 3 天、`GROUP_CONTEXT` 7 天、`PLAN` 14 天，未列出的类型沿用上面的全局值。它和 `MEMORY_DECAY_DAYS` 一样是「这类信息多久之后不再值得等第二次证据」的语义判断，不是部署参数。
 
 ### Gate 1 三档
 
@@ -661,8 +663,11 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | 回应检测窗口（秒） |
 | `PROACTIVE_COLDSTART_TOPICS` | 见 settings.py | 冷启动话题清单，逗号分隔 |
 | `PROACTIVE_AT_EXCLUDE_USERS` | 空 | 不会被选为主动搭话对象的 QQ 号（逗号分隔） |
+| `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | 不会被主动追问验证的候选类型（逗号分隔；留空 = 都可以问） |
 
 排除名单的主要用途是**群内其他 AI** —— 互相 @ 会触发无终止的循环对话。被排除的账号仍会被动收集信息（消息照常落库与整合），只是不主动向它们提问。
+
+`PROACTIVE_VERIFY_EXCLUDE_TYPES` 排除的是**候选类型**而不是人。配额极稀缺（默认每人每天 2 次），而验证是为了把候选推过晋升线变成**长期**记忆——时效信息等确认下来时早已过期，「你听到地震预警了吗」隔一周问也很荒谬。这些候选照常落库、照常可以凭 `AT_MENTION` 或被动复现晋升，只是不会为它们去打扰用户。
 
 配额上限硬封顶在 `BASE + BONUS_MAX`（默认 4 次/天）。**「越活跃越被骚扰」是必须避免的失控模式**，因此奖励幅度不建议调大。
 

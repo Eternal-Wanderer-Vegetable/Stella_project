@@ -97,9 +97,13 @@ When the same fact is observed again, **a new row is not inserted**; evidence is
 
 Similarity matching requires **the same group + same user + same type + similar content** (`memory/text_similarity.py`, Jaccard ≥ 0.65 or one string is a substring of the other).
 
-Keeping `first_seen_at` unchanged is intentional: it is the anchor for expiration. `OBSERVING` candidates that have not received new evidence after `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` are marked `REJECTED` (not deleted, and retained for auditing).
+Keeping `first_seen_at` unchanged is intentional: it is the anchor for expiration. `OBSERVING` candidates that have not received new evidence once their TTL has elapsed are marked `REJECTED` (not deleted, and retained for auditing).
 
 Without this mechanism, `OBSERVING` would be a dead end with entries but no exits—the same fact would be stored with a new uuid each time, each instance would remain stuck, and cross-validation would never succeed.
+
+The TTL is **tiered by type** (`MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE`): 3 days for `EVENT`, 7 for `GROUP_CONTEXT`, 14 for `PLAN`; any type not listed falls back to the global `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` (30 days). A TTL expresses "how long we are willing to wait for a second piece of evidence," and if an `EVENT` ("heard an earthquake warning") is not mentioned again within three days, it was neither important enough to come up repeatedly nor is it still "the present."
+
+> A uniform 30 days costs more than a larger candidate pool: that `EVENT` stays inside the proactive-verification selection range for a full month, being picked again and again to ask the same person about. See [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md), Symptom 2.
 
 ## Promotion Layer: Gate 1 Three Tiers
 
@@ -277,6 +281,8 @@ Priority:
 
 Exclusion conditions: the daily quota is full, the user is within the user-level cooldown, or the maximum number of consecutive non-responses has been exceeded.
 
+The verification pool only draws **non-time-sensitive** candidates. The quota is extremely scarce (2 per user per day by default), and verification exists to push a candidate past the promotion line into **long-term** memory — for time-sensitive information that quota is spent wrong, because by the time the answer arrives the information itself has expired. It also does not hold up semantically: "do you live in X" is still valid a week later, "did you hear the earthquake warning" a week later is absurd. Only the **follow-up question** path is excluded: these candidates are still stored, and can still be promoted by a single `AT_MENTION` or by passive reoccurrence.
+
 ### Safeguards
 
 | Mechanism | Function |
@@ -286,6 +292,7 @@ Exclusion conditions: the daily quota is full, the user is within the user-level
 | Consecutive no-response backoff | Stop follow-up questions to the user after reaching `PROACTIVE_MAX_NO_REPLY` |
 | Count on sending | Consumes quota regardless of whether a response is received, otherwise the system would repeatedly address the same person |
 | Candidate deduplication | Target selection excludes `last_asked_candidate_id`, so the same candidate is never asked about twice in a row |
+| No follow-ups on time-sensitive types | `PROACTIVE_VERIFY_EXCLUDE_TYPES` (`EVENT` / `PLAN` / `GROUP_CONTEXT` by default) never enters the verification pool |
 | Persist state | Quota, the last candidate asked about, and the no-response counter all live in the database and survive a restart |
 
 "The more active someone is, the more they are harassed" is the runaway behavior that must be avoided, so the frequency reward is deliberately kept small.
@@ -312,9 +319,9 @@ The system also requires "do not respond to any sentence in the context, includi
 - **Deduplication of cold-start topics is weak**. Keyword avoidance for Chinese topics depends on segmentation, which is currently largely ineffective for Chinese; when the topic list is short, the cost of repeated questions is acceptable
 - **During proactive @-mentions, Mode detection and the retrieval query use the full task-instruction text**, which has a poor signal-to-noise ratio. This has no visible impact when the memory store is empty; after data exists, an independent `retrieval_query` should be introduced
 
-The following four items were identified by [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (that report classifies them as P1/P2):
+The following four items were identified by [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (the P0 and P1 items in the same report have been fixed: the promotion deadlock, follow-up deduplication, per-type candidate TTLs, and excluding time-sensitive types from verification):
 
-- **The whole pipeline is blind to time sensitivity**. The candidate layer has no TTL concept at all: `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` is a uniform 30 days across every type, and `_fetch_observing_candidate` does not filter by `type` either. So an `EVENT` ("heard an earthquake warning") is just as eligible for repeated "verification" as a stable `FACT` — but verifying an event that has already passed is semantically wrong
+- **The ranking layer's recency decay still ignores type**. `_recency_factor` (`memory/policy.py`) uses a uniform τ=30 days for every type; the `mem_type` parameter is kept only for compatibility with older calls and takes no part in the computation. So an `EVENT` from last week and a stable `FACT` recorded last week score identically on the freshness dimension. The candidate layer and the proactive-verification side are now tiered by type (fixed in P1); the ranking side is not
 - **The 60-day lifetime for `EVENT` / `PLAN` is too long**; a one-off event lingers in the retrieval pool for two months
 - **Response detection checks "did they say anything in the window" rather than "did they reply to the bot"**. In an active group this is almost always true, so `consecutive_no_reply` is continuously reset and the `PROACTIVE_MAX_NO_REPLY` backoff essentially never fires
 - **`last_accessed_at` does not mean what the documentation says**. The retrieval path never refreshes it (only candidate reinforcement and compression merges write to it), so in practice it means "last time this was confirmed." This defeats the ranking intent that "an old memory still frequently used is more valuable," and creates an inverse effect: the more often a memory is asked about, the more often its decay clock is reset

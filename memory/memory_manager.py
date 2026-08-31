@@ -26,6 +26,7 @@ from nonebot import logger
 from config import (
     DB_PATH,
     MEMORY_CANDIDATE_MAX_OBSERVING_DAYS,
+    MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE,
     MEMORY_CONFIRM_HIGH_CONFIDENCE,
     MEMORY_OBSERVE_LOW_CONFIDENCE,
     MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT,
@@ -247,24 +248,87 @@ class MemoryManager:
 
         return False, f"置信度不足（conf={conf:.2f} < {MEMORY_OBSERVE_LOW_CONFIDENCE}）"
 
+    @staticmethod
+    def _observing_ttl_days(mem_type: str | None) -> float:
+        """该类型候选在 OBSERVING 的最长停留天数：有类型档就用，否则走全局值。
+
+        单独抽出来是为了让「时效型信息不该等满 30 天」这条判断有个能直接断言的
+        入口——它藏在 SQL 里的话，测试只能靠构造时间戳去反推。
+        脏 type（空串、大小写不一）一律按全局值处理：宁可多留几天，也不要因为
+        一个拼错的类型名把候选提前丢掉。
+        """
+        key = (mem_type or "").strip().upper()
+        try:
+            return float(MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE[key])
+        except (KeyError, TypeError, ValueError):
+            return float(MEMORY_CANDIDATE_MAX_OBSERVING_DAYS)
+
     def _reject_stale_candidates(self, cursor: sqlite3.Cursor) -> int:
         """把超期未获新证据的 OBSERVING 候选标记为 REJECTED（不删除，保留供审计）。
 
         没有这一步，OBSERVING 会变成只进不出的死胡同：一条永远等不到复现的
         候选会被无限次重新评估、反复失败，把候选表堆大并拖慢每轮晋升。
         以 first_seen_at 为锚点（不是 updated_at，后者每次复现都会刷新）。
+
+        TTL 按类型分档（``MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE``）：EVENT 这类
+        时效信息几天内没有复现就不再值得等下去。统一 30 天的后果是它一直占着候选池，
+        且始终落在主动验证的取数范围内被反复挑中（见 design_docs/bug_report/
+        bug_report_2026_8_31#1.md 现象 2）。
+
+        分类型逐条执行而不是写成一条 CASE：超期淘汰是完全不可见的后台动作，
+        按类型分行记日志才能事后看出「淘汰的是哪一类」，可审计性优先于少一次 UPDATE。
+        """
+        typed = {
+            str(t).strip().upper(): float(d)
+            for t, d in MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE.items()
+            if str(t).strip()
+        }
+        total = 0
+        for mem_type, days in sorted(typed.items()):
+            total += self._reject_stale_batch(
+                cursor, "AND UPPER(COALESCE(type, 'FACT')) = ?", (mem_type,), days, mem_type
+            )
+
+        # 剩下的类型走全局 TTL。type 为空或脏值经 COALESCE 归到 FACT，
+        # 因此不会有候选因为类型缺失而永久豁免淘汰。
+        rest_clause, rest_params = "", ()
+        if typed:
+            holes = ",".join("?" * len(typed))
+            rest_clause = f"AND UPPER(COALESCE(type, 'FACT')) NOT IN ({holes})"
+            rest_params = tuple(sorted(typed))
+        total += self._reject_stale_batch(
+            cursor,
+            rest_clause,
+            rest_params,
+            float(MEMORY_CANDIDATE_MAX_OBSERVING_DAYS),
+            "其他类型",
+        )
+        return total
+
+    @staticmethod
+    def _reject_stale_batch(
+        cursor: sqlite3.Cursor,
+        type_clause: str,
+        type_params: tuple[str, ...],
+        days: float,
+        label: str,
+    ) -> int:
+        """按一个类型过滤条件淘汰超期候选，返回被标记的行数。
+
+        ``type_clause`` 只由本模块的常量拼出（占位符个数），类型名一律走参数绑定。
         """
         cursor.execute(
             "UPDATE memory_candidates SET status = 'REJECTED', updated_at = CURRENT_TIMESTAMP "
             "WHERE status = 'OBSERVING' AND first_seen_at IS NOT NULL "
+            f"{type_clause} "
             "AND julianday('now') - julianday(first_seen_at) > ?",
-            (MEMORY_CANDIDATE_MAX_OBSERVING_DAYS,),
+            (*type_params, days),
         )
-        rejected = cursor.rowcount
+        rejected = cursor.rowcount or 0
         if rejected > 0:
             logger.info(
-                f"🗑️ [MemoryManager] {rejected} 条候选超过 "
-                f"{MEMORY_CANDIDATE_MAX_OBSERVING_DAYS} 天未获新证据，标记 REJECTED"
+                f"🗑️ [MemoryManager] {rejected} 条 {label} 候选超过 "
+                f"{days:g} 天未获新证据，标记 REJECTED"
             )
         return rejected
 
