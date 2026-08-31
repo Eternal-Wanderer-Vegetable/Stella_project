@@ -308,7 +308,7 @@ ruff check .
 - 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 感谢Bilibili平台UP主 [Ruuuuusty](https://space.bilibili.com/650991829) 将我和chat-GPT对Stella徽标的想法变为现实。
 - 本项目开发中得到了来自如下组织的支持：
-  - **模型提供商**：Deepseek，OpenAI（ChatGPT），Google（Gemini，Gemma），通义千问（text-embedding-qwen3-embedding-0.6b）和~~ Anthropic ~~。没有他们的优秀模型作为基础，这个项目不可能诞生。
+  - **模型提供商**：Deepseek，OpenAI（ChatGPT），Google（Gemini，Gemma），通义千问（text-embedding-qwen3-embedding-0.6b）和 ~~Anthropic~~。没有他们的优秀模型作为基础，这个项目不可能诞生。
   - **Coding Agent**：[Opencode](https://github.com/anomalyco/opencode)，感谢 Opencode 对本项目的大力支持。
   - **开源代码库**：[nonebot2](https://github.com/nonebot/nonebot2)，[NapCatQQ](https://github.com/NapNeko/NapCatQQ)，以及源代码中引用的所有第三方库。向与之相关的所有开发与维护者致敬。此外本项目也是为了向 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 与 [MaiBot](https://github.com/Mai-with-u/MaiBot) 两位前辈看齐，创造一个真正的、能够完整本地循环、不必把群聊信息和个人隐私交出去的 AI 朋友。
   - **开发者社区**：[Linux Do](https://linux.do)
