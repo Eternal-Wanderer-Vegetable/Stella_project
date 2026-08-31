@@ -1,5 +1,7 @@
 <div align="center">
 
+![标题图片](docs\pic\Title Image (Second Edition).jpg)
+
 # 🌟 Stella
 
 **一个依托记忆系统进行拟人化聊天的 QQ 群聊机器人**
