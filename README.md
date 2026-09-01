@@ -1,6 +1,6 @@
 <div align="center">
 
-![标题图片](docs/pic/Title_Image(Second_Edition).jpg)
+![标题图片](docs/pic/Title_Image(Second_Edition)_Compressed_version.jpg)
 
 # 🌟 Stella
 

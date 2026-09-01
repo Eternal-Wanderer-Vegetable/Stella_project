@@ -1,6 +1,6 @@
 <div align="center">
 
-![Title Image](docs/pic/Title_Image(Second_Edition).jpg)
+![Title Image](docs/pic/Title_Image(Second_Edition)_Compressed_version.jpg)
 
 
 # 🌟 Stella
