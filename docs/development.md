@@ -493,6 +493,8 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 `pip-audit` 是阻塞的，某个上游依赖爆出 CVE 时 CI 会红。若判断为不可立即修复的上游问题，可临时在该步骤加 `|| true`，但应记录原因。
 
+**只有 3.10 红、且是全量 collect error 时，先怀疑传递依赖**。`requirements.txt` 里的直接依赖基本都是下限约束（`>=`），传递依赖则完全不钉——任何上游发一个只支持 3.11+ 的新版本，`test (3.10)` 就会全红，而 3.11/3.12 与开发机全绿。2026-09-01 的实例：`pygtrie` 2.6.0 在模块顶层用了 `typing.Self`（3.11 才有），`import nonebot` 直接抛 `AttributeError: module 'typing' has no attribute 'Self'`，622 个用例全部 error。这类故障的排查方式是**只看 `==== ERRORS ====` 段的第一条 traceback**（几万行日志里全是同一条的复制），修法是在 `requirements.txt` 里显式钉住那个传递依赖并写清原因。
+
 ## 发布流程
 
 打 tag 后 CI（`.github/workflows/release.yml`）自动打包并发布，产出 `Stella-vX.Y.Z-win64.zip`。

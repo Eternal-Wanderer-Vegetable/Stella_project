@@ -457,6 +457,8 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 `pip-audit` is blocking, so CI goes red when an upstream dependency exposes a CVE. If you determine that an upstream issue cannot be fixed immediately, you may temporarily add `|| true` to that step, but record the reason.
 
+**When only 3.10 is red and every test is a collect error, suspect a transitive dependency first.** The direct dependencies in `requirements.txt` are mostly lower bounds (`>=`) and transitive ones are not pinned at all, so any upstream release that supports 3.11+ only turns `test (3.10)` completely red while 3.11 / 3.12 and the dev machine stay green. The 2026-09-01 instance: `pygtrie` 2.6.0 used `typing.Self` (3.11+) at module top level, so `import nonebot` raised `AttributeError: module 'typing' has no attribute 'Self'` and all 622 tests errored. Triage by reading **only the first traceback in the `==== ERRORS ====` section** (the tens of thousands of log lines are all copies of the same one); the fix is to pin that transitive dependency explicitly in `requirements.txt` with the reason written down.
+
 ## Release Process
 
 After a tag is pushed, CI (`.github/workflows/release.yml`) automatically packages and publishes `Stella-vX.Y.Z-win64.zip`.

@@ -7,6 +7,14 @@
 nonebot2[fastapi,websockets]>=2.5.0
 nonebot-adapter-onebot>=2.4.6
 nonebot-plugin-apscheduler>=0.5.0
+# 传递依赖，但必须钉住：nonebot2 的约束是 pygtrie>=2.4.1,<3.0.0，而 pygtrie 2.6.0
+# （2026-09-01 发布）在模块顶层写了 `def __copy__(self) -> _t.Self:`——注解在类体求值，
+# 而 `typing.Self` 是 Python 3.11 才有的，于是 `import nonebot` 在 3.10 上直接
+# AttributeError: module 'typing' has no attribute 'Self'。上游没给这个版本标
+# requires_python，pip 在 3.10 上照样装它，表现是全量 collect error（CI test 3.10 全红，
+# 本仓库 target-version 是 py310）。上游改用 typing_extensions 或补上 requires_python
+# 之后可以放开这条。
+pygtrie>=2.4.1,<2.6
 python-dotenv>=1.0.0
 httpx>=0.24.0
 pydantic>=1.10,<3
