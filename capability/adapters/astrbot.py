@@ -13,16 +13,21 @@ AstrBot Plugin → Adapter → Capability Registry → Comes
 - Comes 不依赖插件名称；
 - 插件生态可替换。
 
-## 两条注册通路
+## 四层注册通路
 
-**显式声明**（``config/capabilities/*.toml``，见 ``capability/loader.py``）：
-把若干工具归入一个语义能力，带中文 ``examples`` 与 ``keywords``。路由质量最好。
+| 序 | 层 | 位置 | 由谁决定 |
+|---|---|---|---|
+| 1 | 用户声明 | ``STELLA_HOME/config/capabilities/*.toml`` | 部署者 |
+| 2 | 出厂声明 | ``PROJECT_ROOT/config/capabilities/*.toml`` | 本项目 |
+| 3 | 插件自带声明 | ``<插件目录>/capability.toml`` | 插件作者 |
+| 4 | 自动派生（本模块） | 扫 ``llm_tools`` 取未被认领的工具 | 无人 |
 
-**自动派生**（本模块）：扫 ``llm_tools``，把**没有被任何显式声明认领**的活跃工具
-注册成 ``tool.<工具名>``。零配置——装上插件就能被路由到。
+前三层是**显式声明**（见 ``capability/loader.py``）：把若干工具归入一个语义能力，
+带中文 ``examples`` 与 ``keywords``，路由质量最好。第四层是本模块的兜底：把没有被任何
+声明认领的活跃工具注册成 ``tool.<工具名>``，装上插件就在注册表里有个位置。
 
-两者的归属判定靠 ``registry.claimed_by()``：声明的注册一定早于自动派生
-（后者要等插件加载完），而 ``_claim`` 是先到先得，所以「先到」天然等于「显式优先」。
+四层的归属判定统一靠 ``registry.claimed_by()`` 的**先到先得**：装配序（``bootstrap``）
+从高优先层往低走，而 ``_claim`` 只认第一个来的，所以「先到」天然等于「高优先层胜出」。
 
 ## 自动派生能力的先天局限
 
@@ -38,8 +43,12 @@ AstrBot Plugin → Adapter → Capability Registry → Comes
 要让一个工具能被聊天触发，就给它写一份声明——几行 TOML 的一次性成本，
 换掉的是「工具假阳」这一类高代价错误（见 config/settings.py 该配置项的注释）。
 
-这个局限**刻意不用生成的方式去补**：从工具描述 machine-generate 中文 examples 需要调模型，
-而生成质量无法验证，错的 examples 比没有 examples 更糟（会把不相关的请求吸进来）。
+**这个局限不在运行期用生成去补。** 启动时调模型把 examples 直接灌进内存里的原型向量，
+那份语料没有人过目、没有基准、也不留痕，错的 examples 比没有 examples 更糟（会把不相关的
+请求吸进来）。**离线**生成是支持的：``deploy plugin-scaffold`` 产出的是磁盘上一份
+``capability.toml.draft``，带 ``reviewed = false``，人审改成 ``true`` 才会被载入，
+且生成时就打印同域分离度与负样本余量。区别不在「生成」，在于**有没有一道人审闸门和一份
+可复算的指标**。详见 ``docs/plugin-spec.md``。
 """
 
 from __future__ import annotations
@@ -49,6 +58,7 @@ from typing import Any
 from capability.registry import (
     AUTO_CAPABILITY_PREFIX,
     KIND_ASTRBOT_TOOL,
+    SOURCE_AUTO,
     Capability,
     CapabilityProvider,
     CapabilityRegistry,
@@ -91,13 +101,14 @@ def _build_auto_capability(tool: Any, route_enabled: bool) -> Capability:
         keywords=[],
         input_schema=getattr(tool, "parameters", None) or {},
         route_enabled=route_enabled,
+        source=SOURCE_AUTO,
         providers=[
             CapabilityProvider(
                 provider_id=f"{cap_id}#{tool.name}",
                 capability_id=cap_id,
                 kind=KIND_ASTRBOT_TOOL,
                 tool_name=tool.name,
-                source="auto",
+                source=SOURCE_AUTO,
             ),
         ],
     )
@@ -163,28 +174,34 @@ def sync_astrbot_tools(
         _logger().warning(
             f"🧩 [Capability] 以下 {len(unrouted)} 个工具没有能力声明，"
             f"不参与语义路由（聊天中不会被触发）: {unrouted}。"
-            f"要启用请在 config/capabilities/<域名>.toml 里为它写一条 [[capability]]，"
-            f"或设 ROUTER_ROUTE_AUTO_CAPABILITIES=true 恢复旧行为",
+            f"要启用请任选一条：在 config/capabilities/<域名>.toml 里为它写一条 "
+            f"[[capability]]；或在插件目录里放一份 capability.toml"
+            f"（``python -m deploy plugin-check <插件目录>`` 会告诉你缺哪条，"
+            f"格式见 docs/plugin-spec.md）；或设 ROUTER_ROUTE_AUTO_CAPABILITIES=true "
+            f"恢复旧行为",
         )
     return stats
 
 
 def bootstrap(target: CapabilityRegistry | None = None) -> dict[str, int]:
-    """启动期一次性装配：先读声明文件，再自动派生剩余工具。
+    """启动期一次性装配：三层声明从高到低，最后自动派生剩余工具。
 
-    **顺序不可交换**：声明必须先注册，才能通过 ``claimed_by`` 抢下工具归属。
-    反过来的话自动派生会先把每个工具都占成 ``tool.<name>``，显式声明再想认领
-    同一个工具就抢不到了（``_claim`` 先到先得），于是精心写的中文 examples
-    永远不会被用到——而这不报错，只表现为「路由准确率没提升」。
+    **顺序不可交换**（层内层间都一样）：高优先层必须先注册，才能通过 ``claimed_by``
+    抢下工具归属。反过来的话低层会先把工具占住——自动派生尤其霸道，它会把每个工具都
+    占成 ``tool.<name>``，显式声明再想认领同一个工具就抢不到了（``_claim`` 先到先得），
+    于是精心写的中文 examples 永远不会被用到——而这不报错，只表现为「路由准确率没提升」。
 
     返回的统计里 ``routable`` 是**真正会参与路由竞争的能力数**——这个数才决定
-    Router 的行为，`declared` / `derived` 只说明注册表里有什么。
+    Router 的行为；``declared`` / ``plugin_declared`` / ``derived`` 只说明注册表里有什么。
+    ``declared`` 含插件层，``plugin_declared`` 是其中来自插件自带声明的部分（单独列出来是
+    因为它回答的是「谁决定了 Bot 会调什么」，与用户自己写的那些不是一回事）。
     """
-    from capability.loader import load_capabilities
+    from capability.loader import load_declaration_tiers
 
-    declared = load_capabilities(target=target)
+    tiers = load_declaration_tiers(target)
     stats = sync_astrbot_tools(target)
-    stats["declared"] = declared
+    stats["declared"] = tiers["declared"]
+    stats["plugin_declared"] = tiers["plugin"]
     reg = target if target is not None else _default_registry
     stats["routable"] = len(reg.routable())
     return stats

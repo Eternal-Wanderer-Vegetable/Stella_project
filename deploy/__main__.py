@@ -10,6 +10,7 @@
       python -m deploy stop
       python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]
       python -m deploy space-merge --from space_1,space_2 --to casual [--dry-run]
+      python -m deploy plugin-check <插件目录> [--json]
       python -m deploy manifest [--write]
 """
 
@@ -315,6 +316,27 @@ def _cmd_space_merge(args: argparse.Namespace) -> int:
     return 0 if not result.error else 1
 
 
+def _cmd_plugin_check(args: argparse.Namespace) -> int:
+    """按插件接入规范校验一个插件目录。
+
+    延迟 import：本命令要拉起 ``capability`` 与 ``astrbot_compat``（后者会装 shim），
+    而 ``doctor`` / ``status`` 这些常用命令没有理由为它付这份 import 成本。
+    """
+    from . import plugin_check
+
+    plugin_dir = Path(args.plugin_dir).expanduser()
+    if not plugin_dir.is_dir():
+        print(f"{plugin_dir} 不是一个目录。")
+        return 1
+    facts = plugin_check.collect(plugin_dir)
+    results = plugin_check.run_all(facts)
+    if args.json:
+        print(plugin_check.to_json(facts, results))
+    else:
+        print(plugin_check.to_terminal(facts, results))
+    return 1 if report.has_blocking(results) else 0
+
+
 def _cmd_manifest(args: argparse.Namespace) -> int:
     """生成发布包清单（release CI 用；升级时据此判断用户是否改过自带文件）。"""
     from . import manifest
@@ -396,6 +418,13 @@ def main(argv: list[str] | None = None) -> int:
     p_merge.add_argument("--to", required=True, help="目标空间名")
     p_merge.add_argument("--dry-run", action="store_true", help="只预演，不写入")
     p_merge.set_defaults(func=_cmd_space_merge)
+
+    p_plugin_check = sub.add_parser(
+        "plugin-check", help="按插件接入规范校验一个插件目录（会执行该插件代码）"
+    )
+    p_plugin_check.add_argument("plugin_dir", help="插件目录（含 main.py 的那一层）")
+    p_plugin_check.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
+    p_plugin_check.set_defaults(func=_cmd_plugin_check)
 
     p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
     p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")

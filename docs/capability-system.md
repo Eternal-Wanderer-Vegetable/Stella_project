@@ -111,7 +111,20 @@ information           weather.query     AstrBot 天气插件     get_weather()
 
 > 注册表单例刻意**不从 `capability/__init__.py` 再导出**。在包入口 `from capability.registry import registry` 会让包属性 `capability.registry` 从子模块变成那个单例对象，于是 `import capability.registry as m` 拿到的是实例而不是模块（`import a.b as c` 会退化成 `getattr(a, "b")`）。这种遮蔽只在 `__init__` 已执行时出现，行为随 import 顺序变化。取用一律写 `from capability.registry import registry`。
 
-### 两条注册通路
+### 四层注册通路
+
+能力进注册表有四个来源，优先级从高到低。**同一个工具被高优先层认领后，低优先层对应的那条整条跳过**——跳整条而不是跳单个 provider，因为半条能力的 examples / keywords 与 providers 不再自洽，比缺一条更糟。
+
+| 序 | 层 | 位置 | `provider.source` |
+|---|---|---|---|
+| 1 | 用户 | `STELLA_HOME/config/capabilities/*.toml` | `config` |
+| 2 | 出厂 | `<项目根>/config/capabilities/*.toml` | `config` |
+| 3 | 插件自带 | `<已加载插件目录>/capability.toml` | `plugin` |
+| 4 | 自动派生 | 没被任何声明认领的活跃工具 | `auto` |
+
+前三层格式**完全一致**——一种写法管三个位置，用户想改插件写歪的 examples，在 `config/capabilities/` 里写一条同 id 或同工具的声明即可覆盖。第 3 层由 `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED`（默认 `true`）控制，关掉它就把「插件作者决定自己的工具能不能被自动调用」这项权力收回到用户手里。写法与规则见 [插件接入规范 §6.2](plugin-spec.md#62-capabilitytoml-与三层优先级)。
+
+第 3 层**只扫加载成功的插件**：import 失败的插件没登记任何工具，它的声明会造出 provider 指向不存在工具的能力，而 `routable()` 只查 enabled / backoff、不查工具是否存在——那条能力会参与路由竞争、抢走 `ROUTER_CAPABILITY_MARGIN` 的间距，最后在 Comes 里必然 failed。同理，`capability.toml.draft` 与 `reviewed = false` 的声明一律不载入（人审闸门）。
 
 **显式声明** `config/capabilities/*.toml`（**文件名即 domain**，格式见同目录 `.example`）：
 
@@ -126,7 +139,7 @@ providers = ["get_weather"]                    # llm_tools 里的工具名，不
 
 **自动派生**：启动时把没有被任何声明认领的活跃工具注册成 `tool.<工具名>`，`description` 取工具描述。它们照常注册、仍可被显式执行，但**默认不参与路由**（`route_enabled=False`，见下）。
 
-两者的归属靠「先到先得」判定，而**装配顺序不可交换**：必须先读声明、再自动派生。反过来的话自动派生会先把每个工具占成 `tool.<name>`，声明再想认领同一个工具就抢不到，于是精心写的中文 examples 永远不会被用到——而这不报错，只表现为「路由准确率没提升」。顺序由 `adapters/astrbot.py::bootstrap` 保证，它在 `bot.py` 里注册于 `initialize_plugins` **之后**（插件可以在自己的 `initialize()` 里调 `add_llm_tools`，先跑就会漏掉）。
+四层的归属靠「先到先得」判定（`registry.claimed_by()`），而**装配顺序不可交换**：必须先读完三层声明、再自动派生。反过来的话自动派生会先把每个工具占成 `tool.<name>`，声明再想认领同一个工具就抢不到，于是精心写的中文 examples 永远不会被用到——而这不报错，只表现为「路由准确率没提升」。顺序由 `adapters/astrbot.py::bootstrap` 保证，它在 `bot.py` 里注册于 `initialize_plugins` **之后**（插件可以在自己的 `initialize()` 里调 `add_llm_tools`，先跑就会漏掉）。
 
 ### 声明优先：为什么自动派生不参与路由
 
@@ -150,7 +163,9 @@ providers = ["get_weather"]                    # llm_tools 里的工具名，不
 
 未声明的工具不参与路由是**刻意的，但不是无声的**：启动时会打一条 WARNING 点名有哪些工具处于这个状态，并给出两条出路（写声明，或把开关设成 `true`）。不点名的话现象是「插件装了、日志也说派生成功了、可就是从来不被调用」，极难定位。
 
-这个局限刻意不用生成的方式补——从工具描述 machine-generate 中文 examples 需要调模型且质量无法验证，错的 examples 比没有 examples 更糟（会把不相关的请求吸进来）。
+这个局限**不在运行期无声地补**：启动时调模型从工具描述生成 examples 直接灌进内存里的原型向量，没有文件、没人过目、没有基准，而错的 examples 比没有 examples 更糟（会把不相关的请求吸进来）。
+
+离线生成是另一件事，是支持的：`python -m deploy plugin-scaffold` 在磁盘上产出一份 `capability.toml.draft`（`reviewed = false`，`keywords` 留空、候选词只写在注释里），生成后当场用真实 embedding 打一份报告（同域原型分离度、每条 example 与本能力原型的余弦、负样本余量），人审改名并置 `reviewed = true` 之后才进注册表。有文件、有审阅、有可打印的数，「质量无法验证」就不再成立——被禁的始终是「未经验证的语料进路由」，不是「生成」。（`plugin-scaffold` 尚未实现，排在落地方案第 3 期；`reviewed` 闸门与三层加载已可用。）
 
 ## Router 三级级联
 

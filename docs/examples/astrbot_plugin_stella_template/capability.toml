@@ -1,0 +1,39 @@
+# Stella 能力声明。格式与 config/capabilities/*.toml 完全一致——一种格式管三个位置：
+#   1. STELLA_HOME/config/capabilities/*.toml   用户层（最高）
+#   2. PROJECT_ROOT/config/capabilities/*.toml  出厂层
+#   3. <插件目录>/capability.toml               插件自带（本文件，最低）
+# 同一个工具被高优先层认领后，本文件对应的那条**整条跳过**。所以用户想改插件写歪的
+# examples，只要在 config/capabilities/ 里写一条同 id 或同工具的声明即可覆盖。
+
+# 人审闸门。plugin-scaffold 生成的草稿写 false 且文件名带 .draft 后缀，两道都不放它进注册表。
+# 手写声明时这一行可以省略（键缺省视为已审），写出来是为了自文档。
+reviewed = true
+
+[[capability]]
+id = "text.stats"
+# 显式写 domain：插件自带声明缺省落在「plugin」域，而 domain 是能力查询的分组依据、
+# 也是同域分离度的分组依据，归到一个有意义的语义域里对两者都更好。
+domain = "utility"
+description = "统计一段文字的字数、行数与非空白字符数"
+# examples 是 Router 的 Level 1 语义原型语料，写「用户会怎么问」——**不是**写给决策器的
+# 指令句。工具 description 那种「当用户询问 X 时调用」与用户的问句不同构，拿它算余弦时
+# 同域工具之间几乎没有区分度（实测负样本余量 −0.024，换成下面这种问句后 +0.141）。
+# 4~6 句，每句覆盖一种不同的问法。
+examples = [
+    "这段话有多少字",
+    "帮我数一下字数",
+    "这段文字有几行",
+    "算算上面那段有多少个字",
+    "统计一下这段话的长度",
+]
+# keywords 是 Level 0 的确定性字面词，本条**刻意不给**：get_text_stats 有必填参数 text，
+# 而 Level 0 只做字面命中、不抽取参数，拍板执行只会让 Comes 去猜那个必填值。
+# 出厂声明里 anime.search（必填 keyword）同样不给 keywords，video.dynamics 破例是因为
+# 它的参数有合理默认值——按这个标准取舍。
+#
+# 真要写的话，规则是：名词短语、至少 3 个字、宁缺勿滥、**绝不从 examples 里切**
+# （中文没有词边界，从「会不会下雨」切出来的候选里既有「下雨」也有「不会」，
+# 后者会命中几乎任何句子），且不要与别的能力的 examples 串味——Level 0 命中即执行，
+# 没有二次判定，一个泄漏的关键词就是一次高代价的工具假阳。
+# keywords = ["字数统计"]
+providers = ["get_text_stats"]

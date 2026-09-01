@@ -90,6 +90,12 @@ ignore = [
 ]
 allowed-confusables = ["，", "。", "“", "”", "：", "；", "？", "！", "【", "】", "《", "》", "…", "—", "（", "）", "、"]
 
+[tool.ruff.lint.per-file-ignores]
+# docs/examples/ 下是**给插件作者拷走的模板**，必须与上游 AstrBot 的写法逐字一致：
+# 上游插件统一写 `from astrbot.api.event import filter`，那个名字确实遮蔽内建 filter，
+# 但改名就不再是能原样跑在 AstrBot 上的参考实现了（兼容承诺见 docs/plugin-spec.md §0）。
+"docs/examples/**/*.py" = ["A004"]
+
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
 

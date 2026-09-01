@@ -513,6 +513,10 @@ llm_usage_daily  (date, role, slot, model)
 
 未实现的上游能力一律抛 `StellaCompatNotSupported`（而不是静默返回假值），插件报错时能直接看出缺的是哪个接口。
 
+**工具执行通路多一步**：`@llm_tool` 注册成功不等于聊天能触发它——路由候选集来自 `registry.routable()`，需要一份能力声明。声明有三层（用户 `STELLA_HOME/config/capabilities/` > 出厂 `<项目根>/config/capabilities/` > 插件自带 `<插件目录>/capability.toml`），格式完全一致，同一工具被高优先层认领后低层那条整条跳过；插件自带层由 `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED`（默认 `true`）控制，且只扫加载成功的插件。写插件的完整规则见 [插件接入规范](plugin-spec.md)，分层与路由细节见 [能力系统](capability-system.md#四层注册通路)。
+
+**热重载**（`ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED`，默认关闭，尚未实现）定位是调试便利而非重启：它能收回 handler、工具、能力声明与 `sys.modules` 里的模块，但收不回裸 `asyncio.create_task()` 起的任务、插件起的线程、monkeypatch 与已被别处持有的旧实例引用。这也是规范要求后台任务走 `context.register_task` 的原因。
+
 ### 加载时机与目录名
 
 **插件在事件循环里装载**，入口是 `bot.py` 的 `on_startup` 钩子 `_bootstrap_astrbot_plugins()`（装载 + `initialize_plugins()`）。这不是随便放的：上游 AstrBot 的插件加载整条链路是异步的，因此插件在 `__init__` 里 `asyncio.create_task(...)` 起后台任务是**官方插件的常规写法**（`astrbot_plugin_bilibili` 即是）。放回 import 期同步装，这类插件会以 `RuntimeError: no running event loop` 加载失败——而用户唯一的出路是改插件源码，与「不改源码直接跑」正相反。两条约束别破：钩子必须是 `async def`（同步钩子被 nonebot 丢进线程池，那里同样没有运行中的循环），且必须注册在 `_bootstrap_capabilities` 之前（启动钩子按注册顺序**串行**执行）。

@@ -245,6 +245,58 @@ def test_clear_resets_claims_too():
     assert reg.claimed_by("get_weather") is None
 
 
+def test_unregister_releases_claimed_tools():
+    """热重载的关键一步：摘能力必须同时释放归属，否则新声明抢不到自己的工具。
+
+    ``_claim`` 是先到先得，工具若仍被一个已不存在的能力认领着，重载后插件重新注册
+    的声明就永远认领不上——这不报错，只表现为「重载完就路由不到了」。
+    """
+    reg = CapabilityRegistry()
+    reg.register(_capability(providers=[_provider("get_weather")]))
+    assert reg.unregister("weather.query") is True
+    assert reg.get("weather.query") is None
+    assert reg.claimed_by("get_weather") is None
+    # 释放后能被新的能力重新认领
+    reg.register(_capability(id="weather.v2", providers=[_provider("get_weather", "weather.v2")]))
+    assert reg.claimed_by("get_weather") == "weather.v2"
+
+
+def test_unregister_only_releases_its_own_tools():
+    reg = CapabilityRegistry()
+    reg.register(_capability(providers=[_provider("get_weather")]))
+    reg.register(_capability(id="dice.roll", providers=[_provider("roll_dice", "dice.roll")]))
+    reg.unregister("weather.query")
+    assert reg.claimed_by("roll_dice") == "dice.roll"
+
+
+def test_unregister_releases_providers_added_afterwards():
+    """按归属表反查而不是遍历 ``capability.providers``：后者可能与归属表不同步。"""
+    reg = CapabilityRegistry()
+    reg.register(_capability())
+    reg.add_provider("weather.query", _provider("get_weather"))
+    reg.unregister("weather.query")
+    assert reg.claimed_by("get_weather") is None
+
+
+def test_unregister_unknown_returns_false_and_keeps_version():
+    reg = CapabilityRegistry()
+    v0 = reg.version
+    assert reg.unregister("nope") is False
+    assert reg.version == v0
+
+
+def test_release_tool_frees_a_single_claim():
+    reg = CapabilityRegistry()
+    reg.register(_capability(providers=[_provider("get_weather")]))
+    v0 = reg.version
+    assert reg.release_tool("get_weather") is True
+    assert reg.claimed_by("get_weather") is None
+    assert reg.version > v0
+    # 能力本身还在（只释放归属，不摘能力）
+    assert reg.get("weather.query") is not None
+    assert reg.release_tool("get_weather") is False
+
+
 def test_module_singleton_is_shared_across_import_paths():
     """注册表分裂的表现是「插件明明装了但路由不到」，必须钉死单例。"""
     import importlib

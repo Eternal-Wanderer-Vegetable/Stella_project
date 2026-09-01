@@ -4,6 +4,12 @@
 # **文件名就是 domain**，这里叫 information，能力的 domain 字段自动填 "information"。
 # 随仓库还发了一份真实声明可以照抄：config/capabilities/entertainment.toml。
 #
+# **插件也可以自带这份文件**：放在插件根目录、命名为 capability.toml，格式与本文件完全
+# 一致（域名不再由文件名给出，所以每条能力自己写 domain，缺省落在 "plugin" 域）。
+# 三层优先级：这里（用户层）> 项目根的 config/capabilities/（出厂层）> 插件自带。
+# 同一个工具被高优先层认领后，低层那条**整条跳过**——所以插件自带的 examples 写得不合
+# 你的用法时，在这里写一条同 id 或同工具的声明就能覆盖它。写法见 docs/plugin-spec.md。
+#
 # 声明**不是可选的**（ROUTER_ROUTE_AUTO_CAPABILITIES=false 起，即默认）：没有声明的
 # 插件工具照常注册、仍可被显式执行，但**不参与语义路由**，聊天里不会被触发。
 # 启动日志会打一条 WARNING 点名有哪些工具处于这个状态。

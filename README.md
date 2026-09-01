@@ -199,9 +199,13 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 
 启动后看 `logs/boot_debug.log`，里面会写清发现了哪些插件、加载成功还是失败、失败原因。
 
-插件的 `@command` 指令（默认前缀 `/`）装完就能用。但插件用 `@llm_tool` 注册的**函数工具**还需要一步：在 `config/capabilities/<域名>.toml` 里给它写一条能力声明，Stella 才会在聊天里主动调用它。仓库里有一份真实样例（`config/capabilities/entertainment.toml`）可以照抄，格式说明见 `config/capabilities/information.toml.example`。
+插件的 `@command` 指令（默认前缀 `/`）装完就能用。插件用 `@llm_tool` 注册的**函数工具**要能在聊天里被自动调用，还需要一份能力声明——按 [插件接入规范](docs/plugin-spec.md) 写的插件**自带** `capability.toml`，这种插件装完就是完整的，你什么都不用配。
 
-> 为什么要多写这一步：插件的工具描述是写给「看着全部工具做选择」的决策器的指令句，而 Stella 的路由是拿它和用户的**问句**算语义相似度——两种用途要求的文本形态不同，直接拿来用会让同类工具互相抢。实测数据与取舍见 [能力系统](docs/capability-system.md#声明优先为什么自动派生不参与路由)。
+插件没自带（多数现存的 AstrBot 插件都没有），或者它自带的那份不合你的用法时，就在 `config/capabilities/<域名>.toml` 里补一条 / 覆盖一条——用户目录里的声明优先级最高，同一个工具被它认领后，插件自带的那条整条跳过。仓库里有一份真实样例（`config/capabilities/entertainment.toml`）可以照抄，格式说明见 `config/capabilities/information.toml.example`，怎么写才准见 [插件接入规范 §6.3](docs/plugin-spec.md#63-怎么写-examples)。
+
+> 为什么需要这份声明：插件的工具描述是写给「看着全部工具做选择」的决策器的指令句，而 Stella 的路由是拿它和用户的**问句**算语义相似度——两种用途要求的文本形态不同，直接拿来用会让同类工具互相抢。实测数据与取舍见 [能力系统](docs/capability-system.md#声明优先为什么自动派生不参与路由)。
+
+写插件或想确认一份声明写得对不对，跑 `python -m deploy plugin-check <插件目录>`：16 项检查，零 error 才算达标。
 
 插件的卡片图由本地 Chromium 渲染，**首次需要出图时会自动后台下载约 270MB 的浏览器内核**，期间插件照常回纯文本，装好后自动生效、不用重启。
 
@@ -223,6 +227,7 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 | [架构说明](docs/architecture.md) | 目录结构、消息处理流程、模块职责、AstrBot 兼容层 |
 | [记忆系统](docs/memory-system.md) | 两层过滤的设计理由、晋升规则、检索策略 |
 | [能力系统](docs/capability-system.md) | Capability Router 与 Comes：工具如何在聊天上下文之外执行 |
+| [插件接入规范](docs/plugin-spec.md) | 写一个 Stella 能完整用起来的插件：声明格式、两条通路、失败契约、自检工具 |
 | [配置参考](docs/configuration.md) | 端点 × 角色两层模型配置、全部配置项与调参建议 |
 | [开发指南](docs/development.md) | 测试、探针脚本、CI、贡献流程 |
 

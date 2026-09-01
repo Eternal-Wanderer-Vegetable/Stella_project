@@ -25,20 +25,25 @@ def to_json(results: list[CheckResult], snapshot: Snapshot | None = None) -> str
     doc: dict = {
         "version": 1,
         "summary": _summarize(results),
-        "items": [
-            {
-                "id": r.id,
-                "level": r.level,
-                "title": r.title,
-                "detail": r.detail,
-                "fix_hint": r.fix_hint,
-            }
-            for r in results
-        ],
+        "items": result_items(results),
     }
     if snapshot is not None:
         doc["llm"] = _llm_section(snapshot)
     return json.dumps(doc, ensure_ascii=False, indent=2)
+
+
+def result_items(results: list[CheckResult]) -> list[dict]:
+    """结论列表 → JSON 条目。doctor 与 plugin-check 共用同一套字段名。"""
+    return [
+        {
+            "id": r.id,
+            "level": r.level,
+            "title": r.title,
+            "detail": r.detail,
+            "fix_hint": r.fix_hint,
+        }
+        for r in results
+    ]
 
 
 def _llm_section(snap: Snapshot) -> dict:
@@ -137,6 +142,38 @@ def _usage_overview(snap: Snapshot) -> list[str]:
     ]
 
 
+_LEVEL_LABELS = {"error": "错误", "warn": "警告", "ok": "通过", "info": "提示"}
+# ANSI 前景色 + 是否加粗。``info`` 只有 plugin-check 会产出（「这条会被别的层顶掉」
+# 这类纯告知），用不刺眼的青色且不加粗，免得和真问题抢注意力。
+_LEVEL_STYLES = {
+    "error": ("31", "1"),
+    "warn": ("33", "1"),
+    "ok": ("32", ""),
+    "info": ("36", ""),
+}
+
+
+def format_results(results: list[CheckResult], *, use_color: bool | None = None) -> list[str]:
+    """结论列表 → 终端文本行。doctor 与 plugin-check 共用。
+
+    两处各写一遍的话，级别标签与配色会漂移——而这是用户判断严重程度的唯一线索。
+    ``use_color`` 缺省按 stdout 是否为 tty 自动判定。
+    """
+    if use_color is None:
+        use_color = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    lines: list[str] = []
+    for r in results:
+        label_text = _LEVEL_LABELS.get(r.level, r.level)
+        code, bold = _LEVEL_STYLES.get(r.level, ("0", ""))
+        label = f"\x1b[{code};{bold}m[{label_text}]\x1b[0m" if use_color else f"[{label_text}]"
+        lines.append(f"{label} {r.title}")
+        if r.detail:
+            lines.append(f"    {r.detail}")
+        if r.fix_hint:
+            lines.append(f"    解决：{r.fix_hint}")
+    return lines
+
+
 def to_terminal(results: list[CheckResult], snapshot: Snapshot | None = None) -> str:
     """人类可读文本。颜色用 ANSI，检测不到终端时自动降级。
 
@@ -144,27 +181,10 @@ def to_terminal(results: list[CheckResult], snapshot: Snapshot | None = None) ->
     检查结论，但「无缝切换」要能被信任，前提就是用户能一眼看到当前到底在用谁——
     尤其是配了在线端点却忘了改角色绑定时，表里一看就知道请求还在走本地。
     """
-    use_color = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     lines: list[str] = []
     if snapshot is not None:
         lines += _llm_overview(snapshot)
-    levels = {"error": "错误", "warn": "警告", "ok": "通过"}
-    styles = {
-        "error": ("31", "1"),
-        "warn": ("33", "1"),
-        "ok": ("32", ""),
-    }
-    for r in results:
-        code, bold = styles[r.level]
-        if use_color:
-            label = f"\x1b[{code};{bold}m[{levels[r.level]}]\x1b[0m"
-        else:
-            label = f"[{levels[r.level]}]"
-        lines.append(f"{label} {r.title}")
-        if r.detail:
-            lines.append(f"    {r.detail}")
-        if r.fix_hint:
-            lines.append(f"    解决：{r.fix_hint}")
+    lines += format_results(results)
     lines.append("")
     if has_blocking(results):
         lines.append("发现阻塞性问题，请先解决后再启动。")

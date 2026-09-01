@@ -860,6 +860,16 @@ ASTRBOT_AUTO_INSTALL_REQUIREMENTS = _env("ASTRBOT_AUTO_INSTALL_REQUIREMENTS", "f
     "1",
     "yes",
 )
+# 是否载入插件自带的 <插件目录>/capability.toml（声明三层里优先级最低的那层）。
+# 默认开：零配置装完插件就能被聊天触发，是插件接入规范的意义所在。
+# 留开关是因为它让**插件作者**决定自己的工具能否被自动调用——而这件事以前需要
+# 用户手写 config/capabilities/*.toml 才成立，那是一次显式的逐工具授权。关掉它
+# 就退回旧行为：插件工具照常注册、可被显式执行，但不参与语义路由。
+# 用户层与出厂层的声明不受本开关影响。详见 docs/plugin-spec.md。
+ASTRBOT_PLUGIN_CAPABILITIES_ENABLED = _env(
+    "ASTRBOT_PLUGIN_CAPABILITIES_ENABLED",
+    "true",
+).lower() in ("true", "1", "yes")
 # 指令唤醒前缀（逗号分隔）。AstrBot 上游默认为 "/"，插件的 @filter.command 依赖它：
 # 群里直接打 "/help" 就能触发，不必先 @ 机器人。留空表示只认 @ / 引用 / 私聊。
 ASTRBOT_WAKE_PREFIXES = [

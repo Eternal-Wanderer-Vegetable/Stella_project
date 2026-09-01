@@ -41,6 +41,12 @@ KIND_NATIVE = "native"
 # 自动派生能力的 id 前缀：没有被任何显式声明认领的插件工具会落到 ``tool.<工具名>``。
 AUTO_CAPABILITY_PREFIX = "tool."
 
+# 注册来源。声明分三层（用户 > 出厂 > 插件自带），自动派生垫底；层间归属靠
+# ``claimed_by`` 的先到先得判定，来源标记只用于诊断展示与 ``deploy plugin-check``。
+SOURCE_CONFIG = "config"  # config/capabilities/*.toml（用户数据目录或程序目录）
+SOURCE_PLUGIN = "plugin"  # 插件自带的 <插件目录>/capability.toml
+SOURCE_AUTO = "auto"  # 未被任何声明认领的插件工具，启动时自动派生
+
 
 @dataclass
 class CapabilityProvider:
@@ -53,7 +59,7 @@ class CapabilityProvider:
         tool_name: ``astrbot_tool`` 时为 ``llm_tools`` 里的工具名；
         priority: 越大越优先。同一能力有多个 provider 时的选择依据；
         enabled: 人工开关。关闭的 provider 永不参与选择；
-        source: 注册来源（``config`` / ``auto``），用于「显式声明优先」的归属判定；
+        source: 注册来源，见 SOURCE_* 常量，用于「显式声明优先」的归属判定与诊断；
         failures: 连续失败次数。达到阈值后进入退避（见 ``available``）；
         disabled_until: 退避到期的时间戳（``time.time()`` 纪元秒）。0 表示未退避。
     """
@@ -64,7 +70,7 @@ class CapabilityProvider:
     tool_name: str = ""
     priority: int = 0
     enabled: bool = True
-    source: str = "config"
+    source: str = SOURCE_CONFIG
     failures: int = 0
     disabled_until: float = 0.0
 
@@ -134,7 +140,9 @@ class Capability:
         route_enabled: 是否参与 Router 的能力选择。``False`` 时能力照常注册、
             照常可被显式指定执行，但不进 ``routable()``，因此不参与 Level 0/1/2 的
             任何竞争。自动派生的能力按 ``ROUTER_ROUTE_AUTO_CAPABILITIES`` 落到这里，
-            理由见 ``capability/adapters/astrbot.py``。
+            理由见 ``capability/adapters/astrbot.py``；
+        source: 注册来源，见 SOURCE_* 常量。**只用于诊断展示与校验**，不参与任何
+            路由逻辑——层间优先级由 ``claimed_by`` 的先到先得决定，不看这个字段。
     """
 
     id: str
@@ -145,6 +153,7 @@ class Capability:
     input_schema: dict[str, Any] = field(default_factory=dict)
     providers: list[CapabilityProvider] = field(default_factory=list)
     route_enabled: bool = True
+    source: str = ""
 
     @property
     def is_auto(self) -> bool:
@@ -215,6 +224,9 @@ class CapabilityRegistry:
         existing.domain = existing.domain or capability.domain
         existing.description = existing.description or capability.description
         existing.input_schema = existing.input_schema or capability.input_schema
+        # source 同理保留先到的那个：它记录的是「这条能力是谁定义的」，而先到
+        # 的那一层按定义就是优先级最高的那一层。
+        existing.source = existing.source or capability.source
         # route_enabled 取「或」：一旦有任一次注册认为它该参与路由，就参与。
         # 语义是「显式声明优先」——声明（route_enabled=True）碰上自动派生
         # （可能为 False）时，声明赢；而重复同步同一批自动能力时两边都是 False，
@@ -259,6 +271,32 @@ class CapabilityRegistry:
         self._capabilities.clear()
         self._claimed_tools.clear()
         self._version += 1
+
+    def unregister(self, capability_id: str) -> bool:
+        """摘掉一个能力并释放它认领过的工具。返回它原本是否存在。
+
+        热重载**必须**走这里，不许自己 pop ``_capabilities``：归属表不一起清的话，
+        工具会永远被一个已不存在的能力认领着，而 ``_claim`` 是先到先得，于是重载后
+        插件重新注册的声明**抢不到自己的工具**——这不报错，只表现为「重载完就路由不到了」。
+
+        按 owner 反查而不是遍历 ``capability.providers``：provider 可能是事后经
+        ``add_provider`` 挂上的，两处不一定同步，归属表才是判定归属的那一份。
+        """
+        capability = self._capabilities.pop(capability_id, None)
+        if capability is None:
+            return False
+        for tool_name, owner in list(self._claimed_tools.items()):
+            if owner == capability_id:
+                del self._claimed_tools[tool_name]
+        self._version += 1
+        return True
+
+    def release_tool(self, tool_name: str) -> bool:
+        """释放单个工具的归属，让后续注册能重新认领它。返回它原本是否被认领着。"""
+        if self._claimed_tools.pop(tool_name, None) is None:
+            return False
+        self._version += 1
+        return True
 
     # ---------- 查询 ----------
 
@@ -322,6 +360,9 @@ __all__ = [
     "KIND_ASTRBOT_TOOL",
     "KIND_MCP",
     "KIND_NATIVE",
+    "SOURCE_AUTO",
+    "SOURCE_CONFIG",
+    "SOURCE_PLUGIN",
     "Capability",
     "CapabilityProvider",
     "CapabilityRegistry",

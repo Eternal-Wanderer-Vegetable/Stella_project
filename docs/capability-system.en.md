@@ -113,7 +113,20 @@ The registry is the **only** place that knows the "capability ↔ tool" mapping.
 
 > The registry singleton is deliberately **not re-exported from `capability/__init__.py`**. An entry-point import such as `from capability.registry import registry` makes the package attribute `capability.registry` change from the submodule into that singleton object. Then `import capability.registry as m` gets the instance rather than the module (`import a.b as c` degenerates into `getattr(a, "b")`). This shadowing occurs only after `__init__` has run, so behavior varies with import order. Always access it with `from capability.registry import registry`.
 
-### Two Registration Paths
+### Four Registration Tiers
+
+Capabilities reach the registry from four sources, highest precedence first. **Once a higher tier claims a tool, the corresponding entry in a lower tier is skipped entirely** — entirely rather than per provider, because half a capability whose `examples` / `keywords` no longer match its `providers` is worse than a missing one.
+
+| Order | Tier | Location | `provider.source` |
+|---|---|---|---|
+| 1 | User | `STELLA_HOME/config/capabilities/*.toml` | `config` |
+| 2 | Factory | `<project root>/config/capabilities/*.toml` | `config` |
+| 3 | Shipped with the plugin | `<loaded plugin dir>/capability.toml` | `plugin` |
+| 4 | Automatically derived | Active tools no declaration claimed | `auto` |
+
+The first three tiers share **one identical format** — one way of writing covers three locations, so a user who dislikes a plugin's `examples` only has to write a declaration with the same id or the same tool under `config/capabilities/`. Tier 3 is gated by `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED` (default `true`); turning it off takes "the plugin author decides whether their tool can be called automatically" back into the user's hands. For the format and rules see [Plugin Integration Specification §6.2](plugin-spec.en.md#62-capabilitytoml-and-the-three-tiers).
+
+Tier 3 **only scans plugins that loaded successfully**: a plugin that failed to import registered no tools, so its declaration would create a capability whose provider points at a nonexistent tool — and `routable()` only checks enabled / backoff, never whether the tool exists. That capability would compete in routing, eat into the `ROUTER_CAPABILITY_MARGIN` gap, and then inevitably end as `failed` inside Comes. For the same reason `capability.toml.draft` and any declaration with `reviewed = false` are never loaded (the human-review gate).
 
 **Explicit declaration** in `config/capabilities/*.toml` (**the filename is the domain**; see the `.example` file in the same directory):
 
@@ -128,7 +141,7 @@ providers = ["get_weather"]                                             # Tool n
 
 **Automatic derivation**: at startup, active tools that have not been claimed by any declaration are registered as `tool.<tool name>`, with `description` taken from the tool description. They are registered normally and can still be executed explicitly, but **do not participate in routing by default** (`route_enabled=False`, see below).
 
-Ownership between the two is determined on a "first come, first served" basis, and the **assembly order cannot be swapped**: declarations must be read first, followed by automatic derivation. In the opposite order, automatic derivation would first claim every tool as `tool.<name>`, and declarations would be unable to claim those tools afterward. The carefully written Chinese examples would then never be used. This does not raise an error; it only appears as "routing accuracy did not improve." The order is guaranteed by `adapters/astrbot.py::bootstrap`, which is registered in `bot.py` **after** `initialize_plugins` (a plugin can call `add_llm_tools` in its own `initialize()`, so running earlier would miss it).
+Ownership across the four tiers is determined on a "first come, first served" basis (`registry.claimed_by()`), and the **assembly order cannot be swapped**: all three declaration tiers must be read first, followed by automatic derivation. In the opposite order, automatic derivation would first claim every tool as `tool.<name>`, and declarations would be unable to claim those tools afterward. The carefully written Chinese examples would then never be used. This does not raise an error; it only appears as "routing accuracy did not improve." The order is guaranteed by `adapters/astrbot.py::bootstrap`, which is registered in `bot.py` **after** `initialize_plugins` (a plugin can call `add_llm_tools` in its own `initialize()`, so running earlier would miss it).
 
 ### Declaration Priority: Why Automatically Derived Capabilities Do Not Participate in Routing
 
@@ -152,7 +165,9 @@ Comparison using 12 cases and real embeddings:
 
 Excluding undeclared tools from routing is **intentional, but not silent**: at startup, a WARNING names the tools in this state and gives two options (write a declaration or set the switch to `true`). Without naming them, the symptom is "the plugin is installed, the log says derivation succeeded, but it is never called," which is extremely difficult to diagnose.
 
-This limitation deliberately is not addressed by generation: machine-generating Chinese examples from tool descriptions requires a model call and the quality cannot be verified. Incorrect examples are worse than no examples (they pull unrelated requests in).
+This limitation is deliberately **not patched silently at runtime**: calling a model at startup to generate examples from tool descriptions and pouring them straight into the in-memory prototype vectors means no file, no reviewer, and no baseline — and incorrect examples are worse than no examples (they pull unrelated requests in).
+
+Offline generation is a different thing, and it is supported: `python -m deploy plugin-scaffold` writes a `capability.toml.draft` to disk (`reviewed = false`, `keywords` left empty with candidates only in comments) and immediately computes a report with the real embedding model (same-domain prototype separation, each example's cosine against its own capability prototype, negative-sample margin). It enters the registry only after a human renames the file and sets `reviewed = true`. With a file, a review, and a printable number, "the quality cannot be verified" no longer holds — what is forbidden is unverified corpus reaching the Router, not generation itself. (`plugin-scaffold` is not implemented yet; it is phase 3 of the rollout plan. The `reviewed` gate and three-tier loading are available today.)
 
 ## Router Three-Level Cascade
 

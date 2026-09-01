@@ -198,9 +198,13 @@ The directory name does not need to be changed: an `xxx-master` / `xxx-main` suf
 
 After startup, check `logs/boot_debug.log`. It records which plugins were found, whether loading succeeded or failed, and the reason for any failure.
 
-Plugin `@command` commands (default prefix `/`) work immediately after installation. However, function tools registered by a plugin with `@llm_tool` require one more step: add a capability declaration for it in `config/capabilities/<domain>.toml` so Stella can proactively call it in chat. The repository contains a real example (`config/capabilities/entertainment.toml`) that you can copy; see `config/capabilities/information.toml.example` for the format.
+Plugin `@command` commands (default prefix `/`) work immediately after installation. Function tools registered with `@llm_tool` additionally need a capability declaration before chat can trigger them -- and a plugin written to the [Plugin Integration Specification](docs/plugin-spec.en.md) **ships its own** `capability.toml`, so that kind of plugin is complete on arrival and needs no configuration from you.
 
-> Why is this extra step necessary? A plugin's tool description is an instruction sentence for a decision-maker that chooses while looking at all tools, whereas Stella's router calculates semantic similarity between it and the user's **question**. The two purposes require different text forms, and using the description directly makes similar tools compete with one another. See [Capability System](docs/capability-system.en.md#declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing) for measured data and the trade-offs.
+When a plugin ships none (most existing AstrBot plugins do not), or the one it ships does not suit how you use it, add or override an entry in `config/capabilities/<domain>.toml` -- declarations in the user directory have the highest precedence, and once one of them claims a tool the plugin's own entry is skipped entirely. The repository contains a real example (`config/capabilities/entertainment.toml`) that you can copy; see `config/capabilities/information.toml.example` for the format, and [Plugin Integration Specification §6.3](docs/plugin-spec.en.md#63-how-to-write-examples) for how to write one that actually routes.
+
+> Why the declaration is needed: a plugin's tool description is an instruction sentence for a decision-maker that chooses while looking at all tools, whereas Stella's router calculates semantic similarity between it and the user's **question**. The two purposes require different text forms, and using the description directly makes similar tools compete with one another. See [Capability System](docs/capability-system.en.md#declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing) for measured data and the trade-offs.
+
+Writing a plugin, or unsure whether a declaration is right? Run `python -m deploy plugin-check <plugin dir>`: 16 checks, and zero errors is the bar.
 
 Plugin cards are rendered by local Chromium. **The first time an image is needed, it automatically downloads about 270 MB of browser engine in the background**; the plugin continues to return plain text during the download, and takes effect automatically once installation finishes without requiring a restart.
 
@@ -222,6 +226,7 @@ All runtime logs are in `logs/`:
 | [Architecture](docs/architecture.en.md) | Directory structure, message-processing flow, module responsibilities, and the AstrBot compatibility layer |
 | [Memory System](docs/memory-system.en.md) | Rationale for two-layer filtering, promotion rules, and search strategy |
 | [Capability System](docs/capability-system.en.md) | Capability Router and Comes: how tools execute outside the chat context |
+| [Plugin Integration Specification](docs/plugin-spec.en.md) | Writing a plugin Stella can use in full: declaration format, the two paths, the failure contract, the self-check tool |
 | [Configuration Reference](docs/configuration.en.md) | Two-layer endpoint x role model configuration, all configuration options, and tuning recommendations |
 | [Development Guide](docs/development.en.md) | Tests, probe scripts, CI, and contribution workflow |
 

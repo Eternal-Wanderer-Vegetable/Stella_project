@@ -1,0 +1,14 @@
+{
+    "max_text_chars": {
+        "description": "max_text_chars",
+        "type": "int",
+        "hint": "单次统计的字数上限。超过这个长度的输入会被拒绝（工具抛异常，Comes 记一次失败）。",
+        "default": 2000
+    },
+    "reply_with_lines": {
+        "description": "reply_with_lines",
+        "type": "bool",
+        "hint": "统计结果里是否带行数。关掉后返回值更短，更省 prompt 预算。",
+        "default": true
+    }
+}

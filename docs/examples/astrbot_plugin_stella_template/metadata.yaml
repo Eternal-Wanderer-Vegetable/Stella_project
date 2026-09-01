@@ -1,0 +1,14 @@
+name: astrbot_plugin_stella_template
+desc: Stella 插件接入规范的模板插件：一个指令 + 一个可路由工具。
+version: v1.0.0
+author: Stella Project Contributors
+repo: https://github.com/stella-project/stella
+
+# Stella 扩展字段。AstrBot 不读它，多写不影响在 AstrBot 上运行。
+stella:
+  # 出网披露。这是**披露契约，不是沙箱**——未声明的请求我们不拦，但 Stella 除插件
+  # 之外不出网，插件是唯一的出口，所以出网的插件必须自己说清去哪儿、干什么。
+  # 本模板不真的出网（示例工具只做本地计算），这里列出的是「假如要出网」的写法。
+  egress:
+    - host: api.example.com
+      purpose: 示例：查询公开数据（本模板实际不发起请求）
