@@ -243,33 +243,42 @@ def snapshot(
     }
 
 
-def _command_names(limit: int = 60) -> list[str]:
-    """已加载插件登记的指令名（不带唤醒前缀）。
+def command_specs_of(
+    handlers: Sequence[Any],
+    *,
+    limit: int = 60,
+) -> list[tuple[str, str]]:
+    """一批 handler 登记的 ``(指令名, 说明)``，按指令名排序、名字去重。
 
-    指令**不是能力**：它们靠 ``ASTRBOT_WAKE_PREFIXES`` 前缀显式触发，不参与语义路由，
-    所以不在注册表里。别名不列——一条指令挂 5 个别名对「你能做什么」毫无信息量。
+    从 :func:`_command_names` 里提出来是因为 ``deploy plugin-scaffold`` 要对**单个插件
+    新增的那几个** handler 做同样的解析：指令名是生成 ``examples`` 时信息量第二高的输入
+    （``/天气`` 本身就是用户的自然说法，见 ``docs/plugin-spec.md`` §12 那张输入排序表）。
+    两处各写一遍 ``CommandFilter`` / ``CommandGroupFilter`` 的取名规则必然漂移，而漂移的
+    表现是「群里列出的指令和生成器看到的指令不是同一批」。
+
+    别名不列：一条指令挂 5 个别名对「你能做什么」和对语料都毫无信息量。
     """
     try:
         from astrbot_compat.filters import CommandFilter, CommandGroupFilter
-        from astrbot_compat.registry import EventType, star_handlers_registry
-    except Exception:
-        return []
-    try:
-        handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.AdapterMessageEvent,
-        )
     except Exception:
         return []
 
-    names: set[str] = set()
-    for md in handlers:
-        for handler_filter in getattr(md, "event_filters", None) or []:
+    found: dict[str, str] = {}
+
+    def _keep(name: str, desc: str) -> None:
+        # 同名 handler 取第一个非空说明：空说明覆盖掉有说明的那条纯属信息损失
+        if name and (name not in found or (not found[name] and desc)):
+            found[name] = desc
+
+    for handler in handlers:
+        desc = str(getattr(handler, "desc", "") or "").strip()
+        for handler_filter in getattr(handler, "event_filters", None) or []:
             if isinstance(handler_filter, CommandFilter):
                 parents = [p for p in (handler_filter.parent_command_names or []) if p]
                 base = str(handler_filter.command_name or "")
                 if not base:
                     continue
-                names.add(f"{parents[0]} {base}" if parents else base)
+                _keep(f"{parents[0]} {base}" if parents else base, desc)
             elif isinstance(handler_filter, CommandGroupFilter):
                 try:
                     complete = handler_filter.get_complete_command_names()
@@ -277,8 +286,25 @@ def _command_names(limit: int = 60) -> list[str]:
                     continue
                 # 该方法按长度倒序返回「主名 + 全部别名」，取最短的那个当展示名
                 if complete:
-                    names.add(min(complete, key=len))
-    return sorted(names)[:limit]
+                    _keep(min(complete, key=len), desc)
+    return sorted(found.items())[:limit]
+
+
+def _command_names(limit: int = 60) -> list[str]:
+    """已加载插件登记的指令名（不带唤醒前缀）。
+
+    指令**不是能力**：它们靠 ``ASTRBOT_WAKE_PREFIXES`` 前缀显式触发，不参与语义路由，
+    所以不在注册表里。
+    """
+    try:
+        from astrbot_compat.registry import EventType, star_handlers_registry
+
+        handlers = star_handlers_registry.get_handlers_by_event_type(
+            EventType.AdapterMessageEvent,
+        )
+    except Exception:
+        return []
+    return [name for name, _ in command_specs_of(handlers, limit=limit)]
 
 
 # ---------- 群内文本 ----------
@@ -578,6 +604,7 @@ __all__ = [
     "TOOL_OK",
     "TOOL_UNKNOWN",
     "chat_overview",
+    "command_specs_of",
     "is_query_text",
     "offline_declarations",
     "snapshot",

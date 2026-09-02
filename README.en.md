@@ -204,7 +204,7 @@ When a plugin ships none (most existing AstrBot plugins do not), or the one it s
 
 > Why the declaration is needed: a plugin's tool description is an instruction sentence for a decision-maker that chooses while looking at all tools, whereas Stella's router calculates semantic similarity between it and the user's **question**. The two purposes require different text forms, and using the description directly makes similar tools compete with one another. See [Capability System](docs/capability-system.en.md#declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing) for measured data and the trade-offs.
 
-Writing a plugin, or unsure whether a declaration is right? Run `python -m deploy plugin-check <plugin dir>`: 16 checks, and zero errors is the bar.
+Writing a plugin, or unsure whether a declaration is right? Run `python -m deploy plugin-check <plugin dir>`: 16 checks, and zero errors is the bar. If you would rather not write `examples` from scratch, run `python -m deploy plugin-scaffold <plugin dir>` first to generate a draft (`capability.toml.draft`); it also computes a quantified report with the real embedding model telling you how well that corpus actually routes. The draft needs a human review, a rename, and `reviewed = true` before it takes effect -- unreviewed corpus never reaches the Router.
 
 To see whether it actually made it into the routing set: @-mention the bot in a group and ask "what can you do", or run `python -m deploy capabilities`. Both print the same list — which capabilities chat can trigger automatically, which cannot, and why not (no declaration / misspelled tool name / claimed by a higher tier / implementation backing off). Quicker than reading the boot log.
 

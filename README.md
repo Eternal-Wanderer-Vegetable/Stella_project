@@ -205,7 +205,7 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 
 > 为什么需要这份声明：插件的工具描述是写给「看着全部工具做选择」的决策器的指令句，而 Stella 的路由是拿它和用户的**问句**算语义相似度——两种用途要求的文本形态不同，直接拿来用会让同类工具互相抢。实测数据与取舍见 [能力系统](docs/capability-system.md#声明优先为什么自动派生不参与路由)。
 
-写插件或想确认一份声明写得对不对，跑 `python -m deploy plugin-check <插件目录>`：16 项检查，零 error 才算达标。
+写插件或想确认一份声明写得对不对，跑 `python -m deploy plugin-check <插件目录>`：16 项检查，零 error 才算达标。不想从零手写 examples，可以先跑 `python -m deploy plugin-scaffold <插件目录>` 生成一份草稿（`capability.toml.draft`），它同时用真实 embedding 打一份量化报告告诉你这份语料准不准；草稿要人审、改名并把 `reviewed` 置为 `true` 才会生效——没审过的语料到不了路由。
 
 装完想知道它到底进没进路由：在群里 @ 机器人问一句「你能做什么」，或者跑 `python -m deploy capabilities`。两处列的是同一份清单——哪些能力能被聊天自动触发、哪些不能，以及不能的原因（没有声明 / 工具名拼错 / 被更高优先层顶掉 / 实现正在退避）。这比翻启动日志直接。
 

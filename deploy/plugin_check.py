@@ -65,8 +65,9 @@ MIN_EXAMPLES = 3
 # 关键词长度下限。「新番」这种两字词会命中「新番组」「更新番外」；教训见
 # config/capabilities/entertainment.toml 里 anime.recommend 用「番剧推荐」而不是「新番」。
 MIN_KEYWORD_CHARS = 3
-# 同域能力两两原型余弦的**极差**下限。首轮实测 5 个 ACG 工具对一句「主管，这是？」
-# 给出 0.443/0.412/0.388/0.386/0.385，极差 0.058 < 0.06 —— 那就是「同域没有区分度」的形态。
+# 同域原型**最近间距**（1 − 同域两两原型余弦的最大值）的下限。0.06 这个数来自首轮实测：
+# 5 个 ACG 工具对一句「主管，这是？」给出 0.443/0.412/0.388/0.386/0.385，彼此差不到 0.06
+# —— 那就是「同域能力在语义空间里挤成一个点」的形态，首位选谁基本靠掷骰子。
 SEPARATION_MIN_SPREAD = 0.06
 # 负样本最高分与置信线的余量下限。工具描述当语料时实测 −0.024（负样本压过置信线，
 # 即无关请求会触发工具）；换成中文问句 examples 后 +0.141。低于 0 一定要报。
@@ -74,9 +75,19 @@ NEGATIVE_MARGIN_MIN = 0.0
 
 # examples 疑似「指令句」的字面标记。用途错配是整条设计的起点：工具 description 是写给
 # 决策器的指令句（「当用户询问 X 时调用」），而 examples 要写用户**会怎么问**。
-_IMPERATIVE_MARKERS = ("当用户", "时调用", "本工具", "用于", "该工具", "调用此")
+IMPERATIVE_MARKERS = ("当用户", "时调用", "本工具", "用于", "该工具", "调用此")
 # 出网库。命中即要求 metadata.yaml 里有 stella.egress 声明（披露契约，不是沙箱）。
 _EGRESS_LIBS = ("httpx", "aiohttp", "requests", "urllib3", "websockets")
+
+
+def imperative_marker(text: str) -> str:
+    """命中的第一个「指令句」标记，没命中返回空串。
+
+    ``plugin-scaffold`` 用同一个判据把模型偶发写成指令句的 example 直接扔掉：生成侧
+    与校验侧共用**判据本身**而不是各自拿着同一张词表，才不会出现「生成器放过、校验器
+    报警」这种谁都不信的组合。
+    """
+    return next((m for m in IMPERATIVE_MARKERS if m in text), "")
 
 _SKIP_DIRS = frozenset({"__pycache__", ".venv", "venv", "node_modules", ".git", ".idea"})
 _REQ_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+")
@@ -91,11 +102,18 @@ _EGRESS_IMPORT_RE = re.compile(
 
 
 class ToolFact(NamedTuple):
-    """一个 ``@llm_tool`` 工具的事实。``required`` 取 ``parameters["required"]``。"""
+    """一个 ``@llm_tool`` 工具的事实。``required`` 取 ``parameters["required"]``。
+
+    ``params`` 是 ``(参数名, 参数说明)``，取自 ``parameters["properties"]``——它不产生任何
+    结论，只喂 ``plugin-scaffold``：必填 ``city(城市名，如「杭州」)`` 直接告诉生成器「用户的
+    问法里会带地名」，而这是光看工具名与 description 拿不到的信息（``docs/plugin-spec.md``
+    §12 那张输入排序表把 docstring 的 ``Args`` 排在工具描述之前，就是这个原因）。
+    """
 
     name: str
     description: str = ""
     required: tuple[str, ...] = ()
+    params: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -119,6 +137,9 @@ class PluginFacts:
     plugin_name: str = ""
     plugin_version: str = ""
     tools: list[ToolFact] = field(default_factory=list)
+    # 该插件新增的 ``(指令名, 说明)``。同样不产生结论：指令走唤醒前缀显式触发，写不写
+    # 声明都照样能用。收进来只为喂生成器——``/天气`` 这种指令名本身就是用户的自然说法。
+    commands: list[tuple[str, str]] = field(default_factory=list)
     # 依赖
     requirements: list[str] = field(default_factory=list)
     missing_requirements: list[str] = field(default_factory=list)
@@ -371,6 +392,31 @@ def _read_config_tiers(facts: PluginFacts) -> None:
     facts.config_claims = claims
 
 
+def _tool_params(parameters: dict[str, Any] | None) -> tuple[tuple[str, str], ...]:
+    """``parameters["properties"]`` → ``(参数名, 说明)``，按 ``@llm_tool`` 的声明顺序。
+
+    顺序照 dict 的插入序而不是排序：``add_func`` 是按 docstring ``Args`` 段逐条填进去的，
+    那个顺序就是作者写的顺序，也是「必填的先出现」这个惯例所在。
+    """
+    props = ((parameters or {}).get("properties") or {})
+    if not isinstance(props, dict):
+        return ()
+    return tuple(
+        (str(name), str((spec or {}).get("description") or "").strip())
+        for name, spec in props.items()
+        if isinstance(spec, dict) or spec is None
+    )
+
+
+def _new_command_specs(handlers_before: set[str]) -> list[tuple[str, str]]:
+    """本插件新增的 ``(指令名, 说明)``。解析规则复用 ``capability.inventory``。"""
+    from astrbot_compat.registry import star_handlers_registry
+    from capability.inventory import command_specs_of
+
+    added = [h for h in star_handlers_registry if h.handler_full_name not in handlers_before]
+    return command_specs_of(added)
+
+
 async def _load_and_enumerate(plugin_dir: Path, facts: PluginFacts) -> None:
     """在事件循环内加载插件并枚举它新增的工具。
 
@@ -384,8 +430,13 @@ async def _load_and_enumerate(plugin_dir: Path, facts: PluginFacts) -> None:
         load_plugin,
         terminate_plugins,
     )
+    from astrbot_compat.registry import star_handlers_registry
 
     before = set(llm_tools.names())
+    # 指令要靠前后差集取：``md.star_handler_full_names`` 只收本模块登记的 handler，
+    # 定义在插件子模块里的那些不在其中（``base._resolve_plugin_dir_name`` 做前缀匹配
+    # 正是为此）。差集不依赖 handler 定义在哪个模块，本插件新增了什么就是什么。
+    handlers_before = {h.handler_full_name for h in star_handlers_registry}
     try:
         md = load_plugin(plugin_dir)
         if md is None:
@@ -406,10 +457,12 @@ async def _load_and_enumerate(plugin_dir: Path, facts: PluginFacts) -> None:
                 name=t.name,
                 description=(t.description or "").strip(),
                 required=tuple((t.parameters or {}).get("required") or ()),
+                params=_tool_params(t.parameters),
             )
             for t in llm_tools.tools
             if t.name not in before
         )
+        facts.commands = _new_command_specs(handlers_before)
     finally:
         # 插件在 initialize 里起的后台任务不该活过这条命令
         with contextlib.suppress(Exception):
@@ -712,7 +765,7 @@ def check_examples_style(facts: PluginFacts) -> CheckResult | None:
     offenders: list[str] = []
     for cap in facts.capabilities:
         for example in cap.examples:
-            hit = next((m for m in _IMPERATIVE_MARKERS if m in example), "")
+            hit = imperative_marker(example)
             if hit:
                 offenders.append(f"{cap.id}：「{example}」含「{hit}」")
     if not offenders:
@@ -830,7 +883,7 @@ def check_separation(facts: PluginFacts) -> CheckResult | None:
     margin = facts.separation.get("negative_margin")
     if isinstance(spread, (int, float)) and spread < SEPARATION_MIN_SPREAD:
         problems.append(
-            f"同域两两原型余弦极差仅 {spread:.3f}（下限 {SEPARATION_MIN_SPREAD}）——"
+            f"同域原型最近间距仅 {spread:.3f}（下限 {SEPARATION_MIN_SPREAD}）——"
             f"同域能力之间几乎没有区分度，首位很容易选错",
         )
     if isinstance(margin, (int, float)) and margin < NEGATIVE_MARGIN_MIN:
@@ -1137,6 +1190,7 @@ def to_terminal(facts: PluginFacts, results: list[CheckResult]) -> str:
 
 
 __all__ = [
+    "IMPERATIVE_MARKERS",
     "MIN_EXAMPLES",
     "MIN_KEYWORD_CHARS",
     "NEGATIVE_MARGIN_MIN",
@@ -1144,6 +1198,7 @@ __all__ = [
     "PluginFacts",
     "ToolFact",
     "collect",
+    "imperative_marker",
     "run_all",
     "to_json",
     "to_terminal",

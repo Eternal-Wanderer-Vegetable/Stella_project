@@ -23,8 +23,8 @@ import pytest
 
 from capability.registry import Capability, CapabilityProvider, CapabilityRegistry
 from capability.router.semantic import (
-    _mean_vector,
     build_prototypes,
+    mean_vector,
     reset_prototype_cache,
     route_semantic,
     score_capabilities,
@@ -85,7 +85,7 @@ def _registry(*caps: Capability) -> CapabilityRegistry:
 
 
 def test_mean_vector_averages_and_normalizes():
-    out = _mean_vector([[1.0, 0.0], [0.0, 1.0]])
+    out = mean_vector([[1.0, 0.0], [0.0, 1.0]])
     assert out is not None
     # 均值 (0.5, 0.5) 归一化后每维 ≈ 0.7071
     assert out[0] == pytest.approx(0.7071, abs=1e-3)
@@ -94,14 +94,14 @@ def test_mean_vector_averages_and_normalizes():
 
 def test_mean_vector_drops_mismatched_dimensions():
     """换过 embedding 模型留下的脏缓存不能污染均值。"""
-    out = _mean_vector([[1.0, 0.0], [1.0, 0.0, 0.0]])
+    out = mean_vector([[1.0, 0.0], [1.0, 0.0, 0.0]])
     assert out == pytest.approx([1.0, 0.0])
 
 
 def test_mean_vector_handles_empty_and_zero():
-    assert _mean_vector([]) is None
-    assert _mean_vector([[]]) is None
-    assert _mean_vector([[0.0, 0.0]]) is None
+    assert mean_vector([]) is None
+    assert mean_vector([[]]) is None
+    assert mean_vector([[0.0, 0.0]]) is None
 
 
 # ---------- 原型构建 ----------

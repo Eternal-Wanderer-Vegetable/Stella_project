@@ -166,7 +166,7 @@ providers = ["get_weather"]                    # llm_tools 里的工具名，不
 
 这个局限**不在运行期无声地补**：启动时调模型从工具描述生成 examples 直接灌进内存里的原型向量，没有文件、没人过目、没有基准，而错的 examples 比没有 examples 更糟（会把不相关的请求吸进来）。
 
-离线生成是另一件事，是支持的：`python -m deploy plugin-scaffold` 在磁盘上产出一份 `capability.toml.draft`（`reviewed = false`，`keywords` 留空、候选词只写在注释里），生成后当场用真实 embedding 打一份报告（同域原型分离度、每条 example 与本能力原型的余弦、负样本余量），人审改名并置 `reviewed = true` 之后才进注册表。有文件、有审阅、有可打印的数，「质量无法验证」就不再成立——被禁的始终是「未经验证的语料进路由」，不是「生成」。（`plugin-scaffold` 尚未实现，排在落地方案第 3 期；`reviewed` 闸门与三层加载已可用。）
+离线生成是另一件事，是支持的：`python -m deploy plugin-scaffold` 在磁盘上产出一份 `capability.toml.draft`（`reviewed = false`，`keywords` 留空、候选词只写在注释里），生成后当场用真实 embedding 打一份报告（同域原型分离度、每条 example 与本能力原型的余弦、负样本余量），人审改名并置 `reviewed = true` 之后才进注册表。有文件、有审阅、有可打印的数，「质量无法验证」就不再成立——被禁的始终是「未经验证的语料进路由」，不是「生成」。
 
 ## Router 三级级联
 

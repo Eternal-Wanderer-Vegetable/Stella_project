@@ -431,7 +431,7 @@ Among the third group, those three `Context` attributes raise `StellaCompatUnsup
 The full pipeline:
 
 ```bash
-python -m deploy plugin-scaffold <plugin dir>   # generate capability.toml.draft (optional)
+python -m deploy plugin-scaffold <plugin dir>   # generate capability.toml.draft + report (optional)
 #   → human review: fix examples, take the candidate keywords from the comments if wanted,
 #     set reviewed = true, drop the .draft suffix
 python -m deploy plugin-check <plugin dir>      # 16 checks; non-zero exit code if any error
@@ -463,7 +463,7 @@ The 16 checks:
 
 The minimum bar for release is **zero errors**. A warn means "please double-check", not "must change" — check ⑩ already has one measured exception in the factory declarations (`anime.schedule`'s 「放送」 is only two characters, and it is what rescues a question scoring 0.641 from under the 0.70 confidence line). The judge is you, not the checker.
 
-> `plugin-scaffold` (generation) is **not implemented yet** as of this specification's release; it is phase 3 of the rollout plan. `plugin-check`, three-tier declaration loading and capability query ([§14](#14-capability-query)) are available today.
+`plugin-scaffold` flags: `--endpoint <slot>` picks a different model slot (defaults to the `ROLE_EXTRACT` tier, see `core/llm/registry.py`), `--dry-run` prints without writing, `--force` overwrites an existing draft, and `--measure` **skips generation** and only recomputes the quantified report for a declaration that already exists (`capability.toml` or `.draft`) — use it during review after editing `examples`, so you do not spend another model call. Like `plugin-check`, it **imports and instantiates your plugin**: enumerating `@llm_tool` has no other way.
 
 On generation: **generating a draft offline that only takes effect after human review is supported**; silently generating examples from tool descriptions at runtime and feeding them into memory is **not** (that is precisely why `ROUTER_ROUTE_AUTO_CAPABILITIES` defaults to off). The difference is whether there is a file, a reviewer, and a quantified baseline — the `reviewed` gate is how that line is drawn.
 

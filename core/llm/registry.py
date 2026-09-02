@@ -698,6 +698,41 @@ def backend_for(role: str) -> LLMBackend | None:
     return backend
 
 
+def backend_for_endpoint(role: str, slot: str) -> LLMBackend | None:
+    """把某个角色临时搬到指定端点槽上，返回一个**不进缓存**的后端。
+
+    只为一件事存在：``deploy plugin-scaffold --endpoint`` 让人把一次性的离线生成挪到
+    更强的模型上（生成 ``examples`` 是质量敏感、一次性的活，而 EXTRACT 角色平时绑的
+    往往是本机小模型）。
+
+    三个刻意的差别，都不该改：
+
+    - **不写 ``_backends``**。那张表是进程级的 role → backend 映射，塞一个带覆盖的
+      实例进去，同进程里后面所有走 ``backend_for(role)`` 的调用都会静默改端点；
+    - **不套 ``RoleBackend``**。显式指定端点的语义是「就用这个」，自动降级到另一个槽
+      与这个意图相反，而且降级的那次没人会注意到；
+    - **模型按新端点重算**（``_resolve_role_model``）。模型 ID 归端点，不跟着角色走；
+      沿用旧槽的模型名发给另一家服务商一律 400。
+
+    槽名不存在、拼错或那张卡没配地址时返回 ``None``——与 :func:`backend_for` 一样是
+    正常分支，调用方自己决定是报错退出还是降级。
+    """
+    from dataclasses import replace
+
+    ep = endpoint(slot)
+    if ep is None:
+        return None
+    b = binding(role)
+    if b is None:
+        return None
+    model = _resolve_role_model(role, f"LLM_ROLE_{role.upper()}_", ep)
+    override = replace(
+        b, slot=ep.slot, endpoint=ep, model=model, fallback_slot="", fallback=None,
+    )
+    return _build_backend(ep, override, role)
+
+
+
 # ---------- 可观测性 ----------
 
 
@@ -889,6 +924,7 @@ __all__ = [
     "RoleBackend",
     "RoleBinding",
     "backend_for",
+    "backend_for_endpoint",
     "binding",
     "bindings",
     "concurrency_of",

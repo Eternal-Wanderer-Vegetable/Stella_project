@@ -55,6 +55,7 @@ Stella_project/
 | `python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]` | 从旧版本安装目录导入用户数据并升级数据库；只读旧目录，报告写 `migration_report.md` |
 | `python -m deploy space-merge --from a,b --to c [--dry-run]` | 合并共享空间（记忆 + 画像 + FTS + 账本），替代过去要用户手搓的一串 UPDATE |
 | `python -m deploy plugin-check <插件目录> [--json]` | 按 [插件接入规范](plugin-spec.md) 校验一个插件目录：16 项检查，零 error 才算达标。**会 import 并实例化该插件**（与启动时做的事同类），输出里明说这一点 |
+| `python -m deploy plugin-scaffold <插件目录> [--endpoint 槽] [--force] [--dry-run] [--measure]` | 给插件生成 `capability.toml.draft`（`reviewed = false`，`keywords` 留空、候选词只写在注释里），并当场用**真实 embedding** 打一份量化报告（同域原型分离度、每条 example 与本能力原型的余弦、负样本余量）。`--measure` 只重算报告、不调模型，供人审时复算。产物是草稿：`.draft` 后缀与 `reviewed = false` 两道闸门都拦着它，人审改名并置 `true` 之后才进路由。**同样会 import 并实例化该插件** |
 | `python -m deploy capabilities [--json]` | 列出能力清单：哪些能被聊天自动触发、哪些不能及原因、各自来自哪一层、哪个 provider 正在退避。数据走状态接口（注册表是 Bot 进程内的单例）；Bot 没运行时退到直接读磁盘上的三层声明，那份数据回答不了「可不可路由」，渲染时会说明 |
 | `python -m deploy paths [--env-file]` | 输出解析后的程序目录 / 用户数据目录等路径；`--env-file` 只打印 `.env` 路径（`start.bat` 用） |
 | `python -m deploy manifest [--write]` | 生成发布包清单 `.stella-manifest.json`（升级时据此判断用户是否改过自带文件），release CI 调用 |

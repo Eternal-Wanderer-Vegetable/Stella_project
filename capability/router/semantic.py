@@ -68,8 +68,14 @@ def _logger():
     return logger
 
 
-def _mean_vector(vectors: list[list[float]]) -> list[float] | None:
-    """求均值并 L2 归一化。维度不一致的向量直接丢弃（换过模型的脏缓存）。"""
+def mean_vector(vectors: list[list[float]]) -> list[float] | None:
+    """求均值并 L2 归一化。维度不一致的向量直接丢弃（换过模型的脏缓存）。
+
+    公开而不是私有：这条「均值再归一化」的契约需要一个具名入口——测试直接钉它的数值，
+    ``deploy plugin-scaffold`` 的量化报告也要求与路由**共用同一套原型算法**（那份报告
+    走的是下面的 ``build_prototypes()``，而它调这里；自己复制一份均值+归一化的实现，
+    就等于让报告去度量另一个模型）。
+    """
     usable = [v for v in vectors if v]
     if not usable:
         return None
@@ -145,7 +151,7 @@ async def build_prototypes(
             vec = await svc.embed(text)
             if vec:
                 vectors.append(vec)
-        proto = _mean_vector(vectors)
+        proto = mean_vector(vectors)
         if proto is None:
             # 这一个这次没算出来（服务不可用/维度不一致），保持「未算完」下次再试
             complete = False
@@ -299,6 +305,7 @@ async def route_semantic(
 __all__ = [
     "WARMUP_TIMEOUT",
     "build_prototypes",
+    "mean_vector",
     "reset_prototype_cache",
     "route_semantic",
     "score_capabilities",

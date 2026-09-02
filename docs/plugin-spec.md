@@ -429,7 +429,7 @@ stella:
 完整流水：
 
 ```bash
-python -m deploy plugin-scaffold <插件目录>    # 生成 capability.toml.draft（可选）
+python -m deploy plugin-scaffold <插件目录>    # 生成 capability.toml.draft 并量化（可选）
 #   → 人审：改 examples、按需取用注释里的候选 keywords、reviewed = true、去掉 .draft 后缀
 python -m deploy plugin-check <插件目录>       # 16 项检查，有 error 时退出码非零
 python -m capability.router.benchmark          # 路由基准，确认四类路由错误没变差
@@ -460,7 +460,7 @@ python -m capability.router.benchmark          # 路由基准，确认四类路�
 
 发布前的最低要求是**零 error**。warn 是「请复核」而不是「必须改」——第 ⑩ 项在出厂声明里就有一个经实测确认的破例（`anime.schedule` 的「放送」只有两个字，靠它把一句 0.641 分的问句从 0.70 置信线下救回来）。判断的是你，不是检查器。
 
-> `plugin-scaffold`（生成）在本规范发布时**尚未实现**，排在落地方案的第 3 期。`plugin-check`、三层声明加载与能力查询（[§14](#14-能力查询)）已经可用。
+`plugin-scaffold` 的开关：`--endpoint <槽>` 换模型槽（默认走 `ROLE_EXTRACT` 那一档，见 `core/llm/registry.py`）、`--dry-run` 只打印不落盘、`--force` 覆盖已有草稿、`--measure` **跳过生成**、只对现成的声明（`capability.toml` 或 `.draft`）重算一遍量化报告——人审时改完 examples 拿它复算，不必再花一次模型调用。它和 `plugin-check` 一样**会 import 并实例化你的插件**：枚举 `@llm_tool` 只有这一个办法。
 
 关于生成：**离线生成一份草稿、人审之后才生效**是被支持的；运行期无声地从工具描述生成 examples 灌进内存**不被支持**（那正是 `ROUTER_ROUTE_AUTO_CAPABILITIES` 默认关闭的原因）。差别在于有没有文件、有没有人过目、有没有量化基准，`reviewed` 闸门就是这条分界的实现。
 

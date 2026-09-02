@@ -11,6 +11,7 @@
       python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]
       python -m deploy space-merge --from space_1,space_2 --to casual [--dry-run]
       python -m deploy plugin-check <插件目录> [--json]
+      python -m deploy plugin-scaffold <插件目录> [--endpoint 槽] [--force] [--dry-run] [--measure]
       python -m deploy capabilities [--json]
       python -m deploy manifest [--write]
 """
@@ -341,6 +342,23 @@ def _cmd_plugin_check(args: argparse.Namespace) -> int:
     return 1 if report.has_blocking(results) else 0
 
 
+def _cmd_plugin_scaffold(args: argparse.Namespace) -> int:
+    """给一个插件生成 ``capability.toml.draft``，并用真实 embedding 打一份量化报告。
+
+    延迟 import 的理由同 ``_cmd_plugin_check``，只是更重一层：这条命令还要拉起
+    ``core.llm`` 与 ``memory.embeddings``。
+    """
+    from . import plugin_scaffold
+
+    return plugin_scaffold.run(
+        args.plugin_dir,
+        endpoint=args.endpoint,
+        force=args.force,
+        dry_run=args.dry_run,
+        measure_only=args.measure,
+    )
+
+
 def _cmd_capabilities(args: argparse.Namespace) -> int:
     """列出 Stella 当前具备哪些能力、哪些装了却不生效。
 
@@ -442,6 +460,26 @@ def main(argv: list[str] | None = None) -> int:
     p_plugin_check.add_argument("plugin_dir", help="插件目录（含 main.py 的那一层）")
     p_plugin_check.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
     p_plugin_check.set_defaults(func=_cmd_plugin_check)
+
+    p_scaffold = sub.add_parser(
+        "plugin-scaffold",
+        help="给插件生成 capability.toml.draft 并量化（会执行该插件代码）",
+    )
+    p_scaffold.add_argument("plugin_dir", help="插件目录（含 main.py 的那一层）")
+    p_scaffold.add_argument(
+        "--endpoint",
+        default="",
+        help="指定生成用的端点槽（LOCAL / ONLINE_CHAT / ONLINE_MEMORY / EXTRA），"
+        "默认走 EXTRACT 角色绑定的那个",
+    )
+    p_scaffold.add_argument("--force", action="store_true", help="覆盖已存在的草稿")
+    p_scaffold.add_argument("--dry-run", action="store_true", help="只打印，不写文件")
+    p_scaffold.add_argument(
+        "--measure",
+        action="store_true",
+        help="只量化已有声明（不调模型、不写文件）",
+    )
+    p_scaffold.set_defaults(func=_cmd_plugin_scaffold)
 
     p_caps = sub.add_parser(
         "capabilities", help="列出当前能力清单（哪些能被聊天触发、哪些不能及原因）"
