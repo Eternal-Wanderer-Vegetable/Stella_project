@@ -312,7 +312,7 @@ ruff check .
 - 我的父母给予了最重要的经济支持。没有他们，这一切都无从开始。
 - 灵感来源于和 [@t1mb2rg](https://github.com/t1mb2rg) 的讨论和 [@CST-Cat](https://github.com/CST-Cat) 的争执中。感谢他们贡献了属于自己的想法。
 - [@MIO-456](https://github.com/MIO-456) 开发的 [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) 项目激励了本项目的开发。
-- 感谢 [vowm3440](https://github.com/vowm3440) , [@CST-Cat](https://github.com/CST-Cat) , [higashitaniyume](https://github.com/higashitaniyume) 为我寻找到了支持这个项目的公益站资源。没有他们的慷慨分享，这个项目就不可能出现。
+- 感谢 [@vowm3440](https://github.com/vowm3440) , [@CST-Cat](https://github.com/CST-Cat) , [@higashitaniyume](https://github.com/higashitaniyume) 为我寻找到了支持这个项目的公益站资源。没有他们的慷慨分享，这个项目就不可能出现。
 - 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 感谢Bilibili平台UP主 [Ruuuuusty](https://space.bilibili.com/650991829) 将我和chat-GPT对Stella徽标的想法变为现实。
 - 本项目开发中得到了来自如下组织的支持：

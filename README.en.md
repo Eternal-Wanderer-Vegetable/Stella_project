@@ -311,7 +311,7 @@ This project received encouragement and support from many people and organizatio
 - My parents provided the most important financial support. Without them, none of this could have begun.
 - The inspiration came from discussions with [@t1mb2rg](https://github.com/t1mb2rg) and arguments with [@CST-Cat](https://github.com/CST-Cat). Thank you for contributing your own ideas.
 - The [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) project developed by [@MIO-456](https://github.com/MIO-456) inspired the development of this project.
-- Thanks to [vowm3440](https://github.com/vowm3440), [@CST-Cat](https://github.com/CST-Cat), and [higashitaniyume](https://github.com/higashitaniyume) for helping me find public resources that support this project. Without their generous sharing, this project wouldn't have been possible.
+- Thanks to [@vowm3440](https://github.com/vowm3440), [@CST-Cat](https://github.com/CST-Cat), and [@higashitaniyume](https://github.com/higashitaniyume) for helping me find public resources that support this project. Without their generous sharing, this project wouldn't have been possible.
 - Thanks to [@qian-o](https://github.com/qian-o) and their companions, as well as [@MIO-456](https://github.com/MIO-456) and their companions. Without their encouragement, there would have been no motivation to start developing this project.
 - Thanks to the Bilibili video creator [Ruuuuusty](https://space.bilibili.com/650991829) for turning my and chat-GPT's ideas about the Stella logo into reality.
 - This project received support from the following organizations during development:
