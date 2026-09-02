@@ -53,7 +53,8 @@
 core/tasks.py                    # Task / Result / TaskGraph 协议（四个模块共用）
 capability/
 ├── registry.py                  # Capability / CapabilityProvider / 注册表单例
-├── loader.py                    # config/capabilities/*.toml → 注册表
+├── loader.py                    # 三层 *.toml 声明（用户 / 出厂 / 插件自带）→ 注册表
+├── inventory.py                 # 能力清单：结构化快照 + 群内文本 + 离线读声明
 ├── hooks.py                     # activate_capabilities 前置钩子（管线接入点）
 ├── router/
 │   ├── __init__.py              # route() 三级级联入口
@@ -310,6 +311,8 @@ python -m capability.router.benchmark --cases my.json
 
 ## 排查
 
+**先问一句，别翻日志。** 「装了插件却从来不被调用」的答案在能力清单里：群里 @ 机器人问「你能做什么」，或者跑 `python -m deploy capabilities`——后者按「可路由 / 不可路由 + 原因」分两张表，原因就是下面这张表要查的那几条（没有声明 / 工具名拼错 / 被高优先层顶掉 / provider 正在退避 / 工具被 `active=false` 停用）。管理员在群里还能看到来源层与未声明工具的具体名单。字段含义见 [插件接入规范 §14](plugin-spec.md#14-能力查询)。
+
 线上判断「为什么这次没调工具」只看 `logs/stella_thought_logs.md` 的这两行：
 
 ```
@@ -320,7 +323,7 @@ python -m capability.router.benchmark --cases my.json
 
 | 现象 | 先查 |
 |---|---|
-| 插件装了但从不被调用 | 最常见是**没写能力声明**——启动日志有一条 WARNING 点名；其次看 `[capability][boot] 能力装配完成` 的 `routable` 数（`derived` 大而 `routable` 小就是它）；再看工具是否 `active` |
+| 插件装了但从不被调用 | `python -m deploy capabilities`：它直接把原因写在「不参与路由」那张表里。最常见是**没写能力声明**（表里显示「无能力声明（自动派生）」，启动日志也有一条 WARNING 点名）|
 | 声明写了但 examples 没生效 | `registry.claimed_by(工具名)` 是否指向你的能力（应指向声明的 id，不是 `tool.<名字>`） |
 | 路由判定总是 `default` | embedding 服务是否可用（`MEMORY_EMBEDDING_BASE_URL`）；注册表是否为空 |
 | 工具调了但 Stella 不提结果 | `Result.status` 是否 `failed`（失败不产出 summary）；或工具直接给用户发了图片（成功但无可转述内容） |

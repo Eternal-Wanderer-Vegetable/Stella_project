@@ -204,6 +204,7 @@ Link monitoring refreshes the heartbeat through an **independent** `event_prepro
 | Proactive interjection | Scheduled check hits and probability curve passes | `proactive` | `proactive_join` |
 | Plugin dispatch | Group is allowlisted + not a self-echo + message is non-empty | — | — |
 | Runtime toggle | Administrator @ mentions the Bot + matches a toggle keyword | — | — |
+| Capability query | Group is allow-listed + @ mentioned + matches a phrasing such as “what can you do” | — | — |
 
 The three conversation paths share one Pipeline and use `ChatContext` fields to distinguish behavior. Each group has one `asyncio.Lock`, ensuring that only one inference runs in a group at a time.
 
@@ -223,16 +224,19 @@ The probability roll for topic interjections is **not inside the gate**. It is u
 
 **@ replies do not go through the gate.** They are answered normally when the Bot is @ mentioned during sleep or mute periods.
 
-> Priority relationship of the four listeners (smaller numbers execute first):
+> Priority relationship of the five listeners (smaller numbers execute first):
 >
 > | Listener | priority | block | Responsibility |
 > |---|---|---|---|
 > | `group_silent_listener` | 0 | No | Persistence (must be first, see above) |
 > | `toggle_handler` | 1 | Yes | Runtime toggle commands |
+> | `capability_handler` | 1 | Yes | Capability query (“what can you do”) |
 > | `plugin_handler` | 2 | No | AstrBot plugin dispatch (see [compatibility layer](#astrbot-plugin-compatibility-layer)) |
 > | `chat_handler` | 3 | Yes | Main @ reply flow |
 >
-> `toggle_handler` must precede `chat_handler`; otherwise a command such as “quiet” is treated as ordinary conversation and handed to the LLM.
+> `toggle_handler` must precede `chat_handler`; otherwise a command such as “quiet” is treated as ordinary conversation and handed to the LLM. The same applies to `capability_handler`: unless it precedes `chat_handler`, “what can you do” is handed to the LLM, which answers with what it **guesses** its capabilities are rather than what the registry actually holds.
+>
+> `toggle_handler` and `capability_handler` share a priority and are both `block=True`, and NoneBot runs same-priority matchers together, so their rules must be **mechanically disjoint**: `is_query_text()` always returns False when the text matches the runtime toggle keyword lists, and `_assert_capability_rule_disjoint()` pins this at startup by brute-forcing every concatenation of the two lists. This does not rely on “the two lists happen not to overlap” — whoever adds a word will not check the other list, and a sentence matching both would fire one handler that **changes group settings**.
 >
 > `plugin_handler` uses `block=False`: when no plugin matches, the event must continue to `chat_handler`. When a plugin matches, it records the `message_id` in `_plugin_handled_msgs`, and `chat_handler` skips it itself. Using block would also block cases where a plugin merely records something and does not reply.
 
@@ -545,9 +549,9 @@ See [Configuration Reference](configuration.en.md#html-to-image-rendering-plugin
 
 **Why not add a port**: NoneBot already runs FastAPI/uvicorn, and its reverse WS endpoint `/onebot/v11/ws` is provided by that server. The status route is mounted on the same app (`GET /stella/status`), so Stella still has only one listening port (`PORT`).
 
-**Implementation**: `stella_project/plugins/bot_main/status_api.py`. `setup_status_api()` is called in ai_gateway's startup section (after extension loading); `build_payload()` aggregates `link_status()`, `core.llm.snapshot()`, `usage_store.usage_snapshot()`, and version/process information, returning `{version, pid, uptime_seconds, allowed_group_count, link, scheduler, usage}`. Consumers are `_fetch_live_status()` in `deploy/process.py` (loopback query, 1-second timeout) and the GUI.
+**Implementation**: `stella_project/plugins/bot_main/status_api.py`. `setup_status_api()` is called in ai_gateway's startup section (after extension loading); `build_payload()` aggregates `link_status()`, `core.llm.snapshot()`, `usage_store.usage_snapshot()`, `capability.inventory.snapshot()`, and version/process information, returning `{version, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities}`. Consumers are `_fetch_live_status()` in `deploy/process.py` (loopback query, 1-second timeout) and the GUI.
 
-**Security constraints**: `HOST` may be `0.0.0.0` (required when NapCat is on another machine), in which case the route is exposed to the LAN. There are two protections: 1. accept only requests from loopback addresses and return 403 for others; 2. keep credentials and group-chat content out of the response. `allowed_group_count` provides a count, not group numbers, and `usage` contains only counts and ratios (token count, call count, cache hit rate, slot name, and model ID), never prompts or model output. `tests/test_status_api.py` locks this constraint in as an assertion: it serializes the real output of `usage_snapshot()` and fails if `api_key` / `Bearer` / `http://` appears.
+**Security constraints**: `HOST` may be `0.0.0.0` (required when NapCat is on another machine), in which case the route is exposed to the LAN. There are two protections: 1. accept only requests from loopback addresses and return 403 for others; 2. keep credentials and group-chat content out of the response. `allowed_group_count` provides a count, not group numbers, and `usage` contains only counts and ratios (token count, call count, cache hit rate, slot name, and model ID), never prompts or model output. `capabilities` contains structured fields only (capability id, domain, source tier, whether it is routable, provider tool names and health, `examples` count), without the `description` and `examples` free text from the declarations — those two fields are the only place that could smuggle in a URL or a key, and keeping them out of the response body means no extra guard is needed for them. `tests/test_status_api.py` locks this constraint in as an assertion: it serializes the real output of `usage_snapshot()` and fails if `api_key` / `Bearer` / `http://` appears.
 
 ## Extension Mechanism
 

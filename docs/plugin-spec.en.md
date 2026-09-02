@@ -463,7 +463,7 @@ The 16 checks:
 
 The minimum bar for release is **zero errors**. A warn means "please double-check", not "must change" — check ⑩ already has one measured exception in the factory declarations (`anime.schedule`'s 「放送」 is only two characters, and it is what rescues a question scoring 0.641 from under the 0.70 confidence line). The judge is you, not the checker.
 
-> `plugin-scaffold` (generation) and `deploy capabilities` ([§14](#14-capability-query)) are **not implemented yet** as of this specification's release; they are phases 3 and 2 of the rollout plan respectively. `plugin-check` and three-tier declaration loading are available today.
+> `plugin-scaffold` (generation) is **not implemented yet** as of this specification's release; it is phase 3 of the rollout plan. `plugin-check`, three-tier declaration loading and capability query ([§14](#14-capability-query)) are available today.
 
 On generation: **generating a draft offline that only takes effect after human review is supported**; silently generating examples from tool descriptions at runtime and feeding them into memory is **not** (that is precisely why `ROUTER_ROUTE_AUTO_CAPABILITIES` defaults to off). The difference is whether there is a file, a reviewer, and a quantified baseline — the `reviewed` gate is how that line is drawn.
 
@@ -490,7 +490,7 @@ So hot reload is a **debugging convenience, not a restart**. If you suspect the 
 
 ## 14. Capability Query
 
-> The three surfaces in this chapter are not implemented yet (phases 2 and 4 of the rollout plan). For now, the way to see the capability list is the capability-assembly log in `logs/boot_debug.log`.
+> The first two surfaces are available today; the GUI list is not implemented yet (phase 4 of the rollout plan).
 
 Three surfaces, one data source:
 

@@ -876,6 +876,18 @@ Two lessons from measurement:
 - **Use `keywords` sparingly, but include the ones that matter.** The L1 score for “today's broadcast schedule” is only 0.641, below the 0.70 confidence line and therefore likely to be missed. The `anime.schedule` keyword “broadcast” catches it with zero latency. Conversely, use “new anime” rather than “new anime recommendation” as the `anime.recommend` keyword; otherwise “I have recently been following new anime” would be sent directly to the lookup by Level 0.
 - **Do not give `keywords` to capabilities that need parameters to execute.** `anime.search` needs a search keyword and `video.dynamics` needs a UID. Level 0 cannot obtain those parameters; deciding early only makes Comes guess.
 
+### Capability Query
+
+| Variable | Default | Description |
+|---|---|---|
+| `CAPABILITY_QUERY_ENABLED` | `true` | Whether a group member can @-mention the bot and ask "what can you do" / "what features do you have" and have Stella list the currently routable capabilities |
+
+On by default: undeclared plugin tools not participating in routing is **deliberate**, but if users have no way to learn that, the symptom degrades into "I installed the plugin and it is never called" — the one problem in this layer that used to require reading the boot log to diagnose. The reply does not go through a model (it reads the registry and formats text directly), so it costs no tokens.
+
+**Permission split**: regular members see the routable capability list and a *count* of plugin tools without a declaration; the source tier, provider health and the **specific names** of undeclared tools are troubleshooting information and are shown to admins only (`PROACTIVE_TOGGLE_ADMINS`, or the group owner/admins).
+
+The same data has two other exits: `python -m deploy capabilities [--json]` (a table, including a "why not routable" column) and the `capabilities` block of `GET /stella/status`. **The response body carries structured fields only**, no `description` or `examples` free text — see [Local Status API](#local-status-api) for that constraint. For field meanings and how the three exits relate, see [Plugin Specification §14](plugin-spec.en.md#14-capability-query).
+
 ## OneBot Connection
 
 The Bot communicates with NapCat through a OneBot V11 WebSocket. **NapCat must be logged in first**: install [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and complete QQ login. The Bot no longer manages the NapCat process; automatic login falls back to QR-code scanning, so a person must be present for login
@@ -902,14 +914,14 @@ If both sides configure an access token, the values must match. The relevant env
 
 ## Local Status API
 
-`deploy status` and the desktop GUI read **in-process** status from `http://HOST:PORT/stella/status` (link health, scheduler queue depth, today's token usage, and uptime). External processes cannot obtain those data directly, while an HTTP endpoint naturally means “if it cannot connect, it is not running.”
+`deploy status` and the desktop GUI read **in-process** status from `http://HOST:PORT/stella/status` (link health, scheduler queue depth, today's token usage, the capability inventory, and uptime). External processes cannot obtain those data directly, while an HTTP endpoint naturally means “if it cannot connect, it is not running.”
 
 | Configuration | Default | Description |
 |---|---|---|
 | `STELLA_STATUS_API_ENABLED` | `true` | Whether to register the status route |
 | `STELLA_STATUS_API_PATH` | `/stella/status` | Route path (change it only if it conflicts with a future route) |
 
-**Only loopback requests are accepted** (`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`), and the response contains neither credentials nor group-chat content. `allowed_group_count` gives a count rather than group numbers, and `usage` gives counts and ratios only, never prompts or model output. `HOST` may be set to `0.0.0.0` when NapCat is on another machine, which exposes the route to the LAN. See the “Local Status API” section of `architecture.en.md` for the design.
+**Only loopback requests are accepted** (`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`), and the response contains neither credentials nor group-chat content. `allowed_group_count` gives a count rather than group numbers, `usage` gives counts and ratios only, never prompts or model output, and `capabilities` gives structured fields only, without the `description` and `examples` free text from the declarations. `HOST` may be set to `0.0.0.0` when NapCat is on another machine, which exposes the route to the LAN. See the “Local Status API” section of `architecture.en.md` for the design.
 
 ### Security Verification: Loopback-Only Access with `HOST=0.0.0.0`
 

@@ -11,6 +11,7 @@
       python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]
       python -m deploy space-merge --from space_1,space_2 --to casual [--dry-run]
       python -m deploy plugin-check <插件目录> [--json]
+      python -m deploy capabilities [--json]
       python -m deploy manifest [--write]
 """
 
@@ -237,7 +238,10 @@ def _cmd_status(args: argparse.Namespace) -> int:
         if data["recent_log"]:
             recent = data["recent_log"]
             print(f"最近日志 [{recent.get('level', '?')}] {recent.get('message', '')[:120]}")
-        print("提示：link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时无法显示。")
+        print(
+            "提示：link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时无法显示；"
+            "能力清单见 python -m deploy capabilities。"
+        )
     return 0
 
 
@@ -337,6 +341,19 @@ def _cmd_plugin_check(args: argparse.Namespace) -> int:
     return 1 if report.has_blocking(results) else 0
 
 
+def _cmd_capabilities(args: argparse.Namespace) -> int:
+    """列出 Stella 当前具备哪些能力、哪些装了却不生效。
+
+    退出码恒为 0：这是一条查询命令，「没有可路由的能力」是一种合法状态（新装的
+    实例就是这样），拿它当失败会让 CI 与 GUI 把正常情况当故障。
+    """
+    from . import capability_view
+
+    view = capability_view.collect()
+    print(capability_view.to_json(view) if args.json else capability_view.to_terminal(view))
+    return 0
+
+
 def _cmd_manifest(args: argparse.Namespace) -> int:
     """生成发布包清单（release CI 用；升级时据此判断用户是否改过自带文件）。"""
     from . import manifest
@@ -425,6 +442,12 @@ def main(argv: list[str] | None = None) -> int:
     p_plugin_check.add_argument("plugin_dir", help="插件目录（含 main.py 的那一层）")
     p_plugin_check.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
     p_plugin_check.set_defaults(func=_cmd_plugin_check)
+
+    p_caps = sub.add_parser(
+        "capabilities", help="列出当前能力清单（哪些能被聊天触发、哪些不能及原因）"
+    )
+    p_caps.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
+    p_caps.set_defaults(func=_cmd_capabilities)
 
     p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
     p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")

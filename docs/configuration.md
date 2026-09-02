@@ -885,6 +885,18 @@ provider 退避是**时间窗**而非永久禁用：插件依赖的外部 API �
 - **`keywords` 宁缺勿滥，但该给的要给。** 「今天的放送表」的 L1 得分只有 0.641（低于 0.70 的置信线，会漏），靠 `anime.schedule` 的关键词「放送」才被零延迟接住。反面例子：`anime.recommend` 的关键词写成「新番推荐」而不是「新番」，否则「我最近在追新番」会被 Level 0 直接拍板去查。
 - **需要参数才能执行的能力不要给 `keywords`。** `anime.search` 要检索关键词、`video.dynamics` 要 UID，Level 0 拿不到这些参数，拍板了也只是让 Comes 去猜。
 
+### 能力查询
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `CAPABILITY_QUERY_ENABLED` | `true` | 群里能不能 @ 机器人问「你能做什么」/「有什么功能」，由 Stella 直接列出当前可路由的能力 |
+
+默认开：未声明的插件工具不参与路由是**刻意的**，但如果用户无从得知这件事，现象就退化成「装了插件却从来不被调用」——那正是这一层唯一需要翻启动日志才能诊断的问题。回复不经模型（直接读注册表拼文本），所以不产生 token 开销。
+
+**权限分界**：普通群友看到可路由的能力清单与「有多少插件工具没配声明」的条数；来源层、provider 健康度、未声明工具的**具体名单**属排查信息，只给管理员（`PROACTIVE_TOGGLE_ADMINS` 或群主/管理员）。
+
+同一份数据还有两个出口：`python -m deploy capabilities [--json]`（表格，含「为什么不可路由」一列）与状态接口 `GET /stella/status` 的 `capabilities` 块。**响应体只放结构化字段**，不含 `description` 与 `examples` 原文——那条约束见 [本地状态接口](#本地状态接口)。字段含义与三个出口的关系见 [插件接入规范 §14](plugin-spec.md#14-能力查询)。
+
 ## OneBot 连接
 
 Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用
@@ -913,14 +925,14 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 
 ## 本地状态接口
 
-`deploy status` 与桌面 GUI 通过 `http://HOST:PORT/stella/status` 读取**进程内**状态（链路健康度、调度器排队深度、今日 token 用量、启动时长）——那些数据外部进程拿不到，HTTP 端点则天然「连不上就是没运行」。
+`deploy status` 与桌面 GUI 通过 `http://HOST:PORT/stella/status` 读取**进程内**状态（链路健康度、调度器排队深度、今日 token 用量、能力清单、启动时长）——那些数据外部进程拿不到，HTTP 端点则天然「连不上就是没运行」。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `STELLA_STATUS_API_ENABLED` | `true` | 是否注册状态路由 |
 | `STELLA_STATUS_API_PATH` | `/stella/status` | 路由路径（与将来的其他路由冲突时再改） |
 
-**只接受回环地址的请求**（`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号，`usage` 只给计数与比率、绝不含 prompt 与模型输出）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
+**只接受回环地址的请求**（`127.0.0.1` / `::1` / `127.x.x.x` / `localhost`），且响应体不含凭据与群聊内容（`allowed_group_count` 只给数量不给群号，`usage` 只给计数与比率、绝不含 prompt 与模型输出，`capabilities` 只给结构化字段、不含声明里的 `description` 与 `examples` 原文）——`HOST` 可能配成 `0.0.0.0`（NapCat 在另一台机器时），那时路由会暴露到局域网。设计说明见 architecture.md 的「本地状态接口」。
 
 ### 安全实测：`HOST=0.0.0.0` 时仍仅回环可访问
 

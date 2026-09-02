@@ -51,6 +51,7 @@ def test_build_payload_fields_complete():
         "link",
         "scheduler",
         "usage",
+        "capabilities",
     }
     assert payload["pid"] == 123
     assert payload["link"] is link
@@ -119,3 +120,52 @@ def test_usage_snapshot_shape_carries_no_credentials_or_chat_content():
             assert banned not in text
     finally:
         store.reset_state()
+
+
+def test_capabilities_defaults_to_none():
+    """取数失败时 capabilities 为 None——面板据此整块隐藏，而不是显示一个空清单。"""
+    payload = status_api.build_payload(None, {}, pid=1, started_at=time.time())
+    assert payload["capabilities"] is None
+
+
+def test_capabilities_passes_through():
+    caps = {"version": 1, "total": 3, "routable": 2, "items": []}
+    payload = status_api.build_payload(
+        None, {}, pid=1, started_at=time.time(), capabilities=caps
+    )
+    assert payload["capabilities"] is caps
+
+
+def test_capability_snapshot_carries_no_free_text_from_declarations():
+    """约束：能力清单只暴露结构化字段。
+
+    ``description`` 与 ``examples`` 原文是声明里唯一可能夹带 URL 与密钥的字段
+    （用户自己写的 TOML，插件作者写的 TOML，谁都可能往里贴一条带 token 的接口地址）。
+    不放进响应体就不必为它加一道守卫——这条断言就是那个「不放进去」的机械保证。
+
+    真实数据：现装的三层声明载进一个独立注册表，再过一遍 ``snapshot()`` 与序列化。
+    """
+    from pathlib import Path
+
+    from capability.inventory import snapshot
+    from capability.loader import load_capabilities
+    from capability.registry import CapabilityRegistry
+
+    reg = CapabilityRegistry()
+    load_capabilities(Path(__file__).resolve().parents[1] / "config" / "capabilities", target=reg)
+    assert len(reg) > 0, "出厂声明应当至少有一份，否则这条断言什么都没验到"
+
+    descriptions = [c.description for c in reg.all() if c.description]
+    examples = [e for c in reg.all() for e in c.examples]
+    assert descriptions and examples, "样本里得同时有描述与例句，才说明确实被排除了"
+
+    text = json.dumps(
+        status_api.build_payload(
+            None, {}, pid=1, started_at=time.time(), capabilities=snapshot(target=reg)
+        ),
+        ensure_ascii=False,
+    )
+    for banned in ("api_key", "Bearer", "sk-", "prompt_text", "http://", "https://"):
+        assert banned not in text
+    for free_text in descriptions + examples:
+        assert free_text not in text, f"自由文本泄漏进响应体：{free_text!r}"

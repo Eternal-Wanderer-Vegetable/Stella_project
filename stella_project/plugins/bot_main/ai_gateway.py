@@ -9,6 +9,9 @@
    - group_silent_listener（静默监听，priority 0）：只记录群消息到短期记忆，不触发总结；
    - toggle_handler（运行时开关，priority 1）：管理员 @ 机器人说「安静」/「恢复」时
      临时关闭或恢复本群主动发言（必须早于 chat_handler，否则会被当成普通对话）；
+   - capability_handler（能力查询，priority 1）：@ 机器人问「你能做什么」时直接读能力
+     注册表列出清单，不经模型。与 toggle_handler 同优先级且都 block=True，两者的 rule
+     必须机械互斥——见 _assert_capability_rule_disjoint()；
    - plugin_handler（AstrBot 插件，priority 2）：对所有消息跑一遍插件过滤器，
      是否唤醒由过滤器自己决定（指令受 "/" 前缀与 @ 约束，正则/全量监听不受约束）；
    - chat_handler（@ 触发，priority 3）：当机器人被 @ 且发出非空消息时才会走完整推理；
@@ -35,6 +38,7 @@ import random
 import time
 from collections import OrderedDict, defaultdict
 from datetime import date
+from pathlib import Path
 
 from nonebot import get_driver, logger, on_message
 from nonebot.adapters.onebot.v11 import (
@@ -51,6 +55,7 @@ from capability.hooks import register as register_capability_hook
 from config import (
     ALLOWED_GROUPS,
     ASTRBOT_COMPAT_ALLOW_PRIVATE,
+    CAPABILITY_QUERY_ENABLED,
     CONSOLIDATION_LOCAL_BATCH_SIZE,
     CONSOLIDATION_MAX_ROUNDS_PER_RUN,
     CONSOLIDATION_SCHEDULE_INTERVAL,
@@ -525,6 +530,7 @@ def _assert_listener_priorities() -> None:
     """校验落库监听器优先级最高；违反时输出 critical 日志（不中断启动）。"""
     for name, priority in (
         ("toggle_handler", _PRIORITY_TOGGLE),
+        ("capability_handler", _PRIORITY_TOGGLE),
         ("plugin_handler", _PRIORITY_PLUGIN),
         ("chat_handler", _PRIORITY_CHAT),
     ):
@@ -566,6 +572,130 @@ async def handle_toggle(bot: Bot, event: GroupMessageEvent):
     await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
     await toggle_handler.finish(
         Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
+    )
+
+
+# ============================================================
+# 能力查询（群里问「你能做什么」）
+# ============================================================
+
+# 超过这个长度改发图：QQ 会把长文本折叠成「查看全文」，而这段清单的价值恰好
+# 在于一眼扫完。渲染不可用时照旧发文本（见 _capability_image）。
+_CAPABILITY_TEXT_TO_IMAGE = 320
+
+
+async def is_capability_query(event: GroupMessageEvent) -> bool:
+    """触发规则：已启用群 + @ 机器人 + 文本命中能力查询句式。
+
+    与 ``is_toggle_command`` **同优先级且都 block=True**，而 NoneBot 会把同优先级的
+    matcher 一起跑——一句「恢复一下，你能做什么」会同时命中两者，其中一个**会改群
+    设置**。所以互斥必须是机械的：判据在 ``inventory.is_query_text``（命中任一开关词
+    一律返回 False），启动期由 ``_assert_capability_rule_disjoint()`` 钉住。
+    """
+    if not CAPABILITY_QUERY_ENABLED:
+        return False
+    if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+        return False
+    from capability.inventory import is_query_text
+
+    return is_query_text(
+        event.get_plaintext(),
+        toggle_keywords=_MUTE_KEYWORDS + _UNMUTE_KEYWORDS,
+    )
+
+
+capability_handler = on_message(
+    rule=Rule(is_capability_query), priority=_PRIORITY_TOGGLE, block=True
+)
+
+
+def _assert_capability_rule_disjoint() -> None:
+    """启动期自检：开关命令绝不会同时被判成能力查询。
+
+    两张词表「刚好不重叠」不是可验证的性质——往任一张表里加词的人不会去查另一张。
+    这里穷举 4×2 组开关词与全部查询句式的拼接（52 组，import 期跑一次可忽略），
+    命中即 critical：那意味着一句话会同时改群设置并回一份清单。
+    """
+    from capability.inventory import QUERY_KEYWORDS, is_query_text
+
+    toggle = _MUTE_KEYWORDS + _UNMUTE_KEYWORDS
+    bad = [
+        f"{t}，{q}"
+        for t in toggle
+        for q in QUERY_KEYWORDS
+        if is_query_text(f"{t}，{q}", toggle_keywords=toggle)
+    ]
+    if bad:
+        logger.critical(
+            f"❌ 能力查询与运行时开关的触发规则不互斥（{len(bad)} 组，例：{bad[0]}）："
+            f"两者同为 priority={_PRIORITY_TOGGLE} 且 block=True，NoneBot 会一起跑，"
+            f"于是同一句话既改群设置又回一份能力清单。"
+            f"请检查 capability/inventory.py 的 is_query_text。"
+        )
+        return
+    logger.debug(
+        f"✅ 能力查询规则与运行时开关互斥"
+        f"（已验 {len(toggle) * len(QUERY_KEYWORDS)} 组组合）"
+    )
+
+
+_assert_capability_rule_disjoint()
+
+
+async def _capability_image(text: str) -> Path | None:
+    """清单太长时转成图片。不需要转、或渲染不可用时返回 ``None``（调用方发纯文本）。
+
+    ``render_text`` 在浏览器缺失 / 首次 270MB 还在后台下载 / 截图失败时返回 ``None``
+    而不抛异常，所以这里只需处理 import 失败。清单再长也比一条发不出去的消息有用。
+    """
+    if len(text) <= _CAPABILITY_TEXT_TO_IMAGE:
+        return None
+    try:
+        from astrbot_compat.render import render_text
+
+        return await render_text(text)
+    except Exception as e:
+        logger.debug(f"[Capability] 清单转图不可用，退回纯文本: {e}")
+        return None
+
+
+@capability_handler.handle()
+async def handle_capability_query(bot: Bot, event: GroupMessageEvent):
+    """回答「你能做什么」：直接读能力注册表拼文本，**不经模型**。
+
+    不走 LLM 是刻意的：这个问题有确定答案，交给模型只会得到一段听起来合理、却与
+    注册表实际状态无关的描述——而这个 surface 存在的全部意义就是让用户看到注册表里
+    **真实有什么**（「插件装了、日志说派生成功了、可就是从来不被调用」正是它要回答
+    的问题）。顺带的好处是零 token 开销，谁都可以随便问。
+
+    权限分界（方案 §3.1）：来源层、provider 健康度、未声明工具的具体名单属排查信息，
+    只给管理员（``PROACTIVE_TOGGLE_ADMINS`` 或群主/管理员）；普通群友看到可路由能力
+    清单与未声明工具的**条数**——「让用户知道」是这条需求的全部意义，不该要权限。
+    """
+    role = getattr(getattr(event, "sender", None), "role", "") or ""
+    admin = event.user_id in PROACTIVE_TOGGLE_ADMINS or role in ("owner", "admin")
+
+    try:
+        from capability.inventory import chat_overview
+
+        reply = chat_overview(admin=admin)
+    except Exception as e:
+        logger.warning(f"[Capability] 能力清单生成失败: {e}")
+        reply = "能力清单这会儿取不到，稍后再问我一次"
+    logger.info(
+        f"[Capability] 群 {event.group_id} 用户 {event.user_id} 查询能力清单"
+        f"（admin={admin}，{len(reply)} 字）"
+    )
+
+    # 只把首行记进短期记忆：整段是清单，下一轮整合看到几十行工具名只会把它当群聊
+    # 语境（_record_bot_lines 的用途是补「我刚说过什么」，不是存档我发过的正文）。
+    head = next((ln for ln in reply.splitlines() if ln.strip()), "")
+    await _record_bot_lines(int(bot.self_id), event.group_id, [head])
+
+    image = await _capability_image(reply)
+    body = MessageSegment.image(image) if image else MessageSegment.text(reply)
+    await capability_handler.finish(
+        Message([MessageSegment.reply(event.message_id), body])
     )
 
 

@@ -202,6 +202,7 @@ Stella_project/
 | 主动插话 | 定时检查命中，概率曲线通过 | `proactive` | `proactive_join` |
 | 插件分发 | 群在白名单 + 非自身回显 + 消息非空 | — | — |
 | 运行时开关 | 管理员 @ 机器人 + 命中开关关键词 | — | — |
+| 能力查询 | 群在白名单 + 被 @ + 命中「你能做什么」等说法 | — | — |
 
 三条对话路径共用同一个 Pipeline，靠 `ChatContext` 的字段区分行为。每群一把 `asyncio.Lock`，保证同一群同时只跑一次推理。
 
@@ -221,16 +222,19 @@ Stella_project/
 
 **@ 回复不经过 gate。** 睡眠或静音期间被 @ 照常回复。
 
-> 四个监听器的优先级关系（数字越小越先执行）：
+> 五个监听器的优先级关系（数字越小越先执行）：
 >
 > | 监听器 | priority | block | 职责 |
 > |---|---|---|---|
 > | `group_silent_listener` | 0 | 否 | 落库（必须最先，见上文） |
 > | `toggle_handler` | 1 | 是 | 运行时开关命令 |
+> | `capability_handler` | 1 | 是 | 能力查询（「你能做什么」） |
 > | `plugin_handler` | 2 | 否 | AstrBot 插件分发（见[兼容层](#astrbot-插件兼容层)） |
 > | `chat_handler` | 3 | 是 | @ 回复主流程 |
 >
-> `toggle_handler` 必须早于 `chat_handler`，否则「安静」这类命令会被当成普通对话交给 LLM。
+> `toggle_handler` 必须早于 `chat_handler`，否则「安静」这类命令会被当成普通对话交给 LLM。同理 `capability_handler`：不早于 `chat_handler`，「你能做什么」就会被当普通对话交给 LLM，答出来的是它**猜**自己有什么能力，而不是注册表里实际有什么。
+>
+> `toggle_handler` 与 `capability_handler` **同优先级且同为 `block=True`**，而 NoneBot 会把同优先级的 matcher 一起跑，所以两者的 rule 必须**机械互斥**：`is_query_text()` 命中运行时开关词表时一律返回 False，启动期由 `_assert_capability_rule_disjoint()` 穷举两张词表的拼接钉住。不靠「两张词表刚好不重叠」——加词的人不会去查另一张表，而一句「恢复一下，你能做什么」同时命中两者时，其中一个**会改群设置**。
 >
 > `plugin_handler` 用 `block=False`：没命中任何插件时事件要能继续落到 `chat_handler`。命中时它把 `message_id` 记进 `_plugin_handled_msgs`，由 `chat_handler` 自己跳过——用 block 会连带把「插件只是顺手记了点东西、并没有回复」的情况也拦掉。
 
@@ -549,9 +553,9 @@ llm_usage_daily  (date, role, slot, model)
 
 **为什么不新增端口**：NoneBot 本就跑着 FastAPI/uvicorn，反向 WS 端点 `/onebot/v11/ws` 就是它提供的。状态路由直接挂在同一个 app 上（`GET /stella/status`），Stella 仍然只有一个监听端口（`PORT`）。
 
-**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 聚合 `link_status()`、`core.llm.snapshot()`、`usage_store.usage_snapshot()` 与版本/进程信息，返回 `{version, pid, uptime_seconds, allowed_group_count, link, scheduler, usage}`。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI。
+**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 聚合 `link_status()`、`core.llm.snapshot()`、`usage_store.usage_snapshot()`、`capability.inventory.snapshot()` 与版本/进程信息，返回 `{version, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities}`。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI。
 
-**安全约束**：`HOST` 可能是 `0.0.0.0`（NapCat 在另一台机器时必须如此），此时路由暴露到局域网。两道防护：① 只接受回环地址的请求，其余返回 403；② 响应体不含凭据与群聊内容——`allowed_group_count` 只给数量不给群号，`usage` 只有计数与比率（token 数、调用次数、缓存命中率、槽名与模型 ID），绝不含 prompt 与模型输出。`tests/test_status_api.py` 把这条约束钉成了断言：它拿 `usage_snapshot()` 的真实输出过一遍序列化，出现 `api_key` / `Bearer` / `http://` 即失败。
+**安全约束**：`HOST` 可能是 `0.0.0.0`（NapCat 在另一台机器时必须如此），此时路由暴露到局域网。两道防护：① 只接受回环地址的请求，其余返回 403；② 响应体不含凭据与群聊内容——`allowed_group_count` 只给数量不给群号，`usage` 只有计数与比率（token 数、调用次数、缓存命中率、槽名与模型 ID），绝不含 prompt 与模型输出，`capabilities` 只有结构化字段（能力 id、域、来源层、是否可路由、provider 工具名与健康度、examples 条数），不含声明里的 `description` 与 `examples` 原文——那两个字段是唯一可能夹带 URL 与密钥的地方，不放进响应体就不必为它加一道守卫。`tests/test_status_api.py` 把这条约束钉成了断言：它拿 `usage_snapshot()` 的真实输出过一遍序列化，出现 `api_key` / `Bearer` / `http://` 即失败。
 
 ## 扩展机制
 

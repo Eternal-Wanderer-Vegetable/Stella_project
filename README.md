@@ -207,6 +207,8 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 
 写插件或想确认一份声明写得对不对，跑 `python -m deploy plugin-check <插件目录>`：16 项检查，零 error 才算达标。
 
+装完想知道它到底进没进路由：在群里 @ 机器人问一句「你能做什么」，或者跑 `python -m deploy capabilities`。两处列的是同一份清单——哪些能力能被聊天自动触发、哪些不能，以及不能的原因（没有声明 / 工具名拼错 / 被更高优先层顶掉 / 实现正在退避）。这比翻启动日志直接。
+
 插件的卡片图由本地 Chromium 渲染，**首次需要出图时会自动后台下载约 270MB 的浏览器内核**，期间插件照常回纯文本，装好后自动生效、不用重启。
 
 ### 🔍 出问题先看哪里
@@ -310,6 +312,7 @@ ruff check .
 - 我的父母给予了最重要的经济支持。没有他们，这一切都无从开始。
 - 灵感来源于和 [@t1mb2rg](https://github.com/t1mb2rg) 的讨论和 [@CST-Cat](https://github.com/CST-Cat) 的争执中。感谢他们贡献了属于自己的想法。
 - [@MIO-456](https://github.com/MIO-456) 开发的 [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) 项目激励了本项目的开发。
+- 感谢 [vowm3440](https://github.com/vowm3440) , [@CST-Cat](https://github.com/CST-Cat) , [higashitaniyume](https://github.com/higashitaniyume) 为我寻找到了支持这个项目的公益站资源。没有他们的慷慨分享，这个项目就不可能出现。
 - 感谢 [@qian-o](https://github.com/qian-o) 和他的伙伴们，以及 [@MIO-456](https://github.com/MIO-456) 和他的伙伴们。没有他们的鼓励，就没有最初开发这个项目的动力。
 - 感谢Bilibili平台UP主 [Ruuuuusty](https://space.bilibili.com/650991829) 将我和chat-GPT对Stella徽标的想法变为现实。
 - 本项目开发中得到了来自如下组织的支持：

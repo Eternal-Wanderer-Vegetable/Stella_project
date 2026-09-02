@@ -55,7 +55,8 @@ This is the core of the entire design, and both directions must be blocked:
 core/tasks.py                    # Task / Result / TaskGraph protocol (shared by all four modules)
 capability/
 ├── registry.py                  # Capability / CapabilityProvider / registry singleton
-├── loader.py                    # config/capabilities/*.toml → registry
+├── loader.py                    # three declaration tiers (user / factory / plugin) → registry
+├── inventory.py                 # capability inventory: snapshot + in-chat text + offline read
 ├── hooks.py                     # activate_capabilities pre-hook (pipeline integration point)
 ├── router/
 │   ├── __init__.py              # route() three-level cascade entry point
@@ -312,6 +313,8 @@ Exit code 0 means memory false negatives are 0 (gating can be enabled); non-zero
 
 ## Troubleshooting
 
+**Ask first; do not read logs.** The answer to "the plugin is installed but never called" is in the capability inventory: @-mention the bot in a group and ask "what can you do", or run `python -m deploy capabilities`. The latter splits capabilities into routable and not-routable tables, and the reason column already holds the entries the table below tells you to check (no declaration / misspelled tool name / claimed by a higher tier / provider backing off / tool disabled with `active=false`). Admins asking in a group additionally see the source tier and the specific names of undeclared tools. See [Plugin Specification §14](plugin-spec.en.md#14-capability-query) for field meanings.
+
 To determine online "why was no tool called this time," look only at these two lines in `logs/stella_thought_logs.md`:
 
 ```
@@ -322,7 +325,7 @@ To determine online "why was no tool called this time," look only at these two l
 
 | Symptom | Check first |
 |---|---|
-| Plugin is installed but never called | Most commonly, **no capability declaration was written**—the startup log contains a WARNING naming it; next check `routable` in `[capability][boot] Capability assembly complete` (a large `derived` and small `routable` means this); then check whether the tool is `active` |
+| Plugin is installed but never called | `python -m deploy capabilities`: it writes the reason straight into the not-routable table. Most commonly **no capability declaration was written** (shown as "no capability declaration (auto-derived)"; the startup log also contains a WARNING naming it) |
 | Declaration was written but examples have no effect | Whether `registry.claimed_by(tool name)` points to your capability (it should point to the declared id, not `tool.<name>`) |
 | Routing decision is always `default` | Whether the embedding service is available (`MEMORY_EMBEDDING_BASE_URL`); whether the registry is empty |
 | Tool was called but Stella does not mention the result | Whether `Result.status` is `failed` (failures produce no summary); or whether the tool sent an image directly to the user (successful but with no content that can be relayed) |

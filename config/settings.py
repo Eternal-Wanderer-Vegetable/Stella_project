@@ -1192,6 +1192,14 @@ ROUTER_MAX_CAPABILITIES = _env_int("ROUTER_MAX_CAPABILITIES", 3)
 ROUTER_GATE_MEMORY = _env("ROUTER_GATE_MEMORY", "false").lower() in ("true", "1", "yes")
 # 单次路由判定的超时（秒）。超时按降级处理（chat+memory，不调工具），不阻塞回复。
 ROUTER_TIMEOUT = _env_float("ROUTER_TIMEOUT", 8.0)
+# 群里能不能问「你能做什么」/「有什么功能」，由 Stella 直接列出当前可路由的能力。
+# 默认开：能力可见性是本层的一部分而不是附加功能——未声明的插件工具不参与路由是
+# **刻意的**，但如果用户无从得知这件事，现象就退化成「装了插件却从来不被调用」，
+# 而那是 2026-08 之前唯一能靠翻启动日志才能诊断的问题。
+# 回复不经模型（直接读注册表并拼文本），所以不产生 token 开销。
+# 来源层、provider 健康度、未声明工具的具体名单只给管理员（PROACTIVE_TOGGLE_ADMINS
+# 或群主/管理员）；普通群友看到能力清单与未声明工具的条数。
+CAPABILITY_QUERY_ENABLED = _env("CAPABILITY_QUERY_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # ---------- Comes（工具执行层） ----------
 # Comes 只负责「能力 → 找 Provider → 调 Tool → 返回 Result」，不理解用户、不管人格。

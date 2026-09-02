@@ -206,6 +206,8 @@ When a plugin ships none (most existing AstrBot plugins do not), or the one it s
 
 Writing a plugin, or unsure whether a declaration is right? Run `python -m deploy plugin-check <plugin dir>`: 16 checks, and zero errors is the bar.
 
+To see whether it actually made it into the routing set: @-mention the bot in a group and ask "what can you do", or run `python -m deploy capabilities`. Both print the same list — which capabilities chat can trigger automatically, which cannot, and why not (no declaration / misspelled tool name / claimed by a higher tier / implementation backing off). Quicker than reading the boot log.
+
 Plugin cards are rendered by local Chromium. **The first time an image is needed, it automatically downloads about 270 MB of browser engine in the background**; the plugin continues to return plain text during the download, and takes effect automatically once installation finishes without requiring a restart.
 
 ### 🔍 Where to look when something goes wrong
@@ -309,6 +311,7 @@ This project received encouragement and support from many people and organizatio
 - My parents provided the most important financial support. Without them, none of this could have begun.
 - The inspiration came from discussions with [@t1mb2rg](https://github.com/t1mb2rg) and arguments with [@CST-Cat](https://github.com/CST-Cat). Thank you for contributing your own ideas.
 - The [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) project developed by [@MIO-456](https://github.com/MIO-456) inspired the development of this project.
+- Thanks to [vowm3440](https://github.com/vowm3440), [@CST-Cat](https://github.com/CST-Cat), and [higashitaniyume](https://github.com/higashitaniyume) for helping me find public resources that support this project. Without their generous sharing, this project wouldn't have been possible.
 - Thanks to [@qian-o](https://github.com/qian-o) and their companions, as well as [@MIO-456](https://github.com/MIO-456) and their companions. Without their encouragement, there would have been no motivation to start developing this project.
 - Thanks to the Bilibili video creator [Ruuuuusty](https://space.bilibili.com/650991829) for turning my and chat-GPT's ideas about the Stella logo into reality.
 - This project received support from the following organizations during development:

@@ -236,6 +236,7 @@ def test_status_dict_shape(monkeypatch, tmp_path):
         "link",
         "scheduler",
         "usage",
+        "capabilities",
         "uptime_seconds",
         "note",
     }

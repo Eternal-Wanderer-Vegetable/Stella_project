@@ -77,6 +77,21 @@ def _fallback_states() -> dict:
         return {}
 
 
+def _capabilities() -> dict | None:
+    """能力清单快照。取不到就当没有（同 ``_fallback_states`` 的惯例）。
+
+    ``capability.inventory.snapshot()`` 刻意只产结构化字段（不含 description 与
+    examples 原文），正是为了满足本模块「响应体不含凭据与群聊内容」那条约束——
+    自由文本是唯一可能夹带 URL 与密钥的字段，不放进来就不必为它加一道守卫。
+    """
+    try:
+        from capability.inventory import snapshot as capability_snapshot
+
+        return capability_snapshot()
+    except Exception:
+        return None
+
+
 def build_payload(
     link: dict | None,
     sched: dict,
@@ -84,6 +99,7 @@ def build_payload(
     pid: int,
     started_at: float,
     usage: dict | None = None,
+    capabilities: dict | None = None,
 ) -> dict:
     """组装状态响应。
 
@@ -95,6 +111,11 @@ def build_payload(
     今日 token 按角色/端点/模型、缓存命中率、预算余量、正在降级的角色。
     绝不含 prompt / 模型输出 / base_url / api_key——这条与上面那串同等重要，
     用量面板是给用户看成本的，不是给它一个泄漏通道。
+
+    ``capabilities`` 是 ``capability.inventory.snapshot()``：能力 id、域、来源层、
+    是否可路由、provider 的工具名与退避状态。**同样只有结构化字段**，理由见
+    ``_capabilities()``。它回答的是「插件装了为什么从来不被调用」——今天这个问题
+    只能靠翻启动日志。
     """
     return {
         "version": _project_version(),
@@ -104,6 +125,7 @@ def build_payload(
         "link": link,          # link_status() 原样，或 None（扩展未加载时）
         "scheduler": sched,    # core.llm.snapshot()
         "usage": usage,        # usage_store.usage_snapshot()，或 None（取数失败）
+        "capabilities": capabilities,  # inventory.snapshot()，或 None（取数失败）
     }
 
 
@@ -154,7 +176,12 @@ def setup_status_api() -> None:
             # 取数失败只让面板少一块，绝不让状态接口 500
             usage = None
         return build_payload(
-            link, sched, pid=os.getpid(), started_at=_STARTED_AT, usage=usage
+            link,
+            sched,
+            pid=os.getpid(),
+            started_at=_STARTED_AT,
+            usage=usage,
+            capabilities=_capabilities(),
         )
 
     try:
