@@ -6,10 +6,10 @@ Thank you for contributing code, documentation, tests, issue reports, or design 
 
 ## 先看这些文档 / Read These First
 
-- [开发指南（中文）](../docs/development.md) / [Development Guide (English)](../docs/development.en.md)
-- [架构说明（中文）](../docs/architecture.md) / [Architecture (English)](../docs/architecture.en.md)
-- [插件接入规范（中文）](../docs/plugin-spec.md) / [Plugin Specification (English)](../docs/plugin-spec.en.md)
-- [LICENSE](../LICENSE)
+- [开发指南（中文）](/docs/development.md) / [Development Guide (English)](/docs/development.en.md)
+- [架构说明（中文）](/docs/architecture.md) / [Architecture (English)](/docs/architecture.en.md)
+- [插件接入规范（中文）](/docs/plugin-spec.md) / [Plugin Specification (English)](/docs/plugin-spec.en.md)
+- [LICENSE](/LICENSE)
 
 开发指南包含环境准备、测试、CI、代码约定、发布流程和 PR 前检查项。涉及记忆、提示词、数据归属、监听器优先级或成本控制的改动，请先阅读相关设计记录。
 
@@ -26,9 +26,9 @@ The Development Guide covers setup, tests, CI, code conventions, release procedu
 
 Before opening an issue, search existing issues to avoid duplicates. Use an issue template and include your version, operating system, Python version, reproduction steps, actual and expected results, and relevant logs or a minimal reproduction. Redact sensitive data; never upload `.env` files, API keys, chat transcripts, databases, or complete runtime logs.
 
-安全漏洞请阅读 [安全政策 / Security Policy](SECURITY.md)，不要在公开 Issue 中披露。
+安全漏洞请阅读 [安全政策 / Security Policy](.github/SECURITY.md)，不要在公开 Issue 中披露。
 
-For security vulnerabilities, read the [Security Policy](SECURITY.md) instead of disclosing them in a public issue.
+For security vulnerabilities, read the [Security Policy](.github/SECURITY.md) instead of disclosing them in a public issue.
 
 ## 开发环境 / Development Setup
 
@@ -78,6 +78,6 @@ Commit messages may be written in Chinese or English and should briefly describe
 
 ## 许可 / License
 
-提交到本项目的内容应允许在项目 [AGPL v3.0](../LICENSE) 许可及其中适用的附加条款下发布。提交 PR 即表示你有权提交这些内容。
+提交到本项目的内容应允许在项目 [AGPL v3.0](/LICENSE) 许可及其中适用的附加条款下发布。提交 PR 即表示你有权提交这些内容。
 
-Contributions must be distributable under the project’s [AGPL v3.0](../LICENSE) license and applicable additional terms. By opening a PR, you confirm that you have the right to submit the contribution.
+Contributions must be distributable under the project’s [AGPL v3.0](/LICENSE) license and applicable additional terms. By opening a PR, you confirm that you have the right to submit the contribution.
