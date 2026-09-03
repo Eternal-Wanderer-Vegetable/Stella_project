@@ -292,17 +292,6 @@ graph LR
 >
 > 开发过程中测试用模型可能变更，具体会在 release 说明中标注。
 
-## 🤝 贡献
-
-欢迎 issue 与 PR。提交前请确认：
-
-```bash
-python -m pytest tests -q
-ruff check .
-```
-
-> 详见 [开发指南](docs/development.md)。
-
 ## 📄 License
 
 本项目基于 **[GNU Affero General Public License v3.0](LICENSE)** （AGPL v3.0）发布，且**带有不与主协议冲突的附加条款**。详见 LICENSE 文件与各源文件头部的版权声明。

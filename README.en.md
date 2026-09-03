@@ -291,17 +291,6 @@ The application layer gives each model a serial gate (LM Studio itself does not 
 >
 > Models used for testing during development may change; specific changes will be noted in release descriptions.
 
-## 🤝 Contributing
-
-Issues and PRs are welcome. Before submitting, please confirm:
-
-```bash
-python -m pytest tests -q
-ruff check .
-```
-
-> See the [Development Guide](docs/development.en.md) for details.
-
 ## 📄 License
 
 This project is released under the **[GNU Affero General Public License v3.0](LICENSE)** (AGPL v3.0) and comes with **additional terms that don’t conflict with the main license**. See the LICENSE file and the copyright notices at the top of each source file for details.
