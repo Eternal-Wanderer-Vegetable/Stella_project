@@ -434,7 +434,7 @@ def test_chat_overview_admin_names_the_misspelled_tool(reg):
         admin=True,
     )
     assert "get_weahter" in text
-    assert "工具名拼错是静默失效的头号原因" in text
+    assert "要么那个插件没装，要么工具名拼错了" in text
 
 
 def test_chat_overview_admin_reports_backoff_and_manual_switch_off(reg):
@@ -478,6 +478,35 @@ def test_chat_overview_empty_registry_reads_as_a_sentence(reg):
     assert "我现在没有可以在聊天里自动触发的能力。" in text
     assert "共 0 项：；" not in text
     assert "注册表共 0 项；" in text
+
+
+def test_factory_declarations_stay_dark_until_their_plugin_is_installed(reg):
+    """回归 bug_report_2026_9_2#1：一个插件都没装的部署答「我能做这 5 项能力」。
+
+    读的是**仓库里真会随发布包出厂的那份** ``config/capabilities/``，而不是现编一条：
+    那 5 条娱乐能力就是从那里来的。断言写成「工具一个都不在 → 0 项可路由」而不是钉住
+    某个数字，这样以后再加出厂声明，这条守卫照样成立。
+    """
+    from capability.loader import load_capabilities
+
+    declared = load_capabilities(_PROJ / "config" / "capabilities", reg)
+    assert declared > 0, "出厂声明目录空了？这条守卫需要至少一条声明才有意义"
+
+    # 装探针 = Bot 进程；一个工具都查不到 = 一个插件都没装
+    reg.set_tool_probe(lambda name: False)
+    snap = inventory.snapshot(target=reg, tool_manager=_manager())
+
+    assert snap["declared"] == declared  # 声明照常留在注册表里——装上插件就点亮
+    assert snap["routable"] == 0
+    assert all(not i["routable"] for i in snap["items"])
+
+    text = inventory.chat_overview(target=reg, data=snap)
+    assert "我现在没有可以在聊天里自动触发的能力。" in text
+    assert "【娱乐】" not in text
+
+    # 管理员那一份要说清为什么：普通群友看到的是上面那句，排查的人需要工具名
+    admin = inventory.chat_overview(target=reg, data=snap, admin=True)
+    assert "声明里指向的这些工具不存在" in admin
 
 
 def test_chat_overview_lists_commands_with_the_configured_wake_prefix(reg, monkeypatch):
@@ -613,7 +642,7 @@ def test_live_notes_name_the_misspelled_tool_and_the_undeclared_ones(reg):
     )
     assert "可被聊天自动触发（1）" in out
     assert "get_weahter（工具不存在）" in out
-    assert "工具名拼错是静默失效的头号原因" in out
+    assert "要么那个插件没装，要么工具名拼错了" in out
     assert "有 1 个插件工具没有能力声明" in out
     assert "docs/plugin-spec.md" in out
 
@@ -636,6 +665,41 @@ def test_live_lists_commands_with_the_configured_wake_prefix(reg, monkeypatch):
 def test_live_empty_registry_says_so_instead_of_printing_an_empty_table(reg):
     out = _live(inventory.snapshot(target=reg, tool_manager=_manager()))
     assert "没有任何能力可被聊天自动触发。" in out
+
+
+def test_live_table_says_when_a_declaration_points_at_a_missing_tool(reg):
+    """「插件没装 / 工具名拼错」是这张表最常要回答的一条，得与「被停用」分开报。
+
+    两者在表里长得一样（都是「不可路由」），而它们要人去的地方不同：核插件目录里
+    ``@llm_tool`` 的函数名，还是去把 ``active`` 打开。
+    """
+    reg.register(
+        _cap("anime.search", description="检索番剧", examples=("有什么好看的番",), tools=("bgm_search",)),
+    )
+    reg.register(
+        _cap("music.play", description="放歌", examples=("放首歌",), tools=("play_song",)),
+    )
+    # 真探针对「查不到」与「active=false」都回 False（判据见 comes/executor.resolve_tools）
+    reg.set_tool_probe(lambda name: False)
+
+    out = _live(inventory.snapshot(target=reg, tool_manager=_manager(play_song=False)))
+    assert "不参与路由（2）" in out
+    assert "声明指向的工具不存在（插件没装，或工具名拼错）" in out
+    assert "声明指向的工具被停用了（active = false）" in out
+
+
+def test_live_table_never_blames_a_missing_plugin_when_tools_are_unknown(reg):
+    """读不到工具注册表时不许指着用户说「你的插件没装」——那会把人送去翻插件目录。
+
+    这一列的成因在别处（兼容层没起来），而那时 Bot 进程里探针也压根装不上，
+    所以这条能力照旧算可路由；表里出现「工具不存在」就说明判据串了。
+    """
+    reg.register(
+        _cap("anime.search", description="检索番剧", examples=("有什么好看的番",), tools=("bgm_search",)),
+    )
+    out = _live(inventory.snapshot(target=reg, tool_manager=types.SimpleNamespace(tools=None)))
+    assert "可被聊天自动触发（1）" in out  # 钉住它没被降级——否则下一行会空过
+    assert "声明指向的工具不存在" not in out
 
 
 # ---------- CLI 渲染：表格对齐 ----------

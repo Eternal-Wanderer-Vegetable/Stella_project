@@ -1,6 +1,6 @@
 <div align="center">
 
-![标题图片](docs/pic/Title_Image(Second_Edition)_Compressed_version.jpg)
+![标题图片](assets/pic/Title_Image(Second_Edition)_Compressed_version.jpg)
 
 # 🌟 Stella
 
@@ -305,7 +305,7 @@ ruff check .
 
 ## 📄 License
 
-本项目基于 **[GNU Affero General Public License v3.0](LICENSE)** （AGPL v3.0）发布。详见 LICENSE 文件与各源文件头部的版权声明。
+本项目基于 **[GNU Affero General Public License v3.0](LICENSE)** （AGPL v3.0）发布，且**带有不与主协议冲突的附加条款**。详见 LICENSE 文件与各源文件头部的版权声明。
 
 ## 💛 致谢
 
@@ -324,6 +324,3 @@ ruff check .
   - **开发者社区**：[Linux Do](https://linux.do)
 - 特别致谢 Freya，这是献给你的作品。我的探索之旅因你的馈赠而起，是时候交出一份并不完美的回礼了。
 
-## ⚠️ 免责声明
-
-**在使用本项目的部分或者全部代码时，请遵守您所在国家/地区的相关法律和您所接入相关平台的用户协议中的相关条款。全体开发者无法且没有任何义务为使用者使用该项目所造成的任何直接/间接后果负责**（包括但不限于账号封禁，任何直接/间接的经济损失，任何的民事/刑事责任等）。

@@ -12,6 +12,7 @@
 from capability.adapters.astrbot import (
     auto_capability_id,
     bootstrap,
+    install_tool_probe,
     sync_astrbot_tools,
 )
 from capability.registry import Capability, CapabilityProvider, CapabilityRegistry
@@ -299,3 +300,88 @@ providers = ["get_weather"]
     assert stats["derived"] == 1          # roll_dice 被派生了
     assert stats["routable"] == 1         # 但只有声明的 weather.query 参与路由
     assert [c.id for c in reg.routable()] == ["weather.query"]
+
+
+# ---------- 工具存活探针（回归 bug_report_2026_9_2#1）----------
+
+
+def _declare(reg: CapabilityRegistry, cap_id: str, tool: str) -> None:
+    """手写一条指向 ``tool`` 的声明（等价于 config/capabilities/*.toml 里的一条）。"""
+    reg.register(
+        Capability(
+            id=cap_id,
+            domain="entertainment",
+            description="检索 ACG 作品信息",
+            examples=["有什么好看的番"],
+            providers=[
+                CapabilityProvider(
+                    provider_id=f"{cap_id}#{tool}",
+                    capability_id=cap_id,
+                    tool_name=tool,
+                ),
+            ],
+        ),
+    )
+
+
+def test_install_tool_probe_makes_a_declaration_wait_for_its_plugin():
+    """回归：一个插件都没装的部署把出厂声明答成了自己的 5 项能力。
+
+    ``llm_tools`` 在这个用例里是空的（conftest 每个用例都清），正好等于那台部署。
+    装上插件后**不重跑 bootstrap** 也该点亮——探针是查询时才问的，不留装配快照，
+    热重载后不用重装就靠这一点。
+    """
+    reg = CapabilityRegistry()
+    _declare(reg, "anime.search", "bgm_search_subjects_advanced")
+
+    assert install_tool_probe(reg) is True
+    assert reg.routable() == []
+
+    _register_tool("bgm_search_subjects_advanced", "search bangumi subjects")
+    assert [c.id for c in reg.routable()] == ["anime.search"]
+
+
+def test_probe_treats_an_inactive_tool_as_absent():
+    """判据与 ``comes/executor.resolve_tools`` 对齐：``active=False`` 视同缺失。"""
+    reg = CapabilityRegistry()
+    _declare(reg, "anime.search", "bgm_search")
+    _register_tool("bgm_search", "search", active=False)
+
+    install_tool_probe(reg)
+    assert reg.routable() == []
+
+
+def test_bootstrap_routable_stat_is_truthful_when_the_probe_is_installed(
+    tmp_path, monkeypatch,
+):
+    """``bootstrap`` 回的 ``routable`` 是排查这件事时第一个看的数，必须是真话。
+
+    所以 ``bot.py`` 里探针**必须**装在 ``bootstrap()`` 之前——反过来那行启动日志会
+    报装探针前的旧答案，而那正是「怎么一个插件都没装还说有 5 项能力」的现场。
+    """
+    import capability.loader as loader_mod
+
+    (tmp_path / "entertainment.toml").write_text(
+        """
+[[capability]]
+id = "anime.search"
+description = "检索 ACG 作品信息"
+examples = ["有什么好看的番"]
+providers = ["bgm_search_subjects_advanced"]
+""",
+        encoding="utf-8",
+    )
+    real_load = loader_mod.load_capabilities
+    monkeypatch.setattr(
+        loader_mod,
+        "load_capabilities",
+        lambda directory=None, target=None: real_load(tmp_path, target),
+    )
+
+    reg = CapabilityRegistry()
+    install_tool_probe(reg)
+    stats = bootstrap(reg)
+
+    assert stats["declared"] == 1      # 声明读到了
+    assert stats["routable"] == 0      # 但它指向的插件没装
+    assert reg.routable() == []

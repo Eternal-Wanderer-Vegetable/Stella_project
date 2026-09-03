@@ -12,6 +12,7 @@
 from capability.registry import (
     AUTO_CAPABILITY_PREFIX,
     KIND_ASTRBOT_TOOL,
+    KIND_MCP,
     Capability,
     CapabilityProvider,
     CapabilityRegistry,
@@ -211,6 +212,107 @@ def test_register_merge_keeps_disabled_on_idempotent_resync():
             _capability(id="c", providers=[_provider("t", "c")], route_enabled=False),
         )
     assert reg.get("c").route_enabled is False
+    assert reg.routable() == []
+
+
+# ---------- 工具存活探针（回归 bug_report_2026_9_2#1）----------
+
+
+def test_routable_without_probe_ignores_whether_the_tool_exists():
+    """没装探针时行为与从前**逐字一致**——这条是给两个离线工具的契约。
+
+    ``deploy plugin-scaffold`` 与 ``python -m capability.router.benchmark`` 在没加载
+    插件的独立进程里量**声明本身**的路由质量，那里 ``llm_tools`` 必然是空的。把
+    「工具不在」无条件当成不可路由，这两个工具会一起变成空跑。
+    """
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="c", providers=[_provider("never_installed", "c")]))
+    assert [c.id for c in reg.routable()] == ["c"]
+
+
+def test_routable_drops_capability_whose_tool_is_not_installed():
+    """回归：一个插件都没装的部署把出厂声明答成「我能做这 5 件事」。
+
+    出厂自带的 ``config/capabilities/entertainment.toml`` 指向 bilibili 插件的 5 个
+    ``llm_tool``。装了探针（=Bot 进程）而工具不在，这条就必须从候选集里消失：不然
+    L0 关键词能命中它、L1 语义上它还挤在真能力旁边，而真被路由到只换来 Comes 一句
+    「工具全部不可用」。
+    """
+    reg = CapabilityRegistry()
+    reg.register(
+        _capability(id="anime.search", providers=[_provider("bgm_search", "anime.search")]),
+    )
+    reg.set_tool_probe(lambda name: False)
+    assert reg.routable() == []
+    # 仍在注册表里：能力没被删掉，只是不参与竞争——装上插件就点亮
+    assert reg.get("anime.search") is not None
+
+
+def test_probe_is_consulted_per_query_not_at_assembly():
+    """判定跟着工具注册表的**当前**内容走，装配时不留快照。
+
+    热重载后不用重装探针就靠这条；留快照的表现是「重载完了清单还是旧的」。
+    """
+    installed: set[str] = set()
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="c", providers=[_provider("t", "c")]))
+    reg.set_tool_probe(lambda name: name in installed)
+    assert reg.routable() == []
+    installed.add("t")
+    assert [c.id for c in reg.routable()] == ["c"]
+
+
+def test_probe_excludes_unsupported_provider_kind():
+    """判据与 ``comes/executor.resolve_tools`` 对齐：非 astrbot_tool 的 kind 本轮不支持。
+
+    对不齐的表现是「路由挑中了它，Comes 立刻回一句失败」——用户看到的是答非所问，
+    而两边的日志各自都觉得自己没错。
+    """
+    reg = CapabilityRegistry()
+    reg.register(
+        _capability(
+            id="c",
+            providers=[
+                CapabilityProvider(
+                    provider_id="c#m", capability_id="c", kind=KIND_MCP, tool_name="m",
+                ),
+            ],
+        ),
+    )
+    reg.set_tool_probe(lambda name: True)
+    assert reg.routable() == []
+
+
+def test_live_providers_is_enabled_providers_minus_the_probe():
+    """两者只差探针那一层：``enabled_providers`` 是纯数据判断，够不着进程状态。"""
+    reg = CapabilityRegistry()
+    cap = reg.register(
+        _capability(id="c", providers=[_provider("gone", "c"), _provider("here", "c")]),
+    )
+    reg.set_tool_probe(lambda name: name == "here")
+    assert [p.tool_name for p in cap.enabled_providers()] == ["gone", "here"]
+    assert [p.tool_name for p in reg.live_providers(cap)] == ["here"]
+
+
+def test_setting_the_probe_bumps_version():
+    """Router 的原型缓存按版本号失效；探针一装，``routable()`` 的答案就变了。"""
+    reg = CapabilityRegistry()
+    probe = lambda name: True  # noqa: E731
+    v0 = reg.version
+    reg.set_tool_probe(probe)
+    assert reg.version > v0
+    # 重复装同一个探针不算变更：没必要把原型缓存白冲掉一次
+    v1 = reg.version
+    reg.set_tool_probe(probe)
+    assert reg.version == v1
+
+
+def test_clear_keeps_the_probe():
+    """热重载清空能力再重装；顺手卸掉探针的话，重载后声明会全都重新变成可路由。"""
+    reg = CapabilityRegistry()
+    reg.set_tool_probe(lambda name: False)
+    reg.clear()
+    reg.register(_capability(id="c", providers=[_provider("t", "c")]))
     assert reg.routable() == []
 
 

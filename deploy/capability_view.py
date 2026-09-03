@@ -28,12 +28,14 @@ from typing import Any, NamedTuple
 
 from capability.inventory import (
     DOMAIN_LABELS,
+    HINT_MISSING_TOOL,
     SOURCE_LABELS,
     TOOL_INACTIVE,
     TOOL_MISSING,
     TOOL_OK,
     TOOL_UNKNOWN,
 )
+from capability.registry import KIND_ASTRBOT_TOOL
 
 # 工具状态 → 表里显示什么。``unknown`` 与 ``missing`` 必须分开：前者的成因在别处
 # （读不到工具注册表），后者会把人引到插件目录去核工具名。
@@ -150,9 +152,13 @@ def _provider_cell(provider: dict[str, Any]) -> str:
 def _reason_not_routable(item: dict[str, Any]) -> str:
     """这条为什么不可路由。判据顺序照 ``registry.routable()``，先命中先报。
 
-    ``routable()`` 要求 ``route_enabled`` 且有可用 provider 且有原型语料，三者缺一
-    即不进候选集。逐条对上是刻意的：说「不可路由」谁都会，说清缺哪一样才省得用户
-    去翻源码。
+    ``routable()`` 要求 ``route_enabled``、有能真的跑起来的 provider、有原型语料，
+    三者缺一即不进候选集。逐条对上是刻意的：说「不可路由」谁都会，说清缺哪一样才
+    省得用户去翻源码。
+
+    「跑得起来」比「可用」严一层：人工没关、不在退避窗，还得那个工具真的在
+    （判据见 ``registry._tool_live``）。这一层是**最常命中**的一条——声明指向的插件
+    没装、或者工具名拼错了，而两者在表里长得一样，所以要分开报。
     """
     if item.get("auto"):
         return "无能力声明（自动派生）"
@@ -163,6 +169,17 @@ def _reason_not_routable(item: dict[str, Any]) -> str:
         return "声明没有任何 providers"
     if not any(p.get("enabled") and p.get("available") for p in providers):
         return "所有实现都不可用（已关闭或正在退避）"
+    if not any(p.get("tool_state") == TOOL_OK for p in providers):
+        # 注意判据都写成「有没有哪个 provider 是 X」而不是「有没有不是 X 的」：
+        # tools_known=false 时全部 provider 都是 unknown，那时一条都不该命中——
+        # 读不到工具注册表就指着用户说「你的插件没装」是谎报（见 inventory._tool_states）。
+        kinds = {str(p.get("kind") or "") for p in providers}
+        if KIND_ASTRBOT_TOOL not in kinds:
+            return f"实现类型暂不支持（{'、'.join(sorted(k for k in kinds if k))}）"
+        if any(p.get("tool_state") == TOOL_MISSING for p in providers):
+            return "声明指向的工具不存在（插件没装，或工具名拼错）"
+        if any(p.get("tool_state") == TOOL_INACTIVE for p in providers):
+            return "声明指向的工具被停用了（active = false）"
     if not item.get("examples") and not item.get("keywords"):
         return "既没有 examples 也没有 keywords（没有原型语料）"
     return "原因未知"
@@ -223,7 +240,7 @@ def _live_notes(snap: dict[str, Any]) -> list[str]:
     if missing:
         out.append(
             f"声明里指向的这些工具不存在：{'、'.join(missing)}"
-            f" —— 工具名拼错是静默失效的头号原因，对照插件里 @llm_tool 的函数名核一遍。",
+            f" —— {HINT_MISSING_TOOL}",
         )
     unrouted = int(snap.get("auto_unrouted") or 0)
     if unrouted:

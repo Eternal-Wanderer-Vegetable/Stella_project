@@ -84,6 +84,37 @@ def auto_capability_id(tool_name: str) -> str:
     return f"{AUTO_CAPABILITY_PREFIX}{tool_name}"
 
 
+def install_tool_probe(target: CapabilityRegistry | None = None) -> bool:
+    """让注册表能查「声明指向的工具此刻在不在」。返回是否装上。
+
+    **只有 Bot 进程该调这个，而且要在 ``bootstrap()`` 之前调**（顺序决定了
+    ``bootstrap`` 回的 ``routable`` 统计是不是真话——那行日志正是部署者排查
+    「怎么一个插件都没装还说有 5 项能力」时第一个看的东西）。理由与「为什么不是
+    注册表自己去查」都在 ``CapabilityRegistry.set_tool_probe`` 的 docstring 里。
+
+    **不放进 ``bootstrap()``**：``capability/router/benchmark.py`` 与
+    ``deploy/plugin_scaffold.py`` 也走 ``bootstrap()``，它们在没加载插件的独立进程里
+    量声明本身的路由质量，装上探针会让它们一起变成空跑。
+
+    读不到 ``llm_tools`` 时**不装**（返回 False）而不是装一个永远说「不在」的探针：
+    那等于把「兼容层没起来」误报成「你的插件都没装」，而后者会把人送去翻插件目录。
+    """
+    try:
+        from astrbot_compat.llm.tool import llm_tools
+    except Exception as exc:  # 兼容层没起来（理论上不该发生）
+        _logger().warning(f"🧩 [Capability] 工具存活探针未装上（读不到 llm_tools）：{exc}")
+        return False
+
+    def _live(tool_name: str) -> bool:
+        """判据与 comes/executor.resolve_tools 逐字一致：查得到且 active。"""
+        tool = llm_tools.get_tool(tool_name)
+        return tool is not None and bool(getattr(tool, "active", True))
+
+    reg = target if target is not None else _default_registry
+    reg.set_tool_probe(_live)
+    return True
+
+
 def _build_auto_capability(tool: Any, route_enabled: bool) -> Capability:
     """把一个 FunctionTool 包成一个单 provider 的能力。
 
@@ -207,4 +238,9 @@ def bootstrap(target: CapabilityRegistry | None = None) -> dict[str, int]:
     return stats
 
 
-__all__ = ["auto_capability_id", "bootstrap", "sync_astrbot_tools"]
+__all__ = [
+    "auto_capability_id",
+    "bootstrap",
+    "install_tool_probe",
+    "sync_astrbot_tools",
+]

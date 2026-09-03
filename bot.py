@@ -164,12 +164,20 @@ async def _bootstrap_capabilities() -> None:
     而且外面套着 ROUTER_TIMEOUT。放后台是因为启动不该等它——预热失败的后果
     只是首条消息慢一点。
 
+    装配前先给注册表装上**工具存活探针**（``install_tool_probe``）：声明可以指向一个
+    没装的插件的工具（出厂自带的 ``config/capabilities/entertainment.toml`` 就是这样，
+    等你装了 bilibili 插件才点亮），那种能力必须不进路由候选集，否则一个插件都没装的
+    部署会把出厂声明当成自己的能力答出去。**必须在 ``bootstrap()`` 之前**，否则它回的
+    ``routable`` 统计是装探针前的旧答案——而那行日志正是排查这件事时第一个看的东西。
+
     失败只告警：能力层是增量功能，装配不上的后果应该是「这次没有工具能力」，
     而不是 Bot 起不来。
     """
     try:
-        from capability.adapters.astrbot import bootstrap
+        from capability.adapters.astrbot import bootstrap, install_tool_probe
 
+        if not install_tool_probe():
+            _diag_log("[capability][boot] 工具存活探针未装上：本次不校验声明指向的工具存不存在")
         stats = bootstrap()
         _diag_log(f"[capability][boot] 能力装配完成: {stats}")
     except Exception as _e:

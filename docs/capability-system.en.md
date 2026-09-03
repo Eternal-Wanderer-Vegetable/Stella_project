@@ -127,7 +127,17 @@ Capabilities reach the registry from four sources, highest precedence first. **O
 
 The first three tiers share **one identical format** — one way of writing covers three locations, so a user who dislikes a plugin's `examples` only has to write a declaration with the same id or the same tool under `config/capabilities/`. Tier 3 is gated by `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED` (default `true`); turning it off takes "the plugin author decides whether their tool can be called automatically" back into the user's hands. For the format and rules see [Plugin Integration Specification §6.2](plugin-spec.en.md#62-capabilitytoml-and-the-three-tiers).
 
-Tier 3 **only scans plugins that loaded successfully**: a plugin that failed to import registered no tools, so its declaration would create a capability whose provider points at a nonexistent tool — and `routable()` only checks enabled / backoff, never whether the tool exists. That capability would compete in routing, eat into the `ROUTER_CAPABILITY_MARGIN` gap, and then inevitably end as `failed` inside Comes. For the same reason `capability.toml.draft` and any declaration with `reviewed = false` are never loaded (the human-review gate).
+Tier 3 **only scans plugins that loaded successfully**: a plugin that failed to import registered no tools, so its declaration would create a capability whose provider points at a nonexistent tool. For the same reason `capability.toml.draft` and any declaration with `reviewed = false` are never loaded (the human-review gate).
+
+### A declaration whose tool is absent does not enter the candidate set
+
+The first two tiers are **files**, and a file does not know which plugins are installed. The shipped `entertainment.toml` declares 5 ACG capabilities pointing at the 5 `@llm_tool`s of `astrbot_plugin_bilibili` — with that plugin absent those 5 still counted as "routable", so a deployment with **no plugins at all** answered "what can you do" with 5 things it cannot do (`design_docs/bug_report/bug_report_2026_9_2#1.md`). And not just in words: they competed in routing, ate into the `ROUTER_CAPABILITY_MARGIN` gap, and once hit were bound to end as `failed` inside Comes.
+
+So on top of enabled / backoff, `routable()` also asks "does this tool exist right now", by exactly the rule `comes/executor.py::resolve_tools` uses: kind is `astrbot_tool`, the tool resolves, and it is `active`.
+
+The tool registry lives in `astrbot_compat`, and `capability/` must not import it back (that would weld the registry to the compat layer), so the question is **injected**: at startup `bot.py` calls `adapters/astrbot.py::install_tool_probe()` to hand the registry a probe, and it must be installed **before** `bootstrap()` — otherwise the `routable` count in the startup log reports the pre-probe answer, and that line is the first thing anyone looks at when chasing exactly this. The probe is consulted **on every query**, not snapshotted at assembly, so plugin hot reload needs no reinstall.
+
+With no probe installed (the default) behaviour is what it always was: declarations stay routable. That is not a fallback but a requirement — `deploy plugin-scaffold` and `python -m capability.router.benchmark` deliberately run `bootstrap()` in a standalone, plugin-less process; they measure declaration-corpus quality, which must not depend on which plugins happen to be installed. An empty tool registry looks identical in those processes and on a brand-new deployment, so the two can only be told apart by *whether a probe was installed*, never by whether the registry is empty.
 
 **Explicit declaration** in `config/capabilities/*.toml` (**the filename is the domain**; see the `.example` file in the same directory):
 
@@ -313,7 +323,7 @@ Exit code 0 means memory false negatives are 0 (gating can be enabled); non-zero
 
 ## Troubleshooting
 
-**Ask first; do not read logs.** The answer to "the plugin is installed but never called" is in the capability inventory: @-mention the bot in a group and ask "what can you do", or run `python -m deploy capabilities`. The latter splits capabilities into routable and not-routable tables, and the reason column already holds the entries the table below tells you to check (no declaration / misspelled tool name / claimed by a higher tier / provider backing off / tool disabled with `active=false`). Admins asking in a group additionally see the source tier and the specific names of undeclared tools. See [Plugin Specification §14](plugin-spec.en.md#14-capability-query) for field meanings.
+**Ask first; do not read logs.** The answer to "the plugin is installed but never called" is in the capability inventory: @-mention the bot in a group and ask "what can you do", or run `python -m deploy capabilities`. The latter splits capabilities into routable and not-routable tables, and the reason column already holds the entries the table below tells you to check (no declaration / plugin not installed / misspelled tool name / claimed by a higher tier / provider backing off / tool disabled with `active=false`). Admins asking in a group additionally see the source tier and the specific names of undeclared tools. See [Plugin Specification §14](plugin-spec.en.md#14-capability-query) for field meanings.
 
 To determine online "why was no tool called this time," look only at these two lines in `logs/stella_thought_logs.md`:
 
@@ -326,6 +336,7 @@ To determine online "why was no tool called this time," look only at these two l
 | Symptom | Check first |
 |---|---|
 | Plugin is installed but never called | `python -m deploy capabilities`: it writes the reason straight into the not-routable table. Most commonly **no capability declaration was written** (shown as "no capability declaration (auto-derived)"; the startup log also contains a WARNING naming it) |
+| The inventory lists a capability from a plugin you never installed | It should land in the not-routable table with the reason "the declared tool does not exist". If it shows up as routable instead, the tool-liveness probe was not installed — the startup log will say so |
 | Declaration was written but examples have no effect | Whether `registry.claimed_by(tool name)` points to your capability (it should point to the declared id, not `tool.<name>`) |
 | Routing decision is always `default` | Whether the embedding service is available (`MEMORY_EMBEDDING_BASE_URL`); whether the registry is empty |
 | Tool was called but Stella does not mention the result | Whether `Result.status` is `failed` (failures produce no summary); or whether the tool sent an image directly to the user (successful but with no content that can be relayed) |

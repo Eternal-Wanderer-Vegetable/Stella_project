@@ -155,7 +155,7 @@ async def get_weather(self, event: AstrMessageEvent, city: str, days: int = 1):
 - **参数类型只从 docstring 的 `Args` 段读取**，不看类型注解。`parse_tool_docstring()` 只认上面这一种格式（`名字(类型): 说明`，缩进在 `Args:` 之下）；写错格式的结果是参数**静默丢失**，模型调用时不传值；
 - 类型写法支持 `string` / `number` / `int` / `boolean` / `object` / `array` / `list[string]` 这一类；
 - 在函数签名里给了 Python 默认值**不代表参数可选**——docstring `Args` 段里列出的参数一律登记为必填。参数是否必填会影响 `keywords` 该不该写（[§6.4](#64-怎么写-keywords)）；
-- 工具名取 `@filter.llm_tool("名字")` 的参数，省略时取函数名。这个名字就是 `capability.toml` 里 `providers` 要填的东西，**拼错的后果是静默失效**（`plugin-check` 第 ⑤ 项专门查这个）。
+- 工具名取 `@filter.llm_tool("名字")` 的参数，省略时取函数名。这个名字就是 `capability.toml` 里 `providers` 要填的东西，**拼错的后果是这条能力整条不进路由**——不报错，但 `python -m deploy capabilities` 会把它列在「不参与路由」表里、原因写「声明指向的工具不存在」（`plugin-check` 第 ⑤ 项在装之前就能查出来）。
 
 ### 6.2 `capability.toml` 与三层优先级
 
@@ -475,7 +475,7 @@ python -m capability.router.benchmark          # 路由基准，确认四类路�
 1. `boot_debug.log` 里有没有这个插件？没有 → 目录名以 `.` / `_` 开头，或者压缩包没解压；
 2. 加载失败？→ 看失败原因，多数是缺依赖（`requirements.txt` 默认不自动装）；
 3. 加载成功但工具从不触发 → 十有八九是缺 `capability.toml`，日志里那条 WARNING 会点名；
-4. 有声明但还是不触发 → `providers` 里的工具名拼错了，或者被高优先层顶掉了。`plugin-check` 第 ⑤ / ⑬ 项直接给答案。
+4. 有声明但还是不触发 → `providers` 里的工具名拼错了，或者被高优先层顶掉了。`plugin-check` 第 ⑤ / ⑬ 项直接给答案；已经装上跑起来的话，`python -m deploy capabilities` 会把拼错的那条写成「声明指向的工具不存在」。
 
 **热重载**由 `ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED` 控制，**默认关闭**——它会重新 import 并执行插件代码，比只读查询大一档，不该在没人明确打开时可用。打开后由**群内管理员**触发：
 

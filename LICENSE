@@ -13,11 +13,85 @@ General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-The full text of the GNU Affero General Public License v3.0 (the
-canonical text published by the Free Software Foundation on 19 November
-2007) is reproduced below verbatim.
+========================================================================
+Additional Permissions under GNU AGPL-3.0 Section 7
 
-========================================================================                    GNU AFFERO GENERAL PUBLIC LICENSE
+The following additional permissions are granted under the terms of
+Section 7 of the GNU Affero General Public License version 3:
+
+1. Disclaimer of Liability and Compliance with Local Laws
+
+   By using, copying, modifying, or conveying any part of this Program,
+   you acknowledge and agree that:
+
+   (a) It is your sole responsibility to ensure that your use of this
+       Program complies with all applicable laws and regulations of the
+       jurisdiction(s) in which you operate, as well as any terms of
+       service or user agreements of any third-party platforms with
+       which you use this Program.
+
+   (b) To the maximum extent permitted by applicable law, in no event
+       shall the copyright holders, contributors, or any other party
+       who modifies and/or conveys the Program as permitted above, be
+       liable to you for any damages, including but not limited to:
+       account suspension or termination, any direct or indirect
+       economic losses, or any civil or criminal liability arising out
+       of or in connection with your use of the Program.
+
+   (c) This additional permission does not limit or expand any warranty
+       disclaimer or liability limitation already provided under
+       Sections 15 and 16 of the GNU Affero General Public License.
+
+2. License for Original Artistic Assets
+
+   The following applies specifically to original artistic assets
+   included in this Program, such as but not limited to:
+   images, icons, sprites, 3D models, textures, audio files, and
+   visual design elements (collectively, "Artistic Assets"):
+
+   (a) Artistic Assets are licensed under the terms of this GNU Affero
+       General Public License, with the following additional restriction
+       that is not a "further restriction" within the meaning of
+       Section 10, but rather a specification of the scope of the
+       licensed work: Artistic Assets may not be extracted from this
+       Program and used independently or in separate projects without
+       the express written permission of the copyright holders, except
+       as an integral part of the Program (modified or unmodified) that
+       is conveyed in compliance with this License.
+
+   (b) For the avoidance of doubt, the AGPL-3.0's source code
+       requirements (Section 1) apply to the source code of the
+       Program, but do not require the Corresponding Source to include
+       the original source files of the Artistic Assets in a
+       modifiable format (such as layered PSD files or raw project
+       files) unless you choose to provide them. The Program's source
+       code distribution containing the Artistic Assets in their
+       standard compressed or compiled format (such as PNG, JPEG, OGG,
+       etc.) satisfies the source code requirement with respect to
+       those assets.
+
+   (c) This additional permission does not grant any rights to use the
+       Stella Project name, trademarks, or other branding elements for
+       any purpose without prior written consent.
+
+   (d) A complete, file-by-file list of files defined as Artistic Assets
+       is provided in the file "assets/LICENSE.assets.txt" distributed
+       with this Program. That file is incorporated herein by reference
+       and forms an integral part of this license.
+
+   (e) For the avoidance of doubt, the definition of Artistic Assets in
+       this license and in the referenced LICENSE.assets.txt file applies
+       only to those specific files listed therein, and does not extend
+       to any other files in the Program.
+
+========================================================================
+The full text of the GNU Affero General Public License v3.0 follows
+below. In the event of any conflict between the additional permissions
+above and the terms of the AGPL-3.0, the AGPL-3.0 terms shall govern
+unless the additional permissions explicitly expand or grant rights
+beyond those provided by the AGPL-3.0.
+
+                    GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
  Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>

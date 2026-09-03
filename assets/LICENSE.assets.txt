@@ -1,0 +1,117 @@
+Stella — Original Artistic Assets License
+Copyright (C) 2026 Stella Project Contributors
+
+This file contains the licensing terms and scope definition for the
+original artistic assets included in the Stella project.
+
+These assets are part of the "Program" as defined in the GNU Affero
+General Public License version 3 (AGPL-3.0), and are subject to the
+terms of the AGPL-3.0 as well as the Additional Permissions set forth
+in the root LICENSE file of this project.
+
+In the event of any conflict between the terms of this file and the
+root LICENSE file, the root LICENSE file shall govern.
+
+========================================================================
+1. DEFINITION OF ARTISTIC ASSETS
+
+For the purposes of this project, "Artistic Assets" are defined as
+the following files and file types located within the project
+repository:
+
+(a) Image and Texture Files:
+    - All files with the following extensions: .png, .jpg, .jpeg, .gif,
+      .bmp, .tga, .psd, .xcf, .svg, .webp
+    - Located in the directories: assets/textures/, assets/ui/,
+      assets/sprites/, and assets/images/
+
+(b) 3D Model and Animation Files:
+    - All files with the following extensions: .blend, .fbx, .obj,
+      .gltf, .glb, .dae, .3ds, .pmx, .vrm
+    - Located in the directories: assets/models/, assets/characters/,
+      and assets/environment/
+
+(c) Audio and Sound Files:
+    - All files with the following extensions: .wav, .mp3, .ogg,
+      .flac, .aac, .opus, .mid
+    - Located in the directories: assets/audio/, assets/music/,
+      and assets/sfx/
+
+(d) Font Files:
+    - All files with the following extensions: .ttf, .otf, .woff,
+      .woff2
+    - Located in the directories: assets/fonts/
+
+(e) Visual Design Source Files:
+    - All files with the following extensions: .psd, .xcf, .ai, .fig,
+      .sketch, .xd
+    - Located in the directories: assets/sources/, assets/design/
+
+========================================================================
+2. SCOPE OF LICENSE
+
+The Artistic Assets listed above are covered by the AGPL-3.0 as part
+of the Program, with the following additional permissions and scope
+clarifications as permitted under AGPL-3.0 Section 7:
+
+2.1 Use as an Integral Part of the Program
+
+    Artistic Assets may be used, copied, modified, and conveyed solely
+    as an integral part of the Program (modified or unmodified). They
+    may not be extracted, detached, or used independently in separate
+    projects or works without the express written permission of the
+    copyright holders.
+
+2.2 Source Code vs. Source Format
+
+    For the purposes of AGPL-3.0 Section 1 ("Source Code"):
+
+    (a) The "preferred form of the work for making modifications to it"
+        for Artistic Assets means the standard compressed or compiled
+        distribution format (such as PNG, JPG, OGG, GLTF, etc.) as
+        they are distributed in the Program's release packages.
+
+    (b) No obligation is created to provide editable source files
+        (such as layered PSD files, raw 3D model project files, DAW
+        project files, or unprocessed audio tracks) as part of the
+        Corresponding Source, unless you voluntarily choose to do so.
+
+2.3 Attribution
+
+    When conveying the Program or a modified version thereof, you must
+    preserve all copyright notices embedded within the Artistic Assets
+    and provide reasonable attribution to the Stella Project in any
+    documentation or about-screen accompanying the conveyed work.
+
+2.4 Trademark and Branding
+
+    This license does not grant any rights to use the Stella Project
+    name, logo, or other trademarks for any purpose without prior
+    written consent.
+
+========================================================================
+3. COMPLETE LIST OF ARTISTIC ASSETS
+
+The following is a complete list of files defined as Artistic Assets
+within this project (or the directory containing them):
+
+assets/
+├── textures/
+│   ├── Title_Image(First_Edition).jpg
+    ├── Title_Image(Second_Edition)_Compressed_version.jpg
+    ├── Title_Image(Second_Edition).jpg
+
+========================================================================
+4. RELATIONSHIP TO THE ROOT LICENSE
+
+This LICENSE.assets.txt serves as a supplement to the Additional
+Permissions defined in the root LICENSE file of the Stella project,
+specifically as an elaboration of the "Artistic Assets" clause
+contained therein.
+
+All terms and conditions of the GNU Affero General Public License
+version 3, as well as any additional permissions or terms stated in
+the root LICENSE, apply to the Artistic Assets listed in this file.
+
+========================================================================
+END OF LICENSE.assets.txt

@@ -125,7 +125,17 @@ information           weather.query     AstrBot 天气插件     get_weather()
 
 前三层格式**完全一致**——一种写法管三个位置，用户想改插件写歪的 examples，在 `config/capabilities/` 里写一条同 id 或同工具的声明即可覆盖。第 3 层由 `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED`（默认 `true`）控制，关掉它就把「插件作者决定自己的工具能不能被自动调用」这项权力收回到用户手里。写法与规则见 [插件接入规范 §6.2](plugin-spec.md#62-capabilitytoml-与三层优先级)。
 
-第 3 层**只扫加载成功的插件**：import 失败的插件没登记任何工具，它的声明会造出 provider 指向不存在工具的能力，而 `routable()` 只查 enabled / backoff、不查工具是否存在——那条能力会参与路由竞争、抢走 `ROUTER_CAPABILITY_MARGIN` 的间距，最后在 Comes 里必然 failed。同理，`capability.toml.draft` 与 `reviewed = false` 的声明一律不载入（人审闸门）。
+第 3 层**只扫加载成功的插件**：import 失败的插件没登记任何工具，它的声明会造出 provider 指向不存在工具的能力。同理，`capability.toml.draft` 与 `reviewed = false` 的声明一律不载入（人审闸门）。
+
+### 声明指向的工具不在，这条能力就不进候选集
+
+前两层是**文件**，它们不知道插件装没装。出厂目录里的 `entertainment.toml` 声明了 5 项 ACG 能力，指向 `astrbot_plugin_bilibili` 的 5 个 `@llm_tool`——插件没装时那 5 项曾照样算「可路由」，于是一个插件都没装的部署被问「你能做什么」会答出 5 项它做不到的事（`design_docs/bug_report/bug_report_2026_9_2#1.md`）。不止是嘴上说错：它们会参与路由竞争、抢走 `ROUTER_CAPABILITY_MARGIN` 的间距，命中后在 Comes 里必然 failed。
+
+所以 `routable()` 除了 enabled / backoff，还要问一句「这个工具此刻在不在」，判据与 `comes/executor.py::resolve_tools` 逐字一致：kind 是 `astrbot_tool`、查得到、且 `active`。
+
+工具注册表在 `astrbot_compat` 里，而 `capability/` 不许反向 import 它（那会把注册表和兼容层焊死），所以这一问是**注入**的：`bot.py` 启动时调 `adapters/astrbot.py::install_tool_probe()` 给注册表装一个探针，且必须装在 `bootstrap()` **之前**——否则启动日志里那行 `routable` 统计报的是装探针前的答案，而排查这件事时第一个看的就是那行。探针在**每次查询**时才被调用，不是装配时快照一次，所以插件热重载后不用重装。
+
+没装探针时（默认）行为与从前一致：声明照旧可路由。这不是兜底而是必需——`deploy plugin-scaffold` 与 `python -m capability.router.benchmark` 刻意在**没有插件**的独立进程里跑 `bootstrap()`，它们量的是声明语料的质量，本就不该受「装了哪些插件」影响；而「空的工具注册表」在这两种场合和在一台全新部署上长得一模一样，两者只能靠「探针装没装」区分，不能靠注册表是否为空。
 
 **显式声明** `config/capabilities/*.toml`（**文件名即 domain**，格式见同目录 `.example`）：
 
@@ -311,7 +321,7 @@ python -m capability.router.benchmark --cases my.json
 
 ## 排查
 
-**先问一句，别翻日志。** 「装了插件却从来不被调用」的答案在能力清单里：群里 @ 机器人问「你能做什么」，或者跑 `python -m deploy capabilities`——后者按「可路由 / 不可路由 + 原因」分两张表，原因就是下面这张表要查的那几条（没有声明 / 工具名拼错 / 被高优先层顶掉 / provider 正在退避 / 工具被 `active=false` 停用）。管理员在群里还能看到来源层与未声明工具的具体名单。字段含义见 [插件接入规范 §14](plugin-spec.md#14-能力查询)。
+**先问一句，别翻日志。** 「装了插件却从来不被调用」的答案在能力清单里：群里 @ 机器人问「你能做什么」，或者跑 `python -m deploy capabilities`——后者按「可路由 / 不可路由 + 原因」分两张表，原因就是下面这张表要查的那几条（没有声明 / 插件没装 / 工具名拼错 / 被高优先层顶掉 / provider 正在退避 / 工具被 `active=false` 停用）。管理员在群里还能看到来源层与未声明工具的具体名单。字段含义见 [插件接入规范 §14](plugin-spec.md#14-能力查询)。
 
 线上判断「为什么这次没调工具」只看 `logs/stella_thought_logs.md` 的这两行：
 
@@ -324,6 +334,7 @@ python -m capability.router.benchmark --cases my.json
 | 现象 | 先查 |
 |---|---|
 | 插件装了但从不被调用 | `python -m deploy capabilities`：它直接把原因写在「不参与路由」那张表里。最常见是**没写能力声明**（表里显示「无能力声明（自动派生）」，启动日志也有一条 WARNING 点名）|
+| 清单里有一项**没装过的插件**的能力 | 该项在 `python -m deploy capabilities` 里应落在「不参与路由」表、原因是「声明指向的工具不存在」。若它出现在「可路由」表，说明工具存活探针没装上——启动日志会有一条「工具存活探针未装上」 |
 | 声明写了但 examples 没生效 | `registry.claimed_by(工具名)` 是否指向你的能力（应指向声明的 id，不是 `tool.<名字>`） |
 | 路由判定总是 `default` | embedding 服务是否可用（`MEMORY_EMBEDDING_BASE_URL`）；注册表是否为空 |
 | 工具调了但 Stella 不提结果 | `Result.status` 是否 `failed`（失败不产出 summary）；或工具直接给用户发了图片（成功但无可转述内容） |

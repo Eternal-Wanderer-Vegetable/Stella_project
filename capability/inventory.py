@@ -57,6 +57,14 @@ TOOL_INACTIVE = "inactive"  # 存在但 active=False —— Comes 视同缺失�
 TOOL_MISSING = "missing"  # 工具注册表里没有这个名字
 TOOL_UNKNOWN = "unknown"  # 读不到工具注册表，或 provider 不是 astrbot_tool
 
+# 「声明指向的工具不在」在群里和 CLI 里要说同一句话。两处措辞漂了的表现是用户按其中
+# 一句去改、另一句还在说别的，而这两句回答的是同一个问题。「插件没装」放在「拼错」前面
+# 是按频次排的：新部署上出厂声明先于任何插件存在，那时缺的是插件而不是拼写。
+HINT_MISSING_TOOL = (
+    "对应能力不参与路由。要么那个插件没装，要么工具名拼错了"
+    "（对照插件里 @llm_tool 的函数名核一遍）"
+)
+
 # 域名 → 中文标签。缺的域直接显示原名，不猜也不报错：域名由声明文件名决定，
 # 用户完全可以建一个我们没预料到的域。
 DOMAIN_LABELS = {
@@ -607,7 +615,7 @@ def _admin_lines(snap: dict[str, Any]) -> list[str]:
         out.append(
             "（管理员）声明里指向的这些工具不存在："
             + "、".join(str(m) for m in missing[:8])
-            + " —— 工具名拼错是静默失效的头号原因，对照插件里 @llm_tool 的函数名核一遍",
+            + f" —— {HINT_MISSING_TOOL}",
         )
     return out
 
@@ -781,6 +789,7 @@ def offline_declarations() -> dict[str, Any]:
 
 __all__ = [
     "DOMAIN_LABELS",
+    "HINT_MISSING_TOOL",
     "QUERY_KEYWORDS",
     "SNAPSHOT_VERSION",
     "SOURCE_LABELS",

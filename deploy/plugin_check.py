@@ -669,9 +669,10 @@ def check_tool_undeclared(facts: PluginFacts) -> CheckResult | None:
 def check_provider_missing(facts: PluginFacts) -> CheckResult | None:
     """⑤ 声明里的 ``providers`` 指向了不存在的工具名。
 
-    工具名拼错是静默失效的头号原因：``routable()`` 只查 enabled/backoff、不查工具是否
-    存在，于是那条能力照常参与路由竞争、抢走 ``ROUTER_CAPABILITY_MARGIN`` 的间距，
-    最后必然在 Comes 里 failed。
+    拼错的后果是这条能力**整条不进候选集**（``routable()`` 会查工具此刻在不在），
+    也就是插件装了、声明写了、却从来不被调用——而这不报错。这一项要在装之前就把它
+    拦下来：``deploy capabilities`` 只能在跑起来之后告诉你「工具不存在」，那时已经分不清
+    是拼错了还是插件没装。
     """
     if not facts.executed_plugin_code or facts.load_error:
         return None

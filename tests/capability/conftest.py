@@ -20,9 +20,13 @@ def _clean_registry():
     """
     from capability.registry import registry
 
+    # ``clear()`` 刻意不动工具存活探针（热重载要保留它，见 registry.clear），所以
+    # 这里额外卸一次：真装上一个的用例请用自己的 CapabilityRegistry，别污染单例。
     registry.clear()
+    registry.set_tool_probe(None)
     yield
     registry.clear()
+    registry.set_tool_probe(None)
 
 
 @pytest.fixture(autouse=True)

@@ -157,7 +157,7 @@ async def get_weather(self, event: AstrMessageEvent, city: str, days: int = 1):
 - **Parameter types are read only from the docstring's `Args` section**, never from annotations. `parse_tool_docstring()` accepts only the format above (`name(type): description`, indented under `Args:`); getting the format wrong makes the parameter **vanish silently**, and the model calls the tool without it;
 - Supported type spellings include `string` / `number` / `int` / `boolean` / `object` / `array` / `list[string]`;
 - A Python default in the signature does **not** make a parameter optional — every parameter listed in the `Args` section is registered as required. Whether a tool has required parameters decides whether you should write `keywords` ([§6.4](#64-how-to-write-keywords));
-- The tool name is the argument to `@filter.llm_tool("name")`, defaulting to the function name. That name is what goes into `providers` in `capability.toml`, and **a typo fails silently** (check ⑤ of `plugin-check` exists for exactly this).
+- The tool name is the argument to `@filter.llm_tool("name")`, defaulting to the function name. That name is what goes into `providers` in `capability.toml`, and **a typo keeps the whole capability out of routing** — no error, but `python -m deploy capabilities` lists it under not-routable with the reason "the declared tool does not exist" (check ⑤ of `plugin-check` catches it before you even install).
 
 ### 6.2 `capability.toml` and the Three Tiers
 
@@ -478,7 +478,7 @@ Triage order for **"the plugin is installed but is never called"**:
 1. Is the plugin in `boot_debug.log` at all? No → the directory name starts with `.` / `_`, or the archive was never extracted;
 2. Did it fail to load? → read the reason; usually a missing dependency (`requirements.txt` is not installed automatically by default);
 3. Loaded, but the tool never fires → nine times out of ten `capability.toml` is missing; the WARNING in the log names it;
-4. Declared, but still never fires → a tool name in `providers` is misspelled, or a higher tier claimed it. Checks ⑤ / ⑬ of `plugin-check` answer this directly.
+4. Declared, but still never fires → a tool name in `providers` is misspelled, or a higher tier claimed it. Checks ⑤ / ⑬ of `plugin-check` answer this directly; on a running deployment `python -m deploy capabilities` reports the misspelled one as "the declared tool does not exist".
 
 **Hot reload** is gated by `ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED`, **default off** — it re-imports and executes plugin code, one notch heavier than a read-only query, so it should not be available unless somebody deliberately turned it on. Once on, an **in-group admin** triggers it:
 

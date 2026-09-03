@@ -27,6 +27,7 @@ information           weather.query   AstrBot 天气插件   get_forecast()
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -207,6 +208,39 @@ class CapabilityRegistry:
         self._claimed_tools: dict[str, str] = {}
         # 注册表版本号：每次变更自增，供 Router 的原型向量缓存失效
         self._version = 0
+        # 「这个工具此刻真的在吗」探针。见 ``set_tool_probe``：None = 不校验。
+        self._tool_probe: Callable[[str], bool] | None = None
+
+    def set_tool_probe(self, probe: Callable[[str], bool] | None) -> None:
+        """装上（或用 ``None`` 卸掉）「工具此刻真的在吗」探针，供 ``routable`` 查询。
+
+        为什么这件事必须由**调用方注入**而不是注册表自己去查：注册表不许 import
+        ``astrbot_compat``（它是 Provider 的一种实现方式，不是能力层的依赖），而更要紧
+        的是「工具不在」这件事在不同进程里的**含义不同**：
+
+        * Bot 进程里，工具不在就是不在——声明指向的插件没装（或工具名拼错），路由到
+          它只会换来 Comes 的一句失败。这种能力必须从候选集里消失，否则出厂自带的
+          声明会在一个插件都没装的部署上被答成「我能做这 5 件事」（bug_report_2026_9_2#1）。
+        * ``deploy plugin-scaffold`` 与 ``python -m capability.router.benchmark`` 是独立
+          进程，插件根本没加载，``llm_tools`` 必然是空的。它们量的是**声明本身**的路由
+          质量（见 ``capability/router/benchmark.py`` 模块 docstring），按「工具不在」把
+          声明全滤掉的话，这两个工具会一起变成空跑。
+
+        两者靠「探针装没装」区分，而不是靠工具注册表是不是空的——空注册表在这两种
+        场合里长得一模一样。所以：**只有 Bot 进程装探针**（见
+        ``capability.adapters.astrbot.install_tool_probe``），离线进程不装、行为不变。
+
+        探针在**查询时**才被调用，因此插件热重载后不用重装：判定跟着 ``llm_tools``
+        的当前内容走，不会留下一份装配时的快照（快照的表现是「重载完了清单还是旧的」）。
+
+        探针**不许抛异常**。装不上（读不到 ``llm_tools``）时就别装，那是安装点的事——
+        在这里兜底只会把「探针坏了」和「工具确实不在」混成同一个结论。
+        """
+        if probe is self._tool_probe:
+            return
+        self._tool_probe = probe
+        # 探针一装/一卸，``routable()`` 的答案就变了，Router 的原型缓存必须跟着失效
+        self._version += 1
 
     # ---------- 变更 ----------
 
@@ -267,7 +301,11 @@ class CapabilityRegistry:
         self._claimed_tools.setdefault(provider.tool_name, provider.capability_id)
 
     def clear(self) -> None:
-        """清空注册表（测试与热重载用）。"""
+        """清空注册表（测试与热重载用）。
+
+        **不动探针**：它是进程级接线（谁在跑这份注册表），不是注册表的内容。热重载
+        会清掉能力再重装，顺手卸掉探针的话，重载后所有声明都会重新变成「可路由」。
+        """
         self._capabilities.clear()
         self._claimed_tools.clear()
         self._version += 1
@@ -310,11 +348,38 @@ class CapabilityRegistry:
     def ids(self) -> list[str]:
         return sorted(self._capabilities)
 
+    def _tool_live(self, provider: CapabilityProvider) -> bool:
+        """provider 指向的实现此刻是否真的存在。没装探针时一律为 True。
+
+        判据与 ``capability/comes/executor.py`` 的 ``resolve_tools`` **必须逐条对齐**：
+        非 ``astrbot_tool`` 的 kind 本轮不支持，工具查不到或 ``active=False`` 都算不在。
+        对不齐的表现是「路由挑中了它，Comes 立刻回一句『工具全部不可用』」——用户看到
+        的是 Stella 答非所问，而日志里两边各自都觉得自己没错。
+        """
+        probe = self._tool_probe
+        if probe is None:
+            return True
+        if provider.kind != KIND_ASTRBOT_TOOL or not provider.tool_name:
+            return False
+        return probe(provider.tool_name)
+
+    def live_providers(self, capability: Capability) -> list[CapabilityProvider]:
+        """既可用、又确实落到一个存在实现上的 provider（priority 降序）。
+
+        与 ``Capability.enabled_providers`` 的差别只有探针那一层：后者是纯数据判断
+        （人工开关 + 退避窗），够不着「工具在不在」这种进程状态。
+        """
+        return [p for p in capability.enabled_providers() if self._tool_live(p)]
+
     def routable(self) -> list[Capability]:
-        """可被路由的能力：``route_enabled`` 且至少有一个可用 provider，且有原型语料。
+        """可被路由的能力：``route_enabled`` 且至少有一个**能真的跑起来的** provider，
+        且有原型语料。
 
         没有 provider 的能力路由到了也执行不了（Comes 会直接 failed），
-        提前排除掉可以少一次无用的 27B 往返。
+        提前排除掉可以少一次无用的 27B 往返。「跑不起来」不止是人工关闭和退避——
+        声明指向的工具压根没装也算（判据见 ``_tool_live``，只在装了探针的进程里生效）。
+        少了这一条，一个插件都没装的部署会把出厂自带的声明当成自己的能力报出去
+        （bug_report_2026_9_2#1），而且那 5 条原型还会挤在真能力旁边参与语义竞争。
 
         ``route_enabled=False`` 的能力被排除在**所有**路由级别之外（L0 关键词、
         L1 语义、L2 兜底），因为三者都以本方法为候选集来源。这是「声明优先」策略的
@@ -323,7 +388,7 @@ class CapabilityRegistry:
         return [
             c
             for c in self.all()
-            if c.route_enabled and c.enabled_providers() and c.prototype_texts()
+            if c.route_enabled and self.live_providers(c) and c.prototype_texts()
         ]
 
     def find_providers(self, capability_id: str) -> list[CapabilityProvider]:
