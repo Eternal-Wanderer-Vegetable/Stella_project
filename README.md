@@ -207,7 +207,9 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 
 写插件或想确认一份声明写得对不对，跑 `python -m deploy plugin-check <插件目录>`：16 项检查，零 error 才算达标。不想从零手写 examples，可以先跑 `python -m deploy plugin-scaffold <插件目录>` 生成一份草稿（`capability.toml.draft`），它同时用真实 embedding 打一份量化报告告诉你这份语料准不准；草稿要人审、改名并把 `reviewed` 置为 `true` 才会生效——没审过的语料到不了路由。
 
-装完想知道它到底进没进路由：在群里 @ 机器人问一句「你能做什么」，或者跑 `python -m deploy capabilities`。两处列的是同一份清单——哪些能力能被聊天自动触发、哪些不能，以及不能的原因（没有声明 / 工具名拼错 / 被更高优先层顶掉 / 实现正在退避）。这比翻启动日志直接。
+装完想知道它到底进没进路由，三个地方看的是同一份清单：在群里 @ 机器人问一句「你能做什么」、跑 `python -m deploy capabilities`、或者打开 `Stella.exe` 的「插件」页点开这个插件（绿点＝该工具已被声明认领、能被聊天自动触发）。列的都是哪些能力能被聊天自动触发、哪些不能，以及不能的原因（没有声明 / 工具名拼错 / 被更高优先层顶掉 / 实现正在退避）。这比翻启动日志直接。
+
+调试插件时可以打开热重载（`ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED=true`，**默认关闭**），改完代码在群里发「@Stella 重载插件 <插件目录名>」就能不重启生效。它**不等于重启**——裸 `asyncio.create_task` 起的任务、插件起的线程与 monkeypatch 都收不回来，所以怀疑状态不干净就重启，细节见 [插件接入规范 §13](docs/plugin-spec.md#13-调试)。
 
 插件的卡片图由本地 Chromium 渲染，**首次需要出图时会自动后台下载约 270MB 的浏览器内核**，期间插件照常回纯文本，装好后自动生效、不用重启。
 

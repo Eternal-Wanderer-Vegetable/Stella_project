@@ -480,23 +480,37 @@ Triage order for **"the plugin is installed but is never called"**:
 3. Loaded, but the tool never fires → nine times out of ten `capability.toml` is missing; the WARNING in the log names it;
 4. Declared, but still never fires → a tool name in `providers` is misspelled, or a higher tier claimed it. Checks ⑤ / ⑬ of `plugin-check` answer this directly.
 
-**Hot reload** (not implemented yet; phase 4 of the rollout plan): it will be gated by `ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED`, **default off**, triggered by an in-group admin command. By design it can reclaim handlers, tools, capability declarations and the modules in `sys.modules`, but it **cannot** clean up:
+**Hot reload** is gated by `ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED`, **default off** — it re-imports and executes plugin code, one notch heavier than a read-only query, so it should not be available unless somebody deliberately turned it on. Once on, an **in-group admin** triggers it:
+
+```
+@Stella 重载插件 astrbot_plugin_bilibili
+```
+
+Permissions follow the proactive-speech toggle (the `PROACTIVE_TOGGLE_ADMINS` allowlist, or group owner/admin); a non-admin sending this gets no reaction at all. An in-group command rather than a POST on the status API: that endpoint is read-only, and adding a write entry point that can re-import arbitrary plugin code is a notch bigger security step than a read-only endpoint.
+
+What it does: run `terminate()` (5 s timeout) → cancel the background tasks that plugin registered via `register_task` → detach its handlers (including those defined in submodules), function tools, capability declarations and tool claims → purge the plugin package from `sys.modules` and the `__pycache__` directories on disk → load it again and run `initialize()` → re-run the three declaration tiers plus auto-derivation, and recompute the Router prototypes in the background.
+
+The `__pycache__` step is not incidental tidying: a `.pyc` is considered valid based only on the source file's mtime (whole seconds) and byte size, so "changed one character within the same second" — exactly what debugging a constant or a flag looks like — hits stale bytecode, and the reload reports success while running the old code.
+
+What it **cannot** clean up:
 
 - Background tasks started with a bare `asyncio.create_task()` (this is why [§4](#4-lifecycle-and-load-order) requires `register_task`)
 - Threads a plugin started, global hooks it registered, monkeypatches, module-level state in third-party libraries
 - References to the old instance already held elsewhere
 
-So hot reload is a **debugging convenience, not a restart**. If you suspect the state is unclean, restart.
+So hot reload is a **debugging convenience, not a restart**. If you suspect the state is unclean, restart — that sentence is also appended to every successful reload reply.
+
+When the new code fails to import, the reload reports the failure back into the group and does **not** roll back: the old module is already out of `sys.modules`, so there is nothing to roll back to. Fix it and reload again.
+
+`ASTRBOT_PLUGIN_HOT_RELOAD_WATCH` (default off, and only effective when the main switch is also on) watches the mtime of `*.py` and `capability.toml` inside loaded plugin directories and reloads on save. That is the most convenient way to debug, but "automatic" is dangerous in production: one stray save re-imports plugin code in a live group. The poll interval is `ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL` (default 5 seconds).
 
 ## 14. Capability Query
-
-> The first two surfaces are available today; the GUI list is not implemented yet (phase 4 of the rollout plan).
 
 Three surfaces, one data source:
 
 - **Ask in the group**: "what can you do", "what features do you have" — the routable capabilities grouped by domain, with a closing line saying how many plugin tools will never be triggered automatically because they carry no declaration. Any member may ask; the source tier, provider health and the specific list of undeclared tools are troubleshooting information and are shown to admins only;
 - **`python -m deploy capabilities [--json]`** — as a table: what chat can trigger, what it cannot, which tier each came from, which provider is currently backed off;
-- **GUI** — a read-only list over the same payload.
+- **The GUI "Plugins" page** — the same payload re-indexed **by plugin**: the left column lists what is installed, each with a dot and a one-line verdict (failed to load / deactivated / N tools undeclared / fine); click one to see that plugin's commands and tools. The tool column answers "has a capability declaration claimed it" directly — a green dot means claimed and chat can trigger it automatically, a grey dot means no declaration claims it and it can only be called explicitly; missing / deactivated / currently backed off are called out on the same row. Unextracted archives, a lone `capability.draft.toml`, and `reviewed = false` are each called out on the plugin they belong to. "Copy diagnostics" on the "Run status" page still carries routable N of M and the undeclared-tool count.
 
 The payload carries structured fields only (id, domain, source tier, routable or not, provider tool names, whether the tool actually exists, backoff state, number of examples) and **no `description` or `examples` text** — the status endpoint has a hard constraint that responses contain no credentials and no chat content, and free text is the one field that could smuggle in a URL or a key. The text itself is right there in those three TOML tiers, locally.
 

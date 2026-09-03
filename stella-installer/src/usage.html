@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stella</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>用量</h1>
+      <span class="ver">v2.6.0</span>
+      <nav class="top-nav">
+        <a class="nav-secondary" href="./run.html">运行状态</a>
+        <a class="nav-secondary" href="./usage.html">用量</a>
+        <a class="nav-secondary" href="./plugins.html">插件</a>
+        <a class="nav-secondary" href="./config.html">配置</a>
+        <a class="nav-secondary" href="./persona.html">人格设定</a>
+        <a class="nav-secondary" href="./doctor.html">环境自检</a>
+      </nav>
+    </header>
+    <p class="subtitle">今日 token 消耗、各模型分项与降级状态。数据来自 Bot 进程内的状态接口，Bot 未运行时看不到。</p>
+    <div id="root"><div class="loading">正在读取用量…</div></div>
+  </div>
+
+  <script type="module">
+    import { getStatus, getVersion, installCloseOverlay } from "./api.js";
+
+    const root = document.getElementById("root");
+    installCloseOverlay();
+    getVersion().then(v => { document.querySelector(".ver").textContent = `v${v}`; }).catch(() => {});
+
+    // token 数动辄六位数，千分位是可读性的下限；万以上再折成 k 就够了
+    function fmtNum(n) {
+      const v = Number(n || 0);
+      if (!isFinite(v)) return "0";
+      if (v >= 10000) return `${(v / 1000).toFixed(1)}k`;
+      return v.toLocaleString("zh-CN");
+    }
+
+    function pct(x) { return `${(Number(x || 0) * 100).toFixed(1)}%`; }
+
+    function escapeHTML(s) {
+      return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+
+    // 用量面板。缓存命中率单独占一格：它是验证前缀缓存到底有没有生效的唯一手段，
+    // 一直是 0 就说明 prompt 的固定前缀被什么东西破坏了（改了 persona、加了时间戳…）。
+    function usageHTML(usage, alive) {
+      const u = usage || null;
+      // 接口不可达 / 老版本 Bot：说清为什么空，而不是显示一堆 0
+      if (!u) {
+        return alive
+          ? `<div class="notice"><span class="notice-icon">i</span><div>读不到用量数据。
+               <div class="notice-sub">可能是状态接口被关闭（<code>STELLA_STATUS_API_ENABLED=false</code>），或 Bot 仍在启动中。</div></div></div>`
+          : `<div class="notice"><span class="notice-icon">i</span><div>Bot 未运行，没有用量可显示。
+               <div class="notice-sub">用量是进程内的实时计数，到「运行状态」页启动 Bot 后再回来看。</div></div></div>`;
+      }
+      if (u.accounting === false) {
+        return `<div class="notice"><span class="notice-icon">i</span><div>用量记账已关闭。
+          <div class="notice-sub">在「配置」页或 <code>.env</code> 里把 <code>LLM_USAGE_ACCOUNTING</code> 设为 <code>true</code> 才会开始统计。</div></div></div>`;
+      }
+      const t = u.totals || {};
+      const budget = Number(u.budget || 0);
+      const used = Number(u.used_tokens || 0);
+      const over = !!u.over_budget;
+      const paused = u.paused_roles || [];
+      const quotaText = budget > 0
+        ? `${fmtNum(used)} / ${fmtNum(budget)}`
+        : `${fmtNum(used)}（不限）`;
+      const remainPart = budget > 0
+        ? `<div class="item"><span class="k">剩余</span><span class="v ${over ? "bad" : "good"}">${fmtNum(u.remaining_tokens ?? 0)}</span></div>`
+        : ``;
+      const pausedPart = paused.length
+        ? `<div class="item"><span class="k">已暂停</span><span class="v bad">${escapeHTML(paused.join("、"))}（${escapeHTML(String(u.action || ""))}）</span></div>`
+        : ``;
+      const head = `
+        <div class="link-row">
+          <div class="item"><span class="k">今日 token</span><span class="v ${over ? "bad" : ""}">${quotaText}</span></div>
+          ${remainPart}
+          <div class="item"><span class="k">调用</span><span class="v">${fmtNum(t.calls || 0)}</span></div>
+          <div class="item"><span class="k">失败</span><span class="v ${t.failures ? "bad" : ""}">${fmtNum(t.failures || 0)}</span></div>
+          <div class="item"><span class="k">截断</span><span class="v ${t.truncated ? "bad" : ""}">${fmtNum(t.truncated || 0)}</span></div>
+          <div class="item" title="分母是输入 token 而不是调用次数。这个数字一直是 0 说明前缀缓存没有生效。"><span class="k">缓存命中率</span><span class="v">${pct(t.cache_hit_rate)}</span></div>
+          <div class="item"><span class="k">预算域</span><span class="v">${escapeHTML(String(u.scope || "online"))}</span></div>
+          <div class="item"><span class="k">统计日期</span><span class="v">${escapeHTML(String(u.date || "—"))}</span></div>
+          ${pausedPart}
+        </div>`;
+      const rows = Object.entries(u.by_key || {}).map(([key, d]) => `
+        <div class="usage-item">
+          <span class="ukey">${escapeHTML(key)}</span>
+          <span class="ukind">${escapeHTML(String(d.kind || "-"))}</span>
+          <span class="unum">入 ${fmtNum(d.prompt_tokens || 0)}</span>
+          <span class="unum">出 ${fmtNum(d.completion_tokens || 0)}</span>
+          <span class="unum">缓存 ${pct(d.cache_hit_rate)}</span>
+          <span class="unum">${fmtNum(d.calls || 0)} 次</span>
+        </div>`).join("");
+      const detail = `<h2 class="section-title">分项明细</h2>` + (rows
+        ? `<div class="usage-list">${rows}</div>`
+        : `<div class="usage-list"><span class="sched-empty">今天还没有调用记录</span></div>`);
+      const degraded = Object.entries(u.fallback_states || {})
+        .filter(([, d]) => d && d.degraded)
+        .map(([role, d]) => `${escapeHTML(role)}：${escapeHTML(String(d.primary_slot || "?"))} → ${escapeHTML(String(d.fallback_slot || "?"))}（冷却剩余 ${Number(d.cooldown_remaining || 0).toFixed(0)}s）`);
+      const fb = degraded.length
+        ? `<div class="link-row"><div class="item"><span class="k">正在降级</span><span class="v bad">${degraded.join(" · ")}</span></div></div>`
+        : ``;
+      return head + fb + detail;
+    }
+
+    let timer = null;
+
+    async function refresh() {
+      try {
+        const st = await getStatus();
+        root.innerHTML = usageHTML(st.usage, !!st.alive);
+      } catch (e) {
+        root.innerHTML = `<div class="notice notice-error"><span class="notice-icon">!</span><div>无法获取状态：<code>${escapeHTML(e)}</code><div class="notice-sub">请确认 Python 环境可用，或到「环境自检」页排查。</div></div></div>`;
+      }
+    }
+
+    refresh();
+    // 用量变化远慢于日志：5 秒一轮足够，也省得每 1.5 秒打一次状态接口
+    timer = setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

@@ -167,6 +167,61 @@ def test_exclusion_not_coincidence_is_what_makes_toggles_false():
     assert inventory.is_query_text(sentence, toggle_keywords=_toggle_keywords()) is False
 
 
+# ---------- 触发判定：与热重载命令的互斥 ----------
+#
+# reload_handler 与上面两个 handler 同优先级、同为 block=True，所以第三条规则加进来
+# 之后互斥变成三方的。实现方式是「另外两条规则一旦发现这是重载命令就返回 False」，
+# 于是整条链的正确性归结为两件可穷举的事：parse_reload_command 判得准（下面两条），
+# 以及那两条规则真的调了它（再下面那条从源码里确认）。
+
+
+def test_plugin_name_that_looks_like_a_toggle_still_parses_as_reload():
+    """插件名是**任意字符串**：叫「恢复」也得仍被解析成重载命令。
+
+    判错的后果是「重载插件 恢复」在重载的同时把主动发言打开——而发这句的人只想重载。
+    """
+    from astrbot_compat.loader import RELOAD_KEYWORDS, parse_reload_command
+
+    names = _toggle_keywords() + inventory.QUERY_KEYWORDS
+    for phrase in RELOAD_KEYWORDS:
+        for name in names:
+            text = f"{phrase} {name}"
+            assert parse_reload_command(text) == name, text
+
+
+def test_plain_toggle_or_query_is_never_read_as_reload():
+    """反向：一句纯粹的开关命令或能力查询绝不能被当成重载命令。
+
+    判错的后果更糟——「安静」会被 reload_handler 吃掉（block=True），开关彻底失灵。
+    """
+    from astrbot_compat.loader import parse_reload_command
+
+    for text in _toggle_keywords() + inventory.QUERY_KEYWORDS:
+        assert parse_reload_command(text) is None, text
+
+
+def test_both_sibling_rules_actually_consult_the_reload_parser():
+    """上面两条只证明判据本身对；这条确认那两条规则真的调了它。
+
+    少调一处不会让任何断言变红，只会让一句「重载插件 恢复」同时改群设置——
+    正是这类互斥最容易退化的方式（加规则的人不会去改另外两条）。
+    """
+    import ast
+
+    source = (
+        _PROJ / "stella_project" / "plugins" / "bot_main" / "ai_gateway.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    wanted = {"is_toggle_command", "is_capability_query"}
+    seen: dict[str, bool] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name in wanted:
+            body = ast.get_source_segment(source, node) or ""
+            seen[node.name] = "parse_reload_command" in body
+    assert set(seen) == wanted, f"ai_gateway 里找不到 {wanted - set(seen)}——改名了就要同步这个用例"
+    assert all(seen.values()), f"这些规则没查重载命令: {[k for k, v in seen.items() if not v]}"
+
+
 # ---------- 结构化快照：snapshot() ----------
 
 

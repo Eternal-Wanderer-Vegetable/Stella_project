@@ -270,7 +270,7 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 
 ### 成本控制：用量记账与每日预算
 
-在线端点按 token 计费，记忆域（整合 / 压缩 / 提取）又是高频后台任务——**不记账就不知道钱花在哪，没有预算就没有上限**。用量按「日期 × 角色 × 端点槽 × 模型」累加进 `llm_usage_daily` 表，在 GUI「运行状态」页与 `python -m deploy status` 里可见。
+在线端点按 token 计费，记忆域（整合 / 压缩 / 提取）又是高频后台任务——**不记账就不知道钱花在哪，没有预算就没有上限**。用量按「日期 × 角色 × 端点槽 × 模型」累加进 `llm_usage_daily` 表，在 GUI「用量」页与 `python -m deploy status` 里可见。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
@@ -895,7 +895,21 @@ provider 退避是**时间窗**而非永久禁用：插件依赖的外部 API �
 
 **权限分界**：普通群友看到可路由的能力清单与「有多少插件工具没配声明」的条数；来源层、provider 健康度、未声明工具的**具体名单**属排查信息，只给管理员（`PROACTIVE_TOGGLE_ADMINS` 或群主/管理员）。
 
-同一份数据还有两个出口：`python -m deploy capabilities [--json]`（表格，含「为什么不可路由」一列）与状态接口 `GET /stella/status` 的 `capabilities` 块。**响应体只放结构化字段**，不含 `description` 与 `examples` 原文——那条约束见 [本地状态接口](#本地状态接口)。字段含义与三个出口的关系见 [插件接入规范 §14](plugin-spec.md#14-能力查询)。
+同一份数据还有两个出口：`python -m deploy capabilities [--json]`（表格，含「为什么不可路由」一列）与状态接口 `GET /stella/status` 的 `capabilities` 块，GUI 的「插件」页读的就是后者（按插件重新索引后逐个展示）。**响应体只放结构化字段**，不含 `description` 与 `examples` 原文——那条约束见 [本地状态接口](#本地状态接口)。字段含义与三个出口的关系见 [插件接入规范 §14](plugin-spec.md#14-能力查询)。
+
+### 插件热重载（调试用）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED` | `false` | 允不允许不重启就重载单个插件。打开后由群内管理员发「@Stella 重载插件 <名>」触发 |
+| `ASTRBOT_PLUGIN_HOT_RELOAD_WATCH` | `false` | 监视插件目录里 `*.py` 与 `capability.toml` 的 mtime，改完存盘自动重载。需与主开关同时打开 |
+| `ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL` | `5.0` | 上一项的轮询间隔（秒） |
+
+默认关是因为重载会**重新 import 并执行插件代码**，比只读查询大一档。权限沿用主动发言开关那套（`PROACTIVE_TOGGLE_ADMINS` 或群主/管理员）；非管理员发这句不会有任何反应。选群内命令而不是给状态接口开一个 POST，是因为那个端点是只读的，加一条能触发任意插件 re-import 的写入口是比只读端点大一档的安全步骤。
+
+**它不等于重启。** 能收回 handler、函数工具、能力声明、`sys.modules` 里的插件包与磁盘上的 `__pycache__`；收不回裸 `asyncio.create_task()` 起的任务（插件要走 `context.register_task`）、插件起的线程、注册的全局钩子、monkeypatch、第三方库的模块级状态、已被别处持有的旧实例引用。这段话也会跟在每一条重载成功的回复后面。怀疑状态不干净就重启。完整说明见 [插件接入规范 §13](plugin-spec.md#13-调试)。
+
+`..._WATCH` 单独默认关：调试时它最省事，但「自动」在生产上危险——一次误存盘就会在群里跑一遍重新 import。
 
 ## OneBot 连接
 

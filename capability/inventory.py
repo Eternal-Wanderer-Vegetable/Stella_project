@@ -15,6 +15,8 @@
   ``tests/test_status_api.py`` 钉住了「响应体不含凭据与群聊内容」——``description``
   与 ``examples`` 原文是唯一可能夹带 URL 与密钥的字段，不放进去就不必为它加一道守卫。
   原文在本机 TOML 里，要看直接读那三层文件（``offline_declarations()``）。
+  快照里还带一份**按插件分组**的视图（``plugins``）：用户装的是插件而不是能力，
+  「这个插件到底能干什么、它的工具进没进路由」在按能力组织的那份数据里要靠工具名反查。
 - ``chat_overview()``：给人看的文本，带描述。来源层、provider 健康度、未声明工具的
   具体名单属排查信息，**只给管理员**；普通群友能看到可路由能力清单与未声明工具的**条数**。
 
@@ -27,6 +29,7 @@
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 from collections import Counter
 from collections.abc import Sequence
@@ -240,6 +243,11 @@ def snapshot(
         # 「你能做什么」只答能力、不答指令，对装了一堆 @command 的群就是**误导**。
         "commands": _command_names(),
         "missing_tools": sorted(set(missing_tools)),
+        # 同一批事实按插件重新索引一遍：用户装的是插件，不是能力（见「按插件分组」那段）
+        "plugins": _plugin_items(reg, states, routable_ids, stamp),
+        # 指令怎么发要带前缀，别让渲染方自己去猜配置
+        "wake_prefix": wake_prefix(),
+        "archives": _unextracted_archives(),
     }
 
 
@@ -305,6 +313,183 @@ def _command_names(limit: int = 60) -> list[str]:
     except Exception:
         return []
     return [name for name, _ in command_specs_of(handlers, limit=limit)]
+
+
+# ---------- 按插件分组 ----------
+#
+# 能力清单是**按能力**组织的，而用户装的是**插件**：「我装的这个插件到底能干什么、
+# 它的工具进没进路由」在按能力组织的那份数据里要靠工具名反查，人做不到。所以再出一份
+# 按插件分组的视图——同一批底层事实，换一个索引方向。
+#
+# 「哪些 handler / 工具属于这个插件」的判据借 ``astrbot_compat.loader`` 的
+# ``plugin_handlers`` / ``tool_names_of``（热重载摘工具用的也是那两个），不在这里重写：
+# 两处各写一遍取名规则必然漂移，而漂移的表现是「插件页说有这个工具、重载时却摘不掉」。
+
+# 出网 / 密钥可能夹带在异常文本里（插件连不上某个服务时的报错就带地址）。响应体有
+# 「不含凭据」的硬约束，而 URL 是唯一会被顺手带进来的一类，替换掉比整条不给有用。
+_URL_RE = re.compile(r"\b(?:https?|ws|wss|ftp)://\S+", re.IGNORECASE)
+_REASON_MAX = 300
+
+
+def _safe_reason(text: str) -> str:
+    """插件加载失败的原因，去掉 URL 并截断。
+
+    原因本身既不是凭据也不是聊天内容（它就是 ``boot_debug.log`` 里那一行），而它是
+    「插件装了却不生效」唯一能直接回答问题的字段，所以不整条丢掉。URL 换成占位符是因为
+    异常文本是自由文本里唯一可能顺手带上地址的一类。
+    """
+    cleaned = _URL_RE.sub("<url>", (text or "").strip())
+    return cleaned if len(cleaned) <= _REASON_MAX else cleaned[: _REASON_MAX - 1] + "…"
+
+
+def _plugin_declaration(plugin_dir: Path | None) -> tuple[str, bool | None]:
+    """插件自带声明的状态：``("plugin" | "draft" | "none", reviewed)``。
+
+    ``draft`` 是「跑过 plugin-scaffold 但没人审」——那份文件躺在目录里却不生效，
+    是插件页要点名的一种状态（用户会以为自己已经配好了）。
+    """
+    if plugin_dir is None:
+        return "none", None
+    from capability.loader import (
+        PLUGIN_DECL_DRAFT_FILENAME,
+        PLUGIN_DECL_FILENAME,
+        parse_declaration,
+    )
+
+    decl = plugin_dir / PLUGIN_DECL_FILENAME
+    try:
+        if decl.is_file():
+            return "plugin", parse_declaration(decl, source=SOURCE_PLUGIN).reviewed
+        if (plugin_dir / PLUGIN_DECL_DRAFT_FILENAME).is_file():
+            return "draft", False
+    except OSError:
+        return "none", None
+    return "none", None
+
+
+def _plugin_tool_item(
+    tool_name: str,
+    reg: CapabilityRegistry,
+    states: dict[str, bool] | None,
+    routable_ids: set[str],
+    now: float,
+) -> dict[str, Any]:
+    """一个插件工具在路由里的处境。``capability`` 为空 = 没有任何声明认领它。
+
+    带上 provider 的健康度（是否被人工关闭、是否在退避）是因为插件详情页取代了原先那张
+    扁平能力表：一个工具「声明齐全、可路由、但连续失败正在退避」与「一切正常」在界面上
+    必须能分开，否则用户看到满屏绿灯却仍然调不动它。
+    """
+    owner = reg.claimed_by(tool_name) or ""
+    capability = reg.get(owner) if owner else None
+    provider = None
+    if capability is not None:
+        provider = next(
+            (p for p in capability.providers if p.tool_name == tool_name),
+            None,
+        )
+    backoff = 0
+    if provider is not None and provider.disabled_until > 0.0:
+        backoff = int(max(0.0, provider.disabled_until - now))
+    return {
+        "name": tool_name,
+        "tool_state": _tool_state(tool_name, states),
+        "capability": owner,
+        # 自动派生那层的 id 是 tool.<名>，对用户来说等于「没声明」，但来源层要照实说
+        "source": getattr(capability, "source", "") or "",
+        "auto": bool(capability is not None and capability.is_auto),
+        "routable": owner in routable_ids,
+        # provider 不存在（工具没被任何声明认领）时按「正常」报：那时该说的是「没声明」，
+        # 再叠一句「不可用」只会把人引到错误的方向
+        "enabled": bool(provider.enabled) if provider is not None else True,
+        "available": bool(provider.available(now)) if provider is not None else True,
+        "failures": int(provider.failures) if provider is not None else 0,
+        "backoff_seconds": backoff,
+    }
+
+
+def _plugin_items(
+    reg: CapabilityRegistry,
+    states: dict[str, bool] | None,
+    routable_ids: set[str],
+    now: float,
+) -> list[dict[str, Any]]:
+    """一行一个插件：元数据、指令、工具，以及每个工具进没进路由。
+
+    加载失败的插件也在列表里（``loaded=False``）——「文件在、但没装上」正是用户最需要
+    看到的一种状态，而它在按能力组织的那份数据里根本不会出现（失败的插件没登记任何工具）。
+    """
+    try:
+        from astrbot_compat import loader
+        from astrbot_compat.registry import star_registry
+    except Exception:
+        return []
+
+    items: list[dict[str, Any]] = []
+    seen_dirs: set[str] = set()
+    for md in list(star_registry):
+        handlers = loader.plugin_handlers(md)
+        tools = [
+            _plugin_tool_item(name, reg, states, routable_ids, now)
+            for name in loader.tool_names_of(handlers)
+        ]
+        plugin_dir = loader._plugin_dir_of(md)
+        declaration, reviewed = _plugin_declaration(plugin_dir)
+        dir_name = md.root_dir_name or ""
+        if dir_name:
+            seen_dirs.add(dir_name)
+        items.append(
+            {
+                "dir": dir_name,
+                "name": md.name or dir_name,
+                "version": md.version or "",
+                "author": md.author or "",
+                "loaded": True,
+                # activated=False 是「装上了但被停用」（initialize 抛异常 / 依赖未实现能力），
+                # 与「没装上」不是一回事，两者用户要采取的行动也不同
+                "activated": bool(md.activated),
+                "error": "",
+                "declaration": declaration,
+                "reviewed": reviewed,
+                "commands": [name for name, _ in command_specs_of(handlers)],
+                "tools": tools,
+                "routable_tools": sum(1 for t in tools if t["routable"]),
+                "unrouted_tools": sum(1 for t in tools if not t["routable"]),
+            },
+        )
+
+    for dir_name, reason in sorted(loader.get_failed_plugins().items()):
+        if dir_name in seen_dirs:
+            continue
+        items.append(
+            {
+                "dir": dir_name,
+                "name": dir_name,
+                "version": "",
+                "author": "",
+                "loaded": False,
+                "activated": False,
+                "error": _safe_reason(reason),
+                "declaration": "none",
+                "reviewed": None,
+                "commands": [],
+                "tools": [],
+                "routable_tools": 0,
+                "unrouted_tools": 0,
+            },
+        )
+    items.sort(key=lambda i: (not i["loaded"], str(i["dir"] or i["name"])))
+    return items
+
+
+def _unextracted_archives() -> list[str]:
+    """插件目录里没解压的压缩包。「装了却没被发现」十次有九次是这个。"""
+    try:
+        from astrbot_compat import loader
+
+        return loader.unextracted_archives()
+    except Exception:
+        return []
 
 
 # ---------- 群内文本 ----------

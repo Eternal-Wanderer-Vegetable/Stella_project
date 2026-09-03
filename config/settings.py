@@ -882,6 +882,31 @@ ASTRBOT_COMPAT_ALLOW_PRIVATE = _env("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true").lowe
     "yes",
 )
 
+# ---------- 插件热重载（调试用） ----------
+# 是否允许在不重启的情况下重载单个插件（群内管理员发「@Stella 重载插件 <名>」）。
+# 默认关闭：重载会重新 import 并执行插件代码，比只读查询大一档；而且它**不等于重启**
+# ——能收回 handler、函数工具、能力声明与 sys.modules 里的模块，但收不回裸
+# asyncio.create_task 起的任务（要走 context.register_task）、插件起的线程、注册的
+# 全局钩子、monkeypatch、第三方库的模块级状态、已被别处持有的旧实例引用。
+# 定位是调试便利，怀疑状态不干净就重启。详见 docs/plugin-spec.md §13。
+ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED = _env(
+    "ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED",
+    "false",
+).lower() in ("true", "1", "yes")
+# 是否监视插件目录的 mtime 自动重载（改完存盘即生效）。调试最省事，但「自动」在生产
+# 上危险：一次误存盘就会在群里跑一遍重新 import。跟主开关一起默认关，且必须两个都开
+# 才生效。
+ASTRBOT_PLUGIN_HOT_RELOAD_WATCH = _env(
+    "ASTRBOT_PLUGIN_HOT_RELOAD_WATCH",
+    "false",
+).lower() in ("true", "1", "yes")
+# 自动重载的轮询间隔（秒）。只 stat 已加载插件目录里的 *.py 与 capability.toml，
+# 开销很小；调太短的唯一后果是编辑器保存到一半时就触发一次半截重载。
+ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL = _env_float(
+    "ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL",
+    5.0,
+)
+
 # ---------- HTML → 图片渲染（插件卡片） ----------
 # 大量 AstrBot 插件把结果卡片做成 Jinja2 模板 + CSS，靠 Star.html_render 出图。
 # 后端是**本地 Chromium**（playwright）：模板里填的是群友昵称、动态正文、头像 URL，

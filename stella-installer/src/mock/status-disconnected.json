@@ -26,5 +26,6 @@
     "accounting": false
   },
   "uptime_seconds": 26.255794286727905,
-  "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null"
+  "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null",
+  "capabilities": null
 }

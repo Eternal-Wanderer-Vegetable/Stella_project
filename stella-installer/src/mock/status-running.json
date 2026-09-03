@@ -100,5 +100,297 @@
     }
   },
   "uptime_seconds": 259.91937708854675,
-  "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null"
+  "note": "link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时为 null",
+  "capabilities": {
+    "version": 1,
+    "registry_version": 14,
+    "total": 6,
+    "routable": 3,
+    "declared": 4,
+    "auto": 2,
+    "auto_unrouted": 2,
+    "tools_known": true,
+    "items": [
+      {
+        "id": "anime.schedule",
+        "domain": "entertainment",
+        "source": "config",
+        "route_enabled": true,
+        "routable": true,
+        "auto": false,
+        "examples": 5,
+        "keywords": 1,
+        "providers": [
+          {
+            "tool": "get_anime_schedule",
+            "kind": "astrbot_tool",
+            "source": "config",
+            "priority": 0,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0,
+            "tool_state": "ok"
+          }
+        ]
+      },
+      {
+        "id": "anime.search",
+        "domain": "entertainment",
+        "source": "config",
+        "route_enabled": true,
+        "routable": true,
+        "auto": false,
+        "examples": 6,
+        "keywords": 0,
+        "providers": [
+          {
+            "tool": "search_anime",
+            "kind": "astrbot_tool",
+            "source": "config",
+            "priority": 0,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0,
+            "tool_state": "ok"
+          }
+        ]
+      },
+      {
+        "id": "video.dynamics",
+        "domain": "entertainment",
+        "source": "plugin",
+        "route_enabled": true,
+        "routable": true,
+        "auto": false,
+        "examples": 4,
+        "keywords": 2,
+        "providers": [
+          {
+            "tool": "get_user_dynamics",
+            "kind": "astrbot_tool",
+            "source": "plugin",
+            "priority": 0,
+            "enabled": true,
+            "available": false,
+            "failures": 2,
+            "backoff_seconds": 118,
+            "tool_state": "ok"
+          }
+        ]
+      },
+      {
+        "id": "weather.query",
+        "domain": "information",
+        "source": "config",
+        "route_enabled": true,
+        "routable": false,
+        "auto": false,
+        "examples": 4,
+        "keywords": 0,
+        "providers": [
+          {
+            "tool": "get_weather",
+            "kind": "astrbot_tool",
+            "source": "config",
+            "priority": 0,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0,
+            "tool_state": "missing"
+          }
+        ]
+      },
+      {
+        "id": "tool.bili_hot",
+        "domain": "plugin",
+        "source": "auto",
+        "route_enabled": true,
+        "routable": false,
+        "auto": true,
+        "examples": 0,
+        "keywords": 0,
+        "providers": [
+          {
+            "tool": "bili_hot",
+            "kind": "astrbot_tool",
+            "source": "auto",
+            "priority": 0,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0,
+            "tool_state": "ok"
+          }
+        ]
+      },
+      {
+        "id": "tool.bili_video_info",
+        "domain": "plugin",
+        "source": "auto",
+        "route_enabled": true,
+        "routable": false,
+        "auto": true,
+        "examples": 0,
+        "keywords": 0,
+        "providers": [
+          {
+            "tool": "bili_video_info",
+            "kind": "astrbot_tool",
+            "source": "auto",
+            "priority": 0,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0,
+            "tool_state": "ok"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      "bangumi",
+      "bili",
+      "help"
+    ],
+    "missing_tools": [
+      "get_weather"
+    ],
+    "plugins": [
+      {
+        "dir": "astrbot_plugin_anime",
+        "name": "番剧助手",
+        "version": "1.2.0",
+        "author": "someone",
+        "loaded": true,
+        "activated": true,
+        "error": "",
+        "declaration": "none",
+        "reviewed": null,
+        "commands": [
+          "bangumi"
+        ],
+        "tools": [
+          {
+            "name": "get_anime_schedule",
+            "tool_state": "ok",
+            "capability": "anime.schedule",
+            "source": "config",
+            "auto": false,
+            "routable": true,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0
+          },
+          {
+            "name": "search_anime",
+            "tool_state": "ok",
+            "capability": "anime.search",
+            "source": "config",
+            "auto": false,
+            "routable": true,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0
+          }
+        ],
+        "routable_tools": 2,
+        "unrouted_tools": 0
+      },
+      {
+        "dir": "astrbot_plugin_bilibili",
+        "name": "哔哩哔哩",
+        "version": "2.0.1",
+        "author": "Soulter",
+        "loaded": true,
+        "activated": true,
+        "error": "",
+        "declaration": "plugin",
+        "reviewed": true,
+        "commands": [
+          "bili"
+        ],
+        "tools": [
+          {
+            "name": "get_user_dynamics",
+            "tool_state": "ok",
+            "capability": "video.dynamics",
+            "source": "plugin",
+            "auto": false,
+            "routable": true,
+            "enabled": true,
+            "available": false,
+            "failures": 2,
+            "backoff_seconds": 118
+          },
+          {
+            "name": "bili_hot",
+            "tool_state": "ok",
+            "capability": "tool.bili_hot",
+            "source": "auto",
+            "auto": true,
+            "routable": false,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0
+          },
+          {
+            "name": "bili_video_info",
+            "tool_state": "ok",
+            "capability": "tool.bili_video_info",
+            "source": "auto",
+            "auto": true,
+            "routable": false,
+            "enabled": true,
+            "available": true,
+            "failures": 0,
+            "backoff_seconds": 0
+          }
+        ],
+        "routable_tools": 1,
+        "unrouted_tools": 2
+      },
+      {
+        "dir": "astrbot_plugin_helper",
+        "name": "帮助",
+        "version": "0.9.0",
+        "author": "stella",
+        "loaded": true,
+        "activated": false,
+        "error": "",
+        "declaration": "draft",
+        "reviewed": null,
+        "commands": [
+          "help"
+        ],
+        "tools": [],
+        "routable_tools": 0,
+        "unrouted_tools": 0
+      },
+      {
+        "dir": "astrbot_plugin_broken",
+        "name": "astrbot_plugin_broken",
+        "version": "",
+        "author": "",
+        "loaded": false,
+        "activated": false,
+        "error": "ModuleNotFoundError: No module named 'aiocqhttp'",
+        "declaration": "none",
+        "reviewed": null,
+        "commands": [],
+        "tools": [],
+        "routable_tools": 0,
+        "unrouted_tools": 0
+      }
+    ],
+    "wake_prefix": "/",
+    "archives": [
+      "astrbot_plugin_weather.zip"
+    ]
+  }
 }

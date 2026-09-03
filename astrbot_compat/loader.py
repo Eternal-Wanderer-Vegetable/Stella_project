@@ -14,6 +14,7 @@ import importlib.machinery
 import importlib.util
 import keyword
 import logging
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +50,30 @@ _loaded_dirs: set[str] = set()
 _failed: dict[str, str] = {}
 # 归一化后的包名 -> 提供它的插件目录，用来发现「两个目录归一化后同名」
 _alias_dirs: dict[str, Path] = {}
+# 被热重载摘下来、但新代码没装回去的插件：目录名 -> 插件目录。
+# 存在的理由是一次**必然会发生**的操作序列：改代码 → 重载 → 新代码有语法错 → 装不回来。
+# 那之后插件已经不在 star_registry 里了，只按「已加载插件」找的话，用户改完错字反而
+# 没法再重载——只能重启，而重启正是热重载要省掉的那件事。
+_detached: dict[str, Path] = {}
+
+# 热重载**清不掉**的东西。必须出现在重载回复里而不只是文档里：用户看到「重载成功」
+# 之后会假定进程状态与重启等价，而这几类残留恰好都不报错，只表现为「改了代码、
+# 重载了、旧行为还在」。定位是调试便利，不等于重启。
+HOT_RELOAD_CAVEAT = (
+    "重载清不掉：裸 asyncio.create_task 起的任务（要走 context.register_task）、"
+    "插件起的线程、注册的全局钩子、monkeypatch、第三方库的模块级状态、"
+    "已被别处持有的旧实例引用。怀疑状态不干净就重启。"
+)
+
+# 群内触发热重载的说法。放在这里而不是 ai_gateway：触发词与它触发的东西写在一处，
+# 而且 ai_gateway 的另外两个同优先级 handler（toggle / capability）要拿它做机械互斥。
+RELOAD_KEYWORDS = ("重载插件", "重新加载插件", "重载一下插件")
+# 插件名的边界字符：空白与常见标点。中文没有词边界，用户会顺手写「重载插件 foo，谢谢」，
+# 只按空白切的话插件名会变成「foo，谢谢」——然后报「找不到插件」，而人看不出差在哪。
+_RELOAD_SEPARATORS = frozenset(" \t\r\n　,，。．.、;；:：!！?？~～()（）[]【】\"'“”‘’")
+# 重载后重算原型向量的后台任务。必须留引用：只有局部变量的话 task 可能在跑完前
+# 被 GC 掉（RUF006）。
+_WARMUP_TASKS: set[asyncio.Task] = set()
 
 
 def _compat_version() -> str:
@@ -645,3 +670,425 @@ async def terminate_plugins() -> None:
 
 def get_failed_plugins() -> dict[str, str]:
     return dict(_failed)
+
+
+# ---------------------------------------------------------------------------
+# 热重载（调试用，默认关闭）
+#
+# 定位是**调试便利，不等于重启**。它能收回 handler、工具、能力声明与 sys.modules
+# 里的模块；收不回的那几类见 HOT_RELOAD_CAVEAT，且必须一起说给用户听。
+# ---------------------------------------------------------------------------
+
+
+def parse_reload_command(text: str) -> str | None:
+    """把「@Stella 重载插件 astrbot_plugin_x」解析成插件名；不是重载命令返回 None。
+
+    与 ``capability.inventory.is_query_text`` 同一个用意：三个 handler
+    （toggle / capability / reload）在 ai_gateway 里同优先级且都 ``block=True``，
+    NoneBot 会把它们一起跑，所以互斥必须是**机械的**——由一个函数说了算，而不是
+    指望三张词表刚好不重叠。判据放在这里，ai_gateway 启动期再拿它跑一遍自检。
+    """
+    stripped = (text or "").strip()
+    if not stripped:
+        return None
+    for phrase in RELOAD_KEYWORDS:
+        index = stripped.find(phrase)
+        if index < 0:
+            continue
+        rest = stripped[index + len(phrase) :]
+        # 先吃掉名字前的分隔符，再一路读到下一个分隔符为止。
+        # 「重载插件 foo 顺便安静一下」只取 foo，剩下的话不该被当成插件名的一部分。
+        start = 0
+        while start < len(rest) and rest[start] in _RELOAD_SEPARATORS:
+            start += 1
+        end = start
+        while end < len(rest) and rest[end] not in _RELOAD_SEPARATORS:
+            end += 1
+        name = rest[start:end]
+        if name:
+            return name
+    return None
+
+
+def hot_reload_enabled() -> bool:
+    """热重载总开关。读不到配置时按**关闭**处理（宁关勿开）。"""
+    try:
+        from config.settings import ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED
+
+        return bool(ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED)
+    except Exception:
+        return False
+
+
+def find_loaded_plugin(name: str) -> StarMetadata | None:
+    """按目录名找已加载插件；找不到再按插件显示名找一次。
+
+    两条都认是因为触发面是**人在群里打字**：用户看到的是 `boot_debug.log` 里的
+    目录名，也可能是「你能做什么」里列出的插件名，逼他分清这两者没有意义。
+    目录名优先——它唯一，显示名不保证。
+    """
+    target = (name or "").strip()
+    if not target:
+        return None
+    for md in list(star_registry):
+        if md.root_dir_name == target:
+            return md
+    for md in list(star_registry):
+        if md.name == target:
+            return md
+    return None
+
+
+def _plugin_package(md: StarMetadata) -> str:
+    """插件包路径：``data.plugins.foo.main`` → ``data.plugins.foo``。"""
+    return md.module_path.rpartition(".")[0]
+
+
+def plugin_handlers(md: StarMetadata) -> list:
+    """这个插件登记的全部 handler，**含定义在子模块里的**。
+
+    只按 ``md.module_path`` 精确匹配是不够的：handler 完全可以定义在插件包的子模块
+    （`data.plugins.foo.commands`）里，`base.py::_resolve_plugin_dir_name` 正为此做了
+    前缀匹配。漏掉它们的后果是重载后旧 handler 还挂在注册表上，同一条指令被响应两次。
+
+    公开而不是私有：``capability.inventory`` 要按插件分组列出指令与工具，而
+    「哪些 handler 属于这个插件」的判据只能有一处，两处各写一遍必然漂移。
+    """
+    pkg = _plugin_package(md)
+    prefix = f"{pkg}." if pkg else ""
+    return [
+        h
+        for h in list(star_handlers_registry)
+        if h.handler_module_path == md.module_path
+        or (prefix and h.handler_module_path.startswith(prefix))
+    ]
+
+
+def tool_names_of(handlers: list) -> list[str]:
+    """这批 handler 里注册的函数工具名。
+
+    取名规则照 ``filters._register_llm_tool``：``@llm_tool("别名")`` 会把别名写进
+    ``extras_configs['tool_name']``，没写别名时工具名就是函数名。工具表本身不记
+    「谁注册了我」，所以「这个工具属于哪个插件」只能从 handler 侧反推——热重载靠它
+    摘工具，插件清单靠它分组，两处共用这一份。
+    """
+    names: list[str] = []
+    for h in handlers:
+        if h.event_type != EventType.OnCallingFuncToolEvent:
+            continue
+        name = str(h.extras_configs.get("tool_name") or h.handler_name or "")
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _release_capabilities(tool_names: list[str]) -> int:
+    """摘掉这些工具所属的能力并释放归属，返回摘了几条能力。
+
+    **必须同时清 ``_claimed_tools``**（``registry.unregister`` 已经这么做了，这里对
+    没有能力却仍被认领的工具再补一刀）：归属表不清的话，工具会永远被一个已不存在的
+    能力认领着，而 ``_claim`` 是先到先得，于是重载后插件重新注册的声明**抢不到自己的
+    工具**——不报错，只表现为「重载完就路由不到了」。
+
+    能力层的重建交给随后的 ``bootstrap()``：用户层/出厂层的声明可能把本插件的工具和
+    别的工具编在同一条能力里，那条能力整体被摘掉之后要靠三层重跑才补得回来。
+    """
+    if not tool_names:
+        return 0
+    try:
+        from capability.registry import registry as capability_registry
+    except Exception as e:  # pragma: no cover - capability 层不可用时降级
+        logger.warning(f"[astrbot_compat] 能力注册表不可用，跳过能力摘除: {e}")
+        return 0
+
+    removed = 0
+    for name in tool_names:
+        owner = capability_registry.claimed_by(name)
+        if owner and capability_registry.unregister(owner):
+            removed += 1
+        capability_registry.release_tool(name)
+    return removed
+
+
+def _purge_modules(pkg: str) -> int:
+    """把插件包及其全部子模块从 ``sys.modules`` 里摘掉，返回摘了几个。
+
+    不摘的话 ``import`` 直接命中缓存，重载等于什么都没做——这是热重载最容易「看起来
+    成功了其实没生效」的一步。
+    """
+    if not pkg:
+        return 0
+    doomed = [m for m in list(sys.modules) if m == pkg or m.startswith(f"{pkg}.")]
+    for m in doomed:
+        sys.modules.pop(m, None)
+    return len(doomed)
+
+
+def _purge_bytecode_cache(plugin_dir: Path) -> int:
+    """删掉插件目录下的 ``__pycache__``，返回删了几个目录。
+
+    不删的话热重载有一个**静默失效**的窗口：``.pyc`` 的有效性只按源文件的
+    「mtime 整秒 + 字节数」判定，所以「同一秒内改了一个字符」这种编辑
+    （调试时改常量、改开关，恰恰最常见）会命中旧字节码——重载报成功，跑的还是旧代码。
+    这正是热重载最难自证的一类问题，为一次几毫秒的目录删除不值得留着。
+
+    删不掉只记 debug：那时最坏也就是退回上面那个窗口，不该让重载失败。
+    """
+    removed = 0
+    try:
+        caches = [p for p in plugin_dir.rglob("__pycache__") if p.is_dir()]
+    except OSError:
+        return 0
+    for cache in caches:
+        try:
+            shutil.rmtree(cache)
+        except OSError as e:
+            logger.debug(f"[astrbot_compat] 清理 {cache} 失败（跳过）: {e}")
+        else:
+            removed += 1
+    return removed
+
+
+def _detach_plugin(md: StarMetadata, plugin_dir: Path) -> dict[str, int]:
+    """把一个插件从各处注册表上完整摘下来。返回各项计数（供日志与回复）。
+
+    顺序有讲究：先摘 handler（工具名要从它们反推），再摘工具与能力，最后摘模块与
+    元数据。反过来的话工具名就无从取得了。
+    """
+    handlers = plugin_handlers(md)
+    tool_names = tool_names_of(handlers)
+
+    for h in handlers:
+        with contextlib.suppress(Exception):
+            star_handlers_registry.remove(h)
+
+    with contextlib.suppress(Exception):
+        from .llm.tool import llm_tools
+
+        for name in tool_names:
+            llm_tools.remove_tool(name)
+
+    capabilities = _release_capabilities(tool_names)
+
+    pkg = _plugin_package(md)
+    modules = _purge_modules(pkg)
+    caches = _purge_bytecode_cache(plugin_dir)
+
+    for path, meta in list(star_map.items()):
+        if meta is md or path == md.module_path or (pkg and path.startswith(f"{pkg}.")):
+            star_map.pop(path, None)
+    if md in star_registry:
+        star_registry.remove(md)
+
+    _loaded_dirs.discard(md.root_dir_name)
+    _failed.pop(md.root_dir_name, None)
+    if md.root_dir_name:
+        # 记住「它原本在哪」，好让新代码装不回来时还能按目录名再试一次（见 _detached）
+        _detached[md.root_dir_name] = plugin_dir
+    for alias, owner_dir in list(_alias_dirs.items()):
+        with contextlib.suppress(OSError):
+            if owner_dir == plugin_dir or owner_dir.resolve() == plugin_dir.resolve():
+                _alias_dirs.pop(alias, None)
+
+    return {
+        "handlers": len(handlers),
+        "tools": len(tool_names),
+        "capabilities": capabilities,
+        "modules": modules,
+        "pycache": caches,
+    }
+
+
+def _plugin_dir_of(md: StarMetadata) -> Path | None:
+    """插件在磁盘上的目录。由模块 ``__file__`` 反推，拼路径只作兜底。
+
+    反推而不是拼 ``ASTRBOT_PLUGINS_DIR / root_dir_name``：目录名不合法或插件目录被
+    配置到项目外时插件是按文件路径挂载的，拼出来的路径不一定对（而这一步错了会
+    重载出一个**别的**插件）。
+    """
+    main_file = getattr(md.module, "__file__", None)
+    if main_file:
+        with contextlib.suppress(OSError):
+            return Path(main_file).resolve().parent
+    if md.root_dir_name:
+        candidate = _plugins_dir() / md.root_dir_name
+        with contextlib.suppress(OSError):
+            if candidate.is_dir():
+                return candidate
+    return None
+
+
+async def _terminate_one(md: StarMetadata) -> None:
+    """跑插件的 terminate（5s 超时），随后取消它登记过的后台任务。
+
+    异常与超时都只告警不中断：**卸载必须继续走完**。半途停下会留下一个既没摘干净、
+    也没重新装上的状态——比彻底不重载更糟，因为那时 handler 已经摘了一半。
+    """
+    if md.star_cls is not None:
+        try:
+            await asyncio.wait_for(md.star_cls.terminate(), timeout=5.0)
+        # 必须写 asyncio.TimeoutError：Python 3.10 下它与内置 TimeoutError 是两个
+        # 不相干的类（3.11 起才合并），写内置的会在 3.10 上漏接。
+        except asyncio.TimeoutError:
+            logger.warning(f"[astrbot_compat] 插件 {md.plugin_id} terminate 超时，继续卸载")
+        except Exception as e:
+            logger.warning(f"[astrbot_compat] 插件 {md.plugin_id} terminate 异常，继续卸载: {e}")
+        else:
+            with contextlib.suppress(Exception):
+                from .pipeline import emit_hook
+
+                await emit_hook(EventType.OnPluginUnloadedEvent, md)
+
+    with contextlib.suppress(Exception):
+        from .context import get_context
+
+        pkg = _plugin_package(md)
+        cancelled = get_context().cancel_tasks(pkg)
+        if cancelled:
+            logger.info(f"[astrbot_compat] 插件 {md.root_dir_name} 已取消 {cancelled} 个登记任务")
+
+
+def _rebuild_capabilities() -> dict[str, int]:
+    """重跑三层声明 + 自动派生，并让 Router 的原型缓存跟着失效。
+
+    走 ``bootstrap()`` 整条重跑而不是只补这一个插件的那层：能力是**跨插件**的（一条
+    用户声明完全可以把两个插件的工具编在一起），只补一层补不回被整条摘掉的那些。
+    ``register`` 是合并语义、``skip_claimed`` 只跳已被认领的，所以重跑是幂等的。
+
+    ``registry.version`` 在这个过程里必然自增，``router/semantic`` 的原型缓存据此
+    自动失效（已有机制），随后的 ``warmup()`` 只是把重算挪到后台。
+    """
+    from capability.adapters.astrbot import bootstrap
+
+    return bootstrap()
+
+
+def _schedule_warmup() -> None:
+    """后台重算 Router 原型向量。失败只是首条消息多等一会儿，绝不影响重载结论。"""
+    try:
+        from config.settings import CAPABILITY_ROUTER_ENABLED, ROUTER_SEMANTIC_ENABLED
+
+        if not (CAPABILITY_ROUTER_ENABLED and ROUTER_SEMANTIC_ENABLED):
+            return
+        from capability.router.semantic import warmup
+
+        task = asyncio.ensure_future(warmup())
+        # 必须留引用：只有局部变量的话 task 可能在跑完前被 GC 掉（RUF006）
+        _WARMUP_TASKS.add(task)
+        task.add_done_callback(_WARMUP_TASKS.discard)
+    except Exception as e:
+        logger.debug(f"[astrbot_compat] 重载后原型预热未启动（跳过）: {e}")
+
+
+async def reload_plugin(dir_name: str) -> StarMetadata | None:
+    """重新加载一个插件。失败返回 ``None``，原因进 ``get_failed_plugins()``。
+
+    步骤：``terminate`` → 摘 handler / 工具 / 能力 / 模块 / 字节码 → 重新 ``load_plugin``
+    + ``initialize`` → 重跑能力装配 + 后台预热。
+
+    也接受**上一次重载没装回来**的插件（新代码有语法错时会落到这个状态）：那时前半段
+    已经没什么可摘的，直接从加载开始。见 ``_detached``。
+
+    **这不等于重启。** 清不掉的东西见 ``HOT_RELOAD_CAVEAT``，调用方有义务把那段话
+    转达给触发重载的人。受 ``ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED`` 控制（默认关闭）：
+    它会执行插件代码的重新 import，比只读查询大一档，不该在没人明确打开时可用。
+    """
+    if not hot_reload_enabled():
+        logger.warning(
+            "[astrbot_compat] 热重载未启用（ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED=false），已拒绝",
+        )
+        return None
+
+    md = find_loaded_plugin(dir_name)
+    if md is not None:
+        key = md.root_dir_name or dir_name
+        plugin_dir = _plugin_dir_of(md)
+    else:
+        key = (dir_name or "").strip()
+        plugin_dir = _detached.get(key)
+        if plugin_dir is None:
+            logger.warning(f"[astrbot_compat] 找不到已加载的插件 {dir_name!r}，无法重载")
+            return None
+        logger.info(f"[astrbot_compat] 插件 {key} 上次没装回来，这次从加载开始")
+
+    if plugin_dir is None or not plugin_dir.is_dir():
+        _failed[key] = f"插件目录不存在或不可读: {plugin_dir}"
+        logger.warning(f"[astrbot_compat] 插件 {key} 的目录不可用，无法重载: {plugin_dir}")
+        return None
+
+    logger.info(f"[astrbot_compat] 开始重载插件 {key}（{plugin_dir}）")
+    if md is not None:
+        await _terminate_one(md)
+        detached = _detach_plugin(md, plugin_dir)
+        logger.info(f"[astrbot_compat] 插件 {key} 已卸载: {detached}")
+    else:
+        # 半路重来：模块与字节码上次已经摘过，但改完源码后字节码可能又被写回来了。
+        # 包名走 _module_package 而不是拼目录名：目录名不合法时插件是按文件路径挂载的
+        # （GitHub ZIP 的 -master 后缀就是），拼出来的名字对不上。
+        _purge_modules(_module_package(plugin_dir)[0])
+        _purge_bytecode_cache(plugin_dir)
+
+    # 目录清单可能在本进程启动之后变过（改文件、加子模块），不清缓存会 import 到旧的
+    importlib.invalidate_caches()
+    try:
+        fresh = load_plugin(plugin_dir)
+    except Exception as e:
+        _failed[key] = repr(e)
+        logger.exception(f"[astrbot_compat] 插件 {key} 重载时加载失败: {e}")
+        return None
+    if fresh is None:
+        # load_plugin 已经把原因写进 _failed（import 失败 / 没有 Star 子类 / 实例化失败）
+        _failed.setdefault(key, "重新加载失败，原因见启动日志")
+        logger.warning(f"[astrbot_compat] 插件 {key} 重载失败: {_failed.get(key)}")
+        return None
+
+    try:
+        if fresh.star_cls is not None:
+            await fresh.star_cls.initialize()
+    except Exception as e:
+        # initialize 失败的插件在上游是「标记为未激活」，不是「回滚到旧版本」——
+        # 旧模块已经从 sys.modules 里摘掉了，也没有可回滚的东西。照 initialize_plugins
+        # 的处理：标记失败并让它不参与分发，用户改完代码可以再重载一次。
+        fresh.activated = False
+        _failed[key] = repr(e)
+        logger.exception(f"[astrbot_compat] 插件 {key} 重载后 initialize 失败: {e}")
+        return None
+
+    stats = _rebuild_capabilities()
+    _schedule_warmup()
+    # 装回来了，「上次没装回来」的记录就该销掉
+    _detached.pop(key, None)
+    if fresh.root_dir_name:
+        _detached.pop(fresh.root_dir_name, None)
+    logger.info(f"[astrbot_compat] 插件 {key} 重载完成，能力装配: {stats}")
+    return fresh
+
+
+def plugin_source_stamp(md: StarMetadata) -> float:
+    """插件目录里源码与声明的最新 mtime。读不到时返回 0。
+
+    只看 ``*.py`` 与 ``capability.toml``：这两类改了才需要重载，而插件的数据目录、
+    渲染缓存、日志会一直在变，把它们算进来等于每轮都重载一次。
+    """
+    plugin_dir = _plugin_dir_of(md)
+    if plugin_dir is None:
+        return 0.0
+    newest = 0.0
+    try:
+        for path in plugin_dir.rglob("*"):
+            if path.name != "capability.toml" and path.suffix != ".py":
+                continue
+            with contextlib.suppress(OSError):
+                newest = max(newest, path.stat().st_mtime)
+    except OSError:
+        return 0.0
+    return newest
+
+
+def plugin_source_stamps() -> dict[str, float]:
+    """全部已加载插件的源码 mtime 快照，供 watch 模式比对。"""
+    return {
+        md.root_dir_name: plugin_source_stamp(md)
+        for md in list(star_registry)
+        if md.root_dir_name
+    }

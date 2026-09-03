@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stella</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>插件</h1>
+      <span class="ver">v2.6.0</span>
+      <nav class="top-nav">
+        <a class="nav-secondary" href="./run.html">运行状态</a>
+        <a class="nav-secondary" href="./usage.html">用量</a>
+        <a class="nav-secondary" href="./plugins.html">插件</a>
+        <a class="nav-secondary" href="./config.html">配置</a>
+        <a class="nav-secondary" href="./persona.html">人格设定</a>
+        <a class="nav-secondary" href="./doctor.html">环境自检</a>
+      </nav>
+    </header>
+    <p class="subtitle">装了哪些插件、每个插件能干什么。点左侧任意一项看它的指令与工具。</p>
+    <div id="root"><div class="loading">正在读取插件清单…</div></div>
+  </div>
+
+  <script type="module">
+    /*
+     * 插件页回答的是「我装的这个插件到底能干什么、为什么它从来不被调用」。
+     *
+     * 先列插件、点开才看详情，是因为这两个问题的主语是**插件**：用户装的是插件，
+     * 而注册表是按能力组织的，把两百个工具平铺出来等于让人自己按工具名反查归属。
+     *
+     * 数据源是 status.capabilities（capability.inventory.snapshot()），与群里那句
+     * 「你能做什么」、`python -m deploy capabilities` 完全一致——三处各算一遍必然漂移。
+     *
+     * payload 里刻意没有 description 与 examples 原文：状态接口有「响应体不含凭据与
+     * 聊天内容」的硬约束，自由文本是唯一可能夹带 URL 或密钥的字段。所以这页只显示
+     * 结构化信息，看描述要读本地那三层 TOML。
+     */
+    import { getStatus, getVersion, installCloseOverlay } from "./api.js";
+
+    const root = document.getElementById("root");
+    installCloseOverlay();
+    getVersion().then(v => { document.querySelector(".ver").textContent = `v${v}`; }).catch(() => {});
+
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    const SOURCE_TEXT = { config: "配置声明", plugin: "插件自带", auto: "自动派生", "": "未认领" };
+    const TOOL_STATE_TEXT = { ok: "", inactive: "已停用", missing: "工具不存在", unknown: "状态未知" };
+    const DECL_TEXT = {
+      plugin: "插件自带 capability.toml",
+      draft: "只有草稿（capability.draft.toml）",
+      none: "没有自带声明",
+    };
+
+    let caps = null;      // status.capabilities
+    let alive = false;
+    let selected = "";    // 选中插件的 dir（比下标稳：刷新后顺序可能变）
+    let lastSig = "";
+
+    // 一个插件的一句话结论。先说最该采取行动的那件事——
+    // 顺序即优先级：装不上 > 被停用 > 有工具不参与路由 > 正常。
+    function verdict(p) {
+      if (!p.loaded) return { cls: "bad", text: "加载失败" };
+      if (!p.activated) return { cls: "bad", text: "已停用" };
+      if (p.unrouted_tools) return { cls: "warn", text: `${p.unrouted_tools} 个工具未声明` };
+      if (p.tools.some(t => t.tool_state === "missing" || t.tool_state === "inactive")) {
+        return { cls: "warn", text: "有工具不可用" };
+      }
+      if (p.tools.some(t => t.backoff_seconds || !t.enabled)) return { cls: "warn", text: "有工具在退避" };
+      if (!p.tools.length && !p.commands.length) return { cls: "off", text: "没有工具与指令" };
+      return { cls: "good", text: "正常" };
+    }
+
+    function toolRow(t) {
+      const state = TOOL_STATE_TEXT[t.tool_state] ?? String(t.tool_state || "");
+      const flags = [
+        state,
+        t.enabled === false ? "已关闭" : "",
+        t.backoff_seconds ? `退避中 ${t.backoff_seconds}s` : "",
+      ].filter(Boolean);
+      // 「有没有被认领」是这页的核心一列：没被任何声明认领 = 聊天里不会自动触发
+      const claim = t.capability
+        ? `<span class="cap-meta" title="认领它的能力 id">${esc(t.capability)}<span class="tool-src">（${esc(SOURCE_TEXT[t.source] ?? t.source)}）</span></span>`
+        : `<span class="cap-meta bad">未被任何声明认领</span>`;
+      return `
+        <div class="cap-item">
+          <span class="cap-dot ${t.routable ? "good" : "off"}" title="${t.routable ? "可被聊天自动触发" : "不参与语义路由"}"></span>
+          <span class="cap-id">${esc(t.name)}</span>
+          ${claim}
+          <span class="cap-tools">${flags.length ? `<span class="cap-tool bad">${esc(flags.join(" · "))}</span>` : `<span class="cap-tool">${t.routable ? "可路由" : "仅可显式调用"}</span>`}</span>
+        </div>`;
+    }
+
+    function detailHTML(p) {
+      const v = verdict(p);
+      const prefix = String(caps.wake_prefix || "/");
+      const meta = [
+        p.version ? `v${esc(p.version)}` : "",
+        p.author ? `作者 ${esc(p.author)}` : "",
+        esc(p.dir || ""),
+      ].filter(Boolean).join(" · ");
+
+      const notes = [];
+      if (!p.loaded) {
+        notes.push(`这个插件没有装上，它的指令与工具都不存在。原因：<code>${esc(p.error || "未知")}</code>
+          <div class="notice-sub">多半是缺依赖或代码报错。完整堆栈见 <code>logs/boot_debug.log</code>。</div>`);
+      } else if (!p.activated) {
+        notes.push(`插件已加载但被停用，不会响应任何消息。
+          <div class="notice-sub">通常是 <code>initialize()</code> 抛了异常，或它依赖的能力没有实现。见 <code>logs/boot_debug.log</code>。</div>`);
+      }
+      if (p.declaration === "draft") {
+        notes.push(`目录里只有 <code>capability.draft.toml</code>（草稿）——它<strong>不生效</strong>。
+          <div class="notice-sub">审阅后改名为 <code>capability.toml</code> 才会被加载。</div>`);
+      } else if (p.declaration === "plugin" && p.reviewed === false) {
+        notes.push(`自带声明标了 <code>reviewed = false</code>，因此被跳过。
+          <div class="notice-sub">核对里面的 <code>examples</code> 与工具名之后把它改成 <code>true</code>。</div>`);
+      }
+      if (p.loaded && p.unrouted_tools) {
+        notes.push(`有 ${p.unrouted_tools} 个工具没有能力声明，聊天里不会被自动触发（仍可被显式调用）。
+          <div class="notice-sub">给它写一份 <code>capability.toml</code>；<code>python -m deploy plugin-check ${esc(p.dir)}</code> 会告诉你缺哪条。</div>`);
+      }
+      const noteHTML = notes.length
+        ? notes.map(n => `<div class="notice"><span class="notice-icon">i</span><div>${n}</div></div>`).join("")
+        : "";
+
+      const cmds = p.commands.length
+        ? `<div class="link-row">${p.commands.map(c => `<div class="item"><span class="v mono">${esc(prefix)}${esc(c)}</span></div>`).join("")}</div>`
+        : `<div class="cap-list"><span class="sched-empty">这个插件没有登记指令</span></div>`;
+
+      const tools = p.tools.length
+        ? `<div class="cap-list">${p.tools.map(toolRow).join("")}</div>`
+        : `<div class="cap-list"><span class="sched-empty">这个插件没有登记 LLM 工具</span></div>`;
+
+      return `
+        <div class="plugin-detail-head">
+          <div>
+            <strong>${esc(p.name)}</strong>
+            <span class="dot-tag ${v.cls}">${esc(v.text)}</span>
+            <div class="plugin-meta">${meta}</div>
+          </div>
+        </div>
+        <div class="plugin-detail-body">
+          <div class="link-row">
+            <div class="item"><span class="k">状态</span><span class="v ${p.loaded && p.activated ? "good" : "bad"}">${p.loaded ? (p.activated ? "已加载" : "已停用") : "加载失败"}</span></div>
+            <div class="item"><span class="k">能力声明</span><span class="v ${p.declaration === "plugin" && p.reviewed !== false ? "good" : ""}">${esc(DECL_TEXT[p.declaration] ?? p.declaration)}</span></div>
+            <div class="item" title="能被聊天自动触发的工具数"><span class="k">可路由工具</span><span class="v ${p.routable_tools ? "good" : ""}">${p.routable_tools} / ${p.tools.length}</span></div>
+            <div class="item"><span class="k">指令</span><span class="v">${p.commands.length}</span></div>
+          </div>
+          ${noteHTML}
+          <h2 class="section-title">指令<span class="section-hint">前缀触发，不参与语义路由</span></h2>
+          ${cmds}
+          <h2 class="section-title">工具<span class="section-hint">绿点 = 已被能力声明认领，聊天里会自动触发</span></h2>
+          ${tools}
+        </div>`;
+    }
+
+    function render() {
+      if (!caps) {
+        root.innerHTML = alive
+          ? `<div class="notice"><span class="notice-icon">i</span><div>读不到插件清单。
+              <div class="notice-sub">可能是状态接口被关闭（<code>STELLA_STATUS_API_ENABLED=false</code>），或 Bot 仍在启动中。</div></div></div>`
+          : `<div class="notice"><span class="notice-icon">i</span><div>Bot 未运行，看不到插件清单。
+              <div class="notice-sub">「装没装上、工具进没进路由」只有进程里才知道。到「运行状态」页启动 Bot 后再回来看。</div></div></div>`;
+        return;
+      }
+
+      const plugins = caps.plugins || [];
+      const archives = (caps.archives || []).filter(Boolean);
+      const archiveNote = archives.length
+        ? `<div class="notice"><span class="notice-icon">!</span><div>插件目录里有没解压的压缩包：<code>${archives.map(esc).join("、")}</code>
+            <div class="notice-sub">压缩包不会被加载。解压成目录（目录里要有 <code>main.py</code> 与 <code>metadata.yaml</code>）后重启 Bot。</div></div></div>`
+        : "";
+      const toolsUnknownNote = caps.tools_known === false
+        ? `<div class="notice"><span class="notice-icon">i</span><div>读不到工具注册表，「工具是否存在」这一列本次不可信。</div></div>`
+        : "";
+
+      if (!plugins.length) {
+        root.innerHTML = archiveNote + toolsUnknownNote +
+          `<div class="notice"><span class="notice-icon">i</span><div>还没有装任何插件。
+            <div class="notice-sub">把插件目录放进 <code>data/plugins/</code> 后重启 Bot。写法见 <code>docs/plugin-spec.md</code>。</div></div></div>`;
+        return;
+      }
+
+      if (!plugins.some(p => p.dir === selected)) selected = plugins[0].dir;
+      const current = plugins.find(p => p.dir === selected);
+
+      root.innerHTML = archiveNote + toolsUnknownNote + `
+        <div class="plugin-browser">
+          <aside class="plugin-sidebar">
+            <div class="plugin-sidebar-title">已安装 ${plugins.length}</div>
+            ${plugins.map(p => {
+              const v = verdict(p);
+              return `<button class="plugin-item ${p.dir === selected ? "active" : ""}" data-dir="${esc(p.dir)}">
+                <span class="plugin-item-name"><span class="cap-dot ${v.cls}"></span>${esc(p.name)}</span>
+                <small>${esc(v.text)}</small>
+              </button>`;
+            }).join("")}
+          </aside>
+          <section class="plugin-main">${detailHTML(current)}</section>
+        </div>`;
+
+      root.querySelectorAll(".plugin-item").forEach(b => {
+        b.onclick = () => { selected = b.dataset.dir; lastSig = ""; render(); };
+      });
+    }
+
+    async function refresh() {
+      try {
+        const st = await getStatus();
+        alive = !!st.alive;
+        caps = st.capabilities || null;
+        // 轮询在后台跑，但用户可能正把鼠标停在某一项上：内容没变就不重建 DOM
+        const sig = JSON.stringify([alive, caps]);
+        if (sig === lastSig) return;
+        lastSig = sig;
+        render();
+      } catch (e) {
+        lastSig = "";
+        root.innerHTML = `<div class="notice notice-error"><span class="notice-icon">!</span><div>无法获取状态：<code>${esc(e)}</code><div class="notice-sub">请确认 Python 环境可用，或到「环境自检」页排查。</div></div></div>`;
+      }
+    }
+
+    refresh();
+    // 插件清单只在启动与热重载时变，5 秒一轮足够
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

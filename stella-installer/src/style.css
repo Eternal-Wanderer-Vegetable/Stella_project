@@ -672,3 +672,165 @@ pre.report {
 .usage-item .ukey { min-width: 240px; }
 .usage-item .ukind { color: var(--text-faint); }
 .usage-item .unum { color: var(--text-faint); }
+
+
+/* ── 能力清单（一行一条能力 + 它的实现工具） ──
+   与用量明细同构，只多一个左侧圆点：可路由 = 能被聊天自动触发，灰点 = 不参与路由。
+   那个圆点就是「插件装了却从来不被调用」的直接答案。 */
+.cap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 16px;
+  margin-bottom: 20px;
+  font-size: 12px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.cap-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  font-family: var(--mono);
+}
+.cap-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.cap-dot.good { background: var(--ok); }
+.cap-dot.off { background: var(--text-faint); }
+.cap-item .cap-id { min-width: 200px; }
+.cap-item .cap-meta { color: var(--text-faint); min-width: 180px; }
+.cap-item .cap-tools { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.cap-item .cap-tool { color: var(--text-faint); }
+.cap-item .cap-tool.bad { color: var(--error); }
+
+
+/* ── 小标题（用量、插件详情内部分节） ──
+   页面内的分节标题，比 h1 轻，比正文重；行尾灰字用来解释这一节的判读方式，
+   省掉一段说明文字。 */
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 18px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.section-hint { color: var(--text-faint); font-size: 12px; font-weight: 400; }
+.mono { font-family: var(--mono); }
+
+
+/* ── 插件浏览器（左列表 / 右详情） ──
+   与 .persona-editor 同构：装了什么先一眼看全，点进去才看某一个的能力细节。
+   左列每项自带一个圆点与一句结论，是为了让「哪个插件出问题了」不必逐个点开。 */
+.plugin-browser {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 520px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.plugin-sidebar {
+  border-right: 1px solid var(--border);
+  padding: 10px;
+  background: #191b20;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.plugin-sidebar-title {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 6px 8px 10px;
+}
+.plugin-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 8px;
+  text-align: left;
+}
+.plugin-item.active { background: var(--bg-hover); border-color: var(--accent); }
+.plugin-item-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* 插件名可能很长，超出就截断——左列宽度固定，换行会让每项高度不一 */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-item small { color: var(--text-faint); font-size: 11px; padding-left: 14px; }
+.plugin-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.plugin-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-detail-head strong { font-size: 15px; }
+.plugin-meta { color: var(--text-faint); font-size: 12px; font-family: var(--mono); margin-top: 3px; }
+/* 详情区里的 .link-row / .cap-list 自带外边距，这里只补两侧留白 */
+.plugin-detail-body { padding: 4px 16px 16px; }
+.plugin-detail-body .section-title:first-of-type { margin-top: 14px; }
+
+
+/* ── 结论药丸（插件一句话状态） ── */
+.dot-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  vertical-align: 2px;
+}
+.dot-tag.good { color: var(--ok); background: rgba(63, 191, 127, 0.10); }
+.dot-tag.warn { color: var(--warn); background: var(--warn-bg); }
+.dot-tag.bad  { color: var(--error); background: var(--error-bg); }
+.dot-tag.off  { color: var(--text-faint); background: var(--bg-hover); }
+
+
+/* 能力圆点补齐 warn / bad：插件详情把「声明齐全但正在退避」与「装不上」
+   分成了两种颜色，只有 good/off 两色时它们会一起塌成灰点。 */
+.cap-dot.warn { background: var(--warn); }
+.cap-dot.bad { background: var(--error); }
+.cap-item .cap-meta.bad { color: var(--error); }
+.cap-item .tool-src { color: var(--text-faint); }
+
+
+@media (max-width: 700px) {
+  .plugin-browser { grid-template-columns: 1fr; }
+  .plugin-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    overflow-x: auto;
+    max-height: none;
+    gap: 4px;
+  }
+  .plugin-sidebar-title { display: none; }
+  .plugin-item { min-width: 150px; }
+  .plugin-main { max-height: none; }
+}

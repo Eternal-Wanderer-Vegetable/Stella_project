@@ -261,7 +261,7 @@ The GUI warns when the two keys are identical; the `registry` shared-key check r
 
 ### Cost Control: Usage Accounting and Daily Budget
 
-Online endpoints charge by token, and the memory domain (consolidation / compression / extraction) consists of frequent background tasks. **Without accounting, you do not know where money goes; without a budget, there is no ceiling.** Usage accumulates in the `llm_usage_daily` table by date × role × endpoint slot × model and is visible on the GUI `Runtime Status` page and in `python -m deploy status`.
+Online endpoints charge by token, and the memory domain (consolidation / compression / extraction) consists of frequent background tasks. **Without accounting, you do not know where money goes; without a budget, there is no ceiling.** Usage accumulates in the `llm_usage_daily` table by date × role × endpoint slot × model and is visible on the GUI `Usage` page and in `python -m deploy status`.
 
 | Configuration | Default | Description |
 |---|---|---|
@@ -886,7 +886,21 @@ On by default: undeclared plugin tools not participating in routing is **deliber
 
 **Permission split**: regular members see the routable capability list and a *count* of plugin tools without a declaration; the source tier, provider health and the **specific names** of undeclared tools are troubleshooting information and are shown to admins only (`PROACTIVE_TOGGLE_ADMINS`, or the group owner/admins).
 
-The same data has two other exits: `python -m deploy capabilities [--json]` (a table, including a "why not routable" column) and the `capabilities` block of `GET /stella/status`. **The response body carries structured fields only**, no `description` or `examples` free text — see [Local Status API](#local-status-api) for that constraint. For field meanings and how the three exits relate, see [Plugin Specification §14](plugin-spec.en.md#14-capability-query).
+The same data has two other exits: `python -m deploy capabilities [--json]` (a table, including a "why not routable" column) and the `capabilities` block of `GET /stella/status`, which is what the GUI's "Plugins" page reads (re-indexed by plugin, one plugin at a time). **The response body carries structured fields only**, no `description` or `examples` free text — see [Local Status API](#local-status-api) for that constraint. For field meanings and how the three exits relate, see [Plugin Specification §14](plugin-spec.en.md#14-capability-query).
+
+### Plugin Hot Reload (for debugging)
+
+| Variable | Default | Description |
+|---|---|---|
+| `ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED` | `false` | Whether a single plugin can be reloaded without restarting. Once on, an in-group admin triggers it with "@Stella 重载插件 &lt;name&gt;" |
+| `ASTRBOT_PLUGIN_HOT_RELOAD_WATCH` | `false` | Watch the mtime of `*.py` and `capability.toml` inside plugin directories and reload on save. Requires the main switch to be on as well |
+| `ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL` | `5.0` | Poll interval for the above, in seconds |
+
+Off by default because a reload **re-imports and executes plugin code**, one notch heavier than a read-only query. Permissions follow the proactive-speech toggle (`PROACTIVE_TOGGLE_ADMINS`, or the group owner/admins); a non-admin sending this gets no reaction at all. An in-group command rather than a POST on the status API: that endpoint is read-only, and adding a write entry point that can re-import arbitrary plugin code is a notch bigger security step than a read-only endpoint.
+
+**It is not a restart.** It reclaims handlers, function tools, capability declarations, the plugin package in `sys.modules` and the `__pycache__` directories on disk; it does not reclaim tasks started with a bare `asyncio.create_task()` (plugins must use `context.register_task`), threads a plugin started, global hooks it registered, monkeypatches, module-level state in third-party libraries, or references to the old instance already held elsewhere. That paragraph is also appended to every successful reload reply. If you suspect the state is unclean, restart. Full description in [Plugin Specification §13](plugin-spec.en.md#13-debugging).
+
+`..._WATCH` is off separately: it is the most convenient way to debug, but "automatic" is dangerous in production — one stray save re-imports plugin code in a live group.
 
 ## OneBot Connection
 

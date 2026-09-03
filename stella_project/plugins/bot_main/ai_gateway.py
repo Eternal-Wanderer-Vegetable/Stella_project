@@ -12,6 +12,9 @@
    - capability_handler（能力查询，priority 1）：@ 机器人问「你能做什么」时直接读能力
      注册表列出清单，不经模型。与 toggle_handler 同优先级且都 block=True，两者的 rule
      必须机械互斥——见 _assert_capability_rule_disjoint()；
+   - reload_handler（插件热重载，priority 1）：管理员发「@Stella 重载插件 <名>」时
+     重载单个插件。默认关闭（ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED），与上面两个 handler
+     同样要机械互斥——插件名是任意字符串，见 _assert_reload_rule_disjoint()；
    - plugin_handler（AstrBot 插件，priority 2）：对所有消息跑一遍插件过滤器，
      是否唤醒由过滤器自己决定（指令受 "/" 前缀与 @ 约束，正则/全量监听不受约束）；
    - chat_handler（@ 触发，priority 3）：当机器人被 @ 且发出非空消息时才会走完整推理；
@@ -55,6 +58,9 @@ from capability.hooks import register as register_capability_hook
 from config import (
     ALLOWED_GROUPS,
     ASTRBOT_COMPAT_ALLOW_PRIVATE,
+    ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED,
+    ASTRBOT_PLUGIN_HOT_RELOAD_WATCH,
+    ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL,
     CAPABILITY_QUERY_ENABLED,
     CONSOLIDATION_LOCAL_BATCH_SIZE,
     CONSOLIDATION_MAX_ROUNDS_PER_RUN,
@@ -512,12 +518,22 @@ _UNMUTE_KEYWORDS = ("恢复", "醒醒", "可以说话", "开启主动发言")
 
 
 async def is_toggle_command(event: GroupMessageEvent) -> bool:
-    """触发规则：已启用群 + @ 机器人 + 文本命中开关关键词。"""
+    """触发规则：已启用群 + @ 机器人 + 文本命中开关关键词。
+
+    命中重载命令时**一律返回 False**：三个 handler 同优先级且都 ``block=True``，
+    NoneBot 会一起跑，而「@Stella 重载插件 恢复计划」这种插件名会同时命中开关词。
+    互斥判据只有一处（``parse_reload_command``），由 ``_assert_reload_rule_disjoint``
+    在启动期钉住。
+    """
     if not PROACTIVE_RUNTIME_TOGGLE_ENABLED:
         return False
     if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
         return False
     text = event.get_plaintext().strip()
+    from astrbot_compat.loader import parse_reload_command
+
+    if parse_reload_command(text):
+        return False
     return any(k in text for k in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS)
 
 
@@ -531,6 +547,7 @@ def _assert_listener_priorities() -> None:
     for name, priority in (
         ("toggle_handler", _PRIORITY_TOGGLE),
         ("capability_handler", _PRIORITY_TOGGLE),
+        ("reload_handler", _PRIORITY_TOGGLE),
         ("plugin_handler", _PRIORITY_PLUGIN),
         ("chat_handler", _PRIORITY_CHAT),
     ):
@@ -596,10 +613,15 @@ async def is_capability_query(event: GroupMessageEvent) -> bool:
         return False
     if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
         return False
+    from astrbot_compat.loader import parse_reload_command
     from capability.inventory import is_query_text
 
+    text = event.get_plaintext()
+    # 重载命令优先：插件名可以是任何字符串，包含查询句式也不奇怪
+    if parse_reload_command(text):
+        return False
     return is_query_text(
-        event.get_plaintext(),
+        text,
         toggle_keywords=_MUTE_KEYWORDS + _UNMUTE_KEYWORDS,
     )
 
@@ -697,6 +719,164 @@ async def handle_capability_query(bot: Bot, event: GroupMessageEvent):
     await capability_handler.finish(
         Message([MessageSegment.reply(event.message_id), body])
     )
+
+
+# ============================================================
+# 插件热重载（管理员命令，默认关闭）
+# ============================================================
+
+
+async def is_reload_command(event: GroupMessageEvent) -> bool:
+    """触发规则：已启用群 + @ 机器人 + 文本是「重载插件 <名>」。
+
+    权限**不在这里判**（与 ``toggle_handler`` 同一惯例）：规则只管命中，命中后由
+    handler 判权限并静默忽略无权者。放在规则里的话，非管理员发这句会掉进 chat_handler
+    交给 LLM，Stella 就会煞有介事地回一句「好的我重载了」——那比不响应糟得多。
+    """
+    if not ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED:
+        return False
+    if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+        return False
+    from astrbot_compat.loader import parse_reload_command
+
+    return parse_reload_command(event.get_plaintext()) is not None
+
+
+reload_handler = on_message(
+    rule=Rule(is_reload_command), priority=_PRIORITY_TOGGLE, block=True
+)
+
+
+def _assert_reload_rule_disjoint() -> None:
+    """启动期自检：重载命令与开关命令、能力查询三者互不误伤。
+
+    三者同为 ``priority=1`` 且 ``block=True``，NoneBot 会把同优先级的 matcher 一起跑。
+    互斥的实现方式是「另外两条规则一旦发现这是重载命令就返回 False」，所以整条链的
+    正确性归结为一个可穷举的性质：``parse_reload_command`` 对这两类输入判得准。
+
+    正向（插件名恰好是开关词或查询句式，插件名是**任意字符串**，这完全可能）：必须
+    仍被解析成重载命令，否则「重载插件 恢复」会在重载的同时把主动发言打开。
+    反向（一句纯粹的开关命令或能力查询）：绝不能被解析成重载命令，否则「安静」会被
+    reload_handler 吃掉，开关彻底失灵。
+    """
+    from astrbot_compat.loader import RELOAD_KEYWORDS, parse_reload_command
+    from capability.inventory import QUERY_KEYWORDS
+
+    names = _MUTE_KEYWORDS + _UNMUTE_KEYWORDS + QUERY_KEYWORDS
+    bad: list[str] = []
+    checked = 0
+    for phrase in RELOAD_KEYWORDS:
+        for name in names:
+            text = f"{phrase} {name}"
+            checked += 1
+            if parse_reload_command(text) != name:
+                bad.append(f"{text!r} → {parse_reload_command(text)!r}（该解析成 {name!r}）")
+    for name in names:
+        checked += 1
+        if parse_reload_command(name) is not None:
+            bad.append(f"{name!r} 被误判成重载命令（会吃掉开关/查询）")
+    if bad:
+        logger.critical(
+            f"❌ 热重载命令与开关/能力查询的触发规则不互斥（{len(bad)} 组，例：{bad[0]}）："
+            f"三者同为 priority={_PRIORITY_TOGGLE} 且 block=True，NoneBot 会一起跑，"
+            f"于是同一句话既重载插件又改群设置。"
+            f"请检查 astrbot_compat/loader.py 的 parse_reload_command。"
+        )
+        return
+    logger.debug(f"✅ 热重载命令规则与开关/能力查询互斥（已验 {checked} 组组合）")
+
+
+_assert_reload_rule_disjoint()
+
+
+@reload_handler.handle()
+async def handle_reload(bot: Bot, event: GroupMessageEvent):
+    """管理员热重载单个插件。
+
+    权限沿用 ``toggle_handler`` 那套（``PROACTIVE_TOGGLE_ADMINS`` 或群主/管理员）。
+    选群内命令而不是给状态接口开一个 POST：那个端点是**只读**的，加一条能触发任意
+    插件 re-import 的写入口是比只读端点大一档的安全步骤，为一个调试功能不值当。
+
+    回复里必须带上 ``HOT_RELOAD_CAVEAT``：看到「重载成功」的人会假定进程状态与重启
+    等价，而清不掉的那几类残留恰好都不报错。
+    """
+    from astrbot_compat.loader import (
+        HOT_RELOAD_CAVEAT,
+        get_failed_plugins,
+        parse_reload_command,
+        reload_plugin,
+    )
+
+    role = getattr(getattr(event, "sender", None), "role", "") or ""
+    if event.user_id not in PROACTIVE_TOGGLE_ADMINS and role not in ("owner", "admin"):
+        logger.info(f"[HotReload] 群 {event.group_id} 用户 {event.user_id} 无权重载插件")
+        return
+
+    name = parse_reload_command(event.get_plaintext()) or ""
+    logger.info(f"[HotReload] 群 {event.group_id} 用户 {event.user_id} 请求重载插件 {name!r}")
+    try:
+        md = await reload_plugin(name)
+    except Exception as e:
+        logger.exception(f"[HotReload] 重载 {name!r} 异常: {e}")
+        md = None
+        reason = repr(e)
+    else:
+        reason = get_failed_plugins().get(name, "")
+
+    if md is None:
+        detail = f"：{reason}" if reason else "。看 logs/boot_debug.log 里的失败原因"
+        reply = f"重载 {name} 失败{detail}"
+    else:
+        reply = (
+            f"已重载 {md.root_dir_name}（{md.name} v{md.version}）。{HOT_RELOAD_CAVEAT}"
+        )
+
+    await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
+    await reload_handler.finish(
+        Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
+    )
+
+
+async def _watch_plugin_sources() -> None:
+    """监视已加载插件的源码 mtime，变了就重载一遍。
+
+    只在 ``ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED`` 与 ``..._WATCH`` **都**为真时挂上。
+    首轮只建立基线不重载：进程刚起来时磁盘上的 mtime 必然「比上一次记录的新」，
+    不建基线的话每次启动都会白重载一遍全部插件。
+    """
+    from astrbot_compat.loader import plugin_source_stamps, reload_plugin
+
+    stamps = plugin_source_stamps()
+    logger.info(f"👀 [HotReload] 已开始监视 {len(stamps)} 个插件目录的改动（调试模式）")
+    while True:
+        try:
+            await asyncio.sleep(ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL)
+            current = plugin_source_stamps()
+            for dir_name, stamp in current.items():
+                previous = stamps.get(dir_name)
+                if previous is None or stamp <= previous:
+                    continue
+                logger.info(f"👀 [HotReload] 检测到 {dir_name} 源码变动，自动重载")
+                await reload_plugin(dir_name)
+            # 重载会换掉 md，重新取一次快照而不是把 current 直接当基线：
+            # 重载本身可能改动目录（生成 __pycache__ 之外的东西），基线要认重载后的状态
+            stamps = plugin_source_stamps()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            # watcher 自己挂了而静默，比不监视更糟：那时用户以为改完存盘就生效了
+            logger.exception("[HotReload] 监视循环异常，继续监视")
+
+
+_hot_reload_watcher: asyncio.Task | None = None
+
+if ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED and ASTRBOT_PLUGIN_HOT_RELOAD_WATCH:
+
+    @get_driver().on_startup
+    async def _start_hot_reload_watcher() -> None:
+        # 插件与能力装配都挂在 on_startup 上，这里排在它们之后拿到的才是完整清单
+        global _hot_reload_watcher
+        _hot_reload_watcher = asyncio.create_task(_watch_plugin_sources())
 
 
 # ============================================================
@@ -1279,6 +1459,8 @@ async def _graceful_shutdown() -> None:
     """
     if _stop_watcher_task is not None and _stop_watcher_task is not asyncio.current_task():
         _stop_watcher_task.cancel()
+    if _hot_reload_watcher is not None:
+        _hot_reload_watcher.cancel()
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions
 

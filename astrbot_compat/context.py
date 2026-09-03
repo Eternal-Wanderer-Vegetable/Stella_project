@@ -7,12 +7,38 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from typing import Any
 
 from .exceptions import StellaCompatNotSupported, StellaCompatUnsupportedAttribute
 
 _MODEL_DEPENDENT_PLUGINS: set[str] = set()
 logger = logging.getLogger("astrbot_compat.context")
+
+
+def _caller_module(depth: int) -> str:
+    """登记方所在的模块路径（`data.plugins.foo.main` 这种）。取不到时返回空串。
+
+    热重载要能只取消**被重载的那个插件**起的后台任务，所以任务必须带归属；而
+    ``register_task(task, desc)`` 的签名是上游 API，不能加参数让插件自己报家门
+    （那样每个插件都得改代码，超集承诺就没了）。所以从调用栈上取——插件调用
+    ``self.context.register_task(...)`` 时，上一帧的 ``__name__`` 就是插件模块。
+
+    取不到只意味着这个任务归属未知：它照常被全量 ``cancel_tasks()`` 收走，
+    只是不会被单插件重载收走。这是安全的降级方向（宁可漏取消也不错杀别人的任务）。
+    """
+    try:
+        frame = sys._getframe(depth)
+    except (ValueError, AttributeError):  # pragma: no cover - 非 CPython 或栈太浅
+        return ""
+    return str(frame.f_globals.get("__name__") or "")
+
+
+def _owned_by(module: str, owner: str) -> bool:
+    """``module`` 是否属于 ``owner`` 这个包。空 owner 表示「全部」。"""
+    if not owner:
+        return True
+    return module == owner or module.startswith(f"{owner}.")
 
 
 class Context:
@@ -22,7 +48,9 @@ class Context:
         _ = (args, kwargs)
         self._config: dict = {}
         self._registered_web_apis: list = []
-        self._tasks: list[asyncio.Task] = []
+        # 任务 → 登记它的模块路径。归属标记只为热重载服务：卸载单个插件时要能只掐
+        # 掉它自己的后台任务。dict 保序，遍历顺序与登记顺序一致。
+        self._tasks: dict[asyncio.Task, str] = {}
         self._provider_manager_override = None
         self.platform_manager = None
 
@@ -132,20 +160,36 @@ class Context:
         return None
 
     def register_task(self, task: Any, desc: str = "") -> None:
-        """登记一个后台任务，进程退出时统一取消。"""
+        """登记一个后台任务，进程退出时统一取消。
+
+        插件**必须**走这里而不是裸 ``asyncio.create_task(...)``：只有登记过的任务在
+        插件卸载与热重载时收得回，裸 task 会残留并继续跑（见 docs/plugin-spec.md §4，
+        ``deploy plugin-check`` 第 ⑮ 项会扫这个写法）。
+        """
         try:
             t = asyncio.ensure_future(task)
         except (TypeError, RuntimeError) as e:
             logger.warning(f"[astrbot_compat] register_task({desc}) 失败: {e}")
             return
-        self._tasks.append(t)
-        t.add_done_callback(lambda fut: self._tasks.remove(fut) if fut in self._tasks else None)
+        # depth=1 是本函数自己的帧，depth=2 才是调用方（插件）
+        self._tasks[t] = _caller_module(2)
+        t.add_done_callback(lambda fut: self._tasks.pop(fut, None))
 
-    def cancel_tasks(self) -> None:
-        for t in list(self._tasks):
+    def cancel_tasks(self, owner: str = "") -> int:
+        """取消已登记的后台任务，返回取消了几个。
+
+        ``owner`` 为插件包路径（``data.plugins.foo``）时只取消该插件登记的任务，
+        供热重载使用；缺省的空串表示全部，即进程退出时的老语义。
+        """
+        cancelled = 0
+        for t, module in list(self._tasks.items()):
+            if not _owned_by(module, owner):
+                continue
             if not t.done():
                 t.cancel()
-        self._tasks.clear()
+                cancelled += 1
+            self._tasks.pop(t, None)
+        return cancelled
 
     # --- 兼容占位 ---
 
