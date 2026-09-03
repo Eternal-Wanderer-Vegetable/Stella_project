@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞 / Security vulnerability
+    url: https://github.com/Eternal-Wanderer-Vegetable/Stella_project/security
+    about: 请勿公开提交安全漏洞；请阅读安全政策并使用私密渠道。/ Do not disclose vulnerabilities publicly; read the Security Policy and use a private channel.
