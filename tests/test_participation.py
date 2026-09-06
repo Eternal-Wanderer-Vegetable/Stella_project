@@ -11,6 +11,7 @@ LM Studio 在跑，单测只测确定性的规则行为。
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -43,12 +44,17 @@ def make_manager(tmp_path: Path, **kw) -> ParticipationManager:
     return m
 
 
-async def feed(m: ParticipationManager, gid: int, uid: int, texts: list[str], start_mid: int = 1):
-    """按序喂消息，返回最后一个决策。"""
+def feed(m: ParticipationManager, gid: int, uid: int, texts: list[str], start_mid: int = 1):
+    """按序喂消息，返回最后一个决策（同步包装：本文件全部用 asyncio.run 驱动）。"""
     decision = None
     for i, t in enumerate(texts):
-        decision = await m.observe(gid, uid, t, msg_id=start_mid + i)
+        decision = asyncio.run(m.observe(gid, uid, t, msg_id=start_mid + i))
     return decision
+
+
+def observe(m: ParticipationManager, gid: int, uid: int, text: str, **kw):
+    """m.observe 的同步包装（本文件不依赖 pytest 异步插件——CI 的 pytest 未装）。"""
+    return asyncio.run(m.observe(gid, uid, text, **kw))
 
 
 # ── 打分表（补充要求 B）──────────────────────────────────
@@ -118,7 +124,7 @@ def test_hot_reload_keeps_old_tables_on_error(tmp_path):
 # ── 场景 B：高速刷屏 → 低分/不触发（§30-B）───────────────
 
 
-async def test_high_velocity_suppresses(tmp_path):
+def test_high_velocity_suppresses(tmp_path):
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
     # 短时间灌入大量消息
@@ -127,7 +133,7 @@ async def test_high_velocity_suppresses(tmp_path):
     now = time.time()
     decision = None
     for i, t in enumerate(["哈哈", "草", "6", "哈哈", "对", "确实", "嗯", "乐"]):
-        decision = await m.observe(gid, uid, t, msg_id=i + 1, now=now + i * 0.5)
+        decision = observe(m, gid, uid, t, msg_id=i + 1, now=now + i * 0.5)
     assert decision is not None
     assert decision.breakdown.velocity_penalty >= 15  # HIGH/VERY_HIGH 档
     assert decision.level in (IGNORE, OBSERVE, CANDIDATE)
@@ -137,19 +143,19 @@ async def test_high_velocity_suppresses(tmp_path):
 # ── 场景 C：强社交钩子 → 有机会进入 CANDIDATE/ALLOW（§30-C）──
 
 
-async def test_strong_social_hook_scores_high(tmp_path):
+def test_strong_social_hook_scores_high(tmp_path):
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
     # 纯钩子（无相关性、无问句）：拿到 SocialOpportunity 分且打上钩子旗标，
     # 但单独一条钩子允许停留在 OBSERVE——宁可沉默（上游 §31）
-    d = await feed(m, gid, uid, ["你们在聊啥", "我昨天遇到一个事", "我刚刚干了一件特别离谱的事情"])
+    d = feed(m, gid, uid, ["你们在聊啥", "我昨天遇到一个事", "我刚刚干了一件特别离谱的事情"])
     assert d is not None
     assert d.breakdown.social_opportunity >= 15
     assert "strong_social_hook" in d.reason_flags
     # 钩子 + 开放问题 + 兴趣锚的组合：相关性与机会信号必须更强
     # （总分对比受速度惩罚影响，不做严格大于断言）
     m2 = make_manager(tmp_path)
-    d2 = await feed(m2, gid, uid, [
+    d2 = feed(m2, gid, uid, [
         "有人在吗",
         "有群友遇到特别离谱的报错吗",
         "你们知道这个 rust 游戏的 bug 怎么回事吗",
@@ -160,7 +166,7 @@ async def test_strong_social_hook_scores_high(tmp_path):
     assert "open_question" in d2.reason_flags
 
 
-async def test_strong_hook_direct_allows_llm_without_confirm(tmp_path):
+def test_strong_hook_direct_allows_llm_without_confirm(tmp_path):
     """强钩子直通（§19 末段）：SocialOpportunity 与总分同时达标 → 跳过二次确认。"""
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
@@ -170,7 +176,7 @@ async def test_strong_hook_direct_allows_llm_without_confirm(tmp_path):
     d = None
     # 构造 direct_invite + open_question 同时命中的高分场景：
     for i, t in enumerate(["有人在吗", "我最近在玩 rust 写的 game", "stella 你觉得怎么样"]):
-        d = await m.observe(gid, uid, t, msg_id=i + 1, now=now + i * 30)
+        d = observe(m, gid, uid, t, msg_id=i + 1, now=now + i * 30)
     assert d is not None
     # 分数不强制 ALLOW（与词表相关），但决策链路必须给出非 None 且带 mode
     assert d.mode in ("DIRECT_RELEVANCE", "SOCIAL_HOOK", "TOPIC_INTEREST")
@@ -179,11 +185,11 @@ async def test_strong_hook_direct_allows_llm_without_confirm(tmp_path):
 # ── 场景 D：感兴趣但没有插话机会 → 允许沉默（§30-D）──────
 
 
-async def test_interested_but_no_opportunity_stays_silent(tmp_path):
+def test_interested_but_no_opportunity_stays_silent(tmp_path):
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
     # 感兴趣话题（rust/游戏）但只是陈述、已被充分回应
-    d = await feed(m, gid, uid, [
+    d = feed(m, gid, uid, [
         "我最近在玩 rust 写的游戏",
         "这游戏还行",
         "确实",
@@ -197,51 +203,51 @@ async def test_interested_but_no_opportunity_stays_silent(tmp_path):
 # ── 场景 E：刚说过话 → 显著降分（§30-E）─────────────────
 
 
-async def test_recent_speech_penalty_drops_score(tmp_path):
+def test_recent_speech_penalty_drops_score(tmp_path):
     gid, uid = 1001, 42
     import time
 
     now = time.time()
     m = make_manager(tmp_path)
-    await m.observe(gid, uid, "热身消息一", msg_id=1, now=now)
-    await m.observe(gid, uid, "热身消息二", msg_id=2, now=now)
-    d_before = await m.observe(gid, uid, "有人玩过这个游戏吗", msg_id=3, now=now)
+    observe(m, gid, uid, "热身消息一", msg_id=1, now=now)
+    observe(m, gid, uid, "热身消息二", msg_id=2, now=now)
+    d_before = observe(m, gid, uid, "有人玩过这个游戏吗", msg_id=3, now=now)
     m.note_stella_spoke(gid, "proactive")
-    d_after = await m.observe(gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
+    d_after = observe(m, gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
     assert d_before is not None and d_after is not None
     assert d_after.breakdown.recent_speech_penalty > d_before.breakdown.recent_speech_penalty
     assert d_after.score < d_before.score
 
 
-async def test_passive_reply_gets_discounted_penalty(tmp_path):
+def test_passive_reply_gets_discounted_penalty(tmp_path):
     """被 @ 回复（passive）不累积同等级惩罚（§14）。"""
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
     import time
 
     now = time.time()
-    await m.observe(gid, uid, "热身一", msg_id=1, now=now)
-    await m.observe(gid, uid, "热身二", msg_id=2, now=now)
+    observe(m, gid, uid, "热身一", msg_id=1, now=now)
+    observe(m, gid, uid, "热身二", msg_id=2, now=now)
     m.note_stella_spoke(gid, "passive")
-    d_after = await m.observe(gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
+    d_after = observe(m, gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
     # passive：just_spoke(45) * 折扣 0.3 ≈ 13.5，远小于 proactive 的强惩罚
     assert d_after.breakdown.recent_speech_penalty <= 0.3 * 45 + 1
     # passive 折扣应明显低于 proactive 的强惩罚
     m.note_stella_spoke(gid, "proactive")
-    d_pro = await m.observe(gid, uid, "还有人玩过这个吗", msg_id=5, now=now)
+    d_pro = observe(m, gid, uid, "还有人玩过这个吗", msg_id=5, now=now)
     assert d_pro.breakdown.recent_speech_penalty > d_after.breakdown.recent_speech_penalty
 
 
 # ── 场景 F：话题过期 → 不复活旧话题（§30-F）──────────────
 
 
-async def test_expired_topic_blocked_and_new_topic_created(tmp_path):
+def test_expired_topic_blocked_and_new_topic_created(tmp_path):
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
     import time
 
     now = time.time()
-    await feed(m, gid, uid, ["今天吃什么", "不知道", "随便"])
+    feed(m, gid, uid, ["今天吃什么", "不知道", "随便"])
     state = m._groups[gid]
     old_topic_id = state.topic.topic_id
     # 推进到 COOLING → EXPIRED（thresholds: cooling 120s, expire 300s）
@@ -252,7 +258,7 @@ async def test_expired_topic_blocked_and_new_topic_created(tmp_path):
     state.advance_lifecycle(tables, now=t + 500)
     assert state.topic.status.value == "EXPIRED"
     # EXPIRED 后相关消息不允许触发，且必须创建新话题
-    d = await m.observe(gid, uid, "说到吃的，我今天想吃火锅", msg_id=99, now=t)
+    d = observe(m, gid, uid, "说到吃的，我今天想吃火锅", msg_id=99, now=t)
     assert state.topic.topic_id != old_topic_id
     assert d.breakdown.expired_penalty == 0  # 新话题不受旧话题过期惩罚
 
@@ -260,7 +266,7 @@ async def test_expired_topic_blocked_and_new_topic_created(tmp_path):
 # ── Candidate 二次确认（§19）────────────────────────────
 
 
-async def test_candidate_needs_confirmation(tmp_path):
+def test_candidate_needs_confirmation(tmp_path):
     m = make_manager(tmp_path)
     tracker = m._tracker
     from memory.participation.scorer import ScoreBreakdown
@@ -289,10 +295,10 @@ async def test_candidate_needs_confirmation(tmp_path):
 # ── 日志（补充要求 A）────────────────────────────────────
 
 
-async def test_decision_logs_written(tmp_path):
+def test_decision_logs_written(tmp_path):
     m = make_manager(tmp_path)
     gid, uid = 1001, 42
-    await feed(m, gid, uid, ["有人玩过这个游戏吗", "我也想问", "怎么样"])
+    feed(m, gid, uid, ["有人玩过这个游戏吗", "我也想问", "怎么样"])
     jsonl = (tmp_path / "d.jsonl").read_text(encoding="utf-8").strip()
     md = (tmp_path / "d.md").read_text(encoding="utf-8")
     assert jsonl  # full 级别：每次评分都有 JSONL 行
