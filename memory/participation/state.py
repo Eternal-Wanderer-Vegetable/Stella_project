@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable
 
 from memory.participation.buffer import BufferedMessage, MessageBuffer
 from memory.participation.signals import topic_shift_hit
@@ -100,7 +100,7 @@ class ConversationState:
         msg: BufferedMessage,
         tables: ParticipationTables,
         *,
-        similarity: Callable[[str, list[str]], "float | None | object"] | None = None,
+        similarity: Callable[[str, list[str]], "float | object | None"] | None = None,
         next_topic_id: Callable[[int], int] | None = None,
     ) -> Topic:
         """处理一条新消息：判断话题归属并更新状态。返回消息所属话题。
@@ -124,7 +124,7 @@ class ConversationState:
         self,
         msg: BufferedMessage,
         tables: ParticipationTables,
-        similarity: Callable[[str, list[str]], "float | None | object"] | None,
+        similarity: Callable[[str, list[str]], "float | object | None"] | None,
     ) -> bool:
         topic = self.topic
         if topic is None:
@@ -148,9 +148,7 @@ class ConversationState:
 
         # 规则兜底（embedding 不可用）：闲置超时 + 参与者变化
         idle = msg.timestamp - topic.last_active_at
-        if idle > sw.fallback_idle_seconds and msg.sender_id not in topic.participants:
-            return True
-        return False
+        return idle > sw.fallback_idle_seconds and msg.sender_id not in topic.participants
 
     def velocity_level(self, tables: ParticipationTables, now: float | None = None) -> tuple[str, int]:
         """消息速度档位与窗口内原始计数（上游 §23）。"""

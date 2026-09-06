@@ -669,7 +669,10 @@ def migrate_v13(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     与记忆系统隔离，不进 ``GROUP_SCOPED_TABLES``（空间合并/群迁移不碰它——
     话题状态属于「当下这场对话」，跟随真实群号，但也不需要在 v8 类迁移中改写）。
     """
-    from memory.schema import create_participation_log_table, create_participation_topics_table
+    from memory.schema import (
+        create_participation_log_table,
+        create_participation_topics_table,
+    )
 
     create_participation_topics_table(conn)
     create_participation_log_table(conn)

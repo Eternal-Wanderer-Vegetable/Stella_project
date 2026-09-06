@@ -102,13 +102,13 @@ from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_re
 from extensions import load_extensions
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
+from memory.participation import get_participation_manager
 from memory.post_processors import (
     bad_phrase_filter,
     log_thought,
     parse_output,
     split_lines,
 )
-from memory.participation import get_participation_manager
 from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
 from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition

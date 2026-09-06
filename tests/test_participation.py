@@ -168,7 +168,6 @@ async def test_strong_hook_direct_allows_llm_without_confirm(tmp_path):
 
     now = time.time()
     d = None
-    msgs = ["今天群里怎么样", "stella 你也来说说看你觉得咋样", ""]
     # 构造 direct_invite + open_question 同时命中的高分场景：
     for i, t in enumerate(["有人在吗", "我最近在玩 rust 写的 game", "stella 你觉得怎么样"]):
         d = await m.observe(gid, uid, t, msg_id=i + 1, now=now + i * 30)
@@ -199,19 +198,16 @@ async def test_interested_but_no_opportunity_stays_silent(tmp_path):
 
 
 async def test_recent_speech_penalty_drops_score(tmp_path):
-    m = make_manager(tmp_path)
     gid, uid = 1001, 42
     import time
 
     now = time.time()
-    before = await feed(m, gid, uid, ["你们觉得这个游戏怎么样"], start_mid=1)
-    # 用同一时间基线保证可比
-    m2 = make_manager(tmp_path)
-    await m2.observe(gid, uid, "热身消息一", msg_id=1, now=now)
-    await m2.observe(gid, uid, "热身消息二", msg_id=2, now=now)
-    d_before = await m2.observe(gid, uid, "有人玩过这个游戏吗", msg_id=3, now=now)
-    m2.note_stella_spoke(gid, "proactive")
-    d_after = await m2.observe(gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
+    m = make_manager(tmp_path)
+    await m.observe(gid, uid, "热身消息一", msg_id=1, now=now)
+    await m.observe(gid, uid, "热身消息二", msg_id=2, now=now)
+    d_before = await m.observe(gid, uid, "有人玩过这个游戏吗", msg_id=3, now=now)
+    m.note_stella_spoke(gid, "proactive")
+    d_after = await m.observe(gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
     assert d_before is not None and d_after is not None
     assert d_after.breakdown.recent_speech_penalty > d_before.breakdown.recent_speech_penalty
     assert d_after.score < d_before.score
@@ -226,7 +222,6 @@ async def test_passive_reply_gets_discounted_penalty(tmp_path):
     now = time.time()
     await m.observe(gid, uid, "热身一", msg_id=1, now=now)
     await m.observe(gid, uid, "热身二", msg_id=2, now=now)
-    d_before = await m.observe(gid, uid, "有人玩过这个游戏吗", msg_id=3, now=now)
     m.note_stella_spoke(gid, "passive")
     d_after = await m.observe(gid, uid, "还有人玩过这个吗", msg_id=4, now=now)
     # passive：just_spoke(45) * 折扣 0.3 ≈ 13.5，远小于 proactive 的强惩罚

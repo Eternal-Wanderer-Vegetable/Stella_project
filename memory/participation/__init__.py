@@ -30,7 +30,11 @@ from pathlib import Path
 from nonebot import logger
 
 from memory.participation.buffer import BufferedMessage, MessageBuffer
-from memory.participation.decision import ALLOW_LLM, DecisionTracker, ParticipationDecision
+from memory.participation.decision import (
+    ALLOW_LLM,
+    DecisionTracker,
+    ParticipationDecision,
+)
 from memory.participation.observability import (
     log_decision,
     record_to_db,
@@ -43,8 +47,8 @@ from memory.participation.tables import ParticipationTableError, TableStore
 __all__ = [
     "BufferedMessage",
     "ParticipationManager",
-    "get_participation_manager",
     "ParticipationTableError",
+    "get_participation_manager",
 ]
 
 
@@ -68,7 +72,10 @@ class ParticipationManager:
 
             tables_dir = Path(PARTICIPATION_TABLES_DIR)
         if jsonl_path is None or md_path is None:
-            from config import PARTICIPATION_DECISION_LOG_PATH, PARTICIPATION_MD_LOG_PATH
+            from config import (
+                PARTICIPATION_DECISION_LOG_PATH,
+                PARTICIPATION_MD_LOG_PATH,
+            )
 
             jsonl_path = jsonl_path or PARTICIPATION_DECISION_LOG_PATH
             md_path = md_path or PARTICIPATION_MD_LOG_PATH
@@ -356,9 +363,8 @@ class ParticipationManager:
         try:
             import sqlite3
 
-            from memory.schema import create_participation_topics_table
-
             from config import DB_PATH
+            from memory.schema import create_participation_topics_table
 
             conn = sqlite3.connect(DB_PATH)
             try:

@@ -11,13 +11,11 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from memory.participation.signals import SignalSnapshot
 from memory.participation.state import (
-    VELOCITY_HIGH,
-    VELOCITY_VERY_HIGH,
     ConversationState,
     TopicStatus,
 )
@@ -219,13 +217,9 @@ def score(
 ) -> ScoreBreakdown:
     """计算一次完整评分。不抛异常；embedding 回调失败时静默降级为关键词。"""
     now = now if now is not None else time.time()
-    if similarity is not None:
-        _wrapped = similarity
-    else:
-        _wrapped = None  # type: ignore[assignment]
 
     try:
-        relevance = _relevance(state, recent_texts, tables.topics, tables, _wrapped)
+        relevance = _relevance(state, recent_texts, tables.topics, tables, similarity)
     except Exception:
         relevance = _relevance(state, recent_texts, tables.topics, tables, None)
 
