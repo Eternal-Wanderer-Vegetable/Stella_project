@@ -1,0 +1,40 @@
+# ============================================================
+# 决策阈值表（上游设计 §18/§19）
+#
+# IGNORE    <  ignore_below        明显不适合插话
+# OBSERVE   >= ignore_below        有机会，继续观察
+# CANDIDATE >= candidate_at        明确机会，等待下一条消息确认
+# ALLOW_LLM >= allow_at            值得让 LLM 生成一次回复
+# ============================================================
+
+ignore_below = 30
+candidate_at = 60
+allow_at = 80
+
+# 评分热身：每群缓冲区内不足该条数时不评分（信息量不够，避免开局乱插话）
+warmup_messages = 3
+
+# Candidate 二次确认（上游 §19）：进入 CANDIDATE 后需要连续多少条消息
+# 维持 candidate_at 以上才升为 ALLOW_LLM。0 = 不需要确认（不推荐）。
+candidate_confirm_messages = 1
+
+# 强钩子直通：社交机会分与总分同时达标时跳过二次确认直接 ALLOW_LLM（上游 §19 末段）
+[strong_hook_direct]
+social_opportunity_min = 18
+score_min = 80
+
+# 话题生命周期（秒，上游 §6）
+[topic_lifecycle]
+# ACTIVE → COOLING：距上次话题活跃超过该秒数
+cooling_after = 120
+# COOLING → EXPIRED：冷却后再经过该秒数
+expire_after = 300
+
+# 话题切换判定（上游 §5/§6）
+[topic_switch]
+# 新消息与当前话题最近文本的 embedding 相似度低于该值视为话题转移候选
+similarity_below = 0.45
+# 相似度判断参考当前话题最近 K 条文本
+recent_texts = 5
+# 规则兜底（embedding 不可用时）：距上次活跃超过该秒数且参与者发生变化
+fallback_idle_seconds = 90

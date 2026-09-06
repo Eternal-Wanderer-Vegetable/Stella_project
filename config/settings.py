@@ -736,6 +736,37 @@ PROACTIVE_VERIFY_EXCLUDE_TYPES = {
     if t.strip()
 }
 
+# ---------- 主动插话（Participation Decision Layer） ----------
+# 独立于上面「主动发言 v2」的新决策层：基于群聊状态（话题/机会/社交钩子/惩罚项）
+# 评分决定「现在该不该插话」，替代掷骰子。设计见
+# design_docs/Stella_主动插话机制工程方案.md 与 Stella_主动插话机制实现方案.md。
+# 注意：所有分值/阈值/词表都在 config/participation/*.toml 外置打分表中，
+# 这里只放行为开关类参数——调参请改打分表，不要往这里加数字。
+# 总开关：开启后被动消息进入评分层；关闭则完全不评分。
+PARTICIPATION_ENABLED = _env("PARTICIPATION_ENABLED", "true").lower() in ("true", "1", "yes")
+# 触发开关（灰度）：评分命中 ALLOW_LLM 后是否真正调用 LLM 发言。
+# 关闭时只输出决策日志，用于只观察评分是否合理。
+PARTICIPATION_TRIGGER_ENABLED = _env("PARTICIPATION_TRIGGER_ENABLED", "true").lower() in ("true", "1", "yes")
+# 外置打分表目录（weights/thresholds/signals/topics 四个 toml）
+PARTICIPATION_TABLES_DIR = _env_path(
+    "PARTICIPATION_TABLES_DIR", Path(__file__).resolve().parent / "participation"
+)
+# 每群消息缓冲区大小（条）
+PARTICIPATION_BUFFER_SIZE = _env_int("PARTICIPATION_BUFFER_SIZE", 200)
+# 内存中最多维护多少个群的状态（LRU，超群的旧状态置 EXPIRED 释放）
+PARTICIPATION_MAX_GROUPS = _env_int("PARTICIPATION_MAX_GROUPS", 64)
+# 评分日志级别：full=每次评分都记 / summary=只记 CANDIDATE 以上 / off=只记 ALLOW_LLM
+PARTICIPATION_LOG_LEVEL = _env("PARTICIPATION_LOG_LEVEL", "full").lower()
+# 决策 JSONL 日志与 Markdown 日志路径（默认落在 LOG_DIR）
+PARTICIPATION_DECISION_LOG_PATH = _env_path(
+    "PARTICIPATION_DECISION_LOG_PATH", LOG_DIR / "participation_decisions.jsonl"
+)
+PARTICIPATION_MD_LOG_PATH = _env_path(
+    "PARTICIPATION_MD_LOG_PATH", LOG_DIR / "participation_logs.md"
+)
+# 状态机推进定时任务间隔（秒）：COOLING→EXPIRED 不依赖新消息，靠它推进
+PARTICIPATION_TICK_INTERVAL = _env_int("PARTICIPATION_TICK_INTERVAL", 60)
+
 # ---------- 数据库清理（测试期用） ----------
 # 程序启动时自动清理混乱的记忆数据（测试阶段频繁重启注入的脏数据）
 #   True = 每次启动都清理短期/长期记忆并重置整合 checkpoint（用户画像保留）

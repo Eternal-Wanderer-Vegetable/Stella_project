@@ -523,3 +523,54 @@ def test_v11_db_backfills_zero_importance(tmp_path):
     ]
     # 行数守恒：回填是 UPDATE，不该增删任何行
     assert _rows(path, "SELECT COUNT(*) FROM memory_candidates") == [(3,)]
+
+
+def test_v12_db_only_gains_participation_tables(tmp_path):
+    """schema v12 旧库升级：多出 participation_topics / participation_log，其余不动。
+
+    ``SCHEMA_VERSION`` 每 +1 都要配一个旧库夹具回归测试（memory/schema.py 的硬规矩）。
+    v13 加的是两张新表（主动插话决策层），最容易出的错是「顺手动了别的表」。
+    """
+    path = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(schema.MEMORIES_TABLE_DDL)
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, content, status)"
+            " VALUES ('m1','casual','u1','喜欢猫','active')"
+        )
+        conn.execute(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER,"
+            " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 12)")
+        conn.commit()
+    finally:
+        conn.close()
+    spaces_dir = tmp_path / "spaces"
+    spaces_dir.mkdir()
+    (spaces_dir / "casual.toml").write_text("qq_groups = [1001]\n", encoding="utf-8")
+    ctx = migrations.context_from_paths(spaces_dir, tmp_path / "ledger.json", (1001,))
+
+    report = schema.migrate_to_latest(path, ctx)
+
+    assert report.error is None
+    assert report.problems == []
+    assert report.to_version == schema.SCHEMA_VERSION
+    # 既有记忆原样保留
+    assert _rows(path, "SELECT content, group_shared_space FROM memories") == [
+        ("喜欢猫", "casual")
+    ]
+    # 两张新表就绪且为空
+    assert _rows(path, "SELECT COUNT(*) FROM participation_topics") == [(0,)]
+    assert _rows(path, "SELECT COUNT(*) FROM participation_log") == [(0,)]
+    topic_cols = _columns(path, "participation_topics")
+    for col in ("group_id", "topic_id", "label", "status", "started_at",
+                "last_active_at", "stella_involved", "speak_count"):
+        assert col in topic_cols
+    log_cols = _columns(path, "participation_log")
+    for col in ("ts", "group_id", "topic_id", "relevance", "opportunity",
+                "social_opportunity", "topic_involvement", "silence_bonus",
+                "recent_speech_penalty", "velocity_penalty", "repetition_penalty",
+                "expired_penalty", "final_score", "mode", "decision", "reason_flags"):
+        assert col in log_cols

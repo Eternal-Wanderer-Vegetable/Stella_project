@@ -52,8 +52,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v12：回填 importance=0 的存量候选/记忆，解除晋升死锁）
-SCHEMA_VERSION = 12
+# 当前 Schema 版本（v13：新增主动插话的 participation_topics / participation_log 表）
+SCHEMA_VERSION = 13
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -519,6 +519,59 @@ CREATE TABLE IF NOT EXISTS llm_usage_daily (
 def create_llm_usage_daily_table(conn: sqlite3.Connection) -> None:
     """确保 llm_usage_daily 表存在（幂等）。"""
     conn.execute(LLM_USAGE_DAILY_TABLE_DDL)
+
+
+# 主动插话话题状态表（v13）：每群当前话题生命周期的持久化。
+# 重启后不丢失 EXPIRED 判定——否则「重启后翻旧账」会复活十分钟前的话题。
+PARTICIPATION_TOPICS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS participation_topics (
+    group_id TEXT,
+    topic_id INTEGER,
+    label TEXT,
+    status TEXT DEFAULT 'NEW',
+    started_at DATETIME,
+    last_active_at DATETIME,
+    stella_involved INTEGER DEFAULT 0,
+    speak_count INTEGER DEFAULT 0,
+    PRIMARY KEY (group_id, topic_id)
+)
+"""
+
+
+def create_participation_topics_table(conn: sqlite3.Connection) -> None:
+    """确保 participation_topics 表存在（幂等）。"""
+    conn.execute(PARTICIPATION_TOPICS_TABLE_DDL)
+
+
+# 主动插话决策日志表（v13）：每次评分的全字段落库，调参依据（上游方案 §29）。
+# 写入频率高但行小；清理跟随 group_messages 的每日清理策略即可。
+PARTICIPATION_LOG_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS participation_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+    group_id TEXT,
+    topic_id INTEGER,
+    relevance REAL DEFAULT 0,
+    opportunity REAL DEFAULT 0,
+    social_opportunity REAL DEFAULT 0,
+    topic_involvement REAL DEFAULT 0,
+    silence_bonus REAL DEFAULT 0,
+    recent_speech_penalty REAL DEFAULT 0,
+    velocity_penalty REAL DEFAULT 0,
+    repetition_penalty REAL DEFAULT 0,
+    expired_penalty REAL DEFAULT 0,
+    final_score REAL DEFAULT 0,
+    mode TEXT,
+    decision TEXT,
+    reason_flags TEXT,
+    snapshot TEXT
+)
+"""
+
+
+def create_participation_log_table(conn: sqlite3.Connection) -> None:
+    """确保 participation_log 表存在（幂等）。"""
+    conn.execute(PARTICIPATION_LOG_TABLE_DDL)
 
 
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:

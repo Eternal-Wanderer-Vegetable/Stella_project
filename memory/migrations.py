@@ -655,6 +655,27 @@ def migrate_v12(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v13(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v13：主动插话决策层的两张新表（participation_topics / participation_log）。
+
+    设计见 design_docs/Stella_主动插话机制实现方案.md：
+
+    - ``participation_topics``：每群话题生命周期（NEW/ACTIVE/COOLING/EXPIRED）。
+      必须落库——EXPIRED 判定丢了，重启后会把十分钟前的话题重新拉起来
+      （上游工程方案 §6.4 明确禁止的行为）。
+    - ``participation_log``：每次评分的全字段落库（上游工程方案 §29 可观测性），
+      调参的依据。只插入不回填，旧库没有历史决策可迁。
+
+    与记忆系统隔离，不进 ``GROUP_SCOPED_TABLES``（空间合并/群迁移不碰它——
+    话题状态属于「当下这场对话」，跟随真实群号，但也不需要在 v8 类迁移中改写）。
+    """
+    from memory.schema import create_participation_log_table, create_participation_topics_table
+
+    create_participation_topics_table(conn)
+    create_participation_log_table(conn)
+    return MigrationResult(version=13, notes=["participation_topics / participation_log 已就绪"])
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -662,6 +683,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     10: migrate_v10,
     11: migrate_v11,
     12: migrate_v12,
+    13: migrate_v13,
 }
 
 

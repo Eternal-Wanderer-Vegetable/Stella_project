@@ -72,6 +72,9 @@ from config import (
     LLM_TIMEOUT,
     MESSAGE_CLEANUP_ENABLED,
     MESSAGE_CLEANUP_HOUR,
+    PARTICIPATION_ENABLED,
+    PARTICIPATION_TICK_INTERVAL,
+    PARTICIPATION_TRIGGER_ENABLED,
     PROACTIVE_CHECK_INTERVAL,
     PROACTIVE_ENABLED,
     PROACTIVE_MAX_LINES,
@@ -105,6 +108,7 @@ from memory.post_processors import (
     parse_output,
     split_lines,
 )
+from memory.participation import get_participation_manager
 from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
 from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
@@ -356,6 +360,23 @@ async def record_group_chat(event: GroupMessageEvent):
     # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
     session_touch(ctx.group_id)
 
+    # 主动插话评分层（Participation Decision Layer）：
+    # 只对 PASSIVE 消息评分——AT_MENTION 是 Hard Trigger，走 handle_chat 的
+    # 强制响应路径，二者必须独立（上游工程方案 §3/原则 7）。
+    # 评分全本地（规则 + 可选 embedding），零 LLM 调用；observe 内部自己吞异常，
+    # 这里不再包 try 以免刷屏。
+    if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
+        decision = await get_participation_manager().observe(
+            ctx.group_id,
+            ctx.user_id,
+            text,
+            msg_id=event.message_id,
+        )
+        if decision is not None and decision.should_speak and PARTICIPATION_TRIGGER_ENABLED:
+            # ALLOW_LLM：交给统一执行器（群锁/预算/去重/consolidate 都在里头）。
+            # create_task：评分在 priority 0 的非阻断监听器里，不能同步等 LLM。
+            _spawn_participation_speak(event.group_id, decision)
+
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     """触发规则：(1) 属于已启用群 (2) 有人 @ 机器人 (3) 附带非空文本。"""
@@ -481,6 +502,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 把本次回复记入“已说过的话”，防止随后主动发言再重复刷屏
         with contextlib.suppress(Exception):
             get_proactive().record_spoken(event.group_id, ctx.lines)
+            # 评分层记账：被 @ 后的回复记为**被动**——被叫到后回答不应该
+            # 获得与主动插话同等级的惩罚（上游工程方案 §14）
+            get_participation_manager().note_stella_spoke(event.group_id, "passive")
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
@@ -726,20 +750,36 @@ async def handle_capability_query(bot: Bot, event: GroupMessageEvent):
 # ============================================================
 
 
+# 参与评分打分表的重载命令短语（管理员 @ Bot 说这两句之一即热重载 TOML，
+# 见实现方案 §4 补充要求 B：调参不改代码不重启）
+_TABLES_RELOAD_PHRASES = ("重载打分表", "重载参与评分")
+
+
+def _is_tables_reload(text: str) -> bool:
+    t = (text or "").strip()
+    return any(t == p or t.startswith(p) for p in _TABLES_RELOAD_PHRASES)
+
+
 async def is_reload_command(event: GroupMessageEvent) -> bool:
-    """触发规则：已启用群 + @ 机器人 + 文本是「重载插件 <名>」。
+    """触发规则：已启用群 + @ 机器人 + 文本是「重载插件 <名>」或「重载打分表」。
 
     权限**不在这里判**（与 ``toggle_handler`` 同一惯例）：规则只管命中，命中后由
     handler 判权限并静默忽略无权者。放在规则里的话，非管理员发这句会掉进 chat_handler
     交给 LLM，Stella 就会煞有介事地回一句「好的我重载了」——那比不响应糟得多。
+
+    打分表重载不依赖 ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED：那是插件系统的开关，
+    打分表属于核心决策层，且重载是纯数据替换（无 re-import 残留）。
     """
-    if not ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED:
-        return False
     if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+        return False
+    text = event.get_plaintext()
+    if _is_tables_reload(text):
+        return True
+    if not ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED:
         return False
     from astrbot_compat.loader import parse_reload_command
 
-    return parse_reload_command(event.get_plaintext()) is not None
+    return parse_reload_command(text) is not None
 
 
 reload_handler = on_message(
@@ -811,6 +851,15 @@ async def handle_reload(bot: Bot, event: GroupMessageEvent):
     if event.user_id not in PROACTIVE_TOGGLE_ADMINS and role not in ("owner", "admin"):
         logger.info(f"[HotReload] 群 {event.group_id} 用户 {event.user_id} 无权重载插件")
         return
+
+    # 打分表热重载分支：纯数据替换，成功/失败都直接回一句
+    if _is_tables_reload(event.get_plaintext()):
+        ok, msg = get_participation_manager().reload_tables()
+        reply = f"✅ {msg}" if ok else f"❌ {msg}（沿用旧表，看 config/participation/*.toml）"
+        await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
+        await reload_handler.finish(
+            Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
+        )
 
     name = parse_reload_command(event.get_plaintext()) or ""
     logger.info(f"[HotReload] 群 {event.group_id} 用户 {event.user_id} 请求重载插件 {name!r}")
@@ -1036,6 +1085,9 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
 
         proactive.mark_spoke(group_id)
         proactive.record_spoken(group_id, [line])
+        # 评分层记账：主动 @ 同样算主动发言（上游 §14 的区分只针对被动应答）
+        with contextlib.suppress(Exception):
+            get_participation_manager().note_stella_spoke(group_id, "proactive")
         logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {line}")
 
         await _record_bot_lines(self_id, group_id, [line])
@@ -1108,11 +1160,78 @@ async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
     logger.info(f"{'🌙' if kind == 'sleep' else '☀️'} [{kind}] 群 {group_id}: {line}")
 
 
-async def _proactive_speak_for_group(bot: Bot, group_id: int):
-    """对单个群尝试主动发言：概率命中时生成一句自然的话并发送。
+# 参与评分层各 mode 对应的指令文案（写清楚「为什么现在轮到你说话」，上游 §20）。
+# 这是 prompt 文案不是分值——分值/阈值都在 config/participation/*.toml。
+_PARTICIPATION_INSTRUCTIONS: dict[str, str] = {
+    "TOPIC_INTEREST": (
+        "（群里正在聊一个你感兴趣的话题，没有人在@你。"
+        "你想自然地插一句加入讨论，说一句相关的话。）"
+    ),
+    "SOCIAL_HOOK": (
+        "（有群友说了句带悬念的话，像在等人接茬，没有人在@你。"
+        "你想自然地接一句，比如好奇地追问。）"
+    ),
+    "CONTINUE_EXISTING_CONVERSATION": (
+        "（你刚刚参与了这段对话，群友还在继续聊。"
+        "你想自然地接一句，把话说完就好，不要开启新话题。）"
+    ),
+    "DIRECT_RELEVANCE": (
+        "（有群友在对话中提到了你、明显是在向你搭话，虽然没有@你。"
+        "你想自然地回应一句。）"
+    ),
+}
+_PARTICIPATION_DEFAULT_INSTRUCTION = (
+    "（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）"
+)
+
+
+def _spawn_participation_speak(group_id: int, decision) -> None:
+    """决策命中 ALLOW_LLM 后的后台执行（不阻塞消息监听）。
+
+    任务引用必须持有（见 _reply_check_tasks 的说明），否则可能在完成前被 GC。
+    """
+    async def _runner() -> None:
+        try:
+            from nonebot import get_bot
+
+            bot = get_bot()
+        except Exception as e:
+            logger.debug(f"[参与评分] 群 {group_id} 跳过触发：无可用 Bot（{e}）")
+            return
+        try:
+            await _proactive_speak_for_group(
+                bot,
+                group_id,
+                intent=f"participation_{decision.mode}",
+                instruction=_PARTICIPATION_INSTRUCTIONS.get(
+                    decision.mode, _PARTICIPATION_DEFAULT_INSTRUCTION
+                ),
+                skip_dice=True,
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ [参与评分] 群 {group_id} 触发发言异常: {e}")
+
+    task = asyncio.create_task(_runner())
+    _reply_check_tasks.add(task)
+    task.add_done_callback(_reply_check_tasks.discard)
+
+
+async def _proactive_speak_for_group(
+    bot: Bot,
+    group_id: int,
+    *,
+    intent: str = "proactive_join",
+    instruction: str | None = None,
+    skip_dice: bool = False,
+):
+    """对单个群尝试主动发言：命中时生成一句自然的话并发送。
 
     :param bot: OneBot Bot 实例（用于组群发消息）
     :param group_id: 目标群号
+    :param intent: 写入 ChatContext 的诊断意图（proactive_join=定时掷骰；
+        participation_<mode>=评分层命中，上游 §20）
+    :param instruction: 喂给 Pipeline 的指令文案（None = 默认罐头指令）
+    :param skip_dice: 跳过概率掷骰（评分层已做完决策，再掷骰等于双重门槛）
     :return: None；命中时发送若干条群消息并记录“已发言”
     """
     # 先判断该群是否到了“可以主动发言”的时机（统一闸门判定）
@@ -1122,7 +1241,7 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
         return
     proactive = get_proactive()
     # gate 通过后再掷概率骰：概率是话题插话独有的（主动 @ 由配额与冷却约束，不掷骰）
-    if not proactive.should_speak(group_id):
+    if not skip_dice and not proactive.should_speak(group_id):
         return
 
     # 同样要抢占本群的互斥锁：主动发言不能和 @ 回复并发，避免上下文被互相污染
@@ -1147,9 +1266,9 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
             user_id=0,
             group_id=group_id,
             msg_id=0,
-            message="（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）",
+            message=instruction or _PARTICIPATION_DEFAULT_INSTRUCTION,
             trigger="proactive",
-            intent="proactive_join",
+            intent=intent,
         )
         try:
             ctx = await pipeline.run(ctx)
@@ -1178,6 +1297,9 @@ async def _proactive_speak_for_group(bot: Bot, group_id: int):
         # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
         proactive.mark_spoke(group_id)
         get_proactive().record_spoken(group_id, ctx.lines)
+        # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty）
+        with contextlib.suppress(Exception):
+            get_participation_manager().note_stella_spoke(group_id, "proactive")
         logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
         await _record_bot_lines(int(bot.self_id), group_id, ctx.lines)
 
@@ -1221,9 +1343,28 @@ if scheduler is not None and PROACTIVE_ENABLED:
                 # 同一轮只发一次言。
                 if await _proactive_at_user(bot, group_id):
                     continue
+                if PARTICIPATION_ENABLED:
+                    # 评分层接管「什么时候说」：掷骰子路径停用，
+                    # 话题插话由被动消息上的 observe() 事件驱动。
+                    continue
                 await _proactive_speak_for_group(bot, group_id)
             except Exception as e:
                 logger.error(f"主动发言异常（群 {group_id}）: {e}")
+
+
+# 评分层的状态机推进：COOLING→EXPIRED 不依赖新消息，必须靠定时任务推进，
+# 否则一个沉寂话题永远停在 COOLING、持续吃 25 分过期惩罚（或反之永不失效）。
+if scheduler is not None and PARTICIPATION_ENABLED:
+    @scheduler.scheduled_job(
+        "interval", seconds=PARTICIPATION_TICK_INTERVAL, id="participation_tick"
+    )
+    async def participation_tick_job():
+        try:
+            changes = get_participation_manager().tick()
+            for change in changes:
+                logger.info(f"📊 [参与评分] {change}")
+        except Exception as e:
+            logger.warning(f"⚠️ [参与评分] 状态机推进异常: {e}")
 
 
 # ============================================================

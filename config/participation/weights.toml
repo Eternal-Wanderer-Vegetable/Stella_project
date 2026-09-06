@@ -1,0 +1,104 @@
+# ============================================================
+# 参与评分权重表（上游设计：design_docs/Stella_主动插话机制工程方案.md §17）
+#
+# 本文件是 9 项指标的**唯一数值来源**——scorer 代码里不允许出现任何分值常量。
+# 修改本文件后可用管理员命令热重载（@Stella 重载打分表），或重启进程。
+# 调参流程：改表 → 跑 benchmark（tests/benchmark/participation）→ 看报告 diff。
+# ============================================================
+
+# ---- Relevance：Stella 对当前话题的相关性（0~30）----
+[relevance]
+max = 30
+# 长期兴趣部分上限（来自 topics.toml 的兴趣锚）
+long_term_max = 20
+# 当前关注部分上限（Stella 最近参与过的话题标签短期加权）
+current_max = 10
+# 关键词命中即给的保底分（每个命中兴趣锚取一次，不叠加）
+keyword_hit = 10
+# embedding 相似度达到该值给满 long_term_max；低于 embedding_zero_at 给 0，中间线性
+embedding_full_at = 0.60
+embedding_zero_at = 0.25
+
+# ---- Opportunity：插话机会（-20~30）----
+[opportunity]
+min = -20
+max = 30
+# 开放问题（「有人玩过吗」「你们觉得怎么样」）——存在明显社交空位
+open_question = 22
+# 群级问句（？/吗 结尾、无具体指向）——次级空位
+question_to_group = 14
+# 未完成表达（「就是……」结尾悬念 + 后续有人追问）
+unfinished_expression = 18
+# 已被充分回答（对方回应「哦懂了/确实」等认可性短语）
+answered = -18
+# 普通陈述
+plain_statement = 0
+
+# ---- SocialOpportunity：社交机会（0~20，上游 §11）----
+[social_opportunity]
+max = 20
+# 直接社交邀请（明确把 Stella 拉进对话但未到 Hard Trigger 级别）
+direct_invite = 20
+# 明显悬念（「我干了件特别蠢的事」）
+strong_suspense = 15
+# 强烈情绪表达
+strong_emotion = 10
+# 普通陈述
+plain_statement = 0
+# 已经被群友充分回应
+fully_responded = -10
+
+# ---- TopicInvolvement：当前参与状态（0~20，上游 §12）----
+[topic_involvement]
+max = 20
+# Stella 已参与当前话题（Continuation 倾向）
+involved = 20
+
+# ---- SilenceBonus：沉默奖励（0~10，上游 §13）----
+[silence_bonus]
+max = 10
+# 距上次发言经过该秒数拿满（min(max, elapsed/growth) 线性增长后封顶）
+growth_seconds = 600
+
+# ---- RecentSpeechPenalty：近期发言惩罚（0~60，上游 §14）----
+[recent_speech_penalty]
+max = 60
+# 刚说过话（just_spoke_seconds 内）的强惩罚
+just_spoke_seconds = 30
+just_spoke = 45
+# 连续主动发言，每次追加
+consecutive_proactive_each = 10
+# 当前话题内连续插话，每次追加
+topic_consecutive_each = 5
+# 被动应答（被 @ 后回复）按此折扣计入惩罚——被叫到后回答不等于抢话
+passive_discount = 0.3
+
+# ---- MessageVelocityPenalty：消息速度惩罚（0~30，上游 §10.4/§23）----
+# 只降低评分，不直接禁止发言。
+[velocity_penalty]
+max = 30
+# 滑动窗口长度（秒）
+window_seconds = 30
+# 窗口内消息数达到该值进入 MEDIUM/HIGH/VERY_HIGH
+medium_at = 3
+high_at = 6
+very_high_at = 10
+# 各档惩罚值
+low = 0
+medium = 5
+high = 15
+very_high = 30
+
+# ---- RepetitionPenalty：重复参与惩罚（0~20，上游 §15）----
+[repetition_penalty]
+max = 20
+# 当前话题内每次已主动发言追加
+per_proactive_in_topic = 8
+# 出现新机会信号（开放问题/强钩子）时减免
+new_opportunity_relief = 10
+
+# ---- TopicExpiredPenalty：话题过期惩罚（0~40，上游 §16）----
+[expired_penalty]
+max = 40
+cooling = 25
+expired = 40

@@ -717,6 +717,44 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 静音只影响主动发言，被 @ 时仍照常回复。非管理员触发时不做任何改动也不回复。
 
+## 主动插话（Participation Decision Layer）
+
+基于群聊状态的评分制插话决策层，替代「主动发言 v2」的频率掷骰子（后者在
+`PARTICIPATION_ENABLED=true` 时停用，主动 @ 路径不受影响）。设计见
+`design_docs/Stella_主动插话机制工程方案.md` 与 `Stella_主动插话机制实现方案.md`。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `PARTICIPATION_ENABLED` | `true` | 总开关：开启后被动消息进入评分层 |
+| `PARTICIPATION_TRIGGER_ENABLED` | `true` | 灰度开关：评分命中 `ALLOW_LLM` 后是否真正调用 LLM 发言 |
+| `PARTICIPATION_TABLES_DIR` | `config/participation` | 外置打分表目录（四个 toml，见下） |
+| `PARTICIPATION_BUFFER_SIZE` | `200` | 每群消息缓冲区大小（条） |
+| `PARTICIPATION_MAX_GROUPS` | `64` | 内存状态 LRU 上限（群数） |
+| `PARTICIPATION_LOG_LEVEL` | `full` | 评分日志级别：`full` / `summary` / `off`（`ALLOW_LLM` 永远记录） |
+| `PARTICIPATION_TICK_INTERVAL` | `60` | 话题状态机推进间隔（秒，COOLING→EXPIRED） |
+
+**所有分值 / 阈值 / 词表都在 `config/participation/` 的四个外置打分表中**，代码内不含
+任何分值常量：
+
+| 文件 | 内容 |
+|---|---|
+| `weights.toml` | 9 项指标的加/减分值与上下限（相关性/机会/社交钩子/参与度/沉默奖励/近期发言惩罚/速度惩罚/重复惩罚/过期惩罚） |
+| `thresholds.toml` | IGNORE/OBSERVE/CANDIDATE/ALLOW_LLM 分级阈值、Candidate 二次确认、话题生命周期与切换判定 |
+| `signals.toml` | 信号词表：开放问句、悬念、情绪、认可性回应、低信息量、承接词 |
+| `topics.toml` | 长期兴趣锚（关键词 + 兴趣描述，供 embedding 相似度） |
+
+调参流程：改打分表 → 跑 benchmark → 看报告 diff：
+
+```bash
+python -m tests.benchmark.participation.runner          # 回放生产库真实群聊
+python -m tests.benchmark.participation.runner --tables config/participation_v2   # A/B 对比
+```
+
+运行中热重载：管理员在群里 `@Stella 重载打分表`（失败保留旧表）。
+
+评分日志落三处：`logs/participation_decisions.jsonl`（结构化）、
+`logs/participation_logs.md`（人类可读分项表）、`participation_log` 表（落库）。
+
 ## 记忆压缩
 
 | 配置项 | 默认值 | 说明 |

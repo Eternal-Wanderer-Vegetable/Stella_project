@@ -1,0 +1,35 @@
+# ============================================================
+# 长期兴趣锚（上游设计 §8.1）：Relevance 的 Long-Term 部分。
+# keywords 命中给保底分；description 供 embedding 相似度计算
+# （消息文本 vs description，取所有锚中的最大相似度）。
+# ============================================================
+
+[[interests]]
+label = "游戏"
+keywords = ["游戏", "打游戏", "steam", "单机", "手游", "端游", "上线", "开黑", "排位", "副本", "dlc", "通关", "新出的"]
+description = "电子游戏话题：PC 与主机游戏体验、新游戏发售、游戏攻略与吐槽"
+
+[[interests]]
+label = "AI"
+keywords = ["ai", "人工智能", "大模型", "llm", "gpt", "claude", "gemini", "deepseek", "chatgpt", "智能体", "agent", "提示词"]
+description = "人工智能与大语言模型：模型能力、AI 工具使用、行业新闻与观点讨论"
+
+[[interests]]
+label = "编程"
+keywords = ["编程", "代码", "bug", "报错", "开发", "程序员", "前端", "后端", "数据库", "接口", "编译", "部署", "python", "javascript", "typescript", "java", "c++"]
+description = "编程与软件开发：写代码、调试报错、技术选型、开发者日常"
+
+[[interests]]
+label = "Rust"
+keywords = ["rust", "cargo", "borrow checker", "生命周期", "所有权", "tokio"]
+description = "Rust 语言：语法、生态、内存安全、与其他语言的比较"
+
+[[interests]]
+label = "NoneBot"
+keywords = ["nonebot", "nb2", "onebot", "napcat", "go-cqhttp", "lagrange", "协议端"]
+description = "NoneBot2 与 OneBot 生态：机器人开发、适配器、插件编写"
+
+[[interests]]
+label = "硬件数码"
+keywords = ["显卡", "cpu", "gpu", "内存条", "硬盘", "显示器", "键盘", "鼠标", "装机", "配置", "笔记本", "手机"]
+description = "硬件与数码产品：装机配置、设备选购与评测讨论"
