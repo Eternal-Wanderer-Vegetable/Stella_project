@@ -1,6 +1,7 @@
 # Docker 化部署方案 v1.0
 
-> 状态：已评审（2026-09-07）。阶段 1 已实施：`Dockerfile`、`.dockerignore`、`docker-compose.yml`、`docs/deployment-docker.md`。阶段 2/3 未实施。
+> 状态：已评审（2026-09-07）。阶段 1、2 已实施：`Dockerfile`（含 `WITH_RENDER` 精简变体）、`.dockerignore`、`docker-compose.yml`（stella + napcat 双容器）、`entrypoint.sh`（.env 缺失守门）、`docs/deployment-docker.md`。阶段 3 未实施。
+> 容器实测：2026-09-07 于 Docker Desktop 29.7.2（Windows/WSL2）通过全套 8 项验证（构建 / 守门 / 非交互 init / 健康检查 / 状态端点 200/403 语义 / 优雅停机 1s / 精简镜像对比 / 收尾清理）。实测发现并修复一个缺陷：entrypoint.sh 的 SPDX 许可头曾被写在首行导致无 shebang，内核无法直接 exec（compose `init:true` 下靠 tini 的 execvp 回落 /bin/sh 侥幸能跑，裸 `docker run` 即失败）——shebang 必须第一行。
 > 目标：**零代码改动**，把 Stella 容器化，远程服务器 `docker compose` 一条命令起停；升级 = 换镜像，数据不动。
 > 原则：复用项目已有的 `STELLA_HOME`（程序目录 / 用户数据目录分离）设计，不引入新的布局概念。
 
@@ -60,7 +61,7 @@
 | `init: true` + `stop_grace_period: 15s` | uvicorn 已有 5s 优雅停机（在途记忆整合不丢）；`init` 收割 playwright 拉起的 node/chromium 子进程（shutdown 钩子已处理，此为双保险） |
 | 非 root（uid 1000）运行 | 写权限只给数据卷；`PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright` 必须同时设——默认缓存路径在 `/root` 下，切用户后找不到浏览器 |
 | `TZ=Asia/Shanghai` + tzdata | 主动搭话、消息新鲜度（`RECENT_TAIL_MAX_AGE_MINUTES` 等）都依赖本地时间语义，容器默认 UTC 会全错且无报错 |
-| 镜像体积 ~1.1–1.3GB | slim 130MB + 依赖 + 浏览器（~270MB）+ 中文字体。阶段 2 提供 `WITH_RENDER=false` 精简变体（~450MB，不渲染卡片） |
+| 镜像体积（实测）完整版 1.74GB / 精简版 838MB | slim 基础 + 依赖（含 playwright pip 包）+ 浏览器（~270MB）+ 中文字体；`WITH_RENDER=false` 精简变体已提供并实测（无浏览器，渲染走既有降级路径） |
 | 只能单实例 | 记忆库是本地 SQLite + 进程内状态，禁止 `--scale` / 多副本 |
 
 ## 3. 镜像设计（Dockerfile 要点）
@@ -91,7 +92,7 @@ CMD ["python", "bot.py"]
 
 阶段 1 仅 `stella` 服务（详见根目录 `docker-compose.yml`）：`build: .`、`./StellaData:/data`、`init: true`、`stop_grace_period: 15s`、`restart: unless-stopped`、`extra_hosts: host.docker.internal:host-gateway`（混合模式连宿主机 LM Studio）、`ports: 8080`（NapCat 在别处时必须可达，公网暴露务必配 token）。
 
-阶段 2 增加 `napcat` 服务（`mlikiowa/napcat-docker`）：WebUI 6099 绑 `127.0.0.1`，反向 WS 走 compose 内网 `ws://stella:8080/onebot/v11/ws`，届时 `stella` 的 ports 可撤掉或改绑回环；另加极简 `entrypoint.sh`（检测 `/data/.env` 缺失时打印「先跑 deploy init」引导，再 `exec python bot.py`）。
+阶段 2 落地后 compose 为双服务：`stella`（本地构建）+ `napcat`（`mlikiowa/napcat-docker`，WebUI 6099 绑 `127.0.0.1` 走 SSH 隧道扫码，反向 WS 走 compose 内网 `ws://stella:8080/onebot/v11/ws`，`depends_on: service_healthy`）；`stella.ports` 默认 `127.0.0.1:8080:8080`，仅备选拓扑（NapCat 远程）才改为公网发布 + token。`entrypoint.sh` 在启动 Bot 前校验 `/data/.env`：缺失则打印引导并退出（NoneBot 会带着空配置"健康"跑起来，那种假绿比起不来更难排查），`STELLA_SKIP_ENV_CHECK=1` 可跳过；非启动命令（`deploy init` / `deploy doctor`）直接放行。另在 `.env` 检出 `HOST=127.*` 时打警告——`deploy init` 向导的 host 默认值是 `127.0.0.1`（Windows 桌面假设），容器内这样配会把 NapCat 挡在外面而健康检查仍绿（检查走容器内回环）。`WITH_RENDER=false` 构建参数产出无浏览器精简镜像（渲染走既有降级路径）。
 
 容器场景下 `deploy start/stop/status`（宿主机进程管理）被 compose 取代；`deploy init` / `deploy doctor` 在容器内依然可用。
 
@@ -107,7 +108,7 @@ CMD ["python", "bot.py"]
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 1 | `Dockerfile` + `.dockerignore` + `docker-compose.yml`（仅 stella，NapCat 在别处）+ `docs/deployment-docker.md` + README 链接 | ✅ 已实施 |
-| 2 | compose 集成 napcat 服务 + `entrypoint.sh` 引导 + `WITH_RENDER` 精简镜像构建参数 | ⬜ |
+| 2 | compose 集成 napcat 服务 + `entrypoint.sh` 引导 + `WITH_RENDER` 精简镜像构建参数 | ✅ 已实施 |
 | 3 | GitHub Actions 出镜像到 GHCR（挂 `release.yml` 的 tag 触发，amd64 优先、arm64 可选）；AGPL-3.0 分发镜像时源码 tag 即合规对应 | ⬜ |
 
 ## 8. 风险与边界

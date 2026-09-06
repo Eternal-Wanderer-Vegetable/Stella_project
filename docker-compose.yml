@@ -2,16 +2,18 @@
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
 #
-# 阶段 1 编排：仅 Stella 本体，适用于「NapCat 在别的机器上跑、Stella 在这台
-# 服务器上跑」的拓扑。同机双容器（stella + napcat）的编排规划见
-# design_docs/Docker 化部署方案 v1.0.md §5（阶段 2）。
+# 推荐编排：Stella + NapCat 同机双容器（阶段 2）。
+#   * NapCat（QQ 协议端）通过 compose 内网以反向 WS 连 Stella，不占用公网端口；
+#   * 备选拓扑「NapCat 在别的机器上」见 docs/deployment-docker.md §1——把下面
+#     stella.ports 的回环绑定改成 "8080:8080" 并务必配 ONEBOT_ACCESS_TOKEN。
 #
 # 常用命令（详见 docs/deployment-docker.md）：
 #   docker compose build
 #   docker compose run --rm stella python -m deploy init   # 首次配置（交互向导 → ./StellaData/.env）
 #   docker compose up -d
 #   docker compose ps                                       # STATUS 列看到 healthy 才算起好
-#   docker compose logs -f stella
+#   docker compose logs -f stella                           # 运行日志
+#   docker compose logs napcat | grep -i token              # NapCat WebUI 的登录 token
 #   docker compose exec stella python -m deploy doctor      # 环境自检
 
 services:
@@ -34,11 +36,40 @@ services:
       # 想让 Docker 管理卷可换成 named volume：stella-data:/data（见 docs/deployment-docker.md）
       - ./StellaData:/data
     ports:
-      # NapCat 在别的机器上时必须可达。公网暴露务必在 .env 里配 ONEBOT_ACCESS_TOKEN
-      # （NapCat 侧同值），并建议前置 TLS / WireGuard——伪造客户端可以操纵 Bot。
-      # 若 NapCat 与本容器同机（阶段 2），可改绑 "127.0.0.1:8080:8080" 或整个去掉。
-      - "8080:8080"
+      # 默认只绑回环：NapCat 同 compose 走内网连它，公网不暴露。
+      # NapCat 在别的机器上时改成 "8080:8080"，并务必在 .env 配 ONEBOT_ACCESS_TOKEN
+      # （NapCat 侧同值）+ 前置 TLS / WireGuard——伪造客户端可以操纵 Bot。
+      - "127.0.0.1:8080:8080"
     extra_hosts:
       # 混合部署模式：LM Studio 跑在这台宿主机上时，.env 里填
       # http://host.docker.internal:1234 即可从容器内访问
       - "host.docker.internal:host-gateway"
+
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      # QQ 数据目录的运行身份。0 = root，与 Docker 自动创建的 ./napcat/ 目录属主一致；
+      # 想用普通用户跑就连同 NAPCAT_UID 一起改成对应 uid，并 chown ./napcat/
+      NAPCAT_GID: "0"
+      NAPCAT_UID: "0"
+    volumes:
+      # QQ 登录态与消息数据：丢了要重新扫码
+      - ./napcat/QQ:/app/.config/QQ
+      # NapCat 配置（WebUI 里配的网络、token 等）
+      - ./napcat/config:/app/napcat/config
+    ports:
+      # WebUI 仅首次扫码登录与网络配置时需要；绑回环 + SSH 隧道访问（见部署文档），
+      # 不要暴露公网。登录 token 见 `docker compose logs napcat`
+      - "127.0.0.1:6099:6099"
+    # NapCat 的反向 WS 客户端会自动重连，此依赖只是让首次连接少几次失败重试
+    depends_on:
+      stella:
+        condition: service_healthy
+    # 首次启动后在 WebUI（http://<隧道>/webui）里：
+    #   1. 扫码登录 QQ；
+    #   2. 网络配置 → 添加「WebSocket 客户端」：
+    #      URL = ws://stella:8080/onebot/v11/ws（compose 服务名即主机名）
+    #      token = .env 里 ONEBOT_ACCESS_TOKEN 的值（没配就留空）

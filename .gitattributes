@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+#
+# Windows 开发机普遍 core.autocrlf=true（检出时 LF→CRLF），而 shell 脚本带 CRLF
+# 在 Linux 容器里连 shebang 都解析不了。entrypoint.sh 会进 Docker 镜像被执行，
+# 必须钉死 LF（Dockerfile 里另有构建期剥离 \r 的双保险）。
+
+*.sh text eol=lf
