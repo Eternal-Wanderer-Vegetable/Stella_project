@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+#
+# 阶段 1 编排：仅 Stella 本体，适用于「NapCat 在别的机器上跑、Stella 在这台
+# 服务器上跑」的拓扑。同机双容器（stella + napcat）的编排规划见
+# design_docs/Docker 化部署方案 v1.0.md §5（阶段 2）。
+#
+# 常用命令（详见 docs/deployment-docker.md）：
+#   docker compose build
+#   docker compose run --rm stella python -m deploy init   # 首次配置（交互向导 → ./StellaData/.env）
+#   docker compose up -d
+#   docker compose ps                                       # STATUS 列看到 healthy 才算起好
+#   docker compose logs -f stella
+#   docker compose exec stella python -m deploy doctor      # 环境自检
+
+services:
+  stella:
+    build: .
+    image: stella:latest
+    container_name: stella
+    # 收割 playwright 拉起的 node/chromium 子进程；SIGTERM → uvicorn 优雅停机
+    init: true
+    restart: unless-stopped
+    # bot.py 里 uvicorn 已设 5s 优雅停机（在途记忆整合不丢），这里给足余量
+    stop_grace_period: 15s
+    environment:
+      # 镜像里已有同值默认；显式写出方便按部署地区改
+      TZ: Asia/Shanghai
+      # STELLA_HOME 已在镜像 ENV 固定为 /data，一般不用动
+    volumes:
+      # 全部用户数据（.env、记忆库、插件、日志、人格）都在这一个目录里，
+      # 备份/迁移打包它即可。首次使用前：mkdir -p StellaData && sudo chown 1000:1000 StellaData
+      # 想让 Docker 管理卷可换成 named volume：stella-data:/data（见 docs/deployment-docker.md）
+      - ./StellaData:/data
+    ports:
+      # NapCat 在别的机器上时必须可达。公网暴露务必在 .env 里配 ONEBOT_ACCESS_TOKEN
+      # （NapCat 侧同值），并建议前置 TLS / WireGuard——伪造客户端可以操纵 Bot。
+      # 若 NapCat 与本容器同机（阶段 2），可改绑 "127.0.0.1:8080:8080" 或整个去掉。
+      - "8080:8080"
+    extra_hosts:
+      # 混合部署模式：LM Studio 跑在这台宿主机上时，.env 里填
+      # http://host.docker.internal:1234 即可从容器内访问
+      - "host.docker.internal:host-gateway"

@@ -87,6 +87,8 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 ## 🚀 快速开始
 
+> 本节面向 **Windows 桌面**部署。Linux / 远程服务器请直接看 [Docker 部署指南](docs/deployment-docker.md)。
+
 ### 📦 下载 & 安装（普通用户）
 
 - 第一步：下载如下必须依赖：
@@ -233,6 +235,7 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 | [能力系统](docs/capability-system.md) | Capability Router 与 Comes：工具如何在聊天上下文之外执行 |
 | [插件接入规范](docs/plugin-spec.md) | 写一个 Stella 能完整用起来的插件：声明格式、两条通路、失败契约、自检工具 |
 | [配置参考](docs/configuration.md) | 端点 × 角色两层模型配置、全部配置项与调参建议 |
+| [Docker 部署指南](docs/deployment-docker.md) | 远程服务器容器化部署：构建、配置、从 Windows 迁移、升级与备份 |
 | [开发指南](docs/development.md) | 测试、探针脚本、CI、贡献流程 |
 
 > 设计过程记录（规范草案、检查点、缺陷报告、测试清单）在 [`design_docs/`](design_docs/)。

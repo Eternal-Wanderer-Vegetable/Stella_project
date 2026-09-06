@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+#
+# 镜像里只允许出现「程序」。用户数据（.env / 记忆库 / 插件 / 日志 / 人格）走
+# STELLA_HOME 挂卷，密钥与聊天记录绝不能烤进镜像层；Windows 发布形态与开发
+# 产物也不进构建上下文。边界依据见 design_docs/Docker 化部署方案 v1.0.md §0.1。
+#
+# 注意：.env.example 是 deploy init 的模板，必须进镜像——所以这里逐个列出
+# 环境文件，不能图省事写 .env*。
+
+# --- 版本库与开发工具链（不参与运行） ---
+.git
+.gitignore
+.github
+.gitnexus
+.claude
+.vscode
+.mypy_cache
+.pytest_cache
+.ruff_cache
+pyrightconfig.json
+AGENTS.md
+CLAUDE.md
+
+# --- 用户数据 / 密钥（运行期挂卷，绝不进镜像） ---
+.env
+.env.dev
+.env.prod
+.env.backup
+.env.bak
+deploy.answers.toml
+.stella-state.json
+.stella-manifest.json
+StellaData
+logs
+data
+memory/agent_memory.db*
+memory/stella_memory_backup.db
+memory/*.bak
+memory/.last_message_cleanup
+
+# --- Windows 发布形态（Linux 镜像用不到的体积大头） ---
+runtime
+stella-installer
+release_assets
+release_backup
+start_claude_command.txt
+STARTCOMMAND.md
+
+# --- 开发与文档产物（运行期不读） ---
+# plugin_scaffold 对 docs/ 只有注释引用，无文件读取。
+_deprecated
+docs
+tests
+scripts
+design_docs
+assets
+requirements-dev.txt
+README.en.md
+README改进简要说明.md
+test_compressor_trigger.py
+dump_windows.py
+
+# --- 开发探针产物（含真实群聊数据，禁止进镜像） ---
+prompt_now.txt
+positive_reordered.json
+consolidation_probe.json
+consolidation_probe.md
+consolidation_positive_probe.md
+windows_raw.json
+windows_probe_positive.json
+windows_review.txt
+
+# --- Python 缓存 ---
+__pycache__
+**/__pycache__
+*.pyc
