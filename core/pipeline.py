@@ -18,6 +18,7 @@ from nonebot import logger
 
 from config import MEMORY_V2_ENABLED
 from core.context import ChatContext
+from core.context_budget import fit_prompt_to_window
 from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
 from core.llm.base import LLMBackend
 
@@ -201,6 +202,12 @@ class Pipeline:
             system_prompt = self.system_prompt
             if self.system_prompt_resolver is not None:
                 system_prompt = self.system_prompt_resolver(ctx)
+            budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+            user_prompt = budgeted.prompt
+            ctx.context_window_tokens = budgeted.window_tokens
+            ctx.prompt_budget_tokens = budgeted.budget_tokens
+            ctx.prompt_estimated_tokens = budgeted.estimated_tokens
+            ctx.prompt_truncated = budgeted.truncated
             ctx.system_prompt_len = len(system_prompt)
             ctx.prompt_log = user_prompt
 
@@ -214,6 +221,7 @@ class Pipeline:
                 import time as _time
                 _t0 = _time.monotonic()
                 try:
+                    ctx.llm_call_count += 1
                     raw = await asyncio.wait_for(
                         self._llm.generate(user_prompt, system_prompt),
                         timeout=self._timeout,

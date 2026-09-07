@@ -93,6 +93,7 @@ from config import (
 )
 from config.spaces import prompt_text, resolve_space
 from core.context import ChatContext
+from core.reply_gate import get_reply_gate
 from core.llm import ROLE_CHAT, backend_for
 from core.llm.registry import log_summary as log_llm_summary
 from core.llm.usage_store import budget_blocked
@@ -454,6 +455,14 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             raw_event=event,
             bot=bot,
         )
+        gate = get_reply_gate().evaluate(
+            event.group_id,
+            trigger="reply",
+            intent="",
+        )
+        ctx.gate_path = gate.path
+        ctx.gate_score = gate.score
+        ctx.gate_reasons = gate.reasons
 
         # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，
         # 避免每次群消息都做无用总结，同时保证对话用到的短期记忆是最新的。
@@ -1243,10 +1252,23 @@ async def _proactive_speak_for_group(
     # gate 通过后再掷概率骰：概率是话题插话独有的（主动 @ 由配额与冷却约束，不掷骰）
     if not skip_dice and not proactive.should_speak(group_id):
         return
-
     # 同样要抢占本群的互斥锁：主动发言不能和 @ 回复并发，避免上下文被互相污染
     lock = _group_locks[group_id]
     async with lock:
+        # 必须在群锁内判断：多个后台触发可能同时排队，锁外判断会让它们
+        # 一起通过 cooldown，随后连续启动多次主动回复。
+        gate = get_reply_gate().evaluate(
+            group_id,
+            trigger="proactive",
+            intent=intent,
+        )
+        if not gate.allowed:
+            logger.info(
+                f"[ReplyGate] 群 {group_id} 跳过主动发言："
+                f"{', '.join(gate.reasons)}"
+            )
+            return
+        get_reply_gate().start(group_id, proactive=True)
         # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
         try:
             consolidator = get_consolidator()
@@ -1269,12 +1291,17 @@ async def _proactive_speak_for_group(
             message=instruction or _PARTICIPATION_DEFAULT_INSTRUCTION,
             trigger="proactive",
             intent=intent,
+            gate_path=gate.path,
+            gate_score=gate.score,
+            gate_reasons=gate.reasons,
         )
         try:
             ctx = await pipeline.run(ctx)
         except Exception as e:
             logger.error(f"主动发言 Pipeline 异常: {e}")
             return
+        finally:
+            get_reply_gate().finish(group_id)
         if not ctx.lines:
             return
 

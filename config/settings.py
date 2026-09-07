@@ -510,6 +510,11 @@ LM_STUDIO_API_KEY = _env("LM_STUDIO_API_KEY", "")
 # LLM 调用超时（秒）
 LLM_TIMEOUT = _env_float("LLM_TIMEOUT", 90.0)
 
+# 8192-token 工作窗口：输入预算会为模型输出和估算误差预留空间。
+LLM_CONTEXT_WINDOW_TOKENS = _env_int("LLM_CONTEXT_WINDOW_TOKENS", 8192)
+LLM_OUTPUT_RESERVE_TOKENS = _env_int("LLM_OUTPUT_RESERVE_TOKENS", 1000)
+LLM_CONTEXT_SAFETY_TOKENS = _env_int("LLM_CONTEXT_SAFETY_TOKENS", 200)
+
 # ---------- LLM 调度器（应用层闸门） ----------
 # LM Studio 本身不限并发，应用层必须手动串行访问共享模型，否则并发推理会
 # 互相拖慢且难以定位。调度器为两种资源（chat=27B / consolidation=E4B）各自
@@ -627,6 +632,9 @@ PROACTIVE_COOLDOWN = _env_int("PROACTIVE_COOLDOWN", 600)
 PROACTIVE_MIN_MESSAGES_SINCE_SPOKE = _env_int("PROACTIVE_MIN_MESSAGES_SINCE_SPOKE", 15)
 # 主动发言的定时检查间隔（秒）
 PROACTIVE_CHECK_INTERVAL = _env_int("PROACTIVE_CHECK_INTERVAL", 60)
+REPLY_GATE_PROACTIVE_COOLDOWN_SECONDS = _env_float(
+    "REPLY_GATE_PROACTIVE_COOLDOWN_SECONDS", 15.0
+)
 # 消息频率估算窗口（取最近 N 条消息计算平均间隔）
 PROACTIVE_FREQ_WINDOW = _env_int("PROACTIVE_FREQ_WINDOW", 10)
 # 主动发言时每次最多发出的行数（主动插话宜简短，避免刷屏）
