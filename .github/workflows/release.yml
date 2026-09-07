@@ -397,9 +397,9 @@ jobs:
 
       - name: 打包
         run: |
-          tar czf "stellacli-v${RELEASE_VERSION}-linux-amd64.tar.gz" \
+          tar czf "Stella-CLI-version-v${RELEASE_VERSION}-linux-amd64.tar.gz" \
             -C cli/target/x86_64-unknown-linux-musl/release stellacli
-          ls -lh stellacli-v*.tar.gz
+          ls -lh Stella-CLI-version-v*.tar.gz
 
       - name: 上传到 Release（tag 触发时）
         if: github.event_name == 'push'
@@ -407,15 +407,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${RELEASE_VERSION}" \
-            "stellacli-v${RELEASE_VERSION}-linux-amd64.tar.gz" --clobber
+            "Stella-CLI-version-v${RELEASE_VERSION}-linux-amd64.tar.gz" --clobber
           echo "✅ 已上传 Linux CLI asset"
 
       - name: 上传 artifact（手工触发时用于验证产物）
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: stellacli-linux-preview
-          path: stellacli-v*.tar.gz
+          name: Stella-CLI-linux-preview
+          path: Stella-CLI-version-v*.tar.gz
           retention-days: 7
 
   build-cli-windows:
@@ -465,7 +465,7 @@ jobs:
         run: |
           Compress-Archive -Path cli/target/release/stellacli.exe `
             -DestinationPath "stellacli-v${env:RELEASE_VERSION}-windows-amd64.zip" -Force
-          Get-Item stellacli-v*.zip | Select-Object Name, Length
+          Get-Item Stella-CLI-version-v*.zip | Select-Object Name, Length
 
       - name: 上传到 Release（tag 触发时）
         if: github.event_name == 'push'
@@ -474,13 +474,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${RELEASE_VERSION}" \
-            "stellacli-v${RELEASE_VERSION}-windows-amd64.zip" --clobber
+            "Stella-CLI-version-v${RELEASE_VERSION}-windows-amd64.zip" --clobber
           echo "✅ 已上传 Windows CLI asset"
 
       - name: 上传 artifact（手工触发时用于验证产物）
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: stellacli-windows-preview
-          path: stellacli-v*.zip
+          name: Stella-CLI-windows-preview
+          path: Stella-CLI-version-v*.zip
           retention-days: 7

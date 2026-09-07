@@ -36,8 +36,9 @@ struct Cli {
     /// 部署形态（默认自动检测）
     #[arg(long, global = true, value_name = "FORM")]
     mode: Option<ModeArg>,
+    /// 子命令可缺省：双击运行时打印帮助（而不是 clap 报「缺少子命令」后闪退）
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -155,26 +156,67 @@ enum PluginCmd {
 
 fn main() {
     let cli = Cli::parse();
-    let code = match run(cli) {
-        Ok(c) => c,
-        Err(e) => {
-            let mut err = anstream::stderr();
-            let _ = writeln!(
-                err,
-                "{}错误：{e:#}{}",
-                style::ERROR.render(),
-                anstyle::Reset.render()
-            );
+    let code = match cli.command {
+        Some(command) => match run(cli.mode, command) {
+            Ok(c) => c,
+            Err(e) => {
+                let mut err = anstream::stderr();
+                let _ = writeln!(
+                    err,
+                    "{}错误：{e:#}{}",
+                    style::ERROR.render(),
+                    anstyle::Reset.render()
+                );
+                2
+            }
+        },
+        // 资源管理器双击是最常见的首启方式：给帮助而不是 usage 报错。
+        // 帮助要经 anstream 输出：它对 Windows 控制台走 WriteConsoleW，老式
+        // conhost（CP936）下中文不乱码；clap 的 print_help 直写字节会。
+        None => {
+            use clap::CommandFactory;
+            use std::io::Write as _;
+            let mut buf = Vec::new();
+            let _ = Cli::command().write_help(&mut buf);
+            let mut out = anstream::stdout();
+            let _ = out.write_all(&buf);
+            let _ = writeln!(out);
             2
         }
     };
+    pause_if_console_owned();
     std::process::exit(code);
 }
 
-fn run(cli: Cli) -> Result<i32> {
-    let ctx = ctx::resolve(cli.mode.map(Into::into))?;
+/// 资源管理器双击启动时，Windows 会为进程**新开**一个控制台，进程一退出窗口
+/// 立刻消失——输出根本读不到（用户报告的「打开即闪退」）。GetConsoleProcessList
+/// 返回 1 说明控制台里只有我们自己（双击/快捷方式开的）；从 cmd/PowerShell/
+/// Windows Terminal 里运行时列表里还有 shell（≥2），照常即退。非交互 stdin
+/// （CI、管道）读行直接 EOF，因此误触发也不会卡住。
+fn pause_if_console_owned() {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetConsoleProcessList(process_list: *mut u32, process_count: u32) -> u32;
+        }
+        let mut list = [0u32; 16];
+        let n = unsafe { GetConsoleProcessList(list.as_mut_ptr(), 16) };
+        if n == 0 || n > 1 {
+            return;
+        }
+        let mut out = anstream::stdout();
+        let _ = writeln!(out, "\n按回车键退出…");
+        let _ = std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut String::new());
+    }
+    #[cfg(not(windows))]
+    {}
+}
+
+fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
+    let ctx = ctx::resolve(mode.map(Into::into))?;
     let mut out = anstream::stdout();
-    match cli.command {
+    match command {
         Command::Doctor { json } => {
             let cmd = ctx.domain_cmd(&["doctor", "--json"], false);
             let (v, raw, code) = runner::capture_json(&cmd, &ctx.root, "deploy doctor")?;

@@ -99,7 +99,7 @@
 - **代码位置**：仓库根 `cli/`（独立 Cargo 工程 `stellacli`（crate 与二进制同名）），与 `stella-installer/src-tauri` 并列互不依赖（共享的只有「deploy --json 契约」这条约定）。
 - **构建目标**：`x86_64-pc-windows-msvc`（windows-latest）+ `x86_64-unknown-linux-musl`（静态链接，任何发行版可直接跑，容器里也能用）。
 - **CI**：ci.yml 加一个 job——`cargo fmt --check` + `clippy -D warnings` + `cargo test`（ubuntu 即可，Windows 编译验证放 release 侧）。
-- **发布**：release.yml 加 job 产出 `stellacli-v{ver}-windows-amd64.zip` / `stellacli-v{ver}-linux-amd64.tar.gz` 挂到 Release assets。**永久独立发包，不进 Windows 主发布包**（已定）：CLI 面向没有 WebView 的设备，是独立验证的备选形态，与主包解耦。版本一致性校验扩一条：Cargo.toml version 必须等于 tag/pyproject 版本。
+- **发布**：release.yml 加 job 产出 `Stella-CLI-version-v{ver}-windows-amd64.zip` / `Stella-CLI-version-v{ver}-linux-amd64.tar.gz` 挂到 Release assets。**永久独立发包，不进 Windows 主发布包**（已定）：CLI 面向没有 WebView 的设备，是独立验证的备选形态，与主包解耦。版本一致性校验扩一条：Cargo.toml version 必须等于 tag/pyproject 版本。
 - **AGPL-3.0**：二进制随仓库源码同许可分发，Release 页对应 tag 即源码要约，合规无额外动作。
 
 ## 7. 分阶段实施
@@ -137,7 +137,7 @@
 **交付**：`cli/`（Cargo 工程，~7 个模块，15 个单元测试）、ci.yml `cli` job
 （fmt/clippy/test/帮助文本冒烟，并纳入 PR 结果门禁）、release.yml
 `build-cli-linux`（musl 静态）+ `build-cli-windows`（msvc）双 job，
-产物 `stellacli-v{ver}-{linux,windows}-amd64` 独立 Release assets。
+产物 `Stella-CLI-version-v{ver}-{linux,windows}-amd64` 独立 Release assets。
 release 二进制约 1MB。
 
 **E2E（全部通过）**：docker 形态（沙箱 compose）——init（容器内非交互向导）→
