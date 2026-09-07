@@ -18,8 +18,12 @@
 
 services:
   stella:
+    # 方式一（默认）：本地构建——改了代码 / 想要精简镜像（WITH_RENDER=false）时用
     build: .
     image: stella:latest
+    # 方式二：直接用官方镜像（免构建，tag 触发的 CI 会推到 GHCR，版本号见 Releases）——
+    # 注释掉上面两行，改用下行（首次发布后需在 GitHub Packages 里把包设为 Public）
+    # image: ghcr.io/eternal-wanderer-vegetable/stella_project:latest
     container_name: stella
     # 收割 playwright 拉起的 node/chromium 子进程；SIGTERM → uvicorn 优雅停机
     init: true

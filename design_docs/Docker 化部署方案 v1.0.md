@@ -1,6 +1,6 @@
 # Docker 化部署方案 v1.0
 
-> 状态：已评审（2026-09-07）。阶段 1、2 已实施：`Dockerfile`（含 `WITH_RENDER` 精简变体）、`.dockerignore`、`docker-compose.yml`（stella + napcat 双容器）、`entrypoint.sh`（.env 缺失守门）、`docs/deployment-docker.md`。阶段 3 未实施。
+> 状态：已评审（2026-09-07）。阶段 1、2、3 已实施：`Dockerfile`（含 `WITH_RENDER` 精简变体）、`.dockerignore`、`docker-compose.yml`（stella + napcat 双容器）、`entrypoint.sh`（.env 缺失守门）、`docs/deployment-docker.md`、`.github/workflows/docker-publish.yml`（GHCR 镜像发布）。
 > 容器实测：2026-09-07 于 Docker Desktop 29.7.2（Windows/WSL2）通过全套 8 项验证（构建 / 守门 / 非交互 init / 健康检查 / 状态端点 200/403 语义 / 优雅停机 1s / 精简镜像对比 / 收尾清理）。实测发现并修复一个缺陷：entrypoint.sh 的 SPDX 许可头曾被写在首行导致无 shebang，内核无法直接 exec（compose `init:true` 下靠 tini 的 execvp 回落 /bin/sh 侥幸能跑，裸 `docker run` 即失败）——shebang 必须第一行。
 > 目标：**零代码改动**，把 Stella 容器化，远程服务器 `docker compose` 一条命令起停；升级 = 换镜像，数据不动。
 > 原则：复用项目已有的 `STELLA_HOME`（程序目录 / 用户数据目录分离）设计，不引入新的布局概念。
@@ -109,7 +109,17 @@ CMD ["python", "bot.py"]
 |---|---|---|
 | 1 | `Dockerfile` + `.dockerignore` + `docker-compose.yml`（仅 stella，NapCat 在别处）+ `docs/deployment-docker.md` + README 链接 | ✅ 已实施 |
 | 2 | compose 集成 napcat 服务 + `entrypoint.sh` 引导 + `WITH_RENDER` 精简镜像构建参数 | ✅ 已实施 |
-| 3 | GitHub Actions 出镜像到 GHCR（挂 `release.yml` 的 tag 触发，amd64 优先、arm64 可选）；AGPL-3.0 分发镜像时源码 tag 即合规对应 | ⬜ |
+| 3 | GitHub Actions 出镜像到 GHCR（挂 `release.yml` 的 tag 触发，amd64 优先、arm64 可选）；AGPL-3.0 分发镜像时源码 tag 即合规对应 | ✅ 已实施（`docker-publish.yml`，实测验证待首个 tag 触发） |
+
+### 7.1 阶段 3 实施要点
+
+- **触发**：与 Release 同为 `v*` tag；Docker 相关文件改动的 PR 只构建冒烟不推送；手工触发默认只验证，勾选 `push_image` 才推送。tag 触发时先校验 pyproject 版本与 tag 一致（与 release.yml 同一道防线）。
+- **tag 策略**：`v3.5.0` → `3.5.0`、`3.5`、`latest`（metadata-action semver 模式）；镜像名 `ghcr.io/<owner>/<repo>` 强制小写。
+- **默认单架构** `linux/amd64`：`PLATFORMS` 加 `linux/arm64` 即双架构（playwright 有 arm64 内核，但 QEMU 下构建显著变慢，且冒烟步骤因 load 单架构限制自动跳过）。
+- **冒烟**：构建产物跑「容器内 import 六大包 + entrypoint 空数据守门」，PR 阶段就拦住镜像级回归。
+- **缓存**：gha 缓存（mode=max）覆盖 pip/apt/浏览器层，重跑从 ~15 分钟降到几分钟。
+- **provenance=false**：Ubuntu 22.04 自带的老 Docker 拉带 attestation 的清单会出现 unknown/unknown 条目，兼容性优先。
+- **⚠ 首次推送后**：GHCR 包默认可能不可见，仓库主人需到 Packages 设置里改 Public，用户才能免登录 `docker pull`。
 
 ## 8. 风险与边界
 

@@ -55,6 +55,8 @@ sudo chown -R 1000:1000 StellaData   # 拿不准就执行这条，必然正确
 # 3) 构建镜像（国内服务器可加 --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple，
 #    但部分国内镜像不收录 playwright，装不上就去掉该参数回落官方源）
 docker compose build
+#    也可跳过构建直接用官方镜像：把 docker-compose.yml 里 stella 服务的
+#    build/image 两行注释换为 GHCR 那行（见文件内注释），然后 docker compose pull stella
 
 # 4) 首次配置：交互向导（监听端口保持 8080 不变、群号、模型端点与 key），写入 StellaData/.env
 #    ⚠ 向导问「监听地址」时务必填 0.0.0.0（默认值 127.0.0.1 是 Windows 桌面场景的，
@@ -107,8 +109,8 @@ docker compose pull  # 阶段 3 起：直接拉官方镜像，无需本地构建
 
 # 升级（数据卷不动，这就是 STELLA_HOME 设计的收益）
 git pull
-docker compose build          # stella 本地构建
-docker compose pull napcat    # NapCat 用现成镜像，直接拉新版
+docker compose build          # 本地构建方式；改用 GHCR 官方镜像时：
+docker compose pull napcat    #   docker compose pull stella && docker compose pull napcat
 docker compose up -d
 
 # 备份（停机备份最稳；SQLite 在线备份也可用 docker compose exec stella python -m deploy doctor 之类自检后再热备）

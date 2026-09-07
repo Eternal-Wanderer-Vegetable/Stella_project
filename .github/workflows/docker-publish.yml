@@ -1,0 +1,132 @@
+name: Docker Publish
+
+# 镜像发布（设计见 design_docs/Docker 化部署方案 v1.0.md §7 阶段 3）：
+#   * push v* tag → 构建 ghcr.io/<owner>/<repo>:<版本> 并推送（与 Release 同一触发）；
+#   * 改动 Docker 相关文件的 PR → 只构建冒烟，不推送（提前拦住镜像构建回归）；
+#   * 手工触发 → 默认只构建验证；勾选 push_image 才推送（用于补发镜像，不污染版本号）。
+#
+# ⚠ 首次推送后，GHCR 上的包默认可能不可见：仓库主人需到 GitHub → Packages →
+#   stella_project → Package settings 把可见性设为 Public，用户才能免登录拉取。
+#
+# 多架构：默认只出 linux/amd64（主流服务器）。要加 arm64，把下面 PLATFORMS 改成
+#   linux/amd64,linux/arm64 即可——playwright 官方有 arm64 的 chromium 内核；
+#   但 QEMU 模拟下构建显著变慢，且冒烟步骤（load 单架构限制）会自动跳过。
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'entrypoint.sh'
+      - '.dockerignore'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+      - 'docker-compose.yml'
+      - '.github/workflows/docker-publish.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '镜像版本号（不带 v 前缀，如 3.5.0）'
+        required: true
+        type: string
+      push_image:
+        description: '是否推送镜像到 GHCR（默认只构建验证）'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 镜像必须全小写（Docker 参考语法要求），${GITHUB_REPOSITORY,,} 做 bash 小写展开
+  PLATFORMS: linux/amd64
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析镜像名（仓库路径转小写）
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      # 与 Release 相同的防线：tag 版本必须与 pyproject.toml 一致，防止镜像版本
+      # 与源码版本错位（镜像 tag 就是用户拉取时的版本依据，错位比 zip 更难回收）。
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        run: |
+          VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          TAG=${GITHUB_REF_NAME#v}
+          echo "pyproject.toml version: ${VERSION}"
+          echo "tag（去 v 前缀）: ${TAG}"
+          if [ "${VERSION}" != "${TAG}" ]; then
+            echo "::error::pyproject.toml 版本（${VERSION}）与 tag（${TAG}）不一致"
+            exit 1
+          fi
+
+      # arm64 并入 PLATFORMS 时才真正用到；无条件装只是几秒钟，省得条件维护
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # tag 策略：v3.5.0 → 3.5.0、3.5、latest（semver 自动带 latest）；
+      # 手工触发 → 只打输入的版本号（latest=auto 使 raw tag 不抢 latest）
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      # load:true 把镜像导出到本地 docker images，供下方冒烟步骤直接跑——
+      # 它只支持单架构，PLATFORMS 扩到多架构时冒烟步骤会因条件不满足而跳过
+      - name: 构建镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ github.event_name == 'push' || inputs.push_image == true }}
+          load: ${{ env.PLATFORMS == 'linux/amd64' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # gha 缓存把 pip/apt/浏览器层（合计 ~1.5GB）缓存下来，重跑只需几分钟
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # 不生成 attestation 清单：部分老版本 Docker（如 Ubuntu 22.04 自带的
+          # 20.10）拉取带 attestation 的镜像列表会多出 unknown/unknown 条目
+          provenance: false
+
+      # 冒烟 = 用刚构建的镜像本身验证（Release 的 import 检查 + entrypoint 守门）。
+      # 本地实测已覆盖健康检查/优雅停机等完整链路，这里拦的是「构建产物坏了」。
+      - name: 冒烟：镜像内 import 与 entrypoint 守门
+        if: env.PLATFORMS == 'linux/amd64'
+        env:
+          REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          docker run --rm "$REF" python -c "import config, core, memory, deploy, extensions, astrbot_compat, capability; print('镜像内 import 检查通过')"
+          mkdir -p /tmp/stella-empty
+          if docker run --rm -v /tmp/stella-empty:/data "$REF" 2>guard.err; then
+            echo "::error::空数据目录不应放行启动"
+            exit 1
+          fi
+          grep -q "deploy init" guard.err && echo "entrypoint 守门正常"
+          echo "✅ 冒烟通过"
