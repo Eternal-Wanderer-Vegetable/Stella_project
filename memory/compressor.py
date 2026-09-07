@@ -38,6 +38,7 @@ from config import (
     MEMORY_COMPRESS_LOG_PATH,
     MEMORY_DECAY_DAYS,
 )
+from memory.cache_keys import bump_memory_history
 from memory.schema import create_memories_table
 from memory.text_similarity import is_similar, merge_content
 
@@ -120,6 +121,10 @@ class MemoryCompressor:
         )
         conn.commit()
         conn.close()
+        # 记忆内容/状态变了（合并/原子化/归档/衰减）→ 递增历史版本，
+        # 语义检索缓存立即失效（设计阶段四）。零改动批次不递增，保住命中率。
+        if merged or atomized or archived or decayed:
+            bump_memory_history()
         self._append_log(f"周度压缩：合并 {merged}，原子化 {atomized}，归档 {archived}，衰减 {decayed}")
         logger.info("🧹 [MemoryCompressor] 周度压缩完成")
 
@@ -171,6 +176,8 @@ class MemoryCompressor:
                     ("light", reason, merged, atomized, 0),
                 )
                 conn.commit()
+                if merged or atomized:
+                    bump_memory_history()
                 self._append_log(f"轻量压缩（{reason}）：合并 {merged}，原子化 {atomized}（active={total_active}）")
             else:
                 logger.debug(f"🧹 [MemoryCompressor] 轻量压缩跳过（active={total_active}, last_light={last_light}）")

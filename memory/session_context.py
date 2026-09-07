@@ -92,6 +92,22 @@ def get_summary(group_id: int) -> str:
     return _sessions.get(group_id, SessionState()).summary
 
 
+def summary_version(group_id: int) -> int:
+    """会话摘要的版本号，供会话上下文缓存编入 key。
+
+    - 无状态返回 -1（从未初始化）；
+    - 有状态返回 compact_count：apply_summary 每写一次摘要必 +1，
+      end_session 清空后回到 -1（无状态）→ 0（新状态）也必然变化。
+
+    覆盖 skip_range 的场景：它只推进位置不改摘要文本，摘要不变则
+    short_term 组装结果不变，版本不递增是**正确**的（内容没变就不该失效）。
+    """
+    state = _sessions.get(group_id)
+    if state is None:
+        return -1
+    return state.compact_count
+
+
 def pending_bounds(group_id: int, tail_start_id: int) -> tuple[int, int] | None:
     """返回待压缩的消息 id 区间 ``(exclusive_low, exclusive_high)``；无待压缩则 None。
 

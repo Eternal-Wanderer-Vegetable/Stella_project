@@ -20,6 +20,7 @@ from config import (
     MESSAGE_CLEANUP_KEEP_COUNT,
     MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED,
 )
+from memory.cache_keys import bump_memory_history
 
 # 上次消息清理的时间戳文件
 _LAST_CLEANUP_FILE = DB_PATH.parent / ".last_message_cleanup"
@@ -69,6 +70,9 @@ def clean_db(
         _align_checkpoint(cur, gid)
     conn.commit()
     conn.close()
+    # 清库是破坏性管理操作：无条件递增记忆历史版本，让所有进程内缓存
+    # （检索缓存 / 会话上下文缓存）立即失效，绝不复用清理前的结果。
+    bump_memory_history()
     return results
 
 

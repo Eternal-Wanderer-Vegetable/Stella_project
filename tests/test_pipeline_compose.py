@@ -151,3 +151,46 @@ def test_instruction_intent_puts_tool_result_after_instruction():
     assert out.startswith("说出那句确认的话")
     assert out.index("说出那句确认的话") < out.index("东京 27℃")
     assert out.index("东京 27℃") < out.index("背景对话")
+
+
+# ============================================================
+# 阶段四验收：普通回复必须保持单次 LLM 调用
+# （本地 Gate → Stella Retrieval v2 → 单次 LLM → 回复）
+# ============================================================
+
+import asyncio
+
+
+class _CountingBackend:
+    """只计数的伪后端：不发起任何 HTTP，只验证调用次数。"""
+
+    backend_name = "counting"
+    model = "counting-model"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(self, prompt: str, system_prompt: str = "") -> str:
+        self.calls += 1
+        return "<thought>嗯</thought><action>NONE</action><reply>好</reply>"
+
+
+def test_normal_reply_is_exactly_one_llm_call():
+    """普通回复路径整条 Pipeline 只允许一次 LLM 调用。
+
+    阶段四验收项「快速路径最多 1 次 LLM」：ContextBudget 裁剪、上下文组装、
+    检索缓存全部不得引入额外的 LLM 调用；后续接入 Planner 时本用例是护栏。
+    """
+    from core.pipeline import Pipeline
+
+    pipeline = Pipeline(timeout=5.0)
+    backend = _CountingBackend()
+    pipeline.set_llm_backend(backend)
+
+    ctx = asyncio.run(
+        pipeline.run(ChatContext(user_id=1, group_id=1, msg_id=1, message="在吗"))
+    )
+    assert backend.calls == 1
+    assert ctx.llm_call_count == 1
+    # 裸管线未注册 parse_output 后钩子，直接断言原始输出
+    assert "好" in ctx.raw_output

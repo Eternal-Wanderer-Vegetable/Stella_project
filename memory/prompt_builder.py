@@ -191,9 +191,23 @@ def build_v2_prompt_context(
     current_user_id=None,
     mode: str = "CASUAL_REPLY",
 ) -> str:
-    """v2 分区版 Prompt 组装：对话摘要 / 用户画像 / 聊天背景 / 行为约束 四区分离。
+    """v2 分区版 Prompt 组装：稳定区在前、动态区在后（设计阶段四：Prompt 前缀稳定化）。
 
-    首段为当前时间（本地时区），先于任何对话内容。
+    段落顺序与稳定性（系统提示词在最前、当前输入由 pipeline 追加在最后，
+    合起来即 系统提示词 → 稳定行为规则 → 动态上下文 → 当前输入）：
+
+      稳定区（同一用户/同一检索缓存窗口内逐字节相同）：
+        1. 当前用户身份段 —— 每用户固定；
+        2. 交流注意（行为约束）—— 检索缓存窗口内不变；
+      动态区（每次回复都可能变）：
+        3. 当前时间（仍是环境事实，先于任何对话内容）；
+        4. 当前对话摘要 / 尾巴（short_term）；
+        5. 用户画像；
+        6. 可参考的聊天背景。
+
+    在线 API 的前缀缓存只能命中「第一处差异之前」的内容：把分钟级变动的
+    时间戳或每轮都变的摘要放在开头，后面所有稳定段落就每次都按全价重复
+    计费（与 tests/test_prompt_cache_prefix.py 守卫的记忆链路同一条约束）。
 
     :param short_term: 短期摘要或最近消息回退文本；
     :param user_profile: 关于当前用户的稳定画像（仅稳定事实）；
@@ -203,14 +217,23 @@ def build_v2_prompt_context(
     :param mode: Stella 行为模式（决定聊天素材 token 预算）。
     """
     parts: list[str] = []
-    # 环境事实：当前时间应当先于任何对话内容。
-    parts.append(build_time_section())
+    # ── 稳定区：先于一切随时间/轮次变动的内容 ──
+    # 明确当前说话人身份，避免模型把摘要/记忆中其他用户的发言归属到当前用户
     if current_user_id not in (None, 0):
         parts.append(
             f"当前与你对话的用户 QQ 号：{current_user_id}。"
             f"注意：上下文里标注了用户QQ号的内容属于对应的人，"
             f"只有明确写着当前用户 {current_user_id} 的才归 TA；不要把别人的发言当成 TA 说的。"
         )
+    # 行为约束与聊天素材严格分离，且属于稳定行为规则区（见 docstring）
+    behavior = build_behavior_section(behavior_constraints)
+    if behavior:
+        parts.append(behavior)
+
+    # ── 动态区 ──
+    # 环境事实：当前时间先于任何对话内容（不先于稳定区——它分钟级变动，
+    # 放最前会把身份段与行为约束挤出可缓存前缀）。
+    parts.append(build_time_section())
     if short_term:
         parts.append(f"当前对话摘要：\n{short_term}")
     if user_profile:
@@ -228,10 +251,5 @@ def build_v2_prompt_context(
     conv = build_conversation_section(conversation_memories, max_tokens=conv_max)
     if conv:
         parts.append(conv)
-
-    # 行为约束与聊天素材严格分离
-    behavior = build_behavior_section(behavior_constraints)
-    if behavior:
-        parts.append(behavior)
 
     return "\n\n".join(parts)

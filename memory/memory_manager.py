@@ -39,6 +39,7 @@ from config import (
     MEMORY_QUOTA_W_RECENCY,
     MEMORY_USER_QUOTA,
 )
+from memory.cache_keys import bump_memory_history
 from memory.compressor import get_compressor
 from memory.retriever import _upsert_fts_record
 from memory.schema import (
@@ -180,6 +181,12 @@ class MemoryManager:
             promoted = True
         conn.commit()
         conn.close()
+
+        # 记忆库内容变了（新建/合并/冲突标记都发生在 promoted 批次内）：
+        # 递增历史版本，让语义检索缓存立即换桶，@ 对话前刚整合出的新记忆
+        # 不被 5 分钟 TTL 挡在门外（设计阶段四「历史版本变化时失效缓存」）。
+        if promoted:
+            bump_memory_history()
 
         # 提交并关闭连接后再触发压缩，避免对仍在写事务的连接产生 SQLite 锁冲突
         if promoted:

@@ -53,11 +53,20 @@ def test_tech_mode_has_larger_conversation_budget():
     assert prompt_builder.estimate_tokens(tech) > prompt_builder.estimate_tokens(casual)
 
 
-def test_time_section_present_and_first():
-    """当前时间必须出现且位于最前——它是环境事实，应先于任何对话内容。"""
-    out = prompt_builder.build_v2_prompt_context("摘要", "画像", [], [], current_user_id=1001)
-    assert out.startswith("现在是 ")
+def test_time_section_present_after_stable_zone():
+    """当前时间必须出现，位于稳定区（身份段/行为约束）之后、任何对话内容之前。
+
+    阶段四（Prompt 前缀稳定化）：时间分钟级变动，放最前会把稳定区挤出
+    可缓存前缀；但它仍是环境事实，必须先于摘要/记忆等对话内容。
+    """
+    out = prompt_builder.build_v2_prompt_context(
+        "摘要", "画像", [], [{"behavior_rule": "规则R"}], current_user_id=1001
+    )
+    assert "现在是 " in out
     assert "星期" in out
+    assert out.index("当前与你对话的用户 QQ 号") < out.index("现在是 ")
+    assert out.index("交流注意") < out.index("现在是 ")
+    assert out.index("现在是 ") < out.index("当前对话摘要")
 
 
 def test_trace_records_and_statistics(tmp_path, monkeypatch):

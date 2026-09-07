@@ -16,6 +16,7 @@ import contextlib
 import json
 import re
 import sqlite3
+import time
 
 from nonebot import logger
 
@@ -31,11 +32,13 @@ from config import (
 )
 from config.spaces import resolve_space
 from core.context import ChatContext
+from memory.cache_keys import POLICY_VERSION
 from memory.prompt_builder import build_memory_context
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
 from memory.session_context import ensure_initialized as session_ensure_initialized
 from memory.session_context import get_summary as get_session_summary
+from memory.session_context import summary_version as session_summary_version
 from memory.timeutil import (
     humanize_duration,
     log_sqlite_error,
@@ -108,6 +111,13 @@ async def build_context(ctx: ChatContext) -> ChatContext:
     摘要过期时改用「之前的话题」标题并注明时长；尾巴按时间窗过滤并在
     内部空白处插入断层标记。
 
+    会话上下文缓存（设计阶段四）：key = session_id + history_version + mode +
+    policy_version。历史版本 = 消息表 max(id) + 摘要 updated_at + 会话摘要版本，
+    任一变化立即换桶；都不变时直接复用上次组装好的文本——既省重复读库，
+    也保证同版本下拼出的上下文逐字节一致，不破坏 Prompt 前缀稳定性。
+    尾巴的时间窗过滤随墙钟缓慢漂移，由 TTL 兜底（窗口以小时计，5 分钟内的
+    陈旧无害）。
+
     参数：ctx — 会被写入 ctx.short_term；
     副作用：向 ctx.short_term 写入文本（读取 DB，不写库）；
     返回：ctx。
@@ -121,6 +131,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         # ── 1) 短期摘要：只取「话题层」信息（active_summary / pending_topic） ──
         active_summary = pending_topic = ""
         summary_age: str | None = None
+        stc_updated_at: str | None = None
         try:
             cursor.execute(
                 "SELECT active_summary, pending_topic, updated_at FROM short_term_context "
@@ -130,6 +141,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             row = cursor.fetchone()
             if row:
                 active_summary, pending_topic = (row[0] or ""), (row[1] or "")
+                stc_updated_at = row[2] if len(row) > 2 else None
                 # 摘要由整合器产出、按设计滞后。不标注新鲜度会让模型
                 # 把几小时前的话题当成当前话题。
                 elapsed = seconds_since(row[2]) if len(row) > 2 else None
@@ -142,6 +154,34 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         except sqlite3.OperationalError as e:
             # 摘要表尚不存在（新群首条消息）→ debug；列名不匹配等 → warning
             log_sqlite_error("PreProcessors.build_context", e)
+
+        # ── 1.5) 会话上下文缓存：历史版本未变则整段复用，跳过尾巴等重查询 ──
+        history_version = (
+            _max_message_id(cursor, ctx.group_id),
+            stc_updated_at,
+            session_summary_version(ctx.group_id),
+        )
+        # key 含 DB_PATH：与检索缓存同款隔离（换库/测试临时库绝不互读缓存）
+        cache_key = (
+            str(DB_PATH),
+            str(ctx.group_id),
+            history_version,
+            getattr(ctx, "memory_mode", "") or "",
+            POLICY_VERSION,
+        )
+        cached = _SESSION_CONTEXT_CACHE.get(cache_key)
+        if cached is not None and (time.monotonic() - cached[0]) < SESSION_CONTEXT_CACHE_TTL:
+            conn.close()
+            # 命中即刷新计时（与检索缓存同款简单 LRU 语义）
+            _SESSION_CONTEXT_CACHE[cache_key] = cached
+            if cached[1]:
+                ctx.short_term = cached[1]
+            ctx.tail_start_id = cached[2]
+            logger.debug(
+                f"🧠 [Context] 群 {ctx.group_id} 命中会话上下文缓存"
+                f"（历史版本 {history_version[0]}/{history_version[2]}）"
+            )
+            return ctx
 
         # ── 2) 最近原始消息（含 Bot 自己的发言，带来源标注） ──
         tail, tail_start_id = _fetch_recent_tail(cursor, ctx.group_id, RECENT_TAIL_LIMIT)
@@ -186,9 +226,50 @@ async def build_context(ctx: ChatContext) -> ChatContext:
                 f"原始尾巴={len(tail.splitlines()) if tail else 0} 行"
                 f"{' 会话摘要=有' if session_summary else ''}"
             )
+
+        # 组装结果写回缓存（parts 为空也写：空结果同样是该版本的确定产物）
+        _SESSION_CONTEXT_CACHE[cache_key] = (
+            time.monotonic(),
+            "\n".join(parts),
+            tail_start_id,
+        )
+        if len(_SESSION_CONTEXT_CACHE) > _SESSION_CONTEXT_CACHE_MAX_ENTRIES:
+            for key in list(_SESSION_CONTEXT_CACHE)[
+                : len(_SESSION_CONTEXT_CACHE) - _SESSION_CONTEXT_CACHE_MAX_ENTRIES
+            ]:
+                _SESSION_CONTEXT_CACHE.pop(key, None)
     except Exception as e:
         logger.warning(f"读取上下文异常（跳过）: {e}")
     return ctx
+
+
+# ── 会话上下文缓存（进程内，key = (群, 历史版本, 模式, 策略版本)） ──
+# 设计阶段四「缓存与快速路径」：会话上下文缓存 session_id + history_version
+# + mode + policy_version。失效完全由版本驱动，TTL 只兜底墙钟相关的漂移
+# （尾巴时间窗过滤）与容量逐出。
+SESSION_CONTEXT_CACHE_TTL = 300.0  # 5 分钟
+_SESSION_CONTEXT_CACHE_MAX_ENTRIES = 64
+_SESSION_CONTEXT_CACHE: dict[
+    tuple[str, str, tuple[int, str | None, int], str, str],
+    tuple[float, str, int],
+] = {}
+
+
+def _max_message_id(cursor: sqlite3.Cursor, group_id: int) -> int:
+    """该群消息表的当前最大 id（历史版本的消息维度；无消息/表缺失为 0）。
+
+    走 idx_group_messages_group_id (group_id, id) 索引，聚合代价可忽略；
+    表缺失（新库）返回 0，与「无消息」同版本——两者组装结果都为空，等价。
+    """
+    try:
+        row = cursor.execute(
+            "SELECT MAX(id) FROM group_messages WHERE group_id = ?",
+            (str(group_id),),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+    except sqlite3.OperationalError as e:
+        log_sqlite_error("PreProcessors._max_message_id", e)
+        return 0
 
 
 def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tuple[str, int]:

@@ -32,6 +32,7 @@ from config import (
     RAG_ENABLED,
     RAG_TOP_K,
 )
+from memory.cache_keys import memory_history_version, topic_hash
 from memory.policy import (
     MODE_CONFLICT_AVOID,
     VISIBILITY_INTERNAL,
@@ -357,9 +358,21 @@ def retrieve_memories(
 
     mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
 
-    # 短期缓存：5 分钟内同一空间同一触发方式的检索结果直接复用，避免每句话重新检索。
-    # 缓存 key 必须用空间（而非 QQ 群）——否则同空间的两个群各自缓存，白跑检索。
-    cache_key = (str(DB_PATH), group_shared_space, str(user_id), trigger, mode)
+    # 语义检索缓存（设计阶段四）：key = 空间 + 用户 + 话题哈希 + 模式 + 记忆历史版本。
+    # - 话题哈希让「话题变了」立即换桶，杜绝 5 分钟内错误复用旧话题的检索结果；
+    # - 归一化按关键词（而非原文）计算，同一话题换个措辞仍能命中，保住命中率；
+    # - 历史版本在整合器写入记忆后递增，晋升/合并的新记忆立刻可见，不被 TTL 拖住；
+    # - 空间级检索（主动发言）user 位为空串，与限定用户的检索天然分桶。
+    # key 必须用空间（而非 QQ 群）——同空间的两个群共享记忆，按群分桶只会白跑检索。
+    user_key = "" if trigger == "proactive" else str(user_id)
+    cache_key = (
+        str(DB_PATH),
+        group_shared_space,
+        user_key,
+        topic_hash(query),
+        mode,
+        memory_history_version(),
+    )
     cached = _CACHE.get(cache_key)
     if cached is not None and (time.monotonic() - cached[0]) < RETRIEVAL_CACHE_TTL:
         _CACHE[cache_key] = cached  # 简单 LRU：命中即刷新计时
@@ -461,11 +474,12 @@ def retrieve_memories(
     return result
 
 
-# 短期检索缓存（进程内，Key = (db_path, group, user, trigger, mode)）
+# 短期检索缓存（进程内，key = (db, 空间, 用户, 话题哈希, 模式, 记忆历史版本)）
 # 设计参考：Memory Retrieval Specification §12 Retrieval Cache
+#   + 《拟人化插话与低成本运行改进方案》阶段四「缓存与快速路径」
 RETRIEVAL_CACHE_TTL = 300.0  # 5 分钟
 _CACHE_MAX_ENTRIES = 128
-_CACHE: dict[tuple[str, str, str, str, str], tuple[float, RetrievalResult]] = {}
+_CACHE: dict[tuple[str, str, str, str, str, int], tuple[float, RetrievalResult]] = {}
 
 
 async def retrieve_memories_emb(
