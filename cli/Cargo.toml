@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+#
+# stellacli —— Stella 跨平台命令行控制台。
+# 设计见 design_docs/跨平台 CLI 控制台方案 v1.0.md：本工具是编排层与渲染层，
+# 领域逻辑一律透传 Python deploy 模块（GUI 与 CLI 共用 --json 契约）。
+# 版本号必须与 pyproject.toml 保持一致（release CI 有校验）。
+
+[package]
+name = "stellacli"
+version = "3.5.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Stella 跨平台命令行控制台（本地运行 / Docker 编排统一入口）"
+license = "AGPL-3.0-only"
+publish = false
+
+[[bin]]
+name = "stellacli"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+anstream = "0.6"
+anstyle = "1"
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+strip = true

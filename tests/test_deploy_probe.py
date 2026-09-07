@@ -115,3 +115,18 @@ def test_version_marks_does_not_write_state_file(tmp_path, monkeypatch):
     assert marks["version_transition"] == state.FIRST_RUN
     assert marks["last_run_version"] == ""
     assert not marks["state_file_error"]
+
+
+def test_probe_database_fresh_install_parent_missing(monkeypatch, tmp_path):
+    """全新安装：memory/ 目录尚不存在时，可写性探测不应误报。
+
+    历史缺陷：对缺失目录直接 os.access(W_OK) 必得 False，doctor 在任何全新
+    部署上都会报「数据库不可写」的阻塞级误报。修复后探测会先建目录（与 Bot
+    首次写库的行为一致），全新安装应得到 db_writable=True。
+    """
+    monkeypatch.setattr(probe, "DB_PATH", tmp_path / "memory" / "agent_memory.db")
+    r = probe._probe_database()
+    assert r["db_exists"] is False
+    assert r["db_writable"] is True
+    # 目录确实被建出来（Bot 首启前 doctor 就能给出真实结论）
+    assert (tmp_path / "memory").is_dir()

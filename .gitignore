@@ -95,3 +95,5 @@ runtime/
 
 start_claude_command.txt
 /README改进简要说明.md
+# Rust CLI 构建产物（cli/ 工程见 design_docs/跨平台 CLI 控制台方案 v1.0.md）
+/cli/target/

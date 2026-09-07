@@ -344,3 +344,143 @@ jobs:
           name: Stella-release-preview
           path: dist/*.zip
           retention-days: 7
+
+  # ============ stellacli（独立分发的命令行控制台） ============
+  # 面向没有 WebView 的设备（方案 Q2 已定）：单独构建、单独验证、单独发布，
+  # 永不混入 Windows 主发布包。needs: build 是为了等主 Release 建好再传 asset
+  #（gh release upload 要求 Release 已存在）。
+  build-cli-linux:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析发布版本
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"; V="${V#v}"
+          fi
+          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
+
+      # 与主构建同一道防线：tag 必须与 Cargo.toml / pyproject 同时一致
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        run: |
+          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          echo "Cargo=$CARGO_V pyproject=$PY_V tag=$RELEASE_VERSION"
+          if [ "$CARGO_V" != "$PY_V" ] || [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
+            echo "::error::版本不一致（Cargo/pyproject/tag）"; exit 1
+          fi
+
+      # 手工触发测试打包流程时同步版本号（与安装器 job 的处理同款）
+      - name: 同步 Cargo 版本号（手工触发时）
+        if: github.event_name != 'push'
+        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 安装 musl 工具链
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: 构建（musl 静态链接，任意发行版可直接运行）
+        working-directory: cli
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: 打包
+        run: |
+          tar czf "stellacli-v${RELEASE_VERSION}-linux-amd64.tar.gz" \
+            -C cli/target/x86_64-unknown-linux-musl/release stellacli
+          ls -lh stellacli-v*.tar.gz
+
+      - name: 上传到 Release（tag 触发时）
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${RELEASE_VERSION}" \
+            "stellacli-v${RELEASE_VERSION}-linux-amd64.tar.gz" --clobber
+          echo "✅ 已上传 Linux CLI asset"
+
+      - name: 上传 artifact（手工触发时用于验证产物）
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellacli-linux-preview
+          path: stellacli-v*.tar.gz
+          retention-days: 7
+
+  build-cli-windows:
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析发布版本
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"; V="${V#v}"
+          fi
+          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          echo "Cargo=$CARGO_V pyproject=$PY_V tag=$RELEASE_VERSION"
+          if [ "$CARGO_V" != "$PY_V" ] || [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
+            echo "::error::版本不一致（Cargo/pyproject/tag）"; exit 1
+          fi
+
+      - name: 同步 Cargo 版本号（手工触发时）
+        if: github.event_name != 'push'
+        shell: bash
+        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 构建
+        working-directory: cli
+        run: cargo build --release
+
+      - name: 打包
+        shell: pwsh
+        run: |
+          Compress-Archive -Path cli/target/release/stellacli.exe `
+            -DestinationPath "stellacli-v${env:RELEASE_VERSION}-windows-amd64.zip" -Force
+          Get-Item stellacli-v*.zip | Select-Object Name, Length
+
+      - name: 上传到 Release（tag 触发时）
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${RELEASE_VERSION}" \
+            "stellacli-v${RELEASE_VERSION}-windows-amd64.zip" --clobber
+          echo "✅ 已上传 Windows CLI asset"
+
+      - name: 上传 artifact（手工触发时用于验证产物）
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellacli-windows-preview
+          path: stellacli-v*.zip
+          retention-days: 7

@@ -118,9 +118,46 @@ jobs:
             .pytest_cache/
             test-output.log
 
+  # ============ Rust CLI（stellacli，见 design_docs/跨平台 CLI 控制台方案 v1.0.md） ============
+  cli:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 格式检查
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: 单元测试
+        run: cargo test
+
+      # 子命令清单冒烟：防止重构时悄悄丢命令。与 deploy 子命令集的完整对账
+      # （需要装全套 Python 依赖）暂缓，见方案 §8 的风险条目。
+      - name: 帮助文本冒烟
+        run: |
+          cargo build --release
+          ./target/release/stellacli --version
+          HELP=$(./target/release/stellacli --help)
+          for sub in doctor init start stop restart status logs upgrade migrate plugin capabilities manifest compose; do
+            echo "$HELP" | grep -q "  $sub" || { echo "::error::帮助文本缺少子命令 $sub"; exit 1; }
+          done
+
   # ============ 通知（可选） ============
   notify:
-    needs: [test, lint, security]
+    needs: [test, lint, security, cli]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
     steps:
@@ -129,7 +166,8 @@ jobs:
         run: |
           if [ "${{ needs.test.result }}" == "success" ] && \
              [ "${{ needs.lint.result }}" == "success" ] && \
-             [ "${{ needs.security.result }}" == "success" ]; then
+             [ "${{ needs.security.result }}" == "success" ] && \
+             [ "${{ needs.cli.result }}" == "success" ]; then
             echo "status=✅ All checks passed!" >> $GITHUB_OUTPUT
           else
             echo "status=❌ Some checks failed. Please check the logs." >> $GITHUB_OUTPUT

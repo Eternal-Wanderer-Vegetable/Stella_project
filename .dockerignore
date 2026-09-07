@@ -76,3 +76,6 @@ windows_review.txt
 __pycache__
 **/__pycache__
 *.pyc
+
+# Rust CLI：不进镜像（镜像里只需要 Python 程序），target/ 体积大
+cli

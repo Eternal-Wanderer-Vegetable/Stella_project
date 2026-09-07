@@ -325,6 +325,15 @@ def _probe_database() -> dict:
         "source_kind_counts": {},
     }
     if not result["db_exists"]:
+        # 全新安装时 memory/ 尚不存在（Bot 首次写库才会建）。对缺失目录直接做
+        # os.access 必得 False，doctor 便在任何全新部署上报「数据库不可写」的
+        # 阻塞级误报（2026-09-07 由 stellacli 的 E2E 暴露，GUI 首跑同样中招）。
+        # 先按 Bot 的行为把目录建出来再探测；建不出来（真的没权限）时
+        # os.access 的 False 才是正确结论。
+        try:
+            DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
         try:
             result["db_writable"] = os.access(DB_PATH.parent, os.W_OK)
         except Exception:
