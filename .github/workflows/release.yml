@@ -463,9 +463,14 @@ jobs:
       - name: 打包
         shell: pwsh
         run: |
-          Compress-Archive -Path cli/target/release/stellacli.exe `
-            -DestinationPath "stellacli-v${env:RELEASE_VERSION}-windows-amd64.zip" -Force
-          Get-Item Stella-CLI-version-v*.zip | Select-Object Name, Length
+          $ErrorActionPreference = 'Stop'
+          # 文件名只在此定义一次（upload 步骤引用同名常量）——2026-09-07 曾因
+          # pwsh 的 ${env:} 写法躲过改名脚本，产物旧名、上传找新名，直到 upload
+          # 才炸。Test-Path 断言让任何名字漂移在打包这一步就硬失败。
+          $zip = "Stella-CLI-version-v${env:RELEASE_VERSION}-windows-amd64.zip"
+          Compress-Archive -Path cli/target/release/stellacli.exe -DestinationPath $zip -Force
+          if (-not (Test-Path $zip)) { throw "打包产物未生成：$zip" }
+          Get-Item $zip | Select-Object Name, Length
 
       - name: 上传到 Release（tag 触发时）
         if: github.event_name == 'push'
