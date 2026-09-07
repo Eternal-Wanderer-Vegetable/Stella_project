@@ -15,6 +15,7 @@
 [![OneBot V11](https://img.shields.io/badge/OneBot-V11-black)](https://onebot.dev/)
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docs/deployment-docker.md)
 
 中文 | [English](README.en.md)
 
@@ -279,6 +280,8 @@ graph LR
 **插件兼容与渲染**：`Jinja2` · `Playwright`（本地 Chromium，仅用于把插件卡片渲染成图片）
 
 **桌面安装器**：`Tauri 2` · `Rust`（`stella-installer/`，原生 HTML/JS 前端，无前端构建步骤）
+
+**容器化部署**：`Docker` · `docker compose`（`Dockerfile` + stella/napcat 双容器编排，Chromium 与中文字体已内置镜像；见 [Docker 部署指南](docs/deployment-docker.md)）
 
 **开发与验证**：`pytest` · `ruff` · `pyright`
 

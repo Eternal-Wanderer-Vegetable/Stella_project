@@ -16,6 +16,7 @@
 [![OneBot V11](https://img.shields.io/badge/OneBot-V11-black)](https://onebot.dev/)
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docs/deployment-docker.en.md)
 
 [中文](README.md) | English
 
@@ -278,6 +279,8 @@ Stage 2 is awakened only when Stage 1 determines that self-disclosure is present
 **Plugin compatibility and rendering**: `Jinja2` · `Playwright` (local Chromium, used only to render plugin cards as images)
 
 **Desktop installer**: `Tauri 2` · `Rust` (`stella-installer/`, native HTML/JS frontend, with no frontend build step)
+
+**Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with Chromium and CJK fonts baked into the image; see the [Docker Deployment Guide](docs/deployment-docker.en.md))
 
 **Development and verification**: `pytest` · `ruff` · `pyright`
 
