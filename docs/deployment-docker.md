@@ -1,5 +1,7 @@
 # Docker 部署指南
 
+中文 | [English](deployment-docker.en.md)
+
 > 适用场景：把 Stella 部署到远程 Linux 服务器（或任何有 Docker 的机器）上长期运行。
 > 设计依据见 [`design_docs/Docker 化部署方案 v1.0.md`](../design_docs/Docker%20化部署方案%20v1.0.md)。
 > Windows 桌面部署（Stella.exe / start.bat）不受影响，见 [README](../README.md)。
@@ -105,7 +107,6 @@ docker compose stop            # 停（SIGTERM → 5 秒优雅停机，在途记
 docker compose start           # 起
 docker compose restart         # 重启
 docker compose logs -f stella  # 跟日志
-docker compose pull  # 阶段 3 起：直接拉官方镜像，无需本地构建
 
 # 升级（数据卷不动，这就是 STELLA_HOME 设计的收益）
 git pull

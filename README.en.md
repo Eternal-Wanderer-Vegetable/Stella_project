@@ -90,6 +90,8 @@ You decide where the models come from.
 
 ## 🚀 Quick Start
 
+> This section covers **Windows desktop** deployment. For Linux / remote servers, see the [Docker Deployment Guide](docs/deployment-docker.en.md).
+
 ### 📦 Download & Install (regular users)
 
 - Step 1: Download the following required dependencies:
@@ -232,6 +234,7 @@ All runtime logs are in `logs/`:
 | [Capability System](docs/capability-system.en.md) | Capability Router and Comes: how tools execute outside the chat context |
 | [Plugin Integration Specification](docs/plugin-spec.en.md) | Writing a plugin Stella can use in full: declaration format, the two paths, the failure contract, the self-check tool |
 | [Configuration Reference](docs/configuration.en.md) | Two-layer endpoint x role model configuration, all configuration options, and tuning recommendations |
+| [Docker Deployment Guide](docs/deployment-docker.en.md) | Containerized deployment on a remote server: build or pull the image, configure, migrate from Windows, upgrade and back up |
 | [Development Guide](docs/development.en.md) | Tests, probe scripts, CI, and contribution workflow |
 
 > Design process records (specification drafts, checkpoints, defect reports, and test checklists) are in [`design_docs/`](design_docs/).
