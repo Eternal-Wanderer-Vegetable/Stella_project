@@ -200,10 +200,13 @@ def test_on_reply_sent_sees_response_after_reply(monkeypatch, tmp_path):
 def test_sweep_resolves_stale_rows(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(learning, "EXPRESSION_LEARNING_ENABLED", True)
-    # asked_at_mono=0 表示很久以前（monotonic 不会回退）
+    # asked_at_mono 必须取「远小于任何单调钟读数」的负值：Linux 的
+    # time.monotonic() 从开机起算，刚启动的 CI 机器上读数可能只有几百秒，
+    # sweep 的 cutoff = monotonic() - 窗口 - 余量 会是负数，写 0.0 不再被判为
+    # 超窗（Windows 的单调钟是开机以来的 QPC，本地跑不出这个问题）。
     effect_id = store.add_reply_effect(
         group_shared_space="sp1", group_id=1, user_id=100,
-        trigger="proactive", reply_excerpt="有人在吗", asked_at_mono=0.0,
+        trigger="proactive", reply_excerpt="有人在吗", asked_at_mono=-1_000_000.0,
     )
     assert store.get_reply_effect(effect_id)["resolved"] is False
 

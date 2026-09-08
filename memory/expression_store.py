@@ -417,7 +417,12 @@ def prune(
     examples_keep_days: float,
     effects_keep_days: float,
 ) -> dict[str, int]:
-    """按保留期裁剪表达样本与已结算效果行；黑话表不裁（词条是长期资产）。
+    """按保留期裁剪表达样本与回复效果行；黑话表不裁（词条是长期资产）。
+
+    reply_effects 不区分结算状态一并清理：正常超窗行早被 sweep 结算，
+    还留在库里的超龄未结算行只可能是「重启导致单调钟不可比」的僵尸数据
+    （机器重启后 time.monotonic() 归零，重启前的 asked_at_mono 永远判不出
+    超窗），留着没有学习价值。
 
     各表的时间列不同（expression_examples 用 created_at，reply_effects 用
     asked_at），逐表指定，拼错列名只会让那一表裁剪失败并留痕，不影响其他表。
@@ -425,14 +430,14 @@ def prune(
     conn = _connect()
     out = {"expression_examples": 0, "reply_effects": 0}
     try:
-        for table, ts_column, days, where in (
-            ("expression_examples", "created_at", examples_keep_days, ""),
-            ("reply_effects", "asked_at", effects_keep_days, " AND resolved = 1"),
+        for table, ts_column, days in (
+            ("expression_examples", "created_at", examples_keep_days),
+            ("reply_effects", "asked_at", effects_keep_days),
         ):
             if days <= 0:
                 continue
             cur = conn.execute(
-                f"DELETE FROM {table} WHERE julianday('now') - julianday({ts_column}) > ?{where}",
+                f"DELETE FROM {table} WHERE julianday('now') - julianday({ts_column}) > ?",
                 (float(days),),
             )
             out[table] = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
