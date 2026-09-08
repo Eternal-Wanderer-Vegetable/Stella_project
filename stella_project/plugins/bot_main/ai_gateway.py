@@ -68,6 +68,7 @@ from config import (
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
     DB_CLEANUP_CLEAR_MESSAGES,
     DB_CLEANUP_ON_START,
+    EXPRESSION_SWEEP_INTERVAL,
     EXTENSIONS_DIR,
     LLM_TIMEOUT,
     MESSAGE_CLEANUP_ENABLED,
@@ -102,6 +103,7 @@ from core.reply_gate import get_reply_gate
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from extensions import load_extensions
+from memory import expression_learning
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
 from memory.participation import get_participation_manager
@@ -365,6 +367,10 @@ async def record_group_chat(event: GroupMessageEvent):
     # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
     session_touch(ctx.group_id)
 
+    # 黑话计数（设计阶段六）：纯内存操作，命中门槛才碰一次库；
+    # 在热路径上必须与落库同级别的开销，否则每条消息都在付学习的税。
+    expression_learning.note_passive_message(ctx.group_shared_space, ctx.user_id, text)
+
     # 主动插话评分层（Participation Decision Layer）：
     # 只对 PASSIVE 消息评分——AT_MENTION 是 Hard Trigger，走 handle_chat 的
     # 强制响应路径，二者必须独立（上游工程方案 §3/原则 7）。
@@ -524,6 +530,18 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             # 评分层记账：被 @ 后的回复记为**被动**——被叫到后回答不应该
             # 获得与主动插话同等级的惩罚（上游工程方案 §14）
             get_participation_manager().note_stella_spoke(event.group_id, "passive")
+
+        # 表达与回复效果学习（设计阶段六）：登记 + 派生异步任务，不阻塞发送。
+        # 放在发送循环之前：最后一行 chat_handler.finish() 会抛 FinishedException，
+        # 循环之后的代码不执行。
+        expression_learning.on_reply_sent(
+            group_id=event.group_id,
+            group_shared_space=ctx.group_shared_space,
+            user_id=event.user_id,
+            message=ctx.message,
+            lines=ctx.lines,
+            trigger="reply",
+        )
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
@@ -1107,6 +1125,16 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
         # 评分层记账：主动 @ 同样算主动发言（上游 §14 的区分只针对被动应答）
         with contextlib.suppress(Exception):
             get_participation_manager().note_stella_spoke(group_id, "proactive")
+        # 回复效果学习（设计阶段六）：目标是「主动 @ 是否被回应/忽略」；
+        # message 传空——build_instruction 的罐头指令不是用户的表达素材。
+        expression_learning.on_reply_sent(
+            group_id=group_id,
+            group_shared_space=ctx.group_shared_space,
+            user_id=target.user_id,
+            message="",
+            lines=[line],
+            trigger="proactive",
+        )
         logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {line}")
 
         await _record_bot_lines(self_id, group_id, [line])
@@ -1339,6 +1367,15 @@ async def _proactive_speak_for_group(
         # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty）
         with contextlib.suppress(Exception):
             get_participation_manager().note_stella_spoke(group_id, "proactive")
+        # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」
+        expression_learning.on_reply_sent(
+            group_id=group_id,
+            group_shared_space=ctx.group_shared_space,
+            user_id=0,
+            message="",
+            lines=ctx.lines,
+            trigger="proactive",
+        )
         logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
         await _record_bot_lines(int(bot.self_id), group_id, ctx.lines)
 
@@ -1404,6 +1441,21 @@ if scheduler is not None and PARTICIPATION_ENABLED:
                 logger.info(f"📊 [参与评分] {change}")
         except Exception as e:
             logger.warning(f"⚠️ [参与评分] 状态机推进异常: {e}")
+
+
+# 表达学习的兜底结算（设计阶段六）：进程重启会丢掉在途的延迟任务，
+# 定期扫描超窗未结算的 reply_effects 补结算。
+if scheduler is not None:
+    @scheduler.scheduled_job(
+        "interval", seconds=EXPRESSION_SWEEP_INTERVAL, id="expression_sweep"
+    )
+    async def expression_sweep_job():
+        try:
+            swept = expression_learning.sweep_pending_effects()
+            if swept:
+                logger.info(f"📝 [Expression] 补结算 {swept} 条超窗回复效果")
+        except Exception as e:
+            logger.debug(f"[Expression] sweep 任务异常: {e}")
 
 
 # ============================================================
@@ -1494,6 +1546,11 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
                 logger.info(f"📊 [Trace] 已清理 {pruned} 条过期决策追踪")
         except Exception as e:
             logger.debug(f"📊 [Trace] 决策追踪清理异常: {e}")
+        # 表达学习的数据保留期清理（设计阶段六）：样本与已结算效果行
+        with contextlib.suppress(Exception):
+            pruned = expression_learning.prune_learning()
+            if pruned:
+                logger.info(f"📝 [Expression] 已清理过期学习数据: {pruned}")
 
 
 # ============================================================

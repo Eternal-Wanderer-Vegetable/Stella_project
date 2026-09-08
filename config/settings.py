@@ -1319,3 +1319,28 @@ PLANNER_PROACTIVE_WAIT_ENABLED = _env("PLANNER_PROACTIVE_WAIT_ENABLED", "false")
 PLANNER_TIMEOUT = _env_float("PLANNER_TIMEOUT", 20.0)
 # Planner prompt 里最近对话摘要的 token 上限（深度预算中「最近消息」的压缩份额）。
 PLANNER_CONTEXT_MAX_TOKENS = _env_int("PLANNER_CONTEXT_MAX_TOKENS", 400)
+
+# ---------- 表达与插话效果学习（设计阶段六） ----------
+# 四张独立表（expression_examples / jargon_glossary / behavior_patterns /
+# reply_effects，见 memory/expression_store.py）记录「怎么说效果好」，与
+# 记忆系统（「知道什么」）完全分离。全部学习都在异步后处理中完成，
+# 不阻塞主回复路径、不增加任何 LLM 调用（纯本地规则）。
+EXPRESSION_LEARNING_ENABLED = _env("EXPRESSION_LEARNING_ENABLED", "true").lower() in ("true", "1", "yes")
+# 回复发出后等待用户回应的窗口（秒）：窗口结束时结算 reply_effects
+# （回应/复用表达/使用表情/纠正/忽略）。
+REPLY_EFFECT_WINDOW_SECONDS = _env_float("REPLY_EFFECT_WINDOW_SECONDS", 300.0)
+# 进程重启会丢掉在途的延迟结算任务：定期扫描超窗未结算的行补结算。
+EXPRESSION_SWEEP_INTERVAL = _env_int("EXPRESSION_SWEEP_INTERVAL", 3600)
+# 每条用户消息最多采集的表达样本条数（宁缺毋滥，防止样本表被刷屏灌满）。
+EXPRESSION_HARVEST_PER_MESSAGE = _env_int("EXPRESSION_HARVEST_PER_MESSAGE", 2)
+# 表达样本保留天数（超期由每日清理任务裁剪）。
+EXPRESSION_EXAMPLES_KEEP_DAYS = _env_float("EXPRESSION_EXAMPLES_KEEP_DAYS", 30.0)
+# 已结算回复效果保留天数。
+REPLY_EFFECTS_KEEP_DAYS = _env_float("REPLY_EFFECTS_KEEP_DAYS", 60.0)
+# 黑话候选的入册门槛（进程内出现次数）与转正门槛（跨天数累积的命中数）。
+# 刻意只统计两类低噪声信号：拉丁/字母数字混排词（yyds、xswl）与引号内中文词
+# （「绝绝子」）——无差别统计中文 n-gram 只会得到一堆常用短语。
+JARGON_HIT_THRESHOLD = _env_int("JARGON_HIT_THRESHOLD", 5)
+JARGON_CONFIRM_THRESHOLD = _env_int("JARGON_CONFIRM_THRESHOLD", 12)
+# 进程内黑话计数器的容量上限（防止长聊天记录把内存吃穿）。
+JARGON_TRACKER_MAX_TERMS = _env_int("JARGON_TRACKER_MAX_TERMS", 4096)
