@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import memory.proactive as proactive_module
+from memory.participation.decision import ParticipationDecision
+from memory.participation.scorer import ScoreBreakdown
 from memory.proactive import ProactiveController
 from memory.proactive_prompt import PROACTIVE_SKIP_MARKER
 from memory.proactive_state import get_state, record_at, record_reply_result
@@ -84,6 +86,15 @@ class _FakeParticipation:
 
     def note_stella_spoke(self, group_id, trigger):
         self.notes.append((group_id, trigger))
+
+
+class _FakeParticipationEvents(_FakeParticipation):
+    def __init__(self):
+        super().__init__()
+        self.events = []
+
+    def log_event(self, decision, event, *, reason=""):
+        self.events.append((decision.trigger_msg_id, event, reason))
 
 
 def test_record_at_counts_and_persists(db):
@@ -301,3 +312,93 @@ async def test_proactive_group_skip_finishes_gate_without_side_effects(
     assert proactive.recorded == []
     participation.assert_not_called()
     record_bot_lines.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_participation_evidence_reaches_generation_and_skip_is_observed(
+    ai_gateway_module, monkeypatch
+):
+    """Participation 的真实触发证据要进入 Prompt，skip 不得记为主动发言。"""
+    gateway = ai_gateway_module
+    bot = _FakeBot()
+    proactive = _FakeProactive()
+    participation = _FakeParticipationEvents()
+    gate = Mock()
+    gate.evaluate.return_value = SimpleNamespace(
+        allowed=True,
+        path="proactive",
+        score=0.8,
+        reasons=("participation",),
+    )
+    consolidator = SimpleNamespace(
+        has_new_messages_to_consolidate=lambda group_id, threshold: 0
+    )
+    decision = ParticipationDecision(
+        group_id=1,
+        should_speak=True,
+        score=82.0,
+        level="ALLOW_LLM",
+        mode="TOPIC_INTEREST",
+        topic_id=7,
+        trigger_msg_id=42,
+        confidence=0.8,
+        reason_flags=["open_question", "interest_anchor"],
+        breakdown=ScoreBreakdown(
+            final_score=82.0,
+            relevance=20.0,
+            opportunity=18.0,
+            social_opportunity=5.0,
+            topic_involvement=12.0,
+            velocity_level="MEDIUM",
+            velocity_count=4,
+        ),
+    )
+    evidence = {
+        "trigger_msg_id": 42,
+        "topic_id": 7,
+        "reason_flags": ["open_question", "interest_anchor"],
+        "breakdown": decision.breakdown.as_dict(),
+        "trigger_text": "这个实现为什么会这样？",
+        "topic_label": "实现问题",
+        "topic_status": "ACTIVE",
+        "velocity_level": "MEDIUM",
+        "velocity_count": 4,
+        "recent_messages": [
+            {"msg_id": 41, "sender_id": 10, "text": "我在看这个实现"},
+            {"msg_id": 42, "sender_id": 11, "text": "这个实现为什么会这样？"},
+        ],
+    }
+    seen = {}
+
+    monkeypatch.setattr(gateway, "can_speak", lambda group_id, kind: (True, ""))
+    monkeypatch.setattr(gateway, "get_proactive", lambda: proactive)
+    monkeypatch.setattr(gateway, "get_reply_gate", lambda: gate)
+    monkeypatch.setattr(gateway, "get_consolidator", lambda: consolidator)
+    monkeypatch.setattr(gateway, "get_participation_manager", lambda: participation)
+    monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
+
+    async def fake_run(ctx):
+        seen["message"] = ctx.message
+        ctx.lines = [PROACTIVE_SKIP_MARKER]
+        return ctx
+
+    monkeypatch.setattr(gateway.pipeline, "run", fake_run)
+
+    await gateway._proactive_speak_for_group(
+        bot,
+        1,
+        intent="participation_TOPIC_INTEREST",
+        instruction=gateway._PARTICIPATION_INSTRUCTIONS["TOPIC_INTEREST"],
+        skip_dice=True,
+        decision=decision,
+        evidence=evidence,
+    )
+
+    assert "trigger_msg_id=42" in seen["message"]
+    assert "sender=11 msg_id=42: 这个实现为什么会这样？" in seen["message"]
+    assert "open_question, interest_anchor" in seen["message"]
+    assert participation.events == [(42, "generation_skip", "naturalness_skip")]
+    gate.finish.assert_called_once_with(1, waiting=False)
+    bot.send_group_msg.assert_not_awaited()
+    assert proactive.marked == []
+    assert proactive.recorded == []

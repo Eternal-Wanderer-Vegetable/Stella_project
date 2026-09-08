@@ -61,6 +61,8 @@ def log_decision(
     jsonl_path: Path,
     md_path: Path,
     configured_level: str = LOG_FULL,
+    event: str = "decision",
+    event_reason: str = "",
 ) -> None:
     """输出一次评分的全部日志。文件 IO 失败只告警，绝不影响决策链路。"""
     level = decision.level
@@ -88,7 +90,7 @@ def log_decision(
             parts.append(" ".join(deltas))
         logger.info(
             f"📊 [参与评分] 群 {decision.group_id} topic={decision.topic_id} "
-            f"score={decision.score:.0f} → {level} mode={decision.mode} "
+            f"event={event} score={decision.score:.0f} → {level} mode={decision.mode} "
             f"({'; '.join(parts) or '无显著加减分'})"
         )
 
@@ -101,6 +103,8 @@ def log_decision(
             **(bd.as_dict() if bd else {}),
             "mode": decision.mode,
             "decision": level,
+            "event": event,
+            "event_reason": event_reason,
             "should_speak": decision.should_speak,
             "confidence": round(decision.confidence, 2),
             "reason_flags": decision.reason_flags,
@@ -136,7 +140,9 @@ def log_decision(
                     f"　ExpiredPenalty: {bd.expired_penalty:.0f}",
                 ]
             lines += [
-                f"- Score: {decision.score:.0f}　Decision: {level}　Mode: {decision.mode}",
+                f"- Score: {decision.score:.0f}　Decision: {level}　"
+                f"Event: {event}　Mode: {decision.mode}",
+                f"- Event reason: {event_reason or '无'}",
                 f"- Flags: {', '.join(decision.reason_flags) or '无'}",
                 "",
             ]

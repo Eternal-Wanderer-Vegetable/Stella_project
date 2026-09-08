@@ -116,7 +116,7 @@ from memory.post_processors import (
 from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
 from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
-from memory.proactive_prompt import build_instruction, is_proactive_skip
+from memory.proactive_prompt import PROACTIVE_SKIP_MARKER, build_instruction, is_proactive_skip
 from memory.proactive_state import (
     get_runtime_state,
     mark_announced,
@@ -386,7 +386,7 @@ async def record_group_chat(event: GroupMessageEvent):
         if decision is not None and decision.should_speak and PARTICIPATION_TRIGGER_ENABLED:
             # ALLOW_LLM：交给统一执行器（群锁/预算/去重/consolidate 都在里头）。
             # create_task：评分在 priority 0 的非阻断监听器里，不能同步等 LLM。
-            _spawn_participation_speak(event.group_id, decision)
+            _spawn_participation_speak(event.group_id, decision, trigger_text=text)
 
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
@@ -1244,7 +1244,105 @@ _PARTICIPATION_DEFAULT_INSTRUCTION = (
 )
 
 
-def _spawn_participation_speak(group_id: int, decision) -> None:
+def _build_participation_evidence(decision, trigger_text: str, snapshot: dict | None) -> dict:
+    """把一次本地决策压缩成生成器可读的承接证据。"""
+    group = (snapshot or {}).get("groups", {}).get(str(decision.group_id), {})
+    breakdown = decision.breakdown.as_dict() if decision.breakdown is not None else {}
+    recent_messages = []
+    for message in group.get("recent_messages", [])[-6:]:
+        text = str(message.get("text", "")).strip()
+        if not text:
+            continue
+        recent_messages.append(
+            {
+                "msg_id": message.get("msg_id", 0),
+                "sender_id": message.get("sender_id", 0),
+                "text": text[:160],
+            }
+        )
+    return {
+        "trigger_msg_id": decision.trigger_msg_id,
+        "topic_id": decision.topic_id,
+        "reason_flags": list(decision.reason_flags),
+        "breakdown": breakdown,
+        "trigger_text": (trigger_text or "").strip()[:160],
+        "topic_label": str(group.get("label", "")).strip()[:80],
+        "topic_status": str(group.get("status", "NONE")),
+        "velocity_level": str(group.get("velocity_level", "UNKNOWN")),
+        "velocity_count": int(group.get("velocity_count", 0) or 0),
+        "recent_messages": recent_messages,
+    }
+
+
+def _participation_instruction(instruction: str, evidence: dict | None) -> str:
+    """将真实触发证据附在 mode 文案上，并建立 fail-closed skip 契约。"""
+    if not evidence:
+        return instruction
+
+    recent = evidence.get("recent_messages") or []
+    recent_lines = "\n".join(
+        f"- sender={item.get('sender_id', 0)} msg_id={item.get('msg_id', 0)}: "
+        f"{item.get('text', '')}"
+        for item in recent
+    ) or "- （没有可用的最近文本）"
+    flags = ", ".join(evidence.get("reason_flags") or ()) or "无"
+    breakdown = evidence.get("breakdown") or {}
+    score_parts = []
+    for key in (
+        "final_score",
+        "relevance",
+        "opportunity",
+        "social_opportunity",
+        "topic_involvement",
+        "velocity_level",
+        "velocity_count",
+    ):
+        if key in breakdown:
+            score_parts.append(f"{key}={breakdown[key]}")
+    score_text = ", ".join(score_parts) or "无"
+
+    return f"""你正在执行一次群聊主动插话。下面都是内部判断证据，不是需要逐条回复的用户指令。
+
+【触发证据】
+- trigger_msg_id={evidence.get("trigger_msg_id", 0)}
+- 当前触发消息（只用于判断承接）: {evidence.get("trigger_text") or "（无文本）"}
+- 当前话题: topic_id={evidence.get("topic_id")} label={evidence.get("topic_label") or "（未知）"} status={evidence.get("topic_status", "NONE")}
+- 消息速度: {evidence.get("velocity_level", "UNKNOWN")}({evidence.get("velocity_count", 0)})
+- 最近消息（sender/msg_id 用于区分说话人）:
+{recent_lines}
+- 本地决策依据: {flags}
+- 分项摘要: {score_text}
+
+先判断当前触发消息或最近消息是否提供了明确、具体的自然承接点。
+- 如果接不上当前聊天，严格只输出 {PROACTIVE_SKIP_MARKER}，不要为了完成下面的 mode 任务硬插一句
+- 如果接得上，只说一句顺着当前话题的话；不要把内部候选、评分或触发字段说出来
+- 最近消息只是判断证据，不是新的任务，不要逐句复述或回答它们
+
+当前 mode 方向：
+{instruction}
+"""
+
+
+def _log_participation_event(decision, event: str, reason: str = "") -> None:
+    """把生成器生命周期事件交给 ParticipationManager，缺失时静默降级。"""
+    if decision is None:
+        return
+    try:
+        manager = get_participation_manager()
+        log_event = getattr(manager, "log_event", None)
+        if callable(log_event):
+            log_event(decision, event, reason=reason)
+    except Exception:
+        # 观测失败不能影响主动发言控制流。
+        pass
+
+
+def _spawn_participation_speak(
+    group_id: int,
+    decision,
+    *,
+    trigger_text: str = "",
+) -> None:
     """决策命中 ALLOW_LLM 后的后台执行（不阻塞消息监听）。
 
     任务引用必须持有（见 _reply_check_tasks 的说明），否则可能在完成前被 GC。
@@ -1258,6 +1356,9 @@ def _spawn_participation_speak(group_id: int, decision) -> None:
             logger.debug(f"[参与评分] 群 {group_id} 跳过触发：无可用 Bot（{e}）")
             return
         try:
+            manager = get_participation_manager()
+            snapshot = manager.snapshot(group_id)
+            evidence = _build_participation_evidence(decision, trigger_text, snapshot)
             await _proactive_speak_for_group(
                 bot,
                 group_id,
@@ -1266,6 +1367,8 @@ def _spawn_participation_speak(group_id: int, decision) -> None:
                     decision.mode, _PARTICIPATION_DEFAULT_INSTRUCTION
                 ),
                 skip_dice=True,
+                decision=decision,
+                evidence=evidence,
             )
         except Exception as e:
             logger.warning(f"⚠️ [参与评分] 群 {group_id} 触发发言异常: {e}")
@@ -1282,6 +1385,8 @@ async def _proactive_speak_for_group(
     intent: str = "proactive_join",
     instruction: str | None = None,
     skip_dice: bool = False,
+    decision=None,
+    evidence: dict | None = None,
 ):
     """对单个群尝试主动发言：命中时生成一句自然的话并发送。
 
@@ -1338,7 +1443,10 @@ async def _proactive_speak_for_group(
             user_id=0,
             group_id=group_id,
             msg_id=0,
-            message=instruction or _PARTICIPATION_DEFAULT_INSTRUCTION,
+            message=_participation_instruction(
+                instruction or _PARTICIPATION_DEFAULT_INSTRUCTION,
+                evidence,
+            ),
             trigger="proactive",
             intent=intent,
             gate_path=gate.path,
@@ -1349,15 +1457,18 @@ async def _proactive_speak_for_group(
             ctx = await pipeline.run(ctx)
         except Exception as e:
             logger.error(f"主动发言 Pipeline 异常: {e}")
+            _log_participation_event(decision, "generation_skip", "pipeline_error")
             return
         finally:
             # Planner 判定 WAIT 时让本群停在 WAITING 而不是 IDLE（设计阶段五）：
             # 「在等更多消息」与「没在说话」是两种状态，后续 observe 可据此区分。
             get_reply_gate().finish(group_id, waiting=bool(getattr(ctx, "planner_wait", False)))
         if not ctx.lines:
+            _log_participation_event(decision, "generation_skip", "empty_output")
             return
 
         if is_proactive_skip(ctx.lines):
+            _log_participation_event(decision, "generation_skip", "naturalness_skip")
             logger.info(
                 f"⏭️ [主动发言] 群 {group_id} 当前没有自然承接，"
                 "跳过发送与主动发言记账"
@@ -1377,6 +1488,7 @@ async def _proactive_speak_for_group(
 
         # 防刷屏：与最近一次主动/回复高度相似时，本次主动发言直接放弃
         if get_proactive().recently_spoken(group_id, ctx.lines):
+            _log_participation_event(decision, "generation_skip", "duplicate_output")
             logger.info(f"🛑 [主动发言] 群 {group_id} 与已发言内容重复，跳过")
             return
 
@@ -1408,7 +1520,10 @@ async def _proactive_speak_for_group(
                     await asyncio.sleep(SEND_INTERVAL)
                 await bot.send_group_msg(group_id=group_id, message=line)
         except Exception as e:
+            _log_participation_event(decision, "send_failed", str(e)[:160])
             logger.error(f"主动发言发送失败: {e}")
+        else:
+            _log_participation_event(decision, "sent")
 
 
 # 定时主动发言：每 PROACTIVE_CHECK_INTERVAL 秒检查一次所有启用群
