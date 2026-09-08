@@ -88,7 +88,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt 2>/dev/null || true  # 开发依赖可选
-          pip install pytest pytest-cov pytest-xdist pytest-timeout
+          pip install pytest pytest-asyncio pytest-cov pytest-xdist pytest-timeout
 
       - name: Run tests with coverage
         run: |
