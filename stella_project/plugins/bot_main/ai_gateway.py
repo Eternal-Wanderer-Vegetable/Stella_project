@@ -1112,9 +1112,14 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             return False
 
         if is_proactive_skip(ctx.lines):
+            proactive.mark_proactive_skip(
+                group_id,
+                target.user_id,
+                target.skip_subject,
+            )
             logger.info(
                 f"⏭️ [主动@] 群 {group_id} 用户 {target.user_id} "
-                "当前没有自然承接，跳过发送与记账"
+                f"当前没有自然承接，跳过发送与记账（subject={target.skip_subject}）"
             )
             return False
 

@@ -213,6 +213,54 @@ def test_pick_target_verify_mode(tmp_path, monkeypatch):
     assert "候选" in target.reason
 
 
+def test_pick_target_skip_cooldown_is_candidate_specific(tmp_path, monkeypatch):
+    """同一候选 skip 后暂不重试，但候选 ID 变化可立即恢复。"""
+    _setup_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(pt, "PROACTIVE_COLDSTART_TOPICS", [])
+    monkeypatch.setattr(pt, "PROACTIVE_AT_USER_COOLDOWN", 0.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_NATURALNESS_MODE", "enforce")
+    monkeypatch.setattr(proactive, "PROACTIVE_SKIP_COOLDOWN_SECONDS", 900.0)
+    monkeypatch.setattr(proactive.time, "monotonic", _faketicks())
+    c = proactive.ProactiveController()
+    monkeypatch.setattr(pt, "get_proactive", lambda: c)
+    c.record_message(1, 2001)
+    _provision_candidates(tmp_path / "ps.db", [
+        ("cand-1", resolve_space(1), "2001", "FACT", "候选一", 0.7, "OBSERVING"),
+    ])
+
+    c.mark_proactive_skip(1, 2001, "candidate:cand-1")
+    assert pick_target(1) is None
+
+    _provision_candidates(tmp_path / "ps.db", [
+        ("cand-2", resolve_space(1), "2001", "FACT", "候选二", 0.7, "OBSERVING"),
+    ])
+    target = pick_target(1)
+    assert target is not None
+    assert target.candidate_id == "cand-2"
+
+
+def test_pick_target_skip_cooldown_is_topic_specific(tmp_path, monkeypatch):
+    """冷启动话题的 skip 不会阻塞新的话题；全部话题都冷却时不再生成。"""
+    _setup_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(pt, "PROACTIVE_COLDSTART_TOPICS", ["话题一", "话题二"])
+    monkeypatch.setattr(pt, "PROACTIVE_AT_USER_COOLDOWN", 0.0)
+    monkeypatch.setattr(proactive, "PROACTIVE_NATURALNESS_MODE", "enforce")
+    monkeypatch.setattr(proactive, "PROACTIVE_SKIP_COOLDOWN_SECONDS", 900.0)
+    monkeypatch.setattr(proactive.time, "monotonic", _faketicks())
+    monkeypatch.setattr(pt.random, "choice", lambda options: options[0])
+    c = proactive.ProactiveController()
+    monkeypatch.setattr(pt, "get_proactive", lambda: c)
+    c.record_message(1, 2001)
+
+    c.mark_proactive_skip(1, 2001, "topic:话题一")
+    target = pick_target(1)
+    assert target is not None
+    assert target.topic == "话题二"
+
+    c.mark_proactive_skip(1, 2001, "topic:话题二")
+    assert pick_target(1) is None
+
+
 def test_pick_target_verify_prefers_highest_confidence(tmp_path, monkeypatch):
     """多个用户有候选 → 选 confidence 最高的那个。"""
     _setup_db(monkeypatch, tmp_path)

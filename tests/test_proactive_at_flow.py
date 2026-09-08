@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import memory.proactive as proactive_module
 from memory.proactive import ProactiveController
 from memory.proactive_prompt import PROACTIVE_SKIP_MARKER
 from memory.proactive_state import get_state, record_at, record_reply_result
@@ -54,6 +55,7 @@ class _FakeProactive:
         self.should_speak_result = should_speak
         self.marked = []
         self.recorded = []
+        self.skipped = []
 
     def recently_spoken(self, group_id, lines):
         return False
@@ -63,6 +65,9 @@ class _FakeProactive:
 
     def record_spoken(self, group_id, lines):
         self.recorded.append((group_id, lines))
+
+    def mark_proactive_skip(self, group_id, user_id, subject):
+        self.skipped.append((group_id, user_id, subject))
 
     def should_speak(self, group_id):
         return self.should_speak_result
@@ -132,6 +137,25 @@ def test_last_spoke_ts_tracks_any_message():
     assert proactive.last_tome_ts(1, 1001) is None
 
 
+def test_skip_cooldown_expires_and_new_message_clears(monkeypatch):
+    """skip TTL 到期可重试；目标用户的新消息会提前解除旧 skip。"""
+    now = [100.0]
+    monkeypatch.setattr(proactive_module.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(proactive_module, "PROACTIVE_NATURALNESS_MODE", "enforce")
+    monkeypatch.setattr(proactive_module, "PROACTIVE_SKIP_COOLDOWN_SECONDS", 60.0)
+
+    proactive = ProactiveController()
+    proactive.mark_proactive_skip(1, 1001, "candidate:c-1")
+    assert proactive.proactive_skip_active(1, 1001, "candidate:c-1") is True
+
+    proactive.record_message(1, 1001)
+    assert proactive.proactive_skip_active(1, 1001, "candidate:c-1") is False
+
+    proactive.mark_proactive_skip(1, 1001, "candidate:c-1")
+    now[0] += 61.0
+    assert proactive.proactive_skip_active(1, 1001, "candidate:c-1") is False
+
+
 @pytest.mark.asyncio
 async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
     ai_gateway_module, monkeypatch
@@ -169,6 +193,7 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
     bot.send_group_msg.assert_not_awaited()
     assert proactive.marked == []
     assert proactive.recorded == []
+    assert proactive.skipped == [(1, 1001, "topic:最近在玩什么游戏")]
     participation.assert_not_called()
     record_at_mock.assert_not_called()
     record_bot_lines.assert_not_awaited()

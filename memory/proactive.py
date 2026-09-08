@@ -23,10 +23,12 @@ from config import (
     PROACTIVE_FREQ_WINDOW,
     PROACTIVE_INTERVAL_FAST,
     PROACTIVE_INTERVAL_SLOW,
+    PROACTIVE_NATURALNESS_MODE,
     PROACTIVE_MIN_MESSAGES_SINCE_SPOKE,
     PROACTIVE_PROB_AT_FAST,
     PROACTIVE_PROB_AT_SLOW,
     PROACTIVE_PROB_GAMMA,
+    PROACTIVE_SKIP_COOLDOWN_SECONDS,
 )
 
 
@@ -69,6 +71,9 @@ class ProactiveController:
         # 混用会让活跃群里的回应判定恒为真（见 design_docs/bug_report/
         # bug_report_2026_8_31#1.md §5.1）。
         self._last_tome: dict[int, dict[int, float]] = {}
+        # (group_id, user_id, candidate/topic subject) -> monotonic expiry.
+        # 这是进程内的负向冷却，不落库，避免给一次 skip 增加持久化迁移。
+        self._proactive_skip_until: dict[tuple[int, int, str], float] = {}
 
     # ── 反重复刷屏 ──────────────────────────────────────
     def record_spoken(self, group_id: int, lines: list[str]):
@@ -112,6 +117,7 @@ class ProactiveController:
             del lst[: len(lst) - PROACTIVE_FREQ_WINDOW]
 
         self._msg_count[group_id] = self._msg_count.get(group_id, 0) + 1
+        self.clear_proactive_skips(group_id, uid)
 
     def record_tome(self, group_id: int, user_id: int) -> None:
         """该用户「对 Bot 说话」了（@ Bot、回复 Bot 的消息、或以昵称呼叫）。
@@ -178,6 +184,40 @@ class ProactiveController:
         昵称呼叫（OneBot 的 to_me），不认在群里随便说了句话。
         """
         return self._last_tome.get(group_id, {}).get(int(user_id))
+
+    # ── 主动提问负向冷却 ──────────────────────────────────
+    @staticmethod
+    def _proactive_skip_key(group_id: int, user_id: int, subject: str) -> tuple[int, int, str]:
+        return int(group_id), int(user_id), str(subject or "").strip()
+
+    def mark_proactive_skip(self, group_id: int, user_id: int, subject: str) -> None:
+        """记录一次没有自然承接的候选/话题，避免短时间内重复付费生成。"""
+        ttl = max(0.0, float(PROACTIVE_SKIP_COOLDOWN_SECONDS))
+        if ttl <= 0.0:
+            return
+        key = self._proactive_skip_key(group_id, user_id, subject)
+        if not key[2]:
+            return
+        self._proactive_skip_until[key] = time.monotonic() + ttl
+
+    def proactive_skip_active(self, group_id: int, user_id: int, subject: str) -> bool:
+        """判断同一候选/话题是否仍处于 skip TTL 内。"""
+        key = self._proactive_skip_key(group_id, user_id, subject)
+        until = self._proactive_skip_until.get(key)
+        if until is None:
+            return False
+        if until <= time.monotonic():
+            self._proactive_skip_until.pop(key, None)
+            return False
+        return PROACTIVE_NATURALNESS_MODE == "enforce"
+
+    def clear_proactive_skips(self, group_id: int, user_id: int) -> None:
+        """用户发新消息时解除该用户旧的自然度 skip。"""
+        group = int(group_id)
+        user = int(user_id)
+        for key in tuple(self._proactive_skip_until):
+            if key[:2] == (group, user):
+                self._proactive_skip_until.pop(key, None)
 
     # ── 冷却管理 ────────────────────────────────────────
     def mark_spoke(self, group_id: int):
