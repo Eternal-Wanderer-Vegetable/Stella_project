@@ -281,6 +281,18 @@ score = W_CONTEXT × 上下文契合
 
 > 注：这也是全本地部署值得优先考虑的理由之一——主动替用户画像的过程产生的数据跟隐私强相关。接在线端点时这一步（`CONSOLIDATION` / `EXTRACT` 两个角色）会把群聊原文发给服务商，所以「混合」模式把整合留在本地：出网的只有对话生成那一步。见 [configuration.md · 三个典型场景](configuration.md#三个典型场景)。
 
+### Participation Decision Layer：主动插话先判断是否值得打扰
+
+普通主动插话不再只依赖活跃度概率。`memory/participation/` 从近期群聊提取话题、
+相关性、速度与打断风险等信号，在本地完成评分，输出 `IGNORE` / `OBSERVE` / `CANDIDATE` /
+`ALLOW_LLM` 四级决策，再决定是否生成证据。
+这层是**软决策**：先经过 `memory/proactive_gate.py` 的总开关、静音、睡眠、冷却等硬闸门，
+再由 Participation 判断当前是否有自然承接点；它不调用 LLM，也不改变主动 @ 的配额与回应退避。
+
+打分表放在 `config/participation/*.toml`，每次决策写入结构化日志，并落库到
+`participation_topics` / `participation_log`（Schema v13），便于回放和调参。缺少足够证据时
+默认宁可等待，不把「有消息」直接等同于「现在应该说话」。
+
 ### 目标选择
 
 优先级：

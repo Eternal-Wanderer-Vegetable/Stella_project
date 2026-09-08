@@ -123,7 +123,7 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 配置、记忆、人格、空间设置与已装插件会自动搬过来，数据库自动升级，`runtime/` 自动复用（省一次
 约 100MB 的下载）。全程**只读旧目录**——无论成败旧安装都还在原地能跑，可以放心重试；导入报告
-写在 `migration_report.md`。命令行等价操作：
+写在当前 `STELLA_HOME/migration_report.md`。命令行等价操作：
 
 ```bash
 python -m deploy migrate --dry-run   # 先看预览（会在数据库副本上真跑一遍）
@@ -135,7 +135,7 @@ python -m deploy migrate             # 执行
 
 ```text
 D:\你的目录\
-  Stella-v3.1.0-win64\   ← 程序（升级时整个换掉，可以放心删）
+  Stella-vX.Y.Z-win64\   ← 程序（升级时整个换掉，可以放心删）
   StellaData\            ← 你的数据（升级时一动不动）
 ```
 

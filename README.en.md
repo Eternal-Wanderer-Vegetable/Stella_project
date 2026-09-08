@@ -124,7 +124,7 @@ You decide where the models come from.
 2. Extract the new version into a new directory.
 3. Double-click `Stella.exe` (or `start.bat`) -> confirm "Import Configuration".
 
-Configuration, memories, personality, space settings, and installed plugins are moved automatically; the database is upgraded automatically, and `runtime/` is reused automatically (saving one approximately 100 MB download). The old directory is **read-only throughout**. Regardless of success or failure, the old installation remains runnable in place, so you can safely retry. The import report is written to `migration_report.md`. Command-line equivalents:
+Configuration, memories, personality, space settings, and installed plugins are moved automatically; the database is upgraded automatically, and `runtime/` is reused automatically (saving one approximately 100 MB download). The old directory is **read-only throughout**. Regardless of success or failure, the old installation remains runnable in place, so you can safely retry. The import report is written to the current `STELLA_HOME/migration_report.md`. Command-line equivalents:
 
 ```bash
 python -m deploy migrate --dry-run   # Preview first (runs once on a database copy)
@@ -135,7 +135,7 @@ Upgrading from 2.x also does not require losing memories: the old database is mi
 
 ```text
 D:\your-directory\
-  Stella-v3.1.0-win64\   <- Program (replace the whole directory when upgrading; safe to delete)
+  Stella-vX.Y.Z-win64\   <- Program (replace the whole directory when upgrading; safe to delete)
   StellaData\            <- Your data (untouched during upgrades)
 ```
 

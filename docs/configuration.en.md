@@ -4,13 +4,13 @@
 
 > Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
 
-**Regular users (Release package)**: For first-time setup, use the `Configuration` page in `Stella.exe`: enter the group number, connection method, address, and model ID, then save to write them to `.env` in the project root. The model list can be read automatically from the local LM Studio, or entered manually.
+**Regular users (Release package)**: For first-time setup, use the `Configuration` page in `Stella.exe`: enter the group number, connection method, address, and model ID, then save to write them to `STELLA_HOME/.env`. The model list can be read automatically from the local LM Studio, or entered manually.
 
 **Developers**: Use the wizard `python -m deploy init`: answer only 5 required items (group number, connection method, address, and two model IDs). The wizard retrieves the model list from LM Studio and lets you choose by number, avoiding the common mistake of typing a complete ID but omitting the `google/` prefix. It generates `.env` line by line from `.env.example`, preserving the template comments exactly, especially the cross-NapCat OneBot connection instructions. You can also use `--answers` to save and reuse answers.
 
 This is the complete configuration reference for tuning the system.
 
-Configuration is centralized in [`config/settings.py`](../config/settings.py), which reads `.env` from the project root and exports module-level constants. Tune the system without changing this file or the business code.
+Configuration is centralized in [`config/settings.py`](../config/settings.py), which reads `STELLA_HOME/.env` and exports module-level constants. Tune the system without changing this file or the business code.
 
 ```bash
 cp .env.example .env
@@ -87,7 +87,7 @@ Putting data there by default would turn the perfectly natural cleanup action of
 Therefore the default is outside; only when a user **explicitly** creates a `StellaData/` subdirectory is a self-contained layout assumed
 (in that case, import or back up the data before upgrading).
 
-The Release package therefore **does not contain an inner `Stella/` directory**: after extracting the zip, `Stella-v3.1.0-win64/` is the program directory and the data is placed beside it. An extra nesting level would turn “beside” into “inside the version folder,” which is the v3.1.0 defect.
+The Release package therefore **does not contain an inner `Stella/` directory**: after extracting the zip, `Stella-vX.Y.Z-win64/` is the program directory and the data is placed beside it. An extra nesting level would turn “beside” into “inside the version folder,” which was the old release-layout defect.
 
 The relative layout inside the data directory is exactly the same as in the old installation, so the “legacy layout” is simply the special case where the data directory happens to equal the installation directory.
 Use `python -m deploy paths` to view the current resolution result (`deploy doctor` also displays it).
@@ -655,6 +655,8 @@ For a practical frequency reference for the three presets (`CHECK_INTERVAL=60`):
 | `PROACTIVE_COLDSTART_TOPICS` | see settings.py | Cold-start topic list, comma-separated |
 | `PROACTIVE_AT_EXCLUDE_USERS` | empty | QQ numbers that will not be selected for proactive conversation (comma-separated) |
 | `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | Candidate types that are never verified via a proactive follow-up (comma-separated; empty = any type may be asked about) |
+| `PROACTIVE_NATURALNESS_MODE` | `enforce` | Natural-continuation rollout: `enforce` applies skip cooldown; `observe` records decisions without blocking repeated attempts |
+| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | In-process negative cooldown after skipping the same candidate/cold-start topic; `0` disables it |
 
 The exclusion list is primarily for **other AIs in the group**: mutually @-mentioning them can trigger an endless conversational loop. Excluded accounts are still passively collected (messages are stored and consolidated normally); the Bot simply does not ask them questions proactively.
 
@@ -663,6 +665,12 @@ The exclusion list is primarily for **other AIs in the group**: mutually @-menti
 The quota is hard-capped at `BASE + BONUS_MAX` (4 times per day by default). **“The more active a user is, the more they are harassed” is a failure mode that must be avoided**, so increasing the bonus is not recommended.
 
 Quota is counted when a mention is sent, regardless of whether the user responds. Otherwise unanswered follow-ups would consume no quota and could repeatedly target the same person.
+
+The natural-continuation check reuses the existing Replyer generation and does not add a second LLM call. When the model emits the internal
+`[[STELLA_SKIP]]` marker exactly, the gateway sends nothing, does not consume the proactive-@ quota, and does not start response detection.
+With `PROACTIVE_NATURALNESS_MODE=enforce`, the same candidate or cold-start topic is not generated again during
+`PROACTIVE_SKIP_COOLDOWN_SECONDS`; a new message from the target user immediately clears that user's previous skip.
+Use `observe` to measure skip rate and generation cost during rollout without blocking repeated attempts.
 
 ### Sleep Period
 
@@ -707,6 +715,44 @@ Usage: @ the Bot and say a keyword.
 Mute state is **persisted in the `group_runtime_state` table and remains effective after restart**. Administrators usually disable it because something went wrong, so a restart should not silently re-enable it.
 
 Mute affects proactive speaking only; @ replies continue normally. A non-administrator trigger makes no change and receives no reply.
+
+## Proactive Interjection (Participation Decision Layer)
+
+This is a group-state-based scoring layer that replaces the old “proactive-speaking v2”
+probability roll when `PARTICIPATION_ENABLED=true`; the proactive @ path is unaffected.
+See `design_docs/Stella_主动插话机制工程方案.md` and `Stella_主动插话机制实现方案.md` for the design.
+
+| Configuration | Default | Description |
+|---|---|---|
+| `PARTICIPATION_ENABLED` | `true` | Global switch: feed passive messages into the scoring layer |
+| `PARTICIPATION_TRIGGER_ENABLED` | `true` | Rollout switch: whether an `ALLOW_LLM` decision actually calls the LLM |
+| `PARTICIPATION_TABLES_DIR` | `config/participation` | External scoring-table directory (four TOML files; see below) |
+| `PARTICIPATION_BUFFER_SIZE` | `200` | Per-group message-buffer size |
+| `PARTICIPATION_MAX_GROUPS` | `64` | LRU limit for in-memory group state |
+| `PARTICIPATION_LOG_LEVEL` | `full` | Scoring log level: `full` / `summary` / `off` (`ALLOW_LLM` is always recorded) |
+| `PARTICIPATION_TICK_INTERVAL` | `60` | Topic-state lifecycle interval in seconds (`COOLING` → `EXPIRED`) |
+
+**All scores, thresholds, and keyword lists live in the four external tables under
+`config/participation/`**. The Python code contains no scoring constants:
+
+| File | Contents |
+|---|---|
+| `weights.toml` | Add/subtract scores and bounds for nine metrics (relevance, opportunity, social hook, involvement, silence bonus, recent-speech penalty, velocity penalty, repetition penalty, and expiry penalty) |
+| `thresholds.toml` | `IGNORE` / `OBSERVE` / `CANDIDATE` / `ALLOW_LLM` thresholds, candidate confirmation, topic lifetime, and topic-switch criteria |
+| `signals.toml` | Signal words for open questions, suspense, emotion, acknowledgements, low-information messages, and continuation words |
+| `topics.toml` | Long-term interest anchors (keywords + interest descriptions used for optional embedding similarity) |
+
+Tuning workflow: edit the tables, run the benchmark, and inspect the report diff:
+
+```bash
+python -m tests.benchmark.participation.runner
+python -m tests.benchmark.participation.runner --tables config/participation_v2
+```
+
+Runtime reload: an administrator can send `@Stella 重载打分表` in a group. On failure, the previous tables remain active.
+
+Scoring is recorded in three places: `logs/participation_decisions.jsonl` (structured),
+`logs/participation_logs.md` (human-readable breakdown), and the `participation_log` table.
 
 ## Memory Compression
 
@@ -947,7 +993,7 @@ Measured with (`PORT=8080`, `HOST=0.0.0.0`):
 # Local loopback → 200
 curl -i http://127.0.0.1:8080/stella/status
 # HTTP/1.1 200 OK
-# {"version":"2.6.0","pid":1234,"uptime_seconds":...}
+# {"version":"<installed-version>","pid":1234,"uptime_seconds":...}
 
 # LAN IP on the same host → 403 (simulates another machine on the LAN)
 curl -i http://192.168.1.20:8080/stella/status
