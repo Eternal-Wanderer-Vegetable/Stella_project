@@ -8,13 +8,13 @@
 <body>
   <div class="app">
     <div class="boot">
-      <div class="boot-title">Stella</div>
+      <div class="boot-title">正在启动</div>
       <div class="boot-status" id="st">正在检查环境…</div>
     </div>
   </div>
 
   <script type="module">
-    import { getConfig, runDoctor, runMigrate } from "./api.js";
+    import { getConfig, runDoctor, runMigrate, navigateToPage } from "./api.js";
 
     const st = document.getElementById("st");
 
@@ -49,25 +49,25 @@
           st.textContent = "正在查找上一个版本的数据…";
           if (await hasImportableInstall()) {
             st.textContent = "找到了旧版本，正在打开导入向导…";
-            setTimeout(() => location.replace("./migrate.html"), 300);
+            setTimeout(() => navigateToPage("./migrate.html", { replace: true }), 300);
             return;
           }
           st.textContent = "尚未完成配置，正在打开配置向导…";
-          setTimeout(() => location.replace("./config.html"), 300);
+          setTimeout(() => navigateToPage("./config.html", { replace: true }), 300);
           return;
         }
         const data = await runDoctor();
         if (data.summary?.blocking) {
           st.textContent = "发现需要处理的问题，正在打开环境自检…";
-          setTimeout(() => location.replace("./doctor.html"), 700);
+          setTimeout(() => navigateToPage("./doctor.html", { replace: true }), 700);
         } else {
-          location.replace("./run.html");
+          navigateToPage("./run.html", { replace: true });
         }
       } catch (e) {
         // 自检本身失败（Python 找不到、deploy 模块坏了）也要能进自检页——
         // 那里有完整的错误展示与排查提示，比停在启动页有用。
         st.textContent = "环境检查失败，正在打开详情…";
-        setTimeout(() => location.replace("./doctor.html"), 700);
+        setTimeout(() => navigateToPage("./doctor.html", { replace: true }), 700);
       }
     })();
   </script>

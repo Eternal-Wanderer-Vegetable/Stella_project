@@ -8,19 +8,21 @@
 <body>
   <div class="app">
     <header>
-      <h1>人格设定</h1>
-      <span class="ver">v2.6.0</span>
+      <div class="brand-lockup">
+        <h1 class="brand">Stella</h1>
+        <span class="ver">v3.7.0</span>
+      </div>
       <nav class="top-nav">
         <a class="nav-secondary" href="./run.html">运行状态</a>
         <a class="nav-secondary" href="./usage.html">用量</a>
         <a class="nav-secondary" href="./plugins.html">插件</a>
         <a class="nav-secondary" href="./config.html">配置</a>
-        <a class="nav-secondary" href="./persona.html">人格设定</a>
+        <a class="nav-secondary active" href="./persona.html" aria-current="page">人格设定</a>
         <a class="nav-secondary" href="./doctor.html">环境自检</a>
       </nav>
     </header>
     <p class="subtitle">为共享空间编辑 system prompt。未指定自定义人格的空间继续使用 memory/SYSTEM.md。</p>
-    <div id="root"><div class="loading">正在读取人格…</div></div>
+    <div id="root"></div>
   </div>
 
   <script type="module">
@@ -33,6 +35,25 @@
     let selected = 0;
 
     const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function renderPending() {
+      root.innerHTML = `
+        <div class="persona-editor">
+          <aside class="persona-sidebar">
+            <div class="persona-sidebar-title">共享空间</div>
+            <button class="persona-item active" disabled>
+              <strong>人格设定</strong><small>暂无同步数据</small>
+            </button>
+          </aside>
+          <section class="persona-main">
+            <div class="persona-toolbar">
+              <div><strong>选择共享空间</strong><span class="persona-meta">内容将在后台同步</span></div>
+            </div>
+            <textarea class="persona-code" disabled placeholder="共享空间的人格内容会显示在这里。"></textarea>
+            <div class="persona-footer">准备就绪</div>
+          </section>
+        </div>`;
+    }
 
     function render() {
       if (!personas.length) {
@@ -96,12 +117,13 @@
       }
     }
 
-    try {
-      personas = await getPersonas();
+    renderPending();
+    getPersonas().then(data => {
+      personas = data;
       render();
-    } catch (e) {
+    }).catch(e => {
       root.innerHTML = `<div class="notice notice-error">无法读取人格：<code>${esc(e)}</code></div>`;
-    }
+    });
   </script>
 </body>
 </html>

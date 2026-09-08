@@ -5,6 +5,52 @@
  * USE_MOCK 保留的理由：改 CSS 时用 mock 更快（不需要 Python 环境、
  * 不需要等真实检查跑完），且能一键构造「全通过」这类难以真实复现的场景。
  */
+import { navigateToPage } from "./page-transition.js";
+
+const VIEW_CACHE_PREFIX = "stella:view:";
+
+export { navigateToPage };
+
+/**
+ * JSON 对象的键顺序不应影响页面是否需要重绘。
+ * 这些数据来自 Rust/Python 的 JSON 接口，排序后再签名可以避免
+ * 后端仅改变序列化顺序时触发无意义的 DOM 更新。
+ */
+export function stableSignature(value) {
+  const seen = new WeakSet();
+  const normalize = input => {
+    if (input === null || typeof input !== "object") return input;
+    if (seen.has(input)) return "[Circular]";
+    seen.add(input);
+    if (Array.isArray(input)) return input.map(normalize);
+    return Object.fromEntries(
+      Object.keys(input).sort().map(key => [key, normalize(input[key])]),
+    );
+  };
+  return JSON.stringify(normalize(value));
+}
+
+/**
+ * 页面间只缓存短生命周期的非敏感摘要，避免切页时再次出现空白骨架。
+ * 配置（含 API key）、人格正文和日志不经过这里。
+ */
+export function readViewCache(key) {
+  try {
+    const raw = sessionStorage.getItem(`${VIEW_CACHE_PREFIX}${key}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeViewCache(key, value) {
+  try {
+    sessionStorage.setItem(`${VIEW_CACHE_PREFIX}${key}`, JSON.stringify(value));
+  } catch {
+    // WebView 禁用存储时不影响正常的实时请求与渲染。
+  }
+}
+
 const USE_MOCK = false;
 
 
@@ -150,7 +196,7 @@ export async function listModels(baseUrl, apiKey = "") {
 }
 
 export async function getVersion() {
-  if (USE_MOCK || !invoke) return "2.6.0";
+  if (USE_MOCK || !invoke) return "3.7.0";
   return await invoke("get_version");
 }
 

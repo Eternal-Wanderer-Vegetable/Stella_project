@@ -8,12 +8,14 @@
 <body>
   <div class="app">
     <header>
-      <h1>运行状态</h1>
-      <span class="ver">v2.6.0</span>
+      <div class="brand-lockup">
+        <h1 class="brand">Stella</h1>
+        <span class="ver">v3.7.0</span>
+      </div>
       <!-- 自检是排查工具而非日常页面，降级为角落里的次要入口。
            出问题时由界面主动提示用户点它（见 renderError / 状态提示条）。 -->
       <nav class="top-nav">
-        <a class="nav-secondary" href="./run.html">运行状态</a>
+        <a class="nav-secondary active" href="./run.html" aria-current="page">运行状态</a>
         <a class="nav-secondary" href="./usage.html">用量</a>
         <a class="nav-secondary" href="./plugins.html">插件</a>
         <a class="nav-secondary" href="./config.html">配置</a>
@@ -22,13 +24,13 @@
       </nav>
     </header>
     <p class="subtitle">启动、停止与实时日志。遇到问题时点「复制诊断信息」，内容可直接贴进 issue。</p>
-    <div id="root"><div class="loading">正在加载运行状态与日志…</div></div>
+    <div id="root"></div>
   </div>
 
   <script type="module">
-     import { getStatus, readLogTail, startBot, stopBot, copyText, getVersion, installCloseOverlay } from "./api.js";
+     import { getStatus, readLogTail, startBot, stopBot, copyText, getVersion, installCloseOverlay, readViewCache, writeViewCache } from "./api.js";
 
-     const root = document.getElementById("root");
+    const root = document.getElementById("root");
      let appVersion = "";
      installCloseOverlay();
      getVersion().then(v => { appVersion = v; document.querySelector(".ver").textContent = `v${v}`; }).catch(() => {});
@@ -105,6 +107,25 @@
           if (!atBottom && follow) { follow = false; const c = root.querySelector("#chk-follow"); if (c) c.checked = false; }
         };
       }
+    }
+
+    function renderPending() {
+      ensureSkeleton();
+      root.querySelector("#status-area").innerHTML = `
+        <div class="status-card">
+          <span class="dot stopped"></span>
+          <div class="status-main">
+            <div class="status-line">状态未同步</div>
+            <div class="status-sub">Stella 已就绪</div>
+          </div>
+          <div class="ops">
+            <button disabled>启动</button>
+            <button disabled>复制诊断信息</button>
+          </div>
+        </div>`;
+      root.querySelector("#link-area").innerHTML = "";
+      root.querySelector("#sched-content").innerHTML = `<span class="sched-empty">暂无排队信息</span>`;
+      renderLogs();
     }
 
     function statusSig(st) {
@@ -248,6 +269,11 @@
       return shown.map(l => `<div class="log-line ${l.level}"><span class="t">${fmtTime(l.ts)}</span><span class="lv">${escapeHTML(l.level)}</span><span class="mod">${escapeHTML(l.module)}</span><span class="msg">${escapeHTML(l.message)}</span></div>`).join("");
     }
 
+    function cacheableStatus(st) {
+      const { usage, capabilities, ...status } = st;
+      return status;
+    }
+
     function schedHTML(sched) {
       const s = sched || {};
       const names = Object.keys(s);
@@ -332,6 +358,7 @@
         const nextLogs = await readLogTail(st.log_file);
         logs = nextLogs;
         lastStatus = st; lastError = null;
+        writeViewCache("run-status", cacheableStatus(st));
         document.querySelector('.top-nav a[href="./doctor.html"]')?.classList.remove("alert");
         renderStatus(st);
         renderLogs();
@@ -344,6 +371,13 @@
       }
     }
 
+    const cachedStatus = readViewCache("run-status");
+    if (cachedStatus) {
+      lastStatus = cachedStatus;
+      renderStatus(cachedStatus);
+    } else {
+      renderPending();
+    }
     refresh();
     resumePolling();
   </script>

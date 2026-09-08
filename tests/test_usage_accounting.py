@@ -71,7 +71,8 @@ def _budget(monkeypatch, **kw):
 
 
 def _record(role=ROLE_CONSOLIDATION, slot="ONLINE_MEMORY", model="m", kind=KIND_ONLINE,
-            prompt=100, completion=20, cached=0, finish="stop", ok=True):
+            prompt=100, completion=20, cached=0, finish="stop", ok=True,
+            estimated_prompt=0, estimated_cached=0):
     return usage_sink.record(
         role=role,
         slot=slot,
@@ -82,6 +83,8 @@ def _record(role=ROLE_CONSOLIDATION, slot="ONLINE_MEMORY", model="m", kind=KIND_
             "completion_tokens": completion,
             "prompt_cache_hit_tokens": cached,
         },
+        estimated_prompt_tokens=estimated_prompt,
+        estimated_cached_tokens=estimated_cached,
         finish_reason=finish,
         ok=ok,
     )
@@ -426,6 +429,32 @@ def test_snapshot_reports_cache_hit_rate_over_input_tokens(db, monkeypatch):
     assert snap["totals"]["cache_hit_rate"] == 0.25
 
 
+def test_local_theoretical_cache_estimate_is_aggregated_and_persisted(db, monkeypatch):
+    _budget(monkeypatch)
+    store.install()
+    _record(
+        role=ROLE_CHAT,
+        slot="LOCAL",
+        kind=KIND_LOCAL,
+        prompt=100,
+        completion=10,
+        estimated_prompt=100,
+        estimated_cached=60,
+    )
+
+    key = f"{ROLE_CHAT}@LOCAL:m"
+    snap = store.usage_snapshot()
+    assert snap["by_key"][key]["estimated_cached_tokens"] == 60
+    assert snap["by_key"][key]["estimated_cache_hit_rate"] == pytest.approx(0.6)
+
+    assert store.flush() == 1
+    row = sqlite3.connect(db).execute(
+        "SELECT estimated_prompt_tokens, estimated_cached_tokens "
+        "FROM llm_usage_daily"
+    ).fetchone()
+    assert row == (100, 60)
+
+
 def test_snapshot_has_no_credentials_or_chat_content(db, monkeypatch):
     """响应体只许有计数与比率：绝不含 prompt / 模型输出 / base_url / key。"""
     _budget(monkeypatch, LLM_DAILY_TOKEN_BUDGET=1000)
@@ -444,6 +473,8 @@ def test_snapshot_has_no_credentials_or_chat_content(db, monkeypatch):
     allowed = {
         "role", "slot", "model", "kind", "calls", "failures", "truncated",
         "prompt_tokens", "completion_tokens", "cached_tokens", "cache_hit_rate",
+        "estimated_prompt_tokens", "estimated_cached_tokens",
+        "estimated_cache_hit_rate",
     }
     for entry in snap["by_key"].values():
         assert set(entry) == allowed
