@@ -281,6 +281,11 @@ jobs:
         run: |
           test -s cli-bin/stellacli-linux/stellacli || { echo "::error::缺少 Linux CLI 二进制"; exit 1; }
           test -s cli-bin/stellacli-windows/stellacli.exe || { echo "::error::缺少 Windows CLI 二进制"; exit 1; }
+          # upload/download-artifact v4 不保留 Unix 权限位：下载回来的 Linux
+          # 二进制没有 +x，必须补上（cp 保留权限、tar 按此打包，用户解压
+          # 即得可执行文件；Windows exe 无权限位概念，不需要处理）。
+          chmod +x cli-bin/stellacli-linux/stellacli
+          test -x cli-bin/stellacli-linux/stellacli || { echo "::error::chmod 后仍不可执行"; exit 1; }
 
       - name: 放入 Tauri 安装器
         uses: actions/download-artifact@v4
