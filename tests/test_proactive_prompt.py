@@ -8,9 +8,11 @@
 但效果立刻变差的条款，因此需要断言锁住。
 """
 from memory.proactive_prompt import (
+    PROACTIVE_SKIP_MARKER,
     build_coldstart_instruction,
     build_instruction,
     build_verify_instruction,
+    is_proactive_skip,
 )
 
 
@@ -48,12 +50,22 @@ def test_no_placeholder_left():
 
 
 def test_context_role_clause_present():
-    """上下文只作语气素材——缺了这条，模型会去回应尾巴里的对话而非执行指令。"""
+    """上下文用于判断承接，但不能被误当成待回复内容。"""
     for out in (
         build_verify_instruction("某件事"),
         build_coldstart_instruction("某话题"),
     ):
-        assert "不要去回应下面的任何一句话" in out
+        assert "不要把下面任何一句话当成新的任务直接回复" in out
+        assert "自然承接" in out
+        assert PROACTIVE_SKIP_MARKER in out
+        assert "接不上" not in out or "直接问" not in out
+
+
+def test_proactive_skip_marker_is_strict_and_internal():
+    assert is_proactive_skip([PROACTIVE_SKIP_MARKER])
+    assert is_proactive_skip([f"  {PROACTIVE_SKIP_MARKER}  "])
+    assert not is_proactive_skip([f"{PROACTIVE_SKIP_MARKER} 顺便问一句"])
+    assert not is_proactive_skip(["正常问题"])
 
 
 class _Target:

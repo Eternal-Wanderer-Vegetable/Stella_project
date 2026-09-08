@@ -261,6 +261,7 @@ class ParticipationManager:
             jsonl_path=self._jsonl_path,
             md_path=self._md_path,
             configured_level=self._log_level,
+            event="decision_allow" if decision.should_speak else "decision",
         )
         if self._persist and decision.level in ("CANDIDATE", ALLOW_LLM):
             record_to_db(decision, group_id)
@@ -400,12 +401,47 @@ class ParticipationManager:
 
     # ── 观测辅助 ────────────────────────────────────────
 
+    def log_event(
+        self,
+        decision: ParticipationDecision,
+        event: str,
+        *,
+        reason: str = "",
+    ) -> None:
+        """记录 ALLOW_LLM 之后的生成/发送生命周期事件。"""
+        state = self._groups.get(decision.group_id)
+        if state is None:
+            return
+        log_decision(
+            decision,
+            state,
+            jsonl_path=self._jsonl_path,
+            md_path=self._md_path,
+            configured_level=self._log_level,
+            event=event,
+            event_reason=reason,
+        )
+
     def snapshot(self, group_id: int | None = None) -> dict:
         """给 status API / benchmark 用的群状态快照。"""
         groups = {}
         items = [(group_id, self._groups[group_id])] if group_id in self._groups else list(self._groups.items())
         for gid, state in items:
             topic = state.topic
+            tables = self._store.tables
+            if tables is not None:
+                velocity_level, velocity_count = state.velocity_level(tables)
+            else:  # pragma: no cover - disabled manager has no live state
+                velocity_level, velocity_count = "UNKNOWN", 0
+            recent_messages = [
+                {
+                    "msg_id": msg.msg_id,
+                    "sender_id": msg.sender_id,
+                    "text": msg.text.strip()[:160],
+                }
+                for msg in state.buffer.tail(6)
+                if msg.text.strip()
+            ]
             groups[str(gid)] = {
                 "topic_id": topic.topic_id if topic else None,
                 "label": topic.label if topic else "",
@@ -414,6 +450,9 @@ class ParticipationManager:
                 "stella_involved": bool(topic.stella_involved) if topic else False,
                 "stella_last_spoke_at": state.speak_stats.last_spoke_at or None,
                 "buffer_size": len(state.buffer),
+                "velocity_level": velocity_level,
+                "velocity_count": velocity_count,
+                "recent_messages": recent_messages,
             }
         return {"enabled": self.enabled, "groups": groups}
 

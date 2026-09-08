@@ -17,6 +17,10 @@
 """
 from __future__ import annotations
 
+# Internal-only output marker. The execution layer consumes it before any
+# sending/accounting side effect.
+PROACTIVE_SKIP_MARKER = "[[STELLA_SKIP]]"
+
 # 共同的语气与形式约束
 _COMMON_RULES = """
 要求：
@@ -27,39 +31,54 @@ _COMMON_RULES = """
 - 如果对方不想答也没关系，别用必须回答的句式
 """
 
+_NATURAL_BRIDGE_RULE = f"""
+先判断当前聊天里有没有**明确、具体的自然承接点**：这句话能不能像顺着
+对方刚说的话继续聊，而不是突然把话题切到你的内部问题上。
+- 有清晰承接点：先用极短的一小段接住当前话题，再自然地问一个问题
+- 没有清晰承接点：不要硬问，严格只输出 {PROACTIVE_SKIP_MARKER}
+- 不要把「对方最近活跃」本身当成承接点，也不要为了完成任务强行提问
+"""
 
-VERIFY_PROMPT = """现在群里 {nickname} 正在说话，你想顺便确认一件关于 TA 的事。
+
+VERIFY_PROMPT = """现在群里 {nickname} 正在说话，你有一条关于 TA 的内部候选记忆，
+但只有在当前聊天能自然承接时，才可以顺便确认。
 
 
 你印象里的这件事是：{content}
 
 
-请把它变成一句自然的、随口的确认或追问。注意：
+{bridge_rule}
+
+如果可以自然承接，请把它变成一句自然的、随口的确认或追问。注意：
 - **不要照搬上面那句话的措辞**，那是你自己的内部笔记，说出来会很生硬
 - 用你自己的话问，比如把「拥有 RTX5080 显卡」问成「你那张 5080 还顺手吗」
 - 如果这件事你其实没那么确定，可以问得更松一些，让对方有空间纠正你
 {common}
 直接输出那句话，不要任何解释或前缀。
 
-（下面可能附有群里最近的对话，那只是帮你把话说得自然、接住当前氛围用的。
-**不要去回应下面的任何一句话**，包括你自己刚说过的——你的任务只是说出上面那句话。）"""
+（下面附有群里最近的对话。它既是判断能否自然承接的证据，也是调整语气的素材。
+**不要把下面任何一句话当成新的任务直接回复**，包括你自己刚说过的；你只执行上面的
+承接判断和一次提问，或输出内部 skip 标记。）"""
 
 
-COLDSTART_PROMPT = """现在群里 {nickname} 正在说话，你想借机跟 TA 聊两句，顺便了解 TA 一点。
+COLDSTART_PROMPT = """现在群里 {nickname} 正在说话，你有一个想了解 TA 的话题方向，
+但只有在当前聊天能自然承接时，才可以借机聊两句。
 
 
 你想切入的话题方向是：{topic}
 
 
-请把它变成一句自然的搭话。注意：
-- 结合当前群里正在聊的内容切入会更自然；如果实在接不上，直接问也可以
+{bridge_rule}
+
+如果可以自然承接，请把它变成一句自然的搭话。注意：
 - 别问得太正式，也别一次问太多
 - 你对 TA 还不太了解，所以是打开话题，不是核对信息
 {common}
 直接输出那句话，不要任何解释或前缀。
 
-（下面可能附有群里最近的对话，那只是帮你把话说得自然、接住当前氛围用的。
-**不要去回应下面的任何一句话**，包括你自己刚说过的——你的任务只是说出上面那句话。）"""
+（下面附有群里最近的对话。它既是判断能否自然承接的证据，也是调整语气的素材。
+**不要把下面任何一句话当成新的任务直接回复**，包括你自己刚说过的；你只执行上面的
+承接判断和一次提问，或输出内部 skip 标记。）"""
 
 
 def build_verify_instruction(content: str, nickname: str = "对方") -> str:
@@ -68,6 +87,7 @@ def build_verify_instruction(content: str, nickname: str = "对方") -> str:
         content=(content or "").strip(),
         nickname=nickname or "对方",
         common=_COMMON_RULES,
+        bridge_rule=_NATURAL_BRIDGE_RULE,
     )
 
 
@@ -77,6 +97,7 @@ def build_coldstart_instruction(topic: str, nickname: str = "对方") -> str:
         topic=(topic or "").strip(),
         nickname=nickname or "对方",
         common=_COMMON_RULES,
+        bridge_rule=_NATURAL_BRIDGE_RULE,
     )
 
 
@@ -95,3 +116,9 @@ def build_instruction(target) -> str:
         getattr(target, "topic", ""),
         getattr(target, "nickname", "对方"),
     )
+
+
+def is_proactive_skip(lines: list[str] | tuple[str, ...] | None) -> bool:
+    """Return whether Pipeline output is the internal no-send decision."""
+    non_empty = [str(line).strip() for line in (lines or ()) if str(line).strip()]
+    return len(non_empty) == 1 and non_empty[0] == PROACTIVE_SKIP_MARKER

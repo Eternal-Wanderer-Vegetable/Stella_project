@@ -664,6 +664,8 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `PROACTIVE_COLDSTART_TOPICS` | 见 settings.py | 冷启动话题清单，逗号分隔 |
 | `PROACTIVE_AT_EXCLUDE_USERS` | 空 | 不会被选为主动搭话对象的 QQ 号（逗号分隔） |
 | `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | 不会被主动追问验证的候选类型（逗号分隔；留空 = 都可以问） |
+| `PROACTIVE_NATURALNESS_MODE` | `enforce` | 自然承接灰度：`enforce` 执行 skip 冷却，`observe` 只记录而不拦截重复尝试 |
+| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | 同一候选/冷启动话题 skip 后的进程内负向冷却；`0` 表示关闭 |
 
 排除名单的主要用途是**群内其他 AI** —— 互相 @ 会触发无终止的循环对话。被排除的账号仍会被动收集信息（消息照常落库与整合），只是不主动向它们提问。
 
@@ -672,6 +674,12 @@ PROACTIVE_PROB_AT_SLOW=0.0
 配额上限硬封顶在 `BASE + BONUS_MAX`（默认 4 次/天）。**「越活跃越被骚扰」是必须避免的失控模式**，因此奖励幅度不建议调大。
 
 配额为「发出即计数」，不论用户是否回应——否则无回应的追问不占配额，会导致对同一人连续搭话。
+
+自然承接判断是一次已有的 Replyer 生成，不新增第二次 LLM。模型严格输出内部
+`[[STELLA_SKIP]]` 时，网关不会发送、不会消耗主动 @ 配额，也不会启动回应检测。
+`PROACTIVE_NATURALNESS_MODE=enforce` 时，同一候选或冷启动话题在
+`PROACTIVE_SKIP_COOLDOWN_SECONDS` 内不会再次触发生成；目标用户发出新消息后会立即清理
+该用户的旧 skip。`observe` 适合灰度观察 skip 率和生成成本，但不拦截重复尝试。
 
 ### 睡眠时段
 

@@ -307,7 +307,26 @@ def test_decision_logs_written(tmp_path):
     record = json.loads(jsonl.splitlines()[-1])
     for key in ("relevance", "opportunity", "final_score", "decision", "mode", "reason_flags"):
         assert key in record
+    assert record["event"] == "decision"
     assert "Score:" in md and "Decision:" in md
+
+
+def test_snapshot_contains_limited_topic_velocity_and_recent_messages(tmp_path):
+    m = make_manager(tmp_path)
+    gid = 1001
+    observe(m, gid, 42, "正在讨论 rust 游戏", msg_id=11)
+    observe(m, gid, 43, "这个实现有点奇怪", msg_id=12)
+
+    group = m.snapshot(gid)["groups"][str(gid)]
+
+    assert group["topic_id"] is not None
+    assert group["velocity_level"] in {"LOW", "MEDIUM", "HIGH", "VERY_HIGH"}
+    assert group["velocity_count"] >= 2
+    assert group["recent_messages"][-1] == {
+        "msg_id": 12,
+        "sender_id": 43,
+        "text": "这个实现有点奇怪",
+    }
 
 
 def test_off_level_still_records_allow_llm(tmp_path):

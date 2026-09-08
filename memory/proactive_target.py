@@ -58,6 +58,13 @@ class ProactiveTarget:
     topic: str = ""  # coldstart 模式下的话题
     reason: str = ""  # 供日志与审计
 
+    @property
+    def skip_subject(self) -> str:
+        """用于负向冷却的稳定主题键；候选/话题变化会自然生成新键。"""
+        if self.mode == "verify":
+            return f"candidate:{self.candidate_id or self.candidate_content}"
+        return f"topic:{self.topic}"
+
 
 def at_quota(group_id: int, user_id: int) -> int:
     """该用户当日的主动 @ 配额上限：基础 + 按 24h 发言量的小幅奖励。
@@ -130,7 +137,10 @@ def _exclude_types_clause() -> tuple[str, tuple[str, ...]]:
 
 
 def _fetch_observing_candidate(
-    group_shared_space: str, user_id: int, exclude_id: str = ""
+    group_shared_space: str,
+    user_id: int,
+    exclude_id: str = "",
+    exclude_ids: set[str] | None = None,
 ) -> tuple[str, str, str, float] | None:
     """取该用户 confidence 最接近晋升线的 OBSERVING 候选。
 
@@ -152,13 +162,22 @@ def _fetch_observing_candidate(
     """
     lower = max(0.0, MEMORY_OBSERVE_LOW_CONFIDENCE - 0.2)
     type_clause, type_params = _exclude_types_clause()
+    excluded = {str(item) for item in (exclude_ids or set()) if str(item)}
+    if exclude_id:
+        excluded.add(str(exclude_id))
+    id_clause = ""
+    id_params: tuple[str, ...] = ()
+    if excluded:
+        placeholders = ",".join("?" * len(excluded))
+        id_clause = f"AND id NOT IN ({placeholders}) "
+        id_params = tuple(sorted(excluded))
     try:
         conn = sqlite3.connect(DB_PATH)
         row = conn.execute(
             "SELECT id, content, type, confidence FROM memory_candidates "
             "WHERE group_shared_space = ? AND user_id = ? AND status = 'OBSERVING' "
             "AND confidence >= ? AND confidence < ? AND content != '' "
-            "AND id != ? "
+            f"{id_clause}"
             f"{type_clause}"
             "ORDER BY confidence DESC LIMIT 1",
             (
@@ -166,7 +185,7 @@ def _fetch_observing_candidate(
                 str(user_id),
                 lower,
                 MEMORY_CONFIRM_HIGH_CONFIDENCE,
-                exclude_id or "",
+                *id_params,
                 *type_params,
             ),
         ).fetchone()
@@ -245,6 +264,7 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
     if not actives:
         return None
 
+    proactive = get_proactive()
     eligible: list[int] = []
     for uid in actives:
         ok, reason = can_at_user(group_id, uid)
@@ -259,11 +279,22 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
     # 每人排除上次已经问过的那条候选，否则同一条候选会在每轮都胜出 → 复读
     verify_pool: list[tuple[float, int, tuple[str, str, str, float]]] = []
     for uid in eligible:
-        found = _fetch_observing_candidate(
-            space, uid, exclude_id=get_state(group_id, uid)["last_asked_candidate_id"]
-        )
-        if found:
+        state = get_state(group_id, uid)
+        excluded_candidate_ids: set[str] = set()
+        while True:
+            found = _fetch_observing_candidate(
+                space,
+                uid,
+                exclude_id=state["last_asked_candidate_id"],
+                exclude_ids=excluded_candidate_ids,
+            )
+            if not found:
+                break
+            if proactive.proactive_skip_active(group_id, uid, f"candidate:{found[0]}"):
+                excluded_candidate_ids.add(found[0])
+                continue
             verify_pool.append((found[3], uid, found))
+            break
     if verify_pool:
         verify_pool.sort(key=lambda item: item[0], reverse=True)
         _, uid, (cid, content, ctype, conf) = verify_pool[0]
@@ -287,8 +318,11 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
         t
         for t in PROACTIVE_COLDSTART_TOPICS
         if t != state["last_asked_topic"] and not _topic_covered(t, known)
+        and not proactive.proactive_skip_active(group_id, uid, f"topic:{t}")
     ]
-    topic = random.choice(topics or PROACTIVE_COLDSTART_TOPICS)
+    if not topics:
+        return None
+    topic = random.choice(topics)
     return ProactiveTarget(
         user_id=uid,
         mode="coldstart",

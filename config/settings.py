@@ -708,6 +708,13 @@ PROACTIVE_AT_QUOTA_BASE = _env_int("PROACTIVE_AT_QUOTA_BASE", 2)
 PROACTIVE_AT_QUOTA_BONUS_MAX = _env_int("PROACTIVE_AT_QUOTA_BONUS_MAX", 2)
 PROACTIVE_AT_BONUS_MSGS_LOW = _env_int("PROACTIVE_AT_BONUS_MSGS_LOW", 20)
 PROACTIVE_AT_BONUS_MSGS_HIGH = _env_int("PROACTIVE_AT_BONUS_MSGS_HIGH", 100)
+# 主动提问的自然度灰度：enforce 执行 skip 冷却，observe 只让新消息清理/日志链路运行。
+# 模型已经明确输出 skip 时始终不向用户发送内部标记。
+PROACTIVE_NATURALNESS_MODE = _env("PROACTIVE_NATURALNESS_MODE", "enforce").strip().lower()
+if PROACTIVE_NATURALNESS_MODE not in {"observe", "enforce"}:
+    PROACTIVE_NATURALNESS_MODE = "observe"
+# 同一候选/冷启动话题在 skip 后的最小重试间隔；0 表示关闭负向冷却。
+PROACTIVE_SKIP_COOLDOWN_SECONDS = _env_float("PROACTIVE_SKIP_COOLDOWN_SECONDS", 900.0)
 # 同一用户两次主动 @ 的最小间隔（秒），默认 2 小时
 PROACTIVE_AT_USER_COOLDOWN = _env_float("PROACTIVE_AT_USER_COOLDOWN", 7200.0)
 # 判定「正在活跃」的时间窗（秒）：只对刚说过话的人主动搭话
