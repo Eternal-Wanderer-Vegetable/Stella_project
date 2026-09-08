@@ -116,7 +116,7 @@ from memory.post_processors import (
 from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
 from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
-from memory.proactive_prompt import build_instruction
+from memory.proactive_prompt import build_instruction, is_proactive_skip
 from memory.proactive_state import (
     get_runtime_state,
     mark_announced,
@@ -1111,6 +1111,13 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
         if not ctx.lines:
             return False
 
+        if is_proactive_skip(ctx.lines):
+            logger.info(
+                f"⏭️ [主动@] 群 {group_id} 用户 {target.user_id} "
+                "当前没有自然承接，跳过发送与记账"
+            )
+            return False
+
         # 主动 @ 只发一句：追问必须简短，多行会像连续质询
         line = _join_lines_naturally(ctx.lines) if len(ctx.lines) > 1 else ctx.lines[0].strip()
         if not line:
@@ -1343,6 +1350,13 @@ async def _proactive_speak_for_group(
             # 「在等更多消息」与「没在说话」是两种状态，后续 observe 可据此区分。
             get_reply_gate().finish(group_id, waiting=bool(getattr(ctx, "planner_wait", False)))
         if not ctx.lines:
+            return
+
+        if is_proactive_skip(ctx.lines):
+            logger.info(
+                f"⏭️ [主动发言] 群 {group_id} 当前没有自然承接，"
+                "跳过发送与主动发言记账"
+            )
             return
 
         # 主动插话只保留 PROACTIVE_MAX_LINES 条以内的消息（避免刷屏），
