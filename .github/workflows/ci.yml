@@ -160,6 +160,8 @@ jobs:
     needs: [test, lint, security, cli]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
+    permissions:
+      issues: write
     steps:
       - name: Check status
         id: status
@@ -174,7 +176,9 @@ jobs:
           fi
 
       - name: Comment on PR
-        uses: actions/github-script@v7
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: actions/github-script@v9
         with:
           script: |
             const status = "${{ steps.status.outputs.status }}";
