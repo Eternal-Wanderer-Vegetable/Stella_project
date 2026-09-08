@@ -77,6 +77,13 @@ class ChatContext:
     behavior_constraints: list[dict] = field(default_factory=list)   # 行为约束
     memory_trace: dict = field(default_factory=dict)                 # 决策轨迹
 
+    # ---- 受限 Planner（设计阶段五：深度回复路径） ----
+    # 三者均默认空/False = 走快速路径（本地 Gate → 检索 → 单次 LLM）。
+    planner_trigger: str = ""   # 本地触发原因：history_reference / ambiguity / proactive_unclear
+    planner_action: str = ""    # Planner 决策：REPLY / QUERY_MEMORY / WAIT
+    planner_wait: bool = False  # WAIT：本轮不回复，等更多消息（仅主动路径；不轮询 LLM）
+    deep_tool_calls: int = 0    # 本轮深度记忆查询次数（上限 PLANNER_MAX_TOOL_CALLS_PER_TURN）
+
     # ---- 会话上下文压缩 ----
     # 尾巴起点消息 id：会话压缩用它计算不与尾巴重叠的待压缩区间。
     # 0 表示无尾巴（新群或全部消息都超出时间窗）。

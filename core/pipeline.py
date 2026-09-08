@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from nonebot import logger
 
-from config import MEMORY_V2_ENABLED
+from config import MEMORY_V2_ENABLED, PLANNER_MAX_LLM_CALLS_PER_TURN
 from core.context import ChatContext
 from core.context_budget import fit_prompt_to_window
 from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
@@ -110,6 +111,16 @@ class Pipeline:
         self._timeout = timeout
         self.system_prompt: str = ""
         self.system_prompt_resolver = None
+        # 受限 Planner（设计阶段五）：None = 无深度路径（测试/降级装配）。
+        self._planner: Any | None = None
+
+    def set_planner(self, planner: Any) -> None:
+        """挂上受限 Planner（core.planner.RestrictedPlanner 或测试替身）。
+
+        类型刻意写 Any：core 不 import 具体实现（planner 依赖 config 的
+        PLANNER_* 旋钮），只鸭子类型调用 ``await planner.maybe_plan(ctx)``。
+        """
+        self._planner = planner
 
     def register_pre_hook(self, hook: PreHook, priority: int = 10):
         """注册前置钩子，并按其优先级降序排列。
@@ -162,82 +173,102 @@ class Pipeline:
         if ctx.reply:
             return ctx
 
+        # ── 受限 Planner（设计阶段五）：本地触发判定零 LLM，命中才进深度路径 ──
+        # Planner 异常只能降级为快速路径（少几条补充记忆），不能吞掉回复。
+        if self._planner is not None:
+            try:
+                ctx = await self._planner.maybe_plan(ctx)
+            except Exception as e:
+                logger.warning(f"[Planner] 规划异常（按快速路径继续）: {e}")
+            if getattr(ctx, "planner_wait", False):
+                # WAIT：本轮不回复、不轮询 LLM，等后续消息事件重新驱动。
+                logger.info(f"[Planner] 群 {ctx.group_id} 本轮等待更多消息，不回复")
+                return ctx
+
         if self._llm:
-            user_prompt = ctx.message
-            # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
-            if MEMORY_V2_ENABLED:
-                # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
-                from memory.prompt_builder import build_v2_prompt_context
-
-                user_prompt = _compose_prompt(
-                    build_v2_prompt_context(
-                        getattr(ctx, "short_term", "") or "",
-                        getattr(ctx, "user_profile", "") or "",
-                        getattr(ctx, "conversation_memories", []) or [],
-                        getattr(ctx, "behavior_constraints", []) or [],
-                        current_user_id=ctx.user_id,
-                        mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
-                    ),
-                    ctx,
+            # 深度路径 LLM 硬上限：Planner 消耗的名额从同一上限里扣。
+            # 正常装配下 Planner 会给 Replyer 留 1 个名额，这里是结构保险。
+            if ctx.llm_call_count >= PLANNER_MAX_LLM_CALLS_PER_TURN:
+                logger.warning(
+                    f"[Planner] 本轮 LLM 调用已达上限 {PLANNER_MAX_LLM_CALLS_PER_TURN}，跳过回复生成"
                 )
+                ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
             else:
-                from memory.prompt_builder import build_prompt_context
+                user_prompt = ctx.message
+                # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
+                if MEMORY_V2_ENABLED:
+                    # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
+                    from memory.prompt_builder import build_v2_prompt_context
 
-                short_term = getattr(ctx, "short_term", "") or ""
-                user_profile = getattr(ctx, "user_profile", "") or ""
-                memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
-                user_prompt = _compose_prompt(
-                    build_prompt_context(
-                        short_term,
-                        user_profile,
-                        memories_for_prompt,
-                        current_user_id=ctx.user_id,
-                    ),
-                    ctx,
-                )
-
-            # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
-            ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
-            ctx.llm_model = getattr(self._llm, "model", "") or getattr(self._llm, "site", "")
-            system_prompt = self.system_prompt
-            if self.system_prompt_resolver is not None:
-                system_prompt = self.system_prompt_resolver(ctx)
-            budgeted = fit_prompt_to_window(user_prompt, system_prompt)
-            user_prompt = budgeted.prompt
-            ctx.context_window_tokens = budgeted.window_tokens
-            ctx.prompt_budget_tokens = budgeted.budget_tokens
-            ctx.prompt_estimated_tokens = budgeted.estimated_tokens
-            ctx.prompt_truncated = budgeted.truncated
-            ctx.system_prompt_len = len(system_prompt)
-            ctx.prompt_log = user_prompt
-
-            # 闸门资源名 = CHAT 角色绑定的端点槽：纯本地部署下压缩/候选提取绑同一
-            # 个槽，于是与主链路 FIFO 串行共用 27B；把它们分到不同端点后同一行
-            # 代码自动变成并行。交互回复标记为高优先级意图（当前优先级未启用，
-            # 仅按 FIFO 处理）。
-            async with acquire(
-                gate_of(ROLE_CHAT), tag=f"reply:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
-            ):
-                import time as _time
-                _t0 = _time.monotonic()
-                try:
-                    ctx.llm_call_count += 1
-                    raw = await asyncio.wait_for(
-                        self._llm.generate(user_prompt, system_prompt),
-                        timeout=self._timeout,
+                    user_prompt = _compose_prompt(
+                        build_v2_prompt_context(
+                            getattr(ctx, "short_term", "") or "",
+                            getattr(ctx, "user_profile", "") or "",
+                            getattr(ctx, "conversation_memories", []) or [],
+                            getattr(ctx, "behavior_constraints", []) or [],
+                            current_user_id=ctx.user_id,
+                            mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
+                        ),
+                        ctx,
                     )
-                    ctx.llm_elapsed = _time.monotonic() - _t0
-                    ctx.raw_output = raw
-                except asyncio.TimeoutError:
-                    # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
-                    ctx.llm_elapsed = _time.monotonic() - _t0
-                    logger.error("LLM 执行超时")
-                    ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
-                except Exception as e:
-                    # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
-                    ctx.llm_elapsed = _time.monotonic() - _t0
-                    logger.error(f"LLM 执行异常: {e}")
-                    ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
+                else:
+                    from memory.prompt_builder import build_prompt_context
+
+                    short_term = getattr(ctx, "short_term", "") or ""
+                    user_profile = getattr(ctx, "user_profile", "") or ""
+                    memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
+                    user_prompt = _compose_prompt(
+                        build_prompt_context(
+                            short_term,
+                            user_profile,
+                            memories_for_prompt,
+                            current_user_id=ctx.user_id,
+                        ),
+                        ctx,
+                    )
+
+                # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
+                ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
+                ctx.llm_model = getattr(self._llm, "model", "") or getattr(self._llm, "site", "")
+                system_prompt = self.system_prompt
+                if self.system_prompt_resolver is not None:
+                    system_prompt = self.system_prompt_resolver(ctx)
+                budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+                user_prompt = budgeted.prompt
+                ctx.context_window_tokens = budgeted.window_tokens
+                ctx.prompt_budget_tokens = budgeted.budget_tokens
+                ctx.prompt_estimated_tokens = budgeted.estimated_tokens
+                ctx.prompt_truncated = budgeted.truncated
+                ctx.system_prompt_len = len(system_prompt)
+                ctx.prompt_log = user_prompt
+
+                # 闸门资源名 = CHAT 角色绑定的端点槽：纯本地部署下压缩/候选提取绑同一
+                # 个槽，于是与主链路 FIFO 串行共用 27B；把它们分到不同端点后同一行
+                # 代码自动变成并行。交互回复标记为高优先级意图（当前优先级未启用，
+                # 仅按 FIFO 处理）。
+                async with acquire(
+                    gate_of(ROLE_CHAT), tag=f"reply:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
+                ):
+                    import time as _time
+                    _t0 = _time.monotonic()
+                    try:
+                        ctx.llm_call_count += 1
+                        raw = await asyncio.wait_for(
+                            self._llm.generate(user_prompt, system_prompt),
+                            timeout=self._timeout,
+                        )
+                        ctx.llm_elapsed = _time.monotonic() - _t0
+                        ctx.raw_output = raw
+                    except asyncio.TimeoutError:
+                        # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
+                        ctx.llm_elapsed = _time.monotonic() - _t0
+                        logger.error("LLM 执行超时")
+                        ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
+                    except Exception as e:
+                        # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
+                        ctx.llm_elapsed = _time.monotonic() - _t0
+                        logger.error(f"LLM 执行异常: {e}")
+                        ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
 
         # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）
         if MEMORY_V2_ENABLED:

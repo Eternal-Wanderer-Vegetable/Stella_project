@@ -1295,3 +1295,27 @@ COMES_DIRECT_CALL_NO_ARGS = _env("COMES_DIRECT_CALL_NO_ARGS", "true").lower() in
 COMES_PROVIDER_FAILURE_THRESHOLD = _env_int("COMES_PROVIDER_FAILURE_THRESHOLD", 3)
 # 被退避的 provider 多久后恢复（秒）。
 COMES_PROVIDER_RECOVER_SECONDS = _env_float("COMES_PROVIDER_RECOVER_SECONDS", 600.0)
+
+# ---------- 受限 Planner（深度回复路径，设计阶段五） ----------
+# 绝大多数消息走快速路径（本地 Gate → 检索 → 单次 LLM）。只有本地零 LLM 判定
+# 命中触发条件（历史指代 / 话题歧义 / 主动插话表达不明确）才进入深度路径：
+# Planner（1 次 LLM）→ 最多 1 次深度记忆查询（本地，压缩后回填）→ Replyer（1 次 LLM）。
+# 「需要工具」不在此列：Capability Router → Comes 已在每条消息上独立处理，
+# Planner 不重复派发工具（见 capability/hooks.py）。
+PLANNER_ENABLED = _env("PLANNER_ENABLED", "true").lower() in ("true", "1", "yes")
+# 深度路径的 LLM 硬上限（含 Replyer）：普通路径 1 次，深度路径 2 次。
+PLANNER_MAX_LLM_CALLS_PER_TURN = _env_int("PLANNER_MAX_LLM_CALLS_PER_TURN", 2)
+# Planner 最多规划轮数（每轮 1 次 LLM；实际上限受上面的 LLM 总名额约束）。
+PLANNER_MAX_ROUNDS = _env_int("PLANNER_MAX_ROUNDS", 2)
+# 每轮最多 1 次深度记忆查询（验收项「单轮最多 1 次深度记忆查询」）。
+PLANNER_MAX_TOOL_CALLS_PER_TURN = _env_int("PLANNER_MAX_TOOL_CALLS_PER_TURN", 1)
+# query_memory 结果压缩后的最大行数（每行含事实/时间/参与者/置信度）。
+PLANNER_QUERY_MEMORY_MAX_LINES = _env_int("PLANNER_QUERY_MEMORY_MAX_LINES", 5)
+# 主动发言路径是否允许 Planner 决定 WAIT（等更多消息再插话）。
+# **默认关闭**：主动插话已由参与评分层（零 LLM）把关，再花 1 次 LLM 判定「说不说」
+# 会让每次主动发言成本翻倍；确有需要（高机会但表达不明的场景）再打开。
+PLANNER_PROACTIVE_WAIT_ENABLED = _env("PLANNER_PROACTIVE_WAIT_ENABLED", "false").lower() in ("true", "1", "yes")
+# Planner 单次 LLM 调用超时（秒）。超时按「直接回复」处理，不阻塞主链路。
+PLANNER_TIMEOUT = _env_float("PLANNER_TIMEOUT", 20.0)
+# Planner prompt 里最近对话摘要的 token 上限（深度预算中「最近消息」的压缩份额）。
+PLANNER_CONTEXT_MAX_TOKENS = _env_int("PLANNER_CONTEXT_MAX_TOKENS", 400)

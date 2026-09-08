@@ -93,11 +93,12 @@ from config import (
 )
 from config.spaces import prompt_text, resolve_space
 from core.context import ChatContext
-from core.reply_gate import get_reply_gate
 from core.llm import ROLE_CHAT, backend_for
 from core.llm.registry import log_summary as log_llm_summary
 from core.llm.usage_store import budget_blocked
 from core.pipeline import Pipeline
+from core.planner import RestrictedPlanner
+from core.reply_gate import get_reply_gate
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from extensions import load_extensions
@@ -178,6 +179,9 @@ if _chat_backend is None:
     )
 else:
     pipeline.set_llm_backend(_chat_backend)
+    # 受限 Planner（设计阶段五）：与 Replyer 共用 CHAT 后端与 LLM 名额——
+    # 深度路径 2 次 LLM 的硬上限在 core/pipeline.py 里统一扣减。
+    pipeline.set_planner(RestrictedPlanner(_chat_backend))
 
 # 启动日志打一张「角色 → 端点 → 模型 → 闸门」表，并把解析问题一次性报出来。
 # 「无缝切换」要能被信任，前提是切完能一眼确认到底切没切成。
@@ -503,6 +507,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             # 兜底：异常时给用户一句温和的占位回复，避免冷场
             ctx.reply = "......？"
             ctx.lines = ["......？"]
+
+        # Planner 决定等待更多消息（设计阶段五）：@ 是硬触发不会走到这里，
+        # 该标记只可能出现在主动路径；防御性地早退，绝不能发「......？」占位。
+        if getattr(ctx, "planner_wait", False):
+            logger.info(f"⏳ [Planner] 群 {event.group_id} 本轮不回复，等待更多消息")
+            return
 
         # 防御：就算后钩子没产出任何行，也一定给一句兜底
         if not ctx.lines:
@@ -1301,7 +1311,9 @@ async def _proactive_speak_for_group(
             logger.error(f"主动发言 Pipeline 异常: {e}")
             return
         finally:
-            get_reply_gate().finish(group_id)
+            # Planner 判定 WAIT 时让本群停在 WAITING 而不是 IDLE（设计阶段五）：
+            # 「在等更多消息」与「没在说话」是两种状态，后续 observe 可据此区分。
+            get_reply_gate().finish(group_id, waiting=bool(getattr(ctx, "planner_wait", False)))
         if not ctx.lines:
             return
 
