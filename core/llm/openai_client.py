@@ -27,6 +27,7 @@ import httpx
 from nonebot import logger
 
 from core.llm.compat import compat_for, learn_from_error, shape_payload
+from core.llm.prefix_cache_estimator import estimate_local_prefix
 from core.llm.usage_sink import record as record_usage
 
 # 4xx 是请求/配置问题，重试无意义；5xx（如瞬时 502）退避后重试
@@ -179,7 +180,17 @@ async def chat_completion(
                 data = resp.json()
             _warn_if_truncated(data)
             if data.get("choices"):
-                _record(data, role=role, slot=slot, model=model, kind=kind)
+                _record(
+                    data,
+                    messages=messages,
+                    tools=tools,
+                    role=role,
+                    slot=slot,
+                    model=model,
+                    kind=kind,
+                    is_local=(kind or ("online" if api_key else "local")).strip().lower()
+                    == "local",
+                )
                 return data
             last_error = OpenAIClientError("返回体没有 choices")
             logger.warning(f"[astrbot_llm] 第 {attempt} 次尝试返回空 choices，重试...")
@@ -209,18 +220,35 @@ async def chat_completion(
     raise OpenAIClientError(f"chat-completions 请求失败: {last_error}") from last_error
 
 
-def _record(data: dict, *, role: str, slot: str, model: str, kind: str) -> None:
+def _record(
+    data: dict,
+    *,
+    messages: list[dict],
+    tools: list[dict] | None,
+    role: str,
+    slot: str,
+    model: str,
+    kind: str,
+    is_local: bool,
+) -> None:
     """把响应里的 usage / finish_reason 交给用量上报口。"""
     finish = ""
     # 上报是旁路：响应结构不符合预期时宁可少报一个字段，也不能让它把请求本身弄失败。
     with contextlib.suppress(KeyError, IndexError, TypeError):
         finish = data["choices"][0].get("finish_reason") or ""
+    estimate = (
+        estimate_local_prefix(messages, slot=slot, model=model, tools=tools)
+        if is_local
+        else None
+    )
     record_usage(
         role=role,
         slot=slot,
         model=model,
         kind=kind,
         usage=data.get("usage") or {},
+        estimated_prompt_tokens=estimate.prompt_tokens if estimate else 0,
+        estimated_cached_tokens=estimate.cached_tokens if estimate else 0,
         finish_reason=finish,
     )
 
@@ -294,12 +322,24 @@ async def chat_completion_stream(
                 yield data
             # 流正常结束后才记账：中途被下游放弃时 usage 本来也不完整，记了反而失真。
             # 拿不到 usage 就记 0——记 0 也比这条链路在用量表里完全不出现好。
+            estimate = (
+                estimate_local_prefix(
+                    messages,
+                    slot=slot,
+                    model=model,
+                    tools=tools,
+                )
+                if (kind or ("online" if api_key else "local")).strip().lower() == "local"
+                else None
+            )
             record_usage(
                 role=role,
                 slot=slot,
                 model=model,
                 kind=kind,
                 usage=last_usage,
+                estimated_prompt_tokens=estimate.prompt_tokens if estimate else 0,
+                estimated_cached_tokens=estimate.cached_tokens if estimate else 0,
                 finish_reason=last_finish,
             )
     except httpx.HTTPStatusError as e:

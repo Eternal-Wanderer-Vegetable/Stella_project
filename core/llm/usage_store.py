@@ -73,6 +73,8 @@ class _Row:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_tokens: int = 0
+    estimated_prompt_tokens: int = 0
+    estimated_cached_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -86,6 +88,8 @@ class _Row:
         self.prompt_tokens += other.prompt_tokens
         self.completion_tokens += other.completion_tokens
         self.cached_tokens += other.cached_tokens
+        self.estimated_prompt_tokens += other.estimated_prompt_tokens
+        self.estimated_cached_tokens += other.estimated_cached_tokens
 
 
 # (date, role, slot, model) → 今日权威累计（含已落盘的部分，启动时从表里读回）
@@ -179,11 +183,12 @@ def _load_today() -> None:
     try:
         rows = conn.execute(
             "SELECT date, role, slot, model, kind, calls, failures, truncated, "
-            "prompt_tokens, completion_tokens, cached_tokens "
+            "prompt_tokens, completion_tokens, cached_tokens, "
+            "estimated_prompt_tokens, estimated_cached_tokens "
             "FROM llm_usage_daily WHERE date = ?",
             (today,),
         ).fetchall()
-        for d, role, slot, model, kind, calls, fails, trunc, pt, ct, cached in rows:
+        for d, role, slot, model, kind, calls, fails, trunc, pt, ct, cached, est_pt, est_cached in rows:
             _totals[(d, role, slot, model)] = _Row(
                 kind=kind or "",
                 calls=int(calls or 0),
@@ -192,6 +197,8 @@ def _load_today() -> None:
                 prompt_tokens=int(pt or 0),
                 completion_tokens=int(ct or 0),
                 cached_tokens=int(cached or 0),
+                estimated_prompt_tokens=int(est_pt or 0),
+                estimated_cached_tokens=int(est_cached or 0),
             )
         cutoff = _date_key(date.today() - timedelta(days=RETENTION_DAYS))
         conn.execute("DELETE FROM llm_usage_daily WHERE date < ?", (cutoff,))
@@ -233,8 +240,9 @@ def flush(*, force: bool = True) -> int:
             """
             INSERT INTO llm_usage_daily
                 (date, role, slot, model, kind, calls, failures, truncated,
-                 prompt_tokens, completion_tokens, cached_tokens, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                prompt_tokens, completion_tokens, cached_tokens,
+                estimated_prompt_tokens, estimated_cached_tokens, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(date, role, slot, model) DO UPDATE SET
                 kind = excluded.kind,
                 calls = calls + excluded.calls,
@@ -243,6 +251,8 @@ def flush(*, force: bool = True) -> int:
                 prompt_tokens = prompt_tokens + excluded.prompt_tokens,
                 completion_tokens = completion_tokens + excluded.completion_tokens,
                 cached_tokens = cached_tokens + excluded.cached_tokens,
+                estimated_prompt_tokens = estimated_prompt_tokens + excluded.estimated_prompt_tokens,
+                estimated_cached_tokens = estimated_cached_tokens + excluded.estimated_cached_tokens,
                 updated_at = CURRENT_TIMESTAMP
             """,
             [
@@ -258,6 +268,8 @@ def flush(*, force: bool = True) -> int:
                     row.prompt_tokens,
                     row.completion_tokens,
                     row.cached_tokens,
+                    row.estimated_prompt_tokens,
+                    row.estimated_cached_tokens,
                 )
                 for (d, role, slot, model), row in batch
             ],
@@ -278,6 +290,8 @@ def flush(*, force: bool = True) -> int:
                 staged.prompt_tokens -= row.prompt_tokens
                 staged.completion_tokens -= row.completion_tokens
                 staged.cached_tokens -= row.cached_tokens
+                staged.estimated_prompt_tokens -= row.estimated_prompt_tokens
+                staged.estimated_cached_tokens -= row.estimated_cached_tokens
         _last_flush = time.monotonic()
     except Exception:
         # 写库失败只丢统计，绝不影响调用方。下次 flush 会带着同一批重试。
@@ -302,6 +316,8 @@ def _on_record(rec: usage_sink.UsageRecord) -> None:
         prompt_tokens=rec.prompt_tokens,
         completion_tokens=rec.completion_tokens,
         cached_tokens=rec.cached_tokens,
+        estimated_prompt_tokens=rec.estimated_prompt_tokens,
+        estimated_cached_tokens=rec.estimated_cached_tokens,
     )
     _totals.setdefault(key, _Row(kind=delta.kind)).add(delta)
     _pending.setdefault(key, _Row(kind=delta.kind)).add(delta)
@@ -416,6 +432,13 @@ def usage_snapshot() -> dict:
             "prompt_tokens": row.prompt_tokens,
             "completion_tokens": row.completion_tokens,
             "cached_tokens": row.cached_tokens,
+            "estimated_prompt_tokens": row.estimated_prompt_tokens,
+            "estimated_cached_tokens": row.estimated_cached_tokens,
+            "estimated_cache_hit_rate": (
+                row.estimated_cached_tokens / row.estimated_prompt_tokens
+            )
+            if row.estimated_prompt_tokens
+            else 0.0,
             # 分母是输入 token 而不是调用次数：一次长请求命中一半与两次短请求
             # 各命中全部，省下来的钱完全不同。
             "cache_hit_rate": (row.cached_tokens / row.prompt_tokens)
@@ -442,6 +465,13 @@ def usage_snapshot() -> dict:
             "prompt_tokens": agg.prompt_tokens,
             "completion_tokens": agg.completion_tokens,
             "cached_tokens": agg.cached_tokens,
+            "estimated_prompt_tokens": agg.estimated_prompt_tokens,
+            "estimated_cached_tokens": agg.estimated_cached_tokens,
+            "estimated_cache_hit_rate": (
+                agg.estimated_cached_tokens / agg.estimated_prompt_tokens
+            )
+            if agg.estimated_prompt_tokens
+            else 0.0,
             "cache_hit_rate": (agg.cached_tokens / agg.prompt_tokens)
             if agg.prompt_tokens
             else 0.0,

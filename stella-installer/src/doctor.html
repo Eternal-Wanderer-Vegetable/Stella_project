@@ -8,15 +8,17 @@
 <body>
   <div class="app">
     <header>
-      <h1>环境自检</h1>
-      <span class="ver">v2.6.0</span>
+      <div class="brand-lockup">
+        <h1 class="brand">Stella</h1>
+        <span class="ver">v3.7.0</span>
+      </div>
       <nav class="top-nav">
         <a class="nav-secondary" href="./run.html">运行状态</a>
         <a class="nav-secondary" href="./usage.html">用量</a>
         <a class="nav-secondary" href="./plugins.html">插件</a>
         <a class="nav-secondary" href="./config.html">配置</a>
         <a class="nav-secondary" href="./persona.html">人格设定</a>
-        <a class="nav-secondary" href="./doctor.html">环境自检</a>
+        <a class="nav-secondary active" href="./doctor.html" aria-current="page">环境自检</a>
       </nav>
     </header>
     <p class="subtitle">启动前检查配置、模型与数据库状态。发现问题时会给出具体的修复方法。</p>
@@ -33,7 +35,7 @@
 
 
   <script type="module">
-     import { runDoctor, copyText, getVersion, installCloseOverlay } from "./api.js";
+     import { runDoctor, copyText, getVersion, installCloseOverlay, readViewCache, stableSignature, writeViewCache } from "./api.js";
 
 
      const root = document.getElementById("root");
@@ -44,7 +46,10 @@
 
     // 后端 JSON schema 版本。将来后端改结构时 bump 它，前端就能明确报
     // 「版本不匹配，请更新安装器」，而不是渲染出一片空白。
-    const EXPECTED_SCHEMA = 1;
+     const EXPECTED_SCHEMA = 1;
+    let lastReport = null;
+    let lastReportSig = "";
+    let checking = false;
 
 
     function verdict(s) {
@@ -112,7 +117,7 @@
       root.querySelectorAll(".check-head").forEach(h => {
         h.onclick = () => h.parentElement.classList.toggle("open");
       });
-      root.querySelector("#btn-recheck").onclick = load;
+      root.querySelector("#btn-recheck").onclick = () => load({ manual: true });
       root.querySelector("#btn-copy").onclick = () => copyReport(data);
     }
 
@@ -138,6 +143,32 @@
         </div>`;
     }
 
+    function renderPending() {
+      root.innerHTML = `
+        <div class="summary">
+          <span class="verdict">检查准备就绪</span>
+          <div class="counts"><span>结果将在后台同步</span></div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="btn-recheck">重新检查</button>
+          <button id="btn-copy" disabled>复制检查报告</button>
+        </div>
+        <div class="all-clear">
+          <div class="big">—</div>
+          <div>检查结果尚未同步，页面已可以继续操作。</div>
+        </div>`;
+      root.querySelector("#btn-recheck").onclick = () => load({ manual: true });
+    }
+
+    function renderIfChanged(data) {
+      const sig = stableSignature(data);
+      lastReport = data;
+      if (sig === lastReportSig) return;
+      lastReportSig = sig;
+      writeViewCache("doctor", data);
+      render(data);
+    }
+
 
     /** 报告格式面向「贴进 issue」：带环境信息、只列问题、不含敏感值。 */
     async function copyReport(data) {
@@ -161,11 +192,18 @@
     }
 
 
-    async function load() {
-      root.innerHTML = `<div class="loading">正在检查…</div>`;
+    async function load({ manual = false } = {}) {
+      if (checking) return;
+      checking = true;
+      const button = root.querySelector("#btn-recheck");
+      if (button && (manual || !lastReport)) {
+        button.disabled = true;
+        button.textContent = "检查中…";
+      }
       try {
-        render(await runDoctor());
+        renderIfChanged(await runDoctor());
       } catch (e) {
+        if (lastReport) return;
         // 不捕获异常时 loading 会永久停留，真实错误只在 Console 里——
         // 用户看到的是「卡住了」，无法自助排查也无法提交有效 issue。
         root.innerHTML = `
@@ -184,10 +222,25 @@
               </div>
             </div>
           </div>`;
+      } finally {
+        checking = false;
+        const currentButton = root.querySelector("#btn-recheck");
+        if (currentButton && lastReport && (manual || !currentButton.disabled)) {
+          currentButton.disabled = false;
+          currentButton.textContent = "重新检查";
+        }
       }
     }
 
 
+    const cachedReport = readViewCache("doctor");
+    if (cachedReport) {
+      lastReport = cachedReport;
+      lastReportSig = stableSignature(cachedReport);
+      render(cachedReport);
+    } else {
+      renderPending();
+    }
     load();
   </script>
 </body>

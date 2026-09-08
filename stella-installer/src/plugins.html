@@ -8,19 +8,21 @@
 <body>
   <div class="app">
     <header>
-      <h1>插件</h1>
-      <span class="ver">v2.6.0</span>
+      <div class="brand-lockup">
+        <h1 class="brand">Stella</h1>
+        <span class="ver">v3.7.0</span>
+      </div>
       <nav class="top-nav">
         <a class="nav-secondary" href="./run.html">运行状态</a>
         <a class="nav-secondary" href="./usage.html">用量</a>
-        <a class="nav-secondary" href="./plugins.html">插件</a>
+        <a class="nav-secondary active" href="./plugins.html" aria-current="page">插件</a>
         <a class="nav-secondary" href="./config.html">配置</a>
         <a class="nav-secondary" href="./persona.html">人格设定</a>
         <a class="nav-secondary" href="./doctor.html">环境自检</a>
       </nav>
     </header>
     <p class="subtitle">装了哪些插件、每个插件能干什么。点左侧任意一项看它的指令与工具。</p>
-    <div id="root"><div class="loading">正在读取插件清单…</div></div>
+    <div id="root"></div>
   </div>
 
   <script type="module">
@@ -37,7 +39,7 @@
      * 聊天内容」的硬约束，自由文本是唯一可能夹带 URL 或密钥的字段。所以这页只显示
      * 结构化信息，看描述要读本地那三层 TOML。
      */
-    import { getStatus, getVersion, installCloseOverlay } from "./api.js";
+    import { getStatus, getVersion, installCloseOverlay, readViewCache, stableSignature, writeViewCache } from "./api.js";
 
     const root = document.getElementById("root");
     installCloseOverlay();
@@ -57,6 +59,25 @@
     let alive = false;
     let selected = "";    // 选中插件的 dir（比下标稳：刷新后顺序可能变）
     let lastSig = "";
+
+    function renderPending() {
+      root.innerHTML = `
+        <div class="plugin-browser">
+          <aside class="plugin-sidebar">
+            <div class="plugin-sidebar-title">已安装</div>
+            <button class="plugin-item active" disabled>
+              <span class="plugin-item-name"><span class="cap-dot off"></span>插件清单</span>
+              <small>暂无同步数据</small>
+            </button>
+          </aside>
+          <section class="plugin-main">
+            <div class="plugin-detail-head"><div><strong>插件状态</strong><div class="plugin-meta">等待状态数据</div></div></div>
+            <div class="plugin-detail-body">
+              <div class="notice"><span class="notice-icon">i</span><div>插件页面已打开，数据将在后台同步。</div></div>
+            </div>
+          </section>
+        </div>`;
+    }
 
     // 一个插件的一句话结论。先说最该采取行动的那件事——
     // 顺序即优先级：装不上 > 被停用 > 有工具不参与路由 > 正常。
@@ -211,16 +232,28 @@
         alive = !!st.alive;
         caps = st.capabilities || null;
         // 轮询在后台跑，但用户可能正把鼠标停在某一项上：内容没变就不重建 DOM
-        const sig = JSON.stringify([alive, caps]);
+        const snapshot = { alive, caps };
+        const sig = stableSignature(snapshot);
         if (sig === lastSig) return;
         lastSig = sig;
+        writeViewCache("plugins", snapshot);
         render();
       } catch (e) {
+        if (lastSig) return;
         lastSig = "";
         root.innerHTML = `<div class="notice notice-error"><span class="notice-icon">!</span><div>无法获取状态：<code>${esc(e)}</code><div class="notice-sub">请确认 Python 环境可用，或到「环境自检」页排查。</div></div></div>`;
       }
     }
 
+    const cachedPlugins = readViewCache("plugins");
+    if (cachedPlugins) {
+      alive = !!cachedPlugins.alive;
+      caps = cachedPlugins.caps || null;
+      lastSig = stableSignature(cachedPlugins);
+      render();
+    } else {
+      renderPending();
+    }
     refresh();
     // 插件清单只在启动与热重载时变，5 秒一轮足够
     setInterval(refresh, 5000);

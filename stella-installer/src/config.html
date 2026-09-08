@@ -8,23 +8,25 @@
 <body>
   <div class="app">
     <header>
-      <h1>配置</h1>
-      <span class="ver">v2.6.0</span>
+      <div class="brand-lockup">
+        <h1 class="brand">Stella</h1>
+        <span class="ver">v3.7.0</span>
+      </div>
       <nav class="top-nav">
         <a class="nav-secondary" href="./run.html">运行状态</a>
         <a class="nav-secondary" href="./usage.html">用量</a>
         <a class="nav-secondary" href="./plugins.html">插件</a>
-        <a class="nav-secondary" href="./config.html">配置</a>
+        <a class="nav-secondary active" href="./config.html" aria-current="page">配置</a>
         <a class="nav-secondary" href="./persona.html">人格设定</a>
         <a class="nav-secondary" href="./doctor.html">环境自检</a>
       </nav>
     </header>
     <p class="subtitle">填写启动 Stella 所需的连接和模型信息。配置会写入项目根目录的 .env。</p>
-    <div id="root"><div class="loading">正在读取配置…</div></div>
+    <div id="root"></div>
   </div>
 
   <script type="module">
-    import { getConfig, saveConfig, listModels, runDoctor, getVersion, installCloseOverlay } from "./api.js";
+    import { getConfig, saveConfig, listModels, runDoctor, getVersion, installCloseOverlay, navigateToPage, readViewCache, stableSignature, writeViewCache } from "./api.js";
 
     const root = document.getElementById("root");
     installCloseOverlay();
@@ -33,6 +35,25 @@
     let schemaFields = [];
     let advancedValues = {};
     let mainValues = {};
+    let lastConfigSig = "";
+    let configSynced = false;
+    const EMPTY_CONFIG = {
+      configured: false,
+      allowed_groups: "",
+      onebot_mode: "reverse",
+      host: "127.0.0.1",
+      port: 8080,
+      ws_urls: "",
+      access_token: "",
+      lm_base_url: "http://127.0.0.1:1234",
+      chat_model: "",
+      consolidation_model: "",
+      embedding_model: "",
+      spaces: "",
+      advanced_env: "",
+      advanced_values: {},
+      schema: { version: 1, fields: [] },
+    };
     const ROLE_NAMES = ["CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT"];
     const SLOT_NAMES = ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"];
     // 主表单与「模型服务」分区管的键不能再出现在「高级配置」里：同一个键摆两个控件，
@@ -62,6 +83,59 @@
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function isSecretKey(key) {
+      return /(?:API_KEY|TOKEN|PASSWORD|SECRET)/i.test(String(key));
+    }
+
+    // 缓存配置页的结构与普通值，但永远不把 token、API key 或完整 .env 写入 sessionStorage。
+    function configSnapshot(data) {
+      const values = data.advanced_values || {};
+      return {
+        ...data,
+        access_token: Boolean(String(data.access_token ?? "").trim()),
+        advanced_env: "",
+        advanced_values: Object.fromEntries(
+          Object.entries(values).filter(([key]) => !isSecretKey(key)),
+        ),
+        secret_presence: Object.fromEntries(
+          Object.entries(values)
+            .filter(([key]) => isSecretKey(key))
+            .map(([key, value]) => [key, Boolean(String(value ?? "").trim())]),
+        ),
+      };
+    }
+
+    function fromCachedConfig(snapshot) {
+      return {
+        ...snapshot,
+        access_token: "",
+        advanced_values: { ...(snapshot.advanced_values || {}) },
+        advanced_env: "",
+      };
+    }
+
+    function applyConfigState(data) {
+      config = data;
+      schemaFields = data.schema?.fields || [];
+      advancedValues = { ...(data.advanced_values || {}) };
+      mainValues = {
+        lm_base_url: String(data.lm_base_url ?? ""),
+        chat_model: String(data.chat_model ?? ""),
+        consolidation_model: String(data.consolidation_model ?? ""),
+        embedding_model: String(data.embedding_model ?? ""),
+      };
+    }
+
+    // 配置未变化时不重建表单，只把真实密钥写回已有控件，避免闪烁和丢失焦点。
+    function syncSecretInputs(data) {
+      const accessToken = root.querySelector("#access_token");
+      if (accessToken) accessToken.value = String(data.access_token ?? "");
+      const values = data.advanced_values || {};
+      root.querySelectorAll("[data-adv-key]").forEach(input => {
+        if (isSecretKey(input.dataset.advKey)) input.value = String(values[input.dataset.advKey] ?? "");
+      });
     }
 
     function render() {
@@ -159,7 +233,7 @@
       // 导入是一次性动作，所以不放顶栏，而是挂在配置页表单**下方**：新用户的主线是
       // 填配置，存量用户才需要导入。未配置且探测到旧安装时，index.html 会直接把人
       // 送进导入页，那条路径不受这里影响。
-      root.querySelector("#btn-migrate").onclick = () => { location.href = "./migrate.html"; };
+      root.querySelector("#btn-migrate").onclick = () => { navigateToPage("./migrate.html"); };
       root.querySelector("#config-form").onsubmit = save;
     }
 
@@ -773,6 +847,10 @@
       const button = root.querySelector("#btn-save");
       const status = root.querySelector("#status");
       const error = root.querySelector("#error");
+      if (!configSynced) {
+        status.textContent = "配置仍在同步，请稍候再保存。";
+        return;
+      }
       button.disabled = true;
       error.textContent = "";
       // 先做前端拦截：这几类问题存下去也只是让 doctor 再报一次，不如当场说清楚。
@@ -788,9 +866,9 @@
         await saveConfig(collect());
         const doctor = await runDoctor();
         if (doctor.summary?.blocking) {
-          location.replace("./doctor.html");
+          navigateToPage("./doctor.html", { replace: true });
         } else {
-          location.replace("./run.html");
+          navigateToPage("./run.html", { replace: true });
         }
       } catch (e) {
         error.textContent = String(e);
@@ -799,12 +877,30 @@
       }
     }
 
-    try {
-      config = await getConfig();
+    const cachedConfigData = readViewCache("config");
+    if (cachedConfigData) {
+      applyConfigState(fromCachedConfig(cachedConfigData));
+      lastConfigSig = stableSignature(cachedConfigData);
       render();
-    } catch (e) {
-      root.innerHTML = `<div class="notice notice-error">无法读取配置：<code>${esc(e)}</code></div>`;
+    } else {
+      config = EMPTY_CONFIG;
+      render();
     }
+    getConfig().then(data => {
+      const snapshot = configSnapshot(data);
+      const changed = !lastConfigSig || stableSignature(snapshot) !== lastConfigSig;
+      applyConfigState(data);
+      configSynced = true;
+      lastConfigSig = stableSignature(snapshot);
+      writeViewCache("config", snapshot);
+      if (changed) {
+        render();
+      } else {
+        syncSecretInputs(data);
+      }
+    }).catch(e => {
+      if (!lastConfigSig) root.querySelector("#error").textContent = `无法读取最新配置：${e}`;
+    });
   </script>
 </body>
 </html>

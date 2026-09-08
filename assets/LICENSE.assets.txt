@@ -1,8 +1,9 @@
 Stella — Original Artistic Assets License
 Copyright (C) 2026 Stella Project Contributors
 
-This file contains the licensing terms and scope definition for the
-original artistic assets included in the Stella project.
+This file contains the licensing terms and the complete scope
+definition for the original artistic assets included in the Stella
+project.
 
 These assets are part of the "Program" as defined in the GNU Affero
 General Public License version 3 (AGPL-3.0), and are subject to the
@@ -15,44 +16,28 @@ root LICENSE file, the root LICENSE file shall govern.
 ========================================================================
 1. DEFINITION OF ARTISTIC ASSETS
 
-For the purposes of this project, "Artistic Assets" are defined as
-the following files and file types located within the project
-repository:
+For the purposes of this project, "Artistic Assets" means the original
+visual, graphic, typographic, audio, and design works that are included
+in the Program and identified in Section 3 of this file.
 
-(a) Image and Texture Files:
-    - All files with the following extensions: .png, .jpg, .jpeg, .gif,
-      .bmp, .tga, .psd, .xcf, .svg, .webp
-    - Located in the directories: assets/textures/, assets/ui/,
-      assets/sprites/, and assets/images/
+This definition includes original source images, textures, previews,
+compressed variants, generated artwork, and platform-specific copies
+of those works. The scope is determined by the complete file list in
+Section 3 and is not limited to one particular directory or file
+extension.
 
-(b) 3D Model and Animation Files:
-    - All files with the following extensions: .blend, .fbx, .obj,
-      .gltf, .glb, .dae, .3ds, .pmx, .vrm
-    - Located in the directories: assets/models/, assets/characters/,
-      and assets/environment/
+The following third-party template assets are not Artistic Assets under
+this file and remain subject to their own applicable terms:
 
-(c) Audio and Sound Files:
-    - All files with the following extensions: .wav, .mp3, .ogg,
-      .flac, .aac, .opus, .mid
-    - Located in the directories: assets/audio/, assets/music/,
-      and assets/sfx/
-
-(d) Font Files:
-    - All files with the following extensions: .ttf, .otf, .woff,
-      .woff2
-    - Located in the directories: assets/fonts/
-
-(e) Visual Design Source Files:
-    - All files with the following extensions: .psd, .xcf, .ai, .fig,
-      .sketch, .xd
-    - Located in the directories: assets/sources/, assets/design/
+    - stella-installer/src/assets/javascript.svg
+    - stella-installer/src/assets/tauri.svg
 
 ========================================================================
 2. SCOPE OF LICENSE
 
-The Artistic Assets listed above are covered by the AGPL-3.0 as part
-of the Program, with the following additional permissions and scope
-clarifications as permitted under AGPL-3.0 Section 7:
+The Artistic Assets listed in Section 3 are covered by the AGPL-3.0 as
+part of the Program, with the following additional permissions and
+scope clarifications as permitted under AGPL-3.0 Section 7:
 
 2.1 Use as an Integral Part of the Program
 
@@ -68,13 +53,13 @@ clarifications as permitted under AGPL-3.0 Section 7:
 
     (a) The "preferred form of the work for making modifications to it"
         for Artistic Assets means the standard compressed or compiled
-        distribution format (such as PNG, JPG, OGG, GLTF, etc.) as
-        they are distributed in the Program's release packages.
+        distribution format in which each asset is distributed with the
+        Program, such as JPEG, PNG, ICO, or ICNS.
 
     (b) No obligation is created to provide editable source files
-        (such as layered PSD files, raw 3D model project files, DAW
-        project files, or unprocessed audio tracks) as part of the
-        Corresponding Source, unless you voluntarily choose to do so.
+        (such as layered image files, raw design project files, or
+        unprocessed source material) as part of the Corresponding Source,
+        unless you voluntarily choose to do so.
 
 2.3 Attribution
 
@@ -89,17 +74,45 @@ clarifications as permitted under AGPL-3.0 Section 7:
     name, logo, or other trademarks for any purpose without prior
     written consent.
 
+2.5 Adding or Replacing Assets
+
+    For each release, every new or replaced original Artistic Asset
+    must be added to the complete file list in Section 3. A file is not
+    covered by this supplement merely because it has an image, audio,
+    font, model, or design-related extension; it must be identified in
+    Section 3 or covered by a later version of this file.
+
 ========================================================================
 3. COMPLETE LIST OF ARTISTIC ASSETS
 
-The following is a complete list of files defined as Artistic Assets
-within this project (or the directory containing them):
+The following is the complete file-by-file list of original Artistic
+Assets included in this project:
 
-assets/
-├── textures/
-│   ├── Title_Image(First_Edition).jpg
-    ├── Title_Image(Second_Edition)_Compressed_version.jpg
-    ├── Title_Image(Second_Edition).jpg
+Original artwork and image resources:
+
+    assets/pic/Stella_logo_origin.jpg
+    assets/pic/Title_Image(First_Edition).jpg
+    assets/pic/Title_Image(Second_Edition)_Compressed_version.jpg
+    assets/pic/Title_Image(Second_Edition).jpg
+
+Application icon resources derived from the Stella artwork:
+
+    stella-installer/src-tauri/icons/128x128.png
+    stella-installer/src-tauri/icons/128x128@2x.png
+    stella-installer/src-tauri/icons/32x32.png
+    stella-installer/src-tauri/icons/Square107x107Logo.png
+    stella-installer/src-tauri/icons/Square142x142Logo.png
+    stella-installer/src-tauri/icons/Square150x150Logo.png
+    stella-installer/src-tauri/icons/Square284x284Logo.png
+    stella-installer/src-tauri/icons/Square30x30Logo.png
+    stella-installer/src-tauri/icons/Square310x310Logo.png
+    stella-installer/src-tauri/icons/Square44x44Logo.png
+    stella-installer/src-tauri/icons/Square71x71Logo.png
+    stella-installer/src-tauri/icons/Square89x89Logo.png
+    stella-installer/src-tauri/icons/StoreLogo.png
+    stella-installer/src-tauri/icons/icon.icns
+    stella-installer/src-tauri/icons/icon.ico
+    stella-installer/src-tauri/icons/icon.png
 
 ========================================================================
 4. RELATIONSHIP TO THE ROOT LICENSE
@@ -111,7 +124,11 @@ contained therein.
 
 All terms and conditions of the GNU Affero General Public License
 version 3, as well as any additional permissions or terms stated in
-the root LICENSE, apply to the Artistic Assets listed in this file.
+the root LICENSE, apply to the Artistic Assets listed in Section 3.
+
+The third-party assets identified in Section 1 are not relicensed by
+this file. Their respective copyright notices and license terms remain
+applicable.
 
 ========================================================================
 END OF LICENSE.assets.txt

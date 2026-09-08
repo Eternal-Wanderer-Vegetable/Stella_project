@@ -23,6 +23,7 @@ from nonebot import logger
 
 from core.llm.base import LLMBackend
 from core.llm.compat import EndpointCompat, compat_for, learn_from_error, shape_payload
+from core.llm.prefix_cache_estimator import estimate_local_prefix
 from core.llm.usage_sink import record as record_usage
 
 # 正常重试预算。自适应重试不占用它，见 generate_detailed。
@@ -170,12 +171,23 @@ class LMStudioBackend(LLMBackend):
                             f"（finish_reason=length, completion_tokens={usage.get('completion_tokens')}）"
                         )
                     if reply:
+                        estimate = (
+                            estimate_local_prefix(
+                                payload.get("messages") or [],
+                                slot=self.slot,
+                                model=self.model,
+                            )
+                            if self.kind == "local"
+                            else None
+                        )
                         record = record_usage(
                             role=self.role,
                             slot=self.slot,
                             model=self.model,
                             kind=self.kind,
                             usage=usage,
+                            estimated_prompt_tokens=estimate.prompt_tokens if estimate else 0,
+                            estimated_cached_tokens=estimate.cached_tokens if estimate else 0,
                             finish_reason=finish,
                         )
                         cached = (

@@ -43,6 +43,8 @@ class UsageRecord:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_tokens: int = 0
+    estimated_prompt_tokens: int = 0
+    estimated_cached_tokens: int = 0
     finish_reason: str = ""
     ok: bool = True
 
@@ -63,6 +65,8 @@ class _Aggregate:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_tokens: int = 0
+    estimated_prompt_tokens: int = 0
+    estimated_cached_tokens: int = 0
     truncated: int = 0
     failed: int = 0
 
@@ -108,6 +112,8 @@ def record(
     model: str = "",
     kind: str = "",
     usage: dict | None = None,
+    estimated_prompt_tokens: int = 0,
+    estimated_cached_tokens: int = 0,
     finish_reason: str = "",
     ok: bool = True,
 ) -> UsageRecord:
@@ -130,6 +136,12 @@ def record(
         value = usage.get(key)
         return int(value) if isinstance(value, (int, float)) else 0
 
+    def _nonnegative_int(value: object) -> int:
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
     rec = UsageRecord(
         role=role,
         slot=slot,
@@ -138,6 +150,8 @@ def record(
         prompt_tokens=_int("prompt_tokens"),
         completion_tokens=_int("completion_tokens"),
         cached_tokens=extract_cached_tokens(usage),
+        estimated_prompt_tokens=_nonnegative_int(estimated_prompt_tokens),
+        estimated_cached_tokens=_nonnegative_int(estimated_cached_tokens),
         finish_reason=finish_reason or "",
         ok=ok,
     )
@@ -147,6 +161,8 @@ def record(
     bucket.prompt_tokens += rec.prompt_tokens
     bucket.completion_tokens += rec.completion_tokens
     bucket.cached_tokens += rec.cached_tokens
+    bucket.estimated_prompt_tokens += rec.estimated_prompt_tokens
+    bucket.estimated_cached_tokens += rec.estimated_cached_tokens
     if rec.truncated:
         bucket.truncated += 1
     if not rec.ok:
@@ -180,6 +196,13 @@ def snapshot() -> dict:
             "prompt_tokens": prompt,
             "completion_tokens": agg.completion_tokens,
             "cached_tokens": agg.cached_tokens,
+            "estimated_prompt_tokens": agg.estimated_prompt_tokens,
+            "estimated_cached_tokens": agg.estimated_cached_tokens,
+            "estimated_cache_hit_rate": (
+                agg.estimated_cached_tokens / agg.estimated_prompt_tokens
+            )
+            if agg.estimated_prompt_tokens
+            else 0.0,
             # 缓存命中率的分母是输入 token，不是调用次数：一次长请求命中一半
             # 与两次短请求各命中全部，省下来的钱完全不同。
             "cache_hit_rate": (agg.cached_tokens / prompt) if prompt else 0.0,
@@ -192,6 +215,12 @@ def snapshot() -> dict:
 def reset_state() -> None:
     """清空内存聚合（测试用）。不动已安装的 sink。"""
     _totals.clear()
+    try:
+        from core.llm.prefix_cache_estimator import reset_state as reset_prefix_cache
+
+        reset_prefix_cache()
+    except Exception:
+        pass
 
 
 __all__ = [

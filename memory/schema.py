@@ -74,6 +74,16 @@ def normalize_source_kind(value: str | None) -> str:
 # ── 表结构定义 ──────────────────────────────────────────
 # (表名, 列名, ADD COLUMN 语句)
 _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
+    (
+        "llm_usage_daily",
+        "estimated_prompt_tokens",
+        "ALTER TABLE llm_usage_daily ADD COLUMN estimated_prompt_tokens INTEGER NOT NULL DEFAULT 0",
+    ),
+    (
+        "llm_usage_daily",
+        "estimated_cached_tokens",
+        "ALTER TABLE llm_usage_daily ADD COLUMN estimated_cached_tokens INTEGER NOT NULL DEFAULT 0",
+    ),
     # long_term_memories（旧表）：补上 v2 记忆字段
     (
         "long_term_memories",
@@ -510,6 +520,8 @@ CREATE TABLE IF NOT EXISTS llm_usage_daily (
     prompt_tokens INTEGER NOT NULL DEFAULT 0,
     completion_tokens INTEGER NOT NULL DEFAULT 0,
     cached_tokens INTEGER NOT NULL DEFAULT 0,
+    estimated_prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    estimated_cached_tokens INTEGER NOT NULL DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (date, role, slot, model)
 )
@@ -519,6 +531,20 @@ CREATE TABLE IF NOT EXISTS llm_usage_daily (
 def create_llm_usage_daily_table(conn: sqlite3.Connection) -> None:
     """确保 llm_usage_daily 表存在（幂等）。"""
     conn.execute(LLM_USAGE_DAILY_TABLE_DDL)
+    # usage_store 会在状态接口热路径上调用这里；旧库未必已经经过完整启动迁移，
+    # 因此这两个观测列也要在此处自愈，避免整份今日快照因缺列被吞异常。
+    for column, ddl in (
+        (
+            "estimated_prompt_tokens",
+            "ALTER TABLE llm_usage_daily ADD COLUMN estimated_prompt_tokens INTEGER NOT NULL DEFAULT 0",
+        ),
+        (
+            "estimated_cached_tokens",
+            "ALTER TABLE llm_usage_daily ADD COLUMN estimated_cached_tokens INTEGER NOT NULL DEFAULT 0",
+        ),
+    ):
+        if not _column_exists(conn.cursor(), "llm_usage_daily", column):
+            conn.execute(ddl)
 
 
 # 主动插话话题状态表（v13）：每群当前话题生命周期的持久化。

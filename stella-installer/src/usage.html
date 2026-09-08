@@ -8,11 +8,13 @@
 <body>
   <div class="app">
     <header>
-      <h1>用量</h1>
-      <span class="ver">v2.6.0</span>
+      <div class="brand-lockup">
+        <h1 class="brand">Stella</h1>
+        <span class="ver">v3.7.0</span>
+      </div>
       <nav class="top-nav">
         <a class="nav-secondary" href="./run.html">运行状态</a>
-        <a class="nav-secondary" href="./usage.html">用量</a>
+        <a class="nav-secondary active" href="./usage.html" aria-current="page">用量</a>
         <a class="nav-secondary" href="./plugins.html">插件</a>
         <a class="nav-secondary" href="./config.html">配置</a>
         <a class="nav-secondary" href="./persona.html">人格设定</a>
@@ -20,11 +22,11 @@
       </nav>
     </header>
     <p class="subtitle">今日 token 消耗、各模型分项与降级状态。数据来自 Bot 进程内的状态接口，Bot 未运行时看不到。</p>
-    <div id="root"><div class="loading">正在读取用量…</div></div>
+    <div id="root"></div>
   </div>
 
   <script type="module">
-    import { getStatus, getVersion, installCloseOverlay } from "./api.js";
+    import { getStatus, getVersion, installCloseOverlay, readViewCache, stableSignature, writeViewCache } from "./api.js";
 
     const root = document.getElementById("root");
     installCloseOverlay();
@@ -41,14 +43,48 @@
     function pct(x) { return `${(Number(x || 0) * 100).toFixed(1)}%`; }
 
     function escapeHTML(s) {
-      return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
 
-    // 用量面板。缓存命中率单独占一格：它是验证前缀缓存到底有没有生效的唯一手段，
-    // 一直是 0 就说明 prompt 的固定前缀被什么东西破坏了（改了 persona、加了时间戳…）。
+    const ROLE_LABELS = {
+      chat: "对话生成",
+      router: "兜底判定",
+      plugin: "插件调用",
+      compact: "会话压缩",
+      consolidation: "记忆整合",
+      extract: "记忆提取",
+    };
+    const SLOT_LABELS = {
+      LOCAL: "本机",
+      ONLINE_CHAT: "在线 · 对话",
+      ONLINE_MEMORY: "在线 · 记忆",
+      EXTRA: "备用本机",
+    };
+
+    function safeRate(value) {
+      const rate = Number(value);
+      return Number.isFinite(rate) && rate >= 0 ? Math.min(rate, 1) : null;
+    }
+
+    function theoreticalRate(promptTokens, cachedTokens) {
+      const prompt = Number(promptTokens || 0);
+      const cached = Number(cachedTokens || 0);
+      return prompt > 0 && cached >= 0 ? Math.min(cached / prompt, 1) : null;
+    }
+
+    function rateText(value) {
+      return value == null ? "—" : pct(value);
+    }
+
+    function rateClass(value) {
+      if (value == null) return "";
+      if (value >= 0.7) return "good";
+      if (value >= 0.35) return "warn";
+      return "bad";
+    }
+
     function usageHTML(usage, alive) {
       const u = usage || null;
-      // 接口不可达 / 老版本 Bot：说清为什么空，而不是显示一堆 0
       if (!u) {
         return alive
           ? `<div class="notice"><span class="notice-icon">i</span><div>读不到用量数据。
@@ -60,64 +96,215 @@
         return `<div class="notice"><span class="notice-icon">i</span><div>用量记账已关闭。
           <div class="notice-sub">在「配置」页或 <code>.env</code> 里把 <code>LLM_USAGE_ACCOUNTING</code> 设为 <code>true</code> 才会开始统计。</div></div></div>`;
       }
+
       const t = u.totals || {};
       const budget = Number(u.budget || 0);
       const used = Number(u.used_tokens || 0);
+      const inputTokens = Number(t.prompt_tokens || 0);
+      const outputTokens = Number(t.completion_tokens || 0);
       const over = !!u.over_budget;
-      const paused = u.paused_roles || [];
-      const quotaText = budget > 0
-        ? `${fmtNum(used)} / ${fmtNum(budget)}`
-        : `${fmtNum(used)}（不限）`;
-      const remainPart = budget > 0
-        ? `<div class="item"><span class="k">剩余</span><span class="v ${over ? "bad" : "good"}">${fmtNum(u.remaining_tokens ?? 0)}</span></div>`
-        : ``;
-      const pausedPart = paused.length
-        ? `<div class="item"><span class="k">已暂停</span><span class="v bad">${escapeHTML(paused.join("、"))}（${escapeHTML(String(u.action || ""))}）</span></div>`
-        : ``;
-      const head = `
-        <div class="link-row">
-          <div class="item"><span class="k">今日 token</span><span class="v ${over ? "bad" : ""}">${quotaText}</span></div>
-          ${remainPart}
-          <div class="item"><span class="k">调用</span><span class="v">${fmtNum(t.calls || 0)}</span></div>
-          <div class="item"><span class="k">失败</span><span class="v ${t.failures ? "bad" : ""}">${fmtNum(t.failures || 0)}</span></div>
-          <div class="item"><span class="k">截断</span><span class="v ${t.truncated ? "bad" : ""}">${fmtNum(t.truncated || 0)}</span></div>
-          <div class="item" title="分母是输入 token 而不是调用次数。这个数字一直是 0 说明前缀缓存没有生效。"><span class="k">缓存命中率</span><span class="v">${pct(t.cache_hit_rate)}</span></div>
-          <div class="item"><span class="k">预算域</span><span class="v">${escapeHTML(String(u.scope || "online"))}</span></div>
-          <div class="item"><span class="k">统计日期</span><span class="v">${escapeHTML(String(u.date || "—"))}</span></div>
-          ${pausedPart}
+      const budgetPct = budget > 0 ? Math.min(Math.max((used / budget) * 100, 0), 100) : 0;
+      const rows = Object.entries(u.by_key || {});
+      const localRows = rows.filter(([, d]) => String(d.kind || "").toLowerCase() === "local");
+      const onlineRows = rows.filter(([, d]) => String(d.kind || "").toLowerCase() === "online");
+      const localEstimatePrompt = localRows.reduce((sum, [, d]) => sum + Number(d.estimated_prompt_tokens || 0), 0);
+      const localEstimateCached = localRows.reduce((sum, [, d]) => sum + Number(d.estimated_cached_tokens || 0), 0);
+      const onlinePrompt = onlineRows.reduce((sum, [, d]) => sum + Number(d.prompt_tokens || 0), 0);
+      const onlineCached = onlineRows.reduce((sum, [, d]) => sum + Number(d.cached_tokens || 0), 0);
+      const localTheoreticalRate = theoreticalRate(localEstimatePrompt, localEstimateCached);
+      const theoreticalPrompt = localEstimatePrompt + onlinePrompt;
+      const theoreticalCached = localEstimateCached + onlineCached;
+      const theoreticalTotalRate = theoreticalRate(theoreticalPrompt, theoreticalCached);
+      const actualTotalRate = theoreticalRate(onlinePrompt, onlineCached);
+      const cacheScopeText = localRows.length && onlineRows.length
+        ? "本地理论 + 在线实际"
+        : localRows.length
+          ? "本地理论估算"
+          : onlineRows.length
+            ? "在线服务端实际"
+            : "暂无缓存数据";
+      const displayedCachedTokens = localRows.length ? localEstimateCached : onlineCached;
+      const paused = (u.paused_roles || []).map(role => ROLE_LABELS[role] || role);
+      const fallbackRows = Object.entries(u.fallback_states || {});
+      const degradedRows = fallbackRows.filter(([, state]) => state?.degraded);
+
+      const detailRows = rows.map(([key, d]) => {
+        const isLocal = String(d.kind || "").toLowerCase() === "local";
+        const isOnline = String(d.kind || "").toLowerCase() === "online";
+        const theoretical = isLocal
+          ? theoreticalRate(d.estimated_prompt_tokens, d.estimated_cached_tokens)
+          : isOnline
+            ? theoreticalRate(d.prompt_tokens, d.cached_tokens)
+            : null;
+        const actual = isOnline ? safeRate(d.cache_hit_rate) : null;
+        return `
+          <tr>
+            <td>
+              <strong>${escapeHTML(ROLE_LABELS[d.role] || d.role || key)}</strong>
+              <small>${escapeHTML(String(d.role || "unknown"))}</small>
+            </td>
+            <td>
+              <span class="usage-slot">${escapeHTML(SLOT_LABELS[d.slot] || d.slot || "—")}</span>
+              <small>${escapeHTML(String(d.kind || "—"))}</small>
+            </td>
+            <td class="usage-model" title="${escapeHTML(d.model || key)}">${escapeHTML(d.model || key)}</td>
+            <td class="num">${fmtNum(d.calls)}</td>
+            <td class="num">${fmtNum(d.prompt_tokens)}</td>
+            <td class="num">${fmtNum(d.completion_tokens)}</td>
+            <td class="num">${fmtNum(d.cached_tokens)}</td>
+            <td class="num rate ${rateClass(theoretical)}">${rateText(theoretical)}</td>
+            <td class="num rate ${rateClass(actual)}">${rateText(actual)}</td>
+            <td class="num ${d.failures ? "bad" : ""}">${fmtNum(d.failures)}</td>
+          </tr>`;
+      }).join("");
+
+      const tableRows = detailRows || `
+        <tr class="usage-empty-row">
+          <td colspan="10">今天还没有调用记录</td>
+        </tr>`;
+      const fallbackMarkup = degradedRows.length
+        ? `<div class="usage-fallback usage-fallback-warn">
+             <div class="usage-panel-title"><span>当前降级</span><span class="dot-tag warn">需要关注</span></div>
+             <div class="usage-fallback-grid">${degradedRows.map(([role, state]) => `
+               <div class="usage-fallback-row">
+                 <strong>${escapeHTML(ROLE_LABELS[role] || role)}</strong>
+                 <span>${escapeHTML(SLOT_LABELS[state.primary_slot] || state.primary_slot || "—")} → ${escapeHTML(SLOT_LABELS[state.fallback_slot] || state.fallback_slot || "—")}</span>
+                 <small>冷却剩余 ${Math.max(0, Math.round(Number(state.cooldown_remaining || 0)))} 秒</small>
+               </div>`).join("")}</div>
+           </div>`
+        : `<div class="usage-fallback">
+             <div class="usage-panel-title"><span>降级状态</span><span class="dot-tag good">正常</span></div>
+             <p class="usage-muted">当前没有角色处于降级状态。</p>
+           </div>`;
+
+      return `
+        <div class="usage-dashboard">
+          <div class="usage-dashboard-head">
+            <div>
+              <h2>今日用量</h2>
+              <p>${escapeHTML(String(u.date || "—"))} · 预算域 ${escapeHTML(String(u.scope || "online"))}</p>
+            </div>
+            <div class="usage-head-status">
+              ${paused.length ? `<span class="usage-paused">已暂停：${escapeHTML(paused.join("、"))}</span>` : ""}
+              <span class="usage-live"><span class="usage-live-dot"></span>实时同步</span>
+            </div>
+          </div>
+
+          <div class="usage-metrics">
+            <div class="usage-metric usage-metric-primary">
+              <span>总 token</span>
+              <strong>${fmtNum(used)}</strong>
+              <small>${budget > 0 ? `${fmtNum(budget)} 预算上限` : "预算不限"}</small>
+            </div>
+            <div class="usage-metric">
+              <span>输入 token</span>
+              <strong>${fmtNum(inputTokens)}</strong>
+              <small>提示词与上下文</small>
+            </div>
+            <div class="usage-metric">
+              <span>输出 token</span>
+              <strong>${fmtNum(outputTokens)}</strong>
+              <small>模型生成内容</small>
+            </div>
+            <div class="usage-metric">
+              <span>调用次数</span>
+              <strong>${fmtNum(t.calls)}</strong>
+              <small class="${t.failures ? "metric-bad" : ""}">${fmtNum(t.failures)} 次失败 · ${fmtNum(t.truncated)} 次截断</small>
+            </div>
+          </div>
+
+          <section class="usage-panel usage-budget">
+            <div class="usage-panel-title">
+              <span>预算使用</span>
+              <strong class="${over ? "metric-bad" : ""}">${budget > 0 ? `${budgetPct.toFixed(1)}%` : "不限额"}</strong>
+            </div>
+            ${budget > 0
+              ? `<div class="usage-progress"><span class="${over ? "over" : ""}" style="width:${budgetPct}%"></span></div>
+                 <div class="usage-budget-meta"><span>已用 ${fmtNum(used)}</span><span class="${over ? "metric-bad" : ""}">${over ? "已超出预算" : `剩余 ${fmtNum(u.remaining_tokens ?? 0)}`}</span></div>`
+              : `<p class="usage-muted">当前预算域未设置 token 上限。</p>`}
+          </section>
+
+          <section class="usage-panel usage-cache">
+            <div class="usage-panel-title"><span>缓存效率</span><span class="usage-badge">${cacheScopeText}</span></div>
+            <div class="usage-cache-grid">
+              <div><span>本地理论命中率</span><strong class="rate ${rateClass(localTheoreticalRate)}">${rateText(localTheoreticalRate)}</strong><small>重复前缀估算 · 不等于实际 KV 命中</small></div>
+              <div><span>服务端实际命中率</span><strong class="rate ${rateClass(actualTotalRate)}">${rateText(actualTotalRate)}</strong><small>${onlineRows.length ? "由在线端点返回" : "当前没有在线端点数据"}</small></div>
+              <div><span>${localRows.length ? "理论可复用 token" : "已缓存 token"}</span><strong>${fmtNum(displayedCachedTokens)}</strong><small>${localRows.length ? "本地估算 · 今日累计" : "在线端点返回 · 今日累计"}</small></div>
+            </div>
+            <p class="usage-footnote">本地理论值根据同一端点/模型曾出现过的文本公共前缀估算，且只保存前缀哈希，不保存提示词正文；它表示“可能复用”的比例，不代表 LM Studio 或模型引擎实际发生了 KV-cache 命中。在线实际值则来自服务商返回的 cached token。</p>
+          </section>
+
+          <section class="usage-panel usage-table-panel">
+            <div class="usage-panel-title">
+              <div><span>按角色与模型</span><small>每行代表一个角色、端点和模型组合</small></div>
+              <span class="usage-table-count">${rows.length} 项</span>
+            </div>
+            <div class="usage-table-scroll">
+              <table class="usage-table">
+                <thead>
+                  <tr><th>角色</th><th>端点</th><th>模型</th><th>调用</th><th>输入</th><th>输出</th><th>缓存</th><th>理论命中</th><th>实际命中</th><th>失败</th></tr>
+                </thead>
+                <tbody>
+                  ${tableRows}
+                  <tr class="usage-total-row">
+                    <td colspan="3">总计</td>
+                    <td class="num">${fmtNum(t.calls)}</td>
+                    <td class="num">${fmtNum(inputTokens)}</td>
+                    <td class="num">${fmtNum(outputTokens)}</td>
+                    <td class="num">${fmtNum(cachedTokens)}</td>
+                    <td class="num rate ${rateClass(theoreticalTotalRate)}">${rateText(theoreticalTotalRate)}</td>
+                    <td class="num rate ${rateClass(actualTotalRate)}">${rateText(actualTotalRate)}</td>
+                    <td class="num ${t.failures ? "bad" : ""}">${fmtNum(t.failures)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          ${fallbackMarkup}
         </div>`;
-      const rows = Object.entries(u.by_key || {}).map(([key, d]) => `
-        <div class="usage-item">
-          <span class="ukey">${escapeHTML(key)}</span>
-          <span class="ukind">${escapeHTML(String(d.kind || "-"))}</span>
-          <span class="unum">入 ${fmtNum(d.prompt_tokens || 0)}</span>
-          <span class="unum">出 ${fmtNum(d.completion_tokens || 0)}</span>
-          <span class="unum">缓存 ${pct(d.cache_hit_rate)}</span>
-          <span class="unum">${fmtNum(d.calls || 0)} 次</span>
-        </div>`).join("");
-      const detail = `<h2 class="section-title">分项明细</h2>` + (rows
-        ? `<div class="usage-list">${rows}</div>`
-        : `<div class="usage-list"><span class="sched-empty">今天还没有调用记录</span></div>`);
-      const degraded = Object.entries(u.fallback_states || {})
-        .filter(([, d]) => d && d.degraded)
-        .map(([role, d]) => `${escapeHTML(role)}：${escapeHTML(String(d.primary_slot || "?"))} → ${escapeHTML(String(d.fallback_slot || "?"))}（冷却剩余 ${Number(d.cooldown_remaining || 0).toFixed(0)}s）`);
-      const fb = degraded.length
-        ? `<div class="link-row"><div class="item"><span class="k">正在降级</span><span class="v bad">${degraded.join(" · ")}</span></div></div>`
-        : ``;
-      return head + fb + detail;
+    }
+
+    function renderPending() {
+      root.innerHTML = `
+        <div class="usage-dashboard usage-dashboard-pending">
+          <div class="usage-dashboard-head"><div><h2>今日用量</h2><p>正在同步统计数据</p></div><span class="usage-live"><span class="usage-live-dot"></span>实时同步</span></div>
+          <div class="usage-metrics">
+            ${["总 token", "输入 token", "输出 token", "调用次数"].map(label => `<div class="usage-metric"><span>${label}</span><strong>—</strong><small>等待数据</small></div>`).join("")}
+          </div>
+          <section class="usage-panel usage-table-panel"><div class="usage-panel-title"><span>按角色与模型</span></div><div class="usage-table-scroll"><table class="usage-table"><thead><tr><th>角色</th><th>端点</th><th>模型</th><th>调用</th><th>输入</th><th>输出</th><th>缓存</th><th>理论命中</th><th>实际命中</th><th>失败</th></tr></thead><tbody><tr class="usage-empty-row"><td colspan="10">暂无可显示的数据</td></tr></tbody></table></div></section>
+        </div>`;
     }
 
     let timer = null;
+    let lastUsageSig = "";
+
+    function usageSnapshot(st) {
+      return { alive: !!st.alive, usage: st.usage || null };
+    }
 
     async function refresh() {
       try {
         const st = await getStatus();
+        const snapshot = usageSnapshot(st);
+        const sig = stableSignature(snapshot);
+        if (sig === lastUsageSig) return;
+        lastUsageSig = sig;
         root.innerHTML = usageHTML(st.usage, !!st.alive);
+        writeViewCache("usage", snapshot);
       } catch (e) {
+        if (lastUsageSig) return;
         root.innerHTML = `<div class="notice notice-error"><span class="notice-icon">!</span><div>无法获取状态：<code>${escapeHTML(e)}</code><div class="notice-sub">请确认 Python 环境可用，或到「环境自检」页排查。</div></div></div>`;
       }
     }
 
+    const cachedUsage = readViewCache("usage");
+    if (cachedUsage) {
+      lastUsageSig = stableSignature(cachedUsage);
+      root.innerHTML = usageHTML(cachedUsage.usage, cachedUsage.alive);
+    } else {
+      renderPending();
+    }
     refresh();
     // 用量变化远慢于日志：5 秒一轮足够，也省得每 1.5 秒打一次状态接口
     timer = setInterval(refresh, 5000);
