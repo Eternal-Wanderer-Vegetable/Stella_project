@@ -116,7 +116,11 @@ from memory.post_processors import (
 from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
 from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
-from memory.proactive_prompt import PROACTIVE_SKIP_MARKER, build_instruction, is_proactive_skip
+from memory.proactive_prompt import (
+    PROACTIVE_SKIP_MARKER,
+    build_instruction,
+    is_proactive_skip,
+)
 from memory.proactive_state import (
     get_runtime_state,
     mark_announced,
