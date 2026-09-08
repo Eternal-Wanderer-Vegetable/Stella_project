@@ -22,17 +22,16 @@ class TurnRuntime:
         self._states: dict[int, TurnState] = {}
 
     def state_for(self, group_id: int) -> TurnState:
-        state = self._states.setdefault(int(group_id), TurnState())
-        return state
+        return self._states.setdefault(int(group_id), TurnState())
 
     def can_start_proactive(self, group_id: int, cooldown: float, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
         state = self.state_for(group_id)
         if state.state == "RUNNING":
             return False
-        if state.last_started_at and now - state.last_started_at < max(0.0, cooldown):
-            return False
-        return True
+        if not state.last_started_at:
+            return True
+        return now - state.last_started_at >= max(0.0, cooldown)
 
     def start(self, group_id: int, *, proactive: bool = False, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
