@@ -3,7 +3,7 @@
 中文 | [English](configuration.en.md)
 
 **普通用户（Release 包）**：推荐用 `Stella.exe` 的「配置」页完成首次配置——填写群号、
-连接方式、地址与模型 ID，保存后写入项目根目录的 `.env`；模型列表可从本机 LM Studio
+连接方式、地址与模型 ID，保存后写入 `STELLA_HOME/.env`；模型列表可从本机 LM Studio
 自动读取，也可手工输入。
 
 **开发者**：推荐用向导 `python -m deploy init`：只需回答 5 个必答项（群号、连接方式、
@@ -13,7 +13,7 @@ OneBot 连接那段跨 NapCat 的说明书）会原样保留。也可用 `--answ
 
 本文是完整配置参考，用于调参。
 
-配置集中在 [`config/settings.py`](../config/settings.py)，通过读取项目根目录的 `.env` 导出模块级常量。业务代码不需要改动该文件即可调参。
+配置集中在 [`config/settings.py`](../config/settings.py)，通过读取 `STELLA_HOME/.env` 导出模块级常量。业务代码不需要改动该文件即可调参。
 
 ```bash
 cp .env.example .env
@@ -91,8 +91,8 @@ LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
 所以默认在外，只有用户**显式**建了 `StellaData/` 子目录时才认为他要的是自包含布局
 （那种情况下升级前必须先导入或备份）。
 
-发布包因此**不带内层 `Stella/` 目录**：zip 解压后得到 `Stella-v3.1.0-win64/` 就是程序目录，
-数据落在它的同级。多一层嵌套会把「同级」顶成「版本文件夹的内部」——这正是 v3.1.0 的缺陷。
+发布包因此**不带内层 `Stella/` 目录**：zip 解压后得到 `Stella-vX.Y.Z-win64/` 就是程序目录，
+数据落在它的同级。多一层嵌套会把「同级」顶成「版本文件夹的内部」——这正是旧发布布局的缺陷。
 
 数据目录内部的相对布局与旧安装完全一致，所以「旧布局」只是「数据目录恰好等于安装目录」的一个特例。
 用 `python -m deploy paths` 查看当前解析结果（`deploy doctor` 也会显示）。
@@ -1004,7 +1004,7 @@ Bot 不再代管 NapCat 进程——自动登录会退化为扫码，登录必�
 # 本机回环 → 200
 curl -i http://127.0.0.1:8080/stella/status
 # HTTP/1.1 200 OK
-# {"version":"2.6.0","pid":1234,"uptime_seconds":...}
+# {"version":"<installed-version>","pid":1234,"uptime_seconds":...}
 
 # 同机通过局域网 IP 访问 → 403（模拟局域网其他机器）
 curl -i http://192.168.1.20:8080/stella/status

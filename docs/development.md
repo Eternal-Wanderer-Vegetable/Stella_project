@@ -42,22 +42,22 @@ Stella_project/
 ## 部署工具
 
 `deploy/` 是「检查逻辑全在 Python 侧、GUI 只是渲染器」的部署工具：doctor 输出结构化 JSON，
-桌面安装器（Tauri）调用它并渲染，换 GUI 框架不用重写逻辑。六个子命令：
+桌面安装器（Tauri）调用它并渲染，`stellacli` 也把它作为本地模式的领域后端；换 GUI 框架不用重写逻辑。当前子命令如下：
 
 | 命令 | 用途 |
 |---|---|
 | `python -m deploy doctor [--json]` | 环境自检；`--json` 输出结构化结果（id/level/title/detail/fix_hint），供 GUI 做图标与本地化映射 |
 | `python -m deploy init [--answers PATH] [--force] [--dry-run]` | 交互式生成 `.env`（基于 `.env.example` 逐行替换，模型 ID 从 LM Studio 拉列表选编号）；`--answers` 复用上次的 `deploy.answers.toml`，换机器重装 / CI 冒烟 / GUI（`save_config`）复用同一份答案 |
 | `python -m deploy start [--force] [--detach]` | 先跑 doctor，无阻塞问题（或 `--force`）后启动 `bot.py`；`--detach` 后台启动并写 PID 到 `logs/stella.pid`（GUI 用） |
-| `python -m deploy status [--json]` | 读 PID 文件报进程是否存活，并从 JSON 日志尾部推断最近状态（`link_status` 在 Bot 进程内，外部读不到） |
+| `python -m deploy status [--json]` | 通过状态接口优先判断进程是否存活，并汇总链路健康度、调度器排队、今日用量与能力清单；接口不可达时再用 PID 文件兜底，并读取最近 JSON 日志 |
 | `python -m deploy stop` | 优雅停止：写停止哨兵 → 轮询等待 → 降级信号 → 硬杀兜底（见下）；Tauri 安装器与 `bot.py` 位于同一发布目录 |
 | `python -m deploy config-schema --json` | 输出 `settings.py` 的配置 schema（分组、默认值、注释），GUI 的「高级选项」表单据此生成 |
-| `python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]` | 从旧版本安装目录导入用户数据并升级数据库；只读旧目录，报告写 `migration_report.md` |
+| `python -m deploy migrate [--from 旧目录] [--dry-run] [--fresh-runtime]` | 从旧版本安装目录导入用户数据并升级数据库；只读旧目录，报告同时返回 Markdown 原文并写入当前 `STELLA_HOME/migration_report.md` |
 | `python -m deploy space-merge --from a,b --to c [--dry-run]` | 合并共享空间（记忆 + 画像 + FTS + 账本），替代过去要用户手搓的一串 UPDATE |
 | `python -m deploy plugin-check <插件目录> [--json]` | 按 [插件接入规范](plugin-spec.md) 校验一个插件目录：16 项检查，零 error 才算达标。**会 import 并实例化该插件**（与启动时做的事同类），输出里明说这一点 |
 | `python -m deploy plugin-scaffold <插件目录> [--endpoint 槽] [--force] [--dry-run] [--measure]` | 给插件生成 `capability.toml.draft`（`reviewed = false`，`keywords` 留空、候选词只写在注释里），并当场用**真实 embedding** 打一份量化报告（同域原型分离度、每条 example 与本能力原型的余弦、负样本余量）。`--measure` 只重算报告、不调模型，供人审时复算。产物是草稿：`.draft` 后缀与 `reviewed = false` 两道闸门都拦着它，人审改名并置 `true` 之后才进路由。**同样会 import 并实例化该插件** |
 | `python -m deploy capabilities [--json]` | 列出能力清单：哪些能被聊天自动触发、哪些不能及原因、各自来自哪一层、哪个 provider 正在退避。数据走状态接口（注册表是 Bot 进程内的单例）；Bot 没运行时退到直接读磁盘上的三层声明，那份数据回答不了「可不可路由」，渲染时会说明 |
-| `python -m deploy paths [--env-file]` | 输出解析后的程序目录 / 用户数据目录等路径；`--env-file` 只打印 `.env` 路径（`start.bat` 用） |
+| `python -m deploy paths [--env-file]` | 输出解析后的程序目录 / 用户数据目录等路径；`--env-file` 只打印 `STELLA_HOME/.env` 路径（`start.bat` 用） |
 | `python -m deploy manifest [--write]` | 生成发布包清单 `.stella-manifest.json`（升级时据此判断用户是否改过自带文件），release CI 调用 |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
@@ -93,7 +93,7 @@ python -m deploy doctor --json > stella-installer/src/mock/doctor-clean.json
 
 **前端契约**：`deploy doctor --json`、`deploy config-schema --json` 与 `deploy paths` 是 GUI 的
 数据契约，改结构要 bump schema 的 `version` 字段并同步 `stella-installer/src/mock/`。
-`deploy migrate` 返回的是 Markdown 报告原文（同一份内容也会写进 `migration_report.md`，
+`deploy migrate` 返回的是 Markdown 报告原文（同一份内容也会写进当前 `STELLA_HOME/migration_report.md`，
 只生成一次就不会两处不一致），GUI 直接以等宽文本渲染。
 
 **GUI 不自己判断用户数据目录在哪**：`python::data_root()` 去问 `deploy paths`。判据只有
@@ -621,7 +621,7 @@ else:
 | @ 对话完全学不到东西 | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明落库监听器被 `block=True` 拦截（priority 必须为 0） |
 | 主动 @ 永远走冷启动 | 日志里 `mode=coldstart` 恒定，或 `[ProactiveTarget] 读取候选失败`；说明候选查询的空间列名不匹配 |
 | 某个模型排队严重 / 回复变慢 | 日志里 `[Scheduler]` 的等待/持有/队列深度告警；`core.llm.snapshot()` 导出累计统计 |
-| 记忆读写静默无效 | 启动日志有无 v8 旧库告警；`PRAGMA table_info(memories)` 是否为 `group_shared_space` |
+| 记忆读写静默无效 | 先运行 `python -m deploy paths` 确认 `STELLA_HOME` 与数据库位置；再检查启动日志中的迁移结果，以及 `PRAGMA table_info(memories)` 是否包含 `group_shared_space` |
 | GUI 显示不出链路状态 | 检查 `STELLA_STATUS_API_ENABLED`，用 `curl http://127.0.0.1:8080/stella/status` 直接验证；进程在但接口 403 说明路由被误暴露限制、连不上说明 uvicorn 未起来 |
 
 ### 常用 SQL

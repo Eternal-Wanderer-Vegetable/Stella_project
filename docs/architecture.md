@@ -27,6 +27,12 @@ SQLite（memory/agent_memory.db）
 
 > 存储层有**两层归属维度**：`group_id` 是真实 QQ 群，`group_shared_space` 是群组共享空间。前者承载「当下这场对话的状态」，后者承载「对人的长期认知」。详见下文「主要数据表」。
 
+主动插话还有一条位于记忆层旁的 **Participation Decision Layer**：它从近期群聊提取信号，
+对话题机会、相关性与打扰风险做本地评分，输出 `IGNORE` / `OBSERVE` / `CANDIDATE` /
+`ALLOW_LLM` 决策，再决定是否把证据交给生成器。
+它不替代 `proactive_gate.py` 的硬闸门，也不调用 LLM；外置权重在 `config/participation/`，
+决策日志同时写入运行期日志与 v13 的 `participation_log` 表。
+
 ## 目录结构
 
 ```text
@@ -39,7 +45,8 @@ Stella_project/
 │   ├── settings.py         # 集中配置：读 .env，导出模块级常量
 │   ├── spaces.py           # 群组共享空间解析（config/spaces/*.toml）
 │   ├── spaces/             # 空间配置（文件名即空间名，不进 .env）
-│   └── capabilities/       # 能力声明（文件名即 domain，可选；见 *.example）
+│   ├── capabilities/       # 能力声明（文件名即 domain，可选；见 *.example）
+│   └── participation/      # 主动插话外置打分表
 │
 ├── core/                           # 与业务无关的编排骨架
 │   ├── context.py                  # ChatContext：一次处理的运行期载体
@@ -59,6 +66,7 @@ Stella_project/
 │   ├── registry.py                 # Capability / Provider / 注册表单例 + 健康度退避
 │   ├── loader.py                   # config/capabilities/*.toml → 注册表
 │   ├── hooks.py                    # activate_capabilities 前置钩子（管线接入点）
+│   ├── inventory.py                # 能力清单快照（供状态接口与 deploy capabilities）
 │   ├── router/                     # 三级路由
 │   │   ├── types.py                # Route / CapabilityHit
 │   │   ├── rules.py                # Level 0：关键词规则（零延迟）
@@ -73,7 +81,8 @@ Stella_project/
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
-│   ├── schema.py                   # Schema 迁移（Additive，当前 v8）+ 来源枚举
+│   ├── schema.py                   # Schema 迁移（Additive，当前 v13）+ 来源枚举
+│   ├── migrations.py               # 按版本执行结构与数据迁移
 │   ├── timeutil.py                 # DB 时间戳统一按 UTC 解析
 │   ├── text_similarity.py          # 内容相似度与合并（单一真相源）
 │   │
@@ -100,6 +109,13 @@ Stella_project/
 │   ├── proactive_gate.py           # 主动发言的统一准入闸门（六道条件）
 │   ├── proactive_target.py         # 主动 @ 的目标选择与配额判定
 │   ├── proactive_prompt.py         # 主动 @ 的任务指令模板
+│   ├── participation/              # 主动插话 Participation Decision Layer
+│   │   ├── decision.py             # 参与决策与模式
+│   │   ├── signals.py              # 群聊信号提取
+│   │   ├── scorer.py               # 参与评分
+│   │   ├── state.py                # 话题与群状态
+│   │   ├── tables.py               # 外置 TOML 打分表加载
+│   │   └── observability.py        # 决策日志与可观测性
 │   │
 │   ├── trace.py                    # 记忆决策追踪
 │   ├── benchmark.py                # Memory Benchmark 运行器
@@ -126,13 +142,22 @@ Stella_project/
 │   ├── probe.py                    # doctor 的采集层（只探测，不判断）
 │   ├── checks.py                   # doctor 的判断层（纯函数，每项一个）
 │   ├── process.py                  # start --detach / status / stop
-│   ├── init.py                     # 配置向导
-│   └── env_schema.py               # settings.py → GUI 配置表单 schema
+│   ├── init_wizard.py              # 配置向导与答案文件
+│   ├── migrate.py                  # 旧安装导入与数据库升级
+│   ├── plugin_check.py             # 插件接入规范检查
+│   ├── plugin_scaffold.py          # 能力声明草稿与 embedding 量化
+│   ├── capability_view.py          # 能力清单查询与渲染
+│   ├── manifest.py                 # 发布包清单
+│   ├── env_schema.py               # settings.py → GUI 配置表单 schema
+│   └── __main__.py                 # 子命令编排；领域逻辑仍在各模块
 │
 ├── stella_project/plugins/bot_main/
 │   ├── ai_gateway.py               # QQ 事件监听、Pipeline 装配、主动发言调度
 │   ├── status_api.py               # 本地状态接口（回环，供 deploy status / GUI）
 │   └── config.py                   # 插件配置（pydantic）
+│
+├── cli/                            # stellacli：本地 / Docker 的编排与渲染层
+│   └── src/                        # Rust CLI；领域逻辑透传 deploy / Compose
 │
 ├── data/                           # 运行期数据（全部 gitignore）
 │   ├── plugins/                    # 第三方 AstrBot 插件
@@ -416,6 +441,8 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 | `consolidation_state` | QQ 群 | 每群的整合 checkpoint |
 | `proactive_state` | QQ 群 | 主动 @ 的配额、冷却、退避状态 |
 | `group_runtime_state` | QQ 群 | 静音开关、睡眠/苏醒播报去重 |
+| `participation_topics` | QQ 群 | 话题生命周期与当前参与状态 |
+| `participation_log` | QQ 群 | Participation 每次评分与决策记录 |
 | `memory_candidates` | **空间** | 记忆候选（含 `occurrence_count` / `source_kinds` / `first_seen_at`） |
 | `memories` | **空间** | 长期记忆（含 `usage_tags` / `visibility` / `behavior_rule`） |
 | `memories_fts` | **空间** | FTS5 全文索引（按 `mem_id` 与 `memories` 同步） |
@@ -436,8 +463,9 @@ python -m memory.schema --backup    # 仅备份
 
 > **改结构与改数据在另一个模块**：`memory/migrations.py` 按版本注册（`migrate_v7` / `v8` / …），
 > 每版一个函数、一个事务，成功后才推进 `schema_meta.version`；`schema._migrate()` 的加列/建表
-> 作为每次迁移的收尾步骤。v7（画像分群）与 v8（记忆表改按空间归属）的数据迁移已于 2026-08-27
-> 补齐，v5 → 最新版全自动：列改名 + 值重写为空间名 + 画像主键重建 + FTS 重建 + 校验，
+> 作为每次迁移的收尾步骤。当前 `SCHEMA_VERSION` 为 **13**；v7（画像分群）、v8（记忆表改按空间归属）
+> 与 v13（Participation 话题/决策日志）等数据迁移均由 `memory/migrations.py` 注册，v5 → 当前版全自动：
+> 列改名 + 值重写为空间名 + 画像主键重建 + FTS 重建 + Participation 表创建与校验，
 > 失败整级回滚。**新规矩：`SCHEMA_VERSION` 每 +1 必须同时提交 `migrate_vN` 与旧库夹具测试。**
 >
 > 每次迁移写一份 `agent_memory.db.pre-vN-<时间戳>.bak`（这次迁移前的状态）；

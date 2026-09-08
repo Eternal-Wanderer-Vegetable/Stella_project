@@ -283,6 +283,21 @@ Therefore, proactive @-mentions are not "a supplement to the memory system" but 
 
 > Note: This is also one reason to prioritize fully local deployment—the data produced while proactively building a user profile is strongly privacy-sensitive. When connecting to an online endpoint, this step (the `CONSOLIDATION` / `EXTRACT` roles) sends the original group-chat text to the provider, so the "hybrid" mode keeps consolidation local: only the dialogue-generation step goes out over the network. See [configuration.en.md · Three Typical Scenarios](configuration.en.md#three-typical-scenarios).
 
+### Participation Decision Layer: Decide Whether an Interjection Is Worth the Interruption
+
+Ordinary proactive interjection is no longer driven only by the activity-probability curve.
+`memory/participation/` extracts topic, relevance, velocity, and interruption-risk signals from
+recent group chat and scores them locally, producing an `IGNORE` / `OBSERVE` / `CANDIDATE` /
+`ALLOW_LLM` decision before passing evidence to the generator. This is a **soft decision**: the hard gates in `memory/proactive_gate.py`
+(master switch, mute, sleep, cooldown, and so on) run first, then Participation decides whether
+there is a natural continuation point. It does not call an LLM and does not change proactive-@ quotas
+or response backoff.
+
+Scoring tables live in `config/participation/*.toml`. Each decision is written to structured logs
+and to `participation_topics` / `participation_log` (Schema v13), making replay and tuning possible.
+When evidence is insufficient, the default is to wait rather than treating “there is a message” as
+“the Bot should speak now.”
+
 ### Target Selection
 
 Priority:

@@ -29,6 +29,13 @@ The capability and memory layers are **parallel** branches. Both are activated b
 
 > The storage layer has **two ownership dimensions**: `group_id` is the real QQ group, while `group_shared_space` is the shared group space. The former carries “the state of this current conversation,” and the latter carries “long-term knowledge about people.” See “Main Data Tables” below.
 
+Proactive interjection also has a **Participation Decision Layer** beside the memory layer: it extracts
+recent group-chat signals, scores topic opportunity, relevance, and interruption risk locally, then
+produces an `IGNORE` / `OBSERVE` / `CANDIDATE` / `ALLOW_LLM` decision and decides whether to pass
+evidence to the generator. It does not replace the hard
+gate in `proactive_gate.py` and does not call an LLM. External weights live in `config/participation/`;
+decision logs go to runtime logs and the v13 `participation_log` table.
+
 ## Directory Structure
 
 ```text
@@ -41,7 +48,8 @@ Stella_project/
 │   ├── settings.py         # Centralized configuration: reads .env and exports module-level constants
 │   ├── spaces.py           # Shared group space resolution (config/spaces/*.toml)
 │   ├── spaces/             # Space configuration (filename is the space name; not in .env)
-│   └── capabilities/       # Capability declarations (filename is the domain, optional; see *.example)
+│   ├── capabilities/       # Capability declarations (filename is the domain, optional; see *.example)
+│   └── participation/      # External scoring tables for proactive interjection
 │
 ├── core/                           # Business-independent orchestration skeleton
 │   ├── context.py                  # ChatContext: runtime carrier for one processing operation
@@ -61,6 +69,7 @@ Stella_project/
 │   ├── registry.py                 # Capability / Provider / registry singleton + health-based backoff
 │   ├── loader.py                   # config/capabilities/*.toml → registry
 │   ├── hooks.py                    # activate_capabilities pre-hook (pipeline integration point)
+│   ├── inventory.py                # Structured capability snapshot for status/deploy capabilities
 │   ├── router/                     # Three-level routing
 │   │   ├── types.py                # Route / CapabilityHit
 │   │   ├── rules.py                # Level 0: keyword rules (zero latency)
@@ -75,7 +84,8 @@ Stella_project/
 │
 ├── memory/                         # Memory system core
 │   ├── SYSTEM.md                   # Bot system prompt
-│   ├── schema.py                   # Schema migrations (Additive, currently v8) + source enum
+│   ├── schema.py                   # Schema migrations (Additive, currently v13) + source enum
+│   ├── migrations.py               # Versioned structural and data migrations
 │   ├── timeutil.py                 # Parse DB timestamps uniformly as UTC
 │   ├── text_similarity.py          # Content similarity and merging (single source of truth)
 │   │
@@ -102,6 +112,13 @@ Stella_project/
 │   ├── proactive_gate.py           # Unified proactive-speaking admission gate (six conditions)
 │   ├── proactive_target.py         # Target selection and quota decisions for proactive @ mentions
 │   ├── proactive_prompt.py         # Task instruction template for proactive @ mentions
+│   ├── participation/              # Proactive interjection Participation Decision Layer
+│   │   ├── decision.py             # Participation decisions and modes
+│   │   ├── signals.py              # Group-chat signal extraction
+│   │   ├── scorer.py               # Participation scoring
+│   │   ├── state.py                # Topic and group state
+│   │   ├── tables.py               # External TOML scoring-table loader
+│   │   └── observability.py        # Decision logs and observability
 │   │
 │   ├── trace.py                    # Memory decision tracing
 │   ├── benchmark.py                # Memory Benchmark runner
@@ -128,13 +145,22 @@ Stella_project/
 │   ├── probe.py                    # doctor collection layer (probes only, no decisions)
 │   ├── checks.py                   # doctor decision layer (pure functions, one per check)
 │   ├── process.py                  # start --detach / status / stop
-│   ├── init.py                     # Configuration wizard
-│   └── env_schema.py               # settings.py → GUI configuration form schema
+│   ├── init_wizard.py              # Configuration wizard and answer files
+│   ├── migrate.py                  # Old-install import and database upgrade
+│   ├── plugin_check.py             # Plugin specification checks
+│   ├── plugin_scaffold.py          # Capability draft and embedding measurement
+│   ├── capability_view.py          # Capability inventory query and rendering
+│   ├── manifest.py                 # Release-package manifest
+│   ├── env_schema.py               # settings.py → GUI configuration form schema
+│   └── __main__.py                 # Subcommand orchestration; domain logic stays in modules
 │
 ├── stella_project/plugins/bot_main/
 │   ├── ai_gateway.py               # QQ event listener, Pipeline assembly, proactive-speaking scheduling
 │   ├── status_api.py               # Local status interface (loopback, for deploy status / GUI)
 │   └── config.py                   # Plugin configuration (pydantic)
+│
+├── cli/                            # stellacli: local / Docker orchestration and rendering layer
+│   └── src/                        # Rust CLI; delegates domain logic to deploy / Compose
 │
 ├── data/                           # Runtime data (all gitignored)
 │   ├── plugins/                    # Third-party AstrBot plugins
@@ -418,6 +444,8 @@ The type annotation for `route` is `Any` rather than `Route`: `core` is a “bus
 | `consolidation_state` | QQ group | Per-group consolidation checkpoint |
 | `proactive_state` | QQ group | Proactive @ quota, cooldown, and backoff state |
 | `group_runtime_state` | QQ group | Mute switch and sleep/wake announcement deduplication |
+| `participation_topics` | QQ group | Topic lifecycle and current participation state |
+| `participation_log` | QQ group | Per-decision Participation scores and outcomes |
 | `memory_candidates` | **Space** | Memory candidates (including `occurrence_count` / `source_kinds` / `first_seen_at`) |
 | `memories` | **Space** | Long-term memories (including `usage_tags` / `visibility` / `behavior_rule`) |
 | `memories_fts` | **Space** | FTS5 full-text index (synchronized with `memories` by `mem_id`) |
@@ -436,7 +464,7 @@ python -m memory.schema             # Execute
 python -m memory.schema --backup    # Backup only
 ```
 
-> **Structural changes and data changes live in another module**: `memory/migrations.py` registers migrations by version (`migrate_v7` / `v8` / …), with one function and one transaction per version; only after success does it advance `schema_meta.version`. The add-column/create-table work in `schema._migrate()` is the final step of each migration. The data migrations for v7 (profile grouping) and v8 (memory tables changed to space ownership) were completed on 2026-08-27. v5 → latest is fully automatic: rename columns + rewrite values as space names + rebuild profile primary keys + rebuild FTS + validate, with a full-level rollback on failure. **New rule: every increment of `SCHEMA_VERSION` must be committed together with `migrate_vN` and a legacy-database fixture test.**
+> **Structural changes and data changes live in another module**: `memory/migrations.py` registers migrations by version (`migrate_v7` / `v8` / …), with one function and one transaction per version; only after success does it advance `schema_meta.version`. The add-column/create-table work in `schema._migrate()` is the final step of each migration. The current `SCHEMA_VERSION` is **13**; v7 (profile grouping), v8 (memory tables changed to space ownership), and v13 (Participation topic/decision logs) are registered in `memory/migrations.py`. v5 → the current version is fully automatic: rename columns + rewrite values as space names + rebuild profile primary keys + rebuild FTS + create Participation tables + validate, with a full-level rollback on failure. **New rule: every increment of `SCHEMA_VERSION` must be committed together with `migrate_vN` and a legacy-database fixture test.**
 >
 > Each migration writes `agent_memory.db.pre-vN-<timestamp>.bak` (the state before that migration). `stella_memory_backup.db` is “the first original database ever”; it skips creation when a backup already exists. When archiving the old database, move it together with that file, or the system will be left in a state that “looks backed up but is actually the wrong backup.”
 

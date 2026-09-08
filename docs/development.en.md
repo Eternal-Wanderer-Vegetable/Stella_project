@@ -42,22 +42,22 @@ this directory contains the real `.env` and chat history, and once they leave wi
 
 ## Deployment Tools
 
-`deploy/` is a deployment tool whose "all checking logic is on the Python side, with the GUI as only a renderer": doctor outputs structured JSON, and the desktop installer (Tauri) calls it and renders the result, so changing GUI frameworks does not require rewriting the logic. It has six subcommands:
+`deploy/` is a deployment tool whose "all checking logic is on the Python side, with the GUI as only a renderer": doctor outputs structured JSON, the desktop installer (Tauri) calls it and renders the result, and `stellacli` uses it as the local-mode domain backend. Changing GUI frameworks does not require rewriting the logic. The current subcommands are:
 
 | Command | Purpose |
 |---|---|
 | `python -m deploy doctor [--json]` | Environment self-check; `--json` outputs structured results (`id/level/title/detail/fix_hint`) for the GUI to map to icons and localized strings |
 | `python -m deploy init [--answers PATH] [--force] [--dry-run]` | Interactively generates `.env` (replacing lines one by one based on `.env.example`; fetches the model list from LM Studio and selects by number); `--answers` reuses the previous `deploy.answers.toml`, allowing the same answers to be reused for reinstalling on another machine / CI smoke tests / the GUI (`save_config`) |
 | `python -m deploy start [--force] [--detach]` | Runs doctor first, then starts `bot.py` if there are no blocking issues (or with `--force`); `--detach` starts it in the background and writes its PID to `logs/stella.pid` (for the GUI) |
-| `python -m deploy status [--json]` | Reads the PID file to report whether the process is alive, and infers the latest status from the tail of the JSON log (`link_status` exists inside the Bot process and cannot be read externally) |
+| `python -m deploy status [--json]` | Prefers the status endpoint to determine whether the process is alive, and aggregates link health, scheduler queues, today's usage, and the capability inventory; when the endpoint is unreachable it falls back to the PID file and reads the latest JSON log |
 | `python -m deploy stop` | Gracefully stops the process: write the stop sentinel -> poll and wait -> fall back to a signal -> use a hard kill as the last resort (see below); the Tauri installer and `bot.py` are in the same release directory |
 | `python -m deploy config-schema --json` | Outputs the configuration schema from `settings.py` (groups, defaults, comments), which the GUI uses to generate the "Advanced options" form |
-| `python -m deploy migrate [--from OLD_DIR] [--dry-run] [--fresh-runtime]` | Imports user data from an old-version installation directory and upgrades the database; reads the old directory only and writes the report to `migration_report.md` |
+| `python -m deploy migrate [--from OLD_DIR] [--dry-run] [--fresh-runtime]` | Imports user data from an old-version installation directory and upgrades the database; reads the old directory only, returns the Markdown report, and writes it to `STELLA_HOME/migration_report.md` |
 | `python -m deploy space-merge --from a,b --to c [--dry-run]` | Merges shared spaces (memory + profiles + FTS + ledger), replacing the sequence of UPDATE statements users previously had to perform manually |
 | `python -m deploy plugin-check <plugin dir> [--json]` | Validates a plugin directory against the [Plugin Specification](plugin-spec.en.md): 16 checks, and zero errors is the bar. **It imports and instantiates the plugin** (the same thing startup does), and the output says so explicitly |
 | `python -m deploy plugin-scaffold <plugin dir> [--endpoint SLOT] [--force] [--dry-run] [--measure]` | Generates `capability.toml.draft` for a plugin (`reviewed = false`, `keywords` left empty with candidates only in comments) and immediately computes a quantified report with the **real embedding model** (same-domain prototype separation, each example's cosine against its own capability prototype, negative-sample margin). `--measure` only recomputes the report without calling the model, for use during review. The output is a draft: both the `.draft` suffix and `reviewed = false` gate it, and it reaches the Router only after a human renames the file and sets `true`. **It also imports and instantiates the plugin** |
 | `python -m deploy capabilities [--json]` | Lists the capability inventory: which capabilities chat can trigger automatically, which cannot and why, which tier each came from, and which provider is backing off. The data comes from the status endpoint (the registry is a singleton inside the Bot process); when the Bot is not running it falls back to reading the three declaration tiers from disk, which cannot answer "is it routable" — the rendering says so |
-| `python -m deploy paths [--env-file]` | Outputs resolved paths such as the program directory / user data directory; `--env-file` prints only the `.env` path (used by `start.bat`) |
+| `python -m deploy paths [--env-file]` | Outputs resolved paths such as the program directory / user data directory; `--env-file` prints only the `STELLA_HOME/.env` path (used by `start.bat`) |
 | `python -m deploy manifest [--write]` | Generates the release-package manifest `.stella-manifest.json` (used during upgrades to determine whether the user changed a bundled file); called by release CI |
 
 Layers: `probe` collects data (with side effects) -> `checks` makes decisions (pure functions, the testing focus) -> `report` renders the result.
@@ -81,7 +81,7 @@ Design trade-off: do not use `POST /shutdown` -- status_api is read-only, and ad
 The sentinel file is a runtime artifact and has been added to `.gitignore`, the exclusion list in `release.yml`, and the sensitive-file checks.
 
 **Frontend contract**: `deploy doctor --json`, `deploy config-schema --json`, and `deploy paths` are the GUI data contracts. When changing their structures, bump the `version` field of the schema and update `stella-installer/src/mock/` at the same time.
-`deploy migrate` returns the original Markdown report (the same content is also written to `migration_report.md`; it is generated only once so the two copies cannot diverge), and the GUI renders it directly as monospaced text.
+`deploy migrate` returns the original Markdown report (the same content is also written to the current `STELLA_HOME/migration_report.md`; it is generated only once so the two copies cannot diverge), and the GUI renders it directly as monospaced text.
 
 **The GUI must not determine the user data directory itself**: `python::data_root()` asks `deploy paths`. There is only one source of criteria, `config/home.py`; maintaining two implementations would result in "one side reads the old directory while the other writes to the new directory", with symptoms such as "save succeeded but had no effect".
 
@@ -566,7 +566,7 @@ Likewise, every path that "returns an empty result on failure and continues" mus
 | @ conversations learn nothing at all | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`; `AT_MENTION` at 0 means the persistence listener was intercepted by `block=True` (`priority` must be 0) |
 | Proactive @ always uses cold start | `mode=coldstart` remains constant in the logs, or `[ProactiveTarget] failed to read candidates`; indicates that the space column name in the candidate query does not match |
 | A model has severe queueing / replies are slow | Wait/hold/queue-depth alerts under `[Scheduler]` in the logs; `core.llm.snapshot()` exports cumulative statistics |
-| Memory reads/writes silently do nothing | Check for a v8 old-database warning in the startup log; check whether `PRAGMA table_info(memories)` contains `group_shared_space` |
+| Memory reads/writes silently do nothing | Run `python -m deploy paths` to confirm `STELLA_HOME` and the database location; then inspect migration results in the startup log and check whether `PRAGMA table_info(memories)` contains `group_shared_space` |
 | GUI cannot display link status | Check `STELLA_STATUS_API_ENABLED`, and verify directly with `curl http://127.0.0.1:8080/stella/status`; if the process is running but the endpoint returns 403, the route was incorrectly exposed or restricted; if it cannot connect, uvicorn did not start |
 
 ### Common SQL
