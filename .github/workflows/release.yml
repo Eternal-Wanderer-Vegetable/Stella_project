@@ -66,8 +66,114 @@ jobs:
           path: stella-installer/src-tauri/target/release/Stella.exe
           if-no-files-found: error
 
+  # ============ stellacli 二进制（先行构建，打包集中在 build 作业） ============
+  # CLI 包 = 完整程序目录 + stellacli：CLI 是编排层，本地形态要透传
+  # python -m deploy，只发二进制会连「项目根」都找不到。因此二进制先在
+  # 各自平台构建成 artifact，由 build 作业与程序目录一起组装（方案见
+  # design_docs/跨平台 CLI 控制台方案 v1.0.md；打包不在此处做，避免
+  # 「程序目录」在多个作业间重复维护排除清单）。
+  build-cli-linux-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析发布版本
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"; V="${V#v}"
+          fi
+          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
+
+      # 与主构建同一道防线：tag 必须与 Cargo.toml / pyproject 同时一致
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        run: |
+          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          echo "Cargo=$CARGO_V pyproject=$PY_V tag=$RELEASE_VERSION"
+          if [ "$CARGO_V" != "$PY_V" ] || [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
+            echo "::error::版本不一致（Cargo/pyproject/tag）"; exit 1
+          fi
+
+      # 手工触发测试打包流程时同步版本号（与安装器 job 的处理同款）
+      - name: 同步 Cargo 版本号（手工触发时）
+        if: github.event_name != 'push'
+        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 安装 musl 工具链
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: 构建（musl 静态链接，任意发行版可直接运行）
+        working-directory: cli
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: 上传二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellacli-linux
+          path: cli/target/x86_64-unknown-linux-musl/release/stellacli
+          if-no-files-found: error
+
+  build-cli-windows-binary:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析发布版本
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"; V="${V#v}"
+          fi
+          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          echo "Cargo=$CARGO_V pyproject=$PY_V tag=$RELEASE_VERSION"
+          if [ "$CARGO_V" != "$PY_V" ] || [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
+            echo "::error::版本不一致（Cargo/pyproject/tag）"; exit 1
+          fi
+
+      - name: 同步 Cargo 版本号（手工触发时）
+        if: github.event_name != 'push'
+        shell: bash
+        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 构建
+        working-directory: cli
+        run: cargo build --release
+
+      - name: 上传二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellacli-windows
+          path: cli/target/release/stellacli.exe
+          if-no-files-found: error
+
   build:
-    needs: build-installer
+    needs: [build-installer, build-cli-linux-binary, build-cli-windows-binary]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +205,14 @@ jobs:
       # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
       # 日志只需 --exclude 'logs'：2026-08-25 起全部运行期日志都落在 logs/
       # （config 的 LOG_DIR）。此前思考/整合/压缩日志散在项目根目录，要逐个列名。
+      #
+      # 开发向内容（2026-09-08 bug_report_2026_9_8#2：曾把 .claude/ 等整包发出去）：
+      # .claude / AGENTS.md / CLAUDE.md 是 AI 编码代理的技能与指令文件；
+      # cli/ 是 Rust CLI 的源码（产物另行打包）；assets/ 是 README 的仓库渲染图；
+      # .gitattributes 是 git 元数据；.stella-state.json 是开发机的运行痕迹
+      # （正常应只存在于 STELLA_HOME，仓库里这份是历史误提交，绝不能让新装用户
+      # 带着别人的 last_schema_version 启动）。.gitnexus 当前未被 git 跟踪，
+      # 仍列入排除是防御性的：一旦哪天被提交，不该无声进入发布包。
       - name: 构造发布目录（排除测试与开发文件）
         run: |
           mkdir -p dist/Stella
@@ -111,6 +225,14 @@ jobs:
             --exclude '.github' \
             --exclude '.git' \
             --exclude '.gitignore' \
+            --exclude '.gitattributes' \
+            --exclude '.claude' \
+            --exclude '.gitnexus' \
+            --exclude 'AGENTS.md' \
+            --exclude 'CLAUDE.md' \
+            --exclude '.stella-state.json' \
+            --exclude 'cli' \
+            --exclude 'assets' \
             --exclude 'release_assets' \
             --exclude 'memory/benchmark' \
             --exclude 'requirements-dev.txt' \
@@ -139,6 +261,27 @@ jobs:
           cp release_assets/start.bat release_assets/doctor.bat \
              release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
 
+      # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF。
+      # 放在 CLI 组装之前：CLI 包从这份目录复制，不能再各自转一遍。
+      - name: 确保 bat 与 txt 为 CRLF
+        run: |
+          sed -i 's/\r$//' dist/Stella/start.bat dist/Stella/doctor.bat \
+            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
+          sed -i 's/$/\r/' dist/Stella/start.bat dist/Stella/doctor.bat \
+            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
+
+      - name: 下载 CLI 二进制
+        uses: actions/download-artifact@v4
+        with:
+          pattern: stellacli-*
+          path: cli-bin
+          merge-multiple: false
+
+      - name: 校验 CLI 二进制到位
+        run: |
+          test -s cli-bin/stellacli-linux/stellacli || { echo "::error::缺少 Linux CLI 二进制"; exit 1; }
+          test -s cli-bin/stellacli-windows/stellacli.exe || { echo "::error::缺少 Windows CLI 二进制"; exit 1; }
+
       - name: 放入 Tauri 安装器
         uses: actions/download-artifact@v4
         with:
@@ -147,14 +290,6 @@ jobs:
 
       - name: 校验安装器位于项目根目录
         run: test -s dist/Stella/Stella.exe
-
-      # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF
-      - name: 确保 bat 与 txt 为 CRLF
-        run: |
-          sed -i 's/\r$//' dist/Stella/start.bat dist/Stella/doctor.bat \
-            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
-          sed -i 's/$/\r/' dist/Stella/start.bat dist/Stella/doctor.bat \
-            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
 
       # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
       - name: 准备校验用 Python
@@ -165,7 +300,7 @@ jobs:
 
       # 装依赖不只是为了 import 检查——它同时验证了 requirements.txt 本身可安装。
       # 若某个 pin 写错或上游撤版，用户会在 start.bat 的 pip 步骤失败，
-      # 那时排查成本远高于在这里拦住。
+      # 那时排查成本远高于在这里拦住。CLI 包复用同一份程序目录，无需重复校验。
       - name: 校验发布包依赖可安装且模块可 import
         run: |
           python -m pip install --upgrade pip
@@ -175,6 +310,7 @@ jobs:
 
       # 清单是「用户有没有改过发布包自带文件」的唯一判据（见 deploy/manifest.py）。
       # 没有它，升级时只能二选一：覆盖用户改过的人格，或让用户永远拿不到新默认值。
+      # 清单只登记人格/能力配置等固定目标（不随二进制变化），CLI 包直接复用。
       - name: 生成发布包清单
         run: |
           cd dist/Stella
@@ -216,7 +352,9 @@ jobs:
             echo "::error::发布包含敏感或运行期文件，已中止发布"
             exit 1
           fi
-          if unzip -l "$ZIP" | grep -E '(tests/|design_docs/|_deprecated/|stella-installer/)'; then
+          # 开发目录守卫与 rsync 排除清单同源维护：清单漏一项，这里就得补一项，
+          # 两道锁一起防止「整包发出开发文件」的回归（2026-09-08 主包混入 .claude/）。
+          if unzip -l "$ZIP" | grep -E '(tests/|design_docs/|_deprecated/|stella-installer/|\.claude/|\.gitnexus/|(^|[ /])cli/|(^|[ /])assets/|(^|[ /])(AGENTS|CLAUDE)\.md|(^|[ /])\.stella-state\.json$)'; then
             echo "::error::发布包含开发目录，已中止发布"
             exit 1
           fi
@@ -276,10 +414,67 @@ jobs:
           [ "$MISSING" -eq 0 ] && echo "✅ 必需文件齐全"
           exit "$MISSING"
 
+      # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
+      # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
+      # 只发二进制会在 find_root 就失败（2026-09-08 bug_report：单独下载启动报错）。
+      # Windows CLI 包保留 start.bat：它就是嵌入式 Python 运行时的引导脚本
+      # （stellacli 的本地形态自动识别 runtime/python.exe）；
+      # Linux 包去掉 Windows 专用脚本，改用系统 Python + requirements.txt。
+      # 产物名写入 GITHUB_ENV 只定义一次——2026-09-07 曾因 pwsh 的 ${env:} 写法
+      # 让产物旧名、上传找新名，直到 upload 才炸；名字漂移必须在这里就硬失败。
+      - name: 组装 CLI 发布包（Windows zip + Linux tar.gz）
+        run: |
+          set -e
+          # 公共部分：从主发布目录复制，去掉 Tauri 安装器（CLI 面向无 WebView 设备，
+          # 方案要求 CLI 永不混入 Windows 主发布包的图形安装器）。
+          # README-快速开始.txt 以「双击 Stella.exe」为主线，GUI 向导不进 CLI 包，
+          # CLI 包用 README-CLI-快速开始.txt。
+          rsync -a --exclude 'Stella.exe' --exclude 'README-快速开始.txt' dist/Stella/ dist/cli-win/
+          rsync -a --exclude 'Stella.exe' --exclude '*.bat' --exclude 'README-快速开始.txt' \
+            dist/Stella/ dist/cli-linux/
+
+          cp cli-bin/stellacli-windows/stellacli.exe dist/cli-win/
+          cp release_assets/README-CLI-快速开始.txt dist/cli-win/
+          # CLI 包里的 txt 也要 CRLF（同主包的坑：Linux 打包、Windows 消费）
+          sed -i 's/\r$//' dist/cli-win/README-CLI-快速开始.txt
+          sed -i 's/$/\r/' dist/cli-win/README-CLI-快速开始.txt
+
+          cp cli-bin/stellacli-linux/stellacli dist/cli-linux/
+          cp release_assets/README-CLI-快速开始.txt dist/cli-linux/
+
+          # 完整性守卫：CLI 包必须是「能独立跑起来的完整形态」，缺任何一块
+          # 都会重演「单独下载启动报错」——这里在发布前钉死最低限度的组成。
+          for d in dist/cli-win dist/cli-linux; do
+            for f in bot.py requirements.txt .env.example pyproject.toml LICENSE \
+                     deploy/__main__.py config/settings.py core/pipeline.py \
+                     memory/SYSTEM.md system_prompts .stella-manifest.json; do
+              test -e "$d/$f" || { echo "::error::CLI 包缺少必需组件: $d/$f"; exit 1; }
+            done
+          done
+          test -x dist/cli-linux/stellacli || { echo "::error::Linux CLI 二进制不可执行"; exit 1; }
+          test -s dist/cli-win/stellacli.exe || { echo "::error::Windows CLI 二进制缺失"; exit 1; }
+
+          cd dist/cli-win
+          zip -q -r "../Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" .
+          cd ../cli-linux
+          tar czf "../Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" .
+          cd ..
+          # 安装器绝不进 CLI 包（与「CLI 永不混入主发布包」互为镜像的边界）
+          if unzip -l "Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" | grep -q 'Stella\.exe'; then
+            echo "::error::CLI 包混入了 Tauri 安装器"; exit 1
+          fi
+          if tar tzf "Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" | grep -q 'Stella\.exe'; then
+            echo "::error::CLI 包混入了 Tauri 安装器"; exit 1
+          fi
+
+          echo "CLI_WIN_ZIP=Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" >> "$GITHUB_ENV"
+          echo "CLI_TGZ=Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" >> "$GITHUB_ENV"
+          ls -lh Stella-CLI-version-*
+
       # —— 核心改进：支持在同版本 Release 已存在时覆盖 asset ——
       # 旧逻辑仅执行 `gh release create`，若 Release 已存在则直接报错失败，
       # 无法实现“同版本重发/补丁包”场景。本步骤改为幂等逻辑：
-      #   - 若 Release 已存在：用 `gh release upload --clobber` 覆盖同名 zip
+      #   - 若 Release 已存在：用 `gh release upload --clobber` 覆盖同名资产
       #   - 若不存在：用 `gh release create` 新建
       # 覆盖时会保留原 Release 的 tag/发布时间，仅替换资产，适合紧急修复。
       - name: 发布 Release（新建或覆盖同版本 asset）
@@ -288,20 +483,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          ZIP="dist/Stella-${RELEASE_REF}-win64.zip"
-          if [ ! -f "$ZIP" ]; then
-            echo "::error::找不到发布包 $ZIP"
-            exit 1
-          fi
+          cd dist
+          ZIP="Stella-${RELEASE_REF}-win64.zip"
+          for f in "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::找不到发布包 $f"
+              exit 1
+            fi
+          done
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
-            gh release upload "${RELEASE_REF}" "$ZIP" --clobber
+            gh release upload "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
-            gh release create "${RELEASE_REF}" "$ZIP" \
+            gh release create "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
-              --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md
+              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}"
           fi
           echo "--- 当前 Release 资产 ---"
@@ -315,20 +513,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          ZIP="dist/Stella-${RELEASE_REF}-win64.zip"
-          if [ ! -f "$ZIP" ]; then
-            echo "::error::找不到发布包 $ZIP"
-            exit 1
-          fi
+          cd dist
+          ZIP="Stella-${RELEASE_REF}-win64.zip"
+          for f in "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::找不到发布包 $f"
+              exit 1
+            fi
+          done
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
-            gh release upload "${RELEASE_REF}" "$ZIP" --clobber
+            gh release upload "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
-            gh release create "${RELEASE_REF}" "$ZIP" \
+            gh release create "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
-              --notes-file release_assets/RELEASE_NOTES_TEMPLATE.md
+              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
           fi
           echo "--- 当前 Release 资产 ---"
@@ -342,150 +543,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Stella-release-preview
-          path: dist/*.zip
-          retention-days: 7
-
-  # ============ stellacli（独立分发的命令行控制台） ============
-  # 面向没有 WebView 的设备（方案 Q2 已定）：单独构建、单独验证、单独发布，
-  # 永不混入 Windows 主发布包。needs: build 是为了等主 Release 建好再传 asset
-  #（gh release upload 要求 Release 已存在）。
-  build-cli-linux:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 解析发布版本
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            V="${GITHUB_REF_NAME#v}"
-          else
-            V="${{ inputs.version }}"; V="${V#v}"
-          fi
-          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
-
-      # 与主构建同一道防线：tag 必须与 Cargo.toml / pyproject 同时一致
-      - name: 校验版本号一致（tag 触发时）
-        if: github.event_name == 'push'
-        run: |
-          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
-          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
-          echo "Cargo=$CARGO_V pyproject=$PY_V tag=$RELEASE_VERSION"
-          if [ "$CARGO_V" != "$PY_V" ] || [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
-            echo "::error::版本不一致（Cargo/pyproject/tag）"; exit 1
-          fi
-
-      # 手工触发测试打包流程时同步版本号（与安装器 job 的处理同款）
-      - name: 同步 Cargo 版本号（手工触发时）
-        if: github.event_name != 'push'
-        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli
-
-      - name: 安装 musl 工具链
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: 构建（musl 静态链接，任意发行版可直接运行）
-        working-directory: cli
-        run: cargo build --release --target x86_64-unknown-linux-musl
-
-      - name: 打包
-        run: |
-          tar czf "Stella-CLI-version-v${RELEASE_VERSION}-linux-amd64.tar.gz" \
-            -C cli/target/x86_64-unknown-linux-musl/release stellacli
-          ls -lh Stella-CLI-version-v*.tar.gz
-
-      - name: 上传到 Release（tag 触发时）
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "v${RELEASE_VERSION}" \
-            "Stella-CLI-version-v${RELEASE_VERSION}-linux-amd64.tar.gz" --clobber
-          echo "✅ 已上传 Linux CLI asset"
-
-      - name: 上传 artifact（手工触发时用于验证产物）
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Stella-CLI-linux-preview
-          path: Stella-CLI-version-v*.tar.gz
-          retention-days: 7
-
-  build-cli-windows:
-    runs-on: windows-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 解析发布版本
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            V="${GITHUB_REF_NAME#v}"
-          else
-            V="${{ inputs.version }}"; V="${V#v}"
-          fi
-          echo "RELEASE_VERSION=$V" >> "$GITHUB_ENV"
-
-      - name: 校验版本号一致（tag 触发时）
-        if: github.event_name == 'push'
-        shell: bash
-        run: |
-          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
-          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
-          echo "Cargo=$CARGO_V pyproject=$PY_V tag=$RELEASE_VERSION"
-          if [ "$CARGO_V" != "$PY_V" ] || [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
-            echo "::error::版本不一致（Cargo/pyproject/tag）"; exit 1
-          fi
-
-      - name: 同步 Cargo 版本号（手工触发时）
-        if: github.event_name != 'push'
-        shell: bash
-        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli
-
-      - name: 构建
-        working-directory: cli
-        run: cargo build --release
-
-      - name: 打包
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          # 文件名只在此定义一次（upload 步骤引用同名常量）——2026-09-07 曾因
-          # pwsh 的 ${env:} 写法躲过改名脚本，产物旧名、上传找新名，直到 upload
-          # 才炸。Test-Path 断言让任何名字漂移在打包这一步就硬失败。
-          $zip = "Stella-CLI-version-v${env:RELEASE_VERSION}-windows-amd64.zip"
-          Compress-Archive -Path cli/target/release/stellacli.exe -DestinationPath $zip -Force
-          if (-not (Test-Path $zip)) { throw "打包产物未生成：$zip" }
-          Get-Item $zip | Select-Object Name, Length
-
-      - name: 上传到 Release（tag 触发时）
-        if: github.event_name == 'push'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "v${RELEASE_VERSION}" \
-            "Stella-CLI-version-v${RELEASE_VERSION}-windows-amd64.zip" --clobber
-          echo "✅ 已上传 Windows CLI asset"
-
-      - name: 上传 artifact（手工触发时用于验证产物）
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Stella-CLI-windows-preview
-          path: Stella-CLI-version-v*.zip
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
           retention-days: 7
