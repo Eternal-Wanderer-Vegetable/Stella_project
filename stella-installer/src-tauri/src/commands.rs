@@ -4,6 +4,9 @@ use crate::python;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static GUI_OWNS_BOT: AtomicBool = AtomicBool::new(false);
 
 /// 环境自检。返回 `deploy doctor --json` 的原始 JSON 字符串。
 ///
@@ -73,12 +76,16 @@ pub async fn start_bot(force: bool) -> Result<String, String> {
             if stderr.trim().is_empty() { stdout } else { stderr }
         ));
     }
+    GUI_OWNS_BOT.store(true, Ordering::Release);
     Ok(stdout)
 }
 
 /// 优雅停止。对应 `deploy stop`，可能等待在途任务收尾。
 #[tauri::command]
 pub async fn stop_bot() -> Result<String, String> {
+    if !GUI_OWNS_BOT.load(Ordering::Acquire) {
+        return Ok("当前 GUI 未启动 Stella，不执行跨实例停止。".to_owned());
+    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
         python::run_deploy_without_prepare(&["stop"])
     })
@@ -90,6 +97,7 @@ pub async fn stop_bot() -> Result<String, String> {
             if stderr.trim().is_empty() { stdout } else { stderr }
         ));
     }
+    GUI_OWNS_BOT.store(false, Ordering::Release);
     Ok(stdout)
 }
 

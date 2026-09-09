@@ -282,7 +282,16 @@ def _cmd_paths(args: argparse.Namespace) -> int:
     GUI 不自己判断用户数据目录在哪：判据只有 ``config/home.py`` 一份，两处各写一遍
     必然漂移（一边读旧目录、一边写新目录，用户会看到「保存了但没生效」）。
     """
-    from config import DB_PATH, LOG_DIR, STELLA_JSON_LOG_PATH
+    from config import (
+        DB_PATH,
+        INSTANCE_ID,
+        INSTANCE_MANIFEST_PATH,
+        INSTANCE_PID_FILE,
+        INSTANCE_RUNTIME_DIR,
+        LOG_DIR,
+        STELLA_JSON_LOG_PATH,
+        STELLA_STOP_SENTINEL,
+    )
 
     if args.env_file:
         # start.bat 用它判断「配置过了没有」——路径判据同样只能有一份
@@ -302,6 +311,11 @@ def _cmd_paths(args: argparse.Namespace) -> int:
         "db_path": str(DB_PATH),
         "log_dir": str(LOG_DIR),
         "json_log_path": str(STELLA_JSON_LOG_PATH),
+        "instance_id": INSTANCE_ID,
+        "instance_runtime_dir": str(INSTANCE_RUNTIME_DIR),
+        "instance_pid_file": str(INSTANCE_PID_FILE),
+        "instance_manifest": str(INSTANCE_MANIFEST_PATH),
+        "instance_stop_sentinel": str(STELLA_STOP_SENTINEL),
         "pointer_file": str(home.pointer_path()),
     }
     print(json.dumps(data, ensure_ascii=False, indent=2))

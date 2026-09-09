@@ -45,6 +45,8 @@ def test_build_payload_fields_complete():
     payload = status_api.build_payload(link, sched, pid=123, started_at=time.time())
     assert set(payload) == {
         "version",
+        "instance_id",
+        "launch_token_digest",
         "pid",
         "uptime_seconds",
         "allowed_group_count",

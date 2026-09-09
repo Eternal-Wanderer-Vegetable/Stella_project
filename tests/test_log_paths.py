@@ -63,7 +63,7 @@ def test_deploy_reads_the_configured_json_log_path():
     import deploy.process as process
 
     assert process.LOG_FILE == settings.STELLA_JSON_LOG_PATH
-    assert process.PID_FILE.parent == settings.LOG_DIR
+    assert process.PID_FILE == settings.INSTANCE_PID_FILE
 
 
 def test_compress_log_setting_is_a_path_not_a_filename():

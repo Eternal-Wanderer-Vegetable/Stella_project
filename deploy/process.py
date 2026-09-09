@@ -31,15 +31,26 @@ import httpx
 from dotenv import dotenv_values
 
 from config import (
-    LOG_DIR,
+    INSTANCE_ID,
+    INSTANCE_MANIFEST_PATH,
+    INSTANCE_PID_FILE,
     PROJECT_ROOT,
     SHUTDOWN_GRACE_SECONDS,
     STELLA_HOME,
     STELLA_JSON_LOG_PATH,
 )
+from config.instance import (
+    LAUNCH_TOKEN_ENV,
+    launch_token_digest,
+    manifest_for,
+    new_launch_token,
+    read_manifest,
+    write_manifest,
+)
 from core.stop_signal import clear_stop_request, request_stop
 
-PID_FILE = LOG_DIR / "stella.pid"
+PID_FILE = INSTANCE_PID_FILE
+MANIFEST_FILE = INSTANCE_MANIFEST_PATH
 BOT_ENTRY = PROJECT_ROOT / "bot.py"
 # 必须读配置而不是自己拼 logs/stella.jsonl：Bot 侧的 sink 由 STELLA_JSON_LOG_PATH
 # 决定，两边各拼一份的话，用户一改配置 `deploy status` 就开始读一个空文件
@@ -73,6 +84,24 @@ def write_pid(pid: int) -> None:
 def clear_pid() -> None:
     with contextlib.suppress(OSError):
         PID_FILE.unlink()
+
+
+def clear_manifest() -> None:
+    with contextlib.suppress(OSError):
+        MANIFEST_FILE.unlink()
+
+
+def _owned_manifest(pid: int | None = None) -> dict | None:
+    manifest = read_manifest(MANIFEST_FILE)
+    if not manifest or manifest.get("instance_id") != INSTANCE_ID:
+        return None
+    if manifest.get("project_root") != str(PROJECT_ROOT.resolve()):
+        return None
+    if pid is not None and manifest.get("pid") != pid:
+        return None
+    if not isinstance(manifest.get("launch_token"), str) or not manifest["launch_token"]:
+        return None
+    return manifest
 
 
 def is_alive(pid: int) -> bool:
@@ -140,18 +169,46 @@ def start_detached() -> int:
     if not BOT_ENTRY.exists():
         print(f"缺少入口 {BOT_ENTRY}，无法启动。")
         return 1
+    existing = read_pid()
+    if existing is not None and is_alive(existing):
+        print(f"当前 Stella 实例已经在运行（PID {existing}）。")
+        return 1
     flags = 0
     if os.name == "nt":
         flags |= subprocess.CREATE_NEW_PROCESS_GROUP
+    launch_token = new_launch_token()
+    child_env = os.environ.copy()
+    child_env[LAUNCH_TOKEN_ENV] = launch_token
+    child_env["STELLA_INSTANCE_ID"] = INSTANCE_ID
     proc = subprocess.Popen(
         [sys.executable, str(BOT_ENTRY)],
         cwd=str(PROJECT_ROOT),
         creationflags=flags,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=child_env,
     )
-    write_pid(proc.pid)
-    print(f"后台启动 Stella（PID {proc.pid}），PID 已写入 {PID_FILE}")
+    try:
+        write_pid(proc.pid)
+        write_manifest(
+            MANIFEST_FILE,
+            manifest_for(
+                instance_id=INSTANCE_ID,
+                project_root=PROJECT_ROOT,
+                pid=proc.pid,
+                launch_token=launch_token,
+            ),
+        )
+    except OSError as e:
+        with contextlib.suppress(Exception):
+            proc.terminate()
+        clear_pid()
+        clear_manifest()
+        print(f"无法记录 Stella 实例 ownership：{e}")
+        return 1
+    print(
+        f"后台启动 Stella（PID {proc.pid}），实例 {INSTANCE_ID} 的 PID 已写入 {PID_FILE}"
+    )
     return 0
 
 
@@ -179,7 +236,16 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
             return False
         print("未发现运行中的 Stella 进程。")
         clear_pid()
+        clear_manifest()
         return True
+
+    manifest = _owned_manifest(pid)
+    if manifest is None:
+        print(
+            f"拒绝停止 PID {pid}：它不属于当前 Stella 实例（{INSTANCE_ID}）。"
+        )
+        print("未写入停止哨兵，也未发送信号；请使用启动该进程的实例执行停止。")
+        return False
 
     # 缓冲与 grace 成比例：grace 很小（测试）时不该白白多等，grace=30 时给足 5 秒
     buffer = min(STOP_WAIT_BUFFER_SECONDS, grace_seconds * 0.2)
@@ -196,6 +262,7 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
             if not is_alive(pid):
                 print("Stella 已优雅退出。")
                 clear_pid()
+                clear_manifest()
                 return True
             now = time.monotonic()
             if now - last_report >= 5.0:
@@ -217,6 +284,7 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
             if not is_alive(pid):
                 print("Stella 已优雅退出。")
                 clear_pid()
+                clear_manifest()
                 return True
             time.sleep(_POLL_INTERVAL)
 
@@ -228,6 +296,7 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
             return False
         print("Stella 已被强制终止。")
         clear_pid()
+        clear_manifest()
         return True
     finally:
         # 无论哪条路径退出都不留哨兵，避免下次启动自杀
@@ -278,9 +347,16 @@ def _fetch_live_status(timeout: float = 1.0) -> dict | None:
     if resp.status_code != 200:
         return None
     try:
-        return resp.json()
+        data = resp.json()
     except Exception:
         return None
+    if not isinstance(data, dict) or data.get("instance_id") != INSTANCE_ID:
+        return None
+    manifest = _owned_manifest()
+    token = manifest.get("launch_token") if manifest else ""
+    if token and data.get("launch_token_digest") != launch_token_digest(token):
+        return None
+    return data
 
 
 def status() -> dict:
@@ -298,6 +374,7 @@ def status() -> dict:
     pid = read_pid()
     pid_alive = pid is not None and is_alive(pid)
     live = _fetch_live_status()
+    managed = pid_alive and _owned_manifest(pid) is not None
 
     # 接口可达即视为运行中；它同时能补上 PID（进程自己报的，比文件可靠）
     alive = live is not None or pid_alive
@@ -319,7 +396,9 @@ def status() -> dict:
     return {
         "pid": pid,
         "alive": alive,
-        "pid_file_present": pid_alive,   # GUI 据此判断进程是否由 deploy stop 管得了
+        "pid_file_present": managed,   # GUI 据此判断进程是否由当前实例管得了
+        "managed": managed,
+        "instance_id": INSTANCE_ID,
         "api_reachable": live is not None,
         "log_file": str(LOG_FILE),
         "recent_log": recent,

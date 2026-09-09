@@ -126,6 +126,38 @@ header .ver {
   border-color: var(--warn);
 }
 
+/* ── 设置分页 ── */
+.settings-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.settings-tab {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  color: var(--text-faint);
+  background: transparent;
+  border-color: transparent;
+  font-size: 12px;
+}
+.settings-tab:hover { color: var(--text); border-color: var(--border); }
+.settings-tab.active {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.settings-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  margin-bottom: 10px;
+}
+.settings-panel[hidden] { display: none; }
+
 
 /* ── 启动页：只在自检期间短暂出现（通常 1~2 秒） ── */
 .boot {

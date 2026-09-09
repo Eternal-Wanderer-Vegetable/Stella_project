@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 
+from config.instance import manifest_for, write_manifest
 from deploy import process
 
 
@@ -50,6 +51,20 @@ def _stubborn_child(seconds: float = 30.0):
         creationflags=flags,
     )
     return proc, proc.pid
+
+
+def _own_pid(monkeypatch, tmp_path, pid):
+    manifest = tmp_path / "ownership.json"
+    monkeypatch.setattr(process, "MANIFEST_FILE", manifest)
+    write_manifest(
+        manifest,
+        manifest_for(
+            instance_id=process.INSTANCE_ID,
+            project_root=process.PROJECT_ROOT,
+            pid=pid,
+            launch_token="test-launch-token",
+        ),
+    )
 
 
 def test_pid_roundtrip(monkeypatch, tmp_path):
@@ -166,6 +181,7 @@ def test_stop_writes_sentinel_before_hard_kill(monkeypatch, tmp_path):
     monkeypatch.setattr(process, "_hard_kill", fake_hard_kill)
     proc, pid = _stubborn_child(30.0)
     process.write_pid(pid)
+    _own_pid(monkeypatch, tmp_path, pid)
     try:
         assert process.stop(grace_seconds=0.1) is True
         assert events[0] == "request"
@@ -186,6 +202,7 @@ def test_stop_clears_sentinel_on_exit(monkeypatch, tmp_path):
     monkeypatch.setattr(process, "PID_FILE", pid_file)
     proc, pid = _short_lived(0.5)
     process.write_pid(pid)
+    _own_pid(monkeypatch, tmp_path, pid)
     try:
         assert process.stop(grace_seconds=0.1) is True
     finally:
@@ -206,6 +223,7 @@ def test_stop_kills_live_process(monkeypatch, tmp_path):
     monkeypatch.setattr(process, "PID_FILE", pid_file)
     proc, pid = _short_lived(30.0)
     process.write_pid(pid)
+    _own_pid(monkeypatch, tmp_path, pid)
     try:
         # stop() 的返回值在「测试进程是子进程的父进程」这一特殊关系下不可靠
         # （僵尸未回收 → is_alive 恒为 True），因此只调用、不断言返回值。
@@ -220,6 +238,35 @@ def test_stop_kills_live_process(monkeypatch, tmp_path):
             proc.wait()
 
 
+def test_stop_refuses_foreign_manifest_without_signal(monkeypatch, tmp_path):
+    """PID 文件存在但 ownership 属于另一个实例时，绝不写哨兵或发信号。"""
+    events: list[str] = []
+    pid_file = tmp_path / "stella.pid"
+    manifest = tmp_path / "ownership.json"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "MANIFEST_FILE", manifest)
+    monkeypatch.setattr(process, "request_stop", lambda reason="": events.append("request"))
+    monkeypatch.setattr(process, "_hard_kill", lambda pid: events.append("kill") or True)
+    proc, pid = _short_lived(5.0)
+    process.write_pid(pid)
+    write_manifest(
+        manifest,
+        manifest_for(
+            instance_id="another-instance",
+            project_root=process.PROJECT_ROOT,
+            pid=pid,
+            launch_token="foreign-token",
+        ),
+    )
+    try:
+        assert process.stop(grace_seconds=0.1) is False
+        assert events == []
+        assert proc.poll() is None
+    finally:
+        proc.terminate()
+        proc.wait()
+
+
 def test_status_dict_shape(monkeypatch, tmp_path):
     pid_file = tmp_path / "stella.pid"
     monkeypatch.setattr(process, "PID_FILE", pid_file)
@@ -230,6 +277,8 @@ def test_status_dict_shape(monkeypatch, tmp_path):
         "pid",
         "alive",
         "pid_file_present",
+        "managed",
+        "instance_id",
         "api_reachable",
         "log_file",
         "recent_log",
@@ -270,7 +319,13 @@ def test_status_api_reachable_without_pid_file(monkeypatch, tmp_path):
         status_code = 200
 
         def json(self):
-            return {"pid": 99999, "link": {"healthy": True}, "scheduler": {}, "uptime_seconds": 12.0}
+            return {
+                "pid": 99999,
+                "instance_id": process.INSTANCE_ID,
+                "link": {"healthy": True},
+                "scheduler": {},
+                "uptime_seconds": 12.0,
+            }
 
     class _FakeHttpx:
         def get(self, url, **kwargs):
@@ -297,6 +352,7 @@ def test_status_pid_file_fallback_when_api_unreachable(monkeypatch, tmp_path):
     proc, pid = _short_lived(5.0)
     try:
         process.write_pid(pid)
+        _own_pid(monkeypatch, tmp_path, pid)
         data = process.status()
         assert data["alive"] is True
         assert data["api_reachable"] is False
@@ -315,7 +371,7 @@ def test_fetch_live_status_maps_wildcard_host(monkeypatch):
         status_code = 200
 
         def json(self):
-            return {"uptime_seconds": 42.0}
+            return {"instance_id": process.INSTANCE_ID, "uptime_seconds": 42.0}
 
     calls: list[tuple[str, dict]] = []
 
@@ -327,7 +383,10 @@ def test_fetch_live_status_maps_wildcard_host(monkeypatch):
     monkeypatch.setattr(process, "dotenv_values", lambda _p: {"HOST": "0.0.0.0", "PORT": "8080"})
     monkeypatch.setattr(process, "httpx", _FakeHttpx())
     data = process._fetch_live_status()
-    assert data == {"uptime_seconds": 42.0}
+    assert data == {
+        "instance_id": process.INSTANCE_ID,
+        "uptime_seconds": 42.0,
+    }
     assert calls[0][0] == "http://127.0.0.1:8080/stella/status"
     assert calls[0][1]["timeout"] == 1.0
     assert calls[0][1]["trust_env"] is False
@@ -353,6 +412,22 @@ def test_fetch_live_status_non_200_returns_none(monkeypatch):
 
         def json(self):
             return {}
+
+    class _FakeHttpx:
+        def get(self, url, **kwargs):
+            return _FakeResp()
+
+    monkeypatch.setattr(process, "dotenv_values", lambda _p: {})
+    monkeypatch.setattr(process, "httpx", _FakeHttpx())
+    assert process._fetch_live_status() is None
+
+
+def test_fetch_live_status_rejects_foreign_instance(monkeypatch):
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"instance_id": "another-instance", "pid": 321}
 
     class _FakeHttpx:
         def get(self, url, **kwargs):
