@@ -102,6 +102,7 @@
       const used = Number(u.used_tokens || 0);
       const inputTokens = Number(t.prompt_tokens || 0);
       const outputTokens = Number(t.completion_tokens || 0);
+      const cachedTokens = Number(t.cached_tokens || 0);
       const over = !!u.over_budget;
       const budgetPct = budget > 0 ? Math.min(Math.max((used / budget) * 100, 0), 100) : 0;
       const rows = Object.entries(u.by_key || {});
@@ -131,6 +132,9 @@
       const detailRows = rows.map(([key, d]) => {
         const isLocal = String(d.kind || "").toLowerCase() === "local";
         const isOnline = String(d.kind || "").toLowerCase() === "online";
+        const cacheTokens = isLocal
+          ? Number(d.estimated_cached_tokens || 0)
+          : Number(d.cached_tokens || 0);
         const theoretical = isLocal
           ? theoreticalRate(d.estimated_prompt_tokens, d.estimated_cached_tokens)
           : isOnline
@@ -151,7 +155,7 @@
             <td class="num">${fmtNum(d.calls)}</td>
             <td class="num">${fmtNum(d.prompt_tokens)}</td>
             <td class="num">${fmtNum(d.completion_tokens)}</td>
-            <td class="num">${fmtNum(d.cached_tokens)}</td>
+            <td class="num">${fmtNum(cacheTokens)}</td>
             <td class="num rate ${rateClass(theoretical)}">${rateText(theoretical)}</td>
             <td class="num rate ${rateClass(actual)}">${rateText(actual)}</td>
             <td class="num ${d.failures ? "bad" : ""}">${fmtNum(d.failures)}</td>
@@ -251,7 +255,7 @@
                     <td class="num">${fmtNum(t.calls)}</td>
                     <td class="num">${fmtNum(inputTokens)}</td>
                     <td class="num">${fmtNum(outputTokens)}</td>
-                    <td class="num">${fmtNum(cachedTokens)}</td>
+                    <td class="num">${fmtNum(localRows.length ? theoreticalCached : cachedTokens)}</td>
                     <td class="num rate ${rateClass(theoreticalTotalRate)}">${rateText(theoreticalTotalRate)}</td>
                     <td class="num rate ${rateClass(actualTotalRate)}">${rateText(actualTotalRate)}</td>
                     <td class="num ${t.failures ? "bad" : ""}">${fmtNum(t.failures)}</td>
