@@ -36,12 +36,17 @@ def request_stop(reason: str = "") -> None:
     """
     path = _sentinel_path()
     try:
+        from config import INSTANCE_ID, STELLA_LAUNCH_TOKEN
+
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "pid": os.getpid(),
             "reason": reason,
+            "instance_id": INSTANCE_ID,
         }
+        if STELLA_LAUNCH_TOKEN:
+            payload["launch_token"] = STELLA_LAUNCH_TOKEN
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         tmp.replace(path)

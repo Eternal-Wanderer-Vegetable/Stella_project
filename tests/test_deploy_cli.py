@@ -158,6 +158,9 @@ def test_paths_json_exposes_both_roots(capsys):
     assert data["project_root"] and data["stella_home"]
     assert data["stella_home_source"]
     assert data["db_path"].endswith("agent_memory.db")
+    assert data["instance_id"]
+    assert data["instance_runtime_dir"]
+    assert data["instance_pid_file"]
 
 
 def _fake_capabilities() -> dict:

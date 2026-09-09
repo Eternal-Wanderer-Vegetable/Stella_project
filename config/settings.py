@@ -30,6 +30,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from . import home
+from .instance import (
+    LAUNCH_TOKEN_ENV,
+    manifest_path,
+    pid_path,
+    resolve_instance_id,
+    runtime_dir,
+    stop_sentinel_path,
+)
 
 # ============================================================
 # Stella Project — 集中配置
@@ -68,6 +76,23 @@ if _ENVIRONMENT in ("dev", "development"):
     load_dotenv(STELLA_HOME / ".env.dev", override=True)
 elif _ENVIRONMENT in ("prod", "production"):
     load_dotenv(STELLA_HOME / ".env.prod", override=True)
+
+# 进程控制身份。它只隔离 PID / 停止哨兵 / ownership manifest，不改变
+# STELLA_HOME 下的记忆、人格、空间与配置共享语义。
+INSTANCE_ID = resolve_instance_id(PROJECT_ROOT)
+INSTANCE_RUNTIME_DIR = runtime_dir(STELLA_HOME, INSTANCE_ID)
+INSTANCE_PID_FILE = pid_path(STELLA_HOME, INSTANCE_ID)
+INSTANCE_MANIFEST_PATH = manifest_path(STELLA_HOME, INSTANCE_ID)
+INSTANCE_STOP_SENTINEL = stop_sentinel_path(STELLA_HOME, INSTANCE_ID)
+_custom_stop_sentinel = os.getenv("STELLA_STOP_SENTINEL", "").strip()
+if _custom_stop_sentinel:
+    _custom_stop_path = Path(_custom_stop_sentinel).expanduser().resolve()
+    STELLA_STOP_SENTINEL = _custom_stop_path.with_name(
+        f"{_custom_stop_path.stem}.{INSTANCE_ID}{_custom_stop_path.suffix}"
+    )
+else:
+    STELLA_STOP_SENTINEL = INSTANCE_STOP_SENTINEL
+STELLA_LAUNCH_TOKEN = os.getenv(LAUNCH_TOKEN_ENV, "").strip()
 
 
 def _env(key: str, default: str = "") -> str:
@@ -884,7 +909,6 @@ SHUTDOWN_GRACE_SECONDS = _env_float("SHUTDOWN_GRACE_SECONDS", 30.0)
 # 路径可覆盖：项目目录只读时指到可写位置。
 # 不用 POST /shutdown：status_api 只读，加写接口就多一个无鉴权的写接口，
 # HOST=0.0.0.0 时就是局域网可触发的远程关机。哨兵靠文件系统权限天然只限本机用户。
-STELLA_STOP_SENTINEL = _env_path("STELLA_STOP_SENTINEL", _user_path(".stella-stop-request"))
 # watcher 轮询间隔（秒）：轮询过于频繁只是空转，0.5s 足够让停止按钮几乎即时响应
 STOP_WATCH_INTERVAL_SECONDS = _env_float("STOP_WATCH_INTERVAL_SECONDS", 0.5)
 

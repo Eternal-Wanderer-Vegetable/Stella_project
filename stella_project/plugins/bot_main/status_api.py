@@ -17,6 +17,7 @@ HTTP 端点则天然「连不上就是没运行」。
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import os
 import time
@@ -29,7 +30,13 @@ from importlib.metadata import PackageNotFoundError, version
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from config import ALLOWED_GROUPS, STELLA_STATUS_API_ENABLED, STELLA_STATUS_API_PATH
+from config import (
+    ALLOWED_GROUPS,
+    INSTANCE_ID,
+    STELLA_LAUNCH_TOKEN,
+    STELLA_STATUS_API_ENABLED,
+    STELLA_STATUS_API_PATH,
+)
 
 # 进程启动时刻：模块 import 即执行（ai_gateway 在插件加载时导入本模块）。
 # 放这里比放 setup_status_api() 里早——即便路由因故未注册，uptime 基准也更接近真实启动点。
@@ -119,6 +126,12 @@ def build_payload(
     """
     return {
         "version": _project_version(),
+        "instance_id": INSTANCE_ID,
+        "launch_token_digest": (
+            hashlib.sha256(STELLA_LAUNCH_TOKEN.encode("utf-8")).hexdigest()
+            if STELLA_LAUNCH_TOKEN
+            else ""
+        ),
         "pid": pid,
         "uptime_seconds": time.time() - started_at,
         "allowed_group_count": len(ALLOWED_GROUPS),

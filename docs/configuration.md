@@ -1022,9 +1022,14 @@ curl -i http://[::1]:8080/stella/status
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
+| `STELLA_INSTANCE_ID` | 由程序目录派生 | 实例身份。不同安装目录默认不同；手工指定时，并行实例必须使用不同 ID |
 | `SHUTDOWN_GRACE_SECONDS` | `30.0` | Bot 侧停止时等待在途任务（整合/压缩）收尾的上限（秒） |
-| `STELLA_STOP_SENTINEL` | `.stella-stop-request` | 停止请求哨兵路径（deploy stop 写入、Bot 内 watcher 观察后自行退出）；项目目录只读时可改到可写位置 |
+| `STELLA_STOP_SENTINEL` | `.stella/instances/<instance-id>/stop-request.json` | 停止请求哨兵路径；自定义路径也会自动附加实例 ID |
 | `STOP_WATCH_INTERVAL_SECONDS` | `0.5` | 哨兵轮询间隔（秒） |
+
+PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`。`deploy stop` 只会停止
+拥有匹配 manifest 的 PID；状态接口还会校验实例 ID，因此测试版关闭窗口不会误杀正式版。
+本次隔离只覆盖进程控制，不改变 `STELLA_HOME` 下配置、记忆、空间与人格的共享语义。
 
 停止链路：deploy 写哨兵 → Bot 内 watcher 观察到后触发 uvicorn 优雅关闭（走 `on_shutdown` → 整合收尾）→ 超时降级信号 → 硬杀兜底。不用 `POST /shutdown`：status_api 只读，加写接口就多一个无鉴权、局域网可触发的远程关机。详见 development.md 的「停止链路（哨兵优先）」。
 

@@ -53,7 +53,7 @@
             return;
           }
           st.textContent = "尚未完成配置，正在打开配置向导…";
-          setTimeout(() => navigateToPage("./config.html", { replace: true }), 300);
+          setTimeout(() => navigateToPage("./settings.html?page=connection", { replace: true }), 300);
           return;
         }
         const data = await runDoctor();
