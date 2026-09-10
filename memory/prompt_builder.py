@@ -15,9 +15,9 @@ v2（记忆系统升级）新增分区拼接：聊天素材（Conversation Memor
 from __future__ import annotations
 
 import contextlib
+import unicodedata
 from collections.abc import Iterable
 from datetime import datetime
-import unicodedata
 
 from config import (
     MEMORY_BEHAVIOR_MAX_TOKENS,

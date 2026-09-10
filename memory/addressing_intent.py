@@ -259,9 +259,8 @@ async def classify_addressing(
         return AddressingRequest(NOT_ADDRESS_REQUEST, reason=reason or "no_intent")
 
     target = _normalize_user_id(target_user_id)
-    if target and target != "0":
-        if operation == SET_SELF_ADDRESS:
-            operation = SET_OTHER_ADDRESS
+    if target and target != "0" and operation == SET_SELF_ADDRESS:
+        operation = SET_OTHER_ADDRESS
 
     term = extract_address_term(value) if operation in (
         SET_SELF_ADDRESS,

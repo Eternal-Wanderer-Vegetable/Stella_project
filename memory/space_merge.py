@@ -135,7 +135,7 @@ def _resolve_address_conflicts(
     by_user: dict[str, list[tuple[str, str, str]]] = {}
     for user_id, space, term, updated_at in rows:
         by_user.setdefault(str(user_id), []).append(
-            (str(space), str(term), str(updated_at or ""),)
+            (str(space), str(term), str(updated_at or ""))
         )
     for user_id, entries in sorted(by_user.items()):
         if len(entries) < 2:

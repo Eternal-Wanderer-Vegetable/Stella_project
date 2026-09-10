@@ -488,7 +488,7 @@ ADDRESSING_INTENT_TIMEOUT = _env_float(
 ADDRESSING_INTENT_THRESHOLD = _env_float("ADDRESSING_INTENT_THRESHOLD", 0.58)
 ADDRESSING_INTENT_MARGIN = _env_float("ADDRESSING_INTENT_MARGIN", 0.06)
 
-# 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）： 
+# 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
 # rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
 # 一定填满 mode_limit”的超召回噪音（Retrieval Spec 第 7 节：不要固定 Top-K）。
 # 0.40 的经验依据（embedding 路径）：仅靠领域(1.0)+usage(5)+recency、语义≈0 的

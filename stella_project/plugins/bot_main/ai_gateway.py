@@ -57,12 +57,12 @@ from nonebot.rule import Rule
 
 from capability.hooks import register as register_capability_hook
 from config import (
+    ADDRESSING_ENABLED,
     ALLOWED_GROUPS,
     ASTRBOT_COMPAT_ALLOW_PRIVATE,
     ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED,
     ASTRBOT_PLUGIN_HOT_RELOAD_WATCH,
     ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL,
-    ADDRESSING_ENABLED,
     CAPABILITY_QUERY_ENABLED,
     CONSOLIDATION_LOCAL_BATCH_SIZE,
     CONSOLIDATION_MAX_ROUNDS_PER_RUN,
@@ -105,8 +105,7 @@ from core.reply_gate import get_reply_gate
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from extensions import load_extensions
-from memory import expression_learning
-from memory import addressing
+from memory import addressing, expression_learning
 from memory.addressing_intent import (
     CLEAR_ADDRESS,
     NOT_ADDRESS_REQUEST,

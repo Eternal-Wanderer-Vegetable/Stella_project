@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import memory.proactive as proactive_module
 from core.context import ChatContext
 from memory import addressing, pre_processors
-import memory.proactive as proactive_module
 from memory.participation.decision import ParticipationDecision
 from memory.participation.scorer import ScoreBreakdown
 from memory.proactive import ProactiveController
