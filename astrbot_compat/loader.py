@@ -617,7 +617,7 @@ def load_all_plugins() -> list[StarMetadata]:
 async def initialize_plugins() -> None:
     """调用每个插件的 initialize()，随后触发加载完成类钩子。"""
     from .context import _MODEL_DEPENDENT_PLUGINS
-    from .exceptions import StellaCompatNotSupported
+    from .exceptions import StellaCompatModelUnavailable, StellaCompatNotSupported
     from .pipeline import emit_hook
 
     for md in list(star_registry):
@@ -625,6 +625,15 @@ async def initialize_plugins() -> None:
             continue
         try:
             await md.star_cls.initialize()
+        except StellaCompatModelUnavailable as e:
+            logger.warning(
+                f"[astrbot_compat] 插件 {md.plugin_id} 依赖大模型能力，但当前不可用，已标记为受限: {e}",
+            )
+            md.activated = False
+            _MODEL_DEPENDENT_PLUGINS.add(md.plugin_id)
+            _failed[_failed_key(md, md.root_dir_name)] = (
+                f"StellaCompatModelUnavailable: {e}"
+            )
         except StellaCompatNotSupported as e:
             logger.warning(
                 f"[astrbot_compat] 插件 {md.plugin_id} 依赖未实现能力 {e}，已标记为受限",

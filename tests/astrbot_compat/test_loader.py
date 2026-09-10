@@ -17,6 +17,7 @@ import asyncio
 import json
 import shutil
 import sys
+import types
 import uuid
 
 import pytest
@@ -170,6 +171,31 @@ def test_lifecycle_hooks_are_called(install_plugin):
     assert "initialize" in mod.TRACE
     asyncio.run(loader.terminate_plugins())
     assert "terminate" in mod.TRACE
+
+
+def test_model_dependent_initialize_is_limited_without_disabling_ordinary_plugins(
+    install_plugin, monkeypatch,
+):
+    from config import settings
+
+    first = install_plugin()
+    second = install_plugin()
+    limited = loader.load_plugin(first.path)
+    ordinary = loader.load_plugin(second.path)
+    assert limited is not None
+    assert ordinary is not None
+
+    async def requires_model(self):
+        await self.context.llm_generate(prompt="initialization probe")
+
+    limited.star_cls.initialize = types.MethodType(requires_model, limited.star_cls)
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False, raising=False)
+
+    asyncio.run(loader.initialize_plugins())
+
+    assert limited.activated is False
+    assert ordinary.activated is True
+    assert "StellaCompatModelUnavailable" in loader.get_failed_plugins()[first.dir_name]
 
 
 def test_terminate_timeout_is_reported_as_timeout(install_plugin, caplog, monkeypatch):

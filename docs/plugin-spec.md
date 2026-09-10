@@ -290,7 +290,33 @@ if resp.status_code != 200:
 
 这意味着**无参工具的副作用会更早发生**，进一步说明 [§3](#3-两条接入通路怎么选) 那条「写操作不做成工具」的必要性。
 
-### 6.9 一个能力多个实现
+### 6.9 无聊天模型时的能力边界
+
+本文所说的“无模型”特指**聊天生成、Agent/Comes 生成和 Level 2 Router fallback 不可用**，不包括 embedding 模型。只要 embedding 服务仍可用，Level 1 语义路由仍会运行；Level 0 关键词规则始终不需要模型。Level 2 不能在生成模型缺席时强行启用。
+
+要让有参查询（例如“查东京明天天气”）在无聊天模型时自动完成，能力声明需要提供确定性输入契约。`input_schema` 会与工具的 JSON schema 合并，支持 `regex`/`pattern`、`enum`、`default` 和基础类型转换：
+
+```toml
+[[capability]]
+id = "weather.query"
+providers = ["get_weather"]
+
+[capability.input_schema]
+required = ["city", "date"]
+
+[capability.input_schema.properties.city]
+type = "string"
+regex = "查(?P<city>[^，。？?]+?)(?:今天|明天|后天)?天气"
+
+[capability.input_schema.properties.date]
+type = "string"
+regex = "(今天|明天|后天)"
+default = "今天"
+```
+
+只有在能力已确定、provider/tool 唯一、必填输入完整且校验通过时，Comes 才会直接调用工具并把安全摘要直接回复给用户，不经过聊天生成。缺参、歧义或校验失败时不会让 Agent 猜参数，而是回复需要补充的信息；工具内部失败只会回复通用不可用提示，不会泄漏原始 JSON、异常栈或模型内部文本。
+
+### 6.10 一个能力多个实现
 
 一条 `capability` 可以有多个 `providers`（比如两个不同的天气插件）。选择顺序按 `priority`，失败的 provider 会被记账并短暂退避，期间自动切到下一个。
 
@@ -406,7 +432,7 @@ stella:
 | `@filter.llm_tool` 注册的工具 | 注册成功 ≠ 能被聊天触发，需要 `capability.toml` | [§6.2](#62-capabilitytoml-与三层优先级) |
 | `metadata.yaml` 的 `astrbot_version` | 不匹配只告警，仍然加载 | [§15](#15-版本与兼容策略) |
 | `requirements.txt` | 默认不自动 `pip install`，只在日志点名 | [§2](#2-目录结构清单) |
-| `Context.llm_generate` / `tool_loop_agent` / `get_current_chat_provider_id` | `ASTRBOT_LLM_ENABLED=false` 时抛 `StellaCompatNotSupported` | — |
+| `Context.llm_generate` / `tool_loop_agent` / `get_current_chat_provider_id` | 生成模型不可用时抛 `StellaCompatModelUnavailable`；普通 command/regex/event 插件仍可运行 | — |
 
 **③ 抛 `StellaCompatNotSupported`**
 

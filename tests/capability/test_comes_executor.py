@@ -227,6 +227,77 @@ def test_direct_call_passes_task_input_as_args(astr_event):
     assert seen == {"city": "东京"}
 
 
+def test_parameterized_deterministic_task_direct_calls_without_model(monkeypatch, astr_event):
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False)
+    seen = {}
+
+    async def handler(event, city: str):
+        seen["city"] = city
+        return f"{city}: 晴"
+
+    _register_tool("get_weather", handler, required=["city"])
+    reg = _registry_with("weather.query", ["get_weather"])
+    task = _task(
+        input={"city": "东京"},
+        constraints={"deterministic_route": True, "input_status": "complete"},
+    )
+    result = _run(execute(task, event=astr_event, target=reg))
+    assert result.status is ResultStatus.SUCCESS
+    assert result.metadata["direct_call"] is True
+    assert seen == {"city": "东京"}
+    assert result.summary == "东京: 晴"
+
+
+def test_missing_deterministic_input_does_not_call_agent(monkeypatch, astr_event, fake_llm):
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False)
+    called = False
+
+    async def handler(event, city: str):
+        nonlocal called
+        called = True
+        return city
+
+    _register_tool("get_weather", handler, required=["city"])
+    reg = _registry_with("weather.query", ["get_weather"])
+    task = _task(
+        input={},
+        constraints={
+            "deterministic_route": True,
+            "input_status": "missing",
+            "missing_input": ["city"],
+        },
+    )
+    result = _run(execute(task, event=astr_event, target=reg))
+    assert result.status is ResultStatus.NEEDS_CLARIFICATION
+    assert result.metadata["missing_input"] == ["city"]
+    assert called is False
+    assert fake_llm.calls == []
+
+
+def test_ambiguous_deterministic_provider_does_not_call_agent(monkeypatch, astr_event, fake_llm):
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False)
+    async def handler(event):
+        return "unused"
+
+    _register_tool("first", handler)
+    _register_tool("second", handler)
+    reg = _registry_with("c", ["first", "second"])
+    task = _task(
+        "c",
+        constraints={"deterministic_route": True, "input_status": "complete"},
+    )
+    result = _run(execute(task, event=astr_event, target=reg))
+    assert result.status is ResultStatus.NEEDS_CLARIFICATION
+    assert result.metadata["ambiguous_input"] == ["provider"]
+    assert fake_llm.calls == []
+
+
 # ---------- 受限 agent ----------
 
 

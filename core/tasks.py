@@ -69,6 +69,7 @@ class ResultStatus(str, Enum):
     FAILED = "failed"
     PARTIAL = "partial"
     CANCELLED = "cancelled"
+    NEEDS_CLARIFICATION = "needs_clarification"
 
 
 @dataclass

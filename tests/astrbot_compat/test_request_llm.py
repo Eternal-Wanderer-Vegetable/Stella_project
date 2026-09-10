@@ -64,6 +64,20 @@ def test_list_args_are_independent(fake_bot, make_event):
     assert event.request_llm(prompt="2").image_urls == []
 
 
+def test_model_availability_keeps_embedding_independent(monkeypatch):
+    from astrbot_compat.llm.manager import ProviderManager
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False)
+    monkeypatch.setattr(settings, "MEMORY_EMBEDDING_ENABLED", True)
+    monkeypatch.setattr(settings, "MEMORY_EMBEDDING_BASE_URL", "http://embed")
+    monkeypatch.setattr(settings, "MEMORY_EMBEDDING_MODEL", "embed-model")
+
+    manager = ProviderManager()
+    assert manager.availability("plugin").available is False
+    assert manager.availability("embedding").available is True
+
+
 # ---------------------------------------------------------------- 端到端
 
 

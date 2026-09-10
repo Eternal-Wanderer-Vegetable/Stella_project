@@ -73,6 +73,17 @@ def _failed(task: Task, reason: str, **meta: Any) -> Result:
     )
 
 
+def _needs_clarification(task: Task, **meta: Any) -> Result:
+    """Return a user-safe structured result without exposing internal errors."""
+    return Result(
+        task_id=task.task_id,
+        status=ResultStatus.NEEDS_CLARIFICATION,
+        data=None,
+        summary="",
+        metadata={"capability": task.capability, "reason": "需要补充必要信息", **meta},
+    )
+
+
 # ============================================================
 # Provider → ToolSet
 # ============================================================
@@ -118,7 +129,14 @@ def _required_params(tool: Any) -> list[str]:
     return [str(name) for name in required] if isinstance(required, list) else []
 
 
-def can_direct_call(tool_set: Any) -> bool:
+def _missing_required_params(task: Task | None, tool: Any) -> list[str]:
+    required = _required_params(tool)
+    if task is None:
+        return required
+    return [name for name in required if name not in (task.input or {})]
+
+
+def can_direct_call(tool_set: Any, task: Task | None = None) -> bool:
     """能否跳过 LLM 直接调工具。
 
     条件：只有一个工具，且它没有必填参数。此时模型唯一能做的就是「调它、不带参数」，
@@ -126,7 +144,10 @@ def can_direct_call(tool_set: Any) -> bool:
     """
     if len(tool_set.tools) != 1:
         return False
-    return not _required_params(tool_set.tools[0])
+    required = _required_params(tool_set.tools[0])
+    if required and not bool((task.constraints if task else {}).get("deterministic_route")):
+        return False
+    return not _missing_required_params(task, tool_set.tools[0])
 
 
 # ============================================================
@@ -303,12 +324,53 @@ async def execute(
         return _failed(task, f"能力 {task.capability} 的工具全部不可用", missing=missing)
 
     used_direct = False
+    direct_candidate = len(tool_set.tools) == 1
+    direct_missing = _missing_required_params(task, tool_set.tools[0]) if direct_candidate else []
+    deterministic_route = bool(task.constraints.get("deterministic_route"))
     try:
-        if s.COMES_DIRECT_CALL_NO_ARGS and can_direct_call(tool_set):
+        if s.COMES_DIRECT_CALL_NO_ARGS and can_direct_call(tool_set, task):
             used_direct = True
             completion = ""
             outputs = await asyncio.wait_for(
                 _direct_call(task, tool_set.tools[0], event, s.COMES_TOOL_TIMEOUT),
+                timeout=s.COMES_TASK_TIMEOUT,
+            )
+        elif deterministic_route and (
+            task.constraints.get("input_status") in {"missing", "ambiguous", "invalid"}
+            or direct_missing
+        ):
+            try:
+                from astrbot_compat.llm.manager import get_provider_manager
+
+                generation_available = get_provider_manager().availability("plugin").available
+            except Exception:
+                generation_available = False
+            if not generation_available:
+                return _needs_clarification(
+                    task,
+                    missing_input=task.constraints.get("missing_input", direct_missing),
+                    ambiguous_input=task.constraints.get("ambiguous_input", []),
+                    input_errors=task.constraints.get("input_errors", []),
+                )
+            completion, outputs = await asyncio.wait_for(
+                _agent_call(task, tool_set, event, _session_of(event)),
+                timeout=s.COMES_TASK_TIMEOUT,
+            )
+        elif deterministic_route and len(tool_set.tools) != 1:
+            try:
+                from astrbot_compat.llm.manager import get_provider_manager
+
+                generation_available = get_provider_manager().availability("plugin").available
+            except Exception:
+                generation_available = False
+            if not generation_available:
+                return _needs_clarification(
+                    task,
+                    ambiguous_input=["provider"],
+                    reason="无法在无模型模式下唯一选择工具",
+                )
+            completion, outputs = await asyncio.wait_for(
+                _agent_call(task, tool_set, event, _session_of(event)),
                 timeout=s.COMES_TASK_TIMEOUT,
             )
         else:

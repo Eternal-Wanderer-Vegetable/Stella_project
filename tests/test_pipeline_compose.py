@@ -194,3 +194,25 @@ def test_normal_reply_is_exactly_one_llm_call():
     assert ctx.llm_call_count == 1
     # 裸管线未注册 parse_output 后钩子，直接断言原始输出
     assert "好" in ctx.raw_output
+
+
+def test_direct_capability_reply_skips_generation():
+    from core.context import ChatContext
+    from core.pipeline import Pipeline
+
+    pipeline = Pipeline(timeout=5.0)
+    backend = _CountingBackend()
+
+    async def deterministic_reply(ctx):
+        ctx.reply = "东京明天 27℃，晴。"
+        ctx.lines = [ctx.reply]
+        return ctx
+
+    pipeline.register_pre_hook(deterministic_reply, priority=50)
+    pipeline.set_llm_backend(backend)
+    ctx = asyncio.run(
+        pipeline.run(ChatContext(user_id=1, group_id=1, msg_id=1, message="查东京天气"))
+    )
+    assert backend.calls == 0
+    assert ctx.reply == "东京明天 27℃，晴。"
+    assert ctx.lines == ["东京明天 27℃，晴。"]

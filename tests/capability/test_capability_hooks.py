@@ -129,6 +129,67 @@ def test_build_tool_tasks_one_per_capability():
     assert len({t.task_id for t in tasks}) == 2
 
 
+def test_build_tool_tasks_extracts_declared_inputs():
+    from astrbot_compat.llm.tool import FunctionTool, llm_tools
+    from capability.registry import CapabilityRegistry
+
+    async def handler(event, city: str, date: str):
+        return f"{city} {date}"
+
+    llm_tools.add_tool(
+        FunctionTool(
+            name="get_weather",
+            description="天气",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string"},
+                    "date": {"type": "string"},
+                },
+                "required": ["city", "date"],
+            },
+            handler=handler,
+        ),
+    )
+    target = CapabilityRegistry()
+    target.register(
+        Capability(
+            id="weather.query",
+            input_schema={
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "regex": r"查(?P<city>[\u4e00-\u9fff]{2,8})天气",
+                    },
+                    "date": {"type": "string", "regex": r"(?P<date>明天|今天)"},
+                },
+                "required": ["city", "date"],
+            },
+            providers=[
+                CapabilityProvider(
+                    provider_id="weather#get",
+                    capability_id="weather.query",
+                    tool_name="get_weather",
+                ),
+            ],
+        ),
+    )
+    route = Route(
+        tool=True,
+        deterministic=True,
+        requires_generation=False,
+        capabilities=[CapabilityHit("weather.query", 1.0)],
+    )
+    tasks = build_tool_tasks(
+        route,
+        "帮我查东京天气，明天的",
+        target=target,
+        tool_manager=llm_tools,
+    )
+    assert tasks[0].input == {"city": "东京", "date": "明天"}
+    assert tasks[0].constraints["input_status"] == "complete"
+
+
 def test_build_tool_tasks_empty_route():
     assert build_tool_tasks(Route(), "msg") == []
 
@@ -190,6 +251,86 @@ def test_comes_runs_and_fills_summaries(stub_route, spy_memory, spy_comes, fake_
     assert len(spy_comes) == 1
     assert ctx.tool_summaries == ["weather.query 的结果"]
     assert len(ctx.task_results) == 1
+
+
+def test_deterministic_result_populates_direct_reply(
+    stub_route, spy_memory, spy_comes, fake_bot, fake_nb_event,
+):
+    stub_route(
+        Route(
+            tool=True,
+            requires_generation=False,
+            deterministic=True,
+            capabilities=[CapabilityHit("weather.query", 1.0)],
+        ),
+    )
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    _run(activate_capabilities(ctx))
+    assert ctx.reply == "weather.query 的结果"
+    assert ctx.lines == ["weather.query 的结果"]
+
+
+def test_deterministic_missing_input_populates_clarification_reply(
+    monkeypatch, stub_route, spy_memory, fake_bot, fake_nb_event,
+):
+    import capability.comes as comes_pkg
+
+    async def _fake(tasks, *, event, target=None, tool_manager=None):
+        return [
+            Result(
+                task_id=tasks[0].task_id,
+                status=ResultStatus.NEEDS_CLARIFICATION,
+                summary="",
+                metadata={"missing_input": ["city"]},
+            ),
+        ]
+
+    monkeypatch.setattr(comes_pkg, "execute_all", _fake)
+    stub_route(
+        Route(
+            tool=True,
+            requires_generation=False,
+            deterministic=True,
+            capabilities=[CapabilityHit("weather.query", 1.0)],
+        ),
+    )
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    _run(activate_capabilities(ctx))
+
+    assert ctx.reply == "请补充必要信息：city。"
+    assert ctx.lines == [ctx.reply]
+
+
+def test_deterministic_failure_populates_safe_unavailable_reply(
+    monkeypatch, stub_route, spy_memory, fake_bot, fake_nb_event,
+):
+    import capability.comes as comes_pkg
+
+    async def _fake(tasks, *, event, target=None, tool_manager=None):
+        return [
+            Result(
+                task_id=tasks[0].task_id,
+                status=ResultStatus.FAILED,
+                summary="",
+                metadata={"reason": "internal details must stay private"},
+            ),
+        ]
+
+    monkeypatch.setattr(comes_pkg, "execute_all", _fake)
+    stub_route(
+        Route(
+            tool=True,
+            requires_generation=False,
+            deterministic=True,
+            capabilities=[CapabilityHit("weather.query", 1.0)],
+        ),
+    )
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    _run(activate_capabilities(ctx))
+
+    assert ctx.reply == "这个功能暂时不可用，请稍后再试。"
+    assert ctx.lines == [ctx.reply]
+    assert "internal details" not in ctx.reply
 
 
 def test_comes_skipped_without_platform_handles(stub_route, spy_memory, spy_comes):

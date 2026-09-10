@@ -10,7 +10,11 @@ import logging
 import sys
 from typing import Any
 
-from .exceptions import StellaCompatNotSupported, StellaCompatUnsupportedAttribute
+from .exceptions import (
+    StellaCompatModelUnavailable,
+    StellaCompatNotSupported,
+    StellaCompatUnsupportedAttribute,
+)
 
 _MODEL_DEPENDENT_PLUGINS: set[str] = set()
 logger = logging.getLogger("astrbot_compat.context")
@@ -305,7 +309,9 @@ class Context:
     async def get_current_chat_provider_id(self, umo: str) -> str:
         provider = await self.get_using_provider_async(umo)
         if provider is None:
-            raise StellaCompatNotSupported("Context.get_current_chat_provider_id（LLM 未启用）")
+            raise StellaCompatModelUnavailable(
+                "Context.get_current_chat_provider_id（LLM 未启用）",
+            )
         return provider.meta().id
 
     def add_llm_tools(self, *tools: Any) -> None:
@@ -338,7 +344,7 @@ class Context:
         """
         provider = self.get_provider_by_id(chat_provider_id)
         if provider is None:
-            raise StellaCompatNotSupported("Context.llm_generate（LLM 未启用）")
+            raise StellaCompatModelUnavailable("Context.llm_generate（LLM 未启用）")
         return await provider.text_chat(
             prompt=prompt,
             image_urls=image_urls,
@@ -371,7 +377,7 @@ class Context:
 
         provider = self.get_provider_by_id(chat_provider_id)
         if provider is None:
-            raise StellaCompatNotSupported("Context.tool_loop_agent（LLM 未启用）")
+            raise StellaCompatModelUnavailable("Context.tool_loop_agent（LLM 未启用）")
         req = ProviderRequest(
             prompt=prompt,
             session_id=getattr(event, "unified_msg_origin", ""),

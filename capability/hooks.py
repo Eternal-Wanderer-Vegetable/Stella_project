@@ -38,8 +38,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from capability.input_parser import merge_schemas, parse_input
+from capability.registry import CapabilityRegistry
+from capability.registry import registry as _default_registry
 from core.context import ChatContext
-from core.tasks import Result, Task, TaskType, next_task_id
+from core.tasks import Result, ResultStatus, Task, TaskType, next_task_id
 
 # 本钩子的注册优先级。必须小于 build_context(50)——短期上下文（摘要 + 尾巴）
 # 是对话素材，与「要不要检索长期记忆」无关，永远该先组装好。
@@ -64,7 +67,13 @@ def _logger():
 # ============================================================
 
 
-def build_tool_tasks(route: Any, message: str) -> list[Task]:
+def build_tool_tasks(
+    route: Any,
+    message: str,
+    *,
+    target: CapabilityRegistry | None = None,
+    tool_manager=None,
+) -> list[Task]:
     """把 Router 的能力命中转成 ``tool.execute`` 任务。
 
     ``objective`` 直接用用户原话：它就是语义层的任务目标，而且是最忠实的版本。
@@ -73,15 +82,51 @@ def build_tool_tasks(route: Any, message: str) -> list[Task]:
     语义层，用户原话完全满足；它不该是「调用 weather_api()」这种执行指令。
     """
     tasks: list[Task] = []
+    registry = target if target is not None else _default_registry
+    if tool_manager is None:
+        try:
+            from astrbot_compat.llm.tool import llm_tools
+
+            tool_manager = llm_tools
+        except Exception:
+            tool_manager = None
     for hit in getattr(route, "capabilities", None) or []:
+        capability = registry.get(hit.capability_id)
+        capability_schema = getattr(capability, "input_schema", {}) if capability else {}
+        tool_schema: dict[str, Any] = {}
+        if capability is not None and tool_manager is not None:
+            for provider in capability.enabled_providers():
+                tool = tool_manager.get_tool(provider.tool_name)
+                if tool is not None and getattr(tool, "active", True):
+                    tool_schema = getattr(tool, "parameters", {}) or {}
+                    break
+        schema = merge_schemas(capability_schema, tool_schema)
+        parsed = parse_input(message, schema)
+        status = "complete"
+        if parsed.errors:
+            status = "invalid"
+        elif parsed.ambiguous:
+            status = "ambiguous"
+        elif parsed.missing:
+            status = "missing"
         tasks.append(
             Task(
                 task_id=next_task_id(),
                 type=TaskType.TOOL_EXECUTE,
                 capability=hit.capability_id,
                 objective=message,
+                input=parsed.values,
                 constraints={"router_score": hit.score},
             ),
+        )
+        tasks[-1].constraints.update(
+            {
+                "input_status": status,
+                "missing_input": list(parsed.missing),
+                "ambiguous_input": list(parsed.ambiguous),
+                "input_errors": list(parsed.errors),
+                "deterministic_route": bool(getattr(route, "deterministic", False)),
+            },
         )
     return tasks
 
@@ -116,6 +161,35 @@ async def _run_comes(ctx: ChatContext, route: Any) -> None:
     # 只有 ok 且有摘要的结果才进 prompt。失败的任务不告知 Stella——
     # 它不该向用户解释某个工具报了什么错，那是运维信息不是聊天素材。
     ctx.tool_summaries = [r.summary for r in results if r.ok and r.summary]
+    if not getattr(route, "requires_generation", True):
+        _set_direct_reply(ctx, results)
+
+
+def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
+    """Turn deterministic results into one safe reply before Pipeline generation."""
+    summaries = [r.summary.strip() for r in results if r.ok and r.summary.strip()]
+    if summaries:
+        text = "\n".join(summaries)
+    else:
+        missing: list[str] = []
+        ambiguous: list[str] = []
+        for result in results:
+            missing.extend(result.metadata.get("missing_input") or [])
+            ambiguous.extend(result.metadata.get("ambiguous_input") or [])
+        if missing:
+            fields = "、".join(dict.fromkeys(str(item) for item in missing))
+            text = f"请补充必要信息：{fields}。"
+        elif ambiguous:
+            fields = "、".join(dict.fromkeys(str(item) for item in ambiguous))
+            text = f"我没能确定这些信息：{fields}，请换一种说法。"
+        elif any(result.status is ResultStatus.NEEDS_CLARIFICATION for result in results):
+            text = "请补充完成这项操作所需的信息。"
+        elif results and all(not result.ok for result in results):
+            text = "这个功能暂时不可用，请稍后再试。"
+        else:
+            return
+    ctx.reply = text
+    ctx.lines = [text]
 
 
 async def _build_astr_event(ctx: ChatContext) -> Any:

@@ -119,6 +119,8 @@ def test_route_to_dict_is_flat_and_readable():
     # 不用 asdict：嵌套 dict 在日志里远不如 "weather.query=0.82" 直观
     assert snap["capabilities"] == ["weather.query=0.82"]
     assert snap["elapsed"] == 0.123
+    assert snap["requires_generation"] is True
+    assert snap["deterministic"] is False
 
 
 def test_route_repr_lists_active_labels():
@@ -260,6 +262,8 @@ def test_level0_short_circuits_before_embedding():
     r = _run(route("东京天气如何", target=reg, embedding_service=ExplodingEmbedding()))
     assert r.level == LEVEL_RULE
     assert r.capability_ids == ["weather.query"]
+    assert r.deterministic is True
+    assert r.requires_generation is False
 
 
 def test_level1_runs_when_rules_defer():
@@ -268,6 +272,8 @@ def test_level1_runs_when_rules_defer():
     r = _run(route("帮我查一下", target=reg, embedding_service=svc))
     assert r.level == LEVEL_SEMANTIC
     assert r.tool is True
+    assert r.deterministic is True
+    assert r.requires_generation is False
 
 
 def test_semantic_unavailable_degrades():
@@ -319,6 +325,8 @@ def test_level2_only_triggers_inside_uncertain_band(monkeypatch):
     )
     r = _run(route("帮我查一下", target=reg, embedding_service=svc_mid, fallback_backend=backend))
     assert r.level == LEVEL_FALLBACK
+    assert r.requires_generation is True
+    assert r.deterministic is False
     assert len(backend.prompts) == 1
 
 
