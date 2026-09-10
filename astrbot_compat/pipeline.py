@@ -24,7 +24,7 @@ from .events import (
     ResultContentType,
     build_event,
 )
-from .exceptions import StellaCompatNotSupported
+from .exceptions import StellaCompatModelUnavailable, StellaCompatNotSupported
 from .filters import CommandGroupFilter, PermissionTypeFilter
 from .llm.entities import ProviderRequest
 from .registry import EventType, StarHandlerMetadata, star_handlers_registry, star_map
@@ -349,7 +349,7 @@ async def dispatch(nb_event: Any, bot: Any) -> bool:
             await _invoke(handler_md, event, params)
             if event._has_send_oper or event.is_stopped() or event.call_llm is False:
                 handled = True
-        except StellaCompatNotSupported as e:
+        except StellaCompatModelUnavailable as e:
             logger.warning(f"[astrbot_compat] 插件 {pid} 依赖大模型能力：{e}")
             with contextlib.suppress(Exception):
                 from .context import _MODEL_DEPENDENT_PLUGINS
@@ -362,6 +362,9 @@ async def dispatch(nb_event: Any, bot: Any) -> bool:
                         MessageChain().message("这个插件需要依赖大模型能力，Stella 暂不支持"),
                     )
             handled = True
+        except StellaCompatNotSupported:
+            logger.exception(f"[astrbot_compat] 插件 {pid} 调用了未支持的兼容 API")
+            await _notify_plugin_error(event, handler_md)
         except Exception:
             logger.exception(f"[astrbot_compat] 插件 {pid} handler 执行异常")
             await _notify_plugin_error(event, handler_md)

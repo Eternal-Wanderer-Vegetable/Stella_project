@@ -211,6 +211,25 @@ def test_llm_dependent_plugin_is_reported(register_plugin, make_event, fake_bot,
     assert "大模型" in fake_bot.sent[0]
 
 
+def test_non_model_compat_error_is_not_reported_as_model_dependency(
+    register_plugin,
+    make_event,
+    fake_bot,
+):
+    class Demo(Star):
+        @filter.regex(r"dbfail", priority=10)
+        async def unsupported(self, event):
+            await self.context.get_db()
+
+        @filter.regex(r"dbfail", priority=1)
+        async def survivor(self, event):
+            yield event.plain_result("survived")
+
+    register_plugin(Demo)
+    assert _run(make_event("dbfail"), fake_bot) is True
+    assert fake_bot.sent == ["survived"]
+
+
 def test_forward_message_uses_forward_action(register_plugin, make_event, fake_bot):
     from astrbot_compat.components import Node, Nodes, Plain
 
