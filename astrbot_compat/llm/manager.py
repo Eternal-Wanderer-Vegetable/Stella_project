@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from .provider import Provider, StellaChatProvider
 from .tool import llm_tools
@@ -14,6 +15,20 @@ logger = logging.getLogger("astrbot_compat.llm.manager")
 
 # Stella 只有一个模型后端，固定用这个 id
 STELLA_PROVIDER_ID = "stella"
+
+
+@dataclass(frozen=True)
+class ModelAvailability:
+    """A role-scoped availability snapshot.
+
+    Embeddings intentionally have their own state: disabling generation must not
+    make rule/embedding capability routing disappear.
+    """
+
+    role: str
+    available: bool
+    reason: str
+    kind: str = "generation"
 
 
 class ProviderManager:
@@ -37,6 +52,38 @@ class ProviderManager:
             return settings.ASTRBOT_LLM_ENABLED
         except Exception:
             return True
+
+    def availability(self, role: str = "plugin") -> ModelAvailability:
+        """Return a cheap, side-effect-free availability diagnosis."""
+        normalized = (role or "plugin").strip().lower()
+        if normalized == "embedding":
+            try:
+                from config import settings
+
+                enabled = bool(settings.MEMORY_EMBEDDING_ENABLED)
+                base_url = str(settings.MEMORY_EMBEDDING_BASE_URL or "").strip()
+                model = str(settings.MEMORY_EMBEDDING_MODEL or "").strip()
+            except Exception as exc:
+                return ModelAvailability(
+                    normalized,
+                    False,
+                    f"embedding 配置不可读: {exc}",
+                    kind="embedding",
+                )
+            if not enabled:
+                return ModelAvailability(normalized, False, "embedding 未启用", kind="embedding")
+            if not base_url or not model:
+                return ModelAvailability(
+                    normalized,
+                    False,
+                    "embedding 缺少服务地址或模型名",
+                    kind="embedding",
+                )
+            return ModelAvailability(normalized, True, "embedding 配置可用", kind="embedding")
+
+        if not self._enabled():
+            return ModelAvailability(normalized, False, "生成模型未启用")
+        return ModelAvailability(normalized, True, "生成模型已启用")
 
     @property
     def provider(self) -> Provider | None:
@@ -86,6 +133,7 @@ def reset_provider_manager() -> None:
 
 
 __all__ = [
+    "ModelAvailability",
     "STELLA_PROVIDER_ID",
     "ProviderManager",
     "get_provider_manager",
