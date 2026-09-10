@@ -25,7 +25,7 @@ class StellaCompatNotSupported(StellaCompatError):  # noqa: N818
         self.name = name
 
 
-class StellaCompatModelUnavailable(StellaCompatNotSupported):  # noqa: N818
+class StellaCompatModelUnavailable(StellaCompatNotSupported):
     """A supported LLM API whose optional generation backend is unavailable."""
 
 

@@ -270,6 +270,69 @@ def test_deterministic_result_populates_direct_reply(
     assert ctx.lines == ["weather.query 的结果"]
 
 
+def test_deterministic_missing_input_populates_clarification_reply(
+    monkeypatch, stub_route, spy_memory, fake_bot, fake_nb_event,
+):
+    import capability.comes as comes_pkg
+
+    async def _fake(tasks, *, event, target=None, tool_manager=None):
+        return [
+            Result(
+                task_id=tasks[0].task_id,
+                status=ResultStatus.NEEDS_CLARIFICATION,
+                summary="",
+                metadata={"missing_input": ["city"]},
+            ),
+        ]
+
+    monkeypatch.setattr(comes_pkg, "execute_all", _fake)
+    stub_route(
+        Route(
+            tool=True,
+            requires_generation=False,
+            deterministic=True,
+            capabilities=[CapabilityHit("weather.query", 1.0)],
+        ),
+    )
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    _run(activate_capabilities(ctx))
+
+    assert ctx.reply == "请补充必要信息：city。"
+    assert ctx.lines == [ctx.reply]
+
+
+def test_deterministic_failure_populates_safe_unavailable_reply(
+    monkeypatch, stub_route, spy_memory, fake_bot, fake_nb_event,
+):
+    import capability.comes as comes_pkg
+
+    async def _fake(tasks, *, event, target=None, tool_manager=None):
+        return [
+            Result(
+                task_id=tasks[0].task_id,
+                status=ResultStatus.FAILED,
+                summary="",
+                metadata={"reason": "internal details must stay private"},
+            ),
+        ]
+
+    monkeypatch.setattr(comes_pkg, "execute_all", _fake)
+    stub_route(
+        Route(
+            tool=True,
+            requires_generation=False,
+            deterministic=True,
+            capabilities=[CapabilityHit("weather.query", 1.0)],
+        ),
+    )
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    _run(activate_capabilities(ctx))
+
+    assert ctx.reply == "这个功能暂时不可用，请稍后再试。"
+    assert ctx.lines == [ctx.reply]
+    assert "internal details" not in ctx.reply
+
+
 def test_comes_skipped_without_platform_handles(stub_route, spy_memory, spy_comes):
     """主动发言路径没有用户事件，工具能力自然不可用——属正常，不该报错。"""
     stub_route(Route(tool=True, capabilities=[CapabilityHit("weather.query", 0.8)]))

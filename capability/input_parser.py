@@ -133,9 +133,12 @@ def parse_input(message: str, schema: dict[str, Any] | None) -> InputParseResult
         elif value is not None:
             values[str(name)] = value
     for name in schema.get("required") or []:
-        if name not in values:
-            if name not in ambiguous and not any(str(name) in error for error in errors):
-                missing.append(str(name))
+        if (
+            name not in values
+            and name not in ambiguous
+            and not any(str(name) in error for error in errors)
+        ):
+            missing.append(str(name))
     return InputParseResult(
         values=values,
         missing=tuple(missing),

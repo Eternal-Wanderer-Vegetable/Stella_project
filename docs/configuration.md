@@ -858,6 +858,12 @@ python -m playwright install chromium                  # 约 700MB，含用不�
 | `ROUTER_GATE_MEMORY` | `false` | 是否真的按 `route.memory` 门控长期记忆检索 |
 | `ROUTER_TIMEOUT` | `8.0` | 单次判定超时（秒）。超时按降级处理，不阻塞回复 |
 
+#### 无模型运行模式
+
+这里的“无模型”只表示生成模型不可用：聊天回复、Agent/Comes 生成和 Level 2 Router fallback 会停用或降级；**embedding 不属于这个范围**。因此可以使用 `ASTRBOT_LLM_ENABLED=false`，同时保留 `MEMORY_EMBEDDING_ENABLED=true`，让 Level 0 关键词规则和 Level 1 embedding 继续识别能力。embedding 自己不可用时，Router 必须保守降级，不应猜测工具。
+
+确定性能力还可以在不调用生成模型的情况下执行：能力的 `input_schema` 与工具 JSON schema 合并，用声明的正则、枚举、默认值和基础类型转换填写 `Task.input`。仅当能力、provider、必填参数都唯一且有效时才会直调工具；成功或部分成功使用安全摘要直接回复，并跳过聊天 Pipeline 的生成阶段。缺参或歧义会返回澄清提示，工具失败会返回通用不可用提示。
+
 > **声明优先（`ROUTER_ROUTE_AUTO_CAPABILITIES=false`）。** 要让一个插件工具能在聊天里被触发，得在 `config/capabilities/*.toml` 里给它写一条 `[[capability]]`。没有声明的工具照常注册、仍可被显式执行，但不参与语义路由——**启动日志会点名有哪些**，所以这不是静默失效。
 >
 > 依据是 2026-08-24 的首轮实测。工具描述是写给「看着全部工具做选择」的决策器的指令句（`"当用户询问 X 时调用"`），拿它当语义原型去和用户的**问句**算余弦，同一语域的工具之间几乎没有区分度。5 个 bgm/bilibili 工具、12 条用例、真实 embedding 的对照：
@@ -893,6 +899,8 @@ python -m capability.router.benchmark --cases capability/router/benchmark/acg.js
 > 退出码 0 表示可以打开。报告把四类错误分开计数，刻意不合成单一准确率——合成会把高代价错误藏在平均值里。
 
 `ROUTER_FALLBACK_ENABLED` 默认关闭是为了省 27B 推理资源：纯本地默认配置下 Level 2（`ROUTER` 角色）与主聊天绑在同一个 `LOCAL` 端点槽上，用同一个模型、排同一道闸门。先靠 L0/L1 跑一段时间、用 benchmark 量出准确率再决定。把 `ROUTER` 单独指到廉价的在线端点可以消掉这层顾虑。
+
+普通 AstrBot 插件的加载、初始化、`command`/`regex`/`event_message_type` 分发和发送不依赖聊天模型。插件只有在调用 `Context.llm_generate`、`tool_loop_agent` 等显式 LLM API 时，才会在模型边界收到“模型不可用”；依赖该 API 的插件会被标记为受限，不会阻止无关普通插件继续运行。
 
 ### Comes
 

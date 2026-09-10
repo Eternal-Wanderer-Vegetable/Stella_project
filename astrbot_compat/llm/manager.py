@@ -133,8 +133,8 @@ def reset_provider_manager() -> None:
 
 
 __all__ = [
-    "ModelAvailability",
     "STELLA_PROVIDER_ID",
+    "ModelAvailability",
     "ProviderManager",
     "get_provider_manager",
     "reset_provider_manager",

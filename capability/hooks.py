@@ -38,11 +38,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from core.context import ChatContext
-from core.tasks import Result, Task, TaskType, next_task_id
 from capability.input_parser import merge_schemas, parse_input
 from capability.registry import CapabilityRegistry
 from capability.registry import registry as _default_registry
+from core.context import ChatContext
+from core.tasks import Result, ResultStatus, Task, TaskType, next_task_id
 
 # 本钩子的注册优先级。必须小于 build_context(50)——短期上下文（摘要 + 尾巴）
 # 是对话素材，与「要不要检索长期记忆」无关，永远该先组装好。
