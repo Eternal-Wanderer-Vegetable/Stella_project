@@ -293,6 +293,8 @@ async def route_semantic(
     selected = select_hits(hits, s)
     return Route(
         chat=True,
+        requires_generation=False,
+        deterministic=True,
         memory=memory,
         tool=True,
         capabilities=selected,

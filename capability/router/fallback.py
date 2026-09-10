@@ -162,6 +162,8 @@ async def route_fallback(
     hits = [CapabilityHit(capability_id=capability_id, score=FALLBACK_SCORE)] if tool else []
     return Route(
         chat=True,
+        requires_generation=True,
+        deterministic=False,
         memory=memory,
         tool=tool,
         capabilities=hits,

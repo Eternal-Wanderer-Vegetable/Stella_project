@@ -157,6 +157,8 @@ def apply_rules(
     if hits:
         return Route(
             chat=True,
+            requires_generation=False,
+            deterministic=True,
             memory=wants_memory or not _is_pure_greeting(text),
             tool=True,
             capabilities=hits,

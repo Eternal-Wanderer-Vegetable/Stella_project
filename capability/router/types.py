@@ -45,6 +45,9 @@ class Route:
     属性:
         chat: 是否需要 Stella 出面回复。**默认 True**——Stella 是唯一对用户说话的模块，
             任何请求最终都要有人回话，没有「只执行不回复」的路径；
+        requires_generation: 是否需要聊天/生成模型完成本次回复。确定性工具路径为 False；
+            结果仍由普通回复链路负责发送；
+        deterministic: 是否允许在没有 Agent 模型时按已验证输入直接执行；
         memory: 是否需要读取长期记忆。默认 True 是保守取值，见 ROUTER_GATE_MEMORY 的注释；
         tool: 是否需要调用工具。默认 False——凭空调工具的代价高于漏调；
         capabilities: 命中的能力（按 score 降序），只在 tool=True 时有意义。
@@ -59,6 +62,8 @@ class Route:
     """
 
     chat: bool = True
+    requires_generation: bool = True
+    deterministic: bool = False
     memory: bool = True
     tool: bool = False
     capabilities: list[CapabilityHit] = field(default_factory=list)
@@ -79,6 +84,8 @@ class Route:
         """
         return {
             "chat": self.chat,
+            "requires_generation": self.requires_generation,
+            "deterministic": self.deterministic,
             "memory": self.memory,
             "tool": self.tool,
             "capabilities": [repr(h) for h in self.capabilities],
@@ -94,6 +101,8 @@ class Route:
             for name, on in (("chat", self.chat), ("memory", self.memory), ("tool", self.tool))
             if on
         ]
+        if not self.requires_generation:
+            labels.append("no-generation")
         caps = f" {self.capability_ids}" if self.capabilities else ""
         return f"Route({'+'.join(labels)}{caps} via {self.level})"
 
@@ -105,7 +114,15 @@ def default_route(reason: str = "", level: str = LEVEL_DEFAULT) -> Route:
     保守方向是刻意的：漏调一次工具用户最多再问一遍，凭空调一次工具则可能真的
     发出一条消息或改变外部状态。
     """
-    return Route(chat=True, memory=True, tool=False, level=level, reason=reason)
+    return Route(
+        chat=True,
+        requires_generation=True,
+        deterministic=False,
+        memory=True,
+        tool=False,
+        level=level,
+        reason=reason,
+    )
 
 
 __all__ = [
