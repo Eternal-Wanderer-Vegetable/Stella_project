@@ -56,13 +56,20 @@ _SET_PATTERNS = (
     re.compile(r"(?:以后|请|今后)?(?:称我为|叫我做|喊我做)\s*(?P<term>.+)$"),
     re.compile(r"(?:称呼|叫法)\s*(?:改成|改为|设为|设置为)\s*(?P<term>.+)$"),
 )
+_OTHER_SET_PATTERNS = (
+    re.compile(
+        r"(?:以后|请|今后)?(?:叫|称呼|喊)\s*"
+        r"(?:他|她|TA|ta|用户)\s*(?:为|叫|做)?\s*(?P<term>.+)$"
+    ),
+)
 _CLEAR_RE = re.compile(
     r"(?:别再|不要再|别|不要|取消|清除|删除|忘掉|忘记).{0,8}"
     r"(?:称呼|叫我|喊我|叫法)"
 )
 _QUERY_RE = re.compile(r"(?:怎么称呼|称呼我什么|叫我什么|我的称呼|称呼记录)")
 _ADDRESS_CUE_RE = re.compile(
-    r"(?:称呼|叫法|叫我|喊我|称我|叫成|设为|改成|不要再叫|别再叫|怎么称呼)"
+    r"(?:称呼|叫法|叫我|喊我|称我|叫他|叫她|叫TA|叫ta|喊他|喊她|喊TA|喊ta|"
+    r"称呼他|称呼她|称呼TA|称呼ta|叫成|设为|改成|不要再叫|别再叫|怎么称呼)"
 )
 _TERM_TRAILING_RE = re.compile(r"^[\s:：，,。.!！?？；;、\"“”'‘’「」『』]+|[\s，,。.!！?？；;、\"“”'‘’「」『』]+$")
 
@@ -107,6 +114,8 @@ def _rule_operation(text: str) -> str | None:
         return CLEAR_ADDRESS
     if _QUERY_RE.search(value):
         return QUERY_ADDRESS
+    if any(pattern.search(value) for pattern in _OTHER_SET_PATTERNS):
+        return SET_OTHER_ADDRESS
     if any(pattern.search(value) for pattern in _SET_PATTERNS):
         if re.search(r"(?:把|给|替|帮).{0,24}(?:用户|他|她|TA|称呼|叫法)", value):
             return SET_OTHER_ADDRESS
@@ -117,7 +126,7 @@ def _rule_operation(text: str) -> str | None:
 def extract_address_term(text: str) -> str:
     """从确定性短语中提取短称呼；提取失败返回空串。"""
     value = (text or "").strip()
-    for pattern in _SET_PATTERNS:
+    for pattern in (*_OTHER_SET_PATTERNS, *_SET_PATTERNS):
         match = pattern.search(value)
         if match:
             return _normalize_term(match.group("term"))
@@ -232,7 +241,7 @@ async def classify_addressing(
             semantic_operation, semantic_score, ambiguous = None, 0.0, False
             reason = f"embedding_fallback:{type(error).__name__}"
         else:
-            if ambiguous:
+            if ambiguous and rule_operation is None:
                 return AddressingRequest(
                     operation or semantic_operation or NOT_ADDRESS_REQUEST,
                     target_user_id=_normalize_user_id(target_user_id),

@@ -59,6 +59,34 @@ def test_missing_term_requires_clarification():
     assert result.address_term == ""
 
 
+def test_other_user_natural_expression_extracts_term():
+    result = asyncio.run(
+        addressing_intent.classify_addressing(
+            "以后叫他队长", service=FakeEmbeddingService()
+        )
+    )
+
+    assert result.operation == addressing_intent.SET_OTHER_ADDRESS
+    assert result.address_term == "队长"
+    assert result.needs_clarification is False
+
+
+def test_complete_rule_match_wins_over_semantic_margin(monkeypatch):
+    async def ambiguous_match(text: str, service=None):
+        return addressing_intent.SET_OTHER_ADDRESS, 0.8, True
+
+    monkeypatch.setattr(addressing_intent, "_semantic_match", ambiguous_match)
+    result = asyncio.run(
+        addressing_intent.classify_addressing(
+            "以后叫他队长", service=FakeEmbeddingService()
+        )
+    )
+
+    assert result.operation == addressing_intent.SET_OTHER_ADDRESS
+    assert result.address_term == "队长"
+    assert result.needs_clarification is False
+
+
 def test_prototype_cache_is_invalidated_when_model_changes():
     addressing_intent.reset_prototype_cache()
     first = FakeEmbeddingService("model-a")
