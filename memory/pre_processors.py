@@ -441,6 +441,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 
     # 共享空间：同一空间内的多个 QQ 群共享画像与记忆（M2.5-1 的 __post_init__ 应已填好，or 只是防御）
     space = ctx.group_shared_space or resolve_space(ctx.group_id)
+    _load_preferred_address(ctx, space)
 
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -545,6 +546,7 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
 
     # 共享空间：同一空间内的多个 QQ 群共享画像与记忆（M2.5-1 的 __post_init__ 应已填好，or 只是防御）
     space = ctx.group_shared_space or resolve_space(ctx.group_id)
+    _load_preferred_address(ctx, space)
 
     # 先组装稳定画像（只读稳定事实，过滤人格判断）
     profile = _read_stable_profile(space, ctx.user_id)
@@ -581,6 +583,21 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
             f"行为约束={len(result.behavior_constraints)}"
         )
     return ctx
+
+
+def _load_preferred_address(ctx: ChatContext, space: str) -> None:
+    """只为明确的目标用户读取称呼偏好，群级主动发言保持为空。"""
+    ctx.preferred_address = None
+    if ctx.trigger == "proactive" or ctx.user_id in (None, 0):
+        return
+    try:
+        from memory.addressing import get_preference
+
+        preference = get_preference(space, ctx.user_id)
+        if preference is not None:
+            ctx.preferred_address = preference.address_term
+    except Exception as error:
+        logger.debug(f"读取称呼偏好失败（跳过）: {error}")
 
 
 def _read_stable_profile(group_shared_space: str, user_id: int) -> str:

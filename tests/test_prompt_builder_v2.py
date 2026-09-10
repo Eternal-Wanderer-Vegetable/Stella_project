@@ -45,6 +45,28 @@ def test_build_v2_prompt_context_omits_empty_sections():
     assert "可参考的聊天背景" in prompt
 
 
+def test_build_v2_prompt_context_injects_preferred_address_in_stable_zone():
+    prompt = prompt_builder.build_v2_prompt_context(
+        "", "", [], [], current_user_id=100, preferred_address="哥哥"
+    )
+
+    assert "称呼偏好" in prompt
+    assert "哥哥" in prompt
+    assert prompt.index("称呼偏好") < prompt.index("现在是 ")
+
+
+def test_preferred_address_is_omitted_without_explicit_user():
+    prompt = prompt_builder.build_v2_prompt_context(
+        "", "", [], [], current_user_id=0, preferred_address="哥哥"
+    )
+    assert "称呼偏好" not in prompt
+
+
+def test_prompt_builder_keeps_old_positional_call_compatible():
+    prompt = prompt_builder.build_v2_prompt_context("", "", [], [], 100, "CASUAL_REPLY")
+    assert "当前与你对话的用户 QQ 号：100" in prompt
+
+
 def test_tech_mode_has_larger_conversation_budget():
     """技术模式放宽聊天素材 token 预算。"""
     conv = [{"content": f"测试内容第{i}条" * 4} for i in range(50)]

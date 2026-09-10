@@ -27,6 +27,7 @@ def _build_db(path: Path) -> None:
         conn.execute(schema.MEMORY_CANDIDATES_TABLE_DDL)
         conn.execute(schema.ATOMIC_FACTS_TABLE_DDL)
         conn.execute(schema.USER_PROFILES_TABLE_DDL)
+        conn.execute(schema.USER_ADDRESS_PREFERENCES_TABLE_DDL)
         conn.execute(
             "CREATE TABLE long_term_memories (id INTEGER PRIMARY KEY AUTOINCREMENT,"
             " group_id TEXT, user_id TEXT, summary TEXT)"
@@ -55,6 +56,15 @@ def _build_db(path: Path) -> None:
                 ("space_1", "u1", "阿一", "话多", 30),
                 ("space_2", "u1", "阿一", "在技术群很安静", 5),
                 ("space_2", "u2", "阿二", "只在这个空间", 7),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO user_address_preferences "
+            "(group_shared_space, user_id, address_term, source, updated_by_user_id, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            [
+                ("space_1", "u1", "哥哥", "natural_language", "u1", "2026-09-09 10:00:00"),
+                ("space_2", "u1", "队长", "natural_language", "u2", "2026-09-10 10:00:00"),
             ],
         )
         conn.execute(
@@ -101,8 +111,20 @@ def test_every_owned_table_is_rewritten(db):
         "memory_candidates",
         "atomic_facts",
         "user_profiles",
+        "user_address_preferences",
         "long_term_memories",
     }
+
+
+def test_address_conflict_keeps_latest_explicit_update(db):
+    """同一用户的称呼冲突按 updated_at 选择，而非沿用画像互动次数。"""
+    report = space_merge.merge_spaces(["space_1", "space_2"], "casual", db_path=db)
+
+    assert _rows(
+        db,
+        "SELECT group_shared_space, user_id, address_term FROM user_address_preferences",
+    ) == [("casual", "u1", "队长")]
+    assert any("用户 u1 的称呼" in conflict and "队长" in conflict for conflict in report.conflicts)
 
 
 def test_profile_conflict_keeps_more_interactive_one(db):
@@ -173,4 +195,3 @@ def test_backup_is_taken_before_merge(db):
     assert report.backup_path is not None
     assert report.backup_path.is_file()
     assert "pre-merge" in report.backup_path.name
-

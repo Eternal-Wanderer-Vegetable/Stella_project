@@ -40,6 +40,7 @@ import os
 import random
 import time
 from collections import OrderedDict, defaultdict
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -56,6 +57,7 @@ from nonebot.rule import Rule
 
 from capability.hooks import register as register_capability_hook
 from config import (
+    ADDRESSING_ENABLED,
     ALLOWED_GROUPS,
     ASTRBOT_COMPAT_ALLOW_PRIVATE,
     ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED,
@@ -103,7 +105,17 @@ from core.reply_gate import get_reply_gate
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from extensions import load_extensions
-from memory import expression_learning
+from memory import addressing, expression_learning
+from memory.addressing_intent import (
+    CLEAR_ADDRESS,
+    NOT_ADDRESS_REQUEST,
+    QUERY_ADDRESS,
+    SET_OTHER_ADDRESS,
+    SET_SELF_ADDRESS,
+    AddressingRequest,
+    classify_addressing,
+    is_likely_addressing_request,
+)
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
 from memory.participation import get_participation_manager
@@ -152,6 +164,7 @@ _reply_check_tasks: set[asyncio.Task] = set()
 
 # 插件已处理标记：message_id -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
 _plugin_handled_msgs: OrderedDict[int, float] = OrderedDict()
+_addressing_decisions: OrderedDict[int, AddressingRequest] = OrderedDict()
 
 # pre-hook 按 priority 降序执行（数值越大越先）：
 # 50 -> build_context（组装短期上下文：话题摘要 + 原始尾巴 + 会话摘要）
@@ -575,11 +588,178 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
 
 # ============================================================
+# 个性化称呼（自然语言配置）
+# ============================================================
+
+def _message_segment_type(segment) -> str:
+    return str(getattr(segment, "type", "") or (segment.get("type", "") if isinstance(segment, dict) else ""))
+
+
+def _message_segment_data(segment) -> dict:
+    data = getattr(segment, "data", None)
+    if data is None and isinstance(segment, dict):
+        data = segment.get("data")
+    return data if isinstance(data, dict) else {}
+
+
+def _addressing_target_ids(event: GroupMessageEvent) -> list[str]:
+    """提取消息中除 Stella 外的明确 @ 目标，拒绝 ``@all``。"""
+    targets: list[str] = []
+    for segment in event.get_message():
+        if _message_segment_type(segment) != "at":
+            continue
+        qq = str(_message_segment_data(segment).get("qq") or "").strip()
+        if not qq or qq.lower() == "all" or qq == str(event.self_id):
+            continue
+        if qq not in targets:
+            targets.append(qq)
+    return targets
+
+
+def _is_group_admin(event: GroupMessageEvent) -> bool:
+    role = getattr(getattr(event, "sender", None), "role", "") or ""
+    return event.user_id in PROACTIVE_TOGGLE_ADMINS or role in ("owner", "admin")
+
+
+def _cache_addressing_decision(event: GroupMessageEvent, result: AddressingRequest) -> None:
+    _addressing_decisions[event.message_id] = result
+    _addressing_decisions.move_to_end(event.message_id)
+    while len(_addressing_decisions) > 256:
+        _addressing_decisions.popitem(last=False)
+
+
+async def is_addressing_command(event: GroupMessageEvent) -> bool:
+    """称呼请求规则：群内 @ Stella 且文本经过廉价预筛并命中结构化意图。"""
+    if not ADDRESSING_ENABLED:
+        return False
+    if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+        return False
+    text = event.get_plaintext().strip()
+    if not is_likely_addressing_request(text):
+        return False
+    # reload 的插件名可以是任意字符串，命中它时保持现有重载优先级。
+    from astrbot_compat.loader import parse_reload_command
+
+    if parse_reload_command(text):
+        return False
+    result = await classify_addressing(text)
+    _cache_addressing_decision(event, result)
+    return result.operation != NOT_ADDRESS_REQUEST
+
+
+addressing_handler = on_message(
+    rule=Rule(is_addressing_command), priority=_PRIORITY_TOGGLE, block=True
+)
+
+
+def _assert_addressing_rule_disjoint() -> None:
+    """启动期钉住称呼规则与既有 priority=1 规则的互斥边界。"""
+    from astrbot_compat.loader import parse_reload_command
+
+    samples = [
+        *(f"{word}，称呼我为哥哥" for word in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS),
+        *(f"{word}，把称呼改成队长" for word in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS),
+    ]
+    bad = [text for text in samples if not is_likely_addressing_request(text)]
+    reload_like = [text for text in samples if parse_reload_command(text)]
+    if bad or reload_like:
+        logger.critical(
+            "称呼 handler 与 priority=1 设置 handler 的互斥自检失败："
+            f"addressing_prefilter={bad[:1]!r}, reload_overlap={reload_like[:1]!r}"
+        )
+        return
+    logger.debug(f"✅ 称呼 handler 互斥自检通过（已验 {len(samples)} 组组合）")
+
+
+def _addressing_clarification(result: AddressingRequest, target_ids: list[str]) -> str:
+    if len(target_ids) > 1:
+        return "你一次 @ 了多位用户，我不确定要修改谁，请一次只指定一位。"
+    if result.operation in (SET_SELF_ADDRESS, SET_OTHER_ADDRESS) and not result.address_term:
+        return "你希望我怎么称呼这位用户？请把称呼也告诉我。"
+    if result.operation == SET_OTHER_ADDRESS and not target_ids:
+        return "请 @ 你要修改称呼的那位用户，我不会猜测目标。"
+    return "我还没听清你的称呼设置，请明确告诉我称呼谁、改成什么。"
+
+
+async def _finish_addressing(bot: Bot, event: GroupMessageEvent, reply: str) -> None:
+    await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
+    await addressing_handler.finish(
+        Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
+    )
+
+
+@addressing_handler.handle()
+async def handle_addressing(bot: Bot, event: GroupMessageEvent):
+    """执行自然语言称呼配置；所有写入都经过 addressing 服务。"""
+    result = _addressing_decisions.pop(event.message_id, None)
+    if result is None:
+        result = await classify_addressing(event.get_plaintext().strip())
+    if result.operation == NOT_ADDRESS_REQUEST:
+        return
+
+    target_ids = _addressing_target_ids(event)
+    if result.needs_clarification or len(target_ids) > 1:
+        await _finish_addressing(bot, event, _addressing_clarification(result, target_ids))
+        return
+
+    explicit_target = target_ids[0] if target_ids else None
+    if explicit_target and result.operation == SET_SELF_ADDRESS:
+        result = replace(result, operation=SET_OTHER_ADDRESS, target_user_id=explicit_target)
+    target_user_id = explicit_target or str(event.user_id)
+
+    if result.operation == SET_OTHER_ADDRESS and not explicit_target:
+        await _finish_addressing(bot, event, _addressing_clarification(result, target_ids))
+        return
+    if target_user_id != str(event.user_id) and not _is_group_admin(event):
+        logger.info(
+            f"[Addressing] 群 {event.group_id} 用户 {event.user_id} 无权修改用户 {target_user_id}"
+        )
+        await _finish_addressing(bot, event, "我不能替你修改其他人的称呼，除非你是本群管理员。")
+        return
+
+    space = resolve_space(event.group_id)
+    try:
+        if result.operation in (SET_SELF_ADDRESS, SET_OTHER_ADDRESS):
+            preference = addressing.set_preference(
+                space,
+                target_user_id,
+                result.address_term,
+                source="natural_language",
+                updated_by_user_id=event.user_id,
+            )
+            if target_user_id == str(event.user_id):
+                reply = f"好，以后我叫你「{preference.address_term}」。"
+            else:
+                reply = f"好，以后我称呼用户 {target_user_id} 为「{preference.address_term}」。"
+        elif result.operation == CLEAR_ADDRESS:
+            addressing.clear_preference(space, target_user_id)
+            reply = "好，我不再使用这个个性化称呼了。"
+        elif result.operation == QUERY_ADDRESS:
+            preference = addressing.get_preference(space, target_user_id)
+            reply = (
+                f"我现在称呼你「{preference.address_term}」。"
+                if preference
+                else "我还没有为你设置个性化称呼。"
+            )
+        else:
+            return
+    except ValueError as error:
+        logger.info(f"[Addressing] 群 {event.group_id} 称呼输入被拒绝: {error}")
+        reply = f"这个称呼我不能保存：{error}"
+    except Exception as error:
+        logger.warning(f"[Addressing] 群 {event.group_id} 处理失败: {error}")
+        reply = "称呼设置暂时没保存成功，请稍后再试。"
+    await _finish_addressing(bot, event, reply)
+
+
+# ============================================================
 # 运行时开关（管理员临时关闭/恢复主动发言）
 # ============================================================
 
 _MUTE_KEYWORDS = ("安静", "闭嘴", "别说话", "停止主动发言")
 _UNMUTE_KEYWORDS = ("恢复", "醒醒", "可以说话", "开启主动发言")
+
+_assert_addressing_rule_disjoint()
 
 
 async def is_toggle_command(event: GroupMessageEvent) -> bool:
@@ -599,6 +779,8 @@ async def is_toggle_command(event: GroupMessageEvent) -> bool:
 
     if parse_reload_command(text):
         return False
+    if is_likely_addressing_request(text):
+        return False
     return any(k in text for k in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS)
 
 
@@ -611,6 +793,7 @@ def _assert_listener_priorities() -> None:
     """校验落库监听器优先级最高；违反时输出 critical 日志（不中断启动）。"""
     for name, priority in (
         ("toggle_handler", _PRIORITY_TOGGLE),
+        ("addressing_handler", _PRIORITY_TOGGLE),
         ("capability_handler", _PRIORITY_TOGGLE),
         ("reload_handler", _PRIORITY_TOGGLE),
         ("plugin_handler", _PRIORITY_PLUGIN),
@@ -684,6 +867,8 @@ async def is_capability_query(event: GroupMessageEvent) -> bool:
     text = event.get_plaintext()
     # 重载命令优先：插件名可以是任何字符串，包含查询句式也不奇怪
     if parse_reload_command(text):
+        return False
+    if is_likely_addressing_request(text):
         return False
     return is_query_text(
         text,

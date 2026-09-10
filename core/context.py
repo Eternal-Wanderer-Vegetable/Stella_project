@@ -70,6 +70,8 @@ class ChatContext:
     # ---- 结构化上下文供 prompt_builder 使用 ----
     short_term: str = ""
     user_profile: str = ""
+    # 明确目标用户的关系性称呼；不替代平台昵称，也不用于群级主动发言。
+    preferred_address: str | None = None
     memories_for_prompt: list[dict] = field(default_factory=list)
     # ---- 记忆系统 v2：模式 / 分区记忆 / 行为约束 / 决策轨迹 ----
     memory_mode: str = "CASUAL_REPLY"          # Stella 行为模式

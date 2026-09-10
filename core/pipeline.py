@@ -208,6 +208,7 @@ class Pipeline:
                             getattr(ctx, "behavior_constraints", []) or [],
                             current_user_id=ctx.user_id,
                             mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
+                            preferred_address=getattr(ctx, "preferred_address", None),
                         ),
                         ctx,
                     )
@@ -223,6 +224,7 @@ class Pipeline:
                             user_profile,
                             memories_for_prompt,
                             current_user_id=ctx.user_id,
+                            preferred_address=getattr(ctx, "preferred_address", None),
                         ),
                         ctx,
                     )

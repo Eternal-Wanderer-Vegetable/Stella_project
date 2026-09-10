@@ -476,6 +476,18 @@ MEMORY_EMBEDDING_TIMEOUT = _env_float("MEMORY_EMBEDDING_TIMEOUT", 10.0)
 # rule-only 路径仍用 policy.CONTEXTUAL_MIN_SIMILARITY（0.05），两条路径阈值不共用。
 MEMORY_EMBEDDING_CONTEXTUAL_MIN = _env_float("MEMORY_EMBEDDING_CONTEXTUAL_MIN", 0.25)
 
+# ---------- 个性化称呼 ----------
+# 称呼配置只由明确的自然语言请求修改；embedding 只负责意图筛选，不直接写库。
+ADDRESSING_ENABLED = _env("ADDRESSING_ENABLED", "true").lower() in ("true", "1", "yes")
+ADDRESSING_SEMANTIC_ENABLED = _env(
+    "ADDRESSING_SEMANTIC_ENABLED", "true"
+).lower() in ("true", "1", "yes")
+ADDRESSING_INTENT_TIMEOUT = _env_float(
+    "ADDRESSING_INTENT_TIMEOUT", MEMORY_EMBEDDING_TIMEOUT
+)
+ADDRESSING_INTENT_THRESHOLD = _env_float("ADDRESSING_INTENT_THRESHOLD", 0.58)
+ADDRESSING_INTENT_MARGIN = _env_float("ADDRESSING_INTENT_MARGIN", 0.06)
+
 # 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
 # rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
 # 一定填满 mode_limit”的超召回噪音（Retrieval Spec 第 7 节：不要固定 Top-K）。

@@ -67,9 +67,10 @@ class MergeReport:
         if self.conflicts:
             lines += [
                 "",
-                "## 画像冲突（同一个人在多个源空间都有画像）",
+                "## 冲突处理",
                 "",
-                "保留互动次数多的那份，另一份已丢弃——合并不可逆，如需核对请看备份。",
+                "画像冲突按互动次数选择；称呼冲突按最近一次显式更新时间选择。"
+                "并列时按空间名升序选择，另一份已丢弃——合并不可逆，如需核对请看备份。",
                 "",
             ] + [f"- {c}" for c in self.conflicts]
         lines += [
@@ -117,6 +118,43 @@ def _resolve_profile_conflicts(
         )
 
 
+def _resolve_address_conflicts(
+    conn: sqlite3.Connection, sources: list[str], target: str, report: MergeReport
+) -> None:
+    """同一用户存在多条称呼时，保留最近一次显式设置的记录。"""
+    cursor = conn.cursor()
+    if "user_address_preferences" not in {t for t, _ in migrations.owned_tables(cursor)}:
+        return
+    spaces = [*sources, target]
+    placeholders = ", ".join(["?"] * len(spaces))
+    rows = cursor.execute(
+        f"SELECT user_id, group_shared_space, address_term, updated_at "
+        f"FROM user_address_preferences WHERE group_shared_space IN ({placeholders})",
+        spaces,
+    ).fetchall()
+    by_user: dict[str, list[tuple[str, str, str]]] = {}
+    for user_id, space, term, updated_at in rows:
+        by_user.setdefault(str(user_id), []).append(
+            (str(space), str(term), str(updated_at or ""))
+        )
+    for user_id, entries in sorted(by_user.items()):
+        if len(entries) < 2:
+            continue
+        winner = max(entries, key=lambda item: (item[2], item[0] == target, item[0]))
+        losers = [entry for entry in entries if entry[0] != winner[0]]
+        for space, _, _ in losers:
+            cursor.execute(
+                "DELETE FROM user_address_preferences "
+                "WHERE group_shared_space = ? AND user_id = ?",
+                (space, user_id),
+            )
+        report.conflicts.append(
+            f"用户 {user_id} 的称呼：保留 `{winner[0]}` 的「{winner[1]}」"
+            f"（updated_at={winner[2] or '未记录'}），"
+            f"丢弃 {'、'.join(f'`{space}`' for space, _, _ in losers)}"
+        )
+
+
 def merge_spaces(
     sources: list[str],
     target: str,
@@ -148,6 +186,7 @@ def merge_spaces(
         conn.execute("BEGIN")
         cursor = conn.cursor()
         _resolve_profile_conflicts(conn, list(sources), target, report)
+        _resolve_address_conflicts(conn, list(sources), target, report)
         placeholders = ", ".join(["?"] * len(sources))
         for table, owner in migrations.owned_tables(cursor):
             cursor.execute(
