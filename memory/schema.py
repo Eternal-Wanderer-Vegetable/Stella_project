@@ -52,8 +52,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v13：新增主动插话的 participation_topics / participation_log 表）
-SCHEMA_VERSION = 13
+# 当前 Schema 版本（v14：新增用户个性化称呼偏好表）
+SCHEMA_VERSION = 14
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -385,6 +385,26 @@ def create_user_profiles_table(conn: sqlite3.Connection) -> None:
     conn.execute(USER_PROFILES_TABLE_DDL)
 
 
+# 用户个性化称呼表（v14 起）：按共享空间与用户隔离。
+# 该关系不是用户画像，也不是普通记忆；它是由用户明确设置的运行期偏好。
+USER_ADDRESS_PREFERENCES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS user_address_preferences (
+    group_shared_space TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    address_term TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'natural_language',
+    updated_by_user_id TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_shared_space, user_id)
+)
+"""
+
+
+def create_user_address_preferences_table(conn: sqlite3.Connection) -> None:
+    """确保用户个性化称呼表存在（幂等）。"""
+    conn.execute(USER_ADDRESS_PREFERENCES_TABLE_DDL)
+
+
 # 记忆候选表（v8 起）：以 group_shared_space 归属。
 # 此前在 consolidator 与 memory_manager 各手抄一份（字段易漂移），v8 起以本处为
 # 单一真相源，建表一律从这里走。
@@ -688,6 +708,10 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(GROUP_RUNTIME_STATE_TABLE_DDL)
+    # v14：用户个性化称呼偏好表（新表，不属于 additive column 范畴）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(USER_ADDRESS_PREFERENCES_TABLE_DDL)
     # v7：用户画像表（新表，不属于 additive column 范畴；规范 DDL 与
     # consolidator 建表共用，避免手抄两份造成字段漂移）
     if not dry_run:

@@ -39,7 +39,13 @@ from pathlib import Path
 from config import space_map
 
 # 按空间归属，且 v8 需要把 group_id 改名为 group_shared_space 的表
-SPACE_RENAME_TABLES = ("memories", "memory_candidates", "atomic_facts", "user_profiles")
+SPACE_RENAME_TABLES = (
+    "memories",
+    "memory_candidates",
+    "atomic_facts",
+    "user_profiles",
+    "user_address_preferences",
+)
 # 按空间归属，但列名保持 group_id（值早已是空间名，改名会写坏它）
 SPACE_VALUE_ONLY_TABLES = ("long_term_memories",)
 # 按真实 QQ 群归属：迁移绝不触碰。列在这里是为了让「漏了哪张表」这件事可被审查。
@@ -679,6 +685,14 @@ def migrate_v13(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return MigrationResult(version=13, notes=["participation_topics / participation_log 已就绪"])
 
 
+def migrate_v14(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v14：用户个性化称呼偏好表。"""
+    from memory.schema import create_user_address_preferences_table
+
+    create_user_address_preferences_table(conn)
+    return MigrationResult(version=14, notes=["user_address_preferences 已就绪"])
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -687,6 +701,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     11: migrate_v11,
     12: migrate_v12,
     13: migrate_v13,
+    14: migrate_v14,
 }
 
 
