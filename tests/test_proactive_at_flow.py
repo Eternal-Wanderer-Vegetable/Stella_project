@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from core.context import ChatContext
+from memory import addressing, pre_processors
 import memory.proactive as proactive_module
 from memory.participation.decision import ParticipationDecision
 from memory.participation.scorer import ScoreBreakdown
@@ -165,6 +167,40 @@ def test_skip_cooldown_expires_and_new_message_clears(monkeypatch):
     proactive.mark_proactive_skip(1, 1001, "candidate:c-1")
     now[0] += 61.0
     assert proactive.proactive_skip_active(1, 1001, "candidate:c-1") is False
+
+
+@pytest.mark.asyncio
+async def test_targeted_context_reads_address_but_group_proactive_context_does_not(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "addressing.db"
+    db_path.touch()
+    monkeypatch.setattr(pre_processors, "DB_PATH", db_path)
+    monkeypatch.setattr(addressing, "DB_PATH", db_path)
+
+    addressing.set_preference("space_a", 1001, "哥哥", db_path=db_path)
+
+    targeted = ChatContext(
+        user_id=1001,
+        group_id=1,
+        group_shared_space="space_a",
+        msg_id=0,
+        message="说句话",
+        trigger="reply",
+    )
+    await pre_processors.build_user_context(targeted)
+    assert targeted.preferred_address == "哥哥"
+
+    group_proactive = ChatContext(
+        user_id=0,
+        group_id=1,
+        group_shared_space="space_a",
+        msg_id=0,
+        message="随便聊聊",
+        trigger="proactive",
+    )
+    await pre_processors.build_user_context(group_proactive)
+    assert group_proactive.preferred_address is None
 
 
 @pytest.mark.asyncio
