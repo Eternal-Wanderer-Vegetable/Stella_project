@@ -119,6 +119,7 @@ fn render_inner(v: &Value, out: &mut dyn Write) -> Result<()> {
             writeln!(out, "运行时长：{}", fmt_duration(secs as i64))?;
         }
     }
+    render_runtime(v.get("runtime"), out)?;
     if let Some(link) = v.get("link").filter(|l| l.is_object()) {
         let enabled = link
             .get("enabled")
@@ -184,6 +185,31 @@ fn render_inner(v: &Value, out: &mut dyn Write) -> Result<()> {
                 arr.len()
             )?;
         }
+    }
+    Ok(())
+}
+
+fn render_runtime(runtime: Option<&Value>, out: &mut dyn Write) -> Result<()> {
+    let Some(components) = runtime
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("components"))
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    let mut parts = Vec::new();
+    for name in ["stella", "llama", "onebot"] {
+        if let Some(state) = components
+            .get(name)
+            .and_then(Value::as_object)
+            .and_then(|component| component.get("state"))
+            .and_then(Value::as_str)
+        {
+            parts.push(format!("{name}={state}"));
+        }
+    }
+    if !parts.is_empty() {
+        writeln!(out, "Runtime：{}", parts.join("，"))?;
     }
     Ok(())
 }
@@ -324,5 +350,20 @@ mod tests {
         });
         let text = render_inner_to_string(&v);
         assert!(text.contains("llm_chat×2"), "{text}");
+    }
+
+    #[test]
+    fn runtime_states_are_rendered_when_present() {
+        let v: Value = serde_json::json!({
+            "runtime": {"components": {
+                "stella": {"state": "healthy"},
+                "llama": {"state": "disabled"},
+                "onebot": {"state": "degraded"}
+            }}
+        });
+        let text = render_inner_to_string(&v);
+        assert!(text.contains("stella=healthy"));
+        assert!(text.contains("llama=disabled"));
+        assert!(text.contains("onebot=degraded"));
     }
 }
