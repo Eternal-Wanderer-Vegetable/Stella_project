@@ -76,8 +76,12 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
-    /// 启动（本地：deploy start --detach；docker：compose up -d）
-    Start,
+    /// 启动（本地：Runtime start；docker：compose up -d）
+    Start {
+        /// 忽略 doctor 的阻塞性问题
+        #[arg(long)]
+        force: bool,
+    },
     /// 优雅停止（本地：deploy stop 哨兵协议；docker：compose stop）
     Stop,
     /// 重启
@@ -251,10 +255,14 @@ fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
             // 交互向导：必须继承 TTY（docker 形态下不加 -T）
             runner::run_passthrough(&ctx.domain_cmd(&sub_ref, true), &ctx.root)
         }
-        Command::Start => match ctx.mode {
-            Mode::Local => {
-                runner::run_passthrough(&ctx.deploy_cmd(&["start", "--detach"]), &ctx.root)
-            }
+        Command::Start { force } => match ctx.mode {
+            Mode::Local => runner::run_runtime_or_legacy(
+                &ctx,
+                "start",
+                &["start", "--detach"],
+                force,
+                &mut out,
+            ),
             Mode::Docker => runner::run_passthrough(&ctx.compose_cmd(&["up", "-d"]), &ctx.root),
         },
         Command::Stop => match ctx.mode {

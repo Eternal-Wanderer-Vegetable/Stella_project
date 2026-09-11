@@ -6,6 +6,7 @@
 //! 编排 docker compose。**stellacli 不实现任何领域逻辑**（方案 §2 铁律）——
 //! doctor/init/stop 等一律落到 deploy，这里只有 spawn 与包装。
 
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
@@ -108,8 +109,64 @@ impl Ctx {
     /// Runtime 不可用时，调用方应回退到对应的 legacy deploy 命令；这样旧
     /// 发布包和旧 Docker 镜像仍能被同一版 CLI 控制。
     pub fn runtime_cmd(&self, operation: &str) -> Vec<String> {
-        self.domain_cmd(&["runtime", operation, "--component", "stella"], false)
+        self.runtime_cmd_with_force(operation, false)
     }
+
+    pub fn runtime_cmd_with_force(&self, operation: &str, force: bool) -> Vec<String> {
+        let mut sub = vec!["runtime".to_owned(), operation.to_owned()];
+        sub.extend(["--component".to_owned(), "stella".to_owned()]);
+        if force {
+            sub.push("--force".to_owned());
+        }
+        let sub_ref: Vec<&str> = sub.iter().map(String::as_str).collect();
+        self.domain_cmd(&sub_ref, false)
+    }
+}
+
+/// 执行 Runtime 生命周期操作；旧版本不识别 Runtime envelope 时回退 legacy。
+pub fn run_runtime_or_legacy(
+    ctx: &Ctx,
+    operation: &str,
+    legacy_sub: &[&str],
+    force: bool,
+    out: &mut dyn Write,
+) -> Result<i32> {
+    let runtime_cmd = ctx.runtime_cmd_with_force(operation, force);
+    if let Ok(process) = run_output(&runtime_cmd, &ctx.root) {
+        let code = process.status.code().unwrap_or(1);
+        let stdout = String::from_utf8_lossy(&process.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&process.stderr).into_owned();
+        if let Some(envelope) = parse_json_output(&stdout)
+            .filter(|value| value.get("operation").and_then(Value::as_str) == Some(operation))
+        {
+            if let Some(message) = envelope.get("message").and_then(Value::as_str) {
+                writeln!(out, "{message}")?;
+            } else if let Some(error) = envelope
+                .get("error")
+                .and_then(|value| value.get("message"))
+                .and_then(Value::as_str)
+            {
+                writeln!(out, "错误：{error}")?;
+            } else if let Some(data) = envelope.get("data") {
+                writeln!(out, "{}", serde_json::to_string_pretty(data)?)?;
+            } else if !stdout.trim().is_empty() {
+                write!(out, "{stdout}")?;
+            }
+            if !stderr.trim().is_empty() {
+                writeln!(out, "{stderr}")?;
+            }
+            return Ok(code);
+        }
+    }
+    run_passthrough(&ctx.domain_cmd(legacy_sub, true), &ctx.root)
+}
+
+fn parse_json_output(stdout: &str) -> Option<Value> {
+    serde_json::from_str(stdout).ok().or_else(|| {
+        stdout
+            .find('{')
+            .and_then(|index| serde_json::from_str(&stdout[index..]).ok())
+    })
 }
 
 /// 优先读取 Runtime envelope 的 data，无法识别时回退 legacy JSON 命令。
@@ -124,11 +181,7 @@ pub fn capture_runtime_or_legacy_json(
         let code = out.status.code().unwrap_or(1);
         let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
-        let parsed = serde_json::from_str::<Value>(&stdout).ok().or_else(|| {
-            stdout
-                .find('{')
-                .and_then(|i| serde_json::from_str(&stdout[i..]).ok())
-        });
+        let parsed = parse_json_output(&stdout);
         if let Some(envelope) = parsed {
             if envelope.get("operation").and_then(Value::as_str) == Some(operation) {
                 let data = envelope.get("data").cloned().with_context(|| {
