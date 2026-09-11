@@ -61,6 +61,14 @@ def test_build_payload_fields_complete():
     assert isinstance(payload["version"], str) and payload["version"]
 
 
+def test_build_payload_can_nest_runtime_diagnostics():
+    runtime = {"schema_version": 1, "components": {"onebot": {"state": "degraded"}}}
+    payload = status_api.build_payload(
+        None, {}, pid=1, started_at=time.time(), runtime_status=runtime
+    )
+    assert payload["runtime"] is runtime
+
+
 def test_build_payload_omits_secrets(monkeypatch):
     """安全护栏：序列化后的 JSON 不得出现凭据或具体群号。"""
     monkeypatch.setattr(status_api, "ALLOWED_GROUPS", {123456789, 987654321})

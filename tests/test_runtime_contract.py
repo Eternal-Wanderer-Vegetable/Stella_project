@@ -72,3 +72,12 @@ def test_schema_fixtures_match_python_defaults():
     state = json.loads((root / "runtime-state.json").read_text(encoding="utf-8"))
     assert manifest["components"] == runtime.default_manifest()["components"]
     assert state["components"] == runtime.default_state()["components"]
+
+
+def test_onebot_link_maps_to_degraded_without_restarting_stella(monkeypatch, tmp_path):
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path)
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "test")
+    runtime.sync_onebot_status({"enabled": True, "healthy": False})
+    state = runtime.read_state()
+    assert state["components"]["onebot"]["state"] == "degraded"
+    assert state["desired"] == "running"

@@ -351,6 +351,15 @@ def sync_stella_status(
     )
 
 
+def sync_onebot_status(link: dict[str, Any] | None) -> None:
+    """Map OneBot link facts to Runtime state without restarting Stella."""
+    if not link or not link.get("enabled", False):
+        update_component("onebot", "disabled", desired="stopped")
+        return
+    state = "healthy" if link.get("healthy") else "degraded"
+    update_component("onebot", state, desired="running")
+
+
 def runtime_status_json() -> str:
     return json.dumps(snapshot(), ensure_ascii=False, indent=2)
 
@@ -371,6 +380,7 @@ __all__ = [
     "runtime_status_json",
     "snapshot",
     "structured_error",
+    "sync_onebot_status",
     "sync_stella_status",
     "update_component",
     "validate_manifest",
