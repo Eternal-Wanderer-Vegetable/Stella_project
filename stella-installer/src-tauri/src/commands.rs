@@ -17,6 +17,20 @@ static GUI_OWNS_BOT: AtomicBool = AtomicBool::new(false);
 /// 否则有 error 时前端会收到错误而不是检查结果。
 #[tauri::command]
 pub async fn run_doctor() -> Result<String, String> {
+    let runtime =
+        tauri::async_runtime::spawn_blocking(|| try_runtime_operation("doctor", false, true))
+            .await
+            .map_err(|e| format!("Runtime 自检任务未能完成：{e}"))?;
+    if let Some((envelope, _stdout, stderr, code)) = runtime {
+        if let Some(data) = envelope.get("data") {
+            return serde_json::to_string(data)
+                .map_err(|e| format!("Runtime doctor 结果无效：{e}"));
+        }
+        return Err(runtime_failure(
+            &envelope,
+            &format!("Runtime doctor 异常退出（code {code}）：{stderr}"),
+        ));
+    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
         python::run_deploy(&["doctor", "--json"])
     })
@@ -42,6 +56,20 @@ pub async fn run_doctor() -> Result<String, String> {
 /// status 只报告状态，不判断成败，因此非零退出码才是异常。
 #[tauri::command]
 pub async fn get_status() -> Result<String, String> {
+    let runtime =
+        tauri::async_runtime::spawn_blocking(|| try_runtime_operation("status", false, true))
+            .await
+            .map_err(|e| format!("Runtime 状态任务未能完成：{e}"))?;
+    if let Some((envelope, _stdout, stderr, code)) = runtime {
+        if let Some(data) = envelope.get("data") {
+            return serde_json::to_string(data)
+                .map_err(|e| format!("Runtime status 结果无效：{e}"));
+        }
+        return Err(runtime_failure(
+            &envelope,
+            &format!("Runtime status 异常退出（code {code}）：{stderr}"),
+        ));
+    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
         python::run_deploy(&["status", "--json"])
     })
@@ -61,6 +89,25 @@ pub async fn get_status() -> Result<String, String> {
 /// 后台启动 Bot。对应 `deploy start --detach`。
 #[tauri::command]
 pub async fn start_bot(force: bool) -> Result<String, String> {
+    let runtime = tauri::async_runtime::spawn_blocking(move || {
+        try_runtime_operation("start", force, true)
+    })
+    .await
+    .map_err(|e| format!("Runtime 启动任务未能完成：{e}"))?;
+    if let Some((envelope, _stdout, stderr, code)) = runtime {
+        if !envelope
+            .get("ok")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Err(runtime_failure(
+                &envelope,
+                &format!("Runtime 启动异常退出（code {code}）：{stderr}"),
+            ));
+        }
+        GUI_OWNS_BOT.store(true, Ordering::Release);
+        return Ok(runtime_message(&envelope));
+    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(move || {
         let mut args = vec!["start", "--detach"];
         if force {
@@ -85,6 +132,24 @@ pub async fn start_bot(force: bool) -> Result<String, String> {
 pub async fn stop_bot() -> Result<String, String> {
     if !GUI_OWNS_BOT.load(Ordering::Acquire) {
         return Ok("当前 GUI 未启动 Stella，不执行跨实例停止。".to_owned());
+    }
+    let runtime =
+        tauri::async_runtime::spawn_blocking(|| try_runtime_operation("stop", false, false))
+            .await
+            .map_err(|e| format!("Runtime 停止任务未能完成：{e}"))?;
+    if let Some((envelope, _stdout, stderr, code)) = runtime {
+        if !envelope
+            .get("ok")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Err(runtime_failure(
+                &envelope,
+                &format!("Runtime 停止异常退出（code {code}）：{stderr}"),
+            ));
+        }
+        GUI_OWNS_BOT.store(false, Ordering::Release);
+        return Ok(runtime_message(&envelope));
     }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
         python::run_deploy_without_prepare(&["stop"])
@@ -784,5 +849,85 @@ fn extract_json(s: &str) -> Option<&str> {
         Some(&s[start..=end])
     } else {
         None
+    }
+}
+
+/// 只有完整且 operation 匹配的 envelope 才能启用 Runtime 路径。
+///
+/// 旧版 Python 没有 `runtime` 子命令，argparse 错误不会带 envelope；这时
+/// 返回 None，调用方才会走 legacy deploy fallback。Runtime 自身的失败结果
+/// 仍然是合法 envelope，不能被误判成「不可用」。
+fn try_runtime_operation(
+    operation: &str,
+    force: bool,
+    prepare: bool,
+) -> Option<(serde_json::Value, String, String, i32)> {
+    let (stdout, stderr, code) =
+        python::run_runtime_operation(operation, "stella", None, force, prepare).ok()?;
+    let value: serde_json::Value = serde_json::from_str(extract_json(&stdout)?).ok()?;
+    if value.get("operation").and_then(serde_json::Value::as_str) != Some(operation) {
+        return None;
+    }
+    Some((value, stdout, stderr, code))
+}
+
+fn runtime_message(envelope: &serde_json::Value) -> String {
+    envelope
+        .get("message")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .or_else(|| {
+            envelope
+                .get("data")
+                .and_then(|data| serde_json::to_string(data).ok())
+        })
+        .unwrap_or_default()
+}
+
+fn runtime_failure(envelope: &serde_json::Value, fallback: &str) -> String {
+    let message = envelope
+        .get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|message| !message.is_empty());
+    match message {
+        Some(message) => message.to_owned(),
+        None => fallback.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_json, runtime_failure, runtime_message};
+
+    #[test]
+    fn runtime_envelope_parser_requires_matching_operation() {
+        let stdout = r#"warning
+{"ok":true,"operation":"status","component":"stella","data":{"alive":false}}"#;
+        let parsed: serde_json::Value =
+            serde_json::from_str(extract_json(stdout).unwrap()).unwrap();
+        assert_eq!(
+            parsed.get("operation").and_then(serde_json::Value::as_str),
+            Some("status")
+        );
+    }
+
+    #[test]
+    fn runtime_message_prefers_legacy_compatible_message() {
+        let envelope = serde_json::json!({
+            "ok": true,
+            "operation": "start",
+            "message": "started"
+        });
+        assert_eq!(runtime_message(&envelope), "started");
+    }
+
+    #[test]
+    fn runtime_failure_prefers_structured_error() {
+        let envelope = serde_json::json!({
+            "ok": false,
+            "error": {"code": "operation_failed", "message": "启动失败"}
+        });
+        assert_eq!(runtime_failure(&envelope, "fallback"), "启动失败");
     }
 }

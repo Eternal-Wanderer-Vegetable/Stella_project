@@ -393,6 +393,9 @@ def execute_operation(
         "parameters": parameters or {},
     }
     validate_operation_request(request)
+    force = request["parameters"].get("force", False)
+    if not isinstance(force, bool):
+        raise ValueError("Runtime parameters.force 必须是布尔值")
     if component != "stella" and operation in {"start", "stop", "restart", "logs"}:
         return {
             "ok": False,
@@ -426,6 +429,24 @@ def execute_operation(
             "data": redact_value(data),
             "exit_code": 0 if not report.has_blocking(results) else 1,
         }
+
+    if operation == "start":
+        facts = probe.collect()
+        results = checks.run_all(facts)
+        if report.has_blocking(results) and not force:
+            data = json.loads(report.to_json(results, facts))
+            return redact_value({
+                "ok": False,
+                "operation": operation,
+                "component": component,
+                "exit_code": 1,
+                "data": data,
+                "error": structured_error(
+                    "component_failed",
+                    "存在阻塞性问题；确认原因后可使用 force 参数继续启动",
+                    component=component,
+                ),
+            })
 
     if operation == "logs":
         tail = parameters.get("tail", 100) if parameters else 100

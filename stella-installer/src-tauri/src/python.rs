@@ -822,6 +822,35 @@ pub fn run_deploy_without_prepare(args: &[&str]) -> Result<(String, String, i32)
     run_deploy_inner(args, false)
 }
 
+/// 执行统一 Runtime 操作。
+///
+/// 这是迁移期的窄接缝：当前 Runtime 操作仍由 Python compatibility owner
+/// 执行，未来可将本函数的实现替换为 named pipe/localhost client，而不改变
+/// Tauri command 的公开接口。`prepare` 与普通 deploy 调用保持相同语义。
+pub fn run_runtime_operation(
+    operation: &str,
+    component: &str,
+    tail: Option<usize>,
+    force: bool,
+    prepare: bool,
+) -> Result<(String, String, i32), String> {
+    let mut args = vec![
+        "runtime".to_owned(),
+        operation.to_owned(),
+        "--component".to_owned(),
+        component.to_owned(),
+    ];
+    if let Some(tail) = tail {
+        args.push("--tail".to_owned());
+        args.push(tail.to_string());
+    }
+    if force {
+        args.push("--force".to_owned());
+    }
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_deploy_inner(&borrowed, prepare)
+}
+
 fn run_deploy_inner(
     args: &[&str],
     prepare: bool,

@@ -404,7 +404,14 @@ def _cmd_runtime(args: argparse.Namespace) -> int:
         result = runtime.execute_operation(
             args.operation,
             args.component,
-            {"tail": args.tail} if args.tail is not None else {},
+            {
+                key: value
+                for key, value in (
+                    ("tail", args.tail),
+                    ("force", args.force),
+                )
+                if value is not None
+            },
         )
     except ValueError as exc:
         print(json.dumps(
@@ -539,6 +546,11 @@ def main(argv: list[str] | None = None) -> int:
         "--tail",
         type=int,
         help="logs 操作读取的最大行数（1-2000）",
+    )
+    p_runtime.add_argument(
+        "--force",
+        action="store_true",
+        help="start 操作忽略 doctor 的阻塞性问题",
     )
     p_runtime.set_defaults(func=_cmd_runtime)
 
