@@ -4,9 +4,17 @@
 """memory.benchmark 与 memory.consolidation_log 的单元测试。"""
 
 import json
+import sqlite3
+from types import SimpleNamespace
 
 import memory.consolidation_log as cl
-from memory.benchmark import evaluate_case, load_cases, run_benchmark
+from memory.benchmark import (
+    evaluate_case,
+    evaluate_retrieval_result,
+    load_cases,
+    run_benchmark,
+    write_case_db,
+)
 
 
 def test_load_cases_missing_dir(tmp_path):
@@ -35,6 +43,58 @@ def test_evaluate_case_basic():
     assert isinstance(res["final"], list)
     assert res["expected"] == ["m1"]
     assert isinstance(res["ok"], bool)
+
+
+def test_write_case_db_can_add_native_schema_marker(tmp_path):
+    db_path = tmp_path / "case.db"
+    write_case_db(
+        db_path,
+        {
+            "id": "schema",
+            "input": "你好",
+            "memories": {"m1": {"content": "事实"}},
+        },
+        with_schema_meta=True,
+    )
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute(
+            "SELECT version FROM schema_meta WHERE k = 'version'"
+        ).fetchone() == (14,)
+
+
+def test_evaluate_retrieval_result_preserves_case_scoring():
+    case = {
+        "id": "score",
+        "input": "推荐游戏",
+        "mode": "RECOMMEND",
+        "expected_memory": ["m1"],
+        "expected_behavior_memory": ["guard"],
+        "forbidden_memory": ["bad"],
+        "memories": {},
+    }
+    result = SimpleNamespace(
+        mode="RECOMMEND",
+        conversation_memories=[
+            {"id": "m1", "_score": 0.9, "_score_parts": {"sem": 0.9}},
+            {"id": "bad", "_score": 0.8},
+        ],
+        behavior_constraints=[{"id": "guard", "_score": 0.7}],
+        trace={
+            "ranked_all": [
+                {"id": "m1", "score": 0.9},
+                {"id": "bad", "score": 0.8},
+                {"id": "guard", "score": 0.7},
+            ]
+        },
+    )
+
+    evaluated = evaluate_retrieval_result(case, result)
+
+    assert evaluated["found_expected"] == ["m1"]
+    assert evaluated["found_behavior"] == ["guard"]
+    assert evaluated["activated_forbidden"] == ["bad"]
+    assert evaluated["ok"] is False
 
 
 def test_evaluate_case_forbidden_reported():
