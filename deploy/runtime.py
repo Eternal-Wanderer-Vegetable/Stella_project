@@ -10,10 +10,12 @@ manifest/state JSON 契约，供旧 deploy、GUI 和诊断工具在迁移期使�
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 import re
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,10 +40,12 @@ STATE_FILENAME = "runtime-state.json"
 ERROR_CODES = (
     "invalid_operation",
     "invalid_component",
+    "unsupported_component_operation",
     "invalid_manifest",
     "invalid_state",
     "runtime_unavailable",
     "component_failed",
+    "operation_failed",
 )
 _SECRET_KEY = re.compile(
     r"(token|secret|password|passwd|api[_-]?key|credential)", re.IGNORECASE
@@ -364,6 +368,123 @@ def runtime_status_json() -> str:
     return json.dumps(snapshot(), ensure_ascii=False, indent=2)
 
 
+def _captured_call(callback: Any) -> tuple[Any, str]:
+    """Run a legacy owner call without contaminating the JSON operation output."""
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        value = callback()
+    return value, output.getvalue().strip()
+
+
+def execute_operation(
+    operation: str,
+    component: str = "stella",
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Execute one Runtime operation through the current compatibility owner.
+
+    The dispatcher is deliberately small: it provides the stable control-plane
+    envelope now, while the Rust supervisor can replace the owner behind this
+    seam without changing CLI or GUI callers.
+    """
+    request = {
+        "operation": operation,
+        "component": component,
+        "parameters": parameters or {},
+    }
+    validate_operation_request(request)
+    if component != "stella" and operation in {"start", "stop", "restart", "logs"}:
+        return {
+            "ok": False,
+            "operation": operation,
+            "component": component,
+            "error": structured_error(
+                "unsupported_component_operation",
+                f"组件 {component} 当前没有可用的 Python compatibility owner",
+                component=component,
+            ),
+        }
+
+    from . import checks, probe, process, report
+
+    if operation == "status":
+        return {
+            "ok": True,
+            "operation": operation,
+            "component": component,
+            "data": redact_value(process.status()),
+        }
+
+    if operation == "doctor":
+        facts = probe.collect()
+        results = checks.run_all(facts)
+        data = json.loads(report.to_json(results, facts))
+        return {
+            "ok": not report.has_blocking(results),
+            "operation": operation,
+            "component": component,
+            "data": redact_value(data),
+            "exit_code": 0 if not report.has_blocking(results) else 1,
+        }
+
+    if operation == "logs":
+        tail = parameters.get("tail", 100) if parameters else 100
+        if not isinstance(tail, int) or isinstance(tail, bool) or not 1 <= tail <= 2000:
+            raise ValueError("logs.tail 必须是 1 到 2000 的整数")
+        path = process.LOG_FILE
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()[-tail:] if path.exists() else []
+        except OSError as exc:
+            return {
+                "ok": False,
+                "operation": operation,
+                "component": component,
+                "error": structured_error("operation_failed", str(exc), path=str(path)),
+            }
+        return {
+            "ok": True,
+            "operation": operation,
+            "component": component,
+            "data": {"path": str(path), "lines": lines},
+        }
+
+    if operation == "start":
+        value, output = _captured_call(process.start_detached)
+        ok = value == 0
+    elif operation == "stop":
+        value, output = _captured_call(process.stop)
+        ok = value is True
+    elif operation == "restart":
+        stopped, stop_output = _captured_call(process.stop)
+        if stopped is True:
+            value, start_output = _captured_call(process.start_detached)
+            output = "\n".join(part for part in (stop_output, start_output) if part)
+            ok = value == 0
+        else:
+            output = stop_output
+            ok = False
+    else:
+        raise ValueError(f"不支持的 Runtime 操作：{operation}")
+
+    result: dict[str, Any] = {
+        "ok": ok,
+        "operation": operation,
+        "component": component,
+        "exit_code": 0 if ok else 1,
+        "data": snapshot(),
+    }
+    if output:
+        result["message"] = output[-2000:]
+    if not ok:
+        result["error"] = structured_error(
+            "operation_failed",
+            output or f"Runtime 操作失败：{operation}",
+            operation=operation,
+            component=component,
+        )
+    return redact_value(result)
+
+
 __all__ = [
     "COMPONENTS",
     "ERROR_CODES",
@@ -374,6 +495,7 @@ __all__ = [
     "STATE_FILENAME",
     "default_manifest",
     "default_state",
+    "execute_operation",
     "read_manifest",
     "read_state",
     "redact_value",

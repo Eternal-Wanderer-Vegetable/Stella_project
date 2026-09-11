@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy import runtime
+from deploy import process, runtime
 
 
 def test_default_manifest_has_optional_components():
@@ -81,3 +81,29 @@ def test_onebot_link_maps_to_degraded_without_restarting_stella(monkeypatch, tmp
     state = runtime.read_state()
     assert state["components"]["onebot"]["state"] == "degraded"
     assert state["desired"] == "running"
+
+
+def test_execute_status_uses_shared_operation_envelope(monkeypatch):
+    monkeypatch.setattr(process, "status", lambda: {"alive": False})
+    result = runtime.execute_operation("status")
+    assert result == {
+        "ok": True,
+        "operation": "status",
+        "component": "stella",
+        "data": {"alive": False},
+    }
+
+
+def test_execute_rejects_unsupported_component_owner():
+    result = runtime.execute_operation("start", "llama")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "unsupported_component_operation"
+
+
+def test_execute_start_captures_legacy_output(monkeypatch):
+    monkeypatch.setattr(process, "start_detached", lambda: (print("started"), 0)[1])
+    monkeypatch.setattr(runtime, "snapshot", lambda: {"components": {"stella": {"state": "starting"}}})
+    result = runtime.execute_operation("start")
+    assert result["ok"] is True
+    assert result["exit_code"] == 0
+    assert result["message"] == "started"

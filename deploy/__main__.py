@@ -399,13 +399,12 @@ def _cmd_manifest(args: argparse.Namespace) -> int:
 
 
 def _cmd_runtime(args: argparse.Namespace) -> int:
-    """Validate or print the shared Runtime contract without starting processes."""
+    """Execute one Runtime operation and print the shared JSON envelope."""
     try:
-        if args.operation == "status":
-            print(runtime.runtime_status_json())
-            return 0
-        runtime.validate_operation_request(
-            {"operation": args.operation, "component": args.component}
+        result = runtime.execute_operation(
+            args.operation,
+            args.component,
+            {"tail": args.tail} if args.tail is not None else {},
         )
     except ValueError as exc:
         print(json.dumps(
@@ -413,13 +412,8 @@ def _cmd_runtime(args: argparse.Namespace) -> int:
             ensure_ascii=False,
         ))
         return 2
-    print(json.dumps({
-        "ok": True,
-        "operation": args.operation,
-        "component": args.component,
-        "schema_version": runtime.SCHEMA_VERSION,
-    }, ensure_ascii=False))
-    return 0
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return int(result.get("exit_code", 0 if result.get("ok") else 1))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -540,6 +534,11 @@ def main(argv: list[str] | None = None) -> int:
         default="stella",
         choices=runtime.COMPONENTS,
         help="组件名",
+    )
+    p_runtime.add_argument(
+        "--tail",
+        type=int,
+        help="logs 操作读取的最大行数（1-2000）",
     )
     p_runtime.set_defaults(func=_cmd_runtime)
 
