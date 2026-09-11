@@ -42,11 +42,11 @@ jobs:
       - name: 校验 Rust distribution 元数据
         shell: pwsh
         run: |
-          $metadata = Get-Content 'memory_rust/native/pyproject.toml' -Raw
-          if ($metadata -notmatch '(?m)^name = "stella-memory-rust"$') {
+          $metadataLines = (Get-Content 'memory_rust/native/pyproject.toml' -Raw) -split '\r?\n'
+          if ($metadataLines -cnotcontains 'name = "stella-memory-rust"') {
             throw 'Rust distribution name changed unexpectedly'
           }
-          if ($metadata -notmatch '(?m)^version = "0\.1\.0"$') {
+          if ($metadataLines -cnotcontains 'version = "0.1.0"') {
             throw 'Rust backend package version is not the expected independent package version'
           }
 
