@@ -17,6 +17,11 @@ Set `MEMORY_BACKEND` before starting Stella:
   return the Python result. Rust performs no write or post-commit side effect.
 - `strict`: require the Rust backend and surface load or contract failures.
 
+For compatibility with earlier rollout scripts, `MEMORY_RUST_SHADOW=true`
+selects `shadow` and `MEMORY_RUST_STRICT=true` selects `strict` when
+`MEMORY_BACKEND` is unset. If both flags are enabled, strict wins. An explicit
+`MEMORY_BACKEND` value always takes precedence.
+
 The first rollout keeps `python` as the recommended setting. Returning to the
 Python engine is an environment-only change:
 
@@ -27,6 +32,16 @@ MEMORY_BACKEND=python
 Rust does not own embedding HTTP, LLM consolidation, schema migration,
 Python async locks, scheduler work, cache invalidation, or compressor
 side effects.
+
+## Compatibility Matrix
+
+| Rust distribution | Backend API | Memory schema | Python |
+| --- | ---: | ---: | --- |
+| `stella-memory-rust 0.1.x` | 1 | 14 | 3.10+ (`abi3`) |
+
+The native loader rejects API or schema mismatches before selecting Rust. The
+main Stella package keeps the Python engine and does not require this
+distribution.
 
 ## Release Assets
 
