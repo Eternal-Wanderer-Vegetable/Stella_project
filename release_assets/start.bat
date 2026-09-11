@@ -11,6 +11,15 @@ set "PY_SHA256=4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3"
 set "RUNTIME_DIR=runtime"
 set "PY=%RUNTIME_DIR%\python.exe"
 set "DEPS_MARKER=%RUNTIME_DIR%\.stella-deps-ready"
+set "RUST_MARKER=%RUNTIME_DIR%\.stella-rust-ready"
+set "RUST_WHEEL="
+
+rem A Rust engine release carries its wheel beside this launcher.  The regular
+rem Python release has no wheels directory and keeps the Python backend default.
+for %%f in ("wheels\stella_memory_rust-*.whl") do (
+    if exist "%%~f" set "RUST_WHEEL=%%~f"
+)
+if defined RUST_WHEEL set "MEMORY_BACKEND=rust"
 
 rem The deps marker stores the sha256 of requirements.txt, not a fixed string.
 rem Upgrades reuse the whole runtime/ directory to avoid a 100MB download; a
@@ -22,7 +31,7 @@ call :req_hash
 if not exist "%DEPS_MARKER%" goto :install
 set "MARKED="
 set /p MARKED=<"%DEPS_MARKER%"
-if /i "!MARKED!"=="!REQ_HASH!" goto :run
+if /i "!MARKED!"=="!REQ_HASH!" goto :rust_install
 echo Dependencies changed since the last run. Reinstalling...
 goto :install
 
@@ -119,6 +128,13 @@ rem Record which requirements.txt these dependencies were installed from.
 call :req_hash
 > "%DEPS_MARKER%" echo !REQ_HASH!
 
+:rust_install
+call :ensure_rust_wheel
+if errorlevel 1 (
+    if /i not "%~1"=="--prepare" pause
+    exit /b 1
+)
+
 :run
 if /i "%~1"=="--prepare" (
     exit /b 0
@@ -157,6 +173,28 @@ if not exist "!ENV_FILE!" (
 pause
 exit /b %errorlevel%
 
+:ensure_rust_wheel
+if not defined RUST_WHEEL exit /b 0
+call :rust_wheel_hash
+if exist "%RUST_MARKER%" (
+    set "RUST_MARKED="
+    set /p RUST_MARKED=<"%RUST_MARKER%"
+    if /i "!RUST_MARKED!"=="!RUST_HASH!" exit /b 0
+)
+echo Installing the bundled Rust memory engine...
+"%PY%" -m pip install --no-index --no-deps --upgrade --target . "%RUST_WHEEL%"
+if errorlevel 1 (
+    echo [ERROR] Failed to install the bundled Rust memory engine.
+    exit /b 1
+)
+"%PY%" -c "import memory_rust._native" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] The bundled Rust memory engine failed its import check.
+    exit /b 1
+)
+> "%RUST_MARKER%" echo !RUST_HASH!
+exit /b 0
+
 :req_hash
 rem SHA256 of requirements.txt into REQ_HASH ("none" when the file is missing).
 set "REQ_HASH=none"
@@ -167,6 +205,16 @@ for /f "skip=1 tokens=* delims=" %%h in ('certutil -hashfile "requirements.txt" 
 )
 :req_hash_done
 set "REQ_HASH=!REQ_HASH: =!"
+exit /b 0
+
+:rust_wheel_hash
+set "RUST_HASH=none"
+for /f "skip=1 tokens=* delims=" %%h in ('certutil -hashfile "%RUST_WHEEL%" SHA256') do (
+    set "RUST_HASH=%%h"
+    goto :rust_hash_done
+)
+:rust_hash_done
+set "RUST_HASH=!RUST_HASH: =!"
 exit /b 0
 
 :try_download

@@ -57,6 +57,15 @@ The same `vX.Y.Z` GitHub Release also receives the independent Rust engine:
 Stella-Rust_engine_version-vX.Y.Z-win64.zip
 ```
 
-The Rust asset contains the separately installable wheel and checksums. Its
-package version is independent of the Stella application version, while the
-asset filename always uses the exact main Release tag.
+The Rust asset is a complete Windows Stella package based on the matching
+Python asset. It includes `Stella.exe`, the normal `start.bat` bootstrap,
+the Python source/runtime configuration, and one bundled
+`stella-memory-rust` wheel under `wheels/`. Double-clicking `start.bat` or
+`Stella.exe` follows the same first-run setup as the Python asset, then
+installs the local wheel into the application directory without downloading
+it and selects `MEMORY_BACKEND=rust`. Installing beside the bundled
+`memory_rust` package keeps the native extension importable from the embedded
+Python runtime. `VERSION.txt` and `SHA256SUMS.txt` describe the native engine
+payload. The wheel package version remains independent of the Stella
+application version, while the asset filename always uses the exact main
+Release tag.

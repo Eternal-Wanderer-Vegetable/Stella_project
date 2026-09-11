@@ -41,6 +41,7 @@ mod runtime_bootstrap {
     const PYPI_INDEX: &str = "https://pypi.org/simple";
     const PIP_MIRROR: &str = "https://pypi.tuna.tsinghua.edu.cn/simple";
     const DEPS_MARKER: &str = ".stella-deps-ready";
+    const RUST_MARKER: &str = ".stella-rust-ready";
     const PROGRESS_FILE: &str = ".bootstrap-progress";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
     const MIN_GET_PIP_SIZE: u64 = 500_000;
@@ -83,6 +84,7 @@ mod runtime_bootstrap {
         // 跟着过来就等于「依赖已就绪」，新版本新增的依赖于是永远装不上。存哈希后
         // requirements.txt 一变就自动重装。判据必须与 release_assets/start.bat 一致。
         if deps_marker_matches(root, &runtime) {
+            ensure_rust_wheel(root, &runtime.join("python.exe"))?;
             return Ok(());
         }
 
@@ -119,6 +121,7 @@ mod runtime_bootstrap {
             // 标记里存 requirements.txt 的哈希，而不是一句 "ready"：详见 deps_marker_matches
             let marked = requirements_hash(root).unwrap_or_else(|| "ready".to_owned());
             fs::write(runtime.join(DEPS_MARKER), marked + "\n").map_err(|e| e.to_string())?;
+            ensure_rust_wheel(root, &python)?;
             Ok(())
         })();
 
@@ -264,6 +267,70 @@ mod runtime_bootstrap {
             None => true,
             Some(expected) => recorded.trim().eq_ignore_ascii_case(&expected),
         }
+    }
+
+    fn rust_wheel(root: &Path) -> Result<Option<std::path::PathBuf>, String> {
+        let wheels_dir = root.join("wheels");
+        if !wheels_dir.is_dir() {
+            return Ok(None);
+        }
+        let mut wheels = Vec::new();
+        for entry in fs::read_dir(&wheels_dir).map_err(|e| e.to_string())? {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            let is_rust_wheel = path.is_file()
+                && path.extension().and_then(|ext| ext.to_str()) == Some("whl")
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("stella_memory_rust-"));
+            if is_rust_wheel {
+                wheels.push(path);
+            }
+        }
+        match wheels.len() {
+            0 => Ok(None),
+            1 => Ok(wheels.pop()),
+            count => Err(format!(
+                "Rust engine 包含 {count} 个 stella-memory-rust wheel，期望恰好 1 个"
+            )),
+        }
+    }
+
+    fn ensure_rust_wheel(root: &Path, python: &Path) -> Result<(), String> {
+        let Some(wheel) = rust_wheel(root)? else {
+            return Ok(());
+        };
+        let marker = python
+            .parent()
+            .ok_or_else(|| "无法定位 Python runtime 目录".to_owned())?
+            .join(RUST_MARKER);
+        let expected = sha256_hex(&wheel)?;
+        if fs::read_to_string(&marker)
+            .map(|recorded| recorded.trim().eq_ignore_ascii_case(&expected))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
+        emit_progress(root, "正在安装随包提供的 Rust 记忆引擎…");
+        let wheel_arg = wheel.to_string_lossy().into_owned();
+        let install_args = [
+            "-m",
+            "pip",
+            "install",
+            "--no-index",
+            "--no-deps",
+            "--upgrade",
+            "--target",
+            ".",
+            wheel_arg.as_str(),
+        ];
+        run(python, &install_args, root)
+            .map_err(|e| format!("Rust 记忆引擎安装失败：{e}"))?;
+        run(python, &["-c", "import memory_rust._native"], root)
+            .map_err(|e| format!("Rust 记忆引擎导入检查失败：{e}"))?;
+        fs::write(&marker, expected + "\n").map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn sha256_hex(path: &Path) -> Result<String, String> {
@@ -578,6 +645,39 @@ mod runtime_bootstrap {
                 "start.bat 不能再写固定内容的就绪标记（复用 runtime 时会漏装依赖）"
             );
         }
+
+        #[test]
+        fn both_bootstrap_paths_install_the_bundled_rust_wheel() {
+            let src = fs::read_to_string(Path::new(file!())).expect("无法读取 python.rs");
+            assert!(
+                src.contains("fn ensure_rust_wheel"),
+                "GUI bootstrap 必须安装随包提供的 Rust wheel"
+            );
+            assert!(
+                src.contains("--no-index")
+                    && src.contains("--no-deps")
+                    && src.contains("import memory_rust._native"),
+                "GUI bootstrap 必须离线安装并检查 Rust native extension"
+            );
+
+            let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("release_assets")
+                .join("start.bat");
+            if !bat_path.is_file() {
+                return;
+            }
+            let bat = fs::read_to_string(&bat_path).expect("无法读取 start.bat");
+            assert!(
+                bat.contains("wheels\\stella_memory_rust-*.whl"),
+                "start.bat 必须发现随包提供的 Rust wheel"
+            );
+            assert!(
+                bat.contains("--no-index") && bat.contains("import memory_rust._native"),
+                "start.bat 必须离线安装并检查 Rust native extension"
+            );
+        }
     }
 }
 
@@ -734,6 +834,9 @@ fn run_deploy_inner(
 
     let mut cmd = Command::new(&python);
     cmd.arg("-m").arg("deploy").args(args).current_dir(&root);
+    if rust_wheel_present(&root) {
+        cmd.env("MEMORY_BACKEND", "rust");
+    }
 
     // Windows 抑制黑窗：不加则每次调用都闪一个黑色控制台窗口。
     // 几乎所有 Tauri + 子进程的项目都会踩这个坑。0x0800_0000 = CREATE_NO_WINDOW。
@@ -754,4 +857,19 @@ fn run_deploy_inner(
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     let code = output.status.code().unwrap_or(-1);
     Ok((stdout, stderr, code))
+}
+
+fn rust_wheel_present(root: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(root.join("wheels")) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        path.is_file()
+            && path.extension().and_then(|ext| ext.to_str()) == Some("whl")
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("stella_memory_rust-"))
+    })
 }

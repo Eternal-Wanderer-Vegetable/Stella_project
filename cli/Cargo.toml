@@ -9,7 +9,7 @@
 
 [package]
 name = "stellacli"
-version = "3.10.0"
+version = "3.10.1"
 edition = "2021"
 rust-version = "1.75"
 description = "Stella 跨平台命令行控制台（本地运行 / Docker 编排统一入口）"

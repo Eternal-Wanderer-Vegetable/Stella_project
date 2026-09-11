@@ -52,15 +52,12 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert 'Stella-${RELEASE_REF}-win64.zip' in main
     assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
-    assert (
-        "gh release create $env:RELEASE_REF `" in rust
-        and "gh release create $env:RELEASE_REF $asset" not in rust
-    )
-    assert "gh release view $env:RELEASE_REF *> $null" in rust
-    assert "if ($LASTEXITCODE -eq 0)" in rust
-    assert "if ($LASTEXITCODE -ne 0)" in rust
-    assert "Failed to create or find release" in rust
     assert "Rust asset upload failed" in rust
+    assert 'gh release download $env:RELEASE_REF' in rust
+    assert 'Stella-$env:RELEASE_REF-win64.zip' in rust
+    assert "gh release create" not in rust
+    assert "校验主 Python 与 CLI 版本" in rust
+    assert "pyproject.toml" in rust and "cli/Cargo.toml" in rust
 
 
 def test_rust_metadata_guard_handles_windows_line_endings():
@@ -74,6 +71,30 @@ def test_rust_metadata_guard_handles_windows_line_endings():
     ) in rust
     assert "$metadataLines -cnotcontains 'name = \"stella-memory-rust\"'" in rust
     assert "$metadataLines -cnotcontains 'version = \"0.1.0\"'" in rust
+
+
+def test_rust_release_is_a_complete_launchable_engine_package():
+    """The Rust asset must be the full Windows package plus one local wheel."""
+    rust = (
+        PROJECT_ROOT / ".github" / "workflows" / "release-memory-rust.yml"
+    ).read_text(encoding="utf-8")
+    launcher = (PROJECT_ROOT / "release_assets" / "start.bat").read_text(
+        encoding="utf-8"
+    )
+    assert 'Expand-Archive -LiteralPath "dist\\base\\$baseAsset"' in rust
+    assert 'Copy-Item "dist\\rust-wheel\\*.whl" "$root\\wheels\\"' in rust
+    assert '"Stella.exe"' in rust
+    assert '"start.bat"' in rust
+    assert '"wheels"' in rust
+    assert '"RUST_ENGINE.txt"' in rust
+    assert 'must contain exactly one bundled wheel' in rust
+    assert 'for %%f in ("wheels\\stella_memory_rust-*.whl")' in launcher
+    assert 'set "MEMORY_BACKEND=rust"' in launcher
+    assert (
+        'pip install --no-index --no-deps --upgrade --target . "%RUST_WHEEL%"'
+        in launcher
+    )
+    assert 'import memory_rust._native' in launcher
 
 
 def test_python_release_excludes_rust_native_outputs():
