@@ -30,9 +30,10 @@ from core.llm.usage_sink import record as record_usage
 _MAX_ATTEMPTS = 3
 
 
-class LMStudioBackend(LLMBackend):
-    """调用 OpenAI 兼容 chat-completions 接口的后端。"""
-    backend_name = "lm_studio"
+class OpenAICompatibleBackend(LLMBackend):
+    """调用 OpenAI-compatible chat-completions 接口的通用后端。"""
+
+    backend_name = "openai_compatible"
     is_local = True
 
     def __init__(
@@ -240,3 +241,12 @@ class LMStudioBackend(LLMBackend):
             role=self.role, slot=self.slot, model=self.model, kind=self.kind, ok=False
         )
         raise last_error or RuntimeError("LLM 请求失败")
+
+
+class LMStudioBackend(OpenAICompatibleBackend):
+    """兼容旧调用点的 LM Studio 名称。实现由通用 OpenAI 后端提供。"""
+
+    backend_name = "lm_studio"
+
+
+__all__ = ["LMStudioBackend", "OpenAICompatibleBackend"]
