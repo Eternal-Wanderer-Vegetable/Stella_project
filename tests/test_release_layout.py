@@ -53,7 +53,8 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
     assert "Rust asset upload failed" in rust
-    assert 'gh release download $env:RELEASE_REF' in rust
+    assert 'https://api.github.com/repos/$repo/releases/tags/$env:RELEASE_REF' in rust
+    assert 'Accept = "application/octet-stream"' in rust
     assert 'Stella-$env:RELEASE_REF-win64.zip' in rust
     assert "gh release create" not in rust
     assert "校验主 Python 与 CLI 版本" in rust
