@@ -332,6 +332,138 @@ def _max_float(a: Any, b: Any) -> float:
     return max(_f(a), _f(b))
 
 
+def _backend_parity_report(
+    python_result: RetrievalResult,
+    rust_result: RetrievalResult,
+) -> dict[str, Any]:
+    """Compare observable retrieval output without logging memory contents."""
+
+    python_ids = [
+        str(memory.get("id"))
+        for memory in python_result.conversation_memories
+    ]
+    rust_ids = [
+        str(memory.get("id"))
+        for memory in rust_result.conversation_memories
+    ]
+    python_behavior_ids = [
+        str(memory.get("id"))
+        for memory in python_result.behavior_constraints
+    ]
+    rust_behavior_ids = [
+        str(memory.get("id"))
+        for memory in rust_result.behavior_constraints
+    ]
+    python_scores = {
+        str(memory.get("id")): float(memory.get("_score") or 0.0)
+        for memory in python_result.conversation_memories
+    }
+    rust_scores = {
+        str(memory.get("id")): float(memory.get("_score") or 0.0)
+        for memory in rust_result.conversation_memories
+    }
+    score_delta = max(
+        (
+            abs(python_scores[mid] - rust_scores[mid])
+            for mid in python_scores.keys() & rust_scores.keys()
+        ),
+        default=0.0,
+    )
+    return {
+        "match": (
+            python_ids == rust_ids
+            and python_behavior_ids == rust_behavior_ids
+            and score_delta <= 0.01
+        ),
+        "python_ids": python_ids,
+        "rust_ids": rust_ids,
+        "python_behavior_ids": python_behavior_ids,
+        "rust_behavior_ids": rust_behavior_ids,
+        "max_score_delta": round(score_delta, 4),
+    }
+
+
+def _retrieve_with_optional_backend(
+    group_shared_space: str,
+    user_id: int,
+    query: str,
+    trigger: str,
+    mode: str | None,
+    semantic_scores: dict[str, float] | None,
+) -> RetrievalResult:
+    from memory_rust.backend import RetrievalRequest
+    from memory_rust.selector import resolve_backend
+
+    resolved_mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
+    decision, backend = resolve_backend()
+    if decision.selected == "python":
+        return retrieve_memories(
+            group_shared_space,
+            user_id,
+            query,
+            trigger=trigger,
+            mode=resolved_mode,
+            semantic_scores=semantic_scores,
+            _bypass_backend=True,
+        )
+
+    request = RetrievalRequest(
+        db_path=DB_PATH,
+        group_shared_space=group_shared_space,
+        user_id=user_id,
+        query=query,
+        trigger=trigger,
+        mode=resolved_mode,
+        pool_limit=max(
+            LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
+            mode_limit(resolved_mode) * 5,
+        ),
+        semantic_scores=semantic_scores or {},
+    )
+    try:
+        rust_result = backend.retrieve(request)
+    except Exception as exc:
+        if decision.requested in {"auto", "shadow"}:
+            logger.warning(
+                "[MemoryBackend] Rust retrieval fallback: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            return retrieve_memories(
+                group_shared_space,
+                user_id,
+                query,
+                trigger=trigger,
+                mode=resolved_mode,
+                semantic_scores=semantic_scores,
+                _bypass_backend=True,
+            )
+        raise
+
+    if not decision.shadow:
+        return rust_result
+
+    python_result = retrieve_memories(
+        group_shared_space,
+        user_id,
+        query,
+        trigger=trigger,
+        mode=resolved_mode,
+        semantic_scores=semantic_scores,
+        _bypass_backend=True,
+    )
+    report = _backend_parity_report(python_result, rust_result)
+    python_result.trace["rust_shadow"] = report
+    if not report["match"]:
+        logger.warning(
+            "[MemoryBackend] Rust shadow parity mismatch: ids=%s behavior=%s max_score_delta=%s",
+            report["rust_ids"],
+            report["rust_behavior_ids"],
+            report["max_score_delta"],
+        )
+    return python_result
+
+
 def retrieve_memories(
     group_shared_space: str,
     user_id: int,
@@ -339,6 +471,7 @@ def retrieve_memories(
     trigger: str = "reply",
     mode: str | None = None,
     semantic_scores: dict[str, float] | None = None,
+    _bypass_backend: bool = False,
 ) -> RetrievalResult:
     """v2 记忆检索主入口。
 
@@ -355,6 +488,19 @@ def retrieve_memories(
     """
     if not MEMORY_V2_ENABLED or not DB_PATH.exists():
         return RetrievalResult()
+
+    if not _bypass_backend:
+        from memory_rust.selector import configured_mode
+
+        if configured_mode() != "python":
+            return _retrieve_with_optional_backend(
+                group_shared_space,
+                user_id,
+                query,
+                trigger,
+                mode,
+                semantic_scores,
+            )
 
     mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
 

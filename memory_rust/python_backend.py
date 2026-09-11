@@ -35,6 +35,7 @@ class PythonMemoryBackend:
             trigger=request.trigger,
             mode=request.mode,
             semantic_scores=dict(request.semantic_scores or {}),
+            _bypass_backend=True,
         )
 
     def promote(self, manager: Any) -> Any:

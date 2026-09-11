@@ -17,6 +17,7 @@ from memory_rust.backend import (
 from memory_rust.selector import (
     BackendDecision,
     get_backend,
+    resolve_backend,
     select_backend,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "MemoryBackend",
     "RetrievalRequest",
     "get_backend",
+    "resolve_backend",
     "select_backend",
 ]

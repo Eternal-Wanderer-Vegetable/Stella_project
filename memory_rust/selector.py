@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -82,7 +83,22 @@ class RustMemoryBackend:
         self._native = native
 
     def retrieve(self, request):
-        return self._native.retrieve(request)
+        payload = {
+            "db_path": str(request.db_path),
+            "group_shared_space": request.group_shared_space,
+            "user_id": request.user_id,
+            "query": request.query,
+            "trigger": request.trigger,
+            "mode": request.mode,
+            "pool_limit": request.pool_limit,
+            "semantic_scores": dict(request.semantic_scores or {}),
+        }
+        raw = self._native.retrieve(json.dumps(payload, ensure_ascii=False))
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        from memory.retrieval_v2 import RetrievalResult
+
+        return RetrievalResult(**raw)
 
     def promote(self, manager):
         return self._native.promote(manager)
@@ -135,7 +151,18 @@ def get_backend(
 ) -> MemoryBackend:
     """Instantiate the resolved backend; Python remains the safe default."""
 
+    _, backend = resolve_backend(mode, native_loader=native_loader)
+    return backend
+
+
+def resolve_backend(
+    mode: str | None = None,
+    *,
+    native_loader: Callable[[], ModuleType] = _load_native,
+) -> tuple[BackendDecision, MemoryBackend]:
+    """Resolve a mode once so callers can retain shadow/fallback metadata."""
+
     decision = select_backend(mode, native_loader=native_loader)
     if decision.selected == "python":
-        return python_backend()
-    return _try_rust(native_loader)
+        return decision, python_backend()
+    return decision, _try_rust(native_loader)
