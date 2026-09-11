@@ -44,7 +44,7 @@ _STARTED_AT = time.time()
 
 # importlib.metadata 查不到（未安装成包 / 源码直接运行）时的回退版本号。
 # 与 pyproject.toml 的 version 保持一致，改版本号时一并更新。
-_FALLBACK_VERSION = "2.6.0"
+_FALLBACK_VERSION = "4.0.0"
 
 
 def _project_version() -> str:

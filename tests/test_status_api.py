@@ -61,6 +61,13 @@ def test_build_payload_fields_complete():
     assert isinstance(payload["version"], str) and payload["version"]
 
 
+def test_fallback_version_matches_release_version(monkeypatch):
+    monkeypatch.setattr(status_api, "version", lambda _name: (_ for _ in ()).throw(
+        status_api.PackageNotFoundError
+    ))
+    assert status_api._project_version() == "4.0.0"
+
+
 def test_build_payload_can_nest_runtime_diagnostics():
     runtime = {"schema_version": 1, "components": {"onebot": {"state": "degraded"}}}
     payload = status_api.build_payload(
