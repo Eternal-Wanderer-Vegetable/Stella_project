@@ -1,0 +1,24 @@
+[package]
+name = "stella-runtime-manager"
+version = "4.0.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Stella Runtime Contract and component supervisor"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+name = "runtime_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "stella-runtime-manager"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

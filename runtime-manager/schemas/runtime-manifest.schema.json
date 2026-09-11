@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stella Runtime Manifest",
+  "type": "object",
+  "required": ["schema_version", "instance_id", "project_root", "runtime_dir", "components"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "instance_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "project_root": {"type": "string", "minLength": 1},
+    "runtime_dir": {"type": "string", "minLength": 1},
+    "components": {
+      "type": "object",
+      "propertyNames": {"enum": ["stella", "llama", "onebot"]},
+      "additionalProperties": {"$ref": "#/$defs/component"}
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "required": ["kind", "enabled"],
+      "properties": {
+        "kind": {"enum": ["stella", "llama", "onebot"]},
+        "enabled": {"type": "boolean"},
+        "dependencies": {"type": "array", "items": {"enum": ["stella", "llama", "onebot"]}},
+        "health": {"type": "object"},
+        "logs": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

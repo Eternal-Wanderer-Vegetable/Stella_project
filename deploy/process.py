@@ -49,6 +49,8 @@ from config.instance import (
 )
 from core.stop_signal import clear_stop_request, request_stop
 
+from . import runtime
+
 PID_FILE = INSTANCE_PID_FILE
 MANIFEST_FILE = INSTANCE_MANIFEST_PATH
 BOT_ENTRY = PROJECT_ROOT / "bot.py"
@@ -393,7 +395,7 @@ def status() -> dict:
                 recent = json.loads(lines[-1])
     except Exception:
         recent = None
-    return {
+    data = {
         "pid": pid,
         "alive": alive,
         "pid_file_present": managed,   # GUI 据此判断进程是否由当前实例管得了
@@ -415,3 +417,10 @@ def status() -> dict:
             "接口不可达时为 null"
         ),
     }
+    runtime.sync_stella_status(
+        alive=alive,
+        api_reachable=live is not None,
+        pid=pid,
+    )
+    data["runtime"] = runtime.snapshot()
+    return data

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from config import PROJECT_ROOT, STELLA_HOME, STELLA_HOME_SOURCE, home
 
-from . import checks, env_merge, env_schema, migrate, probe, process, report
+from . import checks, env_merge, env_schema, migrate, probe, process, report, runtime
 from .init_wizard import (
     load_answers,
     managed_keys,
@@ -398,6 +398,30 @@ def _cmd_manifest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_runtime(args: argparse.Namespace) -> int:
+    """Validate or print the shared Runtime contract without starting processes."""
+    try:
+        if args.operation == "status":
+            print(runtime.runtime_status_json())
+            return 0
+        runtime.validate_operation_request(
+            {"operation": args.operation, "component": args.component}
+        )
+    except ValueError as exc:
+        print(json.dumps(
+            {"ok": False, "error": runtime.structured_error("invalid_operation", str(exc))},
+            ensure_ascii=False,
+        ))
+        return 2
+    print(json.dumps({
+        "ok": True,
+        "operation": args.operation,
+        "component": args.component,
+        "schema_version": runtime.SCHEMA_VERSION,
+    }, ensure_ascii=False))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # 固定 UTF-8：Windows 下 stdout 被重定向（GUI 读管道/PS 管道）时
     # Python 会改用 ANSI 代码页，导致中文变乱码。强制 UTF-8 后
@@ -504,6 +528,20 @@ def main(argv: list[str] | None = None) -> int:
     p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
     p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")
     p_manifest.set_defaults(func=_cmd_manifest)
+
+    p_runtime = sub.add_parser("runtime", help="查看/校验 Runtime Contract")
+    p_runtime.add_argument(
+        "operation",
+        choices=runtime.OPERATIONS,
+        help="Runtime 操作（当前只执行 status，其余用于契约校验）",
+    )
+    p_runtime.add_argument(
+        "--component",
+        default="stella",
+        choices=runtime.COMPONENTS,
+        help="组件名",
+    )
+    p_runtime.set_defaults(func=_cmd_runtime)
 
     p_paths = sub.add_parser("paths", help="输出解析后的路径（程序目录 / 用户数据目录等）")
     p_paths.add_argument("--json", action="store_true", help="兼容 GUI 调用（默认就是 JSON）")
