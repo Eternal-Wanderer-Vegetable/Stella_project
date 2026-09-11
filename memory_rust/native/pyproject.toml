@@ -12,5 +12,7 @@ license = { text = "AGPL-3.0-only" }
 [tool.maturin]
 manifest-path = "Cargo.toml"
 module-name = "memory_rust._native"
-python-source = ".."
+python-source = "../.."
+python-packages = ["memory_rust"]
 features = ["pyo3/extension-module"]
+exclude = ["memory_rust/native/**"]

@@ -235,6 +235,11 @@ jobs:
             --exclude 'assets' \
             --exclude 'release_assets' \
             --exclude 'memory/benchmark' \
+            --exclude 'memory_rust/native/target' \
+            --exclude 'memory_rust/native/.venv' \
+            --exclude '*.pyd' \
+            --exclude '*.dll' \
+            --exclude '*.so' \
             --exclude 'requirements-dev.txt' \
             --exclude 'pyrightconfig.json' \
             --exclude '.pytest_cache' \
@@ -361,6 +366,10 @@ jobs:
           # 两道锁一起防止「整包发出开发文件」的回归（2026-09-08 主包混入 .claude/）。
           if unzip -l "$ZIP" | grep -E '(tests/|design_docs/|_deprecated/|stella-installer/|\.claude/|\.gitnexus/|(^|[ /])cli/|(^|[ /])assets/|(^|[ /])(AGENTS|CLAUDE)\.md|(^|[ /])\.stella-state\.json$)'; then
             echo "::error::发布包含开发目录，已中止发布"
+            exit 1
+          fi
+          if unzip -l "$ZIP" | grep -E 'memory_rust/native/(target/|.*\.(pyd|dll|so)$)'; then
+            echo "::error::Python 发布包混入 Rust native 构建产物"
             exit 1
           fi
           echo "✅ 敏感文件检查通过"

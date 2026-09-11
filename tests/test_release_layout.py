@@ -41,6 +41,28 @@ def _release_excludes() -> set[str]:
     return excludes
 
 
+def test_release_assets_keep_python_name_and_add_separate_rust_name():
+    """Python asset keeps its stable name while Rust uses a separate same-tag asset."""
+    main = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    rust = (
+        PROJECT_ROOT / ".github" / "workflows" / "release-memory-rust.yml"
+    ).read_text(encoding="utf-8")
+    assert 'Stella-${RELEASE_REF}-win64.zip' in main
+    assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
+    assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
+
+
+def test_python_release_excludes_rust_native_outputs():
+    """The Python zip may carry the optional loader, never native build outputs."""
+    excludes = _release_excludes()
+    assert "memory_rust/native/target" in excludes
+    assert "*.pyd" in excludes
+    assert "*.dll" in excludes
+    assert "*.so" in excludes
+
+
 def test_release_excludes_are_parsed_without_stray_quotes():
     """解析器自身的回归测试。
 
