@@ -293,8 +293,6 @@ def evaluate_case(
         group_id, user_id = _write_case_db(db_path, case)
         query = case.get("input") or ""
         trigger = case.get("trigger", "proactive" if case.get("mode") == "ACTIVE_JOIN" else "reply")
-        declared_mode = normalize_mode(case.get("mode", "CASUAL_REPLY"))
-
         # 临时把 retrieval_v2 指向本用例的临时库，结束后恢复现场
         old_db, old_v2, old_rag = (
             retrieval_v2.DB_PATH,

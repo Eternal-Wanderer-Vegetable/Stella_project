@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 import statistics
 import sys
 import tempfile
@@ -34,7 +33,6 @@ from memory.policy import detect_mode, mode_limit, normalize_mode
 from memory_rust.backend import RetrievalRequest
 from memory_rust.python_backend import PythonMemoryBackend
 from memory_rust.selector import get_backend
-
 
 SCORE_TOLERANCE = 1e-3
 
