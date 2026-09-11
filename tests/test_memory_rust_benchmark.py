@@ -165,3 +165,52 @@ def test_compare_report_marks_trace_only_difference_as_diagnostic():
 
     assert report["cases_mismatch"] == 0
     assert report["diagnostic_mismatch_cases"] == []
+
+
+def test_percentile_summary_uses_interpolated_p50_and_p95():
+    summary = benchmark._performance_summary(
+        [1.0, 2.0, 3.0, 4.0, 5.0],
+        warmup=2,
+        iterations=5,
+        errors=0,
+    )
+
+    assert summary["p50_ms"] == 3.0
+    assert summary["p95_ms"] == 4.8
+    assert summary["min_ms"] == 1.0
+    assert summary["max_ms"] == 5.0
+    assert summary["throughput_per_second"] == 333.333
+
+
+def test_performance_suite_counts_runtime_errors_and_keeps_successes(tmp_path):
+    calls = 0
+
+    class _FlakyBackend:
+        name = "fake"
+
+        def retrieve(self, request):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("transient")
+            return SimpleNamespace(
+                mode=request.mode,
+                conversation_memories=[],
+                behavior_constraints=[],
+                trace={},
+            )
+
+    report = benchmark._run_performance_suite(
+        "fake",
+        _FlakyBackend(),
+        [_case()],
+        embedding_fixture=None,
+        work_dir=tmp_path,
+        warmup=1,
+        iterations=2,
+        clock=iter([0.0, 0.001, 0.002, 0.005]).__next__,
+    )
+
+    assert report["samples"] == 1
+    assert report["errors"] == 1
+    assert report["cases"][0]["errors"] == 1

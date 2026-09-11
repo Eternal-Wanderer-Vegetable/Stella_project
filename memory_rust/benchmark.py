@@ -12,8 +12,10 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import statistics
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -356,10 +358,141 @@ def _build_compare_report(
     }
 
 
+def _percentile(samples: list[float], percentile: float) -> float | None:
+    """Return an interpolated percentile in milliseconds."""
+    if not samples:
+        return None
+    ordered = sorted(samples)
+    if len(ordered) == 1:
+        return round(ordered[0], 4)
+    position = (len(ordered) - 1) * percentile / 100.0
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    value = ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+    return round(value, 4)
+
+
+def _performance_summary(
+    samples: list[float],
+    *,
+    warmup: int,
+    iterations: int,
+    errors: int,
+) -> dict[str, Any]:
+    """Aggregate backend-call timings in milliseconds."""
+    total_seconds = sum(samples) / 1000.0
+    return {
+        "warmup": warmup,
+        "iterations": iterations,
+        "samples": len(samples),
+        "min_ms": round(min(samples), 4) if samples else None,
+        "mean_ms": round(statistics.fmean(samples), 4) if samples else None,
+        "p50_ms": _percentile(samples, 50),
+        "p95_ms": _percentile(samples, 95),
+        "max_ms": round(max(samples), 4) if samples else None,
+        "throughput_per_second": (
+            round(len(samples) / total_seconds, 3) if total_seconds else 0.0
+        ),
+        "errors": errors,
+    }
+
+
+def _run_performance_suite(
+    backend_name: str,
+    backend: Any,
+    cases: list[dict[str, Any]],
+    *,
+    embedding_fixture: dict[str, Any] | None,
+    work_dir: Path,
+    warmup: int,
+    iterations: int,
+    clock: Any = time.perf_counter,
+) -> dict[str, Any]:
+    """Time backend retrieval calls after isolated case setup."""
+    if warmup < 0:
+        raise ValueError("warmup must be >= 0")
+    if iterations <= 0:
+        raise ValueError("iterations must be > 0")
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    samples: list[float] = []
+    errors = 0
+    case_reports: list[dict[str, Any]] = []
+    for index, case in enumerate(cases):
+        semantic_scores = (
+            fixture_semantic_scores(case, embedding_fixture)
+            if embedding_fixture is not None
+            else None
+        )
+        db_path = work_dir / f"{backend_name}_perf_{index}_{case.get('id', 'case')}.db"
+        write_case_db(db_path, case, with_schema_meta=backend_name == "rust")
+        request, _, _ = _case_request(case, db_path, semantic_scores)
+
+        retrieval_v2 = None
+        old_state: tuple[Any, Any, Any] | None = None
+        case_samples: list[float] = []
+        case_errors = 0
+        try:
+            if backend_name == "python":
+                retrieval_v2, old_db, old_v2, old_rag = _prepare_python_runtime(db_path)
+                old_state = (old_db, old_v2, old_rag)
+            for _ in range(warmup):
+                try:
+                    if retrieval_v2 is not None:
+                        retrieval_v2._CACHE.clear()
+                    backend.retrieve(request)
+                except Exception:
+                    errors += 1
+                    case_errors += 1
+            for _ in range(iterations):
+                try:
+                    if retrieval_v2 is not None:
+                        retrieval_v2._CACHE.clear()
+                    started = clock()
+                    backend.retrieve(request)
+                    elapsed_ms = (clock() - started) * 1000.0
+                    samples.append(elapsed_ms)
+                    case_samples.append(elapsed_ms)
+                except Exception:
+                    errors += 1
+                    case_errors += 1
+        finally:
+            if retrieval_v2 is not None and old_state is not None:
+                _restore_python_runtime(retrieval_v2, *old_state)
+
+        case_reports.append(
+            {
+                "id": case.get("id", "?"),
+                "samples": len(case_samples),
+                "errors": case_errors,
+                "timing": _performance_summary(
+                    case_samples,
+                    warmup=warmup,
+                    iterations=iterations,
+                    errors=case_errors,
+                ),
+            }
+        )
+
+    summary = _performance_summary(
+        samples,
+        warmup=warmup,
+        iterations=iterations,
+        errors=errors,
+    )
+    summary["backend"] = backend_name
+    summary["cases"] = case_reports
+    return summary
+
+
 def run_rust_benchmark(
     benchmark_dir: Path = MEMORY_BENCHMARK_DIR,
     *,
     embedding_fixture: dict[str, Any] | None = None,
+    performance: bool = False,
+    warmup: int = 1,
+    iterations: int = 5,
 ) -> dict[str, Any]:
     """Run all cases through the strict Rust backend."""
     cases = load_cases(benchmark_dir)
@@ -372,13 +505,25 @@ def run_rust_benchmark(
         ) from exc
 
     with tempfile.TemporaryDirectory(prefix="stella_rust_benchmark_") as tmp:
-        return _run_backend_suite(
+        metrics = _run_backend_suite(
             "rust",
             backend,
             cases,
             embedding_fixture=embedding_fixture,
             work_dir=Path(tmp),
         )
+    if performance:
+        with tempfile.TemporaryDirectory(prefix="stella_rust_perf_") as tmp:
+            metrics["performance"] = _run_performance_suite(
+                "rust",
+                backend,
+                cases,
+                embedding_fixture=embedding_fixture,
+                work_dir=Path(tmp),
+                warmup=warmup,
+                iterations=iterations,
+            )
+    return metrics
 
 
 def run_compare_benchmark(
@@ -386,6 +531,9 @@ def run_compare_benchmark(
     *,
     embedding_fixture: dict[str, Any] | None = None,
     score_tolerance: float = SCORE_TOLERANCE,
+    performance: bool = False,
+    warmup: int = 1,
+    iterations: int = 5,
 ) -> dict[str, Any]:
     """Run Python and strict Rust against isolated copies of every case."""
     cases = load_cases(benchmark_dir)
@@ -415,20 +563,46 @@ def run_compare_benchmark(
             work_dir=root / "rust",
         )
 
-    return {
+    parity = _build_compare_report(
+        python_metrics,
+        rust_metrics,
+        score_tolerance=score_tolerance,
+    )
+    report = {
         "backend": "compare",
         "ok": (
             python_metrics["cases_ok"] == python_metrics["cases_total"]
             and rust_metrics["cases_ok"] == rust_metrics["cases_total"]
+            and parity["cases_mismatch"] == 0
         ),
         "python": python_metrics,
         "rust": rust_metrics,
-        "parity": _build_compare_report(
-            python_metrics,
-            rust_metrics,
-            score_tolerance=score_tolerance,
-        ),
+        "parity": parity,
     }
+    if performance:
+        with tempfile.TemporaryDirectory(prefix="stella_compare_perf_") as tmp:
+            root = Path(tmp)
+            report["performance"] = {
+                "python": _run_performance_suite(
+                    "python",
+                    python_backend,
+                    cases,
+                    embedding_fixture=embedding_fixture,
+                    work_dir=root / "python",
+                    warmup=warmup,
+                    iterations=iterations,
+                ),
+                "rust": _run_performance_suite(
+                    "rust",
+                    rust_backend,
+                    cases,
+                    embedding_fixture=embedding_fixture,
+                    work_dir=root / "rust",
+                    warmup=warmup,
+                    iterations=iterations,
+                ),
+            }
+    return report
 
 
 def _print_summary(metrics: dict[str, Any]) -> None:
@@ -482,6 +656,23 @@ def main(argv: list[str] | None = None) -> int:
         help="write the machine-readable report to this path",
     )
     parser.add_argument(
+        "--performance",
+        action="store_true",
+        help="measure backend retrieval latency after warmup",
+    )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=1,
+        help="warmup retrieval calls per case (default: 1)",
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=5,
+        help="timed retrieval calls per case (default: 5)",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="print per-case results",
@@ -495,9 +686,21 @@ def main(argv: list[str] | None = None) -> int:
             else None
         )
         metrics = (
-            run_compare_benchmark(args.dir, embedding_fixture=fixture)
+            run_compare_benchmark(
+                args.dir,
+                embedding_fixture=fixture,
+                performance=args.performance,
+                warmup=args.warmup,
+                iterations=args.iterations,
+            )
             if args.compare
-            else run_rust_benchmark(args.dir, embedding_fixture=fixture)
+            else run_rust_benchmark(
+                args.dir,
+                embedding_fixture=fixture,
+                performance=args.performance,
+                warmup=args.warmup,
+                iterations=args.iterations,
+            )
         )
     except Exception as exc:
         error = {
@@ -534,6 +737,18 @@ def main(argv: list[str] | None = None) -> int:
                     f"hard={result['hard_mismatches']} "
                     f"diagnostic={result['diagnostic_mismatches']}"
                 )
+    if args.performance:
+        performance = metrics["performance"]
+        if args.compare:
+            performance = performance["rust"]
+        print(
+            f"Performance {performance['backend']}: "
+            f"samples={performance['samples']} "
+            f"p50={performance['p50_ms']}ms "
+            f"p95={performance['p95_ms']}ms "
+            f"throughput={performance['throughput_per_second']}/s "
+            f"errors={performance['errors']}"
+        )
     if args.verbose:
         results = metrics["rust"]["results"] if args.compare else metrics["results"]
         for result in results:
@@ -543,7 +758,18 @@ def main(argv: list[str] | None = None) -> int:
                 f"final={result['ordered_final']} "
                 f"behavior={result['ordered_behavior']}"
             )
-    return 0 if not args.compare or metrics["parity"]["cases_mismatch"] == 0 else 1
+    if args.compare:
+        performance_errors = sum(
+            metrics.get("performance", {}).get(backend, {}).get("errors", 0)
+            for backend in ("python", "rust")
+        )
+        return 0 if metrics["ok"] and performance_errors == 0 else 1
+    performance_errors = metrics.get("performance", {}).get("errors", 0)
+    return (
+        0
+        if metrics["cases_ok"] == metrics["cases_total"] and performance_errors == 0
+        else 1
+    )
 
 
 if __name__ == "__main__":
