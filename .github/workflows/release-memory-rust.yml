@@ -87,17 +87,40 @@ jobs:
         run: |
           $baseAsset = "Stella-$env:RELEASE_REF-win64.zip"
           $downloadDir = "dist\base"
+          $repo = '${{ github.repository }}'
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "User-Agent" = "Stella-release"
+          }
           Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
           $downloaded = $false
           for ($attempt = 1; $attempt -le 60; $attempt++) {
-            gh release download $env:RELEASE_REF `
-              --pattern $baseAsset `
-              --dir $downloadDir `
-              --clobber
-            if ($LASTEXITCODE -eq 0 -and (Test-Path "$downloadDir\$baseAsset")) {
-              $downloaded = $true
-              break
+            try {
+              $release = Invoke-RestMethod `
+                -Headers $headers `
+                -Uri "https://api.github.com/repos/$repo/releases/tags/$env:RELEASE_REF" `
+                -ErrorAction Stop
+              $asset = @($release.assets | Where-Object { $_.name -eq $baseAsset }) | Select-Object -First 1
+              if ($null -ne $asset) {
+                Invoke-WebRequest `
+                  -Headers (@{
+                    Authorization = "Bearer $env:GH_TOKEN"
+                    Accept = "application/octet-stream"
+                    "User-Agent" = "Stella-release"
+                  }) `
+                  -Uri $asset.url `
+                  -OutFile "$downloadDir\$baseAsset" `
+                  -ErrorAction Stop
+                if ((Test-Path "$downloadDir\$baseAsset") -and
+                    (Get-Item "$downloadDir\$baseAsset").Length -gt 0) {
+                  $downloaded = $true
+                  break
+                }
+              }
+            } catch {
+              Write-Host "等待主 Python asset（第 $attempt/60 次）: $($_.Exception.Message)"
             }
             Remove-Item "$downloadDir\*" -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 15
