@@ -54,6 +54,19 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
 
 
+def test_rust_metadata_guard_handles_windows_line_endings():
+    """Rust metadata validation must work for both LF and Windows CRLF files."""
+    rust = (
+        PROJECT_ROOT / ".github" / "workflows" / "release-memory-rust.yml"
+    ).read_text(encoding="utf-8")
+    assert (
+        "(Get-Content 'memory_rust/native/pyproject.toml' -Raw) "
+        "-split '\\r?\\n'"
+    ) in rust
+    assert "$metadataLines -cnotcontains 'name = \"stella-memory-rust\"'" in rust
+    assert "$metadataLines -cnotcontains 'version = \"0.1.0\"'" in rust
+
+
 def test_python_release_excludes_rust_native_outputs():
     """The Python zip may carry the optional loader, never native build outputs."""
     excludes = _release_excludes()
