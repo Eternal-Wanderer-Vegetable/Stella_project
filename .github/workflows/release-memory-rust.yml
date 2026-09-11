@@ -99,18 +99,27 @@ jobs:
           $asset = "dist\$env:RUST_ASSET"
           $found = $false
           for ($attempt = 1; $attempt -le 20; $attempt++) {
-            if (gh release view $env:RELEASE_REF *> $null) {
+            gh release view $env:RELEASE_REF *> $null
+            if ($LASTEXITCODE -eq 0) {
               $found = $true
               break
             }
             Start-Sleep -Seconds 15
           }
           if (-not $found) {
-            gh release create $env:RELEASE_REF $asset `
+            gh release create $env:RELEASE_REF `
               --title "Stella $env:RELEASE_REF" `
               --notes "Rust memory engine asset for $env:RELEASE_REF"
-          } else {
-            gh release upload $env:RELEASE_REF $asset --clobber
+            if ($LASTEXITCODE -ne 0) {
+              gh release view $env:RELEASE_REF *> $null
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to create or find release $env:RELEASE_REF"
+              }
+            }
+          }
+          gh release upload $env:RELEASE_REF $asset --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Rust asset upload failed for $env:RELEASE_REF"
           }
           $names = gh release view $env:RELEASE_REF --json assets --jq '.assets[].name'
           if ($names -notcontains $env:RUST_ASSET) {

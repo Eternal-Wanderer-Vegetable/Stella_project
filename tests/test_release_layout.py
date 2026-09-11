@@ -52,6 +52,15 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert 'Stella-${RELEASE_REF}-win64.zip' in main
     assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
+    assert (
+        "gh release create $env:RELEASE_REF `" in rust
+        and "gh release create $env:RELEASE_REF $asset" not in rust
+    )
+    assert "gh release view $env:RELEASE_REF *> $null" in rust
+    assert "if ($LASTEXITCODE -eq 0)" in rust
+    assert "if ($LASTEXITCODE -ne 0)" in rust
+    assert "Failed to create or find release" in rust
+    assert "Rust asset upload failed" in rust
 
 
 def test_rust_metadata_guard_handles_windows_line_endings():
