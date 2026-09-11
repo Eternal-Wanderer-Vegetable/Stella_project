@@ -96,3 +96,72 @@ def test_aggregate_results_matches_python_metric_shape():
     assert metrics["cases_ok"] == 1
     assert metrics["memory_recall"] == 100.0
     assert metrics["forbidden_activation_rate"] == 0.0
+
+
+def _evaluated_result(
+    *,
+    final: list[str],
+    behavior: list[str] | None = None,
+    mode: str = "RECOMMEND",
+    scores: dict[str, float] | None = None,
+    ranked_all: dict[str, dict] | None = None,
+) -> dict:
+    return {
+        "id": "parity-case",
+        "ordered_final": final,
+        "ordered_behavior": behavior or [],
+        "detected_mode": mode,
+        "scores": scores or {},
+        "ranked_all": ranked_all or {},
+    }
+
+
+def test_compare_separates_hard_and_diagnostic_mismatches():
+    python_result = _evaluated_result(
+        final=["m1"],
+        scores={"m1": 0.9},
+        ranked_all={"m1": {"score": 0.9}},
+    )
+    rust_result = _evaluated_result(
+        final=["m2"],
+        scores={"m1": 0.901},
+        ranked_all={"m1": {"score": 0.901}},
+    )
+
+    report = benchmark._compare_case_results(python_result, rust_result)
+
+    assert report["hard_mismatches"] == ["conversation_order"]
+    assert report["diagnostic_mismatches"] == []
+    assert report["max_score_delta"] == 0.001
+
+
+def test_compare_report_marks_trace_only_difference_as_diagnostic():
+    python_metrics = {
+        "backend": "python",
+        "cases_ok": 1,
+        "cases_total": 1,
+        "results": [
+            _evaluated_result(
+                final=["m1"],
+                scores={"m1": 0.9},
+                ranked_all={"m1": {"score": 0.9, "cut": False}},
+            )
+        ],
+    }
+    rust_metrics = {
+        "backend": "rust",
+        "cases_ok": 1,
+        "cases_total": 1,
+        "results": [
+            _evaluated_result(
+                final=["m1"],
+                scores={"m1": 0.9},
+                ranked_all={"m1": {"score": 0.9}},
+            )
+        ],
+    }
+
+    report = benchmark._build_compare_report(python_metrics, rust_metrics)
+
+    assert report["cases_mismatch"] == 0
+    assert report["diagnostic_mismatch_cases"] == []

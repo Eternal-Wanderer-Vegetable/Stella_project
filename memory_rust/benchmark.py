@@ -34,6 +34,9 @@ from memory_rust.python_backend import PythonMemoryBackend
 from memory_rust.selector import get_backend
 
 
+SCORE_TOLERANCE = 1e-3
+
+
 class RustBenchmarkError(RuntimeError):
     """Raised when the strict Rust benchmark cannot produce a valid result."""
 
@@ -219,6 +222,140 @@ def _aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _run_backend_suite(
+    backend_name: str,
+    backend: Any,
+    cases: list[dict[str, Any]],
+    *,
+    embedding_fixture: dict[str, Any] | None = None,
+    work_dir: Path,
+) -> dict[str, Any]:
+    work_dir.mkdir(parents=True, exist_ok=True)
+    results = [
+        _run_backend_case(
+            backend_name,
+            backend,
+            case,
+            work_dir,
+            index,
+            embedding_fixture,
+        )
+        for index, case in enumerate(cases)
+    ]
+    metrics = _aggregate_results(results)
+    metrics["backend"] = backend_name
+    return metrics
+
+
+def _compare_case_results(
+    python_result: dict[str, Any],
+    rust_result: dict[str, Any],
+    *,
+    score_tolerance: float = SCORE_TOLERANCE,
+) -> dict[str, Any]:
+    """Compare one case while separating result and diagnostic differences."""
+    hard_mismatches: list[str] = []
+    if python_result["ordered_final"] != rust_result["ordered_final"]:
+        hard_mismatches.append("conversation_order")
+    if python_result["ordered_behavior"] != rust_result["ordered_behavior"]:
+        hard_mismatches.append("behavior_order")
+    if python_result["detected_mode"] != rust_result["detected_mode"]:
+        hard_mismatches.append("mode")
+
+    python_scores = python_result.get("scores") or {}
+    rust_scores = rust_result.get("scores") or {}
+    diagnostic_mismatches: list[str] = []
+    score_deltas: dict[str, float] = {}
+    for memory_id in sorted(set(python_scores) | set(rust_scores)):
+        python_score = python_scores.get(memory_id)
+        rust_score = rust_scores.get(memory_id)
+        if python_score is None or rust_score is None:
+            diagnostic_mismatches.append(f"score_presence:{memory_id}")
+            continue
+        delta = round(abs(float(python_score) - float(rust_score)), 6)
+        score_deltas[memory_id] = delta
+        if delta > score_tolerance:
+            diagnostic_mismatches.append(f"score_delta:{memory_id}")
+
+    python_ranked = list((python_result.get("ranked_all") or {}).keys())
+    rust_ranked = list((rust_result.get("ranked_all") or {}).keys())
+    if python_ranked != rust_ranked:
+        diagnostic_mismatches.append("ranked_trace_order")
+
+    return {
+        "id": rust_result.get("id", python_result.get("id", "?")),
+        "ok": not hard_mismatches,
+        "hard_mismatches": hard_mismatches,
+        "diagnostic_mismatches": diagnostic_mismatches,
+        "score_deltas": score_deltas,
+        "max_score_delta": max(score_deltas.values(), default=0.0),
+        "python": {
+            "final": python_result["ordered_final"],
+            "behavior": python_result["ordered_behavior"],
+            "mode": python_result["detected_mode"],
+        },
+        "rust": {
+            "final": rust_result["ordered_final"],
+            "behavior": rust_result["ordered_behavior"],
+            "mode": rust_result["detected_mode"],
+        },
+    }
+
+
+def _build_compare_report(
+    python_metrics: dict[str, Any],
+    rust_metrics: dict[str, Any],
+    *,
+    score_tolerance: float = SCORE_TOLERANCE,
+) -> dict[str, Any]:
+    python_by_id = {result["id"]: result for result in python_metrics["results"]}
+    rust_by_id = {result["id"]: result for result in rust_metrics["results"]}
+    case_ids = sorted(set(python_by_id) | set(rust_by_id))
+    parity_results: list[dict[str, Any]] = []
+    for case_id in case_ids:
+        python_result = python_by_id.get(case_id)
+        rust_result = rust_by_id.get(case_id)
+        if python_result is None or rust_result is None:
+            parity_results.append(
+                {
+                    "id": case_id,
+                    "ok": False,
+                    "hard_mismatches": ["case_presence"],
+                    "diagnostic_mismatches": [],
+                    "score_deltas": {},
+                    "max_score_delta": 0.0,
+                }
+            )
+            continue
+        parity_results.append(
+            _compare_case_results(
+                python_result,
+                rust_result,
+                score_tolerance=score_tolerance,
+            )
+        )
+
+    hard_cases = [result for result in parity_results if result["hard_mismatches"]]
+    diagnostic_cases = [
+        result for result in parity_results if result["diagnostic_mismatches"]
+    ]
+    return {
+        "cases_total": len(parity_results),
+        "cases_match": len(parity_results) - len(hard_cases),
+        "cases_mismatch": len(hard_cases),
+        "cases_match_rate": round(
+            (len(parity_results) - len(hard_cases))
+            / max(1, len(parity_results))
+            * 100,
+            1,
+        ),
+        "hard_mismatch_cases": [result["id"] for result in hard_cases],
+        "diagnostic_mismatch_cases": [result["id"] for result in diagnostic_cases],
+        "score_tolerance": score_tolerance,
+        "results": parity_results,
+    }
+
+
 def run_rust_benchmark(
     benchmark_dir: Path = MEMORY_BENCHMARK_DIR,
     *,
@@ -235,21 +372,63 @@ def run_rust_benchmark(
         ) from exc
 
     with tempfile.TemporaryDirectory(prefix="stella_rust_benchmark_") as tmp:
-        work_dir = Path(tmp)
-        results = [
-            _run_backend_case(
-                "rust",
-                backend,
-                case,
-                work_dir,
-                index,
-                embedding_fixture,
-            )
-            for index, case in enumerate(cases)
-        ]
-    metrics = _aggregate_results(results)
-    metrics["backend"] = "rust"
-    return metrics
+        return _run_backend_suite(
+            "rust",
+            backend,
+            cases,
+            embedding_fixture=embedding_fixture,
+            work_dir=Path(tmp),
+        )
+
+
+def run_compare_benchmark(
+    benchmark_dir: Path = MEMORY_BENCHMARK_DIR,
+    *,
+    embedding_fixture: dict[str, Any] | None = None,
+    score_tolerance: float = SCORE_TOLERANCE,
+) -> dict[str, Any]:
+    """Run Python and strict Rust against isolated copies of every case."""
+    cases = load_cases(benchmark_dir)
+    try:
+        rust_backend = get_backend("rust")
+    except Exception as exc:
+        raise RustBenchmarkError(
+            f"Rust backend is unavailable or incompatible: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+    python_backend = PythonMemoryBackend()
+
+    with tempfile.TemporaryDirectory(prefix="stella_compare_benchmark_") as tmp:
+        root = Path(tmp)
+        python_metrics = _run_backend_suite(
+            "python",
+            python_backend,
+            cases,
+            embedding_fixture=embedding_fixture,
+            work_dir=root / "python",
+        )
+        rust_metrics = _run_backend_suite(
+            "rust",
+            rust_backend,
+            cases,
+            embedding_fixture=embedding_fixture,
+            work_dir=root / "rust",
+        )
+
+    return {
+        "backend": "compare",
+        "ok": (
+            python_metrics["cases_ok"] == python_metrics["cases_total"]
+            and rust_metrics["cases_ok"] == rust_metrics["cases_total"]
+        ),
+        "python": python_metrics,
+        "rust": rust_metrics,
+        "parity": _build_compare_report(
+            python_metrics,
+            rust_metrics,
+            score_tolerance=score_tolerance,
+        ),
+    }
 
 
 def _print_summary(metrics: dict[str, Any]) -> None:
@@ -292,6 +471,11 @@ def main(argv: list[str] | None = None) -> int:
         help="optional deterministic embedding fixture",
     )
     parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="run Python and strict Rust and emit per-case parity diagnostics",
+    )
+    parser.add_argument(
         "--json",
         type=Path,
         default=None,
@@ -310,7 +494,11 @@ def main(argv: list[str] | None = None) -> int:
             if args.embedding_fixture is not None
             else None
         )
-        metrics = run_rust_benchmark(args.dir, embedding_fixture=fixture)
+        metrics = (
+            run_compare_benchmark(args.dir, embedding_fixture=fixture)
+            if args.compare
+            else run_rust_benchmark(args.dir, embedding_fixture=fixture)
+        )
     except Exception as exc:
         error = {
             "backend": "rust",
@@ -331,16 +519,31 @@ def main(argv: list[str] | None = None) -> int:
             + "\n",
             encoding="utf-8",
         )
-    _print_summary(metrics)
+    _print_summary(metrics["rust"] if args.compare else metrics)
+    if args.compare:
+        parity = metrics["parity"]
+        print(
+            f"Parity: {parity['cases_match']}/{parity['cases_total']} "
+            f"hard matches ({parity['cases_match_rate']}%), "
+            f"score tolerance={parity['score_tolerance']}"
+        )
+        for result in parity["results"]:
+            if result["hard_mismatches"] or result["diagnostic_mismatches"]:
+                print(
+                    f"{result['id']}: "
+                    f"hard={result['hard_mismatches']} "
+                    f"diagnostic={result['diagnostic_mismatches']}"
+                )
     if args.verbose:
-        for result in metrics["results"]:
+        results = metrics["rust"]["results"] if args.compare else metrics["results"]
+        for result in results:
             print(
                 f"{'PASS' if result['ok'] else 'FAIL'} "
                 f"{result['id']} mode={result['detected_mode']} "
                 f"final={result['ordered_final']} "
                 f"behavior={result['ordered_behavior']}"
             )
-    return 0
+    return 0 if not args.compare or metrics["parity"]["cases_mismatch"] == 0 else 1
 
 
 if __name__ == "__main__":
