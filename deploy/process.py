@@ -201,11 +201,18 @@ def start_detached() -> int:
                 launch_token=launch_token,
             ),
         )
+        runtime.update_component(
+            "stella",
+            "starting",
+            pid=proc.pid,
+            desired="running",
+        )
     except OSError as e:
         with contextlib.suppress(Exception):
             proc.terminate()
         clear_pid()
         clear_manifest()
+        runtime.update_component("stella", "failed", error=str(e), desired="running")
         print(f"无法记录 Stella 实例 ownership：{e}")
         return 1
     print(

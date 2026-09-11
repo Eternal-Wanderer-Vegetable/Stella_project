@@ -5,7 +5,9 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use runtime_manager::{default_manifest, RuntimeState, RuntimeStore, SCHEMA_VERSION};
+use runtime_manager::{
+    default_manifest, lock::InstanceLock, RuntimeState, RuntimeStore, SCHEMA_VERSION,
+};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -19,6 +21,11 @@ fn main() -> Result<()> {
         }
     }
     let store = RuntimeStore::new(root.clone());
+    let _lock = if command == "status" || command == "validate" {
+        None
+    } else {
+        Some(InstanceLock::acquire(root.clone())?)
+    };
 
     match command.as_str() {
         "validate" => {
