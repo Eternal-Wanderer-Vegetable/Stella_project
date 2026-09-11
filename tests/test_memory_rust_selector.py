@@ -12,7 +12,12 @@ from memory_rust.backend import (
     BackendUnavailable,
 )
 from memory_rust.python_backend import PythonMemoryBackend
-from memory_rust.selector import BackendDecision, get_backend, select_backend
+from memory_rust.selector import (
+    BackendDecision,
+    configured_mode,
+    get_backend,
+    select_backend,
+)
 
 
 def _native(**overrides):
@@ -28,6 +33,8 @@ def _native(**overrides):
 
 def test_python_is_the_default_backend(monkeypatch):
     monkeypatch.delenv("MEMORY_BACKEND", raising=False)
+    monkeypatch.delenv("MEMORY_RUST_SHADOW", raising=False)
+    monkeypatch.delenv("MEMORY_RUST_STRICT", raising=False)
 
     decision = select_backend()
     backend = get_backend()
@@ -35,6 +42,22 @@ def test_python_is_the_default_backend(monkeypatch):
     assert decision.selected == "python"
     assert backend.name == "python"
     assert isinstance(backend, PythonMemoryBackend)
+
+
+def test_legacy_shadow_flag_selects_shadow(monkeypatch):
+    monkeypatch.delenv("MEMORY_BACKEND", raising=False)
+    monkeypatch.setenv("MEMORY_RUST_SHADOW", "true")
+    monkeypatch.delenv("MEMORY_RUST_STRICT", raising=False)
+
+    assert configured_mode() == "shadow"
+
+
+def test_legacy_strict_flag_takes_precedence_over_shadow(monkeypatch):
+    monkeypatch.delenv("MEMORY_BACKEND", raising=False)
+    monkeypatch.setenv("MEMORY_RUST_SHADOW", "1")
+    monkeypatch.setenv("MEMORY_RUST_STRICT", "yes")
+
+    assert configured_mode() == "strict"
 
 
 def test_auto_falls_back_when_native_extension_is_missing():

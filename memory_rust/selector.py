@@ -18,11 +18,12 @@ from memory_rust.backend import (
     BackendUnavailable,
     MemoryBackend,
     PromotionRequest,
-    )
+)
 from memory_rust.python_backend import python_backend
 
 _VALID_MODES = frozenset({"python", "rust", "auto", "shadow", "strict"})
 _NATIVE_MODULE = "memory_rust._native"
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 @dataclass(frozen=True)
@@ -39,13 +40,26 @@ class BackendDecision:
 def configured_mode() -> str:
     """Read and validate the backend mode from the environment."""
 
-    value = os.getenv("MEMORY_BACKEND", "python").strip().lower() or "python"
+    value = os.getenv("MEMORY_BACKEND", "").strip().lower()
+    if not value:
+        if _env_flag("MEMORY_RUST_STRICT"):
+            value = "strict"
+        elif _env_flag("MEMORY_RUST_SHADOW"):
+            value = "shadow"
+        else:
+            value = "python"
     if value not in _VALID_MODES:
         raise ValueError(
             f"invalid MEMORY_BACKEND={value!r}; expected one of "
             f"{', '.join(sorted(_VALID_MODES))}"
         )
     return value
+
+
+def _env_flag(name: str) -> bool:
+    """Interpret the legacy boolean rollout flags without truthiness surprises."""
+
+    return os.getenv(name, "").strip().lower() in _TRUE_VALUES
 
 
 def _load_native() -> ModuleType:

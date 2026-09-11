@@ -4,6 +4,8 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import memory.memory_manager as memory_manager
 from memory_rust.backend import PromotionRequest
 from memory_rust.selector import BackendDecision
@@ -109,3 +111,60 @@ def test_rust_promotion_keeps_observing_gate_in_python(tmp_path, monkeypatch):
     conn.close()
     assert status == "OBSERVING"
     assert calls == []
+
+
+def test_auto_falls_back_to_python_after_rust_runtime_failure(tmp_path, monkeypatch):
+    db = _prepare_db(tmp_path, monkeypatch)
+    _seed(db, "c1")
+    python_calls: list[bool] = []
+
+    class BrokenRustBackend:
+        name = "rust"
+
+        def promote(self, request):
+            raise RuntimeError("native transaction failed")
+
+    monkeypatch.setattr(
+        "memory_rust.selector.resolve_backend",
+        lambda mode: (BackendDecision(mode, "rust"), BrokenRustBackend()),
+    )
+    monkeypatch.setenv("MEMORY_BACKEND", "auto")
+    manager = memory_manager.MemoryManager()
+    monkeypatch.setattr(
+        manager,
+        "_process_new_candidates_python",
+        lambda: python_calls.append(True),
+    )
+
+    manager.process_new_candidates()
+
+    assert python_calls == [True]
+
+
+def test_strict_rust_runtime_failure_is_not_swallowed(tmp_path, monkeypatch):
+    db = _prepare_db(tmp_path, monkeypatch)
+    _seed(db, "c1")
+    python_calls: list[bool] = []
+
+    class BrokenRustBackend:
+        name = "rust"
+
+        def promote(self, request):
+            raise RuntimeError("native transaction failed")
+
+    monkeypatch.setattr(
+        "memory_rust.selector.resolve_backend",
+        lambda mode: (BackendDecision(mode, "rust"), BrokenRustBackend()),
+    )
+    monkeypatch.setenv("MEMORY_BACKEND", "strict")
+    manager = memory_manager.MemoryManager()
+    monkeypatch.setattr(
+        manager,
+        "_process_new_candidates_python",
+        lambda: python_calls.append(True),
+    )
+
+    with pytest.raises(RuntimeError, match="native transaction failed"):
+        manager.process_new_candidates()
+
+    assert python_calls == []

@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import json
 import sqlite3
+import time
 import uuid
 
 from nonebot import logger
@@ -109,8 +110,40 @@ class MemoryManager:
         mode = configured_mode()
         if mode in {"auto", "rust", "strict"}:
             decision, backend = resolve_backend(mode)
+            logger.info(
+                "[MemoryBackend] promotion backend selected: %s (requested=%s)",
+                backend.name,
+                decision.requested,
+            )
             if backend.name == "rust":
-                return self._process_new_candidates_rust(decision, backend)
+                started = time.perf_counter()
+                try:
+                    self._process_new_candidates_rust(decision, backend)
+                except Exception as exc:
+                    elapsed_ms = (time.perf_counter() - started) * 1000
+                    if decision.requested != "auto":
+                        logger.error(
+                            "[MemoryBackend] Rust promotion failed in non-fallback mode "
+                            "(elapsed_ms=%.1f): %s: %s",
+                            elapsed_ms,
+                            type(exc).__name__,
+                            exc,
+                        )
+                        raise
+                    logger.warning(
+                        "[MemoryBackend] Rust promotion fallback to Python "
+                        "(elapsed_ms=%.1f): %s: %s",
+                        elapsed_ms,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    return self._process_new_candidates_python()
+                logger.info(
+                    "[MemoryBackend] Rust promotion committed "
+                    "(elapsed_ms=%.1f)",
+                    (time.perf_counter() - started) * 1000,
+                )
+                return None
             if decision.fallback_reason:
                 logger.warning(
                     "[MemoryBackend] Rust promotion unavailable; using Python: %s",
@@ -157,6 +190,10 @@ class MemoryManager:
         ).fetchall()
         conn.commit()
         conn.close()
+        logger.info(
+            "[MemoryBackend] Rust promotion candidates=%d",
+            len(rows),
+        )
 
         promoted = False
         for row in rows:
