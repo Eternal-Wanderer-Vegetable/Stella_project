@@ -10,6 +10,7 @@ from memory_rust.backend import (
     BACKEND_API_VERSION,
     MEMORY_SCHEMA_VERSION,
     MemoryBackend,
+    PromotionRequest,
     RetrievalRequest,
 )
 
@@ -38,8 +39,10 @@ class PythonMemoryBackend:
             _bypass_backend=True,
         )
 
-    def promote(self, manager: Any) -> Any:
-        return manager.process_new_candidates()
+    def promote(self, request: PromotionRequest) -> Any:
+        raise RuntimeError(
+            "Python promotion is owned by MemoryManager and is not delegated"
+        )
 
 
 def python_backend() -> MemoryBackend:

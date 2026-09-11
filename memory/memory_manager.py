@@ -38,6 +38,8 @@ from config import (
     MEMORY_QUOTA_W_IMPORTANCE,
     MEMORY_QUOTA_W_RECENCY,
     MEMORY_USER_QUOTA,
+    RAG_ENABLED,
+    RAG_SQLITE_FTS_ENABLED,
 )
 from memory.cache_keys import bump_memory_history
 from memory.compressor import get_compressor
@@ -97,6 +99,120 @@ class MemoryManager:
             ensure_v2_schema(DB_PATH)
 
     def process_new_candidates(self) -> None:
+        """Process candidates with the configured backend.
+
+        Python remains the default. Rust is only asked to handle the bounded
+        database transaction; the Python gate and post-commit hooks stay here.
+        """
+        from memory_rust.selector import configured_mode, resolve_backend
+
+        mode = configured_mode()
+        if mode in {"auto", "rust", "strict"}:
+            decision, backend = resolve_backend(mode)
+            if backend.name == "rust":
+                return self._process_new_candidates_rust(decision, backend)
+            if decision.fallback_reason:
+                logger.warning(
+                    "[MemoryBackend] Rust promotion unavailable; using Python: %s",
+                    decision.fallback_reason,
+                )
+        return self._process_new_candidates_python()
+
+    @staticmethod
+    def _candidate_from_row(row) -> dict:
+        return {
+            "id": row[0],
+            "group_shared_space": row[1],
+            "user_id": row[2],
+            "type": row[3] or "FACT",
+            "content": row[4] or "",
+            "importance": float(row[5] or 0.0),
+            "confidence": float(row[6] or 0.0),
+            "evidence": row[7] or "",
+            "status": row[8] or "NEW",
+            "source_message_ids": row[9] or "[]",
+            "usage_tags": row[10] or "[]",
+            "visibility": row[11] or "OPEN",
+            "behavior_rule": row[12] or "",
+            "occurrence_count": int(row[13] or 1),
+            "source_kinds": row[14] or '["PASSIVE"]',
+            "source_kind": row[15] or "PASSIVE",
+        }
+
+    def _process_new_candidates_rust(self, decision, backend) -> None:
+        """Run one native transaction per candidate and keep Python side effects."""
+        from memory_rust.backend import PromotionRequest
+
+        if not DB_PATH.exists():
+            return
+        conn = self._connect()
+        cursor = conn.cursor()
+        self._ensure_tables()
+        self._reject_stale_candidates(cursor)
+        rows = cursor.execute(
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, "
+            "source_message_ids, usage_tags, visibility, behavior_rule, "
+            "occurrence_count, source_kinds, source_kind, origin_group_id"
+            " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
+        ).fetchall()
+        conn.commit()
+        conn.close()
+
+        promoted = False
+        for row in rows:
+            candidate = self._candidate_from_row(row)
+            should_promote, reason = self._decide_promotion(candidate)
+            if not should_promote:
+                status_conn = self._connect()
+                status_conn.execute(
+                    "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    ("OBSERVING", candidate["id"]),
+                )
+                status_conn.commit()
+                status_conn.close()
+                logger.debug(
+                    "[MemoryManager] candidate %s -> OBSERVING: %s",
+                    candidate["id"],
+                    reason,
+                )
+                continue
+
+            request = PromotionRequest(
+                db_path=DB_PATH,
+                candidate_id=str(candidate["id"]),
+                group_shared_space=str(candidate["group_shared_space"]),
+                user_id=str(candidate["user_id"]),
+                memory_type=str(candidate["type"]),
+                quota_limit=MEMORY_USER_QUOTA,
+                quota_enforce=MEMORY_QUOTA_ENFORCE,
+                quota_confirmation_cap=MEMORY_QUOTA_CONFIRMATION_CAP,
+                quota_weight_importance=MEMORY_QUOTA_W_IMPORTANCE,
+                quota_weight_confirmation=MEMORY_QUOTA_W_CONFIRMATION,
+                quota_weight_recency=MEMORY_QUOTA_W_RECENCY,
+                fts_enabled=RAG_ENABLED and RAG_SQLITE_FTS_ENABLED,
+            )
+            result = backend.promote(request)
+            result_promoted = (
+                result.get("promoted", False)
+                if isinstance(result, dict)
+                else bool(getattr(result, "promoted", False))
+            )
+            if result_promoted:
+                promoted = True
+                logger.info(
+                    "[MemoryManager] Rust promoted candidate %s: %s",
+                    candidate["id"],
+                    reason,
+                )
+
+        if promoted:
+            bump_memory_history()
+            try:
+                get_compressor().maybe_compress(reason="candidate_processed")
+            except Exception as e:
+                logger.warning(f"🧹 [MemoryManager] 触发轻量压缩失败: {e}")
+
+    def _process_new_candidates_python(self) -> None:
         """处理全部待晋升的记忆候选（status ∈ {NEW, OBSERVING}），并把结果提交。
 
         关键逻辑：

@@ -17,9 +17,12 @@ fn retrieve(request_json: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn promote(_request_json: &str) -> PyResult<String> {
-    promotion::unavailable().map_err(PyRuntimeError::new_err)?;
-    Ok(String::new())
+fn promote(request_json: &str) -> PyResult<String> {
+    let request = serde_json::from_str(request_json)
+        .map_err(|err| PyValueError::new_err(format!("invalid promotion request: {err}")))?;
+    let output = promotion::promote(request).map_err(PyRuntimeError::new_err)?;
+    serde_json::to_string(&output)
+        .map_err(|err| PyRuntimeError::new_err(format!("promotion serialization failed: {err}")))
 }
 
 #[pymodule]

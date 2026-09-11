@@ -17,7 +17,8 @@ from memory_rust.backend import (
     BackendContractError,
     BackendUnavailable,
     MemoryBackend,
-)
+    PromotionRequest,
+    )
 from memory_rust.python_backend import python_backend
 
 _VALID_MODES = frozenset({"python", "rust", "auto", "shadow", "strict"})
@@ -100,8 +101,23 @@ class RustMemoryBackend:
 
         return RetrievalResult(**raw)
 
-    def promote(self, manager):
-        return self._native.promote(manager)
+    def promote(self, request: PromotionRequest):
+        payload = {
+            "db_path": str(request.db_path),
+            "candidate_id": request.candidate_id,
+            "group_shared_space": request.group_shared_space,
+            "user_id": request.user_id,
+            "memory_type": request.memory_type,
+            "quota_limit": request.quota_limit,
+            "quota_enforce": request.quota_enforce,
+            "quota_confirmation_cap": request.quota_confirmation_cap,
+            "quota_weight_importance": request.quota_weight_importance,
+            "quota_weight_confirmation": request.quota_weight_confirmation,
+            "quota_weight_recency": request.quota_weight_recency,
+            "fts_enabled": request.fts_enabled,
+        }
+        raw = self._native.promote(json.dumps(payload, ensure_ascii=False))
+        return json.loads(raw) if isinstance(raw, str) else raw
 
 
 def _try_rust(

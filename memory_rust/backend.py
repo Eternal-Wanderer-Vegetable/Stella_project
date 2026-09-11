@@ -42,6 +42,24 @@ class RetrievalRequest:
     semantic_scores: Mapping[str, float] | None = None
 
 
+@dataclass(frozen=True)
+class PromotionRequest:
+    """Input for one bounded, already-gated promotion transaction."""
+
+    db_path: Path
+    candidate_id: str
+    group_shared_space: str
+    user_id: str
+    memory_type: str
+    quota_limit: int
+    quota_enforce: bool
+    quota_confirmation_cap: int
+    quota_weight_importance: float
+    quota_weight_confirmation: float
+    quota_weight_recency: float
+    fts_enabled: bool
+
+
 class MemoryBackend(Protocol):
     """Minimal interface implemented by Python and native backends."""
 
@@ -52,5 +70,5 @@ class MemoryBackend(Protocol):
     def retrieve(self, request: RetrievalRequest) -> Any:
         """Retrieve memories using the backend's implementation."""
 
-    def promote(self, manager: Any) -> Any:
-        """Run the bounded promotion operation owned by the backend."""
+    def promote(self, request: PromotionRequest) -> Any:
+        """Run one bounded promotion transaction."""
