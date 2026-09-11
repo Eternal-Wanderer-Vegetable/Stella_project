@@ -102,4 +102,100 @@ impl Ctx {
             crate::ctx::Mode::Docker => self.compose_deploy_cmd(sub, tty),
         }
     }
+
+    /// 构造统一 Runtime 操作命令。
+    ///
+    /// Runtime 不可用时，调用方应回退到对应的 legacy deploy 命令；这样旧
+    /// 发布包和旧 Docker 镜像仍能被同一版 CLI 控制。
+    pub fn runtime_cmd(&self, operation: &str) -> Vec<String> {
+        self.domain_cmd(&["runtime", operation, "--component", "stella"], false)
+    }
+}
+
+/// 优先读取 Runtime envelope 的 data，无法识别时回退 legacy JSON 命令。
+pub fn capture_runtime_or_legacy_json(
+    ctx: &Ctx,
+    operation: &str,
+    legacy_sub: &[&str],
+    what: &str,
+) -> Result<(Value, String, i32)> {
+    let runtime_cmd = ctx.runtime_cmd(operation);
+    if let Ok(out) = run_output(&runtime_cmd, &ctx.root) {
+        let code = out.status.code().unwrap_or(1);
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        let parsed = serde_json::from_str::<Value>(&stdout).ok().or_else(|| {
+            stdout
+                .find('{')
+                .and_then(|i| serde_json::from_str(&stdout[i..]).ok())
+        });
+        if let Some(envelope) = parsed {
+            if envelope.get("operation").and_then(Value::as_str) == Some(operation) {
+                let data = envelope.get("data").cloned().with_context(|| {
+                    format!(
+                        "{what} 的 Runtime envelope 缺少 data（退出码 {code}）。\
+                         \nstderr: {stderr}"
+                    )
+                })?;
+                let raw = serde_json::to_string_pretty(&data)?;
+                return Ok((data, raw, code));
+            }
+        }
+    }
+    let legacy_cmd = ctx.domain_cmd(legacy_sub, false);
+    capture_json(&legacy_cmd, &ctx.root, what)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ctx::Mode;
+
+    #[test]
+    fn runtime_command_uses_local_deploy() {
+        let ctx = Ctx {
+            mode: Mode::Local,
+            root: Path::new(".").to_path_buf(),
+            python: vec!["python".to_owned()],
+        };
+        assert_eq!(
+            ctx.runtime_cmd("status"),
+            vec![
+                "python",
+                "-m",
+                "deploy",
+                "runtime",
+                "status",
+                "--component",
+                "stella"
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_command_uses_non_tty_compose_run() {
+        let ctx = Ctx {
+            mode: Mode::Docker,
+            root: Path::new(".").to_path_buf(),
+            python: Vec::new(),
+        };
+        assert_eq!(
+            ctx.runtime_cmd("doctor"),
+            vec![
+                "docker",
+                "compose",
+                "run",
+                "--rm",
+                "-T",
+                "stella",
+                "python",
+                "-m",
+                "deploy",
+                "runtime",
+                "doctor",
+                "--component",
+                "stella"
+            ]
+        );
+    }
 }

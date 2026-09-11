@@ -218,8 +218,12 @@ fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
     let mut out = anstream::stdout();
     match command {
         Command::Doctor { json } => {
-            let cmd = ctx.domain_cmd(&["doctor", "--json"], false);
-            let (v, raw, code) = runner::capture_json(&cmd, &ctx.root, "deploy doctor")?;
+            let (v, raw, code) = runner::capture_runtime_or_legacy_json(
+                &ctx,
+                "doctor",
+                &["doctor", "--json"],
+                "deploy doctor",
+            )?;
             if json {
                 writeln!(out, "{raw}")?;
             } else {
@@ -269,8 +273,12 @@ fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
         },
         Command::Status { json } => match ctx.mode {
             Mode::Local => {
-                let cmd = ctx.deploy_cmd(&["status", "--json"]);
-                let (_, raw, _) = runner::capture_json(&cmd, &ctx.root, "deploy status")?;
+                let (_, raw, _) = runner::capture_runtime_or_legacy_json(
+                    &ctx,
+                    "status",
+                    &["status", "--json"],
+                    "deploy status",
+                )?;
                 if json {
                     writeln!(out, "{raw}")?;
                 } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
