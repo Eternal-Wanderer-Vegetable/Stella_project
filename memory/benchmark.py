@@ -148,6 +148,125 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     return group_id, user_id
 
 
+def write_case_db(
+    db_path: Path,
+    case: dict[str, Any],
+    *,
+    with_schema_meta: bool = False,
+) -> tuple[int, int]:
+    """Write a benchmark case and optionally add the native schema marker."""
+    group_id, user_id = _write_case_db(db_path, case)
+    if with_schema_meta:
+        from memory.schema import SCHEMA_VERSION
+
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS schema_meta "
+                "(k TEXT PRIMARY KEY, version INTEGER)"
+            )
+            conn.execute(
+                "INSERT INTO schema_meta (k, version) VALUES ('version', ?) "
+                "ON CONFLICT(k) DO UPDATE SET version = excluded.version",
+                (SCHEMA_VERSION,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return group_id, user_id
+
+
+def evaluate_retrieval_result(
+    case: dict[str, Any],
+    result: Any,
+) -> dict[str, Any]:
+    """Normalize any backend RetrievalResult into the benchmark result shape."""
+    query = case.get("input") or ""
+    trigger = case.get(
+        "trigger",
+        "proactive" if case.get("mode") == "ACTIVE_JOIN" else "reply",
+    )
+    detected_mode = result.mode or detect_mode(query, trigger=trigger)
+    conversation = result.conversation_memories
+    behavior = result.behavior_constraints
+
+    final_ids = {m["id"] for m in conversation}
+    behavior_ids = {m["id"] for m in behavior}
+    expected = set(case.get("expected_memory") or [])
+    expected_behavior = set(case.get("expected_behavior_memory") or [])
+    forbidden = set(case.get("forbidden_memory") or [])
+
+    found_expected = final_ids & expected
+    found_behavior = behavior_ids & expected_behavior
+    behavior_leaked = final_ids & expected_behavior
+    activated_forbidden = final_ids & forbidden
+
+    over_recall = False
+    if expected:
+        max_retrieved = int(case.get("max_retrieved") or (len(expected) * 2))
+        over_recall = len(final_ids) > max_retrieved
+
+    scores = {m["id"]: round(float(m.get("_score") or 0.0), 3) for m in conversation}
+    parts = {
+        m["id"]: m.get("_score_parts") or {}
+        for m in conversation
+        if m.get("_score_parts")
+    }
+    ranked_all = {
+        item["id"]: item
+        for item in (result.trace or {}).get("ranked_all") or []
+        if item.get("id")
+    }
+
+    def _label(mid: str) -> str:
+        if mid in expected or mid in expected_behavior:
+            return "positive"
+        if mid in forbidden:
+            return "forbidden"
+        return "noise"
+
+    pos_scores = [
+        item["score"]
+        for mid, item in ranked_all.items()
+        if _label(mid) == "positive"
+    ]
+    noise_scores = [
+        item["score"]
+        for mid, item in ranked_all.items()
+        if _label(mid) == "noise"
+    ]
+    separation_margin = None
+    if pos_scores and noise_scores:
+        separation_margin = round(min(pos_scores) - max(noise_scores), 4)
+
+    return {
+        "id": case.get("id", "?"),
+        "declared_mode": normalize_mode(case.get("mode", "CASUAL_REPLY")),
+        "detected_mode": detected_mode,
+        "expected": sorted(expected),
+        "expected_behavior": sorted(expected_behavior),
+        "forbidden": sorted(forbidden),
+        "final": sorted(final_ids),
+        "behavior": sorted(behavior_ids),
+        "scores": scores,
+        "parts": parts,
+        "ranked_all": ranked_all,
+        "separation_margin": separation_margin,
+        "found_expected": sorted(found_expected),
+        "found_behavior": sorted(found_behavior),
+        "behavior_leaked": sorted(behavior_leaked),
+        "activated_forbidden": sorted(activated_forbidden),
+        "over_recall": over_recall,
+        "ok": bool(
+            found_expected == expected
+            and found_behavior == expected_behavior
+            and not behavior_leaked
+            and not activated_forbidden
+            and not over_recall
+        ),
+    }
+
+
 def evaluate_case(
     case: dict[str, Any],
     work_dir: Path | None = None,
@@ -204,86 +323,7 @@ def evaluate_case(
             retrieval_v2.MEMORY_V2_ENABLED = old_v2
             retrieval_v2.RAG_ENABLED = old_rag
 
-        detected_mode = result.mode or detect_mode(query, trigger=trigger)
-        conversation = result.conversation_memories
-        behavior = result.behavior_constraints
-
-        final_ids = {m["id"] for m in conversation}
-        behavior_ids = {m["id"] for m in behavior}
-        expected = set(case.get("expected_memory") or [])
-        expected_behavior = set(case.get("expected_behavior_memory") or [])
-        forbidden = set(case.get("forbidden_memory") or [])
-
-        # 期望记忆必须进会话；期望行为约束记忆必须进行为约束、且不得泄漏进会话
-        found_expected = final_ids & expected
-        found_behavior = behavior_ids & expected_behavior
-        behavior_leaked = final_ids & expected_behavior
-        activated_forbidden = final_ids & forbidden
-
-        # 超召回容忍度：用例可声明 max_retrieved 精确控制容忍上限；未声明时
-        # 退化为“期望数 × 2”（只对带期望记忆的用例生效，行为约束用例不计）。
-        # 防止“把所有合法候选都塞进去”式的刷 metrics 行为。
-        over_recall = False
-        if expected:
-            max_retrieved = int(case.get("max_retrieved") or (len(expected) * 2))
-            over_recall = len(final_ids) > max_retrieved
-
-        # 会话记忆的排序分（用于 --verbose 观察期望/噪音分数分布，别拍脑袋定阈值）
-        scores = {m["id"]: round(float(m.get("_score") or 0.0), 3) for m in conversation}
-        # 分量分解（ctx/usg/sem/rec/conf/imp）：判断“为什么这条记忆排这么高/低”
-        parts = {
-            m["id"]: m.get("_score_parts") or {}
-            for m in conversation
-            if m.get("_score_parts")
-        }
-        # 全部进入排序的候选（含被 mode_limit 截断的）：id → (score, cut, parts)
-        ranked_all = {
-            item["id"]: item
-            for item in (result.trace or {}).get("ranked_all") or []
-            if item.get("id")
-        }
-
-        # 正/噪音综合分间隔（separation_margin）：按用例算
-        # “正样本最低综合分 − 噪音最高综合分”，取最差；只对进入排序的候选统计。
-        def _label(mid: str) -> str:
-            if mid in expected or mid in expected_behavior:
-                return "positive"
-            if mid in forbidden:
-                return "forbidden"
-            return "noise"
-
-        pos_scores = [item["score"] for mid, item in ranked_all.items() if _label(mid) == "positive"]
-        noise_scores = [item["score"] for mid, item in ranked_all.items() if _label(mid) == "noise"]
-        separation_margin = None
-        if pos_scores and noise_scores:
-            separation_margin = round(min(pos_scores) - max(noise_scores), 4)
-
-        return {
-            "id": case.get("id", "?"),
-            "declared_mode": declared_mode,
-            "detected_mode": detected_mode,
-            "expected": sorted(expected),
-            "expected_behavior": sorted(expected_behavior),
-            "forbidden": sorted(forbidden),
-            "final": sorted(final_ids),
-            "behavior": sorted(behavior_ids),
-            "scores": scores,
-            "parts": parts,
-            "ranked_all": ranked_all,
-            "separation_margin": separation_margin,
-            "found_expected": sorted(found_expected),
-            "found_behavior": sorted(found_behavior),
-            "behavior_leaked": sorted(behavior_leaked),
-            "activated_forbidden": sorted(activated_forbidden),
-            "over_recall": over_recall,
-            "ok": bool(
-                found_expected == expected
-                and found_behavior == expected_behavior
-                and not behavior_leaked
-                and not activated_forbidden
-                and not over_recall
-            ),
-        }
+        return evaluate_retrieval_result(case, result)
     finally:
         if manager is not None:
             manager.cleanup()

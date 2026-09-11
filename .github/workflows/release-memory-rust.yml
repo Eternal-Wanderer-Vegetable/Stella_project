@@ -1,0 +1,118 @@
+name: Release Rust memory engine
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（可带 v 前缀，例如 v3.10.0）'
+        required: true
+        type: string
+      overwrite_release:
+        description: '若同版本 Release 已存在，是否覆盖 Rust asset'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析并校验主 Release 版本
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push') {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          } else {
+            $version = '${{ inputs.version }}' -replace '^v', ''
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "非法 Release 版本: $version"
+          }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE_REF=v$version" >> $env:GITHUB_ENV
+          "RUST_ASSET=Stella-Rust_engine_version-v$version-win64.zip" >> $env:GITHUB_ENV
+
+      - name: 校验 Rust distribution 元数据
+        shell: pwsh
+        run: |
+          $metadata = Get-Content 'memory_rust/native/pyproject.toml' -Raw
+          if ($metadata -notmatch '(?m)^name = "stella-memory-rust"$') {
+            throw 'Rust distribution name changed unexpectedly'
+          }
+          if ($metadata -notmatch '(?m)^version = "0\.1\.0"$') {
+            throw 'Rust backend package version is not the expected independent package version'
+          }
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: 准备 Python 构建环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装 maturin
+        shell: pwsh
+        run: python -m pip install --upgrade pip maturin
+
+      - name: 构建 Rust wheel
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\rust-wheel | Out-Null
+          maturin build --release --manifest-path memory_rust/native/Cargo.toml `
+            --out dist\rust-wheel
+
+      - name: 组装独立 Rust engine zip
+        shell: pwsh
+        run: |
+          $root = "dist\Stella-Rust_engine_version-$env:RELEASE_REF-win64"
+          New-Item -ItemType Directory -Force -Path "$root\wheels" | Out-Null
+          Copy-Item "dist\rust-wheel\*.whl" "$root\wheels\"
+          @(
+            "Stella Rust memory engine"
+            "Release: $env:RELEASE_REF"
+            "Distribution: stella-memory-rust"
+            "Backend API: 1"
+            "Memory schema: 14"
+            "Install: python -m pip install .\wheels\stella_memory_rust-*.whl"
+          ) | Set-Content "$root\VERSION.txt" -Encoding utf8
+          Get-FileHash "$root\wheels\*.whl" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  wheels\$([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content "$root\SHA256SUMS.txt" -Encoding ascii
+          Compress-Archive -Path "$root\*" -DestinationPath "dist\$env:RUST_ASSET"
+          if (-not (Test-Path "dist\$env:RUST_ASSET")) {
+            throw "Rust asset was not created: $env:RUST_ASSET"
+          }
+
+      - name: 上传 Rust asset 到同一主 Release
+        if: github.event_name == 'push' || inputs.overwrite_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $asset = "dist\$env:RUST_ASSET"
+          $found = $false
+          for ($attempt = 1; $attempt -le 20; $attempt++) {
+            if (gh release view $env:RELEASE_REF *> $null) {
+              $found = $true
+              break
+            }
+            Start-Sleep -Seconds 15
+          }
+          if (-not $found) {
+            gh release create $env:RELEASE_REF $asset `
+              --title "Stella $env:RELEASE_REF" `
+              --notes "Rust memory engine asset for $env:RELEASE_REF"
+          } else {
+            gh release upload $env:RELEASE_REF $asset --clobber
+          }
+          $names = gh release view $env:RELEASE_REF --json assets --jq '.assets[].name'
+          if ($names -notcontains $env:RUST_ASSET) {
+            throw "Rust asset was not uploaded to $env:RELEASE_REF"
+          }
