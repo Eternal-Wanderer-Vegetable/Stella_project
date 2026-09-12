@@ -13,6 +13,7 @@ import ctypes
 import os
 import subprocess
 import time
+from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,19 +82,33 @@ def file_lock_error(path: Path) -> int | None:
     """Return the Win32 error code when ``path`` cannot be opened exclusively."""
     if os.name != "nt":
         return None
-    kernel32 = ctypes.windll.kernel32
-    handle = kernel32.CreateFileW(
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+    handle = create_file(
         str(path),
-        0,
+        0x80000000,  # GENERIC_READ
         0,
         None,
         3,  # OPEN_EXISTING
         0x80,  # FILE_ATTRIBUTE_NORMAL
         None,
     )
-    if handle == INVALID_HANDLE_VALUE:
-        return int(kernel32.GetLastError())
-    kernel32.CloseHandle(handle)
+    if handle == INVALID_HANDLE_VALUE or handle == -1:
+        return int(ctypes.get_last_error())
+    close_handle(handle)
     return None
 
 

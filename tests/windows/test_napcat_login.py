@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
@@ -29,11 +31,12 @@ class _StatusHandler(BaseHTTPRequestHandler):
 
 def test_manual_qr_state_machine_never_exports_secret(tmp_path):
     archive = tmp_path / "napcat.zip"
-    archive.write_bytes(b"package")
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("napcat.exe", b"package")
     manifest = {
         "id": "napcat",
         "version": "1",
-        "digest": __import__("hashlib").sha256(archive.read_bytes()).hexdigest(),
+        "digest": hashlib.sha256(archive.read_bytes()).hexdigest(),
         "source": "pinned-source",
         "license": "notice",
         "sbom": "sbom",
