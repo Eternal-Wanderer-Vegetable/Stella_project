@@ -5,7 +5,7 @@
   "core_flavor": "rust",
   "distribution": "oneclick",
   "catalog_url": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/download/v4.0.1/package-catalog-windows-amd64.json",
-  "included_components": ["python-runtime", "llama-cpu", "napcat", "stella-memory-rust"],
+  "included_components": ["python-runtime", "llama-cpu", "napcat"],
   "default_models": [
     {
       "id": "qwen3-embedding-0.6b",

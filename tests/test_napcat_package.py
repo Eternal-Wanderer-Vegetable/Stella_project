@@ -107,3 +107,22 @@ def test_remote_napcat_checksum_failure_does_not_activate(monkeypatch, tmp_path)
         acquire.install_napcat(manifest, tmp_path / "data")
     assert error.value.code == "checksum_mismatch"
     assert not (tmp_path / "data" / ".stella" / "napcat.json").exists()
+
+
+def test_pinned_msi_installs_without_attempting_login(monkeypatch, tmp_path):
+    archive = _archive(tmp_path, name="napcat.msi")
+    manifest = _manifest(archive)
+    calls = []
+
+    monkeypatch.setattr(napcat.os, "name", "nt")
+    monkeypatch.setattr(
+        napcat.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+
+    result = napcat.install_msi(archive, manifest, tmp_path / "data")
+
+    assert calls and calls[0][0][:3] == ["msiexec.exe", "/i", str(archive.resolve())]
+    assert calls[0][0][3:] == ["/qn", "/norestart"]
+    assert result["login"] == {"unattended": False, "status": "not_logged_in"}

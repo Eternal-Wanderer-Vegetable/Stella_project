@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import uuid
 import zipfile
@@ -186,6 +187,65 @@ def install_archive(
     return payload
 
 
+def install_msi(
+    archive: Path,
+    manifest: dict[str, Any],
+    data_root: Path,
+) -> dict[str, Any]:
+    """Verify and invoke a pinned Windows NapCat MSI without logging in."""
+    metadata = validate_manifest(manifest)
+    archive = Path(archive).expanduser().resolve()
+    if archive.suffix.lower() != ".msi":
+        raise NapCatError("invalid_source", "NapCat MSI 安装入口只接受 .msi")
+    if not archive.is_file():
+        raise NapCatError("source_missing", f"NapCat MSI 不存在：{archive}")
+    if sha256(archive) != metadata["digest"]:
+        raise NapCatError("checksum_mismatch", "NapCat MSI digest 不匹配")
+    if os.name != "nt":
+        raise NapCatError("unsupported_platform", "NapCat MSI 只能在 Windows 上安装")
+    command = [
+        "msiexec.exe",
+        "/i",
+        str(archive),
+        "/qn",
+        "/norestart",
+    ]
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            timeout=900,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise NapCatError("install_failed", f"NapCat MSI 安装失败：{exc}") from exc
+
+    paths = _paths(data_root)
+    paths["metadata"].parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        **metadata,
+        "install_path": "msi-managed",
+        "qq_data_path": str(paths["qq"]),
+        "config_path": str(paths["config"]),
+        "login": {"unattended": False, "status": "not_logged_in"},
+    }
+    fd, temporary = tempfile.mkstemp(
+        prefix=".napcat-", suffix=".json", dir=paths["metadata"].parent
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        Path(temporary).replace(paths["metadata"])
+    finally:
+        if Path(temporary).exists():
+            Path(temporary).unlink()
+    return payload
+
+
 def status(data_root: Path, observed: str | None = None) -> dict[str, Any]:
     paths = _paths(data_root)
     if not paths["metadata"].is_file():
@@ -230,6 +290,7 @@ __all__ = [
     "STATES",
     "NapCatError",
     "install_archive",
+    "install_msi",
     "sha256",
     "status",
     "uninstall",

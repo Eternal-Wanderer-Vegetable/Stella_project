@@ -125,6 +125,8 @@ def install_napcat(
             local_archive,
             checksum=metadata["digest"],
         )
+    if local_archive.suffix.lower() == ".msi":
+        return napcat.install_msi(local_archive, metadata, Path(data_root))
     return napcat.install_archive(local_archive, metadata, Path(data_root))
 
 
