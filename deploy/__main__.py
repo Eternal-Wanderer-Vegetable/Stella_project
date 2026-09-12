@@ -505,6 +505,27 @@ def _cmd_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bootstrap(args: argparse.Namespace) -> int:
+    from . import bootstrap
+
+    try:
+        result = bootstrap.install_profile(
+            args.profile,
+            STELLA_HOME,
+            catalog_path=Path(args.catalog) if args.catalog else None,
+        )
+    except bootstrap.BootstrapError as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                ensure_ascii=False,
+            )
+        )
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_runtime(args: argparse.Namespace) -> int:
     """Execute one Runtime operation and print the shared JSON envelope."""
     try:
@@ -604,6 +625,32 @@ def main(argv: list[str] | None = None) -> int:
         help="版本化程序目录；默认使用项目目录",
     )
     p_upgrade.set_defaults(func=_cmd_upgrade)
+
+    p_bootstrap = sub.add_parser(
+        "bootstrap", help="安装 OneClick profile 声明的组件与默认模型"
+    )
+    bootstrap_sub = p_bootstrap.add_subparsers(
+        dest="bootstrap_action", required=True
+    )
+    p_bootstrap_install = bootstrap_sub.add_parser(
+        "install", help="下载、校验并激活 OneClick 默认组件"
+    )
+    p_bootstrap_install.add_argument(
+        "--profile",
+        choices=(
+            "oneclick-python",
+            "oneclick-rust",
+            "standalone-python",
+            "standalone-rust",
+        ),
+        required=True,
+    )
+    p_bootstrap_install.add_argument(
+        "--catalog",
+        default=None,
+        help="测试或离线场景使用的本地 package catalog",
+    )
+    p_bootstrap_install.set_defaults(func=_cmd_bootstrap)
 
     p_merge = sub.add_parser("space-merge", help="把若干共享空间合并为一个（含记忆与画像）")
     p_merge.add_argument("--from", dest="source", required=True, help="源空间名，逗号分隔")
