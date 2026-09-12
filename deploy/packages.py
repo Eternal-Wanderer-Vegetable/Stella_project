@@ -104,7 +104,7 @@ def _validate_record(record: Any) -> dict[str, Any]:
     ):
         raise PackageError("invalid_registry", "包路径必须是数据目录内的相对路径")
     checksum = _validate_checksum(record.get("checksum", ""))
-    return {
+    normalized: dict[str, Any] = {
         "kind": kind,
         "id": package_id,
         "version": version,
@@ -121,6 +121,34 @@ def _validate_record(record: Any) -> dict[str, Any]:
             else {}
         ),
     }
+    for key in (
+        "backend",
+        "runtime_api",
+        "driver_min",
+        "abi",
+        "license",
+        "sbom",
+        "source",
+        "artifact",
+        "status",
+    ):
+        if record.get(key) is not None:
+            value = record[key]
+            if not isinstance(value, str) or not value.strip():
+                raise PackageError("invalid_registry", f"包字段 {key} 必须是非空字符串")
+            if key == "backend" and value.strip().lower() not in {
+                "cpu", "cuda", "hip", "metal", "vulkan"
+            }:
+                raise PackageError("invalid_registry", f"不支持的 backend：{value}")
+            normalized[key] = value.strip()
+    if record.get("dependencies") is not None:
+        dependencies = record["dependencies"]
+        if not isinstance(dependencies, list) or not all(
+            isinstance(item, str) and item.strip() for item in dependencies
+        ):
+            raise PackageError("invalid_registry", "包 dependencies 必须是字符串数组")
+        normalized["dependencies"] = list(dependencies)
+    return normalized
 
 
 def validate_registry(payload: Any) -> None:
@@ -277,12 +305,15 @@ def import_model(
     checksum: str,
     data_root: Path | None = None,
     activate: bool = True,
+    backend: str | None = None,
 ) -> dict[str, Any]:
     """Import a model without exposing an incomplete or unverified file."""
     source = Path(source).expanduser().resolve()
     package_id = _validate_id(model_id, "模型 id")
     package_version = _validate_id(version, "模型 version")
     expected = _validate_checksum(checksum)
+    if backend is not None and backend not in {"cpu", "cuda", "hip", "metal", "vulkan"}:
+        raise PackageError("unsupported_backend", f"不支持的 model backend：{backend}")
     root = data_root or STELLA_HOME
     target = _package_store(root) / "model" / package_id / package_version
     suffix = source.suffix.lower() if source.suffix else ".bin"
@@ -297,6 +328,8 @@ def import_model(
         "checksum": actual,
         "installed_at": _now(),
     }
+    if backend:
+        record["backend"] = backend
 
     registry = _read_registry(root)
     identity = (record["kind"], record["id"], record["version"])
@@ -397,6 +430,22 @@ def _catalog_records(root: Path, platform: str | None) -> list[dict[str, Any]]:
         if platform:
             record["platform"] = platform
         records.append(record)
+    generated = root / ".stella-llama-catalog.json"
+    if generated.is_file():
+        try:
+            payload = json.loads(generated.read_text(encoding="utf-8"))
+            extra = payload.get("packages", [])
+        except (OSError, ValueError, TypeError) as exc:
+            raise PackageError("invalid_catalog", f"{generated} 不是有效 JSON") from exc
+        if not isinstance(extra, list):
+            raise PackageError("invalid_catalog", "llama catalog packages 必须是数组")
+        for item in extra:
+            record = _validate_record(item)
+            if record["kind"] != "component" or not record.get("backend"):
+                raise PackageError("invalid_catalog", "llama artifact 必须是带 backend 的 component")
+            if platform and record.get("platform") not in {None, platform}:
+                continue
+            records.append(record)
     return records
 
 

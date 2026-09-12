@@ -88,7 +88,10 @@ services:
       retries: 3
 
   napcat:
-    image: mlikiowa/napcat-docker:latest
+    # Release and production deployments must inject an audited immutable
+    # reference (prefer @sha256:...). There is intentionally no floating
+    # default here.
+    image: ${NAPCAT_IMAGE:?NAPCAT_IMAGE must be a pinned NapCat image reference}
     container_name: napcat
     labels:
       com.stella.runtime.schema: "1"

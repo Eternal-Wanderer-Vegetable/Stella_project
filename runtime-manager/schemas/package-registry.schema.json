@@ -18,7 +18,17 @@
           "path": {"type": "string", "minLength": 1},
           "checksum": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
           "platform": {"type": "string"},
-          "installed_at": {"type": "string"}
+          "installed_at": {"type": "string"},
+          "backend": {"enum": ["cpu", "cuda", "hip", "metal", "vulkan"]},
+          "runtime_api": {"type": "string"},
+          "driver_min": {"type": "string"},
+          "abi": {"type": "string"},
+          "dependencies": {"type": "array", "items": {"type": "string"}},
+          "license": {"type": "string"},
+          "sbom": {"type": "string"},
+          "source": {"type": "string"},
+          "artifact": {"type": "string"},
+          "status": {"enum": ["build-only", "hardware-verified", "unavailable"]}
         },
         "additionalProperties": false
       }

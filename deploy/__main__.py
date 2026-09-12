@@ -14,6 +14,7 @@
       python -m deploy plugin-scaffold <插件目录> [--endpoint 槽] [--force] [--dry-run] [--measure]
       python -m deploy capabilities [--json]
       python -m deploy manifest [--write]
+      python -m deploy upgrade SOURCE --version VERSION [--install-root PATH]
 """
 
 from __future__ import annotations
@@ -424,12 +425,36 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             record = packages.rollback_model()
             print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
             return 0
+        if args.package_action == "napcat-status":
+            from . import napcat
+
+            print(json.dumps(napcat.status(STELLA_HOME), ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "napcat-install":
+            from . import napcat
+
+            manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+            result = napcat.install_archive(Path(args.source), manifest, STELLA_HOME)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "napcat-uninstall":
+            from . import napcat
+
+            print(
+                json.dumps(
+                    napcat.uninstall(STELLA_HOME, args.version),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
         record = packages.import_model(
             Path(args.source),
             model_id=args.model_id,
             version=args.version,
             checksum=args.checksum,
             activate=not args.no_activate,
+            backend=args.backend,
         )
         print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
         return 0
@@ -441,6 +466,41 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             )
         )
         return 1
+
+
+def _cmd_upgrade(args: argparse.Namespace) -> int:
+    """Install a verified program tree through the transactional pointer."""
+    from .upgrade import UpgradeError, transactional_upgrade
+
+    try:
+        result = transactional_upgrade(
+            Path(args.source),
+            version=args.version,
+            data_root=STELLA_HOME,
+            install_root=Path(args.install_root) if args.install_root else PROJECT_ROOT,
+            expected_checksum=args.checksum,
+        )
+    except UpgradeError as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                ensure_ascii=False,
+            )
+        )
+        return 1
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "version": result.version,
+                "active_path": str(result.active_path),
+                "previous_path": str(result.previous_path) if result.previous_path else None,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
 
 
 def _cmd_runtime(args: argparse.Namespace) -> int:
@@ -532,6 +592,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_migrate.set_defaults(func=_cmd_migrate)
 
+    p_upgrade = sub.add_parser("upgrade", help="校验并原子切换程序版本")
+    p_upgrade.add_argument("source", help="已解包的升级源目录")
+    p_upgrade.add_argument("--version", required=True, help="目标版本")
+    p_upgrade.add_argument("--checksum", default=None, help="源目录 tree SHA-256")
+    p_upgrade.add_argument(
+        "--install-root",
+        default=None,
+        help="版本化程序目录；默认使用项目目录",
+    )
+    p_upgrade.set_defaults(func=_cmd_upgrade)
+
     p_merge = sub.add_parser("space-merge", help="把若干共享空间合并为一个（含记忆与画像）")
     p_merge.add_argument("--from", dest="source", required=True, help="源空间名，逗号分隔")
     p_merge.add_argument("--to", required=True, help="目标空间名")
@@ -588,11 +659,26 @@ def main(argv: list[str] | None = None) -> int:
         "rollback-model", help="按历史记录恢复上一个 active model"
     )
     p_rollback.set_defaults(func=_cmd_packages)
+    p_napcat_status = package_sub.add_parser("napcat-status", help="查看 NapCat 脱敏登录状态")
+    p_napcat_status.set_defaults(func=_cmd_packages)
+    p_napcat_install = package_sub.add_parser("napcat-install", help="安装已校验的 NapCat ZIP")
+    p_napcat_install.add_argument("source", help="NapCat ZIP 路径")
+    p_napcat_install.add_argument("--manifest", required=True, help="固定来源与 digest manifest")
+    p_napcat_install.set_defaults(func=_cmd_packages)
+    p_napcat_uninstall = package_sub.add_parser("napcat-uninstall", help="卸载 NapCat 程序但保留 QQ 数据")
+    p_napcat_uninstall.add_argument("--version", default=None)
+    p_napcat_uninstall.set_defaults(func=_cmd_packages)
     p_import = package_sub.add_parser("import-model", help="校验并原子导入一个模型文件")
     p_import.add_argument("source", help="模型文件路径")
     p_import.add_argument("--id", dest="model_id", required=True, help="模型标识")
     p_import.add_argument("--version", required=True, help="模型版本")
     p_import.add_argument("--checksum", required=True, help="SHA-256 checksum")
+    p_import.add_argument(
+        "--backend",
+        choices=("cpu", "cuda", "hip", "metal", "vulkan"),
+        default=None,
+        help="模型兼容的 llama backend",
+    )
     p_import.add_argument(
         "--no-activate",
         action="store_true",
