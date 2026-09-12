@@ -20,6 +20,7 @@
           "platform": {"type": "string"},
           "installed_at": {"type": "string"},
           "backend": {"enum": ["cpu", "cuda", "hip", "metal", "vulkan"]},
+          "model_role": {"enum": ["embedding", "chat", "consolidation", "reranker"]},
           "runtime_api": {"type": "string"},
           "driver_min": {"type": "string"},
           "abi": {"type": "string"},
@@ -28,12 +29,25 @@
           "sbom": {"type": "string"},
           "source": {"type": "string"},
           "artifact": {"type": "string"},
-          "status": {"enum": ["build-only", "hardware-verified", "unavailable"]}
+          "status": {"enum": ["available", "build-only", "hardware-verified", "unavailable"]},
+          "size": {"type": "integer", "minimum": 1},
+          "dimension": {"type": "integer", "minimum": 1},
+          "remote": {"type": "boolean"}
         },
         "additionalProperties": false
       }
     },
-    "active": {"type": "object", "additionalProperties": {"type": "string"}},
+    "active": {
+      "type": "object",
+      "properties": {
+        "runtime": {"type": "string"},
+        "component": {"type": "string"},
+        "model": {"type": "string"},
+        "onebot": {"type": "string"},
+        "embedding": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
     "history": {"type": "array", "items": {"type": "object"}}
   },
   "additionalProperties": false

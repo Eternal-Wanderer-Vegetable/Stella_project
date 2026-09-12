@@ -83,6 +83,31 @@ def test_checksum_failure_does_not_change_active_model(monkeypatch, tmp_path):
     assert not (data_root / ".stella" / "packages" / "model" / "second").exists()
 
 
+def test_embedding_import_has_separate_active_slot(monkeypatch, tmp_path):
+    data_root = tmp_path / "StellaData"
+    source = tmp_path / "embedding.gguf"
+    source.write_bytes(b"embedding")
+    runtime_dir = tmp_path / "instance"
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "test")
+
+    record = packages.import_model(
+        source,
+        model_id="qwen3-embedding-0.6b",
+        version="q8_0",
+        checksum=_checksum(source),
+        data_root=data_root,
+        model_role="embedding",
+        model_metadata={"dimension": 1024, "license": "Apache-2.0"},
+    )
+
+    registry = packages.read_registry(data_root)
+    assert registry["active"]["embedding"] == "qwen3-embedding-0.6b@q8_0"
+    assert registry["packages"][0]["model_role"] == "embedding"
+    assert record["dimension"] == 1024
+    assert not registry["active"].get("model")
+
+
 def test_model_rollback_restores_previous_version(monkeypatch, tmp_path):
     data_root = tmp_path / "StellaData"
     first = tmp_path / "first.gguf"
@@ -116,6 +141,41 @@ def test_model_rollback_restores_previous_version(monkeypatch, tmp_path):
         runtime.read_manifest()["components"]["llama"]["config"]["model"]["package"]
         == "demo@1.0.0"
     )
+
+
+def test_embedding_rollback_uses_embedding_history_without_touching_chat_model(
+    tmp_path,
+):
+    data_root = tmp_path / "StellaData"
+    first = tmp_path / "embedding-first.gguf"
+    second = tmp_path / "embedding-second.gguf"
+    first.write_bytes(b"embedding-first")
+    second.write_bytes(b"embedding-second")
+
+    packages.import_model(
+        first,
+        model_id="qwen3-embedding-0.6b",
+        version="q8_0",
+        checksum=_checksum(first),
+        data_root=data_root,
+        model_role="embedding",
+    )
+    packages.import_model(
+        second,
+        model_id="qwen3-embedding-0.6b",
+        version="q6_k",
+        checksum=_checksum(second),
+        data_root=data_root,
+        model_role="embedding",
+    )
+
+    restored = packages.rollback_model(data_root, model_role="embedding")
+
+    registry = packages.read_registry(data_root)
+    assert restored["version"] == "q8_0"
+    assert registry["active"]["embedding"] == "qwen3-embedding-0.6b@q8_0"
+    assert "model" not in registry["active"]
+    assert registry["history"][-1]["kind"] == "embedding"
 
 
 def test_catalog_records_versions_and_verifies_checksums(tmp_path):

@@ -423,7 +423,7 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             print(json.dumps(packages.read_registry(), ensure_ascii=False, indent=2))
             return 0
         if args.package_action == "rollback-model":
-            record = packages.rollback_model()
+            record = packages.rollback_model(model_role=args.model_role)
             print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
             return 0
         if args.package_action == "napcat-status":
@@ -456,6 +456,7 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             checksum=args.checksum,
             activate=not args.no_activate,
             backend=args.backend,
+            model_role=args.model_role,
         )
         print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
         return 0
@@ -670,6 +671,12 @@ def main(argv: list[str] | None = None) -> int:
     p_rollback = package_sub.add_parser(
         "rollback-model", help="按历史记录恢复上一个 active model"
     )
+    p_rollback.add_argument(
+        "--model-role",
+        choices=("embedding", "chat"),
+        default=None,
+        help="模型角色；不填时回滚传统 active model",
+    )
     p_rollback.set_defaults(func=_cmd_packages)
     p_napcat_status = package_sub.add_parser("napcat-status", help="查看 NapCat 脱敏登录状态")
     p_napcat_status.set_defaults(func=_cmd_packages)
@@ -690,6 +697,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("cpu", "cuda", "hip", "metal", "vulkan"),
         default=None,
         help="模型兼容的 llama backend",
+    )
+    p_import.add_argument(
+        "--model-role",
+        choices=("embedding", "chat", "consolidation", "reranker"),
+        default=None,
+        help="模型角色；embedding 会写入 active.embedding",
     )
     p_import.add_argument(
         "--no-activate",

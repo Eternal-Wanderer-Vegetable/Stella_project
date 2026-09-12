@@ -6,6 +6,7 @@ import zipfile
 
 import pytest
 
+from deploy import acquire
 from deploy import napcat
 
 
@@ -78,3 +79,31 @@ def test_status_is_an_enum_and_never_contains_login_secret(tmp_path):
     result = napcat.status(tmp_path / "data")
     assert result["state"] == "connected"
     assert "token" not in result
+
+
+def test_remote_napcat_acquisition_verifies_before_activation(monkeypatch, tmp_path):
+    archive = _archive(tmp_path)
+    manifest = _manifest(archive)
+    monkeypatch.setattr(
+        acquire.urllib.request,
+        "urlopen",
+        lambda url, timeout: archive.open("rb"),
+    )
+    result = acquire.install_napcat(manifest, tmp_path / "data")
+    assert result["login"]["unattended"] is False
+    assert napcat.status(tmp_path / "data")["state"] == "not_logged_in"
+
+
+def test_remote_napcat_checksum_failure_does_not_activate(monkeypatch, tmp_path):
+    archive = _archive(tmp_path)
+    manifest = _manifest(archive)
+    manifest["digest"] = "0" * 64
+    monkeypatch.setattr(
+        acquire.urllib.request,
+        "urlopen",
+        lambda url, timeout: archive.open("rb"),
+    )
+    with pytest.raises(acquire.AcquireError) as error:
+        acquire.install_napcat(manifest, tmp_path / "data")
+    assert error.value.code == "checksum_mismatch"
+    assert not (tmp_path / "data" / ".stella" / "napcat.json").exists()
