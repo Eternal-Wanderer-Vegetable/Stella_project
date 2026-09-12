@@ -26,6 +26,7 @@ REGISTRY_FILENAME = "packages.json"
 PACKAGE_ROOT = Path(".stella") / "packages"
 SCHEMA_VERSION = 1
 PACKAGE_KINDS = ("runtime", "component", "model", "onebot")
+ACTIVE_KEYS = (*PACKAGE_KINDS, "embedding")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}$")
 _CHECKSUM = re.compile(r"^[0-9a-fA-F]{64}$")
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:/")
@@ -123,6 +124,8 @@ def _validate_record(record: Any) -> dict[str, Any]:
     }
     for key in (
         "backend",
+        "model_role",
+        "profile",
         "runtime_api",
         "driver_min",
         "abi",
@@ -141,6 +144,26 @@ def _validate_record(record: Any) -> dict[str, Any]:
             }:
                 raise PackageError("invalid_registry", f"不支持的 backend：{value}")
             normalized[key] = value.strip()
+    if record.get("size") is not None:
+        try:
+            size = int(record["size"])
+        except (TypeError, ValueError) as exc:
+            raise PackageError("invalid_registry", "包 size 必须是正整数") from exc
+        if size <= 0:
+            raise PackageError("invalid_registry", "包 size 必须是正整数")
+        normalized["size"] = size
+    if record.get("dimension") is not None:
+        try:
+            dimension = int(record["dimension"])
+        except (TypeError, ValueError) as exc:
+            raise PackageError("invalid_registry", "包 dimension 必须是正整数") from exc
+        if dimension <= 0:
+            raise PackageError("invalid_registry", "包 dimension 必须是正整数")
+        normalized["dimension"] = dimension
+    if record.get("remote") is not None:
+        if not isinstance(record["remote"], bool):
+            raise PackageError("invalid_registry", "包 remote 必须是布尔值")
+        normalized["remote"] = record["remote"]
     if record.get("dependencies") is not None:
         dependencies = record["dependencies"]
         if not isinstance(dependencies, list) or not all(
@@ -168,10 +191,13 @@ def validate_registry(payload: Any) -> None:
     if not isinstance(active, dict):
         raise PackageError("invalid_registry", "包 registry 的 active 必须是对象")
     for kind, identity in active.items():
-        if kind not in PACKAGE_KINDS or not isinstance(identity, str):
+        if kind not in ACTIVE_KEYS or not isinstance(identity, str):
             raise PackageError("invalid_registry", "包 registry 的 active 无效")
+        record_kind = "model" if kind == "embedding" else kind
         if not any(
-            item["kind"] == kind and f"{item['id']}@{item['version']}" == identity
+            item["kind"] == record_kind
+            and f"{item['id']}@{item['version']}" == identity
+            and (kind != "embedding" or item.get("model_role") == "embedding")
             for item in packages
         ):
             raise PackageError(
@@ -306,6 +332,8 @@ def import_model(
     data_root: Path | None = None,
     activate: bool = True,
     backend: str | None = None,
+    model_role: str | None = None,
+    model_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Import a model without exposing an incomplete or unverified file."""
     source = Path(source).expanduser().resolve()
@@ -314,6 +342,10 @@ def import_model(
     expected = _validate_checksum(checksum)
     if backend is not None and backend not in {"cpu", "cuda", "hip", "metal", "vulkan"}:
         raise PackageError("unsupported_backend", f"不支持的 model backend：{backend}")
+    if model_role is not None and model_role not in {
+        "embedding", "chat", "consolidation", "reranker"
+    }:
+        raise PackageError("invalid_model_role", f"不支持的 model role：{model_role}")
     root = data_root or STELLA_HOME
     target = _package_store(root) / "model" / package_id / package_version
     suffix = source.suffix.lower() if source.suffix else ".bin"
@@ -330,6 +362,11 @@ def import_model(
     }
     if backend:
         record["backend"] = backend
+    if model_role:
+        record["model_role"] = model_role
+    for key in ("license", "source", "artifact", "dimension"):
+        if model_metadata and model_metadata.get(key) is not None:
+            record[key] = model_metadata[key]
 
     registry = _read_registry(root)
     identity = (record["kind"], record["id"], record["version"])
@@ -340,13 +377,14 @@ def import_model(
     ]
     registry["packages"].append(record)
     if activate:
-        previous = registry.get("active", {}).get("model")
+        active_key = "embedding" if model_role == "embedding" else "model"
+        previous = registry.get("active", {}).get(active_key)
         current = f"{package_id}@{package_version}"
-        registry.setdefault("active", {})["model"] = current
+        registry.setdefault("active", {})[active_key] = current
         if previous != current:
             registry.setdefault("history", []).append(
                 {
-                    "kind": "model",
+                    "kind": active_key,
                     "previous": previous,
                     "current": current,
                     "at": _now(),
@@ -354,21 +392,28 @@ def import_model(
             )
     registry["updated_at"] = _now()
     write_registry(registry, root)
-    if activate:
+    if activate and model_role != "embedding":
         _update_runtime_manifest(record, root)
     return record
 
 
-def rollback_model(data_root: Path | None = None) -> dict[str, Any]:
+def rollback_model(
+    data_root: Path | None = None,
+    *,
+    model_role: str | None = None,
+) -> dict[str, Any]:
     """Restore the previous active model recorded in the package history."""
     root = data_root or STELLA_HOME
+    if model_role not in {None, "embedding", "chat"}:
+        raise PackageError("invalid_model_role", f"不支持的 model role：{model_role}")
+    active_key = "embedding" if model_role == "embedding" else "model"
     registry = _read_registry(root)
-    current = registry.get("active", {}).get("model")
+    current = registry.get("active", {}).get(active_key)
     previous = None
     for event in reversed(registry.get("history", [])):
         if (
             isinstance(event, dict)
-            and event.get("kind") == "model"
+            and event.get("kind") == active_key
             and event.get("current") == current
             and event.get("previous")
         ):
@@ -380,16 +425,21 @@ def rollback_model(data_root: Path | None = None) -> dict[str, Any]:
         (
             item
             for item in registry["packages"]
-            if item["kind"] == "model" and f"{item['id']}@{item['version']}" == previous
+            if item["kind"] == "model"
+            and f"{item['id']}@{item['version']}" == previous
+            and (
+                active_key != "embedding"
+                or item.get("model_role") == "embedding"
+            )
         ),
         None,
     )
     if record is None:
         raise PackageError("rollback_unavailable", f"回滚目标未安装：{previous}")
-    registry.setdefault("active", {})["model"] = previous
+    registry.setdefault("active", {})[active_key] = previous
     registry.setdefault("history", []).append(
         {
-            "kind": "model",
+            "kind": active_key,
             "previous": current,
             "current": previous,
             "at": _now(),
@@ -398,11 +448,14 @@ def rollback_model(data_root: Path | None = None) -> dict[str, Any]:
     )
     registry["updated_at"] = _now()
     write_registry(registry, root)
-    _update_runtime_manifest(record, root)
+    if active_key != "embedding":
+        _update_runtime_manifest(record, root)
     return record
 
 
-def _catalog_records(root: Path, platform: str | None) -> list[dict[str, Any]]:
+def _catalog_records(
+    root: Path, platform: str | None, profile_id: str | None = None
+) -> list[dict[str, Any]]:
     version = state.program_version(root) or "unknown"
     candidates = (
         ("runtime", "python-bootstrap", version, "start.bat"),
@@ -446,29 +499,64 @@ def _catalog_records(root: Path, platform: str | None) -> list[dict[str, Any]]:
             if platform and record.get("platform") not in {None, platform}:
                 continue
             records.append(record)
+    if profile_id:
+        from .profiles import load_profile
+
+        profile = load_profile(profile_id)
+        for model in profile["default_models"]:
+            records.append(
+                {
+                    "kind": "model",
+                    "id": model["id"],
+                    "version": model["version"],
+                    "path": f"models/embedding/{model['filename']}",
+                    "checksum": model["sha256"],
+                    "platform": profile["platform"],
+                    "runtime_api": "llama.cpp-embedding",
+                    "license": model["license"],
+                    "source": model["source"],
+                    "artifact": model["filename"],
+                    "status": "available",
+                    "model_role": model["role"],
+                    "size": model["size"],
+                    "dimension": model["dimension"],
+                    "remote": True,
+                }
+            )
     return records
 
 
 def build_catalog(
-    root: Path = PROJECT_ROOT, *, platform: str | None = None
+    root: Path = PROJECT_ROOT,
+    *,
+    platform: str | None = None,
+    profile_id: str | None = None,
 ) -> dict[str, Any]:
     root = Path(root).resolve()
-    return {
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _now(),
         "platform": platform or "any",
-        "packages": _catalog_records(root, platform),
+        "packages": _catalog_records(root, platform, profile_id),
     }
+    if profile_id:
+        payload["profile"] = profile_id
+    return payload
 
 
 def catalog_path(root: Path = PROJECT_ROOT) -> Path:
     return Path(root) / CATALOG_FILENAME
 
 
-def write_catalog(root: Path = PROJECT_ROOT, *, platform: str | None = None) -> Path:
+def write_catalog(
+    root: Path = PROJECT_ROOT,
+    *,
+    platform: str | None = None,
+    profile_id: str | None = None,
+) -> Path:
     root = Path(root).resolve()
     path = catalog_path(root)
-    _atomic_write(path, build_catalog(root, platform=platform))
+    _atomic_write(path, build_catalog(root, platform=platform, profile_id=profile_id))
     return path
 
 
@@ -491,7 +579,10 @@ def verify_catalog(root: Path = PROJECT_ROOT) -> list[str]:
         try:
             record = _validate_record(item)
             file_path = root / record["path"]
-            if not file_path.is_file():
+            if record.get("remote"):
+                if not record.get("source"):
+                    problems.append(f"{record['id']} 缺少远程 source")
+            elif not file_path.is_file():
                 problems.append(f"{record['path']} 不存在")
             elif file_sha256(file_path) != record["checksum"]:
                 problems.append(f"{record['path']} checksum 不匹配")
@@ -501,6 +592,7 @@ def verify_catalog(root: Path = PROJECT_ROOT) -> list[str]:
 
 
 __all__ = [
+    "ACTIVE_KEYS",
     "CATALOG_FILENAME",
     "PACKAGE_KINDS",
     "PackageError",

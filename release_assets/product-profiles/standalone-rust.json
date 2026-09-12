@@ -1,0 +1,14 @@
+{
+  "id": "standalone-rust",
+  "version": "4.0.1",
+  "platform": "windows-amd64",
+  "core_flavor": "rust",
+  "distribution": "standalone",
+  "included_components": ["stella-core", "stella-memory-rust"],
+  "default_models": [],
+  "optional_components": [],
+  "artifact": {
+    "kind": "archive",
+    "filename": "Stella-Standalone-Rust-v4.0.1-windows-amd64.zip"
+  }
+}

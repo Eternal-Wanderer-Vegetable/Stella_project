@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stella Product Profile",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "platform",
+    "core_flavor",
+    "distribution",
+    "included_components",
+    "default_models",
+    "optional_components",
+    "artifact"
+  ],
+  "properties": {
+    "id": {
+      "enum": [
+        "oneclick-python",
+        "oneclick-rust",
+        "standalone-python",
+        "standalone-rust"
+      ]
+    },
+    "version": {"const": "4.0.1"},
+    "platform": {"const": "windows-amd64"},
+    "core_flavor": {"enum": ["python", "rust"]},
+    "distribution": {"enum": ["oneclick", "standalone"]},
+    "catalog_url": {"type": "string", "format": "uri"},
+    "included_components": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "default_models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "filename",
+          "source",
+          "license",
+          "sha256",
+          "size",
+          "dimension",
+          "role"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "version": {"type": "string", "minLength": 1},
+          "filename": {"type": "string", "minLength": 1},
+          "source": {"type": "string", "format": "uri"},
+          "license": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "size": {"type": "integer", "minimum": 1},
+          "dimension": {"type": "integer", "minimum": 1},
+          "role": {"enum": ["embedding", "chat", "consolidation", "reranker"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "optional_components": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["kind", "filename"],
+      "properties": {
+        "kind": {"enum": ["installer", "archive"]},
+        "filename": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

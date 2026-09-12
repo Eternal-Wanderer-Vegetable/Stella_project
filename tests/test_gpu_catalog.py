@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import zipfile
 
 import pytest
 
 from deploy import packages
+from scripts.build_release_catalog import build_catalog
 from scripts.verify_llama_package import verify
 
 
@@ -96,3 +98,37 @@ def test_catalog_rejects_invalid_backend(tmp_path):
     )
     with pytest.raises(packages.PackageError):
         packages.build_catalog(tmp_path)
+
+
+def test_release_catalog_contains_windows_cpu_napcat_and_embedding(tmp_path):
+    package = tmp_path / "Stella-llama-v4.0.1-windows-x86_64-cpu.zip"
+    with zipfile.ZipFile(package, "w") as bundle:
+        bundle.writestr(
+            "BACKEND.json",
+            json.dumps(
+                {
+                    "backend": "cpu",
+                    "os": "windows",
+                    "arch": "windows-amd64",
+                    "abi": "documented",
+                    "runtime_api": "openai-compatible",
+                    "driver_min": "none",
+                    "license": "llama.cpp",
+                    "status": "build-only",
+                }
+            ),
+        )
+    catalog = build_catalog(
+        package,
+        release_ref="v4.0.1",
+        repository="owner/repo",
+    )
+    ids = {item["id"] for item in catalog["packages"]}
+    assert ids == {"llama-cpu", "napcat", "qwen3-embedding-0.6b"}
+    assert catalog["packages"][0]["source"].startswith(
+        "https://github.com/owner/repo/releases/download/v4.0.1/"
+    )
+    assert not any(
+        item.get("model_role") in {"chat", "consolidation", "reranker"}
+        for item in catalog["packages"]
+    )

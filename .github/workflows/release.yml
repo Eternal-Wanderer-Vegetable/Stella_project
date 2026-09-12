@@ -21,9 +21,14 @@ permissions:
 
 jobs:
   # Tauri 的 Windows WebView/Rust 产物必须在 Windows runner 上构建。
-  # 这里只构建便携 exe，不构建 NSIS/MSI：最终发布包仍是解压即用的 Stella ZIP，
-  # 且安装器需要和 bot.py 位于同一个项目根目录才能调用 deploy。
+  # OneClick 只发布 NSIS setup executable；程序树通过 Tauri resources 嵌入，
+  # 安装后由 project_root() 从 resources/stella 定位。
   build-installer:
+    needs: [build-rust-wheel]
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [oneclick-python, oneclick-rust]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +42,20 @@ jobs:
             $version = '${{ inputs.version }}' -replace '^v', ''
           }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          if ($version -ne '4.0.1') {
+            throw "OneClick release 只允许 v4.0.1，实际为 $version"
+          }
+
+      - name: 准备 OneClick 内嵌程序资源
+        shell: pwsh
+        run: |
+          if ('${{ matrix.profile }}' -eq 'oneclick-rust') {
+            New-Item -ItemType Directory -Force -Path wheels | Out-Null
+            Copy-Item 'rust-wheel\*.whl' wheels\
+          }
+          python scripts/build_release_package.py ${{ matrix.profile }} `
+            --source . --output dist/unused `
+            --stage-resources stella-installer/src-tauri/resources/stella
 
       - name: 同步 Tauri 版本号
         shell: pwsh
@@ -54,16 +73,43 @@ jobs:
         shell: pwsh
         run: cargo install tauri-cli --version '^2' --locked
 
-      - name: 构建便携版安装器
+      - name: 构建 OneClick NSIS 安装器
         shell: pwsh
         working-directory: stella-installer/src-tauri
-        run: cargo tauri build --no-bundle
+        env:
+          STELLA_BUILD_PROFILE: ${{ matrix.profile }}
+        run: cargo tauri build --bundles nsis
 
       - name: 上传安装器
         uses: actions/upload-artifact@v4
         with:
-          name: stella-installer
-          path: stella-installer/src-tauri/target/release/Stella.exe
+          name: stella-installer-${{ matrix.profile }}
+          path: stella-installer/src-tauri/target/release/bundle/nsis/*setup.exe
+          if-no-files-found: error
+
+  build-rust-wheel:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 构建 Rust memory wheel
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip maturin
+          New-Item -ItemType Directory -Force -Path dist\rust-wheel | Out-Null
+          maturin build --release --manifest-path memory_rust/native/Cargo.toml `
+            --out dist\rust-wheel
+          $wheels = @(Get-ChildItem dist\rust-wheel\*.whl)
+          if ($wheels.Count -ne 1) {
+            throw "Rust wheel 构建必须得到恰好一个 wheel"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stella-rust-wheel
+          path: dist/rust-wheel/*.whl
           if-no-files-found: error
 
   # ============ stellacli 二进制（先行构建，打包集中在 build 作业） ============
@@ -173,7 +219,7 @@ jobs:
           if-no-files-found: error
 
   build:
-    needs: [build-installer, build-cli-linux-binary, build-cli-windows-binary]
+    needs: [build-installer, build-rust-wheel, build-cli-linux-binary, build-cli-windows-binary]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -282,6 +328,12 @@ jobs:
           path: cli-bin
           merge-multiple: false
 
+      - name: 下载 Rust wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: stella-rust-wheel
+          path: rust-wheel
+
       - name: 校验 CLI 二进制到位
         run: |
           test -s cli-bin/stellacli-linux/stellacli || { echo "::error::缺少 Linux CLI 二进制"; exit 1; }
@@ -291,15 +343,6 @@ jobs:
           # 即得可执行文件；Windows exe 无权限位概念，不需要处理）。
           chmod +x cli-bin/stellacli-linux/stellacli
           test -x cli-bin/stellacli-linux/stellacli || { echo "::error::chmod 后仍不可执行"; exit 1; }
-
-      - name: 放入 Tauri 安装器
-        uses: actions/download-artifact@v4
-        with:
-          name: stella-installer
-          path: dist/Stella
-
-      - name: 校验安装器位于项目根目录
-        run: test -s dist/Stella/Stella.exe
 
       # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
       - name: 准备校验用 Python
@@ -335,107 +378,42 @@ jobs:
       - name: 校验发布包布局（用户数据未入包 / 自带可改文件已登记）
         run: python scripts/check_release_layout.py dist/Stella
 
-      # zip 内**不再包一层 Stella/**：Windows 资源管理器解压时默认会建一个与 zip
-      # 同名的文件夹，再套一层就成了 Stella-v3.1.0-win64\Stella\——多出来的这一级会把
-      # config/home.py 的「安装目录的同级」顶成「版本文件夹的内部」，用户数据于是落在
-      # Stella-v3.1.0-win64\StellaData，升级后清理旧版本文件夹＝删掉自己的全部记忆。
-      # 打平之后：解压得到 Stella-v3.1.0-win64\（程序），数据在其同级 StellaData\。
-      - name: 打包 zip
+      # 主发布线只保留四种产品：OneClick 是两个单文件安装程序，
+      # Standalone 是两个 allowlist ZIP；不再生成含混的 Stella-v*-win64 ZIP。
+      - name: 组装 OneClick 与 Standalone 产品
         run: |
-          cd dist/Stella
-          zip -q -r "../Stella-${RELEASE_REF}-win64.zip" .
-          ls -lh "../Stella-${RELEASE_REF}-win64.zip"
+          set -e
+          rm -rf dist/products
+          mkdir -p dist/products
+          python scripts/build_release_package.py standalone-python \
+            --source . --output dist/standalone-python
+          python scripts/build_release_package.py standalone-rust \
+            --source . --output dist/standalone-rust \
+            --rust-wheel rust-wheel/*.whl
+          python scripts/build_release_package.py --help >/dev/null
 
-      # 纵深防御：排除清单必然会有遗漏（将来加新的配置/日志文件时容易忘），
-      # 这一步在发布前对成品做最后检查。含真实群聊内容或凭据的文件一旦发布
-      # 就无法收回——GitHub Release 的资产会被立刻镜像与抓取。
-      - name: 校验 zip 未包含敏感文件
-        run: |
-          ZIP="dist/Stella-${RELEASE_REF}-win64.zip"
-          echo "=== 发布包内容 ==="
-          unzip -l "$ZIP"
-          echo "=================="
-          # 注意不能裸匹配 probe / consolidation_log：deploy/probe.py 与
-          # memory/consolidation_log.py 是必需模块，会正常出现在包内；
-          # .env.example 也需保留（deploy init 的模板），因此 .env 只匹配
-          # 带敏感后缀的变体（.dev/.prod/.bak/.backup）与根目录 .env。
-          # 根目录 .env 必须用 (^|[ /]) 起头而不是裸 /：zip 打平后它在包内就叫 ".env"，
-          # 前面没有斜杠，只写 /\.env$ 会让这条最该拦的规则静默失效。
-          if unzip -l "$ZIP" | grep -Ei '((^|[ /])\.env(\.(dev|prod|bak|backup))?$|answers\.toml|\.stella-stop-request|\.db$|\.jsonl$|\.log$|stella_thought_logs|memory_consolidation_log|memory_compressor_log|windows_raw|_probe|sanitize_map)'; then
-            echo "::error::发布包含敏感或运行期文件，已中止发布"
-            exit 1
-          fi
-          # 开发目录守卫与 rsync 排除清单同源维护：清单漏一项，这里就得补一项，
-          # 两道锁一起防止「整包发出开发文件」的回归（2026-09-08 主包混入 .claude/）。
-          if unzip -l "$ZIP" | grep -E '(tests/|design_docs/|_deprecated/|stella-installer/|\.claude/|\.gitnexus/|(^|[ /])cli/|(^|[ /])assets/|(^|[ /])(AGENTS|CLAUDE)\.md|(^|[ /])\.stella-state\.json$)'; then
-            echo "::error::发布包含开发目录，已中止发布"
-            exit 1
-          fi
-          if unzip -l "$ZIP" | grep -E 'memory_rust/native/(target/|.*\.(pyd|dll|so)$)'; then
-            echo "::error::Python 发布包混入 Rust native 构建产物"
-            exit 1
-          fi
-          echo "✅ 敏感文件检查通过"
+      - name: 下载 OneClick 安装程序
+        uses: actions/download-artifact@v4
+        with:
+          pattern: stella-installer-*
+          path: installer-bin
+          merge-multiple: false
 
-      # import 检查覆盖不到非 Python 资产：SYSTEM.md 缺失时 import 一切正常，
-      # 但用户拿到的 Bot 没有人格；.env.example 缺失则 deploy init 无法渲染。
-      # 这类文件只能显式列举校验。
-      - name: 校验发布包必需文件齐全
+      - name: 校验并收集四类产品资产
         run: |
-          cd dist/Stella
-          MISSING=0
-          for f in \
-            bot.py \
-            requirements.txt \
-            .env.example \
-            pyproject.toml \
-            LICENSE \
-            README.md \
-            start.bat \
-            doctor.bat \
-            stop.bat \
-            Stella.exe \
-            "README-快速开始.txt" \
-            config/settings.py \
-            config/spaces.py \
-            config/space_map.py \
-            core/pipeline.py \
-            core/logging_sink.py \
-            core/llm/scheduler.py \
-            core/llm/lm_studio.py \
-            memory/SYSTEM.md \
-            memory/schema.py \
-            memory/migrations.py \
-            memory/space_merge.py \
-            memory/consolidator.py \
-            memory/extraction_prompt.py \
-            deploy/__main__.py \
-            deploy/checks.py \
-            deploy/probe.py \
-            deploy/process.py \
-            deploy/init_wizard.py \
-            deploy/migrate.py \
-            deploy/env_merge.py \
-            deploy/env_keys.py \
-            deploy/manifest.py \
-            deploy/packages.py \
-            extensions/__init__.py \
-            extensions/link_monitor/__init__.py \
-            docs/configuration.md \
-            .stella-manifest.json \
-            .stella-package-catalog.json \
-            runtime-manager/schemas/runtime-manifest.schema.json \
-            runtime-manager/schemas/runtime-state.schema.json \
-            runtime-manager/schemas/package-catalog.schema.json \
-            runtime-manager/schemas/package-registry.schema.json \
-          ; do
-            if [ ! -f "$f" ]; then
-              echo "::error::缺少必需文件: $f"
-              MISSING=1
-            fi
-          done
-          [ "$MISSING" -eq 0 ] && echo "✅ 必需文件齐全"
-          exit "$MISSING"
+          set -e
+          cp dist/Stella-Standalone-Python-v4.0.1-windows-amd64.zip dist/products/
+          cp dist/Stella-Standalone-Rust-v4.0.1-windows-amd64.zip dist/products/
+          cp installer-bin/oneclick-python/*.exe dist/products/
+          cp installer-bin/oneclick-rust/*.exe dist/products/
+          test -s dist/products/Stella-OneClick-Python-v4.0.1-windows-amd64.exe
+          test -s dist/products/Stella-OneClick-Rust-v4.0.1-windows-amd64.exe
+          test -s dist/products/Stella-Standalone-Python-v4.0.1-windows-amd64.zip
+          test -s dist/products/Stella-Standalone-Rust-v4.0.1-windows-amd64.zip
+          if unzip -l dist/products/Stella-Standalone-Python-v4.0.1-windows-amd64.zip \
+            | grep -E '(^|/)(runtime|napcat|models|llama-server)'; then exit 1; fi
+          if unzip -l dist/products/Stella-Standalone-Rust-v4.0.1-windows-amd64.zip \
+            | grep -E '(^|/)(runtime|napcat|models|llama-server)'; then exit 1; fi
 
       # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
       # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
@@ -470,7 +448,7 @@ jobs:
           for d in dist/cli-win dist/cli-linux; do
             for f in bot.py requirements.txt .env.example pyproject.toml LICENSE \
                      deploy/__main__.py config/settings.py core/pipeline.py \
-                     memory/SYSTEM.md system_prompts .stella-manifest.json; do
+                     memory/SYSTEM.md system_prompts; do
               test -e "$d/$f" || { echo "::error::CLI 包缺少必需组件: $d/$f"; exit 1; }
             done
           done
@@ -507,8 +485,7 @@ jobs:
         run: |
           set -e
           cd dist
-          ZIP="Stella-${RELEASE_REF}-win64.zip"
-          for f in "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+          for f in products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ"; do
             if [ ! -f "$f" ]; then
               echo "::error::找不到发布包 $f"
               exit 1
@@ -516,11 +493,11 @@ jobs:
           done
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
-            gh release upload "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
-            gh release create "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" \
+            gh release create "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
               --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}"
@@ -537,8 +514,7 @@ jobs:
         run: |
           set -e
           cd dist
-          ZIP="Stella-${RELEASE_REF}-win64.zip"
-          for f in "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+          for f in products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ"; do
             if [ ! -f "$f" ]; then
               echo "::error::找不到发布包 $f"
               exit 1
@@ -546,11 +522,11 @@ jobs:
           done
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
-            gh release upload "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
-            gh release create "${RELEASE_REF}" "$ZIP" "$CLI_WIN_ZIP" "$CLI_TGZ" \
+            gh release create "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
               --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
@@ -567,6 +543,7 @@ jobs:
         with:
           name: Stella-release-preview
           path: |
+            dist/products/*
             dist/*.zip
             dist/*.tar.gz
           retention-days: 7

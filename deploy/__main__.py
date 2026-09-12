@@ -408,6 +408,7 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             path = packages.write_catalog(
                 PROJECT_ROOT,
                 platform=args.platform,
+                profile_id=args.profile,
             )
             print(f"已写入 {path}")
             return 0
@@ -422,7 +423,7 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             print(json.dumps(packages.read_registry(), ensure_ascii=False, indent=2))
             return 0
         if args.package_action == "rollback-model":
-            record = packages.rollback_model()
+            record = packages.rollback_model(model_role=args.model_role)
             print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
             return 0
         if args.package_action == "napcat-status":
@@ -455,6 +456,7 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             checksum=args.checksum,
             activate=not args.no_activate,
             backend=args.backend,
+            model_role=args.model_role,
         )
         print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
         return 0
@@ -500,6 +502,27 @@ def _cmd_upgrade(args: argparse.Namespace) -> int:
             indent=2,
         )
     )
+    return 0
+
+
+def _cmd_bootstrap(args: argparse.Namespace) -> int:
+    from . import bootstrap
+
+    try:
+        result = bootstrap.install_profile(
+            args.profile,
+            STELLA_HOME,
+            catalog_path=Path(args.catalog) if args.catalog else None,
+        )
+    except bootstrap.BootstrapError as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                ensure_ascii=False,
+            )
+        )
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -603,6 +626,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_upgrade.set_defaults(func=_cmd_upgrade)
 
+    p_bootstrap = sub.add_parser(
+        "bootstrap", help="安装 OneClick profile 声明的组件与默认模型"
+    )
+    bootstrap_sub = p_bootstrap.add_subparsers(
+        dest="bootstrap_action", required=True
+    )
+    p_bootstrap_install = bootstrap_sub.add_parser(
+        "install", help="下载、校验并激活 OneClick 默认组件"
+    )
+    p_bootstrap_install.add_argument(
+        "--profile",
+        choices=(
+            "oneclick-python",
+            "oneclick-rust",
+            "standalone-python",
+            "standalone-rust",
+        ),
+        required=True,
+    )
+    p_bootstrap_install.add_argument(
+        "--catalog",
+        default=None,
+        help="测试或离线场景使用的本地 package catalog",
+    )
+    p_bootstrap_install.set_defaults(func=_cmd_bootstrap)
+
     p_merge = sub.add_parser("space-merge", help="把若干共享空间合并为一个（含记忆与画像）")
     p_merge.add_argument("--from", dest="source", required=True, help="源空间名，逗号分隔")
     p_merge.add_argument("--to", required=True, help="目标空间名")
@@ -650,6 +699,17 @@ def main(argv: list[str] | None = None) -> int:
     package_sub = p_packages.add_subparsers(dest="package_action", required=True)
     p_catalog = package_sub.add_parser("catalog", help="生成发布包组件清单")
     p_catalog.add_argument("--platform", default=None, help="包目标平台，例如 windows-amd64")
+    p_catalog.add_argument(
+        "--profile",
+        choices=(
+            "oneclick-python",
+            "oneclick-rust",
+            "standalone-python",
+            "standalone-rust",
+        ),
+        default=None,
+        help="按产品 profile 生成清单",
+    )
     p_catalog.set_defaults(func=_cmd_packages)
     p_verify = package_sub.add_parser("verify", help="校验发布包清单中的文件 checksum")
     p_verify.set_defaults(func=_cmd_packages)
@@ -657,6 +717,12 @@ def main(argv: list[str] | None = None) -> int:
     p_list.set_defaults(func=_cmd_packages)
     p_rollback = package_sub.add_parser(
         "rollback-model", help="按历史记录恢复上一个 active model"
+    )
+    p_rollback.add_argument(
+        "--model-role",
+        choices=("embedding", "chat"),
+        default=None,
+        help="模型角色；不填时回滚传统 active model",
     )
     p_rollback.set_defaults(func=_cmd_packages)
     p_napcat_status = package_sub.add_parser("napcat-status", help="查看 NapCat 脱敏登录状态")
@@ -678,6 +744,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("cpu", "cuda", "hip", "metal", "vulkan"),
         default=None,
         help="模型兼容的 llama backend",
+    )
+    p_import.add_argument(
+        "--model-role",
+        choices=("embedding", "chat", "consolidation", "reranker"),
+        default=None,
+        help="模型角色；embedding 会写入 active.embedding",
     )
     p_import.add_argument(
         "--no-activate",

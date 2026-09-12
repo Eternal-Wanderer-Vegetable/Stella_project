@@ -43,6 +43,7 @@ mod runtime_bootstrap {
     const DEPS_MARKER: &str = ".stella-deps-ready";
     const RUST_MARKER: &str = ".stella-rust-ready";
     const PROGRESS_FILE: &str = ".bootstrap-progress";
+    const PROFILE_MARKER_PREFIX: &str = ".stella-profile-ready-";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
     const MIN_GET_PIP_SIZE: u64 = 500_000;
 
@@ -85,6 +86,7 @@ mod runtime_bootstrap {
         // requirements.txt 一变就自动重装。判据必须与 release_assets/start.bat 一致。
         if deps_marker_matches(root, &runtime) {
             ensure_rust_wheel(root, &runtime.join("python.exe"))?;
+            ensure_product_profile(root, &runtime.join("python.exe"))?;
             return Ok(());
         }
 
@@ -122,6 +124,7 @@ mod runtime_bootstrap {
             let marked = requirements_hash(root).unwrap_or_else(|| "ready".to_owned());
             fs::write(runtime.join(DEPS_MARKER), marked + "\n").map_err(|e| e.to_string())?;
             ensure_rust_wheel(root, &python)?;
+            ensure_product_profile(root, &python)?;
             Ok(())
         })();
 
@@ -330,6 +333,50 @@ mod runtime_bootstrap {
         run(python, &["-c", "import memory_rust._native"], root)
             .map_err(|e| format!("Rust 记忆引擎导入检查失败：{e}"))?;
         fs::write(&marker, expected + "\n").map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn profile_id(root: &Path) -> Option<String> {
+        std::env::var("STELLA_PROFILE")
+            .ok()
+            .or_else(|| option_env!("STELLA_BUILD_PROFILE").map(str::to_owned))
+            .or_else(|| fs::read_to_string(root.join(".stella-profile")).ok())
+            .map(|value| value.trim().to_owned())
+            .filter(|value| {
+                matches!(
+                    value.as_str(),
+                    "oneclick-python"
+                        | "oneclick-rust"
+                        | "standalone-python"
+                        | "standalone-rust"
+                )
+            })
+    }
+
+    fn ensure_product_profile(root: &Path, python: &Path) -> Result<(), String> {
+        let Some(profile) = profile_id(root) else {
+            return Ok(());
+        };
+        if profile.starts_with("standalone-") {
+            return Ok(());
+        }
+        let marker = root
+            .join("runtime")
+            .join(format!("{PROFILE_MARKER_PREFIX}{profile}"));
+        if marker.is_file() {
+            return Ok(());
+        }
+        emit_progress(root, &format!("正在安装产品组件（{profile}）…"));
+        let args = [
+            "-m",
+            "deploy",
+            "bootstrap",
+            "install",
+            "--profile",
+            profile.as_str(),
+        ];
+        run(python, &args, root).map_err(|e| format!("产品组件安装失败：{e}"))?;
+        fs::write(&marker, "complete\n").map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -706,6 +753,15 @@ pub fn project_root() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
     {
+        for candidate in [
+            exe_dir.clone(),
+            exe_dir.join("resources"),
+            exe_dir.join("resources").join("stella"),
+        ] {
+            if candidate.join("bot.py").is_file() {
+                return candidate;
+            }
+        }
         let mut dir: Option<&Path> = Some(exe_dir.as_path());
         for _ in 0..6 {
             if let Some(d) = dir {

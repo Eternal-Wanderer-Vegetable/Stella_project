@@ -1,8 +1,13 @@
-# Stella v4.0.0 发布说明
+# Stella v4.0.1 发布说明
 
 > 打 tag 前把本文件更新为本版本的内容，CI 会直接把它作为 Release Notes。
 
 ## 主要变化
+
+- 发布线拆分为 OneClick-Python、OneClick-Rust、Standalone-Python 和
+  Standalone-Rust，避免不同目标用户下载到不匹配的内容。
+- OneClick 默认安装 `qwen3-embedding-0.6b`；聊天、整理和 reranker 模型不预装。
+- OneClick 使用单个 Windows 安装程序；Standalone 仅包含 Stella 本体。
 
 - 增加 Runtime Contract、统一组件状态、脱敏错误和实例级 Runtime 文件。
 - 增加 Rust `runtime-manager` 契约基础层，并保留 Python deploy、CLI、Tauri 的兼容入口。
@@ -41,7 +46,7 @@ python -m deploy migrate             # 执行
 
 ```text
 D:\你的目录\
-  Stella-v4.0.0-win64\   ← 程序（升级时整个换掉，可以放心删）
+  Stella-v4.0.1\         ← 程序（升级时整个换掉，可以放心删）
   StellaData\            ← 你的数据（升级时一动不动）
 ```
 
@@ -51,13 +56,14 @@ D:\你的目录\
 
 ## 下载
 
-见本 Release 的资产：`Stella-v4.0.0-win64.zip`（解压后双击 `Stella.exe` 或 `start.bat`）。
+见本 Release 的四类 Windows 资产：`Stella-OneClick-*` 安装程序与
+`Stella-Standalone-*` 压缩包。v4.0.0 保留为历史 Pre-release，不被覆盖。
 
 ## 本版本边界
 
-NapCat 自动安装、自动登录和无人值守扫码不是本版本的默认能力；QQ 登录仍需
-人工扫码。真实 Windows 原生进程树、文件锁、端口冲突和升级回滚矩阵也需要在
-目标平台继续验收。
+OneClick 会自动获取并校验固定版本的 NapCat 包，但不会代替 QQ 登录；
+QQ 登录仍需人工扫码。真实 Windows 原生进程树、文件锁、端口冲突和升级回滚矩阵
+仍需要在目标平台继续验收。
 
 ## 验证范围
 

@@ -7,6 +7,14 @@
     "schema_version": {"const": 1},
     "generated_at": {"type": "string", "minLength": 1},
     "platform": {"type": "string", "minLength": 1},
+    "profile": {
+      "enum": [
+        "oneclick-python",
+        "oneclick-rust",
+        "standalone-python",
+        "standalone-rust"
+      ]
+    },
     "packages": {
       "type": "array",
       "items": {"$ref": "#/$defs/package"}
@@ -24,6 +32,7 @@
         "checksum": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
         "platform": {"type": "string"},
         "backend": {"enum": ["cpu", "cuda", "hip", "metal", "vulkan"]},
+        "model_role": {"enum": ["embedding", "chat", "consolidation", "reranker"]},
         "runtime_api": {"type": "string", "minLength": 1},
         "driver_min": {"type": "string", "minLength": 1},
         "abi": {"type": "string", "minLength": 1},
@@ -32,7 +41,11 @@
         "sbom": {"type": "string", "minLength": 1},
         "source": {"type": "string", "minLength": 1},
         "artifact": {"type": "string", "minLength": 1},
-        "status": {"enum": ["build-only", "hardware-verified", "unavailable"]}
+        "status": {"enum": ["available", "build-only", "hardware-verified", "unavailable"]}
+        ,
+        "size": {"type": "integer", "minimum": 1},
+        "dimension": {"type": "integer", "minimum": 1},
+        "remote": {"type": "boolean"}
       },
       "additionalProperties": false
     }

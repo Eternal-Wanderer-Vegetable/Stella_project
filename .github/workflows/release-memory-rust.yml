@@ -85,7 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $baseAsset = "Stella-$env:RELEASE_REF-win64.zip"
+          $baseAsset = "Stella-Standalone-Python-v$env:RELEASE_VERSION-windows-amd64.zip"
           $downloadDir = "dist\base"
           $repo = '${{ github.repository }}'
           $headers = @{
@@ -133,7 +133,7 @@ jobs:
         if: github.event_name == 'push' || inputs.overwrite_release
         shell: pwsh
         run: |
-          $baseAsset = "Stella-$env:RELEASE_REF-win64.zip"
+          $baseAsset = "Stella-Standalone-Python-v$env:RELEASE_VERSION-windows-amd64.zip"
           $root = "dist\Stella-Rust_engine_version-$env:RELEASE_REF-win64"
           Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -LiteralPath "dist\base\$baseAsset" `
