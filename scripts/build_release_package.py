@@ -5,8 +5,12 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 import zipfile
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from deploy.profiles import load_profile
 
@@ -17,6 +21,10 @@ COMMON_FILES = (
     "LICENSE",
     "README.md",
     ".env.example",
+    "start.bat",
+    "doctor.bat",
+    "stop.bat",
+    "README-快速开始.txt",
 )
 COMMON_DIRS = (
     "config",
@@ -25,6 +33,7 @@ COMMON_DIRS = (
     "extensions",
     "memory",
     "system_prompts",
+    "runtime-manager",
 )
 RUST_DIRS = ("memory_rust",)
 INSTALLER_FILES = COMMON_FILES + (
@@ -33,7 +42,7 @@ INSTALLER_FILES = COMMON_FILES + (
     "runtime-manager/schemas/package-catalog.schema.json",
     "runtime-manager/schemas/package-registry.schema.json",
 )
-INSTALLER_DIRS = COMMON_DIRS + ("runtime-manager",)
+INSTALLER_DIRS = COMMON_DIRS
 FORBIDDEN_PARTS = (
     "StellaData",
     "runtime",
@@ -45,19 +54,44 @@ FORBIDDEN_PARTS = (
     ".gitnexus",
     "design_docs",
     "stella-installer",
+    "benchmark",
 )
 
 
 def _copy_tree(source: Path, destination: Path, relative: str) -> None:
     source_path = source / relative
+    if not source_path.exists() and relative in {
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
+    }:
+        source_path = source / "release_assets" / relative
     if not source_path.exists():
         raise FileNotFoundError(f"allowlist entry is missing: {relative}")
     target = destination / relative
     if source_path.is_dir():
-        shutil.copytree(source_path, target, dirs_exist_ok=True)
+        shutil.copytree(
+            source_path,
+            target,
+            dirs_exist_ok=True,
+            ignore=_ignore_release_entries,
+        )
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, target)
+
+
+def _ignore_release_entries(_path: str, names: list[str]) -> set[str]:
+    ignored = set()
+    for name in names:
+        if (
+            name in FORBIDDEN_PARTS
+            or name in {".env", ".env.dev", ".env.prod", ".env.bak"}
+            or name.endswith((".db", ".log", ".jsonl", ".pyc"))
+        ):
+            ignored.add(name)
+    return ignored
 
 
 def _assert_clean(root: Path) -> None:
@@ -70,7 +104,13 @@ def _assert_clean(root: Path) -> None:
             raise ValueError(f"secret or user data in release content: {relative}")
 
 
-def build_standalone(source: Path, output: Path, profile_id: str) -> Path:
+def build_standalone(
+    source: Path,
+    output: Path,
+    profile_id: str,
+    *,
+    rust_wheel: Path | None = None,
+) -> Path:
     profile = load_profile(profile_id)
     if profile["distribution"] != "standalone":
         raise ValueError(f"{profile_id} is not a standalone profile")
@@ -82,6 +122,13 @@ def build_standalone(source: Path, output: Path, profile_id: str) -> Path:
     if profile["core_flavor"] == "rust":
         for relative in RUST_DIRS:
             _copy_tree(source, output, relative)
+        if rust_wheel is not None:
+            wheel = Path(rust_wheel).resolve()
+            if not wheel.is_file() or wheel.suffix.lower() != ".whl":
+                raise FileNotFoundError(f"Rust wheel is missing: {wheel}")
+            target = output / "wheels" / wheel.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(wheel, target)
     _assert_clean(output)
     archive = output.parent / profile["artifact"]["filename"]
     if archive.exists():
@@ -120,6 +167,9 @@ def stage_installer_resources(source: Path, output: Path, profile_id: str) -> Pa
     output.mkdir(parents=True)
     for relative in INSTALLER_FILES + INSTALLER_DIRS:
         _copy_tree(source, output, relative)
+    wheels = source / "wheels"
+    if profile["core_flavor"] == "rust" and wheels.is_dir():
+        shutil.copytree(wheels, output / "wheels", dirs_exist_ok=True)
     (output / ".stella-profile").write_text(profile_id + "\n", encoding="utf-8")
     return output
 
@@ -136,6 +186,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--installer", type=Path)
     parser.add_argument("--stage-resources", type=Path)
+    parser.add_argument("--rust-wheel", type=Path)
     args = parser.parse_args()
     if args.stage_resources is not None:
         stage_installer_resources(args.source, args.stage_resources, args.profile)
@@ -145,7 +196,12 @@ def main() -> int:
             parser.error("--installer is required for one-click profiles")
         result = build_oneclick(args.installer, args.output, args.profile)
     else:
-        result = build_standalone(args.source.resolve(), args.output.resolve(), args.profile)
+        result = build_standalone(
+            args.source.resolve(),
+            args.output.resolve(),
+            args.profile,
+            rust_wheel=args.rust_wheel,
+        )
     print(result)
     return 0
 

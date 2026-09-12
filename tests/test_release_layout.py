@@ -42,20 +42,28 @@ def _release_excludes() -> set[str]:
 
 
 def test_release_assets_keep_python_name_and_add_separate_rust_name():
-    """Python asset keeps its stable name while Rust uses a separate same-tag asset."""
+    """The main release exposes four explicit product assets."""
     main = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
     rust = (
         PROJECT_ROOT / ".github" / "workflows" / "release-memory-rust.yml"
     ).read_text(encoding="utf-8")
-    assert 'Stella-${RELEASE_REF}-win64.zip' in main
+    assert "Stella-OneClick-Python-v4.0.1-windows-amd64.exe" in main
+    assert "Stella-OneClick-Rust-v4.0.1-windows-amd64.exe" in main
+    assert "Stella-Standalone-Python-v4.0.1-windows-amd64.zip" in main
+    assert "Stella-Standalone-Rust-v4.0.1-windows-amd64.zip" in main
+    assert "products/*.exe" in main
+    assert "products/*.zip" in main
     assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
     assert "Rust asset upload failed" in rust
     assert 'https://api.github.com/repos/$repo/releases/tags/$env:RELEASE_REF' in rust
     assert 'Accept = "application/octet-stream"' in rust
-    assert 'Stella-$env:RELEASE_REF-win64.zip' in rust
+    assert (
+        'Stella-Standalone-Python-v$env:RELEASE_VERSION-windows-amd64.zip'
+        in rust
+    )
     assert "gh release create" not in rust
     assert "校验主 Python 与 CLI 版本" in rust
     assert "pyproject.toml" in rust and "cli/Cargo.toml" in rust

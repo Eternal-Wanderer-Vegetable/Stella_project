@@ -3,12 +3,17 @@ name: Llama backend packages
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Release version, for example 4.0.1"
+        required: true
+        default: "4.0.1"
+        type: string
       llama_commit:
         description: "Pinned llama.cpp commit"
         required: true
         type: string
       publish:
-        description: "Upload verified build artifacts for a release"
+        description: "Upload verified backend assets to the matching Release"
         required: true
         default: false
         type: boolean
@@ -47,24 +52,56 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          test "$VERSION" = "4.0.1"
+          mkdir -p "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}"
           python scripts/build_llama_package.py .llama.cpp \
-            --output dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }} \
+            --output "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}" \
             --backend '${{ matrix.backend }}' \
             --commit '${{ inputs.llama_commit }}' \
             --os '${{ matrix.os }}' \
             --arch '${{ matrix.target }}'
       - name: Verify package provenance
         shell: bash
-        run: python scripts/verify_llama_package.py dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          python scripts/verify_llama_package.py "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
-          path: dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+          name: Stella-llama-v${{ inputs.version || '4.0.1' }}-${{ matrix.target }}-${{ matrix.backend }}
+          path: dist/Stella-llama-v*-${{ matrix.target }}-${{ matrix.backend }}
 
   publish:
     if: ${{ inputs.publish }}
     needs: [build]
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Publication is intentionally a separate reviewed step after all backend artifacts verify."
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          test "$VERSION" = "4.0.1"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "RELEASE_REF=v$VERSION" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Stella-llama-v*
+          path: dist
+          merge-multiple: false
+      - name: Package and publish verified backend assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd dist
+          for directory in Stella-llama-v*; do
+            [ -d "$directory" ] || continue
+            (cd "$directory" && zip -q -r "../${directory}.zip" .)
+          done
+          assets=(Stella-llama-v*.zip)
+          test "${#assets[@]}" -eq 5
+          gh release upload "$RELEASE_REF" "${assets[@]}" --clobber
+          gh release view "$RELEASE_REF" --json assets --jq '.assets[].name'

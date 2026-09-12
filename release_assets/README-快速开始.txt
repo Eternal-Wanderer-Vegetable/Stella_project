@@ -2,40 +2,47 @@
   Stella 快速开始
 ====================================================
 
-本程序是 Windows 免安装版：解压后可双击 Stella.exe 使用图形界面，
-也可双击 start.bat 使用命令行流程，无需自行安装 Python。
+本项目提供两类 Windows 版本：
+
+- OneClick：下载一个安装程序，双击后自动展开程序并准备 Python、llama.cpp、
+  NapCat 与 qwen3-embedding-0.6b。
+- Standalone：只包含 Stella 本体，解压后使用系统 Python；不会自动下载 NapCat、
+  llama.cpp 或任何 GGUF 模型。
+
+请根据自己的使用方式下载对应版本，不要把两类文件混用。
 
 ----------------------------------------------------
- 第一步：安装并登录 NapCat
+ OneClick 首次安装
 ----------------------------------------------------
-1. 下载 NapCatQQ Desktop：
-   https://github.com/NapNeko/NapCatQQ-Desktop
-2. 安装后扫码登录你的 QQ（必须人工扫码）。
-3. 在 NapCat WebUI 的「网络配置」里添加「WebSocket 客户端」，
+1. 双击 `Stella-OneClick-*.exe`，安装程序会自动展开 Stella。
+2. 首次启动会自动准备嵌入式 Python、llama.cpp CPU 后端、
+   NapCat 和 `qwen3-embedding-0.6b`。
+3. NapCat 登录仍需人工扫码；程序不会 OCR、代扫码或自动确认。
+4. 在 NapCat WebUI 的「网络配置」里添加「WebSocket 客户端」，
    地址填：
      ws://127.0.0.1:8080/onebot/v11/ws
 
 ----------------------------------------------------
- 第二步：安装 LM Studio 并加载两个模型
+ 主聊天模型
 ----------------------------------------------------
 1. 下载安装 LM Studio：https://lmstudio.ai/
-2. 加载主聊天模型（.env 里填 LM_STUDIO_MODEL，示例：
+2. 加载主聊天模型（`.env` 里填 `LM_STUDIO_MODEL`，示例：
    google/gemma-4-26b-a4b-qat）。该模型独占 GPU。
-3. 加载记忆整理模型（.env 里填 CONSOLIDATION_LM_STUDIO_MODEL，
+3. 记忆整理模型是可选项（`.env` 里填 `CONSOLIDATION_LM_STUDIO_MODEL`，
    示例：google/gemma-4-e4b）。在模型设置里把 GPU Offload 设为 0，
    让它走纯 CPU 推理——这是双模型并行的前提：聊天用 GPU、
    记忆整理用 CPU，两者同时运行互不挤占显存。
 
 ----------------------------------------------------
- 第三步：启动 Stella
+ 启动 Stella
 ----------------------------------------------------
 1. 双击 start.bat。
-2. 首次运行会自动下载约 100MB 的 Python 运行时并安装依赖，
-   请耐心等待（可能需几分钟）。
-3. 下载与安装完成后会进入配置向导，回答 5 个必答项即可。
+2. Standalone 首次运行需要系统 Python 和依赖；OneClick 会自动准备。
+3. OneClick 默认只安装 `qwen3-embedding-0.6b`，聊天、整理和 reranker
+   模型不会自动下载。
 4. 启动成功后，在群里 @ 机器人即可开始对话。
 
-说明：Rust engine 发布包会在此目录附带 `wheels\stella_memory_rust-*.whl`。
+说明：Standalone Rust 版本会附带 Rust memory engine；OneClick Rust 版本会在安装阶段准备。
 双击 `start.bat` 或 `Stella.exe` 时会自动离线安装该 wheel，并使用 Rust 记忆引擎；
 普通 Python 发布包没有这个目录，仍使用原本的 Python 记忆引擎。
 
@@ -56,8 +63,8 @@ start.bat 会下载并运行 Python 并安装依赖，部分杀软可能拦截�
  升级到新版本
 ----------------------------------------------------
 1. 先运行 stop.bat 停止程序
-2. 把新版本解压到一个新目录
-3. 双击 Stella.exe（或 start.bat），程序会自动找到旧目录，
+2. OneClick 运行新版本安装程序；Standalone 解压到一个新目录
+3. 启动新版本，程序会自动找到旧目录，
    问你要不要导入。确认即可——配置、记忆、人格、空间设置、
    已装插件都会搬过来，数据库也会自动升级到新版本。
    命令行用法：python -m deploy migrate --dry-run  （先看预览）

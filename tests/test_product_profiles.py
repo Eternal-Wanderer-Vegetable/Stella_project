@@ -65,11 +65,23 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         "LICENSE",
         "README.md",
         ".env.example",
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
     ):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in ("config", "core", "deploy", "extensions", "memory", "system_prompts"):
+    for directory in (
+        "config",
+        "core",
+        "deploy",
+        "extensions",
+        "memory",
+        "system_prompts",
+        "runtime-manager",
+    ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
@@ -108,6 +120,10 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         "LICENSE",
         "README.md",
         ".env.example",
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
         "runtime-manager/schemas/runtime-manifest.schema.json",
         "runtime-manager/schemas/runtime-state.schema.json",
         "runtime-manager/schemas/package-catalog.schema.json",
