@@ -25,7 +25,6 @@ COMMON_DIRS = (
     "extensions",
     "memory",
     "system_prompts",
-    "system_prompts",
 )
 RUST_DIRS = ("memory_rust",)
 FORBIDDEN_PARTS = (

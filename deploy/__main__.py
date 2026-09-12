@@ -408,6 +408,7 @@ def _cmd_packages(args: argparse.Namespace) -> int:
             path = packages.write_catalog(
                 PROJECT_ROOT,
                 platform=args.platform,
+                profile_id=args.profile,
             )
             print(f"已写入 {path}")
             return 0
@@ -650,6 +651,17 @@ def main(argv: list[str] | None = None) -> int:
     package_sub = p_packages.add_subparsers(dest="package_action", required=True)
     p_catalog = package_sub.add_parser("catalog", help="生成发布包组件清单")
     p_catalog.add_argument("--platform", default=None, help="包目标平台，例如 windows-amd64")
+    p_catalog.add_argument(
+        "--profile",
+        choices=(
+            "oneclick-python",
+            "oneclick-rust",
+            "standalone-python",
+            "standalone-rust",
+        ),
+        default=None,
+        help="按产品 profile 生成清单",
+    )
     p_catalog.set_defaults(func=_cmd_packages)
     p_verify = package_sub.add_parser("verify", help="校验发布包清单中的文件 checksum")
     p_verify.set_defaults(func=_cmd_packages)

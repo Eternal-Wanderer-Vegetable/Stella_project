@@ -172,6 +172,43 @@ def test_catalog_is_json_and_does_not_include_model_bytes(tmp_path):
     assert not any(item["kind"] == "model" for item in payload["packages"])
 
 
+def test_profile_catalog_includes_only_declared_default_embedding(tmp_path):
+    (tmp_path / "start.bat").write_text("start", encoding="utf-8")
+    catalog = packages.build_catalog(
+        tmp_path,
+        platform="windows-amd64",
+        profile_id="oneclick-python",
+    )
+    assert catalog["profile"] == "oneclick-python"
+    models = [item for item in catalog["packages"] if item["kind"] == "model"]
+    assert [item["id"] for item in models] == ["qwen3-embedding-0.6b"]
+    assert models[0]["status"] == "available"
+    assert models[0]["remote"] is True
+
+
+def test_profile_catalog_is_available_from_cli(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(packages, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(deploy_main, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "start.bat").write_text("start", encoding="utf-8")
+    assert (
+        deploy_main.main(
+            [
+                "packages",
+                "catalog",
+                "--platform",
+                "windows-amd64",
+                "--profile",
+                "oneclick-python",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(
+        (tmp_path / packages.CATALOG_FILENAME).read_text(encoding="utf-8")
+    )
+    assert payload["profile"] == "oneclick-python"
+
+
 def test_packages_list_is_a_json_cli_surface(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(packages, "STELLA_HOME", tmp_path)
     assert deploy_main.main(["packages", "list"]) == 0

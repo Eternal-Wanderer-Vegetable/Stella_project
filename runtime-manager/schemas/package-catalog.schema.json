@@ -41,7 +41,7 @@
         "sbom": {"type": "string", "minLength": 1},
         "source": {"type": "string", "minLength": 1},
         "artifact": {"type": "string", "minLength": 1},
-        "status": {"enum": ["build-only", "hardware-verified", "unavailable"]}
+        "status": {"enum": ["available", "build-only", "hardware-verified", "unavailable"]}
         ,
         "size": {"type": "integer", "minimum": 1},
         "dimension": {"type": "integer", "minimum": 1},
