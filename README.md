@@ -92,12 +92,12 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 ### 📦 下载 & 安装（普通用户）
 
-- 第一步：下载如下必须依赖：
+- 第一步：按使用场景准备组件：
 
-  - [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)，并按照其中的指示配置**反向websocket链接**。记录下您配置的端口号并打开链接。
-  - [LM Studio](https://lmstudio.ai/)，安装后在软件内部下载必须模型（见[开发中使用的本地模型](#开发中使用的本地模型)）并加载模型，且打开LM Studio的远程服务端口。
+  - 如果要接入 QQ：准备 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)，并按照其中的指示配置**反向 websocket 链接**。记录下您配置的端口号并打开链接。
+  - 如果要使用本地模型：可选择 [LM Studio](https://lmstudio.ai/)，或使用 Stella Runtime 的可选 `llama.cpp` profile。使用在线模型时不需要安装 LM Studio。
 
-> 注：即使使用全部接入在线模型的方案，也需要下载LM Studio来加载本地embedding模型。（这是工具调用的必须条件，同时仅0.6B参数的embedding模型也可以在没有显卡的绝大多数电脑上顺利运行）
+> AI 可以关闭。关闭 AI 或本地模型暂不可用时，基础 Bot、OneBot 诊断和部署管理仍可运行。
 
 - 第二步：到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后有两种启动方式：
 
@@ -109,7 +109,7 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 - 第三步：
   - 1.首次打开 `Stella.exe` 后会出现配置界面。先填**监听端口**（就是第一步在 NapCat 里配的反向 WS 端口）与要让 Stella 进的**群号**。
   - 2.往下到「模型服务」分区，按你的部署方式点一个**一键预设**，再把对应的端点卡片填完：
-    - **全本地** → 点「纯本地」，在「本机 LM Studio」卡片里填 LM Studio 的地址与模型 ID。点卡片上的「测试连接」（或底部的「读取 LM Studio 模型」）可以直接把已加载的模型列表读回来。
+    - **全本地** → 点「纯本地」，在本机 OpenAI 兼容端点卡片里填 LM Studio、llama.cpp 或其他兼容服务的地址与模型 ID。点卡片上的「测试连接」可以读取服务端模型列表。
     - **全在线 / 混合** → 点「纯在线（双 key）」或「混合（对话在线 · 整合本地）」，在两张在线卡片里各填一次服务商地址、API key 与模型 ID。**两把 key 要填不同的**，原因见[三种部署模式](#-三种部署模式)。
   - 3.配置完成后，单击“保存并检查”，程序会自动跳转至“运行状态”界面。单击“启动”即可。
 
@@ -159,7 +159,7 @@ pip install -r requirements.txt
 | Python | 3.10+（Release 包内置嵌入式 Python，无需自装） |
 | 框架 | [NoneBot 2](https://nonebot.dev/) |
 | QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |
-| 模型服务 | 本地 [LM Studio](https://lmstudio.ai/)，或任意 OpenAI 兼容的在线 API（填地址 + API key 即可），两者可混用 |
+| 模型服务 | 可选的本地 [LM Studio](https://lmstudio.ai/) / `llama.cpp` Runtime，或任意 OpenAI 兼容的在线 API（填地址 + API key 即可），两者可混用；也可以关闭 AI |
 
 ### 配置
 
@@ -275,13 +275,15 @@ graph LR
 
 ## 🛠 技术栈
 
-**Bot 后端**：`NoneBot 2` · `OneBot V11` · `SQLite (FTS5)` · `LM Studio` / 任意 OpenAI 兼容 API · `APScheduler` · `httpx`
+**Bot 后端**：`NoneBot 2` · `OneBot V11` · `SQLite (FTS5)` · OpenAI 兼容 API · `APScheduler` · `httpx`
+
+**可选 Runtime**：Rust `runtime-manager` · `llama.cpp` / `llama-server` · Runtime manifest/state contract
 
 **插件兼容与渲染**：`Jinja2` · `Playwright`（本地 Chromium，仅用于把插件卡片渲染成图片）
 
 **桌面安装器**：`Tauri 2` · `Rust`（`stella-installer/`，原生 HTML/JS 前端，无前端构建步骤）
 
-**容器化部署**：`Docker` · `docker compose`（`Dockerfile` + stella/napcat 双容器编排，Chromium 与中文字体已内置镜像；见 [Docker 部署指南](docs/deployment-docker.md)）
+**容器化部署**：`Docker` · `docker compose`（`Dockerfile` + stella/napcat 双容器编排，另有可选 `llama` profile；Chromium 与中文字体已内置镜像；见 [Docker 部署指南](docs/deployment-docker.md)）
 
 **开发与验证**：`pytest` · `ruff` · `pyright`
 

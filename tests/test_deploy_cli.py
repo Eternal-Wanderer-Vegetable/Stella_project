@@ -135,7 +135,15 @@ def test_migrate_subcommand_is_registered(capsys):
     with contextlib.redirect_stdout(buffer), contextlib.suppress(SystemExit):
         deploy_main.main(["--help"])
     helptext = buffer.getvalue()
-    for command in ("migrate", "space-merge", "manifest", "paths", "capabilities"):
+    for command in (
+        "migrate",
+        "space-merge",
+        "manifest",
+        "paths",
+        "capabilities",
+        "packages",
+        "runtime",
+    ):
         assert command in helptext, command
 
 

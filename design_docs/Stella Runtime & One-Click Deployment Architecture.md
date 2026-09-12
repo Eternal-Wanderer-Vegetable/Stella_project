@@ -2604,3 +2604,27 @@ Stella 的“一键安装”不应定义为：
 > **“用户无需理解或手动配置 Stella 的内部运行时，即可从空白系统环境获得一个可运行、可诊断、可更新、可恢复的 Stella 实例。”**
 
 这也是 Stella Runtime Architecture 的最终目标。
+
+---
+
+## Appendix D — MVP 实施状态（2026-09-12）
+
+本轮实现已经把架构文档中的第一批稳定边界落到现有项目结构：
+
+| 能力 | 当前落点 |
+|---|---|
+| Runtime Contract | `deploy/runtime.py`、`runtime-manager/`、manifest/state schema 与 fixtures |
+| 统一状态 | Python deploy、`/stella/status`、`stellacli status` 与 Docker status |
+| 可选本地模型 | Docker `llama` profile、`/v1/models` readiness、OpenAI-compatible endpoint |
+| OneBot 诊断 | OneBot/NapCat 配置、可达性、断线和等待重连状态 |
+| 包与模型 | 独立版本、平台、SHA-256 catalog、原子导入和 active model 回滚 |
+| 数据边界 | `STELLA_HOME`、实例 Runtime 目录、独立 NapCat 数据目录 |
+
+当前交付是可回归的 MVP 基础层：llama 不是 Stella Core 的硬依赖，NapCat
+断线不会误停 Stella，敏感值不会进入 Runtime state 或普通诊断输出。现有
+Python deploy 命令和 CLI/Tauri 兼容入口继续保留，便于渐进迁移。
+
+以下项目仍明确延期：真实 Windows 原生进程树与文件锁验收、Rust Supervisor
+完整接管并删除双 owner、NapCat 自动安装与无人值守扫码、全 GPU backend
+打包矩阵，以及模型市场和多 QQ 集群。它们需要独立的产品、平台或许可证决策，
+不能由本 MVP 的契约测试替代。

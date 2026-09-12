@@ -133,6 +133,30 @@ docker compose start
 # Restore = unpack over StellaData/, then up -d
 ```
 
+### 5.1 Runtime status and optional llama
+
+This release uses one Runtime status shape with shared `schema_version`, component,
+state, endpoint, error, and diagnostics fields. View the aggregate status with:
+
+```bash
+stellacli --mode docker status --json
+docker compose exec stella python -m deploy runtime status
+```
+
+The default compose topology does not start a local model service. To use the
+containerized `llama-server`, place a GGUF file under `./models/` and explicitly
+enable the optional profile:
+
+```bash
+docker compose --profile llama up -d
+```
+
+The llama service has a `/v1/models` healthcheck, while the upper layer can perform
+a minimal chat readiness check. Missing models, port conflicts, or a failed llama
+process only mark llama as `degraded`/`failed`; Stella Core and the basic Bot keep
+running. An online API or LM Studio on the host can still be used as the same
+OpenAI-compatible endpoint.
+
 ## 6. Security Checklist
 
 - **When exposing 8080 to the public internet, a token is mandatory**: set `ONEBOT_ACCESS_TOKEN=<random string>` in `.env` and the same value in the NapCat WebUI. Without a token, anyone who knows the address can impersonate a QQ client and control the Bot.
@@ -171,3 +195,15 @@ Data is then managed by Docker (find the location via `docker volume inspect ste
 - `PORT` inside the container is fixed at 8080 (rationale and alternatives in §7).
 - NapCat's login state lives in `./napcat/QQ/` and its network configuration in `./napcat/config/` -- include both in backups alongside `StellaData/`; if lost you need to re-scan the QR code and re-configure WS respectively.
 - QQ risk-control note: scanning a QR code to log in a new device from a datacenter IP may trigger a security review. That is QQ-side policy and unrelated to this project; if it keeps failing, leave NapCat running in your usual network environment and switch to the alternative topology in §1.
+
+### Contract and data boundaries
+
+- Runtime manifest/state lives in the instance Runtime directory and stores only
+  component state, diagnostics, and redacted errors.
+- The release catalog lives in the replaceable program directory; installed package
+  records, model bytes, and rollback history live under `STELLA_HOME/.stella/packages/`.
+- `STELLA_HOME` is the user-data boundary. Runtime, component, and model upgrades must
+  not overwrite configuration, memories, plugins, personas, or logs.
+- NapCat account data and network configuration remain in the separate `napcat/`
+  directory; they are not written into Runtime state and do not share Stella Core's
+  upgrade lifecycle.

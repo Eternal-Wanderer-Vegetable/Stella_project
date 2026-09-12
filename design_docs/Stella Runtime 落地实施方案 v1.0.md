@@ -4,7 +4,7 @@
 >
 > **文档类型：** Engineering Implementation Proposal
 >
-> **状态：** Proposed
+> **状态：** Implemented MVP / Follow-up required
 >
 > **版本：** 1.0
 >
@@ -358,3 +358,29 @@ cd cli && cargo test
 7. AI 关闭或 LLM 失败时，基础 Bot 仍能工作。
 8. 日志、manifest、版本和 checksum 可定位到具体组件。
 9. 迁移和升级不会覆盖 `STELLA_HOME` 中的用户数据。
+
+## 11. 2026-09-12 实施收口
+
+本轮已完成 Runtime MVP 的契约、诊断和发布基础，并保持现有 Python deploy、
+Tauri、CLI 与 Docker 边界兼容：
+
+- Runtime Contract 已落地到 Python 兼容层、Rust `runtime-manager` crate、
+  manifest/state schema 和 fixtures；
+- `stella`、可选 `llama`、`onebot` 使用统一状态枚举、错误 envelope 和脱敏规则；
+- `deploy runtime` 提供契约校验与状态访问，`/stella/status`、本地 CLI 与 Docker
+  status 可以携带统一 Runtime 状态；
+- llama readiness 使用 `/v1/models` 与最小请求语义，llama 缺失或失败只产生
+  可诊断的降级状态，不阻断 Stella Core；
+- OneBot/NapCat 已加入配置、可达性、断线和等待重连诊断；仍保留人工扫码登录；
+- 组件包、模型包、SHA-256 校验、原子导入、active model 回滚和发布 catalog 已建立；
+- Docker 增加可选 `llama` profile，默认拓扑仍不强制本地模型服务。
+
+以下能力不属于本轮的默认交付，继续作为后续阶段处理：
+
+- 真实 Windows 原生进程树、文件锁、端口冲突和升级回滚矩阵；
+- Rust Supervisor 对 Stella 生命周期的完整接管，以及最终删除重复 owner；
+- NapCat 自动安装、自动登录和无人值守扫码；
+- 全 GPU backend 矩阵、模型市场、云同步和多 QQ 集群。
+
+因此，本方案的当前状态是“契约与可诊断 MVP 已实现，生产级桌面 Supervisor
+和第三方组件自动化仍需后续验收”，而不是宣称所有一键部署目标已经完成。
