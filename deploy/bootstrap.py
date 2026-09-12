@@ -260,6 +260,19 @@ def install_profile(
     if profile["distribution"] != "oneclick":
         _write_progress(root, profile_id=profile_id, state="skipped")
         return {"ok": True, "profile": profile_id, "state": "skipped", "installed": []}
+    previous = read_progress(root)
+    if (
+        isinstance(previous, dict)
+        and previous.get("profile") == profile_id
+        and previous.get("state") == "complete"
+    ):
+        return {
+            "ok": True,
+            "profile": profile_id,
+            "state": "complete",
+            "installed": [],
+            "resumed": True,
+        }
 
     catalog = _load_catalog(profile, catalog_path)
     component_ids = [
@@ -294,7 +307,12 @@ def install_profile(
                     "platform": record["platform"],
                 }
                 installed.append(
-                    acquire.install_napcat(manifest, root, cache_dir=archive.parent)
+                    acquire.install_napcat(
+                        manifest,
+                        root,
+                        archive=archive,
+                        cache_dir=archive.parent,
+                    )
                 )
             elif record["kind"] == "model":
                 installed.append(
@@ -306,6 +324,7 @@ def install_profile(
                             "role": record.get("model_role", "embedding"),
                         },
                         root,
+                        archive=archive,
                         cache_dir=archive.parent,
                     )
                 )

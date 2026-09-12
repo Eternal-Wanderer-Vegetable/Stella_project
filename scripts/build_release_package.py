@@ -27,6 +27,13 @@ COMMON_DIRS = (
     "system_prompts",
 )
 RUST_DIRS = ("memory_rust",)
+INSTALLER_FILES = COMMON_FILES + (
+    "runtime-manager/schemas/runtime-manifest.schema.json",
+    "runtime-manager/schemas/runtime-state.schema.json",
+    "runtime-manager/schemas/package-catalog.schema.json",
+    "runtime-manager/schemas/package-registry.schema.json",
+)
+INSTALLER_DIRS = COMMON_DIRS + ("runtime-manager",)
 FORBIDDEN_PARTS = (
     "StellaData",
     "runtime",
@@ -101,6 +108,22 @@ def build_oneclick(installer: Path, output: Path, profile_id: str) -> Path:
     return target
 
 
+def stage_installer_resources(source: Path, output: Path, profile_id: str) -> Path:
+    """Stage the allowlisted program tree embedded by the Tauri installer."""
+    profile = load_profile(profile_id)
+    if profile["distribution"] != "oneclick":
+        raise ValueError(f"{profile_id} is not a one-click profile")
+    source = Path(source).resolve()
+    output = Path(output).resolve()
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True)
+    for relative in INSTALLER_FILES + INSTALLER_DIRS:
+        _copy_tree(source, output, relative)
+    (output / ".stella-profile").write_text(profile_id + "\n", encoding="utf-8")
+    return output
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("profile", choices=(
@@ -112,7 +135,11 @@ def main() -> int:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--installer", type=Path)
+    parser.add_argument("--stage-resources", type=Path)
     args = parser.parse_args()
+    if args.stage_resources is not None:
+        stage_installer_resources(args.source, args.stage_resources, args.profile)
+        return 0
     if args.profile.startswith("oneclick-"):
         if args.installer is None:
             parser.error("--installer is required for one-click profiles")

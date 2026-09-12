@@ -108,24 +108,31 @@ def install_napcat(
     manifest: dict[str, Any],
     data_root: Path,
     *,
+    archive: Path | None = None,
     cache_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Acquire a pinned NapCat archive and pass it to install_archive."""
     metadata = napcat.validate_manifest(manifest)
     cache = Path(cache_dir or (Path(data_root) / ".stella" / "downloads"))
-    archive = cache / f"napcat-{metadata['version']}.zip"
-    download_verified(
-        metadata["source"],
-        archive,
-        checksum=metadata["digest"],
+    local_archive = (
+        Path(archive)
+        if archive is not None
+        else cache / f"napcat-{metadata['version']}.zip"
     )
-    return napcat.install_archive(archive, metadata, Path(data_root))
+    if archive is None:
+        download_verified(
+            metadata["source"],
+            local_archive,
+            checksum=metadata["digest"],
+        )
+    return napcat.install_archive(local_archive, metadata, Path(data_root))
 
 
 def install_default_embedding(
     model: dict[str, Any],
     data_root: Path,
     *,
+    archive: Path | None = None,
     cache_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Acquire and register one declared embedding artifact."""
@@ -134,16 +141,21 @@ def install_default_embedding(
     if missing or model.get("role") != "embedding":
         raise AcquireError("invalid_model", "默认 embedding 元数据不完整")
     cache = Path(cache_dir or (Path(data_root) / ".stella" / "downloads"))
-    source = _https_url(model["source"], "model source")
-    archive = cache / str(model["filename"])
-    download_verified(
-        source,
-        archive,
-        checksum=str(model["sha256"]),
-        size=int(model["size"]),
+    local_archive = (
+        Path(archive)
+        if archive is not None
+        else cache / str(model["filename"])
     )
+    if archive is None:
+        source = _https_url(model["source"], "model source")
+        download_verified(
+            source,
+            local_archive,
+            checksum=str(model["sha256"]),
+            size=int(model["size"]),
+        )
     return packages.import_model(
-        archive,
+        local_archive,
         model_id=str(model["id"]),
         version=str(model["version"]),
         checksum=str(model["sha256"]),

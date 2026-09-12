@@ -12,7 +12,11 @@ from deploy.profiles import (
     load_profiles,
     validate_profile,
 )
-from scripts.build_release_package import build_oneclick, build_standalone
+from scripts.build_release_package import (
+    build_oneclick,
+    build_standalone,
+    stage_installer_resources,
+)
 
 
 def test_all_profiles_are_v401_and_non_overlapping():
@@ -93,3 +97,45 @@ def test_release_builder_oneclick_is_single_executable(tmp_path):
     result = build_oneclick(installer, output, "oneclick-python")
     assert result.name == "Stella-OneClick-Python-v4.0.1-windows-amd64.exe"
     assert [path.name for path in output.iterdir()] == [result.name]
+
+
+def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
+    source = tmp_path / "source"
+    for relative in (
+        "bot.py",
+        "requirements.txt",
+        "pyproject.toml",
+        "LICENSE",
+        "README.md",
+        ".env.example",
+        "runtime-manager/schemas/runtime-manifest.schema.json",
+        "runtime-manager/schemas/runtime-state.schema.json",
+        "runtime-manager/schemas/package-catalog.schema.json",
+        "runtime-manager/schemas/package-registry.schema.json",
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    for directory in (
+        "config",
+        "core",
+        "deploy",
+        "extensions",
+        "memory",
+        "system_prompts",
+        "runtime-manager",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    (source / "tests").mkdir()
+    (source / "tests" / "secret.txt").write_text("must not ship", encoding="utf-8")
+
+    output = tmp_path / "resources"
+    stage_installer_resources(source, output, "oneclick-python")
+
+    assert (output / ".stella-profile").read_text(encoding="utf-8").strip() == (
+        "oneclick-python"
+    )
+    assert (output / "deploy" / "__init__.py").exists()
+    assert not (output / "tests").exists()

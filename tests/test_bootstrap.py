@@ -156,3 +156,33 @@ def test_oneclick_failure_records_failed_progress(tmp_path, monkeypatch):
     progress = bootstrap.read_progress(tmp_path / "data")
     assert progress["state"] == "failed"
     assert progress["completed"] == []
+
+
+def test_oneclick_is_idempotent_without_redownloading(tmp_path, monkeypatch):
+    catalog, files = _catalog(tmp_path)
+    source_map = {
+        "https://example.invalid/llama-cpu.zip": files["llama-cpu"],
+        "https://example.invalid/napcat.zip": files["napcat"],
+        "https://example.invalid/Qwen3-Embedding-0.6B-Q8_0.gguf": files[
+            "qwen3-embedding-0.6b"
+        ],
+    }
+    calls = 0
+
+    def fake_download(source, destination, *, checksum, size=None, **_kwargs):
+        nonlocal calls
+        calls += 1
+        source_path = source_map[source]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source_path.read_bytes())
+        return destination
+
+    monkeypatch.setattr(bootstrap.acquire, "download_verified", fake_download)
+    data_root = tmp_path / "data"
+    bootstrap.install_profile("oneclick-python", data_root, catalog_path=catalog)
+    result = bootstrap.install_profile(
+        "oneclick-python", data_root, catalog_path=catalog
+    )
+
+    assert result["resumed"] is True
+    assert calls == 3
