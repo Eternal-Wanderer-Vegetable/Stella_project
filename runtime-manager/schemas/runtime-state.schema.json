@@ -27,6 +27,23 @@
               "details": {"type": "object"}
             },
             "additionalProperties": false
+          },
+          "diagnostics": {
+            "type": "object",
+            "properties": {
+              "mode": {"enum": ["reverse", "forward", "unknown"]},
+              "endpoint_configured": {"type": "boolean"},
+              "forward_reachable": {"type": ["boolean", "null"]},
+              "reverse_port_in_use": {"type": ["boolean", "null"]},
+              "token_configured": {"type": "boolean"},
+              "token_in_url": {"type": "boolean"},
+              "token_consistent": {"type": ["boolean", "null"]},
+              "connected": {"type": "boolean"},
+              "healthy": {"type": "boolean"},
+              "waiting_for_reconnect": {"type": "boolean"},
+              "last_probe_ok": {"type": ["boolean", "null"]}
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

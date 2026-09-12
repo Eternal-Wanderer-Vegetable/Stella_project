@@ -97,10 +97,43 @@ def test_schema_fixtures_match_python_defaults():
 def test_onebot_link_maps_to_degraded_without_restarting_stella(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path)
     monkeypatch.setattr(runtime, "INSTANCE_ID", "test")
-    runtime.sync_onebot_status({"enabled": True, "healthy": False})
+    runtime.sync_onebot_status(
+        {
+            "enabled": True,
+            "healthy": False,
+            "mode": "forward",
+            "endpoint_configured": True,
+            "forward_reachable": False,
+            "token_configured": True,
+            "token_in_url": True,
+            "token_consistent": False,
+            "connected": False,
+            "waiting_for_reconnect": True,
+            "last_probe_ok": False,
+        }
+    )
     state = runtime.read_state()
     assert state["components"]["onebot"]["state"] == "degraded"
     assert state["desired"] == "running"
+    diagnostics = state["components"]["onebot"]["diagnostics"]
+    assert diagnostics["token_consistent"] is False
+    assert diagnostics["waiting_for_reconnect"] is True
+    assert "secret" not in json.dumps(diagnostics).lower()
+
+
+def test_onebot_diagnostics_reject_non_object():
+    with pytest.raises(ValueError):
+        runtime.validate_state_payload(
+            {
+                "schema_version": 1,
+                "instance_id": "test",
+                "desired": "running",
+                "updated_at": "now",
+                "components": {
+                    "onebot": {"state": "degraded", "diagnostics": "secret"}
+                },
+            }
+        )
 
 
 def test_execute_status_uses_shared_operation_envelope(monkeypatch):

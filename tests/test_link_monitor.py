@@ -230,6 +230,14 @@ def test_link_status_fields_and_healthy(link_monitor):
         "last_probe_seconds_ago",
         "timeout",
         "healthy",
+        "mode",
+        "endpoint_configured",
+        "forward_reachable",
+        "reverse_port_in_use",
+        "token_configured",
+        "token_in_url",
+        "token_consistent",
+        "waiting_for_reconnect",
     }
 
     # ① 连接 + 事件新鲜 → healthy True

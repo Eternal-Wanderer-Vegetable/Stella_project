@@ -34,6 +34,10 @@ def _healthy_snapshot(**overrides) -> Snapshot:
         "onebot_port": 8080,
         "onebot_port_in_use": False,
         "onebot_forward_reachable": None,
+        "onebot_endpoint_configured": True,
+        "onebot_token_configured": False,
+        "onebot_token_in_url": False,
+        "onebot_token_consistent": None,
         "status_api_reachable": False,
         "lm_reachable": True,
         "lm_error": "",
@@ -310,6 +314,14 @@ def test_onebot_mode_unknown():
     assert r is not None and r.level == "error"
 
 
+def test_onebot_invalid_endpoint_is_error():
+    r = checks.check_onebot_endpoint(
+        _healthy_snapshot(onebot_mode="forward", onebot_endpoint_configured=False)
+    )
+    assert r is not None and r.level == "error"
+    assert "ONEBOT_WS_URLS" in r.fix_hint
+
+
 def test_onebot_reverse_port_busy_is_warn():
     r = checks.check_onebot_reverse_port(
         _healthy_snapshot(onebot_mode="reverse", onebot_port_in_use=True)
@@ -362,6 +374,14 @@ def test_onebot_forward_ok():
         )
         is None
     )
+
+
+def test_onebot_token_mismatch_is_error():
+    r = checks.check_onebot_token(
+        _healthy_snapshot(onebot_token_consistent=False)
+    )
+    assert r is not None and r.level == "error"
+    assert "ONEBOT_ACCESS_TOKEN" in r.fix_hint
 
 
 # ── LM Studio ──

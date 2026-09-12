@@ -134,6 +134,8 @@ pub struct ComponentState {
     pub endpoint: Option<String>,
     #[serde(default)]
     pub error: Option<RuntimeError>,
+    #[serde(default)]
+    pub diagnostics: Option<std::collections::BTreeMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

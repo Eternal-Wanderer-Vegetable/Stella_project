@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import contextlib
+import hmac
 import importlib.util
 import json
 import os
@@ -21,7 +22,7 @@ import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from dotenv import dotenv_values
@@ -184,12 +185,39 @@ def _port_in_use(host: str, port: int) -> bool | None:
 
 def _probe_onebot() -> dict:
     """判定连接模式与可达性（反向 WS 端口 / 正向 WS 地址）。"""
+    def _token_facts(values: dict, url: str | None) -> dict[str, bool | None]:
+        configured_token = str(values.get("ONEBOT_ACCESS_TOKEN") or "").strip()
+        url_token = ""
+        if url:
+            try:
+                query = parse_qs(urlparse(url).query)
+                for key in ("access_token", "token"):
+                    candidates = query.get(key) or []
+                    if candidates and candidates[0]:
+                        url_token = str(candidates[0])
+                        break
+            except (TypeError, ValueError):
+                pass
+        return {
+            "token_configured": bool(configured_token),
+            "token_in_url": bool(url_token),
+            "token_consistent": (
+                hmac.compare_digest(configured_token, url_token)
+                if configured_token and url_token
+                else None
+            ),
+        }
+
     result = {
         "mode": "unknown",
         "host": "",
         "port": 0,
         "port_in_use": None,
         "forward_reachable": None,
+        "endpoint_configured": False,
+        "token_configured": False,
+        "token_in_url": False,
+        "token_consistent": None,
     }
     try:
         env_path = STELLA_HOME / ".env"
@@ -201,7 +229,20 @@ def _probe_onebot() -> dict:
 
     ws_url = _extract_ws_url(values)
     if ws_url:
+        result.update(_token_facts(values, ws_url))
         result["mode"] = "forward"
+        try:
+            parts = urlparse(ws_url)
+            port = parts.port
+        except (TypeError, ValueError):
+            parts = None
+            port = None
+        result["endpoint_configured"] = bool(
+            parts
+            and parts.scheme in {"ws", "wss"}
+            and bool(parts.hostname)
+            and (port is None or 1 <= port <= 65535)
+        )
         result["forward_reachable"] = _tcp_reachable(ws_url)
         return result
 
@@ -213,7 +254,9 @@ def _probe_onebot() -> dict:
     result["mode"] = "reverse"
     result["host"] = host
     result["port"] = port
+    result["endpoint_configured"] = bool(host) and 1 <= port <= 65535
     result["port_in_use"] = _port_in_use(host, port)
+    result.update(_token_facts(values, None))
     return result
 
 
@@ -716,6 +759,10 @@ def collect() -> Snapshot:
         onebot_port=onebot.get("port", 8080),
         onebot_port_in_use=onebot.get("port_in_use"),
         onebot_forward_reachable=onebot.get("forward_reachable"),
+        onebot_endpoint_configured=onebot.get("endpoint_configured"),
+        onebot_token_configured=onebot.get("token_configured", False),
+        onebot_token_in_url=onebot.get("token_in_url", False),
+        onebot_token_consistent=onebot.get("token_consistent"),
         status_api_reachable=status_api_reachable,
         lm_reachable=lm.get("lm_reachable"),
         lm_error=lm.get("lm_error", ""),

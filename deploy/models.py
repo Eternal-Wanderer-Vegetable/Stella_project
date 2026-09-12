@@ -54,6 +54,10 @@ class Snapshot:
     onebot_port: int = 8080
     onebot_port_in_use: bool | None = False
     onebot_forward_reachable: bool | None = None
+    onebot_endpoint_configured: bool | None = True
+    onebot_token_configured: bool = False
+    onebot_token_in_url: bool = False
+    onebot_token_consistent: bool | None = None
     # 状态接口是否可达。它同时是「端口被自己占用」的可靠证据——
     # 接口挂在同一个 HTTP 服务器上，能连上说明监听者就是 Stella。
     status_api_reachable: bool = False

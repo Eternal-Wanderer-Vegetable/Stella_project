@@ -50,6 +50,9 @@ ERROR_CODES = (
 _SECRET_KEY = re.compile(
     r"(token|secret|password|passwd|api[_-]?key|credential)", re.IGNORECASE
 )
+_SAFE_BOOLEAN_DIAGNOSTIC_KEYS = frozenset(
+    {"token_configured", "token_in_url", "token_consistent"}
+)
 _FORBIDDEN_REQUEST_KEYS = frozenset({"command", "cmd", "shell", "shell_command", "executable"})
 
 
@@ -159,7 +162,10 @@ def structured_error(code: str, message: str, **details: Any) -> dict[str, Any]:
 
 def redact_value(value: Any, *, key: str = "") -> Any:
     """Recursively redact credential-like fields before they cross a boundary."""
-    if _SECRET_KEY.search(key):
+    if _SECRET_KEY.search(key) and not (
+        key in _SAFE_BOOLEAN_DIAGNOSTIC_KEYS
+        and (isinstance(value, bool) or value is None)
+    ):
         return "[REDACTED]"
     if isinstance(value, dict):
         return {str(k): redact_value(v, key=str(k)) for k, v in value.items()}
@@ -235,6 +241,8 @@ def validate_state_payload(payload: dict[str, Any]) -> None:
             raise ValueError(f"组件 {name} 的 pid 无效")
         if "error" in spec and not isinstance(spec["error"], dict):
             raise ValueError(f"组件 {name} 的 error 无效")
+        if "diagnostics" in spec and not isinstance(spec["diagnostics"], dict):
+            raise ValueError(f"组件 {name} 的 diagnostics 无效")
 
 
 def validate_operation_request(payload: dict[str, Any]) -> None:
@@ -333,6 +341,7 @@ def update_component(
     pid: int | None = None,
     endpoint: str | None = None,
     error: str | None = None,
+    diagnostics: dict[str, Any] | None = None,
     desired: str | None = None,
 ) -> str | None:
     """更新一个组件状态；失败返回诊断文本而不阻断 Bot 生命周期。"""
@@ -350,6 +359,8 @@ def update_component(
             current.pop("pid", None)
         if endpoint is not None:
             current["endpoint"] = endpoint
+        if diagnostics is not None:
+            current["diagnostics"] = redact_value(diagnostics)
         if error:
             current["error"] = structured_error(
                 "component_failed", str(error), component=component
@@ -420,11 +431,36 @@ def sync_stella_status(
 
 def sync_onebot_status(link: dict[str, Any] | None) -> None:
     """Map OneBot link facts to Runtime state without restarting Stella."""
+    diagnostics = {
+        "mode": str((link or {}).get("mode") or "unknown"),
+        "endpoint_configured": bool((link or {}).get("endpoint_configured", False)),
+        "forward_reachable": (link or {}).get("forward_reachable"),
+        "reverse_port_in_use": (link or {}).get("reverse_port_in_use"),
+        "token_configured": bool((link or {}).get("token_configured", False)),
+        "token_in_url": bool((link or {}).get("token_in_url", False)),
+        "token_consistent": (link or {}).get("token_consistent"),
+        "connected": bool((link or {}).get("connected", False)),
+        "healthy": bool((link or {}).get("healthy", False)),
+        "waiting_for_reconnect": bool(
+            (link or {}).get("waiting_for_reconnect", False)
+        ),
+        "last_probe_ok": (link or {}).get("last_probe_ok"),
+    }
     if not link or not link.get("enabled", False):
-        update_component("onebot", "disabled", desired="stopped")
+        update_component(
+            "onebot",
+            "disabled",
+            diagnostics=diagnostics,
+            desired="stopped",
+        )
         return
     state = "healthy" if link.get("healthy") else "degraded"
-    update_component("onebot", state, desired="running")
+    update_component(
+        "onebot",
+        state,
+        diagnostics=diagnostics,
+        desired="running",
+    )
 
 
 def runtime_status_json() -> str:

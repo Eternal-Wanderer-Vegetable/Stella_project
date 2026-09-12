@@ -124,6 +124,22 @@ def check_onebot_mode(snap: Snapshot) -> CheckResult | None:
     return None
 
 
+def check_onebot_endpoint(snap: Snapshot) -> CheckResult | None:
+    """已选择连接模式但 WS 地址/监听配置无效时阻止启动。"""
+    if snap.onebot_mode not in {"reverse", "forward"}:
+        return None
+    if snap.onebot_endpoint_configured is not False:
+        return None
+    return CheckResult(
+        id="onebot_endpoint",
+        level="error",
+        title="OneBot WebSocket 地址无效",
+        detail="当前连接模式的 WS 地址、主机或端口配置无法解析。",
+        fix_hint="反向 WS 检查 HOST/PORT；正向 WS 检查 ONEBOT_WS_URLS 是否为合法 "
+        "ws:// 或 wss:// 地址。",
+    )
+
+
 def check_onebot_reverse_port(snap: Snapshot) -> CheckResult | None:
     """仅反向 WS：端口被占 → warn；探测失败 → warn。
 
@@ -179,6 +195,20 @@ def check_onebot_forward(snap: Snapshot) -> CheckResult | None:
             fix_hint="检查 .env 里 ONEBOT_WS_URLS 是否为合法 ws:// 或 wss:// 地址。",
         )
     return None
+
+
+def check_onebot_token(snap: Snapshot) -> CheckResult | None:
+    """正向 WS 的显式 token 与 Bot token 不一致时给出可操作警告。"""
+    if snap.onebot_token_consistent is not False:
+        return None
+    return CheckResult(
+        id="onebot_token",
+        level="error",
+        title="OneBot access token 不一致",
+        detail="Bot 配置的 access token 与正向 WS 地址中的 token 不一致。",
+        fix_hint="让 .env 的 ONEBOT_ACCESS_TOKEN 与 NapCat WS 服务端配置保持一致，"
+        "或移除两侧的 token 后重新连接。",
+    )
 
 
 def check_lm_studio_reachable(snap: Snapshot) -> CheckResult | None:
@@ -1099,8 +1129,10 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_env_file,
     check_allowed_groups,
     check_onebot_mode,
+    check_onebot_endpoint,
     check_onebot_reverse_port,
     check_onebot_forward,
+    check_onebot_token,
     check_lm_studio_reachable,
     check_lm_model_chat,
     check_lm_model_consolidation,

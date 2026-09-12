@@ -33,6 +33,62 @@ def test_extract_ws_url_missing():
     assert probe._extract_ws_url({}) is None
 
 
+def test_probe_onebot_reports_safe_forward_token_facts(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        'ONEBOT_WS_URLS=["ws://127.0.0.1:3001/onebot?access_token=secret"]\n'
+        "ONEBOT_ACCESS_TOKEN=secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(probe, "_tcp_reachable", lambda _url: True)
+
+    result = probe._probe_onebot()
+
+    assert result["mode"] == "forward"
+    assert result["endpoint_configured"] is True
+    assert result["forward_reachable"] is True
+    assert result["token_configured"] is True
+    assert result["token_in_url"] is True
+    assert result["token_consistent"] is True
+    assert "secret" not in repr(result)
+
+
+def test_probe_onebot_detects_token_mismatch_without_leaking_values(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        'ONEBOT_WS_URLS=["ws://127.0.0.1:3001?token=url-secret"]\n'
+        "ONEBOT_ACCESS_TOKEN=env-secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(probe, "_tcp_reachable", lambda _url: False)
+
+    result = probe._probe_onebot()
+
+    assert result["token_consistent"] is False
+    assert "secret" not in repr(result)
+
+
+def test_probe_onebot_reports_reverse_port_and_token_presence(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        "HOST=127.0.0.1\nPORT=8080\nONEBOT_ACCESS_TOKEN=secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(probe, "_port_in_use", lambda _host, _port: True)
+
+    result = probe._probe_onebot()
+
+    assert result["mode"] == "reverse"
+    assert result["endpoint_configured"] is True
+    assert result["port_in_use"] is True
+    assert result["token_configured"] is True
+    assert result["token_in_url"] is False
+    assert result["token_consistent"] is None
+    assert "secret" not in repr(result)
+
+
 def test_probe_env_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
     exists, keys, superseded = probe._probe_env_file()
@@ -148,6 +204,20 @@ def test_probe_llama_readiness_is_diagnostic_when_server_exits(monkeypatch):
 
 def test_tcp_reachable_invalid_url():
     assert probe._tcp_reachable("ws://") is None
+
+
+def test_probe_onebot_invalid_url_is_diagnostic(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        "ONEBOT_WS_URLS=ws://host:not-a-port\n",
+        encoding="utf-8",
+    )
+
+    result = probe._probe_onebot()
+
+    assert result["mode"] == "forward"
+    assert result["endpoint_configured"] is False
+    assert result["forward_reachable"] is False
 
 
 def test_collect_never_raises(monkeypatch):
