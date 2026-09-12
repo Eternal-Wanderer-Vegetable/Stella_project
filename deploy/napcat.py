@@ -93,7 +93,12 @@ def _paths(data_root: Path) -> dict[str, Path]:
 def _safe_member(name: str) -> Path:
     normalized = name.replace("\\", "/")
     path = Path(normalized)
-    if path.is_absolute() or ".." in path.parts or normalized.startswith("/"):
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or normalized.startswith("/")
+        or (len(normalized) >= 2 and normalized[1] == ":")
+    ):
         raise NapCatError("unsafe_archive", f"NapCat archive 路径穿越：{name}")
     return path
 
@@ -137,10 +142,13 @@ def install_archive(
         raise NapCatError("already_installed", f"NapCat 版本已安装：{metadata['version']}")
     paths["staging"].mkdir(parents=True, exist_ok=True)
     stage = paths["staging"] / uuid.uuid4().hex
+    previous_metadata = (
+        paths["metadata"].read_bytes() if paths["metadata"].is_file() else None
+    )
+    activated = False
     try:
         _extract_archive(archive, stage)
         target.parent.mkdir(parents=True, exist_ok=True)
-        stage.replace(target)
         payload = {
             **metadata,
             "install_path": str(target),
@@ -157,6 +165,8 @@ def install_archive(
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
+            stage.replace(target)
+            activated = True
             Path(temporary).replace(paths["metadata"])
         finally:
             if Path(temporary).exists():
@@ -165,6 +175,12 @@ def install_archive(
         shutil.rmtree(stage, ignore_errors=True)
         raise
     except OSError as exc:
+        if activated:
+            shutil.rmtree(target, ignore_errors=True)
+            if previous_metadata is None:
+                paths["metadata"].unlink(missing_ok=True)
+            else:
+                paths["metadata"].write_bytes(previous_metadata)
         shutil.rmtree(stage, ignore_errors=True)
         raise NapCatError("install_failed", str(exc)) from exc
     return payload

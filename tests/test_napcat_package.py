@@ -58,6 +58,15 @@ def test_archive_path_traversal_is_rejected(tmp_path):
     assert error.value.code == "unsafe_archive"
 
 
+def test_windows_drive_path_is_rejected(tmp_path):
+    archive = tmp_path / "drive.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("C:/escape.exe", b"unsafe")
+    with pytest.raises(napcat.NapCatError) as error:
+        napcat.install_archive(archive, _manifest(archive), tmp_path / "data")
+    assert error.value.code == "unsafe_archive"
+
+
 def test_status_is_an_enum_and_never_contains_login_secret(tmp_path):
     archive = _archive(tmp_path)
     napcat.install_archive(archive, _manifest(archive), tmp_path / "data")

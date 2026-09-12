@@ -55,7 +55,7 @@ jobs:
           printf '{}\n' > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/SBOM.json
           printf 'Build artifact requires the pinned llama.cpp build toolchain.\n' > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/LICENSE
           if [ "${{ matrix.os }}" = "windows-latest" ]; then touch dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/llama-server.exe; else touch dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/llama-server; fi
-          sha256sum dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/* > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/SHA256SUMS.txt
+          (cd dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }} && sha256sum * > SHA256SUMS.txt)
       - name: Verify package provenance
         shell: bash
         run: python scripts/verify_llama_package.py dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
