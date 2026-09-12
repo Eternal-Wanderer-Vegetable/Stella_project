@@ -48,14 +48,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
-          printf '%s\n' '${{ inputs.llama_commit }}' > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/VERSION.txt
-          cat > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/BACKEND.json <<EOF
-          {"backend":"${{ matrix.backend }}","os":"${{ matrix.os }}","arch":"${{ matrix.target }}","abi":"documented","runtime_api":"openai-compatible","license":"llama.cpp","sbom":"SBOM.json","status":"build-only"}
-          EOF
-          printf '{}\n' > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/SBOM.json
-          printf 'Build artifact requires the pinned llama.cpp build toolchain.\n' > dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/LICENSE
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then touch dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/llama-server.exe; else touch dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}/llama-server; fi
-          (cd dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }} && sha256sum * > SHA256SUMS.txt)
+          python scripts/build_llama_package.py .llama.cpp \
+            --output dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }} \
+            --backend '${{ matrix.backend }}' \
+            --commit '${{ inputs.llama_commit }}' \
+            --os '${{ matrix.os }}' \
+            --arch '${{ matrix.target }}'
       - name: Verify package provenance
         shell: bash
         run: python scripts/verify_llama_package.py dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
