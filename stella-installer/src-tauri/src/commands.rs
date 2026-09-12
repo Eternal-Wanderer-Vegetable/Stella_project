@@ -4,6 +4,7 @@ use crate::python;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static GUI_OWNS_BOT: AtomicBool = AtomicBool::new(false);
@@ -490,9 +491,8 @@ pub async fn save_persona(
 #[tauri::command]
 pub async fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let path = path
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| python::data_root().join("logs").join("stella.jsonl"));
+        let root = python::data_root();
+        let path = resolve_log_path(&root, path.as_deref())?;
         let mut file = match File::open(&path) {
             Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
@@ -522,6 +522,49 @@ pub async fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<Str
     })
     .await
     .map_err(|e| format!("日志读取任务未能完成：{e}"))?
+}
+
+/// Resolve a GUI-provided log path without allowing reads outside STELLA_HOME.
+///
+/// Runtime component paths are relative to the same data root, while the legacy
+/// status payload may still provide an absolute `STELLA_JSON_LOG_PATH`. Existing
+/// files are canonicalized so symlinked paths cannot escape the root; missing
+/// files keep their parent anchored so a not-yet-created component log remains a
+/// normal empty result.
+fn resolve_log_path(root: &Path, requested: Option<&str>) -> Result<PathBuf, String> {
+    let root = std::fs::canonicalize(root)
+        .map_err(|error| format!("无法定位 Stella 数据目录：{error}"))?;
+    let raw = requested
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("logs").join("stella.jsonl"));
+    let candidate = if raw.is_absolute() {
+        raw
+    } else {
+        root.join(raw)
+    };
+
+    let resolved = match std::fs::canonicalize(&candidate) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = candidate
+                .parent()
+                .ok_or_else(|| "日志路径缺少父目录".to_owned())?;
+            let parent = std::fs::canonicalize(parent)
+                .map_err(|parent_error| format!("无法定位日志目录：{parent_error}"))?;
+            let name = candidate
+                .file_name()
+                .ok_or_else(|| "日志路径缺少文件名".to_owned())?;
+            parent.join(name)
+        }
+        Err(error) => return Err(format!("无法解析日志路径：{error}")),
+    };
+
+    if !resolved.starts_with(&root) || resolved == root {
+        return Err("日志路径必须位于 Stella 数据目录内".to_owned());
+    }
+    Ok(resolved)
 }
 
 /// 从旧版本安装目录导入用户数据。对应 `deploy migrate`。
@@ -898,7 +941,23 @@ fn runtime_failure(envelope: &serde_json::Value, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_json, runtime_failure, runtime_message};
+    use super::{extract_json, resolve_log_path, runtime_failure, runtime_message};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_root(label: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "stella-tauri-log-{label}-{}-{stamp}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
 
     #[test]
     fn runtime_envelope_parser_requires_matching_operation() {
@@ -929,5 +988,42 @@ mod tests {
             "error": {"code": "operation_failed", "message": "启动失败"}
         });
         assert_eq!(runtime_failure(&envelope, "fallback"), "启动失败");
+    }
+
+    #[test]
+    fn log_path_defaults_inside_data_root() {
+        let root = test_root("default");
+        let logs = root.join("logs");
+        fs::create_dir_all(&logs).unwrap();
+
+        let path = resolve_log_path(&root, None).unwrap();
+
+        assert_eq!(path, fs::canonicalize(logs).unwrap().join("stella.jsonl"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn log_path_accepts_runtime_relative_path() {
+        let root = test_root("runtime");
+        let logs = root.join("runtime").join("logs");
+        fs::create_dir_all(&logs).unwrap();
+
+        let path = resolve_log_path(&root, Some("runtime/logs/onebot.log")).unwrap();
+
+        assert_eq!(path, fs::canonicalize(logs).unwrap().join("onebot.log"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn log_path_rejects_escape_from_data_root() {
+        let root = test_root("escape");
+        let outside = root.parent().unwrap().join("stella-tauri-outside.log");
+        fs::write(&outside, "secret").unwrap();
+
+        let result = resolve_log_path(&root, Some("../stella-tauri-outside.log"));
+
+        assert!(result.is_err());
+        let _ = fs::remove_file(outside);
+        let _ = fs::remove_dir_all(root);
     }
 }
