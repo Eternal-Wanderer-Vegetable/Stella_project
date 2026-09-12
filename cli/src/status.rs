@@ -20,6 +20,45 @@ use crate::ctx::Ctx;
 use crate::runner;
 use crate::style;
 
+const STELLA_STATUS_ENDPOINT: &str = "http://127.0.0.1:8080/stella/status";
+
+/// Add the fields shared by local and docker status views without removing the
+/// legacy deploy payload consumed by existing scripts and the GUI.
+pub fn normalize_local_status(v: &Value) -> Value {
+    let mut doc = v.clone();
+    let state = local_state(v);
+    let api_reachable = v
+        .get("api_reachable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let error = runtime_component(v, "stella")
+        .and_then(|component| component.get("error"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let health = json!({
+        "status": state,
+        "api_reachable": api_reachable,
+    });
+    let components = v
+        .get("runtime")
+        .and_then(|runtime| runtime.get("components"))
+        .cloned()
+        .unwrap_or_else(|| json!({"stella": {"state": state}}));
+
+    if let Some(object) = doc.as_object_mut() {
+        object.insert("mode".into(), Value::String("local".into()));
+        object.insert("state".into(), Value::String(state));
+        object.insert("health".into(), health);
+        object.insert("error".into(), error);
+        object.insert(
+            "endpoint".into(),
+            Value::String(STELLA_STATUS_ENDPOINT.into()),
+        );
+        object.insert("components".into(), components);
+    }
+    doc
+}
+
 /// 本地形态：渲染 `deploy status --json` 的结果。
 pub fn render_local(v: &Value, root: &std::path::Path, out: &mut dyn Write) -> Result<()> {
     writeln!(
@@ -63,10 +102,54 @@ pub fn docker_status(ctx: &Ctx, as_json: bool, out: &mut dyn Write) -> Result<i3
     let inner = exec_status(ctx);
 
     if as_json {
+        let runtime = inner
+            .as_ref()
+            .and_then(|value| value.get("runtime"))
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        let stella_state = docker_component_state(
+            stella_state.as_deref(),
+            stella_health.as_deref(),
+            runtime_component_from_runtime(&runtime, "stella"),
+            inner.is_some(),
+            "stopped",
+        );
+        let llama_state = docker_component_state(
+            inspect_state(ctx, "llama").as_deref(),
+            inspect_health(ctx, "llama").as_deref(),
+            runtime_component_from_runtime(&runtime, "llama"),
+            false,
+            "disabled",
+        );
+        let onebot_state = docker_component_state(
+            napcat_state.as_deref(),
+            None,
+            runtime_component_from_runtime(&runtime, "onebot"),
+            false,
+            "disabled",
+        );
         let doc = json!({
+            "schema_version": runtime.get("schema_version").and_then(Value::as_i64).unwrap_or(1),
             "mode": "docker",
+            "state": stella_state,
+            "health": {
+                "status": stella_health.as_deref().unwrap_or("unknown"),
+                "api_reachable": inner.is_some(),
+                "container": stella_health,
+            },
+            "error": runtime_component_from_runtime(&runtime, "stella")
+                .and_then(|component| component.get("error"))
+                .cloned()
+                .unwrap_or(Value::Null),
+            "endpoint": STELLA_STATUS_ENDPOINT,
+            "components": {
+                "stella": {"state": stella_state},
+                "llama": {"state": llama_state},
+                "onebot": {"state": onebot_state},
+            },
             "stella": {"state": stella_state, "health": stella_health},
             "napcat": {"state": napcat_state},
+            "runtime": runtime,
             "inner": inner,
         });
         writeln!(out, "{}", serde_json::to_string_pretty(&doc)?)?;
@@ -119,6 +202,7 @@ fn render_inner(v: &Value, out: &mut dyn Write) -> Result<()> {
             writeln!(out, "运行时长：{}", fmt_duration(secs as i64))?;
         }
     }
+    render_runtime(v.get("runtime"), out)?;
     if let Some(link) = v.get("link").filter(|l| l.is_object()) {
         let enabled = link
             .get("enabled")
@@ -186,6 +270,104 @@ fn render_inner(v: &Value, out: &mut dyn Write) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn render_runtime(runtime: Option<&Value>, out: &mut dyn Write) -> Result<()> {
+    let Some(components) = runtime
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("components"))
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    let mut parts = Vec::new();
+    for name in ["stella", "llama", "onebot"] {
+        if let Some(state) = components
+            .get(name)
+            .and_then(Value::as_object)
+            .and_then(|component| component.get("state"))
+            .and_then(Value::as_str)
+        {
+            parts.push(format!("{name}={state}"));
+        }
+    }
+    if !parts.is_empty() {
+        writeln!(out, "Runtime：{}", parts.join("，"))?;
+    }
+    Ok(())
+}
+
+fn runtime_component<'a>(v: &'a Value, name: &str) -> Option<&'a Value> {
+    v.get("runtime")
+        .and_then(|runtime| runtime_component_from_runtime(runtime, name))
+}
+
+fn runtime_component_from_runtime<'a>(runtime: &'a Value, name: &str) -> Option<&'a Value> {
+    runtime
+        .get("components")
+        .and_then(Value::as_object)
+        .and_then(|components| components.get(name))
+}
+
+fn local_state(v: &Value) -> String {
+    runtime_component(v, "stella")
+        .and_then(|component| component.get("state"))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            let alive = v.get("alive").and_then(Value::as_bool).unwrap_or(false);
+            let api_reachable = v
+                .get("api_reachable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if api_reachable {
+                "healthy".into()
+            } else if alive {
+                "starting".into()
+            } else {
+                "stopped".into()
+            }
+        })
+}
+
+fn docker_component_state(
+    container_state: Option<&str>,
+    health: Option<&str>,
+    runtime_component: Option<&Value>,
+    api_reachable: bool,
+    absent_state: &str,
+) -> String {
+    if container_state.is_none() {
+        return runtime_component
+            .and_then(|component| component.get("state"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| absent_state.to_owned());
+    }
+    match container_state.unwrap_or_default() {
+        "exited" | "dead" => "failed".into(),
+        "created" | "restarting" => "starting".into(),
+        "running" => {
+            if health == Some("healthy")
+                || runtime_component.is_some_and(|component| {
+                    component.get("state").and_then(Value::as_str) == Some("healthy")
+                })
+            {
+                "healthy".into()
+            } else if health == Some("unhealthy") {
+                "degraded".into()
+            } else if api_reachable {
+                "running".into()
+            } else {
+                runtime_component
+                    .and_then(|component| component.get("state"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("running")
+                    .to_owned()
+            }
+        }
+        other => other.to_owned(),
+    }
 }
 
 /// 调度器摘要：有等待者才点名，空闲就一句话。
@@ -324,5 +506,51 @@ mod tests {
         });
         let text = render_inner_to_string(&v);
         assert!(text.contains("llm_chat×2"), "{text}");
+    }
+
+    #[test]
+    fn runtime_states_are_rendered_when_present() {
+        let v: Value = serde_json::json!({
+            "runtime": {"components": {
+                "stella": {"state": "healthy"},
+                "llama": {"state": "disabled"},
+                "onebot": {"state": "degraded"}
+            }}
+        });
+        let text = render_inner_to_string(&v);
+        assert!(text.contains("stella=healthy"));
+        assert!(text.contains("llama=disabled"));
+        assert!(text.contains("onebot=degraded"));
+    }
+
+    #[test]
+    fn local_status_adds_shared_fields_without_dropping_legacy_payload() {
+        let value = serde_json::json!({
+            "alive": true,
+            "api_reachable": true,
+            "runtime": {"components": {"stella": {"state": "healthy"}}}
+        });
+        let normalized = normalize_local_status(&value);
+        assert_eq!(normalized["mode"], "local");
+        assert_eq!(normalized["state"], "healthy");
+        assert_eq!(normalized["health"]["api_reachable"], true);
+        assert_eq!(normalized["endpoint"], STELLA_STATUS_ENDPOINT);
+        assert_eq!(normalized["alive"], true);
+    }
+
+    #[test]
+    fn docker_component_state_maps_optional_service_states() {
+        assert_eq!(
+            docker_component_state(None, None, None, false, "disabled"),
+            "disabled"
+        );
+        assert_eq!(
+            docker_component_state(Some("running"), Some("unhealthy"), None, false, "stopped"),
+            "degraded"
+        );
+        assert_eq!(
+            docker_component_state(Some("exited"), None, None, false, "stopped"),
+            "failed"
+        );
     }
 }

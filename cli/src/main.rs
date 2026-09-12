@@ -76,15 +76,19 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
-    /// 启动（本地：deploy start --detach；docker：compose up -d）
-    Start,
-    /// 优雅停止（本地：deploy stop 哨兵协议；docker：compose stop）
+    /// 启动（本地：Runtime start；docker：compose adapter）
+    Start {
+        /// 忽略 doctor 的阻塞性问题
+        #[arg(long)]
+        force: bool,
+    },
+    /// 优雅停止（本地：Runtime stop；docker：compose adapter）
     Stop,
     /// 重启
     Restart,
-    /// 运行状态面板（本地读 deploy status，docker 聚合容器状态与容器内状态接口）
+    /// 运行状态面板（本地/Docker 使用统一 state/health/error/endpoint 字段）
     Status {
-        /// 输出 JSON（本地=deploy status 原样；docker=聚合结构）
+        /// 输出 JSON（保留 legacy 字段并追加统一 Runtime 状态字段）
         #[arg(long)]
         json: bool,
     },
@@ -218,8 +222,12 @@ fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
     let mut out = anstream::stdout();
     match command {
         Command::Doctor { json } => {
-            let cmd = ctx.domain_cmd(&["doctor", "--json"], false);
-            let (v, raw, code) = runner::capture_json(&cmd, &ctx.root, "deploy doctor")?;
+            let (v, raw, code) = runner::capture_runtime_or_legacy_json(
+                &ctx,
+                "doctor",
+                &["doctor", "--json"],
+                "deploy doctor",
+            )?;
             if json {
                 writeln!(out, "{raw}")?;
             } else {
@@ -247,10 +255,14 @@ fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
             // 交互向导：必须继承 TTY（docker 形态下不加 -T）
             runner::run_passthrough(&ctx.domain_cmd(&sub_ref, true), &ctx.root)
         }
-        Command::Start => match ctx.mode {
-            Mode::Local => {
-                runner::run_passthrough(&ctx.deploy_cmd(&["start", "--detach"]), &ctx.root)
-            }
+        Command::Start { force } => match ctx.mode {
+            Mode::Local => runner::run_runtime_or_legacy(
+                &ctx,
+                "start",
+                &["start", "--detach"],
+                force,
+                &mut out,
+            ),
             Mode::Docker => runner::run_passthrough(&ctx.compose_cmd(&["up", "-d"]), &ctx.root),
         },
         Command::Stop => match ctx.mode {
@@ -269,10 +281,18 @@ fn run(mode: Option<ModeArg>, command: Command) -> Result<i32> {
         },
         Command::Status { json } => match ctx.mode {
             Mode::Local => {
-                let cmd = ctx.deploy_cmd(&["status", "--json"]);
-                let (_, raw, _) = runner::capture_json(&cmd, &ctx.root, "deploy status")?;
+                let (v, raw, _) = runner::capture_runtime_or_legacy_json(
+                    &ctx,
+                    "status",
+                    &["status", "--json"],
+                    "deploy status",
+                )?;
                 if json {
-                    writeln!(out, "{raw}")?;
+                    writeln!(
+                        out,
+                        "{}",
+                        serde_json::to_string_pretty(&status::normalize_local_status(&v))?
+                    )?;
                 } else if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
                     status::render_local(&v, &ctx.root, &mut out)?;
                 } else {

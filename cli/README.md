@@ -14,9 +14,9 @@ Stella 跨平台命令行控制台（Windows / Linux 统一入口）。方案与
 stellacli doctor    [--json]   环境自检（彩色渲染 / 原始 JSON）
 stellacli init      [--answers PATH] [--force] [--dry-run]
                                 配置向导（交互式）
-stellacli start / stop / restart
-                                生命周期（本地=deploy start/stop；docker=compose）
-stellacli status    [--json]   运行状态面板（docker 形态聚合容器健康+容器内接口）
+stellacli start [--force] / stop / restart
+                                生命周期（本地优先 Runtime，docker=compose adapter）
+stellacli status    [--json]   统一 state/health/error/endpoint 状态面板
 stellacli logs      [-f] [--boot|--thought] [--file PATH] [--compose]
                                 日志（默认结构化 stella.jsonl，级别着色）
 stellacli upgrade              升级（docker=拉取/构建+重建；本地=发布包指引）
@@ -25,6 +25,20 @@ stellacli plugin check <目录> [--json] / plugin scaffold [...]
 stellacli capabilities [--json]
 stellacli manifest  [--write]
 stellacli compose   <任意参数> docker 形态逃生舱（透传 docker compose）
+```
+
+本地的 `doctor`、`status` 与启停操作优先调用 `python -m deploy runtime`，
+返回值保留既有字段并追加统一的 `state`、`health`、`error`、`endpoint` 和
+`components` 视图；旧发布包没有 Runtime 子命令时自动回退到对应的
+`deploy` 命令。Docker 的启停由 compose adapter 管理，状态面板把容器状态、
+健康检查与容器内 Runtime 状态归一到同一组字段。
+
+Docker 的 llama.cpp 服务是可选 profile，不会改变默认 Stella/NapCat 拓扑：
+
+```bash
+mkdir -p models
+# 将 GGUF 模型放入 models/，或在 .env 设置 LLAMA_MODEL_PATH
+docker compose --profile llama up -d
 ```
 
 形态自动检测（`--mode local|docker` 或环境变量 `STELLA_MODE` 可显式指定）：

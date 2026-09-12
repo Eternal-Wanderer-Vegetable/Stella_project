@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（可带 v 前缀，例如 v3.10.0）'
+        description: '版本号（可带 v 前缀，例如 v3.10.1）'
         required: true
         type: string
       overwrite_release:
@@ -39,6 +39,17 @@ jobs:
           "RELEASE_REF=v$version" >> $env:GITHUB_ENV
           "RUST_ASSET=Stella-Rust_engine_version-v$version-win64.zip" >> $env:GITHUB_ENV
 
+      - name: 校验主 Python 与 CLI 版本
+        shell: pwsh
+        run: |
+          $pyproject = Get-Content 'pyproject.toml' -Raw
+          $pythonVersion = [regex]::Match($pyproject, '(?m)^version = "([^"]+)"').Groups[1].Value
+          $cargo = Get-Content 'cli/Cargo.toml' -Raw
+          $cliVersion = [regex]::Match($cargo, '(?m)^version = "([^"]+)"').Groups[1].Value
+          if ($pythonVersion -ne $env:RELEASE_VERSION -or $cliVersion -ne $env:RELEASE_VERSION) {
+            throw "主版本不一致: pyproject=$pythonVersion cli/Cargo.toml=$cliVersion release=$env:RELEASE_VERSION"
+          }
+
       - name: 校验 Rust distribution 元数据
         shell: pwsh
         run: |
@@ -68,27 +79,145 @@ jobs:
           maturin build --release --manifest-path memory_rust/native/Cargo.toml `
             --out dist\rust-wheel
 
-      - name: 组装独立 Rust engine zip
+      - name: 下载完整 Python engine 发布包
+        if: github.event_name == 'push' || inputs.overwrite_release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $baseAsset = "Stella-$env:RELEASE_REF-win64.zip"
+          $downloadDir = "dist\base"
+          $repo = '${{ github.repository }}'
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "User-Agent" = "Stella-release"
+          }
+          Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+          $downloaded = $false
+          for ($attempt = 1; $attempt -le 60; $attempt++) {
+            try {
+              $release = Invoke-RestMethod `
+                -Headers $headers `
+                -Uri "https://api.github.com/repos/$repo/releases/tags/$env:RELEASE_REF" `
+                -ErrorAction Stop
+              $asset = @($release.assets | Where-Object { $_.name -eq $baseAsset }) | Select-Object -First 1
+              if ($null -ne $asset) {
+                Invoke-WebRequest `
+                  -Headers (@{
+                    Authorization = "Bearer $env:GH_TOKEN"
+                    Accept = "application/octet-stream"
+                    "User-Agent" = "Stella-release"
+                  }) `
+                  -Uri $asset.url `
+                  -OutFile "$downloadDir\$baseAsset" `
+                  -ErrorAction Stop
+                if ((Test-Path "$downloadDir\$baseAsset") -and
+                    (Get-Item "$downloadDir\$baseAsset").Length -gt 0) {
+                  $downloaded = $true
+                  break
+                }
+              }
+            } catch {
+              Write-Host "等待主 Python asset（第 $attempt/60 次）: $($_.Exception.Message)"
+            }
+            Remove-Item "$downloadDir\*" -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 15
+          }
+          if (-not $downloaded) {
+            throw "Python engine asset was not found on release $env:RELEASE_REF"
+          }
+
+      - name: 组装可一键启动的 Rust engine zip
+        if: github.event_name == 'push' || inputs.overwrite_release
         shell: pwsh
         run: |
+          $baseAsset = "Stella-$env:RELEASE_REF-win64.zip"
           $root = "dist\Stella-Rust_engine_version-$env:RELEASE_REF-win64"
+          Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath "dist\base\$baseAsset" `
+            -DestinationPath $root -Force
           New-Item -ItemType Directory -Force -Path "$root\wheels" | Out-Null
           Copy-Item "dist\rust-wheel\*.whl" "$root\wheels\"
           @(
-            "Stella Rust memory engine"
+            "Stella Rust memory engine release"
             "Release: $env:RELEASE_REF"
             "Distribution: stella-memory-rust"
             "Backend API: 1"
             "Memory schema: 14"
-            "Install: python -m pip install .\wheels\stella_memory_rust-*.whl"
+            "Launcher: start.bat"
+            "The launcher installs the bundled wheel and selects MEMORY_BACKEND=rust."
           ) | Set-Content "$root\VERSION.txt" -Encoding utf8
+          @(
+            "Stella Rust memory engine release"
+            ""
+            "This is a complete Stella Windows package with the Rust memory backend."
+            "Double-click Stella.exe or start.bat to launch it."
+            "The launcher installs the bundled wheel locally and selects MEMORY_BACKEND=rust."
+            "The Python memory implementation remains in the package as the fallback."
+          ) | Set-Content "$root\RUST_ENGINE.txt" -Encoding utf8
           Get-FileHash "$root\wheels\*.whl" -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  wheels\$([IO.Path]::GetFileName($_.Path))" } |
             Set-Content "$root\SHA256SUMS.txt" -Encoding ascii
+          $wheelVerify = Join-Path $env:RUNNER_TEMP "stella-rust-wheel-verify"
+          Remove-Item $wheelVerify -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $wheelVerify | Out-Null
+          Copy-Item "$root\memory_rust" "$wheelVerify\memory_rust" -Recurse
+          $rustWheels = @(Get-ChildItem "$root\wheels\stella_memory_rust-*.whl")
+          if ($rustWheels.Count -ne 1) {
+            throw "Rust wheel build must produce exactly one wheel"
+          }
+          $wheelPath = $rustWheels[0].FullName
+          python -m pip install --no-index --no-deps --upgrade `
+            --target $wheelVerify $wheelPath
+          Push-Location $wheelVerify
+          try {
+            python -c "import memory_rust._native as native; assert native.BACKEND_API_VERSION == 1; assert native.MEMORY_SCHEMA_VERSION == 14"
+          } finally {
+            Pop-Location
+          }
+          foreach ($required in @(
+            "Stella.exe",
+            "start.bat",
+            "doctor.bat",
+            "stop.bat",
+            "bot.py",
+            "requirements.txt",
+            "memory_rust",
+            "wheels",
+            "RUST_ENGINE.txt"
+          )) {
+            if (-not (Test-Path "$root\$required")) {
+              throw "Rust engine package is missing required component: $required"
+            }
+          }
           Compress-Archive -Path "$root\*" -DestinationPath "dist\$env:RUST_ASSET"
           if (-not (Test-Path "dist\$env:RUST_ASSET")) {
             throw "Rust asset was not created: $env:RUST_ASSET"
           }
+          $verify = "dist\rust-verify"
+          Remove-Item $verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath "dist\$env:RUST_ASSET" -DestinationPath $verify
+          foreach ($required in @(
+            "Stella.exe",
+            "start.bat",
+            "doctor.bat",
+            "stop.bat",
+            "bot.py",
+            "requirements.txt",
+            "wheels",
+            "RUST_ENGINE.txt"
+          )) {
+            if (-not (Test-Path "$verify\$required")) {
+              throw "Rust asset is missing required component after compression: $required"
+            }
+          }
+          $verifyWheels = @(Get-ChildItem "$verify\wheels\stella_memory_rust-*.whl")
+          if ($verifyWheels.Count -ne 1) {
+            throw "Rust asset must contain exactly one bundled wheel"
+          }
+          Remove-Item $verify -Recurse -Force
 
       - name: 上传 Rust asset 到同一主 Release
         if: github.event_name == 'push' || inputs.overwrite_release
@@ -97,25 +226,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $asset = "dist\$env:RUST_ASSET"
-          $found = $false
-          for ($attempt = 1; $attempt -le 20; $attempt++) {
-            gh release view $env:RELEASE_REF *> $null
-            if ($LASTEXITCODE -eq 0) {
-              $found = $true
-              break
-            }
-            Start-Sleep -Seconds 15
-          }
-          if (-not $found) {
-            gh release create $env:RELEASE_REF `
-              --title "Stella $env:RELEASE_REF" `
-              --notes "Rust memory engine asset for $env:RELEASE_REF"
-            if ($LASTEXITCODE -ne 0) {
-              gh release view $env:RELEASE_REF *> $null
-              if ($LASTEXITCODE -ne 0) {
-                throw "Failed to create or find release $env:RELEASE_REF"
-              }
-            }
+          if (-not (Test-Path $asset)) {
+            throw "Rust asset was not created: $env:RUST_ASSET"
           }
           gh release upload $env:RELEASE_REF $asset --clobber
           if ($LASTEXITCODE -ne 0) {

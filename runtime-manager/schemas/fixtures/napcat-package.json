@@ -1,0 +1,13 @@
+{
+  "kind": "onebot",
+  "id": "napcat",
+  "version": "pinned",
+  "path": "napcat/NapCat.zip",
+  "checksum": "0000000000000000000000000000000000000000000000000000000000000000",
+  "platform": "windows-amd64",
+  "license": "external-license-notice",
+  "sbom": "napcat.spdx.json",
+  "source": "external-pinned-source",
+  "artifact": "NapCat.zip",
+  "status": "build-only"
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "instance_id": "demo",
+  "project_root": "C:/Stella",
+  "runtime_dir": "C:/StellaData/.stella/instances/demo",
+  "components": {
+    "stella": {
+      "kind": "stella",
+      "enabled": true,
+      "dependencies": [],
+      "health": {
+        "type": "http",
+        "path": "/stella/status"
+      },
+      "logs": {
+        "path": "logs/stella.log"
+      }
+    },
+    "llama": {
+      "kind": "llama",
+      "enabled": false,
+      "dependencies": [],
+      "config": {
+        "host": "127.0.0.1",
+        "port": 8081,
+        "model": {
+          "path": "",
+          "package": "",
+          "id": "",
+          "checksum": ""
+        },
+        "ctx_size": 4096,
+        "backend": "cpu"
+      },
+      "health": {
+        "type": "http",
+        "path": "/v1/models"
+      },
+      "logs": {
+        "path": "logs/llama.log"
+      }
+    },
+    "onebot": {
+      "kind": "onebot",
+      "enabled": false,
+      "dependencies": ["stella"],
+      "health": {
+        "type": "link-status"
+      },
+      "logs": {
+        "path": "logs/onebot.log"
+      }
+    }
+  }
+}

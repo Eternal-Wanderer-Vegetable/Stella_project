@@ -34,6 +34,10 @@ def _healthy_snapshot(**overrides) -> Snapshot:
         "onebot_port": 8080,
         "onebot_port_in_use": False,
         "onebot_forward_reachable": None,
+        "onebot_endpoint_configured": True,
+        "onebot_token_configured": False,
+        "onebot_token_in_url": False,
+        "onebot_token_consistent": None,
         "status_api_reachable": False,
         "lm_reachable": True,
         "lm_error": "",
@@ -310,6 +314,14 @@ def test_onebot_mode_unknown():
     assert r is not None and r.level == "error"
 
 
+def test_onebot_invalid_endpoint_is_error():
+    r = checks.check_onebot_endpoint(
+        _healthy_snapshot(onebot_mode="forward", onebot_endpoint_configured=False)
+    )
+    assert r is not None and r.level == "error"
+    assert "ONEBOT_WS_URLS" in r.fix_hint
+
+
 def test_onebot_reverse_port_busy_is_warn():
     r = checks.check_onebot_reverse_port(
         _healthy_snapshot(onebot_mode="reverse", onebot_port_in_use=True)
@@ -362,6 +374,14 @@ def test_onebot_forward_ok():
         )
         is None
     )
+
+
+def test_onebot_token_mismatch_is_error():
+    r = checks.check_onebot_token(
+        _healthy_snapshot(onebot_token_consistent=False)
+    )
+    assert r is not None and r.level == "error"
+    assert "ONEBOT_ACCESS_TOKEN" in r.fix_hint
 
 
 # ── LM Studio ──
@@ -795,6 +815,26 @@ def test_llm_endpoint_unprobed_is_not_reported():
     """None = 没探（槽未配置或探测本身异常），不能当成「不通」报出来。"""
     assert checks.check_llm_endpoint_reachable(_endpoint_snapshot("online", None)) is None
     assert checks.check_llm_endpoint_reachable(_endpoint_snapshot("online", True)) is None
+
+
+def test_llama_readiness_is_a_non_blocking_diagnostic():
+    result = checks.check_llama_readiness(
+        _healthy_snapshot(
+            llama_readiness={
+                "ready": False,
+                "model_path": "C:/models/missing.gguf",
+                "model_exists": False,
+                "port_in_use": True,
+                "models_reachable": False,
+                "runtime_state": "failed",
+                "error": "Connection refused",
+            }
+        )
+    )
+    assert result is not None
+    assert result.level == "warn"
+    assert result.id == "llama_readiness"
+    assert "基础 Bot" in result.fix_hint
 
 
 def test_llm_endpoint_sharing_lm_studio_address_is_not_reported_twice():

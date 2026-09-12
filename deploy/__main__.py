@@ -14,6 +14,7 @@
       python -m deploy plugin-scaffold <插件目录> [--endpoint 槽] [--force] [--dry-run] [--measure]
       python -m deploy capabilities [--json]
       python -m deploy manifest [--write]
+      python -m deploy upgrade SOURCE --version VERSION [--install-root PATH]
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from pathlib import Path
 
 from config import PROJECT_ROOT, STELLA_HOME, STELLA_HOME_SOURCE, home
 
-from . import checks, env_merge, env_schema, migrate, probe, process, report
+from . import checks, env_merge, env_schema, migrate, probe, process, report, runtime
 from .init_wizard import (
     load_answers,
     managed_keys,
@@ -398,6 +399,135 @@ def _cmd_manifest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_packages(args: argparse.Namespace) -> int:
+    """Manage installed package records or verify a release catalog."""
+    from . import packages
+
+    try:
+        if args.package_action == "catalog":
+            path = packages.write_catalog(
+                PROJECT_ROOT,
+                platform=args.platform,
+            )
+            print(f"已写入 {path}")
+            return 0
+        if args.package_action == "verify":
+            problems = packages.verify_catalog(PROJECT_ROOT)
+            if problems:
+                print(json.dumps({"ok": False, "problems": problems}, ensure_ascii=False))
+                return 1
+            print(json.dumps({"ok": True, "catalog": str(packages.catalog_path(PROJECT_ROOT))}))
+            return 0
+        if args.package_action == "list":
+            print(json.dumps(packages.read_registry(), ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "rollback-model":
+            record = packages.rollback_model()
+            print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "napcat-status":
+            from . import napcat
+
+            print(json.dumps(napcat.status(STELLA_HOME), ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "napcat-install":
+            from . import napcat
+
+            manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
+            result = napcat.install_archive(Path(args.source), manifest, STELLA_HOME)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "napcat-uninstall":
+            from . import napcat
+
+            print(
+                json.dumps(
+                    napcat.uninstall(STELLA_HOME, args.version),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+        record = packages.import_model(
+            Path(args.source),
+            model_id=args.model_id,
+            version=args.version,
+            checksum=args.checksum,
+            activate=not args.no_activate,
+            backend=args.backend,
+        )
+        print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
+        return 0
+    except packages.PackageError as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                ensure_ascii=False,
+            )
+        )
+        return 1
+
+
+def _cmd_upgrade(args: argparse.Namespace) -> int:
+    """Install a verified program tree through the transactional pointer."""
+    from .upgrade import UpgradeError, transactional_upgrade
+
+    try:
+        result = transactional_upgrade(
+            Path(args.source),
+            version=args.version,
+            data_root=STELLA_HOME,
+            install_root=Path(args.install_root) if args.install_root else PROJECT_ROOT,
+            expected_checksum=args.checksum,
+        )
+    except UpgradeError as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                ensure_ascii=False,
+            )
+        )
+        return 1
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "version": result.version,
+                "active_path": str(result.active_path),
+                "previous_path": str(result.previous_path) if result.previous_path else None,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _cmd_runtime(args: argparse.Namespace) -> int:
+    """Execute one Runtime operation and print the shared JSON envelope."""
+    try:
+        result = runtime.execute_operation(
+            args.operation,
+            args.component,
+            {
+                key: value
+                for key, value in (
+                    ("tail", args.tail),
+                    ("force", args.force),
+                )
+                if value is not None
+            },
+        )
+    except ValueError as exc:
+        print(json.dumps(
+            {"ok": False, "error": runtime.structured_error("invalid_operation", str(exc))},
+            ensure_ascii=False,
+        ))
+        return 2
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return int(result.get("exit_code", 0 if result.get("ok") else 1))
+
+
 def main(argv: list[str] | None = None) -> int:
     # 固定 UTF-8：Windows 下 stdout 被重定向（GUI 读管道/PS 管道）时
     # Python 会改用 ANSI 代码页，导致中文变乱码。强制 UTF-8 后
@@ -462,6 +592,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_migrate.set_defaults(func=_cmd_migrate)
 
+    p_upgrade = sub.add_parser("upgrade", help="校验并原子切换程序版本")
+    p_upgrade.add_argument("source", help="已解包的升级源目录")
+    p_upgrade.add_argument("--version", required=True, help="目标版本")
+    p_upgrade.add_argument("--checksum", default=None, help="源目录 tree SHA-256")
+    p_upgrade.add_argument(
+        "--install-root",
+        default=None,
+        help="版本化程序目录；默认使用项目目录",
+    )
+    p_upgrade.set_defaults(func=_cmd_upgrade)
+
     p_merge = sub.add_parser("space-merge", help="把若干共享空间合并为一个（含记忆与画像）")
     p_merge.add_argument("--from", dest="source", required=True, help="源空间名，逗号分隔")
     p_merge.add_argument("--to", required=True, help="目标空间名")
@@ -504,6 +645,70 @@ def main(argv: list[str] | None = None) -> int:
     p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
     p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")
     p_manifest.set_defaults(func=_cmd_manifest)
+
+    p_packages = sub.add_parser("packages", help="管理组件包、模型包和发布包清单")
+    package_sub = p_packages.add_subparsers(dest="package_action", required=True)
+    p_catalog = package_sub.add_parser("catalog", help="生成发布包组件清单")
+    p_catalog.add_argument("--platform", default=None, help="包目标平台，例如 windows-amd64")
+    p_catalog.set_defaults(func=_cmd_packages)
+    p_verify = package_sub.add_parser("verify", help="校验发布包清单中的文件 checksum")
+    p_verify.set_defaults(func=_cmd_packages)
+    p_list = package_sub.add_parser("list", help="列出 STELLA_HOME 中已安装的包")
+    p_list.set_defaults(func=_cmd_packages)
+    p_rollback = package_sub.add_parser(
+        "rollback-model", help="按历史记录恢复上一个 active model"
+    )
+    p_rollback.set_defaults(func=_cmd_packages)
+    p_napcat_status = package_sub.add_parser("napcat-status", help="查看 NapCat 脱敏登录状态")
+    p_napcat_status.set_defaults(func=_cmd_packages)
+    p_napcat_install = package_sub.add_parser("napcat-install", help="安装已校验的 NapCat ZIP")
+    p_napcat_install.add_argument("source", help="NapCat ZIP 路径")
+    p_napcat_install.add_argument("--manifest", required=True, help="固定来源与 digest manifest")
+    p_napcat_install.set_defaults(func=_cmd_packages)
+    p_napcat_uninstall = package_sub.add_parser("napcat-uninstall", help="卸载 NapCat 程序但保留 QQ 数据")
+    p_napcat_uninstall.add_argument("--version", default=None)
+    p_napcat_uninstall.set_defaults(func=_cmd_packages)
+    p_import = package_sub.add_parser("import-model", help="校验并原子导入一个模型文件")
+    p_import.add_argument("source", help="模型文件路径")
+    p_import.add_argument("--id", dest="model_id", required=True, help="模型标识")
+    p_import.add_argument("--version", required=True, help="模型版本")
+    p_import.add_argument("--checksum", required=True, help="SHA-256 checksum")
+    p_import.add_argument(
+        "--backend",
+        choices=("cpu", "cuda", "hip", "metal", "vulkan"),
+        default=None,
+        help="模型兼容的 llama backend",
+    )
+    p_import.add_argument(
+        "--no-activate",
+        action="store_true",
+        help="只安装并记录，不切换当前 active model",
+    )
+    p_import.set_defaults(func=_cmd_packages)
+
+    p_runtime = sub.add_parser("runtime", help="查看/校验 Runtime Contract")
+    p_runtime.add_argument(
+        "operation",
+        choices=runtime.OPERATIONS,
+        help="Runtime 操作（当前只执行 status，其余用于契约校验）",
+    )
+    p_runtime.add_argument(
+        "--component",
+        default="stella",
+        choices=runtime.COMPONENTS,
+        help="组件名",
+    )
+    p_runtime.add_argument(
+        "--tail",
+        type=int,
+        help="logs 操作读取的最大行数（1-2000）",
+    )
+    p_runtime.add_argument(
+        "--force",
+        action="store_true",
+        help="start 操作忽略 doctor 的阻塞性问题",
+    )
+    p_runtime.set_defaults(func=_cmd_runtime)
 
     p_paths = sub.add_parser("paths", help="输出解析后的路径（程序目录 / 用户数据目录等）")
     p_paths.add_argument("--json", action="store_true", help="兼容 GUI 调用（默认就是 JSON）")

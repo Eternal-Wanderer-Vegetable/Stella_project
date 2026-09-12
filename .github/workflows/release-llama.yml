@@ -1,0 +1,70 @@
+name: Llama backend packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_commit:
+        description: "Pinned llama.cpp commit"
+        required: true
+        type: string
+      publish:
+        description: "Upload verified build artifacts for a release"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            backend: cpu
+          - os: ubuntu-latest
+            target: linux-x86_64
+            backend: cuda
+          - os: windows-latest
+            target: windows-x86_64
+            backend: cpu
+          - os: windows-latest
+            target: windows-x86_64
+            backend: vulkan
+          - os: macos-latest
+            target: macos-arm64
+            backend: metal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: ${{ inputs.llama_commit }}
+          path: .llama.cpp
+      - name: Build backend package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+          python scripts/build_llama_package.py .llama.cpp \
+            --output dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }} \
+            --backend '${{ matrix.backend }}' \
+            --commit '${{ inputs.llama_commit }}' \
+            --os '${{ matrix.os }}' \
+            --arch '${{ matrix.target }}'
+      - name: Verify package provenance
+        shell: bash
+        run: python scripts/verify_llama_package.py dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+          path: dist/Stella-llama-v4.0.0-${{ matrix.target }}-${{ matrix.backend }}
+
+  publish:
+    if: ${{ inputs.publish }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Publication is intentionally a separate reviewed step after all backend artifacts verify."

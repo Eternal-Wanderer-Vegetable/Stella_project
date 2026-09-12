@@ -33,6 +33,62 @@ def test_extract_ws_url_missing():
     assert probe._extract_ws_url({}) is None
 
 
+def test_probe_onebot_reports_safe_forward_token_facts(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        'ONEBOT_WS_URLS=["ws://127.0.0.1:3001/onebot?access_token=secret"]\n'
+        "ONEBOT_ACCESS_TOKEN=secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(probe, "_tcp_reachable", lambda _url: True)
+
+    result = probe._probe_onebot()
+
+    assert result["mode"] == "forward"
+    assert result["endpoint_configured"] is True
+    assert result["forward_reachable"] is True
+    assert result["token_configured"] is True
+    assert result["token_in_url"] is True
+    assert result["token_consistent"] is True
+    assert "secret" not in repr(result)
+
+
+def test_probe_onebot_detects_token_mismatch_without_leaking_values(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        'ONEBOT_WS_URLS=["ws://127.0.0.1:3001?token=url-secret"]\n'
+        "ONEBOT_ACCESS_TOKEN=env-secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(probe, "_tcp_reachable", lambda _url: False)
+
+    result = probe._probe_onebot()
+
+    assert result["token_consistent"] is False
+    assert "secret" not in repr(result)
+
+
+def test_probe_onebot_reports_reverse_port_and_token_presence(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        "HOST=127.0.0.1\nPORT=8080\nONEBOT_ACCESS_TOKEN=secret\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(probe, "_port_in_use", lambda _host, _port: True)
+
+    result = probe._probe_onebot()
+
+    assert result["mode"] == "reverse"
+    assert result["endpoint_configured"] is True
+    assert result["port_in_use"] is True
+    assert result["token_configured"] is True
+    assert result["token_in_url"] is False
+    assert result["token_consistent"] is None
+    assert "secret" not in repr(result)
+
+
 def test_probe_env_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
     exists, keys, superseded = probe._probe_env_file()
@@ -84,8 +140,84 @@ def test_port_in_use_free_port():
     assert probe._port_in_use("127.0.0.1", 0) is False
 
 
+def test_probe_llama_readiness_requires_models_and_chat(monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(("get", url))
+        return type(
+            "Response",
+            (),
+            {
+                "raise_for_status": lambda self: None,
+                "json": lambda self: {"data": [{"id": "demo.gguf"}]},
+            },
+        )()
+
+    def fake_post(url, **kwargs):
+        calls.append(("post", url, kwargs["json"]))
+        return type(
+            "Response",
+            (),
+            {
+                "raise_for_status": lambda self: None,
+                "json": lambda self: {"choices": [{"message": {"content": "ok"}}]},
+            },
+        )()
+
+    monkeypatch.setattr(probe.httpx, "get", fake_get)
+    monkeypatch.setattr(probe.httpx, "post", fake_post)
+    monkeypatch.setattr(probe, "_port_in_use", lambda _host, _port: True)
+    result = probe.probe_llama_readiness(
+        "http://127.0.0.1:8081",
+        model="demo.gguf",
+        model_path="",
+        host="127.0.0.1",
+        port=8081,
+    )
+    assert result["ready"] is True
+    assert result["models_reachable"] is True
+    assert result["chat_reachable"] is True
+    assert calls[0][0] == "get"
+    assert calls[1][0] == "post"
+    assert calls[1][2]["max_tokens"] == 1
+
+
+def test_probe_llama_readiness_is_diagnostic_when_server_exits(monkeypatch):
+    monkeypatch.setattr(
+        probe,
+        "fetch_endpoint_models",
+        lambda *_args, **_kwargs: ([], "Connection refused"),
+    )
+    result = probe.probe_llama_readiness(
+        "http://127.0.0.1:8081",
+        model_path="C:/missing/model.gguf",
+        host="127.0.0.1",
+        port=8081,
+        runtime_state="failed",
+    )
+    assert result["ready"] is False
+    assert result["model_exists"] is False
+    assert result["runtime_state"] == "failed"
+    assert "Connection refused" in result["error"]
+
+
 def test_tcp_reachable_invalid_url():
     assert probe._tcp_reachable("ws://") is None
+
+
+def test_probe_onebot_invalid_url_is_diagnostic(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    (tmp_path / ".env").write_text(
+        "ONEBOT_WS_URLS=ws://host:not-a-port\n",
+        encoding="utf-8",
+    )
+
+    result = probe._probe_onebot()
+
+    assert result["mode"] == "forward"
+    assert result["endpoint_configured"] is False
+    assert result["forward_reachable"] is False
 
 
 def test_collect_never_raises(monkeypatch):

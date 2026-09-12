@@ -13,7 +13,7 @@ import asyncio
 import httpx
 import pytest
 
-from core.llm.lm_studio import LMStudioBackend
+from core.llm.lm_studio import LMStudioBackend, OpenAICompatibleBackend
 
 
 class _FakeResponse:
@@ -76,6 +76,16 @@ def test_constructor_normalizes_url():
     backend2 = LMStudioBackend("http://127.0.0.1:9999")
     assert backend2.api_url == "http://127.0.0.1:9999/v1/chat/completions"
     assert backend2.model == ""
+
+
+def test_openai_compatible_backend_is_the_shared_implementation():
+    backend = OpenAICompatibleBackend("http://127.0.0.1:1234", model="m")
+    assert backend.backend_name == "openai_compatible"
+    assert backend.api_url.endswith("/v1/chat/completions")
+    assert isinstance(
+        LMStudioBackend("http://127.0.0.1:1234"),
+        OpenAICompatibleBackend,
+    )
 
 
 def test_generate_success_path(monkeypatch):

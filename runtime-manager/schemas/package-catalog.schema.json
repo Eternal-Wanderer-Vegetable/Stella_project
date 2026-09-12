@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stella Package Catalog",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "platform", "packages"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string", "minLength": 1},
+    "platform": {"type": "string", "minLength": 1},
+    "packages": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/package"}
+    }
+  },
+  "$defs": {
+    "package": {
+      "type": "object",
+      "required": ["kind", "id", "version", "path", "checksum"],
+      "properties": {
+        "kind": {"enum": ["runtime", "component", "model", "onebot"]},
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+\\-]{0,63}$"},
+        "version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+\\-]{0,63}$"},
+        "path": {"type": "string", "minLength": 1},
+        "checksum": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "platform": {"type": "string"},
+        "backend": {"enum": ["cpu", "cuda", "hip", "metal", "vulkan"]},
+        "runtime_api": {"type": "string", "minLength": 1},
+        "driver_min": {"type": "string", "minLength": 1},
+        "abi": {"type": "string", "minLength": 1},
+        "dependencies": {"type": "array", "items": {"type": "string"}},
+        "license": {"type": "string", "minLength": 1},
+        "sbom": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "artifact": {"type": "string", "minLength": 1},
+        "status": {"enum": ["build-only", "hardware-verified", "unavailable"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

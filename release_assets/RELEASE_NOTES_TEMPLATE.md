@@ -1,10 +1,14 @@
-# Stella vX.Y.Z 发布说明
+# Stella v4.0.0 发布说明
 
 > 打 tag 前把本文件更新为本版本的内容，CI 会直接把它作为 Release Notes。
 
 ## 主要变化
 
-- （在此填写本版本的主要变化，可从两个 tag 之间的 commit 提炼）
+- 增加 Runtime Contract、统一组件状态、脱敏错误和实例级 Runtime 文件。
+- 增加 Rust `runtime-manager` 契约基础层，并保留 Python deploy、CLI、Tauri 的兼容入口。
+- AI 改为可选能力：支持可选的 Docker `llama` profile，llama 不可用时 Stella 基础功能继续运行。
+- OneBot/NapCat 增加配置、可达性、断线和等待重连诊断，不会因 NapCat 断线误停 Stella。
+- 增加组件/模型包 catalog、SHA-256 校验、原子模型导入、active model 回滚记录。
 
 ## 破坏性变更
 
@@ -37,7 +41,7 @@ python -m deploy migrate             # 执行
 
 ```text
 D:\你的目录\
-  Stella-vX.Y.Z-win64\   ← 程序（升级时整个换掉，可以放心删）
+  Stella-v4.0.0-win64\   ← 程序（升级时整个换掉，可以放心删）
   StellaData\            ← 你的数据（升级时一动不动）
 ```
 
@@ -47,4 +51,16 @@ D:\你的目录\
 
 ## 下载
 
-见本 Release 的资产：`Stella-vX.Y.Z-win64.zip`（解压后双击 `Stella.exe` 或 `start.bat`）。
+见本 Release 的资产：`Stella-v4.0.0-win64.zip`（解压后双击 `Stella.exe` 或 `start.bat`）。
+
+## 本版本边界
+
+NapCat 自动安装、自动登录和无人值守扫码不是本版本的默认能力；QQ 登录仍需
+人工扫码。真实 Windows 原生进程树、文件锁、端口冲突和升级回滚矩阵也需要在
+目标平台继续验收。
+
+## 验证范围
+
+契约级 Python/Rust 测试、Docker compose 配置和降级场景回归已纳入本版本验证。
+当前环境未执行完整的真实 Windows 原生进程树、文件锁、升级回滚和 NapCat
+自动化矩阵。

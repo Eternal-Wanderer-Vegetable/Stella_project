@@ -122,6 +122,28 @@ docker compose start
 # 恢复 = 解包覆盖 StellaData/ 后 up -d
 ```
 
+### 5.1 Runtime 状态与可选 llama
+
+本版本的 Runtime 状态使用统一的 `schema_version`、组件名、状态、endpoint、
+错误和诊断字段。查看聚合状态：
+
+```bash
+stellacli --mode docker status --json
+docker compose exec stella python -m deploy runtime status
+```
+
+默认 compose 不启动本地模型服务。需要使用容器内的 `llama-server` 时，准备
+`./models/` 下的 GGUF 文件，并显式启用可选 profile：
+
+```bash
+docker compose --profile llama up -d
+```
+
+llama 服务通过 `/v1/models` healthcheck，并由上层以最小 chat readiness 继续
+确认可用性。模型缺失、端口占用或 llama 进程失败只会把 llama 标记为
+`degraded`/`failed`；Stella Core 和基础 Bot 不会因此停止。在线 API 或宿主机
+上的 LM Studio 仍可作为同一 OpenAI-compatible endpoint 使用。
+
 ## 6. 安全清单
 
 - **公网暴露 8080 时必须配 token**：`.env` 里 `ONEBOT_ACCESS_TOKEN=<随机串>`，NapCat 侧 WebUI 填同值。没有 token 时任何知道地址的人都能伪装成 QQ 客户端操纵 Bot。
@@ -160,3 +182,13 @@ volumes:
 - 容器内 `PORT` 固定 8080（理由与替代做法见 §7）。
 - NapCat 的登录态在 `./napcat/QQ/`、网络配置在 `./napcat/config/`——这两目录和 `StellaData/` 一样要进备份；丢了分别要重新扫码、重新配 WS。
 - QQ 风控提示：服务器机房 IP 上扫码登录新设备可能触发安全验证，属于 QQ 侧策略，与本项目无关；实在过不去就把 NapCat 留在常用网络环境里跑，改用 §1 的备选拓扑。
+
+### Contract 与数据边界
+
+- Runtime manifest/state 位于实例 Runtime 目录；它们只保存组件状态、诊断和脱敏错误。
+- 发布 catalog 位于可替换的程序目录；已安装包 registry、模型文件和回滚记录位于
+  `STELLA_HOME/.stella/packages/`。
+- `STELLA_HOME` 是用户数据边界，升级 Runtime、组件或模型不得覆盖配置、记忆、
+  插件、人格和日志。
+- NapCat 的账号数据和网络配置仍位于独立的 `napcat/` 目录，不写入 Stella
+  Runtime state，也不与 Stella Core 共用升级生命周期。

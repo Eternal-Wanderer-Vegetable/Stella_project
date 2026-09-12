@@ -805,6 +805,25 @@ def test_backend_carries_every_resolved_field():
     assert backend.is_local is True
 
 
+def test_enabled_runtime_llama_replaces_local_endpoint(monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "LLM_ENDPOINT_LOCAL_MODEL", "old-model", raising=False)
+    monkeypatch.setattr(
+        "deploy.runtime.llama_endpoint_config",
+        lambda: {
+            "base_url": "http://127.0.0.1:8081",
+            "model": "runtime-model",
+        },
+    )
+    registry.reset_state()
+    endpoint = registry.endpoint(registry.SLOT_LOCAL)
+    assert endpoint is not None
+    assert endpoint.base_url == "http://127.0.0.1:8081"
+    assert endpoint.model == "runtime-model"
+    assert endpoint.kind == registry.KIND_LOCAL
+
+
 def test_backend_knows_its_slot_and_role():
     """槽名与角色名要一路带到后端：日志前缀与用量归集都靠它们分辨是谁在说话。
 

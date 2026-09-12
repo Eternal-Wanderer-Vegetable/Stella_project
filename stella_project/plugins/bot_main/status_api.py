@@ -44,7 +44,7 @@ _STARTED_AT = time.time()
 
 # importlib.metadata 查不到（未安装成包 / 源码直接运行）时的回退版本号。
 # 与 pyproject.toml 的 version 保持一致，改版本号时一并更新。
-_FALLBACK_VERSION = "2.6.0"
+_FALLBACK_VERSION = "4.0.0"
 
 
 def _project_version() -> str:
@@ -107,6 +107,7 @@ def build_payload(
     started_at: float,
     usage: dict | None = None,
     capabilities: dict | None = None,
+    runtime_status: dict | None = None,
 ) -> dict:
     """组装状态响应。
 
@@ -124,7 +125,7 @@ def build_payload(
     ``_capabilities()``。它回答的是「插件装了为什么从来不被调用」——今天这个问题
     只能靠翻启动日志。
     """
-    return {
+    payload = {
         "version": _project_version(),
         "instance_id": INSTANCE_ID,
         "launch_token_digest": (
@@ -140,6 +141,9 @@ def build_payload(
         "usage": usage,        # usage_store.usage_snapshot()，或 None（取数失败）
         "capabilities": capabilities,  # inventory.snapshot()，或 None（取数失败）
     }
+    if runtime_status is not None:
+        payload["runtime"] = runtime_status
+    return payload
 
 
 def setup_status_api() -> None:
@@ -175,6 +179,13 @@ def setup_status_api() -> None:
         except Exception:
             link = None
         try:
+            from deploy import runtime
+
+            runtime.sync_onebot_status(link)
+            runtime_status = runtime.snapshot()
+        except Exception:
+            runtime_status = None
+        try:
             from core.llm import snapshot
 
             sched = snapshot()
@@ -195,6 +206,7 @@ def setup_status_api() -> None:
             started_at=_STARTED_AT,
             usage=usage,
             capabilities=_capabilities(),
+            runtime_status=runtime_status,
         )
 
     try:

@@ -288,6 +288,7 @@ def test_status_dict_shape(monkeypatch, tmp_path):
         "capabilities",
         "uptime_seconds",
         "note",
+        "runtime",
     }
     assert data["pid"] is None
     assert data["alive"] is False

@@ -95,12 +95,12 @@ You decide where the models come from.
 
 ### 📦 Download & Install (regular users)
 
-- Step 1: Download the following required dependencies:
+- Step 1: Prepare the components needed for your setup:
 
-  - [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop), and configure the **reverse websocket connection** according to its instructions. Record the port you configure and open the link.
-  - [LM Studio](https://lmstudio.ai/). After installation, download the required models inside the software (see [Local models used in development](#local-models-used-in-development)), load the models, and open LM Studio's remote service port.
+  - If you connect QQ: prepare [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and configure the **reverse websocket connection** according to its instructions. Record the port you configure and open the link.
+  - If you use local models: choose [LM Studio](https://lmstudio.ai/), or the optional `llama.cpp` profile managed by the Stella Runtime. LM Studio is not required for online-only setups.
 
-> Note: Even when using an all-online model setup, you still need to download LM Studio to load the local embedding model. (This is required for tool calls, and even the 0.6B-parameter embedding model runs smoothly on most computers without a graphics card.)
+> AI can be disabled. When AI is disabled or a local model is unavailable, the basic Bot, OneBot diagnostics, and deployment management remain available.
 
 - Step 2: Download the latest `Stella-*-win64.zip` from [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases). After extracting it, there are two ways to start it:
 
@@ -112,7 +112,7 @@ You decide where the models come from.
 - Step 3:
   - 1. After opening `Stella.exe` for the first time, the configuration UI appears. First fill in the **listening port** (the reverse WS port configured in NapCat in Step 1) and the **group number** that Stella should join.
   - 2. Scroll down to the Model Services section, choose a **one-click preset** according to your deployment mode, and fill in the corresponding endpoint cards:
-    - **All local** -> Click `纯本地`, then fill in the LM Studio address and model ID in the Local LM Studio card. The Test Connection button on the card (or Read LM Studio Models at the bottom) reads back the list of loaded models directly.
+    - **All local** -> Click `纯本地`, then fill in the address and model ID for an OpenAI-compatible local endpoint such as LM Studio or llama.cpp. The Test Connection button reads back the service's model list.
     - **All online / Hybrid** -> Click `纯在线（双 key）` or `混合（对话在线 · 整合本地）`, then fill in the provider address, API key, and model ID once in each of the two online cards. **The two keys must be different**; see [Three Deployment Modes](#-three-deployment-modes) for why.
   - 3. After configuration is complete, click "Save and Check". The program automatically switches to the Run Status page. Click "Start".
 
@@ -158,7 +158,7 @@ pip install -r requirements.txt
 | Python | 3.10+ (the Release package includes embedded Python; no separate installation is needed) |
 | Framework | [NoneBot 2](https://nonebot.dev/) |
 | QQ protocol endpoint | [NapCat](https://github.com/NapNeko/NapCatQQ) or another OneBot V11 implementation (installing and logging in with [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) is recommended) |
-| Model service | Local [LM Studio](https://lmstudio.ai/), or any OpenAI-compatible online API (just provide the address + API key); the two can be mixed |
+| Model service | Optional local [LM Studio](https://lmstudio.ai/) / `llama.cpp` Runtime, or any OpenAI-compatible online API (provide the address + API key); the two can be mixed, and AI can be disabled |
 
 ### Configuration
 
@@ -274,13 +274,15 @@ Stage 2 is awakened only when Stage 1 determines that self-disclosure is present
 
 ## 🛠 Technology Stack
 
-**Bot backend**: `NoneBot 2` · `OneBot V11` · `SQLite (FTS5)` · `LM Studio` / any OpenAI-compatible API · `APScheduler` · `httpx`
+**Bot backend**: `NoneBot 2` · `OneBot V11` · `SQLite (FTS5)` · OpenAI-compatible APIs · `APScheduler` · `httpx`
+
+**Optional Runtime**: Rust `runtime-manager` · `llama.cpp` / `llama-server` · Runtime manifest/state contract
 
 **Plugin compatibility and rendering**: `Jinja2` · `Playwright` (local Chromium, used only to render plugin cards as images)
 
 **Desktop installer**: `Tauri 2` · `Rust` (`stella-installer/`, native HTML/JS frontend, with no frontend build step)
 
-**Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with Chromium and CJK fonts baked into the image; see the [Docker Deployment Guide](docs/deployment-docker.en.md))
+**Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with an optional `llama` profile; Chromium and CJK fonts are baked into the image; see the [Docker Deployment Guide](docs/deployment-docker.en.md))
 
 **Development and verification**: `pytest` · `ruff` · `pyright`
 

@@ -326,6 +326,9 @@ jobs:
           cd dist/Stella
           python -m deploy manifest --write
           cat .stella-manifest.json
+          python -m deploy packages catalog --platform windows-amd64
+          python -m deploy packages verify
+          cat .stella-package-catalog.json
 
       # 纵深防御之二：USER_DATA 清单（deploy/migrate.py）与 rsync 排除清单是两份，
       # 迟早会对不上。这一步让「对不上」在发布前失败，而不是等用户升级时丢数据。
@@ -415,10 +418,16 @@ jobs:
             deploy/env_merge.py \
             deploy/env_keys.py \
             deploy/manifest.py \
+            deploy/packages.py \
             extensions/__init__.py \
             extensions/link_monitor/__init__.py \
             docs/configuration.md \
             .stella-manifest.json \
+            .stella-package-catalog.json \
+            runtime-manager/schemas/runtime-manifest.schema.json \
+            runtime-manager/schemas/runtime-state.schema.json \
+            runtime-manager/schemas/package-catalog.schema.json \
+            runtime-manager/schemas/package-registry.schema.json \
           ; do
             if [ ! -f "$f" ]; then
               echo "::error::缺少必需文件: $f"

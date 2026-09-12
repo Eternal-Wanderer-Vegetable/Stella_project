@@ -213,6 +213,12 @@ def link_status() -> dict:
     last_probe_seconds_ago = (
         None if state.last_probe_time is None else now - state.last_probe_time
     )
+    try:
+        from deploy.probe import _probe_onebot
+
+        config_status = _probe_onebot()
+    except Exception:
+        config_status = {}
     healthy = (
         LINK_MONITOR_ENABLED
         and state.connected
@@ -231,6 +237,14 @@ def link_status() -> dict:
         "last_probe_seconds_ago": last_probe_seconds_ago,
         "timeout": LINK_MONITOR_TIMEOUT,
         "healthy": healthy,
+        "mode": config_status.get("mode", "unknown"),
+        "endpoint_configured": config_status.get("endpoint_configured"),
+        "forward_reachable": config_status.get("forward_reachable"),
+        "reverse_port_in_use": config_status.get("port_in_use"),
+        "token_configured": config_status.get("token_configured", False),
+        "token_in_url": config_status.get("token_in_url", False),
+        "token_consistent": config_status.get("token_consistent"),
+        "waiting_for_reconnect": LINK_MONITOR_ENABLED and not state.connected,
     }
 
 
