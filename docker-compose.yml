@@ -49,6 +49,30 @@ services:
       # http://host.docker.internal:1234 即可从容器内访问
       - "host.docker.internal:host-gateway"
 
+  # Optional local llama.cpp server. It is disabled unless the llama profile is
+  # selected, so AI remains optional and the default Bot topology is unchanged.
+  # Override LLAMA_IMAGE and LLAMA_MODEL_PATH in .env for a specific package.
+  llama:
+    profiles: ["llama"]
+    image: ${LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    container_name: llama
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "127.0.0.1:8081:8081"
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8081"
+      - "--model"
+      - "${LLAMA_MODEL_PATH:-/models/model.gguf}"
+      - "--ctx-size"
+      - "${LLAMA_CTX_SIZE:-4096}"
+
   napcat:
     image: mlikiowa/napcat-docker:latest
     container_name: napcat
