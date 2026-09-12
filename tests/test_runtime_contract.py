@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy import process, runtime
+from deploy import checks, probe, process, runtime
 
 
 def test_default_manifest_has_optional_components():
@@ -154,6 +154,8 @@ def test_execute_rejects_unsupported_component_owner():
 
 
 def test_execute_start_captures_legacy_output(monkeypatch):
+    monkeypatch.setattr(probe, "collect", lambda: object())
+    monkeypatch.setattr(checks, "run_all", lambda facts: [])
     monkeypatch.setattr(process, "start_detached", lambda: (print("started"), 0)[1])
     monkeypatch.setattr(runtime, "snapshot", lambda: {"components": {"stella": {"state": "starting"}}})
     result = runtime.execute_operation("start")
