@@ -103,5 +103,13 @@ jobs:
           done
           assets=(Stella-llama-v*.zip)
           test "${#assets[@]}" -eq 5
+          cpu_asset="Stella-llama-v${VERSION}-windows-x86_64-cpu.zip"
+          test -f "$cpu_asset"
+          python scripts/build_release_catalog.py \
+            --backend-asset "$cpu_asset" \
+            --release-ref "$RELEASE_REF" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --output package-catalog-windows-amd64.json
           gh release upload "$RELEASE_REF" "${assets[@]}" --clobber
+          gh release upload "$RELEASE_REF" package-catalog-windows-amd64.json --clobber
           gh release view "$RELEASE_REF" --json assets --jq '.assets[].name'
