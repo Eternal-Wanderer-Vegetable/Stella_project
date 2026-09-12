@@ -398,6 +398,51 @@ def _cmd_manifest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_packages(args: argparse.Namespace) -> int:
+    """Manage installed package records or verify a release catalog."""
+    from . import packages
+
+    try:
+        if args.package_action == "catalog":
+            path = packages.write_catalog(
+                PROJECT_ROOT,
+                platform=args.platform,
+            )
+            print(f"已写入 {path}")
+            return 0
+        if args.package_action == "verify":
+            problems = packages.verify_catalog(PROJECT_ROOT)
+            if problems:
+                print(json.dumps({"ok": False, "problems": problems}, ensure_ascii=False))
+                return 1
+            print(json.dumps({"ok": True, "catalog": str(packages.catalog_path(PROJECT_ROOT))}))
+            return 0
+        if args.package_action == "list":
+            print(json.dumps(packages.read_registry(), ensure_ascii=False, indent=2))
+            return 0
+        if args.package_action == "rollback-model":
+            record = packages.rollback_model()
+            print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
+            return 0
+        record = packages.import_model(
+            Path(args.source),
+            model_id=args.model_id,
+            version=args.version,
+            checksum=args.checksum,
+            activate=not args.no_activate,
+        )
+        print(json.dumps({"ok": True, "package": record}, ensure_ascii=False, indent=2))
+        return 0
+    except packages.PackageError as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                ensure_ascii=False,
+            )
+        )
+        return 1
+
+
 def _cmd_runtime(args: argparse.Namespace) -> int:
     """Execute one Runtime operation and print the shared JSON envelope."""
     try:
@@ -529,6 +574,31 @@ def main(argv: list[str] | None = None) -> int:
     p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
     p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")
     p_manifest.set_defaults(func=_cmd_manifest)
+
+    p_packages = sub.add_parser("packages", help="管理组件包、模型包和发布包清单")
+    package_sub = p_packages.add_subparsers(dest="package_action", required=True)
+    p_catalog = package_sub.add_parser("catalog", help="生成发布包组件清单")
+    p_catalog.add_argument("--platform", default=None, help="包目标平台，例如 windows-amd64")
+    p_catalog.set_defaults(func=_cmd_packages)
+    p_verify = package_sub.add_parser("verify", help="校验发布包清单中的文件 checksum")
+    p_verify.set_defaults(func=_cmd_packages)
+    p_list = package_sub.add_parser("list", help="列出 STELLA_HOME 中已安装的包")
+    p_list.set_defaults(func=_cmd_packages)
+    p_rollback = package_sub.add_parser(
+        "rollback-model", help="按历史记录恢复上一个 active model"
+    )
+    p_rollback.set_defaults(func=_cmd_packages)
+    p_import = package_sub.add_parser("import-model", help="校验并原子导入一个模型文件")
+    p_import.add_argument("source", help="模型文件路径")
+    p_import.add_argument("--id", dest="model_id", required=True, help="模型标识")
+    p_import.add_argument("--version", required=True, help="模型版本")
+    p_import.add_argument("--checksum", required=True, help="SHA-256 checksum")
+    p_import.add_argument(
+        "--no-activate",
+        action="store_true",
+        help="只安装并记录，不切换当前 active model",
+    )
+    p_import.set_defaults(func=_cmd_packages)
 
     p_runtime = sub.add_parser("runtime", help="查看/校验 Runtime Contract")
     p_runtime.add_argument(
