@@ -28,6 +28,7 @@ STATES = (
     "expired",
 )
 NAPCAT_ID = "napcat"
+_IS_WINDOWS = os.name == "nt"
 _HEX = set("0123456789abcdef")
 
 
@@ -201,7 +202,7 @@ def install_msi(
         raise NapCatError("source_missing", f"NapCat MSI 不存在：{archive}")
     if sha256(archive) != metadata["digest"]:
         raise NapCatError("checksum_mismatch", "NapCat MSI digest 不匹配")
-    if os.name != "nt":
+    if not _IS_WINDOWS:
         raise NapCatError("unsupported_platform", "NapCat MSI 只能在 Windows 上安装")
     command = [
         "msiexec.exe",

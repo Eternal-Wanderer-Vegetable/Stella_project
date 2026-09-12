@@ -113,7 +113,7 @@ def test_pinned_msi_installs_without_attempting_login(monkeypatch, tmp_path):
     manifest = _manifest(archive)
     calls = []
 
-    monkeypatch.setattr(napcat.os, "name", "nt")
+    monkeypatch.setattr(napcat, "_IS_WINDOWS", True)
     monkeypatch.setattr(
         napcat.subprocess,
         "run",
