@@ -6,8 +6,7 @@ import zipfile
 
 import pytest
 
-from deploy import acquire
-from deploy import napcat
+from deploy import acquire, napcat
 
 
 def _archive(tmp_path, name="napcat.zip", unsafe=False):

@@ -36,7 +36,8 @@ COMMON_DIRS = (
     "runtime-manager",
 )
 RUST_DIRS = ("memory_rust",)
-INSTALLER_FILES = COMMON_FILES + (
+INSTALLER_FILES = (
+    *COMMON_FILES,
     "runtime-manager/schemas/runtime-manifest.schema.json",
     "runtime-manager/schemas/runtime-state.schema.json",
     "runtime-manager/schemas/package-catalog.schema.json",

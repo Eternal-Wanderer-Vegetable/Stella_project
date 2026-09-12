@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from . import acquire, napcat, packages
+from . import acquire, packages
 from .profiles import load_profile
 
 PROGRESS_FILENAME = ".bootstrap-progress"

@@ -26,7 +26,7 @@ REGISTRY_FILENAME = "packages.json"
 PACKAGE_ROOT = Path(".stella") / "packages"
 SCHEMA_VERSION = 1
 PACKAGE_KINDS = ("runtime", "component", "model", "onebot")
-ACTIVE_KEYS = PACKAGE_KINDS + ("embedding",)
+ACTIVE_KEYS = (*PACKAGE_KINDS, "embedding")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}$")
 _CHECKSUM = re.compile(r"^[0-9a-fA-F]{64}$")
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:/")
@@ -592,8 +592,8 @@ def verify_catalog(root: Path = PROJECT_ROOT) -> list[str]:
 
 
 __all__ = [
-    "CATALOG_FILENAME",
     "ACTIVE_KEYS",
+    "CATALOG_FILENAME",
     "PACKAGE_KINDS",
     "PackageError",
     "build_catalog",
