@@ -25,6 +25,9 @@ services:
     # 注释掉上面两行，改用下行（首次发布后需在 GitHub Packages 里把包设为 Public）
     # image: ghcr.io/eternal-wanderer-vegetable/stella_project:latest
     container_name: stella
+    labels:
+      com.stella.runtime.schema: "1"
+      com.stella.runtime.component: stella
     # 收割 playwright 拉起的 node/chromium 子进程；SIGTERM → uvicorn 优雅停机
     init: true
     restart: unless-stopped
@@ -56,6 +59,9 @@ services:
     profiles: ["llama"]
     image: ${LLAMA_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
     container_name: llama
+    labels:
+      com.stella.runtime.schema: "1"
+      com.stella.runtime.component: llama
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
@@ -72,10 +78,21 @@ services:
       - "${LLAMA_MODEL_PATH:-/models/model.gguf}"
       - "--ctx-size"
       - "${LLAMA_CTX_SIZE:-4096}"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "curl -fsS http://127.0.0.1:8081/v1/models >/dev/null || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
 
   napcat:
     image: mlikiowa/napcat-docker:latest
     container_name: napcat
+    labels:
+      com.stella.runtime.schema: "1"
+      com.stella.runtime.component: onebot
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai

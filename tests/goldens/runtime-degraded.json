@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "components": {
+    "llama": {
+      "state": "disabled"
+    },
+    "onebot": {
+      "state": "degraded",
+      "diagnostics": {
+        "mode": "forward",
+        "endpoint_configured": true,
+        "forward_reachable": false,
+        "reverse_port_in_use": null,
+        "token_configured": true,
+        "token_in_url": true,
+        "token_consistent": false,
+        "connected": false,
+        "healthy": false,
+        "waiting_for_reconnect": true,
+        "last_probe_ok": false
+      }
+    },
+    "stella": {
+      "state": "healthy",
+      "pid": 1234
+    }
+  }
+}
