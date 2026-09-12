@@ -20,6 +20,18 @@
       "kind": "llama",
       "enabled": false,
       "dependencies": [],
+      "config": {
+        "host": "127.0.0.1",
+        "port": 8081,
+        "model": {
+          "path": "",
+          "package": "",
+          "id": "",
+          "checksum": ""
+        },
+        "ctx_size": 4096,
+        "backend": "cpu"
+      },
       "health": {
         "type": "http",
         "path": "/v1/models"

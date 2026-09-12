@@ -241,6 +241,70 @@ def fetch_endpoint_models(base_url: str, api_key: str = "") -> tuple[list[str], 
         return [], str(e)[:300]
 
 
+def probe_llama_readiness(
+    base_url: str,
+    *,
+    model: str = "",
+    api_key: str = "",
+    timeout: float = 5.0,
+    model_path: str = "",
+    host: str = "",
+    port: int = 0,
+    runtime_state: str = "",
+) -> dict[str, Any]:
+    """用 models + 最小 chat 请求判断 llama 是否 ready。
+
+    所有失败都返回诊断事实，不抛异常、不阻塞 Stella；错误文案不携带请求头或
+    API key，供 Runtime state/doctor 安全展示。
+    """
+    result: dict[str, Any] = {
+        "enabled": True,
+        "endpoint": base_url,
+        "model": model,
+        "model_path": model_path,
+        "model_exists": bool(model_path and Path(model_path).is_file()),
+        "host": host,
+        "port": port,
+        "port_in_use": _port_in_use(host, port) if host and port else None,
+        "runtime_state": runtime_state,
+        "models_reachable": False,
+        "chat_reachable": False,
+        "ready": False,
+        "error": "",
+    }
+    models, error = fetch_endpoint_models(base_url, api_key)
+    result["models"] = models
+    if error:
+        result["error"] = f"/v1/models: {error[:240]}"
+        return result
+    result["models_reachable"] = True
+    payload: dict[str, Any] = {
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+        "temperature": 0,
+    }
+    if model:
+        payload["model"] = model
+    try:
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        response = httpx.post(
+            f"{base_url.rstrip('/')}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+            trust_env=False,
+        )
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict) or not data.get("choices"):
+            raise ValueError("响应缺少 choices")
+        result["chat_reachable"] = True
+        result["ready"] = True
+    except Exception as exc:
+        result["error"] = f"/v1/chat/completions: {str(exc)[:240]}"
+    return result
+
+
 def fetch_loaded_models(base_url: str = "") -> tuple[list[str], str]:
     """查询 LM Studio 已加载模型 ID 列表。
 
@@ -283,6 +347,7 @@ def _probe_llm_registry() -> dict:
         "llm_endpoint_reachable": {},
         "llm_endpoint_error": {},
         "llm_endpoint_models": {},
+        "llama_readiness": {},
     }
     try:
         from core.llm import registry
@@ -310,6 +375,22 @@ def _probe_llm_registry() -> dict:
         out["llm_endpoint_reachable"][slot] = not err
         out["llm_endpoint_error"][slot] = err
         out["llm_endpoint_models"][slot] = models
+    try:
+        from deploy import runtime
+
+        llama = runtime.llama_endpoint_config()
+        if llama:
+            state = (runtime.read_state().get("components") or {}).get("llama") or {}
+            out["llama_readiness"] = probe_llama_readiness(
+                llama["base_url"],
+                model=llama["model"],
+                model_path=llama["model_path"],
+                host=llama["host"],
+                port=llama["port"],
+                runtime_state=str(state.get("state") or ""),
+            )
+    except Exception:
+        out["llama_readiness"] = {}
     return out
 
 
@@ -657,6 +738,7 @@ def collect() -> Snapshot:
         llm_endpoint_reachable=llm.get("llm_endpoint_reachable", {}),
         llm_endpoint_error=llm.get("llm_endpoint_error", {}),
         llm_endpoint_models=llm.get("llm_endpoint_models", {}),
+        llama_readiness=llm.get("llama_readiness", {}),
         db_exists=db.get("db_exists", False),
         db_path=db.get("db_path", ""),
         db_writable=db.get("db_writable"),

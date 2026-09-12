@@ -915,6 +915,36 @@ def check_llm_role_model(
     return results or None
 
 
+def check_llama_readiness(snap: Snapshot) -> CheckResult | None:
+    """llama 缺模型、端口/进程异常只告警，不阻塞 Stella Core。"""
+    readiness = snap.llama_readiness
+    if not readiness:
+        return None
+    if readiness.get("ready") and readiness.get("model_exists", True):
+        return None
+    reasons: list[str] = []
+    if readiness.get("model_path") and readiness.get("model_exists") is False:
+        reasons.append("模型文件不存在")
+    elif not readiness.get("model_path"):
+        reasons.append("未配置模型文件")
+    if readiness.get("port_in_use") is False:
+        reasons.append("Runtime 端口未监听")
+    elif readiness.get("port_in_use") is True and not readiness.get("models_reachable"):
+        reasons.append("端口已被占用但不是可用的 llama endpoint")
+    if readiness.get("runtime_state") in {"failed", "stopped"}:
+        reasons.append(f"Runtime 状态为 {readiness['runtime_state']}")
+    if readiness.get("error"):
+        reasons.append(str(readiness["error"]))
+    return CheckResult(
+        id="llama_readiness",
+        level="warn",
+        title="可选 llama 服务未就绪",
+        detail="；".join(reasons) or "最小 chat readiness 未通过",
+        fix_hint="AI 是可选组件，不影响 Stella 基础 Bot。检查 Runtime manifest 的模型路径、"
+        "端口和 backend；修复后重启 llama 组件，或保持 disabled 以继续使用其它 LLM 端点。",
+    )
+
+
 def check_embedding_locality(snap: Snapshot) -> CheckResult | None:
     """R2：embedding 恒定本地。地址指到在线端点 → warn。
 
@@ -1095,6 +1125,7 @@ _ALL_CHECKS: tuple[Callable[[Snapshot], CheckResult | Sequence[CheckResult] | No
     check_llm_config_issues,
     check_llm_endpoint_reachable,
     check_llm_role_model,
+    check_llama_readiness,
     check_embedding_locality,
     check_llm_usage_accounting,
     check_llm_daily_budget,

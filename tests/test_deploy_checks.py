@@ -797,6 +797,26 @@ def test_llm_endpoint_unprobed_is_not_reported():
     assert checks.check_llm_endpoint_reachable(_endpoint_snapshot("online", True)) is None
 
 
+def test_llama_readiness_is_a_non_blocking_diagnostic():
+    result = checks.check_llama_readiness(
+        _healthy_snapshot(
+            llama_readiness={
+                "ready": False,
+                "model_path": "C:/models/missing.gguf",
+                "model_exists": False,
+                "port_in_use": True,
+                "models_reachable": False,
+                "runtime_state": "failed",
+                "error": "Connection refused",
+            }
+        )
+    )
+    assert result is not None
+    assert result.level == "warn"
+    assert result.id == "llama_readiness"
+    assert "基础 Bot" in result.fix_hint
+
+
 def test_llm_endpoint_sharing_lm_studio_address_is_not_reported_twice():
     """与 LM Studio 同地址的槽由 check_lm_studio_reachable 报——同一个服务没起来，
     说两遍会让用户以为有两个问题。"""

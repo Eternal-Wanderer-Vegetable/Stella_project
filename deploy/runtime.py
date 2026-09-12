@@ -107,6 +107,18 @@ def default_manifest() -> dict[str, Any]:
                 "kind": "llama",
                 "enabled": False,
                 "dependencies": [],
+                "config": {
+                    "host": "127.0.0.1",
+                    "port": 8081,
+                    "model": {
+                        "path": "",
+                        "package": "",
+                        "id": "",
+                        "checksum": "",
+                    },
+                    "ctx_size": 4096,
+                    "backend": "cpu",
+                },
                 "health": {"type": "http", "path": "/v1/models"},
                 "logs": {"path": "logs/llama.log"},
             },
@@ -178,6 +190,34 @@ def validate_manifest(payload: dict[str, Any]) -> None:
         health = spec.get("health")
         if health is not None and not isinstance(health, dict):
             raise ValueError(f"组件 {name} 的 health 必须是对象")
+        if name != "llama":
+            continue
+        config = spec.get("config")
+        if not isinstance(config, dict):
+            raise ValueError("llama 组件必须包含 config")
+        if not str(config.get("host", "")).strip():
+            raise ValueError("llama.config.host 不能为空")
+        try:
+            port = int(config.get("port", 0))
+        except (TypeError, ValueError):
+            raise ValueError("llama.config.port 必须是整数") from None
+        if not 1 <= port <= 65535:
+            raise ValueError("llama.config.port 必须在 1 到 65535 之间")
+        model = config.get("model")
+        if not isinstance(model, dict):
+            raise ValueError("llama.config.model 必须是对象")
+        for key in ("path", "package", "id", "checksum"):
+            if key in model and not isinstance(model[key], str):
+                raise ValueError(f"llama.config.model.{key} 必须是字符串")
+        try:
+            ctx_size = int(config.get("ctx_size", 0))
+        except (TypeError, ValueError):
+            raise ValueError("llama.config.ctx_size 必须是整数") from None
+        if ctx_size <= 0:
+            raise ValueError("llama.config.ctx_size 必须大于 0")
+        backend = str(config.get("backend", "")).strip().lower()
+        if backend not in {"cpu", "cuda", "hip", "metal", "vulkan"}:
+            raise ValueError("llama.config.backend 不受支持")
 
 
 def validate_state_payload(payload: dict[str, Any]) -> None:
@@ -243,6 +283,29 @@ def read_state() -> dict[str, Any]:
     except ValueError:
         return default_state()
     return redact_value(value)
+
+
+def llama_endpoint_config() -> dict[str, Any] | None:
+    """返回启用的 Runtime llama endpoint，不暴露凭据或任意命令。"""
+    manifest = read_manifest()
+    spec = (manifest.get("components") or {}).get("llama") or {}
+    if not spec.get("enabled"):
+        return None
+    config = spec.get("config") or {}
+    model = config.get("model") or {}
+    host = str(config.get("host") or "127.0.0.1").strip()
+    port = int(config.get("port") or 8081)
+    return {
+        "base_url": f"http://{host}:{port}",
+        "host": host,
+        "port": port,
+        "model": str(model.get("id") or "").strip(),
+        "model_path": str(model.get("path") or "").strip(),
+        "model_package": str(model.get("package") or "").strip(),
+        "model_checksum": str(model.get("checksum") or "").strip(),
+        "ctx_size": int(config.get("ctx_size") or 4096),
+        "backend": str(config.get("backend") or "cpu").strip().lower(),
+    }
 
 
 def validate_operation(operation: str, component: str = "stella") -> None:
@@ -517,6 +580,7 @@ __all__ = [
     "default_manifest",
     "default_state",
     "execute_operation",
+    "llama_endpoint_config",
     "read_manifest",
     "read_state",
     "redact_value",

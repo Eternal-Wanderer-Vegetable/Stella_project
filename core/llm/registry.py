@@ -195,6 +195,19 @@ def _endpoint_from_settings(slot: str) -> Endpoint:
     api_key = str(getattr(s, prefix + "API_KEY", "") or "").strip()
     model = str(getattr(s, prefix + "MODEL", "") or "").strip()
     kind = str(getattr(s, prefix + "KIND", "") or "").strip().lower()
+    if slot == SLOT_LOCAL:
+        try:
+            from deploy.runtime import llama_endpoint_config
+
+            runtime_llama = llama_endpoint_config()
+        except Exception:
+            runtime_llama = None
+        if runtime_llama:
+            base_url = str(runtime_llama["base_url"]).strip()
+            runtime_model = str(runtime_llama.get("model") or "").strip()
+            if runtime_model:
+                model = runtime_model
+            kind = KIND_LOCAL
     if kind not in (KIND_LOCAL, KIND_ONLINE):
         if kind:
             _issues.append(

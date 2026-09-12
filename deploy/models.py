@@ -86,6 +86,8 @@ class Snapshot:
     llm_endpoint_reachable: dict[str, bool | None] = field(default_factory=dict)
     llm_endpoint_error: dict[str, str] = field(default_factory=dict)
     llm_endpoint_models: dict[str, list[str]] = field(default_factory=dict)
+    # Runtime llama 的可诊断事实。它只影响 doctor 告警，不阻塞 Stella Core。
+    llama_readiness: dict = field(default_factory=dict)
     # .env 里仍留着的、已被新键取代的键（env_keys.SUPERSEDED）
     superseded_env_keys: list[str] = field(default_factory=list)
 

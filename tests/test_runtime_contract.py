@@ -16,6 +16,26 @@ def test_default_manifest_has_optional_components():
     assert manifest["schema_version"] == 1
     assert set(manifest["components"]) == {"stella", "llama", "onebot"}
     assert manifest["components"]["llama"]["enabled"] is False
+    assert manifest["components"]["llama"]["config"] == {
+        "host": "127.0.0.1",
+        "port": 8081,
+        "model": {"path": "", "package": "", "id": "", "checksum": ""},
+        "ctx_size": 4096,
+        "backend": "cpu",
+    }
+
+
+def test_enabled_llama_manifest_exposes_a_local_endpoint(monkeypatch, tmp_path):
+    payload = runtime.default_manifest()
+    payload["components"]["llama"]["enabled"] = True
+    payload["components"]["llama"]["config"]["model"]["id"] = "demo.gguf"
+    payload["components"]["llama"]["config"]["model"]["path"] = str(tmp_path / "demo.gguf")
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path)
+    runtime.write_manifest(payload)
+    endpoint = runtime.llama_endpoint_config()
+    assert endpoint["base_url"] == "http://127.0.0.1:8081"
+    assert endpoint["model"] == "demo.gguf"
+    assert endpoint["backend"] == "cpu"
 
 
 def test_unknown_operation_and_component_are_rejected():

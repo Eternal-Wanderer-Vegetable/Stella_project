@@ -84,6 +84,68 @@ def test_port_in_use_free_port():
     assert probe._port_in_use("127.0.0.1", 0) is False
 
 
+def test_probe_llama_readiness_requires_models_and_chat(monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(("get", url))
+        return type(
+            "Response",
+            (),
+            {
+                "raise_for_status": lambda self: None,
+                "json": lambda self: {"data": [{"id": "demo.gguf"}]},
+            },
+        )()
+
+    def fake_post(url, **kwargs):
+        calls.append(("post", url, kwargs["json"]))
+        return type(
+            "Response",
+            (),
+            {
+                "raise_for_status": lambda self: None,
+                "json": lambda self: {"choices": [{"message": {"content": "ok"}}]},
+            },
+        )()
+
+    monkeypatch.setattr(probe.httpx, "get", fake_get)
+    monkeypatch.setattr(probe.httpx, "post", fake_post)
+    monkeypatch.setattr(probe, "_port_in_use", lambda _host, _port: True)
+    result = probe.probe_llama_readiness(
+        "http://127.0.0.1:8081",
+        model="demo.gguf",
+        model_path="",
+        host="127.0.0.1",
+        port=8081,
+    )
+    assert result["ready"] is True
+    assert result["models_reachable"] is True
+    assert result["chat_reachable"] is True
+    assert calls[0][0] == "get"
+    assert calls[1][0] == "post"
+    assert calls[1][2]["max_tokens"] == 1
+
+
+def test_probe_llama_readiness_is_diagnostic_when_server_exits(monkeypatch):
+    monkeypatch.setattr(
+        probe,
+        "fetch_endpoint_models",
+        lambda *_args, **_kwargs: ([], "Connection refused"),
+    )
+    result = probe.probe_llama_readiness(
+        "http://127.0.0.1:8081",
+        model_path="C:/missing/model.gguf",
+        host="127.0.0.1",
+        port=8081,
+        runtime_state="failed",
+    )
+    assert result["ready"] is False
+    assert result["model_exists"] is False
+    assert result["runtime_state"] == "failed"
+    assert "Connection refused" in result["error"]
+
+
 def test_tcp_reachable_invalid_url():
     assert probe._tcp_reachable("ws://") is None
 

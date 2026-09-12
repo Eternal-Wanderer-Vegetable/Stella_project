@@ -58,12 +58,40 @@ pub struct LogSpec {
     pub path: String,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModelSpec {
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub package: String,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ComponentConfig {
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub model: ModelSpec,
+    #[serde(default)]
+    pub ctx_size: u32,
+    #[serde(default)]
+    pub backend: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentManifest {
     pub kind: Component,
     pub enabled: bool,
     #[serde(default)]
     pub dependencies: Vec<Component>,
+    #[serde(default)]
+    pub config: Option<ComponentConfig>,
     #[serde(default)]
     pub health: Option<HealthSpec>,
     #[serde(default)]
@@ -188,6 +216,7 @@ pub fn default_manifest(
             kind: Component::Stella,
             enabled: true,
             dependencies: vec![],
+            config: None,
             health: Some(HealthSpec {
                 kind: "http".into(),
                 path: Some("/stella/status".into()),
@@ -203,6 +232,18 @@ pub fn default_manifest(
             kind: Component::Llama,
             enabled: false,
             dependencies: vec![],
+            config: Some(ComponentConfig {
+                host: "127.0.0.1".into(),
+                port: 8081,
+                model: ModelSpec {
+                    path: String::new(),
+                    package: String::new(),
+                    id: String::new(),
+                    checksum: String::new(),
+                },
+                ctx_size: 4096,
+                backend: "cpu".into(),
+            }),
             health: Some(HealthSpec {
                 kind: "http".into(),
                 path: Some("/v1/models".into()),
@@ -218,6 +259,7 @@ pub fn default_manifest(
             kind: Component::Onebot,
             enabled: false,
             dependencies: vec![Component::Stella],
+            config: None,
             health: Some(HealthSpec {
                 kind: "link-status".into(),
                 path: None,
@@ -333,6 +375,10 @@ mod tests {
         assert_eq!(
             manifest.components["onebot"].dependencies,
             vec![Component::Stella]
+        );
+        assert_eq!(
+            manifest.components["llama"].config.as_ref().unwrap().port,
+            8081
         );
     }
 

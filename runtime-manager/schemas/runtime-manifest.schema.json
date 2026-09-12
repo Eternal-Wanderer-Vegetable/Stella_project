@@ -22,8 +22,29 @@
         "kind": {"enum": ["stella", "llama", "onebot"]},
         "enabled": {"type": "boolean"},
         "dependencies": {"type": "array", "items": {"enum": ["stella", "llama", "onebot"]}},
+        "config": {"$ref": "#/$defs/componentConfig"},
         "health": {"type": "object"},
         "logs": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "componentConfig": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string", "minLength": 1},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "model": {
+          "type": "object",
+          "properties": {
+            "path": {"type": "string"},
+            "package": {"type": "string"},
+            "id": {"type": "string"},
+            "checksum": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "ctx_size": {"type": "integer", "minimum": 1},
+        "backend": {"enum": ["cpu", "cuda", "hip", "metal", "vulkan"]}
       },
       "additionalProperties": false
     }
