@@ -1,0 +1,27 @@
+{
+  "id": "oneclick-python",
+  "version": "4.0.1",
+  "platform": "windows-amd64",
+  "core_flavor": "python",
+  "distribution": "oneclick",
+  "catalog_url": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/download/v4.0.1/package-catalog-windows-amd64.json",
+  "included_components": ["python-runtime", "llama-cpu", "napcat"],
+  "default_models": [
+    {
+      "id": "qwen3-embedding-0.6b",
+      "version": "q8_0",
+      "filename": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+      "source": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
+      "license": "Apache-2.0",
+      "sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+      "size": 639150592,
+      "dimension": 1024,
+      "role": "embedding"
+    }
+  ],
+  "optional_components": ["stella-memory-rust"],
+  "artifact": {
+    "kind": "installer",
+    "filename": "Stella-OneClick-Python-v4.0.1-windows-amd64.exe"
+  }
+}

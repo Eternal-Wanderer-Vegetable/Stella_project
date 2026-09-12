@@ -123,6 +123,8 @@ def _validate_record(record: Any) -> dict[str, Any]:
     }
     for key in (
         "backend",
+        "model_role",
+        "profile",
         "runtime_api",
         "driver_min",
         "abi",
@@ -141,6 +143,26 @@ def _validate_record(record: Any) -> dict[str, Any]:
             }:
                 raise PackageError("invalid_registry", f"不支持的 backend：{value}")
             normalized[key] = value.strip()
+    if record.get("size") is not None:
+        try:
+            size = int(record["size"])
+        except (TypeError, ValueError) as exc:
+            raise PackageError("invalid_registry", "包 size 必须是正整数") from exc
+        if size <= 0:
+            raise PackageError("invalid_registry", "包 size 必须是正整数")
+        normalized["size"] = size
+    if record.get("dimension") is not None:
+        try:
+            dimension = int(record["dimension"])
+        except (TypeError, ValueError) as exc:
+            raise PackageError("invalid_registry", "包 dimension 必须是正整数") from exc
+        if dimension <= 0:
+            raise PackageError("invalid_registry", "包 dimension 必须是正整数")
+        normalized["dimension"] = dimension
+    if record.get("remote") is not None:
+        if not isinstance(record["remote"], bool):
+            raise PackageError("invalid_registry", "包 remote 必须是布尔值")
+        normalized["remote"] = record["remote"]
     if record.get("dependencies") is not None:
         dependencies = record["dependencies"]
         if not isinstance(dependencies, list) or not all(
@@ -402,7 +424,9 @@ def rollback_model(data_root: Path | None = None) -> dict[str, Any]:
     return record
 
 
-def _catalog_records(root: Path, platform: str | None) -> list[dict[str, Any]]:
+def _catalog_records(
+    root: Path, platform: str | None, profile_id: str | None = None
+) -> list[dict[str, Any]]:
     version = state.program_version(root) or "unknown"
     candidates = (
         ("runtime", "python-bootstrap", version, "start.bat"),
@@ -446,29 +470,64 @@ def _catalog_records(root: Path, platform: str | None) -> list[dict[str, Any]]:
             if platform and record.get("platform") not in {None, platform}:
                 continue
             records.append(record)
+    if profile_id:
+        from .profiles import load_profile
+
+        profile = load_profile(profile_id)
+        for model in profile["default_models"]:
+            records.append(
+                {
+                    "kind": "model",
+                    "id": model["id"],
+                    "version": model["version"],
+                    "path": f"models/embedding/{model['filename']}",
+                    "checksum": model["sha256"],
+                    "platform": profile["platform"],
+                    "runtime_api": "llama.cpp-embedding",
+                    "license": model["license"],
+                    "source": model["source"],
+                    "artifact": model["filename"],
+                    "status": "available",
+                    "model_role": model["role"],
+                    "size": model["size"],
+                    "dimension": model["dimension"],
+                    "remote": True,
+                }
+            )
     return records
 
 
 def build_catalog(
-    root: Path = PROJECT_ROOT, *, platform: str | None = None
+    root: Path = PROJECT_ROOT,
+    *,
+    platform: str | None = None,
+    profile_id: str | None = None,
 ) -> dict[str, Any]:
     root = Path(root).resolve()
-    return {
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _now(),
         "platform": platform or "any",
-        "packages": _catalog_records(root, platform),
+        "packages": _catalog_records(root, platform, profile_id),
     }
+    if profile_id:
+        payload["profile"] = profile_id
+    return payload
 
 
 def catalog_path(root: Path = PROJECT_ROOT) -> Path:
     return Path(root) / CATALOG_FILENAME
 
 
-def write_catalog(root: Path = PROJECT_ROOT, *, platform: str | None = None) -> Path:
+def write_catalog(
+    root: Path = PROJECT_ROOT,
+    *,
+    platform: str | None = None,
+    profile_id: str | None = None,
+) -> Path:
     root = Path(root).resolve()
     path = catalog_path(root)
-    _atomic_write(path, build_catalog(root, platform=platform))
+    _atomic_write(path, build_catalog(root, platform=platform, profile_id=profile_id))
     return path
 
 
@@ -491,7 +550,10 @@ def verify_catalog(root: Path = PROJECT_ROOT) -> list[str]:
         try:
             record = _validate_record(item)
             file_path = root / record["path"]
-            if not file_path.is_file():
+            if record.get("remote"):
+                if not record.get("source"):
+                    problems.append(f"{record['id']} 缺少远程 source")
+            elif not file_path.is_file():
                 problems.append(f"{record['path']} 不存在")
             elif file_sha256(file_path) != record["checksum"]:
                 problems.append(f"{record['path']} checksum 不匹配")

@@ -1,0 +1,14 @@
+{
+  "id": "standalone-python",
+  "version": "4.0.1",
+  "platform": "windows-amd64",
+  "core_flavor": "python",
+  "distribution": "standalone",
+  "included_components": ["stella-core"],
+  "default_models": [],
+  "optional_components": ["stella-memory-rust"],
+  "artifact": {
+    "kind": "archive",
+    "filename": "Stella-Standalone-Python-v4.0.1-windows-amd64.zip"
+  }
+}
