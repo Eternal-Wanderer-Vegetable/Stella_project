@@ -164,7 +164,7 @@ jobs:
             "Stella Rust memory engine release"
             ""
             "This is a complete Stella Windows package with the Rust memory backend."
-            "Double-click Stella.exe or start.bat to launch it."
+            "Run start.bat to launch it."
             "The launcher installs the bundled wheel locally and selects MEMORY_BACKEND=rust."
             "The Python memory implementation remains in the package as the fallback."
           ) | Set-Content "$root\RUST_ENGINE.txt" -Encoding utf8
@@ -198,7 +198,6 @@ jobs:
             Pop-Location
           }
           foreach ($required in @(
-            "Stella.exe",
             "start.bat",
             "doctor.bat",
             "stop.bat",
@@ -220,7 +219,6 @@ jobs:
           Remove-Item $verify -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -LiteralPath "dist\$env:RUST_ASSET" -DestinationPath $verify
           foreach ($required in @(
-            "Stella.exe",
             "start.bat",
             "doctor.bat",
             "stop.bat",
