@@ -58,9 +58,20 @@ def build(source: Path, output: Path, *, backend: str, commit: str, os_name: str
         build_dir / "Release" / f"llama-server{suffix}",
         build_dir / f"llama-server{suffix}",
     ]
-    executable = next((path for path in candidates if path.is_file()), None)
+    discovered = sorted(
+        path
+        for path in build_dir.rglob(f"llama-server{suffix}")
+        if path.is_file() and path not in candidates
+    )
+    executable = next(
+        (path for path in [*candidates, *discovered] if path.is_file()),
+        None,
+    )
     if executable is None:
-        raise FileNotFoundError(f"cmake completed but llama-server was not found under {build_dir}")
+        raise FileNotFoundError(
+            f"cmake completed but llama-server was not found under {build_dir}; "
+            f"searched: {', '.join(str(path) for path in [*candidates, *discovered])}"
+        )
     shutil.copy2(executable, output / executable.name)
     for path in build_dir.rglob("*"):
         if path.is_file() and path.suffix.lower() in {".dll", ".so", ".dylib"}:
