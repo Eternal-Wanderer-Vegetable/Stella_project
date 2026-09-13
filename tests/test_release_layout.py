@@ -108,7 +108,7 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     installer = text[
         text.index("  build-installer:") : text.index("  build-rust-wheel:")
     ]
-    assert "needs: [build-rust-wheel]" in installer
+    assert "needs: [build-rust-wheel, build-oneclick-catalog-backend]" in installer
     download = installer.index("uses: actions/download-artifact@v4")
     prepare = installer.index("name: 准备 OneClick 内嵌程序资源")
     build = installer.index("name: 构建 OneClick NSIS 安装器")

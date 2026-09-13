@@ -218,6 +218,51 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
     assert not (output / "tests").exists()
 
 
+def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
+    source = tmp_path / "source"
+    for relative in (
+        "bot.py",
+        "requirements.txt",
+        "pyproject.toml",
+        "LICENSE",
+        "README.md",
+        ".env.example",
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
+        "runtime-manager/schemas/runtime-manifest.schema.json",
+        "runtime-manager/schemas/runtime-state.schema.json",
+        "runtime-manager/schemas/package-catalog.schema.json",
+        "runtime-manager/schemas/package-registry.schema.json",
+        "package-catalog-windows-amd64.json",
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    for directory in (
+        "config",
+        "core",
+        "deploy",
+        "extensions",
+        "memory",
+        "system_prompts",
+        "runtime-manager",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+
+    output = tmp_path / "resources"
+    stage_installer_resources(source, output, "oneclick-python")
+
+    assert (output / "package-catalog-windows-amd64.json").exists()
+
+
 def test_tauri_bundles_the_stella_resource_directory():
     config_path = (
         PROJECT_ROOT / "stella-installer" / "src-tauri" / "tauri.conf.json"

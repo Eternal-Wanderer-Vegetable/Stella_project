@@ -91,7 +91,7 @@ jobs:
   # OneClick 只发布 NSIS setup executable；程序树通过 Tauri resources 嵌入，
   # 安装后由 project_root() 从 resources/stella 定位。
   build-installer:
-    needs: [build-rust-wheel]
+    needs: [build-rust-wheel, build-oneclick-catalog-backend]
     strategy:
       fail-fast: false
       matrix:
@@ -133,9 +133,24 @@ jobs:
           name: stella-rust-wheel
           path: rust-wheel
 
+      - name: 下载 OneClick Windows CPU backend
+        uses: actions/download-artifact@v4
+        with:
+          name: stella-oneclick-catalog-backend
+          path: llama-catalog
+
       - name: 准备 OneClick 内嵌程序资源
         shell: pwsh
         run: |
+          $backend = @(Get-ChildItem 'llama-catalog\*.zip' -File)
+          if ($backend.Count -ne 1) {
+            throw "OneClick installer 必须下载恰好一个 Windows CPU backend，实际为 $($backend.Count)"
+          }
+          python scripts/build_release_catalog.py `
+            --backend-asset $backend[0].FullName `
+            --release-ref "v$env:RELEASE_VERSION" `
+            --repository "${{ github.repository }}" `
+            --output package-catalog-windows-amd64.json
           if ('${{ matrix.profile }}' -eq 'oneclick-rust') {
             New-Item -ItemType Directory -Force -Path wheels | Out-Null
             $wheels = @(Get-ChildItem 'rust-wheel\*.whl' -File)
@@ -143,6 +158,9 @@ jobs:
               throw "OneClick Rust 必须下载恰好一个 Rust wheel，实际为 $($wheels.Count)"
             }
             Copy-Item $wheels[0].FullName wheels\
+          }
+          if (-not (Test-Path -LiteralPath 'package-catalog-windows-amd64.json')) {
+            throw 'OneClick package catalog was not generated'
           }
           python scripts/build_release_package.py ${{ matrix.profile }} `
             --source . --output dist/unused `

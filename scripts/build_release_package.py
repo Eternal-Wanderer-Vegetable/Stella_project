@@ -176,6 +176,9 @@ def stage_installer_resources(source: Path, output: Path, profile_id: str) -> Pa
     output.mkdir(parents=True)
     for relative in INSTALLER_FILES + INSTALLER_DIRS:
         _copy_tree(source, output, relative)
+    bundled_catalog = source / "package-catalog-windows-amd64.json"
+    if bundled_catalog.is_file():
+        _copy_tree(source, output, bundled_catalog.name)
     wheels = source / "wheels"
     if profile["core_flavor"] == "rust" and wheels.is_dir():
         shutil.copytree(wheels, output / "wheels", dirs_exist_ok=True)

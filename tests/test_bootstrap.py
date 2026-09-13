@@ -102,6 +102,27 @@ def test_standalone_bootstrap_skips_network(tmp_path, monkeypatch):
     assert bootstrap.read_progress(tmp_path / "data")["state"] == "skipped"
 
 
+def test_bundled_catalog_is_used_before_network(tmp_path, monkeypatch):
+    catalog, _files = _catalog(tmp_path)
+    bundled = tmp_path / "package-catalog-windows-amd64.json"
+    bundled.write_bytes(catalog.read_bytes())
+    monkeypatch.setattr(bootstrap, "PROJECT_ROOT", tmp_path)
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("Bundled catalog should avoid catalog network access")
+
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", fail)
+    profile = {
+        "id": "oneclick-python",
+        "catalog_url": "https://example.invalid/catalog.json",
+    }
+
+    loaded = bootstrap._load_catalog(profile, None)
+
+    assert loaded["schema_version"] == 1
+    assert len(loaded["packages"]) == 3
+
+
 def test_oneclick_installs_declared_components_and_only_embedding(
     tmp_path, monkeypatch
 ):

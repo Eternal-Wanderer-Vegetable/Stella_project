@@ -16,11 +16,12 @@ from pathlib import Path
 from typing import Any
 
 from . import acquire, packages
-from .profiles import load_profile
+from .profiles import PROJECT_ROOT, load_profile
 
 PROGRESS_FILENAME = ".bootstrap-progress"
 COMPONENT_ROOT = Path(".stella") / "components"
 CATALOG_TIMEOUT = 30
+BUNDLED_CATALOG_FILENAME = "package-catalog-windows-amd64.json"
 
 
 class BootstrapError(ValueError):
@@ -85,9 +86,17 @@ def read_progress(data_root: Path) -> dict[str, Any] | None:
 
 
 def _load_catalog(profile: dict[str, Any], catalog_path: Path | None) -> dict[str, Any]:
-    if catalog_path is not None:
+    local_catalog = (
+        Path(PROJECT_ROOT) / BUNDLED_CATALOG_FILENAME
+        if catalog_path is None
+        else None
+    )
+    source_path = Path(catalog_path) if catalog_path is not None else local_catalog
+    if source_path is not None and (
+        catalog_path is not None or source_path.is_file()
+    ):
         try:
-            payload = json.loads(Path(catalog_path).read_text(encoding="utf-8"))
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError) as exc:
             raise BootstrapError(
                 "catalog_read_failed", "无法读取产品 package catalog"

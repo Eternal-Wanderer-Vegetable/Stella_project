@@ -11,7 +11,7 @@ def test_build_finds_multiconfig_windows_server_output(tmp_path, monkeypatch):
     (source / "LICENSE").write_text("license", encoding="utf-8")
     output = tmp_path / "dist" / "package"
     build_dir = output.parent / ".llama-build-cpu"
-    executable = build_dir / "bin" / "Release" / "llama-server.exe"
+    executable = build_dir / "bin" / "Release" / "x64" / "llama-server.exe"
 
     def fake_run(command, *, check):
         assert check is True
