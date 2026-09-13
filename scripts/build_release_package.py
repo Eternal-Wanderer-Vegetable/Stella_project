@@ -12,7 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from deploy.profiles import load_profile
+from deploy.profiles import PROFILE_IDS, load_profile
 
 COMMON_FILES = (
     "bot.py",
@@ -42,6 +42,7 @@ INSTALLER_FILES = (
     "runtime-manager/schemas/runtime-state.schema.json",
     "runtime-manager/schemas/package-catalog.schema.json",
     "runtime-manager/schemas/package-registry.schema.json",
+    *(f"release_assets/product-profiles/{profile_id}.json" for profile_id in PROFILE_IDS),
 )
 INSTALLER_DIRS = COMMON_DIRS
 FORBIDDEN_PARTS = (
