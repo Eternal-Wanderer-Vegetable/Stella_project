@@ -42,8 +42,19 @@ jobs:
             $version = '${{ inputs.version }}' -replace '^v', ''
           }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
-          if ($version -ne '4.0.1') {
-            throw "OneClick release 只允许 v4.0.1，实际为 $version"
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "非法 Release 版本: $version"
+          }
+          $pyproject = Get-Content 'pyproject.toml' -Raw
+          $pythonVersion = [regex]::Match(
+            $pyproject, '(?m)^version = "([^"]+)"'
+          ).Groups[1].Value
+          $cli = Get-Content 'cli/Cargo.toml' -Raw
+          $cliVersion = [regex]::Match(
+            $cli, '(?m)^version = "([^"]+)"'
+          ).Groups[1].Value
+          if ($pythonVersion -ne $version -or $cliVersion -ne $version) {
+            throw "主版本不一致: pyproject=$pythonVersion cli/Cargo.toml=$cliVersion release=$version"
           }
 
       # needs 只保证上游 job 已完成，不会把 upload-artifact 的文件自动放进
@@ -237,7 +248,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 防止忘改 pyproject.toml 版本号：tag v0.3.0 必须与 version = "0.3.0" 一致
+      # 防止忘改 pyproject.toml 版本号：tag 必须与项目版本一致
       - name: 校验版本号一致
         run: |
           VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
@@ -415,17 +426,22 @@ jobs:
       - name: 校验并收集四类产品资产
         run: |
           set -e
-          cp dist/Stella-Standalone-Python-v4.0.1-windows-amd64.zip dist/products/
-          cp dist/Stella-Standalone-Rust-v4.0.1-windows-amd64.zip dist/products/
+          python_version="${RELEASE_REF#v}"
+          python_asset="Stella-Standalone-Python-v${python_version}-windows-amd64.zip"
+          rust_asset="Stella-Standalone-Rust-v${python_version}-windows-amd64.zip"
+          oneclick_python="Stella-OneClick-Python-v${python_version}-windows-amd64.exe"
+          oneclick_rust="Stella-OneClick-Rust-v${python_version}-windows-amd64.exe"
+          cp "dist/${python_asset}" dist/products/
+          cp "dist/${rust_asset}" dist/products/
           cp installer-bin/oneclick-python/*.exe dist/products/
           cp installer-bin/oneclick-rust/*.exe dist/products/
-          test -s dist/products/Stella-OneClick-Python-v4.0.1-windows-amd64.exe
-          test -s dist/products/Stella-OneClick-Rust-v4.0.1-windows-amd64.exe
-          test -s dist/products/Stella-Standalone-Python-v4.0.1-windows-amd64.zip
-          test -s dist/products/Stella-Standalone-Rust-v4.0.1-windows-amd64.zip
-          if unzip -l dist/products/Stella-Standalone-Python-v4.0.1-windows-amd64.zip \
+          test -s "dist/products/${oneclick_python}"
+          test -s "dist/products/${oneclick_rust}"
+          test -s "dist/products/${python_asset}"
+          test -s "dist/products/${rust_asset}"
+          if unzip -l "dist/products/${python_asset}" \
             | grep -E '(^|/)(runtime|napcat|models|llama-server)'; then exit 1; fi
-          if unzip -l dist/products/Stella-Standalone-Rust-v4.0.1-windows-amd64.zip \
+          if unzip -l "dist/products/${rust_asset}" \
             | grep -E '(^|/)(runtime|napcat|models|llama-server)'; then exit 1; fi
 
       # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 4.0.1"
+        description: "Release version, for example 4.0.2"
         required: true
-        default: "4.0.1"
+        default: "4.0.2"
         type: string
       llama_commit:
         description: "Pinned llama.cpp commit"
@@ -54,7 +54,10 @@ jobs:
           set -euo pipefail
           VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
-          test "$VERSION" = "4.0.1"
+          PY_VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          CLI_VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          test "$VERSION" = "$PY_VERSION"
+          test "$VERSION" = "$CLI_VERSION"
           mkdir -p "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}"
           python scripts/build_llama_package.py .llama.cpp \
             --output "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}" \
@@ -70,7 +73,7 @@ jobs:
           python scripts/verify_llama_package.py "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: Stella-llama-v${{ inputs.version || '4.0.1' }}-${{ matrix.target }}-${{ matrix.backend }}
+          name: llama-${{ matrix.target }}-${{ matrix.backend }}
           path: dist/Stella-llama-v*-${{ matrix.target }}-${{ matrix.backend }}
 
   publish:
@@ -83,12 +86,15 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
-          test "$VERSION" = "4.0.1"
+          PY_VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          CLI_VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          test "$VERSION" = "$PY_VERSION"
+          test "$VERSION" = "$CLI_VERSION"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "RELEASE_REF=v$VERSION" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
-          pattern: Stella-llama-v*
+          pattern: llama-*
           path: dist
           merge-multiple: false
       - name: Package and publish verified backend assets
@@ -105,7 +111,7 @@ jobs:
           test "${#assets[@]}" -eq 5
           cpu_asset="Stella-llama-v${VERSION}-windows-x86_64-cpu.zip"
           test -f "$cpu_asset"
-          python scripts/build_release_catalog.py \
+          python ../scripts/build_release_catalog.py \
             --backend-asset "$cpu_asset" \
             --release-ref "$RELEASE_REF" \
             --repository "${GITHUB_REPOSITORY}" \
