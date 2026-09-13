@@ -69,6 +69,25 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "pyproject.toml" in rust and "cli/Cargo.toml" in rust
 
 
+def test_oneclick_rust_downloads_wheel_before_tauri_build():
+    """The slow installer build must consume an explicitly downloaded wheel."""
+    text = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    installer = text[
+        text.index("  build-installer:") : text.index("  build-rust-wheel:")
+    ]
+    assert "needs: [build-rust-wheel]" in installer
+    download = installer.index("uses: actions/download-artifact@v4")
+    prepare = installer.index("name: 准备 OneClick 内嵌程序资源")
+    build = installer.index("name: 构建 OneClick NSIS 安装器")
+    assert download < prepare < build
+    assert "name: stella-rust-wheel" in installer
+    assert "path: rust-wheel" in installer
+    assert "Get-ChildItem 'rust-wheel\\*.whl' -File" in installer
+    assert "必须下载恰好一个 Rust wheel" in installer
+
+
 def test_rust_metadata_guard_handles_windows_line_endings():
     """Rust metadata validation must work for both LF and Windows CRLF files."""
     rust = (

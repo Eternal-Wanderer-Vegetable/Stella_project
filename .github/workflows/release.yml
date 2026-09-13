@@ -46,12 +46,25 @@ jobs:
             throw "OneClick release 只允许 v4.0.1，实际为 $version"
           }
 
+      # needs 只保证上游 job 已完成，不会把 upload-artifact 的文件自动放进
+      # 当前 runner；必须显式下载，且下载完成后才能开始慢速的 Tauri 构建。
+      - name: 下载 Rust memory wheel（OneClick Rust）
+        if: matrix.profile == 'oneclick-rust'
+        uses: actions/download-artifact@v4
+        with:
+          name: stella-rust-wheel
+          path: rust-wheel
+
       - name: 准备 OneClick 内嵌程序资源
         shell: pwsh
         run: |
           if ('${{ matrix.profile }}' -eq 'oneclick-rust') {
             New-Item -ItemType Directory -Force -Path wheels | Out-Null
-            Copy-Item 'rust-wheel\*.whl' wheels\
+            $wheels = @(Get-ChildItem 'rust-wheel\*.whl' -File)
+            if ($wheels.Count -ne 1) {
+              throw "OneClick Rust 必须下载恰好一个 Rust wheel，实际为 $($wheels.Count)"
+            }
+            Copy-Item $wheels[0].FullName wheels\
           }
           python scripts/build_release_package.py ${{ matrix.profile }} `
             --source . --output dist/unused `
