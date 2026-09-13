@@ -174,7 +174,16 @@ jobs:
           $wheelVerify = Join-Path $env:RUNNER_TEMP "stella-rust-wheel-verify"
           Remove-Item $wheelVerify -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $wheelVerify | Out-Null
-          Copy-Item "$root\memory_rust" "$wheelVerify\memory_rust" -Recurse
+          $sourceRust = Join-Path $PWD "memory_rust"
+          if (-not (Test-Path -LiteralPath $sourceRust -PathType Container)) {
+            throw "Rust engine source package is missing: $sourceRust"
+          }
+          Copy-Item -LiteralPath $sourceRust -Destination $wheelVerify -Recurse
+          Remove-Item "$wheelVerify\memory_rust\native\target" `
+            -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem "$wheelVerify\memory_rust" -Directory -Recurse |
+            Where-Object { $_.Name -in @('__pycache__', '.pytest_cache') } |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           $rustWheels = @(Get-ChildItem "$root\wheels\stella_memory_rust-*.whl")
           if ($rustWheels.Count -ne 1) {
             throw "Rust wheel build must produce exactly one wheel"
