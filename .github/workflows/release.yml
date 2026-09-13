@@ -433,8 +433,8 @@ jobs:
           oneclick_rust="Stella-OneClick-Rust-v${python_version}-windows-amd64.exe"
           cp "dist/${python_asset}" dist/products/
           cp "dist/${rust_asset}" dist/products/
-          cp installer-bin/oneclick-python/*.exe dist/products/
-          cp installer-bin/oneclick-rust/*.exe dist/products/
+          cp installer-bin/stella-installer-oneclick-python/*.exe dist/products/
+          cp installer-bin/stella-installer-oneclick-rust/*.exe dist/products/
           test -s "dist/products/${oneclick_python}"
           test -s "dist/products/${oneclick_rust}"
           test -s "dist/products/${python_asset}"
