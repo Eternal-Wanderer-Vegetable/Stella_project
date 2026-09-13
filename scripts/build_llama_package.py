@@ -54,6 +54,7 @@ def build(source: Path, output: Path, *, backend: str, commit: str, os_name: str
     suffix = ".exe" if os_name.lower().startswith("windows") else ""
     candidates = [
         build_dir / "bin" / f"llama-server{suffix}",
+        build_dir / "bin" / "Release" / f"llama-server{suffix}",
         build_dir / "Release" / f"llama-server{suffix}",
         build_dir / f"llama-server{suffix}",
     ]
