@@ -128,6 +128,10 @@ def test_release_catalog_contains_windows_cpu_napcat_and_embedding(tmp_path):
     assert catalog["packages"][0]["source"].startswith(
         "https://github.com/owner/repo/releases/download/v4.0.1/"
     )
+    napcat = next(item for item in catalog["packages"] if item["id"] == "napcat")
+    assert napcat["path"] == napcat["artifact"]
+    for item in catalog["packages"]:
+        packages._validate_record(item)
     assert not any(
         item.get("model_role") in {"chat", "consolidation", "reranker"}
         for item in catalog["packages"]
