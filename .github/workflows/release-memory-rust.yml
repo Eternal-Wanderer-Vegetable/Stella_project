@@ -203,7 +203,6 @@ jobs:
             "stop.bat",
             "bot.py",
             "requirements.txt",
-            "memory_rust",
             "wheels",
             "RUST_ENGINE.txt"
           )) {

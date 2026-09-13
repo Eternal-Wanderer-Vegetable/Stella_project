@@ -19,6 +19,7 @@ NAPCAT = {
     "kind": "onebot",
     "id": "napcat",
     "version": "3.2.1",
+    "path": "NapCatQQ-Desktop-3.2.1-x64.msi",
     "platform": "windows-amd64",
     "source": (
         "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download/"
