@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import subprocess
+import sys
 import zipfile
 
 import pytest
@@ -77,6 +79,23 @@ def test_profile_metadata_tracks_project_version_when_template_is_stale():
     assert normalized["version"] == version
     assert f"v{version}" in normalized["catalog_url"]
     assert f"v{version}" in normalized["artifact"]["filename"]
+
+
+def test_profile_loader_does_not_require_runtime_dependencies():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            "from deploy.profiles import load_profile; load_profile('oneclick-rust')",
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
