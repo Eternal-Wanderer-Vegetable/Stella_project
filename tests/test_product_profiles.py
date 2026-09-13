@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import subprocess
 import sys
 import zipfile
@@ -210,3 +211,12 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
     )
     assert (output / "deploy" / "__init__.py").exists()
     assert not (output / "tests").exists()
+
+
+def test_tauri_bundles_the_stella_resource_directory():
+    config_path = (
+        PROJECT_ROOT / "stella-installer" / "src-tauri" / "tauri.conf.json"
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert config["bundle"]["resources"] == ["resources/stella"]
