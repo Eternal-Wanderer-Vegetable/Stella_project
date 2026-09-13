@@ -120,6 +120,10 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
         "cp installer-bin/stella-installer-oneclick-rust/*.exe dist/products/"
         in text
     )
+    assert (
+        "grep -E '(^|/)(runtime|napcat|models|llama-server)(/|$)'"
+        in text
+    )
 
 
 def test_rust_metadata_guard_handles_windows_line_endings():
