@@ -1,10 +1,10 @@
 {
   "id": "oneclick-python",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "platform": "windows-amd64",
   "core_flavor": "python",
   "distribution": "oneclick",
-  "catalog_url": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/download/v4.0.2/package-catalog-windows-amd64.json",
+  "catalog_url": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/download/v4.0.3/package-catalog-windows-amd64.json",
   "included_components": ["python-runtime", "llama-cpu", "napcat"],
   "default_models": [
     {
@@ -22,6 +22,6 @@
   "optional_components": ["stella-memory-rust"],
   "artifact": {
     "kind": "installer",
-    "filename": "Stella-OneClick-Python-v4.0.2-windows-amd64.exe"
+    "filename": "Stella-OneClick-Python-v4.0.3-windows-amd64.exe"
   }
 }

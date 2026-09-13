@@ -22,7 +22,7 @@
         "standalone-rust"
       ]
     },
-    "version": {"const": "4.0.1"},
+    "version": {"const": "4.0.3"},
     "platform": {"const": "windows-amd64"},
     "core_flavor": {"enum": ["python", "rust"]},
     "distribution": {"enum": ["oneclick", "standalone"]},

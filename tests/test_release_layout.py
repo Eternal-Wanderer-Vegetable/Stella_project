@@ -81,6 +81,19 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "test \"$VERSION\" = \"4.0.1\"" not in llama
 
 
+def test_release_profiles_are_versioned_with_the_project():
+    """A project version bump must not leave profiles naming the previous release."""
+    from config.state import program_version
+    from deploy.profiles import load_profiles
+
+    version = program_version(PROJECT_ROOT)
+    profiles = load_profiles()
+    assert version == "4.0.3"
+    for profile in profiles.values():
+        assert profile["version"] == version
+        assert f"-v{version}-" in profile["artifact"]["filename"]
+
+
 def test_oneclick_rust_downloads_wheel_before_tauri_build():
     """The slow installer build must consume an explicitly downloaded wheel."""
     text = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(

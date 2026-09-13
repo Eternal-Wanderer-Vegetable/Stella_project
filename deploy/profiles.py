@@ -8,7 +8,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from config.state import program_version
+
 PROFILE_ROOT = Path(__file__).resolve().parent.parent / "release_assets" / "product-profiles"
+PROJECT_ROOT = PROFILE_ROOT.parent.parent
 PROFILE_IDS = (
     "oneclick-python",
     "oneclick-rust",
@@ -36,6 +39,13 @@ FORBIDDEN_DEFAULT_MODEL_ROLES = ("chat", "consolidation", "reranker")
 
 class ProfileError(ValueError):
     """Raised when a release profile is incomplete or internally inconsistent."""
+
+
+def _current_project_version() -> str:
+    version = program_version(PROJECT_ROOT)
+    if not version:
+        raise ProfileError("无法从 pyproject.toml 读取项目版本")
+    return version
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -68,8 +78,11 @@ def validate_profile(payload: Any) -> dict[str, Any]:
     profile_id = str(payload["id"]).strip()
     if profile_id not in PROFILE_IDS:
         raise ProfileError(f"未知产品 profile：{profile_id}")
-    if str(payload["version"]).strip() != "4.0.2":
-        raise ProfileError("产品 profile 当前必须是 4.0.2")
+    project_version = _current_project_version()
+    if str(payload["version"]).strip() != project_version:
+        raise ProfileError(
+            f"产品 profile 版本必须与项目版本 {project_version} 一致"
+        )
     if str(payload["platform"]).strip() not in SUPPORTED_PLATFORMS:
         raise ProfileError("产品 profile platform 不受支持")
     flavor = str(payload["core_flavor"]).strip()
@@ -113,7 +126,7 @@ def validate_profile(payload: Any) -> dict[str, Any]:
         raise ProfileError("禁止默认安装 chat/consolidation/reranker 模型")
     normalized = dict(payload)
     normalized["id"] = profile_id
-    normalized["version"] = "4.0.2"
+    normalized["version"] = project_version
     normalized["platform"] = str(payload["platform"]).strip()
     normalized["core_flavor"] = flavor
     normalized["distribution"] = distribution
