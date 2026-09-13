@@ -433,12 +433,30 @@ jobs:
           oneclick_rust="Stella-OneClick-Rust-v${python_version}-windows-amd64.exe"
           cp "dist/${python_asset}" dist/products/
           cp "dist/${rust_asset}" dist/products/
-          cp installer-bin/stella-installer-oneclick-python/*.exe dist/products/
-          cp installer-bin/stella-installer-oneclick-rust/*.exe dist/products/
-          test -s "dist/products/${oneclick_python}"
-          test -s "dist/products/${oneclick_rust}"
-          test -s "dist/products/${python_asset}"
-          test -s "dist/products/${rust_asset}"
+          for profile in oneclick-python oneclick-rust; do
+            installer_dir="installer-bin/stella-installer-${profile}"
+            mapfile -t installers < <(
+              find "$installer_dir" -maxdepth 1 -type f -name '*.exe' -print
+            )
+            if [ "${#installers[@]}" -ne 1 ]; then
+              echo "::error::${profile} 必须下载恰好一个安装器，实际为 ${#installers[@]}"
+              printf '%s\n' "${installers[@]}"
+              exit 1
+            fi
+            python scripts/build_release_package.py "$profile" \
+              --source . --output "dist/$profile" \
+              --installer "${installers[0]}"
+          done
+          cp "dist/oneclick-python/${oneclick_python}" dist/products/
+          cp "dist/oneclick-rust/${oneclick_rust}" dist/products/
+          for asset in \
+            "$oneclick_python" "$oneclick_rust" \
+            "$python_asset" "$rust_asset"; do
+            if [ ! -s "dist/products/${asset}" ]; then
+              echo "::error::缺少发布资产或文件为空: ${asset}"
+              exit 1
+            fi
+          done
           python scripts/check_release_archive.py "dist/products/${python_asset}"
           python scripts/check_release_archive.py "dist/products/${rust_asset}"
 

@@ -113,13 +113,16 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     assert "必须下载恰好一个 Rust wheel" in installer
     assert "merge-multiple: false" in text
     assert (
-        "cp installer-bin/stella-installer-oneclick-python/*.exe dist/products/"
+        'installer_dir="installer-bin/stella-installer-${profile}"'
         in text
     )
-    assert (
-        "cp installer-bin/stella-installer-oneclick-rust/*.exe dist/products/"
-        in text
-    )
+    assert "mapfile -t installers" in text
+    assert "必须下载恰好一个安装器" in text
+    assert 'python scripts/build_release_package.py "$profile"' in text
+    assert '--installer "${installers[0]}"' in text
+    assert 'cp "dist/oneclick-python/${oneclick_python}" dist/products/' in text
+    assert 'cp "dist/oneclick-rust/${oneclick_rust}" dist/products/' in text
+    assert '缺少发布资产或文件为空' in text
     assert (
         'python scripts/check_release_archive.py "dist/products/${python_asset}"'
         in text
