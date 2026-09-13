@@ -1,4 +1,4 @@
-# Stella v4.0.2 发布说明
+# Stella v4.0.4 发布说明
 
 > 打 tag 前把本文件更新为本版本的内容，CI 会直接把它作为 Release Notes。
 
@@ -46,7 +46,7 @@ python -m deploy migrate             # 执行
 
 ```text
 D:\你的目录\
-  Stella-v4.0.2\         ← 程序（升级时整个换掉，可以放心删）
+  Stella-v4.0.4\         ← 程序（升级时整个换掉，可以放心删）
   StellaData\            ← 你的数据（升级时一动不动）
 ```
 
