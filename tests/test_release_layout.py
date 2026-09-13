@@ -55,6 +55,12 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "oneclick_rust=\"Stella-OneClick-Rust-v${python_version}" in main
     assert "products/*.exe" in main
     assert "products/*.zip" in main
+    assert "build-oneclick-catalog-backend:" in main
+    assert "LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d" in main
+    assert "stella-oneclick-catalog-backend" in main
+    assert 'cp "${catalog_backends[0]}" dist/products/' in main
+    assert "python scripts/build_release_catalog.py" in main
+    assert "products/package-catalog-windows-amd64.json" in main
     assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
     assert "Rust asset upload failed" in rust
@@ -156,6 +162,9 @@ def test_rust_release_is_a_complete_launchable_engine_package():
     )
     assert 'Expand-Archive -LiteralPath "dist\\base\\$baseAsset"' in rust
     assert 'Copy-Item "dist\\rust-wheel\\*.whl" "$root\\wheels\\"' in rust
+    assert '$sourceRust = Join-Path $PWD "memory_rust"' in rust
+    assert 'Copy-Item -LiteralPath $sourceRust -Destination $wheelVerify -Recurse' in rust
+    assert 'Copy-Item "$root\\memory_rust"' not in rust
     assert '"Stella.exe"' in rust
     assert '"start.bat"' in rust
     assert '"wheels"' in rust

@@ -19,7 +19,74 @@ on:
 permissions:
   contents: write
 
+env:
+  # The OneClick catalog must point at a reproducible Windows CPU backend.
+  LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d
+
 jobs:
+  # OneClick installation is not publishable without the CPU backend catalog.
+  # Build this package in the main release workflow so the catalog is uploaded
+  # before the Release becomes visible to end users.
+  build-oneclick-catalog-backend:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析并校验发布版本
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push') {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          } else {
+            $version = '${{ inputs.version }}' -replace '^v', ''
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "非法 Release 版本: $version"
+          }
+          $pyproject = Get-Content 'pyproject.toml' -Raw
+          $pythonVersion = [regex]::Match(
+            $pyproject, '(?m)^version = "([^"]+)"'
+          ).Groups[1].Value
+          if ($pythonVersion -ne $version) {
+            throw "主版本不一致: pyproject=$pythonVersion release=$version"
+          }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Checkout pinned llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: ${{ env.LLAMA_CPP_COMMIT }}
+          path: .llama.cpp
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 构建并校验 Windows CPU backend
+        shell: pwsh
+        run: |
+          $package = "dist\Stella-llama-v$env:RELEASE_VERSION-windows-x86_64-cpu"
+          $archive = "dist\Stella-llama-v$env:RELEASE_VERSION-windows-x86_64-cpu.zip"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          python scripts/build_llama_package.py .llama.cpp `
+            --output $package `
+            --backend cpu `
+            --commit $env:LLAMA_CPP_COMMIT `
+            --os windows `
+            --arch windows-amd64
+          python scripts/verify_llama_package.py $package
+          Compress-Archive -Path "$package\*" -DestinationPath $archive
+          if (-not (Test-Path -LiteralPath $archive)) {
+            throw "Windows CPU backend asset was not created: $archive"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stella-oneclick-catalog-backend
+          path: dist/Stella-llama-v*-windows-x86_64-cpu.zip
+          if-no-files-found: error
+
   # Tauri 的 Windows WebView/Rust 产物必须在 Windows runner 上构建。
   # OneClick 只发布 NSIS setup executable；程序树通过 Tauri resources 嵌入，
   # 安装后由 project_root() 从 resources/stella 定位。
@@ -243,7 +310,14 @@ jobs:
           if-no-files-found: error
 
   build:
-    needs: [build-installer, build-rust-wheel, build-cli-linux-binary, build-cli-windows-binary]
+    needs:
+      [
+        build-installer,
+        build-rust-wheel,
+        build-cli-linux-binary,
+        build-cli-windows-binary,
+        build-oneclick-catalog-backend
+      ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -358,6 +432,12 @@ jobs:
           name: stella-rust-wheel
           path: rust-wheel
 
+      - name: 下载 OneClick Windows CPU backend
+        uses: actions/download-artifact@v4
+        with:
+          name: stella-oneclick-catalog-backend
+          path: llama-catalog
+
       - name: 校验 CLI 二进制到位
         run: |
           test -s cli-bin/stellacli-linux/stellacli || { echo "::error::缺少 Linux CLI 二进制"; exit 1; }
@@ -415,6 +495,22 @@ jobs:
             --source . --output dist/standalone-rust \
             --rust-wheel rust-wheel/*.whl
           python scripts/build_release_package.py --help >/dev/null
+
+          mapfile -t catalog_backends < <(
+            find llama-catalog -maxdepth 1 -type f -name '*.zip' -print
+          )
+          if [ "${#catalog_backends[@]}" -ne 1 ]; then
+            echo "::error::OneClick catalog 必须下载恰好一个 Windows CPU backend"
+            printf '%s\n' "${catalog_backends[@]}"
+            exit 1
+          fi
+          cp "${catalog_backends[0]}" dist/products/
+          python scripts/build_release_catalog.py \
+            --backend-asset "${catalog_backends[0]}" \
+            --release-ref "${RELEASE_REF}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --output dist/products/package-catalog-windows-amd64.json
+          test -s dist/products/package-catalog-windows-amd64.json
 
       - name: 下载 OneClick 安装程序
         uses: actions/download-artifact@v4
@@ -530,7 +626,8 @@ jobs:
         run: |
           set -e
           cd dist
-          for f in products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+          for f in products/*.exe products/*.zip \
+            products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ"; do
             if [ ! -f "$f" ]; then
               echo "::error::找不到发布包 $f"
               exit 1
@@ -538,11 +635,13 @@ jobs:
           done
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
-            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
-            gh release create "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" \
+            gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
               --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}"
@@ -559,7 +658,8 @@ jobs:
         run: |
           set -e
           cd dist
-          for f in products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+          for f in products/*.exe products/*.zip \
+            products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ"; do
             if [ ! -f "$f" ]; then
               echo "::error::找不到发布包 $f"
               exit 1
@@ -567,11 +667,13 @@ jobs:
           done
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
-            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
-            gh release create "${RELEASE_REF}" products/*.exe products/*.zip "$CLI_WIN_ZIP" "$CLI_TGZ" \
+            gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
               --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
