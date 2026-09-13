@@ -165,7 +165,8 @@ def test_rust_release_is_a_complete_launchable_engine_package():
     assert '$sourceRust = Join-Path $PWD "memory_rust"' in rust
     assert 'Copy-Item -LiteralPath $sourceRust -Destination $wheelVerify -Recurse' in rust
     assert 'Copy-Item "$root\\memory_rust"' not in rust
-    assert '"Stella.exe"' in rust
+    assert '"Stella.exe"' not in rust
+    assert '"Run start.bat to launch it."' in rust
     assert '"start.bat"' in rust
     assert '"wheels"' in rust
     assert '"RUST_ENGINE.txt"' in rust
