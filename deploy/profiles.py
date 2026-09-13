@@ -9,8 +9,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from config.state import program_version
-
 PROFILE_ROOT = Path(__file__).resolve().parent.parent / "release_assets" / "product-profiles"
 PROJECT_ROOT = PROFILE_ROOT.parent.parent
 PROFILE_IDS = (
@@ -43,10 +41,18 @@ class ProfileError(ValueError):
 
 
 def _current_project_version() -> str:
-    version = program_version(PROJECT_ROOT)
-    if not version:
-        raise ProfileError("无法从 pyproject.toml 读取项目版本")
-    return version
+    """Read the version without importing runtime configuration dependencies."""
+    path = PROJECT_ROOT / "pyproject.toml"
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("version = ", "version=")):
+                version = stripped.split("=", 1)[1].strip().strip("\"'")
+                if version:
+                    return version
+    except OSError as exc:
+        raise ProfileError("无法从 pyproject.toml 读取项目版本") from exc
+    raise ProfileError("无法从 pyproject.toml 读取项目版本")
 
 
 def _materialize_release_metadata(
