@@ -56,6 +56,13 @@ FORBIDDEN_PARTS = (
     "design_docs",
     "stella-installer",
     "benchmark",
+    "target",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".venv",
+    "venv",
 )
 
 

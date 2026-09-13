@@ -127,10 +127,18 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    for relative in ("deploy/napcat.py", "deploy/models.py", "deploy/runtime.py"):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
     (source / "runtime" / "python.exe").parent.mkdir(parents=True)
     (source / "runtime" / "python.exe").write_bytes(b"must not ship")
     (source / "models" / "chat.gguf").parent.mkdir(parents=True)
     (source / "models" / "chat.gguf").write_bytes(b"must not ship")
+    (source / "runtime-manager" / "target" / "debug").mkdir(parents=True)
+    (source / "runtime-manager" / "target" / "debug" / "build.bin").write_bytes(
+        b"must not ship"
+    )
 
     archive = build_standalone(
         source,
@@ -142,6 +150,10 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     assert "bot.py" in names
     assert "runtime/python.exe" not in names
     assert "models/chat.gguf" not in names
+    assert "deploy/napcat.py" in names
+    assert "deploy/models.py" in names
+    assert "deploy/runtime.py" in names
+    assert "runtime-manager/target/debug/build.bin" not in names
 
 
 def test_release_builder_oneclick_is_single_executable(tmp_path):
