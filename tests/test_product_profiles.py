@@ -200,6 +200,10 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
     (source / "tests").mkdir()
     (source / "tests" / "secret.txt").write_text("must not ship", encoding="utf-8")
 
@@ -210,6 +214,7 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         "oneclick-python"
     )
     assert (output / "deploy" / "__init__.py").exists()
+    assert (output / "release_assets" / "product-profiles" / "oneclick-rust.json").exists()
     assert not (output / "tests").exists()
 
 
