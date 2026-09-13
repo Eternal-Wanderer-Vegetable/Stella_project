@@ -1,10 +1,10 @@
 {
   "id": "oneclick-rust",
-  "version": "4.0.3",
+  "version": "4.0.4",
   "platform": "windows-amd64",
   "core_flavor": "rust",
   "distribution": "oneclick",
-  "catalog_url": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/download/v4.0.3/package-catalog-windows-amd64.json",
+  "catalog_url": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/download/v4.0.4/package-catalog-windows-amd64.json",
   "included_components": ["python-runtime", "llama-cpu", "napcat"],
   "default_models": [
     {
@@ -22,6 +22,6 @@
   "optional_components": [],
   "artifact": {
     "kind": "installer",
-    "filename": "Stella-OneClick-Rust-v4.0.3-windows-amd64.exe"
+    "filename": "Stella-OneClick-Rust-v4.0.4-windows-amd64.exe"
   }
 }

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,36 @@ def _current_project_version() -> str:
     return version
 
 
+def _materialize_release_metadata(
+    payload: dict[str, Any], project_version: str
+) -> dict[str, Any]:
+    """Resolve versioned release metadata from the current project version."""
+    normalized = dict(payload)
+    normalized["version"] = project_version
+
+    artifact = payload.get("artifact")
+    if isinstance(artifact, dict):
+        normalized_artifact = dict(artifact)
+        filename = str(normalized_artifact.get("filename", ""))
+        normalized_artifact["filename"] = re.sub(
+            r"(?<=-v)\d+\.\d+\.\d+(?=-)",
+            project_version,
+            filename,
+            count=1,
+        )
+        normalized["artifact"] = normalized_artifact
+
+    catalog_url = payload.get("catalog_url")
+    if isinstance(catalog_url, str):
+        normalized["catalog_url"] = re.sub(
+            r"(/releases/download/)v[^/]+(/)",
+            rf"\g<1>v{project_version}\g<2>",
+            catalog_url,
+            count=1,
+        )
+    return normalized
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -79,10 +110,7 @@ def validate_profile(payload: Any) -> dict[str, Any]:
     if profile_id not in PROFILE_IDS:
         raise ProfileError(f"未知产品 profile：{profile_id}")
     project_version = _current_project_version()
-    if str(payload["version"]).strip() != project_version:
-        raise ProfileError(
-            f"产品 profile 版本必须与项目版本 {project_version} 一致"
-        )
+    normalized = _materialize_release_metadata(payload, project_version)
     if str(payload["platform"]).strip() not in SUPPORTED_PLATFORMS:
         raise ProfileError("产品 profile platform 不受支持")
     flavor = str(payload["core_flavor"]).strip()
@@ -95,7 +123,7 @@ def validate_profile(payload: Any) -> dict[str, Any]:
     components = payload["included_components"]
     models = payload["default_models"]
     optional = payload["optional_components"]
-    artifact = payload["artifact"]
+    artifact = normalized["artifact"]
     if not isinstance(components, list) or not all(isinstance(item, str) for item in components):
         raise ProfileError("included_components 必须是字符串数组")
     if not isinstance(models, list) or not all(isinstance(item, dict) for item in models):
@@ -124,9 +152,7 @@ def validate_profile(payload: Any) -> dict[str, Any]:
             raise ProfileError("Standalone 不得包含 llama-cpu 或 napcat")
     if any(str(model.get("role", "")).strip() in FORBIDDEN_DEFAULT_MODEL_ROLES for model in models):
         raise ProfileError("禁止默认安装 chat/consolidation/reranker 模型")
-    normalized = dict(payload)
     normalized["id"] = profile_id
-    normalized["version"] = project_version
     normalized["platform"] = str(payload["platform"]).strip()
     normalized["core_flavor"] = flavor
     normalized["distribution"] = distribution

@@ -22,7 +22,10 @@
         "standalone-rust"
       ]
     },
-    "version": {"const": "4.0.3"},
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "platform": {"const": "windows-amd64"},
     "core_flavor": {"enum": ["python", "rust"]},
     "distribution": {"enum": ["oneclick", "standalone"]},

@@ -24,7 +24,7 @@ from scripts.build_release_package import (
 def test_all_profiles_match_project_version_and_are_non_overlapping():
     profiles = load_profiles()
     version = program_version(PROJECT_ROOT)
-    assert version == "4.0.3"
+    assert version
     assert tuple(profiles) == PROFILE_IDS
     assert {item["artifact"]["filename"] for item in profiles.values()} == {
         f"Stella-OneClick-Python-v{version}-windows-amd64.exe",
@@ -58,6 +58,25 @@ def test_profile_rejects_missing_embedding_provenance():
     del profile["default_models"][0]["sha256"]
     with pytest.raises(ProfileError):
         validate_profile(profile)
+
+
+def test_profile_metadata_tracks_project_version_when_template_is_stale():
+    profile = copy.deepcopy(load_profiles()["oneclick-python"])
+    version = program_version(PROJECT_ROOT)
+    stale_version = "0.0.0"
+    profile["version"] = stale_version
+    profile["catalog_url"] = profile["catalog_url"].replace(
+        f"v{version}", f"v{stale_version}"
+    )
+    profile["artifact"]["filename"] = profile["artifact"]["filename"].replace(
+        f"v{version}", f"v{stale_version}"
+    )
+
+    normalized = validate_profile(profile)
+
+    assert normalized["version"] == version
+    assert f"v{version}" in normalized["catalog_url"]
+    assert f"v{version}" in normalized["artifact"]["filename"]
 
 
 def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
@@ -111,7 +130,8 @@ def test_release_builder_oneclick_is_single_executable(tmp_path):
     installer.write_bytes(b"installer")
     output = tmp_path / "oneclick"
     result = build_oneclick(installer, output, "oneclick-python")
-    assert result.name == "Stella-OneClick-Python-v4.0.3-windows-amd64.exe"
+    version = program_version(PROJECT_ROOT)
+    assert result.name == f"Stella-OneClick-Python-v{version}-windows-amd64.exe"
     assert [path.name for path in output.iterdir()] == [result.name]
 
 
