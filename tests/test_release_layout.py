@@ -121,7 +121,11 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
         in text
     )
     assert (
-        "grep -E '(^|/)(runtime|napcat|models|llama-server)(/|$)'"
+        'python scripts/check_release_archive.py "dist/products/${python_asset}"'
+        in text
+    )
+    assert (
+        'python scripts/check_release_archive.py "dist/products/${rust_asset}"'
         in text
     )
 

@@ -439,10 +439,8 @@ jobs:
           test -s "dist/products/${oneclick_rust}"
           test -s "dist/products/${python_asset}"
           test -s "dist/products/${rust_asset}"
-          if unzip -l "dist/products/${python_asset}" \
-            | grep -E '(^|/)(runtime|napcat|models|llama-server)(/|$)'; then exit 1; fi
-          if unzip -l "dist/products/${rust_asset}" \
-            | grep -E '(^|/)(runtime|napcat|models|llama-server)(/|$)'; then exit 1; fi
+          python scripts/check_release_archive.py "dist/products/${python_asset}"
+          python scripts/check_release_archive.py "dist/products/${rust_asset}"
 
       # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
       # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
