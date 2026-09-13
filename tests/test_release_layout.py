@@ -111,6 +111,15 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     assert "path: rust-wheel" in installer
     assert "Get-ChildItem 'rust-wheel\\*.whl' -File" in installer
     assert "必须下载恰好一个 Rust wheel" in installer
+    assert "merge-multiple: false" in text
+    assert (
+        "cp installer-bin/stella-installer-oneclick-python/*.exe dist/products/"
+        in text
+    )
+    assert (
+        "cp installer-bin/stella-installer-oneclick-rust/*.exe dist/products/"
+        in text
+    )
 
 
 def test_rust_metadata_guard_handles_windows_line_endings():
