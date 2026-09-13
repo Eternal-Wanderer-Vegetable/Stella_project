@@ -49,15 +49,20 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     rust = (
         PROJECT_ROOT / ".github" / "workflows" / "release-memory-rust.yml"
     ).read_text(encoding="utf-8")
-    assert "Stella-OneClick-Python-v4.0.1-windows-amd64.exe" in main
-    assert "Stella-OneClick-Rust-v4.0.1-windows-amd64.exe" in main
-    assert "Stella-Standalone-Python-v4.0.1-windows-amd64.zip" in main
-    assert "Stella-Standalone-Rust-v4.0.1-windows-amd64.zip" in main
+    assert "python_asset=\"Stella-Standalone-Python-v${python_version}" in main
+    assert "rust_asset=\"Stella-Standalone-Rust-v${python_version}" in main
+    assert "oneclick_python=\"Stella-OneClick-Python-v${python_version}" in main
+    assert "oneclick_rust=\"Stella-OneClick-Rust-v${python_version}" in main
     assert "products/*.exe" in main
     assert "products/*.zip" in main
     assert "Stella-Rust_engine_version-v$version-win64.zip" in rust
     assert "gh release upload $env:RELEASE_REF $asset --clobber" in rust
     assert "Rust asset upload failed" in rust
+    assert 'workflows: ["Release"]' in rust
+    assert "types: [completed]" in rust
+    assert "github.event.workflow_run.conclusion == 'success'" in rust
+    assert "github.event_name == 'workflow_run'" in rust
+    assert "github.event_name == 'push'" not in rust
     assert 'https://api.github.com/repos/$repo/releases/tags/$env:RELEASE_REF' in rust
     assert 'Accept = "application/octet-stream"' in rust
     assert (
@@ -67,6 +72,13 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "gh release create" not in rust
     assert "校验主 Python 与 CLI 版本" in rust
     assert "pyproject.toml" in rust and "cli/Cargo.toml" in rust
+
+    llama = (
+        PROJECT_ROOT / ".github" / "workflows" / "release-llama.yml"
+    ).read_text(encoding="utf-8")
+    assert "test \"$VERSION\" = \"$PY_VERSION\"" in llama
+    assert "python ../scripts/build_release_catalog.py" in llama
+    assert "test \"$VERSION\" = \"4.0.1\"" not in llama
 
 
 def test_oneclick_rust_downloads_wheel_before_tauri_build():

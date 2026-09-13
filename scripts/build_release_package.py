@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the four v4.0.1 release products from an explicit allowlist."""
+"""Assemble the four release products from an explicit allowlist."""
 
 from __future__ import annotations
 

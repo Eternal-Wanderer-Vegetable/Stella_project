@@ -1,12 +1,13 @@
 name: Release Rust memory engine
 
 on:
-  push:
-    tags: ['v*']
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（可带 v 前缀，例如 v3.10.1）'
+        description: '版本号（可带 v 前缀，例如 v4.0.2）'
         required: true
         type: string
       overwrite_release:
@@ -20,15 +21,25 @@ permissions:
 
 jobs:
   build-and-publish:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        startsWith(github.event.workflow_run.head_branch, 'v')
+      )
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: 解析并校验主 Release 版本
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'push') {
-            $version = '${{ github.ref_name }}' -replace '^v', ''
+          if ('${{ github.event_name }}' -eq 'workflow_run') {
+            $version = '${{ github.event.workflow_run.head_branch }}' -replace '^v', ''
           } else {
             $version = '${{ inputs.version }}' -replace '^v', ''
           }
@@ -80,7 +91,7 @@ jobs:
             --out dist\rust-wheel
 
       - name: 下载完整 Python engine 发布包
-        if: github.event_name == 'push' || inputs.overwrite_release
+        if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.overwrite_release)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -96,7 +107,7 @@ jobs:
           Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
           $downloaded = $false
-          for ($attempt = 1; $attempt -le 60; $attempt++) {
+          for ($attempt = 1; $attempt -le 12; $attempt++) {
             try {
               $release = Invoke-RestMethod `
                 -Headers $headers `
@@ -120,17 +131,17 @@ jobs:
                 }
               }
             } catch {
-              Write-Host "等待主 Python asset（第 $attempt/60 次）: $($_.Exception.Message)"
+              Write-Host "等待主 Python asset（第 $attempt/12 次）: $($_.Exception.Message)"
             }
             Remove-Item "$downloadDir\*" -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 15
+            Start-Sleep -Seconds 5
           }
           if (-not $downloaded) {
             throw "Python engine asset was not found on release $env:RELEASE_REF"
           }
 
       - name: 组装可一键启动的 Rust engine zip
-        if: github.event_name == 'push' || inputs.overwrite_release
+        if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.overwrite_release)
         shell: pwsh
         run: |
           $baseAsset = "Stella-Standalone-Python-v$env:RELEASE_VERSION-windows-amd64.zip"
@@ -220,7 +231,7 @@ jobs:
           Remove-Item $verify -Recurse -Force
 
       - name: 上传 Rust asset 到同一主 Release
-        if: github.event_name == 'push' || inputs.overwrite_release
+        if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.overwrite_release)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

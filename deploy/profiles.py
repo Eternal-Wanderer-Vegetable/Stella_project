@@ -68,8 +68,8 @@ def validate_profile(payload: Any) -> dict[str, Any]:
     profile_id = str(payload["id"]).strip()
     if profile_id not in PROFILE_IDS:
         raise ProfileError(f"未知产品 profile：{profile_id}")
-    if str(payload["version"]).strip() != "4.0.1":
-        raise ProfileError("产品 profile 当前必须是 4.0.1")
+    if str(payload["version"]).strip() != "4.0.2":
+        raise ProfileError("产品 profile 当前必须是 4.0.2")
     if str(payload["platform"]).strip() not in SUPPORTED_PLATFORMS:
         raise ProfileError("产品 profile platform 不受支持")
     flavor = str(payload["core_flavor"]).strip()
@@ -113,7 +113,7 @@ def validate_profile(payload: Any) -> dict[str, Any]:
         raise ProfileError("禁止默认安装 chat/consolidation/reranker 模型")
     normalized = dict(payload)
     normalized["id"] = profile_id
-    normalized["version"] = "4.0.1"
+    normalized["version"] = "4.0.2"
     normalized["platform"] = str(payload["platform"]).strip()
     normalized["core_flavor"] = flavor
     normalized["distribution"] = distribution
