@@ -83,6 +83,12 @@ if not exist get-pip.py (
 )
 if exist get-pip.py for %%A in (get-pip.py) do if %%~zA LSS 500000 del get-pip.py
 if not exist get-pip.py (
+    echo The default get-pip download failed. Retrying without inherited proxy settings...
+    call :clear_pip_proxy
+    curl.exe -L --fail --connect-timeout 15 -o get-pip.py "https://bootstrap.pypa.io/get-pip.py"
+    if exist get-pip.py for %%A in (get-pip.py) do if %%~zA LSS 500000 del get-pip.py
+)
+if not exist get-pip.py (
     "%PY%" -m ensurepip --upgrade
     if errorlevel 1 (
         echo [ERROR] Failed to install pip.
@@ -90,11 +96,16 @@ if not exist get-pip.py (
         exit /b 1
     )
 ) else (
-    "%PY%" get-pip.py --no-warn-script-location
+    "%PY%" get-pip.py --no-warn-script-location --index-url https://pypi.org/simple
     if errorlevel 1 (
-        echo [ERROR] Failed to install pip.
-        if /i not "%~1"=="--prepare" pause
-        exit /b 1
+        echo The default pip bootstrap failed. Retrying without inherited proxy settings...
+        call :clear_pip_proxy
+        "%PY%" get-pip.py --isolated --no-warn-script-location --index-url https://pypi.org/simple
+        if errorlevel 1 (
+            echo [ERROR] Failed to install pip.
+            if /i not "%~1"=="--prepare" pause
+            exit /b 1
+        )
     )
 )
 del get-pip.py 2>nul
@@ -107,14 +118,23 @@ rem 失败不阻断：绝大多数依赖有 wheel，真缺了下一步会报更�
 echo Installing build tools...
 "%PY%" -m pip install setuptools wheel --no-warn-script-location
 if errorlevel 1 (
-    "%PY%" -m pip install setuptools wheel --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    call :clear_pip_proxy
+    "%PY%" -m pip --isolated install setuptools wheel --no-warn-script-location -i https://pypi.org/simple
+)
+if errorlevel 1 (
+    "%PY%" -m pip --isolated install setuptools wheel --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 )
 
 echo Installing Python dependencies. This may take a few minutes.
-"%PY%" -m pip install -r requirements.txt --no-warn-script-location
+"%PY%" -m pip install -r requirements.txt --no-warn-script-location -i https://pypi.org/simple
 if errorlevel 1 (
-    echo The default package index failed. Retrying with the mirror...
-    "%PY%" -m pip install -r requirements.txt --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
+    echo The default package index failed. Retrying without inherited proxy settings...
+    call :clear_pip_proxy
+    "%PY%" -m pip --isolated install -r requirements.txt --no-warn-script-location -i https://pypi.org/simple
+)
+if errorlevel 1 (
+    echo The direct package index failed. Retrying with the mirror...
+    "%PY%" -m pip --isolated install -r requirements.txt --no-warn-script-location -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 )
 if errorlevel 1 (
     echo [ERROR] Failed to install Python dependencies.
@@ -227,4 +247,18 @@ exit /b 0
 powershell -NoProfile -Command "try { Invoke-WebRequest -Uri '%~1' -OutFile '%~2' -TimeoutSec 120 } catch { exit 1 }"
 if not exist "%~2" exit /b 1
 if exist "%~2" for %%A in ("%~2") do if %%~zA LSS 1048576 exit /b 1
+exit /b 0
+
+:clear_pip_proxy
+set "HTTP_PROXY="
+set "HTTPS_PROXY="
+set "ALL_PROXY="
+set "http_proxy="
+set "https_proxy="
+set "all_proxy="
+set "PIP_PROXY="
+set "PIP_INDEX_URL="
+set "PIP_EXTRA_INDEX_URL="
+set "PIP_TRUSTED_HOST="
+set "PIP_CONFIG_FILE="
 exit /b 0
