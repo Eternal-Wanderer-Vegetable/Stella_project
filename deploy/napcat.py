@@ -204,25 +204,60 @@ def install_msi(
         raise NapCatError("checksum_mismatch", "NapCat MSI digest 不匹配")
     if not _IS_WINDOWS:
         raise NapCatError("unsupported_platform", "NapCat MSI 只能在 Windows 上安装")
+    paths = _paths(data_root)
+    log_dir = paths["root"] / ".stella" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "napcat-msi-install.log"
     command = [
         "msiexec.exe",
         "/i",
         str(archive),
-        "/qn",
+        "/passive",
         "/norestart",
+        "/L*v",
+        str(log_path),
     ]
     try:
-        subprocess.run(
+        result = subprocess.run(
             command,
-            check=True,
+            check=False,
             capture_output=True,
             timeout=900,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise NapCatError("install_failed", f"NapCat MSI 安装失败：{exc}") from exc
+    if result.returncode == 1603:
+        # Some NapCat MSI builds require an interactive elevation/custom-action
+        # path that cannot run under /passive. Retry once with the full UI.
+        interactive_log = log_dir / "napcat-msi-install-interactive.log"
+        interactive_command = [
+            "msiexec.exe",
+            "/i",
+            str(archive),
+            "/norestart",
+            "/L*v",
+            str(interactive_log),
+        ]
+        try:
+            result = subprocess.run(
+                interactive_command,
+                check=False,
+                timeout=900,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            log_path = interactive_log
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise NapCatError(
+                "install_failed",
+                f"NapCat MSI 安装失败：无法启动交互式重试（日志：{log_path}）",
+            ) from exc
+    if result.returncode not in {0, 1641, 3010}:
+        raise NapCatError(
+            "install_failed",
+            f"NapCat MSI 安装失败：msiexec 退出码 {result.returncode}（日志：{log_path}）",
+        )
 
-    paths = _paths(data_root)
     paths["metadata"].parent.mkdir(parents=True, exist_ok=True)
     payload = {
         **metadata,
