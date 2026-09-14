@@ -29,6 +29,12 @@
           "id": "",
           "checksum": ""
         },
+        "embedding_model": {
+          "path": "",
+          "package": "",
+          "id": "",
+          "checksum": ""
+        },
         "ctx_size": 4096,
         "backend": "cpu"
       },

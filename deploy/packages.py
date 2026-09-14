@@ -306,7 +306,12 @@ def _copy_verified(source: Path, target: Path, expected: str) -> str:
     return actual
 
 
-def _update_runtime_manifest(record: dict[str, Any], data_root: Path) -> None:
+def _update_runtime_manifest(
+    record: dict[str, Any],
+    data_root: Path,
+    *,
+    model_role: str | None = None,
+) -> None:
     # Import lazily so package listing remains usable when the runtime contract
     # is unavailable during a first-run bootstrap.
     from . import runtime
@@ -314,12 +319,17 @@ def _update_runtime_manifest(record: dict[str, Any], data_root: Path) -> None:
     payload = runtime.read_manifest()
     llama = payload.setdefault("components", {}).setdefault("llama", {})
     config = llama.setdefault("config", {})
-    config["model"] = {
+    target_key = "embedding_model" if model_role == "embedding" else "model"
+    config[target_key] = {
         "path": str((data_root / record["path"]).resolve()),
         "package": f"{record['id']}@{record['version']}",
         "id": record["id"],
         "checksum": record["checksum"],
     }
+    if model_role == "embedding":
+        # OneClick's qwen embedding is a real local runtime resource. Enable the
+        # component here, while keeping it separate from the optional chat model.
+        llama["enabled"] = True
     runtime.write_manifest(payload)
 
 
@@ -392,8 +402,8 @@ def import_model(
             )
     registry["updated_at"] = _now()
     write_registry(registry, root)
-    if activate and model_role != "embedding":
-        _update_runtime_manifest(record, root)
+    if activate:
+        _update_runtime_manifest(record, root, model_role=model_role)
     return record
 
 
@@ -448,8 +458,7 @@ def rollback_model(
     )
     registry["updated_at"] = _now()
     write_registry(registry, root)
-    if active_key != "embedding":
-        _update_runtime_manifest(record, root)
+    _update_runtime_manifest(record, root, model_role=model_role)
     return record
 
 

@@ -79,6 +79,8 @@ pub struct ComponentConfig {
     #[serde(default)]
     pub model: ModelSpec,
     #[serde(default)]
+    pub embedding_model: ModelSpec,
+    #[serde(default)]
     pub ctx_size: u32,
     #[serde(default)]
     pub backend: String,
@@ -238,6 +240,12 @@ pub fn default_manifest(
                 host: "127.0.0.1".into(),
                 port: 8081,
                 model: ModelSpec {
+                    path: String::new(),
+                    package: String::new(),
+                    id: String::new(),
+                    checksum: String::new(),
+                },
+                embedding_model: ModelSpec {
                     path: String::new(),
                     package: String::new(),
                     id: String::new(),

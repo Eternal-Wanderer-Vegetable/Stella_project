@@ -432,6 +432,25 @@ def _probe_llm_registry() -> dict:
                 port=llama["port"],
                 runtime_state=str(state.get("state") or ""),
             )
+        else:
+            embedding = runtime.embedding_endpoint_config()
+            if embedding:
+                state = (
+                    (runtime.read_state().get("components") or {}).get("llama")
+                    or {}
+                )
+                model_path = str(embedding["model_path"])
+                out["llama_readiness"] = {
+                    "enabled": True,
+                    "embedding_fallback": True,
+                    "endpoint": embedding["base_url"],
+                    "model": embedding["model"],
+                    "model_path": model_path,
+                    "model_exists": bool(model_path and Path(model_path).is_file()),
+                    "runtime_state": str(state.get("state") or ""),
+                    "ready": bool(model_path and Path(model_path).is_file()),
+                    "error": "",
+                }
     except Exception:
         out["llama_readiness"] = {}
     return out

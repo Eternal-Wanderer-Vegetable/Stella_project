@@ -20,6 +20,12 @@ def test_default_manifest_has_optional_components():
         "host": "127.0.0.1",
         "port": 8081,
         "model": {"path": "", "package": "", "id": "", "checksum": ""},
+        "embedding_model": {
+            "path": "",
+            "package": "",
+            "id": "",
+            "checksum": "",
+        },
         "ctx_size": 4096,
         "backend": "cpu",
     }
@@ -36,6 +42,24 @@ def test_enabled_llama_manifest_exposes_a_local_endpoint(monkeypatch, tmp_path):
     assert endpoint["base_url"] == "http://127.0.0.1:8081"
     assert endpoint["model"] == "demo.gguf"
     assert endpoint["backend"] == "cpu"
+
+
+def test_embedding_only_manifest_exposes_separate_endpoint(monkeypatch, tmp_path):
+    payload = runtime.default_manifest()
+    payload["components"]["llama"]["enabled"] = True
+    payload["components"]["llama"]["config"]["embedding_model"]["id"] = (
+        "qwen3-embedding-0.6b"
+    )
+    payload["components"]["llama"]["config"]["embedding_model"]["path"] = str(
+        tmp_path / "embedding.gguf"
+    )
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path)
+    runtime.write_manifest(payload)
+
+    assert runtime.llama_endpoint_config() is None
+    endpoint = runtime.embedding_endpoint_config()
+    assert endpoint["model"] == "qwen3-embedding-0.6b"
+    assert endpoint["base_url"] == "http://127.0.0.1:8081"
 
 
 def test_unknown_operation_and_component_are_rejected():
@@ -147,7 +171,8 @@ def test_execute_status_uses_shared_operation_envelope(monkeypatch):
     }
 
 
-def test_execute_rejects_unsupported_component_owner():
+def test_execute_rejects_unconfigured_llama_component(monkeypatch):
+    monkeypatch.setattr(runtime, "embedding_endpoint_config", lambda: None)
     result = runtime.execute_operation("start", "llama")
     assert result["ok"] is False
     assert result["error"]["code"] == "unsupported_component_operation"

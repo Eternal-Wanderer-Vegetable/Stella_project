@@ -395,6 +395,23 @@ def test_lm_studio_unreachable_is_error():
     assert "Connection refused" in r.detail
 
 
+def test_lm_studio_unreachable_uses_local_embedding_fallback():
+    r = checks.check_lm_studio_reachable(
+        _healthy_snapshot(
+            lm_reachable=False,
+            lm_error="Connection refused",
+            embedding_enabled=True,
+            llama_readiness={
+                "embedding_fallback": True,
+                "enabled": True,
+                "model_exists": True,
+            },
+        )
+    )
+    assert r is not None and r.level == "warn"
+    assert "本地 llama.cpp" in r.detail
+
+
 def test_lm_studio_probe_failed_is_warn():
     r = checks.check_lm_studio_reachable(_healthy_snapshot(lm_reachable=None))
     assert r is not None and r.level == "warn"
