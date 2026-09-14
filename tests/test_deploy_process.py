@@ -108,6 +108,62 @@ def test_is_alive_bogus_pid():
     assert process.is_alive(999999999) is False
 
 
+def test_wait_for_startup_accepts_matching_healthy_instance(monkeypatch):
+    calls = {"count": 0}
+
+    monkeypatch.setattr(process, "is_alive", lambda pid: True)
+
+    def live_status(*, timeout):
+        calls["count"] += 1
+        return {"pid": 123, "instance_id": process.INSTANCE_ID}
+
+    monkeypatch.setattr(process, "_fetch_live_status", live_status)
+
+    assert process.wait_for_startup(123, timeout=0.1, poll_interval=0.01) == (True, "")
+    assert calls["count"] == 1
+
+
+def test_wait_for_startup_reports_early_exit(monkeypatch):
+    monkeypatch.setattr(process, "is_alive", lambda pid: False)
+    monkeypatch.setattr(
+        process,
+        "_fetch_live_status",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("不应探测已退出进程")),
+    )
+
+    ready, detail = process.wait_for_startup(456, timeout=0.1, poll_interval=0.01)
+
+    assert ready is False
+    assert "启动期间退出" in detail
+    assert "456" in detail
+
+
+def test_wait_for_startup_accepts_alive_process_when_status_api_disabled(monkeypatch):
+    monkeypatch.setattr(process, "STELLA_STATUS_API_ENABLED", False)
+    monkeypatch.setattr(process, "is_alive", lambda pid: True)
+    monkeypatch.setattr(
+        process,
+        "_fetch_live_status",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("不应探测已关闭的状态接口")),
+    )
+
+    assert process.wait_for_startup(123, timeout=0.1, poll_interval=0.01) == (True, "")
+
+
+def test_wait_for_startup_does_not_accept_foreign_pid(monkeypatch):
+    monkeypatch.setattr(process, "is_alive", lambda pid: True)
+    monkeypatch.setattr(
+        process,
+        "_fetch_live_status",
+        lambda **kwargs: {"pid": 999, "instance_id": process.INSTANCE_ID},
+    )
+
+    ready, detail = process.wait_for_startup(123, timeout=0.01, poll_interval=0.005)
+
+    assert ready is False
+    assert "启动超时" in detail
+
+
 def test_is_alive_false_for_unreaped_child(monkeypatch, tmp_path):
     """已退出但未 wait() 回收的子进程（POSIX 下为僵尸）应被判为不存活。"""
     monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")

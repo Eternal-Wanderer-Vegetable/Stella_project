@@ -38,6 +38,7 @@ from config import (
     SHUTDOWN_GRACE_SECONDS,
     STELLA_HOME,
     STELLA_JSON_LOG_PATH,
+    STELLA_STATUS_API_ENABLED,
 )
 from config.instance import (
     LAUNCH_TOKEN_ENV,
@@ -68,6 +69,9 @@ STOP_WAIT_BUFFER_SECONDS = 5.0
 _STAGE_SIGNAL_WAIT_SECONDS = 3.0
 # 轮询间隔（秒）
 _POLL_INTERVAL = 0.3
+# 后台启动不能只以 Popen 成功为成功：uvicorn 可能随后因端口冲突或导入错误退出。
+STARTUP_TIMEOUT_SECONDS = 15.0
+STARTUP_POLL_INTERVAL = 0.3
 
 
 def read_pid() -> int | None:
@@ -167,7 +171,7 @@ def _windows_is_alive(pid: int) -> bool:
 
 
 def start_detached() -> int:
-    """后台启动 bot.py 并写 PID 文件，立即返回。"""
+    """后台启动 bot.py，写 PID 文件并等待当前实例真正就绪。"""
     if not BOT_ENTRY.exists():
         print(f"缺少入口 {BOT_ENTRY}，无法启动。")
         return 1
@@ -218,7 +222,62 @@ def start_detached() -> int:
     print(
         f"后台启动 Stella（PID {proc.pid}），实例 {INSTANCE_ID} 的 PID 已写入 {PID_FILE}"
     )
-    return 0
+    ready, detail = wait_for_startup(proc.pid)
+    if ready:
+        print(f"Stella 已就绪（PID {proc.pid}）。")
+        return 0
+
+    clear_pid()
+    clear_manifest()
+    runtime.update_component(
+        "stella",
+        "failed",
+        error=detail,
+        desired="running",
+    )
+    print(detail)
+    return 1
+
+
+def wait_for_startup(
+    pid: int,
+    *,
+    timeout: float = STARTUP_TIMEOUT_SECONDS,
+    poll_interval: float = STARTUP_POLL_INTERVAL,
+) -> tuple[bool, str]:
+    """等待指定实例的状态接口就绪，或报告可操作的启动失败原因。
+
+    ``_fetch_live_status`` 同时校验 instance_id 与 launch token，因此响应来自
+    另一份 Stella 安装时不会被误认为当前实例已经启动。状态接口被显式关闭时，
+    存活的子进程仍可视为就绪，保持旧配置的兼容性。
+    """
+    if timeout < 0:
+        raise ValueError("启动等待 timeout 不能为负数")
+    if poll_interval <= 0:
+        raise ValueError("启动等待 poll_interval 必须大于 0")
+
+    if not STELLA_STATUS_API_ENABLED:
+        return (True, "") if is_alive(pid) else (
+            False,
+            f"Stella 子进程在启动期间退出（PID {pid}）。",
+        )
+
+    deadline = time.monotonic() + timeout
+    while True:
+        if not is_alive(pid):
+            return False, f"Stella 子进程在启动期间退出（PID {pid}）。"
+
+        live = _fetch_live_status(timeout=min(1.0, poll_interval))
+        if live is not None and live.get("pid") == pid:
+            return True, ""
+
+        if time.monotonic() >= deadline:
+            return (
+                False,
+                f"Stella 启动超时（PID {pid}）：状态接口未在 "
+                f"{timeout:.0f} 秒内就绪。请运行 deploy doctor 检查端口和依赖。",
+            )
+        time.sleep(poll_interval)
 
 
 def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
