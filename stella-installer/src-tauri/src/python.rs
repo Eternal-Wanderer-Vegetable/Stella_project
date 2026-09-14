@@ -46,6 +46,19 @@ mod runtime_bootstrap {
     const PROFILE_MARKER_PREFIX: &str = ".stella-profile-ready-";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
     const MIN_GET_PIP_SIZE: u64 = 500_000;
+    const NETWORK_ENV_VARS: &[&str] = &[
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "PIP_PROXY",
+        "PIP_INDEX_URL",
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_TRUSTED_HOST",
+        "PIP_CONFIG_FILE",
+    ];
 
     static PREPARE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -447,7 +460,14 @@ mod runtime_bootstrap {
                     "--index-url",
                     PYPI_INDEX,
                 ];
-                match run(python, &args, root) {
+                let direct_args = [
+                    "get-pip.py",
+                    "--isolated",
+                    "--no-warn-script-location",
+                    "--index-url",
+                    PYPI_INDEX,
+                ];
+                match run_with_direct_retry(python, &args, &direct_args, root) {
                     Ok(_) => installed = true,
                     Err(e) => fallback_reason = Some(e),
                 }
@@ -489,7 +509,11 @@ mod runtime_bootstrap {
             "-m", "pip", "install", "--no-warn-script-location",
             "-i", PYPI_INDEX, "setuptools", "wheel",
         ];
-        if run(python, &args, root).is_ok() {
+        let direct_args = [
+            "-m", "pip", "--isolated", "install", "--no-warn-script-location",
+            "-i", PYPI_INDEX, "setuptools", "wheel",
+        ];
+        if run_with_direct_retry(python, &args, &direct_args, root).is_ok() {
             return Ok(());
         }
         let mirror = [
@@ -497,7 +521,12 @@ mod runtime_bootstrap {
             "-i", PIP_MIRROR, "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
             "setuptools", "wheel",
         ];
-        let _ = run(python, &mirror, root);
+        let direct_mirror = [
+            "-m", "pip", "--isolated", "install", "--no-warn-script-location",
+            "-i", PIP_MIRROR, "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
+            "setuptools", "wheel",
+        ];
+        let _ = run_with_direct_retry(python, &mirror, &direct_mirror, root);
         Ok(())
     }
 
@@ -510,14 +539,23 @@ mod runtime_bootstrap {
             "-m", "pip", "install", "-r", "requirements.txt",
             "--no-warn-script-location", "-i", PYPI_INDEX,
         ];
-        match run(python, &primary, root) {
+        let direct_primary = [
+            "-m", "pip", "--isolated", "install", "-r", "requirements.txt",
+            "--no-warn-script-location", "-i", PYPI_INDEX,
+        ];
+        match run_with_direct_retry(python, &primary, &direct_primary, root) {
             Ok(_) => Ok(()),
             Err(first) => {
                 let mirror = [
                     "-m", "pip", "install", "-r", "requirements.txt", "--no-warn-script-location",
                     "-i", PIP_MIRROR, "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
                 ];
-                run(python, &mirror, root)
+                let direct_mirror = [
+                    "-m", "pip", "--isolated", "install", "-r", "requirements.txt",
+                    "--no-warn-script-location", "-i", PIP_MIRROR,
+                    "--trusted-host", "pypi.tuna.tsinghua.edu.cn",
+                ];
+                run_with_direct_retry(python, &mirror, &direct_mirror, root)
                     .map(|_| ())
                     .map_err(|second| {
                         format!("依赖安装失败：\n{first}\n\n镜像重试也失败：\n{second}")
@@ -526,14 +564,54 @@ mod runtime_bootstrap {
         }
     }
 
+    fn run_with_direct_retry(
+        python: &Path,
+        args: &[&str],
+        direct_args: &[&str],
+        cwd: &Path,
+    ) -> Result<String, String> {
+        match run(python, args, cwd) {
+            Ok(output) => Ok(output),
+            Err(first) => run_without_network_config(python, direct_args, cwd).map_err(|second| {
+                format!(
+                    "{first}\n\n清除代理与 pip 用户配置后直连重试也失败：{second}"
+                )
+            }),
+        }
+    }
+
     fn run(python: &Path, args: &[&str], cwd: &Path) -> Result<String, String> {
+        run_command(python, args, cwd, false)
+    }
+
+    fn run_without_network_config(
+        python: &Path,
+        args: &[&str],
+        cwd: &Path,
+    ) -> Result<String, String> {
+        run_command(python, args, cwd, true)
+    }
+
+    fn run_command(
+        python: &Path,
+        args: &[&str],
+        cwd: &Path,
+        clear_network_config: bool,
+    ) -> Result<String, String> {
         use std::os::windows::process::CommandExt;
 
-        let output = Command::new(python)
+        let mut command = Command::new(python);
+        command
             .args(args)
             .current_dir(cwd)
             .stdin(Stdio::null())
-            .creation_flags(0x0800_0000)
+            .creation_flags(0x0800_0000);
+        if clear_network_config {
+            for variable in NETWORK_ENV_VARS {
+                command.env_remove(variable);
+            }
+        }
+        let output = command
             .output()
             .map_err(|e| format!("无法运行 {}：{e}", python.display()))?;
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -650,6 +728,58 @@ mod runtime_bootstrap {
             assert!(
                 tools_at < reqs_at,
                 "构建工具必须先装：装依赖时才需要它来构建 sdist"
+            );
+        }
+
+        #[test]
+        fn bootstrap_retries_pip_without_stale_proxy_configuration() {
+            let src = fs::read_to_string(Path::new(file!())).expect("无法读取 python.rs");
+            for variable in [
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "PIP_PROXY",
+                "PIP_CONFIG_FILE",
+            ] {
+                assert!(
+                    src.contains(&format!("\"{variable}\"")),
+                    "GUI bootstrap 必须清理 {variable}"
+                );
+            }
+            assert!(
+                src.contains("run_with_direct_retry"),
+                "GUI bootstrap 必须在代理失败后重试直连"
+            );
+            assert!(
+                src.contains("\"--isolated\""),
+                "直连重试必须忽略 pip 用户配置和环境变量"
+            );
+
+            let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("release_assets")
+                .join("start.bat");
+            if !bat_path.is_file() {
+                return;
+            }
+            let bat = fs::read_to_string(&bat_path).expect("无法读取 start.bat");
+            assert!(
+                bat.contains("call :clear_pip_proxy"),
+                "start.bat 必须在 get-pip 或 pip 失败后清理代理并重试"
+            );
+            assert!(
+                bat.contains("The default get-pip download failed"),
+                "start.bat 必须在 get-pip 下载失败后重试直连"
+            );
+            assert!(
+                bat.contains("%PY%\" -m pip --isolated"),
+                "start.bat 的直连重试必须使用 pip isolated 模式"
+            );
+            assert!(
+                bat.contains("set \"HTTP_PROXY=\"")
+                    && bat.contains("set \"PIP_CONFIG_FILE=\""),
+                "start.bat 必须清理代理与 pip 配置环境变量"
             );
         }
 
