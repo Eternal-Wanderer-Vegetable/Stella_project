@@ -322,11 +322,11 @@ def test_onebot_invalid_endpoint_is_error():
     assert "ONEBOT_WS_URLS" in r.fix_hint
 
 
-def test_onebot_reverse_port_busy_is_warn():
+def test_onebot_reverse_port_busy_is_blocking_error():
     r = checks.check_onebot_reverse_port(
         _healthy_snapshot(onebot_mode="reverse", onebot_port_in_use=True)
     )
-    assert r is not None and r.level == "warn"
+    assert r is not None and r.level == "error"
     assert "不是 Stella 自己" in r.detail
 
 
