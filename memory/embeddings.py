@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 from contextlib import asynccontextmanager
@@ -116,11 +117,31 @@ class EmbeddingService:
             dim: 预期编码维度（仅用于缓存键，不发给服务端——LM Studio 忽略 dimensions）；
             cache: 可注入的缓存（测试用），缺省用模块级 _CACHE。
         """
-        self.api_url = f"{base_url.rstrip('/')}/v1/embeddings"
+        self.base_url = base_url.rstrip("/")
         self.model = model or ""
         self.timeout = timeout
         self.dim = dim
         self._cache = cache if cache is not None else _CACHE
+
+    async def _request_embedding(
+        self, base_url: str, model: str, text: str
+    ) -> list[float]:
+        payload: dict[str, Any] = {"input": text}
+        if model:
+            payload["model"] = model
+        async with (
+            _maybe_gate(),
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(self.timeout), trust_env=False
+            ) as client,
+        ):
+            resp = await client.post(f"{base_url}/v1/embeddings", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        vector = data["data"][0]["embedding"]
+        if not isinstance(vector, list) or not vector:
+            raise ValueError("embedding 返回为空")
+        return [float(value) for value in vector]
 
     async def embed(self, text: str) -> list[float] | None:
         """把一段文本编码为向量；失败返回 None（调用方自行降级）。"""
@@ -131,24 +152,32 @@ class EmbeddingService:
         if key in self._cache:
             return self._cache[key]
 
-        payload: dict[str, Any] = {"input": text}
-        if self.model:
-            payload["model"] = self.model
+        last_error: Exception | None = None
+        vector: list[float] | None = None
         try:
-            # 网络请求在闸门内（少占锁），向量解析移到闸门外（少占锁时间）
-            async with (
-                _maybe_gate(),
-                httpx.AsyncClient(timeout=httpx.Timeout(self.timeout), trust_env=False) as client,
-            ):
-                resp = await client.post(self.api_url, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-            vector = data["data"][0]["embedding"]
-            if not isinstance(vector, list) or not vector:
-                raise ValueError("embedding 返回为空")
-            vector = [float(v) for v in vector]
-        except Exception as e:
-            logger.warning(f"[Embedding] 编码失败（{text[:20]}…）: {e}")
+            vector = await self._request_embedding(self.base_url, self.model, text)
+        except Exception as exc:
+            last_error = exc
+
+        if vector is None:
+            try:
+                from deploy.llama import ensure_local_embedding_service
+
+                fallback = await asyncio.to_thread(
+                    ensure_local_embedding_service,
+                    preferred_url=self.base_url,
+                )
+                if fallback.get("ok") and fallback.get("endpoint"):
+                    fallback_url = str(fallback["endpoint"]).rstrip("/")
+                    fallback_model = str(fallback.get("model") or self.model)
+                    vector = await self._request_embedding(
+                        fallback_url, fallback_model, text
+                    )
+            except Exception as exc:
+                last_error = exc
+
+        if vector is None:
+            logger.warning(f"[Embedding] 编码失败（{text[:20]}…）: {last_error}")
             self._cache[key] = None
             return None
 

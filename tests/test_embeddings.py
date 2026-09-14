@@ -63,6 +63,37 @@ def test_embedding_service_degrades_on_failure(monkeypatch):
     assert _run(svc.similarity("a", "b")) is None
 
 
+def test_embedding_service_starts_local_fallback_after_primary_failure(monkeypatch):
+    calls = []
+
+    async def fake_post(self, url, json):
+        calls.append((url, json))
+        if url.startswith("http://lm/v1/"):
+            raise httpx.ConnectError("LM Studio is offline")
+        return _FakeResp({"data": [{"embedding": [0.5, 0.5]}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(
+        "deploy.llama.ensure_local_embedding_service",
+        lambda **_kwargs: {
+            "ok": True,
+            "source": "local",
+            "endpoint": "http://local:8081",
+            "model": "qwen3-embedding-0.6b",
+        },
+    )
+    svc = EmbeddingService("http://lm", model="remote-model", cache={})
+
+    assert _run(svc.embed("hello")) == [0.5, 0.5]
+    assert calls == [
+        ("http://lm/v1/embeddings", {"input": "hello", "model": "remote-model"}),
+        (
+            "http://local:8081/v1/embeddings",
+            {"input": "hello", "model": "qwen3-embedding-0.6b"},
+        ),
+    ]
+
+
 def test_embedding_service_empty_text(monkeypatch):
     """空文本返回 None，不发请求。"""
     calls = []
@@ -184,4 +215,3 @@ def test_retrieve_memories_emb_falls_back_on_service_failure(tmp_path, monkeypat
 
     result = _run(retrieval_v2.retrieve_memories_emb("1", 100, "有什么游戏推荐吗", service=_Broken()))
     assert [m["id"] for m in result.conversation_memories] == ["m1"]
-

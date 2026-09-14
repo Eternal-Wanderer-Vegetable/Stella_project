@@ -212,9 +212,29 @@ def check_onebot_token(snap: Snapshot) -> CheckResult | None:
 
 
 def check_lm_studio_reachable(snap: Snapshot) -> CheckResult | None:
-    """LM Studio 不可达 → error（带错误）；探测失败 → warn。"""
+    """LM Studio 不可达时，若本地 embedding fallback 有效则只告警。"""
     if snap.lm_reachable is False:
         detail = f"错误：{snap.lm_error}" if snap.lm_error else "无法访问 /v1/models。"
+        local = snap.llama_readiness
+        if (
+            snap.embedding_enabled
+            and local.get("embedding_fallback")
+            and local.get("enabled")
+            and local.get("model_exists")
+        ):
+            return CheckResult(
+                id="lm_studio",
+                level="warn",
+                title="LM Studio 不可达，已准备本地 embedding fallback",
+                detail=(
+                    f"{detail} qwen embedding 将由本地 llama.cpp 提供；"
+                    "聊天模型仍需要 LM Studio 或其它已配置的 LLM 端点。"
+                ),
+                fix_hint=(
+                    "可保持 LM Studio 关闭以使用本地 embedding；若需要聊天回复，"
+                    "请启动 LM Studio 或配置可用的其它聊天端点。"
+                ),
+            )
         return CheckResult(
             id="lm_studio",
             level="error",

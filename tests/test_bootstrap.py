@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy import bootstrap, napcat, packages
+from deploy import bootstrap, napcat, packages, runtime
 
 
 def _sha256(path: Path) -> str:
@@ -146,6 +146,8 @@ def test_oneclick_installs_declared_components_and_only_embedding(
 
     monkeypatch.setattr(bootstrap.acquire, "download_verified", fake_download)
     data_root = tmp_path / "data"
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "oneclick-test")
     result = bootstrap.install_profile(
         "oneclick-python", data_root, catalog_path=catalog
     )
@@ -160,6 +162,16 @@ def test_oneclick_installs_declared_components_and_only_embedding(
         item.get("model_role") in {"chat", "consolidation", "reranker"}
         for item in registry["packages"]
     )
+    manifest = runtime.read_manifest()
+    llama = manifest["components"]["llama"]
+    assert llama["enabled"] is True
+    assert llama["config"]["embedding_model"]["id"] == "qwen3-embedding-0.6b"
+    assert llama["config"]["embedding_model"]["path"].endswith(
+        "qwen3-embedding-0.6b.gguf"
+    )
+    env = (data_root / ".env").read_text(encoding="utf-8")
+    assert "MEMORY_EMBEDDING_ENABLED=true" in env
+    assert "MEMORY_EMBEDDING_MODEL=qwen3-embedding-0.6b" in env
     assert bootstrap.read_progress(data_root)["state"] == "complete"
 
 

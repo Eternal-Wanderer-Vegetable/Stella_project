@@ -43,6 +43,16 @@
           },
           "additionalProperties": false
         },
+        "embedding_model": {
+          "type": "object",
+          "properties": {
+            "path": {"type": "string"},
+            "package": {"type": "string"},
+            "id": {"type": "string"},
+            "checksum": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
         "ctx_size": {"type": "integer", "minimum": 1},
         "backend": {"enum": ["cpu", "cuda", "hip", "metal", "vulkan"]}
       },

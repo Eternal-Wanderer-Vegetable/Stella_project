@@ -133,6 +133,57 @@ driver.on_startup(_bootstrap_astrbot_plugins)
 driver.on_shutdown(terminate_plugins)
 
 
+async def _bootstrap_local_embedding() -> None:
+    """让 OneClick 在 LM Studio 不可用时先准备本地 embedding 服务。"""
+    try:
+        from config import MEMORY_EMBEDDING_BASE_URL, MEMORY_EMBEDDING_ENABLED
+
+        if not MEMORY_EMBEDDING_ENABLED:
+            return
+        import asyncio
+
+        from deploy.llama import ensure_local_embedding_service
+
+        result = await asyncio.to_thread(
+            ensure_local_embedding_service,
+            preferred_url=MEMORY_EMBEDDING_BASE_URL,
+        )
+        if result.get("ok"):
+            _diag_log(
+                "[embedding][boot] "
+                f"source={result.get('source', 'unknown')} "
+                f"endpoint={result.get('endpoint', '')}"
+            )
+        else:
+            _diag_log(
+                f"[embedding][boot] 本地 fallback 未就绪: "
+                f"{result.get('message', '')}"
+            )
+    except Exception as exc:
+        _diag_log(f"[embedding][boot] 启动 embedding fallback 失败（跳过）: {exc}")
+
+
+async def _shutdown_local_embedding() -> None:
+    """只停止当前 Stella 进程自己启动的本地 llama 服务。"""
+    try:
+        import asyncio
+
+        from deploy.llama import stop_local_embedding_service
+
+        result = await asyncio.to_thread(stop_local_embedding_service)
+        if not result.get("ok"):
+            _diag_log(
+                f"[embedding][shutdown] 停止本地服务失败: "
+                f"{result.get('message', '')}"
+            )
+    except Exception as exc:
+        _diag_log(f"[embedding][shutdown] 停止 embedding fallback 失败（跳过）: {exc}")
+
+
+driver.on_startup(_bootstrap_local_embedding)
+driver.on_shutdown(_shutdown_local_embedding)
+
+
 async def _shutdown_renderer() -> None:
     """关掉 HTML 渲染用的 Chromium。
 

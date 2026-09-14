@@ -256,6 +256,82 @@ def _register_component(record: dict[str, Any], data_root: Path) -> None:
     packages.write_registry(registry, data_root)
 
 
+def _ensure_oneclick_embedding_defaults(data_root: Path) -> None:
+    """Persist the local embedding defaults without overwriting user choices.
+
+    The shipped template historically points embedding at LM Studio and leaves
+    the feature disabled. OneClick owns this default, but only replaces those
+    untouched legacy values; an explicit user endpoint remains authoritative.
+    """
+    env_path = Path(data_root) / ".env"
+    if env_path.is_file():
+        try:
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+    else:
+        lines = []
+
+    desired = {
+        "MEMORY_EMBEDDING_ENABLED": "true",
+        "MEMORY_EMBEDDING_MODEL": "qwen3-embedding-0.6b",
+    }
+    legacy = {
+        "MEMORY_EMBEDDING_ENABLED": {"false", "0", "no", ""},
+        "MEMORY_EMBEDDING_MODEL": {"", "text-embedding-qwen3-embedding-0.6b"},
+    }
+    seen: set[str] = set()
+    updated: list[str] = []
+    for line in lines:
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            updated.append(line)
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in desired:
+            seen.add(key)
+            if value.strip().lower() in legacy[key]:
+                line = f"{key}={desired[key]}"
+        updated.append(line)
+    for key, value in desired.items():
+        if key not in seen:
+            updated.append(f"{key}={value}")
+    if updated != lines:
+        try:
+            env_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+        except OSError:
+            return
+
+
+def _repair_oneclick_runtime(profile_id: str, data_root: Path) -> None:
+    """Repair activation state for interrupted/older completed OneClick installs."""
+    if not profile_id.startswith("oneclick-"):
+        return
+    try:
+        registry = packages.read_registry(data_root)
+        active = registry.get("active", {}).get("embedding")
+        record = next(
+            (
+                item
+                for item in registry.get("packages", [])
+                if item.get("kind") == "model"
+                and item.get("model_role") == "embedding"
+                and f"{item.get('id')}@{item.get('version')}" == active
+            ),
+            None,
+        )
+        if record is not None:
+            packages._update_runtime_manifest(
+                record, Path(data_root), model_role="embedding"
+            )
+        _ensure_oneclick_embedding_defaults(Path(data_root))
+    except (OSError, TypeError, ValueError, packages.PackageError):
+        # Bootstrap repair must not turn an already completed install into a
+        # hard failure. The next embedding request will report the exact issue.
+        return
+
+
 def install_profile(
     profile_id: str,
     data_root: Path,
@@ -275,6 +351,7 @@ def install_profile(
         and previous.get("profile") == profile_id
         and previous.get("state") == "complete"
     ):
+        _repair_oneclick_runtime(profile_id, root)
         return {
             "ok": True,
             "profile": profile_id,
@@ -342,6 +419,7 @@ def install_profile(
                 _register_component(component, root)
                 installed.append(component)
             completed.append(item_id)
+        _repair_oneclick_runtime(profile_id, root)
         _write_progress(root, profile_id=profile_id, state="complete", completed=completed)
         return {
             "ok": True,

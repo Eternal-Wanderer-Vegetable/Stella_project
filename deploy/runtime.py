@@ -119,6 +119,12 @@ def default_manifest() -> dict[str, Any]:
                         "id": "",
                         "checksum": "",
                     },
+                    "embedding_model": {
+                        "path": "",
+                        "package": "",
+                        "id": "",
+                        "checksum": "",
+                    },
                     "ctx_size": 4096,
                     "backend": "cpu",
                 },
@@ -209,12 +215,17 @@ def validate_manifest(payload: dict[str, Any]) -> None:
             raise ValueError("llama.config.port 必须是整数") from None
         if not 1 <= port <= 65535:
             raise ValueError("llama.config.port 必须在 1 到 65535 之间")
-        model = config.get("model")
-        if not isinstance(model, dict):
-            raise ValueError("llama.config.model 必须是对象")
-        for key in ("path", "package", "id", "checksum"):
-            if key in model and not isinstance(model[key], str):
-                raise ValueError(f"llama.config.model.{key} 必须是字符串")
+        for model_key in ("model", "embedding_model"):
+            model = config.get(model_key)
+            if model is None:
+                continue
+            if not isinstance(model, dict):
+                raise ValueError(f"llama.config.{model_key} 必须是对象")
+            for key in ("path", "package", "id", "checksum"):
+                if key in model and not isinstance(model[key], str):
+                    raise ValueError(
+                        f"llama.config.{model_key}.{key} 必须是字符串"
+                    )
         try:
             ctx_size = int(config.get("ctx_size", 0))
         except (TypeError, ValueError):
@@ -294,13 +305,44 @@ def read_state() -> dict[str, Any]:
 
 
 def llama_endpoint_config() -> dict[str, Any] | None:
-    """返回启用的 Runtime llama endpoint，不暴露凭据或任意命令。"""
+    """返回启用的 Runtime 聊天 llama endpoint。
+
+    OneClick 默认只安装 embedding 模型。该模型不能被当作聊天模型暴露给
+    ``core.llm.registry``，因此聊天 endpoint 与 embedding endpoint 必须分开。
+    """
     manifest = read_manifest()
     spec = (manifest.get("components") or {}).get("llama") or {}
     if not spec.get("enabled"):
         return None
     config = spec.get("config") or {}
     model = config.get("model") or {}
+    if not str(model.get("path") or "").strip():
+        return None
+    host = str(config.get("host") or "127.0.0.1").strip()
+    port = int(config.get("port") or 8081)
+    return {
+        "base_url": f"http://{host}:{port}",
+        "host": host,
+        "port": port,
+        "model": str(model.get("id") or "").strip(),
+        "model_path": str(model.get("path") or "").strip(),
+        "model_package": str(model.get("package") or "").strip(),
+        "model_checksum": str(model.get("checksum") or "").strip(),
+        "ctx_size": int(config.get("ctx_size") or 4096),
+        "backend": str(config.get("backend") or "cpu").strip().lower(),
+    }
+
+
+def embedding_endpoint_config() -> dict[str, Any] | None:
+    """返回启用的本地 embedding endpoint，不暴露凭据或任意命令."""
+    manifest = read_manifest()
+    spec = (manifest.get("components") or {}).get("llama") or {}
+    if not spec.get("enabled"):
+        return None
+    config = spec.get("config") or {}
+    model = config.get("embedding_model") or {}
+    if not str(model.get("path") or "").strip():
+        return None
     host = str(config.get("host") or "127.0.0.1").strip()
     port = int(config.get("port") or 8081)
     return {
@@ -495,6 +537,58 @@ def execute_operation(
     force = request["parameters"].get("force", False)
     if not isinstance(force, bool):
         raise ValueError("Runtime parameters.force 必须是布尔值")
+    if component == "llama" and operation in {"start", "stop", "restart"}:
+        if embedding_endpoint_config() is None:
+            return {
+                "ok": False,
+                "operation": operation,
+                "component": component,
+                "exit_code": 2,
+                "data": snapshot(),
+                "error": structured_error(
+                    "unsupported_component_operation",
+                    "当前 Runtime manifest 未配置本地 embedding llama 服务。",
+                    component=component,
+                    operation=operation,
+                ),
+            }
+        from . import llama
+
+        if operation == "start":
+            value = llama.ensure_local_embedding_service()
+            ok = bool(value.get("ok"))
+            output = value.get("message", "")
+        elif operation == "stop":
+            value = llama.stop_local_embedding_service()
+            ok = bool(value.get("ok"))
+            output = value.get("message", "")
+        else:
+            stopped = llama.stop_local_embedding_service()
+            value = (
+                llama.ensure_local_embedding_service()
+                if stopped.get("ok")
+                else stopped
+            )
+            ok = bool(value.get("ok"))
+            output = value.get("message", "")
+        result = {
+            "ok": ok,
+            "operation": operation,
+            "component": component,
+            "exit_code": 0 if ok else 1,
+            "data": snapshot(),
+        }
+        if output:
+            result["message"] = str(output)[-2000:]
+        if not ok:
+            result["error"] = structured_error(
+                "operation_failed",
+                output or f"Runtime 操作失败：{operation}",
+                operation=operation,
+                component=component,
+            )
+        return redact_value(result)
+
     if component != "stella" and operation in {"start", "stop", "restart", "logs"}:
         return {
             "ok": False,
@@ -615,6 +709,7 @@ __all__ = [
     "STATE_FILENAME",
     "default_manifest",
     "default_state",
+    "embedding_endpoint_config",
     "execute_operation",
     "llama_endpoint_config",
     "read_manifest",
