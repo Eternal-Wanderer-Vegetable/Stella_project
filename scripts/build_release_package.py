@@ -27,6 +27,8 @@ COMMON_FILES = (
     "README-快速开始.txt",
 )
 COMMON_DIRS = (
+    "astrbot_compat",
+    "capability",
     "config",
     "core",
     "deploy",

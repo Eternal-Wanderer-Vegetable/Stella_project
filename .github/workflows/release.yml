@@ -481,7 +481,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r dist/Stella/requirements.txt
           cd dist/Stella
-          python -c "import config, core, memory, deploy, extensions; print('import 检查通过')"
+          python -c "import astrbot_compat, capability, config, core, memory, deploy, extensions; print('import 检查通过')"
 
       # 清单是「用户有没有改过发布包自带文件」的唯一判据（见 deploy/manifest.py）。
       # 没有它，升级时只能二选一：覆盖用户改过的人格，或让用户永远拿不到新默认值。
