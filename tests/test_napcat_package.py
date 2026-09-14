@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -117,11 +118,56 @@ def test_pinned_msi_installs_without_attempting_login(monkeypatch, tmp_path):
     monkeypatch.setattr(
         napcat.subprocess,
         "run",
-        lambda command, **kwargs: calls.append((command, kwargs)),
+        lambda command, **kwargs: (
+            calls.append((command, kwargs)) or SimpleNamespace(returncode=0)
+        ),
     )
 
     result = napcat.install_msi(archive, manifest, tmp_path / "data")
 
     assert calls and calls[0][0][:3] == ["msiexec.exe", "/i", str(archive.resolve())]
-    assert calls[0][0][3:] == ["/qn", "/norestart"]
+    assert calls[0][0][3:5] == ["/passive", "/norestart"]
+    assert calls[0][0][5] == "/L*v"
+    assert calls[0][0][6].endswith("napcat-msi-install.log")
     assert result["login"] == {"unattended": False, "status": "not_logged_in"}
+
+
+def test_msi_1603_retries_with_interactive_ui(monkeypatch, tmp_path):
+    archive = _archive(tmp_path, name="napcat.msi")
+    manifest = _manifest(archive)
+    calls = []
+    results = iter((1603, 0))
+
+    monkeypatch.setattr(napcat, "_IS_WINDOWS", True)
+    monkeypatch.setattr(
+        napcat.subprocess,
+        "run",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs))
+            or SimpleNamespace(returncode=next(results))
+        ),
+    )
+
+    result = napcat.install_msi(archive, manifest, tmp_path / "data")
+
+    assert result["login"] == {"unattended": False, "status": "not_logged_in"}
+    assert len(calls) == 2
+    assert calls[0][0][3:5] == ["/passive", "/norestart"]
+    assert calls[1][0][3] == "/norestart"
+    assert calls[1][0][4] == "/L*v"
+    assert calls[1][0][5].endswith("napcat-msi-install-interactive.log")
+
+
+def test_msi_failure_reports_exit_code_and_log(monkeypatch, tmp_path):
+    archive = _archive(tmp_path, name="napcat.msi")
+    manifest = _manifest(archive)
+
+    monkeypatch.setattr(napcat, "_IS_WINDOWS", True)
+    monkeypatch.setattr(
+        napcat.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1603),
+    )
+
+    with pytest.raises(napcat.NapCatError, match="退出码 1603"):
+        napcat.install_msi(archive, manifest, tmp_path / "data")
