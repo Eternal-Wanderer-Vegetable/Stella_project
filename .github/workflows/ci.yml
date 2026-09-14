@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  artifact-metadata: write
+
 # 取消正在运行的旧工作流，节省资源
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -56,7 +60,7 @@ jobs:
         run: bandit -r . -f json -o bandit-report.json || true
 
       - name: Upload security report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-report
           path: bandit-report.json
@@ -104,13 +108,13 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.python-version }}
           path: coverage.xml
 
       - name: Upload test results on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-results-${{ matrix.python-version }}
@@ -176,7 +180,7 @@ jobs:
           python -m pytest tests/windows -q --junitxml=windows-native.xml
       - name: Upload native report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-native-${{ github.sha }}
           path: windows-native.xml
