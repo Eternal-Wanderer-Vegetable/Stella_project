@@ -145,13 +145,13 @@ def check_onebot_reverse_port(snap: Snapshot) -> CheckResult | None:
 
     Bot 自己在运行时端口必然被占用，这是最常见的情况——把它报成警告会
     让 ``deploy start`` 在端口冲突时继续拉起一个必然马上退出的子进程。
-    状态接口可达即可确认占用者是 Stella 自己：接口挂在同一个 HTTP
-    服务器上，能连上就说明监听者就是它。
+    状态接口可达或端口探针确认监听 PID 属于 Stella，即可确认占用者是
+    Stella 自己；两者都不可得时仍按外部冲突处理。
     """
     if snap.onebot_mode != "reverse":
         return None
     # 端口被自己占用：正常状态，不报告
-    if snap.status_api_reachable:
+    if snap.status_api_reachable or snap.onebot_port_owned_by_stella is True:
         return None
     if snap.onebot_port_in_use is True:
         return CheckResult(

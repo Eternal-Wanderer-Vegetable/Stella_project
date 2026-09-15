@@ -19,6 +19,7 @@ import re
 import shutil
 import socket
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -183,6 +184,89 @@ def _port_in_use(host: str, port: int) -> bool | None:
         return None
 
 
+def _port_owner_pids(host: str, port: int) -> set[int] | None:
+    """Return Windows listener PIDs for ``host:port`` when available."""
+    if os.name != "nt":
+        return None
+    try:
+        result = subprocess.run(
+            ["netstat.exe", "-ano", "-p", "tcp"],
+            capture_output=True,
+            text=False,
+            timeout=2,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+
+    expected_host = host.strip().lower()
+    if expected_host in {"localhost", "::1"}:
+        expected_host = "127.0.0.1"
+    wildcard = expected_host in {"0.0.0.0", "::", "::0", "*"}
+    raw_stdout = result.stdout or b""
+    if isinstance(raw_stdout, bytes):
+        raw_stdout = raw_stdout.decode("ascii", errors="replace")
+    owners: set[int] = set()
+    for line in raw_stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 5 or fields[0].upper() != "TCP":
+            continue
+        if fields[3].upper() != "LISTENING":
+            continue
+        local = fields[1].strip("[]")
+        try:
+            local_host, local_port = local.rsplit(":", 1)
+            local_port = int(local_port)
+            pid = int(fields[4])
+        except (ValueError, IndexError):
+            continue
+        if local_port != port:
+            continue
+        if not wildcard and local_host.lower() != expected_host:
+            continue
+        owners.add(pid)
+    return owners
+
+
+def _port_owned_by_stella(host: str, port: int) -> bool | None:
+    """Determine whether a busy reverse-WS port belongs to this Stella instance."""
+    owner_pids = _port_owner_pids(host, port)
+    if owner_pids is not None:
+        if not owner_pids:
+            return False
+        known_pids = {os.getpid()}
+        try:
+            from . import process
+
+            pid = process.read_pid()
+            if (
+                pid is not None
+                and process.is_alive(pid)
+                and process._owned_manifest(pid) is not None
+            ):
+                known_pids.add(pid)
+        except Exception:
+            pass
+        return bool(owner_pids & known_pids)
+
+    try:
+        from . import process
+
+        pid = process.read_pid()
+        if (
+            pid is not None
+            and process.is_alive(pid)
+            and process._owned_manifest(pid) is not None
+        ):
+            return True
+    except Exception:
+        pass
+    return None
+
+
 def _probe_onebot() -> dict:
     """判定连接模式与可达性（反向 WS 端口 / 正向 WS 地址）。"""
     def _token_facts(values: dict, url: str | None) -> dict[str, bool | None]:
@@ -213,6 +297,7 @@ def _probe_onebot() -> dict:
         "host": "",
         "port": 0,
         "port_in_use": None,
+        "port_owned_by_stella": None,
         "forward_reachable": None,
         "endpoint_configured": False,
         "token_configured": False,
@@ -256,6 +341,8 @@ def _probe_onebot() -> dict:
     result["port"] = port
     result["endpoint_configured"] = bool(host) and 1 <= port <= 65535
     result["port_in_use"] = _port_in_use(host, port)
+    if result["port_in_use"] is True:
+        result["port_owned_by_stella"] = _port_owned_by_stella(host, port)
     result.update(_token_facts(values, None))
     return result
 
@@ -777,6 +864,7 @@ def collect() -> Snapshot:
         onebot_host=onebot.get("host", "127.0.0.1"),
         onebot_port=onebot.get("port", 8080),
         onebot_port_in_use=onebot.get("port_in_use"),
+        onebot_port_owned_by_stella=onebot.get("port_owned_by_stella"),
         onebot_forward_reachable=onebot.get("forward_reachable"),
         onebot_endpoint_configured=onebot.get("endpoint_configured"),
         onebot_token_configured=onebot.get("token_configured", False),

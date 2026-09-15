@@ -44,8 +44,14 @@ def test_windows_backend_verifier_requires_openssl_runtime(tmp_path):
     metadata["os"] = "windows"
     (tmp_path / "BACKEND.json").write_text(json.dumps(metadata), encoding="utf-8")
     assert "missing executable: llama-server.exe" in verify(tmp_path)
-    assert "missing Windows runtime DLL: libcrypto-3-x64.dll" in verify(tmp_path)
-    assert "missing Windows runtime DLL: libssl-3-x64.dll" in verify(tmp_path)
+    assert (
+        "missing Windows runtime DLL: libcrypto-3-x64.dll or libcrypto-3.dll"
+        in verify(tmp_path)
+    )
+    assert (
+        "missing Windows runtime DLL: libssl-3-x64.dll or libssl-3.dll"
+        in verify(tmp_path)
+    )
 
 
 def test_catalog_accepts_all_backend_metadata(tmp_path):

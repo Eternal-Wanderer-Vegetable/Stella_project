@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from deploy import probe
 from deploy.models import Snapshot
 
@@ -77,12 +79,14 @@ def test_probe_onebot_reports_reverse_port_and_token_presence(monkeypatch, tmp_p
         encoding="utf-8",
     )
     monkeypatch.setattr(probe, "_port_in_use", lambda _host, _port: True)
+    monkeypatch.setattr(probe, "_port_owned_by_stella", lambda _host, _port: True)
 
     result = probe._probe_onebot()
 
     assert result["mode"] == "reverse"
     assert result["endpoint_configured"] is True
     assert result["port_in_use"] is True
+    assert result["port_owned_by_stella"] is True
     assert result["token_configured"] is True
     assert result["token_in_url"] is False
     assert result["token_consistent"] is None
@@ -138,6 +142,23 @@ def test_probe_env_file_reports_superseded_keys(monkeypatch, tmp_path):
 def test_port_in_use_free_port():
     # 端口 0 = 由系统分配空闲端口，bind 必然成功 → 返回 False
     assert probe._port_in_use("127.0.0.1", 0) is False
+
+
+def test_port_owner_pids_parses_windows_netstat(monkeypatch):
+    monkeypatch.setattr(probe.os, "name", "nt")
+    monkeypatch.setattr(
+        probe.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "  TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    13316\n"
+                "  TCP    127.0.0.1:3001  0.0.0.0:0    LISTENING    99\n"
+            ),
+        ),
+    )
+
+    assert probe._port_owner_pids("0.0.0.0", 8080) == {13316}
 
 
 def test_probe_llama_readiness_requires_models_and_chat(monkeypatch):

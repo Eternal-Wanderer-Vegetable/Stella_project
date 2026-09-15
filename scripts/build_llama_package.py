@@ -19,7 +19,10 @@ FLAGS = {
     "metal": ["-DGGML_METAL=ON"],
     "vulkan": ["-DGGML_VULKAN=ON"],
 }
-WINDOWS_REQUIRED_DLLS = ("libcrypto-3-x64.dll", "libssl-3-x64.dll")
+WINDOWS_OPENSSL_DLLS = (
+    ("libcrypto-3-x64.dll", "libcrypto-3.dll"),
+    ("libssl-3-x64.dll", "libssl-3.dll"),
+)
 
 
 def _digest(path: Path) -> str:
@@ -66,6 +69,16 @@ def _find_runtime_dll(name: str, roots: Iterable[Path]) -> Path | None:
     return None
 
 
+def _find_openssl_dll(
+    alternatives: tuple[str, ...], roots: Iterable[Path]
+) -> Path | None:
+    for name in alternatives:
+        source = _find_runtime_dll(name, roots)
+        if source is not None:
+            return source
+    return None
+
+
 def _copy_runtime_libraries(
     build_dir: Path,
     executable: Path,
@@ -81,20 +94,22 @@ def _copy_runtime_libraries(
         return
     roots = _runtime_roots(build_dir, executable, runtime_dirs)
     missing: list[str] = []
-    for name in WINDOWS_REQUIRED_DLLS:
-        target = output / name
-        if target.is_file():
+    for alternatives in WINDOWS_OPENSSL_DLLS:
+        if any((output / name).is_file() for name in alternatives):
             continue
-        source = _find_runtime_dll(name, roots)
+        source = _find_openssl_dll(alternatives, roots)
         if source is None:
-            missing.append(name)
+            missing.append("/".join(alternatives))
             continue
-        shutil.copy2(source, target)
+        # Preserve the filename supplied by the OpenSSL distribution. Renaming
+        # an ABI-specific DLL can make the Windows loader reject it.
+        shutil.copy2(source, output / source.name)
     if missing:
         raise FileNotFoundError(
             "Windows llama.cpp package is missing required OpenSSL runtime DLLs: "
             + ", ".join(missing)
-            + ". Set OPENSSL_RUNTIME_DIR or pass --runtime-dir."
+            + ". Set OPENSSL_RUNTIME_DIR or pass --runtime-dir. "
+            "The package keeps the DLL filename supplied by the runtime."
         )
 
 
