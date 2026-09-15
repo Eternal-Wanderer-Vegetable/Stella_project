@@ -138,6 +138,41 @@ def test_wait_for_startup_reports_early_exit(monkeypatch):
     assert "456" in detail
 
 
+def test_start_detached_cleans_up_process_after_startup_probe_failure(
+    monkeypatch, tmp_path, capsys
+):
+    """状态探测失败时不能留下仍占用 8080 的后台 Bot。"""
+    pid_file = tmp_path / "stella.pid"
+    manifest = tmp_path / "ownership.json"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "MANIFEST_FILE", manifest)
+    monkeypatch.setattr(process, "BOT_ENTRY", tmp_path / "bot.py")
+    process.BOT_ENTRY.write_text("print('bot')", encoding="utf-8")
+    monkeypatch.setattr(
+        process,
+        "wait_for_startup",
+        lambda pid: (False, "状态接口未就绪"),
+    )
+    monkeypatch.setattr(process.runtime, "update_component", lambda *args, **kwargs: None)
+
+    proc, _pid = _short_lived(30.0)
+    monkeypatch.setattr(
+        process.subprocess,
+        "Popen",
+        lambda *args, **kwargs: proc,
+    )
+    try:
+        assert process.start_detached() == 1
+        assert proc.poll() is not None
+        assert process.read_pid() is None
+        assert not manifest.exists()
+        assert "状态接口未就绪" in capsys.readouterr().out
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+        proc.wait()
+
+
 def test_wait_for_startup_accepts_alive_process_when_status_api_disabled(monkeypatch):
     monkeypatch.setattr(process, "STELLA_STATUS_API_ENABLED", False)
     monkeypatch.setattr(process, "is_alive", lambda pid: True)
