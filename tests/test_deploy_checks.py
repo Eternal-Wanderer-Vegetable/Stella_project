@@ -33,6 +33,7 @@ def _healthy_snapshot(**overrides) -> Snapshot:
         "onebot_host": "0.0.0.0",
         "onebot_port": 8080,
         "onebot_port_in_use": False,
+        "onebot_port_owned_by_stella": None,
         "onebot_forward_reachable": None,
         "onebot_endpoint_configured": True,
         "onebot_token_configured": False,
@@ -338,6 +339,19 @@ def test_onebot_reverse_port_busy_but_self_is_ok():
                 onebot_mode="reverse",
                 onebot_port_in_use=True,
                 status_api_reachable=True,
+            )
+        )
+        is None
+    )
+
+
+def test_onebot_reverse_port_busy_but_pid_probe_identifies_self():
+    assert (
+        checks.check_onebot_reverse_port(
+            _healthy_snapshot(
+                onebot_mode="reverse",
+                onebot_port_in_use=True,
+                onebot_port_owned_by_stella=True,
             )
         )
         is None

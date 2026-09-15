@@ -148,6 +148,42 @@ def _record(
     return matches[0]
 
 
+def _installed_record_matches(data_root: Path, record: dict[str, Any]) -> bool:
+    """Check whether a completed install already contains this catalog record."""
+    root = Path(data_root).expanduser().resolve()
+    if record.get("kind") == "onebot" and record.get("id") == "napcat":
+        metadata_path = root / ".stella" / "napcat.json"
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return False
+        return (
+            metadata.get("version") == record.get("version")
+            and str(metadata.get("digest", "")).lower()
+            == str(record.get("checksum", "")).lower()
+        )
+    try:
+        registry = packages.read_registry(data_root)
+    except (OSError, TypeError, ValueError, packages.PackageError):
+        return False
+    for installed in registry.get("packages", []):
+        if (
+            installed.get("kind") != record.get("kind")
+            or installed.get("id") != record.get("id")
+            or installed.get("version") != record.get("version")
+            or str(installed.get("checksum", "")).lower()
+            != str(record.get("checksum", "")).lower()
+        ):
+            continue
+        try:
+            path = (root / str(installed["path"])).resolve()
+            path.relative_to(root)
+        except (KeyError, OSError, TypeError, ValueError):
+            return False
+        return path.is_file() or path.is_dir()
+    return False
+
+
 def _download_record(record: dict[str, Any], data_root: Path) -> Path:
     source = str(record.get("source") or "").strip()
     if not source:
@@ -360,21 +396,27 @@ def install_profile(
         _write_progress(root, profile_id=profile_id, state="skipped")
         return {"ok": True, "profile": profile_id, "state": "skipped", "installed": []}
     previous = read_progress(root)
-    if (
-        isinstance(previous, dict)
-        and previous.get("profile") == profile_id
-        and previous.get("state") == "complete"
-    ):
-        _repair_oneclick_runtime(profile_id, root)
-        return {
-            "ok": True,
-            "profile": profile_id,
-            "state": "complete",
-            "installed": [],
-            "resumed": True,
-        }
-
-    catalog = _load_catalog(profile, catalog_path)
+    try:
+        catalog = _load_catalog(profile, catalog_path)
+    except BootstrapError:
+        # A previously completed install remains usable when an older bundle
+        # has no catalog; do not turn a repair/startup path into a hard error.
+        # New bundles always include the catalog, so this fallback does not
+        # suppress normal upgrades when the catalog is available.
+        if (
+            isinstance(previous, dict)
+            and previous.get("profile") == profile_id
+            and previous.get("state") == "complete"
+        ):
+            _repair_oneclick_runtime(profile_id, root)
+            return {
+                "ok": True,
+                "profile": profile_id,
+                "state": "complete",
+                "installed": [],
+                "resumed": True,
+            }
+        raise
     component_ids = [
         item for item in profile["included_components"] if item != "python-runtime"
     ]
@@ -383,6 +425,27 @@ def install_profile(
         (model["id"], _record(catalog, model["id"], "model"))
         for model in profile["default_models"]
     )
+    if (
+        isinstance(previous, dict)
+        and previous.get("profile") == profile_id
+        and previous.get("state") == "complete"
+    ):
+        pending = [
+            (item_id, record)
+            for item_id, record in items
+            if not _installed_record_matches(root, record)
+        ]
+        if not pending:
+            _repair_oneclick_runtime(profile_id, root)
+            return {
+                "ok": True,
+                "profile": profile_id,
+                "state": "complete",
+                "installed": [],
+                "resumed": True,
+            }
+        # Keep valid NapCat/model installations and refresh only stale records.
+        items = pending
     completed: list[str] = []
     installed: list[dict[str, Any]] = []
     _write_progress(root, profile_id=profile_id, state="running", completed=completed)

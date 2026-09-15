@@ -53,13 +53,14 @@ class Snapshot:
     onebot_host: str = "0.0.0.0"
     onebot_port: int = 8080
     onebot_port_in_use: bool | None = False
+    onebot_port_owned_by_stella: bool | None = None
     onebot_forward_reachable: bool | None = None
     onebot_endpoint_configured: bool | None = True
     onebot_token_configured: bool = False
     onebot_token_in_url: bool = False
     onebot_token_consistent: bool | None = None
-    # 状态接口是否可达。它同时是「端口被自己占用」的可靠证据——
-    # 接口挂在同一个 HTTP 服务器上，能连上说明监听者就是 Stella。
+    # 状态接口是否可达。它是「端口被自己占用」的强证据；端口探针还会
+    # 在 Windows 上用监听 PID 做独立归属判断，以兼容状态接口关闭/改路径。
     status_api_reachable: bool = False
 
     # ── LM Studio ──

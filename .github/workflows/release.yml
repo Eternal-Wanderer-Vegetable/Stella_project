@@ -67,7 +67,10 @@ jobs:
       - name: 准备 Windows OpenSSL runtime
         shell: pwsh
         run: |
-          $required = @('libcrypto-3-x64.dll', 'libssl-3-x64.dll')
+          $requiredSets = @(
+            @('libcrypto-3-x64.dll', 'libcrypto-3.dll'),
+            @('libssl-3-x64.dll', 'libssl-3.dll')
+          )
           $roots = @(
             (Join-Path $env:ProgramFiles 'OpenSSL-Win64\bin'),
             (Join-Path $env:ProgramFiles 'OpenSSL\bin'),
@@ -76,8 +79,13 @@ jobs:
           )
           function Find-OpenSslDir {
             foreach ($root in $roots) {
-              if ((Test-Path (Join-Path $root $required[0])) -and
-                  (Test-Path (Join-Path $root $required[1]))) {
+              $crypto = $requiredSets[0] | Where-Object {
+                Test-Path (Join-Path $root $_)
+              }
+              $ssl = $requiredSets[1] | Where-Object {
+                Test-Path (Join-Path $root $_)
+              }
+              if ($crypto -and $ssl) {
                 return $root
               }
             }
@@ -89,7 +97,7 @@ jobs:
             $opensslDir = Find-OpenSslDir
           }
           if (-not $opensslDir) {
-            throw "未找到 Windows OpenSSL runtime: $($required -join ', ')"
+            throw "未找到 Windows OpenSSL runtime: libcrypto-3-x64.dll/libcrypto-3.dll, libssl-3-x64.dll/libssl-3.dll"
           }
           "OPENSSL_RUNTIME_DIR=$opensslDir" >> $env:GITHUB_ENV
 

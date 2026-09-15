@@ -9,7 +9,10 @@ import json
 from pathlib import Path
 
 BACKENDS = {"cpu", "cuda", "hip", "metal", "vulkan"}
-WINDOWS_REQUIRED_DLLS = ("libcrypto-3-x64.dll", "libssl-3-x64.dll")
+WINDOWS_OPENSSL_DLLS = (
+    ("libcrypto-3-x64.dll", "libcrypto-3.dll"),
+    ("libssl-3-x64.dll", "libssl-3.dll"),
+)
 
 
 def _sha256(path: Path) -> str:
@@ -45,9 +48,11 @@ def verify(root: Path) -> list[str]:
     if not executable.is_file():
         problems.append(f"missing executable: {executable.name}")
     if metadata.get("os") == "windows":
-        for name in WINDOWS_REQUIRED_DLLS:
-            if not (root / name).is_file():
-                problems.append(f"missing Windows runtime DLL: {name}")
+        for alternatives in WINDOWS_OPENSSL_DLLS:
+            if not any((root / name).is_file() for name in alternatives):
+                problems.append(
+                    "missing Windows runtime DLL: " + " or ".join(alternatives)
+                )
     sums = root / "SHA256SUMS.txt"
     if not sums.is_file():
         problems.append("missing SHA256SUMS.txt")

@@ -67,7 +67,10 @@ def test_build_rejects_windows_package_without_openssl_runtime(tmp_path, monkeyp
     ):
         monkeypatch.delenv(variable, raising=False)
 
-    with pytest.raises(FileNotFoundError, match=r"libcrypto-3-x64\.dll"):
+    with pytest.raises(
+        FileNotFoundError,
+        match=r"libcrypto-3-x64\.dll/libcrypto-3\.dll",
+    ):
         build(
             source,
             output,
