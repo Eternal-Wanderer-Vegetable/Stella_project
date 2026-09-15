@@ -44,6 +44,7 @@ mod runtime_bootstrap {
     const RUST_MARKER: &str = ".stella-rust-ready";
     const PROGRESS_FILE: &str = ".bootstrap-progress";
     const PROFILE_MARKER_PREFIX: &str = ".stella-profile-ready-";
+    const PROFILE_CATALOG_FILENAME: &str = "package-catalog-windows-amd64.json";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
     const MIN_GET_PIP_SIZE: u64 = 500_000;
     const NETWORK_ENV_VARS: &[&str] = &[
@@ -373,10 +374,31 @@ mod runtime_bootstrap {
         if profile.starts_with("standalone-") {
             return Ok(());
         }
+        ensure_product_profile_for(root, python, &profile, |python, args, cwd| {
+            run(python, args, cwd)
+        })
+    }
+
+    fn ensure_product_profile_for<F>(
+        root: &Path,
+        python: &Path,
+        profile: &str,
+        run_profile: F,
+    ) -> Result<(), String>
+    where
+        F: FnOnce(&Path, &[&str], &Path) -> Result<String, String>,
+    {
         let marker = root
             .join("runtime")
             .join(format!("{PROFILE_MARKER_PREFIX}{profile}"));
-        if marker.is_file() {
+        let catalog = root.join(PROFILE_CATALOG_FILENAME);
+        let catalog_hash = sha256_hex(&catalog).map_err(|e| {
+            format!(
+                "无法读取产品 package catalog（{}）：{e}",
+                catalog.display()
+            )
+        })?;
+        if profile_marker_matches(&marker, &catalog_hash) {
             return Ok(());
         }
         emit_progress(root, &format!("正在安装产品组件（{profile}）…"));
@@ -386,11 +408,23 @@ mod runtime_bootstrap {
             "bootstrap",
             "install",
             "--profile",
-            profile.as_str(),
+            profile,
         ];
-        run(python, &args, root).map_err(|e| format!("产品组件安装失败：{e}"))?;
-        fs::write(&marker, "complete\n").map_err(|e| e.to_string())?;
+        run_profile(python, &args, root).map_err(|e| format!("产品组件安装失败：{e}"))?;
+        let installed_catalog_hash = sha256_hex(&catalog).map_err(|e| {
+            format!(
+                "产品组件安装成功，但无法记录 package catalog（{}）：{e}",
+                catalog.display()
+            )
+        })?;
+        fs::write(&marker, installed_catalog_hash + "\n").map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    fn profile_marker_matches(marker: &Path, catalog_hash: &str) -> bool {
+        fs::read_to_string(marker)
+            .map(|recorded| recorded.trim().eq_ignore_ascii_case(catalog_hash))
+            .unwrap_or(false)
     }
 
     fn sha256_hex(path: &Path) -> Result<String, String> {
@@ -653,6 +687,111 @@ mod runtime_bootstrap {
             assert_eq!(
                 sha256_hex(&file).unwrap(),
                 "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+            );
+            fs::remove_dir_all(&dir).ok();
+        }
+
+        #[test]
+        fn legacy_profile_marker_does_not_match_catalog() {
+            let dir = std::env::temp_dir().join("stella-profile-marker-legacy-test");
+            fs::create_dir_all(&dir).unwrap();
+            let marker = dir.join("marker");
+            fs::write(&marker, "complete\n").unwrap();
+
+            assert!(!profile_marker_matches(
+                &marker,
+                "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+            ));
+            fs::remove_dir_all(&dir).ok();
+        }
+
+        #[test]
+        fn profile_marker_matches_catalog_hash_only() {
+            let dir = std::env::temp_dir().join("stella-profile-marker-hash-test");
+            fs::create_dir_all(&dir).unwrap();
+            let marker = dir.join("marker");
+            fs::write(
+                &marker,
+                "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD\n",
+            )
+            .unwrap();
+
+            assert!(profile_marker_matches(
+                &marker,
+                "ba7816bf8f01cfeA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+            ));
+            assert!(!profile_marker_matches(&marker, "different"));
+            fs::remove_dir_all(&dir).ok();
+        }
+
+        #[test]
+        fn product_profile_bootstrap_records_catalog_hash_after_success() {
+            let dir = std::env::temp_dir().join("stella-profile-bootstrap-test");
+            fs::create_dir_all(dir.join("runtime")).unwrap();
+            let catalog = dir.join(PROFILE_CATALOG_FILENAME);
+            fs::write(&catalog, b"catalog-v4.0.29").unwrap();
+            let python = dir.join("runtime").join("python.exe");
+
+            let mut calls = 0;
+            ensure_product_profile_for(&dir, &python, "oneclick-rust", |_, args, cwd| {
+                calls += 1;
+                assert_eq!(
+                    args,
+                    &[
+                        "-m",
+                        "deploy",
+                        "bootstrap",
+                        "install",
+                        "--profile",
+                        "oneclick-rust"
+                    ]
+                );
+                assert_eq!(cwd, dir.as_path());
+                Ok(String::new())
+            })
+            .unwrap();
+
+            let marker = dir
+                .join("runtime")
+                .join(".stella-profile-ready-oneclick-rust");
+            assert_eq!(
+                fs::read_to_string(&marker).unwrap().trim(),
+                sha256_hex(&catalog).unwrap()
+            );
+            assert_eq!(calls, 1);
+
+            ensure_product_profile_for(&dir, &python, "oneclick-rust", |_, _, _| {
+                panic!("matching catalog marker must skip bootstrap")
+            })
+            .unwrap();
+            assert_eq!(calls, 1);
+            fs::remove_dir_all(&dir).ok();
+        }
+
+        #[test]
+        fn changed_catalog_invalidates_profile_marker() {
+            let dir = std::env::temp_dir().join("stella-profile-bootstrap-refresh-test");
+            fs::create_dir_all(dir.join("runtime")).unwrap();
+            let catalog = dir.join(PROFILE_CATALOG_FILENAME);
+            fs::write(&catalog, b"catalog-v4.0.29").unwrap();
+            let python = dir.join("runtime").join("python.exe");
+            let marker = dir
+                .join("runtime")
+                .join(".stella-profile-ready-oneclick-rust");
+            fs::write(&marker, sha256_hex(&catalog).unwrap() + "\n").unwrap();
+            fs::write(&catalog, b"catalog-v4.0.30").unwrap();
+
+            let mut calls = 0;
+            ensure_product_profile_for(&dir, &python, "oneclick-rust", |_, _, _| {
+                calls += 1;
+                Ok(String::new())
+            })
+            .unwrap();
+
+            assert_eq!(calls, 1);
+            assert_eq!(
+                fs::read_to_string(&marker).unwrap().trim(),
+                sha256_hex(&catalog).unwrap()
             );
             fs::remove_dir_all(&dir).ok();
         }
