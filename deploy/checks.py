@@ -212,7 +212,7 @@ def check_onebot_token(snap: Snapshot) -> CheckResult | None:
 
 
 def check_lm_studio_reachable(snap: Snapshot) -> CheckResult | None:
-    """LM Studio 不可达时，若本地 embedding fallback 有效则只告警。"""
+    """LM Studio 不可达只告警；基础 Bot 不依赖模型提供商。"""
     if snap.lm_reachable is False:
         detail = f"错误：{snap.lm_error}" if snap.lm_error else "无法访问 /v1/models。"
         local = snap.llama_readiness
@@ -237,10 +237,18 @@ def check_lm_studio_reachable(snap: Snapshot) -> CheckResult | None:
             )
         return CheckResult(
             id="lm_studio",
-            level="error",
-            title="LM Studio 不可达",
-            detail=detail,
-            fix_hint="启动 LM Studio 并打开 Local Server（默认 127.0.0.1:1234）。",
+            level="warn",
+            title="LM Studio 不可达，模型功能暂不可用",
+            detail=(
+                f"{detail} Stella 基础 Bot 与插件程序化回复仍可启动；"
+                "需要模型的聊天、语义检索和记忆整合功能会暂时降级。"
+            ),
+            fix_hint=(
+                "需要聊天模型时，启动 LM Studio 并打开 Local Server（默认 "
+                "127.0.0.1:1234），或配置其它可用的 LLM_ENDPOINT_*；"
+                "需要本地 embedding 时可执行 python -m deploy runtime start "
+                "--component llama。"
+            ),
         )
     if snap.lm_reachable is None:
         return CheckResult(
@@ -894,7 +902,7 @@ def check_llm_config_issues(
 def check_llm_endpoint_reachable(
     snap: Snapshot,
 ) -> CheckResult | Sequence[CheckResult] | None:
-    """逐槽报「地址不通」：本地 → error，在线 → warn。
+    """逐槽报「地址不通」：所有模型端点只告警。
 
     在线端点刻意只到 warn：``/v1/models`` 是可选接口，不少服务商压根不开放、
     或者要另一种鉴权，探不到并不代表 chat 调用不通。为一条探测失败拦住一个
@@ -910,19 +918,16 @@ def check_llm_endpoint_reachable(
             continue  # 没启用、探通了、或没探（None）都不报
         if base.rstrip("/") == snap.lm_base_url.rstrip("/"):
             continue
-        local = str(ep.get("kind") or "") == "local"
         err = snap.llm_endpoint_error.get(slot, "")
         detail = f"{base} 的 /v1/models 请求失败。" + (f"错误：{err}" if err else "")
         results.append(
             CheckResult(
                 id=f"llm_endpoint_{slot.lower()}",
-                level="error" if local else "warn",
+                level="warn",
                 title=f"端点 {slot} 不可达",
                 detail=detail,
                 fix_hint=(
-                    f"确认该本地服务已启动，或修正 LLM_ENDPOINT_{slot}_BASE_URL。"
-                    if local
-                    else f"确认 LLM_ENDPOINT_{slot}_BASE_URL 与 API_KEY 正确、网络可达。"
+                    f"确认 LLM_ENDPOINT_{slot}_BASE_URL 与 API_KEY 正确、网络可达。"
                     "若该服务商本就不开放 /v1/models，本条可以忽略——"
                     "真正的验证是发一次对话。"
                 ),

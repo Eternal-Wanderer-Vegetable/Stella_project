@@ -332,6 +332,20 @@ def _repair_oneclick_runtime(profile_id: str, data_root: Path) -> None:
         return
 
 
+def repair_oneclick_runtime(data_root: Path) -> bool:
+    """Repair a completed OneClick install before a new process starts."""
+    root = Path(data_root).expanduser().resolve()
+    progress = read_progress(root)
+    if (
+        not isinstance(progress, dict)
+        or not str(progress.get("profile") or "").startswith("oneclick-")
+        or progress.get("state") != "complete"
+    ):
+        return False
+    _repair_oneclick_runtime(str(progress["profile"]), root)
+    return True
+
+
 def install_profile(
     profile_id: str,
     data_root: Path,
@@ -438,4 +452,9 @@ def install_profile(
         raise
 
 
-__all__ = ["BootstrapError", "install_profile", "read_progress"]
+__all__ = [
+    "BootstrapError",
+    "install_profile",
+    "read_progress",
+    "repair_oneclick_runtime",
+]

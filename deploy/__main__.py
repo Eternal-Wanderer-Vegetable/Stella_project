@@ -133,6 +133,10 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_start(args: argparse.Namespace) -> int:
+    optional = runtime.prepare_optional_runtime()
+    optional_message = str(optional.get("message") or "").strip()
+    if optional_message and optional.get("source") != "unavailable":
+        print(("" if optional.get("ok") else "[警告] ") + optional_message)
     snapshot = probe.collect()
     results = checks.run_all(snapshot)
     if report.has_blocking(results):
