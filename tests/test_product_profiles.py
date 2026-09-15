@@ -126,6 +126,7 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
+        "stella_project",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -153,6 +154,7 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     assert "bot.py" in names
     assert "astrbot_compat/__init__.py" in names
     assert "capability/__init__.py" in names
+    assert "stella_project/__init__.py" in names
     assert "runtime/python.exe" not in names
     assert "models/chat.gguf" not in names
     assert "deploy/napcat.py" in names
@@ -202,6 +204,7 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
+        "stella_project",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +224,7 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
     )
     assert (output / "astrbot_compat" / "__init__.py").exists()
     assert (output / "capability" / "__init__.py").exists()
+    assert (output / "stella_project" / "__init__.py").exists()
     assert (output / "deploy" / "__init__.py").exists()
     assert (output / "release_assets" / "product-profiles" / "oneclick-rust.json").exists()
     assert not (output / "tests").exists()
@@ -258,6 +262,7 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
+        "stella_project",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
