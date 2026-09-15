@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import INSTANCE_ID, INSTANCE_RUNTIME_DIR, PROJECT_ROOT
+from config import INSTANCE_ID, INSTANCE_RUNTIME_DIR, PROJECT_ROOT, STELLA_HOME
 
 SCHEMA_VERSION = 1
 COMPONENTS = ("stella", "llama", "onebot")
@@ -282,15 +282,73 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def read_manifest() -> dict[str, Any]:
+def _active_embedding_record(
+    data_root: Path | None = None,
+) -> tuple[dict[str, Any], Path] | None:
+    """Find the active embedding package when the manifest is missing."""
+    root = Path(data_root or _stella_home()).expanduser().resolve()
+    try:
+        from . import packages
+
+        registry = packages.read_registry(root)
+    except (OSError, TypeError, ValueError):
+        return None
+    active = str(registry.get("active", {}).get("embedding") or "").strip()
+    if not active:
+        return None
+    for record in registry.get("packages", []):
+        if (
+            record.get("kind") != "model"
+            or record.get("model_role") != "embedding"
+            or f"{record.get('id')}@{record.get('version')}" != active
+        ):
+            continue
+        try:
+            path = (root / str(record["path"])).resolve()
+            path.relative_to(root)
+        except (KeyError, OSError, ValueError, TypeError):
+            return None
+        return record, path
+    return None
+
+
+def _stella_home() -> Path:
+    """Resolve the current data root without importing another config symbol."""
+    return STELLA_HOME
+
+
+def _manifest_with_installed_embedding() -> dict[str, Any]:
+    """Build an effective manifest for older installs missing the manifest file."""
+    payload = default_manifest()
+    active = _active_embedding_record()
+    if active is None:
+        return payload
+    record, path = active
+    llama = payload["components"]["llama"]
+    llama["enabled"] = True
+    llama["config"]["embedding_model"] = {
+        "path": str(path),
+        "package": f"{record['id']}@{record['version']}",
+        "id": str(record["id"]),
+        "checksum": str(record["checksum"]),
+    }
+    return payload
+
+
+def _read_valid_manifest() -> dict[str, Any] | None:
     value = _read_json(manifest_path())
     if value is None:
-        return default_manifest()
+        return None
     try:
         validate_manifest(value)
     except ValueError:
-        return default_manifest()
+        return None
     return value
+
+
+def read_manifest() -> dict[str, Any]:
+    value = _read_valid_manifest()
+    return value if value is not None else _manifest_with_installed_embedding()
 
 
 def read_state() -> dict[str, Any]:
@@ -517,6 +575,30 @@ def _captured_call(callback: Any) -> tuple[Any, str]:
     return value, output.getvalue().strip()
 
 
+def prepare_optional_runtime() -> dict[str, Any]:
+    """Repair OneClick state and best-effort start local embedding service."""
+    try:
+        from . import bootstrap
+
+        bootstrap.repair_oneclick_runtime(_stella_home())
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": "error",
+            "message": f"修复 OneClick runtime 状态失败：{exc}",
+        }
+    try:
+        from . import llama
+
+        return llama.ensure_local_embedding_service()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": "error",
+            "message": f"准备本地 embedding 服务失败：{exc}",
+        }
+
+
 def execute_operation(
     operation: str,
     component: str = "stella",
@@ -624,6 +706,7 @@ def execute_operation(
         }
 
     if operation == "start":
+        optional = prepare_optional_runtime()
         facts = probe.collect()
         results = checks.run_all(facts)
         if report.has_blocking(results) and not force:
@@ -687,6 +770,13 @@ def execute_operation(
         "exit_code": 0 if ok else 1,
         "data": snapshot(),
     }
+    if operation == "start":
+        optional_message = str(optional.get("message") or "").strip()
+        if optional_message and optional.get("source") != "unavailable":
+            prefix = "" if optional.get("ok") else "[警告] "
+            output = "\n".join(
+                part for part in (f"{prefix}{optional_message}", output) if part
+            )
     if output:
         result["message"] = output[-2000:]
     if not ok:
@@ -712,6 +802,7 @@ __all__ = [
     "embedding_endpoint_config",
     "execute_operation",
     "llama_endpoint_config",
+    "prepare_optional_runtime",
     "read_manifest",
     "read_state",
     "redact_value",

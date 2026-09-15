@@ -219,3 +219,57 @@ def test_oneclick_is_idempotent_without_redownloading(tmp_path, monkeypatch):
 
     assert result["resumed"] is True
     assert calls == 3
+
+
+def test_completed_oneclick_repair_restores_manifest_and_env(tmp_path, monkeypatch):
+    data_root = tmp_path / "data"
+    runtime_dir = tmp_path / "runtime"
+    monkeypatch.setattr(runtime, "STELLA_HOME", data_root)
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "repair-test")
+    model = data_root / ".stella" / "packages" / "model" / "qwen.gguf"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"model")
+    packages.write_registry(
+        {
+            "schema_version": 1,
+            "updated_at": "now",
+            "packages": [
+                {
+                    "kind": "model",
+                    "id": "qwen3-embedding-0.6b",
+                    "version": "q8_0",
+                    "path": ".stella/packages/model/qwen.gguf",
+                    "checksum": "a" * 64,
+                    "model_role": "embedding",
+                }
+            ],
+            "active": {"embedding": "qwen3-embedding-0.6b@q8_0"},
+            "history": [],
+        },
+        data_root,
+    )
+    (data_root / ".stella" / bootstrap.PROGRESS_FILENAME).parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    bootstrap._write_progress(
+        data_root,
+        profile_id="oneclick-rust",
+        state="complete",
+        completed=["llama-cpu", "qwen3-embedding-0.6b"],
+    )
+    (data_root / ".env").write_text(
+        "MEMORY_EMBEDDING_ENABLED=false\n"
+        "MEMORY_EMBEDDING_MODEL=text-embedding-qwen3-embedding-0.6b\n",
+        encoding="utf-8",
+    )
+
+    assert bootstrap.repair_oneclick_runtime(data_root) is True
+    manifest = runtime.read_manifest()
+    assert manifest["components"]["llama"]["enabled"] is True
+    assert (
+        manifest["components"]["llama"]["config"]["embedding_model"]["id"]
+        == "qwen3-embedding-0.6b"
+    )
+    env = (data_root / ".env").read_text(encoding="utf-8")
+    assert "MEMORY_EMBEDDING_ENABLED=true" in env

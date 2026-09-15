@@ -62,6 +62,43 @@ def test_embedding_only_manifest_exposes_separate_endpoint(monkeypatch, tmp_path
     assert endpoint["base_url"] == "http://127.0.0.1:8081"
 
 
+def test_missing_manifest_uses_active_embedding_package(monkeypatch, tmp_path):
+    from deploy import packages
+
+    data_root = tmp_path / "data"
+    model = data_root / "model.gguf"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"model")
+    monkeypatch.setattr(runtime, "STELLA_HOME", data_root)
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", data_root / "runtime")
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "test")
+    packages.write_registry(
+        {
+            "schema_version": 1,
+            "updated_at": "now",
+            "packages": [
+                {
+                    "kind": "model",
+                    "id": "qwen3-embedding-0.6b",
+                    "version": "q8_0",
+                    "path": "model.gguf",
+                    "checksum": "a" * 64,
+                    "model_role": "embedding",
+                }
+            ],
+            "active": {"embedding": "qwen3-embedding-0.6b@q8_0"},
+            "history": [],
+        },
+        data_root,
+    )
+
+    endpoint = runtime.embedding_endpoint_config()
+
+    assert endpoint is not None
+    assert endpoint["model"] == "qwen3-embedding-0.6b"
+    assert endpoint["model_path"] == str(model.resolve())
+
+
 def test_unknown_operation_and_component_are_rejected():
     with pytest.raises(ValueError):
         runtime.validate_operation("shell")
@@ -179,6 +216,11 @@ def test_execute_rejects_unconfigured_llama_component(monkeypatch):
 
 
 def test_execute_start_captures_legacy_output(monkeypatch):
+    monkeypatch.setattr(
+        runtime,
+        "prepare_optional_runtime",
+        lambda: {"ok": False, "source": "unavailable"},
+    )
     monkeypatch.setattr(probe, "collect", lambda: object())
     monkeypatch.setattr(checks, "run_all", lambda facts: [])
     monkeypatch.setattr(process, "start_detached", lambda: (print("started"), 0)[1])

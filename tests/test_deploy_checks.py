@@ -387,12 +387,13 @@ def test_onebot_token_mismatch_is_error():
 # ── LM Studio ──
 
 
-def test_lm_studio_unreachable_is_error():
+def test_lm_studio_unreachable_is_non_blocking_warning():
     r = checks.check_lm_studio_reachable(
         _healthy_snapshot(lm_reachable=False, lm_error="Connection refused")
     )
-    assert r is not None and r.level == "error"
+    assert r is not None and r.level == "warn"
     assert "Connection refused" in r.detail
+    assert "程序化回复" in r.detail
 
 
 def test_lm_studio_unreachable_uses_local_embedding_fallback():
@@ -410,6 +411,22 @@ def test_lm_studio_unreachable_uses_local_embedding_fallback():
     )
     assert r is not None and r.level == "warn"
     assert "本地 llama.cpp" in r.detail
+
+
+def test_unreachable_custom_local_endpoint_is_non_blocking_warning():
+    r = checks.check_llm_endpoint_reachable(
+        _healthy_snapshot(
+            llm_endpoints={
+                "OTHER_LOCAL": {
+                    "base_url": "http://127.0.0.1:8088",
+                    "kind": "local",
+                }
+            },
+            llm_endpoint_reachable={"OTHER_LOCAL": False},
+            llm_endpoint_error={"OTHER_LOCAL": "Connection refused"},
+        )
+    )
+    assert r is not None and r[0].level == "warn"
 
 
 def test_lm_studio_probe_failed_is_warn():
@@ -822,10 +839,10 @@ def test_llm_endpoint_online_unreachable_is_only_warn():
     assert "Connection refused" in r[0].detail
 
 
-def test_llm_endpoint_local_unreachable_is_error():
-    """本地端点探不到就是真的没起来——地址是自己机器上的，不存在「不开放」这回事。"""
+def test_llm_endpoint_local_unreachable_is_non_blocking_warning():
+    """本地端点探不到也不阻止程序化插件流程。"""
     r = checks.check_llm_endpoint_reachable(_endpoint_snapshot("local", False))
-    assert isinstance(r, list) and r[0].level == "error"
+    assert isinstance(r, list) and r[0].level == "warn"
 
 
 def test_llm_endpoint_unprobed_is_not_reported():
