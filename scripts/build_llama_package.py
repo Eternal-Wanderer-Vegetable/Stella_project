@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 
 FLAGS = {
@@ -17,6 +19,7 @@ FLAGS = {
     "metal": ["-DGGML_METAL=ON"],
     "vulkan": ["-DGGML_VULKAN=ON"],
 }
+WINDOWS_REQUIRED_DLLS = ("libcrypto-3-x64.dll", "libssl-3-x64.dll")
 
 
 def _digest(path: Path) -> str:
@@ -27,11 +30,89 @@ def _digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build(source: Path, output: Path, *, backend: str, commit: str, os_name: str, arch: str) -> Path:
+def _runtime_roots(
+    build_dir: Path,
+    executable: Path,
+    runtime_dirs: Iterable[Path],
+) -> list[Path]:
+    roots = [build_dir, executable.parent]
+    for directory in runtime_dirs:
+        roots.append(Path(directory).expanduser())
+    for variable in ("OPENSSL_BIN_DIR", "OPENSSL_ROOT_DIR", "OPENSSL_DIR"):
+        value = os.environ.get(variable)
+        if not value:
+            continue
+        root = Path(value).expanduser()
+        roots.append(root / "bin" if variable != "OPENSSL_BIN_DIR" else root)
+    vcpkg_root = os.environ.get("VCPKG_INSTALLATION_ROOT")
+    if vcpkg_root:
+        roots.append(Path(vcpkg_root) / "installed" / "x64-windows" / "bin")
+    roots.extend(Path(entry) for entry in os.environ.get("PATH", "").split(os.pathsep) if entry)
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = os.path.normcase(str(root))
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
+def _find_runtime_dll(name: str, roots: Iterable[Path]) -> Path | None:
+    for root in roots:
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _copy_runtime_libraries(
+    build_dir: Path,
+    executable: Path,
+    output: Path,
+    *,
+    os_name: str,
+    runtime_dirs: Iterable[Path],
+) -> None:
+    for path in build_dir.rglob("*"):
+        if path.is_file() and path.suffix.lower() in {".dll", ".so", ".dylib"}:
+            shutil.copy2(path, output / path.name)
+    if os_name != "windows":
+        return
+    roots = _runtime_roots(build_dir, executable, runtime_dirs)
+    missing: list[str] = []
+    for name in WINDOWS_REQUIRED_DLLS:
+        target = output / name
+        if target.is_file():
+            continue
+        source = _find_runtime_dll(name, roots)
+        if source is None:
+            missing.append(name)
+            continue
+        shutil.copy2(source, target)
+    if missing:
+        raise FileNotFoundError(
+            "Windows llama.cpp package is missing required OpenSSL runtime DLLs: "
+            + ", ".join(missing)
+            + ". Set OPENSSL_RUNTIME_DIR or pass --runtime-dir."
+        )
+
+
+def build(
+    source: Path,
+    output: Path,
+    *,
+    backend: str,
+    commit: str,
+    os_name: str,
+    arch: str,
+    runtime_dirs: Iterable[Path] = (),
+) -> Path:
     if backend not in FLAGS:
         raise ValueError(f"unsupported backend: {backend}")
     source = Path(source).resolve()
     output = Path(output).resolve()
+    normalized_os = "windows" if os_name.lower().startswith("windows") else os_name.lower()
     build_dir = output.parent / f".llama-build-{backend}"
     if not (source / "CMakeLists.txt").is_file():
         raise FileNotFoundError(f"llama.cpp source is missing CMakeLists.txt: {source}")
@@ -51,7 +132,7 @@ def build(source: Path, output: Path, *, backend: str, commit: str, os_name: str
         ["cmake", "--build", str(build_dir), "--config", "Release", "--target", "llama-server"],
         check=True,
     )
-    suffix = ".exe" if os_name.lower().startswith("windows") else ""
+    suffix = ".exe" if normalized_os == "windows" else ""
     candidates = [
         build_dir / "bin" / f"llama-server{suffix}",
         build_dir / "bin" / "Release" / f"llama-server{suffix}",
@@ -73,9 +154,13 @@ def build(source: Path, output: Path, *, backend: str, commit: str, os_name: str
             f"searched: {', '.join(str(path) for path in [*candidates, *discovered])}"
         )
     shutil.copy2(executable, output / executable.name)
-    for path in build_dir.rglob("*"):
-        if path.is_file() and path.suffix.lower() in {".dll", ".so", ".dylib"}:
-            shutil.copy2(path, output / path.name)
+    _copy_runtime_libraries(
+        build_dir,
+        executable,
+        output,
+        os_name=normalized_os,
+        runtime_dirs=runtime_dirs,
+    )
     license_source = next(
         (path for path in (source / "LICENSE", source / "LICENSE.md") if path.is_file()),
         None,
@@ -85,7 +170,7 @@ def build(source: Path, output: Path, *, backend: str, commit: str, os_name: str
     shutil.copy2(license_source, output / "LICENSE")
     metadata = {
         "backend": backend,
-        "os": os_name,
+        "os": normalized_os,
         "arch": arch,
         "abi": "documented",
         "runtime_api": "openai-compatible",
@@ -128,6 +213,7 @@ def main() -> int:
     parser.add_argument("--commit", required=True)
     parser.add_argument("--os", dest="os_name", required=True)
     parser.add_argument("--arch", required=True)
+    parser.add_argument("--runtime-dir", action="append", type=Path, default=[])
     args = parser.parse_args()
     build(
         args.source,
@@ -136,6 +222,7 @@ def main() -> int:
         commit=args.commit,
         os_name=args.os_name,
         arch=args.arch,
+        runtime_dirs=args.runtime_dir,
     )
     return 0
 

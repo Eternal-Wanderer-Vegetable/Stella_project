@@ -38,6 +38,16 @@ def test_backend_package_verifier_requires_provenance_and_checksums(tmp_path):
     assert any("checksum mismatch" in item for item in verify(tmp_path))
 
 
+def test_windows_backend_verifier_requires_openssl_runtime(tmp_path):
+    _write_backend(tmp_path)
+    metadata = json.loads((tmp_path / "BACKEND.json").read_text(encoding="utf-8"))
+    metadata["os"] = "windows"
+    (tmp_path / "BACKEND.json").write_text(json.dumps(metadata), encoding="utf-8")
+    assert "missing executable: llama-server.exe" in verify(tmp_path)
+    assert "missing Windows runtime DLL: libcrypto-3-x64.dll" in verify(tmp_path)
+    assert "missing Windows runtime DLL: libssl-3-x64.dll" in verify(tmp_path)
+
+
 def test_catalog_accepts_all_backend_metadata(tmp_path):
     (tmp_path / "start.bat").write_text("start", encoding="utf-8")
     records = []
