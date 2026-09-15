@@ -36,6 +36,7 @@ COMMON_DIRS = (
     "memory",
     "system_prompts",
     "runtime-manager",
+    "stella_project",
 )
 RUST_DIRS = ("memory_rust",)
 INSTALLER_FILES = (
