@@ -19,6 +19,8 @@ import time
 import types
 from pathlib import Path
 
+from fastapi import FastAPI
+
 _PROJ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJ / "stella_project"))
 
@@ -37,6 +39,36 @@ def test_is_loopback_true():
 def test_is_loopback_false():
     for host in ("192.168.1.10", "0.0.0.0", "abc", ""):
         assert status_api._is_loopback(host) is False
+
+
+def test_setup_status_api_registers_route_and_is_idempotent(monkeypatch):
+    app = FastAPI()
+    monkeypatch.setattr(status_api, "STELLA_STATUS_API_ENABLED", True)
+    monkeypatch.setattr(status_api, "STELLA_STATUS_API_PATH", "/stella/status")
+
+    monkeypatch.setattr(
+        sys.modules["nonebot"],
+        "get_app",
+        lambda: app,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sys.modules["nonebot"],
+        "get_driver",
+        lambda: types.SimpleNamespace(config=types.SimpleNamespace(port=8080)),
+        raising=False,
+    )
+
+    status_api.setup_status_api()
+    status_api.setup_status_api()
+
+    routes = [
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/stella/status"
+    ]
+    assert len(routes) == 1
+    assert "GET" in routes[0].methods
 
 
 def test_build_payload_fields_complete():

@@ -227,6 +227,7 @@ def start_detached() -> int:
         print(f"Stella 已就绪（PID {proc.pid}）。")
         return 0
 
+    _cleanup_failed_start(proc)
     clear_pid()
     clear_manifest()
     runtime.update_component(
@@ -237,6 +238,20 @@ def start_detached() -> int:
     )
     print(detail)
     return 1
+
+
+def _cleanup_failed_start(proc: subprocess.Popen) -> None:
+    """回收启动探测失败后仍存活的 Bot，避免残留进程占用服务端口。"""
+    if proc.poll() is not None and not is_alive(proc.pid):
+        return
+
+    with contextlib.suppress(OSError):
+        proc.terminate()
+    with contextlib.suppress(subprocess.TimeoutExpired, OSError):
+        proc.wait(timeout=2.0)
+
+    if is_alive(proc.pid):
+        _hard_kill(proc.pid)
 
 
 def wait_for_startup(

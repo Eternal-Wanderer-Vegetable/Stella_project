@@ -41,6 +41,7 @@ from config import (
 # 进程启动时刻：模块 import 即执行（ai_gateway 在插件加载时导入本模块）。
 # 放这里比放 setup_status_api() 里早——即便路由因故未注册，uptime 基准也更接近真实启动点。
 _STARTED_AT = time.time()
+_STARTUP_HOOK_REGISTERED = False
 
 # importlib.metadata 查不到（未安装成包 / 源码直接运行）时的回退版本号。
 # 与 pyproject.toml 的 version 保持一致，改版本号时一并更新。
@@ -146,22 +147,16 @@ def build_payload(
     return payload
 
 
-def setup_status_api() -> None:
-    """注册 GET /stella/status。非 ASGI 驱动或开关关闭时静默跳过。
-
-    NoneBot 的 get_app() 只在 ReverseDriver（FastAPI/Quart）下可用。取不到
-    app 时不报错——状态接口是加分项，缺了只是 GUI 少一块信息，不该阻断启动。
-    """
-    if not STELLA_STATUS_API_ENABLED:
-        return
-    try:
-        from nonebot import get_app, logger
-
-        app = get_app()
-    except Exception:
-        return
-    if app is None:
-        return
+def _register_status_route(app) -> bool:
+    """在给定 ASGI app 上注册状态路由；已注册时保持幂等。"""
+    for route in getattr(app, "routes", ()):
+        if (
+            getattr(route, "path", None) == STELLA_STATUS_API_PATH
+            and "GET" in (getattr(route, "methods", None) or ())
+            and getattr(getattr(route, "endpoint", None), "__module__", None)
+            == __name__
+        ):
+            return True
 
     @app.get(STELLA_STATUS_API_PATH)
     async def _status_endpoint(request: Request):
@@ -208,6 +203,50 @@ def setup_status_api() -> None:
             capabilities=_capabilities(),
             runtime_status=runtime_status,
         )
+
+    return True
+
+
+def _register_status_route_on_startup() -> None:
+    """在 NoneBot lifespan 开始时补注册一次状态路由。"""
+    try:
+        from nonebot import get_app, logger
+
+        if _register_status_route(get_app()):
+            logger.success("✅ 本地状态接口已就绪")
+    except Exception:
+        # 状态接口是诊断能力，不能阻断 Bot 启动。
+        return
+
+
+def setup_status_api() -> None:
+    """注册 GET /stella/status。非 ASGI 驱动或开关关闭时静默跳过。
+
+    NoneBot 的 get_app() 只在 ReverseDriver（FastAPI/Quart）下可用。取不到
+    app 时延迟到 lifespan 启动阶段再试——状态接口是加分项，缺了只是 GUI
+    少一块信息，不该阻断启动。
+    """
+    if not STELLA_STATUS_API_ENABLED:
+        return
+    try:
+        from nonebot import get_app, get_driver, logger
+
+        app = get_app()
+    except Exception:
+        app = None
+        try:
+            driver = get_driver()
+            global _STARTUP_HOOK_REGISTERED
+            if not _STARTUP_HOOK_REGISTERED:
+                driver.on_startup(_register_status_route_on_startup)
+                _STARTUP_HOOK_REGISTERED = True
+        except Exception:
+            return
+
+    if app is None:
+        return
+    if not _register_status_route(app):
+        return
 
     try:
         from nonebot import get_driver
