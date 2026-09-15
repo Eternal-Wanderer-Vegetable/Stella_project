@@ -52,6 +52,35 @@ jobs:
           repository: ggml-org/llama.cpp
           ref: ${{ inputs.llama_commit }}
           path: .llama.cpp
+      - name: Prepare Windows OpenSSL runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $required = @('libcrypto-3-x64.dll', 'libssl-3-x64.dll')
+          $roots = @(
+            (Join-Path $env:ProgramFiles 'OpenSSL-Win64\bin'),
+            (Join-Path $env:ProgramFiles 'OpenSSL\bin'),
+            'C:\Program Files\Git\usr\bin',
+            'C:\ProgramData\chocolatey\bin'
+          )
+          function Find-OpenSslDir {
+            foreach ($root in $roots) {
+              if ((Test-Path (Join-Path $root $required[0])) -and
+                  (Test-Path (Join-Path $root $required[1]))) {
+                return $root
+              }
+            }
+            return $null
+          }
+          $opensslDir = Find-OpenSslDir
+          if (-not $opensslDir) {
+            choco install openssl --yes --no-progress
+            $opensslDir = Find-OpenSslDir
+          }
+          if (-not $opensslDir) {
+            throw "Windows OpenSSL runtime not found: $($required -join ', ')"
+          }
+          "OPENSSL_RUNTIME_DIR=$opensslDir" >> $env:GITHUB_ENV
       - name: Build backend package
         shell: bash
         run: |
@@ -63,12 +92,18 @@ jobs:
           test "$VERSION" = "$PY_VERSION"
           test "$VERSION" = "$CLI_VERSION"
           mkdir -p "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}"
-          python scripts/build_llama_package.py .llama.cpp \
-            --output "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}" \
-            --backend '${{ matrix.backend }}' \
-            --commit '${{ inputs.llama_commit }}' \
-            --os '${{ matrix.os }}' \
+          build_args=(
+            .llama.cpp
+            --output "dist/Stella-llama-v${VERSION}-${{ matrix.target }}-${{ matrix.backend }}"
+            --backend '${{ matrix.backend }}'
+            --commit '${{ inputs.llama_commit }}'
+            --os '${{ matrix.os }}'
             --arch '${{ matrix.target }}'
+          )
+          if [ '${{ runner.os }}' = 'Windows' ]; then
+            build_args+=(--runtime-dir "$OPENSSL_RUNTIME_DIR")
+          fi
+          python scripts/build_llama_package.py "${build_args[@]}"
       - name: Verify package provenance
         shell: bash
         run: |

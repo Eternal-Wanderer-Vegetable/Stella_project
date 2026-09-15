@@ -64,6 +64,35 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: 准备 Windows OpenSSL runtime
+        shell: pwsh
+        run: |
+          $required = @('libcrypto-3-x64.dll', 'libssl-3-x64.dll')
+          $roots = @(
+            (Join-Path $env:ProgramFiles 'OpenSSL-Win64\bin'),
+            (Join-Path $env:ProgramFiles 'OpenSSL\bin'),
+            'C:\Program Files\Git\usr\bin',
+            'C:\ProgramData\chocolatey\bin'
+          )
+          function Find-OpenSslDir {
+            foreach ($root in $roots) {
+              if ((Test-Path (Join-Path $root $required[0])) -and
+                  (Test-Path (Join-Path $root $required[1]))) {
+                return $root
+              }
+            }
+            return $null
+          }
+          $opensslDir = Find-OpenSslDir
+          if (-not $opensslDir) {
+            choco install openssl --yes --no-progress
+            $opensslDir = Find-OpenSslDir
+          }
+          if (-not $opensslDir) {
+            throw "未找到 Windows OpenSSL runtime: $($required -join ', ')"
+          }
+          "OPENSSL_RUNTIME_DIR=$opensslDir" >> $env:GITHUB_ENV
+
       - name: 构建并校验 Windows CPU backend
         shell: pwsh
         run: |
@@ -75,7 +104,8 @@ jobs:
             --backend cpu `
             --commit $env:LLAMA_CPP_COMMIT `
             --os windows `
-            --arch windows-amd64
+            --arch windows-amd64 `
+            --runtime-dir $env:OPENSSL_RUNTIME_DIR
           python scripts/verify_llama_package.py $package
           Compress-Archive -Path "$package\*" -DestinationPath $archive
           if (-not (Test-Path -LiteralPath $archive)) {
