@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from deploy import probe
 from deploy.models import Snapshot
 
@@ -283,3 +285,33 @@ def test_probe_database_fresh_install_parent_missing(monkeypatch, tmp_path):
     assert r["db_writable"] is True
     # 目录确实被建出来（Bot 首启前 doctor 就能给出真实结论）
     assert (tmp_path / "memory").is_dir()
+
+
+def test_probe_render_recognizes_offline_browsers(tmp_path, monkeypatch):
+    """随包离线内核要被认作「已安装」，doctor 才不会在 OneClick Offline 上误报。
+
+    doctor 是独立进程，render 在 bot 进程里设的 PLAYWRIGHT_BROWSERS_PATH 对它
+    不可见，所以 _probe_render 必须单独认 offline/playwright-browsers 目录。
+    """
+    pytest.importorskip("playwright")
+    installed = (
+        tmp_path / "offline" / "playwright-browsers" / "chromium_headless_shell-1187"
+    )
+    installed.mkdir(parents=True)
+    (installed / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
+    monkeypatch.setattr(probe, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(probe, "_browsers_root", lambda: None)
+
+    out = probe._probe_render()
+
+    assert out["chromium_installed"] is True
+
+
+def test_probe_render_without_offline_browsers_keeps_heuristic(tmp_path, monkeypatch):
+    """没有离线仓时不能凭空报 True：维持「未知/缺失」的原有语义。"""
+    monkeypatch.setattr(probe, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(probe, "_browsers_root", lambda: None)
+
+    out = probe._probe_render()
+
+    assert out["chromium_installed"] in (None, False)

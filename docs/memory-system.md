@@ -349,6 +349,9 @@ score = W_CONTEXT × 上下文契合
 
 ## 延伸阅读
 
+本文描述的是默认的 Python 记忆引擎（`memory/`）。检索层另有可选的 Rust 实现（独立发布、
+`MEMORY_BACKEND` 切换、支持 shadow 旁路对比），见 [Rust 记忆后端](memory-rust-backend.md)。
+
 设计过程与实测记录在 [`design_docs/`](../design_docs/)：
 
 - `Memory Schema / Consolidation / Retrieval / Policy Matrix / Evaluation & Debug Specification v1.0.md` —— 原始规范

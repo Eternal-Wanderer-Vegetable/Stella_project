@@ -464,7 +464,19 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 ## Release Process
 
-After a tag is pushed, CI (`.github/workflows/release.yml`) automatically packages and publishes `Stella-vX.Y.Z-win64.zip`.
+After a tag is pushed, CI (`.github/workflows/release.yml`) automatically packages and publishes six Windows product assets: `Stella-OneClick-Python/Rust-vX.Y.Z-windows-amd64.exe` (single-file installers), `Stella-OneClick-Python/Rust-Offline-vX.Y.Z-windows-amd64.exe` (offline installers, see below), and `Stella-Standalone-Python/Rust-vX.Y.Z-windows-amd64.zip` (Stella-only archives), plus independent assets such as the CLI and the llama backend.
+
+### The OneClick Offline payload
+
+The Offline variants share **the same code and the same profile id** as the online installers; their NSIS resources simply carry an extra `offline/` payload (its presence decides whether the installer resolves artifacts locally or over the network — see `stella-installer/src-tauri/src/python.rs` and `deploy/bootstrap.py`). The payload is built in CI by `scripts/build_offline_payload.py` and contains:
+
+- the embedded Python runtime zip (hash parsed from `PY_VER`/`PY_SHA256` in `python.rs` — single source of truth);
+- `get-pip.py` (`MANIFEST.json` records its sha256; the installer verifies it and installs pip offline with `--no-index`);
+- the full wheel closure of requirements.txt (built in CI with `pip wheel`, which also covers sdist-only packages such as `qrcode_terminal`);
+- every component declared by the package catalog (llama.cpp backend / NapCat / the default embedding model; file names equal the catalog `artifact` field, verified through the same catalog-checksum path as online installs);
+- playwright's chromium-headless-shell (`PLAYWRIGHT_BROWSERS_PATH` points at the bundled kernel, so rendering needs no download).
+
+**When touching install-time components, keep the payload in sync**: new catalog components need no payload-script change (it iterates the catalog); new Python dependencies must produce wheels under `pip wheel`; a playwright upgrade must be reflected by the bundled kernel revision (the script installs it live, so it always matches).
 
 ### Checklist Before Tagging
 

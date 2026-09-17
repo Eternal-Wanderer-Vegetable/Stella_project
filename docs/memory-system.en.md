@@ -354,6 +354,8 @@ The following two items were identified by [`bug_report_2026_8_31#1.md`](../desi
 
 ## Further Reading
 
+This document describes the default Python memory engine (`memory/`). The retrieval layer also has an optional Rust implementation (released independently, switched via `MEMORY_BACKEND`, with a shadow mode for side-by-side comparison); see [Rust Memory Backend](memory-rust-backend.md).
+
 The design process and empirical records are in [`design_docs/`](../design_docs/):
 
 - `Memory Schema / Consolidation / Retrieval / Policy Matrix / Evaluation & Debug Specification v1.0.md` — original specification

@@ -21,7 +21,7 @@ use std::sync::RwLock;
 mod runtime_bootstrap {
     use std::fs::{self, File, OpenOptions};
     use std::io::{self, Read, Write};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -47,6 +47,14 @@ mod runtime_bootstrap {
     const PROFILE_CATALOG_FILENAME: &str = "package-catalog-windows-amd64.json";
     const MIN_ZIP_SIZE: u64 = 1_048_576;
     const MIN_GET_PIP_SIZE: u64 = 500_000;
+    // 随包离线仓（OneClick Offline 安装包专属，由 scripts/build_offline_payload.py
+    // 在发布时构建、build_release_package.py --offline-payload 装进 resources）。
+    // 目录存在即视为离线安装：每一步先取本地文件并校验，任何一步校验不过
+    // 都回落在线路径，行为与不带离线仓的安装包完全一致。
+    const OFFLINE_DIR: &str = "offline";
+    const OFFLINE_WHEELS_DIR: &str = "wheels";
+    const OFFLINE_GET_PIP: &str = "get-pip.py";
+    const OFFLINE_MANIFEST: &str = "MANIFEST.json";
     const NETWORK_ENV_VARS: &[&str] = &[
         "HTTP_PROXY",
         "HTTPS_PROXY",
@@ -110,13 +118,16 @@ mod runtime_bootstrap {
         emit_progress(root, "正在准备 Python 运行时…");
         let result: Result<(), String> = (|| {
             if !python.is_file() {
-                let zip_path = root.join(format!("python-{PY_VER}-embed-amd64.zip"));
-                emit_progress(root, &format!("正在下载 Python {PY_VER}（约 15MB）…"));
-                download_and_verify(root, &zip_path).map_err(|e| {
-                    // 下载/校验失败：删除残留的 zip，避免下次误用
-                    let _ = fs::remove_file(&zip_path);
-                    e
-                })?;
+                let zip_name = format!("python-{PY_VER}-embed-amd64.zip");
+                let zip_path = root.join(&zip_name);
+                if !acquire_offline_python_zip(root, &zip_name, &zip_path) {
+                    emit_progress(root, &format!("正在下载 Python {PY_VER}（约 15MB）…"));
+                    download_and_verify(root, &zip_path).map_err(|e| {
+                        // 下载/校验失败：删除残留的 zip，避免下次误用
+                        let _ = fs::remove_file(&zip_path);
+                        e
+                    })?;
+                }
                 emit_progress(root, "正在校验并解压运行时…");
                 if let Err(e) = extract_zip(&zip_path, &runtime) {
                     cleanup_partial_runtime(&runtime);
@@ -188,6 +199,78 @@ mod runtime_bootstrap {
             "下载 Python 运行时失败（所有镜像均不可用）：{}\n最后错误：{last_err}\n请检查网络后重试，或手动运行 start.bat。",
             zip_path.display()
         ))
+    }
+
+    fn offline_dir(root: &Path) -> PathBuf {
+        root.join(OFFLINE_DIR)
+    }
+
+    /// 随包离线依赖 wheel 仓；离线安装时 pip 用 `--no-index --find-links` 指向它。
+    fn offline_wheels(root: &Path) -> Option<PathBuf> {
+        let dir = offline_dir(root).join(OFFLINE_WHEELS_DIR);
+        dir.is_dir().then_some(dir)
+    }
+
+    /// 读 MANIFEST.json 里某文件的 sha256（payload 构建脚本写入）。
+    fn offline_manifest_hash(root: &Path, name: &str) -> Result<String, String> {
+        let manifest_path = offline_dir(root).join(OFFLINE_MANIFEST);
+        let text = fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("无法读取离线清单 {}：{e}", manifest_path.display()))?;
+        let manifest: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("离线清单 {} 不是有效 JSON：{e}", manifest_path.display()))?;
+        manifest
+            .get("files")
+            .and_then(|files| files.get(name))
+            .and_then(|value| value.as_str())
+            .map(str::to_owned)
+            .ok_or_else(|| format!("离线清单缺少 {name} 的校验值"))
+    }
+
+    /// 校验随包离线仓中的单个文件（MANIFEST.json 记录 sha256），通过则返回其路径。
+    fn verify_offline_file(root: &Path, name: &str) -> Result<PathBuf, String> {
+        let path = offline_dir(root).join(name);
+        if !path.is_file() {
+            return Err(format!("随包离线仓缺少 {}", path.display()));
+        }
+        let expected = offline_manifest_hash(root, name)?;
+        let actual = sha256_hex(&path)?;
+        if !actual.eq_ignore_ascii_case(&expected) {
+            return Err(format!(
+                "随包离线文件校验失败：{}\n期望: {expected}\n实际: {actual}",
+                path.display()
+            ));
+        }
+        Ok(path)
+    }
+
+    /// 随包离线仓里的 Python 运行时 zip：存在且通过 PY_SHA256 校验 → 复制到工作
+    /// 位置并返回 true；不存在或校验失败都返回 false（走在线下载——离线仓损坏
+    /// 不该让有网的用户装不上，而真离线环境下在线路径会给出明确的网络错误）。
+    fn acquire_offline_python_zip(root: &Path, zip_name: &str, zip_path: &Path) -> bool {
+        let offline_zip = offline_dir(root).join(zip_name);
+        if !offline_zip.is_file() {
+            return false;
+        }
+        emit_progress(root, "正在校验随包离线运行时…");
+        let actual = match sha256_hex(&offline_zip) {
+            Ok(hash) => hash,
+            Err(e) => {
+                emit_progress(root, &format!("随包离线运行时不可用：{e}，改用在线下载"));
+                return false;
+            }
+        };
+        if !actual.eq_ignore_ascii_case(PY_SHA256) {
+            emit_progress(
+                root,
+                &format!("随包离线运行时校验失败（期望 {PY_SHA256}，实际 {actual}），改用在线下载"),
+            );
+            return false;
+        }
+        if let Err(e) = fs::copy(&offline_zip, zip_path) {
+            emit_progress(root, &format!("随包离线运行时复制失败：{e}，改用在线下载"));
+            return false;
+        }
+        true
     }
 
     fn download(root: &Path, url: &str, dest: &Path) -> Result<(), String> {
@@ -479,6 +562,28 @@ mod runtime_bootstrap {
     }
 
     fn ensure_pip(root: &Path, python: &Path) -> Result<(), String> {
+        // 随包离线仓优先：get-pip.py 自带完整 pip wheel，配合 --no-index 全程零联网。
+        // 校验或安装失败都回落在线路径（下载 get-pip → ensurepip 兜底），与
+        // 不带离线仓时的安装包行为一致。
+        if offline_dir(root).join(OFFLINE_GET_PIP).is_file() {
+            match verify_offline_file(root, OFFLINE_GET_PIP) {
+                Ok(path) => {
+                    emit_progress(root, "正在从随包离线仓安装 pip…");
+                    let script = path.to_string_lossy().into_owned();
+                    let args = [script.as_str(), "--no-warn-script-location", "--no-index"];
+                    match run(python, &args, root) {
+                        Ok(_) => return Ok(()),
+                        Err(e) => emit_progress(
+                            root,
+                            &format!("随包离线 pip 安装失败，改用在线获取：{e}"),
+                        ),
+                    }
+                }
+                Err(e) => {
+                    emit_progress(root, &format!("随包 get-pip.py 校验失败，改用在线获取：{e}"))
+                }
+            }
+        }
         let get_pip = root.join("get-pip.py");
         let mut fallback_reason: Option<String> = None;
         let mut installed = false;
@@ -539,6 +644,21 @@ mod runtime_bootstrap {
     /// 失败**不阻断**：多数依赖有 wheel，缺构建工具只影响 sdist 那几个，
     /// 真需要时会在 install_deps 里报出来，那条错误信息比这里更具体。
     fn ensure_build_tools(root: &Path, python: &Path) -> Result<(), String> {
+        // 随包离线仓优先：wheels 目录里有发布时构建好的 setuptools/wheel，
+        // --no-index 保证零联网。失败回落在线源（离线环境下在线路径会给出
+        // 明确错误，错误信息链里保留离线失败原因）。
+        if let Some(wheels) = offline_wheels(root) {
+            emit_progress(root, "正在从随包离线仓安装构建工具…");
+            let link = wheels.to_string_lossy().into_owned();
+            let args = [
+                "-m", "pip", "install", "--no-index", "--find-links", link.as_str(),
+                "--no-warn-script-location", "setuptools", "wheel",
+            ];
+            match run(python, &args, root) {
+                Ok(_) => return Ok(()),
+                Err(e) => emit_progress(root, &format!("离线安装构建工具失败，改用在线源：{e}")),
+            }
+        }
         let args = [
             "-m", "pip", "install", "--no-warn-script-location",
             "-i", PYPI_INDEX, "setuptools", "wheel",
@@ -568,6 +688,22 @@ mod runtime_bootstrap {
         let requirements = root.join("requirements.txt");
         if !requirements.is_file() {
             return Err(format!("缺少 {}", requirements.display()));
+        }
+        // 随包离线仓优先：发布时用 `pip wheel` 把 requirements.txt 的完整闭包
+        // （含 sdist 现场构建出的 wheel，如 qrcode_terminal）预构建进来，
+        // --no-index 解析全程不碰网络。失败回落在线源。
+        if let Some(wheels) = offline_wheels(root) {
+            emit_progress(root, "正在从随包离线仓安装依赖…");
+            let link = wheels.to_string_lossy().into_owned();
+            let args = [
+                "-m", "pip", "install", "-r", "requirements.txt",
+                "--no-index", "--find-links", link.as_str(),
+                "--no-warn-script-location",
+            ];
+            match run(python, &args, root) {
+                Ok(_) => return Ok(()),
+                Err(e) => emit_progress(root, &format!("离线依赖安装失败，改用在线源：{e}")),
+            }
         }
         let primary = [
             "-m", "pip", "install", "-r", "requirements.txt",
@@ -689,6 +825,68 @@ mod runtime_bootstrap {
                 "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
             );
             fs::remove_dir_all(&dir).ok();
+        }
+
+        /// 随包离线运行时 zip：缺失或哈希对不上都必须拒绝采用（返回 false 走在线），
+        /// 绝不能把未校验的离线文件解压进 runtime——那是绕过 PY_SHA256 的口子。
+        #[test]
+        fn offline_python_zip_missing_or_corrupt_falls_back_to_download() {
+            let dir = std::env::temp_dir().join("stella-offline-py-zip-test");
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            let name = format!("python-{PY_VER}-embed-amd64.zip");
+            let zip_path = dir.join("out.zip");
+            // 离线仓不存在/没有这个文件 → 走在线
+            assert!(!acquire_offline_python_zip(&dir, &name, &zip_path));
+            // 离线仓里有但哈希对不上 → 拒绝，且不产出工作副本
+            fs::create_dir_all(dir.join("offline")).unwrap();
+            fs::write(dir.join("offline").join(&name), b"corrupt").unwrap();
+            assert!(!acquire_offline_python_zip(&dir, &name, &zip_path));
+            assert!(!zip_path.is_file());
+            fs::remove_dir_all(&dir).ok();
+        }
+
+        /// 离线仓文件必须过 MANIFEST.json 的 sha256 校验：缺清单、内容被改都要报错。
+        #[test]
+        fn verify_offline_file_checks_manifest_hash() {
+            let dir = std::env::temp_dir().join("stella-offline-manifest-test");
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(dir.join("offline")).unwrap();
+            let payload = dir.join("offline").join("get-pip.py");
+            fs::write(&payload, b"get-pip").unwrap();
+            let hash = sha256_hex(&payload).unwrap();
+            // 缺清单 → Err
+            assert!(verify_offline_file(&dir, "get-pip.py").is_err());
+            // 清单哈希匹配 → Ok 且返回离线路径本身
+            fs::write(
+                dir.join("offline").join("MANIFEST.json"),
+                format!(r#"{{"schema_version": 1, "files": {{"get-pip.py": "{hash}"}}}}"#),
+            )
+            .unwrap();
+            assert_eq!(verify_offline_file(&dir, "get-pip.py").unwrap(), payload);
+            // 内容被改动 → Err
+            fs::write(&payload, b"tampered").unwrap();
+            assert!(verify_offline_file(&dir, "get-pip.py").is_err());
+            fs::remove_dir_all(&dir).ok();
+        }
+
+        /// 离线仓存在时，pip 依赖与构建工具安装必须是 --no-index --find-links
+        /// （零联网），运行时 zip 必须先取离线副本并按 PIN 的 SHA256 校验。
+        #[test]
+        fn offline_payload_installs_are_no_index() {
+            let src = fs::read_to_string(Path::new(file!())).expect("无法读取 python.rs");
+            assert!(
+                src.contains("--no-index") && src.contains("--find-links"),
+                "离线仓存在时 pip 安装必须是 --no-index --find-links，保证零联网"
+            );
+            assert!(
+                src.contains("fn acquire_offline_python_zip"),
+                "Python 运行时 zip 必须先取随包离线副本并按 PY_SHA256 校验"
+            );
+            assert!(
+                src.contains("verify_offline_file(root, OFFLINE_GET_PIP)"),
+                "离线 get-pip.py 必须过 MANIFEST 哈希校验"
+            );
         }
 
         #[test]

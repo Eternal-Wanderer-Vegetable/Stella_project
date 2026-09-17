@@ -91,7 +91,7 @@ LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
 所以默认在外，只有用户**显式**建了 `StellaData/` 子目录时才认为他要的是自包含布局
 （那种情况下升级前必须先导入或备份）。
 
-发布包因此**不带内层 `Stella/` 目录**：zip 解压后得到 `Stella-vX.Y.Z-win64/` 就是程序目录，
+发布包（Standalone zip）因此**不带内层 `Stella/` 目录**：压缩包里的文件就在压缩包根上，解压目标目录本身就是程序目录，
 数据落在它的同级。多一层嵌套会把「同级」顶成「版本文件夹的内部」——这正是旧发布布局的缺陷。
 
 数据目录内部的相对布局与旧安装完全一致，所以「旧布局」只是「数据目录恰好等于安装目录」的一个特例。
@@ -108,6 +108,8 @@ LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
 |---|---|---|
 | `LOG_DIR` | `logs/` | 所有日志的根目录 |
 | `STELLA_JSON_LOG_PATH` | `logs/stella.jsonl` | 结构化日志，给程序读（GUI 的日志面板、`deploy status`） |
+| `STELLA_JSON_LOG_ENABLED` | `true` | 结构化日志总开关（关掉后 GUI 日志面板与 `deploy status` 的最近日志都拿不到内容） |
+| `STELLA_JSON_LOG_MAX_MESSAGE` | `500` | 单条结构化日志的截断长度：prompt 全文动辄数千字符，进文件只会让 jsonl 暴涨 |
 | `THOUGHT_LOG_PATH` | `logs/stella_thought_logs.md` | 思考/决策日志：每轮的完整 prompt、原始输出、路由判定、工具结果 |
 | `CONSOLIDATION_LOG_PATH` | `logs/memory_consolidation_log.md` | 每批记忆整合的运行摘要与 LLM 原文 |
 | `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | 每次记忆压缩的合并/原子化/归档计数 |
@@ -390,11 +392,12 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 |---|---|---|
 | `MEMORY_EXTRACT_ENABLED` | `true` | 关闭则退回单阶段（整合模型一次性出全部） |
 | `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` | 同 `LM_STUDIO_BASE_URL` | 提取服务地址 |
+| `MEMORY_EXTRACT_LM_STUDIO_API_KEY` | 空 | 提取服务需要鉴权时填写（本地服务留空；走在线端点时通常也由端点槽的 `API_KEY` 接管） |
 | `MEMORY_EXTRACT_LM_STUDIO_MODEL` | 同 `LM_STUDIO_MODEL` | 默认继承主聊天模型 |
 | `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | 抽取任务不需要发散，比整合的 0.3 更低 |
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | 只输出候选数组，不需要很大 |
 
-> 这四个 `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` 是 `LLM_ROLE_EXTRACT_*` 的继承上游。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 即可（模型取该端点的 `MODEL`；要与同端点其他角色用不同的模型才需要写 `LLM_ROLE_EXTRACT_MODEL`），本节的键不用动。
+> 这五个 `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` 是 `LLM_ROLE_EXTRACT_*` 的继承上游。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 即可（模型取该端点的 `MODEL`；要与同端点其他角色用不同的模型才需要写 `LLM_ROLE_EXTRACT_MODEL`），本节的键不用动。
 
 **为什么要拆**：小模型能总结主题，却在噪音环境下系统性地把候选提取判空。2026-08-16 实测 7 批整合全部返回空候选，而信息明确出现在它自己写的摘要里——是「读到了但主动弃掉」，不是没看到。候选提取是高精度抽取任务，交给大模型。
 
@@ -460,6 +463,18 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 
 > **尾巴的时间窗与断层标记**：仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生的事（2026-08-15 缺陷）。`RECENT_TAIL_MAX_AGE_MINUTES` 过滤掉超时消息；窗口内部相邻消息间隔超过 `RECENT_TAIL_GAP_MARK_MINUTES` 时插入一行「（……中间隔了 X……）」标记，让模型知道「之前聊过但已经过去很久」，而非直接失忆。
 
+### 8192 工作窗口的预算切分
+
+三层上下文、记忆注入与工具结论共享同一个工作窗口，预算在调用模型前按下面三项切开（`core/context_budget.py` 执行，输入超预算时从尾巴最旧的开始丢）：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `LLM_CONTEXT_WINDOW_TOKENS` | `8192` | 主聊天模型的工作窗口（tokens）。README 的全部预算叙事以这个数为基准 |
+| `LLM_OUTPUT_RESERVE_TOKENS` | `1000` | 为模型输出预留的份额（含 `MAX_TOKENS` 与截断余量） |
+| `LLM_CONTEXT_SAFETY_TOKENS` | `200` | 估算误差的安全垫（分词器估不准时的兜底） |
+
+> 输入预算 = 窗口 − 输出预留 − 安全垫。换更大的模型（如 32K 窗口）时把 `LLM_CONTEXT_WINDOW_TOKENS` 一起调大即可，各层预算按比例放宽；反过来在 8K 上跑时不要压 `LLM_OUTPUT_RESERVE_TOKENS`——输出被截断会让 JSON 解析失败，比少几条记忆更糟。
+
 ### 会话上下文压缩
 
 短时连续对话中，早期消息会滚出尾巴窗口而彻底消失。本机制把滚出的部分压缩成一段回顾，使 Bot 在长对话里保持连贯（类似 coding agent 的 compact）。
@@ -498,6 +513,7 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | 同一事实复现时的置信度增益 |
 | `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | 观察区停留上限，超期标 `REJECTED`（不删除）。时效型类型另有更短的档位，见下 |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | `evidence` 累积上限 |
+| `MEMORY_CANDIDATE_DEFAULT_IMPORTANCE` | `0.5` | 模型没给 importance 时的兜底值。**不能填 0**：0 会被晋升门槛一票否决，候选永远卡在 OBSERVING、被主动验证反复追问却永远晋升不了 |
 
 `0.12` 的取值使 0.5 起步的候选约 2 次复现后跨过 0.6 门槛。
 
@@ -529,6 +545,10 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 > 多个 QQ 群归入同一空间时配额实际收紧了（同一个人在同一空间只有一份认知）。这符合设计，但调参时需要知道。
 
 ## 记忆：检索与排序
+
+### 检索后端：Python / Rust（MEMORY_BACKEND）
+
+记忆引擎默认用 Python 实现（`memory/`），可选安装独立的 Rust 检索后端。选择方式不是本表的键，而是 `MEMORY_BACKEND` 环境变量：`python`（默认）/ `rust` / `auto`（可用则用、失败回退）/ `shadow`（Rust 只读旁路跑、记录一致性诊断、返回 Python 结果）/ `strict`（强制 Rust，失败即报）。兼容性矩阵、发布资产与回滚方式见 [memory-rust-backend.md](memory-rust-backend.md)；早期的 `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` 等价于 `shadow` / `strict`，显式 `MEMORY_BACKEND` 优先。
 
 ### RAG 开关
 
@@ -741,6 +761,9 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `PARTICIPATION_MAX_GROUPS` | `64` | 内存状态 LRU 上限（群数） |
 | `PARTICIPATION_LOG_LEVEL` | `full` | 评分日志级别：`full` / `summary` / `off`（`ALLOW_LLM` 永远记录） |
 | `PARTICIPATION_TICK_INTERVAL` | `60` | 话题状态机推进间隔（秒，COOLING→EXPIRED） |
+| `PARTICIPATION_DECISION_LOG_PATH` | `logs/participation_decisions.jsonl` | 决策 JSONL 日志路径（空则落在 `LOG_DIR`） |
+| `PARTICIPATION_MD_LOG_PATH` | `logs/participation_logs.md` | 人类可读分项表日志路径（空则落在 `LOG_DIR`） |
+| `REPLY_GATE_PROACTIVE_COOLDOWN_SECONDS` | `15.0` | 回复必要性门控（`core/reply_gate.py`，零 token）：主动插话后的最短间隔，硬触发（被 @）不受此限 |
 
 **所有分值 / 阈值 / 词表都在 `config/participation/` 的四个外置打分表中**，代码内不含
 任何分值常量：
@@ -763,6 +786,51 @@ python -m tests.benchmark.participation.runner --tables config/participation_v2 
 
 评分日志落三处：`logs/participation_decisions.jsonl`（结构化）、
 `logs/participation_logs.md`（人类可读分项表）、`participation_log` 表（落库）。
+
+## 受限 Planner（深度回复路径）
+
+绝大多数消息走快速路径（检索 → 单次 LLM）。只有本地零 LLM 的触发判定命中（历史指代 / 话题歧义 / 主动插话表达不明确）才进入深度路径：Planner 规划（1 次 LLM）→ 最多一次深度记忆查询 → 回复（1 次 LLM）。实现见 `core/planner.py`。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `PLANNER_ENABLED` | `true` | 深度路径总开关；关闭后全部走快速路径 |
+| `PLANNER_MAX_LLM_CALLS_PER_TURN` | `2` | 深度路径的 LLM 硬上限（含回复生成）：普通路径 1 次，深度路径 2 次 |
+| `PLANNER_MAX_ROUNDS` | `2` | Planner 最多规划轮数（每轮 1 次 LLM，实际受上面的总名额约束） |
+| `PLANNER_MAX_TOOL_CALLS_PER_TURN` | `1` | 每轮最多 1 次深度记忆查询 |
+| `PLANNER_QUERY_MEMORY_MAX_LINES` | `5` | 深度记忆查询结果压缩后的最大行数（每行含事实/时间/参与者/置信度） |
+| `PLANNER_CONTEXT_MAX_TOKENS` | `400` | Planner prompt 里最近对话摘要的 token 上限 |
+| `PLANNER_TIMEOUT` | `20.0` | Planner 单次 LLM 调用超时（秒）；超时按「直接回复」处理，不阻塞主链路 |
+| `PLANNER_PROACTIVE_WAIT_ENABLED` | **`false`** | 主动发言路径是否允许 Planner 判定 WAIT（等更多消息再插话）。默认关：主动插话已由参与评分层（零 LLM）把关，再花 1 次 LLM 判定「说不说」会让每次主动发言成本翻倍 |
+
+> Planner 的任何异常都只降级为快速路径（少几条补充记忆），不能吞掉回复；这是结构保险，不是配置项。
+
+## 个性化称呼
+
+称呼是用户明确设置的关系偏好（「叫我 X」），与 `user_profiles.nickname` 和普通记忆分开存放（v14 的 `user_address_preferences` 表）。修改只接受明确的自然语言请求；embedding 只负责意图筛选，不直接写库。实现见 `memory/addressing.py` / `memory/addressing_intent.py`。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `ADDRESSING_ENABLED` | `true` | 称呼系统总开关 |
+| `ADDRESSING_SEMANTIC_ENABLED` | `true` | 是否启用 embedding 语义判定（关闭则只靠规则预筛，识别力下降但零 embedding 成本） |
+| `ADDRESSING_INTENT_THRESHOLD` | `0.58` | 语义判定的相似度门槛 |
+| `ADDRESSING_INTENT_MARGIN` | `0.06` | 最优意图与次优意图的最小区分度（低于则视为歧义、不动作） |
+| `ADDRESSING_INTENT_TIMEOUT` | 空 | embedding 调用超时（秒）；空用 embedding 服务的全局超时 |
+
+## 表达与插话效果学习
+
+回复发出后的异步后台学习（零 LLM）：用户是否继续回应、是否复用 Stella 的表达、是否用表情、是否纠正、是否忽略主动发言。样本与统计存独立的四张表（`expression_store`），与记忆系统（「知道什么」）完全分离；坏了只影响学习不影响聊天。实现见 `memory/expression_learning.py`。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `EXPRESSION_LEARNING_ENABLED` | `true` | 总开关 |
+| `REPLY_EFFECT_WINDOW_SECONDS` | `300.0` | 回复发出后等待用户回应的窗口（秒），窗口结束时结算这轮效果 |
+| `EXPRESSION_SWEEP_INTERVAL` | `3600` | 补结算扫描间隔：进程重启会丢在途的延迟结算任务，靠定期扫描超窗未结算的行补上 |
+| `EXPRESSION_HARVEST_PER_MESSAGE` | `2` | 每条用户消息最多采集的表达样本条数（宁缺毋滥，防样本表被刷屏灌满） |
+| `EXPRESSION_EXAMPLES_KEEP_DAYS` | `30.0` | 表达样本保留天数（超期由每日清理任务裁剪） |
+| `REPLY_EFFECTS_KEEP_DAYS` | `60.0` | 已结算回复效果的保留天数 |
+| `JARGON_HIT_THRESHOLD` | `5` | 黑话候选的入册门槛（进程内出现次数）。只统计两类低噪声信号：拉丁/字母数字混排词（yyds、xswl）与引号内中文词（「绝绝子」） |
+| `JARGON_CONFIRM_THRESHOLD` | `12` | 黑话转正门槛（跨天数累积命中数） |
+| `JARGON_TRACKER_MAX_TERMS` | `4096` | 进程内黑话计数器的容量上限（防长聊天记录把内存吃穿） |
 
 ## 记忆压缩
 
@@ -801,6 +869,35 @@ python -m tests.benchmark.participation.runner --tables config/participation_v2 
 > `DB_CLEANUP_ON_START=true` 会在每次启动时丢失记忆并重置整合进度。测试结束后务必改回 `false`。
 
 > 关闭 `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` 会导致积压超过 `MESSAGE_CLEANUP_KEEP_COUNT` 时未整合消息被永久丢弃，那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
+
+## AstrBot 插件兼容层
+
+AstrBot 生态的第三方插件放进 `data/plugins/<插件目录>/` 即可直接运行（兼容边界与写法见[插件接入规范](plugin-spec.md)）。插件目录、配置与数据默认都锚定用户数据目录（`STELLA_HOME`），需要时用下面三项分别挪走：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `ASTRBOT_COMPAT_ENABLED` | `true` | 兼容层总开关；关闭后插件既不加载也不分发 |
+| `ASTRBOT_COMPAT_VERSION` | `4.27.0` | 对外声称兼容的 AstrBot 版本（注入日志与插件自检用，仅声明，不代表完全兼容） |
+| `ASTRBOT_PLUGINS_DIR` | `<用户数据>/data/plugins` | 第三方插件源码目录（每个子目录一个插件，需含 metadata.yaml） |
+| `ASTRBOT_PLUGIN_CONFIG_DIR` | `<用户数据>/data/config` | 插件配置持久化目录 |
+| `ASTRBOT_PLUGIN_DATA_DIR` | `<用户数据>/data/plugin_data` | 插件运行时数据目录（`StarTools.get_data_dir` 的根） |
+| `ASTRBOT_AUTO_INSTALL_REQUIREMENTS` | **`false`** | 是否自动安装插件声明的 `requirements.txt`。默认关：等于自动执行任意代码，装插件前请自己审一遍依赖 |
+| `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED` | `true` | 是否载入插件自带的 `capability.toml`（三层声明里优先级最低的那层） |
+| `ASTRBOT_WAKE_PREFIXES` | `/` | 指令唤醒前缀（逗号分隔）。插件的 `@filter.command` 依赖它：群里直接打 `/help` 就能触发，不必先 @ 机器人；留空表示只认 @ / 引用 / 私聊 |
+| `ASTRBOT_COMPAT_ALLOW_PRIVATE` | `true` | 是否允许私聊触发插件（上游私聊默认无需前缀即可命中指令） |
+
+插件借用 Stella 的 LLM 能力（`PLUGIN` 角色）时的行为：
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `ASTRBOT_LLM_ENABLED` | `true` | 是否给插件提供 LLM 服务；关闭后依赖模型的插件功能不可用（指令类插件不受影响） |
+| `ASTRBOT_LLM_BASE_URL` | 同 `LM_STUDIO_BASE_URL` | 插件侧 LLM 服务地址（未单独配置时继承本机端点） |
+| `ASTRBOT_LLM_API_KEY` | 同 `LM_STUDIO_API_KEY` | 对应的 API key |
+| `ASTRBOT_LLM_SYSTEM_PROMPT` | `你是一个简单的机器人助手，请直接、简短地回答，不要扮演角色。` | 插件侧 LLM 的人格。刻意不用 Stella 的人格：插件回答的是工具性问题，不该带人格 |
+| `ASTRBOT_LLM_MAX_CONTEXT_TOKENS` | `8192` | 插件侧上下文窗口 |
+| `ASTRBOT_LLM_MAX_TOOLS` | `32` | 单次请求最多暴露给插件的工具数 |
+
+> `ASTRBOT_LLM_MODEL` / `_TEMPERATURE` / `_MAX_TOKENS` / `_MAX_TOOL_STEPS` / `_TOOL_TIMEOUT` 已并入[端点与角色](#端点与角色两层配置)的 `PLUGIN` 角色继承链，GUI 的角色矩阵里改；`ASTRBOT_PLUGIN_HOT_RELOAD_*` 见[插件热重载](#插件热重载调试用)。
 
 ## HTML → 图片渲染（插件卡片）
 

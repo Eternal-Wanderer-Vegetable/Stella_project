@@ -126,15 +126,96 @@ jobs:
           path: dist/Stella-llama-v*-windows-x86_64-cpu.zip
           if-no-files-found: error
 
+  # OneClick Offline 的随包负载：把安装期本要联网下载的所有产物在发布时预取齐
+  # （Python 运行时 / get-pip / 依赖 wheel 闭包 / catalog 组件 / playwright 内核），
+  # 安装期由 python.rs 与 deploy.bootstrap 的本地优先路径就地取用，零联网。
+  build-offline-payload:
+    needs: [build-oneclick-catalog-backend]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析并校验发布版本
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push') {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          } else {
+            $version = '${{ inputs.version }}' -replace '^v', ''
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "非法 Release 版本: $version"
+          }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: 下载 OneClick Windows CPU backend
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-oneclick-catalog-backend
+          path: llama-catalog
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # playwright 要 import 才能预装内核；payload 脚本用 `pip wheel` 现场构建
+      # requirements 的依赖闭包（含只有 sdist 的包），两者都需要依赖先就位。
+      - name: 安装依赖
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: 构建离线负载
+        shell: pwsh
+        run: |
+          $backend = @(Get-ChildItem 'llama-catalog\*.zip' -File)
+          if ($backend.Count -ne 1) {
+            throw "离线负载必须基于恰好一个 Windows CPU backend，实际为 $($backend.Count)"
+          }
+          python scripts/build_release_catalog.py `
+            --backend-asset $backend[0].FullName `
+            --release-ref "v$env:RELEASE_VERSION" `
+            --repository "${{ github.repository }}" `
+            --output offline-stage/package-catalog-windows-amd64.json
+          python scripts/build_offline_payload.py `
+            --output offline-stage/payload `
+            --catalog offline-stage/package-catalog-windows-amd64.json `
+            --with-browsers
+          if (-not (Test-Path 'offline-stage\payload\MANIFEST.json')) {
+            throw 'offline payload was not created'
+          }
+
+      # 闭包完整性要在发布前钉死：少一个传递依赖的 wheel，用户就会在
+      # --no-index 安装时收到「No matching distribution」。--ignore-installed
+      # 强制 pip 只从离线仓解析，防止 runner 上已装的包掩盖缺口。
+      - name: 校验离线 wheel 闭包可解析
+        shell: pwsh
+        run: |
+          python -m pip install --dry-run --ignore-installed --no-index `
+            --find-links offline-stage/payload/wheels `
+            -r requirements.txt
+
+      - name: 上传离线负载
+        uses: actions/upload-artifact@v7
+        with:
+          name: stella-offline-payload
+          path: offline-stage/payload
+          if-no-files-found: error
+
   # Tauri 的 Windows WebView/Rust 产物必须在 Windows runner 上构建。
   # OneClick 只发布 NSIS setup executable；程序树通过 Tauri resources 嵌入，
   # 安装后由 project_root() 从 resources/stella 定位。
+  # payload 维度：online 走安装期联网（现状），offline 嵌入 build-offline-payload
+  # 的随包负载。两者同一 profile、同一份代码，只差 resources 里有没有 offline/。
   build-installer:
-    needs: [build-rust-wheel, build-oneclick-catalog-backend]
+    needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload]
     strategy:
       fail-fast: false
       matrix:
         profile: [oneclick-python, oneclick-rust]
+        payload: [online, offline]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -178,6 +259,13 @@ jobs:
           name: stella-oneclick-catalog-backend
           path: llama-catalog
 
+      - name: 下载 Offline payload
+        if: matrix.payload == 'offline'
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-offline-payload
+          path: offline-payload
+
       - name: 准备 OneClick 内嵌程序资源
         shell: pwsh
         run: |
@@ -201,9 +289,20 @@ jobs:
           if (-not (Test-Path -LiteralPath 'package-catalog-windows-amd64.json')) {
             throw 'OneClick package catalog was not generated'
           }
-          python scripts/build_release_package.py ${{ matrix.profile }} `
-            --source . --output dist/unused `
-            --stage-resources stella-installer/src-tauri/resources/stella
+          $stageArgs = @(
+            'scripts/build_release_package.py',
+            '${{ matrix.profile }}',
+            '--source', '.',
+            '--output', 'dist/unused',
+            '--stage-resources', 'stella-installer/src-tauri/resources/stella'
+          )
+          if ('${{ matrix.payload }}' -eq 'offline') {
+            if (-not (Test-Path 'offline-payload\MANIFEST.json')) {
+              throw 'Offline payload artifact is missing MANIFEST.json'
+            }
+            $stageArgs += @('--offline-payload', 'offline-payload')
+          }
+          python @stageArgs
 
       - name: 同步 Tauri 版本号
         shell: pwsh
@@ -231,7 +330,7 @@ jobs:
       - name: 上传安装器
         uses: actions/upload-artifact@v7
         with:
-          name: stella-installer-${{ matrix.profile }}
+          name: stella-installer-${{ matrix.profile }}-${{ matrix.payload }}
           path: stella-installer/src-tauri/target/release/bundle/nsis/*setup.exe
           if-no-files-found: error
 
@@ -576,7 +675,7 @@ jobs:
           path: installer-bin
           merge-multiple: false
 
-      - name: 校验并收集四类产品资产
+      - name: 校验并收集六类产品资产
         run: |
           set -e
           python_version="${RELEASE_REF#v}"
@@ -584,26 +683,48 @@ jobs:
           rust_asset="Stella-Standalone-Rust-v${python_version}-windows-amd64.zip"
           oneclick_python="Stella-OneClick-Python-v${python_version}-windows-amd64.exe"
           oneclick_rust="Stella-OneClick-Rust-v${python_version}-windows-amd64.exe"
+          # Offline 变体：同一 profile、同一份代码，只差随包 offline/ 负载；
+          # 产物靠文件名里的 -Offline 与在线版区分（见 build_release_package.py --artifact-name）。
+          oneclick_python_off="Stella-OneClick-Python-Offline-v${python_version}-windows-amd64.exe"
+          oneclick_rust_off="Stella-OneClick-Rust-Offline-v${python_version}-windows-amd64.exe"
           cp "dist/${python_asset}" dist/products/
           cp "dist/${rust_asset}" dist/products/
           for profile in oneclick-python oneclick-rust; do
-            installer_dir="installer-bin/stella-installer-${profile}"
-            mapfile -t installers < <(
-              find "$installer_dir" -maxdepth 1 -type f -name '*.exe' -print
-            )
-            if [ "${#installers[@]}" -ne 1 ]; then
-              echo "::error::${profile} 必须下载恰好一个安装器，实际为 ${#installers[@]}"
-              printf '%s\n' "${installers[@]}"
-              exit 1
-            fi
-            python scripts/build_release_package.py "$profile" \
-              --source . --output "dist/$profile" \
-              --installer "${installers[0]}"
+            for variant in online offline; do
+              installer_dir="installer-bin/stella-installer-${profile}-${variant}"
+              mapfile -t installers < <(
+                find "$installer_dir" -maxdepth 1 -type f -name '*.exe' -print
+              )
+              if [ "${#installers[@]}" -ne 1 ]; then
+                echo "::error::${profile}-${variant} 必须下载恰好一个安装器，实际为 ${#installers[@]}"
+                printf '%s\n' "${installers[@]}"
+                exit 1
+              fi
+              extra_args=()
+              if [ "$variant" = offline ]; then
+                if [ "$profile" = oneclick-python ]; then
+                  asset_name="$oneclick_python_off"
+                else
+                  asset_name="$oneclick_rust_off"
+                fi
+                extra_args+=(--artifact-name "$asset_name")
+              else
+                if [ "$profile" = oneclick-python ]; then
+                  asset_name="$oneclick_python"
+                else
+                  asset_name="$oneclick_rust"
+                fi
+              fi
+              python scripts/build_release_package.py "$profile" \
+                --source . --output "dist/${profile}-${variant}" \
+                --installer "${installers[0]}" \
+                --artifact-name "$asset_name"
+              cp "dist/${profile}-${variant}/${asset_name}" dist/products/
+            done
           done
-          cp "dist/oneclick-python/${oneclick_python}" dist/products/
-          cp "dist/oneclick-rust/${oneclick_rust}" dist/products/
           for asset in \
             "$oneclick_python" "$oneclick_rust" \
+            "$oneclick_python_off" "$oneclick_rust_off" \
             "$python_asset" "$rust_asset"; do
             if [ ! -s "dist/products/${asset}" ]; then
               echo "::error::缺少发布资产或文件为空: ${asset}"

@@ -22,6 +22,9 @@ PROGRESS_FILENAME = ".bootstrap-progress"
 COMPONENT_ROOT = Path(".stella") / "components"
 CATALOG_TIMEOUT = 30
 BUNDLED_CATALOG_FILENAME = "package-catalog-windows-amd64.json"
+# 随包离线仓（<程序根>/offline/packages/<artifact>）：OneClick Offline 安装包
+# 把 catalog 声明的远程组件在发布时预下载进来，安装期按 artifact 文件名就地取用。
+OFFLINE_PACKAGES_DIRNAME = "packages"
 
 
 class BootstrapError(ValueError):
@@ -184,12 +187,37 @@ def _installed_record_matches(data_root: Path, record: dict[str, Any]) -> bool:
     return False
 
 
+def _offline_artifact(record: dict[str, Any]) -> Path | None:
+    """该组件在随包离线仓中的本地副本，没有则 None。
+
+    这里只做存在性判断；副本必须通过 checksum/size 校验（`_download_record`）
+    才会被采用——校验失败回落在线下载，而不是让损坏的离线文件阻断安装。
+    """
+    filename = str(record.get("artifact") or Path(record["path"]).name).strip()
+    if not filename:
+        return None
+    candidate = Path(PROJECT_ROOT) / "offline" / OFFLINE_PACKAGES_DIRNAME / filename
+    return candidate if candidate.is_file() else None
+
+
 def _download_record(record: dict[str, Any], data_root: Path) -> Path:
+    filename = str(record.get("artifact") or Path(record["path"]).name)
+    cache = Path(data_root) / ".stella" / "downloads"
+    offline = _offline_artifact(record)
+    if offline is not None:
+        try:
+            return acquire.verify_local_artifact(
+                offline,
+                checksum=str(record["checksum"]),
+                size=int(record["size"]) if record.get("size") is not None else None,
+            )
+        except acquire.AcquireError:
+            # 离线副本损坏/被篡改：不阻断，落回在线路径。真离线环境下在线路径
+            # 会以网络错误收场，错误信息里会带上离线副本校验未通过的线索。
+            pass
     source = str(record.get("source") or "").strip()
     if not source:
         raise BootstrapError("provenance_missing", f"{record['id']} 缺少 source")
-    filename = str(record.get("artifact") or Path(record["path"]).name)
-    cache = Path(data_root) / ".stella" / "downloads"
     try:
         return acquire.download_verified(
             source,
@@ -198,7 +226,10 @@ def _download_record(record: dict[str, Any], data_root: Path) -> Path:
             size=int(record["size"]) if record.get("size") is not None else None,
         )
     except acquire.AcquireError as exc:
-        raise BootstrapError(exc.code, f"{record['id']} 下载失败：{exc.message}") from exc
+        message = f"{record['id']} 下载失败：{exc.message}"
+        if offline is not None:
+            message += f"（随包离线副本 {filename} 校验未通过，未能离线安装）"
+        raise BootstrapError(exc.code, message) from exc
 
 
 def _safe_member(name: str) -> Path:

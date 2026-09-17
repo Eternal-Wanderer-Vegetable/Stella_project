@@ -80,12 +80,23 @@ def _browsers_root() -> Path | None:
     return home / ".cache" / "ms-playwright"
 
 
+def _offline_browsers_root() -> Path | None:
+    """随包离线内核目录（OneClick Offline 安装包的专用布局），不存在返回 None。
+
+    doctor 是独立进程，``astrbot_compat.render.apply_offline_browsers`` 在 bot
+    进程里设的 ``PLAYWRIGHT_BROWSERS_PATH`` 对这里不可见，所以要单独认一次。
+    """
+    candidate = PROJECT_ROOT / "offline" / "playwright-browsers"
+    return candidate if candidate.is_dir() else None
+
+
 def _probe_render() -> dict[str, Any]:
     """渲染能力：pip 包是否装了 + Chromium 内核是否下载过。
 
     内核用**目录启发式**判断而不是真去启动浏览器：启动一次要 1~2 秒，而 doctor
     是个一次性 CLI，不值得为一条提示付这个钱。判断错的后果只是提示不准，
     不影响任何行为（真正的可用性判断在 astrbot_compat/render.py 里，失败即降级）。
+    随包离线内核（offline/playwright-browsers）与默认缓存等价，命中即算已安装。
     """
     out: dict[str, Any] = {
         "playwright_installed": importlib.util.find_spec("playwright") is not None,
@@ -95,13 +106,21 @@ def _probe_render() -> dict[str, Any]:
         out["chromium_installed"] = False
         return out
     root = _browsers_root()
-    if root is None:
-        return out
-    with contextlib.suppress(OSError):
-        out["chromium_installed"] = root.is_dir() and any(
-            child.is_dir() and child.name.startswith("chromium")
-            for child in root.iterdir()
-        )
+    if root is not None:
+        with contextlib.suppress(OSError):
+            out["chromium_installed"] = root.is_dir() and any(
+                child.is_dir() and child.name.startswith("chromium")
+                for child in root.iterdir()
+            )
+    if not out["chromium_installed"]:
+        offline = _offline_browsers_root()
+        if offline is not None:
+            with contextlib.suppress(OSError):
+                out["chromium_installed"] = any(
+                    child.is_dir()
+                    and child.name.startswith("chromium_headless_shell")
+                    for child in offline.iterdir()
+                )
     return out
 
 

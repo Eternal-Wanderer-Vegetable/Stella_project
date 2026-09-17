@@ -104,6 +104,44 @@ def download_verified(
         raise
 
 
+def verify_local_artifact(
+    path: Path,
+    *,
+    checksum: str,
+    size: int | None = None,
+) -> Path:
+    """Verify one already-local artifact and return it.
+
+    Offline installers ship release-time copies of the remote artifacts; those
+    copies must clear exactly the same provenance bar as a fresh download
+    (checksum, and size when the catalog declares one) before the transactional
+    installers may touch them. Verification failure is an error, never a
+    silent pass-through — a corrupted bundle must not install half a component.
+    """
+    expected = str(checksum or "").strip().lower()
+    if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+        raise AcquireError("invalid_checksum", "本地 artifact 必须提供 64 位 SHA-256")
+    path = Path(path)
+    if not path.is_file():
+        raise AcquireError("read_failed", f"本地 artifact 不存在：{path}")
+    if size is not None:
+        if int(size) <= 0:
+            raise AcquireError("invalid_size", "artifact size 必须为正数")
+        actual_size = path.stat().st_size
+        if actual_size != int(size):
+            raise AcquireError(
+                "size_mismatch",
+                f"本地大小不匹配：期望 {size}，实际 {actual_size}",
+            )
+    actual = _digest(path)
+    if actual != expected:
+        raise AcquireError(
+            "checksum_mismatch",
+            f"本地 checksum 不匹配：期望 {expected}，实际 {actual}",
+        )
+    return path
+
+
 def install_napcat(
     manifest: dict[str, Any],
     data_root: Path,
@@ -168,4 +206,10 @@ def install_default_embedding(
     )
 
 
-__all__ = ["AcquireError", "download_verified", "install_default_embedding", "install_napcat"]
+__all__ = [
+    "AcquireError",
+    "download_verified",
+    "install_default_embedding",
+    "install_napcat",
+    "verify_local_artifact",
+]

@@ -109,14 +109,21 @@ def test_release_profiles_are_versioned_with_the_project():
 
 
 def test_oneclick_rust_downloads_wheel_before_tauri_build():
-    """The slow installer build must consume an explicitly downloaded wheel."""
+    """The slow installer build must consume an explicitly downloaded wheel.
+
+    同时钉住 Offline 变体的管线结构：payload job 先行产出随包负载，installer
+    matrix 带 payload 维度，收集步骤把 6 类资产全部落到 products/。
+    """
     text = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
     installer = text[
         text.index("  build-installer:") : text.index("  build-rust-wheel:")
     ]
-    assert "needs: [build-rust-wheel, build-oneclick-catalog-backend]" in installer
+    assert (
+        "needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload]"
+        in installer
+    )
     download = installer.index("uses: actions/download-artifact@v8")
     prepare = installer.index("name: 准备 OneClick 内嵌程序资源")
     build = installer.index("name: 构建 OneClick NSIS 安装器")
@@ -127,15 +134,15 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     assert "必须下载恰好一个 Rust wheel" in installer
     assert "merge-multiple: false" in text
     assert (
-        'installer_dir="installer-bin/stella-installer-${profile}"'
+        'installer_dir="installer-bin/stella-installer-${profile}-${variant}"'
         in text
     )
     assert "mapfile -t installers" in text
     assert "必须下载恰好一个安装器" in text
     assert 'python scripts/build_release_package.py "$profile"' in text
     assert '--installer "${installers[0]}"' in text
-    assert 'cp "dist/oneclick-python/${oneclick_python}" dist/products/' in text
-    assert 'cp "dist/oneclick-rust/${oneclick_rust}" dist/products/' in text
+    assert "--artifact-name" in text
+    assert 'cp "dist/${profile}-${variant}/${asset_name}" dist/products/' in text
     assert '缺少发布资产或文件为空' in text
     assert (
         'python scripts/check_release_archive.py "dist/products/${python_asset}"'
@@ -143,6 +150,22 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     )
     assert (
         'python scripts/check_release_archive.py "dist/products/${rust_asset}"'
+        in text
+    )
+    # OneClick Offline：随包负载 job 先行，安装器 matrix 带 payload 维度
+    assert "build-offline-payload:" in text
+    assert "build-offline-payload" in installer
+    assert "payload: [online, offline]" in text
+    assert "name: stella-offline-payload" in text
+    assert "--offline-payload" in text
+    assert "name: 校验离线 wheel 闭包可解析" in text
+    assert "--no-index" in text
+    assert (
+        "Stella-OneClick-Python-Offline-v${python_version}-windows-amd64.exe"
+        in text
+    )
+    assert (
+        "Stella-OneClick-Rust-Offline-v${python_version}-windows-amd64.exe"
         in text
     )
 
