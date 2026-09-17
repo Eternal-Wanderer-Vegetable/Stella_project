@@ -18,6 +18,7 @@ design_docs/test_checklist.md 的渲染一节）。
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -544,3 +545,90 @@ def test_global_guard_blocks_real_backend_in_tests():
 
     assert settings.RENDER_AUTO_INSTALL is False, "测试里绝不许触发内核下载"
     assert render._load_async_playwright() is None, "测试里绝不许真的 import playwright"
+
+
+# ============================================================
+# 随包离线内核（OneClick Offline）
+# ============================================================
+
+
+def _saved_browsers_env():
+    """apply_offline_browsers 直接写 os.environ（monkeypatch 管不到），手动保真还原。"""
+    saved = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+
+    def restore():
+        if saved is None:
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+        else:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = saved
+        render.reset_state()
+
+    return restore
+
+
+def test_apply_offline_browsers_sets_env_when_revision_matches(tmp_path, monkeypatch):
+    """离线仓带修订号匹配的完整内核 → 设 PLAYWRIGHT_BROWSERS_PATH 指过去。"""
+    installed = tmp_path / "chromium_headless_shell-1187"
+    installed.mkdir()
+    (installed / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
+    monkeypatch.setattr(render, "offline_browsers_root", lambda: tmp_path)
+    monkeypatch.setattr(render, "_expected_headless_revision", lambda: "1187")
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    restore = _saved_browsers_env()
+    try:
+        assert render.apply_offline_browsers() is True
+        assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(tmp_path)
+    finally:
+        restore()
+
+
+def test_apply_offline_browsers_ignores_revision_mismatch(tmp_path, monkeypatch):
+    """修订号对不上（比如 pip 包升级了）→ 不接管，走默认缓存 + 在线下载。"""
+    installed = tmp_path / "chromium_headless_shell-1187"
+    installed.mkdir()
+    (installed / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
+    monkeypatch.setattr(render, "offline_browsers_root", lambda: tmp_path)
+    monkeypatch.setattr(render, "_expected_headless_revision", lambda: "9999")
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    restore = _saved_browsers_env()
+    try:
+        assert render.apply_offline_browsers() is False
+        assert "PLAYWRIGHT_BROWSERS_PATH" not in os.environ
+    finally:
+        restore()
+
+
+def test_apply_offline_browsers_respects_user_override(tmp_path, monkeypatch):
+    """用户显式设置的 PLAYWRIGHT_BROWSERS_PATH 永远优先，绝不覆盖。"""
+    monkeypatch.setattr(render, "offline_browsers_root", lambda: tmp_path)
+    monkeypatch.setattr(render, "_expected_headless_revision", lambda: "1187")
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", r"D:\custom-browsers")
+    restore = _saved_browsers_env()
+    try:
+        assert render.apply_offline_browsers() is False
+        assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == r"D:\custom-browsers"
+    finally:
+        restore()
+
+
+def test_apply_offline_browsers_ignores_incomplete_install(tmp_path, monkeypatch):
+    """目录在但缺 INSTALLATION_COMPLETE 标记 → 视为没装完，不接管。"""
+    installed = tmp_path / "chromium_headless_shell-1187"
+    installed.mkdir()
+    monkeypatch.setattr(render, "offline_browsers_root", lambda: tmp_path)
+    monkeypatch.setattr(render, "_expected_headless_revision", lambda: "1187")
+    monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    restore = _saved_browsers_env()
+    try:
+        assert render.apply_offline_browsers() is False
+        assert "PLAYWRIGHT_BROWSERS_PATH" not in os.environ
+    finally:
+        restore()
+
+
+def test_expected_headless_revision_matches_browsers_json():
+    """真实 playwright 环境（CI 装了 pip 包）能读到确定性的修订号。"""
+    pytest.importorskip("playwright")
+    revision = render._expected_headless_revision()
+    assert revision is not None
+    assert revision.isdigit()

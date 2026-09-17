@@ -152,14 +152,22 @@ def build_standalone(
     return archive
 
 
-def build_oneclick(installer: Path, output: Path, profile_id: str) -> Path:
+def build_oneclick(
+    installer: Path,
+    output: Path,
+    profile_id: str,
+    *,
+    artifact_name: str | None = None,
+) -> Path:
     profile = load_profile(profile_id)
     if profile["distribution"] != "oneclick":
         raise ValueError(f"{profile_id} is not a one-click profile")
     if not installer.is_file():
         raise FileNotFoundError(f"installer is missing: {installer}")
     output.mkdir(parents=True, exist_ok=True)
-    target = output / profile["artifact"]["filename"]
+    # artifact_name：Offline 变体与在线版同一 profile，只靠产物文件名区分
+    # （payload 是否存在决定行为，profile id 保持不变）。
+    target = output / (artifact_name or profile["artifact"]["filename"])
     shutil.copy2(installer, target)
     siblings = [path for path in output.iterdir() if path.is_file() and path != target]
     for sibling in siblings:
@@ -167,7 +175,13 @@ def build_oneclick(installer: Path, output: Path, profile_id: str) -> Path:
     return target
 
 
-def stage_installer_resources(source: Path, output: Path, profile_id: str) -> Path:
+def stage_installer_resources(
+    source: Path,
+    output: Path,
+    profile_id: str,
+    *,
+    offline_payload: Path | None = None,
+) -> Path:
     """Stage the allowlisted program tree embedded by the Tauri installer."""
     profile = load_profile(profile_id)
     if profile["distribution"] != "oneclick":
@@ -186,6 +200,13 @@ def stage_installer_resources(source: Path, output: Path, profile_id: str) -> Pa
     if profile["core_flavor"] == "rust" and wheels.is_dir():
         shutil.copytree(wheels, output / "wheels", dirs_exist_ok=True)
     (output / ".stella-profile").write_text(profile_id + "\n", encoding="utf-8")
+    if offline_payload is not None:
+        offline_payload = Path(offline_payload).resolve()
+        if not offline_payload.is_dir():
+            raise FileNotFoundError(f"offline payload is missing: {offline_payload}")
+        # 整仓原样进 resources/stella/offline：安装器（python.rs）按
+        # <程序根>/offline 寻址，deploy 按 catalog 的 artifact 文件名寻址。
+        shutil.copytree(offline_payload, output / "offline", dirs_exist_ok=True)
     return output
 
 
@@ -202,14 +223,28 @@ def main() -> int:
     parser.add_argument("--installer", type=Path)
     parser.add_argument("--stage-resources", type=Path)
     parser.add_argument("--rust-wheel", type=Path)
+    parser.add_argument("--offline-payload", type=Path,
+                        help="build_offline_payload.py 的产物，随 resources 嵌入（Offline 变体）")
+    parser.add_argument("--artifact-name",
+                        help="覆盖 oneclick 产物文件名（Offline 变体用）")
     args = parser.parse_args()
+    if args.offline_payload is not None and not args.stage_resources:
+        parser.error("--offline-payload 只能与 --stage-resources 搭配")
+    if args.artifact_name is not None and not args.profile.startswith("oneclick-"):
+        parser.error("--artifact-name 只适用于 oneclick profile")
     if args.stage_resources is not None:
-        stage_installer_resources(args.source, args.stage_resources, args.profile)
+        stage_installer_resources(
+            args.source, args.stage_resources, args.profile,
+            offline_payload=args.offline_payload,
+        )
         return 0
     if args.profile.startswith("oneclick-"):
         if args.installer is None:
             parser.error("--installer is required for one-click profiles")
-        result = build_oneclick(args.installer, args.output, args.profile)
+        result = build_oneclick(
+            args.installer, args.output, args.profile,
+            artifact_name=args.artifact_name,
+        )
     else:
         result = build_standalone(
             args.source.resolve(),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -314,3 +315,112 @@ def test_completed_oneclick_repair_restores_manifest_and_env(tmp_path, monkeypat
     )
     env = (data_root / ".env").read_text(encoding="utf-8")
     assert "MEMORY_EMBEDDING_ENABLED=true" in env
+
+
+# ============================================================
+# 随包离线仓（OneClick Offline）
+# ============================================================
+
+
+def _seed_offline_packages(root: Path, catalog: Path, files: dict[str, Path]) -> None:
+    """把 catalog 声明的组件按 artifact 文件名预置进 <root>/offline/packages。"""
+    id_to_file = {
+        "llama-cpu": files["llama-cpu"],
+        "napcat": files["napcat"],
+        "qwen3-embedding-0.6b": files["qwen3-embedding-0.6b"],
+    }
+    packages_dir = root / "offline" / "packages"
+    packages_dir.mkdir(parents=True, exist_ok=True)
+    for record in json.loads(catalog.read_text(encoding="utf-8"))["packages"]:
+        shutil.copyfile(id_to_file[record["id"]], packages_dir / record["artifact"])
+
+
+_SOURCE_MAP_KEYS = (
+    "https://example.invalid/llama-cpu.zip",
+    "https://example.invalid/napcat.zip",
+    "https://example.invalid/Qwen3-Embedding-0.6B-Q8_0.gguf",
+)
+
+
+def _fake_downloader(source_map):
+    def fake_download(source, destination, *, checksum, size=None, **_kwargs):
+        source_path = source_map[source]
+        assert _sha256(source_path) == checksum
+        if size is not None:
+            assert source_path.stat().st_size == size
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source_path.read_bytes())
+        return destination
+
+    return fake_download
+
+
+def test_verify_local_artifact_accepts_matching_copy(tmp_path):
+    artifact = tmp_path / "component.zip"
+    artifact.write_bytes(b"payload")
+    assert (
+        bootstrap.acquire.verify_local_artifact(artifact, checksum=_sha256(artifact))
+        == artifact
+    )
+
+
+def test_verify_local_artifact_rejects_tampered_copy(tmp_path):
+    artifact = tmp_path / "component.zip"
+    artifact.write_bytes(b"payload")
+    with pytest.raises(bootstrap.acquire.AcquireError, match="checksum"):
+        bootstrap.acquire.verify_local_artifact(artifact, checksum="0" * 64)
+
+
+def test_verify_local_artifact_rejects_size_mismatch(tmp_path):
+    artifact = tmp_path / "component.zip"
+    artifact.write_bytes(b"payload")
+    with pytest.raises(bootstrap.acquire.AcquireError, match="大小"):
+        bootstrap.acquire.verify_local_artifact(
+            artifact, checksum=_sha256(artifact), size=999
+        )
+
+
+def test_offline_packages_serve_components_without_network(tmp_path, monkeypatch):
+    catalog, files = _catalog(tmp_path)
+    _seed_offline_packages(tmp_path, catalog, files)
+    monkeypatch.setattr(bootstrap, "PROJECT_ROOT", tmp_path)
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("Offline bundle must serve packages without network")
+
+    monkeypatch.setattr(bootstrap.acquire, "download_verified", fail)
+    data_root = tmp_path / "data"
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "oneclick-offline-test")
+
+    result = bootstrap.install_profile(
+        "oneclick-python", data_root, catalog_path=catalog
+    )
+
+    assert result["state"] == "complete"
+    assert (data_root / ".stella" / "components" / "llama-cpu" / "4.0.1").is_dir()
+    registry = packages.read_registry(data_root)
+    assert registry["active"]["embedding"] == "qwen3-embedding-0.6b@q8_0"
+    assert bootstrap.read_progress(data_root)["state"] == "complete"
+
+
+def test_corrupt_offline_package_falls_back_to_download(tmp_path, monkeypatch):
+    catalog, files = _catalog(tmp_path)
+    _seed_offline_packages(tmp_path, catalog, files)
+    # 篡改其中一个离线副本：内容不再匹配 catalog checksum，必须被拒收并回落在线
+    (tmp_path / "offline" / "packages" / "llama-cpu.zip").write_bytes(b"tampered")
+    monkeypatch.setattr(bootstrap, "PROJECT_ROOT", tmp_path)
+    source_map = dict(zip(_SOURCE_MAP_KEYS, files.values(), strict=True))
+    monkeypatch.setattr(
+        bootstrap.acquire, "download_verified", _fake_downloader(source_map)
+    )
+    data_root = tmp_path / "data"
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "oneclick-offline-fallback-test")
+
+    result = bootstrap.install_profile(
+        "oneclick-python", data_root, catalog_path=catalog
+    )
+
+    assert result["state"] == "complete"
+    assert (data_root / ".stella" / "components" / "llama-cpu" / "4.0.1").is_dir()

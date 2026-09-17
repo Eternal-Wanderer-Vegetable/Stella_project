@@ -40,7 +40,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import logging
+import os
 import re
 import sys
 import time
@@ -67,6 +69,11 @@ _INSTALL_TARGET = "chromium-headless-shell"
 # 启动渠道的尝试顺序：先 headless shell，失败再退回 playwright 自带的 chromium
 # （用户可能装的是完整版，或 playwright 版本老到没有这个 channel）。
 _LAUNCH_CHANNELS: tuple[str | None, ...] = (_INSTALL_TARGET, None)
+# 随包离线内核（OneClick Offline 安装包发布时预装的浏览器目录，见
+# scripts/build_offline_payload.py）。目录名/布局与 playwright 的默认缓存一致，
+# 只是通过 PLAYWRIGHT_BROWSERS_PATH 指过去，而不是复制几百 MB 到用户缓存。
+_OFFLINE_ROOT_NAME = "offline"
+_OFFLINE_BROWSERS_DIRNAME = "playwright-browsers"
 
 
 def _settings() -> Any:
@@ -225,11 +232,13 @@ def reset_state() -> None:
     """清空模块级状态（测试与热重载用）。不关浏览器，调用方自己保证。"""
     global _playwright, _browser, _browser_lock, _render_sem
     global _install_task, _install_blocked_until, _warned_unavailable
+    global _offline_browsers_applied
     _playwright = _browser = None
     _browser_lock = _render_sem = None
     _install_task = None
     _install_blocked_until = 0.0
     _warned_unavailable = False
+    _offline_browsers_applied = False
 
 
 def _is_missing_browser(exc: BaseException) -> bool:
@@ -322,6 +331,81 @@ def _load_async_playwright() -> Any:
     return async_playwright
 
 
+# ============================================================
+# 随包离线内核：OneClick Offline 安装包自带浏览器，装好即用、零联网
+# ============================================================
+
+_offline_browsers_applied = False
+
+
+def offline_browsers_root() -> Path:
+    """随包离线内核目录（``<程序根>/offline/playwright-browsers``）。"""
+    return (
+        Path(__file__).resolve().parent.parent
+        / _OFFLINE_ROOT_NAME
+        / _OFFLINE_BROWSERS_DIRNAME
+    )
+
+
+def _expected_headless_revision() -> str | None:
+    """当前安装的 playwright 所期望的 headless shell 修订号。
+
+    来源是 playwright 自带的 ``browsers.json``——随包内核必须与 pip 包的修订号
+    完全一致，否则 node 驱动会当作没装。读不到（playwright 未装/结构变化）
+    返回 None。单独拆出便于单测注入。
+    """
+    try:
+        import playwright
+
+        manifest = json.loads(
+            (
+                Path(playwright.__file__).parent
+                / "driver"
+                / "package"
+                / "browsers.json"
+            ).read_text(encoding="utf-8")
+        )
+    except Exception:
+        return None
+    for browser in manifest.get("browsers", []):
+        if browser.get("name") == _INSTALL_TARGET:
+            revision = str(browser.get("revision") or "").strip()
+            return revision or None
+    return None
+
+
+def apply_offline_browsers() -> bool:
+    """离线包带内核且修订号匹配 → 设 ``PLAYWRIGHT_BROWSERS_PATH`` 指向随包内核。
+
+    必须在驱动进程启动**之前**生效：playwright 的 node 驱动启动时读这个环境
+    变量决定去哪找浏览器，所以只能在首次 `_get_browser()` 里、`factory().start()`
+    之前调用一次（幂等，结果缓存）。
+
+    任何一个守卫不满足都不设置，行为与不带离线包时完全一致（默认缓存 +
+    ``RENDER_AUTO_INSTALL`` 在线下载）：
+
+    - 用户已显式设置 ``PLAYWRIGHT_BROWSERS_PATH`` → 用户优先，绝不覆盖；
+    - 读不到当前 playwright 期望的修订号；
+    - 随包目录里没有「修订号匹配且带 INSTALLATION_COMPLETE 标记」的内核。
+    """
+    global _offline_browsers_applied
+    if _offline_browsers_applied:
+        return True
+    _offline_browsers_applied = True
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return False
+    revision = _expected_headless_revision()
+    if not revision:
+        return False
+    root = offline_browsers_root()
+    installed = root / f"{_INSTALL_TARGET.replace('-', '_')}-{revision}"
+    if not (installed / "INSTALLATION_COMPLETE").is_file():
+        return False
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(root)
+    logger.info(f"🖼 [Render] 使用随包离线浏览器内核（revision={revision}）")
+    return True
+
+
 async def _get_browser() -> Any:
     """取（或启动）共享的浏览器实例；不可用时返回 None。
 
@@ -346,6 +430,9 @@ async def _get_browser() -> Any:
                     )
                 return None
             try:
+                # 必须在驱动 spawn 之前：PLAYWRIGHT_BROWSERS_PATH 是 node 驱动
+                # 启动时读的，驱动起来后再改对它无效。
+                apply_offline_browsers()
                 _playwright = await factory().start()
             except Exception as e:
                 _playwright = None
@@ -502,8 +589,10 @@ async def render_text(text: str, options: dict | None = None) -> Path | None:
 
 __all__ = [
     "DEFAULT_VIEWPORT_WIDTH",
+    "apply_offline_browsers",
     "cache_dir",
     "context_kwargs",
+    "offline_browsers_root",
     "output_suffix",
     "parse_viewport_width",
     "prune_cache",

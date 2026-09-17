@@ -95,6 +95,7 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 - 第一步：到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 选一种 Windows 产品下载。按「要不要帮你把运行环境装好」分两条产品线：
 
   - **OneClick 一键安装（推荐）**：`Stella-OneClick-Python-vX.Y.Z-windows-amd64.exe`，单文件安装程序，双击安装。首次启动会自动准备嵌入式 Python、`llama.cpp` CPU 后端、NapCat 与 `qwen3-embedding-0.6b` 向量模型——**NapCat 无需单独安装**，但登录仍需人工扫码（程序不会代扫码）。想用 Rust 记忆引擎就下载 `Stella-OneClick-Rust-vX.Y.Z-windows-amd64.exe`，引擎在安装阶段一并就绪。
+  - **OneClick 一键安装·离线版**：`Stella-OneClick-Python-Offline-vX.Y.Z-windows-amd64.exe`（Rust 版为 `Stella-OneClick-Rust-Offline-*`）。安装流程与在线版完全相同，但嵌入式 Python、全部 Python 依赖、`llama.cpp` CPU 后端、NapCat、向量模型与浏览器渲染内核**全部随包内置，安装与渲染全程不需要联网**——适合国内网络受限或内网环境。代价是安装包体积约 1GB。
   - **Standalone 解压版**：`Stella-Standalone-Python-vX.Y.Z-windows-amd64.zip`，解压即用，**只包含 Stella 本体**——需要自备 Python 3.10+ 与 NapCat，也不会自动下载 `llama.cpp` 或任何模型。Rust 版（`Stella-Standalone-Rust-*.zip`）额外附带 Rust 记忆引擎 wheel，首次启动自动离线安装并启用。
 
   两类产品都提供 `Stella.exe` 图形界面（推荐）与 `start.bat` 命令行两种启动方式。`Stella.exe` 启动时自动跑一遍环境自检——尚未配置会打开「配置」页，有阻塞问题会打开「环境自检」页，一切正常则直接进入「运行状态」页；`start.bat` 则进入命令行配置向导并启动 Bot。**请勿把两类产品装进同一个目录。**

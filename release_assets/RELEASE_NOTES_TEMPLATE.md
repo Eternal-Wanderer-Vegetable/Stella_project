@@ -8,6 +8,8 @@
   Standalone-Rust，避免不同目标用户下载到不匹配的内容。
 - OneClick 默认安装 `qwen3-embedding-0.6b`；聊天、整理和 reranker 模型不预装。
 - OneClick 使用单个 Windows 安装程序；Standalone 仅包含 Stella 本体。
+- 新增 OneClick Offline 离线安装程序（`Stella-OneClick-*-Offline-*`）：运行时、依赖、
+  组件、模型与渲染内核全部随包内置，安装期零联网（体积约 1GB）。
 
 - 增加 Runtime Contract、统一组件状态、脱敏错误和实例级 Runtime 文件。
 - 增加 Rust `runtime-manager` 契约基础层，并保留 Python deploy、CLI、Tauri 的兼容入口。
@@ -56,7 +58,7 @@ D:\你的目录\
 
 ## 下载
 
-见本 Release 的四类 Windows 资产：`Stella-OneClick-*` 安装程序与
+见本 Release 的 Windows 资产：`Stella-OneClick-*` 安装程序（在线/离线两种）与
 `Stella-Standalone-*` 压缩包。v4.0.0 保留为历史 Pre-release，不被覆盖。
 
 ## 本版本边界

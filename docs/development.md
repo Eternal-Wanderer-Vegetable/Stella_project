@@ -500,7 +500,24 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 ## 发布流程
 
-打 tag 后 CI（`.github/workflows/release.yml`）自动打包并发布，产出四类 Windows 产品资产：`Stella-OneClick-Python/Rust-vX.Y.Z-windows-amd64.exe`（单文件安装器）与 `Stella-Standalone-Python/Rust-vX.Y.Z-windows-amd64.zip`（仅本体的解压包），另有 CLI、llama backend 等独立资产。
+打 tag 后 CI（`.github/workflows/release.yml`）自动打包并发布，产出六类 Windows 产品资产：`Stella-OneClick-Python/Rust-vX.Y.Z-windows-amd64.exe`（单文件安装器）、`Stella-OneClick-Python/Rust-Offline-vX.Y.Z-windows-amd64.exe`（离线安装器，见下）与 `Stella-Standalone-Python/Rust-vX.Y.Z-windows-amd64.zip`（仅本体的解压包），另有 CLI、llama backend 等独立资产。
+
+### OneClick Offline 的离线负载
+
+Offline 变体与在线版**同一份代码、同一个 profile id**，只是 NSIS 资源里多了一份
+`offline/` 负载（存在与否决定安装器走本地优先还是联网路径，见
+`stella-installer/src-tauri/src/python.rs` 与 `deploy/bootstrap.py`）。负载由
+`scripts/build_offline_payload.py` 在 CI 里构建，包含：
+
+- 嵌入式 Python 运行时 zip（哈希从 `python.rs` 的 `PY_VER`/`PY_SHA256` 解析，单一事实来源）；
+- `get-pip.py`（`MANIFEST.json` 记录 sha256，安装器校验后配合 `--no-index` 离线装 pip）；
+- requirements.txt 的完整 wheel 闭包（`pip wheel` 现场构建，含只有 sdist 的包，如 `qrcode_terminal`）；
+- package catalog 声明的全部组件（llama.cpp backend / NapCat / 默认 embedding 模型，文件名 = catalog 的 `artifact` 字段，校验走与在线安装同一条 catalog checksum 路径）；
+- playwright 的 chromium-headless-shell（`PLAYWRIGHT_BROWSERS_PATH` 指向随包内核，渲染零下载）。
+
+**修改安装期组件时必须同步检查**：新增 catalog 组件 → 无需改负载脚本（按 catalog 遍历）；
+新增 Python 依赖 → 确认 `pip wheel` 能构建出 wheel；升级 playwright → 负载里的内核
+revision 必须与新版本一致（脚本现场安装，天然一致）。
 
 ### 打 tag 前的检查清单
 
