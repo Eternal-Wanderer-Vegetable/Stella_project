@@ -87,7 +87,7 @@ Putting data there by default would turn the perfectly natural cleanup action of
 Therefore the default is outside; only when a user **explicitly** creates a `StellaData/` subdirectory is a self-contained layout assumed
 (in that case, import or back up the data before upgrading).
 
-The Release package therefore **does not contain an inner `Stella/` directory**: after extracting the zip, `Stella-vX.Y.Z-win64/` is the program directory and the data is placed beside it. An extra nesting level would turn “beside” into “inside the version folder,” which was the old release-layout defect.
+The Release archive (Standalone zip) therefore **does not contain an inner `Stella/` directory**: files sit at the archive root, and the extraction target directory itself is the program directory, with the data placed beside it. An extra nesting level would turn “beside” into “inside the version folder,” which was the old release-layout defect.
 
 The relative layout inside the data directory is exactly the same as in the old installation, so the “legacy layout” is simply the special case where the data directory happens to equal the installation directory.
 Use `python -m deploy paths` to view the current resolution result (`deploy doctor` also displays it).
@@ -102,6 +102,8 @@ Files that ship with the Release package but may also be changed by users (`syst
 |---|---|---|
 | `LOG_DIR` | `logs/` | Root directory for all logs |
 | `STELLA_JSON_LOG_PATH` | `logs/stella.jsonl` | Structured log for programs to read (the GUI log panel, `deploy status`) |
+| `STELLA_JSON_LOG_ENABLED` | `true` | Master switch for the structured log; when off, neither the GUI log panel nor `deploy status` can read recent log content |
+| `STELLA_JSON_LOG_MAX_MESSAGE` | `500` | Truncation length per structured-log entry: full prompts are thousands of characters and would bloat the jsonl file |
 | `THOUGHT_LOG_PATH` | `logs/stella_thought_logs.md` | Thought/decision log: complete prompt, raw output, routing decision, and tool result for each round |
 | `CONSOLIDATION_LOG_PATH` | `logs/memory_consolidation_log.md` | Runtime summary and original LLM output for each memory-consolidation batch |
 | `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | Merge, atomization, and archive counts for each memory compression |
@@ -381,11 +383,12 @@ Stage 2 is **activated only when Stage 1 determines that the batch contains user
 |---|---|---|
 | `MEMORY_EXTRACT_ENABLED` | `true` | When disabled, falls back to one stage (the consolidation model produces everything in one pass) |
 | `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` | same as `LM_STUDIO_BASE_URL` | Extraction service address |
+| `MEMORY_EXTRACT_LM_STUDIO_API_KEY` | empty | API key if the extraction service requires authentication (leave empty for local services; on online endpoints the slot's `API_KEY` usually takes over) |
 | `MEMORY_EXTRACT_LM_STUDIO_MODEL` | same as `LM_STUDIO_MODEL` | Defaults to the main chat model |
 | `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | Extraction does not need creative variation, so it is lower than consolidation's 0.3 |
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | Only a candidate array is output, so a large value is unnecessary |
 
-> These four `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` settings are the inheritance sources for `LLM_ROLE_EXTRACT_*`. To send Stage 2 to a strong online model, change `LLM_ROLE_EXTRACT_ENDPOINT` (the model comes from that endpoint's `MODEL`; write `LLM_ROLE_EXTRACT_MODEL` only when it must differ from other roles on the same endpoint). The settings in this section do not need to change.
+> These five `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` settings are the inheritance sources for `LLM_ROLE_EXTRACT_*`. To send Stage 2 to a strong online model, change `LLM_ROLE_EXTRACT_ENDPOINT` (the model comes from that endpoint's `MODEL`; write `LLM_ROLE_EXTRACT_MODEL` only when it must differ from other roles on the same endpoint). The settings in this section do not need to change.
 
 **Why split the stages**: a small model can summarize a topic, but in a noisy environment it systematically returns no candidates. On 2026-08-16, all 7 tested consolidation batches returned empty candidates even though the information was clearly present in the summaries it had written. It had read the information but actively discarded it; it had not failed to see it. Candidate extraction is a high-precision extraction task and is delegated to a larger model.
 
@@ -451,6 +454,18 @@ The reason `MEMORY_EMBEDDING_GATE` defaults to `auto` is that `MEMORY_EMBEDDING_
 
 > **Tail time window and gap markers**: taking only the latest N IDs means that after several hours offline, a restart treats a conversation from hours ago as current (the 2026-08-15 defect). `RECENT_TAIL_MAX_AGE_MINUTES` filters out expired messages; when adjacent messages inside the window are more than `RECENT_TAIL_GAP_MARK_MINUTES` apart, it inserts a line such as “(... X elapsed in between ...)” so the model knows that the conversation happened before but a long time has passed, rather than simply forgetting it.
 
+### Budget Split of the 8192 Working Window
+
+The three context layers, memory injection, and tool conclusions share one working window. The budget is split before each model call (enforced by `core/context_budget.py`; when the input exceeds its budget, the oldest tail messages are dropped first):
+
+| Configuration | Default | Description |
+|---|---|---|
+| `LLM_CONTEXT_WINDOW_TOKENS` | `8192` | Working window (tokens) of the main chat model; the baseline for all budget reasoning in the README |
+| `LLM_OUTPUT_RESERVE_TOKENS` | `1000` | Share reserved for the model's output (including `MAX_TOKENS` and truncation headroom) |
+| `LLM_CONTEXT_SAFETY_TOKENS` | `200` | Safety margin for estimation error (a fallback when the tokenizer's estimate is off) |
+
+> Input budget = window − output reserve − safety margin. When switching to a model with a larger window (say 32K), raise `LLM_CONTEXT_WINDOW_TOKENS` accordingly and each layer's budget loosens proportionally. Conversely, do not squeeze `LLM_OUTPUT_RESERVE_TOKENS` on an 8K model — a truncated output breaks JSON parsing, which is worse than having a few memories fewer.
+
 ### Session Context Compaction
 
 In a short, continuous conversation, early messages eventually roll out of the tail window and disappear completely. This mechanism compresses the rolled-out portion into a recap so the Bot remains coherent in long conversations, similar to compacting in a coding agent.
@@ -489,6 +504,7 @@ The reason for consolidating once when a session ends is that the conversation's
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | Confidence gain when the same fact recurs |
 | `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | Maximum time in the observation area; mark as `REJECTED` after expiry (do not delete). Time-sensitive types have shorter tiers; see below |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | Maximum accumulated `evidence` |
+| `MEMORY_CANDIDATE_DEFAULT_IMPORTANCE` | `0.5` | Fallback importance when the model provides none. **Must not be 0**: a 0 is vetoed by the promotion threshold, leaving candidates stuck in OBSERVING forever — repeatedly probed by proactive verification yet never promoted |
 
 The value `0.12` means a candidate starting at 0.5 crosses the 0.6 threshold after approximately 2 recurrences.
 
@@ -520,6 +536,10 @@ The observation limit is **tiered by type**. The tier table is the code-level co
 > When multiple QQ groups belong to one space, the quota is effectively tighter because the same person has only one body of knowledge in that space. This is intentional, but it matters when tuning.
 
 ## Memory: Retrieval and Ranking
+
+### Retrieval Backend: Python / Rust (`MEMORY_BACKEND`)
+
+The memory engine defaults to the Python implementation (`memory/`); an independent Rust retrieval backend can be installed optionally. The switch is the `MEMORY_BACKEND` environment variable, not a key in the table below: `python` (default) / `rust` / `auto` (use Rust when available, fall back on failure) / `shadow` (run Rust read-only beside Python, record parity diagnostics, return the Python result) / `strict` (require Rust and surface failures). See [memory-rust-backend.md](memory-rust-backend.md) for the compatibility matrix, release assets, and rollback; the earlier `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` are equivalent to `shadow` / `strict`, and an explicit `MEMORY_BACKEND` takes precedence.
 
 ### RAG Switches
 
@@ -732,6 +752,9 @@ See `design_docs/Stella_主动插话机制工程方案.md` and `Stella_主动插
 | `PARTICIPATION_MAX_GROUPS` | `64` | LRU limit for in-memory group state |
 | `PARTICIPATION_LOG_LEVEL` | `full` | Scoring log level: `full` / `summary` / `off` (`ALLOW_LLM` is always recorded) |
 | `PARTICIPATION_TICK_INTERVAL` | `60` | Topic-state lifecycle interval in seconds (`COOLING` → `EXPIRED`) |
+| `PARTICIPATION_DECISION_LOG_PATH` | `logs/participation_decisions.jsonl` | Path of the decision JSONL log (empty falls back to `LOG_DIR`) |
+| `PARTICIPATION_MD_LOG_PATH` | `logs/participation_logs.md` | Path of the human-readable breakdown log (empty falls back to `LOG_DIR`) |
+| `REPLY_GATE_PROACTIVE_COOLDOWN_SECONDS` | `15.0` | Reply-necessity gate (`core/reply_gate.py`, zero tokens): minimum interval after a proactive interjection; hard triggers (being @ mentioned) are exempt |
 
 **All scores, thresholds, and keyword lists live in the four external tables under
 `config/participation/`**. The Python code contains no scoring constants:
@@ -754,6 +777,51 @@ Runtime reload: an administrator can send `@Stella 重载打分表` in a group. 
 
 Scoring is recorded in three places: `logs/participation_decisions.jsonl` (structured),
 `logs/participation_logs.md` (human-readable breakdown), and the `participation_log` table.
+
+## Restricted Planner (Deep Reply Path)
+
+The vast majority of messages take the fast path (retrieval → one LLM call). Only when the zero-LLM local trigger detection hits (historical reference / topic ambiguity / an unclear proactive-interjection phrasing) does the deep path start: the Planner plans (1 LLM call) → at most one deep memory query → the reply (1 LLM call). Implementation: `core/planner.py`.
+
+| Configuration | Default | Description |
+|---|---|---|
+| `PLANNER_ENABLED` | `true` | Master switch of the deep path; off means everything takes the fast path |
+| `PLANNER_MAX_LLM_CALLS_PER_TURN` | `2` | Hard per-turn LLM cap of the deep path (including reply generation): 1 call on the fast path, 2 on the deep path |
+| `PLANNER_MAX_ROUNDS` | `2` | Maximum planning rounds (1 LLM call each; effectively bounded by the cap above) |
+| `PLANNER_MAX_TOOL_CALLS_PER_TURN` | `1` | At most one deep memory query per round |
+| `PLANNER_QUERY_MEMORY_MAX_LINES` | `5` | Maximum lines of the compressed deep-memory-query result (each line carries fact/time/participants/confidence) |
+| `PLANNER_CONTEXT_MAX_TOKENS` | `400` | Token cap for the recent-conversation summary inside the Planner prompt |
+| `PLANNER_TIMEOUT` | `20.0` | Per-call LLM timeout of the Planner (seconds); a timeout is handled as “reply directly” and never blocks the main path |
+| `PLANNER_PROACTIVE_WAIT_ENABLED` | **`false`** | Whether the Planner may decide WAIT (wait for more messages before interjecting) on the proactive path. Off by default: proactive interjection is already vetted by the participation scoring layer (zero LLM), and spending one more LLM call to decide “speak or not” doubles the cost of every proactive message |
+
+> Any Planner exception only degrades to the fast path (a few supplementary memories fewer); it must never swallow the reply. This is a structural guarantee, not a configuration option.
+
+## Personalized Addressing
+
+An addressing preference is a relationship preference the user explicitly set (“call me X”), stored separately from `user_profiles.nickname` and ordinary memories (the v14 `user_address_preferences` table). Changes are accepted only from explicit natural-language requests; the embedding only filters intent and never writes to the database directly. Implementation: `memory/addressing.py` / `memory/addressing_intent.py`.
+
+| Configuration | Default | Description |
+|---|---|---|
+| `ADDRESSING_ENABLED` | `true` | Master switch of the addressing system |
+| `ADDRESSING_SEMANTIC_ENABLED` | `true` | Whether to use embedding-based semantic matching (off means rule pre-screening only — weaker recognition but zero embedding cost) |
+| `ADDRESSING_INTENT_THRESHOLD` | `0.58` | Similarity threshold for the semantic decision |
+| `ADDRESSING_INTENT_MARGIN` | `0.06` | Minimum margin between the best and second-best intent (below it the request is treated as ambiguous and no action is taken) |
+| `ADDRESSING_INTENT_TIMEOUT` | empty | Embedding call timeout (seconds); empty uses the embedding service's global timeout |
+
+## Expression and Interjection-Outcome Learning
+
+Asynchronous background learning after a reply is sent (zero LLM): whether the user kept responding, reused Stella's phrasing, used emoji, corrected it, or ignored a proactive message. Samples and statistics live in four separate tables (`expression_store`), fully apart from the memory system (“what is known”); a failure affects learning only, never chat. Implementation: `memory/expression_learning.py`.
+
+| Configuration | Default | Description |
+|---|---|---|
+| `EXPRESSION_LEARNING_ENABLED` | `true` | Master switch |
+| `REPLY_EFFECT_WINDOW_SECONDS` | `300.0` | Window after a reply is sent during which the user's response is awaited (seconds); the effect is settled when the window closes |
+| `EXPRESSION_SWEEP_INTERVAL` | `3600` | Resettlement scan interval: a process restart loses in-flight delayed settlements, so a periodic scan settles rows whose window has already closed |
+| `EXPRESSION_HARVEST_PER_MESSAGE` | `2` | Maximum expression samples harvested per user message (quality over quantity, to keep spam from flooding the sample table) |
+| `EXPRESSION_EXAMPLES_KEEP_DAYS` | `30.0` | Retention days for expression samples (pruned by the daily cleanup task) |
+| `REPLY_EFFECTS_KEEP_DAYS` | `60.0` | Retention days for settled reply effects |
+| `JARGON_HIT_THRESHOLD` | `5` | Enrollment threshold for jargon candidates (in-process occurrence count). Only two low-noise signal classes are counted: Latin/alphanumeric mixed words (yyds, xswl) and quoted Chinese words (“绝绝子”) |
+| `JARGON_CONFIRM_THRESHOLD` | `12` | Promotion threshold for jargon (accumulated hits across days) |
+| `JARGON_TRACKER_MAX_TERMS` | `4096` | Capacity cap of the in-process jargon counter (so long chat histories cannot eat the memory) |
 
 ## Memory Compression
 
@@ -792,6 +860,35 @@ Scoring is recorded in three places: `logs/participation_decisions.jsonl` (struc
 > `DB_CLEANUP_ON_START=true` loses memory and resets consolidation progress on every startup. Change it back to `false` after testing.
 
 > Disabling `MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED` causes unconsolidated messages to be permanently discarded when the backlog exceeds `MESSAGE_CLEANUP_KEEP_COUNT`. That content will never enter the memory system, and checkpoint alignment makes the loss invisible.
+
+## AstrBot Plugin Compatibility Layer
+
+Third-party plugins from the AstrBot ecosystem run as-is when placed in `data/plugins/<plugin-dir>/` (compatibility boundaries and authoring rules: [Plugin Integration Specification](plugin-spec.en.md)). The plugin, config, and data directories are anchored to the user data directory (`STELLA_HOME`) by default and can be relocated individually with the three entries below:
+
+| Configuration | Default | Description |
+|---|---|---|
+| `ASTRBOT_COMPAT_ENABLED` | `true` | Master switch of the compatibility layer; when off, plugins are neither loaded nor dispatched |
+| `ASTRBOT_COMPAT_VERSION` | `4.27.0` | AstrBot version claimed for compatibility (injected into logs and plugin self-checks; a declaration only, not a guarantee) |
+| `ASTRBOT_PLUGINS_DIR` | `<user data>/data/plugins` | Third-party plugin source directory (one plugin per subdirectory, must contain metadata.yaml) |
+| `ASTRBOT_PLUGIN_CONFIG_DIR` | `<user data>/data/config` | Plugin configuration persistence directory |
+| `ASTRBOT_PLUGIN_DATA_DIR` | `<user data>/data/plugin_data` | Plugin runtime data directory (the root returned by `StarTools.get_data_dir`) |
+| `ASTRBOT_AUTO_INSTALL_REQUIREMENTS` | **`false`** | Whether to auto-install a plugin's declared `requirements.txt`. Off by default: it amounts to executing arbitrary code — review a plugin's dependencies yourself before installing it |
+| `ASTRBOT_PLUGIN_CAPABILITIES_ENABLED` | `true` | Whether to load a plugin's bundled `capability.toml` (the lowest-priority of the three declaration tiers) |
+| `ASTRBOT_WAKE_PREFIXES` | `/` | Command wake prefixes (comma-separated). Plugin `@filter.command` depends on them: typing `/help` in the group triggers it without @ mentioning the Bot; empty means only @ / quote / private chat wake plugins |
+| `ASTRBOT_COMPAT_ALLOW_PRIVATE` | `true` | Whether private chat can trigger plugins (upstream private chat hits commands without a prefix by default) |
+
+Behavior when a plugin borrows Stella's LLM capability (the `PLUGIN` role):
+
+| Configuration | Default | Description |
+|---|---|---|
+| `ASTRBOT_LLM_ENABLED` | `true` | Whether to provide the LLM service to plugins; when off, model-dependent plugin features are unavailable (command plugins are unaffected) |
+| `ASTRBOT_LLM_BASE_URL` | same as `LM_STUDIO_BASE_URL` | Plugin-side LLM service address (inherits the local endpoint when not configured separately) |
+| `ASTRBOT_LLM_API_KEY` | same as `LM_STUDIO_API_KEY` | The corresponding API key |
+| `ASTRBOT_LLM_SYSTEM_PROMPT` | `你是一个简单的机器人助手，请直接、简短地回答，不要扮演角色。` | Persona for the plugin-side LLM. Deliberately not Stella's persona: plugins answer tool-like questions and should not role-play |
+| `ASTRBOT_LLM_MAX_CONTEXT_TOKENS` | `8192` | Plugin-side context window |
+| `ASTRBOT_LLM_MAX_TOOLS` | `32` | Maximum tools exposed to a plugin per request |
+
+> `ASTRBOT_LLM_MODEL` / `_TEMPERATURE` / `_MAX_TOKENS` / `_MAX_TOOL_STEPS` / `_TOOL_TIMEOUT` have been folded into the `PLUGIN` role's inheritance chain under [Endpoint and Role](#endpoint-and-role-two-layer-configuration) — change them in the GUI's role matrix; for `ASTRBOT_PLUGIN_HOT_RELOAD_*` see [Plugin Hot Reload](#plugin-hot-reload-for-debugging).
 
 ## HTML to Image Rendering (Plugin Cards)
 

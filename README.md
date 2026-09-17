@@ -84,7 +84,7 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 - **🔌 可扩展** —— Pipeline 前后置 Hook 机制，扩展目录自动加载
 
-- **🧪 可验证** —— 1450+ 单元测试覆盖记忆晋升、跨用户隔离、两层归属、防编造护栏、路由降级与工具隔离；接在线端点后还多一层**厂商中立契约测试**（请求体多带一个字段就红、参数差异只许按错误措辞自适应而不许写厂商白名单）与前缀缓存守卫；另有探针脚本对真实模型做回归验证（含一个专门复现「噪音环境下漏掉信息」的用例），以及一份量化四类路由错误的基准
+- **🧪 可验证** —— 2000+ 单元测试覆盖记忆晋升、跨用户隔离、两层归属、防编造护栏、路由降级与工具隔离；接在线端点后还多一层**厂商中立契约测试**（请求体多带一个字段就红、参数差异只许按错误措辞自适应而不许写厂商白名单）与前缀缓存守卫；另有探针脚本对真实模型做回归验证（含一个专门复现「噪音环境下漏掉信息」的用例），以及一份量化四类路由错误的基准
 
 ## 🚀 快速开始
 
@@ -92,22 +92,24 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 ### 📦 下载 & 安装（普通用户）
 
-- 第一步：按使用场景准备组件：
+- 第一步：到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 选一种 Windows 产品下载。按「要不要帮你把运行环境装好」分两条产品线：
 
-  - 如果要接入 QQ：准备 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)，并按照其中的指示配置**反向 websocket 链接**。记录下您配置的端口号并打开链接。
-  - 如果要使用本地模型：可选择 [LM Studio](https://lmstudio.ai/)，或使用 Stella Runtime 的可选 `llama.cpp` profile。使用在线模型时不需要安装 LM Studio。
+  - **OneClick 一键安装（推荐）**：`Stella-OneClick-Python-vX.Y.Z-windows-amd64.exe`，单文件安装程序，双击安装。首次启动会自动准备嵌入式 Python、`llama.cpp` CPU 后端、NapCat 与 `qwen3-embedding-0.6b` 向量模型——**NapCat 无需单独安装**，但登录仍需人工扫码（程序不会代扫码）。想用 Rust 记忆引擎就下载 `Stella-OneClick-Rust-vX.Y.Z-windows-amd64.exe`，引擎在安装阶段一并就绪。
+  - **Standalone 解压版**：`Stella-Standalone-Python-vX.Y.Z-windows-amd64.zip`，解压即用，**只包含 Stella 本体**——需要自备 Python 3.10+ 与 NapCat，也不会自动下载 `llama.cpp` 或任何模型。Rust 版（`Stella-Standalone-Rust-*.zip`）额外附带 Rust 记忆引擎 wheel，首次启动自动离线安装并启用。
+
+  两类产品都提供 `Stella.exe` 图形界面（推荐）与 `start.bat` 命令行两种启动方式。`Stella.exe` 启动时自动跑一遍环境自检——尚未配置会打开「配置」页，有阻塞问题会打开「环境自检」页，一切正常则直接进入「运行状态」页；`start.bat` 则进入命令行配置向导并启动 Bot。**请勿把两类产品装进同一个目录。**
 
 > AI 可以关闭。关闭 AI 或本地模型暂不可用时，基础 Bot、OneBot 诊断和部署管理仍可运行。
 
-- 第二步：到 [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases) 下载最新的 `Stella-*-win64.zip`，解压后有两种启动方式：
+- 第二步：按使用场景准备其余组件：
 
-  - **图形界面（推荐）**：双击 `Stella.exe` ，首次运行会自动下载约 100MB 的嵌入式 Python 并安装依赖；之后每次启动自动跑一遍环境自检——尚未配置会打开「配置」页，有阻塞问题会打开「环境自检」页，一切正常则直接进入「运行状态」页。
-  - **命令行**：双击 `start.bat`，同样会自动下载 Python 并安装依赖，然后进入配置向导并启动 Bot。
+  - 接入 QQ：OneClick 版的 NapCat 已随装就绪，扫码登录后，在 NapCat WebUI 的「网络配置」里添加「WebSocket 客户端」指向 Bot（反向 WS，地址 `ws://127.0.0.1:8080/onebot/v11/ws`）；Standalone 版请先自行安装 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop)，再按同样方式配置反向 WS。
+  - 如果要使用本地聊天模型：安装 [LM Studio](https://lmstudio.ai/) 并加载模型（OneClick 已内置 `llama.cpp` CPU 后端与向量模型）。使用在线模型时不需要安装 LM Studio。
 
 > **小提示**：首次运行会下载并运行 Python，此行为可能会被您电脑上的安全防护软件报告为可疑操作并拦截，需加入信任列表。
 
 - 第三步：
-  - 1.首次打开 `Stella.exe` 后会出现配置界面。先填**监听端口**（就是第一步在 NapCat 里配的反向 WS 端口）与要让 Stella 进的**群号**。
+  - 1.首次打开 `Stella.exe` 后会出现配置界面。先填**监听端口**（就是第二步在 NapCat 里配的反向 WS 端口）与要让 Stella 进的**群号**。
   - 2.往下到「模型服务」分区，按你的部署方式点一个**一键预设**，再把对应的端点卡片填完：
     - **全本地** → 点「纯本地」，在本机 OpenAI 兼容端点卡片里填 LM Studio、llama.cpp 或其他兼容服务的地址与模型 ID。点卡片上的「测试连接」可以读取服务端模型列表。
     - **全在线 / 混合** → 点「纯在线（双 key）」或「混合（对话在线 · 整合本地）」，在两张在线卡片里各填一次服务商地址、API key 与模型 ID。**两把 key 要填不同的**，原因见[三种部署模式](#-三种部署模式)。
@@ -118,7 +120,7 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 ### ⬆️ 从旧版本升级
 
 1. 运行 `stop.bat` 停止程序
-2. 把新版本解压到一个新目录
+2. OneClick：直接运行新版本的安装程序；Standalone：把新版本解压到一个新目录
 3. 双击 `Stella.exe`（或 `start.bat`）→ 确认「配置导入」
 
 配置、记忆、人格、空间设置与已装插件会自动搬过来，数据库自动升级，`runtime/` 自动复用（省一次
@@ -135,7 +137,8 @@ python -m deploy migrate             # 执行
 
 ```text
 D:\你的目录\
-  Stella-vX.Y.Z-win64\   ← 程序（升级时整个换掉，可以放心删）
+  Stella\                ← 程序目录（升级时整个换掉，可以放心删；Standalone 压缩包内没有
+                            内层文件夹，解压目标就是它）
   StellaData\            ← 你的数据（升级时一动不动）
 ```
 
@@ -156,9 +159,9 @@ pip install -r requirements.txt
 
 | 组件 | 要求 |
 |---|---|
-| Python | 3.10+（Release 包内置嵌入式 Python，无需自装） |
+| Python | 3.10+（OneClick 安装包内置嵌入式 Python；Standalone 解压版需自装） |
 | 框架 | [NoneBot 2](https://nonebot.dev/) |
-| QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |
+| QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（OneClick 安装包已内置 NapCat，扫码登录即可；Standalone 推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |
 | 模型服务 | 可选的本地 [LM Studio](https://lmstudio.ai/) / `llama.cpp` Runtime，或任意 OpenAI 兼容的在线 API（填地址 + API key 即可），两者可混用；也可以关闭 AI |
 
 ### 配置

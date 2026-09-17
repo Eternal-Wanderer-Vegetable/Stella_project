@@ -464,7 +464,7 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 ## Release Process
 
-After a tag is pushed, CI (`.github/workflows/release.yml`) automatically packages and publishes `Stella-vX.Y.Z-win64.zip`.
+After a tag is pushed, CI (`.github/workflows/release.yml`) automatically packages and publishes four Windows product assets: `Stella-OneClick-Python/Rust-vX.Y.Z-windows-amd64.exe` (single-file installers) and `Stella-Standalone-Python/Rust-vX.Y.Z-windows-amd64.zip` (Stella-only archives), plus independent assets such as the CLI and the llama backend.
 
 ### Checklist Before Tagging
 

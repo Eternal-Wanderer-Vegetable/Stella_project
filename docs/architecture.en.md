@@ -36,6 +36,8 @@ evidence to the generator. It does not replace the hard
 gate in `proactive_gate.py` and does not call an LLM. External weights live in `config/participation/`;
 decision logs go to runtime logs and the v13 `participation_log` table.
 
+Addressing preferences form another small branch beside the memory layer: `memory/addressing.py` stores user-defined addressing preferences (the v14 `user_address_preferences` table, kept separate from `user_profiles.nickname` and ordinary memories), while `memory/addressing_intent.py` recognizes intents such as “call me X” from natural language — rules do the cheap pre-screening, an embedding decides semantics, and the module only returns structured requests; model output is never treated as an executable command.
+
 ## Directory Structure
 
 ```text
@@ -55,6 +57,13 @@ Stella_project/
 │   ├── context.py                  # ChatContext: runtime carrier for one processing operation
 │   ├── tasks.py                    # Task / Result / TaskGraph protocol (shared by four modules)
 │   ├── pipeline.py                  # Pipeline orchestrator + prompt assembly order
+│   ├── context_budget.py           # Chat context budget: hard bounds for input/output/estimation error within the 8192 working window
+│   ├── planner.py                  # Restricted Planner: deep-reply-path orchestrator (trigger detection costs zero LLM calls)
+│   ├── reply_gate.py               # Zero-token reply-necessity gate (proactive interjection only adds local state and cooldown)
+│   ├── turn_runtime.py             # Lightweight session runtime: per-group state needed by gates (holds no chat content)
+│   ├── logging_sink.py             # Structured JSON logs (stella.jsonl, consumed by the GUI)
+│   ├── shutdown.py                 # Graceful shutdown: wait for in-flight background tasks (its own module for testability)
+│   ├── stop_signal.py              # Stop sentinel: deploy writes, Bot reads and exits (deploy can import it standalone)
 │   └── llm/
 │       ├── base.py                 # Abstract LLM backend interface
 │       ├── registry.py             # Endpoint × role registry: the only backend construction entry point in the project
@@ -84,10 +93,12 @@ Stella_project/
 │
 ├── memory/                         # Memory system core
 │   ├── SYSTEM.md                   # Bot system prompt
-│   ├── schema.py                   # Schema migrations (Additive, currently v13) + source enum
+│   ├── schema.py                   # Schema migrations (Additive, currently v14) + source enum
 │   ├── migrations.py               # Versioned structural and data migrations
+│   ├── space_merge.py              # Space merging: fold several spaces' memories/profiles into one (deploy space-merge)
 │   ├── timeutil.py                 # Parse DB timestamps uniformly as UTC
 │   ├── text_similarity.py          # Content similarity and merging (single source of truth)
+│   ├── cache_keys.py               # Single source of cache keys (shared by session-context / retrieval layers, no circular deps)
 │   │
 │   ├── pre_processors.py           # Message persistence, short-term context, user-context assembly
 │   ├── session_context.py          # Session-compaction state and decisions (pure logic)
@@ -95,6 +106,7 @@ Stella_project/
 │   ├── post_processors.py          # Output parsing, composure-break filtering, line splitting, thought logging
 │   ├── prompt_builder.py           # Memory and context → partitioned Prompt
 │   │
+│   ├── cost_gates.py               # Cost gates: free local pre-screening before consolidation (Tier 1, pure functions, zero I/O)
 │   ├── consolidator.py             # Consolidation: messages → summary/profile/candidates (including candidate reinforcement)
 │   ├── consolidation_prompt.py     # JSON output template for consolidation tasks
 │   ├── extraction_prompt.py        # Prompt template for Phase 2 candidate extraction
@@ -112,6 +124,10 @@ Stella_project/
 │   ├── proactive_gate.py           # Unified proactive-speaking admission gate (six conditions)
 │   ├── proactive_target.py         # Target selection and quota decisions for proactive @ mentions
 │   ├── proactive_prompt.py         # Task instruction template for proactive @ mentions
+│   ├── addressing.py               # User addressing preferences: normalization, validation, persistence (v14 table)
+│   ├── addressing_intent.py        # Addressing-intent recognition: rule pre-screening + embedding semantics (returns structured requests only)
+│   ├── expression_learning.py      # Expression and interjection-outcome learning: async settlement after a reply is sent (zero LLM)
+│   ├── expression_store.py         # Separate storage for expression learning (“how to say it well”, apart from the memory system)
 │   ├── participation/              # Proactive interjection Participation Decision Layer
 │   │   ├── decision.py             # Participation decisions and modes
 │   │   ├── signals.py              # Group-chat signal extraction
@@ -246,6 +262,8 @@ Master switch → per-path switch → runtime mute → sleep period → wake-up 
 
 The return value includes a reason string, making it possible to investigate “why did it not speak this time?” Consolidating this into a single entry point has a reason: these conditions were previously scattered across `proactive_speak_job`, `_proactive_at_user`, and `should_speak`, so every added condition required changes at three call sites.
 
+Beyond the gate there is also a zero-token **reply-necessity gate** (`core/reply_gate.py`): hard triggers (being @ mentioned) pass straight through, while the proactive-interjection path only adds local state and cooldown constraints. The per-group runtime state it relies on lives in `core/turn_runtime.py` — it holds no chat content and makes no LLM calls.
+
 The probability roll for topic interjections is **not inside the gate**. It is unique to the join path, so the caller rolls it after the gate passes (proactive @ has quota and user-level cooldown constraints and does not roll).
 
 **@ replies do not go through the gate.** They are answered normally when the Bot is @ mentioned during sleep or mute periods.
@@ -309,6 +327,8 @@ asyncio.gather(
 
 `build_context` always executes unconditionally: short-term context is conversation material and is unrelated to “whether long-term memory should be retrieved.”
 
+After the pre hooks and before the model call there is also a **Restricted Planner** deep path (`core/planner.py`): the vast majority of messages never enter it — it wakes only when the zero-LLM local `detect_trigger` hits one of its start conditions (historical reference, topic ambiguity, and similar), allowing a deep memory query to supplement the context, with a hard per-turn cap on LLM calls (`PLANNER_MAX_LLM_CALLS_PER_TURN`). A Planner exception only degrades to the fast path (a few supplementary memories fewer); it must never swallow the reply. When it decides “not enough information yet” (`PLANNER_PROACTIVE_WAIT_ENABLED`), the turn may skip replying and wait for subsequent messages to re-drive it.
+
 > **Memory gating is disabled by default** (`ROUTER_GATE_MEMORY=false`): the Router still makes and records its decision, but memory retrieval still executes unconditionally. A false `memory=False` decision would cause Stella to silently lose long-term memory for that turn: no exception is raised and the reply is unaffected, but “it suddenly no longer remembers you,” the same type of defect as the all-zero `AT_MENTION` incident on 2026-08-17. Before enabling it, run `python -m capability.router.benchmark` and confirm that memory false negatives are zero.
 
 **`build_user_context`** uses v2 retrieval (`MEMORY_V2_ENABLED`):
@@ -370,6 +390,8 @@ log_thought        (40)  → write logs/stella_thought_logs.md
 
 Before sending, the Bot's own line is written to `group_messages` (`BOT_SELF`). **It must happen before sending**: the final line calls `finish()`, which raises `FinishedException`; code after it does not execute.
 
+After the reply is sent, `memory/expression_learning.py` settles learning asynchronously in the background (whether the user kept responding, reused Stella's phrasing, used emoji, corrected it, or ignored a proactive message): the reply path itself only calls `on_reply_sent` to register and spawn the task (microsecond-level return); learning makes zero LLM calls, and a failure affects learning only, never chat. Samples and statistics live in a separate `expression_store`, apart from the memory system (“what is known”).
+
 ### 6. Memory Writing and Promotion
 
 This happens asynchronously and does not block replies:
@@ -392,6 +414,8 @@ Message accumulation → maybe_consolidate() (@ trigger / before proactive speak
                     → Lightweight compaction (throttled trigger)
 ```
 
+> **Consolidation is preceded by a free local pre-screen** (`memory/cost_gates.py`, Tier 1): online endpoints charge by token while consolidation is a frequent background task; this step answers “is this batch worth spending money consolidating,” with all criteria running locally at zero cost and zero I/O.
+>
 > **Why split into two phases**: the small model can summarize topics, but in noisy environments it systematically returns an empty candidate extraction. In a measurement on 2026-08-16, all 7 consolidation batches returned empty candidates even though the information was clearly present in its own `active_summary`: it “read it but actively discarded it.” Candidate extraction is a high-precision extraction task, so it is delegated to the main chat model.
 >
 > Phase 2 is controlled by a soft threshold (Phase 1's Boolean decision) and is awakened only when there is genuine user self-disclosure; routine message floods and small talk do not consume GPU. When Phase 2 succeeds, its candidates **replace** Phase 1's candidates, **including when it returns an empty array**: that means the large model's review found none and correctly fixes the small model's false positive. If the call or parsing fails, Phase 1's candidates are used as a fallback.
@@ -450,8 +474,10 @@ The type annotation for `route` is `Any` rather than `Route`: `core` is a “bus
 | `memories` | **Space** | Long-term memories (including `usage_tags` / `visibility` / `behavior_rule`) |
 | `memories_fts` | **Space** | FTS5 full-text index (synchronized with `memories` by `mem_id`) |
 | `user_profiles` | **Space** | Stable user profiles, primary key `(group_shared_space, user_id)` |
+| `user_address_preferences` | **Space** | User addressing preferences (v14), primary key `(group_shared_space, user_id)` |
 | `atomic_facts` | **Space** | Atomic facts split from long-term memories |
 | `memory_traces` | Both | Memory decision traces (`group_id` records the trigger source; `group_shared_space` records the retrieval space) |
+| `expression_examples` / `jargon_glossary` / `behavior_patterns` / `reply_effects` | **Space** | Expression and interjection-outcome learning (tables created independently by `expression_store`, outside schema migrations; `reply_effects` also records `group_id`) |
 | `compressor_stats` / `compressor_state` | Global | Compaction statistics and throttling state |
 | `llm_usage_daily` | Global | Daily LLM usage, primary key `(date, role, slot, model)` |
 | `schema_meta` | Global | Schema version |
@@ -464,7 +490,7 @@ python -m memory.schema             # Execute
 python -m memory.schema --backup    # Backup only
 ```
 
-> **Structural changes and data changes live in another module**: `memory/migrations.py` registers migrations by version (`migrate_v7` / `v8` / …), with one function and one transaction per version; only after success does it advance `schema_meta.version`. The add-column/create-table work in `schema._migrate()` is the final step of each migration. The current `SCHEMA_VERSION` is **13**; v7 (profile grouping), v8 (memory tables changed to space ownership), and v13 (Participation topic/decision logs) are registered in `memory/migrations.py`. v5 → the current version is fully automatic: rename columns + rewrite values as space names + rebuild profile primary keys + rebuild FTS + create Participation tables + validate, with a full-level rollback on failure. **New rule: every increment of `SCHEMA_VERSION` must be committed together with `migrate_vN` and a legacy-database fixture test.**
+> **Structural changes and data changes live in another module**: `memory/migrations.py` registers migrations by version (`migrate_v7` / `v8` / …), with one function and one transaction per version; only after success does it advance `schema_meta.version`. The add-column/create-table work in `schema._migrate()` is the final step of each migration. The current `SCHEMA_VERSION` is **14**; v7 (profile grouping), v8 (memory tables changed to space ownership), v13 (Participation topic/decision logs), and v14 (addressing-preference table) are registered in `memory/migrations.py`. v5 → the current version is fully automatic: rename columns + rewrite values as space names + rebuild profile primary keys + rebuild FTS + create Participation tables + validate, with a full-level rollback on failure. **New rule: every increment of `SCHEMA_VERSION` must be committed together with `migrate_vN` and a legacy-database fixture test.**
 >
 > Each migration writes `agent_memory.db.pre-vN-<timestamp>.bak` (the state before that migration). `stella_memory_backup.db` is “the first original database ever”; it skips creation when a backup already exists. When archiving the old database, move it together with that file, or the system will be left in a state that “looks backed up but is actually the wrong backup.”
 

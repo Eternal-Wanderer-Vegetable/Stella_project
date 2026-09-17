@@ -500,7 +500,7 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 ## 发布流程
 
-打 tag 后 CI（`.github/workflows/release.yml`）自动打包并发布，产出 `Stella-vX.Y.Z-win64.zip`。
+打 tag 后 CI（`.github/workflows/release.yml`）自动打包并发布，产出四类 Windows 产品资产：`Stella-OneClick-Python/Rust-vX.Y.Z-windows-amd64.exe`（单文件安装器）与 `Stella-Standalone-Python/Rust-vX.Y.Z-windows-amd64.zip`（仅本体的解压包），另有 CLI、llama backend 等独立资产。
 
 ### 打 tag 前的检查清单
 

@@ -45,24 +45,21 @@ distribution.
 
 ## Release Assets
 
-The main release keeps its existing name:
+The Rust engine ships through two of the four Windows product assets, published
+in the same `vX.Y.Z` GitHub Release as the Python products:
 
 ```text
-Stella-vX.Y.Z-win64.zip
+Stella-OneClick-Rust-vX.Y.Z-windows-amd64.exe      # installer prepares the engine during installation
+Stella-Standalone-Rust-vX.Y.Z-windows-amd64.zip    # Stella-only archive bundling the wheel
 ```
 
-The same `vX.Y.Z` GitHub Release also receives the independent Rust engine:
-
-```text
-Stella-Rust_engine_version-vX.Y.Z-win64.zip
-```
-
-The Rust asset is a complete Windows Stella package based on the matching
-Python asset. It includes the normal `start.bat` bootstrap, the Python
-source/runtime configuration, and one bundled `stella-memory-rust` wheel
-under `wheels/`. Running `start.bat` follows the same first-run setup as the
-Python asset, then installs the local wheel into the application directory
-without downloading it and selects `MEMORY_BACKEND=rust`. Installing beside the bundled
+The Standalone-Rust archive includes the normal `start.bat` bootstrap and one
+bundled `stella-memory-rust` wheel under `wheels/`. Running `start.bat` (or
+`Stella.exe`) follows the same first-run setup as the Python archive, then
+installs the local wheel into the application directory without downloading
+it and selects `MEMORY_BACKEND=rust`. The OneClick-Rust installer performs the
+same preparation during the installation stage; the plain Python products have
+no `wheels/` directory and keep the Python engine. Installing beside the bundled
 `memory_rust` package keeps the native extension importable from the embedded
 Python runtime. `VERSION.txt` and `SHA256SUMS.txt` describe the native engine
 payload. The wheel package version remains independent of the Stella

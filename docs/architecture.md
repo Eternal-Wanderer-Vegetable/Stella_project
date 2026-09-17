@@ -33,6 +33,11 @@ SQLite（memory/agent_memory.db）
 它不替代 `proactive_gate.py` 的硬闸门，也不调用 LLM；外置权重在 `config/participation/`，
 决策日志同时写入运行期日志与 v13 的 `participation_log` 表。
 
+称呼偏好是记忆层旁的另一个小分支：`memory/addressing.py` 存用户明确设置的称呼偏好
+（v14 的 `user_address_preferences` 表，与 `user_profiles.nickname` 和普通记忆分开），
+`memory/addressing_intent.py` 负责从自然语言里识别「叫我 X」这类意图——规则做廉价预筛、
+embedding 判语义，只返回结构化请求，不把模型输出当可执行命令。
+
 ## 目录结构
 
 ```text
@@ -52,6 +57,13 @@ Stella_project/
 │   ├── context.py                  # ChatContext：一次处理的运行期载体
 │   ├── tasks.py                    # Task / Result / TaskGraph 协议（四模块共用）
 │   ├── pipeline.py                  # Pipeline 编排器 + prompt 拼装顺序
+│   ├── context_budget.py           # 聊天上下文预算：8192 工作窗口下输入/输出/估算误差的硬边界
+│   ├── planner.py                  # 受限 Planner：深度回复路径的编排器（触发判定零 LLM）
+│   ├── reply_gate.py               # 零 token 的回复必要性门控（主动插话只加本地状态与冷却）
+│   ├── turn_runtime.py             # 轻量会话运行时：门控需要的按群状态（不持聊天内容）
+│   ├── logging_sink.py             # 结构化 JSON 日志（stella.jsonl，供 GUI 消费）
+│   ├── shutdown.py                 # 优雅停止：等待在途后台任务收尾（独立成模块以便单测）
+│   ├── stop_signal.py              # 停止哨兵：deploy 写、Bot 读并自杀（deploy 层可独立 import）
 │   └── llm/
 │       ├── base.py                 # LLM 后端抽象接口
 │       ├── registry.py             # 端点 × 角色注册表：全项目唯一的后端构造入口
@@ -81,10 +93,12 @@ Stella_project/
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
-│   ├── schema.py                   # Schema 迁移（Additive，当前 v13）+ 来源枚举
+│   ├── schema.py                   # Schema 迁移（Additive，当前 v14）+ 来源枚举
 │   ├── migrations.py               # 按版本执行结构与数据迁移
+│   ├── space_merge.py              # 空间合并：把若干空间的记忆/画像并进一个（deploy space-merge）
 │   ├── timeutil.py                 # DB 时间戳统一按 UTC 解析
 │   ├── text_similarity.py          # 内容相似度与合并（单一真相源）
+│   ├── cache_keys.py               # 缓存 key 统一来源（会话上下文 / 检索两层共用，无循环依赖）
 │   │
 │   ├── pre_processors.py           # 消息落库、短期上下文、用户上下文组装
 │   ├── session_context.py          # 会话压缩的状态与判定（纯逻辑）
@@ -92,6 +106,7 @@ Stella_project/
 │   ├── post_processors.py          # 输出解析、破防过滤、分行、思考日志
 │   ├── prompt_builder.py           # 记忆与上下文 → 分区 Prompt
 │   │
+│   ├── cost_gates.py               # 成本闸门：整合前的本地免费预筛（Tier 1，零 I/O 纯函数）
 │   ├── consolidator.py             # 整合：消息 → 摘要/画像/候选（含候选强化）
 │   ├── consolidation_prompt.py     # 整合任务的 JSON 输出模板
 │   ├── extraction_prompt.py        # 阶段2 候选提取的 prompt 模板
@@ -109,6 +124,10 @@ Stella_project/
 │   ├── proactive_gate.py           # 主动发言的统一准入闸门（六道条件）
 │   ├── proactive_target.py         # 主动 @ 的目标选择与配额判定
 │   ├── proactive_prompt.py         # 主动 @ 的任务指令模板
+│   ├── addressing.py               # 用户个性化称呼偏好：规范化、校验、持久化（v14 表）
+│   ├── addressing_intent.py        # 称呼意图识别：规则预筛 + embedding 语义判定（只返回结构化请求）
+│   ├── expression_learning.py      # 表达与插话效果学习：回复发出后的异步结算（零 LLM）
+│   ├── expression_store.py         # 表达学习的独立存储（「怎么说效果好」，与记忆系统分离）
 │   ├── participation/              # 主动插话 Participation Decision Layer
 │   │   ├── decision.py             # 参与决策与模式
 │   │   ├── signals.py              # 群聊信号提取
@@ -243,6 +262,8 @@ Stella_project/
 
 返回值带原因字符串，便于排查「为什么这次没说话」。收敛到单一入口是有原因的：这些条件原先散在 `proactive_speak_job` / `_proactive_at_user` / `should_speak` 三处，每加一个条件都要改三个调用点。
 
+gate 之外还有一道零 token 的**回复必要性门控**（`core/reply_gate.py`）：硬触发（被 @）直通，主动插话路径只增加本地状态与冷却约束。它依赖的按群运行状态在 `core/turn_runtime.py`——不持有聊天内容、不调用 LLM。
+
 话题插话的**概率掷骰不在 gate 内** —— 那是 join 路径独有的，由调用方在 gate 通过后自行掷骰（主动 @ 有配额与用户级冷却约束，不掷骰）。
 
 **@ 回复不经过 gate。** 睡眠或静音期间被 @ 照常回复。
@@ -306,6 +327,8 @@ asyncio.gather(
 
 `build_context` 保持无条件执行——短期上下文是对话素材，与「要不要检索长期记忆」无关。
 
+pre hooks 之后、调用模型之前，还有一道**受限 Planner**（`core/planner.py`）的深度路径：绝大多数消息不经过它——本地零 LLM 的 `detect_trigger` 判定命中（历史指代、话题歧义等启动条件）才唤醒，允许发起深度记忆查询补充上下文，并有每轮 LLM 调用硬上限（`PLANNER_MAX_LLM_CALLS_PER_TURN`）。Planner 异常只降级为快速路径（少几条补充记忆），不能吞掉回复；判定为「等信息不够」时（`PLANNER_PROACTIVE_WAIT_ENABLED`）本轮可以不回复，等后续消息重新驱动。
+
 > **记忆门控默认关闭**（`ROUTER_GATE_MEMORY=false`）：Router 照常判定与记录，但记忆检索仍无条件执行。误判 `memory=False` 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 `AT_MENTION` 全为 0 的缺陷同一类型。要打开先跑 `python -m capability.router.benchmark` 确认记忆假阴为 0。
 
 **`build_user_context`** 走 v2 检索（`MEMORY_V2_ENABLED`）：
@@ -367,6 +390,8 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 
 发送前先把 Bot 自己的台词写入 `group_messages`（`BOT_SELF`）。**必须在发送前**：最后一行走 `finish()` 会抛 `FinishedException`，之后的代码不执行。
 
+回复发出之后，`memory/expression_learning.py` 在后台异步结算学习（用户是否继续回应、是否复用 Stella 的表达、是否用表情、是否纠正、是否忽略主动发言）：主回复路径只调 `on_reply_sent` 登记并派生任务（微秒级返回），学习零 LLM 调用、坏了只影响学习不影响聊天；样本与统计存独立的 `expression_store`，与记忆系统（「知道什么」）分离。
+
 ### 6. 记忆写入与晋升
 
 异步进行，不阻塞回复：
@@ -389,6 +414,8 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
         → 轻量压缩（节流触发）
 ```
 
+> **整合前有一道本地免费预筛**（`memory/cost_gates.py`，Tier 1）：在线端点按 token 计费而整合是高频后台任务，这一步回答「这批消息值得花钱整合吗」，判据全部跑在本地、零成本、零 I/O。
+>
 > **为什么拆两阶段**：小模型能总结主题，却在噪音环境下系统性地把候选提取判空——2026-08-16 实测 7 批整合全部返回空候选，而信息明确出现在它自己写的 `active_summary` 里，是「读到了但主动弃掉」。候选提取是高精度抽取任务，交给主聊天模型。
 >
 > 阶段 2 由软门槛控制（阶段 1 的布尔判断），只在真有用户自我披露时唤醒，日常刷屏与寒暄不消耗 GPU。阶段 2 成功时其结果**覆盖**阶段 1 的候选，**包括返回空数组的情况**——那是大模型复核认为确实没有，正好纠正小模型的误判；调用或解析失败则回退阶段 1 候选。
@@ -447,8 +474,10 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 | `memories` | **空间** | 长期记忆（含 `usage_tags` / `visibility` / `behavior_rule`） |
 | `memories_fts` | **空间** | FTS5 全文索引（按 `mem_id` 与 `memories` 同步） |
 | `user_profiles` | **空间** | 用户稳定画像，主键 `(group_shared_space, user_id)` |
+| `user_address_preferences` | **空间** | 用户称呼偏好（v14），主键 `(group_shared_space, user_id)` |
 | `atomic_facts` | **空间** | 长记忆拆分出的原子事实 |
 | `memory_traces` | 两者 | 记忆决策追踪（`group_id` 记触发来源，`group_shared_space` 记检索空间） |
+| `expression_examples` / `jargon_glossary` / `behavior_patterns` / `reply_effects` | **空间** | 表达与插话效果学习（`expression_store` 独立建表，不走 schema 迁移；`reply_effects` 另记 `group_id`） |
 | `compressor_stats` / `compressor_state` | 全局 | 压缩统计与节流状态 |
 | `llm_usage_daily` | 全局 | 每日 LLM 用量，主键 `(date, role, slot, model)` |
 | `schema_meta` | 全局 | Schema 版本号 |
@@ -463,8 +492,8 @@ python -m memory.schema --backup    # 仅备份
 
 > **改结构与改数据在另一个模块**：`memory/migrations.py` 按版本注册（`migrate_v7` / `v8` / …），
 > 每版一个函数、一个事务，成功后才推进 `schema_meta.version`；`schema._migrate()` 的加列/建表
-> 作为每次迁移的收尾步骤。当前 `SCHEMA_VERSION` 为 **13**；v7（画像分群）、v8（记忆表改按空间归属）
-> 与 v13（Participation 话题/决策日志）等数据迁移均由 `memory/migrations.py` 注册，v5 → 当前版全自动：
+> 作为每次迁移的收尾步骤。当前 `SCHEMA_VERSION` 为 **14**；v7（画像分群）、v8（记忆表改按空间归属）、
+> v13（Participation 话题/决策日志）与 v14（称呼偏好表）等数据迁移均由 `memory/migrations.py` 注册，v5 → 当前版全自动：
 > 列改名 + 值重写为空间名 + 画像主键重建 + FTS 重建 + Participation 表创建与校验，
 > 失败整级回滚。**新规矩：`SCHEMA_VERSION` 每 +1 必须同时提交 `migrate_vN` 与旧库夹具测试。**
 >

@@ -87,7 +87,7 @@ You decide where the models come from.
 
 - **🔌 Extensible** -- Pipeline pre- and post-processing Hooks, with automatic loading from the extension directory.
 
-- **🧪 Verifiable** -- 1450+ unit tests cover memory promotion, cross-user isolation, two-layer ownership, anti-fabrication safeguards, routing fallback, and tool isolation. After connecting an online endpoint, there is also a layer of **vendor-neutral contract tests** (an extra field in the request body fails the test; parameter differences may adapt only to error wording and may not use a vendor whitelist) and a prefix-cache guard. Probe scripts also perform regression checks against real models (including a case specifically reproducing "missing information in a noisy environment"), along with a benchmark quantifying four types of routing errors.
+- **🧪 Verifiable** -- 2000+ unit tests cover memory promotion, cross-user isolation, two-layer ownership, anti-fabrication safeguards, routing fallback, and tool isolation. After connecting an online endpoint, there is also a layer of **vendor-neutral contract tests** (an extra field in the request body fails the test; parameter differences may adapt only to error wording and may not use a vendor whitelist) and a prefix-cache guard. Probe scripts also perform regression checks against real models (including a case specifically reproducing "missing information in a noisy environment"), along with a benchmark quantifying four types of routing errors.
 
 ## 🚀 Quick Start
 
@@ -95,22 +95,24 @@ You decide where the models come from.
 
 ### 📦 Download & Install (regular users)
 
-- Step 1: Prepare the components needed for your setup:
+- Step 1: Choose a Windows product from [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases). They come in two product lines, split by "does it set up the runtime for you":
 
-  - If you connect QQ: prepare [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and configure the **reverse websocket connection** according to its instructions. Record the port you configure and open the link.
-  - If you use local models: choose [LM Studio](https://lmstudio.ai/), or the optional `llama.cpp` profile managed by the Stella Runtime. LM Studio is not required for online-only setups.
+  - **OneClick installer (recommended)**: `Stella-OneClick-Python-vX.Y.Z-windows-amd64.exe`, a single-file installer — double-click to install. On first launch it automatically prepares the embedded Python, the `llama.cpp` CPU backend, NapCat, and the `qwen3-embedding-0.6b` embedding model — **no separate NapCat installation is needed**, although login still requires scanning the QR code yourself (the program never scans or confirms for you). To use the Rust memory engine, download `Stella-OneClick-Rust-vX.Y.Z-windows-amd64.exe` instead; the engine is prepared during installation.
+  - **Standalone archive**: `Stella-Standalone-Python-vX.Y.Z-windows-amd64.zip`, extract and run. It contains **only Stella itself** — you provide Python 3.10+ and NapCat yourself, and it does not auto-download `llama.cpp` or any model. The Rust variant (`Stella-Standalone-Rust-*.zip`) additionally bundles the Rust memory-engine wheel, which is installed offline automatically on first launch.
+
+  Both product lines offer a `Stella.exe` graphical interface (recommended) and a `start.bat` command-line flow. `Stella.exe` runs an environment check on launch: if not configured, it opens the Configuration page; if there are blocking issues, it opens the Environment Check page; if everything is normal, it goes directly to the Run Status page. `start.bat` opens the command-line configuration wizard and starts the Bot. **Do not install both product lines into the same directory.**
 
 > AI can be disabled. When AI is disabled or a local model is unavailable, the basic Bot, OneBot diagnostics, and deployment management remain available.
 
-- Step 2: Download the latest `Stella-*-win64.zip` from [Releases](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases). After extracting it, there are two ways to start it:
+- Step 2: Prepare the remaining components for your setup:
 
-  - **Graphical interface (recommended)**: Double-click `Stella.exe`. On the first run, it automatically downloads about 100 MB of embedded Python and installs dependencies. On subsequent launches, it automatically runs an environment check: if not configured, it opens the Configuration page; if there are blocking issues, it opens the Environment Check page; if everything is normal, it goes directly to the Run Status page.
-  - **Command line**: Double-click `start.bat`. It likewise downloads Python and installs dependencies automatically, then opens the configuration wizard and starts the Bot.
+  - Connecting QQ: with OneClick, NapCat is already in place — after scanning the QR code to log in, add a "WebSocket client" under Network in the NapCat WebUI pointing at the Bot (reverse WS, address `ws://127.0.0.1:8080/onebot/v11/ws`). With Standalone, first install [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) yourself, then configure the reverse WS the same way.
+  - If you use a local chat model: install [LM Studio](https://lmstudio.ai/) and load a model (OneClick already bundles the `llama.cpp` CPU backend and the embedding model). LM Studio is not required for online-only setups.
 
 > **Tip**: The first run downloads and executes Python. Your computer's security software may report this as suspicious activity and block it; add it to the trusted list if necessary.
 
 - Step 3:
-  - 1. After opening `Stella.exe` for the first time, the configuration UI appears. First fill in the **listening port** (the reverse WS port configured in NapCat in Step 1) and the **group number** that Stella should join.
+  - 1. After opening `Stella.exe` for the first time, the configuration UI appears. First fill in the **listening port** (the reverse WS port configured in NapCat in Step 2) and the **group number** that Stella should join.
   - 2. Scroll down to the Model Services section, choose a **one-click preset** according to your deployment mode, and fill in the corresponding endpoint cards:
     - **All local** -> Click `纯本地`, then fill in the address and model ID for an OpenAI-compatible local endpoint such as LM Studio or llama.cpp. The Test Connection button reads back the service's model list.
     - **All online / Hybrid** -> Click `纯在线（双 key）` or `混合（对话在线 · 整合本地）`, then fill in the provider address, API key, and model ID once in each of the two online cards. **The two keys must be different**; see [Three Deployment Modes](#-three-deployment-modes) for why.
@@ -121,7 +123,7 @@ You decide where the models come from.
 ### ⬆️ Upgrading from an older version
 
 1. Run `stop.bat` to stop the program.
-2. Extract the new version into a new directory.
+2. OneClick: run the new version's installer directly. Standalone: extract the new version into a new directory.
 3. Double-click `Stella.exe` (or `start.bat`) -> confirm "Import Configuration".
 
 Configuration, memories, personality, space settings, and installed plugins are moved automatically; the database is upgraded automatically, and `runtime/` is reused automatically (saving one approximately 100 MB download). The old directory is **read-only throughout**. Regardless of success or failure, the old installation remains runnable in place, so you can safely retry. The import report is written to the current `STELLA_HOME/migration_report.md`. Command-line equivalents:
@@ -135,7 +137,9 @@ Upgrading from 2.x also does not require losing memories: the old database is mi
 
 ```text
 D:\your-directory\
-  Stella-vX.Y.Z-win64\   <- Program (replace the whole directory when upgrading; safe to delete)
+  Stella\                <- Program directory (replace the whole directory when upgrading; safe
+                            to delete. Standalone archives have no inner folder — the extract
+                            target *is* this directory)
   StellaData\            <- Your data (untouched during upgrades)
 ```
 
@@ -155,9 +159,9 @@ pip install -r requirements.txt
 
 | Component | Requirement |
 |---|---|
-| Python | 3.10+ (the Release package includes embedded Python; no separate installation is needed) |
+| Python | 3.10+ (OneClick installers bundle the embedded Python; Standalone archives require your own installation) |
 | Framework | [NoneBot 2](https://nonebot.dev/) |
-| QQ protocol endpoint | [NapCat](https://github.com/NapNeko/NapCatQQ) or another OneBot V11 implementation (installing and logging in with [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) is recommended) |
+| QQ protocol endpoint | [NapCat](https://github.com/NapNeko/NapCatQQ) or another OneBot V11 implementation (OneClick installers bundle NapCat — just scan the QR code to log in; for Standalone, installing and logging in with [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) is recommended) |
 | Model service | Optional local [LM Studio](https://lmstudio.ai/) / `llama.cpp` Runtime, or any OpenAI-compatible online API (provide the address + API key); the two can be mixed, and AI can be disabled |
 
 ### Configuration
