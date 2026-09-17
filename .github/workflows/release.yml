@@ -174,15 +174,17 @@ jobs:
           if ($backend.Count -ne 1) {
             throw "离线负载必须基于恰好一个 Windows CPU backend，实际为 $($backend.Count)"
           }
+          # build_release_catalog.py 的 write_text 不建父目录，暂存目录必须先建好
+          New-Item -ItemType Directory -Force -Path offline-stage | Out-Null
           python scripts/build_release_catalog.py `
             --backend-asset $backend[0].FullName `
             --release-ref "v$env:RELEASE_VERSION" `
             --repository "${{ github.repository }}" `
             --output offline-stage/package-catalog-windows-amd64.json
+          # 浏览器内核默认随负载安装（--skip-browsers 才跳过）
           python scripts/build_offline_payload.py `
             --output offline-stage/payload `
-            --catalog offline-stage/package-catalog-windows-amd64.json `
-            --with-browsers
+            --catalog offline-stage/package-catalog-windows-amd64.json
           if (-not (Test-Path 'offline-stage\payload\MANIFEST.json')) {
             throw 'offline payload was not created'
           }
