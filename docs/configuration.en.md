@@ -680,7 +680,7 @@ Replies are not disabled during sleep because ignoring a user who actively calls
 
 | Configuration | Default | Description |
 |---|---|---|
-| `USER_TIMEZONE` | (empty) | Users' schedule timezone (IANA name, e.g. `Asia/Shanghai`); empty means the server's system timezone |
+| `USER_TIMEZONE` | (empty) | Users' schedule timezone: IANA name (e.g. `Asia/Shanghai`, recommended) or fixed offset like `UTC+8`; empty means the server's system timezone |
 | `PROACTIVE_SLEEP_ENABLED` | `true` | Global sleep-period switch |
 | `PROACTIVE_SLEEP_START` | `23:30` | Sleep time (`HH:MM`, in `USER_TIMEZONE`) |
 | `PROACTIVE_SLEEP_END` | `07:30` | Wake time (`HH:MM`, in `USER_TIMEZONE`) |
@@ -691,7 +691,7 @@ Replies are not disabled during sleep because ignoring a user who actively calls
 
 Intervals crossing midnight are supported (`START > END` means the interval crosses the day boundary). `START == END` means no sleep. Invalid time formats fall back to the defaults and emit a warning; a configuration typo should not make the Bot talk all night.
 
-**Times follow the users' schedule timezone rather than UTC** because this describes a human schedule, unrelated to database timestamps. A server timezone that differs from the users' is the norm for cloud deployments (overseas VPS machines are usually UTC); without correction, the sleep window opens and closes at the wrong hours and the model calls daytime "the middle of the night". Setting `USER_TIMEZONE` fixes the sleep window, the current-time section of the prompt, and the date boundary of sleep/wake-up announcements in one place. An invalid `USER_TIMEZONE` logs a warning and falls back to the server's local time.
+**Times follow the users' schedule timezone rather than UTC** because this describes a human schedule, unrelated to database timestamps. A server timezone that differs from the users' is the norm for cloud deployments (overseas VPS machines are usually UTC); without correction, the sleep window opens and closes at the wrong hours and the model calls daytime "the middle of the night". Setting `USER_TIMEZONE` fixes the sleep window, the current-time section of the prompt, and the date boundary of sleep/wake-up announcements in one place. Both IANA names and fixed offsets are accepted (`UTC+8`, `UTC-05:00`, `GMT+5:30`, or a bare `+8`); fixed offsets do not track DST, so prefer IANA names in DST-observing regions. An invalid value logs a warning once and falls back to the server's local time.
 
 **Why the wake-up grace period is needed**: activity statistics accumulated overnight could make the Bot send several messages immediately upon waking. The grace period starts when the wake-up transition is detected.
 

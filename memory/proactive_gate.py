@@ -16,9 +16,11 @@ _proactive_at_user / should_speak 三处。每加一个条件就要改三个调�
 """
 from __future__ import annotations
 
+import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import time as dtime
+from datetime import timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from nonebot import logger
@@ -43,6 +45,10 @@ _DEFAULT_SLEEP_END = dtime(7, 30)
 # 已告警过的非法时区名。同一名字每进程只告警一次，避免定时任务每分钟刷屏。
 _tz_warned: set[str] = set()
 
+# 固定偏移写法：UTC+8 / UTC-05:00 / GMT+5:30，前缀可省略（+8）；HH 可 1~2 位，
+# 分钟可带冒号或不带。IANA 名称（如 Asia/Shanghai）不含 +/- 前缀，不会误中。
+_OFFSET_FORMAT = re.compile(r"^(?:UTC|GMT)?([+-])(\d{1,2})(?::?(\d{2}))?$", re.IGNORECASE)
+
 # group_id -> 苏醒时刻（monotonic）。进程内状态，用于醒来缓冲。
 _wakeup_at: dict[int, float] = {}
 # group_id -> 上一次判定的睡眠状态。用于检测睡眠↔苏醒跃变（播报与缓冲的触发点）。
@@ -62,8 +68,14 @@ def _parse_hhmm(text: str, default: dtime) -> dtime:
         return default
 
 
-def _resolve_zone(name: str) -> ZoneInfo | None:
-    """IANA 时区名 → ZoneInfo；空 / local / system / 非法 → None。
+def _resolve_zone(name: str) -> datetime.tzinfo | None:
+    """解析 USER_TIMEZONE 配置值；空 / local / system / 非法 → None。
+
+    支持两种写法：
+
+    - IANA 名称（推荐，自动处理夏令时）：``Asia/Shanghai``；
+    - 固定偏移：``UTC+8`` / ``UTC-05:00`` / ``GMT+5:30``，前缀可省略（``+8``）。
+      固定偏移不跟踪夏令时——有夏令时的地区请用 IANA 名称。
 
     None 统一表示「用服务器本地时间」：未配置是合法的默认，配置笔误则与
     _parse_hhmm 同一哲学——回退而非抛错，别让作息功能整体失效。ZoneInfo
@@ -72,13 +84,25 @@ def _resolve_zone(name: str) -> ZoneInfo | None:
     name = name.strip()
     if not name or name.lower() in ("local", "system"):
         return None
-    try:
-        return ZoneInfo(name)
-    except Exception:
-        if name not in _tz_warned:
-            _tz_warned.add(name)
-            logger.warning(f"⚠️ [Gate] USER_TIMEZONE 非法: {name!r}，回退服务器本地时间")
-        return None
+    offset = _OFFSET_FORMAT.match(name)
+    if offset is not None:
+        sign = 1 if offset.group(1) == "+" else -1
+        hours, minutes = int(offset.group(2)), int(offset.group(3) or 0)
+        try:
+            # 超出 ±24h 或分钟 ≥60 时抛 ValueError，落到底部统一告警
+            if minutes < 60:
+                return dt_timezone(sign * timedelta(hours=hours, minutes=minutes))
+        except ValueError:
+            pass
+    else:
+        try:
+            return ZoneInfo(name)
+        except Exception:
+            pass
+    if name not in _tz_warned:
+        _tz_warned.add(name)
+        logger.warning(f"⚠️ [Gate] USER_TIMEZONE 非法: {name!r}，回退服务器本地时间")
+    return None
 
 
 def user_now() -> datetime:

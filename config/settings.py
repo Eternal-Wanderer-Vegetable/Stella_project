@@ -660,11 +660,13 @@ CONSOLIDATION_BACKLOG_WARN = _env_int("CONSOLIDATION_BACKLOG_WARN", 300)
 # ---------- 用户作息时区 ----------
 # 服务器时区 ≠ 群友时区是云部署的常态（海外 VPS 多为 UTC），此时一切按「人类
 # 作息」解释的时间都会整体错位：睡眠窗口在错误的小时开合，模型嘴里的「现在是
-# 晚上」也可能是白天。填群友所在时区的 IANA 名称（如 Asia/Shanghai、
-# America/New_York）即可整体校正；留空或填 local/system 表示跟随服务器系统
-# 时区（默认，与旧版行为一致）。配置了非法名称时告警并回退服务器本地时间。
-# 消费方：memory/proactive_gate.py（睡眠窗口）与 memory/prompt_builder.py
-# （提示词里的当前时间）。睡眠起止等 HH:MM 一律指该时区下的墙上时间。
+# 晚上」也可能是白天。两种写法：IANA 名称（推荐，自动处理夏令时，如
+# Asia/Shanghai、America/New_York），或固定偏移 UTC+X（如北京 UTC+8、印度
+# UTC+5:30；也可写 GMT+X 或省略前缀如 +8；固定偏移不跟踪夏令时）。留空或填
+# local/system 表示跟随服务器系统时区（默认，与旧版行为一致）。非法值告警
+# 一次并回退服务器本地时间。消费方：memory/proactive_gate.py（睡眠窗口）与
+# memory/prompt_builder.py（提示词里的当前时间）。睡眠起止等 HH:MM 一律指
+# 该时区下的墙上时间。
 USER_TIMEZONE = _env("USER_TIMEZONE", "")
 
 # ---------- 主动发言 ----------

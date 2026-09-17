@@ -85,6 +85,29 @@ def test_user_now_uses_configured_timezone(monkeypatch):
     assert now.utcoffset().total_seconds() == 8 * 3600
 
 
+def test_user_now_accepts_utc_offset_format(monkeypatch):
+    """UTC+X 固定偏移：前缀大小写/省略、分钟带不带冒号都接受。"""
+    cases = {
+        "UTC+8": 8 * 3600,
+        "UTC+08:00": 8 * 3600,
+        "utc-5": -5 * 3600,
+        "GMT+5:30": 5.5 * 3600,
+        "+8": 8 * 3600,
+        "UTC+0": 0,
+    }
+    for value, offset in cases.items():
+        monkeypatch.setattr(gate, "USER_TIMEZONE", value)
+        assert gate.user_now().utcoffset().total_seconds() == offset, value
+
+
+def test_user_now_invalid_offset_falls_back(monkeypatch):
+    """超出范围的偏移（UTC+25、分钟 ≥60）回退服务器本地时间并告警。"""
+    for value in ("UTC+25", "UTC+8:99"):
+        monkeypatch.setattr(gate, "USER_TIMEZONE", value)
+        assert gate.user_now().tzinfo is None, value
+        assert value in gate._tz_warned
+
+
 def test_user_now_invalid_timezone_falls_back(monkeypatch):
     """非法时区名回退服务器本地时间，同一名字只告警一次。"""
     monkeypatch.setattr(gate, "USER_TIMEZONE", "Mars/Olympus")
@@ -108,6 +131,8 @@ def test_sleeping_judged_in_user_timezone(monkeypatch):
     assert not gate.is_sleeping()  # 未配置时区：服务器墙上 18:00，醒着
     monkeypatch.setattr(gate, "USER_TIMEZONE", "Asia/Shanghai")
     assert gate.is_sleeping()  # 上海已是 8/16 凌晨 02:00，睡眠中
+    monkeypatch.setattr(gate, "USER_TIMEZONE", "UTC+8")
+    assert gate.is_sleeping()  # UTC+8 固定偏移写法与 IANA 名称等价
 
 
 # ── 状态跃变与醒来缓冲 ────────────────────────────────
