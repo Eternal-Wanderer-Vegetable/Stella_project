@@ -41,7 +41,6 @@ import random
 import time
 from collections import OrderedDict, defaultdict
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 
 from nonebot import get_driver, logger, on_message
@@ -127,7 +126,12 @@ from memory.post_processors import (
 )
 from memory.pre_processors import build_context, record_message
 from memory.proactive import get_proactive
-from memory.proactive_gate import can_speak, is_sleeping, note_sleep_transition
+from memory.proactive_gate import (
+    can_speak,
+    is_sleeping,
+    note_sleep_transition,
+    user_now,
+)
 from memory.proactive_prompt import (
     PROACTIVE_SKIP_MARKER,
     build_instruction,
@@ -1387,7 +1391,8 @@ async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
     if kind is None:
         return
 
-    today = date.today().isoformat()
+    # 播报日期按用户作息时区去重：时区配置不同时，「今天」的边界跟睡眠窗口一致
+    today = user_now().date().isoformat()
     field = "last_sleep_announce_date" if kind == "sleep" else "last_wakeup_announce_date"
     if get_runtime_state(group_id)[field] == today:
         return

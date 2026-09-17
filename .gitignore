@@ -15,6 +15,7 @@ FlexiWeb_Stream_Scraper/
 # Coverage data files
 .coverage
 .coverage-*
+coverage.xml
 
 # 用户数据目录（STELLA_HOME）。开发机上 config/home.py 的「便携模式」会命中这里，
 # 于是仓库、发布包、运行期的相对布局统一为「数据都在 StellaData/ 里」。
@@ -46,6 +47,7 @@ windows_probe_positive.json
 # 整合探针输出（含真实群聊内容，禁止入库）
 consolidation_probe.md
 consolidation_probe*.json
+consolidation_positive_probe.md
 dump_windows.py
 windows_review.txt
 

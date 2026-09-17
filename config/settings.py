@@ -657,6 +657,18 @@ CONSOLIDATION_MAX_ROUNDS_PER_RUN = _env_int("CONSOLIDATION_MAX_ROUNDS_PER_RUN", 
 # 积压超过该条数时日志提升为 warning（可观测性，不改变行为）
 CONSOLIDATION_BACKLOG_WARN = _env_int("CONSOLIDATION_BACKLOG_WARN", 300)
 
+# ---------- 用户作息时区 ----------
+# 服务器时区 ≠ 群友时区是云部署的常态（海外 VPS 多为 UTC），此时一切按「人类
+# 作息」解释的时间都会整体错位：睡眠窗口在错误的小时开合，模型嘴里的「现在是
+# 晚上」也可能是白天。两种写法：IANA 名称（推荐，自动处理夏令时，如
+# Asia/Shanghai、America/New_York），或固定偏移 UTC+X（如北京 UTC+8、印度
+# UTC+5:30；也可写 GMT+X 或省略前缀如 +8；固定偏移不跟踪夏令时）。留空或填
+# local/system 表示跟随服务器系统时区（默认，与旧版行为一致）。非法值告警
+# 一次并回退服务器本地时间。消费方：memory/proactive_gate.py（睡眠窗口）与
+# memory/prompt_builder.py（提示词里的当前时间）。睡眠起止等 HH:MM 一律指
+# 该时区下的墙上时间。
+USER_TIMEZONE = _env("USER_TIMEZONE", "")
+
 # ---------- 主动发言 ----------
 # 是否启用主动发言
 PROACTIVE_ENABLED = _env("PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -685,7 +697,8 @@ CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGE
 # 且 AT_MENTION 是当前唯一的记忆来源，睡眠期不回复等于每天损失数小时采集。
 # 被动信息收集（消息落库、整合）在睡眠期照常进行。
 PROACTIVE_SLEEP_ENABLED = _env("PROACTIVE_SLEEP_ENABLED", "true").lower() in ("true", "1", "yes")
-# 睡眠起止（HH:MM，**本地时间**——它描述人类作息，与 DB 时间戳的 UTC 无关）。
+# 睡眠起止（HH:MM，USER_TIMEZONE 时区下的墙上时间——它描述人类作息，与 DB
+# 时间戳的 UTC 无关；未配置 USER_TIMEZONE 时即服务器本地时间）。
 # 支持跨午夜：START > END 时视为跨天区间。
 PROACTIVE_SLEEP_START = _env("PROACTIVE_SLEEP_START", "23:30")
 PROACTIVE_SLEEP_END = _env("PROACTIVE_SLEEP_END", "07:30")
