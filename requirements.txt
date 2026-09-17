@@ -16,6 +16,10 @@ nonebot-plugin-apscheduler>=0.5.0
 # 之后可以放开这条。
 pygtrie>=2.4.1,<2.6
 python-dotenv>=1.0.0
+# zoneinfo 的 IANA 时区库（USER_TIMEZONE 用）。Linux 用系统 tzdata 即可；
+# Windows 没有系统级时区数据库，缺了它 ZoneInfo("Asia/Shanghai") 直接抛错，
+# 时区配置会静默回退服务器本地时间（见 proactive_gate._resolve_zone）。
+tzdata>=2024.1; sys_platform == "win32"
 httpx>=0.24.0
 pydantic>=1.10,<3
 pyyaml>=6.0

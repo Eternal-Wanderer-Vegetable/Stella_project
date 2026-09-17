@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 from datetime import datetime
 from datetime import time as dtime
+from zoneinfo import ZoneInfo
 
 from nonebot import logger
 
@@ -30,6 +31,7 @@ from config import (
     PROACTIVE_SLEEP_END,
     PROACTIVE_SLEEP_START,
     PROACTIVE_WAKEUP_GRACE_SECONDS,
+    USER_TIMEZONE,
 )
 from memory.proactive import get_proactive
 from memory.proactive_state import get_runtime_state
@@ -37,6 +39,9 @@ from memory.proactive_state import get_runtime_state
 # 睡眠时段的兜底默认值（配置格式非法时使用）
 _DEFAULT_SLEEP_START = dtime(23, 30)
 _DEFAULT_SLEEP_END = dtime(7, 30)
+
+# 已告警过的非法时区名。同一名字每进程只告警一次，避免定时任务每分钟刷屏。
+_tz_warned: set[str] = set()
 
 # group_id -> 苏醒时刻（monotonic）。进程内状态，用于醒来缓冲。
 _wakeup_at: dict[int, float] = {}
@@ -57,15 +62,54 @@ def _parse_hhmm(text: str, default: dtime) -> dtime:
         return default
 
 
+def _resolve_zone(name: str) -> ZoneInfo | None:
+    """IANA 时区名 → ZoneInfo；空 / local / system / 非法 → None。
+
+    None 统一表示「用服务器本地时间」：未配置是合法的默认，配置笔误则与
+    _parse_hhmm 同一哲学——回退而非抛错，别让作息功能整体失效。ZoneInfo
+    自带按名缓存，重复解析开销可忽略。
+    """
+    name = name.strip()
+    if not name or name.lower() in ("local", "system"):
+        return None
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        if name not in _tz_warned:
+            _tz_warned.add(name)
+            logger.warning(f"⚠️ [Gate] USER_TIMEZONE 非法: {name!r}，回退服务器本地时间")
+        return None
+
+
+def user_now() -> datetime:
+    """「用户作息」意义上的当前时刻。
+
+    配置了 ``USER_TIMEZONE`` 时返回该时区的 aware 时间，否则返回服务器本地
+    naive 时间（与旧版行为一致）。服务器时区与群友时区不一致时（海外 VPS 多为
+    UTC），直接 ``datetime.now()`` 会把作息整体错位——睡眠窗口在错误的小时
+    开合、提示词把上午说成深夜。因此一切按人类作息解释的时间都应取自这里：
+    睡眠判定、提示词时间段落（prompt_builder）、入睡/苏醒播报的日期去重。
+    """
+    zone = _resolve_zone(str(USER_TIMEZONE or ""))
+    return datetime.now(zone) if zone is not None else datetime.now()
+
+
+def _tz_suffix() -> str:
+    """can_speak 原因串里的时区标注；未配置有效时区时为空串。"""
+    name = str(USER_TIMEZONE or "").strip()
+    return f"，{name}" if _resolve_zone(name) is not None else ""
+
+
 def is_sleeping(now: datetime | None = None) -> bool:
     """当前是否处于睡眠时段。
 
-    用**本地时间**：它描述的是人类作息，与数据库时间戳（UTC）无关。
-    支持跨午夜区间（如 23:30 → 07:30）。start == end 视为不睡眠。
+    用**用户作息时区**（``USER_TIMEZONE``，缺省服务器本地时间）：它描述的是
+    人类作息，与数据库时间戳（UTC）无关。支持跨午夜区间（如 23:30 → 07:30）。
+    start == end 视为不睡眠。
     """
     if not PROACTIVE_SLEEP_ENABLED:
         return False
-    now = now or datetime.now()
+    now = now or user_now()
     start = _parse_hhmm(PROACTIVE_SLEEP_START, _DEFAULT_SLEEP_START)
     end = _parse_hhmm(PROACTIVE_SLEEP_END, _DEFAULT_SLEEP_END)
     if start == end:
@@ -137,7 +181,7 @@ def can_speak(group_id: int, kind: str) -> tuple[bool, str]:
         return False, "管理员已临时关闭本群主动发言"
 
     if is_sleeping():
-        return False, f"睡眠时段（{PROACTIVE_SLEEP_START}–{PROACTIVE_SLEEP_END}）"
+        return False, f"睡眠时段（{PROACTIVE_SLEEP_START}–{PROACTIVE_SLEEP_END}{_tz_suffix()}）"
 
     if in_wakeup_grace(group_id):
         return False, f"醒来缓冲期（{PROACTIVE_WAKEUP_GRACE_SECONDS:.0f}s 内不主动发言）"
@@ -156,3 +200,4 @@ def reset_state() -> None:
     """清空进程内状态（供测试使用）。"""
     _wakeup_at.clear()
     _last_sleeping.clear()
+    _tz_warned.clear()

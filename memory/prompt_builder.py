@@ -17,7 +17,6 @@ from __future__ import annotations
 import contextlib
 import unicodedata
 from collections.abc import Iterable
-from datetime import datetime
 
 from config import (
     MEMORY_BEHAVIOR_MAX_TOKENS,
@@ -25,6 +24,7 @@ from config import (
     MEMORY_CONVERSATION_TECH_MAX_TOKENS,
 )
 from memory.policy import MODE_CONFLICT_AVOID, MODE_TECH_HELP
+from memory.proactive_gate import user_now
 
 _WEEKDAYS = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
 
@@ -32,11 +32,12 @@ _WEEKDAYS = ("星期一", "星期二", "星期三", "星期四", "星期五", "�
 def build_time_section() -> str:
     """当前时间段落。
 
-    用**本地时间**：它描述的是人类作息，与数据库时间戳（UTC）无关。
-    模型此前完全没有时间概念，既无法判断上下文里的对话是多久前的，
-    也无法回答「今天星期几」这类基本问题。
+    用**用户作息时区**（``USER_TIMEZONE``，缺省服务器本地时间）：它描述的是
+    人类作息，与数据库时间戳（UTC）无关。模型此前完全没有时间概念，既无法
+    判断上下文里的对话是多久前的，也无法回答「今天星期几」这类基本问题；
+    服务器时区与群友不一致时，直接取服务器时间会把白天说成深夜。
     """
-    now = datetime.now()
+    now = user_now()
     return f"现在是 {now.strftime('%Y-%m-%d %H:%M')}，{_WEEKDAYS[now.weekday()]}。"
 
 

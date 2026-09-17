@@ -689,9 +689,10 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
+| `USER_TIMEZONE` | （空） | 用户作息时区（IANA 名称，如 `Asia/Shanghai`）；留空跟随服务器系统时区 |
 | `PROACTIVE_SLEEP_ENABLED` | `true` | 睡眠时段总开关 |
-| `PROACTIVE_SLEEP_START` | `23:30` | 入睡时刻（`HH:MM`，**本地时间**） |
-| `PROACTIVE_SLEEP_END` | `07:30` | 苏醒时刻（`HH:MM`，**本地时间**） |
+| `PROACTIVE_SLEEP_START` | `23:30` | 入睡时刻（`HH:MM`，按 `USER_TIMEZONE`） |
+| `PROACTIVE_SLEEP_END` | `07:30` | 苏醒时刻（`HH:MM`，按 `USER_TIMEZONE`） |
 | `PROACTIVE_WAKEUP_GRACE_SECONDS` | `900.0` | 醒来缓冲：苏醒后多久内仍不主动发言 |
 | `PROACTIVE_SLEEP_ANNOUNCE` | `true` | 是否在入睡/苏醒时播报一句 |
 | `PROACTIVE_SLEEP_MESSAGES` | 见 settings.py | 入睡播报台词（逗号分隔，随机选一条） |
@@ -699,7 +700,7 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 支持跨午夜区间（`START > END` 时视为跨天）。`START == END` 视为不睡眠。时间格式非法时回退到默认值并输出警告——配置笔误不应让 Bot 通宵说话。
 
-**这里用本地时间而非 UTC**：它描述的是人类作息，与数据库时间戳无关。这是全项目唯一该用本地时间的地方。
+**这里按用户作息时区取时间而非 UTC**：它描述的是人类作息，与数据库时间戳无关。服务器时区与群友时区不一致是云部署的常态（海外 VPS 多为 UTC），不校正的话睡眠窗口会在错误的小时开合，模型也会把白天说成深夜——配置 `USER_TIMEZONE` 可一并修正睡眠窗口、提示词里的「现在是几点」和入睡/苏醒播报的日期边界。`USER_TIMEZONE` 非法时告警并回退服务器本地时间。
 
 **醒来缓冲的必要性**：积压一夜的活跃度统计会让 Bot 一睁眼就连发几句。缓冲期从「检测到苏醒跃变」开始计时。
 
@@ -1065,7 +1066,7 @@ PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`
 |---|---|
 | Bot 太吵 | 降 `PROACTIVE_PROB_AT_FAST`；升 `PROACTIVE_COOLDOWN` 与 `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`；降 `PROACTIVE_AT_QUOTA_BASE`；或让管理员在群内说「安静」临时关闭 |
 | Bot 太安静 | 升 `PROACTIVE_PROB_AT_FAST`；降 `PROACTIVE_TOPIC_WARMUP_SECONDS` |
-| 深夜还在说话 | 确认 `PROACTIVE_SLEEP_ENABLED=true`，检查 `PROACTIVE_SLEEP_START/END` 是否覆盖目标时段 |
+| 深夜还在说话 | 确认 `PROACTIVE_SLEEP_ENABLED=true`，检查 `PROACTIVE_SLEEP_START/END` 是否覆盖目标时段；服务器与群友时区不同时确认 `USER_TIMEZONE` 已配置 |
 | 一觉醒来连发几句 | 升 `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | 记不住事 | 降 `MEMORY_OBSERVE_LOW_CONFIDENCE`；降 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；确认 `PROACTIVE_AT_ENABLED=true`（被动摄入的产出接近零） |
 | 记错事 | 升 `MEMORY_CONFIRM_HIGH_CONFIDENCE`；升 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；关闭 `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` |

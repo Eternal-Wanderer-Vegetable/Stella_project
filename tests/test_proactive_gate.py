@@ -6,6 +6,7 @@
 睡眠判定必须与运行时刻无关（注入固定时间），否则测试会在特定时段随机失败。
 """
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -19,6 +20,7 @@ def _clean_state(monkeypatch):
     monkeypatch.setattr(gate, "PROACTIVE_SLEEP_ENABLED", True)
     monkeypatch.setattr(gate, "PROACTIVE_SLEEP_START", "23:30")
     monkeypatch.setattr(gate, "PROACTIVE_SLEEP_END", "07:30")
+    monkeypatch.setattr(gate, "USER_TIMEZONE", "")
     yield
     gate.reset_state()
 
@@ -65,6 +67,47 @@ def test_malformed_config_falls_back(monkeypatch):
     monkeypatch.setattr(gate, "PROACTIVE_SLEEP_END", "")
     assert gate.is_sleeping(_at(3, 0))
     assert not gate.is_sleeping(_at(12, 0))
+
+
+# ── 用户作息时区（USER_TIMEZONE） ────────────────────
+
+def test_user_now_follows_server_local_by_default(monkeypatch):
+    """未配置 / 留空 / local / system：返回服务器本地 naive 时间（旧版行为）。"""
+    for value in ("", "local", "system"):
+        monkeypatch.setattr(gate, "USER_TIMEZONE", value)
+        assert gate.user_now().tzinfo is None
+
+
+def test_user_now_uses_configured_timezone(monkeypatch):
+    monkeypatch.setattr(gate, "USER_TIMEZONE", "Asia/Shanghai")
+    now = gate.user_now()
+    assert now.tzinfo is not None
+    assert now.utcoffset().total_seconds() == 8 * 3600
+
+
+def test_user_now_invalid_timezone_falls_back(monkeypatch):
+    """非法时区名回退服务器本地时间，同一名字只告警一次。"""
+    monkeypatch.setattr(gate, "USER_TIMEZONE", "Mars/Olympus")
+    assert gate.user_now().tzinfo is None
+    assert gate._tz_warned == {"Mars/Olympus"}
+
+
+def test_sleeping_judged_in_user_timezone(monkeypatch):
+    """睡眠窗口按配置时区的墙上时间判定：服务器 UTC 傍晚 6 点＝上海凌晨 2 点。"""
+    monkeypatch.setattr(gate, "PROACTIVE_SLEEP_START", "23:00")
+    monkeypatch.setattr(gate, "PROACTIVE_SLEEP_END", "07:00")
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            base = datetime(2026, 8, 15, 18, 0, tzinfo=ZoneInfo("UTC"))
+            return base.astimezone(tz) if tz is not None else datetime(2026, 8, 15, 18, 0)
+
+    monkeypatch.setattr(gate, "datetime", _FrozenDatetime)
+
+    assert not gate.is_sleeping()  # 未配置时区：服务器墙上 18:00，醒着
+    monkeypatch.setattr(gate, "USER_TIMEZONE", "Asia/Shanghai")
+    assert gate.is_sleeping()  # 上海已是 8/16 凌晨 02:00，睡眠中
 
 
 # ── 状态跃变与醒来缓冲 ────────────────────────────────
