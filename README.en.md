@@ -312,6 +312,7 @@ This project received encouragement and support from many people and organizatio
 - The [Lumi_Nox](https://github.com/MIO-456/Lumi_Nox) project developed by [@MIO-456](https://github.com/MIO-456) inspired the development of this project.
 - Thanks to [@vowm3440](https://github.com/vowm3440), [@CST-Cat](https://github.com/CST-Cat), and [@higashitaniyume](https://github.com/higashitaniyume) for helping me find public resources that support this project. Without their generous sharing, this project wouldn't have been possible.
 - Thanks to [@qian-o](https://github.com/qian-o) and their companions, as well as [@MIO-456](https://github.com/MIO-456) and their companions. Without their encouragement, there would have been no motivation to start developing this project.
+- Thanks to [@vowm3440](https://github.com/vowm3440) for continuous deployment and testing in QQ groups. Many directions for improvement have emerged precisely from observing examples of this deployment.
 - Thanks to the Bilibili video creator [Ruuuuusty](https://space.bilibili.com/650991829) for turning my and chat-GPT's ideas about the Stella logo into reality.
 - This project received support from the following organizations during development:
   - **Model providers**: Deepseek, OpenAI (ChatGPT), Google (Gemini, Gemma), Tongyi Qianwen (text-embedding-qwen3-embedding-0.6b), and ~~Anthropic~~. This project could not have been created without their excellent models as a foundation.
