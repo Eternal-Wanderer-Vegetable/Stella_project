@@ -121,6 +121,8 @@ def main() -> int:
         release_ref=args.release_ref,
         repository=args.repository,
     )
+    # write_text 不建父目录；输出落到子目录（如 offline-stage/）时直接 FileNotFoundError
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
