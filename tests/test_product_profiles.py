@@ -285,3 +285,22 @@ def test_tauri_bundles_the_stella_resource_directory():
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert config["bundle"]["resources"] == ["resources/stella"]
+
+
+def test_tauri_bundles_webview2_offline_installer():
+    """WebView2 必须内嵌完整离线安装包，绝不能走需要联网的安装方式。
+
+    2026-09 真实用户反馈：没有 WebView2 的电脑上安装器起不了前端。默认的
+    downloadBootstrapper 要联网下载运行时，离线环境直接失败——「一键离线」的
+    产品定义不允许这个缺口。embedBootstrapper 虽然内嵌了引导器，但引导器本身
+    仍要联网下载运行时；只有 offlineInstaller 是真离线（+约 127MB，已接受的
+    体积换稳定策略）。silent 默认 true，静默安装不弹窗。
+    """
+    config_path = (
+        PROJECT_ROOT / "stella-installer" / "src-tauri" / "tauri.conf.json"
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    mode = config["bundle"]["windows"]["webviewInstallMode"]
+    assert mode["type"] == "offlineInstaller"
+    assert mode.get("silent", True) is True

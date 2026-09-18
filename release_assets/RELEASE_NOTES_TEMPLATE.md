@@ -10,6 +10,8 @@
 - OneClick 使用单个 Windows 安装程序；Standalone 仅包含 Stella 本体。
 - 新增 OneClick Offline 离线安装程序（`Stella-OneClick-*-Offline-*`）：运行时、依赖、
   组件、模型与渲染内核全部随包内置，安装期零联网（体积约 1GB）。
+- WebView2 运行时离线安装器已内嵌进全部 OneClick 安装程序：没有 WebView2 的
+  电脑不再需要联网下载即可正常启动界面。
 
 - 增加 Runtime Contract、统一组件状态、脱敏错误和实例级 Runtime 文件。
 - 增加 Rust `runtime-manager` 契约基础层，并保留 Python deploy、CLI、Tauri 的兼容入口。

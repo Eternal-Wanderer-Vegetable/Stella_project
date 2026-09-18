@@ -476,6 +476,8 @@ The Offline variants share **the same code and the same profile id** as the onli
 - every component declared by the package catalog (llama.cpp backend / NapCat / the default embedding model; file names equal the catalog `artifact` field, verified through the same catalog-checksum path as online installs);
 - playwright's chromium-headless-shell (`PLAYWRIGHT_BROWSERS_PATH` points at the bundled kernel, so rendering needs no download).
 
+The WebView2 runtime is not part of the payload; instead it is embedded into the NSIS installer itself via Tauri's `webviewInstallMode: offlineInstaller` (about +127MB): at install time the registry is checked first — an existing WebView2 is left alone, a missing one is installed silently from the embedded offline package, with no network either way. The default `downloadBootstrapper` needs to download the runtime, which leaves the GUI unable to start on offline machines without WebView2 (real user report, 2026-09), and `embedBootstrapper` still requires internet — `offlineInstaller` is the only truly offline option.
+
 **When touching install-time components, keep the payload in sync**: new catalog components need no payload-script change (it iterates the catalog); new Python dependencies must produce wheels under `pip wheel`; a playwright upgrade must be reflected by the bundled kernel revision (the script installs it live, so it always matches).
 
 ### Checklist Before Tagging
