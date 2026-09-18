@@ -87,7 +87,7 @@ def validate_answers(a: Answers) -> list[str]:
         problems.append(f"LM Studio 地址：{a.lm_base_url!r} 必须以 http:// 或 https:// 开头。")
 
     # 两个本机模型 ID **允许留空**，这与 2026-08-29 之前相反。原因：模型 ID 现在
-    # 有两个出处——本机模型（LM_STUDIO_MODEL / CONSOLIDATION_LM_STUDIO_MODEL）与
+    # 有两个出处——本机槽模型（LLM_ENDPOINT_LOCAL_MODEL，向导写的这个）与
     # GUI「模型服务」分区里的角色模型（LLM_ROLE_*_MODEL，写在同一份 .env 的另一段）。
     # 纯在线部署的角色模型全部指向在线端点，本机模型 ID 根本不需要填；向导看不到
     # 角色那一段，在这里拦死就等于「配了在线也过不了向导」，与 P2 的验收标准
@@ -103,12 +103,20 @@ def validate_answers(a: Answers) -> list[str]:
 
 
 def _managed_values(a: Answers) -> dict[str, str]:
-    """「向导管理的键 → 目标值」映射（reverse 与 forward 互斥）。"""
+    """「向导管理的键 → 目标值」映射（reverse 与 forward 互斥）。
+
+    连接三键写**新键**（2026-09-18 起）：LM_STUDIO_* / CONSOLIDATION_LM_STUDIO_*
+    已登记 SUPERSEDED，向导不能再生产它们——否则每次保存都会往 .env 里长回
+    旧键，与迁移方向背道而驰。chat_model 落到 LOCAL **槽级**模型而非
+    LLM_ROLE_CHAT_MODEL：本机五个角色（CHAT/ROUTER/PLUGIN/COMPACT/EXTRACT）
+    旧体系全部继承同一个 LM_STUDIO_MODEL，槽级模型表达的正是同一件事；
+    个别角色要换模型仍可在高级配置里写角色级覆盖。
+    """
     values: dict[str, str] = {
         "ALLOWED_GROUPS": ",".join(str(g) for g in a.allowed_groups),
-        "LM_STUDIO_BASE_URL": a.lm_base_url,
-        "LM_STUDIO_MODEL": a.chat_model,
-        "CONSOLIDATION_LM_STUDIO_MODEL": a.consolidation_model,
+        "LLM_ENDPOINT_LOCAL_BASE_URL": a.lm_base_url,
+        "LLM_ENDPOINT_LOCAL_MODEL": a.chat_model,
+        "LLM_ROLE_CONSOLIDATION_MODEL": a.consolidation_model,
         "ONEBOT_ACCESS_TOKEN": a.access_token,
     }
     if a.onebot_mode == "reverse":

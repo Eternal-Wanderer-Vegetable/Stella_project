@@ -871,9 +871,9 @@ def _local_slot_override_warning() -> list[tuple[str, str]]:
         (
             "warn",
             f"端点槽 {SLOT_LOCAL} 的地址被显式改成 {override}，但 "
-            f"LM_STUDIO_BASE_URL 仍是 {master}，由它继承的 {SLOT_EXTRA} 槽"
+            f"兼容旧键 LM_STUDIO_BASE_URL 仍是 {master}，由它继承的 {SLOT_EXTRA} 槽"
             f"（整合 / 会话压缩）没跟着改，会打到旧地址。"
-            f"换本地地址请直接改 LM_STUDIO_BASE_URL，"
+            f"请重跑一次 deploy init / migrate 完成旧键迁移（会移除该行），"
             f"或把 LLM_ENDPOINT_EXTRA_BASE_URL 一并改掉",
         )
     ]

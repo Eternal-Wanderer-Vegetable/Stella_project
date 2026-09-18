@@ -594,6 +594,9 @@ MEMORY_BENCHMARK_DIR = _env_path(
 # 本段是**旧键**，保留为「LLM 端点 / LLM 角色」两节的默认继承来源：未迁移的 .env
 # 只填这三个键也能照旧跑（LOCAL 槽与 CHAT/ROUTER/COMPACT 角色都默认继承它们）。
 # 新配置请直接写 LLM_ENDPOINT_* / LLM_ROLE_*，见本文件末尾那两节。
+# 这批键（连同下面整合 / 提取 / 插件三段的第一、二代连接键）已整体登记在
+# deploy/env_keys.py 的 SUPERSEDED 表：init/migrate 会把旧值搬进新键并删旧行，
+# GUI 只显示新键。这里的兼容读要等迁移发版一个弃用窗口后才随 Phase 2 删除。
 LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
 LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
 # 远程 OpenAI 兼容 API 的 Bearer Token；本地 LM Studio 留空

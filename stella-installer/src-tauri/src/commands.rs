@@ -212,12 +212,22 @@ pub async fn get_config() -> Result<String, String> {
                 .cloned()
                 .unwrap_or_else(|| fallback.to_owned())
         };
+        // 卡片值优先读新键；没走过迁移的旧 .env 只有旧键，回落读取保证显示连续。
+        let get2 = |key: &str, legacy: &str, fallback: &str| {
+            values
+                .get(key)
+                .cloned()
+                .or_else(|| values.get(legacy).cloned())
+                .unwrap_or_else(|| fallback.to_owned())
+        };
         // 「配置过了没有」不能只看本机模型：纯在线部署（角色全绑在线端点）根本
-        // 不需要填 LM_STUDIO_MODEL，只认它会把这类用户永久判成「未配置」，
+        // 不需要填本机模型 ID，只认它会把这类用户永久判成「未配置」，
         // index.html 于是每次启动都把人送回向导。对话角色填了模型就算配过。
+        // LM_STUDIO_MODEL 是旧键（SUPERSEDED），未迁移的 .env 里可能只有它。
         let empty = String::new();
         let configured = path.is_file()
-            && (!values.get("LM_STUDIO_MODEL").unwrap_or(&empty).is_empty()
+            && (!values.get("LLM_ENDPOINT_LOCAL_MODEL").unwrap_or(&empty).is_empty()
+                || !values.get("LM_STUDIO_MODEL").unwrap_or(&empty).is_empty()
                 || !values.get("LLM_ROLE_CHAT_MODEL").unwrap_or(&empty).is_empty());
         let ws_urls = values
             .get("ONEBOT_WS_URLS")
@@ -243,9 +253,9 @@ pub async fn get_config() -> Result<String, String> {
             "port": get("PORT", "8080").parse::<u16>().unwrap_or(8080),
             "ws_urls": ws_urls,
             "access_token": get("ONEBOT_ACCESS_TOKEN", ""),
-            "lm_base_url": get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234"),
-            "chat_model": get("LM_STUDIO_MODEL", ""),
-            "consolidation_model": get("CONSOLIDATION_LM_STUDIO_MODEL", ""),
+            "lm_base_url": get2("LLM_ENDPOINT_LOCAL_BASE_URL", "LM_STUDIO_BASE_URL", "http://127.0.0.1:1234"),
+            "chat_model": get2("LLM_ENDPOINT_LOCAL_MODEL", "LM_STUDIO_MODEL", ""),
+            "consolidation_model": get2("LLM_ROLE_CONSOLIDATION_MODEL", "CONSOLIDATION_LM_STUDIO_MODEL", ""),
             "embedding_model": get("MEMORY_EMBEDDING_MODEL", ""),
             "spaces": spaces,
             "advanced_env": advanced_env,
@@ -813,10 +823,16 @@ fn apply_advanced_env(
     let managed = [
         ("ALLOWED_GROUPS", groups.iter().map(i64::to_string).collect::<Vec<_>>().join(",")),
         ("ONEBOT_ACCESS_TOKEN", config.access_token.clone()),
-        ("LM_STUDIO_BASE_URL", config.lm_base_url.clone()),
-        ("LM_STUDIO_MODEL", config.chat_model.clone()),
+        // 卡片写新键（2026-09-18 起）：LM_STUDIO_* 已 SUPERSEDED，强写清单若
+        // 继续生产旧键，迁移就永远走不完。旧 .env 里遗留的旧键行由保存前半段
+        // 的 deploy init --force 合并迁移负责移除。
         (
-            "CONSOLIDATION_LM_STUDIO_MODEL",
+            "LLM_ENDPOINT_LOCAL_BASE_URL",
+            config.lm_base_url.clone(),
+        ),
+        ("LLM_ENDPOINT_LOCAL_MODEL", config.chat_model.clone()),
+        (
+            "LLM_ROLE_CONSOLIDATION_MODEL",
             config.consolidation_model.clone(),
         ),
         ("MEMORY_EMBEDDING_MODEL", config.embedding_model.clone()),

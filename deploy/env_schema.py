@@ -106,7 +106,14 @@ def build_schema(settings_path: Path) -> dict:
         if parent:
             field["inherits"] = parent
         fields.append(field)
-    return {"version": 1, "fields": fields}
+    # SUPERSEDED 键不在 fields 里（代码仍兼容读，但界面只该出现新键），但 GUI
+    # 需要这份名单：高级配置把「模板/schema 之外」的旧 .env 行当作未知键回写，
+    # 不过滤的话每次保存都会把刚被合并器迁走的旧键行原样写回去。
+    return {
+        "version": 1,
+        "fields": fields,
+        "superseded_keys": sorted(env_keys.SUPERSEDED),
+    }
 
 
 def _sections_by_line(lines: list[str]) -> list[str]:

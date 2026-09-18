@@ -32,6 +32,10 @@
     getVersion().then(v => { document.querySelector(".ver").textContent = `v${v}`; }).catch(() => {});
     let config = null;
     let schemaFields = [];
+    // SUPERSEDED 旧键名单（schema payload 顶层带来）：这些键代码仍兼容读，
+    // 但不该再由用户填——高级配置回写未知键时必须跳过它们，否则每次保存
+    // 都会把刚被合并器迁走的旧行原样写回 .env，迁移永远不彻底。
+    let supersededKeys = new Set();
     let advancedValues = {};
     let mainValues = {};
     let lastConfigSig = "";
@@ -64,20 +68,21 @@
     const SLOT_NAMES = ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"];
     // 主表单与「模型服务」分区管的键不能再出现在「高级配置」里：同一个键摆两个控件，
     // 用户改了其中一个、保存时另一个的旧值又盖回去，表现就是「改了没反应」。
-    // 刻意**不**列入 LLM_ENDPOINT_LOCAL_BASE_URL / _API_KEY / _MODEL 与
-    // LLM_ENDPOINT_EXTRA_MODEL：本机与备用两张卡的地址、key、模型用的是旧键
-    // （LM_STUDIO_* / CONSOLIDATION_LM_STUDIO_MODEL），端点级同名键是「留空即继承」的
-    // 覆盖项，留在高级配置里当逃生口（真要指到另一台机器、或让整张卡换个模型时才用）。
+    // 刻意**不**列入 LLM_ENDPOINT_LOCAL_API_KEY：本机卡没有 key 控件，高级配置是
+    // 它唯一的填写处；LOCAL 地址/模型两张卡直接管（写新键），其余端点槽的同名键
+    // 是「留空即继承」的覆盖项，留在高级配置里当逃生口。
     // 六个 LLM_ROLE_*_MODEL 同理降级：模型的正常出处是端点卡片，角色级只是
-    // 「同一端点上某个角色换个模型」的覆盖项，卡片上不再给它控件。
+    // 「同一端点上某个角色换个模型」的覆盖项，卡片上不再给它控件
+    // （CONSOLIDATION 例外——「记忆整合模型 ID」卡片写的就是 LLM_ROLE_CONSOLIDATION_MODEL）。
     // 四个 LLM_ENDPOINT_*_KIND 留在 managed 里但也没有控件：值由 slotKind() 按槽名
     // 与地址推导、syncKinds() 写回。放进高级配置只会让人以为改了有用——保存时推导
     // 值一定盖回去。
     const managedKeys = new Set([
       "ALLOWED_GROUPS", "HOST", "PORT", "ONEBOT_WS_URLS", "ONEBOT_ACCESS_TOKEN",
-      "LM_STUDIO_BASE_URL", "LM_STUDIO_MODEL", "CONSOLIDATION_LM_STUDIO_MODEL",
+      "LLM_ENDPOINT_LOCAL_BASE_URL", "LLM_ENDPOINT_LOCAL_MODEL",
+      "LLM_ROLE_CONSOLIDATION_MODEL",
       "MEMORY_EMBEDDING_MODEL",
-      "LM_STUDIO_API_KEY", "MEMORY_EMBEDDING_GATE", "LLM_FALLBACK_ENABLED",
+      "MEMORY_EMBEDDING_GATE", "LLM_FALLBACK_ENABLED",
       ...SLOT_NAMES.flatMap(slot => ["KIND", "CONCURRENCY", "TIMEOUT"].map(f => `LLM_ENDPOINT_${slot}_${f}`)),
       ...SLOT_NAMES.filter(slot => slot !== "LOCAL")
         .flatMap(slot => [`LLM_ENDPOINT_${slot}_BASE_URL`, `LLM_ENDPOINT_${slot}_API_KEY`]),
@@ -125,6 +130,7 @@
     function applyConfigState(data) {
       config = data;
       schemaFields = data.schema?.fields || [];
+      supersededKeys = new Set(data.schema?.superseded_keys || []);
       advancedValues = { ...(data.advanced_values || {}) };
       mainValues = {
         lm_base_url: String(data.lm_base_url ?? ""),
@@ -504,6 +510,7 @@
       updateMode();
       bindSettingsTabs();
       schemaFields = config.schema?.fields || [];
+      supersededKeys = new Set(config.schema?.superseded_keys || []);
       advancedValues = { ...(config.advanced_values || {}) };
       // 这四个键的控件长在「模型服务」的卡片里，而那一片会被 renderModelService()
       // 整段重绘（换预设、重置默认值时）。重绘会把 DOM 连根换掉，所以值另存一份，
@@ -1218,7 +1225,12 @@
       const lines = schemaFields
         .filter(field => !(field.inherits && !String(values[field.key] ?? "").trim()))
         .map(field => `${field.key}=${values[field.key] ?? field.default ?? ""}`);
-      for (const [key, value] of Object.entries(values)) if (!known.has(key)) lines.push(`${key}=${value}`);
+      for (const [key, value] of Object.entries(values)) {
+        // SUPERSEDED 旧键不回写：它们已被合并器迁到新键并从 .env 移除，
+        // 这里原样写回会让每次保存都把旧行复活（迁移永不彻底）。
+        if (known.has(key) || supersededKeys.has(key)) continue;
+        lines.push(`${key}=${value}`);
+      }
       return lines.join("\n");
     }
 
