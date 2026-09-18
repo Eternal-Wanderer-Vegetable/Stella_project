@@ -18,14 +18,14 @@
 
 模型 ID 归端点而不是归角色：一个端点通常只对应一家服务商的一份模型清单，
 「换服务商」应当只改一处，而不是在六个角色上各写一遍同一个字符串。角色仍能覆盖
-（同一端点上某个角色要用更便宜的那档模型），三档解析顺序见 :func:`_resolve_role_model`。
+（同一端点上某个角色要用更便宜的那档模型），两级解析顺序见 :func:`_resolve_role_model`。
 
 **为什么槽位是固定四个而不是动态列表**：``deploy/env_schema.py`` 用 AST 扫
 ``config/settings.py`` 里的字面量 ``_env*("KEY", ...)`` 调用来生成 GUI 表单，
 动态命名的端点永远不会出现在 GUI 里，用户改不到。静态声明是硬约束。
 
-**纯本地部署逐字等价**：``LOCAL`` 槽默认继承 ``LM_STUDIO_*``、``EXTRA`` 槽默认
-继承 ``CONSOLIDATION_LM_STUDIO_*``，且 ``CONSOLIDATION`` 角色默认绑到 ``EXTRA``。
+**纯本地部署逐字等价**：``LOCAL`` 槽与 ``EXTRA`` 槽的地址默认都指向本机
+LM Studio（``http://127.0.0.1:1234``），且 ``CONSOLIDATION`` 角色默认绑到 ``EXTRA``。
 于是改造前「chat 闸门（27B/GPU）与 consolidation 闸门（E4B/CPU）各自串行、彼此
 并行」的拓扑被完整保留，只是资源名从 ``chat``/``consolidation`` 变成
 ``LOCAL``/``EXTRA``。
@@ -317,61 +317,26 @@ def _role_max_tokens(role: str, raw: Any) -> int:
     return 1024
 
 
-# 角色 MODEL 留空时继承的那个旧键（与 ``config/settings.py`` 里的 ``_env_inherit``
-# 声明一一对应）。registry 需要这张表来回答一个 settings 层答不上来的问题：
-# **用户到底有没有为这个角色单独指定模型**——``_env_inherit`` 在 settings 层就把
-# 留空折叠成了旧键的值，两者到这里已经分不开。拿角色值与旧键值比一下就能分开：
-# 相等 = 没单独指定（走端点的模型），不等 = 单独指定了（角色覆盖端点）。
-_ROLE_MODEL_LEGACY_KEY: dict[str, str] = {
-    ROLE_CHAT: "LM_STUDIO_MODEL",
-    ROLE_ROUTER: "LM_STUDIO_MODEL",
-    ROLE_PLUGIN: "ASTRBOT_LLM_MODEL",
-    ROLE_COMPACT: "LM_STUDIO_MODEL",
-    ROLE_CONSOLIDATION: "CONSOLIDATION_LM_STUDIO_MODEL",
-    ROLE_EXTRACT: "MEMORY_EXTRACT_LM_STUDIO_MODEL",
-}
+def _resolve_role_model(prefix: str, ep: Endpoint | None) -> str:
+    """角色最终用的模型 ID。顺序：**角色显式 MODEL → 端点 MODEL**。
 
-# 每个旧键「归属」的端点槽——GUI 里那张卡的模型输入框绑的就是这个旧键
-# （LOCAL 卡的模型 = LM_STUDIO_MODEL，EXTRA 卡的模型 = CONSOLIDATION_LM_STUDIO_MODEL），
-# 所以哪怕用户把这张卡指到在线服务商，旧键里的值也是他**为这张卡**填的，仍然算数。
-# 反过来，角色被挪到别的槽（尤其两个在线槽）时旧键就不算了：那里的值是本机模型名。
-_LEGACY_MODEL_HOME_SLOT: dict[str, str] = {
-    "LM_STUDIO_MODEL": SLOT_LOCAL,
-    "ASTRBOT_LLM_MODEL": SLOT_LOCAL,
-    "MEMORY_EXTRACT_LM_STUDIO_MODEL": SLOT_LOCAL,
-    "CONSOLIDATION_LM_STUDIO_MODEL": SLOT_EXTRA,
-}
-
-
-def _resolve_role_model(role: str, prefix: str, ep: Endpoint | None) -> str:
-    """角色最终用的模型 ID。顺序：**角色显式 MODEL → 端点 MODEL → 角色旧键**。
-
-    三档的理由各不相同：
+    两档的理由：
 
     1. 角色显式 MODEL 最高，因为「同一个端点上某个角色换个模型」是真实需求
        （兜底判定挑更便宜的那档），而这是唯一能表达它的地方；
-    2. 端点 MODEL 第二，因为模型清单是随服务商走的——换端点就该换模型，
-       而不是让人在六个角色上各写一遍同一个字符串（GUI 的端点卡片即本档）；
-    3. 角色旧键垫底，保证存量 ``.env`` 逐字等价：只填了
-       ``MEMORY_EXTRACT_LM_STUDIO_MODEL`` 的用户，其 EXTRACT 角色仍用那个小模型。
+    2. 端点 MODEL 兜底，因为模型清单是随服务商走的——换端点就该换模型，
+       而不是让人在六个角色上各写一遍同一个字符串（GUI 的端点卡片即本档）。
 
-    为什么第 3 档不能排在第 2 档前面，以及为什么它在在线槽上会被整个跳过：旧键
-    大多默认继承 ``LM_STUDIO_MODEL``，也就是**本机模型名**。把本机模型名发给在线
-    服务商一律 400，而各家的报错文案还都不一样——远不如在 ``validate()`` 里直接说
-    「这张卡没填模型」。所以第 3 档只在两种情况下生效：端点是本机的，或者端点正是
-    这个旧键归属的那张卡（见 ``_LEGACY_MODEL_HOME_SLOT``，例如 EXTRA 卡被指到在线
-    服务商、模型 ID 就填在 GUI 的「记忆整合模型 ID」里）。
+    两档都空时返回空串：本地 LM Studio 会路由到已加载的模型；在线端点则由
+    ``_binding_from_settings`` 当场报「该端点没填模型」——本机模型名不会在
+    不知情的情况下被发给在线服务商。
     """
     s = _settings()
     role_model = str(getattr(s, prefix + "MODEL", "") or "").strip()
-    legacy_key = _ROLE_MODEL_LEGACY_KEY.get(role, "")
-    inherited = str(getattr(s, legacy_key, "") or "").strip() if legacy_key else ""
-    if role_model and role_model != inherited:
+    if role_model:
         return role_model
     if ep is not None and ep.model:
         return ep.model
-    if ep is None or ep.kind == KIND_LOCAL or ep.slot == _LEGACY_MODEL_HOME_SLOT.get(legacy_key, ""):
-        return role_model
     return ""
 
 
@@ -395,7 +360,7 @@ def _binding_from_settings(role: str) -> RoleBinding:
             ("error", f"角色 {role} 绑到端点槽 {slot}，但该槽没配 BASE_URL，调用会失败")
         )
 
-    model = _resolve_role_model(role, prefix, ep)
+    model = _resolve_role_model(prefix, ep)
     # 在线端点必须显式给模型 ID：本地 LM Studio 留空由服务端默认路由，
     # 在线厂商留空一律 400，而且报错文案各家都不一样，不如启动就说清楚。
     if ep is not None and ep.kind == KIND_ONLINE and not model:
@@ -513,10 +478,9 @@ def embedding_gate() -> str:
     - 显式槽名优先，任何时候都直接生效；
     - ``auto``：**若存在 KIND=local 且 BASE_URL 与 ``MEMORY_EMBEDDING_BASE_URL``
       相同的端点槽 → 共用该槽闸门；否则不排队。** 判定是确定性的，doctor 会打印结果。
-    - 留空按 ``auto`` 处理，此时还会看旧布尔键 ``LLM_SCHEDULER_GATE_EMBEDDING``：
-      它被显式设成 false 的用户是**主动**关掉排队的，不能因为换了新键就悄悄打开。
+    - 留空按 ``auto`` 处理。
 
-    为什么不沿用旧键的语义（挂到主聊天闸门）：旧的前提是「embedding 与主聊天同实例」。
+    为什么不沿用旧布尔键的语义（挂到主聊天闸门）：旧的前提是「embedding 与主聊天同实例」。
     对话一旦切到在线端点，本地 embedding 就会去排在线调用的队、白白串行。
     """
     s = _settings()
@@ -532,8 +496,6 @@ def embedding_gate() -> str:
         return ""
 
     # auto（含留空）
-    if not bool(getattr(s, "LLM_SCHEDULER_GATE_EMBEDDING", True)):
-        return ""
     embed_url = str(getattr(s, "MEMORY_EMBEDDING_BASE_URL", "") or "").strip().rstrip("/")
     if not embed_url:
         return ""
@@ -738,7 +700,7 @@ def backend_for_endpoint(role: str, slot: str) -> LLMBackend | None:
     b = binding(role)
     if b is None:
         return None
-    model = _resolve_role_model(role, f"LLM_ROLE_{role.upper()}_", ep)
+    model = _resolve_role_model(f"LLM_ROLE_{role.upper()}_", ep)
     override = replace(
         b, slot=ep.slot, endpoint=ep, model=model, fallback_slot="", fallback=None,
     )
@@ -787,7 +749,7 @@ def validate() -> list[tuple[str, str]]:
     在启动阶段就暴露，而不是等第一次调用才 500。
     """
     bindings()  # 触发解析，填充 _issues
-    return list(_issues) + _embedding_gate_warnings() + _legacy_key_warnings()
+    return list(_issues) + _embedding_gate_warnings()
 
 
 def _embedding_gate_warnings() -> list[tuple[str, str]]:
@@ -802,81 +764,6 @@ def _embedding_gate_warnings() -> list[tuple[str, str]]:
     if endpoint(raw.upper()) is not None:
         return []
     return [("error", f"MEMORY_EMBEDDING_GATE={raw!r} 不是已配置的端点槽，按 auto 处理")]
-
-
-def _legacy_key_warnings() -> list[tuple[str, str]]:
-    """旧键与新端点地址不一致时告警。
-
-    ``EXTRACT`` 与 ``PLUGIN`` 角色改造后走 ``LOCAL`` 槽，**不再读**
-    ``MEMORY_EXTRACT_LM_STUDIO_BASE_URL`` / ``ASTRBOT_LLM_BASE_URL``。这两个键默认
-    继承 ``LM_STUDIO_BASE_URL``，所以绝大多数人无感；但**显式改过**它们、想让提取
-    或插件走另一台机器的用户，会在升级后被静默改回主地址——必须提醒。
-
-    ``CONSOLIDATION`` 不在此列：``EXTRA`` 槽默认就继承
-    ``CONSOLIDATION_LM_STUDIO_BASE_URL``，地址是跟着走的。
-
-    另加一条**反方向**的告警，见 :func:`_local_slot_override_warning`。
-    """
-    s = _settings()
-    local = endpoints()[SLOT_LOCAL]
-    if not local.configured:
-        return []
-    out: list[tuple[str, str]] = []
-    base = local.base_url.rstrip("/")
-    checks = (
-        ("MEMORY_EXTRACT_LM_STUDIO_BASE_URL", ROLE_EXTRACT, SLOT_LOCAL),
-        ("ASTRBOT_LLM_BASE_URL", ROLE_PLUGIN, SLOT_LOCAL),
-    )
-    for key, role, slot in checks:
-        b = bindings().get(role)
-        if b is None or b.slot != slot:
-            continue  # 用户已经把这个角色挪到别的槽了，旧键本来就不该再生效
-        legacy = str(getattr(s, key, "") or "").strip().rstrip("/")
-        if legacy and legacy != base:
-            out.append(
-                (
-                    "warn",
-                    f"{key}={legacy} 与端点槽 {slot} 的地址（{base}）不同，"
-                    f"而角色 {role} 现在走 {slot}：旧键已不再生效，"
-                    f"若确实要用另一台机器，请把 {role} 绑到 {SLOT_EXTRA} 槽",
-                )
-            )
-    return out + _local_slot_override_warning()
-
-
-def _local_slot_override_warning() -> list[tuple[str, str]]:
-    """``LLM_ENDPOINT_LOCAL_BASE_URL`` 被显式改成与 ``LM_STUDIO_BASE_URL`` 不同的地址。
-
-    这一条是上面那些告警的反方向，而且更容易踩到：``LLM_ENDPOINT_LOCAL_BASE_URL``
-    留空即继承 ``LM_STUDIO_BASE_URL``，所以**换本地地址的正确做法是改后者**。
-    只改前者的话，聊天立刻跟着走了，但仍由 ``LM_STUDIO_BASE_URL`` 继承下来的那一支
-    ——``CONSOLIDATION_LM_STUDIO_BASE_URL`` → ``EXTRA`` 槽（整合 / 会话压缩）——
-    还指着旧地址，表现是「聊天好了、整合全失败」，而两处地址长得几乎一样，
-    肉眼对不出来。
-
-    只在两者**都非空且不同**、且 ``EXTRA`` 确实还是个本地槽且没跟着改时才报：
-    留空是正常的继承状态，把 EXTRA 指向第三台机器也是正常用法，都不该打扰。
-    """
-    s = _settings()
-    override = str(getattr(s, "LLM_ENDPOINT_LOCAL_BASE_URL", "") or "").strip().rstrip("/")
-    master = str(getattr(s, "LM_STUDIO_BASE_URL", "") or "").strip().rstrip("/")
-    if not override or not master or override == master:
-        return []
-    extra = endpoints()[SLOT_EXTRA]
-    if not extra.configured or not extra.is_local:
-        return []
-    if extra.base_url.rstrip("/") != master:
-        return []  # EXTRA 已被显式改到别处，不是「忘了跟着改」
-    return [
-        (
-            "warn",
-            f"端点槽 {SLOT_LOCAL} 的地址被显式改成 {override}，但 "
-            f"LM_STUDIO_BASE_URL 仍是 {master}，由它继承的 {SLOT_EXTRA} 槽"
-            f"（整合 / 会话压缩）没跟着改，会打到旧地址。"
-            f"换本地地址请直接改 LM_STUDIO_BASE_URL，"
-            f"或把 LLM_ENDPOINT_EXTRA_BASE_URL 一并改掉",
-        )
-    ]
 
 
 def log_summary() -> None:

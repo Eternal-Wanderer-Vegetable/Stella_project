@@ -1279,7 +1279,7 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
     target.nickname = await _resolve_nickname(bot, group_id, target.user_id)
     logger.info(
         f"🎯 [主动@] 群 {group_id} 选定用户 {target.user_id}"
-        f"（{target.nickname}，mode={target.mode}）：{target.reason}"
+        f"（{target.nickname}）：{target.reason}"
     )
 
     lock = _group_locks[group_id]
@@ -1362,7 +1362,6 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
     record_at(
         group_id,
         target.user_id,
-        topic=target.topic,
         candidate_id=target.candidate_id,
     )
 

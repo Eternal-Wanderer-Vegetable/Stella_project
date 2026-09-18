@@ -24,9 +24,9 @@ Boolean values accept `true` / `1` / `yes` (case-insensitive); everything else i
 
 ```env
 ALLOWED_GROUPS=123456789
-LM_STUDIO_BASE_URL=http://127.0.0.1:1234
-LM_STUDIO_MODEL=your-chat-model
-CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
+LLM_ENDPOINT_LOCAL_BASE_URL=http://127.0.0.1:1234
+LLM_ENDPOINT_LOCAL_MODEL=your-chat-model
+LLM_ROLE_CONSOLIDATION_MODEL=your-small-model
 ```
 
 For a fully online deployment (without running local LM Studio), replace the minimum set with endpoints and roles. Local model IDs can be left completely empty. See [Model Services · Endpoint and Role](#endpoint-and-role-two-layer-configuration):
@@ -194,16 +194,16 @@ Keys have the form `LLM_ENDPOINT_<SLOT>_<FIELD>`. Fields are `BASE_URL` / `API_K
 - `CONCURRENCY` is the slot gate's concurrency limit, with strict FIFO serialization within a slot. Local LM Studio **does not queue**; concurrent requests only slow one another down and make attribution difficult, so local slots remain at `1`. Online endpoints can be increased to the concurrency allowed by the provider.
 - `TIMEOUT` is the timeout for one request. It is **not the same as `LLM_TIMEOUT`**, which is the full-round response budget in `core/pipeline.py`.
 
-Leaving the address and key for `LOCAL` and `EXTRA` empty inherits the old keys, so **an unmigrated `.env` behaves exactly as before the upgrade** and requires no manual migration:
+The old keys `LM_STUDIO_*` / `CONSOLIDATION_LM_STUDIO_*` have been removed: lines left in a `.env` **no longer take effect**. After a single run of `deploy init` / `migrate`, their values are automatically converted into the new keys below and the old lines are removed (`deploy doctor` lists the mapping). If you skipped migration, run `init` once — no manual editing needed either way:
 
-| New key | Inherited when empty |
-|---|---|
-| `LLM_ENDPOINT_LOCAL_BASE_URL` | `LM_STUDIO_BASE_URL` |
-| `LLM_ENDPOINT_LOCAL_API_KEY` | `LM_STUDIO_API_KEY` |
-| `LLM_ENDPOINT_EXTRA_BASE_URL` | `CONSOLIDATION_LM_STUDIO_BASE_URL` (which itself inherits `LM_STUDIO_BASE_URL`) |
-| `LLM_ENDPOINT_EXTRA_API_KEY` | `CONSOLIDATION_LM_STUDIO_API_KEY` |
+| New key | Default | Where the old value goes |
+|---|---|---|
+| `LLM_ENDPOINT_LOCAL_BASE_URL` | `http://127.0.0.1:1234` | `LM_STUDIO_BASE_URL` converted automatically |
+| `LLM_ENDPOINT_LOCAL_API_KEY` | empty | `LM_STUDIO_API_KEY` converted automatically |
+| `LLM_ENDPOINT_EXTRA_BASE_URL` | `http://127.0.0.1:1234` | `CONSOLIDATION_LM_STUDIO_BASE_URL` converted automatically |
+| `LLM_ENDPOINT_EXTRA_API_KEY` | empty | `CONSOLIDATION_LM_STUDIO_API_KEY` converted automatically |
 
-`MODEL` does not use this inheritance. Instead, when empty, each role falls back to its own old key (see the resolution order below). When `LLM_ENDPOINT_LOCAL_MODEL` is empty, roles bound to `LOCAL` continue to use `LM_STUDIO_MODEL` / `ASTRBOT_LLM_MODEL` / `MEMORY_EXTRACT_LM_STUDIO_MODEL` respectively, exactly as before; filling it means “use this one model for the entire local slot,” overriding those old keys. The model ID input on the GUI's local and spare cards writes the old keys (`LM_STUDIO_MODEL` / `CONSOLIDATION_LM_STUDIO_MODEL`); `LLM_ENDPOINT_LOCAL_MODEL` / `LLM_ENDPOINT_EXTRA_MODEL` remain in advanced configuration as escape hatches.
+An empty `LLM_ENDPOINT_LOCAL_MODEL` means "no model pinned for the local slot" — roles bound to `LOCAL` that are themselves empty fall back to LM Studio's default routing. Filling it means "use this one model for the entire local slot." The model ID input on the GUI's local card writes `LLM_ENDPOINT_LOCAL_MODEL` itself; the GUI control for the consolidation model writes `LLM_ROLE_CONSOLIDATION_MODEL` (see the Memory Consolidation Model section).
 
 > In a purely local deployment, `EXTRA` and `LOCAL` point to the same address. Its purpose is only to provide consolidation with an **independent gate**: consolidation is a long-running task, and sharing a gate with chat would make @ replies wait behind it.
 
@@ -215,18 +215,19 @@ Keys have the form `LLM_ROLE_<ROLE>_<FIELD>`. Fields are `ENDPOINT` / `MODEL` / 
 |---|---|---|---|---|
 | `CHAT` | Main model for replying to group members, prioritizing quality | `LOCAL` | `0.7` | `2000` |
 | `ROUTER` | Decides whether a message should receive a reply, a binary task | `LOCAL` | `0.7` | `2000` |
-| `PLUGIN` | LLM borrowed by third-party plugins | `LOCAL` | inherits `ASTRBOT_LLM_TEMPERATURE` | inherits `ASTRBOT_LLM_MAX_TOKENS` |
+| `PLUGIN` | LLM borrowed by third-party plugins | `LOCAL` | `0.7` | `1024` |
 | `COMPACT` | Session compaction: compresses earlier conversation into a recap | `LOCAL` | `0.3` | `0` (= `SESSION_SUMMARY_MAX_TOKENS × 3`) |
-| `CONSOLIDATION` | Stage 1 of two-stage consolidation | `EXTRA` | inherits `CONSOLIDATION_LM_STUDIO_TEMPERATURE` | inherits `CONSOLIDATION_LOCAL_MAX_TOKENS` |
-| `EXTRACT` | Stage 2 memory-candidate extraction | `LOCAL` | inherits `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | inherits `MEMORY_EXTRACT_MAX_TOKENS` |
+| `CONSOLIDATION` | Stage 1 of two-stage consolidation | `EXTRA` | `0.3` | inherits `CONSOLIDATION_LOCAL_MAX_TOKENS` |
+| `EXTRACT` | Stage 2 memory-candidate extraction | `LOCAL` | `0.2` | inherits `MEMORY_EXTRACT_MAX_TOKENS` |
 
 **`MODEL` normally does not need to be filled in.** The normal source of a model ID is `LLM_ENDPOINT_<SLOT>_MODEL` from the previous section, which is what the GUI endpoint card edits. Role-level `MODEL` is only an **override**, for cases where one role needs another model on the same endpoint, such as using a cheaper model for fallback decisions. The `Model` column in the GUI role matrix is therefore read-only and shows the final value and its source. To override it, edit `LLM_ROLE_<ROLE>_MODEL` in advanced configuration.
 
 The complete resolution order (`core/llm/registry.py::_resolve_role_model`) is:
 
-1. **Explicit role `MODEL`**: the criterion is that its value differs from the old key it inherits. All `MODEL` settings are inheritance-based (`CHAT` / `ROUTER` / `COMPACT` inherit `LM_STUDIO_MODEL`, `PLUGIN` inherits `ASTRBOT_LLM_MODEL`, `CONSOLIDATION` inherits `CONSOLIDATION_LM_STUDIO_MODEL`, and `EXTRACT` inherits `MEMORY_EXTRACT_LM_STUDIO_MODEL`). Thus an existing `.env` that only sets an old key reaches tier 3 and behaves exactly as before;
-2. **The `MODEL` of the endpoint bound to the role**;
-3. **The role's own old key** (the one in parentheses in tier 1). On an **online** endpoint, this tier applies only to the card that owns that old key: `LM_STUDIO_MODEL` belongs to `LOCAL`, and `CONSOLIDATION_LM_STUDIO_MODEL` belongs to `EXTRA`. If a role is moved to `ONLINE_CHAT` / `ONLINE_MEMORY` while the endpoint has no model, the local model name is not accidentally sent to the online provider (which would always produce a 400). Instead, the system immediately reports that the endpoint has no model.
+1. **Explicit role `MODEL`**: non-empty means explicit. To give one role its own model, write it here;
+2. **The `MODEL` of the endpoint bound to the role**.
+
+When both tiers are empty the role's model is an empty string: a local endpoint lets LM Studio route to the loaded model by default, while an online endpoint fails startup validation with "the endpoint has no model" (the local model name is never sent to an online provider by accident, which would always produce a 400). The legacy-key fallback tier was removed together with the old keys; after upgrading, confirm your model IDs landed on the new keys such as `LLM_ENDPOINT_LOCAL_MODEL` (normally done automatically by `deploy init` / `migrate`).
 
 > **“Empty means inherit” requires a genuinely empty setting.** Writing an inheritance-based key as `KEY=` (nothing after the equals sign) is **not equivalent** to omitting the line: the empty string is treated as an explicit value and cuts the inheritance chain at that point. Before 2026-08-28, this is how `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` became an empty string, causing Stage 2 to construct a URL without a scheme every time and fail. When editing `.env` manually, **delete the whole line** instead of clearing the value after the equals sign. The GUI handles this for you and does not write empty inheritance-based keys to `.env`.
 
@@ -310,12 +311,12 @@ Both outcomes of `auto` are correct: when a local slot exists, sharing its gate 
 
 ### Main Chat Model
 
-The keys in this section and the following `Memory Consolidation Model` and `Memory Candidate Extraction` sections **remain the main configuration entry points**. They are what the wizard writes, and what the `Model ID` fields on the GUI local and spare endpoint cards edit. They also serve as the inheritance sources for the role keys above: when `LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` are empty, all use `LM_STUDIO_MODEL`. Fill the corresponding `LLM_ROLE_*` only when a role must differ from the local default.
+The keys in this section are the **connection parameters of the local endpoint slot (`LOCAL`)** — what the wizard and the GUI local card write. When `LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` are empty, all use `LLM_ENDPOINT_LOCAL_MODEL`. The old keys `LM_STUDIO_*` have been removed (lines left in a `.env` no longer take effect); `deploy init` / `migrate` converts their values into this section's new keys and removes the old lines. Fill the corresponding `LLM_ROLE_*` only when a role must differ from the local default.
 
 | Configuration | Default | Description |
 |---|---|---|
-| `LM_STUDIO_BASE_URL` | `http://127.0.0.1:1234` | LM Studio address |
-| `LM_STUDIO_MODEL` | empty | Model ID; when empty, the server chooses the default route |
+| `LLM_ENDPOINT_LOCAL_BASE_URL` | `http://127.0.0.1:1234` | LM Studio address |
+| `LLM_ENDPOINT_LOCAL_MODEL` | empty | Model ID; when empty, the server chooses the default route |
 | `LLM_TIMEOUT` | `90.0` | Timeout for one generation (seconds) |
 
 ### Memory Consolidation Model
@@ -324,9 +325,9 @@ Consolidation is separate from chat and can point to a different model on the sa
 
 | Configuration | Default | Description |
 |---|---|---|
-| `CONSOLIDATION_LM_STUDIO_BASE_URL` | same as `LM_STUDIO_BASE_URL` | Consolidation service address |
-| `CONSOLIDATION_LM_STUDIO_MODEL` | `google/gemma-4-e4b` | Consolidation model ID |
-| `CONSOLIDATION_LM_STUDIO_TEMPERATURE` | `0.3` | Low temperature for stable JSON output |
+| `LLM_ENDPOINT_EXTRA_BASE_URL` | same as `LLM_ENDPOINT_LOCAL_BASE_URL` | Consolidation service address (the `EXTRA` slot, with a gate independent of `LOCAL`) |
+| `LLM_ROLE_CONSOLIDATION_MODEL` | `google/gemma-4-e4b` | Consolidation model ID (what the GUI "Memory Consolidation Model ID" control writes) |
+| `LLM_ROLE_CONSOLIDATION_TEMPERATURE` | `0.3` | Low temperature for stable JSON output |
 | `CONSOLIDATION_LOCAL_BATCH_SIZE` | `30` | Normal consolidation batch size |
 | `CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE` | `10` | Small batch for the force path (before an @ trigger / proactive speaking) |
 | `CONSOLIDATION_OVERLAP` | `15` | Number of previous messages to review, preventing topics from being cut at batch boundaries |
@@ -349,7 +350,7 @@ The `CONSOLIDATION_LOCAL_*` values above are for the **local** endpoint. Local i
 
 > **Online endpoints should also tighten `LLM_ROLE_CONSOLIDATION_MAX_TOKENS`** (which by default inherits 1200 from `CONSOLIDATION_LOCAL_MAX_TOKENS`). Online model output is usually priced at 3~4 times the input price, while Stage 1 consolidation output rarely exceeds 800 tokens. Setting `800` removes a portion of pure unused allowance. **Do not reduce it below 600**: truncation causes JSON parsing to fail; see the previous caution. The default is intentionally unchanged because local inference is not billed and has no reason to be tightened.
 
-> `CONSOLIDATION_LM_STUDIO_BASE_URL` remains the inheritance source for the `EXTRA` endpoint slot. `CONSOLIDATION_LM_STUDIO_MODEL` / `_TEMPERATURE` / `CONSOLIDATION_LOCAL_MAX_TOKENS` remain the sources for `LLM_ROLE_CONSOLIDATION_*`. **Do not delete them just because role keys are now available**: deleting them also clears the address of the `EXTRA` slot. To move consolidation online, set `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY` and put the model in `LLM_ENDPOINT_ONLINE_MEMORY_MODEL`.
+> Consolidation's connection parameters live directly on `LLM_ENDPOINT_EXTRA_*` (address / key) and `LLM_ROLE_CONSOLIDATION_*` (model / temperature). The old keys `CONSOLIDATION_LM_STUDIO_*` have been removed; `deploy init` / `migrate` converts their values into the new keys and removes the old lines. To move consolidation online, set `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY` and put the model in `LLM_ENDPOINT_ONLINE_MEMORY_MODEL`.
 
 > **Note `CONSOLIDATION_LOCAL_MAX_TOKENS`**: batch 30 + overlap 15 means up to 45 messages can be supplied in one request. Truncation causes JSON parsing to fail, while the checkpoint **still advances** on a parse failure to prevent repeatedly rerunning the same batch. That batch of messages is then permanently lost. `core/llm/lm_studio.py` logs a warning when `finish_reason=length`; after running for a while, check the logs for it.
 
@@ -382,13 +383,10 @@ Stage 2 is **activated only when Stage 1 determines that the batch contains user
 | Configuration | Default | Description |
 |---|---|---|
 | `MEMORY_EXTRACT_ENABLED` | `true` | When disabled, falls back to one stage (the consolidation model produces everything in one pass) |
-| `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` | same as `LM_STUDIO_BASE_URL` | Extraction service address |
-| `MEMORY_EXTRACT_LM_STUDIO_API_KEY` | empty | API key if the extraction service requires authentication (leave empty for local services; on online endpoints the slot's `API_KEY` usually takes over) |
-| `MEMORY_EXTRACT_LM_STUDIO_MODEL` | same as `LM_STUDIO_MODEL` | Defaults to the main chat model |
-| `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | Extraction does not need creative variation, so it is lower than consolidation's 0.3 |
+| `LLM_ROLE_EXTRACT_TEMPERATURE` | `0.2` | Extraction does not need creative variation, so it is lower than consolidation's 0.3 |
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | Only a candidate array is output, so a large value is unnecessary |
 
-> These five `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` settings are the inheritance sources for `LLM_ROLE_EXTRACT_*`. To send Stage 2 to a strong online model, change `LLM_ROLE_EXTRACT_ENDPOINT` (the model comes from that endpoint's `MODEL`; write `LLM_ROLE_EXTRACT_MODEL` only when it must differ from other roles on the same endpoint). The settings in this section do not need to change.
+The model defaults to the main chat model (the local slot model `LLM_ENDPOINT_LOCAL_MODEL`). To send Stage 2 to a strong online model, change `LLM_ROLE_EXTRACT_ENDPOINT` (the model comes from that endpoint's `MODEL`; write `LLM_ROLE_EXTRACT_MODEL` only when it must differ from other roles on the same endpoint). The old keys `MEMORY_EXTRACT_LM_STUDIO_*` have been removed entirely and are converted automatically on upgrade — except `_BASE_URL` / `_API_KEY`, the old system's "fifth endpoint" parameters with no new-key equivalent: their values are dropped on merge. If you need a dedicated extraction endpoint, point the `EXTRA` slot at it and bind the `EXTRACT` role there.
 
 **Why split the stages**: a small model can summarize a topic, but in a noisy environment it systematically returns no candidates. On 2026-08-16, all 7 tested consolidation batches returned empty candidates even though the information was clearly present in the summaries it had written. It had read the information but actively discarded it; it had not failed to see it. Candidate extraction is a high-precision extraction task and is delegated to a larger model.
 
@@ -500,7 +498,6 @@ The reason for consolidating once when a session ends is that the conversation's
 | Configuration | Default | Description |
 |---|---|---|
 | `MEMORY_SOURCE_KIND_ENABLED` | `true` | When disabled, all messages have equal weight and the prompt does not label their sources |
-| `MEMORY_AT_MENTION_CONFIDENCE_BONUS` | `0.05` | Confidence bonus for candidates from the `AT_MENTION` source |
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | Confidence gain when the same fact recurs |
 | `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | Maximum time in the observation area; mark as `REJECTED` after expiry (do not delete). Time-sensitive types have shorter tiers; see below |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | Maximum accumulated `evidence` |
@@ -632,7 +629,6 @@ middle           → t = (SLOW - interval) / (SLOW - FAST)
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | Probability at the high-frequency end |
 | `PROACTIVE_PROB_AT_SLOW` | `0.0` | Probability at the quiet end |
 | `PROACTIVE_PROB_GAMMA` | `1.0` | Curve-shaping exponent; >1 is more conservative |
-| `PROACTIVE_TOPIC_WARMUP_SECONDS` | `45.0` | Topic warm-up duration; do not participate before it is reached |
 | `PROACTIVE_COOLDOWN` | `600` | Hard group-level cooldown (seconds) |
 | `PROACTIVE_CHECK_INTERVAL` | `60` | Scheduled check interval (seconds) |
 | `PROACTIVE_FREQ_WINDOW` | `10` | Frequency-estimation window (most recent N messages) |
@@ -672,11 +668,10 @@ For a practical frequency reference for the three presets (`CHECK_INTERVAL=60`):
 | `PROACTIVE_AT_ACTIVE_WITHIN` | `300.0` | Window for deciding that a user is “currently active” (seconds) |
 | `PROACTIVE_MAX_NO_REPLY` | `2` | Maximum consecutive non-responses before follow-up questions are paused |
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | Response-detection window (seconds) |
-| `PROACTIVE_COLDSTART_TOPICS` | see settings.py | Cold-start topic list, comma-separated |
 | `PROACTIVE_AT_EXCLUDE_USERS` | empty | QQ numbers that will not be selected for proactive conversation (comma-separated) |
 | `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | Candidate types that are never verified via a proactive follow-up (comma-separated; empty = any type may be asked about) |
 | `PROACTIVE_NATURALNESS_MODE` | `enforce` | Natural-continuation rollout: `enforce` applies skip cooldown; `observe` records decisions without blocking repeated attempts |
-| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | In-process negative cooldown after skipping the same candidate/cold-start topic; `0` disables it |
+| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | In-process negative cooldown after skipping the same candidate; `0` disables it |
 
 The exclusion list is primarily for **other AIs in the group**: mutually @-mentioning them can trigger an endless conversational loop. Excluded accounts are still passively collected (messages are stored and consolidated normally); the Bot simply does not ask them questions proactively.
 
@@ -688,7 +683,7 @@ Quota is counted when a mention is sent, regardless of whether the user responds
 
 The natural-continuation check reuses the existing Replyer generation and does not add a second LLM call. When the model emits the internal
 `[[STELLA_SKIP]]` marker exactly, the gateway sends nothing, does not consume the proactive-@ quota, and does not start response detection.
-With `PROACTIVE_NATURALNESS_MODE=enforce`, the same candidate or cold-start topic is not generated again during
+With `PROACTIVE_NATURALNESS_MODE=enforce`, the same candidate is not generated again during
 `PROACTIVE_SKIP_COOLDOWN_SECONDS`; a new message from the target user immediately clears that user's previous skip.
 Use `observe` to measure skip rate and generation cost during rollout without blocking repeated attempts.
 
@@ -832,7 +827,6 @@ Asynchronous background learning after a reply is sent (zero LLM): whether the u
 | `MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD` | `0.3` | Importance threshold for archiving low-value memories |
 | `MEMORY_ARCHIVE_INACTIVE_DAYS` | `180` | Days without access before low-value archival |
 | `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | Compression log (see [Logs](#logs)) |
-| `MEMORY_RECENCY_HALF_LIFE_DAYS` | `120.0` | Fallback recency half-life (days) |
 
 `MEMORY_DECAY_DAYS` is a dictionary in code, not an `.env` setting, defining the lifetime of each memory type:
 
@@ -1133,7 +1127,7 @@ Shutdown flow: deploy writes the sentinel → the in-Bot watcher detects it and 
 | Desired effect | Adjustment |
 |---|---|
 | Bot is too noisy | Lower `PROACTIVE_PROB_AT_FAST`; raise `PROACTIVE_COOLDOWN` and `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`; lower `PROACTIVE_AT_QUOTA_BASE`; or have an administrator say “mute” in the group to disable it temporarily |
-| Bot is too quiet | Raise `PROACTIVE_PROB_AT_FAST`; lower `PROACTIVE_TOPIC_WARMUP_SECONDS` |
+| Bot is too quiet | Raise `PROACTIVE_PROB_AT_FAST`; lower `warmup_messages` in `config/participation/thresholds.toml` |
 | Bot still talks late at night | Confirm `PROACTIVE_SLEEP_ENABLED=true` and check whether `PROACTIVE_SLEEP_START/END` cover the target period |
 | Bot sends several messages after waking | Raise `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | Bot does not remember things | Lower `MEMORY_OBSERVE_LOW_CONFIDENCE`; lower `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`; confirm `PROACTIVE_AT_ENABLED=true` (passive-ingestion output is close to zero) |

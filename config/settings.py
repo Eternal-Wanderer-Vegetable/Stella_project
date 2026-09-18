@@ -83,7 +83,6 @@ INSTANCE_ID = resolve_instance_id(PROJECT_ROOT)
 INSTANCE_RUNTIME_DIR = runtime_dir(STELLA_HOME, INSTANCE_ID)
 INSTANCE_PID_FILE = pid_path(STELLA_HOME, INSTANCE_ID)
 INSTANCE_MANIFEST_PATH = manifest_path(STELLA_HOME, INSTANCE_ID)
-INSTANCE_STOP_SENTINEL = stop_sentinel_path(STELLA_HOME, INSTANCE_ID)
 _custom_stop_sentinel = os.getenv("STELLA_STOP_SENTINEL", "").strip()
 if _custom_stop_sentinel:
     _custom_stop_path = Path(_custom_stop_sentinel).expanduser().resolve()
@@ -91,7 +90,7 @@ if _custom_stop_sentinel:
         f"{_custom_stop_path.stem}.{INSTANCE_ID}{_custom_stop_path.suffix}"
     )
 else:
-    STELLA_STOP_SENTINEL = INSTANCE_STOP_SENTINEL
+    STELLA_STOP_SENTINEL = stop_sentinel_path(STELLA_HOME, INSTANCE_ID)
 STELLA_LAUNCH_TOKEN = os.getenv(LAUNCH_TOKEN_ENV, "").strip()
 
 
@@ -105,7 +104,7 @@ def _env(key: str, default: str = "") -> str:
         key 对应的环境变量值；未设置时返回 default。
 
     注意「未设置」与「设为空」是两回事：``KEY=`` 会返回空字符串而不是 default。
-    这是有意的——``LM_STUDIO_API_KEY=`` 的空值本身就有意义（表示「不带 key」），
+    这是有意的——``LLM_ENDPOINT_LOCAL_API_KEY=`` 的空值本身就有意义（表示「不带 key」），
     一刀切回落会让用户无法表达它。**默认值需要继承另一个配置项时，用
     ``_env_inherit``**，那里空值才等同未设置。
     """
@@ -210,16 +209,76 @@ def _env_path(key: str, default: Path) -> Path:
         return default
     return Path(raw).expanduser().resolve()
 
-# ---------- 项目路径（自动校准） ----------
-# 与上文同样地向上定位项目根目录（以存在 core/ 目录为判据），
-# 确保后续 SYSTEM.md、数据库等相对路径都建立在根目录之上。
-_CURRENT_FILE = Path(__file__).resolve()
-_PROJECT_ROOT = _CURRENT_FILE.parent
-while _PROJECT_ROOT.parent != _PROJECT_ROOT:
-    if (_PROJECT_ROOT / "core").is_dir():
-        break
-    _PROJECT_ROOT = _PROJECT_ROOT.parent
-PROJECT_ROOT = _PROJECT_ROOT
+
+def _env_bool(key: str, default: str = "true") -> bool:
+    """读取布尔环境变量；default 取 "true" / "false" 字符串。
+
+    default 刻意用字符串而不是 Python 布尔：deploy/env_schema.py 靠 AST 静态
+    读取字面量生成 GUI 默认值，"true" 落到 .env 模板与 GUI 显示的口径才一致。
+    真值集与 deploy/env_keys.py 的 _bool 保持一致（true/1/yes，大小写不敏感，
+    容忍首尾空白与成对引号），并有测试锁定两处口径不漂移；其余值告警回默认。
+    """
+    raw = os.getenv(key, "").strip().strip("\"'")
+    if not raw:
+        return default == "true"
+    lowered = raw.lower()
+    if lowered in ("true", "1", "yes"):
+        return True
+    if lowered in ("false", "0", "no"):
+        return False
+    from nonebot import logger
+    logger.warning(f"⚠️ 配置项 {key}={raw!r} 不是有效布尔值，使用默认值 {default}")
+    return default == "true"
+
+
+def _env_int_set(key: str, default: str = "") -> set[int]:
+    """读取逗号分隔的整数集合环境变量；非法片段告警并跳过。
+
+    早期实现是裸 ``{int(x) ...}`` 推导，.env 里一个 ``12a`` 就会让本模块
+    import 直接抛异常、Bot 起不来——宁缺毋滥地丢掉坏片段并留痕，好过整站拒绝启动。
+    """
+    raw = os.getenv(key, "").strip() or default
+    result: set[int] = set()
+    for fragment in raw.split(","):
+        fragment = fragment.strip()
+        if not fragment:
+            continue
+        try:
+            result.add(int(fragment))
+        except ValueError:
+            from nonebot import logger
+            logger.warning(f"⚠️ 配置项 {key} 含非法整数片段 {fragment!r}，已忽略")
+    return result
+
+
+def _env_str_list(key: str, default: str = "", upper: bool = False) -> list[str]:
+    """读取逗号分隔的字符串列表环境变量；保序、去空片段，upper=True 时统一大写。"""
+    raw = os.getenv(key, "").strip() or default
+    result = [fragment.strip() for fragment in raw.split(",") if fragment.strip()]
+    return [fragment.upper() for fragment in result] if upper else result
+
+
+def _env_choice(
+    key: str, default: str, choices: tuple[str, ...], on_invalid: str | None = None
+) -> str:
+    """读取枚举环境变量：strip/lower 后必须落在 choices 内。
+
+    空值回 default；非法值告警并回 on_invalid（未指定则 default）。个别键的
+    保守兜底与默认值不同（如 PROACTIVE_NATURALNESS_MODE 非法时回 observe
+    而默认是 enforce），用 on_invalid 表达，替代各自手写的 if 改写。
+    choices 用字面量元组：deploy/env_schema.py 靠 AST 读它生成 GUI 下拉选项。
+    """
+    raw = os.getenv(key, "").strip().lower()
+    if not raw:
+        return default
+    if raw in choices:
+        return raw
+    fallback = default if on_invalid is None else on_invalid
+    from nonebot import logger
+    logger.warning(
+        f"⚠️ 配置项 {key}={raw!r} 不是有效选项（可选：{'/'.join(choices)}），使用 {fallback}"
+    )
+    return fallback
 
 
 def _user_path(relative: str) -> Path:
@@ -269,7 +328,7 @@ BOOT_DIAG_LOG_PATH = _env_path("BOOT_DIAG_LOG_PATH", LOG_DIR / "boot_debug.log")
 # ---------- QQ 群聊 ----------
 # 逗号分隔的群号字符串转为 int 集合；过滤空片段避免尾逗号导致 int('') 报错。
 # 群号从 .env 的 ALLOWED_GROUPS 读取（用英文逗号分隔多个群号）。
-ALLOWED_GROUPS = {int(x) for x in _env("ALLOWED_GROUPS", "").split(",") if x.strip()}
+ALLOWED_GROUPS = _env_int_set("ALLOWED_GROUPS")
 
 # ---------- 上下文 ----------
 # 每次回复时附加的最近原始消息条数（含 Bot 自己的发言）。
@@ -303,7 +362,7 @@ SHORT_TERM_SUMMARY_STALE_MINUTES = _env_float("SHORT_TERM_SUMMARY_STALE_MINUTES"
 #   话题摘要：整合器产出的跨会话背景
 # 重叠会导致同一段对话出现两个版本，模型以摘要为准从而接错话题
 # （2026-08-13 缺陷的成因）。
-SESSION_CONTEXT_ENABLED = _env("SESSION_CONTEXT_ENABLED", "true").lower() in ("true", "1", "yes")
+SESSION_CONTEXT_ENABLED = _env_bool("SESSION_CONTEXT_ENABLED", "true")
 # 待压缩文本超过该 token 估算值才触发压缩。
 # 不是每轮都压缩：27B 在 GPU 上约 2 秒，但每轮多一次调用会让 COMPACT 角色所在
 # 那道闸门（纯本地默认是 LOCAL 槽，与聊天同一道）的串行等待明显放大。
@@ -324,7 +383,7 @@ PROACTIVE_LONG_TERM_LIMIT = _env_int("PROACTIVE_LONG_TERM_LIMIT", 10)
 # @-回复时引用的该用户近期长期记忆条数
 REPLY_LONG_TERM_LIMIT = _env_int("REPLY_LONG_TERM_LIMIT", 3)
 # @-回复时是否启用旧记忆话题匹配（对非该用户的旧记忆做关键词相关度筛选）
-LONG_TERM_RELEVANCE_ENABLED = _env("LONG_TERM_RELEVANCE_ENABLED", "true").lower() in ("true", "1", "yes")
+LONG_TERM_RELEVANCE_ENABLED = _env_bool("LONG_TERM_RELEVANCE_ENABLED", "true")
 # 从用户消息中提取的关键词数量（用于匹配旧记忆摘要）
 LONG_TERM_RELEVANCE_KEYWORDS = _env_int("LONG_TERM_RELEVANCE_KEYWORDS", 5)
 # 相关记忆检索的候选数量上限
@@ -338,11 +397,11 @@ LONG_TERM_RELEVANCE_WEIGHT_USER_RELEVANCE = _env_float("LONG_TERM_RELEVANCE_WEIG
 
 # ---------- RAG（检索增强生成）配置 ----------
 # 是否启用基于 SQLite 的 RAG 检索
-RAG_ENABLED = _env("RAG_ENABLED", "true").lower() in ("true", "1", "yes")
+RAG_ENABLED = _env_bool("RAG_ENABLED", "true")
 # 每次检索时返回的相关记忆上限
 RAG_TOP_K = _env_int("RAG_TOP_K", 5)
 # 是否启用 SQLite FTS5 作为记忆检索索引
-RAG_SQLITE_FTS_ENABLED = _env("RAG_SQLITE_FTS_ENABLED", "true").lower() in ("true", "1", "yes")
+RAG_SQLITE_FTS_ENABLED = _env_bool("RAG_SQLITE_FTS_ENABLED", "true")
 
 # ---------- 候选强化（交叉验证） ----------
 # 同一事实被再次独立观察到时的置信度增益。这是「暂存 → 交叉验证 → 逐步强化」
@@ -382,7 +441,7 @@ MEMORY_CANDIDATE_DEFAULT_IMPORTANCE = _env_float("MEMORY_CANDIDATE_DEFAULT_IMPOR
 MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE = _env_int("MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE", 2)
 # AT_MENTION（用户直接对 Bot 说）是高密度、高意图证据，单次即可晋升。
 # 关闭后 AT_MENTION 与 PASSIVE 同等对待（仍需复现）。
-MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT = _env("MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT", "true").lower() in ("true", "1", "yes")
+MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT = _env_bool("MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT", "true")
 # 晋升所需的最低重要度：importance 由 LLM 自评、可靠性最低，
 # 因此只作为「淘汰过于琐碎的信息」的下限，不单独构成晋升依据。
 MEMORY_PROMOTE_MIN_IMPORTANCE = _env_float("MEMORY_PROMOTE_MIN_IMPORTANCE", 0.3)
@@ -390,7 +449,7 @@ MEMORY_PROMOTE_MIN_IMPORTANCE = _env_float("MEMORY_PROMOTE_MIN_IMPORTANCE", 0.3)
 # ---------- 每用户记忆配额（宁缺毋滥的硬约束） ----------
 # 是否真正执行淘汰。**默认关闭**：先以 dry-run 观察它想淘汰什么，
 # 确认合理后再打开。打开后会把超额记忆置 archived（不删除，但退出检索）。
-MEMORY_QUOTA_ENFORCE = _env("MEMORY_QUOTA_ENFORCE", "false").lower() in ("true", "1", "yes")
+MEMORY_QUOTA_ENFORCE = _env_bool("MEMORY_QUOTA_ENFORCE", "false")
 # 单用户在单群的 active 记忆上限。到顶后新记忆必须挤掉现存最弱的一条。
 # 依据：一个用户真正有价值的稳定事实数量有限；上限封顶使呈现层总量可控，
 # 天然对抗捕获层放宽带来的膨胀。
@@ -406,7 +465,7 @@ MEMORY_QUOTA_CONFIRMATION_CAP = _env_int("MEMORY_QUOTA_CONFIRMATION_CAP", 3)
 
 # ---------- 记忆系统 v2（Memory Policy / Retrieval v2） ----------
 # 总开关：False 时回退旧系统（旧 Consolidator 输出、旧 Retriever、旧 Prompt Builder）
-MEMORY_V2_ENABLED = _env("MEMORY_V2_ENABLED", "true").lower() in ("true", "1", "yes")
+MEMORY_V2_ENABLED = _env_bool("MEMORY_V2_ENABLED", "true")
 
 # Mode 检测的最低调用分数：detect_mode 打分制下，得分低于该值的信号不足以把
 # 模式从 CASUAL_REPLY 改判为其他模式。可调、可 benchmark（越高越保守）。
@@ -441,27 +500,22 @@ MEMORY_SCORE_W_IMPORTANCE = _env_float("MEMORY_SCORE_W_IMPORTANCE", 0.05)
 # 已是实质淘汰，会让矩阵漏写直接决定排序结果；0.75 保留兼容项仍能参与排序。
 USAGE_TYPE_MISMATCH_PENALTY = _env_float("USAGE_TYPE_MISMATCH_PENALTY", 0.75)
 
-# Recency 兜底半衰期（天）：记忆类型没有 MEMORY_DECAY_DAYS 条目时用此值
-MEMORY_RECENCY_HALF_LIFE_DAYS = _env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 120.0)
-
 # ---------- 消息来源分级（source_kind） ----------
 # @ 对话是唯一稳定的用户信息源（依据 check_point#1：群聊主体为角色扮演，
 # 被动摄入的可提取信息极少）。开关关闭时退回「所有消息等权」的旧行为：
-# prompt 不标注来源、候选不加置信度奖励；schema 字段仍然写入（无害，便于审计）。
-MEMORY_SOURCE_KIND_ENABLED = _env("MEMORY_SOURCE_KIND_ENABLED", "true").lower() in ("true", "1", "yes")
-# AT_MENTION 来源候选的置信度奖励。仅作微调，不足以让低置信候选越过
-# consolidation_prompt 的 0.7 门槛或 MEMORY_OBSERVE_LOW_CONFIDENCE。
-MEMORY_AT_MENTION_CONFIDENCE_BONUS = _env_float("MEMORY_AT_MENTION_CONFIDENCE_BONUS", 0.05)
+# prompt 不标注来源；schema 字段仍然写入（无害，便于审计）。
+MEMORY_SOURCE_KIND_ENABLED = _env_bool("MEMORY_SOURCE_KIND_ENABLED", "true")
 
 # ---------- 记忆语义检索（可选，Embedding） ----------
 # 默认关闭：语义分用 memory.policy 的规则版（词面 Jaccard，离线、确定）。
 # 打开后走本地 LM Studio /v1/embeddings 计算查询与记忆的余弦相似度，语义分真正可区分；
 # 模型/服务不可用时自动回退规则版，保证链路不中断。
-MEMORY_EMBEDDING_ENABLED = _env("MEMORY_EMBEDDING_ENABLED", "false").lower() in ("true", "1", "yes")
+MEMORY_EMBEDDING_ENABLED = _env_bool("MEMORY_EMBEDDING_ENABLED", "false")
 MEMORY_EMBEDDING_BASE_URL = _env("MEMORY_EMBEDDING_BASE_URL", "http://127.0.0.1:1234")
 MEMORY_EMBEDDING_MODEL = _env("MEMORY_EMBEDDING_MODEL", "")
 # embedding 走哪个端点槽的闸门：auto | <端点槽名> | none。取代旧的布尔键
-# LLM_SCHEDULER_GATE_EMBEDDING（true→auto、false→none，旧键仍被兼容读取）。
+# LLM_SCHEDULER_GATE_EMBEDDING（true→auto、false→none，旧键已随兼容层删除，
+# deploy init / migrate 会把旧值换算过来）。
 # auto 的判定是确定性的、doctor 会打印结果：**若存在 KIND=local 且 BASE_URL 与
 # MEMORY_EMBEDDING_BASE_URL 相同的端点槽 → 共用该槽闸门；否则独立不排队。**
 # 为什么不能沿用旧的布尔默认值：旧默认把 embedding 挂在「主聊天」闸门上，理由是
@@ -478,16 +532,15 @@ MEMORY_EMBEDDING_CONTEXTUAL_MIN = _env_float("MEMORY_EMBEDDING_CONTEXTUAL_MIN", 
 
 # ---------- 个性化称呼 ----------
 # 称呼配置只由明确的自然语言请求修改；embedding 只负责意图筛选，不直接写库。
-ADDRESSING_ENABLED = _env("ADDRESSING_ENABLED", "true").lower() in ("true", "1", "yes")
-ADDRESSING_SEMANTIC_ENABLED = _env(
-    "ADDRESSING_SEMANTIC_ENABLED", "true"
-).lower() in ("true", "1", "yes")
+ADDRESSING_ENABLED = _env_bool("ADDRESSING_ENABLED", "true")
+ADDRESSING_SEMANTIC_ENABLED = _env_bool("ADDRESSING_SEMANTIC_ENABLED", "true")
 ADDRESSING_INTENT_TIMEOUT = _env_float(
     "ADDRESSING_INTENT_TIMEOUT", MEMORY_EMBEDDING_TIMEOUT
 )
 ADDRESSING_INTENT_THRESHOLD = _env_float("ADDRESSING_INTENT_THRESHOLD", 0.58)
 ADDRESSING_INTENT_MARGIN = _env_float("ADDRESSING_INTENT_MARGIN", 0.06)
 
+# ---------- 记忆检索分数与模式限额 ----------
 # 记忆进入 Prompt 的最低分数门槛（宁缺毋滥）：
 # rank_memories 给出的 _score 低于此值时不进聊天素材。避免“合法候选足够多就
 # 一定填满 mode_limit”的超召回噪音（Retrieval Spec 第 7 节：不要固定 Top-K）。
@@ -506,6 +559,7 @@ MEMORY_LIMIT_EMOTIONAL = _env_int("MEMORY_LIMIT_EMOTIONAL", 3)
 MEMORY_LIMIT_CONFLICT_AVOID = _env_int("MEMORY_LIMIT_CONFLICT_AVOID", 10)
 MEMORY_LIMIT_GROUP_EVENT = _env_int("MEMORY_LIMIT_GROUP_EVENT", 5)
 
+# ---------- Prompt 记忆预算 ----------
 # Prompt 长度控制（Gemma 27B 虽支持较长上下文，但记忆不是越多越好）
 #   Conversation Memory 上限（普通聊天）
 MEMORY_CONVERSATION_MAX_TOKENS = _env_int("MEMORY_CONVERSATION_MAX_TOKENS", 500)
@@ -514,6 +568,7 @@ MEMORY_BEHAVIOR_MAX_TOKENS = _env_int("MEMORY_BEHAVIOR_MAX_TOKENS", 150)
 #   技术场景 Conversation 上限
 MEMORY_CONVERSATION_TECH_MAX_TOKENS = _env_int("MEMORY_CONVERSATION_TECH_MAX_TOKENS", 1000)
 
+# ---------- 记忆类型生命周期 ----------
 # 记忆类型生命周期（衰减用，天）；FACT 极慢 → GROUP_CONTEXT 很快
 MEMORY_DECAY_DAYS: dict[str, float] = {
     "FACT": 730.0,
@@ -525,8 +580,9 @@ MEMORY_DECAY_DAYS: dict[str, float] = {
     "GROUP_CONTEXT": 30.0,
 }
 
+# ---------- 决策追踪与评测 ----------
 # 决策追踪（Evaluation & Debug：记录为什么调用/拒绝记忆）
-MEMORY_TRACE_ENABLED = _env("MEMORY_TRACE_ENABLED", "true").lower() in ("true", "1", "yes")
+MEMORY_TRACE_ENABLED = _env_bool("MEMORY_TRACE_ENABLED", "true")
 # 决策追踪表名
 MEMORY_TRACE_TABLE = _env("MEMORY_TRACE_TABLE", "memory_traces")
 
@@ -535,15 +591,7 @@ MEMORY_BENCHMARK_DIR = _env_path(
     "MEMORY_BENCHMARK_DIR", PROJECT_ROOT / "memory" / "benchmark"
 )
 
-# ---------- 本地 LLM（LM Studio） ----------
-# 本段是**旧键**，保留为「LLM 端点 / LLM 角色」两节的默认继承来源：未迁移的 .env
-# 只填这三个键也能照旧跑（LOCAL 槽与 CHAT/ROUTER/COMPACT 角色都默认继承它们）。
-# 新配置请直接写 LLM_ENDPOINT_* / LLM_ROLE_*，见本文件末尾那两节。
-LM_STUDIO_BASE_URL = _env("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234")
-LM_STUDIO_MODEL = _env("LM_STUDIO_MODEL", "")
-# 远程 OpenAI 兼容 API 的 Bearer Token；本地 LM Studio 留空
-LM_STUDIO_API_KEY = _env("LM_STUDIO_API_KEY", "")
-
+# ---------- LLM 调用预算（超时与上下文窗口） ----------
 # LLM 调用超时（秒）
 LLM_TIMEOUT = _env_float("LLM_TIMEOUT", 90.0)
 
@@ -568,27 +616,17 @@ LLM_SCHEDULER_HOLD_WARN_SECONDS = _env_float("LLM_SCHEDULER_HOLD_WARN_SECONDS", 
 LLM_SCHEDULER_QUEUE_WARN_DEPTH = _env_int("LLM_SCHEDULER_QUEUE_WARN_DEPTH", 3)
 # 优先级排队**尚未实现**，保留开关：先以 FIFO + snapshot() 积累真实排队数据，
 # 多群上线后据数据再决定是否偏离 FIFO。
-LLM_SCHEDULER_PRIORITY_ENABLED = _env("LLM_SCHEDULER_PRIORITY_ENABLED", "false").lower() in ("true", "1", "yes")
-# **已被 MEMORY_EMBEDDING_GATE 取代**，保留仅为兼容未迁移的 .env：
-# 未显式设置 MEMORY_EMBEDDING_GATE 时，本键 false 等价于 GATE=none、true 等价于 auto。
-# 旧语义：embedding 默认与主聊天同实例（一次检索可编码 20+ 条），需走 chat 闸门；
-# 独立实例部署（与聊天模型隔离）时可关闭。
-LLM_SCHEDULER_GATE_EMBEDDING = _env("LLM_SCHEDULER_GATE_EMBEDDING", "true").lower() in ("true", "1", "yes")
+LLM_SCHEDULER_PRIORITY_ENABLED = _env_bool("LLM_SCHEDULER_PRIORITY_ENABLED", "false")
 
 # ---------- 记忆整合 ----------
-# 数据整理任务与主聊天模型分离，避免显存/推理竞争；可指向同一实例的多模型或独立端口。
-# 留空则继承主聊天配置。
+# 数据整理任务与主聊天模型分离：连接参数在端点段的 EXTRA 槽
+# （LLM_ENDPOINT_EXTRA_BASE_URL / _API_KEY），模型与温度是角色段的
+# LLM_ROLE_CONSOLIDATION_MODEL / _TEMPERATURE（GUI「记忆整合模型 ID」卡片
+# 写的即模型项）。
 # 历史注记：_deprecated/core_llm_flexiweb.py 那套「用 Playwright 抓网页充当在线模型」的
-# 整合流程已弃用，**与本项无关**——本项一直在用。（这句话里的「弃用」曾让
-# deploy/env_schema.py 的注释子串匹配把本项误判为废弃键、从 GUI 里整个丢掉；
+# 整合流程已弃用，**与本节无关**——本节一直在用。（这句话里的「弃用」曾让
+# deploy/env_schema.py 的注释子串匹配把本节误判为废弃键、从 GUI 里整个丢掉；
 # 现判据已改走 deploy/env_keys.py 的显式登记表，不再猜注释。）
-CONSOLIDATION_LM_STUDIO_BASE_URL = _env_inherit("CONSOLIDATION_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
-# 记忆整合用的 API key（默认与主聊天共用；远程 API 时填写）
-CONSOLIDATION_LM_STUDIO_API_KEY = _env_inherit("CONSOLIDATION_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
-# 注意：LM Studio 路由需要完整模型 ID（含 google/ 前缀），如 google/gemma-4-e4b
-CONSOLIDATION_LM_STUDIO_MODEL = _env("CONSOLIDATION_LM_STUDIO_MODEL", "google/gemma-4-e4b")
-# 整理任务偏低温度，保证 JSON 输出稳定
-CONSOLIDATION_LM_STUDIO_TEMPERATURE = _env_float("CONSOLIDATION_LM_STUDIO_TEMPERATURE", 0.3)
 
 # 整合批次大小（整合模型上下文窗口足够，可从旧值 10 放宽）
 CONSOLIDATION_LOCAL_BATCH_SIZE = _env_int("CONSOLIDATION_LOCAL_BATCH_SIZE", 30)
@@ -630,21 +668,18 @@ CONSOLIDATION_ONLINE_OVERLAP = _env_int("CONSOLIDATION_ONLINE_OVERLAP", 0)
 CONSOLIDATION_MAX_SKIP_STREAK = _env_int("CONSOLIDATION_MAX_SKIP_STREAK", 3)
 
 # ---------- 记忆候选提取（两阶段整合的第二阶段） ----------
-# 整合拆两步：阶段1（E4B）出短期摘要+用户画像+自我披露判断；阶段2（本段配置的
-# 模型）只做一件高精度的事——从消息里精确提取「用户亲口说的、关于自己的稳定信息」。
-# 依据（log_2026_8_16_1717）：E4B 能总结主题，却系统性地把候选提取判空
+# 整合拆两步：阶段1（整合模型）出短期摘要+用户画像+自我披露判断；阶段2（EXTRACT
+# 角色）只做一件高精度的事——从消息里精确提取「用户亲口说的、关于自己的稳定信息」。
+# 依据（log_2026_8_16_1717）：整合模型能总结主题，却系统性地把候选提取判空
 # （7 批全空，且明确「读到了信息但主动弃掉」）。候选提取是高精度抽取任务，
-# 交给主聊天用的 27B。默认全部继承主聊天配置（即 27B），保留独立键便于将来替换。
-MEMORY_EXTRACT_LM_STUDIO_BASE_URL = _env_inherit("MEMORY_EXTRACT_LM_STUDIO_BASE_URL", LM_STUDIO_BASE_URL)
-MEMORY_EXTRACT_LM_STUDIO_API_KEY = _env_inherit("MEMORY_EXTRACT_LM_STUDIO_API_KEY", LM_STUDIO_API_KEY)
-MEMORY_EXTRACT_LM_STUDIO_MODEL = _env_inherit("MEMORY_EXTRACT_LM_STUDIO_MODEL", LM_STUDIO_MODEL)
+# 默认交给主聊天模型（LOCAL 槽模型）。
 # 提取偏低温度保证 JSON 稳定；比整合的 0.3 再低一点，抽取任务不需要发散
-MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE = _env_float("MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE", 0.2)
+# （正式出处是角色段的 LLM_ROLE_EXTRACT_TEMPERATURE）。
 # 提取只输出 memory_candidates 数组，不需要很大；但要容纳多条候选
 MEMORY_EXTRACT_MAX_TOKENS = _env_int("MEMORY_EXTRACT_MAX_TOKENS", 1000)
-# 阶段2 总开关。关闭时退回单阶段（E4B 一次性出全部，即 af60473 之前的行为），
+# 阶段2 总开关。关闭时退回单阶段（整合模型一次性出全部，即 af60473 之前的行为），
 # 用于对照与回退。
-MEMORY_EXTRACT_ENABLED = _env("MEMORY_EXTRACT_ENABLED", "true").lower() in ("true", "1", "yes")
+MEMORY_EXTRACT_ENABLED = _env_bool("MEMORY_EXTRACT_ENABLED", "true")
 
 # ---------- 整合调度 ----------
 # 定时整合的检查间隔（秒）。整合此前只在 @ 触发与主动发言前进行，
@@ -671,7 +706,7 @@ USER_TIMEZONE = _env("USER_TIMEZONE", "")
 
 # ---------- 主动发言 ----------
 # 是否启用主动发言
-PROACTIVE_ENABLED = _env("PROACTIVE_ENABLED", "true").lower() in ("true", "1", "yes")
+PROACTIVE_ENABLED = _env_bool("PROACTIVE_ENABLED", "true")
 # 群级硬冷却（秒）：两次主动发言之间的最小间隔。
 # 120s 配合 CHECK_INTERVAL=30s / PROB_AT_FAST=0.35 时实测约每 3~4 分钟发言一次，过于频繁。
 PROACTIVE_COOLDOWN = _env_int("PROACTIVE_COOLDOWN", 600)
@@ -696,7 +731,7 @@ CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGE
 # 但**被 @ 时照常回复**——用户主动叫它却不回应看起来像掉线，
 # 且 AT_MENTION 是当前唯一的记忆来源，睡眠期不回复等于每天损失数小时采集。
 # 被动信息收集（消息落库、整合）在睡眠期照常进行。
-PROACTIVE_SLEEP_ENABLED = _env("PROACTIVE_SLEEP_ENABLED", "true").lower() in ("true", "1", "yes")
+PROACTIVE_SLEEP_ENABLED = _env_bool("PROACTIVE_SLEEP_ENABLED", "true")
 # 睡眠起止（HH:MM，USER_TIMEZONE 时区下的墙上时间——它描述人类作息，与 DB
 # 时间戳的 UTC 无关；未配置 USER_TIMEZONE 时即服务器本地时间）。
 # 支持跨午夜：START > END 时视为跨天区间。
@@ -706,37 +741,29 @@ PROACTIVE_SLEEP_END = _env("PROACTIVE_SLEEP_END", "07:30")
 # 积压一夜的活跃度统计会让它一睁眼就连发几句。
 PROACTIVE_WAKEUP_GRACE_SECONDS = _env_float("PROACTIVE_WAKEUP_GRACE_SECONDS", 900.0)
 # 是否在入睡/苏醒时向群里播报一句
-PROACTIVE_SLEEP_ANNOUNCE = _env("PROACTIVE_SLEEP_ANNOUNCE", "true").lower() in ("true", "1", "yes")
+PROACTIVE_SLEEP_ANNOUNCE = _env_bool("PROACTIVE_SLEEP_ANNOUNCE", "true")
 # 播报台词（逗号分隔多条，随机选一条；留空则不播报对应时段）
-PROACTIVE_SLEEP_MESSAGES = [
-    t.strip()
-    for t in _env(
-        "PROACTIVE_SLEEP_MESSAGES",
-        "我先去睡了，晚安~,有点困了，明天聊,睡觉去了，你们别聊太晚",
-    ).split(",")
-    if t.strip()
-]
-PROACTIVE_WAKEUP_MESSAGES = [
-    t.strip()
-    for t in _env(
-        "PROACTIVE_WAKEUP_MESSAGES",
-        "早，我回来了,睡醒了，早上好,起床了~",
-    ).split(",")
-    if t.strip()
-]
+PROACTIVE_SLEEP_MESSAGES = _env_str_list(
+    "PROACTIVE_SLEEP_MESSAGES",
+    "我先去睡了，晚安~,有点困了，明天聊,睡觉去了，你们别聊太晚",
+)
+PROACTIVE_WAKEUP_MESSAGES = _env_str_list(
+    "PROACTIVE_WAKEUP_MESSAGES",
+    "早，我回来了,睡醒了，早上好,起床了~",
+)
 
 # ---------- 主动发言：运行时开关 ----------
 # 管理员可在群内临时关闭主动发言（配置级开关之外的另一道闸门），
 # 便于部署者在群成员反馈后即时调整，避免未知问题打扰正常聊天。
 # 运行时开关持久化在 group_runtime_state 表，重启后仍生效——
 # 管理员关掉它通常是因为出了问题，重启不该把它悄悄打开。
-PROACTIVE_RUNTIME_TOGGLE_ENABLED = _env("PROACTIVE_RUNTIME_TOGGLE_ENABLED", "true").lower() in ("true", "1", "yes")
+PROACTIVE_RUNTIME_TOGGLE_ENABLED = _env_bool("PROACTIVE_RUNTIME_TOGGLE_ENABLED", "true")
 # 允许操作运行时开关的用户（QQ 号，逗号分隔）。留空则仅群主/管理员可操作。
-PROACTIVE_TOGGLE_ADMINS = {int(x) for x in _env("PROACTIVE_TOGGLE_ADMINS", "").split(",") if x.strip()}
+PROACTIVE_TOGGLE_ADMINS = _env_int_set("PROACTIVE_TOGGLE_ADMINS")
 
 # ---------- 主动发言 v2：话题参与概率曲线（双锚点插值） ----------
 # 同一条曲线通过参数即可表达两种意图，无需模式开关：
-#   「热闹时插话」（新默认）：PROB_AT_FAST=0.35, PROB_AT_SLOW=0.0
+#   「热闹时插话」（新默认）：PROB_AT_FAST=0.15, PROB_AT_SLOW=0.0（0.35 偏吵，已调低）
 #   「热闹时闭嘴」（旧行为）：PROB_AT_FAST=0.05, PROB_AT_SLOW=0.5
 #   完全关闭：两个锚点都设 0
 # 群性质差异大（闲聊群 vs 技术群），因此这条曲线必须现场可调。
@@ -746,23 +773,21 @@ PROACTIVE_PROB_AT_FAST = _env_float("PROACTIVE_PROB_AT_FAST", 0.15)
 PROACTIVE_PROB_AT_SLOW = _env_float("PROACTIVE_PROB_AT_SLOW", 0.0)
 # 曲线整形指数：1.0 线性；>1 把高概率压缩到最活跃一端（更保守）；<1 更平坦
 PROACTIVE_PROB_GAMMA = _env_float("PROACTIVE_PROB_GAMMA", 1.0)
-# 话题预热：话题刚开始时模型总结不出主题，贸然插话会答非所问
-PROACTIVE_TOPIC_WARMUP_SECONDS = _env_float("PROACTIVE_TOPIC_WARMUP_SECONDS", 45.0)
 
 # ---------- 主动发言 v2：每用户 @ 配额 ----------
 # 主动 @ 是侵入性最强的行为，必须有硬上限。基础 2 次/天，高频发言者小幅上浮：
 # 依据是双向的——高频用户信息产出多、值得多问，且对群内消息容忍度更高。
 # 但奖励幅度必须小，上限封顶在 BASE + BONUS_MAX，杜绝「越活跃越被骚扰」。
-PROACTIVE_AT_ENABLED = _env("PROACTIVE_AT_ENABLED", "true").lower() in ("true", "1", "yes")
+PROACTIVE_AT_ENABLED = _env_bool("PROACTIVE_AT_ENABLED", "true")
 PROACTIVE_AT_QUOTA_BASE = _env_int("PROACTIVE_AT_QUOTA_BASE", 2)
 PROACTIVE_AT_QUOTA_BONUS_MAX = _env_int("PROACTIVE_AT_QUOTA_BONUS_MAX", 2)
 PROACTIVE_AT_BONUS_MSGS_LOW = _env_int("PROACTIVE_AT_BONUS_MSGS_LOW", 20)
 PROACTIVE_AT_BONUS_MSGS_HIGH = _env_int("PROACTIVE_AT_BONUS_MSGS_HIGH", 100)
 # 主动提问的自然度灰度：enforce 执行 skip 冷却，observe 只让新消息清理/日志链路运行。
 # 模型已经明确输出 skip 时始终不向用户发送内部标记。
-PROACTIVE_NATURALNESS_MODE = _env("PROACTIVE_NATURALNESS_MODE", "enforce").strip().lower()
-if PROACTIVE_NATURALNESS_MODE not in {"observe", "enforce"}:
-    PROACTIVE_NATURALNESS_MODE = "observe"
+PROACTIVE_NATURALNESS_MODE = _env_choice(
+    "PROACTIVE_NATURALNESS_MODE", "enforce", ("observe", "enforce"), on_invalid="observe"
+)
 # 同一候选/冷启动话题在 skip 后的最小重试间隔；0 表示关闭负向冷却。
 PROACTIVE_SKIP_COOLDOWN_SECONDS = _env_float("PROACTIVE_SKIP_COOLDOWN_SECONDS", 900.0)
 # 同一用户两次主动 @ 的最小间隔（秒），默认 2 小时
@@ -773,20 +798,11 @@ PROACTIVE_AT_ACTIVE_WITHIN = _env_float("PROACTIVE_AT_ACTIVE_WITHIN", 300.0)
 PROACTIVE_MAX_NO_REPLY = _env_int("PROACTIVE_MAX_NO_REPLY", 2)
 # 回应检测窗口（秒）：发出提问后该用户在此窗口内有任何发言即视为有回应
 PROACTIVE_REPLY_WINDOW_SECONDS = _env_float("PROACTIVE_REPLY_WINDOW_SECONDS", 300.0)
-# 冷启动话题清单（无候选可验证时用，逗号分隔）
-PROACTIVE_COLDSTART_TOPICS = [
-    t.strip()
-    for t in _env(
-        "PROACTIVE_COLDSTART_TOPICS",
-        "最近在玩什么游戏,平时喜欢吃什么,今天天气怎么样,最近在忙什么,平时用什么设备",
-    ).split(",")
-    if t.strip()
-]
 # 主动 @ 的排除名单（QQ 号，逗号分隔）：这些账号不会被选为主动搭话对象。
 # 主要用途是群内其他 AI ——互相 @ 会触发无终止的循环对话。
 # 注意：被排除的账号仍会被动收集信息（消息照常落库与整合），
 # 只是不主动向它们提问。
-PROACTIVE_AT_EXCLUDE_USERS = {int(x) for x in _env("PROACTIVE_AT_EXCLUDE_USERS", "").split(",") if x.strip()}
+PROACTIVE_AT_EXCLUDE_USERS = _env_int_set("PROACTIVE_AT_EXCLUDE_USERS")
 # 不参与「主动验证」的候选类型（逗号分隔；留空表示所有类型都可验证）。
 # 主动 @ 的配额极其稀缺（默认每人每天 2 次），而验证的目的是把候选推过晋升线、
 # 变成**长期**记忆。对时效型信息这笔配额本身就花错了：等确认下来，信息已经过期。
@@ -795,11 +811,9 @@ PROACTIVE_AT_EXCLUDE_USERS = {int(x) for x in _env("PROACTIVE_AT_EXCLUDE_USERS",
 # GROUP_CONTEXT 另有一层理由：它归属于群而不是人，向某个人验证群层面的事本身错位。
 # 注意：排除的只是**主动追问**这一条路径。这些候选照常落库、照常可以凭 AT_MENTION
 # 单次晋升或靠被动复现晋升，只是不会为它们去打扰用户。
-PROACTIVE_VERIFY_EXCLUDE_TYPES = {
-    t.strip().upper()
-    for t in _env("PROACTIVE_VERIFY_EXCLUDE_TYPES", "EVENT,PLAN,GROUP_CONTEXT").split(",")
-    if t.strip()
-}
+PROACTIVE_VERIFY_EXCLUDE_TYPES = set(
+    _env_str_list("PROACTIVE_VERIFY_EXCLUDE_TYPES", "EVENT,PLAN,GROUP_CONTEXT", upper=True)
+)
 
 # ---------- 主动插话（Participation Decision Layer） ----------
 # 独立于上面「主动发言 v2」的新决策层：基于群聊状态（话题/机会/社交钩子/惩罚项）
@@ -808,10 +822,10 @@ PROACTIVE_VERIFY_EXCLUDE_TYPES = {
 # 注意：所有分值/阈值/词表都在 config/participation/*.toml 外置打分表中，
 # 这里只放行为开关类参数——调参请改打分表，不要往这里加数字。
 # 总开关：开启后被动消息进入评分层；关闭则完全不评分。
-PARTICIPATION_ENABLED = _env("PARTICIPATION_ENABLED", "true").lower() in ("true", "1", "yes")
+PARTICIPATION_ENABLED = _env_bool("PARTICIPATION_ENABLED", "true")
 # 触发开关（灰度）：评分命中 ALLOW_LLM 后是否真正调用 LLM 发言。
 # 关闭时只输出决策日志，用于只观察评分是否合理。
-PARTICIPATION_TRIGGER_ENABLED = _env("PARTICIPATION_TRIGGER_ENABLED", "true").lower() in ("true", "1", "yes")
+PARTICIPATION_TRIGGER_ENABLED = _env_bool("PARTICIPATION_TRIGGER_ENABLED", "true")
 # 外置打分表目录（weights/thresholds/signals/topics 四个 toml）
 PARTICIPATION_TABLES_DIR = _env_path(
     "PARTICIPATION_TABLES_DIR", Path(__file__).resolve().parent / "participation"
@@ -821,7 +835,7 @@ PARTICIPATION_BUFFER_SIZE = _env_int("PARTICIPATION_BUFFER_SIZE", 200)
 # 内存中最多维护多少个群的状态（LRU，超群的旧状态置 EXPIRED 释放）
 PARTICIPATION_MAX_GROUPS = _env_int("PARTICIPATION_MAX_GROUPS", 64)
 # 评分日志级别：full=每次评分都记 / summary=只记 CANDIDATE 以上 / off=只记 ALLOW_LLM
-PARTICIPATION_LOG_LEVEL = _env("PARTICIPATION_LOG_LEVEL", "full").lower()
+PARTICIPATION_LOG_LEVEL = _env_choice("PARTICIPATION_LOG_LEVEL", "full", ("full", "summary", "off"))
 # 决策 JSONL 日志与 Markdown 日志路径（默认落在 LOG_DIR）
 PARTICIPATION_DECISION_LOG_PATH = _env_path(
     "PARTICIPATION_DECISION_LOG_PATH", LOG_DIR / "participation_decisions.jsonl"
@@ -836,9 +850,9 @@ PARTICIPATION_TICK_INTERVAL = _env_int("PARTICIPATION_TICK_INTERVAL", 60)
 # 程序启动时自动清理混乱的记忆数据（测试阶段频繁重启注入的脏数据）
 #   True = 每次启动都清理短期/长期记忆并重置整合 checkpoint（用户画像保留）
 #   测试结束后请改回 False，否则每次重启都会丢失记忆
-DB_CLEANUP_ON_START = _env("DB_CLEANUP_ON_START", "false").lower() in ("true", "1", "yes")
+DB_CLEANUP_ON_START = _env_bool("DB_CLEANUP_ON_START", "false")
 # 清理时是否连原始群消息记录也一起删除（危险操作，默认关闭）
-DB_CLEANUP_CLEAR_MESSAGES = _env("DB_CLEANUP_CLEAR_MESSAGES", "false").lower() in ("true", "1", "yes")
+DB_CLEANUP_CLEAR_MESSAGES = _env_bool("DB_CLEANUP_CLEAR_MESSAGES", "false")
 
 # ---------- 记忆压缩（Compressor）配置 ----------
 # 轻量化压缩触发阈值（活动记忆条数，超过则考虑轻量触发）
@@ -858,7 +872,7 @@ MEMORY_COMPRESS_LOG_PATH = _env_path("MEMORY_COMPRESS_LOG_PATH", LOG_DIR / "memo
 
 # ---------- 消息表定期清理 ----------
 # 是否启用 group_messages 定期清理（每天定时清理，保留最近 N 条）
-MESSAGE_CLEANUP_ENABLED = _env("MESSAGE_CLEANUP_ENABLED", "true").lower() in ("true", "1", "yes")
+MESSAGE_CLEANUP_ENABLED = _env_bool("MESSAGE_CLEANUP_ENABLED", "true")
 # 每个群保留的最近消息条数（超出部分删除）
 MESSAGE_CLEANUP_KEEP_COUNT = _env_int("MESSAGE_CLEANUP_KEEP_COUNT", 1000)
 # 定时清理的执行时间（小时，24小时制），默认凌晨 4 点
@@ -866,9 +880,7 @@ MESSAGE_CLEANUP_HOUR = _env_int("MESSAGE_CLEANUP_HOUR", 4)
 # 清理时是否保护未整合的消息（checkpoint 之后的消息不删除）。
 # 关闭会导致积压超过 MESSAGE_CLEANUP_KEEP_COUNT 时未整合消息被永久丢弃，
 # 那些内容永远不会进入记忆系统，且 checkpoint 对齐会让丢失变得不可见。
-MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED = _env(
-    "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", "true"
-).lower() in ("true", "1", "yes")
+MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED = _env_bool("MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", "true")
 
 # ---------- 输出 ----------
 MAX_REPLY_LINES = _env_int("MAX_REPLY_LINES", 5)
@@ -879,7 +891,7 @@ SEND_INTERVAL = _env_float("SEND_INTERVAL", 0.8)
 # 扫码（见 design_docs/deprecated_napcat_manager.md），登录必须有人在场，
 # 进程管理因此没有收益。用户用 NapCatQQ Desktop 装好并登录 NapCat，
 # Bot 只连接现成的 OneBot WS 端点（连接方式配置在 .env 顶部：HOST/PORT 或 ONEBOT_WS_URLS）。
-LINK_MONITOR_ENABLED = _env("LINK_MONITOR_ENABLED", "true").lower() in ("true", "1", "yes")
+LINK_MONITOR_ENABLED = _env_bool("LINK_MONITOR_ENABLED", "true")
 # 距上次收到**任何** OneBot 事件（含 NapCat 周期性心跳元事件，默认 15s 一次）
 # 超过该秒数，才做一次主动探活。静默 ≠ 断线：群里没人说话时心跳仍在，
 # 只挂 on_message 会把安静的群误判为链路中断（2026-08-14 重启循环的成因）。
@@ -909,7 +921,7 @@ FALLBACK_REPLY = "......？"
 
 # ---------- 结构化日志（供 GUI / 前端消费） ----------
 # 与人类可读日志并存：这份是给程序读的，GUI 靠它做级别过滤与错误复制。
-STELLA_JSON_LOG_ENABLED = _env("STELLA_JSON_LOG_ENABLED", "true").lower() in ("true", "1", "yes")
+STELLA_JSON_LOG_ENABLED = _env_bool("STELLA_JSON_LOG_ENABLED", "true")
 STELLA_JSON_LOG_PATH = _env_path("STELLA_JSON_LOG_PATH", LOG_DIR / "stella.jsonl")
 # 单条消息的截断长度：prompt 全文动辄数千字符，进结构化日志只会让文件暴涨
 STELLA_JSON_LOG_MAX_MESSAGE = _env_int("STELLA_JSON_LOG_MAX_MESSAGE", 500)
@@ -920,7 +932,7 @@ STELLA_JSON_LOG_MAX_MESSAGE = _env_int("STELLA_JSON_LOG_MAX_MESSAGE", 500)
 # 进程内状态（链路健康度、调度器排队），那些数据外部进程拿不到。
 # 只接受回环地址的请求，且响应体不含凭据与群聊内容——HOST 可能是 0.0.0.0，
 # 那时本路由也会暴露到局域网。
-STELLA_STATUS_API_ENABLED = _env("STELLA_STATUS_API_ENABLED", "true").lower() in ("true", "1", "yes")
+STELLA_STATUS_API_ENABLED = _env_bool("STELLA_STATUS_API_ENABLED", "true")
 STELLA_STATUS_API_PATH = _env("STELLA_STATUS_API_PATH", "/stella/status")
 
 # ---------- 优雅停止 ----------
@@ -940,7 +952,7 @@ STOP_WATCH_INTERVAL_SECONDS = _env_float("STOP_WATCH_INTERVAL_SECONDS", 0.5)
 # ---------- AstrBot 插件兼容层 ----------
 # 将 AstrBot 生态的第三方插件直接放入 data/plugins/<插件目录>/ 即可。
 # 仅支持不依赖大模型能力的功能类插件；依赖模型的插件需官方移植。
-ASTRBOT_COMPAT_ENABLED = _env("ASTRBOT_COMPAT_ENABLED", "true").lower() in ("true", "1", "yes")
+ASTRBOT_COMPAT_ENABLED = _env_bool("ASTRBOT_COMPAT_ENABLED", "true")
 # 对外声称兼容的 AstrBot 版本（注入日志与插件自检用，仅声明，不代表完全兼容）
 ASTRBOT_COMPAT_VERSION = _env("ASTRBOT_COMPAT_VERSION", "4.27.0")
 # 第三方插件源码目录（每个子目录为一个插件，需含 metadata.yaml）
@@ -950,32 +962,19 @@ ASTRBOT_PLUGIN_CONFIG_DIR = _env_path("ASTRBOT_PLUGIN_CONFIG_DIR", _user_path("d
 # 插件运行时数据目录（StarTools.get_data_dir 返回的根目录）
 ASTRBOT_PLUGIN_DATA_DIR = _env_path("ASTRBOT_PLUGIN_DATA_DIR", _user_path("data/plugin_data"))
 # 是否自动安装插件声明的依赖（requirements.txt）；默认关闭，避免任意代码执行
-ASTRBOT_AUTO_INSTALL_REQUIREMENTS = _env("ASTRBOT_AUTO_INSTALL_REQUIREMENTS", "false").lower() in (
-    "true",
-    "1",
-    "yes",
-)
+ASTRBOT_AUTO_INSTALL_REQUIREMENTS = _env_bool("ASTRBOT_AUTO_INSTALL_REQUIREMENTS", "false")
 # 是否载入插件自带的 <插件目录>/capability.toml（声明三层里优先级最低的那层）。
 # 默认开：零配置装完插件就能被聊天触发，是插件接入规范的意义所在。
 # 留开关是因为它让**插件作者**决定自己的工具能否被自动调用——而这件事以前需要
 # 用户手写 config/capabilities/*.toml 才成立，那是一次显式的逐工具授权。关掉它
 # 就退回旧行为：插件工具照常注册、可被显式执行，但不参与语义路由。
 # 用户层与出厂层的声明不受本开关影响。详见 docs/plugin-spec.md。
-ASTRBOT_PLUGIN_CAPABILITIES_ENABLED = _env(
-    "ASTRBOT_PLUGIN_CAPABILITIES_ENABLED",
-    "true",
-).lower() in ("true", "1", "yes")
+ASTRBOT_PLUGIN_CAPABILITIES_ENABLED = _env_bool("ASTRBOT_PLUGIN_CAPABILITIES_ENABLED", "true")
 # 指令唤醒前缀（逗号分隔）。AstrBot 上游默认为 "/"，插件的 @filter.command 依赖它：
 # 群里直接打 "/help" 就能触发，不必先 @ 机器人。留空表示只认 @ / 引用 / 私聊。
-ASTRBOT_WAKE_PREFIXES = [
-    p for p in (s.strip() for s in _env("ASTRBOT_WAKE_PREFIXES", "/").split(",")) if p
-]
+ASTRBOT_WAKE_PREFIXES = _env_str_list("ASTRBOT_WAKE_PREFIXES", "/")
 # 是否允许私聊触发插件。上游私聊默认无需唤醒前缀即可命中指令。
-ASTRBOT_COMPAT_ALLOW_PRIVATE = _env("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true").lower() in (
-    "true",
-    "1",
-    "yes",
-)
+ASTRBOT_COMPAT_ALLOW_PRIVATE = _env_bool("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true")
 
 # ---------- 插件热重载（调试用） ----------
 # 是否允许在不重启的情况下重载单个插件（群内管理员发「@Stella 重载插件 <名>」）。
@@ -984,17 +983,11 @@ ASTRBOT_COMPAT_ALLOW_PRIVATE = _env("ASTRBOT_COMPAT_ALLOW_PRIVATE", "true").lowe
 # asyncio.create_task 起的任务（要走 context.register_task）、插件起的线程、注册的
 # 全局钩子、monkeypatch、第三方库的模块级状态、已被别处持有的旧实例引用。
 # 定位是调试便利，怀疑状态不干净就重启。详见 docs/plugin-spec.md §13。
-ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED = _env(
-    "ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED",
-    "false",
-).lower() in ("true", "1", "yes")
+ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED = _env_bool("ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED", "false")
 # 是否监视插件目录的 mtime 自动重载（改完存盘即生效）。调试最省事，但「自动」在生产
 # 上危险：一次误存盘就会在群里跑一遍重新 import。跟主开关一起默认关，且必须两个都开
 # 才生效。
-ASTRBOT_PLUGIN_HOT_RELOAD_WATCH = _env(
-    "ASTRBOT_PLUGIN_HOT_RELOAD_WATCH",
-    "false",
-).lower() in ("true", "1", "yes")
+ASTRBOT_PLUGIN_HOT_RELOAD_WATCH = _env_bool("ASTRBOT_PLUGIN_HOT_RELOAD_WATCH", "false")
 # 自动重载的轮询间隔（秒）。只 stat 已加载插件目录里的 *.py 与 capability.toml，
 # 开销很小；调太短的唯一后果是编辑器保存到一半时就触发一次半截重载。
 ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL = _env_float(
@@ -1008,11 +1001,11 @@ ASTRBOT_PLUGIN_HOT_RELOAD_WATCH_INTERVAL = _env_float(
 # 属于聊天内容；上游默认把 HTML 发到远程 t2i 服务，Stella 不走那条路——其他环节
 # （对话模型、embedding、整合）全在本地，渲染没理由成为唯一出网的一环。
 # 实现见 astrbot_compat/render.py。
-RENDER_ENABLED = _env("RENDER_ENABLED", "true").lower() in ("true", "1", "yes")
+RENDER_ENABLED = _env_bool("RENDER_ENABLED", "true")
 # 浏览器缺失时是否自动后台下载浏览器内核（headless shell，约 270MB，几分钟）。
 # 下载期间照常降级（插件回纯文本），装好后自动生效、不需要重启。
 # 关掉它就得手工跑：<python> -m playwright install chromium-headless-shell
-RENDER_AUTO_INSTALL = _env("RENDER_AUTO_INSTALL", "true").lower() in ("true", "1", "yes")
+RENDER_AUTO_INSTALL = _env_bool("RENDER_AUTO_INSTALL", "true")
 # 自动安装失败后多久才再试（秒）。必须有冷却——否则每条带链接的消息都会重新拉一次几百 MB。
 RENDER_INSTALL_RETRY_SECONDS = _env_float("RENDER_INSTALL_RETRY_SECONDS", 3600.0)
 # 渲染产物目录。**不放 LOG_DIR**：这是要发出去的图片，不是日志。
@@ -1035,11 +1028,9 @@ RENDER_TEXT_WIDTH = _env_int("RENDER_TEXT_WIDTH", 800)
 # messages 数组 / function calling / 图片，而主链路的 generate() 表达不了这些。
 # 插件调用经 core.llm.scheduler 上 PLUGIN 角色所属端点槽的那道闸门排队；
 # 纯本地默认（PLUGIN 在 LOCAL 槽）下与主对话 FIFO 串行，改绑到在线槽后这道串行消失。
-ASTRBOT_LLM_ENABLED = _env("ASTRBOT_LLM_ENABLED", "true").lower() in ("true", "1", "yes")
-ASTRBOT_LLM_BASE_URL = _env_inherit("ASTRBOT_LLM_BASE_URL", LM_STUDIO_BASE_URL)
-ASTRBOT_LLM_MODEL = _env_inherit("ASTRBOT_LLM_MODEL", LM_STUDIO_MODEL)
-ASTRBOT_LLM_API_KEY = _env_inherit("ASTRBOT_LLM_API_KEY", LM_STUDIO_API_KEY)
-ASTRBOT_LLM_TEMPERATURE = _env_float("ASTRBOT_LLM_TEMPERATURE", 0.7)
+ASTRBOT_LLM_ENABLED = _env_bool("ASTRBOT_LLM_ENABLED", "true")
+# 插件的模型 / 温度 / 长度由 PLUGIN 角色与本机槽模型决定（见「LLM 角色」段）；
+# 旧键 ASTRBOT_LLM_MODEL/_TEMPERATURE/_MAX_TOKENS 已随兼容层删除。
 # 插件专属人格：插件没给 system_prompt 时注入这一句。
 # 刻意不用 Stella 的人格——插件的回复不该带 Stella 的语气，否则用户分不清是谁在说话；
 # 但完全不给 system 消息又会让本地模型的输出风格漂移，所以给一句最小的锚。
@@ -1048,8 +1039,6 @@ ASTRBOT_LLM_SYSTEM_PROMPT = _env(
     "ASTRBOT_LLM_SYSTEM_PROMPT",
     "你是一个简单的机器人助手，请直接、简短地回答，不要扮演角色。",
 )
-# 单次回复的生成预算
-ASTRBOT_LLM_MAX_TOKENS = _env_int("ASTRBOT_LLM_MAX_TOKENS", 1024)
 # 送出前的上下文预算（估算值）。超出时从最早的非 system 消息开始丢弃。
 # 本地 8192 窗口的模型请保持默认；换更大窗口的模型时调大这里。
 ASTRBOT_LLM_MAX_CONTEXT_TOKENS = _env_int("ASTRBOT_LLM_MAX_CONTEXT_TOKENS", 8192)
@@ -1074,15 +1063,13 @@ ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
 # 「哪个角色用哪个端点、用什么模型」见下一节「LLM 角色」。
 # embedding **不在**本体系内：它恒定本地，闸门归属见 MEMORY_EMBEDDING_GATE。
 
-# 槽 LOCAL：本地 LM Studio。三个连接键默认继承旧的 LM_STUDIO_*，
-# 因此未迁移的 .env 行为与改造前一致。
-LLM_ENDPOINT_LOCAL_BASE_URL = _env_inherit("LLM_ENDPOINT_LOCAL_BASE_URL", LM_STUDIO_BASE_URL)
+# 槽 LOCAL：本地 LM Studio。连接三件套（地址 / key / 模型）的正式出处，
+# GUI 本机卡片与 deploy init 向导写的就是这里。
+LLM_ENDPOINT_LOCAL_BASE_URL = _env("LLM_ENDPOINT_LOCAL_BASE_URL", "http://127.0.0.1:1234")
 # 本地服务通常不校验 key；少数本地网关要求填 dummy key，那时填这里。
-LLM_ENDPOINT_LOCAL_API_KEY = _env_inherit("LLM_ENDPOINT_LOCAL_API_KEY", LM_STUDIO_API_KEY)
+LLM_ENDPOINT_LOCAL_API_KEY = _env("LLM_ENDPOINT_LOCAL_API_KEY", "")
 # 端点级模型 ID：绑到本槽的角色自己没写 MODEL 时用它（解析顺序见 core/llm/registry
-# 的 _resolve_role_model）。**本机槽留空即可**——留空时每个角色回落到自己的旧键
-# （LM_STUDIO_MODEL / ASTRBOT_LLM_MODEL / MEMORY_EXTRACT_LM_STUDIO_MODEL 等），
-# 那正是改造前的行为；填了这里就等于「本机槽统一用这一个模型」，会盖掉那些旧键。
+# 的 _resolve_role_model）。填了它等于「本机槽统一用这一个模型」。
 LLM_ENDPOINT_LOCAL_MODEL = _env("LLM_ENDPOINT_LOCAL_MODEL", "")
 # local | online。**显式声明，不再靠「有没有 api_key」猜**——那个启发式在两个
 # 方向上都会错：本地网关要求 dummy key 时漏发 reasoning_effort=none（本地推理
@@ -1118,15 +1105,15 @@ LLM_ENDPOINT_ONLINE_MEMORY_KIND = _env("LLM_ENDPOINT_ONLINE_MEMORY_KIND", "onlin
 LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY", 2)
 LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT", 120.0)
 
-# 槽 EXTRA：备用槽。**默认充当「本地记忆域」**——地址与 LOCAL 相同（继承旧的
-# CONSOLIDATION_LM_STUDIO_*），但闸门独立，于是整合与聊天能真正并行。
+# 槽 EXTRA：备用槽。**默认充当「本地记忆域」**——地址默认与 LOCAL 相同
+# （同一个 LM Studio），但闸门独立，于是整合与聊天能真正并行。
 # 这正是改造前 chat / consolidation 两把锁分离的原因（27B 跑 GPU、E4B 跑 CPU），
 # 所以 LLM_ROLE_CONSOLIDATION_ENDPOINT 默认指向本槽而不是 LOCAL。
 # 混合部署或调试时也可把它指向第三个服务。
-LLM_ENDPOINT_EXTRA_BASE_URL = _env_inherit("LLM_ENDPOINT_EXTRA_BASE_URL", CONSOLIDATION_LM_STUDIO_BASE_URL)
-LLM_ENDPOINT_EXTRA_API_KEY = _env_inherit("LLM_ENDPOINT_EXTRA_API_KEY", CONSOLIDATION_LM_STUDIO_API_KEY)
-# 留空即可：CONSOLIDATION 角色回落到 CONSOLIDATION_LM_STUDIO_MODEL（GUI 里的
-# 「记忆整合模型 ID」），与改造前一致。指向第三个服务时才需要填这里。
+LLM_ENDPOINT_EXTRA_BASE_URL = _env("LLM_ENDPOINT_EXTRA_BASE_URL", "http://127.0.0.1:1234")
+LLM_ENDPOINT_EXTRA_API_KEY = _env("LLM_ENDPOINT_EXTRA_API_KEY", "")
+# 留空即可：CONSOLIDATION 角色回落到自己的 LLM_ROLE_CONSOLIDATION_MODEL
+# （GUI 里的「记忆整合模型 ID」）。指向第三个服务时才需要填这里。
 LLM_ENDPOINT_EXTRA_MODEL = _env("LLM_ENDPOINT_EXTRA_MODEL", "")
 LLM_ENDPOINT_EXTRA_KIND = _env("LLM_ENDPOINT_EXTRA_KIND", "local")
 LLM_ENDPOINT_EXTRA_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_CONCURRENCY", 1)
@@ -1138,33 +1125,31 @@ LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
 # none = 停用该角色，所有调用点必须优雅退化而不是抛异常（沿用
 # capability/router/fallback.py 里「构造失败返回 None 即降级」的惯例）。
 #
-# 六个角色的默认值都对齐改造前的实际行为，所以**未迁移的 .env 逐项等价今天**：
-# CHAT/ROUTER/PLUGIN/COMPACT/EXTRACT 在 LOCAL 槽（= 改造前的 chat 闸门），
-# CONSOLIDATION 在 EXTRA 槽（= 改造前的 consolidation 闸门）。
-# 模型 / 温度 / max_tokens 则继承各自原来的旧键；没有旧键的（CHAT/ROUTER/COMPACT）
-# 写死成改造前 LMStudioBackend 的构造默认值。
+# 六个角色的默认值：CHAT/ROUTER/PLUGIN/COMPACT/EXTRACT 在 LOCAL 槽（= 改造前的
+# chat 闸门），CONSOLIDATION 在 EXTRA 槽（= 改造前的 consolidation 闸门）。
+# 温度 / max_tokens 的默认值沿袭改造前 LMStudioBackend 的构造参数。
 #
 # **MODEL 通常不用填**：模型 ID 的正常出处是端点槽的 LLM_ENDPOINT_<槽>_MODEL
 # （GUI 的端点卡片就是它），这里只是**角色级覆盖**，给「同一个端点上，某个角色要用
-# 另一个模型」的场景（例如兜底判定挑一个更便宜的）。完整解析顺序见
+# 另一个模型」的场景（例如兜底判定挑一个更便宜的）。解析顺序见
 # core/llm/registry.py 的 _resolve_role_model：
-#   角色显式 MODEL → 该角色所绑端点的 MODEL → 角色自己的旧键（下面每行标出的那个）。
-# 「显式」的判据是「值与它继承的旧键不同」——只写了旧键的存量 .env 因此仍走第三档，
-# 与改造前逐字等价；而把角色切到在线槽时，本机模型名不会被误带到在线服务商去。
+#   角色显式 MODEL（非空即显式）→ 该角色所绑端点的 MODEL。
+# 角色切到在线槽而角色与端点都没填模型时，会当场报「该端点没填模型」，
+# 本机模型名不会被误带到在线服务商去。
 #
 # FALLBACK_ENDPOINT 留空 = 不降级。降级只在鉴权失败 / 限流 / 5xx 重试耗尽 /
 # 连接超时时触发；400（请求体错误）**不降级**——那是配置问题，降级只会掩盖它。
 
 # 主对话生成。改造前：ai_gateway.py 用 LM_STUDIO_* 构造，温度/长度取构造默认值。
 LLM_ROLE_CHAT_ENDPOINT = _env("LLM_ROLE_CHAT_ENDPOINT", "LOCAL")
-LLM_ROLE_CHAT_MODEL = _env_inherit("LLM_ROLE_CHAT_MODEL", LM_STUDIO_MODEL)
+LLM_ROLE_CHAT_MODEL = _env("LLM_ROLE_CHAT_MODEL", "")
 LLM_ROLE_CHAT_TEMPERATURE = _env_float("LLM_ROLE_CHAT_TEMPERATURE", 0.7)
 LLM_ROLE_CHAT_MAX_TOKENS = _env_int("LLM_ROLE_CHAT_MAX_TOKENS", 2000)
 LLM_ROLE_CHAT_FALLBACK_ENDPOINT = _env("LLM_ROLE_CHAT_FALLBACK_ENDPOINT", "")
 
 # Router Level 2 兜底判定。任务是「要不要工具」的二分类，在线时可用廉价模型。
 LLM_ROLE_ROUTER_ENDPOINT = _env("LLM_ROLE_ROUTER_ENDPOINT", "LOCAL")
-LLM_ROLE_ROUTER_MODEL = _env_inherit("LLM_ROLE_ROUTER_MODEL", LM_STUDIO_MODEL)
+LLM_ROLE_ROUTER_MODEL = _env("LLM_ROLE_ROUTER_MODEL", "")
 LLM_ROLE_ROUTER_TEMPERATURE = _env_float("LLM_ROLE_ROUTER_TEMPERATURE", 0.7)
 LLM_ROLE_ROUTER_MAX_TOKENS = _env_int("LLM_ROLE_ROUTER_MAX_TOKENS", 2000)
 LLM_ROLE_ROUTER_FALLBACK_ENDPOINT = _env("LLM_ROLE_ROUTER_FALLBACK_ENDPOINT", "")
@@ -1172,15 +1157,15 @@ LLM_ROLE_ROUTER_FALLBACK_ENDPOINT = _env("LLM_ROLE_ROUTER_FALLBACK_ENDPOINT", ""
 # AstrBot 插件的 LLM 调用（messages 数组 / function calling / 图片）。
 # 走 core/llm/openai_client.py，不是 LMStudioBackend。
 LLM_ROLE_PLUGIN_ENDPOINT = _env("LLM_ROLE_PLUGIN_ENDPOINT", "LOCAL")
-LLM_ROLE_PLUGIN_MODEL = _env_inherit("LLM_ROLE_PLUGIN_MODEL", ASTRBOT_LLM_MODEL)
-LLM_ROLE_PLUGIN_TEMPERATURE = _env_float_inherit("LLM_ROLE_PLUGIN_TEMPERATURE", ASTRBOT_LLM_TEMPERATURE)
-LLM_ROLE_PLUGIN_MAX_TOKENS = _env_int_inherit("LLM_ROLE_PLUGIN_MAX_TOKENS", ASTRBOT_LLM_MAX_TOKENS)
+LLM_ROLE_PLUGIN_MODEL = _env("LLM_ROLE_PLUGIN_MODEL", "")
+LLM_ROLE_PLUGIN_TEMPERATURE = _env_float("LLM_ROLE_PLUGIN_TEMPERATURE", 0.7)
+LLM_ROLE_PLUGIN_MAX_TOKENS = _env_int("LLM_ROLE_PLUGIN_MAX_TOKENS", 1024)
 LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT = _env("LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT", "")
 
 # 会话压缩：把较早的对话压成回顾。**在线时归记忆域**（与整合共用同一把 key），
 # 让记忆域的流量与对话域的缓存互不干扰。
 LLM_ROLE_COMPACT_ENDPOINT = _env("LLM_ROLE_COMPACT_ENDPOINT", "LOCAL")
-LLM_ROLE_COMPACT_MODEL = _env_inherit("LLM_ROLE_COMPACT_MODEL", LM_STUDIO_MODEL)
+LLM_ROLE_COMPACT_MODEL = _env("LLM_ROLE_COMPACT_MODEL", "")
 LLM_ROLE_COMPACT_TEMPERATURE = _env_float("LLM_ROLE_COMPACT_TEMPERATURE", 0.3)
 # **0 = 按 SESSION_SUMMARY_MAX_TOKENS × 3 推导**（改造前 session_compact.py 的算法）。
 # 不写死数值，是为了让调大摘要长度的用户不必同时改这里。
@@ -1190,21 +1175,21 @@ LLM_ROLE_COMPACT_FALLBACK_ENDPOINT = _env("LLM_ROLE_COMPACT_FALLBACK_ENDPOINT", 
 # 记忆整合 阶段1：出短期摘要 + 用户画像 + 自我披露判断。是「总结 + 二分类」任务，
 # 在线时用廉价模型即可。默认端点是 EXTRA 而非 LOCAL，理由见 EXTRA 槽的说明。
 LLM_ROLE_CONSOLIDATION_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_ENDPOINT", "EXTRA")
-LLM_ROLE_CONSOLIDATION_MODEL = _env_inherit("LLM_ROLE_CONSOLIDATION_MODEL", CONSOLIDATION_LM_STUDIO_MODEL)
-LLM_ROLE_CONSOLIDATION_TEMPERATURE = _env_float_inherit("LLM_ROLE_CONSOLIDATION_TEMPERATURE", CONSOLIDATION_LM_STUDIO_TEMPERATURE)
+LLM_ROLE_CONSOLIDATION_MODEL = _env("LLM_ROLE_CONSOLIDATION_MODEL", "google/gemma-4-e4b")
+LLM_ROLE_CONSOLIDATION_TEMPERATURE = _env_float("LLM_ROLE_CONSOLIDATION_TEMPERATURE", 0.3)
 LLM_ROLE_CONSOLIDATION_MAX_TOKENS = _env_int_inherit("LLM_ROLE_CONSOLIDATION_MAX_TOKENS", CONSOLIDATION_LOCAL_MAX_TOKENS)
 LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT", "")
 
 # 记忆整合 阶段2：从消息里精确提取「用户亲口说的、关于自己的稳定信息」。
 # 高精度抽取任务，但只在阶段1 判定 has_self_disclosure=true 时才唤醒，频次低。
 LLM_ROLE_EXTRACT_ENDPOINT = _env("LLM_ROLE_EXTRACT_ENDPOINT", "LOCAL")
-LLM_ROLE_EXTRACT_MODEL = _env_inherit("LLM_ROLE_EXTRACT_MODEL", MEMORY_EXTRACT_LM_STUDIO_MODEL)
-LLM_ROLE_EXTRACT_TEMPERATURE = _env_float_inherit("LLM_ROLE_EXTRACT_TEMPERATURE", MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE)
+LLM_ROLE_EXTRACT_MODEL = _env("LLM_ROLE_EXTRACT_MODEL", "")
+LLM_ROLE_EXTRACT_TEMPERATURE = _env_float("LLM_ROLE_EXTRACT_TEMPERATURE", 0.2)
 LLM_ROLE_EXTRACT_MAX_TOKENS = _env_int_inherit("LLM_ROLE_EXTRACT_MAX_TOKENS", MEMORY_EXTRACT_MAX_TOKENS)
 LLM_ROLE_EXTRACT_FALLBACK_ENDPOINT = _env("LLM_ROLE_EXTRACT_FALLBACK_ENDPOINT", "")
 
 # 降级总开关。关掉后主端点失败就是失败（各调用点自行退化），不会切到备用端点。
-LLM_FALLBACK_ENABLED = _env("LLM_FALLBACK_ENABLED", "true").lower() in ("true", "1", "yes")
+LLM_FALLBACK_ENABLED = _env_bool("LLM_FALLBACK_ENABLED", "true")
 # 降级后多少秒再试探性回归主端点。太短会在厂商限流期间反复撞墙，
 # 太长则厂商恢复了还在用备用端点。
 LLM_FALLBACK_COOLDOWN = _env_int("LLM_FALLBACK_COOLDOWN", 300)
@@ -1222,13 +1207,13 @@ LLM_FALLBACK_COOLDOWN = _env_int("LLM_FALLBACK_COOLDOWN", 300)
 
 # 是否把 LLM 用量落库。关掉则完全不挂记账钩子、一次也不碰数据库——
 # 代价是**预算随之失效**（没有用量数据，预算无从判断），GUI 用量面板同时留白。
-LLM_USAGE_ACCOUNTING = _env("LLM_USAGE_ACCOUNTING", "true").lower() in ("true", "1", "yes")
+LLM_USAGE_ACCOUNTING = _env_bool("LLM_USAGE_ACCOUNTING", "true")
 # 每日 token 预算（输入 + 输出之和）。**0 = 不限**。
 # 撞破之后做什么由 LLM_BUDGET_EXHAUSTED_ACTION 决定，默认只停记忆域、对话照常。
 LLM_DAILY_TOKEN_BUDGET = _env_int("LLM_DAILY_TOKEN_BUDGET", 0)
 # 预算算哪些端点的用量：online = 只算在线端点（默认，本地模型不花钱）；all = 全算。
 # 纯本地部署设成 all 才有意义——那时它是「算力预算」而不是账单预算。
-LLM_BUDGET_SCOPE = _env("LLM_BUDGET_SCOPE", "online").strip().lower()
+LLM_BUDGET_SCOPE = _env_choice("LLM_BUDGET_SCOPE", "online", ("online", "all"))
 # 撞破预算之后做什么：
 #   pause_memory（默认）= 只停记忆域三个角色（整合 / 压缩 / 提取），对话照常可用；
 #   pause_all           = 连对话一起停，被拦下的消息**静默不回**（只写 warn 日志，
@@ -1236,14 +1221,16 @@ LLM_BUDGET_SCOPE = _env("LLM_BUDGET_SCOPE", "online").strip().lower()
 #                         而纯在线部署本来就没有本地端点可落）；
 #   warn_only           = 只在日志里告警一次，从不拦任何调用。
 # 认不出的值按最保守的 pause_memory 处理。
-LLM_BUDGET_EXHAUSTED_ACTION = _env("LLM_BUDGET_EXHAUSTED_ACTION", "pause_memory").strip().lower()
+LLM_BUDGET_EXHAUSTED_ACTION = _env_choice(
+    "LLM_BUDGET_EXHAUSTED_ACTION", "pause_memory", ("pause_memory", "pause_all", "warn_only")
+)
 
 
 # ---------- Capability Router（能力路由） ----------
 # 判断一次请求需要哪些能力（聊天 / 记忆 / 工具），避免把所有插件工具的 schema
 # 都塞进 Stella 的聊天上下文——8192 的工作窗口装不下几十个工具描述，且工具描述
 # 会干扰正常聊天。设计见 design_docs/Capability Router 与 Comes 落地方案 v1.0.md。
-CAPABILITY_ROUTER_ENABLED = _env("CAPABILITY_ROUTER_ENABLED", "true").lower() in ("true", "1", "yes")
+CAPABILITY_ROUTER_ENABLED = _env_bool("CAPABILITY_ROUTER_ENABLED", "true")
 # 自动派生的能力（``tool.<工具名>``，即没有被任何 config/capabilities/*.toml 认领的
 # 插件工具）是否参与 Router 的能力竞争。**默认关闭：声明优先。**
 #
@@ -1260,15 +1247,15 @@ CAPABILITY_ROUTER_ENABLED = _env("CAPABILITY_ROUTER_ENABLED", "true").lower() in
 # 关闭后未声明的工具仍然照常注册（启动日志会点名），只是不参与语义路由；
 # 要让它可被聊天触发，就给它写一份声明——那是几行 TOML 的一次性成本。
 # 设为 true 可恢复「装上插件就能路由」的旧行为（零配置，代价是上面这些数）。
-ROUTER_ROUTE_AUTO_CAPABILITIES = _env("ROUTER_ROUTE_AUTO_CAPABILITIES", "false").lower() in ("true", "1", "yes")
+ROUTER_ROUTE_AUTO_CAPABILITIES = _env_bool("ROUTER_ROUTE_AUTO_CAPABILITIES", "false")
 # Level 0：关键词规则快速判断。零延迟、不调模型，处理高置信度请求。
-ROUTER_RULE_ENABLED = _env("ROUTER_RULE_ENABLED", "true").lower() in ("true", "1", "yes")
+ROUTER_RULE_ENABLED = _env_bool("ROUTER_RULE_ENABLED", "true")
 # Level 1：Embedding 语义路由。用消息与各能力原型向量的余弦相似度判定。
 # 复用 MEMORY_EMBEDDING_* 的服务地址与模型（同一个本地 embedding 实例）。
-ROUTER_SEMANTIC_ENABLED = _env("ROUTER_SEMANTIC_ENABLED", "true").lower() in ("true", "1", "yes")
+ROUTER_SEMANTIC_ENABLED = _env_bool("ROUTER_SEMANTIC_ENABLED", "true")
 # Level 2：更强模型兜底。默认**关闭**——方案第 8 节明确要求避免浪费 27B 推理资源，
 # 先靠 L0/L1 跑一段时间、用 router benchmark 量出准确率再决定是否打开。
-ROUTER_FALLBACK_ENABLED = _env("ROUTER_FALLBACK_ENABLED", "false").lower() in ("true", "1", "yes")
+ROUTER_FALLBACK_ENABLED = _env_bool("ROUTER_FALLBACK_ENABLED", "false")
 # ---- 下面四个阈值是一组，2026-08-25 用真实 embedding（qwen3-embedding-0.6b）在 12 条
 # ---- 用例上标定，前提是**能力带中文 examples**（即 ROUTER_ROUTE_AUTO_CAPABILITIES=false）。
 # ---- 复现：python -m capability.router.benchmark --cases capability/router/benchmark/acg.json
@@ -1309,7 +1296,7 @@ ROUTER_MAX_CAPABILITIES = _env_int("ROUTER_MAX_CAPABILITIES", 3)
 # **默认关闭**：Router 误判 memory=false 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、
 # 不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 AT_MENTION 全为 0 的缺陷
 # 同一类型（静默、难察觉、后果严重）。先用 router benchmark 量出准确率再打开。
-ROUTER_GATE_MEMORY = _env("ROUTER_GATE_MEMORY", "false").lower() in ("true", "1", "yes")
+ROUTER_GATE_MEMORY = _env_bool("ROUTER_GATE_MEMORY", "false")
 # 单次路由判定的超时（秒）。超时按降级处理（chat+memory，不调工具），不阻塞回复。
 ROUTER_TIMEOUT = _env_float("ROUTER_TIMEOUT", 8.0)
 # 群里能不能问「你能做什么」/「有什么功能」，由 Stella 直接列出当前可路由的能力。
@@ -1319,13 +1306,13 @@ ROUTER_TIMEOUT = _env_float("ROUTER_TIMEOUT", 8.0)
 # 回复不经模型（直接读注册表并拼文本），所以不产生 token 开销。
 # 来源层、provider 健康度、未声明工具的具体名单只给管理员（PROACTIVE_TOGGLE_ADMINS
 # 或群主/管理员）；普通群友看到能力清单与未声明工具的条数。
-CAPABILITY_QUERY_ENABLED = _env("CAPABILITY_QUERY_ENABLED", "true").lower() in ("true", "1", "yes")
+CAPABILITY_QUERY_ENABLED = _env_bool("CAPABILITY_QUERY_ENABLED", "true")
 
 # ---------- Comes（工具执行层） ----------
 # Comes 只负责「能力 → 找 Provider → 调 Tool → 返回 Result」，不理解用户、不管人格。
 # 它用一个**受限 agent**驱动工具：请求里只有 COMES_SYSTEM_PROMPT + 任务目标 +
 # 本次命中能力的 1~3 个工具 schema，既没有 Stella 的人格也没有聊天上下文。
-COMES_ENABLED = _env("COMES_ENABLED", "true").lower() in ("true", "1", "yes")
+COMES_ENABLED = _env_bool("COMES_ENABLED", "true")
 # Comes 的执行器人格。刻意不用 Stella 的人格（与 ASTRBOT_LLM_SYSTEM_PROMPT 同一考量）：
 # 它的输出只是给 Stella 看的中间结果，不该带语气。
 COMES_SYSTEM_PROMPT = _env(
@@ -1346,7 +1333,7 @@ COMES_TASK_TIMEOUT = _env_float("COMES_TASK_TIMEOUT", 90.0)
 COMES_SUMMARY_MAX_CHARS = _env_int("COMES_SUMMARY_MAX_CHARS", 300)
 # 命中能力只有一个 provider、且其工具没有必填参数时，跳过 LLM 直接调工具。
 # 省一次 27B 往返，且不可能填错参数。
-COMES_DIRECT_CALL_NO_ARGS = _env("COMES_DIRECT_CALL_NO_ARGS", "true").lower() in ("true", "1", "yes")
+COMES_DIRECT_CALL_NO_ARGS = _env_bool("COMES_DIRECT_CALL_NO_ARGS", "true")
 # 连续失败多少次后临时禁用一个 provider（健康度退避）。0 表示不退避。
 COMES_PROVIDER_FAILURE_THRESHOLD = _env_int("COMES_PROVIDER_FAILURE_THRESHOLD", 3)
 # 被退避的 provider 多久后恢复（秒）。
@@ -1358,7 +1345,7 @@ COMES_PROVIDER_RECOVER_SECONDS = _env_float("COMES_PROVIDER_RECOVER_SECONDS", 60
 # Planner（1 次 LLM）→ 最多 1 次深度记忆查询（本地，压缩后回填）→ Replyer（1 次 LLM）。
 # 「需要工具」不在此列：Capability Router → Comes 已在每条消息上独立处理，
 # Planner 不重复派发工具（见 capability/hooks.py）。
-PLANNER_ENABLED = _env("PLANNER_ENABLED", "true").lower() in ("true", "1", "yes")
+PLANNER_ENABLED = _env_bool("PLANNER_ENABLED", "true")
 # 深度路径的 LLM 硬上限（含 Replyer）：普通路径 1 次，深度路径 2 次。
 PLANNER_MAX_LLM_CALLS_PER_TURN = _env_int("PLANNER_MAX_LLM_CALLS_PER_TURN", 2)
 # Planner 最多规划轮数（每轮 1 次 LLM；实际上限受上面的 LLM 总名额约束）。
@@ -1370,7 +1357,7 @@ PLANNER_QUERY_MEMORY_MAX_LINES = _env_int("PLANNER_QUERY_MEMORY_MAX_LINES", 5)
 # 主动发言路径是否允许 Planner 决定 WAIT（等更多消息再插话）。
 # **默认关闭**：主动插话已由参与评分层（零 LLM）把关，再花 1 次 LLM 判定「说不说」
 # 会让每次主动发言成本翻倍；确有需要（高机会但表达不明的场景）再打开。
-PLANNER_PROACTIVE_WAIT_ENABLED = _env("PLANNER_PROACTIVE_WAIT_ENABLED", "false").lower() in ("true", "1", "yes")
+PLANNER_PROACTIVE_WAIT_ENABLED = _env_bool("PLANNER_PROACTIVE_WAIT_ENABLED", "false")
 # Planner 单次 LLM 调用超时（秒）。超时按「直接回复」处理，不阻塞主链路。
 PLANNER_TIMEOUT = _env_float("PLANNER_TIMEOUT", 20.0)
 # Planner prompt 里最近对话摘要的 token 上限（深度预算中「最近消息」的压缩份额）。
@@ -1381,7 +1368,7 @@ PLANNER_CONTEXT_MAX_TOKENS = _env_int("PLANNER_CONTEXT_MAX_TOKENS", 400)
 # reply_effects，见 memory/expression_store.py）记录「怎么说效果好」，与
 # 记忆系统（「知道什么」）完全分离。全部学习都在异步后处理中完成，
 # 不阻塞主回复路径、不增加任何 LLM 调用（纯本地规则）。
-EXPRESSION_LEARNING_ENABLED = _env("EXPRESSION_LEARNING_ENABLED", "true").lower() in ("true", "1", "yes")
+EXPRESSION_LEARNING_ENABLED = _env_bool("EXPRESSION_LEARNING_ENABLED", "true")
 # 回复发出后等待用户回应的窗口（秒）：窗口结束时结算 reply_effects
 # （回应/复用表达/使用表情/纠正/忽略）。
 REPLY_EFFECT_WINDOW_SECONDS = _env_float("REPLY_EFFECT_WINDOW_SECONDS", 300.0)

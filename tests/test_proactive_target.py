@@ -4,8 +4,8 @@
 """主动 @ 配额与选人策略（memory.proactive_target）的单元测试。
 
 覆盖 D2a：at_quota 配额插值、can_at_user 排除规则、_cooldown_elapsed 解析、
-pick_target 的 verify / coldstart 两种选人路径与 exclude 过滤。
-覆盖 D2b：_topic_covered 关键词避让、ProactiveTarget.nickname 默认值。
+pick_target 的 verify 选人路径与 exclude 过滤。
+覆盖 ProactiveTarget.nickname 默认值。
 全部纯逻辑，不触网。
 """
 import sqlite3
@@ -19,7 +19,6 @@ from memory.proactive_target import (
     ProactiveTarget,
     _cooldown_elapsed,
     _fetch_observing_candidate,
-    _topic_covered,
     at_quota,
     can_at_user,
     pick_target,
@@ -207,7 +206,6 @@ def test_pick_target_verify_mode(tmp_path, monkeypatch):
     target = pick_target(1)
     assert target is not None
     assert isinstance(target, ProactiveTarget)
-    assert target.mode == "verify"
     assert target.user_id == 2001
     assert target.candidate_id == "cand-1"
     assert "候选" in target.reason
@@ -216,7 +214,6 @@ def test_pick_target_verify_mode(tmp_path, monkeypatch):
 def test_pick_target_skip_cooldown_is_candidate_specific(tmp_path, monkeypatch):
     """同一候选 skip 后暂不重试，但候选 ID 变化可立即恢复。"""
     _setup_db(monkeypatch, tmp_path)
-    monkeypatch.setattr(pt, "PROACTIVE_COLDSTART_TOPICS", [])
     monkeypatch.setattr(pt, "PROACTIVE_AT_USER_COOLDOWN", 0.0)
     monkeypatch.setattr(proactive, "PROACTIVE_NATURALNESS_MODE", "enforce")
     monkeypatch.setattr(proactive, "PROACTIVE_SKIP_COOLDOWN_SECONDS", 900.0)
@@ -239,28 +236,6 @@ def test_pick_target_skip_cooldown_is_candidate_specific(tmp_path, monkeypatch):
     assert target.candidate_id == "cand-2"
 
 
-def test_pick_target_skip_cooldown_is_topic_specific(tmp_path, monkeypatch):
-    """冷启动话题的 skip 不会阻塞新的话题；全部话题都冷却时不再生成。"""
-    _setup_db(monkeypatch, tmp_path)
-    monkeypatch.setattr(pt, "PROACTIVE_COLDSTART_TOPICS", ["话题一", "话题二"])
-    monkeypatch.setattr(pt, "PROACTIVE_AT_USER_COOLDOWN", 0.0)
-    monkeypatch.setattr(proactive, "PROACTIVE_NATURALNESS_MODE", "enforce")
-    monkeypatch.setattr(proactive, "PROACTIVE_SKIP_COOLDOWN_SECONDS", 900.0)
-    monkeypatch.setattr(proactive.time, "monotonic", _faketicks())
-    monkeypatch.setattr(pt.random, "choice", lambda options: options[0])
-    c = proactive.ProactiveController()
-    monkeypatch.setattr(pt, "get_proactive", lambda: c)
-    c.record_message(1, 2001)
-
-    c.mark_proactive_skip(1, 2001, "topic:话题一")
-    target = pick_target(1)
-    assert target is not None
-    assert target.topic == "话题二"
-
-    c.mark_proactive_skip(1, 2001, "topic:话题二")
-    assert pick_target(1) is None
-
-
 def test_pick_target_verify_prefers_highest_confidence(tmp_path, monkeypatch):
     """多个用户有候选 → 选 confidence 最高的那个。"""
     _setup_db(monkeypatch, tmp_path)
@@ -278,31 +253,6 @@ def test_pick_target_verify_prefers_highest_confidence(tmp_path, monkeypatch):
     assert target is not None
     assert target.user_id == 2002
     assert target.candidate_id == "cand-high"
-
-
-def test_pick_target_coldstart_avoids_last_topic(tmp_path, monkeypatch):
-    """无候选 → mode=coldstart，且 topic 不等于 last_asked_topic。
-
-    注意：record_at 会把 last_at_at 写成 CURRENT_TIMESTAMP（UTC），立即处于
-    PROACTIVE_AT_USER_COOLDOWN 冷却内（这正是 2026-08-14 修复后的正确行为，
-    旧代码在 UTC+8 下因时区偏差恒判「已过」）。本用例只测冷启动避让逻辑，
-    因此把冷却压到 0 让用户可被选中；冷却判定本身由
-    test_can_at_user_right_after_record_at_is_cooldown 单独覆盖。
-    """
-    _setup_db(monkeypatch, tmp_path)
-    monkeypatch.setattr(pt, "PROACTIVE_COLDSTART_TOPICS", ["游戏话题", "美食话题"])
-    monkeypatch.setattr(pt, "PROACTIVE_AT_USER_COOLDOWN", 0.0)
-    monkeypatch.setattr(proactive.time, "monotonic", _faketicks())
-    c = proactive.ProactiveController()
-    monkeypatch.setattr(pt, "get_proactive", lambda: c)
-    c.record_message(1, 2001)
-    proactive_state.record_at(1, 2001, topic="游戏话题")
-
-    target = pick_target(1)
-    assert target is not None
-    assert target.mode == "coldstart"
-    assert target.topic != "游戏话题"
-    assert target.topic == "美食话题"
 
 
 def test_pick_target_exclude_user_ids(tmp_path, monkeypatch):
@@ -370,21 +320,11 @@ def test_fetch_observing_candidate_window(tmp_path, monkeypatch):
     assert found[0] == "right"
 
 
-# ── D2b：冷启动关键词避让与昵称 ──────────────────────────
-
-def test_topic_covered_variants():
-    """_topic_covered：空 known → False；全部词元命中 → True；部分命中 → False。"""
-    assert _topic_covered("RTX5080", "") is False
-    assert _topic_covered("RTX5080", "他有一张 RTX5080 显卡") is True
-    assert _topic_covered("RTX5080", "他有一张 4090 显卡") is False
-    # 要求全部关键词都命中——部分命中不算已知（宁可多问一次）
-    assert _topic_covered("RTX5080 显卡", "他有一张 RTX5080") is False
-    assert _topic_covered("RTX5080 显卡", "他有一张 RTX5080 显卡") is True
-
+# ── 昵称 ─────────────────────────────────────────────────
 
 def test_target_nickname_default():
     """ProactiveTarget.nickname 默认值为「对方」。"""
-    t = ProactiveTarget(user_id=2001, mode="coldstart")
+    t = ProactiveTarget(user_id=2001)
     assert t.nickname == "对方"
     # 可变 dataclass：ai_gateway 拿到 target 后可直接赋值
     t.nickname = "小明"

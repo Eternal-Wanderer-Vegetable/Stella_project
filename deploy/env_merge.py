@@ -176,6 +176,11 @@ def merge_env(
                 replaced.add(key)
                 report.kept.append(key)
                 continue
+            # 防御：模板若还带着已被取代的键的**生效行**（正常应随模板清理消失，
+            # 注释掉的说明行不受影响），一律不再输出——模板是「新版该长什么样」
+            # 的唯一权威，不能一边迁移一边又从模板里长回旧键。
+            if _ASSIGN.match(line) and env_keys.superseded_by(key):
+                continue
         output.append(line)
 
     leftovers = [key for key in pending if key not in replaced]

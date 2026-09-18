@@ -35,15 +35,15 @@ except ImportError:  # pragma: no cover - Python 3.10 需要 tomli 兜底
 
 from config import (
     ALLOWED_GROUPS,
-    CONSOLIDATION_LM_STUDIO_MODEL,
     DB_CLEANUP_ON_START,
     DB_PATH,
-    LM_STUDIO_BASE_URL,
-    LM_STUDIO_MODEL,
+    LLM_ENDPOINT_LOCAL_BASE_URL,
+    LLM_ENDPOINT_LOCAL_MODEL,
+    LLM_ROLE_CONSOLIDATION_MODEL,
+    LLM_ROLE_EXTRACT_MODEL,
     MEMORY_EMBEDDING_BASE_URL,
     MEMORY_EMBEDDING_ENABLED,
     MEMORY_EMBEDDING_MODEL,
-    MEMORY_EXTRACT_LM_STUDIO_MODEL,
     PROJECT_ROOT,
     RENDER_ENABLED,
     STELLA_HOME,
@@ -458,10 +458,10 @@ def fetch_loaded_models(base_url: str = "") -> tuple[list[str], str]:
     """查询 LM Studio 已加载模型 ID 列表。
 
     返回 ``(模型列表, 错误信息)``，错误信息为空表示成功。
-    ``base_url`` 为空时用配置的 ``LM_STUDIO_BASE_URL``。
+    ``base_url`` 为空时用配置的本机端点地址（LLM_ENDPOINT_LOCAL_BASE_URL）。
     doctor 与 init 向导共用，避免重复实现 HTTP 请求。
     """
-    return fetch_endpoint_models(base_url or LM_STUDIO_BASE_URL)
+    return fetch_endpoint_models(base_url or LLM_ENDPOINT_LOCAL_BASE_URL)
 
 
 def _probe_lm_studio() -> dict:
@@ -892,11 +892,11 @@ def collect() -> Snapshot:
         status_api_reachable=status_api_reachable,
         lm_reachable=lm.get("lm_reachable"),
         lm_error=lm.get("lm_error", ""),
-        lm_base_url=LM_STUDIO_BASE_URL,
+        lm_base_url=LLM_ENDPOINT_LOCAL_BASE_URL,
         lm_models=lm.get("lm_models", []),
-        lm_model_chat=LM_STUDIO_MODEL,
-        lm_model_consolidation=CONSOLIDATION_LM_STUDIO_MODEL,
-        lm_model_extract=MEMORY_EXTRACT_LM_STUDIO_MODEL,
+        lm_model_chat=LLM_ENDPOINT_LOCAL_MODEL,
+        lm_model_consolidation=LLM_ROLE_CONSOLIDATION_MODEL,
+        lm_model_extract=LLM_ROLE_EXTRACT_MODEL,
         lm_model_embedding=MEMORY_EMBEDDING_MODEL,
         embedding_enabled=MEMORY_EMBEDDING_ENABLED,
         embedding_base_url=MEMORY_EMBEDDING_BASE_URL,

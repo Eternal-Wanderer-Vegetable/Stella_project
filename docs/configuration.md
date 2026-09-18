@@ -27,9 +27,9 @@ cp .env.example .env
 
 ```env
 ALLOWED_GROUPS=123456789
-LM_STUDIO_BASE_URL=http://127.0.0.1:1234
-LM_STUDIO_MODEL=your-chat-model
-CONSOLIDATION_LM_STUDIO_MODEL=your-small-model
+LLM_ENDPOINT_LOCAL_BASE_URL=http://127.0.0.1:1234
+LLM_ENDPOINT_LOCAL_MODEL=your-chat-model
+LLM_ROLE_CONSOLIDATION_MODEL=your-small-model
 ```
 
 纯在线部署（不跑本机 LM Studio）的最小集换成端点与角色，本机模型 ID 可以完全留空——详见 [模型服务 · 端点与角色](#端点与角色两层配置)：
@@ -203,16 +203,16 @@ Stella 的模型配置分两层：
 - `CONCURRENCY` 是该槽闸门的并发上限，同槽内 FIFO 严格串行。本机 LM Studio **不排队**，并发请求只会互相拖慢且难以归因，所以本地槽保持 `1`；在线端点可以放大到服务商允许的并发。
 - `TIMEOUT` 是单次请求超时，**与 `LLM_TIMEOUT` 不是一回事**——后者是 `core/pipeline.py` 的整轮回复预算。
 
-`LOCAL` 与 `EXTRA` 的地址和 key 留空即继承旧键，因此**未迁移的 `.env` 行为与升级前完全一致**，不需要任何手工迁移：
+旧键 `LM_STUDIO_*` / `CONSOLIDATION_LM_STUDIO_*` 已删除：留在 `.env` 里**不再生效**。走过一次 `deploy init` / `migrate`，它们的值会被自动换算到下面的新键、旧行随之移除（`deploy doctor` 会给出对照）；没走过迁移的，重跑一次 init 即可，同样不需要手工迁移：
 
-| 新键 | 留空时继承 |
-|---|---|
-| `LLM_ENDPOINT_LOCAL_BASE_URL` | `LM_STUDIO_BASE_URL` |
-| `LLM_ENDPOINT_LOCAL_API_KEY` | `LM_STUDIO_API_KEY` |
-| `LLM_ENDPOINT_EXTRA_BASE_URL` | `CONSOLIDATION_LM_STUDIO_BASE_URL`（它再继承 `LM_STUDIO_BASE_URL`） |
-| `LLM_ENDPOINT_EXTRA_API_KEY` | `CONSOLIDATION_LM_STUDIO_API_KEY` |
+| 新键 | 默认值 | 旧键值去向 |
+|---|---|---|
+| `LLM_ENDPOINT_LOCAL_BASE_URL` | `http://127.0.0.1:1234` | `LM_STUDIO_BASE_URL` 自动换算 |
+| `LLM_ENDPOINT_LOCAL_API_KEY` | 空 | `LM_STUDIO_API_KEY` 自动换算 |
+| `LLM_ENDPOINT_EXTRA_BASE_URL` | `http://127.0.0.1:1234` | `CONSOLIDATION_LM_STUDIO_BASE_URL` 自动换算 |
+| `LLM_ENDPOINT_EXTRA_API_KEY` | 空 | `CONSOLIDATION_LM_STUDIO_API_KEY` 自动换算 |
 
-`MODEL` 不走这套继承，而是「留空则由角色各自回落到自己的旧键」（见下节的解析顺序）：`LLM_ENDPOINT_LOCAL_MODEL` 留空时，绑在 `LOCAL` 上的角色仍分别用 `LM_STUDIO_MODEL` / `ASTRBOT_LLM_MODEL` / `MEMORY_EXTRACT_LM_STUDIO_MODEL`，与改造前逐字一致；填上它就等于「本机槽统一用这一个模型」，会盖掉那些旧键。GUI 的本机卡片与备用卡片上那个「模型 ID」输入框写的是旧键（`LM_STUDIO_MODEL` / `CONSOLIDATION_LM_STUDIO_MODEL`），`LLM_ENDPOINT_LOCAL_MODEL` / `LLM_ENDPOINT_EXTRA_MODEL` 留在高级配置里当逃生口。
+`LLM_ENDPOINT_LOCAL_MODEL` 留空表示「本机槽不指定模型」——绑在 `LOCAL` 上的角色各自留空时由 LM Studio 默认路由；填上它就等于「本机槽统一用这一个模型」。GUI 本机卡片上的「模型 ID」输入框写的就是 `LLM_ENDPOINT_LOCAL_MODEL`；整合模型的 GUI 控件写的是 `LLM_ROLE_CONSOLIDATION_MODEL`（见「记忆整理模型」节）。
 
 > 纯本地部署下 `EXTRA` 与 `LOCAL` 同址，它的作用只是给整合一道**独立的闸门**：整合是长任务，与聊天共用闸门会让 @ 回复排在它后面。
 
@@ -224,18 +224,19 @@ Stella 的模型配置分两层：
 |---|---|---|---|---|
 | `CHAT` | 回复群友的主模型，质量优先 | `LOCAL` | `0.7` | `2000` |
 | `ROUTER` | 判断「这条要不要回」，二分类任务 | `LOCAL` | `0.7` | `2000` |
-| `PLUGIN` | 第三方插件借用的 LLM | `LOCAL` | 继承 `ASTRBOT_LLM_TEMPERATURE` | 继承 `ASTRBOT_LLM_MAX_TOKENS` |
+| `PLUGIN` | 第三方插件借用的 LLM | `LOCAL` | `0.7` | `1024` |
 | `COMPACT` | 会话压缩：把较早的对话压成回顾 | `LOCAL` | `0.3` | `0`（= `SESSION_SUMMARY_MAX_TOKENS × 3`） |
-| `CONSOLIDATION` | 两阶段整合的阶段 1 | `EXTRA` | 继承 `CONSOLIDATION_LM_STUDIO_TEMPERATURE` | 继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` |
-| `EXTRACT` | 阶段 2 记忆候选提取 | `LOCAL` | 继承 `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | 继承 `MEMORY_EXTRACT_MAX_TOKENS` |
+| `CONSOLIDATION` | 两阶段整合的阶段 1 | `EXTRA` | `0.3` | 继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` |
+| `EXTRACT` | 阶段 2 记忆候选提取 | `LOCAL` | `0.2` | 继承 `MEMORY_EXTRACT_MAX_TOKENS` |
 
 **`MODEL` 通常不用填。** 模型 ID 的正常出处是上一节的 `LLM_ENDPOINT_<槽名>_MODEL`（GUI 的端点卡片就是它），角色级 `MODEL` 只是**覆盖项**，用于「同一个端点上，某个角色要用另一个模型」——例如兜底判定挑一档更便宜的。GUI 的角色矩阵里「模型」一列因此是只读显示（显示最终结果与它的出处），要覆盖请改高级配置里的 `LLM_ROLE_<角色>_MODEL`。
 
 完整解析顺序（`core/llm/registry.py::_resolve_role_model`）：
 
-1. **角色显式 `MODEL`** —— 判据是「值与它继承的旧键不同」。`MODEL` 全部是继承型（`CHAT` / `ROUTER` / `COMPACT` 继承 `LM_STUDIO_MODEL`，`PLUGIN` 继承 `ASTRBOT_LLM_MODEL`，`CONSOLIDATION` 继承 `CONSOLIDATION_LM_STUDIO_MODEL`，`EXTRACT` 继承 `MEMORY_EXTRACT_LM_STUDIO_MODEL`），所以「只写了旧键」的存量 `.env` 落在第 3 档，行为与改造前逐字相同；
-2. **该角色所绑端点的 `MODEL`**；
-3. **角色自己的旧键**（第 1 档括号里那个）。这一档在**在线**端点上只对「这个旧键归属的那张卡」生效：`LM_STUDIO_MODEL` 归 `LOCAL`、`CONSOLIDATION_LM_STUDIO_MODEL` 归 `EXTRA`。把角色挪到 `ONLINE_CHAT` / `ONLINE_MEMORY` 而端点没填模型时，本机模型名不会被误带到在线服务商去（那一律是 400），而是当场报「该端点没填模型」。
+1. **角色显式 `MODEL`** —— 非空即显式。想给某个角色单独换模型，写这里就够；
+2. **该角色所绑端点的 `MODEL`**。
+
+两档都空时角色模型为空串：本地端点由 LM Studio 默认路由，在线端点会在启动校验时报「该端点没填模型」（本机模型名不会被误带到在线服务商去，那一律是 400）。旧键回落档已随旧键删除而移除；升级后请确认 `LLM_ENDPOINT_LOCAL_MODEL` 等新键已带上你原来的模型 ID（正常由 `deploy init` / `migrate` 自动完成）。
 
 > **「留空即继承」要求真的留空。** 继承型键写成 `KEY=`（等号后什么都没有）与「整行不存在」**不等价**：空串会被当成显式值，把继承链就地切断。2026-08-28 之前 `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` 正是这样变成空串，使阶段 2 每次都拼出无协议 URL 而失败。手改 `.env` 时请**删掉整行**而不是清空等号右边；GUI 已经代你处理（留空的继承型键不写进 `.env`）。
 
@@ -319,12 +320,12 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 
 ### 主聊天模型
 
-本节与下面的「记忆整理模型」「记忆候选提取」三段的键**仍然是配置的主入口**（向导写的就是它们，GUI 里本机与备用两张端点卡片上的「模型 ID」也是它们），同时充当上面角色键的继承上游——`LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` 留空时都取 `LM_STUDIO_MODEL`。只有要让某个角色**不同于**本机默认时，才需要填对应的 `LLM_ROLE_*`。
+本节的键是**本机端点槽（LOCAL）的连接参数**，也是向导与 GUI 本机卡片写入的目标；`LLM_ROLE_CHAT_MODEL` / `_ROUTER_MODEL` / `_COMPACT_MODEL` 留空时都取 `LLM_ENDPOINT_LOCAL_MODEL`。旧键 `LM_STUDIO_*` 已删除（留在 `.env` 里不再生效），`deploy init` / `migrate` 时会把旧值自动换算到本节新键并移除旧行。只有要让某个角色**不同于**本机默认时，才需要填对应的 `LLM_ROLE_*`。
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
-| `LM_STUDIO_BASE_URL` | `http://127.0.0.1:1234` | LM Studio 地址 |
-| `LM_STUDIO_MODEL` | 空 | 模型 ID，留空由服务端默认路由 |
+| `LLM_ENDPOINT_LOCAL_BASE_URL` | `http://127.0.0.1:1234` | LM Studio 地址 |
+| `LLM_ENDPOINT_LOCAL_MODEL` | 空 | 模型 ID，留空由服务端默认路由 |
 | `LLM_TIMEOUT` | `90.0` | 单次生成超时（秒） |
 
 ### 记忆整理模型
@@ -333,9 +334,9 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
-| `CONSOLIDATION_LM_STUDIO_BASE_URL` | 同 `LM_STUDIO_BASE_URL` | 整合服务地址 |
-| `CONSOLIDATION_LM_STUDIO_MODEL` | `google/gemma-4-e4b` | 整合模型 ID |
-| `CONSOLIDATION_LM_STUDIO_TEMPERATURE` | `0.3` | 低温保证 JSON 输出稳定 |
+| `LLM_ENDPOINT_EXTRA_BASE_URL` | 同 `LLM_ENDPOINT_LOCAL_BASE_URL` | 整合服务地址（EXTRA 槽，闸门与 LOCAL 独立） |
+| `LLM_ROLE_CONSOLIDATION_MODEL` | `google/gemma-4-e4b` | 整合模型 ID（GUI「记忆整合模型 ID」写的就是它） |
+| `LLM_ROLE_CONSOLIDATION_TEMPERATURE` | `0.3` | 低温保证 JSON 输出稳定 |
 | `CONSOLIDATION_LOCAL_BATCH_SIZE` | `30` | 常规整合批次大小 |
 | `CONSOLIDATION_LOCAL_FORCE_BATCH_SIZE` | `10` | force 路径（@ 触发/主动发言前）的小批次 |
 | `CONSOLIDATION_OVERLAP` | `15` | 向前回看条数，保证话题不被批次边界切断 |
@@ -358,7 +359,7 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 
 > **在线端点建议同时收紧 `LLM_ROLE_CONSOLIDATION_MAX_TOKENS`**（默认继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` 的 1200）。在线模型的输出单价通常是输入的 3~4 倍，而整合阶段 1 的实际输出很少超过 800 token；填 `800` 能砍掉一截纯粹白付的余量。**不要压到 600 以下**——输出被截断会导致 JSON 解析失败，见上一条注意事项。默认值刻意不动：本地推理不计费，没有收紧的理由。
 
-> `CONSOLIDATION_LM_STUDIO_BASE_URL` 现在还是 `EXTRA` 端点槽的继承上游，`CONSOLIDATION_LM_STUDIO_MODEL` / `_TEMPERATURE` / `CONSOLIDATION_LOCAL_MAX_TOKENS` 则是 `LLM_ROLE_CONSOLIDATION_*` 的上游。**不要因为改用了角色键就删掉它们**——删掉会把 `EXTRA` 槽的地址一起清空。整合改走在线只需设 `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY`，模型填在 `LLM_ENDPOINT_ONLINE_MEMORY_MODEL` 上。
+> 整合的连接参数直接落在 `LLM_ENDPOINT_EXTRA_*`（地址 / key）与 `LLM_ROLE_CONSOLIDATION_*`（模型 / 温度）上；旧键 `CONSOLIDATION_LM_STUDIO_*` 已删除，`deploy init` / `migrate` 会把它们的值搬进新键并移除旧行。整合改走在线只需设 `LLM_ROLE_CONSOLIDATION_ENDPOINT=ONLINE_MEMORY`，模型填在 `LLM_ENDPOINT_ONLINE_MEMORY_MODEL` 上。
 
 > **注意 `CONSOLIDATION_LOCAL_MAX_TOKENS`**：批次 30 + overlap 15 意味着单次最多喂入 45 条消息，输出被截断会导致 JSON 解析失败，而解析失败时 checkpoint **仍会推进**（防止同批反复重跑），那批消息就永久丢失了。`core/llm/lm_studio.py` 会在 `finish_reason=length` 时输出告警，建议运行一段后检查日志有无该告警。
 
@@ -391,11 +392,10 @@ GUI 在两把 key 相同时给出警告；`registry` 的键共用检查会把它
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `MEMORY_EXTRACT_ENABLED` | `true` | 关闭则退回单阶段（整合模型一次性出全部） |
-| `MEMORY_EXTRACT_LM_STUDIO_BASE_URL` | 同 `LM_STUDIO_BASE_URL` | 提取服务地址 |
-| `MEMORY_EXTRACT_LM_STUDIO_API_KEY` | 空 | 提取服务需要鉴权时填写（本地服务留空；走在线端点时通常也由端点槽的 `API_KEY` 接管） |
-| `MEMORY_EXTRACT_LM_STUDIO_MODEL` | 同 `LM_STUDIO_MODEL` | 默认继承主聊天模型 |
-| `MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE` | `0.2` | 抽取任务不需要发散，比整合的 0.3 更低 |
+| `LLM_ROLE_EXTRACT_TEMPERATURE` | `0.2` | 抽取任务不需要发散，比整合的 0.3 更低 |
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | 只输出候选数组，不需要很大 |
+
+模型默认与主聊天一致（本机槽模型 `LLM_ENDPOINT_LOCAL_MODEL`）。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 即可（模型取该端点的 `MODEL`；要与同端点其他角色用不同的模型才需要写 `LLM_ROLE_EXTRACT_MODEL`）。旧键 `MEMORY_EXTRACT_LM_STUDIO_*` 已整体删除，升级合并时自动换算；`_BASE_URL` / `_API_KEY` 是旧体系「第五端点」参数、没有对应新键，合并时其值会被丢弃——确实需要独立提取端点的，把 `EXTRA` 槽指过去并绑 `EXTRACT` 角色。
 
 > 这五个 `MEMORY_EXTRACT_LM_STUDIO_*` / `MEMORY_EXTRACT_MAX_TOKENS` 是 `LLM_ROLE_EXTRACT_*` 的继承上游。要让阶段 2 走在线强模型，改 `LLM_ROLE_EXTRACT_ENDPOINT` 即可（模型取该端点的 `MODEL`；要与同端点其他角色用不同的模型才需要写 `LLM_ROLE_EXTRACT_MODEL`），本节的键不用动。
 
@@ -509,7 +509,6 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `MEMORY_SOURCE_KIND_ENABLED` | `true` | 关闭后所有消息等权，prompt 不标注来源 |
-| `MEMORY_AT_MENTION_CONFIDENCE_BONUS` | `0.05` | `AT_MENTION` 来源候选的置信度奖励 |
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | 同一事实复现时的置信度增益 |
 | `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | 观察区停留上限，超期标 `REJECTED`（不删除）。时效型类型另有更短的档位，见下 |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | `evidence` 累积上限 |
@@ -641,7 +640,6 @@ interval >= SLOW → PROB_AT_SLOW
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | 高频端概率 |
 | `PROACTIVE_PROB_AT_SLOW` | `0.0` | 冷清端概率 |
 | `PROACTIVE_PROB_GAMMA` | `1.0` | 曲线整形指数，>1 更保守 |
-| `PROACTIVE_TOPIC_WARMUP_SECONDS` | `45.0` | 话题预热时长，不足则不参与 |
 | `PROACTIVE_COOLDOWN` | `600` | 群级硬冷却（秒） |
 | `PROACTIVE_CHECK_INTERVAL` | `60` | 定时检查间隔（秒） |
 | `PROACTIVE_FREQ_WINDOW` | `10` | 频率估算窗口（最近 N 条消息） |
@@ -681,11 +679,10 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `PROACTIVE_AT_ACTIVE_WITHIN` | `300.0` | 判定「正在活跃」的时间窗（秒） |
 | `PROACTIVE_MAX_NO_REPLY` | `2` | 连续无回应上限，超过则暂停追问 |
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | 回应检测窗口（秒） |
-| `PROACTIVE_COLDSTART_TOPICS` | 见 settings.py | 冷启动话题清单，逗号分隔 |
 | `PROACTIVE_AT_EXCLUDE_USERS` | 空 | 不会被选为主动搭话对象的 QQ 号（逗号分隔） |
 | `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | 不会被主动追问验证的候选类型（逗号分隔；留空 = 都可以问） |
 | `PROACTIVE_NATURALNESS_MODE` | `enforce` | 自然承接灰度：`enforce` 执行 skip 冷却，`observe` 只记录而不拦截重复尝试 |
-| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | 同一候选/冷启动话题 skip 后的进程内负向冷却；`0` 表示关闭 |
+| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | 同一候选 skip 后的进程内负向冷却；`0` 表示关闭 |
 
 排除名单的主要用途是**群内其他 AI** —— 互相 @ 会触发无终止的循环对话。被排除的账号仍会被动收集信息（消息照常落库与整合），只是不主动向它们提问。
 
@@ -697,7 +694,7 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 自然承接判断是一次已有的 Replyer 生成，不新增第二次 LLM。模型严格输出内部
 `[[STELLA_SKIP]]` 时，网关不会发送、不会消耗主动 @ 配额，也不会启动回应检测。
-`PROACTIVE_NATURALNESS_MODE=enforce` 时，同一候选或冷启动话题在
+`PROACTIVE_NATURALNESS_MODE=enforce` 时，同一候选在
 `PROACTIVE_SKIP_COOLDOWN_SECONDS` 内不会再次触发生成；目标用户发出新消息后会立即清理
 该用户的旧 skip。`observe` 适合灰度观察 skip 率和生成成本，但不拦截重复尝试。
 
@@ -841,7 +838,6 @@ python -m tests.benchmark.participation.runner --tables config/participation_v2 
 | `MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD` | `0.3` | 低价值归档的重要度阈值 |
 | `MEMORY_ARCHIVE_INACTIVE_DAYS` | `180` | 低价值归档的未访问天数 |
 | `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | 压缩日志（见[日志](#日志)） |
-| `MEMORY_RECENCY_HALF_LIFE_DAYS` | `120.0` | Recency 兜底半衰期（天） |
 
 `MEMORY_DECAY_DAYS` 是代码内的字典（不走 `.env`），定义各类型记忆的生命周期：
 
@@ -1162,7 +1158,7 @@ PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`
 | 想要的效果 | 调整方向 |
 |---|---|
 | Bot 太吵 | 降 `PROACTIVE_PROB_AT_FAST`；升 `PROACTIVE_COOLDOWN` 与 `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`；降 `PROACTIVE_AT_QUOTA_BASE`；或让管理员在群内说「安静」临时关闭 |
-| Bot 太安静 | 升 `PROACTIVE_PROB_AT_FAST`；降 `PROACTIVE_TOPIC_WARMUP_SECONDS` |
+| Bot 太安静 | 升 `PROACTIVE_PROB_AT_FAST`；调低 `config/participation/thresholds.toml` 的 `warmup_messages` |
 | 深夜还在说话 | 确认 `PROACTIVE_SLEEP_ENABLED=true`，检查 `PROACTIVE_SLEEP_START/END` 是否覆盖目标时段；服务器与群友时区不同时确认 `USER_TIMEZONE` 已配置 |
 | 一觉醒来连发几句 | 升 `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | 记不住事 | 降 `MEMORY_OBSERVE_LOW_CONFIDENCE`；降 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；确认 `PROACTIVE_AT_ENABLED=true`（被动摄入的产出接近零） |

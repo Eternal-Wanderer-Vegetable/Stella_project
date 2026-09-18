@@ -28,6 +28,22 @@ DEPRECATED: dict[str, str] = {
         "2026-08-25 日志统一到 LOG_DIR 后改为完整路径 MEMORY_COMPRESS_LOG_PATH；"
         "语义从「文件名」变成「完整路径」，旧值不能直接沿用"
     ),
+    "MEMORY_RECENCY_HALF_LIFE_DAYS": (
+        "recency 衰减已改为统一的指数衰减（τ=30 天，见 memory/policy.py），"
+        "不再按类型取半衰期；本键自 2026-08-11 起代码不再读取"
+    ),
+    "MEMORY_AT_MENTION_CONFIDENCE_BONUS": (
+        "从未接线：AT_MENTION 的强证据语义由 MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT"
+        "（单次晋升门槛）承担"
+    ),
+    "PROACTIVE_TOPIC_WARMUP_SECONDS": (
+        "话题预热由参与评分层承担：config/participation/thresholds.toml 的 "
+        "warmup_messages（按条数，不是秒数）"
+    ),
+    "PROACTIVE_COLDSTART_TOPICS": (
+        "主动 @ 已收敛为「只验证记忆候选」：无可验证候选时不再用日常话题冷启动搭话，"
+        "无记忆锚点的闲聊由参与评分层（config/participation/*.toml）承担"
+    ),
 }
 
 # 已废弃的键前缀 → 原因
@@ -40,22 +56,46 @@ DEPRECATED_PREFIXES: dict[str, str] = {
 #
 # 为什么这张表现在还是空的：2026-08-28 的端点/角色改造**没有改名任何旧键**，
 # 而是让新键继承旧键（config/settings.py 里的 _env_inherit）。这不是偷懒——
-# LM_STUDIO_BASE_URL / _MODEL / _API_KEY 各有 4~5 个继承它的子键，而合并器改名时
+# LM_STUDIO_BASE_URL / _MODEL / _API_KEY 各有 4~5 个继承子键，而合并器改名时
 # 是「把值搬到新键、旧键那行恢复模板默认值」，一改名就等于把那 4~5 个子键悄悄
-# 重置回默认地址。宁可键名不够漂亮，也不能让升级把用户配置改坏。
+# 重置回默认地址。旧键的收敛改走下面 SUPERSEDED 的换算迁移（2026-09-18 起），
+# 这里保持为空。
 RENAMED: dict[str, str] = {}
 
-# 已被新键取代、但**代码仍在兼容读取**的键（旧名 → 新名）。
-#
-# 与 DEPRECATED 的分工：那张表是「代码已经不读了」，所以只能提示用户删掉；
-# 这张表是「代码还读，只是不该再由用户来填」——于是三个消费方各取所需：
-#   - deploy/env_schema.py：从 GUI schema 里剔掉旧键，界面上只留新键
-#     （同一件事摆两个控件，且旧键的布尔语义在新体系下本身就不够表达）；
-#   - deploy/env_merge.py：升级时把值换算成新键的值，旧键那行随之消失；
-#   - deploy doctor：对还留着旧键的 .env 给出改法提示。
+# 已被新键取代的键（旧名 → 新名）。**兼容读已随 Phase 2 删除**（config/settings.py
+# 不再定义这些键），但换算迁移保留：
+#   - deploy/env_merge.py：升级时把旧键值换算成新键的值，旧键那行随之消失——
+#     未走过迁移的存量 .env 在任何 merge 路径上仍能自动搬值；
+#   - deploy doctor：对还留着旧键的 .env 给出改法提示（这些行已不生效）；
+#   - deploy/env_schema.py：旧键不进 GUI。
 # 值怎么换算见 migrate_value()——表本身保持纯数据，好让 GUI 直接读。
+#
+# 2026-09-18 的三代键收敛：LM_STUDIO_* / CONSOLIDATION_LM_STUDIO_* /
+# MEMORY_EXTRACT_LM_STUDIO_* / ASTRBOT_LLM_* 的连接参数整体迁入
+# LLM_ENDPOINT_* / LLM_ROLE_*。全部 1:1 值直接沿用（targets 的语义论证见
+# 该提交与 config/settings.py 端点段的注释）。兼容读与 registry 的三级模型解析
+# 已在 Phase 2（同日提交）删除；deploy upgrade 只换程序树不跑合并，直接换文件
+# 升级且从未跑过 init/migrate 的 .env 里这些行会失效——换算迁移保留在合并器里，
+# 走过任意一次 init / migrate 就能自动搬值并清理旧行。
 SUPERSEDED: dict[str, str] = {
     "LLM_SCHEDULER_GATE_EMBEDDING": "MEMORY_EMBEDDING_GATE",
+    # ── 第一代：本机 LM Studio ──
+    "LM_STUDIO_BASE_URL": "LLM_ENDPOINT_LOCAL_BASE_URL",
+    "LM_STUDIO_API_KEY": "LLM_ENDPOINT_LOCAL_API_KEY",
+    "LM_STUDIO_MODEL": "LLM_ENDPOINT_LOCAL_MODEL",
+    # ── 第二代：整合（EXTRA 槽 + CONSOLIDATION 角色）──
+    "CONSOLIDATION_LM_STUDIO_BASE_URL": "LLM_ENDPOINT_EXTRA_BASE_URL",
+    "CONSOLIDATION_LM_STUDIO_API_KEY": "LLM_ENDPOINT_EXTRA_API_KEY",
+    "CONSOLIDATION_LM_STUDIO_MODEL": "LLM_ROLE_CONSOLIDATION_MODEL",
+    "CONSOLIDATION_LM_STUDIO_TEMPERATURE": "LLM_ROLE_CONSOLIDATION_TEMPERATURE",
+    # ── 第二代：候选提取（EXTRACT 角色）──
+    "MEMORY_EXTRACT_LM_STUDIO_MODEL": "LLM_ROLE_EXTRACT_MODEL",
+    "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE": "LLM_ROLE_EXTRACT_TEMPERATURE",
+    "MEMORY_EXTRACT_LM_STUDIO_MAX_TOKENS": "LLM_ROLE_EXTRACT_MAX_TOKENS",
+    # ── 第二代：AstrBot 插件 LLM（PLUGIN 角色）──
+    "ASTRBOT_LLM_MODEL": "LLM_ROLE_PLUGIN_MODEL",
+    "ASTRBOT_LLM_TEMPERATURE": "LLM_ROLE_PLUGIN_TEMPERATURE",
+    "ASTRBOT_LLM_MAX_TOKENS": "LLM_ROLE_PLUGIN_MAX_TOKENS",
 }
 
 # 敏感键：报告里只说「已沿用」，绝不打印值。

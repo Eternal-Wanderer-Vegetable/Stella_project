@@ -21,7 +21,7 @@ PORT=8080
 ONEBOT_ACCESS_TOKEN=
 
 # ---------- 模型 ----------
-LM_STUDIO_MODEL=
+LLM_ENDPOINT_LOCAL_MODEL=
 # 主动发言的冷却秒数
 # PROACTIVE_COOLDOWN=600
 # 本版新增的开关
@@ -46,16 +46,18 @@ def _merge(**kwargs):
 
 
 def test_user_values_are_carried_over():
-    """旧值逐项沿用，包括模板里被注释掉的键（要取消注释并填值）。"""
+    """旧值逐项沿用；旧键 LM_STUDIO_MODEL 自动迁移成新键（值跟着走）。"""
     rendered, report = _merge()
     values = env_merge.parse_env(rendered)
 
     assert values["HOST"] == "0.0.0.0"
     assert values["PORT"] == "9000"
-    assert values["LM_STUDIO_MODEL"] == "google/gemma-4-26b"
+    # LM_STUDIO_MODEL 已 SUPERSEDED：值换算到新键，旧行消失
+    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "google/gemma-4-26b"
+    assert "LM_STUDIO_MODEL" not in values
     # 模板里是 `# PROACTIVE_COOLDOWN=600`，用户设过 → 必须取消注释并用用户值
     assert values["PROACTIVE_COOLDOWN"] == "1200"
-    assert {"HOST", "PORT", "PROACTIVE_COOLDOWN"} <= set(report.kept)
+    assert {"HOST", "PORT", "PROACTIVE_COOLDOWN", "LLM_ENDPOINT_LOCAL_MODEL"} <= set(report.kept)
 
 
 def test_template_comments_survive():
@@ -221,7 +223,9 @@ def test_real_env_example_round_trips():
     values = env_merge.parse_env(rendered)
 
     assert values["ALLOWED_GROUPS"] == "123456"
-    assert values["LM_STUDIO_MODEL"] == "demo/model"
+    # 旧键值自动迁到新键，旧行消失
+    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "demo/model"
+    assert "LM_STUDIO_MODEL" not in values
     assert report.unknown == []
 
 
@@ -239,6 +243,18 @@ def test_real_env_example_carries_the_new_keys():
 
     assert "MEMORY_EMBEDDING_GATE" in keys
     assert "LLM_SCHEDULER_GATE_EMBEDDING" not in keys, "旧键不该再出现在模板里"
+    for legacy in (
+        "LM_STUDIO_BASE_URL",
+        "LM_STUDIO_MODEL",
+        "LM_STUDIO_API_KEY",
+        "CONSOLIDATION_LM_STUDIO_MODEL",
+        "CONSOLIDATION_LM_STUDIO_TEMPERATURE",
+        "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE",
+        "ASTRBOT_LLM_MODEL",
+        "ASTRBOT_LLM_TEMPERATURE",
+        "ASTRBOT_LLM_MAX_TOKENS",
+    ):
+        assert legacy not in keys, "旧键不该再出现在模板里"
     for slot in ("LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"):
         for suffix in ("BASE_URL", "API_KEY", "KIND", "CONCURRENCY", "TIMEOUT"):
             assert f"LLM_ENDPOINT_{slot}_{suffix}" in keys
@@ -265,4 +281,89 @@ def test_real_env_example_migrates_the_superseded_gate_key_in_place():
     assert env_merge.parse_env(rendered)["MEMORY_EMBEDDING_GATE"] == "none"
     assert report.appended == []
     assert report.unknown == []
+
+
+def test_all_llm_legacy_keys_migrate_one_to_one():
+    """三代键收敛：13 个旧连接键逐一映射到新键，值原样沿用。
+
+    SUPERSEDED 表本身是数据，这里锁的是映射方向——比如 LM_STUDIO_MODEL 若误指
+    到某个角色键，本机另外几个角色就会在迁移后丢模型。全部走「值直接沿用」：
+    这批键不允许配 _VALUE_MIGRATIONS 换算函数。
+    """
+    from deploy import env_keys
+
+    expected = {
+        "LM_STUDIO_BASE_URL": "LLM_ENDPOINT_LOCAL_BASE_URL",
+        "LM_STUDIO_API_KEY": "LLM_ENDPOINT_LOCAL_API_KEY",
+        "LM_STUDIO_MODEL": "LLM_ENDPOINT_LOCAL_MODEL",
+        "CONSOLIDATION_LM_STUDIO_BASE_URL": "LLM_ENDPOINT_EXTRA_BASE_URL",
+        "CONSOLIDATION_LM_STUDIO_API_KEY": "LLM_ENDPOINT_EXTRA_API_KEY",
+        "CONSOLIDATION_LM_STUDIO_MODEL": "LLM_ROLE_CONSOLIDATION_MODEL",
+        "CONSOLIDATION_LM_STUDIO_TEMPERATURE": "LLM_ROLE_CONSOLIDATION_TEMPERATURE",
+        "MEMORY_EXTRACT_LM_STUDIO_MODEL": "LLM_ROLE_EXTRACT_MODEL",
+        "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE": "LLM_ROLE_EXTRACT_TEMPERATURE",
+        "MEMORY_EXTRACT_LM_STUDIO_MAX_TOKENS": "LLM_ROLE_EXTRACT_MAX_TOKENS",
+        "ASTRBOT_LLM_MODEL": "LLM_ROLE_PLUGIN_MODEL",
+        "ASTRBOT_LLM_TEMPERATURE": "LLM_ROLE_PLUGIN_TEMPERATURE",
+        "ASTRBOT_LLM_MAX_TOKENS": "LLM_ROLE_PLUGIN_MAX_TOKENS",
+    }
+    for old, target in expected.items():
+        assert env_keys.SUPERSEDED.get(old) == target, old
+    assert not (set(env_keys._VALUE_MIGRATIONS) & set(expected))
+
+
+def test_legacy_key_migration_round_trips_on_real_template():
+    """真实模板下，一批旧键合并后各归各位：值在新键上、旧行消失、无未知键。"""
+    from config import PROJECT_ROOT
+
+    template = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+    old = (
+        "LM_STUDIO_BASE_URL=http://192.168.1.5:1234\n"
+        "LM_STUDIO_MODEL=demo/26b\n"
+        "CONSOLIDATION_LM_STUDIO_MODEL=demo/e4b\n"
+        "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE=0.1\n"
+        "ASTRBOT_LLM_MAX_TOKENS=512\n"
+    )
+    rendered, report = env_merge.merge_env(old, template)
+    values = env_merge.parse_env(rendered)
+
+    assert values["LLM_ENDPOINT_LOCAL_BASE_URL"] == "http://192.168.1.5:1234"
+    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "demo/26b"
+    assert values["LLM_ROLE_CONSOLIDATION_MODEL"] == "demo/e4b"
+    assert values["LLM_ROLE_EXTRACT_TEMPERATURE"] == "0.1"
+    assert values["LLM_ROLE_PLUGIN_MAX_TOKENS"] == "512"
+    for old_key in (
+        "LM_STUDIO_BASE_URL",
+        "LM_STUDIO_MODEL",
+        "CONSOLIDATION_LM_STUDIO_MODEL",
+        "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE",
+        "ASTRBOT_LLM_MAX_TOKENS",
+    ):
+        assert old_key not in values
+    assert report.unknown == []
+    assert len(report.migrated) == 5
+
+
+def test_template_defense_drops_active_superseded_lines():
+    """模板若还残留旧键的生效行（清理遗漏），合并输出不得再长出它——
+    模板是「新版该长什么样」的唯一权威，不能一边迁移一边从模板长回旧键。"""
+    template = "LM_STUDIO_MODEL=stale/model\nLLM_ENDPOINT_LOCAL_MODEL=\n"
+    rendered, _ = env_merge.merge_env("", template)
+    values = env_merge.parse_env(rendered)
+
+    assert "LM_STUDIO_MODEL" not in values
+    assert "LLM_ENDPOINT_LOCAL_MODEL" in values
+
+
+def test_schema_payload_carries_superseded_keys():
+    """GUI 靠这份名单在回写未知键时跳过旧键——没有它，每次保存都会把刚被
+    合并器迁走的旧行原样写回 .env，迁移永不彻底。"""
+    from config import PROJECT_ROOT
+    from deploy.env_schema import build_schema
+
+    data = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    assert "LM_STUDIO_MODEL" in data["superseded_keys"]
+    assert "LLM_SCHEDULER_GATE_EMBEDDING" in data["superseded_keys"]
+    fields = {f["key"] for f in data["fields"]}
+    assert not (fields & set(data["superseded_keys"]))
 

@@ -192,7 +192,7 @@ python -m pytest tests -n auto --dist loadgroup
 | `test_stella_home.py` | 数据目录定位：环境变量优先、旧布局原地不动（也认库文件）、默认取安装目录的同级 `data` 且不预先创建 |
 | `test_release_layout.py` | 发布物布局：排除项解析不带多余引号、**任何用户数据路径都不许进包**、`data/` 处处排除、打进包就红 |
 | `test_env_schema.py` | `settings.py` → GUI 配置表单 schema 的分组与默认值 |
-| `test_env_inherit.py` | 继承型配置项：`KEY=`（空值）必须回落父键，而 `_env` 不许跟着改——`LM_STUDIO_API_KEY=` 的空值是有意义的 |
+| `test_env_inherit.py` | 继承型配置项：`KEY=`（空值）必须回落父键，而 `_env` 不许跟着改——`MEMORY_EXTRACT_LM_STUDIO_BASE_URL=` 的空值是有意义的 |
 | `test_env_merge.py` | `.env` 合并：`SUPERSEDED` 换算（`LLM_SCHEDULER_GATE_EMBEDDING` → `MEMORY_EMBEDDING_GATE`）、优先级与重复合并幂等 |
 | `test_prompt_cache_prefix.py` | 前缀缓存守卫：三个记忆链路模板的可变占位符必须排在全部固定指令之后 |
 | `test_usage_accounting.py` | 用量记账与预算：UPSERT 幂等、日期键跨天翻滚、临界与超额判据、`pause_memory` 只停记忆域而聊天不受影响、`pause_all` 静默返回不抛异常、`warn_only` 从不拦、记账关闭时零写库、**库不存在时 sink 也不抛异常** |
@@ -636,7 +636,6 @@ else:
 | 链路掉线 / 收不到消息 | 日志里的 `[LinkMonitor]` 告警（含排查步骤）；NapCatQQ Desktop 日志确认账号是否掉线 |
 | 整合输出被截断 | 日志里的 `finish_reason=length` 告警 |
 | @ 对话完全学不到东西 | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明落库监听器被 `block=True` 拦截（priority 必须为 0） |
-| 主动 @ 永远走冷启动 | 日志里 `mode=coldstart` 恒定，或 `[ProactiveTarget] 读取候选失败`；说明候选查询的空间列名不匹配 |
 | 某个模型排队严重 / 回复变慢 | 日志里 `[Scheduler]` 的等待/持有/队列深度告警；`core.llm.snapshot()` 导出累计统计 |
 | 记忆读写静默无效 | 先运行 `python -m deploy paths` 确认 `STELLA_HOME` 与数据库位置；再检查启动日志中的迁移结果，以及 `PRAGMA table_info(memories)` 是否包含 `group_shared_space` |
 | GUI 显示不出链路状态 | 检查 `STELLA_STATUS_API_ENABLED`，用 `curl http://127.0.0.1:8080/stella/status` 直接验证；进程在但接口 403 说明路由被误暴露限制、连不上说明 uvicorn 未起来 |

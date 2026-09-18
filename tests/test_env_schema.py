@@ -38,14 +38,15 @@ def test_schema_excludes_deprecated_compatibility_settings():
 def test_schema_keeps_keys_whose_comments_merely_mention_deprecation():
     """回归：废弃与否只认 env_keys 登记表，不许再拿注释做子串匹配。
 
-    旧实现按「说明里有没有『废弃』二字」猜，误剔两个**在用**的键——
-    CONSOLIDATION_LM_STUDIO_BASE_URL（注释提到 FlexiWeb 流程已弃用）与
-    MEMORY_COMPRESS_LOG_PATH（注释提到旧键登记在废弃表里，它本身是那个新键）。
-    被剔除的键在 GUI 里完全不可见，用户根本改不到。
+    旧实现按「说明里有没有『废弃』二字」猜，误剔**在用**的键——
+    MEMORY_COMPRESS_LOG_PATH（注释提到旧键登记在废弃表里，它本身是那个新键）与
+    CONSOLIDATION_LM_STUDIO_BASE_URL（注释提到 FlexiWeb 流程已弃用）都中过招。
+    被剔除的键在 GUI 里完全不可见，用户根本改不到。前者的注释至今仍提「废弃」，
+    是本用例的活样本；后者那批旧键后来被 SUPERSEDED 迁移整体取代，由
+    test_all_llm_legacy_keys_migrate_one_to_one 的反向断言守着。
     """
     schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
     keys = {field["key"] for field in schema["fields"]}
-    assert "CONSOLIDATION_LM_STUDIO_BASE_URL" in keys
     assert "MEMORY_COMPRESS_LOG_PATH" in keys
 
 
@@ -67,32 +68,8 @@ def test_schema_marks_inherited_defaults():
     schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
     fields = {field["key"]: field for field in schema["fields"]}
     expected = {
-        # ── 早于 P1 的继承链（旧键之间） ──
-        "CONSOLIDATION_LM_STUDIO_BASE_URL": "LM_STUDIO_BASE_URL",
-        "CONSOLIDATION_LM_STUDIO_API_KEY": "LM_STUDIO_API_KEY",
-        "MEMORY_EXTRACT_LM_STUDIO_BASE_URL": "LM_STUDIO_BASE_URL",
-        "MEMORY_EXTRACT_LM_STUDIO_API_KEY": "LM_STUDIO_API_KEY",
-        "MEMORY_EXTRACT_LM_STUDIO_MODEL": "LM_STUDIO_MODEL",
-        "ASTRBOT_LLM_BASE_URL": "LM_STUDIO_BASE_URL",
-        "ASTRBOT_LLM_MODEL": "LM_STUDIO_MODEL",
-        "ASTRBOT_LLM_API_KEY": "LM_STUDIO_API_KEY",
-        # ── P1 端点槽：新键继承旧键，纯本地部署逐字等价于改造前 ──
-        "LLM_ENDPOINT_LOCAL_BASE_URL": "LM_STUDIO_BASE_URL",
-        "LLM_ENDPOINT_LOCAL_API_KEY": "LM_STUDIO_API_KEY",
-        "LLM_ENDPOINT_EXTRA_BASE_URL": "CONSOLIDATION_LM_STUDIO_BASE_URL",
-        "LLM_ENDPOINT_EXTRA_API_KEY": "CONSOLIDATION_LM_STUDIO_API_KEY",
-        # ── P1 角色：每个角色的 model/temperature/max_tokens 继承它原来的那个键 ──
-        "LLM_ROLE_CHAT_MODEL": "LM_STUDIO_MODEL",
-        "LLM_ROLE_ROUTER_MODEL": "LM_STUDIO_MODEL",
-        "LLM_ROLE_PLUGIN_MODEL": "ASTRBOT_LLM_MODEL",
-        "LLM_ROLE_PLUGIN_TEMPERATURE": "ASTRBOT_LLM_TEMPERATURE",
-        "LLM_ROLE_PLUGIN_MAX_TOKENS": "ASTRBOT_LLM_MAX_TOKENS",
-        "LLM_ROLE_COMPACT_MODEL": "LM_STUDIO_MODEL",
-        "LLM_ROLE_CONSOLIDATION_MODEL": "CONSOLIDATION_LM_STUDIO_MODEL",
-        "LLM_ROLE_CONSOLIDATION_TEMPERATURE": "CONSOLIDATION_LM_STUDIO_TEMPERATURE",
+        # ── 三代键收敛后仅剩的两对：MAX_TOKENS 的继承上游都是仍在用的键 ──
         "LLM_ROLE_CONSOLIDATION_MAX_TOKENS": "CONSOLIDATION_LOCAL_MAX_TOKENS",
-        "LLM_ROLE_EXTRACT_MODEL": "MEMORY_EXTRACT_LM_STUDIO_MODEL",
-        "LLM_ROLE_EXTRACT_TEMPERATURE": "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE",
         "LLM_ROLE_EXTRACT_MAX_TOKENS": "MEMORY_EXTRACT_MAX_TOKENS",
     }
     for child, parent in expected.items():
@@ -100,6 +77,45 @@ def test_schema_marks_inherited_defaults():
         # 继承型默认值无法静态求值，default 必须留空——写成别的值会误导 GUI
         assert fields[child]["default"] == ""
     # 非继承项不许莫名带上这个标记
-    assert "inherits" not in fields["LM_STUDIO_BASE_URL"]
+    assert "inherits" not in fields["MEMORY_COMPRESS_LOG_PATH"]
+    assert "inherits" not in fields["LLM_ENDPOINT_LOCAL_BASE_URL"]
     inherited = {f["key"] for f in schema["fields"] if "inherits" in f}
     assert inherited == set(expected), "继承项集合与预期不一致（新增继承项请同步本用例）"
+
+
+def test_schema_field_types_drive_gui_controls():
+    """字段必须带 type 元数据：GUI 靠它选控件形态并做输入校验。
+
+    早期 schema 丢弃类型信息，高级配置页所有键一律渲染成自由文本框，
+    非法值原样落盘 .env（int 集合键甚至会让 import 直接崩溃）。
+    """
+    schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    fields = {field["key"]: field for field in schema["fields"]}
+    assert fields["RAG_ENABLED"]["type"] == "bool"
+    # 布尔默认值保持字符串口径（"true" 而非 "True"）：_env_bool 的 default 参数
+    # 刻意收字符串，schema 输出与旧版逐字节一致
+    assert fields["RAG_ENABLED"]["default"] == "true"
+    assert fields["MESSAGE_CLEANUP_HOUR"]["type"] == "int"
+    assert fields["LLM_TIMEOUT"]["type"] == "float"
+    assert fields["SYSTEM_PROMPT_PATH"]["type"] == "path"
+    assert fields["ALLOWED_GROUPS"]["type"] == "int_set"
+    assert fields["PROACTIVE_SLEEP_MESSAGES"]["type"] == "str_list"
+    assert fields["USER_TIMEZONE"]["type"] == "string"
+    # 继承型按各自助手带类型（GUI 对温度/数字给数字键盘，对字符串给文本框）
+    assert fields["LLM_ROLE_CONSOLIDATION_MAX_TOKENS"]["type"] == "int"
+    assert fields["LLM_ROLE_PLUGIN_TEMPERATURE"]["type"] == "float"
+
+
+def test_schema_choice_fields_carry_options():
+    """choice 字段必须带 choices（AST 从字面量元组读取），GUI 渲染成下拉。"""
+    schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    fields = {field["key"]: field for field in schema["fields"]}
+    assert fields["PROACTIVE_NATURALNESS_MODE"]["type"] == "choice"
+    assert fields["PROACTIVE_NATURALNESS_MODE"]["choices"] == ["observe", "enforce"]
+    assert fields["LLM_BUDGET_EXHAUSTED_ACTION"]["choices"] == [
+        "pause_memory", "pause_all", "warn_only",
+    ]
+    assert fields["LLM_BUDGET_SCOPE"]["choices"] == ["online", "all"]
+    assert fields["PARTICIPATION_LOG_LEVEL"]["choices"] == ["full", "summary", "off"]
+    # 非枚举键不许莫名带 choices
+    assert "choices" not in fields["RAG_ENABLED"]

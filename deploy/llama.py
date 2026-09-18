@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from config import LM_STUDIO_BASE_URL, STELLA_HOME
+from config import LLM_ENDPOINT_LOCAL_BASE_URL, STELLA_HOME
 
 from . import packages, runtime
 
@@ -226,7 +226,7 @@ def _launch_local(endpoint: dict[str, Any]) -> dict[str, Any]:
 
 
 def ensure_local_embedding_service(
-    *, preferred_url: str = LM_STUDIO_BASE_URL
+    *, preferred_url: str = LLM_ENDPOINT_LOCAL_BASE_URL
 ) -> dict[str, Any]:
     """Prefer LM Studio, otherwise start and return the bundled local service."""
     endpoint = runtime.embedding_endpoint_config()
