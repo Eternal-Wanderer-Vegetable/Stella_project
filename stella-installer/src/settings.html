@@ -515,6 +515,10 @@
         embedding_model: String(config.embedding_model ?? ""),
       };
       renderAdvanced();
+      // 高级配置的行内校验用事件委托绑在容器上：字段 DOM 会被重绘整段替换，
+      // 绑在容器上就不用每次重绘后重绑。
+      root.querySelector("#advanced-groups").addEventListener("input", applyAdvancedValidation);
+      root.querySelector("#advanced-groups").addEventListener("change", applyAdvancedValidation);
       renderModelService();
       root.querySelector("#btn-models").onclick = loadModels;
       root.querySelector("#btn-reset-defaults").onclick = resetDefaults;
@@ -1073,6 +1077,10 @@
           description: field.description || "",
           // 继承型配置项：schema 给不出字面默认值，只给「留空即继承谁」
           inherits: field.inherits || "",
+          // 类型与可选项来自 schema（deploy/env_schema.py 按 _env* 助手名生成），
+          // GUI 据此选控件形态并做输入校验
+          type: field.type || "string",
+          choices: field.choices || [],
         });
       }
       return [...groups.values()];
@@ -1087,11 +1095,106 @@
         .join("");
     }
 
+    /** 按字段类型渲染控件：bool/choice 用下拉（非法值无从输入），int/float
+     *  给数字键盘提示，其余保持自由文本框。 */
+    function advancedControlHTML(item) {
+      const key = esc(item.key);
+      if (item.type === "bool") {
+        const value = String(item.value).trim().toLowerCase();
+        const current = ["false", "0", "no"].includes(value) ? "false" : "true";
+        return `<select data-adv-key="${key}">
+          <option value="true"${current === "true" ? " selected" : ""}>true</option>
+          <option value="false"${current === "false" ? " selected" : ""}>false</option>
+        </select>`;
+      }
+      if (item.type === "choice") {
+        const choices = item.choices || [];
+        const normalized = String(item.value).trim().toLowerCase();
+        const exact = choices.find(choice => choice === normalized);
+        let options = choices.map(choice =>
+          `<option value="${esc(choice)}"${choice === exact ? " selected" : ""}>${esc(choice)}</option>`
+        ).join("");
+        // 存量 .env 里的非法值不能被下拉静默改写：原样保留为选项，交给校验标红
+        if (!exact) {
+          options = `<option value="${esc(String(item.value).trim())}" selected>${esc(String(item.value).trim())}（无效）</option>${options}`;
+        }
+        return `<select data-adv-key="${key}">${options}</select>`;
+      }
+      const inputmode = item.type === "int" ? ' inputmode="numeric"'
+        : item.type === "float" ? ' inputmode="decimal"' : "";
+      return `<input data-adv-key="${key}" value="${esc(item.value)}"${inputmode}${item.inherits ? ` placeholder="继承 ${esc(item.inherits)}"` : ""} />`;
+    }
+
+    /** 单字段校验。返回 null 表示通过，否则 {level: "error"|"warn", text}。
+     *  error 拦截保存，warn 只提醒（时区这类无法本地判死的自由文本）。 */
+    function validateAdvancedField(field, rawValue) {
+      const value = String(rawValue ?? "").trim();
+      // 继承型留空不落盘（见 buildAdvancedEnv），空值永不报错
+      if (field.inherits && !value) return null;
+      const lowered = value.toLowerCase();
+      switch (field.type) {
+        case "int":
+          if (!/^-?\d+$/.test(value)) return { level: "error", text: "需要整数" };
+          return null;
+        case "float":
+          if (value === "" || !Number.isFinite(parseFloat(value))) return { level: "error", text: "需要数字" };
+          return null;
+        case "int_set": {
+          if (value === "") return null;
+          const bad = value.split(",").map(part => part.trim()).find(part => part && !/^-?\d+$/.test(part));
+          if (bad !== undefined) return { level: "error", text: `含非法整数「${bad}」，多个值用英文逗号分隔` };
+          return null;
+        }
+        case "choice":
+          if (value && !(field.choices || []).some(choice => choice === lowered)) {
+            return { level: "error", text: `可选：${(field.choices || []).join(" / ")}` };
+          }
+          return null;
+        case "string":
+          // 时区是自由文本，但拼错的时区会在运行期被静默回退成服务器时区——提前提醒
+          if (field.key === "USER_TIMEZONE" && value && !["local", "system"].includes(lowered)
+            && typeof Intl !== "undefined" && Intl.supportedValuesOf) {
+            const known = Intl.supportedValuesOf("timeZone").includes(value)
+              || /^(gmt|utc)[+-]\d{1,2}(:\d{2})?$/.test(lowered)
+              || /^[+-]\d{1,2}(:\d{2})?$/.test(lowered);
+            if (!known) return { level: "warn", text: "不是常见 IANA 时区名或 UTC+X 偏移，运行期会回退为服务器本地时间" };
+          }
+          return null;
+        default:
+          return null;
+      }
+    }
+
+    /** 全量重校验高级配置：行内标错/提醒，返回 error 级问题清单（供保存拦截）。 */
+    function applyAdvancedValidation() {
+      const problems = [];
+      const byKey = new Map(schemaFields.map(field => [field.key, field]));
+      root.querySelectorAll("[data-adv-field]").forEach(wrap => {
+        const field = byKey.get(wrap.dataset.advField);
+        const control = wrap.querySelector("[data-adv-key]");
+        if (!field || !control) return;
+        const msg = wrap.querySelector(".adv-msg");
+        const issue = validateAdvancedField(field, control.value);
+        if (!issue) {
+          wrap.classList.remove("adv-invalid");
+          msg.hidden = true;
+          return;
+        }
+        if (issue.level === "error") problems.push(`${field.key}：${issue.text}`);
+        wrap.classList.toggle("adv-invalid", issue.level === "error");
+        msg.textContent = issue.text;
+        msg.className = `adv-msg adv-${issue.level}`;
+        msg.hidden = false;
+      });
+      return problems;
+    }
+
     function groupHTML(group) {
       const body = `<div class="advanced-fields">${group.items.map(item => `
-        <div class="advanced-field">
+        <div class="advanced-field" data-adv-field="${esc(item.key)}">
           <label>${esc(item.key)}${item.description ? `<small>${esc(item.description)}</small>` : ""}${item.inherits ? `<small>留空即继承 ${esc(item.inherits)}</small>` : ""}</label>
-          <input data-adv-key="${esc(item.key)}" value="${esc(item.value)}"${item.inherits ? ` placeholder="继承 ${esc(item.inherits)}"` : ""} />
+          ${advancedControlHTML(item)}
+          <span class="adv-msg" hidden></span>
         </div>`).join("")}</div>`;
       return `<section class="primary-config-group"><h3>${esc(group.title)}</h3>${body}</section>`;
     }
@@ -1148,6 +1251,19 @@
       error.textContent = "";
       // 先做前端拦截：这几类问题存下去也只是让 doctor 再报一次，不如当场说清楚。
       const problems = modelServiceProblems();
+      // 高级配置的非法值同样当场拦下：存下去 Python 侧只会告警回退，
+      // 用户却不知道自己填的东西从来没生效过。
+      const advancedErrors = applyAdvancedValidation();
+      if (advancedErrors.length) {
+        const all = [...problems, ...advancedErrors];
+        const head = problems.length ? "配置还有问题，先修好再保存："
+          : "高级配置还有非法值，先修好再保存：";
+        error.innerHTML = [head, ...all.map(t => `· ${esc(t)}`)].join("<br />");
+        root.querySelector(".adv-invalid [data-adv-key]")?.focus();
+        status.textContent = "未保存";
+        button.disabled = false;
+        return;
+      }
       if (problems.length) {
         error.innerHTML = ["模型服务还有问题，先修好再保存：", ...problems.map(t => `· ${esc(t)}`)].join("<br />");
         status.textContent = "未保存";

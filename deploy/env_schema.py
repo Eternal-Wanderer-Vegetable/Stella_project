@@ -24,7 +24,33 @@ from . import env_keys
 # int / float 版与 _env_int / _env_float 行为完全相同，独立命名的唯一目的就是
 # 让这里能识别出「这一项是继承型」——见 config/settings.py 里 _env_int_inherit。
 _INHERIT_FUNCS = frozenset({"_env_inherit", "_env_int_inherit", "_env_float_inherit"})
-_ENV_FUNCS = frozenset({"_env", "_env_int", "_env_float", "_env_path"}) | _INHERIT_FUNCS
+_ENV_FUNCS = frozenset({
+    "_env",
+    "_env_int",
+    "_env_float",
+    "_env_path",
+    "_env_bool",
+    "_env_int_set",
+    "_env_str_list",
+    "_env_choice",
+}) | _INHERIT_FUNCS
+
+# 助手名 → 字段类型。GUI 据此决定控件形态与输入校验规则（下拉 / 数字键盘 /
+# 逐片段校验逗号列表）；不在这里的助手生成的键不会进 schema——新增助手时
+# 必须两处同步，漏了 _ENV_FUNCS 键就整个从 GUI 消失，漏了类型就退化为自由文本框。
+_FIELD_TYPES = {
+    "_env": "string",
+    "_env_int": "int",
+    "_env_float": "float",
+    "_env_path": "path",
+    "_env_bool": "bool",
+    "_env_int_set": "int_set",
+    "_env_str_list": "str_list",
+    "_env_choice": "choice",
+    "_env_inherit": "string",
+    "_env_int_inherit": "int",
+    "_env_float_inherit": "float",
+}
 
 
 def build_schema(settings_path: Path) -> dict:
@@ -72,7 +98,10 @@ def build_schema(settings_path: Path) -> dict:
             "section": sections[node.lineno - 1],
             "description": _description_before(lines, node.lineno),
             "default": _default_value(call),
+            "type": _FIELD_TYPES.get(call.func.id, "string"),
         }
+        if call.func.id == "_env_choice":
+            field["choices"] = _choice_values(call)
         parent = _inherits_from(call)
         if parent:
             field["inherits"] = parent
@@ -154,3 +183,18 @@ def _default_value(call: ast.Call) -> str:
         # 输出 inherits 标记，default 保持空串。
         return ""
     return str(value)
+
+
+def _choice_values(call: ast.Call) -> list[str]:
+    """``_env_choice("KEY", default, choices)`` 的第三参转 JSON 列表。
+
+    choices 必须是字面量元组（见 config/settings.py 里 _env_choice 的说明）；
+    写成非常量结构时拿不到值，返回空列表，GUI 退化为自由文本框。
+    """
+    if len(call.args) < 3:
+        return []
+    try:
+        value = ast.literal_eval(call.args[2])
+    except (ValueError, TypeError):
+        return []
+    return [str(item) for item in value]

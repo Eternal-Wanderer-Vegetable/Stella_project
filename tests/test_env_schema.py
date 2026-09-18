@@ -103,3 +103,41 @@ def test_schema_marks_inherited_defaults():
     assert "inherits" not in fields["LM_STUDIO_BASE_URL"]
     inherited = {f["key"] for f in schema["fields"] if "inherits" in f}
     assert inherited == set(expected), "继承项集合与预期不一致（新增继承项请同步本用例）"
+
+
+def test_schema_field_types_drive_gui_controls():
+    """字段必须带 type 元数据：GUI 靠它选控件形态并做输入校验。
+
+    早期 schema 丢弃类型信息，高级配置页所有键一律渲染成自由文本框，
+    非法值原样落盘 .env（int 集合键甚至会让 import 直接崩溃）。
+    """
+    schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    fields = {field["key"]: field for field in schema["fields"]}
+    assert fields["RAG_ENABLED"]["type"] == "bool"
+    # 布尔默认值保持字符串口径（"true" 而非 "True"）：_env_bool 的 default 参数
+    # 刻意收字符串，schema 输出与旧版逐字节一致
+    assert fields["RAG_ENABLED"]["default"] == "true"
+    assert fields["MESSAGE_CLEANUP_HOUR"]["type"] == "int"
+    assert fields["LLM_TIMEOUT"]["type"] == "float"
+    assert fields["SYSTEM_PROMPT_PATH"]["type"] == "path"
+    assert fields["ALLOWED_GROUPS"]["type"] == "int_set"
+    assert fields["PROACTIVE_SLEEP_MESSAGES"]["type"] == "str_list"
+    assert fields["LM_STUDIO_BASE_URL"]["type"] == "string"
+    # 继承型按各自助手带类型（GUI 对温度/数字给数字键盘，对字符串给文本框）
+    assert fields["MEMORY_EXTRACT_LM_STUDIO_BASE_URL"]["type"] == "string"
+    assert fields["LLM_ROLE_PLUGIN_TEMPERATURE"]["type"] == "float"
+
+
+def test_schema_choice_fields_carry_options():
+    """choice 字段必须带 choices（AST 从字面量元组读取），GUI 渲染成下拉。"""
+    schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    fields = {field["key"]: field for field in schema["fields"]}
+    assert fields["PROACTIVE_NATURALNESS_MODE"]["type"] == "choice"
+    assert fields["PROACTIVE_NATURALNESS_MODE"]["choices"] == ["observe", "enforce"]
+    assert fields["LLM_BUDGET_EXHAUSTED_ACTION"]["choices"] == [
+        "pause_memory", "pause_all", "warn_only",
+    ]
+    assert fields["LLM_BUDGET_SCOPE"]["choices"] == ["online", "all"]
+    assert fields["PARTICIPATION_LOG_LEVEL"]["choices"] == ["full", "summary", "off"]
+    # 非枚举键不许莫名带 choices
+    assert "choices" not in fields["RAG_ENABLED"]

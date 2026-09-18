@@ -305,7 +305,11 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .advanced-field { display: flex; flex-direction: column; gap: 4px; }
 .advanced-field label { color: var(--text-dim); font: 12px var(--mono); }
 .advanced-field label small { display: block; color: var(--text-faint); font: 11px/1.4 "Segoe UI", sans-serif; margin-top: 2px; }
-.advanced-field input { width: 100%; padding: 7px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; font: 12px var(--mono); }
+.advanced-field input, .advanced-field select { width: 100%; padding: 7px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; font: 12px var(--mono); }
+.advanced-field.adv-invalid input, .advanced-field.adv-invalid select { border-color: var(--error); }
+.adv-msg { font-size: 12px; line-height: 1.5; }
+.adv-msg.adv-error { color: var(--error); }
+.adv-msg.adv-warn { color: var(--warn); }
 /* ── 模型服务分区（端点卡片 + 角色矩阵） ──
    矩阵有 6 列，窄窗口下不折行而是整块横向滚动：折成一列会让「哪个值属于哪个角色」
    彻底失去参照，横滚至少还看得懂。
