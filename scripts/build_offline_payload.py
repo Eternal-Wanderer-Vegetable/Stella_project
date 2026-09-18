@@ -30,6 +30,7 @@ resources/stella/offline）：
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -204,6 +205,14 @@ def write_manifest(output: Path, version: str, files: dict[str, Path]) -> None:
 
 
 def main() -> int:
+    # 固定 UTF-8：Windows 下 stdout/stderr 被重定向（GH Actions runner 的管道
+    # 默认 cp1252）时 Python 改用 ANSI 代码页，打印中文进度直接 UnicodeEncodeError。
+    # stderr 也要：SystemExit 的中文错误信息走 stderr，否则真出错时会反过来
+    # 被一个编码异常盖掉真实原因。与 deploy/__main__.py 的做法一致。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            with contextlib.suppress(Exception):
+                stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--output", type=Path, required=True, help="payload 输出目录")
     parser.add_argument("--catalog", type=Path, required=True,
