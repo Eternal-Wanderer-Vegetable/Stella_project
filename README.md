@@ -160,6 +160,7 @@ pip install -r requirements.txt
 
 | 组件 | 要求 |
 |---|---|
+| 操作系统 | Windows 10/11 x64（OneClick 安装包已内置 WebView2 运行时离线安装器，无 WebView2 的电脑也能装；Standalone 需系统自带） |
 | Python | 3.10+（OneClick 安装包内置嵌入式 Python；Standalone 解压版需自装） |
 | 框架 | [NoneBot 2](https://nonebot.dev/) |
 | QQ 协议端 | [NapCat](https://github.com/NapNeko/NapCatQQ) 或其他 OneBot V11 实现（OneClick 安装包已内置 NapCat，扫码登录即可；Standalone 推荐用 [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) 安装并登录） |

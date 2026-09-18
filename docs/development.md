@@ -515,6 +515,13 @@ Offline 变体与在线版**同一份代码、同一个 profile id**，只是 NS
 - package catalog 声明的全部组件（llama.cpp backend / NapCat / 默认 embedding 模型，文件名 = catalog 的 `artifact` 字段，校验走与在线安装同一条 catalog checksum 路径）；
 - playwright 的 chromium-headless-shell（`PLAYWRIGHT_BROWSERS_PATH` 指向随包内核，渲染零下载）。
 
+WebView2 运行时不在负载里，而是由 Tauri 的
+`webviewInstallMode: offlineInstaller` 内嵌进 NSIS 安装器本体（约 +127MB）：
+安装时先检测注册表，已有 WebView2 则跳过，没有则静默装内嵌的离线安装包，
+同样零联网。默认的 `downloadBootstrapper` 需要联网下载运行时，在无 WebView2
+的离线机器上 GUI 起不来（2026-09 真实用户反馈），`embedBootstrapper` 也仍需
+联网——必须用 `offlineInstaller`。
+
 **修改安装期组件时必须同步检查**：新增 catalog 组件 → 无需改负载脚本（按 catalog 遍历）；
 新增 Python 依赖 → 确认 `pip wheel` 能构建出 wheel；升级 playwright → 负载里的内核
 revision 必须与新版本一致（脚本现场安装，天然一致）。

@@ -160,6 +160,7 @@ pip install -r requirements.txt
 
 | Component | Requirement |
 |---|---|
+| OS | Windows 10/11 x64 (OneClick installers bundle an offline WebView2 runtime installer, so machines without WebView2 are covered; Standalone relies on the system-provided runtime) |
 | Python | 3.10+ (OneClick installers bundle the embedded Python; Standalone archives require your own installation) |
 | Framework | [NoneBot 2](https://nonebot.dev/) |
 | QQ protocol endpoint | [NapCat](https://github.com/NapNeko/NapCatQQ) or another OneBot V11 implementation (OneClick installers bundle NapCat — just scan the QR code to log in; for Standalone, installing and logging in with [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) is recommended) |
