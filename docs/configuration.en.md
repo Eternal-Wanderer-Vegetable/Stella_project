@@ -500,7 +500,6 @@ The reason for consolidating once when a session ends is that the conversation's
 | Configuration | Default | Description |
 |---|---|---|
 | `MEMORY_SOURCE_KIND_ENABLED` | `true` | When disabled, all messages have equal weight and the prompt does not label their sources |
-| `MEMORY_AT_MENTION_CONFIDENCE_BONUS` | `0.05` | Confidence bonus for candidates from the `AT_MENTION` source |
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | Confidence gain when the same fact recurs |
 | `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | Maximum time in the observation area; mark as `REJECTED` after expiry (do not delete). Time-sensitive types have shorter tiers; see below |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | Maximum accumulated `evidence` |
@@ -632,7 +631,6 @@ middle           → t = (SLOW - interval) / (SLOW - FAST)
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | Probability at the high-frequency end |
 | `PROACTIVE_PROB_AT_SLOW` | `0.0` | Probability at the quiet end |
 | `PROACTIVE_PROB_GAMMA` | `1.0` | Curve-shaping exponent; >1 is more conservative |
-| `PROACTIVE_TOPIC_WARMUP_SECONDS` | `45.0` | Topic warm-up duration; do not participate before it is reached |
 | `PROACTIVE_COOLDOWN` | `600` | Hard group-level cooldown (seconds) |
 | `PROACTIVE_CHECK_INTERVAL` | `60` | Scheduled check interval (seconds) |
 | `PROACTIVE_FREQ_WINDOW` | `10` | Frequency-estimation window (most recent N messages) |
@@ -672,11 +670,10 @@ For a practical frequency reference for the three presets (`CHECK_INTERVAL=60`):
 | `PROACTIVE_AT_ACTIVE_WITHIN` | `300.0` | Window for deciding that a user is “currently active” (seconds) |
 | `PROACTIVE_MAX_NO_REPLY` | `2` | Maximum consecutive non-responses before follow-up questions are paused |
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | Response-detection window (seconds) |
-| `PROACTIVE_COLDSTART_TOPICS` | see settings.py | Cold-start topic list, comma-separated |
 | `PROACTIVE_AT_EXCLUDE_USERS` | empty | QQ numbers that will not be selected for proactive conversation (comma-separated) |
 | `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | Candidate types that are never verified via a proactive follow-up (comma-separated; empty = any type may be asked about) |
 | `PROACTIVE_NATURALNESS_MODE` | `enforce` | Natural-continuation rollout: `enforce` applies skip cooldown; `observe` records decisions without blocking repeated attempts |
-| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | In-process negative cooldown after skipping the same candidate/cold-start topic; `0` disables it |
+| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | In-process negative cooldown after skipping the same candidate; `0` disables it |
 
 The exclusion list is primarily for **other AIs in the group**: mutually @-mentioning them can trigger an endless conversational loop. Excluded accounts are still passively collected (messages are stored and consolidated normally); the Bot simply does not ask them questions proactively.
 
@@ -688,7 +685,7 @@ Quota is counted when a mention is sent, regardless of whether the user responds
 
 The natural-continuation check reuses the existing Replyer generation and does not add a second LLM call. When the model emits the internal
 `[[STELLA_SKIP]]` marker exactly, the gateway sends nothing, does not consume the proactive-@ quota, and does not start response detection.
-With `PROACTIVE_NATURALNESS_MODE=enforce`, the same candidate or cold-start topic is not generated again during
+With `PROACTIVE_NATURALNESS_MODE=enforce`, the same candidate is not generated again during
 `PROACTIVE_SKIP_COOLDOWN_SECONDS`; a new message from the target user immediately clears that user's previous skip.
 Use `observe` to measure skip rate and generation cost during rollout without blocking repeated attempts.
 
@@ -832,7 +829,6 @@ Asynchronous background learning after a reply is sent (zero LLM): whether the u
 | `MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD` | `0.3` | Importance threshold for archiving low-value memories |
 | `MEMORY_ARCHIVE_INACTIVE_DAYS` | `180` | Days without access before low-value archival |
 | `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | Compression log (see [Logs](#logs)) |
-| `MEMORY_RECENCY_HALF_LIFE_DAYS` | `120.0` | Fallback recency half-life (days) |
 
 `MEMORY_DECAY_DAYS` is a dictionary in code, not an `.env` setting, defining the lifetime of each memory type:
 
@@ -1133,7 +1129,7 @@ Shutdown flow: deploy writes the sentinel → the in-Bot watcher detects it and 
 | Desired effect | Adjustment |
 |---|---|
 | Bot is too noisy | Lower `PROACTIVE_PROB_AT_FAST`; raise `PROACTIVE_COOLDOWN` and `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`; lower `PROACTIVE_AT_QUOTA_BASE`; or have an administrator say “mute” in the group to disable it temporarily |
-| Bot is too quiet | Raise `PROACTIVE_PROB_AT_FAST`; lower `PROACTIVE_TOPIC_WARMUP_SECONDS` |
+| Bot is too quiet | Raise `PROACTIVE_PROB_AT_FAST`; lower `warmup_messages` in `config/participation/thresholds.toml` |
 | Bot still talks late at night | Confirm `PROACTIVE_SLEEP_ENABLED=true` and check whether `PROACTIVE_SLEEP_START/END` cover the target period |
 | Bot sends several messages after waking | Raise `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | Bot does not remember things | Lower `MEMORY_OBSERVE_LOW_CONFIDENCE`; lower `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`; confirm `PROACTIVE_AT_ENABLED=true` (passive-ingestion output is close to zero) |

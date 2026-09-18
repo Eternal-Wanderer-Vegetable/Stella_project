@@ -31,16 +31,15 @@ def db(tmp_path, monkeypatch):
 
 
 def test_at_count_increments(tmp_path, monkeypatch):
-    """record_at 每次 +1，last_asked_topic 与 candidate_id 同步刷新。"""
+    """record_at 每次 +1，candidate_id 同步刷新。"""
     db = tmp_path / "ps.db"
     monkeypatch.setattr(proactive_state, "DB_PATH", db)
 
-    proactive_state.record_at(1, 2001, topic="上次聊过什么", candidate_id="abc")
-    proactive_state.record_at(1, 2001, topic="又聊一次")
+    proactive_state.record_at(1, 2001, candidate_id="abc")
+    proactive_state.record_at(1, 2001)
 
     state = proactive_state.get_state(1, 2001)
     assert state["at_count_today"] == 2
-    assert state["last_asked_topic"] == "又聊一次"
     assert state["last_asked_candidate_id"] == ""
 
     # 不同用户独立计数
@@ -113,7 +112,7 @@ def test_missing_table_returns_defaults_without_error(tmp_path, monkeypatch):
     state = proactive_state.get_state(1, 2001)
     assert state["at_count_today"] == 0
     assert state["consecutive_no_reply"] == 0
-    assert state["last_asked_topic"] == ""
+    assert state["last_asked_candidate_id"] == ""
     # count_user_messages_24h 读表缺失 → 0，不打断主动发言链路
     assert proactive_state.count_user_messages_24h(1, 2001) == 0
 

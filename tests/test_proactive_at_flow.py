@@ -101,13 +101,12 @@ class _FakeParticipationEvents(_FakeParticipation):
 
 def test_record_at_counts_and_persists(db):
     """发出即计数，且落库后可跨实例读取。"""
-    record_at(1, 1001, topic="最近在玩什么游戏")
+    record_at(1, 1001)
     state = get_state(1, 1001)
     assert state["at_count_today"] == 1
-    assert state["last_asked_topic"] == "最近在玩什么游戏"
     assert state["last_at_at"] is not None
 
-    record_at(1, 1001, topic="平时喜欢吃什么")
+    record_at(1, 1001)
     assert get_state(1, 1001)["at_count_today"] == 2
 
 
@@ -213,8 +212,8 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
     proactive = _FakeProactive()
     target = ProactiveTarget(
         user_id=1001,
-        mode="coldstart",
-        topic="最近在玩什么游戏",
+        candidate_id="cand-9",
+        candidate_content="他住在上海",
     )
     participation = Mock()
     record_at_mock = Mock()
@@ -240,7 +239,7 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
     bot.send_group_msg.assert_not_awaited()
     assert proactive.marked == []
     assert proactive.recorded == []
-    assert proactive.skipped == [(1, 1001, "topic:最近在玩什么游戏")]
+    assert proactive.skipped == [(1, 1001, "candidate:cand-9")]
     participation.assert_not_called()
     record_at_mock.assert_not_called()
     record_bot_lines.assert_not_awaited()
@@ -258,8 +257,8 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     participation = _FakeParticipation()
     target = ProactiveTarget(
         user_id=1001,
-        mode="coldstart",
-        topic="最近在玩什么游戏",
+        candidate_id="cand-1",
+        candidate_content="他住在上海",
     )
     record_at_mock = Mock()
     record_bot_lines = AsyncMock()
@@ -297,8 +296,7 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     record_at_mock.assert_called_once_with(
         1,
         1001,
-        topic="最近在玩什么游戏",
-        candidate_id="",
+        candidate_id="cand-1",
     )
     record_bot_lines.assert_awaited_once()
     expression_sent.assert_called_once()

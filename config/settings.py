@@ -83,7 +83,6 @@ INSTANCE_ID = resolve_instance_id(PROJECT_ROOT)
 INSTANCE_RUNTIME_DIR = runtime_dir(STELLA_HOME, INSTANCE_ID)
 INSTANCE_PID_FILE = pid_path(STELLA_HOME, INSTANCE_ID)
 INSTANCE_MANIFEST_PATH = manifest_path(STELLA_HOME, INSTANCE_ID)
-INSTANCE_STOP_SENTINEL = stop_sentinel_path(STELLA_HOME, INSTANCE_ID)
 _custom_stop_sentinel = os.getenv("STELLA_STOP_SENTINEL", "").strip()
 if _custom_stop_sentinel:
     _custom_stop_path = Path(_custom_stop_sentinel).expanduser().resolve()
@@ -91,7 +90,7 @@ if _custom_stop_sentinel:
         f"{_custom_stop_path.stem}.{INSTANCE_ID}{_custom_stop_path.suffix}"
     )
 else:
-    STELLA_STOP_SENTINEL = INSTANCE_STOP_SENTINEL
+    STELLA_STOP_SENTINEL = stop_sentinel_path(STELLA_HOME, INSTANCE_ID)
 STELLA_LAUNCH_TOKEN = os.getenv(LAUNCH_TOKEN_ENV, "").strip()
 
 
@@ -441,17 +440,11 @@ MEMORY_SCORE_W_IMPORTANCE = _env_float("MEMORY_SCORE_W_IMPORTANCE", 0.05)
 # 已是实质淘汰，会让矩阵漏写直接决定排序结果；0.75 保留兼容项仍能参与排序。
 USAGE_TYPE_MISMATCH_PENALTY = _env_float("USAGE_TYPE_MISMATCH_PENALTY", 0.75)
 
-# Recency 兜底半衰期（天）：记忆类型没有 MEMORY_DECAY_DAYS 条目时用此值
-MEMORY_RECENCY_HALF_LIFE_DAYS = _env_float("MEMORY_RECENCY_HALF_LIFE_DAYS", 120.0)
-
 # ---------- 消息来源分级（source_kind） ----------
 # @ 对话是唯一稳定的用户信息源（依据 check_point#1：群聊主体为角色扮演，
 # 被动摄入的可提取信息极少）。开关关闭时退回「所有消息等权」的旧行为：
-# prompt 不标注来源、候选不加置信度奖励；schema 字段仍然写入（无害，便于审计）。
+# prompt 不标注来源；schema 字段仍然写入（无害，便于审计）。
 MEMORY_SOURCE_KIND_ENABLED = _env("MEMORY_SOURCE_KIND_ENABLED", "true").lower() in ("true", "1", "yes")
-# AT_MENTION 来源候选的置信度奖励。仅作微调，不足以让低置信候选越过
-# consolidation_prompt 的 0.7 门槛或 MEMORY_OBSERVE_LOW_CONFIDENCE。
-MEMORY_AT_MENTION_CONFIDENCE_BONUS = _env_float("MEMORY_AT_MENTION_CONFIDENCE_BONUS", 0.05)
 
 # ---------- 记忆语义检索（可选，Embedding） ----------
 # 默认关闭：语义分用 memory.policy 的规则版（词面 Jaccard，离线、确定）。
@@ -736,7 +729,7 @@ PROACTIVE_TOGGLE_ADMINS = {int(x) for x in _env("PROACTIVE_TOGGLE_ADMINS", "").s
 
 # ---------- 主动发言 v2：话题参与概率曲线（双锚点插值） ----------
 # 同一条曲线通过参数即可表达两种意图，无需模式开关：
-#   「热闹时插话」（新默认）：PROB_AT_FAST=0.35, PROB_AT_SLOW=0.0
+#   「热闹时插话」（新默认）：PROB_AT_FAST=0.15, PROB_AT_SLOW=0.0（0.35 偏吵，已调低）
 #   「热闹时闭嘴」（旧行为）：PROB_AT_FAST=0.05, PROB_AT_SLOW=0.5
 #   完全关闭：两个锚点都设 0
 # 群性质差异大（闲聊群 vs 技术群），因此这条曲线必须现场可调。
@@ -746,8 +739,6 @@ PROACTIVE_PROB_AT_FAST = _env_float("PROACTIVE_PROB_AT_FAST", 0.15)
 PROACTIVE_PROB_AT_SLOW = _env_float("PROACTIVE_PROB_AT_SLOW", 0.0)
 # 曲线整形指数：1.0 线性；>1 把高概率压缩到最活跃一端（更保守）；<1 更平坦
 PROACTIVE_PROB_GAMMA = _env_float("PROACTIVE_PROB_GAMMA", 1.0)
-# 话题预热：话题刚开始时模型总结不出主题，贸然插话会答非所问
-PROACTIVE_TOPIC_WARMUP_SECONDS = _env_float("PROACTIVE_TOPIC_WARMUP_SECONDS", 45.0)
 
 # ---------- 主动发言 v2：每用户 @ 配额 ----------
 # 主动 @ 是侵入性最强的行为，必须有硬上限。基础 2 次/天，高频发言者小幅上浮：
@@ -773,15 +764,6 @@ PROACTIVE_AT_ACTIVE_WITHIN = _env_float("PROACTIVE_AT_ACTIVE_WITHIN", 300.0)
 PROACTIVE_MAX_NO_REPLY = _env_int("PROACTIVE_MAX_NO_REPLY", 2)
 # 回应检测窗口（秒）：发出提问后该用户在此窗口内有任何发言即视为有回应
 PROACTIVE_REPLY_WINDOW_SECONDS = _env_float("PROACTIVE_REPLY_WINDOW_SECONDS", 300.0)
-# 冷启动话题清单（无候选可验证时用，逗号分隔）
-PROACTIVE_COLDSTART_TOPICS = [
-    t.strip()
-    for t in _env(
-        "PROACTIVE_COLDSTART_TOPICS",
-        "最近在玩什么游戏,平时喜欢吃什么,今天天气怎么样,最近在忙什么,平时用什么设备",
-    ).split(",")
-    if t.strip()
-]
 # 主动 @ 的排除名单（QQ 号，逗号分隔）：这些账号不会被选为主动搭话对象。
 # 主要用途是群内其他 AI ——互相 @ 会触发无终止的循环对话。
 # 注意：被排除的账号仍会被动收集信息（消息照常落库与整合），

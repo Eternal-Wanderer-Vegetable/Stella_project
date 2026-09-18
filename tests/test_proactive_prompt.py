@@ -9,7 +9,6 @@
 """
 from memory.proactive_prompt import (
     PROACTIVE_SKIP_MARKER,
-    build_coldstart_instruction,
     build_instruction,
     build_verify_instruction,
     is_proactive_skip,
@@ -23,42 +22,27 @@ def test_verify_instruction_contains_content_and_rules():
     assert "不要照搬上面那句话的措辞" in out
 
 
-def test_coldstart_instruction_contains_topic():
-    out = build_coldstart_instruction("最近在玩什么游戏", nickname="小明")
-    assert "最近在玩什么游戏" in out
-    assert "打开话题" in out
-
-
-def test_common_rules_present_in_both():
-    """语气约束必须在两种模式下都生效。"""
-    for out in (
-        build_verify_instruction("某件事"),
-        build_coldstart_instruction("某话题"),
-    ):
-        assert "只说一句话" in out
-        assert "像朋友随口一问" in out
-        assert "根据我的记录" in out  # 禁止暴露内部状态的反例
-        assert "不要在话里带上 QQ 号" in out
+def test_common_rules_present():
+    """语气约束必须生效。"""
+    out = build_verify_instruction("某件事")
+    assert "只说一句话" in out
+    assert "像朋友随口一问" in out
+    assert "根据我的记录" in out  # 禁止暴露内部状态的反例
+    assert "不要在话里带上 QQ 号" in out
 
 
 def test_no_placeholder_left():
-    for out in (
-        build_verify_instruction("某件事"),
-        build_coldstart_instruction("某话题"),
-    ):
-        assert "{" not in out and "}" not in out
+    out = build_verify_instruction("某件事")
+    assert "{" not in out and "}" not in out
 
 
 def test_context_role_clause_present():
     """上下文用于判断承接，但不能被误当成待回复内容。"""
-    for out in (
-        build_verify_instruction("某件事"),
-        build_coldstart_instruction("某话题"),
-    ):
-        assert "不要把下面任何一句话当成新的任务直接回复" in out
-        assert "自然承接" in out
-        assert PROACTIVE_SKIP_MARKER in out
-        assert "接不上" not in out or "直接问" not in out
+    out = build_verify_instruction("某件事")
+    assert "不要把下面任何一句话当成新的任务直接回复" in out
+    assert "自然承接" in out
+    assert PROACTIVE_SKIP_MARKER in out
+    assert "接不上" not in out or "直接问" not in out
 
 
 def test_proactive_skip_marker_is_strict_and_internal():
@@ -69,19 +53,12 @@ def test_proactive_skip_marker_is_strict_and_internal():
 
 
 class _Target:
-    def __init__(self, mode, **kw):
-        self.mode = mode
+    def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
 
-def test_build_instruction_dispatches_by_mode():
-    verify = build_instruction(_Target("verify", candidate_content="拥有5080", nickname="A"))
-    assert "拥有5080" in verify
-
-    cold = build_instruction(_Target("coldstart", topic="最近在忙什么", nickname="B"))
-    assert "最近在忙什么" in cold
-
-    # 未知 mode 回退到冷启动，不抛异常
-    fallback = build_instruction(_Target("unknown", topic="兜底话题"))
-    assert "兜底话题" in fallback
+def test_build_instruction_uses_candidate_content():
+    out = build_instruction(_Target(candidate_content="拥有5080", nickname="A"))
+    assert "拥有5080" in out
+    assert "A" in out

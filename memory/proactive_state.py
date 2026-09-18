@@ -44,7 +44,7 @@ def get_state(group_id: int, user_id: int) -> dict:
     try:
         conn = _connect()
         row = conn.execute(
-            "SELECT at_count_today, at_count_date, last_at_at, last_asked_topic, "
+            "SELECT at_count_today, at_count_date, last_at_at, "
             "last_asked_candidate_id, consecutive_no_reply FROM proactive_state "
             "WHERE group_id = ? AND user_id = ?",
             (str(group_id), str(user_id)),
@@ -58,7 +58,6 @@ def get_state(group_id: int, user_id: int) -> dict:
         return {
             "at_count_today": 0,
             "last_at_at": None,
-            "last_asked_topic": "",
             "last_asked_candidate_id": "",
             "consecutive_no_reply": 0,
         }
@@ -68,13 +67,12 @@ def get_state(group_id: int, user_id: int) -> dict:
     return {
         "at_count_today": count,
         "last_at_at": row[2],
-        "last_asked_topic": row[3] or "",
-        "last_asked_candidate_id": row[4] or "",
-        "consecutive_no_reply": int(row[5] or 0),
+        "last_asked_candidate_id": row[3] or "",
+        "consecutive_no_reply": int(row[4] or 0),
     }
 
 
-def record_at(group_id: int, user_id: int, topic: str = "", candidate_id: str = "") -> None:
+def record_at(group_id: int, user_id: int, candidate_id: str = "") -> None:
     """记录一次主动 @：配额 +1、刷新时间与追问内容。
 
     **发出即计数**，不论用户是否回应——否则无回应的追问不占配额，会导致
@@ -85,16 +83,15 @@ def record_at(group_id: int, user_id: int, topic: str = "", candidate_id: str = 
         current = get_state(group_id, user_id)["at_count_today"]
         conn.execute(
             "INSERT INTO proactive_state (group_id, user_id, at_count_today, at_count_date, "
-            "last_at_at, last_asked_topic, last_asked_candidate_id, updated_at) "
-            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, CURRENT_TIMESTAMP) "
+            "last_at_at, last_asked_candidate_id, updated_at) "
+            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP) "
             "ON CONFLICT(group_id, user_id) DO UPDATE SET "
             "at_count_today = excluded.at_count_today, "
             "at_count_date = excluded.at_count_date, "
             "last_at_at = CURRENT_TIMESTAMP, "
-            "last_asked_topic = excluded.last_asked_topic, "
             "last_asked_candidate_id = excluded.last_asked_candidate_id, "
             "updated_at = CURRENT_TIMESTAMP",
-            (str(group_id), str(user_id), current + 1, _today(), topic, candidate_id),
+            (str(group_id), str(user_id), current + 1, _today(), candidate_id),
         )
         conn.commit()
         conn.close()

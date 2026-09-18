@@ -636,7 +636,6 @@ else:
 | 链路掉线 / 收不到消息 | 日志里的 `[LinkMonitor]` 告警（含排查步骤）；NapCatQQ Desktop 日志确认账号是否掉线 |
 | 整合输出被截断 | 日志里的 `finish_reason=length` 告警 |
 | @ 对话完全学不到东西 | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明落库监听器被 `block=True` 拦截（priority 必须为 0） |
-| 主动 @ 永远走冷启动 | 日志里 `mode=coldstart` 恒定，或 `[ProactiveTarget] 读取候选失败`；说明候选查询的空间列名不匹配 |
 | 某个模型排队严重 / 回复变慢 | 日志里 `[Scheduler]` 的等待/持有/队列深度告警；`core.llm.snapshot()` 导出累计统计 |
 | 记忆读写静默无效 | 先运行 `python -m deploy paths` 确认 `STELLA_HOME` 与数据库位置；再检查启动日志中的迁移结果，以及 `PRAGMA table_info(memories)` 是否包含 `group_shared_space` |
 | GUI 显示不出链路状态 | 检查 `STELLA_STATUS_API_ENABLED`，用 `curl http://127.0.0.1:8080/stella/status` 直接验证；进程在但接口 403 说明路由被误暴露限制、连不上说明 uvicorn 未起来 |

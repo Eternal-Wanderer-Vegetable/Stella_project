@@ -509,7 +509,6 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `MEMORY_SOURCE_KIND_ENABLED` | `true` | 关闭后所有消息等权，prompt 不标注来源 |
-| `MEMORY_AT_MENTION_CONFIDENCE_BONUS` | `0.05` | `AT_MENTION` 来源候选的置信度奖励 |
 | `MEMORY_CANDIDATE_REOCCURRENCE_BONUS` | `0.12` | 同一事实复现时的置信度增益 |
 | `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` | `30` | 观察区停留上限，超期标 `REJECTED`（不删除）。时效型类型另有更短的档位，见下 |
 | `MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS` | `800` | `evidence` 累积上限 |
@@ -641,7 +640,6 @@ interval >= SLOW → PROB_AT_SLOW
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | 高频端概率 |
 | `PROACTIVE_PROB_AT_SLOW` | `0.0` | 冷清端概率 |
 | `PROACTIVE_PROB_GAMMA` | `1.0` | 曲线整形指数，>1 更保守 |
-| `PROACTIVE_TOPIC_WARMUP_SECONDS` | `45.0` | 话题预热时长，不足则不参与 |
 | `PROACTIVE_COOLDOWN` | `600` | 群级硬冷却（秒） |
 | `PROACTIVE_CHECK_INTERVAL` | `60` | 定时检查间隔（秒） |
 | `PROACTIVE_FREQ_WINDOW` | `10` | 频率估算窗口（最近 N 条消息） |
@@ -681,11 +679,10 @@ PROACTIVE_PROB_AT_SLOW=0.0
 | `PROACTIVE_AT_ACTIVE_WITHIN` | `300.0` | 判定「正在活跃」的时间窗（秒） |
 | `PROACTIVE_MAX_NO_REPLY` | `2` | 连续无回应上限，超过则暂停追问 |
 | `PROACTIVE_REPLY_WINDOW_SECONDS` | `300.0` | 回应检测窗口（秒） |
-| `PROACTIVE_COLDSTART_TOPICS` | 见 settings.py | 冷启动话题清单，逗号分隔 |
 | `PROACTIVE_AT_EXCLUDE_USERS` | 空 | 不会被选为主动搭话对象的 QQ 号（逗号分隔） |
 | `PROACTIVE_VERIFY_EXCLUDE_TYPES` | `EVENT,PLAN,GROUP_CONTEXT` | 不会被主动追问验证的候选类型（逗号分隔；留空 = 都可以问） |
 | `PROACTIVE_NATURALNESS_MODE` | `enforce` | 自然承接灰度：`enforce` 执行 skip 冷却，`observe` 只记录而不拦截重复尝试 |
-| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | 同一候选/冷启动话题 skip 后的进程内负向冷却；`0` 表示关闭 |
+| `PROACTIVE_SKIP_COOLDOWN_SECONDS` | `900.0` | 同一候选 skip 后的进程内负向冷却；`0` 表示关闭 |
 
 排除名单的主要用途是**群内其他 AI** —— 互相 @ 会触发无终止的循环对话。被排除的账号仍会被动收集信息（消息照常落库与整合），只是不主动向它们提问。
 
@@ -697,7 +694,7 @@ PROACTIVE_PROB_AT_SLOW=0.0
 
 自然承接判断是一次已有的 Replyer 生成，不新增第二次 LLM。模型严格输出内部
 `[[STELLA_SKIP]]` 时，网关不会发送、不会消耗主动 @ 配额，也不会启动回应检测。
-`PROACTIVE_NATURALNESS_MODE=enforce` 时，同一候选或冷启动话题在
+`PROACTIVE_NATURALNESS_MODE=enforce` 时，同一候选在
 `PROACTIVE_SKIP_COOLDOWN_SECONDS` 内不会再次触发生成；目标用户发出新消息后会立即清理
 该用户的旧 skip。`observe` 适合灰度观察 skip 率和生成成本，但不拦截重复尝试。
 
@@ -841,7 +838,6 @@ python -m tests.benchmark.participation.runner --tables config/participation_v2 
 | `MEMORY_ARCHIVE_IMPORTANCE_THRESHOLD` | `0.3` | 低价值归档的重要度阈值 |
 | `MEMORY_ARCHIVE_INACTIVE_DAYS` | `180` | 低价值归档的未访问天数 |
 | `MEMORY_COMPRESS_LOG_PATH` | `logs/memory_compressor_log.md` | 压缩日志（见[日志](#日志)） |
-| `MEMORY_RECENCY_HALF_LIFE_DAYS` | `120.0` | Recency 兜底半衰期（天） |
 
 `MEMORY_DECAY_DAYS` 是代码内的字典（不走 `.env`），定义各类型记忆的生命周期：
 
@@ -1162,7 +1158,7 @@ PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`
 | 想要的效果 | 调整方向 |
 |---|---|
 | Bot 太吵 | 降 `PROACTIVE_PROB_AT_FAST`；升 `PROACTIVE_COOLDOWN` 与 `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`；降 `PROACTIVE_AT_QUOTA_BASE`；或让管理员在群内说「安静」临时关闭 |
-| Bot 太安静 | 升 `PROACTIVE_PROB_AT_FAST`；降 `PROACTIVE_TOPIC_WARMUP_SECONDS` |
+| Bot 太安静 | 升 `PROACTIVE_PROB_AT_FAST`；调低 `config/participation/thresholds.toml` 的 `warmup_messages` |
 | 深夜还在说话 | 确认 `PROACTIVE_SLEEP_ENABLED=true`，检查 `PROACTIVE_SLEEP_START/END` 是否覆盖目标时段；服务器与群友时区不同时确认 `USER_TIMEZONE` 已配置 |
 | 一觉醒来连发几句 | 升 `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | 记不住事 | 降 `MEMORY_OBSERVE_LOW_CONFIDENCE`；降 `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`；确认 `PROACTIVE_AT_ENABLED=true`（被动摄入的产出接近零） |

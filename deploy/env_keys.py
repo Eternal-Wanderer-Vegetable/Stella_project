@@ -28,6 +28,22 @@ DEPRECATED: dict[str, str] = {
         "2026-08-25 日志统一到 LOG_DIR 后改为完整路径 MEMORY_COMPRESS_LOG_PATH；"
         "语义从「文件名」变成「完整路径」，旧值不能直接沿用"
     ),
+    "MEMORY_RECENCY_HALF_LIFE_DAYS": (
+        "recency 衰减已改为统一的指数衰减（τ=30 天，见 memory/policy.py），"
+        "不再按类型取半衰期；本键自 2026-08-11 起代码不再读取"
+    ),
+    "MEMORY_AT_MENTION_CONFIDENCE_BONUS": (
+        "从未接线：AT_MENTION 的强证据语义由 MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT"
+        "（单次晋升门槛）承担"
+    ),
+    "PROACTIVE_TOPIC_WARMUP_SECONDS": (
+        "话题预热由参与评分层承担：config/participation/thresholds.toml 的 "
+        "warmup_messages（按条数，不是秒数）"
+    ),
+    "PROACTIVE_COLDSTART_TOPICS": (
+        "主动 @ 已收敛为「只验证记忆候选」：无可验证候选时不再用日常话题冷启动搭话，"
+        "无记忆锚点的闲聊由参与评分层（config/participation/*.toml）承担"
+    ),
 }
 
 # 已废弃的键前缀 → 原因
