@@ -127,12 +127,12 @@ def build_wheels(requirements: Path, wheels_dir: Path) -> None:
     wheels_dir.mkdir(parents=True, exist_ok=True)
     # 显式带上 setuptools/wheel：pip wheel 只构建 requirements 的闭包，
     # 而安装器的 ensure_build_tools 也从离线仓取这两个包。
+    # 注意 --no-warn-script-location 是 pip install 的选项，pip wheel 没有。
     command = [
         sys.executable, "-m", "pip", "wheel",
         "-r", str(requirements),
         "setuptools", "wheel",
         "-w", str(wheels_dir),
-        "--no-warn-script-location",
     ]
     subprocess.run(command, check=True)
     wheels = sorted(wheels_dir.glob("*.whl"))
