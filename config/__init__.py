@@ -4,7 +4,7 @@
 """配置包入口。
 
 仅将 settings 子模块的公开常量全部再导出，使得业务代码可以写成
-``from config import LM_STUDIO_BASE_URL`` 而不是深入 settings 子模块；
+``from config import LLM_ENDPOINT_LOCAL_BASE_URL`` 而不是深入 settings 子模块；
 所有路径/环境变量解析的逻辑都集中在 config/settings.py 中。
 """
 

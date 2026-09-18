@@ -257,11 +257,11 @@ class StellaChatProvider(Provider):
         cfg = provider_config or {
             "id": "stella",
             "type": "openai_chat_completion",
-            "api_base": s.ASTRBOT_LLM_BASE_URL,
-            "key": [s.ASTRBOT_LLM_API_KEY] if s.ASTRBOT_LLM_API_KEY else [""],
+            "api_base": s.LLM_ENDPOINT_LOCAL_BASE_URL,
+            "key": [s.LLM_ENDPOINT_LOCAL_API_KEY] if s.LLM_ENDPOINT_LOCAL_API_KEY else [""],
         }
         super().__init__(cfg, {})
-        # 取角色配置的模型 ID（留空则继承 ASTRBOT_LLM_MODEL）。插件可通过
+        # 取角色配置的模型 ID（留空则用本机槽模型）。插件可通过
         # set_model() 覆盖它，实际请求用 `model or self.model_name`，
         # 因此这里必须是角色配置而不是旧键——否则角色配的模型永远轮不到。
         self.model_name = _plugin_model_default()
@@ -274,10 +274,9 @@ class StellaChatProvider(Provider):
         ``text_chat`` 即可，那条路上的 key 由本模块自己填。
 
         代价是「插件自建客户端」的用法在插件绑到独立端点后会 401——那是显式
-        失败，比把 key 散出去好；且 ``ASTRBOT_LLM_BASE_URL`` 与本地端点不一致时
-        doctor 会警告。
+        失败，比把 key 散出去好。
         """
-        return _settings().ASTRBOT_LLM_API_KEY
+        return _settings().LLM_ENDPOINT_LOCAL_API_KEY
 
     def set_key(self, key: str) -> None:
         self.provider_config["key"] = [key]
@@ -534,7 +533,7 @@ def _plugin_call_args(model: str) -> dict:
 
 
 def _plugin_model_default() -> str:
-    """PLUGIN 角色配置的模型 ID；解析不出来时回落到旧键。
+    """PLUGIN 角色配置的模型 ID；解析不出来时回落到角色配置的默认值。
 
     只用于初始化 ``self.model_name``（AstrBot 契约里插件可读可改的字段）。
     这里**不能**抛异常：provider 在插件加载期构造，抛了会连带整个插件加载失败。
@@ -547,12 +546,13 @@ def _plugin_model_default() -> str:
         if b is not None and b.model:
             return b.model
     except Exception as e:  # pragma: no cover - 配置异常不该阻断插件加载
-        logger.warning(f"[astrbot_llm] 读取 PLUGIN 角色模型失败，回落 ASTRBOT_LLM_MODEL: {e}")
-    return _settings().ASTRBOT_LLM_MODEL
+        logger.warning(f"[astrbot_llm] 读取 PLUGIN 角色模型失败，回落角色/本机槽配置: {e}")
+    s = _settings()
+    return s.LLM_ROLE_PLUGIN_MODEL or s.LLM_ENDPOINT_LOCAL_MODEL
 
 
 def _plugin_reply_budget() -> int:
-    """PLUGIN 角色实际生效的 max_tokens；解析不出来时回落到旧键。
+    """PLUGIN 角色实际生效的 max_tokens；解析不出来时回落到角色配置的默认值。
 
     与 ``_plugin_model_default`` 同理不抛异常：预算估算只是日志与裁剪依据，
     为它中断一次插件调用不值得。
@@ -566,7 +566,7 @@ def _plugin_reply_budget() -> int:
             return b.max_tokens
     except Exception:  # pragma: no cover - 同上
         pass
-    return _settings().ASTRBOT_LLM_MAX_TOKENS
+    return _settings().LLM_ROLE_PLUGIN_MAX_TOKENS
 
 
 def _response_from_raw(raw: dict) -> LLMResponse:

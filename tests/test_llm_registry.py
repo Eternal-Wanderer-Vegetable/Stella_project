@@ -100,21 +100,7 @@ _BASELINE: dict[str, object] = {
     "LLM_FALLBACK_COOLDOWN": 300,
     "MEMORY_EMBEDDING_GATE": "auto",
     "MEMORY_EMBEDDING_BASE_URL": _LOCAL_URL,
-    "LLM_SCHEDULER_GATE_EMBEDDING": True,
     "SESSION_SUMMARY_MAX_TOKENS": 300,
-    # 旧键：与 LOCAL 同址，纯本地用户不该看到「旧键已失效」告警
-    "MEMORY_EXTRACT_LM_STUDIO_BASE_URL": _LOCAL_URL,
-    # 四个模型旧键钉成空串：_resolve_role_model 拿「角色值 == 旧键值」判断
-    # 「用户有没有为这个角色单独指定模型」，不钉住就会读到开发机 .env 里的值，
-    # 用例结果随机器而变。
-    "LM_STUDIO_MODEL": "",
-    "ASTRBOT_LLM_MODEL": "",
-    "CONSOLIDATION_LM_STUDIO_MODEL": "",
-    "MEMORY_EXTRACT_LM_STUDIO_MODEL": "",
-    # 继承主键：LLM_ENDPOINT_LOCAL_* / EXTRA_* 留空时都从它继承，
-    # 而 _local_slot_override_warning() 直接读它。不钉住就会读开发机的 .env。
-    "LM_STUDIO_BASE_URL": _LOCAL_URL,
-    "ASTRBOT_LLM_BASE_URL": _LOCAL_URL,
 }
 
 
@@ -372,17 +358,15 @@ def test_local_role_without_a_model_is_fine(env):
     assert not any("MODEL" in m for m in _issues("error"))
 
 
-# ---------- 模型 ID 的三档解析 ----------
-# 顺序是「角色显式 MODEL → 端点 MODEL → 角色旧键」，判据见 registry
-# 的 _resolve_role_model。这一组用例守的是「模型写在端点卡片上、六个角色不用
-# 重复写一遍」这个界面约定，以及它不能改变存量本地配置的行为。
+# ---------- 模型 ID 的两级解析 ----------
+# 顺序是「角色显式 MODEL → 端点 MODEL」，见 registry 的 _resolve_role_model。
+# 这一组用例守的是「模型写在端点卡片上、六个角色不用重复写一遍」这个界面约定。
 
 
-def test_endpoint_model_is_used_when_the_role_only_inherited_one(env):
-    """角色 MODEL 只是从旧键继承来的（值相等）→ 视为没写，用端点上的。"""
+def test_endpoint_model_is_used_when_the_role_is_empty(env):
+    """角色 MODEL 留空 → 用端点上的模型：模型写在端点卡片上，角色不用重复写。"""
     env(
-        LM_STUDIO_MODEL="local-27b",
-        LLM_ROLE_CHAT_MODEL="local-27b",  # _env_inherit 的产物，不是用户写的
+        LLM_ROLE_CHAT_MODEL="",
         LLM_ENDPOINT_LOCAL_MODEL="slot-model",
     )
     b = registry.binding(registry.ROLE_CHAT)
@@ -402,16 +386,10 @@ def test_an_explicit_role_model_beats_the_endpoint_model(env):
     assert b.model == "cheap-router"
 
 
-def test_an_explicit_legacy_key_survives_an_empty_endpoint_model(env):
-    """存量配置：只写了 MEMORY_EXTRACT_LM_STUDIO_MODEL 挑个小模型。
-
-    端点 MODEL 留空时必须回落到它，否则「升级后抽取悄悄换成了 27B」——
-    这类静默变化比报错难查得多。
-    """
+def test_an_explicit_role_model_survives_an_empty_endpoint_model(env):
+    """角色给了自己的模型而端点 MODEL 留空 → 用角色的（本地端点可默认路由）。"""
     env(
-        LM_STUDIO_MODEL="local-27b",
-        MEMORY_EXTRACT_LM_STUDIO_MODEL="local-e4b",
-        LLM_ROLE_EXTRACT_MODEL="local-e4b",  # _env_inherit 的产物
+        LLM_ROLE_EXTRACT_MODEL="local-e4b",
         LLM_ENDPOINT_LOCAL_MODEL="",
     )
     b = registry.binding(registry.ROLE_EXTRACT)
@@ -420,10 +398,9 @@ def test_an_explicit_legacy_key_survives_an_empty_endpoint_model(env):
 
 
 def test_moving_a_role_online_takes_the_card_model_not_the_local_one(env):
-    """本机模型名发给在线服务商一律 400，所以第二档必须先于第三档。"""
+    """角色 MODEL 留空时，在线端点用那张卡自己的模型，不会拿到本机模型名。"""
     env(
-        LM_STUDIO_MODEL="local-27b",
-        LLM_ROLE_CHAT_MODEL="local-27b",  # _env_inherit 的产物
+        LLM_ROLE_CHAT_MODEL="",
         LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
         LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
         LLM_ENDPOINT_ONLINE_CHAT_MODEL="deepseek-chat",
@@ -435,19 +412,18 @@ def test_moving_a_role_online_takes_the_card_model_not_the_local_one(env):
     assert _issues("error") == []
 
 
-def test_the_extra_card_model_still_counts_when_that_card_goes_online(env):
-    """EXTRA 卡指到在线服务商时，模型 ID 仍然读 GUI 的「记忆整合模型 ID」。
+def test_the_role_model_still_counts_when_that_card_goes_online(env):
+    """EXTRA 卡指到在线服务商时，模型 ID 仍读 GUI 的「记忆整合模型 ID」。
 
-    那个输入框绑的就是 CONSOLIDATION_LM_STUDIO_MODEL，用户填的是在线模型名——
-    「在线槽不认旧键」这条规则不能把自己这张卡的输入框也一起否掉。
+    那个输入框写的就是 LLM_ROLE_CONSOLIDATION_MODEL；角色显式 MODEL 优先于
+    端点槽——「在线槽的模型归端点卡片」不能把自己角色的输入框也一起否掉。
     """
     env(
         LLM_ENDPOINT_EXTRA_BASE_URL=_ONLINE_URL,
         LLM_ENDPOINT_EXTRA_API_KEY=_SECRET,
         LLM_ENDPOINT_EXTRA_KIND="online",
         LLM_ENDPOINT_EXTRA_MODEL="",
-        CONSOLIDATION_LM_STUDIO_MODEL="deepseek-chat",
-        LLM_ROLE_CONSOLIDATION_MODEL="deepseek-chat",  # _env_inherit 的产物
+        LLM_ROLE_CONSOLIDATION_MODEL="deepseek-chat",
     )
     b = registry.binding(registry.ROLE_CONSOLIDATION)
     assert b is not None
@@ -458,8 +434,7 @@ def test_the_extra_card_model_still_counts_when_that_card_goes_online(env):
 def test_the_missing_online_model_error_names_the_endpoint_key(env):
     """报错要指向「该去哪填」。端点键在前，因为那才是界面上的那个框。"""
     env(
-        LM_STUDIO_MODEL="local-27b",
-        LLM_ROLE_CHAT_MODEL="local-27b",
+        LLM_ROLE_CHAT_MODEL="",
         LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
         LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
         LLM_ENDPOINT_ONLINE_CHAT_MODEL="",
@@ -676,113 +651,15 @@ def test_the_hot_path_never_accumulates_issues(env):
     assert len(registry.validate()) == before
 
 
-def test_a_legacy_false_still_means_do_not_queue(env):
-    """显式关掉排队的用户是**主动**这么做的，不能因为换了新键就悄悄打开。"""
-    env(MEMORY_EMBEDDING_GATE="auto", LLM_SCHEDULER_GATE_EMBEDDING=False)
-    assert registry.embedding_gate() == ""
-
-
-def test_an_explicit_slot_overrides_the_legacy_flag(env):
-    """新键写了具体槽名 = 新意图，比旧布尔更明确。"""
-    env(MEMORY_EMBEDDING_GATE="LOCAL", LLM_SCHEDULER_GATE_EMBEDDING=False)
+def test_an_explicit_slot_beats_auto(env):
+    """写了具体槽名 = 明确意图，优先于 auto 的同址判定。"""
+    env(MEMORY_EMBEDDING_GATE="LOCAL")
     assert registry.embedding_gate() == registry.SLOT_LOCAL
 
 
 def test_no_embedding_address_means_no_queueing(env):
     env(MEMORY_EMBEDDING_BASE_URL="")
     assert registry.embedding_gate() == ""
-
-
-# ============================================================
-# 旧键失效告警
-# ============================================================
-
-
-def test_a_diverging_legacy_extract_address_warns(env):
-    """显式把提取指到另一台机器的用户，升级后会被静默改回主地址——必须提醒。"""
-    env(MEMORY_EXTRACT_LM_STUDIO_BASE_URL=_OTHER_URL)
-    warns = _issues("warn")
-    assert any("MEMORY_EXTRACT_LM_STUDIO_BASE_URL" in m for m in warns)
-    # 告警要给出可执行的出路，而不只是「已失效」
-    assert any(registry.SLOT_EXTRA in m for m in warns)
-
-
-def test_a_diverging_legacy_plugin_address_warns(env):
-    env(ASTRBOT_LLM_BASE_URL=_OTHER_URL)
-    assert any("ASTRBOT_LLM_BASE_URL" in m for m in _issues("warn"))
-
-
-def test_no_warning_once_the_role_has_moved_off_local(env):
-    """用户已经把角色挪到别的槽了，旧键本来就不该再生效，提醒纯属噪音。"""
-    env(
-        MEMORY_EXTRACT_LM_STUDIO_BASE_URL=_OTHER_URL,
-        LLM_ROLE_EXTRACT_ENDPOINT="EXTRA",
-    )
-    assert not any("MEMORY_EXTRACT_LM_STUDIO_BASE_URL" in m for m in _issues("warn"))
-
-
-def test_trailing_slashes_do_not_trigger_a_false_warning(env):
-    env(MEMORY_EXTRACT_LM_STUDIO_BASE_URL=_LOCAL_URL + "/")
-    assert not any("MEMORY_EXTRACT_LM_STUDIO_BASE_URL" in m for m in _issues("warn"))
-
-
-def _override_warns() -> list[str]:
-    """只挑 _local_slot_override_warning() 那一条。
-
-    不能按 ``"LM_STUDIO_BASE_URL" in m`` 筛：改了 LOCAL 地址会同时触发上面那条
-    ``MEMORY_EXTRACT_LM_STUDIO_BASE_URL`` 旧键告警（键名里也含这个子串），
-    否定用例会被它假通过。
-    """
-    return [m for m in _issues("warn") if "被显式改成" in m]
-
-
-def test_overriding_only_the_local_slot_address_warns_that_extra_stayed_behind(env):
-    """只改 LLM_ENDPOINT_LOCAL_BASE_URL：聊天跟着走了，整合还打在旧地址。
-
-    这是 GUI 隐患 #4：两个地址长得几乎一样，表现是「聊天好了、整合全失败」，
-    肉眼对不出来——没有这条告警就只能靠看日志里的连接失败反推。
-    """
-    env(LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL)
-    warns = _override_warns()
-    assert warns, "改了 LOCAL 没改主键，必须报"
-    # 告警要把两个地址都报出来，否则用户无法确认到底差在哪
-    assert any(_OTHER_URL in m and _LOCAL_URL in m for m in warns)
-    # 以及可执行的出路：改主键，或把 EXTRA 一并改掉
-    assert any("LLM_ENDPOINT_EXTRA_BASE_URL" in m for m in warns)
-
-
-def test_no_override_warning_when_extra_was_changed_too(env):
-    """两边都改了就不是「忘了跟着改」，不该打扰。"""
-    env(
-        LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL,
-        LLM_ENDPOINT_EXTRA_BASE_URL=_OTHER_URL,
-    )
-    assert not _override_warns()
-
-
-def test_no_override_warning_on_the_factory_local_config():
-    """出厂配置里两者同址（留空即继承的等价形式），不能先吓人一跳。"""
-    assert not _override_warns()
-
-
-def test_no_override_warning_when_extra_points_at_a_third_machine(env):
-    """把整合挤到第三台机器是正当用法，不是漏改。"""
-    env(
-        LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL,
-        LLM_ENDPOINT_EXTRA_BASE_URL="http://192.168.1.50:1234",
-    )
-    assert not _override_warns()
-
-
-def test_no_override_warning_when_extra_has_moved_online(env):
-    """EXTRA 已经是在线端点时，本地地址怎么改都与它无关。"""
-    env(
-        LLM_ENDPOINT_LOCAL_BASE_URL=_OTHER_URL,
-        LLM_ENDPOINT_EXTRA_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_EXTRA_KIND="online",
-        LLM_ENDPOINT_EXTRA_API_KEY=_SECRET,
-    )
-    assert not _override_warns()
 
 
 # ============================================================

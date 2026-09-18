@@ -38,16 +38,16 @@ def test_schema_excludes_deprecated_compatibility_settings():
 def test_schema_keeps_keys_whose_comments_merely_mention_deprecation():
     """回归：废弃与否只认 env_keys 登记表，不许再拿注释做子串匹配。
 
-    旧实现按「说明里有没有『废弃』二字」猜，误剔两个**在用**的键——
-    MEMORY_COMPRESS_LOG_PATH（注释提到旧键登记在废弃表里，它本身是那个新键）
-    与 CONSOLIDATION_LM_STUDIO_BASE_URL（注释提到 FlexiWeb 流程已弃用；该键
-    后来被 SUPERSEDED 迁移取代，改由 test_all_llm_legacy_keys_migrate_one_to_one
-    的反向断言守着）。被剔除的键在 GUI 里完全不可见，用户根本改不到。
+    旧实现按「说明里有没有『废弃』二字」猜，误剔**在用**的键——
+    MEMORY_COMPRESS_LOG_PATH（注释提到旧键登记在废弃表里，它本身是那个新键）与
+    CONSOLIDATION_LM_STUDIO_BASE_URL（注释提到 FlexiWeb 流程已弃用）都中过招。
+    被剔除的键在 GUI 里完全不可见，用户根本改不到。前者的注释至今仍提「废弃」，
+    是本用例的活样本；后者那批旧键后来被 SUPERSEDED 迁移整体取代，由
+    test_all_llm_legacy_keys_migrate_one_to_one 的反向断言守着。
     """
     schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
     keys = {field["key"] for field in schema["fields"]}
     assert "MEMORY_COMPRESS_LOG_PATH" in keys
-    assert "MEMORY_EXTRACT_LM_STUDIO_BASE_URL" in keys  # 注释满是「继承旧键」，仍在用
 
 
 def test_schema_never_leaks_registered_deprecated_keys():
@@ -68,31 +68,8 @@ def test_schema_marks_inherited_defaults():
     schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
     fields = {field["key"]: field for field in schema["fields"]}
     expected = {
-        # ── 早于 P1 的继承链（旧键之间）。
-        #    已 SUPERSEDED 的子键（CONSOLIDATION_LM_STUDIO_BASE_URL/_API_KEY、
-        #    MEMORY_EXTRACT_LM_STUDIO_MODEL、ASTRBOT_LLM_MODEL）不进 schema，
-        #    其继承对从本表移除——迁移完成删除兼容读时整表归零。
-        "MEMORY_EXTRACT_LM_STUDIO_BASE_URL": "LM_STUDIO_BASE_URL",
-        "MEMORY_EXTRACT_LM_STUDIO_API_KEY": "LM_STUDIO_API_KEY",
-        "ASTRBOT_LLM_BASE_URL": "LM_STUDIO_BASE_URL",
-        "ASTRBOT_LLM_API_KEY": "LM_STUDIO_API_KEY",
-        # ── P1 端点槽：新键继承旧键，纯本地部署逐字等价于改造前 ──
-        "LLM_ENDPOINT_LOCAL_BASE_URL": "LM_STUDIO_BASE_URL",
-        "LLM_ENDPOINT_LOCAL_API_KEY": "LM_STUDIO_API_KEY",
-        "LLM_ENDPOINT_EXTRA_BASE_URL": "CONSOLIDATION_LM_STUDIO_BASE_URL",
-        "LLM_ENDPOINT_EXTRA_API_KEY": "CONSOLIDATION_LM_STUDIO_API_KEY",
-        # ── P1 角色：每个角色的 model/temperature/max_tokens 继承它原来的那个键 ──
-        "LLM_ROLE_CHAT_MODEL": "LM_STUDIO_MODEL",
-        "LLM_ROLE_ROUTER_MODEL": "LM_STUDIO_MODEL",
-        "LLM_ROLE_PLUGIN_MODEL": "ASTRBOT_LLM_MODEL",
-        "LLM_ROLE_PLUGIN_TEMPERATURE": "ASTRBOT_LLM_TEMPERATURE",
-        "LLM_ROLE_PLUGIN_MAX_TOKENS": "ASTRBOT_LLM_MAX_TOKENS",
-        "LLM_ROLE_COMPACT_MODEL": "LM_STUDIO_MODEL",
-        "LLM_ROLE_CONSOLIDATION_MODEL": "CONSOLIDATION_LM_STUDIO_MODEL",
-        "LLM_ROLE_CONSOLIDATION_TEMPERATURE": "CONSOLIDATION_LM_STUDIO_TEMPERATURE",
+        # ── 三代键收敛后仅剩的两对：MAX_TOKENS 的继承上游都是仍在用的键 ──
         "LLM_ROLE_CONSOLIDATION_MAX_TOKENS": "CONSOLIDATION_LOCAL_MAX_TOKENS",
-        "LLM_ROLE_EXTRACT_MODEL": "MEMORY_EXTRACT_LM_STUDIO_MODEL",
-        "LLM_ROLE_EXTRACT_TEMPERATURE": "MEMORY_EXTRACT_LM_STUDIO_TEMPERATURE",
         "LLM_ROLE_EXTRACT_MAX_TOKENS": "MEMORY_EXTRACT_MAX_TOKENS",
     }
     for child, parent in expected.items():
@@ -101,6 +78,7 @@ def test_schema_marks_inherited_defaults():
         assert fields[child]["default"] == ""
     # 非继承项不许莫名带上这个标记
     assert "inherits" not in fields["MEMORY_COMPRESS_LOG_PATH"]
+    assert "inherits" not in fields["LLM_ENDPOINT_LOCAL_BASE_URL"]
     inherited = {f["key"] for f in schema["fields"] if "inherits" in f}
     assert inherited == set(expected), "继承项集合与预期不一致（新增继承项请同步本用例）"
 
@@ -124,7 +102,7 @@ def test_schema_field_types_drive_gui_controls():
     assert fields["PROACTIVE_SLEEP_MESSAGES"]["type"] == "str_list"
     assert fields["USER_TIMEZONE"]["type"] == "string"
     # 继承型按各自助手带类型（GUI 对温度/数字给数字键盘，对字符串给文本框）
-    assert fields["MEMORY_EXTRACT_LM_STUDIO_BASE_URL"]["type"] == "string"
+    assert fields["LLM_ROLE_CONSOLIDATION_MAX_TOKENS"]["type"] == "int"
     assert fields["LLM_ROLE_PLUGIN_TEMPERATURE"]["type"] == "float"
 
 

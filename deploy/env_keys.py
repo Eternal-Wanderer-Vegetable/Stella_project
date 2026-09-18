@@ -62,22 +62,21 @@ DEPRECATED_PREFIXES: dict[str, str] = {
 # 这里保持为空。
 RENAMED: dict[str, str] = {}
 
-# 已被新键取代、但**代码仍在兼容读取**的键（旧名 → 新名）。
-#
-# 与 DEPRECATED 的分工：那张表是「代码已经不读了」，所以只能提示用户删掉；
-# 这张表是「代码还读，只是不该再由用户来填」——于是三个消费方各取所需：
-#   - deploy/env_schema.py：从 GUI schema 里剔掉旧键，界面上只留新键；
-#   - deploy/env_merge.py：升级时把值换算成新键的值，旧键那行随之消失；
-#   - deploy doctor：对还留着旧键的 .env 给出改法提示。
+# 已被新键取代的键（旧名 → 新名）。**兼容读已随 Phase 2 删除**（config/settings.py
+# 不再定义这些键），但换算迁移保留：
+#   - deploy/env_merge.py：升级时把旧键值换算成新键的值，旧键那行随之消失——
+#     未走过迁移的存量 .env 在任何 merge 路径上仍能自动搬值；
+#   - deploy doctor：对还留着旧键的 .env 给出改法提示（这些行已不生效）；
+#   - deploy/env_schema.py：旧键不进 GUI。
 # 值怎么换算见 migrate_value()——表本身保持纯数据，好让 GUI 直接读。
 #
 # 2026-09-18 的三代键收敛：LM_STUDIO_* / CONSOLIDATION_LM_STUDIO_* /
 # MEMORY_EXTRACT_LM_STUDIO_* / ASTRBOT_LLM_* 的连接参数整体迁入
 # LLM_ENDPOINT_* / LLM_ROLE_*。全部 1:1 值直接沿用（targets 的语义论证见
-# 该提交与 config/settings.py 端点段的注释）；config/settings.py 的兼容读与
-# registry 的三级模型解析**本轮保留**——deploy upgrade 只换程序树不跑合并，
-# 没走过 init/migrate 的存量 .env 靠它们保持原行为。这批键转入 DEPRECATED
-# （即删除兼容读）要等迁移发版一个弃用窗口之后。
+# 该提交与 config/settings.py 端点段的注释）。兼容读与 registry 的三级模型解析
+# 已在 Phase 2（同日提交）删除；deploy upgrade 只换程序树不跑合并，直接换文件
+# 升级且从未跑过 init/migrate 的 .env 里这些行会失效——换算迁移保留在合并器里，
+# 走过任意一次 init / migrate 就能自动搬值并清理旧行。
 SUPERSEDED: dict[str, str] = {
     "LLM_SCHEDULER_GATE_EMBEDDING": "MEMORY_EMBEDDING_GATE",
     # ── 第一代：本机 LM Studio ──

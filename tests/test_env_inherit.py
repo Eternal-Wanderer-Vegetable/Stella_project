@@ -65,7 +65,7 @@ def test_inherit_pairs_were_actually_discovered():
     数量下限是个软基线（2026-08-28 是 24 对），只为把「一条都没找到」这种
     静默失效变成红灯，不是为了钉死具体条数。
     """
-    assert len(INHERIT_PAIRS) >= 20, f"只发现 {len(INHERIT_PAIRS)} 对继承项，schema 提取大概坏了"
+    assert len(INHERIT_PAIRS) >= 2  # 三代键收敛后仅剩 CONSOLIDATION/EXTRACT 的 MAX_TOKENS 两对, f"只发现 {len(INHERIT_PAIRS)} 对继承项，schema 提取大概坏了"
 
 
 @pytest.mark.parametrize(("child", "parent"), INHERIT_PAIRS)
