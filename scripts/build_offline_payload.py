@@ -35,6 +35,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -45,7 +46,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from deploy.acquire import download_verified
+from deploy.acquire import AcquireError, download_verified, verify_local_artifact
 from deploy.packages import _validate_record
 
 PYTHON_RS = REPO_ROOT / "stella-installer" / "src-tauri" / "src" / "python.rs"
@@ -127,12 +128,12 @@ def build_wheels(requirements: Path, wheels_dir: Path) -> None:
     wheels_dir.mkdir(parents=True, exist_ok=True)
     # 显式带上 setuptools/wheel：pip wheel 只构建 requirements 的闭包，
     # 而安装器的 ensure_build_tools 也从离线仓取这两个包。
+    # 注意 --no-warn-script-location 是 pip install 的选项，pip wheel 没有。
     command = [
         sys.executable, "-m", "pip", "wheel",
         "-r", str(requirements),
         "setuptools", "wheel",
         "-w", str(wheels_dir),
-        "--no-warn-script-location",
     ]
     subprocess.run(command, check=True)
     wheels = sorted(wheels_dir.glob("*.whl"))
@@ -142,7 +143,19 @@ def build_wheels(requirements: Path, wheels_dir: Path) -> None:
     print(f"[payload] wheels 闭包完成：{len(wheels)} 个，共 {total} 字节")
 
 
-def fetch_catalog_packages(catalog_path: Path, packages_dir: Path) -> None:
+def fetch_catalog_packages(
+    catalog_path: Path,
+    packages_dir: Path,
+    local_artifacts: Path | None = None,
+) -> None:
+    """按 catalog 把组件归档取齐到 packages/。
+
+    `local_artifacts` 是 CI 里已经下好的归档目录（文件名 = catalog 的 artifact）。
+    必须支持它：llama-cpu 记录的 source 是自指的 Release URL，而 payload 构建时
+    Release 还没发布（在线安装器不受影响——用户安装时 Release 已存在），所以
+    backend zip 必须用 CI artifact 就地取用。本地文件与下载走同一条
+    checksum/size 校验（verify_local_artifact），绝不因为省一次下载就放过校验。
+    """
     payload = json.loads(catalog_path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1:
         raise SystemExit("package catalog schema_version 不受支持")
@@ -157,12 +170,29 @@ def fetch_catalog_packages(catalog_path: Path, packages_dir: Path) -> None:
         if destination.is_file():
             print(f"[payload] {artifact} 已存在，跳过下载")
             continue
-        download_verified(
-            str(record["source"]),
-            destination,
-            checksum=str(record["checksum"]),
-            size=int(record["size"]) if record.get("size") is not None else None,
-        )
+        checksum = str(record["checksum"])
+        size = int(record["size"]) if record.get("size") is not None else None
+        local = local_artifacts / artifact if local_artifacts else None
+        if local is not None and local.is_file():
+            try:
+                verify_local_artifact(local, checksum=checksum, size=size)
+            except AcquireError as exc:
+                raise SystemExit(f"{artifact} 本地归档校验未通过：{exc.message}") from exc
+            shutil.copyfile(local, destination)
+            print(
+                f"[payload] {artifact} 采用 CI 本地归档，校验通过"
+                f"（{destination.stat().st_size} 字节）"
+            )
+            continue
+        try:
+            download_verified(
+                str(record["source"]),
+                destination,
+                checksum=checksum,
+                size=size,
+            )
+        except AcquireError as exc:
+            raise SystemExit(f"{artifact} 下载失败：{exc.message}") from exc
         print(f"[payload] {artifact} 下载并校验通过（{destination.stat().st_size} 字节）")
 
 
@@ -223,6 +253,10 @@ def main() -> int:
                         help="已下载好的嵌入式 Python zip（跳过下载，仍做哈希校验）")
     parser.add_argument("--get-pip", type=Path,
                         help="已下载好的 get-pip.py（跳过下载）")
+    parser.add_argument("--local-artifacts", type=Path,
+                        help="已下载好的组件归档目录（文件名 = catalog artifact），"
+                             "命中即校验后采用。llama-cpu 的 source 是自指 Release URL，"
+                             "payload 构建时该 Release 尚未发布，必须用 CI artifact 就地取用")
     parser.add_argument("--skip-wheels", action="store_true",
                         help="跳过 pip wheel（仅调试 payload 脚本本身时用）")
     parser.add_argument("--skip-browsers", action="store_true",
@@ -238,7 +272,11 @@ def main() -> int:
     get_pip = fetch_get_pip(output, args.get_pip)
     if not args.skip_wheels:
         build_wheels(args.requirements.resolve(), output / "wheels")
-    fetch_catalog_packages(args.catalog.resolve(), output / "packages")
+    fetch_catalog_packages(
+        args.catalog.resolve(),
+        output / "packages",
+        local_artifacts=args.local_artifacts.resolve() if args.local_artifacts else None,
+    )
 
     browsers_revision = None
     if not args.skip_browsers:
