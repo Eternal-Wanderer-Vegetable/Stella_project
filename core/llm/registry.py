@@ -38,6 +38,8 @@ LM Studio（``http://127.0.0.1:1234``），且 ``CONSOLIDATION`` 角色默认绑
 
 from __future__ import annotations
 
+import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -74,6 +76,29 @@ SLOT_ONLINE_MEMORY = "ONLINE_MEMORY"
 SLOT_EXTRA = "EXTRA"
 
 SLOTS: tuple[str, ...] = (SLOT_LOCAL, SLOT_ONLINE_CHAT, SLOT_ONLINE_MEMORY, SLOT_EXTRA)
+
+# 自定义槽命名约定：``.env`` 里出现 ``LLM_ENDPOINT_EXTRA_<NAME>_BASE_URL``
+# 就自动多出一个 ``EXTRA_<NAME>`` 槽（地址 / key / 模型 / 类型 / 并发 / 超时
+# 同构），不需要改代码——GUI 的「添加端点卡」写的正是这组键。典型用途：
+# EXTRA_VISION（图片转述专用槽）。四个内建槽之外的槽没有 settings 属性
+# 声明，它们的键直接读 os.environ（见 _env_value）。
+_EXTRA_SLOT_RE = re.compile(r"^LLM_ENDPOINT_(EXTRA_[A-Z0-9]+)_BASE_URL$")
+
+
+def extra_slots() -> list[str]:
+    """发现 ``EXTRA_*`` 自定义槽（按名排序，结果稳定）。"""
+    found = {
+        m.group(1)
+        for key in os.environ
+        if (m := _EXTRA_SLOT_RE.match(key))
+    }
+    return sorted(found)
+
+
+def all_slots() -> tuple[str, ...]:
+    """内建槽 + 自定义槽。绑定时校验槽名应该用这里而不是 ``SLOTS``。"""
+    return (*SLOTS, *extra_slots())
+
 
 KIND_LOCAL = "local"
 KIND_ONLINE = "online"
@@ -189,14 +214,24 @@ def reset_state() -> None:
 # ---------- 端点解析 ----------
 
 
+def _env_value(key: str) -> str | None:
+    """读一个端点键：``config.settings`` 里有同名属性就用它（保持测试可
+    monkeypatch 的路径），没有的键（自定义 EXTRA_* 槽不在 settings.py 里
+    声明）回落到环境变量——``.env`` 在 settings import 时已 load_dotenv，
+    所以两边读的是同一份配置。键不存在返回 None（≠ 空串）。"""
+    s = _settings()
+    if hasattr(s, key):
+        return str(getattr(s, key) or "")
+    return os.environ.get(key)
+
+
 def _endpoint_from_settings(slot: str) -> Endpoint:
     """按 ``LLM_ENDPOINT_<SLOT>_*` 读一个槽；缺失/非法值就地纠正并记 issue。"""
-    s = _settings()
     prefix = f"LLM_ENDPOINT_{slot}_"
-    base_url = str(getattr(s, prefix + "BASE_URL", "") or "").strip()
-    api_key = str(getattr(s, prefix + "API_KEY", "") or "").strip()
-    model = str(getattr(s, prefix + "MODEL", "") or "").strip()
-    kind = str(getattr(s, prefix + "KIND", "") or "").strip().lower()
+    base_url = str(_env_value(prefix + "BASE_URL") or "").strip()
+    api_key = str(_env_value(prefix + "API_KEY") or "").strip()
+    model = str(_env_value(prefix + "MODEL") or "").strip()
+    kind = str(_env_value(prefix + "KIND") or "").strip().lower()
     if slot == SLOT_LOCAL:
         try:
             from deploy.runtime import llama_endpoint_config
@@ -220,12 +255,12 @@ def _endpoint_from_settings(slot: str) -> Endpoint:
         kind = KIND_ONLINE if api_key else KIND_LOCAL
 
     try:
-        concurrency = max(1, int(getattr(s, prefix + "CONCURRENCY", 1) or 1))
+        concurrency = max(1, int(_env_value(prefix + "CONCURRENCY") or 1))
     except (TypeError, ValueError):
         _issues.append(("error", f"端点 {slot} 的 CONCURRENCY 不是整数，按 1 处理"))
         concurrency = 1
     try:
-        timeout = float(getattr(s, prefix + "TIMEOUT", 120.0) or 120.0)
+        timeout = float(_env_value(prefix + "TIMEOUT") or 120.0)
     except (TypeError, ValueError):
         _issues.append(("error", f"端点 {slot} 的 TIMEOUT 不是数字，按 120 秒处理"))
         timeout = 120.0
@@ -258,10 +293,11 @@ def _endpoint_from_settings(slot: str) -> Endpoint:
 
 
 def endpoints() -> dict[str, Endpoint]:
-    """全部四个端点槽的解析结果（含未配置的空槽），懒解析并缓存。"""
+    """全部端点槽的解析结果（内建四个 + ``EXTRA_*`` 自定义槽，含未配置的空槽），
+    懒解析并缓存。"""
     global _endpoints
     if _endpoints is None:
-        _endpoints = {slot: _endpoint_from_settings(slot) for slot in SLOTS}
+        _endpoints = {slot: _endpoint_from_settings(slot) for slot in all_slots()}
         _check_key_sharing(_endpoints)
     return _endpoints
 
@@ -348,16 +384,17 @@ def _binding_from_settings(role: str) -> RoleBinding:
     prefix = f"LLM_ROLE_{role.upper()}_"
     slot_raw = str(getattr(s, prefix + "ENDPOINT", "") or "").strip()
     slot = slot_raw.upper()
-    if slot and slot not in SLOTS and slot != "NONE":
+    known_slots = all_slots()
+    if slot and slot not in known_slots and slot != "NONE":
         _issues.append(
             (
                 "error",
                 f"角色 {role} 绑定了不存在的端点槽 {slot_raw!r}"
-                f"（合法值：{'/'.join(SLOTS)} 或 none）",
+                f"（合法值：{'/'.join(known_slots)} 或 none）",
             )
         )
     ep = endpoint(slot)
-    if slot and slot in SLOTS and ep is None:
+    if slot and slot in known_slots and ep is None:
         _issues.append(
             ("error", f"角色 {role} 绑到端点槽 {slot}，但该槽没配 BASE_URL，调用会失败")
         )
@@ -383,7 +420,7 @@ def _binding_from_settings(role: str) -> RoleBinding:
 
     fallback_raw = str(getattr(s, prefix + "FALLBACK_ENDPOINT", "") or "").strip()
     fallback_slot = fallback_raw.upper()
-    if fallback_slot and fallback_slot not in SLOTS and fallback_slot != "NONE":
+    if fallback_slot and fallback_slot not in known_slots and fallback_slot != "NONE":
         _issues.append(
             ("error", f"角色 {role} 的 FALLBACK_ENDPOINT={fallback_raw!r} 不是合法槽名")
         )
@@ -501,8 +538,7 @@ def embedding_gate() -> str:
     embed_url = str(getattr(s, "MEMORY_EMBEDDING_BASE_URL", "") or "").strip().rstrip("/")
     if not embed_url:
         return ""
-    for slot in SLOTS:
-        ep = endpoints()[slot]
+    for ep in endpoints().values():
         if ep.configured and ep.kind == KIND_LOCAL and ep.base_url.rstrip("/") == embed_url:
             return ep.slot
     return ""
@@ -721,7 +757,7 @@ def describe() -> dict:
     resolved = endpoints()
     bound = bindings()
     return {
-        "endpoints": {slot: resolved[slot].describe() for slot in SLOTS},
+        "endpoints": {slot: ep.describe() for slot, ep in resolved.items()},
         "roles": {role: bound[role].describe() for role in ROLES},
         "embedding_gate": embedding_gate() or "none",
         "fallback_enabled": _fallback_enabled(),
@@ -775,8 +811,7 @@ def log_summary() -> None:
     """
     info = describe()
     logger.info("[LLM] 端点与角色解析结果：")
-    for slot in SLOTS:
-        ep = info["endpoints"][slot]
+    for slot, ep in info["endpoints"].items():
         if not ep["base_url"]:
             continue
         logger.info(
@@ -826,6 +861,7 @@ __all__ = [
     "Endpoint",
     "RoleBackend",
     "RoleBinding",
+    "all_slots",
     "backend_for",
     "backend_for_endpoint",
     "binding",
@@ -836,6 +872,7 @@ __all__ = [
     "endpoint",
     "endpoint_of",
     "endpoints",
+    "extra_slots",
     "fallback_states",
     "fallback_worthy",
     "gate_of",

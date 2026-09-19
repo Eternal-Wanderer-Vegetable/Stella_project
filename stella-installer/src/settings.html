@@ -65,7 +65,27 @@
       schema: { version: 1, fields: [] },
     };
     const ROLE_NAMES = ["CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT", "VISION"];
-    const SLOT_NAMES = ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"];
+    // 内建槽（与 core/llm/registry.py 的 SLOTS 一致）。EXTRA_VISION 是图片转述
+    // 的默认端点卡：键在 settings.py 里声明过，但没有它也要常驻显示——这张卡
+    // 本身就是「启用识图」的入口。
+    const SLOT_NAMES = ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA", "EXTRA_VISION"];
+    // 自定义槽约定（与 registry.extra_slots() 的正则一致）：.env 里出现
+    // LLM_ENDPOINT_EXTRA_<名>_BASE_URL 就多一个同构槽。「+ 添加端点卡」按钮
+    // 写的正是这组键，后端自动识别，不用改代码。
+    const CUSTOM_SLOT_RE = /^LLM_ENDPOINT_(EXTRA_[A-Z0-9]+)_BASE_URL$/;
+    /** 从 advancedValues（= .env 全量键）发现自定义槽，按名排序保证稳定。 */
+    function discoveredSlots() {
+      const found = new Set();
+      for (const key of Object.keys(advancedValues)) {
+        const m = CUSTOM_SLOT_RE.exec(key);
+        if (m) found.add(m[1]);
+      }
+      return [...found].sort();
+    }
+    /** 卡片清单 = 内建槽 ∪ 发现的自定义槽（EXTRA_VISION 已在内建清单里）。 */
+    function allSlots() {
+      return [...new Set([...SLOT_NAMES, ...discoveredSlots()])];
+    }
     // 主表单与「模型服务」分区管的键不能再出现在「高级配置」里：同一个键摆两个控件，
     // 用户改了其中一个、保存时另一个的旧值又盖回去，表现就是「改了没反应」。
     // 刻意**不**列入 LLM_ENDPOINT_LOCAL_API_KEY：本机卡没有 key 控件，高级配置是
@@ -77,20 +97,27 @@
     // 四个 LLM_ENDPOINT_*_KIND 留在 managed 里但也没有控件：值由 slotKind() 按槽名
     // 与地址推导、syncKinds() 写回。放进高级配置只会让人以为改了有用——保存时推导
     // 值一定盖回去。
-    const managedKeys = new Set([
+    const MANAGED_KEYS_STATIC = new Set([
       "ALLOWED_GROUPS", "HOST", "PORT", "ONEBOT_WS_URLS", "ONEBOT_ACCESS_TOKEN",
       "LLM_ENDPOINT_LOCAL_BASE_URL", "LLM_ENDPOINT_LOCAL_MODEL",
       "LLM_ROLE_CONSOLIDATION_MODEL",
       "MEMORY_EMBEDDING_MODEL",
       "MEMORY_EMBEDDING_GATE", "LLM_FALLBACK_ENABLED",
-      ...SLOT_NAMES.flatMap(slot => ["KIND", "CONCURRENCY", "TIMEOUT"].map(f => `LLM_ENDPOINT_${slot}_${f}`)),
-      ...SLOT_NAMES.filter(slot => slot !== "LOCAL")
-        .flatMap(slot => [`LLM_ENDPOINT_${slot}_BASE_URL`, `LLM_ENDPOINT_${slot}_API_KEY`]),
-      "LLM_ENDPOINT_ONLINE_CHAT_MODEL", "LLM_ENDPOINT_ONLINE_MEMORY_MODEL",
-      ...ROLE_NAMES.flatMap(role =>
-        ["ENDPOINT", "TEMPERATURE", "MAX_TOKENS", "FALLBACK_ENDPOINT"]
-          .map(f => `LLM_ROLE_${role}_${f}`)),
     ]);
+    /** 键是否被主表单 / 模型服务分区接管。做成函数而不是静态集合：自定义
+     *  EXTRA_* 槽是运行期才发现的，静态集合盖不住它们。 */
+    function isManagedKey(key) {
+      if (MANAGED_KEYS_STATIC.has(key)) return true;
+      let m = /^LLM_ROLE_([A-Z_]+)_(ENDPOINT|TEMPERATURE|MAX_TOKENS|FALLBACK_ENDPOINT)$/.exec(key);
+      if (m) return ROLE_NAMES.includes(m[1]);
+      m = /^LLM_ENDPOINT_([A-Z_]+)_(BASE_URL|API_KEY|MODEL|KIND|CONCURRENCY|TIMEOUT)$/.exec(key);
+      if (!m) return false;
+      const [slot, field] = [m[1], m[2]];
+      if (!allSlots().includes(slot)) return false;
+      if (field === "BASE_URL" || field === "API_KEY") return slot !== "LOCAL";
+      if (field === "MODEL") return !CARD_MODEL_MAIN_ID[slot];  // LOCAL/EXTRA 用主表单旧键
+      return true;  // KIND / CONCURRENCY / TIMEOUT 所有槽都管
+    }
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -579,13 +606,20 @@
       ONLINE_CHAT: "在线 · 对话生成",
       ONLINE_MEMORY: "在线 · 记忆整合",
       EXTRA: "备用 / 第二个本机实例",
+      EXTRA_VISION: "图片转述专用",
     };
     const SLOT_NOTE = {
       LOCAL: "本机 LM Studio 的地址与模型 ID 就填在这张卡上（对应 LM_STUDIO_BASE_URL / LM_STUDIO_MODEL）。指到这张卡的角色默认都用这个模型；纯在线部署可以整张卡留空。",
       ONLINE_CHAT: "对话生成专用 key。必须与「在线 · 记忆整合」用不同的一把：两边的提示词前缀分属不同缓存域，共用一把 key 会互相打断缓存，省钱的前提就没了。",
       ONLINE_MEMORY: "记忆整合与会话压缩专用 key。请知悉：整合会把群聊原文发送到这家服务商。",
       EXTRA: "地址留空即沿用 CONSOLIDATION_LM_STUDIO_BASE_URL（它再继承本机地址）。纯本地场景下它与本机同址，作用只是让整合有独立的并发闸门。模型对应 CONSOLIDATION_LM_STUDIO_MODEL。把地址改指服务商，这张卡就自动按在线处理（卡头的类型徽标会跟着变）。",
+      EXTRA_VISION: "图片转述的默认端点卡，出厂未配 = 功能关闭。配好后把下方角色矩阵里「图片转述」的端点选成 EXTRA_VISION 即启用。本机填多模态模型（如 qwen-vl 系）；指到服务商时群聊图片会发过去。",
     };
+    /** 自定义槽的默认卡片文案。 */
+    function slotLabel(slot) { return SLOT_LABEL[slot] || `自定义槽 ${slot}`; }
+    function slotNote(slot) {
+      return SLOT_NOTE[slot] || "由「添加端点卡」或手写 .env 创建的 EXTRA_* 自定义槽，字段与其他槽同构。本机/局域网地址按本机处理，其余按在线处理（卡头徽标会跟着变）。";
+    }
     // ── 角色绑定（binding = 角色 × 槽）──────────────────────────────────
     // 矩阵里的一行不是「角色」而是「一条绑定」：一个角色将来可能有多张卡
     // （同一角色按用途拆到不同端点——例如对话拆「主回复 / 兜底回复」两条绑定，
@@ -662,7 +696,10 @@
     //   · 两个 ONLINE_* 槽固定 online：槽名就是声明。这两个槽**不能**按地址猜，
     //     否则会误判本机中转网关（one-api 这类跑在 127.0.0.1、却按上游厂商计费的
     //     转发层）——那种部署地址是本机的，钱却是真花。
-    //   · 本机与备用两张卡按**地址**判断（这两张卡的地址用户是可以改指的）。
+      //   · 本机与备用两张卡按**地址**判断（这两张卡的地址用户是可以改指的），
+      //     EXTRA_* 自定义槽同此规则。
+      //   · `LM_STUDIO_BASE_URL` / `CONSOLIDATION_LM_STUDIO_*` 是旧键名，已由
+      //     LLM_ENDPOINT_* 取代；这里沿用旧键 ID 只是表单控件兼容。
     //     不按「有没有 api_key」判断：本机网关要求 dummy key 的人会被误判成在线，
     //     从而漏发 reasoning_effort=none（本地推理模型把 token 全耗在思维链上）。
     const FIXED_SLOT_KIND = { ONLINE_CHAT: "online", ONLINE_MEMORY: "online" };
@@ -681,7 +718,7 @@
      *  schema 里的每个键都会落一行，不写就会落成 settings.py 里的默认值（EXTRA 的
      *  默认是 local，那么把它指向服务商之后仍然会被当本机，在线的校验全部失效）。 */
     function syncKinds() {
-      for (const slot of SLOT_NAMES) advancedValues[`LLM_ENDPOINT_${slot}_KIND`] = slotKind(slot);
+      for (const slot of allSlots()) advancedValues[`LLM_ENDPOINT_${slot}_KIND`] = slotKind(slot);
     }
     const KIND_BADGE = {
       local: { text: "本机 · 不计费", cls: "svc-kind-local" },
@@ -697,7 +734,7 @@
     function refreshKindBadges() {
       const host = root.querySelector("#model-service");
       if (!host) return;
-      for (const slot of SLOT_NAMES) {
+      for (const slot of allSlots()) {
         const badge = host.querySelector(`[data-slot-kind="${slot}"]`);
         if (badge) badge.outerHTML = kindBadgeHTML(slot);
       }
@@ -775,13 +812,14 @@
       // none 在不接受它的下拉里（如 FALLBACK_ENDPOINT）语义上等价于「留空」，
       // 不当成未知槽名渲染——后端本来就把它当合法的空处理。
       const normalized = isNone && !unbindable ? "" : (isNone ? "none" : current);
-      const names = SLOT_NAMES.includes(normalized) || !normalized ? SLOT_NAMES : [...SLOT_NAMES, normalized];
+      const all = allSlots();
+      const names = all.includes(normalized) || !normalized ? all : [...all, normalized];
       const noneOpt = unbindable
         ? `<option value="none" ${isNone ? "selected" : ""}>none · 未绑定（关闭）</option>`
         : "";
       const head = blankLabel ? `<option value="" ${normalized ? "" : "selected"}>${esc(blankLabel)}</option>` : "";
       return head + noneOpt + names.map(slot => {
-        const label = SLOT_LABEL[slot] ? `${slot} · ${SLOT_LABEL[slot]}` : `${slot}（未知槽名）`;
+        const label = SLOT_LABEL[slot] ? `${slot} · ${SLOT_LABEL[slot]}` : `${slot}（自定义槽）`;
         return `<option value="${esc(slot)}" ${slot === normalized ? "selected" : ""}>${esc(label)}</option>`;
       }).join("");
     }
@@ -813,11 +851,11 @@
         <details class="svc-card" data-slot="${esc(slot)}">
           <summary class="svc-card-summary">
             <div class="svc-card-head">
-              <b>${esc(SLOT_LABEL[slot])}</b><code>${esc(slot)}</code>
+              <b>${esc(slotLabel(slot))}</b><code>${esc(slot)}</code>
               ${kindBadgeHTML(slot)}
               ${tags.map(text => `<span class="svc-tag">${esc(text)}</span>`).join("")}
             </div>
-            <span class="svc-note">${esc(SLOT_NOTE[slot])}</span>
+            <span class="svc-note">${esc(slotNote(slot))}</span>
           </summary>
           <div class="svc-card-body">
             <div class="svc-card-grid">
@@ -930,10 +968,15 @@
       const host = root.querySelector("#model-service");
       syncMain();  // 卡片里那四个真控件即将被重绘掉，先把值收进值仓
       const gate = advValue("MEMORY_EMBEDDING_GATE").trim() || "auto";
-      const gateOptions = ["auto", "none", ...SLOT_NAMES];
+      const gateOptions = ["auto", "none", ...allSlots()];
       const fallback = advValue("LLM_FALLBACK_ENABLED").trim().toLowerCase() !== "false";
       host.innerHTML = `
-        <div class="svc-cards">${SLOT_NAMES.map(endpointCardHTML).join("")}</div>
+        <div class="svc-cards">${allSlots().map(endpointCardHTML).join("")}</div>
+        <div class="svc-add">
+          <input id="svc-new-slot" placeholder="自定义槽名，如 EXTRA_SEARCH（留空自动编号）" />
+          <button type="button" id="btn-add-slot">+ 添加端点卡</button>
+          <span class="config-status" id="svc-add-status">自定义槽以 EXTRA_ 开头；保存后角色矩阵里就能选到它。</span>
+        </div>
         <div class="svc-presets">
           <span>一键预设：</span>
           ${Object.entries(PRESETS).map(([id, preset]) =>
@@ -975,6 +1018,7 @@
       host.querySelectorAll("[data-svc-test]").forEach(button => {
         button.onclick = () => testEndpoint(button.dataset.svcTest);
       });
+      host.querySelector("#btn-add-slot").onclick = addSlotCard;
       // 角色换端点 → 模型列跟着变（换端点就是换模型，这是本次改动的核心语义）。
       host.querySelectorAll("[data-role-endpoint]").forEach(select => {
         select.onchange = refreshServiceWarnings;
@@ -988,6 +1032,41 @@
         host.querySelector(`#${id}`)?.addEventListener("input", refreshServiceWarnings);
       }
       refreshServiceWarnings();
+    }
+
+    /** 「+ 添加端点卡」：声明一个 EXTRA_* 自定义槽。
+     *  落盘机制：往 advancedValues 写一条空的 LLM_ENDPOINT_<名>_BASE_URL，
+     *  buildAdvancedEnv() 会把它写进 .env（键不在 schema 也不在 SUPERSEDED，
+     *  走「保留原值」分支）；后端 registry.extra_slots() 下次解析就认出它。
+     *  空 BASE_URL 本身不会触发「没配地址」的 error——校验只查「有角色在用」。 */
+    function addSlotCard() {
+      const input = root.querySelector("#svc-new-slot");
+      const status = root.querySelector("#svc-add-status");
+      syncAdvanced();  // 先收编辑中的值，重绘前不丢
+      let name = input.value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+      if (!name) {
+        // 自动编号：EXTRA_1、EXTRA_2…… 跳过已存在与内建名
+        for (let i = 1; ; i++) {
+          name = `EXTRA_${i}`;
+          if (!allSlots().includes(name)) break;
+        }
+      } else if (!name.startsWith("EXTRA_")) {
+        name = `EXTRA_${name}`;
+      }
+      if (!/^EXTRA_[A-Z0-9]+$/.test(name)) {
+        status.textContent = `槽名 ${name} 不合法：只能含大写字母、数字、下划线，且不能是裸 EXTRA。`;
+        return;
+      }
+      if (allSlots().includes(name)) {
+        status.textContent = `槽 ${name} 已存在，卡片就在上面。`;
+        return;
+      }
+      advancedValues[`LLM_ENDPOINT_${name}_BASE_URL`] = "";
+      input.value = "";
+      renderModelService();
+      const card = host.querySelector(`.svc-card[data-slot="${name}"]`);
+      if (card) { card.open = true; card.scrollIntoView({ block: "nearest" }); }
+      root.querySelector("#svc-add-status").textContent = `已添加 ${name}，填完卡片并在角色矩阵里绑过去、点保存后生效。`;
     }
 
     function applyPreset(id) {
@@ -1036,14 +1115,13 @@
     function modelServiceProblems() {
       syncAdvanced();
       const problems = [];
-      // 只检查**已配地址**的端点。四个槽是静态声明的，两个 ONLINE_* 出厂就写着
-      // kind=online、地址与 key 都空 —— 按 kind 一刀切会让纯本地用户开局就看到两条
-      // 永远修不掉的「没填 API key」，而后端 registry 对没配地址的槽本就当「未配置」
-      // 直接跳过（endpoints() 里它是 None）。判据在这里跟后端对齐。
-      for (const slot of SLOT_NAMES) {
+      // 只检查**已配地址**的端点。槽按 kind 一刀切会让纯本地用户开局就看到
+      // 永远修不掉的「没填 API key」，而后端 registry 对没配地址的槽本就当
+      // 「未配置」直接跳过（endpoints() 里它是 None）。判据在这里跟后端对齐。
+      for (const slot of allSlots()) {
         if (!effectiveUrl(slot)) continue;
         if (slotKind(slot) === "online" && !effectiveApiKey(slot)) {
-          problems.push(`在线端点 ${slot}（${SLOT_LABEL[slot]}）填了地址但没填 API key，调用一定 401。`);
+          problems.push(`在线端点 ${slot}（${slotLabel(slot)}）填了地址但没填 API key，调用一定 401。`);
         }
       }
       const boundLabels = {};  // slot → [label]，报错文案里点名是谁在用
@@ -1059,8 +1137,8 @@
       }
       for (const slot of Object.keys(boundLabels)) {
         const who = boundLabels[slot].join("、");
-        if (!SLOT_NAMES.includes(slot)) { problems.push(`${who}指向未知端点 ${slot}。`); continue; }
-        if (!effectiveUrl(slot)) problems.push(`端点 ${slot}（${SLOT_LABEL[slot]}）有角色在用（${who}），但地址为空。`);
+        if (!allSlots().includes(slot)) { problems.push(`${who}指向未知端点 ${slot}。`); continue; }
+        if (!effectiveUrl(slot)) problems.push(`端点 ${slot}（${slotLabel(slot)}）有角色在用（${who}），但地址为空。`);
       }
       // 在线端点必须显式给模型：本机留空由服务端默认路由，在线厂商留空一律 400。
       // 后端 registry 把这条报成 error（保存后那次 doctor 一定会拦），所以这里也拦，
@@ -1068,7 +1146,7 @@
       for (const entry of ROLE_BINDINGS) {
         const slot = roleSlot(entry);
         if (isUnboundSlot(slot)) continue;  // 未绑定的角色不产生调用，不必有模型
-        if (!SLOT_NAMES.includes(slot) || slotKind(slot) !== "online") continue;
+        if (!allSlots().includes(slot) || slotKind(slot) !== "online") continue;
         if (!effectiveUrl(slot)) continue;  // 上面已经报过「地址为空」了
         if (!effectiveModel(entry).model) {
           problems.push(`${entry.label}指向在线端点 ${slot}，但该端点没填模型 ID。`);
@@ -1106,7 +1184,7 @@
       for (const entry of ROLE_BINDINGS) {
         if (entry.sendsContent !== true) continue;
         const slot = roleSlot(entry);
-        if (isUnboundSlot(slot) || !SLOT_NAMES.includes(slot)) continue;
+        if (isUnboundSlot(slot) || !allSlots().includes(slot)) continue;
         if (slotKind(slot) !== "online") continue;
         const content = entry.role === "VISION" ? "群聊图片" : "群聊原文";
         lines.push({ level: "warn", text: `${entry.label}指向在线端点，${content}会发送到该服务商。` });
@@ -1127,7 +1205,7 @@
     function parseAdvanced() {
       const groups = new Map();
       for (const field of schemaFields) {
-        if (managedKeys.has(field.key)) continue;
+        if (isManagedKey(field.key)) continue;
         const section = field.section || "其他设置";
         if (!groups.has(section)) groups.set(section, { title: section, items: [] });
         groups.get(section).items.push({

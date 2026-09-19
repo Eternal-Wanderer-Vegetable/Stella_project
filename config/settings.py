@@ -1119,6 +1119,19 @@ LLM_ENDPOINT_EXTRA_KIND = _env("LLM_ENDPOINT_EXTRA_KIND", "local")
 LLM_ENDPOINT_EXTRA_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_CONCURRENCY", 1)
 LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
 
+# 槽 EXTRA_VISION：图片转述的默认端点卡。**出厂未配地址 = 未启用**；图片转述
+# 角色（VISION）默认绑 none，要启用时在 GUI「模型服务」分区给本卡填地址、
+# 把 VISION 行的端点改指 EXTRA_VISION（或任何别的槽）即可。本卡与 EXTRA 同构：
+# 地址留空时按本机推导，指到服务商时把 KIND 改成 online（GUI 保存会自动推导）。
+# 它是「EXTRA_* 自定义槽」约定的样板：往 .env 里再写一组 LLM_ENDPOINT_EXTRA_<名>_*
+# 键就会多出一个同构槽（registry.extra_slots() 自动发现），无需改代码。
+LLM_ENDPOINT_EXTRA_VISION_BASE_URL = _env("LLM_ENDPOINT_EXTRA_VISION_BASE_URL", "")
+LLM_ENDPOINT_EXTRA_VISION_API_KEY = _env("LLM_ENDPOINT_EXTRA_VISION_API_KEY", "")
+LLM_ENDPOINT_EXTRA_VISION_MODEL = _env("LLM_ENDPOINT_EXTRA_VISION_MODEL", "")
+LLM_ENDPOINT_EXTRA_VISION_KIND = _env("LLM_ENDPOINT_EXTRA_VISION_KIND", "local")
+LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY", 1)
+LLM_ENDPOINT_EXTRA_VISION_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_VISION_TIMEOUT", 120.0)
+
 # ---------- LLM 角色（Role） ----------
 # 角色 = 一个调用场景。每个角色引用一个端点槽，并带自己的模型 / 温度 / max_tokens。
 # ENDPOINT 取 LOCAL | ONLINE_CHAT | ONLINE_MEMORY | EXTRA | none；
