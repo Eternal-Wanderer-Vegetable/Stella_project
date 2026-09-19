@@ -1195,6 +1195,41 @@ LLM_FALLBACK_ENABLED = _env_bool("LLM_FALLBACK_ENABLED", "true")
 LLM_FALLBACK_COOLDOWN = _env_int("LLM_FALLBACK_COOLDOWN", 300)
 
 
+# ---------- 图片识别（视觉转述） ----------
+# @ 消息携带图片时，先把图翻译成一句客观文字描述，再并入用户输入走原有
+# 纯文本主链路（设计见 design_docs/Stella_图片识别（视觉转述）实施计划 v1.0.md）。
+#
+# **功能默认关闭**：本地消费级显卡部署的模型几乎不具备图像转述能力，即使
+# 名义多模态也常无法正常工作。启用条件只有一条——给下面 LLM_ROLE_VISION_*
+# 这组角色键显式绑一个**确认可用**的视觉端点（默认 none 即未绑定）。
+# 未绑定时整条链路与旧版逐字节一致：纯图片 @ 不触发、纯图片消息不落库、
+# 图文 @ 只看文字。这不是降级路径，是默认状态。
+
+# 总开关（运行时停机位）。真正的启用条件是
+# VISION_ENABLED=true 且 VISION 角色绑定了可用端点（见 core/vision.py 的
+# vision_available()）；这个键只用于「临时关掉但保留端点配置」的场景。
+VISION_ENABLED = _env_bool("VISION_ENABLED", "true")
+# 单条消息最多处理几张图（QQ 九宫格刷屏保护）。超出的图按 [图片] 占位处理。
+VISION_MAX_IMAGES = _env_int("VISION_MAX_IMAGES", 3)
+# 单张图片本地下载的大小上限（字节）。在线端点直接用 URL、本地路径直读的
+# 不受此限；超限的图片按占位处理，不阻断其余图。
+VISION_MAX_IMAGE_BYTES = _env_int("VISION_MAX_IMAGE_BYTES", 8388608)
+# 单张图片转述的超时（秒）。视觉推理在主对话之外独立占一道角色闸门，
+# 超时该图占位、其余照常，不拖垮整条回复。
+VISION_DESCRIBE_TIMEOUT = _env_float("VISION_DESCRIBE_TIMEOUT", 60.0)
+# 用户 @ Bot 的消息里引用了另一条消息时，引用消息里的图片是否一并描述。
+VISION_INCLUDE_QUOTED = _env_bool("VISION_INCLUDE_QUOTED", "true")
+
+# 图片转述角色。**默认 none = 未绑定 = 功能关闭**。绑到本地槽时用多模态
+# 模型（如 qwen-vl 系）；绑到在线槽时注意——群聊图片会以 URL 形式发往
+# 第三方服务，请按群成员隐私预期选择。
+LLM_ROLE_VISION_ENDPOINT = _env("LLM_ROLE_VISION_ENDPOINT", "none")
+LLM_ROLE_VISION_MODEL = _env("LLM_ROLE_VISION_MODEL", "")
+LLM_ROLE_VISION_TEMPERATURE = _env_float("LLM_ROLE_VISION_TEMPERATURE", 0.3)
+LLM_ROLE_VISION_MAX_TOKENS = _env_int("LLM_ROLE_VISION_MAX_TOKENS", 300)
+LLM_ROLE_VISION_FALLBACK_ENDPOINT = _env("LLM_ROLE_VISION_FALLBACK_ENDPOINT", "")
+
+
 # ---------- LLM 成本控制（用量记账与预算） ----------
 # 在线端点按 token 计费，而记忆域（整合 / 压缩 / 提取）是高频后台任务：不记账就不知道
 # 钱花在哪，没有预算就没有上限。用量按「日期 × 角色 × 端点槽 × 模型」累加进

@@ -168,6 +168,13 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "source_kind",
         "ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'",
     ),
+    # 平台消息 id：图片描述回写（core/vision.update_recorded_message）需要按
+    # OneBot message_id 定位刚插入的行；只对新写入的行有效，老行留 NULL。
+    (
+        "group_messages",
+        "msg_id",
+        "ALTER TABLE group_messages ADD COLUMN msg_id INTEGER",
+    ),
     (
         "memory_candidates",
         "source_kind",

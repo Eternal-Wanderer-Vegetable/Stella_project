@@ -72,13 +72,16 @@ async def record_message(ctx: ChatContext) -> ChatContext:
                 user_id TEXT,
                 content TEXT,
                 source_kind TEXT DEFAULT 'PASSIVE',
+                msg_id INTEGER,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
         # 老库的 group_messages 已存在且 ensure_v2_schema 可能晚于首条消息执行，
-        # 这里自补一次 source_kind 列（失败即说明列已存在）
+        # 这里自补一次 source_kind / msg_id 列（失败即说明列已存在）
         with contextlib.suppress(sqlite3.OperationalError):
             cursor.execute("ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'")
+        with contextlib.suppress(sqlite3.OperationalError):
+            cursor.execute("ALTER TABLE group_messages ADD COLUMN msg_id INTEGER")
         # messages 表为旧版兼容（只读回退），新消息统一写入 group_messages
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -94,10 +97,10 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             ON group_messages (group_id, id)
         """)
         cursor.execute("""
-            INSERT INTO group_messages (group_id, user_id, content, source_kind)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO group_messages (group_id, user_id, content, source_kind, msg_id)
+            VALUES (?, ?, ?, ?, ?)
         """, (str(ctx.group_id), str(ctx.user_id), ctx.message,
-              normalize_source_kind(ctx.source_kind)))
+              normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0)))
         conn.commit()
         conn.close()
     except Exception as e:
