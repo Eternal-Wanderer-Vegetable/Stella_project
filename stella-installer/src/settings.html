@@ -64,14 +64,14 @@
       advanced_values: {},
       schema: { version: 1, fields: [] },
     };
-    const ROLE_NAMES = ["CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT"];
+    const ROLE_NAMES = ["CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT", "VISION"];
     const SLOT_NAMES = ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"];
     // 主表单与「模型服务」分区管的键不能再出现在「高级配置」里：同一个键摆两个控件，
     // 用户改了其中一个、保存时另一个的旧值又盖回去，表现就是「改了没反应」。
     // 刻意**不**列入 LLM_ENDPOINT_LOCAL_API_KEY：本机卡没有 key 控件，高级配置是
     // 它唯一的填写处；LOCAL 地址/模型两张卡直接管（写新键），其余端点槽的同名键
     // 是「留空即继承」的覆盖项，留在高级配置里当逃生口。
-    // 六个 LLM_ROLE_*_MODEL 同理降级：模型的正常出处是端点卡片，角色级只是
+    // 全部 LLM_ROLE_*_MODEL 同理降级：模型的正常出处是端点卡片，角色级只是
     // 「同一端点上某个角色换个模型」的覆盖项，卡片上不再给它控件
     // （CONSOLIDATION 例外——「记忆整合模型 ID」卡片写的就是 LLM_ROLE_CONSOLIDATION_MODEL）。
     // 四个 LLM_ENDPOINT_*_KIND 留在 managed 里但也没有控件：值由 slotKind() 按槽名
@@ -586,14 +586,24 @@
       ONLINE_MEMORY: "记忆整合与会话压缩专用 key。请知悉：整合会把群聊原文发送到这家服务商。",
       EXTRA: "地址留空即沿用 CONSOLIDATION_LM_STUDIO_BASE_URL（它再继承本机地址）。纯本地场景下它与本机同址，作用只是让整合有独立的并发闸门。模型对应 CONSOLIDATION_LM_STUDIO_MODEL。把地址改指服务商，这张卡就自动按在线处理（卡头的类型徽标会跟着变）。",
     };
-    const ROLES = [
-      { role: "CHAT", label: "对话生成", help: "回复群友的主模型，质量优先。" },
-      { role: "ROUTER", label: "兜底判定", help: "判断「这条要不要回」。二分类任务，廉价模型足够。" },
-      { role: "PLUGIN", label: "插件调用", help: "第三方插件借用的 LLM。插件代码拿不到这里的 key。" },
-      { role: "COMPACT", label: "会话压缩", help: "把较早的对话压成回顾。默认归记忆域，与整合共用缓存以省钱。" },
-      { role: "CONSOLIDATION", label: "记忆整合", help: "阶段 1 总结。量大而低频，廉价模型足够。" },
-      { role: "EXTRACT", label: "记忆提取", help: "阶段 2 高精度抽取。频次低，值得用强模型。" },
+    // ── 角色绑定（binding = 角色 × 槽）──────────────────────────────────
+    // 矩阵里的一行不是「角色」而是「一条绑定」：一个角色将来可能有多张卡
+    // （同一角色按用途拆到不同端点——例如对话拆「主回复 / 兜底回复」两条绑定，
+    // 或视觉角色将来加第二张卡），所以所有遍历都走 binding 而不是裸角色名。
+    //   unbindable   允许 ENDPOINT=none：该角色可整体关闭，矩阵下拉里给「未绑定」项
+    //   defaultSlot  .env 键留空时解析到的槽（VISION 默认 none = 出厂关闭）
+    //   sendsContent 指到在线端点时会把群聊内容发出去（隐私提醒用）
+    const ROLE_BINDINGS = [
+      { role: "CHAT",         label: "对话生成", help: "回复群友的主模型，质量优先。",                              defaultSlot: "LOCAL" },
+      { role: "ROUTER",       label: "兜底判定", help: "判断「这条要不要回」。二分类任务，廉价模型足够。",          defaultSlot: "LOCAL" },
+      { role: "PLUGIN",       label: "插件调用", help: "第三方插件借用的 LLM。插件代码拿不到这里的 key。",          defaultSlot: "LOCAL" },
+      { role: "COMPACT",      label: "会话压缩", help: "把较早的对话压成回顾。默认归记忆域，与整合共用缓存以省钱。", defaultSlot: "LOCAL", sendsContent: true },
+      { role: "CONSOLIDATION",label: "记忆整合", help: "阶段 1 总结。量大而低频，廉价模型足够。",                  defaultSlot: "EXTRA",  sendsContent: true },
+      { role: "EXTRACT",      label: "记忆提取", help: "阶段 2 高精度抽取。频次低，值得用强模型。",                 defaultSlot: "LOCAL", sendsContent: true },
+      { role: "VISION",       label: "图片转述", help: "可选：把 @ 消息里的图片转成一句文字描述。默认不绑端点 = 关闭；绑在线端点时群聊图片会发给服务商。", defaultSlot: "none", unbindable: true, sendsContent: true },
     ];
+    /** 按角色名取它的绑定（将来一个角色有多张卡时返回多条）。 */
+    function roleBindings(roleName) { return ROLE_BINDINGS.filter(entry => entry.role === roleName); }
     // 三个预设只动「角色 → 端点」这一列：地址与 key 是用户填进去的，预设不该清掉，
     // 否则点一下预设就把 key 弄丢了。MEMORY_EMBEDDING_GATE 在三个场景里都是 auto
     // （auto 自己会解析成「共用本地槽闸门」或「不排队」），所以也不在预设范围内。
@@ -692,9 +702,18 @@
         if (badge) badge.outerHTML = kindBadgeHTML(slot);
       }
     }
-    function roleSlot(role) {
-      const raw = advValue(`LLM_ROLE_${role}_ENDPOINT`).trim();
-      return raw || (role === "CONSOLIDATION" ? "EXTRA" : "LOCAL");
+    /** 绑定当前指向的槽。值是裸槽名或 "none"（unbindable 角色的关闭态）；
+     *  调用方必须先判 `slot === "none"` 再当槽名用。 */
+    function roleSlot(binding) {
+      const raw = advValue(`LLM_ROLE_${binding.role}_ENDPOINT`).trim();
+      return raw || binding.defaultSlot;
+    }
+    /** 槽值是否为「未绑定」哨兵。后端 endpoint() 对 none 大小写不敏感
+     *  （先 upper 再比），这里对齐——.env 里写 NONE 也应判成关闭。 */
+    const isUnboundSlot = slot => String(slot || "").toLowerCase() === "none";
+    /** 该绑定当前是否处于「未绑定 = 角色关闭」状态。 */
+    function roleUnbound(binding) {
+      return binding.unbindable === true && isUnboundSlot(roleSlot(binding));
     }
 
     // ── 模型 ID 的三档解析（必须与 core/llm/registry.py 的 _resolve_role_model 一致）──
@@ -727,14 +746,16 @@
     /** 端点级模型（第二档）。LOCAL / EXTRA 这两张卡上填的是旧键，端点级键是逃生口。 */
     function endpointModel(slot) { return advValue(`LLM_ENDPOINT_${slot}_MODEL`).trim(); }
 
-    /** 角色最终用的模型 + 出处（出处只给人看，出错时能一眼知道该去改哪个框）。 */
-    function effectiveModel(role) {
-      const legacyKey = ROLE_MODEL_LEGACY_KEY[role] || "";
+    /** 角色最终用的模型 + 出处（出处只给人看，出错时能一眼知道该去改哪个框）。
+     *  未绑定的角色返回空，由渲染层显示「未启用」。 */
+    function effectiveModel(binding) {
+      const legacyKey = ROLE_MODEL_LEGACY_KEY[binding.role] || "";
       const legacy = legacyKey ? legacyModelValue(legacyKey) : "";
-      const explicit = advValue(`LLM_ROLE_${role}_MODEL`).trim();
+      const explicit = advValue(`LLM_ROLE_${binding.role}_MODEL`).trim();
       // 「显式」的判据与后端一致：值与它继承的旧键不同才算用户单独指定过。
-      if (explicit && explicit !== legacy) return { model: explicit, from: `角色覆盖 LLM_ROLE_${role}_MODEL` };
-      const slot = roleSlot(role);
+      if (explicit && explicit !== legacy) return { model: explicit, from: `角色覆盖 LLM_ROLE_${binding.role}_MODEL` };
+      const slot = roleSlot(binding);
+      if (isUnboundSlot(slot)) return { model: "", from: "" };
       const slotModel = endpointModel(slot);
       if (slotModel) return { model: slotModel, from: `端点 ${slot} 的 MODEL` };
       // 旧键垫底，但在线槽上只认「这张卡自己的那个旧键」：别的旧键装的是本机模型名，
@@ -746,11 +767,26 @@
     }
 
     /** 槽名下拉。.env 里若写着未知槽名，作为一个显式选项保留——静默改成 LOCAL
-     *  等于替用户改配置，而 registry.validate() 本来就会把非法槽名报成 error。 */
-    function slotOptions(current, blankLabel = "") {
-      const names = SLOT_NAMES.includes(current) || !current ? SLOT_NAMES : [...SLOT_NAMES, current];
+     *  等于替用户改配置，而 registry.validate() 本来就会把非法槽名报成 error。
+     *  unbindable 角色额外给一项 none（「未绑定」），语义化地对应「角色关闭」。 */
+    function slotOptions(current, blankLabel = "", unbindable = false) {
+      // none 大小写归一：.env 写 NONE 时按哨兵渲染，不当成未知槽名
+      const isNone = isUnboundSlot(current);
+      // none 在不接受它的下拉里（如 FALLBACK_ENDPOINT）语义上等价于「留空」，
+      // 不当成未知槽名渲染——后端本来就把它当合法的空处理。
+      const normalized = isNone && !unbindable ? "" : (isNone ? "none" : current);
+      const names = SLOT_NAMES.includes(normalized) || !normalized ? SLOT_NAMES : [...SLOT_NAMES, normalized];
+      const noneOpt = unbindable
+        ? `<option value="none" ${isNone ? "selected" : ""}>none · 未绑定（关闭）</option>`
+        : "";
+      const head = blankLabel ? `<option value="" ${normalized ? "" : "selected"}>${esc(blankLabel)}</option>` : "";
+      return head + noneOpt + names.map(slot => {
+        const label = SLOT_LABEL[slot] ? `${slot} · ${SLOT_LABEL[slot]}` : `${slot}（未知槽名）`;
+        return `<option value="${esc(slot)}" ${slot === normalized ? "selected" : ""}>${esc(label)}</option>`;
+      }).join("");
+    }
       const head = blankLabel ? `<option value="" ${current ? "" : "selected"}>${esc(blankLabel)}</option>` : "";
-      return head + names.map(slot => {
+      return head + noneOpt + names.map(slot => {
         const label = SLOT_LABEL[slot] ? `${slot} · ${SLOT_LABEL[slot]}` : `${slot}（未知槽名）`;
         return `<option value="${esc(slot)}" ${slot === current ? "selected" : ""}>${esc(label)}</option>`;
       }).join("");
@@ -847,29 +883,34 @@
      *  真要让某个角色在同一端点上换模型，改高级配置里的 LLM_ROLE_<角色>_MODEL —— 那时
      *  这里会显示成「角色覆盖」，不至于让人以为界面没生效。
      */
-    function roleModelCellHTML(role) {
-      const { model, from } = effectiveModel(role);
-      if (model) {
-        return `<span class="svc-model" data-role-model="${esc(role)}">${esc(model)}<small>${esc(from)}</small></span>`;
+    function roleModelCellHTML(binding) {
+      if (isUnboundSlot(roleSlot(binding))) {
+        return `<span class="svc-model svc-model-empty" data-role-model="${esc(binding.role)}"><i>未启用 —— 端点为 none，该角色关闭</i></span>`;
       }
-      const hint = slotKind(roleSlot(role)) === "online"
+      const { model, from } = effectiveModel(binding);
+      if (model) {
+        return `<span class="svc-model" data-role-model="${esc(binding.role)}">${esc(model)}<small>${esc(from)}</small></span>`;
+      }
+      const hint = slotKind(roleSlot(binding)) === "online"
         ? "未指定 —— 在端点卡片的「模型 ID」里填"
         : "留空：由本机服务端默认路由";
-      return `<span class="svc-model svc-model-empty" data-role-model="${esc(role)}"><i>${esc(hint)}</i></span>`;
+      return `<span class="svc-model svc-model-empty" data-role-model="${esc(binding.role)}"><i>${esc(hint)}</i></span>`;
     }
 
     // 数值列刻意用 text + inputmode 而非 type="number"：number 控件读到 .env 里
     // 已有的非法值会把 value 变成空串，syncAdvanced 一收就静默清空了用户配置。
     function roleRowHTML(entry) {
       const key = suffix => `LLM_ROLE_${entry.role}_${suffix}`;
-      const slot = roleSlot(entry.role);
+      const slot = roleSlot(entry);
       const num = suffix => `<input inputmode="decimal" data-adv-key="${esc(key(suffix))}"
              value="${esc(advValue(key(suffix)))}" placeholder="${esc(advPlaceholder(key(suffix)))}" />`;
+      // data-role 上是「角色名」，data-binding 上是这条绑定的稳定 id（将来一个角色
+      // 有多张卡时用 `${role}:${index}` 区分，眼下与 data-role 同值）。
       return `
-        <div class="svc-row" data-role="${esc(entry.role)}">
+        <div class="svc-row" data-role="${esc(entry.role)}" data-binding="${esc(entry.role)}">
           <span class="svc-role"><b>${esc(entry.label)}</b><small>${esc(entry.help)}</small></span>
-          <select data-adv-key="${esc(key("ENDPOINT"))}" data-role-endpoint="${esc(entry.role)}">${slotOptions(slot)}</select>
-          ${roleModelCellHTML(entry.role)}
+          <select data-adv-key="${esc(key("ENDPOINT"))}" data-role-endpoint="${esc(entry.role)}">${slotOptions(slot, "", entry.unbindable === true)}</select>
+          ${roleModelCellHTML(entry)}
           ${num("TEMPERATURE")}
           ${num("MAX_TOKENS")}
           <select data-adv-key="${esc(key("FALLBACK_ENDPOINT"))}">${slotOptions(advValue(key("FALLBACK_ENDPOINT")).trim(), "不回退")}</select>
@@ -909,7 +950,7 @@
           <div class="svc-row svc-row-head">
             <span>角色</span><span>端点</span><span>模型</span><span>温度</span><span>max_tokens</span><span>失败回退</span>
           </div>
-          ${ROLES.map(roleRowHTML).join("")}
+          ${ROLE_BINDINGS.map(roleRowHTML).join("")}
           ${embeddingRowHTML()}
         </div>
         <div class="svc-foot">
@@ -1011,18 +1052,31 @@
           problems.push(`在线端点 ${slot}（${SLOT_LABEL[slot]}）填了地址但没填 API key，调用一定 401。`);
         }
       }
-      for (const slot of new Set(ROLES.map(entry => roleSlot(entry.role)))) {
-        if (!SLOT_NAMES.includes(slot)) { problems.push(`有角色指向未知端点 ${slot}。`); continue; }
-        if (!effectiveUrl(slot)) problems.push(`端点 ${slot}（${SLOT_LABEL[slot]}）有角色在用，但地址为空。`);
+      const boundLabels = {};  // slot → [label]，报错文案里点名是谁在用
+      for (const entry of ROLE_BINDINGS) {
+        const slot = roleSlot(entry);
+        if (isUnboundSlot(slot)) {
+          // none 对任何角色都合法（后端 endpoint() 先 upper 再判），但只有声明了
+          // unbindable 的角色「关」是设计态——别的角色被手写成 none 值得说一句。
+          if (!entry.unbindable) problems.push(`${entry.label}的端点是 none（未绑定），该角色不会产生调用。`);
+          continue;
+        }
+        (boundLabels[slot] = boundLabels[slot] || []).push(entry.label);
+      }
+      for (const slot of Object.keys(boundLabels)) {
+        const who = boundLabels[slot].join("、");
+        if (!SLOT_NAMES.includes(slot)) { problems.push(`${who}指向未知端点 ${slot}。`); continue; }
+        if (!effectiveUrl(slot)) problems.push(`端点 ${slot}（${SLOT_LABEL[slot]}）有角色在用（${who}），但地址为空。`);
       }
       // 在线端点必须显式给模型：本机留空由服务端默认路由，在线厂商留空一律 400。
       // 后端 registry 把这条报成 error（保存后那次 doctor 一定会拦），所以这里也拦，
       // 只是能把话说得更具体：该去哪个框里填。
-      for (const entry of ROLES) {
-        const slot = roleSlot(entry.role);
+      for (const entry of ROLE_BINDINGS) {
+        const slot = roleSlot(entry);
+        if (isUnboundSlot(slot)) continue;  // 未绑定的角色不产生调用，不必有模型
         if (!SLOT_NAMES.includes(slot) || slotKind(slot) !== "online") continue;
         if (!effectiveUrl(slot)) continue;  // 上面已经报过「地址为空」了
-        if (!effectiveModel(entry.role).model) {
+        if (!effectiveModel(entry).model) {
           problems.push(`${entry.label}指向在线端点 ${slot}，但该端点没填模型 ID。`);
         }
       }
@@ -1033,9 +1087,9 @@
     function refreshRoleModels() {
       const host = root.querySelector("#model-service");
       if (!host) return;
-      for (const entry of ROLES) {
+      for (const entry of ROLE_BINDINGS) {
         const cell = host.querySelector(`[data-role-model="${entry.role}"]`);
-        if (cell) cell.outerHTML = roleModelCellHTML(entry.role);
+        if (cell) cell.outerHTML = roleModelCellHTML(entry);
       }
     }
 
@@ -1053,11 +1107,15 @@
         lines.push({ level: "warn", text: "两个在线端点用了同一把 API key：两边的提示词前缀会互相打断缓存，省钱的前提就没了。" });
       }
       // 「角色走在线端点却没有模型」已经在 modelServiceProblems() 里按 error 报了，
-      // 这里只补一条提醒：整合类角色一旦指到在线端点，群聊原文就会出本机。
-      for (const entry of ROLES) {
-        if (!["CONSOLIDATION", "COMPACT", "EXTRACT"].includes(entry.role)) continue;
-        if (slotKind(roleSlot(entry.role)) !== "online") continue;
-        lines.push({ level: "warn", text: `${entry.label}指向在线端点，群聊原文会发送到该服务商。` });
+      // 这里只补一条隐私提醒：声明了 sendsContent 的角色（记忆域 + 图片转述）一旦
+      // 指到在线端点，群聊内容就会发送到该服务商——VISION 发的是图片本身。
+      for (const entry of ROLE_BINDINGS) {
+        if (entry.sendsContent !== true) continue;
+        const slot = roleSlot(entry);
+        if (isUnboundSlot(slot) || !SLOT_NAMES.includes(slot)) continue;
+        if (slotKind(slot) !== "online") continue;
+        const content = entry.role === "VISION" ? "群聊图片" : "群聊原文";
+        lines.push({ level: "warn", text: `${entry.label}指向在线端点，${content}会发送到该服务商。` });
       }
       box.innerHTML = lines.map(line => `<div class="svc-warn-line svc-${line.level}">${esc(line.text)}</div>`).join("");
     }
