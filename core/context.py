@@ -101,6 +101,12 @@ class ChatContext:
     # （工具结果同样不该污染聊天上下文，见 core/pipeline.py 的 _tool_result_section）。
     tool_summaries: list[str] = field(default_factory=list)
 
+    # ---- 图片识别（视觉转述，见 design_docs/Stella_图片识别（视觉转述）实施计划 v1.0） ----
+    # 接入层从 OneBot 事件提取的图片来源（URL / base64:// / data: / 本地路径）。
+    image_sources: list[str] = field(default_factory=list)
+    # describe_images 产出的每张图的客观描述（与 image_sources 同序、可短于它）。
+    image_captions: list[str] = field(default_factory=list)
+
     # ---- 平台原始句柄（opaque） ----
     # Comes 调 AstrBot 工具时，工具 handler 内部会用 event.send() /
     # event.bot.call_action()，必须是真实对象，构造不出等价替身。core 不解释它们的

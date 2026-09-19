@@ -54,12 +54,14 @@ ROLE_PLUGIN = "plugin"
 ROLE_COMPACT = "compact"
 ROLE_CONSOLIDATION = "consolidation"
 ROLE_EXTRACT = "extract"
+ROLE_VISION = "vision"
 
 # 顺序即启动日志里的打印顺序：先对话域，再记忆域
 ROLES: tuple[str, ...] = (
     ROLE_CHAT,
     ROLE_ROUTER,
     ROLE_PLUGIN,
+    ROLE_VISION,
     ROLE_COMPACT,
     ROLE_CONSOLIDATION,
     ROLE_EXTRACT,
@@ -815,6 +817,7 @@ __all__ = [
     "ROLE_EXTRACT",
     "ROLE_PLUGIN",
     "ROLE_ROUTER",
+    "ROLE_VISION",
     "SLOTS",
     "SLOT_EXTRA",
     "SLOT_LOCAL",
