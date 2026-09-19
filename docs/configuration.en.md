@@ -174,7 +174,7 @@ Stella's model configuration has two layers:
 
 The model ID belongs on the endpoint rather than being repeated on every role. One endpoint normally corresponds to one provider's model list, so “switch provider” should require changing only one place.
 
-There are 4 endpoint slots × 6 roles. A combination such as “chat online, consolidation local” therefore only changes a few `LLM_ROLE_*_ENDPOINT` settings; it requires no code changes and no provider-specific adapter.
+There are 4 endpoint slots × 7 roles (`VISION` is unbound by default and excluded from presets; see [Image Recognition](#image-recognition-vision-captioning)). A combination such as “chat online, consolidation local” therefore only changes a few `LLM_ROLE_*_ENDPOINT` settings; it requires no code changes and no provider-specific adapter.
 
 The installer's `Configuration → Model Services` section is the graphical interface for these two layers (endpoint cards + role matrix + three one-click presets). Editing `.env` manually is equivalent to using the GUI. **Slot names and role names are statically declared**: `deploy/env_schema.py` scans literal `_env*("KEY", …)` calls in `config/settings.py` with the AST to generate the GUI form; dynamically constructed key names do not appear in the interface.
 
@@ -219,6 +219,7 @@ Keys have the form `LLM_ROLE_<ROLE>_<FIELD>`. Fields are `ENDPOINT` / `MODEL` / 
 | `COMPACT` | Session compaction: compresses earlier conversation into a recap | `LOCAL` | `0.3` | `0` (= `SESSION_SUMMARY_MAX_TOKENS × 3`) |
 | `CONSOLIDATION` | Stage 1 of two-stage consolidation | `EXTRA` | `0.3` | inherits `CONSOLIDATION_LOCAL_MAX_TOKENS` |
 | `EXTRACT` | Stage 2 memory-candidate extraction | `LOCAL` | `0.2` | inherits `MEMORY_EXTRACT_MAX_TOKENS` |
+| `VISION` | Image captioning (optional, off by default) | `none` | `0.3` | `300` |
 
 **`MODEL` normally does not need to be filled in.** The normal source of a model ID is `LLM_ENDPOINT_<SLOT>_MODEL` from the previous section, which is what the GUI endpoint card edits. Role-level `MODEL` is only an **override**, for cases where one role needs another model on the same endpoint, such as using a cheaper model for fallback decisions. The `Model` column in the GUI role matrix is therefore read-only and shows the final value and its source. To override it, edit `LLM_ROLE_<ROLE>_MODEL` in advanced configuration.
 
@@ -233,7 +234,7 @@ When both tiers are empty the role's model is an empty string: a local endpoint 
 
 ### Three Typical Scenarios
 
-Only the 6 `LLM_ROLE_*_ENDPOINT` settings need to change; the GUI provides three corresponding one-click presets. `MEMORY_EMBEDDING_GATE` remains `auto` in all three scenarios.
+Only the `LLM_ROLE_*_ENDPOINT` settings of the six always-on roles need to change; the GUI provides three corresponding one-click presets. `MEMORY_EMBEDDING_GATE` remains `auto` in all three scenarios.
 
 | Role | A: Fully local | B: Fully online (dual key) | C: Hybrid: chat online · consolidation local |
 |---|---|---|---|
@@ -243,6 +244,9 @@ Only the 6 `LLM_ROLE_*_ENDPOINT` settings need to change; the GUI provides three
 | `COMPACT` | `LOCAL` | `ONLINE_MEMORY` | `LOCAL` |
 | `CONSOLIDATION` | `EXTRA` | `ONLINE_MEMORY` | `LOCAL` |
 | `EXTRACT` | `LOCAL` | `ONLINE_MEMORY` (choose a strong model) | `LOCAL` |
+| `VISION` | `none` | `none` | `none` |
+
+`VISION` is left unbound in all three presets: it is an **explicitly enabled** optional feature (see [Image Recognition](#image-recognition-vision-captioning)). To use it, point `LLM_ROLE_VISION_ENDPOINT` at a vision-capable endpoint yourself.
 
 Scenario C balances cost and privacy: only chat generation goes online; the original group-chat text is not sent to the online provider.
 
@@ -434,6 +438,31 @@ The hold-warning threshold accounts for 3 backend retries (120 seconds per timeo
 The reason `MEMORY_EMBEDDING_GATE` defaults to `auto` is that `MEMORY_EMBEDDING_BASE_URL` defaults to the same instance as main chat, while one retrieval encodes every candidate memory once (the candidate pool can reach 20+). Without serialization, intermittent slowdowns are difficult to diagnose. If embedding runs on an independent instance, set `none` to avoid unnecessary serialization. `python -m deploy doctor` identifies `LLM_SCHEDULER_GATE_EMBEDDING` as an old key.
 
 **Why priority is not implemented**: strict FIFO across multiple groups can place an @ reply behind background tasks. However, each group has at most one background task in flight and the total is bounded; the actual impact requires real queueing data. Accumulate observations from `core.llm.snapshot()` first, then decide whether to deviate from FIFO.
+
+### Image Recognition (Vision Captioning)
+
+When an @-mentioned message contains images, Stella first has a vision model turn each image into a one-line text description, then merges it into the user input as “图片内容：…” and runs the existing text-only pipeline — the chat model itself needs no multimodal capability (implementation: `core/vision.py`; design: `design_docs/Stella_图片识别（视觉转述）实施计划 v1.0.md`).
+
+**Off by default**: `LLM_ROLE_VISION_ENDPOINT` defaults to `none` (unbound). Models that run on consumer-grade local GPUs almost never provide usable image captioning, so pointing the role at the chat endpoint by default would only produce garbage captions. The only way to enable it is to explicitly bind a vision-capable endpoint (a local multimodal model or an online vision API). When unbound, the whole path behaves like the previous build: image-only @ mentions do not trigger, image-only messages are not persisted, and image-plus-text @ mentions only see the text.
+
+| Configuration | Default | Description |
+|---|---|---|
+| `LLM_ROLE_VISION_ENDPOINT` | `none` | Endpoint slot for the vision role; `none` = feature off |
+| `LLM_ROLE_VISION_MODEL` | empty | Vision model ID; empty uses the bound endpoint's `MODEL` |
+| `LLM_ROLE_VISION_TEMPERATURE` | `0.3` | Captioning is a descriptive task; no need for divergence |
+| `LLM_ROLE_VISION_MAX_TOKENS` | `300` | One line of description is enough |
+| `LLM_ROLE_VISION_FALLBACK_ENDPOINT` | empty | Same semantics as other roles |
+| `VISION_ENABLED` | `true` | Runtime kill switch: disables captioning without losing endpoint configuration |
+| `VISION_MAX_IMAGES` | `3` | Max images captioned per message (nine-grid spam protection) |
+| `VISION_MAX_IMAGE_BYTES` | `8388608` | Per-image download size cap (bytes) |
+| `VISION_DESCRIBE_TIMEOUT` | `60.0` | Per-image caption timeout (seconds); timed-out or failed images degrade to the `[图片]` placeholder |
+| `VISION_INCLUDE_QUOTED` | `true` | Whether images inside a quoted message are also captioned |
+
+- Captioning runs through the `VISION` role's own gate and usage accounting (`acquire(gate_of(ROLE_VISION))`) — it queues on and bills to whichever slot it is bound to.
+- Online endpoints receive images by URL: when bound to an `ONLINE_*` slot the image URL is sent to the provider directly; when bound to a local slot the image is downloaded first and sent as a data URL (bounded by `VISION_MAX_IMAGE_BYTES`).
+- A successfully captioned image rewrites the persisted `[图片]` placeholder by message ID into “图片内容：…”, so consolidation and retrieval see the captioned text.
+- **Privacy**: binding an online endpoint means group-chat images go to a third-party provider; choose according to what the group expects.
+- When the budget is exceeded: `pause_memory` does not affect captioning (it sits on the reply path, not in the memory domain); under `pause_all` captioning is blocked together with the reply.
 
 ## Context
 

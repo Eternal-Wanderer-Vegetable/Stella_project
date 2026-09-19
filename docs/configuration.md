@@ -52,7 +52,7 @@ LLM_ROLE_EXTRACT_ENDPOINT=ONLINE_MEMORY
 LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
 ```
 
-模型 ID 写在**端点**上，指到该端点的角色默认都用它——不必在六个角色上各写一遍同一个字符串。两把 key 必须不同，原因见[为什么必须两把在线 key](#为什么必须两把在线-key)。用安装器的「配置 → 模型服务」分区点一下「纯在线（双 key）」预设，等价于上面这段。
+模型 ID 写在**端点**上，指到该端点的角色默认都用它——不必在每个角色上各写一遍同一个字符串。两把 key 必须不同，原因见[为什么必须两把在线 key](#为什么必须两把在线-key)。用安装器的「配置 → 模型服务」分区点一下「纯在线（双 key）」预设，等价于上面这段。
 
 ---
 
@@ -183,7 +183,7 @@ Stella 的模型配置分两层：
 
 模型 ID 挂在端点上而不是每个角色上重复一遍：一个端点通常只对应一家服务商的一份模型清单，「换服务商」就该只改一处。
 
-共 4 个端点槽 × 6 个角色。「对话走在线、整合留本地」这类组合因此只是改几个 `LLM_ROLE_*_ENDPOINT`，不需要碰代码，也不需要为某家服务商写适配。
+共 4 个端点槽 × 7 个角色（其中 `VISION` 默认不绑端点、不参与预设，见[图片识别](#图片识别视觉转述)）。「对话走在线、整合留本地」这类组合因此只是改几个 `LLM_ROLE_*_ENDPOINT`，不需要碰代码，也不需要为某家服务商写适配。
 
 安装器「配置 → 模型服务」分区是这两层的图形界面（端点卡片 + 角色矩阵 + 三个一键预设），手改 `.env` 与用 GUI 等价。**槽名和角色名都是静态声明的**：`deploy/env_schema.py` 靠 AST 扫描 `config/settings.py` 里的字面量 `_env*("KEY", …)` 调用来生成 GUI 表单，动态拼出来的键名不会出现在界面上。
 
@@ -228,6 +228,7 @@ Stella 的模型配置分两层：
 | `COMPACT` | 会话压缩：把较早的对话压成回顾 | `LOCAL` | `0.3` | `0`（= `SESSION_SUMMARY_MAX_TOKENS × 3`） |
 | `CONSOLIDATION` | 两阶段整合的阶段 1 | `EXTRA` | `0.3` | 继承 `CONSOLIDATION_LOCAL_MAX_TOKENS` |
 | `EXTRACT` | 阶段 2 记忆候选提取 | `LOCAL` | `0.2` | 继承 `MEMORY_EXTRACT_MAX_TOKENS` |
+| `VISION` | 图片转述（可选，默认关闭） | `none` | `0.3` | `300` |
 
 **`MODEL` 通常不用填。** 模型 ID 的正常出处是上一节的 `LLM_ENDPOINT_<槽名>_MODEL`（GUI 的端点卡片就是它），角色级 `MODEL` 只是**覆盖项**，用于「同一个端点上，某个角色要用另一个模型」——例如兜底判定挑一档更便宜的。GUI 的角色矩阵里「模型」一列因此是只读显示（显示最终结果与它的出处），要覆盖请改高级配置里的 `LLM_ROLE_<角色>_MODEL`。
 
@@ -242,7 +243,7 @@ Stella 的模型配置分两层：
 
 ### 三个典型场景
 
-只需要改 6 个 `LLM_ROLE_*_ENDPOINT`，GUI 里对应三个一键预设。三个场景的 `MEMORY_EMBEDDING_GATE` 都保持 `auto`。
+只需要改 6 个常驻角色的 `LLM_ROLE_*_ENDPOINT`，GUI 里对应三个一键预设。三个场景的 `MEMORY_EMBEDDING_GATE` 都保持 `auto`。
 
 | 角色 | A 纯本地 | B 纯在线（双 key） | C 混合：对话在线 · 整合本地 |
 |---|---|---|---|
@@ -252,6 +253,9 @@ Stella 的模型配置分两层：
 | `COMPACT` | `LOCAL` | `ONLINE_MEMORY` | `LOCAL` |
 | `CONSOLIDATION` | `EXTRA` | `ONLINE_MEMORY` | `LOCAL` |
 | `EXTRACT` | `LOCAL` | `ONLINE_MEMORY`（挑强模型） | `LOCAL` |
+| `VISION` | `none` | `none` | `none` |
+
+`VISION` 在三个预设里都不绑端点：它是**显式开启**的可选功能（见[图片识别](#图片识别视觉转述)），要用时单独改 `LLM_ROLE_VISION_ENDPOINT` 指到一个确认可用的视觉端点。
 
 场景 C 是省钱与隐私的折中：只有对话生成出网，群聊原文不发给在线服务商。
 
@@ -445,6 +449,31 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 `MEMORY_EMBEDDING_GATE` 默认 `auto` 的原因：`MEMORY_EMBEDDING_BASE_URL` 默认与主聊天同一个实例，而一次检索要对每条候选记忆各编码一次（候选池可达 20+），不串行会出现间歇性变慢且极难定位。若把 embedding 部署在独立实例，设 `none` 可避免不必要的串行。`python -m deploy doctor` 会把 `LLM_SCHEDULER_GATE_EMBEDDING` 提示为旧键。
 
 **优先级为什么没实现**：多群下严格 FIFO 会让 @ 回复排在后台任务之后。但后台任务每群最多 1 个在途、数量有界，实际影响需要真实排队数据才能判断。先积累 `core.llm.snapshot()` 的观测数据，再决定是否偏离 FIFO。
+
+### 图片识别（视觉转述）
+
+被 @ 的消息里带图片时，Stella 先用视觉模型把每张图翻译成一句文字描述，再以「图片内容：……」并入用户输入走原有纯文本链路——聊天模型本身不需要多模态能力（实现见 `core/vision.py`，设计见 `design_docs/Stella_图片识别（视觉转述）实施计划 v1.0.md`）。
+
+**默认关闭**：`LLM_ROLE_VISION_ENDPOINT` 默认 `none`（未绑定）。消费级本地显卡部署的模型几乎不具备可用的图像转述能力，让它默认指向聊天端点只会产生乱转述。启用方式只有一条：把它显式绑到一个确认可用的视觉端点（本地多模态模型，或在线视觉模型）。未绑定时整条链路与旧版一致：纯图片 @ 不触发、纯图片消息不落库、图文 @ 只看文字。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `LLM_ROLE_VISION_ENDPOINT` | `none` | 视觉角色绑定的端点槽；`none` = 功能关闭 |
+| `LLM_ROLE_VISION_MODEL` | 空 | 视觉模型 ID，留空用所绑端点的 `MODEL` |
+| `LLM_ROLE_VISION_TEMPERATURE` | `0.3` | 转述是描述任务，不需要发散 |
+| `LLM_ROLE_VISION_MAX_TOKENS` | `300` | 一句描述足够 |
+| `LLM_ROLE_VISION_FALLBACK_ENDPOINT` | 空 | 与其他角色同构 |
+| `VISION_ENABLED` | `true` | 运行时停机位：临时关掉识图但保留端点配置 |
+| `VISION_MAX_IMAGES` | `3` | 单条消息最多转述几张图（九宫格刷屏保护） |
+| `VISION_MAX_IMAGE_BYTES` | `8388608` | 单张图片下载大小上限（字节） |
+| `VISION_DESCRIBE_TIMEOUT` | `60.0` | 单张图片转述超时（秒）；超时或失败的图降级为 `[图片]` 占位 |
+| `VISION_INCLUDE_QUOTED` | `true` | 引用消息里的图片是否一并转述 |
+
+- 转述走 `VISION` 角色自己的闸门与用量记账（`acquire(gate_of(ROLE_VISION))`）——绑到哪道槽就排哪道闸、记到哪道槽的账。
+- 在线端点按 URL 收图：绑 `ONLINE_*` 槽时图片 URL 直接发给服务商；绑本地槽时图片先下载、转成 data URL 再发给本地服务（受 `VISION_MAX_IMAGE_BYTES` 限制）。
+- 转述成功的图会把已落库的 `[图片]` 占位按消息 id 回写成「图片内容：……」，整合与检索看到的是转述后的文本。
+- **隐私**：绑在线端点意味着群聊图片发往第三方服务，请按群成员预期选择。
+- 预算超额时：`pause_memory` 不影响识图（它在回复路径上，不是记忆域）；`pause_all` 下识图随回复一起被拦。
 
 ## 上下文
 

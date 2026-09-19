@@ -64,6 +64,7 @@ Stella_project/
 │   ├── logging_sink.py             # 结构化 JSON 日志（stella.jsonl，供 GUI 消费）
 │   ├── shutdown.py                 # 优雅停止：等待在途后台任务收尾（独立成模块以便单测）
 │   ├── stop_signal.py              # 停止哨兵：deploy 写、Bot 读并自杀（deploy 层可独立 import）
+│   ├── vision.py                   # 图片转述：提取图源 → VISION 角色转述 → 并入消息文本（可选，默认关闭）
 │   └── llm/
 │       ├── base.py                 # LLM 后端抽象接口
 │       ├── registry.py             # 端点 × 角色注册表：全项目唯一的后端构造入口
@@ -241,7 +242,7 @@ Stella_project/
 
 | 路径 | 触发条件 | `trigger` | `intent` |
 |---|---|---|---|
-| @ 回复 | 群在白名单 + 被 @ + 有文本 | `reply` | `""` |
+| @ 回复 | 群在白名单 + 被 @ + 有文本¹ | `reply` | `""` |
 | 主动 @ | 定时检查命中，选中活跃用户 | `reply` | `proactive_at` |
 | 主动插话 | 定时检查命中，概率曲线通过 | `proactive` | `proactive_join` |
 | 插件分发 | 群在白名单 + 非自身回显 + 消息非空 | — | — |
@@ -249,6 +250,8 @@ Stella_project/
 | 能力查询 | 群在白名单 + 被 @ + 命中「你能做什么」等说法 | — | — |
 
 三条对话路径共用同一个 Pipeline，靠 `ChatContext` 的字段区分行为。每群一把 `asyncio.Lock`，保证同一群同时只跑一次推理。
+
+> ¹ 绑定了 `VISION` 端点（`LLM_ROLE_VISION_ENDPOINT` 非 `none`）时，「有文本」放宽为「有文本或图片」——纯图片 @ 以 `[图片]` 占位进入流程，转述由 pre hook 补上。未绑定时行为与旧版一致：纯图片消息既不触发也不落库（见 `core/vision.py::vision_available()`）。
 
 插件分发的门槛刻意比 @ 回复宽得多（判定在 `astrbot_compat.pipeline.should_dispatch`）：上游 AstrBot 对每一条消息都跑一遍插件 filter，是否唤醒由 filter 自己决定。门槛是「消息里有段」而**不是**「有纯文本」——手机端分享的小程序卡片只有一个 `json` 段，按纯文本判会把整条消息挡在插件层外，于是 `@event_message_type(ALL)` 这类专为非文本消息存在的 handler 永远收不到事件（2026-08-25 实测）。
 
@@ -289,6 +292,8 @@ gate 之外还有一道零 token 的**回复必要性门控**（`core/reply_gate
 Pipeline 的 pre hook 按 priority **降序**执行：
 
 ```
+describe_images_hook   (60)  → ctx.image_captions：把图转述成「图片内容：……」并入 ctx.message
+                               （仅 VISION 已绑定时注册为有效路径；未绑定直接返回）
 build_context          (50)  → ctx.short_term
 activate_capabilities  (45)  → ctx.route，并行激活 {长期记忆检索, Comes 工具执行}
 ```
@@ -327,6 +332,8 @@ asyncio.gather(
 
 `build_context` 保持无条件执行——短期上下文是对话素材，与「要不要检索长期记忆」无关。
 
+**`describe_images_hook`**（`core/vision.py`，详见 [configuration.md · 图片识别](configuration.md#图片识别视觉转述)）：`VISION` 角色绑了端点时才干活——提取消息里的图片（含被引用消息中的图，受 `VISION_INCLUDE_QUOTED` 控制），每张经 `VISION` 角色闸门调视觉模型产出一句描述，拼接成「图片内容：……」追加到 `ctx.message`，并按 `msg_id` 把已落库的 `[图片]` 占位回写成转述文本。转述失败 / 超时 / 超尺寸的图降级保留 `[图片]` 占位，不阻断回复；转述结果有进程内 LRU 缓存（同一 URL 重发不重复调模型）。
+
 pre hooks 之后、调用模型之前，还有一道**受限 Planner**（`core/planner.py`）的深度路径：绝大多数消息不经过它——本地零 LLM 的 `detect_trigger` 判定命中（历史指代、话题歧义等启动条件）才唤醒，允许发起深度记忆查询补充上下文，并有每轮 LLM 调用硬上限（`PLANNER_MAX_LLM_CALLS_PER_TURN`）。Planner 异常只降级为快速路径（少几条补充记忆），不能吞掉回复；判定为「等信息不够」时（`PLANNER_PROACTIVE_WAIT_ENABLED`）本轮可以不回复，等后续消息重新驱动。
 
 > **记忆门控默认关闭**（`ROUTER_GATE_MEMORY=false`）：Router 照常判定与记录，但记忆检索仍无条件执行。误判 `memory=False` 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 `AT_MENTION` 全为 0 的缺陷同一类型。要打开先跑 `python -m capability.router.benchmark` 确认记忆假阴为 0。
@@ -362,7 +369,7 @@ detect_mode(消息, 触发方式)                     ← 判定行为模式
 >
 > | 闸门（槽） | 并发度 | 使用者 |
 > |---|---|---|
-> | `LOCAL` | 1 | 聊天回复、会话压缩、候选提取、Comes 工具循环、Router Level 2、embedding 编码（`MEMORY_EMBEDDING_GATE=auto`） |
+> | `LOCAL` | 1 | 聊天回复、会话压缩、候选提取、Comes 工具循环、Router Level 2、图片转述（`VISION` 绑定 LOCAL 时）、embedding 编码（`MEMORY_EMBEDDING_GATE=auto`） |
 > | `EXTRA` | 1 | 两阶段整合的阶段 1 |
 >
 > 同一资源内严格 FIFO（`asyncio.Lock` 的等待队列本就是 FIFO），不同资源之间可真正并行。把某个角色改绑到在线槽（例如 `LLM_ROLE_CHAT_ENDPOINT=ONLINE_CHAT`，默认并发度 4）后，它就从 `LOCAL` 那条队里出去了——这是在线化带来的吞吐收益的来源。配置方式见 [configuration.md · 端点与角色](configuration.md#端点与角色两层配置)。
