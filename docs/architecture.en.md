@@ -64,6 +64,7 @@ Stella_project/
 │   ├── logging_sink.py             # Structured JSON logs (stella.jsonl, consumed by the GUI)
 │   ├── shutdown.py                 # Graceful shutdown: wait for in-flight background tasks (its own module for testability)
 │   ├── stop_signal.py              # Stop sentinel: deploy writes, Bot reads and exits (deploy can import it standalone)
+│   ├── vision.py                   # Image captioning: extract image sources → caption via the VISION role → merge into message text (optional, off by default)
 │   └── llm/
 │       ├── base.py                 # Abstract LLM backend interface
 │       ├── registry.py             # Endpoint × role registry: the only backend construction entry point in the project
@@ -241,7 +242,7 @@ Link monitoring refreshes the heartbeat through an **independent** `event_prepro
 
 | Path | Trigger condition | `trigger` | `intent` |
 |---|---|---|---|
-| @ reply | Group is allowlisted + Bot is @ mentioned + contains text | `reply` | `""` |
+| @ reply | Group is allowlisted + Bot is @ mentioned + contains text¹ | `reply` | `""` |
 | Proactive @ | Scheduled check hits and selects an active user | `reply` | `proactive_at` |
 | Proactive interjection | Scheduled check hits and probability curve passes | `proactive` | `proactive_join` |
 | Plugin dispatch | Group is allowlisted + not a self-echo + message is non-empty | — | — |
@@ -249,6 +250,8 @@ Link monitoring refreshes the heartbeat through an **independent** `event_prepro
 | Capability query | Group is allow-listed + @ mentioned + matches a phrasing such as “what can you do” | — | — |
 
 The three conversation paths share one Pipeline and use `ChatContext` fields to distinguish behavior. Each group has one `asyncio.Lock`, ensuring that only one inference runs in a group at a time.
+
+> ¹ When the `VISION` endpoint is bound (`LLM_ROLE_VISION_ENDPOINT` other than `none`), "contains text" relaxes to "contains text or an image" — an image-only @ enters the flow as a `[图片]` placeholder and a pre hook supplies the caption. When unbound, behavior matches the previous build: image-only messages neither trigger a reply nor get persisted (see `core/vision.py::vision_available()`).
 
 The threshold for plugin dispatch is deliberately much broader than for @ replies (`astrbot_compat.pipeline.should_dispatch` makes the decision): upstream AstrBot runs plugin filters once for every message, and each filter decides whether to wake up. The threshold is “the message has a segment,” **not** “the message has plain text.” A mini-program card shared from a mobile device contains only one `json` segment; checking for plain text would block the entire message outside the plugin layer, so handlers such as `@event_message_type(ALL)`, which specifically exist for non-text messages, would never receive the event (measured on 2026-08-25).
 
@@ -289,6 +292,8 @@ The probability roll for topic interjections is **not inside the gate**. It is u
 Pipeline pre-hooks execute in **descending** priority order:
 
 ```
+describe_images_hook   (60)  → ctx.image_captions: captions images into "图片内容：…" and merges them into ctx.message
+                               (active only when VISION is bound; returns immediately otherwise)
 build_context          (50)  → ctx.short_term
 activate_capabilities  (45)  → ctx.route, concurrently activates {long-term memory retrieval, Comes tool execution}
 ```
@@ -327,6 +332,8 @@ asyncio.gather(
 
 `build_context` always executes unconditionally: short-term context is conversation material and is unrelated to “whether long-term memory should be retrieved.”
 
+**`describe_images_hook`** (`core/vision.py`; see [configuration.en.md · Image Recognition](configuration.en.md#image-recognition-vision-captioning)): only active when the `VISION` role is bound to an endpoint. It extracts image sources from the message (including images inside a quoted message, controlled by `VISION_INCLUDE_QUOTED`), calls a vision model through the `VISION` role's gate for a one-line caption per image, appends them as “图片内容：…” to `ctx.message`, and rewrites the persisted `[图片]` placeholder by `msg_id` with the captioned text. Images that fail, time out, or exceed the size limit degrade to the `[图片]` placeholder without blocking the reply; captions are cached in an in-process LRU so a re-sent URL is not captioned twice.
+
 After the pre hooks and before the model call there is also a **Restricted Planner** deep path (`core/planner.py`): the vast majority of messages never enter it — it wakes only when the zero-LLM local `detect_trigger` hits one of its start conditions (historical reference, topic ambiguity, and similar), allowing a deep memory query to supplement the context, with a hard per-turn cap on LLM calls (`PLANNER_MAX_LLM_CALLS_PER_TURN`). A Planner exception only degrades to the fast path (a few supplementary memories fewer); it must never swallow the reply. When it decides “not enough information yet” (`PLANNER_PROACTIVE_WAIT_ENABLED`), the turn may skip replying and wait for subsequent messages to re-drive it.
 
 > **Memory gating is disabled by default** (`ROUTER_GATE_MEMORY=false`): the Router still makes and records its decision, but memory retrieval still executes unconditionally. A false `memory=False` decision would cause Stella to silently lose long-term memory for that turn: no exception is raised and the reply is unaffected, but “it suddenly no longer remembers you,” the same type of defect as the all-zero `AT_MENTION` incident on 2026-08-17. Before enabling it, run `python -m capability.router.benchmark` and confirm that memory false negatives are zero.
@@ -362,7 +369,7 @@ The tool-results paragraph consumes only `ctx.tool_summaries` (one sentence afte
 >
 > | Gate (slot) | Concurrency | Users |
 > |---|---|---|
-> | `LOCAL` | 1 | Chat replies, session compaction, candidate extraction, Comes tool loop, Router Level 2, embedding encoding (`MEMORY_EMBEDDING_GATE=auto`) |
+> | `LOCAL` | 1 | Chat replies, session compaction, candidate extraction, Comes tool loop, Router Level 2, image captioning (when `VISION` is bound to `LOCAL`), embedding encoding (`MEMORY_EMBEDDING_GATE=auto`) |
 > | `EXTRA` | 1 | Phase 1 of two-phase consolidation |
 >
 > Strict FIFO applies within one resource (`asyncio.Lock`'s wait queue is FIFO), while different resources can truly run concurrently. If a role is rebound to an online slot (for example, `LLM_ROLE_CHAT_ENDPOINT=ONLINE_CHAT`, with default concurrency 4), it leaves the `LOCAL` queue. This is the source of the throughput gain from going online. See [configuration.en.md · Endpoint and Role](configuration.en.md#endpoint-and-role-two-layer-configuration) for configuration.

@@ -45,7 +45,7 @@ You decide where the models come from.
 | **Hybrid** (recommended) | Online API | Local | Users who want better conversation quality without paying for tokens for frequent small tasks (the machine must still be able to run a small model) |
 | **All online** | Online API | Online API | Users without a graphics card, lightweight servers, or anyone who wants to get it running quickly to see how it works |
 
-- All three modes share the same memory, personality, and plugin configuration. Switching modes only changes configuration and does not lose data. The configuration UI provides one-click presets for all three modes (`纯本地` / `混合（对话在线 · 整合本地）` / `纯在线（双 key）`); one click configures all six roles, after which they can still be fine-tuned individually.
+- All three modes share the same memory, personality, and plugin configuration. Switching modes only changes configuration and does not lose data. The configuration UI provides one-click presets for all three modes (`纯本地` / `混合（对话在线 · 整合本地）` / `纯在线（双 key）`); one click configures the six always-on roles, after which they can still be fine-tuned individually (a seventh role, `VISION`, handles image captioning; it is unbound by default, not part of the presets, and can be assigned in advanced configuration when needed).
 
 - When using online models, **conversation generation and memory consolidation each use an independent API key**. Their prefix caches do not evict each other, and capability routing follows the chat endpoint and reuses the same prefix.
 
@@ -65,7 +65,9 @@ You decide where the models come from.
 
 - **🧠 Two-layer memory filtering** -- Capture is permissive (uncertain information may enter the candidate pool), while promotion is strict (confidence tiers + cross-validation + per-user quotas). Filtering happens at the data-backed, auditable, and reversible layer rather than in the prompt: only after filtering in the database does it consume context, and candidates and confidence do not use the conversation budget.
 
-- **🔄 Models are replaceable** -- You can independently choose endpoints for the six roles: conversation, capability routing, plugin borrowing, session compression, memory consolidation, and memory extraction. Local and online endpoints can be combined freely; vector search remains local. Changing models does not touch memories, and changing modes does not require rebuilding the database.
+- **🔄 Models are replaceable** -- You can independently choose endpoints for the seven roles: conversation, capability routing, plugin borrowing, session compression, memory consolidation, memory extraction, and image captioning. Local and online endpoints can be combined freely; vector search remains local. Changing models does not touch memories, and changing modes does not require rebuilding the database.
+
+- **🖼 It can see images** -- An optional image-captioning role: when an @-mentioned message contains images, a vision model first turns each image into a one-line description that joins the conversation. Consumer-grade local models rarely offer usable image captioning, so the feature is **off by default** — bind a vision-capable endpoint (a local multimodal model or an online vision API) to enable it; when unbound, behavior is identical to a build without image support.
 
 - **💰 Spending is visible** -- Online token usage is logged daily by role, endpoint, and model. The GUI and `deploy status` show today's usage, **the provider's prefix-cache hit rate** (the only way to verify that the money-saving measure is actually working), and remaining budget. You can set a daily budget; when it is exceeded, memory consolidation is paused by default while **the bot keeps talking in the group as usual**.
 
