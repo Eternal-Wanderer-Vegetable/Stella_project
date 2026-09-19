@@ -103,6 +103,7 @@ from core.planner import RestrictedPlanner
 from core.reply_gate import get_reply_gate
 from core.shutdown import wait_for_tasks
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
+from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
 from memory import addressing, expression_learning
 from memory.addressing_intent import (
@@ -170,13 +171,46 @@ _reply_check_tasks: set[asyncio.Task] = set()
 _plugin_handled_msgs: OrderedDict[int, float] = OrderedDict()
 _addressing_decisions: OrderedDict[int, AddressingRequest] = OrderedDict()
 
+async def describe_images_hook(ctx: ChatContext) -> ChatContext:
+    """图片转述钩子：把 ctx.image_sources 里的图转成文字描述并入 ctx.message。
+
+    priority=60（先于 build_context）：尾巴组装与记忆检索看到的就是带描述
+    的完整文本。VISION 未绑定（默认）时 describe_images 返回空，本钩子
+    什么都不做——整条链路与旧版一致。
+
+    转述完成后按 msg_id 回写 group_messages 刚插入的那行（priority-0 落库
+    时图片描述还没生成，当时只能写 [图片] 占位）。任何失败只降级为占位，
+    绝不阻断回复——与 activate_capabilities「钩子不抛异常」的契约一致。
+    """
+    if not ctx.image_sources:
+        return ctx
+    try:
+        from core.vision import describe_images, update_recorded_message
+
+        captions = await describe_images(ctx.image_sources, user_text=ctx.message)
+    except Exception as e:
+        logger.warning(f"⚠️ [Vision] 图片转述异常（按占位继续）: {e}")
+        return ctx
+    if not captions:
+        return ctx
+    ctx.image_captions = captions
+    ctx.message += f"「图片内容：{'；'.join(captions)}」"
+    try:
+        await update_recorded_message(ctx.group_id, ctx.msg_id, ctx.message)
+    except Exception as e:
+        logger.debug(f"[Vision] 回写消息描述失败（跳过）: {e}")
+    return ctx
+
+
 # pre-hook 按 priority 降序执行（数值越大越先）：
+# 60 -> describe_images_hook（图片转述：图 → 文字描述并入 ctx.message）
 # 50 -> build_context（组装短期上下文：话题摘要 + 原始尾巴 + 会话摘要）
 # 45 -> activate_capabilities（Router 判定 → 并行跑 {长期记忆检索, Comes 工具执行}）
 #
 # build_user_context **不再单独注册**：它已被 activate_capabilities 接管。
 # 方案第 17 节要求 Memory 与 Comes 并行，两个独立钩子只能串行，必须收进同一个
 # gather。这里再注册一次会让记忆检索跑两遍（一次串行、一次在 gather 里）。
+pipeline.register_pre_hook(describe_images_hook, priority=60)
 pipeline.register_pre_hook(build_context, priority=50)
 register_capability_hook(pipeline)
 
@@ -366,8 +400,14 @@ async def record_group_chat(event: GroupMessageEvent):
     if event.user_id == event.self_id:
         return
     text = event.get_plaintext().strip()
-    if not text or text.startswith("/"):
+    if text.startswith("/"):
         return
+    if not text:
+        # 纯图片消息：识图功能可用时按 [图片] 占位入库，让尾巴/整合知道
+        # 「刚才有人发过图」；不可用（默认）时照旧不落库，与旧版一致。
+        if not (vision_available() and extract_image_sources(event)):
+            return
+        text = "[图片]"
     ctx = ChatContext(
         user_id=event.user_id,
         group_id=event.group_id,
@@ -411,7 +451,12 @@ async def record_group_chat(event: GroupMessageEvent):
 
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
-    """触发规则：(1) 属于已启用群 (2) 有人 @ 机器人 (3) 附带非空文本。"""
+    """触发规则：(1) 属于已启用群 (2) 有人 @ 机器人 (3) 附带非空文本。
+
+    识图功能可用（``vision_available()``）时，条件 3 放宽为「非空文本或
+    带图片」——@ Stella + 纯图也能进对话；功能未配置（默认）时判据与
+    旧版逐字一致，纯图消息照旧不触发。
+    """
     _tome = event.is_tome()
     _txt = event.get_plaintext().strip()
     _gid_ok = event.group_id in ALLOWED_GROUPS
@@ -420,7 +465,11 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
         return False
     if not event.is_tome():
         return False
-    return len(event.get_plaintext().strip()) > 0
+    if len(event.get_plaintext().strip()) > 0:
+        return True
+    # 识图功能未启用时 extract_image_sources 不取图源、直接判空，
+    # 行为与旧版一致（纯图 @ 不触发）。
+    return vision_available() and bool(extract_image_sources(event))
 
 
 async def is_plugin_trigger(event: MessageEvent) -> bool:
@@ -475,16 +524,22 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         return
     lock = _group_locks[event.group_id]
     async with lock:
+        # 纯图片 @（无文字）时给 message 一个占位文本：它是检索查询与 prompt
+        # 的当前输入，空串会让整轮对话退化成「没有当前输入」。
+        message_text = event.get_plaintext().strip() or "[图片]"
         ctx = ChatContext(
             user_id=event.user_id,
             group_id=event.group_id,
             msg_id=event.message_id,
-            message=event.get_plaintext().strip(),
+            message=message_text,
             # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
             # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
             # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
             raw_event=event,
             bot=bot,
+            # 图片来源（本体 + 引用）；识图未启用时保持空列表，describe_images_hook
+            # 会跳过，行为与旧版一致。
+            image_sources=extract_image_sources(event) if vision_available() else [],
         )
         gate = get_reply_gate().evaluate(
             event.group_id,
