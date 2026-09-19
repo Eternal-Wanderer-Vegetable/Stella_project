@@ -785,12 +785,6 @@
         return `<option value="${esc(slot)}" ${slot === normalized ? "selected" : ""}>${esc(label)}</option>`;
       }).join("");
     }
-      const head = blankLabel ? `<option value="" ${current ? "" : "selected"}>${esc(blankLabel)}</option>` : "";
-      return head + noneOpt + names.map(slot => {
-        const label = SLOT_LABEL[slot] ? `${slot} · ${SLOT_LABEL[slot]}` : `${slot}（未知槽名）`;
-        return `<option value="${esc(slot)}" ${slot === current ? "selected" : ""}>${esc(label)}</option>`;
-      }).join("");
-    }
 
     function endpointCardHTML(slot) {
       const urlKey = urlKeyOf(slot);
