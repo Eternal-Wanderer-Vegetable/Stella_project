@@ -295,6 +295,25 @@ async def _bootstrap_capabilities() -> None:
 
         _diag_log(f"[knowledge][boot] 知识库能力装配失败（跳过）: {_e}\n{traceback.format_exc()}")
 
+    # Skills 运行时（SKILLS_ENABLED 时，plan §6.5）：插件能力准备之后、
+    # Router 预热之前建立 catalog 快照。失败只告警——Skills 是增量功能，
+    # 装配不上的后果是「这层不存在」，绝不是 Bot 起不来。
+    try:
+        from config import SKILLS_ENABLED as _SKILLS_ON
+        from skills import runtime as _skills_runtime
+
+        if _SKILLS_ON:
+            _rt = _skills_runtime.build_runtime()
+            if _rt is not None:
+                _skills_runtime.install(_rt)
+                _diag_log(f"[skills][boot] 技能运行时装配: {_rt.status()}")
+        else:
+            _diag_log("[skills][boot] SKILLS_ENABLED=false，Skills 层未装配")
+    except Exception as _e:
+        import traceback
+
+        _diag_log(f"[skills][boot] Skills 运行时装配失败（跳过）: {_e}\n{traceback.format_exc()}")
+
     try:
         from config import CAPABILITY_ROUTER_ENABLED, ROUTER_SEMANTIC_ENABLED
 

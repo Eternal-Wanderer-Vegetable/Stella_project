@@ -100,6 +100,29 @@ def _capabilities() -> dict | None:
         return None
 
 
+def _skills() -> dict | None:
+    """Skills/Sandbox 状态段（plan §6.5：数量、来源、后端状态、失败计数）。
+
+    只有计数与策略摘要：候选 manifest 的 description 原文、技能正文、
+    workspace 路径明细一律不进状态接口——与 ``_capabilities`` 同一条
+    「响应体不含自由文本」的守卫。
+    """
+    try:
+        from skills import runtime as skills_runtime
+        from skills.sandbox import executor_status
+
+        rt = skills_runtime.current()
+        if rt is None:
+            return None
+        payload = rt.status()
+        payload["sandbox"] = executor_status(
+            getattr(rt.orchestrator, "_executor", None)
+        )
+        return payload
+    except Exception:
+        return None
+
+
 def build_payload(
     link: dict | None,
     sched: dict,
@@ -109,6 +132,7 @@ def build_payload(
     usage: dict | None = None,
     capabilities: dict | None = None,
     runtime_status: dict | None = None,
+    skills: dict | None = None,
 ) -> dict:
     """组装状态响应。
 
@@ -141,6 +165,7 @@ def build_payload(
         "scheduler": sched,    # core.llm.snapshot()
         "usage": usage,        # usage_store.usage_snapshot()，或 None（取数失败）
         "capabilities": capabilities,  # inventory.snapshot()，或 None（取数失败）
+        "skills": skills,      # skills.runtime status，或 None（未装配/取数失败）
     }
     if runtime_status is not None:
         payload["runtime"] = runtime_status
@@ -202,6 +227,7 @@ def _register_status_route(app) -> bool:
             usage=usage,
             capabilities=_capabilities(),
             runtime_status=runtime_status,
+            skills=_skills(),
         )
 
     return True

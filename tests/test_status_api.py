@@ -86,8 +86,10 @@ def test_build_payload_fields_complete():
         "scheduler",
         "usage",
         "capabilities",
+        "skills",
     }
     assert payload["pid"] == 123
+    assert payload["skills"] is None  # 未装配 skills 运行时时为 None
     assert payload["link"] is link
     assert payload["scheduler"] is sched
     assert isinstance(payload["version"], str) and payload["version"]
@@ -283,3 +285,46 @@ def test_capability_snapshot_carries_no_mcp_secrets():
     # 非敏感的诊断字段在
     assert "mcp_brave_search" in text
     assert "degraded" in text
+
+
+def test_skills_section_absent_without_runtime(monkeypatch):
+    import skills.runtime as skills_runtime
+
+    monkeypatch.setattr(skills_runtime, "current", lambda: None)
+    assert status_api._skills() is None
+
+
+def test_skills_section_is_counts_only(monkeypatch):
+    """skills 状态段只有计数与后端状态：候选描述/正文/路径不得出现。"""
+    import skills.runtime as skills_runtime
+
+    class _FakeCatalog:
+        def status(self):
+            return {
+                "version": "abc123",
+                "total": 1,
+                "layer_counts": {"builtin": 1, "plugin": 0, "user": 0},
+                "quarantined": 0,
+                "last_error": "",
+                "last_refresh_at": 0.0,
+            }
+
+    class _FakeRT:
+        catalog = _FakeCatalog()
+        selector = object()
+        orchestrator = None  # executor 取不到 → disabled 状态
+
+        def status(self):
+            return {
+                "installed": True,
+                "orchestrator": False,
+                "catalog": self.catalog.status(),
+            }
+
+    monkeypatch.setattr(skills_runtime, "current", lambda: _FakeRT())
+    section = status_api._skills()
+    assert section["installed"] is True
+    assert section["catalog"]["total"] == 1
+    assert section["sandbox"]["backend"] == "disabled"
+    # 守卫：正文式的自由文本不在这里
+    assert "description" not in section
