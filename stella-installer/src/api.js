@@ -205,9 +205,10 @@ export async function getPersonas() {
   return JSON.parse(await invoke("get_personas"));
 }
 
-export async function savePersona(space, promptFile, content) {
+export async function savePersona(space, promptFile, content, groups = null) {
   if (USE_MOCK || !invoke) return "已保存";
-  return await invoke("save_persona", { space, promptFile, content });
+  // groups 传数字数组（卡片输入是字符串，调用方负责转换）；null = 保留空间 toml 里的旧值
+  return await invoke("save_persona", { space, promptFile, content, groups });
 }
 
 

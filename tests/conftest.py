@@ -11,18 +11,24 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
 
-# 测试永远把用户数据目录钉在仓库根目录。
+# 测试永远把用户数据目录钉在一个专用临时目录。
 #
 # 必须在 import config 之前设置：``config/settings.py`` 在 import 时就解析
-# ``STELLA_HOME``（顺序见 config/home.py），而开发机上「仓库里有 .env」会命中旧布局、
-# CI 上「没有 .env」会解析到仓库同级的 StellaData —— 同一份测试在两处得到不同路径，
-# 测试结论就不可信了。pytest 先 import conftest 再 import 用例模块，所以这里是最早
-# 且唯一可靠的时机。setdefault：外部显式指定时以外部为准。
-os.environ.setdefault("STELLA_HOME", str(Path(__file__).resolve().parent.parent))
+# ``STELLA_HOME``（顺序见 config/home.py）。不能用仓库根：测试会在那里重建
+# .env / memory/agent_memory.db 等旧布局痕迹，而开发数据目录就锚在仓库的
+# StellaData/ 上——痕迹一多，开发环境的解析结果就被测试运行改变（2026-09-20
+# 实测：跑完测试后 GUI 的人格读写全部落回仓库根）。钉在临时目录还保证 CI 与
+# 开发机得到同一路径，测试结论可比。pytest 先 import conftest 再 import 用例
+# 模块，所以这里是最早且唯一可靠的时机。setdefault：外部显式指定时以外部为准。
+os.environ.setdefault(
+    "STELLA_HOME",
+    str(Path(tempfile.mkdtemp(prefix="stella-test-home-"))),
+)
 
 
 @pytest.fixture(autouse=True)

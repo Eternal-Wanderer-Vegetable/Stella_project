@@ -181,6 +181,10 @@
       const nextPage = SETTINGS_PAGES.has(page) ? page : "connection";
       const changed = settingsPage !== nextPage;
       settingsPage = nextPage;
+      // 人格列表不能只在模块加载时取一次：GUI 侧数据目录会在进程里被修正
+      // （save_config 跑完 init 后 invalidate 缓存重解析），页面若不重拉，
+      // 就一直显示修正前的旧数据（2026-09-20 实测：列表空白不随修正自愈）。
+      if (changed && nextPage === "persona") refreshPersonas();
       root.querySelectorAll("[data-settings-page]").forEach(button => {
         const active = button.dataset.settingsPage === settingsPage;
         button.classList.toggle("active", active);
@@ -437,10 +441,17 @@
       button.disabled = true;
       status.textContent = "正在保存…";
       try {
-        await savePersona(persona.name, persona.prompt_file, persona.content);
+        // 群号输入是字符串，转成数字再交给 Rust（Vec<i64>）；保存人格 = 保存整张卡片
+        const groups = (persona.groups || []).map(value => Number(value));
+        if (groups.some(value => !Number.isFinite(value) || value <= 0)) {
+          throw new Error("群号必须是正整数");
+        }
+        await savePersona(persona.name, persona.prompt_file, persona.content, groups);
         personas = await getPersonas();
         personasSynced = true;
-        expandedPersonaName = persona.name;
+        // 保存成功即收回卡片：列表行已能看到保存结果（群号 · 人格文件），
+        // 继续摊开只会挡住其它空间。
+        expandedPersonaName = "";
         renderPersona();
       } catch (error) {
         status.textContent = `保存失败：${error}`;
@@ -1454,15 +1465,19 @@
     });
 
     renderPersonaPending();
-    getPersonas().then(data => {
-      personas = data;
-      personasSynced = true;
-      renderPersona();
-    }).catch(error => {
-      personasSynced = true;
-      const host = root.querySelector("#persona-settings");
-      if (host) host.innerHTML = `<div class="notice notice-error">无法读取人格：<code>${esc(error)}</code></div>`;
-    });
+    refreshPersonas();
+
+    function refreshPersonas() {
+      getPersonas().then(data => {
+        personas = data;
+        personasSynced = true;
+        renderPersona();
+      }).catch(error => {
+        personasSynced = true;
+        const host = root.querySelector("#persona-settings");
+        if (host) host.innerHTML = `<div class="notice notice-error">无法读取人格：<code>${esc(error)}</code></div>`;
+      });
+    }
   </script>
 </body>
 </html>

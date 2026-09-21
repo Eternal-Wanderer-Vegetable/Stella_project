@@ -57,8 +57,9 @@ PROJECT_ROOT = _PROJECT_ROOT
 
 # ---------- 用户数据根目录（STELLA_HOME） ----------
 # PROJECT_ROOT 是**程序目录**（升级时整体替换），STELLA_HOME 是**用户数据目录**
-# （升级时不动）。定位顺序见 config/home.py：环境变量 → 机器级指针文件 →
-# 旧布局（数据就在安装目录内）→ 安装目录同级的 StellaData。
+# （升级时不动）。定位顺序见 config/home.py：环境变量 → 便携模式（安装目录内的
+# StellaData）→ 旧布局（数据就在安装目录内）→ 机器级指针文件 → 安装目录同级的
+# StellaData。
 #
 # 旧布局下 STELLA_HOME == PROJECT_ROOT，所有路径与 2026-08-27 之前完全一致，
 # 存量安装原地继续工作。刻意在这里不创建目录：import config 不该有副作用，
