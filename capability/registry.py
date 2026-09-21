@@ -31,9 +31,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-# Provider 实现方式。本轮只实现 astrbot_tool，其余是留好的口子（方案第 20 节：
-# 未来支持 MCP / API / Native Tool）。不提前实现是刻意的——没有真实调用方时
-# 抽象一定是错的。
+# Provider 实现方式。astrbot_tool 与 mcp 已实现（MCP 见 capability/providers/），
+# api / native 是留好的口子。没有真实调用方时不提前实现是刻意的。
 KIND_ASTRBOT_TOOL = "astrbot_tool"
 KIND_MCP = "mcp"
 KIND_API = "api"
@@ -57,7 +56,11 @@ class CapabilityProvider:
         provider_id: provider 唯一标识（同一能力下不重复）；
         capability_id: 所属能力 id；
         kind: 实现类型，见 KIND_* 常量；
-        tool_name: ``astrbot_tool`` 时为 ``llm_tools`` 里的工具名；
+        tool_name: ``astrbot_tool`` 时为 ``llm_tools`` 里的工具名；``mcp`` 时为
+            内部命名空间名（``mcp_<server>_<tool>``，见 mcp.model.mcp_tool_name），
+            给模型看、也是健康度记账的键；
+        server_id: 仅 ``mcp``：配置里的 Server id；
+        remote_tool_name: 仅 ``mcp``：tools/list 返回的原始工具名；
         priority: 越大越优先。同一能力有多个 provider 时的选择依据；
         enabled: 人工开关。关闭的 provider 永不参与选择；
         source: 注册来源，见 SOURCE_* 常量，用于「显式声明优先」的归属判定与诊断；
@@ -69,6 +72,8 @@ class CapabilityProvider:
     capability_id: str
     kind: str = KIND_ASTRBOT_TOOL
     tool_name: str = ""
+    server_id: str = ""
+    remote_tool_name: str = ""
     priority: int = 0
     enabled: bool = True
     source: str = SOURCE_CONFIG
@@ -119,6 +124,22 @@ class CapabilityProvider:
         else:
             state = ""
         return f"Provider({self.provider_id} kind={self.kind} tool={self.tool_name}{state})"
+
+
+def provider_claim_key(provider: CapabilityProvider) -> str | None:
+    """provider 的**认领键**：决定「这份实现被哪个能力认领了」的唯一标识。
+
+    backend-aware（方案 §7.2.4）：``astrbot_tool`` 用 ``llm_tools`` 工具名；
+    ``mcp`` 用 ``mcp:<server>:<tool>``——两个 Server 的同名远程工具键不同，
+    不会互相认领。返回 None 的 provider（缺标识、或 kind 不可认领）不参与归属。
+    """
+    if provider.kind == KIND_ASTRBOT_TOOL:
+        return provider.tool_name or None
+    if provider.kind == KIND_MCP:
+        if provider.server_id and provider.remote_tool_name:
+            return f"{KIND_MCP}:{provider.server_id}:{provider.remote_tool_name}"
+        return None
+    return None
 
 
 @dataclass
@@ -204,12 +225,16 @@ class CapabilityRegistry:
 
     def __init__(self) -> None:
         self._capabilities: dict[str, Capability] = {}
-        # 工具名 → 认领它的能力 id。自动派生时据此跳过已被显式声明认领的工具。
+        # 认领键 → 认领它的能力 id。自动派生时据此跳过已被显式声明认领的工具；
+        # 键的形态见 provider_claim_key（astrbot 用工具名，mcp 用 server:tool）。
         self._claimed_tools: dict[str, str] = {}
         # 注册表版本号：每次变更自增，供 Router 的原型向量缓存失效
         self._version = 0
         # 「这个工具此刻真的在吗」探针。见 ``set_tool_probe``：None = 不校验。
         self._tool_probe: Callable[[str], bool] | None = None
+        # Provider Runtime（capability/providers）。Bot 进程启动时装上（见
+        # capability/adapters/mcp.py）；None = 按旧探针语义判定（离线进程与单测）。
+        self._provider_runtime: Any | None = None
 
     def set_tool_probe(self, probe: Callable[[str], bool] | None) -> None:
         """装上（或用 ``None`` 卸掉）「工具此刻真的在吗」探针，供 ``routable`` 查询。
@@ -240,6 +265,27 @@ class CapabilityRegistry:
             return
         self._tool_probe = probe
         # 探针一装/一卸，``routable()`` 的答案就变了，Router 的原型缓存必须跟着失效
+        self._version += 1
+
+    def set_provider_runtime(self, runtime: Any | None) -> None:
+        """装上（或卸掉）Provider Runtime，``_tool_live`` 从此按 kind 委托分派。
+
+        进程级接线（谁在跑这份注册表），与探针同性质：``clear()`` 不动它，热重载
+        不重装。装/卸会改变 ``routable()`` 的答案，所以同样要让 Router 的原型缓存
+        失效（版本号自增）。传入同一对象时不重复自增。
+        """
+        if runtime is self._provider_runtime:
+            return
+        self._provider_runtime = runtime
+        self._version += 1
+
+    def bump_version(self) -> None:
+        """外部状态变化导致的失效通知：MCP 工具目录或 Server 可用性变化时由
+        adapter 调用（方案 §7.2.6），让 Router 的原型/候选集缓存重新计算。
+
+        Registry 自己不认识 MCP（不 import providers.mcp），所以这件事由装在
+        ``client.tools_changed_callback`` 上的 adapter 代劳。
+        """
         self._version += 1
 
     # ---------- 变更 ----------
@@ -290,15 +336,56 @@ class CapabilityRegistry:
         self._version += 1
         return True
 
+    def replace_provider(self, capability_id: str, provider: CapabilityProvider) -> bool:
+        """按 provider_id 差量替换（或新增）一个 provider，供 tools/list_changed 刷新。
+
+        MCP 的 tools/list 变化只影响个别 provider；整能力重建会让 examples 合并、
+        健康度计数白白丢一轮。没有就当作新增（语义与 ``add_provider`` 一致）。
+        """
+        capability = self._capabilities.get(capability_id)
+        if capability is None:
+            return False
+        provider.capability_id = capability_id
+        for index, existing in enumerate(capability.providers):
+            if existing.provider_id == provider.provider_id:
+                capability.providers[index] = provider
+                self._claim(provider)
+                self._version += 1
+                return True
+        return self.add_provider(capability_id, provider)
+
+    def remove_provider(self, capability_id: str, provider_id: str) -> bool:
+        """按 provider_id 摘掉一个 provider 并释放它的认领键。返回是否真的摘了。
+
+        远程工具从 tools/list 里消失时由 adapter 调用：provider 留着的话，
+        ``routable()`` 会一直把这条能力当成候选（直到 Comes 里 resolve 失败）。
+        """
+        capability = self._capabilities.get(capability_id)
+        if capability is None:
+            return False
+        for index, existing in enumerate(capability.providers):
+            if existing.provider_id != provider_id:
+                continue
+            key = provider_claim_key(existing)
+            del capability.providers[index]
+            # 只有当归属仍指向本能力时才释放：先到先得意味着这个键可能已经被
+            # 别的能力抢走了（本次摘除发生在归属易主之后），那种情况不能动归属表。
+            if key is not None and self._claimed_tools.get(key) == capability_id:
+                del self._claimed_tools[key]
+            self._version += 1
+            return True
+        return False
+
     def _claim(self, provider: CapabilityProvider) -> None:
-        """记录工具归属。已被别的能力认领过的工具不改归属（先到先得）。
+        """记录实现归属。已被别的能力认领过的键不改归属（先到先得）。
 
         先到先得而不是后来者胜出：加载顺序里显式声明（TOML）一定早于自动派生
         （要等插件加载完），所以「先到」天然等于「显式优先」。
         """
-        if provider.kind != KIND_ASTRBOT_TOOL or not provider.tool_name:
+        key = provider_claim_key(provider)
+        if key is None:
             return
-        self._claimed_tools.setdefault(provider.tool_name, provider.capability_id)
+        self._claimed_tools.setdefault(key, provider.capability_id)
 
     def clear(self) -> None:
         """清空注册表（测试与热重载用）。
@@ -349,13 +436,30 @@ class CapabilityRegistry:
         return sorted(self._capabilities)
 
     def _tool_live(self, provider: CapabilityProvider) -> bool:
-        """provider 指向的实现此刻是否真的存在。没装探针时一律为 True。
+        """provider 指向的实现此刻是否真的存在。
 
-        判据与 ``capability/comes/executor.py`` 的 ``resolve_tools`` **必须逐条对齐**：
-        非 ``astrbot_tool`` 的 kind 本轮不支持，工具查不到或 ``active=False`` 都算不在。
-        对不齐的表现是「路由挑中了它，Comes 立刻回一句『工具全部不可用』」——用户看到
-        的是 Stella 答非所问，而日志里两边各自都觉得自己没错。
+        两条判定通路，按进程接线选择：
+
+        - **装了 Provider Runtime**（Bot 进程，见 ``set_provider_runtime``）：按
+          kind 委托给对应 backend——astrbot_tool 查 ``llm_tools``，mcp 查 Server
+          状态与工具目录（Server 挂着时其下 Provider 全部视为不在，但 Capability
+          声明保留，重连后自动点亮）；
+        - **没装**（单测、``deploy plugin-scaffold``、Router benchmark）：沿用探针
+          语义，行为与本函数的历史版本**逐字一致**——探针没装一律 True，装了则
+          非 ``astrbot_tool`` 的 kind 不支持。
+
+        判据与 ``capability/comes/executor.py`` 的 ``resolve_tools`` **必须逐条对齐**，
+        工具查不到或 ``active=False`` 都算不在。对不齐的表现是「路由挑中了它，Comes
+        立刻回一句『工具全部不可用』」——用户看到的是 Stella 答非所问，而日志里两边
+        各自都觉得自己没错。
         """
+        runtime = self._provider_runtime
+        if runtime is not None:
+            try:
+                return bool(runtime.is_live(provider))
+            except Exception:
+                # runtime 坏了不把能力悄悄摘掉（见 ProviderRuntime.is_live 的兜底语义）
+                return True
         probe = self._tool_probe
         if probe is None:
             return True
@@ -397,8 +501,19 @@ class CapabilityRegistry:
         return capability.enabled_providers() if capability else []
 
     def claimed_by(self, tool_name: str) -> str | None:
-        """某工具被哪个能力认领了；未被认领返回 None。"""
+        """某个 astrbot 工具名被哪个能力认领了；未被认领返回 None。"""
         return self._claimed_tools.get(tool_name)
+
+    def claimed_by_provider(self, provider: CapabilityProvider) -> str | None:
+        """某个 provider（按认领键）被哪个能力认领了；未认领或键为空返回 None。
+
+        声明层的归属判定（``loader._shadowed_by``）必须走这里而不是 ``claimed_by``：
+        MCP provider 的认领键里没有工具名可直接查。
+        """
+        key = provider_claim_key(provider)
+        if key is None:
+            return None
+        return self._claimed_tools.get(key)
 
     @property
     def version(self) -> int:
@@ -431,5 +546,6 @@ __all__ = [
     "Capability",
     "CapabilityProvider",
     "CapabilityRegistry",
+    "provider_claim_key",
     "registry",
 ]

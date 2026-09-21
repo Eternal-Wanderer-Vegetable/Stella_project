@@ -193,3 +193,127 @@ input_schema = "nope"
     c = reg.get("c.d")
     assert a is not None and a.input_schema == {"type": "object"}
     assert c is not None and c.input_schema == {}
+
+
+# ---------- MCP provider 声明（方案 §7.3）----------
+
+
+def test_loads_mcp_provider_with_server_and_tool(tmp_path):
+    reg = CapabilityRegistry()
+    path = _write(
+        tmp_path,
+        "web.toml",
+        """
+[[capability]]
+id = "web.search"
+description = "联网搜索"
+examples = ["搜一下"]
+providers = [
+  { id = "mcp:brave:search", kind = "mcp", server = "brave", tool = "search", priority = 10 },
+]
+""",
+    )
+    assert load_capability_file(path, reg) == 1
+    providers = reg.find_providers("web.search")
+    assert len(providers) == 1
+    provider = providers[0]
+    assert provider.kind == "mcp"
+    assert provider.provider_id == "mcp:brave:search"
+    assert provider.server_id == "brave"
+    assert provider.remote_tool_name == "search"
+    # 内部命名空间名给模型看：server 段保证不同 Server 的同名工具不串线
+    assert provider.tool_name == "mcp_brave_search"
+    assert provider.priority == 10
+
+
+def test_mcp_provider_defaults_provider_id_and_priority(tmp_path):
+    reg = CapabilityRegistry()
+    path = _write(
+        tmp_path,
+        "web.toml",
+        """
+[[capability]]
+id = "web.search"
+providers = [{ kind = "mcp", server = "brave", tool = "search" }]
+""",
+    )
+    load_capability_file(path, reg)
+    provider = reg.find_providers("web.search")[0]
+    assert provider.provider_id == "mcp:brave:search"
+    assert provider.priority == 0
+
+
+def test_mcp_provider_without_server_or_tool_is_skipped(tmp_path):
+    reg = CapabilityRegistry()
+    path = _write(
+        tmp_path,
+        "web.toml",
+        """
+[[capability]]
+id = "web.search"
+providers = [
+  { kind = "mcp", tool = "search" },
+  { kind = "mcp", server = "brave" },
+]
+""",
+    )
+    load_capability_file(path, reg)
+    assert reg.find_providers("web.search") == []
+
+
+def test_unknown_kind_is_still_skipped(tmp_path):
+    reg = CapabilityRegistry()
+    path = _write(
+        tmp_path,
+        "x.toml",
+        """
+[[capability]]
+id = "a.b"
+providers = [{ kind = "carrier_pigeon", tool = "t" }]
+""",
+    )
+    load_capability_file(path, reg)
+    assert reg.find_providers("a.b") == []
+
+
+def test_mcp_claim_shadows_lower_tiers(tmp_path):
+    """MCP 认领键参与「先到先得」：同 Server 同工具的低优先层声明整条跳过。"""
+    reg = CapabilityRegistry()
+    high = _write(
+        tmp_path,
+        "user.toml",
+        """
+[[capability]]
+id = "web.search"
+providers = [{ kind = "mcp", server = "brave", tool = "search" }]
+""",
+    )
+    low = _write(
+        tmp_path,
+        "plugin.toml",
+        """
+[[capability]]
+id = "web.search.alt"
+providers = [{ kind = "mcp", server = "brave", tool = "search" }]
+""",
+    )
+    assert load_capability_file(high, reg) == 1
+    # skip_claimed=True 模拟低优先层
+    assert load_capability_file(low, reg, skip_claimed=True) == 0
+    assert reg.get("web.search.alt") is None
+
+
+def test_mcp_declaration_parses_without_server_online(tmp_path):
+    """离线声明检查不把「Server 在不在线」当解析错误——解析期根本不碰连接。"""
+    reg = CapabilityRegistry()
+    path = _write(
+        tmp_path,
+        "web.toml",
+        """
+[[capability]]
+id = "web.search"
+providers = [{ kind = "mcp", server = "not-running", tool = "search" }]
+""",
+    )
+    assert load_capability_file(path, reg) == 1
+    assert reg.get("web.search") is not None

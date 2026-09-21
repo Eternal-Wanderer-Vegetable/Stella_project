@@ -218,3 +218,68 @@ def test_capability_snapshot_carries_no_free_text_from_declarations():
         assert banned not in text
     for free_text in descriptions + examples:
         assert free_text not in text, f"自由文本泄漏进响应体：{free_text!r}"
+
+
+def test_capability_snapshot_carries_no_mcp_secrets():
+    """MCP 状态进能力快照也不带凭据：url / command / args / token 一律不出（方案 §9）。
+
+    Server 配置里全是敏感物（远程地址、stdio 命令行、auth_env 指向的 token）；
+    快照的字段面是白名单式的（server_id / remote_tool / 状态 / 脱敏后的 last_error），
+    这条断言就是那个「白名单」的机械保证。
+    """
+    import time
+
+    from capability.adapters.mcp import install_mcp_runtime
+    from capability.inventory import snapshot
+    from capability.providers.mcp.client import McpServerClient
+    from capability.providers.mcp.manager import McpServerManager
+    from capability.providers.mcp.model import ServerConfig
+    from capability.registry import (
+        KIND_MCP,
+        Capability,
+        CapabilityProvider,
+        CapabilityRegistry,
+    )
+
+    config = ServerConfig(
+        server_id="brave",
+        enabled=True,
+        transport="streamable_http",
+        url="https://mcp.example.com/mcp?token=abc",
+        auth_env="STELLA_MCP_BRAVE_TOKEN",
+        allowed_tools=["search"],
+    )
+    client = McpServerClient(config)
+    client.status.state = "degraded"
+    # 连接类错误文本常带 URL（可能夹 query token）——必须被 sanitize 掉
+    client.status.last_error = "connect timeout https://mcp.example.com/mcp?token=abc"
+    manager = McpServerManager()
+    manager._clients["brave"] = client
+
+    reg = CapabilityRegistry()
+    reg.register(
+        Capability(
+            id="web.search",
+            providers=[
+                CapabilityProvider(
+                    provider_id="mcp:brave:search",
+                    capability_id="web.search",
+                    kind=KIND_MCP,
+                    tool_name="mcp_brave_search",
+                    server_id="brave",
+                    remote_tool_name="search",
+                ),
+            ],
+        ),
+    )
+    install_mcp_runtime(manager=manager, target=reg)
+
+    payload = status_api.build_payload(
+        None, {}, pid=1, started_at=time.time(), capabilities=snapshot(target=reg),
+    )
+    text = json.dumps(payload, ensure_ascii=False)
+    for banned in ("token=abc", "https://", "mcp.example.com", "STELLA_MCP_BRAVE_TOKEN", "streamable_http"):
+        assert banned not in text, f"MCP 敏感字段泄漏进响应体：{banned}"
+    # 非敏感的诊断字段在
+    assert "mcp_brave_search" in text
+    assert "degraded" in text

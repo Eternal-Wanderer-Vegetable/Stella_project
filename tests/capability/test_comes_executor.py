@@ -17,6 +17,7 @@ import pytest
 
 from capability.comes import execute_all
 from capability.comes.executor import can_direct_call, execute, resolve_tools
+from capability.providers.mcp.client import McpServerClient
 from capability.registry import (
     KIND_MCP,
     Capability,
@@ -638,3 +639,151 @@ def test_backed_off_provider_is_skipped_next_time(monkeypatch, astr_event):
     r = _run(execute(_task("c"), event=astr_event, target=reg))
     assert r.status is ResultStatus.FAILED
     assert "没有可用 provider" in r.metadata["reason"]
+
+
+# ---------- MCP provider 走同一执行链路（方案 §7.6）----------
+
+
+class _FakeRemoteSession:
+    """最小会话替身：只服务 comes 层的调用断言。"""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self.text = "东京明天晴，22 度"
+        self.is_error = False
+
+    async def call_tool(self, name, args):
+        self.calls.append((name, dict(args or {})))
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            content=[SimpleNamespace(text=self.text)],
+            isError=self.is_error,
+        )
+
+
+def _wire_mcp_runtime(*, required: list[str] | None = None) -> tuple[CapabilityRegistry, _FakeRemoteSession, McpServerClient]:
+    """接线一个含 ready MCP Server 的 Runtime，返回（注册表, 会话替身）。"""
+    from capability.adapters.mcp import install_mcp_runtime
+    from capability.providers.mcp.client import McpServerClient
+    from capability.providers.mcp.manager import McpServerManager
+    from capability.providers.mcp.model import SERVER_READY, ServerConfig
+
+    session = _FakeRemoteSession()
+    config = ServerConfig(
+        server_id="brave",
+        enabled=True,
+        transport="stdio",
+        command="npx",
+        allowed_tools=["search"],
+    )
+    client = McpServerClient(config)
+    client.status.state = SERVER_READY
+    schema = {"type": "object", "properties": {}}
+    if required:
+        schema = {
+            "type": "object",
+            "properties": {"q": {"type": "string"}},
+            "required": list(required),
+        }
+    client._apply_catalog([("search", "web search", schema)])
+    client._session = session
+
+    manager = McpServerManager()
+    manager._clients["brave"] = client
+
+    reg = CapabilityRegistry()
+    reg.register(
+        Capability(
+            id="web.search",
+            description="联网搜索",
+            examples=["搜一下"],
+            providers=[
+                CapabilityProvider(
+                    provider_id="mcp:brave:search",
+                    capability_id="web.search",
+                    kind=KIND_MCP,
+                    tool_name="mcp_brave_search",
+                    server_id="brave",
+                    remote_tool_name="search",
+                ),
+            ],
+        ),
+    )
+    # 接线到全局 Runtime（executor 读的是全局单例）
+    install_mcp_runtime(manager=manager)
+    return reg, session, client
+
+
+def test_mcp_tool_flows_through_agent_loop(astr_event, fake_llm):
+    """MCP 工具经受限 agent 调用：命名空间名给模型，结果进 outputs/summary。"""
+    reg, session, _client = _wire_mcp_runtime(required=["q"])
+    fake_llm.default_text = "东京明天晴，22 度。"  # agent 第二轮的结论
+    fake_llm.push_tool_call("mcp_brave_search", '{"q": "东京明天"}')
+
+    result = _run(
+        execute(_task("web.search"), event=astr_event, target=reg),
+    )
+    assert result.status is ResultStatus.SUCCESS
+    assert session.calls == [("search", {"q": "东京明天"})]
+    assert result.data == [("mcp_brave_search", session.text)]
+    assert "东京明天晴" in result.summary
+    assert result.metadata["tools"] == ["mcp_brave_search"]
+
+
+def test_mcp_tool_direct_call_without_model(astr_event):
+    """无必填参数的 MCP 工具走 direct call：零模型往返（方案 §7.7）。"""
+    reg, session, _client = _wire_mcp_runtime(required=[])
+
+    result = _run(
+        execute(_task("web.search"), event=astr_event, target=reg),
+    )
+    assert result.status is ResultStatus.SUCCESS
+    assert result.metadata["direct_call"] is True
+    assert session.calls == [("search", {})]
+
+
+def test_mcp_tool_passes_known_slots_as_args(astr_event):
+    reg, session, _client = _wire_mcp_runtime(required=[])
+
+    task = _task("web.search", input={"q": "东京"})
+    result = _run(execute(task, event=astr_event, target=reg))
+    assert result.status is ResultStatus.SUCCESS
+    assert session.calls == [("search", {"q": "东京"})]
+
+
+def test_mcp_server_down_is_failed_not_crash(astr_event):
+    """Server 掉线 → resolve 为 missing → 任务 failed，绝不抛异常。"""
+    reg, _session, client = _wire_mcp_runtime()
+    client.status.state = "degraded"
+
+    result = _run(execute(_task("web.search"), event=astr_event, target=reg))
+    assert result.status is ResultStatus.FAILED
+    assert result.metadata["missing"] == ["mcp_brave_search"]
+
+
+def test_mcp_tool_error_marks_failure_and_records_health(astr_event):
+    """Server 明确报错：任务 failed，失败记到 MCP provider 头上（退避累计）。"""
+    reg, session, _client = _wire_mcp_runtime()
+    session.is_error = True
+
+    result = _run(execute(_task("web.search"), event=astr_event, target=reg))
+    assert result.status is ResultStatus.FAILED
+    assert result.summary == ""  # 失败不产摘要（data/summary 隔离）
+
+
+    provider = reg.get("web.search").providers[0]
+    assert provider.failures == 1  # 健康度记在 MCP provider 上
+
+
+def test_mcp_output_is_bounded_before_summarize(astr_event, fake_llm, monkeypatch):
+    """超大 MCP 返回被截在 client 层（方案 §3.4 的输出上限）。"""
+    reg, session, client = _wire_mcp_runtime()
+    session.text = "x" * 100
+    client.config.max_output_chars = 20
+    fake_llm.push_tool_call("mcp_brave_search", "{}")
+
+    result = _run(execute(_task("web.search"), event=astr_event, target=reg))
+    assert result.status is ResultStatus.SUCCESS
+    content = result.data[0][1]
+    assert len(content) <= 20

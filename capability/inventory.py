@@ -38,6 +38,7 @@ from typing import Any
 
 from capability.registry import (
     KIND_ASTRBOT_TOOL,
+    KIND_MCP,
     SOURCE_AUTO,
     SOURCE_CONFIG,
     SOURCE_PLUGIN,
@@ -164,21 +165,36 @@ def _tool_state(tool_name: str, states: dict[str, bool] | None) -> str:
     return TOOL_OK if states[tool_name] else TOOL_INACTIVE
 
 
+def _mcp_status_of(provider: CapabilityProvider) -> dict[str, Any]:
+    """MCP provider 的运行时状态（未接线 Runtime 或查询失败时返回空 dict）。
+
+    状态本体由 McpBackend 给出且已脱敏（无 url / command / env）；这里只做
+    「Runtime 没接线」的缺省——离线进程里 MCP 字段全部回退 unknown。
+    """
+    try:
+        from capability.providers import provider_runtime
+
+        return provider_runtime.status(provider) if provider_runtime else {}
+    except Exception:
+        return {}
+
+
 def _provider_item(
     provider: CapabilityProvider,
     states: dict[str, bool] | None,
     now: float,
 ) -> dict[str, Any]:
     """一个 provider 的结构化状态。**不含任何自由文本**（见模块 docstring）。"""
+    mcp = _mcp_status_of(provider) if provider.kind == KIND_MCP else {}
     state = (
         _tool_state(provider.tool_name, states)
         if provider.kind == KIND_ASTRBOT_TOOL
-        else TOOL_UNKNOWN
+        else str(mcp.get("tool_state") or TOOL_UNKNOWN)
     )
     remaining = 0
     if provider.disabled_until > 0.0:
         remaining = int(max(0.0, provider.disabled_until - now))
-    return {
+    item: dict[str, Any] = {
         "tool": provider.tool_name,
         "kind": provider.kind,
         "source": provider.source,
@@ -189,6 +205,18 @@ def _provider_item(
         "backoff_seconds": remaining,
         "tool_state": state,
     }
+    if provider.kind == KIND_MCP:
+        # 方案 §7.9 的 MCP 字段面。last_error 在 backend 已去 URL、截断。
+        item.update(
+            {
+                "server_id": provider.server_id,
+                "remote_tool": provider.remote_tool_name,
+                "server_state": str(mcp.get("server_state") or "unknown"),
+                "last_error": str(mcp.get("last_error") or ""),
+                "call_count": int(mcp.get("call_count") or 0),
+            },
+        )
+    return item
 
 
 def snapshot(
@@ -227,11 +255,15 @@ def snapshot(
         )
         # 声明里指向不存在的工具是静默失效的头号原因。只看声明层：自动派生那层是从
         # 工具反推出来的，不可能指向不存在的工具，把它算进来只会多出一堆噪音。
+        # 只算 astrbot 工具：MCP 的 missing 是「Server 没就绪/目录里没有」，成因与
+        # 提示语（HINT_MISSING_TOOL 的「插件没装/拼错」）完全不同，混进去会误导。
         if not cap.is_auto:
             missing_tools.extend(
                 str(p["tool"])
                 for p in providers
-                if p["tool_state"] == TOOL_MISSING and p["tool"]
+                if p["kind"] == KIND_ASTRBOT_TOOL
+                and p["tool_state"] == TOOL_MISSING
+                and p["tool"]
             )
 
     auto_items = [i for i in items if i["auto"]]
@@ -617,6 +649,16 @@ def _admin_lines(snap: dict[str, Any]) -> list[str]:
             + "、".join(str(m) for m in missing[:8])
             + f" —— {HINT_MISSING_TOOL}",
         )
+
+    mcp_sick = [
+        f"{i.get('id')}#{p.get('remote_tool')}"
+        f"（server {p.get('server_state')}：{str(p.get('last_error') or '')[:80]}）"
+        for i in items
+        for p in i.get("providers") or []
+        if p.get("kind") == KIND_MCP and p.get("server_state") not in (None, "ready")
+    ]
+    if mcp_sick:
+        out.append("（管理员）MCP Server 未就绪：" + "；".join(mcp_sick[:5]))
     return out
 
 

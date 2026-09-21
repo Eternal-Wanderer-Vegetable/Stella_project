@@ -25,6 +25,13 @@ dev = [
     "pyright[nodejs]",
     "ruff"
 ]
+# MCP Client 的可选依赖（capability/providers/mcp）。刻意不进默认依赖：
+# MCP_ENABLED 默认 false，绝大多数部署用不到；SDK 缺失时对应 Server 报
+# degraded，Stella 其余功能不受影响（见 capability/providers/mcp/client.py）。
+# 版本下限取本仓库验证过的 1.29；上限钉住大版本，防协议面漂移。
+mcp = [
+    "mcp>=1.29,<2",
+]
 
 [tool.setuptools.packages.find]
 include = ["stella_project*"]

@@ -1389,6 +1389,16 @@ COMES_PROVIDER_FAILURE_THRESHOLD = _env_int("COMES_PROVIDER_FAILURE_THRESHOLD", 
 # 被退避的 provider 多久后恢复（秒）。
 COMES_PROVIDER_RECOVER_SECONDS = _env_float("COMES_PROVIDER_RECOVER_SECONDS", 600.0)
 
+# ---------- MCP Provider（受控 MCP Client，见 capability/providers/mcp） ----------
+# 让 Stella 以 MCP Client 身份连接外部 MCP Server，并把显式声明过的 MCP 工具
+# 纳入 Router → Comes 链路。第一版只支持 Tools（Resources/Prompts/Sampling 延后）。
+# **默认关闭**：MCP Server 是外部边界（子进程/远程端点），命令、URL、认证、
+# 超时全部要部署者在 STELLA_HOME/config/mcp.toml 里逐条写明才放开（方案 §6.2）。
+MCP_ENABLED = _env_bool("MCP_ENABLED", "false")
+# MCP Server 配置文件名（相对 STELLA_HOME/config/）。文件不存在 = 没有任何 Server，
+# 属于可运行的退化态，不是错误。
+MCP_CONFIG_FILE = _env("MCP_CONFIG_FILE", "mcp.toml")
+
 # ---------- 受限 Planner（深度回复路径，设计阶段五） ----------
 # 绝大多数消息走快速路径（本地 Gate → 检索 → 单次 LLM）。只有本地零 LLM 判定
 # 命中触发条件（历史指代 / 话题歧义 / 主动插话表达不明确）才进入深度路径：

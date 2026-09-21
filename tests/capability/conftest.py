@@ -24,9 +24,39 @@ def _clean_registry():
     # 这里额外卸一次：真装上一个的用例请用自己的 CapabilityRegistry，别污染单例。
     registry.clear()
     registry.set_tool_probe(None)
+    # Provider Runtime 同理是进程级接线：用例装了 backend / 接线会泄漏到后续用例
+    from capability.adapters import mcp as mcp_adapter
+    from capability.providers import provider_runtime
+
+    provider_runtime.reset()
+    registry.set_provider_runtime(None)
+    mcp_adapter.reset_mcp_sync()
     yield
     registry.clear()
     registry.set_tool_probe(None)
+    provider_runtime.reset()
+    registry.set_provider_runtime(None)
+    mcp_adapter.reset_mcp_sync()
+
+
+@pytest.fixture(autouse=True)
+def _clean_mcp_manager():
+    """清空 MCP Manager 单例的运行态（客户端与回调），防用例间串线。
+
+    需要真实 Manager 行为的用例请自建 ``McpServerManager()``；只有个别路径
+    （如 adapters.on_tools_changed 的缺省参数）会碰到单例。
+    """
+    from capability.providers.mcp.manager import manager
+
+    manager._clients.clear()
+    manager._configs.clear()
+    manager._started = False
+    manager.tools_changed_callback = None
+    yield
+    manager._clients.clear()
+    manager._configs.clear()
+    manager._started = False
+    manager.tools_changed_callback = None
 
 
 @pytest.fixture(autouse=True)
