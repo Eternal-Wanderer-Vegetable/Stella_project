@@ -11,8 +11,8 @@ conftest` 依赖 sys.path 顺序，不可靠。
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 
