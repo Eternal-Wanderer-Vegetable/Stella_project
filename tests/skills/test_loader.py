@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import pytest
-from _helpers import make_manifest
+from skills_helpers import make_manifest
 
 from skills.loader import load_skill, read_resource
 from skills.model import SkillManifest, SkillSource

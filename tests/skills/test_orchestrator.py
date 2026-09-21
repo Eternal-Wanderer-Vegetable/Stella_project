@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from _helpers import make_manifest
+from skills_helpers import make_manifest
 
 from skills.model import (
     ACTION_LIST_FILES,
