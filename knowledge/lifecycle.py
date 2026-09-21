@@ -43,6 +43,8 @@ _TRANSITIONS: dict[tuple[str, str], str] = {
     # 直发（免审）边：managed 库的上传、shared 开直发库的维护者投稿，
     # 不经过 in_review 直接发布（acl.submit_needs_review 决定走不走这条边）。
     (DOC_STATE_DRAFT, DOC_STATE_ACTIVE): "publish",
+    # 替换发布边：已发布文档用新版本再发布（版本替换不改变文档的业务状态）。
+    (DOC_STATE_ACTIVE, DOC_STATE_ACTIVE): "publish",
     (DOC_STATE_IN_REVIEW, DOC_STATE_DRAFT): "reject",
     (DOC_STATE_ACTIVE, DOC_STATE_DRAFT): "unpublish",
     (DOC_STATE_ACTIVE, DOC_STATE_ARCHIVED): "archive",
