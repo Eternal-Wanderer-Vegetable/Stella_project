@@ -1268,11 +1268,19 @@ pub fn data_root() -> PathBuf {
     if let Some(cached) = DATA_ROOT_CACHE.read().ok().and_then(|c| c.clone()) {
         return cached;
     }
-    let resolved = resolve_data_root();
-    if let Ok(mut cache) = DATA_ROOT_CACHE.write() {
-        *cache = Some(resolved.clone());
+    match resolve_data_root() {
+        Some(resolved) => {
+            if let Ok(mut cache) = DATA_ROOT_CACHE.write() {
+                *cache = Some(resolved.clone());
+            }
+            resolved
+        }
+        // 解析失败**不许缓存**回退值：`deploy paths` 偶发失败（进程刚启动时文件被
+        // 构建或杀毒扫描短暂占用等）若被钉死在缓存里，整个进程生命周期内所有读写
+        // 都会落在回退目录（2026-09-20 实测：人格列表读到空、保存落进仓库根）。
+        // 返回回退值但留下空缓存，下一次调用会重新解析、自愈。
+        None => project_root(),
     }
-    resolved
 }
 
 /// 丢弃 [`data_root`] 的缓存，下次调用重新问一次 Python。
@@ -1284,18 +1292,18 @@ pub fn invalidate_data_root() {
     }
 }
 
-fn resolve_data_root() -> PathBuf {
-    run_deploy_without_prepare(&["paths"])
-        .ok()
-        .filter(|(_, _, code)| *code == 0)
-        .and_then(|(stdout, _, _)| {
-            serde_json::from_str::<serde_json::Value>(extract_json_str(&stdout)?)
-                .ok()?
-                .get("stella_home")?
-                .as_str()
-                .map(PathBuf::from)
-        })
-        .unwrap_or_else(project_root)
+fn resolve_data_root() -> Option<PathBuf> {
+    let (stdout, stderr, code) = run_deploy_without_prepare(&["paths"]).ok()?;
+    if code != 0 {
+        eprintln!("deploy paths 失败（code {code}）：{}", stderr.trim());
+        return None;
+    }
+    let data: serde_json::Value = serde_json::from_str(extract_json_str(&stdout)?).ok()?;
+    let Some(home) = data.get("stella_home").and_then(serde_json::Value::as_str) else {
+        eprintln!("deploy paths 未输出 stella_home：{stdout}");
+        return None;
+    };
+    Some(PathBuf::from(home))
 }
 
 /// 从可能夹带日志的 stdout 里截出 JSON 对象（与 commands.rs 的 extract_json 同源）。

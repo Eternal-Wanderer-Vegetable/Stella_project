@@ -66,6 +66,13 @@ _BASELINE: dict[str, object] = {
     "LLM_ENDPOINT_EXTRA_KIND": "local",
     "LLM_ENDPOINT_EXTRA_CONCURRENCY": 1,
     "LLM_ENDPOINT_EXTRA_TIMEOUT": 120.0,
+    # 图片转述的默认端点卡：出厂未配地址 = 未启用
+    "LLM_ENDPOINT_EXTRA_VISION_BASE_URL": "",
+    "LLM_ENDPOINT_EXTRA_VISION_API_KEY": "",
+    "LLM_ENDPOINT_EXTRA_VISION_MODEL": "",
+    "LLM_ENDPOINT_EXTRA_VISION_KIND": "local",
+    "LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY": 1,
+    "LLM_ENDPOINT_EXTRA_VISION_TIMEOUT": 120.0,
     "LLM_ROLE_CHAT_ENDPOINT": "LOCAL",
     "LLM_ROLE_CHAT_MODEL": "local-27b",
     "LLM_ROLE_CHAT_TEMPERATURE": 0.7,
@@ -121,6 +128,11 @@ def env(monkeypatch):
 
     for key, value in _BASELINE.items():
         monkeypatch.setattr(settings, key, value, raising=False)
+    # 自定义 EXTRA_* 槽从 os.environ 发现（settings 里没有它们的属性）。
+    # 清掉环境里可能泄漏进来的同型键，让用例从「无自定义槽」起步。
+    for key in list(__import__("os").environ):
+        if registry._EXTRA_SLOT_RE.match(key):
+            monkeypatch.delenv(key, raising=False)
     registry.reset_state()
 
     def _set(**kw):
@@ -1081,3 +1093,61 @@ def test_log_summary_skips_unconfigured_slots(monkeypatch):
     text = "\n".join(fake.lines)
     assert f"端点 {registry.SLOT_ONLINE_CHAT}" not in text
     assert f"端点 {registry.SLOT_LOCAL}" in text
+
+
+# ============================================================
+# EXTRA_* 自定义槽（GUI「添加端点卡」与 .env 手写的同型键）
+# ============================================================
+
+
+def test_extra_slot_discovered_from_env(env, monkeypatch):
+    """LLM_ENDPOINT_EXTRA_FOO_BASE_URL 出现在环境里就多一个槽。"""
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_FOO_BASE_URL", _LOCAL_URL)
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_FOO_MODEL", "foo-model")
+    registry.reset_state()
+    assert "EXTRA_FOO" in registry.extra_slots()
+    assert "EXTRA_FOO" in registry.all_slots()
+    ep = registry.endpoints()["EXTRA_FOO"]
+    assert ep.base_url == _LOCAL_URL
+    assert ep.model == "foo-model"
+    assert ep.kind == registry.KIND_LOCAL  # 没填 key → 按 local
+
+
+def test_extra_slot_reads_env_not_settings_attrs(env, monkeypatch):
+    """自定义槽没有 settings 属性，必须从环境变量读。"""
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_BAR_BASE_URL", _ONLINE_URL)
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_BAR_API_KEY", _SECRET)
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_BAR_KIND", "online")
+    registry.reset_state()
+    ep = registry.endpoints()["EXTRA_BAR"]
+    assert ep.kind == registry.KIND_ONLINE
+    assert ep.api_key == _SECRET
+    blob = json.dumps(registry.describe(), ensure_ascii=False, default=str)
+    assert _SECRET not in blob
+
+
+def test_role_binds_to_custom_slot(env, monkeypatch):
+    """角色 ENDPOINT=EXTRA_FOO 是合法绑定，不再是「未知槽名」。"""
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_FOO_BASE_URL", _LOCAL_URL)
+    env(LLM_ROLE_VISION_ENDPOINT="EXTRA_FOO")
+    binding = registry.binding(registry.ROLE_VISION)
+    assert binding is not None and binding.bound
+    assert binding.slot == "EXTRA_FOO"
+    assert registry.gate_of(registry.ROLE_VISION) == "EXTRA_FOO"
+    assert not [m for m in _issues("error") if "EXTRA_FOO" in m]
+
+
+def test_role_bound_to_unconfigured_custom_slot_is_error(env, monkeypatch):
+    """卡存在但没配地址、又有角色指过去 → error（可诊断，不是静默）。"""
+    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_EMPTY_BASE_URL", "")
+    env(LLM_ROLE_VISION_ENDPOINT="EXTRA_EMPTY")
+    binding = registry.binding(registry.ROLE_VISION)
+    assert binding is not None and not binding.bound
+    assert any("EXTRA_EMPTY" in m for m in _issues("error"))
+
+
+def test_extra_vision_declared_slot(env):
+    """EXTRA_VISION 键在 settings.py 里声明，空地址时被当未配置。"""
+    from config import settings
+
+    assert hasattr(settings, "LLM_ENDPOINT_EXTRA_VISION_BASE_URL")

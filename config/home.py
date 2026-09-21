@@ -11,15 +11,19 @@
 「要读 .env 才知道 .env 在哪」的死循环）：
 
 1. 环境变量 ``STELLA_HOME``；
-2. 机器级指针文件（``%LOCALAPPDATA%\\Stella\\home.txt`` / ``~/.config/stella/home.txt``）
-   —— 它在**程序目录之外**，所以任何一份新解压的程序都能立刻接上老数据。这是「升级
-   只需一步」的实现基础；
+2. ``<安装目录>/StellaData`` 已存在 → 用它（**便携模式**）。想把程序连数据整个拷进 U 盘、
+   或希望仓库/发布包/运行期的布局完全一致时，建一个这样的子目录即可。开发仓库走的就是
+   这条。它必须排在旧布局痕迹之前：痕迹是启发式（开发仓库里跑一轮测试、误启动一次 Bot
+   就会重建 ``memory/agent_memory.db``，2026-09-20 实测），而显式建 StellaData 是明确
+   的本地意愿，不该被痕迹反复拽回旧布局；
 3. 安装目录本身像是用过的旧布局（有 ``.env`` 或 ``memory/agent_memory.db``）→ 就地使用，
    3.0.0 及更早的安装原地继续工作，零改动；
-4. ``<安装目录>/StellaData`` 已存在 → 用它（**便携模式**）。想把程序连数据整个拷进 U 盘、
-   或希望仓库/发布包/运行期的布局完全一致时，建一个这样的子目录即可。开发仓库走的就是
-   这条；
-5. 都没有 → ``<安装目录>/../StellaData``（便携、用户看得见、可整体拷走）。
+4. 机器级指针文件（``%LOCALAPPDATA%\\Stella\\home.txt`` / ``~/.config/stella/home.txt``）
+   —— 它在**程序目录之外**，是「升级只需一步」的实现基础。但它只服务**本地没有任何
+   数据痕迹**的新解压程序：指针是机器级默认，而便携目录和旧布局痕迹是这份程序自己的
+   本地证据/本地意愿，更具体者优先。否则在有正式安装的机器上，开发仓库会被指针拖去
+   正式安装的数据目录，两套环境混用（2026-09-19 实测）；
+5. 都没有 → ``<安装目录>/../StellaData``（便携、用户看得见、可整体拷走），新建时写指针。
 
 **为什么默认是「同级」而不是「内部」**（第 5 条 vs 第 4 条）：程序目录是升级时被整体
 替换、也会被用户当作「旧版本」删掉的那个目录。数据放进去，就等于把「删掉旧版本文件夹」
@@ -124,18 +128,22 @@ def _resolve(install_root: Path, *, create: bool) -> HomeResolution:
             _ensure(home)
         return HomeResolution(path=home, source=f"环境变量 {ENV_VAR}")
 
-    pointed = read_pointer()
-    if pointed is not None:
-        return HomeResolution(path=pointed, source=f"指针文件 {pointer_path()}")
+    # 便携模式：用户显式在安装目录里建了 StellaData，就用它。必须排在旧布局痕迹
+    # 之前——痕迹是启发式，开发仓库里跑一轮测试、误启动一次 Bot 就会重建
+    # memory/agent_memory.db，把数据目录反复拽回安装目录（2026-09-20 实测）；
+    # 而建一个叫 StellaData 的目录是明确的本地意愿。也必须排在指针文件之前：
+    # 指针是机器级默认，只服务本地没有任何本地意愿的新解压程序，否则开发仓库会
+    # 被指针拖去正式安装的数据目录（2026-09-19 实测）。
+    inside = install_root / DEFAULT_DIR_NAME
+    if inside.is_dir():
+        return HomeResolution(path=inside.resolve(), source="便携模式：安装目录内的 StellaData")
 
     if looks_used(install_root):
         return HomeResolution(path=install_root, source="旧布局：数据在安装目录内")
 
-    # 便携模式：用户显式在安装目录里建了 StellaData，就用它。放在默认值之前判断，
-    # 但排在「旧布局」之后——旧安装的数据在安装目录根上，不该被一个恰好同名的空目录抢走。
-    inside = install_root / DEFAULT_DIR_NAME
-    if inside.is_dir():
-        return HomeResolution(path=inside.resolve(), source="便携模式：安装目录内的 StellaData")
+    pointed = read_pointer()
+    if pointed is not None:
+        return HomeResolution(path=pointed, source=f"指针文件 {pointer_path()}")
 
     home = (install_root.parent / DEFAULT_DIR_NAME).resolve()
     if create:

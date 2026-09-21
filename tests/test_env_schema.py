@@ -71,6 +71,8 @@ def test_schema_marks_inherited_defaults():
         # ── 三代键收敛后仅剩的两对：MAX_TOKENS 的继承上游都是仍在用的键 ──
         "LLM_ROLE_CONSOLIDATION_MAX_TOKENS": "CONSOLIDATION_LOCAL_MAX_TOKENS",
         "LLM_ROLE_EXTRACT_MAX_TOKENS": "MEMORY_EXTRACT_MAX_TOKENS",
+        # 称呼意图超时继承 embedding 超时（默认值写在父键上，AST 拿不到字面量）
+        "ADDRESSING_INTENT_TIMEOUT": "MEMORY_EMBEDDING_TIMEOUT",
     }
     for child, parent in expected.items():
         assert fields[child].get("inherits") == parent, f"{child} 缺 inherits 标记"

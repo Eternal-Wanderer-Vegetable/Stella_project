@@ -421,3 +421,157 @@ def test_package_does_not_shadow_registry_submodule():
 
     assert isinstance(capability.registry, types.ModuleType)
     assert "registry" not in capability.__all__
+
+
+# ---------- MCP Provider（Provider Runtime 接线，方案 §7.2）----------
+
+
+class _StubRuntime:
+    """最小 ProviderRuntime 替身：按 server 状态回答 is_live。"""
+
+    def __init__(self, ready: bool = True):
+        self.ready = ready
+        self.calls: list[str] = []
+
+    def is_live(self, provider):
+        self.calls.append(provider.provider_id)
+        return self.ready
+
+
+def _mcp_provider(capability_id: str = "web.search", tool: str = "search"):
+    return CapabilityProvider(
+        provider_id=f"mcp:brave:{tool}",
+        capability_id=capability_id,
+        kind=KIND_MCP,
+        tool_name=f"mcp_brave_{tool}",
+        server_id="brave",
+        remote_tool_name=tool,
+    )
+
+
+def test_provider_claim_key_is_backend_aware():
+    from capability.registry import provider_claim_key
+
+    assert provider_claim_key(_provider("get_weather")) == "get_weather"
+    assert provider_claim_key(_mcp_provider()) == "mcp:brave:search"
+    # 两个 Server 的同名工具：键不同（方案 §6.1 的唯一键要求）
+    other = _mcp_provider()
+    other.server_id = "bing"
+    assert provider_claim_key(other) == "mcp:bing:search"
+
+
+def test_mcp_provider_claims_do_not_collide_across_servers():
+    reg = CapabilityRegistry()
+    brave = _mcp_provider("web.search", "search")
+    bing = _mcp_provider("web.search.alt", "search")
+    bing.server_id = "bing"
+    reg.register(_capability(id="web.search", providers=[brave]))
+    reg.register(_capability(id="web.search.alt", providers=[bing]))
+    assert reg.claimed_by_provider(brave) == "web.search"
+    assert reg.claimed_by_provider(bing) == "web.search.alt"
+
+
+def test_runtime_wired_mcp_provider_is_live_when_server_ready():
+    """接线 Runtime 后：Server ready → 可路由；掉线 → 不可路由但声明保留。"""
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="web.search", providers=[_mcp_provider()]))
+    runtime = _StubRuntime(ready=True)
+    reg.set_provider_runtime(runtime)
+    assert [c.id for c in reg.routable()] == ["web.search"]
+
+    runtime.ready = False
+    assert reg.routable() == []
+    assert reg.get("web.search") is not None
+    assert reg.get("web.search").providers
+
+
+def test_runtime_takes_precedence_over_probe():
+    """Runtime 接线后 astrbot kind 也委托 backend；没有对应 backend 的 kind 不过滤。"""
+    reg = CapabilityRegistry()
+    reg.register(
+        _capability(id="c", providers=[_provider("gone", "c")]),
+    )
+    reg.set_tool_probe(lambda name: False)  # 探针说工具不在
+
+    runtime = _StubRuntime(ready=True)
+    reg.set_provider_runtime(runtime)
+    # StubRuntime 对所有 kind 都说 live → routable 恢复；探针不再被咨询
+    assert [c.id for c in reg.routable()] == ["c"]
+    assert runtime.calls == ["c#gone"]
+
+    # 卸掉 Runtime：回到探针语义
+    reg.set_provider_runtime(None)
+    assert reg.routable() == []
+
+
+def test_runtime_broken_is_treated_as_pass_not_absent():
+    """backend 抛异常：按「未知放行」处理，不把能力悄悄摘出候选集。"""
+
+    class _Boom:
+        def is_live(self, provider):
+            raise RuntimeError("boom")
+
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="c", providers=[_provider("t", "c")]))
+    reg.set_provider_runtime(_Boom())
+    assert [c.id for c in reg.routable()] == ["c"]
+
+
+def test_setting_runtime_bumps_version_and_is_idempotent():
+    reg = CapabilityRegistry()
+    v0 = reg.version
+    runtime = _StubRuntime()
+    reg.set_provider_runtime(runtime)
+    assert reg.version > v0
+    v1 = reg.version
+    reg.set_provider_runtime(runtime)
+    assert reg.version == v1
+
+
+def test_bump_version_invalidates_router_cache():
+    reg = CapabilityRegistry()
+    v0 = reg.version
+    reg.bump_version()
+    assert reg.version > v0
+
+
+def test_replace_provider_swaps_in_place():
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="c", providers=[_provider("t", "c")]))
+    replacement = _provider("t", "c")
+    replacement.priority = 9
+    assert reg.replace_provider("c", replacement) is True
+    providers = reg.find_providers("c")
+    assert len(providers) == 1
+    assert providers[0].priority == 9
+
+
+def test_replace_provider_adds_when_absent():
+    reg = CapabilityRegistry()
+    reg.register(_capability(id="c", providers=[]))
+    assert reg.replace_provider("c", _provider("new", "c")) is True
+    assert [p.tool_name for p in reg.find_providers("c")] == ["new"]
+
+
+def test_remove_provider_releases_claim_and_bumps_version():
+    reg = CapabilityRegistry()
+    provider = _mcp_provider()
+    reg.register(_capability(id="web.search", providers=[provider]))
+    v0 = reg.version
+
+    assert reg.remove_provider("web.search", "mcp:brave:search") is True
+    assert reg.get("web.search").providers == []
+    assert reg.claimed_by_provider(_mcp_provider()) is None
+    assert reg.version > v0
+    # 再摘一次是 False，版本号不再动
+    v1 = reg.version
+    assert reg.remove_provider("web.search", "mcp:brave:search") is False
+    assert reg.version == v1
+
+
+def test_remove_provider_on_unknown_capability_is_noop():
+    """能力不存在：摘除返回 False，版本号不动。"""
+    reg = CapabilityRegistry()
+    v0 = reg.version
+    assert reg.remove_provider("nope", "mcp:brave:search") is False
+    assert reg.version == v0

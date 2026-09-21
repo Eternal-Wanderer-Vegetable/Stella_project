@@ -317,6 +317,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .svc { margin-top: 0; }
 .svc-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; color: var(--text-dim); font-size: 12px; }
 .svc-presets button { padding: 5px 10px; font-size: 12px; }
+.svc-add { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; color: var(--text-dim); font-size: 12px; }
+.svc-add input { width: 260px; padding: 5px 8px; font-size: 12px; }
+.svc-add button { padding: 5px 10px; font-size: 12px; }
 .svc-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .svc-card { min-width: 0; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .svc-card[open] { grid-column: 1 / -1; order: -1; }

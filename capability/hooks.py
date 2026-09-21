@@ -39,7 +39,7 @@ import asyncio
 from typing import Any
 
 from capability.input_parser import merge_schemas, parse_input
-from capability.registry import CapabilityRegistry
+from capability.registry import KIND_ASTRBOT_TOOL, CapabilityRegistry
 from capability.registry import registry as _default_registry
 from core.context import ChatContext
 from core.tasks import Result, ResultStatus, Task, TaskType, next_task_id
@@ -67,6 +67,13 @@ def _logger():
 # ============================================================
 
 
+def _wired_runtime() -> Any | None:
+    """进程级 Provider Runtime；没接线（没有 backend）返回 None。见 comes/executor。"""
+    from capability.providers import provider_runtime
+
+    return provider_runtime or None
+
+
 def build_tool_tasks(
     route: Any,
     message: str,
@@ -80,10 +87,16 @@ def build_tool_tasks(
     在这里改写（比如提炼成「查询天气」）只会丢信息——用户说的是「东京明天」，
     提炼后城市和日期就没了，Comes 反而要去猜。方案第 4 节要求 objective 属于
     语义层，用户原话完全满足；它不该是「调用 weather_api()」这种执行指令。
+
+    工具 schema 取自能力下第一个 **live** 的 provider（方案 §7.7）：接线了
+    Provider Runtime 时按 kind 分派（MCP 的 required 字段由此得以参与
+    parse_input / 缺参澄清 / 无模型 direct call）；没接线时走 ``llm_tools``
+    遗留路径，行为与历史版本一致。
     """
     tasks: list[Task] = []
     registry = target if target is not None else _default_registry
-    if tool_manager is None:
+    runtime = _wired_runtime()
+    if tool_manager is None and runtime is None:
         try:
             from astrbot_compat.llm.tool import llm_tools
 
@@ -94,12 +107,18 @@ def build_tool_tasks(
         capability = registry.get(hit.capability_id)
         capability_schema = getattr(capability, "input_schema", {}) if capability else {}
         tool_schema: dict[str, Any] = {}
-        if capability is not None and tool_manager is not None:
+        if capability is not None:
             for provider in capability.enabled_providers():
-                tool = tool_manager.get_tool(provider.tool_name)
-                if tool is not None and getattr(tool, "active", True):
-                    tool_schema = getattr(tool, "parameters", {}) or {}
+                if runtime is not None and runtime.backend_of(provider.kind) is not None:
+                    if not runtime.is_live(provider):
+                        continue
+                    tool_schema = runtime.schema(provider)
                     break
+                if tool_manager is not None and provider.kind == KIND_ASTRBOT_TOOL:
+                    tool = tool_manager.get_tool(provider.tool_name)
+                    if tool is not None and getattr(tool, "active", True):
+                        tool_schema = getattr(tool, "parameters", {}) or {}
+                        break
         schema = merge_schemas(capability_schema, tool_schema)
         parsed = parse_input(message, schema)
         status = "complete"

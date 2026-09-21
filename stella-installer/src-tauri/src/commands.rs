@@ -287,6 +287,11 @@ pub async fn save_config(config: ConfigInput) -> Result<String, String> {
             groups.dedup();
             groups
         };
+        // parse_spaces 放行空群组的空间后，这里的兜底校验不能再省：所有空间都没绑
+        // 群、允许群号也空着，写出的 ALLOWED_GROUPS 为空等于谁都不允许。
+        if groups.is_empty() {
+            return Err("至少给一个空间绑定群号，或填写允许的群号列表".to_owned());
+        }
         if config.onebot_mode != "reverse" && config.onebot_mode != "forward" {
             return Err("连接方式必须是 reverse 或 forward".to_owned());
         }
@@ -422,7 +427,11 @@ pub async fn get_personas() -> Result<String, String> {
             let custom = custom_path
                 .as_ref()
                 .filter(|path| path.is_file())
-                .and_then(|path| std::fs::read_to_string(path).ok());
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                // 只建了空间、还没写正文的空 md 不算自定义人格：按默认人格展示。
+                // 否则 0 字节文件会把编辑器顶成空白，还标成「当前使用自定义人格」
+                // （2026-09-20 实测）。
+                .filter(|text| !text.trim().is_empty());
             personas.push(serde_json::json!({
                 "name": name,
                 "prompt_file": prompt,
@@ -442,6 +451,7 @@ pub async fn save_persona(
     space: String,
     prompt_file: String,
     content: String,
+    groups: Option<Vec<i64>>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         if space.is_empty()
@@ -466,25 +476,55 @@ pub async fn save_persona(
         let root = python::data_root();
         let dir = root.join("system_prompts");
         std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建人格目录：{e}"))?;
+        // 正文留空保存 = 用默认人格覆盖：空 md 文件只会得到「空白自定义人格」，
+        // 聊天侧等于没有人格。默认人格与 get_personas 的回退同源（程序目录
+        // memory/SYSTEM.md）；默认文件缺失时按原文写入，展示层会把空文件当回退。
+        let content = if content.trim().is_empty() {
+            std::fs::read_to_string(python::project_root().join("memory").join("SYSTEM.md"))
+                .unwrap_or(content)
+        } else {
+            content
+        };
         std::fs::write(dir.join(&file), content).map_err(|e| format!("无法保存人格：{e}"))?;
         let spaces_dir = root.join("config").join("spaces");
         std::fs::create_dir_all(&spaces_dir).map_err(|e| format!("无法创建空间目录：{e}"))?;
         let space_path = spaces_dir.join(format!("{space}.toml"));
         let old = std::fs::read_to_string(&space_path).unwrap_or_else(|_| "qq_groups = []\n".to_owned());
+        // 「保存人格」保存的是整张卡片：正文写 system_prompts，群号写 qq_groups。
+        // 群号不随卡片保存的话，用户在卡片里填的群号会在重新拉取后悄悄退回旧值
+        // （2026-09-20 实测）。groups 传 None 时保留旧值（兼容旧前端调用）。
         let mut output = Vec::new();
-        let mut replaced = false;
+        let mut replaced_prompt = false;
+        let mut replaced_groups = false;
         for line in old.lines() {
-            if line.trim_start().starts_with("system_prompt") {
-                if !replaced {
+            let key = line.trim_start();
+            if key.starts_with("system_prompt") {
+                if !replaced_prompt {
                     output.push(format!("system_prompt = {}", toml_string(&file)));
-                    replaced = true;
+                    replaced_prompt = true;
+                }
+            } else if key.starts_with("qq_groups") {
+                if let Some(groups) = &groups {
+                    if !replaced_groups {
+                        let joined = groups.iter().map(|value| value.to_string()).collect::<Vec<_>>().join(", ");
+                        output.push(format!("qq_groups = [{joined}]"));
+                        replaced_groups = true;
+                    }
+                } else {
+                    output.push(line.to_owned());
                 }
             } else {
                 output.push(line.to_owned());
             }
         }
-        if !replaced {
+        if !replaced_prompt {
             output.push(format!("system_prompt = {}", toml_string(&file)));
+        }
+        if let Some(groups) = &groups {
+            if !replaced_groups {
+                let joined = groups.iter().map(|value| value.to_string()).collect::<Vec<_>>().join(", ");
+                output.push(format!("qq_groups = [{joined}]"));
+            }
         }
         std::fs::write(space_path, format!("{}\n", output.join("\n")))
             .map_err(|e| format!("无法保存空间人格映射：{e}"))?;
@@ -534,15 +574,31 @@ pub async fn read_log_tail(path: Option<String>, max_bytes: usize) -> Result<Str
     .map_err(|e| format!("日志读取任务未能完成：{e}"))?
 }
 
+/// Windows 的 canonicalize 产出 `\\?\E:\...` 扩展前缀路径，而 status 载荷里的
+/// 日志路径是普通前缀——同一目录两种写法直接做 `starts_with` 会互相误判
+/// （2026-09-20 实测：日志目录尚不存在时普通路径被判成越界）。统一剥掉前缀。
+fn canonical_plain(path: &Path) -> std::io::Result<PathBuf> {
+    let canonical = std::fs::canonicalize(path)?;
+    let text = canonical.as_os_str().to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        Ok(PathBuf::from(format!(r"\\{rest}")))
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        Ok(PathBuf::from(rest))
+    } else {
+        Ok(canonical)
+    }
+}
+
 /// Resolve a GUI-provided log path without allowing reads outside STELLA_HOME.
 ///
 /// Runtime component paths are relative to the same data root, while the legacy
 /// status payload may still provide an absolute `STELLA_JSON_LOG_PATH`. Existing
 /// files are canonicalized so symlinked paths cannot escape the root; missing
 /// files keep their parent anchored so a not-yet-created component log remains a
-/// normal empty result.
+/// normal empty result. All comparisons happen on the de-verbified form (see
+/// `canonical_plain`).
 fn resolve_log_path(root: &Path, requested: Option<&str>) -> Result<PathBuf, String> {
-    let root = std::fs::canonicalize(root)
+    let root = canonical_plain(root)
         .map_err(|error| format!("无法定位 Stella 数据目录：{error}"))?;
     let raw = requested
         .map(str::trim)
@@ -555,18 +611,27 @@ fn resolve_log_path(root: &Path, requested: Option<&str>) -> Result<PathBuf, Str
         root.join(raw)
     };
 
-    let resolved = match std::fs::canonicalize(&candidate) {
+    let resolved = match canonical_plain(&candidate) {
         Ok(path) => path,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             let parent = candidate
                 .parent()
                 .ok_or_else(|| "日志路径缺少父目录".to_owned())?;
-            let parent = std::fs::canonicalize(parent)
-                .map_err(|parent_error| format!("无法定位日志目录：{parent_error}"))?;
-            let name = candidate
-                .file_name()
-                .ok_or_else(|| "日志路径缺少文件名".to_owned())?;
-            parent.join(name)
+            match canonical_plain(parent) {
+                Ok(parent) => {
+                    let name = candidate
+                        .file_name()
+                        .ok_or_else(|| "日志路径缺少文件名".to_owned())?;
+                    parent.join(name)
+                }
+                // 日志目录本身也不存在（全新数据目录、Bot 首次启动前）：candidate
+                // 要么由验证过的 root 拼出、要么是载荷里的绝对路径（下方统一做越界
+                // 检查）。返回原样即可——read_log_tail 对不存在的文件返回空日志。
+                Err(not_found) if not_found.kind() == std::io::ErrorKind::NotFound => candidate,
+                Err(parent_error) => {
+                    return Err(format!("无法定位日志目录：{parent_error}"))
+                }
+            }
         }
         Err(error) => return Err(format!("无法解析日志路径：{error}")),
     };
@@ -698,7 +763,17 @@ fn parse_spaces(text: &str) -> Result<Vec<(String, String, Vec<i64>)>, String> {
         {
             return Err(format!("人格文件名无效：{prompt}（只允许 system_prompts 根目录下的 .md 文件）"));
         }
-        result.push((name.to_owned(), prompt.to_owned(), parse_groups(groups)?));
+        // 空群组必须放行：「创建人格空间」就是先建空间、后绑群号的流程，
+        // save_persona 给新空间写的默认 toml 就是 `qq_groups = []`。这里若沿
+        // 用 parse_groups 的「至少一个群号」校验，一个没绑群的空间会让整个
+        // parse_spaces 报错、get_personas 吞成空列表——所有空间一起消失
+        // （2026-09-20 实测）。非空的非法值（乱码、非正整数）仍然报错。
+        let groups = if groups.trim().is_empty() {
+            Vec::new()
+        } else {
+            parse_groups(groups)?
+        };
+        result.push((name.to_owned(), prompt.to_owned(), groups));
     }
     Ok(result)
 }
@@ -957,7 +1032,7 @@ fn runtime_failure(envelope: &serde_json::Value, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_json, resolve_log_path, runtime_failure, runtime_message};
+    use super::{canonical_plain, extract_json, resolve_log_path, runtime_failure, runtime_message};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1014,7 +1089,22 @@ mod tests {
 
         let path = resolve_log_path(&root, None).unwrap();
 
-        assert_eq!(path, fs::canonicalize(logs).unwrap().join("stella.jsonl"));
+        // resolve_log_path 返回去扩展前缀的普通形态（见 canonical_plain）
+        assert_eq!(path, canonical_plain(&logs).unwrap().join("stella.jsonl"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn log_path_tolerates_missing_logs_dir() {
+        // 全新数据目录：logs/ 还没建（Bot 首次启动前）。必须正常解析且落在 root 内，
+        // read_log_tail 对不存在的文件返回空日志——不能把「还没有日志」报成错误。
+        let root = test_root("fresh");
+
+        let path = resolve_log_path(&root, None).unwrap();
+
+        // 候选锚定在 canonicalize 之后的 root 上（8.3 短路径会被展开为完整形式）
+        let expected_root = canonical_plain(&root).unwrap();
+        assert_eq!(path, expected_root.join("logs").join("stella.jsonl"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1026,7 +1116,7 @@ mod tests {
 
         let path = resolve_log_path(&root, Some("runtime/logs/onebot.log")).unwrap();
 
-        assert_eq!(path, fs::canonicalize(logs).unwrap().join("onebot.log"));
+        assert_eq!(path, canonical_plain(&logs).unwrap().join("onebot.log"));
         let _ = fs::remove_dir_all(root);
     }
 

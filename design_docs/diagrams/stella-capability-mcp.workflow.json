@@ -1,0 +1,336 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Stella 能力执行链与 MCP 集成",
+    "locale": "zh-CN",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-path",
+        "label": "主链路",
+        "focus": [
+          "msg",
+          "crouter",
+          "tasks",
+          "comes",
+          "pruntime",
+          "mcpmgr",
+          "mcpserver",
+          "result",
+          "reply"
+        ],
+        "note": "一条群消息从接入、路由、受限执行到摘要回复的完整路径。"
+      },
+      {
+        "id": "mcp-branch",
+        "label": "MCP 分支与维护",
+        "focus": [
+          "pruntime",
+          "mcpmgr",
+          "mcpserver"
+        ],
+        "note": "MCP Server 的调用边界、断线退避重连与工具目录变化同步。"
+      },
+      {
+        "id": "isolation",
+        "label": "上下文隔离",
+        "focus": [
+          "tasks",
+          "comes",
+          "result",
+          "reply"
+        ],
+        "note": "Comes 只拿任务目标与本次工具集，Stella 只读压缩后的 summary。"
+      }
+    ],
+    "output": "design_docs/diagrams/stella-capability-mcp.html",
+    "viewBox": [
+      1120,
+      684
+    ]
+  },
+  "lanes": [
+    {
+      "id": "chat",
+      "label": "群聊入口"
+    },
+    {
+      "id": "chain",
+      "label": "路由与执行"
+    },
+    {
+      "id": "external",
+      "label": "MCP 外部边界（远程）",
+      "variant": "exception"
+    },
+    {
+      "id": "runtime",
+      "label": "Provider 运行时（进程内）"
+    }
+  ],
+  "phases": [
+    {
+      "id": "intake",
+      "label": "接入",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "route",
+      "label": "路由与任务",
+      "fromCol": 1,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "execute",
+      "label": "执行与结果",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "router_group",
+      "label": "判定与任务构造",
+      "lane": "chain",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "dispatch_group",
+      "label": "按 kind 分派",
+      "lane": "runtime",
+      "fromCol": 4,
+      "toCol": 5
+    },
+    {
+      "id": "mcp_boundary",
+      "label": "白名单 + 超时",
+      "lane": "external",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "msg",
+    "crouter",
+    "tasks",
+    "comes",
+    "pruntime",
+    "mcpmgr",
+    "mcpserver",
+    "result",
+    "reply"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "msg"
+    ],
+    "allowedTerminals": [
+      "reply",
+      "astrbot"
+    ],
+    "requiredEdges": [
+      {
+        "from": "pruntime",
+        "to": "mcpmgr"
+      },
+      {
+        "from": "mcpmgr",
+        "to": "mcpserver"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "msg",
+      "lane": "chat",
+      "col": 0,
+      "type": "external",
+      "label": "用户消息",
+      "sublabel": "群聊 · 唤醒词",
+      "width": 118
+    },
+    {
+      "id": "reply",
+      "lane": "chat",
+      "col": 5,
+      "type": "backend",
+      "label": "Stella 回复",
+      "sublabel": "人格 + 摘要素材",
+      "width": 118
+    },
+    {
+      "id": "crouter",
+      "lane": "chain",
+      "col": 1,
+      "type": "backend",
+      "label": "能力路由",
+      "sublabel": "Capability Router",
+      "tag": "三级判定 · 只路由显式声明",
+      "width": 118
+    },
+    {
+      "id": "tasks",
+      "lane": "chain",
+      "col": 2,
+      "type": "backend",
+      "label": "任务构造",
+      "sublabel": "build_tool_tasks",
+      "tag": "MCP schema 缺参判定",
+      "width": 118
+    },
+    {
+      "id": "comes",
+      "lane": "chain",
+      "col": 3,
+      "type": "backend",
+      "label": "受限 agent 执行",
+      "sublabel": "ToolSet 只含命中能力",
+      "width": 120
+    },
+    {
+      "id": "result",
+      "lane": "chain",
+      "col": 5,
+      "type": "backend",
+      "label": "结果归一与摘要",
+      "sublabel": "data 与 summary 隔离",
+      "width": 118
+    },
+    {
+      "id": "pruntime",
+      "lane": "runtime",
+      "col": 4,
+      "type": "backend",
+      "label": "Runtime 分派",
+      "sublabel": "ProviderBackend 按 kind",
+      "width": 118
+    },
+    {
+      "id": "astrbot",
+      "lane": "chain",
+      "col": 4,
+      "type": "database",
+      "label": "插件工具注册表",
+      "sublabel": "llm_tools",
+      "width": 118
+    },
+    {
+      "id": "mcpmgr",
+      "lane": "runtime",
+      "col": 5,
+      "type": "backend",
+      "label": "MCP Manager",
+      "sublabel": "连接 · 重连 · 目录 · 调用",
+      "tag": "tools/list_changed → 缓存失效",
+      "width": 118
+    },
+    {
+      "id": "mcpserver",
+      "lane": "external",
+      "col": 5,
+      "type": "external",
+      "label": "MCP Server",
+      "sublabel": "stdio / Streamable HTTP",
+      "width": 118
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-msg-router",
+      "from": "msg",
+      "to": "crouter",
+      "label": "激活能力管线"
+    },
+    {
+      "id": "e-router-tasks",
+      "from": "crouter",
+      "to": "tasks",
+      "label": "命中能力"
+    },
+    {
+      "id": "e-tasks-comes",
+      "from": "tasks",
+      "to": "comes",
+      "label": "任务与已知输入",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-comes-runtime",
+      "from": "comes",
+      "to": "pruntime",
+      "label": "解析 Provider"
+    },
+    {
+      "id": "e-runtime-astrbot",
+      "from": "pruntime",
+      "to": "astrbot",
+      "label": "kind=astrbot_tool",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-result-reply",
+      "from": "result",
+      "to": "reply",
+      "label": "只带 summary",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-runtime-mcp",
+      "from": "pruntime",
+      "to": "mcpmgr",
+      "label": "kind=mcp",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-mcp-server",
+      "from": "mcpmgr",
+      "to": "mcpserver",
+      "label": "tools/list · tools/call",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-astrbot-result",
+      "from": "astrbot",
+      "to": "result",
+      "label": "插件工具返回",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "e-server-result",
+      "from": "mcpserver",
+      "to": "result",
+      "label": "受限文本返回",
+      "variant": "emphasis",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "上下文隔离",
+      "items": [
+        "Router 三级判定：L0 关键词 / L1 语义 / L2 兜底",
+        "activate_capabilities 前置钩子串起路由与并行分支",
+        "工具原始返回留在 Result.data，Stella 只读 Result.summary"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "MCP 安全边界",
+      "items": [
+        "默认拒绝：仅显式声明且在 allowed_tools 白名单内的工具参与路由",
+        "断线指数退避重连、只降级对应 Provider；tools/list_changed 同步并失效 Router 缓存"
+      ]
+    }
+  ]
+}

@@ -44,8 +44,9 @@ examples = ["搜一下", "帮我查查"]
 providers = [{ tool = "bing_search", priority = 10 }, { tool = "google_search" }]
 ```
 
-``providers`` 两种写法都收：字符串（工具名）或表（可带 ``priority`` / ``kind``）。
-字符串形式覆盖绝大多数场景，表形式留给「同一能力有多个实现要排优先级」的情况。
+``providers`` 两种写法都收：字符串（astrbot 工具名）或表（可带 ``priority`` / ``kind``）。
+字符串形式覆盖绝大多数场景，表形式留给「同一能力有多个实现要排优先级」的情况；
+``kind = "mcp"`` 的表必须带 ``server`` 与 ``tool``（见 ``_parse_provider``）。
 
 ``examples`` 与 ``keywords`` 服务于**不同**的路由级别，不要混用：
 ``examples`` 是 Level 1 的语义原型语料（写自然句子），``keywords`` 是 Level 0 的
@@ -69,6 +70,7 @@ except ImportError:  # pragma: no cover - Python 3.10 需要 tomli 兜底（pypr
 
 from capability.registry import (
     KIND_ASTRBOT_TOOL,
+    KIND_MCP,
     SOURCE_CONFIG,
     SOURCE_PLUGIN,
     Capability,
@@ -105,7 +107,15 @@ def _parse_provider(
     index: int,
     source: str = SOURCE_CONFIG,
 ) -> CapabilityProvider | None:
-    """把 providers 列表里的一项解析成 CapabilityProvider；非法项返回 None。"""
+    """把 providers 列表里的一项解析成 CapabilityProvider；非法项返回 None。
+
+    ``kind = "mcp"`` 的表形式（方案 §7.3）必须带 ``server`` 与 ``tool``（远程工具名）：
+
+        providers = [{ id = "mcp:brave:search", kind = "mcp", server = "brave", tool = "search" }]
+
+    MCP Server 此刻在不在**不**属于声明解析的错误（方案 §3.3/§7.3）：连接是运行时
+    状态，由 Provider Runtime 在查询时判定，声明照常注册。
+    """
     if isinstance(raw, str):
         tool_name = raw.strip()
         if not tool_name:
@@ -118,9 +128,19 @@ def _parse_provider(
             source=source,
         )
     if isinstance(raw, dict):
-        tool_name = str(raw.get("tool") or raw.get("tool_name") or "").strip()
         kind = str(raw.get("kind") or KIND_ASTRBOT_TOOL).strip() or KIND_ASTRBOT_TOOL
-        # astrbot_tool 没有工具名就无从执行；其它 kind 本轮不实现，也一并要求标识
+        if kind == KIND_MCP:
+            return _parse_mcp_provider(raw, capability_id, index, source)
+        if kind != KIND_ASTRBOT_TOOL:
+            # 未知 kind 记 warning 并跳过（方案 §7.3）：收进来会在查询期变成
+            # 「永远不可用」的僵尸 provider，声明层就该点名拦下
+            _logger().warning(
+                f"⚠️ [Capability] {capability_id} 的第 {index + 1} 个 provider kind="
+                f"{kind!r} 不支持，已跳过",
+            )
+            return None
+        tool_name = str(raw.get("tool") or raw.get("tool_name") or "").strip()
+        # astrbot_tool 没有工具名就无从执行
         if not tool_name:
             return None
         try:
@@ -139,6 +159,39 @@ def _parse_provider(
         f"⚠️ [Capability] {capability_id} 的第 {index + 1} 个 provider 既不是工具名也不是表，已跳过",
     )
     return None
+
+
+def _parse_mcp_provider(
+    raw: dict,
+    capability_id: str,
+    index: int,
+    source: str,
+) -> CapabilityProvider | None:
+    """kind=mcp 的 provider 解析。缺 server / tool 记 warning 并跳过。"""
+    from capability.providers.mcp.model import mcp_tool_name
+
+    server = str(raw.get("server") or raw.get("server_id") or "").strip()
+    remote_tool = str(raw.get("tool") or raw.get("remote_tool") or "").strip()
+    if not server or not remote_tool:
+        _logger().warning(
+            f"⚠️ [Capability] {capability_id} 的第 {index + 1} 个 MCP provider 缺少 "
+            f"server 或 tool 字段，已跳过",
+        )
+        return None
+    try:
+        priority = int(raw.get("priority", 0) or 0)
+    except (TypeError, ValueError):
+        priority = 0
+    return CapabilityProvider(
+        provider_id=str(raw.get("id") or f"mcp:{server}:{remote_tool}"),
+        capability_id=capability_id,
+        kind=KIND_MCP,
+        tool_name=mcp_tool_name(server, remote_tool),
+        server_id=server,
+        remote_tool_name=remote_tool,
+        priority=priority,
+        source=source,
+    )
 
 
 def _parse_capability(raw: Any, domain: str, source: str = SOURCE_CONFIG) -> Capability | None:
@@ -191,15 +244,14 @@ def _shadowed_by(reg: CapabilityRegistry, capability: Capability) -> str:
 
     两条判据缺一不可：
     - **同 id 已注册**：涵盖没有 provider 的能力（那种没有工具可供认领判定）；
-    - **任一 provider 的工具已被别的能力认领**：涵盖「换了个 id 声明同一个工具」，
+    - **任一 provider 的实现已被别的能力认领**：涵盖「换了个 id 声明同一个工具」，
       这是用户覆盖插件声明的常见写法（用户未必知道插件把它叫什么 id）。
+      按 provider 认领键判定（``claimed_by_provider``），astrbot 与 MCP 通吃。
     """
     if reg.get(capability.id) is not None:
         return capability.id
     for provider in capability.providers:
-        if provider.kind != KIND_ASTRBOT_TOOL or not provider.tool_name:
-            continue
-        owner = reg.claimed_by(provider.tool_name)
+        owner = reg.claimed_by_provider(provider)
         if owner:
             return owner
     return ""

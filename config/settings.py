@@ -57,8 +57,9 @@ PROJECT_ROOT = _PROJECT_ROOT
 
 # ---------- 用户数据根目录（STELLA_HOME） ----------
 # PROJECT_ROOT 是**程序目录**（升级时整体替换），STELLA_HOME 是**用户数据目录**
-# （升级时不动）。定位顺序见 config/home.py：环境变量 → 机器级指针文件 →
-# 旧布局（数据就在安装目录内）→ 安装目录同级的 StellaData。
+# （升级时不动）。定位顺序见 config/home.py：环境变量 → 便携模式（安装目录内的
+# StellaData）→ 旧布局（数据就在安装目录内）→ 机器级指针文件 → 安装目录同级的
+# StellaData。
 #
 # 旧布局下 STELLA_HOME == PROJECT_ROOT，所有路径与 2026-08-27 之前完全一致，
 # 存量安装原地继续工作。刻意在这里不创建目录：import config 不该有副作用，
@@ -534,7 +535,9 @@ MEMORY_EMBEDDING_CONTEXTUAL_MIN = _env_float("MEMORY_EMBEDDING_CONTEXTUAL_MIN", 
 # 称呼配置只由明确的自然语言请求修改；embedding 只负责意图筛选，不直接写库。
 ADDRESSING_ENABLED = _env_bool("ADDRESSING_ENABLED", "true")
 ADDRESSING_SEMANTIC_ENABLED = _env_bool("ADDRESSING_SEMANTIC_ENABLED", "true")
-ADDRESSING_INTENT_TIMEOUT = _env_float(
+# 留空即继承 MEMORY_EMBEDDING_TIMEOUT（默认 10s）——继承型必须用 _env_float_inherit，
+# 否则 AST schema 拿不到字面量默认值，GUI 里这个框会渲染成「非法的空值」。
+ADDRESSING_INTENT_TIMEOUT = _env_float_inherit(
     "ADDRESSING_INTENT_TIMEOUT", MEMORY_EMBEDDING_TIMEOUT
 )
 ADDRESSING_INTENT_THRESHOLD = _env_float("ADDRESSING_INTENT_THRESHOLD", 0.58)
@@ -1119,6 +1122,19 @@ LLM_ENDPOINT_EXTRA_KIND = _env("LLM_ENDPOINT_EXTRA_KIND", "local")
 LLM_ENDPOINT_EXTRA_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_CONCURRENCY", 1)
 LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
 
+# 槽 EXTRA_VISION：图片转述的默认端点卡。**出厂未配地址 = 未启用**；图片转述
+# 角色（VISION）默认绑 none，要启用时在 GUI「模型服务」分区给本卡填地址、
+# 把 VISION 行的端点改指 EXTRA_VISION（或任何别的槽）即可。本卡与 EXTRA 同构：
+# 地址留空时按本机推导，指到服务商时把 KIND 改成 online（GUI 保存会自动推导）。
+# 它是「EXTRA_* 自定义槽」约定的样板：往 .env 里再写一组 LLM_ENDPOINT_EXTRA_<名>_*
+# 键就会多出一个同构槽（registry.extra_slots() 自动发现），无需改代码。
+LLM_ENDPOINT_EXTRA_VISION_BASE_URL = _env("LLM_ENDPOINT_EXTRA_VISION_BASE_URL", "")
+LLM_ENDPOINT_EXTRA_VISION_API_KEY = _env("LLM_ENDPOINT_EXTRA_VISION_API_KEY", "")
+LLM_ENDPOINT_EXTRA_VISION_MODEL = _env("LLM_ENDPOINT_EXTRA_VISION_MODEL", "")
+LLM_ENDPOINT_EXTRA_VISION_KIND = _env("LLM_ENDPOINT_EXTRA_VISION_KIND", "local")
+LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY", 1)
+LLM_ENDPOINT_EXTRA_VISION_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_VISION_TIMEOUT", 120.0)
+
 # ---------- LLM 角色（Role） ----------
 # 角色 = 一个调用场景。每个角色引用一个端点槽，并带自己的模型 / 温度 / max_tokens。
 # ENDPOINT 取 LOCAL | ONLINE_CHAT | ONLINE_MEMORY | EXTRA | none；
@@ -1373,6 +1389,16 @@ COMES_DIRECT_CALL_NO_ARGS = _env_bool("COMES_DIRECT_CALL_NO_ARGS", "true")
 COMES_PROVIDER_FAILURE_THRESHOLD = _env_int("COMES_PROVIDER_FAILURE_THRESHOLD", 3)
 # 被退避的 provider 多久后恢复（秒）。
 COMES_PROVIDER_RECOVER_SECONDS = _env_float("COMES_PROVIDER_RECOVER_SECONDS", 600.0)
+
+# ---------- MCP Provider（受控 MCP Client，见 capability/providers/mcp） ----------
+# 让 Stella 以 MCP Client 身份连接外部 MCP Server，并把显式声明过的 MCP 工具
+# 纳入 Router → Comes 链路。第一版只支持 Tools（Resources/Prompts/Sampling 延后）。
+# **默认关闭**：MCP Server 是外部边界（子进程/远程端点），命令、URL、认证、
+# 超时全部要部署者在 STELLA_HOME/config/mcp.toml 里逐条写明才放开（方案 §6.2）。
+MCP_ENABLED = _env_bool("MCP_ENABLED", "false")
+# MCP Server 配置文件名（相对 STELLA_HOME/config/）。文件不存在 = 没有任何 Server，
+# 属于可运行的退化态，不是错误。
+MCP_CONFIG_FILE = _env("MCP_CONFIG_FILE", "mcp.toml")
 
 # ---------- 受限 Planner（深度回复路径，设计阶段五） ----------
 # 绝大多数消息走快速路径（本地 Gate → 检索 → 单次 LLM）。只有本地零 LLM 判定

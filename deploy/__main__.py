@@ -13,6 +13,8 @@
       python -m deploy plugin-check <插件目录> [--json]
       python -m deploy plugin-scaffold <插件目录> [--endpoint 槽] [--force] [--dry-run] [--measure]
       python -m deploy capabilities [--json]
+      python -m deploy mcp list [--config PATH]
+      python -m deploy mcp test <server_id> [--config PATH]
       python -m deploy manifest [--write]
       python -m deploy upgrade SOURCE --version VERSION [--install-root PATH]
 """
@@ -391,6 +393,95 @@ def _cmd_capabilities(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mcp(args: argparse.Namespace) -> int:
+    """MCP Server 诊断（方案 §7.9）：``deploy mcp list`` / ``deploy mcp test <id>``。
+
+    - list：把 config/mcp.toml 里的配置面打印出来（本机 CLI，读的就是用户自己的
+      文件，打印原样内容不等价于泄露）；
+    - test：对指定 Server 真实做 连接 → initialize → tools/list，**绝不**调用业务
+      工具；输出只含状态、工具名与脱敏后的错误（无 url / command / args / token）。
+
+    test 独立进程运行，不要求 Bot 正在跑——这正是它存在的意义：配置写完先在
+    命令行里验一遍，再去改 MCP_ENABLED。
+    """
+    import asyncio
+
+    from capability.providers.mcp.client import McpServerClient
+    from capability.providers.mcp.model import (
+        SERVER_READY,
+        TRANSPORT_HTTP,
+        load_mcp_configs,
+        sanitize_error,
+    )
+
+    path = Path(args.config) if getattr(args, "config", None) else None
+
+    if args.mcp_action == "list":
+        configs = load_mcp_configs(path)
+        if not configs:
+            print("没有配置任何 MCP Server（缺 STELLA_HOME/config/mcp.toml 或文件为空）。")
+            return 0
+        for server_id, cfg in sorted(configs.items()):
+            endpoint = cfg.url if cfg.transport == TRANSPORT_HTTP else (
+                f"{cfg.command} {' '.join(cfg.args)}".strip()
+            )
+            problems = cfg.validate()
+            print(
+                f"[{server_id}] enabled={cfg.enabled} transport={cfg.transport} "
+                f"endpoint={endpoint or '（未配置）'}",
+            )
+            print(
+                f"    allowed_tools={cfg.allowed_tools or '（空 = 全部发现但不可路由）'} "
+                f"connect_timeout={cfg.connect_timeout:g}s call_timeout={cfg.call_timeout:g}s"
+                + (f" auth_env={cfg.auth_env}" if cfg.auth_env else ""),
+            )
+            if problems:
+                print(f"    ⚠ 配置问题：{'; '.join(problems)}")
+        return 0
+
+    # test <server_id>
+    configs = load_mcp_configs(path)
+    if args.server_id not in configs:
+        print(
+            f"配置里没有叫 {args.server_id} 的 Server。现有："
+            f"{', '.join(sorted(configs)) or '（无）'}",
+        )
+        return 2
+    cfg = configs[args.server_id]
+    problems = cfg.validate()
+    if problems:
+        print(f"配置非法，未尝试连接：{'; '.join(problems)}")
+        return 2
+    # test 是显式的操作者意图，绕过 enabled 开关（list/test 都不要求 MCP_ENABLED）
+    cfg.enabled = True
+    client = McpServerClient(cfg)
+
+    async def _run() -> int:
+        await client.start()
+        status = client.status_dict()
+        if status["state"] == SERVER_READY:
+            tools = client.catalog()
+            print(f"state=ready tools={len(tools)}")
+            for descriptor in tools:
+                routable = cfg.tool_allowed(descriptor.name)
+                print(
+                    f"  - {descriptor.name}"
+                    f"{'（可路由）' if routable else '（不在 allowed_tools，不参与路由）'}",
+                )
+            await client.close()
+            return 0
+        print(f"state={status['state']} error={sanitize_error(status['last_error'])}")
+        await client.close()
+        return 1
+
+    try:
+        return asyncio.run(_run())
+    except KeyboardInterrupt:
+        print("已中断。")
+        return 130
+
+
+
 def _cmd_manifest(args: argparse.Namespace) -> int:
     """生成发布包清单（release CI 用；升级时据此判断用户是否改过自带文件）。"""
     from . import manifest
@@ -694,6 +785,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_caps.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
     p_caps.set_defaults(func=_cmd_capabilities)
+
+    p_mcp = sub.add_parser("mcp", help="MCP Server 诊断：list 列配置 / test 试连接")
+    mcp_sub = p_mcp.add_subparsers(dest="mcp_action", required=True)
+    p_mcp_list = mcp_sub.add_parser("list", help="列出 config/mcp.toml 里配置的 Server")
+    p_mcp_list.add_argument("--config", default=None, help="配置文件路径（缺省 STELLA_HOME/config/mcp.toml）")
+    p_mcp_list.set_defaults(func=_cmd_mcp)
+    p_mcp_test = mcp_sub.add_parser(
+        "test", help="对指定 Server 做连接 + initialize + tools/list（不调用业务工具）"
+    )
+    p_mcp_test.add_argument("server_id", help="配置里的 Server id")
+    p_mcp_test.add_argument("--config", default=None, help="配置文件路径（缺省 STELLA_HOME/config/mcp.toml）")
+    p_mcp_test.set_defaults(func=_cmd_mcp)
 
     p_manifest = sub.add_parser("manifest", help="生成发布包清单（.stella-manifest.json）")
     p_manifest.add_argument("--write", action="store_true", help="写入文件而非打印")

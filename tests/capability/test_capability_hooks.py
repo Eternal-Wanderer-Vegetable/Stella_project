@@ -521,3 +521,105 @@ def test_registry_singleton_is_used_by_default():
         ),
     )
     assert singleton.get("x.y") is not None
+
+
+# ---------- MCP provider 的 schema 参与输入解析（方案 §7.7）----------
+
+
+def test_build_tool_tasks_uses_mcp_schema_from_runtime():
+    """MCP 工具的 required 字段要参与 parse_input / 缺参判定——
+    这是 build_tool_tasks 必须走 Provider Runtime 的原因（方案 §7.7）。"""
+    from capability.adapters.mcp import install_mcp_runtime
+    from capability.providers.mcp.client import McpServerClient
+    from capability.providers.mcp.manager import McpServerManager
+    from capability.providers.mcp.model import SERVER_READY, ServerConfig
+    from capability.registry import KIND_MCP, CapabilityRegistry
+
+    config = ServerConfig(
+        server_id="brave",
+        enabled=True,
+        transport="stdio",
+        command="npx",
+        allowed_tools=["search"],
+    )
+    client = McpServerClient(config)
+    client.status.state = SERVER_READY
+    client._apply_catalog(
+        [
+            (
+                "search",
+                "web search",
+                {
+                    "type": "object",
+                    "properties": {"q": {"type": "string"}},
+                    "required": ["q"],
+                },
+            ),
+        ],
+    )
+    manager = McpServerManager()
+    manager._clients["brave"] = client
+    runtime = install_mcp_runtime(manager=manager)
+    assert runtime.backend_of("mcp") is not None  # 接线了，下面的解析才走 Runtime
+
+    target = CapabilityRegistry()
+    target.register(
+        Capability(
+            id="web.search",
+            providers=[
+                CapabilityProvider(
+                    provider_id="mcp:brave:search",
+                    capability_id="web.search",
+                    kind=KIND_MCP,
+                    tool_name="mcp_brave_search",
+                    server_id="brave",
+                    remote_tool_name="search",
+                ),
+            ],
+        ),
+    )
+    route = Route(
+        tool=True,
+        deterministic=True,
+        capabilities=[CapabilityHit("web.search", 1.0)],
+    )
+    tasks = build_tool_tasks(route, "帮我搜点啥", target=target)
+    assert tasks[0].constraints["input_status"] == "missing"
+    assert tasks[0].constraints["missing_input"] == ["q"]
+
+    # Server 掉线：schema 取不到，输入解析退化为「无工具 schema」而不崩溃
+    # （没有 required 字段可查，不判缺参；执行期由 resolve_tools 报工具不可用）
+    client.status.state = "degraded"
+    tasks = build_tool_tasks(route, "帮我搜点啥", target=target)
+    assert tasks[0].constraints["input_status"] == "complete"
+
+
+def test_build_tool_tasks_without_runtime_keeps_legacy_path():
+    """没接线 Runtime（离线进程/单测）：行为与历史版本一致。"""
+    from astrbot_compat.llm.tool import FunctionTool, llm_tools
+    from capability.registry import CapabilityRegistry
+
+    llm_tools.add_tool(
+        FunctionTool(
+            name="get_weather",
+            description="天气",
+            parameters={"type": "object", "properties": {}},
+            handler=lambda event: "ok",
+        ),
+    )
+    target = CapabilityRegistry()
+    target.register(
+        Capability(
+            id="weather.query",
+            providers=[
+                CapabilityProvider(
+                    provider_id="w#get",
+                    capability_id="weather.query",
+                    tool_name="get_weather",
+                ),
+            ],
+        ),
+    )
+    route = Route(tool=True, capabilities=[CapabilityHit("weather.query", 1.0)])
+    tasks = build_tool_tasks(route, "查天气", target=target, tool_manager=llm_tools)
+    assert len(tasks) == 1

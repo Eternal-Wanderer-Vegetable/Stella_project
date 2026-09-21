@@ -33,8 +33,13 @@ def test_all_log_paths_live_under_log_dir():
         assert path.parent == settings.LOG_DIR, f"{name} 不在 LOG_DIR 下: {path}"
 
 
-def test_log_dir_defaults_into_project_root_logs():
-    assert settings.LOG_DIR == settings.PROJECT_ROOT / "logs"
+def test_log_dir_defaults_into_data_home():
+    """LOG_DIR 默认锚在数据目录（STELLA_HOME/logs），不跟程序目录走。
+
+    曾经断言它等于 PROJECT_ROOT/logs——那只在「旧布局：STELLA_HOME 恰好等于
+    程序目录」时碰巧成立；数据与程序分离后（config/home.py），日志属于数据目录。
+    """
+    assert settings.LOG_DIR == settings.STELLA_HOME / "logs"
 
 
 def test_log_dir_override_moves_every_log(monkeypatch, tmp_path):

@@ -3,8 +3,8 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """``STELLA_HOME``（用户数据目录）定位的单元测试。
 
-这层的作用是「升级时数据不动」，所以每条定位规则都要有用例：环境变量、机器级
-指针文件、旧布局原地兼容、以及默认的同级 StellaData。另有两条硬要求：
+这层的作用是「升级时数据不动」，所以每条定位规则都要有用例：环境变量、旧布局原地
+兼容、便携模式、机器级指针文件、以及默认的同级 StellaData。另有两条硬要求：
 
 - ``import config`` **不许**有副作用（不建目录、不写指针文件）；
 - 定位失败一律回退安装目录，绝不抛异常——那会让 Bot 起不来。
@@ -78,20 +78,45 @@ def test_portable_data_dir_inside_install_is_used(install):
     assert "便携" in resolved.source
 
 
-def test_portable_mode_loses_to_legacy_layout(install):
-    """旧安装的数据在安装目录根上，不该被一个恰好同名的空目录抢走。"""
+def test_portable_mode_beats_legacy_markers(install):
+    """显式建的便携目录优先于旧布局痕迹：痕迹是启发式，会随时被重建。
+
+    开发仓库里跑一轮测试、误启动一次 Bot，就会在仓库根重建 memory/agent_memory.db
+    （2026-09-20 实测），把数据目录反复拽回安装目录。建一个叫 StellaData 的目录是
+    明确的本地意愿，不该被痕迹盖过。真正的 3.0 旧安装不会有同名子目录（发布包
+    从不携带它，check_release_layout 会拦），原地兼容不受影响。
+    """
     (install / ".env").write_text("ALLOWED_GROUPS=1\n", encoding="utf-8")
-    (install / "StellaData").mkdir()
-    assert home.resolve(install).path == install
+    inside = install / "StellaData"
+    inside.mkdir()
+    resolved = home.resolve(install)
+    assert resolved.path == inside.resolve()
+    assert "便携" in resolved.source
 
 
-def test_portable_mode_loses_to_pointer(install, tmp_path):
-    """指针文件仍然优先：用户已经有一份在用的数据目录，不能被便携目录顶掉。"""
+def test_portable_data_dir_beats_machine_pointer(install, tmp_path):
+    """显式建的便携目录优先于机器级指针：指针是机器默认，便携目录是这份程序的本地意愿。
+
+    没有这条，开发仓库在有正式安装的机器上会被指针拖进正式安装的数据目录，两套环境
+    混用（2026-09-19 实测）。正式安装的目录里没有 StellaData，仍然走指针，行为不变。
+    """
     data = tmp_path / "Elsewhere"
     data.mkdir()
     home.write_pointer(data)
-    (install / "StellaData").mkdir()
-    assert home.resolve(install).path == data
+    inside = install / "StellaData"
+    inside.mkdir()
+    resolved = home.resolve(install)
+    assert resolved.path == inside.resolve()
+    assert "便携" in resolved.source
+
+
+def test_legacy_layout_beats_pointer(install, tmp_path):
+    """旧布局的数据就在安装目录根上，比机器指针更具体：原地继续工作，不被拖走。"""
+    (install / ".env").write_text("ALLOWED_GROUPS=1\n", encoding="utf-8")
+    data = tmp_path / "Elsewhere"
+    data.mkdir()
+    home.write_pointer(data)
+    assert home.resolve(install).path == install
 
 
 def test_default_stays_outside_when_no_portable_dir(install):

@@ -139,7 +139,23 @@ async def _bootstrap_astrbot_plugins() -> None:
     await initialize_plugins()
 
 
+async def _shutdown_mcp_runtime() -> None:
+    """MCP 收尾（方案 §7.8 关闭顺序）：停接受新调用 → 取消在途调用/后台任务 →
+    关闭 HTTP 会话 → 终止 stdio 子进程。
+
+    **必须先于 terminate_plugins 执行**（注册顺序即执行顺序）：插件的工具 handler
+    还在时先把外部边界收掉，避免插件停机过程中又有新的 MCP 调用发出去。
+    """
+    try:
+        from capability.adapters import mcp as mcp_adapter
+
+        await mcp_adapter.close_mcp_runtime()
+    except Exception as _e:
+        _diag_log(f"[mcp][shutdown] MCP 层关闭异常（跳过）: {_e}")
+
+
 driver.on_startup(_bootstrap_astrbot_plugins)
+driver.on_shutdown(_shutdown_mcp_runtime)
 driver.on_shutdown(terminate_plugins)
 
 
@@ -231,9 +247,30 @@ async def _bootstrap_capabilities() -> None:
     部署会把出厂声明当成自己的能力答出去。**必须在 ``bootstrap()`` 之前**，否则它回的
     ``routable`` 统计是装探针前的旧答案——而那行日志正是排查这件事时第一个看的东西。
 
+    MCP（``MCP_ENABLED=true`` 时）：先启动 Manager（连接 + 初始发现），再装
+    Provider Runtime，最后才 bootstrap——顺序错了 ``routable`` 统计就会漏掉 MCP
+    Provider 的真实可用性（方案 §7.8）。MCP 启动失败只告警：它坏掉的后果是
+    「MCP 工具这轮不可用」，Bot 与其余能力照常。
+
     失败只告警：能力层是增量功能，装配不上的后果应该是「这次没有工具能力」，
     而不是 Bot 起不来。
     """
+    # MCP 先行（方案 §7.8 的启动顺序）：Manager 起来 → Runtime 接线 → bootstrap。
+    # 全程容错：MCP 是增量能力，整层失败不能拖垮 capability 装配。
+    try:
+        from capability.adapters import mcp as mcp_adapter
+
+        mcp_adapter.reset_mcp_sync()
+        states = await mcp_adapter.start_mcp_runtime()
+        if states:
+            _diag_log(f"[mcp][boot] MCP Server 初始状态: {states}")
+        mcp_adapter.install_mcp_runtime()
+        mcp_adapter.sync_mcp_providers()
+    except Exception as _e:
+        import traceback
+
+        _diag_log(f"[mcp][boot] MCP 层启动失败（跳过）: {_e}\n{traceback.format_exc()}")
+
     try:
         from capability.adapters.astrbot import bootstrap, install_tool_probe
 

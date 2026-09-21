@@ -89,6 +89,17 @@ def _needs_clarification(task: Task, **meta: Any) -> Result:
 # ============================================================
 
 
+def _wired_runtime() -> Any | None:
+    """进程级 Provider Runtime；没接线（没有 backend）返回 None。
+
+    单测与离线进程不装 backend，走下面的遗留路径，行为与历史版本逐字一致；
+    Bot 进程在启动期由 ``capability/adapters/mcp.py::install_mcp_runtime`` 接线。
+    """
+    from capability.providers import provider_runtime
+
+    return provider_runtime or None
+
+
 def resolve_tools(
     providers: list[CapabilityProvider],
     tool_manager=None,
@@ -96,8 +107,12 @@ def resolve_tools(
     """把 provider 列表解析成一个只含它们的 ToolSet。
 
     返回 ``(ToolSet, 找不到的工具名)``。工具找不到是常态而非异常：
-    声明文件里写了 provider 但对应插件没装 / 没启用时就会这样，
-    此时应带着剩下的工具继续跑，而不是整个任务失败。
+    声明文件里写了 provider 但对应插件没装 / 没启用、或 MCP Server 暂时不可用
+    时就会这样，此时应带着剩下的工具继续跑，而不是整个任务失败。
+
+    解析按 Provider Runtime 分派（方案 §7.6）：``astrbot_tool`` 仍查 ``llm_tools``
+    （与遗留路径同一判据），``mcp`` 走 Manager 的目录即时构造 FunctionTool——
+    schema 每次从目录现取，tools/list 变化后下一次调用自动用新 schema。
     """
     from astrbot_compat.llm.tool import ToolSet
 
@@ -107,11 +122,22 @@ def resolve_tools(
 
         manager = llm_tools
 
+    runtime = _wired_runtime()
     tool_set = ToolSet()
     missing: list[str] = []
     for provider in providers:
+        if runtime is not None and runtime.backend_of(provider.kind) is not None:
+            tool = runtime.resolve(provider)
+            if tool is None:
+                missing.append(
+                    provider.tool_name
+                    or f"{provider.server_id}:{provider.remote_tool_name}",
+                )
+                continue
+            tool_set.add_tool(tool)
+            continue
         if provider.kind != KIND_ASTRBOT_TOOL:
-            # 其它 kind（MCP / API / native）本轮不实现，见 registry 的 KIND_* 注释
+            # Runtime 没接线时的遗留语义：其它 kind 一律「暂不支持」
             missing.append(f"{provider.tool_name}({provider.kind} 暂不支持)")
             continue
         tool = manager.get_tool(provider.tool_name)
