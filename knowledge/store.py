@@ -485,6 +485,10 @@ class KnowledgeStore:
             "DELETE FROM kb_chunk_fts WHERE doc_id=? AND version_no=?",
             (doc_id, version_no),
         )
+        # FTS 列存分词词串而非原文（中文滑窗切片，见 knowledge/fts.py）；
+        # 原文永远只在 kb_chunk.text，引用与展示不经过索引表。
+        from knowledge.fts import segment_text
+
         for seq, text, loc, blob in chunks:
             cur = conn.execute(
                 """
@@ -512,7 +516,7 @@ class KnowledgeStore:
                 INSERT INTO kb_chunk_fts (rowid, text, kb_id, doc_id, version_no)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (cur.lastrowid, text, kb_id, doc_id, version_no),
+                (cur.lastrowid, segment_text(text), kb_id, doc_id, version_no),
             )
 
     def get_chunk_row(
