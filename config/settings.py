@@ -1448,3 +1448,37 @@ JARGON_HIT_THRESHOLD = _env_int("JARGON_HIT_THRESHOLD", 5)
 JARGON_CONFIRM_THRESHOLD = _env_int("JARGON_CONFIRM_THRESHOLD", 12)
 # 进程内黑话计数器的容量上限（防止长聊天记录把内存吃穿）。
 JARGON_TRACKER_MAX_TERMS = _env_int("JARGON_TRACKER_MAX_TERMS", 4096)
+
+# ============================================================
+# 独立知识库（knowledge/ 子系统）
+# ============================================================
+# 与个人记忆平行的资料库子系统：Markdown/TXT/文本型 PDF/DOCX/显式选择的 URL
+# 导入，ACL 隔离、草稿/审核/发布、版本化索引、混合检索与引用式证据注入。
+# 边界纪律见 docs/knowledge-base.md；与记忆系统唯一的交点是「共享本机
+# embedding 服务」（KNOWLEDGE_EMBEDDING_* 留空即继承 MEMORY_EMBEDDING_*）。
+KNOWLEDGE_ENABLED = _env_bool("KNOWLEDGE_ENABLED", "true")
+# 独立存储：绝不复用 agent_memory.db 的任何表（记忆的清理/晋升/保留策略
+# 不得触碰外部文档，plan 红线）。
+KNOWLEDGE_DB_PATH = _env_path("KNOWLEDGE_DB_PATH", _user_path("knowledge/knowledge.db"))
+# 每路（BM25 / 语义）检索的候选上限；融合去重后的证据条数另受
+# KNOWLEDGE_EVIDENCE_MAX_ITEMS 约束。
+KNOWLEDGE_SEARCH_TOP_K = _env_int("KNOWLEDGE_SEARCH_TOP_K", 8)
+# RRF 融合常数（越大，单路排名靠后的候选衰减越平缓；60 是文献常用值）。
+KNOWLEDGE_RRF_K = _env_int("KNOWLEDGE_RRF_K", 60)
+# 进入 prompt 的证据硬边界（plan §9：prompt growth）。
+KNOWLEDGE_EVIDENCE_MAX_ITEMS = _env_int("KNOWLEDGE_EVIDENCE_MAX_ITEMS", 4)
+KNOWLEDGE_EVIDENCE_MAX_TOKENS = _env_int("KNOWLEDGE_EVIDENCE_MAX_TOKENS", 600)
+# 单条摘录的最大字符数（切块已限长，这里兜底截断超长引用）。
+KNOWLEDGE_EVIDENCE_MAX_CHARS = _env_int("KNOWLEDGE_EVIDENCE_MAX_CHARS", 700)
+# 可选 rerank（默认关：多一次模型调用，本地部署收益有限）。
+KNOWLEDGE_RERANK_ENABLED = _env_bool("KNOWLEDGE_RERANK_ENABLED", "false")
+# 知识库 embedding 服务。留空 = 复用 MEMORY_EMBEDDING_* 的地址与模型
+# （与记忆系统同一个本地实例，闸门也走同一把锁，见 memory/embeddings.py）。
+KNOWLEDGE_EMBEDDING_BASE_URL = _env("KNOWLEDGE_EMBEDDING_BASE_URL", "")
+KNOWLEDGE_EMBEDDING_MODEL = _env("KNOWLEDGE_EMBEDDING_MODEL", "")
+# URL 导入的硬边界（plan §9：import security）——只取单页、限时、限量，
+# 不做递归爬取。
+KNOWLEDGE_URL_TIMEOUT = _env_float("KNOWLEDGE_URL_TIMEOUT", 15.0)
+KNOWLEDGE_URL_MAX_BYTES = _env_int("KNOWLEDGE_URL_MAX_BYTES", 2097152)
+# 单文件导入的字节数上限（PDF/DOCX 解压炸弹防护）。
+KNOWLEDGE_IMPORT_MAX_BYTES = _env_int("KNOWLEDGE_IMPORT_MAX_BYTES", 20971520)
