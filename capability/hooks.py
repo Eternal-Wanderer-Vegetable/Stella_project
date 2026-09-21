@@ -339,7 +339,31 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
         _logger().info(
             f"🔧 [Comes] 本轮 {len(ctx.tool_summaries)} 条工具结果将进入 prompt",
         )
+    _check_memory_isolation(ctx)
     return ctx
+
+
+def _check_memory_isolation(ctx: ChatContext) -> None:
+    """知识证据 → 个人记忆的隔离护栏（plan §6.7）。**绝不抛异常。**
+
+    证据只许住在 ``knowledge_evidence``；一旦发现它泄漏进任何记忆字段
+    （说明某个未来改动打破了契约），立刻 error 告警并**就地清掉泄漏的
+    证据副本**——隔离被破坏是 must-fix 事故，宁可这轮丢证据不可污染记忆。
+    """
+    if not ctx.knowledge_evidence:
+        return
+    try:
+        from knowledge.isolation import evidence_leaked_into_memory
+
+        leaked = evidence_leaked_into_memory(ctx)
+    except Exception:
+        return
+    if leaked:
+        _logger().error(
+            f"🚨 [Knowledge] {len(leaked)} 条知识证据泄漏进记忆字段（已清除证据，"
+            f"记忆晋升红线被打破，须排查）: {leaked[:2]}"
+        )
+        ctx.knowledge_evidence = []
 
 
 def register(pipeline: Any) -> None:

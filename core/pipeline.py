@@ -52,30 +52,71 @@ def _tool_result_section(ctx: ChatContext) -> str:
     return f"【刚刚查到的信息（真实数据，回答时以此为准）】\n{body}"
 
 
+def _knowledge_evidence_section(ctx: ChatContext) -> str:
+    """把知识库证据渲染成带编号引用的 prompt 段落；无证据返回空串。
+
+    与 ``_tool_result_section`` 的分界（三轨分离，docs/knowledge-base.md）：
+    证据只来自 ``ctx.knowledge_evidence``，渲染前先过**证据专属预算**
+    （``fit_evidence_to_budget``：条数 + token 双上限），不占工具摘要的预算，
+    也不受工具摘要的影响。
+
+    引用形态：``[1]《标题》 节路径 > ¶段（资料库:名）``。编号让 Stella 能在
+    回复里注明出处（"据《运维手册》[1]……"），这是引用式注入的意义——
+    给答案，同时给答案的来源。
+    """
+    from config import KNOWLEDGE_EVIDENCE_MAX_ITEMS, KNOWLEDGE_EVIDENCE_MAX_TOKENS
+    from core.context_budget import fit_evidence_to_budget
+
+    evidence = getattr(ctx, "knowledge_evidence", None) or []
+    if not evidence:
+        return ""
+    budgeted = fit_evidence_to_budget(
+        evidence,
+        max_items=int(KNOWLEDGE_EVIDENCE_MAX_ITEMS),
+        max_tokens=int(KNOWLEDGE_EVIDENCE_MAX_TOKENS),
+    )
+    if not budgeted:
+        return ""
+    blocks: list[str] = []
+    for idx, item in enumerate(budgeted, start=1):
+        citation = str(item.get("citation") or item.get("doc_title") or "资料库摘录")
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        blocks.append(f"[{idx}] {citation}\n{text}")
+    if not blocks:
+        return ""
+    return (
+        "【资料库检索结果（真实文档摘录，回答时可引用并在句末标注 [编号]）】\n"
+        + "\n\n".join(blocks)
+    )
+
+
 def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
     """把上下文段落与 ctx.message 按正确顺序拼成最终 user prompt。
 
-    普通对话：上下文 → 工具结果 → 当前输入。当前输入必须**显式标记**——它被拼在
-    尾巴之后只是一行裸文本，模型无从判断其特殊地位，会转而回应尾巴里信号更强的
-    话题（2026-08-16 实测：用户说「要玩应该先去玩边狱」，Bot 回了尾巴里
-    别人在聊的周边毛绒玩偶）。
+    普通对话：上下文 → 工具结果 → 知识证据 → 当前输入。当前输入必须**显式标记**
+    ——它被拼在尾巴之后只是一行裸文本，模型无从判断其特殊地位，会转而回应
+    尾巴里信号更强的话题（2026-08-16 实测：用户说「要玩应该先去玩边狱」，
+    Bot 回了尾巴里别人在聊的周边毛绒玩偶）。
 
-    指令型（见 _INSTRUCTION_INTENTS）：指令 → 工具结果 → 上下文（上下文只是语气
-    素材，不是待回应的内容）。
+    指令型（见 _INSTRUCTION_INTENTS）：指令 → 工具结果 → 知识证据 → 上下文
+    （上下文只是语气素材，不是待回应的内容）。
 
-    工具结果（见 _tool_result_section）夹在上下文与当前输入之间：它是「回答这句话
-    的证据」，必须离当前输入近；而「请回应这句话」的指令必须留在最后一行，
-    否则模型会把它当成又一段背景而不是本次任务。
+    工具结果与知识证据都是「回答这句话的证据」，必须离当前输入近；证据在后
+    （离输入最近）：它带编号引用、是本轮最权威的素材。而「请回应这句话」的
+    指令必须留在最后一行，否则模型会把它当成又一段背景而不是本次任务。
     """
     context_text = context_text or ""
     tool_text = _tool_result_section(ctx)
+    knowledge_text = _knowledge_evidence_section(ctx)
     if ctx.intent in _INSTRUCTION_INTENTS:
-        parts = [ctx.message, tool_text, context_text]
+        parts = [ctx.message, tool_text, knowledge_text, context_text]
         return "\n\n".join(p for p in parts if p)
-    if not context_text and not tool_text:
+    if not context_text and not tool_text and not knowledge_text:
         return ctx.message
     speaker = f"用户({ctx.user_id})" if ctx.user_id else "对方"
-    head = "\n\n".join(p for p in (context_text, tool_text) if p)
+    head = "\n\n".join(p for p in (context_text, tool_text, knowledge_text) if p)
     return (
         f"{head}\n\n"
         f"【现在 {speaker} 对你说】{ctx.message}\n"

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import typing
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,7 +44,12 @@ class FakeContext:
 
 
 class FakeEmbedder:
-    profile: dict = {"model": "", "dim": 0, "encoder": "raw-v1", "index_version": 1}
+    profile: typing.ClassVar[dict] = {
+        "model": "",
+        "dim": 0,
+        "encoder": "raw-v1",
+        "index_version": 1,
+    }
 
     @property
     def available(self) -> bool:
