@@ -90,7 +90,24 @@ Stella_project/
 │   │   ├── executor.py             # Capability → Provider → Tool → Result
 │   │   └── summarizer.py           # Result.data → Result.summary
 │   └── adapters/
-│       └── astrbot.py              # llm_tools → Provider 自动派生 + bootstrap
+│       ├── astrbot.py              # llm_tools → Provider 自动派生 + bootstrap
+│       ├── knowledge.py            # knowledge.search 能力装配（KNOWLEDGE_ENABLED 时）
+│       └── mcp.py                  # MCP Manager 启停 + Provider Runtime 接线
+│
+├── knowledge/                      # 独立知识库子系统（详见 docs/knowledge-base.md）
+│   ├── domain.py                   # 领域模型：库/文档/版本/授权 + 引用值对象
+│   ├── acl.py                      # ACL 判定唯一入口（user/group/space 三态主体）
+│   ├── lifecycle.py                # 文档生命周期状态机（draft→review→published→archived）
+│   ├── schema.py                   # knowledge.db 独立 Schema（与 agent_memory.db 零交集）
+│   ├── store.py                    # 存储层唯一读写入口 + 原子版本激活
+│   ├── parsers.py                  # Markdown/TXT/PDF/DOCX/URL 导入解析（带定位符）
+│   ├── chunking.py                 # 段落原子切块（定位符继承）
+│   ├── ingest.py                   # 导入管道：解析→切块→编码→索引就绪（worker 线程）
+│   ├── fts.py                      # FTS5 分词（写入/查询两侧共用）
+│   ├── embedding.py                # KB 向量编码 + 指纹锁定（复用记忆 embedding 服务）
+│   ├── retrieval.py                # BM25+dense 双通道 → RRF 融合 → 有界证据
+│   ├── service.py                  # 门面：角色 API / 发布流 / ACL 强制检索 / 状态面
+│   └── isolation.py                # 记忆隔离护栏（证据不得成为记忆候选）
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
@@ -455,7 +472,7 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 | 诊断 | `trigger` `intent` `intent_detail` `llm_backend` `llm_model` `llm_elapsed` `prompt_log` |
 | 结构化上下文 | `short_term` `user_profile` `memories_for_prompt` `tail_start_id` |
 | 记忆 v2 | `memory_mode` `conversation_memories` `behavior_constraints` `memory_trace` |
-| 任务调度 | `route` `task_results` `tool_summaries` |
+| 任务调度 | `route` `task_results` `tool_summaries` `knowledge_evidence` |
 | 平台句柄 | `raw_event` `bot` |
 
 `group_id` 始终是真实 QQ 群号；`group_shared_space` 由 `config.spaces.resolve_space()` 自动填入，是记忆与画像的归属标识。两者不可混用。
@@ -463,6 +480,8 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 `raw_event` / `bot` 是**不透明句柄**：Comes 调 AstrBot 工具时，工具 handler 内部会用 `event.send()` / `event.bot.call_action()`，必须是真实对象，构造不出等价替身。`core` 不解释它们的类型、也不碰任何方法，只负责从接入层传递到能力层。两者都标了 `repr=False`——OneBot 事件的 `repr` 会把整条消息与 sender 全展开，日志里 `ChatContext` 一旦被 `repr` 就会刷屏。
 
 `route` 的类型标注是 `Any` 而非 `Route`：`core` 是「与业务无关的编排骨架」，不该 import `capability`，反向依赖会成环。
+
+`tool_summaries` / `knowledge_evidence` / `memories_for_prompt` 是**三轨分离**的：工具摘要（压缩文本）、知识库证据（带编号引用的结构化摘录，独立预算 `KNOWLEDGE_EVIDENCE_*`，见 docs/knowledge-base.md）、记忆检索结果各自走各自的渲染与预算，互不挤占。知识证据**绝不**进入记忆整合——`knowledge/isolation.py` 是这条红线的运行时护栏。
 
 ### 主要数据表
 
