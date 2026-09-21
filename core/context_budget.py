@@ -95,3 +95,35 @@ def fit_prompt_to_window(
         window_tokens=int(context_window_tokens),
         truncated=fitted != (prompt or ""),
     )
+
+
+def fit_evidence_to_budget(
+    evidence: list[dict],
+    *,
+    max_items: int,
+    max_tokens: int,
+    text_key: str = "text",
+) -> list[dict]:
+    """知识证据的独立预算（KNOWLEDGE_EVIDENCE_MAX_ITEMS / MAX_TOKENS）。
+
+    与 ``fit_prompt_to_window`` 的关系：后者是**兜底**（整份 prompt 超窗时的
+    粗暴截断），本函数是**前置**硬边界——证据在渲染前就被限条数、限 token，
+    正常情况下根本轮不到兜底动手。顺序保持不变（检索序即相关序），
+    超预算的尾部整条丢弃而不是截半条——半句引用比没有引用更误导。
+    """
+    if not evidence:
+        return []
+    limited = evidence[: max(0, int(max_items))]
+    kept: list[dict] = []
+    used = 0
+    for item in limited:
+        text = str(item.get(text_key, "") or "")
+        cost = estimate_tokens(text) + 20  # 20 ≈ 引用行与格式开销
+        if kept and used + cost > int(max_tokens):
+            break
+        # 第一条永远保留（即使单条超预算）：宁可给一条长证据，不给空段
+        kept.append(item)
+        used += cost
+        if used >= int(max_tokens):
+            break
+    return kept

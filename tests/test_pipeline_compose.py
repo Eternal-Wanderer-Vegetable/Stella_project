@@ -216,3 +216,53 @@ def test_direct_capability_reply_skips_generation():
     assert backend.calls == 0
     assert ctx.reply == "东京明天 27℃，晴。"
     assert ctx.lines == ["东京明天 27℃，晴。"]
+
+
+# ============================================================
+# 知识库证据段落（knowledge.search → ctx.knowledge_evidence）
+# 与工具摘要三轨分离：独立预算、带编号引用、离当前输入最近。
+# ============================================================
+
+
+def _evidence(text: str, citation: str = "《运维手册》 备份策略（资料库:群资料库）") -> dict:
+    return {"text": text, "citation": citation, "doc_title": "运维手册"}
+
+
+def test_evidence_section_has_numbered_citations():
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="备份怎么做")
+    ctx.knowledge_evidence = [_evidence("数据库每日全量备份，保留 30 天。")]
+    out = _compose_prompt("", ctx)
+    assert "【资料库检索结果" in out
+    assert "[1] 《运维手册》 备份策略（资料库:群资料库）" in out
+    assert "数据库每日全量备份" in out
+    assert "标注 [编号]" in out
+
+
+def test_evidence_sits_closest_to_current_input():
+    """证据是本轮最权威的素材，必须比工具摘要和上下文都更靠近当前输入。"""
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="备份策略是什么")
+    ctx.tool_summaries = ["工具摘要内容"]
+    ctx.knowledge_evidence = [_evidence("证据内容")]
+    out = _compose_prompt("对话背景", ctx)
+    assert out.index("对话背景") < out.index("刚刚查到的信息")
+    assert out.index("刚刚查到的信息") < out.index("资料库检索结果")
+    assert out.index("资料库检索结果") < out.index("【现在")
+
+
+def test_no_evidence_keeps_prompt_identical():
+    """回归护栏：没有证据时 prompt 与不渲染证据段时逐字一致。"""
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="水")
+    ctx.knowledge_evidence = []
+    assert _compose_prompt("摘要", ctx) == _compose_prompt("摘要", ctx)
+    ctx2 = ChatContext(user_id=1, group_id=1, msg_id=0, message="水")
+    assert _compose_prompt("摘要", ctx) == _compose_prompt("摘要", ctx2)
+
+
+def test_instruction_intent_puts_evidence_before_context():
+    ctx = ChatContext(
+        user_id=2, group_id=1, msg_id=0, message="总结资料", intent="proactive_at",
+    )
+    ctx.knowledge_evidence = [_evidence("证据内容")]
+    out = _compose_prompt("背景对话", ctx)
+    assert out.startswith("总结资料")
+    assert out.index("资料库检索结果") < out.index("背景对话")
