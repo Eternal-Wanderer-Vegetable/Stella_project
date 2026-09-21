@@ -83,14 +83,15 @@ class TestCreateExecutor:
         assert executor.backend == BACKEND_DISABLED
         assert "teleport" in executor.availability().reason
 
-    def test_docker_backend_without_runner_fails_closed(self, monkeypatch):
+    def test_docker_backend_selects_docker_runner(self, monkeypatch):
+        """步骤 6 交付 Docker runner 后：docker 后端返回受限容器执行器。"""
         from config import settings
+        from skills.runners.docker import DockerSandboxExecutor
 
         monkeypatch.setattr(settings, "SANDBOX_BACKEND", "docker")
         executor = create_executor()
-        # 本步骤尚未交付 Docker runner：必须落到禁用后端而不是宿主执行
-        assert executor.backend == BACKEND_DISABLED
-        assert executor.availability().available is False
+        assert isinstance(executor, DockerSandboxExecutor)
+        assert executor.backend == "docker"
 
 
 class TestExecutorStatus:

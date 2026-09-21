@@ -63,11 +63,12 @@ def current() -> SkillRuntime | None:
 def build_runtime() -> SkillRuntime | None:
     """按 settings 装配完整运行时；装配失败返回 None 并由调用方告警。
 
-    沙盒执行器的选择与接线在 step 5（skills/sandbox.py）：在那之前
-    executor 保持 None，orchestrator 对脚本执行一律 fail-closed，
-    但目录发现、候选与正文浏览照常可用（plan §6.4：失败关闭）。
+    沙盒执行器按 ``SANDBOX_BACKEND`` 选择（skills.sandbox.create_executor）：
+    禁用/不可用后端一律 fail-closed（ DisabledSandboxExecutor 或 executor
+    为 None），绝不回落宿主执行；目录发现、候选与正文浏览不受影响。
     """
     from skills.catalog import SkillCatalog
+    from skills.sandbox import create_executor
     from skills.selector import SkillSelector
 
     catalog = SkillCatalog.from_settings()
@@ -77,7 +78,7 @@ def build_runtime() -> SkillRuntime | None:
 
         logger.warning(f"⚠️ [Skills] 首次目录刷新失败: {catalog.status()['last_error']}")
     selector = SkillSelector.from_settings(catalog)
-    orchestrator = _build_orchestrator(executor=None)
+    orchestrator = _build_orchestrator(executor=create_executor())
     return SkillRuntime(catalog=catalog, selector=selector, orchestrator=orchestrator)
 
 
