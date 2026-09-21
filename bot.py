@@ -284,6 +284,17 @@ async def _bootstrap_capabilities() -> None:
         _diag_log(f"[capability][boot] 能力装配失败（跳过）: {_e}\n{traceback.format_exc()}")
         return
 
+    # 知识库能力（KNOWLEDGE_ENABLED 时）：native backend + knowledge.search 声明。
+    # 与 MCP 同性质——增量能力，装配失败只告警，Bot 照常起。
+    try:
+        from capability.adapters.knowledge import install_knowledge_capability
+
+        _diag_log(f"[knowledge][boot] 知识库能力装配: {install_knowledge_capability()}")
+    except Exception as _e:
+        import traceback
+
+        _diag_log(f"[knowledge][boot] 知识库能力装配失败（跳过）: {_e}\n{traceback.format_exc()}")
+
     try:
         from config import CAPABILITY_ROUTER_ENABLED, ROUTER_SEMANTIC_ENABLED
 

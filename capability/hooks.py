@@ -39,6 +39,7 @@ import asyncio
 from typing import Any
 
 from capability.input_parser import merge_schemas, parse_input
+from capability.providers.knowledge import KNOWLEDGE_SEARCH_CAPABILITY
 from capability.registry import KIND_ASTRBOT_TOOL, CapabilityRegistry
 from capability.registry import registry as _default_registry
 from core.context import ChatContext
@@ -105,11 +106,16 @@ def build_tool_tasks(
             tool_manager = None
     for hit in getattr(route, "capabilities", None) or []:
         capability = registry.get(hit.capability_id)
-        capability_schema = getattr(capability, "input_schema", {}) if capability else {}
+        capability_schema = (
+            getattr(capability, "input_schema", {}) if capability else {}
+        )
         tool_schema: dict[str, Any] = {}
         if capability is not None:
             for provider in capability.enabled_providers():
-                if runtime is not None and runtime.backend_of(provider.kind) is not None:
+                if (
+                    runtime is not None
+                    and runtime.backend_of(provider.kind) is not None
+                ):
                     if not runtime.is_live(provider):
                         continue
                     tool_schema = runtime.schema(provider)
@@ -177,15 +183,60 @@ async def _run_comes(ctx: ChatContext, route: Any) -> None:
 
     results: list[Result] = await execute_all(tasks, event=event)
     ctx.task_results = list(results)
-    # 只有 ok 且有摘要的结果才进 prompt。失败的任务不告知 Stella——
-    # 它不该向用户解释某个工具报了什么错，那是运维信息不是聊天素材。
-    ctx.tool_summaries = [r.summary for r in results if r.ok and r.summary]
+    # 知识库证据走**独立通道**（方案 §6.6 三轨分离）：knowledge.search 的
+    # 结构化摘录进 ctx.knowledge_evidence，由 pipeline 套独立预算后渲染引用段；
+    # 它的 Result.summary 是模型对 JSON 的转述，若一并进 tool_summaries 会
+    # 与证据重复占预算，所以整条排除。其余能力的行为一字不改。
+    summaries: list[str] = []
+    for result in results:
+        if not (result.ok and result.summary):
+            continue
+        evidence = (
+            _knowledge_evidence_of(result)
+            if result.metadata.get("capability") == KNOWLEDGE_SEARCH_CAPABILITY
+            else None
+        )
+        if evidence is None:
+            summaries.append(result.summary)
+        else:
+            ctx.knowledge_evidence.extend(evidence)
+    ctx.tool_summaries = summaries
     if not getattr(route, "requires_generation", True):
         _set_direct_reply(ctx, results)
 
 
+def _knowledge_evidence_of(result: Result) -> list[dict] | None:
+    """从 knowledge.search 的 Result.data 里解析结构化证据。
+
+    返回 None 表示「不是可解析的知识库载荷」（解析失败时回退旧的
+    summary 行为，宁可重复也不丢信息）；空列表表示「检索无结果」
+    （什么也不进 prompt——「没查到」本身不是聊天素材）。
+    """
+    import json
+
+    for _, content in result.data or []:
+        if not isinstance(content, str) or '"evidence"' not in content:
+            continue
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        evidence = payload.get("evidence") if isinstance(payload, dict) else None
+        if isinstance(evidence, list):
+            return [item for item in evidence if isinstance(item, dict)]
+    return None
+
+
 def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
     """Turn deterministic results into one safe reply before Pipeline generation."""
+    # knowledge.search 不参与直回：它的摘录走 ctx.knowledge_evidence 由
+    # pipeline 渲染成引用段，直接把 summary（原始 JSON 的压缩）发给用户是事故。
+    replies = [
+        r
+        for r in results
+        if r.metadata.get("capability") != KNOWLEDGE_SEARCH_CAPABILITY
+    ]
+    results = replies
     summaries = [r.summary.strip() for r in results if r.ok and r.summary.strip()]
     if summaries:
         text = "\n".join(summaries)
@@ -201,7 +252,9 @@ def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
         elif ambiguous:
             fields = "、".join(dict.fromkeys(str(item) for item in ambiguous))
             text = f"我没能确定这些信息：{fields}，请换一种说法。"
-        elif any(result.status is ResultStatus.NEEDS_CLARIFICATION for result in results):
+        elif any(
+            result.status is ResultStatus.NEEDS_CLARIFICATION for result in results
+        ):
             text = "请补充完成这项操作所需的信息。"
         elif results and all(not result.ok for result in results):
             text = "这个功能暂时不可用，请稍后再试。"
@@ -263,7 +316,9 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
         jobs.append(_retrieve_memory(ctx))
         labels.append("memory")
     else:
-        _logger().info("🧠 [Router] 判定无需长期记忆，跳过检索（ROUTER_GATE_MEMORY=true）")
+        _logger().info(
+            "🧠 [Router] 判定无需长期记忆，跳过检索（ROUTER_GATE_MEMORY=true）"
+        )
 
     # 工具执行
     if route.tool and s.COMES_ENABLED:

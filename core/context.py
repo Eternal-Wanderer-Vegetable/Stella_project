@@ -46,7 +46,7 @@ class ChatContext:
     lines: list[str] = field(default_factory=list)
 
     # ---- LLM 调用诊断信息（供 thought 日志记录） ----
-    trigger: str = "reply"          # reply=@回复 / proactive=主动发言
+    trigger: str = "reply"  # reply=@回复 / proactive=主动发言
     # 本次调用的意图（诊断 + prompt 组装用），不参与检索/模式判断：
     #   ""               普通对话
     #   "proactive_at"   主动 @ 某位用户（ctx.message 是任务指令，不是用户输入）
@@ -54,13 +54,13 @@ class ChatContext:
     # 不新增 trigger 取值：detect_mode / build_user_context / retrieval_v2
     # 三处都在判断 trigger == "proactive"，扩充它的取值集合容易漏改。
     intent: str = ""
-    llm_backend: str = ""           # 实际调用的后端名（lm_studio）
-    llm_model: str = ""             # 实际使用的模型名/站点
-    system_prompt_len: int = 0      # 系统提示词字符数
-    prompt_log: str = ""            # 发给 LLM 的完整 prompt（含上下文拼接）
-    llm_elapsed: float = 0.0        # LLM 调用耗时（秒）
-    llm_call_count: int = 0         # 本次上下文触发的 LLM 调用次数
-    gate_path: str = ""             # hard_trigger / proactive / silent
+    llm_backend: str = ""  # 实际调用的后端名（lm_studio）
+    llm_model: str = ""  # 实际使用的模型名/站点
+    system_prompt_len: int = 0  # 系统提示词字符数
+    prompt_log: str = ""  # 发给 LLM 的完整 prompt（含上下文拼接）
+    llm_elapsed: float = 0.0  # LLM 调用耗时（秒）
+    llm_call_count: int = 0  # 本次上下文触发的 LLM 调用次数
+    gate_path: str = ""  # hard_trigger / proactive / silent
     gate_score: float = 0.0
     gate_reasons: tuple[str, ...] = field(default_factory=tuple)
     context_window_tokens: int = 0
@@ -74,17 +74,21 @@ class ChatContext:
     preferred_address: str | None = None
     memories_for_prompt: list[dict] = field(default_factory=list)
     # ---- 记忆系统 v2：模式 / 分区记忆 / 行为约束 / 决策轨迹 ----
-    memory_mode: str = "CASUAL_REPLY"          # Stella 行为模式
+    memory_mode: str = "CASUAL_REPLY"  # Stella 行为模式
     conversation_memories: list[dict] = field(default_factory=list)  # 聊天素材
-    behavior_constraints: list[dict] = field(default_factory=list)   # 行为约束
-    memory_trace: dict = field(default_factory=dict)                 # 决策轨迹
+    behavior_constraints: list[dict] = field(default_factory=list)  # 行为约束
+    memory_trace: dict = field(default_factory=dict)  # 决策轨迹
 
     # ---- 受限 Planner（设计阶段五：深度回复路径） ----
     # 三者均默认空/False = 走快速路径（本地 Gate → 检索 → 单次 LLM）。
-    planner_trigger: str = ""   # 本地触发原因：history_reference / ambiguity / proactive_unclear
-    planner_action: str = ""    # Planner 决策：REPLY / QUERY_MEMORY / WAIT
+    planner_trigger: str = (
+        ""  # 本地触发原因：history_reference / ambiguity / proactive_unclear
+    )
+    planner_action: str = ""  # Planner 决策：REPLY / QUERY_MEMORY / WAIT
     planner_wait: bool = False  # WAIT：本轮不回复，等更多消息（仅主动路径；不轮询 LLM）
-    deep_tool_calls: int = 0    # 本轮深度记忆查询次数（上限 PLANNER_MAX_TOOL_CALLS_PER_TURN）
+    deep_tool_calls: int = (
+        0  # 本轮深度记忆查询次数（上限 PLANNER_MAX_TOOL_CALLS_PER_TURN）
+    )
 
     # ---- 会话上下文压缩 ----
     # 尾巴起点消息 id：会话压缩用它计算不与尾巴重叠的待压缩区间。
@@ -100,6 +104,13 @@ class ChatContext:
     # 压缩后的工具结果摘要，是唯一会被拼进 Stella prompt 的部分
     # （工具结果同样不该污染聊天上下文，见 core/pipeline.py 的 _tool_result_section）。
     tool_summaries: list[str] = field(default_factory=list)
+    # 知识库证据（knowledge.search 的检索结果）：结构化摘录 + 引用，与
+    # tool_summaries / memories_for_prompt 三轨分离（见 docs/knowledge-base.md）。
+    # dict 形态见 capability/providers/knowledge.py 的 _evidence_dict；
+    # 由 capability.hooks 从 knowledge.search 的结果里分流写入，pipeline 在
+    # prompt 组装时套用知识证据预算（KNOWLEDGE_EVIDENCE_*）后渲染成引用段。
+    # **绝不**进入记忆整合：knowledge.isolation 保证它不是记忆候选来源。
+    knowledge_evidence: list[dict] = field(default_factory=list)
 
     # ---- 图片识别（视觉转述，见 design_docs/Stella_图片识别（视觉转述）实施计划 v1.0） ----
     # 接入层从 OneBot 事件提取的图片来源（URL / base64:// / data: / 本地路径）。
