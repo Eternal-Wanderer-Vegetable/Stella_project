@@ -623,3 +623,146 @@ def test_build_tool_tasks_without_runtime_keeps_legacy_path():
     route = Route(tool=True, capabilities=[CapabilityHit("weather.query", 1.0)])
     tasks = build_tool_tasks(route, "查天气", target=target, tool_manager=llm_tools)
     assert len(tasks) == 1
+
+
+# ---------- Skills 分支（plan §6.2：独立、有门、可失败） ----------
+
+
+def _candidate(name: str = "pdf"):
+    from skills.model import SkillCandidate, SkillSource, SkillTrustLevel
+
+    return SkillCandidate(
+        name=name,
+        description="处理 PDF",
+        source=SkillSource.USER,
+        trust=SkillTrustLevel.MANAGED,
+    )
+
+
+def _install_skills_runtime(monkeypatch, *, candidates=None, select_error=None, result=None):
+    """装一个 skills.runtime 的替身，记录 selector/orchestrator 的调用。"""
+    from skills.model import SkillResult, SkillStatus
+
+    calls = {"select": 0, "invoke": 0}
+
+    class _Selector:
+        async def select(self, message):
+            calls["select"] += 1
+            if select_error:
+                raise select_error
+            return list(candidates or [])
+
+    class _Orchestrator:
+        async def invoke(self, objective, manifest, *, session_id=""):
+            calls["invoke"] += 1
+            calls["session_id"] = session_id
+            return result or SkillResult(
+                invocation_id="inv-1",
+                skill_name=manifest.name,
+                status=SkillStatus.COMPLETED,
+                summary=f"技能 {manifest.name} 执行了 1 步：完成",
+            )
+
+    class _Catalog:
+        class _Snap:
+            def get(self, name):
+                from skills.model import SkillManifest, SkillSource
+
+                return SkillManifest(
+                    name=name,
+                    description="d",
+                    source=SkillSource.USER,
+                    root=f"/skills/{name}",
+                )
+
+        snapshot = _Snap()
+
+    class _RT:
+        catalog = _Catalog()
+        selector = _Selector()
+        orchestrator = _Orchestrator()
+
+    import skills.runtime as skills_runtime
+
+    monkeypatch.setattr(skills_runtime, "current", lambda: _RT())
+    return calls
+
+
+@pytest.fixture
+def _skills_defaults(monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "SKILLS_ENABLED", True)
+    monkeypatch.setattr(settings, "SKILLS_EXECUTION_MODE", "sandbox")
+
+
+def test_skills_disabled_by_default(monkeypatch, stub_route, spy_memory):
+    """SKILLS_ENABLED=false（默认）：分支整体不进 gather，运行时压根不被触碰。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "SKILLS_ENABLED", False)
+    calls = _install_skills_runtime(monkeypatch, candidates=[_candidate()])
+    ctx = _ctx()
+    out = _run(activate_capabilities(ctx))
+    assert calls["select"] == 0
+    assert out.skill_candidates == []
+    assert spy_memory  # 主链路照常
+
+
+def test_skills_enabled_without_runtime_noops(monkeypatch, stub_route, spy_memory, _skills_defaults):
+    """开关开着但运行时未装配（测试/未引导）：分支立即返回。"""
+    import skills.runtime as skills_runtime
+
+    monkeypatch.setattr(skills_runtime, "current", lambda: None)
+    ctx = _ctx()
+    out = _run(activate_capabilities(ctx))
+    assert out.skill_candidates == []
+    assert spy_memory
+
+
+def test_skills_browse_mode_records_candidates_without_execution(
+    monkeypatch, stub_route, spy_memory, _skills_defaults
+):
+    from config import settings
+
+    monkeypatch.setattr(settings, "SKILLS_EXECUTION_MODE", "disabled")
+    calls = _install_skills_runtime(monkeypatch, candidates=[_candidate()])
+    ctx = _ctx("帮我处理 pdf")
+    out = _run(activate_capabilities(ctx))
+    assert calls["select"] == 1
+    assert calls["invoke"] == 0  # 浏览模式：绝不执行
+    assert [c.name for c in out.route.skill_candidates] == ["pdf"]
+    assert out.skill_summaries == []
+
+
+def test_skills_sandbox_mode_writes_bounded_outputs(
+    monkeypatch, stub_route, spy_memory, _skills_defaults
+):
+    from skills.model import ArtifactRef, SkillResult, SkillStatus
+
+    result = SkillResult(
+        invocation_id="inv-9",
+        skill_name="pdf",
+        status=SkillStatus.COMPLETED,
+        summary="技能 pdf 执行了 1 步：生成完毕",
+        artifacts=(ArtifactRef(path="out/report.md", size_bytes=3),),
+    )
+    calls = _install_skills_runtime(monkeypatch, candidates=[_candidate()], result=result)
+    ctx = _ctx("帮我处理 pdf")
+    out = _run(activate_capabilities(ctx))
+    assert calls["invoke"] == 1
+    assert out.skill_summaries == ["技能 pdf 执行了 1 步：生成完毕"]
+    assert [a.path for a in out.skill_artifacts] == ["out/report.md"]
+    assert out.skill_results[0].invocation_id == "inv-9"
+
+
+def test_skills_branch_failure_does_not_block_memory(monkeypatch, stub_route, spy_memory, _skills_defaults):
+    """Skills 选择器炸了：主链路无感，记忆照常（return_exceptions 纪律）。"""
+    calls = _install_skills_runtime(
+        monkeypatch, select_error=RuntimeError("选择器炸了")
+    )
+    ctx = _ctx()
+    out = _run(activate_capabilities(ctx))  # 不应抛异常
+    assert calls["select"] == 1
+    assert spy_memory  # memory 分支照常完成
+    assert out.skill_summaries == []

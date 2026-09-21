@@ -303,3 +303,42 @@ class SandboxSpec:
     network_enabled: bool = False
     network_allowlist: tuple[str, ...] = ()
     entry_commands: tuple[tuple[str, ...], ...] = ()  # 预留：受控入口命令
+
+
+# Agent 可请求的抽象沙盒动作全集（plan §6.3）。没有「import 宿主插件」、
+# 没有「直接 subprocess」——动作只表达意图，执行全在 SandboxExecutor。
+ACTION_RUN_SHELL = "run_shell"
+ACTION_RUN_PYTHON = "run_python"
+ACTION_READ_FILE = "read_file"
+ACTION_WRITE_FILE = "write_file"
+ACTION_LIST_FILES = "list_files"
+ALL_ACTIONS: tuple[str, ...] = (
+    ACTION_RUN_SHELL,
+    ACTION_RUN_PYTHON,
+    ACTION_READ_FILE,
+    ACTION_WRITE_FILE,
+    ACTION_LIST_FILES,
+)
+
+# 单个动作参数的防御性上限：动作计划是模型产出，参数既不能巨量也不能巨长。
+MAX_ARGS_PER_ACTION = 16
+MAX_ARG_VALUE_CHARS = 2000
+
+
+@dataclass(frozen=True)
+class SandboxAction:
+    """一个待沙盒执行的动作。``args`` 值全部为字符串（经 orchestrator 归一）。"""
+
+    action: str
+    args: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SandboxActionOutcome:
+    """一个动作的执行结果。``output`` 已被 runner 截到输出预算内。"""
+
+    action: str
+    ok: bool
+    output: str = ""
+    error_code: str = ""  # SkillErrorCode.value；仅失败时非空
+    artifact: ArtifactRef | None = None

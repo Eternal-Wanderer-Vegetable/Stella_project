@@ -82,7 +82,10 @@ class TestBudget:
         )
         assert len(candidates) == 2
         # 确定性排序：同分按名称稳定排序
-        assert [c.name for c in candidates] == ["pdf-four", "pdf-one"]  # 同分按名称字母序
+        assert [c.name for c in candidates] == [
+            "pdf-four",
+            "pdf-one",
+        ]  # 同分按名称字母序
 
     def test_zero_budget_returns_empty(self, tmp_path, catalog):
         _write_user_skill(tmp_path, "pdf-extract", "处理 PDF")
@@ -97,9 +100,7 @@ class TestBudget:
 
 class TestEmbeddingLayer:
     def test_cache_key_includes_catalog_version(self, catalog):
-        selector = SkillSelector(
-            catalog, max_candidates=3, description_max_chars=1024
-        )
+        selector = SkillSelector(catalog, max_candidates=3, description_max_chars=1024)
         key1 = selector._cache_key("v1", "文本")
         key2 = selector._cache_key("v2", "文本")
         assert key1.startswith("skills:v1:")
@@ -120,9 +121,7 @@ class TestEmbeddingLayer:
         assert candidates and candidates[0].name == "doc-sum"
         assert candidates[0].reason.startswith("embedding:")
 
-    def test_embedding_failure_falls_back_to_deterministic(
-        self, tmp_path, catalog
-    ):
+    def test_embedding_failure_falls_back_to_deterministic(self, tmp_path, catalog):
         _write_user_skill(tmp_path, "pdf-extract", "处理 PDF")
         assert catalog.refresh()
 

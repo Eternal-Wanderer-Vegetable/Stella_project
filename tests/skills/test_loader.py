@@ -40,7 +40,9 @@ class TestLoadSkill:
     def test_body_truncated_to_budget(self, tmp_path, write_skill):
         write_skill(tmp_path, "big", body="x" * 5000)
         loaded = load_skill(
-            make_manifest(tmp_path / "big"), body_max_chars=100, asset_max_bytes=ASSET_MAX
+            make_manifest(tmp_path / "big"),
+            body_max_chars=100,
+            asset_max_bytes=ASSET_MAX,
         )
         assert len(loaded.body) == 100
         assert loaded.body_truncated
@@ -49,7 +51,10 @@ class TestLoadSkill:
         write_skill(
             tmp_path,
             "mix",
-            extra_files={"references/small.md": "ok", "references/huge.bin": "y" * 4096},
+            extra_files={
+                "references/small.md": "ok",
+                "references/huge.bin": "y" * 4096,
+            },
         )
         loaded = load_skill(
             make_manifest(tmp_path / "mix"), body_max_chars=1000, asset_max_bytes=1024
@@ -62,9 +67,10 @@ class TestReadResource:
     def test_reads_within_skill_dir(self, tmp_path, write_skill):
         write_skill(tmp_path, "pdf", extra_files={"references/spec.md": "规范"})
         manifest = make_manifest(tmp_path / "pdf")
-        assert read_resource(
-            manifest, "references/spec.md", asset_max_bytes=ASSET_MAX
-        ) == "规范".encode()
+        assert (
+            read_resource(manifest, "references/spec.md", asset_max_bytes=ASSET_MAX)
+            == "规范".encode()
+        )
 
     @pytest.mark.parametrize(
         "bad",
@@ -95,7 +101,9 @@ class TestReadResource:
             pytest.skip("当前环境不允许创建符号链接")
         with pytest.raises(ValueError):
             read_resource(
-                make_manifest(tmp_path / "evil"), "references/leak.md", asset_max_bytes=ASSET_MAX
+                make_manifest(tmp_path / "evil"),
+                "references/leak.md",
+                asset_max_bytes=ASSET_MAX,
             )
 
     def test_rejects_oversize(self, tmp_path, write_skill):
