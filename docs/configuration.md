@@ -1091,6 +1091,49 @@ provider 退避是**时间窗**而非永久禁用：插件依赖的外部 API �
 
 `..._WATCH` 单独默认关：调试时它最省事，但「自动」在生产上危险——一次误存盘就会在群里跑一遍重新 import。
 
+## Skills 与沙盒
+
+Anthropic 风格任务技能（`SKILL.md` + `scripts/` + `references/`）的发现、
+选择与受控执行。目录布局、编写守则与排查见 [Skills](skills.md)。
+**整层默认关闭**；脚本执行只有沙盒一种受控模式，没有后端就 fail-closed。
+
+### Skills
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SKILLS_ENABLED` | `false` | 总开关。关闭时 Skills 层不装配，主链路零开销 |
+| `SKILLS_EXECUTION_MODE` | `disabled` | `disabled`=只浏览目录/候选/正文；`sandbox`=脚本必须经沙盒。没有 local 模式 |
+| `SKILLS_USER_DIR` | `data/skills` | 用户技能目录 |
+| `SKILLS_BUILTIN_DIR` | `assets/skills` | 内置技能目录（随版本发布） |
+| `SKILLS_MAX_CANDIDATES` | `3` | 单次进入候选的最大技能数 |
+| `SKILLS_BODY_MAX_CHARS` | `24000` | 命中后正文的字符上限（超长截断并审计） |
+| `SKILLS_MANIFEST_MAX_BYTES` | `262144` | `SKILL.md` 单文件字节上限（超限隔离） |
+| `SKILLS_ASSET_MAX_BYTES` | `524288` | references/scripts 单文件字节上限 |
+| `SKILLS_ASSET_TOTAL_MAX_BYTES` | `2097152` | 单次调用资源读取总量上限 |
+| `SKILLS_TOTAL_TIMEOUT` | `120` | 一次技能调用的总超时（秒） |
+| `SKILLS_OUTPUT_MAX_CHARS` | `2000` | 进 Stella prompt 的结果摘要长度上限 |
+| `SKILLS_EMBEDDING_ENABLED` | `false` | 选择阶段可选 embedding 匹配（复用 `MEMORY_EMBEDDING_*`，缓存独立于 Router） |
+
+### 沙盒后端
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SANDBOX_BACKEND` | `disabled` | `disabled`=无后端（一切动作拒绝）；`docker`=按调用创建受限容器 |
+| `SANDBOX_IMAGE` | `python:3.12-slim` | 沙盒镜像。容器以非 root UID 运行；镜像缺失时报错而不是自动拉取 |
+| `SANDBOX_CPU_LIMIT` | `1.0` | 单容器 CPU 核数 |
+| `SANDBOX_MEMORY_LIMIT` | `256` | 单容器内存上限（MB） |
+| `SANDBOX_PIDS_LIMIT` | `64` | 单容器进程数上限 |
+| `SANDBOX_TIMEOUT` | `60` | 单个动作的墙钟超时（秒），超时终止容器 |
+| `SANDBOX_OUTPUT_MAX_CHARS` | `65536` | 单次动作 stdout/stderr 合计上限（原始输出只进审计） |
+| `SANDBOX_ARTIFACT_MAX_BYTES` | `10485760` | 单次调用产物总量上限 |
+| `SANDBOX_NETWORK_ENABLED` | `false` | 网络开关。**必须**同时给 allowlist，否则拒绝启动；进程内 runner 对开网络的动作一律策略拒绝（白名单强制需要外置 runner） |
+| `SANDBOX_NETWORK_ALLOWLIST` | 空 | 逗号分隔的域名/端口白名单（外置 runner 消费） |
+| `SANDBOX_WORKSPACE_ROOT` | `workspaces` | 会话工作区根目录；不能是文件系统根、程序目录、用户数据根或插件目录 |
+| `SANDBOX_AUDIT_RETENTION_DAYS` | `30` | 审计事件保留天数（0 = 永久） |
+
+配置校验在启动期执行：负数预算、非法 workspace 根、以及「开网络但无
+白名单」会**拒绝启动**并在日志里逐条点名。
+
 ## OneBot 连接
 
 Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用

@@ -227,6 +227,43 @@ def _knowledge_evidence_of(result: Result) -> list[dict] | None:
     return None
 
 
+async def _run_skills(ctx: ChatContext, route: Any) -> None:
+    """Skills 分支（plan §6.2）：候选 → 命中 → 编排 → 有界摘要回写。
+
+    立即返回的条件（一个都不绕）：SKILLS_ENABLED 关、运行时未装配、
+    无候选、执行模式非 sandbox。任何异常向上抛给 gather 吞掉——
+    Skills 挂掉的后果是「这轮没有技能」，绝不是「Stella 不说话」。
+    """
+    s = _settings()
+    if not s.SKILLS_ENABLED:
+        return
+    from skills import runtime as skills_runtime
+
+    rt = skills_runtime.current()
+    if rt is None:
+        return
+    candidates = await rt.selector.select(ctx.message)
+    route.skill_candidates = candidates
+    if not candidates:
+        return
+    if s.SKILLS_EXECUTION_MODE != "sandbox" or rt.orchestrator is None:
+        # 浏览模式：候选照常给诊断，脚本执行一律不做（fail-closed）
+        return
+    top = candidates[0]
+    manifest = rt.catalog.snapshot.get(top.name)
+    if manifest is None:  # 目录刚好刷新掉了这个候选：这轮放弃，下轮再说
+        return
+    result = await rt.orchestrator.invoke(
+        ctx.message,
+        manifest,
+        session_id=str(ctx.group_shared_space or ctx.group_id or ""),
+    )
+    ctx.skill_results = [result]
+    if result.summary:
+        ctx.skill_summaries = [result.summary]
+    ctx.skill_artifacts = list(result.artifacts)
+
+
 def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
     """Turn deterministic results into one safe reply before Pipeline generation."""
     # knowledge.search 不参与直回：它的摘录走 ctx.knowledge_evidence 由
@@ -324,6 +361,13 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
     if route.tool and s.COMES_ENABLED:
         jobs.append(_run_comes(ctx, route))
         labels.append("comes")
+
+    # Skills 分支（plan §6.2）：与 Memory/Comes 同一故障隔离纪律——
+    # 分支内部自己吞掉所有「不该执行」的情形，真正抛出的异常由下面的
+    # gather(return_exceptions=True) 兜住，只记日志不阻断回复。
+    if s.SKILLS_ENABLED:
+        jobs.append(_run_skills(ctx, route))
+        labels.append("skills")
 
     if not jobs:
         return ctx

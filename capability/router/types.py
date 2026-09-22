@@ -71,6 +71,10 @@ class Route:
     level: str = LEVEL_DEFAULT
     reason: str = ""
     elapsed: float = 0.0
+    # Skills 候选（skills.model.SkillCandidate，metadata-only）。由
+    # capability.hooks 的 skills 分支填充，Router 本体不产出它；放在 Route
+    # 上是为了与工具候选同一条非破坏性通道（plan §6.2）。
+    skill_candidates: list = field(default_factory=list)
 
     @property
     def capability_ids(self) -> list[str]:

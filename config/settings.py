@@ -1482,3 +1482,148 @@ KNOWLEDGE_URL_TIMEOUT = _env_float("KNOWLEDGE_URL_TIMEOUT", 15.0)
 KNOWLEDGE_URL_MAX_BYTES = _env_int("KNOWLEDGE_URL_MAX_BYTES", 2097152)
 # 单文件导入的字节数上限（PDF/DOCX 解压炸弹防护）。
 KNOWLEDGE_IMPORT_MAX_BYTES = _env_int("KNOWLEDGE_IMPORT_MAX_BYTES", 20971520)
+# ============================================================
+# Anthropic 风格 Skills 与受控沙盒（skills/ 子系统）
+# ============================================================
+# Skill 是「完成一类任务的说明书」（SKILL.md + scripts/ + references/），
+# 独立于 Capability 层：不进 Provider 图、不占 Router 候选。整层**默认关闭**；
+# 脚本执行只有 sandbox 一种受控模式——没有安全后端就 fail-closed，绝不在
+# 宿主任意执行代码（plan §6.4/§9）。目录布局与优先级见 docs/skills.md。
+SKILLS_ENABLED = _env_bool("SKILLS_ENABLED", "false")
+# 执行模式：disabled=只做目录/候选/正文浏览（脚本动作一律拒绝）；
+# sandbox=命中技能的脚本与文件操作必须经 SandboxExecutor。没有 local 模式，
+# 也不会因为「Docker 不在」而静默回落到宿主执行。
+SKILLS_EXECUTION_MODE = _env_choice(
+    "SKILLS_EXECUTION_MODE", "disabled", ("disabled", "sandbox")
+)
+# 用户技能目录（AstrBot Skills 同布局：data/skills/<name>/SKILL.md）。
+SKILLS_USER_DIR = _env_path("SKILLS_USER_DIR", _user_path("data/skills"))
+# 内置技能目录（仓库受控内容，随版本发布；信任等级最高）。
+SKILLS_BUILTIN_DIR = _env_path("SKILLS_BUILTIN_DIR", PROJECT_ROOT / "assets" / "skills")
+# 选择阶段返回的最大候选数。候选只有名称/描述 metadata，这条预算同时约束
+# 进 Route/Context 的候选条数。
+SKILLS_MAX_CANDIDATES = _env_int("SKILLS_MAX_CANDIDATES", 3)
+# SKILL.md 正文的字符上限（命中后延迟加载，进 Agent 请求的部分）。
+# 超限截断并记录审计——正文是「不可信指令」，不是越长越好的说明书。
+SKILLS_BODY_MAX_CHARS = _env_int("SKILLS_BODY_MAX_CHARS", 24000)
+# SKILL.md 单文件字节上限（发现阶段校验，防解压炸弹式的巨型文件）。
+SKILLS_MANIFEST_MAX_BYTES = _env_int("SKILLS_MANIFEST_MAX_BYTES", 262144)
+# references/scripts 单个资源文件与单次调用读取总量上限（plan §6.1.5）。
+SKILLS_ASSET_MAX_BYTES = _env_int("SKILLS_ASSET_MAX_BYTES", 524288)
+SKILLS_ASSET_TOTAL_MAX_BYTES = _env_int("SKILLS_ASSET_TOTAL_MAX_BYTES", 2097152)
+# 一次 Skill 调用的总超时（含正文加载 + 沙盒全部动作）。超时按失败降级，
+# 不阻断主聊天链路。
+SKILLS_TOTAL_TIMEOUT = _env_float("SKILLS_TOTAL_TIMEOUT", 120.0)
+# 进 Stella prompt 的 Skill 结果摘要长度上限（与 COMES_SUMMARY_MAX_CHARS 同性质）。
+SKILLS_OUTPUT_MAX_CHARS = _env_int("SKILLS_OUTPUT_MAX_CHARS", 2000)
+# 选择阶段可选的 embedding 匹配（复用 EmbeddingService，独立缓存命名空间）。
+# 默认关：确定性关键词匹配已覆盖首版需求，embedding 是增强不是依赖。
+SKILLS_EMBEDDING_ENABLED = _env_bool("SKILLS_EMBEDDING_ENABLED", "false")
+
+# ---------- 沙盒后端 ----------
+# disabled=没有可用后端（fail-closed）；docker=按调用创建受限容器。
+# 不提供宿主进程直跑后端；Windows 上 Docker 不可用时行为与 disabled 相同
+# （能力探测决定，不按 OS 名猜测隔离设施，plan §6.4）。
+SANDBOX_BACKEND = _env_choice("SANDBOX_BACKEND", "disabled", ("disabled", "docker"))
+# 沙盒镜像。执行时强制以非 root 数字 UID 运行并叠加只读 rootfs 等
+# 容器级约束，镜像本身不承载授权。
+SANDBOX_IMAGE = _env("SANDBOX_IMAGE", "python:3.12-slim")
+SANDBOX_CPU_LIMIT = _env_float("SANDBOX_CPU_LIMIT", 1.0)
+# 内存上限（MB）与进程数上限：容器级硬约束，超限由内核/运行时终止。
+SANDBOX_MEMORY_LIMIT = _env_int("SANDBOX_MEMORY_LIMIT", 256)
+SANDBOX_PIDS_LIMIT = _env_int("SANDBOX_PIDS_LIMIT", 64)
+# 单次沙盒执行的墙钟超时（秒）。超时主动终止容器并记录原因。
+SANDBOX_TIMEOUT = _env_float("SANDBOX_TIMEOUT", 60.0)
+# 单次执行 stdout/stderr 合计字符上限（原始输出只进审计，不进 prompt）。
+SANDBOX_OUTPUT_MAX_CHARS = _env_int("SANDBOX_OUTPUT_MAX_CHARS", 65536)
+# 单次调用总产物大小上限（字节），超出拒绝写入并记录。
+SANDBOX_ARTIFACT_MAX_BYTES = _env_int("SANDBOX_ARTIFACT_MAX_BYTES", 10485760)
+# 网络默认**关闭**。开启时必须有显式域名/端口 allowlist，策略版本进审计。
+SANDBOX_NETWORK_ENABLED = _env_bool("SANDBOX_NETWORK_ENABLED", "false")
+SANDBOX_NETWORK_ALLOWLIST = _env_str_list("SANDBOX_NETWORK_ALLOWLIST", "")
+# 会话 workspace 根目录：每次调用在其下创建
+# <normalized_session>/<invocation_id>，只挂载为容器 /workspace。
+SANDBOX_WORKSPACE_ROOT = _env_path("SANDBOX_WORKSPACE_ROOT", _user_path("workspaces"))
+# 沙盒审计事件保留天数（审计记录见 skills/audit.py；0 = 永久保留）。
+SANDBOX_AUDIT_RETENTION_DAYS = _env_int("SANDBOX_AUDIT_RETENTION_DAYS", 30)
+
+
+def validate_skills_config() -> list[str]:
+    """校验 Skills/Sandbox 配置组合，返回错误清单（空清单 = 合法）。
+
+    plan §6.4：拒绝负数预算、不合法路径、以及 ``network=true`` 但无
+    allowlist 的组合。返回清单而不是直接抛异常，让调用方（模块导入期的
+    ``_assert_skills_config`` 与测试）决定失败方式。
+    """
+    errors: list[str] = []
+    if SKILLS_MAX_CANDIDATES < 0:
+        errors.append("SKILLS_MAX_CANDIDATES 不能为负数")
+    if SKILLS_BODY_MAX_CHARS <= 0:
+        errors.append("SKILLS_BODY_MAX_CHARS 必须为正数")
+    if SKILLS_MANIFEST_MAX_BYTES <= 0:
+        errors.append("SKILLS_MANIFEST_MAX_BYTES 必须为正数")
+    if SKILLS_ASSET_MAX_BYTES <= 0 or SKILLS_ASSET_TOTAL_MAX_BYTES <= 0:
+        errors.append(
+            "SKILLS_ASSET_MAX_BYTES / SKILLS_ASSET_TOTAL_MAX_BYTES 必须为正数"
+        )
+    if SKILLS_ASSET_MAX_BYTES > SKILLS_ASSET_TOTAL_MAX_BYTES:
+        errors.append("SKILLS_ASSET_MAX_BYTES 不能大于 SKILLS_ASSET_TOTAL_MAX_BYTES")
+    if SKILLS_TOTAL_TIMEOUT <= 0:
+        errors.append("SKILLS_TOTAL_TIMEOUT 必须为正数")
+    if SKILLS_OUTPUT_MAX_CHARS <= 0:
+        errors.append("SKILLS_OUTPUT_MAX_CHARS 必须为正数")
+    if SANDBOX_CPU_LIMIT <= 0:
+        errors.append("SANDBOX_CPU_LIMIT 必须为正数")
+    if SANDBOX_MEMORY_LIMIT <= 0:
+        errors.append("SANDBOX_MEMORY_LIMIT 必须为正数")
+    if SANDBOX_PIDS_LIMIT <= 0:
+        errors.append("SANDBOX_PIDS_LIMIT 必须为正数")
+    if SANDBOX_TIMEOUT <= 0:
+        errors.append("SANDBOX_TIMEOUT 必须为正数")
+    if SANDBOX_OUTPUT_MAX_CHARS <= 0:
+        errors.append("SANDBOX_OUTPUT_MAX_CHARS 必须为正数")
+    if SANDBOX_ARTIFACT_MAX_BYTES <= 0:
+        errors.append("SANDBOX_ARTIFACT_MAX_BYTES 必须为正数")
+    if SANDBOX_NETWORK_ENABLED and not SANDBOX_NETWORK_ALLOWLIST:
+        errors.append(
+            "SANDBOX_NETWORK_ENABLED=true 时必须提供 SANDBOX_NETWORK_ALLOWLIST"
+            "（逗号分隔的域名/端口白名单）"
+        )
+    _roots = {PROJECT_ROOT, STELLA_HOME}
+    _ws_anchor = (
+        Path(SANDBOX_WORKSPACE_ROOT.anchor) if SANDBOX_WORKSPACE_ROOT.anchor else None
+    )
+    if _ws_anchor is not None:
+        _roots.add(_ws_anchor)
+    if (
+        SANDBOX_WORKSPACE_ROOT in _roots
+        or SANDBOX_WORKSPACE_ROOT.parent == SANDBOX_WORKSPACE_ROOT
+    ):
+        errors.append(
+            f"SANDBOX_WORKSPACE_ROOT={SANDBOX_WORKSPACE_ROOT} 不是合法的工作区根目录"
+            "（不能是文件系统根、程序目录或用户数据根）"
+        )
+    if SANDBOX_WORKSPACE_ROOT == ASTRBOT_PLUGINS_DIR:
+        errors.append("SANDBOX_WORKSPACE_ROOT 不能与插件目录重合")
+    return errors
+
+
+def _assert_skills_config() -> None:
+    """导入期校验：配置非法直接拒绝启动（安全边界 fail-fast）。
+
+    沙盒配置错了还继续跑，后果是「管理员以为有隔离其实没有」——这类
+    静默降级正是本项目最忌讳的缺陷形态（见 capability/hooks.py 的
+    记忆门控教训）。启动期宁可红着不给跑。
+    """
+    problems = validate_skills_config()
+    if problems:
+        from nonebot import logger
+
+        for problem in problems:
+            logger.error(f"🚨 [Skills] 配置校验失败: {problem}")
+        raise SystemExit(
+            "Skills/Sandbox 配置校验失败，拒绝启动：\n- " + "\n- ".join(problems)
+        )
+
+
+_assert_skills_config()

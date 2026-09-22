@@ -266,3 +266,35 @@ def test_instruction_intent_puts_evidence_before_context():
     out = _compose_prompt("背景对话", ctx)
     assert out.startswith("总结资料")
     assert out.index("资料库检索结果") < out.index("背景对话")
+
+
+# ---------- Skills 结果段（plan §6.3：有界摘要 + workspace 相对产物引用） ----------
+
+
+def test_skill_section_rendered_with_artifact_refs():
+    from skills.model import ArtifactRef
+
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="整理资料")
+    ctx.skill_summaries = ["技能 pdf 执行了 2 步：run_shell: 生成完毕"]
+    ctx.skill_artifacts = [ArtifactRef(path="out/report.md", size_bytes=10)]
+    out = _compose_prompt("", ctx)
+    assert "技能执行结果" in out
+    assert "run_shell: 生成完毕" in out
+    assert "out/report.md" in out  # workspace 相对路径
+    assert out.index("技能执行结果") < out.index("现在 用户(1) 对你说")
+
+
+def test_skill_section_before_context_in_instruction_intent():
+    ctx = ChatContext(
+        user_id=2, group_id=1, msg_id=0, message="继续整理", intent="proactive_at",
+    )
+    ctx.skill_summaries = ["技能 doc 执行了 1 步"]
+    out = _compose_prompt("背景对话", ctx)
+    assert out.startswith("继续整理")
+    assert out.index("技能执行结果") < out.index("背景对话")
+
+
+def test_no_skill_section_without_summaries():
+    ctx = ChatContext(user_id=1, group_id=1, msg_id=0, message="你好")
+    ctx.skill_artifacts = []  # 有产物引用但无摘要也不渲染（摘要是无条件门槛）
+    assert _compose_prompt("", ctx) == "你好"

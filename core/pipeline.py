@@ -92,6 +92,27 @@ def _knowledge_evidence_section(ctx: ChatContext) -> str:
     )
 
 
+def _skill_result_section(ctx: ChatContext) -> str:
+    """把 Skills 的结果摘要渲染成 prompt 段落；无结果返回空串。
+
+    与 ``_tool_result_section`` 同一纪律（plan §6.3）：只吃
+    ``ctx.skill_summaries``（编排器已压缩截断），**绝不**碰 SkillResult
+    里的原始动作输出。产物只以 workspace 相对路径列出（供模型口头告知
+    用户「生成了什么文件」），宿主路径从这里开始就不存在。
+    """
+    summaries = [s.strip() for s in (getattr(ctx, "skill_summaries", None) or []) if s and s.strip()]
+    if not summaries:
+        return ""
+    body = "\n".join(f"- {s}" for s in summaries)
+    artifacts = getattr(ctx, "skill_artifacts", None) or []
+    artifact_lines = [
+        f"  · {getattr(a, 'path', '')}" for a in artifacts if getattr(a, "path", "")
+    ]
+    if artifact_lines:
+        body += "\n【本次生成的工作区文件】\n" + "\n".join(artifact_lines)
+    return f"【技能执行结果（刚按说明书执行的真实结果）】\n{body}"
+
+
 def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
     """把上下文段落与 ctx.message 按正确顺序拼成最终 user prompt。
 
@@ -110,13 +131,16 @@ def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
     context_text = context_text or ""
     tool_text = _tool_result_section(ctx)
     knowledge_text = _knowledge_evidence_section(ctx)
+    skill_text = _skill_result_section(ctx)
     if ctx.intent in _INSTRUCTION_INTENTS:
-        parts = [ctx.message, tool_text, knowledge_text, context_text]
+        parts = [ctx.message, tool_text, knowledge_text, skill_text, context_text]
         return "\n\n".join(p for p in parts if p)
-    if not context_text and not tool_text and not knowledge_text:
+    if not context_text and not tool_text and not knowledge_text and not skill_text:
         return ctx.message
     speaker = f"用户({ctx.user_id})" if ctx.user_id else "对方"
-    head = "\n\n".join(p for p in (context_text, tool_text, knowledge_text) if p)
+    head = "\n\n".join(
+        p for p in (context_text, tool_text, knowledge_text, skill_text) if p
+    )
     return (
         f"{head}\n\n"
         f"【现在 {speaker} 对你说】{ctx.message}\n"

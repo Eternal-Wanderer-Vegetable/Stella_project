@@ -112,6 +112,19 @@ class ChatContext:
     # **绝不**进入记忆整合：knowledge.isolation 保证它不是记忆候选来源。
     knowledge_evidence: list[dict] = field(default_factory=list)
 
+    # ---- Skills（Anthropic 风格技能，skills/ 子系统） ----
+    # 与 route/task_results 同一治理模式：core 只承载，不解释 skills 的类型
+    # （反向 import 会成环）。四个字段全部默认空，旧调用方零改动。
+    # 候选（skills.model.SkillCandidate 对象，metadata-only，无正文无路径），
+    # 由 capability.hooks 的 skills 分支填充：
+    skill_candidates: list = field(default_factory=list)
+    # 本次调用的 SkillResult 对象（原始结果；进 prompt 的只有 skill_summaries）
+    skill_results: list = field(default_factory=list)
+    # 有界摘要（同 tool_summaries 地位，是唯一进 Stella prompt 的技能文本）
+    skill_summaries: list[str] = field(default_factory=list)
+    # 产物引用（skills.model.ArtifactRef），pipeline 渲染为 workspace 相对路径
+    skill_artifacts: list = field(default_factory=list)
+
     # ---- 图片识别（视觉转述，见 design_docs/Stella_图片识别（视觉转述）实施计划 v1.0） ----
     # 接入层从 OneBot 事件提取的图片来源（URL / base64:// / data: / 本地路径）。
     image_sources: list[str] = field(default_factory=list)

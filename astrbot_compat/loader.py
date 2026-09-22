@@ -1065,12 +1065,41 @@ async def reload_plugin(dir_name: str) -> StarMetadata | None:
 
     stats = _rebuild_capabilities()
     _schedule_warmup()
+    _refresh_plugin_skills(plugin_dir)
     # 装回来了，「上次没装回来」的记录就该销掉
     _detached.pop(key, None)
     if fresh.root_dir_name:
         _detached.pop(fresh.root_dir_name, None)
     logger.info(f"[astrbot_compat] 插件 {key} 重载完成，能力装配: {stats}")
     return fresh
+
+
+def _refresh_plugin_skills(plugin_dir) -> None:
+    """插件重载后只刷新该插件的 Skills 来源（plan §6.5）。
+
+    失败保留旧快照、只记日志——技能刷新失败不能改变重载结论，更不能
+    让重载后的插件状态回退。Skills 层未装配（SKILLS_ENABLED=false 或
+    测试环境）时这里是空操作。
+    """
+    if plugin_dir is None:
+        return
+    try:
+        from skills import runtime as skills_runtime
+
+        rt = skills_runtime.current()
+        if rt is None:
+            return
+        if rt.catalog.refresh_plugin(plugin_dir):
+            logger.debug(
+                f"[astrbot_compat] 插件 {plugin_dir.name} 的技能目录已刷新"
+            )
+        else:
+            logger.warning(
+                f"[astrbot_compat] 插件 {plugin_dir.name} 的技能目录刷新失败，"
+                "保留旧快照"
+            )
+    except Exception as e:
+        logger.debug(f"[astrbot_compat] 技能目录刷新未执行（跳过）: {e}")
 
 
 def plugin_source_stamp(md: StarMetadata) -> float:
