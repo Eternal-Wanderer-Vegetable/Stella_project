@@ -48,12 +48,13 @@ nonebot.load_from_toml("pyproject.toml")
 # 某些打包后的 NoneBot 启动路径会在插件 import 期尚未暴露最终 ASGI app。
 # 插件侧已经会尽早尝试注册，这里再在所有插件加载完成后补一次，确保 GUI 的
 # 启动探测不会因 `/stella/status` 缺失而误判；setup_status_api 本身是幂等的。
+# 导入的是模块而非函数：下方 setup_webui 要引用 status_api.collect_status。
 try:
-    from plugins.bot_main.status_api import setup_status_api
+    from plugins.bot_main import status_api
 except ImportError:
-    from stella_project.plugins.bot_main.status_api import setup_status_api
+    from stella_project.plugins.bot_main import status_api
 
-setup_status_api()
+status_api.setup_status_api()
 
 # --- 诊断：显式打印插件发现与加载结果（启动期必落盘） ---
 # 这一段是排查「插件明明放进 data/plugins 却没被加载」的唯一手段：它把发现结果、
@@ -346,7 +347,9 @@ try:
 except ImportError:
     _diag_log("[webui][boot] webui 包缺失（依赖未装齐或打包不全），管理面未启用")
 else:
-    setup_webui()
+    # 宿主注入 v1 状态聚合（webui 不反向 import bot_main，依赖方向见
+    # webui/status_source.py）；status_api 已在上方完成双路径导入
+    setup_webui(status_source=status_api.collect_status)
 
 SERVER = None  # 供 ai_gateway 哨兵触发时取 uvicorn Server 实例（Driver.run 不落地）
 

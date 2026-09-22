@@ -15,6 +15,7 @@ import json
 from fastapi.testclient import TestClient
 
 import config.settings as settings
+from webui import status_source
 
 SECRET_TOKEN = "super-secret-onebot-token"
 
@@ -40,10 +41,7 @@ def _fake_collect() -> dict:
 def _client_with_stubbed_status(isolated_home, monkeypatch) -> TestClient:
     monkeypatch.setattr(settings, "WEBUI_SERVE_DIST", False)
     monkeypatch.setenv("ONEBOT_ACCESS_TOKEN", SECRET_TOKEN)
-    monkeypatch.setattr(
-        "webui.routers.status.status_api",
-        type("Stub", (), {"collect_status": staticmethod(_fake_collect)}),
-    )
+    monkeypatch.setattr(status_source, "_source", _fake_collect)
     from webui.app import create_webui_app
 
     app = create_webui_app()

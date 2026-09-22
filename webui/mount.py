@@ -53,11 +53,20 @@ async def _mount_hook() -> None:
             pass
 
 
-def setup_webui() -> None:
+def setup_webui(*, status_source=None) -> None:
     """注册挂载钩子。必须在**所有**其他 on_startup 注册之后调用；
-    WEBUI_ENABLED=false 时整体不生效（连钩子都不注册）。"""
+    WEBUI_ENABLED=false 时整体不生效（连钩子都不注册）。
+
+    ``status_source``：宿主注入的状态聚合函数（bot.py 传
+    ``status_api.collect_status``，方案 §7.1）。不注入则独立模式回退
+    最小 payload（见 webui.status_source）。
+    """
     if not settings.WEBUI_ENABLED:
         return
+    if status_source is not None:
+        from webui import status_source as status_source_module
+
+        status_source_module.set_status_source(status_source)
     from nonebot import get_driver
 
     get_driver().on_startup(_mount_hook)

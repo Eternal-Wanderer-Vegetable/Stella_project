@@ -3,15 +3,12 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE.
 """webui 测试夹具。
 
-要点（与 tests/test_status_api.py 同一套手法）：
+要点：
 - 目录**不带 __init__.py**——tests/<pkg>/ 带 __init__.py 会在 pytest prepend
   模式下遮蔽顶层同名包（tests/knowledge 的历史教训）；
-- webui.routers.status 导入 ``plugins.bot_main.status_api``，源码直跑时该包
-  在 ``stella_project/`` 下且其 __init__ 会拉起 ai_gateway（重副作用，import
-  期就调 nonebot.get_plugin_config）。先占位一个假包（只指路径、不执行
-  __init__），再按需导入真子模块。**注意本文件比 tests/ 深一层，仓库根是
-  parents[2] 而不是 parents[1]**——插错层级 sys.path 指到 tests/，首个
-  路径分支失效，会静默落到触发 NoneBot 副作用的那条分支（实测）；
+- webui 是叶子包，不 import ``plugins.bot_main``（依赖方向见
+  webui/status_source.py），因此这里**不需要** tests/test_status_api.py 那套
+  伪包注册与 sys.path 处理；
 - 所有 webui 模块在**调用时**读 config.settings 属性，因此夹具只需
   monkeypatch settings 的 STELLA_HOME / PROJECT_ROOT / LOG_DIR 即可把
   凭据、dist 与审计日志整体隔离进临时目录。
@@ -19,19 +16,9 @@
 
 from __future__ import annotations
 
-import sys
-import types
 from pathlib import Path
 
 import pytest
-
-_PROJ = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_PROJ / "stella_project"))
-
-_fake_bot_main = types.ModuleType("plugins.bot_main")
-_fake_bot_main.__path__ = [str(_PROJ / "stella_project" / "plugins" / "bot_main")]
-sys.modules.setdefault("plugins.bot_main", _fake_bot_main)
-
 from fastapi.testclient import TestClient
 
 import config.settings as settings
