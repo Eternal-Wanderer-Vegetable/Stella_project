@@ -20,8 +20,14 @@ _ACTOR = 0  # WebUI 管理员的合成 actor（QQ 号体系外；审计里可识
 
 
 def _service():
-    from stella_project.plugins.bot_main.scheduling.service import SchedulingService
-    from stella_project.plugins.bot_main.scheduling.store import TaskStore
+    try:
+        from stella_project.plugins.bot_main.scheduling.service import SchedulingService
+        from stella_project.plugins.bot_main.scheduling.store import TaskStore
+    except Exception as e:
+        # 独立模式（dev server）下 bot_main 包 __init__ 需要 nonebot driver
+        raise ApiError(
+            "定时任务管理需要 Bot 运行环境（独立 dev server 不可用）", status_code=503
+        ) from e
 
     db_path = getattr(settings, "SCHEDULING_DB_PATH", None) or (
         Path(settings.STELLA_HOME) / "scheduling" / "tasks.db"

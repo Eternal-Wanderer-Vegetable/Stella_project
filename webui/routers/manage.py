@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 
 from webui import audit
 from webui.auth import AuthContext, require_auth
@@ -84,7 +84,7 @@ async def skill_save(name: str, payload: dict) -> Any:
 @skills_router.post("/api/v1/skills/upload")
 async def skills_upload(
     request: Request,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
     auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
 ) -> Any:
     result = skills_service.upload_zip(await file.read())
@@ -132,8 +132,16 @@ async def kb_add_document(
             kb_id, source_type="url", data=payload["url"], title=payload.get("title", ""),
             uri=payload["url"],
         )
+    elif payload.get("file_base64"):
+        # 前端 JSON 通道：base64 文件内容（md/txt/pdf/docx 均按字节交给解析器）
+        import base64
+
+        data = base64.b64decode(payload["file_base64"])
+        result = await kb_service.submit_document(
+            kb_id, source_type="file", data=data, title=payload.get("title", "")
+        )
     else:
-        raise ApiError("需要 url 或（multipart 的）file 内容")
+        raise ApiError("需要 url 或 file_base64")
     audit.record(request=request, username=auth.username, via=auth.via,
                  action="knowledge.import", detail={"kb_id": kb_id, "state": result.get("state")})
     return ok(result)
