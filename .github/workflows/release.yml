@@ -25,6 +25,37 @@ env:
   LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d
 
 jobs:
+  # M6：先构建 WebUI 前端（版本号来自 tag），安装器把它拷入壳内资源、
+  # 发布包把它放进 webui/dist 供 Bot 托管（方案 §12.3）
+  build-dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir dashboard install --frozen-lockfile
+
+      - name: Build dashboard (typecheck included)
+        run: pnpm --dir dashboard build
+
+      - name: Write version marker
+        run: echo "${GITHUB_REF_NAME#v}" > dashboard/dist/assets/version
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: dashboard/dist
+
   # OneClick installation is not publishable without the CPU backend catalog.
   # Build this package in the main release workflow so the catalog is uploaded
   # before the Release becomes visible to end users.
@@ -215,7 +246,7 @@ jobs:
   # payload 维度：online 走安装期联网（现状），offline 嵌入 build-offline-payload
   # 的随包负载。两者同一 profile、同一份代码，只差 resources 里有没有 offline/。
   build-installer:
-    needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload]
+    needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload, build-dashboard]
     strategy:
       fail-fast: false
       matrix:
@@ -299,7 +330,7 @@ jobs:
             '${{ matrix.profile }}',
             '--source', '.',
             '--output', 'dist/unused',
-            '--stage-resources', 'stella-installer/src-tauri/resources/stella'
+            '--stage-resources', 'desktop/src-tauri/resources/stella'
           )
           if ('${{ matrix.payload }}' -eq 'offline') {
             if (-not (Test-Path 'offline-payload\MANIFEST.json')) {
@@ -309,17 +340,23 @@ jobs:
           }
           python @stageArgs
 
+      - name: 下载 WebUI 前端产物（拷入壳内资源）
+        uses: actions/download-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: desktop/dashboard-dist
+
       - name: 同步 Tauri 版本号
         shell: pwsh
         run: |
           $version = $env:RELEASE_VERSION
-          $cargo = Get-Content 'stella-installer/src-tauri/Cargo.toml' -Raw
+          $cargo = Get-Content 'desktop/src-tauri/Cargo.toml' -Raw
           $cargo = $cargo -replace '(?m)^version = "[^"]+"', ('version = "' + $version + '"')
-          Set-Content 'stella-installer/src-tauri/Cargo.toml' $cargo -NoNewline
+          Set-Content 'desktop/src-tauri/Cargo.toml' $cargo -NoNewline
 
-          $tauri = Get-Content 'stella-installer/src-tauri/tauri.conf.json' -Raw
+          $tauri = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw
           $tauri = $tauri -replace '(?m)"version": "[^"]+"', ('"version": "' + $version + '"')
-          Set-Content 'stella-installer/src-tauri/tauri.conf.json' $tauri -NoNewline
+          Set-Content 'desktop/src-tauri/tauri.conf.json' $tauri -NoNewline
 
       - name: 安装 Tauri CLI
         shell: pwsh
@@ -327,7 +364,7 @@ jobs:
 
       - name: 构建 OneClick NSIS 安装器
         shell: pwsh
-        working-directory: stella-installer/src-tauri
+        working-directory: desktop/src-tauri
         env:
           STELLA_BUILD_PROFILE: ${{ matrix.profile }}
         run: cargo tauri build --bundles nsis
@@ -335,8 +372,8 @@ jobs:
       - name: 上传安装器
         uses: actions/upload-artifact@v7
         with:
-          name: stella-installer-${{ matrix.profile }}-${{ matrix.payload }}
-          path: stella-installer/src-tauri/target/release/bundle/nsis/*setup.exe
+          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
+          path: desktop/src-tauri/target/release/bundle/nsis/*setup.exe
           if-no-files-found: error
 
   build-rust-wheel:
@@ -676,7 +713,7 @@ jobs:
       - name: 下载 OneClick 安装程序
         uses: actions/download-artifact@v8
         with:
-          pattern: stella-installer-*
+          pattern: stella-desktop-*
           path: installer-bin
           merge-multiple: false
 
@@ -696,7 +733,7 @@ jobs:
           cp "dist/${rust_asset}" dist/products/
           for profile in oneclick-python oneclick-rust; do
             for variant in online offline; do
-              installer_dir="installer-bin/stella-installer-${profile}-${variant}"
+              installer_dir="installer-bin/stella-desktop-${profile}-${variant}"
               mapfile -t installers < <(
                 find "$installer_dir" -maxdepth 1 -type f -name '*.exe' -print
               )

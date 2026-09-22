@@ -27,5 +27,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // 首屏分包（M5）：vuetify/apexcharts 体量大且极少变动，独立成块后
+    // 业务代码更新不再打穿长缓存
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vuetify: ['vuetify'],
+          charts: ['apexcharts', 'vue3-apexcharts'],
+        },
+      },
+    },
   },
 });

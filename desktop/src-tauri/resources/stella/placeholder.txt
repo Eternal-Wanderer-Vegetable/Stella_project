@@ -1,0 +1,1 @@
+This file keeps local Tauri builds valid. Release jobs replace this directory with staged resources.

@@ -37,6 +37,9 @@ COMMON_DIRS = (
     "system_prompts",
     "runtime-manager",
     "stella_project",
+    # M6：v2 桌面壳 + WebUI 前端产物（方案 §12.3）
+    "desktop",
+    "webui",
 )
 RUST_DIRS = ("memory_rust",)
 INSTALLER_FILES = (
@@ -59,6 +62,8 @@ FORBIDDEN_PARTS = (
     ".gitnexus",
     "design_docs",
     "stella-installer",
+    "dashboard",
+    "openspec",
     "benchmark",
     "target",
     "__pycache__",
