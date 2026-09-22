@@ -279,6 +279,103 @@ paths:
         "200":
           description: OK（envelope.data = {plugins[], failed, capabilities}）
 
+  /api/v1/conversations/groups:
+    get:
+      tags: [conversations]
+      summary: 有消息的群清单（计数与最新时间，供筛选）
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK
+  /api/v1/conversations:
+    get:
+      tags: [conversations]
+      summary: 群消息分页（时间倒序，只读）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: OK（envelope.data = {group_id, total, items[]}）
+  /api/v1/conversations/context:
+    get:
+      tags: [conversations]
+      summary: 群整合 checkpoint（短期话题状态在内存，M1 不提供）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/trace/memory:
+    get:
+      tags: [trace]
+      summary: 记忆决策轨迹流（列表含计数摘要，全文走详情）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: OK
+  /api/v1/trace/memory/{trace_id}:
+    get:
+      tags: [trace]
+      summary: 单条消息决策回放（记忆正文还原 + 分数 + prompt 快照 + 输出）
+      description: >-
+        回放范围（M1）：触发/模式、记忆候选·淘汰·采纳（含分数与正文）、
+        行为约束、prompt 快照、输出。Router 命中 / 工具调用 / 预算分配
+        目前只在 thought 日志（Markdown），不进回放——表里没有的字段不猜。
+      x-stella-milestone: M1
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: 轨迹不存在
+  /api/v1/trace/participation:
+    get:
+      tags: [trace]
+      summary: 参与决策流（评分字段 + 决策 + 原因标记，「为什么没说话」）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: OK
+
   /api/v1/system/doctor:
     get:
       tags: [system]

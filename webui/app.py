@@ -77,16 +77,20 @@ def create_webui_app() -> FastAPI:
     )
     app.include_router(auth_router_module.router)
     app.include_router(status_router_module.router)
-    # M1 只读面板（usage / providers / platform / plugins）
+    # M1 只读面板（usage / providers / platform / plugins / conversations / trace）
+    from webui.routers import conversations as conversations_router_module
     from webui.routers import platform as platform_router_module
     from webui.routers import plugins as plugins_router_module
     from webui.routers import providers as providers_router_module
+    from webui.routers import trace as trace_router_module
     from webui.routers import usage as usage_router_module
 
     app.include_router(usage_router_module.router)
     app.include_router(providers_router_module.router)
     app.include_router(platform_router_module.router)
     app.include_router(plugins_router_module.router)
+    app.include_router(conversations_router_module.router)
+    app.include_router(trace_router_module.router)
 
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request: Request, exc: ApiError):
