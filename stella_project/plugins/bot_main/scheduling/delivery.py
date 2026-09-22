@@ -87,9 +87,26 @@ class DeliveryService:
         self._sender = sender
         self._send_timeout = max(float(send_timeout_seconds), 1.0)
 
-    async def deliver(self, *, run: Run, task: Task, text: str) -> DeliveryResult:
-        """把运行产物投进群。CAS 失败一律静默放弃（守不住租约就别发）。"""
+    async def deliver(
+        self,
+        *,
+        run: Run,
+        task: Task,
+        text: str,
+        model_rounds: int | None = None,
+        tool_calls: int | None = None,
+    ) -> DeliveryResult:
+        """把运行产物投进群。CAS 失败一律静默放弃（守不住租约就别发）。
+
+        ``model_rounds`` / ``tool_calls``：agent 运行的逻辑调用计数，随
+        running→ready 一次性落库（观测用）。
+        """
         text = (text or "").strip()
+        counters: dict = {}
+        if model_rounds is not None:
+            counters["model_rounds"] = model_rounds
+        if tool_calls is not None:
+            counters["tool_calls"] = tool_calls
 
         # 1. silent：策略允许的空产出
         if not text:
@@ -97,6 +114,7 @@ class DeliveryService:
                 if self.store.transition_run(
                     run.run_id, run.lease_owner,
                     from_states=(RunState.RUNNING,), to_state=RunState.SILENT,
+                    **counters,
                 ):
                     return DeliveryResult(state=RunState.SILENT)
                 return DeliveryResult(state=RunState.CANCELLED, error="lease_lost")
@@ -110,7 +128,7 @@ class DeliveryService:
         if not self.store.transition_run(
             run.run_id, run.lease_owner,
             from_states=(RunState.RUNNING,), to_state=RunState.READY,
-            result_text=text, fingerprint=fingerprint,
+            result_text=text, fingerprint=fingerprint, **counters,
         ):
             return DeliveryResult(state=RunState.CANCELLED, error="lease_lost")
 

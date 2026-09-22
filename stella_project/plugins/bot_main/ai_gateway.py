@@ -42,6 +42,7 @@ import time
 from collections import OrderedDict, defaultdict
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from nonebot import get_driver, logger, on_message
 from nonebot.adapters.onebot.v11 import (
@@ -870,6 +871,7 @@ def _assert_listener_priorities() -> None:
         ("addressing_handler", _PRIORITY_TOGGLE),
         ("capability_handler", _PRIORITY_TOGGLE),
         ("reload_handler", _PRIORITY_TOGGLE),
+        ("scheduling_handler", _PRIORITY_TOGGLE),
         ("plugin_handler", _PRIORITY_PLUGIN),
         ("chat_handler", _PRIORITY_CHAT),
     ):
@@ -1191,6 +1193,435 @@ async def handle_reload(bot: Bot, event: GroupMessageEvent):
     await reload_handler.finish(
         Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
     )
+
+
+# ============================================================
+# 定时任务（用户可管理的 Cron / Agent）——见 scheduling/ 包与 docs/scheduling.md
+# ============================================================
+# 与开关/称呼/能力查询/重载同优先级（priority=1, block=True）。规则互斥是两向
+# 机械保证的：那四个分类器先让路给 parse_scheduling_command（见各自函数里的
+# scheduling 分支），本规则再让路给 parse_reload_command（插件名是任意字符串，
+# 必须保持最高优先）。互斥由 _assert_scheduling_rule_disjoint 在导入期钉住。
+
+_scheduling_runtime = None
+_scheduling_service = None
+
+
+async def is_scheduling_command_rule(event: GroupMessageEvent) -> bool:
+    """定时任务指令规则：功能已启用 + 已启用群 + @ + 命中「定时*」指令。"""
+    from config import SCHEDULING_ENABLED
+
+    if not SCHEDULING_ENABLED:
+        return False
+    if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+        return False
+    from astrbot_compat.loader import parse_reload_command
+    from stella_project.plugins.bot_main.scheduling.commands import (
+        is_scheduling_command,
+    )
+
+    text = event.get_plaintext().strip()
+    if parse_reload_command(text):
+        return False
+    return is_scheduling_command(text)
+
+
+scheduling_handler = on_message(
+    rule=Rule(is_scheduling_command_rule), priority=_PRIORITY_TOGGLE, block=True
+)
+
+
+def _assert_scheduling_rule_disjoint() -> None:
+    """导入期自检：调度指令与既有 priority=1 规则（开关/能力查询/重载）互斥。"""
+    from astrbot_compat.loader import parse_reload_command
+    from capability.inventory import QUERY_KEYWORDS, is_query_text
+    from stella_project.plugins.bot_main.scheduling.commands import (
+        is_scheduling_command,
+    )
+
+    samples = [
+        "定时添加 0 9 * * MON Asia/Shanghai 站会啦",
+        "定时智能 0 6 * * * UTC+8 总结群聊",
+        "定时列表",
+        "定时停用 abc123",
+        "定时启用 abc123",
+        "定时立即 abc123",
+    ]
+    toggle = _MUTE_KEYWORDS + _UNMUTE_KEYWORDS
+    bad: list[str] = []
+    for text in samples:
+        if not is_scheduling_command(text):
+            bad.append(f"解析失效 {text!r}")
+            continue
+        if any(k in text for k in toggle):
+            bad.append(f"与开关词重叠 {text!r}")
+        if is_query_text(text, toggle_keywords=toggle):
+            bad.append(f"与能力查询重叠 {text!r}")
+        if parse_reload_command(text):
+            bad.append(f"与重载命令重叠 {text!r}")
+    # 反向：开关/查询句式绝不能被判成调度指令
+    for text in [*toggle, *QUERY_KEYWORDS]:
+        if is_scheduling_command(text):
+            bad.append(f"误吞既有命令 {text!r}")
+    if bad:
+        logger.critical(
+            f"❌ 定时任务规则与 priority=1 既有规则互斥自检失败：{bad[:2]}——"
+            "scheduling/commands.py 的动词表被改坏了吗？"
+        )
+        return
+    logger.debug("✅ 定时任务规则互斥自检通过")
+
+
+_assert_scheduling_rule_disjoint()
+
+
+def _scheduling_short_id(task_id: str) -> str:
+    return task_id[:8]
+
+
+def _scheduling_local_time(dt_utc, tz_name: str) -> str:
+    from stella_project.plugins.bot_main.scheduling.cron import resolve_timezone
+
+    try:
+        return dt_utc.astimezone(resolve_timezone(tz_name)).strftime("%m-%d %H:%M")
+    except Exception:
+        return dt_utc.strftime("%m-%d %H:%M UTC")
+
+
+_SCHEDULING_STATE_LABELS = {
+    "queued": "排队中",
+    "claimed": "已认领",
+    "running": "运行中",
+    "ready": "待发送",
+    "sending": "发送中",
+    "sent": "已发送",
+    "silent": "静默完成",
+    "failed": "失败",
+    "skipped": "已跳过",
+    "cancelled": "已取消",
+    "delivery_unknown": "投递未知",
+}
+
+
+def _format_scheduling_task(task) -> str:
+    icon = {"active": "▶", "paused": "⏸", "cancelled": "✖"}.get(task.status.value, "·")
+    head = f"{icon} {_scheduling_short_id(task.task_id)} {task.cron_expr} @{task.timezone}"
+    if task.mode.value == "agent":
+        head += " [Agent]"
+    if task.status.value == "active" and task.next_run_utc is not None:
+        head += f"，下次 {_scheduling_local_time(task.next_run_utc, task.timezone)}"
+    objective = (
+        task.objective if len(task.objective) <= 24 else task.objective[:24] + "…"
+    )
+    return f"{head}\n    {objective}"
+
+
+def _format_scheduling_run(run, tz_name: str) -> str:
+    label = _SCHEDULING_STATE_LABELS.get(run.state.value, run.state.value)
+    when = (
+        _scheduling_local_time(run.scheduled_for_utc, tz_name)
+        if run.scheduled_for_utc is not None
+        else "手动"
+    )
+    line = f"· {when} {label}"
+    if run.error:
+        line += f"（{run.error[:40]}）"
+    elif run.state.value == "delivery_unknown" and run.delivery_error:
+        line += f"（{run.delivery_error[:40]}）"
+    return line
+
+
+def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
+    """指令分派：service 承担校验/权限/审计，这里只做取参与拼回复。"""
+    from stella_project.plugins.bot_main.scheduling.commands import format_help
+
+    assert _scheduling_service is not None
+    service = _scheduling_service
+    group_id = event.group_id
+    actor_id = event.user_id
+    is_admin = _is_group_admin(event)
+    action = cmd.action
+
+    if action == "help":
+        return format_help()
+
+    if action == "list":
+        tasks = service.list_tasks(group_id=group_id)
+        if not tasks:
+            return "这个群还没有定时任务。发「定时添加」看看格式。"
+        return "\n".join(_format_scheduling_task(t) for t in tasks)
+
+    if action in ("add", "add_agent"):
+        if cmd.fields.get("malformed"):
+            return (
+                "格式：定时添加 <cron> <时区> <内容>\n"
+                "例：定时添加 0 9 * * MON-FRI Asia/Shanghai 站会啦\n"
+                "cron 是 5 字段（分 时 日 月 周），星期用 MON-SUN。"
+            )
+        task = service.create_task(
+            actor_id=actor_id,
+            group_id=group_id,
+            bot_id=str(event.self_id),
+            is_group_admin=is_admin,
+            mode="reminder" if action == "add" else "agent",
+            objective=cmd.objective,
+            cron_expr=cmd.cron_expr,
+            timezone=cmd.timezone,
+        )
+        next_at = (
+            _scheduling_local_time(task.next_run_utc, task.timezone)
+            if task.next_run_utc is not None
+            else "待定"
+        )
+        return f"✅ 已创建任务 {_scheduling_short_id(task.task_id)}，下次触发 {next_at}"
+
+    if action == "show":
+        task = service.show_task(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin,
+        )
+        detail = _format_scheduling_task(task)
+        if task.policy.get("tools"):
+            detail += f"\n    工具：{', '.join(task.policy['tools'])}"
+        detail += f"\n    补跑策略：{task.policy.get('coalesce', 'latest')}"
+        return detail
+
+    if action == "edit":
+        fields = cmd.fields
+        if fields.get("malformed"):
+            return "格式：定时编辑 <id> cron=… tz=… text=… notify=always|on_content [rev=N]"
+        updates: dict = {}
+        if fields.get("cron"):
+            updates["cron_expr"] = fields["cron"]
+        if fields.get("tz"):
+            updates["timezone"] = fields["tz"]
+        if fields.get("text"):
+            updates["objective"] = fields["text"]
+        if fields.get("notify"):
+            updates["notification_mode"] = fields["notify"]
+        if not updates:
+            return "没有要修改的字段。可用键：cron= tz= text= notify= rev="
+        task = service.show_task(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin,
+        )
+        updated = service.edit_task(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            expected_revision=cmd.expected_revision or task.revision,
+            is_group_admin=is_admin, **updates,
+        )
+        return f"✅ 已更新 {_scheduling_short_id(updated.task_id)}（修订 r{updated.revision}）"
+
+    if action in ("pause", "resume", "cancel"):
+        task = service.show_task(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin,
+        )
+        setter = {"pause": service.pause, "resume": service.resume, "cancel": service.cancel}[action]
+        updated = setter(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            expected_revision=cmd.expected_revision or task.revision,
+            is_group_admin=is_admin,
+        )
+        verb = {"pause": "已暂停", "resume": "已恢复", "cancel": "已取消"}[action]
+        return f"✅ 任务 {_scheduling_short_id(updated.task_id)} {verb}"
+
+    if action == "run_now":
+        run = service.run_now(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin,
+        )
+        return f"✅ 已提交立即运行（{_scheduling_short_id(run.run_id)}），稍后执行。"
+
+    if action == "history":
+        runs = service.history(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin, limit=8,
+        )
+        if not runs:
+            return "这个任务还没有运行记录。"
+        task = service.show_task(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin,
+        )
+        return "\n".join(_format_scheduling_run(r, task.timezone) for r in runs)
+
+    if action in ("allow_tool", "deny_tool"):
+        if not cmd.tool_name:
+            return "格式：定时允许 <id> <工具名>（管理员）"
+        task = service.show_task(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            is_group_admin=is_admin,
+        )
+        tools = list(task.policy.get("tools") or [])
+        if action == "allow_tool":
+            if cmd.tool_name in tools:
+                return f"工具 {cmd.tool_name} 已在允许清单里。"
+            tools.append(cmd.tool_name)
+            verb = "已允许"
+        else:
+            if cmd.tool_name not in tools:
+                return f"工具 {cmd.tool_name} 不在允许清单里。"
+            tools.remove(cmd.tool_name)
+            verb = "已禁止"
+        updated = service.set_policy(
+            actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
+            expected_revision=task.revision, is_group_admin=is_admin,
+            policy={"tools": tools, "coalesce": task.policy.get("coalesce")},
+        )
+        listing = ", ".join(updated.policy.get("tools") or []) or "（空）"
+        return f"✅ {verb} {cmd.tool_name}。当前清单：{listing}"
+
+    return format_help()
+
+
+@scheduling_handler.handle()
+async def handle_scheduling(bot: Bot, event: GroupMessageEvent):
+    """定时任务指令入口：解析 → service（权限/审计在 service 内）→ 回帖。
+
+    回帖原则：service 抛的都是用户可读错误（直接转述）；其余异常统一降级为
+    一句「没成功」——细节进日志，不暴露内部信息。
+    """
+    from stella_project.plugins.bot_main.scheduling.commands import (
+        parse_scheduling_command,
+    )
+    from stella_project.plugins.bot_main.scheduling.cron import CronError
+    from stella_project.plugins.bot_main.scheduling.service import (
+        SchedulingServiceError,
+    )
+
+    cmd = parse_scheduling_command(event.get_plaintext().strip())
+    if cmd is None:
+        return
+    if _scheduling_service is None:
+        reply = "定时任务功能没有启用（SCHEDULING_ENABLED）。"
+    else:
+        try:
+            reply = _dispatch_scheduling_command(event, cmd)
+        except SchedulingServiceError as e:
+            reply = str(e)
+        except CronError as e:
+            reply = f"时间表达式有问题：{e}"
+        except Exception as e:
+            logger.warning(f"[Scheduling] 群 {event.group_id} 指令处理失败: {e}")
+            reply = "这个操作没成功，请稍后再试。"
+    await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
+    await scheduling_handler.finish(
+        Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
+    )
+
+
+# ── 调度 worker 的进程内装配（provider / 工具 / 发送边界） ──
+
+async def _scheduling_provider_resolver() -> Any | None:
+    """解析当前活跃的对话 provider（与 COMES _agent_call 同一来源）。"""
+    try:
+        from astrbot_compat.llm.manager import get_provider_manager
+
+        return get_provider_manager().provider
+    except Exception as e:
+        logger.debug(f"[Scheduling] provider 解析失败: {e}")
+        return None
+
+
+async def _scheduling_tool_resolver(name: str):
+    """按**显式名字**解析工具；只认 MCP kind——astrbot 工具能触达任意插件/
+    事件路径，v1 一律不进调度允许清单（计划 §6.6）。"""
+    from capability.providers import provider_runtime
+    from capability.registry import KIND_MCP
+    from capability.registry import registry as capability_registry
+
+    capability_id = capability_registry.claimed_by(name)
+    if not capability_id:
+        return None
+    for provider in capability_registry.find_providers(capability_id):
+        if provider.tool_name != name or provider.kind != KIND_MCP:
+            continue
+        if not provider_runtime.is_live(provider):
+            return None
+        return provider_runtime.resolve(provider)
+    return None
+
+
+async def _scheduling_sender(group_id: int, text: str) -> str | None:
+    """平台发送边界：返回回执（message_id）或 None（拿不到就不声称可靠）。"""
+    from nonebot import get_bot
+
+    bot = get_bot()
+    resp = await bot.send_group_msg(group_id=group_id, message=text)
+    receipt = resp.get("message_id") if isinstance(resp, dict) else getattr(resp, "message_id", None)
+    return str(receipt) if receipt is not None else None
+
+
+def _build_scheduling_stack():
+    """按配置装配 store / service / agent / delivery / runtime。"""
+    from config import (
+        INSTANCE_ID,
+        SCHEDULING_CONTEXT_MAX_CHARS,
+        SCHEDULING_DAILY_GROUP_RUN_CAP,
+        SCHEDULING_DB_PATH,
+        SCHEDULING_GLOBAL_ADMINS,
+        SCHEDULING_MAX_TASKS_PER_GROUP,
+        SCHEDULING_MAX_TASKS_PER_USER,
+        SCHEDULING_SEND_TIMEOUT,
+        SCHEDULING_TICK_INTERVAL,
+        SCHEDULING_WORKER_LEASE_TTL,
+    )
+    from stella_project.plugins.bot_main.scheduling.agent import ScheduledAgentRunner
+    from stella_project.plugins.bot_main.scheduling.delivery import DeliveryService
+    from stella_project.plugins.bot_main.scheduling.runtime import SchedulerRuntime
+    from stella_project.plugins.bot_main.scheduling.service import (
+        SchedulingLimits,
+        SchedulingService,
+    )
+    from stella_project.plugins.bot_main.scheduling.store import TaskStore
+
+    store = TaskStore(SCHEDULING_DB_PATH)
+    limits = SchedulingLimits(
+        max_tasks_per_group=max(SCHEDULING_MAX_TASKS_PER_GROUP, 1),
+        max_tasks_per_user=max(SCHEDULING_MAX_TASKS_PER_USER, 1),
+        daily_group_run_cap=max(SCHEDULING_DAILY_GROUP_RUN_CAP, 0),
+        global_admin_ids=frozenset(SCHEDULING_GLOBAL_ADMINS),
+    )
+    service = SchedulingService(store, limits=limits)
+    runner = ScheduledAgentRunner(
+        provider_resolver=_scheduling_provider_resolver,
+        tool_resolver=_scheduling_tool_resolver,
+    )
+    delivery = DeliveryService(
+        store, sender=_scheduling_sender, send_timeout_seconds=SCHEDULING_SEND_TIMEOUT
+    )
+    runtime = SchedulerRuntime(
+        store=store,
+        delivery=delivery,
+        agent_runner=runner,
+        group_locks=_group_locks,
+        worker_id=f"instance-{INSTANCE_ID}",
+        lease_ttl_seconds=SCHEDULING_WORKER_LEASE_TTL,
+        tick_interval_seconds=SCHEDULING_TICK_INTERVAL,
+        daily_group_run_cap=SCHEDULING_DAILY_GROUP_RUN_CAP,
+        context_max_chars=SCHEDULING_CONTEXT_MAX_CHARS,
+        stop_grace_seconds=SHUTDOWN_GRACE_SECONDS,
+    )
+    return runtime, service
+
+
+@get_driver().on_startup
+async def _start_scheduling() -> None:
+    """启动调度 worker；迁移失败/初始化异常只停用本功能，绝不拖垮主进程。"""
+    from config import SCHEDULING_ENABLED
+
+    global _scheduling_runtime, _scheduling_service
+    if not SCHEDULING_ENABLED:
+        return
+    try:
+        _scheduling_runtime, _scheduling_service = _build_scheduling_stack()
+    except Exception as e:
+        logger.error(f"❌ [Scheduling] 初始化失败（含迁移检查），调度功能停用: {e}")
+        _scheduling_runtime = None
+        _scheduling_service = None
+        return
+    await _scheduling_runtime.start()
 
 
 async def _watch_plugin_sources() -> None:
@@ -2102,6 +2533,11 @@ async def _graceful_shutdown() -> None:
         _stop_watcher_task.cancel()
     if _hot_reload_watcher is not None:
         _hot_reload_watcher.cancel()
+    # 调度 worker 先停：不再认领新运行，等当前运行收尾（受 stop_grace 上界）；
+    # 超时的在途运行交给租约恢复，下次启动按 delivery_unknown / 回队处理。
+    if _scheduling_runtime is not None:
+        with contextlib.suppress(Exception):
+            await _scheduling_runtime.stop()
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions
 

@@ -133,8 +133,13 @@ class ScheduledAgentRunner:
         policy: dict,
         context_text: str,
         limits: AgentRunLimits,
+        cancel_check: CancelCheck | None = None,
     ) -> AgentOutcome:
-        """执行一次 Agent 任务。**绝不抛异常**：一切失败都折进 outcome。"""
+        """执行一次 Agent 任务。**绝不抛异常**：一切失败都折进 outcome。
+
+        ``cancel_check``：运行期注入的取消检查点（运行时按运行/任务当前状态
+        判定），与构造期传入的检查点并存。
+        """
         try:
             return await asyncio.wait_for(
                 self._run_inner(
@@ -144,6 +149,7 @@ class ScheduledAgentRunner:
                     policy=policy,
                     context_text=context_text,
                     limits=limits,
+                    cancel_check=cancel_check,
                 ),
                 timeout=max(limits.wall_clock_seconds, 1.0),
             )
@@ -164,8 +170,15 @@ class ScheduledAgentRunner:
         policy: dict,
         context_text: str,
         limits: AgentRunLimits,
+        cancel_check: CancelCheck | None = None,
     ) -> AgentOutcome:
         denied: list[str] = []
+        extra_check = cancel_check or self._cancel_check
+
+        async def checkpoint() -> None:
+            await self._checkpoint()
+            if extra_check is not None:
+                await extra_check()
 
         budget_reason = self._safe_usage_check()
         if budget_reason:
@@ -182,7 +195,7 @@ class ScheduledAgentRunner:
                 status="failed", error="tools_unavailable", denied_tools=denied
             )
 
-        await self._checkpoint()
+        await checkpoint()
 
         req = ProviderRequest(
             prompt=_build_user_content(objective, context_text),
@@ -194,7 +207,7 @@ class ScheduledAgentRunner:
 
         outcome = AgentOutcome(status="failed", error="max_model_rounds")
         for _round in range(max(limits.max_model_rounds, 1)):
-            await self._checkpoint()
+            await checkpoint()
             outcome.model_rounds = _round + 1
             resp = await provider.text_chat(
                 session_id=req.session_id,
@@ -255,7 +268,7 @@ class ScheduledAgentRunner:
                         )
                     )
                     continue
-                await self._checkpoint()
+                await checkpoint()
                 outcome.tool_calls += 1
                 content = await _execute_tool(tool, raw_args, limits.tool_timeout_seconds)
                 blocks.append(_tool_message(call_id, name, content))

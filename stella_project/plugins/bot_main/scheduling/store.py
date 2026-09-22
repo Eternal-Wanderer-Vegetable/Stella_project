@@ -257,6 +257,17 @@ class TaskStore:
         finally:
             conn.close()
 
+    def list_active_tasks(self) -> list[Task]:
+        """全库的 active 任务（worker 巡检到期触发用；按创建时间升序）。"""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM tasks WHERE status = 'active' ORDER BY created_at ASC"
+            ).fetchall()
+            return [_task_from_row(row) for row in rows]
+        finally:
+            conn.close()
+
     # 可被 edit_task 修改的字段白名单（列名 → 是否需要额外处理）。
     _EDITABLE_COLUMNS = (
         "objective",
