@@ -47,7 +47,13 @@ def test_setup_rejects_weak_password(client: TestClient):
     resp = client.post(
         "/api/v1/auth/setup", json={"username": "admin", "password": "short"}
     )
-    assert resp.status_code == 422  # pydantic 校验失败走 FastAPI 默认 422
+    assert resp.status_code == 422
+    # 422 也必须是 envelope：pydantic 原生 {detail:[...]} 前端读不出人话
+    # （2026-09-22 实测：密码短一位只看到「请求失败」）。文案要点名字段与门槛。
+    body = resp.json()
+    assert body["status"] == "error"
+    assert "密码" in body["message"]
+    assert "8" in body["message"]
 
 
 def test_login_and_logout(client: TestClient):

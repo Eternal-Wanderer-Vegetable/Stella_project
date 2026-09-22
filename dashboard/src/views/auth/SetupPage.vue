@@ -20,8 +20,19 @@ const mismatch = computed(
   () => confirm.value.length > 0 && confirm.value !== password.value,
 );
 
+// 与服务端 CredentialsBody 约束一致（webui/routers/auth.py），提交前先拦
+const passwordRule = (v: string) =>
+  (v && v.length >= 8) || t('features.auth.passwordMinLength');
+
 async function submit(): Promise<void> {
-  if (!username.value || !password.value || mismatch.value || busy.value) return;
+  if (
+    !username.value ||
+    !password.value ||
+    password.value.length < 8 ||
+    mismatch.value ||
+    busy.value
+  )
+    return;
   busy.value = true;
   try {
     await auth.setup(username.value, password.value);
@@ -57,9 +68,12 @@ async function submit(): Promise<void> {
             <v-text-field
               v-model="password"
               :label="$t('features.auth.password')"
+              :hint="$t('features.auth.passwordHint')"
+              persistent-hint
               prepend-inner-icon="mdi-lock-outline"
               type="password"
               autocomplete="new-password"
+              :rules="[passwordRule]"
             />
             <v-text-field
               v-model="confirm"
@@ -67,6 +81,7 @@ async function submit(): Promise<void> {
               prepend-inner-icon="mdi-lock-check-outline"
               type="password"
               autocomplete="new-password"
+              :rules="[passwordRule]"
               :error-messages="mismatch ? [$t('features.auth.passwordMismatch')] : []"
             />
             <v-btn

@@ -15,7 +15,8 @@ info:
   description: >-
     Stella 机器人管理面。所有业务接口返回统一 envelope：
     `{"status": "ok"|"error", "message": ..., "data": ...}`；
-    HTTP 状态码只用于 401（未授权/过期）、403（禁止）、404、413（超限）、429（限流）、500。
+    HTTP 状态码只用于 401（未授权/过期）、403（禁止）、404、413（超限）、
+    422（请求体校验失败，envelope.message 为人话文案）、429（限流）、500。
 servers:
   - url: /
 tags:

@@ -37,6 +37,8 @@
       "setupHint": "First run: create the admin account. Credentials stay in the local data directory (webui/auth.json).",
       "username": "Username",
       "password": "Password",
+      "passwordHint": "8–128 characters",
+      "passwordMinLength": "Password must be at least 8 characters",
       "confirmPassword": "Confirm password",
       "submitLogin": "Sign in",
       "submitSetup": "Finish setup",

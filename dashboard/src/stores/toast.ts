@@ -52,8 +52,16 @@ export function useToast() {
   };
 }
 
-/** axios 错误 → 可展示文案（envelope.message 优先，见 webui/responses.py）。 */
+/** axios 错误 → 可展示文案（envelope.message 优先，见 webui/responses.py）；
+ * detail 仅在是字符串时兜底（数组形态的 pydantic 原生 detail 已被服务端
+ * 422 处理器翻译成 envelope，这里只防旧包/直连场景）。 */
 export function toastApiError(store: ReturnType<typeof useToast>, err: unknown): void {
-  const maybe = err as { response?: { data?: { message?: string } }; message?: string };
-  store.error(maybe?.response?.data?.message ?? maybe?.message ?? '请求失败');
+  const e = err as {
+    response?: { data?: { message?: string; detail?: unknown } };
+    message?: string;
+  };
+  const detail = e?.response?.data?.detail;
+  const fallback =
+    typeof detail === 'string' && detail ? detail : e?.message ?? '请求失败';
+  store.error(e?.response?.data?.message ?? fallback);
 }

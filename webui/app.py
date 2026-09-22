@@ -11,8 +11,10 @@
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 import config.settings as settings
@@ -24,6 +26,35 @@ from webui.static import register_static
 
 # importlib.metadata 查不到（源码直跑）时的回退版本号，与 status_api 同款惯例
 _FALLBACK_VERSION = "4.0.0"
+
+# 422 文案的字段标签：pydantic 的 loc 是英文键，直接拼出来用户看不懂——
+# setup 页密码短一位就只看到「请求失败」是 2026-09-22 的实测教训。
+_FIELD_LABELS = {
+    "username": "用户名",
+    "password": "密码",
+    "old_password": "当前密码",
+    "new_password": "新密码",
+}
+
+
+def _validation_message(errors: list[dict[str, Any]]) -> str:
+    """把 pydantic 校验错误翻成一句人话（多错误用「；」连接）。"""
+    parts: list[str] = []
+    for err in errors:
+        loc = [str(item) for item in err.get("loc", ()) if item != "body"]
+        field = ".".join(loc)
+        label = _FIELD_LABELS.get(field, field or "请求")
+        etype = err.get("type", "")
+        ctx = err.get("ctx") or {}
+        if etype == "string_too_short":
+            parts.append(f"{label}至少 {ctx.get('min_length', '?')} 个字符")
+        elif etype == "string_too_long":
+            parts.append(f"{label}至多 {ctx.get('max_length', '?')} 个字符")
+        elif etype == "missing":
+            parts.append(f"缺少{label}")
+        else:
+            parts.append(f"{label}格式不正确")
+    return "；".join(parts) if parts else "请求参数不正确"
 
 
 def _project_version() -> str:
@@ -50,6 +81,14 @@ def create_webui_app() -> FastAPI:
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request: Request, exc: ApiError):
         return JSONResponse(error(exc.message, exc.data), status_code=exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(_request: Request, exc: RequestValidationError):
+        # FastAPI 默认 422 是 {detail:[...]} 原生形状，前端 envelope 约定读不到
+        # message——统一翻成 error envelope（契约见 openspec/openapi-v1.yaml）。
+        return JSONResponse(
+            error(_validation_message(exc.errors())), status_code=422
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled_handler(_request: Request, exc: Exception):
