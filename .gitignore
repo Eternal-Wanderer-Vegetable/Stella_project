@@ -106,3 +106,7 @@ start_claude_command.txt
 /runtime-manager/target/
 # Optional Rust memory engine build output
 /memory_rust/native/target/
+# WebUI v2 前端工程（design_docs/Stella GUI v2 与 WebUI 建设方案 v1.0.md §5）
+# 依赖与构建产物不入库；dist 由 CI 构建并随发布包分发
+/dashboard/node_modules/
+/dashboard/dist/

@@ -938,6 +938,23 @@ STELLA_JSON_LOG_MAX_MESSAGE = _env_int("STELLA_JSON_LOG_MAX_MESSAGE", 500)
 STELLA_STATUS_API_ENABLED = _env_bool("STELLA_STATUS_API_ENABLED", "true")
 STELLA_STATUS_API_PATH = _env("STELLA_STATUS_API_PATH", "/stella/status")
 
+# ---------- WebUI 面板（v2 控制面） ----------
+# 浏览器/桌面壳共用的管理面板（dashboard/ 构建产物 + /api/v1 接口），与
+# /stella/status 同一个 HTTP 服务器，**不新增端口**。与状态接口的本质区别：
+# 本层带写操作，因此必须鉴权（首次访问走 setup 向导创建管理员，见 webui/auth.py）。
+# HOST=0.0.0.0 时整个管理面暴露到局域网——doctor 会就此告警，登录有限流兜底。
+WEBUI_ENABLED = _env_bool("WEBUI_ENABLED", "true")
+# JWT 有效期（小时）。桌面壳经 desktop-session 换发的 token 同此期限。
+WEBUI_TOKEN_TTL_HOURS = _env_int("WEBUI_TOKEN_TTL_HOURS", 168)
+# 登录/setup/desktop-session 的限流（次/分钟/IP）。爆破管理员密码是管理面
+# 暴露后最现实的攻击面；默认收紧到人工操作完全无感的程度。
+WEBUI_LOGIN_RATELIMIT_PER_MIN = _env_int("WEBUI_LOGIN_RATELIMIT_PER_MIN", 5)
+# 单文件上传上限（MB）。知识库导入与（后续的）聊天附件共用同一入口。
+WEBUI_MAX_UPLOAD_MB = _env_int("WEBUI_MAX_UPLOAD_MB", 50)
+# 是否由本进程托管前端静态资源。前端开发用 Vite 反代（dashboard/ pnpm dev）
+# 时置 false，只保留 API。
+WEBUI_SERVE_DIST = _env_bool("WEBUI_SERVE_DIST", "true")
+
 # ---------- 优雅停止 ----------
 # 停止时等待在途后台任务（整合/压缩）收尾的上限（秒）。
 # LLM 单次调用最长 120s×3 次重试，无限等待会让「停止」看起来卡死。
