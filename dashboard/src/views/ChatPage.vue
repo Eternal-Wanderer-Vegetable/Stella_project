@@ -52,7 +52,9 @@ async function send(): Promise<void> {
 
   let stopWatch: ReturnType<typeof setTimeout> | null = null;
   try {
-    await sseStream('/api/v1/chat', (id, data) => {
+    await sseStream(
+      '/api/v1/chat',
+      (id, data) => {
       try {
         const frame = JSON.parse(data);
         if (frame.type === 'complete') {
@@ -73,7 +75,9 @@ async function send(): Promise<void> {
       }
       if (stopWatch !== null) clearTimeout(stopWatch);
       stopWatch = setTimeout(() => { busy.value = false; }, 500);
-    });
+    },
+    { method: 'POST', body: JSON.stringify({ message: text }) },
+    );
   } catch (err) {
     toastApiError(toast, err);
   } finally {

@@ -8,14 +8,20 @@ import { getToken } from './http';
 export async function sseStream(
   url: string,
   onMessage: (id: string, data: string) => void,
-  opts: { signal?: AbortSignal; lastEventId?: string } = {},
+  opts: { signal?: AbortSignal; lastEventId?: string; method?: string; body?: string } = {},
 ): Promise<void> {
   const headers: Record<string, string> = { Accept: 'text/event-stream' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (opts.lastEventId) headers['Last-Event-ID'] = opts.lastEventId;
+  if (opts.body) headers['Content-Type'] = 'application/json';
 
-  const resp = await fetch(url, { headers, signal: opts.signal });
+  const resp = await fetch(url, {
+    method: opts.method ?? 'GET',
+    body: opts.body,
+    headers,
+    signal: opts.signal,
+  });
   if (!resp.ok || !resp.body) {
     throw new Error(`SSE 连接失败（${resp.status}）`);
   }
