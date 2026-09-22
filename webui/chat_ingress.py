@@ -49,10 +49,12 @@ def _resolve_pipeline():
     """运行时解析宿主管线。失败抛 ApiError（不炸进程）。"""
     try:
         from plugins.bot_main import ai_gateway  # Bot 进程内（nonebot 已挂 sys.path）
-    except ImportError:
+    except Exception:
         try:
             from stella_project.plugins.bot_main import ai_gateway  # 打包/源码直跑
         except Exception as e:
+            # 真包 __init__ 在 nonebot 未初始化时抛 ValueError（不只是 ImportError），
+            # 兜底必须是 Exception——独立 dev server 下聊天要的是明确提示不是崩溃。
             raise RuntimeError(
                 "WebChat 需要 Bot 运行环境（独立模式下管线不可用）"
             ) from e
