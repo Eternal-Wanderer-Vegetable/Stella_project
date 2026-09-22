@@ -35,15 +35,15 @@ const groups: { header?: string; items: NavItem[] }[] = [
   {
     header: 'Connect',
     items: [
-      { icon: 'mdi-robot', title: t('core.navigation.platforms'), milestone: 'M2' },
-      { icon: 'mdi-creation', title: t('core.navigation.providers'), milestone: 'M2' },
+      { icon: 'mdi-robot', title: t('core.navigation.platforms'), to: '/platforms' },
+      { icon: 'mdi-creation', title: t('core.navigation.providers'), to: '/providers' },
       { icon: 'mdi-cog', title: t('core.navigation.config'), milestone: 'M2' },
     ],
   },
   {
     header: 'Capability',
     items: [
-      { icon: 'mdi-puzzle', title: t('core.navigation.extension'), milestone: 'M3' },
+      { icon: 'mdi-puzzle', title: t('core.navigation.extension'), to: '/extension/plugins' },
       { icon: 'mdi-book-open-variant', title: t('core.navigation.knowledgeBase'), milestone: 'M3' },
       { icon: 'mdi-heart', title: t('core.navigation.persona'), milestone: 'M2' },
       { icon: 'mdi-clock-outline', title: t('core.navigation.cron'), milestone: 'M3' },
@@ -52,7 +52,7 @@ const groups: { header?: string; items: NavItem[] }[] = [
   },
   {
     header: 'Observability',
-    items: [{ icon: 'mdi-database', title: t('core.navigation.data'), milestone: 'M1' }],
+    items: [{ icon: 'mdi-database', title: t('core.navigation.data'), to: '/data' }],
   },
   {
     items: [{ icon: 'mdi-cog-outline', title: t('core.navigation.settings'), milestone: 'M2' }],
@@ -90,7 +90,10 @@ async function logout(): Promise<void> {
               v-if="item.to"
               :title="item.title"
               :prepend-icon="item.icon"
-              :active="$route.path === item.to"
+              :active="
+                $route.path === item.to ||
+                (item.to !== '/' && $route.path.startsWith(item.to))
+              "
               :to="item.to"
             />
             <v-list-item v-else :title="item.title" :prepend-icon="item.icon" disabled>

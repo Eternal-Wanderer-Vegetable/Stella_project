@@ -11,6 +11,9 @@ importers:
       '@mdi/font':
         specifier: ^7.4.47
         version: 7.4.47
+      apexcharts:
+        specifier: ^7.5.1
+        version: 7.5.1
       axios:
         specifier: ^1.7.9
         version: 1.20.0
@@ -26,6 +29,9 @@ importers:
       vue-router:
         specifier: ^4.5.0
         version: 4.6.4(vue@3.5.43(typescript@5.6.3))
+      vue3-apexcharts:
+        specifier: ^1.11.1
+        version: 1.11.1(apexcharts@7.5.1)(vue@3.5.43(typescript@5.6.3))
       vuetify:
         specifier: ^3.7.11
         version: 3.13.4(typescript@5.6.3)(vue@3.5.43(typescript@5.6.3))
@@ -458,6 +464,13 @@ packages:
   alien-signals@1.0.13:
     resolution: {integrity: sha512-OGj9yyTnJEttvzhTUWuscOvtqxq5vrhF7vL9oS0xJ2mK0ItPYP1/y+vCFebfxoEyAz0++1AIwJ5CMr+Fk3nDmg==}
 
+  apex-commons@0.8.1:
+    resolution: {integrity: sha512-F7fqJVh0smeTu1d86uuRSNNZvaM/l11GNQMbu6oAiSvuXp+K8KCufg0oZTy2VQBEEipRLAdFqkHnphlVpTG0Gw==}
+
+  apexcharts@7.5.1:
+    resolution: {integrity: sha512-I+S/KSXKGwaCZx73CvAg7yLfM892NEZR2CG5UHkjGFjBq/LhesuglIGuaKn1fiGa5Z0voAyfFROLjWywZNyOEA==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
+
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
@@ -739,6 +752,12 @@ packages:
     hasBin: true
     peerDependencies:
       typescript: '>=5.0.0'
+
+  vue3-apexcharts@1.11.1:
+    resolution: {integrity: sha512-MbN3vg8bMG19wc0Lm1HkeQvODgLm56DgpIxtNUO0xpf/JCzYWVGE4jzXp2JISzy2s3Kul1yOxNQUYsLvKQ5L9g==}
+    peerDependencies:
+      apexcharts: '>=5.10.0'
+      vue: '>=3.0.0'
 
   vue@3.5.43:
     resolution: {integrity: sha512-o5qZoksdnjIKvW1srZ3ab7pcDNYAerBjRe54D0LBLfRdCYFrSgBHVXokMas35czQc0//lmx4/tuY4ZNQ+Rf2Ng==}
@@ -1061,6 +1080,12 @@ snapshots:
 
   alien-signals@1.0.13: {}
 
+  apex-commons@0.8.1: {}
+
+  apexcharts@7.5.1:
+    dependencies:
+      apex-commons: 0.8.1
+
   asynckit@0.4.0: {}
 
   axios@1.20.0:
@@ -1335,6 +1360,11 @@ snapshots:
       '@volar/typescript': 2.4.15
       '@vue/language-core': 2.2.12(typescript@5.6.3)
       typescript: 5.6.3
+
+  vue3-apexcharts@1.11.1(apexcharts@7.5.1)(vue@3.5.43(typescript@5.6.3)):
+    dependencies:
+      apexcharts: 7.5.1
+      vue: 3.5.43(typescript@5.6.3)
 
   vue@3.5.43(typescript@5.6.3):
     dependencies:

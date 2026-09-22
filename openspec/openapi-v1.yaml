@@ -376,6 +376,44 @@ paths:
         "200":
           description: OK
 
+  /api/v1/logs/history:
+    get:
+      tags: [logs]
+      summary: 结构化日志尾部（旧→新；解析失败的行按 {raw} 保留）
+      x-stella-milestone: M1
+      parameters:
+        - name: tail
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 500 }
+        - name: level
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /api/v1/logs/live:
+    get:
+      tags: [logs]
+      summary: 实时日志流（SSE）
+      description: >-
+        帧 = `id: <字节偏移>` + `data: {JSON}`，空闲心跳 `: heartbeat`；
+        重连带 Last-Event-ID 头（或 ?resume=）从断点续传，轮转后从头重放。
+        鉴权用 Bearer 头（前端 fetch 流读取）。X-Accel-Buffering 已关闭。
+      x-stella-milestone: M1
+      parameters:
+        - name: level
+          in: query
+          schema: { type: string }
+        - name: resume
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
   /api/v1/system/doctor:
     get:
       tags: [system]

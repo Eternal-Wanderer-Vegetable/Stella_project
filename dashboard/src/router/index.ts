@@ -12,6 +12,53 @@ const routes: RouteRecordRaw[] = [
     component: FullLayout,
     children: [
       { path: '', name: 'welcome', component: () => import('@/views/WelcomePage.vue') },
+      {
+        path: 'platforms',
+        name: 'platforms',
+        component: () => import('@/views/PlatformsPage.vue'),
+      },
+      {
+        path: 'providers',
+        name: 'providers',
+        component: () => import('@/views/ProvidersPage.vue'),
+      },
+      {
+        path: 'extension/plugins',
+        name: 'plugins',
+        component: () => import('@/views/extension/PluginsPage.vue'),
+      },
+      {
+        // 数据页：Tab 壳 + 子路由（对齐 AstrBot DataPage 范式，方案 §6.9）
+        path: 'data',
+        component: () => import('@/views/data/DataPage.vue'),
+        children: [
+          { path: '', redirect: '/data/statistics' },
+          {
+            path: 'statistics',
+            name: 'data-statistics',
+            component: () => import('@/views/data/StatisticsPage.vue'),
+            meta: { dataTab: 'statistics' },
+          },
+          {
+            path: 'conversations',
+            name: 'data-conversations',
+            component: () => import('@/views/data/ConversationsPage.vue'),
+            meta: { dataTab: 'conversations' },
+          },
+          {
+            path: 'logs',
+            name: 'data-logs',
+            component: () => import('@/views/data/LogsPage.vue'),
+            meta: { dataTab: 'logs' },
+          },
+          {
+            path: 'trace',
+            name: 'data-trace',
+            component: () => import('@/views/data/TracePage.vue'),
+            meta: { dataTab: 'trace' },
+          },
+        ],
+      },
     ],
   },
   {
