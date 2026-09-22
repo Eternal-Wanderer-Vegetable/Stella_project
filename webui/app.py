@@ -78,6 +78,7 @@ def create_webui_app() -> FastAPI:
     app.include_router(auth_router_module.router)
     app.include_router(status_router_module.router)
     # M1 只读面板（usage / providers / platform / plugins / conversations / trace / logs）
+    from webui.routers import chat as chat_router_module
     from webui.routers import config as config_router_module
     from webui.routers import conversations as conversations_router_module
     from webui.routers import logs as logs_router_module
@@ -104,6 +105,8 @@ def create_webui_app() -> FastAPI:
     app.include_router(manage_router_module.kb_router)
     app.include_router(manage_router_module.sched_router)
     app.include_router(plugins_mg_router_module.router)
+    # M4 WebChat（虚拟群 ingress，方案 §13）
+    app.include_router(chat_router_module.router)
 
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request: Request, exc: ApiError):
