@@ -172,6 +172,53 @@ def build_payload(
     return payload
 
 
+def collect_status() -> dict:
+    """聚合一帧完整状态 payload。/stella/status 端点与 webui 的
+    /api/v1/status（已认证管理员）共用这一份聚合——同一进程内的状态只有
+    一个真相源，复制聚合逻辑必然漂移。
+
+    原先是端点闭包里的内联链路，提到模块级只为复用，语义逐行未动：
+    每段独立容错，取数失败只让面板少一块，绝不让调用方 500。
+    """
+    try:
+        from extensions.link_monitor import link_status
+
+        link = link_status()
+    except Exception:
+        link = None
+    try:
+        from deploy import runtime
+
+        runtime.sync_onebot_status(link)
+        runtime_status = runtime.snapshot()
+    except Exception:
+        runtime_status = None
+    try:
+        from core.llm import snapshot
+
+        sched = snapshot()
+    except Exception:
+        sched = {}
+    try:
+        from core.llm.usage_store import usage_snapshot
+
+        usage = usage_snapshot()
+        usage["fallback_states"] = _fallback_states()
+    except Exception:
+        # 取数失败只让面板少一块，绝不让状态接口 500
+        usage = None
+    return build_payload(
+        link,
+        sched,
+        pid=os.getpid(),
+        started_at=_STARTED_AT,
+        usage=usage,
+        capabilities=_capabilities(),
+        runtime_status=runtime_status,
+        skills=_skills(),
+    )
+
+
 def _register_status_route(app) -> bool:
     """在给定 ASGI app 上注册状态路由；已注册时保持幂等。"""
     for route in getattr(app, "routes", ()):
@@ -192,43 +239,7 @@ def _register_status_route(app) -> bool:
         host = request.client.host if request.client else None
         if not _is_loopback(host):
             return JSONResponse({"error": "forbidden"}, status_code=403)
-        try:
-            from extensions.link_monitor import link_status
-
-            link = link_status()
-        except Exception:
-            link = None
-        try:
-            from deploy import runtime
-
-            runtime.sync_onebot_status(link)
-            runtime_status = runtime.snapshot()
-        except Exception:
-            runtime_status = None
-        try:
-            from core.llm import snapshot
-
-            sched = snapshot()
-        except Exception:
-            sched = {}
-        try:
-            from core.llm.usage_store import usage_snapshot
-
-            usage = usage_snapshot()
-            usage["fallback_states"] = _fallback_states()
-        except Exception:
-            # 取数失败只让面板少一块，绝不让状态接口 500
-            usage = None
-        return build_payload(
-            link,
-            sched,
-            pid=os.getpid(),
-            started_at=_STARTED_AT,
-            usage=usage,
-            capabilities=_capabilities(),
-            runtime_status=runtime_status,
-            skills=_skills(),
-        )
+        return collect_status()
 
     return True
 

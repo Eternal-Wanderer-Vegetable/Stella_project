@@ -337,6 +337,17 @@ async def _bootstrap_capabilities() -> None:
 
 driver.on_startup(_bootstrap_capabilities)
 
+# WebUI（v2 面板）：必须是**最后一个** startup 钩子——挂载发生在 lifespan
+# 末尾，SPA catch-all（Mount "/"）因此排在 OneBot WS 与 /stella/status 之后。
+# Starlette 按注册顺序匹配路由，顺序即安全边界（tests/webui/test_webui_mount.py
+# 钉死四类路径共存）。挂载失败只告警不拖垮 Bot（与 status_api 同一取向）。
+try:
+    from webui.mount import setup_webui
+except ImportError:
+    _diag_log("[webui][boot] webui 包缺失（依赖未装齐或打包不全），管理面未启用")
+else:
+    setup_webui()
+
 SERVER = None  # 供 ai_gateway 哨兵触发时取 uvicorn Server 实例（Driver.run 不落地）
 
 
