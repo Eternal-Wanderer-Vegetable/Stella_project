@@ -14,8 +14,9 @@
 - :mod:`.cron` —— 五字段 APScheduler 3.x 兼容方言的解析、校验与 next-fire 预览；
 - :mod:`.service` —— 生命周期操作（create/list/show/edit/pause/resume/cancel/
   run-now/history）与权限、群边界、审计；
-- :mod:`.gate` —— 调度专用严格门控（复用主动发言安全闸，仅豁免新消息启发式，
-  策略读失败一律拒绝）与有界只读上下文；
+- :mod:`.context` —— 有界只读上下文；调度专用的严格门控在新函数
+  ``memory.proactive_gate.can_speak_for_scheduled``（复用主动发言安全闸，
+  仅豁免新消息启发式，策略读失败一律拒绝）；
 - :mod:`.agent` —— 有界 Agent 运行器（时间/轮数/工具数/输出上限 + 显式允许清单）；
 - :mod:`.delivery` —— 投递状态机（ready → sending → sent / delivery_unknown）；
 - :mod:`.runtime` —— 租约 worker（认领到期运行、群锁串行、重启恢复、优雅停止）；
