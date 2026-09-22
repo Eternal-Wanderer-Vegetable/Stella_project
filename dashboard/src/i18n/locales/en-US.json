@@ -1,0 +1,67 @@
+{
+  "core": {
+    "navigation": {
+      "welcome": "Welcome",
+      "chat": "Chat",
+      "platforms": "Platforms",
+      "providers": "Providers",
+      "extension": "Extensions",
+      "config": "Config",
+      "knowledgeBase": "Knowledge",
+      "persona": "Persona",
+      "data": "Data",
+      "cron": "Cron Jobs",
+      "groups": "Groups",
+      "settings": "Settings"
+    },
+    "common": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "edit": "Edit",
+      "confirm": "Confirm",
+      "refresh": "Refresh",
+      "logout": "Log out",
+      "loading": "Loading…"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "unknown": "Unknown"
+    }
+  },
+  "features": {
+    "auth": {
+      "loginTitle": "Sign in to Stella",
+      "setupTitle": "Set up Stella",
+      "setupHint": "First run: create the admin account. Credentials stay in the local data directory (webui/auth.json).",
+      "username": "Username",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "submitLogin": "Sign in",
+      "submitSetup": "Finish setup",
+      "passwordMismatch": "Passwords do not match",
+      "needSetup": "Not initialized yet. Create the admin account first."
+    },
+    "welcome": {
+      "title": "Welcome back",
+      "onboard": "Get started",
+      "step1": "Configure model endpoints",
+      "step2": "Bind QQ groups",
+      "step3": "Start the bot",
+      "todoMilestone": "Available from M2",
+      "statusTitle": "Runtime status",
+      "version": "Version",
+      "pid": "Process",
+      "uptime": "Uptime",
+      "link": "OneBot link",
+      "groups": "Bound groups",
+      "tokensToday": "Tokens today"
+    },
+    "offline": {
+      "title": "Backend is not running",
+      "hint": "Cannot reach the Stella bot process. Desktop users: start the bot from the desktop shell first. Browser users: verify the address and port.",
+      "retry": "Retry"
+    }
+  }
+}

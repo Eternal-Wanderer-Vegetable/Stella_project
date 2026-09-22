@@ -1,0 +1,67 @@
+{
+  "core": {
+    "navigation": {
+      "welcome": "欢迎",
+      "chat": "聊天",
+      "platforms": "平台",
+      "providers": "提供商",
+      "extension": "扩展",
+      "config": "配置",
+      "knowledgeBase": "知识库",
+      "persona": "人格",
+      "data": "数据",
+      "cron": "定时任务",
+      "groups": "群组",
+      "settings": "设置"
+    },
+    "common": {
+      "save": "保存",
+      "cancel": "取消",
+      "delete": "删除",
+      "edit": "编辑",
+      "confirm": "确认",
+      "refresh": "刷新",
+      "logout": "退出登录",
+      "loading": "加载中…"
+    },
+    "status": {
+      "online": "在线",
+      "offline": "离线",
+      "unknown": "未知"
+    }
+  },
+  "features": {
+    "auth": {
+      "loginTitle": "登录 Stella 控制台",
+      "setupTitle": "初始化 Stella 控制台",
+      "setupHint": "首次使用：创建管理员账号。凭据只保存在本机数据目录（webui/auth.json）。",
+      "username": "用户名",
+      "password": "密码",
+      "confirmPassword": "确认密码",
+      "submitLogin": "登录",
+      "submitSetup": "完成初始化",
+      "passwordMismatch": "两次输入的密码不一致",
+      "needSetup": "尚未初始化，请先创建管理员账号"
+    },
+    "welcome": {
+      "title": "欢迎回来",
+      "onboard": "开始使用",
+      "step1": "配置模型端点",
+      "step2": "绑定 QQ 群",
+      "step3": "启动 Bot",
+      "todoMilestone": "M2 起可用",
+      "statusTitle": "运行状态",
+      "version": "版本",
+      "pid": "进程",
+      "uptime": "运行时长",
+      "link": "OneBot 链路",
+      "groups": "已绑定群数",
+      "tokensToday": "今日 token"
+    },
+    "offline": {
+      "title": "后端未运行",
+      "hint": "无法连接 Stella Bot 进程。桌面壳用户：请先在壳内启动 Bot；浏览器用户：请确认服务地址与端口。",
+      "retry": "重试"
+    }
+  }
+}

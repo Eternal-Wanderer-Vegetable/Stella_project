@@ -110,3 +110,5 @@ start_claude_command.txt
 # 依赖与构建产物不入库；dist 由 CI 构建并随发布包分发
 /dashboard/node_modules/
 /dashboard/dist/
+# 发布期由 build_release_package 拷入的托管副本（同上，构建产物）
+/webui/dist/
