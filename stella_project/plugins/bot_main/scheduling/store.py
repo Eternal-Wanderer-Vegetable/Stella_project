@@ -377,15 +377,31 @@ class TaskStore:
         self,
         task_id: str,
         *,
-        last_run_utc: datetime,
-        next_run_utc: datetime | None,
+        last_run_utc: datetime | None = None,
+        next_run_utc: datetime | None = None,
+        clear_next_run: bool = False,
     ) -> None:
-        """刷新 next/last 触发时刻缓存（展示用，不参与正确性；不 bump revision）。"""
+        """刷新 next/last 触发时刻缓存（展示用，不参与正确性；不 bump revision）。
+
+        只更新传入的字段；``clear_next_run`` 用于任务取消/暂停时清掉预览。
+        """
+        sets: list[str] = []
+        params: list[object] = []
+        if last_run_utc is not None:
+            sets.append("last_run_utc = ?")
+            params.append(iso_utc(last_run_utc))
+        if clear_next_run:
+            sets.append("next_run_utc = NULL")
+        elif next_run_utc is not None:
+            sets.append("next_run_utc = ?")
+            params.append(iso_utc(next_run_utc))
+        if not sets:
+            return
+        params.append(task_id)
         conn = self._connect()
         try:
             conn.execute(
-                "UPDATE tasks SET last_run_utc = ?, next_run_utc = ? WHERE task_id = ?",
-                (iso_utc(last_run_utc), iso_utc(next_run_utc) if next_run_utc else None, task_id),
+                f"UPDATE tasks SET {', '.join(sets)} WHERE task_id = ?", params
             )
             conn.commit()
         finally:

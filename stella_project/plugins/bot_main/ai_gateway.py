@@ -701,6 +701,13 @@ async def is_addressing_command(event: GroupMessageEvent) -> bool:
 
     if parse_reload_command(text):
         return False
+    # 定时任务指令整体让路：text=/cron= 的值可以是任意字符串（含称呼句式）
+    from stella_project.plugins.bot_main.scheduling.commands import (
+        is_scheduling_command,
+    )
+
+    if is_scheduling_command(text):
+        return False
     result = await classify_addressing(text)
     _cache_addressing_decision(event, result)
     return result.operation != NOT_ADDRESS_REQUEST
@@ -838,6 +845,14 @@ async def is_toggle_command(event: GroupMessageEvent) -> bool:
 
     if parse_reload_command(text):
         return False
+    # 定时任务指令优先于开关词（动词已避开开关词表，这里再机械挡一层：
+    # 「定时停用 x」这类指令不允许被当成「安静」处理）
+    from stella_project.plugins.bot_main.scheduling.commands import (
+        is_scheduling_command,
+    )
+
+    if is_scheduling_command(text):
+        return False
     if is_likely_addressing_request(text):
         return False
     return any(k in text for k in _MUTE_KEYWORDS + _UNMUTE_KEYWORDS)
@@ -926,6 +941,13 @@ async def is_capability_query(event: GroupMessageEvent) -> bool:
     text = event.get_plaintext()
     # 重载命令优先：插件名可以是任何字符串，包含查询句式也不奇怪
     if parse_reload_command(text):
+        return False
+    # 定时任务指令同理让路（text= 值可以是任意字符串）
+    from stella_project.plugins.bot_main.scheduling.commands import (
+        is_scheduling_command,
+    )
+
+    if is_scheduling_command(text):
         return False
     if is_likely_addressing_request(text):
         return False
