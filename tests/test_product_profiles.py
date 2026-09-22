@@ -127,6 +127,8 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "webui",
+        "desktop",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,6 +207,8 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "webui",
+        "desktop",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -263,6 +267,8 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "webui",
+        "desktop",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,7 +286,7 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
 
 def test_tauri_bundles_the_stella_resource_directory():
     config_path = (
-        PROJECT_ROOT / "stella-installer" / "src-tauri" / "tauri.conf.json"
+        PROJECT_ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
     )
     config = json.loads(config_path.read_text(encoding="utf-8"))
 
@@ -297,7 +303,7 @@ def test_tauri_bundles_webview2_offline_installer():
     体积换稳定策略）。silent 默认 true，静默安装不弹窗。
     """
     config_path = (
-        PROJECT_ROOT / "stella-installer" / "src-tauri" / "tauri.conf.json"
+        PROJECT_ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
     )
     config = json.loads(config_path.read_text(encoding="utf-8"))
 

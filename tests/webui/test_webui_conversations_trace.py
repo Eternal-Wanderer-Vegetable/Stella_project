@@ -111,7 +111,13 @@ def seeded_db(isolated_home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return db
 
 
-def test_conversations_missing_db_degrades(client: TestClient, auth_header: dict):
+def test_conversations_missing_db_degrades(
+    client: TestClient, auth_header: dict, isolated_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # 不能依赖「会话库不存在」：全套件运行时其它测试会先建出会话库——
+    # 显式指向一个不存在的路径来验证降级（全量运行实测踩过顺序问题）。
+    monkeypatch.setattr(settings, "DB_PATH", isolated_home / "no" / "such.db")
     resp = client.get("/api/v1/conversations/groups", headers=auth_header)
     assert resp.status_code == 200
     assert resp.json()["data"]["groups"] == []
