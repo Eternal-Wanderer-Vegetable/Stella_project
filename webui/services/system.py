@@ -29,22 +29,34 @@ def restart() -> dict:
 
 
 async def run_doctor() -> dict:
+    """子进程跑 ``python -m deploy doctor --json``，与 CLI 完全同源。
+
+    退出码语义：**存在未通过检查项时非零**（deploy 侧的约定）——这不等于
+    「doctor 没跑成」。报告 JSON 无论退出码如何都照常打印，所以这里先解析
+    stdout 再看退出码；``ok`` 取自报告自身的 summary（error=0 且不 blocking），
+    而不是退出码。解析失败（真异常）才降级为错误文本。
+    """
+    import json
+
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "deploy", "doctor", "--json",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
     try:
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
     except asyncio.TimeoutError:
         proc.kill()
-        return {"ok": False, "error": "doctor 超时（90s）", "output": ""}
+        return {"ok": False, "error": "doctor 超时（120s）", "output": ""}
     text = out.decode("utf-8", errors="replace")
-    if proc.returncode == 0 and text.lstrip().startswith(("{", "[")):
-        import json
-
-        try:
-            return {"ok": True, "report": json.loads(text), "output": ""}
-        except ValueError:
-            pass
-    return {"ok": False, "error": f"doctor 退出码 {proc.returncode}", "output": text[-4000:]}
+    try:
+        report = json.loads(text)
+    except ValueError:
+        return {
+            "ok": False,
+            "error": f"doctor 退出码 {proc.returncode}，且输出不是 JSON",
+            "output": text[-4000:],
+        }
+    summary = report.get("summary", {}) if isinstance(report, dict) else {}
+    ok = bool(summary) and not summary.get("blocking", False) and summary.get("error", 0) == 0
+    return {"ok": ok, "report": report, "summary": summary, "exit_code": proc.returncode}

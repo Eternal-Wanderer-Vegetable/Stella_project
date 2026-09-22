@@ -13,8 +13,35 @@ const username = ref('');
 const oldPassword = ref('');
 const newPassword = ref('');
 const busy = ref(false);
-const doctor = ref<{ ok: boolean; output: string; error?: string; report?: unknown } | null>(null);
+interface DoctorItem {
+  id: string;
+  level: string;
+  title: string;
+  detail?: string;
+  fix_hint?: string;
+}
+interface DoctorSummary {
+  ok: number;
+  warn: number;
+  error: number;
+  blocking: boolean;
+  total: number;
+}
+interface DoctorReport {
+  version: number;
+  summary: DoctorSummary;
+  items: DoctorItem[];
+}
+const doctor = ref<{
+  ok: boolean;
+  report?: DoctorReport;
+  summary?: DoctorSummary;
+  error?: string;
+  output?: string;
+  exit_code?: number;
+} | null>(null);
 const doctorLoading = ref(false);
+const showRawDoctor = ref(false);
 
 const storedUser = localStorage.getItem('stella-user') ?? '';
 username.value = storedUser;
@@ -109,17 +136,82 @@ onMounted(() => {
             <v-spacer />
             <v-btn size="small" :loading="doctorLoading" @click="runDoctor">运行</v-btn>
           </div>
-          <v-alert v-if="doctor && !doctor.ok" type="error" variant="tonal" density="compact">
-            {{ doctor.error }}
-          </v-alert>
-          <pre v-if="doctor" class="doctor-pre">{{ doctor.output || '（JSON 报告见下方）' }}</pre>
-          <pre
-            v-if="doctor && doctor.ok && doctor.report"
-            class="doctor-pre"
-          >{{ JSON.stringify(doctor.report, null, 2).slice(0, 4000) }}</pre>
           <div v-if="!doctor" class="text-body-2 text-medium-emphasis">
             运行环境自检（Python/依赖/目录/端口/NapCat 探活）。
           </div>
+          <template v-else>
+            <!-- 摘要 -->
+            <div class="d-flex align-center ga-2 mb-2 flex-wrap">
+              <v-chip color="success" size="small" variant="tonal">
+                通过 {{ doctor.summary?.ok ?? 0 }}
+              </v-chip>
+              <v-chip color="warning" size="small" variant="tonal">
+                警告 {{ doctor.summary?.warn ?? 0 }}
+              </v-chip>
+              <v-chip color="error" size="small" variant="tonal">
+                错误 {{ doctor.summary?.error ?? 0 }}
+              </v-chip>
+              <v-chip size="small" variant="outlined">共 {{ doctor.summary?.total ?? 0 }} 项</v-chip>
+              <v-chip
+                v-if="doctor.summary?.blocking"
+                color="error"
+                size="small"
+                variant="tonal"
+              >
+                存在阻塞项：Bot 无法启动
+              </v-chip>
+            </div>
+            <v-alert
+              v-if="doctor.summary?.blocking"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-2"
+            >
+              存在阻塞级问题，deploy start 会拒绝启动。逐项修复（见各项的修复建议）后重跑自检。
+            </v-alert>
+            <v-alert v-if="doctor.error" type="error" variant="tonal" density="compact" class="mb-2">
+              {{ doctor.error }}
+              <div v-if="doctor.output" class="text-caption mt-1">{{ doctor.output }}</div>
+            </v-alert>
+
+            <!-- 检查项列表 -->
+            <v-list density="compact">
+              <v-list-item v-for="item in doctor.report?.items ?? []" :key="item.id">
+                <template #prepend>
+                  <v-icon
+                    :icon="
+                      item.level === 'error'
+                        ? 'mdi-close-circle'
+                        : item.level === 'warn'
+                          ? 'mdi-alert'
+                          : 'mdi-check-circle'
+                    "
+                    :color="
+                      item.level === 'error'
+                        ? 'error'
+                        : item.level === 'warn'
+                          ? 'warning'
+                          : 'success'
+                    "
+                  />
+                </template>
+                <v-list-item-title class="text-body-2">{{ item.title }}</v-list-item-title>
+                <v-list-item-subtitle>
+                  {{ item.detail }}
+                  <code v-if="item.fix_hint" class="fix-hint mt-1">{{ item.fix_hint }}</code>
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+
+            <v-expansion-panels class="mt-2">
+              <v-expansion-panel title="原始 JSON">
+                <v-expansion-panel-text>
+                  <pre class="doctor-pre">{{ JSON.stringify(doctor.report, null, 2) }}</pre>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </template>
         </v-card>
       </v-col>
     </v-row>
@@ -127,6 +219,13 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.fix-hint {
+  display: block;
+  font-size: 0.72rem;
+  background: rgba(var(--v-theme-surface), 0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
 .doctor-pre {
   white-space: pre-wrap;
   word-break: break-all;
