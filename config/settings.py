@@ -1547,6 +1547,38 @@ SANDBOX_WORKSPACE_ROOT = _env_path("SANDBOX_WORKSPACE_ROOT", _user_path("workspa
 # 沙盒审计事件保留天数（审计记录见 skills/audit.py；0 = 永久保留）。
 SANDBOX_AUDIT_RETENTION_DAYS = _env_int("SANDBOX_AUDIT_RETENTION_DAYS", 30)
 
+# ---------- 定时任务（用户可管理的 Cron / 主动 Agent） ----------
+# 群成员可在群里预约 Cron 提醒；管理员可创建带工具允许清单的 Agent 任务。
+# 设计与指令见 docs/scheduling.md；方言/权限/投递语义的硬约束见
+# stella_project/plugins/bot_main/scheduling/ 各模块 docstring。
+# 总开关默认**关闭**：调度会自动向群内发消息，部署者应显式开启。
+SCHEDULING_ENABLED = _env_bool("SCHEDULING_ENABLED", "false")
+# 调度库（独立 SQLite，与记忆库隔离；失败迁移会让 worker 保持停用）。
+SCHEDULING_DB_PATH = _env_path("SCHEDULING_DB_PATH", _user_path("scheduling/tasks.db"))
+# 单 worker 租约 TTL（秒）。一个库同时只允许一个活跃 worker（v1 部署模型），
+# TTL 内未续租即视为死亡，其它进程可接管并恢复其队列。
+SCHEDULING_WORKER_LEASE_TTL = _env_int("SCHEDULING_WORKER_LEASE_TTL", 300)
+# worker 巡检间隔（秒）：到期触发扫描 / 租约续期 / 错过触发补跑都在 tick 里做。
+SCHEDULING_TICK_INTERVAL = _env_int("SCHEDULING_TICK_INTERVAL", 30)
+# 每群每日运行数上限（0 = 不限）。认领时在同一事务里检查，超额运行记 skipped。
+SCHEDULING_DAILY_GROUP_RUN_CAP = _env_int("SCHEDULING_DAILY_GROUP_RUN_CAP", 40)
+# 每群任务总数上限 / 每用户每群任务上限（0/负数 = 只按每群上限约束管理员外用户）。
+SCHEDULING_MAX_TASKS_PER_GROUP = _env_int("SCHEDULING_MAX_TASKS_PER_GROUP", 8)
+SCHEDULING_MAX_TASKS_PER_USER = _env_int("SCHEDULING_MAX_TASKS_PER_USER", 3)
+# 单次运行默认预算（任务创建时可被管理员放宽的只有工具清单；四重上限取任务行，
+# 这里是创建时的默认值）。
+SCHEDULING_RUN_TIMEOUT_SECONDS = _env_int("SCHEDULING_RUN_TIMEOUT_SECONDS", 300)
+SCHEDULING_MAX_MODEL_ROUNDS = _env_int("SCHEDULING_MAX_MODEL_ROUNDS", 4)
+SCHEDULING_MAX_TOOL_CALLS = _env_int("SCHEDULING_MAX_TOOL_CALLS", 8)
+SCHEDULING_OUTPUT_MAX_CHARS = _env_int("SCHEDULING_OUTPUT_MAX_CHARS", 1200)
+# 有界上下文（群近期话题 + 消息尾巴）的字符预算。
+SCHEDULING_CONTEXT_MAX_CHARS = _env_int("SCHEDULING_CONTEXT_MAX_CHARS", 1200)
+# 平台发送单次超时（秒）：超时/异常一律判 delivery_unknown，不自动重投。
+SCHEDULING_SEND_TIMEOUT = _env_float("SCHEDULING_SEND_TIMEOUT", 30.0)
+# 全局管理员（QQ 号，逗号分隔）：群主/群管理员之外的第三类授权来源，
+# 可创建 Agent 任务、改允许清单、管理他人任务。
+SCHEDULING_GLOBAL_ADMINS = _env_int_set("SCHEDULING_GLOBAL_ADMINS")
+
 
 def validate_skills_config() -> list[str]:
     """校验 Skills/Sandbox 配置组合，返回错误清单（空清单 = 合法）。

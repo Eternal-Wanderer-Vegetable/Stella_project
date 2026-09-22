@@ -203,6 +203,44 @@ def get_runtime_state(group_id: int) -> dict:
     }
 
 
+def get_runtime_state_strict(group_id: int) -> dict | None:
+    """读取群级运行时状态；**读取失败返回 None**（调用方须 fail closed）。
+
+    与 :func:`get_runtime_state` 的分工：交互链路读不到状态时按「未静音」放行
+    （fail open）——聊天场景宁可多说一句也不能瞎了；调度链路
+    （``proactive_gate.can_speak_for_scheduled``）需要相反的取舍——拿不准时
+    宁可不发，静音开关读不出来还硬要发言是更糟的结果。两份语义并存，
+    各有测试锁定，互不改动。
+    """
+    try:
+        conn = _connect_runtime()
+        row = conn.execute(
+            "SELECT proactive_muted, muted_by, muted_at, last_sleep_announce_date, "
+            "last_wakeup_announce_date FROM group_runtime_state WHERE group_id = ?",
+            (str(group_id),),
+        ).fetchone()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.warning(f"⚠️ [ProactiveState] 读取群运行时状态失败（调度严格模式）: {e}")
+        return None
+
+    if not row:
+        return {
+            "proactive_muted": False,
+            "muted_by": "",
+            "muted_at": None,
+            "last_sleep_announce_date": "",
+            "last_wakeup_announce_date": "",
+        }
+    return {
+        "proactive_muted": bool(row[0]),
+        "muted_by": row[1] or "",
+        "muted_at": row[2],
+        "last_sleep_announce_date": row[3] or "",
+        "last_wakeup_announce_date": row[4] or "",
+    }
+
+
 def set_proactive_muted(group_id: int, muted: bool, operator_id: int = 0) -> None:
     """设置群级主动发言静音开关（持久化，重启后仍生效）。
 

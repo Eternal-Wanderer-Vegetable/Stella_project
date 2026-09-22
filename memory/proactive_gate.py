@@ -36,7 +36,7 @@ from config import (
     USER_TIMEZONE,
 )
 from memory.proactive import get_proactive
-from memory.proactive_state import get_runtime_state
+from memory.proactive_state import get_runtime_state, get_runtime_state_strict
 
 # 睡眠时段的兜底默认值（配置格式非法时使用）
 _DEFAULT_SLEEP_START = dtime(23, 30)
@@ -216,6 +216,44 @@ def can_speak(group_id: int, kind: str) -> tuple[bool, str]:
 
     if not proactive.has_enough_new_messages(group_id):
         return False, f"距上次发言仅 {proactive.messages_since_spoke(group_id)} 条新消息"
+
+    return True, "允许"
+
+
+def can_speak_for_scheduled(group_id: int) -> tuple[bool, str]:
+    """定时任务（用户预约的 Cron / Agent 触发）的准入判定。
+
+    与 :func:`can_speak` 的关系：**同一套安全闸，两条独立通道**——刻意不往
+    can_speak 里加 kind 分支（那是 HIGH 风险共享符号，GitNexus 影响面见
+    docs/plans/2026-09-22-gitnexus-plan-user-cron-agent.md §4），调度语义全部
+    收在本函数。差异只有两处（计划 §6.5）：
+
+    - **豁免新消息门槛**：定时任务是用户显式预约的发言，不受「群里够不够热闹」
+      的启发式约束；其余闸门（总开关 / 静音 / 睡眠 / 醒来缓冲 / 群级冷却）
+      全部保留——管理员说了安静，定时任务也必须闭嘴；
+    - **静音读取失败 → 拒绝**（fail closed）：交互版读不到状态按未静音放行，
+      是聊天体验的取舍；定时任务拿不准时宁可不发。
+
+    也不掷骰、不查 @ 配额：定时任务的「额度」由调度库的每日配额与群内串行
+    约束（scheduling/store），不占用主动发言的社交额度。
+    """
+    if not PROACTIVE_ENABLED:
+        return False, "主动发言总开关已关闭"
+
+    state = get_runtime_state_strict(group_id)
+    if state is None:
+        return False, "群状态读取失败（调度策略 fail closed）"
+    if PROACTIVE_RUNTIME_TOGGLE_ENABLED and state["proactive_muted"]:
+        return False, "管理员已临时关闭本群主动发言"
+
+    if is_sleeping():
+        return False, f"睡眠时段（{PROACTIVE_SLEEP_START}–{PROACTIVE_SLEEP_END}{_tz_suffix()}）"
+
+    if in_wakeup_grace(group_id):
+        return False, f"醒来缓冲期（{PROACTIVE_WAKEUP_GRACE_SECONDS:.0f}s 内不主动发言）"
+
+    if get_proactive().in_cooldown(group_id):
+        return False, "群级冷却中"
 
     return True, "允许"
 
