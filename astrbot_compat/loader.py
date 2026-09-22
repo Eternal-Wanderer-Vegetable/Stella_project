@@ -12,6 +12,7 @@ import hashlib
 import importlib
 import importlib.machinery
 import importlib.util
+import json
 import keyword
 import logging
 import shutil
@@ -520,12 +521,32 @@ def _plugins_dir() -> Path:
         return _default_plugins_dir()
 
 
+def disabled_plugin_names() -> set[str]:
+    """读 ``data/plugins/.disabled.json`` 里的禁用目录名集合（WebUI 管理）。
+
+    文件损坏按「无禁用」处理——失败开放（fail-open）是刻意的：一个写坏的
+    标记文件不该把用户全部插件静默变没。 ``.disabled.json`` 以点开头，
+    天然躲过下方 ``startswith((".", "_"))`` 的目录过滤。
+    """
+    path = _plugins_dir() / ".disabled.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if isinstance(data, list):
+        return {str(item) for item in data}
+    if isinstance(data, dict):
+        return {str(k) for k, v in data.items() if v}
+    return set()
+
+
 def discover_plugins() -> list[Path]:
     plugins_dir = _plugins_dir()
     if not plugins_dir.exists():
         with contextlib.suppress(OSError):
             plugins_dir.mkdir(parents=True, exist_ok=True)
         return []
+    disabled = disabled_plugin_names()
     result: list[Path] = []
     try:
         entries = list(plugins_dir.iterdir())
@@ -540,6 +561,10 @@ def discover_plugins() -> list[Path]:
             if not p.is_dir():
                 continue
         except OSError:
+            continue
+        if p.name in disabled:
+            # WebUI 的禁用开关（方案 §6.5.1）：跳过发现 = 跳过加载。
+            logger.info(f"[astrbot_compat] 插件 {p.name} 已被禁用，跳过加载")
             continue
         result.append(p)
     result.sort(key=lambda x: x.name)

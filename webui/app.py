@@ -81,8 +81,10 @@ def create_webui_app() -> FastAPI:
     from webui.routers import config as config_router_module
     from webui.routers import conversations as conversations_router_module
     from webui.routers import logs as logs_router_module
+    from webui.routers import manage as manage_router_module
     from webui.routers import platform as platform_router_module
     from webui.routers import plugins as plugins_router_module
+    from webui.routers import plugins_mg as plugins_mg_router_module
     from webui.routers import providers as providers_router_module
     from webui.routers import trace as trace_router_module
     from webui.routers import usage as usage_router_module
@@ -96,6 +98,12 @@ def create_webui_app() -> FastAPI:
     app.include_router(logs_router_module.router)
     # M2 写入面（config/providers/platform/spaces/groups/system 一体的 config router）
     app.include_router(config_router_module.router)
+    # M3 子系统管理（plugins 写侧 / mcp / skills / knowledge / scheduling）
+    app.include_router(manage_router_module.mcp_router)
+    app.include_router(manage_router_module.skills_router)
+    app.include_router(manage_router_module.kb_router)
+    app.include_router(manage_router_module.sched_router)
+    app.include_router(plugins_mg_router_module.router)
 
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request: Request, exc: ApiError):
