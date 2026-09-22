@@ -1,0 +1,59 @@
+name: Dashboard CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "dashboard/**"
+      - "webui/**"
+      - ".github/workflows/dashboard_ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dashboard/**"
+      - "webui/**"
+      - ".github/workflows/dashboard_ci.yml"
+
+permissions:
+  contents: read
+
+# 与 ci.yml 同款并发策略：取消旧运行省资源
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm 版本与仓库锁文件生成器一致（packageManager 由 action 读取；
+      # dashboard 未锁 packageManager 时在此固定，升级 pnpm 需同步锁文件）
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir dashboard install --frozen-lockfile
+
+      # build 内含 vue-tsc --noEmit 类型门禁（见 dashboard/package.json）
+      - name: Typecheck and build
+        run: pnpm --dir dashboard build
+
+      - name: Write build version marker
+        run: echo "${GITHUB_SHA::10}" > dashboard/dist/assets/version
+
+      # 产物只做工件预览；发布期由 release 流水线重新构建并写入正式版本号
+      # （方案 §12.3，M6 落地发布切换）
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: dashboard/dist
+          retention-days: 7
