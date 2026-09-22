@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
+import { toastApiError, useToast } from '@/stores/toast';
 
 // 提供商页（M1 只读运行态）：调度器闸门排队 + 降级状态；端点/角色配置编辑属 M2
 interface GateState {
@@ -36,8 +37,82 @@ async function load(): Promise<void> {
 const gates = computed(() => Object.entries(runtime.value?.scheduler ?? {}));
 const fallbacks = computed(() => Object.entries(runtime.value?.fallback_states ?? {}));
 
+// ---- M2 编辑面：端点槽 + 角色绑定 ----
+interface Endpoint {
+  slot: string; base_url: string; model: string; kind: string;
+  concurrency: number; timeout: number; has_api_key: boolean;
+}
+interface Role { role: string; endpoint: string; model: string; temperature: number }
+const endpoints = ref<Endpoint[]>([]);
+const roles = ref<Role[]>([]);
+const editing = ref(false);
+const testResult = ref<{ ok: boolean; error?: string } | null>(null);
+const testing = ref(false);
+const apiKeyInputs = ref<Record<string, string>>({});
+const toast = useToast();
+
+async function loadConfig(): Promise<void> {
+  try {
+    const e = await unwrap<{ endpoints: Endpoint[] }>(api.get('/providers/endpoints'));
+    endpoints.value = e.endpoints;
+    const r = await unwrap<{ roles: Role[] }>(api.get('/providers/roles'));
+    roles.value = r.roles;
+  } catch (err) {
+    toastApiError(toast, err);
+  }
+}
+
+function openEditor(): void {
+  apiKeyInputs.value = {};
+  testResult.value = null;
+  editing.value = true;
+}
+
+async function fetchModels(ep: Endpoint): Promise<void> {
+  try {
+    const data = await unwrap<{ models: string[]; error: string }>(
+      api.get('/providers/models', { params: { base_url: ep.base_url, api_key: apiKeyInputs.value[ep.slot] ?? '' } }),
+    );
+    if (data.error) toast.error(data.error);
+    else if (data.models.length) {
+      ep.model = data.models[0];
+      toast.success(`拉到 ${data.models.length} 个模型，已选第一个`);
+    } else toast.info('端点未返回模型');
+  } catch (err) {
+    toastApiError(toast, err);
+  }
+}
+
+async function testEp(ep: Endpoint): Promise<void> {
+  testing.value = true;
+  try {
+    testResult.value = await unwrap<{ ok: boolean; error?: string }>(
+      api.post('/providers/test', {
+        base_url: ep.base_url, model: ep.model,
+        api_key: apiKeyInputs.value[ep.slot] ?? '',
+      }),
+    );
+  } catch (err) {
+    toastApiError(toast, err);
+  } finally {
+    testing.value = false;
+  }
+}
+
+async function saveConfig(): Promise<void> {
+  try {
+    await unwrap(api.put('/providers/endpoints', endpoints.value));
+    await unwrap(api.put('/providers/roles', roles.value));
+    toast.success('已保存，需重启生效');
+    editing.value = false;
+  } catch (err) {
+    toastApiError(toast, err);
+  }
+}
+
 onMounted(() => {
   void load();
+  void loadConfig();
   timer = window.setInterval(load, 5000);
 });
 onBeforeUnmount(() => {
@@ -99,5 +174,63 @@ onBeforeUnmount(() => {
         没有角色正在降级（配了降级链且调用过的角色才会出现在这里）。
       </div>
     </v-card>
+    <!-- 端点/角色编辑对话框 -->
+    <v-dialog v-model="editing" width="860" scrollable>
+      <v-card>
+        <v-card-title>编辑端点与角色绑定</v-card-title>
+        <v-card-text style="max-height: 65vh; overflow-y: auto">
+          <div class="text-subtitle-2 mb-2">端点槽（API Key 留空 = 不修改）</div>
+          <v-card v-for="ep in endpoints" :key="ep.slot" variant="outlined" class="pa-3 mb-3">
+            <div class="text-subtitle-2 mb-2">{{ ep.slot }}</div>
+            <v-text-field v-model="ep.base_url" label="Base URL" density="compact" />
+            <div class="d-flex ga-2 align-center">
+              <v-text-field v-model="ep.model" label="模型" density="compact" />
+              <v-btn variant="text" size="small" prepend-icon="mdi-refresh" @click="fetchModels(ep)">
+                拉取模型
+              </v-btn>
+              <v-btn variant="text" size="small" prepend-icon="mdi-lan" :loading="testing" @click="testEp(ep)">
+                测试
+              </v-btn>
+            </div>
+            <v-text-field
+              v-model="apiKeyInputs[ep.slot]" label="API Key（留空不变）"
+              density="compact" type="password"
+              :placeholder="ep.has_api_key ? '已设置' : '未设置'"
+            />
+            <div class="d-flex ga-2">
+              <v-text-field v-model="ep.kind" label="类型（local/online）" density="compact" />
+              <v-text-field v-model="ep.concurrency" label="并发" density="compact" />
+              <v-text-field v-model="ep.timeout" label="超时(秒)" density="compact" />
+            </div>
+            <v-alert v-if="testResult" :type="testResult.ok ? 'success' : 'error'" density="compact" class="mt-2">
+              {{ testResult.ok ? '连通正常' : (testResult.error ?? '测试失败') }}
+            </v-alert>
+          </v-card>
+          <div class="text-subtitle-2 mb-2 mt-4">角色绑定矩阵</div>
+          <v-table density="compact">
+            <thead><tr><th>角色</th><th>端点槽</th><th>模型覆盖</th><th>温度</th></tr></thead>
+            <tbody>
+              <tr v-for="r in roles" :key="r.role">
+                <td>{{ r.role }}</td>
+                <td>
+                  <v-select v-model="r.endpoint" :items="['none', ...endpoints.map(e => e.slot)]"
+                            density="compact" hide-details />
+                </td>
+                <td><v-text-field v-model="r.model" density="compact" hide-details /></td>
+                <td><v-text-field v-model="r.temperature" density="compact" hide-details /></td>
+              </tr>
+            </tbody>
+          </v-table>
+          <v-alert type="warning" density="compact" variant="tonal" class="mt-3">
+            保存写入 .env，重启后生效。
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="editing = false">取消</v-btn>
+          <v-btn color="primary" @click="saveConfig">保存</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>

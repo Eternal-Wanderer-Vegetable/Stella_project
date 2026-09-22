@@ -23,9 +23,44 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/ProvidersPage.vue'),
       },
       {
-        path: 'extension/plugins',
-        name: 'plugins',
-        component: () => import('@/views/extension/PluginsPage.vue'),
+        path: 'extension',
+        name: 'extension',
+        component: () => import('@/views/extension/ExtensionPage.vue'),
+      },
+      {
+        path: 'knowledge-base',
+        name: 'knowledge-base',
+        component: () => import('@/views/knowledge/KnowledgePage.vue'),
+      },
+      {
+        path: 'persona',
+        name: 'persona',
+        component: () => import('@/views/PersonaPage.vue'),
+      },
+      {
+        path: 'cron',
+        name: 'cron',
+        component: () => import('@/views/CronPage.vue'),
+      },
+      {
+        path: 'groups',
+        name: 'groups',
+        component: () => import('@/views/GroupsPage.vue'),
+      },
+      {
+        path: 'config',
+        name: 'config',
+        component: () => import('@/views/ConfigPage.vue'),
+      },
+      {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('@/views/SettingsPage.vue'),
+      },
+      {
+        path: 'chat',
+        name: 'chat',
+        component: () => import('@/views/ChatPage.vue'),
       },
       {
         // 数据页：Tab 壳 + 子路由（对齐 AstrBot DataPage 范式，方案 §6.9）

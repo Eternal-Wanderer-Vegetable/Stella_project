@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
+import { toastApiError, useToast } from '@/stores/toast';
 
 // 平台页（M1 只读）：OneBot/NapCat 链路状态卡；连接配置编辑属 M2。
 // link_status 契约：未连接时若干键为显式 null（前端按可空渲染）。
@@ -20,6 +21,47 @@ interface LinkStatus {
 const link = ref<LinkStatus | null>(null);
 const error = ref('');
 let timer: number | null = null;
+
+// M2 编辑面：正向 WS 地址 / token / HOST/PORT
+const editing = ref(false);
+const wsUrlsText = ref('');
+const accessToken = ref('');
+const host = ref('');
+const port = ref('');
+const toast = useToast();
+
+async function loadConfig(): Promise<void> {
+  try {
+    const cfg = await unwrap<{ host: string; port: string; ws_urls: string[]; has_token: boolean }>(
+      api.get('/platform/onebot'),
+    );
+    host.value = cfg.host;
+    port.value = String(cfg.port);
+    wsUrlsText.value = cfg.ws_urls.join(', ');
+  } catch (err) {
+    toastApiError(toast, err);
+  }
+}
+
+function openEditor(): void {
+  void loadConfig();
+  editing.value = true;
+}
+
+async function saveConfig(): Promise<void> {
+  try {
+    await unwrap(api.put('/platform/onebot', {
+      ws_urls: wsUrlsText.value.split(/[,\s]+/).filter(Boolean),
+      access_token: accessToken.value,
+      host: host.value,
+      port: port.value,
+    }));
+    toast.success('已保存，重启后生效');
+    editing.value = false;
+  } catch (err) {
+    toastApiError(toast, err);
+  }
+}
 
 async function load(): Promise<void> {
   try {
@@ -54,6 +96,14 @@ onBeforeUnmount(() => {
       Stella 当前接入 OneBot V11 / NapCat。连接配置（正向 WS 地址、token）的编辑在 M2 上线。
     </p>
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
+
+    <v-card class="pa-4 mb-4">
+      <div class="d-flex align-center">
+        <div class="text-subtitle-1 font-weight-medium">连接配置</div>
+        <v-spacer />
+        <v-btn color="primary" prepend-icon="mdi-pencil" @click="openEditor">编辑</v-btn>
+      </div>
+    </v-card>
 
     <v-card class="pa-4" :loading="!link">
       <div class="d-flex align-center ga-3 mb-3">
@@ -111,5 +161,33 @@ onBeforeUnmount(() => {
         链路未就绪：请确认 NapCat 已启动且反向 WS 指向本服务（HOST:PORT/onebot/v11/ws）。
       </v-alert>
     </v-card>
+    <!-- 连接配置编辑 -->
+    <v-dialog v-model="editing" width="560">
+      <v-card>
+        <v-card-title>OneBot 连接配置</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="host" label="监听地址（reverse 模式；异机 NapCat 用 0.0.0.0）" />
+          <v-text-field v-model="port" label="监听端口" />
+          <v-text-field
+            v-model="wsUrlsText"
+            label="正向 WS 上游（逗号分隔；forward 模式）"
+            hint="留空 = 使用反向 WS"
+            persistent-hint
+          />
+          <v-text-field
+            v-model="accessToken" label="访问 token（留空不变）" type="password"
+            hint="须与 NapCat 侧一致" persistent-hint
+          />
+          <v-alert type="info" density="compact" variant="tonal" class="mt-2">
+            保存写入 .env，重启后生效。
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="editing = false">取消</v-btn>
+          <v-btn color="primary" @click="saveConfig">保存</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>

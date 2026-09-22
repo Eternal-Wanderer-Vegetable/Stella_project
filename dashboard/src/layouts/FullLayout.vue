@@ -29,7 +29,7 @@ const groups: { header?: string; items: NavItem[] }[] = [
   {
     items: [
       { icon: 'mdi-hand-wave-outline', title: t('core.navigation.welcome'), to: '/' },
-      { icon: 'mdi-chat-processing-outline', title: t('core.navigation.chat'), milestone: 'M4' },
+      { icon: 'mdi-chat-processing-outline', title: t('core.navigation.chat'), to: '/chat' },
     ],
   },
   {
@@ -37,17 +37,17 @@ const groups: { header?: string; items: NavItem[] }[] = [
     items: [
       { icon: 'mdi-robot', title: t('core.navigation.platforms'), to: '/platforms' },
       { icon: 'mdi-creation', title: t('core.navigation.providers'), to: '/providers' },
-      { icon: 'mdi-cog', title: t('core.navigation.config'), milestone: 'M2' },
+      { icon: 'mdi-cog', title: t('core.navigation.config'), to: '/config' },
     ],
   },
   {
     header: 'Capability',
     items: [
-      { icon: 'mdi-puzzle', title: t('core.navigation.extension'), to: '/extension/plugins' },
-      { icon: 'mdi-book-open-variant', title: t('core.navigation.knowledgeBase'), milestone: 'M3' },
-      { icon: 'mdi-heart', title: t('core.navigation.persona'), milestone: 'M2' },
-      { icon: 'mdi-clock-outline', title: t('core.navigation.cron'), milestone: 'M3' },
-      { icon: 'mdi-account-group', title: t('core.navigation.groups'), milestone: 'M2' },
+      { icon: 'mdi-puzzle', title: t('core.navigation.extension'), to: '/extension' },
+      { icon: 'mdi-book-open-variant', title: t('core.navigation.knowledgeBase'), to: '/knowledge-base' },
+      { icon: 'mdi-heart', title: t('core.navigation.persona'), to: '/persona' },
+      { icon: 'mdi-clock-outline', title: t('core.navigation.cron'), to: '/cron' },
+      { icon: 'mdi-account-group', title: t('core.navigation.groups'), to: '/groups' },
     ],
   },
   {
