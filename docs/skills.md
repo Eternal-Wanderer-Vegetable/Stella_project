@@ -92,7 +92,16 @@ front matter 只有白名单内的**标量**字段会被采纳：`name`、`descr
   Docker runner 时，把 `DOCKER_HOST` 指向 sidecar/代理端点；
 - Windows：进程内 runner 不支持命名管道端点，探测会给出明确原因；
   本地开发保持 `SANDBOX_BACKEND=disabled`，需要时把 `DOCKER_HOST`
-  指向远程 runner（协议相同，不按 OS 猜测隔离设施）。
+  指向远程 runner（协议相同，不按 OS 猜测隔离设施）。本机开发想跑
+  真机集成测试时，可用测试脚手架把命名管道桥接到本地 TCP：
+
+  ::
+
+      python tests/sandbox/_npipe_bridge.py --port 2377
+      set STELLA_DOCKER_TEST_ENDPOINT=http://127.0.0.1:2377
+      python -m pytest tests/sandbox/test_docker_integration.py -v
+
+  （该组用例在 daemon 不可达时自动整组跳过，CI 无 Docker 不受影响。）
 
 ## 配置
 

@@ -116,17 +116,24 @@ def _action_command(action: SandboxAction) -> list[str] | None:
         return [
             "python3",
             "-c",
-            "import sys; open(sys.argv[1], 'w', encoding='utf-8').write(sys.argv[2])",
+            "import os, sys; p = sys.argv[1]; "
+            "os.makedirs(os.path.dirname(p) or '.', exist_ok=True); "
+            "open(p, 'w', encoding='utf-8').write(sys.argv[2])",
             str(PurePosixPath("/workspace") / rel),
             content,
         ]
     if action.action == "list_files":
-        rel = safe_relative_path(args.get("path", "") or ".")
+        raw = args.get("path", "") or "."
+        rel = safe_relative_path(raw)
         if rel is None:
-            return None
+            if raw != ".":
+                return None
+            target = "/workspace"  # 显式根目录语义
+        else:
+            target = str(PurePosixPath("/workspace") / rel)
         return [
             "find",
-            str(PurePosixPath("/workspace") / rel),
+            target,
             "-maxdepth",
             "2",
             "-not",
@@ -192,6 +199,10 @@ class DockerSandboxExecutor:
                 transport=self._transport or _sync_transport(endpoint),
                 base_url=_base_url(endpoint),
                 timeout=2.0,
+                # Docker API 流量绝不走系统代理：DOCKER_HOST 指向的本机/内网
+                # 端点被代理劫持既会失效也可能泄漏请求（与 memory/embeddings
+                # 的 trust_env=False 同一理由）。
+                trust_env=False,
             ) as client:
                 resp = client.get(f"/{_API_VERSION}/_ping")
             if resp.status_code == 200:
@@ -252,7 +263,7 @@ class DockerSandboxExecutor:
                 action=action.action, ok=False, error_code="policy_denied"
             )
         try:
-            output = await self._run_container(spec, command)
+            output, exit_code = await self._run_container(spec, command)
         except asyncio.TimeoutError:
             audit().emit(
                 "sandbox_timeout",
@@ -276,6 +287,21 @@ class DockerSandboxExecutor:
             return SandboxActionOutcome(
                 action=action.action, ok=False, error_code="sandbox_unavailable"
             )
+        # 退出码是动作成败的权威信号：非零一律 failed，输出保留给摘要/审计
+        # （如 cat 的报错、python 的 traceback），让「为什么失败」可诊断。
+        if exit_code != 0:
+            audit().emit(
+                "sandbox_action_failed",
+                invocation_id=spec.invocation_id,
+                action=action.action,
+                exit_code=exit_code,
+            )
+            return SandboxActionOutcome(
+                action=action.action,
+                ok=False,
+                error_code="execution_failed",
+                output=output[: spec.limits.output_max_chars],
+            )
         if len(output) >= spec.limits.output_max_chars:
             audit().emit(
                 "sandbox_output_truncated",
@@ -291,17 +317,37 @@ class DockerSandboxExecutor:
         )
 
     async def cleanup(self, spec: SandboxSpec) -> None:
-        """删除残留容器（正常路径容器已被删）。尽力而为，不抛异常。"""
-        name = _container_name(spec.invocation_id)
+        """按 invocation 标签删除全部残留容器（含孤儿）。尽力而为，不抛异常。"""
+        import json as _json
+
+        filters = _json.dumps({"label": [f"stella.invocation={spec.invocation_id}"]})
         try:
             async with self._client() as client:
-                await client.delete(
-                    f"/{_API_VERSION}/containers/{name}", params={"force": "true"}
+                listed = await client.get(
+                    f"/{_API_VERSION}/containers/json",
+                    params={"all": "true", "filters": filters},
                 )
+                ids: list[str] = []
+                if listed.status_code == 200:
+                    try:
+                        ids = [
+                            item.get("Id", "")
+                            for item in (listed.json() or [])
+                            if isinstance(item, dict)
+                        ]
+                    except ValueError:
+                        ids = []
+                for container_id in ids:
+                    if not container_id:
+                        continue
+                    await client.delete(
+                        f"/{_API_VERSION}/containers/{container_id}",
+                        params={"force": "true"},
+                    )
             audit().emit(
                 "sandbox_cleanup",
                 invocation_id=spec.invocation_id,
-                container=name,
+                containers=len(ids),
             )
         except Exception:
             pass
@@ -313,10 +359,13 @@ class DockerSandboxExecutor:
             transport=self._transport or _transport_for(self._endpoint),
             base_url=_base_url(self._endpoint),
             timeout=httpx.Timeout(self._api_timeout),
+            trust_env=False,  # 理由见 availability()：Docker API 不走系统代理
         )
 
-    async def _run_container(self, spec: SandboxSpec, command: list[str]) -> str:
-        """create → start → wait(限时) → logs → rm；返回截断前的输出。"""
+    async def _run_container(
+        self, spec: SandboxSpec, command: list[str]
+    ) -> tuple[str, int]:
+        """create → start → wait(限时) → logs → rm；返回 (输出, 退出码)。"""
         name = _container_name(spec.invocation_id)
         config = _container_config(spec, command, self._image)
         async with self._client() as client:
@@ -330,7 +379,10 @@ class DockerSandboxExecutor:
                     f"镜像 {self._image} 不存在，请先手动拉取（沙盒不自动拉镜像）"
                 )
             if created.status_code >= 400:
-                raise RuntimeError(f"容器创建失败 HTTP {created.status_code}")
+                raise RuntimeError(
+                    f"容器创建失败 HTTP {created.status_code}: "
+                    f"{(created.text or '')[:200]}"
+                )
             container_id = (created.json() or {}).get("Id", "")
             if not container_id:
                 raise RuntimeError("容器创建响应缺少 Id")
@@ -369,6 +421,10 @@ class DockerSandboxExecutor:
                 raise
             if waited.status_code >= 400:
                 raise RuntimeError(f"容器等待失败 HTTP {waited.status_code}")
+            try:
+                exit_code = int((waited.json() or {}).get("StatusCode", -1))
+            except (ValueError, TypeError):
+                exit_code = -1
             logs = await client.get(
                 f"/{_API_VERSION}/containers/{container_id}/logs",
                 params={"stdout": "true", "stderr": "true", "tail": "4096"},
@@ -378,7 +434,7 @@ class DockerSandboxExecutor:
                 f"/{_API_VERSION}/containers/{container_id}",
                 params={"force": "true", "v": "true"},
             )
-        return output[:_OUTPUT_HARD_CAP]
+        return output[:_OUTPUT_HARD_CAP], exit_code
 
 
 def _sync_transport(endpoint: str) -> httpx.HTTPTransport:
@@ -388,8 +444,14 @@ def _sync_transport(endpoint: str) -> httpx.HTTPTransport:
 
 
 def _container_name(invocation_id: str) -> str:
-    safe = _NAME_RE.sub("-", invocation_id)[:48] or uuid.uuid4().hex[:16]
-    return f"{_CONTAINER_NAME_PREFIX}{safe}"
+    """每次执行的唯一容器名：调用 ID + 随机段。
+
+    随机段保证同 invocation 的多次动作、以及上次崩溃留下的同名容器都
+    不会产生 409 冲突；孤儿容器由 ``cleanup`` 按**标签**回收（名字只是
+    前缀约定，不承担唯一性责任）。
+    """
+    safe = _NAME_RE.sub("-", invocation_id)[:24] or uuid.uuid4().hex[:12]
+    return f"{_CONTAINER_NAME_PREFIX}{safe}-{uuid.uuid4().hex[:8]}"
 
 
 def _artifact_of(action: SandboxAction):
@@ -416,6 +478,10 @@ def _container_config(
         "WorkingDir": "/workspace",
         "Tty": False,
         "NetworkDisabled": True,
+        "Labels": {
+            "stella.sandbox": "1",
+            "stella.invocation": spec.invocation_id[:64],
+        },
         "HostConfig": {
             "Binds": binds,
             "ReadonlyRootfs": True,

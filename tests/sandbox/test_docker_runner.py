@@ -130,10 +130,19 @@ class TestContainerName:
 class _FakeDockerAPI:
     """可编程的 Docker API 假实现（httpx.MockTransport handler 工厂）。"""
 
-    def __init__(self, *, logs: bytes = b"", fail_create: bool = False):
+    def __init__(
+        self,
+        *,
+        logs: bytes = b"",
+        fail_create: bool = False,
+        exit_code: int = 0,
+        existing: list[str] | None = None,
+    ):
         self.calls: list[tuple[str, str]] = []
         self.logs = logs
         self.fail_create = fail_create
+        self.exit_code = exit_code
+        self.existing = existing or []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.calls.append((request.method, request.url.path))
@@ -143,10 +152,12 @@ class _FakeDockerAPI:
             if self.fail_create:
                 return httpx.Response(404, json={"message": "No such image"})
             return httpx.Response(201, json={"Id": "cid123"})
+        if request.url.path.endswith("/containers/json"):
+            return httpx.Response(200, json=[{"Id": i} for i in self.existing])
         if request.url.path.endswith("/start"):
             return httpx.Response(204)
         if request.url.path.endswith("/wait"):
-            return httpx.Response(200, json={"StatusCode": 0})
+            return httpx.Response(200, json={"StatusCode": self.exit_code})
         if request.url.path.endswith("/logs"):
             return httpx.Response(200, content=self.logs)
         if request.method == "DELETE":
@@ -194,6 +205,18 @@ class TestExecuteWithFakeAPI:
         assert outcome.artifact is not None
         assert outcome.artifact.path == "out/a.md"
         assert outcome.artifact.size_bytes == 5
+
+    def test_nonzero_exit_marks_action_failed_with_output(self, tmp_path):
+        api = _FakeDockerAPI(logs=STDOUT_HELLO, exit_code=1)
+        executor = _executor(tmp_path, transport=httpx.MockTransport(api.handler))
+        outcome = asyncio.run(
+            executor.execute(
+                make_spec(tmp_path), make_action("run_shell", command="cat x")
+            )
+        )
+        assert not outcome.ok
+        assert outcome.error_code == "execution_failed"
+        assert outcome.output == "abc"  # 报错输出保留给摘要与审计
 
     def test_missing_image_is_diagnosable(self, tmp_path):
         api = _FakeDockerAPI(fail_create=True)
@@ -266,10 +289,18 @@ class TestAvailabilityAndDegradation:
 
 class TestCleanup:
     def test_cleanup_deletes_and_audits(self, tmp_path):
-        api = _FakeDockerAPI()
+        api = _FakeDockerAPI(existing=["cid-stale"])
         executor = _executor(tmp_path, transport=httpx.MockTransport(api.handler))
         asyncio.run(executor.cleanup(make_spec(tmp_path)))
-        assert any(m == "DELETE" for m, _ in api.calls)
+        assert any(
+            m == "DELETE" and p.endswith("containers/cid-stale") for m, p in api.calls
+        )
+
+    def test_cleanup_no_listed_containers_is_noop(self, tmp_path):
+        api = _FakeDockerAPI(existing=[])
+        executor = _executor(tmp_path, transport=httpx.MockTransport(api.handler))
+        asyncio.run(executor.cleanup(make_spec(tmp_path)))
+        assert not any(m == "DELETE" for m, _ in api.calls)
 
     def test_cleanup_survives_api_errors(self, tmp_path):
         def _boom(request):
