@@ -55,7 +55,7 @@ const groups: { header?: string; items: NavItem[] }[] = [
     items: [{ icon: 'mdi-database', title: t('core.navigation.data'), to: '/data' }],
   },
   {
-    items: [{ icon: 'mdi-cog-outline', title: t('core.navigation.settings'), milestone: 'M2' }],
+    items: [{ icon: 'mdi-cog-outline', title: t('core.navigation.settings'), to: '/settings' }],
   },
 ];
 
