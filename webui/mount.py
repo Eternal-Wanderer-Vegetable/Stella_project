@@ -38,10 +38,14 @@ def mount_webui(app) -> None:
 
 async def _mount_hook() -> None:
     try:
-        from nonebot import get_app, logger
+        from nonebot import get_app, get_driver, logger
 
         mount_webui(get_app())
-        logger.success("✅ WebUI 已就绪: http://127.0.0.1:<PORT>/ （API: /api/v1）")
+        # 日志里的端口取真实值：字面量 "<PORT>" 会被 loguru 色彩解析器当成
+        # 颜色标签（<> 是它的标记语法），控制台 handler 直接抛 ValueError
+        # （2026-09-23 热测踩过）。
+        port = getattr(get_driver().config, "port", None) or 8080
+        logger.success(f"✅ WebUI 已就绪: http://127.0.0.1:{port}/ （API: /api/v1）")
     except Exception:  # WebUI 是增量能力，挂载失败不拖垮 Bot（同 status_api 取向）
         import traceback
 

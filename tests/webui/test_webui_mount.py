@@ -11,6 +11,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import sys
+import types
 
 from fastapi import FastAPI, WebSocket
 from starlette.routing import Mount
@@ -57,6 +60,32 @@ def test_mount_adds_root_catchup_and_is_idempotent(isolated_home):
     )
     # 顺序即安全边界：catch-all 必须在既有路由之后
     assert _mount_index(app) > status_idx
+
+
+def test_mount_hook_log_has_no_loguru_markup(isolated_home, monkeypatch):
+    """就绪日志不得含 loguru 色彩标记形状的尖括号（<PORT> 实测炸掉控制台 handler）。"""
+    captured = {}
+    fake_logger = types.SimpleNamespace(
+        success=lambda m: captured.setdefault("msg", m),
+        error=lambda m: captured.setdefault("err", m),
+    )
+    fake_nonebot = types.ModuleType("nonebot")
+    fake_nonebot.get_app = lambda: FastAPI()
+    fake_nonebot.get_driver = lambda: types.SimpleNamespace(
+        config=types.SimpleNamespace(port=8080)
+    )
+    fake_nonebot.logger = fake_logger
+    monkeypatch.setitem(sys.modules, "nonebot", fake_nonebot)
+
+    import asyncio as _asyncio
+
+    from webui import mount as webui_mount
+
+    _asyncio.run(webui_mount._mount_hook())
+
+    msg = captured.get("msg", "")
+    assert "8080" in msg  # 端口取真实值，而不是 <PORT> 字面量
+    assert not re.search(r"<[A-Z][A-Z_]*>", msg)  # 无色彩标记形状的尖括号
 
 
 def test_four_path_classes_coexist(isolated_home, monkeypatch):
