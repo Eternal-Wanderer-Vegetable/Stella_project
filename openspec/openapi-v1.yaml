@@ -229,6 +229,56 @@ paths:
         "401":
           description: 未授权
 
+  /api/v1/usage/today:
+    get:
+      tags: [usage]
+      summary: 今日用量快照 + 预算 + 降级角色
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK（envelope.data = usage_snapshot 形状 + fallback_states）
+  /api/v1/usage/daily:
+    get:
+      tags: [usage]
+      summary: 近 N 天日账序列与排行
+      description: series 按日期补零；by_role/by_slot/by_model 按 prompt+completion 降序。
+      x-stella-milestone: M1
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/providers/runtime:
+    get:
+      tags: [providers]
+      summary: 调度器闸门快照 + 降级状态（只读运行态）
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK（envelope.data = {scheduler, fallback_states}）
+
+  /api/v1/platform/link:
+    get:
+      tags: [platform]
+      summary: OneBot 链路实时状态
+      description: link_status 原样透传；未连接时若干键为显式 null，前端按可空渲染。
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/plugins:
+    get:
+      tags: [plugins]
+      summary: 插件清单 + 失败清单 + 能力声明快照（只读）
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK（envelope.data = {plugins[], failed, capabilities}）
+
   /api/v1/system/doctor:
     get:
       tags: [system]
