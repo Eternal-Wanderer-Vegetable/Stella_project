@@ -22,7 +22,6 @@ interface NavItem {
   icon: string;
   title: string;
   to?: string;
-  milestone?: string;
 }
 
 const groups: { header?: string; items: NavItem[] }[] = [
@@ -96,13 +95,6 @@ async function logout(): Promise<void> {
               "
               :to="item.to"
             />
-            <v-list-item v-else :title="item.title" :prepend-icon="item.icon" disabled>
-              <template #append>
-                <v-chip size="x-small" variant="tonal" color="secondary">
-                  {{ item.milestone }}
-                </v-chip>
-              </template>
-            </v-list-item>
           </template>
         </template>
       </v-list>
