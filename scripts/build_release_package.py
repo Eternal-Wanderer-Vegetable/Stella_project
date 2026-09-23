@@ -26,6 +26,9 @@ COMMON_FILES = (
     "stop.bat",
     "README-快速开始.txt",
 )
+# 常见运行目录。⚠️ 新增顶层包（如 skills/knowledge/webui）时必须同步这里，
+# 否则 payload 缺包：轻则功能 404（webui 挂载被 manage 路由的模块级导入连坐，
+# 2026-09-24 实测），重则启动期 ModuleNotFoundError。
 COMMON_DIRS = (
     "astrbot_compat",
     "capability",
@@ -33,10 +36,14 @@ COMMON_DIRS = (
     "core",
     "deploy",
     "extensions",
+    "knowledge",
     "memory",
+    "skills",
     "system_prompts",
     "runtime-manager",
     "stella_project",
+    # 内置技能在 assets/skills 下（SKILLS_BUILTIN_DIR 默认指这里）
+    "assets",
     # M6：v2 桌面壳 + WebUI 前端产物（方案 §12.3）
     "desktop",
     "webui",
