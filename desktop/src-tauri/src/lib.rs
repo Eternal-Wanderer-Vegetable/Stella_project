@@ -59,6 +59,7 @@ pub fn run() {
             commands::save_persona,
             commands::run_migrate,
             commands::desktop_session_secret,
+            commands::wait_bot_ready,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
