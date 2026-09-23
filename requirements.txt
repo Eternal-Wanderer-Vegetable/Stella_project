@@ -16,6 +16,11 @@ nonebot-plugin-apscheduler>=0.5.0
 # 之后可以放开这条。
 pygtrie>=2.4.1,<2.6
 python-dotenv>=1.0.0
+# WebUI（v2 面板，webui/）：pyjwt 签发/校验管理面 JWT（纯 Python，无 wheel 风险）；
+# python-multipart 是 FastAPI 解析 multipart 表单/上传的必需件，nonebot2[fastapi]
+# 不传递引入——同 aiohttp 的教训，显式声明，别让发布包与开发机产生差异。
+pyjwt>=2.8
+python-multipart>=0.0.9
 # zoneinfo 的 IANA 时区库（USER_TIMEZONE 用）。Linux 用系统 tzdata 即可；
 # Windows 没有系统级时区数据库，缺了它 ZoneInfo("Asia/Shanghai") 直接抛错，
 # 时区配置会静默回退服务器本地时间（见 proactive_gate._resolve_zone）。

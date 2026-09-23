@@ -1,0 +1,495 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE。
+#
+# Stella WebUI API 契约（v1，design_docs/Stella GUI v2 与 WebUI 建设方案 v1.0.md §7）。
+#
+# 本文件是契约源：dashboard/ 前端据它生成类型化客户端；webui/ 后端的 FastAPI
+# 路由与它对齐（运行期自动生成的 openapi.json 位于 /api/v1/openapi.json）。
+# 带 x-stella-milestone 扩展字段标注交付里程碑；M0 只交付 auth 与 status，
+# 其余路径先入契约锁定形状（前端可并行开发），实现随里程碑落地。
+openapi: 3.1.0
+info:
+  title: Stella WebUI API
+  version: "1.0.0"
+  description: >-
+    Stella 机器人管理面。所有业务接口返回统一 envelope：
+    `{"status": "ok"|"error", "message": ..., "data": ...}`；
+    HTTP 状态码只用于 401（未授权/过期）、403（禁止）、404、413（超限）、
+    422（请求体校验失败，envelope.message 为人话文案）、429（限流）、500。
+servers:
+  - url: /
+tags:
+  - name: auth
+    description: 鉴权（setup 向导 / 登录 / 桌面壳免登录 / 账号维护）。M0 交付。
+  - name: status
+    description: 进程内状态聚合（/stella/status 的已认证超集）。M0 交付。
+  - name: system
+    description: 系统操作（doctor / 重启）。
+    x-stella-milestone: M2
+  - name: config
+    description: .env 配置读写（schema 驱动）。
+    x-stella-milestone: M2
+  - name: providers
+    description: 模型端点槽与角色绑定。
+    x-stella-milestone: M2
+  - name: platform
+    description: OneBot/NapCat 连接配置与链路状态。
+    x-stella-milestone: M2
+  - name: groups
+    description: 群清单、空间绑定与运行期开关。
+    x-stella-milestone: M2
+  - name: spaces
+    description: 共享空间（人格载体）管理。
+    x-stella-milestone: M2
+  - name: plugins
+    description: AstrBot 兼容插件管理与市场。
+    x-stella-milestone: M3
+  - name: mcp
+    description: MCP Server 管理。
+    x-stella-milestone: M3
+  - name: skills
+    description: Skills 目录与沙箱状态。
+    x-stella-milestone: M3
+  - name: knowledge
+    description: 知识库管理。
+    x-stella-milestone: M3
+  - name: scheduling
+    description: 定时任务（reminder/agent）管理。
+    x-stella-milestone: M3
+  - name: usage
+    description: 用量统计。
+    x-stella-milestone: M1
+  - name: logs
+    description: 结构化日志（history + SSE live）。
+    x-stella-milestone: M1
+  - name: trace
+    description: 决策轨迹（轨迹流 + 单条消息回放）。
+    x-stella-milestone: M1
+  - name: conversations
+    description: 会话浏览（只读）。
+    x-stella-milestone: M1
+  - name: chat
+    description: WebChat（面板内与 Stella 对话）。
+    x-stella-milestone: M4
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/auth/setup-status:
+    get:
+      tags: [auth]
+      security: []
+      summary: 查询是否需要初始化
+      description: 管理员凭据（STELLA_HOME/webui/auth.json）不存在时 setup_required 为 true。
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          setup_required:
+                            type: boolean
+
+  /api/v1/auth/setup:
+    post:
+      tags: [auth]
+      security: []
+      summary: 首次初始化管理员
+      description: 仅 setup_required 时有效（否则 403）。创建凭据并直接签发 JWT。限流内。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        "200":
+          description: OK（envelope.data = {token, expires_at, username}）
+        "403":
+          description: 已初始化
+        "429":
+          description: 限流
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: 登录
+      description: 成功同时写 HttpOnly Cookie（stella_webui_jwt）。限流内。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: OK（envelope.data = {token, expires_at, username}）
+        "401":
+          description: 用户名或密码错误
+        "429":
+          description: 限流
+
+  /api/v1/auth/desktop-session:
+    post:
+      tags: [auth]
+      security: []
+      summary: 桌面壳免登录换发
+      description: >-
+        仅供本机桌面壳调用：请求头 X-Stella-Desktop-Session 必须等于环境变量
+        STELLA_DESKTOP_SESSION_SECRET（≥32 字符，壳启动 Bot 时注入），且客户端
+        必须来自回环地址。恒定时间比较。限流内。
+      parameters:
+        - name: X-Stella-Desktop-Session
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK（envelope.data = {token, expires_at, username}）
+        "401":
+          description: secret 缺失/不匹配
+        "403":
+          description: 非回环来源
+        "429":
+          description: 限流
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: 当前登录用户
+      responses:
+        "200":
+          description: OK（envelope.data = {username, via}）
+        "401":
+          description: 未授权
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: 登出
+      description: 清除 Cookie；Bearer 无状态，前端自行删除本地 token。
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/auth/account:
+    patch:
+      tags: [auth]
+      summary: 修改用户名/密码
+      description: 必须验证当前密码。修改密码后轮换 jwt_secret 使所有旧 token 失效。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                old_password: { type: string }
+                new_password: { type: string }
+      responses:
+        "200":
+          description: OK（envelope.data = {token, expires_at, username}，需重新持有新 token）
+        "401":
+          description: 当前密码错误
+
+  /api/v1/status:
+    get:
+      tags: [status]
+      summary: 进程内状态聚合
+      description: >-
+        /stella/status 的已认证超集：同 payload，另加 webui 段（登录用户）。
+        响应不含凭据与消息内容；api_key/群号明细只在对应里程碑的专属接口出现。
+      responses:
+        "200":
+          description: OK（envelope.data 结构见 /stella/status 既有约定 + webui 段）
+        "401":
+          description: 未授权
+
+  /api/v1/usage/today:
+    get:
+      tags: [usage]
+      summary: 今日用量快照 + 预算 + 降级角色
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK（envelope.data = usage_snapshot 形状 + fallback_states）
+  /api/v1/usage/daily:
+    get:
+      tags: [usage]
+      summary: 近 N 天日账序列与排行
+      description: series 按日期补零；by_role/by_slot/by_model 按 prompt+completion 降序。
+      x-stella-milestone: M1
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/providers/runtime:
+    get:
+      tags: [providers]
+      summary: 调度器闸门快照 + 降级状态（只读运行态）
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK（envelope.data = {scheduler, fallback_states}）
+
+  /api/v1/platform/link:
+    get:
+      tags: [platform]
+      summary: OneBot 链路实时状态
+      description: link_status 原样透传；未连接时若干键为显式 null，前端按可空渲染。
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/plugins:
+    get:
+      tags: [plugins]
+      summary: 插件清单 + 失败清单 + 能力声明快照（只读）
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK（envelope.data = {plugins[], failed, capabilities}）
+
+  /api/v1/conversations/groups:
+    get:
+      tags: [conversations]
+      summary: 有消息的群清单（计数与最新时间，供筛选）
+      x-stella-milestone: M1
+      responses:
+        "200":
+          description: OK
+  /api/v1/conversations:
+    get:
+      tags: [conversations]
+      summary: 群消息分页（时间倒序，只读）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: OK（envelope.data = {group_id, total, items[]}）
+  /api/v1/conversations/context:
+    get:
+      tags: [conversations]
+      summary: 群整合 checkpoint（短期话题状态在内存，M1 不提供）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/trace/memory:
+    get:
+      tags: [trace]
+      summary: 记忆决策轨迹流（列表含计数摘要，全文走详情）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: OK
+  /api/v1/trace/memory/{trace_id}:
+    get:
+      tags: [trace]
+      summary: 单条消息决策回放（记忆正文还原 + 分数 + prompt 快照 + 输出）
+      description: >-
+        回放范围（M1）：触发/模式、记忆候选·淘汰·采纳（含分数与正文）、
+        行为约束、prompt 快照、输出。Router 命中 / 工具调用 / 预算分配
+        目前只在 thought 日志（Markdown），不进回放——表里没有的字段不猜。
+      x-stella-milestone: M1
+      parameters:
+        - name: trace_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: 轨迹不存在
+  /api/v1/trace/participation:
+    get:
+      tags: [trace]
+      summary: 参与决策流（评分字段 + 决策 + 原因标记，「为什么没说话」）
+      x-stella-milestone: M1
+      parameters:
+        - name: group_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/logs/history:
+    get:
+      tags: [logs]
+      summary: 结构化日志尾部（旧→新；解析失败的行按 {raw} 保留）
+      x-stella-milestone: M1
+      parameters:
+        - name: tail
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 500 }
+        - name: level
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+  /api/v1/logs/live:
+    get:
+      tags: [logs]
+      summary: 实时日志流（SSE）
+      description: >-
+        帧 = `id: <字节偏移>` + `data: {JSON}`，空闲心跳 `: heartbeat`；
+        重连带 Last-Event-ID 头（或 ?resume=）从断点续传，轮转后从头重放。
+        鉴权用 Bearer 头（前端 fetch 流读取）。X-Accel-Buffering 已关闭。
+      x-stella-milestone: M1
+      parameters:
+        - name: level
+          in: query
+          schema: { type: string }
+        - name: resume
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /api/v1/system/doctor:
+    get:
+      tags: [system]
+      summary: 环境自检（doctor）
+      x-stella-milestone: M2
+      responses:
+        "200":
+          description: OK（envelope.data = 检查报告）
+
+  /api/v1/system/restart:
+    post:
+      tags: [system]
+      summary: 请求重启 Bot
+      description: 写停止哨兵并通知外部监管者（桌面壳自动重启 / 无壳形态提示手动重启）。
+      x-stella-milestone: M2
+      responses:
+        "200":
+          description: OK（envelope.data = {restart_mode: "desktop"|"manual"}）
+
+  /api/v1/config/schema:
+    get:
+      tags: [config]
+      summary: 配置 schema（deploy env_schema 输出）
+      x-stella-milestone: M2
+      responses:
+        "200":
+          description: OK
+
+  /api/v1/config:
+    get:
+      tags: [config]
+      summary: 当前配置（secret 掩码）
+      x-stella-milestone: M2
+      responses:
+        "200":
+          description: OK
+    put:
+      tags: [config]
+      summary: 增量写回 .env
+      description: 继承键留空不写入；secret 空串表示不修改。返回 restart_required 提示。
+      x-stella-milestone: M2
+      responses:
+        "200":
+          description: OK（envelope.data = {restart_required}）
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authorization: Bearer <token>；登录响应同时写 HttpOnly Cookie 作为补充通道。
+  schemas:
+    Envelope:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        message:
+          type: [string, "null"]
+        data:
+          description: 业务数据，形状随接口而定
+    ErrorEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            status: { type: string, enum: [error] }
+    SessionData:
+      type: object
+      required: [token, expires_at, username]
+      properties:
+        token: { type: string, description: JWT（HS256） }
+        expires_at:
+          type: string
+          format: date-time
+        username: { type: string }

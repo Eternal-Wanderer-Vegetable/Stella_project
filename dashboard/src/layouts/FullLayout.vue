@@ -1,0 +1,130 @@
+<script setup lang="ts">
+import { useTheme } from 'vuetify';
+
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
+
+import { useAuthStore } from '@/stores/auth';
+import { useCustomizerStore, type ThemeMode } from '@/stores/customizer';
+import { useToast } from '@/stores/toast';
+
+// 侧栏信息架构对齐 AstrBot Dashboard（方案 §6）；带里程碑徽标的条目在
+// 对应里程碑落地前不可点——导航即路线图，避免「空白占位页」。
+const { t } = useI18n();
+const router = useRouter();
+const auth = useAuthStore();
+const customizer = useCustomizerStore();
+const toast = useToast();
+const theme = useTheme();
+
+interface NavItem {
+  icon: string;
+  title: string;
+  to?: string;
+}
+
+const groups: { header?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { icon: 'mdi-hand-wave-outline', title: t('core.navigation.welcome'), to: '/' },
+      { icon: 'mdi-chat-processing-outline', title: t('core.navigation.chat'), to: '/chat' },
+    ],
+  },
+  {
+    header: 'Connect',
+    items: [
+      { icon: 'mdi-robot', title: t('core.navigation.platforms'), to: '/platforms' },
+      { icon: 'mdi-creation', title: t('core.navigation.providers'), to: '/providers' },
+      { icon: 'mdi-cog', title: t('core.navigation.config'), to: '/config' },
+    ],
+  },
+  {
+    header: 'Capability',
+    items: [
+      { icon: 'mdi-puzzle', title: t('core.navigation.extension'), to: '/extension' },
+      { icon: 'mdi-book-open-variant', title: t('core.navigation.knowledgeBase'), to: '/knowledge-base' },
+      { icon: 'mdi-heart', title: t('core.navigation.persona'), to: '/persona' },
+      { icon: 'mdi-clock-outline', title: t('core.navigation.cron'), to: '/cron' },
+      { icon: 'mdi-account-group', title: t('core.navigation.groups'), to: '/groups' },
+    ],
+  },
+  {
+    header: 'Observability',
+    items: [{ icon: 'mdi-database', title: t('core.navigation.data'), to: '/data' }],
+  },
+  {
+    items: [{ icon: 'mdi-cog-outline', title: t('core.navigation.settings'), to: '/settings' }],
+  },
+];
+
+const isDark = computed(() => theme.global.name.value === 'StellaThemeDark');
+
+function toggleTheme(): void {
+  customizer.setThemeMode((isDark.value ? 'light' : 'dark') as ThemeMode);
+}
+
+async function logout(): Promise<void> {
+  await auth.logout();
+  toast.info(t('core.common.logout'));
+  router.push({ name: 'login' });
+}
+</script>
+
+<template>
+  <v-layout>
+    <v-navigation-drawer>
+      <div class="d-flex align-center pa-4">
+        <v-icon icon="mdi-star-four-points" color="secondary" class="mr-2" />
+        <span class="text-h6 font-weight-bold">Stella</span>
+      </div>
+      <v-divider />
+      <v-list nav density="comfortable">
+        <template v-for="(group, gi) in groups" :key="gi">
+          <v-list-subheader v-if="group.header" class="text-uppercase text-disabled">
+            {{ group.header }}
+          </v-list-subheader>
+          <template v-for="item in group.items" :key="item.title">
+            <v-list-item
+              v-if="item.to"
+              :title="item.title"
+              :prepend-icon="item.icon"
+              :active="
+                $route.path === item.to ||
+                (item.to !== '/' && $route.path.startsWith(item.to))
+              "
+              :to="item.to"
+            />
+          </template>
+        </template>
+      </v-list>
+    </v-navigation-drawer>
+
+    <v-app-bar flat>
+      <v-app-bar-title class="text-subtitle-1">
+        {{ $t('features.welcome.title') }}
+      </v-app-bar-title>
+      <template #append>
+        <v-btn
+          :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
+          variant="text"
+          @click="toggleTheme"
+        />
+        <v-btn icon="mdi-logout" variant="text" @click="logout" />
+        <v-avatar color="primary" size="32" class="mr-4">
+          <span class="text-subtitle-2">{{ auth.username.slice(0, 1).toUpperCase() }}</span>
+        </v-avatar>
+      </template>
+    </v-app-bar>
+
+    <v-main class="page-min-height">
+      <router-view />
+    </v-main>
+  </v-layout>
+</template>
+
+<style scoped>
+.page-min-height {
+  min-height: 100vh;
+}
+</style>

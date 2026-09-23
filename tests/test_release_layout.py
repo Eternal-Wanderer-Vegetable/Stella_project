@@ -121,7 +121,7 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
         text.index("  build-installer:") : text.index("  build-rust-wheel:")
     ]
     assert (
-        "needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload]"
+        "needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload, build-dashboard]"
         in installer
     )
     download = installer.index("uses: actions/download-artifact@v8")
@@ -134,7 +134,7 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     assert "必须下载恰好一个 Rust wheel" in installer
     assert "merge-multiple: false" in text
     assert (
-        'installer_dir="installer-bin/stella-installer-${profile}-${variant}"'
+        'installer_dir="installer-bin/stella-desktop-${profile}-${variant}"'
         in text
     )
     assert "mapfile -t installers" in text

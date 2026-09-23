@@ -480,6 +480,41 @@ def usage_snapshot() -> dict:
     }
 
 
+def query_daily(days: int = 30) -> list[dict]:
+    """最近 N 天日账的只读原始行（date × role × slot × model 粒度）。
+
+    供 WebUI 统计图表做时间序列与排行聚合——写入仍然只发生在本模块，
+    读侧单独暴露是为了不让 webui 直接摸表。读前先 flush 一次，把内存
+    缓冲里还没落盘的调用补进去，避免「刚发生的调用在图表上看不到」。
+    库打不开 / 表缺失时返回空列表：图表少一块，不该 500。
+    """
+    try:
+        flush()
+        conn = _connect()
+    except Exception:
+        return []
+    try:
+        cutoff = _date_key(date.today() - timedelta(days=max(0, int(days) - 1)))
+        rows = conn.execute(
+            "SELECT date, role, slot, model, kind, calls, failures, truncated, "
+            "prompt_tokens, completion_tokens, cached_tokens, "
+            "estimated_prompt_tokens, estimated_cached_tokens "
+            "FROM llm_usage_daily WHERE date >= ? ORDER BY date, role, slot, model",
+            (cutoff,),
+        ).fetchall()
+    except Exception:
+        return []
+    finally:
+        with contextlib.suppress(Exception):
+            conn.close()
+    keys = (
+        "date", "role", "slot", "model", "kind", "calls", "failures",
+        "truncated", "prompt_tokens", "completion_tokens", "cached_tokens",
+        "estimated_prompt_tokens", "estimated_cached_tokens",
+    )
+    return [dict(zip(keys, row, strict=True)) for row in rows]
+
+
 def reset_state() -> None:
     """清空内存态并卸载钩子（测试用）。不动库里的数据。"""
     global _loaded_date, _last_flush, _warned_date, _installed

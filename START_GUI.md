@@ -1,7 +1,9 @@
 # GUI 测试启动指令
 
-Stella 桌面图形界面（Release 包里的 `Stella.exe`）源码在 `stella-installer/`（Tauri 2 + 原生 HTML/JS）。
-开发/测试有两种启动方式，完整说明见 `stella-installer/README.md`。
+> **v2 已上线（M6）**：桌面 GUI 与浏览器 WebUI 合并为同一套面板
+> （`dashboard/` + `desktop/`），使用方式见 [docs/webui.md](docs/webui.md)。
+> 下面的 v1（`stella-installer/`）已冻结，仅在过渡期可用；最终形态见
+> tag `gui-v1-final`。
 
 ## 1. 浏览器预览（最快，无需 Rust 环境，走 mock 数据）
 
