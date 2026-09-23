@@ -127,6 +127,9 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "knowledge",
+        "skills",
+        "assets",
         "webui",
         "desktop",
     ):
@@ -201,6 +204,9 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "knowledge",
+        "skills",
+        "assets",
         "webui",
         "desktop",
     ):
@@ -271,6 +277,9 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "knowledge",
+        "skills",
+        "assets",
         "webui",
         "desktop",
     ):
@@ -331,6 +340,9 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
         "system_prompts",
         "runtime-manager",
         "stella_project",
+        "knowledge",
+        "skills",
+        "assets",
         "webui",
         "desktop",
     ):
