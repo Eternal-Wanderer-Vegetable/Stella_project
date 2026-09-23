@@ -165,6 +165,70 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     assert "runtime-manager/target/debug/build.bin" not in names
 
 
+def test_stager_prunes_output_inside_desktop_dir(tmp_path):
+    """复现 CI RecursionError：--stage-resources 的输出位于被暂存的
+    desktop/ 内部（desktop/src-tauri/resources/stella）——copytree 必须
+    剪掉输出目录自身，否则把输出里的自己再往里拷、无限递归。假树与
+    allowlist 测试同构（bot.py 等 COMMON_FILES 齐备）。"""
+    source = tmp_path / "source"
+    for relative in (
+        "bot.py",
+        "requirements.txt",
+        "pyproject.toml",
+        "LICENSE",
+        "README.md",
+        ".env.example",
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
+        "runtime-manager/schemas/runtime-manifest.schema.json",
+        "runtime-manager/schemas/runtime-state.schema.json",
+        "runtime-manager/schemas/package-catalog.schema.json",
+        "runtime-manager/schemas/package-registry.schema.json",
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    for directory in (
+        "astrbot_compat",
+        "capability",
+        "config",
+        "core",
+        "deploy",
+        "extensions",
+        "memory",
+        "system_prompts",
+        "runtime-manager",
+        "stella_project",
+        "webui",
+        "desktop",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    (source / "webui" / "dist").mkdir(parents=True, exist_ok=True)
+    (source / "webui" / "dist" / "index.html").write_text("panel", encoding="utf-8")
+    staged_output = source / "desktop" / "src-tauri" / "resources" / "stella"
+    staged_output.mkdir(parents=True)
+
+    result = stage_installer_resources(
+        source, staged_output, "oneclick-python", offline_payload=None
+    )
+
+    # webui 被完整暂存
+    assert (result / "webui" / "dist" / "index.html").is_file()
+    # 输出目录自身被剪掉：暂存的 desktop/ 内不得出现嵌套的自己
+    # （无剪枝时这里会无限自拷贝直至 RecursionError——CI 实测）
+    assert not (result / "desktop" / "src-tauri" / "resources" / "stella" / "desktop").exists()
+    # 暂存完成后可重复执行（幂等，不递归爆栈）
+    stage_installer_resources(source, staged_output, "oneclick-python")
+
+
 def test_release_builder_oneclick_is_single_executable(tmp_path):
     installer = tmp_path / "installer.exe"
     installer.write_bytes(b"installer")
