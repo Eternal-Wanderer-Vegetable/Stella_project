@@ -224,6 +224,12 @@ def stage_installer_resources(
     output.mkdir(parents=True)
     for relative in INSTALLER_FILES + INSTALLER_DIRS:
         _copy_tree(source, output, relative, prune=output)
+    # webui/dist 兜底：CI 漏拷（或本地源码树没构建前端）时，回退使用桌面壳的
+    # dashboard-dist——两处是同一份产物，缺一不可（面板由 Bot 同端口托管）。
+    webui_dist = output / "webui" / "dist"
+    shell_dist = source / "desktop" / "dashboard-dist"
+    if not webui_dist.exists() and shell_dist.is_dir():
+        shutil.copytree(shell_dist, webui_dist)
     bundled_catalog = source / "package-catalog-windows-amd64.json"
     if bundled_catalog.is_file():
         _copy_tree(source, output, bundled_catalog.name)

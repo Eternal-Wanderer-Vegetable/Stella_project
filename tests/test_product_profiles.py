@@ -235,6 +235,48 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
     stage_installer_resources(source, staged_output, "oneclick-python")
 
 
+def test_stager_falls_back_to_shell_dashboard_dist(tmp_path):
+    """CI 只把面板产物放进 desktop/dashboard-dist 时（webui/dist 未拷），
+    暂存器必须回退使用它——否则 payload 无面板，安装版全站 404
+    （v4.4.4-rc 实测：安装包缺 webui/dist，面板整页缺失）。"""
+    source = tmp_path / "source"
+    for relative in (
+        "bot.py", "requirements.txt", "pyproject.toml", "LICENSE", "README.md",
+        ".env.example", "start.bat", "doctor.bat", "stop.bat", "README-快速开始.txt",
+        "runtime-manager/schemas/runtime-manifest.schema.json",
+        "runtime-manager/schemas/runtime-state.schema.json",
+        "runtime-manager/schemas/package-catalog.schema.json",
+        "runtime-manager/schemas/package-registry.schema.json",
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    for directory in (
+        "astrbot_compat", "capability", "config", "core", "deploy", "extensions",
+        "knowledge", "memory", "skills", "system_prompts", "runtime-manager",
+        "stella_project", "assets", "webui",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    # 只有壳内 dashboard-dist，webui/dist 不存在
+    shell_dist = source / "desktop" / "dashboard-dist"
+    shell_dist.mkdir(parents=True)
+    (shell_dist / "index.html").write_text("panel", encoding="utf-8")
+    output = source / "desktop" / "src-tauri" / "resources" / "stella"
+    output.mkdir(parents=True)
+
+    result = stage_installer_resources(
+        source, output, "oneclick-python", offline_payload=None
+    )
+
+    assert (result / "webui" / "dist" / "index.html").is_file()
+
+
 def test_release_builder_oneclick_is_single_executable(tmp_path):
     installer = tmp_path / "installer.exe"
     installer.write_bytes(b"installer")

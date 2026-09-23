@@ -340,11 +340,17 @@ jobs:
           }
           python @stageArgs
 
-      - name: 下载 WebUI 前端产物（拷入壳内资源）
+      - name: 下载 WebUI 前端产物（壳内资源 + Bot payload 各一份）
         uses: actions/download-artifact@v7
         with:
           name: stella-dashboard-dist
           path: desktop/dashboard-dist
+
+      - name: 拷入 Bot payload 的 webui/dist
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path webui/dist | Out-Null
+          Copy-Item desktop/dashboard-dist/* webui/dist/ -Recurse -Force
 
       - name: 同步 Tauri 版本号
         shell: pwsh
