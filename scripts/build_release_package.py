@@ -75,7 +75,13 @@ FORBIDDEN_PARTS = (
 )
 
 
-def _copy_tree(source: Path, destination: Path, relative: str) -> None:
+def _copy_tree(
+    source: Path,
+    destination: Path,
+    relative: str,
+    *,
+    prune: Path | None = None,
+) -> None:
     source_path = source / relative
     if not source_path.exists() and relative in {
         "start.bat",
@@ -88,11 +94,24 @@ def _copy_tree(source: Path, destination: Path, relative: str) -> None:
         raise FileNotFoundError(f"allowlist entry is missing: {relative}")
     target = destination / relative
     if source_path.is_dir():
+        # 剪掉「阶段产物目录自身」：M6 起桌面壳目录（desktop/）进入发布清单，
+        # 而 --stage-resources 的输出恰在 desktop/ 内部——不剪就会把输出目录
+        # 里的自己再往里拷，copytree 无限递归（CI RecursionError 实测）。
+        prune_resolved = prune.resolve() if prune is not None else None
+
+        def _ignore(dir_path: str, names: list[str]) -> set[str]:
+            blocked = _ignore_release_entries(dir_path, names)
+            if prune_resolved is not None:
+                for name in names:
+                    if (Path(dir_path) / name).resolve() == prune_resolved:
+                        blocked.add(name)
+            return blocked
+
         shutil.copytree(
             source_path,
             target,
             dirs_exist_ok=True,
-            ignore=_ignore_release_entries,
+            ignore=_ignore,
         )
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -197,7 +216,7 @@ def stage_installer_resources(
         shutil.rmtree(output)
     output.mkdir(parents=True)
     for relative in INSTALLER_FILES + INSTALLER_DIRS:
-        _copy_tree(source, output, relative)
+        _copy_tree(source, output, relative, prune=output)
     bundled_catalog = source / "package-catalog-windows-amd64.json"
     if bundled_catalog.is_file():
         _copy_tree(source, output, bundled_catalog.name)
