@@ -124,10 +124,11 @@ onBeforeUnmount(() => {
   <v-container fluid class="pa-6">
     <div class="d-flex align-center mb-1">
       <h1 class="text-h5 font-weight-bold">提供商</h1>
-      <v-chip size="small" variant="tonal" color="secondary" class="ml-3">M1 · 只读运行态</v-chip>
+      <v-chip size="small" variant="tonal" color="secondary" class="ml-3">运行态 + 配置</v-chip>
     </div>
     <p class="text-body-2 text-medium-emphasis mb-4">
-      这里是模型调度器的实时闸门与降级状态。端点与角色的配置编辑在 M2 上线。
+      在此编辑模型端点（Base URL / 模型 / API Key）与角色绑定，并测试连通性；
+    下方为调度器的实时闸门与降级状态。保存写入 .env，重启后生效。
     </p>
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
 

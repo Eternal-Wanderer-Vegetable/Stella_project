@@ -90,10 +90,12 @@ onBeforeUnmount(() => {
   <v-container fluid class="pa-6">
     <div class="d-flex align-center mb-1">
       <h1 class="text-h5 font-weight-bold">平台</h1>
-      <v-chip size="small" variant="tonal" color="secondary" class="ml-3">M1 · 只读状态</v-chip>
+      <v-chip size="small" variant="tonal" color="secondary" class="ml-3">链路状态 + 连接配置</v-chip>
     </div>
     <p class="text-body-2 text-medium-emphasis mb-4">
-      Stella 当前接入 OneBot V11 / NapCat。连接配置（正向 WS 地址、token）的编辑在 M2 上线。
+      Stella 当前接入 OneBot V11 / NapCat：在下方「连接配置」卡片编辑
+    监听地址/端口或正向 WS 地址与 token（保存写入 .env，重启后生效），
+    顶部为实时链路状态。
     </p>
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
 
