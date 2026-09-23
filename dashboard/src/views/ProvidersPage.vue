@@ -49,6 +49,7 @@ const editing = ref(false);
 const testResult = ref<{ ok: boolean; error?: string } | null>(null);
 const testing = ref(false);
 const apiKeyInputs = ref<Record<string, string>>({});
+const fetchedModels = ref<Record<string, string[]>>({});
 const toast = useToast();
 
 async function loadConfig(): Promise<void> {
@@ -71,13 +72,17 @@ function openEditor(): void {
 async function fetchModels(ep: Endpoint): Promise<void> {
   try {
     const data = await unwrap<{ models: string[]; error: string }>(
-      api.get('/providers/models', { params: { base_url: ep.base_url, api_key: apiKeyInputs.value[ep.slot] ?? '' } }),
+      api.get('/providers/models', {
+        params: { base_url: ep.base_url, api_key: apiKeyInputs.value[ep.slot] ?? '' },
+      }),
     );
-    if (data.error) toast.error(data.error);
-    else if (data.models.length) {
-      ep.model = data.models[0];
-      toast.success(`拉到 ${data.models.length} 个模型，已选第一个`);
-    } else toast.info('端点未返回模型');
+    if (data.error) {
+      toast.error(data.error);
+      return;
+    }
+    fetchedModels.value[ep.slot] = data.models;
+    if (data.models.length && !ep.model) ep.model = data.models[0];
+    toast.success(`拉到 ${data.models.length} 个模型，点击卡片选择`);
   } catch (err) {
     toastApiError(toast, err);
   }
@@ -185,13 +190,29 @@ onBeforeUnmount(() => {
             <div class="text-subtitle-2 mb-2">{{ ep.slot }}</div>
             <v-text-field v-model="ep.base_url" label="Base URL" density="compact" />
             <div class="d-flex ga-2 align-center">
-              <v-text-field v-model="ep.model" label="模型" density="compact" />
+              <v-text-field
+                v-model="ep.model" label="模型 ID"
+                :hint="ep.model ? undefined : '未配置模型 ID——doctor 会告警；拉取模型后点选即可'"
+                persistent-hint
+                density="compact"
+              />
               <v-btn variant="text" size="small" prepend-icon="mdi-refresh" @click="fetchModels(ep)">
                 拉取模型
               </v-btn>
               <v-btn variant="text" size="small" prepend-icon="mdi-lan" :loading="testing" @click="testEp(ep)">
                 测试
               </v-btn>
+            </div>
+            <div v-if="fetchedModels[ep.slot]?.length" class="d-flex flex-wrap ga-1 mt-1">
+              <v-chip
+                v-for="m in fetchedModels[ep.slot]" :key="m"
+                size="small"
+                :variant="ep.model === m ? 'tonal' : 'outlined'"
+                :color="ep.model === m ? 'primary' : undefined"
+                @click="ep.model = m"
+              >
+                {{ m }}
+              </v-chip>
             </div>
             <v-text-field
               v-model="apiKeyInputs[ep.slot]" label="API Key（留空不变）"
