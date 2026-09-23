@@ -125,8 +125,7 @@ function spacesToLines(spacesJson: string): string {
       .map(([name, prompt, groups]) =>
         `${name} | ${prompt || `${name}.md`} | ${(groups ?? []).join(',')}`,
       )
-      .join('
-');
+      .join('\\n');
   } catch {
     return '';
   }
