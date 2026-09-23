@@ -112,3 +112,6 @@ start_claude_command.txt
 /dashboard/dist/
 # 发布期由 build_release_package 拷入的托管副本（同上，构建产物）
 /webui/dist/
+# 桌面壳内嵌前端：CI 下载 build-dashboard 产物后填充（仅 .gitkeep 占位入库）
+/desktop/dashboard-dist/*
+!/desktop/dashboard-dist/.gitkeep
