@@ -1,0 +1,1 @@
+此目录由 CI 填充（build-dashboard 产物）；本地构建请先 cp -r dashboard/dist/* dashboard-dist/

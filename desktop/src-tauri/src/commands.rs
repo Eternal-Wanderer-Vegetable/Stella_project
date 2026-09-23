@@ -16,6 +16,52 @@ static GUI_OWNS_BOT: AtomicBool = AtomicBool::new(false);
 ///
 /// doctor 的退出码 1 表示「发现阻塞性问题」，不是调用失败——这里必须放行，
 /// 否则有 error 时前端会收到错误而不是检查结果。
+/// 在线面板的基地址：HOST/PORT 读自 STELLA_HOME/.env（0.0.0.0 → 127.0.0.1）。
+fn live_base_url() -> String {
+    let path = python::data_root().join(".env");
+    let values = std::fs::read_to_string(&path)
+        .map(|text| parse_env(&text))
+        .unwrap_or_default();
+    let host = values.get("HOST").cloned().unwrap_or_else(|| "127.0.0.1".into());
+    let port = values.get("PORT").cloned().unwrap_or_else(|| "8080".into());
+    let host = if host == "0.0.0.0" || host == "::" {
+        "127.0.0.1".to_string()
+    } else {
+        host
+    };
+    format!("http://{host}:{port}")
+}
+
+/// 轮询状态接口直到 Bot 就绪（或超时），返回在线面板基地址。
+///
+/// 离线页的「启动 Bot」按钮走完 start_bot 后调用它：就绪即把 WebView 导航到
+/// 在线面板（由 Bot 同端口托管，登录态存在该源下可跨壳重启保留）。
+#[tauri::command]
+pub async fn wait_bot_ready(timeout_secs: Option<u64>) -> Result<String, String> {
+    let timeout = timeout_secs.unwrap_or(120).max(1);
+    tauri::async_runtime::spawn_blocking(move || {
+        let base = live_base_url();
+        let status_url = format!("{base}/stella/status");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
+        loop {
+            // 状态接口 200 = Bot 进程活着且 WebUI 已挂载
+            if ureq::get(&status_url)
+                .timeout(std::time::Duration::from_secs(1))
+                .call()
+                .is_ok()
+            {
+                return Ok(base);
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(format!("等待 Bot 就绪超时（{timeout}s）。请查看日志排查。"));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(800));
+        }
+    })
+    .await
+    .map_err(|e| format!("等待任务失败：{e}"))?
+}
+
 #[tauri::command]
 pub fn desktop_session_secret() -> String {
     // 供打包进壳的 dashboard 在 tauri:// 源下换取正式 JWT（方案 §4 D5）；
