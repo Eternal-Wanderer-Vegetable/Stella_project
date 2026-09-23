@@ -25,6 +25,9 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 export const tauriBridge = {
+  /** 透传任意窄契约命令（如 save_config 的首启向导）。 */
+  invoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) =>
+    invoke<T>(cmd, args),
   /** 启动 Bot（首次会先准备嵌入式运行时，可能耗时数分钟）。 */
   startBot: (force = false) => invoke<string>("start_bot", { force }),
   /** 轮询状态接口直到就绪，返回在线面板基地址。timeoutSecs=0 表示「立即探测一次」。 */
