@@ -81,6 +81,7 @@ const wizardError = ref('');
 const form = ref({
   groups: '',
   spaceName: '默认空间',
+  spacesText: '',
   lmUrl: 'http://127.0.0.1:1234',
   chatModel: '',
   accessToken: '',
@@ -99,7 +100,9 @@ function parseGroups(): number[] {
 }
 
 function openWizard(): void {
-  // 用现有 .env 回填（读旧配置的入口）：群号/地址/模型/token 全部沿用旧值
+  // 用现有 .env 回填（读旧配置的入口）：群号/地址/模型/token 全部沿用旧值；
+  // 空间绑定逐行回填并原样保留——write_spaces 会删除「managed 且未列出」的
+  // 空间 toml，回填缺失 = 用户的生产空间被清空（生产空间有 5 个，不可重忘）。
   if (cfg.value) {
     form.value.groups = cfg.value.allowed_groups || form.value.groups;
     form.value.lmUrl = cfg.value.lm_base_url || form.value.lmUrl;
@@ -108,9 +111,25 @@ function openWizard(): void {
     form.value.onebotMode = cfg.value.onebot_mode || 'reverse';
     form.value.host = cfg.value.host || '0.0.0.0';
     form.value.port = cfg.value.port || 8080;
+    form.value.spacesText = spacesToLines(cfg.value.spaces);
   }
   wizardError.value = '';
   wizardOpen.value = true;
+}
+
+/** get_config.spaces（JSON [[name,prompt,groups],...]）→ parse_spaces 行格式 */
+function spacesToLines(spacesJson: string): string {
+  try {
+    const parsed = JSON.parse(spacesJson || '[]') as [string, string, (number | string)[]][];
+    return parsed
+      .map(([name, prompt, groups]) =>
+        `${name} | ${prompt || `${name}.md`} | ${(groups ?? []).join(',')}`,
+      )
+      .join('
+');
+  } catch {
+    return '';
+  }
 }
 
 async function saveAndStart(): Promise<void> {
@@ -135,7 +154,7 @@ async function saveAndStart(): Promise<void> {
         chat_model: form.value.chatModel,
         consolidation_model: '',
         embedding_model: '',
-        spaces: `${form.value.spaceName}|default.md|${groups.join(',')}`,
+        spaces: form.value.spacesText,
         advanced_env: '',
       },
     });
@@ -219,7 +238,14 @@ onMounted(async () => {
             label="QQ 群号（逗号分隔，Bot 只在这些群里响应）"
             density="compact"
           />
-          <v-text-field v-model="form.spaceName" label="空间名" density="compact" />
+          <v-textarea
+            v-model="form.spacesText"
+            label="空间绑定（每行：空间名 | 人格文件 | 群号）"
+            rows="3"
+            density="compact"
+            hint="已有空间原样保留；修改群号请编辑对应行"
+            persistent-hint
+          />
           <v-text-field v-model="form.lmUrl" label="LM Studio / OpenAI 兼容地址" density="compact" />
           <v-text-field
             v-model="form.chatModel"
