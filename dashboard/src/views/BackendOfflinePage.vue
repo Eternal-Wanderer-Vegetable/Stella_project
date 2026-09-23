@@ -47,9 +47,10 @@ async function retry(): Promise<void> {
   }
 }
 
-/** 探测/等待 Bot 就绪并跳转到在线面板（面板由 Bot 同端口托管）。 */
+/** 轮询等待 Bot 就绪并跳转到在线面板（面板由 Bot 同端口托管）。 */
 async function enterPanel(timeoutSecs: number): Promise<void> {
   const base = await tauriBridge.waitBotReady(timeoutSecs);
+  step.value = '就绪，正在打开面板…';
   window.location.href = base;
 }
 
@@ -201,12 +202,21 @@ onMounted(async () => {
   } finally {
     cfgLoaded.value = true;
   }
-  // Bot 已在运行（比如壳重启而 Bot 未关）→ 不停在离线页，直接进面板
-  try {
-    await enterPanel(2);
-  } catch {
-    // 未就绪：停在离线页等用户操作
-  }
+  // Bot 已在运行（比如壳重启而 Bot 未关）→ 自动进面板；
+  // 就绪探测带重试循环——单次探测失败不该把用户困在离线页
+  void (async () => {
+    for (let i = 0; i < 36; i++) {
+      if (!starting.value) {
+        try {
+          await enterPanel(2);
+          return;
+        } catch {
+          // 未就绪，继续轮询
+        }
+      }
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  })();
 });
 </script>
 
