@@ -47,13 +47,31 @@ async function retry(): Promise<void> {
   }
 }
 
+/** 轮询等待 Bot 就绪并跳转到在线面板（面板由 Bot 同端口托管）。 */
+async function enterPanel(timeoutSecs: number): Promise<void> {
+  const base = await tauriBridge.waitBotReady(timeoutSecs);
+  step.value = '就绪，正在打开面板…';
+  window.location.href = base;
+}
+
 async function startBot(): Promise<void> {
   starting.value = true;
   startError.value = '';
   step.value = '启动 Bot…';
   try {
     await tauriBridge.startBot(false);
-    step.value = '等待服务就绪（首次启动需安装依赖，最长 20 分钟）…';
+  } catch (err) {
+    const msg = (err as Error).message;
+    // Bot 已在运行（deploy 拒绝重复启动）不算失败——目标本来就是进面板
+    if (!msg.includes('已在运行') && !msg.includes('already running')) {
+      startError.value = msg;
+      step.value = '';
+      starting.value = false;
+      return;
+    }
+  }
+  step.value = '等待服务就绪（首次启动需安装依赖，最长 20 分钟）…';
+  try {
     const base = await tauriBridge.waitBotReady(1200);
     step.value = '就绪，正在打开面板…';
     window.location.href = base;
@@ -159,8 +177,12 @@ async function saveAndStart(): Promise<void> {
     });
 
     wizardStep.value = '启动 Bot（首次需下载嵌入式运行时并安装依赖，5–15 分钟）…';
-    await tauriBridge.startBot(false);
-
+    try {
+      await tauriBridge.startBot(false);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (!msg.includes('已在运行') && !msg.includes('already running')) throw err;
+    }
     wizardStep.value = '等待服务就绪（最长 20 分钟）…';
     const base = await tauriBridge.waitBotReady(1200);
     wizardStep.value = '就绪，正在打开面板…';
@@ -180,6 +202,21 @@ onMounted(async () => {
   } finally {
     cfgLoaded.value = true;
   }
+  // Bot 已在运行（比如壳重启而 Bot 未关）→ 自动进面板；
+  // 就绪探测带重试循环——单次探测失败不该把用户困在离线页
+  void (async () => {
+    for (let i = 0; i < 36; i++) {
+      if (!starting.value) {
+        try {
+          await enterPanel(2);
+          return;
+        } catch {
+          // 未就绪，继续轮询
+        }
+      }
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+  })();
 });
 </script>
 
