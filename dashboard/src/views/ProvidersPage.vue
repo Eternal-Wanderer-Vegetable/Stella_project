@@ -138,6 +138,35 @@ onBeforeUnmount(() => {
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
 
     <v-card class="pa-4 mb-4">
+      <div class="d-flex align-center mb-2">
+        <div class="text-subtitle-1 font-weight-medium">端点与角色</div>
+        <v-spacer />
+        <v-btn color="primary" prepend-icon="mdi-pencil" @click="openEditor">编辑配置</v-btn>
+      </div>
+      <v-table density="compact">
+        <thead>
+          <tr><th>端点槽</th><th>Base URL</th><th>模型</th><th>类型</th><th>API Key</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="ep in endpoints" :key="ep.slot">
+            <td>{{ ep.slot }}</td>
+            <td>{{ ep.base_url || '—' }}</td>
+            <td>{{ ep.model || '—' }}</td>
+            <td>{{ ep.kind || '—' }}</td>
+            <td>
+              <v-chip size="x-small" variant="tonal" :color="ep.has_api_key ? 'success' : 'default'">
+                {{ ep.has_api_key ? '已设置' : '未设置' }}
+              </v-chip>
+            </td>
+          </tr>
+        </tbody>
+      </v-table>
+      <div class="text-caption text-medium-emphasis mt-2">
+        角色绑定：{{ roles.map((r) => `${r.role}→${r.endpoint}`).join(' · ') }}
+      </div>
+    </v-card>
+
+    <v-card class="pa-4 mb-4">
       <div class="text-subtitle-1 font-weight-medium mb-2">模型闸门（每端点串行）</div>
       <v-table density="compact" v-if="gates.length">
         <thead>
