@@ -102,16 +102,22 @@ def roles() -> list[dict]:
 
 def update_roles(payload: list[dict]) -> dict:
     valid_roles = set(llm_registry.ROLES)
-    valid_slots = set(_slots()) | {"none"}
+    valid_slots = set(_slots())
     updates: dict[str, str] = {}
     for item in payload:
         role = item.get("role")
         if role not in valid_roles:
             raise ApiError(f"未知角色: {role}")
         upper = role.upper()
-        endpoint = str(item.get("endpoint", "")).strip().upper()
-        if endpoint and endpoint not in valid_slots:
-            raise ApiError(f"{role} 的端点槽必须是: {', '.join(sorted(valid_slots))}")
+        # ``none`` 是合法值（视觉等可选角色显式声明不启用），规范写法小写——
+        # 之前的 .upper() 把它变成 NONE 再验槽位，误杀成 400（用户实测）。
+        endpoint = str(item.get("endpoint", "")).strip()
+        if endpoint and endpoint.lower() != "none":
+            if endpoint.upper() not in valid_slots:
+                raise ApiError(
+                    f"{role} 的端点槽必须是: {', '.join(sorted(valid_slots))} 或 none"
+                )
+            endpoint = endpoint.upper()
         if endpoint:
             updates[f"LLM_ROLE_{upper}_ENDPOINT"] = endpoint
         if "model" in item:

@@ -272,9 +272,12 @@ onBeforeUnmount(() => {
               </tr>
             </tbody>
           </v-table>
-          <v-alert type="warning" density="compact" variant="tonal" class="mt-3">
-            保存写入 .env，重启后生效。
-          </v-alert>
+          <div class="text-caption text-medium-emphasis mt-2">
+            端点槽选 none = 该角色不启用（视觉默认不启用，属可选增强）。
+            <v-alert type="warning" density="compact" variant="tonal" class="mt-2">
+              保存写入 .env，重启后生效。
+            </v-alert>
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />

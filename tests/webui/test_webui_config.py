@@ -128,6 +128,22 @@ def test_providers_roles_get_put(client: TestClient, auth_header: dict):
     assert resp.status_code == 400
 
 
+def test_vision_none_endpoint_saves_lowercase(client: TestClient, auth_header: dict, isolated_home: Path):
+    """视觉是可选增强：endpoint=none 必须原样保存（小写规范值），
+    不得被 .upper() 误杀成 400（用户实测的阻塞性错误）。"""
+    resp = client.get("/api/v1/providers/roles", headers=auth_header)
+    vision = next(r for r in resp.json()["data"]["roles"] if r["role"] == "vision")
+    assert vision["endpoint"] == "none"  # 出厂默认
+    resp = client.put(
+        "/api/v1/providers/roles",
+        json=[vision],
+        headers=auth_header,
+    )
+    assert resp.status_code == 200
+    env_text = (isolated_home / ".env").read_text(encoding="utf-8")
+    assert "LLM_ROLE_VISION_ENDPOINT=none" in env_text
+
+
 # ---------- spaces ----------
 
 def test_spaces_crud(client: TestClient, auth_header: dict, isolated_home: Path):
