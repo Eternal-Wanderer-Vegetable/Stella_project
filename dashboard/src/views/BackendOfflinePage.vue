@@ -1,42 +1,69 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { isTauri, tauriBridge } from '@/api/tauri';
 import { useAuthStore } from '@/stores/auth';
 
+// 离线页（方案 §11）：
+// - 浏览器：纯重试；
+// - 壳内：读取现有 .env（get_config）——已配置过 → 直接「启动 Bot」
+//   （旧配置原样生效，绝不走会覆盖配置的保存）；未配置 → 首启向导
+//   （save_config，v1 向导同一条 deploy init --answers 通路）→ 启动 →
+//   轮询就绪 → 导航到 Bot 托管的在线面板。
 const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 
 const starting = ref(false);
 const startError = ref('');
+const step = ref('');
 const doctorText = ref('');
 const inShell = computed(() => isTauri());
+
+interface ShellConfig {
+  configured: boolean;
+  allowed_groups: string;
+  onebot_mode: string;
+  host: string;
+  port: number;
+  ws_urls: string;
+  access_token: string;
+  lm_base_url: string;
+  chat_model: string;
+  consolidation_model: string;
+  embedding_model: string;
+  spaces: string;
+}
+
+const cfg = ref<ShellConfig | null>(null);
+const cfgLoaded = ref(false);
 
 async function retry(): Promise<void> {
   const state = await auth.probe();
   if (state === 'online') {
-    router.go(0); // 整页重载，让路由守卫按在线状态重走
+    router.go(0);
   }
 }
 
-/** 壳内启动：start_bot → 轮询就绪（首启含运行时下载，放宽到 20 分钟）→ 导航在线面板。 */
-async function startFromShell(): Promise<void> {
+async function startBot(): Promise<void> {
   starting.value = true;
   startError.value = '';
+  step.value = '启动 Bot…';
   try {
     await tauriBridge.startBot(false);
+    step.value = '等待服务就绪（首次启动需安装依赖，最长 20 分钟）…';
     const base = await tauriBridge.waitBotReady(1200);
-    window.location.href = base; // 导航到 Bot 托管的在线面板
+    step.value = '就绪，正在打开面板…';
+    window.location.href = base;
   } catch (err) {
     startError.value = (err as Error).message;
+    step.value = '';
     starting.value = false;
   }
 }
 
-/** 壳内自检：deploy doctor 的文本报告。 */
 async function runShellDoctor(): Promise<void> {
   doctorText.value = '运行中…';
   try {
@@ -46,7 +73,7 @@ async function runShellDoctor(): Promise<void> {
   }
 }
 
-// ---------- 首启配置向导（壳内；走 v1 同一条 deploy init --answers 通路） ----------
+// ---------- 首启向导（仅 configured=false 时出现） ----------
 const wizardOpen = ref(false);
 const wizardBusy = ref(false);
 const wizardStep = ref('');
@@ -58,6 +85,8 @@ const form = ref({
   chatModel: '',
   accessToken: '',
   onebotMode: 'reverse',
+  host: '0.0.0.0',
+  port: 8080,
 });
 
 function parseGroups(): number[] {
@@ -67,6 +96,21 @@ function parseGroups(): number[] {
     .filter(Boolean)
     .map(Number)
     .filter((n) => !Number.isNaN(n));
+}
+
+function openWizard(): void {
+  // 用现有 .env 回填（读旧配置的入口）：群号/地址/模型/token 全部沿用旧值
+  if (cfg.value) {
+    form.value.groups = cfg.value.allowed_groups || form.value.groups;
+    form.value.lmUrl = cfg.value.lm_base_url || form.value.lmUrl;
+    form.value.chatModel = cfg.value.chat_model || form.value.chatModel;
+    form.value.accessToken = cfg.value.access_token || '';
+    form.value.onebotMode = cfg.value.onebot_mode || 'reverse';
+    form.value.host = cfg.value.host || '0.0.0.0';
+    form.value.port = cfg.value.port || 8080;
+  }
+  wizardError.value = '';
+  wizardOpen.value = true;
 }
 
 async function saveAndStart(): Promise<void> {
@@ -83,8 +127,8 @@ async function saveAndStart(): Promise<void> {
       config: {
         allowed_groups: groups.join(','),
         onebot_mode: form.value.onebotMode,
-        host: '0.0.0.0',
-        port: 8080,
+        host: form.value.host,
+        port: Number(form.value.port) || 8080,
         ws_urls: '',
         access_token: form.value.accessToken,
         lm_base_url: form.value.lmUrl,
@@ -108,6 +152,17 @@ async function saveAndStart(): Promise<void> {
     wizardBusy.value = false;
   }
 }
+
+onMounted(async () => {
+  if (!inShell.value) return;
+  try {
+    cfg.value = await tauriBridge.invoke<ShellConfig>('get_config');
+  } catch {
+    cfg.value = null;
+  } finally {
+    cfgLoaded.value = true;
+  }
+});
 </script>
 
 <template>
@@ -122,20 +177,42 @@ async function saveAndStart(): Promise<void> {
         <v-btn color="primary" variant="tonal" @click="retry">
           {{ $t('features.offline.retry') }}
         </v-btn>
-        <v-btn v-if="inShell" color="warning" @click="wizardOpen = true">初始化并启动</v-btn>
+        <!-- 壳内主按钮：已配置 → 直接启动（旧配置生效）；未配置 → 向导 -->
+        <v-btn
+          v-if="inShell && cfgLoaded"
+          color="warning"
+          :loading="starting"
+          @click="startBot"
+        >
+          {{ cfg?.configured ? '启动 Bot' : '初始化并启动' }}
+        </v-btn>
         <v-btn v-if="inShell" variant="text" @click="runShellDoctor">环境自检</v-btn>
       </div>
+      <div v-if="inShell && cfgLoaded && !cfg?.configured" class="text-caption text-medium-emphasis mt-2">
+        检测到尚未完成初始配置——点「初始化并启动」填写基本信息。
+      </div>
+      <v-btn
+        v-if="inShell && cfgLoaded && cfg?.configured"
+        variant="text"
+        size="small"
+        class="mt-2"
+        @click="openWizard"
+      >
+        修改基础配置（群号 / 模型 / 连接）
+      </v-btn>
       <pre
         v-if="doctorText"
         class="text-caption text-left mt-4"
         style="max-height: 200px; overflow-y: auto; white-space: pre-wrap"
       >{{ doctorText }}</pre>
+      <div v-if="step" class="text-caption text-medium-emphasis mt-2">{{ step }}</div>
+      <div v-if="startError" class="text-error text-caption mt-2 pre-wrap">{{ startError }}</div>
     </div>
 
-    <!-- 首启配置向导（壳内；save_config 与 v1 向导同一条 deploy init 通路） -->
+    <!-- 基础配置向导（首启 / 修改） -->
     <v-dialog v-model="wizardOpen" width="560" persistent>
       <v-card>
-        <v-card-title>初始化配置</v-card-title>
+        <v-card-title>{{ cfg?.configured ? '修改基础配置' : '初始化配置' }}</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="form.groups"
@@ -157,6 +234,10 @@ async function saveAndStart(): Promise<void> {
             density="compact"
             type="password"
           />
+          <div class="d-flex ga-2">
+            <v-text-field v-model="form.host" label="监听地址" density="compact" />
+            <v-text-field v-model="form.port" label="端口" density="compact" />
+          </div>
           <v-select
             v-model="form.onebotMode"
             :items="[
@@ -169,7 +250,7 @@ async function saveAndStart(): Promise<void> {
           <div v-if="wizardStep" class="text-caption text-medium-emphasis mt-2">
             {{ wizardStep }}
           </div>
-          <div v-if="wizardError" class="text-error text-caption mt-2">{{ wizardError }}</div>
+          <div v-if="wizardError" class="text-error text-caption mt-2 pre-wrap">{{ wizardError }}</div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -189,5 +270,8 @@ async function saveAndStart(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.pre-wrap {
+  white-space: pre-wrap;
 }
 </style>
