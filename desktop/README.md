@@ -32,6 +32,11 @@ dashboard 的构建产物由 CI 拷入 `desktop/dashboard-dist/`
 （tauri.conf 的 `frontendDist` 指向它）：发布包离线态加载该目录；
 Bot 在线后导航到 `http://127.0.0.1:<PORT>/`（同一套面板）。
 
+本地构建：先 `cp -r dashboard/dist/* desktop/dashboard-dist/`
+（目录缺失会导致 `cargo check/build` 直接失败——tauri 在编译期校验
+frontendDist 存在性），再 `cargo tauri build`。`cargo check` 已通过
+（2026-09-23，含秘钥注入与 wait_bot_ready 命令）。
+
 ## 本地构建
 
 ```bash
