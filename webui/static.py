@@ -86,6 +86,14 @@ async def _static_file(static_path: str) -> Any:
             media_type=mimetypes.guess_type(candidate.name)[0],
             headers={"Cache-Control": "no-cache"},
         )
+    if static_path.startswith("assets/"):
+        # 带 hash 的构建产物缺失 = 客户端拿着过期入口页（或部署残缺）。
+        # 必须响亮地 404：回落 index.html 会把 HTML 当 JS 发回去（200 +
+        # text/html），浏览器只报一行 MIME 错然后白屏，原因被彻底藏住
+        # （2026-09-24 实测：webui/dist 重建换 hash 后，旧入口页白屏）。
+        return JSONResponse(
+            {"status": "error", "message": "Not Found"}, status_code=404
+        )
     # SPA 深链（hash 路由其实不需要，但保留 history 兼容）
     return FileResponse(dist / "index.html", headers={"Cache-Control": "no-store"})
 
