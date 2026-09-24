@@ -528,3 +528,104 @@ def test_fetch_live_status_rejects_foreign_instance(monkeypatch):
     monkeypatch.setattr(process, "dotenv_values", lambda _p: {})
     monkeypatch.setattr(process, "httpx", _FakeHttpx())
     assert process._fetch_live_status() is None
+
+
+# ---------- 启动前接管旧实例（replace_running，2026-09-24 用户要求） ----------
+
+
+def test_identify_running_via_status_api(monkeypatch, tmp_path):
+    """状态接口自报身份即认定——手工启动（无 PID 文件）的实例也接管。"""
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: {"pid": 555})
+    assert process._identify_running() == 555
+
+
+def test_identify_running_ignores_unconfirmed_pid(monkeypatch, tmp_path):
+    """状态接口无匹配时不认任何裸 PID：PID 复用撞号的陈旧记录绝不能被杀。"""
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
+    process.write_pid(999)
+    monkeypatch.setattr(process, "is_alive", lambda pid: True)
+    monkeypatch.setattr(process, "_owned_manifest", lambda pid: {"pid": 999})
+    assert process._identify_running() is None
+
+
+def test_identify_running_fallback_when_api_disabled(monkeypatch, tmp_path):
+    """状态接口被显式关闭的兜底：PID+manifest 匹配且端口在听 → 认。
+
+    端口在听是关键证据——复用 PID 的无关进程不会监听我们的服务端口。
+    """
+    monkeypatch.setattr(process, "STELLA_STATUS_API_ENABLED", False)
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: None)
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    process.write_pid(888)
+    monkeypatch.setattr(process, "is_alive", lambda pid: True)
+    # 默认参数必须保留：真实 _fetch_live_status 会无参调用 _owned_manifest()
+    monkeypatch.setattr(process, "_owned_manifest", lambda pid=None: {"pid": 888})
+    monkeypatch.setattr(process, "_service_port_in_use", lambda: True)
+    assert process._identify_running() == 888
+    monkeypatch.setattr(process, "_service_port_in_use", lambda: False)
+    assert process._identify_running() is None
+
+
+def test_replace_running_stops_identified_instance(monkeypatch):
+    calls = {}
+
+    def fake_stop(pid, grace, reason):
+        calls["pid"] = pid
+        calls["reason"] = reason
+        return True
+
+    monkeypatch.setattr(process, "_identify_running", lambda: 777)
+    monkeypatch.setattr(process, "_graceful_stop_pid", fake_stop)
+    stopped, note = process.replace_running()
+    assert stopped is True
+    assert "777" in note
+    assert calls["pid"] == 777
+    assert "接管" in calls["reason"]
+
+
+def test_replace_running_no_instance(monkeypatch):
+    monkeypatch.setattr(process, "_identify_running", lambda: None)
+    assert process.replace_running() == (False, "")
+
+
+def test_start_detached_replaces_running_instance_and_transfers_ownership(
+    monkeypatch, tmp_path, capsys
+):
+    """启动时发现旧实例：先接管停止，ownership 记录转到新进程上。"""
+    pid_file = tmp_path / "stella.pid"
+    manifest = tmp_path / "ownership.json"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "MANIFEST_FILE", manifest)
+    monkeypatch.setattr(process, "BOT_ENTRY", tmp_path / "bot.py")
+    process.BOT_ENTRY.write_text("print('bot')", encoding="utf-8")
+    # 旧实例由状态接口自报身份（PID 555，模拟手工启动、无 PID 文件）
+    monkeypatch.setattr(process, "_fetch_live_status", lambda: {"pid": 555})
+    stop_calls = []
+
+    def fake_graceful_stop(pid, grace, reason):
+        stop_calls.append((pid, reason))
+        return True
+
+    monkeypatch.setattr(process, "_graceful_stop_pid", fake_graceful_stop)
+    monkeypatch.setattr(process, "wait_for_startup", lambda pid: (True, ""))
+    monkeypatch.setattr(process.runtime, "update_component", lambda *args, **kwargs: None)
+
+    proc, _pid = _short_lived(30.0)
+    monkeypatch.setattr(process.subprocess, "Popen", lambda *args, **kwargs: proc)
+    try:
+        assert process.start_detached() == 0
+        # 旧实例被接管停止，且停止原因明确是「启动接管」
+        assert stop_calls and stop_calls[0][0] == 555
+        assert "接管" in stop_calls[0][1]
+        # ownership 已写到新进程上（而不是留下旧实例的记录）
+        assert process.read_pid() == proc.pid
+        owned = process._owned_manifest(proc.pid)
+        assert owned is not None
+        out = capsys.readouterr().out
+        assert "先停止以便启动新实例" in out
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+        proc.wait()
