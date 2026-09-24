@@ -45,7 +45,7 @@ async def config_current() -> Any:
 @router.put("/api/v1/config")
 async def config_update(
     request: Request,
-    payload: dict[str, str],
+    payload: dict[str, Any],
     auth: Annotated[AuthContext, Depends(require_auth)],
 ) -> Any:
     result = config_service.update(payload)

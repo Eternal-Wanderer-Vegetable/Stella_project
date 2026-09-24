@@ -94,15 +94,25 @@ def current() -> dict:
     return {"fields": fields, "env_file": str(envfile.env_file())}
 
 
-def update(values: dict[str, str]) -> dict:
+def _scalar_to_str(value: Any) -> str:
+    """JSON 标量 → .env 行值。开关发的是 JSON 布尔值，pydantic 的
+    dict[str, str] 会拒绝 bool——前端 ConfigForm 的开关必须有这条通路
+    （否则「格式不正确」，用户实测阻塞了 DB_CLEANUP 两个开关）。"""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def update(values: dict[str, Any]) -> dict:
     """增量写回。返回 {written, removed, restart_required}。"""
     valid = {f["key"]: f for f in _fields()}
     remove: set[str] = set()
     apply_updates: dict[str, str] = {}
-    for key, value in (values or {}).items():
+    for key, raw_value in (values or {}).items():
         if key not in valid:
             raise ApiError(f"未知配置键: {key}")
         field = valid[key]
+        value = _scalar_to_str(raw_value)
         sensitive = _is_sensitive(key)
         if sensitive and value == "":
             continue  # 敏感键空串 = 不修改
@@ -111,11 +121,15 @@ def update(values: dict[str, str]) -> dict:
             continue
         if field.get("choices") and value not in field["choices"]:
             raise ApiError(f"{key} 的合法取值: {', '.join(map(str, field['choices']))}")
-        if field.get("type") in ("int", "float"):
+        if field.get("type") == "bool":
+            if value.lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
+                raise ApiError(f"{key} 需要布尔值（true/false）")
+            value = value.lower()
+        elif field.get("type") in ("int", "float"):
             try:
                 float(value)
             except (TypeError, ValueError):
                 raise ApiError(f"{key} 需要数字") from None
-        apply_updates[key] = str(value)
+        apply_updates[key] = value
     report = envfile.write_values(apply_updates, remove=remove)
     return {**report, "restart_required": True}
