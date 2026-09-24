@@ -15,8 +15,12 @@ Desktop 同构（方案 §4 D1/D5、§11）。
     `start_bot` 时注入子进程环境变量 `STELLA_DESKTOP_SESSION_SECRET`；
     dashboard 在 tauri 源下经 invoke 取秘钥换发正式 JWT（回环 + 恒定时间
     比较，webui/routers 的 desktop-session 端点）。
-- 关窗语义沿用 v1（安全关闭遮罩 → stop → destroy）；窗口 1280×800；
-  CSP 收紧（v1 为 null）。
+- 关窗语义：CloseRequested → 安全关闭遮罩（dashboard 经 `close-requested`
+  事件自绘）→ stop → destroy。stop **不带**「Bot 是否由本 GUI 进程启动」的
+  门卫——上次会话留下的 Bot 同样会被停止（否则关窗留孤儿占住服务端口，
+  2026-09-24 实测）；跨安装安全由 Python 侧 ownership 校验把守（别的安装或
+  手工启动的实例 `deploy stop` 自会拒绝）。停止失败也照常关窗，细节走
+  `close-failed` 事件与日志；窗口 1280×800；CSP 收紧（v1 为 null）。
 
 ## 布局
 
