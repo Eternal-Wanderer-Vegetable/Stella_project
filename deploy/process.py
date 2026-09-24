@@ -483,6 +483,40 @@ def replace_running(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> tuple[bool
     return stopped, note
 
 
+def register_self() -> bool:
+    """Bot 进程自登记 ownership（PID + manifest）。
+
+    「python bot.py」直启的实例由此获得与 ``deploy start`` 启动实例同等的
+    可管理性：deploy stop/status、WebUI 重启都按同一套记录定位它。前提是
+    环境里已有 launch token（bot.py 在 config import 前兜底生成；deploy
+    start --detach 注入），否则状态接口的 token 摘要与 manifest 对不上，
+    登记反而制造一个身份对不上的记录——此时放弃登记。
+
+    任何失败都静默放弃（返回 False）：登记是增强，绝不能拦住启动。
+    """
+    from config import STELLA_LAUNCH_TOKEN
+
+    if not STELLA_LAUNCH_TOKEN:
+        return False
+    try:
+        write_pid(os.getpid())
+        write_manifest(
+            MANIFEST_FILE,
+            manifest_for(
+                instance_id=INSTANCE_ID,
+                project_root=PROJECT_ROOT,
+                pid=os.getpid(),
+                launch_token=STELLA_LAUNCH_TOKEN,
+            ),
+        )
+        return True
+    except OSError:
+        with contextlib.suppress(Exception):
+            clear_pid()
+            clear_manifest()
+        return False
+
+
 def preflight_for_foreground_start() -> bool:
     """前台启动（``deploy start`` 不带 --detach）前的清场。
 

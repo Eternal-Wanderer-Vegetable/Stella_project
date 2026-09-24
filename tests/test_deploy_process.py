@@ -629,3 +629,51 @@ def test_start_detached_replaces_running_instance_and_transfers_ownership(
         if proc.poll() is None:
             proc.terminate()
         proc.wait()
+
+
+# ---------- 直启实例自登记（register_self，2026-09-24） ----------
+
+
+def test_register_self_writes_owned_records(monkeypatch, tmp_path):
+    import os
+
+    import config
+
+    pid_file = tmp_path / "stella.pid"
+    manifest = tmp_path / "ownership.json"
+    monkeypatch.setattr(process, "PID_FILE", pid_file)
+    monkeypatch.setattr(process, "MANIFEST_FILE", manifest)
+    monkeypatch.setattr(config, "STELLA_LAUNCH_TOKEN", "self-token")
+
+    assert process.register_self() is True
+    assert process.read_pid() == os.getpid()
+    owned = process._owned_manifest(os.getpid())
+    assert owned is not None
+    assert owned["launch_token"] == "self-token"
+
+
+def test_register_self_aborts_without_token(monkeypatch, tmp_path):
+    """没有 launch token（config import 前未定）时放弃登记：登记了身份也对不上。"""
+    import config
+
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "MANIFEST_FILE", tmp_path / "ownership.json")
+    monkeypatch.setattr(config, "STELLA_LAUNCH_TOKEN", "")
+
+    assert process.register_self() is False
+    assert process.read_pid() is None
+
+
+def test_register_self_cleans_up_on_oserror(monkeypatch, tmp_path):
+    import config
+
+    monkeypatch.setattr(process, "PID_FILE", tmp_path / "stella.pid")
+    monkeypatch.setattr(process, "MANIFEST_FILE", tmp_path / "ownership.json")
+    monkeypatch.setattr(config, "STELLA_LAUNCH_TOKEN", "self-token")
+
+    def boom(pid):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(process, "write_pid", boom)
+    assert process.register_self() is False
+    assert process.read_pid() is None

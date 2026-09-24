@@ -9,6 +9,17 @@
 插件（plugins/）及各核心模块（core/、memory/）提供。
 """
 
+# 自登记 ownership 的前提：launch token 必须在 config 首次 import 前进入
+# 环境变量（config 是 import 期快照，见 config/settings.py），否则状态接口
+# 上报的 token 摘要与 manifest 对不上，deploy 侧无法确认本进程身份。
+# deploy start --detach 会注入该变量，这里只兜底「python bot.py」直启形态。
+import os as _os
+
+if not _os.environ.get("STELLA_LAUNCH_TOKEN"):
+    import uuid as _uuid
+
+    _os.environ["STELLA_LAUNCH_TOKEN"] = _uuid.uuid4().hex
+
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
@@ -27,6 +38,18 @@ try:
         print("[stella] 接任启动：上一任进程已退出，继续初始化", flush=True)
 except Exception as _e:  # 自重启等待绝不能拦住正常启动
     print(f"[stella] 接任等待跳过：{_e}", flush=True)
+
+# 启动前接管：本安装已有实例在跑（后台受管实例、上次直启残留）时按身份
+# 证明停掉它，避免 uvicorn 绑定失败（winerror 10048，2026-09-24 实测）。
+# 接任路径刚等上一任退出，这里通常无实例直通。随后自登记 ownership——
+# 直启实例由此获得与 deploy start 启动实例同等的可管理性。
+try:
+    from deploy.process import register_self, replace_running
+
+    replace_running()
+    register_self()
+except Exception as _e:  # 接管/登记是增强，失败不拦启动
+    print(f"[stella] 启动接管/自登记跳过：{_e}", flush=True)
 
 from astrbot_compat import install_shim
 
