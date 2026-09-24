@@ -36,7 +36,7 @@ const uptimeText = computed(() => {
 const steps = computed(() => [
   { key: 'step1', to: '/providers', done: false },
   { key: 'step2', to: '/groups', done: (status.value?.allowed_group_count ?? 0) > 0 },
-  { key: 'step3', to: '/settings', done: !!status.value?.pid },
+  { key: 'step3', to: '/platforms', done: !!status.value?.pid },
 ]);
 
 function goStep(to: string) {
