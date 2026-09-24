@@ -89,6 +89,34 @@ The sentinel file is a runtime artifact and has been added to `.gitignore`, the 
 - Files under `config/spaces/*.toml` written by the installer start with `# Managed by Stella installer`; changing that header or its format affects the GUI's determination of whether the file is "managed by the installer".
 - Section comments in `config/settings.py` (`# ---------- TITLE ----------`) determine configuration groups. Keep this format when adding configuration items so the GUI can categorize them correctly (`deploy config-schema --json` is the single source of truth for the grouping result).
 
+## v2 Control Plane (Panel and Desktop Shell) Development
+
+Three pieces of v2 GUI code live in the repo (see [docs/webui.md](webui.md)):
+
+```bash
+# Panel frontend (Vue 3 + Vuetify 3): dev server proxies to the local bot (8080)
+cd dashboard && pnpm install
+pnpm dev            # http://localhost:5173
+pnpm build          # vue-tsc type gate + vite build → dist/
+
+# Standalone WebUI server (auth/config pages without starting the bot)
+python scripts/dev_webui.py --port 8091
+
+# Desktop shell (Tauri 2): fill the embedded panel first, then compile
+cp -r dashboard/dist/* desktop/dashboard-dist/
+cd desktop/src-tauri && cargo tauri build   # or cargo check for a quick gate
+
+# Forgot the panel admin password
+python scripts/webui_reset_auth.py --yes
+```
+
+Convention: `webui/` is a leaf package and must **never import
+`stella_project.plugins.bot_main`** (host-injection pattern, see
+`webui/status_source.py`). When adding a new top-level Python package or
+directory, sync `COMMON_DIRS` in `scripts/build_release_package.py` — a
+missing payload directory cascades into a WebUI mount failure (2026-09-24
+incident).
+
 ## Pre-commit Checks
 
 ```bash

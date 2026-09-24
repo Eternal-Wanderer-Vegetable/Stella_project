@@ -94,6 +94,8 @@ You decide where the models come from.
 ## 🚀 Quick Start
 
 > This section covers **Windows desktop** deployment. For Linux / remote servers, see the [Docker Deployment Guide](docs/deployment-docker.en.md).
+>
+> **v2 control plane ready (preview)**: point a browser at the bot's own port for the full management panel (auth / config / plugins / MCP / knowledge base / cron / live logs — see [docs/webui.md](docs/webui.md)); the new desktop shell (Tauri 2) embeds the same panel. Current releases still ship the v1 UI; v2 ships with the next major release.
 
 ### 📦 Download & Install (regular users)
 

@@ -91,6 +91,8 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 ## 🚀 快速开始
 
 > 本节面向 **Windows 桌面**部署。Linux / 远程服务器请直接看 [Docker 部署指南](docs/deployment-docker.md)。
+>
+> **v2 控制面已就绪（预览）**：浏览器直接访问 Bot 同端口即是完整管理面板（鉴权/配置/插件/MCP/知识库/定时任务/实时日志，详见 [docs/webui.md](docs/webui.md)）；新版桌面壳（Tauri 2）内嵌同一套面板。当前发布包仍为 v1 界面，v2 随下一个大版本发布。
 
 ### 📦 下载 & 安装（普通用户）
 
@@ -288,7 +290,7 @@ graph LR
 
 **插件兼容与渲染**：`Jinja2` · `Playwright`（本地 Chromium，仅用于把插件卡片渲染成图片）
 
-**桌面安装器**：`Tauri 2` · `Rust`（`stella-installer/`，原生 HTML/JS 前端，无前端构建步骤）
+**桌面安装器**：`Tauri 2` · `Rust`。v1（`stella-installer/`，原生 HTML/JS，已冻结于 `gui-v1-final`）；v2（`desktop/` 壳 + `dashboard/` 面板，Vue 3 + Vuetify 3，见 `docs/webui.md`）
 
 **容器化部署**：`Docker` · `docker compose`（`Dockerfile` + stella/napcat 双容器编排，另有可选 `llama` profile；Chromium 与中文字体已内置镜像；见 [Docker 部署指南](docs/deployment-docker.md)）
 

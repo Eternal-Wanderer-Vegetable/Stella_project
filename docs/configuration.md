@@ -1195,6 +1195,22 @@ curl -i http://[::1]:8080/stella/status
 
 因此即使 `HOST=0.0.0.0` 暴露到局域网，外部机器也无法通过状态接口探测运行信息或凭据；`deploy status` 与 GUI 始终通过 `127.0.0.1` 访问，不受影响。
 
+## WebUI 面板（v2 控制面）
+
+浏览器/桌面壳共用的管理面板，与 Bot 同端口（不新增端口）。全部键见
+`.env.example` 的「WebUI 面板」节与 [docs/webui.md](webui.md)。
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `WEBUI_ENABLED` | `true` | 总开关；false 时不注册任何面板路由 |
+| `WEBUI_TOKEN_TTL_HOURS` | `168` | 面板 JWT 有效期（小时） |
+| `WEBUI_LOGIN_RATELIMIT_PER_MIN` | `5` | 登录/初始化/桌面免登录的限流（次/分钟/IP） |
+| `WEBUI_MAX_UPLOAD_MB` | `50` | 单文件上传上限 |
+| `WEBUI_SERVE_DIST` | `true` | 是否托管面板静态资源（前端开发用 Vite 反代时置 false） |
+
+管理员凭据存 `STELLA_HOME/webui/auth.json`（不进 .env）；忘记密码用
+`python scripts/webui_reset_auth.py --yes` 重置。
+
 ## 优雅停止
 
 | 配置项 | 默认值 | 说明 |

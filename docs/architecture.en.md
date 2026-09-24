@@ -198,7 +198,11 @@ Stella_project/
 │   ├── probe_embedding.py          # Embedding service probe
 │   └── build_embedding_fixture.py  # Build benchmark vector fixture
 │
-├── stella-installer/               # Desktop installer (Tauri 2 + Rust, native HTML/JS)
+├── stella-installer/               # v1 desktop installer (Tauri 2 + Rust, native HTML/JS; frozen at tag gui-v1-final)
+├── dashboard/                      # v2 control-plane frontend (Vue 3 + Vuetify 3 + TS; shared by browser and desktop shell)
+├── webui/                          # v2 control-plane backend (FastAPI sub-app on the same NoneBot port; serves dashboard/dist)
+├── desktop/                        # v2 desktop shell (Tauri 2; embeds the panel + narrow-contract start/doctor)
+├── openspec/                       # WebUI API contract (openapi-v1.yaml)
 ├── tests/                          # pytest tests
 ├── docs/                           # User documentation
 ├── design_docs/                    # Design process records (specifications/checkpoints/defect reports/logs/test checklists)
@@ -619,6 +623,16 @@ See [Configuration Reference](configuration.en.md#html-to-image-rendering-plugin
 Every module/package under `extensions/` that provides `setup(pipeline)` is loaded automatically at startup. Extensions can register Hooks, inject implementations, and start their own scheduled tasks.
 
 `link_monitor` is the reference implementation: at import time it registers an `event_preprocessor` (refresh heartbeat for any OneBot event), two driver hooks (`on_bot_connect` / `on_bot_disconnect`), and its own scheduled task (actively probe after an event timeout, alert on probe failure without restarting). An extension can be integrated without changing the main business program.
+
+## v2 Control Plane (WebUI and Desktop Shell)
+
+The management panel shared by the browser and the desktop shell:
+`dashboard/` (Vue 3 + Vuetify 3) is the frontend, `webui/` (FastAPI
+sub-app) hangs off the same ASGI port as NoneBot — **no extra port**;
+`desktop/` (Tauri 2 shell) embeds the same panel and works offline via a
+narrow contract (start/doctor/config). Auth, first-run wizard and
+troubleshooting: [docs/webui.md](webui.md). The v1 installer
+(`stella-installer/`) is frozen at tag `gui-v1-final`.
 
 ## Time-Handling Conventions
 
