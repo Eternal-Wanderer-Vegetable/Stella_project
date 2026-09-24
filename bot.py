@@ -17,6 +17,17 @@ from core.logging_sink import setup_json_sink
 
 setup_json_sink()
 
+# WebUI「无壳自重启」的接任侧：若本进程由上一任 Bot 派生（webui 重启按钮），
+# 上一任还占着服务端口，必须等它真正退出再继续初始化。必须在任何重活之前；
+# 超时照样继续（端口冲突会留下明确错误，好过无声卡死）。见 core/self_restart.py。
+try:
+    from core.self_restart import wait_for_parent_exit
+
+    if wait_for_parent_exit():
+        print("[stella] 接任启动：上一任进程已退出，继续初始化", flush=True)
+except Exception as _e:  # 自重启等待绝不能拦住正常启动
+    print(f"[stella] 接任等待跳过：{_e}", flush=True)
+
 from astrbot_compat import install_shim
 
 install_shim()
@@ -224,6 +235,29 @@ async def _shutdown_renderer() -> None:
 
 
 driver.on_shutdown(_shutdown_renderer)
+
+
+async def _shutdown_clear_pid() -> None:
+    """优雅退出时清掉自己的 PID/manifest 记录（仅当记录指向本进程）。
+
+    deploy stop 会清，但 WebUI 重启、终端 Ctrl+C 这类不经 deploy 的退出
+    不会——残留的 PID 号随后被系统复用给无关进程，``deploy start`` 就会
+    误判「实例已在运行」而永远拒启（2026-09-24 实测：撞上 QQ 的
+    crashpad_handler）。
+    """
+    import os
+
+    try:
+        from deploy import process as _deploy_process
+
+        if _deploy_process.read_pid() == os.getpid():
+            _deploy_process.clear_pid()
+            _deploy_process.clear_manifest()
+    except Exception:
+        pass
+
+
+driver.on_shutdown(_shutdown_clear_pid)
 
 # Router 原型预热任务的引用。留着只为防 GC（见 _bootstrap_capabilities），跑完自动清空。
 _WARMUP_TASK = None

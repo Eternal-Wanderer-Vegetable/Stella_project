@@ -130,8 +130,18 @@ async function save(): Promise<void> {
 async function restartNow(): Promise<void> {
   saveDialog.value = false;
   try {
-    await unwrap(api.post('/system/restart'));
-    toast.success('已请求重启，等待服务恢复…');
+    // ok=false = 派生接任进程失败、Bot 刻意未停止（manual 兜底），必须如实提示，
+    // 不能像成功那样只说「等待恢复」——站点不会自己回来（2026-09-24 实测）。
+    const data = await unwrap<{ ok: boolean; error?: string }>(
+      api.post('/system/restart'),
+    );
+    if (data.ok) {
+      toast.success('已请求重启，等待服务恢复…');
+    } else {
+      toast.error(
+        `无法自动重启（${data.error ?? '未知原因'}）。Bot 未停止，可继续使用；如需重启请在启动它的终端手动操作。`,
+      );
+    }
   } catch (err) {
     toastApiError(toast, err);
   }

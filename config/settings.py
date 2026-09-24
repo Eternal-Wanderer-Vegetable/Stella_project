@@ -237,10 +237,14 @@ def _env_int_set(key: str, default: str = "") -> set[int]:
 
     早期实现是裸 ``{int(x) ...}`` 推导，.env 里一个 ``12a`` 就会让本模块
     import 直接抛异常、Bot 起不来——宁缺毋滥地丢掉坏片段并留痕，好过整站拒绝启动。
+
+    中文全角逗号（``，``）按分隔符对待：这个值常从 WebUI 配置页或 IME 手输，
+    全角逗号混进来会把两段数字粘成一个片段而被静默丢弃——用户以为群已加白，
+    实则没生效且无报错（2026-09-24 实测）。
     """
     raw = os.getenv(key, "").strip() or default
     result: set[int] = set()
-    for fragment in raw.split(","):
+    for fragment in raw.replace("，", ",").split(","):
         fragment = fragment.strip()
         if not fragment:
             continue

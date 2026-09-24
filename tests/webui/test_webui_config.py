@@ -219,13 +219,20 @@ def test_groups_mute(client: TestClient, auth_header: dict, isolated_home: Path)
 # ---------- system ----------
 
 def test_system_restart_writes_sentinel(client: TestClient, auth_header: dict, monkeypatch):
-    from core import stop_signal
+    """壳形态（注入秘钥）：重启路由必须请求停止，由壳拉起新进程。
 
+    无壳形态的语义（先派接任进程、派生失败不停止）在 test_webui_restart.py
+    里独立覆盖；这里只钉「壳在管时写哨兵」这条路由层契约。
+    """
+    from core import stop_signal
+    from webui import security
+
+    monkeypatch.setattr(security, "desktop_session_secret", lambda: "test-secret")
     called = {}
     monkeypatch.setattr(stop_signal, "request_stop", lambda reason="": called.update(reason=reason))
     resp = client.post("/api/v1/system/restart", headers=auth_header)
     assert resp.status_code == 200
-    assert resp.json()["data"]["restart_mode"] in ("desktop", "manual")
+    assert resp.json()["data"]["restart_mode"] == "desktop"
     assert called.get("reason")
 
 

@@ -4,9 +4,16 @@
 """系统操作：重启与 doctor（方案 §4 D7）。
 
 重启 = 写停止哨兵（``core/stop_signal.request_stop``），Bot 的 watcher
-轮询到后优雅退出；谁来重启分两种形态——桌面壳（持有 GUI_OWNS_BOT 语义，
-检测到退出自动重启）与无壳形态（提示手动 `stella restart`）。桌面壳
-场景的判定：注入了 STELLA_DESKTOP_SESSION_SECRET 即视为壳在管。
+轮询到后优雅退出；谁来拉起新进程分三种形态：
+
+- **桌面壳**（注入了 ``STELLA_DESKTOP_SESSION_SECRET``）：壳监听退出自动
+  重启，直接写哨兵即可；
+- **无壳 + 自重启**（``python bot.py`` 直启）：先派接任进程
+  （``core.self_restart.spawn_successor``，环境变量指认父进程）再写哨兵，
+  接任方在 bot.py 启动极早期等上一任退出后接管端口——2026-09-24 之前
+  这条路没人管，用户点完重启就是 ERR_CONNECTION_REFUSED；
+- **其他宿主**（uvicorn 托管、测试等）：拒绝派生且**不写哨兵**，如实返回
+  错误让用户手动重启——宁可保持运行，也不能把站点停成失联。
 
 doctor：子进程跑 ``python -m deploy doctor --json``，与 CLI 完全同源，
 避免在 webui 进程里重跑探测逻辑。超时 60s；失败返回错误文本。
@@ -21,11 +28,22 @@ from webui import security
 
 
 def restart() -> dict:
-    from core import stop_signal
+    from core import self_restart, stop_signal
 
+    if security.desktop_session_secret():
+        stop_signal.request_stop(reason="webui restart")
+        return {"ok": True, "restart_mode": "desktop"}
+
+    spawn = self_restart.spawn_successor()
+    if not spawn.get("spawned"):
+        # 派生失败不写哨兵：Bot 保持运行，把原因如实交给前端展示。
+        return {
+            "ok": False,
+            "restart_mode": "manual",
+            "error": spawn.get("error") or "无法派生接任进程",
+        }
     stop_signal.request_stop(reason="webui restart")
-    mode = "desktop" if security.desktop_session_secret() else "manual"
-    return {"ok": True, "restart_mode": mode}
+    return {"ok": True, "restart_mode": "self", "successor_pid": spawn.get("pid")}
 
 
 async def run_doctor() -> dict:

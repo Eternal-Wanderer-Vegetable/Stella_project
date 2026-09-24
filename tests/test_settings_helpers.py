@@ -36,6 +36,13 @@ def test_env_int_set_skips_invalid_fragments(monkeypatch):
     assert settings._env_int_set("STELLA_TEST_SET") == {123, 456, 0}
 
 
+def test_env_int_set_accepts_fullwidth_commas(monkeypatch):
+    """全角逗号按分隔符对待：配置页/IME 手输的 ``，`` 不许把两段数字粘成一个
+    片段静默丢掉——用户以为群已加白，实际没生效（2026-09-24 实测）。"""
+    monkeypatch.setenv("STELLA_TEST_SET", "11，22, 33")
+    assert settings._env_int_set("STELLA_TEST_SET") == {11, 22, 33}
+
+
 def test_env_int_set_empty_env_uses_default(monkeypatch):
     monkeypatch.setenv("STELLA_TEST_SET", "  ")
     assert settings._env_int_set("STELLA_TEST_SET", "7,8") == {7, 8}

@@ -170,6 +170,22 @@ def _windows_is_alive(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
+def _service_port_in_use() -> bool:
+    """探测 .env 里 HOST:PORT 是否有进程在监听（TCP 连得上 = 有）。"""
+    import socket
+
+    env = dotenv_values(STELLA_HOME / ".env")
+    host = (env.get("HOST") or "127.0.0.1").strip() or "127.0.0.1"
+    port = int((env.get("PORT") or "8080").strip() or 8080)
+    if host in ("0.0.0.0", "::", "::0"):
+        host = "127.0.0.1"
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def start_detached() -> int:
     """后台启动 bot.py，写 PID 文件并等待当前实例真正就绪。"""
     if not BOT_ENTRY.exists():
@@ -177,8 +193,19 @@ def start_detached() -> int:
         return 1
     existing = read_pid()
     if existing is not None and is_alive(existing):
-        print(f"当前 Stella 实例已经在运行（PID {existing}）。")
-        return 1
+        # PID 复用防御：PID 文件里的进程号活着 ≠ Stella 活着。原实例退出后
+        # Windows 会把号码复用给无关进程（2026-09-24 实测：QQ 的
+        # crashpad_handler 撞号，deploy start 从此永远拒启）。真正的 Stella
+        # 必然占着服务端口，端口没人听就是陈旧记录——清掉照常启动。
+        if _service_port_in_use():
+            print(f"当前 Stella 实例已经在运行（PID {existing}）。")
+            return 1
+        print(
+            f"PID 文件指向 {existing}，但服务端口无人监听——该 PID 已被系统复用给"
+            "其他进程，清除陈旧记录后继续启动。"
+        )
+        clear_pid()
+        clear_manifest()
     flags = 0
     if os.name == "nt":
         flags |= subprocess.CREATE_NEW_PROCESS_GROUP
