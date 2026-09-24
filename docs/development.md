@@ -106,6 +106,32 @@ python -m deploy doctor --json > stella-installer/src/mock/doctor-clean.json
 - `config/settings.py` 的章节注释（`# ---------- 标题 ----------`）决定配置分组，写新配置
   项时保持该格式，GUI 才能正确归类（`deploy config-schema --json` 是分组结果的唯一事实来源）。
 
+## v2 控制面（面板与桌面壳）开发
+
+仓库里有三块 v2 GUI 代码（方案与状态见 [docs/webui.md](webui.md)）：
+
+```bash
+# 面板前端（Vue 3 + Vuetify 3）：开发期反代到本机 Bot（8080）
+cd dashboard && pnpm install
+pnpm dev            # http://localhost:5173
+pnpm build          # vue-tsc 类型门禁 + vite 构建 → dist/
+
+# 独立 WebUI 服务器（不起 Bot 也能调鉴权/配置页）
+python scripts/dev_webui.py --port 8091
+
+# 桌面壳（Tauri 2）：先填充内嵌面板，再编译
+cp -r dashboard/dist/* desktop/dashboard-dist/
+cd desktop/src-tauri && cargo tauri build   # 或 cargo check 快速验证
+
+# 忘记面板管理员密码
+python scripts/webui_reset_auth.py --yes
+```
+
+约定：`webui/` 是叶子包，**不得反向 import `stella_project.plugins.bot_main`**
+（宿主注入模式，见 `webui/status_source.py`）；新增顶层 Python 包/目录时必须
+同步 `scripts/build_release_package.py` 的 `COMMON_DIRS`（payload 缺目录会让
+面板挂载连坐失败，2026-09-24 实测）。
+
 ## 提交前检查
 
 ```bash
