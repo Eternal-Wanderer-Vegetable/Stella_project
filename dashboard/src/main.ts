@@ -20,5 +20,10 @@ app.use(vuetify);
 
 app.mount('#app');
 
+// 挂载成功，取消 index.html 的启动看门狗（8s 后 #app 仍空会显示缓存自愈卡片）。
+if ((window as any).__stellaBootGuard) {
+  clearTimeout((window as any).__stellaBootGuard);
+}
+
 // 桌面壳内生效：关窗前 Rust 侧会先优雅停止 Bot（可能数十秒），盖遮罩防误判卡死。
 installCloseOverlay();
