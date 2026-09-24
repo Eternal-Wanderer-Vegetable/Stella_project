@@ -73,13 +73,25 @@ async function logout(): Promise<void> {
 
 <template>
   <v-layout>
+    <!-- 顶栏横贯全宽（order=-1 使侧栏从顶栏下方开始），logo 融合进顶栏；
+         页面标题不再占用顶栏（各页内容区自有标题） -->
+    <v-app-bar flat order="-1">
+      <v-icon icon="mdi-star-four-points" color="secondary" class="ml-4 mr-2" />
+      <span class="text-h6 font-weight-bold">Stella</span>
+      <v-spacer />
+      <v-btn
+        :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
+        variant="text"
+        @click="toggleTheme"
+      />
+      <v-btn icon="mdi-logout" variant="text" @click="logout" />
+      <v-avatar color="primary" size="32" class="mr-4">
+        <span class="text-subtitle-2">{{ auth.username.slice(0, 1).toUpperCase() }}</span>
+      </v-avatar>
+    </v-app-bar>
+
     <v-navigation-drawer>
-      <div class="d-flex align-center pa-4">
-        <v-icon icon="mdi-star-four-points" color="secondary" class="mr-2" />
-        <span class="text-h6 font-weight-bold">Stella</span>
-      </div>
-      <v-divider />
-      <v-list nav density="comfortable">
+      <v-list nav density="comfortable" class="pt-2">
         <template v-for="(group, gi) in groups" :key="gi">
           <v-list-subheader v-if="group.header" class="text-uppercase text-disabled">
             {{ group.header }}
@@ -99,23 +111,6 @@ async function logout(): Promise<void> {
         </template>
       </v-list>
     </v-navigation-drawer>
-
-    <v-app-bar flat>
-      <v-app-bar-title class="text-subtitle-1">
-        {{ $t('features.welcome.title') }}
-      </v-app-bar-title>
-      <template #append>
-        <v-btn
-          :icon="isDark ? 'mdi-weather-night' : 'mdi-weather-sunny'"
-          variant="text"
-          @click="toggleTheme"
-        />
-        <v-btn icon="mdi-logout" variant="text" @click="logout" />
-        <v-avatar color="primary" size="32" class="mr-4">
-          <span class="text-subtitle-2">{{ auth.username.slice(0, 1).toUpperCase() }}</span>
-        </v-avatar>
-      </template>
-    </v-app-bar>
 
     <v-main class="page-min-height">
       <router-view />

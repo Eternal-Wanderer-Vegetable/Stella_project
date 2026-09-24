@@ -184,7 +184,6 @@ onMounted(load);
   <v-container fluid class="pa-6">
     <div class="d-flex align-center ga-3 mb-4 flex-wrap">
       <h1 class="text-h5 font-weight-bold">配置</h1>
-      <v-chip size="small" variant="tonal" color="warning">保存后自动重启生效</v-chip>
       <v-spacer />
       <v-text-field
         v-model="search"
