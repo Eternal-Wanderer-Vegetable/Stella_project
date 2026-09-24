@@ -58,7 +58,7 @@ function setListItem(key: string, index: number, value: string): void {
           @update:model-value="(v: boolean | null) => setValue(field.key, Boolean(v ?? false))"
         />
         <span class="text-body-2">{{ field.label }}</span>
-        <v-tooltip v-if="field.hint" location="top" max-width="30rem">
+        <v-tooltip v-if="field.hint" location="top" :max-width="480">
           <template #activator="{ props: tip }">
             <v-icon
               v-bind="tip"
@@ -75,7 +75,7 @@ function setListItem(key: string, index: number, value: string): void {
       <div v-else-if="field.type === 'list'" class="config-field">
         <div class="config-field-label">
           <span>{{ field.label }}</span>
-          <v-tooltip v-if="field.hint" location="top" max-width="30rem">
+          <v-tooltip v-if="field.hint" location="top" :max-width="480">
             <template #activator="{ props: tip }">
               <v-icon
                 v-bind="tip"
@@ -105,7 +105,7 @@ function setListItem(key: string, index: number, value: string): void {
       <div v-else class="config-field">
         <div class="config-field-label">
           <span>{{ field.label }}</span>
-          <v-tooltip v-if="field.hint" location="top" max-width="30rem">
+          <v-tooltip v-if="field.hint" location="top" :max-width="480">
             <template #activator="{ props: tip }">
               <v-icon
                 v-bind="tip"

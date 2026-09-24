@@ -84,8 +84,8 @@ async function load(): Promise<void> {
     saved.value = { ...values.value };
     // 折叠面板的展开状态必须是受控的：之前绑定静态 :model-value="[0]"，
     // 每敲一个字触发重渲染就把面板打回「只开第一项」（2026-09-25 用户报告）。
-    const firstStem = groups.value[0]?.[0];
-    openSections.value = firstStem ? [firstStem] : [];
+    // 默认全部折叠（2026-09-25 用户要求）。
+    openSections.value = [];
   } catch (err) {
     toastApiError(toast, err);
   }
