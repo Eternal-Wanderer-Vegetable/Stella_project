@@ -51,14 +51,14 @@
       "step1": "配置模型端点",
       "step2": "绑定 QQ 群",
       "step3": "启动 Bot",
-      "todoMilestone": "M2 起可用",
       "statusTitle": "运行状态",
       "version": "版本",
       "pid": "进程",
       "uptime": "运行时长",
       "link": "OneBot 链路",
       "groups": "已绑定群数",
-      "tokensToday": "今日 token"
+      "tokensToday": "今日 token",
+      "go": "前往配置"
     },
     "offline": {
       "title": "后端未运行",

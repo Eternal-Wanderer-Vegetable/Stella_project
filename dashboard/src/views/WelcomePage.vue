@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 
 import { api, unwrap } from '@/api/http';
 
-// M0 验收页：后端可达时展示一帧真实状态（复用 /stella/status 的聚合），
-// Onboarding 时间线给出 M2 的落点预览。
+// 欢迎页：后端可达时展示一帧真实状态（复用 /stella/status 的聚合），
+// Onboarding 时间线的每一步可点击跳转到对应功能页。
 const { t } = useI18n();
+const router = useRouter();
 
 interface StatusPayload {
   version: string;
@@ -29,6 +31,18 @@ const uptimeText = computed(() => {
   return h > 0 ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
 });
 
+// 引导步骤 → 功能页。step 的完成态只用在有现成数据的地方（不为此多发请求）：
+// step2 看已绑定群数，step3 看进程存活（pid）；step1 无现成判据，保持待办色。
+const steps = computed(() => [
+  { key: 'step1', to: '/providers', done: false },
+  { key: 'step2', to: '/groups', done: (status.value?.allowed_group_count ?? 0) > 0 },
+  { key: 'step3', to: '/settings', done: !!status.value?.pid },
+]);
+
+function goStep(to: string) {
+  router.push(to);
+}
+
 onMounted(async () => {
   try {
     status.value = await unwrap<StatusPayload>(api.get('/status'));
@@ -49,29 +63,27 @@ onMounted(async () => {
       {{ loadError }}
     </v-alert>
 
-    <!-- Onboarding（对齐 AstrBot WelcomePage 的时间线范式；M2 接真实完成判定） -->
+    <!-- Onboarding（对齐 AstrBot WelcomePage 的时间线范式）：每步可点击跳转对应功能页 -->
     <v-card class="mt-4 pa-4">
       <div class="text-subtitle-1 font-weight-medium mb-2">
         {{ $t('features.welcome.onboard') }}
       </div>
       <v-timeline side="end" density="comfortable" truncate-line="both">
-        <v-timeline-item dot-color="secondary" size="small">
-          <div class="text-body-2">{{ $t('features.welcome.step1') }}</div>
-          <v-chip size="x-small" variant="tonal" class="mt-1">
-            {{ $t('features.welcome.todoMilestone') }} · M2
-          </v-chip>
-        </v-timeline-item>
-        <v-timeline-item dot-color="secondary" size="small">
-          <div class="text-body-2">{{ $t('features.welcome.step2') }}</div>
-          <v-chip size="x-small" variant="tonal" class="mt-1">
-            {{ $t('features.welcome.todoMilestone') }} · M2
-          </v-chip>
-        </v-timeline-item>
         <v-timeline-item
-          :dot-color="status?.pid ? 'success' : 'secondary'"
+          v-for="step in steps"
+          :key="step.key"
+          :dot-color="step.done ? 'success' : 'secondary'"
           size="small"
         >
-          <div class="text-body-2">{{ $t('features.welcome.step3') }}</div>
+          <div
+            class="stella-step d-flex align-center"
+            :title="$t('features.welcome.go')"
+            @click="goStep(step.to)"
+          >
+            <div class="text-body-2">{{ $t(`features.welcome.${step.key}`) }}</div>
+            <v-spacer />
+            <v-icon size="small" icon="mdi-chevron-right" class="stella-step-go" />
+          </div>
         </v-timeline-item>
       </v-timeline>
     </v-card>
@@ -118,3 +130,27 @@ onMounted(async () => {
     </v-card>
   </v-container>
 </template>
+
+<style scoped>
+/* 引导步骤整行可点：悬停给反馈，右侧箭头提示跳转 */
+.stella-step {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  transition: background-color 0.15s ease;
+}
+
+.stella-step:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.stella-step:hover .stella-step-go {
+  opacity: 1;
+}
+
+.stella-step-go {
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+</style>

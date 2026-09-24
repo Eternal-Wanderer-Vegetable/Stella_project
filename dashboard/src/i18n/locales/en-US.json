@@ -51,14 +51,14 @@
       "step1": "Configure model endpoints",
       "step2": "Bind QQ groups",
       "step3": "Start the bot",
-      "todoMilestone": "Available from M2",
       "statusTitle": "Runtime status",
       "version": "Version",
       "pid": "Process",
       "uptime": "Uptime",
       "link": "OneBot link",
       "groups": "Bound groups",
-      "tokensToday": "Tokens today"
+      "tokensToday": "Tokens today",
+      "go": "Open"
     },
     "offline": {
       "title": "Backend is not running",
