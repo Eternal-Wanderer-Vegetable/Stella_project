@@ -29,6 +29,36 @@ from . import env_keys
 from .models import CheckResult, Snapshot
 
 
+def _norm_model_id(value: str) -> str:
+    """模型 ID 归一化：小写、去引号/空白、剥 .gguf 后缀。"""
+    return value.strip().strip('"').lower().removesuffix(".gguf")
+
+
+def _match_model_id(configured: str, loaded: list[str]) -> str | None:
+    """在已加载列表里找与配置等价的模型 ID，返回匹配项（无则 None）。
+
+    同一份 GGUF 在不同后端上报的 ID 可能不同：LM Studio 用 GGUF 元数据名
+    （如 text-embedding-qwen3-embedding-0.6b），llama.cpp --alias 常被配成
+    短名（qwen3-embedding-0.6b）。完全相等优先；否则容忍「后缀包含」
+    （短名是长名的尾部且边界为 - . / 或串首），qwen3 不会误配 qwen30。
+    """
+    cn = _norm_model_id(configured)
+    if not cn:
+        return None
+    for lid in loaded:
+        ln = _norm_model_id(lid)
+        if not ln:
+            continue
+        if ln == cn:
+            return lid
+        if ln.endswith(cn) or cn.endswith(ln):
+            longer, shorter = (ln, cn) if len(ln) >= len(cn) else (cn, ln)
+            boundary = longer[-len(shorter) - 1] if len(longer) > len(shorter) else ""
+            if boundary in ("-.", "/", ""):
+                return lid
+    return None
+
+
 def _suggest_model(configured: str, loaded: list[str]) -> str:
     """给出「你可能想写的是」建议。
 
@@ -281,7 +311,7 @@ def _check_lm_model(
             detail=f"{env_key} 为空，将由服务端默认路由。",
             fix_hint="建议在 .env 里显式填写完整模型 ID。",
         )
-    if configured not in snap.lm_models:
+    if _match_model_id(configured, snap.lm_models) is None:
         return CheckResult(
             id=check_id,
             level=level,
@@ -364,14 +394,14 @@ def check_lm_model_embedding(snap: Snapshot) -> CheckResult | None:
             detail="MEMORY_EMBEDDING_MODEL 为空，但 MEMORY_EMBEDDING_ENABLED=true。",
             fix_hint="在 .env 里填写 MEMORY_EMBEDDING_MODEL（LM Studio 中加载的嵌入模型 ID）。",
         )
-    if snap.lm_model_embedding not in snap.lm_models:
+    if _match_model_id(snap.lm_model_embedding, snap.lm_models) is None:
         return CheckResult(
             id="lm_model_embedding",
             level="error",
             title="embedding 模型未加载",
             detail=f"配置的 MEMORY_EMBEDDING_MODEL={snap.lm_model_embedding} "
             "不在 LM Studio 已加载列表。",
-            fix_hint="在 LM Studio 中加载该嵌入模型，或修正配置。"
+            fix_hint="在 LM Studio 中加载该嵌入模型，或修正配置。 "
             " " + _suggest_model(snap.lm_model_embedding, snap.lm_models),
         )
     return None

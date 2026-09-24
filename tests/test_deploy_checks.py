@@ -448,12 +448,21 @@ def test_lm_studio_probe_failed_is_warn():
     assert r is not None and r.level == "warn"
 
 
-def test_lm_model_chat_not_loaded_suggests():
+def test_lm_model_chat_short_id_matches_loaded():
+    """短名与 GGUF 全名等价（后缀容忍）——不再误报「模型未加载」
+    （用户实测：.env 写 gemma-4-e4b，LM Studio 加载 google/gemma-4-e4b）。"""
     r = checks.check_lm_model_chat(
         _healthy_snapshot(lm_model_chat="gemma-4-e4b")
     )
+    assert r is None
+
+
+def test_lm_model_chat_not_loaded_suggests():
+    r = checks.check_lm_model_chat(
+        _healthy_snapshot(lm_model_chat="totally-wrong-model")
+    )
     assert r is not None and r.level == "error"
-    assert "你可能想写的是" in r.fix_hint
+    assert "你可能想写的是" in r.fix_hint or "已加载" in r.fix_hint
 
 
 def test_lm_model_chat_empty_is_warn():
