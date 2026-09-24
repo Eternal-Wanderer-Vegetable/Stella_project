@@ -84,6 +84,15 @@ def test_config_read_masks_sensitive(client: TestClient, auth_header: dict, isol
     assert fields["HOST"]["current_value"] == "127.0.0.1"
 
 
+def test_config_update_accepts_json_bools(client: TestClient, auth_header: dict, isolated_home: Path):
+    """前端开关发的是 JSON 布尔值——必须被规范化为 .env 的 true/false 行
+    （用户实测：布尔开关保存 422「格式不正确」）。"""
+    resp = client.put("/api/v1/config", json={"DB_CLEANUP_ON_START": False}, headers=auth_header)
+    assert resp.status_code == 200
+    env_text = (isolated_home / ".env").read_text(encoding="utf-8")
+    assert "DB_CLEANUP_ON_START=false" in env_text
+
+
 def test_config_update_validates(client: TestClient, auth_header: dict, isolated_home: Path):
     # 未知键拒绝
     resp = client.put("/api/v1/config", json={"NOT_A_REAL_KEY": "1"}, headers=auth_header)
