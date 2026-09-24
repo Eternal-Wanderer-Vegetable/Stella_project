@@ -144,8 +144,8 @@ def test_render_appends_missing_key():
     template = (
         "HOST=127.0.0.1\n"
         "PORT=8080\n"
-        "LLM_ENDPOINT_LOCAL_BASE_URL=http://127.0.0.1:1234\n"
-        "LLM_ENDPOINT_LOCAL_MODEL=x\n"
+        "LLM_ENDPOINT_CHAT_BASE_URL=http://127.0.0.1:1234\n"
+        "LLM_ENDPOINT_CHAT_MODEL=x\n"
         "LLM_ROLE_CONSOLIDATION_MODEL=y\n"
         "ONEBOT_ACCESS_TOKEN=\n"
     )
@@ -182,13 +182,13 @@ def test_render_parseable_by_dotenv():
         consolidation_model="google/gemma-4-e4b",
         access_token="tok",
     )
-    rendered = render_env(a, "ALLOWED_GROUPS=0\nPORT=8080\nLLM_ENDPOINT_LOCAL_MODEL=\n")
+    rendered = render_env(a, "ALLOWED_GROUPS=0\nPORT=8080\nLLM_ENDPOINT_CHAT_MODEL=\n")
     values = dotenv_values(stream=StringIO(rendered))
     assert values["ALLOWED_GROUPS"] == "1,2,3"
     assert values["PORT"] == "9000"
     # 向导写新键（LM_STUDIO_* 已 SUPERSEDED，见 deploy/env_keys.py）
-    assert values["LLM_ENDPOINT_LOCAL_BASE_URL"] == "http://127.0.0.1:1234"
-    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "google/gemma-4-26b-a4b-qat"
+    assert values["LLM_ENDPOINT_CHAT_BASE_URL"] == "http://127.0.0.1:1234"
+    assert values["LLM_ENDPOINT_CHAT_MODEL"] == "google/gemma-4-26b-a4b-qat"
     assert values["LLM_ROLE_CONSOLIDATION_MODEL"] == "google/gemma-4-e4b"
     assert values["ONEBOT_ACCESS_TOKEN"] == "tok"
 

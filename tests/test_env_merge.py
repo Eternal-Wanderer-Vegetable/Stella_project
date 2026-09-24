@@ -21,7 +21,7 @@ PORT=8080
 ONEBOT_ACCESS_TOKEN=
 
 # ---------- 模型 ----------
-LLM_ENDPOINT_LOCAL_MODEL=
+LLM_ENDPOINT_CHAT_MODEL=
 # 主动发言的冷却秒数
 # PROACTIVE_COOLDOWN=600
 # 本版新增的开关
@@ -53,11 +53,11 @@ def test_user_values_are_carried_over():
     assert values["HOST"] == "0.0.0.0"
     assert values["PORT"] == "9000"
     # LM_STUDIO_MODEL 已 SUPERSEDED：值换算到新键，旧行消失
-    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "google/gemma-4-26b"
+    assert values["LLM_ENDPOINT_CHAT_MODEL"] == "google/gemma-4-26b"
     assert "LM_STUDIO_MODEL" not in values
     # 模板里是 `# PROACTIVE_COOLDOWN=600`，用户设过 → 必须取消注释并用用户值
     assert values["PROACTIVE_COOLDOWN"] == "1200"
-    assert {"HOST", "PORT", "PROACTIVE_COOLDOWN", "LLM_ENDPOINT_LOCAL_MODEL"} <= set(report.kept)
+    assert {"HOST", "PORT", "PROACTIVE_COOLDOWN", "LLM_ENDPOINT_CHAT_MODEL"} <= set(report.kept)
 
 
 def test_template_comments_survive():
@@ -224,7 +224,7 @@ def test_real_env_example_round_trips():
 
     assert values["ALLOWED_GROUPS"] == "123456"
     # 旧键值自动迁到新键，旧行消失
-    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "demo/model"
+    assert values["LLM_ENDPOINT_CHAT_MODEL"] == "demo/model"
     assert "LM_STUDIO_MODEL" not in values
     assert report.unknown == []
 
@@ -255,7 +255,7 @@ def test_real_env_example_carries_the_new_keys():
         "ASTRBOT_LLM_MAX_TOKENS",
     ):
         assert legacy not in keys, "旧键不该再出现在模板里"
-    for slot in ("LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA"):
+    for slot in ("CHAT", "MEMORY", "VISION"):
         for suffix in ("BASE_URL", "API_KEY", "KIND", "CONCURRENCY", "TIMEOUT"):
             assert f"LLM_ENDPOINT_{slot}_{suffix}" in keys
     for role in ("CHAT", "ROUTER", "PLUGIN", "COMPACT", "CONSOLIDATION", "EXTRACT"):
@@ -293,11 +293,11 @@ def test_all_llm_legacy_keys_migrate_one_to_one():
     from deploy import env_keys
 
     expected = {
-        "LM_STUDIO_BASE_URL": "LLM_ENDPOINT_LOCAL_BASE_URL",
-        "LM_STUDIO_API_KEY": "LLM_ENDPOINT_LOCAL_API_KEY",
-        "LM_STUDIO_MODEL": "LLM_ENDPOINT_LOCAL_MODEL",
-        "CONSOLIDATION_LM_STUDIO_BASE_URL": "LLM_ENDPOINT_EXTRA_BASE_URL",
-        "CONSOLIDATION_LM_STUDIO_API_KEY": "LLM_ENDPOINT_EXTRA_API_KEY",
+        "LM_STUDIO_BASE_URL": "LLM_ENDPOINT_CHAT_BASE_URL",
+        "LM_STUDIO_API_KEY": "LLM_ENDPOINT_CHAT_API_KEY",
+        "LM_STUDIO_MODEL": "LLM_ENDPOINT_CHAT_MODEL",
+        "CONSOLIDATION_LM_STUDIO_BASE_URL": "LLM_ENDPOINT_MEMORY_BASE_URL",
+        "CONSOLIDATION_LM_STUDIO_API_KEY": "LLM_ENDPOINT_MEMORY_API_KEY",
         "CONSOLIDATION_LM_STUDIO_MODEL": "LLM_ROLE_CONSOLIDATION_MODEL",
         "CONSOLIDATION_LM_STUDIO_TEMPERATURE": "LLM_ROLE_CONSOLIDATION_TEMPERATURE",
         "MEMORY_EXTRACT_LM_STUDIO_MODEL": "LLM_ROLE_EXTRACT_MODEL",
@@ -327,8 +327,8 @@ def test_legacy_key_migration_round_trips_on_real_template():
     rendered, report = env_merge.merge_env(old, template)
     values = env_merge.parse_env(rendered)
 
-    assert values["LLM_ENDPOINT_LOCAL_BASE_URL"] == "http://192.168.1.5:1234"
-    assert values["LLM_ENDPOINT_LOCAL_MODEL"] == "demo/26b"
+    assert values["LLM_ENDPOINT_CHAT_BASE_URL"] == "http://192.168.1.5:1234"
+    assert values["LLM_ENDPOINT_CHAT_MODEL"] == "demo/26b"
     assert values["LLM_ROLE_CONSOLIDATION_MODEL"] == "demo/e4b"
     assert values["LLM_ROLE_EXTRACT_TEMPERATURE"] == "0.1"
     assert values["LLM_ROLE_PLUGIN_MAX_TOKENS"] == "512"
@@ -347,12 +347,12 @@ def test_legacy_key_migration_round_trips_on_real_template():
 def test_template_defense_drops_active_superseded_lines():
     """模板若还残留旧键的生效行（清理遗漏），合并输出不得再长出它——
     模板是「新版该长什么样」的唯一权威，不能一边迁移一边从模板长回旧键。"""
-    template = "LM_STUDIO_MODEL=stale/model\nLLM_ENDPOINT_LOCAL_MODEL=\n"
+    template = "LM_STUDIO_MODEL=stale/model\nLLM_ENDPOINT_CHAT_MODEL=\n"
     rendered, _ = env_merge.merge_env("", template)
     values = env_merge.parse_env(rendered)
 
     assert "LM_STUDIO_MODEL" not in values
-    assert "LLM_ENDPOINT_LOCAL_MODEL" in values
+    assert "LLM_ENDPOINT_CHAT_MODEL" in values
 
 
 def test_schema_payload_carries_superseded_keys():

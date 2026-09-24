@@ -770,7 +770,7 @@ def main(argv: list[str] | None = None) -> int:
     p_scaffold.add_argument(
         "--endpoint",
         default="",
-        help="指定生成用的端点槽（LOCAL / ONLINE_CHAT / ONLINE_MEMORY / EXTRA），"
+        help="指定生成用的端点槽（CHAT / MEMORY / VISION），"
         "默认走 EXTRACT 角色绑定的那个",
     )
     p_scaffold.add_argument("--force", action="store_true", help="覆盖已存在的草稿")

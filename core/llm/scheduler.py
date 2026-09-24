@@ -11,9 +11,9 @@
 - **在线端点 concurrency=N**：厂商侧本来就并发处理，串行只是浪费；这里的上限
   是为了贴合厂商限流（429），而不是为了保护算力。
 
-资源名即端点槽名（``LOCAL`` / ``ONLINE_CHAT`` / ``ONLINE_MEMORY`` / ``EXTRA``），
+资源名即端点槽名（``CHAT`` / ``MEMORY`` / ``VISION``），
 由 ``core.llm.registry.gate_of(role)`` 给出。同一资源内按 FIFO 排队；不同资源
-之间互不阻塞——纯本地部署下 ``LOCAL``（27B/GPU）与 ``EXTRA``（E4B/CPU）能真正并行，
+之间互不阻塞——纯本地部署下 ``CHAT``（27B/GPU）与 ``MEMORY``（E4B/CPU）能真正并行，
 这正是改造前 chat / consolidation 两把锁分离的意义。
 
 **调用方绝不能同时持有两把闸门**：若某个任务先持 A 闸门、再等 B 闸门（或反之），

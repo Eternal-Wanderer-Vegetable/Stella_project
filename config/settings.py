@@ -105,7 +105,7 @@ def _env(key: str, default: str = "") -> str:
         key 对应的环境变量值；未设置时返回 default。
 
     注意「未设置」与「设为空」是两回事：``KEY=`` 会返回空字符串而不是 default。
-    这是有意的——``LLM_ENDPOINT_LOCAL_API_KEY=`` 的空值本身就有意义（表示「不带 key」），
+    这是有意的——``LLM_ENDPOINT_CHAT_API_KEY=`` 的空值本身就有意义（表示「不带 key」），
     一刀切回落会让用户无法表达它。**默认值需要继承另一个配置项时，用
     ``_env_inherit``**，那里空值才等同未设置。
     """
@@ -627,7 +627,7 @@ LLM_SCHEDULER_PRIORITY_ENABLED = _env_bool("LLM_SCHEDULER_PRIORITY_ENABLED", "fa
 
 # ---------- 记忆整合 ----------
 # 数据整理任务与主聊天模型分离：连接参数在端点段的 EXTRA 槽
-# （LLM_ENDPOINT_EXTRA_BASE_URL / _API_KEY），模型与温度是角色段的
+# （LLM_ENDPOINT_MEMORY_BASE_URL / _API_KEY），模型与温度是角色段的
 # LLM_ROLE_CONSOLIDATION_MODEL / _TEMPERATURE（GUI「记忆整合模型 ID」卡片
 # 写的即模型项）。
 # 历史注记：_deprecated/core_llm_flexiweb.py 那套「用 Playwright 抓网页充当在线模型」的
@@ -1075,86 +1075,111 @@ ASTRBOT_LLM_TOOL_TIMEOUT = _env_float("ASTRBOT_LLM_TOOL_TIMEOUT", 120.0)
 ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
 
 # ---------- LLM 端点（Endpoint） ----------
-# 端点 = 一组连接参数：地址 + API key + 类型 + 并发度 + 超时。
-# 它同时是**两样东西的归属单位**：
-#   ① API key —— 不同 key 就是不同的前缀缓存域。对话域与记忆域各用一个 key，
-#      两者的固定前缀才不会互相挤出缓存（这是「双 key」要求的落点）。
+# 端点 = 一份连接参数（base_url / api_key / kind）+ 默认模型 + 并发 + 超时。它同时是：
+#   ① API key 的归属单位 —— 不同 key = 不同前缀缓存域；
 #   ② 闸门资源 —— core/llm/scheduler.py 按端点槽名建闸门，并发度即该端点的上限。
-# 槽位数量**固定为 4**：deploy/env_schema.py 用 AST 扫本文件里字面量
-# _env*("KEY", ...) 调用来生成 GUI，动态命名的端点在界面上根本不会出现。
-# 需要第 5 个端点时在这里照抄 5 行——这是静态声明约束下的显式取舍。
-#
+# 槽位按**用途**固定为 3（2026-09-24 起取代旧的 LOCAL/ONLINE_CHAT/ONLINE_MEMORY/
+# EXTRA/EXTRA_VISION 五槽；「在线 vs 本地」的分离被证明只添乱——端点该按「干什么」
+# 分，而不是按「服务在哪」分）：
+#   CHAT   对话：chat / router / plugin / compact 的默认去处；
+#   MEMORY 记忆：consolidation / extract 的默认去处（闸门独立，整合与聊天并行）；
+#   VISION 视觉：图片转述专用，出厂不配地址（功能可选）。
+# 编辑入口是「提供商」页（webui/services/providers.py），本节不进 deploy/env_schema
+# 的 GUI 表单。_endpoint_slot 同时兜底读取存量 .env 的旧键（LOCAL/EXTRA/...），
+# 未迁移的 .env 无需任何改动即可继续工作。
 # 「哪个角色用哪个端点、用什么模型」见下一节「LLM 角色」。
 # embedding **不在**本体系内：它恒定本地，闸门归属见 MEMORY_EMBEDDING_GATE。
 
-# 槽 LOCAL：本地 LM Studio。连接三件套（地址 / key / 模型）的正式出处，
-# GUI 本机卡片与 deploy init 向导写的就是这里。
-LLM_ENDPOINT_LOCAL_BASE_URL = _env("LLM_ENDPOINT_LOCAL_BASE_URL", "http://127.0.0.1:1234")
+
+def _endpoint_slot(prefix: str, field: str, default: str, *legacy_prefixes: str) -> str:
+    """读一个端点字段：新键（LLM_ENDPOINT_CHAT_BASE_URL 这类）优先，依次回落
+    legacy 前缀的同名字段（存量 .env 兼容），全空才用默认值。"""
+    value = os.getenv(prefix + field, "").strip()
+    if value:
+        return value
+    for legacy in legacy_prefixes:
+        value = os.getenv(legacy + field, "").strip()
+        if value:
+            return value
+    return default
+
+
+# 槽 CHAT：对话域。默认指向本机 LM Studio。
+LLM_ENDPOINT_CHAT_BASE_URL = _endpoint_slot(
+    "LLM_ENDPOINT_CHAT_", "BASE_URL", "http://127.0.0.1:1234", "LLM_ENDPOINT_LOCAL_",
+)
 # 本地服务通常不校验 key；少数本地网关要求填 dummy key，那时填这里。
-LLM_ENDPOINT_LOCAL_API_KEY = _env("LLM_ENDPOINT_LOCAL_API_KEY", "")
+LLM_ENDPOINT_CHAT_API_KEY = _endpoint_slot(
+    "LLM_ENDPOINT_CHAT_", "API_KEY", "", "LLM_ENDPOINT_LOCAL_",
+)
 # 端点级模型 ID：绑到本槽的角色自己没写 MODEL 时用它（解析顺序见 core/llm/registry
-# 的 _resolve_role_model）。填了它等于「本机槽统一用这一个模型」。
-LLM_ENDPOINT_LOCAL_MODEL = _env("LLM_ENDPOINT_LOCAL_MODEL", "")
+# 的 _resolve_role_model）。填了它等于「本槽统一用这一个模型」。
+LLM_ENDPOINT_CHAT_MODEL = _endpoint_slot(
+    "LLM_ENDPOINT_CHAT_", "MODEL", "", "LLM_ENDPOINT_LOCAL_",
+)
 # local | online。**显式声明，不再靠「有没有 api_key」猜**——那个启发式在两个
 # 方向上都会错：本地网关要求 dummy key 时漏发 reasoning_effort=none（本地推理
 # 模型会把 token 全耗在思维链上、content 为空），在线服务不要 key 时误发
 # （有厂商直接 400）。厂商中立的代价就是不许猜。
-LLM_ENDPOINT_LOCAL_KIND = _env("LLM_ENDPOINT_LOCAL_KIND", "local")
-# 闸门并发度。本地=1：共享同一份模型权重，并发推理只会一起变慢。
-LLM_ENDPOINT_LOCAL_CONCURRENCY = _env_int("LLM_ENDPOINT_LOCAL_CONCURRENCY", 1)
-# 单次 HTTP 请求超时（秒）。这一项接管了 core/llm/lm_studio.py 里原先硬编码的
-# 120 秒，**与 LLM_TIMEOUT 不是一回事**：后者是 core/pipeline.py 的整轮回复预算。
-LLM_ENDPOINT_LOCAL_TIMEOUT = _env_float("LLM_ENDPOINT_LOCAL_TIMEOUT", 120.0)
+LLM_ENDPOINT_CHAT_KIND = _endpoint_slot(
+    "LLM_ENDPOINT_CHAT_", "KIND", "local", "LLM_ENDPOINT_LOCAL_",
+)
+# 闸门并发度。本地=1：共享同一份模型权重，并发推理只会一起变慢；在线按厂商限流填。
+LLM_ENDPOINT_CHAT_CONCURRENCY = _endpoint_slot(
+    "LLM_ENDPOINT_CHAT_", "CONCURRENCY", "1", "LLM_ENDPOINT_LOCAL_",
+)
+# 单次 HTTP 请求超时（秒）。**与 LLM_TIMEOUT 不是一回事**：后者是 core/pipeline.py
+# 的整轮回复预算。
+LLM_ENDPOINT_CHAT_TIMEOUT = _endpoint_slot(
+    "LLM_ENDPOINT_CHAT_", "TIMEOUT", "120", "LLM_ENDPOINT_LOCAL_",
+)
 
-# 槽 ONLINE_CHAT：在线·对话域。持有「对话生成」那把 key。
-LLM_ENDPOINT_ONLINE_CHAT_BASE_URL = _env("LLM_ENDPOINT_ONLINE_CHAT_BASE_URL", "")
-# 在线端点必须有 key（registry 启动校验会拦），且**不要与记忆域填同一个 key**：
-# 同 key 会让两个域共享一个缓存空间、互相驱逐彼此的固定前缀。
-LLM_ENDPOINT_ONLINE_CHAT_API_KEY = _env("LLM_ENDPOINT_ONLINE_CHAT_API_KEY", "")
-# 在线槽的模型 ID **写在这里**，不必在每个角色上重复一遍：切到在线时，绑到本槽的
-# 角色默认全用它。个别角色要用别的模型（例如兜底判定挑一个更便宜的），再单独写
-# 那个角色的 LLM_ROLE_<角色>_MODEL 覆盖。
-LLM_ENDPOINT_ONLINE_CHAT_MODEL = _env("LLM_ENDPOINT_ONLINE_CHAT_MODEL", "")
-LLM_ENDPOINT_ONLINE_CHAT_KIND = _env("LLM_ENDPOINT_ONLINE_CHAT_KIND", "online")
-# 在线端点并发度按厂商限流填。默认 4 是个保守值，不是厂商上限。
-LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY", 4)
-LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT", 120.0)
+# 槽 MEMORY：记忆域（整合 / 提取）。地址默认与 CHAT 相同（同一个 LM Studio），
+# 但闸门独立——整合与聊天能真正并行，这正是对话/记忆分槽的意义。换成在线服务商时
+# 这里持有「记忆整合」那把 key，不要与 CHAT 填同一个 key：同 key 会让两个域共享
+# 一个缓存空间、互相驱逐彼此的固定前缀。
+LLM_ENDPOINT_MEMORY_BASE_URL = _endpoint_slot(
+    "LLM_ENDPOINT_MEMORY_", "BASE_URL", "http://127.0.0.1:1234",
+    "LLM_ENDPOINT_EXTRA_", "LLM_ENDPOINT_ONLINE_MEMORY_",
+)
+LLM_ENDPOINT_MEMORY_API_KEY = _endpoint_slot(
+    "LLM_ENDPOINT_MEMORY_", "API_KEY", "", "LLM_ENDPOINT_EXTRA_", "LLM_ENDPOINT_ONLINE_MEMORY_",
+)
+LLM_ENDPOINT_MEMORY_MODEL = _endpoint_slot(
+    "LLM_ENDPOINT_MEMORY_", "MODEL", "", "LLM_ENDPOINT_EXTRA_", "LLM_ENDPOINT_ONLINE_MEMORY_",
+)
+LLM_ENDPOINT_MEMORY_KIND = _endpoint_slot(
+    "LLM_ENDPOINT_MEMORY_", "KIND", "local", "LLM_ENDPOINT_EXTRA_", "LLM_ENDPOINT_ONLINE_MEMORY_",
+)
+LLM_ENDPOINT_MEMORY_CONCURRENCY = _endpoint_slot(
+    "LLM_ENDPOINT_MEMORY_", "CONCURRENCY", "1", "LLM_ENDPOINT_EXTRA_", "LLM_ENDPOINT_ONLINE_MEMORY_",
+)
+LLM_ENDPOINT_MEMORY_TIMEOUT = _endpoint_slot(
+    "LLM_ENDPOINT_MEMORY_", "TIMEOUT", "120", "LLM_ENDPOINT_EXTRA_", "LLM_ENDPOINT_ONLINE_MEMORY_",
+)
 
-# 槽 ONLINE_MEMORY：在线·记忆域。持有「记忆整合」那把 key（整合 / 压缩 / 提取共用）。
-LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL = _env("LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL", "")
-LLM_ENDPOINT_ONLINE_MEMORY_API_KEY = _env("LLM_ENDPOINT_ONLINE_MEMORY_API_KEY", "")
-LLM_ENDPOINT_ONLINE_MEMORY_MODEL = _env("LLM_ENDPOINT_ONLINE_MEMORY_MODEL", "")
-LLM_ENDPOINT_ONLINE_MEMORY_KIND = _env("LLM_ENDPOINT_ONLINE_MEMORY_KIND", "online")
-# 记忆域是后台任务，并发度比对话域低：它不该抢对话的限流额度。
-LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY = _env_int("LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY", 2)
-LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT = _env_float("LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT", 120.0)
-
-# 槽 EXTRA：备用槽。**默认充当「本地记忆域」**——地址默认与 LOCAL 相同
-# （同一个 LM Studio），但闸门独立，于是整合与聊天能真正并行。
-# 这正是改造前 chat / consolidation 两把锁分离的原因（27B 跑 GPU、E4B 跑 CPU），
-# 所以 LLM_ROLE_CONSOLIDATION_ENDPOINT 默认指向本槽而不是 LOCAL。
-# 混合部署或调试时也可把它指向第三个服务。
-LLM_ENDPOINT_EXTRA_BASE_URL = _env("LLM_ENDPOINT_EXTRA_BASE_URL", "http://127.0.0.1:1234")
-LLM_ENDPOINT_EXTRA_API_KEY = _env("LLM_ENDPOINT_EXTRA_API_KEY", "")
-# 留空即可：CONSOLIDATION 角色回落到自己的 LLM_ROLE_CONSOLIDATION_MODEL
-# （GUI 里的「记忆整合模型 ID」）。指向第三个服务时才需要填这里。
-LLM_ENDPOINT_EXTRA_MODEL = _env("LLM_ENDPOINT_EXTRA_MODEL", "")
-LLM_ENDPOINT_EXTRA_KIND = _env("LLM_ENDPOINT_EXTRA_KIND", "local")
-LLM_ENDPOINT_EXTRA_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_CONCURRENCY", 1)
-LLM_ENDPOINT_EXTRA_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_TIMEOUT", 120.0)
-
-# 槽 EXTRA_VISION：图片转述的默认端点卡。**出厂未配地址 = 未启用**；图片转述
-# 角色（VISION）默认绑 none，要启用时在 GUI「模型服务」分区给本卡填地址、
-# 把 VISION 行的端点改指 EXTRA_VISION（或任何别的槽）即可。本卡与 EXTRA 同构：
-# 地址留空时按本机推导，指到服务商时把 KIND 改成 online（GUI 保存会自动推导）。
-# 它是「EXTRA_* 自定义槽」约定的样板：往 .env 里再写一组 LLM_ENDPOINT_EXTRA_<名>_*
-# 键就会多出一个同构槽（registry.extra_slots() 自动发现），无需改代码。
-LLM_ENDPOINT_EXTRA_VISION_BASE_URL = _env("LLM_ENDPOINT_EXTRA_VISION_BASE_URL", "")
-LLM_ENDPOINT_EXTRA_VISION_API_KEY = _env("LLM_ENDPOINT_EXTRA_VISION_API_KEY", "")
-LLM_ENDPOINT_EXTRA_VISION_MODEL = _env("LLM_ENDPOINT_EXTRA_VISION_MODEL", "")
-LLM_ENDPOINT_EXTRA_VISION_KIND = _env("LLM_ENDPOINT_EXTRA_VISION_KIND", "local")
-LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY = _env_int("LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY", 1)
-LLM_ENDPOINT_EXTRA_VISION_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_VISION_TIMEOUT", 120.0)
+# 槽 VISION：图片转述。**出厂未配地址 = 未启用**；图片转述角色（VISION）默认绑
+# none，要启用时在「提供商」页给本卡填地址、把 VISION 行的端点改指 VISION 即可。
+# 绑本地槽时用多模态模型（如 qwen-vl 系）；KIND=online 时注意——群聊图片会以
+# URL 形式发往第三方服务，请按群成员隐私预期选择。
+LLM_ENDPOINT_VISION_BASE_URL = _endpoint_slot(
+    "LLM_ENDPOINT_VISION_", "BASE_URL", "", "LLM_ENDPOINT_EXTRA_VISION_",
+)
+LLM_ENDPOINT_VISION_API_KEY = _endpoint_slot(
+    "LLM_ENDPOINT_VISION_", "API_KEY", "", "LLM_ENDPOINT_EXTRA_VISION_",
+)
+LLM_ENDPOINT_VISION_MODEL = _endpoint_slot(
+    "LLM_ENDPOINT_VISION_", "MODEL", "", "LLM_ENDPOINT_EXTRA_VISION_",
+)
+LLM_ENDPOINT_VISION_KIND = _endpoint_slot(
+    "LLM_ENDPOINT_VISION_", "KIND", "local", "LLM_ENDPOINT_EXTRA_VISION_",
+)
+LLM_ENDPOINT_VISION_CONCURRENCY = _endpoint_slot(
+    "LLM_ENDPOINT_VISION_", "CONCURRENCY", "1", "LLM_ENDPOINT_EXTRA_VISION_",
+)
+LLM_ENDPOINT_VISION_TIMEOUT = _endpoint_slot(
+    "LLM_ENDPOINT_VISION_", "TIMEOUT", "120", "LLM_ENDPOINT_EXTRA_VISION_",
+)
 
 # ---------- LLM 角色（Role） ----------
 # 角色 = 一个调用场景。每个角色引用一个端点槽，并带自己的模型 / 温度 / max_tokens。
@@ -1178,14 +1203,14 @@ LLM_ENDPOINT_EXTRA_VISION_TIMEOUT = _env_float("LLM_ENDPOINT_EXTRA_VISION_TIMEOU
 # 连接超时时触发；400（请求体错误）**不降级**——那是配置问题，降级只会掩盖它。
 
 # 主对话生成。改造前：ai_gateway.py 用 LM_STUDIO_* 构造，温度/长度取构造默认值。
-LLM_ROLE_CHAT_ENDPOINT = _env("LLM_ROLE_CHAT_ENDPOINT", "LOCAL")
+LLM_ROLE_CHAT_ENDPOINT = _env("LLM_ROLE_CHAT_ENDPOINT", "CHAT")
 LLM_ROLE_CHAT_MODEL = _env("LLM_ROLE_CHAT_MODEL", "")
 LLM_ROLE_CHAT_TEMPERATURE = _env_float("LLM_ROLE_CHAT_TEMPERATURE", 0.7)
 LLM_ROLE_CHAT_MAX_TOKENS = _env_int("LLM_ROLE_CHAT_MAX_TOKENS", 2000)
 LLM_ROLE_CHAT_FALLBACK_ENDPOINT = _env("LLM_ROLE_CHAT_FALLBACK_ENDPOINT", "")
 
 # Router Level 2 兜底判定。任务是「要不要工具」的二分类，在线时可用廉价模型。
-LLM_ROLE_ROUTER_ENDPOINT = _env("LLM_ROLE_ROUTER_ENDPOINT", "LOCAL")
+LLM_ROLE_ROUTER_ENDPOINT = _env("LLM_ROLE_ROUTER_ENDPOINT", "CHAT")
 LLM_ROLE_ROUTER_MODEL = _env("LLM_ROLE_ROUTER_MODEL", "")
 LLM_ROLE_ROUTER_TEMPERATURE = _env_float("LLM_ROLE_ROUTER_TEMPERATURE", 0.7)
 LLM_ROLE_ROUTER_MAX_TOKENS = _env_int("LLM_ROLE_ROUTER_MAX_TOKENS", 2000)
@@ -1193,7 +1218,7 @@ LLM_ROLE_ROUTER_FALLBACK_ENDPOINT = _env("LLM_ROLE_ROUTER_FALLBACK_ENDPOINT", ""
 
 # AstrBot 插件的 LLM 调用（messages 数组 / function calling / 图片）。
 # 走 core/llm/openai_client.py，不是 LMStudioBackend。
-LLM_ROLE_PLUGIN_ENDPOINT = _env("LLM_ROLE_PLUGIN_ENDPOINT", "LOCAL")
+LLM_ROLE_PLUGIN_ENDPOINT = _env("LLM_ROLE_PLUGIN_ENDPOINT", "CHAT")
 LLM_ROLE_PLUGIN_MODEL = _env("LLM_ROLE_PLUGIN_MODEL", "")
 LLM_ROLE_PLUGIN_TEMPERATURE = _env_float("LLM_ROLE_PLUGIN_TEMPERATURE", 0.7)
 LLM_ROLE_PLUGIN_MAX_TOKENS = _env_int("LLM_ROLE_PLUGIN_MAX_TOKENS", 1024)
@@ -1201,7 +1226,7 @@ LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT = _env("LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT", ""
 
 # 会话压缩：把较早的对话压成回顾。**在线时归记忆域**（与整合共用同一把 key），
 # 让记忆域的流量与对话域的缓存互不干扰。
-LLM_ROLE_COMPACT_ENDPOINT = _env("LLM_ROLE_COMPACT_ENDPOINT", "LOCAL")
+LLM_ROLE_COMPACT_ENDPOINT = _env("LLM_ROLE_COMPACT_ENDPOINT", "CHAT")
 LLM_ROLE_COMPACT_MODEL = _env("LLM_ROLE_COMPACT_MODEL", "")
 LLM_ROLE_COMPACT_TEMPERATURE = _env_float("LLM_ROLE_COMPACT_TEMPERATURE", 0.3)
 # **0 = 按 SESSION_SUMMARY_MAX_TOKENS × 3 推导**（改造前 session_compact.py 的算法）。
@@ -1211,7 +1236,7 @@ LLM_ROLE_COMPACT_FALLBACK_ENDPOINT = _env("LLM_ROLE_COMPACT_FALLBACK_ENDPOINT", 
 
 # 记忆整合 阶段1：出短期摘要 + 用户画像 + 自我披露判断。是「总结 + 二分类」任务，
 # 在线时用廉价模型即可。默认端点是 EXTRA 而非 LOCAL，理由见 EXTRA 槽的说明。
-LLM_ROLE_CONSOLIDATION_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_ENDPOINT", "EXTRA")
+LLM_ROLE_CONSOLIDATION_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_ENDPOINT", "MEMORY")
 LLM_ROLE_CONSOLIDATION_MODEL = _env("LLM_ROLE_CONSOLIDATION_MODEL", "google/gemma-4-e4b")
 LLM_ROLE_CONSOLIDATION_TEMPERATURE = _env_float("LLM_ROLE_CONSOLIDATION_TEMPERATURE", 0.3)
 LLM_ROLE_CONSOLIDATION_MAX_TOKENS = _env_int_inherit("LLM_ROLE_CONSOLIDATION_MAX_TOKENS", CONSOLIDATION_LOCAL_MAX_TOKENS)
@@ -1219,7 +1244,7 @@ LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT = _env("LLM_ROLE_CONSOLIDATION_FALLBACK
 
 # 记忆整合 阶段2：从消息里精确提取「用户亲口说的、关于自己的稳定信息」。
 # 高精度抽取任务，但只在阶段1 判定 has_self_disclosure=true 时才唤醒，频次低。
-LLM_ROLE_EXTRACT_ENDPOINT = _env("LLM_ROLE_EXTRACT_ENDPOINT", "LOCAL")
+LLM_ROLE_EXTRACT_ENDPOINT = _env("LLM_ROLE_EXTRACT_ENDPOINT", "MEMORY")
 LLM_ROLE_EXTRACT_MODEL = _env("LLM_ROLE_EXTRACT_MODEL", "")
 LLM_ROLE_EXTRACT_TEMPERATURE = _env_float("LLM_ROLE_EXTRACT_TEMPERATURE", 0.2)
 LLM_ROLE_EXTRACT_MAX_TOKENS = _env_int_inherit("LLM_ROLE_EXTRACT_MAX_TOKENS", MEMORY_EXTRACT_MAX_TOKENS)
