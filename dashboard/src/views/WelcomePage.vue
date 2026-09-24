@@ -23,6 +23,53 @@ interface StatusPayload {
 const status = ref<StatusPayload | null>(null);
 const loadError = ref('');
 
+// step1「配置模型端点」的完成判定（2026-09-25 用户要求）：**必选**的对话与记忆
+// 两槽都配好（地址 + 模型），且本地端点能实际连通（拉到模型列表）。视觉是可选
+// 增强，不参与判定。null = 判定进行中，圆点保持待办色。
+const endpointsReady = ref<boolean | null>(null);
+
+interface EndpointLike {
+  slot: string;
+  base_url: string;
+  model: string;
+  kind: string;
+  has_api_key: boolean;
+}
+
+async function checkEndpointsReady(): Promise<void> {
+  try {
+    const { endpoints } = await unwrap<{ endpoints: EndpointLike[] }>(
+      api.get('/providers/endpoints'),
+    );
+    const required = ['CHAT', 'MEMORY'].map((slot) =>
+      endpoints.find((e) => e.slot === slot),
+    );
+    // 配置齐全是第一道门槛（地址 + 模型都在）；在线端点凭 key 才能验证
+    //（key 不回显），配置齐全即算过；本地端点用「拉模型列表」做真实连通
+    // 探测（fetch_endpoint_models，5s 超时）。
+    const configured = required.every(
+      (e) => e !== undefined && !!e.base_url && !!e.model,
+    );
+    if (!configured) {
+      endpointsReady.value = false;
+      return;
+    }
+    const localChecks = required
+      .filter((e): e is EndpointLike => !!e && e.kind === 'local')
+      .map((e) =>
+        unwrap<{ models: string[]; error: string }>(
+          api.get('/providers/models', { params: { base_url: e.base_url } }),
+        ).then((r) => !r.error),
+      );
+    endpointsReady.value = localChecks.length
+      ? (await Promise.all(localChecks)).every(Boolean)
+      : true;
+  } catch {
+    // 探测失败（后端刚重启等）按未完成处理，不报错——这只是一个引导圆点
+    endpointsReady.value = false;
+  }
+}
+
 const uptimeText = computed(() => {
   if (!status.value) return '—';
   const s = Math.floor(status.value.uptime_seconds);
@@ -32,9 +79,10 @@ const uptimeText = computed(() => {
 });
 
 // 引导步骤 → 功能页。step 的完成态只用在有现成数据的地方（不为此多发请求）：
-// step2 看已绑定群数，step3 看进程存活（pid）；step1 无现成判据，保持待办色。
+// step1 看对话+记忆端点配置与连通（checkEndpointsReady 探测）；step2 看已绑定
+// 群数；step3 看进程存活（pid）。
 const steps = computed(() => [
-  { key: 'step1', to: '/providers', done: false },
+  { key: 'step1', to: '/providers', done: endpointsReady.value === true },
   { key: 'step2', to: '/groups', done: (status.value?.allowed_group_count ?? 0) > 0 },
   { key: 'step3', to: '/platforms', done: !!status.value?.pid },
 ]);
@@ -49,6 +97,7 @@ onMounted(async () => {
   } catch (err) {
     loadError.value = (err as Error).message;
   }
+  void checkEndpointsReady();
 });
 </script>
 
