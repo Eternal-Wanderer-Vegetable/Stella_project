@@ -53,7 +53,7 @@
       "step3": "Start the bot",
       "statusTitle": "Runtime status",
       "version": "Version",
-      "pid": "Process",
+      "pid": "Process PID",
       "uptime": "Uptime",
       "link": "OneBot link",
       "groups": "Bound groups",

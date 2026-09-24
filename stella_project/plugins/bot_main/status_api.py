@@ -43,20 +43,48 @@ from config import (
 _STARTED_AT = time.time()
 _STARTUP_HOOK_REGISTERED = False
 
-# importlib.metadata 查不到（未安装成包 / 源码直接运行）时的回退版本号。
-# 与 pyproject.toml 的 version 保持一致，改版本号时一并更新。
+# importlib.metadata 查不到（未安装成包 / 源码直接运行）时的最终回退版本号。
+# 仅在「metadata 查不到、pyproject.toml 也读不到」时使用；正常情况下版本号
+# 动态来自 pyproject.toml（用户要求：改 pyproject 即生效，不再有双重维护）。
 _FALLBACK_VERSION = "4.0.0"
+
+_pyproject_version_cache: str | None = None
+
+
+def _pyproject_version() -> str | None:
+    """从 PROJECT_ROOT/pyproject.toml 读 version；读不到返回 None（结果缓存）。
+
+    源码直跑（``python bot.py``）时 importlib.metadata 查不到包，pyproject
+    是版本的唯一真实出处；Release 包里 pyproject 同样随包分发，两条路都能走。
+    """
+    global _pyproject_version_cache
+    if _pyproject_version_cache is not None:
+        return _pyproject_version_cache or None
+    try:
+        import tomllib
+
+        from config import PROJECT_ROOT
+
+        data = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        value = str(data.get("project", {}).get("version") or "").strip()
+        _pyproject_version_cache = value or "0"  # 空串表示「读过但没有」，防反复读盘
+        return _pyproject_version_cache or None
+    except Exception:
+        _pyproject_version_cache = "0"
+        return None
 
 
 def _project_version() -> str:
-    """项目版本号：优先 importlib.metadata，查不到回退到模块常量。
+    """项目版本号：优先 importlib.metadata（安装态），其次 pyproject.toml（源码态），
+    最后才回落到模块常量。
 
-    不要解析 pyproject.toml——Release 包里它在，但依赖文件位置不优雅。
+    不要在 import 期解析——pyproject 可能在进程启动后才被升级/替换，首次取值
+    缓存一次即可。
     """
     try:
         return version("stella_project")
     except PackageNotFoundError:
-        return _FALLBACK_VERSION
+        return _pyproject_version() or _FALLBACK_VERSION
 
 
 def _is_loopback(host: str | None) -> bool:

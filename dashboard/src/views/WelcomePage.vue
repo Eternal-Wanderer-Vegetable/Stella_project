@@ -16,12 +16,21 @@ interface StatusPayload {
   uptime_seconds: number;
   allowed_group_count: number;
   link: { connected?: boolean } | null;
-  usage: { tokens_today?: number } | null;
+  usage: { totals: { prompt_tokens: number; completion_tokens: number } | null } | null;
   webui?: { username: string };
 }
 
 const status = ref<StatusPayload | null>(null);
 const loadError = ref('');
+
+// 今日 token：与统计页同一口径（totals.prompt + totals.completion，来自
+// usage 日账的当日累计）。status.usage 里没有现成的 tokens_today 字段，
+// 之前读它永远是 undefined，显示成「—」（2026-09-25 用户报告）。
+const tokensToday = computed(() => {
+  const totals = status.value?.usage?.totals;
+  if (!totals) return '—';
+  return (totals.prompt_tokens ?? 0) + (totals.completion_tokens ?? 0);
+});
 
 // step1「配置模型端点」的完成判定（2026-09-25 用户要求）：**必选**的对话与记忆
 // 两槽都配好（地址 + 模型），且本地端点能实际连通（拉到模型列表）。视觉是可选
@@ -173,7 +182,7 @@ onMounted(async () => {
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.tokensToday') }}</div>
-          <div class="text-h6">{{ status.usage?.tokens_today ?? '—' }}</div>
+          <div class="text-h6">{{ tokensToday }}</div>
         </v-col>
       </v-row>
     </v-card>

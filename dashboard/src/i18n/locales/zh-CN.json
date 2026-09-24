@@ -53,7 +53,7 @@
       "step3": "启动 Bot",
       "statusTitle": "运行状态",
       "version": "版本",
-      "pid": "进程",
+      "pid": "进程 PID",
       "uptime": "运行时长",
       "link": "OneBot 链路",
       "groups": "已绑定群数",
