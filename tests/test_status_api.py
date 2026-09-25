@@ -100,17 +100,20 @@ def test_fallback_version_matches_release_version(monkeypatch):
 
     旧实现回退手写常量，改 pyproject 时漂移成 v4.0.0（2026-09-25 用户报告
     欢迎页版本错误）。现在回退值动态读 pyproject，与发布版本永远一致。
+    测试用独立的逐行解析（不经过 config.state）做交叉验证。
     """
-    import tomllib
-
     from config import PROJECT_ROOT
 
     monkeypatch.setattr(status_api, "version", lambda _name: (_ for _ in ()).throw(
         status_api.PackageNotFoundError
     ))
-    expected = tomllib.loads(
-        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    )["project"]["version"]
+    expected = None
+    for line in (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("version = ", "version=")):
+            expected = stripped.split("=", 1)[1].strip().strip("\"'")
+            break
+    assert expected, "pyproject.toml 里必须能解析出版本号"
     assert status_api._project_version() == expected
 
 

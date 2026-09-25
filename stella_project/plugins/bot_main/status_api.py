@@ -52,21 +52,20 @@ _pyproject_version_cache: str | None = None
 
 
 def _pyproject_version() -> str | None:
-    """从 PROJECT_ROOT/pyproject.toml 读 version；读不到返回 None（结果缓存）。
+    """从 ``pyproject.toml`` 读版本；读不到返回 None（结果缓存）。
 
-    源码直跑（``python bot.py``）时 importlib.metadata 查不到包，pyproject
-    是版本的唯一真实出处；Release 包里 pyproject 同样随包分发，两条路都能走。
+    判据复用 :func:`config.state.program_version`——「版本号从哪来」全项目
+    只有这一份解析（源码直跑时 importlib.metadata 查不到包，pyproject 是
+    唯一可靠的出处；Release 包里 pyproject 同样随包分发，两条路都能走）。
     """
     global _pyproject_version_cache
     if _pyproject_version_cache is not None:
         return _pyproject_version_cache or None
     try:
-        import tomllib
-
         from config import PROJECT_ROOT
+        from config.state import program_version
 
-        data = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-        value = str(data.get("project", {}).get("version") or "").strip()
+        value = program_version(PROJECT_ROOT) or ""
         _pyproject_version_cache = value or "0"  # 空串表示「读过但没有」，防反复读盘
         return _pyproject_version_cache or None
     except Exception:
