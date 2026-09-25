@@ -532,7 +532,8 @@ jobs:
         build-rust-wheel,
         build-cli-linux-binary,
         build-cli-windows-binary,
-        build-oneclick-catalog-backend
+        build-oneclick-catalog-backend,
+        build-dashboard
       ]
     runs-on: ubuntu-latest
     steps:
@@ -625,6 +626,23 @@ jobs:
             ./ dist/Stella/
           cp release_assets/start.bat release_assets/doctor.bat \
              release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
+
+      # webui/dist（Bot 托管面板）是构建产物，checkout 里天然没有——必须在
+      # 组装 Standalone/CLI 产品之前放进 repo 树与 dist/Stella，否则打包脚本的
+      # 硬校验会拒打（v5.1.0-rc 实测：FileNotFoundError webui/dist）。
+      # dashboard 产物由 build-dashboard job 产出（needs 已保证它先完成）。
+      - name: 下载 WebUI 前端产物
+        uses: actions/download-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: desktop/dashboard-dist
+
+      - name: 拷入 webui/dist（repo 树 + dist/Stella 各一份）
+        shell: bash
+        run: |
+          mkdir -p webui/dist dist/Stella/webui/dist
+          cp -r desktop/dashboard-dist/* webui/dist/
+          cp -r desktop/dashboard-dist/* dist/Stella/webui/dist/
 
       # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF。
       # 放在 CLI 组装之前：CLI 包从这份目录复制，不能再各自转一遍。
