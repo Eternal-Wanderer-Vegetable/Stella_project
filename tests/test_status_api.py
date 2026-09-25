@@ -96,10 +96,22 @@ def test_build_payload_fields_complete():
 
 
 def test_fallback_version_matches_release_version(monkeypatch):
+    """importlib 查不到包（源码直跑）时回退 pyproject.toml 的版本号。
+
+    旧实现回退手写常量，改 pyproject 时漂移成 v4.0.0（2026-09-25 用户报告
+    欢迎页版本错误）。现在回退值动态读 pyproject，与发布版本永远一致。
+    """
+    import tomllib
+
+    from config import PROJECT_ROOT
+
     monkeypatch.setattr(status_api, "version", lambda _name: (_ for _ in ()).throw(
         status_api.PackageNotFoundError
     ))
-    assert status_api._project_version() == "4.0.0"
+    expected = tomllib.loads(
+        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+    assert status_api._project_version() == expected
 
 
 def test_build_payload_can_nest_runtime_diagnostics():

@@ -20,6 +20,15 @@ const starting = ref(false);
 const startError = ref('');
 const step = ref('');
 const doctorText = ref('');
+// doctor 报告的结构化渲染：items 逐条（级别图标 + 标题 + 详情 + 建议），
+// 原始 JSON 收进折叠块——整屏 JSON 用户读不了（2026-09-25 用户安装失败反馈）。
+interface DoctorItem {
+  level: string;
+  title: string;
+  detail?: string;
+  fix_hint?: string;
+}
+const doctorItems = ref<DoctorItem[]>([]);
 const inShell = computed(() => isTauri());
 
 // ---------- 启动中加载视图（2026-09-25 用户要求） ----------
@@ -136,9 +145,17 @@ async function startBot(): Promise<void> {
 async function runShellDoctor(): Promise<void> {
   doctorText.value = '运行中…';
   try {
-    doctorText.value = await tauriBridge.runDoctor();
+    const text = await tauriBridge.runDoctor();
+    doctorText.value = text;
+    try {
+      const parsed = JSON.parse(text) as { items?: DoctorItem[] };
+      doctorItems.value = Array.isArray(parsed?.items) ? parsed.items : [];
+    } catch {
+      doctorItems.value = [];
+    }
   } catch (err) {
     doctorText.value = `自检失败：${(err as Error).message}`;
+    doctorItems.value = [];
   }
 }
 
@@ -297,11 +314,24 @@ onMounted(async () => {
       <div class="d-flex ga-2 justify-center mt-4">
         <v-btn size="small" variant="text" @click="runShellDoctor">环境自检</v-btn>
       </div>
-      <pre
-        v-if="doctorText"
-        class="text-caption text-left mt-4"
-        style="max-height: 200px; overflow-y: auto; white-space: pre-wrap"
-      >{{ doctorText }}</pre>
+      <div v-if="doctorItems.length" class="text-left mt-4" style="max-width: 36rem">
+        <div v-for="(item, i) in doctorItems" :key="i" class="d-flex ga-2 mb-2">
+          <v-icon
+            size="small"
+            :color="item.level === 'error' ? 'error' : item.level === 'warn' ? 'warning' : 'success'"
+            :icon="item.level === 'error' ? 'mdi-close-circle' : item.level === 'warn' ? 'mdi-alert' : 'mdi-check-circle'"
+          />
+          <div>
+            <div class="text-body-2">{{ item.title }}</div>
+            <div v-if="item.detail" class="text-caption text-medium-emphasis">{{ item.detail }}</div>
+            <div v-if="item.fix_hint" class="text-caption text-medium-emphasis">建议：{{ item.fix_hint }}</div>
+          </div>
+        </div>
+      </div>
+      <details v-if="doctorText" class="mt-2 text-left" style="max-width: 36rem">
+        <summary class="text-caption text-medium-emphasis">原始报告</summary>
+        <pre class="text-caption" style="max-height: 200px; overflow-y: auto; white-space: pre-wrap">{{ doctorText }}</pre>
+      </details>
       <div v-if="startError" class="text-error text-caption mt-2 pre-wrap">{{ startError }}</div>
     </div>
 
@@ -338,11 +368,20 @@ onMounted(async () => {
       >
         修改基础配置（群号 / 模型 / 连接）
       </v-btn>
-      <pre
-        v-if="doctorText"
-        class="text-caption text-left mt-4"
-        style="max-height: 200px; overflow-y: auto; white-space: pre-wrap"
-      >{{ doctorText }}</pre>
+      <div v-if="doctorItems.length" class="text-left mt-4" style="max-width: 36rem">
+        <div v-for="(item, i) in doctorItems" :key="i" class="d-flex ga-2 mb-2">
+          <v-icon
+            size="small"
+            :color="item.level === 'error' ? 'error' : item.level === 'warn' ? 'warning' : 'success'"
+            :icon="item.level === 'error' ? 'mdi-close-circle' : item.level === 'warn' ? 'mdi-alert' : 'mdi-check-circle'"
+          />
+          <div>
+            <div class="text-body-2">{{ item.title }}</div>
+            <div v-if="item.detail" class="text-caption text-medium-emphasis">{{ item.detail }}</div>
+            <div v-if="item.fix_hint" class="text-caption text-medium-emphasis">建议：{{ item.fix_hint }}</div>
+          </div>
+        </div>
+      </div>
       <div v-if="step" class="text-caption text-medium-emphasis mt-2">{{ step }}</div>
       <div v-if="startError" class="text-error text-caption mt-2 pre-wrap">{{ startError }}</div>
     </div>
