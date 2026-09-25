@@ -451,32 +451,39 @@ onMounted(() => {
     <!-- MCP -->
     <div v-if="tab === 'mcp'">
       <v-card class="pa-2">
-        <div class="d-flex align-center pa-2">
+        <!-- 空状态：提示与新增按钮同一行（2026-09-25 用户要求对齐） -->
+        <div v-if="!mcpServers.length" class="d-flex align-center flex-wrap ga-2 pa-3">
+          <span class="text-body-2 text-medium-emphasis">
+            没有 MCP Server。MCP_ENABLED=false 时服务只写配置不热生效。
+          </span>
           <v-spacer />
           <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="openMcpEditor()">新增 Server</v-btn>
         </div>
-        <v-list>
-          <v-list-item v-for="s in mcpServers" :key="s.server_id">
-            <template #prepend>
-              <v-chip :color="s.enabled ? 'success' : 'default'" size="x-small" variant="tonal">
-                {{ s.enabled ? '启用' : '停用' }}
-              </v-chip>
-            </template>
-            <v-list-item-title class="text-body-2">{{ s.server_id }}</v-list-item-title>
-            <v-list-item-subtitle>
-              {{ s.transport === 'stdio' ? s.command : s.url }}
-            </v-list-item-subtitle>
-            <template #append>
-              <v-btn size="x-small" variant="text" @click="testMcp(s)">测试</v-btn>
-              <v-btn size="x-small" variant="text" @click="openMcpEditor(s)">编辑</v-btn>
-              <v-btn size="x-small" variant="text" color="error" @click="deleteMcp(s)">删除</v-btn>
-            </template>
-          </v-list-item>
-        </v-list>
-        <div v-if="mcpTestResult" class="text-caption pa-2">{{ mcpTestResult }}</div>
-        <div v-if="!mcpServers.length" class="text-body-2 text-medium-emphasis pa-4">
-          没有 MCP Server。MCP_ENABLED=false 时服务只写配置不热生效。
-        </div>
+        <template v-else>
+          <div class="d-flex align-center pa-2">
+            <v-spacer />
+            <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="openMcpEditor()">新增 Server</v-btn>
+          </div>
+          <v-list>
+            <v-list-item v-for="s in mcpServers" :key="s.server_id">
+              <template #prepend>
+                <v-chip :color="s.enabled ? 'success' : 'default'" size="x-small" variant="tonal">
+                  {{ s.enabled ? '启用' : '停用' }}
+                </v-chip>
+              </template>
+              <v-list-item-title class="text-body-2">{{ s.server_id }}</v-list-item-title>
+              <v-list-item-subtitle>
+                {{ s.transport === 'stdio' ? s.command : s.url }}
+              </v-list-item-subtitle>
+              <template #append>
+                <v-btn size="x-small" variant="text" @click="testMcp(s)">测试</v-btn>
+                <v-btn size="x-small" variant="text" @click="openMcpEditor(s)">编辑</v-btn>
+                <v-btn size="x-small" variant="text" color="error" @click="deleteMcp(s)">删除</v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+          <div v-if="mcpTestResult" class="text-caption pa-2">{{ mcpTestResult }}</div>
+        </template>
       </v-card>
     </div>
 
