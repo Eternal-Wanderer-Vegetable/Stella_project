@@ -103,6 +103,7 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     source = tmp_path / "source"
     for relative in (
         "bot.py",
+        "deploy/nsis_bootstrap_helper.py",
         "requirements.txt",
         "pyproject.toml",
         "LICENSE",
@@ -180,6 +181,7 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
     source = tmp_path / "source"
     for relative in (
         "bot.py",
+        "deploy/nsis_bootstrap_helper.py",
         "requirements.txt",
         "pyproject.toml",
         "LICENSE",
@@ -250,7 +252,7 @@ def test_stager_falls_back_to_shell_dashboard_dist(tmp_path):
     source = tmp_path / "source"
     for relative in (
         "bot.py", "requirements.txt", "pyproject.toml", "LICENSE", "README.md",
-        ".env.example", "start.bat", "doctor.bat", "stop.bat", "README-快速开始.txt",
+        ".env.example", "deploy/nsis_bootstrap_helper.py", "start.bat", "doctor.bat", "stop.bat", "README-快速开始.txt",
         "runtime-manager/schemas/runtime-manifest.schema.json",
         "runtime-manager/schemas/runtime-state.schema.json",
         "runtime-manager/schemas/package-catalog.schema.json",
@@ -303,6 +305,7 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
     source = tmp_path / "source"
     for relative in (
         "bot.py",
+        "deploy/nsis_bootstrap_helper.py",
         "requirements.txt",
         "pyproject.toml",
         "LICENSE",
@@ -369,6 +372,7 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
     source = tmp_path / "source"
     for relative in (
         "bot.py",
+        "deploy/nsis_bootstrap_helper.py",
         "requirements.txt",
         "pyproject.toml",
         "LICENSE",
@@ -493,7 +497,8 @@ def test_stage_installer_resources_fails_hard_without_webui_dist(tmp_path):
                  "runtime-manager/schemas/package-catalog.schema.json",
                  "runtime-manager/schemas/package-registry.schema.json",
                  *(f"release_assets/product-profiles/{pid}.json"
-                   for pid in PROFILE_IDS)):
+                   for pid in PROFILE_IDS),
+                 "deploy/nsis_bootstrap_helper.py"):
         path = source / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")

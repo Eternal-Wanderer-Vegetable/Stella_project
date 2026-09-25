@@ -25,6 +25,9 @@ COMMON_FILES = (
     "doctor.bat",
     "stop.bat",
     "README-快速开始.txt",
+    # OneClick 离线装载辅助：NSIS POSTINSTALL 钩子以嵌入式 Python 执行，
+    # 完成 pip/依赖离线安装与组件装载收尾（GUI 首启只剩向导与秒级启动）
+    "deploy/nsis_bootstrap_helper.py",
 )
 # 常见运行目录。⚠️ 新增顶层包（如 skills/knowledge/webui）时必须同步这里，
 # 否则 payload 缺包：轻则功能 404（webui 挂载被 manage 路由的模块级导入连坐，
