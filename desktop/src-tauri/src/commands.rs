@@ -66,6 +66,36 @@ pub fn desktop_session_secret() -> String {
     crate::desktop_session_secret().to_string()
 }
 
+/// 读取首启进度（加载视图轮询用，2026-09-25 用户要求：启动不能只有一句
+/// 「正在启动」而无真实反馈）。
+///
+/// 两个进度源都是**文件**（进程内不用 IPC 就能拿到）：
+/// - `deploy bootstrap install` 写 `.stella/.bootstrap-progress.json`
+///   （state/current/completed/error，NapCat、embedding 模型等组件逐个推进）；
+/// - `prepare_runtime` 写 `runtime/.bootstrap-progress`（运行时下载 / pip / 
+///   依赖安装的文本消息）。
+/// 任一缺失返回 null——文件不存在是常态（还没跑到那一步）。
+#[tauri::command]
+pub fn read_start_progress() -> Result<String, String> {
+    let root = python::data_root();
+    let bootstrap_path = root.join(".stella").join(".bootstrap-progress.json");
+    let prepare_path = root.join("runtime").join(".bootstrap-progress");
+
+    let bootstrap = std::fs::read_to_string(&bootstrap_path)
+        .ok()
+        .filter(|text| serde_json::from_str::<serde_json::Value>(text).is_ok())
+        .unwrap_or_else(|| "null".into());
+    let prepare = std::fs::read_to_string(&prepare_path)
+        .map(|text| text.trim().to_owned())
+        .ok();
+
+    let prepare_json = serde_json::to_string(&prepare)
+        .map_err(|e| format!("序列化 prepare 进度失败：{e}"))?;
+    Ok(format!(
+        r#"{{"bootstrap": {bootstrap}, "prepare": {prepare_json}}}"#
+    ))
+}
+
 #[tauri::command]
 pub async fn run_doctor() -> Result<String, String> {
     let runtime =
