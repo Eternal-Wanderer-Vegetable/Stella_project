@@ -265,13 +265,24 @@ def sources_path() -> Path:
     return Path(settings.STELLA_HOME) / "config" / "plugin_sources.json"
 
 
+# AstrBot 官方市场的现行地址（2026-09 起官方源收敛到 cloud.astrbot.app，
+# 条目为 {repo 键: 元数据} + $meta；旧仓库路径 master/packages.json 已 404）。
+_OFFICIAL_MARKET_URL = "https://cloud.astrbot.app/api/v1/market/plugins.json"
+# 历史版本的默认源写死了失效地址（master/master 重复段、旧仓库 404 路径），
+# 存量 plugin_sources.json 里读到的这些 URL 在读取层自动改写为新官方源。
+_BROKEN_OFFICIAL_URLS = {
+    "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/master/packages.json",
+    "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/packages.json",
+}
+
+
 def _default_sources() -> dict:
     return {
         "sources": [
             {
                 "id": "astrbot-official",
                 "name": "AstrBot 官方市场",
-                "url": "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/master/packages.json",
+                "url": _OFFICIAL_MARKET_URL,
                 "enabled": True,
             }
         ]
@@ -287,7 +298,14 @@ def list_sources() -> list[dict]:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = _default_sources()
-    return data.get("sources", [])
+    sources = []
+    for src in data.get("sources", []):
+        url = str(src.get("url", ""))
+        # 存量坏官方地址 → 新官方地址（读取层归一，保存时自然落新值）
+        if url in _BROKEN_OFFICIAL_URLS:
+            src = {**src, "url": _OFFICIAL_MARKET_URL}
+        sources.append(src)
+    return sources
 
 
 def save_sources(sources: list[dict]) -> dict:
@@ -321,7 +339,23 @@ def fetch_market(source_id: str | None = None) -> dict:
                     resp = client.get(src["url"])
                     resp.raise_for_status()
                     raw = resp.json()
-                items = raw if isinstance(raw, list) else raw.get("plugins", [])
+                # 兼容三种市场格式：
+                # 1. 顶层数组（自建源的 [{name,...}, ...]）；
+                # 2. {"plugins": [...]} 包裹；
+                # 3. AstrBot 官方 2026-09 起的 {repo 键: 元数据} 字典（$meta 为
+                #    清单元信息）——条目字段与我们的市场卡完全兼容。
+                if isinstance(raw, list):
+                    items = raw
+                elif isinstance(raw, dict) and isinstance(raw.get("plugins"), list):
+                    items = raw["plugins"]
+                elif isinstance(raw, dict):
+                    items = [
+                        {**meta, "name": str(meta.get("name") or str(key).rsplit("/", 1)[-1])}
+                        for key, meta in raw.items()
+                        if key != "$meta" and isinstance(meta, dict)
+                    ]
+                else:
+                    items = []
                 for item in items:
                     key = (str(item.get("name", "")), str(item.get("repo", "")))
                     existing = merged.get(key)

@@ -240,3 +240,95 @@ def test_scheduling_disabled_blocks_writes(client: TestClient, auth_header: dict
 
 def test_scheduling_requires_auth(client: TestClient):
     assert client.get("/api/v1/scheduling/tasks").status_code == 401
+
+
+# ---------- 插件市场源（2026-09-25 官方源 404 修复） ----------
+
+
+def test_default_official_source_uses_current_market_url():
+    """旧默认源写死了 master/master 重复段（404），默认值必须是现行官方地址。"""
+    from webui.services import plugins_manage
+
+    sources = plugins_manage.list_sources()
+    official = next(s for s in sources if s["id"] == "astrbot-official")
+    assert official["url"] == "https://cloud.astrbot.app/api/v1/market/plugins.json"
+
+
+def test_list_sources_rewrites_broken_legacy_official_url(isolated_home, monkeypatch):
+    """存量 plugin_sources.json 里的失效官方地址：读取层自动改写为新官方源，
+    用户不需要手工改文件。"""
+    import json
+
+    from webui.services import plugins_manage
+
+    cfg_dir = isolated_home / "config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    (cfg_dir / "plugin_sources.json").write_text(
+        json.dumps({
+            "sources": [
+                {"id": "astrbot-official", "name": "AstrBot 官方市场",
+                 "url": "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/master/packages.json",
+                 "enabled": True},
+            ],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    sources = plugins_manage.list_sources()
+    assert sources[0]["url"] == "https://cloud.astrbot.app/api/v1/market/plugins.json"
+
+
+def test_market_parses_official_keyed_dict_format(monkeypatch):
+    """官方市场 2026-09 起是 {repo 键: 元数据} 字典（$meta 为清单信息）：
+    逐条转成市场卡字段，$meta 跳过，缺 name 的用 repo 键尾段兜底。"""
+    from webui.services import plugins_manage
+
+    raw = {
+        "$meta": {"schema_version": 1, "name": "AstrBot Official Plugin Market"},
+        "Sham1k0/astrbot_plugin_get_px": {
+            "name": "astrbot_plugin_get_px",
+            "desc": "Pixiv 搜图",
+            "author": "Sham1k0",
+            "version": "3.8.0",
+            "repo": "https://github.com/Sham1k0/astrbot_plugin_get_px",
+        },
+        "someone/no-name-field": {
+            "desc": "没有 name 字段的条目",
+            "author": "someone",
+            "version": "1.0.0",
+            "repo": "https://github.com/someone/no-name-field",
+        },
+    }
+    from webui.services import plugins_manage as plugins_manage_module
+
+    monkeypatch.setattr(
+        plugins_manage_module, "list_sources",
+        lambda: [{"id": "astrbot-official", "url": "https://x", "enabled": True}],
+    )
+
+    class _FakeResp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return raw
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, url):
+            return _FakeResp()
+
+    monkeypatch.setattr(plugins_manage_module.httpx, "Client", _FakeClient)
+    payload = plugins_manage_module.fetch_market()
+    assert payload["source_errors"] == {}
+    by_name = {p["name"]: p for p in payload["plugins"]}
+    assert by_name["astrbot_plugin_get_px"]["desc"] == "Pixiv 搜图"
+    assert by_name["no-name-field"]["version"] == "1.0.0"
+    assert "$meta" not in {p["name"] for p in payload["plugins"]}
