@@ -28,7 +28,8 @@
     ${EndIf}
     DetailPrint "解压 Python 运行时…"
     SetOutPath "$INSTDIR\resources\stella\runtime"
-    nsExec::ExecToLog '"$SYSDIR\tar.exe" -xf "$1" -C "$INSTDIR\resources\stella\runtime"'
+    ; FindFirst 输出的文件名不含路径——必须拼回 offline 目录再交给 tar
+    nsExec::ExecToLog '"$SYSDIR\tar.exe" -xf "$INSTDIR\resources\stella\offline\$1" -C "$INSTDIR\resources\stella\runtime"'
     Pop $0
     FindClose $0
     ${If} $0 != 0
