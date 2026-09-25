@@ -47,9 +47,8 @@ const search = ref('');
 const showJson = ref(false);
 const jsonText = ref('');
 const jsonError = ref('');
-const saveDialog = ref(false);
 const busy = ref(false);
-const restartDialog = ref(false);
+const openSections = ref<string[]>([]);
 const toast = useToast();
 
 const filtered = computed(() => {
@@ -83,9 +82,37 @@ async function load(): Promise<void> {
     rawFields.value = data.fields;
     values.value = seedValues(data.fields);
     saved.value = { ...values.value };
+    // 折叠面板的展开状态必须是受控的：之前绑定静态 :model-value="[0]"，
+    // 每敲一个字触发重渲染就把面板打回「只开第一项」（2026-09-25 用户报告）。
+    // 默认全部折叠（2026-09-25 用户要求）。
+    openSections.value = [];
   } catch (err) {
     toastApiError(toast, err);
   }
+}
+
+function resetToDefaults(): void {
+  const byKey = new Map(rawFields.value.map((f) => [f.key, f]));
+  const out: Record<string, unknown> = {};
+  for (const [key, current] of Object.entries(values.value)) {
+    const f = byKey.get(key);
+    if (!f) {
+      out[key] = current; // JSON 源码等方式加进来的自定义键，原样保留
+      continue;
+    }
+    if (f.sensitive) {
+      out[key] = ''; // 敏感键空串 = 保存时不修改，不会真的清掉已设密钥
+      continue;
+    }
+    if (f.type === 'bool') {
+      // schema 的 default 是 _env_bool 的字面量参数（"true"/"false" 字符串）
+      out[key] = String(f.default ?? '').toLowerCase() === 'true';
+    } else {
+      out[key] = f.default ?? '';
+    }
+  }
+  values.value = out;
+  toast.info('已恢复为默认值；确认后点击保存（保存后自动重启生效）');
 }
 
 function openJson(): void {
@@ -115,23 +142,36 @@ async function save(): Promise<void> {
     return;
   }
   busy.value = true;
+  let needRestart = false;
   try {
     const data = await unwrap<{ restart_required: boolean }>(api.put('/config', changed));
     saved.value = { ...values.value };
-    toast.success('已保存');
-    if (data.restart_required) saveDialog.value = true;
+    needRestart = data.restart_required;
+    toast.success(needRestart ? '已保存，正在重启生效…' : '已保存');
   } catch (err) {
     toastApiError(toast, err);
   } finally {
     busy.value = false;
   }
+  // 保存即自动重启（2026-09-25 用户要求）：端点三槽化之后重启已由接任进程
+  // 机制兜底，无壳直启也不会失联，不再让用户手动二选一。
+  if (needRestart) await restartNow();
 }
 
 async function restartNow(): Promise<void> {
-  saveDialog.value = false;
   try {
-    await unwrap(api.post('/system/restart'));
-    toast.success('已请求重启，等待服务恢复…');
+    // ok=false = 派生接任进程失败、Bot 刻意未停止（manual 兜底），必须如实提示，
+    // 不能像成功那样只说「等待恢复」——站点不会自己回来（2026-09-24 实测）。
+    const data = await unwrap<{ ok: boolean; error?: string }>(
+      api.post('/system/restart'),
+    );
+    if (data.ok) {
+      toast.success('已请求重启，等待服务恢复…');
+    } else {
+      toast.error(
+        `无法自动重启（${data.error ?? '未知原因'}）。Bot 未停止，可继续使用；如需重启请在启动它的终端手动操作。`,
+      );
+    }
   } catch (err) {
     toastApiError(toast, err);
   }
@@ -144,7 +184,6 @@ onMounted(load);
   <v-container fluid class="pa-6">
     <div class="d-flex align-center ga-3 mb-4 flex-wrap">
       <h1 class="text-h5 font-weight-bold">配置</h1>
-      <v-chip size="small" variant="tonal" color="warning">修改后需重启生效</v-chip>
       <v-spacer />
       <v-text-field
         v-model="search"
@@ -154,6 +193,9 @@ onMounted(load);
         clearable
         style="max-width: 16rem"
       />
+      <v-btn variant="text" prepend-icon="mdi-restore" @click="resetToDefaults">
+        恢复默认值
+      </v-btn>
       <v-btn variant="text" prepend-icon="mdi-code-json" @click="openJson">
         JSON 源码
       </v-btn>
@@ -165,10 +207,11 @@ onMounted(load);
       <v-btn size="x-small" variant="text" @click="values = { ...saved }">放弃</v-btn>
     </div>
 
-    <v-expansion-panels multiple :model-value="[0]">
+    <v-expansion-panels v-model="openSections" multiple>
       <v-expansion-panel
         v-for="[stem, fields] in groups"
         :key="stem"
+        :value="stem"
         :title="`${stem}（${fields.length}）`"
       >
         <v-expansion-panel-text>
@@ -188,20 +231,6 @@ onMounted(load);
           <v-spacer />
           <v-btn @click="showJson = false">关闭</v-btn>
           <v-btn color="primary" @click="applyJson">应用到表单</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-dialog v-model="saveDialog" width="420">
-      <v-card>
-        <v-card-title>保存成功</v-card-title>
-        <v-card-text>
-          配置已写入 .env。settings 在启动时读取，需要重启 Bot 才能生效。现在重启吗？
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="saveDialog = false">稍后手动重启</v-btn>
-          <v-btn color="primary" @click="restartNow">立即重启</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

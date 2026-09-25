@@ -170,15 +170,54 @@ def _windows_is_alive(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
+def _service_port_in_use() -> bool:
+    """探测 .env 里 HOST:PORT 是否有进程在监听（TCP 连得上 = 有）。"""
+    import socket
+
+    env = dotenv_values(STELLA_HOME / ".env")
+    host = (env.get("HOST") or "127.0.0.1").strip() or "127.0.0.1"
+    port = int((env.get("PORT") or "8080").strip() or 8080)
+    if host in ("0.0.0.0", "::", "::0"):
+        host = "127.0.0.1"
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def start_detached() -> int:
-    """后台启动 bot.py，写 PID 文件并等待当前实例真正就绪。"""
+    """后台启动 bot.py，写 PID 文件并等待当前实例真正就绪。
+
+    已有本安装实例在跑时执行**重启语义**：先优雅停掉旧实例再启动（2026-09-24
+    用户要求）——否则新实例绑定端口失败、旧实例继续占位，两头不是。停止链
+    只认身份（状态接口自报 / manifest+端口），PID 文件在就绪后由本函数为新
+    进程重写，ownership 随之转移到新进程。
+    """
     if not BOT_ENTRY.exists():
         print(f"缺少入口 {BOT_ENTRY}，无法启动。")
         return 1
+    replace_running()  # 内部自带「发现实例」提示与停止链
+
     existing = read_pid()
     if existing is not None and is_alive(existing):
-        print(f"当前 Stella 实例已经在运行（PID {existing}）。")
-        return 1
+        # 走到这里说明 PID 文件还指着一个活进程但身份未获证明——典型是 PID
+        # 复用撞号（2026-09-24 实测：QQ 的 crashpad_handler 撞号，deploy
+        # start 从此永远拒启）。真正的 Stella 必然占着服务端口：端口没人听
+        # 就是陈旧记录，清掉照常启动；端口被占则归属不明，宁拒不误杀。
+        if _service_port_in_use():
+            print(
+                f"服务端口已被 PID {existing} 占用，但无法确认它是本安装的 Stella"
+                "（状态接口无匹配）——为避免误伤其他程序，不会自动结束它。"
+            )
+            print("请用任务管理器处理该进程，或在 .env 改用其他 PORT。")
+            return 1
+        print(
+            f"PID 文件指向 {existing}，但服务端口无人监听——该 PID 已被系统复用给"
+            "其他进程，清除陈旧记录后继续启动。"
+        )
+        clear_pid()
+        clear_manifest()
     flags = 0
     if os.name == "nt":
         flags |= subprocess.CREATE_NEW_PROCESS_GROUP
@@ -295,46 +334,24 @@ def wait_for_startup(
         time.sleep(poll_interval)
 
 
-def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
-    """优雅停止：写哨兵 → 轮询收尾 → 降级信号 → 硬杀。
+def _graceful_stop_pid(pid: int, grace_seconds: float, reason: str) -> bool:
+    """对已确认属于本安装的 PID 执行完整停止链，成功则清 PID/manifest。
 
-    返回 True 表示进程已退出（或本来就没在跑）。
+    停止链（哨兵优先，信号降级，硬杀兜底）：
+    - 第 1 阶写停止哨兵文件，Bot 进程内的 watcher 观察到后自行走完整优雅
+      关闭（含 on_shutdown → _graceful_shutdown 的整合收尾）。这绕开了
+      「GUI 用 CREATE_NO_WINDOW 启动、子进程没有控制台、控制台信号永远
+      送不到」的问题——文件不依赖控制台，Windows 与 POSIX 行为一致。
+    - 第 2 阶轮询等待 ``grace + 缓冲``；第 3 阶降级发 CTRL_BREAK/SIGTERM
+      （GUI 场景大概无效，但手动 --detach 启动时有效）；第 4 阶硬杀兜底。
 
-    第一阶写停止哨兵文件，Bot 进程内的 watcher 观察到后自行走完整优雅关闭
-    （含 on_shutdown → _graceful_shutdown 的整合收尾），绕开控制台信号送不到
-    的问题。第二阶轮询等待 ``grace + 缓冲``；第三阶降级发 CTRL_BREAK/SIGTERM
-    （GUI 场景大概无效，但手动 --detach 启动时有效）；第四阶硬杀兜底。
-
-    没有 PID 文件时会查询状态接口：若接口可达，说明 Bot 确实在运行但不是
-    ``deploy start --detach`` 启动的，本函数无法定位并停止它，返回 False。
+    调用方负责先确认身份（manifest 或状态接口），本函数不做归属判断。
     """
-    pid = read_pid()
-    if pid is None or not is_alive(pid):
-        live = _fetch_live_status()
-        if live is not None:
-            print("检测到 Stella 正在运行，但没有 PID 文件——它不是用")
-            print("  python -m deploy start --detach 启动的，因此无法从这里停止。")
-            print(f"  进程 PID（由状态接口自报）：{live.get('pid', '?')}")
-            print("  请在启动它的终端按 Ctrl+C，或用任务管理器结束该 PID。")
-            return False
-        print("未发现运行中的 Stella 进程。")
-        clear_pid()
-        clear_manifest()
-        return True
-
-    manifest = _owned_manifest(pid)
-    if manifest is None:
-        print(
-            f"拒绝停止 PID {pid}：它不属于当前 Stella 实例（{INSTANCE_ID}）。"
-        )
-        print("未写入停止哨兵，也未发送信号；请使用启动该进程的实例执行停止。")
-        return False
-
     # 缓冲与 grace 成比例：grace 很小（测试）时不该白白多等，grace=30 时给足 5 秒
     buffer = min(STOP_WAIT_BUFFER_SECONDS, grace_seconds * 0.2)
     try:
         # 第 1 阶：写哨兵，请 Bot 自己走完整优雅关闭
-        request_stop(reason="deploy stop")
+        request_stop(reason=reason)
         print(f"已发出停止请求给 PID {pid}，等待在途任务收尾…")
 
         # 第 2 阶：轮询等待 Bot 收到哨兵后自行退出
@@ -384,6 +401,138 @@ def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
     finally:
         # 无论哪条路径退出都不留哨兵，避免下次启动自杀
         clear_stop_request()
+
+
+def stop(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> bool:
+    """优雅停止：写哨兵 → 轮询收尾 → 降级信号 → 硬杀。
+
+    返回 True 表示进程已退出（或本来就没在跑）。
+
+    停止链见 `_graceful_stop_pid`。没有 PID 文件时会查询状态接口：若接口
+    可达，说明 Bot 确实在运行但不是 ``deploy start --detach`` 启动的，本
+    函数无法定位并停止它，返回 False（自动接管场景请走 `replace_running`，
+    它认状态接口的身份证明）。
+    """
+    pid = read_pid()
+    if pid is None or not is_alive(pid):
+        live = _fetch_live_status()
+        if live is not None:
+            print("检测到 Stella 正在运行，但没有 PID 文件——它不是用")
+            print("  python -m deploy start --detach 启动的，因此无法从这里停止。")
+            print(f"  进程 PID（由状态接口自报）：{live.get('pid', '?')}")
+            print("  请在启动它的终端按 Ctrl+C，或用任务管理器结束该 PID。")
+            return False
+        print("未发现运行中的 Stella 进程。")
+        clear_pid()
+        clear_manifest()
+        return True
+
+    manifest = _owned_manifest(pid)
+    if manifest is None:
+        print(
+            f"拒绝停止 PID {pid}：它不属于当前 Stella 实例（{INSTANCE_ID}）。"
+        )
+        print("未写入停止哨兵，也未发送信号；请使用启动该进程的实例执行停止。")
+        return False
+
+    return _graceful_stop_pid(pid, grace_seconds, reason="deploy stop")
+
+
+def _identify_running() -> int | None:
+    """找出本安装正在运行的实例 PID；没有返回 None。
+
+    身份判据从严——只认「能证明自己是谁」的进程，绝凭一个裸 PID 号动手
+    （Windows 会复用 PID 号，2026-09-24 实测撞上 QQ 的 crashpad）：
+
+    1. 状态接口自报 instance_id 匹配（含 manifest launch_token 校验）——
+       ``python bot.py`` 直启也满足，这是最强的身份证明；
+    2. 状态接口被显式关闭时的兜底：PID 文件 + manifest 匹配 + 服务端口
+       确实在听。端口在听排除 PID 复用撞号——撞上来的无关进程不会碰
+       我们的服务端口。
+    """
+    live = _fetch_live_status()
+    if live is not None and live.get("pid"):
+        return int(live["pid"])
+    if not STELLA_STATUS_API_ENABLED:
+        pid = read_pid()
+        if (
+            pid is not None
+            and is_alive(pid)
+            and _owned_manifest(pid) is not None
+            and _service_port_in_use()
+        ):
+            return pid
+    return None
+
+
+def replace_running(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> tuple[bool, str]:
+    """找到本安装正在运行的实例并优雅停掉，为启动新实例清场。
+
+    返回 ``(stopped, message)``：没有运行中的实例时 ``(False, "")``；停了
+    东西时 ``(True, 说明)``。身份确认见 `_identify_running`——只停拿得出
+    身份证明的进程；端口被身份不明的占用者把着时不动手，由调用方拒启。
+    """
+    pid = _identify_running()
+    if pid is None:
+        return False, ""
+    # 顺序要点：先打印发现提示再执行停止链，否则停止链的输出会跑在前面，
+    # 用户看到的就是「已发出停止请求」凭空出现（2026-09-24 实测）。
+    note = f"发现运行中的 Stella 实例（PID {pid}），先停止以便启动新实例…"
+    print(note)
+    stopped = _graceful_stop_pid(pid, grace_seconds, reason="deploy start 接管旧实例")
+    return stopped, note
+
+
+def register_self() -> bool:
+    """Bot 进程自登记 ownership（PID + manifest）。
+
+    「python bot.py」直启的实例由此获得与 ``deploy start`` 启动实例同等的
+    可管理性：deploy stop/status、WebUI 重启都按同一套记录定位它。前提是
+    环境里已有 launch token（bot.py 在 config import 前兜底生成；deploy
+    start --detach 注入），否则状态接口的 token 摘要与 manifest 对不上，
+    登记反而制造一个身份对不上的记录——此时放弃登记。
+
+    任何失败都静默放弃（返回 False）：登记是增强，绝不能拦住启动。
+    """
+    from config import STELLA_LAUNCH_TOKEN
+
+    if not STELLA_LAUNCH_TOKEN:
+        return False
+    try:
+        write_pid(os.getpid())
+        write_manifest(
+            MANIFEST_FILE,
+            manifest_for(
+                instance_id=INSTANCE_ID,
+                project_root=PROJECT_ROOT,
+                pid=os.getpid(),
+                launch_token=STELLA_LAUNCH_TOKEN,
+            ),
+        )
+        return True
+    except OSError:
+        with contextlib.suppress(Exception):
+            clear_pid()
+            clear_manifest()
+        return False
+
+
+def preflight_for_foreground_start() -> bool:
+    """前台启动（``deploy start`` 不带 --detach）前的清场。
+
+    与 start_detached 同一接管语义；端口仍被身份不明的占用者把着时返回
+    False——前台启动没有兜底清理，绑定失败就是用户终端里一行 10048。
+    """
+    _, note = replace_running()
+    if note:
+        print(note)
+    if _service_port_in_use():
+        print(
+            "服务端口仍被身份不明的进程占用（状态接口无匹配），前台启动将无法绑定端口。"
+        )
+        print("请用任务管理器处理该进程，或在 .env 改用其他 PORT。")
+        return False
+    return True
 
 
 def _hard_kill(pid: int) -> bool:

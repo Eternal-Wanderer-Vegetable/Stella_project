@@ -256,6 +256,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # dashboard 产物必须在「准备 OneClick 内嵌程序资源」之前到位：
+      # staging 的 webui/dist 兜底读 desktop/dashboard-dist，晚于 staging 就
+      # 会打出面板整页缺失的安装包（v5.0.0 离线包实测，2026-09-25）。
+      - name: 下载 WebUI 前端产物（壳内资源 + Bot payload 各一份）
+        uses: actions/download-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: desktop/dashboard-dist
+
+      - name: 拷入 Bot payload 的 webui/dist
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path webui/dist | Out-Null
+          Copy-Item desktop/dashboard-dist/* webui/dist/ -Recurse -Force
+
       - name: 解析发布版本
         shell: pwsh
         run: |
@@ -340,17 +355,14 @@ jobs:
           }
           python @stageArgs
 
-      - name: 下载 WebUI 前端产物（壳内资源 + Bot payload 各一份）
-        uses: actions/download-artifact@v7
-        with:
-          name: stella-dashboard-dist
-          path: desktop/dashboard-dist
-
-      - name: 拷入 Bot payload 的 webui/dist
+      # staging 后硬校验：webui/dist 缺失的安装包不允许走出这台机器
+      # （v5.0.0 离线包实测：面板整页缺失，用户看到「管理面前端尚未构建」）。
+      - name: 校验内嵌资源含 webui/dist
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path webui/dist | Out-Null
-          Copy-Item desktop/dashboard-dist/* webui/dist/ -Recurse -Force
+          if (-not (Test-Path 'desktop/src-tauri/resources/stella/webui/dist/index.html')) {
+            throw '内嵌资源缺少 webui/dist/index.html——Bot 托管面板将整页缺失'
+          }
 
       - name: 同步 Tauri 版本号
         shell: pwsh

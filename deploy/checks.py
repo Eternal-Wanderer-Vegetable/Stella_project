@@ -330,9 +330,9 @@ def check_lm_model_chat(snap: Snapshot) -> CheckResult | None:
         snap,
         check_id="lm_model_chat",
         configured=snap.lm_model_chat,
-        env_key="LLM_ENDPOINT_LOCAL_MODEL",
+        env_key="LLM_ENDPOINT_CHAT_MODEL",
         level="error",
-        fix_hint="在 LM Studio 中加载该模型，或修正 LLM_ENDPOINT_LOCAL_MODEL。",
+        fix_hint="在 LM Studio 中加载该模型，或修正 LLM_ENDPOINT_CHAT_MODEL（提供商页的对话端点卡）。",
     )
 
 
@@ -355,7 +355,7 @@ def check_lm_model_extract(snap: Snapshot) -> CheckResult | None:
     """提取模型：不匹配 → warn（阶段 2 会静默回退阶段 1 候选）。
 
     为空时不报告：LLM_ROLE_EXTRACT_MODEL 留空时回落本机槽模型
-    （LLM_ENDPOINT_LOCAL_MODEL），因此它为空只可能是聊天模型也为空——
+    （LLM_ENDPOINT_CHAT_MODEL），因此它为空只可能是聊天模型也为空——
     那已由 check_lm_model_chat 报出，
     再报一条是把同一个根因说两遍（不级联原则，与 lm_reachable 为假时
     跳过全部模型检查同理）。
@@ -376,7 +376,7 @@ def check_lm_model_extract(snap: Snapshot) -> CheckResult | None:
 def check_lm_model_embedding(snap: Snapshot) -> CheckResult | None:
     """embedding：开关关 → None；ID 空或不在列表 → error。
 
-    「已加载列表」来自本机端点槽地址（LLM_ENDPOINT_LOCAL_BASE_URL），所以 embedding 被指到另一个地址时
+    「已加载列表」来自本机对话端点地址（LLM_ENDPOINT_CHAT_BASE_URL），所以 embedding 被指到另一个地址时
     这个比对不成立，直接跳过——那种配置的可用性由 check_embedding_locality 与
     实际调用负责，拿别的实例的模型列表去判「未加载」只会误报。
     """
@@ -884,7 +884,7 @@ def _role_is_online(snap: Snapshot, role: str) -> bool:
     """角色是否已切到在线端点。
 
     三条 LM Studio 模型检查（聊天 / 整合 / 提取）读的是本机槽与角色的模型 ID
-    （LLM_ENDPOINT_LOCAL_MODEL / LLM_ROLE_*_MODEL），只有在该角色仍走本地时才
+    （LLM_ENDPOINT_CHAT_MODEL / LLM_ROLE_*_MODEL），只有在该角色仍走本地时才
     成立。角色切到在线之后，那些值不再被使用，还拿「LM Studio 里没加载这个模型」
     去报错就是纯噪音——真正该检查的是在线端点那边的模型 ID，
     由 :func:`check_llm_role_model` 负责。

@@ -36,10 +36,14 @@ pub fn run() {
                 let _ = window.emit("close-requested", ());
                 let window = window.clone();
                 tauri::async_runtime::spawn(async move {
+                    // 停止失败也照常关窗：stop_bot 的失败分支几乎总是「Bot 本
+                    // 就不归本安装管」（别的安装 / 手工启动，deploy stop 的
+                    // ownership 校验拒绝），扣住窗口只会让用户以为关不掉；
+                    // 本安装的 Bot 走哨兵→信号→硬杀四级链，真停不下来属异常，
+                    // 细节留在 close-failed 事件与日志里。
                     if let Err(e) = commands::stop_bot().await {
-                        CLOSE_IN_PROGRESS.swap(false, Ordering::AcqRel);
+                        eprintln!("关闭时停止 Bot 失败（照常关窗）：{e}");
                         let _ = window.emit("close-failed", e);
-                        return;
                     }
                     let _ = window.destroy();
                 });

@@ -136,6 +136,10 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
     for relative in ("deploy/napcat.py", "deploy/models.py", "deploy/runtime.py"):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -213,6 +217,10 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
     for profile_id in PROFILE_IDS:
         path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,6 +267,10 @@ def test_stager_falls_back_to_shell_dashboard_dist(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
     for profile_id in PROFILE_IDS:
         path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -328,6 +340,10 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
     for profile_id in PROFILE_IDS:
         path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -391,6 +407,10 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
+    # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
     for profile_id in PROFILE_IDS:
         path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -428,3 +448,55 @@ def test_tauri_bundles_webview2_offline_installer():
     mode = config["bundle"]["windows"]["webviewInstallMode"]
     assert mode["type"] == "offlineInstaller"
     assert mode.get("silent", True) is True
+
+
+def test_stage_installer_resources_fails_hard_without_webui_dist(tmp_path):
+    """webui/dist 与桌面壳 dashboard-dist 都缺失时必须硬失败。
+
+    v5.0.0 离线包就是在这种状态下打出来的：安装后 Bot 活着，但托管面板
+    整页缺失（「管理面前端尚未构建」）。打包宁可失败，也绝不产出这种包。
+    （2026-09-25 用户安装失败实测。）
+    """
+    import pytest
+
+    source = tmp_path / "source"
+    for directory in (
+        "astrbot_compat",
+        "capability",
+        "config",
+        "core",
+        "deploy",
+        "extensions",
+        "memory",
+        "system_prompts",
+        "runtime-manager",
+        "stella_project",
+        "knowledge",
+        "skills",
+        "assets",
+        "webui",
+        "desktop",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    # COMMON_FILES 先补齐，让 allowlist 校验通过、失败落在 webui/dist 这条上
+    for name in ("bot.py", "requirements.txt", "pyproject.toml", "LICENSE",
+                 "README.md", ".env.example", "start.bat", "doctor.bat",
+                 "stop.bat", "README-快速开始.txt",
+                 "runtime-manager/schemas/runtime-manifest.schema.json",
+                 "runtime-manager/schemas/runtime-state.schema.json",
+                 "runtime-manager/schemas/package-catalog.schema.json",
+                 "runtime-manager/schemas/package-registry.schema.json",
+                 *(f"release_assets/product-profiles/{pid}.json"
+                   for pid in PROFILE_IDS)):
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="webui/dist"):
+        stage_installer_resources(source, tmp_path / "resources", "oneclick-python")

@@ -26,7 +26,15 @@ def _slots() -> list[str]:
     try:
         return list(llm_registry.all_slots())
     except Exception:
-        return ["LOCAL", "ONLINE_CHAT", "ONLINE_MEMORY", "EXTRA", "EXTRA_VISION"]
+        return ["CHAT", "MEMORY", "VISION"]
+
+
+def _norm_slot(value: str) -> str:
+    """旧槽名（LOCAL/EXTRA/...）→ 新槽名；其余原样。委托 registry 单一出处。"""
+    try:
+        return llm_registry._normalize_slot(value)
+    except Exception:
+        return value
 
 
 def endpoints() -> list[dict]:
@@ -55,6 +63,8 @@ def update_endpoints(payload: list[dict]) -> dict:
     updates: dict[str, str] = {}
     for item in payload:
         slot = str(item.get("slot", "")).upper()
+        # 旧槽名归一后校验：客户端拿着过期缓存里的 LOCAL 保存也不炸
+        slot = _norm_slot(slot)
         if slot not in valid:
             raise ApiError(f"未知端点槽: {slot}")
         # 前端传小写字段名，这里统一按大写域匹配
@@ -87,14 +97,17 @@ def roles() -> list[dict]:
         def cfg(field: str, *, _upper: str = upper) -> Any:
             return getattr(settings, f"LLM_ROLE_{_upper}_{field}", None)
 
+        # ENDPOINT 的旧槽名（LOCAL/EXTRA/...）在此归一展示，保存时也会以
+        # 新名写回——.env 里的旧值在下次保存后自然完成迁移。
+        endpoint = _norm_slot(str(cfg("ENDPOINT") or ""))
         items.append(
             {
                 "role": role,
-                "endpoint": cfg("ENDPOINT"),
+                "endpoint": endpoint,
                 "model": cfg("MODEL") or "",
                 "temperature": cfg("TEMPERATURE"),
                 "max_tokens": cfg("MAX_TOKENS"),
-                "fallback_endpoint": cfg("FALLBACK_ENDPOINT"),
+                "fallback_endpoint": _norm_slot(str(cfg("FALLBACK_ENDPOINT") or "")),
             }
         )
     return items
@@ -111,13 +124,15 @@ def update_roles(payload: list[dict]) -> dict:
         upper = role.upper()
         # ``none`` 是合法值（视觉等可选角色显式声明不启用），规范写法小写——
         # 之前的 .upper() 把它变成 NONE 再验槽位，误杀成 400（用户实测）。
+        # 旧槽名（LOCAL/EXTRA/...）在此归一为新名：存量 .env 的绑定值
+        # 保存一次即完成迁移。
         endpoint = str(item.get("endpoint", "")).strip()
         if endpoint and endpoint.lower() != "none":
-            if endpoint.upper() not in valid_slots:
+            endpoint = _norm_slot(endpoint.upper())
+            if endpoint not in valid_slots:
                 raise ApiError(
                     f"{role} 的端点槽必须是: {', '.join(sorted(valid_slots))} 或 none"
                 )
-            endpoint = endpoint.upper()
         if endpoint:
             updates[f"LLM_ROLE_{upper}_ENDPOINT"] = endpoint
         if "model" in item:
@@ -128,6 +143,12 @@ def update_roles(payload: list[dict]) -> dict:
                 updates[f"LLM_ROLE_{upper}_TEMPERATURE"] = str(item["temperature"])
             except (TypeError, ValueError):
                 raise ApiError(f"{role}.temperature 需要数字") from None
+        fallback = str(item.get("fallback_endpoint", "") or "").strip()
+        if fallback:
+            fallback = _norm_slot(fallback.upper())
+            if fallback not in valid_slots:
+                raise ApiError(f"{role} 的降级端点槽必须是: {', '.join(sorted(valid_slots))}")
+            updates[f"LLM_ROLE_{upper}_FALLBACK_ENDPOINT"] = fallback
     report = envfile.write_values(updates)
     return {**report, "restart_required": True}
 

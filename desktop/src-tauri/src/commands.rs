@@ -5,9 +5,6 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-
-static GUI_OWNS_BOT: AtomicBool = AtomicBool::new(false);
 
 /// 环境自检。返回 `deploy doctor --json` 的原始 JSON 字符串。
 ///
@@ -159,7 +156,6 @@ pub async fn start_bot(force: bool) -> Result<String, String> {
                 &format!("Runtime 启动异常退出（code {code}）：{stderr}"),
             ));
         }
-        GUI_OWNS_BOT.store(true, Ordering::Release);
         return Ok(runtime_message(&envelope));
     }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(move || {
@@ -177,16 +173,19 @@ pub async fn start_bot(force: bool) -> Result<String, String> {
             if stderr.trim().is_empty() { stdout } else { stderr }
         ));
     }
-    GUI_OWNS_BOT.store(true, Ordering::Release);
     Ok(stdout)
 }
 
-/// 优雅停止。对应 `deploy stop`，可能等待在途任务收尾。
+/// 停止 Stella。对应 `deploy stop` / runtime stop，可能等待在途任务收尾。
+///
+/// 不设「Bot 是否由本 GUI 进程启动」的门卫：Bot 是 detach 的常驻进程，GUI
+/// 重启后进程内记忆即丢失；若据此拒绝停止，关闭窗口就会留下孤儿 Bot 占住
+/// 服务端口（2026-09-24 实测：上次会话的 Bot 存活，GUI 关闭后 8080 一直
+/// 被占）。跨安装的安全边界由 Python 侧 ownership 校验把守——instance_id /
+/// project_root / launch_token 不匹配（别的安装或手工启动的进程）时
+/// `deploy stop` 会拒绝，宁可不动也不误杀。
 #[tauri::command]
 pub async fn stop_bot() -> Result<String, String> {
-    if !GUI_OWNS_BOT.load(Ordering::Acquire) {
-        return Ok("当前 GUI 未启动 Stella，不执行跨实例停止。".to_owned());
-    }
     let runtime =
         tauri::async_runtime::spawn_blocking(|| try_runtime_operation("stop", false, false))
             .await
@@ -202,7 +201,6 @@ pub async fn stop_bot() -> Result<String, String> {
                 &format!("Runtime 停止异常退出（code {code}）：{stderr}"),
             ));
         }
-        GUI_OWNS_BOT.store(false, Ordering::Release);
         return Ok(runtime_message(&envelope));
     }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
@@ -216,7 +214,6 @@ pub async fn stop_bot() -> Result<String, String> {
             if stderr.trim().is_empty() { stdout } else { stderr }
         ));
     }
-    GUI_OWNS_BOT.store(false, Ordering::Release);
     Ok(stdout)
 }
 
@@ -1087,7 +1084,7 @@ fn runtime_failure(envelope: &serde_json::Value, fallback: &str) -> String {
 mod tests {
     use super::{canonical_plain, extract_json, resolve_log_path, runtime_failure, runtime_message};
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_root(label: &str) -> PathBuf {
@@ -1184,5 +1181,54 @@ mod tests {
         assert!(result.is_err());
         let _ = fs::remove_file(outside);
         let _ = fs::remove_dir_all(root);
+    }
+
+    /// 关闭窗口时的停止不得设「Bot 是否由本 GUI 进程启动」的进程内门卫。
+    ///
+    /// Bot 是 detach 的常驻进程，GUI 重启后进程内标志即丢失；曾经的进程内
+    /// 门卫让「上次会话留下的 Bot」在关窗时被有意跳过，孤儿进程一直占着
+    /// 服务端口（2026-09-24 实测）。跨安装安全由 Python 侧 ownership 校验
+    /// 把守，Rust 侧不再重复一道会误伤的防线。
+    #[test]
+    fn stop_bot_has_no_process_local_ownership_gate() {
+        let src = fs::read_to_string(Path::new(file!())).expect("无法读取 commands.rs");
+        // 旧门卫的静态名。拆开拼接以免本测试的源码自身包含该字面量。
+        let legacy_flag = format!("GUI_{}{}", "OWNS", "_BOT");
+        assert!(
+            !src.contains(&legacy_flag),
+            "stop_bot 不得用进程内标志决定是否停止 Bot——GUI 重启后该标志丢失，\
+             关窗会留下孤儿 Bot 占住端口"
+        );
+        assert!(
+            src.contains("pub async fn stop_bot"),
+            "stop_bot 命令必须仍然存在"
+        );
+    }
+
+    /// 关闭窗口时停止失败也必须销毁窗口：失败分支几乎总是「Bot 不归本安装
+    /// 管」（deploy stop 的 ownership 校验拒绝），此时扣住窗口等于把用户锁在
+    /// 关不掉的界面外。本测试防止将来把「失败即不开窗」的老语义加回来。
+    #[test]
+    fn window_close_destroys_even_when_stop_fails() {
+        let lib_src =
+            fs::read_to_string(Path::new(file!()).with_file_name("lib.rs")).expect("无法读取 lib.rs");
+        let close_handler = lib_src
+            .find("CloseRequested")
+            .map(|at| &lib_src[at..])
+            .expect("lib.rs 必须处理 CloseRequested");
+        let emit_at = close_handler
+            .find("close-failed")
+            .expect("关闭路径必须发出 close-failed 事件供前端感知");
+        let destroy_at = close_handler
+            .find("window.destroy()")
+            .expect("关闭路径必须销毁窗口");
+        assert!(
+            emit_at < destroy_at,
+            "close-failed 事件必须先于销毁窗口发出"
+        );
+        assert!(
+            !close_handler[emit_at..destroy_at].contains("return;"),
+            "停止失败不得提前返回跳过 window.destroy()——窗口必须照常关闭"
+        );
     }
 }

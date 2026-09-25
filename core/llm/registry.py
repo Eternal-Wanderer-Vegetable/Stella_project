@@ -11,8 +11,8 @@
   + 超时。
   它同时是两个东西的单位：**API key 的归属单位**（不同 key = 不同前缀缓存域，
   这是「对话域与记忆域各用一把 key」能提高缓存命中率的前提）与**闸门资源单位**
-  （见 ``core.llm.scheduler``）。共四个**静态**槽位：
-  ``LOCAL`` / ``ONLINE_CHAT`` / ``ONLINE_MEMORY`` / ``EXTRA``。
+  （见 ``core.llm.scheduler``）。槽位按用途固定三个：
+  ``CHAT``（对话）/ ``MEMORY``（记忆）/ ``VISION``（视觉）。
 - **角色（Role）** = 引用某个端点槽 + ``temperature`` / ``max_tokens`` / 降级端点，
   以及一个**可选的**模型覆盖。共六个角色，对应改造前的六处构造点。
 
@@ -20,15 +20,19 @@
 「换服务商」应当只改一处，而不是在六个角色上各写一遍同一个字符串。角色仍能覆盖
 （同一端点上某个角色要用更便宜的那档模型），两级解析顺序见 :func:`_resolve_role_model`。
 
-**为什么槽位是固定四个而不是动态列表**：``deploy/env_schema.py`` 用 AST 扫
-``config/settings.py`` 里的字面量 ``_env*("KEY", ...)`` 调用来生成 GUI 表单，
-动态命名的端点永远不会出现在 GUI 里，用户改不到。静态声明是硬约束。
+**为什么槽位固定三个而不是动态列表**：静态声明让「有哪些槽」一眼可数，
+角色绑定与闸门名有稳定的合法值集合。
 
-**纯本地部署逐字等价**：``LOCAL`` 槽与 ``EXTRA`` 槽的地址默认都指向本机
-LM Studio（``http://127.0.0.1:1234``），且 ``CONSOLIDATION`` 角色默认绑到 ``EXTRA``。
-于是改造前「chat 闸门（27B/GPU）与 consolidation 闸门（E4B/CPU）各自串行、彼此
-并行」的拓扑被完整保留，只是资源名从 ``chat``/``consolidation`` 变成
-``LOCAL``/``EXTRA``。
+**纯本地部署逐字等价**：``CHAT`` 槽与 ``MEMORY`` 槽的地址默认都指向本机
+LM Studio（``http://127.0.0.1:1234``），且 ``CONSOLIDATION`` 角色默认绑到 ``MEMORY``。
+于是「chat 闸门（27B/GPU）与 consolidation 闸门（E4B/CPU）各自串行、彼此
+并行」的拓扑被完整保留，只是资源名从 ``chat``/``consolidation`` 变成 ``CHAT``/``MEMORY``。
+
+**旧槽名兼容**：2026-09-24 前的槽位是 ``LOCAL`` / ``ONLINE_CHAT`` /
+``ONLINE_MEMORY`` / ``EXTRA`` / ``EXTRA_*``。存量 .env 里的这些名字（角色绑定值、
+``MEMORY_EMBEDDING_GATE`` 的显式槽名）经 :func:`_normalize_slot` 统一映射到新槽
+（LOCAL→CHAT、EXTRA→MEMORY、EXTRA_VISION→VISION…）；端点连接参数由
+``config/settings.py`` 的 ``_endpoint_slot`` 在读取层兜底旧键，无需迁移 .env。
 
 解析在**首次使用时一次性完成并缓存**，:func:`validate` 由 ``deploy doctor`` 与
 启动流程调用，把「槽名写错 / online 缺 key / 模型为空」这类问题在启动阶段就报出来，
@@ -39,7 +43,6 @@ LM Studio（``http://127.0.0.1:1234``），且 ``CONSOLIDATION`` 角色默认绑
 from __future__ import annotations
 
 import os
-import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -70,34 +73,37 @@ ROLES: tuple[str, ...] = (
 )
 
 # ---------- 端点槽 ----------
-SLOT_LOCAL = "LOCAL"
-SLOT_ONLINE_CHAT = "ONLINE_CHAT"
-SLOT_ONLINE_MEMORY = "ONLINE_MEMORY"
-SLOT_EXTRA = "EXTRA"
+# 三个槽按**用途**划分（2026-09-24 起取代旧的 LOCAL/ONLINE_CHAT/ONLINE_MEMORY/
+# EXTRA/EXTRA_VISION 五槽）：
+# - CHAT   对话域：chat / router / plugin / compact 的默认去处；
+# - MEMORY 记忆域：consolidation / extract 的默认去处。与 CHAT 闸门独立，
+#   整合与聊天能真正并行（这是分槽的全部意义）；换成在线服务商时各自持钥。
+# - VISION 视觉：图片转述专用，出厂不配地址（未配置 = 功能关闭）。
+SLOT_CHAT = "CHAT"
+SLOT_MEMORY = "MEMORY"
+SLOT_VISION = "VISION"
 
-SLOTS: tuple[str, ...] = (SLOT_LOCAL, SLOT_ONLINE_CHAT, SLOT_ONLINE_MEMORY, SLOT_EXTRA)
+SLOTS: tuple[str, ...] = (SLOT_CHAT, SLOT_MEMORY, SLOT_VISION)
 
-# 自定义槽命名约定：``.env`` 里出现 ``LLM_ENDPOINT_EXTRA_<NAME>_BASE_URL``
-# 就自动多出一个 ``EXTRA_<NAME>`` 槽（地址 / key / 模型 / 类型 / 并发 / 超时
-# 同构），不需要改代码——GUI 的「添加端点卡」写的正是这组键。典型用途：
-# EXTRA_VISION（图片转述专用槽）。四个内建槽之外的槽没有 settings 属性
-# 声明，它们的键直接读 os.environ（见 _env_value）。
-_EXTRA_SLOT_RE = re.compile(r"^LLM_ENDPOINT_(EXTRA_[A-Z0-9]+)_BASE_URL$")
+# 2026-09-24 之前 .env 里写过的旧槽名 → 新槽名。解析角色绑定与显式闸门名时
+# 统一经 `_normalize_slot` 归一，未迁移的 .env 无需任何改动。
+_LEGACY_SLOT_NAMES: dict[str, str] = {
+    "LOCAL": SLOT_CHAT,
+    "ONLINE_CHAT": SLOT_CHAT,
+    "ONLINE_MEMORY": SLOT_MEMORY,
+    "EXTRA": SLOT_MEMORY,
+    "EXTRA_VISION": SLOT_VISION,
+}
 
 
-def extra_slots() -> list[str]:
-    """发现 ``EXTRA_*`` 自定义槽（按名排序，结果稳定）。"""
-    found = {
-        m.group(1)
-        for key in os.environ
-        if (m := _EXTRA_SLOT_RE.match(key))
-    }
-    return sorted(found)
+def _normalize_slot(name: str) -> str:
+    """旧槽名 → 新槽名；其余原样返回（含 none/空串，由调用方判断）。"""
+    return _LEGACY_SLOT_NAMES.get(name, name)
 
 
 def all_slots() -> tuple[str, ...]:
-    """内建槽 + 自定义槽。绑定时校验槽名应该用这里而不是 ``SLOTS``。"""
-    return (*SLOTS, *extra_slots())
+    """全部端点槽。绑定时校验槽名应该用这里而不是 ``SLOTS``。"""
+    return SLOTS
 
 
 KIND_LOCAL = "local"
@@ -232,7 +238,7 @@ def _endpoint_from_settings(slot: str) -> Endpoint:
     api_key = str(_env_value(prefix + "API_KEY") or "").strip()
     model = str(_env_value(prefix + "MODEL") or "").strip()
     kind = str(_env_value(prefix + "KIND") or "").strip().lower()
-    if slot == SLOT_LOCAL:
+    if slot == SLOT_CHAT:
         try:
             from deploy.runtime import llama_endpoint_config
 
@@ -309,23 +315,26 @@ def _check_key_sharing(resolved: dict[str, Endpoint]) -> None:
     那些又长又各不相同的 prompt 会不断顶掉对话域的缓存前缀，命中率反而下降——
     这正是要拆两把 key 的原因，所以配成同一把必须显式提醒。
     """
-    chat = resolved.get(SLOT_ONLINE_CHAT)
-    mem = resolved.get(SLOT_ONLINE_MEMORY)
+    chat = resolved.get(SLOT_CHAT)
+    mem = resolved.get(SLOT_MEMORY)
     if not chat or not mem or not chat.api_key or not mem.api_key:
         return
     if chat.api_key == mem.api_key:
         _issues.append(
             (
                 "warn",
-                f"{SLOT_ONLINE_CHAT} 与 {SLOT_ONLINE_MEMORY} 用了同一把 API key，"
+                f"{SLOT_CHAT} 与 {SLOT_MEMORY} 用了同一把 API key，"
                 "两域会共享同一个前缀缓存域、互相顶掉缓存，建议各用一把",
             )
         )
 
 
 def endpoint(slot: str) -> Endpoint | None:
-    """按槽名取端点；槽名非法或该槽没配 ``BASE_URL`` 时返回 None。"""
-    name = (slot or "").strip().upper()
+    """按槽名取端点；槽名非法或该槽没配 ``BASE_URL`` 时返回 None。
+
+    旧槽名（LOCAL/EXTRA/...）在此统一归一为新槽名。
+    """
+    name = _normalize_slot((slot or "").strip().upper())
     if not name or name == "NONE":
         return None
     ep = endpoints().get(name)
@@ -383,7 +392,8 @@ def _binding_from_settings(role: str) -> RoleBinding:
     s = _settings()
     prefix = f"LLM_ROLE_{role.upper()}_"
     slot_raw = str(getattr(s, prefix + "ENDPOINT", "") or "").strip()
-    slot = slot_raw.upper()
+    # 旧槽名（LOCAL/EXTRA/...）统一归一：存量 .env 的绑定无需迁移。
+    slot = _normalize_slot(slot_raw.upper())
     known_slots = all_slots()
     if slot and slot not in known_slots and slot != "NONE":
         _issues.append(
@@ -419,7 +429,7 @@ def _binding_from_settings(role: str) -> RoleBinding:
         temperature = 0.7
 
     fallback_raw = str(getattr(s, prefix + "FALLBACK_ENDPOINT", "") or "").strip()
-    fallback_slot = fallback_raw.upper()
+    fallback_slot = _normalize_slot(fallback_raw.upper())
     if fallback_slot and fallback_slot not in known_slots and fallback_slot != "NONE":
         _issues.append(
             ("error", f"角色 {role} 的 FALLBACK_ENDPOINT={fallback_raw!r} 不是合法槽名")
@@ -854,10 +864,9 @@ __all__ = [
     "ROLE_ROUTER",
     "ROLE_VISION",
     "SLOTS",
-    "SLOT_EXTRA",
-    "SLOT_LOCAL",
-    "SLOT_ONLINE_CHAT",
-    "SLOT_ONLINE_MEMORY",
+    "SLOT_CHAT",
+    "SLOT_MEMORY",
+    "SLOT_VISION",
     "Endpoint",
     "RoleBackend",
     "RoleBinding",
@@ -872,7 +881,6 @@ __all__ = [
     "endpoint",
     "endpoint_of",
     "endpoints",
-    "extra_slots",
     "fallback_states",
     "fallback_worthy",
     "gate_of",

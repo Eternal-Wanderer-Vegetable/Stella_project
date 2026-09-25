@@ -80,7 +80,7 @@ def test_schema_marks_inherited_defaults():
         assert fields[child]["default"] == ""
     # 非继承项不许莫名带上这个标记
     assert "inherits" not in fields["MEMORY_COMPRESS_LOG_PATH"]
-    assert "inherits" not in fields["LLM_ENDPOINT_LOCAL_BASE_URL"]
+    assert "inherits" not in fields["LLM_FALLBACK_ENABLED"]
     inherited = {f["key"] for f in schema["fields"] if "inherits" in f}
     assert inherited == set(expected), "继承项集合与预期不一致（新增继承项请同步本用例）"
 

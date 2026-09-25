@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+
 import { api, unwrap } from '@/api/http';
 import ConfigForm, { type FormField } from '@/components/ConfigForm.vue';
 import { toastApiError, useToast } from '@/stores/toast';
@@ -137,6 +140,15 @@ async function showReadme(plugin: PluginItem): Promise<void> {
     toastApiError(toast, err);
   }
 }
+
+// README 渲染成 GitHub 风格的 HTML（2026-09-25 用户要求，替代原始文档）。
+// README 是第三方内容：marked 转换后必须过 DOMPurify 消毒再 v-html，
+// 否则一个恶意插件的 README 就能在管理面里执行脚本。
+const readmeHtml = computed(() => {
+  if (!readme.value) return '';
+  const html = marked.parse(readme.value, { async: false });
+  return DOMPurify.sanitize(typeof html === 'string' ? html : '');
+});
 
 async function install(): Promise<void> {
   busy.value = true;
@@ -366,14 +378,16 @@ onMounted(() => {
                   {{ disabled.includes(p.root_dir_name) ? '已禁用' : (p.activated ? '激活' : '未激活') }}
                 </v-chip>
               </td>
-              <td class="d-flex ga-1">
-                <v-btn size="x-small" variant="text" @click="openConfig(p)">配置</v-btn>
-                <v-btn size="x-small" variant="text" @click="showReadme(p)">README</v-btn>
-                <v-btn size="x-small" variant="text" @click="toggle(p)">
-                  {{ disabled.includes(p.root_dir_name) ? '启用' : '禁用' }}
-                </v-btn>
-                <v-btn size="x-small" variant="text" @click="reload(p)">重载</v-btn>
-                <v-btn v-if="!p.reserved" size="x-small" variant="text" color="error" @click="uninstall(p)">卸载</v-btn>
+              <td>
+                <div class="d-flex ga-1 flex-nowrap action-cell">
+                  <v-btn size="x-small" variant="text" @click="openConfig(p)">配置</v-btn>
+                  <v-btn size="x-small" variant="text" @click="showReadme(p)">README</v-btn>
+                  <v-btn size="x-small" variant="text" @click="toggle(p)">
+                    {{ disabled.includes(p.root_dir_name) ? '启用' : '禁用' }}
+                  </v-btn>
+                  <v-btn size="x-small" variant="text" @click="reload(p)">重载</v-btn>
+                  <v-btn v-if="!p.reserved" size="x-small" variant="text" color="error" @click="uninstall(p)">卸载</v-btn>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -437,32 +451,39 @@ onMounted(() => {
     <!-- MCP -->
     <div v-if="tab === 'mcp'">
       <v-card class="pa-2">
-        <div class="d-flex align-center pa-2">
+        <!-- 空状态：提示与新增按钮同一行（2026-09-25 用户要求对齐） -->
+        <div v-if="!mcpServers.length" class="d-flex align-center flex-wrap ga-2 pa-3">
+          <span class="text-body-2 text-medium-emphasis">
+            没有 MCP Server。MCP_ENABLED=false 时服务只写配置不热生效。
+          </span>
           <v-spacer />
           <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="openMcpEditor()">新增 Server</v-btn>
         </div>
-        <v-list>
-          <v-list-item v-for="s in mcpServers" :key="s.server_id">
-            <template #prepend>
-              <v-chip :color="s.enabled ? 'success' : 'default'" size="x-small" variant="tonal">
-                {{ s.enabled ? '启用' : '停用' }}
-              </v-chip>
-            </template>
-            <v-list-item-title class="text-body-2">{{ s.server_id }}</v-list-item-title>
-            <v-list-item-subtitle>
-              {{ s.transport === 'stdio' ? s.command : s.url }}
-            </v-list-item-subtitle>
-            <template #append>
-              <v-btn size="x-small" variant="text" @click="testMcp(s)">测试</v-btn>
-              <v-btn size="x-small" variant="text" @click="openMcpEditor(s)">编辑</v-btn>
-              <v-btn size="x-small" variant="text" color="error" @click="deleteMcp(s)">删除</v-btn>
-            </template>
-          </v-list-item>
-        </v-list>
-        <div v-if="mcpTestResult" class="text-caption pa-2">{{ mcpTestResult }}</div>
-        <div v-if="!mcpServers.length" class="text-body-2 text-medium-emphasis pa-4">
-          没有 MCP Server。MCP_ENABLED=false 时服务只写配置不热生效。
-        </div>
+        <template v-else>
+          <div class="d-flex align-center pa-2">
+            <v-spacer />
+            <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="openMcpEditor()">新增 Server</v-btn>
+          </div>
+          <v-list>
+            <v-list-item v-for="s in mcpServers" :key="s.server_id">
+              <template #prepend>
+                <v-chip :color="s.enabled ? 'success' : 'default'" size="x-small" variant="tonal">
+                  {{ s.enabled ? '启用' : '停用' }}
+                </v-chip>
+              </template>
+              <v-list-item-title class="text-body-2">{{ s.server_id }}</v-list-item-title>
+              <v-list-item-subtitle>
+                {{ s.transport === 'stdio' ? s.command : s.url }}
+              </v-list-item-subtitle>
+              <template #append>
+                <v-btn size="x-small" variant="text" @click="testMcp(s)">测试</v-btn>
+                <v-btn size="x-small" variant="text" @click="openMcpEditor(s)">编辑</v-btn>
+                <v-btn size="x-small" variant="text" color="error" @click="deleteMcp(s)">删除</v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+          <div v-if="mcpTestResult" class="text-caption pa-2">{{ mcpTestResult }}</div>
+        </template>
       </v-card>
     </div>
 
@@ -508,15 +529,16 @@ onMounted(() => {
       </v-card>
     </v-dialog>
 
-    <!-- README 对话框 -->
+    <!-- README 对话框（marked 渲染 + DOMPurify 消毒，GitHub 风格） -->
     <v-dialog
       :model-value="readmeName !== ''"
-      width="720"
+      width="860"
       @update:model-value="readmeName = ''"
     >
       <v-card>
         <v-card-title>README · {{ readmeName }}</v-card-title>
-        <v-card-text><pre class="text-caption" style="white-space: pre-wrap">{{ readme }}</pre></v-card-text>
+        <v-divider />
+        <v-card-text class="md-body" style="max-height: 65vh; overflow-y: auto" v-html="readmeHtml" />
         <v-card-actions><v-spacer /><v-btn @click="readmeName = ''">关闭</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
@@ -571,3 +593,78 @@ onMounted(() => {
     </v-dialog>
   </v-container>
 </template>
+
+<style scoped>
+/* 操作按钮组：td 内层 flex（td 本身不能变 flex，会破坏表格布局） */
+.action-cell {
+  white-space: nowrap;
+}
+
+/* README 的 GitHub 风格渲染。v-html 注入的内容不带 scoped 属性，
+   必须用 :deep() 才能命中（字面样式写在 :deep 内的元素上）。 */
+.md-body {
+  line-height: 1.65;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+.md-body :deep(h1),
+.md-body :deep(h2) {
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  padding-bottom: 0.3em;
+  margin: 1.2em 0 0.6em;
+}
+.md-body :deep(h1) {
+  font-size: 1.5rem;
+}
+.md-body :deep(h2) {
+  font-size: 1.25rem;
+}
+.md-body :deep(h3),
+.md-body :deep(h4) {
+  margin: 1em 0 0.5em;
+}
+.md-body :deep(p) {
+  margin: 0.6em 0;
+}
+.md-body :deep(code) {
+  background: rgba(var(--v-theme-primary), 0.12);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.md-body :deep(pre) {
+  background: rgba(var(--v-theme-primary), 0.08);
+  padding: 0.8em;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.md-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
+}
+.md-body :deep(table) {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+.md-body :deep(th),
+.md-body :deep(td) {
+  border: 1px solid rgba(var(--v-border-color), 0.25);
+  padding: 0.4em 0.7em;
+}
+.md-body :deep(img) {
+  max-width: 100%;
+}
+.md-body :deep(a) {
+  color: rgb(var(--v-theme-primary));
+}
+.md-body :deep(blockquote) {
+  border-left: 3px solid rgba(var(--v-theme-primary), 0.5);
+  margin: 0.6em 0;
+  padding: 0.1em 1em;
+  opacity: 0.85;
+}
+.md-body :deep(ul),
+.md-body :deep(ol) {
+  padding-left: 1.4em;
+}
+</style>

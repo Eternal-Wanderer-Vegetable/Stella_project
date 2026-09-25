@@ -52,6 +52,15 @@ const apiKeyInputs = ref<Record<string, string>>({});
 const fetchedModels = ref<Record<string, string[]>>({});
 const toast = useToast();
 
+// 端点槽中文名：按用途划分的三槽（CHAT 对话 / MEMORY 记忆 / VISION 视觉），
+// 出现在表格与编辑卡标题里，未知槽名回落原始名。
+const SLOT_LABELS: Record<string, string> = {
+  CHAT: '对话',
+  MEMORY: '记忆',
+  VISION: '视觉',
+};
+const slotLabel = (slot: string): string => SLOT_LABELS[slot] ?? slot;
+
 async function loadConfig(): Promise<void> {
   try {
     const e = await unwrap<{ endpoints: Endpoint[] }>(api.get('/providers/endpoints'));
@@ -149,7 +158,7 @@ onBeforeUnmount(() => {
         </thead>
         <tbody>
           <tr v-for="ep in endpoints" :key="ep.slot">
-            <td>{{ ep.slot }}</td>
+            <td>{{ slotLabel(ep.slot) }} <span class="text-caption text-medium-emphasis">{{ ep.slot }}</span></td>
             <td>{{ ep.base_url || '—' }}</td>
             <td>{{ ep.model || '—' }}</td>
             <td>{{ ep.kind || '—' }}</td>
@@ -216,7 +225,7 @@ onBeforeUnmount(() => {
         <v-card-text style="max-height: 65vh; overflow-y: auto">
           <div class="text-subtitle-2 mb-2">端点槽（API Key 留空 = 不修改）</div>
           <v-card v-for="ep in endpoints" :key="ep.slot" variant="outlined" class="pa-3 mb-3">
-            <div class="text-subtitle-2 mb-2">{{ ep.slot }}</div>
+            <div class="text-subtitle-2 mb-2">{{ slotLabel(ep.slot) }}（{{ ep.slot }}）</div>
             <v-text-field v-model="ep.base_url" label="Base URL" density="compact" />
             <div class="d-flex ga-2 align-center">
               <v-text-field
@@ -264,7 +273,9 @@ onBeforeUnmount(() => {
               <tr v-for="r in roles" :key="r.role">
                 <td>{{ r.role }}</td>
                 <td>
-                  <v-select v-model="r.endpoint" :items="['none', ...endpoints.map(e => e.slot)]"
+                  <v-select v-model="r.endpoint"
+                            :items="[{ title: 'none（不启用）', value: 'none' },
+                                      ...endpoints.map(e => ({ title: `${slotLabel(e.slot)}（${e.slot}）`, value: e.slot }))]"
                             density="compact" hide-details />
                 </td>
                 <td><v-text-field v-model="r.model" density="compact" hide-details /></td>

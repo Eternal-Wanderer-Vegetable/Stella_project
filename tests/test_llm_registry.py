@@ -6,7 +6,7 @@
 这组用例守的是 P1 的两条硬要求：
 
 1. **纯本地部署逐字等价今天**——闸门拓扑必须还是「主聊天一把、整合一把、
-   两者并行」，只是资源名从 ``chat``/``consolidation`` 改成了 ``LOCAL``/``EXTRA``。
+   两者并行」，资源名是 ``CHAT``/``MEMORY``。
    这条是整次改造唯一不可协商的回归面：跑挂了用户就会看到「回复被整合堵住」。
 2. **配置问题在启动阶段就报出来**（``validate()``），而不是等第一次调用才 500。
 
@@ -42,63 +42,51 @@ _SECRET = "sk-do-not-leak-0123456789"
 # 纯本地部署的出厂配置。EXTRA 与 LOCAL 同地址、独立闸门，这就是改造前
 # 「27B 一把锁、E4B 一把锁」在新模型下的写法。
 _BASELINE: dict[str, object] = {
-    "LLM_ENDPOINT_LOCAL_BASE_URL": _LOCAL_URL,
-    "LLM_ENDPOINT_LOCAL_API_KEY": "",
-    "LLM_ENDPOINT_LOCAL_MODEL": "",
-    "LLM_ENDPOINT_LOCAL_KIND": "local",
-    "LLM_ENDPOINT_LOCAL_CONCURRENCY": 1,
-    "LLM_ENDPOINT_LOCAL_TIMEOUT": 120.0,
-    "LLM_ENDPOINT_ONLINE_CHAT_BASE_URL": "",
-    "LLM_ENDPOINT_ONLINE_CHAT_API_KEY": "",
-    "LLM_ENDPOINT_ONLINE_CHAT_MODEL": "",
-    "LLM_ENDPOINT_ONLINE_CHAT_KIND": "online",
-    "LLM_ENDPOINT_ONLINE_CHAT_CONCURRENCY": 4,
-    "LLM_ENDPOINT_ONLINE_CHAT_TIMEOUT": 120.0,
-    "LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL": "",
-    "LLM_ENDPOINT_ONLINE_MEMORY_API_KEY": "",
-    "LLM_ENDPOINT_ONLINE_MEMORY_MODEL": "",
-    "LLM_ENDPOINT_ONLINE_MEMORY_KIND": "online",
-    "LLM_ENDPOINT_ONLINE_MEMORY_CONCURRENCY": 2,
-    "LLM_ENDPOINT_ONLINE_MEMORY_TIMEOUT": 120.0,
-    "LLM_ENDPOINT_EXTRA_BASE_URL": _LOCAL_URL,
-    "LLM_ENDPOINT_EXTRA_API_KEY": "",
-    "LLM_ENDPOINT_EXTRA_MODEL": "",
-    "LLM_ENDPOINT_EXTRA_KIND": "local",
-    "LLM_ENDPOINT_EXTRA_CONCURRENCY": 1,
-    "LLM_ENDPOINT_EXTRA_TIMEOUT": 120.0,
+    "LLM_ENDPOINT_CHAT_BASE_URL": _LOCAL_URL,
+    "LLM_ENDPOINT_CHAT_API_KEY": "",
+    "LLM_ENDPOINT_CHAT_MODEL": "",
+    "LLM_ENDPOINT_CHAT_KIND": "local",
+    "LLM_ENDPOINT_CHAT_CONCURRENCY": 1,
+    "LLM_ENDPOINT_CHAT_TIMEOUT": 120.0,
+    "LLM_ENDPOINT_MEMORY_BASE_URL": _LOCAL_URL,
+    "LLM_ENDPOINT_MEMORY_API_KEY": "",
+    "LLM_ENDPOINT_MEMORY_MODEL": "",
+    "LLM_ENDPOINT_MEMORY_KIND": "local",
+    "LLM_ENDPOINT_MEMORY_CONCURRENCY": 1,
+    "LLM_ENDPOINT_MEMORY_TIMEOUT": 120.0,
     # 图片转述的默认端点卡：出厂未配地址 = 未启用
-    "LLM_ENDPOINT_EXTRA_VISION_BASE_URL": "",
-    "LLM_ENDPOINT_EXTRA_VISION_API_KEY": "",
-    "LLM_ENDPOINT_EXTRA_VISION_MODEL": "",
-    "LLM_ENDPOINT_EXTRA_VISION_KIND": "local",
-    "LLM_ENDPOINT_EXTRA_VISION_CONCURRENCY": 1,
-    "LLM_ENDPOINT_EXTRA_VISION_TIMEOUT": 120.0,
-    "LLM_ROLE_CHAT_ENDPOINT": "LOCAL",
+    "LLM_ENDPOINT_VISION_BASE_URL": "",
+    "LLM_ENDPOINT_VISION_API_KEY": "",
+    "LLM_ENDPOINT_VISION_MODEL": "",
+    "LLM_ENDPOINT_VISION_KIND": "local",
+    "LLM_ENDPOINT_VISION_CONCURRENCY": 1,
+    "LLM_ENDPOINT_VISION_TIMEOUT": 120.0,
+    "LLM_ROLE_CHAT_ENDPOINT": "CHAT",
     "LLM_ROLE_CHAT_MODEL": "local-27b",
     "LLM_ROLE_CHAT_TEMPERATURE": 0.7,
     "LLM_ROLE_CHAT_MAX_TOKENS": 2000,
     "LLM_ROLE_CHAT_FALLBACK_ENDPOINT": "",
-    "LLM_ROLE_ROUTER_ENDPOINT": "LOCAL",
+    "LLM_ROLE_ROUTER_ENDPOINT": "CHAT",
     "LLM_ROLE_ROUTER_MODEL": "local-27b",
     "LLM_ROLE_ROUTER_TEMPERATURE": 0.7,
     "LLM_ROLE_ROUTER_MAX_TOKENS": 2000,
     "LLM_ROLE_ROUTER_FALLBACK_ENDPOINT": "",
-    "LLM_ROLE_PLUGIN_ENDPOINT": "LOCAL",
+    "LLM_ROLE_PLUGIN_ENDPOINT": "CHAT",
     "LLM_ROLE_PLUGIN_MODEL": "local-27b",
     "LLM_ROLE_PLUGIN_TEMPERATURE": 0.7,
     "LLM_ROLE_PLUGIN_MAX_TOKENS": 2000,
     "LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT": "",
-    "LLM_ROLE_COMPACT_ENDPOINT": "LOCAL",
+    "LLM_ROLE_COMPACT_ENDPOINT": "CHAT",
     "LLM_ROLE_COMPACT_MODEL": "local-27b",
     "LLM_ROLE_COMPACT_TEMPERATURE": 0.3,
     "LLM_ROLE_COMPACT_MAX_TOKENS": 0,
     "LLM_ROLE_COMPACT_FALLBACK_ENDPOINT": "",
-    "LLM_ROLE_CONSOLIDATION_ENDPOINT": "EXTRA",
+    "LLM_ROLE_CONSOLIDATION_ENDPOINT": "MEMORY",
     "LLM_ROLE_CONSOLIDATION_MODEL": "local-e4b",
     "LLM_ROLE_CONSOLIDATION_TEMPERATURE": 0.3,
     "LLM_ROLE_CONSOLIDATION_MAX_TOKENS": 1500,
     "LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT": "",
-    "LLM_ROLE_EXTRACT_ENDPOINT": "LOCAL",
+    "LLM_ROLE_EXTRACT_ENDPOINT": "CHAT",
     "LLM_ROLE_EXTRACT_MODEL": "local-27b",
     "LLM_ROLE_EXTRACT_TEMPERATURE": 0.3,
     "LLM_ROLE_EXTRACT_MAX_TOKENS": 800,
@@ -128,11 +116,6 @@ def env(monkeypatch):
 
     for key, value in _BASELINE.items():
         monkeypatch.setattr(settings, key, value, raising=False)
-    # 自定义 EXTRA_* 槽从 os.environ 发现（settings 里没有它们的属性）。
-    # 清掉环境里可能泄漏进来的同型键，让用例从「无自定义槽」起步。
-    for key in list(__import__("os").environ):
-        if registry._EXTRA_SLOT_RE.match(key):
-            monkeypatch.delenv(key, raising=False)
     registry.reset_state()
 
     def _set(**kw):
@@ -167,25 +150,25 @@ class _FakeLogger:
 
 def test_pure_local_gate_topology_matches_the_old_two_lock_layout():
     """五个角色一把闸门、整合单独一把——与改造前 chat/consolidation 两把锁同构。"""
-    assert registry.gate_of(registry.ROLE_CHAT) == registry.SLOT_LOCAL
-    assert registry.gate_of(registry.ROLE_ROUTER) == registry.SLOT_LOCAL
-    assert registry.gate_of(registry.ROLE_PLUGIN) == registry.SLOT_LOCAL
-    assert registry.gate_of(registry.ROLE_COMPACT) == registry.SLOT_LOCAL
-    assert registry.gate_of(registry.ROLE_EXTRACT) == registry.SLOT_LOCAL
-    assert registry.gate_of(registry.ROLE_CONSOLIDATION) == registry.SLOT_EXTRA
+    assert registry.gate_of(registry.ROLE_CHAT) == registry.SLOT_CHAT
+    assert registry.gate_of(registry.ROLE_ROUTER) == registry.SLOT_CHAT
+    assert registry.gate_of(registry.ROLE_PLUGIN) == registry.SLOT_CHAT
+    assert registry.gate_of(registry.ROLE_COMPACT) == registry.SLOT_CHAT
+    assert registry.gate_of(registry.ROLE_EXTRACT) == registry.SLOT_CHAT
+    assert registry.gate_of(registry.ROLE_CONSOLIDATION) == registry.SLOT_MEMORY
     # 两把闸门必须是不同资源，否则一次 20~60 秒的整合会把每条回复都堵住
-    assert registry.SLOT_LOCAL != registry.SLOT_EXTRA
+    assert registry.SLOT_CHAT != registry.SLOT_MEMORY
 
 
 def test_embedding_shares_the_local_gate_by_default():
     """embedding 与主聊天同实例时共用同一把闸门（改造前的行为）。"""
-    assert registry.embedding_gate() == registry.SLOT_LOCAL
+    assert registry.embedding_gate() == registry.SLOT_CHAT
 
 
 def test_pure_local_gates_are_all_exclusive():
     """本地两把闸门并发度都是 1 = 改造前的两把 asyncio.Lock。"""
-    assert registry.concurrency_of(registry.SLOT_LOCAL) == 1
-    assert registry.concurrency_of(registry.SLOT_EXTRA) == 1
+    assert registry.concurrency_of(registry.SLOT_CHAT) == 1
+    assert registry.concurrency_of(registry.SLOT_MEMORY) == 1
 
 
 def test_extra_defaults_to_the_same_address_as_local():
@@ -194,8 +177,8 @@ def test_extra_defaults_to_the_same_address_as_local():
     这是「一台机器两块算力（GPU 跑 27B、CPU 跑 E4B）」的表达方式；
     把它们合成一个槽会静默退化成串行。
     """
-    local = registry.endpoint(registry.SLOT_LOCAL)
-    extra = registry.endpoint(registry.SLOT_EXTRA)
+    local = registry.endpoint(registry.SLOT_CHAT)
+    extra = registry.endpoint(registry.SLOT_MEMORY)
     assert local is not None
     assert extra is not None
     assert local.base_url == extra.base_url
@@ -219,10 +202,10 @@ def test_issue_levels_are_only_error_or_warn():
 
 def test_unconfigured_slot_is_none_not_an_empty_endpoint():
     """没配地址的槽 = 没启用。返回空 Endpoint 会让调用方拿它去发请求。"""
-    assert registry.endpoint(registry.SLOT_ONLINE_CHAT) is None
+    assert registry.endpoint(registry.SLOT_VISION) is None
     # 但它仍出现在 endpoints() 里——GUI 要能画出这张空卡片
-    assert registry.SLOT_ONLINE_CHAT in registry.endpoints()
-    assert registry.endpoints()[registry.SLOT_ONLINE_CHAT].configured is False
+    assert registry.SLOT_VISION in registry.endpoints()
+    assert registry.endpoints()[registry.SLOT_VISION].configured is False
 
 
 @pytest.mark.parametrize("name", ["", "   ", "none", "NONE", "NOT_A_SLOT"])
@@ -237,8 +220,8 @@ def test_endpoint_lookup_is_case_insensitive():
 def test_illegal_kind_is_reported_and_treated_as_online(env):
     """KIND 写错时按 online 处理：多带一个 Authorization 头无害，
     反过来把在线端点当本地会漏掉鉴权、并且发出本地专用参数。"""
-    env(LLM_ENDPOINT_LOCAL_KIND="cloud", LLM_ENDPOINT_LOCAL_API_KEY=_SECRET)
-    ep = registry.endpoint(registry.SLOT_LOCAL)
+    env(LLM_ENDPOINT_CHAT_KIND="cloud", LLM_ENDPOINT_CHAT_API_KEY=_SECRET)
+    ep = registry.endpoint(registry.SLOT_CHAT)
     assert ep is not None
     assert ep.kind == registry.KIND_ONLINE
     assert any("KIND" in m for m in _issues("error"))
@@ -250,8 +233,8 @@ def test_illegal_kind_is_reported_and_treated_as_online(env):
 )
 def test_blank_kind_is_guessed_from_the_key(env, api_key, expected):
     """KIND 留空不报错（槽可能就没启用），按有没有 key 猜最不容易出错的值。"""
-    env(LLM_ENDPOINT_EXTRA_KIND="", LLM_ENDPOINT_EXTRA_API_KEY=api_key)
-    ep = registry.endpoint(registry.SLOT_EXTRA)
+    env(LLM_ENDPOINT_MEMORY_KIND="", LLM_ENDPOINT_MEMORY_API_KEY=api_key)
+    ep = registry.endpoint(registry.SLOT_MEMORY)
     assert ep is not None
     assert ep.kind == expected
     assert not any("KIND" in m for m in _issues("error"))
@@ -260,16 +243,16 @@ def test_blank_kind_is_guessed_from_the_key(env, api_key, expected):
 @pytest.mark.parametrize("bad", [0, -3, "abc", None])
 def test_bad_concurrency_falls_back_to_one(env, bad):
     """并发度非法一律按 1。Semaphore(0) 会把闸门锁死，绝不能放过去。"""
-    env(LLM_ENDPOINT_LOCAL_CONCURRENCY=bad)
-    ep = registry.endpoint(registry.SLOT_LOCAL)
+    env(LLM_ENDPOINT_CHAT_CONCURRENCY=bad)
+    ep = registry.endpoint(registry.SLOT_CHAT)
     assert ep is not None
     assert ep.concurrency == 1
 
 
 @pytest.mark.parametrize("bad", ["abc", -1])
 def test_bad_timeout_falls_back_to_120(env, bad):
-    env(LLM_ENDPOINT_LOCAL_TIMEOUT=bad)
-    ep = registry.endpoint(registry.SLOT_LOCAL)
+    env(LLM_ENDPOINT_CHAT_TIMEOUT=bad)
+    ep = registry.endpoint(registry.SLOT_CHAT)
     assert ep is not None
     assert ep.timeout == 120.0
     assert any("TIMEOUT" in m for m in _issues("error"))
@@ -280,8 +263,8 @@ def test_a_zero_timeout_is_read_as_unset(env):
 
     单独成例是因为它与 -1 / "abc" 的行为**不同**：那两个要报错，这个不报。
     """
-    env(LLM_ENDPOINT_LOCAL_TIMEOUT=0)
-    ep = registry.endpoint(registry.SLOT_LOCAL)
+    env(LLM_ENDPOINT_CHAT_TIMEOUT=0)
+    ep = registry.endpoint(registry.SLOT_CHAT)
     assert ep is not None
     assert ep.timeout == 120.0
     assert not any("TIMEOUT" in m for m in _issues("error"))
@@ -289,22 +272,23 @@ def test_a_zero_timeout_is_read_as_unset(env):
 
 def test_base_url_without_scheme_is_an_error(env):
     """httpx 对没有 scheme 的地址会抛一个跟配置毫无关系的异常，先拦下来。"""
-    env(LLM_ENDPOINT_LOCAL_BASE_URL="127.0.0.1:1234")
+    env(LLM_ENDPOINT_CHAT_BASE_URL="127.0.0.1:1234")
     assert any("http" in m for m in _issues("error"))
 
 
 def test_online_endpoint_without_a_key_is_an_error(env):
     """在线端点缺 key 一定 401，等到第一次回复才发现太晚了。"""
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY="",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY="",
+        LLM_ENDPOINT_CHAT_KIND="online",
     )
     assert any("API_KEY" in m for m in _issues("error"))
 
 
 def test_local_endpoint_with_concurrency_above_one_warns(env):
     """本地放开并发是个陷阱：同一份权重上的并发推理不排队，只互相拖慢。"""
-    env(LLM_ENDPOINT_LOCAL_CONCURRENCY=4)
+    env(LLM_ENDPOINT_CHAT_CONCURRENCY=4)
     assert any("并发" in m for m in _issues("warn"))
     # 只是告警，不该拦住启动
     assert not any("并发上限" in m for m in _issues("error"))
@@ -323,10 +307,12 @@ def test_endpoints_are_resolved_once_and_cached():
 def test_sharing_one_key_across_the_two_online_slots_warns(env):
     """R1 的核心：不同 key = 不同前缀缓存域。共用一把会互相顶掉缓存。"""
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_MEMORY_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_MEMORY_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_MEMORY_API_KEY=_SECRET,
+        LLM_ENDPOINT_MEMORY_KIND="online",
     )
     warns = _issues("warn")
     assert any("同一把 API key" in m for m in warns)
@@ -336,10 +322,12 @@ def test_sharing_one_key_across_the_two_online_slots_warns(env):
 
 def test_two_different_keys_do_not_warn(env):
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET + "-chat",
-        LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_MEMORY_API_KEY=_SECRET + "-mem",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET + "-chat",
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_MEMORY_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_MEMORY_API_KEY=_SECRET + "-mem",
+        LLM_ENDPOINT_MEMORY_KIND="online",
     )
     assert not any("同一把 API key" in m for m in _issues("warn"))
 
@@ -355,7 +343,7 @@ def test_role_bound_to_a_nonexistent_slot_is_an_error(env):
 
 
 def test_role_bound_to_an_unconfigured_slot_is_an_error(env):
-    env(LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT")  # 槽名合法但没配地址
+    env(LLM_ROLE_CHAT_ENDPOINT="VISION")  # 槽名合法但没配地址
     assert any("没配 BASE_URL" in m for m in _issues("error"))
     assert registry.gate_of(registry.ROLE_CHAT) == registry.GATE_UNBOUND
 
@@ -363,9 +351,10 @@ def test_role_bound_to_an_unconfigured_slot_is_an_error(env):
 def test_online_role_without_a_model_is_an_error(env):
     """本地 LM Studio 留空可以让服务端默认路由，在线厂商留空一律 400。"""
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ROLE_CHAT_ENDPOINT="CHAT",
         LLM_ROLE_CHAT_MODEL="",
     )
     assert any("没配 MODEL" in m for m in _issues("error"))
@@ -385,7 +374,7 @@ def test_endpoint_model_is_used_when_the_role_is_empty(env):
     """角色 MODEL 留空 → 用端点上的模型：模型写在端点卡片上，角色不用重复写。"""
     env(
         LLM_ROLE_CHAT_MODEL="",
-        LLM_ENDPOINT_LOCAL_MODEL="slot-model",
+        LLM_ENDPOINT_CHAT_MODEL="slot-model",
     )
     b = registry.binding(registry.ROLE_CHAT)
     assert b is not None
@@ -397,7 +386,7 @@ def test_an_explicit_role_model_beats_the_endpoint_model(env):
     env(
         LM_STUDIO_MODEL="local-27b",
         LLM_ROLE_ROUTER_MODEL="cheap-router",
-        LLM_ENDPOINT_LOCAL_MODEL="slot-model",
+        LLM_ENDPOINT_CHAT_MODEL="slot-model",
     )
     b = registry.binding(registry.ROLE_ROUTER)
     assert b is not None
@@ -408,7 +397,7 @@ def test_an_explicit_role_model_survives_an_empty_endpoint_model(env):
     """角色给了自己的模型而端点 MODEL 留空 → 用角色的（本地端点可默认路由）。"""
     env(
         LLM_ROLE_EXTRACT_MODEL="local-e4b",
-        LLM_ENDPOINT_LOCAL_MODEL="",
+        LLM_ENDPOINT_CHAT_MODEL="",
     )
     b = registry.binding(registry.ROLE_EXTRACT)
     assert b is not None
@@ -419,10 +408,11 @@ def test_moving_a_role_online_takes_the_card_model_not_the_local_one(env):
     """角色 MODEL 留空时，在线端点用那张卡自己的模型，不会拿到本机模型名。"""
     env(
         LLM_ROLE_CHAT_MODEL="",
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ENDPOINT_ONLINE_CHAT_MODEL="deepseek-chat",
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_CHAT_MODEL="deepseek-chat",
+        LLM_ROLE_CHAT_ENDPOINT="CHAT",
     )
     b = registry.binding(registry.ROLE_CHAT)
     assert b is not None
@@ -437,10 +427,10 @@ def test_the_role_model_still_counts_when_that_card_goes_online(env):
     端点槽——「在线槽的模型归端点卡片」不能把自己角色的输入框也一起否掉。
     """
     env(
-        LLM_ENDPOINT_EXTRA_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_EXTRA_API_KEY=_SECRET,
-        LLM_ENDPOINT_EXTRA_KIND="online",
-        LLM_ENDPOINT_EXTRA_MODEL="",
+        LLM_ENDPOINT_MEMORY_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_MEMORY_API_KEY=_SECRET,
+        LLM_ENDPOINT_MEMORY_KIND="online",
+        LLM_ENDPOINT_MEMORY_MODEL="",
         LLM_ROLE_CONSOLIDATION_MODEL="deepseek-chat",
     )
     b = registry.binding(registry.ROLE_CONSOLIDATION)
@@ -453,14 +443,15 @@ def test_the_missing_online_model_error_names_the_endpoint_key(env):
     """报错要指向「该去哪填」。端点键在前，因为那才是界面上的那个框。"""
     env(
         LLM_ROLE_CHAT_MODEL="",
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ENDPOINT_ONLINE_CHAT_MODEL="",
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_CHAT_MODEL="",
+        LLM_ROLE_CHAT_ENDPOINT="CHAT",
     )
     msgs = [m for m in _issues("error") if "没配 MODEL" in m]
     assert msgs, _issues("error")
-    assert "LLM_ENDPOINT_ONLINE_CHAT_MODEL" in msgs[0]
+    assert "LLM_ENDPOINT_CHAT_MODEL" in msgs[0]
     assert "LLM_ROLE_CHAT_MODEL" in msgs[0]
 
 
@@ -542,10 +533,12 @@ def test_other_roles_reject_a_zero_max_tokens(env, bad):
 
 def _with_online_fallback(env):
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
-        LLM_ROLE_CHAT_FALLBACK_ENDPOINT="LOCAL",
+        LLM_ENDPOINT_MEMORY_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_MEMORY_API_KEY=_SECRET,
+        LLM_ENDPOINT_MEMORY_KIND="online",
+        LLM_ROLE_CHAT_ENDPOINT="MEMORY",
+        LLM_ROLE_CHAT_MODEL="online-model",
+        LLM_ROLE_CHAT_FALLBACK_ENDPOINT="CHAT",
     )
 
 
@@ -554,14 +547,14 @@ def test_fallback_endpoint_is_resolved(env):
     _with_online_fallback(env)
     b = registry.binding(registry.ROLE_CHAT)
     assert b is not None
-    assert b.slot == registry.SLOT_ONLINE_CHAT
+    assert b.slot == registry.SLOT_MEMORY
     assert b.fallback is not None
-    assert b.fallback.slot == registry.SLOT_LOCAL
-    assert b.describe()["fallback_slot"] == registry.SLOT_LOCAL
+    assert b.fallback.slot == registry.SLOT_CHAT
+    assert b.describe()["fallback_slot"] == registry.SLOT_CHAT
 
 
 def test_fallback_to_the_same_slot_is_pointless_and_dropped(env):
-    env(LLM_ROLE_CHAT_FALLBACK_ENDPOINT="LOCAL")  # 主端点也是 LOCAL
+    env(LLM_ROLE_CHAT_FALLBACK_ENDPOINT="CHAT")  # 主端点也是 LOCAL
     b = registry.binding(registry.ROLE_CHAT)
     assert b is not None
     assert b.fallback is None
@@ -584,7 +577,7 @@ def test_illegal_fallback_slot_is_an_error(env):
 
 def test_fallback_to_an_unconfigured_slot_is_silently_ignored(env):
     """槽名合法但没启用：降级链就是空的，主端点照常工作，不该拦住启动。"""
-    env(LLM_ROLE_CHAT_FALLBACK_ENDPOINT="ONLINE_MEMORY")
+    env(LLM_ROLE_CHAT_FALLBACK_ENDPOINT="VISION")
     b = registry.binding(registry.ROLE_CHAT)
     assert b is not None
     assert b.fallback is None
@@ -596,12 +589,12 @@ def test_fallback_to_an_unconfigured_slot_is_silently_ignored(env):
 
 
 def test_auto_picks_the_local_slot_with_the_matching_address():
-    assert registry.embedding_gate() == registry.SLOT_LOCAL
+    assert registry.embedding_gate() == registry.SLOT_CHAT
 
 
 def test_auto_ignores_a_trailing_slash(env):
     env(MEMORY_EMBEDDING_BASE_URL=_LOCAL_URL + "/")
-    assert registry.embedding_gate() == registry.SLOT_LOCAL
+    assert registry.embedding_gate() == registry.SLOT_CHAT
 
 
 def test_auto_does_not_queue_when_no_local_slot_matches(env):
@@ -616,10 +609,10 @@ def test_auto_never_queues_behind_an_online_endpoint(env):
     对话切到在线端点后，本地 embedding 若还排在线调用的队，就会被网络往返拖住。
     """
     env(
-        LLM_ENDPOINT_LOCAL_KIND="online",
-        LLM_ENDPOINT_LOCAL_API_KEY=_SECRET,
-        LLM_ENDPOINT_EXTRA_KIND="online",
-        LLM_ENDPOINT_EXTRA_API_KEY=_SECRET + "-x",
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_MEMORY_KIND="online",
+        LLM_ENDPOINT_MEMORY_API_KEY=_SECRET + "-x",
     )
     assert registry.embedding_gate() == ""
 
@@ -627,21 +620,21 @@ def test_auto_never_queues_behind_an_online_endpoint(env):
 def test_auto_falls_back_to_extra_when_only_it_matches(env):
     """LOCAL 切到在线、EXTRA 仍是本地时，embedding 该跟 EXTRA 共用闸门。"""
     env(
-        LLM_ENDPOINT_LOCAL_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_LOCAL_KIND="online",
-        LLM_ENDPOINT_LOCAL_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
         LLM_ROLE_CHAT_MODEL="online-model",
         LLM_ROLE_ROUTER_MODEL="online-model",
         LLM_ROLE_PLUGIN_MODEL="online-model",
         LLM_ROLE_COMPACT_MODEL="online-model",
         LLM_ROLE_EXTRACT_MODEL="online-model",
     )
-    assert registry.embedding_gate() == registry.SLOT_EXTRA
+    assert registry.embedding_gate() == registry.SLOT_MEMORY
 
 
 def test_an_explicit_slot_wins(env):
     env(MEMORY_EMBEDDING_GATE="extra")
-    assert registry.embedding_gate() == registry.SLOT_EXTRA
+    assert registry.embedding_gate() == registry.SLOT_MEMORY
 
 
 def test_none_means_do_not_queue(env):
@@ -651,12 +644,12 @@ def test_none_means_do_not_queue(env):
 
 def test_blank_is_treated_as_auto(env):
     env(MEMORY_EMBEDDING_GATE="")
-    assert registry.embedding_gate() == registry.SLOT_LOCAL
+    assert registry.embedding_gate() == registry.SLOT_CHAT
 
 
 def test_an_unknown_slot_name_is_reported_and_treated_as_auto(env):
     env(MEMORY_EMBEDDING_GATE="GPU")
-    assert registry.embedding_gate() == registry.SLOT_LOCAL
+    assert registry.embedding_gate() == registry.SLOT_CHAT
     assert any("MEMORY_EMBEDDING_GATE" in m for m in _issues("error"))
 
 
@@ -672,7 +665,7 @@ def test_the_hot_path_never_accumulates_issues(env):
 def test_an_explicit_slot_beats_auto(env):
     """写了具体槽名 = 明确意图，优先于 auto 的同址判定。"""
     env(MEMORY_EMBEDDING_GATE="LOCAL")
-    assert registry.embedding_gate() == registry.SLOT_LOCAL
+    assert registry.embedding_gate() == registry.SLOT_CHAT
 
 
 def test_no_embedding_address_means_no_queueing(env):
@@ -703,7 +696,7 @@ def test_backend_carries_every_resolved_field():
 def test_enabled_runtime_llama_replaces_local_endpoint(monkeypatch):
     from config import settings
 
-    monkeypatch.setattr(settings, "LLM_ENDPOINT_LOCAL_MODEL", "old-model", raising=False)
+    monkeypatch.setattr(settings, "LLM_ENDPOINT_CHAT_MODEL", "old-model", raising=False)
     monkeypatch.setattr(
         "deploy.runtime.llama_endpoint_config",
         lambda: {
@@ -712,7 +705,7 @@ def test_enabled_runtime_llama_replaces_local_endpoint(monkeypatch):
         },
     )
     registry.reset_state()
-    endpoint = registry.endpoint(registry.SLOT_LOCAL)
+    endpoint = registry.endpoint(registry.SLOT_CHAT)
     assert endpoint is not None
     assert endpoint.base_url == "http://127.0.0.1:8081"
     assert endpoint.model == "runtime-model"
@@ -726,9 +719,9 @@ def test_backend_knows_its_slot_and_role():
     """
     backend = registry.backend_for(registry.ROLE_CONSOLIDATION)
     assert isinstance(backend, LMStudioBackend)
-    assert backend.slot == registry.SLOT_EXTRA
+    assert backend.slot == registry.SLOT_MEMORY
     assert backend.role == registry.ROLE_CONSOLIDATION
-    assert backend._log_tag() == "[LLM consolidation@EXTRA]"
+    assert backend._log_tag() == "[LLM consolidation@MEMORY]"
 
 
 def test_backends_are_cached_per_role():
@@ -1008,7 +1001,7 @@ def test_describe_covers_every_slot_and_role():
     info = registry.describe()
     assert set(info["endpoints"]) == set(registry.SLOTS)
     assert set(info["roles"]) == set(registry.ROLES)
-    assert info["embedding_gate"] == registry.SLOT_LOCAL
+    assert info["embedding_gate"] == registry.SLOT_CHAT
     assert info["fallback_enabled"] is True
     assert isinstance(info["issues"], list)
 
@@ -1016,8 +1009,8 @@ def test_describe_covers_every_slot_and_role():
 def test_describe_reports_the_gate_per_role():
     """GUI 的角色矩阵直接渲染这一列——它就是「切没切成」的答案。"""
     roles = registry.describe()["roles"]
-    assert roles[registry.ROLE_CHAT]["gate"] == registry.SLOT_LOCAL
-    assert roles[registry.ROLE_CONSOLIDATION]["gate"] == registry.SLOT_EXTRA
+    assert roles[registry.ROLE_CHAT]["gate"] == registry.SLOT_CHAT
+    assert roles[registry.ROLE_CONSOLIDATION]["gate"] == registry.SLOT_MEMORY
 
 
 def test_describe_reports_an_unbound_role_as_such(env):
@@ -1035,12 +1028,13 @@ def test_embedding_gate_is_reported_as_none_not_blank(env):
 
 def test_endpoint_describe_reports_only_whether_a_key_exists(env):
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ROLE_CHAT_ENDPOINT="CHAT",
         LLM_ROLE_CHAT_MODEL="online-model",
     )
-    ep = registry.endpoints()[registry.SLOT_ONLINE_CHAT]
+    ep = registry.endpoints()[registry.SLOT_CHAT]
     described = ep.describe()
     assert described["has_api_key"] is True
     assert "api_key" not in described
@@ -1053,13 +1047,15 @@ def test_endpoint_describe_reports_only_whether_a_key_exists(env):
 def test_describe_never_leaks_a_key(env):
     """doctor 报告与 GUI 都吃这份 dict，用户会把它整段贴到 issue 里。"""
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ENDPOINT_ONLINE_MEMORY_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_MEMORY_API_KEY=_SECRET,
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ENDPOINT_MEMORY_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_MEMORY_API_KEY=_SECRET,
+        LLM_ENDPOINT_MEMORY_KIND="online",
+        LLM_ROLE_CHAT_ENDPOINT="CHAT",
         LLM_ROLE_CHAT_MODEL="online-model",
-        LLM_ROLE_CONSOLIDATION_ENDPOINT="ONLINE_MEMORY",
+        LLM_ROLE_CONSOLIDATION_ENDPOINT="MEMORY",
         LLM_ROLE_CONSOLIDATION_MODEL="online-model",
     )
     blob = json.dumps(registry.describe(), ensure_ascii=False, default=str)
@@ -1070,9 +1066,10 @@ def test_describe_never_leaks_a_key(env):
 
 def test_log_summary_prints_the_table_without_the_key(env, monkeypatch):
     env(
-        LLM_ENDPOINT_ONLINE_CHAT_BASE_URL=_ONLINE_URL,
-        LLM_ENDPOINT_ONLINE_CHAT_API_KEY=_SECRET,
-        LLM_ROLE_CHAT_ENDPOINT="ONLINE_CHAT",
+        LLM_ENDPOINT_CHAT_BASE_URL=_ONLINE_URL,
+        LLM_ENDPOINT_CHAT_API_KEY=_SECRET,
+        LLM_ENDPOINT_CHAT_KIND="online",
+        LLM_ROLE_CHAT_ENDPOINT="CHAT",
         LLM_ROLE_CHAT_MODEL="online-model",
     )
     fake = _FakeLogger()
@@ -1082,7 +1079,7 @@ def test_log_summary_prints_the_table_without_the_key(env, monkeypatch):
     assert _SECRET not in text
     # 这张表是「无缝切换可被信任」的前提：角色、端点、闸门都要能一眼看到
     assert registry.ROLE_CHAT in text
-    assert registry.SLOT_ONLINE_CHAT in text
+    assert registry.SLOT_CHAT in text
     assert "embedding 闸门" in text
 
 
@@ -1091,63 +1088,61 @@ def test_log_summary_skips_unconfigured_slots(monkeypatch):
     monkeypatch.setattr(registry, "logger", fake)
     registry.log_summary()
     text = "\n".join(fake.lines)
-    assert f"端点 {registry.SLOT_ONLINE_CHAT}" not in text
-    assert f"端点 {registry.SLOT_LOCAL}" in text
+    assert f"端点 {registry.SLOT_VISION}" not in text
+    assert f"端点 {registry.SLOT_CHAT}" in text
 
 
 # ============================================================
-# EXTRA_* 自定义槽（GUI「添加端点卡」与 .env 手写的同型键）
+# 旧槽名兼容（LOCAL/EXTRA/ONLINE_* → CHAT/MEMORY/VISION）
 # ============================================================
 
 
-def test_extra_slot_discovered_from_env(env, monkeypatch):
-    """LLM_ENDPOINT_EXTRA_FOO_BASE_URL 出现在环境里就多一个槽。"""
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_FOO_BASE_URL", _LOCAL_URL)
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_FOO_MODEL", "foo-model")
-    registry.reset_state()
-    assert "EXTRA_FOO" in registry.extra_slots()
-    assert "EXTRA_FOO" in registry.all_slots()
-    ep = registry.endpoints()["EXTRA_FOO"]
-    assert ep.base_url == _LOCAL_URL
-    assert ep.model == "foo-model"
-    assert ep.kind == registry.KIND_LOCAL  # 没填 key → 按 local
+def test_normalize_slot_maps_every_legacy_name():
+    """存量 .env 的旧槽名必须映射到新槽，未迁移也能继续工作。"""
+    assert registry._normalize_slot("LOCAL") == registry.SLOT_CHAT
+    assert registry._normalize_slot("ONLINE_CHAT") == registry.SLOT_CHAT
+    assert registry._normalize_slot("EXTRA") == registry.SLOT_MEMORY
+    assert registry._normalize_slot("ONLINE_MEMORY") == registry.SLOT_MEMORY
+    assert registry._normalize_slot("EXTRA_VISION") == registry.SLOT_VISION
+    # 新槽名与未知名字原样返回（未知名由绑定校验报错）
+    assert registry._normalize_slot("CHAT") == registry.SLOT_CHAT
+    assert registry._normalize_slot("NOT_A_SLOT") == "NOT_A_SLOT"
 
 
-def test_extra_slot_reads_env_not_settings_attrs(env, monkeypatch):
-    """自定义槽没有 settings 属性，必须从环境变量读。"""
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_BAR_BASE_URL", _ONLINE_URL)
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_BAR_API_KEY", _SECRET)
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_BAR_KIND", "online")
-    registry.reset_state()
-    ep = registry.endpoints()["EXTRA_BAR"]
-    assert ep.kind == registry.KIND_ONLINE
-    assert ep.api_key == _SECRET
-    blob = json.dumps(registry.describe(), ensure_ascii=False, default=str)
-    assert _SECRET not in blob
+def test_role_binding_with_legacy_slot_value(env):
+    """角色 ENDPOINT 写旧名 LOCAL/EXTRA：解析与闸门都落到新槽。"""
+    env(LLM_ROLE_CHAT_ENDPOINT="LOCAL", LLM_ROLE_CONSOLIDATION_ENDPOINT="EXTRA")
+    assert registry.gate_of(registry.ROLE_CHAT) == registry.SLOT_CHAT
+    assert registry.gate_of(registry.ROLE_CONSOLIDATION) == registry.SLOT_MEMORY
+    assert _issues("error") == []
 
 
-def test_role_binds_to_custom_slot(env, monkeypatch):
-    """角色 ENDPOINT=EXTRA_FOO 是合法绑定，不再是「未知槽名」。"""
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_FOO_BASE_URL", _LOCAL_URL)
-    env(LLM_ROLE_VISION_ENDPOINT="EXTRA_FOO")
-    binding = registry.binding(registry.ROLE_VISION)
-    assert binding is not None and binding.bound
-    assert binding.slot == "EXTRA_FOO"
-    assert registry.gate_of(registry.ROLE_VISION) == "EXTRA_FOO"
-    assert not [m for m in _issues("error") if "EXTRA_FOO" in m]
+def test_endpoint_lookup_accepts_legacy_names():
+    assert registry.endpoint("LOCAL") == registry.endpoint("CHAT")
+    assert registry.endpoint("EXTRA") == registry.endpoint("MEMORY")
 
 
-def test_role_bound_to_unconfigured_custom_slot_is_error(env, monkeypatch):
-    """卡存在但没配地址、又有角色指过去 → error（可诊断，不是静默）。"""
-    monkeypatch.setenv("LLM_ENDPOINT_EXTRA_EMPTY_BASE_URL", "")
-    env(LLM_ROLE_VISION_ENDPOINT="EXTRA_EMPTY")
-    binding = registry.binding(registry.ROLE_VISION)
-    assert binding is not None and not binding.bound
-    assert any("EXTRA_EMPTY" in m for m in _issues("error"))
-
-
-def test_extra_vision_declared_slot(env):
-    """EXTRA_VISION 键在 settings.py 里声明，空地址时被当未配置。"""
+def test_settings_endpoint_slot_helper_falls_back_to_legacy_keys(monkeypatch):
+    """config/settings 的 _endpoint_slot：新键优先，其次 legacy 前缀，最后默认值。"""
     from config import settings
 
-    assert hasattr(settings, "LLM_ENDPOINT_EXTRA_VISION_BASE_URL")
+    monkeypatch.delenv("LLM_ENDPOINT_CHAT_BASE_URL", raising=False)
+    monkeypatch.setenv("LLM_ENDPOINT_LOCAL_BASE_URL", "http://legacy:1234")
+    assert (
+        settings._endpoint_slot("LLM_ENDPOINT_CHAT_", "BASE_URL", "http://default",
+                                "LLM_ENDPOINT_LOCAL_")
+        == "http://legacy:1234"
+    )
+    monkeypatch.setenv("LLM_ENDPOINT_CHAT_BASE_URL", "http://new:1234")
+    assert (
+        settings._endpoint_slot("LLM_ENDPOINT_CHAT_", "BASE_URL", "http://default",
+                                "LLM_ENDPOINT_LOCAL_")
+        == "http://new:1234"
+    )
+    monkeypatch.delenv("LLM_ENDPOINT_CHAT_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_ENDPOINT_LOCAL_BASE_URL", raising=False)
+    assert (
+        settings._endpoint_slot("LLM_ENDPOINT_CHAT_", "BASE_URL", "http://default",
+                                "LLM_ENDPOINT_LOCAL_")
+        == "http://default"
+    )

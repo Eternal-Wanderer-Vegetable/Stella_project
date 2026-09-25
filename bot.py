@@ -9,6 +9,17 @@
 插件（plugins/）及各核心模块（core/、memory/）提供。
 """
 
+# 自登记 ownership 的前提：launch token 必须在 config 首次 import 前进入
+# 环境变量（config 是 import 期快照，见 config/settings.py），否则状态接口
+# 上报的 token 摘要与 manifest 对不上，deploy 侧无法确认本进程身份。
+# deploy start --detach 会注入该变量，这里只兜底「python bot.py」直启形态。
+import os as _os
+
+if not _os.environ.get("STELLA_LAUNCH_TOKEN"):
+    import uuid as _uuid
+
+    _os.environ["STELLA_LAUNCH_TOKEN"] = _uuid.uuid4().hex
+
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
@@ -16,6 +27,29 @@ from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 from core.logging_sink import setup_json_sink
 
 setup_json_sink()
+
+# WebUI「无壳自重启」的接任侧：若本进程由上一任 Bot 派生（webui 重启按钮），
+# 上一任还占着服务端口，必须等它真正退出再继续初始化。必须在任何重活之前；
+# 超时照样继续（端口冲突会留下明确错误，好过无声卡死）。见 core/self_restart.py。
+try:
+    from core.self_restart import wait_for_parent_exit
+
+    if wait_for_parent_exit():
+        print("[stella] 接任启动：上一任进程已退出，继续初始化", flush=True)
+except Exception as _e:  # 自重启等待绝不能拦住正常启动
+    print(f"[stella] 接任等待跳过：{_e}", flush=True)
+
+# 启动前接管：本安装已有实例在跑（后台受管实例、上次直启残留）时按身份
+# 证明停掉它，避免 uvicorn 绑定失败（winerror 10048，2026-09-24 实测）。
+# 接任路径刚等上一任退出，这里通常无实例直通。随后自登记 ownership——
+# 直启实例由此获得与 deploy start 启动实例同等的可管理性。
+try:
+    from deploy.process import register_self, replace_running
+
+    replace_running()
+    register_self()
+except Exception as _e:  # 接管/登记是增强，失败不拦启动
+    print(f"[stella] 启动接管/自登记跳过：{_e}", flush=True)
 
 from astrbot_compat import install_shim
 
@@ -224,6 +258,29 @@ async def _shutdown_renderer() -> None:
 
 
 driver.on_shutdown(_shutdown_renderer)
+
+
+async def _shutdown_clear_pid() -> None:
+    """优雅退出时清掉自己的 PID/manifest 记录（仅当记录指向本进程）。
+
+    deploy stop 会清，但 WebUI 重启、终端 Ctrl+C 这类不经 deploy 的退出
+    不会——残留的 PID 号随后被系统复用给无关进程，``deploy start`` 就会
+    误判「实例已在运行」而永远拒启（2026-09-24 实测：撞上 QQ 的
+    crashpad_handler）。
+    """
+    import os
+
+    try:
+        from deploy import process as _deploy_process
+
+        if _deploy_process.read_pid() == os.getpid():
+            _deploy_process.clear_pid()
+            _deploy_process.clear_manifest()
+    except Exception:
+        pass
+
+
+driver.on_shutdown(_shutdown_clear_pid)
 
 # Router 原型预热任务的引用。留着只为防 GC（见 _bootstrap_capabilities），跑完自动清空。
 _WARMUP_TASK = None

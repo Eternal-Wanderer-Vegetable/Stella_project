@@ -8,6 +8,31 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stella 控制台</title>
+    <script>
+      // 启动看门狗：8 秒后 #app 仍是空的 = 模块没加载成功（典型：客户端拿着
+      // 过期入口页，旧 hash 资源已不存在）。白屏不说真话，这里替它说——给出
+      // 自愈按钮（清本站存储后整页重载）。挂载成功由 main.ts 取消计时器。
+      (function () {
+        window.__stellaBootGuard = setTimeout(function () {
+          if (document.querySelector("#app > *")) return;
+          var d = document.createElement("div");
+          d.style.cssText =
+            "position:fixed;inset:0;z-index:99999;background:#171D24;color:#E8ECF1;" +
+            "display:flex;align-items:center;justify-content:center;font-family:system-ui;text-align:center";
+          d.innerHTML =
+            '<div style="max-width:28rem;padding:2rem">' +
+            "<h2>界面加载失败</h2>" +
+            "<p>浏览器里的前端入口已过期（服务端已更新），点击下方按钮清除本站缓存并重新加载。</p>" +
+            '<button onclick="localStorage.clear();sessionStorage.clear();' +
+            'if(window.caches)caches.keys().then(function(k){k.forEach(function(x){caches.delete(x)})});' +
+            'setTimeout(function(){location.replace(\'/\' + location.hash)},300)" ' +
+            'style="margin-top:1rem;padding:.6rem 1.4rem;border:0;border-radius:.5rem;' +
+            'background:#E5CE9C;color:#171D24;font-size:1rem;cursor:pointer">清除缓存并重载</button>' +
+            "</div>";
+          document.body.appendChild(d);
+        }, 8000);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

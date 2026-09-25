@@ -793,15 +793,15 @@ def _resolve_backend(endpoint: str) -> tuple[Any, str]:
         backend = backend_for_endpoint(ROLE_EXTRACT, endpoint)
         if backend is None:
             return None, (
-                f"端点槽 {endpoint} 不可用（槽名只能是 LOCAL / ONLINE_CHAT / "
-                f"ONLINE_MEMORY / EXTRA，且那张卡必须配了 BASE_URL）。"
+                f"端点槽 {endpoint} 不可用（槽名只能是 CHAT / MEMORY / VISION，"
+                f"且那张卡必须配了 BASE_URL）。"
             )
         return backend, ""
     backend = backend_for(ROLE_EXTRACT)
     if backend is None:
         return None, (
             "EXTRACT 角色没有绑定可用端点，生成不了。配 LLM_ROLE_EXTRACT_ENDPOINT "
-            "（默认 LOCAL）与那个槽的 BASE_URL，或者用 --endpoint 指定另一个槽。"
+            "（默认 CHAT）与那个槽的 BASE_URL，或者用 --endpoint 指定另一个槽。"
         )
     return backend, ""
 

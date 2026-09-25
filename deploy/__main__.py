@@ -153,6 +153,8 @@ def _cmd_start(args: argparse.Namespace) -> int:
     if not bot_path.exists():
         print(f"缺少入口 {bot_path}，无法启动。")
         return 1
+    if not process.preflight_for_foreground_start():
+        return 1
     print(f"启动 Stella：{sys.executable} bot.py")
     return subprocess.call([sys.executable, str(bot_path)])
 
@@ -768,7 +770,7 @@ def main(argv: list[str] | None = None) -> int:
     p_scaffold.add_argument(
         "--endpoint",
         default="",
-        help="指定生成用的端点槽（LOCAL / ONLINE_CHAT / ONLINE_MEMORY / EXTRA），"
+        help="指定生成用的端点槽（CHAT / MEMORY / VISION），"
         "默认走 EXTRACT 角色绑定的那个",
     )
     p_scaffold.add_argument("--force", action="store_true", help="覆盖已存在的草稿")

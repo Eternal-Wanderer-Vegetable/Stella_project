@@ -158,3 +158,34 @@ def test_static_path_traversal_blocked(isolated_home, monkeypatch, make_dist):
     deep = asyncio.run(_static_file("a/b/../../../../secret.txt"))
     assert deep.status_code == 404
     assert secret.read_text(encoding="utf-8") == "top-secret"  # 文件未被触碰
+
+
+def test_missing_hashed_asset_404s_instead_of_spa_fallback(
+    isolated_home, monkeypatch, make_dist
+):
+    """assets/ 下缺失的构建产物必须 404，绝不回落 index.html。
+
+    webui/dist 每次重建都会换资产 hash 并删掉旧文件；客户端若拿着过期入口页，
+    旧 chunk 请求会落空。回落 index.html 会把 HTML 以 200 + text/html 发回去，
+    浏览器只报一行 MIME 错然后白屏，原因被彻底藏住（2026-09-24 实测）。
+    响亮的 404 让「过期缓存」在 Network 面板一眼可见。
+    """
+    monkeypatch.setattr(settings, "WEBUI_SERVE_DIST", True)
+    make_dist()
+    app = _main_app()
+    mount_webui(app)
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app)
+    # 缺失的带 hash 资产 → 404 JSON，不是 index.html
+    resp = client.get("/assets/index-DEADBEEF.js")
+    assert resp.status_code == 404
+    assert resp.json()["status"] == "error"
+    # 深链回退不受影响（非 assets 路径仍落 SPA）
+    resp = client.get("/still/a/deep/link")
+    assert resp.status_code == 200
+    assert "stella-m0-dist" in resp.text
+    # 存在的资产照常按文件回
+    resp = client.get("/assets/app.js")
+    assert resp.status_code == 200
+    assert "/*app*/" in resp.text

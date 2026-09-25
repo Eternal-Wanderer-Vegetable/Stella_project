@@ -752,8 +752,11 @@ def execute_operation(
         value, output = _captured_call(process.stop)
         ok = value is True
     elif operation == "restart":
-        stopped, stop_output = _captured_call(process.stop)
-        if stopped is True:
+        # replace_running：认状态接口的身份证明（手工启动的实例也接管），
+        # 停掉旧实例后启动；(False, "") 表示本来就没有实例在跑，同样直接
+        # 启动。只有「发现了实例但没停掉」才判失败。
+        stopped, stop_output = _captured_call(process.replace_running)
+        if stopped is True or not stop_output:
             value, start_output = _captured_call(process.start_detached)
             output = "\n".join(part for part in (stop_output, start_output) if part)
             ok = value == 0

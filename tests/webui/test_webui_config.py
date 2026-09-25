@@ -72,15 +72,16 @@ def test_envfile_rejects_stale_and_bad_keys(client: TestClient, isolated_home: P
 # ---------- 配置读写 ----------
 
 def test_config_read_masks_sensitive(client: TestClient, auth_header: dict, isolated_home: Path):
+    # 端点键已迁出配置页 schema（编辑入口=提供商页），敏感键掩码用仍在 schema 的 ONEBOT_ACCESS_TOKEN
     (isolated_home / ".env").write_text(
-        "LLM_ENDPOINT_LOCAL_API_KEY=sk-secret-123\nHOST=127.0.0.1\n", encoding="utf-8"
+        "ONEBOT_ACCESS_TOKEN=sk-secret-123\nHOST=127.0.0.1\n", encoding="utf-8"
     )
     resp = client.get("/api/v1/config", headers=auth_header)
     assert resp.status_code == 200
     fields = {f["key"]: f for f in resp.json()["data"]["fields"]}
-    assert fields["LLM_ENDPOINT_LOCAL_API_KEY"]["sensitive"] is True
-    assert fields["LLM_ENDPOINT_LOCAL_API_KEY"]["current_value"] is None
-    assert fields["LLM_ENDPOINT_LOCAL_API_KEY"]["has_value"] is True
+    assert fields["ONEBOT_ACCESS_TOKEN"]["sensitive"] is True
+    assert fields["ONEBOT_ACCESS_TOKEN"]["current_value"] is None
+    assert fields["ONEBOT_ACCESS_TOKEN"]["has_value"] is True
     assert fields["HOST"]["current_value"] == "127.0.0.1"
 
 
@@ -111,16 +112,16 @@ def test_providers_endpoints_roundtrip(client: TestClient, auth_header: dict, is
     resp = client.get("/api/v1/providers/endpoints", headers=auth_header)
     assert resp.status_code == 200
     endpoints = resp.json()["data"]["endpoints"]
-    assert any(e["slot"] == "LOCAL" for e in endpoints)
-    local = next(e for e in endpoints if e["slot"] == "LOCAL")
+    assert any(e["slot"] == "CHAT" for e in endpoints)
+    local = next(e for e in endpoints if e["slot"] == "CHAT")
     local.update({"base_url": "http://127.0.0.1:1234", "model": "test-model", "api_key": "sk-x"})
     resp = client.put("/api/v1/providers/endpoints", json=[local], headers=auth_header)
     assert resp.status_code == 200
     assert resp.json()["data"]["restart_required"] is True
     text = (isolated_home / ".env").read_text(encoding="utf-8")
-    assert "LLM_ENDPOINT_LOCAL_BASE_URL=http://127.0.0.1:1234" in text
-    assert "LLM_ENDPOINT_LOCAL_MODEL=test-model" in text
-    assert "LLM_ENDPOINT_LOCAL_API_KEY=sk-x" in text
+    assert "LLM_ENDPOINT_CHAT_BASE_URL=http://127.0.0.1:1234" in text
+    assert "LLM_ENDPOINT_CHAT_MODEL=test-model" in text
+    assert "LLM_ENDPOINT_CHAT_API_KEY=sk-x" in text
 
 
 def test_providers_roles_get_put(client: TestClient, auth_header: dict):
@@ -219,13 +220,20 @@ def test_groups_mute(client: TestClient, auth_header: dict, isolated_home: Path)
 # ---------- system ----------
 
 def test_system_restart_writes_sentinel(client: TestClient, auth_header: dict, monkeypatch):
-    from core import stop_signal
+    """壳形态（注入秘钥）：重启路由必须请求停止，由壳拉起新进程。
 
+    无壳形态的语义（先派接任进程、派生失败不停止）在 test_webui_restart.py
+    里独立覆盖；这里只钉「壳在管时写哨兵」这条路由层契约。
+    """
+    from core import stop_signal
+    from webui import security
+
+    monkeypatch.setattr(security, "desktop_session_secret", lambda: "test-secret")
     called = {}
     monkeypatch.setattr(stop_signal, "request_stop", lambda reason="": called.update(reason=reason))
     resp = client.post("/api/v1/system/restart", headers=auth_header)
     assert resp.status_code == 200
-    assert resp.json()["data"]["restart_mode"] in ("desktop", "manual")
+    assert resp.json()["data"]["restart_mode"] == "desktop"
     assert called.get("reason")
 
 

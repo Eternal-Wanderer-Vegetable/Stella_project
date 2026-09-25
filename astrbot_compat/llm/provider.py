@@ -257,8 +257,8 @@ class StellaChatProvider(Provider):
         cfg = provider_config or {
             "id": "stella",
             "type": "openai_chat_completion",
-            "api_base": s.LLM_ENDPOINT_LOCAL_BASE_URL,
-            "key": [s.LLM_ENDPOINT_LOCAL_API_KEY] if s.LLM_ENDPOINT_LOCAL_API_KEY else [""],
+            "api_base": s.LLM_ENDPOINT_CHAT_BASE_URL,
+            "key": [s.LLM_ENDPOINT_CHAT_API_KEY] if s.LLM_ENDPOINT_CHAT_API_KEY else [""],
         }
         super().__init__(cfg, {})
         # 取角色配置的模型 ID（留空则用本机槽模型）。插件可通过
@@ -276,7 +276,7 @@ class StellaChatProvider(Provider):
         代价是「插件自建客户端」的用法在插件绑到独立端点后会 401——那是显式
         失败，比把 key 散出去好。
         """
-        return _settings().LLM_ENDPOINT_LOCAL_API_KEY
+        return _settings().LLM_ENDPOINT_CHAT_API_KEY
 
     def set_key(self, key: str) -> None:
         self.provider_config["key"] = [key]
@@ -548,7 +548,7 @@ def _plugin_model_default() -> str:
     except Exception as e:  # pragma: no cover - 配置异常不该阻断插件加载
         logger.warning(f"[astrbot_llm] 读取 PLUGIN 角色模型失败，回落角色/本机槽配置: {e}")
     s = _settings()
-    return s.LLM_ROLE_PLUGIN_MODEL or s.LLM_ENDPOINT_LOCAL_MODEL
+    return s.LLM_ROLE_PLUGIN_MODEL or s.LLM_ENDPOINT_CHAT_MODEL
 
 
 def _plugin_reply_budget() -> int:

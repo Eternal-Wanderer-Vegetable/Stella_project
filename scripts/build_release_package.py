@@ -147,6 +147,27 @@ def _assert_clean(root: Path) -> None:
             raise ValueError(f"secret or user data in release content: {relative}")
 
 
+def _ensure_webui_dist(source: Path, output: Path) -> None:
+    """保证产物里有 webui/dist（Bot 托管面板的前端）。
+
+    缺失时回退桌面壳的 dashboard-dist（CI 两处共用同一份产物）；两处都没有
+    就**硬失败**——缺它的安装包装出来 = Bot 活着但面板整页缺失，用户看到的
+    是「管理面前端尚未构建」（v5.0.0 离线包实测，2026-09-25）。
+    """
+    webui_dist = output / "webui" / "dist"
+    if (webui_dist / "index.html").is_file():
+        return
+    shell_dist = source / "desktop" / "dashboard-dist"
+    if (shell_dist / "index.html").is_file():
+        shutil.copytree(shell_dist, webui_dist)
+    if not (webui_dist / "index.html").is_file():
+        raise FileNotFoundError(
+            "webui/dist 缺失（Bot 托管面板的前端）：请先构建前端"
+            "（cd dashboard && npm install && npm run build），"
+            "并把 dashboard/dist 拷为 desktop/dashboard-dist 后重新打包。"
+        )
+
+
 def build_standalone(
     source: Path,
     output: Path,
@@ -162,6 +183,7 @@ def build_standalone(
     output.mkdir(parents=True)
     for relative in COMMON_FILES + COMMON_DIRS:
         _copy_tree(source, output, relative)
+    _ensure_webui_dist(source, output)
     if profile["core_flavor"] == "rust":
         for relative in RUST_DIRS:
             _copy_tree(source, output, relative)
@@ -226,10 +248,8 @@ def stage_installer_resources(
         _copy_tree(source, output, relative, prune=output)
     # webui/dist 兜底：CI 漏拷（或本地源码树没构建前端）时，回退使用桌面壳的
     # dashboard-dist——两处是同一份产物，缺一不可（面板由 Bot 同端口托管）。
-    webui_dist = output / "webui" / "dist"
-    shell_dist = source / "desktop" / "dashboard-dist"
-    if not webui_dist.exists() and shell_dist.is_dir():
-        shutil.copytree(shell_dist, webui_dist)
+    # 两处都没有 → 硬失败，绝不打包出一个面板整页缺失的安装包。
+    _ensure_webui_dist(source, output)
     bundled_catalog = source / "package-catalog-windows-amd64.json"
     if bundled_catalog.is_file():
         _copy_tree(source, output, bundled_catalog.name)

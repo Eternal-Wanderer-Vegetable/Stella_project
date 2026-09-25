@@ -20,7 +20,63 @@ const starting = ref(false);
 const startError = ref('');
 const step = ref('');
 const doctorText = ref('');
+// doctor 报告的结构化渲染：items 逐条（级别图标 + 标题 + 详情 + 建议），
+// 原始 JSON 收进折叠块——整屏 JSON 用户读不了（2026-09-25 用户安装失败反馈）。
+interface DoctorItem {
+  level: string;
+  title: string;
+  detail?: string;
+  fix_hint?: string;
+}
+const doctorItems = ref<DoctorItem[]>([]);
 const inShell = computed(() => isTauri());
+
+// ---------- 启动中加载视图（2026-09-25 用户要求） ----------
+// 首次启动要经历「下载运行时 → 装依赖 → 下载 embedding 模型 → 起 Bot」，
+// 全程数分钟。过去这一程只显示「后端未运行」的错误卡，用户以为程序坏了。
+// 现在启动期间整页切换为加载视图：星标动画 + 阶段轮播提示 + 已用时计时。
+const elapsedSecs = ref(0);
+const hintIndex = ref(0);
+const BOOT_HINTS = [
+  '正在准备嵌入式运行环境…',
+  '正在下载运行时与依赖（首次启动需要几分钟）…',
+  '正在下载 embedding 模型…',
+  '正在启动 Stella Bot…',
+  '一切正常，没有阻塞性错误——首次启动请耐心等待。',
+];
+let hintTimer: number | null = null;
+let elapsedTimer: number | null = null;
+
+function startLoadingUi(): void {
+  elapsedSecs.value = 0;
+  hintIndex.value = 0;
+  if (hintTimer === null) {
+    hintTimer = window.setInterval(() => {
+      hintIndex.value = (hintIndex.value + 1) % BOOT_HINTS.length;
+    }, 4000);
+  }
+  if (elapsedTimer === null) {
+    elapsedTimer = window.setInterval(() => {
+      elapsedSecs.value += 1;
+    }, 1000);
+  }
+}
+
+function stopLoadingUi(): void {
+  if (hintTimer !== null) {
+    window.clearInterval(hintTimer);
+    hintTimer = null;
+  }
+  if (elapsedTimer !== null) {
+    window.clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+}
+
+const elapsedText = computed(() => {
+  const s = elapsedSecs.value;
+  return s >= 60 ? `${Math.floor(s / 60)} 分 ${s % 60} 秒` : `${s} 秒`;
+});
 
 interface ShellConfig {
   configured: boolean;
@@ -57,7 +113,8 @@ async function enterPanel(timeoutSecs: number): Promise<void> {
 async function startBot(): Promise<void> {
   starting.value = true;
   startError.value = '';
-  step.value = '启动 Bot…';
+  step.value = '正在启动 Bot…';
+  startLoadingUi();
   try {
     await tauriBridge.startBot(false);
   } catch (err) {
@@ -67,27 +124,38 @@ async function startBot(): Promise<void> {
       startError.value = msg;
       step.value = '';
       starting.value = false;
+      stopLoadingUi();
       return;
     }
   }
   step.value = '等待服务就绪（首次启动需安装依赖，最长 20 分钟）…';
   try {
     const base = await tauriBridge.waitBotReady(1200);
+    stopLoadingUi();
     step.value = '就绪，正在打开面板…';
     window.location.href = base;
   } catch (err) {
     startError.value = (err as Error).message;
     step.value = '';
     starting.value = false;
+    stopLoadingUi();
   }
 }
 
 async function runShellDoctor(): Promise<void> {
   doctorText.value = '运行中…';
   try {
-    doctorText.value = await tauriBridge.runDoctor();
+    const text = await tauriBridge.runDoctor();
+    doctorText.value = text;
+    try {
+      const parsed = JSON.parse(text) as { items?: DoctorItem[] };
+      doctorItems.value = Array.isArray(parsed?.items) ? parsed.items : [];
+    } catch {
+      doctorItems.value = [];
+    }
   } catch (err) {
     doctorText.value = `自检失败：${(err as Error).message}`;
+    doctorItems.value = [];
   }
 }
 
@@ -202,6 +270,12 @@ onMounted(async () => {
   } finally {
     cfgLoaded.value = true;
   }
+  // 已配置过的安装：打开壳即自动启动（2026-09-25 用户要求——首启不该让用户
+  // 面对「后端未运行」的错误卡，而是看到「正在启动」的加载过程）。
+  // deploy start 遇「已在运行」会原样返回，重复打开壳是安全的。
+  if (cfg.value?.configured) {
+    void startBot();
+  }
   // Bot 已在运行（比如壳重启而 Bot 未关）→ 自动进面板；
   // 就绪探测带重试循环——单次探测失败不该把用户困在离线页
   void (async () => {
@@ -222,7 +296,46 @@ onMounted(async () => {
 
 <template>
   <div class="offline-wrap">
-    <div class="offline-card">
+    <!-- 启动中：动画 + 阶段提示（首启全流程反馈，替代吓人的错误卡） -->
+    <div v-if="starting" class="offline-card text-center">
+      <v-icon
+        icon="mdi-star-four-points"
+        color="secondary"
+        size="64"
+        class="mb-4 stella-boot-star"
+      />
+      <div class="text-h6 mb-1">正在启动 Stella</div>
+      <div class="text-body-2 text-medium-emphasis mb-3">{{ step || '准备中…' }}</div>
+      <v-progress-linear indeterminate color="secondary" class="mb-4 rounded" />
+      <div class="text-body-2 mb-1">{{ BOOT_HINTS[hintIndex] }}</div>
+      <div class="text-caption text-disabled">
+        已运行 {{ elapsedText }} · 首次启动需要下载运行时与依赖，可能需要数分钟，请勿关闭窗口
+      </div>
+      <div class="d-flex ga-2 justify-center mt-4">
+        <v-btn size="small" variant="text" @click="runShellDoctor">环境自检</v-btn>
+      </div>
+      <div v-if="doctorItems.length" class="text-left mt-4" style="max-width: 36rem">
+        <div v-for="(item, i) in doctorItems" :key="i" class="d-flex ga-2 mb-2">
+          <v-icon
+            size="small"
+            :color="item.level === 'error' ? 'error' : item.level === 'warn' ? 'warning' : 'success'"
+            :icon="item.level === 'error' ? 'mdi-close-circle' : item.level === 'warn' ? 'mdi-alert' : 'mdi-check-circle'"
+          />
+          <div>
+            <div class="text-body-2">{{ item.title }}</div>
+            <div v-if="item.detail" class="text-caption text-medium-emphasis">{{ item.detail }}</div>
+            <div v-if="item.fix_hint" class="text-caption text-medium-emphasis">建议：{{ item.fix_hint }}</div>
+          </div>
+        </div>
+      </div>
+      <details v-if="doctorText" class="mt-2 text-left" style="max-width: 36rem">
+        <summary class="text-caption text-medium-emphasis">原始报告</summary>
+        <pre class="text-caption" style="max-height: 200px; overflow-y: auto; white-space: pre-wrap">{{ doctorText }}</pre>
+      </details>
+      <div v-if="startError" class="text-error text-caption mt-2 pre-wrap">{{ startError }}</div>
+    </div>
+
+    <div v-else class="offline-card">
       <v-icon icon="mdi-lan-disconnect" color="warning" size="44" class="mb-3" />
       <div class="text-h6 mb-2">{{ $t('features.offline.title') }}</div>
       <p class="text-body-2 text-medium-emphasis mb-4">
@@ -255,11 +368,20 @@ onMounted(async () => {
       >
         修改基础配置（群号 / 模型 / 连接）
       </v-btn>
-      <pre
-        v-if="doctorText"
-        class="text-caption text-left mt-4"
-        style="max-height: 200px; overflow-y: auto; white-space: pre-wrap"
-      >{{ doctorText }}</pre>
+      <div v-if="doctorItems.length" class="text-left mt-4" style="max-width: 36rem">
+        <div v-for="(item, i) in doctorItems" :key="i" class="d-flex ga-2 mb-2">
+          <v-icon
+            size="small"
+            :color="item.level === 'error' ? 'error' : item.level === 'warn' ? 'warning' : 'success'"
+            :icon="item.level === 'error' ? 'mdi-close-circle' : item.level === 'warn' ? 'mdi-alert' : 'mdi-check-circle'"
+          />
+          <div>
+            <div class="text-body-2">{{ item.title }}</div>
+            <div v-if="item.detail" class="text-caption text-medium-emphasis">{{ item.detail }}</div>
+            <div v-if="item.fix_hint" class="text-caption text-medium-emphasis">建议：{{ item.fix_hint }}</div>
+          </div>
+        </div>
+      </div>
       <div v-if="step" class="text-caption text-medium-emphasis mt-2">{{ step }}</div>
       <div v-if="startError" class="text-error text-caption mt-2 pre-wrap">{{ startError }}</div>
     </div>
@@ -335,5 +457,23 @@ onMounted(async () => {
 }
 .pre-wrap {
   white-space: pre-wrap;
+}
+/* 启动动画：星标旋转 + 呼吸缩放（logo 同款四角星） */
+.stella-boot-star {
+  animation: stella-boot-spin 2.4s ease-in-out infinite;
+}
+@keyframes stella-boot-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+    opacity: 0.75;
+  }
 }
 </style>
