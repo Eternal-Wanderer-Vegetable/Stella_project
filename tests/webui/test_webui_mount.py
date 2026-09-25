@@ -189,3 +189,79 @@ def test_missing_hashed_asset_404s_instead_of_spa_fallback(
     resp = client.get("/assets/app.js")
     assert resp.status_code == 200
     assert "/*app*/" in resp.text
+
+
+# ---------- dist 健康体检（版本标记 + 引用完整性，2026-09-25 机制 1） ----------
+
+
+def _spa_client(monkeypatch, isolated_home):
+    """与 test_spa_hosting 同款：静态托管开启的 TestClient（每例独立 app）。"""
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(settings, "WEBUI_SERVE_DIST", True)
+    app = _main_app()
+    mount_webui(app)
+    return TestClient(app)
+
+
+def test_dist_health_warns_on_missing_hashed_entry(
+    isolated_home, monkeypatch, make_dist, caplog
+):
+    """index.html 引用的本地 js 缺失 = 不完整 dist，必须告警（白屏前兆）。"""
+    import logging
+
+    from webui import static as webui_static
+
+    monkeypatch.setattr(webui_static, "_dist_health_reported", False)
+    make_dist()
+    (isolated_home / "webui" / "dist" / "index.html").write_text(
+        '<html><script src="./assets/app.js"></script>'
+        '<script src="./assets/ghost-chunk.js"></script></html>',
+        encoding="utf-8",
+    )
+    client = _spa_client(monkeypatch, isolated_home)
+    with caplog.at_level(logging.WARNING, logger="webui.static"):
+        assert client.get("/").status_code == 200
+    assert any("dist 不完整" in r.getMessage() for r in caplog.records)
+    assert any("ghost-chunk.js" in r.getMessage() for r in caplog.records)
+
+
+def test_dist_health_warns_on_version_mismatch(
+    isolated_home, monkeypatch, make_dist, caplog
+):
+    """dist 自带版本标记与程序版本不一致时告警（过期发布包的显式线索）。"""
+    import logging
+
+    from webui import static as webui_static
+
+    monkeypatch.setattr(webui_static, "_dist_health_reported", False)
+    make_dist()
+    # 程序版本判据 = 隔离树里的 pyproject.toml（program_version 读它）
+    (isolated_home / "pyproject.toml").write_text(
+        'version = "9.9.9"', encoding="utf-8"
+    )
+    dist = isolated_home / "webui" / "dist"
+    (dist / "assets" / "version").write_text("0.0.1", encoding="utf-8")
+    (dist / "index.html").write_text(
+        '<html><script src="./assets/app.js"></script></html>', encoding="utf-8"
+    )
+    client = _spa_client(monkeypatch, isolated_home)
+    with caplog.at_level(logging.WARNING, logger="webui.static"):
+        assert client.get("/").status_code == 200
+    assert any("版本" in r.getMessage() and "不一致" in r.getMessage() for r in caplog.records)
+
+
+def test_dist_health_silent_when_version_unknown(
+    isolated_home, monkeypatch, make_dist, caplog
+):
+    """本地手搓 dist 没有版本标记：不告警（未知版本不参与比对）。"""
+    import logging
+
+    from webui import static as webui_static
+
+    monkeypatch.setattr(webui_static, "_dist_health_reported", False)
+    make_dist()
+    client = _spa_client(monkeypatch, isolated_home)
+    with caplog.at_level(logging.WARNING, logger="webui.static"):
+        assert client.get("/").status_code == 200
+    assert not [r for r in caplog.records if "不一致" in r.getMessage()]
