@@ -730,6 +730,20 @@ jobs:
             --rust-wheel rust-wheel/*.whl
           python scripts/build_release_package.py --help >/dev/null
 
+      # WebUI 前端产物单独成一份 Release 资产：CI 漏拷或安装包损坏时，可从
+      # Release 页拿到与版本匹配的面板产物手动补进 webui/dist（AstrBot 同款
+      # 的 latest + 版本名双份策略）。
+      - name: 打包 WebUI 前端产物（Release 资产）
+        run: |
+          test -s webui/dist/assets/version || {
+            echo "::error::webui/dist 缺少 assets/version 版本标记"; exit 1;
+          }
+          version="$(sed -E 's/^[vV]//; s/[[:space:]]//g' webui/dist/assets/version | head -c 32)"
+          test -n "$version" || { echo "::error::无法解析前端版本标记"; exit 1; }
+          (cd webui/dist && zip -q -r "$GITHUB_WORKSPACE/dist/products/Stella-WebUI-v${version}.zip" .)
+          cp "dist/products/Stella-WebUI-v${version}.zip" dist/products/Stella-WebUI-latest.zip
+          ls -lh dist/products/Stella-WebUI-*
+
           mapfile -t catalog_backends < <(
             find llama-catalog -maxdepth 1 -type f -name '*.zip' -print
           )

@@ -46,10 +46,53 @@ const BOOT_HINTS = [
 ];
 let hintTimer: number | null = null;
 let elapsedTimer: number | null = null;
+let progressTimer: number | null = null;
+
+// 真实进度（2026-09-25 用户要求）：bootstrap 组件安装（NapCat / embedding
+// 模型逐个推进，失败时 state=failed + error）与 prepare_runtime 的文本进度
+// （运行时下载 / pip / 依赖安装）。都读不到时才回落轮播提示。
+interface BootProgress {
+  state?: string;
+  current?: string;
+  completed?: string[];
+  error?: string;
+}
+const liveProgress = ref<{ bootstrap: BootProgress | null; prepare: string | null } | null>(null);
+const bootstrapFailed = computed(
+  () => liveProgress.value?.bootstrap?.state === 'failed',
+);
+const liveLine = computed(() => {
+  const lp = liveProgress.value;
+  if (!lp) return '';
+  if (lp.bootstrap?.state === 'failed') {
+    return `组件安装失败：${lp.bootstrap.error || lp.bootstrap.current || '未知原因'}`;
+  }
+  if (lp.bootstrap?.current) {
+    const done = lp.bootstrap.completed?.length ?? 0;
+    return `正在安装组件：${lp.bootstrap.current}（已完成 ${done} 项）`;
+  }
+  return lp.prepare || '';
+});
+
+async function pollStartProgress(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    liveProgress.value = await tauriBridge.invoke<{ bootstrap: BootProgress | null; prepare: string | null }>(
+      'read_start_progress',
+    );
+  } catch {
+    // 进度读不到不影响启动；轮播提示继续兜底
+  }
+}
 
 function startLoadingUi(): void {
   elapsedSecs.value = 0;
   hintIndex.value = 0;
+  liveProgress.value = null;
+  void pollStartProgress();
+  if (progressTimer === null) {
+    progressTimer = window.setInterval(() => void pollStartProgress(), 1500);
+  }
   if (hintTimer === null) {
     hintTimer = window.setInterval(() => {
       hintIndex.value = (hintIndex.value + 1) % BOOT_HINTS.length;
@@ -70,6 +113,10 @@ function stopLoadingUi(): void {
   if (elapsedTimer !== null) {
     window.clearInterval(elapsedTimer);
     elapsedTimer = null;
+  }
+  if (progressTimer !== null) {
+    window.clearInterval(progressTimer);
+    progressTimer = null;
   }
 }
 
@@ -307,6 +354,10 @@ onMounted(async () => {
       <div class="text-h6 mb-1">正在启动 Stella</div>
       <div class="text-body-2 text-medium-emphasis mb-3">{{ step || '准备中…' }}</div>
       <v-progress-linear indeterminate color="secondary" class="mb-4 rounded" />
+      <div v-if="liveLine" class="text-body-2 font-weight-medium mb-1">{{ liveLine }}</div>
+      <div v-if="bootstrapFailed" class="text-error text-body-2 mb-1">
+        组件安装失败不影响程序运行——点「重试」可重新安装组件。
+      </div>
       <div class="text-body-2 mb-1">{{ BOOT_HINTS[hintIndex] }}</div>
       <div class="text-caption text-disabled">
         已运行 {{ elapsedText }} · 首次启动需要下载运行时与依赖，可能需要数分钟，请勿关闭窗口
