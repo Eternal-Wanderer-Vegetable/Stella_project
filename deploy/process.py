@@ -523,7 +523,7 @@ def preflight_for_foreground_start() -> bool:
     与 start_detached 同一接管语义；端口仍被身份不明的占用者把着时返回
     False——前台启动没有兜底清理，绑定失败就是用户终端里一行 10048。
     """
-    replaced, note = replace_running()
+    _, note = replace_running()
     if note:
         print(note)
     if _service_port_in_use():

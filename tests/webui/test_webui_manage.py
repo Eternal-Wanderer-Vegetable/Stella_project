@@ -280,7 +280,7 @@ def test_list_sources_rewrites_broken_legacy_official_url(isolated_home, monkeyp
 def test_market_parses_official_keyed_dict_format(monkeypatch):
     """官方市场 2026-09 起是 {repo 键: 元数据} 字典（$meta 为清单信息）：
     逐条转成市场卡字段，$meta 跳过，缺 name 的用 repo 键尾段兜底。"""
-    from webui.services import plugins_manage
+    from webui.services import plugins_manage as plugins_manage_module
 
     raw = {
         "$meta": {"schema_version": 1, "name": "AstrBot Official Plugin Market"},
@@ -298,7 +298,6 @@ def test_market_parses_official_keyed_dict_format(monkeypatch):
             "repo": "https://github.com/someone/no-name-field",
         },
     }
-    from webui.services import plugins_manage as plugins_manage_module
 
     monkeypatch.setattr(
         plugins_manage_module, "list_sources",
