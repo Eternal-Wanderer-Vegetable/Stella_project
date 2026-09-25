@@ -250,7 +250,7 @@ onMounted(() => {
       <v-card>
         <v-card-title>新建定时任务</v-card-title>
         <v-card-text>
-          <div class="d-flex ga-3 align-start">
+          <div class="d-flex ga-3 align-start mt-2">
             <v-select
               v-model="groupId"
               :items="groupItems"
@@ -266,7 +266,7 @@ onMounted(() => {
               hide-details
               style="max-width: 9rem"
             />
-            <v-tooltip location="top" max-width="22rem">
+            <v-tooltip location="top" :max-width="380">
               <template #activator="{ props: tip }">
                 <v-icon
                   v-bind="tip"
@@ -291,7 +291,13 @@ onMounted(() => {
           />
 
           <div class="text-caption text-medium-emphasis mt-4 mb-1">重复（星期几）</div>
-          <v-btn-toggle v-model="selectedDays" multiple variant="outlined" density="comfortable">
+          <v-btn-toggle
+            v-model="selectedDays"
+            multiple
+            variant="outlined"
+            density="comfortable"
+            class="stella-day-toggle d-flex"
+          >
             <v-btn v-for="d in WEEKDAYS" :key="d.value" :value="d.value" class="flex-grow-1">
               {{ d.title }}
             </v-btn>
@@ -314,7 +320,7 @@ onMounted(() => {
               hide-details
               style="max-width: 13rem"
             />
-            <v-tooltip location="top" max-width="22rem">
+            <v-tooltip location="top" :max-width="380">
               <template #activator="{ props: tip }">
                 <v-icon
                   v-bind="tip"
@@ -339,10 +345,6 @@ onMounted(() => {
               {{ preset.label }}
             </v-chip>
           </div>
-
-          <div class="text-caption text-medium-emphasis mt-3">
-            将创建 Cron：<code>{{ cronExpr }}</code>（{{ timezone }}）
-          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -353,3 +355,19 @@ onMounted(() => {
     </v-dialog>
   </v-container>
 </template>
+
+<style scoped>
+/* 选中的星期按钮用星芒金（Stella logo 同色）：金底 + 深板岩字，高对比 */
+.stella-day-toggle :deep(.v-btn--active) {
+  background-color: #e5ce9c !important;
+  color: #171d24 !important;
+}
+
+.stella-day-toggle :deep(.v-btn--active:hover) {
+  background-color: #eeddb2 !important;
+}
+
+.stella-tip-icon {
+  cursor: help;
+}
+</style>
