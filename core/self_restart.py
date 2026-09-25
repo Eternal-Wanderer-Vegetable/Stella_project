@@ -86,7 +86,13 @@ def spawn_successor() -> dict:
 
 def _pid_alive(pid: int) -> bool:
     """进程存活探测。Windows 上 ``os.kill(pid, 0)`` 会 TerminateProcess（见
-    deploy/process.py 的注释），这里用只读的 OpenProcess + 退出码判断。"""
+    deploy/process.py 的注释），这里用只读的 OpenProcess + 退出码判断。
+
+    POSIX 上 ``os.kill(pid, 0)`` 对**僵尸进程**（已退出、未被父进程 wait）
+    依然成功——而 CI/终端里 terminate 子进程后它恰恰就是僵尸。必须读
+    /proc 的状态位把僵尸判成已死，否则等待循环永远放不了行
+    （2026-09-25 Linux CI 实测）。
+    """
     if pid <= 0:
         return False
     if os.name == "nt":
@@ -113,6 +119,14 @@ def _pid_alive(pid: int) -> bool:
         return True
     except OSError:
         return False
+    try:
+        # /proc/{pid}/stat 格式为 `pid (comm) state ...`；comm 可能含空格与
+        # 括号，从最后一个 ')' 之后取状态字符（与 deploy.process 同一口径）。
+        stat_text = (Path("/proc") / str(pid) / "stat").read_text(encoding="utf-8")
+        if stat_text.rpartition(")")[2].lstrip()[:1] == "Z":
+            return False
+    except (OSError, ValueError):
+        pass
     return True
 
 
