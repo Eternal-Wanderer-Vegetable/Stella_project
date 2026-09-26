@@ -115,14 +115,19 @@ def check_dependencies(snap: Snapshot) -> CheckResult | None:
 
 
 def check_env_file(snap: Snapshot) -> CheckResult | None:
-    """.env 不存在 → error。"""
+    """.env 不存在 → warn（settings 全量默认值即可启动，2026-09-26 自锁修复）。
+
+    首启流程依赖「无 .env 也能启动」：面板起来后的一切配置都会由面板写回
+    .env；若缺文件阻塞启动，就回到了「先有鸡还是先有蛋」的死锁。
+    """
     if not snap.env_exists:
         return CheckResult(
             id="env_file",
-            level="error",
-            title="缺少 .env 配置文件",
-            detail="项目根目录下没有 .env。",
-            fix_hint="python -m deploy init 或 cp .env.example .env",
+            level="warn",
+            title="缺少 .env 配置文件（按默认值运行）",
+            detail="项目根目录下没有 .env——全部配置项使用内置默认值。",
+            fix_hint="无需手动处理：在面板里保存任意配置时会自动创建 .env；"
+            "也可以 python -m deploy init 或 cp .env.example .env。",
         )
     return None
 
