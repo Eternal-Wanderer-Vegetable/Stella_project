@@ -83,8 +83,10 @@ def bootstrap_offline(install_root: Path) -> None:
     # 1) ._pth 补丁（必须最先做：否则 get-pip / pip 的 import 全挂）
     patch_pth(runtime)
 
-    # 2) 离线引导 pip（get-pip.py 内嵌完整 pip wheel）
+    # 2) 离线引导 pip：get-pip 以 --no-index 运行时，"pip" 需求必须由
+    #    --find-links 里的 pip wheel 解析（负载构建时已显式带上 pip）
     _run([str(python), str(offline / "get-pip.py"), "--no-index",
+          "--find-links", str(offline / "wheels"),
           "--no-warn-script-location"], install_root)
 
     # 3) 离线安装依赖闭包

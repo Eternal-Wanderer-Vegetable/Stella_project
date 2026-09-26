@@ -133,6 +133,8 @@ def build_wheels(requirements: Path, wheels_dir: Path) -> None:
         sys.executable, "-m", "pip", "wheel",
         "-r", str(requirements),
         "setuptools", "wheel",
+        # pip 本体：get-pip.py 配合 --no-index 时从 wheels 解析 "pip" 需求
+        "pip",
         "-w", str(wheels_dir),
     ]
     subprocess.run(command, check=True)
