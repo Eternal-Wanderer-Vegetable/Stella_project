@@ -47,6 +47,7 @@ const BOOT_HINTS = [
 let hintTimer: number | null = null;
 let elapsedTimer: number | null = null;
 let progressTimer: number | null = null;
+let botProbeTimer: number | null = null;
 
 // 真实进度（2026-09-25 用户要求）：bootstrap 组件安装（NapCat / embedding
 // 模型逐个推进，失败时 state=failed + error）与 prepare_runtime 的文本进度
@@ -85,13 +86,39 @@ async function pollStartProgress(): Promise<void> {
   }
 }
 
+// 直连 Bot 状态接口的事实探针：进程起没起、接口通没通，亮在加载视图上。
+// bot 起来后立即导航进面板（不等 Tauri 侧的等待命令返回）。
+const botProbe = ref<{ pid: number | null; online: boolean }>({ pid: null, online: false });
+
+async function pollBotStatus(): Promise<void> {
+  const port = cfg.value?.port || 8080;
+  try {
+    const resp = await fetch(`http://127.0.0.1:${port}/stella/status`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!resp.ok) throw new Error(String(resp.status));
+    const data = (await resp.json()) as { pid?: number };
+    botProbe.value = { pid: data.pid ?? null, online: true };
+    if (starting.value && step.value.startsWith('等待服务就绪')) {
+      step.value = 'Bot 已就绪，正在打开面板…';
+      window.location.href = `http://127.0.0.1:${port}/`;
+    }
+  } catch {
+    botProbe.value = { pid: null, online: false };
+  }
+}
+
 function startLoadingUi(): void {
   elapsedSecs.value = 0;
   hintIndex.value = 0;
   liveProgress.value = null;
   void pollStartProgress();
+  void pollBotStatus();
   if (progressTimer === null) {
     progressTimer = window.setInterval(() => void pollStartProgress(), 1500);
+  }
+  if (botProbeTimer === null) {
+    botProbeTimer = window.setInterval(() => void pollBotStatus(), 2000);
   }
   if (hintTimer === null) {
     hintTimer = window.setInterval(() => {
@@ -117,6 +144,10 @@ function stopLoadingUi(): void {
   if (progressTimer !== null) {
     window.clearInterval(progressTimer);
     progressTimer = null;
+  }
+  if (botProbeTimer !== null) {
+    window.clearInterval(botProbeTimer);
+    botProbeTimer = null;
   }
 }
 
