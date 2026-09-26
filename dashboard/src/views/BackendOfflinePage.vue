@@ -348,12 +348,11 @@ onMounted(async () => {
   } finally {
     cfgLoaded.value = true;
   }
-  // 已配置过的安装：打开壳即自动启动（2026-09-25 用户要求——首启不该让用户
-  // 面对「后端未运行」的错误卡，而是看到「正在启动」的加载过程）。
+  // 一键安装（2026-09-26 用户要求）：打开壳即自动启动，不再要求先点
+  // 「初始化并启动」。未配置的机器以 settings 默认值启动（空群号/无模型
+  // 均为非阻塞 warn），用户随后在面板里完成全部配置。
   // deploy start 遇「已在运行」会原样返回，重复打开壳是安全的。
-  if (cfg.value?.configured) {
-    void startBot();
-  }
+  void startBot();
   // Bot 已在运行（比如壳重启而 Bot 未关）→ 自动进面板；
   // 就绪探测带重试循环——单次探测失败不该把用户困在离线页
   void (async () => {
@@ -434,12 +433,9 @@ onMounted(async () => {
           :loading="starting"
           @click="startBot"
         >
-          {{ cfg?.configured ? '启动 Bot' : '初始化并启动' }}
+          启动 Bot
         </v-btn>
         <v-btn v-if="inShell" variant="text" @click="runShellDoctor">环境自检</v-btn>
-      </div>
-      <div v-if="inShell && cfgLoaded && !cfg?.configured" class="text-caption text-medium-emphasis mt-2">
-        检测到尚未完成初始配置——点「初始化并启动」填写基本信息。
       </div>
       <v-btn
         v-if="inShell && cfgLoaded && cfg?.configured"

@@ -300,9 +300,9 @@ def test_dependencies_missing():
 
 
 def test_env_file_missing():
+    """缺 .env 降为 warn：settings 全量默认值可启动（首启自锁修复）。"""
     r = checks.check_env_file(_healthy_snapshot(env_exists=False))
-    assert r is not None and r.level == "error"
-
+    assert r is not None and r.level == "warn"
 
 def test_allowed_groups_empty():
     """空名单降为 warn（WebUI 时代自锁问题，2026-09-26）：不再阻塞启动。"""
