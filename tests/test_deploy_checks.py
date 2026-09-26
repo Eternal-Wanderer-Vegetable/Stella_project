@@ -100,8 +100,9 @@ def test_to_json_gui_contract():
     assert doc["version"] == 1
     assert isinstance(doc["items"], list)
     assert doc["summary"]["total"] == checks.total_checks()
-    assert doc["summary"]["error"] >= 1
-    assert doc["summary"]["blocking"] is True
+    # 空名单已降为 warn（自锁修复，2026-09-26）：健康快照 + 空群号 = 无 error
+    assert doc["summary"]["error"] == 0
+    assert doc["summary"]["blocking"] is False
     assert "llm" not in doc  # 不传 snapshot 时结构不变（老 GUI 不该看到多出来的键）
 
 
@@ -257,7 +258,8 @@ def test_run_all_sorts_error_warn_ok():
     )
     levels = [r.level for r in checks.run_all(snap)]
     assert levels == sorted(levels, key=lambda lv: _LEVEL_ORDER[lv])
-    assert levels[0] == "error"
+    # 空群号已降为 warn（自锁修复，2026-09-26）；弃用键提醒也是 warn
+    assert levels and levels[0] == "warn"
 
 
 def test_run_all_flattens_multi_result_check():
@@ -303,8 +305,9 @@ def test_env_file_missing():
 
 
 def test_allowed_groups_empty():
+    """空名单降为 warn（WebUI 时代自锁问题，2026-09-26）：不再阻塞启动。"""
     r = checks.check_allowed_groups(_healthy_snapshot(allowed_groups=[]))
-    assert r is not None and r.level == "error"
+    assert r is not None and r.level == "warn"
 
 
 # ── OneBot 连接 ──

@@ -128,14 +128,23 @@ def check_env_file(snap: Snapshot) -> CheckResult | None:
 
 
 def check_allowed_groups(snap: Snapshot) -> CheckResult | None:
-    """ALLOWED_GROUPS 为空 → error。"""
+    """ALLOWED_GROUPS 为空 → warn（不再是阻塞启动的 error）。
+
+    曾经是 error：空白名单 = 群聊完全无反应，拦在启动前逼用户先填群号。
+    但 WebUI 时代这是**自锁**——群号的配置入口（群组页/面板）恰恰要 bot
+    跑起来才能访问：空群号 → 拒绝启动 → 进不了面板 → 永远配不了群号
+    （2026-09-26 离线安装用户实测卡死在启动页）。降为 warn：bot 照常启动，
+    群聊配置好后即可响应（WebUI 群组页可随时补配，无需再动 .env）。
+    """
     if not snap.allowed_groups:
         return CheckResult(
             id="allowed_groups",
-            level="error",
-            title="ALLOWED_GROUPS 为空",
-            detail="症状是完全无反应——@ 机器人不会有任何回复（这是最难自查的错误）。",
-            fix_hint="在 .env 里填写 ALLOWED_GROUPS=群号（多个用英文逗号分隔）。",
+            level="warn",
+            title="ALLOWED_GROUPS 为空（群聊将不会响应）",
+            detail="症状是完全无反应——@ 机器人不会有任何回复（这是最难自查的错误）。"
+            "不影响启动与 WebUI 面板。",
+            fix_hint="启动后在「扩展 · 群组」页绑定群号；或直接在 .env 里填写 "
+            "ALLOWED_GROUPS=群号（多个用英文逗号分隔）。",
         )
     return None
 
