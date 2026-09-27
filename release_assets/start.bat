@@ -202,12 +202,16 @@ if exist "%RUST_MARKER%" (
     if /i "!RUST_MARKED!"=="!RUST_HASH!" exit /b 0
 )
 echo Installing the bundled Rust memory engine...
-"%PY%" -m pip install --no-index --no-deps --upgrade --target . "%RUST_WHEEL%"
+rem A wheel is a plain zip; extract it in place so _native.pyd just lands in
+rem the existing package. Do NOT use "pip install --target ." here: pip wipes
+rem the existing package directory first, which would delete the Python half
+rem of memory_rust (selector.py etc.) that ships beside the wheel.
+"%PY%" -m zipfile -e "%RUST_WHEEL%" .
 if errorlevel 1 (
     echo [ERROR] Failed to install the bundled Rust memory engine.
     exit /b 1
 )
-"%PY%" -c "import memory_rust._native" >nul 2>&1
+"%PY%" -c "import memory_rust._native, memory_rust.selector" >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] The bundled Rust memory engine failed its import check.
     exit /b 1

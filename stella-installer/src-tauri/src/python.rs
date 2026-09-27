@@ -414,21 +414,25 @@ mod runtime_bootstrap {
 
         emit_progress(root, "正在安装随包提供的 Rust 记忆引擎…");
         let wheel_arg = wheel.to_string_lossy().into_owned();
+        // wheel 就是个 zip，原地解包只会把 _native.pyd 叠进已有包目录。不能走
+        // "pip install --target ."：pip 会先删掉目标里已有的同名包目录，把随包
+        // 发布的 memory_rust Python 半边（selector.py 等）一并抹掉，运行时才炸
+        // No module named 'memory_rust.selector'，而下面的 _native 自检照过。
         let install_args = [
             "-m",
-            "pip",
-            "install",
-            "--no-index",
-            "--no-deps",
-            "--upgrade",
-            "--target",
-            ".",
+            "zipfile",
+            "-e",
             wheel_arg.as_str(),
+            ".",
         ];
         run(python, &install_args, root)
             .map_err(|e| format!("Rust 记忆引擎安装失败：{e}"))?;
-        run(python, &["-c", "import memory_rust._native"], root)
-            .map_err(|e| format!("Rust 记忆引擎导入检查失败：{e}"))?;
+        run(
+            python,
+            &["-c", "import memory_rust._native, memory_rust.selector"],
+            root,
+        )
+        .map_err(|e| format!("Rust 记忆引擎导入检查失败：{e}"))?;
         fs::write(&marker, expected + "\n").map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -1168,10 +1172,10 @@ mod runtime_bootstrap {
                 "GUI bootstrap 必须安装随包提供的 Rust wheel"
             );
             assert!(
-                src.contains("--no-index")
-                    && src.contains("--no-deps")
-                    && src.contains("import memory_rust._native"),
-                "GUI bootstrap 必须离线安装并检查 Rust native extension"
+                src.contains("\"zipfile\"")
+                    && src.contains("import memory_rust._native, memory_rust.selector")
+                    && !src.contains("\"--target\""),
+                "GUI bootstrap 必须原地解包 wheel（pip --target 会先删同名包目录）并检查完整导入"
             );
 
             let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1188,8 +1192,8 @@ mod runtime_bootstrap {
                 "start.bat 必须发现随包提供的 Rust wheel"
             );
             assert!(
-                bat.contains("--no-index") && bat.contains("import memory_rust._native"),
-                "start.bat 必须离线安装并检查 Rust native extension"
+                bat.contains("-m zipfile -e") && bat.contains("import memory_rust._native, memory_rust.selector"),
+                "start.bat 必须原地解包 wheel（pip --target 会先删同名包目录）并检查完整导入"
             );
         }
     }

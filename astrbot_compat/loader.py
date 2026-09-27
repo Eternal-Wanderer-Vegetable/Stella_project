@@ -393,6 +393,11 @@ def _import_failure_reason(exc: Exception, plugin_dir: Path, pkg: str) -> str:
     # 缺的是插件自己的模块：那是插件内部的导入写错了，不是缺依赖
     if not missing or missing == pkg or missing.startswith(f"{pkg}."):
         return repr(exc)
+    # 缺的是插件命名空间的祖先（data / data.plugins）：数据根不在 sys.path
+    # 之类的装载器自身问题，照缺依赖翻译会误导用户去 pip install（2026-09-27
+    # v5.1.9 安装实测：两个插件全被报成「缺少依赖模块 'data'」）
+    if pkg.startswith(f"{missing}."):
+        return repr(exc)
     req = plugin_dir / "requirements.txt"
     if req.is_file():
         return f"缺少依赖模块 {missing!r}；执行 pip install -r \"{req}\" 装齐插件依赖后重启"
@@ -610,6 +615,19 @@ def load_all_plugins() -> list[StarMetadata]:
         root_str = str(PROJECT_ROOT)
         if root_str not in sys.path:
             sys.path.insert(0, root_str)
+
+    # `import data.plugins.X` 要求 `data` 的父目录（数据根）在 sys.path 上。
+    # 插件随数据根住在 `<STELLA_HOME>/data/plugins`（STELLA_HOME 在程序目录
+    # 之外的常态部署）时，只插 PROJECT_ROOT 解析不到 `data`，所有插件会以
+    # ModuleNotFoundError('data') 告终（2026-09-27 v5.1.9 安装实测）。
+    with contextlib.suppress(Exception):
+        from config.settings import ASTRBOT_PLUGINS_DIR
+
+        plugins_root = Path(ASTRBOT_PLUGINS_DIR)
+        if plugins_root.name == "plugins":
+            data_root = str(plugins_root.parent.parent)
+            if data_root not in sys.path:
+                sys.path.insert(0, data_root)
 
     # data / data.plugins 是命名空间包，导入系统会缓存目录清单。若 data/plugins/
     # 在本进程启动后才出现新插件目录，不清缓存会 ModuleNotFoundError。

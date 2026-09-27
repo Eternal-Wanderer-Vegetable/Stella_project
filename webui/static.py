@@ -92,9 +92,8 @@ def _report_dist_health_once(dist: Path) -> None:
     missing = _dist_missing_entries(dist)
     if missing:
         logger.warning(
-            "⚠️ WebUI 前端 dist 不完整：index.html 引用的 %s 缺失——"
-            "客户端可能白屏。请完整重建前端并覆盖 webui/dist。",
-            ", ".join(missing[:5]),
+            f"⚠️ WebUI 前端 dist 不完整：index.html 引用的 {', '.join(missing[:5])} 缺失——"
+            "客户端可能白屏。请完整重建前端并覆盖 webui/dist。"
         )
 
     dist_version = _read_dist_version(dist)
@@ -108,10 +107,8 @@ def _report_dist_health_once(dist: Path) -> None:
         return
     if core_version and dist_version.lstrip("vV") != core_version.lstrip("vV"):
         logger.warning(
-            "⚠️ WebUI 前端版本 (%s) 与程序版本 (%s) 不一致——"
-            "若页面行为异常，请核对发布包里的 webui/dist 是否与程序同期构建。",
-            dist_version,
-            core_version,
+            f"⚠️ WebUI 前端版本 ({dist_version}) 与程序版本 ({core_version}) 不一致——"
+            "若页面行为异常，请核对发布包里的 webui/dist 是否与程序同期构建。"
         )
 
 

@@ -141,6 +141,15 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "behavior_rule",
         "ALTER TABLE memory_candidates ADD COLUMN behavior_rule TEXT",
     ),
+    # content_raw：Rust 晋升后端（memory_rust/native/src/promotion.rs）的候选
+    # 查询硬编码要求这一列，但建表与迁移此前都不创建它——新库老库全都缺，
+    # MEMORY_BACKEND=rust 时整合必炸「no such column: content_raw」，
+    # Python 晋升不读它所以一直没暴露。2026-09-27 用户安装实测（v5.1.9）。
+    (
+        "memory_candidates",
+        "content_raw",
+        "ALTER TABLE memory_candidates ADD COLUMN content_raw TEXT",
+    ),
     # memories（主表）：补上 v2 记忆字段
     (
         "memories",
@@ -422,6 +431,7 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     user_id TEXT,
     type TEXT,
     content TEXT,
+    content_raw TEXT,
     importance REAL,
     confidence REAL,
     evidence TEXT,
