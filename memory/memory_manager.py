@@ -111,9 +111,7 @@ class MemoryManager:
         if mode in {"auto", "rust", "strict"}:
             decision, backend = resolve_backend(mode)
             logger.info(
-                "[MemoryBackend] promotion backend selected: %s (requested=%s)",
-                backend.name,
-                decision.requested,
+                f"[MemoryBackend] promotion backend selected: {backend.name} (requested={decision.requested})"
             )
             if backend.name == "rust":
                 started = time.perf_counter()
@@ -123,31 +121,23 @@ class MemoryManager:
                     elapsed_ms = (time.perf_counter() - started) * 1000
                     if decision.requested != "auto":
                         logger.error(
-                            "[MemoryBackend] Rust promotion failed in non-fallback mode "
-                            "(elapsed_ms=%.1f): %s: %s",
-                            elapsed_ms,
-                            type(exc).__name__,
-                            exc,
+                            f"[MemoryBackend] Rust promotion failed in non-fallback mode "
+                            f"(elapsed_ms={elapsed_ms:.1f}): {type(exc).__name__}: {exc}"
                         )
                         raise
                     logger.warning(
-                        "[MemoryBackend] Rust promotion fallback to Python "
-                        "(elapsed_ms=%.1f): %s: %s",
-                        elapsed_ms,
-                        type(exc).__name__,
-                        exc,
+                        f"[MemoryBackend] Rust promotion fallback to Python "
+                        f"(elapsed_ms={elapsed_ms:.1f}): {type(exc).__name__}: {exc}"
                     )
                     return self._process_new_candidates_python()
                 logger.info(
-                    "[MemoryBackend] Rust promotion committed "
-                    "(elapsed_ms=%.1f)",
-                    (time.perf_counter() - started) * 1000,
+                    f"[MemoryBackend] Rust promotion committed "
+                    f"(elapsed_ms={(time.perf_counter() - started) * 1000:.1f})"
                 )
                 return None
             if decision.fallback_reason:
                 logger.warning(
-                    "[MemoryBackend] Rust promotion unavailable; using Python: %s",
-                    decision.fallback_reason,
+                    f"[MemoryBackend] Rust promotion unavailable; using Python: {decision.fallback_reason}"
                 )
         return self._process_new_candidates_python()
 
@@ -191,8 +181,7 @@ class MemoryManager:
         conn.commit()
         conn.close()
         logger.info(
-            "[MemoryBackend] Rust promotion candidates=%d",
-            len(rows),
+            f"[MemoryBackend] Rust promotion candidates={len(rows)}"
         )
 
         promoted = False
@@ -208,9 +197,7 @@ class MemoryManager:
                 status_conn.commit()
                 status_conn.close()
                 logger.debug(
-                    "[MemoryManager] candidate %s -> OBSERVING: %s",
-                    candidate["id"],
-                    reason,
+                    f"[MemoryManager] candidate {candidate['id']} -> OBSERVING: {reason}"
                 )
                 continue
 
@@ -237,9 +224,7 @@ class MemoryManager:
             if result_promoted:
                 promoted = True
                 logger.info(
-                    "[MemoryManager] Rust promoted candidate %s: %s",
-                    candidate["id"],
-                    reason,
+                    f"[MemoryManager] Rust promoted candidate {candidate['id']}: {reason}"
                 )
 
         if promoted:

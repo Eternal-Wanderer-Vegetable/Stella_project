@@ -425,9 +425,7 @@ def _retrieve_with_optional_backend(
     except Exception as exc:
         if decision.requested in {"auto", "shadow"}:
             logger.warning(
-                "[MemoryBackend] Rust retrieval fallback: %s: %s",
-                type(exc).__name__,
-                exc,
+                f"[MemoryBackend] Rust retrieval fallback: {type(exc).__name__}: {exc}"
             )
             return retrieve_memories(
                 group_shared_space,
@@ -456,10 +454,8 @@ def _retrieve_with_optional_backend(
     python_result.trace["rust_shadow"] = report
     if not report["match"]:
         logger.warning(
-            "[MemoryBackend] Rust shadow parity mismatch: ids=%s behavior=%s max_score_delta=%s",
-            report["rust_ids"],
-            report["rust_behavior_ids"],
-            report["max_score_delta"],
+            f"[MemoryBackend] Rust shadow parity mismatch: ids={report['rust_ids']} "
+            f"behavior={report['rust_behavior_ids']} max_score_delta={report['max_score_delta']}"
         )
     return python_result
 
