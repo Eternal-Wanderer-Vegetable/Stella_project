@@ -78,7 +78,7 @@ from memory.schema import (
     create_user_profiles_table,
     ensure_v2_schema,
 )
-from memory.text_similarity import is_similar, merge_content
+from memory.text_similarity import is_similar, merge_content, same_normalized_text
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
@@ -1100,9 +1100,10 @@ class MemoryConsolidator:
         at_senders 为 AT_MENTION 来源发送者列表：候选的 user_id 在其中时标记 source_kind
         为 AT_MENTION，否则为 PASSIVE。
 
-        候选强化（交叉验证）：同空间同用户同类型且内容相似的待处理候选（NEW/OBSERVING）
+        候选强化（交叉验证）：同空间同用户且内容相似的待处理候选（NEW/OBSERVING）
         不重复插入，改为累积证据——occurrence_count +1、confidence 加
         MEMORY_CANDIDATE_REOCCURRENCE_BONUS、source_kinds 并集、status 回 NEW。
+        跨类型只在归一化后逐字相同时命中（类型词表对称呼类内容两可）。
         这是「单次陈述不足以晋升，复现才是证据」的实现基础（见 MemoryManager Gate 1）。
         """
         if not candidates:
@@ -1161,24 +1162,30 @@ class MemoryConsolidator:
             confidence = float(validated.get("confidence", confidence))
             importance = float(validated.get("importance", importance))
 
-            # ── 候选强化（交叉验证）：先找同空间同用户同类型的待处理候选 ──
+            # ── 候选强化（交叉验证）：先找同空间同用户的待处理候选 ──
             # 命中则累积证据（occurrence_count +1、confidence 加成、status 回 NEW
             # 重新参与晋升评估），而不是插入新行。否则同一事实会反复以新 uuid
             # 落库、各自卡在 OBSERVING，交叉验证永远不成立。
+            # 类型条件分两档：同类型相似即命中；跨类型只在归一化后逐字相同时命中
+            # （类型词表对「希望被称呼为X」两可，LLM 两次抽取可能给出不同 type）。
             existing = None
             for row in cursor.execute(
-                "SELECT id, content, confidence, importance, evidence, occurrence_count, "
+                "SELECT id, type, content, confidence, importance, evidence, occurrence_count, "
                 "source_message_ids, source_kinds FROM memory_candidates "
-                "WHERE group_shared_space = ? AND user_id = ? AND type = ? AND status IN ('NEW', 'OBSERVING')",
-                (group_shared_space, uid, type_),
+                "WHERE group_shared_space = ? AND user_id = ? AND status IN ('NEW', 'OBSERVING')",
+                (group_shared_space, uid),
             ).fetchall():
-                if is_similar(content, row[1] or ""):
+                row_content = row[2] or ""
+                if is_similar(content, row_content) and (
+                    row[1] == type_ or same_normalized_text(content, row_content)
+                ):
                     existing = row
                     break
 
             if existing is not None:
                 (
                     existing_id,
+                    _existing_type,
                     old_content,
                     old_conf,
                     old_imp,

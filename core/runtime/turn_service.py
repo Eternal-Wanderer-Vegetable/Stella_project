@@ -57,6 +57,16 @@ _PENDING_PROMPT_KEY = "_turn_pending_prompt"
 _PENDING_SYSTEM_KEY = "_turn_pending_system_prompt"
 
 
+def pending_system_prompt(ctx: ChatContext) -> str:
+    """读取 prepare_turn 暂存的系统提示词（runtime facade 的生成 provider 用）。
+
+    与暂存键同一通道：未经 prepare_turn 的 ctx（或 resolver 产出为空）返回空串。
+    facade 的默认 provider 不经 generate_reply，靠它拿到经 system_prompt_resolver
+    按空间解析过的那份系统提示词。
+    """
+    return str(getattr(ctx, _PENDING_SYSTEM_KEY, "") or "")
+
+
 def _tool_result_section(ctx: ChatContext) -> str:
     """把 Comes 的结果摘要渲染成一个 prompt 段落；无结果返回空串。
 

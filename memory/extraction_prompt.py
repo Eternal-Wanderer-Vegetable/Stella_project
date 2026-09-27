@@ -85,6 +85,8 @@ EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认
   严禁从中提取任何关于用户的信息
 - 记忆类型必须且只能选一个：FACT=稳定事实 / PREFERENCE=明确喜欢或讨厌 / EVENT=重要事件 /
   PLAN=未来计划 / RELATION=人与人稳定互动 / STYLE=交流方式 / GROUP_CONTEXT=群体共同状态
+- 用户对「怎么称呼/叫TA」的要求（如「以后叫我X」「别再叫我Y」）固定记为 PREFERENCE，
+  不要在 RELATION/PREFERENCE 之间摇摆——同一事实两次类型不同会绕过去重产生重复记忆
 - 涉及「不喜欢/讨厌/拒绝/边界/未经允许」等敏感内容时，usage_tags 必须是 BOUNDARY_PROTECTION
   或 CONFLICT_AVOID，visibility 必须是 RESTRICTED，绝不能当作聊天话题
 - usage_tags 填这条记忆「将来应该被如何使用」，从这些里选：{usages}

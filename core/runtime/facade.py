@@ -34,6 +34,7 @@ from core.runtime.turn_service import (
     GENERATE,
     SILENT,
     TurnService,
+    pending_system_prompt,
 )
 
 DEFAULT_TURN_DEADLINE = 120.0  # 与 WebChat 120s 对齐
@@ -98,12 +99,18 @@ class RuntimeStore:
             pass
 
 
-async def _pipeline_provider(pipeline: "TurnService", key: str, prompt: str) -> str:
+async def _pipeline_provider(
+    pipeline: "TurnService", key: str, prompt: str, ctx: ChatContext
+) -> str:
     """默认 provider：**传入管线自身的 LLM 后端**（生产装配下即 CHAT 角色后端）。
+
+    系统提示词取 prepare_turn 暂存在 ctx 上的那份（经 system_prompt_resolver
+    按空间解析过）。生成不传它，人格、长度上限与 XML 输出格式约束就全部
+    失效（2026-09-27 缺陷：facade 生成丢系统提示词，回复超长且无结构）。
 
     不经旧 Pipeline 编排，也不引入额外注册表查询——测试用 stub 管线时,
     脚本化后端因此自然生效。"""
-    return await pipeline._llm.generate(prompt)  # type: ignore[union-attr]
+    return await pipeline._llm.generate(prompt, pending_system_prompt(ctx))  # type: ignore[union-attr]
 
 
 class RuntimeFacade:
@@ -197,8 +204,12 @@ class RuntimeFacade:
                 prompt = ctx.prompt_log
                 provider = self._provider or _pipeline_provider
                 state.cancel_requested = False
+                # 与 legacy generate_reply 同口径：进入生成即计一次调用、记耗时
+                # （prepare 的调用上限守卫与 thought 日志的「耗时」字段都依赖它们）。
+                ctx.llm_call_count += 1
+                gen_started = time.monotonic()
                 task = asyncio.create_task(provider(key, prompt) if self._provider
-                                           else _pipeline_provider(pipeline, key, prompt))
+                                           else _pipeline_provider(pipeline, key, prompt, ctx))
                 state.inflight = task
                 try:
                     text = await asyncio.wait_for(
@@ -206,6 +217,7 @@ class RuntimeFacade:
                     )
                 except asyncio.TimeoutError:
                     # 有界失败：deadline 按 legacy 超时语义兜底（BC-5），不悬挂
+                    ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
                         turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
@@ -225,6 +237,7 @@ class RuntimeFacade:
                 except Exception:
                     # provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——
                     # 兜底而非上抛，不让异常击穿消息链路
+                    ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
                         turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
@@ -234,6 +247,7 @@ class RuntimeFacade:
                     return await pipeline.finalize_turn(ctx)
                 finally:
                     state.inflight = None
+                ctx.llm_elapsed = time.monotonic() - gen_started
                 ctx.raw_output = str(text)
                 self._record(
                     turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,

@@ -51,7 +51,7 @@ from memory.schema import (
     create_memory_candidates_table,
     ensure_v2_schema,
 )
-from memory.text_similarity import is_similar, merge_content
+from memory.text_similarity import is_similar, merge_content, same_normalized_text
 
 
 class MemoryManager:
@@ -478,23 +478,31 @@ class MemoryManager:
         return rejected
 
     def _find_similar_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> str | None:
-        """在同空间、同用户、同类型的 active 记忆中查找与候选内容相似的记忆 id；找不到返回 None。
+        """在同空间、同用户的 active 记忆中查找与候选内容相似的记忆 id；找不到返回 None。
 
         **必须按 group_shared_space + user_id 过滤**：只比 type 会把用户 A 的候选合并进
         用户 B 的记忆（_merge_content 用「；」把两人的内容拼在一起），造成
         不可恢复的归属污染。与 _resolve_conflicts 的过滤条件保持一致。
+
+        类型条件分两档：同类型相似即命中；跨类型只在归一化后逐字相同时命中——
+        类型词表对「希望被称呼为X」这类内容两可，LLM 两次抽取可能给出 RELATION
+        与 PREFERENCE，纯同类型比对会让跨类型重复各立一条（2026-09-27 缺陷）。
         """
         rows = cursor.execute(
-            "SELECT id, content FROM memories WHERE status = 'active' "
-            "AND group_shared_space = ? AND user_id = ? AND type = ? "
+            "SELECT id, type, content FROM memories WHERE status = 'active' "
+            "AND group_shared_space = ? AND user_id = ? "
             # 证据新鲜度倒序：同类相似记忆有多条时并入最近被确认过的那条。
             # 不用 last_accessed_at——它现在由检索命中刷新，会让「最近被引用过的」
             # 而不是「最近被证实过的」持续吸收新证据。
             "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC",
-            (str(candidate["group_shared_space"]), str(candidate["user_id"]), candidate["type"]),
+            (str(candidate["group_shared_space"]), str(candidate["user_id"])),
         ).fetchall()
-        for mem_id, content in rows:
-            if is_similar(candidate["content"], content):
+        for mem_id, mem_type, content in rows:
+            content = content or ""
+            if is_similar(candidate["content"], content) and (
+                mem_type == candidate["type"]
+                or same_normalized_text(candidate["content"], content)
+            ):
                 return mem_id
         return None
 

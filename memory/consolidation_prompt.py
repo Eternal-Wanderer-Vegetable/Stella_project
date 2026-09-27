@@ -96,6 +96,8 @@ CONSOLIDATION_PROMPT = """你的任务：分析一段群聊记录，用 JSON 格
 - **memory_candidates 分类规则（极其重要）**：
   - 记忆类型必须且只能选一个：FACT=稳定事实 / PREFERENCE=明确喜欢或讨厌 / EVENT=重要事件 /
     PLAN=未来计划 / RELATION=人与人稳定互动 / STYLE=交流方式 / GROUP_CONTEXT=群体共同状态
+  - 用户对「怎么称呼/叫TA」的要求（如「以后叫我X」「别再叫我Y」）固定记为 PREFERENCE，
+    不要在 RELATION/PREFERENCE 之间摇摆——同一事实两次类型不同会绕过去重产生重复记忆
   - 区分「当下状态」与「稳定属性」：只说一次"今天想吃炸鸡"应记为 EVENT 而非 PREFERENCE；
     但客观限制（过敏、忌口、身体条件）与客观事实（居住地、职业、设备型号）说一次即成立，
     记为 FACT。判断标准是这件事会不会明天就变，而不是它被说了几次

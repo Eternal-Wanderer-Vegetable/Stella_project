@@ -40,7 +40,7 @@ from config import (
 )
 from memory.cache_keys import bump_memory_history
 from memory.schema import create_memories_table
-from memory.text_similarity import is_similar, merge_content
+from memory.text_similarity import is_similar, merge_content, same_normalized_text
 
 # 「这条事实最后一次被观察到」的 SQL 表达式：证据新鲜度用 last_confirmed_at，
 # 只有仅存该列的旧库/夹具才回退到 last_accessed_at。
@@ -186,12 +186,16 @@ class MemoryCompressor:
             logger.warning(f"🧹 [MemoryCompressor] maybe_compress 失败: {e}")
 
     def _merge_duplicate_memories(self, cursor: sqlite3.Cursor, rows: list[tuple]) -> int:
-        """把内容相似（同空间同用户同类型 + _is_similar）的记忆合并成一条，被合并方转 archived。
+        """把内容相似（同空间同用户 + _is_similar）的记忆合并成一条，被合并方转 archived。
 
         合并规则：content 用 _merge_content（保留更完整一方或分号拼接）；
         importance/confidence 取两者更大值；confirmation_count 累加（体现“多人/多次确认更可信”）；
         存活方只更新字段、被合并方的 status 置为 'archived'（不删除，仅使其退出检索）。
         返回被归档（合并掉）的记忆条数，供统计用。
+
+        类型条件分两档：同类型相似即合并；跨类型只在归一化后逐字相同时合并
+        （同一条称呼事实被两次抽取成 RELATION 与 PREFERENCE 的场景，
+        2026-09-27 缺陷）。
 
         :param cursor: 已连接的数据库游标（写操作由调用方统一 commit）
         :param rows: 待检查的记忆行（含 id, content, importance, confidence, confirmation_count 等）
@@ -217,13 +221,19 @@ class MemoryCompressor:
             for other in memories[i + 1 :]:
                 if other["id"] in seen:
                     continue
-                # 必须同空间 + 同用户 + 同类型才允许合并。跨用户合并会把 A 的事实
+                # 必须同空间 + 同用户才允许合并。跨用户合并会把 A 的事实
                 # 并入 B 的记忆并把 A 那条置 archived，且发生在周度定时任务里，
                 # 数据不可恢复（与 memory_manager._find_similar_memory 的约束一致）。
+                # 类型：同类型相似即合并；跨类型只在归一化后逐字相同时合并
+                # （同一条称呼事实被两次抽取成 RELATION 与 PREFERENCE 的场景）。
                 if (
                     memory["group_shared_space"] != other["group_shared_space"]
                     or memory["user_id"] != other["user_id"]
-                    or memory["type"] != other["type"]
+                ):
+                    continue
+                if not (
+                    memory["type"] == other["type"]
+                    or same_normalized_text(memory["content"], other["content"])
                 ):
                     continue
                 if is_similar(memory["content"], other["content"]):
