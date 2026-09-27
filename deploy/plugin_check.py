@@ -487,6 +487,18 @@ def _load_plugin(plugin_dir: Path, facts: PluginFacts) -> None:
             sys.path.insert(0, root)
     except Exception:
         pass
+    # 与 load_all_plugins 保持一致：数据根也要在 sys.path 上，`import
+    # data.plugins.X` 才解析得到（插件随数据根住在程序目录之外时）。
+    try:
+        from config.settings import ASTRBOT_PLUGINS_DIR
+
+        plugins_root = Path(ASTRBOT_PLUGINS_DIR)
+        if plugins_root.name == "plugins":
+            data_root = str(plugins_root.parent.parent)
+            if data_root not in sys.path:
+                sys.path.insert(0, data_root)
+    except Exception:
+        pass
     importlib.invalidate_caches()
     with contextlib.suppress(Exception):
         from astrbot_compat.base import StarTools

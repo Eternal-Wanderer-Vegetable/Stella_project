@@ -546,6 +546,41 @@ def test_directory_outside_project_root_is_loadable(install_plugin_at):
     assert md.module_path == f"data.plugins.{p.dir_name}.main"
 
 
+def test_load_all_plugins_adds_plugins_data_root_to_sys_path(tmp_path, monkeypatch):
+    """插件住在 `<数据根>/data/plugins`（程序目录之外）时，load_all_plugins 必须
+    把数据根放进 sys.path——`import data.plugins.X` 要先解析到 `data` 这个
+    命名空间父包。真实事故（2026-09-27，v5.1.9 安装）：只插 PROJECT_ROOT，
+    插件全灭在 ModuleNotFoundError('data')。"""
+    from config import settings
+
+    data_root = tmp_path / "datahome"
+    plugins_dir = data_root / "data" / "plugins"
+    plugins_dir.mkdir(parents=True)
+    monkeypatch.setattr(settings, "ASTRBOT_PLUGINS_DIR", plugins_dir, raising=False)
+    monkeypatch.setattr(settings, "ASTRBOT_COMPAT_ENABLED", True, raising=False)
+
+    root_str = str(data_root)
+    assert root_str not in sys.path  # 前提：本来就不在
+    try:
+        loader.load_all_plugins()
+        assert root_str in sys.path
+    finally:
+        if root_str in sys.path:
+            sys.path.remove(root_str)
+
+
+def test_namespace_ancestor_import_error_is_not_dependency_advice(tmp_path):
+    """导入失败缺的是命名空间祖先（data / data.plugins）时，不能翻译成
+    「缺少依赖模块；执行 pip install …」——那是装载环境问题，装包治不了。
+    2026-09-27 v5.1.9 安装实测：两个插件全被这样误导。"""
+    exc = ModuleNotFoundError("No module named 'data'", name="data")
+    pkg = "data.plugins.foo_master"
+
+    reason = loader._import_failure_reason(exc, tmp_path / "foo-master", pkg)
+
+    assert "pip install" not in reason
+
+
 def test_two_directories_normalizing_to_one_name_do_not_collide(install_plugin_at):
     """同时装着 foo_x 与 foo-x：归一化后同名，不能互相顶替。"""
     shared = f"selftest_{uuid.uuid4().hex[:12]}"
