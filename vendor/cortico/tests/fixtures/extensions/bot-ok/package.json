@@ -1,0 +1,9 @@
+{
+  "name": "cortico-fixture-bot-ok",
+  "version": "1.0.0",
+  "description": "合格的 bot 包",
+  "type": "module",
+  "main": "./index.js",
+  "keywords": ["cortico-bot"],
+  "cortico": { "kind": "bot", "api": 6 }
+}

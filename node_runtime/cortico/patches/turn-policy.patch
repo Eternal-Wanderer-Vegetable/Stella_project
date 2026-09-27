@@ -1,0 +1,164 @@
+--- a/src/core/types.ts
++++ b/src/core/types.ts
+@@ -439,8 +439,21 @@
+    * 循环结束后，若 stopWhen 未满足且 when(最后正文) 为真，追加 user 提示并再运行一轮。
+    */
+   nudge?: { when: (lastContent: string) => boolean; message: string };
++  /**
++   * [STELLA PATCH] turn-policy：provider 调用前的一次性生成前决策。
++   * direct 返回固定文本、silent 直接结束，均不发起模型调用、不产生 assistant 记录。
++   * 通用接口，不承载任何宿主业务规则（迁移计划 A2 预案，见
++   * node_runtime/cortico/patches/turn-policy.patch 与 upstream-lock.json）。
++   */
++  turnPolicy?: () => TurnDecision | Promise<TurnDecision>;
+ }
+ 
++/** [STELLA PATCH] fork 通道的生成前决策（与 ForkOptions.turnPolicy 配套）。 */
++export type TurnDecision =
++  | { kind: 'generate' }
++  | { kind: 'direct'; text: string }
++  | { kind: 'silent' };
++
+ /** Persona 可查询的 session 状态。 */
+ export interface SessionInfo {
+   id: string;
+--- a/src/core/fork.ts
++++ b/src/core/fork.ts
+@@ -22,6 +22,8 @@
+   softRounds?: number;
+   log: Logger;
+   stopWhen?: () => boolean;
++  /** [STELLA PATCH] 生成前决策（types.ts ForkOptions.turnPolicy）。 */
++  turnPolicy?: () => import('./types.ts').TurnDecision | Promise<import('./types.ts').TurnDecision>;
+   wrapUpHint?: string;
+   capNote?: string;
+   nudge?: { when: (lastContent: string) => boolean; message: string };
+@@ -32,6 +34,13 @@
+ /** The caller hands the fork a client already bound to one provider instance; the Item sequence is retained across tool rounds. */
+ export async function runForkLoop(opts: ForkLoopOptions): Promise<string> {
+   const { id, llm, spec, tools, maxRounds, log } = opts;
++  // [STELLA PATCH] turn-policy：生成前决策。direct/silent 不发起 provider 调用、
++  // 不产生 assistant 记录，直接以决策结果结束 fork（node_runtime/cortico/patches）。
++  if (opts.turnPolicy) {
++    const decision = await opts.turnPolicy();
++    if (decision.kind === 'silent') return '';
++    if (decision.kind === 'direct') return decision.text;
++  }
+   const messages = [...opts.messages];
+   const observed = [...messages];
+   opts.observeMessages?.(observed);
+--- a/src/core/core.ts
++++ b/src/core/core.ts
+@@ -328,6 +328,8 @@
+         softRounds: decl.rounds().soft,
+         log: this.log.child(`fork.${decl.id}`),
+         stopWhen: opts.stopWhen,
++        // [STELLA PATCH] turn-policy 透传（见 patches/turn-policy.patch）
++        turnPolicy: opts.turnPolicy,
+         wrapUpHint: opts.wrapUpHint,
+         capNote: opts.capNote,
+         nudge: opts.nudge,
+--- a/tests/core/fork-turn-policy.test.ts
++++ b/tests/core/fork-turn-policy.test.ts
+@@ -0,0 +1,101 @@
++// SPDX-License-Identifier: AGPL-3.0
++// Copyright (c) 2026 Stella Project Contributors
++// 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
++/**
++ * [STELLA PATCH] fork turn-policy 单测（patches/turn-policy.patch 的一部分）。
++ *
++ * 验证 ForkOptions.turnPolicy 的通用语义：
++ * - direct：不调用 provider，返回决策文本，session 无 assistant 记录；
++ * - silent：不调用 provider，返回空串；
++ * - generate / 未提供 policy：行为与上游完全一致。
++ * 该文件随补丁维护；上游升级后由 `pnpm --dir node_runtime/cortico verify-patches`
++ * 与本套件共同确认补丁仍然成立。
++ */
++import { describe, expect, it } from 'vitest';
++import { Core } from '../../src/core/core.ts';
++import { message } from '../../src/protocol/open-responses/context.ts';
++import type { SessionDecl } from '../../src/core/types.ts';
++import { makeCfg, makeFakePersona, makeLoaded, makeTmpDir, textReply, FakeLLM, type FakePersonaOptions } from './helpers.ts';
++
++const turnDecl: SessionDecl = {
++  id: 'turn',
++  label: 'turn',
++  rounds: () => ({ soft: 1, hard: 1, softHint: () => null }),
++  persistent: false,
++  receivesEvents: false,
++  tools: () => [],
++};
++
++async function makeCore(llm: FakeLLM, personaOpts?: FakePersonaOptions) {
++  const tmp = makeTmpDir();
++  const core = new Core(
++    makeLoaded({
++      config: makeCfg(),
++      rootDir: tmp.dir,
++      memoryDir: `${tmp.dir}/persona`,
++      dataDir: `${tmp.dir}/data`,
++    }),
++    { persona: makeFakePersona([], { ...personaOpts, extraSessions: [...(personaOpts?.extraSessions ?? []), turnDecl] }), worlds: [], llm },
++  );
++  await core.start();
++  return {
++    core,
++    cleanup: async () => {
++      await core.stop();
++      tmp.cleanup();
++    },
++  };
++}
++
++describe('fork turnPolicy（STELLA PATCH）', () => {
++  it('direct：provider 零调用，返回决策文本', async () => {
++    const llm = new FakeLLM();
++    llm.script(textReply('不应被消费'));
++    const { core, cleanup } = await makeCore(llm);
++    try {
++      const text = await core.spawnFork({
++        id: 'turn',
++        messages: [message('user', '投影')],
++        turnPolicy: () => ({ kind: 'direct', text: '固定文本' }),
++      });
++      expect(text).toBe('固定文本');
++      expect(llm.calls.length).toBe(0);
++    } finally {
++      await cleanup();
++    }
++  });
++
++  it('silent：provider 零调用，返回空串', async () => {
++    const llm = new FakeLLM();
++    llm.script(textReply('不应被消费'));
++    const { core, cleanup } = await makeCore(llm);
++    try {
++      const text = await core.spawnFork({
++        id: 'turn',
++        messages: [message('user', '投影')],
++        turnPolicy: () => ({ kind: 'silent' }),
++      });
++      expect(text).toBe('');
++      expect(llm.calls.length).toBe(0);
++    } finally {
++      await cleanup();
++    }
++  });
++
++  it('异步 policy 与 generate 缺省行为保持不变', async () => {
++    const llm = new FakeLLM();
++    llm.script(textReply('模型正文'));
++    const { core, cleanup } = await makeCore(llm);
++    try {
++      const generated = await core.spawnFork({
++        id: 'turn',
++        messages: [message('user', '投影')],
++        turnPolicy: async () => ({ kind: 'generate' }),
++      });
++      expect(generated).toBe('模型正文');
++      expect(llm.calls.length).toBe(1);
++    } finally {
++      await cleanup();
++    }
++  });
++});

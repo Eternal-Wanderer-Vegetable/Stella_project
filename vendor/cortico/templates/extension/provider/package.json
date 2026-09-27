@@ -1,0 +1,35 @@
+{
+  "name": "cortico-provider-example",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cortico provider template: an OpenAI Chat Completions dialect on the framework transport",
+  "license": "MIT",
+  "keywords": [
+    "cortico-provider",
+    "cortico"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.5.0",
+  "main": "./src/index.ts",
+  "cortico": {
+    "kind": "provider",
+    "api": 5
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "cortico": "^0.1.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

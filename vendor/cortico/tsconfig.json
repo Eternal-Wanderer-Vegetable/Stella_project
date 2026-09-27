@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    // bin/cortico.mjs 需在安装依赖前执行,使用 JS 与 JSDoc 类型。
+    "allowJs": true,
+    "checkJs": true,
+    // 运行时由 src/extensions/runtime.ts 解析相同前缀,vitest 使用对应 alias。
+    "paths": { "cortico/*": ["./src/*"] }
+  },
+  "include": ["src/**/*.ts", "bots/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "templates/**/*.ts", "bin/**/*.mjs"],
+  // 浏览器源码由 tsconfig.web.json 检查。exclude 只限制初始文件表,
+  // 被 Node 侧导入的共享文件仍参与检查。
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/web/client/**",
+    "src/providers/*/console/client.ts",
+    "src/providers/*/console/*-panel.ts",
+    "src/web/shared/**",
+    // 以下 jsdom 测试由浏览器配置检查。
+    "tests/web/feature-prompts.test.ts",
+    "tests/web/client-main.test.ts",
+    "tests/web/client-language.test.ts",
+    "tests/web/settings-general.test.ts",
+    "tests/web/feature-providers.test.ts",
+    "tests/web/feature-extensions.test.ts",
+    "src/worlds/*/console/**",
+    "bots/*/console/**"
+  ]
+}

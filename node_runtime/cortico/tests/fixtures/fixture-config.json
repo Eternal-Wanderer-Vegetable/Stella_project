@@ -1,0 +1,255 @@
+{
+  "displayName": "雪午Yukima",
+  "timezone": "Asia/Shanghai",
+  "providers": {
+    "fixture": {
+      "kind": "openai-responses-compat",
+      "baseUrl": "https://model.test",
+      "spec": {
+        "model": "test-model",
+        "thinking": true,
+        "reasoningEffort": "low",
+        "temperature": 1
+      }
+    }
+  },
+  "activeProvider": "fixture",
+  "web": {
+    "port": 7777,
+    "theme": "crab-daisy"
+  },
+  "paths": {
+    "memory": "memory",
+    "data": "data"
+  },
+  "batching": {
+    "quietGapMs": 2500,
+    "minBatchAgeMs": 0,
+    "maxBatchAgeMs": 15000,
+    "maxBatchSize": 100
+  },
+  "context": {
+    "maxTokens": 128000,
+    "keepRatio": 0.3333,
+    "softRatio": 0.85,
+    "firstTurn": false,
+    "keepPastThinking": true
+  },
+  "logging": {
+    "file": "debug",
+    "console": "info",
+    "areas": ""
+  },
+  "loop": {
+    "softCap": 8,
+    "hardCap": 16
+  },
+  "memo": {
+    "residentCap": 7,
+    "activeCap": 21
+  },
+  "tick": {
+    "dayIntervalMinutes": [
+      30,
+      60
+    ],
+    "nightIntervalMinutes": 120,
+    "nightStartHour": 0,
+    "nightEndHour": 8
+  },
+  "dream": {
+    "maxRounds": 40
+  },
+  "worlds": {
+    "terminal": {
+      "enabled": true,
+      "pin": ""
+    },
+    "qq": {
+      "enabled": true,
+      "wsUrl": "ws://127.0.0.1:3001",
+      "groups": [],
+      "privates": [],
+      "token": "",
+      "vision": {
+        "enabled": false,
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "model": "bytedance-seed/seed-2.0-mini",
+        "defaultPrompt": "准确分析、精简描述图片内容，按以下结构输出：\n\n## 分类\n判断图片属于照片、表情包、屏幕截图或其他类型。\n\n## 视觉事实\n只描述画面中能够直接看见并确认的对象、文字、数量、位置、颜色、环境和动作。\n不要加入原因、用途、身份、品牌背景或其他推断。\n\n## 文字\n提取画面中清晰可辨认的文字。\n看不清的文字不要猜测，用“部分文字模糊无法辨认”说明。\n\n## 视觉确定推测\n仅允许根据清晰视觉线索作出高置信度判断，并明确标注为推测。\n\n## 视觉延伸推测\n描述由画面情境引出的合理但无法直接确认的推测，并明确标注依据。\n\n## 视觉不可辨认项\n只列出“画面中确实存在或疑似存在，但仅因视觉条件而无法看清、分辨或判断”的内容。\n\n## 一句话描述\n只包含确定性事实",
+        "maxTokens": 1024,
+        "timeoutMs": 60000,
+        "sessionMaxMessages": 24,
+        "concurrency": 3,
+        "maxImageBytes": 10485760,
+        "dedupPrecheckMs": 2500
+      }
+    },
+    "bilibili": {
+      "enabled": false,
+      "roomId": 0,
+      "sessdata": "",
+      "giftFlushYuan": 1,
+      "coalesceWindowMs": 300,
+      "coalesceMaxItems": 64,
+      "audienceOnlineRankOn": 200,
+      "audienceOnlineRankOff": 170,
+      "audienceReleaseHoldSec": 120,
+      "audienceSignalFreshSec": 90,
+      "audienceActiveStaleHoldSec": 300,
+      "audienceEventLineBudget": 114,
+      "audienceEventTokenBudget": 1061,
+      "audienceImportantShare": 0.5,
+      "overlay": {
+        "enabled": true,
+        "port": 7795,
+        "agentNoticeMaxChars": 200,
+        "design": {
+          "schemaVersion": 4,
+          "canvas": {
+            "width": 1920,
+            "height": 1080
+          },
+          "styles": [],
+          "groups": [],
+          "components": [
+            {
+              "id": "danmaku-main",
+              "name": "主弹幕机",
+              "kind": "danmaku",
+              "styleId": "builtin:sky",
+              "axis": "vertical",
+              "admission": "all",
+              "showAvatar": true,
+              "speed": 90,
+              "gap": 12,
+              "maxItems": 12,
+              "usernameMaxChars": 24,
+              "bodyMaxChars": 80,
+              "edgeFadePx": 32
+            },
+            {
+              "id": "agent-notice",
+              "name": "Agent 公告",
+              "kind": "agent-notice",
+              "styleId": "builtin:navy",
+              "emptyText": "公告栏待更新",
+              "hideWhenEmpty": false,
+              "typingMs": 42
+            }
+          ],
+          "placements": [
+            {
+              "id": "placement-danmaku-main",
+              "componentId": "danmaku-main",
+              "x": 1240,
+              "y": 120,
+              "width": 600,
+              "height": 760,
+              "z": 10,
+              "visible": true,
+              "locked": false
+            },
+            {
+              "id": "placement-agent-notice",
+              "componentId": "agent-notice",
+              "x": 120,
+              "y": 60,
+              "width": 960,
+              "height": 120,
+              "z": 20,
+              "visible": true,
+              "locked": false
+            }
+          ]
+        }
+      }
+    },
+    "minecraft": {
+      "enabled": false,
+      "host": "127.0.0.1",
+      "port": 25565,
+      "username": "corti",
+      "version": "1.20.6",
+      "viewerPort": 7792,
+      "local": {
+        "serverEnabled": false,
+        "serverDir": "",
+        "javaPath": "",
+        "jvmArgs": "-Xms1G -Xmx2G",
+        "cheats": true
+      },
+      "world": {
+        "tickSec": 8,
+        "moveThreshold": 12,
+        "snapshotSec": 10,
+        "snapshotAnchorSec": 600
+      },
+      "scaffoldBlocks": [
+        "dirt",
+        "cobblestone"
+      ],
+      "precheck": true,
+      "priorOutcome": true,
+      "reflex": {
+        "fightBack": true,
+        "fleeHealth": 10,
+        "reactCooldownSec": 8,
+        "antiDrown": true,
+        "antiLava": true
+      },
+      "combat": {
+        "enabled": true,
+        "engageRadius": 3,
+        "chaseMax": 6,
+        "maxSec": 30,
+        "space": 2.6,
+        "busyRatio": 60,
+        "cooldownSec": 60
+      },
+      "client": {
+        "enabled": false,
+        "gameDir": "",
+        "versionId": "",
+        "javaPath": "",
+        "jvmArgs": "-Xmx4G",
+        "username": "CortiCam",
+        "width": 1280,
+        "height": 720,
+        "autoJoin": true,
+        "autoSpectate": true,
+        "resyncSec": 30,
+        "restartMax": 3,
+        "noPauseOnLostFocus": true,
+        "syncGui": true
+      },
+      "show": {
+        "clickMs": 200,
+        "dwellOpenMs": 400,
+        "dwellResultMs": 600,
+        "dwellCloseMs": 300,
+        "reopenGapMs": 600,
+        "budgetMs": 6000
+      },
+      "player": {
+        "enabled": false,
+        "username": "Player",
+        "gameDir": "",
+        "versionId": "",
+        "javaPath": "",
+        "jvmArgs": "-Xmx4G",
+        "width": 1280,
+        "height": 720,
+        "autoJoin": true,
+        "teleportToBot": true
+      }
+    },
+    "websearch": {
+      "enabled": true,
+      "country": "CN",
+      "searchLang": "zh-hans",
+      "uiLang": "zh-CN",
+      "safesearch": "moderate",
+      "timeoutMs": 20000
+    }
+  }
+}

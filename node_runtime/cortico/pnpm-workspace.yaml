@@ -1,0 +1,4 @@
+# pnpm 11 自动生成的构建审批占位已填：esbuild 的 postinstall 仅校验平台
+# 二进制（optionalDependencies 已随包分发），与 vendor/cortico 的约定一致。
+allowBuilds:
+  esbuild: true

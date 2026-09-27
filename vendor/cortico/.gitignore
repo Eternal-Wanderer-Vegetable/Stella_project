@@ -1,0 +1,39 @@
+node_modules/
+__pycache__/
+.env
+*.log
+# 仅排除根目录产物;tests/fixtures/ 中的 dist/ 文件需要纳入版本控制。
+/dist/
+
+# 默认部署根,包含私有配置、密钥、Memory 和运行数据。
+# scripts/release-audit.ts 另行检查已跟踪的部署文件。
+/deployments/
+
+# 旧布局的私有运行数据与备份。
+bots/*/data/
+bots/*/workspace*/
+# 旧布局的头像与声线。
+bots/*/avatar.png
+bots/*/voices/
+# 部署配置。含真实 QQ 群号/好友号与 access token。
+# 迁移脚本留下的 config.json.bak-* 同样是真配置的副本,一起排除。
+bots/*/config.json
+bots/*/config.json.bak-*
+# 历史材料可能含私人数据或完整提示词。
+deprecated/
+
+# 本机部署的第三方运行时体积较大，且不属于源码。
+runtime/
+# 允许部署者采用仓库内资源根时仍不会误提交；推荐位置在仓库同级。
+local-resources/
+Cortico-Resources/
+
+# 临时工作区,规则见 AGENTS.md。
+scratch/
+
+# 控制台装的扩展(npm 包),属部署状态。
+# 锚在仓库根上:不带斜杠会连 src/web/client/features/extensions/ 一起吞掉。
+/extensions/
+
+# Corti 运维目录(数据归档+复盘),不入库
+CortiV-DataAnalysis/

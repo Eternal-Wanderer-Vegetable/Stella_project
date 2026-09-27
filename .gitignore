@@ -116,3 +116,7 @@ start_claude_command.txt
 # 桌面壳内嵌前端：CI 下载 build-dashboard 产物后填充（仅 .gitkeep 占位入库）
 /desktop/dashboard-dist/*
 !/desktop/dashboard-dist/.gitkeep
+
+# Cortico vendor 快照内的安装产物（迁移 M1）
+vendor/cortico/node_modules/
+vendor/cortico/dist/

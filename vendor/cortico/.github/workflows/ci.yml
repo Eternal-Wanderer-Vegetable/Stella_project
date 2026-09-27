@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # corepack 下载 pnpm 前会请求确认,CI 里无人应答。
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          # engines.node 要求 >=22;Node 25 起不再附带 corepack,升级时这一步要跟着改。
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (Node)
+        run: pnpm run typecheck
+
+      - name: Typecheck (browser)
+        run: pnpm run typecheck:web
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Build console bundle
+        run: pnpm run build:web

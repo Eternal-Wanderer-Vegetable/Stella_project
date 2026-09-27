@@ -1,0 +1,11 @@
+# 索引一律 LF,与开发者本机的 autocrlf 设置无关。
+* text=auto eol=lf
+
+# 前缀模板的换行是内容的一部分:段与段之间空几行由模板文件说了算。
+# autocrlf 把它们签出成 CRLF 会改掉渲染结果,故 Markdown 一律签出为 LF。
+*.md text eol=lf
+
+# Windows 脚本使用 CRLF。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

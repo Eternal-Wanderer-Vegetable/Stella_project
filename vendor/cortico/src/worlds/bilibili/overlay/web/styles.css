@@ -1,0 +1,258 @@
+:root {
+  color-scheme: dark;
+  font-family: "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body.preview {
+  --wall-base: #202735;
+  --wall-tile: #2b3445;
+  background-color: var(--wall-base);
+  background-image:
+    linear-gradient(45deg, var(--wall-tile) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--wall-tile) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--wall-tile) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--wall-tile) 75%);
+  background-position: 0 0, 0 16px, 16px -16px, -16px 0;
+  background-size: 32px 32px;
+}
+
+body.preview[data-wall-mode="light"] {
+  --wall-base: #e8edf1;
+  --wall-tile: #f5f7f9;
+}
+
+body.preview[data-wall-mode="dark"] {
+  --wall-base: #202735;
+  --wall-tile: #2b3445;
+}
+
+#stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  transform-origin: left top;
+}
+
+.overlay-component {
+  position: absolute;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.component-content {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.overlay-component.title-left,
+.overlay-component.title-right {
+  flex-direction: row;
+}
+
+.component-title {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: .28em .62em;
+  overflow: hidden;
+  line-height: 1.15;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, .08);
+}
+
+.title-left .component-title,
+.title-right .component-title {
+  align-self: stretch;
+  padding: .62em .28em;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+}
+
+.component-title.align-left {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.component-title.align-center {
+  justify-content: center;
+  text-align: center;
+}
+
+.component-title.align-right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.overlay-text,
+.audience-name,
+.audience-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fixed-notice > .component-content,
+.agent-notice > .component-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.image-component:not(.has-title) {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+.image-component .component-content img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.agent-typing-cursor {
+  display: inline-block;
+  width: .08em;
+  height: 1em;
+  margin-left: .1em;
+  vertical-align: -.1em;
+  background: currentColor;
+  animation: agent-cursor-blink 720ms steps(1, end) infinite;
+}
+
+.danmaku-feed {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.danmaku-feed.vertical {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.audience-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.danmaku-feed.vertical .audience-item {
+  flex: 0 0 auto;
+  animation: vertical-in 220ms ease-out both;
+}
+
+.danmaku-feed.horizontal .audience-item {
+  position: absolute;
+  left: 100%;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+}
+
+.audience-avatar {
+  flex: 0 0 auto;
+  width: 1.7em;
+  height: 1.7em;
+  margin-right: .45em;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255,255,255,.22);
+}
+
+.audience-avatar.fallback {
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: .75em;
+  font-weight: 700;
+}
+
+.audience-name { margin-right: .45em; }
+
+.scroll-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.scroll-track {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  height: max-content;
+  will-change: transform;
+}
+
+.scroll-track.horizontal {
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.scroll-track.vertical {
+  left: 50%;
+  top: 100%;
+  flex-direction: column;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.scroll-track.line-carousel {
+  top: 0;
+  left: 0;
+  transform: none;
+}
+
+.scroll-track.line-carousel.horizontal {
+  height: 100%;
+  white-space: normal;
+}
+
+.scroll-track.line-carousel.vertical {
+  width: 100%;
+}
+
+.notice-slide {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 .25em;
+  overflow: hidden;
+  text-align: center;
+}
+
+@keyframes vertical-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes agent-cursor-blink {
+  0%, 52% { opacity: 1; }
+  53%, 100% { opacity: 0; }
+}
