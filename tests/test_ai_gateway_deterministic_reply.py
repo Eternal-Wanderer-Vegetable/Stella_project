@@ -49,6 +49,10 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
     )
     monkeypatch.setattr(gateway.expression_learning, "on_reply_sent", Mock())
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
+    # 新发送契约（计划 §6.1）：每段都走 send 并返回平台回执，finish 只结束
+    # matcher 流程不再携带消息；BOT_SELF 只记确认送达的片段。
+    send = AsyncMock(return_value={"message_id": 777})
+    monkeypatch.setattr(gateway.chat_handler, "send", send)
     finish = AsyncMock(side_effect=FinishedException)
     monkeypatch.setattr(gateway.chat_handler, "finish", finish)
 
@@ -65,5 +69,6 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
         await gateway.handle_chat(bot, event)
 
     gateway._run_turn_via_engine.assert_awaited_once()
-    finish.assert_awaited_once()
+    send.assert_awaited_once()
+    finish.assert_awaited_once_with()
     gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ctx.reply])

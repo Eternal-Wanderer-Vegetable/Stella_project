@@ -366,6 +366,34 @@ class TurnService:
             logger.debug(f"[Social] 上下文插槽失败（按无学习基线继续）: {e}")
 
         budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+        # 预算快照（计划 §6.5/§6.8）：实际裁掉的资产与原因 + 可重放输入档
+        try:
+            from core.observability import turn_trace
+
+            turn_trace.record_event(
+                trace_id=ctx.trace_id, turn_id=ctx.turn_id, stage="budget",
+                status="ok",
+                scope=f"qq:{ctx.group_id}",
+                metrics={
+                    "estimated_tokens": budgeted.estimated_tokens,
+                    "budget_tokens": budgeted.budget_tokens,
+                    "window_tokens": budgeted.window_tokens,
+                    "truncated": budgeted.truncated,
+                    "social_snapshot": bool(getattr(ctx, "social_context_snapshot", "")),
+                },
+                detailed={
+                    "system_prompt": system_prompt,
+                    "user_prompt": budgeted.prompt,
+                    "budget_tokens": budgeted.budget_tokens,
+                    "estimated_tokens": budgeted.estimated_tokens,
+                    "context_window_tokens": budgeted.window_tokens,
+                    "truncated": budgeted.truncated,
+                    "social_snapshot": getattr(ctx, "social_context_snapshot", ""),
+                }
+                if turn_trace.detailed_enabled_for_scope(f"qq:{ctx.group_id}") else None,
+            )
+        except Exception:
+            pass
         user_prompt = budgeted.prompt
         ctx.context_window_tokens = budgeted.window_tokens
         ctx.prompt_budget_tokens = budgeted.budget_tokens

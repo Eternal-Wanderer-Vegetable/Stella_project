@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 
 from nonebot import logger
@@ -35,6 +36,7 @@ from core.social.contracts import (
     DELIVERY_UNKNOWN,
     ConversationScope,
     DeliveryReceipt,
+    aggregate_delivery_status,
     utc_now_iso,
 )
 from memory import social_store
@@ -82,6 +84,7 @@ async def deliver_lines(
     返回已尝试片段的回执列表（未尝试的片段没有事实，不产生行）。
     """
     receipts: list[DeliveryReceipt] = []
+    started_at = time.monotonic()
     for i, line in enumerate(lines):
         if i > 0 and interval_seconds > 0:
             await asyncio.sleep(interval_seconds)
@@ -114,7 +117,40 @@ async def deliver_lines(
             receipts, scope, trace_id, turn_id, epoch, i,
             status=status, text=line, platform_id=platform_id,
         )
+    _trace_delivery(trace_id, turn_id, scope, receipts, started_at)
     return receipts
+
+
+def _trace_delivery(trace_id: str, turn_id: str, scope: ConversationScope | None,
+                    receipts: list[DeliveryReceipt], started_at: float | None) -> None:
+    """投递事实入追踪（计划 §6.8 delivery 阶段）：metadata 恒记，detailed 按群。"""
+    if not receipts:
+        return
+    try:
+        from core.observability import turn_trace
+
+        statuses = [r.status for r in receipts]
+        scope_str = f"qq:{scope.group_id}" if scope else ""
+        turn_trace.record_event(
+            trace_id=trace_id, turn_id=turn_id, stage="delivery",
+            status=aggregate_delivery_status(statuses),
+            scope=scope_str, started_at=started_at,
+            metrics={"segments": len(receipts),
+                     "acknowledged": statuses.count("acknowledged"),
+                     "failed": statuses.count("failed"),
+                     "unknown": statuses.count("unknown")},
+            detailed={
+                "receipts": [
+                    {"part": r.part_index, "status": r.status,
+                     "platform_message_id": r.platform_message_id,
+                     "text": r.text}
+                    for r in receipts
+                ],
+            }
+            if turn_trace.detailed_enabled_for_scope(scope_str) else None,
+        )
+    except Exception:
+        pass
 
 
 def _append_and_persist(

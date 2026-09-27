@@ -213,3 +213,63 @@ def participation(group_id: str | None, *, limit: int, offset: int = 0) -> dict:
         item["snapshot"] = _loads(row[17], {})
         items.append(item)
     return {"total": int(total), "items": items}
+
+
+# ============================================================
+# 轮次追踪（计划 §6.8：turn_trace.db 诊断库，只读访问）
+# ============================================================
+
+
+def turns(*, scope: str | None = None, limit: int = 50, offset: int = 0) -> dict:
+    """轮次列表（turn_trace 独立诊断库；缺失/损坏返回空而不报错）。"""
+    from core.observability import turn_trace
+
+    return turn_trace.list_turns(scope=scope, limit=limit, offset=offset)
+
+
+def turn_timeline(turn_id: str) -> dict | None:
+    """单轮时间线：阶段事件 + 完整性标记 + 可重放性（诚实标注）。"""
+    from core.observability import turn_trace
+
+    return turn_trace.turn_timeline(turn_id)
+
+
+def turn_payloads(turn_id: str) -> dict | None:
+    """detailed 快照正文（敏感正文，仅供鉴权管理接口；metadata 档返回 None）。"""
+    from core.observability import turn_trace
+
+    return turn_trace.turn_payloads(turn_id)
+
+
+def replay_turn(turn_id: str) -> dict:
+    """离线决策回放（零副作用）：重放预算决策并比较冻结快照。"""
+    from core.observability import replay, turn_trace
+
+    timeline = turn_trace.turn_timeline(turn_id)
+    if timeline is None:
+        raise ValueError("turn not found")
+    payloads = turn_trace.turn_payloads(turn_id)
+    budget_payload: dict = {}
+    for p in (payloads or {}).get("payloads", []):
+        if p.get("stage") == "budget":
+            budget_payload = p.get("payload") or {}
+            if not p.get("truncated"):
+                break
+    report = replay.replay_budget_decision(
+        budget_payload,
+        trace_id=timeline["events"][0]["trace_id"] if timeline["events"] else "",
+        turn_id=turn_id,
+        scope=timeline["events"][0].get("scope", "") if timeline["events"] else "",
+    )
+    notes = list(report.notes)
+    if not replay.is_replayable(timeline) or report.verdict == "browsable_only":
+        notes.append("该 trace 只有 metadata 档：仅可浏览，不可声明完整回放")
+    return {
+        "replay_id": report.replay_id,
+        "parent_trace_id": report.parent_trace_id,
+        "turn_id": report.turn_id,
+        "verdict": report.verdict,
+        "original": report.original,
+        "replayed": report.replayed,
+        "notes": notes,
+    }

@@ -344,7 +344,8 @@ async def test_proactive_group_skip_finishes_gate_without_side_effects(
     bot.send_group_msg.assert_not_awaited()
     assert proactive.marked == []
     assert proactive.recorded == []
-    participation.assert_not_called()
+    # 过期保护（计划 §6.9 层 3）会只读查询 topic_revision；记账类调用仍必须为零
+    participation.note_stella_spoke.assert_not_called()
     record_bot_lines.assert_not_awaited()
 
 
