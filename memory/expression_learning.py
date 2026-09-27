@@ -98,6 +98,7 @@ def on_reply_sent(
     turn_id: str = "",
     trace_id: str = "",
     intent: str = "",
+    source_msg_id: int = 0,
 ) -> None:
     """登记一次发言并派生异步学习任务。同步部分只有一次 DB 插入。
 
@@ -119,7 +120,27 @@ def on_reply_sent(
     try:
         _ensure_tables()
         if trigger == "reply" and (message or "").strip():
-            _spawn(_harvest_expression(group_shared_space, user_id, message))
+            from memory.reply_effect_service import social_effects_enabled
+
+            if social_effects_enabled() and source_msg_id and group_id:
+                # 证据化表达采集（计划 §6.3）：候选挂在标准事件上，计数可复现
+                from core.social.contracts import ConversationScope, MessageEvidence
+                from memory import expression_selector, social_store
+
+                scope = ConversationScope.for_qq(group_id)
+                ev_id = social_store.find_event_id(
+                    scope, str(source_msg_id),
+                    fallback=MessageEvidence(
+                        scope=scope, platform_message_id=str(source_msg_id),
+                        user_id=str(user_id), source_kind="AT_MENTION",
+                        text_excerpt=message[:200], trace_id=trace_id, turn_id=turn_id,
+                    ),
+                )
+                expression_selector.note_expression_candidates(
+                    scope, message, event_id=ev_id, author_user=str(user_id)
+                )
+            else:
+                _spawn(_harvest_expression(group_shared_space, user_id, message))
         from memory.reply_effect_service import open_effect, social_effects_enabled
 
         if social_effects_enabled():

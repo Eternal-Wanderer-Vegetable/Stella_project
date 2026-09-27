@@ -731,11 +731,19 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 trigger="reply",
                 turn_id=ctx.turn_id,
                 trace_id=ctx.trace_id,
+                source_msg_id=event.message_id,
             )
 
             # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
             # 整合提供「我刚说过什么」的真实语境
             await _record_bot_lines(event.self_id, event.group_id, delivered)
+
+            # 输出匹配（计划 §6.3.4）：注入的表达真的出现在已发文本 → applied=1，
+            # 只有 applied 的表达才关联使用结果；未匹配保持 unknown
+            with contextlib.suppress(Exception):
+                from memory import expression_selector
+
+                expression_selector.mark_applied(ctx.turn_id, delivered)
         else:
             logger.warning(
                 f"[Delivery] 群 {event.group_id} 全部片段未送达（turn={ctx.turn_id}），"

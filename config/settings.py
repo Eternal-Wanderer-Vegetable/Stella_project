@@ -1507,6 +1507,8 @@ SOCIAL_ENABLED = _env_bool("SOCIAL_ENABLED", "false")
 SOCIAL_MODE = _env("SOCIAL_MODE", "off")
 # 表达注入与黑话注入独立开关（shadow 模式下强制视为关闭）。
 SOCIAL_EXPRESSION_INJECT = _env_bool("SOCIAL_EXPRESSION_INJECT", "false")
+# 同一表达在最近 N 次本群回复中用过就不再注入（防复读，计划 §6.3.5）。
+SOCIAL_EXPRESSION_RECENT_TURNS = _env_int("SOCIAL_EXPRESSION_RECENT_TURNS", 10)
 SOCIAL_JARGON_INJECT = _env_bool("SOCIAL_JARGON_INJECT", "false")
 # 后台学习模型：默认关（共享本地端点时不与前台抢资源，计划 §6.7）。
 SOCIAL_BACKGROUND_LLM_ENABLED = _env_bool("SOCIAL_BACKGROUND_LLM_ENABLED", "false")

@@ -156,6 +156,7 @@ def build_social_block(
         social_mode = _settings.SOCIAL_MODE
         if social_mode not in ("shadow", "active"):
             return "", selection
+        from config import settings as _s2
         from memory import jargon_service
 
         scope = ConversationScope.for_qq(ctx.group_id)
@@ -163,18 +164,27 @@ def build_social_block(
 
         # ── 选择（本地、零 LLM） ──
         jargon_entries = jargon_service.match_jargon(scope, ctx.message or "")
-        # 表达选择器（P4）：当前版本占位为空，选择结果恒空
+        # 表达选择（计划 §6.3）：active only、每轮 ≤2、近期用过的不重复注入；
+        # 注入另受 SOCIAL_EXPRESSION_INJECT 独立开关约束（「可理解/可模仿」分闸）。
         expression_entries: list[dict] = []
+        if getattr(_s2, "SOCIAL_EXPRESSION_INJECT", False):
+            try:
+                from memory import expression_selector
+
+                expression_entries = expression_selector.select(
+                    scope, ctx.message or "",
+                    recent_window_turns=int(getattr(_s2, "SOCIAL_EXPRESSION_RECENT_TURNS", 10)),
+                )
+            except Exception:
+                expression_entries = []
         selection.jargon = jargon_entries
         selection.expressions = expression_entries
 
         # usage 记录（shadow 也记：selected=1 / injected=0）
-        _record_usage(getattr(ctx, "turn_id", ""), jargon_entries,
-                      injected=inject_allowed)
-        _record_usage(getattr(ctx, "turn_id", ""), expression_entries,
-                      injected=False)
-
-        if not inject_allowed or (not jargon_entries and not expression_entries):
+        if not inject_allowed:
+            # shadow：选择照记（selected=1 / injected=0），注入永关
+            _record_usage(getattr(ctx, "turn_id", ""), jargon_entries, injected=False)
+            _record_usage(getattr(ctx, "turn_id", ""), expression_entries, injected=False)
             return "", selection
 
         # ── 预算：先扣基线，再放可选（计划 §6.5） ──
@@ -204,6 +214,11 @@ def build_social_block(
             selection.injected_jargon = True
         if not parts:
             return "", selection
+        # 注入事实确定后落 usage（selected ⊃ injected；applied 由输出匹配补记）
+        _record_usage(getattr(ctx, "turn_id", ""), jargon_entries,
+                      injected=selection.injected_jargon)
+        _record_usage(getattr(ctx, "turn_id", ""), expression_entries,
+                      injected=selection.injected_expression)
         return "\n\n".join(parts), selection
     except Exception:
         # social 是可选增强：任何异常都退回无学习基线，绝不阻断回复

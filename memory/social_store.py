@@ -240,3 +240,54 @@ def acked_bot_message_ids(scope: ConversationScope, turn_id: str) -> list[str]:
         for d in deliveries_for_turn(turn_id)
         if d["status"] == DELIVERY_ACKNOWLEDGED and d["platform_message_id"]
     ]
+
+def find_event_id(
+    scope: "ConversationScope",
+    platform_message_id: str | None,
+    *,
+    fallback: "MessageEvidence | None" = None,
+) -> str:
+    """按平台消息 ID 反查证据行 event_id；没有则用 fallback（或新建）落一行。
+
+    两个 matcher 处理同一消息时共享同一证据行（复合唯一索引兜底）。
+    """
+    try:
+        ensure_tables()
+        conn = _connect()
+        try:
+            if platform_message_id:
+                row = conn.execute(
+                    "SELECT event_id FROM social_events WHERE platform=? AND bot_id=? "
+                    "AND group_id=? AND platform_message_id=? LIMIT 1",
+                    (*scope.row(), str(platform_message_id)),
+                ).fetchone()
+                if row:
+                    return row[0]
+            if fallback is not None:
+                conn.execute(
+                    "INSERT OR IGNORE INTO social_events (event_id, platform, bot_id, "
+                    "group_id, platform_message_id, user_id, source_kind, reply_to_id, "
+                    "mentioned_user_ids, text_excerpt, content_hash, received_at_utc, "
+                    "event_at_utc, trace_id, turn_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        fallback.event_id, *fallback.scope.row(), fallback.platform_message_id,
+                        fallback.user_id, fallback.source_kind, fallback.reply_to_id,
+                        json.dumps(list(fallback.mentioned_user_ids), ensure_ascii=False),
+                        fallback.text_excerpt, fallback.content_hash,
+                        fallback.received_at_utc, fallback.event_at_utc,
+                        fallback.trace_id, fallback.turn_id,
+                    ),
+                )
+                conn.commit()
+                row = conn.execute(
+                    "SELECT event_id FROM social_events WHERE platform=? AND bot_id=? "
+                    "AND group_id=? AND platform_message_id=? LIMIT 1",
+                    (*scope.row(), str(platform_message_id or "")),
+                ).fetchone() if platform_message_id else None
+                return row[0] if row else fallback.event_id
+            return ""
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log_sqlite_error("social_store.find_event_id", e)
+        return ""

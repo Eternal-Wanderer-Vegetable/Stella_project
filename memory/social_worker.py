@@ -258,6 +258,14 @@ def _handle_resolve_effect(payload: dict[str, Any]) -> bool:
         return True  # 引用缺失没有重试价值：终止为成功空操作
     status = resolve_effect(effect_id)
     log_settlement(effect_id, status)
+    if status == "resolved":
+        # 反馈降权（计划 §6.3.6）：applied 且被纠正/拒绝的表达先 quarantine
+        try:
+            from memory.expression_selector import handle_effect_feedback
+
+            handle_effect_feedback(effect_id)
+        except Exception as e:
+            logger.debug(f"[Social] 表达反馈降权失败（跳过）: {e}")
     # missing/state_conflict 重试也无意义；error（DB 抖动）值得重试
     return status != "error"
 
