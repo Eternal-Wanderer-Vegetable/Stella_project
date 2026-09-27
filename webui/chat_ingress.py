@@ -27,6 +27,8 @@ WEBCHAT_GROUP_ID = -1
 WEBCHAT_SPACE = "webchat"
 # 单管理员（定案 ③）：dashboard 用户 ↔ 固定 webchat 身份
 WEBCHAT_USER_ID = 800_000_000
+# native 模式下的 conversation key（与 QQ 群命名空间隔离）
+WEBCHAT_CONV_KEY = f"webchat:{WEBCHAT_USER_ID}"
 
 _lock = asyncio.Lock()
 
@@ -80,7 +82,12 @@ async def run_turn(message: str, username: str) -> dict:
 
     pipeline = _resolve_pipeline()
     async with _lock:  # 同群串行（等价群级锁语义）
-        ctx = await pipeline.run(ctx)
+        # 轮次经 facade（prepare/finalize 留 Python，生成是进程内 provider
+        # 调用）；锁语义由 facade per-key owner 接管
+        from core.runtime.facade import ensure_shared_facade_started
+
+        facade = await ensure_shared_facade_started()
+        ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
 
     lines = [line for line in (ctx.lines or []) if line.strip()]
     for line in lines:  # 回复按 BOT_SELF 落库，给下一轮整合提供语境
@@ -95,3 +102,15 @@ async def run_turn(message: str, username: str) -> dict:
             )
         )
     return {"lines": lines, "thought": ctx.thought}
+
+
+async def reset_webchat_runtime() -> None:
+    """WebChat reset 协调（计划 §R.5）：
+
+    先 fence/cancel 在途轮次 + epoch 递增（拒旧轮晚到），再由调用方清消息库
+    ——已取消旧轮不能晚到后重建历史。
+    """
+    from core.runtime.facade import ensure_shared_facade_started
+
+    facade = await ensure_shared_facade_started()
+    await facade.reset_session(WEBCHAT_CONV_KEY)

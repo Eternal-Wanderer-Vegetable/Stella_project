@@ -30,7 +30,7 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
     ctx.reply = "东京明天 27℃，晴。"
     ctx.lines = [ctx.reply]
 
-    gateway.pipeline.run = AsyncMock(return_value=ctx)
+    gateway._run_turn_via_engine = AsyncMock(return_value=ctx)
     monkeypatch.setattr(
         gateway,
         "get_consolidator",
@@ -64,6 +64,6 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
     with pytest.raises(FinishedException):
         await gateway.handle_chat(bot, event)
 
-    gateway.pipeline.run.assert_awaited_once()
+    gateway._run_turn_via_engine.assert_awaited_once()
     finish.assert_awaited_once()
     gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ctx.reply])

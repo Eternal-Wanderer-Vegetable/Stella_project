@@ -959,6 +959,9 @@ WEBUI_MAX_UPLOAD_MB = _env_int("WEBUI_MAX_UPLOAD_MB", 50)
 # 时置 false，只保留 API。
 WEBUI_SERVE_DIST = _env_bool("WEBUI_SERVE_DIST", "true")
 
+# ---------- 自有运行时（计划修订 v2 §R.5：双路开关已退役） ----------
+# STELLA_RUNTIME 环境变量已不再读取（唯一引擎=facade）；保留该键无害。
+
 # ---------- 优雅停止 ----------
 # 停止时等待在途后台任务（整合/压缩）收尾的上限（秒）。
 # LLM 单次调用最长 120s×3 次重试，无限等待会让「停止」看起来卡死。

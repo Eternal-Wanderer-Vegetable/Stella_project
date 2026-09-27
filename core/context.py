@@ -140,6 +140,57 @@ class ChatContext:
     raw_event: Any = field(default=None, repr=False)
     bot: Any = field(default=None, repr=False)
 
+    # ---- Cortico 迁移：跨进程 JSON 投影（计划 §6.2/§6.4） ----
+    # 投影 schema 版本：字段集变更时 +1；旧 runtime store 按版本向后读取。
+    PROJECTION_SCHEMA_VERSION = 1
+    # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
+    # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
+    # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
+    _PROJECTION_FIELDS = (
+        # 输入标识
+        "user_id", "group_id", "msg_id", "message", "source_kind",
+        "group_shared_space", "trigger", "intent", "image_sources",
+        # pre/prepare 侧
+        "short_term", "user_profile", "preferred_address", "memories_for_prompt",
+        "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",
+        "tool_summaries", "knowledge_evidence", "skill_summaries", "skill_artifacts",
+        "image_captions",
+        # 诊断
+        "llm_backend", "llm_model", "llm_call_count", "context_window_tokens",
+        "prompt_budget_tokens", "prompt_estimated_tokens", "prompt_truncated",
+        "system_prompt_len",
+        # 输出
+        "raw_output", "thought", "action", "reply", "lines",
+        # 门禁与 Planner
+        "gate_path", "gate_score", "gate_reasons",
+        "planner_trigger", "planner_action", "planner_wait", "deep_tool_calls",
+    )
+
+    def to_json_projection(self) -> dict:
+        """跨进程桥的 JSON 投影：白名单字段 + schema 版本。
+
+        - ``raw_event``/``bot``/``route``/``task_results``/``skill_results``/
+          ``memory_trace`` 不进投影（平台句柄与任意对象；桥以进程内短期
+          handle 语义另行管理，重启失效——计划 §6.4）。
+        - 语义字段名一律不改（group/shared_space/user/trigger 等照旧）。
+        """
+        out: dict = {
+            "projection_schema_version": self.PROJECTION_SCHEMA_VERSION,
+        }
+        for name in self._PROJECTION_FIELDS:
+            value = getattr(self, name)
+            if name == "skill_artifacts":
+                # ArtifactRef 是对象；只取桥需要的原始字段
+                value = [
+                    {"path": getattr(a, "path", ""), "size_bytes": getattr(a, "size_bytes", 0)}
+                    for a in (value or [])
+                ]
+            elif name == "gate_reasons":
+                # tuple → list：投影必须 JSON 安全
+                value = list(value or [])
+            out[name] = value
+        return out
+
     def __post_init__(self) -> None:
         """自动解析共享空间归属，不要求调用方逐个传参。
 

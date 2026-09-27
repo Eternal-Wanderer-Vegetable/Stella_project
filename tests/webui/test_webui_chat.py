@@ -58,11 +58,23 @@ def test_run_turn_records_and_uses_pipeline(
     captured = {}
 
     class FakePipeline:
-        async def run(self, ctx):
+        class _LLM:
+            async def generate(self, prompt, system_prompt=""):
+                return "<reply>你好呀</reply>"
+
+        _llm = _LLM()
+
+        async def prepare_turn(self, ctx):
+            from core.runtime.turn_service import GENERATE, TurnPlan
+
             captured["group_id"] = ctx.group_id
             captured["space"] = ctx.group_shared_space
             captured["source_kind"] = ctx.source_kind
             captured["message"] = ctx.message
+            ctx.prompt_log = ctx.message
+            return TurnPlan(ctx, GENERATE)
+
+        async def finalize_turn(self, ctx):
             ctx.lines = ["你好呀"]
             return ctx
 
@@ -99,7 +111,19 @@ def test_chat_endpoints_sse_and_history(
     monkeypatch.setattr(pre_processors, "DB_PATH", memory_db)
 
     class FakePipeline:
-        async def run(self, ctx):
+        class _LLM:
+            async def generate(self, prompt, system_prompt=""):
+                return "<reply>面板回复</reply>"
+
+        _llm = _LLM()
+
+        async def prepare_turn(self, ctx):
+            from core.runtime.turn_service import GENERATE, TurnPlan
+
+            ctx.prompt_log = ctx.message
+            return TurnPlan(ctx, GENERATE)
+
+        async def finalize_turn(self, ctx):
             ctx.lines = ["面板回复"]
             return ctx
 

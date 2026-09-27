@@ -80,8 +80,9 @@ STARTCOMMAND.md
 positive_reordered.json
 prompt_now.txt
 
-# start.bat 首次运行下载的嵌入式 Python 运行时
-runtime/
+# start.bat 首次运行下载的嵌入式 Python 运行时（仅仓库根；锚定以免误伤
+# tests/runtime、core/runtime 等源码目录——Cortico 迁移 M0）
+/runtime/
 
 /memory/.space_assignments.json
 /release_backup/
@@ -115,3 +116,7 @@ start_claude_command.txt
 # 桌面壳内嵌前端：CI 下载 build-dashboard 产物后填充（仅 .gitkeep 占位入库）
 /desktop/dashboard-dist/*
 !/desktop/dashboard-dist/.gitkeep
+
+# Cortico vendor 快照内的安装产物（迁移 M1）
+vendor/cortico/node_modules/
+vendor/cortico/dist/

@@ -82,6 +82,11 @@ async def chat_messages(
 @router.post("/api/v1/chat/reset")
 async def chat_reset() -> Any:
     """清空 WebChat 会话：删虚拟群消息段 + 整合 checkpoint（长期记忆不动）。"""
+    # cortico 模式先 fence：取消在途轮次 + 清 Core 会话历史 + epoch 递增，
+    # 保证已取消旧轮不能晚到后重建历史（计划 §7 M4）
+    from webui import chat_ingress
+
+    await chat_ingress.reset_webchat_runtime()
     db = conv_service._memory_db()
     if not db.exists():
         return ok({"cleared": 0})
