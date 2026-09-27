@@ -82,6 +82,18 @@ def is_similar(a: str | None, b: str | None, threshold: float = SIMILARITY_THRES
     return jaccard_similarity(set(a_norm.split()), set(b_norm.split())) >= threshold
 
 
+def same_normalized_text(a: str | None, b: str | None) -> bool:
+    """两段文本归一化后完全一致（引号/标点/大小写/空白差异忽略）；空值返回 False。
+
+    供「跨类型仍可合并」的判定使用：类型词表对「希望被称呼为X」这类内容两可
+    （PREFERENCE=明确偏好 / RELATION=稳定互动都说得通），LLM 两次抽取可能给出
+    不同 type——归一化后逐字相同的跨类型重复，合并仍是安全的。
+    """
+    a_norm = normalize_text(a)
+    b_norm = normalize_text(b)
+    return bool(a_norm) and a_norm == b_norm
+
+
 def merge_content(old: str, new: str) -> str:
     """合并两段内容：一方包含另一方时取更完整者，否则以「；」连接。
 
@@ -94,6 +106,10 @@ def merge_content(old: str, new: str) -> str:
         return new
     if not new:
         return old
+    if same_normalized_text(old, new):
+        # 引号/标点变体（如 “X” 与 「X」）归一化后同文，但互不为原始子串——
+        # 落到下面的分号拼接会把同一事实在一条记忆里写两遍，必须在这里拦截。
+        return old if len(old) >= len(new) else new
     if new in old:
         return old
     if old in new:

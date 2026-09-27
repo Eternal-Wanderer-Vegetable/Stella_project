@@ -447,7 +447,10 @@ pub fn merge_similar(memories: &[MemoryRecord]) -> Vec<MemoryRecord> {
     let mut merged = Vec::new();
     for memory in memories {
         let target = merged.iter_mut().find(|existing: &&mut MemoryRecord| {
-            existing.memory_type == memory.memory_type
+            // 同类型相似即合并；跨类型只在归一化后逐字相同时合并（类型词表对
+            // 「希望被称呼为X」这类内容两可，同一事实两次抽取可能得到不同 type）。
+            (existing.memory_type == memory.memory_type
+                || crate::similarity::same_normalized_text(&existing.content, &memory.content))
                 && existing.user_id == memory.user_id
                 && is_similar(&existing.content, &memory.content)
         });
@@ -561,5 +564,17 @@ mod tests {
         other_user.user_id = Some("2".to_string());
         let merged = merge_similar(&[memory("one", "用户喜欢游戏", &["RECOMMEND"]), other_user]);
         assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn similarity_merge_collapses_cross_type_normalized_equal() {
+        // 同一称呼事实被两次抽取成 RELATION 与 PREFERENCE：归一化逐字相同即合并，
+        // 结果沿用排名更高一方（先出现者）的类型——与 Python retrieval_v2 对齐。
+        let mut rel = memory("rel", "希望被称呼为“歌姬吧”", &["RECOMMEND"]);
+        rel.memory_type = "RELATION".to_string();
+        let pref = memory("pref", "希望被称呼为「歌姬吧」", &["RECOMMEND"]);
+        let merged = merge_similar(&[rel, pref]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].memory_type, "RELATION");
     }
 }

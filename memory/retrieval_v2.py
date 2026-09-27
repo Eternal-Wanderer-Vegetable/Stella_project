@@ -45,7 +45,7 @@ from memory.policy import (
     split_behavior_constraints,
     usage_allowed,
 )
-from memory.text_similarity import is_similar, merge_content
+from memory.text_similarity import is_similar, merge_content, same_normalized_text
 from memory.timeutil import log_sqlite_error
 
 
@@ -296,18 +296,26 @@ def _query_fts(
 
 
 def _merge_similar(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """同类记忆合并（Selection Rule 1）：同一用户、同一 type 且内容高度相似的记忆合并为一条。
+    """同类记忆合并（Selection Rule 1）：同一用户、内容高度相似的记忆合并为一条。
 
     必须比对 user_id：主动发言路径（include_user=None）取的是全群记忆，
     不比归属会把不同人的记忆合并成一条送进 Prompt，导致回复张冠李戴。
+
+    类型条件分两档：同类型相似即合并；跨类型只在归一化后逐字相同时合并——
+    类型词表对「希望被称呼为X」这类内容两可，LLM 两次抽取可能给出 RELATION
+    与 PREFERENCE，纯同类型比对会让跨类型重复穿过写入侧去重后在 Prompt 里
+    重复出现（2026-09-27 缺陷）。合并结果沿用排名更高一方（先出现者）的类型。
     """
     merged: list[dict[str, Any]] = []
     for mem in memories:
         target = None
         for existing in merged:
             if (
-                existing["type"] == mem["type"]
-                and existing.get("user_id") == mem.get("user_id")
+                existing.get("user_id") == mem.get("user_id")
+                and (
+                    existing["type"] == mem["type"]
+                    or same_normalized_text(existing["content"], mem["content"])
+                )
                 and is_similar(existing["content"], mem["content"])
             ):
                 target = existing
