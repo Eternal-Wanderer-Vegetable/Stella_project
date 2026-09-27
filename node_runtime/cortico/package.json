@@ -15,10 +15,11 @@
     "typecheck": "tsc --noEmit",
     "measure": "tsx scripts/measure.ts",
     "verify-patches": "tsx scripts/verify-patches.ts",
-    "build": "tsc --noEmit"
+    "build": "esbuild src/host.ts --bundle --platform=node --format=esm --outfile=dist/host.mjs --tsconfig=tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
