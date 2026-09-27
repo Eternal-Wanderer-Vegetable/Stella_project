@@ -729,6 +729,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 message=ctx.message,
                 lines=delivered,
                 trigger="reply",
+                turn_id=ctx.turn_id,
+                trace_id=ctx.trace_id,
             )
 
             # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
@@ -1972,6 +1974,9 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             message="",
             lines=delivered,
             trigger="proactive",
+            turn_id=ctx.turn_id,
+            trace_id=ctx.trace_id,
+            intent="proactive_at",
         )
         logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
@@ -2347,6 +2352,9 @@ async def _proactive_speak_for_group(
             message="",
             lines=delivered,
             trigger="proactive",
+            turn_id=ctx.turn_id,
+            trace_id=ctx.trace_id,
+            intent=intent,
         )
         logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
         await _record_bot_lines(int(bot.self_id), group_id, delivered)

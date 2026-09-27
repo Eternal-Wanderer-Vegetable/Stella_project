@@ -95,13 +95,24 @@ def on_reply_sent(
     message: str,
     lines: list[str],
     trigger: str,
+    turn_id: str = "",
+    trace_id: str = "",
+    intent: str = "",
 ) -> None:
     """登记一次发言并派生异步学习任务。同步部分只有一次 DB 插入。
 
     :param message: 触发本次发言的用户消息（主动发言传空串——罐头指令
         不是用户的表达，不该进表达样本）
-    :param lines: Stella 实际发出的台词（结算时判断「复用表达」的对照物）
-    :param trigger: reply / proactive（写进 reply_effects 供分层统计）
+    :param lines: Stella **确认送达**的台词（结算时判断「复用表达」的对照物；
+        partial 发送时只含已发片段）
+    :param trigger: reply / proactive（写进效果行供分层统计）
+    :param turn_id: facade 分配的轮次 ID；社交效果观察（计划 §6.6）接管
+        结算时用它从 social_deliveries 反查投递事实
+    :param trace_id: 接入入口的追踪 ID（效果行与 trace 贯通用）
+
+    结算双路分流（计划 §6.2 迁移步骤 5：灰度时不同时运行两套正向学习写入）：
+    社交模式开启 → 本函数只开 ``social_effects`` 观察行 + 持久作业，旧
+    reply_effects 路径停写；关闭 → 走原有延迟结算，行为不变。
     """
     if not EXPRESSION_LEARNING_ENABLED:
         return
@@ -109,6 +120,21 @@ def on_reply_sent(
         _ensure_tables()
         if trigger == "reply" and (message or "").strip():
             _spawn(_harvest_expression(group_shared_space, user_id, message))
+        from memory.reply_effect_service import open_effect, social_effects_enabled
+
+        if social_effects_enabled():
+            if turn_id:
+                open_effect(
+                    group_id=group_id,
+                    user_id=user_id,
+                    trigger=trigger,
+                    turn_id=turn_id,
+                    trace_id=trace_id,
+                    intent=intent,
+                )
+            # 没有 turn_id 的调用（旧测试/未走 facade）没有投递事实可依，
+            # 不伪造效果行——表达采样仍然生效
+            return
         effect_id = store.add_reply_effect(
             group_shared_space=group_shared_space,
             group_id=group_id,
@@ -298,9 +324,19 @@ def _bump_jargon(group_shared_space: str, term: str, user_id: int) -> None:
 
 
 def sweep_pending_effects() -> int:
-    """补结算超窗未结算的回复效果行（进程重启后的兜底）。返回结算行数。"""
+    """补结算超窗未结算的回复效果行（进程重启后的兜底）。返回结算行数。
+
+    社交效果观察接管时，补偿统一走持久作业队列（social_worker.tick），
+    旧的 monotonic sweep 不再产生结算——它的时间基准本就不能跨重启比较。
+    """
     if not EXPRESSION_LEARNING_ENABLED:
         return 0
+    from memory.reply_effect_service import social_effects_enabled
+
+    if social_effects_enabled():
+        from memory.social_worker import tick
+
+        return int(tick().get("done", 0))
     try:
         _ensure_tables()
         cutoff = time.monotonic() - REPLY_EFFECT_WINDOW_SECONDS - 60.0
