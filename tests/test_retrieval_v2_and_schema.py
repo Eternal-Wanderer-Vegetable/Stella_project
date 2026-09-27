@@ -235,6 +235,30 @@ def test_schema_migration_adds_columns(tmp_path, monkeypatch):
     assert schema.ensure_v2_schema(db_path) is False
 
 
+def test_schema_migration_adds_candidate_content_raw(tmp_path, monkeypatch):
+    """memory_candidates.content_raw 是 Rust 晋升后端的硬依赖（promotion.rs 的
+    候选查询硬编码引用），但建表与迁移此前都不创建——新库老库全缺，
+    MEMORY_BACKEND=rust 时整合必炸 no such column: content_raw
+    （2026-09-27 用户安装实测，v5.1.9）。"""
+    db_path = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE memory_candidates (id TEXT PRIMARY KEY, group_shared_space TEXT,"
+        " user_id TEXT, type TEXT, content TEXT, importance REAL, confidence REAL,"
+        " evidence TEXT, status TEXT)"
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(schema, "DB_PATH", db_path)
+    assert schema.ensure_v2_schema(db_path) is True
+
+    conn = sqlite3.connect(db_path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(memory_candidates)")}
+    conn.close()
+    assert "content_raw" in cols
+
+
 def test_schema_migration_does_not_touch_existing_data(tmp_path, monkeypatch):
     """Additive Migration：已有数据不被删除或破坏。"""
     db_path = tmp_path / "agent_memory.db"
