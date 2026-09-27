@@ -1,10 +1,36 @@
 # Stella → Cortico 整体运行时迁移计划
 
-> 状态：待实施；本次仅编制计划，没有修改生产代码或执行迁移。
-> 范围：整体替换运行时架构，保持当前功能、数据、交互与部署能力；Coding Agent 集成明确排除。
-> Stella 基线：`390987e37847b5eea57f90f74d42e66b10664b8f`，分支 `fix/webui-frontend`。
-> GitNexus：本次执行 `analyze --index-only --pdg`；索引时间 `2026-09-27T00:12:46.017Z`，726 个受覆盖文件与工作区匹配；61,608 节点、145,883 边、766 条流程。
-> Cortico 基线：`bc47c824d388345f1c13722f4a05a5f745a028f8`；禁止按浮动 main 实施。
+> 状态：**已修订（v2，2026-09-27）**——放弃引入 Cortico Core 运行时，转为**自有 facade 运行时（纯 Python）**。本 §R 为权威修订，与正文冲突处一律以本节为准；M0–M4 产物按 §R.4 重新定位。
+> 原始基线（v1 存档）：Scope=Cortico Core 拥有轮次生命周期；Stella 证据基线 `390987e37847b5eea57f90f74d42e66b10664b8f`（分支 fix/webui-frontend）；Cortico 基线 `bc47c824d388345f1c13722f4a05a5f745a028f8`；GitNexus 索引 2026-09-27T00:12:46Z（726 文件/61,608 节点）；标记 `[verified]/[graph]/[inferred]/[assumed]` 语义见 §11。
+
+## §R 修订记录 v2（深度收束：全 Python 运行时）
+
+### R.1 决策依据（源自 M1 原型的实测结论）
+
+- 领域复杂度全部留在 Python 之后，对 Cortico 的实际消费面收敛为「fork 执行一轮」：组装请求 → 恰好一次模型调用 → 返回正文。该语义与 M2 提取的 `turn_service.generate_reply` **等价**——继续保留 Node 层属于纯间接层。
+- 跨进程桥带来一整类缺陷面（帧协议/双锁/子进程生命周期），实施中已实际触发一次 reset 锁重入死锁（计划 §9 预警的失败形态）。
+- 性能账为负贡献：桥开销每轮约 4–5ms（单跳 p95=2.2ms 实测）对比秒级模型底盘；20 Core 实例 +67MiB RSS；轮次本就是 I/O 密集，进程内 asyncio 与 legacy 同姿势。
+- M8 的 Node 发行链（Docker Node 层/NSIS 装载/start.bat 引导/离线闭包）是剩余工作里最重的一块，深度 2 直接删除该工作流；同时消除打包后的 Node22+ 运行时依赖。
+
+### R.2 范围变更
+
+- **保留**：M0 全部产物（功能清单/行为契约/基线报告/legacy oracle——最高验收基准不变）；M2 阶段服务（prepare/generate/finalize）与 ChatContext JSON 投影；M3 的 facade 语义（唯一 owner、per-key 锁、owner_epoch、reset fence、独立 JSONL 运行记录）与 M4 的入口分支——实现载体从「Node host + 双向桥」改为**进程内 asyncio 执行器**。
+- **删除**：`vendor/cortico/` 快照、`node_runtime/cortico/`（host/桥/TS 测试/upstream-lock/补丁）、NDJSON 线协议（bridge.py/contracts.py）、M8 的 Node 打包工作流。
+- **降级**：Cortico（参考克隆 `E:\stella\_reference\Cortico`，MIT）为纯设计参考，不再跟随其更新；turnPolicy 上游 PR 设想作废。
+- 模式名同步更名：`STELLA_RUNTIME` 取值 `legacy|cortico` → **`legacy|native`**（native = 自有 facade 运行时；默认仍 legacy，切默认延后至 M9 与旧引擎退役一并处理）。
+
+### R.3 修订后的验收（替代 §13 相应条目）
+
+- 生产对话生成入口统一经 facade（`STELLA_RUNTIME=native`）；轮次生命周期由 facade 运行记录承载（accepted→prepared→generating→completed|failed|cancelled），投递状态另记。
+- **行为 oracle 不变**：冻结 legacy traces 逐字节一致仍是每次提交的最高基准；DIRECT/SILENT 早退、预算/超时兜底（BC-1..17）逐条保持。
+- 无 Node 依赖：全部发行渠道无需 Node22+（M8 缩减为「确认无新增发行物 + 原渠道回归」）。
+- M6（主动/调度迁 facade）、M7（bot.py 生命周期接 facade）结构不变，落点改为 facade；M9 差异回放的对比基准仍是 M0 冻结 traces。
+
+### R.4 M1–M4 产物的重新定位
+
+- M1：定位为「依赖面测量原型」。其结论（消费面极薄、桥无必要、行为可逐字节对齐）即本次修订的输入；vendor 快照/补丁/TS host 移出仓库（git 历史保留可溯）。
+- M2–M4：全部保留，载体置换为纯 Python；置换验收 = 34 例 runtime 测试重构后全绿 + 10 份冻结 oracle 逐字节不变。
+
 > Evidence provenance schema 2；全局 dirty digest：ddae2d79e44267d6fd40de31c3f37d8d0f10af2a37e7e7e7753d1c4300704ecf；引用文件清单见 §11；只排除本计划的精确路径。
 > 标记：`[verified]` 已读源码；`[graph]` 图查询结果；`[inferred]` 基于证据的设计判断；`[assumed]` 尚需验证。下文“拟新增”均为设计，不代表已有 API。
 

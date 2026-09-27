@@ -3,6 +3,11 @@
 > 日期：2026-09-27。分支 `feat/cortico-runtime-migration`。
 > 结论：**通过 —— 附一个最小通用上游补丁（turn-policy）**。M2 起可以开始迁移领域阶段。
 > 全部试验在真实 Cortico Core（vendor 固定快照）上执行，无 mock Core。
+>
+> **修订后记（v2，同日）**：本 spike 最重要的产出是测出了依赖面的真实厚度——
+> 对 Cortico 的消费收敛为「fork 执行一轮」，与 M2 的 turn_service 等价。据此
+> 负责人决策**放弃引入 Core**，转为纯 Python facade 运行时（计划 §R）。本文档
+> 作为该决策的依据存档；文中 vendor/补丁/TS host 描述已成历史（git 可溯）。
 
 ## 1. 固定与构建
 

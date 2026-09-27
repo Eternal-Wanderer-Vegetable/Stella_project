@@ -48,3 +48,9 @@ python -m pytest tests/test_pipeline_compose.py tests/test_planner.py tests/capa
 | `runtime/cortico/` → `node_runtime/cortico/` | `runtime` 是发行链保留名（.gitignore:84、build_release_package FORBIDDEN_PARTS、check_release_archive、release.yml rsync exclude、.dockerignore；语义=嵌入式 Python 运行时目录）。计划 §10 允许文件名微调 |
 | `vendor/cortico/` 名称保持 | 无冲突；固定快照 + `runtime/cortico/upstream-lock.json` → `node_runtime/cortico/upstream-lock.json` |
 | 上游获取 | 本地参考克隆（E:\stella\_reference\Cortico）无 `bc47c824` 对象；已 `git fetch origin bc47c824d388345f1c13722f4a05a5f745a028f8` 成功，提交主题「扩展包图标与 Coo 默认头像 (#134)」，可导出树 |
+
+## 6. 计划修订 v2 记录（2026-09-27）
+
+- 负责人确认深度收束：放弃引入 Cortico Core，运行时收束为纯 Python facade（计划 §R）。
+- `vendor/cortico/`、`node_runtime/cortico/` 移出仓库（git 历史可溯）；Cortico 降级为设计参考（E:\stella\_reference\Cortico）。
+- 模式值更名 `STELLA_RUNTIME=legacy|native`；全量测试基准（§2，2658 passed）在转向前后均有效——oracle 逐字节一致是转向验收的一部分。
