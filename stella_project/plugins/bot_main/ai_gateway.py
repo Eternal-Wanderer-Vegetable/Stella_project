@@ -581,7 +581,17 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
-            ctx = await pipeline.run(ctx)
+            import config as _config
+
+            if _config.RUNTIME_MODE == "cortico":
+                # cortico 模式（计划 §7 M4）：轮次经 facade——prepare/finalize
+                # 仍走本管线（同批钩子），生成走 Core fork + provider 回程。
+                from core.runtime.facade import ensure_shared_facade_started
+
+                facade = await ensure_shared_facade_started()
+                ctx = await facade.submit_turn(f"qq:{event.group_id}", pipeline, ctx)
+            else:
+                ctx = await pipeline.run(ctx)
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
             raise

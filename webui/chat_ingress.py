@@ -27,8 +27,17 @@ WEBCHAT_GROUP_ID = -1
 WEBCHAT_SPACE = "webchat"
 # 单管理员（定案 ③）：dashboard 用户 ↔ 固定 webchat 身份
 WEBCHAT_USER_ID = 800_000_000
+# cortico 模式下的 conversation key（与 QQ 群命名空间隔离）
+WEBCHAT_CONV_KEY = f"webchat:{WEBCHAT_USER_ID}"
 
 _lock = asyncio.Lock()
+
+
+def _runtime_mode() -> str:
+    """调用期读（测试可 monkeypatch config.RUNTIME_MODE）。"""
+    import config
+
+    return config.RUNTIME_MODE
 
 
 def _ensure_webchat_space() -> None:
@@ -80,7 +89,15 @@ async def run_turn(message: str, username: str) -> dict:
 
     pipeline = _resolve_pipeline()
     async with _lock:  # 同群串行（等价群级锁语义）
-        ctx = await pipeline.run(ctx)
+        if _runtime_mode() == "cortico":
+            # cortico 模式：轮次经 facade（prepare/finalize 留 Python，生成走
+            # Core fork + provider 回程）；锁语义由 facade per-key owner 接管
+            from core.runtime.facade import ensure_shared_facade_started
+
+            facade = await ensure_shared_facade_started()
+            ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
+        else:
+            ctx = await pipeline.run(ctx)
 
     lines = [line for line in (ctx.lines or []) if line.strip()]
     for line in lines:  # 回复按 BOT_SELF 落库，给下一轮整合提供语境
@@ -95,3 +112,17 @@ async def run_turn(message: str, username: str) -> dict:
             )
         )
     return {"lines": lines, "thought": ctx.thought}
+
+
+async def reset_webchat_runtime() -> None:
+    """cortico 模式的 WebChat reset 协调（计划 §7 M4）：
+
+    先 fence/cancel 在途轮次 + 清 Core 会话历史 + epoch 递增（拒旧 owner 晚到），
+    再由调用方清消息库——已取消旧轮不能晚到后重建历史。legacy 模式为 no-op。
+    """
+    if _runtime_mode() != "cortico":
+        return
+    from core.runtime.facade import ensure_shared_facade_started
+
+    facade = await ensure_shared_facade_started()
+    await facade.reset_session(WEBCHAT_CONV_KEY)

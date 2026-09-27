@@ -4749,6 +4749,7 @@ var RpcBridge = class {
     };
     return { response, origin: BRIDGE_ORIGIN, attempts: [attempt] };
   }
+  /** host 读循环派发 provider.respond 的响应；返回是否命中本桥的在途请求。 */
   resolve(reqId, payload) {
     const p = this.pending.get(reqId);
     if (!p) return false;
@@ -4766,6 +4767,15 @@ var SessionRegistry = class {
   /** 出站请求（provider.respond 等）的 future 登记表，读循环派发用。 */
   outbound = /* @__PURE__ */ new Map();
   shuttingDown = false;
+  /** 读循环派发：把 provider.respond 的响应路由给对应会话桥。 */
+  resolveBridge(id, payload) {
+    for (const bridge of this.bridges.values()) {
+      if (payload instanceof Error) {
+        if (bridge.resolve(id, payload)) return true;
+      } else if (bridge.resolve(id, payload)) return true;
+    }
+    return false;
+  }
   outboundSend(method, params) {
     return new Promise((resolve2, reject) => {
       const id = randomUUID();
@@ -4839,7 +4849,7 @@ var SessionRegistry = class {
     }
     const bridge = new RpcBridge(key, (method, p) => this.outboundSend(method, p));
     const controller = new AbortController();
-    const state = { turnId, bridge, controller, deadlineTimer: null, settled: false };
+    const state = { turnId, reqId, bridge, controller, deadlineTimer: null, settled: false };
     this.inflight.set(key, state);
     const settleError = (code, msg) => {
       if (state.settled) return;
@@ -4889,6 +4899,8 @@ var SessionRegistry = class {
       state.bridge.failAll(new Error("reset \u53D6\u6D88\u5728\u9014\u8F6E\u6B21"));
       this.inflight.delete(key);
       state.settled = true;
+      if (state.deadlineTimer) clearTimeout(state.deadlineTimer);
+      replyError(state.reqId, "E_CANCELLED", "reset \u53D6\u6D88\u5728\u9014\u8F6E\u6B21");
     }
     const core = this.cores.get(key);
     if (core) await core.loop.clearSession();
@@ -4950,10 +4962,10 @@ async function main() {
           else p.resolve(env.result ?? {});
           return;
         }
-        for (const bridge of registry.bridges.values()) {
-          if (bridge.resolve(id, env.error ? new Error(String(env.error.message)) : env.result ?? {})) {
-            return;
-          }
+        if (env.error) {
+          if (registry.resolveBridge(id, new Error(String(env.error.message)))) return;
+        } else {
+          if (registry.resolveBridge(id, env.result ?? {})) return;
         }
         return;
       }

@@ -250,13 +250,80 @@ class RuntimeFacade:
         await self._bridge.request(M_TURN_CANCEL, {"key": key, "turn_id": turn_id}, timeout=5.0)
 
     async def reset_session(self, key: str) -> None:
-        """先 fence/cancel 在途轮次，再清 Core 会话历史；epoch 递增拒旧 owner。"""
+        """先 fence/cancel 在途轮次，再清 Core 会话历史；epoch 递增拒旧 owner。
+
+        刻意**不取**提交锁：submit 在锁内等待 provider 回程，reset 若在同一把
+        锁后排队就永远取消不掉它（锁重入死锁，计划 §9 预警的失败形态）。
+        host 侧 cancel/epoch 校验本身按 key 独立；reset 与并发 submit 的竞争
+        结果是后者收到一次 E_KEY（有界失败），新提交用新 epoch 正常进行。
+        """
         state = self._key_state(key)
-        async with state.lock:
-            await self._bridge.request(M_SESSION_RESET, {"key": key, "owner_epoch": state.owner_epoch}, timeout=15.0)
-            resp = await self._bridge.request(M_SESSION_ENSURE, {"key": key})
-            state.owner_epoch = int(resp.get("owner_epoch", state.owner_epoch + 1))
+        await self._bridge.request(M_SESSION_RESET, {"key": key, "owner_epoch": state.owner_epoch}, timeout=15.0)
+        resp = await self._bridge.request(M_SESSION_ENSURE, {"key": key})
+        state.owner_epoch = int(resp.get("owner_epoch", state.owner_epoch + 1))
 
     async def drain(self) -> int:
         resp = await self._bridge.request("runtime.drain", {}, timeout=45.0)
         return int(resp.get("pending", 0))
+
+
+# ---- 进程级共享 facade（M4：gateway / chat_ingress 共用同一 owner 面） ----
+
+_shared_facade: "RuntimeFacade | None" = None
+_shared_started = False
+
+
+def default_host_config() -> dict[str, Any]:
+    """host 侧 CoreConfig（LLM 由 bridge 注入，provider 仅占位；模型名取真实 CHAT 绑定）。"""
+    from config import LLM_ROLE_CHAT_MODEL
+
+    model = (LLM_ROLE_CHAT_MODEL or "").strip() or "stella"
+    return {
+        "displayName": "Stella",
+        "providers": {
+            "stella": {
+                "kind": "openai-responses-compat",
+                "baseUrl": "http://127.0.0.1.invalid",
+                "spec": {"model": model, "thinking": False},
+            }
+        },
+        "activeProvider": "stella",
+        "batching": {"quietGapMs": 2500, "minBatchAgeMs": 0, "maxBatchAgeMs": 15000, "maxBatchSize": 100},
+        "context": {"maxTokens": 128000, "keepRatio": 0.3333, "softRatio": 0.85, "firstTurn": False, "keepPastThinking": True},
+        "logging": {"file": "debug", "console": "info", "areas": ""},
+        "loop": {"softCap": 8, "hardCap": 16},
+    }
+
+
+def get_shared_facade() -> RuntimeFacade:
+    """进程内共享 facade（懒创建）；provider 回程走真实 CHAT 角色后端。"""
+    global _shared_facade
+    if _shared_facade is None:
+        from config import STELLA_HOME
+        from core.llm import ROLE_CHAT, backend_for
+        from core.runtime.bridge import provider_prompt_text
+
+        async def _provider_handler(params: dict[str, Any]) -> dict[str, Any]:
+            prompt = provider_prompt_text(params)
+            backend = backend_for(ROLE_CHAT)
+            text = await backend.generate(prompt)
+            return {"text": text}
+
+        runtime_dir = Path(STELLA_HOME) / "runtime"
+        bridge = NodeBridge(
+            provider_handler=_provider_handler,
+            host_config=default_host_config(),
+            data_root=runtime_dir / "sessions",
+        )
+        _shared_facade = RuntimeFacade(bridge, store=RuntimeStore(runtime_dir / "turns.jsonl"))
+    return _shared_facade
+
+
+async def ensure_shared_facade_started() -> "RuntimeFacade":
+    """首用前启动（handshake）；幂等。"""
+    global _shared_started
+    facade = get_shared_facade()
+    if not _shared_started:
+        await facade.start()
+        _shared_started = True
+    return facade

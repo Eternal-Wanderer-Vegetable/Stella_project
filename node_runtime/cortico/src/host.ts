@@ -126,8 +126,6 @@ class RpcBridge implements ResponseClient {
   }
 
   /** host 读循环派发 provider.respond 的响应；返回是否命中本桥的在途请求。 */
-  resolve(reqId: string, result: Record<string, unknown>): boolean;
-  resolve(reqId: string, error: Error): boolean;
   resolve(reqId: string, payload: Record<string, unknown> | Error): boolean {
     const p = this.pending.get(reqId);
     if (!p) return false;
@@ -141,6 +139,7 @@ class RpcBridge implements ResponseClient {
 // ---- 会话注册表 ----
 interface TurnState {
   turnId: string;
+  reqId: string;
   bridge: RpcBridge;
   controller: AbortController;
   deadlineTimer: NodeJS.Timeout | null;
@@ -155,6 +154,16 @@ class SessionRegistry {
   /** 出站请求（provider.respond 等）的 future 登记表，读循环派发用。 */
   readonly outbound = new Map<string, { resolve: (v: Record<string, unknown>) => void; reject: (e: Error) => void }>();
   private shuttingDown = false;
+
+  /** 读循环派发：把 provider.respond 的响应路由给对应会话桥。 */
+  resolveBridge(id: string, payload: Record<string, unknown> | Error): boolean {
+    for (const bridge of this.bridges.values()) {
+      if (payload instanceof Error) {
+        if (bridge.resolve(id, payload)) return true;
+      } else if (bridge.resolve(id, payload)) return true;
+    }
+    return false;
+  }
 
   outboundSend(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
@@ -236,7 +245,7 @@ class SessionRegistry {
 
     const bridge = new RpcBridge(key, (method, p) => this.outboundSend(method, p));
     const controller = new AbortController();
-    const state: TurnState = { turnId, bridge, controller, deadlineTimer: null, settled: false };
+    const state: TurnState = { turnId, reqId, bridge, controller, deadlineTimer: null, settled: false };
     this.inflight.set(key, state);
 
     const settleError = (code: string, msg: string) => {
@@ -293,6 +302,9 @@ class SessionRegistry {
       state.bridge.failAll(new Error("reset 取消在途轮次"));
       this.inflight.delete(key);
       state.settled = true;
+      if (state.deadlineTimer) clearTimeout(state.deadlineTimer);
+      // 在途 submit 必须有界失败：立即回 E_CANCELLED，不拖到调用方超时
+      replyError(state.reqId, "E_CANCELLED", "reset 取消在途轮次");
     }
     const core = this.cores.get(key);
     if (core) await core.loop.clearSession();
@@ -363,10 +375,10 @@ async function main(): Promise<void> {
           return;
         }
         // provider.respond 等桥内出站请求的响应：路由给对应会话桥
-        for (const bridge of registry.bridges.values()) {
-          if (bridge.resolve(id, env.error ? new Error(String((env.error as Record<string, unknown>).message)) : (env.result ?? {}) as Record<string, unknown>)) {
-            return;
-          }
+        if (env.error) {
+          if (registry.resolveBridge(id, new Error(String((env.error as Record<string, unknown>).message)))) return;
+        } else {
+          if (registry.resolveBridge(id, (env.result ?? {}) as Record<string, unknown>)) return;
         }
         return;
       }
