@@ -48,6 +48,11 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+def new_trace_id() -> str:
+    """接入入口在硬门禁前创建的追踪 ID（未进入 Facade 的静默决策也持有）。"""
+    return uuid.uuid4().hex
+
+
 def parse_utc(value: str | None) -> datetime | None:
     """解析本模块写入的 UTC 时间串；空/非法返回 None（不猜测）。"""
     if not value:

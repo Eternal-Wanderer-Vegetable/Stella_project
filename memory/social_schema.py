@@ -248,9 +248,9 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 def social_schema_version(db_path: Path | str | None = None) -> int:
     """读取社交组件版本；未初始化返回 0。"""
     if db_path is None:
-        from config import DB_PATH
+        from config import settings
 
-        db_path = Path(DB_PATH)
+        db_path = Path(settings.DB_PATH)
     db_path = Path(db_path)
     if not db_path.exists():
         return 0
@@ -535,9 +535,9 @@ def ensure_social_schema(
     中途任何异常整体回滚，组件版本保持不变。
     """
     if db_path is None:
-        from config import DB_PATH
+        from config import settings
 
-        db_path = Path(DB_PATH)
+        db_path = Path(settings.DB_PATH)
     db_path = Path(db_path)
     if social_schema_version(db_path) >= SOCIAL_SCHEMA_VERSION:
         return {}

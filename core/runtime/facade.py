@@ -80,6 +80,7 @@ class TurnRecord:
     outcome: str
     state: str
     started_at: float
+    trace_id: str = ""  # 接入入口创建的追踪 ID（社交闭环贯通用，计划 §6.1）
     finished_at: float | None = None
     detail: dict[str, Any] | None = None
 
@@ -181,22 +182,27 @@ class RuntimeFacade:
             turn_id = uuid.uuid4().hex
             state.last_turn_id = turn_id
             started = time.time()
+            # 身份贯通：trace_id 缺失时补一个（入口未建的静默路径也可追溯）；
+            # turn_id 写回 ctx，投递回执与效果观察用它关联本轮（计划 §6.1）。
+            if not ctx.trace_id:
+                ctx.trace_id = uuid.uuid4().hex
+            ctx.turn_id = turn_id
             epoch_before = await self._ensure_epoch(state)
             self._record(
-                turn_id=turn_id, key=key, owner_epoch=epoch_before,
+                turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=epoch_before,
                 outcome="", state="accepted", started_at=started,
             )
             plan = await pipeline.prepare_turn(ctx)
             # fence：prepare 期间发生 reset → 本轮作废（epoch 已被推进）
             if state.owner_epoch != epoch_before:
                 self._record(
-                    turn_id=turn_id, key=key, owner_epoch=epoch_before,
+                    turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=epoch_before,
                     outcome="cancelled", state="cancelled", started_at=started,
                     finished_at=time.time(), detail={"reason": "reset during prepare"},
                 )
                 raise RuntimeTurnError(E_CANCELLED, "prepare 期间发生 reset，本轮作废")
             self._record(
-                turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                 outcome=plan.outcome, state="prepared", started_at=started,
             )
 
@@ -220,7 +226,7 @@ class RuntimeFacade:
                     ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
-                        turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                        turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                         outcome=plan.outcome, state="deadline_fallback",
                         started_at=started, finished_at=time.time(),
                     )
@@ -228,7 +234,7 @@ class RuntimeFacade:
                 except asyncio.CancelledError:
                     if state.cancel_requested:
                         self._record(
-                            turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                            turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                             outcome="cancelled", state="cancelled", started_at=started,
                             finished_at=time.time(),
                         )
@@ -240,7 +246,7 @@ class RuntimeFacade:
                     ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
-                        turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                        turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                         outcome=plan.outcome, state="provider_fallback",
                         started_at=started, finished_at=time.time(),
                     )
@@ -250,7 +256,7 @@ class RuntimeFacade:
                 ctx.llm_elapsed = time.monotonic() - gen_started
                 ctx.raw_output = str(text)
                 self._record(
-                    turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                    turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                     outcome=plan.outcome, state="completed", started_at=started,
                     finished_at=time.time(),
                 )
@@ -260,7 +266,7 @@ class RuntimeFacade:
                 # 与 legacy 直回/WAIT 早退语义一致——不执行 finalize
                 # （post hooks 不跑，silent 不得被补成兜底 lines）；生命周期照记。
                 self._record(
-                    turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                    turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                     outcome=plan.outcome, state="completed", started_at=started,
                     finished_at=time.time(),
                 )
@@ -270,7 +276,7 @@ class RuntimeFacade:
             if plan.outcome == BUDGET_LIMITED:
                 ctx.llm_backend = pipeline._llm.backend_name  # type: ignore[union-attr]
             self._record(
-                turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                 outcome=plan.outcome, state="completed_local", started_at=started,
                 finished_at=time.time(),
             )

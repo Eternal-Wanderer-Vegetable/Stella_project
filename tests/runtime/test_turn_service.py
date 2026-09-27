@@ -124,11 +124,15 @@ def test_projection_excludes_handles_and_roundtrips_json():
     ctx.raw_event = object()
     ctx.bot = object()
     ctx.tool_summaries = ["东京 27℃"]
+    ctx.trace_id = "trace-1"
+    ctx.turn_id = "turn-1"
     proj = ctx.to_json_projection()
     # JSON 可序列化 + 白名单语义
     assert json.loads(json.dumps(proj, ensure_ascii=False)) == proj
     assert "raw_event" not in proj and "bot" not in proj
     assert "route" not in proj and "task_results" not in proj
-    assert proj["projection_schema_version"] == 1
+    # v2：社交闭环身份（trace_id/turn_id）是安全标量，进投影（计划 §6.1）
+    assert proj["projection_schema_version"] == 2
+    assert proj["trace_id"] == "trace-1" and proj["turn_id"] == "turn-1"
     assert proj["message"] == "在吗"
     assert proj["tool_summaries"] == ["东京 27℃"]

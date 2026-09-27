@@ -91,6 +91,7 @@ from config import (
     SESSION_CONTEXT_ENABLED,
     SESSION_IDLE_CHECK_INTERVAL,
     SHUTDOWN_GRACE_SECONDS,
+    SOCIAL_ENABLED,
     STOP_WATCH_INTERVAL_SECONDS,
     SYSTEM_PROMPT_PATH,
 )
@@ -103,10 +104,18 @@ from core.pipeline import Pipeline
 from core.planner import RestrictedPlanner
 from core.reply_gate import get_reply_gate
 from core.shutdown import wait_for_tasks
+from core.social.contracts import (
+    ConversationScope,
+    MessageEvidence,
+    aggregate_delivery_status,
+    delivered_texts,
+    new_trace_id,
+)
+from core.social.delivery import deliver_lines
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
-from memory import addressing, expression_learning
+from memory import addressing, expression_learning, social_store
 from memory.addressing_intent import (
     CLEAR_ADDRESS,
     NOT_ADDRESS_REQUEST,
@@ -285,6 +294,11 @@ async def _run_turn_via_engine(group_id: int, ctx: ChatContext) -> ChatContext:
         f"qq:{group_id}", pipeline, ctx, deadline=LLM_TIMEOUT
     )
 
+
+def _social_delivery_enabled() -> bool:
+    """投递回执与标准化证据是否落库（总开关；shadow 模式也记事实）。"""
+    return bool(SOCIAL_ENABLED)
+
 # 本地状态接口：挂在 NoneBot 已有的 ASGI app 上（不新增端口）。
 # 放在扩展加载之后：link_status 来自扩展（虽是延迟导入，顺序清晰些更好）。
 # 注册失败只告警——状态接口是加分项，缺了只是 GUI 少一块信息，不该阻断启动。
@@ -337,6 +351,18 @@ try:
 except Exception as e:
     # 记账是旁路，挂不上就不记，绝不能拖垮插件加载
     logger.warning(f"⚠️ LLM 用量记账挂载失败（不影响运行）: {e}")
+
+# ── 启动时社交旁表组件迁移（总开关默认关闭：不开就不碰库） ──
+# 组件版本独立于核心记忆 schema（memory/social_schema.py）；迁移自带
+# 旧库导入与备份，失败只让社交功能停用，绝不阻断插件加载。
+if SOCIAL_ENABLED:
+    try:
+        from memory.social_schema import ensure_social_schema
+
+        _social_import_stats = ensure_social_schema()
+        logger.info(f"📦 [Startup] 社交旁表就绪（旧库导入: {_social_import_stats or '无'}）")
+    except Exception as e:
+        logger.warning(f"⚠️ 社交旁表迁移失败（社交功能停用，不影响运行）: {e}")
 
 # ── 启动时数据库清理（测试期用，避免频繁重启注入脏记忆） ──
 # 打开开关后，在插件装载阶段立即清空短期 / 长期记忆、重置检查点
@@ -433,6 +459,9 @@ async def record_group_chat(event: GroupMessageEvent):
         message=text,
         # @ 到 Bot 的消息是最可靠的用户信息源，落库时标记来源以供整合/审计
         source_kind="AT_MENTION" if event.is_tome() else "PASSIVE",
+        # 追踪 ID 在接入入口、硬门禁前创建（计划 §6.1）；静默监听器是
+        # 每条群消息最早的处理点，证据行的 trace 关联从这里开始。
+        trace_id=new_trace_id(),
     )
     await record_message(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
@@ -455,17 +484,58 @@ async def record_group_chat(event: GroupMessageEvent):
     # 强制响应路径，二者必须独立（上游工程方案 §3/原则 7）。
     # 评分全本地（规则 + 可选 embedding），零 LLM 调用；observe 内部自己吞异常，
     # 这里不再包 try 以免刷屏。
+    reply_to_id, mentioned_users = _extract_message_relations(event)
+    # 标准化消息证据（计划 §6.1）：reply/@ 关系此前只存在于事件对象上，落不进
+    # 任何表，效果观察就无法做引用归因。总开关关闭时不碰旁表；两个 matcher
+    # 重复处理同一消息由 (platform, bot, group, platform_message_id) 复合唯一
+    # 索引幂等兜底，first-writer-wins。
+    if _social_delivery_enabled():
+        with contextlib.suppress(Exception):
+            social_store.record_event(
+                MessageEvidence(
+                    scope=ConversationScope.for_qq(event.group_id),
+                    platform_message_id=str(event.message_id),
+                    user_id=str(event.user_id),
+                    source_kind=ctx.source_kind,
+                    reply_to_id=reply_to_id,
+                    mentioned_user_ids=mentioned_users,
+                    text_excerpt=text,
+                    trace_id=ctx.trace_id,
+                )
+            )
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
         decision = await get_participation_manager().observe(
             ctx.group_id,
             ctx.user_id,
             text,
             msg_id=event.message_id,
+            reply_to=int(reply_to_id) if (reply_to_id or "").isdigit() else None,
+            mentioned_users=tuple(int(m) for m in mentioned_users if m.isdigit()),
+            is_tome=event.is_tome(),
+            has_image=bool(extract_image_sources(event)) if vision_available() else False,
+            has_emoji=bool(expression_learning._EMOJI_RE.search(text)),
         )
         if decision is not None and decision.should_speak and PARTICIPATION_TRIGGER_ENABLED:
             # ALLOW_LLM：交给统一执行器（群锁/预算/去重/consolidate 都在里头）。
             # create_task：评分在 priority 0 的非阻断监听器里，不能同步等 LLM。
             _spawn_participation_speak(event.group_id, decision, trigger_text=text)
+
+
+def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
+    """提取回复引用与 @ 目标（除 Stella 自身、拒绝 @all），供证据与评分层使用。"""
+    reply_to: str | None = None
+    mentioned: list[str] = []
+    for segment in event.get_message():
+        seg_type = _message_segment_type(segment)
+        if seg_type == "reply":
+            reply_to = str(_message_segment_data(segment).get("id") or "") or None
+        elif seg_type == "at":
+            qq = str(_message_segment_data(segment).get("qq") or "").strip()
+            if not qq or qq.lower() == "all" or qq == str(event.self_id):
+                continue
+            if qq not in mentioned:
+                mentioned.append(qq)
+    return reply_to, tuple(mentioned)
 
 
 async def is_chat_trigger(event: GroupMessageEvent) -> bool:
@@ -618,50 +688,64 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         if not ctx.lines:
             ctx.lines = ["......？"]
 
-        # 把本次回复记入“已说过的话”，防止随后主动发言再重复刷屏
-        with contextlib.suppress(Exception):
-            get_proactive().record_spoken(event.group_id, ctx.lines)
-            # 评分层记账：被 @ 后的回复记为**被动**——被叫到后回答不应该
-            # 获得与主动插话同等级的惩罚（上游工程方案 §14）
-            get_participation_manager().note_stella_spoke(event.group_id, "passive")
-
-        # 表达与回复效果学习（设计阶段六）：登记 + 派生异步任务，不阻塞发送。
-        # 放在发送循环之前：最后一行 chat_handler.finish() 会抛 FinishedException，
-        # 循环之后的代码不执行。
-        expression_learning.on_reply_sent(
-            group_id=event.group_id,
-            group_shared_space=ctx.group_shared_space,
-            user_id=event.user_id,
-            message=ctx.message,
-            lines=ctx.lines,
-            trigger="reply",
-        )
-
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-        # 发送前先把 Bot 自己的台词落库（source_kind=BOT_SELF），给下一轮整合提供语境。
-        # 必须放在发送前：最后一行走 chat_handler.finish() 会抛 FinishedException，后续代码不执行。
-        await _record_bot_lines(event.self_id, event.group_id, ctx.lines)
+        # 逐段发送并收集回执（计划 §6.1 发送改造）：只有**确认送达**的片段才
+        # 计发言、写 BOT_SELF、进学习——发送失败不再被记成「说过」。原实现把
+        # 最后一段交给 chat_handler.finish(msg)（抛 FinishedException、拿不到
+        # 回执且无法补记账），现在全部用 send、finish 只结束流程。
+        scope = ConversationScope.for_qq(event.group_id) if _social_delivery_enabled() else None
+
+        async def _send_reply_segment(line: str, i: int) -> str | None:
+            if i == 0:
+                msg = Message([MessageSegment.reply(event.message_id), MessageSegment.text(line)])
+            else:
+                msg = Message(line)
+            return await chat_handler.send(msg)
+
+        receipts = await deliver_lines(
+            ctx.lines,
+            scope=scope,
+            trace_id=ctx.trace_id,
+            turn_id=ctx.turn_id,
+            send_one=_send_reply_segment,
+            interval_seconds=SEND_INTERVAL,
+        )
+        delivered = delivered_texts(receipts)
+        if delivered:
+            # 把确认送达的回复记入“已说过的话”，防止随后主动发言再重复刷屏
+            with contextlib.suppress(Exception):
+                get_proactive().record_spoken(event.group_id, delivered)
+                # 评分层记账：被 @ 后的回复记为**被动**——被叫到后回答不应该
+                # 获得与主动插话同等级的惩罚（上游工程方案 §14）。
+                # 多段回复只更新一次发言占用，不按片段重复计数。
+                get_participation_manager().note_stella_spoke(event.group_id, "passive")
+
+            # 表达与回复效果学习：效果只对照已发部分（partial 时后半段不存在）
+            expression_learning.on_reply_sent(
+                group_id=event.group_id,
+                group_shared_space=ctx.group_shared_space,
+                user_id=event.user_id,
+                message=ctx.message,
+                lines=delivered,
+                trigger="reply",
+            )
+
+            # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
+            # 整合提供「我刚说过什么」的真实语境
+            await _record_bot_lines(event.self_id, event.group_id, delivered)
+        else:
+            logger.warning(
+                f"[Delivery] 群 {event.group_id} 全部片段未送达（turn={ctx.turn_id}），"
+                "不记发言、不学习"
+            )
 
         # 压缩放在回复之后：不阻塞本次回复，摘要从下一轮开始生效
         if ctx.tail_start_id:
             schedule_compact(event.group_id, ctx.tail_start_id)
 
-        # 第一条回复带引用原消息；多行之间间隔 SEND_INTERVAL 秒发送
-        reply_segment = MessageSegment.reply(event.message_id)
-
-        for i, line in enumerate(ctx.lines):
-            if i > 0:
-                await asyncio.sleep(SEND_INTERVAL)
-            if i == 0:
-                msg = Message([reply_segment, MessageSegment.text(line)])
-            else:
-                msg = Message(line)
-            if i == len(ctx.lines) - 1:
-                # 最后一行用 finish（结束本次处理），前面几行用 send
-                await chat_handler.finish(msg)
-            else:
-                await chat_handler.send(msg)
+        # 所有片段已 send 完成，这里只结束本次处理流程（不再携带消息）
+        await chat_handler.finish()
 
 
 # ============================================================
@@ -1819,6 +1903,7 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             trigger="reply",
             # 纯诊断字段：日志据此区分「用户 @ 我」与「我主动 @ 人」
             intent="proactive_at",
+            trace_id=new_trace_id(),
         )
         try:
             ctx = await _run_turn_via_engine(group_id, ctx)
@@ -1850,8 +1935,31 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             logger.info(f"🛑 [主动@] 群 {group_id} 与已发言内容重复，跳过")
             return False
 
+        # 逐段发送 + 回执收集（计划 §6.1）：发送确认之后才记账。原实现先记账
+        # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
+        scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+
+        async def _send_at_segment(seg_line: str, _i: int) -> str | None:
+            message = Message([
+                MessageSegment.at(target.user_id),
+                MessageSegment.text(" " + seg_line),
+            ])
+            return await bot.send_group_msg(group_id=group_id, message=message)
+
+        receipts = await deliver_lines(
+            [line],
+            scope=scope,
+            trace_id=ctx.trace_id,
+            turn_id=ctx.turn_id,
+            send_one=_send_at_segment,
+        )
+        delivered = delivered_texts(receipts)
+        if not delivered:
+            logger.error(f"[主动@] 群 {group_id} 发送失败，不记账不学习")
+            return False
+
         proactive.mark_spoke(group_id)
-        proactive.record_spoken(group_id, [line])
+        proactive.record_spoken(group_id, delivered)
         # 评分层记账：主动 @ 同样算主动发言（上游 §14 的区分只针对被动应答）
         with contextlib.suppress(Exception):
             get_participation_manager().note_stella_spoke(group_id, "proactive")
@@ -1862,25 +1970,16 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             group_shared_space=ctx.group_shared_space,
             user_id=target.user_id,
             message="",
-            lines=[line],
+            lines=delivered,
             trigger="proactive",
         )
-        logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {line}")
+        logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
-        await _record_bot_lines(self_id, group_id, [line])
+        await _record_bot_lines(self_id, group_id, delivered)
 
         # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
         if ctx.tail_start_id:
             schedule_compact(group_id, ctx.tail_start_id)
-
-        try:
-            await bot.send_group_msg(
-                group_id=group_id,
-                message=Message([MessageSegment.at(target.user_id), MessageSegment.text(" " + line)]),
-            )
-        except Exception as e:
-            logger.error(f"主动 @ 发送失败: {e}")
-            return False
 
     # 发出即计数（不论是否获得回应），否则无回应的追问不占配额，
     # 会导致对同一个人连续搭话
@@ -2170,6 +2269,7 @@ async def _proactive_speak_for_group(
             gate_path=gate.path,
             gate_score=gate.score,
             gate_reasons=gate.reasons,
+            trace_id=new_trace_id(),
         )
         try:
             ctx = await _run_turn_via_engine(group_id, ctx)
@@ -2210,38 +2310,54 @@ async def _proactive_speak_for_group(
             logger.info(f"🛑 [主动发言] 群 {group_id} 与已发言内容重复，跳过")
             return
 
+        # 逐段发送 + 回执收集（计划 §6.1）：确认送达后才记账。原实现先记账后
+        # 发送，发送失败已被记成「说过」并进入学习——正是计划 §2 优先修复项。
+        scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+
+        async def _send_proactive_segment(seg_line: str, _i: int) -> str | None:
+            return await bot.send_group_msg(group_id=group_id, message=seg_line)
+
+        receipts = await deliver_lines(
+            ctx.lines,
+            scope=scope,
+            trace_id=ctx.trace_id,
+            turn_id=ctx.turn_id,
+            send_one=_send_proactive_segment,
+            interval_seconds=SEND_INTERVAL,
+        )
+        delivered = delivered_texts(receipts)
+        if not delivered:
+            _log_participation_event(decision, "send_failed", "no_segment_delivered")
+            logger.error(f"[主动发言] 群 {group_id} 全部片段发送失败（不记账不学习）")
+            return
+
         # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
         proactive.mark_spoke(group_id)
-        get_proactive().record_spoken(group_id, ctx.lines)
-        # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty）
+        get_proactive().record_spoken(group_id, delivered)
+        # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty），
+        # 一次逻辑发言只更新一次，不按片段重复计数
         with contextlib.suppress(Exception):
             get_participation_manager().note_stella_spoke(group_id, "proactive")
-        # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」
+        # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」；
+        # user_id=0 表示全群目标，效果结算按群归因（不再作为过滤条件）。
         expression_learning.on_reply_sent(
             group_id=group_id,
             group_shared_space=ctx.group_shared_space,
             user_id=0,
             message="",
-            lines=ctx.lines,
+            lines=delivered,
             trigger="proactive",
         )
-        logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(ctx.lines)}")
-        await _record_bot_lines(int(bot.self_id), group_id, ctx.lines)
+        logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
+        await _record_bot_lines(int(bot.self_id), group_id, delivered)
 
         # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
         if ctx.tail_start_id:
             schedule_compact(group_id, ctx.tail_start_id)
 
-        try:
-            for i, line in enumerate(ctx.lines):
-                if i > 0:
-                    await asyncio.sleep(SEND_INTERVAL)
-                await bot.send_group_msg(group_id=group_id, message=line)
-        except Exception as e:
-            _log_participation_event(decision, "send_failed", str(e)[:160])
-            logger.error(f"主动发言发送失败: {e}")
-        else:
-            _log_participation_event(decision, "sent")
+        _log_participation_event(
+            decision, "sent", aggregate_delivery_status([r.status for r in receipts])
+        )
 
 
 # 定时主动发言：每 PROACTIVE_CHECK_INTERVAL 秒检查一次所有启用群
