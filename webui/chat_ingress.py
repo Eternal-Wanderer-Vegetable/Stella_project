@@ -27,7 +27,7 @@ WEBCHAT_GROUP_ID = -1
 WEBCHAT_SPACE = "webchat"
 # 单管理员（定案 ③）：dashboard 用户 ↔ 固定 webchat 身份
 WEBCHAT_USER_ID = 800_000_000
-# cortico 模式下的 conversation key（与 QQ 群命名空间隔离）
+# native 模式下的 conversation key（与 QQ 群命名空间隔离）
 WEBCHAT_CONV_KEY = f"webchat:{WEBCHAT_USER_ID}"
 
 _lock = asyncio.Lock()
@@ -89,9 +89,9 @@ async def run_turn(message: str, username: str) -> dict:
 
     pipeline = _resolve_pipeline()
     async with _lock:  # 同群串行（等价群级锁语义）
-        if _runtime_mode() == "cortico":
-            # cortico 模式：轮次经 facade（prepare/finalize 留 Python，生成走
-            # Core fork + provider 回程）；锁语义由 facade per-key owner 接管
+        if _runtime_mode() == "native":
+            # native 模式：轮次经 facade（prepare/finalize 留 Python，生成是
+            # 进程内 provider 调用）；锁语义由 facade per-key owner 接管
             from core.runtime.facade import ensure_shared_facade_started
 
             facade = await ensure_shared_facade_started()
@@ -115,12 +115,12 @@ async def run_turn(message: str, username: str) -> dict:
 
 
 async def reset_webchat_runtime() -> None:
-    """cortico 模式的 WebChat reset 协调（计划 §7 M4）：
+    """native 模式的 WebChat reset 协调（计划修订 v2）：
 
-    先 fence/cancel 在途轮次 + 清 Core 会话历史 + epoch 递增（拒旧 owner 晚到），
-    再由调用方清消息库——已取消旧轮不能晚到后重建历史。legacy 模式为 no-op。
+    先 fence/cancel 在途轮次 + epoch 递增（拒旧轮晚到），再由调用方清消息库
+    ——已取消旧轮不能晚到后重建历史。legacy 模式为 no-op。
     """
-    if _runtime_mode() != "cortico":
+    if _runtime_mode() != "native":
         return
     from core.runtime.facade import ensure_shared_facade_started
 

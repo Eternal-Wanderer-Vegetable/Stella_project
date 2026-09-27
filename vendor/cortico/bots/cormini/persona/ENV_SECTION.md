@@ -1,2 +1,0 @@
-## {{world.id}}
-{{world.envPrompt}}

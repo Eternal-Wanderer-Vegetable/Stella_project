@@ -1,9 +1,0 @@
-{
-  "name": "cortico-fixture-imports-framework",
-  "version": "1.0.0",
-  "description": "运行时 import 框架源码的扩展",
-  "type": "module",
-  "main": "./index.js",
-  "keywords": ["cortico-world"],
-  "cortico": { "kind": "world", "api": 5 }
-}

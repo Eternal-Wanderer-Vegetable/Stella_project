@@ -1,7 +1,0 @@
-{
-  "name": "cortico-fixture-no-manifest",
-  "version": "1.0.0",
-  "description": "package.json 里没有 cortico 块",
-  "type": "module",
-  "main": "./index.js"
-}

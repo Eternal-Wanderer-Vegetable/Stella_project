@@ -1,8 +1,0 @@
-{
-  "name": "cortico-fixture-not-esm",
-  "version": "1.0.0",
-  "description": "缺 type: module",
-  "main": "./index.js",
-  "keywords": ["cortico-world"],
-  "cortico": { "kind": "world", "api": 5 }
-}

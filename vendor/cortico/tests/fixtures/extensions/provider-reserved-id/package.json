@@ -1,9 +1,0 @@
-{
-  "name": "cortico-fixture-provider-clash",
-  "version": "1.0.0",
-  "description": "id 与内建 provider 撞名",
-  "type": "module",
-  "main": "./index.js",
-  "keywords": ["cortico-provider"],
-  "cortico": { "kind": "provider", "api": 5 }
-}

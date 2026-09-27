@@ -1,9 +1,0 @@
-{
-  "name": "cortico-fixture-provider-bad-shape",
-  "version": "1.0.0",
-  "description": "声明 provider 却导出 World 定义",
-  "type": "module",
-  "main": "./index.js",
-  "keywords": ["cortico-provider"],
-  "cortico": { "kind": "provider", "api": 5 }
-}

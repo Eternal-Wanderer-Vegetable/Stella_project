@@ -583,9 +583,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         try:
             import config as _config
 
-            if _config.RUNTIME_MODE == "cortico":
-                # cortico 模式（计划 §7 M4）：轮次经 facade——prepare/finalize
-                # 仍走本管线（同批钩子），生成走 Core fork + provider 回程。
+            if _config.RUNTIME_MODE == "native":
+                # native 模式（计划修订 v2）：轮次经 facade——prepare/finalize
+                # 仍走本管线（同批钩子），生成为进程内 provider 调用。
                 from core.runtime.facade import ensure_shared_facade_started
 
                 facade = await ensure_shared_facade_started()

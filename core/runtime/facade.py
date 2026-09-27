@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""RuntimeFacade：Cortico 运行时的 Python 统一入口（计划 §6.4 / M3）。
+"""RuntimeFacade：统一入口 owner 与轮次执行（计划修订 v2：纯 Python 运行时）。
 
-- **唯一入口 owner**：每会话一把锁 + owner_epoch。同会话轮次串行（互斥与
-  legacy 的群锁同界）；epoch 在 reset 时递增，旧 epoch 的提交被 host 拒绝。
-- 轮次生命周期：``accepted → preparing → generating|direct|silent → finalizing
-  → completed|failed|cancelled``；投递状态另记（generated ≠ delivered）。
-- 领域阶段复用 :class:`~core.runtime.turn_service.TurnService`（M2 提取）：
-  prepare/finalize 留在 Python，生成的最终 prompt 以投影交 Core fork；
-  DIRECT/SILENT 经上游 turn-policy 零 provider 结束；BUDGET_LIMITED/
-  NO_BACKEND 是 Python 本地路径（不产生 Core 轮次，与 legacy 行为一致）。
-- 独立运行记录：JSONL append（``STELLA_HOME/runtime/turns.jsonl``），
-  与原记忆库完全隔离，可回退读取。
+- **唯一入口 owner**：每会话一把提交锁 + owner_epoch（reset 递增作废旧上下文）。
+- 轮次生命周期：``accepted → prepared → generating → completed|failed|cancelled``，
+  投递状态另记（generated ≠ delivered）；独立 JSONL 运行记录（不进记忆库）。
+- **执行器为进程内 asyncio**：prepare/finalize 是 M2 的阶段服务；GENERATE 的
+  生成就是一次 provider 调用（默认 = 真实 CHAT 角色后端），deadline/cancel
+  用 asyncio 原生语义。无跨进程桥、无 Node 依赖（计划 §R.2）。
+- 决策语义与 legacy 逐条对齐：DIRECT/SILENT **不执行** finalize（直回/WAIT
+  早退，post hooks 不跑、silent 不得被补成兜底）；BUDGET_LIMITED/NO_BACKEND
+  本地 finalize 产兜底 lines；provider 异常与超时都按 BC-5 兜底（与 legacy
+  pipeline 内部 catch 行为一致），只有取消以异常上抛（调用方需要区分）。
+- reset **不取**提交锁：submit 在锁内等待 provider，reset 若在同一把锁后排队
+  就永远取消不掉它（§9 预警的锁重入死锁，实施中实际触发过一次）。
 """
 
 from __future__ import annotations
@@ -26,16 +28,6 @@ from pathlib import Path
 from typing import Any
 
 from core.context import ChatContext
-from core.runtime.bridge import BridgeBroken, NodeBridge
-from core.runtime.contracts import (
-    E_DEADLINE,
-    E_HOST_GONE,
-    M_SESSION_ENSURE,
-    M_SESSION_RESET,
-    M_TURN_CANCEL,
-    M_TURN_SUBMIT,
-    ProtocolError,
-)
 from core.runtime.turn_service import (
     BUDGET_LIMITED,
     DIRECT,
@@ -46,14 +38,31 @@ from core.runtime.turn_service import (
 
 DEFAULT_TURN_DEADLINE = 120.0  # 与 WebChat 120s 对齐
 
+# ---- 错误码（保留原协议错误码语义；不再有线协议） ----
+E_CANCELLED = "E_CANCELLED"
+E_KEY = "E_KEY"
+
+
+class RuntimeTurnError(Exception):
+    """facade 发起的轮次失败（取消/fence），``code`` 为 E_* 常量。"""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+ProviderFn = Any  # async (key: str, prompt: str) -> str
+
 
 @dataclass
 class KeyState:
-    """每会话状态：入口互斥锁 + owner_epoch（reset 递增，旧 owner 被拒）。"""
+    """每会话状态：提交锁 + owner_epoch + 最近轮次 + 在途任务句柄。"""
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     owner_epoch: int = 0
     last_turn_id: str = ""
+    inflight: asyncio.Task | None = None
+    cancel_requested: bool = False
 
 
 @dataclass
@@ -85,35 +94,45 @@ class RuntimeStore:
             pass
 
 
+async def _default_provider(key: str, prompt: str) -> str:
+    """生产 provider：真实 CHAT 角色后端（薄调用，不经旧 Pipeline 编排）。"""
+    from core.llm import ROLE_CHAT, backend_for
+
+    backend = backend_for(ROLE_CHAT)
+    return await backend.generate(prompt)
+
+
 class RuntimeFacade:
     """统一 submit/cancel/drain/reset/health；持有唯一入口互斥策略。"""
 
     def __init__(
         self,
-        bridge: NodeBridge,
         *,
+        provider: ProviderFn | None = None,
         store: RuntimeStore | None = None,
         default_deadline: float = DEFAULT_TURN_DEADLINE,
     ) -> None:
-        self._bridge = bridge
+        self._provider: ProviderFn = provider or _default_provider
         self._store = store
         self._default_deadline = default_deadline
         self._keys: dict[str, KeyState] = {}
 
-    # ---- 生命周期 ----
+    # ---- 生命周期（进程内执行器：无子进程，保持调用面不变） ----
 
     async def start(self) -> dict[str, Any]:
-        return await self._bridge.start()
+        return self.health()
 
     async def stop(self) -> None:
-        await self._bridge.stop()
+        for state in self._keys.values():
+            if state.inflight is not None and not state.inflight.done():
+                state.cancel_requested = True
+                state.inflight.cancel()
 
     def health(self) -> dict[str, Any]:
         return {
-            "mode": "cortico",
-            "broken": self._bridge.broken is not None,
-            "hello": self._bridge.hello_info,
+            "mode": "native",
             "keys": sorted(self._keys),
+            "inflight": sum(1 for s in self._keys.values() if s.inflight and not s.inflight.done()),
         }
 
     # ---- 内部 ----
@@ -129,6 +148,11 @@ class RuntimeFacade:
         if self._store is not None:
             self._store.record(TurnRecord(**kw))
 
+    async def _ensure_epoch(self, state: KeyState) -> int:
+        if state.owner_epoch == 0:
+            state.owner_epoch = 1
+        return state.owner_epoch
+
     # ---- 轮次提交 ----
 
     async def submit_turn(
@@ -139,191 +163,155 @@ class RuntimeFacade:
         *,
         deadline: float | None = None,
     ) -> ChatContext:
-        """完整新链路的一次轮次：prepare(Python) → Core fork → finalize(Python)。
-
-        provider.respond 的处理函数在 bridge 构造时以 ``provider_handler``
-        注入（最终 prompt → Python 侧真实 LLM 后端 → 文本）。
-        """
+        """完整轮次：prepare → 决策分流 → （GENERATE）进程内生成 → finalize。"""
         state = self._key_state(key)
         async with state.lock:
             turn_id = uuid.uuid4().hex
             state.last_turn_id = turn_id
             started = time.time()
+            epoch_before = await self._ensure_epoch(state)
             self._record(
-                turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                turn_id=turn_id, key=key, owner_epoch=epoch_before,
                 outcome="", state="accepted", started_at=started,
             )
             plan = await pipeline.prepare_turn(ctx)
+            # fence：prepare 期间发生 reset → 本轮作废（epoch 已被推进）
+            if state.owner_epoch != epoch_before:
+                self._record(
+                    turn_id=turn_id, key=key, owner_epoch=epoch_before,
+                    outcome="cancelled", state="cancelled", started_at=started,
+                    finished_at=time.time(), detail={"reason": "reset during prepare"},
+                )
+                raise RuntimeTurnError(E_CANCELLED, "prepare 期间发生 reset，本轮作废")
             self._record(
                 turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
                 outcome=plan.outcome, state="prepared", started_at=started,
             )
 
             if plan.outcome == GENERATE:
-                owner_epoch = await self._ensure_epoch(key, state)
-                projection = [{"role": "user", "text": ctx.prompt_log}]
-                params: dict[str, Any] = {
-                    "key": key,
-                    "turn_id": turn_id,
-                    "owner_epoch": owner_epoch,
-                    "deadline_ms": int((deadline or self._default_deadline) * 1000),
-                    "decision": {"kind": "generate"},
-                    "projection": projection,
-                }
+                prompt = ctx.prompt_log
+                state.cancel_requested = False
+                task = asyncio.create_task(self._provider(key, prompt))
+                state.inflight = task
                 try:
-                    resp = await self._bridge.request(M_TURN_SUBMIT, params, timeout=(deadline or self._default_deadline) + 15.0)
-                except ProtocolError as e:
-                    if e.code == E_DEADLINE:
-                        # 有界失败：deadline 按 legacy 超时语义兜底（BC-5），不悬挂
-                        ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
-                        return await pipeline.finalize_turn(ctx)
-                    self._record(
-                        turn_id=turn_id, key=key, owner_epoch=owner_epoch,
-                        outcome="failed", state="failed", started_at=started,
-                        finished_at=time.time(), detail={"code": e.code, "message": str(e)},
+                    text = await asyncio.wait_for(
+                        task, timeout=deadline or self._default_deadline
                     )
-                    raise
-                except BridgeBroken as e:
+                except asyncio.TimeoutError:
+                    # 有界失败：deadline 按 legacy 超时语义兜底（BC-5），不悬挂
+                    ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
-                        turn_id=turn_id, key=key, owner_epoch=owner_epoch,
-                        outcome="failed", state="failed", started_at=started,
-                        finished_at=time.time(), detail={"code": E_HOST_GONE, "message": str(e)},
+                        turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                        outcome=plan.outcome, state="deadline_fallback",
+                        started_at=started, finished_at=time.time(),
                     )
-                    raise
-                ctx.raw_output = str(resp.get("text", ""))
-                return await pipeline.finalize_turn(ctx)
-            if plan.outcome == DIRECT:
-                owner_epoch = await self._ensure_epoch(key, state)
-                await self._bridge.request(
-                    M_TURN_SUBMIT,
-                    {
-                        "key": key, "turn_id": turn_id, "owner_epoch": owner_epoch,
-                        "deadline_ms": int((deadline or self._default_deadline) * 1000),
-                        "decision": {"kind": "direct", "text": ctx.reply},
-                        "projection": [],
-                    },
-                    timeout=(deadline or self._default_deadline) + 15.0,
-                )
-            elif plan.outcome == SILENT:
-                owner_epoch = await self._ensure_epoch(key, state)
-                await self._bridge.request(
-                    M_TURN_SUBMIT,
-                    {
-                        "key": key, "turn_id": turn_id, "owner_epoch": owner_epoch,
-                        "deadline_ms": int((deadline or self._default_deadline) * 1000),
-                        "decision": {"kind": "silent"},
-                        "projection": [],
-                    },
-                    timeout=(deadline or self._default_deadline) + 15.0,
-                )
-            else:
-                # BUDGET_LIMITED / NO_BACKEND：Python 本地路径（无 Core 轮次）
+                    return await pipeline.finalize_turn(ctx)
+                except asyncio.CancelledError:
+                    if state.cancel_requested:
+                        self._record(
+                            turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                            outcome="cancelled", state="cancelled", started_at=started,
+                            finished_at=time.time(),
+                        )
+                        raise RuntimeTurnError(E_CANCELLED, "轮次已被取消") from None
+                    raise  # 外部取消（调用方断开等）：原样传播
+                except Exception:
+                    # provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——
+                    # 兜底而非上抛，不让异常击穿消息链路
+                    ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
+                    self._record(
+                        turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                        outcome=plan.outcome, state="provider_fallback",
+                        started_at=started, finished_at=time.time(),
+                    )
+                    return await pipeline.finalize_turn(ctx)
+                finally:
+                    state.inflight = None
+                ctx.raw_output = str(text)
                 self._record(
                     turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
-                    outcome=plan.outcome, state="local", started_at=started,
+                    outcome=plan.outcome, state="completed", started_at=started,
                     finished_at=time.time(),
                 )
-                if plan.outcome == BUDGET_LIMITED:
-                    ctx.llm_backend = pipeline._llm.backend_name  # type: ignore[union-attr]
-                    return await pipeline.finalize_turn(ctx)
                 return await pipeline.finalize_turn(ctx)
-            # DIRECT / SILENT：与 legacy 直回/WAIT 早退语义一致——不执行 finalize
-            #（post hooks 不跑，不得把 silent 补成兜底 lines）；Core 侧的 submit
-            # 仅作轮次生命周期记录（turnPolicy 零 provider 结束）。
-            return plan.ctx
 
-    async def _ensure_epoch(self, key: str, state: KeyState) -> int:
-        if state.owner_epoch == 0:
-            resp = await self._bridge.request(M_SESSION_ENSURE, {"key": key})
-            state.owner_epoch = int(resp.get("owner_epoch", 0))
-        return state.owner_epoch
+            if plan.outcome in (DIRECT, SILENT):
+                # 与 legacy 直回/WAIT 早退语义一致——不执行 finalize
+                # （post hooks 不跑，silent 不得被补成兜底 lines）；生命周期照记。
+                self._record(
+                    turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                    outcome=plan.outcome, state="completed", started_at=started,
+                    finished_at=time.time(),
+                )
+                return plan.ctx
+
+            # BUDGET_LIMITED / NO_BACKEND：本地路径（无生成），仍产兜底 lines
+            if plan.outcome == BUDGET_LIMITED:
+                ctx.llm_backend = pipeline._llm.backend_name  # type: ignore[union-attr]
+            self._record(
+                turn_id=turn_id, key=key, owner_epoch=state.owner_epoch,
+                outcome=plan.outcome, state="completed_local", started_at=started,
+                finished_at=time.time(),
+            )
+            return await pipeline.finalize_turn(ctx)
 
     # ---- 取消 / 复位 / 排空 ----
 
     async def cancel_turn(self, key: str, turn_id: str | None = None) -> None:
-        """取消在途轮次；``turn_id`` 缺省时取消该会话最近提交的一轮。"""
-        if turn_id is None:
-            state = self._key_state(key)
-            turn_id = state.last_turn_id
-            if not turn_id:
-                return
-        await self._bridge.request(M_TURN_CANCEL, {"key": key, "turn_id": turn_id}, timeout=5.0)
+        """取消在途轮次；``turn_id`` 缺省时取消该会话最近提交的一轮。
 
-    async def reset_session(self, key: str) -> None:
-        """先 fence/cancel 在途轮次，再清 Core 会话历史；epoch 递增拒旧 owner。
-
-        刻意**不取**提交锁：submit 在锁内等待 provider 回程，reset 若在同一把
-        锁后排队就永远取消不掉它（锁重入死锁，计划 §9 预警的失败形态）。
-        host 侧 cancel/epoch 校验本身按 key 独立；reset 与并发 submit 的竞争
-        结果是后者收到一次 E_KEY（有界失败），新提交用新 epoch 正常进行。
+        刻意不取提交锁（见模块 docstring 的 reset 死锁说明）。
         """
         state = self._key_state(key)
-        await self._bridge.request(M_SESSION_RESET, {"key": key, "owner_epoch": state.owner_epoch}, timeout=15.0)
-        resp = await self._bridge.request(M_SESSION_ENSURE, {"key": key})
-        state.owner_epoch = int(resp.get("owner_epoch", state.owner_epoch + 1))
+        if turn_id is None:
+            turn_id = state.last_turn_id
+        task = state.inflight
+        if task is None or task.done():
+            return
+        if turn_id and state.last_turn_id != turn_id:
+            return
+        state.cancel_requested = True
+        task.cancel()
+
+    async def reset_session(self, key: str) -> None:
+        """取消在途轮次 + epoch 递增作废旧上下文（fence）。
+
+        native 执行器无 Core 会话历史可清；消息库/整合状态的清理仍由调用方
+        （WebChat reset 路由）负责，本方法只做运行时侧的 fence。
+        """
+        state = self._key_state(key)
+        await self.cancel_turn(key)
+        state.owner_epoch += 1
+        self._record(
+            turn_id="", key=key, owner_epoch=state.owner_epoch,
+            outcome="reset", state="reset", started_at=time.time(),
+            finished_at=time.time(),
+        )
 
     async def drain(self) -> int:
-        resp = await self._bridge.request("runtime.drain", {}, timeout=45.0)
-        return int(resp.get("pending", 0))
+        """等待全部在途轮次收尾（优雅关闭路径），返回仍未结束的数量。"""
+        tasks = [s.inflight for s in self._keys.values() if s.inflight and not s.inflight.done()]
+        if tasks:
+            await asyncio.wait(tasks, timeout=30.0)
+        return sum(1 for s in self._keys.values() if s.inflight and not s.inflight.done())
 
 
-# ---- 进程级共享 facade（M4：gateway / chat_ingress 共用同一 owner 面） ----
+# ---- 进程级共享 facade（gateway / chat_ingress 共用同一 owner 面） ----
 
 _shared_facade: "RuntimeFacade | None" = None
-_shared_started = False
-
-
-def default_host_config() -> dict[str, Any]:
-    """host 侧 CoreConfig（LLM 由 bridge 注入，provider 仅占位；模型名取真实 CHAT 绑定）。"""
-    from config import LLM_ROLE_CHAT_MODEL
-
-    model = (LLM_ROLE_CHAT_MODEL or "").strip() or "stella"
-    return {
-        "displayName": "Stella",
-        "providers": {
-            "stella": {
-                "kind": "openai-responses-compat",
-                "baseUrl": "http://127.0.0.1.invalid",
-                "spec": {"model": model, "thinking": False},
-            }
-        },
-        "activeProvider": "stella",
-        "batching": {"quietGapMs": 2500, "minBatchAgeMs": 0, "maxBatchAgeMs": 15000, "maxBatchSize": 100},
-        "context": {"maxTokens": 128000, "keepRatio": 0.3333, "softRatio": 0.85, "firstTurn": False, "keepPastThinking": True},
-        "logging": {"file": "debug", "console": "info", "areas": ""},
-        "loop": {"softCap": 8, "hardCap": 16},
-    }
 
 
 def get_shared_facade() -> RuntimeFacade:
-    """进程内共享 facade（懒创建）；provider 回程走真实 CHAT 角色后端。"""
+    """进程内共享 facade（懒创建）；provider 默认走真实 CHAT 角色后端。"""
     global _shared_facade
     if _shared_facade is None:
         from config import STELLA_HOME
-        from core.llm import ROLE_CHAT, backend_for
-        from core.runtime.bridge import provider_prompt_text
-
-        async def _provider_handler(params: dict[str, Any]) -> dict[str, Any]:
-            prompt = provider_prompt_text(params)
-            backend = backend_for(ROLE_CHAT)
-            text = await backend.generate(prompt)
-            return {"text": text}
 
         runtime_dir = Path(STELLA_HOME) / "runtime"
-        bridge = NodeBridge(
-            provider_handler=_provider_handler,
-            host_config=default_host_config(),
-            data_root=runtime_dir / "sessions",
-        )
-        _shared_facade = RuntimeFacade(bridge, store=RuntimeStore(runtime_dir / "turns.jsonl"))
+        _shared_facade = RuntimeFacade(store=RuntimeStore(runtime_dir / "turns.jsonl"))
     return _shared_facade
 
 
-async def ensure_shared_facade_started() -> "RuntimeFacade":
-    """首用前启动（handshake）；幂等。"""
-    global _shared_started
-    facade = get_shared_facade()
-    if not _shared_started:
-        await facade.start()
-        _shared_started = True
-    return facade
+async def ensure_shared_facade_started() -> RuntimeFacade:
+    """兼容入口（原 Node handshake；进程内执行器无启动动作）。"""
+    return get_shared_facade()
