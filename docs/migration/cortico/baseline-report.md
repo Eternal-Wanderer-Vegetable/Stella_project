@@ -23,6 +23,8 @@ python -m pytest tests/test_pipeline_compose.py tests/test_planner.py tests/capa
 
 - 已有失败：**无**（聚焦集全绿）。全量 `pytest tests/`（CI 矩阵 3.10/3.11/3.12）在 M9 前的每个提交门禁执行；本机 Python 3.14 与 CI 矩阵的差异记录在案，最终回归以 CI 为准。
 - 计划 §8.1 其余范围（session_context/compact、graceful_shutdown、runtime_contract、windows）映射见 feature-parity.md 各行；windows 集在 CI windows-native 跑。
+- **全量套件（2026-09-27，M5 证据基线）**：`pytest tests/ -q -n auto --dist loadgroup` → **2658 passed / 14 skipped / 1 failed**。唯一失败 `tests/webui/test_webui_readonly.py::test_query_daily_reads_temp_db` 为 xdist 并发下临时 db 竞争的偶发（单跑 8/8 通过），与迁移改动无关，按 Q1 单列观察。
+- M4 后新增回归面：`tests/runtime/`（legacy traces 10 + turn_service 7 + bridge_protocol 8 + session_ownership 4 + restart_recovery 2 + ingress_cortico 3 = 34 例）。
 
 ## 3. 性能基线（测量方法冻结；当前未宣称任何压测结果）
 

@@ -14,7 +14,7 @@
 | 旧入口 | 数据归属 | 旧行为 | 目标入口 | 测试/人工步骤 | 阶段 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `group_silent_listener` priority=0 block=False（:392）handler `record_group_chat`（:395-451） | memory.db `group_messages` | 白名单群、非自身回显、非 `/` 开头；空文本仅识图可用时按 `[图片]` 落库；source_kind=AT_MENTION(is_tome)/PASSIVE；触发 record_message、proactive.record_message/record_tome、reset_no_reply、session_touch、expression_learning.note_passive_message、participation observe（命中 ALLOW_LLM 时 `_spawn_participation_speak`） | 不迁移：落库与统计留 Python 接入层；participation 触发产生的生成工作经 RuntimeFacade | `tests/test_bot_self_source.py`、`tests/test_source_kind.py`、人工：群内发言后 `group_messages` 有行 | M6 | ⬜ |
-| `chat_handler` priority=3 block=True（:516）规则 `is_chat_trigger`（:454-473） | memory.db + usage_store | @ 触发主链路：`_plugin_handled_msgs` 跳过（:522）→ 群锁（:526）→ ChatContext（:531）→ reply gate（:545）→ 按需整合（:558）→ 预算拦截 `budget_blocked(ROLE_CHAT)` pause_all 静默 return（:575-580）→ `pipeline.run`（:584）→ planner_wait 早退（:596）→ 空行兜底「......？」（:601）→ 记账/学习/BOT_SELF/压缩调度（:606-631）→ 首行引用+分行间隔发送（:633-647） | `handle_chat` → RuntimeFacade.submit | `tests/test_pipeline_compose.py`、`tests/test_full_workflow.py`、`tests/test_ai_gateway_deterministic_reply.py`；人工：@Bot 普通问答 | M4 | ⬜ |
+| `chat_handler` priority=3 block=True（:516）规则 `is_chat_trigger`（:454-473） | memory.db + usage_store | @ 触发主链路：`_plugin_handled_msgs` 跳过（:522）→ 群锁（:526）→ ChatContext（:531）→ reply gate（:545）→ 按需整合（:558）→ 预算拦截 `budget_blocked(ROLE_CHAT)` pause_all 静默 return（:575-580）→ `pipeline.run`（:584；cortico 模式经 facade）→ planner_wait 早退（:596）→ 空行兜底「......？」（:601）→ 记账/学习/BOT_SELF/压缩调度（:606-631）→ 首行引用+分行间隔发送（:633-647） | `handle_chat` → RuntimeFacade.submit（✅ M4：STELLA_RUNTIME=cortico 分支落地，legacy 默认） | `tests/test_pipeline_compose.py`、`tests/test_full_workflow.py`、`tests/test_ai_gateway_deterministic_reply.py`、`tests/runtime/test_ingress_cortico.py`；人工：@Bot 普通问答 | M4 | 🔷 |
 | `plugin_handler` priority=2 block=False（:494） | astrbot_compat registry | AstrBot 插件分发（`should_dispatch`/`dispatch`），命中记 `_plugin_handled_msgs`（256 LRU）让 chat 跳过 | 不迁移：插件分发留 Python 接入层 | `tests/astrbot_compat/` 全套；人工：B 站插件命令 | 🔒（接入层保留） | ⬜ |
 | `toggle_handler` priority=1（:864） | proactive state | 安静/恢复主动发言命令，管理员校验，回确认语 | 不迁移（确定性命令，零生成） | 人工：@Bot 安静 → 不再主动；恢复 → 恢复 | 🔒 | ⬜ |
 | `addressing_handler` priority=1（:717） | user_profiles | 设置/清除/查询个性化称呼；改他人需群管理员；reply+text 引用回复 | 不迁移（确定性命令） | `tests/test_addressing*.py` | 🔒 | ⬜ |
@@ -38,11 +38,11 @@
 
 | 旧入口 | 数据归属 | 旧行为 | 目标入口 | 测试/人工步骤 | 阶段 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `POST /api/v1/chat`（chat.py:110，JWT） | memory.db 虚拟群 -1 | SSE：`run_started{}` → `complete{lines,thought}`/`error{message}`；空消息直接 JSON 不走 SSE；120s `asyncio.wait_for` 超时→error「回复超时」；仅 RuntimeError/TimeoutError 产生 error 帧 | `run_turn` → RuntimeFacade.submit | `tests/webui/test_webui_chat.py`；人工：WebUI 聊天 | M4 | ⬜ |
-| `run_turn`（chat_ingress.py:64-97） | 同上 | 模块级锁只包 `pipeline.run`；WEBCHAT_GROUP_ID=-1、WEBCHAT_SPACE="webchat"（首用原子写 toml）、WEBCHAT_USER_ID=800_000_000；输入 source_kind=AT_MENTION msg_id=0；回复逐行 BOT_SELF；返回 `{lines,thought}`（无 ts，docstring 有误以代码为准） | facade 提交，锁边界归 RuntimeFacade | 同上 | M4 | ⬜ |
+| `POST /api/v1/chat`（chat.py:110，JWT） | memory.db 虚拟群 -1 | SSE：`run_started{}` → `complete{lines,thought}`/`error{message}`；空消息直接 JSON 不走 SSE；120s `asyncio.wait_for` 超时→error「回复超时」；仅 RuntimeError/TimeoutError 产生 error 帧 | `run_turn` → RuntimeFacade.submit | `tests/webui/test_webui_chat.py`；人工：WebUI 聊天 | M4 | ✅ |
+| `run_turn`（chat_ingress.py:64-97） | 同上 | 模块级锁只包 `pipeline.run`；WEBCHAT_GROUP_ID=-1、WEBCHAT_SPACE="webchat"（首用原子写 toml）、WEBCHAT_USER_ID=800_000_000；输入 source_kind=AT_MENTION msg_id=0；回复逐行 BOT_SELF；返回 `{lines,thought}`（无 ts，docstring 有误以代码为准） | facade 提交，锁边界归 RuntimeFacade | 同上 | M4 | ✅ |
 | `GET /api/v1/chat/session`（chat.py:37） | memory.db | `{group_id:"-1",message_count,space:"webchat"}` | 🔒 不变 | `tests/webui/test_webui_chat.py` | 🔒 | ⬜ |
 | `GET /api/v1/chat/messages`（chat.py:54） | 同上 | before_id/limit(1-200,默认50)，按 id 升序 | 🔒 不变 | 同上 | 🔒 | ⬜ |
-| `POST /api/v1/chat/reset`（chat.py:82） | 同上 | 删虚拟群消息段 + consolidation_state 行；**长期记忆不动**；M4 起须先 fence/cancel/drain 在途轮次再清运行记录，epoch 递增 | 🔒 接口不变，语义增强 | 同上 + 新增 `tests/runtime/` | M4 | ⬜ |
+| `POST /api/v1/chat/reset`（chat.py:82） | 同上 | 删虚拟群消息段 + consolidation_state 行；**长期记忆不动**；M4 起须先 fence/cancel/drain 在途轮次再清运行记录，epoch 递增 | 🔒 接口不变，语义增强 | 同上 + 新增 `tests/runtime/` | M4 | ✅ |
 
 ### C.2 WebUI 其余端点（迁移不改变任何 schema；runtime 仅新增诊断字段）
 
@@ -93,7 +93,7 @@
 | MCP | MCP_ENABLED=false 默认；provider 按 kind 分派 | 连接/关闭顺序、显式允许清单 | `tests/capability/test_mcp_*.py` | M5 | ⬜ |
 | Vision | describe_images_hook（pre p=60）；VISION 角色默认 none=关 | 与 ctx.image_sources/raw_event 绑定 | `tests/test_vision.py` | M5 | ⬜ |
 | Planner | RestrictedPlanner；PLANNER_MAX_LLM_CALLS_PER_TURN=2 硬上限（pipeline :256）；WAIT 条件（planner.py:163） | 调用计数不跨进程丢失；WAIT→silent 有类型 | `tests/test_planner.py` | M2/M5 | ⬜ |
-| 表达学习 | note_passive_message/on_reply_sent（发送路径 :614-621） | 副作用顺序保留 | `test_expression_*.py` | M4 | ⬜ |
+| 表达学习 | note_passive_message/on_reply_sent（发送路径 :614-621） | 副作用顺序保留 | `test_expression_*.py` | M4 | ✅ |
 | 参与/回应检测 | observe（priority 0 内）+ `_check_reply_later` 回访 | 不新增触发器 | `test_participation.py`、`test_reply_detection.py` | M6 | ⬜ |
 
 ## F. 扩展与插件兼容面（冻结候选 = 外部可依赖公开接口）
