@@ -475,23 +475,16 @@ async def record_group_chat(event: GroupMessageEvent):
     # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
     session_touch(ctx.group_id)
 
-    # 黑话计数（设计阶段六）：纯内存操作，命中门槛才碰一次库；
-    # 在热路径上必须与落库同级别的开销，否则每条消息都在付学习的税。
-    expression_learning.note_passive_message(ctx.group_shared_space, ctx.user_id, text)
-
-    # 主动插话评分层（Participation Decision Layer）：
-    # 只对 PASSIVE 消息评分——AT_MENTION 是 Hard Trigger，走 handle_chat 的
-    # 强制响应路径，二者必须独立（上游工程方案 §3/原则 7）。
-    # 评分全本地（规则 + 可选 embedding），零 LLM 调用；observe 内部自己吞异常，
-    # 这里不再包 try 以免刷屏。
+    # 消息关系提取（供证据落库与参与评分共用）
     reply_to_id, mentioned_users = _extract_message_relations(event)
     # 标准化消息证据（计划 §6.1）：reply/@ 关系此前只存在于事件对象上，落不进
     # 任何表，效果观察就无法做引用归因。总开关关闭时不碰旁表；两个 matcher
     # 重复处理同一消息由 (platform, bot, group, platform_message_id) 复合唯一
     # 索引幂等兜底，first-writer-wins。
+    social_event_id = ""
     if _social_delivery_enabled():
         with contextlib.suppress(Exception):
-            social_store.record_event(
+            social_event_id = social_store.record_event(
                 MessageEvidence(
                     scope=ConversationScope.for_qq(event.group_id),
                     platform_message_id=str(event.message_id),
@@ -502,7 +495,14 @@ async def record_group_chat(event: GroupMessageEvent):
                     text_excerpt=text,
                     trace_id=ctx.trace_id,
                 )
-            )
+            ) or ""
+    # 黑话信号采集（设计阶段六 → 计划 §6.4）：社交模式接管时逐 hit 落
+    # occurrence 证据（event_id 幂等）；未接管时走进程内计数器，热路径开销不变。
+    expression_learning.note_passive_message(
+        ctx.group_shared_space, ctx.user_id, text,
+        group_id=event.group_id, event_id=social_event_id,
+    )
+
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
         decision = await get_participation_manager().observe(
             ctx.group_id,

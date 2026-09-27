@@ -146,6 +146,9 @@ class ChatContext:
     # 上下文为空串。两者都是安全标量，可进投影；raw_event/bot 仍然永不过桥。
     trace_id: str = ""
     turn_id: str = ""
+    # 本轮 social 插槽的预算快照（选中/注入/裁剪明细，计划 §6.5）：
+    # JSON 字符串，由 core.social.context_builder 写入，供追踪与审计。
+    social_context_snapshot: str = ""
 
     # ---- Cortico 迁移：跨进程 JSON 投影（计划 §6.2/§6.4） ----
     # 投影 schema 版本：字段集变更时 +1；旧 runtime store 按版本向后读取。

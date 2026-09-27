@@ -66,9 +66,9 @@ _COUNTED_ATTRIBUTIONS = ("direct", "probable", "weak")
 def social_effects_enabled() -> bool:
     """社交效果观察是否接管结算（接管后旧 reply_effects 路径停写，防双学习）。"""
     try:
-        from config import SOCIAL_ENABLED, SOCIAL_MODE
+        from config import settings
 
-        return bool(SOCIAL_ENABLED) and SOCIAL_MODE in ("shadow", "active")
+        return bool(settings.SOCIAL_ENABLED) and settings.SOCIAL_MODE in ("shadow", "active")
     except Exception:
         return False
 

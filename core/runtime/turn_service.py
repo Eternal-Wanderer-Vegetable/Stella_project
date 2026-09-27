@@ -148,8 +148,13 @@ def _skill_result_section(ctx: ChatContext) -> str:
     return f"【技能执行结果（刚按说明书执行的真实结果）】\n{body}"
 
 
-def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
+def _compose_prompt(context_text: str, ctx: ChatContext, social_text: str = "") -> str:
     """把上下文段落与 ctx.message 按正确顺序拼成最终 user prompt。
+
+    ``social_text``（计划 §6.5 可选插槽）是带来源的低权限数据块：普通对话里
+    紧挨知识证据（同为「回答这句话的证据」，离当前输入近）；指令型 intent
+    里跟在任务指令之后（词义解释帮助理解指令）。为空时完全不参与拼接——
+    既有 prompt 字节不变。
 
     普通对话：上下文 → 工具结果 → 知识证据 → 当前输入。当前输入必须**显式标记**
     ——它被拼在尾巴之后只是一行裸文本，模型无从判断其特殊地位，会转而回应
@@ -168,13 +173,13 @@ def _compose_prompt(context_text: str, ctx: ChatContext) -> str:
     knowledge_text = _knowledge_evidence_section(ctx)
     skill_text = _skill_result_section(ctx)
     if ctx.intent in _INSTRUCTION_INTENTS:
-        parts = [ctx.message, tool_text, knowledge_text, skill_text, context_text]
+        parts = [ctx.message, tool_text, knowledge_text, skill_text, social_text, context_text]
         return "\n\n".join(p for p in parts if p)
-    if not context_text and not tool_text and not knowledge_text and not skill_text:
+    if not context_text and not tool_text and not knowledge_text and not skill_text and not social_text:
         return ctx.message
     speaker = f"用户({ctx.user_id})" if ctx.user_id else "对方"
     head = "\n\n".join(
-        p for p in (context_text, tool_text, knowledge_text, skill_text) if p
+        p for p in (context_text, tool_text, knowledge_text, skill_text, social_text) if p
     )
     return (
         f"{head}\n\n"
@@ -305,39 +310,36 @@ class TurnService:
             return TurnPlan(ctx, BUDGET_LIMITED)
 
         user_prompt = ctx.message
+        context_text = ""
         # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
         if MEMORY_V2_ENABLED:
             # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
             from memory.prompt_builder import build_v2_prompt_context
 
-            user_prompt = _compose_prompt(
-                build_v2_prompt_context(
-                    getattr(ctx, "short_term", "") or "",
-                    getattr(ctx, "user_profile", "") or "",
-                    getattr(ctx, "conversation_memories", []) or [],
-                    getattr(ctx, "behavior_constraints", []) or [],
-                    current_user_id=ctx.user_id,
-                    mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
-                    preferred_address=getattr(ctx, "preferred_address", None),
-                ),
-                ctx,
+            context_text = build_v2_prompt_context(
+                getattr(ctx, "short_term", "") or "",
+                getattr(ctx, "user_profile", "") or "",
+                getattr(ctx, "conversation_memories", []) or [],
+                getattr(ctx, "behavior_constraints", []) or [],
+                current_user_id=ctx.user_id,
+                mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
+                preferred_address=getattr(ctx, "preferred_address", None),
             )
+            user_prompt = _compose_prompt(context_text, ctx)
         else:
             from memory.prompt_builder import build_prompt_context
 
             short_term = getattr(ctx, "short_term", "") or ""
             user_profile = getattr(ctx, "user_profile", "") or ""
             memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
-            user_prompt = _compose_prompt(
-                build_prompt_context(
-                    short_term,
-                    user_profile,
-                    memories_for_prompt,
-                    current_user_id=ctx.user_id,
-                    preferred_address=getattr(ctx, "preferred_address", None),
-                ),
-                ctx,
+            context_text = build_prompt_context(
+                short_term,
+                user_profile,
+                memories_for_prompt,
+                current_user_id=ctx.user_id,
+                preferred_address=getattr(ctx, "preferred_address", None),
             )
+            user_prompt = _compose_prompt(context_text, ctx)
 
         # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
         ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
@@ -345,6 +347,24 @@ class TurnService:
         system_prompt = self.system_prompt
         if self.system_prompt_resolver is not None:
             system_prompt = self.system_prompt_resolver(ctx)
+        # ── 社交插槽（计划 §6.5）：先有无学习基线，再按剩余预算放可选片段 ──
+        # 可选学习先裁、不靠通用截断碰运气；任何异常退回基线（可选增强纪律）。
+        try:
+            from core.social.context_builder import (
+                build_social_block,
+                social_context_snapshot,
+            )
+
+            baseline_prompt = _compose_prompt(context_text, ctx)
+            social_text, social_selection = build_social_block(
+                ctx, baseline_prompt=baseline_prompt, system_prompt=system_prompt
+            )
+            if social_text:
+                user_prompt = _compose_prompt(context_text, ctx, social_text=social_text)
+                ctx.social_context_snapshot = social_context_snapshot(social_selection)
+        except Exception as e:
+            logger.debug(f"[Social] 上下文插槽失败（按无学习基线继续）: {e}")
+
         budgeted = fit_prompt_to_window(user_prompt, system_prompt)
         user_prompt = budgeted.prompt
         ctx.context_window_tokens = budgeted.window_tokens

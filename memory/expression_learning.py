@@ -150,15 +150,35 @@ def on_reply_sent(
         logger.debug(f"[Expression] 登记发言学习失败（跳过）: {e}")
 
 
-def note_passive_message(group_shared_space: str, user_id: int, text: str) -> None:
-    """被动消息的黑话计数（静默监听器热路径调用，纯内存操作）。
+def note_passive_message(
+    group_shared_space: str, user_id: int, text: str, *, group_id: int = 0, event_id: str = ""
+) -> None:
+    """被动消息的黑话信号采集（静默监听器热路径调用）。
 
-    命中数达到 JARGON_HIT_THRESHOLD 才碰一次数据库（upsert 累加）。
+    双路分流（计划 §6.2：禁止对新表旧逻辑双写）——社交模式接管时：
+    每个 hit 落一条 occurrence 证据（按 event_id 幂等，重复转发/同一消息
+    不增加独立证据），词形计数与作者数从证据表可复现地重建；未接管时走
+    原进程内计数器 + 门槛 flush，行为不变。
     """
     if not EXPRESSION_LEARNING_ENABLED:
         return
     try:
-        for term in _extract_jargon_terms(text or ""):
+        terms = _extract_jargon_terms(text or "")
+        if not terms:
+            return
+        from memory.reply_effect_service import social_effects_enabled
+
+        if social_effects_enabled() and event_id and group_id:
+            from core.social.contracts import ConversationScope
+            from memory import jargon_service
+
+            scope = ConversationScope.for_qq(group_id)
+            for term in terms:
+                jargon_service.note_occurrence(
+                    scope, term, event_id=event_id, author_user=str(user_id), excerpt=text or ""
+                )
+            return
+        for term in terms:
             _bump_jargon(group_shared_space, term, user_id)
     except Exception as e:
         logger.debug(f"[Expression] 黑话计数失败（跳过）: {e}")
