@@ -94,6 +94,37 @@ class ConversationState:
     speak_stats: StellaSpeakStats = field(default_factory=StellaSpeakStats)
     # 群内最近一次 @/回复 Stella 的时间（Current Relevance 的输入之一）
     last_tome_at: float = 0.0
+    # ── 发言时机补充状态（计划 §6.9 层 2/3） ──
+    # 话题版本号：新建话题 / 显式信号（静音、撤销、新直接请求）时 +1，
+    # 主动生成发送前比对，过期输出直接丢弃
+    topic_revision: int = 0
+    # 逻辑发言窗口 (时间戳, 是否 bot)：发言占比（share）的计算输入；
+    # 多段输出由调用方只记一条（多段算一次，防切段惩罚膨胀）
+    speech_window: "deque[tuple[float, bool]]" = field(
+        default_factory=lambda: deque(maxlen=200)
+    )
+    # Stella 最近主动发言文本（新信息量 novelty 的比对语料，本地 n-gram）
+    recent_bot_texts: "deque[str]" = field(default_factory=lambda: deque(maxlen=5))
+
+    def note_speech(self, now: float, *, is_bot: bool, text: str = "") -> None:
+        """记录一次逻辑发言（bot 或人）。多段输出只记一条。"""
+        self.speech_window.append((float(now), bool(is_bot)))
+        if is_bot and text:
+            self.recent_bot_texts.append(text)
+
+    def speech_share(self, window_seconds: float, now: float | None = None) -> float | None:
+        """滑动窗口内 bot 逻辑发言 / 全部逻辑发言；窗口内无发言返回 None。"""
+        now = now if now is not None else time.time()
+        recent = [b for (ts, b) in self.speech_window if now - ts <= max(1.0, window_seconds)]
+        total = len(recent)
+        if total == 0:
+            return None
+        return sum(1 for b in recent if b) / total
+
+    def bump_topic_revision(self) -> int:
+        """话题版本 +1（转题/撤销/静音/新直接请求时调用）。"""
+        self.topic_revision += 1
+        return self.topic_revision
 
     async def ingest(
         self,
@@ -116,6 +147,8 @@ class ConversationState:
                 topic_id=tid,
                 label=msg.text.strip()[:12] or f"topic-{tid}",
             )
+            # 转题 = 话题版本推进：在途的旧主动输出发送前将判为过期（计划 §6.9 层 3）
+            self.topic_revision += 1
         self.topic.touch(msg)
         self.buffer.append(msg)
         return self.topic

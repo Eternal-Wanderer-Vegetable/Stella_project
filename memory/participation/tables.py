@@ -119,6 +119,27 @@ class ExpiredPenaltyWeights:
 
 
 @dataclass(frozen=True)
+class TimingWeights:
+    """发言时机补充抑制项（计划 §6.9 层 2，[assumed] shadow 初值）。
+
+    TOML 缺省本节时 enabled=False，全部惩罚为 0——既有打分表与 benchmark
+    场景零退化；试点群在 weights.toml 写 [weights.timing] enabled=true 后激活。
+    share：滑动窗口内 bot 逻辑发言占比；低于 share_target 不罚，线性升到
+    share_strong 达 share_penalty_max。novelty：与 Stella 最近主动发言的本地
+    n-gram 相似度 ≥ novelty_similar_at 时按比例罚（无新话题降权，零模型调用）。
+    """
+
+    enabled: bool = False
+    share_window_seconds: float = 1800.0
+    share_target: float = 0.15
+    share_strong: float = 0.20
+    share_penalty_max: float = 30.0
+    novelty_similar_at: float = 0.65
+    novelty_penalty_max: float = 25.0
+    ngram_size: int = 3
+
+
+@dataclass(frozen=True)
 class Weights:
     relevance: RelevanceWeights
     opportunity: OpportunityWeights
@@ -129,6 +150,8 @@ class Weights:
     velocity_penalty: VelocityPenaltyWeights
     repetition_penalty: RepetitionPenaltyWeights
     expired_penalty: ExpiredPenaltyWeights
+    # 可选节：TOML 未写时用默认（enabled=False），旧表零退化
+    timing: "TimingWeights" = field(default_factory=TimingWeights)
 
 
 @dataclass(frozen=True)
@@ -320,6 +343,19 @@ def _load_weights(data: dict[str, Any]) -> Weights:
     )
 
     exp = _require(data, "expired_penalty")
+    # 可选节：[weights.timing] 不存在 → enabled=False（既有表零退化）
+    timing_data = data.get("timing") or {}
+    timing = TimingWeights(
+        enabled=bool(timing_data.get("enabled", False)),
+        share_window_seconds=float(timing_data.get("share_window_seconds", 1800.0)),
+        share_target=float(timing_data.get("share_target", 0.15)),
+        share_strong=float(timing_data.get("share_strong", 0.20)),
+        share_penalty_max=float(timing_data.get("share_penalty_max", 30.0)),
+        novelty_similar_at=float(timing_data.get("novelty_similar_at", 0.65)),
+        novelty_penalty_max=float(timing_data.get("novelty_penalty_max", 25.0)),
+        ngram_size=int(timing_data.get("ngram_size", 3)),
+    )
+
     expired = ExpiredPenaltyWeights(
         max=_num(exp, "max"),
         cooling=_num(exp, "cooling"),
@@ -336,7 +372,8 @@ def _load_weights(data: dict[str, Any]) -> Weights:
         velocity_penalty=velocity,
         repetition_penalty=repetition,
         expired_penalty=expired,
-    )
+        timing=timing,
+)
 
 
 def _load_thresholds(data: dict[str, Any]) -> Thresholds:

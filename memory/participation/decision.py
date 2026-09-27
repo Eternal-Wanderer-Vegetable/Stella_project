@@ -26,6 +26,10 @@ OBSERVE = "OBSERVE"
 CANDIDATE = "CANDIDATE"
 ALLOW_LLM = "ALLOW_LLM"
 
+# 空闲退避序列与上限（计划 §6.9 层 2，[assumed] 初值；单位秒）
+IDLE_BACKOFF_SEQUENCE = (30.0, 60.0, 120.0, 240.0)
+IDLE_BACKOFF_CAP = 300.0
+
 # Participation Mode（上游 §20）
 MODE_DIRECT_MENTION = "DIRECT_MENTION"                    # Hard Trigger 路径，不走本层
 MODE_DIRECT_RELEVANCE = "DIRECT_RELEVANCE"                # 点名邀请（未 @）
@@ -58,6 +62,10 @@ class _CandidateSlot:
     streak: int = 0
     topic_id: int | None = None
     since: float = 0.0
+    # 空闲退避（计划 §6.9 层 2）：连续「无新信息的主动探测」累计；新相关人类
+    # 消息 / 明确提及重置。只抑制主动 ALLOW_LLM，不越任何硬门禁。
+    low_novelty_streak: int = 0
+    backoff_until: float = 0.0
 
 
 def decide_mode(
@@ -87,8 +95,13 @@ class DecisionTracker:
         thresholds: Thresholds,
         topic_id: int | None,
         trigger_msg_id: int,
+        *,
+        now: float | None = None,
+        novelty: float | None = None,
+        is_tome: bool = False,
     ) -> ParticipationDecision:
         score = breakdown.final_score
+        now = now if now is not None else time.time()
         slot = self._slots.setdefault(group_id, _CandidateSlot())
 
         # 名义级别
@@ -118,18 +131,42 @@ class DecisionTracker:
             and score >= thresholds.strong_hook_direct.score_min
         )
 
+        # 空闲退避（计划 §6.9 层 2）：连续无新信息的主动探测按 30→60→120→240
+        # 退避（上限 300）；只压制主动 ALLOW_LLM，强钩子与硬门禁不受影响。
+        # 「后台效果的无回应」不进入本计数（不把没回应当拒绝）。
+        new_info = novelty is not None and novelty < 0.4
+        novel_probe = novelty is not None and novelty >= 0.65
+        if strong_hook or is_tome or new_info:
+            slot.low_novelty_streak = 0
+            slot.backoff_until = 0.0
+        in_backoff = now < slot.backoff_until
+
         level = nominal
-        if nominal == ALLOW_LLM and not strong_hook:
-            # 二次确认：需要连续 candidate_confirm_messages 条达标
-            need = max(1, thresholds.candidate_confirm_messages + 1)
-            if slot.streak < need:
+        if nominal == ALLOW_LLM:
+            if not strong_hook:
+                # 二次确认：需要连续 candidate_confirm_messages 条达标
+                need = max(1, thresholds.candidate_confirm_messages + 1)
+                if slot.streak < need:
+                    level = CANDIDATE
+            if in_backoff:
                 level = CANDIDATE
+            elif not strong_hook and novel_probe:
+                slot.low_novelty_streak += 1
+                idx = min(slot.low_novelty_streak - 1, len(IDLE_BACKOFF_SEQUENCE) - 1)
+                backoff = min(IDLE_BACKOFF_SEQUENCE[idx], IDLE_BACKOFF_CAP)
+                slot.backoff_until = now + backoff
+                level = CANDIDATE  # 本轮退避：不再主动
 
         should_speak = level == ALLOW_LLM
         # confidence：score 相对 [ignore_below, allow_at] 区间的位置
         span = max(1e-6, thresholds.allow_at - thresholds.ignore_below)
         confidence = max(0.0, min(1.0, (score - thresholds.ignore_below) / span))
 
+        reason_flags = signals.flags()
+        if nominal == ALLOW_LLM and level == CANDIDATE and (
+            in_backoff or (novel_probe and not strong_hook)
+        ):
+            reason_flags = [*reason_flags, "idle_backoff"]
         return ParticipationDecision(
             group_id=group_id,
             should_speak=should_speak,
@@ -139,7 +176,7 @@ class DecisionTracker:
             topic_id=topic_id,
             trigger_msg_id=trigger_msg_id,
             confidence=confidence,
-            reason_flags=signals.flags(),
+            reason_flags=reason_flags,
             breakdown=breakdown,
         )
 

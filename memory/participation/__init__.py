@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from pathlib import Path
 
 from nonebot import logger
@@ -39,7 +40,13 @@ from memory.participation.observability import (
     log_decision,
     record_to_db,
 )
-from memory.participation.scorer import score as score_message
+from memory.participation.scorer import (
+    compose_final_score,
+    ngram_jaccard,
+)
+from memory.participation.scorer import (
+    score as score_message,
+)
 from memory.participation.signals import extract as extract_signals
 from memory.participation.state import ConversationState
 from memory.participation.tables import ParticipationTableError, TableStore
@@ -65,6 +72,7 @@ class ParticipationManager:
         jsonl_path: Path | None = None,
         md_path: Path | None = None,
         log_level: str = "full",
+        clock: "Callable[[], float] | None" = None,
     ):
         # 延迟导入 config：benchmark/单测可注入独立路径
         if tables_dir is None:
@@ -92,6 +100,9 @@ class ParticipationManager:
         self._tracker = DecisionTracker()
         self._topic_seq: dict[int, int] = {}  # group_id -> 已分配 topic_id 上限
         self._embedding = None  # 懒初始化（见 _embedding_service）
+        # 注入时钟（计划 §6.9 层 1）：observe/tick/note_stella_spoke 全部走
+        # 同一个 clock——离线回放与 benchmark 注入冻结时钟，绝不偷用 time.time。
+        self._clock = clock or time.time
 
         self._load_tables_or_disable()
 
@@ -204,8 +215,10 @@ class ParticipationManager:
         tables = self._store.tables
         if tables is None:
             return None
-        now = now if now is not None else time.time()
+        now = now if now is not None else self._clock()
         state = self._state_for(group_id)
+        # 逻辑发言记账（share 分母）：人类消息一条 = 一次逻辑发言
+        state.note_speech(now, is_bot=False, text=text)
 
         msg = BufferedMessage(
             timestamp=now,
@@ -248,10 +261,28 @@ class ParticipationManager:
         async def _anchor_sim(text_: str, desc: str) -> float | None:
             return await self._async_similarity(text_, desc)
 
-        breakdown = await self._score_with_embedding(state, signals, tables, velocity_level, velocity_count, recent_texts, _anchor_sim, now)
+        # 发言占比与新信息量（计划 §6.9 层 2）：纯本地计算，零模型调用
+        tw = getattr(tables.weights, "timing", None)
+        share = state.speech_share(tw.share_window_seconds, now=now) if tw is not None else None
+        novelty = (
+            max(
+                (
+                    ngram_jaccard(text, bot_text, tw.ngram_size)
+                    for bot_text in state.recent_bot_texts
+                ),
+                default=0.0,
+            )
+            if tw is not None and state.recent_bot_texts
+            else None
+        )
+        breakdown = await self._score_with_embedding(
+            state, signals, tables, velocity_level, velocity_count, recent_texts,
+            _anchor_sim, now, speech_share=share, novelty=novelty,
+        )
 
         decision = self._tracker.decide(
-            group_id, breakdown, signals, tables.thresholds, topic.topic_id, msg_id
+            group_id, breakdown, signals, tables.thresholds, topic.topic_id, msg_id,
+            now=now, novelty=novelty, is_tome=False,
         )
 
         # 可观测性（loguru + JSONL + MD；落库在 persist 开启时）
@@ -271,13 +302,19 @@ class ParticipationManager:
 
         return decision
 
-    async def _score_with_embedding(self, state, signals, tables, velocity_level, velocity_count, recent_texts, anchor_sim, now):
+    async def _score_with_embedding(
+        self, state, signals, tables, velocity_level, velocity_count, recent_texts,
+        anchor_sim, now, *, speech_share=None, novelty=None,
+    ):
         """scorer.score 的异步包装：先用关键词打分，再用 embedding 增强 Relevance。
 
         任一通道失败都静默保留另一通道的结果——embedding 缺席不拖低关键词分。
+        最终分合成统一走 scorer.compose_final_score（计划 §6.9：与关闭 embedding
+        的路径共用同一公式）。
         """
         breakdown = score_message(
-            state, signals, tables, velocity_level, velocity_count, recent_texts, similarity=None, now=now
+            state, signals, tables, velocity_level, velocity_count, recent_texts,
+            similarity=None, now=now, speech_share=speech_share, novelty=novelty,
         )
         try:
             corpus = " ".join(recent_texts[-6:])
@@ -307,41 +344,48 @@ class ParticipationManager:
             current_old = breakdown.relevance - long_term_old
             breakdown.relevance = max(0.0, min(w.max, max(long_term_old, scaled) + current_old))
 
-            positives = (
-                breakdown.relevance
-                + breakdown.opportunity
-                + breakdown.social_opportunity
-                + breakdown.topic_involvement
-                + breakdown.silence_bonus
-            )
-            negatives = (
-                breakdown.recent_speech_penalty
-                + breakdown.velocity_penalty
-                + breakdown.repetition_penalty
-                + breakdown.expired_penalty
-            )
-            breakdown.final_score = max(0.0, min(100.0, positives - negatives))
+            breakdown.final_score = compose_final_score(breakdown)
         except Exception:
             pass
+        breakdown.final_score = compose_final_score(breakdown)
         return breakdown
 
     # ── Stella 自己的发言记账（惩罚项输入） ─────────────
 
-    def note_stella_spoke(self, group_id: int, kind: str = "proactive") -> None:
-        """ai_gateway 在每次发送后调用：kind = passive（被 @ 回复）/ proactive。
+    def note_stella_spoke(
+        self, group_id: int, kind: str = "proactive", *, now: float | None = None,
+        text: str = "",
+    ) -> None:
+        """ai_gateway 在**确认送达**后调用：kind = passive（被 @ 回复）/ proactive。
 
         上游 §14：被叫到后回答不应该获得与主动插话同等级的惩罚。
+        ``text`` 传入已发首段（多段算一次）：新信息量（novelty）的比对语料；
+        ``now`` 缺省走注入时钟，绝不直接 time.time（计划 §6.9 层 1）。
         """
         state = self._groups.get(group_id)
         if state is None:
             return
+        now = now if now is not None else self._clock()
+        state.note_speech(now, is_bot=True, text=text)
         topic_label = state.topic.label if state.topic else ""
-        state.speak_stats.note_spoke(kind, topic_label)
+        state.speak_stats.note_spoke(kind, topic_label, now=now)
         if state.topic is not None and kind == "proactive":
             state.topic.proactive_speak_count += 1
             state.topic.stella_involved = True
         elif state.topic is not None:
             state.topic.stella_involved = True
+
+    # ── 话题版本（计划 §6.9 层 3：过期主动输出发送前检查） ──
+
+    def topic_revision(self, group_id: int) -> int:
+        """当前话题版本号；群无状态视为 0。"""
+        state = self._groups.get(group_id)
+        return state.topic_revision if state else 0
+
+    def bump_topic_revision(self, group_id: int) -> int:
+        """显式推进话题版本（静音/撤销/新直接请求等取消信号）。返回新版本。"""
+        state = self._state_for(group_id)
+        return state.bump_topic_revision()
 
     # ── 定时推进（COOLING→EXPIRED，由 ai_gateway 挂 APScheduler） ──
 
@@ -352,7 +396,7 @@ class ParticipationManager:
             return []
         changes: list[str] = []
         for group_id, state in list(self._groups.items()):
-            change = state.advance_lifecycle(tables)
+            change = state.advance_lifecycle(tables, now=self._clock())
             if change:
                 changes.append(f"群 {group_id} {change}")
         if self._persist and changes:

@@ -72,15 +72,22 @@ async def deliver_lines(
     send_one: SendOne,
     interval_seconds: float = 0.0,
     stop_on_failure: bool = True,
+    abort_check: Callable[[], bool] | None = None,
 ) -> list[DeliveryReceipt]:
     """逐段发送并收集回执。scope 为 None 时只发送、不落库（社交总开关关闭）。
 
+    ``abort_check``（计划 §6.9 层 3）：每个片段发送前调用，返回 True 表示
+    本轮输出已过期（转题/撤销/静音/新直接请求）——停止后续片段并保留已
+    收回执；已 ACK 的片段不可撤销，聚合状态按已尝试片段计算（partial 语义）。
     返回已尝试片段的回执列表（未尝试的片段没有事实，不产生行）。
     """
     receipts: list[DeliveryReceipt] = []
     for i, line in enumerate(lines):
         if i > 0 and interval_seconds > 0:
             await asyncio.sleep(interval_seconds)
+        if abort_check is not None and abort_check():
+            logger.info(f"[Delivery] 发送中止（输出已过期）：段 {i}/{len(lines)} 未发送")
+            break
         try:
             platform_id = coerce_platform_message_id(await send_one(line, i))
             status = DELIVERY_ACKNOWLEDGED

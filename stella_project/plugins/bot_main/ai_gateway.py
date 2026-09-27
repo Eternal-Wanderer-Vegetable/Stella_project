@@ -103,6 +103,7 @@ from core.llm.usage_store import budget_blocked
 from core.pipeline import Pipeline
 from core.planner import RestrictedPlanner
 from core.reply_gate import get_reply_gate
+from core.runtime.facade import E_CANCELLED, RuntimeTurnError
 from core.shutdown import wait_for_tasks
 from core.social.contracts import (
     ConversationScope,
@@ -612,6 +613,10 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         return
     lock = _group_locks[event.group_id]
     async with lock:
+        # 新的直接请求 = 显式取消信号（计划 §6.9 层 3）：推进话题版本，
+        # 让仍在途/待发送的旧主动输出在发送前判为过期。
+        with contextlib.suppress(Exception):
+            get_participation_manager().bump_topic_revision(event.group_id)
         # 纯图片 @（无文字）时给 message 一个占位文本：它是检索查询与 prompt
         # 的当前输入，空串会让整轮对话退化成「没有当前输入」。
         message_text = event.get_plaintext().strip() or "[图片]"
@@ -671,6 +676,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             ctx = await _run_turn_via_engine(event.group_id, ctx)
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
+            raise
+        except RuntimeTurnError as e:
+            # 取消不是失败（计划 §6.9 层 3）：绝不能落进通用兜底变成「......？」
+            if e.code == E_CANCELLED:
+                logger.info(f"🔇 [chat] 群 {event.group_id} 轮次已取消（reset），静默不发送")
+                return
             raise
         except Exception as e:
             logger.error(f"Pipeline 异常: {e}")
@@ -1019,6 +1030,10 @@ async def handle_toggle(bot: Bot, event: GroupMessageEvent):
 
     mute = any(k in event.get_plaintext() for k in _MUTE_KEYWORDS)
     set_proactive_muted(event.group_id, mute, operator_id=user_id)
+    if mute:
+        # 静音 = 显式取消信号（计划 §6.9 层 3）：在途的旧主动输出发送前判过期
+        with contextlib.suppress(Exception):
+            get_participation_manager().bump_topic_revision(event.group_id)
 
     reply = "好，我不主动说话了，被 @ 还是会回的" if mute else "好，我继续正常参与聊天"
     await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
@@ -1917,6 +1932,12 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
         )
         try:
             ctx = await _run_turn_via_engine(group_id, ctx)
+        except RuntimeTurnError as e:
+            # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
+            if e.code == E_CANCELLED:
+                logger.info(f"🔇 [主动@] 群 {group_id} 轮次已取消，静默退出")
+                return False
+            raise
         except Exception as e:
             logger.error(f"主动 @ Pipeline 异常: {e}")
             return False
@@ -2284,8 +2305,27 @@ async def _proactive_speak_for_group(
             gate_reasons=gate.reasons,
             trace_id=new_trace_id(),
         )
+        # 话题版本快照（计划 §6.9 层 3）：生成前捕获，发送前与逐段发送中比对
+        try:
+            rev_before = get_participation_manager().topic_revision(group_id)
+        except Exception:
+            rev_before = 0
+
+        def _stale() -> bool:
+            try:
+                return get_participation_manager().topic_revision(group_id) != rev_before
+            except Exception:
+                return False
+
         try:
             ctx = await _run_turn_via_engine(group_id, ctx)
+        except RuntimeTurnError as e:
+            # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
+            if e.code == E_CANCELLED:
+                _log_participation_event(decision, "generation_skip", "cancelled")
+                logger.info(f"🔇 [主动发言] 群 {group_id} 轮次已取消，静默退出")
+                return
+            raise
         except Exception as e:
             logger.error(f"主动发言 Pipeline 异常: {e}")
             _log_participation_event(decision, "generation_skip", "pipeline_error")
@@ -2296,6 +2336,12 @@ async def _proactive_speak_for_group(
             get_reply_gate().finish(group_id, waiting=bool(getattr(ctx, "planner_wait", False)))
         if not ctx.lines:
             _log_participation_event(decision, "generation_skip", "empty_output")
+            return
+
+        # 发送前过期检查：生成期间出现转题/撤销/静音/新直接请求 → 丢弃旧输出
+        if _stale():
+            _log_participation_event(decision, "generation_skip", "stale_output")
+            logger.info(f"[主动发言] 群 {group_id} 输出已过期（话题版本变化），丢弃不发")
             return
 
         if is_proactive_skip(ctx.lines):
@@ -2337,6 +2383,7 @@ async def _proactive_speak_for_group(
             turn_id=ctx.turn_id,
             send_one=_send_proactive_segment,
             interval_seconds=SEND_INTERVAL,
+            abort_check=_stale,
         )
         delivered = delivered_texts(receipts)
         if not delivered:
@@ -2348,9 +2395,11 @@ async def _proactive_speak_for_group(
         proactive.mark_spoke(group_id)
         get_proactive().record_spoken(group_id, delivered)
         # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty），
-        # 一次逻辑发言只更新一次，不按片段重复计数
+        # 一次逻辑发言只更新一次，不按片段重复计数；文本进 novelty 比对语料
         with contextlib.suppress(Exception):
-            get_participation_manager().note_stella_spoke(group_id, "proactive")
+            get_participation_manager().note_stella_spoke(
+                group_id, "proactive", text=delivered[0]
+            )
         # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」；
         # user_id=0 表示全群目标，效果结算按群归因（不再作为过滤条件）。
         expression_learning.on_reply_sent(
