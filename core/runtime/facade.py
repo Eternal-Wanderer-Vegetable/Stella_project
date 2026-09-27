@@ -43,8 +43,12 @@ E_CANCELLED = "E_CANCELLED"
 E_KEY = "E_KEY"
 
 
-class RuntimeTurnError(Exception):
-    """facade 发起的轮次失败（取消/fence），``code`` 为 E_* 常量。"""
+class RuntimeTurnError(RuntimeError):
+    """facade 发起的轮次失败（取消/fence），``code`` 为 E_* 常量。
+
+    继承 RuntimeError：chat 路由对 RuntimeError 产出 SSE error 帧
+    （Q-2 契约），reset 取消的轮次因此能向面板返回明确错误而非断流。
+    """
 
     def __init__(self, code: str, message: str):
         super().__init__(message)

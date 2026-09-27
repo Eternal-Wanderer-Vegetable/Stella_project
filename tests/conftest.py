@@ -46,6 +46,18 @@ def _force_v1_memory_path(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _pin_legacy_runtime_mode(monkeypatch):
+    """M9 默认切 native 后，把既有 legacy 路径用例钉回 legacy。
+
+    专项验证 native 的用例（tests/runtime/test_ingress_native.py 等）在用例内
+    显式 monkeypatch 为 native——本夹具先跑，用例内覆盖生效。
+    """
+    import config
+
+    monkeypatch.setattr(config, "RUNTIME_MODE", "legacy")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_space_config(tmp_path, monkeypatch):
     """把共享空间的自动命名账本与 TOML 目录隔离到每个用例独立的临时目录。
 

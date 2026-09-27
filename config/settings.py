@@ -959,11 +959,11 @@ WEBUI_MAX_UPLOAD_MB = _env_int("WEBUI_MAX_UPLOAD_MB", 50)
 # 时置 false，只保留 API。
 WEBUI_SERVE_DIST = _env_bool("WEBUI_SERVE_DIST", "true")
 
-# ---------- 自有运行时（迁移计划修订 v2 §R） ----------
-# 对话轮次执行引擎：legacy=现行 Pipeline 编排（默认）；native=自有 facade
-# 运行时（进程内执行器，经 core.runtime.facade，生成仍由 Python CHAT 角色
-# 后端执行）。过渡期默认 legacy；切默认 native 在 M9 与旧引擎退役一并处理。
-RUNTIME_MODE = _env_choice("STELLA_RUNTIME", "legacy", ("legacy", "native"))
+# ---------- 自有运行时（迁移计划修订 v2 §R，M9 起默认 native） ----------
+# 对话轮次执行引擎：native=自有 facade 运行时（进程内执行器，经
+# core.runtime.facade，生成仍由 Python CHAT 角色后端执行）——M9 起为默认；
+# legacy=旧 Pipeline 编排（过渡保留，§R.5 退役窗口后删除）。
+RUNTIME_MODE = _env_choice("STELLA_RUNTIME", "native", ("legacy", "native"))
 
 # ---------- 优雅停止 ----------
 # 停止时等待在途后台任务（整合/压缩）收尾的上限（秒）。
