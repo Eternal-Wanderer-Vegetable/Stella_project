@@ -51,7 +51,7 @@ JSON 投影新增字段必须带 schema_version；`raw_event/bot` 一律不序�
 ## 6. 配置默认值冻结（迁移不得改变默认行为）
 
 关键默认：`MEMORY_V2_ENABLED=true`、`MEMORY_BACKEND=python`（start.bat 有 wheel 时 rust）、`PROACTIVE_ENABLED=true`（AT_ENABLED=true、MAX_LINES=1、SLEEP 23:30-07:30、RUNTIME_TOGGLE=true）、`PLANNER_ENABLED=true`（MAX_CALLS=2、PROACTIVE_WAIT=false）、`COMES_ENABLED=true`、`KNOWLEDGE_ENABLED=true`、`SKILLS_ENABLED=false`（SANDBOX disabled）、`MCP_ENABLED=false`、`SCHEDULING_ENABLED=false`、`WEBUI_ENABLED=true`、`ROUTER_GATE_MEMORY=false`、`LLM_DAILY_TOKEN_BUDGET=0`、`BUDGET_EXHAUSTED_ACTION=pause_memory`、`SEND_INTERVAL=0.8`、`MAX_REPLY_LINES=5`、`LLM_CONTEXT_WINDOW_TOKENS=8192`。
-新增键仅允许加法：`STELLA_RUNTIME=legacy|native`（v2 修订：`native`=自有 facade 运行时；M9 起默认 native，legacy 过渡保留待退役）+ runtime 诊断键。`.env.example` 披露被 test_env_schema/test_deploy_init 钉底，新增键须同步。
+`STELLA_RUNTIME` 双路开关已随 §R.5 退役（2026-09-27）：唯一引擎 = facade 运行时，该键不再被读取。+ runtime 诊断键（`chat_engine` 状态段）。`.env.example` 披露被 test_env_schema/test_deploy_init 钉底，新增键须同步。
 
 ## 7. 既有怪癖（Q1：保留、记录、另修）
 

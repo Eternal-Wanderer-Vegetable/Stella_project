@@ -270,24 +270,20 @@ load_extensions(pipeline, EXTENSIONS_DIR)
 
 
 async def _run_turn_via_engine(group_id: int, ctx: ChatContext) -> ChatContext:
-    """按 ``STELLA_RUNTIME`` 选择轮次执行引擎（计划修订 v2）。
+    """轮次唯一执行入口（计划 §R.5：legacy 双路开关已退役）。
 
-    legacy=现行 ``Pipeline.run``；native=facade 进程内执行器（prepare/
-    finalize 复用同一条管线，生成是进程内 provider 调用）。deadline 与
-    legacy 的单次生成超时对齐（LLM_TIMEOUT，超时都走兜底文案，BC-5）。
-    主动发言与对话共用 ``qq:{group_id}`` 会话键——两者本就竞争同一群
-    会话，facade 锁嵌在群锁内，互斥语义与 legacy 一致。
+    经 facade 进程内执行器：prepare/finalize 复用同一条管线，生成是
+    进程内 provider 调用。deadline 与旧引擎单次生成超时对齐
+    （LLM_TIMEOUT，超时都走兜底文案，BC-5）。主动发言与对话共用
+    ``qq:{group_id}`` 会话键——两者本就竞争同一群会话，facade 锁嵌在
+    群锁内，互斥语义不变。
     """
-    import config as _config
+    from core.runtime.facade import ensure_shared_facade_started
 
-    if _config.RUNTIME_MODE == "native":
-        from core.runtime.facade import ensure_shared_facade_started
-
-        facade = await ensure_shared_facade_started()
-        return await facade.submit_turn(
-            f"qq:{group_id}", pipeline, ctx, deadline=LLM_TIMEOUT
-        )
-    return await pipeline.run(ctx)
+    facade = await ensure_shared_facade_started()
+    return await facade.submit_turn(
+        f"qq:{group_id}", pipeline, ctx, deadline=LLM_TIMEOUT
+    )
 
 # 本地状态接口：挂在 NoneBot 已有的 ASGI app 上（不新增端口）。
 # 放在扩展加载之后：link_status 来自扩展（虽是延迟导入，顺序清晰些更好）。
@@ -2559,19 +2555,16 @@ async def _graceful_shutdown() -> None:
     if _scheduling_runtime is not None:
         with contextlib.suppress(Exception):
             await _scheduling_runtime.stop()
-    # native 运行时：先排空 facade 在途轮次（provider 调用收尾再落库/发送）。
+    # 先排空 facade 在途轮次（provider 调用收尾再落库/发送）。
     # 与调度 worker 同理：超时未收尾的轮次由运行记录标记，不自动重放。
-    import config as _config
+    from core.runtime import facade as _rt_facade
 
-    if _config.RUNTIME_MODE == "native":
-        from core.runtime import facade as _rt_facade
-
-        shared = _rt_facade.peek_shared_facade()
-        if shared is not None:
-            with contextlib.suppress(Exception):
-                await shared.drain()
-            with contextlib.suppress(Exception):
-                await shared.stop()
+    shared = _rt_facade.peek_shared_facade()
+    if shared is not None:
+        with contextlib.suppress(Exception):
+            await shared.drain()
+        with contextlib.suppress(Exception):
+            await shared.stop()
 
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions

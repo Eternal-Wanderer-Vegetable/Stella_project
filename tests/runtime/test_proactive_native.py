@@ -12,8 +12,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-
-import config
 import runtime_harness as harness
 
 
@@ -81,7 +79,7 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
             r = await _orig_provider(key, prompt)
             print(f"[spy-provider] ok: {r[:40]!r}")
             return r
-        except BaseException as e:
+        except BaseException:
             import traceback
             traceback.print_exc()
             raise
@@ -93,7 +91,6 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
 
     target = ProactiveTarget(user_id=1001, candidate_id="cand-9", candidate_content="他住在上海")
 
-    monkeypatch.setattr(config, "RUNTIME_MODE", "native")
     seen: dict = {}
 
     async def engine(group_id, ctx, **kw):
@@ -113,7 +110,6 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
     monkeypatch.setattr(gateway, "get_participation_manager", Mock())
     monkeypatch.setattr(gateway, "record_at", Mock())
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
-    spawned = []
     monkeypatch.setattr(gateway, "_check_reply_later", AsyncMock())
     try:
         await gateway._proactive_at_user(bot, 1)
@@ -136,7 +132,6 @@ async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monk
     bot = _FakeBot()
     proactive = _FakeProactive()
 
-    monkeypatch.setattr(config, "RUNTIME_MODE", "native")
     seen: dict = {}
 
     async def engine(group_id, ctx, **kw):

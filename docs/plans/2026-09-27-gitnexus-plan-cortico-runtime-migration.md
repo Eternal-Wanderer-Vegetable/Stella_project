@@ -1791,3 +1791,7 @@ GitNexus 可使用 `node .gitnexus/run.cjs`；本次已验证的替代 runner �
 - 保留：M0 oracle、behavior-contract、`tests/runtime/`（基准永不过期）。
 
 回退触发（任一即切回 `STELLA_RUNTIME=legacy` 并告警）：重复发送、串空间/串会话、丢任务、调用次数异常增加、未解释的 prompt 差异、预算静默缺失。
+
+### R.6 退役执行记录（2026-09-27）
+
+§R.5 退役步骤已执行：`_run_turn_via_engine` 的 legacy 分支、`chat_ingress` 的 legacy 分支与 `RUNTIME_MODE` 双路开关（settings/env.example/conftest 钉子）全部删除；`pipeline.py` 保留为 TurnService 兼容门面（钩子注册面）。唯一引擎 = facade；用户 `.env` 中残留的 `STELLA_RUNTIME=native` 键无害（不再被读取）。迁移至此**全部完成**。

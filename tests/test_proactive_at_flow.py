@@ -228,7 +228,7 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
         ctx.lines = [PROACTIVE_SKIP_MARKER]
         return ctx
 
-    monkeypatch.setattr(gateway.pipeline, "run", fake_run)
+    monkeypatch.setattr(gateway, "_run_turn_via_engine", lambda group_id, ctx, **kw: fake_run(ctx))
     monkeypatch.setattr(gateway, "get_proactive", lambda: proactive)
     monkeypatch.setattr(gateway, "get_participation_manager", participation)
     monkeypatch.setattr(gateway, "record_at", record_at_mock)
@@ -278,7 +278,7 @@ async def test_proactive_at_normal_output_still_sends_and_records(
         ctx.lines = ["你最近在玩什么游戏？"]
         return ctx
 
-    monkeypatch.setattr(gateway.pipeline, "run", fake_run)
+    monkeypatch.setattr(gateway, "_run_turn_via_engine", lambda group_id, ctx, **kw: fake_run(ctx))
     monkeypatch.setattr(gateway, "get_proactive", lambda: proactive)
     monkeypatch.setattr(gateway, "get_participation_manager", lambda: participation)
     monkeypatch.setattr(gateway, "record_at", record_at_mock)
@@ -335,7 +335,7 @@ async def test_proactive_group_skip_finishes_gate_without_side_effects(
         ctx.lines = [PROACTIVE_SKIP_MARKER]
         return ctx
 
-    monkeypatch.setattr(gateway.pipeline, "run", fake_run)
+    monkeypatch.setattr(gateway, "_run_turn_via_engine", lambda group_id, ctx, **kw: fake_run(ctx))
 
     await gateway._proactive_speak_for_group(bot, 1, skip_dice=True)
 
@@ -416,7 +416,7 @@ async def test_participation_evidence_reaches_generation_and_skip_is_observed(
         ctx.lines = [PROACTIVE_SKIP_MARKER]
         return ctx
 
-    monkeypatch.setattr(gateway.pipeline, "run", fake_run)
+    monkeypatch.setattr(gateway, "_run_turn_via_engine", lambda group_id, ctx, **kw: fake_run(ctx))
 
     await gateway._proactive_speak_for_group(
         bot,

@@ -13,7 +13,6 @@ import asyncio
 import pytest
 import runtime_harness as harness
 
-import config
 import webui.chat_ingress as ingress
 from core.runtime import facade as facade_mod
 from core.runtime.facade import E_CANCELLED, RuntimeTurnError
@@ -22,7 +21,6 @@ from core.runtime.facade import E_CANCELLED, RuntimeTurnError
 async def test_run_turn_native_mode_full_chain(tmp_path, monkeypatch):
     h = harness.RuntimeHarness(tmp_path)
     await h.start()
-    monkeypatch.setattr(config, "RUNTIME_MODE", "native")
     monkeypatch.setattr(ingress, "_resolve_pipeline", lambda: h.pipeline)
 
     async def _started():
@@ -42,7 +40,6 @@ async def test_run_turn_native_mode_full_chain(tmp_path, monkeypatch):
 async def test_reset_fences_inflight_and_bumps_epoch(tmp_path, monkeypatch):
     h = harness.RuntimeHarness(tmp_path)
     await h.start()
-    monkeypatch.setattr(config, "RUNTIME_MODE", "native")
     monkeypatch.setattr(ingress, "_resolve_pipeline", lambda: h.pipeline)
 
     async def _started():
@@ -65,7 +62,3 @@ async def test_reset_fences_inflight_and_bumps_epoch(tmp_path, monkeypatch):
         await h.stop()
 
 
-async def test_legacy_mode_skips_runtime(monkeypatch):
-    """默认 legacy：不触碰 facade（分支选择冒烟）。"""
-    monkeypatch.setattr(config, "RUNTIME_MODE", "legacy")
-    assert ingress._runtime_mode() == "legacy"

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""RuntimeFacade：统一入口 owner 与轮次执行（计划修订 v2：纯 Python 运行时）。
+"""RuntimeFacade：统一入口 owner 与轮次执行（计划修订 v2：纯 Python 运行时，§R.5 后唯一引擎）。
 
 - **唯一入口 owner**：每会话一把提交锁 + owner_epoch（reset 递增作废旧上下文）。
 - 轮次生命周期：``accepted → prepared → generating → completed|failed|cancelled``，
@@ -98,12 +98,12 @@ class RuntimeStore:
             pass
 
 
-async def _default_provider(key: str, prompt: str) -> str:
-    """生产 provider：真实 CHAT 角色后端（薄调用，不经旧 Pipeline 编排）。"""
-    from core.llm import ROLE_CHAT, backend_for
+async def _pipeline_provider(pipeline: "TurnService", key: str, prompt: str) -> str:
+    """默认 provider：**传入管线自身的 LLM 后端**（生产装配下即 CHAT 角色后端）。
 
-    backend = backend_for(ROLE_CHAT)
-    return await backend.generate(prompt)
+    不经旧 Pipeline 编排，也不引入额外注册表查询——测试用 stub 管线时,
+    脚本化后端因此自然生效。"""
+    return await pipeline._llm.generate(prompt)  # type: ignore[union-attr]
 
 
 class RuntimeFacade:
@@ -116,7 +116,8 @@ class RuntimeFacade:
         store: RuntimeStore | None = None,
         default_deadline: float = DEFAULT_TURN_DEADLINE,
     ) -> None:
-        self._provider: ProviderFn = provider or _default_provider
+        # provider 缺省 = 传入管线自身的 LLM 后端（见 _pipeline_provider）
+        self._provider: ProviderFn = provider
         self._store = store
         self._default_deadline = default_deadline
         self._keys: dict[str, KeyState] = {}
@@ -194,8 +195,10 @@ class RuntimeFacade:
 
             if plan.outcome == GENERATE:
                 prompt = ctx.prompt_log
+                provider = self._provider or _pipeline_provider
                 state.cancel_requested = False
-                task = asyncio.create_task(self._provider(key, prompt))
+                task = asyncio.create_task(provider(key, prompt) if self._provider
+                                           else _pipeline_provider(pipeline, key, prompt))
                 state.inflight = task
                 try:
                     text = await asyncio.wait_for(

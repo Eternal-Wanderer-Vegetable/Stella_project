@@ -207,13 +207,12 @@ def build_payload(
 def _chat_engine() -> dict | None:
     """对话引擎快照（模式/会话数/在途）：native 未启动时给模式占位。"""
     try:
-        import config as _config
         from core.runtime import facade as _rt_facade
 
         shared = _rt_facade.peek_shared_facade()
         if shared is not None:
             return shared.health()
-        return {"mode": _config.RUNTIME_MODE, "keys": [], "inflight": 0}
+        return {"mode": "native", "keys": [], "inflight": 0}
     except Exception:
         return None
 
