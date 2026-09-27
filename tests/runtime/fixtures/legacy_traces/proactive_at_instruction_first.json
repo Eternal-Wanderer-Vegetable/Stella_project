@@ -1,0 +1,52 @@
+{
+  "scenario": "proactive_at_instruction_first",
+  "input": {
+    "message": "说出那句确认的话",
+    "trigger": "reply",
+    "intent": "proactive_at",
+    "short_term": "我: 手机好用吗\n用户(2): 还行",
+    "tool_summaries": [],
+    "knowledge_evidence": [],
+    "system_prompt": "你是Stella，一个群聊里的伙伴。"
+  },
+  "backend_script": [
+    "<thought>照做</thought><action>NONE</action><reply>昨天玩得很开心呀</reply>"
+  ],
+  "trace": {
+    "llm_calls": [
+      {
+        "prompt": "说出那句确认的话\n\n现在是 <normalized-time>。\n\n当前与你对话的用户 QQ 号：1001。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 1001 的才归 TA；不要把别人的发言当成 TA 说的。\n\n当前对话摘要：\n我: 手机好用吗\n用户(2): 还行",
+        "system_prompt": "你是Stella，一个群聊里的伙伴。"
+      }
+    ],
+    "llm_call_count": 1,
+    "raw_output": "<thought>照做</thought><action>NONE</action><reply>昨天玩得很开心呀</reply>",
+    "thought": "照做",
+    "action": "NONE",
+    "reply": "昨天玩得很开心呀",
+    "lines": [
+      "昨天玩得很开心呀"
+    ],
+    "pre_hooks_run": [],
+    "post_hooks_run": [
+      "parse_output",
+      "bad_phrase_filter",
+      "split_lines",
+      "log_thought"
+    ],
+    "planner": {
+      "trigger": "",
+      "action": "",
+      "wait": false
+    },
+    "diagnostics": {
+      "llm_backend": "scripted",
+      "llm_model": "scripted-model",
+      "context_window_tokens": 8192,
+      "prompt_budget_tokens": 6976,
+      "prompt_estimated_tokens": 151,
+      "prompt_truncated": false,
+      "system_prompt_len": 18
+    }
+  }
+}

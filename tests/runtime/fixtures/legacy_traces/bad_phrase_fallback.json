@@ -1,0 +1,52 @@
+{
+  "scenario": "bad_phrase_fallback",
+  "input": {
+    "message": "说句不该说的",
+    "trigger": "reply",
+    "intent": "",
+    "short_term": "",
+    "tool_summaries": [],
+    "knowledge_evidence": [],
+    "system_prompt": "你是Stella，一个群聊里的伙伴。"
+  },
+  "backend_script": [
+    "<thought>破防测试</thought><action>NONE</action><reply>作为一个AI</reply>"
+  ],
+  "trace": {
+    "llm_calls": [
+      {
+        "prompt": "现在是 <normalized-time>。\n\n当前与你对话的用户 QQ 号：1001。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 1001 的才归 TA；不要把别人的发言当成 TA 说的。\n\n【现在 用户(1001) 对你说】说句不该说的\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+        "system_prompt": "你是Stella，一个群聊里的伙伴。"
+      }
+    ],
+    "llm_call_count": 1,
+    "raw_output": "<thought>破防测试</thought><action>NONE</action><reply>作为一个AI</reply>",
+    "thought": "破防兜底",
+    "action": "NONE",
+    "reply": "......？",
+    "lines": [
+      "......？"
+    ],
+    "pre_hooks_run": [],
+    "post_hooks_run": [
+      "parse_output",
+      "bad_phrase_filter",
+      "split_lines",
+      "log_thought"
+    ],
+    "planner": {
+      "trigger": "",
+      "action": "",
+      "wait": false
+    },
+    "diagnostics": {
+      "llm_backend": "scripted",
+      "llm_model": "scripted-model",
+      "context_window_tokens": 8192,
+      "prompt_budget_tokens": 6976,
+      "prompt_estimated_tokens": 175,
+      "prompt_truncated": false,
+      "system_prompt_len": 18
+    }
+  }
+}

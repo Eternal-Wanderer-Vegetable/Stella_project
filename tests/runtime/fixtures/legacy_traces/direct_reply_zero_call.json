@@ -1,0 +1,42 @@
+{
+  "scenario": "direct_reply_zero_call",
+  "input": {
+    "message": "查东京天气",
+    "trigger": "reply",
+    "intent": "",
+    "short_term": "",
+    "tool_summaries": [],
+    "knowledge_evidence": [],
+    "system_prompt": "你是Stella，一个群聊里的伙伴。"
+  },
+  "backend_script": [],
+  "trace": {
+    "llm_calls": [],
+    "llm_call_count": 0,
+    "raw_output": "",
+    "thought": "",
+    "action": "NONE",
+    "reply": "东京明天 27℃，晴。",
+    "lines": [
+      "东京明天 27℃，晴。"
+    ],
+    "pre_hooks_run": [
+      "direct_reply"
+    ],
+    "post_hooks_run": [],
+    "planner": {
+      "trigger": "",
+      "action": "",
+      "wait": false
+    },
+    "diagnostics": {
+      "llm_backend": "",
+      "llm_model": "",
+      "context_window_tokens": 0,
+      "prompt_budget_tokens": 0,
+      "prompt_estimated_tokens": 0,
+      "prompt_truncated": false,
+      "system_prompt_len": 0
+    }
+  }
+}
