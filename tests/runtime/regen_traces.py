@@ -26,11 +26,13 @@ sys.path.insert(0, str(_ROOT))
 os.environ.setdefault("STELLA_HOME", str(Path(tempfile.mkdtemp(prefix="stella-regen-home-"))))
 
 import core.pipeline
+import core.runtime.turn_service
 import memory.pre_processors
 import memory.retrieval_v2
 
 # 镜像 conftest 的 _force_v1_memory_path：捕获走 v1 prompt 分支
 core.pipeline.MEMORY_V2_ENABLED = False
+core.runtime.turn_service.MEMORY_V2_ENABLED = False
 memory.pre_processors.MEMORY_V2_ENABLED = False
 memory.retrieval_v2.MEMORY_V2_ENABLED = False
 

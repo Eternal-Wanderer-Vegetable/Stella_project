@@ -35,10 +35,12 @@ os.environ.setdefault(
 def _force_v1_memory_path(monkeypatch):
     """把涉及 v2 开关的模块内 MEMORY_V2_ENABLED 统一置为 False（每个用例自动生效）。"""
     import core.pipeline
+    import core.runtime.turn_service
     import memory.pre_processors
     import memory.retrieval_v2
 
     monkeypatch.setattr(core.pipeline, "MEMORY_V2_ENABLED", False)
+    monkeypatch.setattr(core.runtime.turn_service, "MEMORY_V2_ENABLED", False)
     monkeypatch.setattr(memory.pre_processors, "MEMORY_V2_ENABLED", False)
     monkeypatch.setattr(memory.retrieval_v2, "MEMORY_V2_ENABLED", False)
 
