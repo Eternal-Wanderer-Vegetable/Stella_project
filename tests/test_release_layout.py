@@ -205,11 +205,11 @@ def test_rust_release_is_a_complete_launchable_engine_package():
     assert 'must contain exactly one bundled wheel' in rust
     assert 'for %%f in ("wheels\\stella_memory_rust-*.whl")' in launcher
     assert 'set "MEMORY_BACKEND=rust"' in launcher
-    assert (
-        'pip install --no-index --no-deps --upgrade --target . "%RUST_WHEEL%"'
-        in launcher
-    )
-    assert 'import memory_rust._native' in launcher
+    # wheel 必须原地解包而不是 pip install --target .：pip 的 --target 会先删掉
+    # 目标里已有的同名包目录，把随包发布的 memory_rust Python 半边一并抹掉。
+    assert '-m zipfile -e "%RUST_WHEEL%"' in launcher
+    assert "--no-index --no-deps --upgrade --target" not in launcher
+    assert 'import memory_rust._native, memory_rust.selector' in launcher
 
 
 def test_python_release_excludes_rust_native_outputs():
