@@ -67,6 +67,20 @@ JSON 投影新增字段必须带 schema_version；`raw_event/bot` 一律不序�
 
 ## 8. runtime 状态机（新增，全阶段遵守）
 
+> v2 修订：runtime=自有 facade（进程内执行器），非 Cortico Core。引擎选择 `STELLA_RUNTIME=legacy|native`。
+
+### 8.1 调度生成的四种交接状态（M6 冻结）
+
+| 状态 | 语义 | 处置 |
+| --- | --- | --- |
+| 到期交接 | 启动时发现错过的到期任务 | 按 latest/all 补跑策略入队，复用既有 claim 流程 |
+| 任务取消 | fence/取消检查点命中（执行前或轮间） | run → cancelled，不投递 |
+| 生成完成待投递 | agent/reminder 产出就绪 | ready→sending→sent，走既有 DeliveryService |
+| 投递结果不明 | sending 后进程死亡/发送超时 | delivery_unknown 终态，**绝不自动重投**（人工「定时立即」除外） |
+
+业务定时器/lease/任务库仍由原调度持有；native 模式下调度与对话轮次以共享 `_group_locks` 互斥（facade 锁嵌套在内，顺序一致）。
+
+
 轮次：`accepted → preparing → generating|direct|silent → finalizing → completed|failed|cancelled`；投递另记 `delivered|unknown`，generated ≠ delivered。
 崩溃恢复：只自动恢复可证明无副作用且 deadline/上下文仍有效的工作；发送结果未知/工具已执行未确认/Event handle 失效 → 待判定，禁止自动重放。
 回退：不在超时后把同事件交给旧引擎重跑；回退经 drain/fence/epoch 在后续安全接入点切换。

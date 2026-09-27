@@ -301,6 +301,11 @@ class RuntimeFacade:
 _shared_facade: "RuntimeFacade | None" = None
 
 
+def peek_shared_facade() -> "RuntimeFacade | None":
+    """只读窥探：返回已创建的共享 facade，不触发懒创建（状态面用）。"""
+    return _shared_facade
+
+
 def get_shared_facade() -> RuntimeFacade:
     """进程内共享 facade（懒创建）；provider 默认走真实 CHAT 角色后端。"""
     global _shared_facade

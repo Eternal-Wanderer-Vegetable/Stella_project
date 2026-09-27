@@ -109,3 +109,21 @@ async def test_direct_and_silent_zero_provider(tmp_path):
         assert h.provider_calls == []
     finally:
         await h.stop()
+
+
+async def test_proactive_at_instruction_first_through_facade(tmp_path):
+    """M6：主动 @ 的指令前置语义经 facade 保持（与冻结 oracle 同源）。"""
+    from core.context import ChatContext
+
+    h = harness.RuntimeHarness(tmp_path)
+    try:
+        await h.start()
+        ctx = ChatContext(
+            user_id=2, group_id=1, msg_id=0,
+            message="说出那句确认的话",
+            trigger="reply", intent="proactive_at",
+        )
+        await h.facade.submit_turn("qq:1", h.pipeline, ctx)
+        assert h.provider_calls[0].startswith("说出那句确认的话")
+    finally:
+        await h.stop()

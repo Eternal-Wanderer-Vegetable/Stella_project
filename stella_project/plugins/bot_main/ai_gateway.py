@@ -268,6 +268,27 @@ pipeline.system_prompt_resolver = _space_system_prompt
 # 加载插件目录下所有扩展（扩展可再向 pipeline 注册钩子/资源）
 load_extensions(pipeline, EXTENSIONS_DIR)
 
+
+async def _run_turn_via_engine(group_id: int, ctx: ChatContext) -> ChatContext:
+    """按 ``STELLA_RUNTIME`` 选择轮次执行引擎（计划修订 v2）。
+
+    legacy=现行 ``Pipeline.run``；native=facade 进程内执行器（prepare/
+    finalize 复用同一条管线，生成是进程内 provider 调用）。deadline 与
+    legacy 的单次生成超时对齐（LLM_TIMEOUT，超时都走兜底文案，BC-5）。
+    主动发言与对话共用 ``qq:{group_id}`` 会话键——两者本就竞争同一群
+    会话，facade 锁嵌在群锁内，互斥语义与 legacy 一致。
+    """
+    import config as _config
+
+    if _config.RUNTIME_MODE == "native":
+        from core.runtime.facade import ensure_shared_facade_started
+
+        facade = await ensure_shared_facade_started()
+        return await facade.submit_turn(
+            f"qq:{group_id}", pipeline, ctx, deadline=LLM_TIMEOUT
+        )
+    return await pipeline.run(ctx)
+
 # 本地状态接口：挂在 NoneBot 已有的 ASGI app 上（不新增端口）。
 # 放在扩展加载之后：link_status 来自扩展（虽是延迟导入，顺序清晰些更好）。
 # 注册失败只告警——状态接口是加分项，缺了只是 GUI 少一块信息，不该阻断启动。
@@ -581,17 +602,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
-            import config as _config
-
-            if _config.RUNTIME_MODE == "native":
-                # native 模式（计划修订 v2）：轮次经 facade——prepare/finalize
-                # 仍走本管线（同批钩子），生成为进程内 provider 调用。
-                from core.runtime.facade import ensure_shared_facade_started
-
-                facade = await ensure_shared_facade_started()
-                ctx = await facade.submit_turn(f"qq:{event.group_id}", pipeline, ctx)
-            else:
-                ctx = await pipeline.run(ctx)
+            ctx = await _run_turn_via_engine(event.group_id, ctx)
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
             raise
@@ -1814,7 +1825,7 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
             intent="proactive_at",
         )
         try:
-            ctx = await pipeline.run(ctx)
+            ctx = await _run_turn_via_engine(group_id, ctx)
         except Exception as e:
             logger.error(f"主动 @ Pipeline 异常: {e}")
             return False
@@ -2165,7 +2176,7 @@ async def _proactive_speak_for_group(
             gate_reasons=gate.reasons,
         )
         try:
-            ctx = await pipeline.run(ctx)
+            ctx = await _run_turn_via_engine(group_id, ctx)
         except Exception as e:
             logger.error(f"主动发言 Pipeline 异常: {e}")
             _log_participation_event(decision, "generation_skip", "pipeline_error")
@@ -2548,6 +2559,20 @@ async def _graceful_shutdown() -> None:
     if _scheduling_runtime is not None:
         with contextlib.suppress(Exception):
             await _scheduling_runtime.stop()
+    # native 运行时：先排空 facade 在途轮次（provider 调用收尾再落库/发送）。
+    # 与调度 worker 同理：超时未收尾的轮次由运行记录标记，不自动重放。
+    import config as _config
+
+    if _config.RUNTIME_MODE == "native":
+        from core.runtime import facade as _rt_facade
+
+        shared = _rt_facade.peek_shared_facade()
+        if shared is not None:
+            with contextlib.suppress(Exception):
+                await shared.drain()
+            with contextlib.suppress(Exception):
+                await shared.stop()
+
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions
 

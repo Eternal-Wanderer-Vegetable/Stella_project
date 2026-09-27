@@ -1774,3 +1774,20 @@ GitNexus 可使用 `node .gitnexus/run.cjs`；本次已验证的替代 runner �
 - [ ] 相关现有测试与新增测试通过；全量CI、必要前端/Rust构建通过；GitNexus提交检查无未处理partial/truncated。
 - [ ] 旧引擎退役、兼容facade责任明确；架构、补丁维护、部署、诊断与回退文档完成。
 - [ ] 没有引入Coding Agent、子Agent执行器或新增自主行为；这些另立计划。
+
+### R.5 切换与退役清单（M9，待负责人实测后执行）
+
+前置：负责人按「一并实测」完成真实部署下的 native 模式验证（QQ @对话 / WebChat / 主动 @ / 主动插话 / 定时任务）。
+
+切换步骤（每步可独立回退）：
+1. `STELLA_RUNTIME=native` 灰度运行（.env，重启生效）→ 观察 `/stella/status` 的 `chat_engine` 与 `logs`。
+2. 全量测试 + oracle 逐字节复核（`pytest tests/runtime/test_legacy_reference_traces.py`）。
+3. 默认切换：config/settings.py `RUNTIME_MODE` 默认值 legacy→native，`RUNTIME_MODE` 注释与 .env.example 同步。
+4. 实机再验证一个完整调度周期（含到期补跑/投递/UNKNOWN）。
+
+退役步骤（确认稳定后）：
+- 删除 ai_gateway `_run_turn_via_engine` 的 legacy 分支与 `pipeline.run` 编排路径、`webui/chat_ingress` 的 legacy 分支；
+- `core/pipeline.py` 保留为兼容 facade（钩子注册面），删除其内不再可达的 legacy 分支语义；
+- 保留：M0 oracle、behavior-contract、`tests/runtime/`（基准永不过期）。
+
+回退触发（任一即切回 `STELLA_RUNTIME=legacy` 并告警）：重复发送、串空间/串会话、丢任务、调用次数异常增加、未解释的 prompt 差异、预算静默缺失。

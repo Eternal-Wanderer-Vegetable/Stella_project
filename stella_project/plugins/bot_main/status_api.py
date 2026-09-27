@@ -160,6 +160,7 @@ def build_payload(
     capabilities: dict | None = None,
     runtime_status: dict | None = None,
     skills: dict | None = None,
+    chat_engine: dict | None = None,
 ) -> dict:
     """组装状态响应。
 
@@ -196,7 +197,25 @@ def build_payload(
     }
     if runtime_status is not None:
         payload["runtime"] = runtime_status
+    if chat_engine is not None:
+        # 对话引擎面（计划修订 v2）：mode/keys/inflight——只有结构化字段，
+        # 不含任何会话内容（与上方的泄漏面约束同一纪律）。
+        payload["chat_engine"] = chat_engine
     return payload
+
+
+def _chat_engine() -> dict | None:
+    """对话引擎快照（模式/会话数/在途）：native 未启动时给模式占位。"""
+    try:
+        import config as _config
+        from core.runtime import facade as _rt_facade
+
+        shared = _rt_facade.peek_shared_facade()
+        if shared is not None:
+            return shared.health()
+        return {"mode": _config.RUNTIME_MODE, "keys": [], "inflight": 0}
+    except Exception:
+        return None
 
 
 def collect_status() -> dict:
@@ -243,6 +262,7 @@ def collect_status() -> dict:
         capabilities=_capabilities(),
         runtime_status=runtime_status,
         skills=_skills(),
+        chat_engine=_chat_engine(),
     )
 
 
