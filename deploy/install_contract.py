@@ -27,6 +27,9 @@ INSTALL_CONTRACT_VERSION = 1
 PAYLOAD_MODE_FILENAME = ".stella-payload-mode"
 #: release 元数据文件（安装树根；由构建期写入，安装/诊断侧只读）。
 RELEASE_METADATA_FILENAME = ".stella-release-metadata.json"
+#: 版本化布局开关标记（S11 Phase 2 双轨）：文件存在 = POSTINSTALL 把程序
+#: 文件搬入 app\<版本>\ 并写激活记录；不存在 = 现状布局逐字节不变。
+VERSIONED_LAYOUT_FILENAME = ".stella-versioned-layout"
 
 PAYLOAD_MODE_ONLINE = "online"
 PAYLOAD_MODE_OFFLINE = "offline"
@@ -115,6 +118,7 @@ __all__ = [
     "PAYLOAD_MODE_OFFLINE",
     "PAYLOAD_MODE_ONLINE",
     "RELEASE_METADATA_FILENAME",
+    "VERSIONED_LAYOUT_FILENAME",
     "InstallOutcome",
     "exit_code_for",
     "read_payload_mode",

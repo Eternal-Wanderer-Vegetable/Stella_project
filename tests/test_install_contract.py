@@ -218,6 +218,38 @@ def test_stage_offline_requires_manifest_and_declares_mode(tmp_path):
     assert (output / "offline" / "MANIFEST.json").is_file()
 
 
+def test_stage_versioned_layout_is_opt_in(tmp_path):
+    """S11 Phase 2 双轨：显式开关才写标记与 launcher；默认零改动。"""
+    from scripts.build_release_package import stage_installer_resources
+
+    source = _source_tree(tmp_path)
+    launcher = source / "launcher-bin" / "StellaLauncher.exe"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_bytes(b"MZ")
+
+    # 默认关：无标记、无 launcher
+    plain = tmp_path / "plain"
+    stage_installer_resources(source, plain, "oneclick-python")
+    assert not (plain / install_contract.VERSIONED_LAYOUT_FILENAME).exists()
+    assert not (plain / "launcher").exists()
+
+    # 显式开：标记 + launcher 进负载
+    versioned = tmp_path / "versioned"
+    stage_installer_resources(
+        source, versioned, "oneclick-python",
+        versioned_layout=True, launcher_exe=launcher,
+    )
+    assert (versioned / install_contract.VERSIONED_LAYOUT_FILENAME).is_file()
+    assert (versioned / "launcher" / "StellaLauncher.exe").is_file()
+
+    # 开关缺 launcher → 硬失败
+    with pytest.raises(ValueError, match="launcher_exe"):
+        stage_installer_resources(
+            source, tmp_path / "broken", "oneclick-python",
+            versioned_layout=True,
+        )
+
+
 def test_stage_writes_release_metadata_with_runtime_fingerprint(tmp_path):
     from scripts.build_release_package import stage_installer_resources
 

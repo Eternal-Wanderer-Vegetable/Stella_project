@@ -15,6 +15,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from deploy.install_contract import (
     PAYLOAD_MODE_OFFLINE,
     PAYLOAD_MODE_ONLINE,
+    VERSIONED_LAYOUT_FILENAME,
     write_payload_mode,
     write_release_metadata,
 )
@@ -277,6 +278,8 @@ def stage_installer_resources(
     offline_payload: Path | None = None,
     release_version: str | None = None,
     build_id: str | None = None,
+    versioned_layout: bool = False,
+    launcher_exe: Path | None = None,
 ) -> Path:
     """Stage the allowlisted program tree embedded by the Tauri installer."""
     profile = load_profile(profile_id)
@@ -337,6 +340,20 @@ def stage_installer_resources(
                 bundled_catalog.read_bytes()
             ).hexdigest()
         write_release_metadata(output, metadata)
+    # 版本化布局双轨（S11 Phase 2）：显式传入 launcher 才写开关标记并把
+    # launcher 带进负载；默认关 = 安装行为与现状逐字节一致。
+    if versioned_layout:
+        if launcher_exe is None:
+            raise ValueError("versioned_layout 需要同时提供 launcher_exe")
+        launcher_exe = Path(launcher_exe).resolve()
+        if not launcher_exe.is_file():
+            raise FileNotFoundError(f"launcher exe 不存在：{launcher_exe}")
+        target = output / "launcher" / "StellaLauncher.exe"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(launcher_exe, target)
+        (output / VERSIONED_LAYOUT_FILENAME).write_text(
+            "1\n", encoding="utf-8"
+        )
     return output
 
 
@@ -361,6 +378,10 @@ def main() -> int:
                         help="写入安装契约 release 元数据（stage-resources 模式）")
     parser.add_argument("--build-id",
                         help="构建标识（CI run id；随 release 元数据写入）")
+    parser.add_argument("--versioned-layout", action="store_true",
+                        help="写入版本化布局开关标记（S11 Phase 2 双轨，默认关）")
+    parser.add_argument("--launcher-exe", type=Path,
+                        help="随包 launcher exe（--versioned-layout 必需）")
     args = parser.parse_args()
     if args.offline_payload is not None and not args.stage_resources:
         parser.error("--offline-payload 只能与 --stage-resources 搭配")
@@ -368,12 +389,16 @@ def main() -> int:
         parser.error("--artifact-name 只适用于 oneclick profile")
     if args.build_id is not None and args.release_version is None:
         parser.error("--build-id 需要与 --release-version 搭配")
+    if args.versioned_layout and args.launcher_exe is None:
+        parser.error("--versioned-layout 需要与 --launcher-exe 搭配")
     if args.stage_resources is not None:
         stage_installer_resources(
             args.source, args.stage_resources, args.profile,
             offline_payload=args.offline_payload,
             release_version=args.release_version,
             build_id=args.build_id,
+            versioned_layout=args.versioned_layout,
+            launcher_exe=args.launcher_exe,
         )
         return 0
     if args.profile.startswith("oneclick-"):
