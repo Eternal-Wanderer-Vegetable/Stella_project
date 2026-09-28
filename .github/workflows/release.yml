@@ -269,6 +269,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 显式 setup-python（WP06）：不依赖 runner 的默认 Python——runner 镜像
+      # 升级换掉默认版本时，staging 脚本会在用户机器之外先炸一次。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       # dashboard 产物必须在「准备 OneClick 内嵌程序资源」之前到位：
       # staging 的 webui/dist 兜底读 desktop/dashboard-dist，晚于 staging 就
       # 会打出面板整页缺失的安装包（v5.0.0 离线包实测，2026-09-25）。
@@ -380,16 +386,24 @@ jobs:
           $tauri = $tauri -replace '(?m)"version": "[^"]+"', ('"version": "' + $version + '"')
           Set-Content 'desktop/src-tauri/tauri.conf.json' $tauri -NoNewline
 
-      - name: 安装 Tauri CLI
+      # 工具链锁定（WP06）：NSIS 模板/插件随 tauri-cli 版本变化——飘一个
+      # 小版本就可能改变 .nsi 结构与 hook 时序。精确版本来自
+      # release_assets/toolchain.json，升级必须走独立可审阅的变更。
+      - name: 安装 Tauri CLI（精确锁定版本）
         shell: pwsh
-        run: cargo install tauri-cli --version '^2' --locked
+        run: |
+          $toolchain = Get-Content 'release_assets/toolchain.json' -Raw | ConvertFrom-Json
+          cargo install tauri-cli --version $toolchain.tauri_cli --locked
+          if ($LASTEXITCODE -ne 0) { throw "tauri-cli 安装失败（退出码 $LASTEXITCODE）" }
 
       - name: 构建 OneClick NSIS 安装器
         shell: pwsh
         working-directory: desktop/src-tauri
         env:
           STELLA_BUILD_PROFILE: ${{ matrix.profile }}
-        run: cargo tauri build --bundles nsis
+        run: |
+          cargo tauri build --bundles nsis
+          if ($LASTEXITCODE -ne 0) { throw "tauri build 失败（退出码 $LASTEXITCODE）" }
 
       - name: 上传安装器
         uses: actions/upload-artifact@v7
@@ -406,13 +420,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: 构建 Rust memory wheel
+      - name: 构建 Rust memory wheel（maturin 精确锁定）
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip maturin
+          $toolchain = Get-Content 'release_assets/toolchain.json' -Raw | ConvertFrom-Json
+          python -m pip install --upgrade "pip" "maturin==$($toolchain.maturin)"
+          if ($LASTEXITCODE -ne 0) { throw "pip install maturin 失败（退出码 $LASTEXITCODE）" }
           New-Item -ItemType Directory -Force -Path dist\rust-wheel | Out-Null
           maturin build --release --manifest-path memory_rust/native/Cargo.toml `
             --out dist\rust-wheel
+          if ($LASTEXITCODE -ne 0) { throw "maturin build 失败（退出码 $LASTEXITCODE）" }
           $wheels = @(Get-ChildItem dist\rust-wheel\*.whl)
           if ($wheels.Count -ne 1) {
             throw "Rust wheel 构建必须得到恰好一个 wheel"

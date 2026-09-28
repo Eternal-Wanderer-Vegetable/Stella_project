@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "_comment": "发布工具链锁定（WP06）。全部值为精确版本或完整提交——CI 与本地构建都从这里读取；升级走独立、可审阅的变更，不随 rebuild 漂移。",
+  "python": "3.12.10",
+  "tauri_cli": "2.12.0",
+  "rust_toolchain": "stable",
+  "maturin": "1.15.0",
+  "node": "24",
+  "pnpm": "10",
+  "llama_cpp_commit": "4a89937354190cef5a97baf8eeb17336105eb72d",
+  "embedding_commit": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
+  "_notes": {
+    "python": "必须与两份壳 python.rs 的 PY_VER / PY_SHA256 及 start.bat 同步（构建期一致性校验见 build_release_package._runtime_fingerprint）。",
+    "embedding_commit": "Qwen/Qwen3-Embedding-0.6B-GGUF 的固定提交；该提交下 Qwen3-Embedding-0.6B-Q8_0.gguf 的 LFS sha256 与 product profile 的 sha256 字段逐字节一致（2026-09-28 经 HF API 核实）。",
+    "tauri_cli": "crates.io 2.x 最新稳定版（2026-09-28 核实）。升级 = 改这里 + 跑完整安装矩阵。",
+    "maturin": "PyPI 当前稳定版（2026-09-28 核实）。"
+  }
+}

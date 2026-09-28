@@ -23,9 +23,13 @@ ONECLICK_DEFAULT_EMBEDDING = {
     "id": "qwen3-embedding-0.6b",
     "version": "q8_0",
     "filename": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+    # 钉在 HF 提交 370f27d（release_assets/toolchain.json 的 embedding_commit）：
+    # 该提交下文件的 LFS sha256 与下方 sha256 逐字节一致（2026-09-28 经 HF API
+    # 核实）。/resolve/main 是浮动引用，重装/换机会拿到不同内容——禁止。
     "source": (
         "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/"
-        "resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf"
+        "resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/"
+        "Qwen3-Embedding-0.6B-Q8_0.gguf"
     ),
     "license": "Apache-2.0",
     "sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
