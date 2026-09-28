@@ -140,9 +140,20 @@ class ChatContext:
     raw_event: Any = field(default=None, repr=False)
     bot: Any = field(default=None, repr=False)
 
+    # ---- 社交闭环身份（计划 §6.1） ----
+    # trace_id：接入入口在硬门禁前创建，未进入 Facade 的静默决策也持有它；
+    # turn_id：RuntimeFacade 分配并写入（跨进程桥两侧一致），未进入 Facade 的
+    # 上下文为空串。两者都是安全标量，可进投影；raw_event/bot 仍然永不过桥。
+    trace_id: str = ""
+    turn_id: str = ""
+    # 本轮 social 插槽的预算快照（选中/注入/裁剪明细，计划 §6.5）：
+    # JSON 字符串，由 core.social.context_builder 写入，供追踪与审计。
+    social_context_snapshot: str = ""
+
     # ---- Cortico 迁移：跨进程 JSON 投影（计划 §6.2/§6.4） ----
     # 投影 schema 版本：字段集变更时 +1；旧 runtime store 按版本向后读取。
-    PROJECTION_SCHEMA_VERSION = 1
+    # v2：新增 trace_id / turn_id（社交闭环身份贯通，计划 §6.1）。
+    PROJECTION_SCHEMA_VERSION = 2
     # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
     # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
     # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
@@ -150,6 +161,7 @@ class ChatContext:
         # 输入标识
         "user_id", "group_id", "msg_id", "message", "source_kind",
         "group_shared_space", "trigger", "intent", "image_sources",
+        "trace_id", "turn_id",
         # pre/prepare 侧
         "short_term", "user_profile", "preferred_address", "memories_for_prompt",
         "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",

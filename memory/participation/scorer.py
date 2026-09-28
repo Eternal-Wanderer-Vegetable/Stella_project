@@ -39,6 +39,11 @@ class ScoreBreakdown:
     repetition_penalty: float = 0.0
     expired_penalty: float = 0.0
     final_score: float = 0.0
+    # ── 发言时机补充抑制项（计划 §6.9 层 2，weights.timing 未启用时恒 0） ──
+    speech_share: float | None = None      # 窗口内 bot 逻辑发言占比
+    share_penalty: float = 0.0
+    novelty: float | None = None           # 与最近主动发言的本地 n-gram 相似度
+    novelty_penalty: float = 0.0
     velocity_level: str = "LOW"
     velocity_count: int = 0
     topic_status: str = "NEW"
@@ -54,8 +59,14 @@ class ScoreBreakdown:
             "silence_bonus": round(self.silence_bonus, 1),
             "recent_speech_penalty": round(self.recent_speech_penalty, 1),
             "velocity_penalty": round(self.velocity_penalty, 1),
-            "repetition_penalty": round(self.repetition_penalty, 1),
-            "expired_penalty": round(self.expired_penalty, 1),
+        "repetition_penalty": round(self.repetition_penalty, 1),
+        "expired_penalty": round(self.expired_penalty, 1),
+        "share_penalty": round(self.share_penalty, 1),
+        "novelty_penalty": round(self.novelty_penalty, 1),
+        "speech_share": (
+            round(self.speech_share, 3) if self.speech_share is not None else None
+        ),
+        "novelty": round(self.novelty, 3) if self.novelty is not None else None,
             "final_score": round(self.final_score, 1),
             "velocity_level": self.velocity_level,
             "velocity_count": self.velocity_count,
@@ -69,6 +80,61 @@ class ScoreBreakdown:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
+
+
+def compose_final_score(breakdown: "ScoreBreakdown") -> float:
+    """唯一的最终分合成公式（计划 §6.9：scorer 与 embedding 增强路径共用）。
+
+    两路评分此前各自手写 positives - negatives，改一处漏一处的风险真实存在；
+    收口后 embedding 开/关两条路径保证同一公式、同一截断。
+    """
+    positives = (
+        breakdown.relevance
+        + breakdown.opportunity
+        + breakdown.social_opportunity
+        + breakdown.topic_involvement
+        + breakdown.silence_bonus
+    )
+    negatives = (
+        breakdown.recent_speech_penalty
+        + breakdown.velocity_penalty
+        + breakdown.repetition_penalty
+        + breakdown.expired_penalty
+        + breakdown.share_penalty
+        + breakdown.novelty_penalty
+    )
+    return _clamp(positives - negatives, 0.0, 100.0)
+
+
+def _share_penalty(share: float | None, tw) -> float:
+    """发言占比惩罚：≤target 不罚，线性升至 strong 达 max（[assumed] shadow 初值）。"""
+    if share is None or share <= tw.share_target:
+        return 0.0
+    span = max(1e-6, tw.share_strong - tw.share_target)
+    t = min(1.0, (share - tw.share_target) / span)
+    return t * tw.share_penalty_max
+
+
+def _novelty_penalty(novelty: float | None, tw) -> float:
+    """新信息量惩罚：与最近主动发言的 n-gram 相似度过高 → 降权（零模型调用）。"""
+    if novelty is None or novelty < tw.novelty_similar_at:
+        return 0.0
+    span = max(1e-6, 1.0 - tw.novelty_similar_at)
+    t = min(1.0, (novelty - tw.novelty_similar_at) / span)
+    return t * tw.novelty_penalty_max
+
+
+def ngram_jaccard(a: str, b: str, n: int = 3) -> float:
+    """字符 n-gram Jaccard 相似度（本地、零模型；manager 计算 novelty 用）。"""
+
+    def grams(t: str) -> set[str]:
+        t = (t or "").strip()
+        return {t[i : i + n] for i in range(max(0, len(t) - n + 1))}
+
+    ga, gb = grams(a), grams(b)
+    if not ga or not gb:
+        return 0.0
+    return len(ga & gb) / len(ga | gb)
 
 
 def _relevance(
@@ -214,8 +280,15 @@ def score(
     *,
     similarity: SimilarityFn | None = None,
     now: float | None = None,
+    speech_share: float | None = None,
+    novelty: float | None = None,
 ) -> ScoreBreakdown:
-    """计算一次完整评分。不抛异常；embedding 回调失败时静默降级为关键词。"""
+    """计算一次完整评分。不抛异常；embedding 回调失败时静默降级为关键词。
+
+    ``speech_share``（窗口内 bot 逻辑发言占比）与 ``novelty``（当前消息与
+    Stella 最近主动发言的 n-gram 相似度）由调用方从 ConversationState 计算；
+    weights.timing 未启用时对应惩罚恒 0（计划 §6.9 层 2）。
+    """
     now = now if now is not None else time.time()
 
     try:
@@ -256,19 +329,11 @@ def score(
     breakdown.stella_involved = bool(state.topic is not None and state.topic.stella_involved)
     if state.speak_stats.last_spoke_at > 0:
         breakdown.seconds_since_spoke = now - state.speak_stats.last_spoke_at
-
-    positives = (
-        breakdown.relevance
-        + breakdown.opportunity
-        + breakdown.social_opportunity
-        + breakdown.topic_involvement
-        + breakdown.silence_bonus
-    )
-    negatives = (
-        breakdown.recent_speech_penalty
-        + breakdown.velocity_penalty
-        + breakdown.repetition_penalty
-        + breakdown.expired_penalty
-    )
-    breakdown.final_score = _clamp(positives - negatives, 0.0, 100.0)
+    tw = getattr(tables.weights, "timing", None)
+    if tw is not None and getattr(tw, "enabled", False):
+        breakdown.speech_share = speech_share
+        breakdown.share_penalty = _share_penalty(speech_share, tw)
+        breakdown.novelty = novelty
+        breakdown.novelty_penalty = _novelty_penalty(novelty, tw)
+    breakdown.final_score = compose_final_score(breakdown)
     return breakdown

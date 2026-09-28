@@ -95,20 +95,67 @@ def on_reply_sent(
     message: str,
     lines: list[str],
     trigger: str,
+    turn_id: str = "",
+    trace_id: str = "",
+    intent: str = "",
+    source_msg_id: int = 0,
 ) -> None:
     """登记一次发言并派生异步学习任务。同步部分只有一次 DB 插入。
 
     :param message: 触发本次发言的用户消息（主动发言传空串——罐头指令
         不是用户的表达，不该进表达样本）
-    :param lines: Stella 实际发出的台词（结算时判断「复用表达」的对照物）
-    :param trigger: reply / proactive（写进 reply_effects 供分层统计）
+    :param lines: Stella **确认送达**的台词（结算时判断「复用表达」的对照物；
+        partial 发送时只含已发片段）
+    :param trigger: reply / proactive（写进效果行供分层统计）
+    :param turn_id: facade 分配的轮次 ID；社交效果观察（计划 §6.6）接管
+        结算时用它从 social_deliveries 反查投递事实
+    :param trace_id: 接入入口的追踪 ID（效果行与 trace 贯通用）
+
+    结算双路分流（计划 §6.2 迁移步骤 5：灰度时不同时运行两套正向学习写入）：
+    社交模式开启 → 本函数只开 ``social_effects`` 观察行 + 持久作业，旧
+    reply_effects 路径停写；关闭 → 走原有延迟结算，行为不变。
     """
     if not EXPRESSION_LEARNING_ENABLED:
         return
     try:
         _ensure_tables()
         if trigger == "reply" and (message or "").strip():
-            _spawn(_harvest_expression(group_shared_space, user_id, message))
+            from memory.reply_effect_service import social_effects_enabled
+
+            if social_effects_enabled() and source_msg_id and group_id:
+                # 证据化表达采集（计划 §6.3）：候选挂在标准事件上，计数可复现
+                from core.social.contracts import ConversationScope, MessageEvidence
+                from memory import expression_selector, social_store
+
+                scope = ConversationScope.for_qq(group_id)
+                ev_id = social_store.find_event_id(
+                    scope, str(source_msg_id),
+                    fallback=MessageEvidence(
+                        scope=scope, platform_message_id=str(source_msg_id),
+                        user_id=str(user_id), source_kind="AT_MENTION",
+                        text_excerpt=message[:200], trace_id=trace_id, turn_id=turn_id,
+                    ),
+                )
+                expression_selector.note_expression_candidates(
+                    scope, message, event_id=ev_id, author_user=str(user_id)
+                )
+            else:
+                _spawn(_harvest_expression(group_shared_space, user_id, message))
+        from memory.reply_effect_service import open_effect, social_effects_enabled
+
+        if social_effects_enabled():
+            if turn_id:
+                open_effect(
+                    group_id=group_id,
+                    user_id=user_id,
+                    trigger=trigger,
+                    turn_id=turn_id,
+                    trace_id=trace_id,
+                    intent=intent,
+                )
+            # 没有 turn_id 的调用（旧测试/未走 facade）没有投递事实可依，
+            # 不伪造效果行——表达采样仍然生效
+            return
         effect_id = store.add_reply_effect(
             group_shared_space=group_shared_space,
             group_id=group_id,
@@ -124,15 +171,35 @@ def on_reply_sent(
         logger.debug(f"[Expression] 登记发言学习失败（跳过）: {e}")
 
 
-def note_passive_message(group_shared_space: str, user_id: int, text: str) -> None:
-    """被动消息的黑话计数（静默监听器热路径调用，纯内存操作）。
+def note_passive_message(
+    group_shared_space: str, user_id: int, text: str, *, group_id: int = 0, event_id: str = ""
+) -> None:
+    """被动消息的黑话信号采集（静默监听器热路径调用）。
 
-    命中数达到 JARGON_HIT_THRESHOLD 才碰一次数据库（upsert 累加）。
+    双路分流（计划 §6.2：禁止对新表旧逻辑双写）——社交模式接管时：
+    每个 hit 落一条 occurrence 证据（按 event_id 幂等，重复转发/同一消息
+    不增加独立证据），词形计数与作者数从证据表可复现地重建；未接管时走
+    原进程内计数器 + 门槛 flush，行为不变。
     """
     if not EXPRESSION_LEARNING_ENABLED:
         return
     try:
-        for term in _extract_jargon_terms(text or ""):
+        terms = _extract_jargon_terms(text or "")
+        if not terms:
+            return
+        from memory.reply_effect_service import social_effects_enabled
+
+        if social_effects_enabled() and event_id and group_id:
+            from core.social.contracts import ConversationScope
+            from memory import jargon_service
+
+            scope = ConversationScope.for_qq(group_id)
+            for term in terms:
+                jargon_service.note_occurrence(
+                    scope, term, event_id=event_id, author_user=str(user_id), excerpt=text or ""
+                )
+            return
+        for term in terms:
             _bump_jargon(group_shared_space, term, user_id)
     except Exception as e:
         logger.debug(f"[Expression] 黑话计数失败（跳过）: {e}")
@@ -298,9 +365,19 @@ def _bump_jargon(group_shared_space: str, term: str, user_id: int) -> None:
 
 
 def sweep_pending_effects() -> int:
-    """补结算超窗未结算的回复效果行（进程重启后的兜底）。返回结算行数。"""
+    """补结算超窗未结算的回复效果行（进程重启后的兜底）。返回结算行数。
+
+    社交效果观察接管时，补偿统一走持久作业队列（social_worker.tick），
+    旧的 monotonic sweep 不再产生结算——它的时间基准本就不能跨重启比较。
+    """
     if not EXPRESSION_LEARNING_ENABLED:
         return 0
+    from memory.reply_effect_service import social_effects_enabled
+
+    if social_effects_enabled():
+        from memory.social_worker import tick
+
+        return int(tick().get("done", 0))
     try:
         _ensure_tables()
         cutoff = time.monotonic() - REPLY_EFFECT_WINDOW_SECONDS - 60.0

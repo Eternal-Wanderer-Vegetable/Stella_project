@@ -1498,6 +1498,25 @@ JARGON_CONFIRM_THRESHOLD = _env_int("JARGON_CONFIRM_THRESHOLD", 12)
 # 进程内黑话计数器的容量上限（防止长聊天记录把内存吃穿）。
 JARGON_TRACKER_MAX_TERMS = _env_int("JARGON_TRACKER_MAX_TERMS", 4096)
 
+# ---------- 社交学习与反馈闭环（功能开关，计划 §7） ----------
+# 总开关默认**关闭**：旁表不写、社交观察不启动，保证既有部署零行为变化。
+# 灰度上线顺序见计划 §7（测试 → 一群 shadow ≥7 天 → 黑话 → 表达 → 新时机）。
+SOCIAL_ENABLED = _env_bool("SOCIAL_ENABLED", "false")
+# off=全关 / shadow=只记录候选与观察，不改实际 prompt 与发送 / active=允许注入。
+# 影子模式已经产生投递回执与效果观察事实（它们不修改任何发送行为）。
+SOCIAL_MODE = _env("SOCIAL_MODE", "off")
+# 表达注入与黑话注入独立开关（shadow 模式下强制视为关闭）。
+SOCIAL_EXPRESSION_INJECT = _env_bool("SOCIAL_EXPRESSION_INJECT", "false")
+# 同一表达在最近 N 次本群回复中用过就不再注入（防复读，计划 §6.3.5）。
+SOCIAL_EXPRESSION_RECENT_TURNS = _env_int("SOCIAL_EXPRESSION_RECENT_TURNS", 10)
+SOCIAL_JARGON_INJECT = _env_bool("SOCIAL_JARGON_INJECT", "false")
+# 后台学习模型：默认关（共享本地端点时不与前台抢资源，计划 §6.7）。
+SOCIAL_BACKGROUND_LLM_ENABLED = _env_bool("SOCIAL_BACKGROUND_LLM_ENABLED", "false")
+# 效果分数自适应权重：默认关，须先满足样本门槛并人工抽检（计划 §6.6）。
+SOCIAL_EFFECTS_ADAPT_WEIGHTS = _env_bool("SOCIAL_EFFECTS_ADAPT_WEIGHTS", "false")
+# 详细追踪的作用域列表（逗号分隔群号；空=只存 metadata 档，计划 §6.8）。
+SOCIAL_TRACE_DETAIL_SCOPES = _env("SOCIAL_TRACE_DETAIL_SCOPES", "")
+
 # ============================================================
 # 独立知识库（knowledge/ 子系统）
 # ============================================================
@@ -1687,6 +1706,18 @@ def validate_skills_config() -> list[str]:
     if SANDBOX_WORKSPACE_ROOT == ASTRBOT_PLUGINS_DIR:
         errors.append("SANDBOX_WORKSPACE_ROOT 不能与插件目录重合")
     return errors
+
+
+def _assert_social_config() -> None:
+    if SOCIAL_MODE not in ("off", "shadow", "active"):
+        raise SystemExit(
+            f"SOCIAL_MODE={SOCIAL_MODE!r} 非法（只允许 off/shadow/active），拒绝启动"
+        )
+    if SOCIAL_MODE != "off" and not SOCIAL_ENABLED:
+        raise SystemExit("SOCIAL_MODE 非 off 时必须同时打开 SOCIAL_ENABLED")
+
+
+_assert_social_config()
 
 
 def _assert_skills_config() -> None:

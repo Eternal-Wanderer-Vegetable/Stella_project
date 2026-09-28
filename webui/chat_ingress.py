@@ -66,6 +66,14 @@ def _resolve_pipeline():
 async def run_turn(message: str, username: str) -> dict:
     """跑一轮 WebChat 对话，返回 {lines, thought, ts}。"""
     from core.context import ChatContext
+    from core.social.contracts import (
+        DELIVERY_ACKNOWLEDGED,
+        ConversationScope,
+        DeliveryReceipt,
+        new_trace_id,
+        utc_now_iso,
+    )
+    from memory import social_store
     from memory.pre_processors import record_message
 
     _ensure_webchat_space()
@@ -77,6 +85,7 @@ async def run_turn(message: str, username: str) -> dict:
         source_kind="AT_MENTION",
         group_shared_space=WEBCHAT_SPACE,
         trigger="reply",
+        trace_id=new_trace_id(),
     )
     await record_message(ctx)
 
@@ -101,6 +110,26 @@ async def run_turn(message: str, username: str) -> dict:
                 group_shared_space=WEBCHAT_SPACE,
             )
         )
+    # server_emitted 投递事实（计划 §6.1）：面板对话的「服务端已产出回复」
+    # 与 QQ 平台 acknowledged 是两种投递语义，以 platform='webchat' 区分；
+    # 群社交效果学习默认只认 platform='qq'，WebChat 行不进入任何群归因。
+    if lines:
+        from config import SOCIAL_ENABLED
+
+        if SOCIAL_ENABLED:
+            scope = ConversationScope(platform="webchat", bot_id="", group_id=str(WEBCHAT_GROUP_ID))
+            for i, line in enumerate(lines):
+                social_store.record_delivery(
+                    DeliveryReceipt(
+                        trace_id=ctx.trace_id,
+                        turn_id=ctx.turn_id,
+                        part_index=i,
+                        status=DELIVERY_ACKNOWLEDGED,
+                        text=line,
+                        acknowledged_at_utc=utc_now_iso(),
+                        scope=scope,
+                    )
+                )
     return {"lines": lines, "thought": ctx.thought}
 
 
