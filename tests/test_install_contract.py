@@ -405,9 +405,16 @@ def test_release_workflow_resolves_version_once():
     # 且发布作业必须核对发布字节与验收字节一致。
     assert "install-test" in jobs, "缺少最终 EXE 安装验收作业"
     assert "install-test" in jobs["build"]["needs"], "发布作业不得绕过安装验收"
-    build_steps = json.dumps(jobs["build"]["steps"])
+    build_steps = json.dumps(jobs["build"]["steps"], ensure_ascii=False)
     assert "check_release_hashes.py" in build_steps, (
         "发布作业必须核对安装器字节与验收报告一致"
+    )
+    # WP14：发布清单 + 发布后回读校验
+    assert "build_release_manifest.py" in build_steps, (
+        "发布作业必须生成 release-manifest / SHA256SUMS"
+    )
+    assert "发布后回读校验" in build_steps, (
+        "tag 发布后必须从公开地址回读资产并逐字节核对"
     )
     install_test = jobs["install-test"]
     assert install_test["strategy"]["matrix"]["payload"] == ["online", "offline"]

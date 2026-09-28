@@ -894,6 +894,17 @@ jobs:
           python scripts/check_release_hashes.py \
             --reports install-reports --products dist/products --suffix .exe
 
+      # 发布清单（WP14）：全部资产绑定 SHA-256/大小；发布后从真实公开
+      # 地址回读逐字节核对，确认没有 404、HTML 错误页或缓存旧字节。
+      - name: 生成发布清单与 SHA256SUMS
+        run: |
+          set -e
+          python scripts/build_release_manifest.py \
+            --products dist/products \
+            --release-version "${{ needs.resolve-release.outputs.version }}" \
+            --build-id "${{ needs.resolve-release.outputs.build_id }}"
+          cat dist/products/SHA256SUMS.txt
+
       # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
       # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
       # 只发二进制会在 find_root 就失败（2026-09-08 bug_report：单独下载启动报错）。
@@ -974,18 +985,33 @@ jobs:
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
             gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
             gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" \
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
               --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}"
           fi
           echo "--- 当前 Release 资产 ---"
           gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
+
+      # WP14：发布后从真实公开下载地址回读全部资产，与发布清单逐字节核对
+      # ——拦住 404、HTML 错误页、CDN 旧缓存或上传截断。
+      - name: 发布后回读校验
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p published-check
+          gh release download "${RELEASE_REF}" -D published-check
+          python scripts/build_release_manifest.py \
+            --products dist/products --verify published-check
 
       # 手工触发的覆盖发布：仅当显式勾选 overwrite_release 时才触及 Releases，
       # 否则保持旧行为（仅上传 artifact，不污染 Releases 页面）。
@@ -1006,12 +1032,14 @@ jobs:
           if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
             gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
             gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ" \
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
               --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
             echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
