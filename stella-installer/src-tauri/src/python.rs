@@ -569,18 +569,38 @@ mod runtime_bootstrap {
         // 随包离线仓优先：get-pip.py 自带完整 pip wheel，配合 --no-index 全程零联网。
         // 校验或安装失败都回落在线路径（下载 get-pip → ensurepip 兜底），与
         // 不带离线仓时的安装包行为一致。
+        let offline_wheels_dir = offline_wheels(root);
         if offline_dir(root).join(OFFLINE_GET_PIP).is_file() {
             match verify_offline_file(root, OFFLINE_GET_PIP) {
                 Ok(path) => {
                     emit_progress(root, "正在从随包离线仓安装 pip…");
                     let script = path.to_string_lossy().into_owned();
-                    let args = [script.as_str(), "--no-warn-script-location", "--no-index"];
-                    match run(python, &args, root) {
-                        Ok(_) => return Ok(()),
-                        Err(e) => emit_progress(
+                    // --find-links 必须与 helper 同参（F13）：--no-index 时
+                    // "pip" 需求只能从随包 wheels 解析，缺了它 get-pip 必败、
+                    // 误导回在线路径。wheels 目录缺失时不进离线分支。
+                    if let Some(link_path) = offline_wheels_dir.as_ref() {
+                        let link = link_path.to_string_lossy().into_owned();
+                        let args = [
+                            script.as_str(),
+                            "--no-index",
+                            "--find-links",
+                            link.as_str(),
+                            "--no-input",
+                            "--disable-pip-version-check",
+                            "--no-warn-script-location",
+                        ];
+                        match run(python, &args, root) {
+                            Ok(_) => return Ok(()),
+                            Err(e) => emit_progress(
+                                root,
+                                &format!("随包离线 pip 安装失败，改用在线获取：{e}"),
+                            ),
+                        }
+                    } else {
+                        emit_progress(
                             root,
-                            &format!("随包离线 pip 安装失败，改用在线获取：{e}"),
-                        ),
+                            "随包离线仓缺少 wheels 目录，改用在线获取 pip",
+                        );
                     }
                 }
                 Err(e) => {

@@ -274,6 +274,9 @@ def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
     (install_root / "offline" / "wheels").mkdir()
     (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
     (install_root / ".stella-profile").write_text("oneclick-python", encoding="utf-8")
+    (install_root / "package-catalog-windows-amd64.json").write_text(
+        "{}", encoding="utf-8"
+    )
     (runtime / "python.exe").write_bytes(b"MZ")
     install_contract.write_payload_mode(install_root, "offline")
     monkeypatch.setattr(helper, "_run", lambda cmd, cwd: None)
@@ -450,8 +453,8 @@ def _catalog(tmp_path: Path):
     return catalog, files
 
 
-@pytest.mark.xfail(reason="F03: helper 缺 Rust wheel 装载与自检，GUI 首启会重复安装", strict=False)
 def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypatch):
+    """F03 修复：离线装载必须在 GUI 首启前完成 Rust wheel 装载与自检。"""
     helper = _load_helper()
     install_root = tmp_path / "install"
     runtime = install_root / "runtime"
@@ -460,8 +463,12 @@ def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypa
     offline.mkdir()
     (offline / "get-pip.py").write_text("# get-pip", encoding="utf-8")
     (offline / "wheels").mkdir()
+    (offline / "MANIFEST.json").write_text("{}", encoding="utf-8")
     (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
     (install_root / ".stella-profile").write_text("oneclick-rust", encoding="utf-8")
+    (install_root / "package-catalog-windows-amd64.json").write_text(
+        "{}", encoding="utf-8"
+    )
     (runtime / "python.exe").write_bytes(b"MZ")
     # 随包 Rust wheel（OneClick Rust 的资源树带 wheels/）
     wheel = install_root / "wheels" / "stella_memory_rust-1.0-cp312-cp312-win_amd64.whl"
@@ -549,8 +556,8 @@ def test_failed_run_retry_skips_healthy_components(tmp_path, monkeypatch):
     )
 
 
-@pytest.mark.xfail(reason="F07: $0 同时保存 FindFirst 句柄与 nsExec 退出码，FindClose 得到被覆盖值", strict=False)
 def test_hook_separates_find_handle_from_exit_code():
+    """F07 修复：FindFirst 句柄寄存器不得被 nsExec 的 Pop 复用。"""
     text = HOOK_PATH.read_text(encoding="utf-8")
     match = re.search(r"FindFirst \$(\w+) \$\w+", text)
     assert match, "POSTINSTALL 钩子必须用 FindFirst 定位 Python zip"
@@ -562,6 +569,42 @@ def test_hook_separates_find_handle_from_exit_code():
     assert re.search(rf"FindClose\s+\${handle}\b", text), (
         f"FindClose 必须关闭 FindFirst 的句柄 ${handle}"
     )
+
+
+def test_hook_requires_exactly_one_python_zip():
+    """通配符必须恰好命中一个 zip：0 个或多个都要 Abort，不解压「随便哪个」。"""
+    text = HOOK_PATH.read_text(encoding="utf-8")
+    assert "FindNext" in text, "必须用 FindNext 检查是否存在第二个匹配"
+    assert text.count("Abort") >= 3, "缺 zip / 多 zip / 校验失败都必须 Abort"
+
+
+def test_hook_verifies_python_zip_hash_before_extraction():
+    """解压前校验：期望哈希来自构建期文件，certutil+find 系统工具完成校验。"""
+    text = HOOK_PATH.read_text(encoding="utf-8")
+    hash_check_pos = text.find("python-zip.sha256")
+    tar_pos = text.find("tar.exe")
+    assert hash_check_pos != -1, "必须读取构建期写下的 python-zip.sha256"
+    assert tar_pos != -1
+    assert hash_check_pos < tar_pos, "哈希校验必须发生在 tar 解压之前"
+    assert "certutil" in text and "find /i" in text, (
+        "校验必须用系统自带 certutil + find（安装期不依赖随包工具）"
+    )
+
+
+def test_offline_payload_writes_nsis_readable_zip_hash(tmp_path, monkeypatch):
+    """python-zip.sha256 必须是恰好 64 位十六进制、无换行（NSIS FileRead 按行读）。"""
+    import scripts.build_offline_payload as payload_builder
+
+    payload = tmp_path / "payload"
+    payload.mkdir()
+    zip_path = payload / "python-3.12.10-embed-amd64.zip"
+    zip_path.write_bytes(b"fake-zip")
+    hash_path = payload_builder.write_python_zip_hash(payload, zip_path)
+    raw = hash_path.read_bytes()
+    assert len(raw) == 64
+    assert raw.decode("ascii").isalnum()
+    assert raw.decode("ascii").upper() == raw.decode("ascii")
+    assert raw == hashlib.sha256(b"fake-zip").hexdigest().upper().encode("ascii")
 
 
 @pytest.mark.xfail(reason="F09: 离线副本损坏静默回落在线，真离线时原始损坏原因被遮盖", strict=False)
@@ -603,11 +646,11 @@ def test_offline_corruption_fails_fast_without_silent_online_fallback(
     )
 
 
-@pytest.mark.xfail(reason="F13: GUI 离线 get-pip 未给 --find-links，与 helper 不一致", strict=False)
 def test_gui_offline_getpip_uses_find_links():
+    """F13 修复：GUI 离线 get-pip 必须与 helper 同参（--find-links）。"""
     text = GUI_PYTHON_RS.read_text(encoding="utf-8")
     branch = re.search(
-        r"verify_offline_file\(root, OFFLINE_GET_PIP\)([\s\S]{0,800}?)let get_pip",
+        r"verify_offline_file\(root, OFFLINE_GET_PIP\)([\s\S]{0,2000}?)let get_pip",
         text,
     )
     assert branch, "离线 get-pip 分支必须存在"

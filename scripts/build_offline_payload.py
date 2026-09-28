@@ -224,6 +224,18 @@ def install_browsers(browsers_dir: Path) -> str:
     raise SystemExit("playwright install 完成，但离线仓里找不到完整的 chromium_headless_shell-*")
 
 
+def write_python_zip_hash(payload: Path, python_zip: Path) -> Path:
+    """写 python-zip.sha256（64 位大写十六进制，**无换行**）。
+
+    NSIS POSTINSTALL 钩子在解压前用 `certutil | find` 校验运行时 zip：
+    NSIS 的 FileRead 按行读取，因此这个文件必须是恰好 64 个字符、
+    不带任何换行/空白后缀。
+    """
+    hash_path = payload / "python-zip.sha256"
+    hash_path.write_text(_sha256(python_zip).upper(), encoding="ascii")
+    return hash_path
+
+
 def write_manifest(output: Path, version: str, files: dict[str, Path]) -> None:
     manifest = {
         "schema_version": 1,
@@ -288,6 +300,7 @@ def main() -> int:
         python_zip.name: python_zip,
         "get-pip.py": get_pip,
     })
+    write_python_zip_hash(output, python_zip)
     total = sum(path.stat().st_size for path in output.rglob("*") if path.is_file())
     print(f"[payload] 完成：{output}（总计 {total} 字节，browsers revision={browsers_revision}）")
     return 0
