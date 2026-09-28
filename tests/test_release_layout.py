@@ -120,10 +120,20 @@ def test_oneclick_rust_downloads_wheel_before_tauri_build():
     installer = text[
         text.index("  build-installer:") : text.index("  build-rust-wheel:")
     ]
-    assert (
-        "needs: [build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload, build-dashboard]"
-        in installer
-    )
+    # needs 必须仍包含慢速 wheel 等四项前置（前置项可随管线演进增补——
+    # 如 resolve-release / publish-candidate 候选通道，S14——但已有依赖
+    # 不得静默消失，故逐项断言而非精确匹配整行）。
+    needs = installer[
+        installer.index("needs:") : installer.index("]", installer.index("needs:"))
+        + 1
+    ]
+    for job in (
+        "build-rust-wheel",
+        "build-oneclick-catalog-backend",
+        "build-offline-payload",
+        "build-dashboard",
+    ):
+        assert job in needs, f"build-installer 缺少前置依赖 {job}"
     download = installer.index("uses: actions/download-artifact@v8")
     prepare = installer.index("name: 准备 OneClick 内嵌程序资源")
     build = installer.index("name: 构建 OneClick NSIS 安装器")

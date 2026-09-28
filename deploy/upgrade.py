@@ -195,10 +195,13 @@ class UpgradeLock:
     def recover_stale(self) -> bool:
         """Remove a lock only when its recorded owner is definitely gone.
 
-        Windows 的 ``os.kill(pid, 0)`` 会 TerminateProcess——那是击杀，不是
-        探测（F19）。探活改走 install_state 的三态原语：只有「确认死亡」
-        或「进程活着但创建身份与记录不一致（PID 被复用）」才删锁；权限
-        不足等 unknown 一律保留锁，绝不据此动手。
+        跨平台统一身份感知分类（install_state.classify_owner）：
+        - 探活为 gone（Windows 用 OpenProcess 三态探测——``os.kill(pid, 0)``
+          在 Windows 是 TerminateProcess，绝不可用，F19；POSIX 用信号 0）；
+        - 进程活着但创建身份与记录不一致 = PID 被复用 → 陈旧，可恢复
+          （CI Linux 实测修复：此前 POSIX 分支无身份判定，复用场景漏判）；
+        - 权限不足等 unknown 一律保留锁，绝不据此动手。
+        遗留锁（无 identity 记录）+ 活 owner → unknown → 保守保留。
         """
         if not self.path.is_file():
             return False
@@ -207,24 +210,6 @@ class UpgradeLock:
         except (OSError, ValueError, TypeError):
             return False
         if not isinstance(owner, dict):
-            return False
-        if os.name != "nt":
-            # POSIX：os.kill(pid, 0) 只做存在性检查，无副作用，保留轻量路径
-            try:
-                pid = int(owner["pid"])
-            except (KeyError, TypeError, ValueError):
-                return False
-            if pid <= 0:
-                return False
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                self.path.unlink(missing_ok=True)
-                return True
-            except PermissionError:
-                return False
-            except OSError:
-                return False
             return False
         from .install_state import classify_owner
 
