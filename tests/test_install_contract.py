@@ -612,6 +612,29 @@ def test_hook_requires_exactly_one_python_zip():
     assert text.count("Abort") >= 3, "缺 zip / 多 zip / 校验失败都必须 Abort"
 
 
+def test_hook_preinstall_runs_expensive_steps_first_gates():
+    """WP08：预检查必须在文件释放前完成——路径长度、目标卷空间、可写性。"""
+    text = HOOK_PATH.read_text(encoding="utf-8")
+    pre_pos = text.find("!macro NSIS_HOOK_PREINSTALL")
+    post_pos = text.find("!macro NSIS_HOOK_POSTINSTALL")
+    assert pre_pos != -1 and post_pos != -1
+    pre_block = text[pre_pos:post_pos]
+    # 空间检查用 FileFunc DriveSpace 的 free/GB 语义（对照 NSIS 源码核实）
+    assert "/D=F /S=G" in pre_block, (
+        "DriveSpace 必须显式取剩余空间（/D=F）并以 GB 为单位（/S=G）"
+    )
+    assert "STELLA_PREINSTALL_MIN_GB" in pre_block, (
+        "空间下限必须是具名 define（保守值，注释说明非精确峰值模型）"
+    )
+    assert "StrLen" in pre_block and "120" in pre_block, (
+        "必须做安装路径长度护栏（深层运行时文件受 MAX_PATH 约束）"
+    )
+    assert "__stella_wtest" in pre_block, (
+        "必须做目标目录可写探测（只读位置在解压前暴露）"
+    )
+    assert pre_block.count("Abort") >= 3, "每个预检查失败都必须 Abort 并解释"
+
+
 def test_hook_verifies_python_zip_hash_before_extraction():
     """解压前校验：期望哈希来自构建期文件，certutil+find 系统工具完成校验。"""
     text = HOOK_PATH.read_text(encoding="utf-8")

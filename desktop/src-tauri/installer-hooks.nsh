@@ -20,6 +20,46 @@
 ; FindClose 关掉的是被覆盖后的退出码值，句柄泄漏且校验形同虚设。
 
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
+
+; 预检查空间下限（GB）。这是**保守下限**而非精确峰值模型：压缩负载 +
+; 展开树 + runtime + 组件 + 日志余量按当前产物实测 > 2GB；精确的逐卷
+; 峰值估算（读 MANIFEST 尺寸动态计算）属于 S15 的完整矩阵， hooks 里
+; 拿不到 JSON 解析能力，先用可解释的保守值挡住明显不够的目标卷。
+!define STELLA_PREINSTALL_MIN_GB 3
+
+!macro NSIS_HOOK_PREINSTALL
+  ; ---------- 预检查（WP08）：把昂贵步骤之前就能判定的问题挡在最前 ----------
+  ; 注意：本钩子在 Tauri 文件释放之前运行，$INSTDIR 可能尚不存在。
+
+  ; 1) 目标路径长度：程序树是「安装目录 + resources\stella + runtime 深层」，
+  ;    INSTDIR 本身过长会让深层文件超出 MAX_PATH（未启用长路径策略的系统
+  ;    上直接安装失败）。不默默改系统长路径策略，只提前解释。
+  StrLen $2 "$INSTDIR"
+  ${If} $2 > 120
+    Abort "安装路径过长（$2 字符）：请选择更短的安装目录（建议 ≤120 字符），否则深层运行时文件可能超出 Windows 路径上限。"
+  ${EndIf}
+
+  ; 2) 目标卷可用空间（FileFunc 的 ${DriveSpace}，系统内置能力；
+  ;    /D=F = free，/S=G = 以 GB 为单位——语义已对照本仓库构建所用
+  ;    NSIS 的 FileFunc.nsh 源码核实）
+  ${DriveSpace} "$INSTDIR" "/D=F /S=G" $3
+  ${If} ${Errors}
+    Abort "无法读取目标卷的可用空间：请检查安装位置后重试。"
+  ${EndIf}
+  ${If} $3 < ${STELLA_PREINSTALL_MIN_GB}
+    Abort "目标卷可用空间不足（约 $3 GB，至少需要 ${STELLA_PREINSTALL_MIN_GB} GB）：程序、运行时、组件与日志都需要空间。请清理磁盘或更换安装位置。"
+  ${EndIf}
+
+  ; 3) 目标目录可写（预创建 + 探测目录 + 清理；只读目录/权限问题在此暴露，
+  ;    而不是解压到一半失败留下半装状态）
+  CreateDirectory "$INSTDIR"
+  CreateDirectory "$INSTDIR\__stella_wtest"
+  ${IfNot} ${FileExists} "$INSTDIR\__stella_wtest\*.*"
+    Abort "安装目录不可写：请检查权限（或选择了只读位置）后重试。"
+  ${EndIf}
+  RMDir "$INSTDIR\__stella_wtest"
+!macroend
 
 !macro NSIS_HOOK_POSTINSTALL
   ; 仅离线变体：嵌入负载以 offline/MANIFEST.json 为标志
