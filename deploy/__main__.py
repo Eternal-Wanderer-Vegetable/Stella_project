@@ -653,11 +653,13 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         return exit_code_for(InstallOutcome.FAILED)
     # 安装契约：结果带 outcome 终态，退出码与之稳定映射（state 字段保留向后兼容）。
     legacy_state = str(result.get("state") or "")
-    outcome = (
-        InstallOutcome.READY
-        if legacy_state in {"complete", "skipped"}
-        else InstallOutcome.FAILED
-    )
+    if legacy_state in {"complete", "skipped"} and result.get("reboot_required"):
+        # MSI 3010/1641：安装成功但需要重启才能生效——不是 ready，也不是 failed。
+        outcome = InstallOutcome.REBOOT_REQUIRED
+    elif legacy_state in {"complete", "skipped"}:
+        outcome = InstallOutcome.READY
+    else:
+        outcome = InstallOutcome.FAILED
     result["outcome"] = outcome.value
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return exit_code_for(outcome)

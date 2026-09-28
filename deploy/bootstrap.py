@@ -612,14 +612,17 @@ def _install_profile_locked(
                         "sbom": record["sbom"],
                         "platform": record["platform"],
                     }
-                    installed.append(
-                        acquire.install_napcat(
-                            manifest,
-                            root,
-                            archive=archive,
-                            cache_dir=archive.parent,
-                        )
+                    napcat_result = acquire.install_napcat(
+                        manifest,
+                        root,
+                        archive=archive,
+                        cache_dir=archive.parent,
                     )
+                    installed.append(napcat_result)
+                    # MSI 3010/1641：重启请求必须穿透账本 → 结果 → 退出码，
+                    # 不能在组件层被吞掉（WP09）。
+                    if napcat_result.get("reboot_required"):
+                        install_state.update_ledger(root, reboot_required=True)
                 elif record["kind"] == "model":
                     installed.append(
                         acquire.install_default_embedding(
@@ -649,12 +652,14 @@ def _install_profile_locked(
             completed.append(item_id)
         _repair_oneclick_runtime(profile_id, root)
         _write_progress(root, profile_id=profile_id, state="complete", completed=completed)
+        ledger = install_state.read_ledger(root) or {}
         install_state.update_ledger(root, state=install_state.LEDGER_READY, current_step="")
         return {
             "ok": True,
             "profile": profile_id,
             "state": "complete",
             "installed": installed,
+            "reboot_required": bool(ledger.get("reboot_required")),
         }
     except BootstrapError as exc:
         _write_progress(

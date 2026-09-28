@@ -609,6 +609,19 @@ def test_offline_payload_writes_nsis_readable_zip_hash(tmp_path, monkeypatch):
     assert raw == hashlib.sha256(b"fake-zip").hexdigest().upper().encode("ascii")
 
 
+def test_cli_bootstrap_reboot_required_maps_to_exit_three(monkeypatch):
+    """MSI 3010/1641 的待重启语义必须穿透组件 → 结果 → CLI 退出码（WP09）。"""
+    code, output = _run_cmd_bootstrap(
+        monkeypatch,
+        install_result={
+            "ok": True, "profile": "oneclick-python", "state": "complete",
+            "installed": [], "reboot_required": True,
+        },
+    )
+    assert code == install_contract.exit_code_for(InstallOutcome.REBOOT_REQUIRED)
+    assert json.loads(output)["outcome"] == "reboot_required"
+
+
 @pytest.mark.xfail(reason="F09: 离线副本损坏静默回落在线，真离线时原始损坏原因被遮盖", strict=False)
 def test_offline_corruption_fails_fast_without_silent_online_fallback(
     tmp_path, monkeypatch
