@@ -1,0 +1,604 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 全文见项目根目录 LICENSE.
+"""安装契约（deploy/install_contract）与其消费方的行为测试。
+
+覆盖 S01/WP01：
+- outcome → 退出码稳定映射；
+- 负载模式声明（.stella-payload-mode）的写入与判定；
+- staging 写 release 元数据（版本 / build_id / 运行时指纹 / catalog 摘要）；
+- helper / CLI 的契约退出码；
+- CI release 工作流的版本统一。
+
+F03/F04/F07/F09/F13 是计划的已知缺陷复现用例：断言的是**目标行为**，
+当前实现尚不满足，因此标记 xfail(strict=False)——对应修复落地后这些
+用例转为 XPASS，届时应移除标记使其成为常规回归。
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import io
+import json
+import re
+import shutil
+import sys
+import zipfile
+from contextlib import redirect_stdout
+from pathlib import Path
+
+import pytest
+
+from deploy import install_contract
+from deploy.install_contract import InstallOutcome
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+HELPER_PATH = REPO_ROOT / "deploy" / "nsis_bootstrap_helper.py"
+HOOK_PATH = REPO_ROOT / "desktop" / "src-tauri" / "installer-hooks.nsh"
+GUI_PYTHON_RS = REPO_ROOT / "desktop" / "src-tauri" / "src" / "python.rs"
+
+import importlib.util
+
+
+def _load_helper():
+    spec = importlib.util.spec_from_file_location("nsis_bootstrap_helper", HELPER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["nsis_bootstrap_helper"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# ============================================================
+# 契约本体
+# ============================================================
+
+
+def test_outcome_exit_code_mapping_is_stable():
+    """退出码是跨 NSIS/CLI/GUI 的公共接口，值一经发布不得变更。"""
+    assert install_contract.OUTCOME_EXIT_CODES == {
+        InstallOutcome.READY: 0,
+        InstallOutcome.FAILED: 1,
+        InstallOutcome.REBOOT_REQUIRED: 3,
+        InstallOutcome.CANCELLED: 4,
+        InstallOutcome.INTERRUPTED: 5,
+        InstallOutcome.REPAIR_REQUIRED: 6,
+    }
+    assert install_contract.EXIT_USAGE == 2
+
+
+def test_payload_mode_roundtrip(tmp_path):
+    mode_path = install_contract.write_payload_mode(tmp_path, "offline")
+    assert mode_path.name == ".stella-payload-mode"
+    assert install_contract.read_payload_mode(tmp_path) == "offline"
+    install_contract.write_payload_mode(tmp_path, "online")
+    assert install_contract.read_payload_mode(tmp_path) == "online"
+    with pytest.raises(ValueError):
+        install_contract.write_payload_mode(tmp_path, "sideload")
+    # 旧包 / 损坏声明 → None（调用方按兼容路径处理）
+    assert install_contract.read_payload_mode(tmp_path / "absent") is None
+    (tmp_path / ".stella-payload-mode").write_text("bogus\n", encoding="utf-8")
+    assert install_contract.read_payload_mode(tmp_path) is None
+
+
+def test_release_metadata_roundtrip(tmp_path):
+    install_contract.write_release_metadata(
+        tmp_path, {"schema_version": 1, "release_version": "5.1.2"}
+    )
+    payload = install_contract.read_release_metadata(tmp_path)
+    assert payload == {"schema_version": 1, "release_version": "5.1.2"}
+    assert install_contract.read_release_metadata(tmp_path / "absent") is None
+    (tmp_path / ".stella-release-metadata.json").write_text("{broken", encoding="utf-8")
+    assert install_contract.read_release_metadata(tmp_path) is None
+
+
+# ============================================================
+# staging：负载模式声明 + release 元数据
+# ============================================================
+
+_PY_RS_CONSTANTS = (
+    "const PY_VER: &str = \"3.12.10\";\n"
+    "const PY_SHA256: &str =\n"
+    "        \"4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3\";\n"
+)
+
+
+def _source_tree(tmp_path: Path) -> Path:
+    source = tmp_path / "source"
+    for relative in (
+        "bot.py",
+        "deploy/nsis_bootstrap_helper.py",
+        "requirements.txt",
+        "pyproject.toml",
+        "LICENSE",
+        "README.md",
+        ".env.example",
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
+        "runtime-manager/schemas/runtime-manifest.schema.json",
+        "runtime-manager/schemas/runtime-state.schema.json",
+        "runtime-manager/schemas/package-catalog.schema.json",
+        "runtime-manager/schemas/package-registry.schema.json",
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    for directory in (
+        "astrbot_compat", "capability", "config", "core", "deploy",
+        "extensions", "memory", "system_prompts", "runtime-manager",
+        "stella_project", "knowledge", "skills", "assets", "webui",
+        "desktop",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    from deploy.profiles import PROFILE_IDS
+
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
+    # 两份壳的 python.rs 常量（构建期指纹一致性校验的输入）
+    for shell in ("desktop", "stella-installer"):
+        path = source / shell / "src-tauri" / "src" / "python.rs"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_PY_RS_CONSTANTS, encoding="utf-8")
+    return source
+
+
+def _offline_payload(tmp_path: Path, *, with_manifest: bool = True) -> Path:
+    payload = tmp_path / "payload"
+    (payload / "packages").mkdir(parents=True, exist_ok=True)
+    (payload / "packages" / "llama-cpu.zip").write_bytes(b"zip")
+    if with_manifest:
+        (payload / "MANIFEST.json").write_text(
+            json.dumps({"schema_version": 1, "files": {}}), encoding="utf-8"
+        )
+    return payload
+
+
+def test_stage_writes_online_payload_mode(tmp_path):
+    from scripts.build_release_package import stage_installer_resources
+
+    source = _source_tree(tmp_path)
+    output = tmp_path / "resources"
+    stage_installer_resources(source, output, "oneclick-python")
+    assert install_contract.read_payload_mode(output) == "online"
+
+
+def test_stage_offline_requires_manifest_and_declares_mode(tmp_path):
+    from scripts.build_release_package import stage_installer_resources
+
+    source = _source_tree(tmp_path)
+    output = tmp_path / "resources"
+    with pytest.raises(FileNotFoundError, match="MANIFEST"):
+        stage_installer_resources(
+            source, output, "oneclick-python",
+            offline_payload=_offline_payload(tmp_path, with_manifest=False),
+        )
+    # 构建失败不留下半成品声明
+    assert not (output / install_contract.PAYLOAD_MODE_FILENAME).exists()
+
+    stage_installer_resources(
+        source, output, "oneclick-python",
+        offline_payload=_offline_payload(tmp_path),
+    )
+    assert install_contract.read_payload_mode(output) == "offline"
+    assert (output / "offline" / "MANIFEST.json").is_file()
+
+
+def test_stage_writes_release_metadata_with_runtime_fingerprint(tmp_path):
+    from scripts.build_release_package import stage_installer_resources
+
+    source = _source_tree(tmp_path)
+    catalog = source / "package-catalog-windows-amd64.json"
+    catalog.write_text('{"schema_version": 1}', encoding="utf-8")
+    output = tmp_path / "resources"
+    stage_installer_resources(
+        source, output, "oneclick-rust",
+        offline_payload=_offline_payload(tmp_path),
+        release_version="5.1.2",
+        build_id="run-42-1",
+    )
+    metadata = install_contract.read_release_metadata(output)
+    assert metadata["schema_version"] == 1
+    assert metadata["release_version"] == "5.1.2"
+    assert metadata["build_id"] == "run-42-1"
+    assert metadata["profile"] == "oneclick-rust"
+    assert metadata["payload_mode"] == "offline"
+    assert metadata["arch"] == "windows-amd64"
+    assert metadata["runtime"]["python_version"] == "3.12.10"
+    assert metadata["runtime"]["python_zip_sha256"] == (
+        "4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3"
+    )
+    assert metadata["catalog_sha256"] == hashlib.sha256(
+        catalog.read_bytes()
+    ).hexdigest()
+
+
+def test_stage_rejects_runtime_fingerprint_drift_between_shells(tmp_path):
+    from scripts.build_release_package import stage_installer_resources
+
+    source = _source_tree(tmp_path)
+    drifted = source / "stella-installer" / "src-tauri" / "src" / "python.rs"
+    drifted.write_text(
+        _PY_RS_CONSTANTS.replace("4ACBED6DD1C744B0376E3B1CF57CE906F9DC9E95E68824584C8099A63025A3C3", "0" * 64),
+        encoding="utf-8",
+    )
+    output = tmp_path / "resources"
+    with pytest.raises(ValueError, match="运行时常量不一致"):
+        stage_installer_resources(
+            source, output, "oneclick-python", release_version="5.1.2"
+        )
+
+
+# ============================================================
+# helper：按声明判定负载变体
+# ============================================================
+
+
+def test_helper_hard_fails_when_offline_declared_but_payload_missing(tmp_path):
+    helper = _load_helper()
+    install_contract.write_payload_mode(tmp_path, "offline")
+    assert helper.main(["nsis_bootstrap_helper.py", str(tmp_path)]) == (
+        install_contract.exit_code_for(InstallOutcome.FAILED)
+    )
+
+
+def test_helper_rejects_invocation_on_online_variant(tmp_path):
+    helper = _load_helper()
+    install_contract.write_payload_mode(tmp_path, "online")
+    assert helper.main(["nsis_bootstrap_helper.py", str(tmp_path)]) == (
+        install_contract.EXIT_USAGE
+    )
+
+
+def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
+    helper = _load_helper()
+    # 无模式声明的旧包：缺 MANIFEST → 拒绝（沿用历史行为）
+    assert helper.main(["nsis_bootstrap_helper.py", str(tmp_path)]) == (
+        install_contract.EXIT_USAGE
+    )
+    # 有声明且负载齐备 → 正常执行装载管线
+    install_root = tmp_path / "install"
+    runtime = install_root / "runtime"
+    runtime.mkdir(parents=True)
+    (install_root / "offline").mkdir()
+    (install_root / "offline" / "MANIFEST.json").write_text("{}", encoding="utf-8")
+    (install_root / "offline" / "get-pip.py").write_text("# get-pip", encoding="utf-8")
+    (install_root / "offline" / "wheels").mkdir()
+    (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
+    (install_root / ".stella-profile").write_text("oneclick-python", encoding="utf-8")
+    (runtime / "python.exe").write_bytes(b"MZ")
+    install_contract.write_payload_mode(install_root, "offline")
+    monkeypatch.setattr(helper, "_run", lambda cmd, cwd: None)
+    assert helper.main(["nsis_bootstrap_helper.py", str(install_root)]) == 0
+
+
+# ============================================================
+# CLI：bootstrap 命令的契约退出码
+# ============================================================
+
+
+def _run_cmd_bootstrap(monkeypatch, install_result=None, exc=None):
+    from deploy import __main__ as deploy_main
+    from deploy import bootstrap
+
+    if exc is not None:
+        def fake_install(*_args, **_kwargs):
+            raise exc
+    else:
+        def fake_install(*_args, **_kwargs):
+            return install_result
+
+    monkeypatch.setattr(bootstrap, "install_profile", fake_install)
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        code = deploy_main._cmd_bootstrap(
+            argparse.Namespace(profile="oneclick-python", catalog=None)
+        )
+    return code, buffer.getvalue()
+
+
+def test_cli_bootstrap_success_maps_to_ready_exit_zero(monkeypatch):
+    code, output = _run_cmd_bootstrap(
+        monkeypatch, install_result={"ok": True, "profile": "oneclick-python",
+                                     "state": "complete", "installed": []}
+    )
+    assert code == install_contract.exit_code_for(InstallOutcome.READY)
+    assert json.loads(output)["outcome"] == "ready"
+
+
+def test_cli_bootstrap_error_maps_to_failed_exit_one(monkeypatch):
+    from deploy.bootstrap import BootstrapError
+
+    code, output = _run_cmd_bootstrap(
+        monkeypatch, exc=BootstrapError("download_failed", "网络不可用")
+    )
+    assert code == install_contract.exit_code_for(InstallOutcome.FAILED)
+    payload = json.loads(output)
+    assert payload["outcome"] == "failed"
+    assert payload["error"]["code"] == "download_failed"
+
+
+def test_cli_bootstrap_unexpected_exception_still_has_terminal_state(monkeypatch):
+    """非 BootstrapError 的意外异常也必须有 failed 终态与稳定退出码。"""
+    code, output = _run_cmd_bootstrap(monkeypatch, exc=RuntimeError("disk exploded"))
+    assert code == install_contract.exit_code_for(InstallOutcome.FAILED)
+    payload = json.loads(output)
+    assert payload["outcome"] == "failed"
+    assert payload["error"]["code"] == "unexpected_error"
+
+
+# ============================================================
+# CI release 工作流：版本统一
+# ============================================================
+
+
+def test_release_workflow_resolves_version_once():
+    import yaml
+
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    )
+    jobs = workflow["jobs"]
+    assert "resolve-release" in jobs
+    assert jobs["resolve-release"]["outputs"]["version"]
+    for job_name in (
+        "build-dashboard",
+        "build-oneclick-catalog-backend",
+        "build-offline-payload",
+        "build-installer",
+        "build-cli-linux-binary",
+        "build-cli-windows-binary",
+        "build",
+    ):
+        assert "resolve-release" in jobs[job_name].get("needs", []), job_name
+    # Dashboard marker 必须消费统一解析的版本（F17：手工发布曾取错来源）
+    dashboard_steps = json.dumps(jobs["build-dashboard"]["steps"])
+    assert "needs.resolve-release.outputs.version" in dashboard_steps
+    # 安装资源 staging 必须把版本与 build_id 写入安装契约元数据
+    installer_steps = json.dumps(jobs["build-installer"]["steps"])
+    assert "--release-version" in installer_steps
+    assert "--build-id" in installer_steps
+
+
+# ============================================================
+# F03/F04/F07/F09/F13 已知缺陷复现（xfail，修复后转正）
+# ============================================================
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _zip(tmp_path: Path, name: str, member: str, content: bytes) -> Path:
+    path = tmp_path / name
+    with zipfile.ZipFile(path, "w") as bundle:
+        bundle.writestr(member, content)
+    return path
+
+
+def _catalog(tmp_path: Path):
+    """与 tests/test_bootstrap.py 同构的最小 catalog（llama + napcat + embedding）。"""
+    files = {
+        "llama-cpu": _zip(tmp_path, "llama.zip", "llama-server", b"llama"),
+        "napcat": _zip(tmp_path, "napcat.zip", "NapCat/napcat.exe", b"napcat"),
+        "qwen3-embedding-0.6b": tmp_path / "embedding.gguf",
+    }
+    files["qwen3-embedding-0.6b"].write_bytes(b"embedding")
+    records = [
+        {
+            "kind": "component", "id": "llama-cpu", "version": "4.0.1",
+            "path": "llama-cpu.zip", "checksum": _sha256(files["llama-cpu"]),
+            "platform": "windows-amd64", "backend": "cpu",
+            "runtime_api": "openai-compatible", "driver_min": "none",
+            "abi": "documented", "license": "llama.cpp", "sbom": "llama-sbom.json",
+            "source": "https://example.invalid/llama-cpu.zip",
+            "artifact": "llama-cpu.zip", "status": "available",
+        },
+        {
+            "kind": "onebot", "id": "napcat", "version": "1.0.0",
+            "path": "napcat.zip", "checksum": _sha256(files["napcat"]),
+            "platform": "windows-amd64", "license": "NapCat", "sbom": "napcat-sbom.json",
+            "source": "https://example.invalid/napcat.zip",
+            "artifact": "napcat.zip", "status": "available",
+        },
+        {
+            "kind": "model", "id": "qwen3-embedding-0.6b", "version": "q8_0",
+            "path": "models/embedding/Qwen3-Embedding-0.6B-Q8_0.gguf",
+            "checksum": _sha256(files["qwen3-embedding-0.6b"]),
+            "platform": "windows-amd64", "model_role": "embedding",
+            "runtime_api": "llama.cpp-embedding", "license": "Apache-2.0",
+            "source": "https://example.invalid/Qwen3-Embedding-0.6B-Q8_0.gguf",
+            "artifact": "Qwen3-Embedding-0.6B-Q8_0.gguf", "status": "available",
+            "size": files["qwen3-embedding-0.6b"].stat().st_size,
+            "dimension": 1024, "remote": True,
+        },
+    ]
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-09-28T00:00:00+00:00",
+                "platform": "windows-amd64",
+                "profile": "oneclick-python",
+                "packages": records,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return catalog, files
+
+
+@pytest.mark.xfail(reason="F03: helper 缺 Rust wheel 装载与自检，GUI 首启会重复安装", strict=False)
+def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypatch):
+    helper = _load_helper()
+    install_root = tmp_path / "install"
+    runtime = install_root / "runtime"
+    runtime.mkdir(parents=True)
+    offline = install_root / "offline"
+    offline.mkdir()
+    (offline / "get-pip.py").write_text("# get-pip", encoding="utf-8")
+    (offline / "wheels").mkdir()
+    (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
+    (install_root / ".stella-profile").write_text("oneclick-rust", encoding="utf-8")
+    (runtime / "python.exe").write_bytes(b"MZ")
+    # 随包 Rust wheel（OneClick Rust 的资源树带 wheels/）
+    wheel = install_root / "wheels" / "stella_memory_rust-1.0-cp312-cp312-win_amd64.whl"
+    wheel.parent.mkdir()
+    with zipfile.ZipFile(wheel, "w") as bundle:
+        bundle.writestr("memory_rust/__init__.py", "")
+    recorded: list[list[str]] = []
+    monkeypatch.setattr(helper, "_run", lambda cmd, cwd: recorded.append(cmd))
+
+    helper.bootstrap_offline(install_root)
+
+    joined = "\n".join(" ".join(cmd) for cmd in recorded)
+    assert "stella_memory_rust" in joined, "离线装载必须就地解包随包 Rust wheel"
+    assert "memory_rust._native" in joined, "装载后必须验证 Rust 扩展可导入"
+
+
+@pytest.mark.xfail(reason="F04: 组件异常只捕获 BootstrapError，NapCatError 遗留 running 假状态", strict=False)
+def test_component_failure_lands_in_failed_terminal_state(tmp_path, monkeypatch):
+    from deploy import bootstrap, napcat
+
+    def fake_download(record, data_root):
+        target = tmp_path / f"{record['id']}.zip"
+        with zipfile.ZipFile(target, "w") as bundle:
+            bundle.writestr("payload", b"x")
+        return target
+
+    monkeypatch.setattr(bootstrap, "_download_record", fake_download)
+
+    def explode(*_args, **_kwargs):
+        raise napcat.NapCatError("install_failed", "MSI 爆炸")
+
+    monkeypatch.setattr(bootstrap.acquire, "install_napcat", explode)
+    data_root = tmp_path / "data"
+    with pytest.raises(napcat.NapCatError):
+        bootstrap.install_profile(
+            "oneclick-python", data_root, catalog_path=_catalog(tmp_path)[0]
+        )
+    progress = bootstrap.read_progress(data_root)
+    assert progress is not None
+    assert progress["state"] == "failed", "任何组件失败都必须落到 failed 终态"
+
+
+@pytest.mark.xfail(reason="F04: failed/running 后的重试不复核健康组件，llama 被重新下载", strict=False)
+def test_failed_run_retry_skips_healthy_components(tmp_path, monkeypatch):
+    from deploy import acquire, bootstrap, napcat, runtime
+
+    catalog, _files = _catalog(tmp_path)
+    downloads: list[str] = []
+
+    def fake_download(record, data_root):
+        downloads.append(record["id"])
+        target = tmp_path / f"{record['id']}.zip"
+        with zipfile.ZipFile(target, "w") as bundle:
+            bundle.writestr("payload", b"x")
+        return target
+
+    monkeypatch.setattr(bootstrap, "_download_record", fake_download)
+    monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path / "gui-runtime")
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "contract-retry-test")
+    napcat_calls = {"count": 0}
+
+    def flaky_napcat(manifest, root, **kwargs):
+        napcat_calls["count"] += 1
+        if napcat_calls["count"] == 1:
+            raise napcat.NapCatError("install_failed", "MSI 爆炸")
+        return manifest
+
+    monkeypatch.setattr(acquire, "install_napcat", flaky_napcat)
+    monkeypatch.setattr(
+        acquire, "install_default_embedding",
+        lambda model, root, **kwargs: {"id": model["id"]},
+    )
+    data_root = tmp_path / "data"
+    with pytest.raises(napcat.NapCatError):
+        bootstrap.install_profile("oneclick-python", data_root, catalog_path=catalog)
+
+    downloads.clear()
+    result = bootstrap.install_profile(
+        "oneclick-python", data_root, catalog_path=catalog
+    )
+    assert result["state"] == "complete"
+    # 已健康的 llama-cpu 不得重新下载（复核通过即复用）
+    assert "llama-cpu" not in downloads, (
+        f"重试不应重新下载健康组件，实际下载了 {downloads}"
+    )
+
+
+@pytest.mark.xfail(reason="F07: $0 同时保存 FindFirst 句柄与 nsExec 退出码，FindClose 得到被覆盖值", strict=False)
+def test_hook_separates_find_handle_from_exit_code():
+    text = HOOK_PATH.read_text(encoding="utf-8")
+    match = re.search(r"FindFirst \$(\w+) \$\w+", text)
+    assert match, "POSTINSTALL 钩子必须用 FindFirst 定位 Python zip"
+    handle = match.group(1)
+    pops = re.findall(r"Pop \$(\w+)", text)
+    assert handle not in pops, (
+        f"FindFirst 句柄寄存器 ${handle} 不得被 nsExec 的 Pop 复用"
+    )
+    assert re.search(rf"FindClose\s+\${handle}\b", text), (
+        f"FindClose 必须关闭 FindFirst 的句柄 ${handle}"
+    )
+
+
+@pytest.mark.xfail(reason="F09: 离线副本损坏静默回落在线，真离线时原始损坏原因被遮盖", strict=False)
+def test_offline_corruption_fails_fast_without_silent_online_fallback(
+    tmp_path, monkeypatch
+):
+    from deploy import bootstrap
+
+    catalog, files = _catalog(tmp_path)
+    # 打包侧：离线仓里的 llama 副本被篡改（内容与 catalog checksum 不符）
+    packages_dir = tmp_path / "offline" / "packages"
+    packages_dir.mkdir(parents=True)
+    (packages_dir / "llama-cpu.zip").write_bytes(b"tampered")
+    monkeypatch.setattr(bootstrap, "PROJECT_ROOT", tmp_path)
+    shutil.copyfile(catalog, tmp_path / "package-catalog-windows-amd64.json")
+
+    source_map = {
+        "https://example.invalid/llama-cpu.zip": files["llama-cpu"],
+        "https://example.invalid/napcat.zip": files["napcat"],
+        "https://example.invalid/Qwen3-Embedding-0.6B-Q8_0.gguf": files[
+            "qwen3-embedding-0.6b"
+        ],
+    }
+
+    def fake_download(source, destination, *, checksum, size=None, **_kwargs):
+        source_path = source_map[source]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source_path.read_bytes())
+        return destination
+
+    monkeypatch.setattr(bootstrap.acquire, "download_verified", fake_download)
+
+    with pytest.raises(bootstrap.BootstrapError) as error:
+        bootstrap.install_profile(
+            "oneclick-python", tmp_path / "data", catalog_path=None
+        )
+    assert error.value.code in {"payload_corrupt", "payload_missing"}, (
+        "声明的离线负载损坏必须快速失败并指认文件，不得静默联网重下"
+    )
+
+
+@pytest.mark.xfail(reason="F13: GUI 离线 get-pip 未给 --find-links，与 helper 不一致", strict=False)
+def test_gui_offline_getpip_uses_find_links():
+    text = GUI_PYTHON_RS.read_text(encoding="utf-8")
+    branch = re.search(
+        r"verify_offline_file\(root, OFFLINE_GET_PIP\)([\s\S]{0,800}?)let get_pip",
+        text,
+    )
+    assert branch, "离线 get-pip 分支必须存在"
+    assert "--find-links" in branch.group(1), (
+        "GUI 离线 get-pip 必须与 helper 同参：--find-links 指向随包 wheels，"
+        "否则 pip 本体无法离线解析"
+    )

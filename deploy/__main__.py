@@ -604,6 +604,7 @@ def _cmd_upgrade(args: argparse.Namespace) -> int:
 
 def _cmd_bootstrap(args: argparse.Namespace) -> int:
     from . import bootstrap
+    from .install_contract import InstallOutcome, exit_code_for
 
     try:
         result = bootstrap.install_profile(
@@ -614,13 +615,43 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
     except bootstrap.BootstrapError as exc:
         print(
             json.dumps(
-                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                {
+                    "ok": False,
+                    "outcome": InstallOutcome.FAILED.value,
+                    "error": {"code": exc.code, "message": exc.message},
+                },
                 ensure_ascii=False,
             )
         )
-        return 1
+        return exit_code_for(InstallOutcome.FAILED)
+    except Exception as exc:  # 未知异常也必须有终态与退出码，不允许裸 traceback 退出
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "outcome": InstallOutcome.FAILED.value,
+                    "error": {
+                        "code": "unexpected_error",
+                        "message": f"{type(exc).__name__}: {exc}",
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+        return exit_code_for(InstallOutcome.FAILED)
+    # 安装契约：结果带 outcome 终态，退出码与之稳定映射（state 字段保留向后兼容）。
+    legacy_state = str(result.get("state") or "")
+    outcome = (
+        InstallOutcome.READY
+        if legacy_state in {"complete", "skipped"}
+        else InstallOutcome.FAILED
+    )
+    result["outcome"] = outcome.value
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return exit_code_for(outcome)
 
 
 def _cmd_runtime(args: argparse.Namespace) -> int:

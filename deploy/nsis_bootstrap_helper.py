@@ -21,9 +21,12 @@
    （NapCat / embedding 模型 / llama.cpp 后端，读 offline/packages，
    断点续装，进度直接打进安装器详情区）。
 
-在线变体（安装树无 ``offline/MANIFEST.json``）不调用本脚本：保持 GUI 内
+在线变体（负载模式声明为 ``online``）不调用本脚本：保持 GUI 内
 引导下载的原流程。任何一步失败都以非零码退出，NSIS 钩子 Abort，
-安装器直接展示失败原因——绝不产出「装好了但坏了」的模糊状态。
+安装器直接展示失败原因。注意：NSIS 的 Abort 只停止安装器，**不会
+撤销已落盘的文件/pip 改动**——失败后的半装状态由组件账本
+（deploy.bootstrap 的进度记录）如实记录并在重试时复核，而不是宣称
+「Abort 即恢复原状」。
 """
 
 from __future__ import annotations
@@ -33,9 +36,23 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 安装契约与 helper 同目录（deploy/），NSIS 以裸文件执行本脚本时脚本目录
+# 已在 sys.path；经 importlib 按路径加载（如单测）时需要显式补上。
+_SELF_DIR = str(Path(__file__).resolve().parent)
+if _SELF_DIR not in sys.path:
+    sys.path.insert(0, _SELF_DIR)
+
+from install_contract import (
+    EXIT_USAGE,
+    InstallOutcome,
+    exit_code_for,
+    read_payload_mode,
+)
+
 RUNTIME_DIRNAME = "runtime"
 OFFLINE_DIRNAME = "offline"
 DEPS_MARKER = ".stella-deps-ready"
+MANIFEST_FILENAME = "MANIFEST.json"
 
 
 def patch_pth(runtime: Path) -> None:
@@ -112,12 +129,38 @@ def bootstrap_offline(install_root: Path) -> None:
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("用法：nsis_bootstrap_helper.py <安装根目录>", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
     install_root = Path(argv[1]).resolve()
-    if not (install_root / "offline" / "MANIFEST.json").is_file():
-        print("离线负载缺失（offline/MANIFEST.json）——在线变体不应调用本脚本。",
-              file=sys.stderr)
-        return 2
+
+    # 负载变体按构建期声明判定（安装契约），不再猜 MANIFEST 是否存在：
+    # 声明 offline 却缺清单 = 包坏了，必须硬失败；绝不能把它静默降级成
+    # 「在线变体」跳过装载，让用户首启时才发现装了一半。
+    declared_mode = read_payload_mode(install_root)
+    manifest_present = (
+        install_root / OFFLINE_DIRNAME / MANIFEST_FILENAME
+    ).is_file()
+    if declared_mode == "offline":
+        if not manifest_present:
+            print(
+                "安装失败：负载声明为离线，但 offline/MANIFEST.json 缺失——"
+                "安装包不完整，请重新获取安装包。",
+                file=sys.stderr,
+            )
+            return exit_code_for(InstallOutcome.FAILED)
+    elif declared_mode == "online":
+        print(
+            "在线变体不应调用本脚本（负载模式声明为 online）。",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    elif not manifest_present:
+        # 旧包没有模式声明：沿用 MANIFEST 存在性判定。
+        print(
+            "离线负载缺失（offline/MANIFEST.json）——在线变体不应调用本脚本。",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+
     bootstrap_offline(install_root)
     return 0
 

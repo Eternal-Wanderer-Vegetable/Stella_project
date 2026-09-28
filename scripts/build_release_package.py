@@ -12,6 +12,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from deploy.install_contract import (
+    PAYLOAD_MODE_OFFLINE,
+    PAYLOAD_MODE_ONLINE,
+    write_payload_mode,
+    write_release_metadata,
+)
 from deploy.profiles import PROFILE_IDS, load_profile
 
 COMMON_FILES = (
@@ -231,12 +237,46 @@ def build_oneclick(
     return target
 
 
+def _runtime_fingerprint(source: Path) -> dict[str, str]:
+    """从两份壳的 python.rs 解析嵌入式运行时指纹（必须一致）。
+
+    desktop 与 stella-installer 各有一份安装逻辑；指纹常量漂移意味着
+    「离线负载按 A 版本下载、GUI 按 B 版本校验」的安装期失败。构建期
+    在这里把两份读一遍并要求逐字节一致，漂移产品出不了包。
+    """
+    import re
+
+    fingerprints = []
+    for relative in (
+        "desktop/src-tauri/src/python.rs",
+        "stella-installer/src-tauri/src/python.rs",
+    ):
+        path = source / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise FileNotFoundError(f"运行时常量源缺失：{path}") from exc
+        version = re.search(r'const PY_VER: &str = "([^"]+)"', text)
+        sha = re.search(r'const PY_SHA256: &str =\s*"([0-9A-Fa-f]{64})"', text)
+        if not version or not sha:
+            raise ValueError(f"无法从 {path} 解析 PY_VER / PY_SHA256")
+        fingerprints.append((version.group(1), sha.group(1).upper()))
+    if len(set(fingerprints)) != 1:
+        raise ValueError(
+            f"两份壳的运行时常量不一致，拒绝打包：{fingerprints}"
+        )
+    version, sha = fingerprints[0]
+    return {"python_version": version, "python_zip_sha256": sha}
+
+
 def stage_installer_resources(
     source: Path,
     output: Path,
     profile_id: str,
     *,
     offline_payload: Path | None = None,
+    release_version: str | None = None,
+    build_id: str | None = None,
 ) -> Path:
     """Stage the allowlisted program tree embedded by the Tauri installer."""
     profile = load_profile(profile_id)
@@ -260,13 +300,43 @@ def stage_installer_resources(
     if profile["core_flavor"] == "rust" and wheels.is_dir():
         shutil.copytree(wheels, output / "wheels", dirs_exist_ok=True)
     (output / ".stella-profile").write_text(profile_id + "\n", encoding="utf-8")
+    payload_mode = PAYLOAD_MODE_ONLINE
     if offline_payload is not None:
         offline_payload = Path(offline_payload).resolve()
         if not offline_payload.is_dir():
             raise FileNotFoundError(f"offline payload is missing: {offline_payload}")
+        if not (offline_payload / "MANIFEST.json").is_file():
+            # 声明离线却没有清单 = 负载不完整。清单缺失时 NSIS 钩子会把它
+            # 当在线变体静默跳过装载，用户首启才发现要联网补装——这种包
+            # 绝不能走出构建机。
+            raise FileNotFoundError(
+                f"offline payload 缺少 MANIFEST.json：{offline_payload}"
+            )
         # 整仓原样进 resources/stella/offline：安装器（python.rs）按
         # <程序根>/offline 寻址，deploy 按 catalog 的 artifact 文件名寻址。
         shutil.copytree(offline_payload, output / "offline", dirs_exist_ok=True)
+        payload_mode = PAYLOAD_MODE_OFFLINE
+    # 负载模式显式落盘（安装契约）：安装侧据此判定变体，不再靠
+    # offline/MANIFEST.json 的存在性猜测。
+    write_payload_mode(output, payload_mode)
+    if release_version is not None:
+        metadata: dict[str, object] = {
+            "schema_version": 1,
+            "release_version": release_version,
+            "build_id": build_id or "",
+            "profile": profile_id,
+            "payload_mode": payload_mode,
+            "arch": "windows-amd64",
+            "supported_os": ["windows-amd64"],
+            "runtime": _runtime_fingerprint(source),
+        }
+        if bundled_catalog.is_file():
+            import hashlib
+
+            metadata["catalog_sha256"] = hashlib.sha256(
+                bundled_catalog.read_bytes()
+            ).hexdigest()
+        write_release_metadata(output, metadata)
     return output
 
 
@@ -287,15 +357,23 @@ def main() -> int:
                         help="build_offline_payload.py 的产物，随 resources 嵌入（Offline 变体）")
     parser.add_argument("--artifact-name",
                         help="覆盖 oneclick 产物文件名（Offline 变体用）")
+    parser.add_argument("--release-version",
+                        help="写入安装契约 release 元数据（stage-resources 模式）")
+    parser.add_argument("--build-id",
+                        help="构建标识（CI run id；随 release 元数据写入）")
     args = parser.parse_args()
     if args.offline_payload is not None and not args.stage_resources:
         parser.error("--offline-payload 只能与 --stage-resources 搭配")
     if args.artifact_name is not None and not args.profile.startswith("oneclick-"):
         parser.error("--artifact-name 只适用于 oneclick profile")
+    if args.build_id is not None and args.release_version is None:
+        parser.error("--build-id 需要与 --release-version 搭配")
     if args.stage_resources is not None:
         stage_installer_resources(
             args.source, args.stage_resources, args.profile,
             offline_payload=args.offline_payload,
+            release_version=args.release_version,
+            build_id=args.build_id,
         )
         return 0
     if args.profile.startswith("oneclick-"):
