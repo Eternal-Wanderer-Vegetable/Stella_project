@@ -10,20 +10,39 @@ the existing atomic activation boundary.
 from __future__ import annotations
 
 import hashlib
-import os
-import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from . import napcat, packages
 
+# 可重试与致命的下载错误分类（WP12）：429/5xx/网络抖动 → 有限退避重试；
+# 404/403/校验失败 → 立即具名失败，绝不无限换源或绕过校验。
+RETRYABLE_HTTP_STATUS = frozenset({429, 500, 502, 503, 504})
+DOWNLOAD_MAX_ATTEMPTS = 4
+DOWNLOAD_BACKOFF_SECONDS = (1.0, 3.0, 9.0)
+
+ProgressCallback = Callable[[int, int | None], None]
+
 
 class AcquireError(ValueError):
     """A user-actionable remote acquisition failure."""
 
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class _RetryableDownloadError(Exception):
+    pass
+
+
+class _FatalDownloadError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
@@ -51,6 +70,55 @@ def _digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _download_once(
+    url: str,
+    part_path: Path,
+    *,
+    timeout: float,
+    progress: ProgressCallback | None,
+) -> None:
+    """单次下载（支持对 .part 的 Range 续传）；中途网络错误保留 .part。"""
+    resume_from = part_path.stat().st_size if part_path.is_file() else 0
+    request = urllib.request.Request(url)
+    if resume_from:
+        request.add_header("Range", f"bytes={resume_from}-")
+    try:
+        response = urllib.request.urlopen(request, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        if exc.code in RETRYABLE_HTTP_STATUS:
+            raise _RetryableDownloadError(f"HTTP {exc.code}") from exc
+        raise _FatalDownloadError(
+            "download_failed", f"HTTP {exc.code}（不可重试）"
+        ) from exc
+    except OSError as exc:
+        raise _RetryableDownloadError(str(exc)) from exc
+    with response:
+        status = getattr(response, "status", None) or 200
+        appending = bool(resume_from) and status == 206
+        if resume_from and not appending:
+            # 服务器不支持 Range：放弃续传，全量重下
+            resume_from = 0
+        mode = "ab" if appending else "wb"
+        with part_path.open(mode) as output:
+            downloaded = resume_from
+            total = None
+            length = response.headers.get("Content-Length") if hasattr(
+                response, "headers"
+            ) else None
+            if length is not None:
+                total = int(length) + (resume_from if appending else 0)
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                output.write(chunk)
+                downloaded += len(chunk)
+                if progress is not None:
+                    progress(downloaded, total)
+    # 进度回调可抛 AcquireError("cancelled") 取消本次下载；此处不捕获，
+    # .part 保留为可验证的续传片段。
+
+
 def download_verified(
     source: str,
     destination: Path,
@@ -58,8 +126,21 @@ def download_verified(
     checksum: str,
     size: int | None = None,
     timeout: float = 120,
+    attempts: int = DOWNLOAD_MAX_ATTEMPTS,
+    backoff: tuple[float, ...] = DOWNLOAD_BACKOFF_SECONDS,
+    progress: ProgressCallback | None = None,
 ) -> Path:
-    """Download one immutable artifact and publish it only after verification."""
+    """Download one immutable artifact and publish it only after verification.
+
+    WP12 语义：
+    * 断点续传：失败保留 ``<destination>.part``，重试时带 Range 续传；
+      服务器不支持 Range 则全量重下。最终完整性始终由 sha256 保证——
+      续传片段若被破坏会在校验一步暴露，不依赖传输层可信。
+    * 有限重试：429/5xx/网络抖动按固定退避重试（默认 4 次）；404/403
+      等致命错误立即失败；校验不匹配不重试。
+    * 取消：``progress`` 回调可抛 ``AcquireError("cancelled")`` 终止本次
+      下载，已下载部分保留为可续传片段。
+    """
     url = _https_url(source, "source")
     expected = str(checksum or "").strip().lower()
     if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
@@ -69,39 +150,45 @@ def download_verified(
 
     destination = Path(destination).expanduser().resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
-    temp_path = Path(temporary)
+    part_path = destination.with_name(destination.name + ".part")
     try:
-        with os.fdopen(fd, "wb") as output:
+        last_message = ""
+        for attempt in range(max(1, attempts)):
             try:
-                with urllib.request.urlopen(url, timeout=timeout) as response:
-                    total = 0
-                    while True:
-                        chunk = response.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        output.write(chunk)
-                        total += len(chunk)
-            except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
-                raise AcquireError("download_failed", f"下载失败：{url}") from exc
-            output.flush()
-            os.fsync(output.fileno())
-        if size is not None and temp_path.stat().st_size != int(size):
+                _download_once(url, part_path, timeout=timeout, progress=progress)
+                break
+            except _RetryableDownloadError as exc:
+                last_message = str(exc)
+                if attempt < max(1, attempts) - 1:
+                    time.sleep(backoff[min(attempt, len(backoff) - 1)])
+            except _FatalDownloadError as exc:
+                raise AcquireError(exc.code, exc.message) from exc
+        else:
+            raise AcquireError(
+                "download_failed",
+                f"下载失败（重试 {attempts} 次后放弃）：{url}；最后错误：{last_message}",
+            )
+
+        actual_size = part_path.stat().st_size
+        if size is not None and actual_size != int(size):
+            part_path.unlink(missing_ok=True)
             raise AcquireError(
                 "size_mismatch",
-                f"下载大小不匹配：期望 {size}，实际 {temp_path.stat().st_size}",
+                f"下载大小不匹配：期望 {size}，实际 {actual_size}",
             )
-        actual = _digest(temp_path)
+        actual = _digest(part_path)
         if actual != expected:
+            part_path.unlink(missing_ok=True)
             raise AcquireError(
                 "checksum_mismatch",
                 f"下载 checksum 不匹配：期望 {expected}，实际 {actual}",
             )
-        temp_path.replace(destination)
+        part_path.replace(destination)
         return destination
-    except (OSError, AcquireError):
-        temp_path.unlink(missing_ok=True)
+    except AcquireError:
         raise
+    except OSError as exc:
+        raise AcquireError("download_failed", f"下载写入失败：{exc}") from exc
 
 
 def verify_local_artifact(

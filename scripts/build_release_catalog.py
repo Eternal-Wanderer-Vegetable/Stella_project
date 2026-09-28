@@ -45,7 +45,13 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build_catalog(backend_asset: Path, *, release_ref: str, repository: str) -> dict:
+def build_catalog(
+    backend_asset: Path,
+    *,
+    release_ref: str,
+    repository: str,
+    asset_base_url: str | None = None,
+) -> dict:
     backend_asset = Path(backend_asset).resolve()
     metadata_path = backend_asset.parent / "BACKEND.json"
     if metadata_path.is_file():
@@ -59,6 +65,16 @@ def build_catalog(backend_asset: Path, *, release_ref: str, repository: str) -> 
         raise ValueError("catalog backend asset must be the Windows CPU package")
     version = release_ref.removeprefix("v")
     backend_name = backend_asset.name
+    # llama-cpu 的 source 默认自指最终 Release（构建时尚不存在——在线安装
+    # 的验收死锁，WP14）。候选通道：--asset-base-url 指向先于安装器发布
+    # 的不可变预发布（candidate-<build_id>），安装器引用它直至晋升。
+    if asset_base_url:
+        backend_source = f"{asset_base_url.rstrip('/')}/{backend_name}"
+    else:
+        backend_source = (
+            f"https://github.com/{repository}/releases/download/"
+            f"{release_ref}/{backend_name}"
+        )
     packages = [
         {
             "kind": "component",
@@ -73,10 +89,7 @@ def build_catalog(backend_asset: Path, *, release_ref: str, repository: str) -> 
             "abi": metadata["abi"],
             "license": metadata["license"],
             "sbom": "SBOM.json",
-            "source": (
-                f"https://github.com/{repository}/releases/download/"
-                f"{release_ref}/{backend_name}"
-            ),
+            "source": backend_source,
             "artifact": backend_name,
             "status": metadata["status"],
             "size": backend_asset.stat().st_size,
@@ -114,12 +127,16 @@ def main() -> int:
     parser.add_argument("--backend-asset", type=Path, required=True)
     parser.add_argument("--release-ref", required=True)
     parser.add_argument("--repository", required=True)
+    parser.add_argument("--asset-base-url", default=None,
+                        help="候选通道基 URL（如 .../releases/download/candidate-<build_id>）；"
+                             "提供时 llama-cpu source 指向它而非自指最终 Release")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     payload = build_catalog(
         args.backend_asset,
         release_ref=args.release_ref,
         repository=args.repository,
+        asset_base_url=args.asset_base_url,
     )
     # write_text 不建父目录；输出落到子目录（如 offline-stage/）时直接 FileNotFoundError
     args.output.parent.mkdir(parents=True, exist_ok=True)

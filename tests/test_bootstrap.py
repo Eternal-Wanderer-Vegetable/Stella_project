@@ -404,10 +404,13 @@ def test_offline_packages_serve_components_without_network(tmp_path, monkeypatch
     assert bootstrap.read_progress(data_root)["state"] == "complete"
 
 
-def test_corrupt_offline_package_falls_back_to_download(tmp_path, monkeypatch):
+def test_corrupt_offline_package_fails_strict_without_online_fallback(
+    tmp_path, monkeypatch
+):
+    """离线副本损坏 → 严格失败（payload_corrupt），不再静默联网回退（WP05）。"""
     catalog, files = _catalog(tmp_path)
     _seed_offline_packages(tmp_path, catalog, files)
-    # 篡改其中一个离线副本：内容不再匹配 catalog checksum，必须被拒收并回落在线
+    # 篡改其中一个离线副本：内容不再匹配 catalog checksum，必须被拒收
     (tmp_path / "offline" / "packages" / "llama-cpu.zip").write_bytes(b"tampered")
     monkeypatch.setattr(bootstrap, "PROJECT_ROOT", tmp_path)
     source_map = dict(zip(_SOURCE_MAP_KEYS, files.values(), strict=True))
@@ -416,11 +419,18 @@ def test_corrupt_offline_package_falls_back_to_download(tmp_path, monkeypatch):
     )
     data_root = tmp_path / "data"
     monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path / "runtime")
-    monkeypatch.setattr(runtime, "INSTANCE_ID", "oneclick-offline-fallback-test")
+    monkeypatch.setattr(runtime, "INSTANCE_ID", "oneclick-offline-strict-test")
 
+    with pytest.raises(bootstrap.BootstrapError) as error:
+        bootstrap.install_profile(
+            "oneclick-python", data_root, catalog_path=catalog
+        )
+    assert error.value.code == "payload_corrupt"
+
+    # 显式在线修复入口保留旧行为：校验不过回落在线，安装可完成
     result = bootstrap.install_profile(
-        "oneclick-python", data_root, catalog_path=catalog
+        "oneclick-python", data_root, catalog_path=catalog,
+        allow_online_fallback=True,
     )
-
     assert result["state"] == "complete"
     assert (data_root / ".stella" / "components" / "llama-cpu" / "4.0.1").is_dir()

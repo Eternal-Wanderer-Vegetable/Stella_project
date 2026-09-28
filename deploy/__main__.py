@@ -569,7 +569,46 @@ def _cmd_packages(args: argparse.Namespace) -> int:
 
 def _cmd_upgrade(args: argparse.Namespace) -> int:
     """Install a verified program tree through the transactional pointer."""
-    from .upgrade import UpgradeError, transactional_upgrade
+    from .upgrade import UpgradeError, rollback_activation
+
+    if args.rollback:
+        # S11 Phase 2：激活记录翻转（当前树 <-> 保留的上一代树，双向）。
+        try:
+            record = rollback_activation()
+        except UpgradeError as exc:
+            print(
+                json.dumps(
+                    {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                    ensure_ascii=False,
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "rolled_back_to": {
+                        "version": record.get("version"),
+                        "path": record.get("path"),
+                    },
+                    "note": "重启 Stella 后生效；再次 --rollback 可滚回",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    if not args.rollback and not args.source:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": "usage", "message": "upgrade 需要 SOURCE 或 --rollback"}},
+                ensure_ascii=False,
+            )
+        )
+        return 2
+
+    from .upgrade import transactional_upgrade
 
     try:
         result = transactional_upgrade(
@@ -604,23 +643,66 @@ def _cmd_upgrade(args: argparse.Namespace) -> int:
 
 def _cmd_bootstrap(args: argparse.Namespace) -> int:
     from . import bootstrap
+    from .install_contract import InstallOutcome, exit_code_for
 
     try:
         result = bootstrap.install_profile(
             args.profile,
             STELLA_HOME,
             catalog_path=Path(args.catalog) if args.catalog else None,
+            allow_online_fallback=args.allow_online_fallback,
         )
-    except bootstrap.BootstrapError as exc:
+    except KeyboardInterrupt:
+        # 取消是终态不是崩溃：install_profile 已落 interrupted 账本/进度
         print(
             json.dumps(
-                {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                {"ok": False, "outcome": InstallOutcome.INTERRUPTED.value},
                 ensure_ascii=False,
             )
         )
-        return 1
+        return exit_code_for(InstallOutcome.INTERRUPTED)
+    except bootstrap.BootstrapError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "outcome": InstallOutcome.FAILED.value,
+                    "error": {"code": exc.code, "message": exc.message},
+                },
+                ensure_ascii=False,
+            )
+        )
+        return exit_code_for(InstallOutcome.FAILED)
+    except Exception as exc:  # 未知异常也必须有终态与退出码，不允许裸 traceback 退出
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "outcome": InstallOutcome.FAILED.value,
+                    "error": {
+                        "code": "unexpected_error",
+                        "message": f"{type(exc).__name__}: {exc}",
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+        return exit_code_for(InstallOutcome.FAILED)
+    # 安装契约：结果带 outcome 终态，退出码与之稳定映射（state 字段保留向后兼容）。
+    legacy_state = str(result.get("state") or "")
+    if legacy_state in {"complete", "skipped"} and result.get("reboot_required"):
+        # MSI 3010/1641：安装成功但需要重启才能生效——不是 ready，也不是 failed。
+        outcome = InstallOutcome.REBOOT_REQUIRED
+    elif legacy_state in {"complete", "skipped"}:
+        outcome = InstallOutcome.READY
+    else:
+        outcome = InstallOutcome.FAILED
+    result["outcome"] = outcome.value
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return exit_code_for(outcome)
 
 
 def _cmd_runtime(args: argparse.Namespace) -> int:
@@ -712,9 +794,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_migrate.set_defaults(func=_cmd_migrate)
 
-    p_upgrade = sub.add_parser("upgrade", help="校验并原子切换程序版本")
-    p_upgrade.add_argument("source", help="已解包的升级源目录")
-    p_upgrade.add_argument("--version", required=True, help="目标版本")
+    p_upgrade = sub.add_parser(
+        "upgrade", help="校验并原子切换程序版本；--rollback 回滚到上一版本"
+    )
+    p_upgrade.add_argument(
+        "source", nargs="?", default=None, help="已解包的升级源目录（--rollback 时不需要）"
+    )
+    p_upgrade.add_argument(
+        "--version", default=None, help="目标版本（--rollback 时不需要）"
+    )
+    p_upgrade.add_argument(
+        "--rollback",
+        action="store_true",
+        help="把激活记录翻转到保留的上一版本树（双向）",
+    )
     p_upgrade.add_argument("--checksum", default=None, help="源目录 tree SHA-256")
     p_upgrade.add_argument(
         "--install-root",
@@ -746,6 +839,12 @@ def main(argv: list[str] | None = None) -> int:
         "--catalog",
         default=None,
         help="测试或离线场景使用的本地 package catalog",
+    )
+    p_bootstrap_install.add_argument(
+        "--allow-online-fallback",
+        action="store_true",
+        help="显式在线修复：离线副本损坏/缺失时回落在线下载（默认严格离线，"
+             "损坏即失败，绝不静默联网）",
     )
     p_bootstrap_install.set_defaults(func=_cmd_bootstrap)
 

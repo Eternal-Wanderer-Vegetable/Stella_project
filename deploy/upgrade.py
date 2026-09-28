@@ -29,6 +29,125 @@ class UpgradeError(RuntimeError):
         self.path = path
 
 
+# ============================================================
+# 机器级激活记录（S11 Phase 2）：版本化程序树的选择开关
+# ============================================================
+
+ACTIVE_RECORD_SCHEMA_VERSION = 1
+_ACTIVATION_RECORD_FILENAME = "active-install.json"
+ACTIVATION_APPS_DIRNAME = "app"
+
+
+def machine_active_record_path() -> Path:
+    """激活记录的机器级位置（INSTDIR 之外，旧卸载器/重装都碰不到）。
+
+    与 config.home 指针（home.txt）同目录族：Windows 用
+    ``%LOCALAPPDATA%\\Stella``，其余平台用 XDG ``~/.config/stella``。
+    """
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        return Path(local) / "Stella" / _ACTIVATION_RECORD_FILENAME
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".config"
+    return base / "stella" / _ACTIVATION_RECORD_FILENAME
+
+
+def write_activation_record(
+    *,
+    version: str,
+    tree_path: Path,
+    tree_sha256: str | None = None,
+    previous: dict | None = None,
+) -> Path:
+    """原子写入激活记录；previous 携带上代树（回滚开关的依据）。"""
+    payload: dict = {
+        "schema_version": ACTIVE_RECORD_SCHEMA_VERSION,
+        "version": version,
+        "path": str(Path(tree_path).resolve()),
+        "previous": previous,
+    }
+    if tree_sha256:
+        payload["tree_sha256"] = tree_sha256
+    _atomic_json(machine_active_record_path(), payload)
+    return machine_active_record_path()
+
+
+def read_activation_record() -> dict | None:
+    """读激活记录；缺失/损坏返回 None（调用方回退到旧解析路径）。"""
+    path = machine_active_record_path()
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def validate_activation_record(record: dict, install_root: Path) -> Path:
+    """校验激活记录并返回树路径；任何不合法抛 UpgradeError（调用方回退）。
+
+    containment 铁律：树必须位于 ``<install_root>\\app`` 之下、单段版本名、
+    且 ``bot.py`` 存在。记录内容是机器级持久状态，等同不可信输入。
+    """
+    if record.get("schema_version") != ACTIVE_RECORD_SCHEMA_VERSION:
+        raise UpgradeError(
+            "invalid_activation_record", "激活记录 schema 版本不受支持"
+        )
+    version = str(record.get("version") or "").strip()
+    raw_path = str(record.get("path") or "").strip()
+    if not version or "/" in version or "\\" in version:
+        raise UpgradeError("invalid_activation_record", "激活记录版本非法")
+    if not raw_path:
+        raise UpgradeError("invalid_activation_record", "激活记录缺少树路径")
+    install_root = Path(install_root).expanduser().resolve()
+    apps_root = install_root / ACTIVATION_APPS_DIRNAME
+    try:
+        resolved = Path(raw_path).expanduser().resolve()
+        resolved.relative_to(apps_root)
+    except (OSError, ValueError) as exc:
+        raise UpgradeError(
+            "invalid_activation_record",
+            f"激活树路径越界：{raw_path}（必须位于 {apps_root} 之下）",
+            path=apps_root,
+        ) from exc
+    if not (resolved / "bot.py").is_file():
+        raise UpgradeError(
+            "invalid_activation_record", f"激活树缺少 bot.py：{resolved}",
+            path=resolved,
+        )
+    return resolved
+
+
+def rollback_activation() -> dict:
+    """把激活记录翻转到 previous（滚回旧树）；当前树降为可滚回的 previous。
+
+    双向：回滚后再执行一次即滚回新树。没有 previous 时明确拒绝。
+    """
+    record = read_activation_record()
+    if not record:
+        raise UpgradeError("rollback_unavailable", "没有激活记录可回滚")
+    previous = record.get("previous")
+    if not isinstance(previous, dict) or not previous.get("path"):
+        raise UpgradeError(
+            "rollback_unavailable", "激活记录没有可回滚的旧版本"
+        )
+    new_payload: dict = {
+        "schema_version": ACTIVE_RECORD_SCHEMA_VERSION,
+        "version": previous.get("version"),
+        "path": previous.get("path"),
+        "previous": {
+            "version": record.get("version"),
+            "path": record.get("path"),
+        },
+    }
+    for key in ("tree_sha256",):
+        if isinstance(previous, dict) and previous.get(key):
+            new_payload[key] = previous[key]
+    _atomic_json(machine_active_record_path(), new_payload)
+    return new_payload
+
+
 @dataclass(frozen=True)
 class UpgradeResult:
     version: str
@@ -52,8 +171,12 @@ class UpgradeLock:
         except FileExistsError as exc:
             raise UpgradeError("upgrade_in_progress", "已有升级操作正在进行中", path=self.path) from exc
         try:
+            from .install_state import process_identity
+
             payload = {
                 "pid": os.getpid(),
+                # 创建身份：恢复陈旧锁时区分「还是那个进程」与「PID 被复用」
+                "identity": process_identity(os.getpid()),
                 "token": uuid.uuid4().hex,
             }
             os.write(fd, (json.dumps(payload) + "\n").encode("utf-8"))
@@ -70,24 +193,30 @@ class UpgradeLock:
         self._held = False
 
     def recover_stale(self) -> bool:
-        """Remove a lock only when its recorded owner is definitely gone."""
+        """Remove a lock only when its recorded owner is definitely gone.
+
+        跨平台统一身份感知分类（install_state.classify_owner）：
+        - 探活为 gone（Windows 用 OpenProcess 三态探测——``os.kill(pid, 0)``
+          在 Windows 是 TerminateProcess，绝不可用，F19；POSIX 用信号 0）；
+        - 进程活着但创建身份与记录不一致 = PID 被复用 → 陈旧，可恢复
+          （CI Linux 实测修复：此前 POSIX 分支无身份判定，复用场景漏判）；
+        - 权限不足等 unknown 一律保留锁，绝不据此动手。
+        遗留锁（无 identity 记录）+ 活 owner → unknown → 保守保留。
+        """
         if not self.path.is_file():
             return False
         try:
             owner = json.loads(self.path.read_text(encoding="utf-8"))
-            pid = int(owner["pid"])
-        except (OSError, ValueError, TypeError, KeyError):
+        except (OSError, ValueError, TypeError):
             return False
-        if pid <= 0:
+        if not isinstance(owner, dict):
             return False
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            self.path.unlink(missing_ok=True)
-            return True
-        except PermissionError:
+        from .install_state import classify_owner
+
+        if classify_owner(owner) != "stale":
             return False
-        return False
+        self.path.unlink(missing_ok=True)
+        return True
 
     def __enter__(self) -> "UpgradeLock":  # noqa: PYI034
         self.acquire()
@@ -216,10 +345,17 @@ def transactional_upgrade(
 
 
 __all__ = [
+    "ACTIVATION_APPS_DIRNAME",
+    "ACTIVE_RECORD_SCHEMA_VERSION",
     "UpgradeError",
     "UpgradeLock",
     "UpgradeResult",
     "active_pointer",
+    "machine_active_record_path",
+    "read_activation_record",
     "read_active",
+    "rollback_activation",
     "transactional_upgrade",
+    "validate_activation_record",
+    "write_activation_record",
 ]

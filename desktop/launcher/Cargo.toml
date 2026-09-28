@@ -1,0 +1,18 @@
+[package]
+name = "stella-launcher"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0"
+description = "Stella 稳定启动入口：读机器级激活记录，启动版本化程序树中的主程序"
+
+[dependencies]
+serde_json = "1"
+
+[[bin]]
+name = "stella-launcher"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

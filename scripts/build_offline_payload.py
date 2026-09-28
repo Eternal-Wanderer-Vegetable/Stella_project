@@ -46,6 +46,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from deploy import offline_payload
 from deploy.acquire import AcquireError, download_verified, verify_local_artifact
 from deploy.packages import _validate_record
 
@@ -169,11 +170,26 @@ def fetch_catalog_packages(
             raise SystemExit(f"catalog record 非法：{exc}") from exc
         artifact = str(record.get("artifact") or Path(record["path"]).name)
         destination = packages_dir / artifact
-        if destination.is_file():
-            print(f"[payload] {artifact} 已存在，跳过下载")
-            continue
         checksum = str(record["checksum"])
         size = int(record["size"]) if record.get("size") is not None else None
+        if destination.is_file():
+            # 缓存命中也必须校验（F14）：复用上一轮构建的陈旧/损坏缓存
+            # 等于把坏负载打进安装包。校验不过 → 隔离后重新下载。
+            try:
+                verify_local_artifact(
+                    destination,
+                    checksum=checksum,
+                    size=size,
+                )
+                print(f"[payload] {artifact} 缓存命中且校验通过，跳过下载")
+                continue
+            except AcquireError as exc:
+                quarantine = destination.with_name(f".corrupt-{artifact}")
+                shutil.move(str(destination), str(quarantine))
+                print(
+                    f"[payload] {artifact} 缓存校验未通过（{exc.message}），"
+                    f"已隔离为 {quarantine.name}，重新下载"
+                )
         local = local_artifacts / artifact if local_artifacts else None
         if local is not None and local.is_file():
             try:
@@ -224,15 +240,55 @@ def install_browsers(browsers_dir: Path) -> str:
     raise SystemExit("playwright install 完成，但离线仓里找不到完整的 chromium_headless_shell-*")
 
 
-def write_manifest(output: Path, version: str, files: dict[str, Path]) -> None:
-    manifest = {
-        "schema_version": 1,
-        "python_version": version,
-        "files": {name: _sha256(path) for name, path in sorted(files.items())},
+def write_python_zip_hash(payload: Path, python_zip: Path) -> Path:
+    """写 python-zip.sha256（64 位大写十六进制，**无换行**）。
+
+    NSIS POSTINSTALL 钩子在解压前用 `certutil | find` 校验运行时 zip：
+    NSIS 的 FileRead 按行读取，因此这个文件必须是恰好 64 个字符、
+    不带任何换行/空白后缀。
+    """
+    hash_path = payload / "python-zip.sha256"
+    hash_path.write_text(_sha256(python_zip).upper(), encoding="ascii")
+    return hash_path
+
+
+def write_manifest(output: Path, version: str, browser_revision: str | None) -> None:
+    """生成 v2 全覆盖清单（deploy.offline_payload.validate/verify 的输入）。
+
+    覆盖 Python zip、get-pip、python-zip.sha256、全部依赖 wheels 与全部
+    catalog 组件；playwright-browsers/ 目录不逐文件入清单（数百 MB，安装
+    期逐文件哈希不划算）——其完整性由 INSTALLATION_COMPLETE 标记与
+    browser_revision 字段核对，S08 预组装 runtime 时再全量验证。清单自身
+    不含自身摘要：外层 release metadata/签名负责绑定清单。
+    """
+    purposes: dict[str, str] = {
+        "get-pip.py": "pip-bootstrap",
+        "python-zip.sha256": "metadata",
     }
-    (output / "MANIFEST.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+    python_zip = next(output.glob("python-*-embed-amd64.zip"), None)
+    if python_zip is None:
+        raise SystemExit("payload 缺少 Python 运行时 zip，无法生成清单")
+    purposes[python_zip.name] = "runtime"
+    for wheel in sorted((output / "wheels").glob("*.whl")):
+        purposes[f"wheels/{wheel.name}"] = "dependency"
+    packages_dir = output / "packages"
+    if packages_dir.is_dir():
+        for package in sorted(packages_dir.iterdir()):
+            if package.is_file():
+                purposes[f"packages/{package.name}"] = "component"
+    manifest = offline_payload.build_manifest(
+        output,
+        purposes,
+        python_version=version,
+        browser_revision=browser_revision,
+    )
+    (output / offline_payload.MANIFEST_FILENAME).write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+    )
+    print(
+        f"[payload] 清单完成：{len(purposes)} 个文件"
+        f"（browsers 目录以 revision={browser_revision} 登记）"
     )
 
 
@@ -271,7 +327,7 @@ def main() -> int:
     print(f"[payload] 嵌入式 Python {version}（常量来自 python.rs）")
 
     python_zip = fetch_python_zip(output, version, expected_sha, args.python_zip)
-    get_pip = fetch_get_pip(output, args.get_pip)
+    fetch_get_pip(output, args.get_pip)
     if not args.skip_wheels:
         build_wheels(args.requirements.resolve(), output / "wheels")
     fetch_catalog_packages(
@@ -284,10 +340,10 @@ def main() -> int:
     if not args.skip_browsers:
         browsers_revision = install_browsers(output / "playwright-browsers")
 
-    write_manifest(output, version, {
-        python_zip.name: python_zip,
-        "get-pip.py": get_pip,
-    })
+    write_python_zip_hash(output, python_zip)
+    write_manifest(output, version, browsers_revision)
+    # 构建后边界校验：清单必须能原样通过安装期同一条验证路径
+    offline_payload.verify_payload(output)
     total = sum(path.stat().st_size for path in output.rglob("*") if path.is_file())
     print(f"[payload] 完成：{output}（总计 {total} 字节，browsers revision={browsers_revision}）")
     return 0

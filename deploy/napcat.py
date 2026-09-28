@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -188,12 +189,37 @@ def install_archive(
     return payload
 
 
+# msiexec 返回码语义（Microsoft MSI 文档；本项目固定策略的唯一事实来源）：
+MSI_SUCCESS_CODES = {0, 3010, 1641}
+MSI_REBOOT_CODES = {3010, 1641}
+MSI_CANCELLED = 1602
+MSI_BUSY = 1618
+MSI_FAILURE = 1603
+# 1618（Windows Installer 忙）的有界退避：重试次数与间隔固定，超限归入
+# msi_busy 具名失败——绝不无限等待，也绝不并发启动第二个 msiexec。
+MSI_BUSY_RETRIES = 3
+MSI_BUSY_BACKOFF_SECONDS = 30.0
+MSI_TIMEOUT_SECONDS = 900
+
+
 def install_msi(
     archive: Path,
     manifest: dict[str, Any],
     data_root: Path,
+    *,
+    allow_interactive_retry: bool = False,
 ) -> dict[str, Any]:
-    """Verify and invoke a pinned Windows NapCat MSI without logging in."""
+    """Verify and invoke a pinned Windows NapCat MSI without logging in.
+
+    返回码策略（WP09）：每个非零码都有具名语义并穿透到调用方——
+    0 继续健康检查；3010/1641 记录 reboot_required 并向上传播（1641 表示
+    已请求重启）；1602 用户取消（不写 metadata，不留假成功）；1618 有界
+    退避后仍忙则 msi_busy；1603 与其它一律具名失败并保留 MSI 详细日志，
+    **不自动弹出完整 UI**（silent 安装突然弹窗是 F10 的缺陷之一；
+    需要交互重试时由 GUI/用户显式发起，传
+    ``allow_interactive_retry=True``）。失败或取消都不写安装 metadata，
+    避免「metadata 说装好了、系统里其实没有」的假成功。
+    """
     metadata = validate_manifest(manifest)
     archive = Path(archive).expanduser().resolve()
     if archive.suffix.lower() != ".msi":
@@ -217,19 +243,32 @@ def install_msi(
         "/L*v",
         str(log_path),
     ]
-    try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            timeout=900,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    result = _run_msiexec(command, timeout=MSI_TIMEOUT_SECONDS)
+
+    if result.returncode == MSI_BUSY:
+        for _attempt in range(MSI_BUSY_RETRIES):
+            time.sleep(MSI_BUSY_BACKOFF_SECONDS)
+            result = _run_msiexec(command, timeout=MSI_TIMEOUT_SECONDS)
+            if result.returncode != MSI_BUSY:
+                break
+        else:
+            raise NapCatError(
+                "msi_busy",
+                "Windows Installer 服务忙（1618）：已有其它安装在进行，"
+                f"重试 {MSI_BUSY_RETRIES} 次仍失败。请稍后在系统空闲时重试"
+                f"（日志：{log_path}）",
+            )
+
+    if result.returncode == MSI_CANCELLED:
+        raise NapCatError(
+            "msi_cancelled",
+            f"NapCat MSI 安装被用户取消（1602）。未写入安装记录（日志：{log_path}）",
         )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise NapCatError("install_failed", f"NapCat MSI 安装失败：{exc}") from exc
-    if result.returncode == 1603:
+
+    if result.returncode == MSI_FAILURE and allow_interactive_retry:
         # Some NapCat MSI builds require an interactive elevation/custom-action
-        # path that cannot run under /passive. Retry once with the full UI.
+        # path that cannot run under /passive. Only when the caller explicitly
+        # allows a full-UI retry (user-facing repair flows), never silently.
         interactive_log = log_dir / "napcat-msi-install-interactive.log"
         interactive_command = [
             "msiexec.exe",
@@ -239,24 +278,16 @@ def install_msi(
             "/L*v",
             str(interactive_log),
         ]
-        try:
-            result = subprocess.run(
-                interactive_command,
-                check=False,
-                timeout=900,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            log_path = interactive_log
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise NapCatError(
-                "install_failed",
-                f"NapCat MSI 安装失败：无法启动交互式重试（日志：{log_path}）",
-            ) from exc
-    if result.returncode not in {0, 1641, 3010}:
+        result = _run_msiexec(interactive_command, timeout=MSI_TIMEOUT_SECONDS)
+        log_path = interactive_log
+
+    if result.returncode not in MSI_SUCCESS_CODES:
         raise NapCatError(
-            "install_failed",
-            f"NapCat MSI 安装失败：msiexec 退出码 {result.returncode}（日志：{log_path}）",
+            "msi_install_failed",
+            f"NapCat MSI 安装失败：msiexec 退出码 {result.returncode}"
+            f"（日志：{log_path}）",
         )
+    reboot_required = result.returncode in MSI_REBOOT_CODES
 
     paths["metadata"].parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -265,7 +296,12 @@ def install_msi(
         "qq_data_path": str(paths["qq"]),
         "config_path": str(paths["config"]),
         "login": {"unattended": False, "status": "not_logged_in"},
+        "reboot_required": reboot_required,
     }
+    if result.returncode == 1641:
+        # 1641：安装器已请求重启。不能谎称“完成且无需重启”，也不在脚本里
+        # 主动重启机器——恢复交给用户/外层协议。
+        payload["reboot_initiated"] = True
     fd, temporary = tempfile.mkstemp(
         prefix=".napcat-", suffix=".json", dir=paths["metadata"].parent
     )
@@ -280,6 +316,27 @@ def install_msi(
         if Path(temporary).exists():
             Path(temporary).unlink()
     return payload
+
+
+def _run_msiexec(command: list[str], *, timeout: float):
+    try:
+        return subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired as exc:
+        log_path = command[-1]
+        raise NapCatError(
+            "msi_timeout",
+            f"NapCat MSI 安装超时（{int(timeout)} 秒）。Windows Installer 可能"
+            f"仍在后台运行，请先在任务管理器确认 msiexec 已退出再重试"
+            f"（日志：{log_path}）",
+        ) from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise NapCatError("install_failed", f"NapCat MSI 安装失败：{exc}") from exc
 
 
 def status(data_root: Path, observed: str | None = None) -> dict[str, Any]:
