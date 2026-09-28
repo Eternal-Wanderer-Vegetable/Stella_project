@@ -1,1072 +1,1128 @@
-name: Release
-
-# 打 v* tag 触发；也支持手工触发（填版本号即可，不带 v 前缀）
-on:
-  push:
-    tags: ['v*']
-  workflow_dispatch:
-    inputs:
-      version:
-        description: '打包版本号（不带 v 前缀，如 0.3.0），用于手工测试打包流程'
-        required: true
-        type: string
-      overwrite_release:
-        description: '若同版本 Release 已存在，是否覆盖其 asset（true 时会新建或更新 Release）'
-        required: false
-        type: boolean
-        default: false
-
-permissions:
-  contents: write
-  artifact-metadata: write
-
-env:
-  # The OneClick catalog must point at a reproducible Windows CPU backend.
-  LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d
-  # 版本化布局双轨开关（S11 Phase 2）：'1' = 安装器构建 launcher 并写
-  # 版本化搬移标记。切 '1' 的前置条件：VM 矩阵（T01/T03/T11/T14/T18）
-  # 全过。默认 '0' = 安装行为与历史版本逐字节一致。
-  VERSIONED_LAYOUT: '0'
-
-jobs:
-  # 版本只解析一次：Dashboard marker / catalog release-ref / 安装契约元数据 /
-  # 产物名全部消费 needs.resolve-release.outputs，杜绝各 job 各自解析造成的
-  # 版本漂移（2026-09-28 计划 F17：手工发布时前端 marker 曾取错来源）。
-  resolve-release:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.resolve.outputs.version }}
-      build_id: ${{ steps.resolve.outputs.build_id }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 解析并校验发布版本（全工作流唯一事实来源）
-        id: resolve
-        shell: bash
-        run: |
-          set -e
-          if [ "${{ github.event_name }}" = "push" ]; then
-            V="${GITHUB_REF_NAME#v}"
-          else
-            V="${{ inputs.version }}"; V="${V#v}"
-          fi
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
-          if ! echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::非法 Release 版本: $V"; exit 1
-          fi
-          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
-          if [ "$PY_V" != "$V" ]; then
-            echo "::error::pyproject.toml 版本（$PY_V）与 Release 版本（$V）不一致"; exit 1
-          fi
-
-  # M6：先构建 WebUI 前端（版本号来自统一解析的 Release 版本），安装器把它
-  # 拷入壳内资源、发布包把它放进 webui/dist 供 Bot 托管（方案 §12.3）
-  build-dashboard:
-    needs: [resolve-release]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: dashboard/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm --dir dashboard install --frozen-lockfile
-
-      - name: Build dashboard (typecheck included)
-        run: pnpm --dir dashboard build
-
-      - name: Write version marker
-        run: |
-          echo "${{ needs.resolve-release.outputs.version }}" > dashboard/dist/assets/version
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: stella-dashboard-dist
-          path: dashboard/dist
-
-  # OneClick installation is not publishable without the CPU backend catalog.
-  # Build this package in the main release workflow so the catalog is uploaded
-  # before the Release becomes visible to end users.
-  build-oneclick-catalog-backend:
-    needs: [resolve-release]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 透传统一解析的发布版本
-        shell: pwsh
-        run: |
-          "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> $env:GITHUB_ENV
-          "BUILD_ID=${{ needs.resolve-release.outputs.build_id }}" >> $env:GITHUB_ENV
-
-      - name: Checkout pinned llama.cpp
-        uses: actions/checkout@v4
-        with:
-          repository: ggml-org/llama.cpp
-          ref: ${{ env.LLAMA_CPP_COMMIT }}
-          path: .llama.cpp
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: 准备 Windows OpenSSL runtime
-        shell: pwsh
-        run: |
-          $requiredSets = @(
-            @('libcrypto-3-x64.dll', 'libcrypto-3.dll'),
-            @('libssl-3-x64.dll', 'libssl-3.dll')
-          )
-          $roots = @(
-            (Join-Path $env:ProgramFiles 'OpenSSL-Win64\bin'),
-            (Join-Path $env:ProgramFiles 'OpenSSL\bin'),
-            'C:\Program Files\Git\usr\bin',
-            'C:\ProgramData\chocolatey\bin'
-          )
-          function Find-OpenSslDir {
-            foreach ($root in $roots) {
-              $crypto = $requiredSets[0] | Where-Object {
-                Test-Path (Join-Path $root $_)
-              }
-              $ssl = $requiredSets[1] | Where-Object {
-                Test-Path (Join-Path $root $_)
-              }
-              if ($crypto -and $ssl) {
-                return $root
-              }
-            }
-            return $null
-          }
-          $opensslDir = Find-OpenSslDir
-          if (-not $opensslDir) {
-            choco install openssl --yes --no-progress
-            $opensslDir = Find-OpenSslDir
-          }
-          if (-not $opensslDir) {
-            throw "未找到 Windows OpenSSL runtime: libcrypto-3-x64.dll/libcrypto-3.dll, libssl-3-x64.dll/libssl-3.dll"
-          }
-          "OPENSSL_RUNTIME_DIR=$opensslDir" >> $env:GITHUB_ENV
-
-      - name: 构建并校验 Windows CPU backend
-        shell: pwsh
-        run: |
-          $package = "dist\Stella-llama-v$env:RELEASE_VERSION-windows-x86_64-cpu"
-          $archive = "dist\Stella-llama-v$env:RELEASE_VERSION-windows-x86_64-cpu.zip"
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          python scripts/build_llama_package.py .llama.cpp `
-            --output $package `
-            --backend cpu `
-            --commit $env:LLAMA_CPP_COMMIT `
-            --os windows `
-            --arch windows-amd64 `
-            --runtime-dir $env:OPENSSL_RUNTIME_DIR
-          python scripts/verify_llama_package.py $package
-          Compress-Archive -Path "$package\*" -DestinationPath $archive
-          if (-not (Test-Path -LiteralPath $archive)) {
-            throw "Windows CPU backend asset was not created: $archive"
-          }
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: stella-oneclick-catalog-backend
-          path: dist/Stella-llama-v*-windows-x86_64-cpu.zip
-          if-no-files-found: error
-
-  # OneClick Offline 的随包负载：把安装期本要联网下载的所有产物在发布时预取齐
-  # （Python 运行时 / get-pip / 依赖 wheel 闭包 / catalog 组件 / playwright 内核），
-  # 安装期由 python.rs 与 deploy.bootstrap 的本地优先路径就地取用，零联网。
-  build-offline-payload:
-    needs: [resolve-release, build-oneclick-catalog-backend]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 透传统一解析的发布版本
-        shell: pwsh
-        run: |
-          "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> $env:GITHUB_ENV
-          "BUILD_ID=${{ needs.resolve-release.outputs.build_id }}" >> $env:GITHUB_ENV
-
-      - name: 下载 OneClick Windows CPU backend
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-oneclick-catalog-backend
-          path: llama-catalog
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      # playwright 要 import 才能预装内核；payload 脚本用 `pip wheel` 现场构建
-      # requirements 的依赖闭包（含只有 sdist 的包），两者都需要依赖先就位。
-      - name: 安装依赖
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-
-      - name: 构建离线负载
-        shell: pwsh
-        run: |
-          $backend = @(Get-ChildItem 'llama-catalog\*.zip' -File)
-          if ($backend.Count -ne 1) {
-            throw "离线负载必须基于恰好一个 Windows CPU backend，实际为 $($backend.Count)"
-          }
-          # build_release_catalog.py 的 write_text 不建父目录，暂存目录必须先建好
-          New-Item -ItemType Directory -Force -Path offline-stage | Out-Null
-          python scripts/build_release_catalog.py `
-            --backend-asset $backend[0].FullName `
-            --release-ref "v$env:RELEASE_VERSION" `
-            --repository "${{ github.repository }}" `
-            --output offline-stage/package-catalog-windows-amd64.json
-          # 浏览器内核默认随负载安装（--skip-browsers 才跳过）。
-          # --local-artifacts：llama-cpu 的 source 是自指 Release URL，payload
-          # 构建时该 Release 还没发布（404），backend zip 用上一步的 artifact。
-          python scripts/build_offline_payload.py `
-            --output offline-stage/payload `
-            --catalog offline-stage/package-catalog-windows-amd64.json `
-            --local-artifacts llama-catalog
-          if (-not (Test-Path 'offline-stage\payload\MANIFEST.json')) {
-            throw 'offline payload was not created'
-          }
-
-      # 闭包完整性要在发布前钉死：少一个传递依赖的 wheel，用户就会在
-      # --no-index 安装时收到「No matching distribution」。--ignore-installed
-      # 强制 pip 只从离线仓解析，防止 runner 上已装的包掩盖缺口。
-      - name: 校验离线 wheel 闭包可解析
-        shell: pwsh
-        run: |
-          python -m pip install --dry-run --ignore-installed --no-index `
-            --find-links offline-stage/payload/wheels `
-            -r requirements.txt
-
-      - name: 上传离线负载
-        uses: actions/upload-artifact@v7
-        with:
-          name: stella-offline-payload
-          path: offline-stage/payload
-          if-no-files-found: error
-
-  # Tauri 的 Windows WebView/Rust 产物必须在 Windows runner 上构建。
-  # OneClick 只发布 NSIS setup executable；程序树通过 Tauri resources 嵌入，
-  # 安装后由 project_root() 从 resources/stella 定位。
-  # payload 维度：online 走安装期联网（现状），offline 嵌入 build-offline-payload
-  # 的随包负载。两者同一 profile、同一份代码，只差 resources 里有没有 offline/。
-  build-installer:
-    needs: [resolve-release, build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload, build-dashboard]
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [oneclick-python, oneclick-rust]
-        payload: [online, offline]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # 显式 setup-python（WP06）：不依赖 runner 的默认 Python——runner 镜像
-      # 升级换掉默认版本时，staging 脚本会在用户机器之外先炸一次。
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      # dashboard 产物必须在「准备 OneClick 内嵌程序资源」之前到位：
-      # staging 的 webui/dist 兜底读 desktop/dashboard-dist，晚于 staging 就
-      # 会打出面板整页缺失的安装包（v5.0.0 离线包实测，2026-09-25）。
-      - name: 下载 WebUI 前端产物（壳内资源 + Bot payload 各一份）
-        uses: actions/download-artifact@v7
-        with:
-          name: stella-dashboard-dist
-          path: desktop/dashboard-dist
-
-      - name: 拷入 Bot payload 的 webui/dist
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path webui/dist | Out-Null
-          Copy-Item desktop/dashboard-dist/* webui/dist/ -Recurse -Force
-
-      - name: 透传统一解析的发布版本
-        shell: pwsh
-        run: |
-          "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> $env:GITHUB_ENV
-          "BUILD_ID=${{ needs.resolve-release.outputs.build_id }}" >> $env:GITHUB_ENV
-          $cli = Get-Content 'cli/Cargo.toml' -Raw
-          $cliVersion = [regex]::Match(
-            $cli, '(?m)^version = "([^"]+)"'
-          ).Groups[1].Value
-          if ($cliVersion -ne '${{ needs.resolve-release.outputs.version }}') {
-            throw "主版本不一致: cli/Cargo.toml=$cliVersion release=${{ needs.resolve-release.outputs.version }}"
-          }
-
-      # needs 只保证上游 job 已完成，不会把 upload-artifact 的文件自动放进
-      # 当前 runner；必须显式下载，且下载完成后才能开始慢速的 Tauri 构建。
-      - name: 下载 Rust memory wheel（OneClick Rust）
-        if: matrix.profile == 'oneclick-rust'
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-rust-wheel
-          path: rust-wheel
-
-      - name: 下载 OneClick Windows CPU backend
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-oneclick-catalog-backend
-          path: llama-catalog
-
-      - name: 下载 Offline payload
-        if: matrix.payload == 'offline'
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-offline-payload
-          path: offline-payload
-
-      - name: 准备 OneClick 内嵌程序资源
-        shell: pwsh
-        run: |
-          $backend = @(Get-ChildItem 'llama-catalog\*.zip' -File)
-          if ($backend.Count -ne 1) {
-            throw "OneClick installer 必须下载恰好一个 Windows CPU backend，实际为 $($backend.Count)"
-          }
-          python scripts/build_release_catalog.py `
-            --backend-asset $backend[0].FullName `
-            --release-ref "v$env:RELEASE_VERSION" `
-            --repository "${{ github.repository }}" `
-            --output package-catalog-windows-amd64.json
-          if ('${{ matrix.profile }}' -eq 'oneclick-rust') {
-            New-Item -ItemType Directory -Force -Path wheels | Out-Null
-            $wheels = @(Get-ChildItem 'rust-wheel\*.whl' -File)
-            if ($wheels.Count -ne 1) {
-              throw "OneClick Rust 必须下载恰好一个 Rust wheel，实际为 $($wheels.Count)"
-            }
-            Copy-Item $wheels[0].FullName wheels\
-          }
-          if (-not (Test-Path -LiteralPath 'package-catalog-windows-amd64.json')) {
-            throw 'OneClick package catalog was not generated'
-          }
-          $stageArgs = @(
-            'scripts/build_release_package.py',
-            '${{ matrix.profile }}',
-            '--source', '.',
-            '--output', 'dist/unused',
-            '--stage-resources', 'desktop/src-tauri/resources/stella',
-            '--release-version', $env:RELEASE_VERSION,
-            '--build-id', $env:BUILD_ID
-          )
-          if ('${{ matrix.payload }}' -eq 'offline') {
-            if (-not (Test-Path 'offline-payload\MANIFEST.json')) {
-              throw 'Offline payload artifact is missing MANIFEST.json'
-            }
-            $stageArgs += @('--offline-payload', 'offline-payload')
-          }
-          if ($env:VERSIONED_LAYOUT -eq '1') {
-            cargo build --release --locked -p stella-launcher --manifest-path desktop/launcher/Cargo.toml
-            if ($LASTEXITCODE -ne 0) { throw "launcher 构建失败（退出码 $LASTEXITCODE）" }
-            $stageArgs += @('--versioned-layout',
-              '--launcher-exe', 'desktop/launcher/target/release/stella-launcher.exe')
-          }
-          python @stageArgs
-
-      # staging 后硬校验：webui/dist 缺失的安装包不允许走出这台机器
-      # （v5.0.0 离线包实测：面板整页缺失，用户看到「管理面前端尚未构建」）。
-      - name: 校验内嵌资源含 webui/dist
-        shell: pwsh
-        run: |
-          if (-not (Test-Path 'desktop/src-tauri/resources/stella/webui/dist/index.html')) {
-            throw '内嵌资源缺少 webui/dist/index.html——Bot 托管面板将整页缺失'
-          }
-
-      - name: 同步 Tauri 版本号
-        shell: pwsh
-        run: |
-          $version = $env:RELEASE_VERSION
-          $cargo = Get-Content 'desktop/src-tauri/Cargo.toml' -Raw
-          $cargo = $cargo -replace '(?m)^version = "[^"]+"', ('version = "' + $version + '"')
-          Set-Content 'desktop/src-tauri/Cargo.toml' $cargo -NoNewline
-
-          $tauri = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw
-          $tauri = $tauri -replace '(?m)"version": "[^"]+"', ('"version": "' + $version + '"')
-          Set-Content 'desktop/src-tauri/tauri.conf.json' $tauri -NoNewline
-
-      # 工具链锁定（WP06）：NSIS 模板/插件随 tauri-cli 版本变化——飘一个
-      # 小版本就可能改变 .nsi 结构与 hook 时序。精确版本来自
-      # release_assets/toolchain.json，升级必须走独立可审阅的变更。
-      - name: 安装 Tauri CLI（精确锁定版本）
-        shell: pwsh
-        run: |
-          $toolchain = Get-Content 'release_assets/toolchain.json' -Raw | ConvertFrom-Json
-          cargo install tauri-cli --version $toolchain.tauri_cli --locked
-          if ($LASTEXITCODE -ne 0) { throw "tauri-cli 安装失败（退出码 $LASTEXITCODE）" }
-
-      - name: 构建 OneClick NSIS 安装器
-        shell: pwsh
-        working-directory: desktop/src-tauri
-        env:
-          STELLA_BUILD_PROFILE: ${{ matrix.profile }}
-        run: |
-          cargo tauri build --bundles nsis
-          if ($LASTEXITCODE -ne 0) { throw "tauri build 失败（退出码 $LASTEXITCODE）" }
-
-      - name: 上传安装器
-        uses: actions/upload-artifact@v7
-        with:
-          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
-          path: desktop/src-tauri/target/release/bundle/nsis/*setup.exe
-          if-no-files-found: error
-
-  build-rust-wheel:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: 构建 Rust memory wheel（maturin 精确锁定）
-        shell: pwsh
-        run: |
-          $toolchain = Get-Content 'release_assets/toolchain.json' -Raw | ConvertFrom-Json
-          python -m pip install --upgrade "pip" "maturin==$($toolchain.maturin)"
-          if ($LASTEXITCODE -ne 0) { throw "pip install maturin 失败（退出码 $LASTEXITCODE）" }
-          New-Item -ItemType Directory -Force -Path dist\rust-wheel | Out-Null
-          maturin build --release --manifest-path memory_rust/native/Cargo.toml `
-            --out dist\rust-wheel
-          if ($LASTEXITCODE -ne 0) { throw "maturin build 失败（退出码 $LASTEXITCODE）" }
-          $wheels = @(Get-ChildItem dist\rust-wheel\*.whl)
-          if ($wheels.Count -ne 1) {
-            throw "Rust wheel 构建必须得到恰好一个 wheel"
-          }
-      - uses: actions/upload-artifact@v7
-        with:
-          name: stella-rust-wheel
-          path: dist/rust-wheel/*.whl
-          if-no-files-found: error
-
-  # ============ stellacli 二进制（先行构建，打包集中在 build 作业） ============
-  # CLI 包 = 完整程序目录 + stellacli：CLI 是编排层，本地形态要透传
-  # python -m deploy，只发二进制会连「项目根」都找不到。因此二进制先在
-  # 各自平台构建成 artifact，由 build 作业与程序目录一起组装（方案见
-  # design_docs/跨平台 CLI 控制台方案 v1.0.md；打包不在此处做，避免
-  # 「程序目录」在多个作业间重复维护排除清单）。
-  build-cli-linux-binary:
-    needs: [resolve-release]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 透传统一解析的发布版本
-        run: |
-          echo "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> "$GITHUB_ENV"
-
-      # resolve-release 已做 tag/pyproject 一致性校验；此处保留 Cargo 侧防线
-      - name: 校验版本号一致（tag 触发时）
-        if: github.event_name == 'push'
-        run: |
-          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
-          echo "Cargo=$CARGO_V tag=$RELEASE_VERSION"
-          if [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
-            echo "::error::版本不一致（Cargo/tag）"; exit 1
-          fi
-
-      # 手工触发测试打包流程时同步版本号（与安装器 job 的处理同款）
-      - name: 同步 Cargo 版本号（手工触发时）
-        if: github.event_name != 'push'
-        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli
-
-      - name: 安装 musl 工具链
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: 构建（musl 静态链接，任意发行版可直接运行）
-        working-directory: cli
-        run: cargo build --release --target x86_64-unknown-linux-musl
-
-      - name: 上传二进制
-        uses: actions/upload-artifact@v7
-        with:
-          name: stellacli-linux
-          path: cli/target/x86_64-unknown-linux-musl/release/stellacli
-          if-no-files-found: error
-
-  build-cli-windows-binary:
-    needs: [resolve-release]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 透传统一解析的发布版本
-        shell: bash
-        run: |
-          echo "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> "$GITHUB_ENV"
-
-      - name: 校验版本号一致（tag 触发时）
-        if: github.event_name == 'push'
-        shell: bash
-        run: |
-          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
-          echo "Cargo=$CARGO_V tag=$RELEASE_VERSION"
-          if [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
-            echo "::error::版本不一致（Cargo/tag）"; exit 1
-          fi
-
-      - name: 同步 Cargo 版本号（手工触发时）
-        if: github.event_name != 'push'
-        shell: bash
-        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: cli
-
-      - name: 构建
-        working-directory: cli
-        run: cargo build --release
-
-      - name: 上传二进制
-        uses: actions/upload-artifact@v7
-        with:
-          name: stellacli-windows
-          path: cli/target/release/stellacli.exe
-          if-no-files-found: error
-
-  # 最终 EXE 安装验收（WP02）：产物构建完成 ≠ 可发布。四个产物各自在独立
-  # 的 Windows runner 上静默安装并校验真实落盘结果；安装失败的包不允许进入
-  # 发布作业。报告（含产物 SHA-256）上传为 artifact，发布作业据此核对
-  # 「发布的字节 = 验收过的字节」。hosted runner 不是干净 Windows；干净 VM
-  # 矩阵与 GUI 首启验收属于发布门禁的后续强化（计划 S15）。
-  install-test:
-    needs: [build-installer]
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [oneclick-python, oneclick-rust]
-        payload: [online, offline]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 下载待验收安装器
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
-          path: installer
-
-      - name: 运行最终 EXE 安装验收
-        shell: pwsh
-        run: |
-          $exe = @(Get-ChildItem 'installer\*.exe' -File)
-          if ($exe.Count -ne 1) {
-            throw "安装器 artifact 必须恰好包含一个 EXE，实际为 $($exe.Count)"
-          }
-          scripts/test_nsis_install.ps1 `
-            -InstallerPath $exe[0].FullName `
-            -ExpectedPayloadMode '${{ matrix.payload }}' `
-            -ExpectedProfile '${{ matrix.profile }}' `
-            -ReportDir 'install-report'
-
-      - name: 上传验收报告
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: stella-install-test-${{ matrix.profile }}-${{ matrix.payload }}
-          path: install-report
-          if-no-files-found: error
-
-  build:
-    needs:
-      [
-        resolve-release,
-        build-installer,
-        install-test,
-        build-rust-wheel,
-        build-cli-linux-binary,
-        build-cli-windows-binary,
-        build-oneclick-catalog-backend,
-        build-dashboard
-      ]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # resolve-release 已做过全量版本校验；这里保留终检防线（防止 checkout
-      # 内容在标签与分支间出现意外偏差）
-      - name: 校验版本号一致
-        run: |
-          VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
-          TAG="${{ needs.resolve-release.outputs.version }}"
-          echo "pyproject.toml version: ${VERSION}"
-          echo "release version: ${TAG}"
-          if [ -z "${VERSION}" ]; then
-            echo "::error::无法从 pyproject.toml 解析版本号"
-            exit 1
-          fi
-          if [ "${VERSION}" != "${TAG}" ]; then
-            echo "::error::pyproject.toml 版本（${VERSION}）与 Release 版本（${TAG}）不一致，请先更新版本号"
-            exit 1
-          fi
-          echo "RELEASE_REF=v${TAG}" >> "$GITHUB_ENV"
-
-      # 不复用 .gitignore：两者语义不同（rsync 的 --exclude-from 不支持 ! 否定模式，
-      # 锚定 / 的含义也有差异），且 .gitignore 将来会因开发需要增删——那些改动
-      # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
-      # 日志只需 --exclude 'logs'：2026-08-25 起全部运行期日志都落在 logs/
-      # （config 的 LOG_DIR）。此前思考/整合/压缩日志散在项目根目录，要逐个列名。
-      #
-      # 开发向内容（2026-09-08 bug_report_2026_9_8#2：曾把 .claude/ 等整包发出去）：
-      # .claude / AGENTS.md / CLAUDE.md 是 AI 编码代理的技能与指令文件；
-      # cli/ 是 Rust CLI 的源码（产物另行打包）；assets/ 是 README 的仓库渲染图；
-      # .gitattributes 是 git 元数据；.stella-state.json 是开发机的运行痕迹
-      # （正常应只存在于 STELLA_HOME，仓库里这份是历史误提交，绝不能让新装用户
-      # 带着别人的 last_schema_version 启动）。.gitnexus 当前未被 git 跟踪，
-      # 仍列入排除是防御性的：一旦哪天被提交，不该无声进入发布包。
-      - name: 构造发布目录（排除测试与开发文件）
-        run: |
-          mkdir -p dist/Stella
-          rsync -a \
-            --exclude 'tests' \
-            --exclude 'design_docs' \
-            --exclude 'scripts' \
-            --exclude '_deprecated' \
-            --exclude 'stella-installer' \
-            --exclude '.github' \
-            --exclude '.git' \
-            --exclude '.gitignore' \
-            --exclude '.gitattributes' \
-            --exclude '.claude' \
-            --exclude '.gitnexus' \
-            --exclude 'AGENTS.md' \
-            --exclude 'CLAUDE.md' \
-            --exclude '.stella-state.json' \
-            --exclude 'cli' \
-            --exclude 'assets' \
-            --exclude 'release_assets' \
-            --exclude 'memory/benchmark' \
-            --exclude 'memory_rust/native/target' \
-            --exclude 'memory_rust/native/.venv' \
-            --exclude '*.pyd' \
-            --exclude '*.dll' \
-            --exclude '*.so' \
-            --exclude 'requirements-dev.txt' \
-            --exclude 'pyrightconfig.json' \
-            --exclude '.pytest_cache' \
-            --exclude '.ruff_cache' \
-            --exclude '.mypy_cache' \
-            --exclude '__pycache__' \
-            --exclude '*.pyc' \
-            --exclude '.env' \
-            --exclude '.env.bak' \
-            --exclude '.env.dev' \
-            --exclude '.env.prod' \
-            --exclude 'deploy.answers.toml' \
-            --exclude '.stella-stop-request*' \
-            --exclude 'logs' \
-            --exclude 'StellaData' \
-            --exclude 'runtime' \
-            --exclude '*.db' \
-            --exclude '*.jsonl' \
-            --exclude '*.log' \
-            --exclude 'consolidation_probe*' \
-            --exclude 'consolidation_positive_probe.md' \
-            --exclude 'windows_raw.json' \
-            ./ dist/Stella/
-          cp release_assets/start.bat release_assets/doctor.bat \
-             release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
-
-      # webui/dist（Bot 托管面板）是构建产物，checkout 里天然没有——必须在
-      # 组装 Standalone/CLI 产品之前放进 repo 树与 dist/Stella，否则打包脚本的
-      # 硬校验会拒打（v5.1.0-rc 实测：FileNotFoundError webui/dist）。
-      # dashboard 产物由 build-dashboard job 产出（needs 已保证它先完成）。
-      - name: 下载 WebUI 前端产物
-        uses: actions/download-artifact@v7
-        with:
-          name: stella-dashboard-dist
-          path: desktop/dashboard-dist
-
-      - name: 拷入 webui/dist（repo 树 + dist/Stella 各一份）
-        shell: bash
-        run: |
-          mkdir -p webui/dist dist/Stella/webui/dist
-          cp -r desktop/dashboard-dist/* webui/dist/
-          cp -r desktop/dashboard-dist/* dist/Stella/webui/dist/
-
-      # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF。
-      # 放在 CLI 组装之前：CLI 包从这份目录复制，不能再各自转一遍。
-      - name: 确保 bat 与 txt 为 CRLF
-        run: |
-          sed -i 's/\r$//' dist/Stella/start.bat dist/Stella/doctor.bat \
-            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
-          sed -i 's/$/\r/' dist/Stella/start.bat dist/Stella/doctor.bat \
-            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
-
-      - name: 下载 CLI 二进制
-        uses: actions/download-artifact@v8
-        with:
-          pattern: stellacli-*
-          path: cli-bin
-          merge-multiple: false
-
-      - name: 下载 Rust wheel
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-rust-wheel
-          path: rust-wheel
-
-      - name: 下载 OneClick Windows CPU backend
-        uses: actions/download-artifact@v8
-        with:
-          name: stella-oneclick-catalog-backend
-          path: llama-catalog
-
-      - name: 校验 CLI 二进制到位
-        run: |
-          test -s cli-bin/stellacli-linux/stellacli || { echo "::error::缺少 Linux CLI 二进制"; exit 1; }
-          test -s cli-bin/stellacli-windows/stellacli.exe || { echo "::error::缺少 Windows CLI 二进制"; exit 1; }
-          # upload/download-artifact v4 不保留 Unix 权限位：下载回来的 Linux
-          # 二进制没有 +x，必须补上（cp 保留权限、tar 按此打包，用户解压
-          # 即得可执行文件；Windows exe 无权限位概念，不需要处理）。
-          chmod +x cli-bin/stellacli-linux/stellacli
-          test -x cli-bin/stellacli-linux/stellacli || { echo "::error::chmod 后仍不可执行"; exit 1; }
-
-      # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
-      - name: 准备校验用 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      # 装依赖不只是为了 import 检查——它同时验证了 requirements.txt 本身可安装。
-      # 若某个 pin 写错或上游撤版，用户会在 start.bat 的 pip 步骤失败，
-      # 那时排查成本远高于在这里拦住。CLI 包复用同一份程序目录，无需重复校验。
-      - name: 校验发布包依赖可安装且模块可 import
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r dist/Stella/requirements.txt
-          cd dist/Stella
-          python -c "import astrbot_compat, capability, config, core, memory, deploy, extensions; print('import 检查通过')"
-
-      # 清单是「用户有没有改过发布包自带文件」的唯一判据（见 deploy/manifest.py）。
-      # 没有它，升级时只能二选一：覆盖用户改过的人格，或让用户永远拿不到新默认值。
-      # 清单只登记人格/能力配置等固定目标（不随二进制变化），CLI 包直接复用。
-      - name: 生成发布包清单
-        run: |
-          cd dist/Stella
-          python -m deploy manifest --write
-          cat .stella-manifest.json
-          python -m deploy packages catalog --platform windows-amd64
-          python -m deploy packages verify
-          cat .stella-package-catalog.json
-
-      # 纵深防御之二：USER_DATA 清单（deploy/migrate.py）与 rsync 排除清单是两份，
-      # 迟早会对不上。这一步让「对不上」在发布前失败，而不是等用户升级时丢数据。
-      - name: 校验发布包布局（用户数据未入包 / 自带可改文件已登记）
-        run: python scripts/check_release_layout.py dist/Stella
-
-      # 主发布线只保留四种产品：OneClick 是两个单文件安装程序，
-      # Standalone 是两个 allowlist ZIP；不再生成含混的 Stella-v*-win64 ZIP。
-      - name: 组装 OneClick 与 Standalone 产品
-        run: |
-          set -e
-          rm -rf dist/products
-          mkdir -p dist/products
-          python scripts/build_release_package.py standalone-python \
-            --source . --output dist/standalone-python
-          python scripts/build_release_package.py standalone-rust \
-            --source . --output dist/standalone-rust \
-            --rust-wheel rust-wheel/*.whl
-          python scripts/build_release_package.py --help >/dev/null
-
-      # WebUI 前端产物单独成一份 Release 资产：CI 漏拷或安装包损坏时，可从
-      # Release 页拿到与版本匹配的面板产物手动补进 webui/dist（AstrBot 同款
-      # 的 latest + 版本名双份策略）。
-      - name: 打包 WebUI 前端产物（Release 资产）
-        run: |
-          test -s webui/dist/assets/version || {
-            echo "::error::webui/dist 缺少 assets/version 版本标记"; exit 1;
-          }
-          version="$(sed -E 's/^[vV]//; s/[[:space:]]//g' webui/dist/assets/version | head -c 32)"
-          test -n "$version" || { echo "::error::无法解析前端版本标记"; exit 1; }
-          (cd webui/dist && zip -q -r "$GITHUB_WORKSPACE/dist/products/Stella-WebUI-v${version}.zip" .)
-          cp "dist/products/Stella-WebUI-v${version}.zip" dist/products/Stella-WebUI-latest.zip
-          ls -lh dist/products/Stella-WebUI-*
-
-          mapfile -t catalog_backends < <(
-            find llama-catalog -maxdepth 1 -type f -name '*.zip' -print
-          )
-          if [ "${#catalog_backends[@]}" -ne 1 ]; then
-            echo "::error::OneClick catalog 必须下载恰好一个 Windows CPU backend"
-            printf '%s\n' "${catalog_backends[@]}"
-            exit 1
-          fi
-          cp "${catalog_backends[0]}" dist/products/
-          python scripts/build_release_catalog.py \
-            --backend-asset "${catalog_backends[0]}" \
-            --release-ref "${RELEASE_REF}" \
-            --repository "${GITHUB_REPOSITORY}" \
-            --output dist/products/package-catalog-windows-amd64.json
-          test -s dist/products/package-catalog-windows-amd64.json
-
-      - name: 下载 OneClick 安装程序
-        uses: actions/download-artifact@v8
-        with:
-          pattern: stella-desktop-*
-          path: installer-bin
-          merge-multiple: false
-
-      - name: 下载安装验收报告
-        uses: actions/download-artifact@v8
-        with:
-          pattern: stella-install-test-*
-          path: install-reports
-          merge-multiple: false
-
-      - name: 校验并收集六类产品资产
-        run: |
-          set -e
-          python_version="${RELEASE_REF#v}"
-          python_asset="Stella-Standalone-Python-v${python_version}-windows-amd64.zip"
-          rust_asset="Stella-Standalone-Rust-v${python_version}-windows-amd64.zip"
-          oneclick_python="Stella-OneClick-Python-v${python_version}-windows-amd64.exe"
-          oneclick_rust="Stella-OneClick-Rust-v${python_version}-windows-amd64.exe"
-          # Offline 变体：同一 profile、同一份代码，只差随包 offline/ 负载；
-          # 产物靠文件名里的 -Offline 与在线版区分（见 build_release_package.py --artifact-name）。
-          oneclick_python_off="Stella-OneClick-Python-Offline-v${python_version}-windows-amd64.exe"
-          oneclick_rust_off="Stella-OneClick-Rust-Offline-v${python_version}-windows-amd64.exe"
-          cp "dist/${python_asset}" dist/products/
-          cp "dist/${rust_asset}" dist/products/
-          for profile in oneclick-python oneclick-rust; do
-            for variant in online offline; do
-              installer_dir="installer-bin/stella-desktop-${profile}-${variant}"
-              mapfile -t installers < <(
-                find "$installer_dir" -maxdepth 1 -type f -name '*.exe' -print
-              )
-              if [ "${#installers[@]}" -ne 1 ]; then
-                echo "::error::${profile}-${variant} 必须下载恰好一个安装器，实际为 ${#installers[@]}"
-                printf '%s\n' "${installers[@]}"
-                exit 1
-              fi
-              extra_args=()
-              if [ "$variant" = offline ]; then
-                if [ "$profile" = oneclick-python ]; then
-                  asset_name="$oneclick_python_off"
-                else
-                  asset_name="$oneclick_rust_off"
-                fi
-                extra_args+=(--artifact-name "$asset_name")
-              else
-                if [ "$profile" = oneclick-python ]; then
-                  asset_name="$oneclick_python"
-                else
-                  asset_name="$oneclick_rust"
-                fi
-              fi
-              python scripts/build_release_package.py "$profile" \
-                --source . --output "dist/${profile}-${variant}" \
-                --installer "${installers[0]}" \
-                --artifact-name "$asset_name"
-              cp "dist/${profile}-${variant}/${asset_name}" dist/products/
-            done
-          done
-          for asset in \
-            "$oneclick_python" "$oneclick_rust" \
-            "$oneclick_python_off" "$oneclick_rust_off" \
-            "$python_asset" "$rust_asset"; do
-            if [ ! -s "dist/products/${asset}" ]; then
-              echo "::error::缺少发布资产或文件为空: ${asset}"
-              exit 1
-            fi
-          done
-          python scripts/check_release_archive.py "dist/products/${python_asset}"
-          python scripts/check_release_archive.py "dist/products/${rust_asset}"
-
-      # 发布门禁：进入 dist/products 的四个 OneClick EXE 必须逐字节等于
-      # install-test 作业真实安装并通过的那四个文件（WP02「存档的是测试过
-      # 的最终字节及摘要」）。任何重跑导致的字节漂移在这里硬失败。
-      - name: 核对发布安装器字节与验收报告一致
-        run: |
-          set -e
-          python scripts/check_release_hashes.py \
-            --reports install-reports --products dist/products --suffix .exe
-
-      # 发布清单（WP14）：全部资产绑定 SHA-256/大小；发布后从真实公开
-      # 地址回读逐字节核对，确认没有 404、HTML 错误页或缓存旧字节。
-      - name: 生成发布清单与 SHA256SUMS
-        run: |
-          set -e
-          python scripts/build_release_manifest.py \
-            --products dist/products \
-            --release-version "${{ needs.resolve-release.outputs.version }}" \
-            --build-id "${{ needs.resolve-release.outputs.build_id }}"
-          cat dist/products/SHA256SUMS.txt
-
-      # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
-      # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
-      # 只发二进制会在 find_root 就失败（2026-09-08 bug_report：单独下载启动报错）。
-      # Windows CLI 包保留 start.bat：它就是嵌入式 Python 运行时的引导脚本
-      # （stellacli 的本地形态自动识别 runtime/python.exe）；
-      # Linux 包去掉 Windows 专用脚本，改用系统 Python + requirements.txt。
-      # 产物名写入 GITHUB_ENV 只定义一次——2026-09-07 曾因 pwsh 的 ${env:} 写法
-      # 让产物旧名、上传找新名，直到 upload 才炸；名字漂移必须在这里就硬失败。
-      - name: 组装 CLI 发布包（Windows zip + Linux tar.gz）
-        run: |
-          set -e
-          # 公共部分：从主发布目录复制，去掉 Tauri 安装器（CLI 面向无 WebView 设备，
-          # 方案要求 CLI 永不混入 Windows 主发布包的图形安装器）。
-          # README-快速开始.txt 以「双击 Stella.exe」为主线，GUI 向导不进 CLI 包，
-          # CLI 包用 README-CLI-快速开始.txt。
-          rsync -a --exclude 'Stella.exe' --exclude 'README-快速开始.txt' dist/Stella/ dist/cli-win/
-          rsync -a --exclude 'Stella.exe' --exclude '*.bat' --exclude 'README-快速开始.txt' \
-            dist/Stella/ dist/cli-linux/
-
-          cp cli-bin/stellacli-windows/stellacli.exe dist/cli-win/
-          cp release_assets/README-CLI-快速开始.txt dist/cli-win/
-          # CLI 包里的 txt 也要 CRLF（同主包的坑：Linux 打包、Windows 消费）
-          sed -i 's/\r$//' dist/cli-win/README-CLI-快速开始.txt
-          sed -i 's/$/\r/' dist/cli-win/README-CLI-快速开始.txt
-
-          cp cli-bin/stellacli-linux/stellacli dist/cli-linux/
-          cp release_assets/README-CLI-快速开始.txt dist/cli-linux/
-
-          # 完整性守卫：CLI 包必须是「能独立跑起来的完整形态」，缺任何一块
-          # 都会重演「单独下载启动报错」——这里在发布前钉死最低限度的组成。
-          for d in dist/cli-win dist/cli-linux; do
-            for f in bot.py requirements.txt .env.example pyproject.toml LICENSE \
-                     deploy/__main__.py config/settings.py core/pipeline.py \
-                     memory/SYSTEM.md system_prompts; do
-              test -e "$d/$f" || { echo "::error::CLI 包缺少必需组件: $d/$f"; exit 1; }
-            done
-          done
-          test -x dist/cli-linux/stellacli || { echo "::error::Linux CLI 二进制不可执行"; exit 1; }
-          test -s dist/cli-win/stellacli.exe || { echo "::error::Windows CLI 二进制缺失"; exit 1; }
-
-          cd dist/cli-win
-          zip -q -r "../Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" .
-          cd ../cli-linux
-          tar czf "../Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" .
-          cd ..
-          # 安装器绝不进 CLI 包（与「CLI 永不混入主发布包」互为镜像的边界）
-          if unzip -l "Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" | grep -q 'Stella\.exe'; then
-            echo "::error::CLI 包混入了 Tauri 安装器"; exit 1
-          fi
-          if tar tzf "Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" | grep -q 'Stella\.exe'; then
-            echo "::error::CLI 包混入了 Tauri 安装器"; exit 1
-          fi
-
-          echo "CLI_WIN_ZIP=Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" >> "$GITHUB_ENV"
-          echo "CLI_TGZ=Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" >> "$GITHUB_ENV"
-          ls -lh Stella-CLI-version-*
-
-      # —— 核心改进：支持在同版本 Release 已存在时覆盖 asset ——
-      # 旧逻辑仅执行 `gh release create`，若 Release 已存在则直接报错失败，
-      # 无法实现“同版本重发/补丁包”场景。本步骤改为幂等逻辑：
-      #   - 若 Release 已存在：用 `gh release upload --clobber` 覆盖同名资产
-      #   - 若不存在：用 `gh release create` 新建
-      # 覆盖时会保留原 Release 的 tag/发布时间，仅替换资产，适合紧急修复。
-      - name: 发布 Release（新建或覆盖同版本 asset）
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          cd dist
-          for f in products/*.exe products/*.zip \
-            products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ"; do
-            if [ ! -f "$f" ]; then
-              echo "::error::找不到发布包 $f"
-              exit 1
-            fi
-          done
-          if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
-            echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
-            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json products/release-manifest.json \
-              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
-            echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
-          else
-            echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
-            gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json products/release-manifest.json \
-              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
-              --title "Stella ${RELEASE_REF}" \
-              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
-            echo "✅ 已创建 Release ${RELEASE_REF}"
-          fi
-          echo "--- 当前 Release 资产 ---"
-          gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
-
-      # WP14：发布后从真实公开下载地址回读全部资产，与发布清单逐字节核对
-      # ——拦住 404、HTML 错误页、CDN 旧缓存或上传截断。
-      - name: 发布后回读校验
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          mkdir -p published-check
-          gh release download "${RELEASE_REF}" -D published-check
-          python scripts/build_release_manifest.py \
-            --products dist/products --verify published-check
-
-      # 手工触发的覆盖发布：仅当显式勾选 overwrite_release 时才触及 Releases，
-      # 否则保持旧行为（仅上传 artifact，不污染 Releases 页面）。
-      - name: 发布 Release（手工覆盖同版本）
-        if: github.event_name == 'workflow_dispatch' && inputs.overwrite_release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          cd dist
-          for f in products/*.exe products/*.zip \
-            products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ"; do
-            if [ ! -f "$f" ]; then
-              echo "::error::找不到发布包 $f"
-              exit 1
-            fi
-          done
-          if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
-            echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
-            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json products/release-manifest.json \
-              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
-            echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
-          else
-            echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
-            gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
-              products/package-catalog-windows-amd64.json products/release-manifest.json \
-              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
-              --title "Stella ${RELEASE_REF}" \
-              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
-            echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
-          fi
-          echo "--- 当前 Release 资产 ---"
-          gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
-
-      # 手工触发默认只产出可下载的 artifact，不污染 Releases 页面——
-      # 否则每次测试打包都会留下一个假 Release 需要手工删除。
-      # 若勾选了 overwrite_release，上一步已完成 Release 覆盖，本步仍保留 artifact 便于下载验证。
-      - name: 上传 artifact（手工触发时用于验证产物）
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v7
-        with:
-          name: Stella-release-preview
-          path: |
-            dist/products/*
-            dist/*.zip
-            dist/*.tar.gz
-          retention-days: 7
+name: Release
+
+# 打 v* tag 触发；也支持手工触发（填版本号即可，不带 v 前缀）
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '打包版本号（不带 v 前缀，如 0.3.0），用于手工测试打包流程'
+        required: true
+        type: string
+      overwrite_release:
+        description: '若同版本 Release 已存在，是否覆盖其 asset（true 时会新建或更新 Release）'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  artifact-metadata: write
+
+env:
+  # The OneClick catalog must point at a reproducible Windows CPU backend.
+  LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d
+  # 版本化布局双轨开关（S11 Phase 2）：'1' = 安装器构建 launcher 并写
+  # 版本化搬移标记。切 '1' 的前置条件：VM 矩阵（T01/T03/T11/T14/T18）
+  # 全过。默认 '0' = 安装行为与历史版本逐字节一致。
+  VERSIONED_LAYOUT: '0'
+
+jobs:
+  # 版本只解析一次：Dashboard marker / catalog release-ref / 安装契约元数据 /
+  # 产物名全部消费 needs.resolve-release.outputs，杜绝各 job 各自解析造成的
+  # 版本漂移（2026-09-28 计划 F17：手工发布时前端 marker 曾取错来源）。
+  resolve-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      build_id: ${{ steps.resolve.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析并校验发布版本（全工作流唯一事实来源）
+        id: resolve
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ inputs.version }}"; V="${V#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          if ! echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::非法 Release 版本: $V"; exit 1
+          fi
+          PY_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          if [ "$PY_V" != "$V" ]; then
+            echo "::error::pyproject.toml 版本（$PY_V）与 Release 版本（$V）不一致"; exit 1
+          fi
+
+  # M6：先构建 WebUI 前端（版本号来自统一解析的 Release 版本），安装器把它
+  # 拷入壳内资源、发布包把它放进 webui/dist 供 Bot 托管（方案 §12.3）
+  build-dashboard:
+    needs: [resolve-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir dashboard install --frozen-lockfile
+
+      - name: Build dashboard (typecheck included)
+        run: pnpm --dir dashboard build
+
+      - name: Write version marker
+        run: |
+          echo "${{ needs.resolve-release.outputs.version }}" > dashboard/dist/assets/version
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: dashboard/dist
+
+  # OneClick installation is not publishable without the CPU backend catalog.
+  # Build this package in the main release workflow so the catalog is uploaded
+  # before the Release becomes visible to end users.
+  build-oneclick-catalog-backend:
+    needs: [resolve-release]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 透传统一解析的发布版本
+        shell: pwsh
+        run: |
+          "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> $env:GITHUB_ENV
+          "BUILD_ID=${{ needs.resolve-release.outputs.build_id }}" >> $env:GITHUB_ENV
+
+      - name: Checkout pinned llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: ${{ env.LLAMA_CPP_COMMIT }}
+          path: .llama.cpp
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 准备 Windows OpenSSL runtime
+        shell: pwsh
+        run: |
+          $requiredSets = @(
+            @('libcrypto-3-x64.dll', 'libcrypto-3.dll'),
+            @('libssl-3-x64.dll', 'libssl-3.dll')
+          )
+          $roots = @(
+            (Join-Path $env:ProgramFiles 'OpenSSL-Win64\bin'),
+            (Join-Path $env:ProgramFiles 'OpenSSL\bin'),
+            'C:\Program Files\Git\usr\bin',
+            'C:\ProgramData\chocolatey\bin'
+          )
+          function Find-OpenSslDir {
+            foreach ($root in $roots) {
+              $crypto = $requiredSets[0] | Where-Object {
+                Test-Path (Join-Path $root $_)
+              }
+              $ssl = $requiredSets[1] | Where-Object {
+                Test-Path (Join-Path $root $_)
+              }
+              if ($crypto -and $ssl) {
+                return $root
+              }
+            }
+            return $null
+          }
+          $opensslDir = Find-OpenSslDir
+          if (-not $opensslDir) {
+            choco install openssl --yes --no-progress
+            $opensslDir = Find-OpenSslDir
+          }
+          if (-not $opensslDir) {
+            throw "未找到 Windows OpenSSL runtime: libcrypto-3-x64.dll/libcrypto-3.dll, libssl-3-x64.dll/libssl-3.dll"
+          }
+          "OPENSSL_RUNTIME_DIR=$opensslDir" >> $env:GITHUB_ENV
+
+      - name: 构建并校验 Windows CPU backend
+        shell: pwsh
+        run: |
+          $package = "dist\Stella-llama-v$env:RELEASE_VERSION-windows-x86_64-cpu"
+          $archive = "dist\Stella-llama-v$env:RELEASE_VERSION-windows-x86_64-cpu.zip"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          python scripts/build_llama_package.py .llama.cpp `
+            --output $package `
+            --backend cpu `
+            --commit $env:LLAMA_CPP_COMMIT `
+            --os windows `
+            --arch windows-amd64 `
+            --runtime-dir $env:OPENSSL_RUNTIME_DIR
+          python scripts/verify_llama_package.py $package
+          Compress-Archive -Path "$package\*" -DestinationPath $archive
+          if (-not (Test-Path -LiteralPath $archive)) {
+            throw "Windows CPU backend asset was not created: $archive"
+          }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stella-oneclick-catalog-backend
+          path: dist/Stella-llama-v*-windows-x86_64-cpu.zip
+          if-no-files-found: error
+
+  # OneClick Offline 的随包负载：把安装期本要联网下载的所有产物在发布时预取齐
+  # （Python 运行时 / get-pip / 依赖 wheel 闭包 / catalog 组件 / playwright 内核），
+  # 安装期由 python.rs 与 deploy.bootstrap 的本地优先路径就地取用，零联网。
+  # 不可变候选通道（S14/WP14）：llama-cpu 的 catalog source 自指最终
+  # Release，而构建时它还不存在。候选预发布先于安装器构建落地，安装器
+  # 与离线负载的 catalog 全部引用它；晋升（正式发布）不删除候选——已发布
+  # 的安装器永远依赖这些 URL。保留最近 6 个候选，更早且无引用的由本作业
+  # 尾部清理。
+  publish-candidate:
+    needs: [resolve-release, build-oneclick-catalog-backend]
+    runs-on: ubuntu-latest
+    outputs:
+      candidate_tag: ${{ steps.publish.outputs.candidate_tag }}
+      asset_base_url: ${{ steps.publish.outputs.asset_base_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载 backend
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-oneclick-catalog-backend
+          path: candidate
+
+      - id: publish
+        name: 发布不可变候选预发布
+        shell: bash
+        run: |
+          set -e
+          TAG="candidate-${{ needs.resolve-release.outputs.build_id }}"
+          ASSET_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          cd candidate
+          sha256sum *.zip > SHA256SUMS.txt
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "候选 $TAG 已存在（同 build_id 重跑），校验并复用"
+            gh release upload "$TAG" *.zip SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" *.zip SHA256SUMS.txt \
+              --prerelease --title "候选构建 $TAG" \
+              --notes "不可变候选通道：安装器验收引用。请勿删除或覆盖。"
+          fi
+          echo "candidate_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset_base_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+
+      - name: 清理超过保留代数的旧候选（保留最近 6 个）
+        shell: bash
+        run: |
+          set -e
+          gh api "repos/${{ github.repository }}/releases?per_page=100" \
+            --jq '.[] | select(.prerelease) | select(.tag_name | startswith("candidate-")) | .tag_name' \
+            | tail -n +7 \
+            | while read -r old; do
+                echo "删除过期候选：$old"
+                gh release delete "$old" --cleanup-tag --yes || true
+              done
+
+  build-offline-payload:
+    needs: [resolve-release, publish-candidate]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 透传统一解析的发布版本
+        shell: pwsh
+        run: |
+          "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> $env:GITHUB_ENV
+          "BUILD_ID=${{ needs.resolve-release.outputs.build_id }}" >> $env:GITHUB_ENV
+
+      - name: 下载 OneClick Windows CPU backend
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-oneclick-catalog-backend
+          path: llama-catalog
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # playwright 要 import 才能预装内核；payload 脚本用 `pip wheel` 现场构建
+      # requirements 的依赖闭包（含只有 sdist 的包），两者都需要依赖先就位。
+      - name: 安装依赖
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: 构建离线负载
+        shell: pwsh
+        run: |
+          $backend = @(Get-ChildItem 'llama-catalog\*.zip' -File)
+          if ($backend.Count -ne 1) {
+            throw "离线负载必须基于恰好一个 Windows CPU backend，实际为 $($backend.Count)"
+          }
+          # build_release_catalog.py 的 write_text 不建父目录，暂存目录必须先建好
+          New-Item -ItemType Directory -Force -Path offline-stage | Out-Null
+          python scripts/build_release_catalog.py `
+            --backend-asset $backend[0].FullName `
+            --release-ref "v$env:RELEASE_VERSION" `
+            --repository "${{ github.repository }}" `
+            --asset-base-url "${{ needs.publish-candidate.outputs.asset_base_url }}" `
+            --output offline-stage/package-catalog-windows-amd64.json
+          # 浏览器内核默认随负载安装（--skip-browsers 才跳过）。
+          # --local-artifacts：llama-cpu 的 source 是自指 Release URL，payload
+          # 构建时该 Release 还没发布（404），backend zip 用上一步的 artifact。
+          python scripts/build_offline_payload.py `
+            --output offline-stage/payload `
+            --catalog offline-stage/package-catalog-windows-amd64.json `
+            --local-artifacts llama-catalog
+          if (-not (Test-Path 'offline-stage\payload\MANIFEST.json')) {
+            throw 'offline payload was not created'
+          }
+
+      # 闭包完整性要在发布前钉死：少一个传递依赖的 wheel，用户就会在
+      # --no-index 安装时收到「No matching distribution」。--ignore-installed
+      # 强制 pip 只从离线仓解析，防止 runner 上已装的包掩盖缺口。
+      - name: 校验离线 wheel 闭包可解析
+        shell: pwsh
+        run: |
+          python -m pip install --dry-run --ignore-installed --no-index `
+            --find-links offline-stage/payload/wheels `
+            -r requirements.txt
+
+      - name: 上传离线负载
+        uses: actions/upload-artifact@v7
+        with:
+          name: stella-offline-payload
+          path: offline-stage/payload
+          if-no-files-found: error
+
+  # Tauri 的 Windows WebView/Rust 产物必须在 Windows runner 上构建。
+  # OneClick 只发布 NSIS setup executable；程序树通过 Tauri resources 嵌入，
+  # 安装后由 project_root() 从 resources/stella 定位。
+  # payload 维度：online 走安装期联网（现状），offline 嵌入 build-offline-payload
+  # 的随包负载。两者同一 profile、同一份代码，只差 resources 里有没有 offline/。
+  build-installer:
+    needs: [resolve-release, publish-candidate, build-rust-wheel, build-oneclick-catalog-backend, build-offline-payload, build-dashboard]
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [oneclick-python, oneclick-rust]
+        payload: [online, offline]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 显式 setup-python（WP06）：不依赖 runner 的默认 Python——runner 镜像
+      # 升级换掉默认版本时，staging 脚本会在用户机器之外先炸一次。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # dashboard 产物必须在「准备 OneClick 内嵌程序资源」之前到位：
+      # staging 的 webui/dist 兜底读 desktop/dashboard-dist，晚于 staging 就
+      # 会打出面板整页缺失的安装包（v5.0.0 离线包实测，2026-09-25）。
+      - name: 下载 WebUI 前端产物（壳内资源 + Bot payload 各一份）
+        uses: actions/download-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: desktop/dashboard-dist
+
+      - name: 拷入 Bot payload 的 webui/dist
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path webui/dist | Out-Null
+          Copy-Item desktop/dashboard-dist/* webui/dist/ -Recurse -Force
+
+      - name: 透传统一解析的发布版本
+        shell: pwsh
+        run: |
+          "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> $env:GITHUB_ENV
+          "BUILD_ID=${{ needs.resolve-release.outputs.build_id }}" >> $env:GITHUB_ENV
+          $cli = Get-Content 'cli/Cargo.toml' -Raw
+          $cliVersion = [regex]::Match(
+            $cli, '(?m)^version = "([^"]+)"'
+          ).Groups[1].Value
+          if ($cliVersion -ne '${{ needs.resolve-release.outputs.version }}') {
+            throw "主版本不一致: cli/Cargo.toml=$cliVersion release=${{ needs.resolve-release.outputs.version }}"
+          }
+
+      # needs 只保证上游 job 已完成，不会把 upload-artifact 的文件自动放进
+      # 当前 runner；必须显式下载，且下载完成后才能开始慢速的 Tauri 构建。
+      - name: 下载 Rust memory wheel（OneClick Rust）
+        if: matrix.profile == 'oneclick-rust'
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-rust-wheel
+          path: rust-wheel
+
+      - name: 下载 OneClick Windows CPU backend
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-oneclick-catalog-backend
+          path: llama-catalog
+
+      - name: 下载 Offline payload
+        if: matrix.payload == 'offline'
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-offline-payload
+          path: offline-payload
+
+      - name: 准备 OneClick 内嵌程序资源
+        shell: pwsh
+        run: |
+          $backend = @(Get-ChildItem 'llama-catalog\*.zip' -File)
+          if ($backend.Count -ne 1) {
+            throw "OneClick installer 必须下载恰好一个 Windows CPU backend，实际为 $($backend.Count)"
+          }
+          python scripts/build_release_catalog.py `
+            --backend-asset $backend[0].FullName `
+            --release-ref "v$env:RELEASE_VERSION" `
+            --repository "${{ github.repository }}" `
+            --asset-base-url "${{ needs.publish-candidate.outputs.asset_base_url }}" `
+            --output package-catalog-windows-amd64.json
+          if ('${{ matrix.profile }}' -eq 'oneclick-rust') {
+            New-Item -ItemType Directory -Force -Path wheels | Out-Null
+            $wheels = @(Get-ChildItem 'rust-wheel\*.whl' -File)
+            if ($wheels.Count -ne 1) {
+              throw "OneClick Rust 必须下载恰好一个 Rust wheel，实际为 $($wheels.Count)"
+            }
+            Copy-Item $wheels[0].FullName wheels\
+          }
+          if (-not (Test-Path -LiteralPath 'package-catalog-windows-amd64.json')) {
+            throw 'OneClick package catalog was not generated'
+          }
+          $stageArgs = @(
+            'scripts/build_release_package.py',
+            '${{ matrix.profile }}',
+            '--source', '.',
+            '--output', 'dist/unused',
+            '--stage-resources', 'desktop/src-tauri/resources/stella',
+            '--release-version', $env:RELEASE_VERSION,
+            '--build-id', $env:BUILD_ID
+          )
+          if ('${{ matrix.payload }}' -eq 'offline') {
+            if (-not (Test-Path 'offline-payload\MANIFEST.json')) {
+              throw 'Offline payload artifact is missing MANIFEST.json'
+            }
+            $stageArgs += @('--offline-payload', 'offline-payload')
+          }
+          if ($env:VERSIONED_LAYOUT -eq '1') {
+            cargo build --release --locked -p stella-launcher --manifest-path desktop/launcher/Cargo.toml
+            if ($LASTEXITCODE -ne 0) { throw "launcher 构建失败（退出码 $LASTEXITCODE）" }
+            $stageArgs += @('--versioned-layout',
+              '--launcher-exe', 'desktop/launcher/target/release/stella-launcher.exe')
+          }
+          python @stageArgs
+
+      # staging 后硬校验：webui/dist 缺失的安装包不允许走出这台机器
+      # （v5.0.0 离线包实测：面板整页缺失，用户看到「管理面前端尚未构建」）。
+      - name: 校验内嵌资源含 webui/dist
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'desktop/src-tauri/resources/stella/webui/dist/index.html')) {
+            throw '内嵌资源缺少 webui/dist/index.html——Bot 托管面板将整页缺失'
+          }
+
+      - name: 同步 Tauri 版本号
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_VERSION
+          $cargo = Get-Content 'desktop/src-tauri/Cargo.toml' -Raw
+          $cargo = $cargo -replace '(?m)^version = "[^"]+"', ('version = "' + $version + '"')
+          Set-Content 'desktop/src-tauri/Cargo.toml' $cargo -NoNewline
+
+          $tauri = Get-Content 'desktop/src-tauri/tauri.conf.json' -Raw
+          $tauri = $tauri -replace '(?m)"version": "[^"]+"', ('"version": "' + $version + '"')
+          Set-Content 'desktop/src-tauri/tauri.conf.json' $tauri -NoNewline
+
+      # 工具链锁定（WP06）：NSIS 模板/插件随 tauri-cli 版本变化——飘一个
+      # 小版本就可能改变 .nsi 结构与 hook 时序。精确版本来自
+      # release_assets/toolchain.json，升级必须走独立可审阅的变更。
+      - name: 安装 Tauri CLI（精确锁定版本）
+        shell: pwsh
+        run: |
+          $toolchain = Get-Content 'release_assets/toolchain.json' -Raw | ConvertFrom-Json
+          cargo install tauri-cli --version $toolchain.tauri_cli --locked
+          if ($LASTEXITCODE -ne 0) { throw "tauri-cli 安装失败（退出码 $LASTEXITCODE）" }
+
+      - name: 构建 OneClick NSIS 安装器
+        shell: pwsh
+        working-directory: desktop/src-tauri
+        env:
+          STELLA_BUILD_PROFILE: ${{ matrix.profile }}
+        run: |
+          cargo tauri build --bundles nsis
+          if ($LASTEXITCODE -ne 0) { throw "tauri build 失败（退出码 $LASTEXITCODE）" }
+
+      - name: 上传安装器
+        uses: actions/upload-artifact@v7
+        with:
+          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
+          path: desktop/src-tauri/target/release/bundle/nsis/*setup.exe
+          if-no-files-found: error
+
+  build-rust-wheel:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 构建 Rust memory wheel（maturin 精确锁定）
+        shell: pwsh
+        run: |
+          $toolchain = Get-Content 'release_assets/toolchain.json' -Raw | ConvertFrom-Json
+          python -m pip install --upgrade "pip" "maturin==$($toolchain.maturin)"
+          if ($LASTEXITCODE -ne 0) { throw "pip install maturin 失败（退出码 $LASTEXITCODE）" }
+          New-Item -ItemType Directory -Force -Path dist\rust-wheel | Out-Null
+          maturin build --release --manifest-path memory_rust/native/Cargo.toml `
+            --out dist\rust-wheel
+          if ($LASTEXITCODE -ne 0) { throw "maturin build 失败（退出码 $LASTEXITCODE）" }
+          $wheels = @(Get-ChildItem dist\rust-wheel\*.whl)
+          if ($wheels.Count -ne 1) {
+            throw "Rust wheel 构建必须得到恰好一个 wheel"
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stella-rust-wheel
+          path: dist/rust-wheel/*.whl
+          if-no-files-found: error
+
+  # ============ stellacli 二进制（先行构建，打包集中在 build 作业） ============
+  # CLI 包 = 完整程序目录 + stellacli：CLI 是编排层，本地形态要透传
+  # python -m deploy，只发二进制会连「项目根」都找不到。因此二进制先在
+  # 各自平台构建成 artifact，由 build 作业与程序目录一起组装（方案见
+  # design_docs/跨平台 CLI 控制台方案 v1.0.md；打包不在此处做，避免
+  # 「程序目录」在多个作业间重复维护排除清单）。
+  build-cli-linux-binary:
+    needs: [resolve-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 透传统一解析的发布版本
+        run: |
+          echo "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> "$GITHUB_ENV"
+
+      # resolve-release 已做 tag/pyproject 一致性校验；此处保留 Cargo 侧防线
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        run: |
+          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          echo "Cargo=$CARGO_V tag=$RELEASE_VERSION"
+          if [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
+            echo "::error::版本不一致（Cargo/tag）"; exit 1
+          fi
+
+      # 手工触发测试打包流程时同步版本号（与安装器 job 的处理同款）
+      - name: 同步 Cargo 版本号（手工触发时）
+        if: github.event_name != 'push'
+        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 安装 musl 工具链
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: 构建（musl 静态链接，任意发行版可直接运行）
+        working-directory: cli
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: 上传二进制
+        uses: actions/upload-artifact@v7
+        with:
+          name: stellacli-linux
+          path: cli/target/x86_64-unknown-linux-musl/release/stellacli
+          if-no-files-found: error
+
+  build-cli-windows-binary:
+    needs: [resolve-release]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 透传统一解析的发布版本
+        shell: bash
+        run: |
+          echo "RELEASE_VERSION=${{ needs.resolve-release.outputs.version }}" >> "$GITHUB_ENV"
+
+      - name: 校验版本号一致（tag 触发时）
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          CARGO_V=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' cli/Cargo.toml | head -n1)
+          echo "Cargo=$CARGO_V tag=$RELEASE_VERSION"
+          if [ "$CARGO_V" != "$RELEASE_VERSION" ]; then
+            echo "::error::版本不一致（Cargo/tag）"; exit 1
+          fi
+
+      - name: 同步 Cargo 版本号（手工触发时）
+        if: github.event_name != 'push'
+        shell: bash
+        run: sed -i "s/^version *= *.*/version = \"$RELEASE_VERSION\"/" cli/Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+
+      - name: 构建
+        working-directory: cli
+        run: cargo build --release
+
+      - name: 上传二进制
+        uses: actions/upload-artifact@v7
+        with:
+          name: stellacli-windows
+          path: cli/target/release/stellacli.exe
+          if-no-files-found: error
+
+  # 最终 EXE 安装验收（WP02）：产物构建完成 ≠ 可发布。四个产物各自在独立
+  # 的 Windows runner 上静默安装并校验真实落盘结果；安装失败的包不允许进入
+  # 发布作业。报告（含产物 SHA-256）上传为 artifact，发布作业据此核对
+  # 「发布的字节 = 验收过的字节」。hosted runner 不是干净 Windows；干净 VM
+  # 矩阵与 GUI 首启验收属于发布门禁的后续强化（计划 S15）。
+  install-test:
+    needs: [build-installer]
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [oneclick-python, oneclick-rust]
+        payload: [online, offline]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载待验收安装器
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
+          path: installer
+
+      - name: 运行最终 EXE 安装验收
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem 'installer\*.exe' -File)
+          if ($exe.Count -ne 1) {
+            throw "安装器 artifact 必须恰好包含一个 EXE，实际为 $($exe.Count)"
+          }
+          scripts/test_nsis_install.ps1 `
+            -InstallerPath $exe[0].FullName `
+            -ExpectedPayloadMode '${{ matrix.payload }}' `
+            -ExpectedProfile '${{ matrix.profile }}' `
+            -ReportDir 'install-report'
+
+      - name: 上传验收报告
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stella-install-test-${{ matrix.profile }}-${{ matrix.payload }}
+          path: install-report
+          if-no-files-found: error
+
+  build:
+    needs:
+      [
+        resolve-release,
+        build-installer,
+        install-test,
+        build-rust-wheel,
+        build-cli-linux-binary,
+        build-cli-windows-binary,
+        build-oneclick-catalog-backend,
+        build-dashboard
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # resolve-release 已做过全量版本校验；这里保留终检防线（防止 checkout
+      # 内容在标签与分支间出现意外偏差）
+      - name: 校验版本号一致
+        run: |
+          VERSION=$(sed -nE 's/^version *= *"([^"]+)".*/\1/p' pyproject.toml | head -n1)
+          TAG="${{ needs.resolve-release.outputs.version }}"
+          echo "pyproject.toml version: ${VERSION}"
+          echo "release version: ${TAG}"
+          if [ -z "${VERSION}" ]; then
+            echo "::error::无法从 pyproject.toml 解析版本号"
+            exit 1
+          fi
+          if [ "${VERSION}" != "${TAG}" ]; then
+            echo "::error::pyproject.toml 版本（${VERSION}）与 Release 版本（${TAG}）不一致，请先更新版本号"
+            exit 1
+          fi
+          echo "RELEASE_REF=v${TAG}" >> "$GITHUB_ENV"
+
+      # 不复用 .gitignore：两者语义不同（rsync 的 --exclude-from 不支持 ! 否定模式，
+      # 锚定 / 的含义也有差异），且 .gitignore 将来会因开发需要增删——那些改动
+      # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
+      # 日志只需 --exclude 'logs'：2026-08-25 起全部运行期日志都落在 logs/
+      # （config 的 LOG_DIR）。此前思考/整合/压缩日志散在项目根目录，要逐个列名。
+      #
+      # 开发向内容（2026-09-08 bug_report_2026_9_8#2：曾把 .claude/ 等整包发出去）：
+      # .claude / AGENTS.md / CLAUDE.md 是 AI 编码代理的技能与指令文件；
+      # cli/ 是 Rust CLI 的源码（产物另行打包）；assets/ 是 README 的仓库渲染图；
+      # .gitattributes 是 git 元数据；.stella-state.json 是开发机的运行痕迹
+      # （正常应只存在于 STELLA_HOME，仓库里这份是历史误提交，绝不能让新装用户
+      # 带着别人的 last_schema_version 启动）。.gitnexus 当前未被 git 跟踪，
+      # 仍列入排除是防御性的：一旦哪天被提交，不该无声进入发布包。
+      - name: 构造发布目录（排除测试与开发文件）
+        run: |
+          mkdir -p dist/Stella
+          rsync -a \
+            --exclude 'tests' \
+            --exclude 'design_docs' \
+            --exclude 'scripts' \
+            --exclude '_deprecated' \
+            --exclude 'stella-installer' \
+            --exclude '.github' \
+            --exclude '.git' \
+            --exclude '.gitignore' \
+            --exclude '.gitattributes' \
+            --exclude '.claude' \
+            --exclude '.gitnexus' \
+            --exclude 'AGENTS.md' \
+            --exclude 'CLAUDE.md' \
+            --exclude '.stella-state.json' \
+            --exclude 'cli' \
+            --exclude 'assets' \
+            --exclude 'release_assets' \
+            --exclude 'memory/benchmark' \
+            --exclude 'memory_rust/native/target' \
+            --exclude 'memory_rust/native/.venv' \
+            --exclude '*.pyd' \
+            --exclude '*.dll' \
+            --exclude '*.so' \
+            --exclude 'requirements-dev.txt' \
+            --exclude 'pyrightconfig.json' \
+            --exclude '.pytest_cache' \
+            --exclude '.ruff_cache' \
+            --exclude '.mypy_cache' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            --exclude '.env' \
+            --exclude '.env.bak' \
+            --exclude '.env.dev' \
+            --exclude '.env.prod' \
+            --exclude 'deploy.answers.toml' \
+            --exclude '.stella-stop-request*' \
+            --exclude 'logs' \
+            --exclude 'StellaData' \
+            --exclude 'runtime' \
+            --exclude '*.db' \
+            --exclude '*.jsonl' \
+            --exclude '*.log' \
+            --exclude 'consolidation_probe*' \
+            --exclude 'consolidation_positive_probe.md' \
+            --exclude 'windows_raw.json' \
+            ./ dist/Stella/
+          cp release_assets/start.bat release_assets/doctor.bat \
+             release_assets/stop.bat release_assets/README-快速开始.txt dist/Stella/
+
+      # webui/dist（Bot 托管面板）是构建产物，checkout 里天然没有——必须在
+      # 组装 Standalone/CLI 产品之前放进 repo 树与 dist/Stella，否则打包脚本的
+      # 硬校验会拒打（v5.1.0-rc 实测：FileNotFoundError webui/dist）。
+      # dashboard 产物由 build-dashboard job 产出（needs 已保证它先完成）。
+      - name: 下载 WebUI 前端产物
+        uses: actions/download-artifact@v7
+        with:
+          name: stella-dashboard-dist
+          path: desktop/dashboard-dist
+
+      - name: 拷入 webui/dist（repo 树 + dist/Stella 各一份）
+        shell: bash
+        run: |
+          mkdir -p webui/dist dist/Stella/webui/dist
+          cp -r desktop/dashboard-dist/* webui/dist/
+          cp -r desktop/dashboard-dist/* dist/Stella/webui/dist/
+
+      # Linux 上打的 zip 若 bat 是 LF，Windows 的 cmd 可能解析异常，必须统一 CRLF。
+      # 放在 CLI 组装之前：CLI 包从这份目录复制，不能再各自转一遍。
+      - name: 确保 bat 与 txt 为 CRLF
+        run: |
+          sed -i 's/\r$//' dist/Stella/start.bat dist/Stella/doctor.bat \
+            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
+          sed -i 's/$/\r/' dist/Stella/start.bat dist/Stella/doctor.bat \
+            dist/Stella/stop.bat dist/Stella/README-快速开始.txt
+
+      - name: 下载 CLI 二进制
+        uses: actions/download-artifact@v8
+        with:
+          pattern: stellacli-*
+          path: cli-bin
+          merge-multiple: false
+
+      - name: 下载 Rust wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-rust-wheel
+          path: rust-wheel
+
+      - name: 下载 OneClick Windows CPU backend
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-oneclick-catalog-backend
+          path: llama-catalog
+
+      - name: 校验 CLI 二进制到位
+        run: |
+          test -s cli-bin/stellacli-linux/stellacli || { echo "::error::缺少 Linux CLI 二进制"; exit 1; }
+          test -s cli-bin/stellacli-windows/stellacli.exe || { echo "::error::缺少 Windows CLI 二进制"; exit 1; }
+          # upload/download-artifact v4 不保留 Unix 权限位：下载回来的 Linux
+          # 二进制没有 +x，必须补上（cp 保留权限、tar 按此打包，用户解压
+          # 即得可执行文件；Windows exe 无权限位概念，不需要处理）。
+          chmod +x cli-bin/stellacli-linux/stellacli
+          test -x cli-bin/stellacli-linux/stellacli || { echo "::error::chmod 后仍不可执行"; exit 1; }
+
+      # 用与 Release 运行时相同的 3.12 验证，避免「CI 用 3.10 通过、用户的 3.12 失败」
+      - name: 准备校验用 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # 装依赖不只是为了 import 检查——它同时验证了 requirements.txt 本身可安装。
+      # 若某个 pin 写错或上游撤版，用户会在 start.bat 的 pip 步骤失败，
+      # 那时排查成本远高于在这里拦住。CLI 包复用同一份程序目录，无需重复校验。
+      - name: 校验发布包依赖可安装且模块可 import
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r dist/Stella/requirements.txt
+          cd dist/Stella
+          python -c "import astrbot_compat, capability, config, core, memory, deploy, extensions; print('import 检查通过')"
+
+      # 清单是「用户有没有改过发布包自带文件」的唯一判据（见 deploy/manifest.py）。
+      # 没有它，升级时只能二选一：覆盖用户改过的人格，或让用户永远拿不到新默认值。
+      # 清单只登记人格/能力配置等固定目标（不随二进制变化），CLI 包直接复用。
+      - name: 生成发布包清单
+        run: |
+          cd dist/Stella
+          python -m deploy manifest --write
+          cat .stella-manifest.json
+          python -m deploy packages catalog --platform windows-amd64
+          python -m deploy packages verify
+          cat .stella-package-catalog.json
+
+      # 纵深防御之二：USER_DATA 清单（deploy/migrate.py）与 rsync 排除清单是两份，
+      # 迟早会对不上。这一步让「对不上」在发布前失败，而不是等用户升级时丢数据。
+      - name: 校验发布包布局（用户数据未入包 / 自带可改文件已登记）
+        run: python scripts/check_release_layout.py dist/Stella
+
+      # 主发布线只保留四种产品：OneClick 是两个单文件安装程序，
+      # Standalone 是两个 allowlist ZIP；不再生成含混的 Stella-v*-win64 ZIP。
+      - name: 组装 OneClick 与 Standalone 产品
+        run: |
+          set -e
+          rm -rf dist/products
+          mkdir -p dist/products
+          python scripts/build_release_package.py standalone-python \
+            --source . --output dist/standalone-python
+          python scripts/build_release_package.py standalone-rust \
+            --source . --output dist/standalone-rust \
+            --rust-wheel rust-wheel/*.whl
+          python scripts/build_release_package.py --help >/dev/null
+
+      # WebUI 前端产物单独成一份 Release 资产：CI 漏拷或安装包损坏时，可从
+      # Release 页拿到与版本匹配的面板产物手动补进 webui/dist（AstrBot 同款
+      # 的 latest + 版本名双份策略）。
+      - name: 打包 WebUI 前端产物（Release 资产）
+        run: |
+          test -s webui/dist/assets/version || {
+            echo "::error::webui/dist 缺少 assets/version 版本标记"; exit 1;
+          }
+          version="$(sed -E 's/^[vV]//; s/[[:space:]]//g' webui/dist/assets/version | head -c 32)"
+          test -n "$version" || { echo "::error::无法解析前端版本标记"; exit 1; }
+          (cd webui/dist && zip -q -r "$GITHUB_WORKSPACE/dist/products/Stella-WebUI-v${version}.zip" .)
+          cp "dist/products/Stella-WebUI-v${version}.zip" dist/products/Stella-WebUI-latest.zip
+          ls -lh dist/products/Stella-WebUI-*
+
+          mapfile -t catalog_backends < <(
+            find llama-catalog -maxdepth 1 -type f -name '*.zip' -print
+          )
+          if [ "${#catalog_backends[@]}" -ne 1 ]; then
+            echo "::error::OneClick catalog 必须下载恰好一个 Windows CPU backend"
+            printf '%s\n' "${catalog_backends[@]}"
+            exit 1
+          fi
+          cp "${catalog_backends[0]}" dist/products/
+          python scripts/build_release_catalog.py \
+            --backend-asset "${catalog_backends[0]}" \
+            --release-ref "${RELEASE_REF}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --output dist/products/package-catalog-windows-amd64.json
+          test -s dist/products/package-catalog-windows-amd64.json
+
+      - name: 下载 OneClick 安装程序
+        uses: actions/download-artifact@v8
+        with:
+          pattern: stella-desktop-*
+          path: installer-bin
+          merge-multiple: false
+
+      - name: 下载安装验收报告
+        uses: actions/download-artifact@v8
+        with:
+          pattern: stella-install-test-*
+          path: install-reports
+          merge-multiple: false
+
+      - name: 校验并收集六类产品资产
+        run: |
+          set -e
+          python_version="${RELEASE_REF#v}"
+          python_asset="Stella-Standalone-Python-v${python_version}-windows-amd64.zip"
+          rust_asset="Stella-Standalone-Rust-v${python_version}-windows-amd64.zip"
+          oneclick_python="Stella-OneClick-Python-v${python_version}-windows-amd64.exe"
+          oneclick_rust="Stella-OneClick-Rust-v${python_version}-windows-amd64.exe"
+          # Offline 变体：同一 profile、同一份代码，只差随包 offline/ 负载；
+          # 产物靠文件名里的 -Offline 与在线版区分（见 build_release_package.py --artifact-name）。
+          oneclick_python_off="Stella-OneClick-Python-Offline-v${python_version}-windows-amd64.exe"
+          oneclick_rust_off="Stella-OneClick-Rust-Offline-v${python_version}-windows-amd64.exe"
+          cp "dist/${python_asset}" dist/products/
+          cp "dist/${rust_asset}" dist/products/
+          for profile in oneclick-python oneclick-rust; do
+            for variant in online offline; do
+              installer_dir="installer-bin/stella-desktop-${profile}-${variant}"
+              mapfile -t installers < <(
+                find "$installer_dir" -maxdepth 1 -type f -name '*.exe' -print
+              )
+              if [ "${#installers[@]}" -ne 1 ]; then
+                echo "::error::${profile}-${variant} 必须下载恰好一个安装器，实际为 ${#installers[@]}"
+                printf '%s\n' "${installers[@]}"
+                exit 1
+              fi
+              extra_args=()
+              if [ "$variant" = offline ]; then
+                if [ "$profile" = oneclick-python ]; then
+                  asset_name="$oneclick_python_off"
+                else
+                  asset_name="$oneclick_rust_off"
+                fi
+                extra_args+=(--artifact-name "$asset_name")
+              else
+                if [ "$profile" = oneclick-python ]; then
+                  asset_name="$oneclick_python"
+                else
+                  asset_name="$oneclick_rust"
+                fi
+              fi
+              python scripts/build_release_package.py "$profile" \
+                --source . --output "dist/${profile}-${variant}" \
+                --installer "${installers[0]}" \
+                --artifact-name "$asset_name"
+              cp "dist/${profile}-${variant}/${asset_name}" dist/products/
+            done
+          done
+          for asset in \
+            "$oneclick_python" "$oneclick_rust" \
+            "$oneclick_python_off" "$oneclick_rust_off" \
+            "$python_asset" "$rust_asset"; do
+            if [ ! -s "dist/products/${asset}" ]; then
+              echo "::error::缺少发布资产或文件为空: ${asset}"
+              exit 1
+            fi
+          done
+          python scripts/check_release_archive.py "dist/products/${python_asset}"
+          python scripts/check_release_archive.py "dist/products/${rust_asset}"
+
+      # 发布门禁：进入 dist/products 的四个 OneClick EXE 必须逐字节等于
+      # install-test 作业真实安装并通过的那四个文件（WP02「存档的是测试过
+      # 的最终字节及摘要」）。任何重跑导致的字节漂移在这里硬失败。
+      - name: 核对发布安装器字节与验收报告一致
+        run: |
+          set -e
+          python scripts/check_release_hashes.py \
+            --reports install-reports --products dist/products --suffix .exe
+
+      # 发布清单（WP14）：全部资产绑定 SHA-256/大小；发布后从真实公开
+      # 地址回读逐字节核对，确认没有 404、HTML 错误页或缓存旧字节。
+      - name: 生成发布清单与 SHA256SUMS
+        run: |
+          set -e
+          python scripts/build_release_manifest.py \
+            --products dist/products \
+            --release-version "${{ needs.resolve-release.outputs.version }}" \
+            --build-id "${{ needs.resolve-release.outputs.build_id }}"
+          cat dist/products/SHA256SUMS.txt
+
+      # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
+      # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
+      # 只发二进制会在 find_root 就失败（2026-09-08 bug_report：单独下载启动报错）。
+      # Windows CLI 包保留 start.bat：它就是嵌入式 Python 运行时的引导脚本
+      # （stellacli 的本地形态自动识别 runtime/python.exe）；
+      # Linux 包去掉 Windows 专用脚本，改用系统 Python + requirements.txt。
+      # 产物名写入 GITHUB_ENV 只定义一次——2026-09-07 曾因 pwsh 的 ${env:} 写法
+      # 让产物旧名、上传找新名，直到 upload 才炸；名字漂移必须在这里就硬失败。
+      - name: 组装 CLI 发布包（Windows zip + Linux tar.gz）
+        run: |
+          set -e
+          # 公共部分：从主发布目录复制，去掉 Tauri 安装器（CLI 面向无 WebView 设备，
+          # 方案要求 CLI 永不混入 Windows 主发布包的图形安装器）。
+          # README-快速开始.txt 以「双击 Stella.exe」为主线，GUI 向导不进 CLI 包，
+          # CLI 包用 README-CLI-快速开始.txt。
+          rsync -a --exclude 'Stella.exe' --exclude 'README-快速开始.txt' dist/Stella/ dist/cli-win/
+          rsync -a --exclude 'Stella.exe' --exclude '*.bat' --exclude 'README-快速开始.txt' \
+            dist/Stella/ dist/cli-linux/
+
+          cp cli-bin/stellacli-windows/stellacli.exe dist/cli-win/
+          cp release_assets/README-CLI-快速开始.txt dist/cli-win/
+          # CLI 包里的 txt 也要 CRLF（同主包的坑：Linux 打包、Windows 消费）
+          sed -i 's/\r$//' dist/cli-win/README-CLI-快速开始.txt
+          sed -i 's/$/\r/' dist/cli-win/README-CLI-快速开始.txt
+
+          cp cli-bin/stellacli-linux/stellacli dist/cli-linux/
+          cp release_assets/README-CLI-快速开始.txt dist/cli-linux/
+
+          # 完整性守卫：CLI 包必须是「能独立跑起来的完整形态」，缺任何一块
+          # 都会重演「单独下载启动报错」——这里在发布前钉死最低限度的组成。
+          for d in dist/cli-win dist/cli-linux; do
+            for f in bot.py requirements.txt .env.example pyproject.toml LICENSE \
+                     deploy/__main__.py config/settings.py core/pipeline.py \
+                     memory/SYSTEM.md system_prompts; do
+              test -e "$d/$f" || { echo "::error::CLI 包缺少必需组件: $d/$f"; exit 1; }
+            done
+          done
+          test -x dist/cli-linux/stellacli || { echo "::error::Linux CLI 二进制不可执行"; exit 1; }
+          test -s dist/cli-win/stellacli.exe || { echo "::error::Windows CLI 二进制缺失"; exit 1; }
+
+          cd dist/cli-win
+          zip -q -r "../Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" .
+          cd ../cli-linux
+          tar czf "../Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" .
+          cd ..
+          # 安装器绝不进 CLI 包（与「CLI 永不混入主发布包」互为镜像的边界）
+          if unzip -l "Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" | grep -q 'Stella\.exe'; then
+            echo "::error::CLI 包混入了 Tauri 安装器"; exit 1
+          fi
+          if tar tzf "Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" | grep -q 'Stella\.exe'; then
+            echo "::error::CLI 包混入了 Tauri 安装器"; exit 1
+          fi
+
+          echo "CLI_WIN_ZIP=Stella-CLI-version-${RELEASE_REF}-windows-amd64.zip" >> "$GITHUB_ENV"
+          echo "CLI_TGZ=Stella-CLI-version-${RELEASE_REF}-linux-amd64.tar.gz" >> "$GITHUB_ENV"
+          ls -lh Stella-CLI-version-*
+
+      # —— 核心改进：支持在同版本 Release 已存在时覆盖 asset ——
+      # 旧逻辑仅执行 `gh release create`，若 Release 已存在则直接报错失败，
+      # 无法实现“同版本重发/补丁包”场景。本步骤改为幂等逻辑：
+      #   - 若 Release 已存在：用 `gh release upload --clobber` 覆盖同名资产
+      #   - 若不存在：用 `gh release create` 新建
+      # 覆盖时会保留原 Release 的 tag/发布时间，仅替换资产，适合紧急修复。
+      - name: 发布 Release（新建或覆盖同版本 asset）
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          cd dist
+          for f in products/*.exe products/*.zip \
+            products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::找不到发布包 $f"
+              exit 1
+            fi
+          done
+          if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_REF} 已存在，更新 asset（--clobber）..."
+            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
+          else
+            echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
+            gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
+              --title "Stella ${RELEASE_REF}" \
+              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
+            echo "✅ 已创建 Release ${RELEASE_REF}"
+          fi
+          echo "--- 当前 Release 资产 ---"
+          gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
+
+      # WP14：发布后从真实公开下载地址回读全部资产，与发布清单逐字节核对
+      # ——拦住 404、HTML 错误页、CDN 旧缓存或上传截断。
+      - name: 发布后回读校验
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p published-check
+          gh release download "${RELEASE_REF}" -D published-check
+          python scripts/build_release_manifest.py \
+            --products dist/products --verify published-check
+
+      # 手工触发的覆盖发布：仅当显式勾选 overwrite_release 时才触及 Releases，
+      # 否则保持旧行为（仅上传 artifact，不污染 Releases 页面）。
+      - name: 发布 Release（手工覆盖同版本）
+        if: github.event_name == 'workflow_dispatch' && inputs.overwrite_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          cd dist
+          for f in products/*.exe products/*.zip \
+            products/package-catalog-windows-amd64.json "$CLI_WIN_ZIP" "$CLI_TGZ"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::找不到发布包 $f"
+              exit 1
+            fi
+          done
+          if gh release view "${RELEASE_REF}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_REF} 已存在，覆盖 asset..."
+            gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
+          else
+            echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
+            gh release create "${RELEASE_REF}" products/*.exe products/*.zip \
+              products/package-catalog-windows-amd64.json products/release-manifest.json \
+              products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
+              --title "Stella ${RELEASE_REF}" \
+              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
+            echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
+          fi
+          echo "--- 当前 Release 资产 ---"
+          gh release view "${RELEASE_REF}" --json assets --jq '.assets[].name' || true
+
+      # 手工触发默认只产出可下载的 artifact，不污染 Releases 页面——
+      # 否则每次测试打包都会留下一个假 Release 需要手工删除。
+      # 若勾选了 overwrite_release，上一步已完成 Release 覆盖，本步仍保留 artifact 便于下载验证。
+      - name: 上传 artifact（手工触发时用于验证产物）
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Stella-release-preview
+          path: |
+            dist/products/*
+            dist/*.zip
+            dist/*.tar.gz
+          retention-days: 7

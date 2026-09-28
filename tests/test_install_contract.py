@@ -447,6 +447,14 @@ def test_release_workflow_resolves_version_once():
     # S11 Phase 2 双轨：workflow 有 VERSIONED_LAYOUT 开关且默认 '0'
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "VERSIONED_LAYOUT: '0'" in workflow_text, "版本化布局默认必须为关（双轨）"
+    # S14/WP14：不可变候选通道——安装器/离线负载的 catalog 引用候选 URL；
+    # 晋升不删候选（保留 6 个）。
+    assert "publish-candidate" in jobs, "缺少候选通道发布作业"
+    assert "publish-candidate" in jobs["build-installer"]["needs"]
+    assert "publish-candidate" in jobs["build-offline-payload"]["needs"]
+    assert "--asset-base-url" in workflow_text, "catalog 构建必须引用候选 URL"
+    assert "--prerelease" in workflow_text, "候选必须为预发布"
+    assert "startswith(\"candidate-\")" in workflow_text or "startswith('candidate-')" in workflow_text
     # WP02：最终 EXE 安装验收是发布硬门禁——构建与发布之间必须有 install-test，
     # 且发布作业必须核对发布字节与验收字节一致。
     assert "install-test" in jobs, "缺少最终 EXE 安装验收作业"
