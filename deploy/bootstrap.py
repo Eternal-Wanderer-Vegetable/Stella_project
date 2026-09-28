@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import acquire, install_state, packages
+from .install_contract import PAYLOAD_MODE_OFFLINE, read_payload_mode
 from .profiles import PROJECT_ROOT, load_profile
 
 PROGRESS_FILENAME = ".bootstrap-progress"
@@ -201,10 +202,27 @@ def _offline_artifact(record: dict[str, Any]) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def _download_record(record: dict[str, Any], data_root: Path) -> Path:
+def _download_record(
+    record: dict[str, Any],
+    data_root: Path,
+    *,
+    allow_online_fallback: bool = False,
+) -> Path:
+    """取一个组件归档：随包离线副本优先，校验通过才使用。
+
+    严格离线语义（WP05/F09）：
+    * 离线副本**存在但损坏/被篡改** → ``payload_corrupt`` 硬失败。旧实现
+      静默回落在线下载，真离线环境下要等网络报错才失败，原始损坏原因被
+      遮盖；损坏的负载本身说明包坏了，必须指认文件。
+    * 负载**声明为离线**（.stella-payload-mode）而文件缺失 →
+      ``payload_missing`` 硬失败，声明不许靠猜。
+    * ``allow_online_fallback=True`` 是唯一回落在线的路径——那是用户/GUI
+      显式发起的在线修复入口，用同一份 catalog 摘要校验。
+    """
     filename = str(record.get("artifact") or Path(record["path"]).name)
     cache = Path(data_root) / ".stella" / "downloads"
     offline = _offline_artifact(record)
+    offline_hint = ""
     if offline is not None:
         try:
             return acquire.verify_local_artifact(
@@ -212,15 +230,28 @@ def _download_record(record: dict[str, Any], data_root: Path) -> Path:
                 checksum=str(record["checksum"]),
                 size=int(record["size"]) if record.get("size") is not None else None,
             )
-        except acquire.AcquireError:
-            # 离线副本损坏/被篡改：不阻断，落回在线路径。真离线环境下在线路径
-            # 会以网络错误收场，错误信息里会带上离线副本校验未通过的线索。
-            pass
+        except acquire.AcquireError as exc:
+            if not allow_online_fallback:
+                raise BootstrapError(
+                    "payload_corrupt",
+                    f"{record['id']} 的随包离线副本校验未通过（{filename}）："
+                    f"{exc.message}——离线负载损坏，拒绝静默联网回退；"
+                    "确认网络可用后可用 --allow-online-fallback 显式在线修复。",
+                ) from exc
+            offline_hint = f"（随包离线副本 {filename} 校验未通过，改走在线下载）"
+    elif read_payload_mode(PROJECT_ROOT) == PAYLOAD_MODE_OFFLINE and (
+        not allow_online_fallback
+    ):
+        raise BootstrapError(
+            "payload_missing",
+            f"{record['id']} 缺少随包离线副本（{filename}）——负载声明为离线"
+            "但文件缺失，拒绝联网回退；请重新获取安装包或显式在线修复。",
+        )
     source = str(record.get("source") or "").strip()
     if not source:
         raise BootstrapError("provenance_missing", f"{record['id']} 缺少 source")
     try:
-        return acquire.download_verified(
+        downloaded = acquire.download_verified(
             source,
             cache / filename,
             checksum=str(record["checksum"]),
@@ -229,8 +260,9 @@ def _download_record(record: dict[str, Any], data_root: Path) -> Path:
     except acquire.AcquireError as exc:
         message = f"{record['id']} 下载失败：{exc.message}"
         if offline is not None:
-            message += f"（随包离线副本 {filename} 校验未通过，未能离线安装）"
+            message += offline_hint
         raise BootstrapError(exc.code, message) from exc
+    return downloaded
 
 
 def _safe_member(name: str) -> Path:
@@ -419,6 +451,7 @@ def install_profile(
     data_root: Path,
     *,
     catalog_path: Path | None = None,
+    allow_online_fallback: bool = False,
 ) -> dict[str, Any]:
     """Install the remote defaults declared by a OneClick profile.
 
@@ -450,7 +483,8 @@ def install_profile(
         raise BootstrapError(exc.code, exc.message) from exc
     try:
         return _install_profile_locked(
-            profile, profile_id, root, catalog_path
+            profile, profile_id, root, catalog_path,
+            allow_online_fallback=allow_online_fallback,
         )
     except KeyboardInterrupt:
         # 取消也是终态：账本与进度都落 interrupted，重试可续装
@@ -504,6 +538,8 @@ def _install_profile_locked(
     profile_id: str,
     root: Path,
     catalog_path: Path | None,
+    *,
+    allow_online_fallback: bool = False,
 ) -> dict[str, Any]:
     # 持锁之后的第一件事：把崩溃残留的 running 账本归类为 interrupted。
     # 仅凭时间久不能断定死亡，判据是 owner 进程身份（install_state）。
@@ -595,7 +631,10 @@ def _install_profile_locked(
                 expected_digest=str(record.get("checksum") or ""),
             )
             try:
-                archive = _download_record(record, root)
+                archive = _download_record(
+                    record, root,
+                    allow_online_fallback=allow_online_fallback,
+                )
             except BootstrapError as exc:
                 raise _mark_component_failed(root, item_id, exc) from exc
             install_state.set_component(

@@ -41,6 +41,32 @@ GUI_PYTHON_RS = REPO_ROOT / "desktop" / "src-tauri" / "src" / "python.rs"
 import importlib.util
 
 
+def _write_payload_manifest(offline_dir):
+    """给种子负载写 v2 MANIFEST（按文件位置推断用途），供装载校验。"""
+    import json
+
+    from deploy import offline_payload as op
+
+    purposes = {}
+    for path in sorted(offline_dir.rglob("*")):
+        if not path.is_file() or path.name == "MANIFEST.json":
+            continue
+        rel = path.relative_to(offline_dir).as_posix()
+        if rel == "get-pip.py":
+            purpose = "pip-bootstrap"
+        elif rel.startswith("wheels/"):
+            purpose = "dependency"
+        elif rel.startswith("packages/"):
+            purpose = "component"
+        else:
+            purpose = "metadata"
+        purposes[rel] = purpose
+    manifest = op.build_manifest(offline_dir, purposes)
+    (offline_dir / "MANIFEST.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+
+
 def _load_helper():
     spec = importlib.util.spec_from_file_location("nsis_bootstrap_helper", HELPER_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -269,7 +295,6 @@ def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
     runtime = install_root / "runtime"
     runtime.mkdir(parents=True)
     (install_root / "offline").mkdir()
-    (install_root / "offline" / "MANIFEST.json").write_text("{}", encoding="utf-8")
     (install_root / "offline" / "get-pip.py").write_text("# get-pip", encoding="utf-8")
     (install_root / "offline" / "wheels").mkdir()
     (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
@@ -278,6 +303,7 @@ def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
         "{}", encoding="utf-8"
     )
     (runtime / "python.exe").write_bytes(b"MZ")
+    _write_payload_manifest(install_root / "offline")
     install_contract.write_payload_mode(install_root, "offline")
     monkeypatch.setattr(helper, "_run", lambda cmd, cwd: None)
     assert helper.main(["nsis_bootstrap_helper.py", str(install_root)]) == 0
@@ -299,11 +325,17 @@ def _run_cmd_bootstrap(monkeypatch, install_result=None, exc=None):
         def fake_install(*_args, **_kwargs):
             return install_result
 
-    monkeypatch.setattr(bootstrap, "install_profile", fake_install)
+    monkeypatch.setattr(
+        bootstrap, "install_profile",
+        fake_install,
+    )
     buffer = io.StringIO()
     with redirect_stdout(buffer):
         code = deploy_main._cmd_bootstrap(
-            argparse.Namespace(profile="oneclick-python", catalog=None)
+            argparse.Namespace(
+                profile="oneclick-python", catalog=None,
+                allow_online_fallback=False,
+            )
         )
     return code, buffer.getvalue()
 
@@ -463,13 +495,13 @@ def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypa
     offline.mkdir()
     (offline / "get-pip.py").write_text("# get-pip", encoding="utf-8")
     (offline / "wheels").mkdir()
-    (offline / "MANIFEST.json").write_text("{}", encoding="utf-8")
     (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
     (install_root / ".stella-profile").write_text("oneclick-rust", encoding="utf-8")
     (install_root / "package-catalog-windows-amd64.json").write_text(
         "{}", encoding="utf-8"
     )
     (runtime / "python.exe").write_bytes(b"MZ")
+    _write_payload_manifest(offline)
     # 随包 Rust wheel（OneClick Rust 的资源树带 wheels/）
     wheel = install_root / "wheels" / "stella_memory_rust-1.0-cp312-cp312-win_amd64.whl"
     wheel.parent.mkdir()
@@ -490,7 +522,7 @@ def test_component_failure_lands_in_failed_terminal_state(tmp_path, monkeypatch)
     原始异常保留在异常链上）。"""
     from deploy import bootstrap, napcat
 
-    def fake_download(record, data_root):
+    def fake_download(record, data_root, **_kwargs):
         target = tmp_path / f"{record['id']}.zip"
         with zipfile.ZipFile(target, "w") as bundle:
             bundle.writestr("payload", b"x")
@@ -520,7 +552,7 @@ def test_failed_run_retry_skips_healthy_components(tmp_path, monkeypatch):
     catalog, _files = _catalog(tmp_path)
     downloads: list[str] = []
 
-    def fake_download(record, data_root):
+    def fake_download(record, data_root, **_kwargs):
         downloads.append(record["id"])
         target = tmp_path / f"{record['id']}.zip"
         with zipfile.ZipFile(target, "w") as bundle:
@@ -622,10 +654,10 @@ def test_cli_bootstrap_reboot_required_maps_to_exit_three(monkeypatch):
     assert json.loads(output)["outcome"] == "reboot_required"
 
 
-@pytest.mark.xfail(reason="F09: 离线副本损坏静默回落在线，真离线时原始损坏原因被遮盖", strict=False)
 def test_offline_corruption_fails_fast_without_silent_online_fallback(
     tmp_path, monkeypatch
 ):
+    """F09 修复：离线副本损坏必须快速失败并指认文件，不得静默联网重下。"""
     from deploy import bootstrap
 
     catalog, files = _catalog(tmp_path)
@@ -656,9 +688,15 @@ def test_offline_corruption_fails_fast_without_silent_online_fallback(
         bootstrap.install_profile(
             "oneclick-python", tmp_path / "data", catalog_path=None
         )
-    assert error.value.code in {"payload_corrupt", "payload_missing"}, (
+    assert error.value.code == "payload_corrupt", (
         "声明的离线负载损坏必须快速失败并指认文件，不得静默联网重下"
     )
+    # 显式在线修复入口才允许回落（错误信息必须指路）
+    result = bootstrap.install_profile(
+        "oneclick-python", tmp_path / "data", catalog_path=None,
+        allow_online_fallback=True,
+    )
+    assert result["state"] == "complete"
 
 
 def test_gui_offline_getpip_uses_find_links():

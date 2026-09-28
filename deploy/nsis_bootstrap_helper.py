@@ -64,6 +64,7 @@ from install_contract import (
     exit_code_for,
     read_payload_mode,
 )
+from offline_payload import PayloadError, read_manifest, verify_payload
 
 RUNTIME_DIRNAME = "runtime"
 OFFLINE_DIRNAME = "offline"
@@ -235,6 +236,14 @@ def bootstrap_offline(install_root: Path) -> None:
         # 非 Rust 产物不应携带 Rust wheel：装上会让 GUI 的 rust_wheel_present
         # 误判成 Rust 后端（profile 切换的劫持路径）。
         sys.exit(f"{profile} 产物不应包含随包 Rust wheel：{rust_wheel}")
+
+    # 0) 负载全量校验（在使用负载之前，WP05）：MANIFEST 结构 + 逐文件
+    #    哈希/大小。任何缺失/损坏都在 pip 步骤之前具名失败——绝不让
+    #    --no-index 安装在半路收到「No matching distribution」才暴露。
+    try:
+        verify_payload(offline, read_manifest(offline))
+    except PayloadError as exc:
+        sys.exit(f"离线负载校验失败（{exc.code}）：{exc.message}")
 
     # 1) ._pth 补丁（必须最先做：否则 get-pip / pip 的 import 全挂）
     patch_pth(runtime)

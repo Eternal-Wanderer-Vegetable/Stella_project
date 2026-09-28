@@ -611,6 +611,7 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
             args.profile,
             STELLA_HOME,
             catalog_path=Path(args.catalog) if args.catalog else None,
+            allow_online_fallback=args.allow_online_fallback,
         )
     except KeyboardInterrupt:
         # 取消是终态不是崩溃：install_profile 已落 interrupted 账本/进度
@@ -788,6 +789,12 @@ def main(argv: list[str] | None = None) -> int:
         "--catalog",
         default=None,
         help="测试或离线场景使用的本地 package catalog",
+    )
+    p_bootstrap_install.add_argument(
+        "--allow-online-fallback",
+        action="store_true",
+        help="显式在线修复：离线副本损坏/缺失时回落在线下载（默认严格离线，"
+             "损坏即失败，绝不静默联网）",
     )
     p_bootstrap_install.set_defaults(func=_cmd_bootstrap)
 

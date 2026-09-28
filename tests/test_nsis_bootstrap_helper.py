@@ -59,6 +59,32 @@ def test_write_deps_marker_matches_sha256(tmp_path):
     assert marker == expected
 
 
+def _write_payload_manifest(offline_dir):
+    """给种子负载写 v2 MANIFEST（按文件位置推断用途），供装载校验。"""
+    import json
+
+    from deploy import offline_payload as op
+
+    purposes = {}
+    for path in sorted(offline_dir.rglob("*")):
+        if not path.is_file() or path.name == "MANIFEST.json":
+            continue
+        rel = path.relative_to(offline_dir).as_posix()
+        if rel == "get-pip.py":
+            purpose = "pip-bootstrap"
+        elif rel.startswith("wheels/"):
+            purpose = "dependency"
+        elif rel.startswith("packages/"):
+            purpose = "component"
+        else:
+            purpose = "metadata"
+        purposes[rel] = purpose
+    manifest = op.build_manifest(offline_dir, purposes)
+    (offline_dir / "MANIFEST.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+
+
 def test_bootstrap_offline_records_pipeline_in_order(tmp_path, monkeypatch):
     """装载管线按序执行：pth 补丁 → get-pip → 依赖闭包 → 依赖标记 →
     profile 组件标记 → 组件装载。"""
@@ -71,6 +97,7 @@ def test_bootstrap_offline_records_pipeline_in_order(tmp_path, monkeypatch):
     (install_root / "requirements.txt").write_text("dep==1\n", encoding="utf-8")
     (install_root / ".stella-profile").write_text("oneclick-python", encoding="utf-8")
     (install_root / "package-catalog-windows-amd64.json").write_text("{}", encoding="utf-8")
+    _write_payload_manifest(install_root / "offline")
     (runtime / "python312._pth").write_text(
         "python312.zip\n.\n#import site\n", encoding="utf-8"
     )
@@ -116,6 +143,7 @@ def _seed_offline_tree(tmp_path, profile="oneclick-python"):
         "{}", encoding="utf-8"
     )
     (runtime / "python.exe").write_bytes(b"MZ")
+    _write_payload_manifest(install_root / "offline")
     return install_root
 
 
