@@ -120,3 +120,36 @@
     DetailPrint "装载完成。"
   ${EndIf}
 !macroend
+
+; 卸载契约（S10b）：用户数据（记忆/配置/QQ 登录态/模型）在卸载时**默认
+; 全部保留**——这本来就是按文件卸载的事实行为，这里把它变成显式语义
+; 并留痕。journal 写在 INSTDIR 之外（$LOCALAPPDATA\Stella\），旧卸载器
+; 与重装都碰不到它。已知限制：钩子只随新构建分发；从旧版本升级来的
+; 安装在卸载时没有这些钩子（发布说明如实标注，不做假承诺）。
+!macro NSIS_HOOK_PREUNINSTALL
+  CreateDirectory "$LOCALAPPDATA\Stella"
+  ${GetTime} "" "L" $0 $1 $2 $3 $4 $5 $6
+  ${If} ${FileExists} "$LOCALAPPDATA\Stella\home.txt"
+    FileOpen $R9 "$LOCALAPPDATA\Stella\uninstall-journal.txt" a
+    ${If} $R9 != ""
+      FileSeek $R9 END
+      FileWrite $R9 "$2-$1-$0 $4:$5:$6 卸载：用户数据已保留（数据根见 home.txt 指针）$\r$\n"
+      FileClose $R9
+    ${EndIf}
+    DetailPrint "用户数据已保留（数据根位置见 $LOCALAPPDATA\Stella\home.txt）。"
+  ${Else}
+    FileOpen $R9 "$LOCALAPPDATA\Stella\uninstall-journal.txt" a
+    ${If} $R9 != ""
+      FileSeek $R9 END
+      FileWrite $R9 "$2-$1-$0 $4:$5:$6 卸载：未检测到外置数据根指针（旧版安装）——如数据在安装目录内，删除该目录前请自行备份。$\r$\n"
+      FileClose $R9
+    ${EndIf}
+    DetailPrint "未检测到外置数据根指针：若数据在安装目录内，删除目录前请自行备份。"
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_POSTUNINSTALL
+  ; 占位：运行期残留（runtime/、pip site-packages、.stella 缓存）的
+  ; ownership 清单清理属于 S11 Phase 2（版本化程序树）——当前语义是
+  ; 「卸载只删 NSIS 已知文件，其余保留并有 uninstall-journal 留痕」。
+!macroend

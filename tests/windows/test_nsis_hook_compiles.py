@@ -35,6 +35,11 @@ Section "main"
   !insertmacro NSIS_HOOK_PREINSTALL
   !insertmacro NSIS_HOOK_POSTINSTALL
 SectionEnd
+
+Section "un.Uninstall"
+  !insertmacro NSIS_HOOK_PREUNINSTALL
+  !insertmacro NSIS_HOOK_POSTUNINSTALL
+SectionEnd
 """
 
 

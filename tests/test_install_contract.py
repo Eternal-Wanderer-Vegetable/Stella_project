@@ -619,6 +619,22 @@ def test_hook_requires_exactly_one_python_zip():
     assert text.count("Abort") >= 3, "缺 zip / 多 zip / 校验失败都必须 Abort"
 
 
+def test_uninstall_hooks_preserve_user_data():
+    """S10b：卸载钩子只留痕不删数据；journal 必须在 INSTDIR 之外。"""
+    text = HOOK_PATH.read_text(encoding="utf-8")
+    pre_pos = text.find("!macro NSIS_HOOK_PREUNINSTALL")
+    post_pos = text.find("!macro NSIS_HOOK_POSTUNINSTALL")
+    assert pre_pos != -1 and post_pos != -1, "PREUNINSTALL/POSTUNINSTALL 钩子必须存在"
+    pre_block = text[pre_pos:post_pos]
+    assert "uninstall-journal.txt" in pre_block, "卸载必须写外置 journal 留痕"
+    assert "home.txt" in pre_block, "journal 必须指明外置数据根指针位置"
+    assert "RMDir" not in pre_block and "Delete " not in pre_block, (
+        "卸载契约钩子绝不删除任何文件"
+    )
+    # journal 落在 $LOCALAPPDATA\Stella\（INSTDIR 之外，旧卸载器/重装碰不到）
+    assert "$LOCALAPPDATA\\Stella\\" in pre_block
+
+
 def test_hook_preinstall_runs_expensive_steps_first_gates():
     """WP08：预检查必须在文件释放前完成——路径长度、目标卷空间、可写性。"""
     text = HOOK_PATH.read_text(encoding="utf-8")
