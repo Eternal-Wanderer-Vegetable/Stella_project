@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -226,6 +227,96 @@ def test_bootstrap_offline_session_log_records_failure(tmp_path, monkeypatch):
     failures = [line for line in lines if line["stage"] == "helper_failed"]
     assert failures and failures[-1]["step"] == "get-pip"
     assert failures[-1]["exit_code"] == 2
+
+
+# ============================================================
+# 数据根显式接入（S10a）
+# ============================================================
+
+
+def _isolate_user_dirs(monkeypatch, tmp_path):
+    """把 LOCALAPPDATA / STELLA_HOME / XDG_CONFIG_HOME 全部隔离到临时目录。"""
+    fake_local = tmp_path / "localappdata"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))
+    monkeypatch.delenv("STELLA_HOME", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    return fake_local
+
+
+def test_resolve_data_root_fresh_defaults_out_of_tree(tmp_path, monkeypatch):
+    fake_local = _isolate_user_dirs(monkeypatch, tmp_path)
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+
+    data_root, source = helper.resolve_data_root(install_root)
+
+    assert source == "new-default"
+    assert data_root == fake_local / "Stella" / "Data"
+    pointer = fake_local / "Stella" / "home.txt"
+    assert pointer.is_file()
+    assert pointer.read_text(encoding="utf-8").strip() == str(data_root)
+
+
+def test_resolve_data_root_env_wins_and_never_writes(tmp_path, monkeypatch):
+    fake_local = _isolate_user_dirs(monkeypatch, tmp_path)
+    monkeypatch.setenv("STELLA_HOME", str(tmp_path / "custom-home"))
+    data_root, source = helper.resolve_data_root(tmp_path)
+    assert (data_root, source) == (None, "env")
+    assert not (fake_local / "Stella" / "home.txt").exists()
+
+
+def test_resolve_data_root_portable_and_legacy_and_pointer(tmp_path, monkeypatch):
+    _isolate_user_dirs(monkeypatch, tmp_path)
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+
+    # 便携：树内 StellaData 优先于新默认
+    (install_root / "StellaData").mkdir()
+    assert helper.resolve_data_root(install_root) == (None, "portable")
+    (install_root / "StellaData").rmdir()
+
+    # 旧布局痕迹
+    (install_root / ".env").write_text("X=1", encoding="utf-8")
+    assert helper.resolve_data_root(install_root) == (None, "legacy")
+    (install_root / ".env").unlink()
+
+    # 已有指针
+    pointer = Path(os.environ["LOCALAPPDATA"]) / "Stella" / "home.txt"
+    pointer.parent.mkdir(parents=True)
+    existing = tmp_path / "existing-home"
+    existing.mkdir()
+    pointer.write_text(str(existing) + "\n", encoding="utf-8")
+    assert helper.resolve_data_root(install_root) == (None, "pointer")
+
+
+def test_resolve_data_root_pointer_write_failure_degrades(tmp_path, monkeypatch):
+    # LOCALAPPDATA 指向一个文件 → mkdir 必败 → 退化为现状默认，不抛异常
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("LOCALAPPDATA", str(blocker))
+    monkeypatch.delenv("STELLA_HOME", raising=False)
+    data_root, source = helper.resolve_data_root(tmp_path)
+    assert (data_root, source) == (None, "pointer-write-failed")
+
+
+def test_bootstrap_offline_injects_data_root_env_and_logs(tmp_path, monkeypatch):
+    fake_local = _isolate_user_dirs(monkeypatch, tmp_path)
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, cwd, env=None, **_kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(helper.subprocess, "run", fake_run)
+    helper.bootstrap_offline(install_root)
+
+    expected_root = fake_local / "Stella" / "Data"
+    assert captured["env"]["STELLA_HOME"] == str(expected_root)
+    session = install_root / helper.SESSION_LOG_FILENAME
+    events = [json.loads(line) for line in session.read_text(encoding="utf-8").splitlines()]
+    data_events = [e for e in events if e["stage"] == "data_root"]
+    assert data_events and "source=new-default" in data_events[0]["detail"]
 
 
 def test_bootstrap_offline_rejects_multiple_rust_wheels(tmp_path, monkeypatch):

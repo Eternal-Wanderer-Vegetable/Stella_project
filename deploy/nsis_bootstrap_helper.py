@@ -218,11 +218,86 @@ def _append_session(install_root: Path, event: dict) -> None:
         pass
 
 
+# ============================================================
+# 数据根显式接入（S10a）：新装默认树外，已有数据根一律不动
+# ============================================================
+
+DEFAULT_DATA_DIR_NAME = "StellaData"
+# 与 config/home.py 的 LEGACY_MARKERS 同口径（镜像而非 import：helper 必须
+# 保持零重依赖，嵌入式 Python 还没有 site-packages）。
+LEGACY_DATA_MARKERS = (".env", "memory/agent_memory.db", "deploy.answers.toml")
+
+
+def data_pointer_path() -> Path:
+    """机器级数据根指针文件位置（与 config/home.pointer_path 同口径）。"""
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        return Path(local) / "Stella" / "home.txt"
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".config"
+    return base / "stella" / "home.txt"
+
+
+def read_data_pointer() -> Path | None:
+    """读指针；不存在/为空/指向不存在的目录都返回 None（home.py 同口径）。"""
+    path = data_pointer_path()
+    try:
+        if not path.is_file():
+            return None
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not text:
+        return None
+    candidate = Path(text)
+    return candidate if candidate.is_dir() else None
+
+
+def write_data_pointer(home: Path) -> bool:
+    """把数据根写进指针文件；失败返回 False（调用方退化为现状默认）。"""
+    path = data_pointer_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(home.resolve()) + "\n", encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+def resolve_data_root(install_root: Path) -> tuple[Path | None, str]:
+    """为离线装载决定数据根；返回（需注入子进程的 STELLA_HOME 或 None, 来源）。
+
+    优先级与 config/home.py 逐条对应（镜像实现，语义一致）：
+    环境变量 > 便携 StellaData > 旧布局痕迹 > 已有指针 > 新默认（树外）。
+    只有「全新安装」才落新默认并写指针——已有数据根一律不动、不迁移。
+    """
+    env_home = os.environ.get("STELLA_HOME", "").strip()
+    if env_home:
+        return None, "env"
+    if (install_root / DEFAULT_DATA_DIR_NAME).is_dir():
+        return None, "portable"
+    if any((install_root / marker).exists() for marker in LEGACY_DATA_MARKERS):
+        return None, "legacy"
+    if read_data_pointer() is not None:
+        return None, "pointer"
+    local = os.environ.get("LOCALAPPDATA")
+    if not local:
+        return None, "no-localappdata"
+    new_home = Path(local) / "Stella" / "Data"
+    if not write_data_pointer(new_home):
+        # 指针写失败（权限/只读盘）：退化为现状树内默认，不阻断安装。
+        return None, "pointer-write-failed"
+    return new_home, "new-default"
+
+
 def _run(cmd: list[str], cwd: Path, *, install_root: Path | None = None,
-         step: str = "command") -> None:
+         step: str = "command", env_extra: dict[str, str] | None = None) -> None:
     """执行装载命令（受控环境）；输出直通安装器详情区（ExecToLog 捕获）。"""
+    env = _isolated_env()
+    if env_extra:
+        env.update(env_extra)
     started = time.monotonic()
-    result = subprocess.run(cmd, cwd=str(cwd), check=False, env=_isolated_env())
+    result = subprocess.run(cmd, cwd=str(cwd), check=False, env=env)
     duration = round(time.monotonic() - started, 3)
     if install_root is not None:
         _append_session(
@@ -335,13 +410,28 @@ def bootstrap_offline(install_root: Path) -> None:
     #    （只代表组件阶段，不代表整体产品 ready——依赖与组件是两个标记）。
     write_profile_ready_marker(runtime, profile, catalog)
 
-    # 7) 组件装载：NapCat / embedding 模型 / llama.cpp 后端。
-    #    数据目录解析与 GUI 运行时同源（config.home），指针/目录因此一致。
+    # 7) 数据根显式接入（S10a）：全新安装默认树外（$LOCALAPPDATA\Stella\Data，
+    #    经机器指针接入，config.home 原有解析零改动）；便携/旧布局/已有指针/
+    #    环境变量一律沿用，绝不迁移。决策必须先于组件装载——NapCat/模型/
+    #    账本/事件流都要落进最终数据根。
+    data_root, data_source = resolve_data_root(install_root)
+    _append_session(
+        install_root,
+        {
+            "stage": "data_root",
+            "detail": f"source={data_source} root={data_root or '(按现有规则解析)'}",
+        },
+    )
+    env_extra = {"STELLA_HOME": str(data_root)} if data_root is not None else None
+
+    # 8) 组件装载：NapCat / embedding 模型 / llama.cpp 后端。
+    #    数据目录由上一步显式决定（指针/沿用），与 GUI 运行时同源（config.home）。
     _run([str(python), "-m", "deploy", "bootstrap", "install",
           "--profile", profile,
           "--catalog", str(catalog)],
          install_root,
-         install_root=install_root, step="deploy-bootstrap-install")
+         install_root=install_root, step="deploy-bootstrap-install",
+         env_extra=env_extra)
     _append_session(install_root, {"stage": "helper_done", "step": "all"})
 
 
