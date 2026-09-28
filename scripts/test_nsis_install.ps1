@@ -27,7 +27,8 @@ param(
     [ValidateSet("online", "offline")][string]$ExpectedPayloadMode = "offline",
     [string]$ExpectedProfile = "",
     [string]$ReportDir = "install-report",
-    [int]$TimeoutSeconds = 3600
+    [int]$TimeoutSeconds = 3600,
+    [switch]$RequireSigned
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,6 +56,14 @@ $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInv
 $sizeBytes = (Get-Item -LiteralPath $installer).Length
 Write-Host "Installer: $installer"
 Write-Host "SHA-256  : $hash ($sizeBytes bytes)"
+
+# 签名核验（S14）：已签名必须 Valid；RequireSigned（正式发布）时未签名
+# 也是失败。签名状态连同 hash 一起进报告，供发布门禁消费。
+$signature = Get-AuthenticodeSignature -LiteralPath $installer
+$signatureValid = ($signature.Status -eq "Valid")
+Add-Check -Name "installer signature" `
+    (($signatureValid -or (-not $RequireSigned)) -and $signature.Status -ne "HashMismatch") `
+    -Detail "status=$($signature.Status) requireSigned=$RequireSigned"
 
 # --- 2. Install silently into a fixed, space-free directory ---------------
 # /D must be last and unquoted (NSIS treats the rest of the command line as
@@ -184,6 +193,7 @@ $report = [ordered]@{
     installer        = $installer.Path
     installer_sha256 = $hash
     installer_size   = $sizeBytes
+    signature_status = $signature.Status
     exit_code        = $exitCode
     duration_seconds = $durationSeconds
     expected_profile = $ExpectedProfile

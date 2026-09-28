@@ -461,6 +461,8 @@ def test_release_workflow_resolves_version_once():
     upload_pos = workflow_text.index("- name: 上传安装器")
     assert signer_pos < upload_pos, "签名必须发生在 artifact 上传之前"
     assert "signtool sign" in workflow_text and "signtool verify" in workflow_text
+    # S15/WP15：体积门禁接入发布作业
+    assert "check_installer_size.py" in workflow_text, "缺少安装器体积门禁"
     assert "--prerelease" in workflow_text, "候选必须为预发布"
     assert "startswith(\"candidate-\")" in workflow_text or "startswith('candidate-')" in workflow_text
     # WP02：最终 EXE 安装验收是发布硬门禁——构建与发布之间必须有 install-test，
@@ -819,3 +821,24 @@ def test_gui_offline_getpip_uses_find_links():
         "GUI 离线 get-pip 必须与 helper 同参：--find-links 指向随包 wheels，"
         "否则 pip 本体无法离线解析"
     )
+
+
+def test_installer_size_gate_classify_and_budget(tmp_path, monkeypatch):
+    """S15：体积分类与预算读取——online 有上限，offline 未实测仅记录。"""
+    import json as json_mod
+
+    from scripts.check_installer_size import classify
+
+    assert classify("Stella-OneClick-Python-Offline-v1.exe") == "offline"
+    assert classify("Stella-OneClick-Python-v1.exe") == "online"
+
+    toolchain = REPO_ROOT / "release_assets" / "toolchain.json"
+    payload = json_mod.loads(toolchain.read_text(encoding="utf-8"))
+    budget = payload["installer_budget_mb"]
+    assert budget["online"] >= 300, "online 实测基线 220.36MB → 上限 300"
+    assert budget["offline"] is None, "offline 未实测，不凭猜测设限"
+    # 体积门禁已接入发布作业
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "check_installer_size.py" in workflow_text

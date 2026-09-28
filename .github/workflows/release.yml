@@ -996,6 +996,13 @@ jobs:
             --build-id "${{ needs.resolve-release.outputs.build_id }}"
           cat dist/products/SHA256SUMS.txt
 
+      # 体积门禁（S15/WP15）：online 以实测基线设硬上限；offline 未实测
+      # 仅记录——不凭猜测设限。
+      - name: 安装器体积门禁
+        run: |
+          set -e
+          python scripts/check_installer_size.py --products dist/products
+
       # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
       # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
       # 只发二进制会在 find_root 就失败（2026-09-08 bug_report：单独下载启动报错）。

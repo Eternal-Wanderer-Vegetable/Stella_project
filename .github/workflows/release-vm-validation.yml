@@ -1,0 +1,126 @@
+name: Release VM Validation
+
+# S15：干净 VM 验收矩阵（自动子集）。运行环境为自托管 runner
+# （labels: [self-hosted, stella-vm-windows]）——hosted runner 预装大量
+# 运行库，不构成「干净 Windows」证据。
+#
+# 前置基础设施（一次性）：
+#   * Hyper-V VM（干净 Windows amd64，无 VC++/Python/Node 开发工具），
+#     装 agent 后打基线检查点；作业开始前由宿主计划任务/启动脚本执行
+#     Restore-VMCheckpoint 还原到基线（vars.STELLA_VM_RESTORE_COMMAND）。
+#   * VM 内网络隔离能力（T02 断网：宿主禁 vSwitch 后再放行）。
+#   * gh CLI 登录（下载历史 Release 做升级矩阵 T11）。
+#
+# 手册项（runbook：release_assets/VM-MATRIX.md）：T04 路径矩阵、
+# T05 磁盘耗尽、T07 网络故障注入、T08 MSI 全码、T09 崩溃恢复、
+# T10 并发互斥、T20 Defender/最低配——需要人为干预或破坏性环境。
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: 'Release 工作流的 run id（其 install-test 之前的构建产物）'
+        required: true
+        type: string
+      previous_release_tag:
+        description: '上一正式版 tag（T11 升级矩阵；留空跳过）'
+        required: false
+        type: string
+      require_signed:
+        description: '验收是否要求签名（tag 触发的正式发布=必须）'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  vm-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { profile: oneclick-python, payload: offline, t02: true }
+          - { profile: oneclick-rust, payload: offline, t02: true }
+          - { profile: oneclick-python, payload: online, t02: false }
+          - { profile: oneclick-rust, payload: online, t02: false }
+    runs-on: [self-hosted, stella-vm-windows]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载被验收安装器（来自指定 Release run）
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
+          path: installer
+          run-id: ${{ inputs.release_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: T01/T02 安装验收（断网场景由宿主在步骤间切换 vSwitch）
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem 'installer\*.exe' -File)[0].FullName
+          New-Item -ItemType Directory -Force -Path vm-report | Out-Null
+          scripts/test_nsis_install.ps1 `
+            -InstallerPath $exe `
+            -ExpectedPayloadMode '${{ matrix.payload }}' `
+            -ExpectedProfile '${{ matrix.profile }}' `
+            -RequireSigned:('${{ inputs.require_signed }}' -eq 'true') `
+            -ReportDir 'vm-report'
+
+      - name: T11 升级矩阵（旧版安装 → 新版覆盖 → 回滚开关）
+        if: inputs.previous_release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 旧版先行：上一正式版的在线 python 安装器（版本化布局的回滚演练）
+          New-Item -ItemType Directory -Force -Path previous | Out-Null
+          gh release download '${{ inputs.previous_release_tag }}' `
+            -R '${{ github.repository }}' -D previous `
+            -p 'Stella-OneClick-Python-v*-windows-amd64.exe'
+          $old = @(Get-ChildItem 'previous\*.exe' -File)[0].FullName
+          scripts/test_nsis_install.ps1 -InstallerPath $old `
+            -ExpectedPayloadMode online -ExpectedProfile oneclick-python `
+            -ReportDir 'vm-report\t11-old'
+          # 新版覆盖同目录后，验证激活记录与旧树保留
+          $new = @(Get-ChildItem 'installer\*.exe' -File)[0].FullName
+          scripts/test_nsis_install.ps1 -InstallerPath $new `
+            -ExpectedPayloadMode '${{ matrix.payload }}' `
+            -ExpectedProfile '${{ matrix.profile }}' `
+            -ReportDir 'vm-report\t11-new'
+          $record = "$env:LOCALAPPDATA\Stella\active-install.json"
+          if (-not (Test-Path $record)) {
+            throw "T11：升级后机器激活记录缺失（$record）"
+          }
+
+      - name: T18 卸载数据保留核对
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $uninst = Get-ChildItem "$env:SystemDrive\stella-install-test\uninstall.exe" `
+            -ErrorAction SilentlyContinue
+          if ($uninst) {
+            Start-Process $uninst.FullName '/S' -Wait
+            $homePtr = "$env:LOCALAPPDATA\Stella\home.txt"
+            if (Test-Path $homePtr) {
+              $dataRoot = (Get-Content $homePtr -Raw).Trim()
+              if (-not (Test-Path $dataRoot)) {
+                throw "T18：数据根 $dataRoot 在卸载后消失"
+              }
+              Add-Content "$env:LOCALAPPDATA\Stella\uninstall-journal.txt" `
+                "VM 矩阵 T18：卸载后数据根保留核对通过"
+            }
+          }
+
+      - name: 归档验收报告
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vm-matrix-${{ matrix.profile }}-${{ matrix.payload }}
+          path: vm-report
+          if-no-files-found: error

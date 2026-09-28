@@ -8,11 +8,21 @@
   "node": "24",
   "pnpm": "10",
   "llama_cpp_commit": "4a89937354190cef5a97baf8eeb17336105eb72d",
+  "installer_budget_mb": {
+    "online": 300,
+    "offline": null
+  },
+  "installer_budget_mb": {
+    "online": 300,
+    "offline": null
+  },
   "embedding_commit": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
   "_notes": {
     "python": "必须与两份壳 python.rs 的 PY_VER / PY_SHA256 及 start.bat 同步（构建期一致性校验见 build_release_package._runtime_fingerprint）。",
     "embedding_commit": "Qwen/Qwen3-Embedding-0.6B-GGUF 的固定提交；该提交下 Qwen3-Embedding-0.6B-Q8_0.gguf 的 LFS sha256 与 product profile 的 sha256 字段逐字节一致（2026-09-28 经 HF API 核实）。",
     "tauri_cli": "crates.io 2.x 最新稳定版（2026-09-28 核实）。升级 = 改这里 + 跑完整安装矩阵。",
+    "installer_budget_mb": "online 以 v5.0.0 实测 220.36MB 为基线给 36% 余量；offline 未实测（含 600MB+ 负载）暂不设限，VM 矩阵实测后补录——不凭猜测设数字。",
+    "installer_budget_mb": "online 以 v5.0.0 实测 220.36MB 为基线给 36% 余量；offline 未实测（含 600MB+ 负载）暂不设限，VM 矩阵实测后补录——不凭猜测设数字。",
     "maturin": "PyPI 当前稳定版（2026-09-28 核实）。"
   }
 }
