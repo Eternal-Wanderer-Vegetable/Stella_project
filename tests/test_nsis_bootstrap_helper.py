@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -105,7 +106,7 @@ def test_bootstrap_offline_records_pipeline_in_order(tmp_path, monkeypatch):
     (runtime / "python.exe").write_bytes(b"MZ")
 
     recorded: list[list[str]] = []
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd: recorded.append(cmd))
+    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: recorded.append(cmd))
 
     helper.bootstrap_offline(install_root)
 
@@ -160,7 +161,7 @@ def test_bootstrap_offline_installs_rust_wheel_before_components(tmp_path, monke
     install_root = _seed_offline_tree(tmp_path, profile="oneclick-rust")
     wheel = _seed_rust_wheel(install_root)
     recorded: list[list[str]] = []
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd: recorded.append(cmd))
+    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: recorded.append(cmd))
 
     helper.bootstrap_offline(install_root)
 
@@ -181,6 +182,50 @@ def test_bootstrap_offline_installs_rust_wheel_before_components(tmp_path, monke
     marker = install_root / "runtime" / helper.RUST_MARKER
     expected = hashlib.sha256(wheel.read_bytes()).hexdigest().upper()
     assert marker.read_text(encoding="utf-8").strip() == expected
+
+
+def test_bootstrap_offline_writes_session_log(tmp_path, monkeypatch):
+    """装载期会话日志：步骤级事件 + 终态事件，安装器关闭后仍可取。"""
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+    manifest = install_root / "offline" / "MANIFEST.json"
+
+    # mock subprocess 层（不是 _run），让真实 _run 写出会话事件
+    monkeypatch.setattr(
+        helper.subprocess, "run",
+        lambda cmd, cwd=None, **_kwargs: SimpleNamespace(returncode=0),
+    )
+
+    helper.bootstrap_offline(install_root)
+    assert manifest.is_file()
+    session = install_root / helper.SESSION_LOG_FILENAME
+    lines = [json.loads(line) for line in session.read_text(encoding="utf-8").splitlines()]
+    stages = [line["stage"] for line in lines]
+    assert stages[0] == "helper_start"
+    assert stages[-1] == "helper_done"
+    step_events = [line for line in lines if line["stage"] == "helper_step"]
+    step_names = [line["step"] for line in step_events]
+    assert step_names[0] == "get-pip"
+    assert step_names[-1] == "deploy-bootstrap-install"
+    assert all("duration_s" in line and "exit_code" in line for line in step_events)
+
+
+def test_bootstrap_offline_session_log_records_failure(tmp_path, monkeypatch):
+    """装载步骤失败 → 会话日志留下 helper_failed 终态事件。"""
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+
+    def failing_run(cmd, cwd, **_kwargs):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr(helper.subprocess, "run", failing_run)
+    with pytest.raises(SystemExit, match="退出码 2"):
+        helper.bootstrap_offline(install_root)
+    session = install_root / helper.SESSION_LOG_FILENAME
+    lines = [json.loads(line) for line in session.read_text(encoding="utf-8").splitlines()]
+    failures = [line for line in lines if line["stage"] == "helper_failed"]
+    assert failures and failures[-1]["step"] == "get-pip"
+    assert failures[-1]["exit_code"] == 2
 
 
 def test_bootstrap_offline_rejects_multiple_rust_wheels(tmp_path, monkeypatch):

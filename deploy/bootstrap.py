@@ -507,6 +507,12 @@ def _record_interrupted(root: Path, profile_id: str) -> None:
         error="安装被中断（用户取消或宿主进程退出）",
     )
     install_state.update_ledger(root, state=install_state.LEDGER_INTERRUPTED)
+    install_state.append_event(
+        root,
+        stage="install_end",
+        state="interrupted",
+        detail=profile_id,
+    )
 
 
 def _mark_component_failed(
@@ -529,6 +535,14 @@ def _mark_component_failed(
         state=install_state.COMPONENT_FAILED,
         error_code=error.code,
         error_message=error.message,
+    )
+    install_state.append_event(
+        root,
+        stage="component",
+        component=component_id,
+        state="failed",
+        error_code=error.code,
+        detail=error.message,
     )
     return error
 
@@ -614,6 +628,11 @@ def _install_profile_locked(
         catalog_sha256=catalog_sha,
         components=[item_id for item_id, _record_ in items],
     )
+    install_state.append_event(
+        root,
+        stage="install_start",
+        detail=f"profile={profile_id} operation={install_state.read_ledger(root)['operation_id']}",
+    )
     _write_progress(root, profile_id=profile_id, state="running", completed=completed)
     try:
         for item_id, record in items:
@@ -639,6 +658,9 @@ def _install_profile_locked(
                 raise _mark_component_failed(root, item_id, exc) from exc
             install_state.set_component(
                 root, item_id, state=install_state.COMPONENT_VERIFIED
+            )
+            install_state.append_event(
+                root, stage="component", component=item_id, state="verified"
             )
             try:
                 if record["kind"] == "onebot" or item_id == "napcat":
@@ -688,11 +710,20 @@ def _install_profile_locked(
             install_state.set_component(
                 root, item_id, state=install_state.COMPONENT_HEALTHY
             )
+            install_state.append_event(
+                root, stage="component", component=item_id, state="healthy"
+            )
             completed.append(item_id)
         _repair_oneclick_runtime(profile_id, root)
         _write_progress(root, profile_id=profile_id, state="complete", completed=completed)
         ledger = install_state.read_ledger(root) or {}
         install_state.update_ledger(root, state=install_state.LEDGER_READY, current_step="")
+        install_state.append_event(
+            root,
+            stage="install_end",
+            state="reboot_required" if ledger.get("reboot_required") else "ready",
+            detail=profile_id,
+        )
         return {
             "ok": True,
             "profile": profile_id,
@@ -713,6 +744,13 @@ def _install_profile_locked(
             state=install_state.LEDGER_FAILED,
             current_step="",
             last_error={"code": exc.code, "message": exc.message[:500]},
+        )
+        install_state.append_event(
+            root,
+            stage="install_end",
+            state="failed",
+            error_code=exc.code,
+            detail=exc.message,
         )
         raise
 

@@ -240,3 +240,150 @@ def test_ledger_write_is_atomic(tmp_path):
     with unittest.mock.patch.object(Path, "replace", spy_replace):
         install_state.new_ledger(tmp_path, profile="p", components=["x"])
     assert calls, "账本必须经临时文件 replace 落盘"
+
+
+# ============================================================
+# 安装事件流（WP13）
+# ============================================================
+
+
+def test_append_event_and_read_back(tmp_path):
+    install_state.append_event(
+        tmp_path, stage="component", component="napcat",
+        state="failed", error_code="msi_busy", detail="忙" * 3,
+    )
+    install_state.append_event(tmp_path, stage="install_end", state="ready")
+    events = install_state.read_events(tmp_path)
+    assert [e["stage"] for e in events] == ["component", "install_end"]
+    assert events[0]["error_code"] == "msi_busy"
+    assert all("ts" in event for event in events)
+
+
+def test_events_rotate_at_size_limit(tmp_path, monkeypatch):
+    # 阈值让 40 条事件恰好只触发一次轮转（每条约 100 字节）
+    monkeypatch.setattr(install_state, "EVENTS_MAX_BYTES", 2048)
+    for index in range(40):
+        install_state.append_event(
+            tmp_path, stage="filler", detail="x" * 64 + str(index)
+        )
+    events_path = tmp_path / ".stella" / "install-events.jsonl"
+    rotated = tmp_path / ".stella" / "install-events.jsonl.1"
+    assert rotated.is_file(), "超过上限必须轮转出 .1"
+    assert events_path.is_file()
+    # 有界不变量：当前文件不超过「上限 + 一条」；总量（两代）不超过
+    # 约 2×上限——事件流永不无界增长。
+    assert events_path.stat().st_size <= 2048 + 512
+    total_size = events_path.stat().st_size + rotated.stat().st_size
+    assert total_size <= 2 * 2048 + 512
+    events = install_state.read_events(tmp_path)
+    assert 0 < len(events) <= 40
+
+
+def test_event_write_failure_never_raises(tmp_path):
+    """日志绝不阻断安装：目标不可写时静默放弃。"""
+    import stat as stat_module
+
+    blocker = tmp_path / ".stella"
+    blocker.mkdir()
+    events = blocker / "install-events.jsonl"
+    events.write_text("", encoding="utf-8")
+    events.chmod(stat_module.S_IREAD)
+    try:
+        install_state.append_event(tmp_path, stage="x")
+    finally:
+        events.chmod(stat_module.S_IREAD | stat_module.S_IWRITE)
+
+
+def _event_trail_catalog(tmp_path):
+    """最小 catalog（下载被 mock，checksum 仍要成对）。"""
+    import hashlib
+    import zipfile as zf
+
+    llama = tmp_path / "llama.zip"
+    with zf.ZipFile(llama, "w") as bundle:
+        bundle.writestr("llama-server", b"llama")
+    napcat_zip = tmp_path / "napcat.zip"
+    with zf.ZipFile(napcat_zip, "w") as bundle:
+        bundle.writestr("NapCat/napcat.exe", b"napcat")
+    embedding = tmp_path / "embedding.gguf"
+    embedding.write_bytes(b"embedding")
+
+    def sha(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    records = [
+        {
+            "kind": "component", "id": "llama-cpu", "version": "4.0.1",
+            "path": "llama-cpu.zip", "checksum": sha(llama),
+            "platform": "windows-amd64", "backend": "cpu",
+            "runtime_api": "openai-compatible", "driver_min": "none",
+            "abi": "documented", "license": "llama.cpp", "sbom": "s",
+            "source": "https://example.invalid/llama-cpu.zip",
+            "artifact": "llama-cpu.zip", "status": "available",
+        },
+        {
+            "kind": "onebot", "id": "napcat", "version": "1.0.0",
+            "path": "napcat.zip", "checksum": sha(napcat_zip),
+            "platform": "windows-amd64", "license": "NapCat", "sbom": "s",
+            "source": "https://example.invalid/napcat.zip",
+            "artifact": "napcat.zip", "status": "available",
+        },
+        {
+            "kind": "model", "id": "qwen3-embedding-0.6b", "version": "q8_0",
+            "path": "models/embedding/Qwen3-Embedding-0.6B-Q8_0.gguf",
+            "checksum": sha(embedding),
+            "platform": "windows-amd64", "model_role": "embedding",
+            "runtime_api": "llama.cpp-embedding", "license": "Apache-2.0",
+            "source": "https://example.invalid/Qwen3-Embedding-0.6B-Q8_0.gguf",
+            "artifact": "Qwen3-Embedding-0.6B-Q8_0.gguf", "status": "available",
+            "size": embedding.stat().st_size, "dimension": 1024, "remote": True,
+        },
+    ]
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-09-28T00:00:00+00:00",
+                "platform": "windows-amd64",
+                "profile": "oneclick-python",
+                "packages": records,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return catalog
+
+
+def test_bootstrap_failure_leaves_event_trail(tmp_path, monkeypatch):
+    """组件失败 → 事件流必须有 component failed + install_end failed。"""
+    import zipfile as zf
+
+    from deploy import bootstrap, napcat
+
+    def fake_download(record, data_root, **_kwargs):
+        target = tmp_path / f"{record['id']}.zip"
+        with zf.ZipFile(target, "w") as bundle:
+            bundle.writestr("payload", b"x")
+        return target
+
+    monkeypatch.setattr(bootstrap, "_download_record", fake_download)
+
+    def explode(*_args, **_kwargs):
+        raise napcat.NapCatError("install_failed", "MSI 爆炸")
+
+    monkeypatch.setattr(bootstrap.acquire, "install_napcat", explode)
+    monkeypatch.setattr(
+        bootstrap.acquire, "install_default_embedding",
+        lambda model, root, **_kwargs: {"id": model["id"]},
+    )
+    data_root = tmp_path / "data"
+    with pytest.raises(bootstrap.BootstrapError):
+        bootstrap.install_profile(
+            "oneclick-python", data_root, catalog_path=_event_trail_catalog(tmp_path)
+        )
+    stages = [(e["stage"], e.get("state") or e.get("error_code"))
+              for e in install_state.read_events(data_root)]
+    assert ("component", "failed") in stages
+    assert ("install_end", "failed") in stages
+    assert stages[-1][0] == "install_end", "最后一条必须是整体终态"

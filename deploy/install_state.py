@@ -24,6 +24,7 @@ import contextlib
 import json
 import os
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,11 @@ from typing import Any
 LEDGER_FILENAME = "install-ledger.json"
 LOCK_FILENAME = "install.lock"
 LEDGER_SCHEMA_VERSION = 1
+# 安装事件流（WP13）：每次安装/修复的结构化日志，是「查看日志 / 导出诊断」
+# 的数据源。追加写 + 大小上限轮转；绝不因日志失败阻断安装。
+EVENTS_FILENAME = "install-events.jsonl"
+EVENTS_ROTATED_FILENAME = "install-events.jsonl.1"
+EVENTS_MAX_BYTES = 2 * 1024 * 1024  # 单文件上限；超过轮转为 .1（保留一代）
 
 # 总体状态（对应安装契约 InstallOutcome 的超集，账本侧多一个 running 中间态）
 LEDGER_RUNNING = "running"
@@ -345,6 +351,63 @@ class InstallLock:
 # ============================================================
 
 
+def append_event(
+    data_root: Path,
+    *,
+    stage: str,
+    component: str | None = None,
+    state: str | None = None,
+    error_code: str | None = None,
+    detail: str | None = None,
+) -> None:
+    """追加一条结构化安装事件（JSONL）。
+
+    字段：时间、阶段、组件、状态、错误码、摘要（operation_id 由调用方
+    放进 stage/detail）。写入失败静默忽略——日志绝不阻断安装；超过大小
+    上限时轮转为 ``.1``（保留一代，防止长期膨胀）。
+    """
+    payload: dict[str, Any] = {"ts": round(time.time(), 3), "stage": stage}
+    if component is not None:
+        payload["component"] = component
+    if state is not None:
+        payload["state"] = state
+    if error_code is not None:
+        payload["error_code"] = error_code
+    if detail is not None:
+        payload["detail"] = str(detail)[:500]
+    path = Path(data_root) / ".stella" / EVENTS_FILENAME
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file() and path.stat().st_size > EVENTS_MAX_BYTES:
+            with contextlib.suppress(OSError):
+                path.replace(path.with_name(EVENTS_ROTATED_FILENAME))
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        pass
+
+
+def read_events(data_root: Path) -> list[dict[str, Any]]:
+    """读全部事件（诊断导出用）；轮转文件在前，损坏行跳过。"""
+    base = Path(data_root) / ".stella"
+    events: list[dict[str, Any]] = []
+    for path in (base / EVENTS_ROTATED_FILENAME, base / EVENTS_FILENAME):
+        if not path.is_file():
+            continue
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                with contextlib.suppress(ValueError):
+                    parsed = json.loads(line)
+                    if isinstance(parsed, dict):
+                        events.append(parsed)
+        except OSError:
+            continue
+    return events
+
+
 def read_ledger(data_root: Path) -> dict[str, Any] | None:
     path = ledger_path(data_root)
     if not path.is_file():
@@ -452,6 +515,9 @@ __all__ = [
     "COMPONENT_PENDING",
     "COMPONENT_STAGED",
     "COMPONENT_VERIFIED",
+    "EVENTS_FILENAME",
+    "EVENTS_MAX_BYTES",
+    "EVENTS_ROTATED_FILENAME",
     "GONE",
     "LEDGER_FAILED",
     "LEDGER_FILENAME",
@@ -463,6 +529,7 @@ __all__ = [
     "UNKNOWN",
     "InstallLock",
     "InstallLockError",
+    "append_event",
     "classify_owner",
     "classify_previous_ledger",
     "ledger_path",
@@ -470,6 +537,7 @@ __all__ = [
     "new_ledger",
     "probe_pid",
     "process_identity",
+    "read_events",
     "read_ledger",
     "self_identity",
     "set_component",

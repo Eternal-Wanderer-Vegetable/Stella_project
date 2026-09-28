@@ -46,10 +46,12 @@ pip/get-pip 子进程以受控环境执行：清除 PIP_*/代理变量，避免�
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # 安装契约与 helper 同目录（deploy/），NSIS 以裸文件执行本脚本时脚本目录
@@ -68,6 +70,9 @@ from offline_payload import PayloadError, read_manifest, verify_payload
 
 RUNTIME_DIRNAME = "runtime"
 OFFLINE_DIRNAME = "offline"
+# 安装会话日志（WP13）：装载期结构化事件流，落在程序树根（安装器写入
+# 的目录必然可写）。安装器被关闭后日志仍在，用户无需截图即可定位失败。
+SESSION_LOG_FILENAME = ".stella-install-session.jsonl"
 WHEELS_DIRNAME = "wheels"
 DEPS_MARKER = ".stella-deps-ready"
 RUST_MARKER = ".stella-rust-ready"
@@ -176,9 +181,10 @@ def ensure_rust_wheel(install_root: Path, python: Path, wheel: Path) -> None:
     的 SHA256，GUI 据此跳过重装）。
     """
     runtime = python.parent
-    _run([str(python), "-m", "zipfile", "-e", str(wheel), "."], install_root)
+    _run([str(python), "-m", "zipfile", "-e", str(wheel), "."], install_root,
+         install_root=install_root, step="rust-wheel-unpack")
     _run([str(python), "-c", "import memory_rust._native, memory_rust.selector"],
-         install_root)
+         install_root, install_root=install_root, step="rust-wheel-verify")
     _atomic_write_text(runtime / RUST_MARKER, _sha256_file(wheel) + "\n")
 
 
@@ -199,10 +205,47 @@ def write_profile_ready_marker(runtime: Path, profile: str, catalog: Path) -> bo
     return True
 
 
-def _run(cmd: list[str], cwd: Path) -> None:
+def _append_session(install_root: Path, event: dict) -> None:
+    """追加一条会话事件；日志失败静默忽略，绝不阻断安装。"""
+    payload = {"ts": round(time.time(), 3), **event}
+    try:
+        path = install_root / SESSION_LOG_FILENAME
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+            )
+    except OSError:
+        pass
+
+
+def _run(cmd: list[str], cwd: Path, *, install_root: Path | None = None,
+         step: str = "command") -> None:
     """执行装载命令（受控环境）；输出直通安装器详情区（ExecToLog 捕获）。"""
+    started = time.monotonic()
     result = subprocess.run(cmd, cwd=str(cwd), check=False, env=_isolated_env())
+    duration = round(time.monotonic() - started, 3)
+    if install_root is not None:
+        _append_session(
+            install_root,
+            {
+                "stage": "helper_step",
+                "step": step,
+                "exit_code": result.returncode,
+                "duration_s": duration,
+            },
+        )
     if result.returncode != 0:
+        if install_root is not None:
+            _append_session(
+                install_root,
+                {
+                    "stage": "helper_failed",
+                    "step": step,
+                    "exit_code": result.returncode,
+                    "duration_s": duration,
+                    "detail": " ".join(cmd)[:500],
+                },
+            )
         sys.exit(f"装载步骤失败（退出码 {result.returncode}）：{' '.join(cmd)}")
 
 
@@ -240,9 +283,24 @@ def bootstrap_offline(install_root: Path) -> None:
     # 0) 负载全量校验（在使用负载之前，WP05）：MANIFEST 结构 + 逐文件
     #    哈希/大小。任何缺失/损坏都在 pip 步骤之前具名失败——绝不让
     #    --no-index 安装在半路收到「No matching distribution」才暴露。
+    _append_session(
+        install_root,
+        {
+            "stage": "helper_start",
+            "detail": f"profile={profile} mode={read_payload_mode(install_root)}",
+        },
+    )
     try:
         verify_payload(offline, read_manifest(offline))
     except PayloadError as exc:
+        _append_session(
+            install_root,
+            {
+                "stage": "helper_failed",
+                "step": "payload_verify",
+                "detail": f"{exc.code}: {exc.message}"[:500],
+            },
+        )
         sys.exit(f"离线负载校验失败（{exc.code}）：{exc.message}")
 
     # 1) ._pth 补丁（必须最先做：否则 get-pip / pip 的 import 全挂）
@@ -254,7 +312,7 @@ def bootstrap_offline(install_root: Path) -> None:
     _run([str(python), str(offline / "get-pip.py"), "--no-index",
           "--find-links", str(wheels), "--no-input",
           "--disable-pip-version-check", "--no-warn-script-location"],
-         install_root)
+         install_root, install_root=install_root, step="get-pip")
 
     # 3) 离线安装依赖闭包：只装发布时已构建/校验过的 wheel，绝不现场构建
     #    （离线负载没有也不允许有编译工具链）。
@@ -262,7 +320,8 @@ def bootstrap_offline(install_root: Path) -> None:
           "--find-links", str(wheels), "--no-input",
           "--disable-pip-version-check",
           "-r", str(install_root / "requirements.txt"),
-          "--no-warn-script-location"], install_root)
+          "--no-warn-script-location"],
+         install_root, install_root=install_root, step="pip-install-deps")
 
     # 4) 依赖就绪标记（GUI 首启的 prepare_runtime 据此跳过装载）
     write_deps_marker(runtime, install_root / "requirements.txt")
@@ -281,7 +340,9 @@ def bootstrap_offline(install_root: Path) -> None:
     _run([str(python), "-m", "deploy", "bootstrap", "install",
           "--profile", profile,
           "--catalog", str(catalog)],
-         install_root)
+         install_root,
+         install_root=install_root, step="deploy-bootstrap-install")
+    _append_session(install_root, {"stage": "helper_done", "step": "all"})
 
 
 def main(argv: list[str]) -> int:

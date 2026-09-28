@@ -305,7 +305,7 @@ def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
     (runtime / "python.exe").write_bytes(b"MZ")
     _write_payload_manifest(install_root / "offline")
     install_contract.write_payload_mode(install_root, "offline")
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd: None)
+    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: None)
     assert helper.main(["nsis_bootstrap_helper.py", str(install_root)]) == 0
 
 
@@ -508,7 +508,7 @@ def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypa
     with zipfile.ZipFile(wheel, "w") as bundle:
         bundle.writestr("memory_rust/__init__.py", "")
     recorded: list[list[str]] = []
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd: recorded.append(cmd))
+    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: recorded.append(cmd))
 
     helper.bootstrap_offline(install_root)
 
