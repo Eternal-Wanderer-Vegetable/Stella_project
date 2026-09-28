@@ -233,21 +233,32 @@ def test_stage_versioned_layout_is_opt_in(tmp_path):
     assert not (plain / install_contract.VERSIONED_LAYOUT_FILENAME).exists()
     assert not (plain / "launcher").exists()
 
-    # 显式开：标记 + launcher 进负载
+    # 显式开：标记 + launcher + 版本文件进负载
     versioned = tmp_path / "versioned"
     stage_installer_resources(
         source, versioned, "oneclick-python",
         versioned_layout=True, launcher_exe=launcher,
+        release_version="5.0.0",
     )
     assert (versioned / install_contract.VERSIONED_LAYOUT_FILENAME).is_file()
     assert (versioned / "launcher" / "StellaLauncher.exe").is_file()
 
-    # 开关缺 launcher → 硬失败
-    with pytest.raises(ValueError, match="launcher_exe"):
+    # 开关缺 release_version → 硬失败（搬移钩子需要 .stella-version）
+    with pytest.raises(ValueError, match="release_version"):
         stage_installer_resources(
             source, tmp_path / "broken", "oneclick-python",
-            versioned_layout=True,
+            versioned_layout=True, launcher_exe=launcher,
         )
+
+    # 无 release_version 的 versioned 请求失败；正常组合无异常
+    stage_installer_resources(
+        source, tmp_path / "full", "oneclick-python",
+        versioned_layout=True, launcher_exe=launcher,
+        release_version="5.0.0",
+    )
+    assert (tmp_path / "full" / ".stella-version").read_text(
+        encoding="utf-8"
+    ) == "5.0.0"
 
 
 def test_stage_writes_release_metadata_with_runtime_fingerprint(tmp_path):
@@ -433,6 +444,9 @@ def test_release_workflow_resolves_version_once():
     installer_steps = json.dumps(jobs["build-installer"]["steps"])
     assert "--release-version" in installer_steps
     assert "--build-id" in installer_steps
+    # S11 Phase 2 双轨：workflow 有 VERSIONED_LAYOUT 开关且默认 '0'
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "VERSIONED_LAYOUT: '0'" in workflow_text, "版本化布局默认必须为关（双轨）"
     # WP02：最终 EXE 安装验收是发布硬门禁——构建与发布之间必须有 install-test，
     # 且发布作业必须核对发布字节与验收字节一致。
     assert "install-test" in jobs, "缺少最终 EXE 安装验收作业"

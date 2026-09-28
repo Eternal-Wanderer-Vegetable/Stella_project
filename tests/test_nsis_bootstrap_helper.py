@@ -13,6 +13,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -188,6 +189,38 @@ def test_bootstrap_offline_installs_rust_wheel_before_components(tmp_path, monke
 # ============================================================
 # 升级 journal（S11a）
 # ============================================================
+
+
+def test_write_record_command_writes_record_and_gcs(tmp_path, monkeypatch):
+    """write-record：写激活记录 + GC 旧树（保留当前+最近一代）。
+
+    搬移后形态：树根位于 <安装目录>\\app\\5.0.0\\resources\\stella。
+    """
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))
+    seeded = _seed_offline_tree(tmp_path, profile="oneclick-python")
+    staged = tmp_path / "staged"
+    version = "5.0.0"
+    tree = staged / "app" / version / "resources" / "stella"
+    tree.parent.mkdir(parents=True)
+    shutil.move(str(seeded), str(tree))
+    (tree / ".stella-version").write_text(version, encoding="utf-8")
+    # 旧树两代：4.9.0（最近一代，保留为回滚目标）与 4.8.0（被 GC）
+    for old in ("4.9.0", "4.8.0"):
+        old_tree = staged / "app" / old / "resources" / "stella"
+        old_tree.mkdir(parents=True)
+        (old_tree / "bot.py").write_text("", encoding="utf-8")
+
+    code = helper.main(["nsis_bootstrap_helper.py", str(tree), "write-record"])
+    assert code == 0
+    record = json.loads(
+        (fake_local / "Stella" / "active-install.json").read_text(encoding="utf-8")
+    )
+    assert record["version"] == version
+    assert record["path"] == str(tree.resolve())
+    remaining = sorted(p.name for p in (staged / "app").iterdir())
+    assert remaining == ["4.9.0", "5.0.0"]  # 当前 + 最近一代；4.8.0 已 GC
 
 
 def test_bootstrap_offline_journals_ready(tmp_path, monkeypatch):

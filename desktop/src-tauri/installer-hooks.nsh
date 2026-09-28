@@ -136,6 +136,53 @@
 
     DetailPrint "装载完成。"
   ${EndIf}
+
+  ; ---------- 版本化程序树（S11 Phase 2，双轨开关）----------
+  ; 开关 = 随包 .stella-versioned-layout 标记（staging 在 CI 显式开启时
+  ; 写入；旧包/关闭态没有它 → 本块整体跳过，现状布局逐字节不变）。
+  ; 动作：把本次释放的程序文件**移动**到 $INSTDIR\app\<版本>\（同卷
+  ; rename，快），复制随包 launcher 为稳定入口 $INSTDIR\Stella.exe，
+  ; 再由嵌入式 Python（write-record 子命令）写机器级激活记录并做旧树
+  ; GC。任何失败 → 尽力恢复现布局并继续——安装本身已成功，版本化只是
+  ; 增强层，绝不因它把整次安装判失败。全程 LogicLib 嵌套（本上下文
+  ; Goto/label 不可靠，见文件头注）。
+  ${If} ${FileExists} "$INSTDIR\resources\stella\.stella-versioned-layout"
+    DetailPrint "启用版本化程序树布局…"
+    ClearErrors
+    FileOpen $R5 "$INSTDIR\resources\stella\.stella-version" r
+    ${If} $R5 != ""
+      FileRead $R5 $R6
+      FileClose $R5
+      CreateDirectory "$INSTDIR\app"
+      ${If} ${FileExists} "$INSTDIR\app\$R6\*.*"
+        ; 同版本重装：以本次释放的新树替换 app 内同版本旧树
+        RMDir /r "$INSTDIR\app\$R6"
+      ${EndIf}
+      Rename "$INSTDIR\resources" "$INSTDIR\app\$R6\resources"
+      ${If} ${Errors}
+        DetailPrint "程序树搬移失败，保持现状布局（安装仍可正常使用）。"
+      ${Else}
+        Rename "$INSTDIR\${MAINBINARYNAME}.exe" "$INSTDIR\app\$R6\${MAINBINARYNAME}.exe"
+        ${If} ${Errors}
+          ; 主程序搬移失败：把 resources 搬回去，回到现状布局
+          Rename "$INSTDIR\app\$R6\resources" "$INSTDIR\resources"
+          DetailPrint "主程序搬移失败，已恢复现状布局。"
+        ${Else}
+          CopyFiles /SILENT "$INSTDIR\app\$R6\resources\stella\launcher\StellaLauncher.exe" "$INSTDIR\${MAINBINARYNAME}.exe"
+          DetailPrint "版本化布局就绪（版本 $R6）。"
+          ; 激活记录 + 旧树 GC（Python 侧落盘；仅离线变体有嵌入式
+          ; Python 可用。在线变体由 launcher 的枚举兜底覆盖，机器记录
+          ; 的补写属于 Phase 2 后续）。
+          ${If} ${FileExists} "$INSTDIR\app\$R6\resources\stella\runtime\python.exe"
+            nsExec::ExecToLog '"$INSTDIR\app\$R6\resources\stella\runtime\python.exe" "$INSTDIR\app\$R6\resources\stella\deploy\nsis_bootstrap_helper.py" "$INSTDIR\app\$R6\resources\stella" write-record'
+            Pop $2
+          ${EndIf}
+        ${EndIf}
+      ${EndIf}
+    ${Else}
+      DetailPrint "缺少 .stella-version，跳过版本化布局。"
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 ; 卸载契约（S10b）：用户数据（记忆/配置/QQ 登录态/模型）在卸载时**默认

@@ -49,6 +49,7 @@ import contextlib
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -509,9 +510,71 @@ def bootstrap_offline(install_root: Path) -> None:
     )
 
 
+def write_activation_command(install_root: Path) -> int:
+    """``write-record`` 子命令：搬移完成后写机器级激活记录 + 旧树 GC。
+
+    NSIS POSTINSTALL 把程序文件搬入 ``<install_root 上两级>\\app\\<版本>\\``
+    之后调用本命令（install_root 即树根，含 bot.py 的那层）。顺序：
+    写记录（NSIS 无 JSON 能力，记录由 Python 侧落盘）→ GC 旧树
+    （app 下除当前外按版本从新到旧保留一代；任何失败都跳过，绝不删当前树）。
+    """
+    from upgrade import machine_active_record_path, write_activation_record
+
+    version_file = install_root / ".stella-version"
+    if version_file.is_file():
+        version = version_file.read_text(encoding="utf-8").strip()
+    else:
+        version = "unknown"
+    write_activation_record(version=version, tree_path=install_root)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "record": str(machine_active_record_path()),
+                "version": version,
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    # 层级：app\<版本>\resources\stella → parents[2] 即 app，parents[1] 即版本目录
+    if len(install_root.parents) < 3:
+        return 0
+    apps_root = install_root.parents[2]
+    current_version_dir = install_root.parents[1]
+    if not apps_root.is_dir() or current_version_dir.parent != apps_root:
+        return 0
+
+    def version_key(name: str) -> tuple:
+        return tuple(
+            int(part) if part.isdigit() else 0 for part in name.split(".")
+        )
+
+    others = sorted(
+        (
+            (version_key(path.name), path)
+            for path in apps_root.iterdir()
+            if path.is_dir() and path.resolve() != current_version_dir.resolve()
+        ),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+    for _key, path in others[1:]:
+        shutil.rmtree(path, ignore_errors=True)
+        _append_session(
+            install_root, {"stage": "gc", "detail": f"removed {path.name}"}
+        )
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) == 3 and argv[2] == "write-record":
+        return write_activation_command(Path(argv[1]).resolve())
     if len(argv) != 2:
-        print("用法：nsis_bootstrap_helper.py <安装根目录>", file=sys.stderr)
+        print(
+            "用法：nsis_bootstrap_helper.py <安装根目录> [write-record]",
+            file=sys.stderr,
+        )
         return EXIT_USAGE
     install_root = Path(argv[1]).resolve()
 

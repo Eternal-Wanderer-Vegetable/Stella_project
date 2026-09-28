@@ -23,6 +23,10 @@ permissions:
 env:
   # The OneClick catalog must point at a reproducible Windows CPU backend.
   LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d
+  # 版本化布局双轨开关（S11 Phase 2）：'1' = 安装器构建 launcher 并写
+  # 版本化搬移标记。切 '1' 的前置条件：VM 矩阵（T01/T03/T11/T14/T18）
+  # 全过。默认 '0' = 安装行为与历史版本逐字节一致。
+  VERSIONED_LAYOUT: '0'
 
 jobs:
   # 版本只解析一次：Dashboard marker / catalog release-ref / 安装契约元数据 /
@@ -362,6 +366,12 @@ jobs:
               throw 'Offline payload artifact is missing MANIFEST.json'
             }
             $stageArgs += @('--offline-payload', 'offline-payload')
+          }
+          if ($env:VERSIONED_LAYOUT -eq '1') {
+            cargo build --release --locked -p stella-launcher --manifest-path desktop/launcher/Cargo.toml
+            if ($LASTEXITCODE -ne 0) { throw "launcher 构建失败（退出码 $LASTEXITCODE）" }
+            $stageArgs += @('--versioned-layout',
+              '--launcher-exe', 'desktop/launcher/target/release/stella-launcher.exe')
           }
           python @stageArgs
 

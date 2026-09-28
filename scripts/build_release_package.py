@@ -345,12 +345,19 @@ def stage_installer_resources(
     if versioned_layout:
         if launcher_exe is None:
             raise ValueError("versioned_layout 需要同时提供 launcher_exe")
+        if release_version is None:
+            raise ValueError("versioned_layout 需要同时提供 release_version")
         launcher_exe = Path(launcher_exe).resolve()
         if not launcher_exe.is_file():
             raise FileNotFoundError(f"launcher exe 不存在：{launcher_exe}")
         target = output / "launcher" / "StellaLauncher.exe"
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(launcher_exe, target)
+        # .stella-version：NSIS 搬移钩子读取的纯文本版本（无换行——
+        # FileRead 按行读，与 python-zip.sha256 同一约定）
+        (output / ".stella-version").write_text(
+            release_version, encoding="utf-8"
+        )
         (output / VERSIONED_LAYOUT_FILENAME).write_text(
             "1\n", encoding="utf-8"
         )
