@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -158,3 +159,124 @@ def test_upgrade_checksum_failure_keeps_active_pointer(tmp_path):
             expected_checksum="0" * 64,
         )
     assert active_pointer(data).exists() is False
+
+
+# ============================================================
+# 机器级激活记录（S11 Phase 2）
+# ============================================================
+
+
+def _isolate_record_dir(monkeypatch, tmp_path):
+    local = tmp_path / "localappdata"
+    local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    return local
+
+
+def _activation_tree(tmp_path, name="5.0.0"):
+    tree = tmp_path / "app" / name
+    tree.mkdir(parents=True)
+    (tree / "bot.py").write_text("", encoding="utf-8")
+    return tree
+
+
+def test_activation_record_write_read_roundtrip(tmp_path, monkeypatch):
+    _isolate_record_dir(monkeypatch, tmp_path)
+    from deploy.upgrade import (
+        read_activation_record,
+        write_activation_record,
+    )
+
+    tree = _activation_tree(tmp_path)
+    write_activation_record(version="5.0.0", tree_path=tree, previous=None)
+    record = read_activation_record()
+    assert record["schema_version"] == 1
+    assert record["version"] == "5.0.0"
+    assert record["path"] == str(tree.resolve())
+    assert record["previous"] is None
+
+
+def test_activation_record_write_is_atomic(tmp_path, monkeypatch):
+    _isolate_record_dir(monkeypatch, tmp_path)
+    from deploy.upgrade import write_activation_record
+
+    real_replace = Path.replace
+    calls = []
+
+    def spy_replace(self, target):
+        calls.append(str(target))
+        return real_replace(self, target)
+
+    import unittest.mock
+
+    with unittest.mock.patch.object(Path, "replace", spy_replace):
+        write_activation_record(
+            version="5.0.0", tree_path=_activation_tree(tmp_path)
+        )
+    assert calls, "激活记录必须经临时文件 replace 落盘"
+
+
+def test_validate_activation_record_containment(tmp_path, monkeypatch):
+    _isolate_record_dir(monkeypatch, tmp_path)
+    from deploy.upgrade import UpgradeError, validate_activation_record
+
+    install_root = tmp_path / "install"
+    install_root.mkdir()
+    good = _activation_tree(install_root, "5.0.0")
+    assert validate_activation_record(
+        {"schema_version": 1, "version": "5.0.0", "path": str(good)},
+        install_root,
+    ) == good.resolve()
+
+    def invalid(payload):
+        with pytest.raises(UpgradeError, match="激活"):
+            validate_activation_record(payload, install_root)
+
+    invalid({"schema_version": 1, "version": "5.0.0", "path": str(tmp_path)})
+    invalid({"schema_version": 1, "version": "5.0.0", "path": "C:/elsewhere/tree"})
+    invalid({"schema_version": 1, "version": "5.0.0", "path": str(tmp_path / "nope")})
+    invalid({"schema_version": 2, "version": "5.0.0", "path": str(good)})
+    invalid({"schema_version": 1, "version": "", "path": str(good)})
+
+
+def test_rollback_activation_flips_and_roundtrips(tmp_path, monkeypatch):
+    _isolate_record_dir(monkeypatch, tmp_path)
+    from deploy.upgrade import (
+        read_activation_record,
+        rollback_activation,
+        write_activation_record,
+    )
+
+    old = _activation_tree(tmp_path, "5.0.0")
+    new = _activation_tree(tmp_path, "5.1.0")
+    write_activation_record(version="5.0.0", tree_path=old)
+    write_activation_record(
+        version="5.1.0", tree_path=new,
+        previous={"version": "5.0.0", "path": str(old.resolve())},
+    )
+
+    rolled = rollback_activation()
+    assert rolled["version"] == "5.0.0"
+    record = read_activation_record()
+    assert record["version"] == "5.0.0"
+    assert record["previous"]["version"] == "5.1.0"
+
+    # 双向：再滚一次回到 5.1.0
+    rolled_back = rollback_activation()
+    assert rolled_back["version"] == "5.1.0"
+
+
+def test_rollback_without_previous_is_rejected(tmp_path, monkeypatch):
+    _isolate_record_dir(monkeypatch, tmp_path)
+    from deploy.upgrade import (
+        UpgradeError,
+        rollback_activation,
+        write_activation_record,
+    )
+
+    write_activation_record(version="5.0.0", tree_path=_activation_tree(tmp_path))
+    with pytest.raises(UpgradeError, match="回滚"):
+        rollback_activation()
+    with pytest.raises(UpgradeError, match="回滚"):
+        rollback_activation()  # 无记录同样拒绝
