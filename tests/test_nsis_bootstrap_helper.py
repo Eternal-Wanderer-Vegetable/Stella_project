@@ -185,6 +185,47 @@ def test_bootstrap_offline_installs_rust_wheel_before_components(tmp_path, monke
     assert marker.read_text(encoding="utf-8").strip() == expected
 
 
+# ============================================================
+# 升级 journal（S11a）
+# ============================================================
+
+
+def test_bootstrap_offline_journals_ready(tmp_path, monkeypatch):
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+    monkeypatch.setattr(
+        helper.subprocess, "run",
+        lambda cmd, cwd=None, **_kwargs: SimpleNamespace(returncode=0),
+    )
+
+    helper.bootstrap_offline(install_root)
+
+    journal = fake_local / "Stella" / "upgrade-journal.txt"
+    lines = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()]
+    assert lines[-1]["outcome"] == "ready"
+    assert "profile=oneclick-python" in lines[-1]["detail"]
+
+
+def test_main_journals_failed_and_reraises(tmp_path, monkeypatch):
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
+    monkeypatch.setattr(
+        helper.subprocess, "run",
+        lambda cmd, cwd=None, **_kwargs: SimpleNamespace(returncode=2),
+    )
+
+    with pytest.raises(SystemExit):
+        helper.main(["nsis_bootstrap_helper.py", str(install_root)])
+
+    journal = fake_local / "Stella" / "upgrade-journal.txt"
+    lines = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()]
+    assert lines[-1]["outcome"] == "failed"
+
+
 def test_bootstrap_offline_writes_session_log(tmp_path, monkeypatch):
     """装载期会话日志：步骤级事件 + 终态事件，安装器关闭后仍可取。"""
     install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
@@ -333,12 +374,28 @@ def test_bootstrap_offline_requires_rust_wheel_for_rust_profile(tmp_path):
         helper.bootstrap_offline(install_root)
 
 
-def test_bootstrap_offline_rejects_stray_rust_wheel_for_python_profile(tmp_path):
-    """python 产物混入 Rust wheel 会让 GUI 误判后端（profile 劫持），必须硬失败。"""
+def test_bootstrap_offline_cleans_stale_rust_activation(tmp_path, monkeypatch):
+    """T12：静默覆盖升级残留的 Rust wheel/marker 必须被清理（python 声明）。"""
     install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
-    _seed_rust_wheel(install_root)
-    with pytest.raises(SystemExit, match="不应包含随包 Rust wheel"):
-        helper.bootstrap_offline(install_root)
+    wheel = _seed_rust_wheel(install_root)
+    marker = install_root / "runtime" / helper.RUST_MARKER
+    marker.write_text("stale", encoding="utf-8")
+    monkeypatch.setattr(
+        helper.subprocess, "run",
+        lambda cmd, cwd=None, **_kwargs: SimpleNamespace(returncode=0),
+    )
+
+    helper.bootstrap_offline(install_root)
+
+    assert not wheel.exists(), "残留 Rust wheel 必须被清理（GUI 后端劫持路径）"
+    assert not marker.exists(), "残留 .stella-rust-ready 必须被清理"
+    session = (install_root / helper.SESSION_LOG_FILENAME).read_text(encoding="utf-8")
+    assert "t12_cleanup" in session
+
+
+def test_rust_profile_never_triggers_t12_cleanup(tmp_path):
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-rust")
+    assert helper.cleanup_stale_rust_activation(install_root, "oneclick-rust") is False
 
 
 def test_run_isolates_pip_environment(tmp_path, monkeypatch):

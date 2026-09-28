@@ -45,6 +45,7 @@ pip/get-pip 子进程以受控环境执行：清除 PIP_*/代理变量，避免�
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -62,9 +63,11 @@ if _SELF_DIR not in sys.path:
 
 from install_contract import (
     EXIT_USAGE,
+    RELEASE_METADATA_FILENAME,
     InstallOutcome,
     exit_code_for,
     read_payload_mode,
+    read_release_metadata,
 )
 from offline_payload import PayloadError, read_manifest, verify_payload
 
@@ -170,6 +173,65 @@ def discover_rust_wheel(install_root: Path) -> Path | None:
             f"随包负载包含 {len(wheels)} 个 {RUST_WHEEL_PREFIX} wheel，期望恰好 1 个"
         )
     return wheels[0] if wheels else None
+
+
+def cleanup_stale_rust_activation(install_root: Path, profile: str) -> bool:
+    """python 产物清除残留的 Rust 激活状态（T12：静默覆盖升级的遗留）。
+
+    静默 /S 升级不卸载旧树：Rust→Python 切换后，旧 `wheels/` wheel 与
+    `runtime\\.stella-rust-ready` 标记仍会留在盘上，GUI 的
+    `rust_wheel_present` 据此把后端劫持成 Rust。这里按声明 profile 清理
+    （装到用户盘上的残留，无法在构建期发现）。注意：runtime 内已解包的
+    memory_rust .pyd 不动——后端选择由 wheels/ 与 marker 决定，清掉即可。
+    构建期的打包缺陷由 staging 校验（stage 只给 rust profile 拷 wheels/）
+    与产品 profile 测试把守，不依赖这条运行期路径。
+    """
+    if profile == "oneclick-rust":
+        return False
+    removed = False
+    wheel_dir = install_root / WHEELS_DIRNAME
+    if wheel_dir.is_dir():
+        for wheel in list(wheel_dir.glob(f"{RUST_WHEEL_PREFIX}*.whl")):
+            with contextlib.suppress(OSError):
+                wheel.unlink()
+                removed = True
+    marker = install_root / RUNTIME_DIRNAME / RUST_MARKER
+    if marker.is_file():
+        with contextlib.suppress(OSError):
+            marker.unlink()
+            removed = True
+    return removed
+
+
+def _append_upgrade_journal(outcome: str, detail: str) -> None:
+    """升级 journal（S11a）：与 NSIS 侧 PREINSTALL 的「升级开始」配对。
+
+    写 ``%LOCALAPPDATA%\\Stella\\upgrade-journal.txt``（INSTDIR 之外）；
+    失败静默忽略——诊断流绝不阻断安装。
+    """
+    local = os.environ.get("LOCALAPPDATA", "").strip()
+    if not local:
+        return
+    payload = {"ts": round(time.time(), 3), "outcome": outcome, "detail": detail[:300]}
+    try:
+        path = Path(local) / "Stella" / "upgrade-journal.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+            )
+    except OSError:
+        pass
+
+
+def _installed_version(install_root: Path) -> str:
+    """本包版本（release 元数据；旧包无元数据记 unknown）。"""
+    metadata_file = install_root / RELEASE_METADATA_FILENAME
+    if not metadata_file.is_file():
+        return "unknown"
+    metadata = read_release_metadata(install_root) or {}
+    version = metadata.get("release_version")
+    return str(version) if version else "unknown"
 
 
 def ensure_rust_wheel(install_root: Path, python: Path, wheel: Path) -> None:
@@ -350,10 +412,18 @@ def bootstrap_offline(install_root: Path) -> None:
                 "oneclick-rust 产物缺少随包 Rust wheel"
                 f"（{WHEELS_DIRNAME}/{RUST_WHEEL_PREFIX}*.whl）"
             )
-    elif rust_wheel is not None:
-        # 非 Rust 产物不应携带 Rust wheel：装上会让 GUI 的 rust_wheel_present
-        # 误判成 Rust 后端（profile 切换的劫持路径）。
-        sys.exit(f"{profile} 产物不应包含随包 Rust wheel：{rust_wheel}")
+    elif cleanup_stale_rust_activation(install_root, profile):
+        # T12：静默覆盖升级留下的旧 Rust wheel/marker 会让 GUI 把后端
+        # 劫持成 Rust（本包声明 python）。构建期缺陷由 staging 校验把守，
+        # 这里的语义是安装期清理用户盘上的残留。
+        rust_wheel = None  # 残留已清除，后续装载不得再引用
+        _append_session(
+            install_root,
+            {
+                "stage": "t12_cleanup",
+                "detail": "removed stale rust wheel/marker for python profile",
+            },
+        )
 
     # 0) 负载全量校验（在使用负载之前，WP05）：MANIFEST 结构 + 逐文件
     #    哈希/大小。任何缺失/损坏都在 pip 步骤之前具名失败——绝不让
@@ -433,6 +503,10 @@ def bootstrap_offline(install_root: Path) -> None:
          install_root=install_root, step="deploy-bootstrap-install",
          env_extra=env_extra)
     _append_session(install_root, {"stage": "helper_done", "step": "all"})
+    _append_upgrade_journal(
+        "ready",
+        f"profile={profile} version={_installed_version(install_root)}",
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -470,7 +544,15 @@ def main(argv: list[str]) -> int:
         )
         return EXIT_USAGE
 
-    bootstrap_offline(install_root)
+    try:
+        bootstrap_offline(install_root)
+    except SystemExit:
+        # 失败也必须有终态 journal（与 NSIS 侧「升级开始」配对，S11a）
+        _append_upgrade_journal(
+            "failed",
+            f"version={_installed_version(install_root)}（详情见安装目录会话日志）",
+        )
+        raise
     return 0
 
 

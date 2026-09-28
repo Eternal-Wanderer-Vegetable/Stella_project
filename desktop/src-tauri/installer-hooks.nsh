@@ -29,6 +29,23 @@
 !define STELLA_PREINSTALL_MIN_GB 3
 
 !macro NSIS_HOOK_PREINSTALL
+  ; S11a：升级开始留痕——journal 在 INSTDIR 之外，交互式升级的旧卸载器
+  ; 删不到它。旧版本号读自注册表（读不到记 unknown）。
+  ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    CreateDirectory "$LOCALAPPDATA\Stella"
+    ReadRegStr $R7 SHCTX "${UNINSTKEY}" "DisplayVersion"
+    ${If} $R7 == ""
+      StrCpy $R7 "unknown"
+    ${EndIf}
+    FileOpen $R8 "$LOCALAPPDATA\Stella\upgrade-journal.txt" a
+    ${If} $R8 != ""
+      FileSeek $R8 END
+      ${GetTime} "" "L" $0 $1 $2 $3 $4 $5 $6
+      FileWrite $R8 "$2-$1-$0 $4:$5:$6 升级开始：$R7 -> ${VERSION}$\r$\n"
+      FileClose $R8
+    ${EndIf}
+  ${EndIf}
+
   ; ---------- 预检查（WP08）：把昂贵步骤之前就能判定的问题挡在最前 ----------
   ; 注意：本钩子在 Tauri 文件释放之前运行，$INSTDIR 可能尚不存在。
 
