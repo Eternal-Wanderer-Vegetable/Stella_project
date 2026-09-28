@@ -13,6 +13,7 @@
 //! 2. **工作目录**：必须是项目根 —— `python -m deploy` 要能 import 到 `deploy` 包；
 //! 3. **Windows 下必须抑制控制台窗口** —— 否则每次调用都会闪一个黑框。
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::RwLock;
@@ -1018,8 +1019,51 @@ mod runtime_bootstrap {
             fs::remove_dir_all(&dir).ok();
         }
 
-        #[test]
-        fn python_runtime_constants_sync_with_start_bat() {
+    #[test]
+    fn activation_tree_requires_containment_and_marker() {
+        let root = std::env::temp_dir().join("stella-activation-test");
+        let _ = fs::remove_dir_all(&root);
+        let apps = root.join("app");
+        let tree = apps.join("5.1.0");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("bot.py"), b"").unwrap();
+        let record = root.join("active-install.json");
+        fs::write(
+            &record,
+            format!(
+                r#"{{"schema_version": 1, "version": "5.1.0", "path": "{}"}}"#,
+                tree.display().to_string().replace('\\', "\\\\")
+            ),
+        )
+        .unwrap();
+
+        // 有效记录 → 树路径（激活函数在文件级模块，测试位于
+        // runtime_bootstrap 内，用 super::super 抵达）
+        assert_eq!(
+            super::super::activation_tree_from(&[record.clone()], &root).as_deref(),
+            Some(tree.as_path())
+        );
+        // 树外路径拒绝（记录不可信输入）
+        fs::write(
+            &record,
+            format!(
+                r#"{{"path": "{}"}}"#,
+                root.join("elsewhere").display().to_string().replace('\\', "\\\\")
+            ),
+        )
+        .unwrap();
+        assert!(super::super::activation_tree_from(&[record.clone()], &root).is_none());
+        // 损坏 JSON 拒绝
+        fs::write(&record, "{broken").unwrap();
+        assert!(super::super::activation_tree_from(&[record.clone()], &root).is_none());
+        // 记录路径不存在 → None（回退传统解析）
+        fs::remove_file(&record).unwrap();
+        assert!(super::super::activation_tree_from(&[record], &root).is_none());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn python_runtime_constants_sync_with_start_bat() {
             let bat_path = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("..")
                 .join("..")
@@ -1229,16 +1273,60 @@ fn prepare_runtime(_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// 激活记录指向的版本化程序树（S11 Phase 2；无记录/记录不可信 → None）。
+///
+/// 机器记录（`%LOCALAPPDATA%\Stella\active-install.json`）优先，安装目录
+/// 内 `.stella\` 副本兜底；containment 铁律：树必须位于 exe 目录 `app\`
+/// 之下且含 `bot.py`——记录是机器持久状态，等同不可信输入，任何不满足
+/// 都回退到传统解析（下方 project_root 的候选列表，逐字节兼容）。
+fn activation_tree() -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))?;
+    let mut record_paths: Vec<PathBuf> = Vec::new();
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        record_paths.push(
+            PathBuf::from(local).join("Stella").join("active-install.json"),
+        );
+    }
+    record_paths.push(exe_dir.join(".stella").join("active-install.json"));
+    activation_tree_from(&record_paths, &exe_dir)
+}
+
+fn activation_tree_from(record_paths: &[PathBuf], exe_dir: &Path) -> Option<PathBuf> {
+    for record_path in record_paths {
+        let Ok(text) = fs::read_to_string(record_path) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let Some(tree) = value.get("path").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let tree = PathBuf::from(tree);
+        if tree.starts_with(exe_dir.join("app")) && tree.join("bot.py").is_file() {
+            return Some(tree);
+        }
+    }
+    None
+}
+
 /// 定位 Stella 项目根目录（含 bot.py 与 deploy/ 的那一层）。
 ///
-/// 两种运行形态：
-/// - `cargo tauri dev`：exe 在 stella-installer/src-tauri/target/debug/，
-///   项目根在其上几层。但更可靠的是用 CARGO_MANIFEST_DIR 编译期常量向上两层；
+/// 三种运行形态：
+/// - 版本化布局（S11 Phase 2）：激活记录优先——见 [`activation_tree`]；
+/// - `cargo tauri dev`：exe 在 src-tauri/target/debug/，可靠 CARGO_MANIFEST_DIR
+///   编译期常量向上两层兜底；
 /// - Release：exe 与 bot.py 同目录（安装器会被放进 Stella 解压目录）。
 ///
 /// 判据统一为「向上找到含 bot.py 的目录」，而不是硬编码层数——
-/// 这样两种形态用同一套逻辑，且目录结构调整时不会静默失效。
+/// 这样各形态用同一套逻辑，且目录结构调整时不会静默失效。
 pub fn project_root() -> PathBuf {
+    // 形态零（S11 Phase 2）：激活记录优先；无记录/不可信 → 完整回退
+    if let Some(tree) = activation_tree() {
+        return tree;
+    }
     // 形态一：从当前 exe 位置向上找含 bot.py 的目录（Release：exe 与 bot.py 同层）
     if let Some(exe_dir) = std::env::current_exe()
         .ok()
