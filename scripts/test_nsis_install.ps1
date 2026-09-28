@@ -1,4 +1,4 @@
-# Final-EXE installation acceptance harness (WP02 / S02).
+﻿# Final-EXE installation acceptance harness (WP02 / S02).
 #
 # Runs one built NSIS installer end to end on a disposable Windows machine
 # (hosted runner or test VM) and verifies what actually landed on disk - not
@@ -28,12 +28,17 @@ param(
     [string]$ExpectedProfile = "",
     [string]$ReportDir = "install-report",
     [int]$TimeoutSeconds = 3600,
-    [switch]$RequireSigned
+    [switch]$RequireSigned,
+    # 安装目录（/D=）。默认 C 盘固定测试目录；T04 自定义目录矩阵传入。
+    [string]$InstallDir = "$env:SystemDrive\stella-install-test"
 )
 
 $ErrorActionPreference = "Stop"
 $installer = Resolve-Path $InstallerPath
-$reportDir = New-Item -ItemType Directory -Force -Path $ReportDir
+# 注意：不使用 New-Item 的返回对象——PS 5.1 某些上下文下它返回字符串路径
+# 而非 DirectoryInfo（本 harness 实测），后续 .FullName 会静默变 null。
+New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
+$reportDirPath = (Resolve-Path -LiteralPath $ReportDir).ProviderPath
 $checks = [System.Collections.Generic.List[object]]::new()
 $startedAt = [DateTime]::UtcNow
 
@@ -68,7 +73,15 @@ Add-Check -Name "installer signature" `
 # --- 2. Install silently into a fixed, space-free directory ---------------
 # /D must be last and unquoted (NSIS treats the rest of the command line as
 # the target path; quoting would embed literal quotes in the path).
-$installDir = Join-Path $env:SystemDrive "stella-install-test"
+# 安全护栏：InstallDir 有既有 bot.py / StellaData 时拒绝 wipes——那是
+# 用户数据（T18 铁律），harness 只对无主目录或纯安装目录负责。
+foreach ($danger in @("bot.py", "StellaData")) {
+    if (Test-Path -LiteralPath (Join-Path $InstallDir $danger)) {
+        $msg = "InstallDir $InstallDir 含既有 '$danger'（用户数据/旧布局），" +
+            "harness 拒绝清空。请更换 -InstallDir 或手动迁移。"
+        throw $msg
+    }
+}
 if (Test-Path -LiteralPath $installDir) {
     Remove-Item -LiteralPath $installDir -Recurse -Force
 }
@@ -87,7 +100,19 @@ if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
 $durationSeconds = [int]([DateTime]::UtcNow - $startedAt).TotalSeconds
 
 # --- 3. Verify the installed program tree ---------------------------------
+# 版本化布局（S11 Phase 2）下程序树可能已被搬入 app\<版本>\resources\stella：
+# 先解析**生效树根**（根布局优先，其次枚举 app\），后续所有检查用它。
 $stella = Join-Path $installDir "resources\stella"
+if (-not (Test-Path -LiteralPath (Join-Path $stella "bot.py"))) {
+    $movedTree = Get-ChildItem -LiteralPath (Join-Path $installDir "app") `
+        -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "resources\stella\bot.py") } |
+        Select-Object -First 1
+    if ($movedTree) {
+        $stella = Join-Path $movedTree.FullName "resources\stella"
+        Write-Host "版本化布局：生效树根 = $stella"
+    }
+}
 $treeOk = Test-PathExists "program tree staged" (Join-Path $stella "bot.py")
 
 $profilePath = Join-Path $stella ".stella-profile"
@@ -126,8 +151,35 @@ if (Test-Path -LiteralPath $metaPath) {
         "missing .stella-release-metadata.json (pre-contract build?)"
 }
 
+# --- 3b. 版本化布局校验（S11 Phase 2，标记存在才有此语义）-----------------
+# $stella 已解析为生效树根；这里核对：标记在生效树内、根入口是 launcher。
+if (Test-Path -LiteralPath (Join-Path $stella ".stella-versioned-layout")) {
+    Add-Check "versioned: tree relocated under app\\" `
+        ($stella -like "*\app\*") "tree=$stella"
+    $treeVersion = ""
+    $versionFile = Join-Path $stella ".stella-version"
+    if (Test-Path -LiteralPath $versionFile) {
+        $treeVersion = (Get-Content $versionFile -Raw).Trim()
+    }
+    Add-Check "versioned: tree version recorded" `
+        ($treeVersion -match '^\d+\.\d+\.\d+$') "version=$treeVersion"
+    $stableEntry = Join-Path $InstallDir "Stella.exe"
+    $appExe = Join-Path (Split-Path (Split-Path $stella)) "Stella.exe"
+    if ((Test-Path -LiteralPath $stableEntry) -and (Test-Path -LiteralPath $appExe)) {
+        $stableSize = (Get-Item -LiteralPath $stableEntry).Length
+        $appSize = (Get-Item -LiteralPath $appExe).Length
+        Add-Check "versioned: stable entry is launcher (smaller than app exe)" `
+            ($stableSize -lt $appSize) "stable=$stableSize app=$appSize"
+    } else {
+        Add-Check "versioned: stable entry is launcher" -Passed $false `
+            "missing stable entry or app exe"
+    }
+}
+
 # --- 4. Offline bundles: the install hook must have done the heavy lifting -
+Write-Host "CP-A: stella=$stella installDir=$installDir"
 $bundledPython = Join-Path $stella "runtime\python.exe"
+Write-Host "CP-B"
 if ($ExpectedPayloadMode -eq "offline") {
     Test-PathExists "offline: embedded python extracted" $bundledPython | Out-Null
     Test-PathExists "offline: dependency ready marker" `
@@ -150,6 +202,7 @@ if ($ExpectedPayloadMode -eq "offline") {
     }
 }
 
+Write-Host "CP-C"
 # --- 5. Self-check with the bundled python, outside the repo --------------
 # Strip PYTHONPATH so nothing from a checkout can leak into the import set.
 if (Test-Path -LiteralPath $bundledPython) {
@@ -176,7 +229,10 @@ if (Test-Path -LiteralPath $bundledPython) {
 # is NOT exercised here; this harness only proves the EXE installs cleanly.
 # GUI-boot acceptance belongs to the dedicated VM matrix (plan S15).
 
+Write-Host "CP-D"
 # --- 6. Always collect evidence -------------------------------------------
+Write-Host "CP-E"
+try {
 $progressCopy = Get-ChildItem -LiteralPath $installDir -Recurse -Filter `
     ".bootstrap-progress" -ErrorAction SilentlyContinue |
     ForEach-Object { Get-Content $_.FullName -Raw }
@@ -206,7 +262,7 @@ $report = [ordered]@{
         $napcatLogContent.Substring($napcatLogContent.Length - 4000)
     } else { $napcatLogContent }
 }
-$reportPath = Join-Path $reportDir.FullName "install-test-report.json"
+$reportPath = Join-Path $reportDirPath "install-test-report.json"
 $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $reportPath -Encoding UTF8
 Write-Host "Report: $reportPath"
 
@@ -215,3 +271,8 @@ if (-not $allPassed) {
     exit 1
 }
 exit 0
+} catch {
+    Write-Host "INNER-ERR: $($_.InvocationInfo.PositionMessage)"
+    Write-Host "INNER-EXC: $($_.Exception.Message)"
+        throw
+}
