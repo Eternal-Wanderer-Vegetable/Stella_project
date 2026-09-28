@@ -4,6 +4,17 @@
 
 ## 主要变化
 
+<!-- 安装与升级语义（随安装可靠性工程落地逐条核对删留） -->
+- 安装/升级/卸载语义：升级保留旧版本树（可用 `python -m deploy upgrade
+  --rollback` 一键回滚，重启生效）；卸载默认保留全部用户数据（记忆/配置/
+  QQ 登录态），位置见 `%LOCALAPPDATA%\Stella\home.txt` 指针；升级与卸载
+  全程留痕（`%LOCALAPPDATA%\Stella\*.journal`）。
+- 新装默认数据根在 `%LOCALAPPDATA%\Stella\Data`（安装目录外，升级/卸载
+  不再波及）；便携目录与旧布局优先级不变。
+- 安装器已签名（SmartScreen 仍可能对新品首次发布提示——签名降低但不消除）。
+- 安装验收（干净 VM）报告随发布归档；体积门禁与实测基线见
+  `release_assets/toolchain.json`。
+
 - 发布线拆分为 OneClick-Python、OneClick-Rust、Standalone-Python 和
   Standalone-Rust，避免不同目标用户下载到不匹配的内容。
 - OneClick 默认安装 `qwen3-embedding-0.6b`；聊天、整理和 reranker 模型不预装。

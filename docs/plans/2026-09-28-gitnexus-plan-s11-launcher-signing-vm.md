@@ -1,6 +1,7 @@
 # GitNexus Engineering Plan — S11 Phase 2 / S14 签名 / S15 VM 矩阵
 
 > 任务：实施 S11 Phase 2（版本化程序树 + 稳定启动入口 + 激活记录 + 回滚开关）、S14 签名与候选发布通道、S15 完整 VM 验收矩阵与 WP15 收尾。
+> 状态：已批准并按 §7 分步实施（P2-1..P2-5、S14-1/2、S15-1/2 九步全部落地）。
 > 证据核实于提交 7a23d3926aa71c558d028788262e1dd8f0e6eace；GitNexus 索引本会话已刷新（analyze --index-only --pdg，docker stella-gitnexus，GitNexus 1.6.11，67,266 节点）。
 > 生成计划路径：docs/plans/2026-09-28-gitnexus-plan-s11-launcher-signing-vm.md
 > 证据溯源 schema 2；全局脏摘要 0a9c85780067d9afcd0764f307b60891e3cee927ee11eaeb5ec7826d10fd82cd；引用清单 19 个排序条目；仅排除本计划生成路径。
