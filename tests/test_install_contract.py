@@ -366,6 +366,19 @@ def test_release_workflow_resolves_version_once():
     installer_steps = json.dumps(jobs["build-installer"]["steps"])
     assert "--release-version" in installer_steps
     assert "--build-id" in installer_steps
+    # WP02：最终 EXE 安装验收是发布硬门禁——构建与发布之间必须有 install-test，
+    # 且发布作业必须核对发布字节与验收字节一致。
+    assert "install-test" in jobs, "缺少最终 EXE 安装验收作业"
+    assert "install-test" in jobs["build"]["needs"], "发布作业不得绕过安装验收"
+    build_steps = json.dumps(jobs["build"]["steps"])
+    assert "check_release_hashes.py" in build_steps, (
+        "发布作业必须核对安装器字节与验收报告一致"
+    )
+    install_test = jobs["install-test"]
+    assert install_test["strategy"]["matrix"]["payload"] == ["online", "offline"]
+    steps_text = json.dumps(install_test["steps"])
+    assert "test_nsis_install.ps1" in steps_text
+    assert "ExpectedPayloadMode" in steps_text
 
 
 # ============================================================

@@ -519,11 +519,55 @@ jobs:
           path: cli/target/release/stellacli.exe
           if-no-files-found: error
 
+  # 最终 EXE 安装验收（WP02）：产物构建完成 ≠ 可发布。四个产物各自在独立
+  # 的 Windows runner 上静默安装并校验真实落盘结果；安装失败的包不允许进入
+  # 发布作业。报告（含产物 SHA-256）上传为 artifact，发布作业据此核对
+  # 「发布的字节 = 验收过的字节」。hosted runner 不是干净 Windows；干净 VM
+  # 矩阵与 GUI 首启验收属于发布门禁的后续强化（计划 S15）。
+  install-test:
+    needs: [build-installer]
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [oneclick-python, oneclick-rust]
+        payload: [online, offline]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载待验收安装器
+        uses: actions/download-artifact@v8
+        with:
+          name: stella-desktop-${{ matrix.profile }}-${{ matrix.payload }}
+          path: installer
+
+      - name: 运行最终 EXE 安装验收
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem 'installer\*.exe' -File)
+          if ($exe.Count -ne 1) {
+            throw "安装器 artifact 必须恰好包含一个 EXE，实际为 $($exe.Count)"
+          }
+          scripts/test_nsis_install.ps1 `
+            -InstallerPath $exe[0].FullName `
+            -ExpectedPayloadMode '${{ matrix.payload }}' `
+            -ExpectedProfile '${{ matrix.profile }}' `
+            -ReportDir 'install-report'
+
+      - name: 上传验收报告
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stella-install-test-${{ matrix.profile }}-${{ matrix.payload }}
+          path: install-report
+          if-no-files-found: error
+
   build:
     needs:
       [
         resolve-release,
         build-installer,
+        install-test,
         build-rust-wheel,
         build-cli-linux-binary,
         build-cli-windows-binary,
@@ -758,6 +802,13 @@ jobs:
           path: installer-bin
           merge-multiple: false
 
+      - name: 下载安装验收报告
+        uses: actions/download-artifact@v8
+        with:
+          pattern: stella-install-test-*
+          path: install-reports
+          merge-multiple: false
+
       - name: 校验并收集六类产品资产
         run: |
           set -e
@@ -816,6 +867,15 @@ jobs:
           done
           python scripts/check_release_archive.py "dist/products/${python_asset}"
           python scripts/check_release_archive.py "dist/products/${rust_asset}"
+
+      # 发布门禁：进入 dist/products 的四个 OneClick EXE 必须逐字节等于
+      # install-test 作业真实安装并通过的那四个文件（WP02「存档的是测试过
+      # 的最终字节及摘要」）。任何重跑导致的字节漂移在这里硬失败。
+      - name: 核对发布安装器字节与验收报告一致
+        run: |
+          set -e
+          python scripts/check_release_hashes.py \
+            --reports install-reports --products dist/products --suffix .exe
 
       # ============ CLI 包组装（完整程序目录 + stellacli，永不混入 Tauri 安装器） ============
       # stellacli 是编排层：本地形态靠「程序根目录 + Python」透传 deploy 模块，
