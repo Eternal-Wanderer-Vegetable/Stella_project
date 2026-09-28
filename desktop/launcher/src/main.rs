@@ -22,13 +22,50 @@ use std::process::Command;
 const RECORD_FILENAME: &str = "active-install.json";
 const APPS_DIRNAME: &str = "app";
 const MAIN_BINARY: &str = "Stella.exe";
-const TREE_MARKER: &str = "bot.py";
+// 版本化树的 bot.py 位置：搬移把 resources 整体移入 app 下版本目录，
+// 因此树判定锚在 resources/stella/bot.py（GUI 的 project_root 也在此
+// 解析，两处口径一致）。
+const TREE_MARKER: &str = "resources/stella/bot.py";
+
+/// 版本目录有效性：主程序存在 + bot.py 锚存在（枚举口径）。
+fn is_valid_tree(tree: &Path) -> bool {
+    tree.join(MAIN_BINARY).is_file() && tree.join(TREE_MARKER).is_file()
+}
+
+/// program root（bot.py 层，激活记录/GUI project_root 口径）有效性。
+fn is_valid_program_root(root: &Path) -> bool {
+    root.join("bot.py").is_file()
+}
+
+/// 从 program root 推导版本目录（Stella.exe 所在层）。
+fn version_dir_of(program_root: &Path) -> PathBuf {
+    program_root
+        .parent()
+        .and_then(|p| p.parent())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| program_root.to_path_buf())
+}
 
 fn main() {
     std::process::exit(run());
 }
 
 fn run() -> i32 {
+    let debug: Option<PathBuf> = std::env::var_os("STELLA_LAUNCHER_DEBUG")
+        .map(PathBuf::from);
+    let trace = |msg: &str| {
+        if let Some(path) = &debug {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                let _ = writeln!(f, "{msg}");
+            }
+        }
+    };
+
     let Some(exe_dir) = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
@@ -36,24 +73,33 @@ fn run() -> i32 {
         show_error("无法定位启动器自身目录。");
         return 1;
     };
+    trace(&format!("exe_dir={}", exe_dir.display()));
     let passthrough: Vec<String> = std::env::args().skip(1).collect();
 
     let Some(tree) = resolve_tree(&exe_dir) else {
+        trace("resolve_tree=None");
         show_error(&format!(
             "未找到可启动的 Stella 程序树。\n请重新运行安装器修复（安装目录：{}）。",
             exe_dir.display()
         ));
         return 1;
     };
+    trace(&format!("tree={}", tree.display()));
 
-    let exe = tree.join(MAIN_BINARY);
+    // tree = program root（bot.py 层，激活记录口径）；Stella.exe 在上两级
+    let version_dir = version_dir_of(&tree);
+    let exe = version_dir.join(MAIN_BINARY);
     match Command::new(&exe)
-        .current_dir(&tree)
+        .current_dir(&version_dir)
         .args(&passthrough)
         .spawn()
     {
-        Ok(_) => 0,
+        Ok(_) => {
+            trace("spawn OK");
+            0
+        }
         Err(err) => {
+            trace(&format!("spawn ERR: {err}"));
             show_error(&format!(
                 "启动 Stella 失败（{}）：{}\n请重新运行安装器修复。",
                 exe.display(),
@@ -66,15 +112,39 @@ fn run() -> i32 {
 
 /// 激活记录优先，枚举兜底；路径一律经过 containment 校验。
 fn resolve_tree(exe_dir: &Path) -> Option<PathBuf> {
+    let debug: Option<PathBuf> =
+        std::env::var_os("STELLA_LAUNCHER_DEBUG").map(PathBuf::from);
+    let trace = |msg: &str| {
+        if let Some(path) = &debug {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                let _ = writeln!(f, "{msg}");
+            }
+        }
+    };
     for record in record_candidate_paths(exe_dir) {
+        trace(&format!("record candidate: {}", record.display()));
         if let Ok(text) = std::fs::read_to_string(&record) {
+            trace(&format!("record read ok ({} chars)", text.len()));
             if let Some(tree) = tree_from_record(&text, exe_dir) {
+                trace(&format!("record tree={}", tree.display()));
                 return Some(tree);
             }
+            trace("record tree invalid");
         }
     }
     let mut trees = enumerate_trees(exe_dir);
-    trees.pop()
+    trace(&format!("enumerated {} trees under {}", trees.len(), exe_dir.join(APPS_DIRNAME).display()));
+    for t in &trees {
+        trace(&format!("  enum tree: {}", t.display()));
+    }
+    trees
+        .pop()
+        .map(|version_dir| version_dir.join("resources").join("stella"))
 }
 
 fn record_candidate_paths(exe_dir: &Path) -> Vec<PathBuf> {
@@ -97,7 +167,7 @@ fn tree_from_record(raw: &str, exe_dir: &Path) -> Option<PathBuf> {
     if !path.starts_with(&apps_root) {
         return None;
     }
-    if path.join(TREE_MARKER).is_file() {
+    if is_valid_program_root(&path) {
         Some(path)
     } else {
         None
@@ -107,19 +177,50 @@ fn tree_from_record(raw: &str, exe_dir: &Path) -> Option<PathBuf> {
 /// 枚举 `app\*` 内含 bot.py 的树，按版本号从新到旧排序（无版本名的排最后）。
 fn enumerate_trees(exe_dir: &Path) -> Vec<PathBuf> {
     let apps = exe_dir.join(APPS_DIRNAME);
+    let debug: Option<PathBuf> =
+        std::env::var_os("STELLA_LAUNCHER_DEBUG").map(PathBuf::from);
+    let trace = |msg: &str| {
+        if let Some(path) = &debug {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                let _ = writeln!(f, "{msg}");
+            }
+        }
+    };
+    trace(&format!(
+        "enumerate_trees apps={} exists={}",
+        apps.display(),
+        apps.is_dir()
+    ));
     let mut trees: Vec<(Vec<u64>, String, PathBuf)> = Vec::new();
     let Ok(entries) = std::fs::read_dir(&apps) else {
+        trace("read_dir ERR");
         return Vec::new();
     };
-    for entry in entries.flatten() {
+    let all: Vec<_> = entries.flatten().collect();
+    for entry in &all {
         let path = entry.path();
-        if path.is_dir() && path.join(TREE_MARKER).is_file() {
+        trace(&format!(
+            "raw entry: {} dir={} botpy={}",
+            path.display(),
+            path.is_dir(),
+            path.join(TREE_MARKER).is_file()
+        ));
+    }
+    for entry in all {
+        let path = entry.path();
+        if path.is_dir() && is_valid_tree(&path) {
             let name = entry.file_name().to_string_lossy().into_owned();
             let key = parse_version(&name);
             trees.push((key, name, path));
         }
     }
     trees.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    trace(&format!("enumerate_trees raw={}", trees.len()));
     trees.into_iter().map(|(_, _, path)| path).collect()
 }
 
@@ -179,7 +280,8 @@ mod tests {
 
     fn seed_tree(root: &Path, version: &str) -> PathBuf {
         let tree = root.join(APPS_DIRNAME).join(version);
-        std::fs::create_dir_all(&tree).unwrap();
+        std::fs::create_dir_all(tree.join("resources").join("stella")).unwrap();
+        std::fs::write(tree.join(MAIN_BINARY), b"").unwrap();
         std::fs::write(tree.join(TREE_MARKER), b"").unwrap();
         tree
     }
@@ -187,26 +289,44 @@ mod tests {
     #[test]
     fn record_tree_validates_containment_and_marker() {
         let root = temp_root("record");
-        let tree = seed_tree(&root, "5.1.0");
-        let json_path = tree.display().to_string().replace('\\', "\\\\");
+        // 生产 record 形态：path = program root（bot.py 层），Stella.exe 在
+        // 其上两级的版本目录里。
+        let program_root = root
+            .join(APPS_DIRNAME)
+            .join("5.1.0")
+            .join("resources")
+            .join("stella");
+        std::fs::create_dir_all(&program_root).unwrap();
+        std::fs::write(program_root.join("bot.py"), b"").unwrap();
+        std::fs::write(
+            root.join(APPS_DIRNAME).join("5.1.0").join(MAIN_BINARY),
+            b"",
+        )
+        .unwrap();
+        let json_path = program_root.display().to_string().replace('\\', "\\\\");
         let good = format!(
             r#"{{"schema_version": 1, "version": "5.1.0", "path": "{json_path}"}}"#
         );
         assert_eq!(
             tree_from_record(&good, &root).as_deref(),
-            Some(tree.as_path())
+            Some(program_root.as_path())
         );
 
         // 树外路径拒绝
-        let evil_path = root.join("elsewhere").display().to_string().replace('\\', "\\\\");
+        let evil_path = root
+            .join("elsewhere")
+            .join("resources")
+            .join("stella")
+            .display()
+            .to_string()
+            .replace('\\', "\\\\");
         let evil = format!(r#"{{"path": "{evil_path}"}}"#);
         assert!(tree_from_record(&evil, &root).is_none());
         // 损坏 JSON 拒绝
         assert!(tree_from_record("{broken", &root).is_none());
         // 缺 bot.py 拒绝
-        std::fs::remove_file(tree.join(TREE_MARKER)).unwrap();
+        std::fs::remove_file(program_root.join("bot.py")).unwrap();
         assert!(tree_from_record(&good, &root).is_none());
-        std::fs::write(tree.join(TREE_MARKER), b"").unwrap();
 
         std::fs::remove_dir_all(&root).ok();
     }
