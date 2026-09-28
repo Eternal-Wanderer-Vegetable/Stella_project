@@ -453,6 +453,14 @@ def test_release_workflow_resolves_version_once():
     assert "publish-candidate" in jobs["build-installer"]["needs"]
     assert "publish-candidate" in jobs["build-offline-payload"]["needs"]
     assert "--asset-base-url" in workflow_text, "catalog 构建必须引用候选 URL"
+    # S14/WP14：签名管道——build 之后、上传之前签名；tag 无凭据硬失败；
+    # install-test 验收签名后字节。
+    assert "签名安装器" in workflow_text
+    assert "STELLA_CERT_THUMBPRINT" in workflow_text
+    signer_pos = workflow_text.index("签名安装器")
+    upload_pos = workflow_text.index("- name: 上传安装器")
+    assert signer_pos < upload_pos, "签名必须发生在 artifact 上传之前"
+    assert "signtool sign" in workflow_text and "signtool verify" in workflow_text
     assert "--prerelease" in workflow_text, "候选必须为预发布"
     assert "startswith(\"candidate-\")" in workflow_text or "startswith('candidate-')" in workflow_text
     # WP02：最终 EXE 安装验收是发布硬门禁——构建与发布之间必须有 install-test，
