@@ -485,8 +485,9 @@ def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypa
     assert "memory_rust._native" in joined, "装载后必须验证 Rust 扩展可导入"
 
 
-@pytest.mark.xfail(reason="F04: 组件异常只捕获 BootstrapError，NapCatError 遗留 running 假状态", strict=False)
 def test_component_failure_lands_in_failed_terminal_state(tmp_path, monkeypatch):
+    """F04 修复：NapCatError 也必须落到 failed 终态（归一化为 BootstrapError，
+    原始异常保留在异常链上）。"""
     from deploy import bootstrap, napcat
 
     def fake_download(record, data_root):
@@ -502,17 +503,18 @@ def test_component_failure_lands_in_failed_terminal_state(tmp_path, monkeypatch)
 
     monkeypatch.setattr(bootstrap.acquire, "install_napcat", explode)
     data_root = tmp_path / "data"
-    with pytest.raises(napcat.NapCatError):
+    with pytest.raises(bootstrap.BootstrapError) as error:
         bootstrap.install_profile(
             "oneclick-python", data_root, catalog_path=_catalog(tmp_path)[0]
         )
+    assert error.value.__cause__ is not None, "原始异常必须保留在异常链上"
     progress = bootstrap.read_progress(data_root)
     assert progress is not None
     assert progress["state"] == "failed", "任何组件失败都必须落到 failed 终态"
 
 
-@pytest.mark.xfail(reason="F04: failed/running 后的重试不复核健康组件，llama 被重新下载", strict=False)
 def test_failed_run_retry_skips_healthy_components(tmp_path, monkeypatch):
+    """F04 修复：failed 重试复核真实状态，健康组件（llama-cpu）直接复用。"""
     from deploy import acquire, bootstrap, napcat, runtime
 
     catalog, _files = _catalog(tmp_path)
@@ -542,7 +544,7 @@ def test_failed_run_retry_skips_healthy_components(tmp_path, monkeypatch):
         lambda model, root, **kwargs: {"id": model["id"]},
     )
     data_root = tmp_path / "data"
-    with pytest.raises(napcat.NapCatError):
+    with pytest.raises(bootstrap.BootstrapError):
         bootstrap.install_profile("oneclick-python", data_root, catalog_path=catalog)
 
     downloads.clear()

@@ -612,6 +612,15 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
             STELLA_HOME,
             catalog_path=Path(args.catalog) if args.catalog else None,
         )
+    except KeyboardInterrupt:
+        # 取消是终态不是崩溃：install_profile 已落 interrupted 账本/进度
+        print(
+            json.dumps(
+                {"ok": False, "outcome": InstallOutcome.INTERRUPTED.value},
+                ensure_ascii=False,
+            )
+        )
+        return exit_code_for(InstallOutcome.INTERRUPTED)
     except bootstrap.BootstrapError as exc:
         print(
             json.dumps(

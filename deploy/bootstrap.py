@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -15,7 +16,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from . import acquire, packages
+from . import acquire, install_state, packages
 from .profiles import PROJECT_ROOT, load_profile
 
 PROGRESS_FILENAME = ".bootstrap-progress"
@@ -419,13 +420,97 @@ def install_profile(
     *,
     catalog_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Install the remote defaults declared by a OneClick profile."""
+    """Install the remote defaults declared by a OneClick profile.
+
+    WP04 语义：
+    * 全程持有跨进程安装锁（数据根级，O_EXCL + owner 身份）；另一进程
+      正在装时以 ``install_in_progress`` 拒绝，而不是并发写坏账本。
+    * 每个组件独立经历 pending → verified → staged/activated → healthy，
+      失败单组件落 failed 并保留原始错误码；所有预期异常族
+      （AcquireError / NapCatError / PackageError / OSError / 子进程异常）
+      都被归一化为带终态的 BootstrapError——绝不允许异常类型决定
+      「失败是否被记录」（F04：过去只有 BootstrapError 进 except，
+      NapCatError 会把账本永远留在 running）。
+    * failed / interrupted 的重试与 complete 的修复走同一条复核路径：
+      以 ``_installed_record_matches`` 复核真实文件/MSI 状态，健康的
+      组件直接复用，绝不因「上次没跑完」就把所有组件重装一遍。
+    * owner 已消失的 running 账本（崩溃残留）在进入时转为 interrupted。
+    """
     profile = load_profile(profile_id)
     root = Path(data_root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     if profile["distribution"] != "oneclick":
         _write_progress(root, profile_id=profile_id, state="skipped")
         return {"ok": True, "profile": profile_id, "state": "skipped", "installed": []}
+
+    try:
+        lock = install_state.InstallLock(root)
+        lock.acquire()
+    except install_state.InstallLockError as exc:
+        raise BootstrapError(exc.code, exc.message) from exc
+    try:
+        return _install_profile_locked(
+            profile, profile_id, root, catalog_path
+        )
+    except KeyboardInterrupt:
+        # 取消也是终态：账本与进度都落 interrupted，重试可续装
+        _record_interrupted(root, profile_id)
+        raise
+    finally:
+        lock.release()
+
+
+def _record_interrupted(root: Path, profile_id: str) -> None:
+    previous = read_progress(root)
+    completed = list(previous.get("completed", [])) if isinstance(previous, dict) else []
+    if not isinstance(previous, dict) or previous.get("profile") != profile_id:
+        return
+    _write_progress(
+        root,
+        profile_id=profile_id,
+        state="interrupted",
+        completed=completed,
+        error="安装被中断（用户取消或宿主进程退出）",
+    )
+    install_state.update_ledger(root, state=install_state.LEDGER_INTERRUPTED)
+
+
+def _mark_component_failed(
+    root: Path, component_id: str, exc: Exception
+) -> BootstrapError:
+    """把任意异常族归一化为 BootstrapError，并在账本落 failed 终态。"""
+    if isinstance(exc, BootstrapError):
+        error = exc
+    elif isinstance(exc, (acquire.AcquireError, packages.PackageError)):
+        error = BootstrapError(exc.code, exc.message)
+    elif isinstance(exc, OSError):
+        error = BootstrapError("component_install_failed", f"{component_id} 安装失败：{exc}")
+    else:
+        error = BootstrapError(
+            "unexpected_error", f"{component_id} 安装失败：{type(exc).__name__}: {exc}"
+        )
+    install_state.set_component(
+        root,
+        component_id,
+        state=install_state.COMPONENT_FAILED,
+        error_code=error.code,
+        error_message=error.message,
+    )
+    return error
+
+
+def _install_profile_locked(
+    profile: dict[str, Any],
+    profile_id: str,
+    root: Path,
+    catalog_path: Path | None,
+) -> dict[str, Any]:
+    # 持锁之后的第一件事：把崩溃残留的 running 账本归类为 interrupted。
+    # 仅凭时间久不能断定死亡，判据是 owner 进程身份（install_state）。
+    owner_present = install_state.read_ledger(root) is not None and install_state.classify_owner(
+        install_state.read_ledger(root).get("owner", {})
+    ) == "alive"
+    install_state.classify_previous_ledger(root, owner_present=owner_present)
     previous = read_progress(root)
     try:
         catalog = _load_catalog(profile, catalog_path)
@@ -456,10 +541,14 @@ def install_profile(
         (model["id"], _record(catalog, model["id"], "model"))
         for model in profile["default_models"]
     )
+    # complete / failed / interrupted 的重试走同一条复核路径：真实状态复核
+    # 通过的组件直接复用（F04：过去只有 complete 才筛选，failed 重试会把
+    # 健康组件重新下载安装一遍）。running 残留已转 interrupted，同样进这里。
+    resumable = {"complete", "failed", "interrupted"}
     if (
         isinstance(previous, dict)
         and previous.get("profile") == profile_id
-        and previous.get("state") == "complete"
+        and previous.get("state") in resumable
     ):
         pending = [
             (item_id, record)
@@ -479,6 +568,16 @@ def install_profile(
         items = pending
     completed: list[str] = []
     installed: list[dict[str, Any]] = []
+    catalog_sha = None
+    if catalog_path is not None:
+        digest = hashlib.sha256(Path(catalog_path).read_bytes()).hexdigest()
+        catalog_sha = digest
+    install_state.new_ledger(
+        root,
+        profile=profile_id,
+        catalog_sha256=catalog_sha,
+        components=[item_id for item_id, _record_ in items],
+    )
     _write_progress(root, profile_id=profile_id, state="running", completed=completed)
     try:
         for item_id, record in items:
@@ -489,46 +588,68 @@ def install_profile(
                 current=item_id,
                 completed=completed,
             )
-            archive = _download_record(record, root)
-            if record["kind"] == "onebot" or item_id == "napcat":
-                manifest = {
-                    "id": "napcat",
-                    "version": record["version"],
-                    "digest": record["checksum"],
-                    "source": record["source"],
-                    "license": record["license"],
-                    "sbom": record["sbom"],
-                    "platform": record["platform"],
-                }
-                installed.append(
-                    acquire.install_napcat(
-                        manifest,
-                        root,
-                        archive=archive,
-                        cache_dir=archive.parent,
+            install_state.set_component(
+                root,
+                item_id,
+                state=install_state.COMPONENT_PENDING,
+                expected_digest=str(record.get("checksum") or ""),
+            )
+            try:
+                archive = _download_record(record, root)
+            except BootstrapError as exc:
+                raise _mark_component_failed(root, item_id, exc) from exc
+            install_state.set_component(
+                root, item_id, state=install_state.COMPONENT_VERIFIED
+            )
+            try:
+                if record["kind"] == "onebot" or item_id == "napcat":
+                    manifest = {
+                        "id": "napcat",
+                        "version": record["version"],
+                        "digest": record["checksum"],
+                        "source": record["source"],
+                        "license": record["license"],
+                        "sbom": record["sbom"],
+                        "platform": record["platform"],
+                    }
+                    installed.append(
+                        acquire.install_napcat(
+                            manifest,
+                            root,
+                            archive=archive,
+                            cache_dir=archive.parent,
+                        )
                     )
-                )
-            elif record["kind"] == "model":
-                installed.append(
-                    acquire.install_default_embedding(
-                        {
-                            **record,
-                            "filename": archive.name,
-                            "sha256": record["checksum"],
-                            "role": record.get("model_role", "embedding"),
-                        },
-                        root,
-                        archive=archive,
-                        cache_dir=archive.parent,
+                elif record["kind"] == "model":
+                    installed.append(
+                        acquire.install_default_embedding(
+                            {
+                                **record,
+                                "filename": archive.name,
+                                "sha256": record["checksum"],
+                                "role": record.get("model_role", "embedding"),
+                            },
+                            root,
+                            archive=archive,
+                            cache_dir=archive.parent,
+                        )
                     )
-                )
-            else:
-                component = _install_component(record, archive, root)
-                _register_component(component, root)
-                installed.append(component)
+                else:
+                    component = _install_component(record, archive, root)
+                    _register_component(component, root)
+                    installed.append(component)
+            except Exception as exc:
+                # 所有异常族（AcquireError / NapCatError / PackageError /
+                # OSError / 子进程异常 / 未知异常）都归一化为带终态的
+                # failed——异常类型不再决定「失败是否被记录」（F04）。
+                raise _mark_component_failed(root, item_id, exc) from exc
+            install_state.set_component(
+                root, item_id, state=install_state.COMPONENT_HEALTHY
+            )
             completed.append(item_id)
         _repair_oneclick_runtime(profile_id, root)
         _write_progress(root, profile_id=profile_id, state="complete", completed=completed)
+        install_state.update_ledger(root, state=install_state.LEDGER_READY, current_step="")
         return {
             "ok": True,
             "profile": profile_id,
@@ -542,6 +663,12 @@ def install_profile(
             state="failed",
             completed=completed,
             error=exc.message,
+        )
+        install_state.update_ledger(
+            root,
+            state=install_state.LEDGER_FAILED,
+            current_step="",
+            last_error={"code": exc.code, "message": exc.message[:500]},
         )
         raise
 

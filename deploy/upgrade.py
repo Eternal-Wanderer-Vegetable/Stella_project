@@ -52,8 +52,12 @@ class UpgradeLock:
         except FileExistsError as exc:
             raise UpgradeError("upgrade_in_progress", "已有升级操作正在进行中", path=self.path) from exc
         try:
+            from .install_state import process_identity
+
             payload = {
                 "pid": os.getpid(),
+                # 创建身份：恢复陈旧锁时区分「还是那个进程」与「PID 被复用」
+                "identity": process_identity(os.getpid()),
                 "token": uuid.uuid4().hex,
             }
             os.write(fd, (json.dumps(payload) + "\n").encode("utf-8"))
@@ -70,24 +74,45 @@ class UpgradeLock:
         self._held = False
 
     def recover_stale(self) -> bool:
-        """Remove a lock only when its recorded owner is definitely gone."""
+        """Remove a lock only when its recorded owner is definitely gone.
+
+        Windows 的 ``os.kill(pid, 0)`` 会 TerminateProcess——那是击杀，不是
+        探测（F19）。探活改走 install_state 的三态原语：只有「确认死亡」
+        或「进程活着但创建身份与记录不一致（PID 被复用）」才删锁；权限
+        不足等 unknown 一律保留锁，绝不据此动手。
+        """
         if not self.path.is_file():
             return False
         try:
             owner = json.loads(self.path.read_text(encoding="utf-8"))
-            pid = int(owner["pid"])
-        except (OSError, ValueError, TypeError, KeyError):
+        except (OSError, ValueError, TypeError):
             return False
-        if pid <= 0:
+        if not isinstance(owner, dict):
             return False
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            self.path.unlink(missing_ok=True)
-            return True
-        except PermissionError:
+        if os.name != "nt":
+            # POSIX：os.kill(pid, 0) 只做存在性检查，无副作用，保留轻量路径
+            try:
+                pid = int(owner["pid"])
+            except (KeyError, TypeError, ValueError):
+                return False
+            if pid <= 0:
+                return False
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                self.path.unlink(missing_ok=True)
+                return True
+            except PermissionError:
+                return False
+            except OSError:
+                return False
             return False
-        return False
+        from .install_state import classify_owner
+
+        if classify_owner(owner) != "stale":
+            return False
+        self.path.unlink(missing_ok=True)
+        return True
 
     def __enter__(self) -> "UpgradeLock":  # noqa: PYI034
         self.acquire()
