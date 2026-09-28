@@ -78,6 +78,18 @@
   RMDir "$INSTDIR\__stella_wtest"
 !macroend
 
+; 版本化搬移的运行时 trace（文件级宏——NSIS 禁止宏内定义宏）。写入
+; $TEMP\stella-versioned-trace.log：静默模式下 DetailPrint 不可见，
+; 搬移是新增路径，失败必须可事后定位。
+!macro VTrace _MSG
+  FileOpen $R9 "$TEMP\stella-versioned-trace.log" a
+  ${If} $R9 != ""
+    FileSeek $R9 END
+    FileWrite $R9 "${_MSG}$\r$\n"
+    FileClose $R9
+  ${EndIf}
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
   ; 仅离线变体：嵌入负载以 offline/MANIFEST.json 为标志
   ${If} ${FileExists} "$INSTDIR\resources\stella\offline\MANIFEST.json"
@@ -148,26 +160,49 @@
   ; Goto/label 不可靠，见文件头注）。
   ${If} ${FileExists} "$INSTDIR\resources\stella\.stella-versioned-layout"
     DetailPrint "启用版本化程序树布局…"
+    ; 运行时 trace（$TEMP 落盘）：静默模式下 DetailPrint 不可见，搬移是
+    ; 新增路径，失败必须可事后定位。（VTrace 宏定义在文件级——NSIS 禁止
+    ; 宏内定义宏。）
+    !insertmacro VTrace "block entered"
     ClearErrors
     FileOpen $R5 "$INSTDIR\resources\stella\.stella-version" r
     ${If} $R5 != ""
       FileRead $R5 $R6
       FileClose $R5
+      !insertmacro VTrace "version=[$R6]"
       CreateDirectory "$INSTDIR\app"
+      CreateDirectory "$INSTDIR\app\$R6"
       ${If} ${FileExists} "$INSTDIR\app\$R6\*.*"
         ; 同版本重装：以本次释放的新树替换 app 内同版本旧树
         RMDir /r "$INSTDIR\app\$R6"
       ${EndIf}
-      Rename "$INSTDIR\resources" "$INSTDIR\app\$R6\resources"
+      ; NSIS Rename 对目录在此上下文不可靠（实测 4/4 失败而事后手动成功），
+      ; 改用 CopyFiles 递归复制 + 删源：先复制（新树在 app\ 完整落位），
+      ; 后删根（失败仅留冗余，下次安装 GC）——崩溃安全方向正确。
+      CopyFiles /SILENT "$INSTDIR\resources" "$INSTDIR\app\$R6\resources"
       ${If} ${Errors}
+        Sleep 2000
+        CopyFiles /SILENT "$INSTDIR\resources" "$INSTDIR\app\$R6\resources"
+      ${EndIf}
+      ${If} ${Errors}
+        !insertmacro VTrace "copy resources FAILED (after retries)"
         DetailPrint "程序树搬移失败，保持现状布局（安装仍可正常使用）。"
       ${Else}
-        Rename "$INSTDIR\${MAINBINARYNAME}.exe" "$INSTDIR\app\$R6\${MAINBINARYNAME}.exe"
+        RMDir /r "$INSTDIR\resources"
+        !insertmacro VTrace "copy resources OK, source removed"
+        CopyFiles /SILENT "$INSTDIR\${MAINBINARYNAME}.exe" "$INSTDIR\app\$R6\${MAINBINARYNAME}.exe"
         ${If} ${Errors}
-          ; 主程序搬移失败：把 resources 搬回去，回到现状布局
-          Rename "$INSTDIR\app\$R6\resources" "$INSTDIR\resources"
+          Sleep 2000
+          CopyFiles /SILENT "$INSTDIR\${MAINBINARYNAME}.exe" "$INSTDIR\app\$R6\${MAINBINARYNAME}.exe"
+        ${EndIf}
+        ${If} ${Errors}
+          !insertmacro VTrace "copy exe FAILED, root kept"
           DetailPrint "主程序搬移失败，已恢复现状布局。"
         ${Else}
+          Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+          CopyFiles /SILENT "$INSTDIR\app\$R6\resources\stella\launcher\StellaLauncher.exe" "$INSTDIR\${MAINBINARYNAME}.exe"
+          !insertmacro VTrace "relocation complete"
+          !insertmacro VTrace "rename exe OK"
           CopyFiles /SILENT "$INSTDIR\app\$R6\resources\stella\launcher\StellaLauncher.exe" "$INSTDIR\${MAINBINARYNAME}.exe"
           DetailPrint "版本化布局就绪（版本 $R6）。"
           ; 激活记录 + 旧树 GC（Python 侧落盘；仅离线变体有嵌入式
@@ -176,10 +211,14 @@
           ${If} ${FileExists} "$INSTDIR\app\$R6\resources\stella\runtime\python.exe"
             nsExec::ExecToLog '"$INSTDIR\app\$R6\resources\stella\runtime\python.exe" "$INSTDIR\app\$R6\resources\stella\deploy\nsis_bootstrap_helper.py" "$INSTDIR\app\$R6\resources\stella" write-record'
             Pop $2
+            !insertmacro VTrace "write-record exit=$2"
+          ${Else}
+            !insertmacro VTrace "no bundled runtime, record deferred"
           ${EndIf}
         ${EndIf}
       ${EndIf}
     ${Else}
+      !insertmacro VTrace "cannot open .stella-version"
       DetailPrint "缺少 .stella-version，跳过版本化布局。"
     ${EndIf}
   ${EndIf}

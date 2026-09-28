@@ -261,6 +261,9 @@ def test_main_journals_failed_and_reraises(tmp_path, monkeypatch):
 
 def test_bootstrap_offline_writes_session_log(tmp_path, monkeypatch):
     """装载期会话日志：步骤级事件 + 终态事件，安装器关闭后仍可取。"""
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))  # upgrade-journal 隔离
     install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
     manifest = install_root / "offline" / "MANIFEST.json"
 
@@ -286,6 +289,9 @@ def test_bootstrap_offline_writes_session_log(tmp_path, monkeypatch):
 
 def test_bootstrap_offline_session_log_records_failure(tmp_path, monkeypatch):
     """装载步骤失败 → 会话日志留下 helper_failed 终态事件。"""
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))  # journal 写本目录
     install_root = _seed_offline_tree(tmp_path, profile="oneclick-python")
 
     def failing_run(cmd, cwd, **_kwargs):
