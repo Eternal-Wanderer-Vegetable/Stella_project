@@ -280,3 +280,39 @@ def test_rollback_without_previous_is_rejected(tmp_path, monkeypatch):
         rollback_activation()
     with pytest.raises(UpgradeError, match="回滚"):
         rollback_activation()  # 无记录同样拒绝
+
+
+def test_cli_upgrade_rollback_flips_record(tmp_path, monkeypatch):
+    """--rollback：翻转激活记录；缺 source 且无 --rollback 时用法拒绝。"""
+    import argparse
+
+    from deploy.__main__ import _cmd_upgrade
+    from deploy.upgrade import (
+        read_activation_record,
+        write_activation_record,
+    )
+
+    _isolate_record_dir(monkeypatch, tmp_path)
+    old = _activation_tree(tmp_path, "5.0.0")
+    new = _activation_tree(tmp_path, "5.1.0")
+    write_activation_record(version="5.0.0", tree_path=old)
+    write_activation_record(
+        version="5.1.0", tree_path=new,
+        previous={"version": "5.0.0", "path": str(old.resolve())},
+    )
+
+    ns = argparse.Namespace(
+        rollback=True, source=None, version=None, checksum=None,
+        install_root=None,
+    )
+    code = _cmd_upgrade(ns)
+    assert code == 0
+    record = read_activation_record()
+    assert record["version"] == "5.0.0", "回滚后激活上一版本"
+
+    # 缺 source 且未 --rollback → 用法拒绝
+    ns = argparse.Namespace(
+        rollback=False, source=None, version="5.2.0", checksum=None,
+        install_root=None,
+    )
+    assert _cmd_upgrade(ns) == 2

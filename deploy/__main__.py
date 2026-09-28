@@ -569,7 +569,46 @@ def _cmd_packages(args: argparse.Namespace) -> int:
 
 def _cmd_upgrade(args: argparse.Namespace) -> int:
     """Install a verified program tree through the transactional pointer."""
-    from .upgrade import UpgradeError, transactional_upgrade
+    from .upgrade import UpgradeError, rollback_activation
+
+    if args.rollback:
+        # S11 Phase 2：激活记录翻转（当前树 <-> 保留的上一代树，双向）。
+        try:
+            record = rollback_activation()
+        except UpgradeError as exc:
+            print(
+                json.dumps(
+                    {"ok": False, "error": {"code": exc.code, "message": exc.message}},
+                    ensure_ascii=False,
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "rolled_back_to": {
+                        "version": record.get("version"),
+                        "path": record.get("path"),
+                    },
+                    "note": "重启 Stella 后生效；再次 --rollback 可滚回",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    if not args.rollback and not args.source:
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": "usage", "message": "upgrade 需要 SOURCE 或 --rollback"}},
+                ensure_ascii=False,
+            )
+        )
+        return 2
+
+    from .upgrade import transactional_upgrade
 
     try:
         result = transactional_upgrade(
@@ -755,9 +794,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_migrate.set_defaults(func=_cmd_migrate)
 
-    p_upgrade = sub.add_parser("upgrade", help="校验并原子切换程序版本")
-    p_upgrade.add_argument("source", help="已解包的升级源目录")
-    p_upgrade.add_argument("--version", required=True, help="目标版本")
+    p_upgrade = sub.add_parser(
+        "upgrade", help="校验并原子切换程序版本；--rollback 回滚到上一版本"
+    )
+    p_upgrade.add_argument(
+        "source", nargs="?", default=None, help="已解包的升级源目录（--rollback 时不需要）"
+    )
+    p_upgrade.add_argument(
+        "--version", default=None, help="目标版本（--rollback 时不需要）"
+    )
+    p_upgrade.add_argument(
+        "--rollback",
+        action="store_true",
+        help="把激活记录翻转到保留的上一版本树（双向）",
+    )
     p_upgrade.add_argument("--checksum", default=None, help="源目录 tree SHA-256")
     p_upgrade.add_argument(
         "--install-root",
