@@ -1,6 +1,6 @@
 # S10/S11 实施计划：数据根显式化、卸载/升级契约（含 .nsi 已核实事实）
 
-> 状态：**草案待审**。基于 2026-09-28 用 tauri-cli 2.12.0 真实构建 oneclick-python（online）安装器并读取生成的
+> 状态：**已批准并实施**（三项决策按推荐方案执行；S11 Phase 2 确认为单独立项）。实施提交：Step 1 数据根外置、Step 2 卸载契约钩子、Step 3 升级 journal + T12 清理。基于 2026-09-28 用 tauri-cli 2.12.0 真实构建 oneclick-python（online）安装器并读取生成的
 > `installer.nsi`（2867 行）后起草；所有模板行为标注 [verified-nsi]，源码行为标注 [verified-src]。
 > 前置计划：docs/plans/2026-09-28-gitnexus-plan-nsis-installation-reliability.md（S01–S09、S12、S13、S14 切片已交付）。
 
