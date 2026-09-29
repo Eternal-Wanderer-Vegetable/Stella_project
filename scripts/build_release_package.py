@@ -70,7 +70,11 @@ INSTALLER_FILES = (
 INSTALLER_DIRS = COMMON_DIRS
 FORBIDDEN_PARTS = (
     "StellaData",
-    "runtime",
+    # 注意：这里没有 "runtime"——顶层 runtime/（开发机嵌入式运行时）不在
+    # allowlist、本就不可能进树；而 core/runtime/ 是 runtime-manager 工作
+    # 的 Python 包，按组件名过滤会把它剥掉（v6.0.1 CI 实测：Standalone
+    # 归档缺 core/runtime 导致 import 崩溃）。 归档侧顶层校验见
+    # check_release_archive 的 FORBIDDEN_ROOT_COMPONENTS。
     "napcat",
     "models",
     "logs",

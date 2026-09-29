@@ -147,6 +147,12 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         path.write_text(relative, encoding="utf-8")
     (source / "runtime" / "python.exe").parent.mkdir(parents=True)
     (source / "runtime" / "python.exe").write_bytes(b"must not ship")
+    # runtime-manager 工作的 Python 包：必须在 Standalone 归档里
+    # （v6.0.1 实测：未锚定的 'runtime' 过滤把它剥掉，import 崩溃）
+    core_runtime = source / "core" / "runtime"
+    core_runtime.mkdir(parents=True, exist_ok=True)
+    (core_runtime / "__init__.py").write_text("", encoding="utf-8")
+    (core_runtime / "turn_service.py").write_text("", encoding="utf-8")
     (source / "models" / "chat.gguf").parent.mkdir(parents=True)
     (source / "models" / "chat.gguf").write_bytes(b"must not ship")
     (source / "runtime-manager" / "target" / "debug").mkdir(parents=True)
@@ -171,6 +177,10 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     assert "deploy/models.py" in names
     assert "deploy/runtime.py" in names
     assert "runtime-manager/target/debug/build.bin" not in names
+    assert "core/runtime/turn_service.py" in names, (
+        "core/runtime 包必须随归档发布（extensions → core.pipeline → "
+        "core.runtime.turn_service 导入链）"
+    )
 
 
 def test_stager_prunes_output_inside_desktop_dir(tmp_path):

@@ -735,6 +735,9 @@ jobs:
           fi
           echo "RELEASE_REF=v${TAG}" >> "$GITHUB_ENV"
 
+      # --exclude '/runtime' 锚定顶层：剥掉开发机的嵌入式运行时目录，但保留
+      # core/runtime/（runtime-manager 工作的 Python 包，v6.0.1 实测：未锚定
+      # 的 'runtime' 把它一并剥掉，import 检查直接崩）。
       # 不复用 .gitignore：两者语义不同（rsync 的 --exclude-from 不支持 ! 否定模式，
       # 锚定 / 的含义也有差异），且 .gitignore 将来会因开发需要增删——那些改动
       # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
@@ -790,7 +793,7 @@ jobs:
             --exclude '.stella-stop-request*' \
             --exclude 'logs' \
             --exclude 'StellaData' \
-            --exclude 'runtime' \
+            --exclude '/runtime' \
             --exclude '*.db' \
             --exclude '*.jsonl' \
             --exclude '*.log' \
