@@ -18,6 +18,7 @@ F03/F04/F07/F09/F13 是计划的已知缺陷复现用例：断言的是**目标�
 from __future__ import annotations
 
 import argparse
+from types import SimpleNamespace
 import hashlib
 import io
 import json
@@ -586,7 +587,15 @@ def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypa
     with zipfile.ZipFile(wheel, "w") as bundle:
         bundle.writestr("memory_rust/__init__.py", "")
     recorded: list[list[str]] = []
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: recorded.append(cmd))
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))  # journal 隔离
+
+    def fake_run(cmd, cwd=None, **_kwargs):
+        recorded.append([str(a) for a in cmd])
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(helper.subprocess, "run", fake_run)
 
     helper.bootstrap_offline(install_root)
 

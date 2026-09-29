@@ -242,12 +242,42 @@ def ensure_rust_wheel(install_root: Path, python: Path, wheel: Path) -> None:
     memory_rust 的 Python 半边（selector.py 等）一并抹掉；必须原地
     ``zipfile -e`` 解包。导入检查通过后才写 ``.stella-rust-ready``（wheel
     的 SHA256，GUI 据此跳过重装）。
+
+    解包与导入各带 2 次有界重试（间隔 2s/5s）：刚写入的 .pyd 会被
+    Defender 实时扫描短暂锁定（与 NSIS 搬移的 rename 失败同源），瞬态
+    失败重试即过；确定性失败（架构不匹配等）退避耗尽后照常失败并留
+    helper_failed 事件。
     """
     runtime = python.parent
-    _run([str(python), "-m", "zipfile", "-e", str(wheel), "."], install_root,
-         install_root=install_root, step="rust-wheel-unpack")
-    _run([str(python), "-c", "import memory_rust._native, memory_rust.selector"],
-         install_root, install_root=install_root, step="rust-wheel-verify")
+    unpack_cmd = [str(python), "-m", "zipfile", "-e", str(wheel), "."]
+    verify_cmd = [str(python), "-c", "import memory_rust._native, memory_rust.selector"]
+    for step, cmd in (("rust-wheel-unpack", unpack_cmd),
+                      ("rust-wheel-verify", verify_cmd)):
+        for attempt, delay in enumerate((0, 2, 5), start=1):
+            if delay:
+                time.sleep(delay)
+                _append_session(
+                    install_root,
+                    {"stage": "rust_wheel_retry", "step": step, "attempt": attempt},
+                )
+            result = subprocess.run(cmd, cwd=str(install_root), check=False,
+                                    env=_isolated_env())
+            if result.returncode == 0:
+                _append_session(
+                    install_root,
+                    {"stage": "helper_step", "step": step,
+                     "exit_code": 0, "attempt": attempt},
+                )
+                break
+            _append_session(
+                install_root,
+                {"stage": "rust_wheel_attempt_failed", "step": step,
+                 "attempt": attempt, "exit_code": result.returncode},
+            )
+        else:
+            sys.exit(
+                f"装载步骤失败（步骤 {step}，重试 3 次仍失败）：{' '.join(cmd)}"
+            )
     _atomic_write_text(runtime / RUST_MARKER, _sha256_file(wheel) + "\n")
 
 
