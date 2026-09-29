@@ -474,10 +474,15 @@ jobs:
       # 签名（S14/WP14）：install-test 必须验收**签名后字节**——本步骤在
       # 上传之前执行。凭据缺失的语义：PR/手工构建允许未签名（大字警告），
       # tag 推送的正式发布硬失败（不用 continue-on-error 伪装通过）。
+      # 凭据形态：STELLA_CERT_PFX_BASE64（PFX 的 base64，导入 CurrentUser\My
+      # 后按 thumbprint 签名）——托管 runner 的证书存储是空的，只有
+      # thumbprint 没有证书实体时 signtool 必然失败。
       - name: 签名安装器（正式发布必需）
         shell: pwsh
         env:
           CERT_THUMBPRINT: ${{ secrets.STELLA_CERT_THUMBPRINT }}
+          CERT_PFX_BASE64: ${{ secrets.STELLA_CERT_PFX_BASE64 }}
+          CERT_PFX_PASSWORD: ${{ secrets.STELLA_CERT_PFX_PASSWORD }}
           CERT_TIMESTAMP_URL: ${{ vars.STELLA_TIMESTAMP_URL }}
         run: |
           $exes = @(Get-ChildItem 'desktop/src-tauri/target/release/bundle/nsis/*setup.exe' -File)
@@ -488,6 +493,22 @@ jobs:
             }
             Write-Host "::warning::未配置 STELLA_CERT_THUMBPRINT，产物保持未签名（仅非正式构建允许）"
             exit 0
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CERT_PFX_BASE64)) {
+            throw "已配置 thumbprint 但缺少 STELLA_CERT_PFX_BASE64：托管 runner 的证书存储为空，无法签名"
+          }
+          # 导入 PFX 到当前用户存储（私钥不可导出）；无论成败都清理落盘的 PFX
+          $pfxPath = Join-Path $env:RUNNER_TEMP "stella-codesign.pfx"
+          try {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+            $importArgs = @('Import-PfxCertificate', '-FilePath', $pfxPath, '-CertStoreLocation', 'Cert:\CurrentUser\My')
+            if (-not [string]::IsNullOrWhiteSpace($env:CERT_PFX_PASSWORD)) {
+              $importArgs += @('-Password', (ConvertTo-SecureString $env:CERT_PFX_PASSWORD -AsPlainText -Force))
+            }
+            & $importArgs[0] @($importArgs | Select-Object -Skip 1) | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "PFX 导入失败（退出码 $LASTEXITCODE）" }
+          } finally {
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
           }
           $ts = if ([string]::IsNullOrWhiteSpace($env:CERT_TIMESTAMP_URL)) { 'http://timestamp.digicert.com' } else { $env:CERT_TIMESTAMP_URL }
           signtool sign /fd SHA256 /td SHA256 /tr $ts /sha1 $env:CERT_THUMBPRINT $exes[0].FullName
