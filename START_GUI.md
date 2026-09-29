@@ -1,7 +1,9 @@
 # GUI 测试启动指令
 
 > **v2 已上线（M6）**：桌面 GUI 与浏览器 WebUI 合并为同一套面板
-> （`dashboard/` + `desktop/`），使用方式见 [docs/webui.md](docs/webui.md)。
+> （`dashboard/` + `desktop/`），使用方式见 [docs/webui.md](docs/webui.md)；
+> v2 桌面壳的本地构建（`cd desktop/src-tauri && cargo tauri build`，含
+> dashboard-dist 拷贝步骤）见 [desktop/README.md](desktop/README.md)。
 > 下面的 v1（`stella-installer/`）已冻结，仅在过渡期可用；最终形态见
 > tag `gui-v1-final`。
 

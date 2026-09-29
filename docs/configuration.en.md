@@ -49,7 +49,7 @@ LLM_ROLE_EXTRACT_ENDPOINT=ONLINE_MEMORY
 LLM_ROLE_EXTRACT_MODEL=vendor/strong-model
 ```
 
-The model ID is set on the **endpoint**, so every role pointing to that endpoint uses it by default. There is no need to repeat the same string across all six roles. The two keys must be different; see [Why Two Online Keys Are Required](#why-two-online-keys-are-required). In the installer, selecting the `Fully online (dual key)` preset under `Configuration → Model Services` is equivalent to the block above.
+The model ID is set on the **endpoint**, so every role pointing to that endpoint uses it by default. There is no need to repeat the same string on every role. The two keys must be different; see [Why Two Online Keys Are Required](#why-two-online-keys-are-required). In the installer, selecting the `Fully online (dual key)` preset under `Configuration → Model Services` is equivalent to the block above.
 
 ---
 ## QQ Groups and Paths
@@ -77,10 +77,10 @@ Since 2026-08-27, user data can be stored outside the installation directory, so
 The resolution order (the criteria are in `config/home.py`, which **does not read `.env`**; otherwise there would be a circular dependency: “read `.env` to find out where `.env` is”):
 
 1. Environment variable `STELLA_HOME`;
-2. Machine-level pointer file (Windows `%LOCALAPPDATA%\Stella\home.txt`, other platforms `~/.config/stella/home.txt`). It is outside the program directory, so any newly extracted program can immediately attach to the old data;
-3. If `.env` or `memory/agent_memory.db` exists in the installation directory → **use it in place** (legacy layout; installations from 3.0.0 and earlier continue to work without changes);
-4. If `StellaData/` exists in the installation directory → use it (**portable mode**: program and data are self-contained and can be moved together. This is the path used by the development repository);
-5. If none of the above exists → use `StellaData/` **beside** the installation directory.
+2. If `StellaData/` exists in the installation directory → use it (**portable mode**: program and data are self-contained and can be moved as a whole. This is the path the development repository takes). It must come before legacy-layout traces: traces are a heuristic (running one round of tests in the development repository recreates `memory/agent_memory.db`), whereas explicitly creating `StellaData/` is unambiguous local intent;
+3. If the installation directory itself contains `.env` or `memory/agent_memory.db` → **use it in place** (legacy layout; installations from 3.0.0 and earlier keep working without any change. Release packages never ship a `StellaData/` and `check_release_layout` blocks one, so genuine legacy installations are unaffected by the previous item);
+4. The machine-level pointer file (Windows `%LOCALAPPDATA%\Stella\home.txt`, other platforms `~/.config/stella/home.txt`). It lives outside the program directory, so any freshly extracted program can immediately attach to the existing data. It serves only freshly extracted programs with **no local data traces and no portable directory**: the portable directory and legacy-layout traces are this copy's own local evidence and local intent, which are more specific than a machine-level default — otherwise, on a machine that already has a formal installation, the pointer would drag the development repository into the formal installation's data directory and mix the two environments;
+5. If none of the above → `StellaData/` **beside** the installation directory.
 
 **Why the default is “beside” rather than “inside”**: the program directory is the directory that is replaced as a whole during upgrades and that users may delete as an “old version.”
 Putting data there by default would turn the perfectly natural cleanup action of “deleting the old version folder” into irreversible data loss.
@@ -394,6 +394,8 @@ Stage 2 is **activated only when Stage 1 determines that the batch contains user
 | `MEMORY_EXTRACT_MAX_TOKENS` | `1000` | Only a candidate array is output, so a large value is unnecessary |
 
 The model defaults to the main chat model (the local slot model `LLM_ENDPOINT_LOCAL_MODEL`). To send Stage 2 to a strong online model, change `LLM_ROLE_EXTRACT_ENDPOINT` (the model comes from that endpoint's `MODEL`; write `LLM_ROLE_EXTRACT_MODEL` only when it must differ from other roles on the same endpoint). The old keys `MEMORY_EXTRACT_LM_STUDIO_*` have been removed entirely and are converted automatically on upgrade — except `_BASE_URL` / `_API_KEY`, the old system's "fifth endpoint" parameters with no new-key equivalent: their values are dropped on merge. If you need a dedicated extraction endpoint, point the `EXTRA` slot at it and bind the `EXTRACT` role there.
+
+> The five `MEMORY_EXTRACT_LM_STUDIO_*` keys / `MEMORY_EXTRACT_MAX_TOKENS` are the inheritance upstream of `LLM_ROLE_EXTRACT_*`. To send Stage 2 to a strong online model, change `LLM_ROLE_EXTRACT_ENDPOINT` (the model comes from that endpoint's `MODEL`; write `LLM_ROLE_EXTRACT_MODEL` only when it must differ from other roles on the same endpoint); the keys in this section need no changes.
 
 **Why split the stages**: a small model can summarize a topic, but in a noisy environment it systematically returns no candidates. On 2026-08-16, all 7 tested consolidation batches returned empty candidates even though the information was clearly present in the summaries it had written. It had read the information but actively discarded it; it had not failed to see it. Candidate extraction is a high-precision extraction task and is delegated to a larger model.
 
@@ -850,6 +852,23 @@ Asynchronous background learning after a reply is sent (zero LLM): whether the u
 | `JARGON_CONFIRM_THRESHOLD` | `12` | Promotion threshold for jargon (accumulated hits across days) |
 | `JARGON_TRACKER_MAX_TERMS` | `4096` | Capacity cap of the in-process jargon counter (so long chat histories cannot eat the memory) |
 
+## Social Learning Loop (SOCIAL_*)
+
+A complete loop on top of [Expression and Interjection-Outcome Learning](#expression-and-interjection-outcome-learning): delivery receipts and effect facts are distilled into **expression candidates** (which phrasings are worth reusing) and **group jargon** (how this group talks), injected through budget-controlled prompt slots, then corrected by later observation — "learn → use → observe → correct" closes the loop. The whole layer is **off by default** (`SOCIAL_ENABLED=false` and `SOCIAL_MODE=off`), guaranteeing zero behavior change for existing deployments; rollout order: testing → one group on `shadow` for ≥7 days → jargon → expressions → new occasions. Implementation: `memory/social_schema.py` / `memory/social_store.py` / `memory/social_worker.py` and `core/social/`; the WebUI chat path records delivery receipts once the switch is on (`webui/chat_ingress.py`).
+
+| Configuration | Default | Description |
+|---|---|---|
+| `SOCIAL_ENABLED` | `false` | Master switch. When off, the side tables are not written and social observation does not start |
+| `SOCIAL_MODE` | `off` | `off` = everything off; `shadow` = only record candidates and observations, without changing actual prompts or sends (shadow mode already produces delivery receipts and effect-observation facts, but does not modify any sending behavior); `active` = injection allowed |
+| `SOCIAL_EXPRESSION_INJECT` | `false` | Expression injection switch (forcibly treated as off in `shadow` mode) |
+| `SOCIAL_EXPRESSION_RECENT_TURNS` | `10` | An expression used in any of the last N replies of this group is not injected again (anti-repetition) |
+| `SOCIAL_JARGON_INJECT` | `false` | Jargon injection switch |
+| `SOCIAL_BACKGROUND_LLM_ENABLED` | `false` | Background learning model; off by default (when sharing the local endpoint, it does not compete with the foreground for resources) |
+| `SOCIAL_EFFECTS_ADAPT_WEIGHTS` | `false` | Adaptive weighting of effect scores; off by default — the sample threshold must be met and manual spot checks done first |
+| `SOCIAL_TRACE_DETAIL_SCOPES` | empty | Scopes for detailed tracing (comma-separated group numbers; empty = only the metadata tier is stored) |
+
+Startup validation: `SOCIAL_MODE` accepts only `off`/`shadow`/`active`; **when `SOCIAL_MODE` is not `off`, `SOCIAL_ENABLED` must also be enabled**, otherwise startup is refused (`_assert_social_config` in `config/settings.py`).
+
 ## Memory Compression
 
 | Configuration | Default | Description |
@@ -973,6 +992,12 @@ The system determines which capabilities a request needs (chat / memory / tools)
 | `ROUTER_GATE_MEMORY` | `false` | Whether long-term retrieval is actually gated by `route.memory` |
 | `ROUTER_TIMEOUT` | `8.0` | Timeout for one decision (seconds). A timeout is handled as a fallback and does not block the reply |
 
+#### No-Model Operation Mode
+
+"No model" here only means the generative model is unavailable: chat replies, Agent/Comes generation, and the Level 2 Router fallback are disabled or degraded; **embedding is not part of this**. You can therefore set `ASTRBOT_LLM_ENABLED=false` while keeping `MEMORY_EMBEDDING_ENABLED=true`, so Level 0 keyword rules and Level 1 embedding keep recognizing capabilities. When embedding itself is unavailable, the Router must degrade conservatively and must not guess tools.
+
+Deterministic capabilities can also run without invoking the generative model: the capability's `input_schema` is merged with the tool's JSON schema, and `Task.input` is filled from the declared regexes, enums, defaults, and basic type conversions. The tool is called directly only when the capability, provider, and required parameters are all unique and valid; on success or partial success the reply is the safe summary, skipping the generation stage of the chat Pipeline. Missing parameters or ambiguity return a clarification prompt; a tool failure returns a generic unavailability message.
+
 > **Declarations take priority (`ROUTER_ROUTE_AUTO_CAPABILITIES=false`).** For a plugin tool to be triggered in chat, add a `[[capability]]` entry for it in `config/capabilities/*.toml`. An undeclared tool is still registered and can still be executed explicitly, but it does not participate in semantic routing. **Startup logs name the affected tools**, so this is not a silent failure.
 >
 > This is based on the first-round measurement from 2026-08-24. Tool descriptions are instruction sentences written for a decision-maker that sees all tools (`"call this when the user asks about X"`). Using them as semantic prototypes against the user's **question** produces almost no separation among tools in the same domain. The comparison used 5 bgm/bilibili tools, 12 cases, and real embeddings:
@@ -1008,6 +1033,8 @@ python -m capability.router.benchmark --cases capability/router/benchmark/acg.js
 > Exit code 0 means it is safe to enable. The report counts four error classes separately rather than deliberately combining them into one accuracy number, because an aggregate can hide high-cost errors in the average.
 
 `ROUTER_FALLBACK_ENABLED` is disabled by default to save 27B inference resources. In the default fully local configuration, Level 2 (the `ROUTER` role) shares the `LOCAL` endpoint slot, model, and gate with main chat. Run L0/L1 for a while and measure accuracy with the benchmark before deciding. Pointing `ROUTER` to a cheap online endpoint removes this concern.
+
+Loading, initialization, `command`/`regex`/`event_message_type` dispatch, and sending for ordinary AstrBot plugins do not depend on the chat model. Only when a plugin calls explicit LLM APIs such as `Context.llm_generate` or `tool_loop_agent` does it hit "model unavailable" at the model boundary; plugins that depend on that API are marked as limited and do not stop unrelated ordinary plugins from running.
 
 ### Comes
 
@@ -1072,6 +1099,46 @@ Off by default because a reload **re-imports and executes plugin code**, one not
 
 `..._WATCH` is off separately: it is the most convenient way to debug, but "automatic" is dangerous in production — one stray save re-imports plugin code in a live group.
 
+## Skills and Sandbox
+
+Discovery, selection, and controlled execution of Anthropic-style task skills (`SKILL.md` + `scripts/` + `references/`). See [Skills](skills.md) for the directory layout, authoring rules, and troubleshooting. **The whole layer is off by default**; script execution has exactly one controlled mode — the sandbox — and with no backend configured it fails closed.
+
+### Skills
+
+| Variable | Default | Description |
+|---|---|---|
+| `SKILLS_ENABLED` | `false` | Master switch. When off, the Skills layer is not assembled and the main path pays zero overhead |
+| `SKILLS_EXECUTION_MODE` | `disabled` | `disabled` = browse directories/candidates/bodies only; `sandbox` = scripts must run through the sandbox. There is no local mode |
+| `SKILLS_USER_DIR` | `data/skills` | User skills directory |
+| `SKILLS_BUILTIN_DIR` | `assets/skills` | Built-in skills directory (shipped with each release) |
+| `SKILLS_MAX_CANDIDATES` | `3` | Maximum number of skills entering the candidate set per invocation |
+| `SKILLS_BODY_MAX_CHARS` | `24000` | Character cap for the body of a matched skill (truncated and audited when exceeded) |
+| `SKILLS_MANIFEST_MAX_BYTES` | `262144` | Byte cap for a single `SKILL.md` file (isolated when exceeded) |
+| `SKILLS_ASSET_MAX_BYTES` | `524288` | Per-file byte cap for references/scripts assets |
+| `SKILLS_ASSET_TOTAL_MAX_BYTES` | `2097152` | Total cap on asset reads per invocation |
+| `SKILLS_TOTAL_TIMEOUT` | `120` | Total timeout for one skill invocation (seconds) |
+| `SKILLS_OUTPUT_MAX_CHARS` | `2000` | Maximum length of the result summary inserted into Stella's prompt |
+| `SKILLS_EMBEDDING_ENABLED` | `false` | Optional embedding matching during selection (reuses `MEMORY_EMBEDDING_*`; its cache is independent of the Router's) |
+
+### Sandbox Backend
+
+| Variable | Default | Description |
+|---|---|---|
+| `SANDBOX_BACKEND` | `disabled` | `disabled` = no backend (every action is denied); `docker` = create a restricted container per call |
+| `SANDBOX_IMAGE` | `python:3.12-slim` | Sandbox image. Containers run as a non-root UID; a missing image is an error, not an automatic pull |
+| `SANDBOX_CPU_LIMIT` | `1.0` | CPU cores per container |
+| `SANDBOX_MEMORY_LIMIT` | `256` | Memory cap per container (MB) |
+| `SANDBOX_PIDS_LIMIT` | `64` | Process-count cap per container |
+| `SANDBOX_TIMEOUT` | `60` | Wall-clock timeout per action (seconds); on timeout the container is terminated |
+| `SANDBOX_OUTPUT_MAX_CHARS` | `65536` | Combined stdout/stderr cap per action (raw output goes only to the audit log) |
+| `SANDBOX_ARTIFACT_MAX_BYTES` | `10485760` | Total cap on artifacts per invocation |
+| `SANDBOX_NETWORK_ENABLED` | `false` | Network switch. An allowlist **must** be provided together with it, otherwise startup is refused; the in-process runner policy-denies any action that opens the network (enforcing the whitelist requires an external runner) |
+| `SANDBOX_NETWORK_ALLOWLIST` | empty | Comma-separated domain/port allowlist (consumed by the external runner) |
+| `SANDBOX_WORKSPACE_ROOT` | `workspaces` | Root of session workspaces; must not be the filesystem root, the program directory, the user data root, or the plugin directory |
+| `SANDBOX_AUDIT_RETENTION_DAYS` | `30` | Retention days for audit events (0 = forever) |
+
+Configuration is validated at startup: negative budgets, an illegal workspace root, and "network on without an allowlist" **refuse startup**, with each violation named individually in the log.
+
 ## OneBot Connection
 
 The Bot communicates with NapCat through a OneBot V11 WebSocket. **NapCat must be logged in first**: install [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and complete QQ login. The Bot no longer manages the NapCat process; automatic login falls back to QR-code scanning, so a person must be present for login
@@ -1131,13 +1198,30 @@ curl -i http://[::1]:8080/stella/status
 
 Thus, even when `HOST=0.0.0.0` exposes Stella to the LAN, external machines cannot use the status interface to probe runtime information or credentials. `deploy status` and the GUI always connect through `127.0.0.1` and are unaffected.
 
+## WebUI Panel (v2 Control Plane)
+
+The administration panel shared by the browser and the desktop shell, on the same port as the Bot (no extra port). For all keys, see the "WebUI 面板" (WebUI Panel) section of `.env.example` and [docs/webui.md](webui.md).
+
+| Key | Default | Description |
+|---|---|---|
+| `WEBUI_ENABLED` | `true` | Master switch; when false, no panel routes are registered |
+| `WEBUI_TOKEN_TTL_HOURS` | `168` | Panel JWT validity (hours) |
+| `WEBUI_LOGIN_RATELIMIT_PER_MIN` | `5` | Rate limit for login/initialization/desktop auto-login (requests/min/IP) |
+| `WEBUI_MAX_UPLOAD_MB` | `50` | Per-file upload cap |
+| `WEBUI_SERVE_DIST` | `true` | Whether to serve the panel's static assets (set false when the frontend dev server proxies through Vite) |
+
+Admin credentials are stored in `STELLA_HOME/webui/auth.json` (not in `.env`); if the password is forgotten, reset it with `python scripts/webui_reset_auth.py --yes`.
+
 ## Graceful Shutdown
 
 | Configuration | Default | Description |
 |---|---|---|
-| `SHUTDOWN_GRACE_SECONDS` | `30.0` | Maximum time for the Bot to wait for in-flight tasks (consolidation/compression) to finish during shutdown (seconds) |
-| `STELLA_STOP_SENTINEL` | `.stella-stop-request` | Stop-request sentinel path (`deploy stop` writes it; the in-Bot watcher observes it and exits); change it to a writable location if the project directory is read-only |
+| `STELLA_INSTANCE_ID` | Derived from the program directory | Instance identity. Different installation directories default to different IDs; when set manually, parallel instances must use different IDs |
+| `SHUTDOWN_GRACE_SECONDS` | `30.0` | Maximum time the Bot waits for in-flight tasks (consolidation/compression) to finish during shutdown (seconds) |
+| `STELLA_STOP_SENTINEL` | `.stella/instances/<instance-id>/stop-request.json` | Stop-request sentinel path; a custom path also gets the instance ID appended automatically |
 | `STOP_WATCH_INTERVAL_SECONDS` | `0.5` | Sentinel polling interval (seconds) |
+
+The PID file and the ownership manifest also live in `.stella/instances/<instance-id>/`. `deploy stop` only stops the PID whose manifest matches, and the status API also validates the instance ID, so closing the window of a test instance does not kill the production one by mistake. This isolation covers process control only; it does not change the sharing semantics of configuration, memories, spaces, and persona under `STELLA_HOME`.
 
 Shutdown flow: deploy writes the sentinel → the in-Bot watcher detects it and triggers uvicorn graceful shutdown (`on_shutdown` → consolidation cleanup) → timeout fallback signal → hard-kill fallback. There is no `POST /shutdown`: `status_api` is read-only, and adding a write endpoint would create an unauthenticated remote shutdown that could be triggered from the LAN. See the “Stop Flow (Sentinel First)” section of development.en.md.
 
@@ -1160,7 +1244,7 @@ Shutdown flow: deploy writes the sentinel → the in-Bot watcher detects it and 
 |---|---|
 | Bot is too noisy | Lower `PROACTIVE_PROB_AT_FAST`; raise `PROACTIVE_COOLDOWN` and `PROACTIVE_MIN_MESSAGES_SINCE_SPOKE`; lower `PROACTIVE_AT_QUOTA_BASE`; or have an administrator say “mute” in the group to disable it temporarily |
 | Bot is too quiet | Raise `PROACTIVE_PROB_AT_FAST`; lower `warmup_messages` in `config/participation/thresholds.toml` |
-| Bot still talks late at night | Confirm `PROACTIVE_SLEEP_ENABLED=true` and check whether `PROACTIVE_SLEEP_START/END` cover the target period |
+| Bot still talks late at night | Confirm `PROACTIVE_SLEEP_ENABLED=true` and check whether `PROACTIVE_SLEEP_START/END` cover the target period; if the server and the group members are in different timezones, confirm `USER_TIMEZONE` is configured |
 | Bot sends several messages after waking | Raise `PROACTIVE_WAKEUP_GRACE_SECONDS` |
 | Bot does not remember things | Lower `MEMORY_OBSERVE_LOW_CONFIDENCE`; lower `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`; confirm `PROACTIVE_AT_ENABLED=true` (passive-ingestion output is close to zero) |
 | Bot remembers things incorrectly | Raise `MEMORY_CONFIRM_HIGH_CONFIDENCE`; raise `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE`; disable `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT` |

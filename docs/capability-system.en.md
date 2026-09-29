@@ -56,6 +56,7 @@ core/tasks.py                    # Task / Result / TaskGraph protocol (shared by
 capability/
 ├── registry.py                  # Capability / CapabilityProvider / registry singleton
 ├── loader.py                    # three declaration tiers (user / factory / plugin) → registry
+├── input_parser.py              # deterministic extraction/validation of input_schema (no model fallback)
 ├── inventory.py                 # capability inventory: snapshot + in-chat text + offline read
 ├── hooks.py                     # activate_capabilities pre-hook (pipeline integration point)
 ├── router/
@@ -65,12 +66,19 @@ capability/
 │   ├── semantic.py              # Level 1: Embedding prototype matching
 │   ├── fallback.py              # Level 2: stronger-model fallback
 │   └── benchmark.py             # Routing accuracy benchmark (determines whether gating can be enabled)
+├── providers/                   # Provider Runtime: pluggable backends resolving "provider → tools"
+│   ├── __init__.py              # ProviderBackend protocol + provider_runtime singleton
+│   ├── registry.py              # ProviderRuntime: dispatches by kind to a backend
+│   ├── mcp/                     # McpBackend + McpServerManager (stdio / Streamable HTTP)
+│   └── knowledge.py             # KnowledgeBackend (kind=native, knowledge-base retrieval)
 ├── comes/
 │   ├── __init__.py              # execute / execute_all
 │   ├── executor.py              # Capability → Provider → Tool → Result
 │   └── summarizer.py            # Result.data → Result.summary
 └── adapters/
-    └── astrbot.py               # llm_tools → automatic Provider derivation + bootstrap
+    ├── astrbot.py               # llm_tools → automatic Provider derivation + bootstrap
+    ├── mcp.py                   # MCP tool catalog → Provider wiring and delta sync
+    └── knowledge.py             # process wiring for the knowledge.search capability
 ```
 
 ## Task / Result Protocol
@@ -133,11 +141,11 @@ Tier 3 **only scans plugins that loaded successfully**: a plugin that failed to 
 
 The first two tiers are **files**, and a file does not know which plugins are installed. The shipped `entertainment.toml` declares 5 ACG capabilities pointing at the 5 `@llm_tool`s of `astrbot_plugin_bilibili` — with that plugin absent those 5 still counted as "routable", so a deployment with **no plugins at all** answered "what can you do" with 5 things it cannot do (`design_docs/bug_report/bug_report_2026_9_2#1.md`). And not just in words: they competed in routing, ate into the `ROUTER_CAPABILITY_MARGIN` gap, and once hit were bound to end as `failed` inside Comes.
 
-So on top of enabled / backoff, `routable()` also asks "does this tool exist right now", by exactly the rule `comes/executor.py::resolve_tools` uses: kind is `astrbot_tool`, the tool resolves, and it is `active`.
+So on top of enabled / backoff, `routable()` also asks "does this tool exist right now". The criterion lives in `registry._tool_live` and has two paths, chosen by process wiring: in a process **with the Provider Runtime installed** (the Bot process, wired at startup by `adapters/mcp.py::install_mcp_runtime`) the question is delegated to the backend for the provider's kind — `astrbot_tool` checks `llm_tools` (the tool resolves and is `active`), while `mcp` checks the MCP server status and its tool catalog (while a server is down every provider under it counts as absent; the declarations are kept and relight automatically once it reconnects).
 
-The tool registry lives in `astrbot_compat`, and `capability/` must not import it back (that would weld the registry to the compat layer), so the question is **injected**: at startup `bot.py` calls `adapters/astrbot.py::install_tool_probe()` to hand the registry a probe, and it must be installed **before** `bootstrap()` — otherwise the `routable` count in the startup log reports the pre-probe answer, and that line is the first thing anyone looks at when chasing exactly this. The probe is consulted **on every query**, not snapshotted at assembly, so plugin hot reload needs no reinstall.
+The tool registry lives in `astrbot_compat`, and `capability/` must not import it back (that would weld the registry to the compat layer), so both the runtime and the probe are **injected**. **Processes without the Runtime** (unit tests, `deploy plugin-scaffold`, the Router benchmark) cannot take the first path and keep the probe semantics: at startup `bot.py` calls `adapters/astrbot.py::install_tool_probe()` to hand the registry a probe, and it must be installed **before** `bootstrap()` — otherwise the `routable` count in the startup log reports the pre-probe answer, and that line is the first thing anyone looks at when chasing exactly this. The probe is consulted **on every query**, not snapshotted at assembly, so plugin hot reload needs no reinstall. This path only understands `astrbot_tool`: with a probe installed, any other kind counts as absent. Both paths must stay aligned item-by-item with `comes/executor.py::resolve_tools` — a tool that does not resolve, or is not `active`, counts as absent; a mismatch shows up as "the Router picked it and Comes immediately failed".
 
-With no probe installed (the default) behaviour is what it always was: declarations stay routable. That is not a fallback but a requirement — `deploy plugin-scaffold` and `python -m capability.router.benchmark` deliberately run `bootstrap()` in a standalone, plugin-less process; they measure declaration-corpus quality, which must not depend on which plugins happen to be installed. An empty tool registry looks identical in those processes and on a brand-new deployment, so the two can only be told apart by *whether a probe was installed*, never by whether the registry is empty.
+With no probe either (the default in offline processes) behaviour is what it always was: declarations stay routable. That is not a fallback but a requirement — `deploy plugin-scaffold` and `python -m capability.router.benchmark` deliberately run `bootstrap()` in a standalone, plugin-less process; they measure declaration-corpus quality, which must not depend on which plugins happen to be installed. An empty tool registry looks identical in those processes and on a brand-new deployment, so the two can only be told apart by *whether a probe was installed*, never by whether the registry is empty.
 
 **Explicit declaration** in `config/capabilities/*.toml` (**the filename is the domain**; see the `.example` file in the same directory):
 
@@ -252,6 +260,18 @@ The tool loop reuses `astrbot_compat.llm.agent.run_tool_loop`: it already implem
 **Direct call with no arguments** (`COMES_DIRECT_CALL_NO_ARGS`): when a hit capability has only one Provider and its tool has no required parameters, skip the LLM and call the tool directly. This saves one 27B round trip and makes it impossible to fill in incorrect parameters.
 
 **Provider health**: accounting is tracked at the tool level. After consecutive failures reach `COMES_PROVIDER_FAILURE_THRESHOLD`, the provider enters **time-window** backoff (`COMES_PROVIDER_RECOVER_SECONDS`), during which another provider for that capability takes over. Only tools that were actually called this time are counted. Counting providers that were not selected would let "never selected" slowly accumulate into backoff. Backoff is not permanent disabling: external API instability is normal, and permanent disabling would let one network fluctuation permanently turn off a capability. This would not raise an error; it would only appear as "this feature stopped working well later."
+
+## Provider Runtime: MCP, Knowledge, and Deterministic Execution
+
+Early on, `CapabilityProvider` had exactly one implementation, `astrbot_tool`, and Comes, hooks, and the registry all queried `llm_tools` directly. The Provider Runtime (`capability/providers/`) abstracts that resolution into **pluggable backends** dispatched by `provider.kind`: `astrbot_tool` → the AstrBot tool registry, `mcp` → MCP servers, `native` → in-process implementations. The Bot process wires the runtime at startup; from then on `routable()`, Comes's tool resolution, and liveness checks all dispatch by kind.
+
+**MCP provider**: MCP tools can be declared as capabilities (`capability/adapters/mcp.py`). Liveness follows the MCP server status and its tool catalog: a provider is live only while its server is ready, the tool is in the catalog, and the tool is in the routing whitelist. A provider whose tool disappears from the catalog is removed and restored when the tool reappears; the declaration on disk is never touched.
+
+**Knowledge native provider**: `knowledge.search` is registered as a native capability (`capability/adapters/knowledge.py`) with Level 1 corpus only and **deliberately no L0 keywords** — words like "check" are not distinctive, and a literal hit would misfire ordinary conversation into a forced retrieval. Retrieved results do not travel the tool-summary track: they land as structured evidence in `ChatContext.knowledge_evidence` (three-track separation from chat context and tool summaries, see [Knowledge Base](knowledge-base.md)), pass through a dedicated evidence budget first (`core/context_budget.py::fit_evidence_to_budget`, caps on both item count and tokens), and are then rendered into a prompt section with numbered citations (`core/runtime/turn_service.py::_knowledge_evidence_section`), which Stella can use to attribute its answer.
+
+**Deterministic no-model execution**: a capability declaration may carry an `input_schema` (loaded by `capability/loader.py`, extracted and validated deterministically by `capability/input_parser.py`, with no model fallback). When the route is deterministic (`Route.deterministic`), the capability resolves to a single provider/tool, and the required inputs validate, Comes can call the tool directly **without a generation model**, building the summary from the raw tool outputs. When inputs are missing or ambiguous and no generation model is available, it returns `needs_clarification` instead of inventing parameters. This path complements the LLM tool loop: with a model available, the restricted agent still runs.
+
+**Skills layer**: the skills runtime (`SKILLS_ENABLED`, default `false`) is assembled in `bot.py::_bootstrap_capabilities` — after plugin capability preparation and before the Router warm-up. For design and usage see [skills.md](skills.md); not duplicated here.
 
 ## Integration Pipeline
 

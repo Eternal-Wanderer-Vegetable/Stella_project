@@ -40,6 +40,11 @@ Hence two ground rules: **upgrade = swap the image, data stays put**; **backup =
 
 - Server: Docker ≥ 20.10 and docker compose v2 (`docker compose version` prints a version)
 - Memory ≥ 1 GB (the image is about 1.2 GB, including the Chromium and CJK fonts used for rendering)
+- **Pin a NapCat image reference**: compose sets **no floating default** for the napcat service and demands an explicitly injected, audited immutable reference (pin it with an `@sha256:` digest). Write one line into the **repository-root** `.env` (this is the file docker compose reads — not to be confused with `StellaData/.env`):
+  ```bash
+  NAPCAT_IMAGE=mlikiowa/napcat-docker@sha256:<digest>   # if not a digest, at least pin a version tag — never :latest
+  ```
+  Without it, `docker compose up` fails immediately with `NAPCAT_IMAGE must be a pinned NapCat image reference`.
 - Decide on model endpoints (trade-offs between the three modes: see [README · Three Deployment Modes](../README.en.md#-three-deployment-modes)):
   - **All-online**: just fill in online API addresses -- simplest;
   - **Hybrid / all-local**: if LM Studio runs on the same host, fill in `http://host.docker.internal:1234` as the endpoint (compose already configures `host-gateway`); if it runs on another machine, use that machine's internal address directly.
@@ -52,12 +57,16 @@ Hence two ground rules: **upgrade = swap the image, data stays put**; **backup =
 git clone https://github.com/Eternal-Wanderer-Vegetable/Stella_project.git
 cd Stella_project
 
-# 2) Prepare the data directory (the container runs as uid 1000; on Ubuntu the first user
+# 2) Create the compose-level .env in the repository root and pin the NapCat image
+#    reference (see §2; without it, up refuses to start)
+printf 'NAPCAT_IMAGE=mlikiowa/napcat-docker@sha256:<digest>\n' > .env
+
+# 3) Prepare the data directory (the container runs as uid 1000; on Ubuntu the first user
 #    is usually 1000, so it is often writable out of the box)
 mkdir -p StellaData
 sudo chown -R 1000:1000 StellaData   # when in doubt, run this -- always correct
 
-# 3) Build the image (on servers in China you can add
+# 4) Build the image (on servers in China you can add
 #    --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple,
 #    but some Chinese mirrors do not carry playwright; if it fails to install,
 #    drop the argument and fall back to the official index)
@@ -66,19 +75,19 @@ docker compose build
 #    swap the stella service's build/image lines for the GHCR line (see the comments
 #    in that file), then run: docker compose pull stella
 
-# 4) First-time configuration: interactive wizard (keep the listen port at the default
+# 5) First-time configuration: interactive wizard (keep the listen port at the default
 #    8080; also group numbers, model endpoints and keys); writes StellaData/.env
 #    ⚠ When the wizard asks for the "listen address", make sure to enter 0.0.0.0
 #    (the default 127.0.0.1 is for the Windows desktop scenario; inside a container
 #    NapCat cannot connect to it -- if you forget, the container warns loudly at startup)
 docker compose run --rm stella python -m deploy init
 
-# 5) Start and confirm health (the stella STATUS column must show healthy;
+# 6) Start and confirm health (the stella STATUS column must show healthy;
 #    napcat counts as started even before login)
 docker compose up -d
 docker compose ps
 
-# 6) NapCat first login and network configuration (manual, once only):
+# 7) NapCat first login and network configuration (manual, once only):
 #    a. SSH tunnel into the WebUI: locally run ssh -L 6099:127.0.0.1:6099 user@<server>,
 #       then open http://127.0.0.1:6099/webui in a browser (the WebUI is bound to the
 #       server's loopback only; it cannot be opened without the tunnel)
@@ -89,7 +98,7 @@ docker compose ps
 #       token = the value of ONEBOT_ACCESS_TOKEN from .env (leave empty if not set)
 ```
 
-If you already have a working `.env`, skip step 4 and place the file at `StellaData/.env` directly.
+If you already have a working `.env`, skip step 5 and place the file at `StellaData/.env` directly.
 Follow-up troubleshooting: `docker compose logs -f stella` (runtime logs), `docker compose exec stella python -m deploy doctor` (environment self-check), `StellaData/logs/boot_debug.log` (boot-time plugin-loading diagnostics).
 
 ## 4. Migrating from an Existing Windows Install
@@ -106,7 +115,7 @@ Follow-up troubleshooting: `docker compose logs -f stella` (runtime logs), `dock
    | `system_prompts/` (only if you customized the persona) | `StellaData/system_prompts/` | Falls back to the factory persona baked into the image |
 
 3. If `.env` contains `127.0.0.1`/`localhost` model endpoints, change them to `http://host.docker.internal:1234` (when LM Studio runs on the same server host) or the real address;
-4. Continue at step 5 of §3 to start the containers.
+4. Continue at step 6 of §3 to start the containers.
 
 `logs/` is optional (historical logs; does not affect operation).
 
@@ -174,6 +183,7 @@ OpenAI-compatible endpoint.
 | Proactive-chat timing is all wrong | Check `TZ` (the image defaults to `Asia/Shanghai`; override in compose) |
 | `deploy init` cannot write to `/data` | The host directory's owner is not uid 1000: `sudo chown -R 1000:1000 StellaData`, or switch to a named volume (see below) |
 | pip fails to install playwright | The mirror you use does not carry playwright; drop `PIP_INDEX_URL` to fall back to the official index (same note as in `requirements.txt`) |
+| `docker compose up` fails immediately with `NAPCAT_IMAGE must be a pinned NapCat image reference` | compose refuses a floating NapCat image: set `NAPCAT_IMAGE=<pinned reference>` (a `@sha256:` digest is best) in the **repository-root** `.env` (not `StellaData/.env`) — see §2 |
 | Want a different port | Change the compose mapping (e.g. `"9090:8080"`); do **not** change `PORT` in `.env` -- the in-container health check and the NapCat reverse-WS address are both anchored to 8080 |
 | The container exits right after starting; logs mention `/data/.env 不存在` (not found) | Expected behavior (entrypoint gate): follow the log hint and run `deploy init` or place `.env`. To force a dry run with empty config for debugging: `docker compose run --rm -e STELLA_SKIP_ENV_CHECK=1 stella` |
 | stella shows healthy but NapCat keeps failing to reconnect | Nine times out of ten `HOST=127.0.0.1` in `StellaData/.env` (the wizard default, a Windows desktop assumption): the in-container health check goes over loopback so it stays green, but NapCat cannot get in. Change to `HOST=0.0.0.0` and restart; the container startup logs contain a matching warning |

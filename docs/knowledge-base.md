@@ -61,7 +61,7 @@ KnowledgeBase (mode: managed|shared, owner, direct_publish, embedding 指纹)
 
 - 双通道：BM25（FTS5 `bm25()`，中文 2/3 字滑窗分词）+ 语义（余弦，授权库 active 向量载入）；RRF 融合（`KNOWLEDGE_RRF_K`）；近重复折叠；可选注入式 rerank（`KNOWLEDGE_RERANK_ENABLED`，默认关）。
 - 降级链：FTS5 不可用/无命中 → 纯 dense；embedding 不可用/指纹不匹配 → 纯 BM25 + `needs_rebuild` 标记；检索永不抛异常。
-- 注入（`core/pipeline._knowledge_evidence_section`）：证据先过 `fit_evidence_to_budget`（条数 + token），渲染成带编号引用的段落（`[1]《标题》 节路径 > ¶段（资料库:名）`），放在工具摘要之后、当前输入之前——证据是本轮最权威的素材，离输入最近。没有证据时 prompt 与原来逐字一致。
+- 注入（`core/runtime/turn_service._knowledge_evidence_section`）：证据先过 `fit_evidence_to_budget`（条数 + token），渲染成带编号引用的段落（`[1]《标题》 节路径 > ¶段（资料库:名）`），放在工具摘要之后、当前输入之前——证据是本轮最权威的素材，离输入最近。没有证据时 prompt 与原来逐字一致。
 
 ## 7. capability 接入
 
@@ -98,4 +98,4 @@ python -m knowledge.schema             # 建库/迁移
 
 ## 10. 测试
 
-`tests/knowledge/` 六个文件覆盖 plan §8 的矩阵：领域/ACL/生命周期、存储（原子激活/FTS 同步）、解析与导入（幂等/替换/失败态）、检索（BM25 精确词、语义无词面重叠、RRF、指纹重建、证据上限、去重）、服务层 ACL 矩阵（投稿/审核/直发/群聊可见性/状态面）、能力接线（backend、工具 ACL、hooks 分流）与隔离护栏。既有记忆/能力/管线测试保持全绿（`test_access_semantics.py`、`tests/capability/`、`test_pipeline_compose.py`、`test_context_budget.py`）。
+`tests/knowledge/` 七个文件覆盖 plan §8 的矩阵：领域/ACL/生命周期、隔离护栏、存储（原子激活/FTS 同步）、解析与导入（幂等/替换/失败态）、检索（BM25 精确词、语义无词面重叠、RRF、指纹重建、证据上限、去重）、服务层 ACL 矩阵（投稿/审核/直发/群聊可见性/状态面）、能力接线（backend、工具 ACL、hooks 分流）。既有记忆/能力/管线测试保持全绿（`test_access_semantics.py`、`tests/capability/`、`test_pipeline_compose.py`、`test_context_budget.py`）。

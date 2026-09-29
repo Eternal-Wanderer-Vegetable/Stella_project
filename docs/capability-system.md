@@ -54,6 +54,7 @@ core/tasks.py                    # Task / Result / TaskGraph 协议（四个模�
 capability/
 ├── registry.py                  # Capability / CapabilityProvider / 注册表单例
 ├── loader.py                    # 三层 *.toml 声明（用户 / 出厂 / 插件自带）→ 注册表
+├── input_parser.py              # input_schema 的确定性抽取与校验（无模型兜底）
 ├── inventory.py                 # 能力清单：结构化快照 + 群内文本 + 离线读声明
 ├── hooks.py                     # activate_capabilities 前置钩子（管线接入点）
 ├── router/
@@ -63,12 +64,19 @@ capability/
 │   ├── semantic.py              # Level 1：Embedding 原型匹配
 │   ├── fallback.py              # Level 2：更强模型兜底
 │   └── benchmark.py             # 路由准确率基准（决定能否开门控）
+├── providers/                   # Provider Runtime：把「provider → 工具」的解析抽象成可插拔 backend
+│   ├── __init__.py              # ProviderBackend 协议 + provider_runtime 单例
+│   ├── registry.py              # ProviderRuntime：按 kind 分派到 backend
+│   ├── mcp/                     # McpBackend + McpServerManager（stdio / Streamable HTTP）
+│   └── knowledge.py             # KnowledgeBackend（kind=native，知识库检索）
 ├── comes/
 │   ├── __init__.py              # execute / execute_all
 │   ├── executor.py              # Capability → Provider → Tool → Result
 │   └── summarizer.py            # Result.data → Result.summary
 └── adapters/
-    └── astrbot.py               # llm_tools → Provider 自动派生 + bootstrap
+    ├── astrbot.py               # llm_tools → Provider 自动派生 + bootstrap
+    ├── mcp.py                   # MCP 工具目录 → Provider 接线与差量同步
+    └── knowledge.py             # knowledge.search 能力的进程接线
 ```
 
 ## Task / Result 协议
@@ -131,11 +139,11 @@ information           weather.query     AstrBot 天气插件     get_weather()
 
 前两层是**文件**，它们不知道插件装没装。出厂目录里的 `entertainment.toml` 声明了 5 项 ACG 能力，指向 `astrbot_plugin_bilibili` 的 5 个 `@llm_tool`——插件没装时那 5 项曾照样算「可路由」，于是一个插件都没装的部署被问「你能做什么」会答出 5 项它做不到的事（`design_docs/bug_report/bug_report_2026_9_2#1.md`）。不止是嘴上说错：它们会参与路由竞争、抢走 `ROUTER_CAPABILITY_MARGIN` 的间距，命中后在 Comes 里必然 failed。
 
-所以 `routable()` 除了 enabled / backoff，还要问一句「这个工具此刻在不在」，判据与 `comes/executor.py::resolve_tools` 逐字一致：kind 是 `astrbot_tool`、查得到、且 `active`。
+所以 `routable()` 除了 enabled / backoff，还要问一句「这个工具此刻在不在」。判据在 `registry._tool_live`，按进程接线分两条通路：**装了 Provider Runtime**（Bot 进程，启动期由 `adapters/mcp.py::install_mcp_runtime` 接线）就按 kind 委派给对应 backend——`astrbot_tool` 查 `llm_tools`（查得到且 `active`），`mcp` 查 MCP Server 状态与工具目录（Server 挂着时其下 provider 全部视为不在，但声明保留，重连后自动点亮）。
 
-工具注册表在 `astrbot_compat` 里，而 `capability/` 不许反向 import 它（那会把注册表和兼容层焊死），所以这一问是**注入**的：`bot.py` 启动时调 `adapters/astrbot.py::install_tool_probe()` 给注册表装一个探针，且必须装在 `bootstrap()` **之前**——否则启动日志里那行 `routable` 统计报的是装探针前的答案，而排查这件事时第一个看的就是那行。探针在**每次查询**时才被调用，不是装配时快照一次，所以插件热重载后不用重装。
+工具注册表在 `astrbot_compat` 里，而 `capability/` 不许反向 import 它（那会把注册表和兼容层焊死），所以无论 Runtime 还是探针都是**注入**的。**没装 Runtime 的进程**（单测、`deploy plugin-scaffold`、Router benchmark）走不了第一条通路，沿用探针语义：`bot.py` 启动时调 `adapters/astrbot.py::install_tool_probe()` 给注册表装一个探针，且必须装在 `bootstrap()` **之前**——否则启动日志里那行 `routable` 统计报的是装探针前的答案，而排查这件事时第一个看的就是那行。探针在**每次查询**时才被调用，不是装配时快照一次，所以插件热重载后不用重装。这条通路只认 `astrbot_tool`：装了探针而 kind 不是 `astrbot_tool`，一律视为不在。两条通路的判据都必须与 `comes/executor.py::resolve_tools` 逐条对齐——工具查不到或 `active=False` 都算不在，对不齐的表现是「路由挑中了它，Comes 立刻 failed」。
 
-没装探针时（默认）行为与从前一致：声明照旧可路由。这不是兜底而是必需——`deploy plugin-scaffold` 与 `python -m capability.router.benchmark` 刻意在**没有插件**的独立进程里跑 `bootstrap()`，它们量的是声明语料的质量，本就不该受「装了哪些插件」影响；而「空的工具注册表」在这两种场合和在一台全新部署上长得一模一样，两者只能靠「探针装没装」区分，不能靠注册表是否为空。
+连探针也没装时（离线进程的默认）行为与从前一致：声明照旧可路由。这不是兜底而是必需——`deploy plugin-scaffold` 与 `python -m capability.router.benchmark` 刻意在**没有插件**的独立进程里跑 `bootstrap()`，它们量的是声明语料的质量，本就不该受「装了哪些插件」影响；而「空的工具注册表」在这两种场合和在一台全新部署上长得一模一样，两者只能靠「探针装没装」区分，不能靠注册表是否为空。
 
 **显式声明** `config/capabilities/*.toml`（**文件名即 domain**，格式见同目录 `.example`）：
 
@@ -250,6 +258,18 @@ Result(status, data, summary, metadata)
 **无参直调**（`COMES_DIRECT_CALL_NO_ARGS`）：命中能力只有一个 Provider、且其工具没有必填参数时跳过 LLM 直接调工具。省一次 27B 往返，且不可能填错参数。
 
 **Provider 健康度**：工具级别记账，连续失败到 `COMES_PROVIDER_FAILURE_THRESHOLD` 后进入**时间窗**退避（`COMES_PROVIDER_RECOVER_SECONDS`），期间该能力的其它 provider 顶上。只对本次真的被调用过的工具记账——给没被选中的 provider 记账会让「一直没被选中」慢慢累积成退避。退避不是永久禁用：外部 API 抖动是常态，永久禁用会让一次网络波动永久关掉一个能力，而这不报错、只表现为「这个功能后来就不好使了」。
+
+## Provider Runtime：MCP、知识库与确定性执行
+
+早期 `CapabilityProvider` 只有 `astrbot_tool` 一种实现，Comes、hooks、registry 都直接查 `llm_tools`。Provider Runtime（`capability/providers/`）把这层解析抽象成**可插拔的 backend**，按 `provider.kind` 分派：`astrbot_tool` → AstrBot 工具注册表，`mcp` → MCP Server，`native` → 进程内实现。Bot 进程在启动期完成接线，此后 `routable()`、Comes 的工具解析与存活判定都按 kind 分派。
+
+**MCP provider**：MCP 工具可以声明成能力（`capability/adapters/mcp.py`）。存活跟随 MCP Server 状态与工具目录：Server 就绪、工具在目录里且在路由白名单内才算 live；工具从目录里消失的 provider 会被摘下、重新出现时补回，磁盘上的声明一字不动。
+
+**知识库原生 provider**：`knowledge.search` 以原生能力注册（`capability/adapters/knowledge.py`），只配 Level 1 语料、**刻意不给 L0 关键词**——「查一下」这类词没有专属性，字面命中会把普通对话误伤成强制检索。检索结果不走工具摘要那条轨：作为结构化证据落进 `ChatContext.knowledge_evidence`（与聊天上下文、工具摘要三轨分离，见 [知识库](knowledge-base.md)），先过证据专属预算（`core/context_budget.py::fit_evidence_to_budget`，条数 + token 双上限），再渲染成带编号引用的 prompt 段落（`core/runtime/turn_service.py::_knowledge_evidence_section`），Stella 回答时可以标注出处。
+
+**确定性无模型执行**：能力声明可带 `input_schema`（`capability/loader.py` 载入，`capability/input_parser.py` 做确定性抽取与校验，无模型兜底）。当路由判定为确定性（`Route.deterministic`）、能力解析到唯一的 provider/工具、且必填输入校验通过时，Comes 可以**不经生成模型**直接调工具，摘要由工具原文构造；输入缺失或歧义、又没有可用的生成模型时，返回 `needs_clarification` 而不是编参数。这条路径与 LLM 工具循环互补：模型可用时仍走受限 agent。
+
+**Skills 层**：Skills 运行时（`SKILLS_ENABLED`，默认 `false`）在 `bot.py::_bootstrap_capabilities` 里装配——插件能力准备之后、Router 预热之前。设计与用法见 [skills.md](skills.md)，此处不展开。
 
 ## 接入管线
 

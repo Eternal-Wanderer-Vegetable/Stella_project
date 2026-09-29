@@ -65,7 +65,7 @@ Stella_project/
 │   ├── shutdown.py                 # 优雅停止：等待在途后台任务收尾（独立成模块以便单测）
 │   ├── stop_signal.py              # 停止哨兵：deploy 写、Bot 读并自杀（deploy 层可独立 import）
 │   ├── vision.py                   # 图片转述：提取图源 → VISION 角色转述 → 并入消息文本（可选，默认关闭）
-│   └── llm/
+│   ├── llm/
 │       ├── base.py                 # LLM 后端抽象接口
 │       ├── registry.py             # 端点 × 角色注册表：全项目唯一的后端构造入口
 │       ├── compat.py               # OpenAI 兼容端点的参数差异自适应（不用厂商白名单）
@@ -74,6 +74,9 @@ Stella_project/
 │       ├── usage_sink.py           # 用量上报口（截断信号 / token 聚合 / 缓存命中率）
 │       ├── usage_store.py          # 日账 + 每日预算判据（llm_usage_daily 的唯一写者）
 │       └── scheduler.py    # 模型级资源闸门（FIFO 串行 + 排队可观测性）
+│   └── runtime/                    # facade 统一运行时：§R.5 后唯一执行引擎（纯 Python，无跨进程桥 / 无 Node 依赖）
+│       ├── facade.py               # RuntimeFacade：统一入口 owner 与轮次执行（旧 STELLA_RUNTIME 双路开关已退役；迁移记录见 docs/migration/cortico/）
+│       └── turn_service.py         # 单轮执行服务：证据注入与 prompt 拼装的落地层（知识证据段在此渲染）
 │
 ├── capability/                     # 能力层（详见 docs/capability-system.md）
 │   ├── registry.py                 # Capability / Provider / 注册表单例 + 健康度退避
@@ -108,6 +111,13 @@ Stella_project/
 │   ├── retrieval.py                # BM25+dense 双通道 → RRF 融合 → 有界证据
 │   ├── service.py                  # 门面：角色 API / 发布流 / ACL 强制检索 / 状态面
 │   └── isolation.py                # 记忆隔离护栏（证据不得成为记忆候选）
+│
+├── skills/                         # Anthropic 风格任务技能层（SKILL.md；详见 docs/skills.md，SKILLS_ENABLED 默认关）
+│   ├── catalog.py                  # 技能目录：发现 / 隔离 / 插件局部刷新
+│   ├── orchestrator.py             # 选择与调用编排（预算 / 超时 / 输出截断）
+│   ├── runtime.py                  # 运行时装配（bot.py 启动期接线）
+│   ├── audit.py                    # 审计事件（logs/skills_audit.jsonl）
+│   └── runners/                    # 受控执行后端（docker 沙盒 runner）
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
@@ -159,6 +169,11 @@ Stella_project/
 │   ├── benchmark/                  # 检索层用例 + _fixtures（含整合正例基准）
 │   └── db_cleaner.py               # 脏数据清理 + 消息表定时裁剪
 │
+├── memory_rust/                    # MEMORY_BACKEND=rust 的 Rust 检索后端（独立 wheel 发布，见 docs/memory-rust-backend.md）
+│   ├── backend.py                  # Python 侧封装（BACKEND_API_VERSION 协商）
+│   ├── selector.py                 # 引擎选择（wheel 探测 + 旧 shadow/strict 开关兼容）
+│   └── native/                     # PyO3/maturin 源码（schema.rs 内嵌 SQL）
+│
 ├── extensions/                     # 自动加载的扩展（扫描 setup(pipeline)）
 │   ├── __init__.py                 # 扩展加载器
 │   └── link_monitor/               # OneBot 链路监测（心跳 + 主动探活，只告警）
@@ -196,6 +211,8 @@ Stella_project/
 ├── cli/                            # stellacli：本地 / Docker 的编排与渲染层
 │   └── src/                        # Rust CLI；领域逻辑透传 deploy / Compose
 │
+├── runtime-manager/                # Rust「Stella Runtime Contract」组件监督器（schemas/ 契约 + src/，可选 Runtime）
+│
 ├── data/                           # 运行期数据（全部 gitignore）
 │   ├── plugins/                    # 第三方 AstrBot 插件
 │   ├── plugin_data/                # 插件自己的 KV / 数据目录
@@ -214,6 +231,8 @@ Stella_project/
 │   ├── sample_windows.py           # 从真实库分层采样消息窗口
 │   ├── probe_embedding.py          # embedding 服务探针
 │   └── build_embedding_fixture.py  # 构建 benchmark 向量 fixture
+│
+├── release_assets/                 # 发布产物模板与发布校验（快速开始 README、发布说明模板、SHA256SUMS/清单语义、VM 验证矩阵）
 │
 ├── stella-installer/               # v1 桌面安装器（Tauri 2 + Rust，原生 HTML/JS；已冻结，见 gui-v1-final）
 ├── dashboard/                      # v2 控制面前端（Vue 3 + Vuetify 3 + TS，pnpm 构建；浏览器与桌面壳共用）
@@ -640,7 +659,7 @@ llm_usage_daily  (date, role, slot, model)
 
 **为什么不新增端口**：NoneBot 本就跑着 FastAPI/uvicorn，反向 WS 端点 `/onebot/v11/ws` 就是它提供的。状态路由直接挂在同一个 app 上（`GET /stella/status`），Stella 仍然只有一个监听端口（`PORT`）。
 
-**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 聚合 `link_status()`、`core.llm.snapshot()`、`usage_store.usage_snapshot()`、`capability.inventory.snapshot()` 与版本/进程信息，返回 `{version, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities}`。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI。
+**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 聚合 `link_status()`、`core.llm.snapshot()`、`usage_store.usage_snapshot()`、`capability.inventory.snapshot()`、skills 运行时状态与版本/进程信息，返回 `{version, instance_id, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities, skills}`，外加两个条件键：`runtime`（Runtime Contract 状态，取到才出现）与 `chat_engine`（对话引擎面：mode/keys/inflight——facade 唯一引擎的健康快照，同样只有结构化字段）。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI/WebUI 面板。
 
 **安全约束**：`HOST` 可能是 `0.0.0.0`（NapCat 在另一台机器时必须如此），此时路由暴露到局域网。两道防护：① 只接受回环地址的请求，其余返回 403；② 响应体不含凭据与群聊内容——`allowed_group_count` 只给数量不给群号，`usage` 只有计数与比率（token 数、调用次数、缓存命中率、槽名与模型 ID），绝不含 prompt 与模型输出，`capabilities` 只有结构化字段（能力 id、域、来源层、是否可路由、provider 工具名与健康度、examples 条数），不含声明里的 `description` 与 `examples` 原文——那两个字段是唯一可能夹带 URL 与密钥的地方，不放进响应体就不必为它加一道守卫。`tests/test_status_api.py` 把这条约束钉成了断言：它拿 `usage_snapshot()` 的真实输出过一遍序列化，出现 `api_key` / `Bearer` / `http://` 即失败。
 

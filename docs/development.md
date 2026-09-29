@@ -59,6 +59,11 @@ Stella_project/
 | `python -m deploy capabilities [--json]` | 列出能力清单：哪些能被聊天自动触发、哪些不能及原因、各自来自哪一层、哪个 provider 正在退避。数据走状态接口（注册表是 Bot 进程内的单例）；Bot 没运行时退到直接读磁盘上的三层声明，那份数据回答不了「可不可路由」，渲染时会说明 |
 | `python -m deploy paths [--env-file]` | 输出解析后的程序目录 / 用户数据目录等路径；`--env-file` 只打印 `STELLA_HOME/.env` 路径（`start.bat` 用） |
 | `python -m deploy manifest [--write]` | 生成发布包清单 `.stella-manifest.json`（升级时据此判断用户是否改过自带文件），release CI 调用 |
+| `python -m deploy upgrade <源目录> --version X.Y.Z [--rollback] [--checksum SHA]` | 版本化升级：校验升级源（可选 tree SHA-256）后**原子切换**程序版本；`--rollback` 把激活记录翻转到保留的上一版本树（双向，不需要源目录） |
+| `python -m deploy bootstrap install --profile {...}` | 安装 profile 声明的组件与默认模型（`oneclick-python` / `oneclick-rust` / `standalone-python` / `standalone-rust`）；安装器装载与手工补救共用这一入口 |
+| `python -m deploy mcp list\|test` | 列出已配置的 MCP server / 对单个 server 做连通冒烟 |
+| `python -m deploy packages ...` | 组件包目录与运维：`catalog` / `verify` / `list` / `rollback` / `napcat-status` / `napcat-install` / `napcat-uninstall` / `import-model` |
+| `python -m deploy runtime status` | 查看 / 校验 Runtime Contract（组件清单、endpoint、schema 版本与诊断字段） |
 
 分层：`probe` 采集（有副作用）→ `checks` 判断（纯函数，测试重点）→ `report` 渲染。
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
@@ -501,14 +506,16 @@ SQL 内部的比较（`julianday('now')` vs `julianday(col)`）两侧同为 UTC�
 
 ## CI
 
-`.github/workflows/ci.yml`，四个 job：
+`.github/workflows/ci.yml`，六个 job：
 
 | Job | 内容 |
 |---|---|
 | `lint` | `ruff check .`（Python 3.11） |
 | `security` | `pip-audit -r requirements.txt`（阻塞）+ `bandit`（非阻塞，报告上传为 artifact） |
 | `test` | 3.10 / 3.11 / 3.12 三版本矩阵，`pytest tests/ --cov=. --cov-branch -n auto`，覆盖率报告上传为 artifact |
-| `notify` | 仅 PR：汇总状态并评论 |
+| `cli` | Rust CLI（`cli/`）：`cargo fmt --check` + `clippy -- -D warnings` + `cargo test`，另对帮助文本做子命令清单冒烟（doctor/init/start/stop/restart/status/logs/upgrade/migrate/plugin/capabilities/manifest/compose），防止重构悄悄丢命令 |
+| `windows-native` | windows-latest 上跑 `pytest tests/windows`——进程树、升级与安装可靠性的原生矩阵（哨兵/PID/激活记录等都依赖真实 Windows 语义） |
+| `notify` | 仅 PR：汇总状态并评论（依赖 test/lint/security/cli） |
 
 `test` 依赖 `lint` 与 `security` 通过；`fail-fast: false` 保证某个版本失败时其余继续。同一分支的旧工作流会被自动取消。
 
@@ -532,7 +539,7 @@ pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 
 Offline 变体与在线版**同一份代码、同一个 profile id**，只是 NSIS 资源里多了一份
 `offline/` 负载（存在与否决定安装器走本地优先还是联网路径，见
-`stella-installer/src-tauri/src/python.rs` 与 `deploy/bootstrap.py`）。负载由
+`desktop/src-tauri/src/python.rs` 与 `deploy/bootstrap.py`；发布安装器自 v6 起从 `desktop/src-tauri` 构建，冻结的 v1 在 `stella-installer/`）。负载由
 `scripts/build_offline_payload.py` 在 CI 里构建，包含：
 
 - 嵌入式 Python 运行时 zip（哈希从 `python.rs` 的 `PY_VER`/`PY_SHA256` 解析，单一事实来源）；
@@ -566,8 +573,8 @@ revision 必须与新版本一致（脚本现场安装，天然一致）。
 然后：
 
 ```bash
-git tag v0.x.0
-git push origin v0.x.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`design_docs/`、`scripts/`、`_deprecated/`、`.github/`、`memory/benchmark/` 等）→ 拷入 `release_assets/` 的四个文件并把 bat/txt 转成 CRLF → 打 zip → 创建 GitHub Release。
@@ -583,14 +590,14 @@ CI 会自动：校验版本号 → 构造发布目录（排除 `tests/`、`desig
 
 升级 Python 版本时这四处要一并更新，并在本地完整跑一遍 `start.bat` 验证（会产生 `runtime/` 目录，已加入 `.gitignore`）。
 
-> **注意**：Tauri 安装器的首次安装逻辑在 `stella-installer/src-tauri/src/python.rs`（`runtime_bootstrap`）里用纯 Rust 复刻了同一流程，`PY_VER` / `PY_SHA256` / 下载镜像常量与 `start.bat` 必须同步修改——安装器不依赖 `start.bat`，它只是备用手动安装方式。
+> **注意**：发布版 OneClick 安装器的首次安装逻辑在 `desktop/src-tauri/src/python.rs`（`runtime_bootstrap`）里用纯 Rust 复刻了同一流程，`PY_VER` / `PY_SHA256` / 下载镜像常量与 `start.bat` 必须同步修改（有同步测试把关）——安装器不依赖 `start.bat`，它只是备用手动安装方式。冻结的 v1 安装器 `stella-installer/src-tauri/src/python.rs` 里还有一份旧孪生，不再随版本发布。
 
 > **编码约定**：`release_assets/` 里的 `.bat` 使用纯 ASCII，内部注释与输出统一使用英文；发布时仍统一转换为 CRLF，确保 Windows `cmd` 稳定解析。面向用户的 `README-快速开始.txt` 可继续使用 UTF-8 with BOM。
 
 ### 嵌入式 Python 的三处必改
 
 Release 包用 Python Embeddable Package 作运行时，它有三个与常规 Python 不同的行为，
-两条 bootstrap 路径（命令行的 `start.bat`、GUI 的 `stella-installer/src-tauri/src/python.rs`）
+两条 bootstrap 路径（命令行的 `start.bat`、发布安装器的 `desktop/src-tauri/src/python.rs`）
 都必须处理：
 
 1. **`import site` 默认被注释**（`python3xx._pth` 里）。不取消注释则 pip 装到

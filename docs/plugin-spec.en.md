@@ -292,7 +292,33 @@ A tool with no required parameters skips one model round trip and is called dire
 
 This means **side effects of argument-less tools happen sooner**, which reinforces [§3](#3-choosing-between-the-two-paths): write operations do not belong in tools.
 
-### 6.9 One Capability, Several Implementations
+### 6.9 Capability Boundaries Without a Chat Model
+
+"No model" in this section means specifically **chat generation, Agent/Comes generation, and the Level 2 Router fallback being unavailable** — it does not include the embedding model. As long as the embedding service is still up, Level 1 semantic routing keeps running; Level 0 keyword rules never needed a model in the first place. Level 2 cannot be forced into service while the generation model is absent.
+
+To let a parameterized query (say "check tomorrow's weather in Tokyo") complete automatically without a chat model, the capability declaration must provide a deterministic input contract. `input_schema` is merged with the tool's JSON schema and supports `regex`/`pattern`, `enum`, `default`, and basic type coercion:
+
+```toml
+[[capability]]
+id = "weather.query"
+providers = ["get_weather"]
+
+[capability.input_schema]
+required = ["city", "date"]
+
+[capability.input_schema.properties.city]
+type = "string"
+regex = "查(?P<city>[^，。？?]+?)(?:今天|明天|后天)?天气"
+
+[capability.input_schema.properties.date]
+type = "string"
+regex = "(今天|明天|后天)"
+default = "今天"
+```
+
+Only when the capability is determined, the provider/tool is unique, and all required inputs are present and pass validation does Comes call the tool directly and reply with a safe summary — without going through chat generation. Missing parameters, ambiguity, or failed validation never let the agent guess arguments; the reply instead asks for the missing information. An internal tool failure only produces a generic unavailability notice — no raw JSON, stack traces, or model-internal text ever leaks.
+
+### 6.10 One Capability, Several Implementations
 
 A single `capability` may list several `providers` (say two different weather plugins). Selection follows `priority`; a failing provider is recorded and briefly backed off, and the next one takes over automatically.
 
@@ -408,7 +434,7 @@ The compatibility layer is a reimplementation. Three states:
 | Tools registered by `@filter.llm_tool` | Registered ≠ reachable from chat; needs `capability.toml` | [§6.2](#62-capabilitytoml-and-the-three-tiers) |
 | `astrbot_version` in `metadata.yaml` | A mismatch only warns; the plugin still loads | [§15](#15-versioning-and-compatibility-policy) |
 | `requirements.txt` | No automatic `pip install` by default; only named in the log | [§2](#2-directory-layout) |
-| `Context.llm_generate` / `tool_loop_agent` / `get_current_chat_provider_id` | Raise `StellaCompatNotSupported` when `ASTRBOT_LLM_ENABLED=false` | — |
+| `Context.llm_generate` / `tool_loop_agent` / `get_current_chat_provider_id` | Raise `StellaCompatModelUnavailable` when the generation model is unavailable; ordinary command/regex/event plugins keep working | — |
 
 **③ Raises `StellaCompatNotSupported`**
 

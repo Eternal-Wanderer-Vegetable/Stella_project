@@ -65,7 +65,7 @@ Stella_project/
 │   ├── shutdown.py                 # Graceful shutdown: wait for in-flight background tasks (its own module for testability)
 │   ├── stop_signal.py              # Stop sentinel: deploy writes, Bot reads and exits (deploy can import it standalone)
 │   ├── vision.py                   # Image captioning: extract image sources → caption via the VISION role → merge into message text (optional, off by default)
-│   └── llm/
+│   ├── llm/
 │       ├── base.py                 # Abstract LLM backend interface
 │       ├── registry.py             # Endpoint × role registry: the only backend construction entry point in the project
 │       ├── compat.py               # Parameter-difference adaptation for OpenAI-compatible endpoints (no vendor allowlist)
@@ -74,6 +74,9 @@ Stella_project/
 │       ├── usage_sink.py           # Usage reporting sink (truncation signals / token aggregation / cache hit rate)
 │       ├── usage_store.py          # Daily ledger + daily budget decision (`llm_usage_daily`'s sole writer)
 │       └── scheduler.py    # Model-level resource gate (FIFO serialization + queue observability)
+│   └── runtime/                    # Unified facade runtime: the sole execution engine since §R.5 (pure Python, no cross-process bridge / no Node dependency)
+│       ├── facade.py               # RuntimeFacade: unified entry owner and turn execution (the legacy STELLA_RUNTIME dual-path switch is retired; migration records in docs/migration/cortico/)
+│       └── turn_service.py         # Per-turn execution service: evidence injection and prompt assembly (the knowledge-evidence section renders here)
 │
 ├── capability/                     # Capability layer (see docs/capability-system.en.md)
 │   ├── registry.py                 # Capability / Provider / registry singleton + health-based backoff
@@ -90,7 +93,31 @@ Stella_project/
 │   │   ├── executor.py             # Capability → Provider → Tool → Result
 │   │   └── summarizer.py           # Result.data → Result.summary
 │   └── adapters/
-│       └── astrbot.py              # Automatic llm_tools → Provider derivation + bootstrap
+│       ├── astrbot.py              # Automatic llm_tools → Provider derivation + bootstrap
+│       ├── knowledge.py            # knowledge.search capability wiring (when KNOWLEDGE_ENABLED)
+│       └── mcp.py                  # MCP Manager start/stop + Provider Runtime wiring
+│
+├── knowledge/                      # Standalone knowledge-base subsystem (see docs/knowledge-base.md)
+│   ├── domain.py                   # Domain model: libraries/documents/versions/grants + citation value objects
+│   ├── acl.py                      # The single ACL decision entry (user/group/space tri-state subjects)
+│   ├── lifecycle.py                # Document lifecycle state machine (draft→review→published→archived)
+│   ├── schema.py                   # Standalone knowledge.db schema (zero overlap with agent_memory.db)
+│   ├── store.py                    # Sole storage read/write entry + atomic version activation
+│   ├── parsers.py                  # Markdown/TXT/PDF/DOCX/URL import parsing (with locators)
+│   ├── chunking.py                 # Paragraph-atomic chunking (locator inheritance)
+│   ├── ingest.py                   # Ingestion pipeline: parse→chunk→encode→index-ready (worker thread)
+│   ├── fts.py                      # FTS5 tokenization (shared by write and query sides)
+│   ├── embedding.py                # KB vector encoding + fingerprint locking (reuses the memory embedding service)
+│   ├── retrieval.py                # BM25+dense dual channel → RRF fusion → bounded evidence
+│   ├── service.py                  # Facade: role APIs / publication flow / ACL-enforced retrieval / status surface
+│   └── isolation.py                # Memory isolation guard (evidence must never become a memory candidate)
+│
+├── skills/                         # Anthropic-style task skill layer (SKILL.md; see docs/skills.md, SKILLS_ENABLED off by default)
+│   ├── catalog.py                  # Skill catalog: discovery / quarantine / plugin-scoped refresh
+│   ├── orchestrator.py             # Selection and invocation orchestration (budgets / timeouts / output truncation)
+│   ├── runtime.py                  # Runtime assembly (wired during bot.py startup)
+│   ├── audit.py                    # Audit events (logs/skills_audit.jsonl)
+│   └── runners/                    # Controlled execution backends (docker sandbox runner)
 │
 ├── memory/                         # Memory system core
 │   ├── SYSTEM.md                   # Bot system prompt
@@ -142,6 +169,11 @@ Stella_project/
 │   ├── benchmark/                  # Retrieval-layer cases + _fixtures (including positive consolidation benchmarks)
 │   └── db_cleaner.py               # Dirty-data cleanup + scheduled message-table pruning
 │
+├── memory_rust/                    # Rust retrieval backend for MEMORY_BACKEND=rust (published as a separate wheel, see docs/memory-rust-backend.md)
+│   ├── backend.py                  # Python-side wrapper (BACKEND_API_VERSION negotiation)
+│   ├── selector.py                 # Engine selection (wheel probing + legacy shadow/strict switch compatibility)
+│   └── native/                     # PyO3/maturin sources (schema.rs embeds the SQL)
+│
 ├── extensions/                     # Automatically loaded extensions (scan setup(pipeline))
 │   ├── __init__.py                 # Extension loader
 │   └── link_monitor/               # OneBot link monitoring (heartbeat + active probing, alerts only)
@@ -179,6 +211,8 @@ Stella_project/
 ├── cli/                            # stellacli: local / Docker orchestration and rendering layer
 │   └── src/                        # Rust CLI; delegates domain logic to deploy / Compose
 │
+├── runtime-manager/                # Rust "Stella Runtime Contract" component supervisor (schemas/ contract + src/, optional runtime)
+│
 ├── data/                           # Runtime data (all gitignored)
 │   ├── plugins/                    # Third-party AstrBot plugins
 │   ├── plugin_data/                # Plugins' own KV / data directories
@@ -197,6 +231,8 @@ Stella_project/
 │   ├── sample_windows.py           # Stratified sampling of message windows from the real database
 │   ├── probe_embedding.py          # Embedding service probe
 │   └── build_embedding_fixture.py  # Build benchmark vector fixture
+│
+├── release_assets/                 # Release artifact templates and release verification (quick-start READMEs, release-notes template, SHA256SUMS/manifest semantics, VM validation matrix)
 │
 ├── stella-installer/               # v1 desktop installer (Tauri 2 + Rust, native HTML/JS; frozen at tag gui-v1-final)
 ├── dashboard/                      # v2 control-plane frontend (Vue 3 + Vuetify 3 + TS; shared by browser and desktop shell)
@@ -459,7 +495,7 @@ The runtime carrier for one processing operation and the only channel through wh
 | Diagnostics | `trigger` `intent` `intent_detail` `llm_backend` `llm_model` `llm_elapsed` `prompt_log` |
 | Structured context | `short_term` `user_profile` `memories_for_prompt` `tail_start_id` |
 | Memory v2 | `memory_mode` `conversation_memories` `behavior_constraints` `memory_trace` |
-| Task scheduling | `route` `task_results` `tool_summaries` |
+| Task scheduling | `route` `task_results` `tool_summaries` `knowledge_evidence` |
 | Platform handles | `raw_event` `bot` |
 
 `group_id` is always the actual QQ group number; `group_shared_space` is automatically populated by `config.spaces.resolve_space()` and identifies the ownership of memories and profiles. They must not be conflated.
@@ -614,7 +650,7 @@ See [Configuration Reference](configuration.en.md#html-to-image-rendering-plugin
 
 **Why not add a port**: NoneBot already runs FastAPI/uvicorn, and its reverse WS endpoint `/onebot/v11/ws` is provided by that server. The status route is mounted on the same app (`GET /stella/status`), so Stella still has only one listening port (`PORT`).
 
-**Implementation**: `stella_project/plugins/bot_main/status_api.py`. `setup_status_api()` is called in ai_gateway's startup section (after extension loading); `build_payload()` aggregates `link_status()`, `core.llm.snapshot()`, `usage_store.usage_snapshot()`, `capability.inventory.snapshot()`, and version/process information, returning `{version, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities}`. Consumers are `_fetch_live_status()` in `deploy/process.py` (loopback query, 1-second timeout) and the GUI.
+**Implementation**: `stella_project/plugins/bot_main/status_api.py`. `setup_status_api()` is called in ai_gateway's startup section (after extension loading); `build_payload()` aggregates `link_status()`, `core.llm.snapshot()`, `usage_store.usage_snapshot()`, `capability.inventory.snapshot()`, the skills runtime status, and version/process information, returning `{version, instance_id, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities, skills}` plus two conditional keys: `runtime` (Runtime Contract status, present only when fetched) and `chat_engine` (the conversation-engine surface: mode/keys/inflight — a health snapshot of the facade, the sole engine; structured fields only). Consumers are `_fetch_live_status()` in `deploy/process.py` (loopback query, 1-second timeout) and the GUI/WebUI panel.
 
 **Security constraints**: `HOST` may be `0.0.0.0` (required when NapCat is on another machine), in which case the route is exposed to the LAN. There are two protections: 1. accept only requests from loopback addresses and return 403 for others; 2. keep credentials and group-chat content out of the response. `allowed_group_count` provides a count, not group numbers, and `usage` contains only counts and ratios (token count, call count, cache hit rate, slot name, and model ID), never prompts or model output. `capabilities` contains structured fields only (capability id, domain, source tier, whether it is routable, provider tool names and health, `examples` count), without the `description` and `examples` free text from the declarations — those two fields are the only place that could smuggle in a URL or a key, and keeping them out of the response body means no extra guard is needed for them. `tests/test_status_api.py` locks this constraint in as an assertion: it serializes the real output of `usage_snapshot()` and fails if `api_key` / `Bearer` / `http://` appears.
 

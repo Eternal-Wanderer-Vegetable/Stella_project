@@ -59,6 +59,11 @@ this directory contains the real `.env` and chat history, and once they leave wi
 | `python -m deploy capabilities [--json]` | Lists the capability inventory: which capabilities chat can trigger automatically, which cannot and why, which tier each came from, and which provider is backing off. The data comes from the status endpoint (the registry is a singleton inside the Bot process); when the Bot is not running it falls back to reading the three declaration tiers from disk, which cannot answer "is it routable" — the rendering says so |
 | `python -m deploy paths [--env-file]` | Outputs resolved paths such as the program directory / user data directory; `--env-file` prints only the `STELLA_HOME/.env` path (used by `start.bat`) |
 | `python -m deploy manifest [--write]` | Generates the release-package manifest `.stella-manifest.json` (used during upgrades to determine whether the user changed a bundled file); called by release CI |
+| `python -m deploy upgrade <SOURCE_DIR> --version X.Y.Z [--rollback] [--checksum SHA]` | Versioned upgrade: verifies the upgrade source (optionally against a tree SHA-256) and then **atomically switches** the program version; `--rollback` flips the activation record back to the retained previous version tree (bidirectional, no source needed) |
+| `python -m deploy bootstrap install --profile {...}` | Installs the components and default models declared by a profile (`oneclick-python` / `oneclick-rust` / `standalone-python` / `standalone-rust`); the installer bootstrap and manual repair share this entry point |
+| `python -m deploy mcp list\|test` | Lists configured MCP servers / runs a connectivity smoke test against one server |
+| `python -m deploy packages ...` | Component package catalog and operations: `catalog` / `verify` / `list` / `rollback` / `napcat-status` / `napcat-install` / `napcat-uninstall` / `import-model` |
+| `python -m deploy runtime status` | Inspects / validates the Runtime Contract (component inventory, endpoints, schema version, diagnostic fields) |
 
 Layers: `probe` collects data (with side effects) -> `checks` makes decisions (pure functions, the testing focus) -> `report` renders the result.
 The criteria used by check functions stay consistent with the actual behavior of ai_gateway (for example, a missing persona file is only a warning in the code, so doctor also reports a warning), avoiding "it runs fine but reports an error" situations.
@@ -467,14 +472,16 @@ At startup, a new database is automatically rebuilt under `memory/` using the cu
 
 ## CI
 
-`.github/workflows/ci.yml` defines four jobs:
+`.github/workflows/ci.yml` defines six jobs:
 
 | Job | Contents |
 |---|---|
 | `lint` | `ruff check .` (Python 3.11) |
 | `security` | `pip-audit -r requirements.txt` (blocking) + `bandit` (non-blocking; report uploaded as an artifact) |
 | `test` | 3.10 / 3.11 / 3.12 version matrix, `pytest tests/ --cov=. --cov-branch -n auto`, and coverage report uploaded as an artifact |
-| `notify` | PRs only: summarize status and comment |
+| `cli` | The Rust CLI (`cli/`): `cargo fmt --check` + `clippy -- -D warnings` + `cargo test`, plus a help-text smoke test over the subcommand list (doctor/init/start/stop/restart/status/logs/upgrade/migrate/plugin/capabilities/manifest/compose) so refactors cannot silently drop commands |
+| `windows-native` | Runs `pytest tests/windows` on windows-latest — the native matrix for process trees, upgrades, and installation reliability (sentinels/PIDs/activation records depend on real Windows semantics) |
+| `notify` | PRs only: summarize status and comment (depends on test/lint/security/cli) |
 
 `test` depends on `lint` and `security` passing; `fail-fast: false` ensures the other versions continue when one fails. Older workflows on the same branch are cancelled automatically.
 
@@ -496,7 +503,7 @@ After a tag is pushed, CI (`.github/workflows/release.yml`) automatically packag
 
 ### The OneClick Offline payload
 
-The Offline variants share **the same code and the same profile id** as the online installers; their NSIS resources simply carry an extra `offline/` payload (its presence decides whether the installer resolves artifacts locally or over the network — see `stella-installer/src-tauri/src/python.rs` and `deploy/bootstrap.py`). The payload is built in CI by `scripts/build_offline_payload.py` and contains:
+The Offline variants share **the same code and the same profile id** as the online installers; their NSIS resources simply carry an extra `offline/` payload (its presence decides whether the installer resolves artifacts locally or over the network — see `desktop/src-tauri/src/python.rs` and `deploy/bootstrap.py`; since v6 the released installer is built from `desktop/src-tauri`, while the frozen v1 lives in `stella-installer/`). The payload is built in CI by `scripts/build_offline_payload.py` and contains:
 
 - the embedded Python runtime zip (hash parsed from `PY_VER`/`PY_SHA256` in `python.rs` — single source of truth);
 - `get-pip.py` (`MANIFEST.json` records its sha256; the installer verifies it and installs pip offline with `--no-index`);
@@ -522,8 +529,8 @@ The WebView2 runtime is not part of the payload; instead it is embedded into the
 Then:
 
 ```bash
-git tag v0.x.0
-git push origin v0.x.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 CI automatically: validates the version -> constructs the release directory (excluding `tests/`, `design_docs/`, `scripts/`, `_deprecated/`, `.github/`, `memory/benchmark/`, etc.) -> copies the four files from `release_assets/` and converts bat/txt files to CRLF -> creates the zip -> creates a GitHub Release.
@@ -539,13 +546,13 @@ CI automatically: validates the version -> constructs the release directory (exc
 
 When upgrading Python, update all four locations together and run `start.bat` completely once locally to verify it (this creates a `runtime/` directory, which is in `.gitignore`).
 
-> **Note**: The Tauri installer's first-install logic in `stella-installer/src-tauri/src/python.rs` (`runtime_bootstrap`) reimplements the same process in pure Rust. `PY_VER` / `PY_SHA256` / download-mirror constants must be changed together with `start.bat`; the installer does not depend on `start.bat`, which is only a fallback manual installation method.
+> **Note**: The released OneClick installer's first-install logic in `desktop/src-tauri/src/python.rs` (`runtime_bootstrap`) reimplements the same process in pure Rust. `PY_VER` / `PY_SHA256` / download-mirror constants must be changed together with `start.bat` (a sync test guards this); the installer does not depend on `start.bat`, which is only a fallback manual installation method. The frozen v1 installer keeps an older twin at `stella-installer/src-tauri/src/python.rs` that is no longer shipped.
 
 > **Encoding convention**: `.bat` files under `release_assets/` use pure ASCII, with internal comments and output uniformly in English. They are still uniformly converted to CRLF at release time to ensure stable parsing by Windows `cmd`. The user-facing `README-快速开始.txt` may continue to use UTF-8 with BOM.
 
 ### Three Required Changes for Embedded Python
 
-The Release package uses the Python Embeddable Package as its runtime. It behaves differently from regular Python in three ways, and both bootstrap paths (command-line `start.bat` and GUI `stella-installer/src-tauri/src/python.rs`) must handle them:
+The Release package uses the Python Embeddable Package as its runtime. It behaves differently from regular Python in three ways, and both bootstrap paths (command-line `start.bat` and the released installer's `desktop/src-tauri/src/python.rs`) must handle them:
 
 1. **`import site` is commented out by default** (in `python3xx._pth`). Unless it is uncommented, dependencies installed into `Lib\site-packages` cannot be imported at all;
 2. **When `._pth` exists, Python builds `sys.path` only from that file**, equivalent to using `-E -s`; relative paths in it are resolved **relative to the directory containing `python.exe`**. The default `.` points to `runtime\` rather than the project root, so `runtime\python.exe -m deploy` reports `No module named deploy` (verified on 2026-08-18). A line `..` must be added;
