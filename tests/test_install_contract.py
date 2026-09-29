@@ -849,7 +849,7 @@ def test_installer_size_gate_classify_and_budget(tmp_path, monkeypatch):
     """S15：体积分类与预算读取——online 有上限，offline 未实测仅记录。"""
     import json as json_mod
 
-    from scripts.check_installer_size import classify
+    from scripts.check_installer_size import classify, load_budget
 
     assert classify("Stella-OneClick-Python-Offline-v1.exe") == "offline"
     assert classify("Stella-OneClick-Python-v1.exe") == "online"
@@ -859,6 +859,10 @@ def test_installer_size_gate_classify_and_budget(tmp_path, monkeypatch):
     budget = payload["installer_budget_mb"]
     assert budget["online"] >= 300, "online 实测基线 220.36MB → 上限 300"
     assert budget["offline"] is None, "offline 未实测，不凭猜测设限"
+    # load_budget 必须容忍 null（v6.0.1 run 102 实测：float(None) 崩在门禁）
+    loaded = load_budget()
+    assert loaded["online"] == float(budget["online"])
+    assert loaded["offline"] is None
     # 体积门禁已接入发布作业
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
