@@ -220,7 +220,7 @@ dependencies = [
 
 [[package]]
 name = "stellacli"
-version = "6.0.0"
+version = "6.0.1"
 dependencies = [
  "anstream 0.6.21",
  "anstyle",
