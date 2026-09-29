@@ -461,6 +461,13 @@ def test_release_workflow_resolves_version_once():
     upload_pos = workflow_text.index("- name: 上传安装器")
     assert signer_pos < upload_pos, "签名必须发生在 artifact 上传之前"
     assert "signtool sign" in workflow_text and "signtool verify" in workflow_text
+    # 未签名发布的显式授权通道（2026-09-29 维护者授权）：repo 变量门控，
+    # 只豁免 tag push 的硬失败；发布说明自动追加未签名声明。
+    assert "STELLA_ALLOW_UNSIGNED" in workflow_text, "缺少未签名发布授权变量"
+    assert "RELEASE_NOTES_EFFECTIVE.md" in workflow_text, (
+        "发布必须消费生效版说明（未签名时自动追加声明）"
+    )
+    assert "本版本安装器未经代码签名" in workflow_text
     # S15/WP15：体积门禁接入发布作业
     assert "check_installer_size.py" in workflow_text, "缺少安装器体积门禁"
     assert "--prerelease" in workflow_text, "候选必须为预发布"
