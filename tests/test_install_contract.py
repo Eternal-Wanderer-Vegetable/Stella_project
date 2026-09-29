@@ -18,7 +18,6 @@ F03/F04/F07/F09/F13 是计划的已知缺陷复现用例：断言的是**目标�
 from __future__ import annotations
 
 import argparse
-from types import SimpleNamespace
 import hashlib
 import io
 import json
@@ -28,6 +27,7 @@ import sys
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -170,6 +170,12 @@ def _source_tree(tmp_path: Path) -> Path:
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
     dist.write_text("panel", encoding="utf-8")
+    # memory_rust Python 半边（OneClick Rust staging 的必备输入）
+    rust_pkg = source / "memory_rust"
+    rust_pkg.mkdir(exist_ok=True)
+    for name in ("__init__.py", "selector.py", "backend.py", "python_backend.py"):
+        (rust_pkg / name).write_text("", encoding="utf-8")
+
     # 两份壳的 python.rs 常量（构建期指纹一致性校验的输入）
     for shell in ("desktop", "stella-installer"):
         path = source / shell / "src-tauri" / "src" / "python.rs"

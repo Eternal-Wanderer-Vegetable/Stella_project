@@ -300,8 +300,27 @@ def stage_installer_resources(
     if bundled_catalog.is_file():
         _copy_tree(source, output, bundled_catalog.name)
     wheels = source / "wheels"
-    if profile["core_flavor"] == "rust" and wheels.is_dir():
-        shutil.copytree(wheels, output / "wheels", dirs_exist_ok=True)
+    if profile["core_flavor"] == "rust":
+        # memory_rust 的 Python 半边（selector/backend/python_backend）必须
+        # 随树发布：wheel 在 maturin 1.15 起不再打包 python-source（弃用），
+        # 只含 _native.pyd——树里没有这半边，导入检查必挂
+        # （v6.0.1 CI install-test 实测：ModuleNotFoundError selector）。
+        # wheel 只负责补 _native.pyd（helper/GUI 解包合并进本包）。
+        rust_pkg = source / "memory_rust"
+        if not rust_pkg.is_dir():
+            raise FileNotFoundError(
+                f"OneClick Rust 缺少 memory_rust Python 半边：{rust_pkg}"
+            )
+        shutil.copytree(
+            rust_pkg,
+            output / "memory_rust",
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(
+                "native", "__pycache__", "*.pyc", "*.whl"
+            ),
+        )
+        if wheels.is_dir():
+            shutil.copytree(wheels, output / "wheels", dirs_exist_ok=True)
     (output / ".stella-profile").write_text(profile_id + "\n", encoding="utf-8")
     payload_mode = PAYLOAD_MODE_ONLINE
     if offline_payload is not None:
