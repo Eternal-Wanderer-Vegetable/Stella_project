@@ -861,6 +861,23 @@ python -m tests.benchmark.participation.runner --tables config/participation_v2 
 | `JARGON_CONFIRM_THRESHOLD` | `12` | 黑话转正门槛（跨天数累积命中数） |
 | `JARGON_TRACKER_MAX_TERMS` | `4096` | 进程内黑话计数器的容量上限（防长聊天记录把内存吃穿） |
 
+## 社交学习闭环（SOCIAL_*）
+
+在「表达与插话效果学习」之上的完整闭环：从投递回执与效果事实里沉淀**表达候选**（哪句值得复用）与**群体黑话**（这群人怎么说话），经预算受控的 prompt 槽位注入后，再用后续观察修正——「学习→使用→观察→修正」成环。整层默认**关闭**（`SOCIAL_ENABLED=false` 且 `SOCIAL_MODE=off`），保证既有部署零行为变化；灰度顺序：测试 → 一群 `shadow` ≥7 天 → 黑话 → 表达 → 新时机。实现见 `memory/social_schema.py` / `memory/social_store.py` / `memory/social_worker.py` 与 `core/social/`；WebUI 聊天路径在开关打开时记录投递回执（`webui/chat_ingress.py`）。
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `SOCIAL_ENABLED` | `false` | 总开关。关闭时旁表不写、社交观察不启动 |
+| `SOCIAL_MODE` | `off` | `off`=全关；`shadow`=只记录候选与观察，不改实际 prompt 与发送（影子模式已产生投递回执与效果观察事实，但不修改任何发送行为）；`active`=允许注入 |
+| `SOCIAL_EXPRESSION_INJECT` | `false` | 表达注入开关（`shadow` 模式下强制视为关闭） |
+| `SOCIAL_EXPRESSION_RECENT_TURNS` | `10` | 同一表达在最近 N 次本群回复中用过就不再注入（防复读） |
+| `SOCIAL_JARGON_INJECT` | `false` | 黑话注入开关 |
+| `SOCIAL_BACKGROUND_LLM_ENABLED` | `false` | 后台学习模型；默认关（共享本地端点时不与前台抢资源） |
+| `SOCIAL_EFFECTS_ADAPT_WEIGHTS` | `false` | 效果分数自适应权重；默认关，须先满足样本门槛并人工抽检 |
+| `SOCIAL_TRACE_DETAIL_SCOPES` | 空 | 详细追踪的作用域列表（逗号分隔群号；空=只存 metadata 档） |
+
+启动期校验：`SOCIAL_MODE` 只允许 `off`/`shadow`/`active`；**`SOCIAL_MODE` 非 `off` 时必须同时打开 `SOCIAL_ENABLED`**，否则拒绝启动（`config/settings.py` 的 `_assert_social_config`）。
+
 ## 记忆压缩
 
 | 配置项 | 默认值 | 说明 |

@@ -95,7 +95,7 @@ When the same fact is observed again, **a new row is not inserted**; evidence is
 | `status` | Return to `NEW` and participate in promotion evaluation again |
 | `first_seen_at` | **Remain unchanged** |
 
-Similarity matching requires **the same group + same user + same type + similar content** (`memory/text_similarity.py`, Jaccard ≥ 0.65 or one string is a substring of the other).
+Similarity matching requires **the same group + same user + similar content**; the type condition is two-tier (since 2026-09-27): the **same type** matching on similarity is a hit; **across types** only normalized-identical text counts (`same_normalized_text` in `memory/text_similarity.py`, which only strips quote/punctuation/whitespace differences). The content-similarity test itself remains Jaccard ≥ 0.65 or one string being a substring of the other. When the old and new texts are normalized-identical at merge time, the longer one is kept as-is instead of concatenating.
 
 Keeping `first_seen_at` unchanged is intentional: it is the anchor for expiration. `OBSERVING` candidates that have not received new evidence once their TTL has elapsed are marked `REJECTED` (not deleted, and retained for auditing).
 
@@ -254,7 +254,7 @@ The reason is that descriptions such as "gentle, humorous, sensitive" are largel
 
 | Action | Trigger | Description |
 |---|---|---|
-| Deduplication merge | Lightweight + weekly | Same group, same user, same type, and similar content → merge; the merged item is `archived` |
+| Deduplication merge | Lightweight + weekly | Same group, same user, and similar content → merge (same-type similarity merges; across types only normalized-identical text merges); the merged item is `archived` |
 | Atomization | Lightweight + weekly | Split memories longer than 80 characters into atomic facts |
 | Low-value archiving | Weekly | Importance below the threshold and not accessed for a long time |
 | Type decay | Weekly | Archive according to the type lifespan defined by `MEMORY_DECAY_DAYS` |
@@ -303,8 +303,7 @@ When evidence is insufficient, the default is to wait rather than treating “th
 Priority:
 
 1. **Verification**: active users with an `OBSERVING` candidate whose confidence is closest to the promotion line—one question can cross the threshold, producing the highest benefit
-2. **Cold start**: users with no candidates but recent activity; start from an everyday topic
-3. Neither → do not speak
+2. No candidates → do not speak. The proactive-@ quota is extremely scarce and is spent only on pushing candidates past the promotion line, not on everyday small talk with no memory anchor
 
 Exclusion conditions: the daily quota is full, the user is within the user-level cooldown, or the maximum number of consecutive non-responses has been exceeded.
 
@@ -344,7 +343,6 @@ The system also requires "do not respond to any sentence in the context, includi
 
 - **Role-playing content may be treated as a real-person attribute**. "I am an exiled vampire" has a source, correct ownership, and no inference, so it can pass all anti-fabrication clauses. This is a data problem rather than a model problem; it can only be mitigated by the promotion layer's reproduction threshold
 - **`MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE = 2` is almost never satisfied on the passive path**. Whether to lower it should be reassessed after the proactive path has accumulated data
-- **Deduplication of cold-start topics is weak**. Keyword avoidance for Chinese topics depends on segmentation, which is currently largely ineffective for Chinese; when the topic list is short, the cost of repeated questions is acceptable
 - **During proactive @-mentions, Mode detection and the retrieval query use the full task-instruction text**, which has a poor signal-to-noise ratio. This has no visible impact when the memory store is empty; after data exists, an independent `retrieval_query` should be introduced
 
 The following two items were identified by [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (the P0/P1/P2 items in the same report have been fixed: the promotion deadlock, follow-up deduplication, per-type candidate TTLs, excluding time-sensitive types from verification, response detection now counting only messages addressed to the bot, and the split between the two timestamps' semantics):

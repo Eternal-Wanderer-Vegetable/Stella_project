@@ -77,6 +77,8 @@ You decide where the models come from.
 
 - **💬 Proactively gather information** -- Information passively ingested from group chats has very low density, so Stella proactively @mentions active users to start a conversation or confirm a memory. Daily quotas, per-user cooldowns, and protection that backs off after consecutive non-responses are provided.
 
+- **🎭 Expression evolves with the group (off by default)** -- The social learning loop: delivery receipts and reply-effect observations distill "which phrasing is worth reusing" and "what this group's slang means". A shadow mode records without intervening first; promoted entries are injected through a budget-controlled prompt slot, and later observations feed back to refine them. Off by default, enabled gradually (`SOCIAL_ENABLED` / `SOCIAL_MODE` — see the [configuration guide](docs/configuration.en.md)).
+
 - **🏠 Shared spaces across groups** -- Multiple QQ groups can belong to one space and share user profiles, long-term memories, and personality. Message tails, topic state, and mute switches remain isolated per group, so Stella will not answer a conversation from group B in group A.
 
 - **🔎 Hybrid search** -- SQLite FTS5 full-text indexing plus multidimensionally weighted ranking, with optional local embedding semantic search and automatic fallback when the service is unavailable.
@@ -89,7 +91,7 @@ You decide where the models come from.
 
 - **🔌 Extensible** -- Pipeline pre- and post-processing Hooks, with automatic loading from the extension directory.
 
-- **🧪 Verifiable** -- 2000+ unit tests cover memory promotion, cross-user isolation, two-layer ownership, anti-fabrication safeguards, routing fallback, and tool isolation. After connecting an online endpoint, there is also a layer of **vendor-neutral contract tests** (an extra field in the request body fails the test; parameter differences may adapt only to error wording and may not use a vendor whitelist) and a prefix-cache guard. Probe scripts also perform regression checks against real models (including a case specifically reproducing "missing information in a noisy environment"), along with a benchmark quantifying four types of routing errors.
+- **🧪 Verifiable** -- 2600+ unit tests cover memory promotion, cross-user isolation, two-layer ownership, anti-fabrication safeguards, routing fallback, and tool isolation. After connecting an online endpoint, there is also a layer of **vendor-neutral contract tests** (an extra field in the request body fails the test; parameter differences may adapt only to error wording and may not use a vendor whitelist) and a prefix-cache guard. Probe scripts also perform regression checks against real models (including a case specifically reproducing "missing information in a noisy environment"), along with a benchmark quantifying four types of routing errors.
 
 ## 🚀 Quick Start
 
@@ -106,6 +108,8 @@ You decide where the models come from.
   - **Standalone archive**: `Stella-Standalone-Python-vX.Y.Z-windows-amd64.zip`, extract and run. It contains **only Stella itself** — you provide Python 3.10+ and NapCat yourself, and it does not auto-download `llama.cpp` or any model. The Rust variant (`Stella-Standalone-Rust-*.zip`) additionally bundles the Rust memory-engine wheel, which is installed offline automatically on first launch.
 
   Both product lines offer a `Stella.exe` graphical interface (recommended) and a `start.bat` command-line flow. `Stella.exe` runs an environment check on launch: if not configured, it opens the Configuration page; if there are blocking issues, it opens the Environment Check page; if everything is normal, it goes directly to the Run Status page. `start.bat` opens the command-line configuration wizard and starts the Bot. **Do not install both product lines into the same directory.**
+
+> **About the "Unknown publisher" prompt**: current Windows installers are not code-signed yet (enforced signing will return once the certificate is in place), so SmartScreen may show an "Unknown publisher" warning — this is expected. Every release ships a `SHA256SUMS.txt` so you can verify your download; the release page notes and the release workflow are the only sources of truth.
 
 > AI can be disabled. When AI is disabled or a local model is unavailable, the basic Bot, OneBot diagnostics, and deployment management remain available.
 
@@ -138,7 +142,14 @@ python -m deploy migrate --dry-run   # Preview first (runs once on a database co
 python -m deploy migrate             # Execute
 ```
 
-Upgrading from 2.x also does not require losing memories: the old database is migrated automatically (columns are renamed, records are reassigned by shared space, and each user profile is placed in the space containing the most of that user's messages). A fresh installation stores user data in `StellaData/`, **at the same level as** the program directory:
+OneClick installs additionally support **atomic versioned upgrades**: `python -m deploy upgrade <extracted-new-version-dir> --version X.Y.Z` verifies and then flips the activation record; if anything goes wrong, `python -m deploy upgrade --rollback` flips back to the retained previous version tree (works both ways).
+
+Upgrading from 2.x also does not require losing memories: the old database is migrated automatically (columns are renamed, records are reassigned by shared space, and each user profile is placed in the space containing the most of that user's messages).
+
+**Where user data lives** depends on the product line and installation history (`python -m deploy paths` shows the actual location and which rule matched):
+
+- **Fresh OneClick installs**: the data root defaults to a location **outside the program directory**, `%LOCALAPPDATA%\Stella\Data`, recorded in the machine-level pointer file `%LOCALAPPDATA%\Stella\home.txt` — reinstalling, uninstalling, or upgrading never touches the data. An existing data root (old sibling directory, portable directory, or pointer target) is always reused, **never migrated**.
+- **Standalone and manual deployments**: data defaults to `StellaData/`, **at the same level as** the program directory:
 
 ```text
 D:\your-directory\
@@ -148,8 +159,10 @@ D:\your-directory\
   StellaData\            <- Your data (untouched during upgrades)
 ```
 
+- **Portable mode (both product lines)**: to make the program and data self-contained (for copying the whole setup to a USB drive), manually create a `StellaData\` subdirectory in the program directory. The program will prefer it, but the cost is that it will be replaced or deleted along with the program directory; import or back up your data before upgrading.
+
 After that, upgrading only requires replacing the program directory; the data does not need to be touched. Cleaning up old version folders will not affect the data.
-To make the program and data self-contained (for copying the whole setup to a USB drive), manually create a `StellaData\` subdirectory in the program directory. The program will prefer it, but the cost is that it will be replaced or deleted along with the program directory; import or back up your data before upgrading.
+Use `python -m deploy paths` to check the actual data directory location and which rule matched.
 Use `python -m deploy paths` to see the actual data directory and which rule selected it.
 
 ### Developer Testing
@@ -290,7 +303,7 @@ Stage 2 is awakened only when Stage 1 determines that self-disclosure is present
 
 **Plugin compatibility and rendering**: `Jinja2` · `Playwright` (local Chromium, used only to render plugin cards as images)
 
-**Desktop installer**: `Tauri 2` · `Rust` (`stella-installer/`, native HTML/JS frontend, with no frontend build step)
+**Desktop installer**: `Tauri 2` · `Rust`. v1 (`stella-installer/`, native HTML/JS, frozen at tag `gui-v1-final`); v2 (`desktop/` shell + `dashboard/` panel, Vue 3 + Vuetify 3 — see `docs/webui.md`).
 
 **Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with an optional `llama` profile; Chromium and CJK fonts are baked into the image; see the [Docker Deployment Guide](docs/deployment-docker.en.md))
 

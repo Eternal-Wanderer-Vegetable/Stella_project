@@ -39,6 +39,11 @@
 
 - 服务器：Docker ≥ 20.10 与 docker compose v2（`docker compose version` 能出版本号）
 - 内存 ≥ 1GB（镜像约 1.2GB，含渲染用的 Chromium 与中文字体）
+- **固定一个 NapCat 镜像引用**：compose 对 napcat 服务**不设浮动默认**，要求显式提供经审计的不可变引用（推荐用 `@sha256:` 摘要钉死版本）。在**仓库根目录**的 `.env`（给 docker compose 用，与 `StellaData/.env` 是两个文件）里写一行：
+  ```bash
+  NAPCAT_IMAGE=mlikiowa/napcat-docker@sha256:<摘要>   # 没有摘要至少也要钉版本 tag，不要用 :latest
+  ```
+  不设的话 `docker compose up` 会直接报 `NAPCAT_IMAGE must be a pinned NapCat image reference` 拒绝启动。
 - 想清楚模型端点（三种模式的取舍见 [README · 三种部署模式](../README.md#-三种部署模式)）：
   - **全在线**：填在线 API 地址即可，最简单；
   - **混合/全本地**：LM Studio 跑在同一台宿主机上时，端点填 `http://host.docker.internal:1234`（compose 已配好 `host-gateway`）；跑在其他机器上就直接填它的内网地址。
@@ -50,26 +55,29 @@
 git clone https://github.com/Eternal-Wanderer-Vegetable/Stella_project.git
 cd Stella_project
 
-# 2) 准备数据目录（容器内以 uid 1000 运行；Ubuntu 首个用户通常就是 1000，多数情况天然可写）
+# 2) 仓库根目录建 compose 用的 .env，固定 NapCat 镜像引用（见 §2；不设 up 会拒绝启动）
+printf 'NAPCAT_IMAGE=mlikiowa/napcat-docker@sha256:<摘要>\n' > .env
+
+# 3) 准备数据目录（容器内以 uid 1000 运行；Ubuntu 首个用户通常就是 1000，多数情况天然可写）
 mkdir -p StellaData
 sudo chown -R 1000:1000 StellaData   # 拿不准就执行这条，必然正确
 
-# 3) 构建镜像（国内服务器可加 --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple，
+# 4) 构建镜像（国内服务器可加 --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple，
 #    但部分国内镜像不收录 playwright，装不上就去掉该参数回落官方源）
 docker compose build
 #    也可跳过构建直接用官方镜像：把 docker-compose.yml 里 stella 服务的
 #    build/image 两行注释换为 GHCR 那行（见文件内注释），然后 docker compose pull stella
 
-# 4) 首次配置：交互向导（监听端口保持 8080 不变、群号、模型端点与 key），写入 StellaData/.env
+# 5) 首次配置：交互向导（监听端口保持 8080 不变、群号、模型端点与 key），写入 StellaData/.env
 #    ⚠ 向导问「监听地址」时务必填 0.0.0.0（默认值 127.0.0.1 是 Windows 桌面场景的，
 #      容器里配它 NapCat 会连不上；忘了改的话容器启动时也会大声警告）
 docker compose run --rm stella python -m deploy init
 
-# 5) 起服务并确认健康（stella 的 STATUS 列出现 healthy；napcat 未登录时也算正常启动）
+# 6) 起服务并确认健康（stella 的 STATUS 列出现 healthy；napcat 未登录时也算正常启动）
 docker compose up -d
 docker compose ps
 
-# 6) NapCat 首次登录与网络配置（人工操作，只需一次）：
+# 7) NapCat 首次登录与网络配置（人工操作，只需一次）：
 #    a. SSH 隧道进 WebUI：本地执行 ssh -L 6099:127.0.0.1:6099 user@<服务器>，
 #       然后浏览器打开 http://127.0.0.1:6099/webui（WebUI 只绑了服务器回环，不走隧道打不开）
 #    b. WebUI 登录 token 在容器日志里：docker compose logs napcat | grep -i token
@@ -96,7 +104,7 @@ docker compose ps
    | `system_prompts/`（仅当改过人格） | `StellaData/system_prompts/` | 回退镜像里的出厂人格 |
 
 3. `.env` 里如有 `127.0.0.1`/`localhost` 的模型端点，改成 `http://host.docker.internal:1234`（LM Studio 在同一台服务器宿主机上时）或实际地址；
-4. 回到 §3 第 5 步起容器。
+4. 回到 §3 第 6 步起容器。
 
 `logs/` 可拷可不拷（历史日志，不影响运行）。
 
@@ -161,6 +169,7 @@ llama 服务通过 `/v1/models` healthcheck，并由上层以最小 chat readine
 | 主动搭话时间全错 | 检查 `TZ`（镜像默认 `Asia/Shanghai`，compose 里可改） |
 | `deploy init` 写不进 `/data` | 宿主机目录属主不是 uid 1000：`sudo chown -R 1000:1000 StellaData`，或改用 named volume（见下） |
 | pip 安装 playwright 失败 | 用的镜像源不收录 playwright，去掉 `PIP_INDEX_URL` 回落官方源（`requirements.txt` 里有同样备注） |
+| `docker compose up` 直接报 `NAPCAT_IMAGE must be a pinned NapCat image reference` | compose 拒绝浮动 NapCat 镜像：在**仓库根目录** `.env`（不是 `StellaData/.env`）里设置 `NAPCAT_IMAGE=<固定引用>`（推荐 `@sha256:` 摘要），见 §2 |
 | 想换端口 | 改 compose 映射（如 `"9090:8080"`），**不要**改 `.env` 里的 `PORT`——容器内健康检查与 NapCat 反向 WS 地址都锚定 8080 |
 | 容器一启动就退出，日志提示 `/data/.env 不存在` | 预期行为（entrypoint 守门）：按日志提示跑 `deploy init` 或放好 `.env`。确要带空配置干跑调试：`docker compose run --rm -e STELLA_SKIP_ENV_CHECK=1 stella` |
 | stella 显示 healthy 但 NapCat 反复重连失败 | 九成是 `StellaData/.env` 里 `HOST=127.0.0.1`（向导默认值是 Windows 桌面假设）：容器内健康检查走回环所以照样绿，但 NapCat 连不进来。改成 `HOST=0.0.0.0` 重启；容器启动日志里有对应警告 |

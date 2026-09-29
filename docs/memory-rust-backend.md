@@ -45,12 +45,13 @@ distribution.
 
 ## Release Assets
 
-The Rust engine ships through two of the four Windows product assets, published
+The Rust engine ships through three of the six Windows product assets, published
 in the same `vX.Y.Z` GitHub Release as the Python products:
 
 ```text
-Stella-OneClick-Rust-vX.Y.Z-windows-amd64.exe      # installer prepares the engine during installation
-Stella-Standalone-Rust-vX.Y.Z-windows-amd64.zip    # Stella-only archive bundling the wheel
+Stella-OneClick-Rust-vX.Y.Z-windows-amd64.exe           # installer prepares the engine during installation
+Stella-OneClick-Rust-Offline-vX.Y.Z-windows-amd64.exe   # offline installer, same engine, fully bundled payload
+Stella-Standalone-Rust-vX.Y.Z-windows-amd64.zip         # Stella-only archive bundling the wheel
 ```
 
 The Standalone-Rust archive includes the normal `start.bat` bootstrap and one

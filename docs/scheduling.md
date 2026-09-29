@@ -135,5 +135,13 @@ Agent 任务在每轮运行里拿到**有界的只读上下文**（群近期话�
 ## v1 明确不做
 
 私聊任务、跨群目标、多进程共享调度库、任意 AstrBot 插件/技能执行、
-`@all` 扇出、WebUI 管理、QQ 投递 exactly-once 承诺。这些是刻意收窄的
+`@all` 扇出、QQ 投递 exactly-once 承诺。这些是刻意收窄的
 边界，不是遗漏。
+
+## WebUI 管理
+
+面板的「定时任务」页（路由 `/cron`）提供任务列表、新建、编辑、立即运行、
+历史与审计，走 `/api/v1/scheduling/tasks` 系列接口（`webui/routers/manage.py`，
+服务层 `webui/services/sched.py`）。WebUI 与群内命令读写同一个任务库
+（`scheduling/store.py`），配额与校验共用一套——面板建的任务在群里
+可见可管，反之亦然；访问权限沿用面板登录鉴权。
