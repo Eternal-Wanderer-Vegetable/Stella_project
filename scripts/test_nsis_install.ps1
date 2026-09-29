@@ -177,32 +177,53 @@ if (Test-Path -LiteralPath (Join-Path $stella ".stella-versioned-layout")) {
 }
 
 # --- 4. Offline bundles: the install hook must have done the heavy lifting -
-Write-Host "CP-A: stella=$stella installDir=$installDir"
 $bundledPython = Join-Path $stella "runtime\python.exe"
-Write-Host "CP-B"
+$dataRoot = $null
 if ($ExpectedPayloadMode -eq "offline") {
     Test-PathExists "offline: embedded python extracted" $bundledPython | Out-Null
     Test-PathExists "offline: dependency ready marker" `
         (Join-Path $stella "runtime\.stella-deps-ready") | Out-Null
 
-    # Locate the data root the installer actually used (config.home resolves
-    # it independently; do not assume, scan for the progress file).
-    $progress = Get-ChildItem -LiteralPath $installDir -Recurse -Filter `
-        ".bootstrap-progress" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($progress) {
-        $progressPayload = Get-Content $progress.FullName -Raw | ConvertFrom-Json
-        Add-Check "offline: bootstrap progress state is complete" `
-            ($progressPayload.state -eq "complete") "state=$($progressPayload.state)"
-        $dataRoot = $progress.Directory.Parent.FullName
-        Test-PathExists "offline: napcat metadata written" `
-            (Join-Path $dataRoot ".stella\napcat.json") | Out-Null
+    # 数据根解析（S10a 之后的新装默认在安装目录之外）：机器指针优先，
+    # 安装目录内扫描兜底（旧布局/指针写失败的退化路径）。两处都没有 =
+    # 装载失败，检查落 failed 并由下方证据收集给出原因。
+    $homePtr = Join-Path $env:LOCALAPPDATA "Stella\home.txt"
+    if (Test-Path -LiteralPath $homePtr) {
+        $candidate = (Get-Content -LiteralPath $homePtr -Raw).Trim()
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            $dataRoot = $candidate
+        }
+    }
+    Add-Check "offline: machine data root pointer resolved" `
+        ($null -ne $dataRoot) "pointer=$homePtr -> $dataRoot"
+
+    if (-not $dataRoot) {
+        $progressLegacy = Get-ChildItem -LiteralPath $installDir -Recurse -Filter `
+            ".bootstrap-progress" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($progressLegacy) {
+            $dataRoot = $progressLegacy.Directory.Parent.FullName
+            Write-Host "legacy layout: data root inside install dir = $dataRoot"
+        }
+    }
+
+    if ($dataRoot) {
+        $progressPath = Join-Path $dataRoot ".stella\.bootstrap-progress"
+        if (Test-Path -LiteralPath $progressPath) {
+            $progressPayload = Get-Content -LiteralPath $progressPath -Raw | ConvertFrom-Json
+            Add-Check "offline: bootstrap progress state is complete" `
+                ($progressPayload.state -eq "complete") "state=$($progressPayload.state) error=$($progressPayload.error)"
+            Test-PathExists "offline: napcat metadata written" `
+                (Join-Path $dataRoot ".stella\napcat.json") | Out-Null
+        } else {
+            Add-Check "offline: bootstrap progress file found" -Passed $false `
+                "no .bootstrap-progress under data root $dataRoot（helper 可能在组件步骤失败——见报告中的会话日志）"
+        }
     } else {
-        Add-Check "offline: bootstrap progress file found" -Passed $false `
-            "POSTINSTALL component bootstrap left no progress record"
+        Add-Check "offline: data root resolvable" -Passed $false `
+            "neither machine pointer nor legacy install-dir progress found"
     }
 }
 
-Write-Host "CP-C"
 # --- 5. Self-check with the bundled python, outside the repo --------------
 # Strip PYTHONPATH so nothing from a checkout can leak into the import set.
 if (Test-Path -LiteralPath $bundledPython) {
@@ -229,17 +250,34 @@ if (Test-Path -LiteralPath $bundledPython) {
 # is NOT exercised here; this harness only proves the EXE installs cleanly.
 # GUI-boot acceptance belongs to the dedicated VM matrix (plan S15).
 
-Write-Host "CP-D"
 # --- 6. Always collect evidence -------------------------------------------
-Write-Host "CP-E"
 try {
-$progressCopy = Get-ChildItem -LiteralPath $installDir -Recurse -Filter `
-    ".bootstrap-progress" -ErrorAction SilentlyContinue |
-    ForEach-Object { Get-Content $_.FullName -Raw }
-$napcatLog = Join-Path $installDir "resources\StellaData\.stella\logs\napcat-msi-install.log"
-$napcatLogContent = if (Test-Path -LiteralPath $napcatLog) {
-    Get-Content $napcatLog -Raw
+$progressCopy = @()
+foreach ($root in @($dataRoot, $installDir)) {
+    if ($root) {
+        $progressCopy += Get-ChildItem -LiteralPath $root -Recurse -Filter `
+            ".bootstrap-progress" -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-Content $_.FullName -Raw }
+    }
+}
+# helper 会话日志（程序树内）与安装事件流（数据根内）：装载失败的
+# 具体步骤/退出码都在这里——报告不收集它们，CI 失败就只能靠猜。
+$sessionLogPath = Join-Path $stella ".stella-install-session.jsonl"
+$sessionLogTail = if (Test-Path -LiteralPath $sessionLogPath) {
+    (Get-Content -LiteralPath $sessionLogPath | Select-Object -Last 40) -join "`n"
 } else { "" }
+$eventsTail = ""
+$napcatLogContent = ""
+if ($dataRoot) {
+    $eventsPath = Join-Path $dataRoot ".stella\install-events.jsonl"
+    if (Test-Path -LiteralPath $eventsPath) {
+        $eventsTail = (Get-Content -LiteralPath $eventsPath | Select-Object -Last 40) -join "`n"
+    }
+    $napcatLog = Join-Path $dataRoot ".stella\logs\napcat-msi-install.log"
+    if (Test-Path -LiteralPath $napcatLog) {
+        $napcatLogContent = Get-Content -LiteralPath $napcatLog -Raw
+    }
+}
 
 $finishedAt = [DateTime]::UtcNow
 $allPassed = ($checks | Where-Object { -not $_.passed } | Measure-Object).Count -eq 0
@@ -258,6 +296,9 @@ $report = [ordered]@{
     declared_payload = $declaredMode
     checks           = $checks
     progress_snapshot = $progressCopy
+    data_root        = $dataRoot
+    helper_session_log_tail = $sessionLogTail
+    install_events_tail = $eventsTail
     napcat_msi_log_tail = if ($napcatLogContent.Length -gt 4000) {
         $napcatLogContent.Substring($napcatLogContent.Length - 4000)
     } else { $napcatLogContent }
@@ -272,7 +313,5 @@ if (-not $allPassed) {
 }
 exit 0
 } catch {
-    Write-Host "INNER-ERR: $($_.InvocationInfo.PositionMessage)"
-    Write-Host "INNER-EXC: $($_.Exception.Message)"
-        throw
+    throw
 }

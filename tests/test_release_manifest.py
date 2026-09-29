@@ -72,3 +72,30 @@ def test_manifest_json_round_trip(tmp_path):
     (tmp_path / MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
     loaded = json.loads((tmp_path / MANIFEST_NAME).read_text(encoding="utf-8"))
     verify_assets_dir(loaded, tmp_path)
+
+
+def test_verify_mode_does_not_require_release_version(tmp_path, monkeypatch):
+    """--verify 模式不传 --release-version 也能工作（v6.0.1 发布后回读步骤）。
+
+    通过 subprocess 走真实 argparse（required 语义无法用 import 复现）。"""
+    import subprocess
+    import sys
+
+    products = tmp_path / "products"
+    (products / "a.exe").parent.mkdir(parents=True)
+    (products / "a.exe").write_bytes(b"data")
+    (products / MANIFEST_NAME).write_text(
+        json.dumps(build_manifest(products, release_version="9.9.9", build_id="b")),
+        encoding="utf-8",
+    )
+    published = tmp_path / "published"
+    published.mkdir()
+    (published / "a.exe").write_bytes(b"data")
+
+    r = subprocess.run(
+        [sys.executable, str(Path(__file__).parents[1] / "scripts" / "build_release_manifest.py"),
+         "--products", str(products), "--verify", str(published)],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "回读校验通过" in r.stdout

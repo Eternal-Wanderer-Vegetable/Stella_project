@@ -27,6 +27,7 @@ import sys
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -169,6 +170,12 @@ def _source_tree(tmp_path: Path) -> Path:
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
     dist.write_text("panel", encoding="utf-8")
+    # memory_rust Python 半边（OneClick Rust staging 的必备输入）
+    rust_pkg = source / "memory_rust"
+    rust_pkg.mkdir(exist_ok=True)
+    for name in ("__init__.py", "selector.py", "backend.py", "python_backend.py"):
+        (rust_pkg / name).write_text("", encoding="utf-8")
+
     # 两份壳的 python.rs 常量（构建期指纹一致性校验的输入）
     for shell in ("desktop", "stella-installer"):
         path = source / shell / "src-tauri" / "src" / "python.rs"
@@ -461,6 +468,13 @@ def test_release_workflow_resolves_version_once():
     upload_pos = workflow_text.index("- name: 上传安装器")
     assert signer_pos < upload_pos, "签名必须发生在 artifact 上传之前"
     assert "signtool sign" in workflow_text and "signtool verify" in workflow_text
+    # 未签名发布的显式授权通道（2026-09-29 维护者授权）：repo 变量门控，
+    # 只豁免 tag push 的硬失败；发布说明自动追加未签名声明。
+    assert "STELLA_ALLOW_UNSIGNED" in workflow_text, "缺少未签名发布授权变量"
+    assert "RELEASE_NOTES_EFFECTIVE.md" in workflow_text, (
+        "发布必须消费生效版说明（未签名时自动追加声明）"
+    )
+    assert "本版本安装器未经代码签名" in workflow_text
     # S15/WP15：体积门禁接入发布作业
     assert "check_installer_size.py" in workflow_text, "缺少安装器体积门禁"
     assert "--prerelease" in workflow_text, "候选必须为预发布"
@@ -579,7 +593,15 @@ def test_helper_installs_bundled_rust_wheel_for_rust_products(tmp_path, monkeypa
     with zipfile.ZipFile(wheel, "w") as bundle:
         bundle.writestr("memory_rust/__init__.py", "")
     recorded: list[list[str]] = []
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: recorded.append(cmd))
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))  # journal 隔离
+
+    def fake_run(cmd, cwd=None, **_kwargs):
+        recorded.append([str(a) for a in cmd])
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(helper.subprocess, "run", fake_run)
 
     helper.bootstrap_offline(install_root)
 
@@ -827,7 +849,7 @@ def test_installer_size_gate_classify_and_budget(tmp_path, monkeypatch):
     """S15：体积分类与预算读取——online 有上限，offline 未实测仅记录。"""
     import json as json_mod
 
-    from scripts.check_installer_size import classify
+    from scripts.check_installer_size import classify, load_budget
 
     assert classify("Stella-OneClick-Python-Offline-v1.exe") == "offline"
     assert classify("Stella-OneClick-Python-v1.exe") == "online"
@@ -837,6 +859,10 @@ def test_installer_size_gate_classify_and_budget(tmp_path, monkeypatch):
     budget = payload["installer_budget_mb"]
     assert budget["online"] >= 300, "online 实测基线 220.36MB → 上限 300"
     assert budget["offline"] is None, "offline 未实测，不凭猜测设限"
+    # load_budget 必须容忍 null（v6.0.1 run 102 实测：float(None) 崩在门禁）
+    loaded = load_budget()
+    assert loaded["online"] == float(budget["online"])
+    assert loaded["offline"] is None
     # 体积门禁已接入发布作业
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"

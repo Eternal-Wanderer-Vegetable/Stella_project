@@ -474,20 +474,51 @@ jobs:
       # 签名（S14/WP14）：install-test 必须验收**签名后字节**——本步骤在
       # 上传之前执行。凭据缺失的语义：PR/手工构建允许未签名（大字警告），
       # tag 推送的正式发布硬失败（不用 continue-on-error 伪装通过）。
+      # 唯一例外（2026-09-29 维护者显式授权的一次性语义）：repo 变量
+      # STELLA_ALLOW_UNSIGNED=1 时放行未签名发布——变量必须在 repo 设置里
+      # 人工创建（可审计、随时移除），放行时打全局警告并在发布说明追加
+      # 未签名声明。凭据形态：STELLA_CERT_PFX_BASE64（PFX 的 base64，导入
+      # CurrentUser\My 后按 thumbprint 签名）——托管 runner 的证书存储是
+      # 空的，只有 thumbprint 没有证书实体时 signtool 必然失败。
       - name: 签名安装器（正式发布必需）
         shell: pwsh
         env:
           CERT_THUMBPRINT: ${{ secrets.STELLA_CERT_THUMBPRINT }}
+          CERT_PFX_BASE64: ${{ secrets.STELLA_CERT_PFX_BASE64 }}
+          CERT_PFX_PASSWORD: ${{ secrets.STELLA_CERT_PFX_PASSWORD }}
           CERT_TIMESTAMP_URL: ${{ vars.STELLA_TIMESTAMP_URL }}
+          ALLOW_UNSIGNED: ${{ vars.STELLA_ALLOW_UNSIGNED }}
         run: |
           $exes = @(Get-ChildItem 'desktop/src-tauri/target/release/bundle/nsis/*setup.exe' -File)
           if ($exes.Count -ne 1) { throw "必须恰好一个安装器，实际为 $($exes.Count)" }
           if ([string]::IsNullOrWhiteSpace($env:CERT_THUMBPRINT)) {
             if ('${{ github.event_name }}' -eq 'push') {
-              throw "正式发布（tag push）必须配置 STELLA_CERT_THUMBPRINT；未签名产物不得发布"
+              if ($env:ALLOW_UNSIGNED -eq '1') {
+                Write-Host "::warning::未签名发布已显式授权（repo 变量 STELLA_ALLOW_UNSIGNED=1）：本次产物不带签名，SmartScreen 将提示未知发布者"
+                Write-Host "::warning::签名凭据就绪后请移除该变量，恢复强制签名门禁"
+                "UNSIGNED_RELEASE=1" >> $env:GITHUB_ENV
+                exit 0
+              }
+              throw "正式发布（tag push）必须配置 STELLA_CERT_THUMBPRINT；未签名产物不得发布（如确需未签名发布，在 repo 变量显式设置 STELLA_ALLOW_UNSIGNED=1）"
             }
             Write-Host "::warning::未配置 STELLA_CERT_THUMBPRINT，产物保持未签名（仅非正式构建允许）"
             exit 0
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CERT_PFX_BASE64)) {
+            throw "已配置 thumbprint 但缺少 STELLA_CERT_PFX_BASE64：托管 runner 的证书存储为空，无法签名"
+          }
+          # 导入 PFX 到当前用户存储（私钥不可导出）；无论成败都清理落盘的 PFX
+          $pfxPath = Join-Path $env:RUNNER_TEMP "stella-codesign.pfx"
+          try {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+            $importArgs = @('Import-PfxCertificate', '-FilePath', $pfxPath, '-CertStoreLocation', 'Cert:\CurrentUser\My')
+            if (-not [string]::IsNullOrWhiteSpace($env:CERT_PFX_PASSWORD)) {
+              $importArgs += @('-Password', (ConvertTo-SecureString $env:CERT_PFX_PASSWORD -AsPlainText -Force))
+            }
+            & $importArgs[0] @($importArgs | Select-Object -Skip 1) | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "PFX 导入失败（退出码 $LASTEXITCODE）" }
+          } finally {
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
           }
           $ts = if ([string]::IsNullOrWhiteSpace($env:CERT_TIMESTAMP_URL)) { 'http://timestamp.digicert.com' } else { $env:CERT_TIMESTAMP_URL }
           signtool sign /fd SHA256 /td SHA256 /tr $ts /sha1 $env:CERT_THUMBPRINT $exes[0].FullName
@@ -704,6 +735,9 @@ jobs:
           fi
           echo "RELEASE_REF=v${TAG}" >> "$GITHUB_ENV"
 
+      # --exclude '/runtime' 锚定顶层：剥掉开发机的嵌入式运行时目录，但保留
+      # core/runtime/（runtime-manager 工作的 Python 包，v6.0.1 实测：未锚定
+      # 的 'runtime' 把它一并剥掉，import 检查直接崩）。
       # 不复用 .gitignore：两者语义不同（rsync 的 --exclude-from 不支持 ! 否定模式，
       # 锚定 / 的含义也有差异），且 .gitignore 将来会因开发需要增删——那些改动
       # 不该意外影响 Release 内容。Release 的排除清单必须是明确、独立维护的。
@@ -759,7 +793,7 @@ jobs:
             --exclude '.stella-stop-request*' \
             --exclude 'logs' \
             --exclude 'StellaData' \
-            --exclude 'runtime' \
+            --exclude '/runtime' \
             --exclude '*.db' \
             --exclude '*.jsonl' \
             --exclude '*.log' \
@@ -1066,6 +1100,34 @@ jobs:
       #   - 若 Release 已存在：用 `gh release upload --clobber` 覆盖同名资产
       #   - 若不存在：用 `gh release create` 新建
       # 覆盖时会保留原 Release 的 tag/发布时间，仅替换资产，适合紧急修复。
+      # 发布说明从模板生成"生效版"：未签名授权发布（repo 变量
+      # STELLA_ALLOW_UNSIGNED=1 且未配置签名凭据）时自动追加未签名声明，
+      # 用户在下载页就能看到，而不是只留在 CI 日志里。
+      - name: 生成生效发布说明
+        env:
+          CERT_THUMBPRINT: ${{ secrets.STELLA_CERT_THUMBPRINT }}
+        run: |
+          set -e
+          cp release_assets/RELEASE_NOTES_TEMPLATE.md release_assets/RELEASE_NOTES_EFFECTIVE.md
+          if [ -n "$CERT_THUMBPRINT" ]; then
+            echo "已配置签名凭据：发布说明不加未签名声明"
+            exit 0
+          fi
+          if [ "${{ vars.STELLA_ALLOW_UNSIGNED }}" != "1" ]; then
+            echo "非未签名授权发布：发布说明不加声明"
+            exit 0
+          fi
+          cat >> release_assets/RELEASE_NOTES_EFFECTIVE.md <<'NOTICE'
+
+          ---
+
+          > ⚠️ **本版本安装器未经代码签名**（维护者显式授权：repo 变量
+          > `STELLA_ALLOW_UNSIGNED=1`）。Windows SmartScreen 会显示
+          > "未知发布者"提示；安装包完整性请以随发布的 `SHA256SUMS.txt`
+          > 核对。签名凭据就绪后将恢复默认的强制签名门禁。
+          NOTICE
+          echo "生效发布说明已追加未签名声明"
+
       - name: 发布 Release（新建或覆盖同版本 asset）
         if: github.event_name == 'push'
         env:
@@ -1085,6 +1147,7 @@ jobs:
             gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
               products/package-catalog-windows-amd64.json products/release-manifest.json \
               products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            gh release edit "${RELEASE_REF}" --notes-file ../release_assets/RELEASE_NOTES_EFFECTIVE.md
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release..."
@@ -1092,7 +1155,7 @@ jobs:
               products/package-catalog-windows-amd64.json products/release-manifest.json \
               products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
-              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
+              --notes-file ../release_assets/RELEASE_NOTES_EFFECTIVE.md
             echo "✅ 已创建 Release ${RELEASE_REF}"
           fi
           echo "--- 当前 Release 资产 ---"
@@ -1132,6 +1195,7 @@ jobs:
             gh release upload "${RELEASE_REF}" products/*.exe products/*.zip \
               products/package-catalog-windows-amd64.json products/release-manifest.json \
               products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" --clobber
+            gh release edit "${RELEASE_REF}" --notes-file ../release_assets/RELEASE_NOTES_EFFECTIVE.md
             echo "✅ 已覆盖 ${RELEASE_REF} 的资产（手工触发）"
           else
             echo "Release ${RELEASE_REF} 不存在，创建新 Release（手工触发）..."
@@ -1139,7 +1203,7 @@ jobs:
               products/package-catalog-windows-amd64.json products/release-manifest.json \
               products/SHA256SUMS.txt "$CLI_WIN_ZIP" "$CLI_TGZ" \
               --title "Stella ${RELEASE_REF}" \
-              --notes-file ../release_assets/RELEASE_NOTES_TEMPLATE.md
+              --notes-file ../release_assets/RELEASE_NOTES_EFFECTIVE.md
             echo "✅ 已创建 Release ${RELEASE_REF}（手工触发）"
           fi
           echo "--- 当前 Release 资产 ---"

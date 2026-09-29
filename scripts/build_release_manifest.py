@@ -90,7 +90,9 @@ def verify_assets_dir(manifest: dict, assets_dir: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--products", type=Path, required=True)
-    parser.add_argument("--release-version", required=True)
+    parser.add_argument("--release-version",
+                        help="写入清单（生成模式必需；verify 模式不需要——"
+                             "版本已在清单文件里）")
     parser.add_argument("--build-id", default="")
     parser.add_argument("--out-dir", type=Path,
                         help="清单与 SHA256SUMS 输出目录（默认 --products）")
@@ -104,6 +106,8 @@ def main() -> int:
         verify_assets_dir(manifest, args.verify.resolve())
         print(f"[manifest] 回读校验通过：{args.verify}")
         return 0
+    if not args.release_version:
+        parser.error("生成模式需要 --release-version")
     manifest = build_manifest(
         products, release_version=args.release_version, build_id=args.build_id
     )

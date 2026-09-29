@@ -147,6 +147,12 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         path.write_text(relative, encoding="utf-8")
     (source / "runtime" / "python.exe").parent.mkdir(parents=True)
     (source / "runtime" / "python.exe").write_bytes(b"must not ship")
+    # runtime-manager 工作的 Python 包：必须在 Standalone 归档里
+    # （v6.0.1 实测：未锚定的 'runtime' 过滤把它剥掉，import 崩溃）
+    core_runtime = source / "core" / "runtime"
+    core_runtime.mkdir(parents=True, exist_ok=True)
+    (core_runtime / "__init__.py").write_text("", encoding="utf-8")
+    (core_runtime / "turn_service.py").write_text("", encoding="utf-8")
     (source / "models" / "chat.gguf").parent.mkdir(parents=True)
     (source / "models" / "chat.gguf").write_bytes(b"must not ship")
     (source / "runtime-manager" / "target" / "debug").mkdir(parents=True)
@@ -171,6 +177,10 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     assert "deploy/models.py" in names
     assert "deploy/runtime.py" in names
     assert "runtime-manager/target/debug/build.bin" not in names
+    assert "core/runtime/turn_service.py" in names, (
+        "core/runtime 包必须随归档发布（extensions → core.pipeline → "
+        "core.runtime.turn_service 导入链）"
+    )
 
 
 def test_stager_prunes_output_inside_desktop_dir(tmp_path):
@@ -505,3 +515,68 @@ def test_stage_installer_resources_fails_hard_without_webui_dist(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="webui/dist"):
         stage_installer_resources(source, tmp_path / "resources", "oneclick-python")
+
+
+def test_oneclick_rust_stages_memory_rust_python_half(tmp_path):
+    """S15 修复回归：maturin 1.15 的 wheel 不再含 memory_rust Python 半边
+    （python-source 弃用），OneClick Rust 的树必须自带 selector/backend，
+    否则 helper/GUI 的导入检查必挂（v6.0.1 CI install-test 实测）。"""
+    source = tmp_path / "source"
+    for relative in (
+        "bot.py",
+        "deploy/nsis_bootstrap_helper.py",
+        "requirements.txt",
+        "pyproject.toml",
+        "LICENSE",
+        "README.md",
+        ".env.example",
+        "start.bat",
+        "doctor.bat",
+        "stop.bat",
+        "README-快速开始.txt",
+        "runtime-manager/schemas/runtime-manifest.schema.json",
+        "runtime-manager/schemas/runtime-state.schema.json",
+        "runtime-manager/schemas/package-catalog.schema.json",
+        "runtime-manager/schemas/package-registry.schema.json",
+    ):
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+    for directory in (
+        "astrbot_compat", "capability", "config", "core", "deploy",
+        "extensions", "memory", "system_prompts", "runtime-manager",
+        "stella_project", "knowledge", "skills", "assets", "webui",
+        "desktop",
+    ):
+        path = source / directory / "__init__.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    dist = source / "webui" / "dist" / "index.html"
+    dist.parent.mkdir(parents=True, exist_ok=True)
+    dist.write_text("panel", encoding="utf-8")
+    for profile_id in PROFILE_IDS:
+        path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+
+    # memory_rust Python 半边 + 构建目录（必须被排除）+ 随包 wheel
+    for name in ("__init__.py", "selector.py", "backend.py", "python_backend.py"):
+        path = source / "memory_rust" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    native = source / "memory_rust" / "native" / "src"
+    native.mkdir(parents=True)
+    (native / "lib.rs").write_text("build-only", encoding="utf-8")
+    wheels = source / "wheels"
+    wheels.mkdir(parents=True)
+    (wheels / "stella_memory_rust-1.0-cp312-cp312-win_amd64.whl").write_bytes(b"whl")
+
+    output = tmp_path / "resources"
+    stage_installer_resources(source, output, "oneclick-rust")
+
+    for name in ("__init__.py", "selector.py", "backend.py", "python_backend.py"):
+        assert (output / "memory_rust" / name).is_file(), name
+    assert not (output / "memory_rust" / "native").exists(), (
+        "Rust 构建目录绝不能进安装树"
+    )
+    assert (output / "wheels" / "stella_memory_rust-1.0-cp312-cp312-win_amd64.whl").is_file()

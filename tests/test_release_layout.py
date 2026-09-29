@@ -241,7 +241,7 @@ def test_release_excludes_are_parsed_without_stray_quotes():
     assert excludes, "没有解析到任何 --exclude，release.yml 的格式可能变了"
     assert not [e for e in excludes if e.startswith(("'", '"')) or e.endswith(("'", '"', "\\"))]
     # 几个已知一定在清单里的值，按原样出现
-    assert {"logs", "tests", "runtime", "*.db"} <= excludes
+    assert {"logs", "tests", "/runtime", "*.db"} <= excludes
 
 
 def _gitignore_entries() -> set[str]:
@@ -328,3 +328,14 @@ def test_never_migrate_paths_are_excluded_from_release():
             name in candidate or candidate in relative.rstrip("/")
             for candidate in excludes | ignored
         ), f"{relative} 应当被 release.yml 或 .gitignore 排除"
+
+
+def test_runtime_exclude_is_anchored_to_top_level():
+    """rsync 的 runtime 排除必须锚定顶层（/runtime）：裸 'runtime' 会把
+    core/runtime/（runtime-manager 工作的 Python 包）一并剥掉——v6.0.1
+    CI 实测：import 检查崩在 core.pipeline → core.runtime.turn_service。"""
+    excludes = _release_excludes()
+    assert "/runtime" in excludes, "缺少锚定的 /runtime 排除（开发机嵌入式运行时）"
+    assert "runtime" not in excludes, (
+        "裸 'runtime' 排除会误伤 core/runtime/ 包（rsync 未锚定模式匹配任意层级）"
+    )

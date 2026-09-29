@@ -159,11 +159,20 @@ def _seed_rust_wheel(install_root, name="stella_memory_rust-1.0-cp312-cp312-win_
 
 
 def test_bootstrap_offline_installs_rust_wheel_before_components(tmp_path, monkeypatch):
-    """oneclick-rust：随包 wheel 原地解包 → 扩展导入自检 → 写 .stella-rust-ready。"""
+    """oneclick-rust：随包 wheel 原地解包 → 扩展导入自检 → 写 .stella-rust-ready。
+
+    重试实现直接走 subprocess.run，mock 那一层并让每步首试成功。
+    """
     install_root = _seed_offline_tree(tmp_path, profile="oneclick-rust")
     wheel = _seed_rust_wheel(install_root)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "la"))  # journal 隔离
     recorded: list[list[str]] = []
-    monkeypatch.setattr(helper, "_run", lambda cmd, cwd, **_kwargs: recorded.append(cmd))
+
+    def fake_run(cmd, cwd=None, **_kwargs):
+        recorded.append([str(a) for a in cmd])
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(helper.subprocess, "run", fake_run)
 
     helper.bootstrap_offline(install_root)
 
@@ -482,3 +491,53 @@ def test_markers_are_written_atomically(tmp_path, monkeypatch):
 def test_main_rejects_when_offline_manifest_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["nsis_bootstrap_helper.py", str(tmp_path)])
     assert helper.main([str(tmp_path)]) == 2
+
+
+def test_rust_wheel_steps_retry_transient_failures(tmp_path, monkeypatch):
+    """解包/导入瞬态失败（Defender 锁）→ 有界重试后成功，不留假失败。"""
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-rust")
+    wheel = _seed_rust_wheel(install_root)
+    sleeps: list[float] = []
+    monkeypatch.setattr(helper.time, "sleep", lambda s: sleeps.append(s))
+    attempts: dict[str, int] = {"unpack": 0, "verify": 0}
+
+    def flaky_run(cmd, cwd=None, **_kwargs):
+        cmd_str = " ".join(str(a) for a in cmd)
+        if "zipfile" in cmd_str:
+            attempts["unpack"] += 1
+            # 解包首试失败 → 重试成功
+            return SimpleNamespace(returncode=1 if attempts["unpack"] == 1 else 0)
+        attempts["verify"] += 1
+        # 导入前两试失败 → 第三次成功
+        return SimpleNamespace(returncode=0 if attempts["verify"] >= 3 else 1)
+
+    monkeypatch.setattr(helper.subprocess, "run", flaky_run)
+    helper.ensure_rust_wheel(install_root, install_root / "runtime" / "python.exe", wheel)
+    marker = install_root / "runtime" / helper.RUST_MARKER
+    assert marker.is_file(), "重试成功后必须写 ready 标记"
+    session = (install_root / helper.SESSION_LOG_FILENAME).read_text(encoding="utf-8")
+    assert "rust_wheel_retry" in session, "重试必须留痕（会话日志）"
+    assert sleeps == [2.0, 2.0, 5.0], f"解包 1 次重试(2s) + 导入 2 次重试(2s/5s)，实际 {sleeps}"
+
+
+def test_rust_wheel_deterministic_failure_exits_after_retries(tmp_path, monkeypatch):
+    """确定性失败（架构不匹配等）：退避耗尽 → 具名失败退出。"""
+    fake_local = tmp_path / "la"
+    fake_local.mkdir()
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local))
+    install_root = _seed_offline_tree(tmp_path, profile="oneclick-rust")
+    wheel = _seed_rust_wheel(install_root)
+    monkeypatch.setattr(helper.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(
+        helper.subprocess, "run",
+        lambda cmd, cwd=None, **_kwargs: SimpleNamespace(returncode=1),
+    )
+    with pytest.raises(SystemExit, match="重试 3 次仍失败"):
+        helper.ensure_rust_wheel(
+            install_root, install_root / "runtime" / "python.exe", wheel
+        )
+    session = (install_root / helper.SESSION_LOG_FILENAME).read_text(encoding="utf-8")
+    assert session.count("rust_wheel_attempt_failed") == 3, "每次失败尝试都要留痕"

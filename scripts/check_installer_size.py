@@ -22,12 +22,16 @@ TOOLCHAIN = REPO_ROOT / "release_assets" / "toolchain.json"
 BUDGET_KEY = "installer_budget_mb"
 
 
-def load_budget() -> dict[str, int]:
+def load_budget() -> dict[str, float | None]:
+    """读取体积预算；`null` = 该类别未实测、不设限（记录但不拦截）。"""
     toolchain = json.loads(TOOLCHAIN.read_text(encoding="utf-8"))
     budget = toolchain.get(BUDGET_KEY)
     if not isinstance(budget, dict):
         raise SystemExit(f"toolchain.json 缺少 {BUDGET_KEY} 体积预算")
-    return {str(k): float(v) for k, v in budget.items()}
+    return {
+        str(k): (float(v) if v is not None else None)
+        for k, v in budget.items()
+    }
 
 
 def classify(name: str) -> str:
