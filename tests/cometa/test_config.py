@@ -222,3 +222,26 @@ class TestDefaultProfile:
         )
         with pytest.raises(CometaConfigError, match="default_profile"):
             CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+
+
+class TestBackendEnv:
+    """[backends.<id>.env]：后端子进程的环境透传（代理等部署级配置）。"""
+
+    def _write(self, tmp_path: Path, body: str) -> None:
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "cometa.toml").write_text(body, encoding="utf-8")
+
+    def test_env_parsed(self, tmp_path):
+        self._write(
+            tmp_path,
+            '[backends.c]\ntype = "codex"\n\n[backends.c.env]\n'
+            'HTTP_PROXY = "http://127.0.0.1:7890"\n',
+        )
+        cfg = CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+        assert cfg.backends["c"].env == {"HTTP_PROXY": "http://127.0.0.1:7890"}
+
+    def test_env_empty_by_default(self, tmp_path):
+        self._write(tmp_path, '[backends.f]\ntype = "fake"\n')
+        cfg = CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+        assert cfg.backends["f"].env == {}

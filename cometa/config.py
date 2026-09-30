@@ -137,6 +137,10 @@ class BackendConfig:
     auth_profile: str = ""
     model: str = ""  # 空 = 后端账号的配置默认值
     capabilities: list[str] = field(default_factory=list)
+    # 传给后端子进程的额外环境变量（如代理：HTTP_PROXY/HTTPS_PROXY）。
+    # codex 类型经 SDK CodexConfig(env=...) 注入 app-server；部署里写这比
+    # 依赖 bot 终端的环境变量可靠（worker 是独立子进程）。
+    env: dict[str, str] = field(default_factory=dict)
     # 仅 type="fake" 可用的演示行为（人工验收脚本；正式后端必须留空）：
     #   complete = 按脚本直接完成；fail = 按脚本失败；
     #   input   = 先请求补充信息、答复后完成；hang/空 = 流挂起直到取消
@@ -148,7 +152,7 @@ class BackendConfig:
             raise CometaConfigError(f"[backends.{backend_id}] 必须是表")
         known = {
             "type", "enabled", "transport", "executable", "auth_profile", "model",
-            "capabilities", "fake_behavior",
+            "capabilities", "fake_behavior", "env",
         }
         unknown = set(data) - known
         if unknown:
@@ -175,6 +179,7 @@ class BackendConfig:
             auth_profile=str(data.get("auth_profile", "")),
             model=str(data.get("model", "")),
             capabilities=[str(c) for c in (data.get("capabilities") or [])],
+            env={str(k): str(v) for k, v in (data.get("env") or {}).items()},
             fake_behavior=fake_behavior,
         )
 

@@ -269,30 +269,46 @@ def _waiting_request_id(store, task_id) -> str:
 
 
 class TestCodexFailClosed:
-    """M0 门禁前 Codex 适配器必须 fail-closed（方案 §6.7/§12.1）。"""
+    """M0 已解锁（openai-codex==0.147.0 实录验证），但 fail-closed 语义保持：
+    SDK 缺失 → probe degraded / open_session 拒绝（seam 确定性测试，不依赖
+    开发机是否装了 SDK）。"""
 
     @pytest.mark.asyncio
     async def test_probe_without_sdk_is_degraded_or_incompatible(self, monkeypatch):
-        # SDK 是否安装在开发机上会变（已装 openai-codex），探测逻辑必须
-        # 确定性可测：显式断开 SDK 导入 seam。
         import cometa.backends.codex as codex_mod
 
         monkeypatch.setattr(codex_mod, "_import_sdk", lambda: None)
         health = await _codex_backend().probe()
-        assert health.state.value in ("degraded", "incompatible")
+        assert health.state.value in ("degraded", "incompatible", "auth_required")
 
     @pytest.mark.asyncio
-    async def test_open_session_refuses(self):
+    async def test_open_session_refuses_without_sdk(self, monkeypatch):
+        import cometa.backends.codex as codex_mod
         from cometa.backends.base import PolicyContext, TurnRequest
 
+        monkeypatch.setattr(codex_mod, "_import_sdk", lambda: None)
         with pytest.raises(CodexUnavailableError):
             await _codex_backend().open_session(
                 TurnRequest(objective="x"), None, PolicyContext(profile="p")
             )
 
     @pytest.mark.asyncio
-    async def test_executor_marks_codex_task_failed(self, make_executor, store, config):
-        """codex 后端不可用时任务明确失败，绝不静默换后端（§6.4）。"""
+    async def test_probe_auth_required_without_auth_file(self, monkeypatch, tmp_path):
+        """SDK 在但认证缺失 → auth_required（不是 ready，§6.7）。"""
+        import cometa.backends.codex as codex_mod
+
+        monkeypatch.setattr(codex_mod, "_auth_ok", lambda: False)
+        health = await _codex_backend().probe()
+        assert health.state.value == "auth_required"
+
+    @pytest.mark.asyncio
+    async def test_executor_marks_codex_task_failed(self, make_executor, store, config, monkeypatch):
+        """codex 后端不可用时任务明确失败，绝不静默换后端（§6.4.4）。
+
+        seam 断开 SDK：单元测试永不拉起真实 App Server（那要联网耗额度）。"""
+        import cometa.backends.codex as codex_mod
+
+        monkeypatch.setattr(codex_mod, "_import_sdk", lambda: None)
         executor, _ = make_executor()
         executor.registry = BackendRegistry()
         executor.registry.register_type("codex", CodexBackend)
