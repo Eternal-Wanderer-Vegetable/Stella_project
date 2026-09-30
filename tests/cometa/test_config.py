@@ -193,3 +193,32 @@ class TestFakeBehavior:
         )
         with pytest.raises(CometaConfigError, match="fake_behavior"):
             CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+
+
+class TestDefaultProfile:
+    """default_profile：显式委派命令（QQ/WebUI 表单无 profile 槽位）的默认路由。"""
+
+    def _write(self, tmp_path: Path, body: str) -> None:
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "cometa.toml").write_text(body, encoding="utf-8")
+
+    def test_default_profile_parsed_and_validated(self, tmp_path):
+        self._write(
+            tmp_path,
+            'default_profile = "coding"\n'
+            '[backends.f]\ntype = "fake"\n'
+            "[profiles.coding]\nbackend = \"f\"\n",
+        )
+        cfg = CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+        assert cfg.default_profile == "coding"
+
+    def test_default_profile_unknown_rejected(self, tmp_path):
+        self._write(
+            tmp_path,
+            'default_profile = "ghost"\n'
+            '[backends.f]\ntype = "fake"\n'
+            "[profiles.coding]\nbackend = \"f\"\n",
+        )
+        with pytest.raises(CometaConfigError, match="default_profile"):
+            CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))

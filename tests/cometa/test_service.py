@@ -234,3 +234,44 @@ class TestHealth:
 
     def test_ready(self, service):
         assert service.health()["state"] == "ready"
+
+
+class TestDefaultProfileRouting:
+    def test_bare_spec_uses_default_profile(self, store, config):
+        """QQ 委派命令没有 profile 槽位：多 profile 部署用 toml 的
+        default_profile（2026-09-30 用户实测：5 profile 配置下命令全被拒）。"""
+        from cometa.config import BackendConfig
+
+        config.default_profile = "demo"
+        from cometa.config import ProfileConfig
+
+        config.backends["demo"] = BackendConfig(backend_id="demo", type="fake", enabled=True)
+        config.profiles["demo"] = ProfileConfig(name="demo", backend="demo")
+        service = CometaService(store, config, instance_id="inst-test")
+        config.access.qq_user_ids = {777}
+        config.access.qq_group_ids = {12345}
+        receipt = service.submit(
+            make_spec(permission_profile=""),
+            actor=Actor(kind="qq_user", id="777"),
+            origin=make_origin(),
+            idempotency_key="k-default",
+        )
+        task = service.store.get_task(receipt.task_id)
+        assert task.backend_id == "demo"  # 命令显式点名了 demo
+        assert task.profile == "demo"
+
+    def test_bare_spec_without_default_rejected_when_ambiguous(self, service, config):
+        _allow(config)
+        from cometa.config import BackendConfig
+
+        config.backends["second"] = BackendConfig(backend_id="second", type="fake", enabled=True)
+        config.profiles["second"] = __import__(
+            "cometa.config", fromlist=["ProfileConfig"]
+        ).ProfileConfig(name="second", backend="second")
+        with pytest.raises(InvalidRequestError, match="default_profile"):
+            service.submit(
+                make_spec(permission_profile=""),
+                actor=ALICE,
+                origin=make_origin(),
+                idempotency_key="k-nog",
+            )

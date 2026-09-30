@@ -75,13 +75,18 @@ class SubmissionPolicy:
         # profile：必须显式或唯一默认
         profile_name = spec.permission_profile.strip()
         if not profile_name:
+            # 显式命令（QQ 委派/WebUI 表单）没有 profile 槽位：单 profile 直接
+            # 用它；多 profile 则用管理员声明的 default_profile（§6.9 管理员
+            # 预授权语义），两者都没有才拒绝。
             if len(self.config.profiles) == 1:
                 profile_name = next(iter(self.config.profiles))
+            elif self.config.default_profile:
+                profile_name = self.config.default_profile
             else:
                 return PolicyDecision(
                     ok=False,
                     reason_code="profile_required",
-                    message="未指定权限 profile",
+                    message="未指定权限 profile（多 profile 部署需在 toml 配 default_profile）",
                 )
         profile = self.config.profile_of(profile_name)
         if profile is None:

@@ -290,6 +290,11 @@ class CometaConfig:
     workspaces: dict[str, WorkspaceConfig] = field(default_factory=dict)
     profiles: dict[str, ProfileConfig] = field(default_factory=dict)
     access: AccessConfig = field(default_factory=AccessConfig)
+    # 显式委派命令未指明 profile 时使用的默认项（必须引用已定义的 profile；
+    # 空 = 仅当恰好定义了一个 profile 时才可省略）。QQ 委派命令没有 profile
+    # 槽位，多 profile 部署没有默认项时命令必然被拒（2026-09-30 用户实测）。
+    default_profile: str = ""
+
     config_hash: str = ""  # TOML 原始字节的 sha256；空 = 无 TOML 文件
 
     # ── 便捷查询 ─────────────────────────────────────────
@@ -307,6 +312,10 @@ class CometaConfig:
 
     def validate_references(self) -> None:
         """profile 引用的 backend/workspace 必须存在（启动期 fail-closed）。"""
+        if self.default_profile and self.default_profile not in self.profiles:
+            raise CometaConfigError(
+                f"default_profile 引用了未定义的 profile {self.default_profile!r}"
+            )
         for profile in self.profiles.values():
             if profile.backend not in self.backends:
                 raise CometaConfigError(
@@ -393,6 +402,7 @@ class CometaConfig:
             "workspaces",
             "profiles",
             "access",
+            "default_profile",
             "_raw_sha256",
         }
         unknown = set(data) - known_top
@@ -411,6 +421,7 @@ class CometaConfig:
             self.profiles[profile.name] = profile
         if "access" in data:
             self.access = AccessConfig.from_toml(data["access"])
+        self.default_profile = str(data.get("default_profile", "")).strip()
 
 
 __all__ = [
