@@ -51,6 +51,7 @@ class CometaRuntime:
         default=None, repr=False, compare=False
     )
     _pump_task: asyncio.Task | None = field(default=None, repr=False, compare=False)
+    _watchdog_task: asyncio.Task | None = field(default=None, repr=False, compare=False)
 
     @property
     def enabled(self) -> bool:
@@ -64,6 +65,26 @@ class CometaRuntime:
         )
         if spawn_worker and self.supervisor is not None:
             self.supervisor.start()
+            self._watchdog_task = asyncio.create_task(
+                self._watch_worker(), name="cometa-worker-watchdog"
+            )
+
+    async def _watch_worker(self) -> None:
+        """worker 子进程退出看门狗：崩溃必须留痕（worker.log 有详情）。
+        v1 不自动拉起（避免与租约恢复矩阵互相踩），只报错。"""
+        supervisor = self.supervisor
+        if supervisor is None:
+            return
+        while not self._pump_stop.is_set():
+            await asyncio.sleep(5.0)
+            if not supervisor.is_running():
+                _LOGGER.error(
+                    "❌ [Cometa] worker 子进程已退出（exit=%s）；任务认领已停摆，"
+                    "详情见 %s。重启 bot 可恢复。",
+                    supervisor._process.poll() if supervisor._process else "?",
+                    supervisor._worker_log_path(),
+                )
+                return
         _LOGGER.info(
             "cometa runtime 已启动（worker 子进程=%s）",
             "yes" if self.supervisor is not None else "no",
@@ -73,6 +94,9 @@ class CometaRuntime:
         """受控关闭：泵 → worker 子进程 → 存量状态留给租约/恢复矩阵。"""
         if getattr(self, "_pump_stop", None) is not None:
             self._pump_stop.set()
+        watchdog = getattr(self, "_watchdog_task", None)
+        if watchdog is not None:
+            watchdog.cancel()
         pump_task = getattr(self, "_pump_task", None)
         if pump_task is not None:
             try:

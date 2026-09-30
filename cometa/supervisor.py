@@ -49,10 +49,15 @@ class WorkerSupervisor:
         self.process_identity = f"{os.getpid()}:{uuid.uuid4().hex[:12]}"
         self._python = python_executable or sys.executable
         self._process: subprocess.Popen | None = None
+        self._log_handle = None
 
     # ── 生命周期 ─────────────────────────────────────────
     def start(self) -> bool:
-        """启动 worker 子进程（幂等：已在运行则跳过）。"""
+        """启动 worker 子进程（幂等：已在运行则跳过）。
+
+        worker 的 stdout/stderr 落到 ``cometa/worker.log``（每次启动重写）：
+        子进程的崩溃（如注册被拒）不能只靠继承控制台——GUI/服务方式启动 bot
+        时那里没人看（2026-09-30 人工清单实测：worker 静默死亡无痕迹）。"""
         if self._process is not None and self._process.poll() is None:
             return True
         args = [
@@ -67,16 +72,41 @@ class WorkerSupervisor:
         kwargs: dict = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = CREATE_NO_WINDOW
+        log_path = self._worker_log_path()
         try:
+            if log_path is not None:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                kwargs["stdout"] = log_path.open("w", encoding="utf-8")
+                kwargs["stderr"] = subprocess.STDOUT
             self._process = subprocess.Popen(args, **kwargs)
         except OSError as e:
             _LOGGER.error("worker 子进程启动失败: %s", e)
             self._process = None
             return False
+        self._log_handle = kwargs.get("stdout")
         _LOGGER.info(
-            "worker 子进程已启动 pid=%s worker=%s", self._process.pid, self.worker_id
+            "worker 子进程已启动 pid=%s worker=%s log=%s",
+            self._process.pid,
+            self.worker_id,
+            log_path,
         )
         return True
+
+    def _worker_log_path(self):
+        base = getattr(self.config, "db_path", None)
+        if base is None:
+            return None
+        return base.parent / "worker.log"
+
+    def read_worker_log_tail(self, limit: int = 2000) -> str:
+        """worker 崩溃诊断用：读取 worker.log 末尾。"""
+        log_path = self._worker_log_path()
+        if log_path is None or not log_path.is_file():
+            return ""
+        try:
+            return log_path.read_text(encoding="utf-8", errors="replace")[-limit:]
+        except OSError:
+            return ""
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
@@ -129,6 +159,10 @@ class WorkerSupervisor:
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     process.wait(timeout=5.0)
         self._process = None
+        if self._log_handle is not None:
+            with contextlib.suppress(OSError):
+                self._log_handle.close()
+            self._log_handle = None
         _LOGGER.info("worker 子进程已停止 worker=%s", self.worker_id)
 
     # ── 内部 ─────────────────────────────────────────────

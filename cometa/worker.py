@@ -24,6 +24,7 @@ import logging
 import os
 import signal
 import sys
+import time
 import uuid
 from datetime import timedelta
 
@@ -76,14 +77,37 @@ class CometaWorker:
         self._backend_ids = backend_ids
 
     # ── 主循环 ───────────────────────────────────────────
+    async def _register_with_retry(self) -> int:
+        """带界重试的注册。重启 bot 时旧 worker 的租约往往还没过期（bot 被强杀
+        时不释放租约），首拍注册会被拒——这正是「双 worker 不重复执行」的
+        数据库保证在工作，此时**等待租约到期后接管**而不是崩溃退出
+        （2026-09-30 人工清单 T8 前哨实测：worker 静默死亡导致任务滞留 queued）。"""
+        deadline = time.monotonic() + max(self.config.lease_seconds * 2 + 10.0, 15.0)
+        attempt = 0
+        while True:
+            try:
+                return self.store.register_worker(
+                    self.instance_id,
+                    self.worker_id,
+                    self.process_identity,
+                    lease_seconds=self.config.lease_seconds,
+                )
+            except Exception as e:
+                attempt += 1
+                if time.monotonic() >= deadline:
+                    raise
+                if attempt == 1:
+                    _LOGGER.warning(
+                        "worker 注册被拒（%s）；旧 worker 租约未过期，"
+                        "每 2s 重试直至可接管（上限 %.0fs）",
+                        e,
+                        deadline - time.monotonic(),
+                    )
+                await asyncio.sleep(min(2.0, max(0.2, deadline - time.monotonic())))
+
     async def run_forever(self, *, stop_grace_seconds: float = DEFAULT_STOP_GRACE_SECONDS):
         """进程入口主循环。正常退出只经由 :meth:`request_stop`。"""
-        self._worker_epoch = self.store.register_worker(
-            self.instance_id,
-            self.worker_id,
-            self.process_identity,
-            lease_seconds=self.config.lease_seconds,
-        )
+        self._worker_epoch = await self._register_with_retry()
         _LOGGER.info(
             "cometa worker 启动 instance=%s worker=%s epoch=%s db=%s",
             self.instance_id,

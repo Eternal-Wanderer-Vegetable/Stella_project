@@ -122,3 +122,76 @@ class TestSingleOwner:
         # 关闭后 worker 租约已释放，新 worker 可立即接管
         epoch = store.register_worker("inst-test", "w2", "pid:2", lease_seconds=30)
         assert epoch >= 1
+
+
+class TestStartupLeaseRetry:
+    @pytest.mark.asyncio
+    async def test_worker_takes_over_after_stale_lease(self, store, config):
+        """快速重启场景：旧 worker 租约未过期时新 worker 重试等待接管，
+        而不是崩溃退出（2026-09-30 人工清单实测的静默死亡缺陷）。"""
+        config.lease_seconds = 2.0
+        from datetime import timedelta as _td
+
+        from cometa.models import iso_utc, utc_now
+
+        # 模拟刚被强杀的旧 worker：租约还有 ~2s 才过期
+        store.register_worker("inst-test", "old-worker", "pid:old", lease_seconds=30.0)
+        import sqlite3 as _sq
+
+        conn = _sq.connect(str(store.db_path))
+        conn.execute(
+            "UPDATE worker_leases SET lease_until_utc = ? WHERE worker_id = 'old-worker'",
+            (iso_utc(utc_now() + _td(seconds=2)),),
+        )
+        conn.commit()
+        conn.close()
+
+        backend = FakeBackend()
+        worker = _worker(store, config, backend, worker_id="new-worker")
+        run = asyncio.create_task(worker.run_forever(stop_grace_seconds=3.0))
+        # 新 worker 应在旧租约过期后接管（而非崩溃）
+        took_over = False
+        for _ in range(120):
+            try:
+                row = store.register_worker(
+                    "inst-test", "probe-peek", "pid:peek", lease_seconds=0.001
+                )
+            except Exception:
+                row = None
+            if row is None:
+                # probe 被拒 = new-worker 持有租约（接管成功）
+                leases = store._connect()
+                try:
+                    rows = leases.execute(
+                        "SELECT worker_id FROM worker_leases WHERE instance_id='inst-test'"
+                    ).fetchall()
+                finally:
+                    leases.close()
+                if rows and rows[0][0] == "new-worker":
+                    took_over = True
+                    break
+            await asyncio.sleep(0.25)
+        worker.request_stop()
+        await asyncio.wait_for(run, timeout=15)
+        assert took_over, "新 worker 未能在旧租约过期后接管"
+
+    @pytest.mark.asyncio
+    async def test_stale_queued_task_claimed_after_restart(self, store, config):
+        """滞留 queued 的任务（上一个 worker 死亡遗留）被新 worker 正常认领。"""
+        backend = FakeBackend()
+        backend.behavior.events = fake_completed("recovered run")
+        worker = _worker(store, config, backend, worker_id="w-new")
+        task_id = submit_task(store, config)  # queued，无人在场
+        run = asyncio.create_task(worker.run_forever(stop_grace_seconds=3.0))
+        try:
+            state = None
+            for _ in range(200):
+                record = store.get_task(task_id)
+                state = record.state
+                if state.value in ("succeeded", "failed", "cancelled"):
+                    break
+                await asyncio.sleep(0.05)
+            assert state.value == "succeeded"
+        finally:
+            worker.request_stop()
+            await asyncio.wait_for(run, timeout=15)
