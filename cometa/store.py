@@ -1328,12 +1328,14 @@ class CometaStore:
         task_id: str,
         *,
         actor: str,
-        idempotency_key: str = "",
+        idempotency_key: str | None = "",
         now: datetime | None = None,
     ) -> ControlReceiptLike:
         """请求取消（方案 §6.8）：持久控制命令；queued 直接终态，
         在途任务转 cancelling，由 worker 确认停止后落 cancelled。"""
         now = now or utc_now()
+        # 列是 NOT NULL DEFAULT ''：显式传 None 会绕过 DEFAULT 直接违反约束
+        idempotency_key = idempotency_key or ""
 
         def _do(conn: sqlite3.Connection) -> ControlReceiptLike:
             row = conn.execute(
