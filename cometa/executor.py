@@ -512,9 +512,19 @@ class AttemptExecutor:
             )
             return True
         partial_text = self.artifacts.read_final_text(task.task_id)
-        summary = "任务已被用户取消。"
-        if partial_text:
-            summary = "任务已被用户取消；中断前产出的内容已保留。"
+        # 到期注入的取消命令（deadline: 前缀）→ 终态落 timed_out（§6.2）；
+        # 用户/系统显式取消 → cancelled。取消语义在方案里是两个事实。
+        timed_out = self.store.has_deadline_control(task.task_id)
+        if timed_out:
+            summary = "任务到达墙钟期限，已确认停止；中断前产出的内容已保留。"
+            state = TaskState.TIMED_OUT
+            limitations = ["deadline_exceeded"]
+        else:
+            summary = "任务已被用户取消。"
+            if partial_text:
+                summary = "任务已被用户取消；中断前产出的内容已保留。"
+            state = TaskState.CANCELLED
+            limitations = ["cancelled_by_user"]
         # 完成先到时终态 CAS 裁决已定（§6.8）：吞掉租约冲突
         with contextlib.suppress(StaleLeaseError):
             self.store.finish_task(
@@ -523,14 +533,14 @@ class AttemptExecutor:
                 owner=owner,
                 epoch=epoch,
                 outcome=Outcome.CANCELLED,
-                state=TaskState.CANCELLED,
+                state=state,
                 summary=summary,
                 final_text_ref=(
                     self.artifacts.save_final_text(task.task_id, partial_text)
                     if partial_text
                     else ""
                 ),
-                limitations=["cancelled_by_user"],
+                limitations=limitations,
                 error="",
             )
         return True

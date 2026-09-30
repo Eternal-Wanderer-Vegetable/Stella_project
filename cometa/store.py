@@ -1784,6 +1784,23 @@ class CometaStore:
 
         return self._tx(_do)
 
+    def has_deadline_control(self, task_id: str) -> bool:
+        """该任务的取消命令里是否含到期注入（idempotency_key=deadline:…）。
+
+        executor 用它区分「用户取消」与「超时取消」，后者落
+        ``timed_out`` 终态（方案 §6.2：到期 → cancelling → timed_out）。
+        """
+
+        def _do(conn: sqlite3.Connection) -> bool:
+            row = conn.execute(
+                "SELECT 1 FROM controls WHERE task_id = ? AND kind = 'cancel'"
+                " AND idempotency_key LIKE 'deadline:%' LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            return row is not None
+
+        return self._read(_do)
+
     # ============================================================
     # 通知投递（事务边界 5，方案 §6.3）
     # ============================================================

@@ -10,6 +10,7 @@ CodexAdapter 在 M0 门禁通过前显式跳过（fail-closed 本身也被测到
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 
 import pytest
 
@@ -24,6 +25,8 @@ from cometa.models import (
     Outcome,
     TaskState,
     VerificationStatus,
+    iso_utc,
+    utc_now,
 )
 from tests.cometa_helpers import claim_task, submit_task
 
@@ -299,3 +302,57 @@ class TestCodexFailClosed:
         await executor.run_attempt(task, attempt)
         record = store.get_task(task_id)
         assert record.state is TaskState.FAILED
+
+
+class TestFakeBehaviorPreset:
+    """TOML fake_behavior 预设驱动 FakeBackend（人工验收的自动化锚点）。"""
+
+    @pytest.mark.asyncio
+    async def test_complete_preset_runs_to_success(self, make_executor, store, config):
+        from cometa.config import BackendConfig
+
+        config.backends["demo"] = BackendConfig(
+            backend_id="demo", type="fake", enabled=True, fake_behavior="complete"
+        )
+        executor, _ = make_executor()
+        # 用「读配置」的工厂替换注入实例（与生产 default_registry 一致，
+        # FakeBackend 从 cfg.fake_behavior 取脚本）
+        registry = BackendRegistry()
+        registry.register_type("fake", lambda cfg: FakeBackend(cfg))
+        executor.registry = registry
+        task_id = submit_task(store, config, backend_id="demo")
+        task, attempt = claim_task(store, backend_ids={"fake", "demo"})
+        await executor.run_attempt(task, attempt)
+        assert store.get_task(task_id).state is TaskState.SUCCEEDED
+
+    @pytest.mark.asyncio
+    async def test_deadline_cancel_lands_timed_out(self, make_executor, store, config):
+        """到期注入的取消 → 终态 timed_out（§6.2：到期 → cancelling → timed_out）。"""
+        import sqlite3
+
+        executor, _ = make_executor()
+        task_id = submit_task(store, config)  # 无脚本：流挂起
+        task, attempt = claim_task(store)
+        store.transition_task(
+            task_id,
+            attempt_id=attempt.attempt_id,
+            owner="w-test",
+            epoch=attempt.lease_epoch,
+            from_states=(TaskState.STARTING,),
+            to_state=TaskState.RUNNING,
+        )
+        # 期限改为已过期，然后触发到期清扫（注入 deadline: 控制命令）
+        conn = sqlite3.connect(str(store.db_path))
+        conn.execute(
+            "UPDATE tasks SET deadline_utc = ? WHERE task_id = ?",
+            (iso_utc(utc_now() - timedelta(seconds=1)), task_id),
+        )
+        conn.commit()
+        conn.close()
+        assert store.enforce_deadlines() == [task_id]
+        await asyncio.wait_for(
+            executor.run_attempt(task, attempt), timeout=20
+        )
+        assert store.get_task(task_id).state is TaskState.TIMED_OUT
+        result = store.get_result(task_id)
+        assert result is not None and "期限" in result.summary

@@ -97,6 +97,32 @@ class FakeBackend:
         self.closed_sessions: list[str] = []
         self._pending_events: dict[str, list[BackendEvent]] = {}
         self._cancelled_turns: set[str] = set()
+        self._apply_preset(getattr(config, "fake_behavior", ""))
+
+    def _apply_preset(self, name: str) -> None:
+        """TOML ``fake_behavior`` 预设（人工验收脚本；见 BackendConfig 字段说明）。"""
+        if name == "complete":
+            self.behavior.events = fake_completed(
+                "演示任务已完成：FakeBackend 按 fake_behavior=complete 脚本产出最终答复。"
+            )
+        elif name == "fail":
+            self.behavior.events = fake_failed("演示失败（fake_behavior=fail）")
+        elif name == "input":
+            self.behavior.events = [
+                backend_event(
+                    "input_request",
+                    {
+                        "backend_request_id": "demo-br-1",
+                        "question": "演示：请补充任意一句话让任务继续。",
+                        "options": [],
+                    },
+                    backend_event_id="demo-input-1",
+                )
+            ]
+            self.behavior.events_after_respond = fake_completed(
+                "已收到补充信息，演示任务完成。"
+            )
+        # "" / "hang"：空脚本 → 流挂起直到被取消（等待态/取消/超时场景用）
 
     # ── 描述与健康 ───────────────────────────────────────
     async def describe(self) -> BackendDescriptor:

@@ -160,3 +160,36 @@ class TestDefaults:
         assert access.qq_user_ids == set()
         assert access.qq_group_ids == set()
         assert access.operator_user_ids == set()
+
+
+class TestFakeBehavior:
+    """fake_behavior：仅 type="fake" 可用的人工验收脚本键（本分支扩展）。"""
+
+    def _write(self, tmp_path: Path, body: str) -> None:
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "cometa.toml").write_text(body, encoding="utf-8")
+
+    def test_valid_values_accepted(self, tmp_path):
+        self._write(
+            tmp_path,
+            '[backends.demo]\ntype = "fake"\nfake_behavior = "complete"\n',
+        )
+        cfg = CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+        assert cfg.backends["demo"].fake_behavior == "complete"
+
+    def test_rejected_on_non_fake_backend(self, tmp_path):
+        self._write(
+            tmp_path,
+            '[backends.codex_local]\ntype = "codex"\nfake_behavior = "complete"\n',
+        )
+        with pytest.raises(CometaConfigError, match="fake"):
+            CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))
+
+    def test_rejects_unknown_value(self, tmp_path):
+        self._write(
+            tmp_path,
+            '[backends.demo]\ntype = "fake"\nfake_behavior = "explode"\n',
+        )
+        with pytest.raises(CometaConfigError, match="fake_behavior"):
+            CometaConfig.load(env=_env(STELLA_HOME=str(tmp_path)))

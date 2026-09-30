@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   artifactDownloadUrl,
   cancelTask,
+  getHealth,
   getTask,
   getResult,
   listBackends,
@@ -31,6 +32,7 @@ const detailResult = ref<CometaResult | null>(null);
 const objective = ref('');
 const answer = ref('');
 const busy = ref(false);
+const disabled = ref(false); // COMETA_ENABLED=false / runtime 未装配（health=disabled）
 const pollTimer = ref<number | null>(null);
 const toast = useToast();
 
@@ -143,7 +145,18 @@ async function answerWaiting(): Promise<void> {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const health = await getHealth();
+    if (health.state === 'disabled') {
+      // 未启用不是错误：优雅提示而不是弹 503 toast
+      disabled.value = true;
+      return;
+    }
+  } catch {
+    disabled.value = true; // 503：runtime 未装配
+    return;
+  }
   void load();
   void loadBackends();
   pollTimer.value = window.setInterval(() => void load(), 5000);
@@ -166,7 +179,15 @@ onBeforeUnmount(() => {
       等待输入的任务会在这里提问。与群内「委派 / 任务状态 / 取消任务」指令共用同一套服务。
     </p>
 
-    <v-card class="pa-4 mb-4">
+    <v-alert
+      v-if="disabled"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+      text="cometa 未启用（COMETA_ENABLED=false 或 runtime 未装配）。在 .env 打开开关、配置 StellaData/config/cometa.toml 并重启后，这里即可提交与跟踪外部 Agent 任务。"
+    />
+
+    <v-card v-if="!disabled" class="pa-4 mb-4">
       <div class="d-flex ga-2 align-center">
         <v-text-field
           v-model="objective"
@@ -184,7 +205,7 @@ onBeforeUnmount(() => {
       </div>
     </v-card>
 
-    <v-card class="pa-2">
+    <v-card v-if="!disabled" class="pa-2">
       <v-table v-if="tasks.length">
         <thead>
           <tr><th>短 ID</th><th>状态</th><th>阶段</th><th>最近活动</th><th>投递</th><th>操作</th></tr>
@@ -210,7 +231,7 @@ onBeforeUnmount(() => {
         </tbody>
       </v-table>
       <div v-else class="text-body-2 text-medium-emphasis pa-4">
-        没有任务。cometa 未启用（COMETA_ENABLED=false）时这里始终为空。
+        没有任务。
       </div>
     </v-card>
 

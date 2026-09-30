@@ -137,18 +137,35 @@ class BackendConfig:
     auth_profile: str = ""
     model: str = ""  # 空 = 后端账号的配置默认值
     capabilities: list[str] = field(default_factory=list)
+    # 仅 type="fake" 可用的演示行为（人工验收脚本；正式后端必须留空）：
+    #   complete = 按脚本直接完成；fail = 按脚本失败；
+    #   input   = 先请求补充信息、答复后完成；hang/空 = 流挂起直到取消
+    fake_behavior: str = ""
 
     @classmethod
     def from_toml(cls, backend_id: str, data: dict) -> "BackendConfig":
         if not isinstance(data, dict):
             raise CometaConfigError(f"[backends.{backend_id}] 必须是表")
-        known = {"type", "enabled", "transport", "executable", "auth_profile", "model", "capabilities"}
+        known = {
+            "type", "enabled", "transport", "executable", "auth_profile", "model",
+            "capabilities", "fake_behavior",
+        }
         unknown = set(data) - known
         if unknown:
             raise CometaConfigError(f"[backends.{backend_id}] 含未知键: {sorted(unknown)}")
         btype = str(data.get("type", "")).strip()
         if not btype:
             raise CometaConfigError(f"[backends.{backend_id}] 缺少 type")
+        fake_behavior = str(data.get("fake_behavior", "")).strip()
+        if fake_behavior and btype != "fake":
+            raise CometaConfigError(
+                f"[backends.{backend_id}] fake_behavior 只允许 type=\"fake\" 的后端使用"
+            )
+        if fake_behavior not in ("", "complete", "fail", "input", "hang"):
+            raise CometaConfigError(
+                f"[backends.{backend_id}] fake_behavior 只支持"
+                " complete/fail/input/hang（空=挂起）"
+            )
         return cls(
             backend_id=backend_id,
             type=btype,
@@ -158,6 +175,7 @@ class BackendConfig:
             auth_profile=str(data.get("auth_profile", "")),
             model=str(data.get("model", "")),
             capabilities=[str(c) for c in (data.get("capabilities") or [])],
+            fake_behavior=fake_behavior,
         )
 
 

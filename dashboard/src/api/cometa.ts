@@ -54,6 +54,18 @@ export interface CometaBackend {
   capabilities: string[];
 }
 
+export interface CometaHealth {
+  state: string;
+  message?: string;
+  reason?: string;
+  config_hash?: string;
+  backends?: string[];
+}
+
+export function getHealth(): Promise<CometaHealth> {
+  return unwrap(api.get('/cometa/health'));
+}
+
 export function listTasks(cursor = 0): Promise<{ tasks: CometaTask[]; next_cursor: number }> {
   return unwrap(api.get('/cometa/tasks', { params: { cursor } }));
 }
