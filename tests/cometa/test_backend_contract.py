@@ -272,7 +272,12 @@ class TestCodexFailClosed:
     """M0 门禁前 Codex 适配器必须 fail-closed（方案 §6.7/§12.1）。"""
 
     @pytest.mark.asyncio
-    async def test_probe_without_sdk_is_degraded_or_incompatible(self):
+    async def test_probe_without_sdk_is_degraded_or_incompatible(self, monkeypatch):
+        # SDK 是否安装在开发机上会变（已装 openai-codex），探测逻辑必须
+        # 确定性可测：显式断开 SDK 导入 seam。
+        import cometa.backends.codex as codex_mod
+
+        monkeypatch.setattr(codex_mod, "_import_sdk", lambda: None)
         health = await _codex_backend().probe()
         assert health.state.value in ("degraded", "incompatible")
 

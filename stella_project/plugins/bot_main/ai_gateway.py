@@ -163,6 +163,11 @@ from memory.session_context import end_session
 from memory.session_context import idle_groups as idle_session_groups
 from memory.session_context import touch as session_touch
 
+# cometa QQ 桥接：必须在模块级绑定——handle_chat 的委派分支直接引用它，
+# 只在 _start_cometa 里局部导入绑定的只是局部名，@ 触发时 NameError
+# （2026-09-30 用户实测缺陷 #9；探针测试绕过了 handle_chat 入口所以没炸到）。
+from stella_project.plugins.bot_main import cometa_bridge
+
 # ============================================================
 # Pipeline 构建
 # ============================================================
@@ -1820,7 +1825,6 @@ async def _start_cometa() -> None:
         return
     try:
         from cometa import runtime as cometa_runtime
-        from stella_project.plugins.bot_main import cometa_bridge
 
         config = cometa_runtime.CometaConfig.load()
         if not config.enabled:
