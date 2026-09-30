@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .artifacts import ArtifactCollector
 from .config import CometaConfig
@@ -44,6 +44,13 @@ class CometaRuntime:
     artifacts: ArtifactCollector
     supervisor: WorkerSupervisor | None = None
     instance_id: str = ""
+    # 运行期句柄必须声明为字段：slots dataclass 不允许事后赋新属性
+    # （2026-09-30 实测：装配时 'CometaRuntime' object has no attribute
+    # '_pump_stop' → cometa 整体停用，测试的 SimpleNamespace 替身掩盖了它）。
+    _pump_stop: asyncio.Event | None = field(
+        default=None, repr=False, compare=False
+    )
+    _pump_task: asyncio.Task | None = field(default=None, repr=False, compare=False)
 
     @property
     def enabled(self) -> bool:
