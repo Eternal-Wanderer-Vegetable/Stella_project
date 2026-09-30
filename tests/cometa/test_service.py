@@ -163,7 +163,7 @@ class TestQueryAuthorization:
 class TestInputRespondAuthorization:
     def test_approval_requires_operator(self, service, config, store):
         receipt = _submit(service, config)
-        from conftest import claim_task
+        from tests.cometa_helpers import claim_task
 
         _claimed, attempt = claim_task(store)
         request_id = store.register_input_request(
@@ -199,7 +199,7 @@ class TestInputRespondAuthorization:
     def test_respond_requires_task_owner(self, service, config, store):
         from datetime import timedelta
 
-        from conftest import claim_task
+        from tests.cometa_helpers import claim_task
 
         receipt = _submit(service, config)
         _task, attempt = claim_task(store)
