@@ -68,6 +68,10 @@ class CometaRuntime:
             self._watchdog_task = asyncio.create_task(
                 self._watch_worker(), name="cometa-worker-watchdog"
             )
+        _LOGGER.info(
+            "cometa runtime 已启动（worker 子进程=%s）",
+            "yes" if self.supervisor is not None else "no",
+        )
 
     async def _watch_worker(self) -> None:
         """worker 子进程退出看门狗：崩溃必须留痕（worker.log 有详情）。
@@ -85,18 +89,48 @@ class CometaRuntime:
                     supervisor._worker_log_path(),
                 )
                 return
-        _LOGGER.info(
-            "cometa runtime 已启动（worker 子进程=%s）",
-            "yes" if self.supervisor is not None else "no",
-        )
+
+    def _cancel_inflight_for_shutdown(self) -> int:
+        """关闭协议第一步（§6.8「通知在途任务中断和保存」）：bot 侧经任务库
+        对本实例 worker 的在途任务注入取消。worker 里的执行器每 2s 轮询到
+        cancelling 即确认后端停止并落终态——Windows 的 terminate() 是硬杀，
+        worker 自己的优雅关闭代码没有机会执行（2026-09-30 人工清单 T14 实测：
+        在途任务优雅关闭后仍是 running）。返回注入数。"""
+        supervisor = self.supervisor
+        if supervisor is None:
+            return 0
+        injected = 0
+        try:
+            for task_id in self.store.tasks_in_flight(
+                self.instance_id, worker_id=supervisor.worker_id
+            ):
+                with contextlib.suppress(Exception):
+                    self.store.request_cancel(
+                        task_id,
+                        actor=f"runtime:{supervisor.worker_id}:shutdown",
+                    )
+                    injected += 1
+        except Exception:
+            _LOGGER.warning(
+                "shutdown：在途任务取消注入失败，交由租约过期与恢复矩阵处理",
+                exc_info=True,
+            )
+        if injected:
+            _LOGGER.info("cometa 关闭：已请求中断 %d 个在途任务", injected)
+        return injected
 
     async def stop(self, *, grace_seconds: float = 10.0) -> None:
-        """受控关闭：泵 → worker 子进程 → 存量状态留给租约/恢复矩阵。"""
+        """受控关闭：注入在途取消 → 泵 → worker 子进程（terminate 只兜底）。"""
         if getattr(self, "_pump_stop", None) is not None:
             self._pump_stop.set()
         watchdog = getattr(self, "_watchdog_task", None)
         if watchdog is not None:
             watchdog.cancel()
+        if self.supervisor is not None and self.supervisor.is_running():
+            # 注入要趁 worker 的执行器还活着：executor 轮询 2s + 确认停止 +
+            # 落终态 ≈ 3-5s，宽限给足
+            self._cancel_inflight_for_shutdown()
+            await asyncio.sleep(min(6.0, max(grace_seconds - 4.0, 2.0)))
         pump_task = getattr(self, "_pump_task", None)
         if pump_task is not None:
             try:

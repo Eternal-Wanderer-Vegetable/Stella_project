@@ -1812,6 +1812,28 @@ class CometaStore:
 
         return self._tx(_do)
 
+    def tasks_in_flight(
+        self, instance_id: str, *, worker_id: str, now: datetime | None = None
+    ) -> list[str]:
+        """某 worker 名下仍占用执行槽的任务（关闭协议的中断注入目标）。
+
+        只认租约仍归属该 worker 的 attempt——租约已易主的旧任务归恢复矩阵管，
+        关闭注入不碰。"""
+        now = now or utc_now()
+
+        def _do(conn: sqlite3.Connection) -> list[str]:
+            rows = conn.execute(
+                "SELECT t.task_id FROM tasks t JOIN attempts a"
+                " ON a.attempt_id = t.current_attempt"
+                " WHERE t.instance_id = ? AND a.lease_owner = ?"
+                " AND a.lease_until_utc > ? AND t.state IN"
+                " ('starting', 'running', 'waiting_input', 'waiting_approval')",
+                (instance_id, worker_id, iso_utc(now)),
+            ).fetchall()
+            return [str(r["task_id"]) for r in rows]
+
+        return self._read(_do)
+
     def has_deadline_control(self, task_id: str) -> bool:
         """该任务的取消命令里是否含到期注入（idempotency_key=deadline:…）。
 

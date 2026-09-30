@@ -81,3 +81,41 @@ class TestAssembly:
             assert sender.sent, "泵真实发送了 ack"
         finally:
             await runtime.stop(grace_seconds=2.0)
+
+
+class TestShutdownInjection:
+    @pytest.mark.asyncio
+    async def test_stop_cancels_inflight_via_store(self, cometa_config):
+        """§6.8 关闭协议：runtime.stop 经任务库注入在途取消（Windows terminate
+        是硬杀，worker 的优雅代码没有机会跑——必须由 bot 侧注入）。"""
+        from cometa.models import TaskState
+        from cometa.service import Actor
+        from tests.cometa_helpers import claim_task, make_origin, make_spec
+
+        cometa_config.enabled = True
+        runtime = build_runtime(
+            cometa_config, sender=NullSender(), instance_id="inst-test",
+            spawn_worker=False,
+        )
+        receipt = runtime.service.submit(
+            make_spec(),
+            actor=Actor(kind="webchat_admin", id="admin"),
+            origin=make_origin(platform="webchat", instance_id="inst-test"),
+            idempotency_key="k-shutdown",
+        )
+        task, attempt = claim_task(runtime.store)
+        runtime.store.transition_task(
+            task.task_id,
+            attempt_id=attempt.attempt_id,
+            owner="w-test",
+            epoch=attempt.lease_epoch,
+            from_states=(TaskState.STARTING,),
+            to_state=TaskState.RUNNING,
+        )
+        # 伪 supervisor：worker_id 与在途 attempt 的租约归属一致
+        runtime.supervisor = type("S", (), {"worker_id": "w-test", "_process": None,
+                                            "is_running": lambda self: True,
+                                            "stop": lambda self, grace_seconds=10: None})()
+        await runtime.start(spawn_worker=False)
+        await runtime.stop(grace_seconds=6.0)
+        assert runtime.store.get_task(task.task_id).state is TaskState.CANCELLING
