@@ -620,6 +620,14 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 纯图片 @（无文字）时给 message 一个占位文本：它是检索查询与 prompt
         # 的当前输入，空串会让整轮对话退化成「没有当前输入」。
         message_text = event.get_plaintext().strip() or "[图片]"
+        # cometa 可信 Origin（方案 §6.5/§6.4.1）：只在 @ 触达路径构造；
+        # 委派决策在能力钩子里读它——这里不判断要不要委派，只提供身份事实。
+        if _cometa_enabled():
+            ctx_origin = cometa_bridge.build_origin(
+                event, bot, instance_id=_cometa_instance_id()
+            )
+        else:
+            ctx_origin = None
         ctx = ChatContext(
             user_id=event.user_id,
             group_id=event.group_id,
@@ -630,6 +638,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
             raw_event=event,
             bot=bot,
+            cometa_origin=ctx_origin,
             # 图片来源（本体 + 引用）；识图未启用时保持空列表，describe_images_hook
             # 会跳过，行为与旧版一致。
             image_sources=extract_image_sources(event) if vision_available() else [],
@@ -701,10 +710,6 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-        # 逐段发送并收集回执（计划 §6.1 发送改造）：只有**确认送达**的片段才
-        # 计发言、写 BOT_SELF、进学习——发送失败不再被记成「说过」。原实现把
-        # 最后一段交给 chat_handler.finish(msg)（抛 FinishedException、拿不到
-        # 回执且无法补记账），现在全部用 send、finish 只结束流程。
         scope = ConversationScope.for_qq(event.group_id) if _social_delivery_enabled() else None
 
         async def _send_reply_segment(line: str, i: int) -> str | None:
@@ -714,6 +719,32 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 msg = Message(line)
             return await chat_handler.send(msg)
 
+        # cometa 受理确认（方案 §6.5）：委派接管的本轮只发 ack 一条，经桥接
+        # 认领 ack 通知后发送；ack 交由普通回复链路会造成入口/泵双发或漏记。
+        # 返回 pump_owned 表示后台泵已抢先接管发送——本轮静默结束（任务不受影响）。
+        cometa_submission = getattr(ctx, "cometa_submission", None)
+        if cometa_submission:
+            ack_outcome = await cometa_bridge.deliver_ack(
+                cometa_submission,
+                lambda line: _send_reply_segment(line, 0),
+            )
+            if ack_outcome == "sent":
+                with contextlib.suppress(Exception):
+                    await _record_bot_lines(
+                        event.self_id, event.group_id, list(ctx.lines)
+                    )
+            elif ack_outcome == "unknown":
+                logger.warning(
+                    f"[Cometa] 群 {event.group_id} 的 ack 发送结果未知"
+                    f"（任务 {cometa_submission.get('task_id', '')[:8]} 不受影响，"
+                    "后续结果会带任务短 ID）"
+                )
+            await chat_handler.finish()
+
+        # 逐段发送并收集回执（计划 §6.1 发送改造）：只有**确认送达**的片段才
+        # 计发言、写 BOT_SELF、进学习——发送失败不再被记成「说过」。原实现把
+        # 最后一段交给 chat_handler.finish(msg)（抛 FinishedException、拿不到
+        # 回执且无法补记账），现在全部用 send、finish 只结束流程。
         receipts = await deliver_lines(
             ctx.lines,
             scope=scope,
@@ -1750,6 +1781,78 @@ async def _start_scheduling() -> None:
     await _scheduling_runtime.start()
 
 
+# ============================================================
+# Cometa 外部 Agent 任务运行层（design_docs/Cometa 外部 Agent 任务运行层
+# 实施方案 v1.0 §6.8/§3.1）：装配模式与调度栈一致——初始化失败只停用本功能。
+# ============================================================
+
+_cometa_runtime_instance = None
+
+
+def _cometa_enabled() -> bool:
+    """入口处的快速门（避免每条 @ 消息都 import cometa）。"""
+    try:
+        from config import COMETA_ENABLED
+
+        return bool(COMETA_ENABLED)
+    except Exception:
+        return False
+
+
+def _cometa_instance_id() -> str:
+    try:
+        from config import INSTANCE_ID
+
+        return str(INSTANCE_ID)
+    except Exception:
+        return ""
+
+
+@get_driver().on_startup
+async def _start_cometa() -> None:
+    """装配 cometa runtime：泵 + worker 子进程 + 服务登记。
+
+    失败（TOML 非法/迁移失败）只停用 cometa，绝不拖垮主进程；
+    COMETA_ENABLED=false 时零动作（现有聊天行为逐字节不变）。
+    """
+    global _cometa_runtime_instance
+    if not _cometa_enabled():
+        return
+    try:
+        from cometa import runtime as cometa_runtime
+        from stella_project.plugins.bot_main import cometa_bridge
+
+        config = cometa_runtime.CometaConfig.load()
+        if not config.enabled:
+            return
+        runtime = cometa_runtime.build_runtime(
+            config,
+            sender=cometa_bridge.notification_sender,
+            instance_id=_cometa_instance_id(),
+            spawn_worker=True,
+        )
+        await runtime.start(spawn_worker=True)
+        cometa_runtime.set_current(runtime)
+        _cometa_runtime_instance = runtime
+        logger.info("✅ [Cometa] 外部 Agent 任务层已装配（worker 子进程已启动）")
+    except Exception as e:
+        logger.error(f"❌ [Cometa] 初始化失败，cometa 停用: {e}")
+        _cometa_runtime_instance = None
+
+
+async def _stop_cometa() -> None:
+    """受控关闭（§6.8）：泵先停，worker 子进程有界等待（未停的交恢复矩阵）。"""
+    global _cometa_runtime_instance
+    if _cometa_runtime_instance is None:
+        return
+    with contextlib.suppress(Exception):
+        from cometa import runtime as cometa_runtime
+
+        await _cometa_runtime_instance.stop(grace_seconds=10.0)
+        cometa_runtime.set_current(None)
+    _cometa_runtime_instance = None
+
+
 async def _watch_plugin_sources() -> None:
     """监视已加载插件的源码 mtime，变了就重载一遍。
 
@@ -2731,6 +2834,11 @@ async def _graceful_shutdown() -> None:
         _stop_watcher_task.cancel()
     if _hot_reload_watcher is not None:
         _hot_reload_watcher.cancel()
+    # cometa 先停（泵 + worker 子进程）：不再认领新任务，在途任务发取消请求
+    # 并等有界收尾；到点未停的 attempt 交租约过期 + 下次启动恢复矩阵处理
+    # （方案 §6.8：不做无条件 running→queued）。
+    with contextlib.suppress(Exception):
+        await _stop_cometa()
     # 调度 worker 先停：不再认领新运行，等当前运行收尾（受 stop_grace 上界）；
     # 超时的在途运行交给租约恢复，下次启动按 delivery_unknown / 回队处理。
     if _scheduling_runtime is not None:

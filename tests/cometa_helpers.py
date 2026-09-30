@@ -72,9 +72,12 @@ def submit_task(
     return task_id
 
 
-def claim_task(store: CometaStore, *, worker: str = "w-test", backend_ids=None):
+def claim_task(
+    store: CometaStore, *, worker: str = "w-test", backend_ids=None,
+    instance_id: str = "inst-test",
+):
     claimed = store.claim_next_task(
-        instance_id="inst-test",
+        instance_id=instance_id,
         worker_id=worker,
         backend_ids=backend_ids or {"fake"},
         lease_seconds=30.0,
