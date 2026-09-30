@@ -583,6 +583,28 @@ class CometaStore:
         return notification_id
 
     @staticmethod
+    def _target_from_task_row(conn: sqlite3.Connection, task_id: str) -> dict:
+        """从任务行的 origin_json 派生通知投递目标。
+
+        所有随事件同事务创建的通知（ack/final/input）必须带 target——
+        否则泵按默认 qq + 空 group 发送，必然失败（2026-09-30 人工清单实测：
+        final 全部 delivery_unknown，err=RuntimeError）。"""
+        row = conn.execute(
+            "SELECT origin_json FROM tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            return {}
+        origin = Origin.from_dict(_loads_json(row["origin_json"], {}))
+        return {
+            "platform": origin.platform,
+            "bot_id": origin.bot_id,
+            "conversation_id": origin.conversation_id,
+            "requester_id": origin.requester_id,
+            "reply_to_message_id": origin.reply_to_message_id,
+            "group_id": origin.conversation_id if origin.platform == "qq" else "",
+        }
+
+    @staticmethod
     def _supersede_progress(conn: sqlite3.Connection, task_id: str, now: datetime) -> None:
         conn.execute(
             "UPDATE notifications SET state = 'superseded', updated_utc = ? "
@@ -1156,6 +1178,7 @@ class CometaStore:
                     kind=NotificationKind.INPUT_REQUIRED,
                     dedupe_key=f"input:{task_id}:{request_id}",
                     payload=payload,
+                    target=self._target_from_task_row(conn, task_id),
                 ),
                 sequence=sequence,
                 now=now,
@@ -1372,6 +1395,7 @@ class CometaStore:
                         kind=NotificationKind.FINAL,
                         dedupe_key=f"final:{task_id}",
                         payload=final_payload,
+                        target=self._target_from_task_row(conn, task_id),
                     ),
                     sequence=self._next_sequence(conn, task_id) - 1,
                     now=now,
@@ -1565,6 +1589,7 @@ class CometaStore:
                     "summary": summary,
                     "result_id": result_id,
                 },
+                target=self._target_from_task_row(conn, task_id),
             )
             if sequence is not None:
                 self._upsert_notification(
@@ -1729,6 +1754,7 @@ class CometaStore:
                             "state": "timed_out_queued",
                             "summary": "任务在排队期间到达期限，未启动即取消。",
                         },
+                        target=self._target_from_task_row(conn, task_id),
                     ),
                     sequence=self._next_sequence(conn, task_id) - 1,
                     now=now,
