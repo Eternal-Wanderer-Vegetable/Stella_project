@@ -17,6 +17,7 @@ Bot 进程。
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import sys
 from dataclasses import dataclass, field
