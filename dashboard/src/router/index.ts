@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/CronPage.vue'),
       },
       {
+        // cometa 外部 Agent 任务（design_docs/Cometa 外部 Agent 任务运行层实施方案 §6.14）
+        path: 'cometa',
+        name: 'cometa',
+        component: () => import('@/views/CometaPage.vue'),
+      },
+      {
         path: 'groups',
         name: 'groups',
         component: () => import('@/views/GroupsPage.vue'),

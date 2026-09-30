@@ -12,7 +12,8 @@
       "data": "数据",
       "cron": "定时任务",
       "groups": "群组",
-      "settings": "设置"
+      "settings": "设置",
+      "cometa": "外部 Agent 任务"
     },
     "common": {
       "save": "保存",
