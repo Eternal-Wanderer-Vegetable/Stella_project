@@ -37,9 +37,10 @@ def config(tmp_path: Path) -> CometaConfig:
     cfg.limits.per_group_active = 8
     cfg.limits.input_wait_seconds = 60.0
     # 无 cometa.toml 的测试环境：显式声明 fake 后端（executor 从 config 解析）
-    from cometa.config import BackendConfig
+    from cometa.config import BackendConfig, ProfileConfig
 
     cfg.backends["fake"] = BackendConfig(backend_id="fake", type="fake", enabled=True)
+    cfg.profiles["coding"] = ProfileConfig(name="coding", backend="fake")
     return cfg
 
 
