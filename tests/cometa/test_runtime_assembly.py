@@ -14,9 +14,7 @@ import asyncio
 
 import pytest
 
-from cometa.delivery import NotificationPump
 from cometa.runtime import build_runtime
-from cometa.store import CometaStore
 
 
 class NullSender:
@@ -51,8 +49,8 @@ class TestAssembly:
     async def test_pump_delivers_submitted_ack(self, cometa_config):
         """提交任务后，运行中的泵把 ack 投递出去（webchat → server_emitted）。"""
         from cometa.models import NotificationState
-        from tests.cometa_helpers import make_origin, make_spec
         from cometa.service import Actor
+        from tests.cometa_helpers import make_origin, make_spec
 
         cometa_config.enabled = True
         sender = NullSender()

@@ -202,3 +202,24 @@ class TestFailures:
         stop.set()
         await asyncio.wait_for(runner, timeout=5)
         assert sender.sent
+
+
+class TestFunctionSenderAdapter:
+    @pytest.mark.asyncio
+    async def test_bare_async_function_accepted(self, store, config):
+        """接线层传裸 async 函数（QQ 桥接形态）也能投递——曾因 AttributeError
+        把所有通知打成 delivery_unknown（2026-09-30 人工清单实测）。"""
+
+        async def bare_send(target: dict, text: str) -> str | None:
+            bare_send.calls.append((dict(target), text))
+            return "fn-receipt"
+
+        bare_send.calls = []
+        task_id = submit_task(store, config)
+        pump = NotificationPump(store, bare_send, poll_interval_seconds=0.1)
+        delivered = await pump.pump_once()
+        assert delivered == 1
+        assert bare_send.calls
+        ack = store.notification_of_dedupe(task_id, f"ack:{task_id}")
+        assert ack.state is NotificationState.SENT
+        assert ack.receipt == "fn-receipt"

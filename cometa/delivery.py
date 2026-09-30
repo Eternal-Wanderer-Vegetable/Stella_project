@@ -53,6 +53,16 @@ class NotificationSender(Protocol):
     async def send(self, target: dict, text: str) -> str | None: ...
 
 
+class _FunctionSender:
+    """裸 async 函数 → NotificationSender 协议适配。"""
+
+    def __init__(self, fn: Callable[[dict, str], Awaitable[str | None]]):
+        self._fn = fn
+
+    async def send(self, target: dict, text: str) -> str | None:
+        return await self._fn(target, text)
+
+
 class NotificationPump:
     """pending → sending → sent/delivery_unknown 的执行者（一库一实例）。"""
 
@@ -69,7 +79,13 @@ class NotificationPump:
         poll_interval_seconds: float = 2.0,
     ):
         self.store = store
-        self._sender = sender
+        # 协议适配：Sender 协议是带 .send 方法的对象，但接线层（QQ 桥接）传入的
+        # 是裸 async 函数——统一包装，否则 pump 调 .send 时 AttributeError、
+        # 所有通知被打成 delivery_unknown（2026-09-30 人工清单实测）。
+        if callable(sender) and not hasattr(sender, "send"):
+            self._sender = _FunctionSender(sender)
+        else:
+            self._sender = sender
         self._config = config
         self._send_timeout = max(float(send_timeout_seconds), 1.0)
         self._backoff = max(float(retry_backoff_seconds), 1.0)
