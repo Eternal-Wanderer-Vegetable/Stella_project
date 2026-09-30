@@ -22,43 +22,57 @@ from cometa.backends.codex_events import normalize_jsonl, notification_to_event
 FIXTURE = Path(__file__).parent / "fixtures" / "codex_events.jsonl"
 
 
-class TestErrorPathFixture:
-    """实录（0.159.2 + 代理）：账号模型需要更新版客户端 → 400 →
-    turn/completed(status=failed) 终态。契约：错误事实保留、终态落 failed、
-    **绝不伪装 completed**——SDK 把失败轮次也经 turn/completed 投递，
-    归一器必须检查 status 而不是把 method 当成功。"""
+class TestFixtureCompletedPath:
+    """实录（0.159.2 + 代理，2026-10-01）：完整完成的真实轮次——
+    turn/started → userMessage → agentMessage 增量流 → message_final →
+    tokenUsage → turn/completed。契约：最终答复从 turn.items 提取，
+    增量流是 message_delta、完成才是 message_final。"""
 
     @pytest.fixture()
     def events(self):
         return normalize_jsonl(FIXTURE.read_text(encoding="utf-8"))
 
-    def test_fixture_replays_to_failed_terminal(self, events):
+    def test_fixture_replays_to_completed_terminal(self, events):
         kinds = [e.kind for e in events]
         assert kinds[0] == "phase"  # turn/started
-        assert "failed" in kinds, "失败轮次必须落 failed"
-        assert "completed" not in kinds, "turn/completed + status=failed 不得映射成功"
-        assert events[-1].kind == "failed", "终态在最后"
+        assert kinds[-1] == "completed", "轮次完成是最后一条"
+        assert "failed" not in kinds
 
-    def test_error_message_preserved(self, events):
-        failed = next(e for e in events if e.kind == "failed")
-        detail = str(failed.payload.get("error", ""))
-        assert "requires a newer version" in detail
+    def test_final_answer_extracted(self, events):
+        finals = [e for e in events if e.kind == "message_final"]
+        assert finals, "agentMessage item/completed → message_final"
+        assert "1+1" in str(finals[-1].payload.get("text", ""))
+        completed = events[-1]
+        assert "1+1" in str(completed.payload.get("text", "")), (
+            "turn.items 提取的最终答复与条目一致"
+        )
 
-    def test_will_retry_error_maps_to_reconnect_phase(self):
-        """will_retry=True 的 error → 重连进度（不是失败、不是成功）。"""
-        from openai_codex.generated.v2_all import ErrorNotification
+    def test_delta_stream_visible(self, events):
+        deltas = [e for e in events if e.kind == "message_delta"]
+        assert len(deltas) >= 5, "增量流逐条可见（executor 有界合并前的原料）"
+        joined = "".join(str(d.payload.get("delta", "")) for d in deltas)
+        assert "1+1" in joined
+
+    def test_failed_turn_synthetic_maps_failed(self):
+        """失败轮次也经 turn/completed 投递（SDK 同源语义）——status 必查。"""
+        from openai_codex.generated.v2_all import (
+            Turn,
+            TurnCompletedNotification,
+            TurnError,
+        )
         from openai_codex.models import Notification
 
-        notification = Notification(method="error", payload=ErrorNotification(
-            thread_id="t1", turn_id="turn-1", will_retry=True,
-            error={"message": "Reconnecting... 2/5",
-                   "additional_details": "request timed out",
-                   "codex_error_info": "other"},
-        ))
+        notification = Notification(
+            method="turn/completed",
+            payload=TurnCompletedNotification(
+                thread_id="t1",
+                turn=Turn(id="turn-1", status="failed", items=[],
+                          error=TurnError(message="quota exceeded")),
+            ),
+        )
         event = notification_to_event(notification)
-        assert event.kind == "phase"
-        assert event.payload.get("phase") == "backend_reconnecting"
-        assert "Reconnecting" in str(event.payload.get("detail", ""))
+        assert event.kind == "failed"
+        assert "quota" in str(event.payload.get("error", ""))
 
 
 class TestCompletedPathSynthetic:

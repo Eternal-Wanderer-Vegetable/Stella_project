@@ -3,8 +3,9 @@
 # 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE.
 """Codex 后端适配器——官方 SDK `openai-codex` 驱动本地 App Server（方案 §6.7）。
 
-**M0 状态（2026-09-30）**：已通过。版本矩阵 = openai-codex 0.147.0 + codex-cli
-0.147.0（SDK 自带 cli-bin 与用户 CLI 同版），事件契约以实录像
+**M0 状态（2026-10-01）**：已通过。版本矩阵 = openai-codex 0.159.2 + 自带
+cli-bin 0.159.2（0.147.0 被账号后端拒绝——「模型需要更新版客户端」），
+事件契约以实录像
 tests/cometa/fixtures/codex_events.jsonl 为准。会话/轮次/流事件/中断/steer
 均经真实 App Server 验证；``resume``/``event_replay`` 虽有 thread_resume API
 但未经验证——**显式声明不支持**（§6.6：不能用一次新执行伪装 resume）。
@@ -53,7 +54,7 @@ from cometa.models import (
 _SDK_IMPORT_NAMES = ("openai_codex",)
 
 # M0 冻结的版本组合（§6.7：版本矩阵；升级须先重跑 M0 探针）。
-M0_SDK_VERSION = "0.147.0"
+M0_SDK_VERSION = "0.159.2"
 
 
 class CodexUnavailableError(RuntimeError):
@@ -71,7 +72,13 @@ def _import_sdk():
 
 
 def _sdk_version(sdk) -> str:
-    return str(getattr(sdk, "SDK_VERSION", "") or "")
+    # 0.159.2 起顶层不再暴露 SDK_VERSION：从包元数据读，拿不到就空（无害）
+    try:
+        from importlib.metadata import version
+
+        return str(version("openai-codex"))
+    except Exception:
+        return ""
 
 
 def _auth_home() -> Path:
