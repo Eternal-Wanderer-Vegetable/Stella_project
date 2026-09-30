@@ -13,11 +13,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import make_origin, submit_task
 
 from cometa.artifacts import ArtifactCollector, ArtifactError
 from cometa.config import WorkspaceConfig
 from cometa.workspace import WorkspaceError, WorkspaceManager
+from tests.cometa_helpers import make_origin, submit_task
 
 
 class TestArtifacts:

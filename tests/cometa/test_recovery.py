@@ -13,9 +13,9 @@ import sqlite3
 from datetime import timedelta
 
 import pytest
-from conftest import claim_task, submit_task
 
 from cometa.models import EventKind, LaunchPhase, TaskState, iso_utc, utc_now
+from tests.cometa_helpers import claim_task, submit_task
 
 
 def _expire_attempt_lease(store, attempt_id: str, *, seconds_ago: float = 60.0) -> None:

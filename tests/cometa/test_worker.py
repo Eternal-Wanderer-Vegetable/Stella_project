@@ -9,12 +9,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from conftest import make_origin, submit_task
 
 from cometa.backends.fake import FakeBackend, fake_completed
 from cometa.backends.registry import BackendRegistry
 from cometa.store import StoreBusyError
 from cometa.worker import CometaWorker
+from tests.cometa_helpers import make_origin, submit_task
 
 
 def _worker(store, config, backend: FakeBackend, **kwargs) -> CometaWorker:

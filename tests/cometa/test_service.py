@@ -12,7 +12,6 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from conftest import make_origin, make_spec
 
 from cometa.models import TaskState, utc_now
 from cometa.service import (
@@ -21,6 +20,7 @@ from cometa.service import (
     InvalidRequestError,
     NotAuthorizedError,
 )
+from tests.cometa_helpers import make_origin, make_spec
 
 
 @pytest.fixture()

@@ -86,3 +86,29 @@ def _no_real_browser(monkeypatch):
 
     monkeypatch.setattr(settings, "RENDER_AUTO_INSTALL", False, raising=False)
     monkeypatch.setattr(render, "_load_async_playwright", lambda: None)
+
+
+# ============================================================
+# cometa 共享夹具（tests/cometa/conftest.py 里有同名细粒度版本；
+# 这里提供跨目录（tests/capability 等）可用的最小形态）
+# ============================================================
+
+
+@pytest.fixture()
+def cometa_config(tmp_path):
+    from cometa.config import BackendConfig, CometaConfig, ProfileConfig
+
+    cfg = CometaConfig.load(env={"STELLA_HOME": str(tmp_path), "COMETA_ENABLED": "true"})
+    cfg.limits.per_user_active = 8
+    cfg.limits.per_group_active = 8
+    cfg.limits.input_wait_seconds = 60.0
+    cfg.backends["fake"] = BackendConfig(backend_id="fake", type="fake", enabled=True)
+    cfg.profiles["coding"] = ProfileConfig(name="coding", backend="fake")
+    return cfg
+
+
+@pytest.fixture()
+def cometa_store(tmp_path, cometa_config):
+    from cometa.store import CometaStore
+
+    return CometaStore(cometa_config.db_path)

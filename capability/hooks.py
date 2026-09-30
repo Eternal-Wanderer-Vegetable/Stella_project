@@ -345,10 +345,23 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
         route = default_route(f"路由入口异常: {e}")
     ctx.route = route
 
+    # Cometa 委派分支（design_docs/Cometa 外部 Agent 任务运行层实施方案 §6.4）：
+    # 在有副作用的分支执行**前**完成委派选择——委派接管时本轮不再执行同目标的
+    # Comes/Skills（§6.4.5）。显式命令走短事务受理；绝不把 Agent 执行放进 gather。
+    # 分支内部吞掉一切异常：委派层坏了的后果是「当普通聊天处理」。
+    delegation_handled = False
+    if s.COMETA_ENABLED:
+        try:
+            from capability.delegation import handle_delegation_turn
+
+            delegation_handled = await handle_delegation_turn(ctx, route)
+        except Exception as e:
+            _logger().warning(f"⚠️ [Cometa] 委派分支异常（已跳过）: {e!r}")
+
     jobs: list[Any] = []
     labels: list[str] = []
 
-    # 记忆检索：门控默认关闭（见模块 docstring）
+    # 记忆检索：门控默认关闭（见模块 docstring）——委派接管**不改变**这里的行为
     if route.memory or not s.ROUTER_GATE_MEMORY:
         jobs.append(_retrieve_memory(ctx))
         labels.append("memory")
@@ -357,15 +370,15 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
             "🧠 [Router] 判定无需长期记忆，跳过检索（ROUTER_GATE_MEMORY=true）"
         )
 
-    # 工具执行
-    if route.tool and s.COMES_ENABLED:
+    # 工具执行（委派接管时跳过：整个请求由 cometa 负责，§6.4.5）
+    if route.tool and s.COMES_ENABLED and not delegation_handled:
         jobs.append(_run_comes(ctx, route))
         labels.append("comes")
 
     # Skills 分支（plan §6.2）：与 Memory/Comes 同一故障隔离纪律——
     # 分支内部自己吞掉所有「不该执行」的情形，真正抛出的异常由下面的
     # gather(return_exceptions=True) 兜住，只记日志不阻断回复。
-    if s.SKILLS_ENABLED:
+    if s.SKILLS_ENABLED and not delegation_handled:
         jobs.append(_run_skills(ctx, route))
         labels.append("skills")
 

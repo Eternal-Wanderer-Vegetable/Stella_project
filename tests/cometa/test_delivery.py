@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from conftest import claim_task, submit_task
 
 from cometa.delivery import NotificationPump, SenderUnavailable
 from cometa.models import (
@@ -20,6 +19,7 @@ from cometa.models import (
     TaskState,
 )
 from cometa.store import NotificationSpec
+from tests.cometa_helpers import claim_task, submit_task
 
 
 class FakeSender:

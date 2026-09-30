@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from conftest import claim_task, submit_task
 
 from cometa.backends.codex import CodexBackend, CodexUnavailableError
 from cometa.backends.fake import FakeBackend, fake_completed, fake_failed
@@ -26,6 +25,7 @@ from cometa.models import (
     TaskState,
     VerificationStatus,
 )
+from tests.cometa_helpers import claim_task, submit_task
 
 
 def _codex_backend() -> CodexBackend:

@@ -116,4 +116,36 @@ def build_runtime(
 
 SYSTEM_ACTOR = Actor(kind="system", id="runtime")
 
-__all__ = ["SYSTEM_ACTOR", "CometaRuntime", "build_runtime"]
+# ── 进程内服务定位（方案 §3.2：runtime 负责「Bot 进程服务定位」）──
+# capability.delegation / QQ 桥接 / WebUI 都通过 current() 取服务，
+# 不反向 import ai_gateway（避免重型依赖环）。测试可 set_current(None) 复位。
+_current_runtime: CometaRuntime | None = None
+
+
+def set_current(runtime: CometaRuntime | None) -> None:
+    """登记/清除本进程的 cometa runtime（装配成功后调用）。"""
+    global _current_runtime
+    _current_runtime = runtime
+
+
+def current() -> CometaRuntime | None:
+    """本进程的 cometa runtime；未装配或停用时返回 None。"""
+    return _current_runtime
+
+
+def current_service() -> CometaService | None:
+    """便捷取服务。未启用返回 None——调用方必须按「功能未装配」处理。"""
+    runtime = _current_runtime
+    if runtime is None or not runtime.enabled:
+        return None
+    return runtime.service
+
+
+__all__ = [
+    "SYSTEM_ACTOR",
+    "CometaRuntime",
+    "build_runtime",
+    "current",
+    "current_service",
+    "set_current",
+]
