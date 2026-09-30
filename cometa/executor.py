@@ -512,13 +512,17 @@ class AttemptExecutor:
             )
             return True
         partial_text = self.artifacts.read_final_text(task.task_id)
-        # 到期注入的取消命令（deadline: 前缀）→ 终态落 timed_out（§6.2）；
-        # 用户/系统显式取消 → cancelled。取消语义在方案里是两个事实。
+        # 取消语义区分三个事实（§6.2/§6.10）：到期 → timed_out；
+        # 输入等待过期 → cancelled(input_expired)；用户/系统显式取消 → cancelled。
         timed_out = self.store.has_deadline_control(task.task_id)
         if timed_out:
             summary = "任务到达墙钟期限，已确认停止；中断前产出的内容已保留。"
             state = TaskState.TIMED_OUT
             limitations = ["deadline_exceeded"]
+        elif self._cancel_reason(task.task_id) == "input_expired":
+            summary = "等待补充信息超时，任务已中断；可重新委派并在收到提问后尽快答复。"
+            state = TaskState.CANCELLED
+            limitations = ["input_wait_expired"]
         else:
             summary = "任务已被用户取消。"
             if partial_text:
@@ -544,6 +548,13 @@ class AttemptExecutor:
                 error="",
             )
         return True
+
+    def _cancel_reason(self, task_id: str) -> str:
+        """最近一条 cancel_requested 事件的 reason（无则空串）。"""
+        for event in reversed(self.store.events_page(task_id, limit=50)):
+            if event.kind is EventKind.CANCEL_REQUESTED:
+                return str(event.payload.get("reason", ""))
+        return ""
 
     # ============================================================
     # 结果收集与校验（§6.12）
