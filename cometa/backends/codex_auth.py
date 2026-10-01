@@ -126,6 +126,14 @@ def _custom_config_present(home: Path) -> bool:
     return str(data.get("model_provider", "")) == CUSTOM_PROVIDER_ID
 
 
+def custom_endpoint_present(
+    backend: BackendConfig, stella_home: Path | None = None
+) -> bool:
+    """托管 home 是否配置过自定义端点（config.toml 或凭据文件任一存在）。"""
+    home = codex_home_for(backend, stella_home)
+    return (home / CREDENTIAL_FILENAME).is_file() or _custom_config_present(home)
+
+
 def auth_state(backend: BackendConfig, stella_home: Path | None = None) -> CodexAuthState:
     """判定该 backend 当前认证状态（文件面，纯函数式，无网络调用）。"""
     home = codex_home_for(backend, stella_home)
@@ -414,6 +422,7 @@ __all__ = [
     "backend_spawn_env",
     "clear_managed_auth",
     "codex_home_for",
+    "custom_endpoint_present",
     "default_stella_home",
     "legacy_auth_available",
     "legacy_auth_home",

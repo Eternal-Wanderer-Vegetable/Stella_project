@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -338,3 +340,281 @@ class TestResultsAndArtifacts:
             headers=auth_header,
         )
         assert evil.status_code in (400, 404)
+
+
+# ── 后端认证管理（codex_auth 双路线）──────────────────────
+
+_AUTH_BASE = "/api/v1/cometa/backends/{backend_id}/auth"
+
+
+class _FakeDeviceLogin:
+    """codex_auth.DeviceLoginSession 的假身：不发网络请求、可编程完成。"""
+
+    def __init__(self):
+        self.user_code = "7S09-9QL1I"
+        self.verification_url = "https://auth.openai.com/codex/device"
+        self.login_id = "fake-login-id"
+        self.completed = False
+        self.closed = False
+
+    async def wait(self):
+        while not self.completed:
+            await asyncio.sleep(0.01)
+
+    async def cancel(self):
+        self.completed = True
+
+    async def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def auth_home(isolated_home, monkeypatch):
+    """codex_auth 的 home 解析读进程 env：STELLA_HOME 与 CODEX_HOME 都要
+    隔离——否则开发机真实的 ~/.codex 登录会被当成 legacy 检出。"""
+    monkeypatch.setenv("STELLA_HOME", str(isolated_home))
+    monkeypatch.setenv("CODEX_HOME", str(isolated_home / "legacy-empty"))
+    return isolated_home
+
+
+@pytest.fixture
+def wired_codex(wired_service, auth_home):
+    """给 wired_service 挂一个 codex 型后端（认证端点的操作对象）。
+
+    依赖 auth_home：codex_auth 的 home 解析读进程 env（STELLA_HOME /
+    CODEX_HOME），凡挂 codex 后端的用例都必须隔离开发机的真实登录。"""
+    from cometa.config import BackendConfig
+
+    wired_service.config.backends["codex_local"] = BackendConfig(
+        backend_id="codex_local", type="codex", enabled=True
+    )
+    return wired_service
+
+
+class TestAuthGates:
+    def test_auth_endpoints_require_cometa_enabled(self, client, auth_header):
+        resp = client.get(
+            _AUTH_BASE.format(backend_id="codex_local") + "/status",
+            headers=auth_header,
+        )
+        assert resp.status_code == 503
+
+    def test_unknown_backend_rejected(self, client, auth_header, wired_codex):
+        resp = client.get(
+            _AUTH_BASE.format(backend_id="nope") + "/status", headers=auth_header
+        )
+        assert resp.status_code == 400
+
+    def test_non_codex_backend_rejected(self, client, auth_header, wired_codex):
+        resp = client.get(
+            _AUTH_BASE.format(backend_id="fake") + "/status", headers=auth_header
+        )
+        assert resp.status_code == 400
+        assert "codex" in resp.json()["message"]
+
+    def test_requires_auth(self, client):
+        assert (
+            client.get(_AUTH_BASE.format(backend_id="codex_local") + "/status").status_code
+            == 401
+        )
+
+
+class TestAuthStatusAndCustomEndpoint:
+    def test_status_none_when_unconfigured(self, client, auth_header, wired_codex):
+        resp = client.get(
+            _AUTH_BASE.format(backend_id="codex_local") + "/status",
+            headers=auth_header,
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["mode"] == "none"
+        assert data["ready"] is False
+        assert data["has_api_key"] is False
+
+    def test_custom_endpoint_flow_and_zero_secret_echo(
+        self, client, auth_header, wired_codex, auth_home
+    ):
+        url = _AUTH_BASE.format(backend_id="codex_local")
+        secret = "sk-live-secret-value-12345"
+        resp = client.post(
+            url + "/custom-endpoint",
+            json={"base_url": "https://relay.example.com/v1", "api_key": secret,
+                  "model": "gpt-x"},
+            headers=auth_header,
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["mode"] == "ready_custom"
+        assert data["ready"] is True
+        assert data["has_api_key"] is True
+        # 零回显：响应全文不含 key 原文
+        assert secret not in resp.text
+
+        # 空串 = 保留原值（providers「留空不变」语义）
+        resp2 = client.post(
+            url + "/custom-endpoint",
+            json={"base_url": "https://relay.example.com/v1", "api_key": "",
+                  "model": "gpt-x"},
+            headers=auth_header,
+        )
+        assert resp2.status_code == 200
+        from cometa.backends import codex_auth
+
+        cred = codex_auth.read_custom_credential(
+            wired_codex.config.backend_of("codex_local")
+        )
+        assert cred is not None and cred["api_key"] == secret
+
+        # 登出不清自定义端点，但模式判定仍是 ready_custom
+        resp3 = client.post(url + "/logout", headers=auth_header)
+        assert resp3.status_code == 200
+        assert resp3.json()["data"]["mode"] == "ready_custom"
+
+    def test_custom_endpoint_first_time_empty_key_rejected(
+        self, client, auth_header, wired_codex
+    ):
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/custom-endpoint",
+            json={"base_url": "https://r.example.com", "api_key": "", "model": "m"},
+            headers=auth_header,
+        )
+        assert resp.status_code == 400
+        assert "api_key" in resp.json()["message"]
+
+    def test_custom_endpoint_wire_api_chat_rejected(
+        self, client, auth_header, wired_codex
+    ):
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/custom-endpoint",
+            json={"base_url": "https://r.example.com", "api_key": "k",
+                  "model": "m", "wire_api": "chat"},
+            headers=auth_header,
+        )
+        assert resp.status_code == 400
+        assert "responses" in resp.json()["message"]
+
+    def test_test_endpoint_requires_base_url(self, client, auth_header, wired_codex):
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/test",
+            json={"base_url": "", "api_key": "k"},
+            headers=auth_header,
+        )
+        assert resp.status_code == 400
+
+
+class TestApiKeyRoute:
+    def test_empty_key_rejected(self, client, auth_header, wired_codex):
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/api-key",
+            json={"api_key": "  "},
+            headers=auth_header,
+        )
+        assert resp.status_code == 400
+
+    def test_sdk_missing_returns_503(self, client, auth_header, wired_codex, monkeypatch):
+        from cometa.backends import codex_auth
+
+        monkeypatch.setattr(codex_auth, "_import_sdk", lambda: None)
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/api-key",
+            json={"api_key": "sk-x"},
+            headers=auth_header,
+        )
+        assert resp.status_code == 503
+
+
+class TestDeviceLoginFlow:
+    def test_start_poll_complete_cycle(
+        self, client, auth_header, wired_codex, monkeypatch
+    ):
+        from cometa.backends import codex_auth
+
+        fake = _FakeDeviceLogin()
+
+        async def _fake_start(backend, stella_home=None):
+            return fake
+
+        monkeypatch.setattr(codex_auth, "start_device_login", _fake_start)
+
+        async def _fake_account(backend, stella_home=None):
+            return {"type": "chatgpt"}
+
+        monkeypatch.setattr(codex_auth, "account_status", _fake_account)
+
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/device-login",
+            headers=auth_header,
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["state"] == "pending"
+        assert data["user_code"] == fake.user_code
+        session_id = data["session_id"]
+
+        poll = client.get(
+            _AUTH_BASE.format(backend_id="codex_local")
+            + f"/device-login/{session_id}",
+            headers=auth_header,
+        )
+        assert poll.status_code == 200
+        assert poll.json()["data"]["state"] == "pending"
+
+        fake.completed = True
+        state = "pending"
+        for _ in range(100):  # ~5s 上限；watcher 在 app loop 里自行收敛
+            state = client.get(
+                _AUTH_BASE.format(backend_id="codex_local")
+                + f"/device-login/{session_id}",
+                headers=auth_header,
+            ).json()["data"]["state"]
+            if state == "completed":
+                break
+            await_async_sleep()
+        assert state == "completed"
+        # 账号摘要出现在 status（零 token，只有类型）
+        status = client.get(
+            _AUTH_BASE.format(backend_id="codex_local") + "/status",
+            headers=auth_header,
+        ).json()["data"]
+        assert status["account"] == {"type": "chatgpt"}
+
+    def test_unknown_session_404(self, client, auth_header, wired_codex):
+        resp = client.get(
+            _AUTH_BASE.format(backend_id="codex_local") + "/device-login/deadbeef",
+            headers=auth_header,
+        )
+        assert resp.status_code == 404
+
+
+def await_async_sleep() -> None:
+    """轮询间隔：TestClient 同步世界里让出一下（watcher 在 app loop 里跑）。"""
+    import time
+
+    time.sleep(0.05)
+
+
+class TestMigrateLegacy:
+    def test_migrate_without_legacy_rejected(self, client, auth_header, wired_codex):
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/migrate-legacy",
+            headers=auth_header,
+        )
+        assert resp.status_code == 400
+
+    def test_migrate_copies_legacy_auth(
+        self, client, auth_header, wired_codex, auth_home, monkeypatch
+    ):
+        legacy = auth_home / "legacy-codex"
+        legacy.mkdir()
+        (legacy / "auth.json").write_text(
+            '{"OPENAI_API_KEY": "sk-old", "auth_mode": "api"}', encoding="utf-8"
+        )
+        monkeypatch.setenv("CODEX_HOME", str(legacy))
+        resp = client.post(
+            _AUTH_BASE.format(backend_id="codex_local") + "/migrate-legacy",
+            headers=auth_header,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["mode"] == "ready_api_key"
+        # 响应不含迁移过来的 key 原文
+        assert "sk-old" not in resp.text
