@@ -101,3 +101,63 @@ export function respondInput(taskId: string, requestId: string, answer: string, 
 export function artifactDownloadUrl(taskId: string, artifactId: string): string {
   return `/api/v1/cometa/tasks/${taskId}/artifacts/${artifactId}`;
 }
+
+// ── 后端认证管理（codex_auth；秘密零回显：状态只含 has_api_key 布尔）──
+
+export interface CometaAuthStatus {
+  backend_id: string;
+  mode: string; // ready_custom | ready_chatgpt | ready_api_key | legacy | none
+  ready: boolean;
+  reason: string;
+  has_api_key: boolean;
+  has_custom_endpoint: boolean;
+  legacy_available: boolean;
+  account: Record<string, string> | null;
+}
+
+export interface CometaDeviceLogin {
+  session_id: string;
+  state: string; // pending | completed | failed
+  user_code: string;
+  verification_url: string;
+  account: Record<string, string> | null;
+  error: string;
+}
+
+export function getAuthStatus(backendId: string): Promise<CometaAuthStatus> {
+  return unwrap(api.get(`/cometa/backends/${backendId}/auth/status`));
+}
+
+export function applyApiKey(backendId: string, apiKey: string): Promise<CometaAuthStatus> {
+  return unwrap(api.post(`/cometa/backends/${backendId}/auth/api-key`, { api_key: apiKey }));
+}
+
+export function applyCustomEndpoint(
+  backendId: string,
+  payload: { base_url: string; api_key: string; model: string; wire_api?: string },
+): Promise<CometaAuthStatus> {
+  return unwrap(api.post(`/cometa/backends/${backendId}/auth/custom-endpoint`, payload));
+}
+
+export function startDeviceLogin(backendId: string): Promise<CometaDeviceLogin> {
+  return unwrap(api.post(`/cometa/backends/${backendId}/auth/device-login`, {}));
+}
+
+export function getDeviceLogin(backendId: string, sessionId: string): Promise<CometaDeviceLogin> {
+  return unwrap(api.get(`/cometa/backends/${backendId}/auth/device-login/${sessionId}`));
+}
+
+export function migrateLegacyAuth(backendId: string): Promise<CometaAuthStatus> {
+  return unwrap(api.post(`/cometa/backends/${backendId}/auth/migrate-legacy`, {}));
+}
+
+export function logoutBackend(backendId: string): Promise<CometaAuthStatus> {
+  return unwrap(api.post(`/cometa/backends/${backendId}/auth/logout`, {}));
+}
+
+export function testAuthEndpoint(
+  backendId: string,
+  payload: { base_url: string; api_key: string },
+): Promise<{ models: string[]; error: string }> {
+  return unwrap(api.post(`/cometa/backends/${backendId}/auth/test`, payload));
+}
