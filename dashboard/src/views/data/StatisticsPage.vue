@@ -1,9 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+
+import { useTheme } from 'vuetify';
 
 import { api, unwrap } from '@/api/http';
 
-// 统计页：概览大数字 + token 趋势 + 调用柱状 + 排行（方案 §6.9，数据=usage 日账）
+// 统计页：概览大数字 + token 趋势 + 调用图表 + 排行（方案 §6.9，数据=usage 日账）
+type ChartKind = 'line' | 'bar';
+
+const CHART_KIND_KEY = 'stella.data.chartKind';
+
+function readChartKind(): ChartKind {
+  try {
+    const stored = localStorage.getItem(CHART_KIND_KEY);
+    return stored === 'bar' ? 'bar' : 'line';
+  } catch {
+    return 'line';
+  }
+}
+
 interface DailyTotals {
   calls: number;
   failures: number;
@@ -34,6 +49,7 @@ interface UsageToday {
     prompt_tokens: number;
     completion_tokens: number;
     cache_hit_rate: number;
+    estimated_cache_hit_rate?: number;
   };
   fallback_states: Record<string, unknown>;
 }
@@ -68,24 +84,85 @@ async function load(): Promise<void> {
 onMounted(load);
 
 const chartHeight = 260;
+
+// 图表形态用户可选（折线/柱状），偏好记忆在 localStorage；两张图共用同一口味。
+const chartKind = ref<ChartKind>(readChartKind());
+watch(chartKind, (kind) => {
+  try {
+    localStorage.setItem(CHART_KIND_KEY, kind);
+  } catch {
+    /* 隐私模式等存不了就算了，仅本次会话生效 */
+  }
+});
+
+// apexcharts 默认文字色是为浅色底设计的深灰——暗色主题里坐标轴/图例几乎不可读
+//（实测）。配色跟随 Vuetify 当前主题动态生成。
+const vuetifyTheme = useTheme();
+const isDark = computed(() => vuetifyTheme.current.value.dark);
+const chartFore = computed(() =>
+  isDark.value ? 'rgba(232, 236, 241, 0.72)' : 'rgba(0, 0, 0, 0.66)',
+);
+const chartGrid = computed(() =>
+  isDark.value ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.10)',
+);
+const chartThemeMode = computed(() => (isDark.value ? 'dark' : 'light'));
+
+function compactTokens(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+  return String(v);
+}
+
 const trendOptions = computed(() => ({
-  chart: { type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
+  theme: { mode: chartThemeMode.value },
+  chart: {
+    type: chartKind.value,
+    toolbar: { show: false },
+    zoom: { enabled: false },
+    foreColor: chartFore.value,
+    background: 'transparent',
+  },
+  grid: { borderColor: chartGrid.value },
   stroke: { curve: 'smooth', width: 2 },
   dataLabels: { enabled: false },
-  xaxis: { categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [] },
+  xaxis: {
+    categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [],
+    labels: { style: { colors: chartFore.value } },
+    axisBorder: { color: chartGrid.value },
+    axisTicks: { color: chartGrid.value },
+  },
+  yaxis: {
+    labels: { style: { colors: chartFore.value }, formatter: compactTokens },
+  },
   colors: ['#8FB0CC', '#E5CE9C'],
-  legend: { position: 'top' },
+  legend: { position: 'top', labels: { colors: chartFore.value } },
+  tooltip: { theme: chartThemeMode.value },
 }));
 const trendSeries = computed(() => [
   { name: '输入 token', data: daily.value?.series.map((s) => s.prompt_tokens) ?? [] },
   { name: '输出 token', data: daily.value?.series.map((s) => s.completion_tokens) ?? [] },
 ]);
 const callOptions = computed(() => ({
-  chart: { type: 'bar', toolbar: { show: false } },
+  theme: { mode: chartThemeMode.value },
+  chart: {
+    type: chartKind.value,
+    toolbar: { show: false },
+    foreColor: chartFore.value,
+    background: 'transparent',
+  },
+  grid: { borderColor: chartGrid.value },
   plotOptions: { bar: { columnWidth: '55%' } },
   dataLabels: { enabled: false },
-  xaxis: { categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [] },
-  colors: ['#2E3B4E'],
+  xaxis: {
+    categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [],
+    labels: { style: { colors: chartFore.value } },
+    axisBorder: { color: chartGrid.value },
+    axisTicks: { color: chartGrid.value },
+  },
+  yaxis: { labels: { style: { colors: chartFore.value } } },
+  // 深浅两套主题下都可见的中调蓝（原 #2E3B4E 在暗色主题里隐形）
+  colors: ['#5C8AC7'],
+  tooltip: { theme: chartThemeMode.value },
 }));
 const callSeries = computed(() => [
   { name: '调用次数', data: daily.value?.series.map((s) => s.calls) ?? [] },
@@ -96,6 +173,12 @@ const budgetPercent = computed(() => {
   if (!t || !t.budget) return 0;
   return Math.min(100, Math.round((t.used_tokens / t.budget) * 100));
 });
+
+// 展示口径用理论哈希估算（本地端点不报 cached_tokens，真实口径恒零）；
+// estimated 字段缺省时回落到端点上报口径（兼容旧 API 形状）。
+const displayHitRate = computed(
+  () => today.value?.totals.estimated_cache_hit_rate ?? today.value?.totals.cache_hit_rate ?? 0,
+);
 </script>
 
 <template>
@@ -121,9 +204,18 @@ const budgetPercent = computed(() => {
       </v-col>
       <v-col cols="6" md="3">
         <v-card class="pa-4">
-          <div class="text-caption text-medium-emphasis">缓存命中率</div>
-          <div class="text-h5">{{ Math.round((today.totals.cache_hit_rate ?? 0) * 100) }}%</div>
-          <div class="text-caption text-disabled">分母是输入 token</div>
+          <div class="text-caption text-medium-emphasis">
+            缓存命中率
+            <v-tooltip location="top" :max-width="420">
+              <template #activator="{ props: tip }">
+                <v-icon v-bind="tip" size="x-small" class="ml-1" icon="mdi-help-circle-outline" />
+              </template>
+              这里的缓存命中率为理论哈希值计算（按提示词前缀复用估算），跟实际缓存命中率有可能不一致。分母是输入 token。
+            </v-tooltip>
+          </div>
+          <div class="text-h5">
+            {{ Math.round(displayHitRate * 100) }}%
+          </div>
         </v-card>
       </v-col>
       <v-col cols="6" md="3">
@@ -156,13 +248,19 @@ const budgetPercent = computed(() => {
           <div class="d-flex align-center mb-2">
             <div class="text-subtitle-1 font-weight-medium">token 趋势</div>
             <v-spacer />
+            <v-btn-toggle v-model="chartKind" mandatory density="compact" class="mr-2">
+              <v-btn value="line">折线</v-btn>
+              <v-btn value="bar">柱状</v-btn>
+            </v-btn-toggle>
             <v-btn-toggle v-model="days" mandatory density="compact" @update:model-value="load">
               <v-btn :value="7">7 天</v-btn>
               <v-btn :value="30">30 天</v-btn>
             </v-btn-toggle>
           </div>
+          <!-- :key 强制重建：apexcharts 对 type/主题切换的原地更新不可靠 -->
           <apexchart
-            type="area"
+            :key="`trend-${chartKind}-${isDark}`"
+            :type="chartKind"
             :height="chartHeight"
             :options="trendOptions"
             :series="trendSeries"
@@ -171,9 +269,17 @@ const budgetPercent = computed(() => {
       </v-col>
       <v-col cols="12" md="4">
         <v-card class="pa-4">
-          <div class="text-subtitle-1 font-weight-medium mb-2">调用次数</div>
+          <div class="d-flex align-center mb-2">
+            <div class="text-subtitle-1 font-weight-medium">调用次数</div>
+            <v-spacer />
+            <v-btn-toggle v-model="chartKind" mandatory density="compact">
+              <v-btn value="line">折线</v-btn>
+              <v-btn value="bar">柱状</v-btn>
+            </v-btn-toggle>
+          </div>
           <apexchart
-            type="bar"
+            :key="`calls-${chartKind}-${isDark}`"
+            :type="chartKind"
             :height="chartHeight"
             :options="callOptions"
             :series="callSeries"

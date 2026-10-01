@@ -177,6 +177,7 @@ onBeforeUnmount(() => {
     <p class="text-body-2 text-medium-emphasis mb-4">
       跨轮次委派外部 Agent（Codex 等）：受理后立即返回，进度与结果在任务中心可查；
       等待输入的任务会在这里提问。与群内「委派 / 任务状态 / 取消任务」指令共用同一套服务。
+      Codex 后端的登录与端点认证在<a href="#/providers">「提供商」页</a>的「外部 Agent」卡片配置。
     </p>
 
     <v-alert
@@ -184,26 +185,8 @@ onBeforeUnmount(() => {
       type="info"
       variant="tonal"
       class="mb-4"
-      text="cometa 未启用（COMETA_ENABLED=false 或 runtime 未装配）。在 .env 打开开关、配置 StellaData/config/cometa.toml 并重启后，这里即可提交与跟踪外部 Agent 任务。"
+      text="cometa 未启用（COMETA_ENABLED=false 或 runtime 未装配）。在 .env 打开开关、配置 StellaData/config/cometa.toml 并重启后，这里即可提交任务、配置后端认证与跟踪外部 Agent 任务。"
     />
-
-    <v-card v-if="!disabled" class="pa-4 mb-4">
-      <div class="d-flex ga-2 align-center">
-        <v-text-field
-          v-model="objective"
-          label="委派目标（至少 8 个字符）"
-          density="compact"
-          hide-details
-          @keyup.enter="submit"
-        />
-        <v-chip v-if="backends.length" size="small" variant="tonal">
-          后端 {{ backends.map((b) => b.backend_id).join('、') }}
-        </v-chip>
-        <v-btn color="primary" :disabled="!canSubmit || busy" :loading="busy" @click="submit">
-          委派
-        </v-btn>
-      </div>
-    </v-card>
 
     <v-card v-if="!disabled" class="pa-2">
       <v-table v-if="tasks.length">

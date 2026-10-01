@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
+import CodexAuthCard from '@/components/CodexAuthCard.vue';
 import { toastApiError, useToast } from '@/stores/toast';
 
 // 提供商页（M1 只读运行态）：调度器闸门排队 + 降级状态；端点/角色配置编辑属 M2
@@ -143,6 +144,7 @@ onBeforeUnmount(() => {
     <p class="text-body-2 text-medium-emphasis mb-4">
       在此编辑模型端点（Base URL / 模型 / API Key）与角色绑定，并测试连通性；
     下方为调度器的实时闸门与降级状态。保存写入 .env，重启后生效。
+    外部 Agent（Codex）的登录与自定义端点认证在下方「外部 Agent」卡片配置，即时生效。
     </p>
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
 
@@ -174,6 +176,9 @@ onBeforeUnmount(() => {
         角色绑定：{{ roles.map((r) => `${r.role}→${r.endpoint}`).join(' · ') }}
       </div>
     </v-card>
+
+    <!-- 外部 Agent（Codex）认证：cometa 未启用时组件自隐藏 -->
+    <CodexAuthCard />
 
     <v-card class="pa-4 mb-4">
       <div class="text-subtitle-1 font-weight-medium mb-2">模型闸门（每端点串行）</div>

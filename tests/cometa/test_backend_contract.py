@@ -293,19 +293,76 @@ class TestCodexFailClosed:
             )
 
     @pytest.mark.asyncio
-    async def test_probe_auth_required_without_auth_file(self, monkeypatch):
-        """SDK 在但认证缺失 → auth_required（不是 ready，§6.7）。
+    async def test_probe_auth_required_without_managed_auth(self, tmp_path, monkeypatch):
+        """SDK 在但托管 codex_home 无认证 → auth_required（不是 ready，§6.7）。
 
         CI 无可选 SDK：必须同时桩 SDK 存在，probe 才会走到认证检查
-        （probe 顺序：可执行文件 → SDK → 认证，任一缺失即提前返回）。"""
+        （probe 顺序：可执行文件 → SDK → 认证，任一缺失即提前返回）。
+        CODEX_HOME 指到空目录，同时隔离开发机 ~/.codex 的真实登录与
+        进程级 CODEX_HOME（legacy 检测）。"""
         from types import SimpleNamespace
 
         import cometa.backends.codex as codex_mod
 
+        monkeypatch.setenv("CODEX_HOME", str(tmp_path / "legacy-empty"))
         monkeypatch.setattr(codex_mod, "_import_sdk", lambda: SimpleNamespace())
-        monkeypatch.setattr(codex_mod, "_auth_ok", lambda: False)
-        health = await _codex_backend().probe()
+        backend = CodexBackend(
+            BackendConfig(
+                backend_id="codex-local",
+                type="codex",
+                env={"CODEX_HOME": str(tmp_path / "managed")},
+            )
+        )
+        health = await backend.probe()
         assert health.state.value == "auth_required"
+        assert "WebUI" in health.reason
+
+    @pytest.mark.asyncio
+    async def test_probe_ready_with_custom_endpoint(self, tmp_path, monkeypatch):
+        """托管 home 配好自定义端点（config.toml + 凭据）→ probe ready。"""
+        from types import SimpleNamespace
+
+        import cometa.backends.codex as codex_mod
+        from cometa.backends.codex_auth import write_custom_endpoint
+
+        monkeypatch.setenv("CODEX_HOME", str(tmp_path / "legacy-empty"))
+        monkeypatch.setattr(codex_mod, "_import_sdk", lambda: SimpleNamespace())
+        managed = tmp_path / "managed"
+        write_custom_endpoint(
+            managed, base_url="https://relay.example.com/v1", api_key="sk-t", model="gpt-x"
+        )
+        backend = CodexBackend(
+            BackendConfig(
+                backend_id="codex-local",
+                type="codex",
+                env={"CODEX_HOME": str(managed)},
+            )
+        )
+        health = await backend.probe()
+        assert health.state.value == "ready"
+
+    @pytest.mark.asyncio
+    async def test_probe_legacy_home_reports_auth_required_with_hint(self, tmp_path, monkeypatch):
+        """旧版 ~/.codex 有登录但托管 home 为空 → auth_required + 迁移指引。"""
+        from types import SimpleNamespace
+
+        import cometa.backends.codex as codex_mod
+
+        legacy = tmp_path / "old-home"
+        legacy.mkdir()
+        (legacy / "auth.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("CODEX_HOME", str(legacy))
+        monkeypatch.setattr(codex_mod, "_import_sdk", lambda: SimpleNamespace())
+        backend = CodexBackend(
+            BackendConfig(
+                backend_id="codex-local",
+                type="codex",
+                env={"CODEX_HOME": str(tmp_path / "managed")},
+            )
+        )
+        health = await backend.probe()
+        assert health.state.value == "auth_required"
+        assert "迁移" in health.reason
 
     @pytest.mark.asyncio
     async def test_executor_marks_codex_task_failed(self, make_executor, store, config, monkeypatch):

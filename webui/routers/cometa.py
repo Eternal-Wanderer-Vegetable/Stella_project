@@ -22,6 +22,7 @@ from webui.audit import record as audit_record
 from webui.auth import AuthContext, require_auth
 from webui.responses import ApiError, ok
 from webui.services import cometa as cometa_service
+from webui.services import cometa_auth as cometa_auth_service
 
 router = APIRouter(tags=["cometa"], dependencies=[Depends(require_auth)])
 
@@ -272,6 +273,131 @@ async def cometa_artifact_download(
         path,
         media_type=artifact.mime or "application/octet-stream",
         filename=artifact.display_name,
+    )
+
+
+# ---------- 后端认证管理（codex_auth；providers 同款纪律，免重启） ----------
+
+
+def _cometa_service_or_503() -> Any:
+    try:
+        return cometa_service.get_service()
+    except cometa_service.CometaUnavailable as e:
+        raise ApiError(e.message, status_code=503) from None
+
+
+@router.get("/api/v1/cometa/backends/{backend_id}/auth/status")
+async def cometa_auth_status(backend_id: str) -> Any:
+    return ok(cometa_auth_service.status(_cometa_service_or_503(), backend_id))
+
+
+@router.post("/api/v1/cometa/backends/{backend_id}/auth/api-key")
+async def cometa_auth_api_key(
+    request: Request,
+    backend_id: str,
+    payload: dict,
+    auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
+) -> Any:
+    service = _cometa_service_or_503()
+    result = await cometa_auth_service.apply_api_key(
+        service, backend_id, str(payload.get("api_key", ""))
+    )
+    # audit 不含 key 原文（只记后端与结果账号类型）
+    _audit_auth(request, auth, "cometa.auth.api_key", backend_id,
+                account=str(result.get("account", {}).get("type", "")))
+    return ok(result)
+
+
+@router.post("/api/v1/cometa/backends/{backend_id}/auth/custom-endpoint")
+async def cometa_auth_custom_endpoint(
+    request: Request,
+    backend_id: str,
+    payload: dict,
+    auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
+) -> Any:
+    service = _cometa_service_or_503()
+    result = await cometa_auth_service.apply_custom_endpoint(service, backend_id, payload)
+    # detail 只含端点形状，不含 api_key
+    _audit_auth(request, auth, "cometa.auth.custom_endpoint", backend_id,
+                base_url=str(payload.get("base_url", "")),
+                model=str(payload.get("model", "")))
+    return ok(result)
+
+
+@router.post("/api/v1/cometa/backends/{backend_id}/auth/device-login")
+async def cometa_auth_device_login(
+    request: Request,
+    backend_id: str,
+    auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
+) -> Any:
+    service = _cometa_service_or_503()
+    result = await cometa_auth_service.start_device_login(service, backend_id)
+    _audit_auth(request, auth, "cometa.auth.device_login", backend_id)
+    return ok(result)
+
+
+@router.get("/api/v1/cometa/backends/{backend_id}/auth/device-login/{session_id}")
+async def cometa_auth_device_login_status(
+    backend_id: str, session_id: str
+) -> Any:
+    service = _cometa_service_or_503()
+    return ok(
+        await cometa_auth_service.device_login_status(service, backend_id, session_id)
+    )
+
+
+@router.post("/api/v1/cometa/backends/{backend_id}/auth/migrate-legacy")
+async def cometa_auth_migrate_legacy(
+    request: Request,
+    backend_id: str,
+    auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
+) -> Any:
+    service = _cometa_service_or_503()
+    result = await cometa_auth_service.migrate_legacy(service, backend_id)
+    _audit_auth(request, auth, "cometa.auth.migrate_legacy", backend_id)
+    return ok(result)
+
+
+@router.post("/api/v1/cometa/backends/{backend_id}/auth/logout")
+async def cometa_auth_logout(
+    request: Request,
+    backend_id: str,
+    auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
+) -> Any:
+    service = _cometa_service_or_503()
+    result = await cometa_auth_service.logout(service, backend_id)
+    _audit_auth(request, auth, "cometa.auth.logout", backend_id)
+    return ok(result)
+
+
+@router.post("/api/v1/cometa/backends/{backend_id}/auth/test")
+async def cometa_auth_test_endpoint(
+    request: Request,
+    backend_id: str,
+    payload: dict,
+    auth: Annotated[AuthContext, Depends(require_auth)] = None,  # type: ignore[assignment]
+) -> Any:
+    service = _cometa_service_or_503()
+    result = await cometa_auth_service.test_endpoint(service, backend_id, payload)
+    _audit_auth(request, auth, "cometa.auth.test", backend_id,
+                base_url=str(payload.get("base_url", "")))
+    return ok(result)
+
+
+def _audit_auth(
+    request: Request,
+    auth: AuthContext | None,
+    action: str,
+    backend_id: str,
+    **detail: Any,
+) -> None:
+    """认证操作的审计落点：detail 必须不含 key/token 原文。"""
+    audit_record(
+        request=request,
+        username=auth.username if auth is not None else "",
+        via=auth.via if auth is not None else "",
+        action=action,
+        detail={"backend_id": backend_id, **detail},
     )
 
 

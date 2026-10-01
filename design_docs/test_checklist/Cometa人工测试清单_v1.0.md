@@ -9,7 +9,7 @@
 
 ## 使用说明
 
-- **顺序**：T0 必须先做；T1–T15 相互独立，可任意顺序，但每项的「前置」要满足。
+- **顺序**：T0 必须先做；T1–T19 相互独立，可任意顺序，但每项的「前置」要满足。
 - **切换场景**：改 `STELLA_HOME/config/cometa.toml` 或 `.env` 后**必须重启 Bot**
   （cometa 配置在启动时加载，不做热更新）。
 - **观察点**（后文反复引用）：
@@ -321,6 +321,45 @@ enabled = true
 2. 升级演练（可选）：切换到 main 分支再切回来，确认 tasks.db 与 toml 未被覆盖/删除；
 3. 备份提醒：备份时**不能只拷贝 tasks.db**——需连同 `-wal` 一起做一致性备份
    （或停机后拷贝）。
+
+结果：☐ 通过 ☐ 不通过（现象：____________）
+
+---
+
+## T16 Codex 认证配置（WebUI 双路线 + 托管 codex_home）
+
+**前置**：T0 完成；`pip install openai-codex==0.159.2 -i https://pypi.org/simple`
+已装（SDK 缺失时认证按钮会报 503，属预期）；WebUI 可访问 `/#/cometa`。
+注意：本项**全程不需要重启 Bot**（认证即时生效是设计行为）。
+
+1. **初始状态**：打开「后端认证（Codex）」卡片，选中 `codex_local` → 状态徽章
+   应为「未配置」，reason 指引在 WebUI 配置；
+2. **自定义端点路线**：填 Base URL（如 LM Studio `http://127.0.0.1:1234`）、
+   模型名、API Key →「测试」应列出模型 →「保存」→ 状态变「自定义端点」（绿），
+   **无重启提示**；
+3. **真实任务**：`委派 codex_local 整理一个排序算法` → probe 应通过（不再
+   backend_probe_failed）；任务进入执行（端点须支持 Responses API + 函数工具，
+   LM Studio 本地端点可能在真实 turn 断流——那是端点限制，不是认证问题）；
+4. **空串保护**：再保存一次但 API Key 留空 → 保存成功且原 key 保留
+   （`stella_credentials.json` 不变）；
+5. **零回显**：卡片与接口响应任何地方都不出现 key 原文（只有「已设置」布尔）；
+6. **审计**：`webui_audit.jsonl` 出现 `cometa.auth.custom_endpoint` 记录，
+   detail 无 key；
+7. **设备码路线**（需 OpenAI 域名可达，含代理透传）：点「发起登录」→ 出现
+   verification_url + 设备码 → 浏览器完成授权 → 2s 轮询内变「登录完成」，
+   状态变「ChatGPT 已登录」；bot 重启后会话丢失属预期（重新发起即可）；
+8. **旧版迁移**：存在 `~/.codex/auth.json` 的机器上，未配置时卡片出黄色
+   「检测到旧版登录」横幅 → 「一键迁移」→ 状态变已登录；再次迁移应被拒绝
+   （托管目录已有认证）；
+9. **登出**：点「登出」→ 状态回「未配置」，自定义端点配置保留
+   （`config.toml`/`stella_credentials.json` 仍在）；
+10. 认证数据落点检查：`STELLA_HOME/cometa/codex_home/codex_local/` 下三个文件
+    （auth.json / config.toml / stella_credentials.json），`cometa.toml` 内
+    **无任何凭据**，`config_hash` 不因认证操作变化（health 接口可查）。
+
+> 注：SDK 已装但未配置认证时，T11 第 3 步的失败原因现在是
+> 「未配置认证……请在 WebUI cometa 页配置」（旧文案「未找到 Codex 认证」已
+> 被 T16 的托管认证取代）。
 
 结果：☐ 通过 ☐ 不通过（现象：____________）
 

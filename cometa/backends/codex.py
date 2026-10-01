@@ -20,8 +20,10 @@ tests/cometa/fixtures/codex_events.jsonl 为准。会话/轮次/流事件/中断
   auto_review 裁决，cometa 级审批声明不支持）；
 - close         → 结束 app-server 子进程（thread 持久化在 codexHome）。
 
-认证（§6.7）：管理员预先 ``codex login``；probe 检查认证文件，
-缺失 → ``auth_required``（不是 ready）。沙盒映射：profile 的
+认证（§6.7）：经 :mod:`cometa.backends.codex_auth` 管理托管 codex_home
+（WebUI 配置，账号登录或自定义端点）。probe 检查托管认证状态，缺失 →
+``auth_required``（不是 ready）；发现旧版 ``~/.codex`` 登录报 legacy 语义
+（不可用，提示 WebUI 一键迁移）。沙盒映射：profile 的
 allow_workspace_write/allow_network → read-only/workspace-write
 （+network_access）——不能落实时拒绝而不是降级成无限权限。
 """
@@ -29,11 +31,11 @@ allow_workspace_write/allow_network → read-only/workspace-write
 from __future__ import annotations
 
 import contextlib
-import os
 import shutil
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+from cometa.backends import codex_auth
 from cometa.backends.base import PolicyContext, TurnRequest, WorkspaceContext
 from cometa.backends.codex_events import notification_to_event
 from cometa.config import BackendConfig
@@ -51,7 +53,8 @@ from cometa.models import (
 )
 
 # 可选 SDK 的导入名。0.147.0 的包名是 openai_codex（openai-codex on PyPI）。
-_SDK_IMPORT_NAMES = ("openai_codex",)
+# 权威实现在 codex_auth._import_sdk；此处保留同名引用，测试 seam 指向本模块。
+_import_sdk = codex_auth._import_sdk
 
 # M0 冻结的版本组合（§6.7：版本矩阵；升级须先重跑 M0 探针）。
 M0_SDK_VERSION = "0.159.2"
@@ -59,16 +62,6 @@ M0_SDK_VERSION = "0.159.2"
 
 class CodexUnavailableError(RuntimeError):
     """Codex 会话协议不可用（SDK 缺失/版本未验证/认证缺失）。"""
-
-
-def _import_sdk():
-    """尝试导入官方 SDK。返回模块或 None（缺失不是错误——probe 负责报告）。"""
-    for name in _SDK_IMPORT_NAMES:
-        try:
-            return __import__(name)
-        except ImportError:
-            continue
-    return None
 
 
 def _sdk_version(sdk) -> str:
@@ -79,18 +72,6 @@ def _sdk_version(sdk) -> str:
         return str(version("openai-codex"))
     except Exception:
         return ""
-
-
-def _auth_home() -> Path:
-    """codexHome：SDK 与 CLI 都默认 ~/.codex，尊重 CODEX_HOME。"""
-    custom = os.getenv("CODEX_HOME", "").strip()
-    if custom:
-        return Path(custom).expanduser()
-    return Path.home() / ".codex"
-
-
-def _auth_ok() -> bool:
-    return (_auth_home() / "auth.json").is_file()
 
 
 class CodexBackend:
@@ -148,12 +129,12 @@ class CodexBackend:
                 f"安装固定版本 openai-codex=={M0_SDK_VERSION}（须 -i https://pypi.org/simple）"
             )
             return health
-        if not _auth_ok():
+        state = codex_auth.auth_state(self._config)
+        if not state.ready:
+            # legacy = 旧版 ~/.codex 有登录但托管后端用不到（CODEX_HOME 已指向
+            # 托管 home）——如实 auth_required，附 WebUI 迁移指引，不装可用。
             health.state = HealthState.AUTH_REQUIRED
-            health.reason = (
-                f"未找到 Codex 认证（{_auth_home() / 'auth.json'}）；"
-                "请先以管理员身份运行 `codex login`"
-            )
+            health.reason = state.reason
             return health
         return health
 
@@ -169,11 +150,12 @@ class CodexBackend:
             raise CodexUnavailableError(
                 f"未找到 Codex 可执行文件 {codex_bin!r}（§6.9 fail-closed，不降级）"
             )
-        # env 透传（toml [backends.<id>.env]）：代理等部署级环境不依赖
-        # bot 终端——worker 子进程只会继承 bot 的环境，缺了就到不了 app-server
+        # env 透传（toml [backends.<id>.env]）+ 托管 codex_home + 自定义端点
+        # API key 都由 codex_auth 统一装配——worker 子进程只会继承 bot 的环境，
+        # 缺了就到不了 app-server；probe 与这里必须同源（auth 状态一致性）。
         return sdk.AsyncCodex(sdk.CodexConfig(
             codex_bin=codex_bin or None,
-            env=dict(self._config.env) or None,
+            env=codex_auth.backend_spawn_env(self._config),
         ))
 
     def _sandbox_and_overrides(self, policy: PolicyContext):

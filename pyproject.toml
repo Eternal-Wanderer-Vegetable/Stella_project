@@ -35,6 +35,14 @@ dev = [
 mcp = [
     "mcp>=1.29,<2",
 ]
+# Cometa 外部 Agent 任务层的可选依赖（cometa/backends/codex.py）。刻意不进
+# 默认依赖：COMETA_ENABLED 默认 false，绝大多数部署用不到；SDK 缺失时 codex
+# 后端报 degraded，Stella 其余功能不受影响。版本是 M0 冻结矩阵（0.159.2 +
+# 自带 cli-bin 实录验证），升级必须重跑 M0 探针——事件契约随版本漂移，钉死
+# 等号防协议面漂移。安装需官方源（-i https://pypi.org/simple）。
+cometa = [
+    "openai-codex==0.159.2",
+]
 
 [tool.setuptools.packages.find]
 include = ["stella_project*"]
