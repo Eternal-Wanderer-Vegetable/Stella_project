@@ -64,23 +64,27 @@ class ArtifactCollector:
 
     # ── 校验 ─────────────────────────────────────────────
     def _validate_source(self, source: Path, workspace_path: Path) -> Path:
-        """源文件必须真实存在于工作区内：拒绝穿越、越界 symlink/junction。"""
+        """源文件必须真实存在于工作区内：拒绝穿越、越界 symlink/junction。
+
+        链接检查在 resolve() **之前**做（Linux 上 resolve 会顺着 symlink 解析
+        到界外，commonpath 就会先报「越出工作区」而掩盖真实原因——CI 实测）。
+        """
         source = Path(source)
         workspace_path = Path(workspace_path)
         if not source.is_absolute():
             source = workspace_path / source
-        resolved = source.resolve()
-        scope = workspace_path.resolve()
-        if os.path.commonpath([str(resolved), str(scope)]) != str(scope):
-            raise ArtifactError(f"产物路径越出工作区: {source}")
-        if resolved.is_symlink() or (resolved.exists() and resolved.is_symlink()):
+        # 链接检查（原始路径）：末段与途经目录都不允许是链接
+        if source.is_symlink():
             raise ArtifactError(f"产物不允许是链接: {source}")
-        # 父目录中的链接同样不允许（junction/symlink 目录逃逸）
-        for parent in resolved.parents:
+        scope = workspace_path.resolve()
+        for parent in source.resolve().parents:
             if parent == scope:
                 break
             if parent.is_symlink():
                 raise ArtifactError(f"产物路径含链接目录: {source}")
+        resolved = source.resolve()
+        if os.path.commonpath([str(resolved), str(scope)]) != str(scope):
+            raise ArtifactError(f"产物路径越出工作区: {source}")
         if not resolved.is_file():
             raise ArtifactError(f"产物不是常规文件: {source}")
         size = resolved.stat().st_size

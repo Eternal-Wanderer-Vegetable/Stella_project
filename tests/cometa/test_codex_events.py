@@ -76,7 +76,14 @@ class TestFixtureCompletedPath:
 
 
 class TestCompletedPathSynthetic:
-    """completed 路径（用 SDK payload 模型合成；实录替换后测试自动增强）。"""
+    """completed 路径（用 SDK payload 模型合成；实录替换后测试自动增强）。
+
+    构造 payload 需要 openai_codex 的 typed 模型：SDK 是可选依赖，缺失时跳过
+    （错误路径 fixture 重放不依赖 SDK，仍会执行）。"""
+
+    @pytest.fixture(autouse=True)
+    def _require_sdk(self):
+        pytest.importorskip("openai_codex")
 
     def _make_notification(self, method, payload):
         from openai_codex.models import Notification

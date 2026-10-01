@@ -293,10 +293,16 @@ class TestCodexFailClosed:
             )
 
     @pytest.mark.asyncio
-    async def test_probe_auth_required_without_auth_file(self, monkeypatch, tmp_path):
-        """SDK 在但认证缺失 → auth_required（不是 ready，§6.7）。"""
+    async def test_probe_auth_required_without_auth_file(self, monkeypatch):
+        """SDK 在但认证缺失 → auth_required（不是 ready，§6.7）。
+
+        CI 无可选 SDK：必须同时桩 SDK 存在，probe 才会走到认证检查
+        （probe 顺序：可执行文件 → SDK → 认证，任一缺失即提前返回）。"""
+        from types import SimpleNamespace
+
         import cometa.backends.codex as codex_mod
 
+        monkeypatch.setattr(codex_mod, "_import_sdk", lambda: SimpleNamespace())
         monkeypatch.setattr(codex_mod, "_auth_ok", lambda: False)
         health = await _codex_backend().probe()
         assert health.state.value == "auth_required"
