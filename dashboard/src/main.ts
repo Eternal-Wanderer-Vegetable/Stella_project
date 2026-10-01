@@ -5,6 +5,7 @@ import 'vuetify/styles';
 // Core plugins.
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
+import VueApexCharts from 'vue3-apexcharts';
 import { installCloseOverlay } from './api/desktopClose';
 import vuetify from './plugins/vuetify';
 import App from './App.vue';
@@ -17,6 +18,8 @@ app.use(createPinia());
 app.use(router);
 app.use(i18n);
 app.use(vuetify);
+// <apexchart> 全局组件：不注册则模板里的图表静默渲染为空（数据页统计实测）。
+app.use(VueApexCharts);
 
 app.mount('#app');
 

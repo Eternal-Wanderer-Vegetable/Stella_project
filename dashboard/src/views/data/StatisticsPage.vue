@@ -1,9 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { api, unwrap } from '@/api/http';
 
-// 统计页：概览大数字 + token 趋势 + 调用柱状 + 排行（方案 §6.9，数据=usage 日账）
+// 统计页：概览大数字 + token 趋势 + 调用图表 + 排行（方案 §6.9，数据=usage 日账）
+type ChartKind = 'line' | 'bar';
+
+const CHART_KIND_KEY = 'stella.data.chartKind';
+
+function readChartKind(): ChartKind {
+  try {
+    const stored = localStorage.getItem(CHART_KIND_KEY);
+    return stored === 'bar' ? 'bar' : 'line';
+  } catch {
+    return 'line';
+  }
+}
+
 interface DailyTotals {
   calls: number;
   failures: number;
@@ -69,8 +82,19 @@ async function load(): Promise<void> {
 onMounted(load);
 
 const chartHeight = 260;
+
+// 图表形态用户可选（折线/柱状），偏好记忆在 localStorage；两张图共用同一口味。
+const chartKind = ref<ChartKind>(readChartKind());
+watch(chartKind, (kind) => {
+  try {
+    localStorage.setItem(CHART_KIND_KEY, kind);
+  } catch {
+    /* 隐私模式等存不了就算了，仅本次会话生效 */
+  }
+});
+
 const trendOptions = computed(() => ({
-  chart: { type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
+  chart: { type: chartKind.value, toolbar: { show: false }, zoom: { enabled: false } },
   stroke: { curve: 'smooth', width: 2 },
   dataLabels: { enabled: false },
   xaxis: { categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [] },
@@ -82,11 +106,12 @@ const trendSeries = computed(() => [
   { name: '输出 token', data: daily.value?.series.map((s) => s.completion_tokens) ?? [] },
 ]);
 const callOptions = computed(() => ({
-  chart: { type: 'bar', toolbar: { show: false } },
+  chart: { type: chartKind.value, toolbar: { show: false } },
   plotOptions: { bar: { columnWidth: '55%' } },
   dataLabels: { enabled: false },
   xaxis: { categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [] },
-  colors: ['#2E3B4E'],
+  // 深浅两套主题下都可见的中调蓝（原 #2E3B4E 在暗色主题里隐形）
+  colors: ['#5C8AC7'],
 }));
 const callSeries = computed(() => [
   { name: '调用次数', data: daily.value?.series.map((s) => s.calls) ?? [] },
@@ -172,13 +197,19 @@ const displayHitRate = computed(
           <div class="d-flex align-center mb-2">
             <div class="text-subtitle-1 font-weight-medium">token 趋势</div>
             <v-spacer />
+            <v-btn-toggle v-model="chartKind" mandatory density="compact" class="mr-2">
+              <v-btn value="line">折线</v-btn>
+              <v-btn value="bar">柱状</v-btn>
+            </v-btn-toggle>
             <v-btn-toggle v-model="days" mandatory density="compact" @update:model-value="load">
               <v-btn :value="7">7 天</v-btn>
               <v-btn :value="30">30 天</v-btn>
             </v-btn-toggle>
           </div>
+          <!-- :key 强制重建：apexcharts 对 type 切换的原地更新不可靠 -->
           <apexchart
-            type="area"
+            :key="`trend-${chartKind}`"
+            :type="chartKind"
             :height="chartHeight"
             :options="trendOptions"
             :series="trendSeries"
@@ -187,9 +218,17 @@ const displayHitRate = computed(
       </v-col>
       <v-col cols="12" md="4">
         <v-card class="pa-4">
-          <div class="text-subtitle-1 font-weight-medium mb-2">调用次数</div>
+          <div class="d-flex align-center mb-2">
+            <div class="text-subtitle-1 font-weight-medium">调用次数</div>
+            <v-spacer />
+            <v-btn-toggle v-model="chartKind" mandatory density="compact">
+              <v-btn value="line">折线</v-btn>
+              <v-btn value="bar">柱状</v-btn>
+            </v-btn-toggle>
+          </div>
           <apexchart
-            type="bar"
+            :key="`calls-${chartKind}`"
+            :type="chartKind"
             :height="chartHeight"
             :options="callOptions"
             :series="callSeries"
