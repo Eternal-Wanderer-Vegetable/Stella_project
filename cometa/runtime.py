@@ -160,7 +160,7 @@ def build_runtime(
     service = CometaService(store, config, instance_id=instance_id)
     workspaces = WorkspaceManager(config)
     artifacts = ArtifactCollector(config.artifacts_dir)
-    pump = NotificationPump(store, sender, config=config)
+    pump = NotificationPump(store, sender, config=config)  # sender 由调用方注入
     supervisor: WorkerSupervisor | None = None
     if spawn_worker:
         supervisor = WorkerSupervisor(

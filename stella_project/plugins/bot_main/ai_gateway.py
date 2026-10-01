@@ -1831,7 +1831,10 @@ async def _start_cometa() -> None:
             return
         runtime = cometa_runtime.build_runtime(
             config,
-            sender=cometa_bridge.notification_sender,
+            # 长结果投递工厂：绑定产物目录与 [delivery] 样式（§6.12 文件主投递）
+            sender=cometa_bridge.make_notification_sender(
+                config.artifacts_dir, config.delivery
+            ),
             instance_id=_cometa_instance_id(),
             spawn_worker=True,
         )

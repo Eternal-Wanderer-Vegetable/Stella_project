@@ -21,7 +21,7 @@ class NullSender:
     def __init__(self):
         self.sent: list[tuple[dict, str]] = []
 
-    async def send(self, target: dict, text: str) -> str | None:
+    async def send(self, target: dict, text: str, payload: dict | None = None) -> str | None:
         self.sent.append((dict(target), text))
         return "server_emitted"
 

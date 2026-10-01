@@ -640,6 +640,7 @@ class AttemptExecutor:
                 error=outcome.error if outcome.kind == "failed" else "",
                 usage=outcome.usage or {},
                 manifest_ref=manifest_ref,
+                full_text_chars=len(outcome.text) if outcome.text else None,
                 artifacts=[
                     {
                         "artifact_id": c.artifact_id,

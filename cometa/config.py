@@ -249,6 +249,39 @@ class ProfileConfig:
 
 
 @dataclass(slots=True)
+class DeliveryConfig:
+    """[delivery]：final 结果到聊天端的投递样式（§6.12 附件交付的落地）。
+
+    长结果（超过 file_above_chars）主投递样式 long_result：
+      file    = 上传 final_text.md 为群文件（QQ 原生渲染 Markdown）
+      forward = 合并转发消息（NapCat 扩展 API，AstrBot 同款体验）
+      text    = 仅文本摘要（旧行为）
+    主样式失败按 file → forward → text 顺序兜底；都失败时封面文本仍会
+    报告结果并说明完整内容未送达（§6.12）。"""
+
+    long_result: str = "file"
+    file_above_chars: int = 500
+
+    @classmethod
+    def from_toml(cls, data: dict) -> "DeliveryConfig":
+        if not isinstance(data, dict):
+            raise CometaConfigError("[delivery] 必须是表")
+        known = {"long_result", "file_above_chars"}
+        unknown = set(data) - known
+        if unknown:
+            raise CometaConfigError(f"[delivery] 含未知键: {sorted(unknown)}")
+        style = str(data.get("long_result", "file")).strip()
+        if style not in ("file", "forward", "text"):
+            raise CometaConfigError(
+                f"[delivery] long_result 只支持 file/forward/text，得到 {style!r}"
+            )
+        return cls(
+            long_result=style,
+            file_above_chars=max(0, int(data.get("file_above_chars", 500))),
+        )
+
+
+@dataclass(slots=True)
 class AccessConfig:
     """[access]：QQ 用户/群与操作员白名单。**空列表表示未授权**；
     WebUI 管理员走现有认证，不在本表内（方案 §6.13）。"""
@@ -295,6 +328,7 @@ class CometaConfig:
     workspaces: dict[str, WorkspaceConfig] = field(default_factory=dict)
     profiles: dict[str, ProfileConfig] = field(default_factory=dict)
     access: AccessConfig = field(default_factory=AccessConfig)
+    delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
     # 显式委派命令未指明 profile 时使用的默认项（必须引用已定义的 profile；
     # 空 = 仅当恰好定义了一个 profile 时才可省略）。QQ 委派命令没有 profile
     # 槽位，多 profile 部署没有默认项时命令必然被拒（2026-09-30 用户实测）。
@@ -407,6 +441,7 @@ class CometaConfig:
             "workspaces",
             "profiles",
             "access",
+            "delivery",
             "default_profile",
             "_raw_sha256",
         }
@@ -426,6 +461,8 @@ class CometaConfig:
             self.profiles[profile.name] = profile
         if "access" in data:
             self.access = AccessConfig.from_toml(data["access"])
+        if "delivery" in data:
+            self.delivery = DeliveryConfig.from_toml(data["delivery"])
         self.default_profile = str(data.get("default_profile", "")).strip()
 
 

@@ -602,6 +602,7 @@ class CometaStore:
             "requester_id": origin.requester_id,
             "reply_to_message_id": origin.reply_to_message_id,
             "group_id": origin.conversation_id if origin.platform == "qq" else "",
+            "task_id": task_id,
         }
 
     @staticmethod
@@ -1495,6 +1496,7 @@ class CometaStore:
         manifest_ref: str = "",
         artifacts: list[dict] | None = None,
         final_notification: NotificationSpec | None = None,
+        full_text_chars: int | None = None,
         now: datetime | None = None,
     ) -> str:
         """落终态：结果 + 产物 + 终态事件 + final notification 同事务。
@@ -1590,6 +1592,9 @@ class CometaStore:
                     "outcome": outcome.value,
                     "summary": summary,
                     "result_id": result_id,
+                    # 完整文本投递（QQ 文件/合并转发）的依据：非空即尝试
+                    "full_text_ref": final_text_ref,
+                    "full_text_chars": full_text_chars or 0,
                 },
                 target=self._target_from_task_row(conn, task_id),
             )

@@ -47,10 +47,12 @@ class NotificationSender(Protocol):
     """把渲染后的文本发到 target 描述的会话；返回平台回执或 None。
 
     target 是通知行里的 target dict（platform/bot_id/conversation_id/
-    requester_id/reply_to_message_id/group_id）。实现方负责按配置校验
-    群允许状态与目标有效性（§6.11）。"""
+    requester_id/reply_to_message_id/group_id/task_id）。payload 是通知行
+    的原始 payload（final 通知携带 full_text_ref/full_text_chars，供
+    长结果投递——QQ 文件/合并转发）。实现方负责按配置校验群允许状态与
+    目标有效性（§6.11）。"""
 
-    async def send(self, target: dict, text: str) -> str | None: ...
+    async def send(self, target: dict, text: str, payload: dict | None = None) -> str | None: ...
 
 
 class _FunctionSender:
@@ -59,8 +61,8 @@ class _FunctionSender:
     def __init__(self, fn: Callable[[dict, str], Awaitable[str | None]]):
         self._fn = fn
 
-    async def send(self, target: dict, text: str) -> str | None:
-        return await self._fn(target, text)
+    async def send(self, target: dict, text: str, payload: dict | None = None) -> str | None:
+        return await self._fn(target, text, payload)
 
 
 class NotificationPump:
@@ -136,7 +138,8 @@ class NotificationPump:
             return False
         try:
             receipt = await asyncio.wait_for(
-                self._sender.send(claimed.target, text), timeout=self._send_timeout
+                self._sender.send(claimed.target, text, claimed.payload),
+                timeout=self._send_timeout,
             )
         except asyncio.TimeoutError:
             return self._unknown(claimed, f"send_timeout_after_{self._send_timeout:.0f}s")

@@ -29,7 +29,7 @@ class FakeSender:
         self.unavailable = unavailable
         self.sent: list[tuple[dict, str]] = []
 
-    async def send(self, target: dict, text: str) -> str | None:
+    async def send(self, target: dict, text: str, payload: dict | None = None) -> str | None:
         self.sent.append((dict(target), text))
         if self.unavailable:
             raise SenderUnavailable("bot offline")
@@ -210,7 +210,7 @@ class TestFunctionSenderAdapter:
         """接线层传裸 async 函数（QQ 桥接形态）也能投递——曾因 AttributeError
         把所有通知打成 delivery_unknown（2026-09-30 人工清单实测）。"""
 
-        async def bare_send(target: dict, text: str) -> str | None:
+        async def bare_send(target: dict, text: str, payload: dict | None = None) -> str | None:
             bare_send.calls.append((dict(target), text))
             return "fn-receipt"
 
