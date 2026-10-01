@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
+import { useTheme } from 'vuetify';
+
 import { api, unwrap } from '@/api/http';
 
 // 统计页：概览大数字 + token 趋势 + 调用图表 + 排行（方案 §6.9，数据=usage 日账）
@@ -93,25 +95,74 @@ watch(chartKind, (kind) => {
   }
 });
 
+// apexcharts 默认文字色是为浅色底设计的深灰——暗色主题里坐标轴/图例几乎不可读
+//（实测）。配色跟随 Vuetify 当前主题动态生成。
+const vuetifyTheme = useTheme();
+const isDark = computed(() => vuetifyTheme.current.value.dark);
+const chartFore = computed(() =>
+  isDark.value ? 'rgba(232, 236, 241, 0.72)' : 'rgba(0, 0, 0, 0.66)',
+);
+const chartGrid = computed(() =>
+  isDark.value ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.10)',
+);
+const chartThemeMode = computed(() => (isDark.value ? 'dark' : 'light'));
+
+function compactTokens(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+  return String(v);
+}
+
 const trendOptions = computed(() => ({
-  chart: { type: chartKind.value, toolbar: { show: false }, zoom: { enabled: false } },
+  theme: { mode: chartThemeMode.value },
+  chart: {
+    type: chartKind.value,
+    toolbar: { show: false },
+    zoom: { enabled: false },
+    foreColor: chartFore.value,
+    background: 'transparent',
+  },
+  grid: { borderColor: chartGrid.value },
   stroke: { curve: 'smooth', width: 2 },
   dataLabels: { enabled: false },
-  xaxis: { categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [] },
+  xaxis: {
+    categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [],
+    labels: { style: { colors: chartFore.value } },
+    axisBorder: { color: chartGrid.value },
+    axisTicks: { color: chartGrid.value },
+  },
+  yaxis: {
+    labels: { style: { colors: chartFore.value }, formatter: compactTokens },
+  },
   colors: ['#8FB0CC', '#E5CE9C'],
-  legend: { position: 'top' },
+  legend: { position: 'top', labels: { colors: chartFore.value } },
+  tooltip: { theme: chartThemeMode.value },
 }));
 const trendSeries = computed(() => [
   { name: '输入 token', data: daily.value?.series.map((s) => s.prompt_tokens) ?? [] },
   { name: '输出 token', data: daily.value?.series.map((s) => s.completion_tokens) ?? [] },
 ]);
 const callOptions = computed(() => ({
-  chart: { type: chartKind.value, toolbar: { show: false } },
+  theme: { mode: chartThemeMode.value },
+  chart: {
+    type: chartKind.value,
+    toolbar: { show: false },
+    foreColor: chartFore.value,
+    background: 'transparent',
+  },
+  grid: { borderColor: chartGrid.value },
   plotOptions: { bar: { columnWidth: '55%' } },
   dataLabels: { enabled: false },
-  xaxis: { categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [] },
+  xaxis: {
+    categories: daily.value?.series.map((s) => s.date.slice(5)) ?? [],
+    labels: { style: { colors: chartFore.value } },
+    axisBorder: { color: chartGrid.value },
+    axisTicks: { color: chartGrid.value },
+  },
+  yaxis: { labels: { style: { colors: chartFore.value } } },
   // 深浅两套主题下都可见的中调蓝（原 #2E3B4E 在暗色主题里隐形）
   colors: ['#5C8AC7'],
+  tooltip: { theme: chartThemeMode.value },
 }));
 const callSeries = computed(() => [
   { name: '调用次数', data: daily.value?.series.map((s) => s.calls) ?? [] },
@@ -206,9 +257,9 @@ const displayHitRate = computed(
               <v-btn :value="30">30 天</v-btn>
             </v-btn-toggle>
           </div>
-          <!-- :key 强制重建：apexcharts 对 type 切换的原地更新不可靠 -->
+          <!-- :key 强制重建：apexcharts 对 type/主题切换的原地更新不可靠 -->
           <apexchart
-            :key="`trend-${chartKind}`"
+            :key="`trend-${chartKind}-${isDark}`"
             :type="chartKind"
             :height="chartHeight"
             :options="trendOptions"
@@ -227,7 +278,7 @@ const displayHitRate = computed(
             </v-btn-toggle>
           </div>
           <apexchart
-            :key="`calls-${chartKind}`"
+            :key="`calls-${chartKind}-${isDark}`"
             :type="chartKind"
             :height="chartHeight"
             :options="callOptions"
