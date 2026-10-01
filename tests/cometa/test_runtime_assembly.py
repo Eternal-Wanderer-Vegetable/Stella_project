@@ -97,7 +97,7 @@ class TestShutdownInjection:
             cometa_config, sender=NullSender(), instance_id="inst-test",
             spawn_worker=False,
         )
-        receipt = runtime.service.submit(
+        runtime.service.submit(
             make_spec(),
             actor=Actor(kind="webchat_admin", id="admin"),
             origin=make_origin(platform="webchat", instance_id="inst-test"),

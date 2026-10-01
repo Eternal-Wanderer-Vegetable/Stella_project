@@ -208,6 +208,6 @@ class TestSenderFlows:
 
     @pytest.mark.asyncio
     async def test_webchat_returns_server_emitted(self, sender_factory, monkeypatch):
-        sender, bot, _ = sender_factory(monkeypatch=monkeypatch)
+        sender, _bot, _ = sender_factory(monkeypatch=monkeypatch)
         receipt = await sender(_target(platform="webchat"), "x", None)
         assert receipt == "server_emitted"
