@@ -187,7 +187,7 @@ class TestSenderFlows:
         delivery = __import__("cometa.config", fromlist=["DeliveryConfig"]).DeliveryConfig(
             file_above_chars=5000
         )
-        sender, bot, artifacts = sender_factory(delivery=delivery, monkeypatch=monkeypatch)
+        sender, _bot, artifacts = sender_factory(delivery=delivery, monkeypatch=monkeypatch)
         ws = artifacts / "task-1"
         ws.mkdir(parents=True)
         (ws / "final_text.md").write_text("内容" * 100, encoding="utf-8")

@@ -58,7 +58,7 @@ class TestAssembly:
             cometa_config, sender=sender, instance_id="inst-test",
             spawn_worker=False,
         )
-        _receipt = runtime.service.submit(
+        receipt = runtime.service.submit(
             make_spec(),
             actor=Actor(kind="webchat_admin", id="admin"),
             origin=make_origin(platform="webchat", conversation_id="webchat",
@@ -69,7 +69,7 @@ class TestAssembly:
         try:
             for _ in range(50):
                 ack = runtime.store.notification_of_dedupe(
-                    _receipt.task_id, f"ack:{_receipt.task_id}"
+                    receipt.task_id, f"ack:{receipt.task_id}"
                 )
                 if ack.state is not NotificationState.PENDING:
                     break
