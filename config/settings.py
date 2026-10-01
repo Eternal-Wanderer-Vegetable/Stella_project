@@ -1647,6 +1647,34 @@ SCHEDULING_SEND_TIMEOUT = _env_float("SCHEDULING_SEND_TIMEOUT", 30.0)
 # 可创建 Agent 任务、改允许清单、管理他人任务。
 SCHEDULING_GLOBAL_ADMINS = _env_int_set("SCHEDULING_GLOBAL_ADMINS")
 
+# ---------- 外部 Agent 任务运行层（cometa） ----------
+# 跨轮次外部 Agent 任务（Codex 等）：受理/执行/结果交付的完整子系统，
+# 设计见 design_docs/Cometa 外部 Agent 任务运行层实施方案 v1.0.md。
+# 环境变量只提供总开关、模式与运维上限；后端/工作区/profile/访问白名单等
+# 详细配置在 STELLA_HOME/config/cometa.toml（cometa/config.py 是其唯一
+# 解析器，独立 worker 进程共用）。两处读取同一批环境变量——这里是 GUI
+# (deploy/env_schema) 的提取源，那边是 worker 的运行时真源。
+# 总开关默认**关闭**：委派会改动真实仓库、消耗外部 Agent 账号额度。
+COMETA_ENABLED = _env_bool("COMETA_ENABLED", "false")
+# 委派模式：explicit = 仅显式命令；auto = 能力钩子自动委派（单独灰度）。
+COMETA_DELEGATION_MODE = _env_choice(
+    "COMETA_DELEGATION_MODE", "explicit", ("explicit", "auto")
+)
+# 详细配置文件（相对 STELLA_HOME/config；路径非法时 cometa 停用）。
+COMETA_CONFIG_FILE = _env("COMETA_CONFIG_FILE", "cometa.toml")
+# 任务库（独立 SQLite；同一数据根的多实例共库，用 instance_id 划分所有权）。
+COMETA_DB_PATH = _env_path("COMETA_DB_PATH", _user_path("cometa/tasks.db"))
+# 每实例活动执行数上限（worker 认领并发）；单用户活跃任务数走 TOML [limits]。
+COMETA_MAX_CONCURRENT = _env_int("COMETA_MAX_CONCURRENT", 2)
+# 受理服务预算（秒）：SQLite 事务+配额检查必须在预算内完成；不含整轮聊天/路由。
+COMETA_SUBMIT_TIMEOUT_SECONDS = _env_float("COMETA_SUBMIT_TIMEOUT_SECONDS", 2.0)
+# 单任务总墙钟期限（秒）：到期转 cancelling，确认停止后落 timed_out。
+COMETA_TASK_TIMEOUT_SECONDS = _env_float("COMETA_TASK_TIMEOUT_SECONDS", 1800.0)
+# 长任务状态通知的最短间隔（秒）：无关键变化时按此节流。
+COMETA_PROGRESS_INTERVAL_SECONDS = _env_float("COMETA_PROGRESS_INTERVAL_SECONDS", 120.0)
+# Stella 可见的结果摘要上限（字符）；完整文本与产物另存任务库产物目录。
+COMETA_RESULT_MAX_CHARS = _env_int("COMETA_RESULT_MAX_CHARS", 2000)
+
 
 def validate_skills_config() -> list[str]:
     """校验 Skills/Sandbox 配置组合，返回错误清单（空清单 = 合法）。

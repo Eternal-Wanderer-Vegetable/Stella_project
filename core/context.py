@@ -150,6 +150,17 @@ class ChatContext:
     # JSON 字符串，由 core.social.context_builder 写入，供追踪与审计。
     social_context_snapshot: str = ""
 
+    # ---- Cometa 外部委派（design_docs/Cometa 外部 Agent 任务运行层实施方案 v1.0） ----
+    # 类型刻意是 Any：core 是编排骨架，import cometa 会反向成环（与 route 同理）。
+    # cometa_origin：可信入口（ai_gateway / chat_ingress）构造的 Origin dict；
+    #   被动群聊/主动发言路径保持 None——委派只由用户显式请求触发（方案 §6.4.1）。
+    # cometa_submission：委派受理成功后由 capability.delegation 写入的 dict
+    #   （task_id / accepted_at / ack_notification_id / ack_text），供接入层
+    #   认领 ack 通知（§6.5：入口与后台泵用同一 CAS，只有一个发送者）。
+    # 两个字段**均不进** _PROJECTION_FIELDS：身份与授权信息不过跨进程桥。
+    cometa_origin: Any = field(default=None, repr=False)
+    cometa_submission: Any = field(default=None, repr=False)
+
     # ---- Cortico 迁移：跨进程 JSON 投影（计划 §6.2/§6.4） ----
     # 投影 schema 版本：字段集变更时 +1；旧 runtime store 按版本向后读取。
     # v2：新增 trace_id / turn_id（社交闭环身份贯通，计划 §6.1）。

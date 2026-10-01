@@ -105,6 +105,11 @@ def create_webui_app() -> FastAPI:
     app.include_router(manage_router_module.kb_router)
     app.include_router(manage_router_module.sched_router)
     app.include_router(plugins_mg_router_module.router)
+    # cometa 外部 Agent 任务（design_docs/Cometa 外部 Agent 任务运行层实施方案 §6.14；
+    # 未启用时端点返回 503 envelope，前端隐藏入口）
+    from webui.routers import cometa as cometa_router_module
+
+    app.include_router(cometa_router_module.router)
     # M4 WebChat（虚拟群 ingress，方案 §13）
     app.include_router(chat_router_module.router)
 

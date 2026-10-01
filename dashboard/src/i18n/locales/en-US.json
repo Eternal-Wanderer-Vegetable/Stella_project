@@ -12,7 +12,8 @@
       "data": "Data",
       "cron": "Cron Jobs",
       "groups": "Groups",
-      "settings": "Settings"
+      "settings": "Settings",
+      "cometa": "Agent Tasks"
     },
     "common": {
       "save": "Save",
