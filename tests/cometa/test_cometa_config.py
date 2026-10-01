@@ -67,9 +67,12 @@ class TestTomlLoading:
         return path
 
     def test_full_toml(self, tmp_path):
+        # 仓库路径用 tmp_path 构造：Windows 盘符路径（E:/...）在 POSIX 上是
+        # 相对路径，resolve() 会拼上 cwd 导致断言失败（CI 实测）
+        repo = (tmp_path / "repo").resolve()
         self._write(
             tmp_path,
-            """
+            f"""
 schema_version = 1
 
 [limits]
@@ -83,7 +86,7 @@ executable = "C:/bin/codex.exe"
 capabilities = ["code.edit"]
 
 [workspaces.stella]
-repository = "E:/stella/stella_project"
+repository = "{repo.as_posix()}"
 base_ref = "HEAD"
 
 [profiles.coding]
@@ -101,7 +104,7 @@ operator_user_ids = [111]
         assert cfg.config_hash
         assert "codex_local" in cfg.backends
         assert cfg.backends["codex_local"].capabilities == ["code.edit"]
-        assert cfg.workspaces["stella"].repository == Path("E:/stella/stella_project")
+        assert cfg.workspaces["stella"].repository == repo
         assert cfg.profiles["coding"].allow_workspace_write is True
         assert cfg.access.qq_user_ids == {111, 222}
         assert cfg.limits.per_user_active == 3

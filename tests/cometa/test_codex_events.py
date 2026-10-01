@@ -26,7 +26,15 @@ class TestFixtureCompletedPath:
     """实录（0.159.2 + 代理，2026-10-01）：完整完成的真实轮次——
     turn/started → userMessage → agentMessage 增量流 → message_final →
     tokenUsage → turn/completed。契约：最终答复从 turn.items 提取，
-    增量流是 message_delta、完成才是 message_final。"""
+    增量流是 message_delta、完成才是 message_final。
+
+    合成事件用 openai_codex 的 typed 模型构造：SDK 是可选依赖，CI/未装
+    环境跳过（错误路径 fixture 重放走 JSONL dict 路径，不依赖 SDK）。"""
+
+    @pytest.fixture(autouse=True)
+    def _require_sdk(self):
+        skipped = pytest.importorskip("openai_codex")
+        assert skipped is not None
 
     @pytest.fixture()
     def events(self):
