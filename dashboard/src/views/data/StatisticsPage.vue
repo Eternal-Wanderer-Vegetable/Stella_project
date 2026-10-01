@@ -34,6 +34,7 @@ interface UsageToday {
     prompt_tokens: number;
     completion_tokens: number;
     cache_hit_rate: number;
+    estimated_cache_hit_rate?: number;
   };
   fallback_states: Record<string, unknown>;
 }
@@ -96,6 +97,12 @@ const budgetPercent = computed(() => {
   if (!t || !t.budget) return 0;
   return Math.min(100, Math.round((t.used_tokens / t.budget) * 100));
 });
+
+// 展示口径用理论哈希估算（本地端点不报 cached_tokens，真实口径恒零）；
+// estimated 字段缺省时回落到端点上报口径（兼容旧 API 形状）。
+const displayHitRate = computed(
+  () => today.value?.totals.estimated_cache_hit_rate ?? today.value?.totals.cache_hit_rate ?? 0,
+);
 </script>
 
 <template>
@@ -121,9 +128,18 @@ const budgetPercent = computed(() => {
       </v-col>
       <v-col cols="6" md="3">
         <v-card class="pa-4">
-          <div class="text-caption text-medium-emphasis">缓存命中率</div>
-          <div class="text-h5">{{ Math.round((today.totals.cache_hit_rate ?? 0) * 100) }}%</div>
-          <div class="text-caption text-disabled">分母是输入 token</div>
+          <div class="text-caption text-medium-emphasis">
+            缓存命中率
+            <v-tooltip location="top" :max-width="420">
+              <template #activator="{ props: tip }">
+                <v-icon v-bind="tip" size="x-small" class="ml-1" icon="mdi-help-circle-outline" />
+              </template>
+              这里的缓存命中率为理论哈希值计算（按提示词前缀复用估算），跟实际缓存命中率有可能不一致。分母是输入 token。
+            </v-tooltip>
+          </div>
+          <div class="text-h5">
+            {{ Math.round(displayHitRate * 100) }}%
+          </div>
         </v-card>
       </v-col>
       <v-col cols="6" md="3">
