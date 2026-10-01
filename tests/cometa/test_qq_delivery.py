@@ -192,7 +192,7 @@ class TestSenderFlows:
         ws.mkdir(parents=True)
         (ws / "final_text.md").write_text("内容" * 100, encoding="utf-8")
         await sender(_target(), "任务 task-1 已完成。", _payload(chars=100))
-        assert not bot.uploads and len(bot.sent) == 1
+        assert not _bot.uploads and len(_bot.sent) == 1
 
     @pytest.mark.asyncio
     async def test_text_style_disables_file(self, sender_factory, tmp_path, monkeypatch):
