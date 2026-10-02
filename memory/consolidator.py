@@ -1376,10 +1376,42 @@ def pending_tasks() -> set[asyncio.Task]:
     return set(_consolidation_tasks)
 
 
-def maybe_consolidate(group_id: int, force: bool = False):
+async def _consolidate_with_flow(consolidator, group_id: int, force: bool,
+                                 parent_trace_id: str):
+    """整合后台任务：独立 root + caused_by 关联（计划 §6.2/§6.5）。"""
+    from core.observability import message_flow
+
+    fctx = None
+    try:
+        fctx = message_flow.begin_trace(
+            root_kind="consolidate", platform="qq", scope=f"qq:{group_id}",
+            source_message_key=f"consolidate:{group_id}",
+        )
+        if parent_trace_id:
+            message_flow.link(parent_trace_id, fctx.trace_id,
+                              kind="caused_by", evidence="consolidation_trigger")
+    except Exception:
+        fctx = None
+    outcome = "done"
+    try:
+        await consolidator.consolidate_group(group_id, force=force)
+    except Exception:
+        outcome = "error"
+        raise
+    finally:
+        try:
+            if fctx is not None and not fctx.ended:
+                message_flow.end_trace(fctx, outcome=outcome)
+        except Exception:
+            pass
+
+
+def maybe_consolidate(group_id: int, force: bool = False, parent_trace_id: str = ""):
     """异步触发一次群整合（后台任务），并登记以跟踪完成与否（不等待）。
 
     force=True 走本地小批次轻量总结，适合 @触发 / 主动发言前调用。
+    ``parent_trace_id``：触发消息的流程 trace（计划 §6.2）——整合是后台
+    批任务，跑在独立 root 上，靠显式 relation 关联，不假装是同步子 span。
 
 
     同群合并：该群已有整合任务在排队或执行时直接跳过。否则活跃群里每条消息
@@ -1392,7 +1424,8 @@ def maybe_consolidate(group_id: int, force: bool = False):
         return
     _pending_groups.add(key)
     consolidator = get_consolidator()
-    task = asyncio.create_task(consolidator.consolidate_group(group_id, force=force))
+    task = asyncio.create_task(
+        _consolidate_with_flow(consolidator, group_id, force, parent_trace_id))
     _consolidation_tasks.add(task)
 
     def _done(t: asyncio.Task):

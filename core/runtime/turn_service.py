@@ -57,6 +57,50 @@ _PENDING_PROMPT_KEY = "_turn_pending_prompt"
 _PENDING_SYSTEM_KEY = "_turn_pending_system_prompt"
 
 
+def _flow_of(ctx: ChatContext):
+    """消息流程 context（计划 §6.2）：未接入/已结束返回 None（全部空转）。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.flow_of(ctx)
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _flow_hook_node(hook_name: str) -> str:
+    """钩子名 → 语义节点 ID；未知扩展钩子给动态 ID（UI 标 unmapped）。"""
+    try:
+        from core.observability import flow_catalog
+
+        mapped = flow_catalog.HOOK_NODE_IDS.get(hook_name)
+        if mapped:
+            return mapped
+    except Exception:
+        pass
+    return f"hook.custom:{hook_name}"
+
+
 def pending_system_prompt(ctx: ChatContext) -> str:
     """读取 prepare_turn 暂存的系统提示词（runtime facade 的生成 provider 用）。
 
@@ -277,13 +321,21 @@ class TurnService:
         表示轮次已经结束（不再生成、也不再 finalize），``BUDGET_LIMITED``
         表示跳过生成但仍需 finalize（与 legacy 的行为一致）。
         """
-        for _, hook in self._pre_hooks:
-            result = await hook(ctx)
-            if result is not None:
-                ctx = result
+        fctx = _flow_of(ctx)
+        with _flow_span(fctx, "prepare.hooks") as hooks_span:
+            for _, hook in self._pre_hooks:
+                hook_name = getattr(hook, "__name__", "hook")
+                node_id = _flow_hook_node(hook_name)
+                with _flow_span(fctx, node_id, parent=hooks_span,
+                                instance_key=hook_name):
+                    result = await hook(ctx)
+                    if result is not None:
+                        ctx = result
 
         # 钩子已生成回复（如重复消息去重、主动发言已被处理），无需再调 LLM
         if ctx.reply:
+            _flow_decision(fctx, "prepare.direct", status="succeeded",
+                           reason_code="hook_reply")
             return TurnPlan(ctx, DIRECT)
 
         # ── 受限 Planner（设计阶段五）：本地触发判定零 LLM，命中才进深度路径 ──
@@ -293,12 +345,18 @@ class TurnService:
                 ctx = await self._planner.maybe_plan(ctx)
             except Exception as e:
                 logger.warning(f"[Planner] 规划异常（按快速路径继续）: {e}")
+                _flow_decision(fctx, "planner.preflight", status="failed",
+                               reason_code="planner_error")
             if getattr(ctx, "planner_wait", False):
                 # WAIT：本轮不回复、不轮询 LLM，等后续消息事件重新驱动。
                 logger.info(f"[Planner] 群 {ctx.group_id} 本轮等待更多消息，不回复")
+                _flow_decision(fctx, "prepare.silent", status="skipped",
+                               reason_code="planner_wait")
                 return TurnPlan(ctx, SILENT)
 
         if not self._llm:
+            _flow_decision(fctx, "prepare.backend_budget", status="blocked",
+                           reason_code="no_backend")
             return TurnPlan(ctx, NO_BACKEND)
 
         # 深度路径 LLM 硬上限：Planner 消耗的名额从同一上限里扣。
@@ -307,39 +365,42 @@ class TurnService:
             logger.warning(
                 f"[Planner] 本轮 LLM 调用已达上限 {PLANNER_MAX_LLM_CALLS_PER_TURN}，跳过回复生成"
             )
+            _flow_decision(fctx, "prepare.backend_budget", status="blocked",
+                           reason_code="call_budget")
             return TurnPlan(ctx, BUDGET_LIMITED)
 
         user_prompt = ctx.message
         context_text = ""
         # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
-        if MEMORY_V2_ENABLED:
-            # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
-            from memory.prompt_builder import build_v2_prompt_context
+        with _flow_span(fctx, "prompt.memory"):
+            if MEMORY_V2_ENABLED:
+                # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
+                from memory.prompt_builder import build_v2_prompt_context
 
-            context_text = build_v2_prompt_context(
-                getattr(ctx, "short_term", "") or "",
-                getattr(ctx, "user_profile", "") or "",
-                getattr(ctx, "conversation_memories", []) or [],
-                getattr(ctx, "behavior_constraints", []) or [],
-                current_user_id=ctx.user_id,
-                mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
-                preferred_address=getattr(ctx, "preferred_address", None),
-            )
-            user_prompt = _compose_prompt(context_text, ctx)
-        else:
-            from memory.prompt_builder import build_prompt_context
+                context_text = build_v2_prompt_context(
+                    getattr(ctx, "short_term", "") or "",
+                    getattr(ctx, "user_profile", "") or "",
+                    getattr(ctx, "conversation_memories", []) or [],
+                    getattr(ctx, "behavior_constraints", []) or [],
+                    current_user_id=ctx.user_id,
+                    mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
+                    preferred_address=getattr(ctx, "preferred_address", None),
+                )
+                user_prompt = _compose_prompt(context_text, ctx)
+            else:
+                from memory.prompt_builder import build_prompt_context
 
-            short_term = getattr(ctx, "short_term", "") or ""
-            user_profile = getattr(ctx, "user_profile", "") or ""
-            memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
-            context_text = build_prompt_context(
-                short_term,
-                user_profile,
-                memories_for_prompt,
-                current_user_id=ctx.user_id,
-                preferred_address=getattr(ctx, "preferred_address", None),
-            )
-            user_prompt = _compose_prompt(context_text, ctx)
+                short_term = getattr(ctx, "short_term", "") or ""
+                user_profile = getattr(ctx, "user_profile", "") or ""
+                memories_for_prompt = getattr(ctx, "memories_for_prompt", []) or []
+                context_text = build_prompt_context(
+                    short_term,
+                    user_profile,
+                    memories_for_prompt,
+                    current_user_id=ctx.user_id,
+                    preferred_address=getattr(ctx, "preferred_address", None),
+                )
+                user_prompt = _compose_prompt(context_text, ctx)
 
         # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
         ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
@@ -349,23 +410,31 @@ class TurnService:
             system_prompt = self.system_prompt_resolver(ctx)
         # ── 社交插槽（计划 §6.5）：先有无学习基线，再按剩余预算放可选片段 ──
         # 可选学习先裁、不靠通用截断碰运气；任何异常退回基线（可选增强纪律）。
-        try:
-            from core.social.context_builder import (
-                build_social_block,
-                social_context_snapshot,
-            )
+        with _flow_span(fctx, "prompt.parts", instance_key="social_slot"):
+            try:
+                from core.social.context_builder import (
+                    build_social_block,
+                    social_context_snapshot,
+                )
 
-            baseline_prompt = _compose_prompt(context_text, ctx)
-            social_text, social_selection = build_social_block(
-                ctx, baseline_prompt=baseline_prompt, system_prompt=system_prompt
-            )
-            if social_text:
-                user_prompt = _compose_prompt(context_text, ctx, social_text=social_text)
-                ctx.social_context_snapshot = social_context_snapshot(social_selection)
-        except Exception as e:
-            logger.debug(f"[Social] 上下文插槽失败（按无学习基线继续）: {e}")
+                baseline_prompt = _compose_prompt(context_text, ctx)
+                social_text, social_selection = build_social_block(
+                    ctx, baseline_prompt=baseline_prompt, system_prompt=system_prompt
+                )
+                if social_text:
+                    user_prompt = _compose_prompt(context_text, ctx, social_text=social_text)
+                    ctx.social_context_snapshot = social_context_snapshot(social_selection)
+            except Exception as e:
+                logger.debug(f"[Social] 上下文插槽失败（按无学习基线继续）: {e}")
 
-        budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+        with _flow_span(fctx, "prompt.fit"):
+            budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+        _flow_decision(fctx, "prompt.fit", status="succeeded",
+                       metrics={
+                           "estimated_tokens": budgeted.estimated_tokens,
+                           "budget_tokens": budgeted.budget_tokens,
+                           "truncated": bool(budgeted.truncated),
+                       })
         # 预算快照（计划 §6.5/§6.8）：实际裁掉的资产与原因 + 可重放输入档
         try:
             from core.observability import turn_trace
@@ -445,6 +514,13 @@ class TurnService:
 
     async def finalize_turn(self, ctx: ChatContext) -> ChatContext:
         """阶段三：记忆决策 trace（V2）与后置 hooks。"""
+        fctx = _flow_of(ctx)
+        with _flow_span(fctx, "finalize.trace") as fin_span:
+            await self._finalize_trace(ctx)
+            ctx = await self._run_post_hooks(ctx, fctx, fin_span)
+        return ctx
+
+    async def _finalize_trace(self, ctx: ChatContext) -> None:
         # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）
         if MEMORY_V2_ENABLED:
             try:
@@ -474,11 +550,23 @@ class TurnService:
             except Exception as e:
                 logger.debug(f"📊 [Pipeline] 记录决策追踪失败: {e}")
 
-        for _, hook in self._post_hooks:
-            result = await hook(ctx)
-            if result is not None:
-                ctx = result
+        return ctx
 
+    async def _run_post_hooks(self, ctx: ChatContext, fctx, parent_span) -> ChatContext:
+        """后置钩子链：优先级降序；每个钩子一个子 span（计划 §6.3 D）。"""
+        for _, hook in self._post_hooks:
+            hook_name = getattr(hook, "__name__", "hook")
+            try:
+                from core.observability import flow_catalog
+
+                node_id = flow_catalog.POST_HOOK_NODE_IDS.get(hook_name)                     or f"hook.custom:{hook_name}"
+            except Exception:
+                node_id = f"hook.custom:{hook_name}"
+            with _flow_span(fctx, node_id, parent=parent_span,
+                            instance_key=hook_name):
+                result = await hook(ctx)
+                if result is not None:
+                    ctx = result
         return ctx
 
     async def run(self, ctx: ChatContext) -> ChatContext:

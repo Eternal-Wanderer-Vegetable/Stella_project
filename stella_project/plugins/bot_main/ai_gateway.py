@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import inspect
 import math
 import os
@@ -186,6 +187,154 @@ _reply_check_tasks: set[asyncio.Task] = set()
 # 插件已处理标记：message_id -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
 _plugin_handled_msgs: OrderedDict[int, float] = OrderedDict()
 _addressing_decisions: OrderedDict[int, AddressingRequest] = OrderedDict()
+
+
+# ============================================================
+# 消息流程追踪（计划 §6.2/§6.3 A）：入口 root 与语义埋点
+# ============================================================
+# root 在 NoneBot event preprocessor（所有 matcher 之前）创建，多个 matcher
+# （静默/命令/插件/聊天）共用同一 root；postprocessor 在全部 matcher 结束后
+# 关闭。root 里只存安全关联键（platform/bot/group/msg_id），绝不存原文。
+_flow_roots: "OrderedDict[tuple[int, int], Any]" = OrderedDict()
+_FLOW_ROOTS_MAX = 256
+
+
+def _flow_root_for(event: GroupMessageEvent):
+    """取本事件的流程 root；没有（preprocessor 未生效等）时返回 None。"""
+    found = _flow_roots.get((event.group_id, event.message_id))
+    return None if (found is None or found.ended) else found
+
+
+def _flow_root_or_create(event: GroupMessageEvent, root_kind: str):
+    found = _flow_root_for(event)
+    if found is not None:
+        return found
+    try:
+        from core.observability import message_flow
+
+        return message_flow.begin_trace(
+            root_kind=root_kind, platform="qq",
+            scope=f"qq:{event.group_id}",
+            source_message_key=(
+                f"qq:{event.self_id}:{event.group_id}:{event.message_id}"),
+        )
+    except Exception:
+        return None
+
+
+def _flow_span(fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib as _cl
+
+        return _cl.nullcontext()
+
+
+def _flow_decision(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _flow_checkpoint(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.checkpoint(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _flow_set_outcome(fctx, outcome: str) -> None:
+    try:
+        if fctx is not None and not fctx.ended:
+            fctx.outcome = outcome
+    except Exception:
+        pass
+
+
+def _flow_command(node_id: str):
+    """命令处理器埋点装饰器：整个 handler 一个 span，终态照实（计划 §6.3 A）。
+
+    ``FinishedException`` 是 NoneBot matcher 的正常结束控制流，不是失败；
+    装饰器透传所有异常，不改变任何分发语义。私聊事件（无流程 root）全部
+    空转——诚实缺席，不伪造。
+    """
+
+    def deco(fn):
+        @functools.wraps(fn)
+        async def wrapper(bot, event):
+            fctx = None
+            if isinstance(event, GroupMessageEvent):
+                fctx = _flow_root_or_create(event, "qq_command")
+            sp = _flow_span(fctx, node_id)
+            sp.__enter__()
+            try:
+                await fn(bot, event)
+            except FinishedException:
+                sp.__exit__(None, None, None)
+                _flow_set_outcome(fctx, "command_sent")
+                raise
+            except Exception as e:
+                sp.__exit__(type(e), e, e.__traceback__)
+                _flow_set_outcome(fctx, "command_error")
+                raise
+            sp.__exit__(None, None, None)
+            _flow_set_outcome(fctx, "command_done")
+
+        return wrapper
+
+    return deco
+
+
+try:
+    from nonebot.message import event_postprocessor, event_preprocessor
+
+    @event_preprocessor
+    async def _flow_ingress_root(event: MessageEvent):
+        """每条群消息最早的处理点：建 shared root（规则/过滤之前，计划 §6.2）。"""
+        if not isinstance(event, GroupMessageEvent):
+            return
+        try:
+            from core.observability import message_flow
+
+            if (event.group_id, event.message_id) in _flow_roots:
+                return
+            root = message_flow.begin_trace(
+                root_kind="qq_passive", platform="qq",
+                scope=f"qq:{event.group_id}",
+                source_message_key=(
+                    f"qq:{event.self_id}:{event.group_id}:{event.message_id}"),
+            )
+            _flow_roots[(event.group_id, event.message_id)] = root
+            _flow_roots.move_to_end((event.group_id, event.message_id))
+            while len(_flow_roots) > _FLOW_ROOTS_MAX:
+                _flow_roots.popitem(last=False)
+        except Exception:
+            pass
+
+    @event_postprocessor
+    async def _flow_ingress_end(event: MessageEvent):
+        """全部 matcher 结束后关闭 root（root 同步边界 = 事件处理结束）。"""
+        if not isinstance(event, GroupMessageEvent):
+            return
+        try:
+            from core.observability import message_flow
+
+            root = _flow_roots.pop((event.group_id, event.message_id), None)
+            if root is not None and not root.ended:
+                message_flow.end_trace(
+                    root, outcome=root.outcome or "passive_only")
+        except Exception:
+            pass
+except Exception as e:  # pragma: no cover - 老版本 NoneBot 缺钩子时不阻断装载
+    logger.warning(f"⚠️ [Flow] NoneBot 事件钩子注册失败（消息流程不可观测）: {e}")
 
 async def describe_images_hook(ctx: ChatContext) -> ChatContext:
     """图片转述钩子：把 ctx.image_sources 里的图转成文字描述并入 ctx.message。
@@ -444,20 +593,30 @@ group_silent_listener = on_message(priority=_PRIORITY_SILENT, block=False)
 @group_silent_listener.handle()
 async def record_group_chat(event: GroupMessageEvent):
     """记录群聊消息到短期记忆（静默侧，不触发总结/推理）。"""
+    fctx = _flow_root_for(event)
     if event.group_id not in ALLOWED_GROUPS:
+        _flow_decision(fctx, "ingress.passive.filter", status="skipped",
+                       reason_code="group_not_allowed")
         return
     # 防止 OneBot 回显自身消息造成重复入库（自身发言会经 _record_bot_lines 单独落库）
     if event.user_id == event.self_id:
+        _flow_decision(fctx, "ingress.passive.filter", status="skipped",
+                       reason_code="self_echo")
         return
     text = event.get_plaintext().strip()
     if text.startswith("/"):
+        _flow_decision(fctx, "ingress.passive.filter", status="skipped",
+                       reason_code="slash_command")
         return
     if not text:
         # 纯图片消息：识图功能可用时按 [图片] 占位入库，让尾巴/整合知道
         # 「刚才有人发过图」；不可用（默认）时照旧不落库，与旧版一致。
         if not (vision_available() and extract_image_sources(event)):
+            _flow_decision(fctx, "ingress.passive.filter", status="skipped",
+                           reason_code="empty_text_no_vision")
             return
         text = "[图片]"
+    _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
     ctx = ChatContext(
         user_id=event.user_id,
         group_id=event.group_id,
@@ -465,21 +624,29 @@ async def record_group_chat(event: GroupMessageEvent):
         message=text,
         # @ 到 Bot 的消息是最可靠的用户信息源，落库时标记来源以供整合/审计
         source_kind="AT_MENTION" if event.is_tome() else "PASSIVE",
-        # 追踪 ID 在接入入口、硬门禁前创建（计划 §6.1）；静默监听器是
-        # 每条群消息最早的处理点，证据行的 trace 关联从这里开始。
-        trace_id=new_trace_id(),
+        # 追踪 ID 在接入入口、硬门禁前创建（计划 §6.1）；与流程 root 共用
+        # 同一身份（§6.2 入口绑定），证据行/投递/派生全部挂同一 trace。
+        trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
     )
-    await record_message(ctx)
+    try:
+        from core.observability import message_flow
+
+        message_flow.attach(ctx, fctx)
+    except Exception:
+        pass
+    with _flow_span(fctx, "ingress.passive.persist"):
+        await record_message(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
-    get_proactive().record_message(ctx.group_id, ctx.user_id)
-    if ctx.source_kind == "AT_MENTION":
-        # 主动 @ 的回应检测只认「对 Bot 说话」，所以这个时间戳必须单独记
-        get_proactive().record_tome(ctx.group_id, ctx.user_id)
-        # 只要还愿意跟 Bot 说话就不算「不想聊」，顺手解除退避（自愈，见 reset_no_reply）
-        reset_no_reply(ctx.group_id, ctx.user_id)
-    # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
-    session_touch(ctx.group_id)
+    with _flow_span(fctx, "ingress.passive.state"):
+        get_proactive().record_message(ctx.group_id, ctx.user_id)
+        if ctx.source_kind == "AT_MENTION":
+            # 主动 @ 的回应检测只认「对 Bot 说话」，所以这个时间戳必须单独记
+            get_proactive().record_tome(ctx.group_id, ctx.user_id)
+            # 只要还愿意跟 Bot 说话就不算「不想聊」，顺手解除退避（自愈，见 reset_no_reply）
+            reset_no_reply(ctx.group_id, ctx.user_id)
+        # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
+        session_touch(ctx.group_id)
 
     # 消息关系提取（供证据落库与参与评分共用）
     reply_to_id, mentioned_users = _extract_message_relations(event)
@@ -489,7 +656,7 @@ async def record_group_chat(event: GroupMessageEvent):
     # 索引幂等兜底，first-writer-wins。
     social_event_id = ""
     if _social_delivery_enabled():
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(Exception), _flow_span(fctx, "ingress.passive.social"):
             social_event_id = social_store.record_event(
                 MessageEvidence(
                     scope=ConversationScope.for_qq(event.group_id),
@@ -504,27 +671,37 @@ async def record_group_chat(event: GroupMessageEvent):
             ) or ""
     # 黑话信号采集（设计阶段六 → 计划 §6.4）：社交模式接管时逐 hit 落
     # occurrence 证据（event_id 幂等）；未接管时走进程内计数器，热路径开销不变。
-    expression_learning.note_passive_message(
-        ctx.group_shared_space, ctx.user_id, text,
-        group_id=event.group_id, event_id=social_event_id,
-    )
+    with _flow_span(fctx, "ingress.passive.expression"):
+        expression_learning.note_passive_message(
+            ctx.group_shared_space, ctx.user_id, text,
+            group_id=event.group_id, event_id=social_event_id,
+        )
 
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
-        decision = await get_participation_manager().observe(
-            ctx.group_id,
-            ctx.user_id,
-            text,
-            msg_id=event.message_id,
-            reply_to=int(reply_to_id) if (reply_to_id or "").isdigit() else None,
-            mentioned_users=tuple(int(m) for m in mentioned_users if m.isdigit()),
-            is_tome=event.is_tome(),
-            has_image=bool(extract_image_sources(event)) if vision_available() else False,
-            has_emoji=bool(expression_learning._EMOJI_RE.search(text)),
-        )
+        with _flow_span(fctx, "ingress.passive.participation") as part_span:
+            decision = await get_participation_manager().observe(
+                ctx.group_id,
+                ctx.user_id,
+                text,
+                msg_id=event.message_id,
+                reply_to=int(reply_to_id) if (reply_to_id or "").isdigit() else None,
+                mentioned_users=tuple(int(m) for m in mentioned_users if m.isdigit()),
+                is_tome=event.is_tome(),
+                has_image=bool(extract_image_sources(event)) if vision_available() else False,
+                has_emoji=bool(expression_learning._EMOJI_RE.search(text)),
+            )
+            part_span.finish(
+                status="succeeded",
+                metrics={"decision": getattr(decision, "decision", "") or ""},
+            )
         if decision is not None and decision.should_speak and PARTICIPATION_TRIGGER_ENABLED:
             # ALLOW_LLM：交给统一执行器（群锁/预算/去重/consolidate 都在里头）。
             # create_task：评分在 priority 0 的非阻断监听器里，不能同步等 LLM。
-            _spawn_participation_speak(event.group_id, decision, trigger_text=text)
+            _flow_checkpoint(fctx, "participation.spawn",
+                             summary="spawned proactive speak, not awaited",
+                             metrics={"trigger_text_chars": len(text)})
+            _spawn_participation_speak(event.group_id, decision, trigger_text=text,
+                                       parent_trace_id=ctx.trace_id)
 
 
 def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
@@ -590,6 +767,9 @@ plugin_handler = on_message(rule=Rule(is_plugin_trigger), priority=_PRIORITY_PLU
 @plugin_handler.handle()
 async def handle_plugin(bot: Bot, event: MessageEvent):
     """AstrBot 插件分发。无插件安装时 dispatch 会立即返回，开销可忽略。"""
+    fctx = _flow_root_for(event) if isinstance(event, GroupMessageEvent) else None
+    plugin_span = _flow_span(fctx, "ingress.plugin")
+    plugin_span.__enter__()
     try:
         from astrbot_compat.pipeline import dispatch
 
@@ -600,7 +780,11 @@ async def handle_plugin(bot: Bot, event: MessageEvent):
             _plugin_handled_msgs[event.message_id] = time.time()
             if len(_plugin_handled_msgs) > 256:
                 _plugin_handled_msgs.popitem(last=False)
+        plugin_span.__exit__(None, None, None)
+        if handled:
+            _flow_set_outcome(fctx, "plugin_handled")
     except Exception as e:
+        plugin_span.__exit__(type(e), e, e.__traceback__)
         logger.warning(f"[plugin] dispatch 异常: {e}", exc_info=True)
 
 
@@ -612,12 +796,19 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
+    fctx = _flow_root_or_create(event, "qq_chat")
     if event.message_id in _plugin_handled_msgs:
         _plugin_handled_msgs.pop(event.message_id, None)
+        _flow_decision(fctx, "chat.plugin_shortcut", status="skipped",
+                       reason_code="plugin_handled")
+        _flow_set_outcome(fctx, "plugin_handled")
         logger.debug(f"[chat] 已由插件处理，跳过 LLM (group {event.group_id})")
         return
     lock = _group_locks[event.group_id]
+    lock_span = _flow_span(fctx, "chat.group_lock")
+    lock_span.__enter__()  # 覆盖「排队等待」；获取后立即闭合（计划 §6.3 A）
     async with lock:
+        lock_span.__exit__(None, None, None)
         # 新的直接请求 = 显式取消信号（计划 §6.9 层 3）：推进话题版本，
         # 让仍在途/待发送的旧主动输出在发送前判为过期。
         with contextlib.suppress(Exception):
@@ -627,48 +818,61 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         message_text = event.get_plaintext().strip() or "[图片]"
         # cometa 可信 Origin（方案 §6.5/§6.4.1）：只在 @ 触达路径构造；
         # 委派决策在能力钩子里读它——这里不判断要不要委派，只提供身份事实。
-        if _cometa_enabled():
-            ctx_origin = cometa_bridge.build_origin(
-                event, bot, instance_id=_cometa_instance_id()
+        with _flow_span(fctx, "chat.context"):
+            if _cometa_enabled():
+                ctx_origin = cometa_bridge.build_origin(
+                    event, bot, instance_id=_cometa_instance_id()
+                )
+            else:
+                ctx_origin = None
+            ctx = ChatContext(
+                user_id=event.user_id,
+                group_id=event.group_id,
+                msg_id=event.message_id,
+                message=message_text,
+                # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
+                # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
+                # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
+                raw_event=event,
+                bot=bot,
+                cometa_origin=ctx_origin,
+                # 图片来源（本体 + 引用）；识图未启用时保持空列表，describe_images_hook
+                # 会跳过，行为与旧版一致。
+                image_sources=extract_image_sources(event) if vision_available() else [],
+                # 身份绑定：与流程 root 共用 trace（计划 §6.2 入口绑定）
+                trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             )
-        else:
-            ctx_origin = None
-        ctx = ChatContext(
-            user_id=event.user_id,
-            group_id=event.group_id,
-            msg_id=event.message_id,
-            message=message_text,
-            # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
-            # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
-            # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
-            raw_event=event,
-            bot=bot,
-            cometa_origin=ctx_origin,
-            # 图片来源（本体 + 引用）；识图未启用时保持空列表，describe_images_hook
-            # 会跳过，行为与旧版一致。
-            image_sources=extract_image_sources(event) if vision_available() else [],
-        )
-        gate = get_reply_gate().evaluate(
-            event.group_id,
-            trigger="reply",
-            intent="",
-        )
-        ctx.gate_path = gate.path
-        ctx.gate_score = gate.score
-        ctx.gate_reasons = gate.reasons
+            try:
+                from core.observability import message_flow
+
+                message_flow.attach(ctx, fctx)
+            except Exception:
+                pass
+        with _flow_span(fctx, "chat.reply_gate"):
+            gate = get_reply_gate().evaluate(
+                event.group_id,
+                trigger="reply",
+                intent="",
+            )
+            ctx.gate_path = gate.path
+            ctx.gate_score = gate.score
+            ctx.gate_reasons = gate.reasons
 
         # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，
         # 避免每次群消息都做无用总结，同时保证对话用到的短期记忆是最新的。
         # 这里用 force=True 强制总结（离线合并新消息到短期记忆），但因为是本地小批量，
         # 并不强制调用在线 LLM，避免影响响应速度。
         try:
-            consolidator = get_consolidator()
-            new_count = consolidator.has_new_messages_to_consolidate(
-                event.group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
-            )
-            if new_count > 0:
-                logger.info(f"🧠 [Trigger] @对话触发短期记忆总结（新消息 {new_count} 条）")
-                maybe_consolidate(event.group_id, force=True)
+            with _flow_span(fctx, "chat.consolidate_trigger"):
+                consolidator = get_consolidator()
+                new_count = consolidator.has_new_messages_to_consolidate(
+                    event.group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+                )
+                if new_count > 0:
+                    logger.info(f"🧠 [Trigger] @对话触发短期记忆总结（新消息 {new_count} 条）")
+                    maybe_consolidate(
+                        event.group_id, force=True,
+                        parent_trace_id=fctx.trace_id if fctx is not None else "")
         except Exception as e:
             logger.warning(f"⚠️ @触发总结异常（跳过）: {e}")
 
@@ -680,24 +884,34 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 走 NoneBot 的正常「不回复」返回路径，不抛异常。
         chat_blocked = budget_blocked(ROLE_CHAT)
         if chat_blocked:
+            _flow_decision(fctx, "chat.daily_budget", status="blocked",
+                           reason_code=str(chat_blocked))
+            _flow_set_outcome(fctx, "budget_blocked")
             logger.warning(
                 f"⚠️ [Budget] 群 {event.group_id} 的 @ 对话被预算拦下，静默不回（{chat_blocked}）"
             )
             return
+        _flow_checkpoint(fctx, "chat.daily_budget", summary="allowed")
 
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
-            ctx = await _run_turn_via_engine(event.group_id, ctx)
+            with _flow_span(fctx, "chat.runtime"):
+                ctx = await _run_turn_via_engine(event.group_id, ctx)
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
             raise
         except RuntimeTurnError as e:
             # 取消不是失败（计划 §6.9 层 3）：绝不能落进通用兜底变成「......？」
             if e.code == E_CANCELLED:
+                _flow_decision(fctx, "chat.runtime_result", status="cancelled",
+                               reason_code="reset_cancelled")
+                _flow_set_outcome(fctx, "cancelled")
                 logger.info(f"🔇 [chat] 群 {event.group_id} 轮次已取消（reset），静默不发送")
                 return
             raise
         except Exception as e:
+            _flow_decision(fctx, "chat.runtime_result", status="failed",
+                           reason_code="pipeline_error")
             logger.error(f"Pipeline 异常: {e}")
             # 兜底：异常时给用户一句温和的占位回复，避免冷场
             ctx.reply = "......？"
@@ -706,6 +920,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # Planner 决定等待更多消息（设计阶段五）：@ 是硬触发不会走到这里，
         # 该标记只可能出现在主动路径；防御性地早退，绝不能发「......？」占位。
         if getattr(ctx, "planner_wait", False):
+            _flow_decision(fctx, "chat.runtime_result", status="skipped",
+                           reason_code="planner_wait")
+            _flow_set_outcome(fctx, "silent")
             logger.info(f"⏳ [Planner] 群 {event.group_id} 本轮不回复，等待更多消息")
             return
 
@@ -724,15 +941,20 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 msg = Message(line)
             return await chat_handler.send(msg)
 
+        with _flow_span(fctx, "send.prepare"):
+            pass
         # cometa 受理确认（方案 §6.5）：委派接管的本轮只发 ack 一条，经桥接
         # 认领 ack 通知后发送；ack 交由普通回复链路会造成入口/泵双发或漏记。
         # 返回 pump_owned 表示后台泵已抢先接管发送——本轮静默结束（任务不受影响）。
         cometa_submission = getattr(ctx, "cometa_submission", None)
         if cometa_submission:
-            ack_outcome = await cometa_bridge.deliver_ack(
-                cometa_submission,
-                lambda line: _send_reply_segment(line, 0),
-            )
+            with _flow_span(fctx, "send.cometa_ack") as ack_span:
+                ack_outcome = await cometa_bridge.deliver_ack(
+                    cometa_submission,
+                    lambda line: _send_reply_segment(line, 0),
+                )
+                ack_span.finish(status="succeeded" if ack_outcome == "sent" else "unknown",
+                                reason_code=ack_outcome)
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
@@ -744,6 +966,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                     f"（任务 {cometa_submission.get('task_id', '')[:8]} 不受影响，"
                     "后续结果会带任务短 ID）"
                 )
+            _flow_set_outcome(fctx, "cometa_ack_" + str(ack_outcome))
             await chat_handler.finish()
 
         # 逐段发送并收集回执（计划 §6.1 发送改造）：只有**确认送达**的片段才
@@ -760,38 +983,46 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         )
         delivered = delivered_texts(receipts)
         if delivered:
-            # 把确认送达的回复记入“已说过的话”，防止随后主动发言再重复刷屏
-            with contextlib.suppress(Exception):
-                get_proactive().record_spoken(event.group_id, delivered)
-                # 评分层记账：被 @ 后的回复记为**被动**——被叫到后回答不应该
-                # 获得与主动插话同等级的惩罚（上游工程方案 §14）。
-                # 多段回复只更新一次发言占用，不按片段重复计数。
-                get_participation_manager().note_stella_spoke(event.group_id, "passive")
+            with _flow_span(fctx, "reply.bookkeeping"):
+                # 把确认送达的回复记入“已说过的话”，防止随后主动发言再重复刷屏
+                with contextlib.suppress(Exception):
+                    get_proactive().record_spoken(event.group_id, delivered)
+                    # 评分层记账：被 @ 后的回复记为**被动**——被叫到后回答不应该
+                    # 获得与主动插话同等级的惩罚（上游工程方案 §14）。
+                    # 多段回复只更新一次发言占用，不按片段重复计数。
+                    get_participation_manager().note_stella_spoke(event.group_id, "passive")
 
-            # 表达与回复效果学习：效果只对照已发部分（partial 时后半段不存在）
-            expression_learning.on_reply_sent(
-                group_id=event.group_id,
-                group_shared_space=ctx.group_shared_space,
-                user_id=event.user_id,
-                message=ctx.message,
-                lines=delivered,
-                trigger="reply",
-                turn_id=ctx.turn_id,
-                trace_id=ctx.trace_id,
-                source_msg_id=event.message_id,
-            )
+                # 表达与回复效果学习：效果只对照已发部分（partial 时后半段不存在）
+                with _flow_span(fctx, "learning.open"):
+                    expression_learning.on_reply_sent(
+                        group_id=event.group_id,
+                        group_shared_space=ctx.group_shared_space,
+                        user_id=event.user_id,
+                        message=ctx.message,
+                        lines=delivered,
+                        trigger="reply",
+                        turn_id=ctx.turn_id,
+                        trace_id=ctx.trace_id,
+                        source_msg_id=event.message_id,
+                    )
 
-            # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
-            # 整合提供「我刚说过什么」的真实语境
-            await _record_bot_lines(event.self_id, event.group_id, delivered)
+                # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
+                # 整合提供「我刚说过什么」的真实语境
+                await _record_bot_lines(event.self_id, event.group_id, delivered)
 
-            # 输出匹配（计划 §6.3.4）：注入的表达真的出现在已发文本 → applied=1，
-            # 只有 applied 的表达才关联使用结果；未匹配保持 unknown
-            with contextlib.suppress(Exception):
-                from memory import expression_selector
+                # 输出匹配（计划 §6.3.4）：注入的表达真的出现在已发文本 → applied=1，
+                # 只有 applied 的表达才关联使用结果；未匹配保持 unknown
+                with contextlib.suppress(Exception):
+                    from memory import expression_selector
 
-                expression_selector.mark_applied(ctx.turn_id, delivered)
+                    expression_selector.mark_applied(ctx.turn_id, delivered)
+            ack_count = sum(1 for r in receipts if r.status == "acknowledged")
+            _flow_set_outcome(
+                fctx, "delivered" if ack_count == len(ctx.lines) else "partial")
         else:
+            _flow_decision(fctx, "reply.no_delivery", status="failed",
+                           reason_code="no_segment_delivered")
+            _flow_set_outcome(fctx, "not_delivered")
             logger.warning(
                 f"[Delivery] 群 {event.group_id} 全部片段未送达（turn={ctx.turn_id}），"
                 "不记发言、不学习"
@@ -799,6 +1030,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         # 压缩放在回复之后：不阻塞本次回复，摘要从下一轮开始生效
         if ctx.tail_start_id:
+            _flow_checkpoint(fctx, "reply.compact",
+                             summary="schedule_compact spawned, not awaited")
             schedule_compact(event.group_id, ctx.tail_start_id)
 
         # 所有片段已 send 完成，这里只结束本次处理流程（不再携带消息）
@@ -914,6 +1147,7 @@ async def _finish_addressing(bot: Bot, event: GroupMessageEvent, reply: str) -> 
 
 
 @addressing_handler.handle()
+@_flow_command("command.addressing")
 async def handle_addressing(bot: Bot, event: GroupMessageEvent):
     """执行自然语言称呼配置；所有写入都经过 addressing 服务。"""
     result = _addressing_decisions.pop(event.message_id, None)
@@ -1051,6 +1285,7 @@ _assert_listener_priorities()
 
 
 @toggle_handler.handle()
+@_flow_command("command.toggle")
 async def handle_toggle(bot: Bot, event: GroupMessageEvent):
     """管理员运行时开关：临时关闭/恢复本群主动发言。
 
@@ -1177,6 +1412,7 @@ async def _capability_image(text: str) -> Path | None:
 
 
 @capability_handler.handle()
+@_flow_command("command.capabilities")
 async def handle_capability_query(bot: Bot, event: GroupMessageEvent):
     """回答「你能做什么」：直接读能力注册表拼文本，**不经模型**。
 
@@ -1301,6 +1537,7 @@ _assert_reload_rule_disjoint()
 
 
 @reload_handler.handle()
+@_flow_command("command.reload")
 async def handle_reload(bot: Bot, event: GroupMessageEvent):
     """管理员热重载单个插件。
 
@@ -1638,6 +1875,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
 
 
 @scheduling_handler.handle()
+@_flow_command("command.scheduling")
 async def handle_scheduling(bot: Bot, event: GroupMessageEvent):
     """定时任务指令入口：解析 → service（权限/审计在 service 内）→ 回帖。
 
@@ -2303,6 +2541,7 @@ def _spawn_participation_speak(
     decision,
     *,
     trigger_text: str = "",
+    parent_trace_id: str = "",
 ) -> None:
     """决策命中 ALLOW_LLM 后的后台执行（不阻塞消息监听）。
 
@@ -2330,6 +2569,7 @@ def _spawn_participation_speak(
                 skip_dice=True,
                 decision=decision,
                 evidence=evidence,
+                parent_trace_id=parent_trace_id,
             )
         except Exception as e:
             logger.warning(f"⚠️ [参与评分] 群 {group_id} 触发发言异常: {e}")
@@ -2348,8 +2588,56 @@ async def _proactive_speak_for_group(
     skip_dice: bool = False,
     decision=None,
     evidence: dict | None = None,
+    parent_trace_id: str = "",
 ):
     """对单个群尝试主动发言：命中时生成一句自然的话并发送。
+
+    流程观测（计划 §6.2）：主动发言是**独立 root**（不是触发消息的子
+    span），与触发它的消息 trace 通过 ``caused_by`` 关联（§3.2）。
+    """
+    fctx = None
+    try:
+        from core.observability import message_flow
+
+        fctx = message_flow.begin_trace(
+            root_kind="proactive", platform="qq", scope=f"qq:{group_id}",
+            source_message_key=f"proactive:{group_id}:{new_trace_id()[:8]}",
+        )
+        if parent_trace_id:
+            message_flow.link(parent_trace_id, fctx.trace_id,
+                              kind="caused_by", evidence="participation_allow")
+    except Exception:
+        fctx = None
+    try:
+        await _proactive_speak_impl(
+            bot, group_id, intent=intent, instruction=instruction,
+            skip_dice=skip_dice, decision=decision, evidence=evidence, fctx=fctx,
+        )
+    except Exception:
+        _flow_set_outcome(fctx, "error")
+        raise
+    finally:
+        try:
+            from core.observability import message_flow
+
+            if fctx is not None and not fctx.ended:
+                message_flow.end_trace(fctx, outcome=fctx.outcome or "closed")
+        except Exception:
+            pass
+
+
+async def _proactive_speak_impl(
+    bot: Bot,
+    group_id: int,
+    *,
+    intent: str = "proactive_join",
+    instruction: str | None = None,
+    skip_dice: bool = False,
+    decision=None,
+    evidence: dict | None = None,
+    fctx=None,
+):
+    """主动发言主体（原 ``_proactive_speak_for_group`` 逻辑，行为不变）。
 
     :param bot: OneBot Bot 实例（用于组群发消息）
     :param group_id: 目标群号
@@ -2362,11 +2650,15 @@ async def _proactive_speak_for_group(
     # 先判断该群是否到了“可以主动发言”的时机（统一闸门判定）
     allowed, reason = can_speak(group_id, "join")
     if not allowed:
+        _flow_decision(fctx, "proactive.preflight", status="blocked",
+                       reason_code=f"can_speak:{reason}")
         logger.debug(f"[主动发言] 群 {group_id} 跳过：{reason}")
         return
     proactive = get_proactive()
     # gate 通过后再掷概率骰：概率是话题插话独有的（主动 @ 由配额与冷却约束，不掷骰）
     if not skip_dice and not proactive.should_speak(group_id):
+        _flow_decision(fctx, "proactive.preflight", status="skipped",
+                       reason_code="dice_skip")
         return
     # 同样要抢占本群的互斥锁：主动发言不能和 @ 回复并发，避免上下文被互相污染
     lock = _group_locks[group_id]
@@ -2379,6 +2671,8 @@ async def _proactive_speak_for_group(
             intent=intent,
         )
         if not gate.allowed:
+            _flow_decision(fctx, "proactive.preflight", status="blocked",
+                           reason_code="reply_gate")
             logger.info(
                 f"[ReplyGate] 群 {group_id} 跳过主动发言："
                 f"{', '.join(gate.reasons)}"
@@ -2393,7 +2687,9 @@ async def _proactive_speak_for_group(
             )
             if new_count > 0:
                 logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
-                maybe_consolidate(group_id, force=True)
+                _flow_checkpoint(fctx, "proactive.consolidate",
+                                 summary="spawned, sleep 1s, not awaiting success")
+                maybe_consolidate(group_id, force=True, parent_trace_id=getattr(fctx, "trace_id", ""))
                 await asyncio.sleep(1.0)
         except Exception as e:
             logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
@@ -2413,8 +2709,14 @@ async def _proactive_speak_for_group(
             gate_path=gate.path,
             gate_score=gate.score,
             gate_reasons=gate.reasons,
-            trace_id=new_trace_id(),
+            trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
         )
+        try:
+            from core.observability import message_flow
+
+            message_flow.attach(ctx, fctx)
+        except Exception:
+            pass
         # 话题版本快照（计划 §6.9 层 3）：生成前捕获，发送前与逐段发送中比对
         try:
             rev_before = get_participation_manager().topic_revision(group_id)
@@ -2428,15 +2730,18 @@ async def _proactive_speak_for_group(
                 return False
 
         try:
-            ctx = await _run_turn_via_engine(group_id, ctx)
+            with _flow_span(fctx, "proactive.turn"):
+                ctx = await _run_turn_via_engine(group_id, ctx)
         except RuntimeTurnError as e:
             # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
             if e.code == E_CANCELLED:
+                _flow_set_outcome(fctx, "cancelled")
                 _log_participation_event(decision, "generation_skip", "cancelled")
                 logger.info(f"🔇 [主动发言] 群 {group_id} 轮次已取消，静默退出")
                 return
             raise
         except Exception as e:
+            _flow_set_outcome(fctx, "turn_error")
             logger.error(f"主动发言 Pipeline 异常: {e}")
             _log_participation_event(decision, "generation_skip", "pipeline_error")
             return
@@ -2445,16 +2750,22 @@ async def _proactive_speak_for_group(
             # 「在等更多消息」与「没在说话」是两种状态，后续 observe 可据此区分。
             get_reply_gate().finish(group_id, waiting=bool(getattr(ctx, "planner_wait", False)))
         if not ctx.lines:
+            _flow_decision(fctx, "proactive.filter", status="skipped",
+                           reason_code="empty_output")
             _log_participation_event(decision, "generation_skip", "empty_output")
             return
 
         # 发送前过期检查：生成期间出现转题/撤销/静音/新直接请求 → 丢弃旧输出
         if _stale():
+            _flow_decision(fctx, "proactive.filter", status="skipped",
+                           reason_code="stale_output")
             _log_participation_event(decision, "generation_skip", "stale_output")
             logger.info(f"[主动发言] 群 {group_id} 输出已过期（话题版本变化），丢弃不发")
             return
 
         if is_proactive_skip(ctx.lines):
+            _flow_decision(fctx, "proactive.filter", status="skipped",
+                           reason_code="naturalness_skip")
             _log_participation_event(decision, "generation_skip", "naturalness_skip")
             logger.info(
                 f"⏭️ [主动发言] 群 {group_id} 当前没有自然承接，"
@@ -2475,6 +2786,8 @@ async def _proactive_speak_for_group(
 
         # 防刷屏：与最近一次主动/回复高度相似时，本次主动发言直接放弃
         if get_proactive().recently_spoken(group_id, ctx.lines):
+            _flow_decision(fctx, "proactive.filter", status="skipped",
+                           reason_code="duplicate_output")
             _log_participation_event(decision, "generation_skip", "duplicate_output")
             logger.info(f"🛑 [主动发言] 群 {group_id} 与已发言内容重复，跳过")
             return
@@ -2497,10 +2810,14 @@ async def _proactive_speak_for_group(
         )
         delivered = delivered_texts(receipts)
         if not delivered:
+            _flow_set_outcome(fctx, "not_delivered")
             _log_participation_event(decision, "send_failed", "no_segment_delivered")
             logger.error(f"[主动发言] 群 {group_id} 全部片段发送失败（不记账不学习）")
             return
 
+        with _flow_span(fctx, "proactive.after"):
+            pass
+        _flow_set_outcome(fctx, "delivered")
         # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
         proactive.mark_spoke(group_id)
         get_proactive().record_spoken(group_id, delivered)

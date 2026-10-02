@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
@@ -121,20 +122,50 @@ async def chat(
     if not message:
         return ok({"lines": [], "thought": ""})
 
+    # 入口身份（计划 §6.2）：鉴权后建 root；started/complete 帧携带关联键，
+    # 让面板能把 SSE 流绑定到同一条 trace。原文不进事件，只存关联键。
+    flow_ctx = None
+    try:
+        from core.observability import message_flow
+
+        flow_ctx = message_flow.begin_trace(
+            root_kind="webchat", platform="webchat", scope="webchat",
+            source_message_key=f"webchat:{auth.username}:{int(time.time() * 1000)}",
+        )
+    except Exception:
+        flow_ctx = None
+
     async def stream():
         from webui.chat_ingress import run_turn
 
-        yield f"data: {json.dumps({'type': 'run_started', 'data': {}})}\n\n"
+        yield f"data: {json.dumps({'type': 'run_started', 'data': _flow_keys(flow_ctx)})}\n\n"
+        deadline_span = None
         try:
-            result = await asyncio.wait_for(run_turn(message, auth.username), timeout=120.0)
+            deadline_span = _flow_span(flow_ctx, "web.outer_deadline")
+            deadline_span.__enter__()
+            result = await asyncio.wait_for(
+                run_turn(message, auth.username, flow_ctx=flow_ctx), timeout=120.0)
             payload_out = {
                 "type": "complete",
-                "data": {"lines": result["lines"], "thought": result["thought"]},
+                "data": {"lines": result["lines"], "thought": result["thought"],
+                         **_flow_keys(flow_ctx)},
             }
+            deadline_span.__exit__(None, None, None)
             yield f"data: {json.dumps(payload_out, ensure_ascii=False)}\n\n"
         except RuntimeError as e:
+            if deadline_span is not None:
+                deadline_span.__exit__(RuntimeError, e, e.__traceback__)
             yield f"data: {json.dumps({'type': 'error', 'data': {'message': str(e)}}, ensure_ascii=False)}\n\n"
         except asyncio.TimeoutError:
+            if deadline_span is not None:
+                deadline_span.__exit__(asyncio.TimeoutError, None, None)
+            try:
+                from core.observability import message_flow
+
+                message_flow.decision(flow_ctx, "web.outer_deadline",
+                                      status="timed_out", reason_code="web_deadline")
+            except Exception:
+                pass
             yield f"data: {json.dumps({'type': 'error', 'data': {'message': '回复超时'}})}\n\n"
 
     return StreamingResponse(
@@ -142,3 +173,25 @@ async def chat(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _flow_keys(flow_ctx) -> dict:
+    """SSE 帧里的 trace 关联键（计划 §6.6）：没有 root 时返回空。"""
+    if flow_ctx is None:
+        return {}
+    try:
+        return {"trace_id": flow_ctx.trace_id,
+                "topology_version": flow_ctx.topology_version}
+    except Exception:
+        return {}
+
+
+def _flow_span(flow_ctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(flow_ctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
