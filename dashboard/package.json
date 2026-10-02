@@ -10,7 +10,8 @@
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sync:webui": "node sync-dist.mjs"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
