@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { formatDbTime } from '@/utils/time';
 
 import { api, unwrap } from '@/api/http';
 
@@ -149,7 +150,7 @@ onMounted(async () => {
               {{ item.content }}
             </v-list-item-title>
             <v-list-item-subtitle>
-              {{ item.timestamp }} · 用户 {{ item.user_id }}
+              {{ formatDbTime(item.timestamp) }} · 用户 {{ item.user_id }}
             </v-list-item-subtitle>
           </v-list-item>
         </v-list>

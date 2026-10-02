@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
+import { formatDbTime } from '@/utils/time';
 import {
   edgePath,
   layoutExecuted,
@@ -194,7 +195,8 @@ const rootKindLabel = (item: FlowMessageSummary) =>
 
 const outcomeLabel = (outcome: string) => OUTCOME_LABELS[outcome] ?? outcome;
 
-const fmtTime = (iso: string) => (iso ? iso.replace('T', ' ').slice(0, 19) : '—');
+// 库里是 UTC（+00:00）：必须转本地时区显示，否则会被当成「记录停在几小时前」
+const fmtTime = (iso: string) => formatDbTime(iso);
 
 function pick(item: FlowMessageSummary) {
   closeCard();
