@@ -64,14 +64,59 @@ export interface LayoutResult {
 }
 
 /**
- * 分层布局：排名（列）= 沿全部静态边（order/condition/spawn/cause）的
- * 最长路径；自环忽略，环由迭代上限兜底——**绝不丢节点**。列内按泳道
- * 聚簇、整列垂直居中；start/end 锚点分别接入源/汇。
+ * 完整流程布局：目录全节点分层（见 {@link layered}）。
  */
 export function layoutLayered(input: FullLayoutInput): LayoutResult {
-  const specNodes = input.spec.nodes;
-  const idSet = new Set(specNodes.map((n) => n.id));
+  return layered({
+    nodes: input.spec.nodes,
+    edges: input.spec.edges,
+    lanes: input.spec.lanes,
+    executed: input.executed,
+    labelOf: input.labelOf,
+    laneOf: input.laneOf,
+  });
+}
+
+/**
+ * 实际路径布局：**只取已执行节点与其间的边**再走同一套分层算法——
+ * 未走过的节点不占位，路径收束成一条连通的左→右流（用户验收 #2）。
+ * 全部保留边天然 traversed；锚点接入执行子图的源/汇。
+ */
+export function layoutExecuted(input: FullLayoutInput): LayoutResult {
+  const nodes = input.spec.nodes.filter((n) => input.executed.has(n.id));
+  const kept = new Set(nodes.map((n) => n.id));
   const edges = input.spec.edges.filter(
+    (e) => e.src !== e.dst && kept.has(e.src) && kept.has(e.dst),
+  );
+  const lanesUsed = new Set(nodes.map((n) => input.laneOf(n.id)));
+  return layered({
+    nodes,
+    edges,
+    lanes: input.spec.lanes.filter(([id]) => lanesUsed.has(id)),
+    executed: input.executed,
+    labelOf: input.labelOf,
+    laneOf: input.laneOf,
+  });
+}
+
+interface LayeredInput {
+  nodes: FlowNodeSpec[];
+  edges: FlowEdgeSpec[];
+  lanes: Array<[string, string]>;
+  executed: Map<string, FlowNodeState>;
+  labelOf: (nodeId: string) => string;
+  laneOf: (nodeId: string) => string;
+}
+
+/**
+ * 分层内核：排名（列）= 沿给定静态边（order/condition/spawn/cause）的
+ * 最长路径；自环忽略，环用 DFS 去回边——**绝不丢节点**。列内按泳道
+ * 聚簇、整列垂直居中；start/end 锚点分别接入源/汇。
+ */
+function layered(input: LayeredInput): LayoutResult {
+  const specNodes = input.nodes;
+  const idSet = new Set(specNodes.map((n) => n.id));
+  const edges = input.edges.filter(
     (e) => e.src !== e.dst && idSet.has(e.src) && idSet.has(e.dst),
   );
 
@@ -126,7 +171,7 @@ export function layoutLayered(input: FullLayoutInput): LayoutResult {
   }
 
   // ── 列内排序：泳道序聚簇，再按声明序稳定兜底 ──
-  const laneIndex = new Map(input.spec.lanes.map(([id], i) => [id, i]));
+  const laneIndex = new Map(input.lanes.map(([id], i) => [id, i]));
   const declaration = new Map(specNodes.map((n, i) => [n.id, i]));
   const columns: string[][] = [];
   for (const n of specNodes) {
@@ -163,7 +208,7 @@ export function layoutLayered(input: FullLayoutInput): LayoutResult {
         outcome: exec?.businessOutcome ?? '',
         instances: exec?.instances ?? 0,
         lane: input.laneOf(id),
-        spec: input.spec.nodes.find((n) => n.id === id),
+        spec: specNodes.find((n) => n.id === id),
         x: CANVAS_PAD + ANCHOR_W + 32 + colIdx * (NODE_W + COL_GAP),
         y: top + rowIdx * ROW_PITCH,
       };

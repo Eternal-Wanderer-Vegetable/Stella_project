@@ -9,6 +9,7 @@ import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
 import {
   edgePath,
+  layoutExecuted,
   layoutLayered,
   type LaidEdge,
   type LaidNode,
@@ -95,6 +96,9 @@ const viewMode = ref<'full' | 'executed'>('full');
 const canvasEl = ref<HTMLElement | null>(null);
 // 浮动详情卡：锚在节点点击位置（相对画布容器）
 const card = ref<{ nodeId: string; x: number; y: number } | null>(null);
+// 视图切换的边淡出窗口：节点在滑动到位前，先把旧路径藏起来
+const morphing = ref(false);
+let morphTimer: ReturnType<typeof setTimeout> | null = null;
 
 onMounted(() => {
   void store.loadMessages();
@@ -103,6 +107,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   store.stopStream();
   stopPlay();
+  if (morphTimer) clearTimeout(morphTimer);
 });
 
 const laneLegend = computed<Array<{ id: string; label: string; color: string }>>(
@@ -119,15 +124,21 @@ const laneLabels = computed<Record<string, string>>(() => {
   return out;
 });
 
-/** 分层流式布局（完整/实际共用坐标，切换只做淡出）。 */
+/**
+ * 分层流式布局：完整 = 目录全图；实际 = 已执行子图收束成一条连通路径。
+ * 切换时节点按 CSS transform 过渡滑到新坐标（边淡出再淡入），不是硬切。
+ */
 const graphLayout = computed(() => {
   if (!store.spec) return null;
-  return layoutLayered({
+  const input = {
     spec: store.spec,
     executed: store.executedNodeMap,
     labelOf: (nodeId: string) => store.nodeLabel(nodeId),
     laneOf: (nodeId: string) => store.nodeLane(nodeId),
-  });
+  };
+  return viewMode.value === 'full'
+    ? layoutLayered(input)
+    : layoutExecuted(input);
 });
 const laidNodes = computed<LaidNode[]>(() => graphLayout.value?.nodes ?? []);
 const laidEdges = computed<LaidEdge[]>(() => graphLayout.value?.edges ?? []);
@@ -136,13 +147,9 @@ const canvasSize = computed(() => ({
   h: graphLayout.value?.height ?? 200,
 }));
 
-/** 实际路径模式下该元素是否应淡出（锚点恒在）。 */
-function isHidden(node: LaidNode): boolean {
-  return (
-    viewMode.value === 'executed' &&
-    node.anchor === undefined &&
-    !store.executedNodeMap.has(node.nodeId)
-  );
+/** 节点是否激活过（有真实事件；锚点恒为激活态）。 */
+function isExecuted(node: LaidNode): boolean {
+  return node.anchor !== undefined || store.executedNodeMap.has(node.nodeId);
 }
 
 function edgeClass(e: LaidEdge): Record<string, boolean> {
@@ -155,11 +162,7 @@ function edgeClass(e: LaidEdge): Record<string, boolean> {
       !e.active &&
       e.kind !== 'spawn' &&
       e.kind !== 'cause',
-    faded:
-      e.kind !== 'spawn' && e.kind !== 'cause'
-        ? viewMode.value === 'full' && !e.active
-        : false,
-    gone: viewMode.value === 'executed' && !e.traversed,
+    morph: morphing.value,
   };
 }
 
@@ -208,6 +211,22 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? STATUS_COLORS.unknown;
 }
 
+// 未激活 = 统一灰（体/条同灰）；激活 = 状态色。泳道归属由彩色圆点标识。
+const INACTIVE_BODY = '#757575';
+const INACTIVE_BAR = '#9e9e9e';
+
+function nodeBodyColor(n: LaidNode): string {
+  if (n.anchor !== undefined) {
+    return n.anchor === 'start' ? '#4caf50' : '#78909c';
+  }
+  return isExecuted(n) ? statusColor(n.status) : INACTIVE_BODY;
+}
+
+function nodeBarColor(n: LaidNode): string {
+  if (n.anchor !== undefined) return 'transparent';
+  return isExecuted(n) ? statusColor(n.status) : INACTIVE_BAR;
+}
+
 function onNodeClick(node: LaidNode, event?: MouseEvent) {
   if (node.anchor !== undefined) return;
   store.selectNode(node.nodeId);
@@ -227,6 +246,17 @@ function closeCard() {
   card.value = null;
   store.selectNode('');
 }
+
+watch(viewMode, () => {
+  // 布局变化：卡锚点失效；边先淡出，节点滑到新坐标后再淡入
+  closeCard();
+  if (reducedMotion) return;
+  morphing.value = true;
+  if (morphTimer) clearTimeout(morphTimer);
+  morphTimer = setTimeout(() => {
+    morphing.value = false;
+  }, 480);
+});
 
 function togglePlay() {
   if (playing.value) {
@@ -452,19 +482,19 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   marker-end="url(#flow-arrow)"
                 />
               </g>
-              <!-- 节点（外层 g 定位，内层 g 做淡入淡出/缩放过渡） -->
+              <!-- 节点（外层 g 以 CSS transform 定位：视图切换时滑动过渡） -->
               <g
                 v-for="n in laidNodes"
                 :key="n.nodeId"
-                :transform="`translate(${n.x}, ${n.y})`"
+                class="flow-node-pos"
+                :style="{ transform: `translate(${n.x}px, ${n.y}px)` }"
               >
                 <g
                   class="flow-node"
                   :class="{
-                    'node-hidden': isHidden(n),
                     selected: n.nodeId === card?.nodeId,
                     pulse: n.status === 'running' && !reducedMotion,
-                    unexecuted: n.status === 'not_observed' && n.anchor === undefined,
+                    unexecuted: !isExecuted(n),
                   }"
                   role="button"
                   :tabindex="n.anchor === undefined ? 0 : -1"
@@ -477,7 +507,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                       width="64"
                       height="26"
                       rx="13"
-                      :fill="n.anchor === 'start' ? '#4caf50' : '#78909c'"
+                      :fill="nodeBodyColor(n)"
                       opacity="0.92"
                     />
                     <text x="32" y="17" class="flow-anchor-label">
@@ -489,15 +519,25 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                       :width="NODE_W"
                       :height="NODE_H"
                       rx="8"
-                      :fill="statusColor(n.status)"
-                      :opacity="n.status === 'not_observed' ? 0.35 : 0.85"
+                      :fill="nodeBodyColor(n)"
+                      opacity="0.92"
                     />
-                    <rect width="5" :height="NODE_H" rx="2" :fill="laneColor(n.lane)" />
-                    <text :x="NODE_W / 2 + 3" :y="17" class="flow-node-label">
+                    <!-- 左条：只有激活（状态色）/ 未激活（灰）两种 -->
+                    <rect width="5" :height="NODE_H" rx="2" :fill="nodeBarColor(n)" />
+                    <!-- 泳道归属圆点（唯一的泳道色彩来源） -->
+                    <circle
+                      :cx="NODE_W - 11"
+                      cy="12"
+                      r="4"
+                      :fill="laneColor(n.lane)"
+                    >
+                      <title>{{ laneLabels[n.lane] ?? n.lane }}</title>
+                    </circle>
+                    <text :x="NODE_W / 2" :y="17" class="flow-node-label">
                       {{ n.label }}
                     </text>
-                    <text :x="NODE_W / 2 + 3" :y="31" class="flow-node-status">
-                      {{ n.status === 'not_observed' ? '未走到' : n.status }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
+                    <text :x="NODE_W / 2" :y="31" class="flow-node-status">
+                      {{ isExecuted(n) ? n.status : '未走到' }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
                     </text>
                   </template>
                 </g>
@@ -670,11 +710,17 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   border-radius: 50%;
   flex: none;
 }
+.flow-node-pos {
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
 .flow-edge {
   fill: none;
   stroke: rgba(var(--v-theme-on-surface), 0.35);
   stroke-width: 1.2;
-  transition: opacity 0.4s ease, stroke 0.4s ease;
+  transition: opacity 0.25s ease, stroke 0.4s ease;
+}
+.flow-edge.morph {
+  opacity: 0.06;
 }
 .edge-spawn,
 .edge-cause {
@@ -699,12 +745,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   outline: none;
   transform-box: fill-box;
   transform-origin: center;
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-.flow-node.node-hidden {
-  opacity: 0;
-  transform: scale(0.55);
-  pointer-events: none;
+  transition: opacity 0.4s ease;
 }
 .flow-node:focus rect,
 .flow-node.selected rect {
@@ -744,6 +785,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   animation: none;
 }
 .reduce-motion .flow-node,
+.reduce-motion .flow-node-pos,
 .reduce-motion .flow-edge {
   transition: none;
 }
