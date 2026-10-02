@@ -1032,7 +1032,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         if ctx.tail_start_id:
             _flow_checkpoint(fctx, "reply.compact",
                              summary="schedule_compact spawned, not awaited")
-            schedule_compact(event.group_id, ctx.tail_start_id)
+            schedule_compact(event.group_id, ctx.tail_start_id,
+                             parent_trace_id=fctx.trace_id if fctx is not None else "")
 
         # 所有片段已 send 完成，这里只结束本次处理流程（不再携带消息）
         await chat_handler.finish()
@@ -2845,7 +2846,9 @@ async def _proactive_speak_impl(
 
         # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
         if ctx.tail_start_id:
-            schedule_compact(group_id, ctx.tail_start_id)
+            schedule_compact(
+                group_id, ctx.tail_start_id,
+                parent_trace_id=fctx.trace_id if fctx is not None else "")
 
         _log_participation_event(
             decision, "sent", aggregate_delivery_status([r.status for r in receipts])

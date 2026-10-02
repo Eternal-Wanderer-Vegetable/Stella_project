@@ -160,6 +160,17 @@ class CometaWorker:
             if claimed is None:
                 break
             task, attempt = claimed
+            try:
+                from core.observability import message_flow
+
+                root = message_flow.by_source_key(f"cometa:{task.task_id}")
+                if root is not None and not root.ended:
+                    message_flow.checkpoint(
+                        root, "cometa.claim",
+                        metrics={"attempt": attempt.attempt_no,
+                                 "worker": self.worker_id[:8]})
+            except Exception:
+                pass
             run_task = asyncio.create_task(
                 self.executor.run_attempt(task, attempt),
                 name=f"cometa-attempt-{attempt.attempt_id[:8]}",

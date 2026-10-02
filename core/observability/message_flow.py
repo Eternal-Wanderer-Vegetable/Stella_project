@@ -435,6 +435,16 @@ def by_trace(trace_id: str) -> FlowContext | None:
     return _active.get(trace_id)
 
 
+def by_source_key(key: str) -> FlowContext | None:
+    """按 source_message_key 查活跃 context（跨层关联：task_id → trace）。"""
+    if not key:
+        return None
+    for ctx in _active.values():
+        if ctx.source_message_key == key and not ctx.ended:
+            return ctx
+    return None
+
+
 def active_traces() -> list[str]:
     return list(_active)
 

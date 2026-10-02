@@ -119,7 +119,38 @@ class NotificationPump:
                 delivered += 1
         return delivered
 
+    @staticmethod
+    def _flow_span(fctx, node_id: str, **kw):
+        try:
+            from core.observability import message_flow
+
+            return message_flow.span(fctx, node_id, **kw)
+        except Exception:
+            import contextlib
+
+            return contextlib.nullcontext()
+
     async def deliver_one(self, notification: NotificationRecord) -> bool:
+        fctx = None
+        try:
+            from core.observability import message_flow
+
+            fctx = message_flow.by_source_key(f"cometa:{notification.task_id}")
+        except Exception:
+            fctx = None
+        sp = self._flow_span(fctx, "cometa.notification",
+                             instance_key=notification.notification_id[:8])
+        sp.__enter__()
+        try:
+            sent = await self._deliver_one(notification)
+        except Exception as e:
+            sp.__exit__(type(e), e, e.__traceback__)
+            raise
+        sp.finish(status="succeeded" if sent else "unknown",
+                  reason_code="" if sent else "delivery_unknown")
+        return sent
+
+    async def _deliver_one(self, notification: NotificationRecord) -> bool:
         claimed = self.store.claim_notification(notification.notification_id)
         if claimed is None:
             return False  # 入口已抢先（ack 竞争）或已被别人取走

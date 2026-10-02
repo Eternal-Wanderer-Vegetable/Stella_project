@@ -288,3 +288,55 @@ class TestRootLifecycle:
             "WHERE trace_id='rl-3'").fetchone()
         conn.close()
         assert row == ("closed", "delivered", 1)
+
+
+class TestAsyncLoopLinks:
+    def test_by_source_key_lookup(self, flow_db):
+        root = message_flow.begin_trace(root_kind="cometa_task",
+                                        source_message_key="cometa:task-1")
+        assert message_flow.by_source_key("cometa:task-1") is root
+        message_flow.end_trace(root)
+        # 已结束的 root 不再命中：worker 重开同一任务时按需新建
+        assert message_flow.by_source_key("cometa:task-1") is None
+
+    def test_relation_dedup(self, flow_db):
+        message_flow.link("p", "c", kind="spawned", evidence="x")
+        message_flow.link("p", "c", kind="spawned", evidence="x")
+        message_flow.flush()
+        conn = sqlite3.connect(flow_db)
+        n = conn.execute(
+            "SELECT COUNT(*) FROM trace_relations "
+            "WHERE parent_trace_id='p' AND child_trace_id='c'").fetchone()[0]
+        conn.close()
+        assert n == 1
+
+    async def test_compact_root_linked_to_parent(self, flow_db, monkeypatch):
+        """schedule_compact 建独立 root 并 caused_by 关联触发 trace（计划 §6.2）。"""
+        import memory.session_compact as sc
+
+        parent = message_flow.begin_trace(root_kind="qq_chat", trace_id="rp-1")
+        called = []
+
+        async def fake_compact_once(group_id, tail_start_id):
+            called.append((group_id, tail_start_id))
+
+        monkeypatch.setattr(sc, "compact_once", fake_compact_once)
+        sc.schedule_compact(1, 42, parent_trace_id="rp-1")
+        for _ in range(100):
+            if called:
+                break
+            import asyncio
+
+            await asyncio.sleep(0.01)
+        message_flow.flush()
+        assert called == [(1, 42)]
+        conn = sqlite3.connect(flow_db)
+        rows = conn.execute(
+            "SELECT parent_trace_id, child_trace_id, kind FROM trace_relations"
+        ).fetchall()
+        roots = conn.execute(
+            "SELECT root_kind FROM message_traces WHERE root_kind='compact'"
+        ).fetchall()
+        conn.close()
+        assert rows and rows[0][0] == "rp-1" and rows[0][2] == "caused_by"
+        assert roots == [("compact",)]

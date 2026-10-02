@@ -211,11 +211,14 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
     return True
 
 
-def schedule_compact(group_id: int, tail_start_id: int) -> None:
+def schedule_compact(group_id: int, tail_start_id: int,
+                     parent_trace_id: str = "") -> None:
     """在后台异步触发一次压缩（不等待）。
 
     压缩放在回复发出**之后**：不阻塞当前回复，摘要从下一轮开始生效。
     同一群不并发压缩——两次调用会基于同一起点各自推进，导致重复或跳过。
+    ``parent_trace_id``：触发回复的流程 trace（计划 §6.2），压缩跑在独立
+    root 上，靠显式 relation 关联。
     """
     if group_id in _in_flight:
         logger.debug(f"[Compact] 群 {group_id} 已有压缩任务在跑，跳过本次触发")
@@ -223,12 +226,34 @@ def schedule_compact(group_id: int, tail_start_id: int) -> None:
 
     async def _run() -> None:
         _in_flight.add(group_id)
+        fctx = None
+        try:
+            from core.observability import message_flow
+
+            fctx = message_flow.begin_trace(
+                root_kind="compact", platform="qq", scope=f"qq:{group_id}",
+                source_message_key=f"compact:{group_id}",
+            )
+            if parent_trace_id:
+                message_flow.link(parent_trace_id, fctx.trace_id,
+                                  kind="caused_by", evidence="post_reply_compact")
+        except Exception:
+            fctx = None
+        outcome = "done"
         try:
             await compact_once(group_id, tail_start_id)
         except Exception:
+            outcome = "error"
             logger.exception(f"❌ [Compact] 群 {group_id} 压缩任务异常")
         finally:
             _in_flight.discard(group_id)
+            try:
+                from core.observability import message_flow
+
+                if fctx is not None and not fctx.ended:
+                    message_flow.end_trace(fctx, outcome=outcome)
+            except Exception:
+                pass
 
     task = asyncio.create_task(_run())
     _tasks.add(task)

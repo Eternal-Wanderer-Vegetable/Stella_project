@@ -111,22 +111,59 @@ class AttemptExecutor:
 
     async def run_attempt(self, task: TaskRecord, attempt: AttemptRecord) -> None:
         """完整生命周期。**任何异常路径都必须让任务落到明确状态**。"""
+        fctx = None
+        outcome = "done"
+        try:
+            from core.observability import message_flow
+
+            fctx = message_flow.by_source_key(f"cometa:{task.task_id}")
+            if fctx is None:
+                fctx = message_flow.begin_trace(
+                    root_kind="cometa_task", platform="cometa", scope="",
+                    source_message_key=f"cometa:{task.task_id}")
+        except Exception:
+            fctx = None
+        try:
+            await self._run_attempt(task, attempt, fctx)
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            try:
+                from core.observability import message_flow
+
+                if fctx is not None and not fctx.ended:
+                    message_flow.end_trace(fctx, outcome=outcome)
+            except Exception:
+                pass
+
+    async def _run_attempt(
+        self, task: TaskRecord, attempt: AttemptRecord, fctx=None
+    ) -> None:
+        """原 run_attempt 主体（行为不变；fctx 为流程观测 context）。"""
         owner = attempt.lease_owner
         epoch = attempt.lease_epoch
-        backend = self._resolve_backend(task)
-        if backend is None:
-            self._fail_fast(task, attempt, "backend_unresolved", "没有可用的后端")
-            return
+        with self._flow_span(fctx, "cometa.preflight"):
+            backend = self._resolve_backend(task)
+            if backend is None:
+                self._flow_decision(fctx, "cometa.preflight", status="blocked",
+                                    reason_code="backend_unresolved")
+                self._fail_fast(task, attempt, "backend_unresolved", "没有可用的后端")
+                return
 
-        probe = await backend.probe()
-        if probe.state is not None and probe.state.value not in ("ready", "degraded"):
-            self._fail_fast(
-                task,
-                attempt,
-                "backend_probe_failed",
-                f"后端探测未通过（{probe.state.value}）：{probe.reason}",
-            )
-            return
+            probe = await backend.probe()
+            if probe.state is not None and probe.state.value not in ("ready", "degraded"):
+                self._flow_decision(fctx, "cometa.preflight", status="blocked",
+                                    reason_code="probe_failed")
+                self._fail_fast(
+                    task,
+                    attempt,
+                    "backend_probe_failed",
+                    f"后端探测未通过（{probe.state.value}）：{probe.reason}",
+                )
+                return
+        self._flow_decision(fctx, "cometa.preflight", status="succeeded",
+                            reason_code=getattr(probe.state, "value", ""))
 
         request = TurnRequest(
             objective=task.spec.objective,
@@ -173,10 +210,11 @@ class AttemptExecutor:
         try:
             # ── 连接后端，session 立即落库（§6.8 启动协议 2）──
             session = None
-            self.store.update_launch_phase(
-                attempt.attempt_id, owner, epoch, LaunchPhase.CONNECTING.value
-            )
-            session = await backend.open_session(request, ws_ctx, policy)
+            with self._flow_span(fctx, "cometa.launch"):
+                self.store.update_launch_phase(
+                    attempt.attempt_id, owner, epoch, LaunchPhase.CONNECTING.value
+                )
+                session = await backend.open_session(request, ws_ctx, policy)
             self.store.update_launch_phase(
                 attempt.attempt_id,
                 owner,
@@ -215,7 +253,8 @@ class AttemptExecutor:
 
         # ── 消费事件流 ──
         try:
-            outcome = await self._consume_stream(task, attempt, backend, turn)
+            with self._flow_span(fctx, "cometa.stream"):
+                outcome = await self._consume_stream(task, attempt, backend, turn)
         except Exception as e:  # executor 自身或 store 异常：明确失败
             _LOGGER.exception("executor 流消费异常 task=%s", task.task_id[:8])
             self._fail_fast(
@@ -252,6 +291,26 @@ class AttemptExecutor:
     # ============================================================
     # 事件流消费
     # ============================================================
+
+    @staticmethod
+    def _flow_span(fctx, node_id: str, **kw):
+        try:
+            from core.observability import message_flow
+
+            return message_flow.span(fctx, node_id, **kw)
+        except Exception:
+            import contextlib
+
+            return contextlib.nullcontext()
+
+    @staticmethod
+    def _flow_decision(fctx, node_id: str, **kw) -> None:
+        try:
+            from core.observability import message_flow
+
+            message_flow.decision(fctx, node_id, **kw)
+        except Exception:
+            pass
 
     async def _consume_stream(
         self,
