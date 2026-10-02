@@ -83,8 +83,12 @@ export interface FlowSpec {
   schema_version: number;
   topology_version: string;
   lanes: Array<[string, string]>;
-  nodes: Record<string, FlowNodeSpec>;
+  // 注意：manifest 里 nodes 是数组（scripts/generate_message_flow.py 按序
+  // 序列化）；按 ID 查要用 specNodeById。2026-10-02 之前这里误写成 Record，
+  // 导致所有目录标签查不到、画布整片显示裸 ID。
+  nodes: FlowNodeSpec[];
   edges: FlowEdgeSpec[];
+  entry_roots: Record<string, string>;
 }
 
 export interface MessageQuery {

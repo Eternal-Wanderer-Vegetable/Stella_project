@@ -98,3 +98,59 @@ describe('flow store', () => {
     expect(store.selectedNodeId).toBe('send.segment');
   });
 });
+
+describe('flow store spec lookup', () => {
+  it('resolves labels from the manifest node ARRAY (not Record)', () => {
+    // 回归：manifest.nodes 是数组；曾误写成 Record 导致整页裸 ID
+    const store = useFlowStore();
+    store.spec = {
+      schema_version: 1,
+      topology_version: 't',
+      lanes: [['gate', '闸门']],
+      nodes: [{ id: 'chat.group_lock', label: '群锁排队', lane: 'gate', kind: 'lock' }],
+      edges: [],
+      entry_roots: { compact: 'compact.preflight' },
+    };
+    expect(store.nodeLabel('chat.group_lock')).toBe('群锁排队');
+    expect(store.nodeLane('chat.group_lock')).toBe('gate');
+  });
+
+  it('maps legacy root_kind node ids through entry_roots', () => {
+    const store = useFlowStore();
+    store.spec = {
+      schema_version: 1,
+      topology_version: 't',
+      lanes: [['background', '后台']],
+      nodes: [
+        { id: 'compact.preflight', label: '压缩预检', lane: 'background', kind: 'gate' },
+      ],
+      edges: [],
+      entry_roots: { compact: 'compact.preflight' },
+    };
+    expect(store.nodeLabel('compact')).toBe('压缩预检');
+    expect(store.nodeLane('compact')).toBe('background');
+  });
+
+  it('excludes trace.link pseudo nodes from the canvas', () => {
+    const store = useFlowStore();
+    store.mergeEvents([
+      ev({ event_id: 'a', row_id: 1, node_id: 'compact.preflight', kind: 'start',
+           status: 'running' }),
+      ev({ event_id: 'b', row_id: 2, node_id: 'trace.link', kind: 'link',
+           status: 'succeeded' }),
+    ]);
+    expect(store.nodeStates.map((n) => n.nodeId)).toEqual(['compact.preflight']);
+    // link 事件仍在时间线（回放）里
+    expect(store.orderedEvents).toHaveLength(2);
+  });
+
+  it('executedNodeMap indexes projected nodes by id', () => {
+    const store = useFlowStore();
+    store.mergeEvents([
+      ev({ event_id: 'a', row_id: 1, node_id: 'gate', kind: 'decision',
+           status: 'blocked' }),
+    ]);
+    expect(store.executedNodeMap.get('gate')?.status).toBe('blocked');
+    expect(store.executedNodeMap.has('missing')).toBe(false);
+  });
+});

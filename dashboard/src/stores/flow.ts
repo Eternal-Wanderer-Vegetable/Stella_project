@@ -4,6 +4,7 @@ import type {
   FlowEvent,
   FlowMessageDetail,
   FlowMessageSummary,
+  FlowNodeSpec,
   FlowSpec,
 } from '@/api/flow';
 import { getEvents, getMessage, getSpec, listMessages } from '@/api/flow';
@@ -52,21 +53,47 @@ export const useFlowStore = defineStore('flow', {
     },
 
     nodeStates(): ReturnType<typeof projectNodes> {
-      return projectNodes(this.visibleEvents, (nodeId) =>
-        this.nodeLabel(nodeId),
-      );
+      // kind=link 是 trace 间关系事实（详情区展示），不是画布节点
+      const nodeEvents = this.visibleEvents.filter((e) => e.kind !== 'link');
+      return projectNodes(nodeEvents, (nodeId) => this.nodeLabel(nodeId));
     },
 
-    nodeLabel(state): (nodeId: string) => string {
+    /** 已执行节点索引（完整视图把未执行节点渲染成灰色 not_observed）。 */
+    executedNodeMap(): Map<string, ReturnType<typeof projectNodes>[number]> {
+      return new Map(this.nodeStates.map((n) => [n.nodeId, n]));
+    },
+
+    /** manifest 的 nodes 是数组：按 ID 建一次索引（label/lane 查找的唯一来源）。 */
+    specNodeById(state): Map<string, FlowNodeSpec> {
+      return new Map((state.spec?.nodes ?? []).map((n) => [n.id, n]));
+    },
+
+    nodeLabel(): (nodeId: string) => string {
       return (nodeId: string) => {
-        const spec = state.spec?.nodes?.[nodeId];
+        const spec = this.specNodeById.get(nodeId);
         if (spec) return spec.label;
+        // 旧轨迹的 root span node_id 是 root_kind（如 compact）：经入口映射
+        // 落到目录入口节点（计划 §6.3），不是裸 ID。
+        const entryNode = this.spec?.entry_roots?.[nodeId];
+        if (entryNode) {
+          const entry = this.specNodeById.get(entryNode);
+          if (entry) return entry.label;
+        }
         return fallbackNodeLabel(nodeId);
       };
     },
 
-    nodeLane(state): (nodeId: string) => string {
-      return (nodeId: string) => state.spec?.nodes?.[nodeId]?.lane ?? 'other';
+    nodeLane(): (nodeId: string) => string {
+      return (nodeId: string) => {
+        const spec = this.specNodeById.get(nodeId);
+        if (spec) return spec.lane;
+        const entryNode = this.spec?.entry_roots?.[nodeId];
+        if (entryNode) {
+          const entry = this.specNodeById.get(entryNode);
+          if (entry) return entry.lane;
+        }
+        return 'other';
+      };
     },
   },
 
