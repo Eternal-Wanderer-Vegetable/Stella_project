@@ -3,8 +3,18 @@
 // 动画只跟随真实事件；未执行节点灰色 not_observed，绝不显示成 skipped。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import type { FlowEvent, FlowMessageSummary, FlowNodeSpec } from '@/api/flow';
+import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
+import {
+  CANVAS_PAD,
+  edgePath,
+  layoutFlow,
+  NODE_GAP_X,
+  NODE_GAP_Y,
+  NODE_H,
+  NODE_W,
+  type LaidNode,
+} from '@/views/data/flowLayout';
 
 const store = useFlowStore();
 
@@ -32,12 +42,6 @@ const STATUS_COLORS: Record<string, string> = {
   unknown: '#bdbdbd',
   not_observed: '#e0e0e0',
 };
-
-const NODE_W = 128;
-const NODE_H = 40;
-const NODE_GAP_X = 56;
-const NODE_GAP_Y = 72;
-const CANVAS_PAD = 28;
 
 const reducedMotion =
   typeof window !== 'undefined' &&
@@ -73,104 +77,22 @@ const laneLabels = computed<Record<string, string>>(() => {
   return out;
 });
 
-interface LaidNode {
-  nodeId: string;
-  label: string;
-  status: string;
-  outcome: string;
-  instances: number;
-  x: number;
-  y: number;
-  lane: string;
-  spec?: FlowNodeSpec;
-}
-
-/** 分层布局：泳道为行，行内按执行顺序排布（确定性，无外部布局依赖）。 */
-const laidNodes = computed<LaidNode[]>(() => {
-  const byLane = new Map<string, typeof store.nodeStates>();
-  for (const n of store.nodeStates) {
-    const lane = store.nodeLane(n.nodeId);
-    const list = byLane.get(lane) ?? [];
-    list.push(n);
-    byLane.set(lane, list);
-  }
-  const rows = laneOrder.value.filter((lane) => byLane.has(lane));
-  const out: LaidNode[] = [];
-  rows.forEach((lane, rowIdx) => {
-    const nodes = byLane.get(lane) ?? [];
-    nodes.forEach((n, colIdx) => {
-      const spec = store.spec?.nodes?.[n.nodeId];
-      out.push({
-        nodeId: n.nodeId,
-        label: n.label,
-        status: n.status,
-        outcome: n.businessOutcome,
-        instances: n.instances,
-        lane,
-        spec,
-        x: CANVAS_PAD + colIdx * (NODE_W + NODE_GAP_X),
-        y: CANVAS_PAD + rowIdx * (NODE_H + NODE_GAP_Y),
-      });
-    });
-  });
-  return out;
-});
-
-const canvasSize = computed(() => {
-  let maxX = 0;
-  let maxY = 0;
-  for (const n of laidNodes.value) {
-    maxX = Math.max(maxX, n.x + NODE_W);
-    maxY = Math.max(maxY, n.y + NODE_H);
-  }
-  return { w: maxX + CANVAS_PAD, h: maxY + CANVAS_PAD };
-});
-
-interface LaidEdge {
-  id: string;
-  from: LaidNode;
-  to: LaidNode;
-  kind: string;
-  label: string;
-}
-
-/** 静态边（双方都出现才画）+ 泳道内执行顺序兜底边。 */
-const laidEdges = computed<LaidEdge[]>(() => {
-  const byId = new Map(laidNodes.value.map((n) => [n.nodeId, n]));
-  const edges: LaidEdge[] = [];
-  const seen = new Set<string>();
-  for (const e of store.spec?.edges ?? []) {
-    const a = byId.get(e.src);
-    const b = byId.get(e.dst);
-    if (!a || !b || a === b) continue;
-    const key = `${e.src}->${e.dst}:${e.kind}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    edges.push({ id: key, from: a, to: b, kind: e.kind, label: e.label });
-  }
-  // 同泳道相邻执行节点之间补执行顺序边（spec 未覆盖的真实顺序）
-  const lanesSeen = new Map<string, LaidNode[]>();
-  for (const n of laidNodes.value) {
-    const list = lanesSeen.get(n.lane) ?? [];
-    list.push(n);
-    lanesSeen.set(n.lane, list);
-  }
-  for (const list of lanesSeen.values()) {
-    for (let i = 1; i < list.length; i += 1) {
-      const key = `seq:${list[i - 1].nodeId}->${list[i].nodeId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({
-        id: key,
-        from: list[i - 1],
-        to: list[i],
-        kind: 'order',
-        label: '',
-      });
-    }
-  }
-  return edges;
-});
+/** 分层布局：泳道为行，行内按执行顺序排布（纯函数在 flowLayout.ts，有单测）。 */
+const layout = computed(() =>
+  layoutFlow({
+    nodeStates: store.nodeStates,
+    laneOf: (nodeId: string) => store.nodeLane(nodeId),
+    laneOrder: laneOrder.value,
+    specEdges: store.spec?.edges ?? [],
+    specNodes: store.spec?.nodes,
+  }),
+);
+const laidNodes = computed<LaidNode[]>(() => layout.value.nodes);
+const laidEdges = computed(() => layout.value.edges);
+const canvasSize = computed(() => ({
+  w: layout.value.width,
+  h: layout.value.height,
+}));
 
 const selectedNode = computed(() =>
   laidNodes.value.find((n) => n.nodeId === store.selectedNodeId),
@@ -245,18 +167,6 @@ function stopPlay() {
 const platformOptions = ['qq', 'webchat', 'cometa'];
 const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 
-/** 节点间的贝塞尔路径（同行为直线，跨行走曲线）。 */
-function edgePath(a: LaidNode, b: LaidNode): string {
-  const ax = a.x + NODE_W;
-  const ay = a.y + NODE_H / 2;
-  const bx = b.x;
-  const by = b.y + NODE_H / 2;
-  if (Math.abs(ay - by) < 4) {
-    return `M ${ax} ${ay} L ${bx} ${by}`;
-  }
-  const mx = (ax + bx) / 2;
-  return `M ${ax} ${ay} C ${mx} ${ay}, ${mx} ${by}, ${bx} ${by}`;
-}
 </script>
 
 <template>

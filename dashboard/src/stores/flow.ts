@@ -8,63 +8,15 @@ import type {
 } from '@/api/flow';
 import { getEvents, getMessage, getSpec, listMessages } from '@/api/flow';
 import { sseStream } from '@/api/sse';
+import {
+  dedupeAndOrder,
+  fallbackNodeLabel,
+  projectNodes,
+} from '@/stores/flowReducer';
 
 // 消息流程 store（计划 §6.7）：纯 reducer 投影 + 历史播放。
 // 播放状态完全留在前端；任何动作都不发消息、不写业务（回放零副作用）。
-
-export interface FlowNodeState {
-  nodeId: string;
-  label: string;
-  status: string; // 投影出的展示状态
-  businessOutcome: string; // reason/summary 携带的业务事实
-  instances: number; // 事件实例数（重试/多段/多轮）
-  firstSeq: number;
-  lastTs: string;
-  durationMs: number | null;
-  metrics: Array<Record<string, unknown>>;
-  events: FlowEvent[];
-}
-
-interface EventType {
-  kind: FlowEvent['kind'];
-  status: string;
-}
-
-/** 单节点投影：以「最近事件」为展示状态；finish 缺失即 running。 */
-function projectNode(nodeId: string, events: FlowEvent[], label: string): FlowNodeState {
-  let status = 'not_observed';
-  let businessOutcome = '';
-  let durationMs: number | null = null;
-  let lastTs = '';
-  const metrics: Array<Record<string, unknown>> = [];
-  for (const ev of events) {
-    lastTs = ev.ts_utc || lastTs;
-    const et: EventType = { kind: ev.kind, status: ev.status };
-    if (et.kind === 'finish' || et.kind === 'decision' || et.kind === 'trace_end') {
-      status = et.status || status;
-      businessOutcome = ev.reason_code || ev.summary || businessOutcome;
-    } else if (et.kind === 'checkpoint') {
-      status = 'succeeded';
-      businessOutcome = ev.summary || businessOutcome;
-    } else if (et.kind === 'start') {
-      if (status === 'not_observed') status = 'running';
-    }
-    if (ev.duration_ms != null) durationMs = ev.duration_ms;
-    if (Object.keys(ev.metrics ?? {}).length > 0) metrics.push(ev.metrics);
-  }
-  return {
-    nodeId,
-    label,
-    status,
-    businessOutcome,
-    instances: new Set(events.map((e) => e.instance_key || e.span_id || e.event_id)).size,
-    firstSeq: events.length ? events[0].seq : 0,
-    lastTs,
-    durationMs,
-    metrics,
-    events,
-  };
-}
+// 投影逻辑在 flowReducer.ts（纯函数，tests/ 下有单测）。
 
 export const useFlowStore = defineStore('flow', {
   state: () => ({
@@ -89,13 +41,7 @@ export const useFlowStore = defineStore('flow', {
   getters: {
     /** 去重 + seq 稳定排序后的全量事件（回放权威，计划 §6.5）。 */
     orderedEvents(state): FlowEvent[] {
-      const seen = new Set<string>();
-      const uniq = state.events.filter((e) => {
-        if (seen.has(e.event_id)) return false;
-        seen.add(e.event_id);
-        return true;
-      });
-      return uniq.sort((a, b) => a.row_id - b.row_id);
+      return dedupeAndOrder(state.events);
     },
 
     /** 当前播放时点之前的事件切片（纯 reducer，无副作用）。 */
@@ -105,29 +51,17 @@ export const useFlowStore = defineStore('flow', {
       return all.slice(0, this.playbackIndex + 1);
     },
 
-    nodeStates(): FlowNodeState[] {
-      const byNode = new Map<string, FlowEvent[]>();
-      for (const ev of this.visibleEvents) {
-        const list = byNode.get(ev.node_id) ?? [];
-        list.push(ev);
-        byNode.set(ev.node_id, list);
-      }
-      const nodes = [...byNode.entries()]
-        .map(([nodeId, evs]) =>
-          projectNode(nodeId, evs, this.nodeLabel(nodeId)),
-        )
-        .sort((a, b) => a.firstSeq - b.firstSeq);
-      return nodes;
+    nodeStates(): ReturnType<typeof projectNodes> {
+      return projectNodes(this.visibleEvents, (nodeId) =>
+        this.nodeLabel(nodeId),
+      );
     },
 
     nodeLabel(state): (nodeId: string) => string {
       return (nodeId: string) => {
         const spec = state.spec?.nodes?.[nodeId];
         if (spec) return spec.label;
-        if (nodeId.startsWith('hook.custom:')) {
-          return `扩展钩子 ${nodeId.split(':')[1]}`;
-        }
-        return nodeId;
+        return fallbackNodeLabel(nodeId);
       };
     },
 
@@ -260,7 +194,11 @@ export const useFlowStore = defineStore('flow', {
     },
 
     stepPlayback(delta: number) {
-      this.setPlayback(this.playbackIndex < 0 ? this.orderedEvents.length - 1 + delta : this.playbackIndex + delta);
+      this.setPlayback(
+        this.playbackIndex < 0
+          ? this.orderedEvents.length - 1 + delta
+          : this.playbackIndex + delta,
+      );
     },
 
     resetPlayback() {

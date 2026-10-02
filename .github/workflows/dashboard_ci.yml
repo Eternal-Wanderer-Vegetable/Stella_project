@@ -43,6 +43,10 @@ jobs:
       - name: Install dependencies
         run: pnpm --dir dashboard install --frozen-lockfile
 
+      # reducer/布局/store 单元测试（vitest，计划 §8.1 Dashboard tests）
+      - name: Unit tests
+        run: pnpm --dir dashboard test
+
       # build 内含 vue-tsc --noEmit 类型门禁（见 dashboard/package.json）
       - name: Typecheck and build
         run: pnpm --dir dashboard build
