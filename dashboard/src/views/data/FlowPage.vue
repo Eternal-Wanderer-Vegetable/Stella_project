@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
+import { fitNodeText } from '@/stores/flowReducer';
 import { formatDbTime } from '@/utils/time';
 import {
   edgePath,
@@ -83,7 +84,7 @@ const laneColor = (lane: string) => LANE_HUES[lane] ?? LANE_HUES.other;
 
 const NODE_W = 128;
 const NODE_H = 40;
-const CARD_W = 320;
+const CARD_W = 380;
 
 const reducedMotion =
   typeof window !== 'undefined' &&
@@ -113,7 +114,7 @@ onBeforeUnmount(() => {
 
 const laneLegend = computed<Array<{ id: string; label: string; color: string }>>(
   () => {
-    const lanes = store.spec?.lanes ?? [];
+    const lanes: Array<[string, string]> = store.spec?.lanes ?? [];
     return lanes.map(([id, label]) => ({ id, label, color: laneColor(id) }));
   },
 );
@@ -430,7 +431,51 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             </v-chip>
           </v-card-text>
 
-          <!-- 泳道图例（节点左色条颜色 ↔ 处理阶段） -->
+          <!-- 输入 / 输出：这条消息进去什么样、回复出来什么样 -->
+          <v-card-text
+            v-if="store.io && (store.io.input || store.io.output.lines.length || store.io.notes.length)"
+            class="pt-1 pb-0"
+          >
+            <div class="io-grid">
+              <div class="io-cell">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  <v-icon size="x-small">mdi-import</v-icon> 输入
+                </div>
+                <div v-if="store.io.input" class="io-text" :title="store.io.input.content">
+                  {{ store.io.input.content }}
+                </div>
+                <div v-else class="text-caption text-medium-emphasis">（无用户输入）</div>
+              </div>
+              <div class="io-cell">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  <v-icon size="x-small">mdi-export</v-icon> 输出
+                  <span v-if="store.io.output.count">（{{ store.io.output.count }} 行）</span>
+                </div>
+                <div v-if="store.io.output.lines.length">
+                  <div
+                    v-for="(line, i) in store.io.output.lines.slice(0, 4)"
+                    :key="i"
+                    class="io-text"
+                    :title="line"
+                  >
+                    {{ line }}
+                  </div>
+                  <div
+                    v-if="store.io.output.lines.length > 4"
+                    class="text-caption text-medium-emphasis"
+                  >
+                    …共 {{ store.io.output.lines.length }} 行
+                  </div>
+                </div>
+                <div v-else class="text-caption text-medium-emphasis">（无）</div>
+              </div>
+            </div>
+            <div v-if="store.io.notes.length" class="text-caption text-medium-emphasis mt-1">
+              {{ store.io.notes.join('；') }}
+            </div>
+          </v-card-text>
+
+          <!-- 泳道图例（节点圆点颜色 ↔ 处理阶段） -->
           <v-card-text
             v-if="laneLegend.length"
             class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
@@ -536,10 +581,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                       <title>{{ laneLabels[n.lane] ?? n.lane }}</title>
                     </circle>
                     <text :x="NODE_W / 2" :y="17" class="flow-node-label">
-                      {{ n.label }}
+                      {{ fitNodeText(n.label, 13) }}
                     </text>
                     <text :x="NODE_W / 2" :y="31" class="flow-node-status">
-                      {{ isExecuted(n) ? n.status : '未走到' }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
+                      {{ fitNodeText(isExecuted(n) ? n.status : '未走到', 18) }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
                     </text>
                   </template>
                 </g>
@@ -686,6 +731,27 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 </template>
 
 <style scoped>
+.io-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.io-cell {
+  min-width: 0;
+}
+.io-text {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .flow-list {
   max-height: 560px;
   overflow-y: auto;
@@ -700,10 +766,18 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .flow-card {
   position: absolute;
-  width: 320px;
-  max-height: 340px;
+  width: 380px;
+  max-width: calc(100% - 16px);
+  max-height: 460px;
   overflow-y: auto;
   z-index: 10;
+}
+.flow-card :deep(.text-caption),
+.flow-card :deep(.text-body-2),
+.flow-card :deep(.text-subtitle-2) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 .lane-dot {
   display: inline-block;

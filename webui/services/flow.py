@@ -240,3 +240,146 @@ def _bundled_spec(version: str) -> dict | None:
     except Exception:
         return None
     return None
+
+
+# ============================================================
+# 输入 / 输出（用户验收：页面要能看到消息进去什么样、回复出来什么样）
+# ============================================================
+
+# 可产生回复的 root：窗口内找 BOT_SELF 落库行
+_REPLY_ROOTS = {"qq_chat", "proactive", "webchat"}
+# 有用户输入的 root：输入行按来源键/窗口匹配
+_INPUT_ROOTS = {"qq_passive", "qq_chat", "qq_command", "webchat"}
+_OUTPUT_WINDOW_FALLBACK_SECONDS = 900
+_OUTPUT_MAX_LINES = 20
+
+
+def _norm_key(iso: str) -> str:
+    """ISO UTC 串 → SQLite timestamp 同形（"YYYY-MM-DD HH:MM:SS"）以便字典序比较。"""
+    return (iso or "").replace("T", " ")[:19]
+
+
+def _window_end(started_utc: str, ended_utc: str) -> str:
+    if ended_utc:
+        return _norm_key(ended_utc)
+    import datetime as _dt
+
+    base = _dt.datetime.fromisoformat(_norm_key(started_utc))
+    return (base + _dt.timedelta(seconds=_OUTPUT_WINDOW_FALLBACK_SECONDS)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
+def _group_id_of(scope: str, root_kind: str) -> str | None:
+    if root_kind == "webchat":
+        return "-1"
+    if scope.startswith("qq:"):
+        return scope.split(":", 1)[1]
+    return None
+
+
+def message_io(trace_id: str) -> dict | None:
+    """一条轨迹的真实输入（用户消息）与输出（确认送达的 BOT_SELF 回复行）。
+
+    内容来自记忆库 ``group_messages``（会话页同一来源，鉴权相同）：
+    输入按 (group, msg_id) 精确命中（QQ）或窗口内首条非 BOT_SELF 行
+    （WebChat，msg_id 恒为 0）；输出 = 轨迹时间窗内的 BOT_SELF 行——
+    只有确认送达的片段才会落库，空输出 ≠ 发送失败（备注说明）。
+    命令回复不经 BOT_SELF 落库，输出为空属预期。
+    """
+    conn = _connect_ro()
+    if conn is None or not _table_exists(conn, "message_traces"):
+        return None
+    try:
+        row = conn.execute(
+            "SELECT root_kind, scope, source_message_key, started_utc, ended_utc "
+            "FROM message_traces WHERE trace_id = ?",
+            (trace_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    root_kind, scope, source_key, started_utc, ended_utc = row
+    notes: list[str] = []
+    started_key = _norm_key(started_utc)
+    end_key = _window_end(started_utc, ended_utc)
+    group_id = _group_id_of(scope, root_kind)
+
+    mem = _memory_conn()
+    if mem is None:
+        return {
+            "input": None, "output": {"lines": [], "count": 0},
+            "notes": ["记忆库不可读，无法展示消息内容"],
+        }
+    try:
+        inp = None
+        if root_kind in _INPUT_ROOTS and group_id is not None:
+            if root_kind == "webchat":
+                row_in = mem.execute(
+                    "SELECT user_id, content, msg_id FROM group_messages "
+                    "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
+                    "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
+                    (group_id, started_key),
+                ).fetchone()
+            else:
+                parts = (source_key or "").split(":")
+                try:
+                    msg_id = int(parts[3]) if len(parts) >= 4 else None
+                except ValueError:
+                    msg_id = None
+                row_in = None
+                if msg_id is not None:
+                    row_in = mem.execute(
+                        "SELECT user_id, content, msg_id FROM group_messages "
+                        "WHERE group_id = ? AND msg_id = ? ORDER BY id DESC LIMIT 1",
+                        (group_id, msg_id),
+                    ).fetchone()
+            if row_in is not None:
+                inp = {"user_id": row_in[0], "content": row_in[1], "msg_id": row_in[2]}
+        elif root_kind == "proactive":
+            notes.append("主动发言：无用户输入")
+
+        lines: list[str] = []
+        if root_kind in _REPLY_ROOTS and group_id is not None:
+            rows_out = mem.execute(
+                "SELECT content FROM group_messages WHERE group_id = ? "
+                "AND source_kind = 'BOT_SELF' AND timestamp >= ? AND timestamp <= ? "
+                "ORDER BY id ASC LIMIT ?",
+                (group_id, started_key, end_key, _OUTPUT_MAX_LINES + 1),
+            ).fetchall()
+            lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
+            if len(rows_out) > _OUTPUT_MAX_LINES:
+                notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
+        elif root_kind in ("consolidate", "compact", "cometa_task", "effect"):
+            notes.append("后台任务：无消息输入输出")
+    finally:
+        mem.close()
+
+    if root_kind == "qq_passive":
+        notes.append("被动消息：仅记录，不产生回复")
+    if root_kind == "qq_command" and not lines:
+        notes.append("命令回复不经 BOT_SELF 落库，此处无输出可展示")
+    if root_kind in _REPLY_ROOTS and not lines:
+        notes.append("时间窗内没有确认送达的回复行（未回复或全部未送达）")
+    return {
+        "input": inp,
+        "output": {"lines": lines, "count": len(lines)},
+        "notes": notes,
+    }
+
+
+def _memory_conn():
+    """记忆库只读连接（与 conversations 服务同一来源）；缺表返回 None。"""
+    from pathlib import Path
+
+    import config.settings as settings
+    from webui.db import connect_ro
+
+    conn = connect_ro(Path(settings.DB_PATH))
+    if conn is None:
+        return None
+    if not _table_exists(conn, "group_messages"):
+        conn.close()
+        return None
+    return conn

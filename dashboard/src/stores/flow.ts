@@ -3,11 +3,12 @@ import { defineStore } from 'pinia';
 import type {
   FlowEvent,
   FlowMessageDetail,
+  FlowMessageIo,
   FlowMessageSummary,
   FlowNodeSpec,
   FlowSpec,
 } from '@/api/flow';
-import { getEvents, getMessage, getSpec, listMessages } from '@/api/flow';
+import { getEvents, getMessage, getMessageIo, getSpec, listMessages } from '@/api/flow';
 import { sseStream } from '@/api/sse';
 import {
   dedupeAndOrder,
@@ -27,6 +28,7 @@ export const useFlowStore = defineStore('flow', {
     platformFilter: '' as string,
     rootKindFilter: '' as string,
     detail: null as FlowMessageDetail | null,
+    io: null as FlowMessageIo | null,
     detailLoading: false,
     events: [] as FlowEvent[],
     seenEventIds: new Set<string>(),
@@ -120,8 +122,15 @@ export const useFlowStore = defineStore('flow', {
       this.seenEventIds = new Set();
       this.playbackIndex = -1;
       this.selectedNodeId = '';
+      this.io = null;
       try {
         this.detail = await getMessage(traceId);
+        // 输入/输出是独立来源（记忆库），失败不阻塞拓扑展示
+        void getMessageIo(traceId)
+          .then((io) => {
+            if (this.detail?.trace_id === traceId) this.io = io;
+          })
+          .catch(() => {});
         await this.fetchEvents();
         if (this.detail?.status === 'interrupted') {
           // 中断的 trace 不会再有新事件：不订阅

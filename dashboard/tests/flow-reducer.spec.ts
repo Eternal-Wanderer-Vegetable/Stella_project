@@ -2,6 +2,7 @@ import type { FlowEvent } from '@/api/flow';
 import {
   dedupeAndOrder,
   fallbackNodeLabel,
+  fitNodeText,
   projectNode,
   projectNodes,
 } from '@/stores/flowReducer';
@@ -126,5 +127,24 @@ describe('fallbackNodeLabel', () => {
   it('explains custom extension hooks and passes through the rest', () => {
     expect(fallbackNodeLabel('hook.custom:my_hook')).toBe('扩展钩子 my_hook');
     expect(fallbackNodeLabel('chat.group_lock')).toBe('chat.group_lock');
+  });
+});
+
+describe('fitNodeText', () => {
+  it('keeps text that fits the node box', () => {
+    expect(fitNodeText('群锁排队', 13)).toBe('群锁排队');
+  });
+
+  it('truncates overflowing text with an ellipsis', () => {
+    const out = fitNodeText('回复闸门评估评估评估评估评估', 6);
+    expect(out.endsWith('…')).toBe(true);
+    expect(out.length).toBeLessThan(7);
+  });
+
+  it('counts CJK full-width and latin half-width', () => {
+    // 13 全宽额度：17 个半宽字符（≈9.35）放得下
+    expect(fitNodeText('abcdefghijklmnopq', 13)).toBe('abcdefghijklmnopq');
+    // 6 全宽 + 6 半宽 ≈ 9.3 > 9 → 截断
+    expect(fitNodeText('回复闸门评估abcdef', 9)).not.toBe('回复闸门评估abcdef');
   });
 });

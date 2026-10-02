@@ -96,3 +96,28 @@ export function fallbackNodeLabel(nodeId: string): string {
   }
   return nodeId;
 }
+
+/** 估算字符串渲染宽度（CJK 记全宽，其余半宽）。 */
+export function textWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    w += ch.charCodeAt(0) > 0xff ? 1 : 0.55;
+  }
+  return w;
+}
+
+/**
+ * 节点框内文本截断（SVG text 不会自动换行/省略）：超宽按字符截断并加
+ * "…"。完整文本始终在浮动详情卡可见。
+ */
+export function fitNodeText(text: string, maxWidth: number): string {
+  if (textWidth(text) <= maxWidth) return text;
+  let out = '';
+  for (const ch of text) {
+    if (textWidth(out + ch) > maxWidth - 1) {
+      return `${out}…`;
+    }
+    out += ch;
+  }
+  return out;
+}

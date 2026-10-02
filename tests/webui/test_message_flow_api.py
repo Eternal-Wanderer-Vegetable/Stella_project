@@ -138,3 +138,63 @@ class TestFlowStream:
         for ev in events:
             if ev["row_id"] <= cursor:
                 assert ev["event_id"] not in body
+
+
+class TestFlowMessageContext:
+    def test_input_output_from_memory_db(self, client: TestClient,
+                                         auth_header, flow_home,
+                                         isolated_home, monkeypatch):
+        """输入按 (group, msg_id) 精确命中；输出 = 窗口内 BOT_SELF 行。"""
+        import config.settings as settings
+        import sqlite3 as s3
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        _seed_trace("rc-1")
+        # 输出匹配用轨迹时间窗：按已种轨迹的 started 秒播种，保证落在窗内
+        import sqlite3 as s3b
+
+        tdb = s3b.connect(flow_home)
+        started = tdb.execute(
+            "SELECT started_utc FROM message_traces WHERE trace_id='rc-1'"
+        ).fetchone()[0].replace("T", " ")[:19]
+        tdb.close()
+        mem = s3.connect(db)
+        mem.execute(
+            "CREATE TABLE group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "group_id TEXT, user_id TEXT, content TEXT, source_kind TEXT, "
+            "msg_id INTEGER, timestamp DATETIME)"
+        )
+        mem.executemany(
+            "INSERT INTO group_messages (group_id, user_id, content, "
+            "source_kind, msg_id, timestamp) VALUES (?,?,?,?,?,?)",
+            [
+                ("123", "u1", "你好呀", "AT_MENTION", 7, started),
+                ("123", "bot", "你也好", "BOT_SELF", 0, started),
+                ("123", "bot", "在听", "BOT_SELF", 0, started),
+            ],
+        )
+        mem.commit()
+        mem.close()
+        data = client.get("/api/v1/trace/messages/rc-1/context",
+                          headers=auth_header).json()["data"]
+        assert data["input"]["content"] == "你好呀"
+        assert data["input"]["msg_id"] == 7
+        assert data["output"]["lines"] == ["你也好", "在听"]
+        assert data["notes"] == []
+
+    def test_passive_trace_notes_no_reply(self, client: TestClient,
+                                          auth_header, flow_home):
+        _seed_trace("rc-2")
+        # rc-2 的来源键 qq:bot:123:7 没有对应输入行：input 为空且不报错
+        data = client.get("/api/v1/trace/messages/rc-2/context",
+                          headers=auth_header).json()["data"]
+        assert data["input"] is None
+        assert data["output"]["lines"] == []
+        assert data["notes"]
+
+    def test_context_404(self, client: TestClient, auth_header, flow_home):
+        resp = client.get("/api/v1/trace/messages/nope/context",
+                          headers=auth_header)
+        assert resp.status_code == 404

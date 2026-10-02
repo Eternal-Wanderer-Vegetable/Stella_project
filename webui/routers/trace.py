@@ -114,6 +114,17 @@ async def flow_message_detail(trace_id: str) -> Any:
     return ok(detail)
 
 
+@router.get("/api/v1/trace/messages/{trace_id}/context")
+async def flow_message_context(trace_id: str) -> Any:
+    """轨迹的真实输入（用户消息）与输出（确认送达的回复行）。"""
+    from webui.services import flow as flow_service
+
+    detail = flow_service.message_detail(trace_id)
+    if detail is None:
+        raise ApiError("消息轨迹不存在", status_code=404)
+    return ok(flow_service.message_io(trace_id))
+
+
 @router.get("/api/v1/trace/messages/{trace_id}/events")
 async def flow_message_events(
     trace_id: str,

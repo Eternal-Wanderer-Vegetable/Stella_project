@@ -123,6 +123,18 @@ export async function getEvents(
   return data.items;
 }
 
+export interface FlowMessageIo {
+  input: { user_id: string; content: string; msg_id: number } | null;
+  output: { lines: string[]; count: number };
+  notes: string[];
+}
+
+export async function getMessageIo(traceId: string): Promise<FlowMessageIo> {
+  return unwrap(
+    api.get(`/trace/messages/${traceId}/context`),
+  ) as Promise<FlowMessageIo>;
+}
+
 export async function getSpec(version: string): Promise<FlowSpec> {
   return unwrap(
     api.get(`/trace/flow/specs/${encodeURIComponent(version)}`),
