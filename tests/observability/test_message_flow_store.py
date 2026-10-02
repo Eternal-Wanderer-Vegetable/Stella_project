@@ -50,11 +50,12 @@ class TestSpanLifecycle:
         events = _rows(flow_db, "SELECT kind, node_id, status FROM flow_events "
                                 "WHERE trace_id='r-1' ORDER BY id")
         kinds = [(k, n, s) for k, n, s in events]
-        # root start + 2 spans (start+finish each) + trace_end
-        assert kinds[0] == ("start", "webchat", "running")
+        # root start + 2 spans (start+finish each) + trace_end；
+        # root span 的节点身份 = 目录入口节点（webchat → web.auth_input）
+        assert kinds[0] == ("start", "web.auth_input", "running")
         assert ("start", "web.session_lock", "running") in kinds
         assert ("finish", "web.session_lock", "succeeded") in kinds
-        assert kinds[-1] == ("trace_end", "webchat", "closed")
+        assert kinds[-1] == ("trace_end", "web.auth_input", "closed")
 
         spans = _rows(flow_db, "SELECT span_id, node_id, parent_span_id, status, "
                                "duration_ms FROM flow_spans WHERE trace_id='r-1'")

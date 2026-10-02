@@ -151,51 +151,97 @@ def _is_empty_result(text: str) -> bool:
     return stripped in ("", "无", "None", "none")
 
 
+def _flow_ctx(group_id: int):
+    """压缩后台 root（schedule_compact 建；无 root 时全部空转）。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.by_source_key(f"compact:{group_id}")
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
 async def compact_once(group_id: int, tail_start_id: int) -> bool:
     """执行一次会话压缩；返回是否实际推进了压缩位置。
 
     调用方无需判断时机——本函数内部会检查区间与阈值，不满足直接返回 False。
     """
-    # 每日 token 预算：撞破之后不再花钱做压缩。返回 False 即「未推进压缩位置」，
-    # 这批消息留在待压缩区间等下一个预算周期——与「端点未配置」同一条降级路径。
-    blocked = budget_blocked(ROLE_COMPACT)
-    if blocked:
-        logger.warning(f"⚠️ [Compact] 群 {group_id} 跳过压缩：已被预算拦下（{blocked}）")
-        return False
+    fctx = _flow_ctx(group_id)
+    with _flow_span(fctx, "compact.preflight"):
+        # 每日 token 预算：撞破之后不再花钱做压缩。返回 False 即「未推进压缩位置」，
+        # 这批消息留在待压缩区间等下一个预算周期——与「端点未配置」同一条降级路径。
+        blocked = budget_blocked(ROLE_COMPACT)
+        if blocked:
+            _flow_decision(fctx, "compact.preflight", status="blocked",
+                           reason_code=f"budget:{blocked}")
+            logger.warning(f"⚠️ [Compact] 群 {group_id} 跳过压缩：已被预算拦下（{blocked}）")
+            return False
 
-    bounds = sc.pending_bounds(group_id, tail_start_id)
-    if bounds is None:
-        return False
-    low_id, high_id = bounds
+        bounds = sc.pending_bounds(group_id, tail_start_id)
+        if bounds is None:
+            _flow_decision(fctx, "compact.preflight", status="skipped",
+                           reason_code="no_pending_range")
+            return False
+        low_id, high_id = bounds
 
-    messages, max_id, count = fetch_pending_messages(
-        group_id, low_id, high_id, sc.compact_message_limit()
-    )
-    if count == 0:
-        # 区间内全是空内容消息：直接跳过，避免反复重试
-        if max_id > low_id:
-            sc.skip_range(group_id, max_id, 0)
-        return False
-
-    if not sc.should_compact(messages):
-        return False
-
-    existing = sc.get_summary(group_id)
-    prompt = build_compact_prompt(messages, existing)
-    logger.info(f"🗜️ [Compact] 群 {group_id} 开始压缩 {count} 条消息（至 id {max_id}）")
-
-    backend = _get_backend()
-    if backend is None:
-        logger.warning(
-            f"⚠️ [Compact] 群 {group_id} 跳过压缩：COMPACT 角色没有可用端点"
-            "（LLM_ROLE_COMPACT_ENDPOINT 指向的槽未配 BASE_URL）。"
-            "运行 python -m deploy doctor 查看解析结果。"
+        messages, max_id, count = fetch_pending_messages(
+            group_id, low_id, high_id, sc.compact_message_limit()
         )
-        return False
+        if count == 0:
+            # 区间内全是空内容消息：直接跳过，避免反复重试
+            _flow_decision(fctx, "compact.preflight", status="skipped",
+                           reason_code="empty_content")
+            if max_id > low_id:
+                sc.skip_range(group_id, max_id, 0)
+            return False
+
+        if not sc.should_compact(messages):
+            _flow_decision(fctx, "compact.preflight", status="skipped",
+                           reason_code="below_threshold")
+            return False
+
+        existing = sc.get_summary(group_id)
+        prompt = build_compact_prompt(messages, existing)
+        logger.info(f"🗜️ [Compact] 群 {group_id} 开始压缩 {count} 条消息（至 id {max_id}）")
+
+        backend = _get_backend()
+        if backend is None:
+            _flow_decision(fctx, "compact.preflight", status="blocked",
+                           reason_code="no_backend")
+            logger.warning(
+                f"⚠️ [Compact] 群 {group_id} 跳过压缩：COMPACT 角色没有可用端点"
+                "（LLM_ROLE_COMPACT_ENDPOINT 指向的槽未配 BASE_URL）。"
+                "运行 python -m deploy doctor 查看解析结果。"
+            )
+            return False
 
     try:
-        async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
-            result = await backend.generate(prompt)
+        with _flow_span(fctx, "compact.generate"):
+            async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
+                result = await backend.generate(prompt)
+        _flow_decision(fctx, "compact.generate", status="succeeded",
+                       metrics={"messages": count})
     except Exception as e:
         # 调用失败**不推进**位置，这批消息留待下次重试
         logger.warning(f"⚠️ [Compact] 群 {group_id} 压缩失败（保留待重试）: {e}")

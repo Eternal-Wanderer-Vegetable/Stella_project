@@ -618,20 +618,30 @@ class MemoryConsolidator:
                 # force 路径走小批次；非 force 路径按批次大小决定阈值。
                 # 取值随端点类型走（在线批量更大，见 _batch_size）——这就是 T1-5
                 # 「攒批门槛」：新消息不足 N 条不整合，直接摊薄每批的固定成本。
-                threshold = _batch_size(force)
-                if new_count < threshold:
-                    return
+                fctx = _flow_ctx(group_id)
+                with _flow_span(fctx, "consolidate.preflight") as pre_span:
+                    threshold = _batch_size(force)
+                    if new_count < threshold:
+                        _flow_decision(fctx, "consolidate.preflight",
+                                       status="skipped", reason_code="below_threshold",
+                                       metrics={"new_count": new_count,
+                                                "threshold": threshold})
+                        pre_span.finish(status="skipped", reason_code="below_threshold")
+                        return
 
-                # 每日 token 预算：撞破之后不再花钱做整合。
-                # **只 return，绝不推进 checkpoint**——跳过是攒批，不是丢弃；
-                # 推进了这批消息就永久没人整合了（P0-4 的另一种形态）。
-                blocked = budget_blocked(ROLE_CONSOLIDATION)
-                if blocked:
-                    logger.warning(
-                        f"⚠️ [Consolidator] 群 {group_id} 整合已被预算拦下（{blocked}），"
-                        f"{new_count} 条消息留在 checkpoint {last_id} 之后等下一个预算周期"
-                    )
-                    return
+                    # 每日 token 预算：撞破之后不再花钱做整合。
+                    # **只 return，绝不推进 checkpoint**——跳过是攒批，不是丢弃；
+                    # 推进了这批消息就永久没人整合了（P0-4 的另一种形态）。
+                    blocked = budget_blocked(ROLE_CONSOLIDATION)
+                    if blocked:
+                        _flow_decision(fctx, "consolidate.preflight",
+                                       status="blocked", reason_code=f"budget:{blocked}")
+                        pre_span.finish(status="blocked", reason_code="budget")
+                        logger.warning(
+                            f"⚠️ [Consolidator] 群 {group_id} 整合已被预算拦下（{blocked}），"
+                            f"{new_count} 条消息留在 checkpoint {last_id} 之后等下一个预算周期"
+                        )
+                        return
 
                 # ── 成本闸门（Tier 1 本地免费预筛）──
                 # 只筛非 force 路径：force 是 @ 触发/主动发言前的即时总结，
@@ -652,6 +662,9 @@ class MemoryConsolidator:
                     else:
                         gate = await self._cost_gate_reason(group_id, last_id, threshold)
                         if gate:
+                            _flow_decision(fctx, "consolidate.preflight",
+                                           status="skipped", reason_code=f"cost_gate:{gate}")
+                            pre_span.finish(status="skipped", reason_code="cost_gate")
                             self._set_skip_streak(group_id, streak + 1)
                             logger.info(
                                 f"💸 [Consolidator] 群 {group_id} 跳过本批整合（{gate}），"
@@ -673,11 +686,14 @@ class MemoryConsolidator:
                     f"（force={force}，新消息 {new_count}，批次阈值 {threshold}）\n"
                 )
 
-                result, processed_end, backend_name, senders, at_senders, messages_text = await self._generate(group_id, last_id, force=force)
-                logger.info(f"📥 [Consolidator Response]\n{result}")
+                with _flow_span(fctx, "consolidate.extract"):
+                    result, processed_end, backend_name, senders, at_senders, messages_text = await self._generate(group_id, last_id, force=force)
+                    logger.info(f"📥 [Consolidator Response]\n{result}")
 
-                parsed = self._parse_json(result)
+                    parsed = self._parse_json(result)
                 if not parsed:
+                    _flow_decision(fctx, "consolidate.extract",
+                                   status="failed", reason_code="json_parse_failed")
                     logger.warning(f"⚠️ [Consolidator] JSON 解析失败，跳过本批次: {result[:200]}")
                     # 即使解析失败也推进 checkpoint，避免同一批消息反复重处理。
                     # 「输出被截断」不走这条路——那种情况 _generate 已缩批重试并在
@@ -686,38 +702,39 @@ class MemoryConsolidator:
                     self._update_checkpoint(group_id, processed_end)
                     return
 
-                self._write_short_term(group_id, parsed.get("short_term"))
-                self._write_user_profiles(
-                    group_shared_space, parsed.get("user_profiles", []), origin_group_id=group_id
-                )
-                candidates = parsed.get("memory_candidates")
-                if candidates is None:
-                    candidates = []
+                with _flow_span(fctx, "consolidate.write"):
+                    self._write_short_term(group_id, parsed.get("short_term"))
+                    self._write_user_profiles(
+                        group_shared_space, parsed.get("user_profiles", []), origin_group_id=group_id
+                    )
+                    candidates = parsed.get("memory_candidates")
+                    if candidates is None:
+                        candidates = []
 
-                # ── 阶段2：候选精确提取（27B）──
-                # 仅在阶段1 判定 has_self_disclosure 为真时唤醒，节约 27B 占用。
-                # 成功时其结果覆盖阶段1 候选——包括返回空数组的情况：
-                # 那是 27B 复核认为确实没有，正好纠正 E4B 的误判。
-                # 调用失败/解析失败返回 None，此时回退阶段1 候选。
-                if MEMORY_EXTRACT_ENABLED and self._has_self_disclosure(parsed):
-                    extracted = await self._extract_candidates(group_id, messages_text)
-                    if extracted is not None:
-                        candidates = extracted
+                    # ── 阶段2：候选精确提取（27B）──
+                    # 仅在阶段1 判定 has_self_disclosure 为真时唤醒，节约 27B 占用。
+                    # 成功时其结果覆盖阶段1 候选——包括返回空数组的情况：
+                    # 那是 27B 复核认为确实没有，正好纠正 E4B 的误判。
+                    # 调用失败/解析失败返回 None，此时回退阶段1 候选。
+                    if MEMORY_EXTRACT_ENABLED and self._has_self_disclosure(parsed):
+                        extracted = await self._extract_candidates(group_id, messages_text)
+                        if extracted is not None:
+                            candidates = extracted
 
-                self._write_memory_candidates(
-                    group_shared_space,
-                    candidates,
-                    sender_ids=senders,
-                    at_senders=at_senders,
-                    origin_group_id=group_id,
-                )
-                if candidates:
-                    # 有新候选记忆时同步触发 MemoryManager 晋升处理
-                    get_memory_manager().process_new_candidates()
-                elif parsed.get("long_term_memories"):
-                    # 兼容旧版输出，将旧格式记忆写入旧表，以免丢失历史信息。
-                    self._write_long_term_memories(group_shared_space, parsed.get("long_term_memories", []))
-                self._update_checkpoint(group_id, processed_end)
+                    self._write_memory_candidates(
+                        group_shared_space,
+                        candidates,
+                        sender_ids=senders,
+                        at_senders=at_senders,
+                        origin_group_id=group_id,
+                    )
+                    if candidates:
+                        # 有新候选记忆时同步触发 MemoryManager 晋升处理
+                        get_memory_manager().process_new_candidates()
+                    elif parsed.get("long_term_memories"):
+                        # 兼容旧版输出，将旧格式记忆写入旧表，以免丢失历史信息。
+                        self._write_long_term_memories(group_shared_space, parsed.get("long_term_memories", []))
+                    self._update_checkpoint(group_id, processed_end)
 
                 at_sender_set = set(at_senders or [])
                 at_count = sum(
@@ -1374,6 +1391,37 @@ def get_consolidator() -> MemoryConsolidator:
 def pending_tasks() -> set[asyncio.Task]:
     """返回在途整合任务集合的副本（供优雅停止等待收尾）。"""
     return set(_consolidation_tasks)
+
+
+def _flow_ctx(group_id: int):
+    """整合后台 root（_consolidate_with_flow 建；无 root 时全部空转）。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.by_source_key(f"consolidate:{group_id}")
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
 
 
 async def _consolidate_with_flow(consolidator, group_id: int, force: bool,

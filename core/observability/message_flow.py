@@ -396,6 +396,7 @@ class FlowContext:
 
     trace_id: str
     root_kind: str
+    entry_node: str = ""
     platform: str = ""
     scope: str = ""
     source_message_key: str = ""
@@ -470,9 +471,14 @@ def begin_trace(
         found = _active.get(trace_id)
         if found is not None and not found.ended:
             return found
+    from core.observability.flow_catalog import ENTRY_ROOTS
+
     ctx = FlowContext(
         trace_id=trace_id or _new_id(),
         root_kind=root_kind,
+        # root span 的语义节点 = 目录里的入口节点（计划 §6.3）：root_kind 是
+        # 存储/筛选用的事实键，画布上的身份是入口节点 ID（可被打标签）。
+        entry_node=ENTRY_ROOTS.get(root_kind, root_kind),
         platform=platform,
         scope=scope,
         source_message_key=source_message_key,
@@ -486,7 +492,7 @@ def begin_trace(
         "", "", "running", 0, 0,
         _dump(_scrub(detail or {})),
     )))
-    _emit_span_start(ctx, span_id="root", node_id=root_kind,
+    _emit_span_start(ctx, span_id="root", node_id=ctx.entry_node,
                      parent_span_id="", instance_key="", summary="")
     return ctx
 
@@ -530,7 +536,8 @@ def end_trace(
     if complete is None:
         complete = not leaked and not loss
     root_duration = (now_mono - ctx.started_mono) * 1000.0
-    _emit_event(ctx, kind=KIND_TRACE_END, node_id=ctx.root_kind, span_id="root",
+    _emit_event(ctx, kind=KIND_TRACE_END, node_id=ctx.entry_node or ctx.root_kind,
+                span_id="root",
                 parent_span_id="", instance_key="", status=status,
                 ts_utc=ts,
                 duration_ms=root_duration,
