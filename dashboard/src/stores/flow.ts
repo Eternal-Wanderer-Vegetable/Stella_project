@@ -39,6 +39,7 @@ export const useFlowStore = defineStore('flow', {
     streaming: false,
     selectedNodeId: '' as string,
     abort: null as AbortController | null,
+    listTimer: null as number | null,
   }),
 
   getters: {
@@ -100,6 +101,27 @@ export const useFlowStore = defineStore('flow', {
   },
 
   actions: {
+    /**
+     * 列表轮询（用户验收：新消息实时出现，不等手动刷新）。5s 一次；
+     * 页面不可见/正在加载时跳过该轮。轮询比 SSE 简单且足够：列表只是
+     * 轻量元数据，单条轨迹的实时性由已打开的 SSE 流负责。
+     */
+    startListPolling() {
+      if (this.listTimer !== null) return;
+      this.listTimer = window.setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        if (this.loadingList) return;
+        void this.loadMessages();
+      }, 5000);
+    },
+
+    stopListPolling() {
+      if (this.listTimer !== null) {
+        window.clearInterval(this.listTimer);
+        this.listTimer = null;
+      }
+    },
+
     async loadMessages() {
       this.loadingList = true;
       try {

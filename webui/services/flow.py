@@ -302,6 +302,27 @@ def message_io(trace_id: str) -> dict | None:
         return None
     root_kind, scope, source_key, started_utc, ended_utc = row
     notes: list[str] = []
+    # 命令回复不经 BOT_SELF 落库，唯一的记录通道是流程事件里的
+    # command.reply 检查点（发送文本摘要，≤500 字）
+    command_lines: list[str] = []
+    try:
+        tconn = _connect_ro()
+        if tconn is not None and _table_exists(tconn, "flow_events"):
+            try:
+                command_lines = [
+                    r[0]
+                    for r in tconn.execute(
+                        "SELECT summary FROM flow_events WHERE trace_id = ? "
+                        "AND node_id = 'command.reply' AND kind = 'checkpoint' "
+                        "ORDER BY id ASC LIMIT ?",
+                        (trace_id, _OUTPUT_MAX_LINES),
+                    ).fetchall()
+                    if r[0]
+                ]
+            finally:
+                tconn.close()
+    except Exception:
+        command_lines = []
     started_key = _norm_key(started_utc)
     end_key = _window_end(started_utc, ended_utc)
     group_id = _group_id_of(scope, root_kind)
@@ -309,7 +330,11 @@ def message_io(trace_id: str) -> dict | None:
     mem = _memory_conn()
     if mem is None:
         return {
-            "input": None, "output": {"lines": [], "count": 0},
+            "input": None,
+            "output": {
+                "lines": command_lines[:_OUTPUT_MAX_LINES],
+                "count": len(command_lines[:_OUTPUT_MAX_LINES]),
+            },
             "notes": ["记忆库不可读，无法展示消息内容"],
         }
     try:
@@ -358,8 +383,10 @@ def message_io(trace_id: str) -> dict | None:
 
     if root_kind == "qq_passive":
         notes.append("被动消息：仅记录，不产生回复")
+    if command_lines:
+        lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
     if root_kind == "qq_command" and not lines:
-        notes.append("命令回复不经 BOT_SELF 落库，此处无输出可展示")
+        notes.append("该命令没有可展示的回复（未回复或发送失败）")
     if root_kind in _REPLY_ROOTS and not lines:
         notes.append("时间窗内没有确认送达的回复行（未回复或全部未送达）")
     return {

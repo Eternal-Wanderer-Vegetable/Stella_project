@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import functools
 import inspect
 import math
@@ -259,6 +260,48 @@ def _flow_set_outcome(fctx, outcome: str) -> None:
         pass
 
 
+# 命令回复捕获：装饰器在 handler 存续期持有 fctx，matcher.finish 包装
+# （见 _flow_watch_finish）据此把发出的文本记成 command.reply 检查点——
+# 命令回复不经 BOT_SELF 落库，这是它在流程页可见的唯一通道。
+_flow_reply_ctx = contextvars.ContextVar("_flow_reply_ctx", default=None)
+
+
+def _flow_reply_text(arg: Any) -> str:
+    """matcher.finish/send 的首个消息参数 → 纯文本（Message/段/串皆可）。"""
+    try:
+        if arg is None:
+            return ""
+        if isinstance(arg, str):
+            return arg
+        extract = getattr(arg, "extract_plain_text", None)
+        if callable(extract):
+            return extract() or ""
+        return str(arg)
+    except Exception:
+        return ""
+
+
+def _flow_watch_finish(matcher) -> None:
+    """包装 matcher.finish：发出的文本入流程（仅群事件有 fctx 时生效）。
+
+    每个 ``on_message()`` 返回独立的 Matcher 子类，包装互不影响；原方法
+    的行为（含 FinishedException 控制流）原样保留。
+    """
+    original = matcher.finish
+
+    async def _finish(*args, **kwargs):
+        fctx = _flow_reply_ctx.get()
+        try:
+            return await original(*args, **kwargs)
+        finally:
+            if fctx is not None and args:
+                text = _flow_reply_text(args[0])
+                if text:
+                    _flow_checkpoint(fctx, "command.reply", summary=text[:500])
+
+    matcher.finish = _finish
+
+
 def _flow_command(node_id: str):
     """命令处理器埋点装饰器：整个 handler 一个 span，终态照实（计划 §6.3 A）。
 
@@ -273,6 +316,7 @@ def _flow_command(node_id: str):
             fctx = None
             if isinstance(event, GroupMessageEvent):
                 fctx = _flow_root_or_create(event, "qq_command")
+            token = _flow_reply_ctx.set(fctx)
             sp = _flow_span(fctx, node_id)
             sp.__enter__()
             try:
@@ -285,6 +329,8 @@ def _flow_command(node_id: str):
                 sp.__exit__(type(e), e, e.__traceback__)
                 _flow_set_outcome(fctx, "command_error")
                 raise
+            finally:
+                _flow_reply_ctx.reset(token)
             sp.__exit__(None, None, None)
             _flow_set_outcome(fctx, "command_done")
 
@@ -1109,6 +1155,7 @@ async def is_addressing_command(event: GroupMessageEvent) -> bool:
 addressing_handler = on_message(
     rule=Rule(is_addressing_command), priority=_PRIORITY_TOGGLE, block=True
 )
+_flow_watch_finish(addressing_handler)
 
 
 def _assert_addressing_rule_disjoint() -> None:
@@ -1255,6 +1302,7 @@ async def is_toggle_command(event: GroupMessageEvent) -> bool:
 # priority=1 必须高于 plugin_handler(priority=2) 与 chat_handler(priority=3, block=True)，
 # 否则「安静」这类命令会被当成普通对话交给 LLM/插件
 toggle_handler = on_message(rule=Rule(is_toggle_command), priority=_PRIORITY_TOGGLE, block=True)
+_flow_watch_finish(toggle_handler)
 
 # ── 监听器优先级不变量（启动期自检） ──
 def _assert_listener_priorities() -> None:
@@ -1360,6 +1408,7 @@ async def is_capability_query(event: GroupMessageEvent) -> bool:
 capability_handler = on_message(
     rule=Rule(is_capability_query), priority=_PRIORITY_TOGGLE, block=True
 )
+_flow_watch_finish(capability_handler)
 
 
 def _assert_capability_rule_disjoint() -> None:
@@ -1493,6 +1542,7 @@ async def is_reload_command(event: GroupMessageEvent) -> bool:
 reload_handler = on_message(
     rule=Rule(is_reload_command), priority=_PRIORITY_TOGGLE, block=True
 )
+_flow_watch_finish(reload_handler)
 
 
 def _assert_reload_rule_disjoint() -> None:
@@ -1629,6 +1679,7 @@ async def is_scheduling_command_rule(event: GroupMessageEvent) -> bool:
 scheduling_handler = on_message(
     rule=Rule(is_scheduling_command_rule), priority=_PRIORITY_TOGGLE, block=True
 )
+_flow_watch_finish(scheduling_handler)
 
 
 def _assert_scheduling_rule_disjoint() -> None:

@@ -198,3 +198,21 @@ class TestFlowMessageContext:
         resp = client.get("/api/v1/trace/messages/nope/context",
                           headers=auth_header)
         assert resp.status_code == 404
+
+
+class TestCommandReplyVisible:
+    def test_command_reply_merged_into_output(self, client: TestClient,
+                                              auth_header, flow_home):
+        """命令回复（command.reply 检查点）合并进输出行。"""
+        from core.observability import message_flow as mf
+
+        root = mf.begin_trace(root_kind="qq_command", platform="qq",
+                              scope="qq:9", source_message_key="qq:b:9:1",
+                              trace_id="rc-cmd")
+        mf.checkpoint(root, "command.reply", summary="已进入安静模式")
+        mf.end_trace(root, outcome="command_sent")
+        mf.flush()
+        data = client.get("/api/v1/trace/messages/rc-cmd/context",
+                          headers=auth_header).json()["data"]
+        assert data["input"] is None
+        assert data["output"]["lines"] == ["已进入安静模式"]
