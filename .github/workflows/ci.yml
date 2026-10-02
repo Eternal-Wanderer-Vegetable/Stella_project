@@ -185,9 +185,29 @@ jobs:
           name: windows-native-${{ github.sha }}
           path: windows-native.xml
 
+  # ============ 消息流程 manifest 漂移门禁 ============
+  # 目录或被埋点源码变化而未重新生成 manifest 时阻断（计划 §6.1/§7 M5）。
+  # 仅需标准库（ast/hashlib），无需安装项目依赖。
+  flow-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check flow manifest drift
+        run: python scripts/generate_message_flow.py --check
+
+      - name: Flow contract tests
+        run: |
+          pip install pytest pytest-asyncio
+          python -m pytest tests/observability/test_message_flow_contract.py -q
+
   # ============ 通知（可选） ============
   notify:
-    needs: [test, lint, security, cli]
+    needs: [test, lint, security, cli, flow-manifest]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
     permissions:
@@ -199,7 +219,8 @@ jobs:
           if [ "${{ needs.test.result }}" == "success" ] && \
              [ "${{ needs.lint.result }}" == "success" ] && \
              [ "${{ needs.security.result }}" == "success" ] && \
-             [ "${{ needs.cli.result }}" == "success" ]; then
+             [ "${{ needs.cli.result }}" == "success" ] && \
+             [ "${{ needs.flow-manifest.result }}" == "success" ]; then
             echo "status=✅ All checks passed!" >> $GITHUB_OUTPUT
           else
             echo "status=❌ Some checks failed. Please check the logs." >> $GITHUB_OUTPUT

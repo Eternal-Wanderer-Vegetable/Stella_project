@@ -1,0 +1,2849 @@
+{
+ "coverage": {
+  "core_unresolved_allowed": 0,
+  "derived_or_opaque": 12,
+  "edges": 104,
+  "lanes": 11,
+  "source_resolved": 101,
+  "total_nodes": 102
+ },
+ "edges": [
+  {
+   "dst": "web.outer_deadline",
+   "kind": "order",
+   "label": "",
+   "src": "web.auth_input"
+  },
+  {
+   "dst": "web.space_context",
+   "kind": "order",
+   "label": "",
+   "src": "web.outer_deadline"
+  },
+  {
+   "dst": "web.session_lock",
+   "kind": "order",
+   "label": "",
+   "src": "web.space_context"
+  },
+  {
+   "dst": "turn.identity",
+   "kind": "order",
+   "label": "",
+   "src": "web.session_lock"
+  },
+  {
+   "dst": "web.output",
+   "kind": "cause",
+   "label": "每段 BOT_SELF 落库",
+   "src": "web.output"
+  },
+  {
+   "dst": "ingress.passive.filter",
+   "kind": "order",
+   "label": "",
+   "src": "ingress.receive"
+  },
+  {
+   "dst": "ingress.passive.persist",
+   "kind": "order",
+   "label": "通过过滤",
+   "src": "ingress.passive.filter"
+  },
+  {
+   "dst": "ingress.passive.state",
+   "kind": "order",
+   "label": "",
+   "src": "ingress.passive.persist"
+  },
+  {
+   "dst": "ingress.passive.social",
+   "kind": "order",
+   "label": "",
+   "src": "ingress.passive.state"
+  },
+  {
+   "dst": "ingress.passive.expression",
+   "kind": "order",
+   "label": "",
+   "src": "ingress.passive.social"
+  },
+  {
+   "dst": "ingress.passive.participation",
+   "kind": "order",
+   "label": "",
+   "src": "ingress.passive.expression"
+  },
+  {
+   "dst": "ingress.chat.rule",
+   "kind": "order",
+   "label": "@ 命中",
+   "src": "ingress.receive"
+  },
+  {
+   "dst": "ingress.plugin",
+   "kind": "order",
+   "label": "插件规则命中",
+   "src": "ingress.receive"
+  },
+  {
+   "dst": "ingress.command.select",
+   "kind": "order",
+   "label": "命令候选",
+   "src": "ingress.receive"
+  },
+  {
+   "dst": "command.addressing",
+   "kind": "condition",
+   "label": "",
+   "src": "ingress.command.select"
+  },
+  {
+   "dst": "command.toggle",
+   "kind": "condition",
+   "label": "",
+   "src": "ingress.command.select"
+  },
+  {
+   "dst": "command.capabilities",
+   "kind": "condition",
+   "label": "",
+   "src": "ingress.command.select"
+  },
+  {
+   "dst": "command.reload",
+   "kind": "condition",
+   "label": "",
+   "src": "ingress.command.select"
+  },
+  {
+   "dst": "command.scheduling",
+   "kind": "condition",
+   "label": "",
+   "src": "ingress.command.select"
+  },
+  {
+   "dst": "chat.plugin_shortcut",
+   "kind": "order",
+   "label": "",
+   "src": "ingress.chat.rule"
+  },
+  {
+   "dst": "chat.group_lock",
+   "kind": "order",
+   "label": "未接管",
+   "src": "chat.plugin_shortcut"
+  },
+  {
+   "dst": "chat.context",
+   "kind": "order",
+   "label": "",
+   "src": "chat.group_lock"
+  },
+  {
+   "dst": "chat.reply_gate",
+   "kind": "order",
+   "label": "",
+   "src": "chat.context"
+  },
+  {
+   "dst": "chat.consolidate_trigger",
+   "kind": "order",
+   "label": "",
+   "src": "chat.reply_gate"
+  },
+  {
+   "dst": "chat.daily_budget",
+   "kind": "order",
+   "label": "",
+   "src": "chat.consolidate_trigger"
+  },
+  {
+   "dst": "turn.identity",
+   "kind": "order",
+   "label": "放行",
+   "src": "chat.daily_budget"
+  },
+  {
+   "dst": "chat.runtime_result",
+   "kind": "condition",
+   "label": "blocked",
+   "src": "chat.daily_budget"
+  },
+  {
+   "dst": "turn.prepare",
+   "kind": "order",
+   "label": "",
+   "src": "turn.identity"
+  },
+  {
+   "dst": "prepare.hooks",
+   "kind": "order",
+   "label": "",
+   "src": "turn.prepare"
+  },
+  {
+   "dst": "hook.vision",
+   "kind": "order",
+   "label": "",
+   "src": "prepare.hooks"
+  },
+  {
+   "dst": "context.session",
+   "kind": "order",
+   "label": "",
+   "src": "prepare.hooks"
+  },
+  {
+   "dst": "capability.route",
+   "kind": "order",
+   "label": "",
+   "src": "prepare.hooks"
+  },
+  {
+   "dst": "prepare.direct",
+   "kind": "condition",
+   "label": "钩子已回复",
+   "src": "prepare.hooks"
+  },
+  {
+   "dst": "planner.preflight",
+   "kind": "order",
+   "label": "",
+   "src": "prepare.hooks"
+  },
+  {
+   "dst": "planner.ask",
+   "kind": "condition",
+   "label": "触发深度路径",
+   "src": "planner.preflight"
+  },
+  {
+   "dst": "planner.parse",
+   "kind": "order",
+   "label": "",
+   "src": "planner.ask"
+  },
+  {
+   "dst": "prepare.silent",
+   "kind": "condition",
+   "label": "WAIT",
+   "src": "planner.parse"
+  },
+  {
+   "dst": "prepare.backend_budget",
+   "kind": "condition",
+   "label": "no_backend/预算尽",
+   "src": "prepare.hooks"
+  },
+  {
+   "dst": "prompt.memory",
+   "kind": "order",
+   "label": "REPLY/未触发",
+   "src": "planner.preflight"
+  },
+  {
+   "dst": "prompt.parts",
+   "kind": "order",
+   "label": "",
+   "src": "prompt.memory"
+  },
+  {
+   "dst": "prompt.fit",
+   "kind": "order",
+   "label": "",
+   "src": "prompt.parts"
+  },
+  {
+   "dst": "turn.generate",
+   "kind": "order",
+   "label": "",
+   "src": "prompt.fit"
+  },
+  {
+   "dst": "turn.timeout",
+   "kind": "condition",
+   "label": "timeout",
+   "src": "turn.generate"
+  },
+  {
+   "dst": "turn.cancel",
+   "kind": "condition",
+   "label": "cancel",
+   "src": "turn.generate"
+  },
+  {
+   "dst": "turn.error",
+   "kind": "condition",
+   "label": "provider error",
+   "src": "turn.generate"
+  },
+  {
+   "dst": "turn.generated",
+   "kind": "order",
+   "label": "完成",
+   "src": "turn.generate"
+  },
+  {
+   "dst": "capability.cometa",
+   "kind": "condition",
+   "label": "Cometa 启用",
+   "src": "capability.route"
+  },
+  {
+   "dst": "delegation.submit",
+   "kind": "condition",
+   "label": "受理",
+   "src": "capability.cometa"
+  },
+  {
+   "dst": "capability.fanout",
+   "kind": "order",
+   "label": "",
+   "src": "capability.route"
+  },
+  {
+   "dst": "memory.retrieve",
+   "kind": "order",
+   "label": "",
+   "src": "capability.fanout"
+  },
+  {
+   "dst": "comes.task_build",
+   "kind": "order",
+   "label": "",
+   "src": "capability.fanout"
+  },
+  {
+   "dst": "skills.preflight",
+   "kind": "order",
+   "label": "",
+   "src": "capability.fanout"
+  },
+  {
+   "dst": "comes.execute_all",
+   "kind": "order",
+   "label": "",
+   "src": "comes.task_build"
+  },
+  {
+   "dst": "comes.dispatch",
+   "kind": "order",
+   "label": "",
+   "src": "comes.execute_all"
+  },
+  {
+   "dst": "skills.invoke",
+   "kind": "condition",
+   "label": "",
+   "src": "skills.preflight"
+  },
+  {
+   "dst": "capability.isolation",
+   "kind": "order",
+   "label": "",
+   "src": "capability.fanout"
+  },
+  {
+   "dst": "prompt.memory",
+   "kind": "order",
+   "label": "",
+   "src": "capability.isolation"
+  },
+  {
+   "dst": "llm.provider",
+   "kind": "order",
+   "label": "",
+   "src": "turn.generate"
+  },
+  {
+   "dst": "llm.request",
+   "kind": "order",
+   "label": "",
+   "src": "llm.provider"
+  },
+  {
+   "dst": "llm.response",
+   "kind": "order",
+   "label": "",
+   "src": "llm.request"
+  },
+  {
+   "dst": "llm.retry",
+   "kind": "condition",
+   "label": "可重试失败",
+   "src": "llm.response"
+  },
+  {
+   "dst": "llm.request",
+   "kind": "order",
+   "label": "退避重试",
+   "src": "llm.retry"
+  },
+  {
+   "dst": "turn.generated",
+   "kind": "order",
+   "label": "",
+   "src": "llm.response"
+  },
+  {
+   "dst": "finalize.trace",
+   "kind": "order",
+   "label": "",
+   "src": "turn.generated"
+  },
+  {
+   "dst": "finalize.trace",
+   "kind": "order",
+   "label": "",
+   "src": "turn.fallback"
+  },
+  {
+   "dst": "finalize.trace",
+   "kind": "order",
+   "label": "",
+   "src": "turn.timeout"
+  },
+  {
+   "dst": "finalize.trace",
+   "kind": "order",
+   "label": "",
+   "src": "turn.error"
+  },
+  {
+   "dst": "post.parse",
+   "kind": "order",
+   "label": "",
+   "src": "finalize.trace"
+  },
+  {
+   "dst": "post.badwords",
+   "kind": "order",
+   "label": "",
+   "src": "post.parse"
+  },
+  {
+   "dst": "post.split",
+   "kind": "order",
+   "label": "",
+   "src": "post.badwords"
+  },
+  {
+   "dst": "post.thought",
+   "kind": "order",
+   "label": "",
+   "src": "post.split"
+  },
+  {
+   "dst": "post.done",
+   "kind": "order",
+   "label": "",
+   "src": "post.thought"
+  },
+  {
+   "dst": "send.prepare",
+   "kind": "order",
+   "label": "",
+   "src": "post.done"
+  },
+  {
+   "dst": "send.cometa_ack",
+   "kind": "condition",
+   "label": "委派受理",
+   "src": "send.prepare"
+  },
+  {
+   "dst": "send.segment",
+   "kind": "order",
+   "label": "普通回复",
+   "src": "send.prepare"
+  },
+  {
+   "dst": "send.receipt",
+   "kind": "order",
+   "label": "",
+   "src": "send.segment"
+  },
+  {
+   "dst": "send.aggregate",
+   "kind": "order",
+   "label": "",
+   "src": "send.segment"
+  },
+  {
+   "dst": "reply.bookkeeping",
+   "kind": "condition",
+   "label": "有送达",
+   "src": "send.aggregate"
+  },
+  {
+   "dst": "reply.no_delivery",
+   "kind": "condition",
+   "label": "全部未送达",
+   "src": "send.aggregate"
+  },
+  {
+   "dst": "reply.compact",
+   "kind": "spawn",
+   "label": "",
+   "src": "reply.bookkeeping"
+  },
+  {
+   "dst": "learning.open",
+   "kind": "spawn",
+   "label": "",
+   "src": "reply.bookkeeping"
+  },
+  {
+   "dst": "effect.observe",
+   "kind": "cause",
+   "label": "",
+   "src": "learning.open"
+  },
+  {
+   "dst": "effect.resolve",
+   "kind": "cause",
+   "label": "",
+   "src": "effect.observe"
+  },
+  {
+   "dst": "consolidate.spawn",
+   "kind": "spawn",
+   "label": "",
+   "src": "chat.consolidate_trigger"
+  },
+  {
+   "dst": "participation.spawn",
+   "kind": "spawn",
+   "label": "ALLOW",
+   "src": "ingress.passive.participation"
+  },
+  {
+   "dst": "proactive.preflight",
+   "kind": "cause",
+   "label": "",
+   "src": "participation.spawn"
+  },
+  {
+   "dst": "proactive.turn",
+   "kind": "order",
+   "label": "",
+   "src": "proactive.preflight"
+  },
+  {
+   "dst": "proactive.filter",
+   "kind": "order",
+   "label": "",
+   "src": "proactive.turn"
+  },
+  {
+   "dst": "proactive.send",
+   "kind": "order",
+   "label": "",
+   "src": "proactive.filter"
+  },
+  {
+   "dst": "proactive.after",
+   "kind": "order",
+   "label": "",
+   "src": "proactive.send"
+  },
+  {
+   "dst": "consolidate.preflight",
+   "kind": "cause",
+   "label": "",
+   "src": "consolidate.spawn"
+  },
+  {
+   "dst": "consolidate.extract",
+   "kind": "condition",
+   "label": "过阈值",
+   "src": "consolidate.preflight"
+  },
+  {
+   "dst": "consolidate.write",
+   "kind": "order",
+   "label": "",
+   "src": "consolidate.extract"
+  },
+  {
+   "dst": "compact.spawn",
+   "kind": "spawn",
+   "label": "",
+   "src": "reply.compact"
+  },
+  {
+   "dst": "compact.preflight",
+   "kind": "cause",
+   "label": "",
+   "src": "compact.spawn"
+  },
+  {
+   "dst": "compact.generate",
+   "kind": "condition",
+   "label": "",
+   "src": "compact.preflight"
+  },
+  {
+   "dst": "cometa.accept",
+   "kind": "cause",
+   "label": "",
+   "src": "delegation.submit"
+  },
+  {
+   "dst": "delegation.ack",
+   "kind": "order",
+   "label": "",
+   "src": "delegation.submit"
+  },
+  {
+   "dst": "cometa.claim",
+   "kind": "cause",
+   "label": "",
+   "src": "cometa.accept"
+  },
+  {
+   "dst": "cometa.preflight",
+   "kind": "order",
+   "label": "",
+   "src": "cometa.claim"
+  },
+  {
+   "dst": "cometa.launch",
+   "kind": "order",
+   "label": "",
+   "src": "cometa.preflight"
+  },
+  {
+   "dst": "cometa.stream",
+   "kind": "order",
+   "label": "",
+   "src": "cometa.launch"
+  },
+  {
+   "dst": "cometa.notification",
+   "kind": "cause",
+   "label": "任务终态",
+   "src": "cometa.stream"
+  },
+  {
+   "dst": "cometa.notification_result",
+   "kind": "order",
+   "label": "",
+   "src": "cometa.notification"
+  }
+ ],
+ "entry_roots": {
+  "cometa_task": "cometa.claim",
+  "compact": "compact.preflight",
+  "consolidate": "consolidate.preflight",
+  "effect": "effect.resolve",
+  "proactive": "proactive.preflight",
+  "qq_chat": "ingress.chat.rule",
+  "qq_command": "ingress.command.select",
+  "qq_passive": "ingress.receive",
+  "webchat": "web.auth_input"
+ },
+ "generator_version": 1,
+ "hook_node_ids": {
+  "activate_capabilities": "capability.fanout",
+  "build_context": "context.session",
+  "describe_images_hook": "hook.vision"
+ },
+ "lanes": [
+  [
+   "web",
+   "WebChat 入口"
+  ],
+  [
+   "ingress",
+   "收到消息与分流"
+  ],
+  [
+   "command",
+   "控制命令"
+  ],
+  [
+   "gate",
+   "闸门与预算"
+  ],
+  [
+   "prepare",
+   "预处理与规划"
+  ],
+  [
+   "capability",
+   "并行能力"
+  ],
+  [
+   "generate",
+   "生成"
+  ],
+  [
+   "finalize",
+   "后处理"
+  ],
+  [
+   "delivery",
+   "发送与记账"
+  ],
+  [
+   "background",
+   "后台派生"
+  ],
+  [
+   "cometa",
+   "Cometa 任务"
+  ]
+ ],
+ "nodes": [
+  {
+   "id": "astrbot.bridge",
+   "kind": "task",
+   "label": "插件事件桥",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "7f2efe7478f43179",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 4,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "capability/hooks.py",
+    "symbol": "_build_astr_event"
+   }
+  },
+  {
+   "id": "capability.cometa",
+   "kind": "decision",
+   "label": "Cometa 委派判定",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "b63835c4f9005dfa",
+    "features": {
+     "awaits": 1,
+     "branches": 0,
+     "calls": 2,
+     "loops": 0,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "capability/delegation.py",
+    "symbol": "handle_delegation_turn"
+   }
+  },
+  {
+   "id": "capability.fanout",
+   "kind": "parallel",
+   "label": "Memory/Comes/Skills 并行",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "634476b06d484e78",
+    "features": {
+     "awaits": 3,
+     "branches": 10,
+     "calls": 41,
+     "loops": 1,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "capability/hooks.py",
+    "symbol": "activate_capabilities"
+   }
+  },
+  {
+   "id": "capability.isolation",
+   "kind": "aggregate",
+   "label": "分支异常隔离",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "634476b06d484e78",
+    "features": {
+     "awaits": 3,
+     "branches": 10,
+     "calls": 41,
+     "loops": 1,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "capability/hooks.py",
+    "symbol": "activate_capabilities"
+   }
+  },
+  {
+   "id": "capability.route",
+   "kind": "decision",
+   "label": "Router 路由判定",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "634476b06d484e78",
+    "features": {
+     "awaits": 3,
+     "branches": 10,
+     "calls": 41,
+     "loops": 1,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "capability/hooks.py",
+    "symbol": "activate_capabilities"
+   }
+  },
+  {
+   "id": "chat.consolidate_trigger",
+   "kind": "decision",
+   "label": "按需整合触发",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "chat.context",
+   "kind": "state",
+   "label": "话题版本与 Cometa Origin",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "chat.daily_budget",
+   "kind": "gate",
+   "label": "日预算阻断",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "chat.group_lock",
+   "kind": "lock",
+   "label": "群锁排队",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "chat.plugin_shortcut",
+   "kind": "filter",
+   "label": "插件已接管短路",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "chat.reply_gate",
+   "kind": "gate",
+   "label": "回复闸门评估",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "chat.runtime_result",
+   "kind": "decision",
+   "label": "运行时结果分派",
+   "lane": "gate",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "comes.dispatch",
+   "kind": "task",
+   "label": "工具结果分发",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "cd8ad6e473a9cbca",
+    "features": {
+     "awaits": 2,
+     "branches": 6,
+     "calls": 16,
+     "loops": 1,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/hooks.py",
+    "symbol": "_run_comes"
+   }
+  },
+  {
+   "id": "comes.execute_all",
+   "kind": "task",
+   "label": "工具执行",
+   "lane": "capability",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "353080bdcfe32c72",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 9,
+     "loops": 1,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/comes/__init__.py",
+    "symbol": "execute_all"
+   }
+  },
+  {
+   "id": "comes.task_build",
+   "kind": "task",
+   "label": "工具任务构建",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "cd8ad6e473a9cbca",
+    "features": {
+     "awaits": 2,
+     "branches": 6,
+     "calls": 16,
+     "loops": 1,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/hooks.py",
+    "symbol": "_run_comes"
+   }
+  },
+  {
+   "id": "cometa.accept",
+   "kind": "persist",
+   "label": "任务入库与去重",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "a4378788669005ac",
+    "features": {
+     "awaits": 0,
+     "branches": 7,
+     "calls": 20,
+     "loops": 0,
+     "raises": 6,
+     "returns": 2,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "cometa/service.py",
+    "symbol": "CometaService.submit"
+   }
+  },
+  {
+   "id": "cometa.claim",
+   "kind": "task",
+   "label": "worker 认领",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "38c31f2b5dcb5fca",
+    "features": {
+     "awaits": 0,
+     "branches": 4,
+     "calls": 21,
+     "loops": 3,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 1,
+     "try": 2
+    },
+    "file": "cometa/worker.py",
+    "symbol": "CometaWorker._tick"
+   }
+  },
+  {
+   "id": "cometa.launch",
+   "kind": "task",
+   "label": "会话启动",
+   "lane": "cometa",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "229d1c0420b0a7c7",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 4,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "cometa/executor.py",
+    "symbol": "AttemptExecutor.run_attempt"
+   }
+  },
+  {
+   "id": "cometa.notification",
+   "kind": "notify",
+   "label": "结果通知发送",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "0b253f86bb617e7d",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 7,
+     "loops": 0,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "cometa/delivery.py",
+    "symbol": "deliver_one"
+   }
+  },
+  {
+   "id": "cometa.notification_result",
+   "kind": "decision",
+   "label": "通知投递终态",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "b1e0fad4c6c7fd47",
+    "features": {
+     "awaits": 1,
+     "branches": 1,
+     "calls": 2,
+     "loops": 1,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "cometa/delivery.py",
+    "symbol": "NotificationPump.pump_once"
+   }
+  },
+  {
+   "id": "cometa.preflight",
+   "kind": "gate",
+   "label": "执行预检",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "229d1c0420b0a7c7",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 4,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "cometa/executor.py",
+    "symbol": "AttemptExecutor.run_attempt"
+   }
+  },
+  {
+   "id": "cometa.stream",
+   "kind": "task",
+   "label": "Agent 流消费",
+   "lane": "cometa",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "229d1c0420b0a7c7",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 4,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "cometa/executor.py",
+    "symbol": "AttemptExecutor.run_attempt"
+   }
+  },
+  {
+   "id": "command.addressing",
+   "kind": "task",
+   "label": "个性化称呼命令",
+   "lane": "command",
+   "source_ref": {
+    "body_hash": "1c75435d61c3ae45",
+    "features": {
+     "awaits": 5,
+     "branches": 12,
+     "calls": 26,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_addressing"
+   }
+  },
+  {
+   "id": "command.capabilities",
+   "kind": "task",
+   "label": "能力查询命令",
+   "lane": "command",
+   "source_ref": {
+    "body_hash": "5e232a0142cb7a34",
+    "features": {
+     "awaits": 3,
+     "branches": 1,
+     "calls": 19,
+     "loops": 0,
+     "raises": 0,
+     "returns": 0,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_capability_query"
+   }
+  },
+  {
+   "id": "command.reload",
+   "kind": "task",
+   "label": "重载命令",
+   "lane": "command",
+   "source_ref": {
+    "body_hash": "915c332f61a9a06c",
+    "features": {
+     "awaits": 5,
+     "branches": 5,
+     "calls": 29,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_reload"
+   }
+  },
+  {
+   "id": "command.scheduling",
+   "kind": "task",
+   "label": "定时任务命令",
+   "lane": "command",
+   "source_ref": {
+    "body_hash": "7e234a0f922d5fec",
+    "features": {
+     "awaits": 2,
+     "branches": 2,
+     "calls": 14,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_scheduling"
+   }
+  },
+  {
+   "id": "command.toggle",
+   "kind": "task",
+   "label": "开关命令",
+   "lane": "command",
+   "source_ref": {
+    "body_hash": "183d32d0e257b03b",
+    "features": {
+     "awaits": 2,
+     "branches": 3,
+     "calls": 17,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_toggle"
+   }
+  },
+  {
+   "id": "compact.generate",
+   "kind": "task",
+   "label": "压缩生成",
+   "lane": "background",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "ca0b1bf648d25723",
+    "features": {
+     "awaits": 1,
+     "branches": 7,
+     "calls": 19,
+     "loops": 0,
+     "raises": 0,
+     "returns": 8,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/session_compact.py",
+    "symbol": "compact_once"
+   }
+  },
+  {
+   "id": "compact.preflight",
+   "kind": "gate",
+   "label": "压缩预检",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "ca0b1bf648d25723",
+    "features": {
+     "awaits": 1,
+     "branches": 7,
+     "calls": 19,
+     "loops": 0,
+     "raises": 0,
+     "returns": 8,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/session_compact.py",
+    "symbol": "compact_once"
+   }
+  },
+  {
+   "id": "compact.spawn",
+   "kind": "background",
+   "label": "压缩派生",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "91baebdae01717d2",
+    "features": {
+     "awaits": 1,
+     "branches": 3,
+     "calls": 12,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 1,
+     "try": 3
+    },
+    "file": "memory/session_compact.py",
+    "symbol": "schedule_compact"
+   }
+  },
+  {
+   "id": "consolidate.extract",
+   "kind": "task",
+   "label": "整合提取",
+   "lane": "background",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "1c164abb13bdd520",
+    "features": {
+     "awaits": 3,
+     "branches": 14,
+     "calls": 51,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/consolidator.py",
+    "symbol": "MemoryConsolidator.consolidate_group"
+   }
+  },
+  {
+   "id": "consolidate.preflight",
+   "kind": "gate",
+   "label": "整合预检",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "1c164abb13bdd520",
+    "features": {
+     "awaits": 3,
+     "branches": 14,
+     "calls": 51,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/consolidator.py",
+    "symbol": "MemoryConsolidator.consolidate_group"
+   }
+  },
+  {
+   "id": "consolidate.spawn",
+   "kind": "background",
+   "label": "整合派生",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "0500e581de823d6f",
+    "features": {
+     "awaits": 0,
+     "branches": 1,
+     "calls": 10,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 1,
+     "try": 0
+    },
+    "file": "memory/consolidator.py",
+    "symbol": "maybe_consolidate"
+   }
+  },
+  {
+   "id": "consolidate.write",
+   "kind": "persist",
+   "label": "整合写入",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "1c164abb13bdd520",
+    "features": {
+     "awaits": 3,
+     "branches": 14,
+     "calls": 51,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/consolidator.py",
+    "symbol": "MemoryConsolidator.consolidate_group"
+   }
+  },
+  {
+   "id": "context.session",
+   "kind": "hook",
+   "label": "短期上下文组装",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "b9190da5bc6194ed",
+    "features": {
+     "awaits": 0,
+     "branches": 22,
+     "calls": 42,
+     "loops": 1,
+     "raises": 0,
+     "returns": 3,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "memory/pre_processors.py",
+    "symbol": "build_context"
+   }
+  },
+  {
+   "id": "delegation.ack",
+   "kind": "delivery",
+   "label": "受理确认回复",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "95d7597816ed6e75",
+    "features": {
+     "awaits": 0,
+     "branches": 1,
+     "calls": 3,
+     "loops": 0,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/delegation.py",
+    "symbol": "_set_ack"
+   }
+  },
+  {
+   "id": "delegation.submit",
+   "kind": "task",
+   "label": "任务受理",
+   "lane": "cometa",
+   "source_ref": {
+    "body_hash": "124ddcc1316a6602",
+    "features": {
+     "awaits": 0,
+     "branches": 1,
+     "calls": 8,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/delegation.py",
+    "symbol": "_submit_delegate"
+   }
+  },
+  {
+   "id": "effect.observe",
+   "kind": "background",
+   "label": "效果窗口观察",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "46831349bc37e460",
+    "features": {
+     "awaits": 0,
+     "branches": 2,
+     "calls": 19,
+     "loops": 0,
+     "raises": 0,
+     "returns": 3,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "memory/reply_effect_service.py",
+    "symbol": "open_effect"
+   }
+  },
+  {
+   "id": "effect.resolve",
+   "kind": "background",
+   "label": "效果结算",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "f18362776ccc1f09",
+    "features": {
+     "awaits": 0,
+     "branches": 10,
+     "calls": 31,
+     "loops": 2,
+     "raises": 0,
+     "returns": 6,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "memory/reply_effect_service.py",
+    "symbol": "resolve_effect"
+   }
+  },
+  {
+   "id": "finalize.trace",
+   "kind": "bookkeeping",
+   "label": "记忆决策轨迹",
+   "lane": "finalize",
+   "source_ref": {
+    "body_hash": "5d382aabbcb26d69",
+    "features": {
+     "awaits": 2,
+     "branches": 0,
+     "calls": 4,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "TurnService.finalize_turn"
+   }
+  },
+  {
+   "id": "hook.vision",
+   "kind": "hook",
+   "label": "图片转述钩子",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "00fe71620fd274b4",
+    "features": {
+     "awaits": 2,
+     "branches": 2,
+     "calls": 5,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 2
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "describe_images_hook"
+   }
+  },
+  {
+   "id": "ingress.chat.rule",
+   "kind": "filter",
+   "label": "聊天触发判定",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "32493a90ebfb7167",
+    "features": {
+     "awaits": 0,
+     "branches": 3,
+     "calls": 12,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "is_chat_trigger"
+   }
+  },
+  {
+   "derived": true,
+   "id": "ingress.command.select",
+   "kind": "decision",
+   "label": "命令候选选择",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "ingress.passive.expression",
+   "kind": "state",
+   "label": "被动表达观察",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "45b3fcd73cf955cf",
+    "features": {
+     "awaits": 0,
+     "branches": 3,
+     "calls": 7,
+     "loops": 2,
+     "raises": 0,
+     "returns": 3,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/expression_learning.py",
+    "symbol": "note_passive_message"
+   }
+  },
+  {
+   "id": "ingress.passive.filter",
+   "kind": "filter",
+   "label": "群过滤/自我/slash/空文本",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "adc6cd916bae78cc",
+    "features": {
+     "awaits": 2,
+     "branches": 13,
+     "calls": 55,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "record_group_chat"
+   }
+  },
+  {
+   "id": "ingress.passive.participation",
+   "kind": "decision",
+   "label": "参与评分",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "ea8fc88a3d5f55e8",
+    "features": {
+     "awaits": 4,
+     "branches": 11,
+     "calls": 20,
+     "loops": 1,
+     "raises": 0,
+     "returns": 6,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "memory/participation/__init__.py",
+    "symbol": "ParticipationManager.observe"
+   }
+  },
+  {
+   "id": "ingress.passive.persist",
+   "kind": "persist",
+   "label": "消息落库",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "30e01357682d3425",
+    "features": {
+     "awaits": 0,
+     "branches": 0,
+     "calls": 17,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/pre_processors.py",
+    "symbol": "record_message"
+   }
+  },
+  {
+   "id": "ingress.passive.social",
+   "kind": "state",
+   "label": "社交证据标准化",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "adc6cd916bae78cc",
+    "features": {
+     "awaits": 2,
+     "branches": 13,
+     "calls": 55,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "record_group_chat"
+   }
+  },
+  {
+   "id": "ingress.passive.state",
+   "kind": "state",
+   "label": "主动状态观察",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "adc6cd916bae78cc",
+    "features": {
+     "awaits": 2,
+     "branches": 13,
+     "calls": 55,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "record_group_chat"
+   }
+  },
+  {
+   "id": "ingress.plugin",
+   "kind": "task",
+   "label": "插件分发",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "e860f81f306d2dd2",
+    "features": {
+     "awaits": 1,
+     "branches": 4,
+     "calls": 17,
+     "loops": 0,
+     "raises": 0,
+     "returns": 0,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_plugin"
+   }
+  },
+  {
+   "id": "ingress.receive",
+   "kind": "entry",
+   "label": "收到群消息",
+   "lane": "ingress",
+   "source_ref": {
+    "body_hash": "adc6cd916bae78cc",
+    "features": {
+     "awaits": 2,
+     "branches": 13,
+     "calls": 55,
+     "loops": 0,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "record_group_chat"
+   }
+  },
+  {
+   "id": "learning.open",
+   "kind": "background",
+   "label": "表达学习开启",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "e58a85afaf12f799",
+    "features": {
+     "awaits": 0,
+     "branches": 6,
+     "calls": 21,
+     "loops": 0,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/expression_learning.py",
+    "symbol": "on_reply_sent"
+   }
+  },
+  {
+   "id": "llm.provider",
+   "kind": "generate",
+   "label": "Provider 直连生成",
+   "lane": "generate",
+   "source_ref": {
+    "body_hash": "941c9ae985e63d3c",
+    "features": {
+     "awaits": 1,
+     "branches": 0,
+     "calls": 2,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "_pipeline_provider"
+   }
+  },
+  {
+   "id": "llm.request",
+   "kind": "generate",
+   "label": "HTTP 请求",
+   "lane": "generate",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "35b4331e972f431d",
+    "features": {
+     "awaits": 3,
+     "branches": 11,
+     "calls": 32,
+     "loops": 1,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/llm/lm_studio.py",
+    "symbol": "OpenAICompatibleBackend.generate_detailed"
+   }
+  },
+  {
+   "id": "llm.response",
+   "kind": "aggregate",
+   "label": "响应解析",
+   "lane": "generate",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "35b4331e972f431d",
+    "features": {
+     "awaits": 3,
+     "branches": 11,
+     "calls": 32,
+     "loops": 1,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/llm/lm_studio.py",
+    "symbol": "OpenAICompatibleBackend.generate_detailed"
+   }
+  },
+  {
+   "id": "llm.retry",
+   "kind": "decision",
+   "label": "重试与退避",
+   "lane": "generate",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "35b4331e972f431d",
+    "features": {
+     "awaits": 3,
+     "branches": 11,
+     "calls": 32,
+     "loops": 1,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/llm/lm_studio.py",
+    "symbol": "OpenAICompatibleBackend.generate_detailed"
+   }
+  },
+  {
+   "id": "memory.retrieve",
+   "kind": "task",
+   "label": "记忆检索",
+   "lane": "capability",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "5f4447be38cccbad",
+    "features": {
+     "awaits": 0,
+     "branches": 10,
+     "calls": 55,
+     "loops": 1,
+     "raises": 0,
+     "returns": 4,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/retrieval_v2.py",
+    "symbol": "retrieve_memories"
+   }
+  },
+  {
+   "id": "participation.score",
+   "kind": "decision",
+   "label": "参与评分决策",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "ea8fc88a3d5f55e8",
+    "features": {
+     "awaits": 4,
+     "branches": 11,
+     "calls": 20,
+     "loops": 1,
+     "raises": 0,
+     "returns": 6,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "memory/participation/__init__.py",
+    "symbol": "ParticipationManager.observe"
+   }
+  },
+  {
+   "id": "participation.spawn",
+   "kind": "background",
+   "label": "主动发言派生",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "b1a6df16f338ea00",
+    "features": {
+     "awaits": 1,
+     "branches": 0,
+     "calls": 12,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 1,
+     "try": 2
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "_spawn_participation_speak"
+   }
+  },
+  {
+   "id": "planner.ask",
+   "kind": "planner",
+   "label": "Planner LLM 决策",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "f458576da8b95fe9",
+    "features": {
+     "awaits": 1,
+     "branches": 0,
+     "calls": 8,
+     "loops": 0,
+     "raises": 0,
+     "returns": 3,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/planner.py",
+    "symbol": "RestrictedPlanner._ask"
+   }
+  },
+  {
+   "id": "planner.parse",
+   "kind": "planner",
+   "label": "Planner 结果解析",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "eac7b6272d99155b",
+    "features": {
+     "awaits": 1,
+     "branches": 9,
+     "calls": 16,
+     "loops": 1,
+     "raises": 0,
+     "returns": 8,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "core/planner.py",
+    "symbol": "RestrictedPlanner.maybe_plan"
+   }
+  },
+  {
+   "id": "planner.preflight",
+   "kind": "planner",
+   "label": "Planner 触发判定",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "eac7b6272d99155b",
+    "features": {
+     "awaits": 1,
+     "branches": 9,
+     "calls": 16,
+     "loops": 1,
+     "raises": 0,
+     "returns": 8,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "core/planner.py",
+    "symbol": "RestrictedPlanner.maybe_plan"
+   }
+  },
+  {
+   "id": "post.badwords",
+   "kind": "post",
+   "label": "违禁语过滤",
+   "lane": "finalize",
+   "source_ref": {
+    "body_hash": "35ee1ad8eef0f9b7",
+    "features": {
+     "awaits": 0,
+     "branches": 1,
+     "calls": 1,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "memory/post_processors.py",
+    "symbol": "bad_phrase_filter"
+   }
+  },
+  {
+   "derived": true,
+   "id": "post.done",
+   "kind": "derived",
+   "label": "后处理完成（可发送）",
+   "lane": "finalize"
+  },
+  {
+   "id": "post.parse",
+   "kind": "post",
+   "label": "输出解析",
+   "lane": "finalize",
+   "source_ref": {
+    "body_hash": "7797c4ac144e15cc",
+    "features": {
+     "awaits": 0,
+     "branches": 1,
+     "calls": 1,
+     "loops": 0,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "memory/post_processors.py",
+    "symbol": "parse_output"
+   }
+  },
+  {
+   "id": "post.split",
+   "kind": "post",
+   "label": "分行",
+   "lane": "finalize",
+   "source_ref": {
+    "body_hash": "cf51ed417551ab4d",
+    "features": {
+     "awaits": 0,
+     "branches": 1,
+     "calls": 6,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "memory/post_processors.py",
+    "symbol": "split_lines"
+   }
+  },
+  {
+   "id": "post.thought",
+   "kind": "post",
+   "label": "思维链日志",
+   "lane": "finalize",
+   "source_ref": {
+    "body_hash": "a0c11db01e5b17d4",
+    "features": {
+     "awaits": 0,
+     "branches": 4,
+     "calls": 16,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "memory/post_processors.py",
+    "symbol": "log_thought"
+   }
+  },
+  {
+   "id": "prepare.backend_budget",
+   "kind": "decision",
+   "label": "无后端/调用预算",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "fc64327aeae03941",
+    "features": {
+     "awaits": 2,
+     "branches": 10,
+     "calls": 59,
+     "loops": 1,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "TurnService.prepare_turn"
+   }
+  },
+  {
+   "id": "prepare.direct",
+   "kind": "decision",
+   "label": "直回短路 (DIRECT)",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "fc64327aeae03941",
+    "features": {
+     "awaits": 2,
+     "branches": 10,
+     "calls": 59,
+     "loops": 1,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "TurnService.prepare_turn"
+   }
+  },
+  {
+   "id": "prepare.hooks",
+   "kind": "hook",
+   "label": "前置钩子链",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "fc64327aeae03941",
+    "features": {
+     "awaits": 2,
+     "branches": 10,
+     "calls": 59,
+     "loops": 1,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "TurnService.prepare_turn"
+   }
+  },
+  {
+   "id": "prepare.silent",
+   "kind": "decision",
+   "label": "等待更多消息 (SILENT)",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "fc64327aeae03941",
+    "features": {
+     "awaits": 2,
+     "branches": 10,
+     "calls": 59,
+     "loops": 1,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "TurnService.prepare_turn"
+   }
+  },
+  {
+   "id": "proactive.after",
+   "kind": "bookkeeping",
+   "label": "主动发言记账",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "2315e339d7fd2caa",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 6,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "_proactive_speak_for_group"
+   }
+  },
+  {
+   "id": "proactive.filter",
+   "kind": "filter",
+   "label": "主动输出过滤",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "2315e339d7fd2caa",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 6,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "_proactive_speak_for_group"
+   }
+  },
+  {
+   "id": "proactive.preflight",
+   "kind": "gate",
+   "label": "主动发言预检",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "2315e339d7fd2caa",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 6,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "_proactive_speak_for_group"
+   }
+  },
+  {
+   "id": "proactive.send",
+   "kind": "delivery",
+   "label": "主动逐段发送",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "2315e339d7fd2caa",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 6,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "_proactive_speak_for_group"
+   }
+  },
+  {
+   "id": "proactive.turn",
+   "kind": "generate",
+   "label": "主动发言轮次",
+   "lane": "background",
+   "source_ref": {
+    "body_hash": "2315e339d7fd2caa",
+    "features": {
+     "awaits": 1,
+     "branches": 2,
+     "calls": 6,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "_proactive_speak_for_group"
+   }
+  },
+  {
+   "id": "prompt.fit",
+   "kind": "prompt",
+   "label": "窗口预算裁剪",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "896e153c5acb9b9e",
+    "features": {
+     "awaits": 0,
+     "branches": 0,
+     "calls": 9,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "core/context_budget.py",
+    "symbol": "fit_prompt_to_window"
+   }
+  },
+  {
+   "id": "prompt.memory",
+   "kind": "prompt",
+   "label": "记忆分区注入",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "fc64327aeae03941",
+    "features": {
+     "awaits": 2,
+     "branches": 10,
+     "calls": 59,
+     "loops": 1,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "TurnService.prepare_turn"
+   }
+  },
+  {
+   "id": "prompt.parts",
+   "kind": "prompt",
+   "label": "提示词分段组装",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "2f9206cc30b6e6b7",
+    "features": {
+     "awaits": 0,
+     "branches": 3,
+     "calls": 5,
+     "loops": 0,
+     "raises": 0,
+     "returns": 3,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "core/runtime/turn_service.py",
+    "symbol": "_compose_prompt"
+   }
+  },
+  {
+   "id": "reply.bookkeeping",
+   "kind": "bookkeeping",
+   "label": "确认段记账与学习",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "reply.compact",
+   "kind": "background",
+   "label": "回复后压缩派生",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "91baebdae01717d2",
+    "features": {
+     "awaits": 1,
+     "branches": 3,
+     "calls": 12,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 1,
+     "try": 3
+    },
+    "file": "memory/session_compact.py",
+    "symbol": "schedule_compact"
+   }
+  },
+  {
+   "id": "reply.no_delivery",
+   "kind": "decision",
+   "label": "全部未送达（不记账）",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "send.aggregate",
+   "kind": "aggregate",
+   "label": "回执聚合",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "8e9f731d35623683",
+    "features": {
+     "awaits": 0,
+     "branches": 3,
+     "calls": 7,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/social/delivery.py",
+    "symbol": "_trace_delivery"
+   }
+  },
+  {
+   "id": "send.cometa_ack",
+   "kind": "delivery",
+   "label": "Cometa 受理确认",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "3e129f1aa02e3343",
+    "features": {
+     "awaits": 1,
+     "branches": 3,
+     "calls": 12,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/cometa_bridge.py",
+    "symbol": "deliver_ack"
+   }
+  },
+  {
+   "id": "send.prepare",
+   "kind": "delivery",
+   "label": "发送准备",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "b36668033b6d34c3",
+    "features": {
+     "awaits": 8,
+     "branches": 20,
+     "calls": 94,
+     "loops": 0,
+     "raises": 2,
+     "returns": 5,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "symbol": "handle_chat"
+   }
+  },
+  {
+   "id": "send.receipt",
+   "kind": "persist",
+   "label": "回执落库",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "e812a6f6ac57da3e",
+    "features": {
+     "awaits": 0,
+     "branches": 4,
+     "calls": 8,
+     "loops": 0,
+     "raises": 0,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/social/delivery.py",
+    "symbol": "_append_and_persist"
+   }
+  },
+  {
+   "id": "send.segment",
+   "kind": "delivery",
+   "label": "逐段发送",
+   "lane": "delivery",
+   "source_ref": {
+    "body_hash": "96cba01e4bfe27fe",
+    "features": {
+     "awaits": 2,
+     "branches": 6,
+     "calls": 33,
+     "loops": 1,
+     "raises": 2,
+     "returns": 1,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "core/social/delivery.py",
+    "symbol": "deliver_lines"
+   }
+  },
+  {
+   "id": "skills.invoke",
+   "kind": "task",
+   "label": "技能执行",
+   "lane": "capability",
+   "opaque": true,
+   "source_ref": {
+    "body_hash": "0f1da55f8d4d3440",
+    "features": {
+     "awaits": 2,
+     "branches": 6,
+     "calls": 8,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/hooks.py",
+    "symbol": "_run_skills"
+   }
+  },
+  {
+   "id": "skills.preflight",
+   "kind": "task",
+   "label": "技能预检",
+   "lane": "capability",
+   "source_ref": {
+    "body_hash": "0f1da55f8d4d3440",
+    "features": {
+     "awaits": 2,
+     "branches": 6,
+     "calls": 8,
+     "loops": 0,
+     "raises": 0,
+     "returns": 5,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "capability/hooks.py",
+    "symbol": "_run_skills"
+   }
+  },
+  {
+   "id": "turn.cancel",
+   "kind": "decision",
+   "label": "轮次取消",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.error",
+   "kind": "decision",
+   "label": "Provider 异常兜底",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.fallback",
+   "kind": "decision",
+   "label": "本地兜底 (budget/no_backend)",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.generate",
+   "kind": "generate",
+   "label": "生成调用（wait_for 围 provider）",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.generated",
+   "kind": "decision",
+   "label": "生成完成",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.identity",
+   "kind": "state",
+   "label": "轮次身份",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.prepare",
+   "kind": "aggregate",
+   "label": "prepare 阶段",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "turn.timeout",
+   "kind": "decision",
+   "label": "生成超时兜底",
+   "lane": "prepare",
+   "source_ref": {
+    "body_hash": "3e03cfba5c850502",
+    "features": {
+     "awaits": 7,
+     "branches": 9,
+     "calls": 68,
+     "loops": 0,
+     "raises": 3,
+     "returns": 5,
+     "spawns": 1,
+     "try": 1
+    },
+    "file": "core/runtime/facade.py",
+    "symbol": "RuntimeFacade.submit_turn"
+   }
+  },
+  {
+   "id": "web.auth_input",
+   "kind": "gate",
+   "label": "鉴权与输入检查",
+   "lane": "web",
+   "source_ref": {
+    "body_hash": "126c5c2e1305e4d1",
+    "features": {
+     "awaits": 1,
+     "branches": 3,
+     "calls": 25,
+     "loops": 0,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "webui/routers/chat.py",
+    "symbol": "chat"
+   }
+  },
+  {
+   "id": "web.outer_deadline",
+   "kind": "gate",
+   "label": "整轮外层超时",
+   "lane": "web",
+   "source_ref": {
+    "body_hash": "126c5c2e1305e4d1",
+    "features": {
+     "awaits": 1,
+     "branches": 3,
+     "calls": 25,
+     "loops": 0,
+     "raises": 0,
+     "returns": 2,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "webui/routers/chat.py",
+    "symbol": "chat"
+   }
+  },
+  {
+   "id": "web.output",
+   "kind": "delivery",
+   "label": "回复落库与 server_emitted",
+   "lane": "web",
+   "source_ref": {
+    "body_hash": "388e959559d002c6",
+    "features": {
+     "awaits": 4,
+     "branches": 6,
+     "calls": 30,
+     "loops": 2,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "webui/chat_ingress.py",
+    "symbol": "run_turn"
+   }
+  },
+  {
+   "id": "web.session_lock",
+   "kind": "lock",
+   "label": "WebChat 串行锁",
+   "lane": "web",
+   "source_ref": {
+    "body_hash": "388e959559d002c6",
+    "features": {
+     "awaits": 4,
+     "branches": 6,
+     "calls": 30,
+     "loops": 2,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "webui/chat_ingress.py",
+    "symbol": "run_turn"
+   }
+  },
+  {
+   "id": "web.space_context",
+   "kind": "persist",
+   "label": "虚拟空间与记录消息",
+   "lane": "web",
+   "source_ref": {
+    "body_hash": "388e959559d002c6",
+    "features": {
+     "awaits": 4,
+     "branches": 6,
+     "calls": 30,
+     "loops": 2,
+     "raises": 1,
+     "returns": 1,
+     "spawns": 0,
+     "try": 3
+    },
+    "file": "webui/chat_ingress.py",
+    "symbol": "run_turn"
+   }
+  }
+ ],
+ "post_hook_node_ids": {
+  "bad_phrase_filter": "post.badwords",
+  "log_thought": "post.thought",
+  "parse_output": "post.parse",
+  "split_lines": "post.split"
+ },
+ "schema_version": 1,
+ "source_revision": "ff82e2fddc251028183db86b0e132f47491c2ffc",
+ "topology_version": "2026.10.02"
+}
