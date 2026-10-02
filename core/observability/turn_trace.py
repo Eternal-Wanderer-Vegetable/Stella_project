@@ -75,6 +75,11 @@ def configure(db_path: Path | str | None = None) -> None:
     _initialized = False
 
 
+def current_db_path() -> Path | None:
+    """当前诊断库路径（message_flow 同库建表用；未 configure 过返回 None）。"""
+    return _db_path
+
+
 def _connect() -> sqlite3.Connection:
     global _initialized
     if _db_path is None:
@@ -154,6 +159,10 @@ def _scrub(value: Any) -> Any:
         return value
     # 任意对象（backend/event/bot…）：只留类型名，绝不 repr 全文
     return f"<{type(value).__name__}>"
+
+
+# 敏感键清洗的公开别名（message_flow / flow reader 复用同一份白名单纪律）
+scrub = _scrub
 
 
 def record_event(
