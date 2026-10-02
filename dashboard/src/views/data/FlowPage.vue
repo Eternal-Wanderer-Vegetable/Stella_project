@@ -1,16 +1,15 @@
 <script setup lang="ts">
-// 消息流程页（计划 §6.7）：左侧消息筛选 / 中央分层画布 / 浮动节点详情卡。
-// 默认画「完整流程」——目录里每个节点都在，执行过的着色、没走过的灰色
-// not_observed（计划 §6.4：未经过的可能路径灰色显示，绝不自动标 skipped）。
+// 消息流程页（计划 §6.7）：左侧消息筛选 / 中央分层流式画布 / 浮动节点详情卡。
+// 布局为 ComfyUI 式左→右分层流（有始有终：开始/结束锚点见 flowLayout）。
+// 「完整流程/实际路径」共用同一套坐标：切换只是淡出未走过的节点与边
+// （CSS 过渡），不是两张图硬切。未走过的路径灰色「未走到」，绝不标 skipped。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
 import {
-  CANVAS_PAD,
   edgePath,
-  layoutFlow,
-  layoutFull,
+  layoutLayered,
   type LaidEdge,
   type LaidNode,
 } from '@/views/data/flowLayout';
@@ -62,6 +61,24 @@ const STATUS_COLORS: Record<string, string> = {
   not_observed: '#5c6470',
 };
 
+// 泳道 → 色相（节点左色条 + 图例；按目录泳道顺序取色）
+const LANE_HUES: Record<string, string> = {
+  web: 'hsl(205, 70%, 55%)',
+  ingress: 'hsl(145, 60%, 45%)',
+  command: 'hsl(275, 55%, 60%)',
+  gate: 'hsl(35, 85%, 55%)',
+  prepare: 'hsl(190, 65%, 45%)',
+  capability: 'hsl(260, 60%, 62%)',
+  generate: 'hsl(0, 70%, 60%)',
+  finalize: 'hsl(95, 55%, 45%)',
+  delivery: 'hsl(160, 65%, 40%)',
+  background: 'hsl(45, 80%, 50%)',
+  cometa: 'hsl(320, 60%, 55%)',
+  other: 'hsl(210, 10%, 55%)',
+};
+
+const laneColor = (lane: string) => LANE_HUES[lane] ?? LANE_HUES.other;
+
 const NODE_W = 128;
 const NODE_H = 40;
 const CARD_W = 320;
@@ -73,7 +90,7 @@ const reducedMotion =
 const playing = ref(false);
 let playTimer: ReturnType<typeof setInterval> | null = null;
 
-// 'full' = 完整流程（目录全节点，默认）；'executed' = 只看实际发生的
+// 两种视图共用同一布局坐标；'executed' 只是把未走过的元素淡出
 const viewMode = ref<'full' | 'executed'>('full');
 const canvasEl = ref<HTMLElement | null>(null);
 // 浮动详情卡：锚在节点点击位置（相对画布容器）
@@ -88,12 +105,12 @@ onBeforeUnmount(() => {
   stopPlay();
 });
 
-const laneOrder = computed<string[]>(() => {
-  if (store.spec?.lanes?.length) {
-    return store.spec.lanes.map(([id]) => id);
-  }
-  return [...new Set(store.nodeStates.map((n) => store.nodeLane(n.nodeId)))];
-});
+const laneLegend = computed<Array<{ id: string; label: string; color: string }>>(
+  () => {
+    const lanes = store.spec?.lanes ?? [];
+    return lanes.map(([id, label]) => ({ id, label, color: laneColor(id) }));
+  },
+);
 
 const laneLabels = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {};
@@ -102,39 +119,49 @@ const laneLabels = computed<Record<string, string>>(() => {
   return out;
 });
 
-/** 实际路径模式：只画发生过事件的节点（泳道为行、执行顺序为列）。 */
-const executedLayout = computed(() =>
-  layoutFlow({
-    nodeStates: store.nodeStates,
-    laneOf: (nodeId: string) => store.nodeLane(nodeId),
-    laneOrder: laneOrder.value,
-    specEdges: store.spec?.edges ?? [],
-    specNodes: store.specNodeById.size
-      ? Object.fromEntries(store.specNodeById)
-      : undefined,
-  }),
-);
-
-/** 完整流程模式：目录全节点 + 执行状态叠加（默认视图）。 */
-const fullLayout = computed(() => {
+/** 分层流式布局（完整/实际共用坐标，切换只做淡出）。 */
+const graphLayout = computed(() => {
   if (!store.spec) return null;
-  return layoutFull({
+  return layoutLayered({
     spec: store.spec,
     executed: store.executedNodeMap,
     labelOf: (nodeId: string) => store.nodeLabel(nodeId),
     laneOf: (nodeId: string) => store.nodeLane(nodeId),
   });
 });
-
-const layout = computed(() =>
-  viewMode.value === 'full' ? fullLayout.value : executedLayout.value,
-);
-const laidNodes = computed<LaidNode[]>(() => layout.value?.nodes ?? []);
-const laidEdges = computed<LaidEdge[]>(() => layout.value?.edges ?? []);
+const laidNodes = computed<LaidNode[]>(() => graphLayout.value?.nodes ?? []);
+const laidEdges = computed<LaidEdge[]>(() => graphLayout.value?.edges ?? []);
 const canvasSize = computed(() => ({
-  w: layout.value?.width ?? CANVAS_PAD,
-  h: layout.value?.height ?? CANVAS_PAD,
+  w: graphLayout.value?.width ?? 400,
+  h: graphLayout.value?.height ?? 200,
 }));
+
+/** 实际路径模式下该元素是否应淡出（锚点恒在）。 */
+function isHidden(node: LaidNode): boolean {
+  return (
+    viewMode.value === 'executed' &&
+    node.anchor === undefined &&
+    !store.executedNodeMap.has(node.nodeId)
+  );
+}
+
+function edgeClass(e: LaidEdge): Record<string, boolean> {
+  return {
+    'flow-edge': true,
+    [`edge-${e.kind}`]: true,
+    active: Boolean(e.active) && viewMode.value === 'full',
+    dim:
+      viewMode.value === 'full' &&
+      !e.active &&
+      e.kind !== 'spawn' &&
+      e.kind !== 'cause',
+    faded:
+      e.kind !== 'spawn' && e.kind !== 'cause'
+        ? viewMode.value === 'full' && !e.active
+        : false,
+    gone: viewMode.value === 'executed' && !e.traversed,
+  };
+}
 
 const selectedNode = computed<LaidNode | null>(() => {
   if (!card.value) return null;
@@ -181,11 +208,12 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? STATUS_COLORS.unknown;
 }
 
-function onNodeClick(node: LaidNode, event: MouseEvent) {
+function onNodeClick(node: LaidNode, event?: MouseEvent) {
+  if (node.anchor !== undefined) return;
   store.selectNode(node.nodeId);
   const rect = canvasEl.value?.getBoundingClientRect();
-  const clickX = event.clientX - (rect?.left ?? 0);
-  const clickY = event.clientY - (rect?.top ?? 0);
+  const clickX = event ? event.clientX - (rect?.left ?? 0) : (rect?.width ?? 400) / 2;
+  const clickY = event ? event.clientY - (rect?.top ?? 0) : (rect?.height ?? 300) / 2;
   const maxX = (rect?.width ?? 800) - CARD_W - 12;
   const maxY = (rect?.height ?? 480) - 320;
   card.value = {
@@ -199,11 +227,6 @@ function closeCard() {
   card.value = null;
   store.selectNode('');
 }
-
-watch(viewMode, () => {
-  // 布局切换后节点位置全变，浮动卡锚点失效：直接关掉
-  closeCard();
-});
 
 function togglePlay() {
   if (playing.value) {
@@ -300,7 +323,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
     <v-col cols="12" md="9">
       <v-card variant="flat" :elevation="1">
         <v-card-text v-if="!store.detail" class="text-medium-emphasis">
-          选择左侧一条消息，查看它从进入到结束经过的完整处理流程（灰色节点是本次没有走到的路径）。
+          选择左侧一条消息，查看它从「开始」到「结束」经过的完整处理流程（灰色虚线节点是本次没有走到的路径）。
         </v-card-text>
         <template v-else>
           <v-card-text class="pb-0 d-flex flex-wrap ga-2 align-center">
@@ -375,6 +398,23 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             </v-chip>
           </v-card-text>
 
+          <!-- 泳道图例（节点左色条颜色 ↔ 处理阶段） -->
+          <v-card-text
+            v-if="laneLegend.length"
+            class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
+          >
+            <span
+              v-for="lane in laneLegend"
+              :key="lane.id"
+              class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis"
+            >
+              <span
+                class="lane-dot"
+                :style="{ background: lane.color }"
+              />{{ lane.label }}
+            </span>
+          </v-card-text>
+
           <div
             ref="canvasEl"
             class="flow-canvas"
@@ -386,7 +426,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               :height="canvasSize.h"
               :viewBox="`0 0 ${canvasSize.w} ${canvasSize.h}`"
               role="img"
-              aria-label="消息处理流程图"
+              aria-label="消息处理流程图：从开始到结束的分层流式布局"
               @click.self="closeCard"
             >
               <defs>
@@ -402,71 +442,65 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--v-theme-on-surface)" opacity="0.5" />
                 </marker>
               </defs>
-              <!-- 泳道背景与标签 -->
-              <g>
-                <rect
-                  v-for="(lane, idx) in laneOrder"
-                  :key="lane"
-                  x="0"
-                  :y="CANVAS_PAD - 20 + idx * (NODE_H + 72)"
-                  :width="canvasSize.w"
-                  :height="NODE_H + 40"
-                  class="flow-lane-bg"
-                  :class="{ alt: idx % 2 === 1 }"
-                />
-                <text
-                  v-for="(lane, idx) in laneOrder"
-                  :key="`label-${lane}`"
-                  :x="4"
-                  :y="CANVAS_PAD - 6 + idx * (NODE_H + 72)"
-                  class="flow-lane-label"
-                >
-                  {{ laneLabels[lane] ?? lane }}
-                </text>
-              </g>
               <!-- 边 -->
               <g>
                 <path
                   v-for="e in laidEdges"
                   :key="e.id"
                   :d="edgePath(e.from, e.to)"
-                  class="flow-edge"
-                  :class="[`edge-${e.kind}`, {
-                    active: e.active,
-                    dim: viewMode === 'full' && !e.active,
-                  }]"
+                  :class="edgeClass(e)"
                   marker-end="url(#flow-arrow)"
                 />
               </g>
-              <!-- 节点 -->
+              <!-- 节点（外层 g 定位，内层 g 做淡入淡出/缩放过渡） -->
               <g
                 v-for="n in laidNodes"
                 :key="n.nodeId"
                 :transform="`translate(${n.x}, ${n.y})`"
-                class="flow-node"
-                :class="{
-                  selected: n.nodeId === card?.nodeId,
-                  pulse: n.status === 'running' && !reducedMotion,
-                  unexecuted: n.status === 'not_observed',
-                }"
-                role="button"
-                tabindex="0"
-                @click.stop="onNodeClick(n, $event)"
-                @keydown.enter="store.selectNode(n.nodeId)"
               >
-                <rect
-                  :width="NODE_W"
-                  :height="NODE_H"
-                  rx="8"
-                  :fill="statusColor(n.status)"
-                  :opacity="n.status === 'not_observed' ? 0.35 : 0.85"
-                />
-                <text :x="NODE_W / 2" :y="17" class="flow-node-label">
-                  {{ n.label }}
-                </text>
-                <text :x="NODE_W / 2" :y="31" class="flow-node-status">
-                  {{ n.status === 'not_observed' ? '未走到' : n.status }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
-                </text>
+                <g
+                  class="flow-node"
+                  :class="{
+                    'node-hidden': isHidden(n),
+                    selected: n.nodeId === card?.nodeId,
+                    pulse: n.status === 'running' && !reducedMotion,
+                    unexecuted: n.status === 'not_observed' && n.anchor === undefined,
+                  }"
+                  role="button"
+                  :tabindex="n.anchor === undefined ? 0 : -1"
+                  @click.stop="onNodeClick(n, $event)"
+                  @keydown.enter="onNodeClick(n)"
+                >
+                  <!-- 锚点：开始 / 结束 -->
+                  <template v-if="n.anchor !== undefined">
+                    <rect
+                      width="64"
+                      height="26"
+                      rx="13"
+                      :fill="n.anchor === 'start' ? '#4caf50' : '#78909c'"
+                      opacity="0.92"
+                    />
+                    <text x="32" y="17" class="flow-anchor-label">
+                      {{ n.label }}
+                    </text>
+                  </template>
+                  <template v-else>
+                    <rect
+                      :width="NODE_W"
+                      :height="NODE_H"
+                      rx="8"
+                      :fill="statusColor(n.status)"
+                      :opacity="n.status === 'not_observed' ? 0.35 : 0.85"
+                    />
+                    <rect width="5" :height="NODE_H" rx="2" :fill="laneColor(n.lane)" />
+                    <text :x="NODE_W / 2 + 3" :y="17" class="flow-node-label">
+                      {{ n.label }}
+                    </text>
+                    <text :x="NODE_W / 2 + 3" :y="31" class="flow-node-status">
+                      {{ n.status === 'not_observed' ? '未走到' : n.status }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
+                    </text>
+                  </template>
+                </g>
               </g>
             </svg>
             <div v-if="!laidNodes.length" class="text-medium-emphasis pa-4">
@@ -484,6 +518,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             >
               <v-card-text class="pa-3">
                 <div class="d-flex align-center ga-1 mb-1">
+                  <span
+                    class="lane-dot"
+                    :style="{ background: laneColor(selectedNode.lane) }"
+                  />
                   <span class="text-subtitle-2">{{ selectedNode.label }}</span>
                   <v-chip
                     size="x-small"
@@ -614,6 +652,9 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   position: relative;
   overflow: auto;
   max-height: 560px;
+  background:
+    radial-gradient(rgba(var(--v-theme-on-surface), 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
 }
 .flow-card {
   position: absolute;
@@ -622,21 +663,18 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   overflow-y: auto;
   z-index: 10;
 }
-.flow-lane-bg {
-  fill: transparent;
-  stroke: rgba(var(--v-theme-on-surface), 0.06);
-}
-.flow-lane-bg.alt {
-  fill: rgba(var(--v-theme-on-surface), 0.03);
-}
-.flow-lane-label {
-  font-size: 10px;
-  fill: rgba(var(--v-theme-on-surface), 0.45);
+.lane-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
 }
 .flow-edge {
   fill: none;
   stroke: rgba(var(--v-theme-on-surface), 0.35);
   stroke-width: 1.2;
+  transition: opacity 0.4s ease, stroke 0.4s ease;
 }
 .edge-spawn,
 .edge-cause {
@@ -647,15 +685,26 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   stroke: rgba(var(--v-theme-primary), 0.45);
 }
 .flow-edge.dim {
-  opacity: 0.18;
+  opacity: 0.15;
 }
 .flow-edge.active {
   stroke: rgba(var(--v-theme-primary), 0.9);
   stroke-width: 1.8;
 }
+.flow-edge.gone {
+  opacity: 0;
+}
 .flow-node {
   cursor: pointer;
   outline: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.flow-node.node-hidden {
+  opacity: 0;
+  transform: scale(0.55);
+  pointer-events: none;
 }
 .flow-node:focus rect,
 .flow-node.selected rect {
@@ -682,11 +731,21 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 .flow-node.unexecuted .flow-node-status {
   fill: rgba(var(--v-theme-on-surface), 0.55);
 }
+.flow-anchor-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-anchor: middle;
+  fill: #fff;
+}
 .flow-node.pulse rect {
   animation: flow-pulse 1.2s ease-in-out infinite;
 }
 .reduce-motion .flow-node.pulse rect {
   animation: none;
+}
+.reduce-motion .flow-node,
+.reduce-motion .flow-edge {
+  transition: none;
 }
 @keyframes flow-pulse {
   0%, 100% { opacity: 0.85; }
