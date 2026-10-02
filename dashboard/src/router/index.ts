@@ -98,6 +98,13 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/data/TracePage.vue'),
             meta: { dataTab: 'trace' },
           },
+          {
+            // 消息流程（源码版本化、真实事件驱动的处理拓扑，计划 §6.7）
+            path: 'flow',
+            name: 'data-flow',
+            component: () => import('@/views/data/FlowPage.vue'),
+            meta: { dataTab: 'flow' },
+          },
         ],
       },
     ],
