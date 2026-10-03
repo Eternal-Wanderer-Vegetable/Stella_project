@@ -83,6 +83,7 @@ def create_webui_app() -> FastAPI:
     from webui.routers import conversations as conversations_router_module
     from webui.routers import logs as logs_router_module
     from webui.routers import manage as manage_router_module
+    from webui.routers import personal_memory as personal_memory_router_module
     from webui.routers import platform as platform_router_module
     from webui.routers import plugins as plugins_router_module
     from webui.routers import plugins_mg as plugins_mg_router_module
@@ -105,6 +106,8 @@ def create_webui_app() -> FastAPI:
     app.include_router(manage_router_module.kb_router)
     app.include_router(manage_router_module.sched_router)
     app.include_router(plugins_mg_router_module.router)
+    # 个人记忆管理（计划 §6.9）：owner/audience 审计/删除/导出（管理员）
+    app.include_router(personal_memory_router_module.router)
     # cometa 外部 Agent 任务（design_docs/Cometa 外部 Agent 任务运行层实施方案 §6.14；
     # 未启用时端点返回 503 envelope，前端隐藏入口）
     from webui.routers import cometa as cometa_router_module

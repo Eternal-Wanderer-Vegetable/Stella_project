@@ -9,6 +9,7 @@ const tabs = [
   { key: 'conversations', label: '会话', to: '/data/conversations' },
   { key: 'logs', label: '日志', to: '/data/logs' },
   { key: 'trace', label: '追踪', to: '/data/trace' },
+  { key: 'personal-memory', label: '个人记忆', to: '/data/personal-memory' },
   { key: 'flow', label: '消息流程', to: '/data/flow' },
 ];
 </script>

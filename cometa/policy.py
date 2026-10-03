@@ -48,7 +48,6 @@ class SubmissionPolicy:
             access = self.config.access
             try:
                 requester = int(origin.requester_id)
-                conversation = int(origin.conversation_id)
             except (TypeError, ValueError):
                 return PolicyDecision(
                     ok=False, reason_code="invalid_origin", message="QQ 身份不合法"
@@ -59,12 +58,24 @@ class SubmissionPolicy:
                     reason_code="user_not_allowed",
                     message="该用户未获委派授权",
                 )
-            if conversation not in access.qq_group_ids:
-                return PolicyDecision(
-                    ok=False,
-                    reason_code="conversation_not_allowed",
-                    message="该会话未获委派授权",
-                )
+            # 会话种类（计划 §6.8）：私聊走用户级授权，绝不匹配群白名单——
+            # 既不因「私聊用户号 == 某群号」误放行，也不把私聊当未授权会话。
+            kind = origin.conversation_kind or (
+                "webchat" if origin.platform == "webchat" else "group"
+            )
+            if kind == "group":
+                try:
+                    conversation = int(origin.conversation_id)
+                except (TypeError, ValueError):
+                    return PolicyDecision(
+                        ok=False, reason_code="invalid_origin", message="QQ 身份不合法"
+                    )
+                if conversation not in access.qq_group_ids:
+                    return PolicyDecision(
+                        ok=False,
+                        reason_code="conversation_not_allowed",
+                        message="该会话未获委派授权",
+                    )
         elif origin.platform == "webchat":
             pass  # 单管理员模型：WebUI 认证即授权（§2 现有行为）
         else:

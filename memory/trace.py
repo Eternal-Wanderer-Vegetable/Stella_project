@@ -31,12 +31,13 @@ from memory.timeutil import log_sqlite_error
 
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
-    """确保 memory_traces 表存在（幂等），并为旧表补齐 v8 新增列。
+    """确保 memory_traces 表存在（幂等），并为旧表补齐历史新增列。
 
-    group_id 是触发这次回复的真实 QQ 群；group_shared_space 是记忆检索所用的
-    共享空间（config.spaces.resolve_space(group_id)）。排查时两者都需要，
-    因此都落库。旧表没有 group_shared_space 列时用 ALTER 补上（追踪数据有
-    诊断价值，重建会丢）；列已存在时 ALTER 会抛 OperationalError，静默跳过。
+    group_id 是触发这次回复的真实 QQ 群（私聊为空）；group_shared_space 是
+    记忆检索所用的归属空间（群=resolve_space，私聊=隔离空间）。排查时两者
+    都需要，因此都落库。v15 起补会话身份四列（计划 §6.3）：私聊的 group_id
+    留空而不是 0，真实身份由 conversation_key/kind/peer/storage_session_id
+    承载——全部记 0 会失去身份。
     """
     conn.execute(
         f"""
@@ -57,13 +58,26 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
             score_map TEXT,
             prompt_snapshot TEXT,
             output TEXT,
-            debug INTEGER DEFAULT 0
+            debug INTEGER DEFAULT 0,
+            conversation_key TEXT DEFAULT '',
+            conversation_kind TEXT DEFAULT '',
+            peer_id TEXT DEFAULT '',
+            storage_session_id INTEGER
         )
         """
     )
     # 旧表兼容：v8 之前的 memory_traces 没有 group_shared_space 列 → 补列（幂等）
     with contextlib.suppress(sqlite3.OperationalError):
         conn.execute(f"ALTER TABLE {MEMORY_TRACE_TABLE} ADD COLUMN group_shared_space TEXT")
+    # v15：会话身份四列（幂等）
+    for ddl in (
+        f"ALTER TABLE {MEMORY_TRACE_TABLE} ADD COLUMN conversation_key TEXT DEFAULT ''",
+        f"ALTER TABLE {MEMORY_TRACE_TABLE} ADD COLUMN conversation_kind TEXT DEFAULT ''",
+        f"ALTER TABLE {MEMORY_TRACE_TABLE} ADD COLUMN peer_id TEXT DEFAULT ''",
+        f"ALTER TABLE {MEMORY_TRACE_TABLE} ADD COLUMN storage_session_id INTEGER",
+    ):
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(ddl)
 
 
 def record_trace(
@@ -82,14 +96,21 @@ def record_trace(
     prompt_snapshot: str = "",
     output: str = "",
     debug: bool = False,
+    conversation_key: str = "",
+    conversation_kind: str = "",
+    peer_id: str = "",
+    storage_session_id: int | None = None,
 ) -> None:
     """把一次记忆决策写入 memory_traces 表；开关关闭或异常时静默跳过。
 
-    group_id 是触发这次回复的真实 QQ 群；group_shared_space 是记忆检索所用的
-    共享空间；两者分别落库，排查时都需要。
+    group_id 是触发这次回复的真实 QQ 群（私聊**留空**，不写 0——0 会丢失
+    身份）；group_shared_space 是记忆检索所用的归属空间。会话身份四字段
+    （conversation_key/kind/peer/storage_session_id）是 v15 起的规范身份。
     """
     if not MEMORY_TRACE_ENABLED or not DB_PATH.exists():
         return
+    # 群字段语义：group 会话写真实群号；私聊/未升级的空值一律落空串
+    group_col = str(group_id) if group_id not in (None, 0, "0") else ""
     try:
         conn = sqlite3.connect(DB_PATH)
         _ensure_table(conn)
@@ -98,11 +119,12 @@ def record_trace(
             INSERT INTO {MEMORY_TRACE_TABLE} (
                 group_id, group_shared_space, user_id, message, mode, trigger,
                 candidate_ids, filtered_ids, final_ids, rejected_ids, behavior_ids,
-                score_map, prompt_snapshot, output, debug
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                score_map, prompt_snapshot, output, debug,
+                conversation_key, conversation_kind, peer_id, storage_session_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(group_id),
+                group_col,
                 str(group_shared_space),
                 str(user_id),
                 (message or "")[:500],
@@ -117,6 +139,10 @@ def record_trace(
                 (prompt_snapshot or "")[:8000],
                 (output or "")[:2000],
                 1 if debug else 0,
+                str(conversation_key or ""),
+                str(conversation_kind or ""),
+                str(peer_id or ""),
+                int(storage_session_id) if storage_session_id else None,
             ),
         )
         conn.commit()

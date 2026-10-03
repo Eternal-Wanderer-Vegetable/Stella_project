@@ -79,7 +79,7 @@ def test_fetch_next_messages_bot_self_marked_and_excluded(tmp_path, monkeypatch)
     monkeypatch.setattr(consolidator_mod, "MEMORY_SOURCE_KIND_ENABLED", True)
     monkeypatch.setattr(consolidator_mod, "CONSOLIDATION_OVERLAP", 15)
 
-    text, batch_end, senders, at_senders = _make_consolidator()._fetch_next_messages(1, 0, 10)
+    text, batch_end, senders, at_senders, _rows = _make_consolidator()._fetch_next_messages(1, 0, 10)
 
     assert batch_end == 2
     assert "消息ID(1) [这是机器人自己发送的消息，不属于任何用户]: 我在问你问题" in text
@@ -101,7 +101,7 @@ def test_mixed_window_three_markers(tmp_path, monkeypatch):
     monkeypatch.setattr(consolidator_mod, "MEMORY_SOURCE_KIND_ENABLED", True)
     monkeypatch.setattr(consolidator_mod, "CONSOLIDATION_OVERLAP", 15)
 
-    text, _, senders, at_senders = _make_consolidator()._fetch_next_messages(1, 0, 10)
+    text, _, senders, at_senders, _rows = _make_consolidator()._fetch_next_messages(1, 0, 10)
 
     assert "消息ID(1) 用户(2001) [对Bot说]: 我显卡是5080" in text
     assert "消息ID(2) [这是机器人自己发送的消息，不属于任何用户]: 我在问你" in text

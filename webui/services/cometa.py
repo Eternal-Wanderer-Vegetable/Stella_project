@@ -50,7 +50,13 @@ def actor_of(username: str) -> Actor:
 
 
 def webchat_origin(service: CometaService, username: str, request_id: str) -> Origin:
-    """WebChat 提交的 Origin。固定虚拟会话身份 + 客户端请求 ID（§6.11）。"""
+    """WebChat 提交的 Origin。固定虚拟会话身份 + 客户端请求 ID（§6.11）。
+
+    v2 起携带完整会话身份（计划 §6.8）：WebChat 没有群/私聊之分，
+    peer 与 conversation_id 都用固定虚拟会话「webchat」。
+    """
+    from webui.chat_ingress import WEBCHAT_CONV_KEY
+
     return Origin(
         instance_id=service.instance_id,
         platform="webchat",
@@ -60,6 +66,9 @@ def webchat_origin(service: CometaService, username: str, request_id: str) -> Or
         source_request_id=request_id or f"webui-{username}",
         reply_to_message_id="",
         conversation_generation=1,
+        conversation_kind="webchat",
+        peer_id="webchat",
+        conversation_key=WEBCHAT_CONV_KEY,
     )
 
 

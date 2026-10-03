@@ -131,8 +131,9 @@ def test_projection_excludes_handles_and_roundtrips_json():
     assert json.loads(json.dumps(proj, ensure_ascii=False)) == proj
     assert "raw_event" not in proj and "bot" not in proj
     assert "route" not in proj and "task_results" not in proj
-    # v2：社交闭环身份（trace_id/turn_id）是安全标量，进投影（计划 §6.1）
-    assert proj["projection_schema_version"] == 2
+    # v2：社交闭环身份（trace_id/turn_id）进投影（计划 §6.1）；
+    # v3：会话身份字段（conversation_kind/key/bot_id/peer/storage）进投影
+    assert proj["projection_schema_version"] == 3
     assert proj["trace_id"] == "trace-1" and proj["turn_id"] == "turn-1"
     assert proj["message"] == "在吗"
     assert proj["tool_summaries"] == ["东京 27℃"]

@@ -30,12 +30,43 @@ class ChatContext:
     group_id: int
     msg_id: int
     message: str
-    # 消息来源：AT_MENTION=用户直接对 Bot 说 / PASSIVE=被动摄入的群聊
+    # 消息来源：AT_MENTION=用户直接对 Bot 说 / PASSIVE=被动摄入的群聊 /
+    # PRIVATE_DIRECT=用户在私聊里直接对 Bot 说 / BOT_SELF=Bot 自己的发言
     source_kind: str = "PASSIVE"
-    # 记忆与画像的归属空间。group_id 始终是真实 QQ 群号；group_shared_space 是
-    # 「当下这场对话的状态」之外的长期认知归属（见 config/spaces.py 两层归属的
-    # 分界线），二者不可混用。留空时按群号自动解析（隐式空间 = 群号字符串）。
+    # 记忆与画像的归属空间。group_id 始终是真实 QQ 群号（私聊为 0，见下）；
+    # group_shared_space 是「当下这场对话的状态」之外的长期认知归属
+    # （见 config/spaces.py 两层归属的分界线），二者不可混用。留空时按群号
+    # 自动解析（隐式空间 = 群号字符串）。
     group_shared_space: str = ""
+
+    # ---- 会话身份（计划 §6.1：ConversationRef 投影到运行期载体） ----
+    # group_id 在私聊轮次里恒为 0（兼容占位，**不是**公共会话号）；真实身份
+    # 在下面四个字段里。storage_session_id 是注册表分配的存储键：群=正整数
+    # 群号、WebChat=-1、私聊=负整数；存储/摘要/checkpoint 一律用它
+    # （storage_key()），绝不能用负号反推种类。
+    conversation_kind: str = ""  # group / private / webchat；空 = 旧入口未升级
+    conversation_key: str = ""  # 规范键 qq:<bot>:group:<gid> 等；空 = 旧入口
+    bot_id: str = ""  # 接入 Bot 的 self_id（个人 owner 键 person:qq:<bot>:<uid> 用）
+    peer_id: str = ""  # 群=群号；私聊=sender QQ 号；WebChat=主体
+    storage_session_id: int = 0  # 0 = 未升级入口，按 group_id 兼容
+
+    def storage_key(self) -> int:
+        """历史消息/摘要/checkpoint 的物理会话键。
+
+        已升级入口返回注册表分配的 storage_session_id；旧入口（未设置身份
+        字段）按 group_id 兼容。**只有**存储语义允许用本键；需要真实群号的
+        消费者必须先判 conversation_kind == "group"。
+        """
+        return self.storage_session_id or self.group_id
+
+    @property
+    def trace_scope(self) -> str:
+        """观测/详细日志的 scope 标签：规范会话键优先，旧入口回退 ``qq:<群号>``。
+
+        私聊轮次的 group_id 是 0，任何 ``qq:{ctx.group_id}`` 拼接都必须改用
+        本属性，否则全部私聊共享同一个 trace scope（计划 §6.2）。
+        """
+        return self.conversation_key or f"qq:{self.group_id}"
 
     # ---- 处理产物 ----
     raw_output: str = ""
@@ -164,7 +195,10 @@ class ChatContext:
     # ---- Cortico 迁移：跨进程 JSON 投影（计划 §6.2/§6.4） ----
     # 投影 schema 版本：字段集变更时 +1；旧 runtime store 按版本向后读取。
     # v2：新增 trace_id / turn_id（社交闭环身份贯通，计划 §6.1）。
-    PROJECTION_SCHEMA_VERSION = 2
+    # v3：新增会话身份四字段（conversation_kind/key/peer/storage_session_id，
+    # 计划 §6.1）。旧 v2 投影缺这些字段 → 按旧 QQ 群/WebChat 格式恢复
+    # （group_id 即存储键），不猜测新格式缺失字段的会话种类。
+    PROJECTION_SCHEMA_VERSION = 3
     # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
     # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
     # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
@@ -173,6 +207,8 @@ class ChatContext:
         "user_id", "group_id", "msg_id", "message", "source_kind",
         "group_shared_space", "trigger", "intent", "image_sources",
         "trace_id", "turn_id",
+        # 会话身份（v3）
+        "conversation_kind", "conversation_key", "bot_id", "peer_id", "storage_session_id",
         # pre/prepare 侧
         "short_term", "user_profile", "preferred_address", "memories_for_prompt",
         "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",

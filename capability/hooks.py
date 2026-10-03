@@ -262,7 +262,14 @@ async def _run_skills(ctx: ChatContext, route: Any) -> None:
         result = await rt.orchestrator.invoke(
             ctx.message,
             manifest,
-            session_id=str(ctx.group_shared_space or ctx.group_id or ""),
+            # 技能执行会话按**规范会话键**隔离（计划 §6.8）：同一 space 的两个群
+            # 或私聊不得共享执行会话；旧入口无 conversation_key 时回退空间/群号。
+            session_id=str(
+                getattr(ctx, "conversation_key", "")
+                or ctx.group_shared_space
+                or ctx.group_id
+                or ""
+            ),
         )
     ctx.skill_results = [result]
     if result.summary:

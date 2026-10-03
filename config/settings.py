@@ -593,6 +593,16 @@ MEMORY_TRACE_ENABLED = _env_bool("MEMORY_TRACE_ENABLED", "true")
 # 决策追踪表名
 MEMORY_TRACE_TABLE = _env("MEMORY_TRACE_TABLE", "memory_traces")
 
+# ---------- QQ 私聊与个人记忆（计划 §6.2/§6.9 的 feature flags） ----------
+# 私聊接入本体。计划定案：最终发布私聊默认启用；灰度阶段运维可显式关闭。
+# 私聊允许策略独立于 ALLOWED_GROUPS（后者是群开关，不是私聊开关）。
+PRIVATE_CHAT_ENABLED = _env_bool("PRIVATE_CHAT_ENABLED", "true")
+# 私聊发送者白名单（逗号分隔 QQ 号）。空 = 不限制（所有好友私聊可用）。
+PRIVATE_CHAT_ALLOWLIST = _env_int_set("PRIVATE_CHAT_ALLOWLIST")
+# 个人事实（PERSON 行）写入开关。schema15 就绪即装，但**默认关闭**（M1 出口
+# 条件：不能提前写 PERSON）；共享事实（USER_SHARED）灰度开启后再回填旧库。
+PERSONAL_MEMORY_WRITE_ENABLED = _env_bool("PERSONAL_MEMORY_WRITE_ENABLED", "false")
+
 # Benchmark 数据集目录（Evaluation & Debug）
 MEMORY_BENCHMARK_DIR = _env_path(
     "MEMORY_BENCHMARK_DIR", PROJECT_ROOT / "memory" / "benchmark"

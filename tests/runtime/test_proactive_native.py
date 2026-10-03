@@ -93,10 +93,10 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
 
     seen: dict = {}
 
-    async def engine(group_id, ctx, **kw):
-        seen["key"] = key = f"qq:{group_id}"
+    async def engine(session_key, ctx, **kw):
+        seen["key"] = session_key
         seen["intent"] = ctx.intent
-        out = await h.facade.submit_turn(key, gateway.pipeline, ctx, **kw)
+        out = await h.facade.submit_turn(session_key, gateway.pipeline, ctx, **kw)
         seen["reply"] = out.reply
         seen["wait"] = bool(getattr(out, "planner_wait", False))
         seen["prompted"] = bool(getattr(out, "prompt_log", ""))
@@ -134,10 +134,10 @@ async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monk
 
     seen: dict = {}
 
-    async def engine(group_id, ctx, **kw):
-        seen["key"] = f"qq:{group_id}"
+    async def engine(session_key, ctx, **kw):
+        seen["key"] = session_key
         seen["intent"] = ctx.intent
-        return await h.facade.submit_turn(f"qq:{group_id}", gateway.pipeline, ctx, **kw)
+        return await h.facade.submit_turn(session_key, gateway.pipeline, ctx, **kw)
 
     monkeypatch.setattr(gateway, "_run_turn_via_engine", engine)
     monkeypatch.setattr(gateway, "can_speak", lambda group_id, kind: (True, ""))

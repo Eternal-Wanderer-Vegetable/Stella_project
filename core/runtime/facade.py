@@ -65,7 +65,7 @@ def _detail_on(ctx: ChatContext) -> bool:
     try:
         from core.observability import turn_trace
 
-        return turn_trace.detailed_enabled_for_scope(f"qq:{ctx.group_id}")
+        return turn_trace.detailed_enabled_for_scope(ctx.trace_scope)
     except Exception:
         return False
 
@@ -248,7 +248,7 @@ class RuntimeFacade:
             )
             _trace(
                 trace_id=ctx.trace_id, turn_id=turn_id, stage="ingress",
-                status="accepted", scope=f"qq:{ctx.group_id}", started_at=started,
+                status="accepted", scope=ctx.trace_scope, started_at=started,
                 versions={"projection": ctx.PROJECTION_SCHEMA_VERSION},
                 detailed={"key": key, "user_id": ctx.user_id,
                           "trigger": ctx.trigger, "intent": ctx.intent}
@@ -265,7 +265,7 @@ class RuntimeFacade:
                 )
                 _trace(trace_id=ctx.trace_id, turn_id=turn_id, stage="prepare",
                        status="cancelled", reason_code="reset_during_prepare",
-                       scope=f"qq:{ctx.group_id}", started_at=started)
+                       scope=ctx.trace_scope, started_at=started)
                 _flow_decision(fctx, "turn.cancel", status="cancelled",
                                reason_code="reset_during_prepare")
                 raise RuntimeTurnError(E_CANCELLED, "prepare 期间发生 reset，本轮作废")
@@ -275,7 +275,7 @@ class RuntimeFacade:
             )
             _trace(
                 trace_id=ctx.trace_id, turn_id=turn_id, stage="prepare",
-                status=plan.outcome, scope=f"qq:{ctx.group_id}", started_at=started,
+                status=plan.outcome, scope=ctx.trace_scope, started_at=started,
                 metrics={"llm_call_count": ctx.llm_call_count},
             )
 
@@ -312,7 +312,7 @@ class RuntimeFacade:
                            stage="model_attempt", status="deadline_fallback",
                            reason_code="timeout", attempt=1,
                            metrics={"elapsed": ctx.llm_elapsed},
-                           scope=f"qq:{ctx.group_id}", started_at=started)
+                           scope=ctx.trace_scope, started_at=started)
                     return await pipeline.finalize_turn(ctx)
                 except asyncio.CancelledError:
                     gen_span.__exit__(asyncio.CancelledError, None, None)
@@ -325,7 +325,7 @@ class RuntimeFacade:
                         _trace(trace_id=ctx.trace_id, turn_id=turn_id,
                                stage="model_attempt", status="cancelled",
                                reason_code="cancel_requested", attempt=1,
-                               scope=f"qq:{ctx.group_id}", started_at=started)
+                               scope=ctx.trace_scope, started_at=started)
                         _flow_decision(fctx, "turn.cancel", status="cancelled",
                                        reason_code="cancel_requested")
                         raise RuntimeTurnError(E_CANCELLED, "轮次已被取消") from None
@@ -349,7 +349,7 @@ class RuntimeFacade:
                            stage="model_attempt", status="provider_fallback",
                            reason_code="provider_error", attempt=1,
                            metrics={"elapsed": ctx.llm_elapsed},
-                           scope=f"qq:{ctx.group_id}", started_at=started)
+                           scope=ctx.trace_scope, started_at=started)
                     return await pipeline.finalize_turn(ctx)
                 finally:
                     state.inflight = None
@@ -367,7 +367,7 @@ class RuntimeFacade:
                 _trace(trace_id=ctx.trace_id, turn_id=turn_id,
                        stage="model_attempt", status="completed", attempt=1,
                        metrics={"elapsed": ctx.llm_elapsed},
-                       scope=f"qq:{ctx.group_id}", started_at=started,
+                       scope=ctx.trace_scope, started_at=started,
                        detailed={"prompt_chars": len(prompt),
                                  "output_chars": len(ctx.raw_output)}
                        if _detail_on(ctx) else None)

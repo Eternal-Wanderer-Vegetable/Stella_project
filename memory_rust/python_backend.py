@@ -29,6 +29,16 @@ class PythonMemoryBackend:
     def retrieve(self, request: RetrievalRequest) -> Any:
         from memory.retrieval_v2 import retrieve_memories
 
+        kwargs: dict[str, Any] = {}
+        if request.scope_space_key:
+            from memory.ownership import MemoryAccessScope
+
+            kwargs["access_scope"] = MemoryAccessScope(
+                space_key=request.scope_space_key,
+                person_owner_key=request.scope_person_owner_key,
+                subject_key=request.scope_subject_key,
+                person_audiences=tuple(request.scope_person_audiences or ()),
+            )
         return retrieve_memories(
             request.group_shared_space,
             request.user_id,
@@ -37,6 +47,7 @@ class PythonMemoryBackend:
             mode=request.mode,
             semantic_scores=dict(request.semantic_scores or {}),
             _bypass_backend=True,
+            **kwargs,
         )
 
     def promote(self, request: PromotionRequest) -> Any:

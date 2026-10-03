@@ -107,6 +107,11 @@ class RustMemoryBackend:
             "mode": request.mode,
             "pool_limit": request.pool_limit,
             "semantic_scores": dict(request.semantic_scores or {}),
+            # v2 owner scope：空串/空表 = SPACE-only（native 侧同语义）
+            "scope_space_key": request.scope_space_key,
+            "scope_person_owner_key": request.scope_person_owner_key,
+            "scope_subject_key": request.scope_subject_key,
+            "scope_person_audiences": list(request.scope_person_audiences),
         }
         raw = self._native.retrieve(json.dumps(payload, ensure_ascii=False))
         if isinstance(raw, str):
@@ -129,6 +134,14 @@ class RustMemoryBackend:
             "quota_weight_confirmation": request.quota_weight_confirmation,
             "quota_weight_recency": request.quota_weight_recency,
             "fts_enabled": request.fts_enabled,
+            # v2 owner 归属：留空 = 旧行为
+            "owner_type": request.owner_type,
+            "owner_key": request.owner_key,
+            "subject_key": request.subject_key,
+            "audience": request.audience,
+            "source_conversation_key": request.source_conversation_key,
+            "fact_key": request.fact_key,
+            "policy_version": request.policy_version,
         }
         raw = self._native.promote(json.dumps(payload, ensure_ascii=False))
         return json.loads(raw) if isinstance(raw, str) else raw

@@ -103,7 +103,7 @@ def test_fetch_next_messages_and_senders(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    text, batch_end, senders, at_senders = cons._fetch_next_messages(1001, 0, 10)
+    text, batch_end, senders, at_senders, _rows = cons._fetch_next_messages(1001, 0, 10)
     assert batch_end == 3
     assert "第一条" in text
     assert senders == ["111", "112"]
@@ -118,7 +118,7 @@ def test_fetch_next_messages_and_senders(tmp_path, monkeypatch):
     conn.close()
     assert cons._get_message_table(sqlite3.connect(db_path).cursor()) == "messages"
 
-    text, batch_end, senders, at_senders = cons._fetch_next_messages(1001, 100, 10)
+    text, batch_end, senders, at_senders, _rows = cons._fetch_next_messages(1001, 100, 10)
     assert batch_end == 100
 
 
@@ -142,7 +142,7 @@ def test_fetch_next_messages_source_kind_at_mention(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    text, batch_end, senders, at_senders = cons._fetch_next_messages(1001, 0, 10)
+    text, batch_end, senders, at_senders, _rows = cons._fetch_next_messages(1001, 0, 10)
     assert batch_end == 3
     assert "消息ID(1) 用户(111): 普通一句" in text
     assert "消息ID(2) 用户(112) [对Bot说]: @你 这是什么" in text
@@ -326,8 +326,8 @@ def test_drain_group_processes_up_to_max_rounds(tmp_path, monkeypatch):
     conn.close()
 
     async def fake_generate(self, group_id, last_id, force=False):
-        _, batch_end, senders, _ = cons._fetch_next_messages(group_id, last_id, 10)
-        return "{}", batch_end, "fake", senders, [], ""
+        _, batch_end, senders, _, _rows = cons._fetch_next_messages(group_id, last_id, 10)
+        return "{}", batch_end, "fake", senders, [], "", []
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
 
@@ -440,7 +440,7 @@ def test_generate_shrinks_batch_when_output_truncated(tmp_path, monkeypatch):
     """
     cons, backend = _prepare_generate(tmp_path, monkeypatch, ["length", "stop"])
 
-    result, batch_end, name, senders, _at_senders, messages = asyncio.run(
+    result, batch_end, name, senders, _at_senders, messages, _rows = asyncio.run(
         cons._generate(1001, 0)
     )
 

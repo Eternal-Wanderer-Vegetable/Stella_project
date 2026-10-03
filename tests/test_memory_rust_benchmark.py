@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import memory_rust.benchmark as benchmark
-from memory_rust.backend import BackendUnavailable
+from memory_rust.backend import MEMORY_SCHEMA_VERSION, BackendUnavailable
 
 
 def _case() -> dict:
@@ -32,7 +32,7 @@ class _FakeRustBackend:
         with sqlite3.connect(request.db_path) as conn:
             assert conn.execute(
                 "SELECT version FROM schema_meta WHERE k = 'version'"
-            ).fetchone() == (14,)
+            ).fetchone() == (MEMORY_SCHEMA_VERSION,)
         return SimpleNamespace(
             mode=request.mode,
             conversation_memories=[

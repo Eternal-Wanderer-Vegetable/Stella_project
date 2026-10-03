@@ -15,6 +15,7 @@ from memory.benchmark import (
     run_benchmark,
     write_case_db,
 )
+from memory_rust.backend import MEMORY_SCHEMA_VERSION
 
 
 def test_load_cases_missing_dir(tmp_path):
@@ -60,7 +61,7 @@ def test_write_case_db_can_add_native_schema_marker(tmp_path):
     with sqlite3.connect(db_path) as conn:
         assert conn.execute(
             "SELECT version FROM schema_meta WHERE k = 'version'"
-        ).fetchone() == (14,)
+        ).fetchone() == (MEMORY_SCHEMA_VERSION,)
 
 
 def test_evaluate_retrieval_result_preserves_case_scoring():

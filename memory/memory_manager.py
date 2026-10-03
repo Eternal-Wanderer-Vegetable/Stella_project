@@ -313,6 +313,14 @@ class MemoryManager:
             "occurrence_count": int(row[13] or 1),
             "source_kinds": row[14] or '["PASSIVE"]',
             "source_kind": row[15] or "PASSIVE",
+            # v15 归属列（计划 §6.4）：rust 晋升事务同语义
+            "owner_type": row[17] if len(row) > 17 else None,
+            "owner_key": row[18] if len(row) > 18 else None,
+            "subject_key": row[19] if len(row) > 19 else None,
+            "audience": row[20] if len(row) > 20 else None,
+            "source_conversation_key": row[21] if len(row) > 21 else None,
+            "fact_key": row[22] if len(row) > 22 else None,
+            "policy_version": row[23] if len(row) > 23 else None,
         }
 
     # ── 观测辅助（计划 §6.1 对象履历；旁路纪律见模块头注释）──────────
@@ -359,6 +367,7 @@ class MemoryManager:
             "confidence": candidate["confidence"],
             "occurrence": candidate["occurrence_count"],
             "at_mention_evidence": MemoryManager._has_at_mention(candidate["source_kinds"]),
+            "direct_evidence": MemoryManager._has_direct_evidence(candidate["source_kinds"]),
             "threshold_min_importance": MEMORY_PROMOTE_MIN_IMPORTANCE,
             "threshold_high_confidence": MEMORY_CONFIRM_HIGH_CONFIDENCE,
             "threshold_low_confidence": MEMORY_OBSERVE_LOW_CONFIDENCE,
@@ -380,7 +389,9 @@ class MemoryManager:
         rows = cursor.execute(
             "SELECT id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, "
             "source_message_ids, usage_tags, visibility, behavior_rule, "
-            "occurrence_count, source_kinds, source_kind, origin_group_id"
+            "occurrence_count, source_kinds, source_kind, origin_group_id, "
+            "owner_type, owner_key, subject_key, audience, "
+            "source_conversation_key, fact_key, policy_version"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
         conn.commit()
@@ -438,6 +449,19 @@ class MemoryManager:
                     group_shared_space=str(candidate["group_shared_space"]),
                     user_id=str(candidate["user_id"]),
                     memory_type=str(candidate["type"]),
+                    # v15 归属（计划 §6.5/§6.7）：native 相似/冲突/配额按同 owner 收口
+                    owner_type=str(candidate.get("owner_type") or "SPACE"),
+                    owner_key=str(
+                        candidate.get("owner_key")
+                        or f"space:{candidate['group_shared_space']}"
+                    ),
+                    subject_key=str(candidate.get("subject_key") or ""),
+                    audience=str(candidate.get("audience") or "CURRENT_SPACE"),
+                    source_conversation_key=str(
+                        candidate.get("source_conversation_key") or ""
+                    ),
+                    fact_key=str(candidate.get("fact_key") or ""),
+                    policy_version=str(candidate.get("policy_version") or ""),
                     quota_limit=MEMORY_USER_QUOTA,
                     quota_enforce=MEMORY_QUOTA_ENFORCE,
                     quota_confirmation_cap=MEMORY_QUOTA_CONFIRMATION_CAP,
@@ -512,6 +536,16 @@ class MemoryManager:
 
         if promoted:
             bump_memory_history()
+            # 持久 scope 版本（计划 §6.6）：跨进程热缓存靠 DB 版本失效——
+            # 空间 owner 必 bump；本批有 PERSON 行时对应个人 owner 也 bump。
+            try:
+                from memory import scope_versions
+
+                scope_versions.bump("global")
+                for key in getattr(self, "_last_promoted_owner_keys", []) or []:
+                    scope_versions.bump(key)
+            except Exception:
+                pass
             try:
                 get_compressor().maybe_compress(reason="candidate_processed")
             except Exception as e:
@@ -549,7 +583,9 @@ class MemoryManager:
         candidates = cursor.execute(
             "SELECT id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, "
             "source_message_ids, usage_tags, visibility, behavior_rule, "
-            "occurrence_count, source_kinds, source_kind, origin_group_id"
+            "occurrence_count, source_kinds, source_kind, origin_group_id, "
+            "owner_type, owner_key, subject_key, audience, "
+            "source_conversation_key, fact_key, policy_version"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
         # 批次事实：actual scope（候选可能来自当前群以外的空间）与条数
@@ -559,6 +595,7 @@ class MemoryManager:
 
         # 本批状态写入都在同一个业务事务里：履历先入缓冲，提交成功后落账
         self._history_buffer = []
+        self._last_promoted_owner_keys = []
         promoted = False
         for row in candidates:
             candidate = {
@@ -578,6 +615,15 @@ class MemoryManager:
                 "occurrence_count": int(row[13] or 1),
                 "source_kinds": row[14] or '["PASSIVE"]',
                 "source_kind": row[15] or "PASSIVE",
+                # v15 归属列（计划 §6.4）：晋升/合并/配额全程保持 owner；
+                # 旧行为 NULL 时由 _create_memory 兜底 SPACE 语义
+                "owner_type": row[17] if len(row) > 17 else None,
+                "owner_key": row[18] if len(row) > 18 else None,
+                "subject_key": row[19] if len(row) > 19 else None,
+                "audience": row[20] if len(row) > 20 else None,
+                "source_conversation_key": row[21] if len(row) > 21 else None,
+                "fact_key": row[22] if len(row) > 22 else None,
+                "policy_version": row[23] if len(row) > 23 else None,
             }
             instance_key = f"cand:{candidate['id']}"
 
@@ -671,6 +717,9 @@ class MemoryManager:
                 ))
                 # 只记录有晋升（CONFIRMED）的批次，用于提交后统一触发压缩
                 promoted = True
+                _ok = candidate.get("owner_key") or f"space:{candidate['group_shared_space']}"
+                if _ok not in self._last_promoted_owner_keys:
+                    self._last_promoted_owner_keys.append(_ok)
 
         # ── 事务提交（memory.promotion.commit 事实节点，计划 §6.1 事务诚实）──
         try:
@@ -720,6 +769,29 @@ class MemoryManager:
             str(k).strip().upper() == "AT_MENTION" for k in kinds
         )
 
+    # 直接对话证据的合法来源（计划 §6.3）：AT_MENTION 与 PRIVATE_DIRECT 同为
+    # 「用户直接对 Bot 说」；PRIVATE_DIRECT 只代表直接性，不代表可跨群共享
+    # （共享由 audience 管）。BOT_SELF 永远不在其中。
+    DIRECT_EVIDENCE_SOURCE_KINDS = frozenset({"AT_MENTION", "PRIVATE_DIRECT"})
+
+    @staticmethod
+    def _has_direct_evidence(source_kinds: str | None) -> bool:
+        """历次证据中是否包含「用户直接对 Bot 说」（AT_MENTION 或 PRIVATE_DIRECT）。
+
+        中性命名的判定入口（计划 §6.3）：晋升/验证的「直接对话高密度证据」
+        语义与具体入口无关；旧 ``_has_at_mention`` 保留兼容。
+        """
+        try:
+            kinds = json.loads(source_kinds or "[]")
+        except (ValueError, TypeError):
+            return False
+        if not isinstance(kinds, list):
+            return False
+        return any(
+            str(k).strip().upper() in MemoryManager.DIRECT_EVIDENCE_SOURCE_KINDS
+            for k in kinds
+        )
+
     @staticmethod
     def _decide_promotion(candidate: dict) -> tuple[bool, str]:
         """Gate 1 三档判定：返回 (是否晋升, 原因说明)。
@@ -750,15 +822,15 @@ class MemoryManager:
             return True, f"高置信直接晋升（conf={conf:.2f}）"
 
         if conf >= MEMORY_OBSERVE_LOW_CONFIDENCE:
-            if MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT and MemoryManager._has_at_mention(
+            if MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT and MemoryManager._has_direct_evidence(
                 candidate["source_kinds"]
             ):
-                return True, f"AT_MENTION 高密度证据单次晋升（conf={conf:.2f}）"
+                return True, f"直接对话高密度证据单次晋升（conf={conf:.2f}）"
             if occurrence >= MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE:
                 return True, f"交叉验证通过（conf={conf:.2f}，观察 {occurrence} 次）"
             return False, (
                 f"置信度中等但证据不足（conf={conf:.2f}，观察 {occurrence} 次 < "
-                f"{MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE}，无 AT_MENTION）"
+                f"{MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE}，无直接对话证据）"
             )
 
         return False, f"置信度不足（conf={conf:.2f} < {MEMORY_OBSERVE_LOW_CONFIDENCE}）"
@@ -854,18 +926,32 @@ class MemoryManager:
         用户 B 的记忆（_merge_content 用「；」把两人的内容拼在一起），造成
         不可恢复的归属污染。与 _resolve_conflicts 的过滤条件保持一致。
 
+        v15（计划 §6.5）：还必须**同归属同受众**——PRIVATE_ONLY 与 USER_SHARED
+        的表示永不自动拼接，合并候选先比 owner_key/audience 再比语义。
+
         类型条件分两档：同类型相似即命中；跨类型只在归一化后逐字相同时命中——
         类型词表对「希望被称呼为X」这类内容两可，LLM 两次抽取可能给出 RELATION
         与 PREFERENCE，纯同类型比对会让跨类型重复各立一条（2026-09-27 缺陷）。
         """
+        owner_key = candidate.get("owner_key") or (
+            f"space:{candidate['group_shared_space']}"
+        )
+        audience = candidate.get("audience") or "CURRENT_SPACE"
         rows = cursor.execute(
             "SELECT id, type, content FROM memories WHERE status = 'active' "
             "AND group_shared_space = ? AND user_id = ? "
+            "AND COALESCE(owner_key, 'space:' || group_shared_space) = ? "
+            "AND COALESCE(audience, 'CURRENT_SPACE') = ? "
             # 证据新鲜度倒序：同类相似记忆有多条时并入最近被确认过的那条。
             # 不用 last_accessed_at——它现在由检索命中刷新，会让「最近被引用过的」
             # 而不是「最近被证实过的」持续吸收新证据。
             "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC",
-            (str(candidate["group_shared_space"]), str(candidate["user_id"])),
+            (
+                str(candidate["group_shared_space"]),
+                str(candidate["user_id"]),
+                owner_key,
+                audience,
+            ),
         ).fetchall()
         for mem_id, mem_type, content in rows:
             content = content or ""
@@ -878,8 +964,15 @@ class MemoryManager:
 
     def _create_memory(self, cursor: sqlite3.Cursor, candidate: dict) -> None:
         """新建长期记忆并同步写入 FTS 索引。内存记忆内容与原样都取 candidate.content。
-        同时写入 v2 元字段（usage_tags / visibility / behavior_rule）。"""
+        同时写入 v2 元字段（usage_tags / visibility / behavior_rule）。
+        v15 归属列（计划 §6.4）：PERSON 候选晋升为记忆必须携带 owner/subject/
+        audience——晋升丢归属会让个人记忆在后续压缩/检索里被当成空间行。
+        旧行（无归属列）兜底为 SPACE，与迁移回填语义一致。"""
         memory_id = uuid.uuid4().hex
+        owner_type = candidate.get("owner_type") or "SPACE"
+        owner_key = candidate.get("owner_key") or (
+            f"space:{candidate['group_shared_space']}"
+        )
         cursor.execute(
             "INSERT OR IGNORE INTO memories ("
             "id, group_shared_space, user_id, type, content, content_raw, importance, confidence, status, "
@@ -887,8 +980,10 @@ class MemoryManager:
             # 新记忆还没被检索过，但置 NULL 会让 _archive_low_value_memories 的
             # 「从未访问」分支立刻把低重要度的新记忆归档，等于不给宽限期。
             "confirmation_count, last_confirmed_at, last_accessed_at, compressed_at, compression_version, is_atomized, "
-            "usage_tags, visibility, behavior_rule, source_kind)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?, ?)",
+            "usage_tags, visibility, behavior_rule, source_kind, "
+            "owner_type, owner_key, subject_key, audience, "
+            "source_conversation_key, fact_key, policy_version)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 memory_id,
                 candidate["group_shared_space"],
@@ -904,6 +999,13 @@ class MemoryManager:
                 candidate.get("visibility") or "OPEN",
                 candidate.get("behavior_rule") or "",
                 candidate.get("source_kind") or "PASSIVE",
+                owner_type,
+                owner_key,
+                candidate.get("subject_key") or "",
+                candidate.get("audience") or "CURRENT_SPACE",
+                candidate.get("source_conversation_key") or "",
+                candidate.get("fact_key") or "",
+                candidate.get("policy_version") or "",
             ),
         )
         _upsert_fts_record(

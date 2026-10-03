@@ -63,6 +63,16 @@ LEGACY_OWNER_COLUMN = "group_id"
 # 溯源列：迁移时回填真实群号，让空间合并可回退（否则合并后拆不回来）
 ORIGIN_COLUMN = "origin_group_id"
 
+# v15 起归属列的保留命名空间前缀（计划 §6.1/§6.4）：
+# - ``private:`` 私聊会话的隔离空间（private:qq:<bot>:<uid>）
+# - ``personal:`` PERSON 行写在 group_shared_space 列的兼容 namespace
+# 它们刻意不与真实群空间名匹配，校验时放行（真实空间名集合查不到它们是设计使然）。
+_RESERVED_SPACE_PREFIXES = ("private:", "personal:")
+
+
+def _is_reserved_namespace(name: str) -> bool:
+    return name.startswith(_RESERVED_SPACE_PREFIXES)
+
 
 @dataclass
 class MigrationContext:
@@ -693,6 +703,100 @@ def migrate_v14(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return MigrationResult(version=14, notes=["user_address_preferences 已就绪"])
 
 
+# v15 的 owner 列清单（表, 列, 声明）。迁移期自加（run_migrations 先于
+# schema._migrate 的 additive 步骤执行，回填前列必须已存在）；新库的规范 DDL
+# 也含这些列，所以 ALTER 全部幂等守卫。
+_V15_OWNER_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
+    "memories": (
+        ("owner_type", "TEXT DEFAULT 'SPACE'"),
+        ("owner_key", "TEXT"),
+        ("subject_key", "TEXT DEFAULT ''"),
+        ("audience", "TEXT DEFAULT 'CURRENT_SPACE'"),
+        ("source_conversation_key", "TEXT DEFAULT ''"),
+        ("fact_key", "TEXT DEFAULT ''"),
+        ("policy_version", "TEXT DEFAULT ''"),
+    ),
+    "memory_candidates": (
+        ("owner_type", "TEXT DEFAULT 'SPACE'"),
+        ("owner_key", "TEXT"),
+        ("subject_key", "TEXT DEFAULT ''"),
+        ("audience", "TEXT DEFAULT 'CURRENT_SPACE'"),
+        ("source_conversation_key", "TEXT DEFAULT ''"),
+        ("fact_key", "TEXT DEFAULT ''"),
+        ("policy_version", "TEXT DEFAULT ''"),
+    ),
+    "atomic_facts": (
+        ("owner_type", "TEXT DEFAULT 'SPACE'"),
+        ("owner_key", "TEXT"),
+        ("subject_key", "TEXT DEFAULT ''"),
+        ("audience", "TEXT DEFAULT 'CURRENT_SPACE'"),
+        ("fact_key", "TEXT DEFAULT ''"),
+        ("policy_version", "TEXT DEFAULT ''"),
+    ),
+}
+
+
+def migrate_v15(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v15：双层记忆归属（计划 §6.1/§6.4）。
+
+    - 建四张新表：conversation_registry / memory_evidence /
+      personal_profile_facts / memory_scope_versions；
+    - 为三张记忆表补 owner 列（幂等 ALTER）并把存量行回填为 SPACE：
+      ``owner_type='SPACE'``、``owner_key='space:'||group_shared_space``。
+      **不做任何个人化改写**——旧记忆全部保持空间语义，跨群共享由
+      审查后的 backfill 工具（M4）显式执行；
+    - PERSON 写入开关（PERSONAL_MEMORY_WRITE_ENABLED）默认关闭，迁移本身
+      不产生任何 PERSON 行。
+    """
+    from memory.ownership import POLICY_VERSION
+    from memory.schema import (
+        create_conversation_registry_table,
+        create_memory_evidence_table,
+        create_memory_scope_versions_table,
+        create_personal_profile_facts_table,
+    )
+
+    result = MigrationResult(version=15)
+    cursor = conn.cursor()
+    create_conversation_registry_table(conn)
+    create_memory_evidence_table(conn)
+    create_personal_profile_facts_table(conn)
+    create_memory_scope_versions_table(conn)
+    result.notes.append(
+        "conversation_registry / memory_evidence / personal_profile_facts / "
+        "memory_scope_versions 已就绪"
+    )
+    for table, columns in _V15_OWNER_COLUMNS.items():
+        if not _columns(cursor, table):
+            continue
+        existing = _columns(cursor, table)
+        added = 0
+        for column, decl in columns:
+            if column in existing:
+                continue
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            added += 1
+        if added:
+            result.notes.append(f"{table}: 补 {added} 列 owner 归属字段")
+        if "owner_key" in _columns(cursor, table):
+            # 注意 WHERE 判据必须是 owner_key：ALTER ... DEFAULT 'SPACE' 会把
+            # 存量行的 owner_type 直接填上默认值，owner_type IS NULL 永不命中。
+            cursor.execute(
+                f"UPDATE {table} SET owner_type = 'SPACE', "
+                f"owner_key = 'space:' || group_shared_space, "
+                f"audience = COALESCE(audience, 'CURRENT_SPACE'), "
+                f"policy_version = COALESCE(NULLIF(policy_version, ''), ?) "
+                f"WHERE owner_key IS NULL",
+                (POLICY_VERSION,),
+            )
+            if cursor.rowcount:
+                result.changed_rows += cursor.rowcount
+                result.notes.append(f"{table}: {cursor.rowcount} 行回填为 SPACE owner")
+    if not result.changed_rows:
+        result.notes.append("没有需要回填的存量行")
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -702,6 +806,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     12: migrate_v12,
     13: migrate_v13,
     14: migrate_v14,
+    15: migrate_v15,
 }
 
 
@@ -795,7 +900,12 @@ def verify_after_migration(
             problems.append(f"{table}.{owner}: 仍有 {empty} 行归属为空")
         for (value,) in cursor.execute(f"SELECT DISTINCT {owner} FROM {table}"):
             name = str(value or "")
-            if not name or space_map.is_legacy_space(name) or name in allowed:
+            if (
+                not name
+                or space_map.is_legacy_space(name)
+                or name in allowed
+                or _is_reserved_namespace(name)
+            ):
                 continue
             problems.append(
                 f"{table}.{owner}: 空间名 {name!r} 既不在配置/账本里也不是 legacy_*，"

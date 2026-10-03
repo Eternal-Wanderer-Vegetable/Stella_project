@@ -56,18 +56,50 @@ def _submit(service) -> dict:
 
 
 class TestBuildOrigin:
+    @staticmethod
+    def _group_event(self_id="10000", group_id=12345, user_id=777, message_id=42):
+        # v2 build_origin 按 isinstance 分流群/私聊（计划 §6.8），用真实事件类型
+        from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+
+        return GroupMessageEvent(
+            time=0, self_id=self_id, post_type="message", sub_type="normal",
+            user_id=user_id, message_type="group", message_id=message_id,
+            group_id=group_id, message=Message("你好"), original_message=Message("你好"),
+            raw_message="你好", font=0, sender={"nickname": "u", "role": "member"},
+        )
+
     def test_from_event_fields(self):
-        event = SimpleNamespace(self_id="10000", group_id=12345, user_id=777, message_id=42)
+        event = self._group_event()
         bot = SimpleNamespace(self_id="10000")
         origin = cometa_bridge.build_origin(event, bot, instance_id="inst-test")
         assert origin["platform"] == "qq"
         assert origin["requester_id"] == "777"
         assert origin["conversation_id"] == "12345"
         assert origin["source_request_id"] == "msg-42"
+        # v2 会话身份完整（计划 §6.8）
+        assert origin["conversation_kind"] == "group"
+        assert origin["peer_id"] == "12345"
+        assert origin["conversation_key"] == "qq:10000:group:12345"
 
     def test_requires_instance(self):
-        event = SimpleNamespace(self_id="1", group_id=1, user_id=1, message_id=1)
+        event = self._group_event(self_id="1", group_id=1, user_id=1, message_id=1)
         assert cometa_bridge.build_origin(event, None, instance_id="") is None
+
+    def test_private_event_yields_private_origin(self):
+        from nonebot.adapters.onebot.v11 import Message, PrivateMessageEvent
+
+        event = PrivateMessageEvent(
+            time=0, self_id="10000", post_type="message", sub_type="friend",
+            user_id=777, message_type="private", message_id=43,
+            message=Message("帮我调研"), original_message=Message("帮我调研"),
+            raw_message="帮我调研", font=0, sender={"nickname": "u"},
+        )
+        bot = SimpleNamespace(self_id="10000")
+        origin = cometa_bridge.build_origin(event, bot, instance_id="inst-test")
+        assert origin["conversation_kind"] == "private"
+        assert origin["peer_id"] == "777"
+        assert origin["conversation_key"] == "qq:10000:private:777"
+        assert origin["conversation_id"] == "qq:10000:private:777"
 
 
 class TestDeliverAck:

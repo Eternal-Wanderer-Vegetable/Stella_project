@@ -294,10 +294,26 @@ class RestrictedPlanner:
         """
         try:
             from config.spaces import resolve_space
+            from memory.ownership import scope_for_conversation
             from memory.retrieval_v2 import retrieve_memories
 
             space = ctx.group_shared_space or resolve_space(ctx.group_id)
-            result = retrieve_memories(space, ctx.user_id, query, trigger=ctx.trigger)
+            # 深度查询与快速路径同一份访问范围（计划 §6.6）：Planner 的改写
+            # 只改 query，不改授权——服务端 scope 由会话身份生成，模型改写词
+            # 不能扩大候选池。
+            access_scope = None
+            if ctx.trigger != "proactive" and getattr(ctx, "conversation_kind", ""):
+                access_scope = scope_for_conversation(
+                    kind=ctx.conversation_kind,
+                    memory_space=space,
+                    platform="qq" if ctx.conversation_kind != "webchat" else "webchat",
+                    bot_id=getattr(ctx, "bot_id", ""),
+                    user_id=ctx.peer_id or ctx.user_id,
+                )
+            result = retrieve_memories(
+                space, ctx.user_id, query, trigger=ctx.trigger,
+                access_scope=access_scope,
+            )
             summary = _compress_memories(result.conversation_memories or [])
             if not summary:
                 logger.info(f"🔍 [Planner] 深度查询无命中（检索词：{query!r}）")

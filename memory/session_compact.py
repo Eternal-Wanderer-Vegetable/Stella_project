@@ -270,8 +270,12 @@ def schedule_compact(group_id: int, tail_start_id: int,
         logger.debug(f"[Compact] 群 {group_id} 已有压缩任务在跑，跳过本次触发")
         return
 
+    # 在途占位必须在 create_task **之前**同步完成（计划 §6.2）：create_task
+    # 的新任务可能到下一个事件循环 tick 才执行 _run()，同 tick 的第二次触发
+    # 会在占位发生前通过检查、基于同一起点各自推进（重复/跳过）。
+    _in_flight.add(group_id)
+
     async def _run() -> None:
-        _in_flight.add(group_id)
         fctx = None
         try:
             from core.observability import message_flow

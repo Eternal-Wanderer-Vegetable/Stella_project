@@ -40,6 +40,7 @@ import inspect
 import math
 import os
 import random
+import sqlite3
 import time
 from collections import OrderedDict, defaultdict
 from dataclasses import replace
@@ -53,6 +54,7 @@ from nonebot.adapters.onebot.v11 import (
     Message,
     MessageEvent,
     MessageSegment,
+    PrivateMessageEvent,
 )
 from nonebot.exception import FinishedException
 from nonebot.rule import Rule
@@ -72,6 +74,7 @@ from config import (
     CONSOLIDATION_TRIGGER_NEW_MESSAGES,
     DB_CLEANUP_CLEAR_MESSAGES,
     DB_CLEANUP_ON_START,
+    DB_PATH,
     EXPRESSION_SWEEP_INTERVAL,
     EXTENSIONS_DIR,
     LLM_TIMEOUT,
@@ -80,6 +83,8 @@ from config import (
     PARTICIPATION_ENABLED,
     PARTICIPATION_TICK_INTERVAL,
     PARTICIPATION_TRIGGER_ENABLED,
+    PRIVATE_CHAT_ALLOWLIST,
+    PRIVATE_CHAT_ENABLED,
     PROACTIVE_CHECK_INTERVAL,
     PROACTIVE_ENABLED,
     PROACTIVE_MAX_LINES,
@@ -181,13 +186,32 @@ pipeline = Pipeline(timeout=LLM_TIMEOUT)
 # 同一群人同一时刻只跑一次推理，防止并发写同一条上下文造成状态混乱
 _group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
+# ── 私聊会话锁（计划 §6.2）：按规范会话键串行，不同私聊互不阻塞 ──
+# 不能复用 _group_locks：私聊没有 group_id（0 占位），且绝不因「同一个用户
+# 在多个群」而串行锁住所有会话——锁只锁同一个会话。
+_private_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+def _event_key(event: MessageEvent) -> str:
+    """事件的去重键（计划 §6.2）：至少包含 bot、会话、message_id。
+
+    相同 msg_id 在不同 Bot/不同会话不可互相压掉——OneBot 的 message_id 只在
+    单 Bot 内保证唯一，多 Bot/私聊群同号时裸 message_id 会误伤。
+    """
+    if isinstance(event, GroupMessageEvent):
+        conv = f"group:{event.group_id}"
+    else:
+        conv = f"private:{getattr(event, 'user_id', 0)}"
+    return f"{event.self_id}:{conv}:{event.message_id}"
+
+
 # 回应检测的后台任务集合：asyncio.create_task 的返回值必须持有引用，
 # 否则任务可能在完成前被 GC 回收
 _reply_check_tasks: set[asyncio.Task] = set()
 
-# 插件已处理标记：message_id -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
-_plugin_handled_msgs: OrderedDict[int, float] = OrderedDict()
-_addressing_decisions: OrderedDict[int, AddressingRequest] = OrderedDict()
+# 插件已处理标记：event_key -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
+_plugin_handled_msgs: OrderedDict[str, float] = OrderedDict()
+_addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
 
 
 # ============================================================
@@ -200,24 +224,37 @@ _flow_roots: "OrderedDict[tuple[int, int], Any]" = OrderedDict()
 _FLOW_ROOTS_MAX = 256
 
 
-def _flow_root_for(event: GroupMessageEvent):
+def _flow_key(event: MessageEvent) -> tuple[int, int]:
+    """流程 root 的键：群=(群号, msg_id)；私聊=(0, msg_id)（计划 §6.2）。"""
+    return (getattr(event, "group_id", 0) or 0, event.message_id)
+
+
+def _flow_scope_of(event: MessageEvent) -> str:
+    """流程 root 的 scope：规范会话身份（私聊不再共享 qq:0）。"""
+    if isinstance(event, GroupMessageEvent):
+        return f"qq:{event.group_id}"
+    return f"qq:{event.self_id}:private:{getattr(event, 'user_id', 0)}"
+
+
+def _flow_root_for(event: MessageEvent):
     """取本事件的流程 root；没有（preprocessor 未生效等）时返回 None。"""
-    found = _flow_roots.get((event.group_id, event.message_id))
+    found = _flow_roots.get(_flow_key(event))
     return None if (found is None or found.ended) else found
 
 
-def _flow_root_or_create(event: GroupMessageEvent, root_kind: str):
+def _flow_root_or_create(event: MessageEvent, root_kind: str):
     found = _flow_root_for(event)
     if found is not None:
         return found
     try:
         from core.observability import message_flow
 
+        key = _flow_key(event)
         return message_flow.begin_trace(
             root_kind=root_kind, platform="qq",
-            scope=f"qq:{event.group_id}",
+            scope=_flow_scope_of(event),
             source_message_key=(
-                f"qq:{event.self_id}:{event.group_id}:{event.message_id}"),
+                f"qq:{event.self_id}:{key[0]}:{event.message_id}"),
         )
     except Exception:
         return None
@@ -314,7 +351,7 @@ def _flow_command(node_id: str):
         @functools.wraps(fn)
         async def wrapper(bot, event):
             fctx = None
-            if isinstance(event, GroupMessageEvent):
+            if isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
                 fctx = _flow_root_or_create(event, "qq_command")
             token = _flow_reply_ctx.set(fctx)
             sp = _flow_span(fctx, node_id)
@@ -344,22 +381,28 @@ try:
 
     @event_preprocessor
     async def _flow_ingress_root(event: MessageEvent):
-        """每条群消息最早的处理点：建 shared root（规则/过滤之前，计划 §6.2）。"""
-        if not isinstance(event, GroupMessageEvent):
+        """每条消息最早的处理点：建 shared root（规则/过滤之前，计划 §6.2）。
+
+        群与私聊都建（私聊此前被 group-only skip 跳过，trace 缺失）；
+        scope 用规范会话身份。
+        """
+        if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return
         try:
             from core.observability import message_flow
 
-            if (event.group_id, event.message_id) in _flow_roots:
+            key = _flow_key(event)
+            if key in _flow_roots:
                 return
             root = message_flow.begin_trace(
-                root_kind="qq_passive", platform="qq",
-                scope=f"qq:{event.group_id}",
+                root_kind="qq_private" if isinstance(event, PrivateMessageEvent) else "qq_passive",
+                platform="qq",
+                scope=_flow_scope_of(event),
                 source_message_key=(
-                    f"qq:{event.self_id}:{event.group_id}:{event.message_id}"),
+                    f"qq:{event.self_id}:{key[0]}:{event.message_id}"),
             )
-            _flow_roots[(event.group_id, event.message_id)] = root
-            _flow_roots.move_to_end((event.group_id, event.message_id))
+            _flow_roots[key] = root
+            _flow_roots.move_to_end(key)
             while len(_flow_roots) > _FLOW_ROOTS_MAX:
                 _flow_roots.popitem(last=False)
         except Exception:
@@ -368,12 +411,12 @@ try:
     @event_postprocessor
     async def _flow_ingress_end(event: MessageEvent):
         """全部 matcher 结束后关闭 root（root 同步边界 = 事件处理结束）。"""
-        if not isinstance(event, GroupMessageEvent):
+        if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return
         try:
             from core.observability import message_flow
 
-            root = _flow_roots.pop((event.group_id, event.message_id), None)
+            root = _flow_roots.pop(_flow_key(event), None)
             if root is not None and not root.ended:
                 message_flow.end_trace(
                     root, outcome=root.outcome or "passive_only")
@@ -465,9 +508,16 @@ else:
 
 
 def _space_system_prompt(ctx: ChatContext) -> str:
-    """按共享空间选择人格；空间 prompt 不可用时由 config.spaces 回退默认文件。"""
+    """按共享空间选择人格；空间 prompt 不可用时由 config.spaces 回退默认文件。
+
+    私聊轮次的 group_id 是 0，绝不能对 0 触发 resolve_space（会凭空分配一个
+    「群 0」的账本条目）——ctx.group_shared_space 由入口显式携带（私聊是
+    隔离空间名，prompt 文件不存在时 prompt_text 回退默认人格，计划 §6.2：
+    私聊不继承任意群人格）。
+    """
     try:
-        return prompt_text(resolve_space(int(ctx.group_id))) or pipeline.system_prompt
+        space = ctx.group_shared_space or resolve_space(int(ctx.group_id))
+        return prompt_text(space) or pipeline.system_prompt
     except Exception as e:
         logger.warning(f"⚠️ 读取空间人格失败，使用默认人格: {e}")
         return pipeline.system_prompt
@@ -479,21 +529,21 @@ pipeline.system_prompt_resolver = _space_system_prompt
 load_extensions(pipeline, EXTENSIONS_DIR)
 
 
-async def _run_turn_via_engine(group_id: int, ctx: ChatContext) -> ChatContext:
+async def _run_turn_via_engine(session_key: str, ctx: ChatContext) -> ChatContext:
     """轮次唯一执行入口（计划 §R.5：legacy 双路开关已退役）。
 
     经 facade 进程内执行器：prepare/finalize 复用同一条管线，生成是
     进程内 provider 调用。deadline 与旧引擎单次生成超时对齐
-    （LLM_TIMEOUT，超时都走兜底文案，BC-5）。主动发言与对话共用
-    ``qq:{group_id}`` 会话键——两者本就竞争同一群会话，facade 锁嵌在
-    群锁内，互斥语义不变。
+    （LLM_TIMEOUT，超时都走兜底文案，BC-5）。
+
+    ``session_key`` 是 runtime owner 键：群沿用旧 ``qq:{group_id}`` 别名
+    （与主动发言竞争同一会话，锁嵌套语义不变）；私聊用规范会话键
+    （计划 §6.1）。deadline 与旧引擎单次生成超时对齐。
     """
     from core.runtime.facade import ensure_shared_facade_started
 
     facade = await ensure_shared_facade_started()
-    return await facade.submit_turn(
-        f"qq:{group_id}", pipeline, ctx, deadline=LLM_TIMEOUT
-    )
+    return await facade.submit_turn(session_key, pipeline, ctx, deadline=LLM_TIMEOUT)
 
 
 def _social_delivery_enabled() -> bool:
@@ -826,7 +876,7 @@ async def handle_plugin(bot: Bot, event: MessageEvent):
         handled = await dispatch(event, bot)
         logger.info(f"[plugin_debug] dispatch handled={handled} msg_id={event.message_id}")
         if handled:
-            _plugin_handled_msgs[event.message_id] = time.time()
+            _plugin_handled_msgs[_event_key(event)] = time.time()
             if len(_plugin_handled_msgs) > 256:
                 _plugin_handled_msgs.popitem(last=False)
         plugin_span.__exit__(None, None, None)
@@ -846,8 +896,8 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
     fctx = _flow_root_or_create(event, "qq_chat")
-    if event.message_id in _plugin_handled_msgs:
-        _plugin_handled_msgs.pop(event.message_id, None)
+    if _event_key(event) in _plugin_handled_msgs:
+        _plugin_handled_msgs.pop(_event_key(event), None)
         _flow_decision(fctx, "chat.plugin_shortcut", status="skipped",
                        reason_code="plugin_handled")
         _flow_set_outcome(fctx, "plugin_handled")
@@ -879,6 +929,13 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 group_id=event.group_id,
                 msg_id=event.message_id,
                 message=message_text,
+                # v3 会话身份（计划 §6.1）：群轮次也带规范键，检索 scope 由
+                # 服务端从这组字段生成
+                conversation_kind="group",
+                conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                bot_id=str(event.self_id),
+                peer_id=str(event.group_id),
+                storage_session_id=event.group_id,
                 # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
                 # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
                 # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
@@ -945,7 +1002,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
             with _flow_span(fctx, "chat.runtime"):
-                ctx = await _run_turn_via_engine(event.group_id, ctx)
+                ctx = await _run_turn_via_engine(f"qq:{event.group_id}", ctx)
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
             raise
@@ -1089,6 +1146,227 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
 
 # ============================================================
+# QQ 私聊入口（计划 §6.2）：普通消息即对话，无须 @
+# ============================================================
+# 允许策略独立于 ALLOWED_GROUPS（那是群开关）；灰度由 PRIVATE_CHAT_ENABLED /
+# PRIVATE_CHAT_ALLOWLIST 控制。trigger 语义沿用 "reply"，来源标记 PRIVATE_DIRECT
+# （schema15 合法来源，与 @ 同为直接对话证据）。
+
+async def is_private_trigger(event: PrivateMessageEvent) -> bool:
+    """私聊触发规则：开关开启、非自身回显、（可选）白名单内、非空文本。"""
+    if not PRIVATE_CHAT_ENABLED:
+        return False
+    if event.user_id == event.self_id:
+        return False
+    if PRIVATE_CHAT_ALLOWLIST and event.user_id not in PRIVATE_CHAT_ALLOWLIST:
+        return False
+    if len(event.get_plaintext().strip()) > 0:
+        return True
+    # 纯图片私聊：与群口径一致——识图可用才算触发
+    return vision_available() and bool(extract_image_sources(event))
+
+
+private_chat_handler = on_message(
+    rule=Rule(is_private_trigger), priority=_PRIORITY_CHAT, block=True
+)
+
+
+def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
+    """可信入口的注册表登记（计划 §6.1）：私聊首次对话分配持久存储会话。"""
+    from memory.conversation_registry import get_or_register_private
+
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        return get_or_register_private(conn, str(event.self_id), int(event.user_id))
+    finally:
+        conn.close()
+
+
+@private_chat_handler.handle()
+async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
+    """私聊主流程（计划 §6.2）：会话锁 → 注册/落库 → Pipeline → 逐条发送。
+
+    与群链路的差异是刻意的：私聊没有群提及/参与评分/主动发言目标，也不做
+    群表达学习（deliver_lines scope=None，§6.8 第一版私聊不进群 social scope）；
+    预算、能力路由、取消、回复整形、BOT_SELF、压缩全部照走。
+    """
+    fctx = _flow_root_or_create(event, "qq_chat")
+    if _event_key(event) in _plugin_handled_msgs:
+        _plugin_handled_msgs.pop(_event_key(event), None)
+        _flow_decision(fctx, "chat.plugin_shortcut", status="skipped",
+                       reason_code="plugin_handled")
+        _flow_set_outcome(fctx, "plugin_handled")
+        logger.debug(f"[chat] 私聊已由插件处理，跳过 LLM (user {event.user_id})")
+        return
+    bot_id = str(event.self_id)
+    lock = _private_locks[f"qq:{bot_id}:private:{event.user_id}"]
+    lock_span = _flow_span(fctx, "chat.conversation_lock")
+    lock_span.__enter__()
+    async with lock:
+        lock_span.__exit__(None, None, None)
+        with _flow_span(fctx, "chat.context"):
+            # 会话注册（幂等，负整数存储 ID 在这里分配）
+            ref = _register_private_conversation(bot, event)
+            message_text = event.get_plaintext().strip() or "[图片]"
+            if _cometa_enabled():
+                ctx_origin = cometa_bridge.build_origin(
+                    event, bot, instance_id=_cometa_instance_id()
+                )
+            else:
+                ctx_origin = None
+            ctx = ChatContext(
+                user_id=event.user_id,
+                group_id=0,  # 私聊没有群号；存储/身份走以下字段（计划 §6.1）
+                msg_id=event.message_id,
+                message=message_text,
+                source_kind="PRIVATE_DIRECT",
+                group_shared_space=ref.memory_space,
+                conversation_kind=ref.kind,
+                conversation_key=ref.conversation_key,
+                bot_id=bot_id,
+                peer_id=ref.peer_id,
+                storage_session_id=ref.storage_session_id,
+                trigger="reply",
+                raw_event=event,
+                bot=bot,
+                cometa_origin=ctx_origin,
+                image_sources=extract_image_sources(event) if vision_available() else [],
+                trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+            )
+            try:
+                from core.observability import message_flow
+
+                message_flow.attach(ctx, fctx)
+            except Exception:
+                pass
+        # 用户消息**先**持久化（source PRIVATE_DIRECT，锁内落库），再组上下文
+        # ——锁覆盖「历史插入 ↔ 压缩」竞态（计划 §6.2）。
+        with _flow_span(fctx, "chat.persist"):
+            await record_message(ctx)
+        try:
+            with _flow_span(fctx, "chat.consolidate_trigger"):
+                consolidator = get_consolidator()
+                new_count = consolidator.has_new_messages_to_consolidate(
+                    ref.storage_session_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+                )
+                if new_count > 0:
+                    logger.info(
+                        f"🧠 [Trigger] 私聊 {ref.runtime_key} 触发短期记忆总结（新消息 {new_count} 条）"
+                    )
+                    maybe_consolidate(
+                        ref.storage_session_id, force=True,
+                        parent_trace_id=fctx.trace_id if fctx is not None else "",
+                    )
+        except Exception as e:
+            logger.warning(f"⚠️ 私聊触发总结异常（跳过）: {e}")
+
+        chat_blocked = budget_blocked(ROLE_CHAT)
+        if chat_blocked:
+            _flow_decision(fctx, "chat.daily_budget", status="blocked",
+                           reason_code=str(chat_blocked))
+            _flow_set_outcome(fctx, "budget_blocked")
+            logger.warning(
+                f"⚠️ [Budget] 私聊 {ref.runtime_key} 对话被预算拦下，静默不回（{chat_blocked}）"
+            )
+            return
+        _flow_checkpoint(fctx, "chat.daily_budget", summary="allowed")
+
+        try:
+            with _flow_span(fctx, "chat.runtime"):
+                ctx = await _run_turn_via_engine(ref.runtime_key, ctx)
+        except FinishedException:
+            raise
+        except RuntimeTurnError as e:
+            if e.code == E_CANCELLED:
+                _flow_decision(fctx, "chat.runtime_result", status="cancelled",
+                               reason_code="reset_cancelled")
+                _flow_set_outcome(fctx, "cancelled")
+                logger.info(f"🔇 [chat] 私聊 {ref.runtime_key} 轮次已取消（reset），静默不发送")
+                return
+            raise
+        except Exception as e:
+            _flow_decision(fctx, "chat.runtime_result", status="failed",
+                           reason_code="pipeline_error")
+            logger.error(f"Pipeline 异常: {e}")
+            ctx.reply = "......？"
+            ctx.lines = ["......？"]
+
+        if getattr(ctx, "planner_wait", False):
+            _flow_decision(fctx, "chat.runtime_result", status="skipped",
+                           reason_code="planner_wait")
+            _flow_set_outcome(fctx, "silent")
+            logger.info(f"⏳ [Planner] 私聊 {ref.runtime_key} 本轮不回复，等待更多消息")
+            return
+
+        if not ctx.lines:
+            ctx.lines = ["......？"]
+
+        logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
+
+        # 第一版私聊不进群 social scope（计划 §6.8）：scope=None 只记本地事实
+        scope = None
+
+        async def _send_reply_segment(line: str, i: int) -> str | None:
+            # 私聊纯文本分条；reply 引用对私聊的兼容性未经真实 adapter 验证
+            # （计划 §12 假设 4，M5 核验），先不构造引用段。
+            return await private_chat_handler.send(Message(line))
+
+        cometa_submission = getattr(ctx, "cometa_submission", None)
+        if cometa_submission:
+            with _flow_span(fctx, "send.cometa_ack") as ack_span:
+                ack_outcome = await cometa_bridge.deliver_ack(
+                    cometa_submission,
+                    lambda line: _send_reply_segment(line, 0),
+                )
+                ack_span.finish(status="succeeded" if ack_outcome == "sent" else "unknown",
+                                reason_code=ack_outcome)
+            if ack_outcome == "sent":
+                with contextlib.suppress(Exception):
+                    await _record_bot_lines(
+                        event.self_id, ref.storage_session_id, list(ctx.lines)
+                    )
+            elif ack_outcome == "unknown":
+                logger.warning(
+                    f"[Cometa] 私聊 {ref.runtime_key} 的 ack 发送结果未知"
+                    f"（任务 {cometa_submission.get('task_id', '')[:8]} 不受影响）"
+                )
+            _flow_set_outcome(fctx, "cometa_ack_" + str(ack_outcome))
+            await private_chat_handler.finish()
+
+        receipts = await deliver_lines(
+            ctx.lines,
+            scope=scope,
+            trace_id=ctx.trace_id,
+            turn_id=ctx.turn_id,
+            send_one=_send_reply_segment,
+            interval_seconds=SEND_INTERVAL,
+        )
+        delivered = delivered_texts(receipts)
+        if delivered:
+            with _flow_span(fctx, "reply.bookkeeping"):
+                # Bot 台词落库（BOT_SELF）：只记确认送达的片段（计划 §6.3）
+                await _record_bot_lines(event.self_id, ref.storage_session_id, delivered)
+            ack_count = sum(1 for r in receipts if r.status == "acknowledged")
+            _flow_set_outcome(
+                fctx, "delivered" if ack_count == len(ctx.lines) else "partial")
+        else:
+            _flow_decision(fctx, "reply.no_delivery", status="failed",
+                           reason_code="no_segment_delivered")
+            _flow_set_outcome(fctx, "not_delivered")
+            logger.warning(
+                f"[Delivery] 私聊 {ref.runtime_key} 全部片段未送达（turn={ctx.turn_id}）"
+            )
+
+        if ctx.tail_start_id:
+            _flow_checkpoint(fctx, "reply.compact",
+                             summary="schedule_compact spawned, not awaited")
+            schedule_compact(ref.storage_session_id, ctx.tail_start_id,
+                             parent_trace_id=fctx.trace_id if fctx is not None else "")
+
+        await private_chat_handler.finish()
+
+
+# ============================================================
 # 个性化称呼（自然语言配置）
 # ============================================================
 
@@ -1122,20 +1400,35 @@ def _is_group_admin(event: GroupMessageEvent) -> bool:
     return event.user_id in PROACTIVE_TOGGLE_ADMINS or role in ("owner", "admin")
 
 
-def _cache_addressing_decision(event: GroupMessageEvent, result: AddressingRequest) -> None:
-    _addressing_decisions[event.message_id] = result
-    _addressing_decisions.move_to_end(event.message_id)
+def _cache_addressing_decision(event: MessageEvent, result: AddressingRequest) -> None:
+    # 决策缓存按完整 event key（计划 §6.2）：相同 msg_id 在不同 Bot/会话不可
+    # 互相压掉。
+    key = _event_key(event)
+    _addressing_decisions[key] = result
+    _addressing_decisions.move_to_end(key)
     while len(_addressing_decisions) > 256:
         _addressing_decisions.popitem(last=False)
 
 
-async def is_addressing_command(event: GroupMessageEvent) -> bool:
-    """称呼请求规则：群内 @ Stella 且文本经过廉价预筛并命中结构化意图。"""
+async def is_addressing_command(event: MessageEvent) -> bool:
+    """称呼请求规则：群内 @ Stella / 私聊普通消息，文本命中结构化意图。
+
+    私聊分支（计划 §6.2）：没有 is_tome 语义（私聊必然是对 Bot 说），允许
+    策略与私聊对话入口一致（PRIVATE_CHAT_ENABLED / ALLOWLIST）。
+    """
     if not ADDRESSING_ENABLED:
         return False
-    if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
-        return False
     text = event.get_plaintext().strip()
+    if isinstance(event, PrivateMessageEvent):
+        if not PRIVATE_CHAT_ENABLED:
+            return False
+        if event.user_id == event.self_id:
+            return False
+        if PRIVATE_CHAT_ALLOWLIST and event.user_id not in PRIVATE_CHAT_ALLOWLIST:
+            return False
+    else:
+        if event.group_id not in ALLOWED_GROUPS or not event.is_tome():
+            return False
     if not is_likely_addressing_request(text):
         return False
     # reload 的插件名可以是任意字符串，命中它时保持现有重载优先级。
@@ -1190,7 +1483,13 @@ def _addressing_clarification(result: AddressingRequest, target_ids: list[str]) 
     return "我还没听清你的称呼设置，请明确告诉我称呼谁、改成什么。"
 
 
-async def _finish_addressing(bot: Bot, event: GroupMessageEvent, reply: str) -> None:
+async def _finish_addressing(bot: Bot, event: MessageEvent, reply: str) -> None:
+    if isinstance(event, PrivateMessageEvent):
+        # 私聊：回复落私聊存储（注册表分配的存储键），纯文本不构造群引用
+        ref = _register_private_conversation(bot, event)
+        await _record_bot_lines(int(bot.self_id), ref.storage_session_id, [reply])
+        await addressing_handler.finish(Message(reply))
+        return
     await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
     await addressing_handler.finish(
         Message([MessageSegment.reply(event.message_id), MessageSegment.text(reply)])
@@ -1199,15 +1498,21 @@ async def _finish_addressing(bot: Bot, event: GroupMessageEvent, reply: str) -> 
 
 @addressing_handler.handle()
 @_flow_command("command.addressing")
-async def handle_addressing(bot: Bot, event: GroupMessageEvent):
-    """执行自然语言称呼配置；所有写入都经过 addressing 服务。"""
-    result = _addressing_decisions.pop(event.message_id, None)
+async def handle_addressing(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """执行自然语言称呼配置；所有写入都经过 addressing 服务。
+
+    私聊分支（计划 §6.2）：只能改**本人**在私聊空间的称呼——不调用群管理员
+    检查，也没有 @ 目标可解析（不可伪造 @ 改他人记录）。第一版称呼仍按空间
+    隔离（私聊空间内生效）；跨空间个人称呼是 M3 的个人事实层。
+    """
+    result = _addressing_decisions.pop(_event_key(event), None)
     if result is None:
         result = await classify_addressing(event.get_plaintext().strip())
     if result.operation == NOT_ADDRESS_REQUEST:
         return
 
-    target_ids = _addressing_target_ids(event)
+    is_private = isinstance(event, PrivateMessageEvent)
+    target_ids = [] if is_private else _addressing_target_ids(event)
     if result.needs_clarification or len(target_ids) > 1:
         await _finish_addressing(bot, event, _addressing_clarification(result, target_ids))
         return
@@ -1220,14 +1525,25 @@ async def handle_addressing(bot: Bot, event: GroupMessageEvent):
     if result.operation == SET_OTHER_ADDRESS and not explicit_target:
         await _finish_addressing(bot, event, _addressing_clarification(result, target_ids))
         return
-    if target_user_id != str(event.user_id) and not _is_group_admin(event):
+    if is_private:
+        # 私聊：不可伪造 @ 目标改他人记录；他人指名一律拒绝
+        if result.operation == SET_OTHER_ADDRESS or target_user_id != str(event.user_id):
+            await _finish_addressing(
+                bot, event, "在私聊里我只能修改你自己的称呼；改别人的称呼请到对应群里操作。"
+            )
+            return
+    elif target_user_id != str(event.user_id) and not _is_group_admin(event):
         logger.info(
             f"[Addressing] 群 {event.group_id} 用户 {event.user_id} 无权修改用户 {target_user_id}"
         )
         await _finish_addressing(bot, event, "我不能替你修改其他人的称呼，除非你是本群管理员。")
         return
 
-    space = resolve_space(event.group_id)
+    if is_private:
+        ref = _register_private_conversation(bot, event)
+        space = ref.memory_space
+    else:
+        space = resolve_space(event.group_id)
     try:
         if result.operation in (SET_SELF_ADDRESS, SET_OTHER_ADDRESS):
             preference = addressing.set_preference(
@@ -1254,10 +1570,10 @@ async def handle_addressing(bot: Bot, event: GroupMessageEvent):
         else:
             return
     except ValueError as error:
-        logger.info(f"[Addressing] 群 {event.group_id} 称呼输入被拒绝: {error}")
+        logger.info(f"[Addressing] 会话 {getattr(event, 'group_id', 0) or f'私聊 {event.user_id}'} 称呼输入被拒绝: {error}")
         reply = f"这个称呼我不能保存：{error}"
     except Exception as error:
-        logger.warning(f"[Addressing] 群 {event.group_id} 处理失败: {error}")
+        logger.warning(f"[Addressing] 会话 {getattr(event, 'group_id', 0) or f'私聊 {event.user_id}'} 处理失败: {error}")
         reply = "称呼设置暂时没保存成功，请稍后再试。"
     await _finish_addressing(bot, event, reply)
 
@@ -2382,7 +2698,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 trace_id=new_trace_id(),
             )
             try:
-                ctx = await _run_turn_via_engine(group_id, ctx)
+                ctx = await _run_turn_via_engine(f"qq:{group_id}", ctx)
             except RuntimeTurnError as e:
                 # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
                 if e.code == E_CANCELLED:
@@ -2876,7 +3192,7 @@ async def _proactive_speak_impl(
 
         try:
             with _flow_span(fctx, "proactive.turn"):
-                ctx = await _run_turn_via_engine(group_id, ctx)
+                ctx = await _run_turn_via_engine(f"qq:{group_id}", ctx)
         except RuntimeTurnError as e:
             # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
             if e.code == E_CANCELLED:
@@ -3149,10 +3465,13 @@ if scheduler is not None:
         "interval", seconds=CONSOLIDATION_SCHEDULE_INTERVAL, id="consolidation_drain"
     )
     async def consolidation_drain_job():
-        """定期排空各群的整合积压。
+        """定期排空各会话的整合积压。
 
         整合此前只在 @ 触发与主动发言前进行，被动摄入速度超过整合速度时会
         无界积压，超过 MESSAGE_CLEANUP_KEEP_COUNT 后未整合消息会被清理丢弃。
+        两条循环互补（计划 §6.3）：ALLOWED_GROUPS 覆盖尚未注册的 legacy 群；
+        注册表循环覆盖私聊等 registered conversations（backlog 检查让重复
+        访问无副作用）。
         """
         consolidator = get_consolidator()
         for group_id in ALLOWED_GROUPS:
@@ -3170,6 +3489,13 @@ if scheduler is not None:
                     )
             except Exception as e:
                 logger.warning(f"⚠️ 定时整合异常（群 {group_id}）: {e}")
+        try:
+            await consolidator.drain_registered_sessions(
+                max_rounds=CONSOLIDATION_MAX_ROUNDS_PER_RUN,
+                allowed_groups=ALLOWED_GROUPS,
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ 定时整合异常（注册会话）: {e}")
 
 
 # ============================================================

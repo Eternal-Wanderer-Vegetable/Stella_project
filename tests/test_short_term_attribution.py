@@ -208,6 +208,7 @@ def test_consolidate_group_unpacks_senders(tmp_path, monkeypatch):
             ["111", "222"],
             ["111"],
             "",
+            [],  # source_rows（计划 §6.5 证据验证用）
         )
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)

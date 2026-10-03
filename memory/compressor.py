@@ -22,6 +22,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import re
 import sqlite3
 import time
@@ -39,6 +41,7 @@ from config import (
     MEMORY_DECAY_DAYS,
 )
 from memory.cache_keys import bump_memory_history
+from memory.ownership import POLICY_VERSION
 from memory.schema import create_memories_table
 from memory.text_similarity import is_similar, merge_content, same_normalized_text
 
@@ -461,6 +464,8 @@ class MemoryCompressor:
 
         subject 取“用户{user_id}”或“空间{group_shared_space}”（无 user_id 时用空间标识），
         predicate 固定为“记忆片段”，object 为片段文本，confidence 初始为 0。
+        归属列**继承来源记忆**（计划 §6.4/§9.1）：原子化 PERSON 记忆若不继承
+        owner，片段会退化为 SPACE 行，后续按受众过滤时丢失或串受众。
         返回尝试插入的条数（注意 OR IGNORE 条件下实际落库数可能更少）。
 
         :param cursor: 数据库游标
@@ -470,11 +475,42 @@ class MemoryCompressor:
         :param fragments: 原子片段列表
         :return: 尝试写入的片段数量
         """
+        owner_type, owner_key, subject_key, audience, fact_policy = (
+            "SPACE",
+            f"space:{group_shared_space}",
+            "",
+            "CURRENT_SPACE",
+            POLICY_VERSION,
+        )
+        # 旧形状 atomic_facts（v15 前建表）自补 owner 列（幂等，与
+        # pre_processors.record_message 的自补同法；列已存在时静默跳过）
+        for ddl in (
+            "ALTER TABLE atomic_facts ADD COLUMN owner_type TEXT DEFAULT 'SPACE'",
+            "ALTER TABLE atomic_facts ADD COLUMN owner_key TEXT",
+            "ALTER TABLE atomic_facts ADD COLUMN subject_key TEXT DEFAULT ''",
+            "ALTER TABLE atomic_facts ADD COLUMN audience TEXT DEFAULT 'CURRENT_SPACE'",
+            "ALTER TABLE atomic_facts ADD COLUMN fact_key TEXT DEFAULT ''",
+            "ALTER TABLE atomic_facts ADD COLUMN policy_version TEXT DEFAULT ''",
+        ):
+            with contextlib.suppress(sqlite3.OperationalError):
+                cursor.execute(ddl)
+        try:
+            row = cursor.execute(
+                "SELECT owner_type, owner_key, subject_key, audience FROM memories WHERE id = ?",
+                (memory_id,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            row = None
+        if row and row[1]:
+            owner_type = row[0] or "SPACE"
+            owner_key = row[1]
+            subject_key = row[2] or ""
+            audience = row[3] or "CURRENT_SPACE"
         inserted = 0
         for fragment in fragments:
             cursor.execute(
-                "INSERT OR IGNORE INTO atomic_facts (id, memory_id, group_shared_space, subject, predicate, object, confidence) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO atomic_facts (id, memory_id, group_shared_space, subject, predicate, object, confidence, owner_type, owner_key, subject_key, audience, fact_key, policy_version) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     uuid.uuid4().hex,
                     memory_id,
@@ -483,6 +519,13 @@ class MemoryCompressor:
                     "记忆片段",
                     fragment,
                     0.0,
+                    owner_type,
+                    owner_key,
+                    subject_key,
+                    audience,
+                    # fact_key：片段内容散列（同片段跨批一致）
+                    hashlib.sha256(f"ATOM:{fragment.strip().lower()}".encode()).hexdigest()[:16],
+                    fact_policy,
                 ),
             )
             inserted += 1
