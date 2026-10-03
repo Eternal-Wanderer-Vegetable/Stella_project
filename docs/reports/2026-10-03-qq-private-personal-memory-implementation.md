@@ -114,3 +114,16 @@
    观察结束后如需回退改回 false 即可（已写入的 PERSON 行按受众继续受控）。
 5. 当前 bot 由验证会话的后台进程托管（pid 见 /stella/status）；回交用户时
    直接在其终端按原方式重启 `.\bot.py` 即可（新 native pyd 已就位）。
+
+### 6.4 补充修复（2026-10-03 深夜，用户真机反馈）
+
+- **私聊短结果只发摘要 + 指针**（2b7d7dc）：私聊投递把「payload 带
+  full_text_ref」一律当超长处理，54 字结果也被藏进 WebUI 指针。修正为
+  与群 `file_above_chars`（默认 500）同阈值：阈值内读 artifact 全文，
+  以「任务头 + 完整结果」直发；真超长才摘要+指针。真机复验：短任务
+  final 直发全文（无误导性「过长」提示）。
+- **任务跑在 FakeBackend 是部署配置**：cometa.toml `default_profile="complete"`
+  指向 demo fake 后端。真实任务需 `default_profile="coding"`（codex_local）
+  或显式「委派 codex_local <目标>」。属部署选择，非代码缺陷。
+- **worker 孤儿坑再次确认**：多次重启后清理了 2 个累积的孤儿 worker；
+  监管器不会自动重拉（需重启 bot），运维注意点已记入项目记忆。
