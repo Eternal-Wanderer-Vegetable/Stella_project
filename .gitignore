@@ -120,3 +120,4 @@ start_claude_command.txt
 # Cortico vendor 快照内的安装产物（迁移 M1）
 vendor/cortico/node_modules/
 vendor/cortico/dist/
+memory_rust/_native.pyd
