@@ -155,6 +155,22 @@ async def flow_spec_version() -> Any:
     return ok({"topology_version": flow_service.latest_spec_version()})
 
 
+@router.get("/api/v1/trace/entities/{entity_type}/{entity_id}")
+async def flow_entity_history(entity_type: str, entity_id: str) -> Any:
+    """对象履历：按实体 ID 查状态变化事实（计划 §6.6 对象视角）。"""
+    from webui.services import flow as flow_service
+
+    return ok({"items": flow_service.entity_history(entity_type, entity_id)})
+
+
+@router.get("/api/v1/trace/messages/{trace_id}/entities")
+async def flow_trace_entities(trace_id: str) -> Any:
+    """一次运行触及的对象变化（运行 ↔ 对象互查入口）。"""
+    from webui.services import flow as flow_service
+
+    return ok({"items": flow_service.entities_for_trace(trace_id)})
+
+
 @router.get("/api/v1/trace/messages/{trace_id}/stream")
 async def flow_message_stream(
     trace_id: str,

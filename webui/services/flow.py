@@ -525,6 +525,21 @@ def message_io(trace_id: str) -> dict | None:
     }
 
 
+def entity_history(entity_type: str, entity_id: str, *,
+                   limit: int = 200) -> list[dict]:
+    """对象履历（计划 §6.6 对象视角）：按实体查状态变化事实。"""
+    from core.observability import entity_history as eh
+
+    return eh.history(entity_type, entity_id, limit=limit)
+
+
+def entities_for_trace(trace_id: str, *, limit: int = 500) -> list[dict]:
+    """一次运行触及的全部对象变化（运行视角 ↔ 对象视角互查）。"""
+    from core.observability import entity_history as eh
+
+    return eh.for_trace(trace_id, limit=limit)
+
+
 def _receipts_conn():
     """业务回执库只读连接（social_deliveries 与记忆库同库）。"""
     from pathlib import Path
