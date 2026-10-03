@@ -149,7 +149,7 @@ def main() -> int:
     log_path = home / "bot_stdout.log"
     results: dict = {"home": str(home), "ws_url": WS_URL}
 
-    with open(log_path, "w", encoding="utf-8", newline="") as log:
+    with log_path.open("w", encoding="utf-8", newline="") as log:
         proc = subprocess.Popen(
             [sys.executable, str(PROJECT_ROOT / "bot.py")],
             cwd=str(PROJECT_ROOT), env=env, stdout=log, stderr=log,
