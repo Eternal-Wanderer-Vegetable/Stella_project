@@ -112,6 +112,10 @@ def create_webui_app() -> FastAPI:
     app.include_router(cometa_router_module.router)
     # M4 WebChat（虚拟群 ingress，方案 §13）
     app.include_router(chat_router_module.router)
+    # M5 隔离验证执行器（计划 §6.7）：固定 CLI/参数 schema，实验并发上限 1
+    from webui.routers import evaluation as evaluation_router_module
+
+    app.include_router(evaluation_router_module.router)
 
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request: Request, exc: ApiError):
