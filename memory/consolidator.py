@@ -22,6 +22,7 @@
 """
 import asyncio
 import contextlib
+import hashlib
 import json
 import re
 import sqlite3
@@ -194,12 +195,14 @@ class MemoryConsolidator:
             _group_locks[key] = lock
         return lock
 
-    async def _generate(self, group_id: int, last_id: int, force: bool = False) -> tuple[str, int, str, list, list, str]:
+    async def _generate(
+        self, group_id: int, last_id: int, force: bool = False
+    ) -> tuple[str, int, str, list, list, str, list]:
         """调用本地 LM Studio 后端生成整合输出。
 
         force=True 时走小批次（用于 @触发/主动发言前的轻量总结）。
         返回 (回复文本, 实际处理到的 batch_end, 实际使用的后端名, 本批发送者 QQ 号列表,
-        AT_MENTION 来源发送者列表, 本批消息文本)，供调用方准确推进 checkpoint、
+        AT_MENTION 来源发送者列表, 本批消息文本, 原始行)，供调用方准确推进 checkpoint、
         对记忆候选做发送者白名单校验与来源分级，并把同一份消息文本交给阶段2 提取。
 
         输出被截断（``finish_reason == "length"``）时不返回，而是按 ``_batch_ladder``
@@ -217,7 +220,9 @@ class MemoryConsolidator:
         base_limit = _batch_size(force)
         ladder = _batch_ladder(base_limit)
         for attempt, limit in enumerate(ladder):
-            messages, batch_end, senders, at_senders = self._fetch_next_messages(group_id, last_id, limit)
+            messages, batch_end, senders, at_senders, source_rows = self._fetch_next_messages(
+                group_id, last_id, limit
+            )
             if not messages:
                 raise RuntimeError("没有可整合的消息")
             prompt = self._build_prompt(group_id, messages)
@@ -234,7 +239,7 @@ class MemoryConsolidator:
             if finish != "length":
                 # 返回真实处理到的 batch_end、后端名、发送者列表与本批消息文本，
                 # 供调用方准确推进 checkpoint 并做发送者白名单校验与阶段2 提取
-                return result, batch_end, backend_name, senders, at_senders, messages
+                return result, batch_end, backend_name, senders, at_senders, messages, source_rows
 
             if attempt + 1 < len(ladder):
                 logger.warning(
@@ -599,7 +604,8 @@ class MemoryConsolidator:
         root 在任何前置 return 之前创建，DB 缺失 / 攒批跳过也留下可查询的运行事实。
         """
         return await self._consolidate_with_root(
-            group_id, force, flow_ctx, memory_space=None, scope=f"qq:{group_id}"
+            group_id, force, flow_ctx, memory_space=None, scope=f"qq:{group_id}",
+            conversation=None,
         )
 
     async def consolidate_conversation(self, ref, force: bool = False, *, flow_ctx=None):
@@ -612,10 +618,12 @@ class MemoryConsolidator:
         return await self._consolidate_with_root(
             ref.storage_session_id, force, flow_ctx,
             memory_space=ref.memory_space, scope=ref.runtime_key,
+            conversation=ref,
         )
 
     async def _consolidate_with_root(
-        self, session_key: int, force: bool, flow_ctx, *, memory_space: str | None, scope: str
+        self, session_key: int, force: bool, flow_ctx, *, memory_space: str | None, scope: str,
+        conversation=None,
     ):
         """整合 root 的生命周期包装（群/注册会话共用）。"""
         # ── 记忆整合独立 root（观测旁路：创建失败按 None 全程空转）──
@@ -638,6 +646,7 @@ class MemoryConsolidator:
                 outcome = await self._consolidate_group_core(
                     session_key, force, mem_root,
                     memory_space=memory_space, scope=scope,
+                    conversation=conversation,
                 )
         except BaseException:
             outcome = "error"
@@ -653,7 +662,14 @@ class MemoryConsolidator:
                     pass
 
     async def _consolidate_group_core(
-        self, group_id: int, force: bool, mctx, *, memory_space: str | None = None, scope: str = ""
+        self,
+        group_id: int,
+        force: bool,
+        mctx,
+        *,
+        memory_space: str | None = None,
+        scope: str = "",
+        conversation=None,
     ) -> str:
         """consolidate_group 的业务主体（root 生命周期在外层方法管理）。
 
@@ -768,7 +784,9 @@ class MemoryConsolidator:
                 )
 
                 with _flow_span(fctx, "consolidate.extract"):
-                    result, processed_end, backend_name, senders, at_senders, messages_text = await self._generate(group_id, last_id, force=force)
+                    result, processed_end, backend_name, senders, at_senders,                         messages_text, source_rows = await self._generate(
+                        group_id, last_id, force=force
+                    )
                     logger.info(f"📥 [Consolidator Response]\n{result}")
 
                     parsed = self._parse_json(result)
@@ -864,6 +882,8 @@ class MemoryConsolidator:
                             at_senders=at_senders,
                             origin_group_id=group_id,
                             flow_ctx=mctx,
+                            conversation=conversation,
+                            source_rows=source_rows,
                         )
                         with contextlib.suppress(Exception):
                             write_span.finish(status="succeeded",
@@ -1009,9 +1029,14 @@ class MemoryConsolidator:
         """该群当前积压的未整合消息数。"""
         return self._count_new_messages(group_id, self._get_last_processed_id(group_id))
 
-    def _fetch_next_messages(self, group_id: int, last_id: int, limit: int) -> tuple[str, int, list, list]:
+    def _fetch_next_messages(
+        self, group_id: int, last_id: int, limit: int
+    ) -> tuple[str, int, list, list, list]:
         """取 last_id 之后最多 limit 条消息（含 overlap 上下文）。
-        返回 (文本, 本批次末尾的最大消息 id, 本批次的发送者 QQ 号列表, AT_MENTION 来源的发送者列表)。
+        返回 (文本, 本批次末尾的最大消息 id, 本批次的发送者 QQ 号列表,
+        AT_MENTION 来源的发送者列表, 原始行 [(id, user_id, content, source_kind)])。
+        第 5 项供个人事实链路做服务端证据验证（计划 §6.5：source row 必须真实
+        存在且 sender 等于 subject）。
         按实际行数取，可容忍 id 空洞。
         消息文本拼装（MEMORY_SOURCE_KIND_ENABLED 开启时）：
         - BOT_SELF   → 「不属于任何用户」标注，只作上下文，绝不作为候选来源；
@@ -1034,7 +1059,7 @@ class MemoryConsolidator:
         new_ids = [r[0] for r in cursor.fetchall()]
         if not new_ids:
             conn.close()
-            return "", last_id, [], []
+            return "", last_id, [], [], []
 
         batch_end = new_ids[-1]
         fetch_from = max(0, last_id - _overlap())
@@ -1053,7 +1078,7 @@ class MemoryConsolidator:
             rows = [(mid, uid, content, "PASSIVE") for mid, uid, content in cursor.fetchall()]
         conn.close()
         if not rows:
-            return "", last_id, [], []
+            return "", last_id, [], [], []
         lines = []
         for mid, uid, content, source_kind in rows:
             if not MEMORY_SOURCE_KIND_ENABLED:
@@ -1097,7 +1122,7 @@ class MemoryConsolidator:
                 f"⚠️ [Consolidator] 群 {group_id} 本批有 {bot_self_count} 条 Bot 发言"
                 "但无 AT_MENTION 来源，@ 消息可能未入库"
             )
-        return text, batch_end, senders, at_senders
+        return text, batch_end, senders, at_senders, list(rows)
 
     def _fetch_current_summary(self, group_id: int) -> str:
         """读取当前群的短期摘要（active_summary）及其关键发言，无记录或表不存在时返回空串。
@@ -1363,6 +1388,8 @@ class MemoryConsolidator:
         origin_group_id: int | None = None,
         *,
         flow_ctx=None,
+        conversation=None,
+        source_rows: list | None = None,
     ) -> dict:
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
@@ -1374,6 +1401,15 @@ class MemoryConsolidator:
         at_senders 为 AT_MENTION 来源发送者列表：候选的 user_id 在其中时标记 source_kind
         为 AT_MENTION，否则为 PASSIVE。
         返回 {"written", "reinforced", "skipped"} 计数（计划 §6.3 memory.candidate.write）。
+
+        个人路由（计划 §6.5/§6.4）：``conversation`` 为私聊 ref 且
+        PERSONAL_MEMORY_WRITE_ENABLED 开启时，通过**服务端证据验证**的候选
+        以 PERSON + PRIVATE_ONLY 归属写入（组内 group_shared_space 用不可与
+        真实空间匹配的兼容 namespace）；验证不过保持 SPACE 候选并落原因。
+        同一 (owner, audience, fact) 对同一来源消息行只有一条 memory_evidence
+        ——消息重放/批次重试不累加 occurrence/confirmation；新消息行才强化。
+        群内的 USER_SHARED 共享（须用户显式分享意图）不在本版自动判定，
+        第一版只有私聊 PRIVATE_ONLY 与 SPACE 两类写入（欠共享优于越权共享）。
 
         候选强化（交叉验证）：同空间同用户且内容相似的待处理候选（NEW/OBSERVING）
         不重复插入，改为累积证据——occurrence_count +1、confidence 加
@@ -1391,6 +1427,54 @@ class MemoryConsolidator:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         self._ensure_common_tables(conn)
+
+        # ── 归属与证据上下文（计划 §6.4/§6.5）：全部服务端判定，模型输出
+        # 里的任何 scope/owner/audience 字段一律不采信 ──
+        from config import PERSONAL_MEMORY_WRITE_ENABLED
+        from memory.ownership import (
+            AUDIENCE_CURRENT_SPACE,
+            AUDIENCE_PRIVATE_ONLY,
+            OWNER_TYPE_PERSON,
+            OWNER_TYPE_SPACE,
+            POLICY_VERSION,
+            person_compat_space,
+            person_owner,
+        )
+
+        person_mode = bool(
+            PERSONAL_MEMORY_WRITE_ENABLED
+            and conversation is not None
+            and getattr(conversation, "is_private", False)
+        )
+        if person_mode:
+            _owner = person_owner(
+                conversation.platform, conversation.bot_id, conversation.peer_id
+            )
+            owner_type, owner_key, subject_key = (
+                OWNER_TYPE_PERSON,
+                _owner.owner_key,
+                _owner.subject_key,
+            )
+            audience = AUDIENCE_PRIVATE_ONLY
+            row_space = person_compat_space(owner_key, audience)
+        else:
+            owner_type, owner_key, subject_key = (
+                OWNER_TYPE_SPACE,
+                f"space:{group_shared_space}",
+                "",
+            )
+            audience = AUDIENCE_CURRENT_SPACE
+            row_space = group_shared_space
+
+        # 服务端证据表：本批真实消息行里「用户直接对 Bot 说」的 (uid → 行)。
+        # BOT_SELF / PASSIVE 永远不能作为个人事实的来源证据。
+        direct_rows_by_uid: dict[str, list[tuple[int, str]]] = {}
+        for _row in source_rows or []:
+            mid_r, uid_r, _c, kind_r = _row[0], _row[1], _row[2], _row[3]
+            if str(kind_r) in ("AT_MENTION", "PRIVATE_DIRECT"):
+                direct_rows_by_uid.setdefault(str(uid_r), []).append(
+                    (int(mid_r), str(kind_r))
+                )
         # 对象履历缓冲：状态写入与 conn.commit() 在同一业务事务里，履历必须
         # 等提交成功后再落——回滚了的写入不能留下「已发生」的履历（计划 §6.1）。
         history_events: list[tuple[str, str, str, str, dict]] = []
@@ -1411,6 +1495,65 @@ class MemoryConsolidator:
             if not content:
                 counts["skipped"] += 1
                 continue
+
+            # ── PERSON 路由的服务端验证（计划 §6.5）──
+            # 模型给的 user_id 只在「本批真实存在直接对话证据的发送者」中生效；
+            # 他人转述/引用/验证不过 → 保持 SPACE 候选并落原因，绝不写他人个人事实。
+            row_owner_type, row_owner_key, row_subject = (
+                owner_type,
+                owner_key,
+                subject_key,
+            )
+            row_audience = audience
+            candidate_row_space = row_space
+            if person_mode and uid in direct_rows_by_uid:
+                row_owner_type, row_owner_key, row_subject = (
+                    OWNER_TYPE_PERSON,
+                    owner_key,
+                    f"qq:{uid}",
+                )
+                row_audience = AUDIENCE_PRIVATE_ONLY
+                candidate_row_space = person_compat_space(row_owner_key, row_audience)
+            elif person_mode:
+                logger.info(
+                    f"[Consolidator] 候选保持 SPACE（私聊中 user_id={uid} 无本人直接对话证据，"
+                    "拒绝个人路由）"
+                )
+            # fact_key：类型 + 归一化内容的稳定散列（同事实跨批一致，证据去重靠它）
+            fact_key = hashlib.sha256(
+                f"{type_}:{(content or '').strip().lower()}".encode()
+            ).hexdigest()[:16]
+            new_evidence_rows: list[int] = []
+
+            if (
+                row_owner_type == OWNER_TYPE_PERSON
+                and conversation is not None
+            ):
+                # 先写证据（INSERT OR IGNORE）：同消息重放不产生新证据 →
+                # 不新增 occurrence/confirmation（计划 §6.5）。
+                for mid_ev, _kind_ev in direct_rows_by_uid.get(uid, []):
+                    cur_ev = cursor.execute(
+                        "INSERT OR IGNORE INTO memory_evidence ("
+                        "id, owner_type, owner_key, subject_key, audience, fact_key,"
+                        " source_conversation_key, source_row_id, candidate_id)"
+                        " VALUES (?,?,?,?,?,?,?,?,?)",
+                        (
+                            uuid.uuid4().hex,
+                            row_owner_type,
+                            row_owner_key,
+                            row_subject,
+                            row_audience,
+                            fact_key,
+                            conversation.conversation_key,
+                            mid_ev,
+                            "",
+                        ),
+                    )
+                    if cur_ev.rowcount:
+                        new_evidence_rows.append(mid_ev)
+                if not new_evidence_rows:
+                    counts["skipped"] += 1
+                    continue
             importance = float(c.get("importance", 0.0) or 0.0)
             # importance 缺省/为 0 时兜底为中位值。**不能让 0 落库**：
             # MEMORY_PROMOTE_MIN_IMPORTANCE 是 _decide_promotion 的第一道检查，
@@ -1459,7 +1602,7 @@ class MemoryConsolidator:
                 "SELECT id, type, content, confidence, importance, evidence, occurrence_count, "
                 "source_message_ids, source_kinds, status FROM memory_candidates "
                 "WHERE group_shared_space = ? AND user_id = ? AND status IN ('NEW', 'OBSERVING')",
-                (group_shared_space, uid),
+                (candidate_row_space, uid),
             ).fetchall():
                 row_content = row[2] or ""
                 if is_similar(content, row_content) and (
@@ -1528,8 +1671,8 @@ class MemoryConsolidator:
             # 无 id 时生成本地候选 id
             candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
             cursor.execute("""
-                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, origin_group_id, occurrence_count, first_seen_at, source_kinds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
+                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, origin_group_id, occurrence_count, first_seen_at, source_kinds, owner_type, owner_key, subject_key, audience, source_conversation_key, fact_key, policy_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     group_shared_space = excluded.group_shared_space,
                     user_id = excluded.user_id,
@@ -1544,10 +1687,17 @@ class MemoryConsolidator:
                     visibility = excluded.visibility,
                     behavior_rule = excluded.behavior_rule,
                     source_kind = excluded.source_kind,
+                    owner_type = excluded.owner_type,
+                    owner_key = excluded.owner_key,
+                    subject_key = excluded.subject_key,
+                    audience = excluded.audience,
+                    source_conversation_key = excluded.source_conversation_key,
+                    fact_key = excluded.fact_key,
+                    policy_version = excluded.policy_version,
                     updated_at = CURRENT_TIMESTAMP
             """, (
                 candidate_id,
-                group_shared_space,
+                candidate_row_space,
                 uid,
                 type_,
                 content,
@@ -1563,7 +1713,22 @@ class MemoryConsolidator:
                 # 溯源列：记住这条候选来自哪个真实 QQ 群，让空间合并可回退
                 str(origin_group_id) if origin_group_id else None,
                 self._merge_source_kinds("[]", source_kind),
+                # v15 归属列（计划 §6.4）：SPACE=空间语义不变；PERSON=个人路由
+                row_owner_type,
+                row_owner_key,
+                row_subject,
+                row_audience,
+                conversation.conversation_key if conversation is not None else "",
+                fact_key,
+                POLICY_VERSION,
             ))
+            if new_evidence_rows:
+                cursor.execute(
+                    "UPDATE memory_evidence SET candidate_id = ? "
+                    "WHERE owner_key = ? AND fact_key = ? AND source_row_id IN "
+                    f"({','.join('?' * len(new_evidence_rows))})",
+                    (candidate_id, row_owner_key, fact_key, *new_evidence_rows),
+                )
             counts["written"] += 1
             # 创建履历（from 空 = 新建，计划 §6.1 entity_change 允许表示创建）
             history_events.append((

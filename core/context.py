@@ -46,6 +46,7 @@ class ChatContext:
     # （storage_key()），绝不能用负号反推种类。
     conversation_kind: str = ""  # group / private / webchat；空 = 旧入口未升级
     conversation_key: str = ""  # 规范键 qq:<bot>:group:<gid> 等；空 = 旧入口
+    bot_id: str = ""  # 接入 Bot 的 self_id（个人 owner 键 person:qq:<bot>:<uid> 用）
     peer_id: str = ""  # 群=群号；私聊=sender QQ 号；WebChat=主体
     storage_session_id: int = 0  # 0 = 未升级入口，按 group_id 兼容
 
@@ -207,7 +208,7 @@ class ChatContext:
         "group_shared_space", "trigger", "intent", "image_sources",
         "trace_id", "turn_id",
         # 会话身份（v3）
-        "conversation_kind", "conversation_key", "peer_id", "storage_session_id",
+        "conversation_kind", "conversation_key", "bot_id", "peer_id", "storage_session_id",
         # pre/prepare 侧
         "short_term", "user_profile", "preferred_address", "memories_for_prompt",
         "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",

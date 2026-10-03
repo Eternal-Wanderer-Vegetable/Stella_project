@@ -94,7 +94,9 @@ def test_record_trace_no_memory_fields(tmp_path, monkeypatch):
         "SELECT group_id, user_id, message, candidate_ids, score_map FROM memory_traces"
     ).fetchone()
     conn.close()
-    assert row[0] == "None"
+    # v15 语义（计划 §6.3）：group_id 为 None/0（私聊等）落空串，不写 "None"/0
+    # ——丢失身份的占位值比空值更具误导性。
+    assert row[0] == ""
     assert row[1] == "None"
     assert row[2] == ""
     assert row[3] == "[]"

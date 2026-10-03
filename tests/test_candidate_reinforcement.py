@@ -170,7 +170,7 @@ def test_gate1_at_mention_promotes_single_shot():
     ok, reason = MemoryManager._decide_promotion(
         _cand(confidence=0.7, source_kinds='["PASSIVE", "AT_MENTION"]')
     )
-    assert ok and "AT_MENTION" in reason
+    assert ok and "直接对话" in reason  # AT_MENTION/PRIVATE_DIRECT 同通道（计划 §6.3）
 
 
 def test_gate1_low_confidence_never_promotes_even_with_at_mention():

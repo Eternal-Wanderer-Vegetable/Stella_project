@@ -545,11 +545,26 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     """记忆系统 v2 的上下文组装：Policy 检索 + 分区记忆 + 决策轨迹。"""
     from config import MEMORY_EMBEDDING_ENABLED
+    from memory.ownership import scope_for_conversation
     from memory.retrieval_v2 import retrieve_memories
 
     # 共享空间：同一空间内的多个 QQ 群共享画像与记忆（M2.5-1 的 __post_init__ 应已填好，or 只是防御）
     space = ctx.group_shared_space or resolve_space(ctx.group_id)
     _load_preferred_address(ctx, space)
+
+    # v3 访问范围（计划 §6.6）：由服务端身份生成，模型输入不可构造。
+    # 主动发言（无目标用户）生成 SPACE-only scope——去 user 条件不会顺带
+    # 获得任何人的个人事实。webchat/未升级入口（kind 空/非私聊群）按其种类
+    # 推导：kind 为空时退回 SPACE-only，与旧行为逐字一致。
+    access_scope = None
+    if ctx.trigger != "proactive" and getattr(ctx, "conversation_kind", ""):
+        access_scope = scope_for_conversation(
+            kind=ctx.conversation_kind,
+            memory_space=space,
+            platform="qq" if ctx.conversation_kind != "webchat" else "webchat",
+            bot_id=getattr(ctx, "bot_id", ""),
+            user_id=ctx.peer_id or ctx.user_id,
+        )
 
     # 先组装稳定画像（只读稳定事实，过滤人格判断）
     profile = _read_stable_profile(space, ctx.user_id)
@@ -565,6 +580,7 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
             user_id=ctx.user_id,
             query=ctx.message,
             trigger=ctx.trigger,
+            access_scope=access_scope,
         )
     else:
         result = retrieve_memories(
@@ -572,6 +588,7 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
             user_id=ctx.user_id,
             query=ctx.message,
             trigger=ctx.trigger,
+            access_scope=access_scope,
         )
     ctx.memory_mode = result.mode
     ctx.conversation_memories = result.conversation_memories

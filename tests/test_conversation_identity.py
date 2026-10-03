@@ -213,7 +213,7 @@ class TestScopeSql:
         frag, params = owner_scope_sql(space_only_scope("space_1"))
         assert "owner_type = 'SPACE'" in frag
         assert "PERSON" not in frag
-        assert params["_scope_space"] == "space:space_1"
+        assert params == ["space:space_1"]
 
     def test_person_fragment_filters_by_audience(self):
         scope = scope_for_conversation(
@@ -221,28 +221,30 @@ class TestScopeSql:
         )
         frag, params = owner_scope_sql(scope)
         assert "owner_type = 'PERSON'" in frag
-        assert params["_scope_person"] == "person:qq:1:2"
-        assert params["_scope_subject"] == "qq:2"
-        assert {
-            params["_scope_aud_0"],
-            params["_scope_aud_1"],
-        } == {AUDIENCE_PRIVATE_ONLY, AUDIENCE_USER_SHARED}
+        # 位置参数：space → person → subject → audiences（计划 §6.6 谓词顺序）
+        assert params == [
+            "space:s",
+            "person:qq:1:2",
+            "qq:2",
+            AUDIENCE_PRIVATE_ONLY,
+            AUDIENCE_USER_SHARED,
+        ]
 
     def test_fragment_against_sqlite(self):
         """片段在真实 SQLite 上按 owner/audience 过滤（候选池权限下推）。"""
         conn = sqlite3.connect(":memory:")
         conn.execute(
-            "CREATE TABLE t (id INTEGER PRIMARY KEY, owner_type TEXT, owner_key TEXT,"
-            " subject_key TEXT, audience TEXT)"
+            "CREATE TABLE t (id INTEGER PRIMARY KEY, group_shared_space TEXT,"
+            " owner_type TEXT, owner_key TEXT, subject_key TEXT, audience TEXT)"
         )
         rows = [
-            (1, OWNER_TYPE_SPACE, "space:space_1", "", "CURRENT_SPACE"),
-            (2, OWNER_TYPE_SPACE, "space:space_2", "", "CURRENT_SPACE"),
-            (3, OWNER_TYPE_PERSON, "person:qq:1:2", "qq:2", AUDIENCE_USER_SHARED),
-            (4, OWNER_TYPE_PERSON, "person:qq:1:2", "qq:2", AUDIENCE_PRIVATE_ONLY),
-            (5, OWNER_TYPE_PERSON, "person:qq:1:3", "qq:3", AUDIENCE_USER_SHARED),
+            (1, "space_1", OWNER_TYPE_SPACE, "space:space_1", "", "CURRENT_SPACE"),
+            (2, "space_2", OWNER_TYPE_SPACE, "space:space_2", "", "CURRENT_SPACE"),
+            (3, "personal:x", OWNER_TYPE_PERSON, "person:qq:1:2", "qq:2", AUDIENCE_USER_SHARED),
+            (4, "personal:y", OWNER_TYPE_PERSON, "person:qq:1:2", "qq:2", AUDIENCE_PRIVATE_ONLY),
+            (5, "personal:z", OWNER_TYPE_PERSON, "person:qq:1:3", "qq:3", AUDIENCE_USER_SHARED),
         ]
-        conn.executemany("INSERT INTO t VALUES (?,?,?,?,?)", rows)
+        conn.executemany("INSERT INTO t VALUES (?,?,?,?,?,?)", rows)
 
         def run(scope):
             frag, params = owner_scope_sql(scope)

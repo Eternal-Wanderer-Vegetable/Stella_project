@@ -181,6 +181,7 @@ def test_full_workflow_consolidation_promotes_memory(tmp_path, monkeypatch):
             ["111", "112"],
             ["111"],
             "",
+            [],  # source_rows（计划 §6.5 证据验证用）
         )
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
@@ -253,6 +254,7 @@ def test_full_workflow_summary_feeds_next_reply(tmp_path, monkeypatch):
             ["111", "112"],
             ["111"],
             "",
+            [],  # source_rows（计划 §6.5 证据验证用）
         )
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_generate)
@@ -296,6 +298,7 @@ def test_full_workflow_force_consolidation_small_batch(tmp_path, monkeypatch):
             ["111", "112"],
             [],
             "",
+            [],  # source_rows（计划 §6.5 证据验证用）
         )
 
     monkeypatch.setattr(consolidator.MemoryConsolidator, "_generate", fake_force)

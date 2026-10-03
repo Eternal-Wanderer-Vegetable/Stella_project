@@ -32,7 +32,9 @@ from config import (
     RAG_ENABLED,
     RAG_TOP_K,
 )
+from memory import scope_versions
 from memory.cache_keys import memory_history_version, topic_hash
+from memory.ownership import MemoryAccessScope, owner_scope_sql
 from memory.policy import (
     MODE_CONFLICT_AVOID,
     VISIBILITY_INTERNAL,
@@ -138,16 +140,29 @@ def _fetch_candidates(
     mode: str,
     query: str,
     pool_limit: int,
+    access_scope: "MemoryAccessScope | None" = None,
 ) -> list[dict[str, Any]]:
     """拉取候选记忆行（先按 Visibility 过滤，再按证据新鲜度倒序）。
 
     检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
     include_user 为 None 表示空间级（主动发言）；否则限定该用户（@ 回复）。
     这是“Policy 优先于 Similarity”的第一步：在合法范围内取候选。
+
+    ``access_scope``（计划 §6.6）：可信代码生成的 owner/audience 范围。给定时
+    空间过滤升级为 owner 谓词（SPACE 行 + 允许受众内的 PERSON 行）——授权在
+    候选构造层下推，不是先全库召回再过滤。PERSON 行写在 personal:* 兼容
+    namespace 里，靠 group_shared_space = ? 永远查不到，谓词必须换轨。
     """
+    scope_sql = ""
+    scope_params: list[Any] = []
+    if access_scope is not None and access_scope.space_key:
+        scope_sql, scope_params = owner_scope_sql(access_scope, alias="m")
     where = "m.status = 'active'"
     params: list[Any] = []
-    if user_id is None:
+    if scope_sql:
+        where += scope_sql
+        params.extend(scope_params)
+    elif user_id is None:
         where += " AND m.group_shared_space = ?"
         params.append(group_shared_space)
     else:
@@ -165,7 +180,7 @@ def _fetch_candidates(
     # 有关键词时优先走 FTS（语义/关键词混合）
     rows: list[tuple[Any, ...]] = []
     if query and RAG_ENABLED:
-        rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode)
+        rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode, access_scope)
     if not rows:
         sql = (
             f"SELECT {_select_columns()} FROM memories m WHERE {where} "
@@ -256,10 +271,13 @@ def _query_fts(
     query: str,
     limit: int,
     mode: str,
+    access_scope: "MemoryAccessScope | None" = None,
 ) -> list[tuple[Any, ...]]:
     """FTS5 语义检索候选（复用 memories_fts 索引，并做 Visibility 预过滤）。
 
     检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+    scope 给定时（计划 §6.6）权限过滤切到 m 侧 owner 谓词——FTS 回退路径与
+    SQL 主路径同授权，绝不退回裸 space 过滤。
     """
     from memory.retriever import _ensure_fts_table, _segment_text
 
@@ -269,18 +287,25 @@ def _query_fts(
     if not tokens:
         return []
     try:
+        params: list[Any] = []
         sql = (
             "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance, m.confidence, "
             "m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule, m.last_accessed_at, "
             "m.last_confirmed_at "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
-            "WHERE f.group_shared_space = ? AND m.status = 'active' "
+            "WHERE m.status = 'active' "
         )
-        params: list[Any] = [group_shared_space]
-        if user_id is not None:
-            sql += "AND m.user_id = ? "
-            params.append(str(user_id))
+        if access_scope is not None and access_scope.space_key:
+            fragment, scope_params = owner_scope_sql(access_scope, alias="m")
+            sql += fragment + " "  # fragment 自带前导 AND
+            params.extend(scope_params)
+        else:
+            sql += "AND f.group_shared_space = ? "
+            params.append(group_shared_space)
+            if user_id is not None:
+                sql += "AND m.user_id = ? "
+                params.append(str(user_id))
         sql += f"AND ({_allowed_visibility_clause(mode)}) "
         if mode == MODE_CONFLICT_AVOID:
             params.append(VISIBILITY_INTERNAL)
@@ -398,6 +423,7 @@ def _retrieve_with_optional_backend(
     trigger: str,
     mode: str | None,
     semantic_scores: dict[str, float] | None,
+    access_scope: MemoryAccessScope | None = None,
 ) -> RetrievalResult:
     from memory_rust.backend import RetrievalRequest
     from memory_rust.selector import resolve_backend
@@ -413,6 +439,7 @@ def _retrieve_with_optional_backend(
             mode=resolved_mode,
             semantic_scores=semantic_scores,
             _bypass_backend=True,
+            access_scope=access_scope,
         )
 
     request = RetrievalRequest(
@@ -427,6 +454,13 @@ def _retrieve_with_optional_backend(
             mode_limit(resolved_mode) * 5,
         ),
         semantic_scores=semantic_scores or {},
+        # v2 owner scope（计划 §6.6/§6.7）：空值 = SPACE-only（native 侧同语义）
+        scope_space_key=access_scope.space_key if access_scope else "",
+        scope_person_owner_key=access_scope.person_owner_key if access_scope else "",
+        scope_subject_key=access_scope.subject_key if access_scope else "",
+        scope_person_audiences=(
+            tuple(access_scope.person_audiences) if access_scope else ()
+        ),
     )
     try:
         rust_result = backend.retrieve(request)
@@ -443,6 +477,7 @@ def _retrieve_with_optional_backend(
                 mode=resolved_mode,
                 semantic_scores=semantic_scores,
                 _bypass_backend=True,
+                access_scope=access_scope,
             )
         raise
 
@@ -457,6 +492,7 @@ def _retrieve_with_optional_backend(
         mode=resolved_mode,
         semantic_scores=semantic_scores,
         _bypass_backend=True,
+        access_scope=access_scope,
     )
     report = _backend_parity_report(python_result, rust_result)
     python_result.trace["rust_shadow"] = report
@@ -476,6 +512,7 @@ def retrieve_memories(
     mode: str | None = None,
     semantic_scores: dict[str, float] | None = None,
     _bypass_backend: bool = False,
+    access_scope: MemoryAccessScope | None = None,
 ) -> RetrievalResult:
     """v2 记忆检索主入口。
 
@@ -488,6 +525,9 @@ def retrieve_memories(
     :param mode: 可显式指定行为模式；不传则自动检测
     :param semantic_scores: 可选外部语义分（按记忆 id 索引，如 embedding 余弦分）；
         不传则用规则版语义占位
+    :param access_scope: 可信代码生成的 owner/audience 范围（计划 §6.6）。
+        None / 无 PERSON 分支 = 旧 SPACE-only 行为——没有 scope 的旧调用
+        **绝不会**读到任何 PERSON 记录。
     :return: RetrievalResult（含聊天素材、行为约束与决策轨迹）
     """
     if not MEMORY_V2_ENABLED or not DB_PATH.exists():
@@ -504,6 +544,7 @@ def retrieve_memories(
                 trigger,
                 mode,
                 semantic_scores,
+                access_scope,
             )
 
     mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
@@ -513,8 +554,14 @@ def retrieve_memories(
     # - 归一化按关键词（而非原文）计算，同一话题换个措辞仍能命中，保住命中率；
     # - 历史版本在整合器写入记忆后递增，晋升/合并的新记忆立刻可见，不被 TTL 拖住；
     # - 空间级检索（主动发言）user 位为空串，与限定用户的检索天然分桶。
+    # - v3（计划 §6.6）：scope 指纹 + **持久** scope 版本入键——共享撤销/回填
+    #   由其他进程落库后，本进程的下一轮检索读到新版本即换桶，不再等 TTL。
     # key 必须用空间（而非 QQ 群）——同空间的两个群共享记忆，按群分桶只会白跑检索。
     user_key = "" if trigger == "proactive" else str(user_id)
+    scope_fingerprint = access_scope.fingerprint() if access_scope else ""
+    scope_keys = [f"space:{group_shared_space}"]
+    if access_scope is not None and access_scope.has_person:
+        scope_keys.append(access_scope.person_owner_key)
     cache_key = (
         str(DB_PATH),
         group_shared_space,
@@ -522,6 +569,8 @@ def retrieve_memories(
         topic_hash(query),
         mode,
         memory_history_version(),
+        scope_fingerprint,
+        scope_versions.current_version(scope_keys),
     )
     cached = _CACHE.get(cache_key)
     if cached is not None and (time.monotonic() - cached[0]) < RETRIEVAL_CACHE_TTL:
@@ -535,7 +584,10 @@ def retrieve_memories(
     cursor = conn.cursor()
     try:
         include_user: int | None = None if trigger == "proactive" else user_id
-        candidates = _fetch_candidates(cursor, group_shared_space, include_user, mode, query, pool_limit)
+        candidates = _fetch_candidates(
+            cursor, group_shared_space, include_user, mode, query, pool_limit,
+            access_scope=access_scope,
+        )
     finally:
         conn.close()
 
@@ -639,6 +691,7 @@ async def retrieve_memories_emb(
     trigger: str = "reply",
     mode: str | None = None,
     service: Any = None,
+    access_scope: MemoryAccessScope | None = None,
 ) -> RetrievalResult:
     """Embedding 版检索：先用本地 LM Studio 编码查询与记忆、算余弦语义分，
     再走生产核心路径 ``retrieve_memories``。服务/模型不可用时回退规则版，
@@ -672,7 +725,10 @@ async def retrieve_memories_emb(
             include_user: int | None = None if trigger == "proactive" else user_id
             limit = mode_limit(resolved_mode)
             pool_limit = max(LONG_TERM_RELEVANCE_CANDIDATE_LIMIT, limit * 5)
-            candidates = _fetch_candidates(cursor, group_shared_space, include_user, resolved_mode, query, pool_limit)
+            candidates = _fetch_candidates(
+                cursor, group_shared_space, include_user, resolved_mode, query,
+                pool_limit, access_scope=access_scope,
+            )
         finally:
             conn.close()
         for m in candidates:
@@ -684,8 +740,12 @@ async def retrieve_memories_emb(
                 semantic_scores[mid] = s
         if semantic_scores:
             return retrieve_memories(
-                group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode, semantic_scores=semantic_scores
+                group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode,
+                semantic_scores=semantic_scores, access_scope=access_scope,
             )
     except Exception as e:
         logger.warning(f"[Embedding] 语义检索失败，回退规则版: {e}")
-    return retrieve_memories(group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode)
+    return retrieve_memories(
+        group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode,
+        access_scope=access_scope,
+    )

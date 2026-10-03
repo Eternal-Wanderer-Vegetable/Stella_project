@@ -171,33 +171,32 @@ def scope_for_conversation(
 # ── SQL 谓词构造（所有检索后端共用，计划 §6.6 的候选池下推） ──────────────
 
 
-def owner_scope_sql(scope: MemoryAccessScope, *, alias: str = "") -> tuple[str, dict[str, Any]]:
-    """生成 owner/audience 过滤的 WHERE 片段与命名参数。
+def owner_scope_sql(scope: MemoryAccessScope, *, alias: str = "") -> tuple[str, list[Any]]:
+    """生成 owner/audience 过滤的 WHERE 片段与**位置**参数。
 
-    返回 ``(sql_fragment, params)``；fragment 以 ``AND`` 开头，直接拼接在既有
-    ``status=active AND visibility/usage`` 条件之后。旧列回退：owner_type 为空
-    的行由迁移（schema15）统一回填 SPACE，读取端不再重复兼容 NULL。
+    返回 ``(sql_fragment, params)``；fragment 以 ``AND`` 开头、占位符一律 ``?``，
+    参数按出现顺序排列——SQL 与 FTS 检索路径按位置绑定（与两处的既有
+    tuple 风格一致，避免命名/位置混用）。旧列回退：owner_type/owner_key 为
+    空的行经 COALESCE 按 space 列还原（迁移回填前的写入兜底）。
 
     PERSON 分支只在 scope 声明了受众时生成——没有受众就没有 PERSON 行，
     不存在「先召回再按受众过滤」的旁路。
     """
     col = f"{alias}." if alias else ""
-    params: dict[str, Any] = {"_scope_space": scope.space_key}
+    params: list[Any] = [scope.space_key]
     person_clause = ""
     if scope.has_person:
-        placeholders = ",".join(
-            f":_scope_aud_{i}" for i in range(len(scope.person_audiences))
-        )
-        for i, aud in enumerate(scope.person_audiences):
-            params[f"_scope_aud_{i}"] = aud
-        params["_scope_person"] = scope.person_owner_key
-        params["_scope_subject"] = scope.subject_key
+        placeholders = ",".join("?" * len(scope.person_audiences))
         person_clause = (
-            f" OR ({col}owner_type = 'PERSON' AND {col}owner_key = :_scope_person "
-            f"AND {col}subject_key = :_scope_subject AND {col}audience IN ({placeholders}))"
+            f" OR ({col}owner_type = 'PERSON' AND {col}owner_key = ? "
+            f"AND {col}subject_key = ? AND {col}audience IN ({placeholders}))"
+        )
+        params.extend(
+            [scope.person_owner_key, scope.subject_key, *scope.person_audiences]
         )
     fragment = (
-        f" AND (({col}owner_type = 'SPACE' AND {col}owner_key = :_scope_space)"
+        f" AND (({col}owner_type = 'SPACE' AND "
+        f"COALESCE({col}owner_key, 'space:' || {col}group_shared_space) = ?)"
         f"{person_clause})"
     )
     return fragment, params

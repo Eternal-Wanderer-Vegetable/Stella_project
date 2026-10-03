@@ -929,6 +929,13 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 group_id=event.group_id,
                 msg_id=event.message_id,
                 message=message_text,
+                # v3 会话身份（计划 §6.1）：群轮次也带规范键，检索 scope 由
+                # 服务端从这组字段生成
+                conversation_kind="group",
+                conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                bot_id=str(event.self_id),
+                peer_id=str(event.group_id),
+                storage_session_id=event.group_id,
                 # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
                 # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
                 # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
@@ -1216,6 +1223,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 group_shared_space=ref.memory_space,
                 conversation_kind=ref.kind,
                 conversation_key=ref.conversation_key,
+                bot_id=bot_id,
                 peer_id=ref.peer_id,
                 storage_session_id=ref.storage_session_id,
                 trigger="reply",
