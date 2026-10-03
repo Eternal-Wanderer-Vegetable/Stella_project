@@ -88,7 +88,7 @@ def bench_long_run_drain(work: Path) -> dict:
                 root_kind="webchat", trace_id=f"lr-{r}"))
         t0 = time.monotonic()
         for round_no in range(25):
-            for r, ctx in enumerate(roots):
+            for ctx in roots:
                 with message_flow.span(ctx, "lr.node",
                                        instance_key=f"seg:{round_no}"):
                     pass
