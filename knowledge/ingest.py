@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 from nonebot import logger
 
+from core.observability import entity_history, message_flow
 from knowledge import chunking
 from knowledge.domain import (
     DOC_STATE_DRAFT,
@@ -95,8 +96,32 @@ def ingest_content(
     """
     job_id = uuid.uuid4().hex[:12]
     store.create_job(job_id, kb.id, source_type, uri, submitted_by)
+    root = _ingest_flow_root(job_id, kb.id, source_type, uri)
+    parse_span = (message_flow.span(root, "knowledge.parse") if root else None)
     try:
         parsed = _parse(source_type, data, title=title, uri=uri)
+    except ParseError as e:
+        logger.warning(f"📥 [Knowledge] 导入解析失败（kb={kb.id}）: {e}")
+        if parse_span:
+            parse_span.finish(status="failed", reason_code="parse_error",
+                              error_code="ParseError")
+        _ingest_failed(store, job_id, kb.id, root, str(e), "parse_error")
+        return ImportOutcome(state="failed", error=str(e))
+    except Exception as e:  # 兜底：任何意外都不炸调用方
+        logger.warning(
+            f"📥 [Knowledge] 导入失败（kb={kb.id}）: {type(e).__name__}: {e}"
+        )
+        if parse_span:
+            parse_span.finish(status="failed", reason_code=type(e).__name__,
+                              error_code=type(e).__name__)
+        _ingest_failed(store, job_id, kb.id, root,
+                       f"{type(e).__name__}: {e}", "unexpected_error")
+        return ImportOutcome(state="failed", error=f"{type(e).__name__}: {e}")
+    if parse_span:
+        parse_span.finish()
+    version_span = (message_flow.span(root, "knowledge.version")
+                    if root else None)
+    try:
         outcome = _build_version(
             store,
             kb,
@@ -105,19 +130,61 @@ def ingest_content(
             needs_review=needs_review,
             embedder=embedder,
         )
-    except ParseError as e:
-        logger.warning(f"📥 [Knowledge] 导入解析失败（kb={kb.id}）: {e}")
-        store.finish_job(job_id, error=str(e))
-        return ImportOutcome(state="failed", error=str(e))
     except Exception as e:  # 兜底：任何意外都不炸调用方
-        logger.warning(
-            f"📥 [Knowledge] 导入失败（kb={kb.id}）: {type(e).__name__}: {e}"
-        )
-        store.finish_job(job_id, error=f"{type(e).__name__}: {e}")
+        if version_span:
+            version_span.finish(status="failed", reason_code=type(e).__name__,
+                                error_code=type(e).__name__)
+        _ingest_failed(store, job_id, kb.id, root,
+                       f"{type(e).__name__}: {e}", "unexpected_error")
         return ImportOutcome(state="failed", error=f"{type(e).__name__}: {e}")
+    if version_span:
+        version_span.finish(status="succeeded",
+                            metrics={"chunks": outcome.chunk_count}
+                            if hasattr(outcome, "chunk_count") else None)
 
     store.finish_job(job_id, doc_id=outcome.doc_id, version_no=outcome.version_no)
+    if root:
+        try:
+            # ready ≠ published（计划 §6.5）：导入终态忠实记录，发布是显式动作
+            message_flow.checkpoint(root, "knowledge.version",
+                                    summary=f"state={outcome.state}",
+                                    metrics={"doc_id": outcome.doc_id,
+                                             "version_no": outcome.version_no})
+            entity_history.record("knowledge_version",
+                                  f"{outcome.doc_id}:v{outcome.version_no}",
+                                  scope=kb.id, trace_id=root.trace_id,
+                                  to_state=outcome.state,
+                                  detail={"job_id": job_id,
+                                          "needs_review": needs_review})
+            message_flow.end_trace(root, outcome=outcome.state)
+        except Exception:
+            pass
     return outcome
+
+
+def _ingest_flow_root(job_id: str, kb_id: str, source_type: str, uri: str):
+    """导入运行的观测 root（旁路：观测不可用不影响导入管道）。"""
+    try:
+        return message_flow.begin_trace(
+            root_kind="knowledge_ingest", origin="api", scope=f"kb:{kb_id}",
+            source_message_key=f"kb:job:{job_id}", trigger=source_type,
+            detail={"uri": uri[:120]}, process_kind="knowledge")
+    except Exception:
+        return None
+
+
+def _ingest_failed(store, job_id: str, kb_id: str, root, error: str,
+                   reason: str) -> None:
+    """失败终态：job 落账 + 观测事实（两条通道各自独立成功/失败）。"""
+    store.finish_job(job_id, error=error)
+    if root is None:
+        return
+    try:
+        message_flow.decision(root, "knowledge.version", status="failed",
+                              reason_code=reason, fact_kind="state")
+        message_flow.end_trace(root, outcome="failed", status="closed")
+    except Exception:
+        pass
 
 
 def _parse(

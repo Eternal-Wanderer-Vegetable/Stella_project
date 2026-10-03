@@ -347,8 +347,21 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
        ("memory/social_worker.py", "run_due_jobs")),
     _N("scheduled.runtime.tick", "预约调度 tick（租约/恢复/执行）", "ops", "entry",
        ("stella_project/plugins/bot_main/scheduling/runtime.py", "tick_once")),
+    _N("scheduled.gate", "预约运行门控（静音/睡眠/冷却）", "ops", "gate",
+       ("stella_project/plugins/bot_main/scheduling/runtime.py",
+        "SchedulerRuntime._execute_locked")),
+    _N("scheduled.agent", "预约 Agent 执行", "ops", "task",
+       ("stella_project/plugins/bot_main/scheduling/runtime.py",
+        "SchedulerRuntime._execute_agent")),
+    _N("scheduled.deliver", "预约投递", "ops", "notify",
+       ("stella_project/plugins/bot_main/scheduling/delivery.py",
+        "DeliveryService.deliver")),
     _N("knowledge.ingest.entry", "知识导入入口", "ops", "entry",
        ("knowledge/ingest.py", "ingest_content")),
+    _N("knowledge.parse", "知识解析", "ops", "task",
+       ("knowledge/ingest.py", "_parse")),
+    _N("knowledge.version", "版本构建与嵌入", "ops", "persist",
+       ("knowledge/ingest.py", "_build_version")),
 ]}
 
 # ---- 静态边（主链；条件边带 label，spawn/cause 是虚线）----

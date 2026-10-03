@@ -1,22 +1,22 @@
 {
  "coverage": {
-  "closure_sites": 6129,
+  "closure_sites": 6331,
   "core_unresolved_allowed": 0,
   "declared_runtime_entries": 20,
   "derived_or_opaque": 13,
   "edges": 124,
   "explicit_boundaries": 4,
   "lanes": 14,
-  "reachable_symbols": 898,
+  "reachable_symbols": 912,
   "reachable_truncated_nodes": [
    "consolidate.extract",
    "consolidate.preflight",
    "consolidate.write",
    "memory.consolidate.entry"
   ],
-  "source_resolved": 124,
-  "total_nodes": 125,
-  "unresolved_calls": 1436
+  "source_resolved": 129,
+  "total_nodes": 130,
+  "unresolved_calls": 1486
  },
  "edges": [
   {
@@ -807,10 +807,10 @@
    "catalog": {
     "derived": 2,
     "edges": 124,
-    "nodes": 125,
+    "nodes": 130,
     "note": "静态目录完整度；不冒充运行观测或数据集覆盖",
     "opaque": 11,
-    "source_anchored": 124
+    "source_anchored": 129
    },
    "dataset": {
     "denominator": "declared_expected_cases",
@@ -2165,10 +2165,10 @@
    "label": "参与评分",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "09dc8c9c6c5d5616",
+    "body_hash": "6563598a356f5387",
     "features": {
      "awaits": 4,
-     "branches": 23,
+     "branches": 22,
      "calls": 36,
      "loops": 1,
      "raises": 0,
@@ -2291,19 +2291,61 @@
    "label": "知识导入入口",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "fa5cf8d118e4a4c9",
+    "body_hash": "417865229274f448",
     "features": {
      "awaits": 0,
-     "branches": 0,
-     "calls": 16,
+     "branches": 9,
+     "calls": 36,
      "loops": 0,
      "raises": 0,
      "returns": 0,
      "spawns": 0,
-     "try": 1
+     "try": 3
     },
     "file": "knowledge/ingest.py",
     "symbol": "ingest_content"
+   }
+  },
+  {
+   "id": "knowledge.parse",
+   "kind": "task",
+   "label": "知识解析",
+   "lane": "ops",
+   "source_ref": {
+    "body_hash": "f387ead1bfb19081",
+    "features": {
+     "awaits": 0,
+     "branches": 0,
+     "calls": 1,
+     "loops": 0,
+     "raises": 0,
+     "returns": 0,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "knowledge/ingest.py",
+    "symbol": "_parse"
+   }
+  },
+  {
+   "id": "knowledge.version",
+   "kind": "persist",
+   "label": "版本构建与嵌入",
+   "lane": "ops",
+   "source_ref": {
+    "body_hash": "1964a48a05fa286d",
+    "features": {
+     "awaits": 0,
+     "branches": 6,
+     "calls": 29,
+     "loops": 1,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 0
+    },
+    "file": "knowledge/ingest.py",
+    "symbol": "_build_version"
    }
   },
   {
@@ -2737,10 +2779,10 @@
    "label": "参与决策（全等级退出）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "09dc8c9c6c5d5616",
+    "body_hash": "6563598a356f5387",
     "features": {
      "awaits": 4,
-     "branches": 23,
+     "branches": 22,
      "calls": 36,
      "loops": 1,
      "raises": 0,
@@ -2779,10 +2821,10 @@
    "label": "参与评分决策",
    "lane": "background",
    "source_ref": {
-    "body_hash": "09dc8c9c6c5d5616",
+    "body_hash": "6563598a356f5387",
     "features": {
      "awaits": 4,
-     "branches": 23,
+     "branches": 22,
      "calls": 36,
      "loops": 1,
      "raises": 0,
@@ -3101,11 +3143,11 @@
    "label": "主动@资格预检",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "1d1bada8afa15e52",
+    "body_hash": "18d013fd3dd5a7c5",
     "features": {
      "awaits": 5,
-     "branches": 13,
-     "calls": 63,
+     "branches": 14,
+     "calls": 64,
      "loops": 0,
      "raises": 1,
      "returns": 0,
@@ -3369,6 +3411,69 @@
    }
   },
   {
+   "id": "scheduled.agent",
+   "kind": "task",
+   "label": "预约 Agent 执行",
+   "lane": "ops",
+   "source_ref": {
+    "body_hash": "fad01e19499d2734",
+    "features": {
+     "awaits": 2,
+     "branches": 11,
+     "calls": 19,
+     "loops": 0,
+     "raises": 1,
+     "returns": 0,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/scheduling/runtime.py",
+    "symbol": "SchedulerRuntime._execute_agent"
+   }
+  },
+  {
+   "id": "scheduled.deliver",
+   "kind": "notify",
+   "label": "预约投递",
+   "lane": "ops",
+   "source_ref": {
+    "body_hash": "e83484a2d145af99",
+    "features": {
+     "awaits": 1,
+     "branches": 10,
+     "calls": 25,
+     "loops": 0,
+     "raises": 0,
+     "returns": 0,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/scheduling/delivery.py",
+    "symbol": "DeliveryService.deliver"
+   }
+  },
+  {
+   "id": "scheduled.gate",
+   "kind": "gate",
+   "label": "预约运行门控（静音/睡眠/冷却）",
+   "lane": "ops",
+   "source_ref": {
+    "body_hash": "c60d0cdeccfffbdb",
+    "features": {
+     "awaits": 2,
+     "branches": 6,
+     "calls": 13,
+     "loops": 0,
+     "raises": 0,
+     "returns": 0,
+     "spawns": 0,
+     "try": 1
+    },
+    "file": "stella_project/plugins/bot_main/scheduling/runtime.py",
+    "symbol": "SchedulerRuntime._execute_locked"
+   }
+  },
+  {
    "id": "scheduled.runtime.tick",
    "kind": "entry",
    "label": "预约调度 tick（租约/恢复/执行）",
@@ -3543,16 +3648,16 @@
    "label": "社交 worker 到期租约处理",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "740786bcb69d8b5f",
+    "body_hash": "e1f8b142a1f015fc",
     "features": {
      "awaits": 0,
-     "branches": 3,
-     "calls": 10,
+     "branches": 7,
+     "calls": 21,
      "loops": 1,
      "raises": 0,
      "returns": 0,
      "spawns": 0,
-     "try": 1
+     "try": 3
     },
     "file": "memory/social_worker.py",
     "symbol": "run_due_jobs"
@@ -18751,7 +18856,7 @@
    "entry": {
     "counts": {
      "await": 4,
-     "branch": 23,
+     "branch": 22,
      "call": 36,
      "loop": 1,
      "return": 6,
@@ -18781,21 +18886,21 @@
      {
       "condition": "decision.level == ALLOW_LLM",
       "kind": "branch",
-      "line": 366
+      "line": 371
      },
      {
       "condition": "self._persist and decision.level in ('CANDIDATE', ALLOW_LLM)",
       "kind": "branch",
-      "line": 416
+      "line": 420
      },
      {
       "condition": "topic.status.value in ('COOLING', 'EXPIRED')",
       "kind": "branch",
-      "line": 419
+      "line": 423
      },
      {
       "kind": "return",
-      "line": 422
+      "line": 426
      },
      {
       "kind": "return",
@@ -18904,42 +19009,47 @@
      },
      {
       "kind": "call",
-      "line": 356,
+      "line": 357,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
+      "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
+      "kind": "branch",
+      "line": 359
+     },
+     {
       "kind": "call",
-      "line": 357,
+      "line": 362,
       "resolved": "self:self._tracker.decide",
       "target": "self._tracker.decide"
      },
      {
       "kind": "call",
-      "line": 361,
+      "line": 366,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "decision.level == CANDIDATE",
       "kind": "branch",
-      "line": 368
+      "line": 373
      },
      {
       "kind": "call",
-      "line": 377,
+      "line": 382,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 391,
+      "line": 396,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 408,
+      "line": 412,
       "resolved": "external:memory.participation.observability",
       "target": "log_decision"
      },
@@ -19019,11 +19129,11 @@
      {
       "condition": "decision.level == OBSERVE",
       "kind": "branch",
-      "line": 373
+      "line": 378
      },
      {
       "kind": "call",
-      "line": 417,
+      "line": 421,
       "resolved": "external:memory.participation.observability",
       "target": "record_to_db"
      },
@@ -19046,12 +19156,12 @@
      {
       "condition": "'idle_backoff'",
       "kind": "branch",
-      "line": 371
+      "line": 376
      },
      {
       "condition": "'decision_allow'",
       "kind": "branch",
-      "line": 414
+      "line": 418
      },
      {
       "kind": "call",
@@ -19067,44 +19177,34 @@
      },
      {
       "kind": "call",
-      "line": 383,
+      "line": 388,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "kind": "call",
-      "line": 384,
+      "line": 389,
       "resolved": "unresolved",
       "target": "round"
-     },
-     {
-      "condition": "slot_before.streak",
-      "kind": "branch",
-      "line": 394
      },
      {
       "condition": "slot_after.streak",
       "kind": "branch",
-      "line": 395
-     },
-     {
-      "condition": "slot_before.backoff_until",
-      "kind": "branch",
-      "line": 397
+      "line": 400
      },
      {
       "condition": "slot_after.backoff_until",
       "kind": "branch",
-      "line": 398
+      "line": 402
      },
      {
       "condition": "slot_after.low_novelty_streak",
       "kind": "branch",
-      "line": 400
+      "line": 404
      },
      {
       "kind": "call",
-      "line": 401,
+      "line": 405,
       "resolved": "local:ParticipationManager.topic_revision",
       "target": "self.topic_revision"
      },
@@ -20938,9 +21038,10 @@
   "knowledge.ingest.entry": {
    "entry": {
     "counts": {
-     "call": 16,
-     "return": 3,
-     "try": 1
+     "branch": 9,
+     "call": 36,
+     "return": 4,
+     "try": 3
     },
     "items": [
      {
@@ -20950,101 +21051,256 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 98
+      "line": 101
      },
      {
-      "kind": "return",
+      "condition": "parse_span",
+      "kind": "branch",
       "line": 120
      },
      {
+      "finally": false,
+      "handlers": [
+       "Exception"
+      ],
+      "kind": "try",
+      "line": 124
+     },
+     {
+      "condition": "version_span",
+      "kind": "branch",
+      "line": 140
+     },
+     {
+      "condition": "root",
+      "kind": "branch",
+      "line": 146
+     },
+     {
+      "kind": "return",
+      "line": 162
+     },
+     {
       "kind": "call",
-      "line": 97,
+      "line": 98,
       "resolved": "unresolved",
       "target": "store.create_job"
      },
      {
       "kind": "call",
-      "line": 119,
+      "line": 99,
+      "resolved": "local:_ingest_flow_root",
+      "target": "_ingest_flow_root"
+     },
+     {
+      "condition": "message_flow.span(root, 'knowledge.parse')",
+      "kind": "branch",
+      "line": 100
+     },
+     {
+      "condition": "message_flow.span(root, 'knowledge.version')",
+      "kind": "branch",
+      "line": 122
+     },
+     {
+      "kind": "call",
+      "line": 145,
       "resolved": "unresolved",
       "target": "store.finish_job"
      },
      {
-      "kind": "call",
-      "line": 99,
-      "resolved": "local:_parse",
-      "target": "_parse"
+      "finally": false,
+      "handlers": [
+       "Exception"
+      ],
+      "kind": "try",
+      "line": 147
      },
      {
       "kind": "call",
       "line": 100,
+      "resolved": "external:core.observability.message_flow.span",
+      "target": "message_flow.span"
+     },
+     {
+      "kind": "call",
+      "line": 102,
+      "resolved": "local:_parse",
+      "target": "_parse"
+     },
+     {
+      "condition": "parse_span",
+      "kind": "branch",
+      "line": 105
+     },
+     {
+      "kind": "return",
+      "line": 109
+     },
+     {
+      "condition": "parse_span",
+      "kind": "branch",
+      "line": 114
+     },
+     {
+      "kind": "return",
+      "line": 119
+     },
+     {
+      "kind": "call",
+      "line": 121,
+      "resolved": "unresolved",
+      "target": "parse_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 122,
+      "resolved": "external:core.observability.message_flow.span",
+      "target": "message_flow.span"
+     },
+     {
+      "kind": "call",
+      "line": 125,
       "resolved": "local:_build_version",
       "target": "_build_version"
      },
      {
-      "kind": "return",
-      "line": 111
+      "condition": "version_span",
+      "kind": "branch",
+      "line": 134
      },
      {
       "kind": "return",
-      "line": 117
+      "line": 139
      },
      {
       "kind": "call",
-      "line": 96,
+      "line": 141,
+      "resolved": "unresolved",
+      "target": "version_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 97,
       "resolved": "external:uuid.uuid.uuid4",
       "target": "uuid.uuid4"
      },
      {
       "kind": "call",
+      "line": 104,
+      "resolved": "external:nonebot.logger.warning",
+      "target": "logger.warning"
+     },
+     {
+      "kind": "call",
+      "line": 108,
+      "resolved": "local:_ingest_failed",
+      "target": "_ingest_failed"
+     },
+     {
+      "kind": "call",
       "line": 109,
-      "resolved": "external:nonebot.logger.warning",
-      "target": "logger.warning"
-     },
-     {
-      "kind": "call",
-      "line": 110,
-      "resolved": "unresolved",
-      "target": "store.finish_job"
-     },
-     {
-      "kind": "call",
-      "line": 111,
       "resolved": "unresolved",
       "target": "ImportOutcome"
      },
      {
       "kind": "call",
-      "line": 113,
+      "line": 111,
       "resolved": "external:nonebot.logger.warning",
       "target": "logger.warning"
-     },
-     {
-      "kind": "call",
-      "line": 116,
-      "resolved": "unresolved",
-      "target": "store.finish_job"
      },
      {
       "kind": "call",
       "line": 117,
+      "resolved": "local:_ingest_failed",
+      "target": "_ingest_failed"
+     },
+     {
+      "kind": "call",
+      "line": 119,
       "resolved": "unresolved",
       "target": "ImportOutcome"
      },
      {
       "kind": "call",
-      "line": 110,
+      "line": 137,
+      "resolved": "local:_ingest_failed",
+      "target": "_ingest_failed"
+     },
+     {
+      "kind": "call",
+      "line": 139,
+      "resolved": "unresolved",
+      "target": "ImportOutcome"
+     },
+     {
+      "kind": "call",
+      "line": 149,
+      "resolved": "external:core.observability.message_flow.checkpoint",
+      "target": "message_flow.checkpoint"
+     },
+     {
+      "kind": "call",
+      "line": 153,
+      "resolved": "external:core.observability.entity_history.record",
+      "target": "entity_history.record"
+     },
+     {
+      "kind": "call",
+      "line": 159,
+      "resolved": "external:core.observability.message_flow.end_trace",
+      "target": "message_flow.end_trace"
+     },
+     {
+      "kind": "call",
+      "line": 106,
+      "resolved": "unresolved",
+      "target": "parse_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 108,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 111,
+      "line": 115,
+      "resolved": "unresolved",
+      "target": "parse_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 135,
+      "resolved": "unresolved",
+      "target": "version_span.finish"
+     },
+     {
+      "condition": "{'chunks': outcome.chunk_count}",
+      "kind": "branch",
+      "line": 142
+     },
+     {
+      "kind": "call",
+      "line": 109,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 114,
+      "line": 143,
+      "resolved": "unresolved",
+      "target": "hasattr"
+     },
+     {
+      "kind": "call",
+      "line": 112,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 115,
       "resolved": "unresolved",
       "target": "type"
      },
@@ -21056,7 +21312,37 @@
      },
      {
       "kind": "call",
-      "line": 117,
+      "line": 118,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 135,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 136,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 138,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 119,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 139,
       "resolved": "unresolved",
       "target": "type"
      }
@@ -21065,8 +21351,283 @@
     "truncated": false
    },
    "reachable_symbols": [
+    "_ingest_flow_root",
     "_parse",
     "_build_version",
+    "_ingest_failed",
+    "content_fingerprint",
+    "_find_by_title"
+   ],
+   "reachable_truncated": false
+  },
+  "knowledge.parse": {
+   "entry": {
+    "counts": {
+     "call": 1,
+     "return": 1
+    },
+    "items": [
+     {
+      "kind": "return",
+      "line": 195
+     },
+     {
+      "kind": "call",
+      "line": 195,
+      "resolved": "external:knowledge.parsers",
+      "target": "parse_content"
+     }
+    ],
+    "spawn_lines": [],
+    "truncated": false
+   },
+   "reachable_symbols": [],
+   "reachable_truncated": false
+  },
+  "knowledge.version": {
+   "entry": {
+    "counts": {
+     "branch": 6,
+     "call": 29,
+     "loop": 1,
+     "raise": 1,
+     "return": 2,
+     "with": 1
+    },
+    "items": [
+     {
+      "condition": "existing is not None",
+      "kind": "branch",
+      "line": 214
+     },
+     {
+      "condition": "doc is not None and doc.status != 'archived'",
+      "kind": "branch",
+      "line": 224
+     },
+     {
+      "condition": "not chunks",
+      "kind": "branch",
+      "line": 246
+     },
+     {
+      "condition": "embedder is not None",
+      "kind": "branch",
+      "line": 251
+     },
+     {
+      "async": false,
+      "context": "transaction(store.db_path)",
+      "kind": "with",
+      "line": 272
+     },
+     {
+      "kind": "return",
+      "line": 290
+     },
+     {
+      "kind": "call",
+      "line": 209,
+      "resolved": "unresolved",
+      "target": "'\\n\\n'.join"
+     },
+     {
+      "kind": "call",
+      "line": 210,
+      "resolved": "local:content_fingerprint",
+      "target": "content_fingerprint"
+     },
+     {
+      "kind": "call",
+      "line": 213,
+      "resolved": "unresolved",
+      "target": "store.find_document_by_hash"
+     },
+     {
+      "kind": "return",
+      "line": 215
+     },
+     {
+      "kind": "call",
+      "line": 223,
+      "resolved": "local:_find_by_title",
+      "target": "_find_by_title"
+     },
+     {
+      "kind": "call",
+      "line": 245,
+      "resolved": "external:knowledge.chunking.chunk_sections",
+      "target": "chunking.chunk_sections"
+     },
+     {
+      "exception": "ParseError('切块后没有任何可用内容')",
+      "kind": "raise",
+      "line": 247
+     },
+     {
+      "iterate": "enumerate(blobs[:len(chunks)])",
+      "kind": "loop",
+      "line": 253
+     },
+     {
+      "kind": "call",
+      "line": 258,
+      "resolved": "external:knowledge.domain",
+      "target": "KBDocumentVersion"
+     },
+     {
+      "kind": "call",
+      "line": 270,
+      "resolved": "unresolved",
+      "target": "store.create_version"
+     },
+     {
+      "kind": "call",
+      "line": 283,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 285,
+      "resolved": "unresolved",
+      "target": "store.update_version"
+     },
+     {
+      "kind": "call",
+      "line": 286,
+      "resolved": "external:nonebot.logger.info",
+      "target": "logger.info"
+     },
+     {
+      "kind": "call",
+      "line": 290,
+      "resolved": "unresolved",
+      "target": "ImportOutcome"
+     },
+     {
+      "kind": "call",
+      "line": 215,
+      "resolved": "unresolved",
+      "target": "ImportOutcome"
+     },
+     {
+      "kind": "call",
+      "line": 230,
+      "resolved": "unresolved",
+      "target": "store.upsert_document"
+     },
+     {
+      "kind": "call",
+      "line": 233,
+      "resolved": "external:knowledge.domain",
+      "target": "KBDocument"
+     },
+     {
+      "kind": "call",
+      "line": 243,
+      "resolved": "unresolved",
+      "target": "store.upsert_document"
+     },
+     {
+      "kind": "call",
+      "line": 247,
+      "resolved": "external:knowledge.parsers",
+      "target": "ParseError"
+     },
+     {
+      "kind": "call",
+      "line": 249,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 252,
+      "resolved": "unresolved",
+      "target": "embedder"
+     },
+     {
+      "kind": "call",
+      "line": 253,
+      "resolved": "unresolved",
+      "target": "enumerate"
+     },
+     {
+      "condition": "blob is not None",
+      "kind": "branch",
+      "line": 255
+     },
+     {
+      "kind": "call",
+      "line": 272,
+      "resolved": "external:knowledge.store",
+      "target": "transaction"
+     },
+     {
+      "kind": "call",
+      "line": 273,
+      "resolved": "unresolved",
+      "target": "store.replace_version_chunks"
+     },
+     {
+      "kind": "call",
+      "line": 263,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 265,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 267,
+      "resolved": "unresolved",
+      "target": "dict"
+     },
+     {
+      "kind": "call",
+      "line": 294,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "condition": "DOC_STATE_IN_REVIEW",
+      "kind": "branch",
+      "line": 240
+     },
+     {
+      "kind": "call",
+      "line": 288,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 253,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 280,
+      "resolved": "unresolved",
+      "target": "enumerate"
+     },
+     {
+      "kind": "call",
+      "line": 234,
+      "resolved": "external:uuid.uuid.uuid4",
+      "target": "uuid.uuid4"
+     }
+    ],
+    "spawn_lines": [],
+    "truncated": false
+   },
+   "reachable_symbols": [
     "content_fingerprint",
     "_find_by_title"
    ],
@@ -25570,7 +26131,7 @@
    "entry": {
     "counts": {
      "await": 4,
-     "branch": 23,
+     "branch": 22,
      "call": 36,
      "loop": 1,
      "return": 6,
@@ -25600,21 +26161,21 @@
      {
       "condition": "decision.level == ALLOW_LLM",
       "kind": "branch",
-      "line": 366
+      "line": 371
      },
      {
       "condition": "self._persist and decision.level in ('CANDIDATE', ALLOW_LLM)",
       "kind": "branch",
-      "line": 416
+      "line": 420
      },
      {
       "condition": "topic.status.value in ('COOLING', 'EXPIRED')",
       "kind": "branch",
-      "line": 419
+      "line": 423
      },
      {
       "kind": "return",
-      "line": 422
+      "line": 426
      },
      {
       "kind": "return",
@@ -25723,42 +26284,47 @@
      },
      {
       "kind": "call",
-      "line": 356,
+      "line": 357,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
+      "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
+      "kind": "branch",
+      "line": 359
+     },
+     {
       "kind": "call",
-      "line": 357,
+      "line": 362,
       "resolved": "self:self._tracker.decide",
       "target": "self._tracker.decide"
      },
      {
       "kind": "call",
-      "line": 361,
+      "line": 366,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "decision.level == CANDIDATE",
       "kind": "branch",
-      "line": 368
+      "line": 373
      },
      {
       "kind": "call",
-      "line": 377,
+      "line": 382,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 391,
+      "line": 396,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 408,
+      "line": 412,
       "resolved": "external:memory.participation.observability",
       "target": "log_decision"
      },
@@ -25838,11 +26404,11 @@
      {
       "condition": "decision.level == OBSERVE",
       "kind": "branch",
-      "line": 373
+      "line": 378
      },
      {
       "kind": "call",
-      "line": 417,
+      "line": 421,
       "resolved": "external:memory.participation.observability",
       "target": "record_to_db"
      },
@@ -25865,12 +26431,12 @@
      {
       "condition": "'idle_backoff'",
       "kind": "branch",
-      "line": 371
+      "line": 376
      },
      {
       "condition": "'decision_allow'",
       "kind": "branch",
-      "line": 414
+      "line": 418
      },
      {
       "kind": "call",
@@ -25886,44 +26452,34 @@
      },
      {
       "kind": "call",
-      "line": 383,
+      "line": 388,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "kind": "call",
-      "line": 384,
+      "line": 389,
       "resolved": "unresolved",
       "target": "round"
-     },
-     {
-      "condition": "slot_before.streak",
-      "kind": "branch",
-      "line": 394
      },
      {
       "condition": "slot_after.streak",
       "kind": "branch",
-      "line": 395
-     },
-     {
-      "condition": "slot_before.backoff_until",
-      "kind": "branch",
-      "line": 397
+      "line": 400
      },
      {
       "condition": "slot_after.backoff_until",
       "kind": "branch",
-      "line": 398
+      "line": 402
      },
      {
       "condition": "slot_after.low_novelty_streak",
       "kind": "branch",
-      "line": 400
+      "line": 404
      },
      {
       "kind": "call",
-      "line": 401,
+      "line": 405,
       "resolved": "local:ParticipationManager.topic_revision",
       "target": "self.topic_revision"
      },
@@ -26150,7 +26706,7 @@
    "entry": {
     "counts": {
      "await": 4,
-     "branch": 23,
+     "branch": 22,
      "call": 36,
      "loop": 1,
      "return": 6,
@@ -26180,21 +26736,21 @@
      {
       "condition": "decision.level == ALLOW_LLM",
       "kind": "branch",
-      "line": 366
+      "line": 371
      },
      {
       "condition": "self._persist and decision.level in ('CANDIDATE', ALLOW_LLM)",
       "kind": "branch",
-      "line": 416
+      "line": 420
      },
      {
       "condition": "topic.status.value in ('COOLING', 'EXPIRED')",
       "kind": "branch",
-      "line": 419
+      "line": 423
      },
      {
       "kind": "return",
-      "line": 422
+      "line": 426
      },
      {
       "kind": "return",
@@ -26303,42 +26859,47 @@
      },
      {
       "kind": "call",
-      "line": 356,
+      "line": 357,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
+      "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
+      "kind": "branch",
+      "line": 359
+     },
+     {
       "kind": "call",
-      "line": 357,
+      "line": 362,
       "resolved": "self:self._tracker.decide",
       "target": "self._tracker.decide"
      },
      {
       "kind": "call",
-      "line": 361,
+      "line": 366,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "decision.level == CANDIDATE",
       "kind": "branch",
-      "line": 368
+      "line": 373
      },
      {
       "kind": "call",
-      "line": 377,
+      "line": 382,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 391,
+      "line": 396,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 408,
+      "line": 412,
       "resolved": "external:memory.participation.observability",
       "target": "log_decision"
      },
@@ -26418,11 +26979,11 @@
      {
       "condition": "decision.level == OBSERVE",
       "kind": "branch",
-      "line": 373
+      "line": 378
      },
      {
       "kind": "call",
-      "line": 417,
+      "line": 421,
       "resolved": "external:memory.participation.observability",
       "target": "record_to_db"
      },
@@ -26445,12 +27006,12 @@
      {
       "condition": "'idle_backoff'",
       "kind": "branch",
-      "line": 371
+      "line": 376
      },
      {
       "condition": "'decision_allow'",
       "kind": "branch",
-      "line": 414
+      "line": 418
      },
      {
       "kind": "call",
@@ -26466,44 +27027,34 @@
      },
      {
       "kind": "call",
-      "line": 383,
+      "line": 388,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "kind": "call",
-      "line": 384,
+      "line": 389,
       "resolved": "unresolved",
       "target": "round"
-     },
-     {
-      "condition": "slot_before.streak",
-      "kind": "branch",
-      "line": 394
      },
      {
       "condition": "slot_after.streak",
       "kind": "branch",
-      "line": 395
-     },
-     {
-      "condition": "slot_before.backoff_until",
-      "kind": "branch",
-      "line": 397
+      "line": 400
      },
      {
       "condition": "slot_after.backoff_until",
       "kind": "branch",
-      "line": 398
+      "line": 402
      },
      {
       "condition": "slot_after.low_novelty_streak",
       "kind": "branch",
-      "line": 400
+      "line": 404
      },
      {
       "kind": "call",
-      "line": 401,
+      "line": 405,
       "resolved": "local:ParticipationManager.topic_revision",
       "target": "self.topic_revision"
      },
@@ -26573,116 +27124,116 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 438
+      "line": 442
      },
      {
       "kind": "return",
-      "line": 470
+      "line": 474
      },
      {
       "kind": "call",
-      "line": 434,
+      "line": 438,
       "resolved": "external:memory.participation.scorer",
       "target": "score_message"
      },
      {
       "condition": "not corpus.strip()",
       "kind": "branch",
-      "line": 440
+      "line": 444
      },
      {
       "iterate": "tables.topics.interests",
       "kind": "loop",
-      "line": 443
+      "line": 447
      },
      {
       "condition": "best is None",
       "kind": "branch",
-      "line": 449
+      "line": 453
      },
      {
       "condition": "best <= w.embedding_zero_at",
       "kind": "branch",
-      "line": 453
+      "line": 457
      },
      {
       "kind": "call",
-      "line": 469,
+      "line": 473,
       "resolved": "external:memory.participation.scorer",
       "target": "compose_final_score"
      },
      {
       "kind": "call",
-      "line": 439,
+      "line": 443,
       "resolved": "unresolved",
       "target": "' '.join"
      },
      {
       "kind": "return",
-      "line": 441
+      "line": 445
      },
      {
       "condition": "not anchor.description",
       "kind": "branch",
-      "line": 444
+      "line": 448
      },
      {
       "condition": "sim is not None and (best is None or sim > best)",
       "kind": "branch",
-      "line": 447
+      "line": 451
      },
      {
       "kind": "return",
-      "line": 450
+      "line": 454
      },
      {
       "condition": "best >= w.embedding_full_at",
       "kind": "branch",
-      "line": 455
+      "line": 459
      },
      {
       "kind": "call",
-      "line": 462,
+      "line": 466,
       "resolved": "unresolved",
       "target": "min"
      },
      {
       "kind": "call",
-      "line": 464,
+      "line": 468,
       "resolved": "unresolved",
       "target": "max"
      },
      {
       "kind": "call",
-      "line": 466,
+      "line": 470,
       "resolved": "external:memory.participation.scorer",
       "target": "compose_final_score"
      },
      {
       "kind": "call",
-      "line": 440,
+      "line": 444,
       "resolved": "unresolved",
       "target": "corpus.strip"
      },
      {
       "kind": "await",
-      "line": 446
+      "line": 450
      },
      {
       "kind": "call",
-      "line": 464,
+      "line": 468,
       "resolved": "unresolved",
       "target": "min"
      },
      {
       "kind": "call",
-      "line": 446,
+      "line": 450,
       "resolved": "unresolved",
       "target": "anchor_sim"
      },
      {
       "kind": "call",
-      "line": 464,
+      "line": 468,
       "resolved": "unresolved",
       "target": "max"
      }
@@ -26708,7 +27259,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2688
+      "line": 2696
      },
      {
       "finally": false,
@@ -26716,91 +27267,91 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2695
+      "line": 2703
      },
      {
       "kind": "call",
-      "line": 2714,
+      "line": 2722,
       "resolved": "external:asyncio.asyncio.create_task",
       "target": "asyncio.create_task"
      },
      {
       "kind": "call",
-      "line": 2715,
+      "line": 2723,
       "resolved": "unresolved",
       "target": "_reply_check_tasks.add"
      },
      {
       "kind": "call",
-      "line": 2716,
+      "line": 2724,
       "resolved": "unresolved",
       "target": "task.add_done_callback"
      },
      {
       "kind": "call",
-      "line": 2714,
+      "line": 2722,
       "resolved": "unresolved",
       "target": "_runner"
      },
      {
       "kind": "call",
-      "line": 2691,
+      "line": 2699,
       "resolved": "external:nonebot",
       "target": "get_bot"
      },
      {
       "kind": "return",
-      "line": 2694
+      "line": 2702
      },
      {
       "kind": "call",
-      "line": 2696,
+      "line": 2704,
       "resolved": "external:memory.participation",
       "target": "get_participation_manager"
      },
      {
       "kind": "call",
-      "line": 2697,
+      "line": 2705,
       "resolved": "unresolved",
       "target": "manager.snapshot"
      },
      {
       "kind": "call",
-      "line": 2698,
+      "line": 2706,
       "resolved": "local:_build_participation_evidence",
       "target": "_build_participation_evidence"
      },
      {
       "kind": "await",
-      "line": 2699
+      "line": 2707
      },
      {
       "kind": "call",
-      "line": 2693,
+      "line": 2701,
       "resolved": "external:nonebot.logger.debug",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 2699,
+      "line": 2707,
       "resolved": "local:_proactive_speak_for_group",
       "target": "_proactive_speak_for_group"
      },
      {
       "kind": "call",
-      "line": 2712,
+      "line": 2720,
       "resolved": "external:nonebot.logger.warning",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 2703,
+      "line": 2711,
       "resolved": "unresolved",
       "target": "_PARTICIPATION_INSTRUCTIONS.get"
      }
     ],
     "spawn_lines": [
-     2714
+     2722
     ],
     "truncated": false
    },
@@ -29722,7 +30273,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2736
+      "line": 2744
      },
      {
       "finally": true,
@@ -29730,12 +30281,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2748
+      "line": 2756
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 2743
+      "line": 2751
      },
      {
       "finally": false,
@@ -29743,55 +30294,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2757
+      "line": 2765
      },
      {
       "kind": "call",
-      "line": 2739,
+      "line": 2747,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 2749
+      "line": 2757
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2755
+      "line": 2763
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 2760
+      "line": 2768
      },
      {
       "kind": "call",
-      "line": 2744,
+      "line": 2752,
       "resolved": "external:core.observability.message_flow.link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 2749,
+      "line": 2757,
       "resolved": "local:_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 2754,
+      "line": 2762,
       "resolved": "local:_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 2761,
+      "line": 2769,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 2741,
+      "line": 2749,
       "resolved": "external:core.social.contracts",
       "target": "new_trace_id"
      }
@@ -29818,8 +30369,8 @@
    "entry": {
     "counts": {
      "await": 5,
-     "branch": 13,
-     "call": 63,
+     "branch": 14,
+     "call": 64,
      "raise": 1,
      "return": 12,
      "try": 5,
@@ -29829,13 +30380,13 @@
      {
       "condition": "own_root",
       "kind": "branch",
-      "line": 2306
+      "line": 2307
      },
      {
       "finally": true,
       "handlers": [],
       "kind": "try",
-      "line": 2331
+      "line": 2332
      },
      {
       "finally": false,
@@ -29843,12 +30394,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2307
+      "line": 2308
      },
      {
       "condition": "not allowed",
       "kind": "branch",
-      "line": 2333
+      "line": 2334
      },
      {
       "finally": false,
@@ -29856,22 +30407,27 @@
        "(TypeError, ValueError)"
       ],
       "kind": "try",
-      "line": 2344
+      "line": 2345
+     },
+     {
+      "condition": "caller_flow_ctx is not None",
+      "kind": "branch",
+      "line": 2352
      },
      {
       "condition": "target is None",
       "kind": "branch",
-      "line": 2350
+      "line": 2358
      },
      {
       "async": true,
       "context": "lock",
       "kind": "with",
-      "line": 2363
+      "line": 2371
      },
      {
       "kind": "return",
-      "line": 2515
+      "line": 2523
      },
      {
       "finally": false,
@@ -29879,45 +30435,39 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2319
+      "line": 2320
      },
      {
       "kind": "return",
-      "line": 2328
+      "line": 2329
      },
      {
       "kind": "call",
-      "line": 2332,
+      "line": 2333,
       "resolved": "external:memory.proactive_gate",
       "target": "can_speak"
      },
      {
       "kind": "return",
-      "line": 2340
+      "line": 2341
      },
      {
       "kind": "call",
-      "line": 2341,
+      "line": 2342,
       "resolved": "external:memory.proactive",
       "target": "get_proactive"
      },
      {
-      "kind": "call",
-      "line": 2348,
-      "resolved": "external:memory.proactive_target",
-      "target": "pick_target"
-     },
-     {
       "kind": "return",
-      "line": 2354
+      "line": 2362
      },
      {
       "kind": "await",
-      "line": 2356
+      "line": 2364
      },
      {
       "kind": "call",
-      "line": 2357,
+      "line": 2365,
       "resolved": "external:nonebot.logger.info",
       "target": "logger.info"
      },
@@ -29928,196 +30478,382 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2376
+      "line": 2384
      },
      {
       "condition": "not ctx.lines",
       "kind": "branch",
-      "line": 2396
+      "line": 2404
      },
      {
       "condition": "is_proactive_skip(ctx.lines)",
       "kind": "branch",
-      "line": 2403
+      "line": 2411
      },
      {
       "condition": "not line",
       "kind": "branch",
-      "line": 2421
+      "line": 2429
      },
      {
       "condition": "proactive.recently_spoken(group_id, [line])",
       "kind": "branch",
-      "line": 2428
+      "line": 2436
      },
      {
       "condition": "not delivered",
       "kind": "branch",
-      "line": 2455
+      "line": 2463
      },
      {
       "async": false,
       "context": "_flow_span(flow_ctx, 'proactive.after', instance_key=f'grp:{group_id}')",
       "kind": "with",
-      "line": 2464
+      "line": 2472
      },
      {
       "kind": "call",
-      "line": 2502,
+      "line": 2510,
       "resolved": "external:memory.proactive_state",
       "target": "record_at"
      },
      {
       "kind": "call",
-      "line": 2509,
+      "line": 2517,
       "resolved": "external:asyncio.asyncio.create_task",
       "target": "asyncio.create_task"
      },
      {
       "kind": "call",
-      "line": 2512,
+      "line": 2520,
       "resolved": "unresolved",
       "target": "_reply_check_tasks.add"
      },
      {
       "kind": "call",
-      "line": 2513,
+      "line": 2521,
       "resolved": "unresolved",
       "target": "task.add_done_callback"
      },
      {
       "kind": "call",
-      "line": 2517,
+      "line": 2525,
       "resolved": "unresolved",
       "target": "_at_end"
      },
      {
       "kind": "call",
-      "line": 2310,
+      "line": 2311,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "condition": "flow_ctx is not None and (not flow_ctx.ended)",
       "kind": "branch",
-      "line": 2322
+      "line": 2323
      },
      {
       "kind": "call",
-      "line": 2335,
+      "line": 2336,
       "resolved": "local:_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 2338,
+      "line": 2339,
       "resolved": "external:nonebot.logger.debug",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 2345,
+      "line": 2346,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 2356,
+      "line": 2353,
+      "resolved": "external:memory.proactive_target",
+      "target": "pick_target"
+     },
+     {
+      "kind": "call",
+      "line": 2357,
+      "resolved": "external:memory.proactive_target",
+      "target": "pick_target"
+     },
+     {
+      "kind": "call",
+      "line": 2364,
       "resolved": "local:_resolve_nickname",
       "target": "_resolve_nickname"
      },
      {
       "kind": "call",
-      "line": 2364,
+      "line": 2372,
       "resolved": "external:core.context",
       "target": "ChatContext"
      },
      {
       "kind": "return",
-      "line": 2401
+      "line": 2409
      },
      {
       "kind": "call",
-      "line": 2403,
+      "line": 2411,
       "resolved": "external:memory.proactive_prompt",
       "target": "is_proactive_skip"
      },
      {
       "kind": "return",
-      "line": 2417
+      "line": 2425
      },
      {
       "condition": "_join_lines_naturally(ctx.lines)",
       "kind": "branch",
-      "line": 2420
-     },
-     {
-      "kind": "return",
-      "line": 2426
-     },
-     {
-      "kind": "call",
-      "line": 2428,
-      "resolved": "unresolved",
-      "target": "proactive.recently_spoken"
+      "line": 2428
      },
      {
       "kind": "return",
       "line": 2434
      },
      {
-      "condition": "ConversationScope.for_qq(group_id)",
-      "kind": "branch",
-      "line": 2438
+      "kind": "call",
+      "line": 2436,
+      "resolved": "unresolved",
+      "target": "proactive.recently_spoken"
      },
      {
       "kind": "return",
-      "line": 2445
+      "line": 2442
+     },
+     {
+      "condition": "ConversationScope.for_qq(group_id)",
+      "kind": "branch",
+      "line": 2446
+     },
+     {
+      "kind": "return",
+      "line": 2453
      },
      {
       "kind": "await",
-      "line": 2447
+      "line": 2455
      },
      {
       "kind": "call",
-      "line": 2454,
+      "line": 2462,
       "resolved": "external:core.social.contracts",
       "target": "delivered_texts"
      },
      {
       "kind": "return",
-      "line": 2461
+      "line": 2469
      },
      {
       "async": false,
       "context": "contextlib.suppress(Exception)",
       "kind": "with",
-      "line": 2473
+      "line": 2481
      },
      {
       "condition": "ctx.tail_start_id",
       "kind": "branch",
-      "line": 2495
+      "line": 2503
      },
      {
       "kind": "call",
-      "line": 2510,
+      "line": 2518,
       "resolved": "local:_check_reply_later",
       "target": "_check_reply_later"
      },
      {
       "kind": "await",
-      "line": 2377
+      "line": 2385
      },
      {
       "condition": "e.code == E_CANCELLED",
       "kind": "branch",
-      "line": 2380
+      "line": 2388
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2387
+      "line": 2395
+     },
+     {
+      "kind": "return",
+      "line": 2402
+     },
+     {
+      "kind": "call",
+      "line": 2405,
+      "resolved": "local:_flow_decision",
+      "target": "_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 2412,
+      "resolved": "unresolved",
+      "target": "proactive.mark_proactive_skip"
+     },
+     {
+      "kind": "call",
+      "line": 2417,
+      "resolved": "local:_flow_decision",
+      "target": "_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 2420,
+      "resolved": "external:nonebot.logger.info",
+      "target": "logger.info"
+     },
+     {
+      "kind": "call",
+      "line": 2428,
+      "resolved": "local:_join_lines_naturally",
+      "target": "_join_lines_naturally"
+     },
+     {
+      "kind": "call",
+      "line": 2428,
+      "resolved": "unresolved",
+      "target": "ctx.lines[0].strip"
+     },
+     {
+      "kind": "call",
+      "line": 2430,
+      "resolved": "local:_flow_decision",
+      "target": "_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 2437,
+      "resolved": "local:_flow_decision",
+      "target": "_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 2440,
+      "resolved": "external:nonebot.logger.info",
+      "target": "logger.info"
+     },
+     {
+      "kind": "call",
+      "line": 2446,
+      "resolved": "local:_social_delivery_enabled",
+      "target": "_social_delivery_enabled"
+     },
+     {
+      "kind": "call",
+      "line": 2446,
+      "resolved": "external:core.social.contracts.ConversationScope.for_qq",
+      "target": "ConversationScope.for_qq"
+     },
+     {
+      "kind": "call",
+      "line": 2449,
+      "resolved": "external:nonebot.adapters.onebot.v11",
+      "target": "Message"
+     },
+     {
+      "kind": "await",
+      "line": 2453
+     },
+     {
+      "kind": "call",
+      "line": 2455,
+      "resolved": "external:core.social.delivery",
+      "target": "deliver_lines"
+     },
+     {
+      "kind": "call",
+      "line": 2464,
+      "resolved": "external:nonebot.logger.error",
+      "target": "logger.error"
+     },
+     {
+      "kind": "call",
+      "line": 2465,
+      "resolved": "local:_flow_decision",
+      "target": "_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 2472,
+      "resolved": "local:_flow_span",
+      "target": "_flow_span"
+     },
+     {
+      "kind": "call",
+      "line": 2474,
+      "resolved": "local:_flow_checkpoint",
+      "target": "_flow_checkpoint"
+     },
+     {
+      "kind": "call",
+      "line": 2478,
+      "resolved": "unresolved",
+      "target": "proactive.mark_spoke"
+     },
+     {
+      "kind": "call",
+      "line": 2479,
+      "resolved": "unresolved",
+      "target": "proactive.record_spoken"
+     },
+     {
+      "kind": "call",
+      "line": 2483,
+      "resolved": "local:_flow_checkpoint",
+      "target": "_flow_checkpoint"
+     },
+     {
+      "kind": "call",
+      "line": 2487,
+      "resolved": "external:memory.expression_learning.on_reply_sent",
+      "target": "expression_learning.on_reply_sent"
+     },
+     {
+      "kind": "call",
+      "line": 2498,
+      "resolved": "external:nonebot.logger.success",
+      "target": "logger.success"
+     },
+     {
+      "kind": "await",
+      "line": 2500
+     },
+     {
+      "kind": "call",
+      "line": 2518,
+      "resolved": "external:time.time.monotonic",
+      "target": "time.monotonic"
+     },
+     {
+      "kind": "call",
+      "line": 2324,
+      "resolved": "external:core.observability.message_flow.end_trace",
+      "target": "message_flow.end_trace"
+     },
+     {
+      "kind": "call",
+      "line": 2376,
+      "resolved": "external:memory.proactive_prompt",
+      "target": "build_instruction"
+     },
+     {
+      "kind": "call",
+      "line": 2382,
+      "resolved": "external:core.social.contracts",
+      "target": "new_trace_id"
+     },
+     {
+      "kind": "call",
+      "line": 2385,
+      "resolved": "local:_run_turn_via_engine",
+      "target": "_run_turn_via_engine"
      },
      {
       "kind": "return",
@@ -30126,182 +30862,62 @@
      {
       "kind": "call",
       "line": 2397,
-      "resolved": "local:_flow_decision",
-      "target": "_flow_decision"
-     },
-     {
-      "kind": "call",
-      "line": 2404,
-      "resolved": "unresolved",
-      "target": "proactive.mark_proactive_skip"
-     },
-     {
-      "kind": "call",
-      "line": 2409,
-      "resolved": "local:_flow_decision",
-      "target": "_flow_decision"
-     },
-     {
-      "kind": "call",
-      "line": 2412,
-      "resolved": "external:nonebot.logger.info",
-      "target": "logger.info"
-     },
-     {
-      "kind": "call",
-      "line": 2420,
-      "resolved": "local:_join_lines_naturally",
-      "target": "_join_lines_naturally"
-     },
-     {
-      "kind": "call",
-      "line": 2420,
-      "resolved": "unresolved",
-      "target": "ctx.lines[0].strip"
-     },
-     {
-      "kind": "call",
-      "line": 2422,
-      "resolved": "local:_flow_decision",
-      "target": "_flow_decision"
-     },
-     {
-      "kind": "call",
-      "line": 2429,
-      "resolved": "local:_flow_decision",
-      "target": "_flow_decision"
-     },
-     {
-      "kind": "call",
-      "line": 2432,
-      "resolved": "external:nonebot.logger.info",
-      "target": "logger.info"
-     },
-     {
-      "kind": "call",
-      "line": 2438,
-      "resolved": "local:_social_delivery_enabled",
-      "target": "_social_delivery_enabled"
-     },
-     {
-      "kind": "call",
-      "line": 2438,
-      "resolved": "external:core.social.contracts.ConversationScope.for_qq",
-      "target": "ConversationScope.for_qq"
-     },
-     {
-      "kind": "call",
-      "line": 2441,
-      "resolved": "external:nonebot.adapters.onebot.v11",
-      "target": "Message"
-     },
-     {
-      "kind": "await",
-      "line": 2445
-     },
-     {
-      "kind": "call",
-      "line": 2447,
-      "resolved": "external:core.social.delivery",
-      "target": "deliver_lines"
-     },
-     {
-      "kind": "call",
-      "line": 2456,
       "resolved": "external:nonebot.logger.error",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 2457,
+      "line": 2398,
       "resolved": "local:_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 2464,
-      "resolved": "local:_flow_span",
-      "target": "_flow_span"
+      "line": 2428,
+      "resolved": "unresolved",
+      "target": "len"
      },
      {
       "kind": "call",
-      "line": 2466,
+      "line": 2453,
+      "resolved": "unresolved",
+      "target": "bot.send_group_msg"
+     },
+     {
+      "kind": "call",
+      "line": 2481,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 2482,
+      "resolved": "unresolved",
+      "target": "get_participation_manager().note_stella_spoke"
+     },
+     {
+      "kind": "call",
+      "line": 2500,
+      "resolved": "local:_record_bot_lines",
+      "target": "_record_bot_lines"
+     },
+     {
+      "kind": "call",
+      "line": 2504,
+      "resolved": "external:memory.session_compact",
+      "target": "schedule_compact"
+     },
+     {
+      "kind": "call",
+      "line": 2505,
       "resolved": "local:_flow_checkpoint",
       "target": "_flow_checkpoint"
-     },
-     {
-      "kind": "call",
-      "line": 2470,
-      "resolved": "unresolved",
-      "target": "proactive.mark_spoke"
-     },
-     {
-      "kind": "call",
-      "line": 2471,
-      "resolved": "unresolved",
-      "target": "proactive.record_spoken"
-     },
-     {
-      "kind": "call",
-      "line": 2475,
-      "resolved": "local:_flow_checkpoint",
-      "target": "_flow_checkpoint"
-     },
-     {
-      "kind": "call",
-      "line": 2479,
-      "resolved": "external:memory.expression_learning.on_reply_sent",
-      "target": "expression_learning.on_reply_sent"
-     },
-     {
-      "kind": "call",
-      "line": 2490,
-      "resolved": "external:nonebot.logger.success",
-      "target": "logger.success"
-     },
-     {
-      "kind": "await",
-      "line": 2492
-     },
-     {
-      "kind": "call",
-      "line": 2510,
-      "resolved": "external:time.time.monotonic",
-      "target": "time.monotonic"
-     },
-     {
-      "kind": "call",
-      "line": 2323,
-      "resolved": "external:core.observability.message_flow.end_trace",
-      "target": "message_flow.end_trace"
-     },
-     {
-      "kind": "call",
-      "line": 2368,
-      "resolved": "external:memory.proactive_prompt",
-      "target": "build_instruction"
-     },
-     {
-      "kind": "call",
-      "line": 2374,
-      "resolved": "external:core.social.contracts",
-      "target": "new_trace_id"
-     },
-     {
-      "kind": "call",
-      "line": 2377,
-      "resolved": "local:_run_turn_via_engine",
-      "target": "_run_turn_via_engine"
-     },
-     {
-      "kind": "return",
-      "line": 2386
      },
      {
       "kind": "call",
       "line": 2389,
-      "resolved": "external:nonebot.logger.error",
-      "target": "logger.error"
+      "resolved": "external:nonebot.logger.info",
+      "target": "logger.info"
      },
      {
       "kind": "call",
@@ -30311,97 +30927,43 @@
      },
      {
       "kind": "call",
-      "line": 2420,
-      "resolved": "unresolved",
-      "target": "len"
-     },
-     {
-      "kind": "call",
-      "line": 2445,
-      "resolved": "unresolved",
-      "target": "bot.send_group_msg"
-     },
-     {
-      "kind": "call",
-      "line": 2473,
-      "resolved": "external:contextlib.contextlib.suppress",
-      "target": "contextlib.suppress"
-     },
-     {
-      "kind": "call",
-      "line": 2474,
-      "resolved": "unresolved",
-      "target": "get_participation_manager().note_stella_spoke"
-     },
-     {
-      "kind": "call",
-      "line": 2492,
-      "resolved": "local:_record_bot_lines",
-      "target": "_record_bot_lines"
-     },
-     {
-      "kind": "call",
-      "line": 2496,
-      "resolved": "external:memory.session_compact",
-      "target": "schedule_compact"
-     },
-     {
-      "kind": "call",
-      "line": 2497,
-      "resolved": "local:_flow_checkpoint",
-      "target": "_flow_checkpoint"
-     },
-     {
-      "kind": "call",
-      "line": 2381,
-      "resolved": "external:nonebot.logger.info",
-      "target": "logger.info"
-     },
-     {
-      "kind": "call",
-      "line": 2382,
-      "resolved": "local:_flow_decision",
-      "target": "_flow_decision"
-     },
-     {
-      "kind": "call",
-      "line": 2442,
+      "line": 2450,
       "resolved": "external:nonebot.adapters.onebot.v11.MessageSegment.at",
       "target": "MessageSegment.at"
      },
      {
       "kind": "call",
-      "line": 2443,
+      "line": 2451,
       "resolved": "external:nonebot.adapters.onebot.v11.MessageSegment.text",
       "target": "MessageSegment.text"
      },
      {
       "kind": "call",
-      "line": 2468,
+      "line": 2476,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 2469,
+      "line": 2477,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 2474,
+      "line": 2482,
       "resolved": "external:memory.participation",
       "target": "get_participation_manager"
      },
      {
       "kind": "call",
-      "line": 2313,
+      "line": 2314,
       "resolved": "external:core.social.contracts",
       "target": "new_trace_id"
      }
     ],
     "spawn_lines": [
-     2509
+     2517
     ],
     "truncated": false
    },
@@ -30706,7 +31268,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2736
+      "line": 2744
      },
      {
       "finally": true,
@@ -30714,12 +31276,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2748
+      "line": 2756
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 2743
+      "line": 2751
      },
      {
       "finally": false,
@@ -30727,55 +31289,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2757
+      "line": 2765
      },
      {
       "kind": "call",
-      "line": 2739,
+      "line": 2747,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 2749
+      "line": 2757
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2755
+      "line": 2763
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 2760
+      "line": 2768
      },
      {
       "kind": "call",
-      "line": 2744,
+      "line": 2752,
       "resolved": "external:core.observability.message_flow.link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 2749,
+      "line": 2757,
       "resolved": "local:_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 2754,
+      "line": 2762,
       "resolved": "local:_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 2761,
+      "line": 2769,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 2741,
+      "line": 2749,
       "resolved": "external:core.social.contracts",
       "target": "new_trace_id"
      }
@@ -30814,7 +31376,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2736
+      "line": 2744
      },
      {
       "finally": true,
@@ -30822,12 +31384,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2748
+      "line": 2756
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 2743
+      "line": 2751
      },
      {
       "finally": false,
@@ -30835,55 +31397,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2757
+      "line": 2765
      },
      {
       "kind": "call",
-      "line": 2739,
+      "line": 2747,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 2749
+      "line": 2757
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2755
+      "line": 2763
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 2760
+      "line": 2768
      },
      {
       "kind": "call",
-      "line": 2744,
+      "line": 2752,
       "resolved": "external:core.observability.message_flow.link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 2749,
+      "line": 2757,
       "resolved": "local:_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 2754,
+      "line": 2762,
       "resolved": "local:_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 2761,
+      "line": 2769,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 2741,
+      "line": 2749,
       "resolved": "external:core.social.contracts",
       "target": "new_trace_id"
      }
@@ -30922,7 +31484,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2736
+      "line": 2744
      },
      {
       "finally": true,
@@ -30930,12 +31492,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2748
+      "line": 2756
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 2743
+      "line": 2751
      },
      {
       "finally": false,
@@ -30943,55 +31505,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2757
+      "line": 2765
      },
      {
       "kind": "call",
-      "line": 2739,
+      "line": 2747,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 2749
+      "line": 2757
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2755
+      "line": 2763
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 2760
+      "line": 2768
      },
      {
       "kind": "call",
-      "line": 2744,
+      "line": 2752,
       "resolved": "external:core.observability.message_flow.link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 2749,
+      "line": 2757,
       "resolved": "local:_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 2754,
+      "line": 2762,
       "resolved": "local:_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 2761,
+      "line": 2769,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 2741,
+      "line": 2749,
       "resolved": "external:core.social.contracts",
       "target": "new_trace_id"
      }
@@ -31031,12 +31593,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3015
+      "line": 3023
      },
      {
       "condition": "not PROACTIVE_ENABLED",
       "kind": "branch",
-      "line": 3034
+      "line": 3042
      },
      {
       "finally": false,
@@ -31044,16 +31606,16 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3040
+      "line": 3048
      },
      {
       "iterate": "ALLOWED_GROUPS",
       "kind": "loop",
-      "line": 3050
+      "line": 3058
      },
      {
       "kind": "call",
-      "line": 3010,
+      "line": 3018,
       "resolved": "external:nonebot_plugin_apscheduler.scheduler.scheduled_job",
       "target": "scheduler.scheduled_job"
      },
@@ -31063,11 +31625,11 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3026
+      "line": 3034
      },
      {
       "kind": "return",
-      "line": 3038
+      "line": 3046
      },
      {
       "finally": false,
@@ -31075,7 +31637,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3051
+      "line": 3059
      },
      {
       "finally": false,
@@ -31083,78 +31645,74 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3057
+      "line": 3065
      },
      {
       "kind": "call",
-      "line": 3077,
+      "line": 3085,
       "resolved": "unresolved",
       "target": "_timer_end"
      },
      {
       "kind": "call",
-      "line": 3018,
+      "line": 3026,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3029
+      "line": 3037
      },
      {
       "kind": "call",
-      "line": 3035,
+      "line": 3043,
       "resolved": "local:_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3037,
+      "line": 3045,
       "resolved": "unresolved",
       "target": "_timer_end"
      },
      {
       "kind": "call",
-      "line": 3042,
+      "line": 3050,
       "resolved": "external:nonebot",
       "target": "get_bot"
      },
      {
       "kind": "return",
-      "line": 3048
+      "line": 3056
      },
      {
       "condition": "await _proactive_at_user(bot, group_id, flow_ctx=fctx)",
       "kind": "branch",
-      "line": 3061
+      "line": 3069
      },
      {
       "condition": "PARTICIPATION_ENABLED",
       "kind": "branch",
-      "line": 3066
+      "line": 3074
      },
      {
       "kind": "call",
-      "line": 3044,
+      "line": 3052,
       "resolved": "external:nonebot.logger.debug",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 3045,
+      "line": 3053,
       "resolved": "local:_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3047,
+      "line": 3055,
       "resolved": "unresolved",
       "target": "_timer_end"
-     },
-     {
-      "kind": "await",
-      "line": 3053
      },
      {
       "kind": "await",
@@ -31162,53 +31720,57 @@
      },
      {
       "kind": "await",
-      "line": 3074
+      "line": 3069
+     },
+     {
+      "kind": "await",
+      "line": 3082
      },
      {
       "kind": "call",
-      "line": 3030,
+      "line": 3038,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3053,
+      "line": 3061,
       "resolved": "local:_announce_sleep_transition",
       "target": "_announce_sleep_transition"
      },
      {
       "kind": "call",
-      "line": 3055,
+      "line": 3063,
       "resolved": "external:nonebot.logger.warning",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 3061,
+      "line": 3069,
       "resolved": "local:_proactive_at_user",
       "target": "_proactive_at_user"
      },
      {
       "kind": "call",
-      "line": 3062,
+      "line": 3070,
       "resolved": "local:_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3069,
+      "line": 3077,
       "resolved": "local:_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3074,
+      "line": 3082,
       "resolved": "local:_proactive_speak_for_group",
       "target": "_proactive_speak_for_group"
      },
      {
       "kind": "call",
-      "line": 3076,
+      "line": 3084,
       "resolved": "external:nonebot.logger.error",
       "target": "logger.error"
      }
@@ -31235,7 +31797,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2736
+      "line": 2744
      },
      {
       "finally": true,
@@ -31243,12 +31805,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2748
+      "line": 2756
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 2743
+      "line": 2751
      },
      {
       "finally": false,
@@ -31256,55 +31818,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2757
+      "line": 2765
      },
      {
       "kind": "call",
-      "line": 2739,
+      "line": 2747,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 2749
+      "line": 2757
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2755
+      "line": 2763
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 2760
+      "line": 2768
      },
      {
       "kind": "call",
-      "line": 2744,
+      "line": 2752,
       "resolved": "external:core.observability.message_flow.link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 2749,
+      "line": 2757,
       "resolved": "local:_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 2754,
+      "line": 2762,
       "resolved": "local:_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 2761,
+      "line": 2769,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 2741,
+      "line": 2749,
       "resolved": "external:core.social.contracts",
       "target": "new_trace_id"
      }
@@ -33867,6 +34429,667 @@
    ],
    "reachable_truncated": false
   },
+  "scheduled.agent": {
+   "entry": {
+    "counts": {
+     "await": 2,
+     "branch": 11,
+     "call": 19,
+     "raise": 1,
+     "return": 4,
+     "try": 1
+    },
+    "items": [
+     {
+      "condition": "self.agent_runner is None",
+      "kind": "branch",
+      "line": 321
+     },
+     {
+      "finally": false,
+      "handlers": [
+       "TaskCancelledError",
+       "Exception"
+      ],
+      "kind": "try",
+      "line": 347
+     },
+     {
+      "condition": "agent_span is not None",
+      "kind": "branch",
+      "line": 371
+     },
+     {
+      "condition": "outcome.status == 'cancelled'",
+      "kind": "branch",
+      "line": 380
+     },
+     {
+      "condition": "outcome.status in ('failed', 'timeout')",
+      "kind": "branch",
+      "line": 390
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 401
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 327
+     },
+     {
+      "kind": "return",
+      "line": 330
+     },
+     {
+      "kind": "call",
+      "line": 331,
+      "resolved": "external:context",
+      "target": "build_scheduled_context"
+     },
+     {
+      "kind": "call",
+      "line": 334,
+      "resolved": "external:agent",
+      "target": "AgentRunLimits"
+     },
+     {
+      "condition": "message_flow.span(root, 'scheduled.agent', instance_key=f'run:{run.run_id}')",
+      "kind": "branch",
+      "line": 344
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 386
+     },
+     {
+      "kind": "return",
+      "line": 389
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 396
+     },
+     {
+      "kind": "return",
+      "line": 400
+     },
+     {
+      "kind": "await",
+      "line": 404
+     },
+     {
+      "kind": "call",
+      "line": 322,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 342,
+      "resolved": "local:SchedulerRuntime._assert_run_runnable",
+      "target": "self._assert_run_runnable"
+     },
+     {
+      "kind": "call",
+      "line": 344,
+      "resolved": "external:core.observability.message_flow.span",
+      "target": "message_flow.span"
+     },
+     {
+      "kind": "await",
+      "line": 348
+     },
+     {
+      "condition": "agent_span is not None",
+      "kind": "branch",
+      "line": 363
+     },
+     {
+      "kind": "return",
+      "line": 365
+     },
+     {
+      "condition": "agent_span is not None",
+      "kind": "branch",
+      "line": 367
+     },
+     {
+      "exception": "bare",
+      "kind": "raise",
+      "line": 370
+     },
+     {
+      "kind": "call",
+      "line": 372,
+      "resolved": "unresolved",
+      "target": "agent_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 381,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 391,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 402,
+      "resolved": "local:root_flow_decision",
+      "target": "root_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 404,
+      "resolved": "self:self.delivery.deliver",
+      "target": "self.delivery.deliver"
+     },
+     {
+      "kind": "call",
+      "line": 328,
+      "resolved": "local:root_flow_decision",
+      "target": "root_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 348,
+      "resolved": "self:self.agent_runner.run",
+      "target": "self.agent_runner.run"
+     },
+     {
+      "kind": "call",
+      "line": 358,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 387,
+      "resolved": "local:root_flow_decision",
+      "target": "root_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 397,
+      "resolved": "local:root_flow_decision",
+      "target": "root_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 364,
+      "resolved": "unresolved",
+      "target": "agent_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 368,
+      "resolved": "unresolved",
+      "target": "agent_span.finish"
+     },
+     {
+      "kind": "call",
+      "line": 368,
+      "resolved": "unresolved",
+      "target": "type"
+     },
+     {
+      "kind": "call",
+      "line": 369,
+      "resolved": "unresolved",
+      "target": "type"
+     }
+    ],
+    "spawn_lines": [],
+    "truncated": false
+   },
+   "reachable_symbols": [
+    "SchedulerRuntime._assert_run_runnable",
+    "root_flow_decision"
+   ],
+   "reachable_truncated": false
+  },
+  "scheduled.deliver": {
+   "entry": {
+    "counts": {
+     "await": 1,
+     "branch": 10,
+     "call": 25,
+     "return": 9,
+     "try": 1
+    },
+    "items": [
+     {
+      "condition": "model_rounds is not None",
+      "kind": "branch",
+      "line": 106
+     },
+     {
+      "condition": "tool_calls is not None",
+      "kind": "branch",
+      "line": 108
+     },
+     {
+      "condition": "not text",
+      "kind": "branch",
+      "line": 112
+     },
+     {
+      "condition": "not self.store.transition_run(run.run_id, run.lease_owner, from_states=(RunState.RUNNING,), to_state=RunState.READY, res",
+      "kind": "branch",
+      "line": 128
+     },
+     {
+      "condition": "not self.store.transition_run(run.run_id, run.lease_owner, from_states=(RunState.READY,), to_state=RunState.SENDING)",
+      "kind": "branch",
+      "line": 136
+     },
+     {
+      "finally": false,
+      "handlers": [
+       "asyncio.TimeoutError",
+       "Exception"
+      ],
+      "kind": "try",
+      "line": 144
+     },
+     {
+      "condition": "not self.store.transition_run(run.run_id, run.lease_owner, from_states=(RunState.SENDING,), to_state=RunState.SENT, deli",
+      "kind": "branch",
+      "line": 154
+     },
+     {
+      "kind": "return",
+      "line": 165
+     },
+     {
+      "kind": "call",
+      "line": 104,
+      "resolved": "unresolved",
+      "target": "(text or '').strip"
+     },
+     {
+      "condition": "task.notification_mode is NotificationMode.ON_CONTENT",
+      "kind": "branch",
+      "line": 113
+     },
+     {
+      "kind": "return",
+      "line": 121
+     },
+     {
+      "condition": "run.scheduled_for_utc.isoformat()",
+      "kind": "branch",
+      "line": 124
+     },
+     {
+      "kind": "call",
+      "line": 125,
+      "resolved": "local:result_fingerprint",
+      "target": "result_fingerprint"
+     },
+     {
+      "kind": "return",
+      "line": 133
+     },
+     {
+      "kind": "return",
+      "line": 140
+     },
+     {
+      "kind": "call",
+      "line": 143,
+      "resolved": "external:time.time.monotonic",
+      "target": "time.monotonic"
+     },
+     {
+      "kind": "return",
+      "line": 159
+     },
+     {
+      "kind": "call",
+      "line": 160,
+      "resolved": "self:self.store.record_delivered_message",
+      "target": "self.store.record_delivered_message"
+     },
+     {
+      "kind": "call",
+      "line": 161,
+      "resolved": "external:nonebot.logger.info",
+      "target": "logger.info"
+     },
+     {
+      "kind": "call",
+      "line": 165,
+      "resolved": "unresolved",
+      "target": "DeliveryResult"
+     },
+     {
+      "condition": "self.store.transition_run(run.run_id, run.lease_owner, from_states=(RunState.RUNNING,), to_state=RunState.SILENT, **coun",
+      "kind": "branch",
+      "line": 114
+     },
+     {
+      "kind": "return",
+      "line": 120
+     },
+     {
+      "kind": "call",
+      "line": 121,
+      "resolved": "local:DeliveryService._fail",
+      "target": "self._fail"
+     },
+     {
+      "kind": "call",
+      "line": 124,
+      "resolved": "unresolved",
+      "target": "run.scheduled_for_utc.isoformat"
+     },
+     {
+      "kind": "call",
+      "line": 128,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 133,
+      "resolved": "unresolved",
+      "target": "DeliveryResult"
+     },
+     {
+      "kind": "call",
+      "line": 136,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 140,
+      "resolved": "unresolved",
+      "target": "DeliveryResult"
+     },
+     {
+      "kind": "await",
+      "line": 145
+     },
+     {
+      "kind": "return",
+      "line": 149
+     },
+     {
+      "kind": "return",
+      "line": 151
+     },
+     {
+      "kind": "call",
+      "line": 152,
+      "resolved": "external:time.time.monotonic",
+      "target": "time.monotonic"
+     },
+     {
+      "kind": "call",
+      "line": 154,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 159,
+      "resolved": "unresolved",
+      "target": "DeliveryResult"
+     },
+     {
+      "kind": "call",
+      "line": 114,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "return",
+      "line": 119
+     },
+     {
+      "kind": "call",
+      "line": 120,
+      "resolved": "unresolved",
+      "target": "DeliveryResult"
+     },
+     {
+      "kind": "call",
+      "line": 145,
+      "resolved": "external:asyncio.asyncio.wait_for",
+      "target": "asyncio.wait_for"
+     },
+     {
+      "kind": "call",
+      "line": 149,
+      "resolved": "local:DeliveryService._unknown",
+      "target": "self._unknown"
+     },
+     {
+      "kind": "call",
+      "line": 151,
+      "resolved": "local:DeliveryService._unknown",
+      "target": "self._unknown"
+     },
+     {
+      "kind": "call",
+      "line": 165,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 119,
+      "resolved": "unresolved",
+      "target": "DeliveryResult"
+     },
+     {
+      "kind": "call",
+      "line": 146,
+      "resolved": "self:self._sender",
+      "target": "self._sender"
+     },
+     {
+      "kind": "call",
+      "line": 157,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "condition": "'有'",
+      "kind": "branch",
+      "line": 163
+     },
+     {
+      "kind": "call",
+      "line": 151,
+      "resolved": "unresolved",
+      "target": "type"
+     }
+    ],
+    "spawn_lines": [],
+    "truncated": false
+   },
+   "reachable_symbols": [
+    "result_fingerprint",
+    "DeliveryService._fail",
+    "DeliveryService._unknown"
+   ],
+   "reachable_truncated": false
+  },
+  "scheduled.gate": {
+   "entry": {
+    "counts": {
+     "await": 2,
+     "branch": 6,
+     "call": 13,
+     "return": 3,
+     "try": 1,
+     "with": 1
+    },
+    "items": [
+     {
+      "condition": "not self.store.mark_running(run.run_id, self.worker_id)",
+      "kind": "branch",
+      "line": 272
+     },
+     {
+      "finally": true,
+      "handlers": [],
+      "kind": "try",
+      "line": 277
+     },
+     {
+      "kind": "return",
+      "line": 273
+     },
+     {
+      "kind": "call",
+      "line": 276,
+      "resolved": "local:SchedulerRuntime._flow_root",
+      "target": "self._flow_root"
+     },
+     {
+      "condition": "not allowed",
+      "kind": "branch",
+      "line": 279
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 290
+     },
+     {
+      "condition": "task.mode is TaskMode.REMINDER",
+      "kind": "branch",
+      "line": 297
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 304
+     },
+     {
+      "kind": "call",
+      "line": 272,
+      "resolved": "self:self.store.mark_running",
+      "target": "self.store.mark_running"
+     },
+     {
+      "kind": "call",
+      "line": 278,
+      "resolved": "external:memory.proactive_gate",
+      "target": "can_speak_for_scheduled"
+     },
+     {
+      "condition": "root is not None",
+      "kind": "branch",
+      "line": 286
+     },
+     {
+      "kind": "return",
+      "line": 289
+     },
+     {
+      "kind": "call",
+      "line": 294,
+      "resolved": "self:self.store.renew_lease",
+      "target": "self.store.renew_lease"
+     },
+     {
+      "kind": "return",
+      "line": 301
+     },
+     {
+      "kind": "await",
+      "line": 302
+     },
+     {
+      "async": false,
+      "context": "contextlib.suppress(Exception)",
+      "kind": "with",
+      "line": 305
+     },
+     {
+      "kind": "call",
+      "line": 280,
+      "resolved": "external:nonebot.logger.info",
+      "target": "logger.info"
+     },
+     {
+      "kind": "call",
+      "line": 281,
+      "resolved": "self:self.store.transition_run",
+      "target": "self.store.transition_run"
+     },
+     {
+      "kind": "call",
+      "line": 291,
+      "resolved": "local:root_flow_decision",
+      "target": "root_flow_decision"
+     },
+     {
+      "kind": "await",
+      "line": 298
+     },
+     {
+      "kind": "call",
+      "line": 302,
+      "resolved": "local:SchedulerRuntime._execute_agent",
+      "target": "self._execute_agent"
+     },
+     {
+      "kind": "call",
+      "line": 287,
+      "resolved": "local:root_flow_decision",
+      "target": "root_flow_decision"
+     },
+     {
+      "kind": "call",
+      "line": 298,
+      "resolved": "self:self.delivery.deliver",
+      "target": "self.delivery.deliver"
+     },
+     {
+      "kind": "call",
+      "line": 305,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 306,
+      "resolved": "external:core.observability.message_flow.end_trace",
+      "target": "message_flow.end_trace"
+     },
+     {
+      "kind": "call",
+      "line": 299,
+      "resolved": "external:delivery",
+      "target": "render_reminder"
+     }
+    ],
+    "spawn_lines": [],
+    "truncated": false
+   },
+   "reachable_symbols": [
+    "SchedulerRuntime._flow_root",
+    "root_flow_decision",
+    "SchedulerRuntime._execute_agent",
+    "SchedulerRuntime._assert_run_runnable"
+   ],
+   "reachable_truncated": false
+  },
   "scheduled.runtime.tick": {
    "entry": {
     "counts": {
@@ -33881,43 +35104,43 @@
      {
       "condition": "not self.store.acquire_worker_lease(self.worker_id, ttl_seconds=self.lease_ttl_seconds, now=now)",
       "kind": "branch",
-      "line": 152
+      "line": 161
      },
      {
       "condition": "self._stop_event is None or not self._stop_event.is_set()",
       "kind": "loop",
-      "line": 159
+      "line": 168
      },
      {
       "kind": "return",
-      "line": 184
+      "line": 193
      },
      {
       "kind": "call",
-      "line": 151,
+      "line": 160,
       "resolved": "self:self._clock",
       "target": "self._clock"
      },
      {
       "kind": "return",
-      "line": 155
+      "line": 164
      },
      {
       "kind": "call",
-      "line": 156,
+      "line": 165,
       "resolved": "self:self.store.recover_expired_leases",
       "target": "self.store.recover_expired_leases"
      },
      {
       "kind": "call",
-      "line": 157,
+      "line": 166,
       "resolved": "self:self._enqueue_due_occurrences",
       "target": "self._enqueue_due_occurrences"
      },
      {
       "condition": "run is None",
       "kind": "branch",
-      "line": 166
+      "line": 175
      },
      {
       "finally": false,
@@ -33925,63 +35148,63 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 168
+      "line": 177
      },
      {
       "kind": "call",
-      "line": 152,
+      "line": 161,
       "resolved": "self:self.store.acquire_worker_lease",
       "target": "self.store.acquire_worker_lease"
      },
      {
       "kind": "call",
-      "line": 160,
+      "line": 169,
       "resolved": "self:self.store.claim_next_run",
       "target": "self.store.claim_next_run"
      },
      {
       "kind": "call",
-      "line": 181,
+      "line": 190,
       "resolved": "self:self.store.renew_worker_lease",
       "target": "self.store.renew_worker_lease"
      },
      {
       "kind": "call",
-      "line": 159,
+      "line": 168,
       "resolved": "self:self._stop_event.is_set",
       "target": "self._stop_event.is_set"
      },
      {
       "kind": "await",
-      "line": 169
+      "line": 178
      },
      {
       "kind": "call",
-      "line": 162,
+      "line": 171,
       "resolved": "self:self._clock",
       "target": "self._clock"
      },
      {
       "kind": "call",
-      "line": 169,
+      "line": 178,
       "resolved": "self:self._execute",
       "target": "self._execute"
      },
      {
       "kind": "call",
-      "line": 171,
+      "line": 180,
       "resolved": "external:nonebot.logger.error",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 174,
+      "line": 183,
       "resolved": "self:self.store.transition_run",
       "target": "self.store.transition_run"
      },
      {
       "kind": "call",
-      "line": 182,
+      "line": 191,
       "resolved": "self:self._clock",
       "target": "self._clock"
      }
@@ -35731,32 +36954,18 @@
   "social.worker.run_due": {
    "entry": {
     "counts": {
-     "branch": 3,
-     "call": 10,
+     "branch": 7,
+     "call": 21,
      "loop": 1,
-     "return": 1,
-     "try": 1
+     "return": 2,
+     "try": 3,
+     "with": 1
     },
     "items": [
      {
-      "iterate": "jobs",
-      "kind": "loop",
-      "line": 197
-     },
-     {
-      "kind": "return",
-      "line": 214
-     },
-     {
-      "kind": "call",
-      "line": 195,
-      "resolved": "local:lease_due_jobs",
-      "target": "lease_due_jobs"
-     },
-     {
-      "condition": "handler is None",
+      "condition": "not jobs",
       "kind": "branch",
-      "line": 199
+      "line": 197
      },
      {
       "finally": false,
@@ -35764,71 +36973,196 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 203
+      "line": 200
      },
      {
-      "condition": "ok",
+      "iterate": "jobs",
+      "kind": "loop",
+      "line": 209
+     },
+     {
+      "condition": "root is not None",
       "kind": "branch",
-      "line": 208
+      "line": 244
+     },
+     {
+      "kind": "return",
+      "line": 248
      },
      {
       "kind": "call",
       "line": 196,
+      "resolved": "local:lease_due_jobs",
+      "target": "lease_due_jobs"
+     },
+     {
+      "kind": "return",
+      "line": 199
+     },
+     {
+      "finally": true,
+      "handlers": [],
+      "kind": "try",
+      "line": 215
+     },
+     {
+      "async": false,
+      "context": "contextlib.suppress(Exception)",
+      "kind": "with",
+      "line": 245
+     },
+     {
+      "kind": "call",
+      "line": 203,
+      "resolved": "external:core.observability.message_flow.begin_trace",
+      "target": "message_flow.begin_trace"
+     },
+     {
+      "kind": "call",
+      "line": 208,
       "resolved": "unresolved",
       "target": "len"
      },
      {
+      "condition": "message_flow.span(root, 'social.worker.run_due', instance_key=f'job:{job_id}', summary=job['type'])",
+      "kind": "branch",
+      "line": 211
+     },
+     {
+      "condition": "handler is None",
+      "kind": "branch",
+      "line": 217
+     },
+     {
+      "finally": false,
+      "handlers": [
+       "Exception"
+      ],
+      "kind": "try",
+      "line": 222
+     },
+     {
+      "condition": "ok",
+      "kind": "branch",
+      "line": 227
+     },
+     {
+      "condition": "jspan is not None",
+      "kind": "branch",
+      "line": 242
+     },
+     {
       "kind": "call",
-      "line": 198,
+      "line": 211,
+      "resolved": "external:core.observability.message_flow.span",
+      "target": "message_flow.span"
+     },
+     {
+      "kind": "call",
+      "line": 216,
       "resolved": "unresolved",
       "target": "_HANDLERS.get"
      },
      {
+      "condition": "job['attempts'] < MAX_ATTEMPTS",
+      "kind": "branch",
+      "line": 233
+     },
+     {
       "kind": "call",
-      "line": 200,
+      "line": 245,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 246,
+      "resolved": "external:core.observability.message_flow.end_trace",
+      "target": "message_flow.end_trace"
+     },
+     {
+      "kind": "call",
+      "line": 218,
       "resolved": "local:fail_job",
       "target": "fail_job"
      },
      {
       "kind": "call",
-      "line": 204,
+      "line": 220,
+      "resolved": "local:_job_outcome",
+      "target": "_job_outcome"
+     },
+     {
+      "kind": "call",
+      "line": 223,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 209,
+      "line": 228,
       "resolved": "local:complete_job",
       "target": "complete_job"
      },
      {
       "kind": "call",
-      "line": 212,
+      "line": 230,
+      "resolved": "local:_job_outcome",
+      "target": "_job_outcome"
+     },
+     {
+      "kind": "call",
+      "line": 232,
       "resolved": "local:fail_job",
       "target": "fail_job"
      },
      {
       "kind": "call",
-      "line": 204,
+      "line": 243,
+      "resolved": "unresolved",
+      "target": "jspan.finish"
+     },
+     {
+      "kind": "call",
+      "line": 223,
       "resolved": "unresolved",
       "target": "handler"
      },
      {
       "kind": "call",
-      "line": 206,
+      "line": 225,
       "resolved": "external:nonebot.logger.warning",
       "target": "logger.warning"
      },
      {
-      "condition": "'retry'",
-      "kind": "branch",
-      "line": 213
+      "kind": "call",
+      "line": 235,
+      "resolved": "local:_job_outcome",
+      "target": "_job_outcome"
      },
      {
       "kind": "call",
-      "line": 204,
+      "line": 239,
+      "resolved": "local:_job_outcome",
+      "target": "_job_outcome"
+     },
+     {
+      "kind": "call",
+      "line": 246,
+      "resolved": "unresolved",
+      "target": "','.join"
+     },
+     {
+      "kind": "call",
+      "line": 223,
       "resolved": "unresolved",
       "target": "job.get"
+     },
+     {
+      "kind": "call",
+      "line": 247,
+      "resolved": "unresolved",
+      "target": "stats.items"
      }
     ],
     "spawn_lines": [],
@@ -35837,6 +37171,7 @@
    "reachable_symbols": [
     "lease_due_jobs",
     "fail_job",
+    "_job_outcome",
     "complete_job",
     "_connect",
     "_finish"
@@ -41842,6 +43177,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "88f3046a7bbacb5397b8af0294bff3c79f5d641d",
+ "source_revision": "08b703556bfc40203c0b1f79d4039d5e3f9a7e11",
  "topology_version": "2026.10.03"
 }
