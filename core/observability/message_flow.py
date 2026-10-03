@@ -486,11 +486,9 @@ class _Writer:
         except Exception:
             # 整批失败 → 逐 run 分组重试：单 run 失败只归账到自己，
             # 绝不污染同批其他 run 的完整性（O03 不串线）
-            try:
+            with contextlib.suppress(Exception):
                 conn.rollback()
-            except Exception:
-                pass
-            for group_trace, rows in _group_by_trace(batch):
+            for _group_trace, rows in _group_by_trace(batch):
                 group_ended: dict[str, tuple[int, bool]] = {}
                 group_touched: set[str] = set()
                 try:
@@ -500,10 +498,8 @@ class _Writer:
                     ended_traces.update(group_ended)
                     touched.update(group_touched)
                 except Exception as e2:
-                    try:
+                    with contextlib.suppress(Exception):
                         conn.rollback()
-                    except Exception:
-                        pass
                     log_sqlite_error("message_flow.writer", e2)
                     self._record_loss(rows, "writer_error")
         finally:

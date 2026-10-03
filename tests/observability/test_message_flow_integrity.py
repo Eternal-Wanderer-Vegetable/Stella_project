@@ -170,9 +170,8 @@ class TestSanitization:
     def test_exception_records_stable_error_code_not_secrets(self, flow_db):
         """异常 span：error_code=类名；summary 脱敏后不含秘密形状。"""
         root = message_flow.begin_trace(root_kind="webchat", trace_id="san-2")
-        with pytest.raises(ValueError):
-            with message_flow.span(root, "gate.test"):
-                raise ValueError("boom Authorization: Bearer sk-leaky")
+        with pytest.raises(ValueError), message_flow.span(root, "gate.test"):
+            raise ValueError("boom Authorization: Bearer sk-leaky")
         message_flow.flush()
         conn = sqlite3.connect(flow_db)
         row = conn.execute(
@@ -231,9 +230,6 @@ class TestHeartbeat:
     def test_heartbeat_tick_touches_running_runs(self, flow_db):
         root = message_flow.begin_trace(root_kind="webchat", trace_id="hb-1")
         message_flow.flush()
-        import datetime as dt
-
-        before = _trace_hb(flow_db, "hb-1")
         # 伪造成旧心跳，再强制 tick → 恢复新鲜
         conn = sqlite3.connect(flow_db)
         conn.execute("UPDATE message_traces SET last_heartbeat_utc='2020-01-01' "

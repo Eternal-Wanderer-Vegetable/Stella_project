@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -133,7 +134,6 @@ def messages(
                 "started_utc": r[5], "ended_utc": r[6], "outcome": r[7],
                 "status": r[8], "complete": bool(r[9]), "loss": bool(r[10]),
             }
-            base = 12
             if len(r) > 12:
                 item["process_instance_id"] = r[12]
                 item["status"] = _live_status(
@@ -183,7 +183,7 @@ def message_detail(trace_id: str) -> dict | None:
                 erow = conn.execute(
                     f"SELECT {', '.join(want)} FROM message_traces "
                     "WHERE trace_id = ?", (trace_id,)).fetchone()
-                extra_vals = dict(zip(want, erow))
+                extra_vals = dict(zip(want, erow, strict=True))
         spans = conn.execute(
             "SELECT span_id, node_id, instance_key, parent_span_id, seq, "
             "started_utc, ended_utc, duration_ms, status, reason_code, attempt "
@@ -445,10 +445,8 @@ def message_io(trace_id: str) -> dict | None:
         tried_receipts = tried_receipts  # 回执读不到就走 fallback
     finally:
         if rconn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 rconn.close()
-            except Exception:
-                pass
 
     mem = _memory_conn()
     lines: list[str] = []
@@ -483,8 +481,7 @@ def message_io(trace_id: str) -> dict | None:
             elif root_kind == "proactive":
                 notes.append("主动发言：无用户输入")
 
-            if not receipt_lines and root_kind not in _BACKGROUND_ROOTS:
-                if group_id is not None:
+            if not receipt_lines and root_kind not in _BACKGROUND_ROOTS                     and group_id is not None:
                     rows_out = mem.execute(
                         "SELECT content FROM group_messages WHERE group_id = ? "
                         "AND source_kind = 'BOT_SELF' AND timestamp >= ? "

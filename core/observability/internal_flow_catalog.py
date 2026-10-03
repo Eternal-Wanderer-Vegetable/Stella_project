@@ -20,7 +20,7 @@ Rust 桥接、第三方 SDK），UNKNOWN 不得自动豁免（计划 §6.2 第 4
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ PROCESS_FAMILIES: dict[str, ProcessFamily] = {
 
 # ---- 声明运行入口（计划 §6.2 第 1 点：入口 inventory）----
 # 锚点全部经源码核验（HEAD 4b089b5）；新增入口必须登记到这里并归类。
-RUNTIME_ENTRY_INVENTORY: tuple[RuntimeEntry, ...] = tuple([
+RUNTIME_ENTRY_INVENTORY: tuple[RuntimeEntry, ...] = (
     # 消息/Turn（M1 已接入 flow root）
     RuntimeEntry("gateway.record_group_chat", "message", "qq_passive",
                  ("stella_project/plugins/bot_main/ai_gateway.py", "record_group_chat"),
@@ -139,7 +139,7 @@ RUNTIME_ENTRY_INVENTORY: tuple[RuntimeEntry, ...] = tuple([
                  ("memory_rust/native/src/promotion.rs", "promote"),
                  "spawn", "Rust 晋升事务（跨语言边界）",
                  boundary="rust"),
-])
+)
 
 
 def entries_for_family(family: str) -> list[RuntimeEntry]:
@@ -191,13 +191,13 @@ def validate_inventory() -> list[str]:
         file_path = root / entry.source[0]
         if not file_path.exists():
             problems.append(f"{entry.entry_id}: source file missing {entry.source[0]}")
-        if entry.root_kind and entry.root_kind not in _ROOT_KINDS():
+        if entry.root_kind and entry.root_kind not in _root_kinds():
             problems.append(
                 f"{entry.entry_id}: root_kind {entry.root_kind} not in flow_catalog.ENTRY_ROOTS")
     return problems
 
 
-def _ROOT_KINDS() -> set[str]:
+def _root_kinds() -> set[str]:
     from core.observability.flow_catalog import ENTRY_ROOTS
 
     return set(ENTRY_ROOTS)

@@ -48,7 +48,7 @@ def _committed_manifest(manifest: dict) -> dict:
 
 class TestCatalogContract:
     def test_manifest_internal_consistency(self, manifest):
-        assert manifest["schema_version"] == 1
+        assert manifest["schema_version"] == 2
         assert manifest["topology_version"] == flow_catalog.TOPOLOGY_VERSION
         ids = [n["id"] for n in manifest["nodes"]]
         assert len(ids) == len(set(ids))
@@ -59,6 +59,32 @@ class TestCatalogContract:
         lane_ids = {lane[0] for lane in manifest["lanes"]}
         for node in manifest["nodes"]:
             assert node["lane"] in lane_ids
+
+    def test_source_closure_present_for_resolved_nodes(self, manifest):
+        """计划 §6.2 第 3 点：每个源码解析节点都有语句级闭包与可达符号。"""
+        closure = manifest["source_closure"]
+        for node in manifest["nodes"]:
+            if not node.get("source_ref"):
+                continue
+            assert node["id"] in closure, node["id"]
+            entry = closure[node["id"]]["entry"]
+            assert entry["counts"], f"{node['id']}: empty closure counts"
+            assert isinstance(closure[node["id"]]["reachable_symbols"], list)
+        assert manifest["coverage"]["closure_sites"] > 0
+        assert manifest["coverage"]["reachable_symbols"] > 0
+
+    def test_entry_inventory_in_manifest(self, manifest):
+        """计划 §6.2 第 1 点：入口 inventory/流程族/显式边界随包发布。"""
+        inv = manifest["entry_inventory"]
+        assert inv["entries"], "runtime entry inventory must be exported"
+        assert inv["families"]
+        assert inv["coverage_denominators"]["catalog"] is not None
+        assert inv["coverage_denominators"]["runtime"] is not None
+        assert inv["coverage_denominators"]["dataset"] is not None
+        for entry in inv["entries"]:
+            assert entry["family"] in {f["family_id"] for f in inv["families"]}
+        for boundary in inv["boundaries"]:
+            assert boundary["boundary"], "explicit boundary needs a reason tag"
 
     def test_core_unresolved_is_zero(self, manifest):
         """每个节点要么 source 解析成功，要么显式 derived/opaque（计划 §13.2）。"""
