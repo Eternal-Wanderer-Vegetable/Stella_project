@@ -115,16 +115,39 @@ def structural_features(node: ast.AST) -> dict:
     return counts
 
 
-def body_hash(node: ast.AST) -> str:
-    """语义体 hash：``ast.unparse`` 归一化源码文本（与注释/空格/行号无关）。
+def _stable_dump(node: ast.AST) -> str:
+    """版本稳定的 AST 序列化（跨 3.10–3.14 同源码同输出）。
 
-    版本可移植性（CI 实测教训 2026-10-03）：``ast.dump`` 的输出随 Python
-    版本变化（3.12 给函数节点加 ``type_params`` 等字段都会改变 dump 文本），
-    本机生成、CI（3.10–3.12）校验必然漂移。``unparse`` 产出归一化源码，
-    同一源码跨 3.10–3.14 文本一致（本仓无版本专属语法）。
+    规则：节点类型名 + 逐字段递归；跳过高版本才有的字段（hasattr 判定）
+    与空值字段（空列表/None——高版本新字段的缺省形态正是它们，跳过后
+    与旧版本"字段不存在"等价）。不使用 ast.dump（其输出随版本新增字段
+    变化）也不依赖 ast.unparse（3.10 与 3.11+ 对元组解包目标的括号选择
+    不同——CI 实测 44 个节点漂移）。
     """
-    payload = ast.unparse(node)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    if isinstance(node, ast.AST):
+        parts = [type(node).__name__]
+        for name in node._fields:
+            if not hasattr(node, name):
+                continue  # 旧版本没有的新字段
+            value = getattr(node, name)
+            if value is None or (isinstance(value, list) and not value):
+                continue  # 新字段的缺省形态与"字段不存在"归一
+            parts.append(f"{name}={_stable_dump(value)}")
+        return "(" + ",".join(parts) + ")"
+    if isinstance(node, list):
+        return "[" + ",".join(_stable_dump(v) for v in node) + "]"
+    return f"{type(node).__name__}:{node!r}"
+
+
+def body_hash(node: ast.AST) -> str:
+    """语义体 hash：自定义稳定序列化（与注释/空格/行号/Python 版本无关）。
+
+    版本可移植性（CI 实测教训 2026-10-03）：``ast.dump`` 随版本新增字段
+    漂移（3.12 给函数节点加 ``type_params``）；``ast.unparse`` 也有版本差
+    （3.10 对元组解包目标输出 ``(a, b) =``，3.11+ 为 ``a, b =``）——本机
+    生成、CI（3.10–3.12）校验必然漂移。改用 :func:`_stable_dump`。
+    """
+    return hashlib.sha256(_stable_dump(node).encode("utf-8")).hexdigest()[:16]
 
 
 # ============================================================

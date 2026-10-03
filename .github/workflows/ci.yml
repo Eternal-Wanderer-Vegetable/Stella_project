@@ -201,11 +201,13 @@ jobs:
         run: python scripts/generate_message_flow.py --check
 
       - name: Flow contract tests
+        # 仅标准库可跑的合同（该 job 不装项目依赖）：
+        # contract/inventory 是纯 stdlib；background_flow_roots 依赖 nonebot,
+        # 由主 test 矩阵全量覆盖，不在这里跑。
         run: |
           pip install pytest pytest-asyncio
           python -m pytest tests/observability/test_message_flow_contract.py \
-            tests/observability/test_internal_flow_inventory.py \
-            tests/observability/test_background_flow_roots.py -q
+            tests/observability/test_internal_flow_inventory.py -q
 
   # ============ 内部流程闭包对账（计划 §6.2.2/§13.16） ============
   # 固定版本 GitNexus 图分析：Python/动态注册/guard 变化时验证索引可建、

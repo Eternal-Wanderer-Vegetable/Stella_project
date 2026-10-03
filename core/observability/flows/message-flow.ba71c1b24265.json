@@ -1214,7 +1214,7 @@
    "label": "插件事件桥",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "0b276a98b2abd25b",
+    "body_hash": "43639124b6073dde",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1235,7 +1235,7 @@
    "label": "Cometa 委派判定",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "67c2df735e800e2e",
+    "body_hash": "267713569e1a7714",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -1256,7 +1256,7 @@
    "label": "Memory/Comes/Skills 并行",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "10ed8ef69937fe23",
+    "body_hash": "c5bfb60ce6318832",
     "features": {
      "awaits": 3,
      "branches": 10,
@@ -1277,7 +1277,7 @@
    "label": "分支异常隔离",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "10ed8ef69937fe23",
+    "body_hash": "c5bfb60ce6318832",
     "features": {
      "awaits": 3,
      "branches": 10,
@@ -1298,7 +1298,7 @@
    "label": "Router 路由判定",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "10ed8ef69937fe23",
+    "body_hash": "c5bfb60ce6318832",
     "features": {
      "awaits": 3,
      "branches": 10,
@@ -1319,7 +1319,7 @@
    "label": "按需整合触发",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1340,7 +1340,7 @@
    "label": "话题版本与 Cometa Origin",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1361,7 +1361,7 @@
    "label": "日预算阻断",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1382,7 +1382,7 @@
    "label": "群锁排队",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1403,7 +1403,7 @@
    "label": "插件已接管短路",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1424,7 +1424,7 @@
    "label": "回复闸门评估",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1445,7 +1445,7 @@
    "label": "运行时结果分派",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1466,7 +1466,7 @@
    "label": "工具结果分发",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "53c2962ac311cfac",
+    "body_hash": "43761cb0dd9cca13",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -1488,7 +1488,7 @@
    "lane": "capability",
    "opaque": true,
    "source_ref": {
-    "body_hash": "adf2993374dff05a",
+    "body_hash": "764d7e5cab4f4ccb",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1509,7 +1509,7 @@
    "label": "工具任务构建",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "53c2962ac311cfac",
+    "body_hash": "43761cb0dd9cca13",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -1530,7 +1530,7 @@
    "label": "任务入库与去重",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "586656ce049ae3ed",
+    "body_hash": "9ea0dbd879d571d9",
     "features": {
      "awaits": 0,
      "branches": 7,
@@ -1551,7 +1551,7 @@
    "label": "worker 认领",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "31e8e3b4ef8a487f",
+    "body_hash": "1e733bc2ee421cae",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -1573,7 +1573,7 @@
    "lane": "cometa",
    "opaque": true,
    "source_ref": {
-    "body_hash": "87fb822108047ac3",
+    "body_hash": "747b7f976ff6ee33",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1594,7 +1594,7 @@
    "label": "结果通知发送",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "4b90f88d913b180d",
+    "body_hash": "432b1e07d4c0e6f2",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1615,7 +1615,7 @@
    "label": "通知投递终态",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "ad524383169db704",
+    "body_hash": "7bdc77b5c47ebc95",
     "features": {
      "awaits": 1,
      "branches": 1,
@@ -1636,7 +1636,7 @@
    "label": "执行预检",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "87fb822108047ac3",
+    "body_hash": "747b7f976ff6ee33",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1658,7 +1658,7 @@
    "lane": "cometa",
    "opaque": true,
    "source_ref": {
-    "body_hash": "87fb822108047ac3",
+    "body_hash": "747b7f976ff6ee33",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1679,7 +1679,7 @@
    "label": "个性化称呼命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "6f8ba3e40ade10ff",
+    "body_hash": "ec7dac615b5912d5",
     "features": {
      "awaits": 5,
      "branches": 12,
@@ -1700,7 +1700,7 @@
    "label": "能力查询命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "f22b33cb89b21790",
+    "body_hash": "e90018a1ccc61bcd",
     "features": {
      "awaits": 3,
      "branches": 1,
@@ -1721,7 +1721,7 @@
    "label": "重载命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "0956ef50d5751af5",
+    "body_hash": "e92e013a4f303522",
     "features": {
      "awaits": 5,
      "branches": 5,
@@ -1742,7 +1742,7 @@
    "label": "定时任务命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "a620ee18a31cb764",
+    "body_hash": "9739a9b008ec450e",
     "features": {
      "awaits": 2,
      "branches": 2,
@@ -1763,7 +1763,7 @@
    "label": "开关命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "337b440e2c34a6eb",
+    "body_hash": "b90110a09bcd626c",
     "features": {
      "awaits": 2,
      "branches": 3,
@@ -1785,7 +1785,7 @@
    "lane": "background",
    "opaque": true,
    "source_ref": {
-    "body_hash": "8ca278d41f1431a3",
+    "body_hash": "be8cb5bf591a9e99",
     "features": {
      "awaits": 1,
      "branches": 7,
@@ -1806,7 +1806,7 @@
    "label": "压缩预检",
    "lane": "background",
    "source_ref": {
-    "body_hash": "8ca278d41f1431a3",
+    "body_hash": "be8cb5bf591a9e99",
     "features": {
      "awaits": 1,
      "branches": 7,
@@ -1827,7 +1827,7 @@
    "label": "压缩派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "d984e314b15b9a8f",
+    "body_hash": "19efc0f793a723b8",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -1849,7 +1849,7 @@
    "lane": "background",
    "opaque": true,
    "source_ref": {
-    "body_hash": "a4db8fdb2f135a0f",
+    "body_hash": "ae824731fc01baa9",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -1870,7 +1870,7 @@
    "label": "整合预检",
    "lane": "background",
    "source_ref": {
-    "body_hash": "a4db8fdb2f135a0f",
+    "body_hash": "ae824731fc01baa9",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -1891,7 +1891,7 @@
    "label": "整合派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "3be5971a87ec9590",
+    "body_hash": "7b93cd30cd68bebe",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -1912,7 +1912,7 @@
    "label": "整合写入",
    "lane": "background",
    "source_ref": {
-    "body_hash": "a4db8fdb2f135a0f",
+    "body_hash": "ae824731fc01baa9",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -1933,7 +1933,7 @@
    "label": "短期上下文组装",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "a2ab5f112d901a11",
+    "body_hash": "1b1de62b14328f6d",
     "features": {
      "awaits": 0,
      "branches": 22,
@@ -1954,7 +1954,7 @@
    "label": "受理确认回复",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "f7a535ab5b89ce0c",
+    "body_hash": "7d0c30bf83d36e80",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -1975,7 +1975,7 @@
    "label": "任务受理",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "8c346e199b3ef8ac",
+    "body_hash": "c01c345e161e2c24",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -1996,7 +1996,7 @@
    "label": "效果窗口观察",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "633d53bd9d88421a",
+    "body_hash": "3a0bb291fe138a13",
     "features": {
      "awaits": 0,
      "branches": 2,
@@ -2017,7 +2017,7 @@
    "label": "效果结算",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "80e8f0ed1543c077",
+    "body_hash": "3ac3903d00d960b6",
     "features": {
      "awaits": 0,
      "branches": 10,
@@ -2038,7 +2038,7 @@
    "label": "记忆决策轨迹",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "0427a899241bf530",
+    "body_hash": "620886d543b061d5",
     "features": {
      "awaits": 2,
      "branches": 0,
@@ -2059,7 +2059,7 @@
    "label": "图片转述钩子",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "d19819b4b9a9976f",
+    "body_hash": "7b7eb726b2ea2bda",
     "features": {
      "awaits": 2,
      "branches": 2,
@@ -2080,7 +2080,7 @@
    "label": "聊天触发判定",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "f08146966fd4388e",
+    "body_hash": "e74b5dfd4a2885a4",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -2102,7 +2102,7 @@
    "label": "命令候选选择",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -2123,7 +2123,7 @@
    "label": "被动表达观察",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "aa3ce2d7e59e4086",
+    "body_hash": "42b978742a994316",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -2144,7 +2144,7 @@
    "label": "群过滤/自我/slash/空文本",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "b5d57a299ab1445e",
+    "body_hash": "4c4fdc06e15c1cf7",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2165,7 +2165,7 @@
    "label": "参与评分",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "4b4b60e78607873a",
+    "body_hash": "407a3923753d7ab3",
     "features": {
      "awaits": 4,
      "branches": 22,
@@ -2186,7 +2186,7 @@
    "label": "消息落库",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "9b42276814bb5b1f",
+    "body_hash": "ba4c69633032f515",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -2207,7 +2207,7 @@
    "label": "社交证据标准化",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "b5d57a299ab1445e",
+    "body_hash": "4c4fdc06e15c1cf7",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2228,7 +2228,7 @@
    "label": "主动状态观察",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "b5d57a299ab1445e",
+    "body_hash": "4c4fdc06e15c1cf7",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2249,7 +2249,7 @@
    "label": "插件分发",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "3aa66ba5f4568cde",
+    "body_hash": "ae76101e76b50052",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -2270,7 +2270,7 @@
    "label": "收到群消息",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "b5d57a299ab1445e",
+    "body_hash": "4c4fdc06e15c1cf7",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2291,7 +2291,7 @@
    "label": "知识导入入口",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "c428ff6af9e0e6fa",
+    "body_hash": "74aec7ba5c46fa15",
     "features": {
      "awaits": 0,
      "branches": 9,
@@ -2312,7 +2312,7 @@
    "label": "知识解析",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "1a965b613608b859",
+    "body_hash": "9ebb907cf8fb73e4",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -2333,7 +2333,7 @@
    "label": "版本构建与嵌入",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "f72f6a7c793a0bb1",
+    "body_hash": "9c95cc478b87409f",
     "features": {
      "awaits": 0,
      "branches": 6,
@@ -2354,7 +2354,7 @@
    "label": "表达学习开启",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "fea51d7fadb237c8",
+    "body_hash": "48ca486140e0f2a3",
     "features": {
      "awaits": 0,
      "branches": 6,
@@ -2375,7 +2375,7 @@
    "label": "Provider 直连生成",
    "lane": "generate",
    "source_ref": {
-    "body_hash": "679fc69469644c18",
+    "body_hash": "e564f44ead15585e",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -2397,7 +2397,7 @@
    "lane": "generate",
    "opaque": true,
    "source_ref": {
-    "body_hash": "263d4a50f55db2dc",
+    "body_hash": "09dc59fb09a9b216",
     "features": {
      "awaits": 3,
      "branches": 11,
@@ -2419,7 +2419,7 @@
    "lane": "generate",
    "opaque": true,
    "source_ref": {
-    "body_hash": "263d4a50f55db2dc",
+    "body_hash": "09dc59fb09a9b216",
     "features": {
      "awaits": 3,
      "branches": 11,
@@ -2441,7 +2441,7 @@
    "lane": "generate",
    "opaque": true,
    "source_ref": {
-    "body_hash": "263d4a50f55db2dc",
+    "body_hash": "09dc59fb09a9b216",
     "features": {
      "awaits": 3,
      "branches": 11,
@@ -2462,7 +2462,7 @@
    "label": "候选写入与归一化（Gate3）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "29d14f7b24ab0a3c",
+    "body_hash": "53d9b1febdf4c3f3",
     "features": {
      "awaits": 0,
      "branches": 14,
@@ -2483,7 +2483,7 @@
    "label": "整合入口（触发/预检/锁）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "a4db8fdb2f135a0f",
+    "body_hash": "ae824731fc01baa9",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -2504,7 +2504,7 @@
    "label": "消息窗口与检查点",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "bb8bcb97fe1fb362",
+    "body_hash": "84034a00df03681c",
     "features": {
      "awaits": 0,
      "branches": 6,
@@ -2525,7 +2525,7 @@
    "label": "自我披露门控→精确抽取（stage2）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "3d626d30aee1b187",
+    "body_hash": "cef3ead5c5bb9c2e",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2547,7 +2547,7 @@
    "lane": "memory",
    "opaque": true,
    "source_ref": {
-    "body_hash": "811efb6548547e9c",
+    "body_hash": "0282f7d284fcd8c2",
     "features": {
      "awaits": 1,
      "branches": 6,
@@ -2568,7 +2568,7 @@
    "label": "记忆维护（压缩/去重/衰减）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "f7f661278102a537",
+    "body_hash": "35b54df3f411147c",
     "features": {
      "awaits": 0,
      "branches": 5,
@@ -2589,7 +2589,7 @@
    "label": "后端解析（Python/Rust/auto 回退）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "ab87e0b826d3cdb9",
+    "body_hash": "8ffaff77c3463264",
     "features": {
      "awaits": 0,
      "branches": 13,
@@ -2610,7 +2610,7 @@
    "label": "晋升批处理入口",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "ab87e0b826d3cdb9",
+    "body_hash": "8ffaff77c3463264",
     "features": {
      "awaits": 0,
      "branches": 13,
@@ -2631,7 +2631,7 @@
    "label": "事务提交确认",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "b00cbb443618890d",
+    "body_hash": "d5d8a8a4fc22d7fe",
     "features": {
      "awaits": 0,
      "branches": 8,
@@ -2652,7 +2652,7 @@
    "label": "冲突扫描与处理",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "73dab3339fd7aa3a",
+    "body_hash": "0941ef714c9d6e6a",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -2673,7 +2673,7 @@
    "label": "新建长期记忆",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "f34b972c422280f3",
+    "body_hash": "d9471ed53cb526dd",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -2694,7 +2694,7 @@
    "label": "晋升门槛判定（逐候选）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "5eb8d89ffd40a02f",
+    "body_hash": "fa7f9be558709d75",
     "features": {
      "awaits": 0,
      "branches": 5,
@@ -2715,7 +2715,7 @@
    "label": "相似合并",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "121ced2eaef7a178",
+    "body_hash": "05897a061868cecc",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2736,7 +2736,7 @@
    "label": "用户配额排序与归档",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "f8218782febe9a2e",
+    "body_hash": "31d69871ab50694c",
     "features": {
      "awaits": 0,
      "branches": 2,
@@ -2758,7 +2758,7 @@
    "lane": "capability",
    "opaque": true,
    "source_ref": {
-    "body_hash": "7c7917167016f07b",
+    "body_hash": "830d2bea866686ac",
     "features": {
      "awaits": 0,
      "branches": 10,
@@ -2779,7 +2779,7 @@
    "label": "参与决策（全等级退出）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "4b4b60e78607873a",
+    "body_hash": "407a3923753d7ab3",
     "features": {
      "awaits": 4,
      "branches": 22,
@@ -2800,7 +2800,7 @@
    "label": "决策 tracker（streak/backoff/strong hook）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "fa8c083f623f34cb",
+    "body_hash": "22ec678904642f01",
     "features": {
      "awaits": 0,
      "branches": 13,
@@ -2821,7 +2821,7 @@
    "label": "参与评分决策",
    "lane": "background",
    "source_ref": {
-    "body_hash": "4b4b60e78607873a",
+    "body_hash": "407a3923753d7ab3",
     "features": {
      "awaits": 4,
      "branches": 22,
@@ -2842,7 +2842,7 @@
    "label": "评分计算（embedding/keyword 回退）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "994b88816bd3034a",
+    "body_hash": "18bbf2c6b9d006ee",
     "features": {
      "awaits": 1,
      "branches": 6,
@@ -2863,7 +2863,7 @@
    "label": "主动发言派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "c3d9347f03572813",
+    "body_hash": "689ad54daa1deb2d",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -2884,7 +2884,7 @@
    "label": "Planner LLM 决策",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "347eb826c5c3aed1",
+    "body_hash": "a030ad73350bfc80",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -2905,7 +2905,7 @@
    "label": "Planner 结果解析",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "1b916eea4a1d69a9",
+    "body_hash": "d1f770feff77bc32",
     "features": {
      "awaits": 1,
      "branches": 9,
@@ -2926,7 +2926,7 @@
    "label": "Planner 触发判定",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "1b916eea4a1d69a9",
+    "body_hash": "d1f770feff77bc32",
     "features": {
      "awaits": 1,
      "branches": 9,
@@ -2947,7 +2947,7 @@
    "label": "违禁语过滤",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "82d73c055c7e4088",
+    "body_hash": "c8f4b1dca65118ed",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2975,7 +2975,7 @@
    "label": "输出解析",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "dd24adc696bfbda7",
+    "body_hash": "78781399c984f00c",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2996,7 +2996,7 @@
    "label": "分行",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "ba879bfe1b63b639",
+    "body_hash": "9f97b8f783d1074b",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -3017,7 +3017,7 @@
    "label": "思维链日志",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "0147162c0cb238e7",
+    "body_hash": "902a8c2cdd71f783",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -3038,7 +3038,7 @@
    "label": "无后端/调用预算",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "0dc11ceb0636aa29",
+    "body_hash": "8211d3d4b558d798",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3059,7 +3059,7 @@
    "label": "直回短路 (DIRECT)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "0dc11ceb0636aa29",
+    "body_hash": "8211d3d4b558d798",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3080,7 +3080,7 @@
    "label": "前置钩子链",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "0dc11ceb0636aa29",
+    "body_hash": "8211d3d4b558d798",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3101,7 +3101,7 @@
    "label": "等待更多消息 (SILENT)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "0dc11ceb0636aa29",
+    "body_hash": "8211d3d4b558d798",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3122,7 +3122,7 @@
    "label": "主动发言记账",
    "lane": "background",
    "source_ref": {
-    "body_hash": "208e0fb07c8e2325",
+    "body_hash": "5093d36ef1ed9959",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3143,7 +3143,7 @@
    "label": "主动@资格预检",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "7b1a787904318096",
+    "body_hash": "31bd642007f53aa6",
     "features": {
      "awaits": 5,
      "branches": 14,
@@ -3164,7 +3164,7 @@
    "label": "验证候选选择与淘汰原因",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "f92d565e83d69341",
+    "body_hash": "3b9bea17567597f4",
     "features": {
      "awaits": 0,
      "branches": 8,
@@ -3185,7 +3185,7 @@
    "label": "主动输出过滤",
    "lane": "background",
    "source_ref": {
-    "body_hash": "208e0fb07c8e2325",
+    "body_hash": "5093d36ef1ed9959",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3206,7 +3206,7 @@
    "label": "主动发言预检",
    "lane": "background",
    "source_ref": {
-    "body_hash": "208e0fb07c8e2325",
+    "body_hash": "5093d36ef1ed9959",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3227,7 +3227,7 @@
    "label": "主动逐段发送",
    "lane": "background",
    "source_ref": {
-    "body_hash": "208e0fb07c8e2325",
+    "body_hash": "5093d36ef1ed9959",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3248,7 +3248,7 @@
    "label": "定时主动预检（独立 root）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "e5bcb2034cf7c812",
+    "body_hash": "c5b73902d8c1220e",
     "features": {
      "awaits": 3,
      "branches": 4,
@@ -3269,7 +3269,7 @@
    "label": "主动发言轮次",
    "lane": "background",
    "source_ref": {
-    "body_hash": "208e0fb07c8e2325",
+    "body_hash": "5093d36ef1ed9959",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3290,7 +3290,7 @@
    "label": "窗口预算裁剪",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "da944b8fb199d641",
+    "body_hash": "b0a564b267ff733d",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -3311,7 +3311,7 @@
    "label": "记忆分区注入",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "0dc11ceb0636aa29",
+    "body_hash": "8211d3d4b558d798",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3332,7 +3332,7 @@
    "label": "提示词分段组装",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "f82300ca4eab2527",
+    "body_hash": "266c15eac3408e85",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -3353,7 +3353,7 @@
    "label": "确认段记账与学习",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -3374,7 +3374,7 @@
    "label": "回复后压缩派生",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "d984e314b15b9a8f",
+    "body_hash": "19efc0f793a723b8",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3395,7 +3395,7 @@
    "label": "全部未送达（不记账）",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -3416,7 +3416,7 @@
    "label": "预约 Agent 执行",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "a9097bfa31ea1aab",
+    "body_hash": "4d2a84ff2e35b693",
     "features": {
      "awaits": 2,
      "branches": 11,
@@ -3437,7 +3437,7 @@
    "label": "预约投递",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "da65ad8280ec6e81",
+    "body_hash": "bfe8cbad1ef205ed",
     "features": {
      "awaits": 1,
      "branches": 10,
@@ -3458,7 +3458,7 @@
    "label": "预约运行门控（静音/睡眠/冷却）",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "e72f33fab094a28d",
+    "body_hash": "f55075d169b8a7f9",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3479,7 +3479,7 @@
    "label": "预约调度 tick（租约/恢复/执行）",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "7d43dba067ae4318",
+    "body_hash": "9fae34d6d076db18",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3500,7 +3500,7 @@
    "label": "回执聚合",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "d6e0ef4fa8ce837c",
+    "body_hash": "99c9560c30cb1b4c",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -3521,7 +3521,7 @@
    "label": "Cometa 受理确认",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "715f97eb932d82c7",
+    "body_hash": "6a7059a5e8569558",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3542,7 +3542,7 @@
    "label": "发送准备",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "d5a67e43bc266230",
+    "body_hash": "a6866a25f3c1876c",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -3563,7 +3563,7 @@
    "label": "回执落库",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "a199e884b7a46a50",
+    "body_hash": "891027f7ab932058",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -3584,7 +3584,7 @@
    "label": "逐段发送",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "0b46c3dff0f0bcc8",
+    "body_hash": "bbd202eb36e5254f",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3606,7 +3606,7 @@
    "lane": "capability",
    "opaque": true,
    "source_ref": {
-    "body_hash": "7874e68d401b58b6",
+    "body_hash": "537023e14cbe8ced",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3627,7 +3627,7 @@
    "label": "技能预检",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "7874e68d401b58b6",
+    "body_hash": "537023e14cbe8ced",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3648,7 +3648,7 @@
    "label": "社交 worker 到期租约处理",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "54bed1cb173873bd",
+    "body_hash": "630966c48462de92",
     "features": {
      "awaits": 0,
      "branches": 7,
@@ -3669,7 +3669,7 @@
    "label": "轮次取消",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3690,7 +3690,7 @@
    "label": "Provider 异常兜底",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3711,7 +3711,7 @@
    "label": "本地兜底 (budget/no_backend)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3732,7 +3732,7 @@
    "label": "生成调用（wait_for 围 provider）",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3753,7 +3753,7 @@
    "label": "生成完成",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3774,7 +3774,7 @@
    "label": "轮次身份",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3795,7 +3795,7 @@
    "label": "prepare 阶段",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3816,7 +3816,7 @@
    "label": "生成超时兜底",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "dc9c7973ce466880",
+    "body_hash": "76f080fafcfc69bc",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3837,7 +3837,7 @@
    "label": "鉴权与输入检查",
    "lane": "web",
    "source_ref": {
-    "body_hash": "ad9f742c161228bd",
+    "body_hash": "879f108efb9bc4ac",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3858,7 +3858,7 @@
    "label": "整轮外层超时",
    "lane": "web",
    "source_ref": {
-    "body_hash": "ad9f742c161228bd",
+    "body_hash": "879f108efb9bc4ac",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3879,7 +3879,7 @@
    "label": "回复落库与 server_emitted",
    "lane": "web",
    "source_ref": {
-    "body_hash": "b449014145ef8a16",
+    "body_hash": "6a4d91d870f69ba2",
     "features": {
      "awaits": 4,
      "branches": 6,
@@ -3900,7 +3900,7 @@
    "label": "WebChat 串行锁",
    "lane": "web",
    "source_ref": {
-    "body_hash": "b449014145ef8a16",
+    "body_hash": "6a4d91d870f69ba2",
     "features": {
      "awaits": 4,
      "branches": 6,
@@ -3921,7 +3921,7 @@
    "label": "虚拟空间与记录消息",
    "lane": "web",
    "source_ref": {
-    "body_hash": "b449014145ef8a16",
+    "body_hash": "6a4d91d870f69ba2",
     "features": {
      "awaits": 4,
      "branches": 6,
@@ -42497,6 +42497,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "df87d45fd12276d17295904ad5e175ea925389b3",
+ "source_revision": "f89352bff5c5b1eeae5e02baa19765b79536b5f1",
  "topology_version": "2026.10.03"
 }
