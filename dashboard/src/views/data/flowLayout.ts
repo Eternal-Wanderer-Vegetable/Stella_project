@@ -1,4 +1,4 @@
-import type { FlowEdgeSpec, FlowNodeSpec } from '@/api/flow';
+import type { FlowEdgeSpec, FlowEvent, FlowNodeSpec } from '@/api/flow';
 import type { FlowNodeState } from '@/stores/flowReducer';
 
 export interface SpecLike {
@@ -80,10 +80,23 @@ export function layoutLayered(input: FullLayoutInput): LayoutResult {
 /**
  * 实际路径布局：**只取已执行节点与其间的边**再走同一套分层算法——
  * 未走过的节点不占位，路径收束成一条连通的左→右流（用户验收 #2）。
- * 全部保留边天然 traversed；锚点接入执行子图的源/汇。
+ * 边 traversed 由真实 transition 事实判定（O05）；unknown 节点（事件里有、
+ * spec 里没有）以占位节点参与布局，始终可见（O05）。
  */
 export function layoutExecuted(input: FullLayoutInput): LayoutResult {
-  const nodes = input.spec.nodes.filter((n) => input.executed.has(n.id));
+  const known = new Set(input.spec.nodes.map((n) => n.id));
+  const unknownNodes: FlowNodeSpec[] = [...input.executed.keys()]
+    .filter((id) => !known.has(id))
+    .map((id) => ({
+      id,
+      label: input.labelOf(id),
+      lane: input.laneOf(id),
+      kind: 'unknown',
+    }));
+  const nodes = [
+    ...input.spec.nodes.filter((n) => input.executed.has(n.id)),
+    ...unknownNodes,
+  ];
   const kept = new Set(nodes.map((n) => n.id));
   const edges = input.spec.edges.filter(
     (e) => e.src !== e.dst && kept.has(e.src) && kept.has(e.dst),
@@ -112,9 +125,26 @@ interface LayeredInput {
  * 分层内核：排名（列）= 沿给定静态边（order/condition/spawn/cause）的
  * 最长路径；自环忽略，环用 DFS 去回边——**绝不丢节点**。列内按泳道
  * 聚簇、整列垂直居中；start/end 锚点分别接入源/汇。
+ *
+ * O05：事件里有、目录里没有的 unknown 节点以占位节点补进画布（始终可见，
+ * 不丢事实）；边 traversed 由真实 transition 事实判定（见 {@link edgeTraversed}）。
  */
 function layered(input: LayeredInput): LayoutResult {
-  const specNodes = input.nodes;
+  const specNodes = [...input.nodes];
+  {
+    // unknown 节点（事件有、spec 无）：占位节点进画布，标签走兜底映射
+    const known = new Set(specNodes.map((n) => n.id));
+    for (const id of input.executed.keys()) {
+      if (!known.has(id)) {
+        specNodes.push({
+          id,
+          label: input.labelOf(id),
+          lane: input.laneOf(id),
+          kind: 'unknown',
+        });
+      }
+    }
+  }
   const idSet = new Set(specNodes.map((n) => n.id));
   const edges = input.edges.filter(
     (e) => e.src !== e.dst && idSet.has(e.src) && idSet.has(e.dst),
@@ -258,10 +288,12 @@ function layered(input: LayeredInput): LayoutResult {
   };
   nodes.push(startAnchor, endAnchor);
 
-  // ── 边：普通边 + 锚点接入边；traversed 驱动实际视图可见性 ──
+  // ── 边：普通边 + 锚点接入边；traversed 由真实 transition 事实判定 ──
   const layoutEdges: LaidEdge[] = edges.map((e) => {
-    const traversed =
-      input.executed.has(e.src) && input.executed.has(e.dst);
+    const traversed = edgeTraversed(
+      input.executed.get(e.src),
+      input.executed.get(e.dst),
+    );
     return {
       id: `${e.src}->${e.dst}:${e.kind}`,
       from: nodeById.get(e.src)!,
@@ -273,25 +305,27 @@ function layered(input: LayeredInput): LayoutResult {
     };
   });
   for (const id of sources) {
+    const traversed = nodeStarted(input.executed.get(id));
     layoutEdges.push({
       id: `__start__->${id}`,
       from: startAnchor,
       to: nodeById.get(id)!,
       kind: 'order',
       label: '',
-      traversed: input.executed.has(id),
-      active: input.executed.has(id),
+      traversed,
+      active: traversed,
     });
   }
   for (const id of sinks) {
+    const traversed = nodeArrived(input.executed.get(id));
     layoutEdges.push({
       id: `${id}->__end__`,
       from: nodeById.get(id)!,
       to: endAnchor,
       kind: 'order',
       label: '',
-      traversed: input.executed.has(id),
-      active: input.executed.has(id),
+      traversed,
+      active: traversed,
     });
   }
 
@@ -301,6 +335,58 @@ function layered(input: LayeredInput): LayoutResult {
     width: contentW + ANCHOR_W + CANVAS_PAD,
     height,
   };
+}
+
+// ============================================================
+// O05（计划 §2.2/§6.6）：「两端点出现过」≠「边已执行」。
+// traversed 需要真实 transition 事实：src 发起（start/decision）之后，
+// 同实例链上有 finish/decision 到达 dst。span 父子（dst 事件挂在 src 开启
+// 的 span 下）或相同 instance_key 视为同链；双方都无实例信息时退化为
+// 时序事实（dst 的到达不早于 src 的发起）。checkpoint 是过程事实、
+// start-only 是在途/中断，都不构成到达。
+// ============================================================
+
+/** 流程确实在该节点启动过（start 事件）。 */
+function nodeStarted(state: FlowNodeState | undefined): boolean {
+  return Boolean(state?.events.some((e) => e.kind === 'start'));
+}
+
+/** 有真实 transition 到达并收束在该节点（finish/decision）。 */
+function nodeArrived(state: FlowNodeState | undefined): boolean {
+  return Boolean(
+    state?.events.some((e) => e.kind === 'finish' || e.kind === 'decision'),
+  );
+}
+
+/** 两个事件是否在同一条实例链上。 */
+function sameChain(departure: FlowEvent, arrival: FlowEvent): boolean {
+  if (departure.span_id && departure.span_id === arrival.parent_span_id) {
+    return true; // span 父子链：dst 事件挂在 src 开启的 span 下
+  }
+  if (departure.instance_key && arrival.instance_key) {
+    return departure.instance_key === arrival.instance_key;
+  }
+  return true; // 双方都无链信息：交给时序判定
+}
+
+/** spec 边 src→dst 是否真实走过（实际视图可见性 / 完整视图高亮的判据）。 */
+export function edgeTraversed(
+  src: FlowNodeState | undefined,
+  dst: FlowNodeState | undefined,
+): boolean {
+  if (!src || !dst) return false;
+  const departures = src.events.filter(
+    (e) => e.kind === 'start' || e.kind === 'decision',
+  );
+  const arrivals = dst.events.filter(
+    (e) => e.kind === 'finish' || e.kind === 'decision',
+  );
+  return arrivals.some((arrival) =>
+    departures.some(
+      (departure) =>
+        sameChain(departure, arrival) && arrival.row_id >= departure.row_id,
+    ),
+  );
 }
 
 /** 节点间的贝塞尔路径（同列为直线，跨列走曲线）。 */

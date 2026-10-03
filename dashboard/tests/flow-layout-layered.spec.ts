@@ -28,6 +28,8 @@ function spec(partial: Partial<SpecLike>): SpecLike {
 }
 
 function exec(nodeId: string, status = 'succeeded') {
+  // O05 合同：traversed 由真实 transition 事实判定，exec 节点默认带
+  // start + finish(同状态)事件——「端点出现过」不再足以标 traversed。
   return {
     nodeId,
     label: nodeId,
@@ -38,7 +40,34 @@ function exec(nodeId: string, status = 'succeeded') {
     lastTs: '',
     durationMs: null,
     metrics: [],
-    events: [] as FlowEvent[],
+    events: [
+      evFact(`${nodeId}:s`, nodeId, 'start', 'running'),
+      evFact(`${nodeId}:f`, nodeId, 'finish', status),
+    ] as FlowEvent[],
+  };
+}
+
+function evFact(
+  eventId: string,
+  nodeId: string,
+  kind: FlowEvent['kind'],
+  status: string,
+): FlowEvent {
+  return {
+    row_id: 0,
+    event_id: eventId,
+    span_id: '',
+    parent_span_id: '',
+    node_id: nodeId,
+    instance_key: '',
+    seq: 0,
+    kind,
+    status,
+    reason_code: '',
+    ts_utc: '2026-10-02T00:00:00',
+    duration_ms: null,
+    summary: '',
+    metrics: {},
   };
 }
 

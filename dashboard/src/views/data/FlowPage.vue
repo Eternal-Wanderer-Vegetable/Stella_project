@@ -92,6 +92,9 @@ const reducedMotion =
 
 const playing = ref(false);
 let playTimer: ReturnType<typeof setInterval> | null = null;
+// O10：播放速率（0.5x/1x/2x/4x），步进间隔 = 300ms / speed
+const playbackSpeed = ref(1);
+const SPEED_OPTIONS = [0.5, 1, 2, 4];
 
 // 两种视图共用同一布局坐标；'executed' 只是把未走过的元素淡出
 const viewMode = ref<'full' | 'executed'>('full');
@@ -102,11 +105,20 @@ const card = ref<{ nodeId: string; x: number; y: number } | null>(null);
 const morphing = ref(false);
 let morphTimer: ReturnType<typeof setTimeout> | null = null;
 
+// O09 生命周期：页面隐藏停 SSE、恢复补读重连；列表轮询随页面挂载/卸载
+function onVisibility() {
+  store.onVisibilityChange();
+}
+
 onMounted(() => {
   void store.loadMessages();
+  store.startListPolling();
+  document.addEventListener('visibilitychange', onVisibility);
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibility);
+  store.stopListPolling();
   store.stopStream();
   stopPlay();
   if (morphTimer) clearTimeout(morphTimer);
@@ -164,6 +176,9 @@ function edgeClass(e: LaidEdge): Record<string, boolean> {
       !e.active &&
       e.kind !== 'spawn' &&
       e.kind !== 'cause',
+    // O05：实际视图里两端都执行过、但没有真实 transition 事实的边
+    //（如只走了另一条分支）画成虚线淡显，不冒充走过的路径
+    untaken: viewMode.value === 'executed' && e.traversed === false,
     morph: morphing.value,
   };
 }
@@ -182,9 +197,14 @@ const currentEvent = computed<FlowEvent | null>(() => {
   return store.orderedEvents[store.playbackIndex] ?? null;
 });
 
+// O01/M1 完整性合同：integrity（writer 账本）优先于 producer 粗视角
+//（complete/loss）；unknown = 观测自身失败，不冒充任何一种完整
 const completenessText = computed(() => {
   const d = store.detail;
   if (!d) return '';
+  if (d.integrity === 'unknown') return '完整性未知（观测自身失败）';
+  if (d.integrity === 'complete') return '完整（已持久化）';
+  if (d.integrity === 'partial') return '不完整（partial）';
   if (d.loss) return '有已知丢失（known loss）';
   if (d.status === 'interrupted') return '进程中断，未闭合（partial）';
   if (!d.complete) return '不完整（partial）';
@@ -193,6 +213,14 @@ const completenessText = computed(() => {
 
 const rootKindLabel = (item: FlowMessageSummary) =>
   ROOT_KIND_LABELS[item.root_kind] ?? item.root_kind;
+
+// 列表图标按 O01 修复后的活跃判定：running=在跑，interrupted=过期化身，
+// 其余为已知终态（closed/outcome 落定）
+function listIcon(status: string): string {
+  if (status === 'running') return 'mdi-play-circle';
+  if (status === 'interrupted') return 'mdi-alert-circle';
+  return 'mdi-check-circle';
+}
 
 const outcomeLabel = (outcome: string) => OUTCOME_LABELS[outcome] ?? outcome;
 
@@ -205,13 +233,25 @@ function pick(item: FlowMessageSummary) {
   stopPlay();
   void store.openTrace(item.trace_id).then(() => {
     void store.loadSpec();
-    if (item.status === 'interrupted') return;
+    // 以详情接口的最新状态为准（列表可能滞后）：interrupted 不再订阅
+    if (store.detail?.status === 'interrupted') return;
     void store.startStream();
   });
 }
 
 function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? STATUS_COLORS.unknown;
+}
+
+// O10：「未观测」（spec 有、本次无任何事件）与「明确跳过」（status=skipped
+// 事实）是两回事；未观测不解释为跳过，也不说「未走到」。
+const NODE_STATUS_LABELS: Record<string, string> = {
+  not_observed: '未观测',
+  skipped: '已跳过',
+};
+
+function nodeStatusText(status: string): string {
+  return NODE_STATUS_LABELS[status] ?? status;
 }
 
 // 未激活 = 统一灰（体/条同灰）；激活 = 状态色。泳道归属由彩色圆点标识。
@@ -261,6 +301,25 @@ watch(viewMode, () => {
   }, 480);
 });
 
+// O10：按当前速率启动步进定时器（间隔 = 300ms / speed）
+function startPlayTimer() {
+  stopPlayTimer();
+  playTimer = setInterval(() => {
+    if (store.playbackIndex >= store.orderedEvents.length - 1) {
+      stopPlay();
+      return;
+    }
+    store.stepPlayback(1);
+  }, reducedMotion ? 0 : 300 / playbackSpeed.value);
+}
+
+function stopPlayTimer() {
+  if (playTimer) {
+    clearInterval(playTimer);
+    playTimer = null;
+  }
+}
+
 function togglePlay() {
   if (playing.value) {
     stopPlay();
@@ -268,24 +327,21 @@ function togglePlay() {
   }
   if (store.playbackIndex < 0) store.setPlayback(0);
   playing.value = true;
-  playTimer = setInterval(() => {
-    if (store.playbackIndex >= store.orderedEvents.length - 1) {
-      stopPlay();
-      return;
-    }
-    store.stepPlayback(1);
-  }, reducedMotion ? 0 : 300);
+  startPlayTimer();
   if (reducedMotion) {
     stopPlay();
   }
 }
 
+// O10：播放中切速率 → 立即按新间隔重启定时器
+watch(playbackSpeed, () => {
+  if (!playing.value || reducedMotion) return;
+  startPlayTimer();
+});
+
 function stopPlay() {
   playing.value = false;
-  if (playTimer) {
-    clearInterval(playTimer);
-    playTimer = null;
-  }
+  stopPlayTimer();
 }
 
 const platformOptions = ['qq', 'webchat', 'cometa'];
@@ -328,8 +384,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
           >
             <template #prepend>
               <v-icon
-                :icon="item.status === 'closed' ? 'mdi-check-circle' : 'mdi-alert-circle'"
-                :color="item.complete ? 'success' : 'warning'"
+                :icon="listIcon(item.status)"
+                :color="item.status === 'running' ? 'primary' : (item.complete ? 'success' : 'warning')"
                 size="small"
               />
             </template>
@@ -356,7 +412,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
     <v-col cols="12" md="9">
       <v-card variant="flat" :elevation="1">
         <v-card-text v-if="!store.detail" class="text-medium-emphasis">
-          选择左侧一条消息，查看它从「开始」到「结束」经过的完整处理流程（灰色虚线节点是本次没有走到的路径）。
+          选择左侧一条消息，查看它从「开始」到「结束」经过的完整处理流程（灰色虚线节点是本次未观测到的路径——没有事实，不解释为跳过或未执行）。
         </v-card-text>
         <template v-else>
           <v-card-text class="pb-0 d-flex flex-wrap ga-2 align-center">
@@ -370,6 +426,14 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               :color="store.detail.complete ? 'success' : 'warning'"
             >
               {{ completenessText }}
+            </v-chip>
+            <v-chip
+              v-if="(store.detail.lost_events ?? 0) > 0"
+              size="x-small"
+              label
+              color="error"
+            >
+              丢失 {{ store.detail.lost_events }} 条事件
             </v-chip>
             <v-chip v-if="store.spec" size="x-small" label>
               图版本 {{ store.spec.topology_version }}
@@ -584,7 +648,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                       {{ fitNodeText(n.label, 13) }}
                     </text>
                     <text :x="NODE_W / 2" :y="31" class="flow-node-status">
-                      {{ fitNodeText(isExecuted(n) ? n.status : '未走到', 18) }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
+                      {{ fitNodeText(isExecuted(n) ? nodeStatusText(n.status) : '未观测', 18) }}<template v-if="n.instances > 1"> ×{{ n.instances }}</template>
                     </text>
                   </template>
                 </g>
@@ -615,7 +679,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                     label
                     :color="statusColor(selectedNode.status)"
                   >
-                    {{ selectedNode.status === 'not_observed' ? '未走到' : selectedNode.status }}
+                    {{ nodeStatusText(selectedNode.status) }}
                   </v-chip>
                   <v-spacer />
                   <v-btn
@@ -627,17 +691,26 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 </div>
                 <div class="text-caption text-medium-emphasis mb-1">
                   {{ selectedNode.nodeId }}
-                  <template v-if="selectedNode.spec?.opaque"> · 外部边界（opaque）</template>
+                  <template v-if="selectedNode.spec?.kind === 'unknown'">
+                    · 未知节点（不在当前目录，事件事实如下）
+                  </template>
+                  <template v-else-if="selectedNode.spec?.opaque"> · 外部边界（opaque）</template>
                   <template v-if="selectedNode.spec?.derived"> · 派生节点</template>
-                  <template v-if="selectedNode.spec">
+                  <template v-if="selectedNode.spec && selectedNode.spec.kind !== 'unknown'">
                     · {{ laneLabels[selectedNode.lane] ?? selectedNode.lane }}
                   </template>
                 </div>
-                <div v-if="selectedNode.outcome" class="text-body-2 mb-1">
+                <div v-if="selectedNode.status === 'skipped'" class="text-body-2 mb-1">
+                  已跳过<template v-if="selectedNode.outcome">（原因：{{ selectedNode.outcome }}）</template>
+                </div>
+                <div v-else-if="selectedNode.outcome" class="text-body-2 mb-1">
                   事实：{{ selectedNode.outcome }}
                 </div>
                 <div v-if="selectedNodeDetail" class="text-caption mb-1">
                   实例 {{ selectedNode.instances }}
+                  <template v-if="selectedNodeDetail.running_count"> · 在跑 {{ selectedNodeDetail.running_count }}</template>
+                  <template v-if="selectedNodeDetail.succeeded_count"> · 成功 {{ selectedNodeDetail.succeeded_count }}</template>
+                  <template v-if="selectedNodeDetail.failed_count"> · 失败 {{ selectedNodeDetail.failed_count }}</template>
                   <template v-if="selectedNodeDetail.durationMs != null">
                     · 最近耗时 {{ selectedNodeDetail.durationMs.toFixed(1) }} ms
                   </template>
@@ -656,11 +729,15 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                       <v-icon size="x-small" :color="statusColor(ev.status)">
                         mdi-circle-slice-8
                       </v-icon>
-                      {{ ev.kind }} {{ ev.status }}
+                      {{ ev.kind }} {{ nodeStatusText(ev.status) }}
+                      <span v-if="(ev.attempt ?? 0) > 0" class="text-medium-emphasis">
+                        #{{ ev.attempt }}</span>
                       <span v-if="ev.instance_key" class="text-medium-emphasis">
                         [{{ ev.instance_key }}]</span>
                       <span v-if="ev.reason_code" class="text-medium-emphasis">
                         {{ ev.reason_code }}</span>
+                      <span v-if="ev.error_code" class="text-error">
+                        {{ ev.error_code }}</span>
                       <span v-if="ev.summary" class="text-medium-emphasis">
                         {{ ev.summary }}</span>
                     </div>
@@ -694,6 +771,23 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 :disabled="store.orderedEvents.length < 2"
                 @click="togglePlay"
               />
+              <!-- O10：播放速率 0.5x/1x/2x/4x（间隔 = 300ms / speed） -->
+              <v-btn-toggle
+                v-model="playbackSpeed"
+                mandatory
+                density="compact"
+                variant="outlined"
+                divided
+              >
+                <v-btn
+                  v-for="s in SPEED_OPTIONS"
+                  :key="s"
+                  :value="s"
+                  size="x-small"
+                >
+                  {{ s }}x
+                </v-btn>
+              </v-btn-toggle>
               <v-btn
                 icon="mdi-chevron-right"
                 size="x-small"
@@ -718,9 +812,13 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             <div v-if="currentEvent" class="text-caption text-medium-emphasis mt-1">
               {{ fmtTime(currentEvent.ts_utc) }} ·
               {{ store.nodeLabel(currentEvent.node_id) }} ·
-              {{ currentEvent.kind }} {{ currentEvent.status }}
+              {{ currentEvent.kind }} {{ nodeStatusText(currentEvent.status) }}
+              <template v-if="(currentEvent.attempt ?? 0) > 0">
+                · 第 {{ currentEvent.attempt }} 次尝试</template>
               <template v-if="currentEvent.reason_code">
                 （{{ currentEvent.reason_code }}）</template>
+              <template v-if="currentEvent.error_code">
+                [{{ currentEvent.error_code }}]</template>
               <template v-if="currentEvent.summary"> {{ currentEvent.summary }}</template>
             </div>
           </v-card-text>
@@ -808,6 +906,11 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .flow-edge.dim {
   opacity: 0.15;
+}
+/* O05：实际视图里没有真实 transition 事实的边——虚线淡显，不冒充走过 */
+.flow-edge.untaken {
+  stroke-dasharray: 3 3;
+  opacity: 0.25;
 }
 .flow-edge.active {
   stroke: rgba(var(--v-theme-primary), 0.9);

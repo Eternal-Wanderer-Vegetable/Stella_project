@@ -11,9 +11,17 @@ export interface FlowMessageSummary {
   started_utc: string;
   ended_utc: string;
   outcome: string;
-  status: string; // closed | interrupted
+  // O01 修复后的活跃判定（计划 §6.1）：running=活跃在跑；interrupted=过期化身
+  status: string; // running | interrupted | 已知终态
   complete: boolean;
   loss: boolean;
+  // 完整性权威账本（M1 后端合同；旧 schema 兼容缺省）
+  integrity?: '' | 'complete' | 'partial' | 'unknown';
+  lost_events?: number;
+  persisted_events?: number;
+  producer_ended?: boolean;
+  process_kind?: string;
+  last_heartbeat_utc?: string;
 }
 
 export interface FlowSpanView {
@@ -27,6 +35,7 @@ export interface FlowSpanView {
   duration_ms: number | null;
   status: string;
   reason_code: string;
+  attempt: number; // 同一节点第 N 次尝试（重试/重入，计划 §6.1 instance 合同）
 }
 
 export interface FlowRelationView {
@@ -44,6 +53,17 @@ export interface FlowMessageDetail extends FlowMessageSummary {
   high_watermark: number;
   spans: FlowSpanView[];
   relations: FlowRelationView[];
+  // M1 观测合同增量（计划 §6.1 root/run 行；旧 schema 兼容缺省）
+  process_kind?: string;
+  origin?: string;
+  trigger?: string;
+  route?: string;
+  business_ts?: string;
+  spec_digest?: string;
+  integrity?: '' | 'complete' | 'partial' | 'unknown';
+  lost_events?: number;
+  persisted_events?: number;
+  producer_ended?: boolean;
 }
 
 export interface FlowEvent {
@@ -61,6 +81,10 @@ export interface FlowEvent {
   duration_ms: number | null;
   summary: string;
   metrics: Record<string, unknown>;
+  // M1 事件合同增量（计划 §6.1 event/transition 行；旧 schema 兼容缺省）
+  attempt?: number;
+  fact_kind?: '' | 'transition' | 'guard' | 'state' | 'commit' | 'receipt' | string;
+  error_code?: string;
 }
 
 export interface FlowNodeSpec {
@@ -151,4 +175,36 @@ export async function getSpecVersion(): Promise<string> {
 /** SSE 事件流 URL（经 sseStream 带 Authorization 拉取）。 */
 export function streamUrl(traceId: string, after = 0): string {
   return `/api/v1/trace/messages/${traceId}/stream?after=${after}`;
+}
+
+// ============================================================
+// 对象履历（计划 §6.6 对象视角；M1 新增 API，运行 ↔ 对象互查）
+// ============================================================
+
+export interface FlowEntityChange {
+  entity_type: string;
+  entity_id: string;
+  from_state: string;
+  to_state: string;
+  ts_utc: string;
+  [key: string]: unknown;
+}
+
+/** 一次运行触及的全部对象变化（运行视角）。 */
+export async function getTraceEntities(traceId: string): Promise<FlowEntityChange[]> {
+  const data = (await unwrap(
+    api.get(`/trace/messages/${traceId}/entities`),
+  )) as { items: FlowEntityChange[] };
+  return data.items;
+}
+
+/** 单实体履历（对象视角反查：哪些 run 改了它）。 */
+export async function getEntityHistory(
+  entityType: string,
+  entityId: string,
+): Promise<FlowEntityChange[]> {
+  const data = (await unwrap(
+    api.get(`/trace/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`),
+  )) as { items: FlowEntityChange[] };
+  return data.items;
 }
