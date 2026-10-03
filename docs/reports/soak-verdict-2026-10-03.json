@@ -1,0 +1,51 @@
+{
+ "date": "2026-10-03",
+ "scope": "小时级长跑验证（计划 §13.14 M6 硬件项）：持续观测负载 60 分钟",
+ "profile": {
+  "duration_minutes": 60,
+  "load": "3 runs / 10s（每 run 41 行：root + 20×span 对 + 20 decision + end）",
+  "maintenance": "每 60 tick 一次 prune（共 7 次）"
+ },
+ "totals": {
+  "runs_total": 1080,
+  "drain_seconds": 0.0,
+  "queue_after": 0,
+  "dropped_total": 0,
+  "traces": 1080,
+  "integrity_complete": 1080,
+  "integrity_other": 0,
+  "events_persisted": 66960,
+  "db_mb_final": 19.34,
+  "prune_calls": 7,
+  "rss_mb_final": 54.6
+ },
+ "watermarks": {
+  "queue_max_observed": 65,
+  "queue_typical": 65,
+  "rss_first_last_mb": [
+   51.4,
+   54.5
+  ],
+  "rss_growth_mb": 3.1,
+  "db_first_last_mb": [
+   0.09,
+   19.29
+  ],
+  "db_growth": "线性（30 天保留窗内 prune 不裁剪当前数据，幂等性验证 7 次无误删）"
+ },
+ "verdict": {
+  "zero_loss": true,
+  "all_complete": true,
+  "drained": true,
+  "rss_growth_mb": 3.1,
+  "rss_ok": true
+ },
+ "verdict_pass": true,
+ "interpretation": {
+  "zero_loss": "持续生产行数量级负载下 writer 全程跟得上；per-run 完整性账本 1080/1080 complete",
+  "no_leak": "RSS 60 分钟仅 +3.1MB（采样 360 个点）",
+  "drain": "生产者停止后队列瞬时排空（0.0s）",
+  "prune": "7 次幂等无误删"
+ },
+ "verdict_final": "PASS"
+}
