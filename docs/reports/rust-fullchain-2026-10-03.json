@@ -1,0 +1,134 @@
+{
+ "native_selected": "rust",
+ "native_fallback_reason": null,
+ "retrieve_smoke": {
+  "native_loaded": true,
+  "retrieve_ok": true
+ },
+ "rust_run": {
+  "mode": "rust",
+  "db": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\rust-fullchain-r217_kd5\\memory.db",
+  "candidate_strong": "CONFIRMED",
+  "candidate_weak": "OBSERVING",
+  "new_memory": [
+   "99cbf806a1be4c7688ade3b4e66fcf6c",
+   "用户名叫小明，住在杭州",
+   "active"
+  ],
+  "old_memory_status": "active",
+  "weak_candidate_events": [
+   {
+    "node": "memory.promotion.conflict",
+    "kind": "decision",
+    "status": "skipped",
+    "reason": "observing_conflict"
+   }
+  ],
+  "flow_backend_decisions": [
+   {
+    "status": "succeeded",
+    "reason": "rust",
+    "metrics": {
+     "mode": "rust",
+     "requested": "rust",
+     "backend": "rust",
+     "fallback_reason": ""
+    }
+   }
+  ],
+  "flow_commit_facts": [
+   {
+    "status": "succeeded",
+    "reason": ""
+   }
+  ],
+  "flow_gate_count": 6,
+  "flow_root_integrity": {
+   "status": "closed",
+   "integrity": "complete",
+   "lost": 0,
+   "producer_ended": true
+  }
+ },
+ "python_run": {
+  "mode": "python",
+  "db": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\rust-fullchain-7kv_kjzs\\memory.db",
+  "candidate_strong": "CONFIRMED",
+  "candidate_weak": "CONFIRMED",
+  "new_memory": [
+   "9ee64e2d4ef44387a40c313def3d8840",
+   "用户名叫小明，住在杭州",
+   "active"
+  ],
+  "old_memory_status": "active",
+  "weak_candidate_events": [
+   {
+    "node": "memory.promotion.conflict",
+    "kind": "start",
+    "status": "running",
+    "reason": ""
+   },
+   {
+    "node": "memory.promotion.conflict",
+    "kind": "finish",
+    "status": "succeeded",
+    "reason": ""
+   },
+   {
+    "node": "memory.promotion.conflict",
+    "kind": "start",
+    "status": "running",
+    "reason": ""
+   },
+   {
+    "node": "memory.promotion.conflict",
+    "kind": "decision",
+    "status": "skipped",
+    "reason": "weak_candidate_observing"
+   },
+   {
+    "node": "memory.promotion.conflict",
+    "kind": "finish",
+    "status": "succeeded",
+    "reason": ""
+   }
+  ],
+  "flow_backend_decisions": [
+   {
+    "status": "succeeded",
+    "reason": "python",
+    "metrics": {
+     "mode": "python",
+     "backend": "python"
+    }
+   }
+  ],
+  "flow_commit_facts": [
+   {
+    "status": "succeeded",
+    "reason": ""
+   }
+  ],
+  "flow_gate_count": 6,
+  "flow_root_integrity": {
+   "status": "closed",
+   "integrity": "complete",
+   "lost": 0,
+   "producer_ended": true
+  }
+ },
+ "parity_observation": {
+  "rust": {
+   "old_memory": "active",
+   "weak_candidate": "OBSERVING",
+   "action": "observing_conflict(立即返回)"
+  },
+  "python": {
+   "old_memory": "active",
+   "weak_candidate": "CONFIRMED",
+   "action": "weak_candidate_observing 后被晋升循环改写 CONFIRMED"
+  },
+  "differ": true
+ },
+ "verdict": "PASS"
+}

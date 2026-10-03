@@ -485,6 +485,30 @@ class MemoryManager:
                     logger.info(
                         f"[MemoryManager] Rust promoted candidate {candidate['id']}: {reason}"
                     )
+                else:
+                    # native 未晋升（observing_conflict / merged 等）：事务
+                    # 已在 Rust 侧提交自己的状态写入（计划 §5），包装层在此
+                    # 落未晋升事实——不虚构 commit，也不静默吞掉（M2 合同：
+                    # 逐候选可解释；弱冲突 parity 现存差异的 Rust 半边）。
+                    action = (
+                        str(result.get("action", "") or "")
+                        if isinstance(result, dict)
+                        else str(getattr(result, "action", "") or "")
+                    )
+                    _probe_decision(ctx, "memory.promotion.conflict",
+                                    status="skipped",
+                                    reason_code=action or "not_promoted",
+                                    instance_key=instance_key,
+                                    metrics={"backend": "rust"})
+                    self._history_buffer_append((
+                        "memory_candidate", str(candidate["id"]),
+                        str(candidate["group_shared_space"]),
+                        candidate["status"], "OBSERVING"
+                        if "conflict" in action or "observe" in action
+                        else candidate["status"],
+                        {"action": action or "not_promoted", "backend": "rust"},
+                    ))
+                    self._flush_history()
 
         if promoted:
             bump_memory_history()
