@@ -307,7 +307,20 @@ def _execute_pipeline(
     errors: list[dict[str, Any]] = []
     samples: list[SampleRecord] = []
     reply_by_event: dict[str, str] = {}
-    model = FixtureModel(_load_fixture_replies(config.dataset_dir))
+    model_errors = 0
+    if real_endpoint:
+        from core.evaluation.adapters import RealEndpointModel
+
+        # 真实模型（计划 §6.7.2）：显式 endpoint + 受控预算；失败按样本
+        # 丢弃并计入 model_execution，不静默回退 fixture（那会伪造分布）
+        model = RealEndpointModel(real_endpoint)
+        model_system = (
+            "你是群聊里的活跃成员 Stella。根据最近的聊天上下文自然地接话，"
+            "只输出要说的一句话，不要解释、不要引号、不要 role 前缀。"
+        )
+    else:
+        model = FixtureModel(_load_fixture_replies(config.dataset_dir))
+        model_system = None
     sender = FakeSender()
 
     clock = VirtualClock(start=messages[0].ts_utc if messages else None)
@@ -337,6 +350,22 @@ def _execute_pipeline(
         clock.advance_to(msg.ts_utc)
         gid = _coerce_int(msg.group_id, "group")
         uid = _coerce_int(msg.user, "user")
+        if msg.source_kind == "BOT_SELF":
+            # 历史观察（计划 §6.7.3）：数据集中的历史 BOT_SELF 只用于恢复
+            # 「Stella 已参与话题」的原状态，绝不计入本轮 bot 行为——无模型
+            # 调用、无发送、样本显式丢弃（不进稳定率）。生产时序里 bot 的
+            # 历史发言不经过 observe 决策槽（那会污染 candidate/speak 状态），
+            # 话题归属由其前面的人类消息成形——这里只记账发言状态。
+            manager.note_stella_spoke(gid, "proactive", now=clock.virtual_epoch, text=msg.content)
+            samples.append(
+                SampleRecord(
+                    event_id=msg.event_id, sequence=msg.sequence, group_id=msg.group_id,
+                    status="dropped", drop_reason="historic_bot_self_state_restore",
+                    decision_level="BOT_SELF_REPLAY",
+                )
+            )
+            _write_partial(paths, messages, samples, model.calls_made, sender.sends_made, errors)
+            continue
         try:
             decision = asyncio.run(
                 manager.observe(
@@ -368,11 +397,26 @@ def _execute_pipeline(
                 stopped_reason = "model_budget_exceeded"
                 break
             try:
-                reply = model.generate(prompt=f"proactive_reply|{msg.group_id}|{msg.msg_id}")
+                reply = model.generate(
+                    prompt=f"群 {msg.group_id} 里有人说：{msg.content}。请自然接话。",
+                    system=model_system,
+                )
             except FixtureExhaustedError as exc:
                 errors.append({"event_id": msg.event_id, "error_code": "FixtureExhaustedError"})
                 record.status = "dropped"
                 record.drop_reason = f"fixture_exhausted:{exc}"
+                samples.append(record)
+                _write_partial(paths, messages, samples, model.calls_made, sender.sends_made, errors)
+                continue
+            except Exception as exc:
+                # 真实模型失败（网络/超时/空回复）：样本显式丢弃带原因，
+                # 不冒充成功也不中断整个实验（其余样本继续）
+                model_errors += 1
+                errors.append(
+                    {"event_id": msg.event_id, "error_code": type(exc).__name__}
+                )
+                record.status = "dropped"
+                record.drop_reason = f"model_error:{type(exc).__name__}"
                 samples.append(record)
                 _write_partial(paths, messages, samples, model.calls_made, sender.sends_made, errors)
                 continue
@@ -416,7 +460,7 @@ def _execute_pipeline(
         report, config, paths, messages,
         manager_factory=lambda: _build_verify_manager(paths, config.dataset_dir),
         reply_by_event=reply_by_event, stopped_reason=stopped_reason,
-        real_endpoint=bool(real_endpoint),
+        real_endpoint=bool(real_endpoint), model_errors=model_errors,
     )
     report.duration_ms = int((time.monotonic() - t0) * 1000)
     report.finished_utc = datetime.now(timezone.utc).isoformat()
@@ -433,6 +477,7 @@ def _add_pipeline_dimensions(
     reply_by_event: dict[str, str],
     stopped_reason: str | None,
     real_endpoint: bool,
+    model_errors: int = 0,
 ) -> None:
     """汇总维度结果；第二遍重算纯决策做同 fixtures 稳定性比对。"""
     stability = report.stability
@@ -498,15 +543,33 @@ def _add_pipeline_dimensions(
         stability.add_dimension("snapshot_coverage", DimensionStatus.PASS, "快照表齐全")
 
     if config.mode == "model_validation":
-        if real_endpoint:
-            stability.add_dimension(
-                "model_execution", DimensionStatus.INCOMPLETE,
-                "显式 endpoint 已配置；当前闭环仍用 fixture 回复验证预算/隔离，真实生成未接入",
-            )
-        else:
+        if not real_endpoint:
             stability.add_dimension(
                 "model_execution", DimensionStatus.SKIPPED,
                 f"未设置 {_MODEL_ENDPOINT_ENV}，不执行真实模型调用",
+            )
+        elif report.model_calls == 0:
+            stability.add_dimension(
+                "model_execution", DimensionStatus.INSUFFICIENT_SAMPLES,
+                "无 should_speak 样本，未发生真实模型调用（0 调用不判 PASS）",
+            )
+        elif model_errors:
+            stability.add_dimension(
+                "model_execution", DimensionStatus.FAIL,
+                f"真实模型调用失败 {model_errors} 次（见 errors/model_error 样本）",
+                sample_ids=[e.get("event_id", "") for e in report.errors
+                            if isinstance(e, dict) and e.get("error_code") != "DecisionMismatch"],
+            )
+        elif report.status != "completed":
+            stability.add_dimension(
+                "model_execution", DimensionStatus.INCOMPLETE,
+                f"真实模型已接入但执行未完成: {stopped_reason}",
+            )
+        else:
+            stability.add_dimension(
+                "model_execution", DimensionStatus.PASS,
+                f"真实端点生成 {report.model_calls} 次全部成功（零重试，"
+                "贪心解码；重复分布需多轮运行另行报告）",
             )
 
 
@@ -516,12 +579,17 @@ def _verify_decisions(
     manager_factory,
     reply_by_event: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """第二遍：全新 manager + 同一时钟序列重算纯决策，与第一遍逐消息比对。"""
+    """第二遍：全新 manager + 同一时钟序列重算纯决策，与第一遍逐消息比对。
+
+    历史 BOT_SELF 的状态恢复同样重放（否则样本间的参与状态错位，比对
+    失真——与第一遍的 restore 语义一致）。
+    """
     ok_samples = [s for s in samples if s.status == "ok"]
     by_event = {m.event_id: m for m in messages}
     verify_clock = VirtualClock(start=messages[0].ts_utc if messages else None)
     verify_manager = manager_factory()
     mismatches: list[dict[str, Any]] = []
+    restored: set[str] = set()
     for sample in ok_samples:
         msg = by_event.get(sample.event_id)
         if msg is None:  # 报告里出现了数据集外样本——本身就是不一致
@@ -529,6 +597,17 @@ def _verify_decisions(
                 {"event_id": sample.event_id, "error_code": "SampleNotInDataset"}
             )
             continue
+        # 重放本样本之前所有未恢复的 BOT_SELF（保持与第一遍相同的状态序列：
+        # 只记账发言状态，不 observe——与第一遍 restore 语义一致）
+        for m2 in messages:
+            if (m2.source_kind == "BOT_SELF" and m2.event_id not in restored
+                    and m2.ts_utc <= msg.ts_utc
+                    and m2.event_id not in {s.event_id for s in ok_samples}):
+                restored.add(m2.event_id)
+                verify_clock.advance_to(m2.ts_utc)
+                verify_manager.note_stella_spoke(
+                    _coerce_int(m2.group_id, "group"), "proactive",
+                    now=verify_clock.virtual_epoch, text=m2.content)
         verify_clock.advance_to(msg.ts_utc)
         gid = _coerce_int(msg.group_id, "group")
         uid = _coerce_int(msg.user, "user")

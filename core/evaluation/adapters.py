@@ -144,6 +144,110 @@ class FixtureExhaustedError(RuntimeError):
     """FixtureModel 脚本耗尽：评测样本与预设回复数不匹配。"""
 
 
+class ModelEndpointError(RuntimeError):
+    """真实模型端点调用失败（网络/超时/非 2xx/空回复）。"""
+
+
+class RealEndpointModel:
+    """真实模型端点适配器（计划 §6.7.2 ``model_validation`` 模式）。
+
+    OpenAI 兼容 ``/v1/chat/completions``；endpoint 只来自显式配置
+    （``STELLA_EVAL_MODEL_ENDPOINT``），绝无生产默认回退。零重试——
+    评测要如实暴露失败，静默重试会污染分布；失败由 runner 按样本丢弃
+    并计入 ``model_execution`` 维度。预算账本与 :class:`FixtureModel`
+    同形（``calls_made``）。
+    """
+
+    def __init__(
+        self,
+        endpoint: str,
+        *,
+        timeout: float = 120.0,
+        max_tokens: int = 512,  # 思考型模型的 reasoning 也计入 token 预算
+        model: str | None = None,
+    ):
+        self._endpoint = endpoint.rstrip("/")
+        self._timeout = timeout
+        self._max_tokens = max_tokens
+        self._model = model
+        self.calls: list[dict] = []
+
+    @property
+    def calls_made(self) -> int:
+        return len(self.calls)
+
+    def _resolve_model(self) -> str:
+        if self._model:
+            return self._model
+        import json as _json
+        import urllib.request
+
+        with urllib.request.urlopen(
+            f"{self._endpoint}/v1/models", timeout=self._timeout
+        ) as resp:
+            payload = _json.loads(resp.read().decode("utf-8"))
+        models = payload.get("data") or []
+        if not models:
+            raise ModelEndpointError("endpoint /v1/models 返回空模型列表")
+        self._model = str(models[0]["id"])
+        return self._model
+
+    def generate(self, prompt: str, *, system: str | None = None) -> str:
+        import json as _json
+        import time as _time
+        import urllib.request
+
+        model = self._resolve_model()
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        body = _json.dumps(
+            {
+                "model": model,
+                "messages": messages,
+                "max_tokens": self._max_tokens,
+                "temperature": 0.0,  # 评测口径：贪心解码；重复分布另行多轮
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self._endpoint}/v1/chat/completions",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        started = _time.monotonic()
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                payload = _json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            self.calls.append(
+                {
+                    "index": len(self.calls),
+                    "prompt_sha1": hashlib.sha1(prompt.encode("utf-8")).hexdigest()[:16],
+                    "reply": "",
+                    "error": f"{type(exc).__name__}: {exc}"[:200],
+                    "latency_ms": round((_time.monotonic() - started) * 1000, 1),
+                }
+            )
+            raise ModelEndpointError(f"{type(exc).__name__}: {exc}") from exc
+        reply = str(
+            ((payload.get("choices") or [{}])[0].get("message") or {}).get("content")
+            or ""
+        ).strip()
+        self.calls.append(
+            {
+                "index": len(self.calls),
+                "prompt_sha1": hashlib.sha1(prompt.encode("utf-8")).hexdigest()[:16],
+                "reply": reply,
+                "latency_ms": round((_time.monotonic() - started) * 1000, 1),
+            }
+        )
+        if not reply:
+            raise ModelEndpointError("端点返回空回复")
+        return reply
+
+
 class FixtureEmbedder:
     """查表向量桩：命中原样返回表内向量，miss 返回零向量；零网络。
 

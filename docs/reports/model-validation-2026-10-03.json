@@ -1,0 +1,42 @@
+{
+ "date": "2026-10-03",
+ "endpoint": "http://127.0.0.1:8081 (llama.cpp / OpenAI 兼容, qwen3.8-flash-next-iq2_xs)",
+ "adapter_smoke": {
+  "real_calls": [
+   {
+    "latency_ms": 3221,
+    "reply": "我还没玩，不过看评价挺有意思，要不要一起试试？"
+   },
+   {
+    "latency_ms": 1656,
+    "reply": "算我一个，周末去爬山！"
+   },
+   {
+    "latency_ms": 1792,
+    "reply": "看了，最后那段太刺激了。"
+   }
+  ],
+  "note": "零重试、贪心解码；思考型模型 reasoning 计入 token 预算（max_tokens 512）"
+ },
+ "pipeline_real_data": {
+  "dataset": "生产记忆库只读导出 175 条（group 263402786 最近切片；PASSIVE 130 / AT_MENTION 17 / BOT_SELF 28；user 伪名化）",
+  "isolated_pipeline_twice": {
+   "semantic_digest": "e2f2447569a2abd7cd87bdbb9ae34dc33663161d",
+   "digest_equal": true,
+   "valid": 147,
+   "total": 175,
+   "dropped": "28（全部为 BOT_SELF 历史状态恢复，不计入稳定率）",
+   "decision_levels": "IGNORE 142 / WARMUP 5"
+  },
+  "model_validation": {
+   "status": "completed",
+   "model_calls": 0,
+   "model_execution": "INSUFFICIENT_SAMPLES"
+  }
+ },
+ "finding": {
+  "observe_first_allow_unreachable_in_replay": "生产阈值 allow_at=80 且 strong hook score_min=80；fixture/零向量 embedding 下 relevance 上限 20-30，无话题参与时单条最高分 72<80；参与(involvement)+20 又需要 Stella 先发言——而生产的首批主动接触走 @ 硬触发（gateway 层，不在 observe 决策槽）。因此 observe-only 重放在合成/真实切片上到达不了生成步骤，model_execution 诚实报 INSUFFICIENT_SAMPLES（0 样本不判 PASS）。",
+  "implication": "管线级真实模型闭环需要 (a) 真实 embedding fixture 或 (b) 硬触发路径入管线下一步；当前真实模型生成已在适配器层验证（上表 3 次真实调用）。"
+ },
+ "verdict": "PASS_WITH_FINDINGS（真实模型接入完成且验证；管线级触发依赖真实分布数据集，诚实不足）"
+}
