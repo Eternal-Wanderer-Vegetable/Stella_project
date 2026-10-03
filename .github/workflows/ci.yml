@@ -200,14 +200,25 @@ jobs:
       - name: Check flow manifest drift
         run: python scripts/generate_message_flow.py --check
 
-      - name: Flow contract tests
-        # 仅标准库可跑的合同（该 job 不装项目依赖）：
-        # contract/inventory 是纯 stdlib；background_flow_roots 依赖 nonebot,
-        # 由主 test 矩阵全量覆盖，不在这里跑。
+      - name: Flow contract self-check
+        # 该 job 刻意不装项目依赖（纯 stdlib，秒级完成）。pytest 合同测试
+        # （contract/inventory/background_roots）需要 nonebot/config 链——
+        # tests/conftest.py 的 autouse 夹具会 import 业务模块——它们由主
+        # test 矩阵（3.10–3.12，全依赖）覆盖；这里只做生成器级自检。
         run: |
-          pip install pytest pytest-asyncio
-          python -m pytest tests/observability/test_message_flow_contract.py \
-            tests/observability/test_internal_flow_inventory.py -q
+          python -c "
+          from scripts.generate_message_flow import build_manifest
+          from core.observability import internal_flow_catalog
+          manifest, problems = build_manifest()
+          assert problems == [], problems
+          assert manifest['coverage']['core_unresolved_allowed'] == 0
+          inventory = internal_flow_catalog.validate_inventory()
+          assert inventory == [], inventory
+          coverage = internal_flow_catalog.coverage_denominators()
+          print('manifest ok:', manifest['coverage']['total_nodes'], 'nodes,',
+                manifest['coverage']['closure_sites'], 'closure sites,',
+                coverage['runtime']['declared_entries'], 'runtime entries')
+          "
 
   # ============ 内部流程闭包对账（计划 §6.2.2/§13.16） ============
   # 固定版本 GitNexus 图分析：Python/动态注册/guard 变化时验证索引可建、
