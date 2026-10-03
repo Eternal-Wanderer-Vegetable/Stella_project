@@ -2462,7 +2462,7 @@
    "label": "候选写入与归一化（Gate3）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "aec7426d719fb3e8",
+    "body_hash": "c99c052847754dd6",
     "features": {
      "awaits": 0,
      "branches": 23,
@@ -22042,8 +22042,8 @@
      {
       "kind": "call",
       "line": 1523,
-      "resolved": "external:hashlib.hashlib.sha256(f\"{type_}:{(content or '').strip().lower()}\".encode('utf-8')).hexdigest",
-      "target": "hashlib.sha256(f\"{type_}:{(content or '').strip().lower()}\".encode('utf-8')).hex"
+      "resolved": "external:hashlib.hashlib.sha256(f\"{type_}:{(content or '').strip().lower()}\".encode()).hexdigest",
+      "target": "hashlib.sha256(f\"{type_}:{(content or '').strip().lower()}\".encode()).hexdigest"
      },
      {
       "kind": "call",
@@ -23165,7 +23165,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 140
+      "line": 141
      },
      {
       "finally": true,
@@ -23173,12 +23173,12 @@
        "BaseException"
       ],
       "kind": "try",
-      "line": 150
+      "line": 151
      },
      {
       "condition": "not rows",
       "kind": "branch",
-      "line": 161
+      "line": 162
      },
      {
       "finally": false,
@@ -23186,7 +23186,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 178
+      "line": 179
      },
      {
       "finally": false,
@@ -23194,139 +23194,139 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 188
+      "line": 189
      },
      {
       "condition": "merged or atomized or archived or decayed",
       "kind": "branch",
-      "line": 197
+      "line": 198
      },
      {
       "condition": "root is not None",
       "kind": "branch",
-      "line": 206
+      "line": 207
      },
      {
       "kind": "call",
-      "line": 143,
+      "line": 144,
       "resolved": "external:core.observability.message_flow.begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "call",
-      "line": 151,
+      "line": 152,
       "resolved": "external:nonebot.logger.info",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 152,
+      "line": 153,
       "resolved": "external:sqlite3.sqlite3.connect",
       "target": "sqlite3.connect"
      },
      {
       "kind": "call",
-      "line": 153,
+      "line": 154,
       "resolved": "unresolved",
       "target": "conn.cursor"
      },
      {
       "kind": "call",
-      "line": 154,
+      "line": 155,
       "resolved": "local:MemoryCompressor._ensure_tables",
       "target": "self._ensure_tables"
      },
      {
       "kind": "call",
-      "line": 156,
+      "line": 157,
       "resolved": "unresolved",
       "target": "cursor.execute(f\"SELECT id, group_shared_space, user_id, type, content, importan"
      },
      {
       "kind": "return",
-      "line": 165
+      "line": 166
      },
      {
       "kind": "call",
-      "line": 167,
+      "line": 168,
       "resolved": "local:_maintenance_checkpoint",
       "target": "_maintenance_checkpoint"
      },
      {
       "kind": "call",
-      "line": 170,
+      "line": 171,
       "resolved": "local:MemoryCompressor._merge_duplicate_memories",
       "target": "self._merge_duplicate_memories"
      },
      {
       "kind": "call",
-      "line": 171,
+      "line": 172,
       "resolved": "local:MemoryCompressor._atomize_long_memories",
       "target": "self._atomize_long_memories"
      },
      {
       "kind": "call",
-      "line": 172,
+      "line": 173,
       "resolved": "local:MemoryCompressor._archive_low_value_memories",
       "target": "self._archive_low_value_memories"
      },
      {
       "kind": "call",
-      "line": 173,
+      "line": 174,
       "resolved": "local:MemoryCompressor._apply_decay",
       "target": "self._apply_decay"
      },
      {
       "kind": "call",
-      "line": 174,
+      "line": 175,
       "resolved": "local:_maintenance_checkpoint",
       "target": "_maintenance_checkpoint"
      },
      {
       "kind": "call",
-      "line": 183,
+      "line": 184,
       "resolved": "local:_maintenance_commit",
       "target": "_maintenance_commit"
      },
      {
       "kind": "call",
-      "line": 184,
+      "line": 185,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
       "kind": "call",
-      "line": 193,
+      "line": 194,
       "resolved": "local:_maintenance_commit",
       "target": "_maintenance_commit"
      },
      {
       "kind": "call",
-      "line": 194,
+      "line": 195,
       "resolved": "unresolved",
       "target": "conn.close"
      },
      {
       "kind": "call",
-      "line": 199,
+      "line": 200,
       "resolved": "local:MemoryCompressor._append_log",
       "target": "self._append_log"
      },
      {
       "kind": "call",
-      "line": 200,
+      "line": 201,
       "resolved": "external:nonebot.logger.info",
       "target": "logger.info"
      },
      {
       "condition": "outcome == 'done'",
       "kind": "branch",
-      "line": 202
+      "line": 203
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 204
+      "line": 205
      },
      {
       "finally": false,
@@ -23334,80 +23334,80 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 207
+      "line": 208
      },
      {
       "kind": "call",
-      "line": 162,
+      "line": 163,
       "resolved": "external:nonebot.logger.info",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 163,
+      "line": 164,
       "resolved": "unresolved",
       "target": "conn.close"
      },
      {
       "kind": "call",
-      "line": 179,
+      "line": 180,
       "resolved": "unresolved",
       "target": "conn.commit"
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 182
+      "line": 183
      },
      {
       "kind": "call",
-      "line": 189,
+      "line": 190,
       "resolved": "unresolved",
       "target": "conn.commit"
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 192
+      "line": 193
      },
      {
       "kind": "call",
-      "line": 198,
+      "line": 199,
       "resolved": "external:memory.cache_keys",
       "target": "bump_memory_history"
      },
      {
       "condition": "not root.ended",
       "kind": "branch",
-      "line": 210
+      "line": 211
      },
      {
       "kind": "call",
-      "line": 156,
+      "line": 157,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
       "kind": "call",
-      "line": 167,
+      "line": 168,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 181,
+      "line": 182,
       "resolved": "local:_maintenance_commit",
       "target": "_maintenance_commit"
      },
      {
       "kind": "call",
-      "line": 191,
+      "line": 192,
       "resolved": "local:_maintenance_commit",
       "target": "_maintenance_commit"
      },
      {
       "kind": "call",
-      "line": 211,
+      "line": 212,
       "resolved": "external:core.observability.message_flow.end_trace",
       "target": "message_flow.end_trace"
      }
@@ -43215,6 +43215,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "1215b9aa1ef84edd3675677646fb3a5284daac74",
+ "source_revision": "9bc2f5fe0647c660bdf43c8eb8f021f301800341",
  "topology_version": "2026.10.03"
 }
