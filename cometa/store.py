@@ -583,20 +583,13 @@ class CometaStore:
         return notification_id
 
     @staticmethod
-    def _target_from_task_row(conn: sqlite3.Connection, task_id: str) -> dict:
-        """从任务行的 origin_json 派生通知投递目标。
+    def _target_from_origin(origin: Origin, task_id: str, group_id: str = "") -> dict:
+        """从 Origin 构造 v2 投递 target（计划 §6.8）。
 
-        所有随事件同事务创建的通知（ack/final/input）必须带 target——
-        否则泵按默认 qq + 空 group 发送，必然失败（2026-09-30 人工清单实测：
-        final 全部 delivery_unknown，err=RuntimeError）。"""
-        row = conn.execute(
-            "SELECT origin_json FROM tasks WHERE task_id = ?", (task_id,)
-        ).fetchone()
-        if row is None:
-            return {}
-        origin = Origin.from_dict(_loads_json(row["origin_json"], {}))
-        # v2 Origin（计划 §6.8）：kind/peer 是投递地址真相源；v1 行按历史约定
-        # 解释（QQ→群、webchat→webchat）。private 的 group_id 必须为空。
+        submit_task 的 ack 与 _target_from_task_row（deadline/finish/input/cancel）
+        共用同一构造器——两条路径 target 字段必须一致，否则「同一任务一半通知
+        群格式一半私聊格式」。private 的 group_id 恒空。
+        """
         kind = origin.conversation_kind or (
             "webchat" if origin.platform == "webchat" else "group"
         )
@@ -609,13 +602,30 @@ class CometaStore:
             "conversation_kind": kind,
             "peer_id": origin.peer_id or origin.conversation_id,
             "conversation_key": origin.conversation_key,
-            "group_id": (
-                origin.conversation_id
-                if (origin.platform == "qq" and kind == "group")
-                else ""
-            ),
+            "group_id": group_id if kind == "group" else "",
             "task_id": task_id,
         }
+
+    @staticmethod
+    def _target_from_task_row(conn: sqlite3.Connection, task_id: str) -> dict:
+        """从任务行的 origin_json 派生通知投递目标。
+
+        所有随事件同事务创建的通知（ack/final/input）必须带 target——
+        否则泵按默认 qq + 空 group 发送，必然失败（2026-09-30 人工清单实测：
+        final 全部 delivery_unknown，err=RuntimeError）。"""
+        row = conn.execute(
+            "SELECT origin_json FROM tasks WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            return {}
+        origin = Origin.from_dict(_loads_json(row["origin_json"], {}))
+        kind = origin.conversation_kind or (
+            "webchat" if origin.platform == "webchat" else "group"
+        )
+        return CometaStore._target_from_origin(
+            origin, task_id,
+            group_id=origin.conversation_id if kind == "group" else "",
+        )
 
     @staticmethod
     def _supersede_progress(conn: sqlite3.Connection, task_id: str, now: datetime) -> None:
@@ -732,14 +742,14 @@ class CometaStore:
                 "objective": spec.objective,
                 "backend_id": backend_id,
             }
-            ack_target = {
-                "platform": origin.platform,
-                "bot_id": origin.bot_id,
-                "conversation_id": origin.conversation_id,
-                "requester_id": origin.requester_id,
-                "reply_to_message_id": origin.reply_to_message_id,
-                "group_id": group_id,
-            }
+            ack_target = self._target_from_origin(
+                origin, tid,
+                # service 层传入的 group_id 参数 = 受理时的会话范围值
+                # （群=群号字符串；私聊=规范键，仅作受理幂等，不进投递地址）
+                group_id=group_id if (origin.conversation_kind or (
+                    "webchat" if origin.platform == "webchat" else "group")) == "group"
+                else "",
+            )
             self._insert_event(
                 conn,
                 task_id=tid,
