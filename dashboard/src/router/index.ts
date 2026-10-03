@@ -99,6 +99,13 @@ const routes: RouteRecordRaw[] = [
             meta: { dataTab: 'trace' },
           },
           {
+            // 个人记忆（计划 §6.9）：owner/audience 审计/删除/导出
+            path: 'personal-memory',
+            name: 'data-personal-memory',
+            component: () => import('@/views/data/PersonalMemoryPage.vue'),
+            meta: { dataTab: 'personal-memory' },
+          },
+          {
             // 消息流程（源码版本化、真实事件驱动的处理拓扑，计划 §6.7）
             path: 'flow',
             name: 'data-flow',
