@@ -185,9 +185,70 @@ jobs:
           name: windows-native-${{ github.sha }}
           path: windows-native.xml
 
+  # ============ 消息流程 manifest 漂移门禁 ============
+  # 目录或被埋点源码变化而未重新生成 manifest 时阻断（计划 §6.1/§7 M5）。
+  # 仅需标准库（ast/hashlib），无需安装项目依赖。
+  flow-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check flow manifest drift
+        run: python scripts/generate_message_flow.py --check
+
+      - name: Flow contract self-check
+        # 该 job 刻意不装项目依赖（纯 stdlib，秒级完成）。pytest 合同测试
+        # （contract/inventory/background_roots）需要 nonebot/config 链——
+        # tests/conftest.py 的 autouse 夹具会 import 业务模块——它们由主
+        # test 矩阵（3.10–3.12，全依赖）覆盖；这里只做生成器级自检。
+        run: |
+          python -c "
+          from scripts.generate_message_flow import build_manifest
+          from core.observability import internal_flow_catalog
+          manifest, problems = build_manifest()
+          assert problems == [], problems
+          assert manifest['coverage']['core_unresolved_allowed'] == 0
+          inventory = internal_flow_catalog.validate_inventory()
+          assert inventory == [], inventory
+          coverage = internal_flow_catalog.coverage_denominators()
+          print('manifest ok:', manifest['coverage']['total_nodes'], 'nodes,',
+                manifest['coverage']['closure_sites'], 'closure sites,',
+                coverage['runtime']['declared_entries'], 'runtime entries')
+          "
+
+  # ============ 内部流程闭包对账（计划 §6.2.2/§13.16） ============
+  # 固定版本 GitNexus 图分析：Python/动态注册/guard 变化时验证索引可建、
+  # 运行入口 inventory 全部可达。抽样 flow 不作为完整性证明（计划 §4.1）。
+  flow-closure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: GitNexus analyze (pinned 1.6.11)
+        run: npx -y gitnexus@1.6.11 analyze --index-only
+
+      - name: Runtime entry inventory validation
+        run: |
+          python -c "
+          from core.observability import internal_flow_catalog
+          problems = internal_flow_catalog.validate_inventory()
+          assert problems == [], problems
+          coverage = internal_flow_catalog.coverage_denominators()
+          print('entries:', coverage['runtime']['declared_entries'],
+                'families:', coverage['runtime']['families'])
+          "
+
   # ============ 通知（可选） ============
   notify:
-    needs: [test, lint, security, cli]
+    needs: [test, lint, security, cli, flow-manifest, flow-closure]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
     permissions:
@@ -199,7 +260,9 @@ jobs:
           if [ "${{ needs.test.result }}" == "success" ] && \
              [ "${{ needs.lint.result }}" == "success" ] && \
              [ "${{ needs.security.result }}" == "success" ] && \
-             [ "${{ needs.cli.result }}" == "success" ]; then
+             [ "${{ needs.cli.result }}" == "success" ] && \
+             [ "${{ needs.flow-manifest.result }}" == "success" ] && \
+             [ "${{ needs.flow-closure.result }}" == "success" ]; then
             echo "status=✅ All checks passed!" >> $GITHUB_OUTPUT
           else
             echo "status=❌ Some checks failed. Please check the logs." >> $GITHUB_OUTPUT

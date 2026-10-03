@@ -6,12 +6,18 @@ on:
     paths:
       - "dashboard/**"
       - "webui/**"
+      # 流程目录/manifest 是 Dashboard FlowSpec 的直接数据源（计划 §10：
+      # 跨语言流程变化触发前端合同）
+      - "core/observability/**"
+      - "scripts/generate_message_flow.py"
       - ".github/workflows/dashboard_ci.yml"
   pull_request:
     branches: [main]
     paths:
       - "dashboard/**"
       - "webui/**"
+      - "core/observability/**"
+      - "scripts/generate_message_flow.py"
       - ".github/workflows/dashboard_ci.yml"
 
 permissions:
@@ -42,6 +48,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm --dir dashboard install --frozen-lockfile
+
+      # reducer/布局/store 单元测试（vitest，计划 §8.1 Dashboard tests）
+      - name: Unit tests
+        run: pnpm --dir dashboard test
 
       # build 内含 vue-tsc --noEmit 类型门禁（见 dashboard/package.json）
       - name: Typecheck and build

@@ -160,6 +160,37 @@ def _compress_memories(memories: list[dict]) -> str:
     return "[深度记忆] " + "；".join(lines)
 
 
+def _flow_of(ctx):
+    """消息流程 context（计划 §6.2）：未接入/已结束返回 None。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.flow_of(ctx)
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(ctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(_flow_of(ctx), node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(ctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(_flow_of(ctx), node_id, **kw)
+    except Exception:
+        pass
+
+
 class RestrictedPlanner:
     """挂在 Pipeline 上的受限规划器（见模块 docstring 的硬限制）。"""
 
@@ -170,23 +201,36 @@ class RestrictedPlanner:
     async def maybe_plan(self, ctx: ChatContext) -> ChatContext:
         """Pipeline 在回复 LLM 之前调用。只在本地触发命中时消耗 LLM 名额。"""
         if not PLANNER_ENABLED or self._backend is None:
+            _flow_decision(ctx, "planner.preflight", status="skipped",
+                           reason_code="disabled")
             return ctx
         trig = detect_trigger(ctx.message, trigger=ctx.trigger, intent=ctx.intent)
         if trig is None:
+            _flow_decision(ctx, "planner.preflight", status="skipped",
+                           reason_code="no_trigger")
             return ctx
         ctx.planner_trigger = trig.kind
+        _flow_decision(ctx, "planner.preflight", status="succeeded",
+                       reason_code=trig.kind)
 
         # 每日预算：与 handle_chat 同一判定，被拦时连 Planner 也不该花。
         if budget_blocked(ROLE_CHAT):
+            _flow_decision(ctx, "planner.ask", status="blocked",
+                           reason_code="daily_budget")
             return ctx
 
         for _ in range(max(1, PLANNER_MAX_ROUNDS)):
             # 给 Replyer 至少留 1 个名额；名额不足就不再规划。
             if ctx.llm_call_count >= PLANNER_MAX_LLM_CALLS_PER_TURN - 1:
+                _flow_decision(ctx, "planner.ask", status="blocked",
+                               reason_code="call_quota_reserved")
                 return ctx
-            raw = await self._ask(ctx, trig)
+            with _flow_span(ctx, "planner.ask"):
+                raw = await self._ask(ctx, trig)
             action, query = parse_action(raw)
             ctx.planner_action = action
+            _flow_decision(ctx, "planner.parse", status="succeeded",
+                           reason_code=action)
 
             if action == "WAIT":
                 # 仅主动路径可等：@ 是硬触发，不能被吞（ReplyGate 同一原则）。

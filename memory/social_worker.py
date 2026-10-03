@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import uuid
@@ -193,25 +194,75 @@ def _finish(job_id: str, status: str, error: str, not_before: str | None = None)
 def run_due_jobs(now_iso: str | None = None, limit: int = 20) -> dict[str, int]:
     """领取并执行到期作业。任何处理器异常都折算为可重试失败。"""
     jobs = lease_due_jobs(now_iso=now_iso, limit=limit)
+    if not jobs:
+        # 空转不建 root（每秒 tick 会刷屏）；noop 事实由 tick 级 metrics 承担
+        return {"claimed": 0, "done": 0, "retry": 0, "dead": 0}
+    try:
+        from core.observability import message_flow
+
+        root = message_flow.begin_trace(
+            root_kind="social_worker", origin="worker", scope="social",
+            process_kind="social")
+    except Exception:  # 观测旁路：绝不拖垮作业执行
+        root = None
     stats = {"claimed": len(jobs), "done": 0, "retry": 0, "dead": 0}
     for job in jobs:
-        handler = _HANDLERS.get(job["type"])
-        if handler is None:
-            fail_job(job["job_id"], MAX_ATTEMPTS, f"no_handler:{job['type']}")
-            stats["dead"] += 1
-            continue
+        job_id = job["job_id"]
+        jspan = (message_flow.span(root, "social.worker.run_due",
+                                   instance_key=f"job:{job_id}",
+                                   summary=job["type"])
+                 if root is not None else None)
         try:
-            ok = bool(handler(job.get("payload_refs") or {}))
-        except Exception as e:  # 处理器崩溃=本轮失败，走重试
-            logger.warning(f"[Social] 作业 {job['type']} 处理异常: {e}")
-            ok = False
-        if ok:
-            complete_job(job["job_id"])
-            stats["done"] += 1
-        else:
-            fail_job(job["job_id"], job["attempts"])
-            stats["retry" if job["attempts"] < MAX_ATTEMPTS else "dead"] += 1
+            handler = _HANDLERS.get(job["type"])
+            if handler is None:
+                fail_job(job["job_id"], MAX_ATTEMPTS, f"no_handler:{job['type']}")
+                stats["dead"] += 1
+                _job_outcome(root, job_id, "dead", f"no_handler:{job['type']}")
+                continue
+            try:
+                ok = bool(handler(job.get("payload_refs") or {}))
+            except Exception as e:  # 处理器崩溃=本轮失败，走重试
+                logger.warning(f"[Social] 作业 {job['type']} 处理异常: {e}")
+                ok = False
+            if ok:
+                complete_job(job["job_id"])
+                stats["done"] += 1
+                _job_outcome(root, job_id, "done", "")
+            else:
+                fail_job(job["job_id"], job["attempts"])
+                if job["attempts"] < MAX_ATTEMPTS:
+                    stats["retry"] += 1
+                    _job_outcome(root, job_id, "retry",
+                                 f"attempts={job['attempts']}")
+                else:
+                    stats["dead"] += 1
+                    _job_outcome(root, job_id, "dead",
+                                 f"attempts={job['attempts']}")
+        finally:
+            if jspan is not None:
+                jspan.finish()
+    if root is not None:
+        with contextlib.suppress(Exception):
+            message_flow.end_trace(root, outcome=",".join(
+                f"{k}={v}" for k, v in stats.items()))
     return stats
+
+
+def _job_outcome(root, job_id: str, state: str, reason: str) -> None:
+    """逐作业终态事实（done/retry/dead 各自可查，计划 §6.5）。"""
+    if root is None:
+        return
+    try:
+        from core.observability import entity_history, message_flow
+
+        message_flow.decision(root, "social.worker.run_due", status=state,
+                              reason_code=reason or state,
+                              instance_key=f"job:{job_id}",
+                              fact_kind="state")
+        entity_history.record("social_job", job_id, trace_id=root.trace_id,
+                              to_state=state, detail={"reason": reason})
+    except Exception:
+        pass
 
 
 def tick() -> dict[str, int]:

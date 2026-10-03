@@ -1,0 +1,28 @@
+{
+ "date": "2026-10-03",
+ "scope": "发行包 spec 资源验收（计划 §13.16）：真实打包 + 资源回读",
+ "build": {
+  "command": "python scripts/build_release_package.py standalone-python --source . --output <tmp> --release-version 6.0.2-smoke",
+  "artifact": "Stella-Standalone-Python-v6.0.1-windows-amd64.zip（脚本取应用版本命名；14.2MB，462 entries）",
+  "staged_tree": "LICENSE/bot.py/core/webui/... 全布局就位"
+ },
+ "resource_checks": {
+  "flow_manifest_current": {
+   "path": "core/observability/flows/message-flow.378b7fa3f837.json",
+   "topology_version": "2026.10.03",
+   "schema_version": 2,
+   "nodes": 130,
+   "closure_sites": 6195,
+   "declared_runtime_entries": 20,
+   "digest_matches_drift_gate": true
+  },
+  "flow_manifest_legacy_kept": "message-flow.651a7719add8.json（2026.10.02，历史轨迹可读）",
+  "webui_dist": "49 entries（本次 pnpm build + sync-dist 产物，浏览器 e2e 所用同一份）",
+  "bot_entry": "bot.py 在包内"
+ },
+ "not_done_honestly": {
+  "nsis_installer": "未构建 NSIS 安装器（makensis 全流程超时，非本轮资源验收范围）",
+  "install_run": "未执行安装器实装验证"
+ },
+ "verdict": "PASS（当前 digest spec 随包、dist 一致、布局完整）"
+}

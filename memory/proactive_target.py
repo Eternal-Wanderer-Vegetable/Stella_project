@@ -191,11 +191,38 @@ def _fetch_observing_candidate(
     return str(row[0]), str(row[1] or ""), str(row[2] or "FACT"), float(row[3] or 0.0)
 
 
-def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> ProactiveTarget | None:
+def _probe(ctx, node_id: str, **kw) -> None:
+    """流程观测探针（计划 §6.4 主动@选择）：ctx 缺省或任何异常都不影响选人。
+
+    旁路纪律：选人业务绝不因观测失败改变结果；reason 直接复用 can_at_user
+    返回文本（计数与原因，不含昵称/原文）。
+    """
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(ctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def pick_target(
+    group_id: int,
+    exclude_user_ids: set[int] | None = None,
+    *,
+    flow_ctx=None,
+    instance_key: str = "",
+) -> ProactiveTarget | None:
     """挑选本次主动 @ 的对象；无合适目标时返回 None。
 
     exclude_user_ids 用于排除 Bot 自身等不该被搭话的账号；
     排除名单同时来自调用方传入与 PROACTIVE_AT_EXCLUDE_USERS 配置。
+
+    ``flow_ctx``/``instance_key``：调用方显式传入的观测上下文与实例键
+    （计划 §6.2 拒绝 ambient 传播）。资格预检逐项落
+    ``proactive.at.preflight``，选择与淘汰原因落 ``proactive.at.select``——
+    无候选 = noop 但有原因可查（计划 §6.4）。
 
     归属分界：候选与已知话题（memory_candidates / memories）按**共享空间**查
     （``resolve_space(group_id)``）；活跃度、配额、冷却（active_users /
@@ -203,6 +230,8 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
     后者是「当下这场对话的状态」。
     """
     if not PROACTIVE_AT_ENABLED:
+        _probe(flow_ctx, "proactive.at.preflight", status="blocked",
+               reason_code="主动 @ 已关闭", instance_key=instance_key)
         return None
 
     # 候选/已知话题按共享空间归属，只解析一次；其余仍用 group_id
@@ -216,17 +245,31 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
         if uid not in excluded
     ]
     if not actives:
+        _probe(flow_ctx, "proactive.at.preflight", status="skipped",
+               reason_code="无活跃用户",
+               metrics={"active_within": PROACTIVE_AT_ACTIVE_WITHIN},
+               instance_key=instance_key)
         return None
 
     proactive = get_proactive()
     eligible: list[int] = []
     for uid in actives:
         ok, reason = can_at_user(group_id, uid)
+        # 资格逐项落 decision（计划 §6.4）：配额/冷却/未回应退避都有原因
+        _probe(flow_ctx, "proactive.at.preflight",
+               status="succeeded" if ok else "blocked",
+               reason_code=reason,
+               metrics={"user_id": uid},
+               instance_key=instance_key)
         if ok:
             eligible.append(uid)
         else:
             logger.debug(f"[ProactiveTarget] 跳过用户 {uid}：{reason}")
     if not eligible:
+        _probe(flow_ctx, "proactive.at.select", status="skipped",
+               reason_code="无通过资格预检的用户",
+               metrics={"considered": len(actives)},
+               instance_key=instance_key)
         return None
 
     # 优先级 1：有可验证候选的用户（按 confidence 降序，最接近晋升线的先问）
@@ -245,6 +288,11 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
             if not found:
                 break
             if proactive.proactive_skip_active(group_id, uid, f"candidate:{found[0]}"):
+                # 候选淘汰原因（计划 §6.4：记录被淘汰候选的原因）
+                _probe(flow_ctx, "proactive.at.select", status="skipped",
+                       reason_code="候选在自然承接冷却中",
+                       metrics={"user_id": uid, "candidate_id": found[0]},
+                       instance_key=instance_key)
                 excluded_candidate_ids.add(found[0])
                 continue
             verify_pool.append((found[3], uid, found))
@@ -252,14 +300,35 @@ def pick_target(group_id: int, exclude_user_ids: set[int] | None = None) -> Proa
     if verify_pool:
         verify_pool.sort(key=lambda item: item[0], reverse=True)
         _, uid, (cid, content, ctype, conf) = verify_pool[0]
-        return ProactiveTarget(
+        target = ProactiveTarget(
             user_id=uid,
             candidate_id=cid,
             candidate_content=content,
             candidate_type=ctype,
             reason=f"验证候选（conf={conf:.2f}，距晋升线 {MEMORY_CONFIRM_HIGH_CONFIDENCE}）",
         )
+        _probe(flow_ctx, "proactive.at.select", status="succeeded",
+               reason_code="选中验证候选",
+               metrics={
+                   "user_id": uid,
+                   "candidate_id": cid,
+                   "candidate_type": ctype,
+                   "confidence": round(conf, 3),
+                   "confirm_line": MEMORY_CONFIRM_HIGH_CONFIDENCE,
+               },
+               summary=target.reason,
+               instance_key=instance_key)
+        return target
 
     # 无可验证候选 → 不发言：主动 @ 的配额极其稀缺，只为把候选推过晋升线而花，
     # 不做无记忆锚点的日常话题搭话。
+    # 计划 §6.4：无候选 = noop，但淘汰/区间事实必须可查询。
+    _probe(flow_ctx, "proactive.at.select", status="skipped",
+           reason_code="无可验证的 OBSERVING 候选",
+           metrics={
+               "eligible": len(eligible),
+               "conf_floor": round(max(0.0, MEMORY_OBSERVE_LOW_CONFIDENCE - 0.2), 3),
+               "conf_ceiling": MEMORY_CONFIRM_HIGH_CONFIDENCE,
+           },
+           instance_key=instance_key)
     return None

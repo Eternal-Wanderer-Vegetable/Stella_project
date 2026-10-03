@@ -49,6 +49,42 @@ from memory.text_similarity import is_similar, merge_content, same_normalized_te
 _FRESHNESS = "COALESCE(last_confirmed_at, last_accessed_at)"
 
 
+def _maintenance_commit(ctx, reason_code: str, ok: bool, exc: BaseException | None) -> None:
+    """维护批 commit 事实（计划 §6.1 事务诚实：committed / failed 分开记录）。
+
+    run_weekly 有两个独立 commit（业务变更 + 统计落库），分别记账；
+    失败以 attempted/rolled_back 表达，不把未提交的维护显示为已完成。
+    """
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        if ok:
+            message_flow.decision(ctx, "memory.maintenance.run",
+                                  status="succeeded", reason_code=reason_code,
+                                  fact_kind="commit")
+        else:
+            message_flow.decision(ctx, "memory.maintenance.run",
+                                  status="failed", reason_code="rolled_back",
+                                  fact_kind="commit",
+                                  error_code=type(exc).__name__ if exc is not None else "")
+    except Exception:
+        pass
+
+
+def _maintenance_checkpoint(ctx, metrics: dict) -> None:
+    """维护步骤过程事实（观测旁路：ctx 缺失或异常全部空转）。"""
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        message_flow.checkpoint(ctx, "memory.maintenance.run", metrics=metrics)
+    except Exception:
+        pass
+
+
 class MemoryCompressor:
     """记忆压缩器：把冗余记忆合并、长记忆原子化、低价值记忆归档。"""
 
@@ -91,42 +127,88 @@ class MemoryCompressor:
 
         对 status='active' 的全部记忆排序后依次执行三步，最后把步进数字写入
         compressor_stats 并追加一条人类可读日志；无活动记忆时提前退出。
+
+        观测（计划 §6.3 memory.maintenance.run，M2）：入口建独立
+        ``memory_maintenance`` root（origin=timer）；压缩/去重/归档/衰减各步
+        计数用 checkpoint；两个独立 commit 分别记录提交事实。root 在任何
+        前置 return 之前创建，空集 noop 也有可查询的运行事实。
         """
-        logger.info("🧹 [MemoryCompressor] 开始周度全量压缩任务（重度运行）")
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        self._ensure_tables()
+        # ── 维护独立 root（观测旁路：创建失败按 None 全程空转）──
+        root = None
+        try:
+            from core.observability import message_flow
 
-        rows = cursor.execute(
-            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
-            "FROM memories WHERE status = 'active' "
-            f"ORDER BY {_FRESHNESS} DESC"
-        ).fetchall()
-        if not rows:
-            logger.info("🧹 [MemoryCompressor] 无可压缩的活动记忆")
+            root = message_flow.begin_trace(
+                root_kind="memory_maintenance", origin="timer",
+                scope="memory_global", trigger="weekly",
+            )
+        except Exception:
+            root = None
+        outcome = "done"
+        try:
+            logger.info("🧹 [MemoryCompressor] 开始周度全量压缩任务（重度运行）")
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            self._ensure_tables()
+
+            rows = cursor.execute(
+                "SELECT id, group_shared_space, user_id, type, content, importance, confidence, confirmation_count, compressed_at, is_atomized "
+                "FROM memories WHERE status = 'active' "
+                f"ORDER BY {_FRESHNESS} DESC"
+            ).fetchall()
+            if not rows:
+                logger.info("🧹 [MemoryCompressor] 无可压缩的活动记忆")
+                conn.close()
+                outcome = "noop_empty"
+                return
+
+            _maintenance_checkpoint(root, {"active_memories": len(rows)})
+
+            # 全量处理：去重、原子化并归档低价值记忆
+            merged = self._merge_duplicate_memories(cursor, rows)
+            atomized = self._atomize_long_memories(cursor, rows)
+            archived = self._archive_low_value_memories(cursor)
+            decayed = self._apply_decay(cursor)
+            _maintenance_checkpoint(root, {"merged": merged, "atomized": atomized,
+                                           "archived": archived, "decayed": decayed})
+
+            # 记录统计与日志：两个独立 commit 分别记录提交事实（计划 §6.3）
+            try:
+                conn.commit()
+            except Exception as exc:
+                _maintenance_commit(root, "data_commit", False, exc)
+                raise
+            _maintenance_commit(root, "data_commit", True, None)
+            cursor.execute(
+                "INSERT INTO compressor_stats (run_type, reason, merged_count, atomized_count, archived_count) VALUES (?, ?, ?, ?, ?)",
+                ("weekly", "scheduled", merged, atomized, archived),
+            )
+            try:
+                conn.commit()
+            except Exception as exc:
+                _maintenance_commit(root, "stats_commit", False, exc)
+                raise
+            _maintenance_commit(root, "stats_commit", True, None)
             conn.close()
-            return
+            # 记忆内容/状态变了（合并/原子化/归档/衰减）→ 递增历史版本，
+            # 语义检索缓存立即失效（设计阶段四）。零改动批次不递增，保住命中率。
+            if merged or atomized or archived or decayed:
+                bump_memory_history()
+            self._append_log(f"周度压缩：合并 {merged}，原子化 {atomized}，归档 {archived}，衰减 {decayed}")
+            logger.info("🧹 [MemoryCompressor] 周度压缩完成")
+        except BaseException:
+            if outcome == "done":
+                outcome = "error"
+            raise
+        finally:
+            if root is not None:
+                try:
+                    from core.observability import message_flow
 
-        # 全量处理：去重、原子化并归档低价值记忆
-        merged = self._merge_duplicate_memories(cursor, rows)
-        atomized = self._atomize_long_memories(cursor, rows)
-        archived = self._archive_low_value_memories(cursor)
-        decayed = self._apply_decay(cursor)
-
-        # 记录统计与日志
-        conn.commit()
-        cursor.execute(
-            "INSERT INTO compressor_stats (run_type, reason, merged_count, atomized_count, archived_count) VALUES (?, ?, ?, ?, ?)",
-            ("weekly", "scheduled", merged, atomized, archived),
-        )
-        conn.commit()
-        conn.close()
-        # 记忆内容/状态变了（合并/原子化/归档/衰减）→ 递增历史版本，
-        # 语义检索缓存立即失效（设计阶段四）。零改动批次不递增，保住命中率。
-        if merged or atomized or archived or decayed:
-            bump_memory_history()
-        self._append_log(f"周度压缩：合并 {merged}，原子化 {atomized}，归档 {archived}，衰减 {decayed}")
-        logger.info("🧹 [MemoryCompressor] 周度压缩完成")
+                    if not root.ended:
+                        message_flow.end_trace(root, outcome=outcome)
+                except Exception:
+                    pass
 
     def maybe_compress(self, reason: str = "auto") -> None:
         """轻量化触发：基于活动记忆数量与冷却判断是否运行小规模压缩。

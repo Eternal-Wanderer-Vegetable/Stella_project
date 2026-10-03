@@ -34,6 +34,7 @@ from typing import Any
 
 from nonebot import logger
 
+from core.observability import message_flow
 from memory.proactive_gate import can_speak_for_scheduled
 
 from .agent import AgentRunLimits, ScheduledAgentRunner, TaskCancelledError
@@ -53,6 +54,14 @@ from .store import TaskStore
 
 # 单任务单轮补跑的出现上限：stop 几天后的 reminder 也不会一口气补几十条
 _MAX_MISSED_PER_TICK = 20
+
+
+def root_flow_decision(root, node_id: str, *, status: str,
+                       reason_code: str) -> None:
+    """预约运行的决策事实（旁路：观测绝不改变运行状态转移语义）。"""
+    with contextlib.suppress(Exception):
+        message_flow.decision(root, node_id, status=status,
+                              reason_code=reason_code, fact_kind="state")
 
 
 class SchedulerRuntime:
@@ -262,34 +271,62 @@ class SchedulerRuntime:
     async def _execute_locked(self, run: Run, task: Task) -> None:
         if not self.store.mark_running(run.run_id, self.worker_id):
             return
-        # 严格门控：管理员静音 / 睡眠 / 冷却时预约任务也闭嘴（读库失败则拒绝）
-        allowed, reason = can_speak_for_scheduled(run.group_id)
-        if not allowed:
-            logger.info(f"[Scheduling] 运行 {run.run_id[:8]} 被门控跳过：{reason}")
-            self.store.transition_run(
-                run.run_id, self.worker_id,
-                from_states=(RunState.RUNNING,), to_state=RunState.SKIPPED,
-                error=f"gate: {reason}"[:200],
+        # 每次运行一个独立 root（计划 §6.5：租约/状态/取消/执行/发送关联，
+        # 复用既有 lease/run 状态协议，不新增同义协议）
+        root = self._flow_root(run, task)
+        try:
+            allowed, reason = can_speak_for_scheduled(run.group_id)
+            if not allowed:
+                logger.info(f"[Scheduling] 运行 {run.run_id[:8]} 被门控跳过：{reason}")
+                self.store.transition_run(
+                    run.run_id, self.worker_id,
+                    from_states=(RunState.RUNNING,), to_state=RunState.SKIPPED,
+                    error=f"gate: {reason}"[:200],
+                )
+                if root is not None:
+                    root_flow_decision(root, "scheduled.gate", status="blocked",
+                                       reason_code=reason)
+                return
+            if root is not None:
+                root_flow_decision(root, "scheduled.gate", status="allowed",
+                                   reason_code="")
+            # 发送窗口前续租：减少「发完还没落回执就被判 unknown」的窗口
+            self.store.renew_lease(
+                run.run_id, self.worker_id, seconds=self.lease_ttl_seconds
             )
-            return
-        # 发送窗口前续租：减少「发完还没落回执就被判 unknown」的窗口
-        self.store.renew_lease(
-            run.run_id, self.worker_id, seconds=self.lease_ttl_seconds
-        )
-        if task.mode is TaskMode.REMINDER:
-            await self.delivery.deliver(
-                run=run, task=task, text=render_reminder(task)
-            )
-            return
-        await self._execute_agent(run, task)
+            if task.mode is TaskMode.REMINDER:
+                await self.delivery.deliver(
+                    run=run, task=task, text=render_reminder(task)
+                )
+                return
+            await self._execute_agent(run, task, root)
+        finally:
+            if root is not None:
+                with contextlib.suppress(Exception):
+                    message_flow.end_trace(root)
 
-    async def _execute_agent(self, run: Run, task: Task) -> None:
+    def _flow_root(self, run: Run, task: Task):
+        """预约运行的观测 root（旁路：观测不可用时业务照跑）。"""
+        try:
+            return message_flow.begin_trace(
+                root_kind="scheduled_task", origin="worker",
+                scope=f"qq:{run.group_id}",
+                source_message_key=f"sched:run:{run.run_id}",
+                trigger=task.task_id, trace_id=f"sch-{run.run_id}",
+                process_kind="scheduling")
+        except Exception:
+            return None
+
+    async def _execute_agent(self, run: Run, task: Task, root=None) -> None:
         if self.agent_runner is None:
             self.store.transition_run(
                 run.run_id, self.worker_id,
                 from_states=(RunState.RUNNING,), to_state=RunState.FAILED,
                 error="runner_missing",
             )
+            if root is not None:
+                root_flow_decision(root, "scheduled.agent", status="failed",
+                                   reason_code="runner_missing")
             return
         context = build_scheduled_context(
             task.group_id, max_chars=self.context_max_chars
@@ -304,6 +341,9 @@ class SchedulerRuntime:
         async def cancel_check() -> None:
             self._assert_run_runnable(run.run_id, task.task_id, task.revision)
 
+        agent_span = (message_flow.span(root, "scheduled.agent",
+                                        instance_key=f"run:{run.run_id}")
+                      if root is not None else None)
         try:
             outcome = await self.agent_runner.run(
                 task_id=task.task_id,
@@ -320,7 +360,19 @@ class SchedulerRuntime:
                 from_states=(RunState.RUNNING,), to_state=RunState.CANCELLED,
                 error="task_fenced",
             )
+            if agent_span is not None:
+                agent_span.finish(status="cancelled", reason_code="task_fenced")
             return
+        except Exception as e:
+            if agent_span is not None:
+                agent_span.finish(status="failed", reason_code=type(e).__name__,
+                                  error_code=type(e).__name__)
+            raise
+        if agent_span is not None:
+            agent_span.finish(status="succeeded", metrics={
+                "model_rounds": outcome.model_rounds,
+                "tool_calls": outcome.tool_calls,
+            })
         counters: dict[str, Any] = {
             "model_rounds": outcome.model_rounds,
             "tool_calls": outcome.tool_calls,
@@ -331,6 +383,9 @@ class SchedulerRuntime:
                 from_states=(RunState.RUNNING,), to_state=RunState.CANCELLED,
                 error="task_fenced", **counters,
             )
+            if root is not None:
+                root_flow_decision(root, "scheduled.agent", status="cancelled",
+                                   reason_code="task_fenced")
             return
         if outcome.status in ("failed", "timeout"):
             self.store.transition_run(
@@ -338,7 +393,14 @@ class SchedulerRuntime:
                 from_states=(RunState.RUNNING,), to_state=RunState.FAILED,
                 error=outcome.error or outcome.status, **counters,
             )
+            if root is not None:
+                root_flow_decision(root, "scheduled.agent",
+                                   status="failed",
+                                   reason_code=outcome.status)
             return
+        if root is not None:
+            root_flow_decision(root, "scheduled.agent", status="succeeded",
+                               reason_code="")
         await self.delivery.deliver(
             run=run, task=task, text=outcome.text, **counters
         )

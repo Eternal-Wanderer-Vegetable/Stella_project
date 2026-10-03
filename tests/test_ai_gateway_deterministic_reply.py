@@ -72,3 +72,59 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
     send.assert_awaited_once()
     finish.assert_awaited_once_with()
     gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ctx.reply])
+
+
+@pytest.mark.asyncio
+async def test_flow_watch_finish_captures_reply_text(ai_gateway_module):
+    """matcher.finish 包装：发出的文本成为 command.reply 检查点（计划 §6.3 A04）。"""
+
+    from core.observability import message_flow, turn_trace
+
+    root = message_flow.begin_trace(root_kind="qq_command", trace_id="cmd-cap")
+
+    class FakeMatcher:
+        @classmethod
+        async def finish(cls, msg, **kwargs):
+            return "ok"
+
+    gateway = ai_gateway_module
+    original = FakeMatcher.finish
+    gateway._flow_watch_finish(FakeMatcher)
+    assert FakeMatcher.finish is not original  # 已包装
+
+    token = gateway._flow_reply_ctx.set(root)
+    try:
+        await FakeMatcher.finish("已进入安静模式")
+    finally:
+        gateway._flow_reply_ctx.reset(token)
+    message_flow.flush()
+
+    import sqlite3
+
+    conn = sqlite3.connect(turn_trace.current_db_path())
+    try:
+        rows = conn.execute(
+            "SELECT node_id, summary FROM flow_events "
+            "WHERE trace_id='cmd-cap' AND node_id='command.reply'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert rows == [("command.reply", "已进入安静模式")]
+
+    # 无 fctx（私聊）：finish 原样工作且不产生事件
+    token = gateway._flow_reply_ctx.set(None)
+    try:
+        assert await FakeMatcher.finish("hi") == "ok"
+    finally:
+        gateway._flow_reply_ctx.reset(token)
+    message_flow.end_trace(root, outcome="command_sent")
+    message_flow.flush()
+    conn = sqlite3.connect(turn_trace.current_db_path())
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM flow_events "
+            "WHERE trace_id='cmd-cap' AND node_id='command.reply'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 1

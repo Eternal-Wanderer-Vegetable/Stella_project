@@ -64,6 +64,37 @@ def coerce_platform_message_id(result) -> str | None:
     return text if text.isdigit() else None
 
 
+def _flow(trace_id: str):
+    """按 trace_id 取消息流程 context（计划 §6.2）；未接入/已结束为 None。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.by_trace(trace_id)
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
 async def deliver_lines(
     lines: list[str],
     *,
@@ -85,25 +116,35 @@ async def deliver_lines(
     """
     receipts: list[DeliveryReceipt] = []
     started_at = time.monotonic()
+    fctx = _flow(trace_id)
     for i, line in enumerate(lines):
         if i > 0 and interval_seconds > 0:
             await asyncio.sleep(interval_seconds)
         if abort_check is not None and abort_check():
             logger.info(f"[Delivery] 发送中止（输出已过期）：段 {i}/{len(lines)} 未发送")
+            _flow_decision(fctx, "send.segment", status="skipped",
+                           reason_code="output_expired",
+                           instance_key=f"seg:{i}",
+                           summary=f"未尝试段 {i + 1}/{len(lines)}")
             break
+        seg_span = _flow_span(fctx, "send.segment", instance_key=f"seg:{i}")
+        seg_span.__enter__()
         try:
             platform_id = coerce_platform_message_id(await send_one(line, i))
             status = DELIVERY_ACKNOWLEDGED
         except FinishedException:
+            seg_span.__exit__(FinishedException, None, None)
             raise
         except asyncio.CancelledError:
             # 取消中断：该段结果不明（平台可能已收到），绝不重发
+            seg_span.__exit__(asyncio.CancelledError, None, None)
             _append_and_persist(
                 receipts, scope, trace_id, turn_id, epoch, i,
                 status=DELIVERY_UNKNOWN, text=line, platform_id=None, detail="cancelled",
             )
             raise
         except Exception as e:
+            seg_span.__exit__(type(e), e, e.__traceback__)
             logger.warning(f"[Delivery] 群 {scope.group_id if scope else '?'} "
                            f"第 {i + 1}/{len(lines)} 段发送失败: {e}")
             _append_and_persist(
@@ -113,12 +154,38 @@ async def deliver_lines(
             if stop_on_failure:
                 break
             continue
+        seg_span.__exit__(None, None, None)
         _append_and_persist(
             receipts, scope, trace_id, turn_id, epoch, i,
             status=status, text=line, platform_id=platform_id,
         )
     _trace_delivery(trace_id, turn_id, scope, receipts, started_at)
+    if fctx is not None:
+        statuses = [r.status for r in receipts]
+        ack = statuses.count("acknowledged")
+        _flow_decision(
+            fctx, "send.aggregate",
+            status=_aggregate_flow_status(statuses),
+            summary=("partial" if 0 < ack < len(lines) else ""),
+            metrics={"attempted": len(receipts), "lines": len(lines),
+                     "acknowledged": ack,
+                     "failed": statuses.count("failed"),
+                     "unknown": statuses.count("unknown")},
+        )
     return receipts
+
+
+def _aggregate_flow_status(statuses: list[str]) -> str:
+    """聚合状态 → flow status（业务 outcome 留在 metrics/summary，不混用）。"""
+    if not statuses:
+        return "failed"
+    if all(s == "acknowledged" for s in statuses):
+        return "succeeded"
+    if any(s == "acknowledged" for s in statuses):
+        return "succeeded"  # partial：已送达事实为真，未尝试段在 metrics 里
+    if all(s == "unknown" for s in statuses):
+        return "unknown"
+    return "failed"
 
 
 def _trace_delivery(trace_id: str, turn_id: str, scope: ConversationScope | None,
@@ -181,6 +248,20 @@ def _append_and_persist(
     if scope is not None and not social_store.record_delivery(receipt):
         # 落库失败 = 发送成功但事实缺档（unknown 降级）：记日志，不阻塞后续片段
         logger.warning(f"[Delivery] 回执落库失败（turn={turn_id} part={part_index}）")
+        # transmission 与 persistence 是两种独立事实（计划 A17）：发送已
+        # confirmed，这里只标回执持久化失败，绝不妨碍该段 acknowledged。
+        try:
+            from core.observability import message_flow
+
+            fctx = message_flow.by_trace(trace_id)
+            if fctx is not None and not fctx.ended:
+                message_flow.decision(
+                    fctx, "send.receipt", status="failed",
+                    reason_code="persist_error",
+                    instance_key=f"seg:{part_index}",
+                    metrics={"transmission": status})
+        except Exception:
+            pass
     if detail and status == DELIVERY_UNKNOWN:
         logger.info(f"[Delivery] 段 {part_index} 状态 unknown: {detail}")
     return receipt

@@ -1,0 +1,95 @@
+{
+ "date": "2026-10-03",
+ "scope": "内部流程观测计划 §13 硬件/环境项验收汇总（M6 收官）",
+ "head": "eda3c7e",
+ "items": [
+  {
+   "item": "native Rust 全链路 + 弱冲突 parity",
+   "verdict": "PASS",
+   "evidence": [
+    "docs/reports/rust-fullchain-2026-10-03.json"
+   ],
+   "key_facts": [
+    "maturin release 构建 _native.pyd；MEMORY_BACKEND=rust 真事务晋升：候选 CONFIRMED、backend=rust 决策、commit 事实、integrity=complete、retrieve 冒烟通过",
+    "弱冲突 parity 实证 differ=true：同 fixture 下 Rust 立即 observing_conflict（弱候选终态 OBSERVING）；Python weak_candidate_observing 后被晋升循环改写 CONFIRMED——计划 §5 登记的业务差异获得双侧 flow 事件证据",
+    "修复观测缺口：Rust 路径未晋升结果原先静默，现落 conflict 决策 + 履历"
+   ]
+  },
+  {
+   "item": "model_validation 真实模型接入",
+   "verdict": "PASS_WITH_FINDINGS",
+   "evidence": [
+    "docs/reports/model-validation-2026-10-03.json"
+   ],
+   "key_facts": [
+    "RealEndpointModel（OpenAI 兼容/零依赖/零重试/思考型 token 预算）；真端点 3 次调用 1.7-3.2s 自然回复",
+    "生产库只读导出 175 条真实切片；isolated_pipeline 双遍 semantic digest 完全一致（e2f2447569a2abd7）",
+    "管线级 model_execution 诚实 INSUFFICIENT_SAMPLES：observe 首个 ALLOW 有分数天花板（72<80，首批主动接触生产走 @ 硬触发在 gateway 层）——根因与出路写入报告"
+   ]
+  },
+  {
+   "item": "性能与容量（10k 布局/100k 数据集/长跑排空）",
+   "verdict": "PASS",
+   "evidence": [
+    "docs/reports/capacity-2026-10-03.json",
+    "dashboard/tests/perf-10k-layout.spec.ts"
+   ],
+   "key_facts": [
+    "10k 事件投影+布局 6.7ms（验收预算 5s）",
+    "100k 消息数据集只读导出 1.45s（~69K 行/s，23.5MB JSONL）",
+    "长跑：持续 5K 行/s × 200 并发 run 零丢失、200/200 integrity=complete、队列最终排空；26K 行突发过载按设计丢包且 per-run 归账",
+    "真实修复：writer 心跳逐批 UPDATE+commit 的 fsync 吞吐 bug → 15s 节流 + 空闲唤醒（89 项观测测试回归绿）"
+   ]
+  },
+  {
+   "item": "受控 NoneBot 入口 smoke",
+   "verdict": "PASS",
+   "evidence": [
+    "docs/reports/nonebot-entry-smoke-2026-10-03.json"
+   ],
+   "key_facts": [
+    "真 bot.py 直启于隔离 STELLA_HOME（PORT=18101，接管自查读临时 .env 探空 no-op，用户 8080 实例零触碰）",
+    "mock NapCat 走真反向 WS（X-Self-ID）注入群消息；真 gateway matcher 处理；qq_passive root integrity=complete"
+   ]
+  },
+  {
+   "item": "浏览器端到端 smoke",
+   "verdict": "PASS",
+   "evidence": [
+    "docs/reports/e2e-browser-2026-10-03.json",
+    "e2e-flow-fullview-2026-10-03.png",
+    "e2e-flow-actualpath-2026-10-03.png"
+   ],
+   "key_facts": [
+    "首启向导→登录→数据页→消息流程；完整性徽章「完整（已持久化）」、图版本 2026.10.03",
+    "完整流程视图：执行节点绿色、其余灰色未观测（O10 语义）；新泳道与新节点（参与决策/整合入口）可见",
+    "实际路径视图：已跳过语义 + 0.5x-4x 播放速度 + 3/3 事件计数"
+   ]
+  },
+  {
+   "item": "发行包 spec 资源验收",
+   "verdict": "PASS",
+   "evidence": [
+    "docs/reports/release-package-2026-10-03.json"
+   ],
+   "key_facts": [
+    "真实 standalone-python 打包：当前 digest manifest（378b7fa3f837，130 节点/6195 闭包/20 入口）随包；legacy manifest 保留",
+    "新构建 webui/dist 49 项随包；bot.py 与全布局就位；NSIS 安装器构建如实未做"
+   ]
+  },
+  {
+   "item": "weak-conflict 业务修复",
+   "verdict": "NOT_DONE（按计划要求）",
+   "key_facts": [
+    "计划 §6.3：parity 差异是独立业务决策，观测只忠实呈现；本轮完成双侧实证（见上），修复留给独立审查"
+   ]
+  }
+ ],
+ "final_gate": {
+  "pytest": "3255 passed / 17 skipped",
+  "vitest": "60 passed",
+  "ruff": "全仓绿",
+  "manifest_check": "matched (378b7fa3f837)",
+  "detect_changes": "No changes detected"
+ }
+}

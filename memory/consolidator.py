@@ -583,17 +583,57 @@ class MemoryConsolidator:
         return n
 
     # ── 核心 ────────────────────────────────────────────
-    async def consolidate_group(self, group_id: int, force: bool = False):
+    async def consolidate_group(self, group_id: int, force: bool = False, *, flow_ctx=None):
         """整合指定群的消息：读取新消息→LLM 总结→解析 JSON→落库→推进 checkpoint。
         force=True 表示走本地小批次轻量总结（用于 @触发/主动发言前的即时总结）。
         副作用：更新 checkpoint、写入 short_term_context / user_profiles / memory_candidates。
 
         两层归属（见 config/spaces.py）：checkpoint / 短期上下文按 **QQ 群**；
         画像 / 候选 / 长期记忆按 **共享空间**（group_shared_space）。
-        """
-        if not DB_PATH.exists():
-            return
 
+        ``flow_ctx``（计划 §6.3 memory.consolidate.entry，M2）：调用方已有父 trace
+        （@触发 / 主动发言的消息 root）时显式传入，入口处建 ``caused_by`` relation，
+        不靠 ambient context 猜（计划 §6.2）。整合始终建**独立**
+        ``memory_consolidate`` root——它是后台批任务，与触发消息只有因果关联；
+        root 在任何前置 return 之前创建，DB 缺失 / 攒批跳过也留下可查询的运行事实。
+        """
+        # ── 记忆整合独立 root（观测旁路：创建失败按 None 全程空转）──
+        mem_root = None
+        try:
+            from core.observability import message_flow
+
+            mem_root = message_flow.begin_trace(
+                root_kind="memory_consolidate", origin="spawn",
+                scope=f"qq:{group_id}", detail={"force": force},
+            )
+            if flow_ctx is not None and getattr(flow_ctx, "trace_id", ""):
+                message_flow.link(flow_ctx.trace_id, mem_root.trace_id,
+                                  kind="caused_by", evidence="consolidate_group")
+        except Exception:
+            mem_root = None
+        outcome = "no_db"
+        try:
+            if DB_PATH.exists():
+                outcome = await self._consolidate_group_core(group_id, force, mem_root)
+        except BaseException:
+            outcome = "error"
+            raise
+        finally:
+            if mem_root is not None:
+                try:
+                    from core.observability import message_flow
+
+                    if not mem_root.ended:
+                        message_flow.end_trace(mem_root, outcome=outcome)
+                except Exception:
+                    pass
+
+    async def _consolidate_group_core(self, group_id: int, force: bool, mctx) -> str:
+        """consolidate_group 的业务主体（root 生命周期在外层方法管理）。
+
+        返回 outcome（推进/停止策略，计划 §6.3 memory.consolidate.entry）：
+        checkpoint 是否推进、为什么停，是本 root 最重要的一个事实。
+        """
         # 群级串行（不再整段持有阶段1 闸门）：模型闸门只在各自的 generate 调用处
         # 短暂持有，两把闸门从不同时持有，因此阶段1 与阶段2 的端点可真正并行，
         # 且同一端点上的任务仍按其并发度排队（本地默认 1，即 FIFO 一次一个）。
@@ -618,20 +658,37 @@ class MemoryConsolidator:
                 # force 路径走小批次；非 force 路径按批次大小决定阈值。
                 # 取值随端点类型走（在线批量更大，见 _batch_size）——这就是 T1-5
                 # 「攒批门槛」：新消息不足 N 条不整合，直接摊薄每批的固定成本。
-                threshold = _batch_size(force)
-                if new_count < threshold:
-                    return
+                fctx = _flow_ctx(group_id)
+                with _flow_span(fctx, "consolidate.preflight") as pre_span:
+                    threshold = _batch_size(force)
+                    # 入口事实（计划 §6.3 memory.consolidate.entry）：触发/force、
+                    # checkpoint 位置与积压计数——「为什么没整合」从这里查起。
+                    _flow_checkpoint(mctx, "memory.consolidate.entry",
+                                     metrics={"group_id": group_id, "force": force,
+                                              "last_id": last_id, "new_count": new_count,
+                                              "threshold": threshold,
+                                              "space": group_shared_space})
+                    if new_count < threshold:
+                        _flow_decision(fctx, "consolidate.preflight",
+                                       status="skipped", reason_code="below_threshold",
+                                       metrics={"new_count": new_count,
+                                                "threshold": threshold})
+                        pre_span.finish(status="skipped", reason_code="below_threshold")
+                        return "skipped_below_threshold"
 
-                # 每日 token 预算：撞破之后不再花钱做整合。
-                # **只 return，绝不推进 checkpoint**——跳过是攒批，不是丢弃；
-                # 推进了这批消息就永久没人整合了（P0-4 的另一种形态）。
-                blocked = budget_blocked(ROLE_CONSOLIDATION)
-                if blocked:
-                    logger.warning(
-                        f"⚠️ [Consolidator] 群 {group_id} 整合已被预算拦下（{blocked}），"
-                        f"{new_count} 条消息留在 checkpoint {last_id} 之后等下一个预算周期"
-                    )
-                    return
+                    # 每日 token 预算：撞破之后不再花钱做整合。
+                    # **只 return，绝不推进 checkpoint**——跳过是攒批，不是丢弃；
+                    # 推进了这批消息就永久没人整合了（P0-4 的另一种形态）。
+                    blocked = budget_blocked(ROLE_CONSOLIDATION)
+                    if blocked:
+                        _flow_decision(fctx, "consolidate.preflight",
+                                       status="blocked", reason_code=f"budget:{blocked}")
+                        pre_span.finish(status="blocked", reason_code="budget")
+                        logger.warning(
+                            f"⚠️ [Consolidator] 群 {group_id} 整合已被预算拦下（{blocked}），"
+                            f"{new_count} 条消息留在 checkpoint {last_id} 之后等下一个预算周期"
+                        )
+                        return "blocked_budget"
 
                 # ── 成本闸门（Tier 1 本地免费预筛）──
                 # 只筛非 force 路径：force 是 @ 触发/主动发言前的即时总结，
@@ -652,6 +709,9 @@ class MemoryConsolidator:
                     else:
                         gate = await self._cost_gate_reason(group_id, last_id, threshold)
                         if gate:
+                            _flow_decision(fctx, "consolidate.preflight",
+                                           status="skipped", reason_code=f"cost_gate:{gate}")
+                            pre_span.finish(status="skipped", reason_code="cost_gate")
                             self._set_skip_streak(group_id, streak + 1)
                             logger.info(
                                 f"💸 [Consolidator] 群 {group_id} 跳过本批整合（{gate}），"
@@ -662,7 +722,7 @@ class MemoryConsolidator:
                                 f"### 💸 群 `{group_id}` 跳过本批整合：{gate}"
                                 f"（未推进 checkpoint {last_id}，连续跳过 {streak + 1}）\n"
                             )
-                            return
+                            return "skipped_cost_gate"
                     # 走到这里说明本轮真的要整合：计数清零，重新开始攒
                     if streak:
                         self._set_skip_streak(group_id, 0)
@@ -673,51 +733,125 @@ class MemoryConsolidator:
                     f"（force={force}，新消息 {new_count}，批次阈值 {threshold}）\n"
                 )
 
-                result, processed_end, backend_name, senders, at_senders, messages_text = await self._generate(group_id, last_id, force=force)
-                logger.info(f"📥 [Consolidator Response]\n{result}")
+                with _flow_span(fctx, "consolidate.extract"):
+                    result, processed_end, backend_name, senders, at_senders, messages_text = await self._generate(group_id, last_id, force=force)
+                    logger.info(f"📥 [Consolidator Response]\n{result}")
 
-                parsed = self._parse_json(result)
+                    parsed = self._parse_json(result)
+                    # 消费窗口事实（计划 §6.3 memory.consolidate.window）：真实
+                    # 消费的消息 id 范围与条数（COUNT 容忍 id 空洞），外加实际
+                    # 后端。只记 id/计数，不记消息原文（计划 §6.1 隐私）。
+                    consumed_count = self._count_window(group_id, last_id, processed_end)
+                    _flow_checkpoint(mctx, "memory.consolidate.window",
+                                     metrics={"consumed_from": last_id + 1,
+                                              "consumed_to": processed_end,
+                                              "consumed_count": consumed_count,
+                                              "checkpoint_last_id": last_id,
+                                              "backend": backend_name})
                 if not parsed:
+                    _flow_decision(fctx, "consolidate.extract",
+                                   status="failed", reason_code="json_parse_failed")
+                    # checkpoint 推进事实（计划 §6.3）：解析失败**推进**——
+                    # 与截断停 checkpoint 的 reason_code 必须可区分，否则
+                    # 「这批消息去哪了」在观测面上无法回答。
+                    _flow_decision(mctx, "memory.consolidate.window",
+                                   status="succeeded",
+                                   reason_code="parse_failed_advance_checkpoint",
+                                   metrics={"checkpoint_from": last_id,
+                                            "checkpoint_to": processed_end})
                     logger.warning(f"⚠️ [Consolidator] JSON 解析失败，跳过本批次: {result[:200]}")
                     # 即使解析失败也推进 checkpoint，避免同一批消息反复重处理。
                     # 「输出被截断」不走这条路——那种情况 _generate 已缩批重试并在
                     # 退到底时抛 OutputTruncatedError，checkpoint 停在原地等人改配置。
                     append_consolidation_log("  > ⚠️ JSON 解析失败，已推进 checkpoint 避免重处理\n")
                     self._update_checkpoint(group_id, processed_end)
-                    return
+                    return "checkpoint_advanced_parse_failed"
 
-                self._write_short_term(group_id, parsed.get("short_term"))
-                self._write_user_profiles(
-                    group_shared_space, parsed.get("user_profiles", []), origin_group_id=group_id
-                )
-                candidates = parsed.get("memory_candidates")
-                if candidates is None:
-                    candidates = []
+                with _flow_span(fctx, "consolidate.write"):
+                    self._write_short_term(group_id, parsed.get("short_term"))
+                    self._write_user_profiles(
+                        group_shared_space, parsed.get("user_profiles", []), origin_group_id=group_id
+                    )
+                    candidates = parsed.get("memory_candidates")
+                    if candidates is None:
+                        candidates = []
 
-                # ── 阶段2：候选精确提取（27B）──
-                # 仅在阶段1 判定 has_self_disclosure 为真时唤醒，节约 27B 占用。
-                # 成功时其结果覆盖阶段1 候选——包括返回空数组的情况：
-                # 那是 27B 复核认为确实没有，正好纠正 E4B 的误判。
-                # 调用失败/解析失败返回 None，此时回退阶段1 候选。
-                if MEMORY_EXTRACT_ENABLED and self._has_self_disclosure(parsed):
-                    extracted = await self._extract_candidates(group_id, messages_text)
-                    if extracted is not None:
-                        candidates = extracted
+                    # ── 阶段2：候选精确提取（27B）──
+                    # 仅在阶段1 判定 has_self_disclosure 为真时唤醒，节约 27B 占用。
+                    # 成功时其结果覆盖阶段1 候选——包括返回空数组的情况：
+                    # 那是 27B 复核认为确实没有，正好纠正 E4B 的误判。
+                    # 调用失败/解析失败返回 None，此时回退阶段1 候选。
+                    # 门控事实（计划 §6.3 memory.extract.gate2）：是否触发 stage2、
+                    # 空数组覆盖 vs None 回退用**不同 reason_code**（计划 §6.3 表
+                    # 「解析失败推进与截断停必须不同」同法——候选变少必须可归因）。
+                    stage2_triggered = bool(
+                        MEMORY_EXTRACT_ENABLED and self._has_self_disclosure(parsed)
+                    )
+                    extracted = None
+                    if stage2_triggered:
+                        # stage1/精确提取调用（目录锚点 memory.extract.stage1）：
+                        # span 包住模型调用，metrics 只记批次大小，不记 prompt 原文。
+                        with _flow_span(mctx, "memory.extract.stage1") as stage1_span:
+                            extracted = await self._extract_candidates(group_id, messages_text)
+                        with contextlib.suppress(Exception):
+                            stage1_span.finish(
+                                status="succeeded",
+                                metrics={"batch_messages": consumed_count,
+                                         "input_chars": len(messages_text or "")})
+                        if extracted is not None:
+                            candidates = extracted
+                        if extracted is None:
+                            _flow_decision(mctx, "memory.extract.gate2", status="skipped",
+                                           reason_code="stage2_fallback_stage1",
+                                           metrics={"stage1_candidates": len(parsed.get("memory_candidates") or [])})
+                        elif not extracted:
+                            _flow_decision(mctx, "memory.extract.gate2", status="succeeded",
+                                           reason_code="stage2_empty_override",
+                                           metrics={"candidates": 0})
+                        else:
+                            _flow_decision(mctx, "memory.extract.gate2", status="succeeded",
+                                           reason_code="stage2_override",
+                                           metrics={"candidates": len(extracted)})
+                    else:
+                        _flow_decision(mctx, "memory.extract.gate2", status="skipped",
+                                       reason_code=("extract_disabled"
+                                                    if not MEMORY_EXTRACT_ENABLED
+                                                    else "no_self_disclosure"),
+                                       metrics={"stage1_candidates": len(candidates)})
 
-                self._write_memory_candidates(
-                    group_shared_space,
-                    candidates,
-                    sender_ids=senders,
-                    at_senders=at_senders,
-                    origin_group_id=group_id,
-                )
-                if candidates:
-                    # 有新候选记忆时同步触发 MemoryManager 晋升处理
-                    get_memory_manager().process_new_candidates()
-                elif parsed.get("long_term_memories"):
-                    # 兼容旧版输出，将旧格式记忆写入旧表，以免丢失历史信息。
-                    self._write_long_term_memories(group_shared_space, parsed.get("long_term_memories", []))
-                self._update_checkpoint(group_id, processed_end)
+                    # 候选写入（计划 §6.3 memory.candidate.write）：span 包住写入，
+                    # metrics 记写入/reinforce/skip 计数（对象履历在业务提交后由
+                    # _write_memory_candidates 自己落账）。
+                    with _flow_span(mctx, "memory.candidate.write") as write_span:
+                        write_counts = self._write_memory_candidates(
+                            group_shared_space,
+                            candidates,
+                            sender_ids=senders,
+                            at_senders=at_senders,
+                            origin_group_id=group_id,
+                            flow_ctx=mctx,
+                        )
+                        with contextlib.suppress(Exception):
+                            write_span.finish(status="succeeded",
+                                              metrics=dict(write_counts))
+                    if candidates:
+                        # 有新候选记忆时同步触发 MemoryManager 晋升处理。
+                        # M2（计划 §6.3）：显式传父 trace——晋升作为
+                        # memory_consolidate root 的子 span，不另建 root。
+                        # 签名探测而不是 try/except TypeError：get_memory_manager
+                        # 可能被测试以零参替身替换（duck-typing），而
+                        # try/except 会把业务内部的 TypeError 误判成签名
+                        # 不匹配，导致晋升重复执行。
+                        manager = get_memory_manager()
+                        if mctx is not None and _accepts_flow_ctx_kw(
+                                getattr(manager, "process_new_candidates", None)):
+                            manager.process_new_candidates(flow_ctx=mctx)
+                        else:
+                            manager.process_new_candidates()
+                    elif parsed.get("long_term_memories"):
+                        # 兼容旧版输出，将旧格式记忆写入旧表，以免丢失历史信息。
+                        self._write_long_term_memories(group_shared_space, parsed.get("long_term_memories", []))
+                    self._update_checkpoint(group_id, processed_end)
 
                 at_sender_set = set(at_senders or [])
                 at_count = sum(
@@ -729,13 +863,27 @@ class MemoryConsolidator:
                     f"记忆候选 {len(candidates)} 条，其中 AT_MENTION 来源 {at_count} 条）\n"
                 )
                 logger.success(f"✅ [Consolidator] 群 {group_id}（空间 {group_shared_space}）整合完成，已处理至 id {processed_end}")
+                # checkpoint 推进事实（成功路径与解析失败路径同一 reason_code 家族）
+                _flow_decision(mctx, "memory.consolidate.window",
+                               status="succeeded", reason_code="checkpoint_advanced",
+                               metrics={"checkpoint_from": last_id,
+                                        "checkpoint_to": processed_end,
+                                        "candidates": len(candidates)})
+                return "checkpoint_advanced"
             except OutputTruncatedError as e:
                 # 截断细节已在 _generate 里记过；这里只强调后果：checkpoint 停在原地，
                 # 这批消息完整保留，改大 max_tokens 后下一轮定时整合会重跑。
                 logger.error(f"❌ [Consolidator] 群 {group_id} 整合中止（未推进 checkpoint）: {e}")
+                # 截断停 checkpoint：与解析失败推进（parse_failed_advance_checkpoint）
+                # 必须不同 reason_code（计划 §6.3 表 memory.extract 行）。
+                _flow_decision(mctx, "memory.consolidate.window",
+                               status="blocked", reason_code="truncated_hold_checkpoint",
+                               metrics={"checkpoint_held_at": self._get_last_processed_id(group_id)})
+                return "checkpoint_held_truncated"
             except Exception:
                 logger.exception(f"❌ [Consolidator] 群 {group_id} 整合失败")
                 append_consolidation_log("  > ❌ 整合失败（详见控制台日志）\n")
+                return "error"
 
     async def drain_group(self, group_id: int, max_rounds: int = 1) -> int:
         """连续整合该群的积压消息，最多 max_rounds 批；返回实际完成的批数。
@@ -920,6 +1068,26 @@ class MemoryConsolidator:
         conn.commit()
         conn.close()
 
+    def _count_window(self, group_id: int, last_id: int, end_id: int) -> int:
+        """统计本批真实消费的消息条数（id ∈ (last_id, end_id]）。
+
+        按 id 范围 COUNT 而不是按行数推算：取数「可容忍 id 空洞」，
+        id 区间宽度不等于消息条数。观测旁路：任何失败返回 0（不猜）。
+        """
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                table = self._get_message_table(conn.cursor())
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE group_id = ? AND id > ? AND id <= ?",
+                    (str(group_id), last_id, end_id),
+                ).fetchone()
+            finally:
+                conn.close()
+            return int(row[0]) if row else 0
+        except Exception:
+            return 0
+
     def _write_short_term(self, group_id: int, data: dict | None):
         """写入短期上下文（摘要 + 进行中的话题 + 关键发言），data 为空则跳过；使用 upsert。
 
@@ -1089,7 +1257,9 @@ class MemoryConsolidator:
         sender_ids: list | None = None,
         at_senders: list | None = None,
         origin_group_id: int | None = None,
-    ):
+        *,
+        flow_ctx=None,
+    ) -> dict:
         """把 LLM 给出的记忆候选写入 memory_candidates 表（状态 NEW），供 MemoryManager 晋升。
         数据清洗：user_id 规范化、type 大写、importance/confidence 转浮点、source_message_ids 序列化。
         每个候选先经过 Policy Validator（validate_candidate）审核，自动修正错误的
@@ -1099,31 +1269,43 @@ class MemoryConsolidator:
         防止 LLM 把 A 的发言归属给 B 造成长期记忆张冠李戴。
         at_senders 为 AT_MENTION 来源发送者列表：候选的 user_id 在其中时标记 source_kind
         为 AT_MENTION，否则为 PASSIVE。
+        返回 {"written", "reinforced", "skipped"} 计数（计划 §6.3 memory.candidate.write）。
 
         候选强化（交叉验证）：同空间同用户且内容相似的待处理候选（NEW/OBSERVING）
         不重复插入，改为累积证据——occurrence_count +1、confidence 加
         MEMORY_CANDIDATE_REOCCURRENCE_BONUS、source_kinds 并集、status 回 NEW。
         跨类型只在归一化后逐字相同时命中（类型词表对称呼类内容两可）。
         这是「单次陈述不足以晋升，复现才是证据」的实现基础（见 MemoryManager Gate 1）。
+
+        ``flow_ctx``（计划 §6.1 对象履历）：调用方的整合 root 观测上下文；候选
+        创建/强化的履历事实在**业务提交之后**落账，trace_id 只在显式传入时可关联，
+        否则为空（不猜）。履历走 message_flow 有界 writer 队列，不在业务事务内。
         """
+        counts = {"written": 0, "reinforced": 0, "skipped": 0}
         if not candidates:
-            return
+            return counts
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         self._ensure_common_tables(conn)
+        # 对象履历缓冲：状态写入与 conn.commit() 在同一业务事务里，履历必须
+        # 等提交成功后再落——回滚了的写入不能留下「已发生」的履历（计划 §6.1）。
+        history_events: list[tuple[str, str, str, str, dict]] = []
         at_sender_set = set(at_senders or [])
         for c in candidates:
             uid = self._normalize_user_id(str(c.get("user_id", "")))
             if not uid:
+                counts["skipped"] += 1
                 continue
             # 发送者白名单校验：只接受本批消息中真实出现过的人
             if sender_ids and uid not in set(sender_ids):
+                counts["skipped"] += 1
                 logger.warning(f"⚠️ [Consolidator] 丢弃归属不明的记忆候选（空间 {group_shared_space}，user_id={uid} 不在本批发送者中）")
                 continue
             source_kind = "AT_MENTION" if uid in at_sender_set else "PASSIVE"
             type_ = (str(c.get("type", "FACT")) or "FACT").strip().upper()
             content = (c.get("content", "") or "").strip()
             if not content:
+                counts["skipped"] += 1
                 continue
             importance = float(c.get("importance", 0.0) or 0.0)
             # importance 缺省/为 0 时兜底为中位值。**不能让 0 落库**：
@@ -1171,7 +1353,7 @@ class MemoryConsolidator:
             existing = None
             for row in cursor.execute(
                 "SELECT id, type, content, confidence, importance, evidence, occurrence_count, "
-                "source_message_ids, source_kinds FROM memory_candidates "
+                "source_message_ids, source_kinds, status FROM memory_candidates "
                 "WHERE group_shared_space = ? AND user_id = ? AND status IN ('NEW', 'OBSERVING')",
                 (group_shared_space, uid),
             ).fetchall():
@@ -1193,6 +1375,7 @@ class MemoryConsolidator:
                     old_count,
                     old_source_ids,
                     old_source_kinds,
+                    old_status,
                 ) = existing
                 merged_confidence = min(
                     1.0,
@@ -1226,6 +1409,16 @@ class MemoryConsolidator:
                     f"🔁 [Consolidator] 候选获得新证据 {existing_id}（第 {new_count} 次，"
                     f"conf {float(old_conf or 0.0):.2f} → {merged_confidence:.2f}，来源 {source_kind}）"
                 )
+                counts["reinforced"] += 1
+                # 强化履历（NEW/OBSERVING → NEW 重新参与晋升评估）
+                history_events.append((
+                    "memory_candidate", str(existing_id),
+                    str(old_status or "NEW"), "NEW",
+                    {"action": "reinforce", "occurrence": new_count,
+                     "confidence": round(merged_confidence, 3),
+                     "previous_confidence": round(float(old_conf or 0.0), 3),
+                     "source_kind": source_kind},
+                ))
                 continue
 
             # 无 id 时生成本地候选 id
@@ -1267,8 +1460,32 @@ class MemoryConsolidator:
                 str(origin_group_id) if origin_group_id else None,
                 self._merge_source_kinds("[]", source_kind),
             ))
+            counts["written"] += 1
+            # 创建履历（from 空 = 新建，计划 §6.1 entity_change 允许表示创建）
+            history_events.append((
+                "memory_candidate", str(candidate_id),
+                "", "NEW",
+                {"action": "create", "type": type_, "occurrence": 1,
+                 "source_kind": source_kind},
+            ))
         conn.commit()
         conn.close()
+        # ── 对象履历：业务提交之后落账（计划 §6.1/§6.3）──
+        # entity_history 走 message_flow 有界 writer 队列（put_nowait），
+        # 不在业务事务/锁内；单条失败自动旁路，绝不影响整合结果。
+        if history_events:
+            trace_id = str(getattr(flow_ctx, "trace_id", "") or "") if flow_ctx is not None else ""
+            try:
+                from core.observability import entity_history
+
+                for etype, eid, from_state, to_state, changed in history_events:
+                    entity_history.record(
+                        etype, eid, scope=str(group_shared_space), trace_id=trace_id,
+                        from_state=from_state, to_state=to_state, changed_fields=changed,
+                    )
+            except Exception:
+                pass
+        return counts
 
     def _write_long_term_memories(self, group_shared_space: str, memories: list):
         """兼容旧版整合输出：把旧格式的 long_term_memories 写入旧表 long_term_memories。
@@ -1376,10 +1593,102 @@ def pending_tasks() -> set[asyncio.Task]:
     return set(_consolidation_tasks)
 
 
-def maybe_consolidate(group_id: int, force: bool = False):
+def _flow_ctx(group_id: int):
+    """整合后台 root（_consolidate_with_flow 建；无 root 时全部空转）。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.by_source_key(f"consolidate:{group_id}")
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _flow_checkpoint(fctx, node_id: str, **kw) -> None:
+    """过程事实（无终态语义）探针：fctx 为 None（观测未接入）时全部空转。"""
+    try:
+        from core.observability import message_flow
+
+        message_flow.checkpoint(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _accepts_flow_ctx_kw(func) -> bool:
+    """晋升入口是否接受 ``flow_ctx`` 关键字（计划 §6.3 显式传父 trace 合同）。
+
+    get_memory_manager() 在测试里可能被零参替身替换（duck-typing）；
+    用签名探测而非 try/except TypeError——后者会把业务内部的 TypeError
+    误判成签名不匹配，导致同一批候选被晋升两次。
+    """
+    if func is None:
+        return False
+    try:
+        import inspect
+
+        params = inspect.signature(func).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "flow_ctx" or p.kind is inspect.Parameter.VAR_KEYWORD
+               for p in params)
+
+
+async def _consolidate_with_flow(consolidator, group_id: int, force: bool,
+                                 parent_trace_id: str):
+    """整合后台任务：独立 root + caused_by 关联（计划 §6.2/§6.5）。"""
+    from core.observability import message_flow
+
+    fctx = None
+    try:
+        fctx = message_flow.begin_trace(
+            root_kind="consolidate", platform="qq", scope=f"qq:{group_id}",
+            source_message_key=f"consolidate:{group_id}",
+        )
+        if parent_trace_id:
+            message_flow.link(parent_trace_id, fctx.trace_id,
+                              kind="caused_by", evidence="consolidation_trigger")
+    except Exception:
+        fctx = None
+    outcome = "done"
+    try:
+        await consolidator.consolidate_group(group_id, force=force)
+    except Exception:
+        outcome = "error"
+        raise
+    finally:
+        try:
+            if fctx is not None and not fctx.ended:
+                message_flow.end_trace(fctx, outcome=outcome)
+        except Exception:
+            pass
+
+
+def maybe_consolidate(group_id: int, force: bool = False, parent_trace_id: str = ""):
     """异步触发一次群整合（后台任务），并登记以跟踪完成与否（不等待）。
 
     force=True 走本地小批次轻量总结，适合 @触发 / 主动发言前调用。
+    ``parent_trace_id``：触发消息的流程 trace（计划 §6.2）——整合是后台
+    批任务，跑在独立 root 上，靠显式 relation 关联，不假装是同步子 span。
 
 
     同群合并：该群已有整合任务在排队或执行时直接跳过。否则活跃群里每条消息
@@ -1392,7 +1701,8 @@ def maybe_consolidate(group_id: int, force: bool = False):
         return
     _pending_groups.add(key)
     consolidator = get_consolidator()
-    task = asyncio.create_task(consolidator.consolidate_group(group_id, force=force))
+    task = asyncio.create_task(
+        _consolidate_with_flow(consolidator, group_id, force, parent_trace_id))
     _consolidation_tasks.add(task)
 
     def _done(t: asyncio.Task):

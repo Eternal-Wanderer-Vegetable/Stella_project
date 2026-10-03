@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 import uuid
@@ -75,6 +76,37 @@ def _trace(**kw: Any) -> None:
         from core.observability import turn_trace
 
         turn_trace.record_event(**kw)
+    except Exception:
+        pass
+
+
+def _flow_ctx(ctx: ChatContext) -> Any:
+    """消息流程 context（计划 §6.2）：入口未建 root / 已结束时为 None，
+    后续 span/decision 全部空转——观测绝不伪造未发生的事实。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.flow_of(ctx)
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(fctx: Any, node_id: str, **kw: Any) -> Any:
+    """开一个流程 span（fail-open：观测模块不可用时返回空上下文管理器）。"""
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        return contextlib.nullcontext()
+
+
+def _flow_decision(fctx: Any, node_id: str, **kw: Any) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(fctx, node_id, **kw)
     except Exception:
         pass
 
@@ -199,14 +231,16 @@ class RuntimeFacade:
         """完整轮次：prepare → 决策分流 → （GENERATE）进程内生成 → finalize。"""
         state = self._key_state(key)
         async with state.lock:
+            fctx = _flow_ctx(ctx)
             turn_id = uuid.uuid4().hex
             state.last_turn_id = turn_id
             started = time.time()
             # 身份贯通：trace_id 缺失时补一个（入口未建的静默路径也可追溯）；
             # turn_id 写回 ctx，投递回执与效果观察用它关联本轮（计划 §6.1）。
-            if not ctx.trace_id:
-                ctx.trace_id = uuid.uuid4().hex
-            ctx.turn_id = turn_id
+            with _flow_span(fctx, "turn.identity"):
+                if not ctx.trace_id:
+                    ctx.trace_id = uuid.uuid4().hex
+                ctx.turn_id = turn_id
             epoch_before = await self._ensure_epoch(state)
             self._record(
                 turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=epoch_before,
@@ -220,7 +254,8 @@ class RuntimeFacade:
                           "trigger": ctx.trigger, "intent": ctx.intent}
                 if _detail_on(ctx) else None,
             )
-            plan = await pipeline.prepare_turn(ctx)
+            with _flow_span(fctx, "turn.prepare"):
+                plan = await pipeline.prepare_turn(ctx)
             # fence：prepare 期间发生 reset → 本轮作废（epoch 已被推进）
             if state.owner_epoch != epoch_before:
                 self._record(
@@ -231,6 +266,8 @@ class RuntimeFacade:
                 _trace(trace_id=ctx.trace_id, turn_id=turn_id, stage="prepare",
                        status="cancelled", reason_code="reset_during_prepare",
                        scope=f"qq:{ctx.group_id}", started_at=started)
+                _flow_decision(fctx, "turn.cancel", status="cancelled",
+                               reason_code="reset_during_prepare")
                 raise RuntimeTurnError(E_CANCELLED, "prepare 期间发生 reset，本轮作废")
             self._record(
                 turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
@@ -250,6 +287,8 @@ class RuntimeFacade:
                 # （prepare 的调用上限守卫与 thought 日志的「耗时」字段都依赖它们）。
                 ctx.llm_call_count += 1
                 gen_started = time.monotonic()
+                gen_span = _flow_span(fctx, "turn.generate")
+                gen_span.__enter__()
                 task = asyncio.create_task(provider(key, prompt) if self._provider
                                            else _pipeline_provider(pipeline, key, prompt, ctx))
                 state.inflight = task
@@ -259,6 +298,9 @@ class RuntimeFacade:
                     )
                 except asyncio.TimeoutError:
                     # 有界失败：deadline 按 legacy 超时语义兜底（BC-5），不悬挂
+                    gen_span.__exit__(asyncio.TimeoutError, None, None)
+                    _flow_decision(fctx, "turn.timeout", status="timed_out",
+                                   reason_code="provider_deadline")
                     ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
@@ -273,6 +315,7 @@ class RuntimeFacade:
                            scope=f"qq:{ctx.group_id}", started_at=started)
                     return await pipeline.finalize_turn(ctx)
                 except asyncio.CancelledError:
+                    gen_span.__exit__(asyncio.CancelledError, None, None)
                     if state.cancel_requested:
                         self._record(
                             turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
@@ -283,11 +326,18 @@ class RuntimeFacade:
                                stage="model_attempt", status="cancelled",
                                reason_code="cancel_requested", attempt=1,
                                scope=f"qq:{ctx.group_id}", started_at=started)
+                        _flow_decision(fctx, "turn.cancel", status="cancelled",
+                                       reason_code="cancel_requested")
                         raise RuntimeTurnError(E_CANCELLED, "轮次已被取消") from None
+                    _flow_decision(fctx, "turn.cancel", status="cancelled",
+                                   reason_code="external_cancel")
                     raise  # 外部取消（调用方断开等）：原样传播
-                except Exception:
+                except Exception as e:
                     # provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——
                     # 兜底而非上抛，不让异常击穿消息链路
+                    gen_span.__exit__(type(e), e, e.__traceback__)
+                    _flow_decision(fctx, "turn.error", status="failed",
+                                   reason_code="provider_error")
                     ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
@@ -303,6 +353,10 @@ class RuntimeFacade:
                     return await pipeline.finalize_turn(ctx)
                 finally:
                     state.inflight = None
+                gen_span.__exit__(None, None, None)
+                _flow_decision(fctx, "turn.generated", status="succeeded",
+                               metrics={"elapsed_ms": round(
+                                   (time.monotonic() - gen_started) * 1000.0, 1)})
                 ctx.llm_elapsed = time.monotonic() - gen_started
                 ctx.raw_output = str(text)
                 self._record(
@@ -322,6 +376,8 @@ class RuntimeFacade:
             if plan.outcome in (DIRECT, SILENT):
                 # 与 legacy 直回/WAIT 早退语义一致——不执行 finalize
                 # （post hooks 不跑，silent 不得被补成兜底 lines）；生命周期照记。
+                _flow_decision(fctx, "turn.direct_silent", status="skipped",
+                               reason_code=plan.outcome)
                 self._record(
                     turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
                     outcome=plan.outcome, state="completed", started_at=started,
@@ -330,6 +386,8 @@ class RuntimeFacade:
                 return plan.ctx
 
             # BUDGET_LIMITED / NO_BACKEND：本地路径（无生成），仍产兜底 lines
+            _flow_decision(fctx, "turn.fallback", status="blocked",
+                           reason_code=plan.outcome)
             if plan.outcome == BUDGET_LIMITED:
                 ctx.llm_backend = pipeline._llm.backend_name  # type: ignore[union-attr]
             self._record(

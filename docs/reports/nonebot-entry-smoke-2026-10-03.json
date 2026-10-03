@@ -1,0 +1,30 @@
+{
+ "home": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\stella-smoke-i4xat05y",
+ "ws_url": "ws://127.0.0.1:18101/onebot/v11/ws",
+ "status_api": {
+  "alive": true,
+  "pid_matches": true
+ },
+ "ws_connected": true,
+ "trace_facts": {
+  "db_exists": true,
+  "traces": [
+   {
+    "trace_id": "ddcfd9772ddd44d1a5cde787bd06b213",
+    "root_kind": "qq_passive",
+    "status": "closed",
+    "integrity": "complete",
+    "outcome": "passive_only"
+   }
+  ],
+  "event_count": 3,
+  "nodes": [
+   "ingress.passive.filter",
+   "ingress.receive"
+  ]
+ },
+ "takeover_touched_user_instance": false,
+ "verdict": "PASS",
+ "child_returncode": null,
+ "log_tail": "03 13:34:31\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4muvicorn\u001b[0m\u001b[36m\u001b[0m | Application startup complete.\n\u001b[32m10-03 13:34:31\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4muvicorn\u001b[0m\u001b[36m\u001b[0m | Uvicorn running on http://127.0.0.1:18101 (Press CTRL+C to quit)\n[capability][boot] Router 原型预热完成: 1 个\n\u001b[32m10-03 13:34:32\u001b[0m [\u001b[33m\u001b[1mWARNING\u001b[0m] \u001b[36m\u001b[4m__main__\u001b[0m\u001b[36m\u001b[0m | [capability][boot] Router 原型预热完成: 1 个\n[capability][boot] Router 原型预热完成: 1 个\n\u001b[32m10-03 13:34:32\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4muvicorn\u001b[0m\u001b[36m\u001b[0m | 127.0.0.1:65147 - \"GET /stella/status HTTP/1.1\" 200\n\u001b[32m10-03 13:34:32\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4muvicorn\u001b[0m\u001b[36m\u001b[0m | 127.0.0.1:65150 - \"WebSocket /onebot/v11/ws\" [accepted]\n\u001b[32m10-03 13:34:32\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4mwebsockets\u001b[0m\u001b[36m\u001b[0m | connection open\n\u001b[32m10-03 13:34:33\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4mnonebot\u001b[0m\u001b[36m\u001b[0m | \u001b[35mOneBot V11\u001b[0m | \u001b[33mBot 10000\u001b[0m connected\n\u001b[32m10-03 13:34:33\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4mextensions\u001b[0m\u001b[36m\u001b[0m | [LinkMonitor] Bot 10000 已连接\n\u001b[32m10-03 13:34:33\u001b[0m [\u001b[32m\u001b[1mSUCCESS\u001b[0m] \u001b[36m\u001b[4mnonebot\u001b[0m\u001b[36m\u001b[0m | \u001b[35mOneBot V11 10000\u001b[0m | [message.group.normal]: Message 55 from 2001@[群:777] 'Stella 你在吗'\n\u001b[32m10-03 13:34:33\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4mnonebot\u001b[0m\u001b[36m\u001b[0m | Event will be handled by Matcher(type='message', module=stella_project.plugins.bot_main.ai_gateway, lineno=636)\n\u001b[32m10-03 13:34:33\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4mnonebot\u001b[0m\u001b[36m\u001b[0m | Matcher(type='message', module=stella_project.plugins.bot_main.ai_gateway, lineno=636) running complete\n\u001b[32m10-03 13:34:33\u001b[0m [\u001b[1mINFO\u001b[0m] \u001b[36m\u001b[4mbot_main\u001b[0m\u001b[36m\u001b[0m | [chat_debug] is_chat_trigger gid=777 gid_ok=False is_tome=False text='Stella 你在吗' self_id=10000 raw=[MessageSegment(type='text', data={'text': 'Stella 你在吗'})]\n\u001b[32m10-03 13:34:58\u001b[0m [\u001b[33m\u001b[1mWARNING\u001b[0m] \u001b[36m\u001b[4mnonebot\u001b[0m\u001b[36m\u001b[0m | \u001b[35mOneBot V11\u001b[0m | WebSocket for Bot 10000 closed by peer\n\u001b[32m10-03 13:34:58\u001b[0m [\u001b[33m\u001b[1mWARNING\u001b[0m] \u001b[36m\u001b[4mextensions\u001b[0m\u001b[36m\u001b[0m | [LinkMonitor] Bot 10000 连接断开\n"
+}

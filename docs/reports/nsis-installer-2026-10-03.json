@@ -1,0 +1,38 @@
+{
+ "date": "2026-10-03",
+ "scope": "NSIS 安装器全流程验证（计划 §13.16）：真实构建 → 静默安装 → 实装运行 → 卸载",
+ "build": {
+  "chain": "release 同链路：staged bot payload → desktop/src-tauri/resources/stella → cargo tauri build --bundles nsis（tauri-cli 2.12.0）",
+  "payload": "standalone-python staging 树（28MB：bot.py/core/webui/dist 全布局）",
+  "artifact": "desktop/src-tauri/target/release/bundle/nsis/Stella_5.0.0_x64-setup.exe（218MB）",
+  "note": "WebView2 bootstrapper 由 go.microsoft.com 下载（tauri 缓存到 %LOCALAPPDATA%/tauri）；首次因网络断连失败，手动下载入缓存后成功"
+ },
+ "install": {
+  "mode": "静默 /S（首次误入交互模式：Git Bash 把 /S 转成路径——须 MSYS_NO_PATHCONV=1，与 GitNexus 同款陷阱）",
+  "location": "D:\\Stella_working_space\\Stella-e2e-5.0.0（既有注册位置；模板事实『静默 /S 覆盖不卸载、忽略 /D』实测成立）",
+  "layout_verified": {
+   "Stella.exe": true,
+   "resources/stella/bot.py": true,
+   "resources/stella/webui/dist/index.html": true,
+   "dist_assets": 48,
+   "flow_manifests": [
+    "message-flow.378b7fa3f837.json (2026.10.03, 130 nodes, 20 entries)",
+    "message-flow.651a7719add8.json (legacy)"
+   ],
+   "start.bat": true,
+   "payload_size": "28MB"
+  }
+ },
+ "installed_bot_run": {
+  "command": "已安装树内 bot.py 直启（隔离 STELLA_HOME，PORT=18102）",
+  "result": "status API alive（pid 47064, v6.0.1）；参与评分表加载等启动链路正常",
+  "user_instance_safety": "用户 8080 实例全程存活未受影响；接管日志零触碰——deploy 接管按数据根身份校验，不同 STELLA_HOME 的实例不会被误认（设计生效，比预想的 .env PORT 防线更根本）"
+ },
+ "uninstall": {
+  "mode": "uninstall.exe /S",
+  "result": "安装目录 0 文件残留；HKCU Uninstall\\Stella 注册表键已删——与 NSI 模板 923 文件清单卸载合同一致"
+ },
+ "cleanup": "desktop/src-tauri/resources/stella 已恢复 tracked 占位（.gitkeep/placeholder.txt）",
+ "not_done_honestly": "交互式安装 UI 流程与 Tauri 壳首启向导未逐页走查（验证聚焦静默安装/实装/卸载链路）",
+ "verdict": "PASS"
+}

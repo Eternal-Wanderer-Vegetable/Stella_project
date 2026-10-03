@@ -181,7 +181,12 @@ async def _run_comes(ctx: ChatContext, route: Any) -> None:
 
     from capability.comes import execute_all
 
-    results: list[Result] = await execute_all(tasks, event=event)
+    with _flow_span(ctx, "comes.execute_all"):
+        results: list[Result] = await execute_all(tasks, event=event)
+    _flow_decision(ctx, "comes.dispatch", status="succeeded",
+                   metrics={"results": len(results),
+                            "summaries": len([
+                                r for r in results if r.ok and r.summary])})
     ctx.task_results = list(results)
     # 知识库证据走**独立通道**（方案 §6.6 三轨分离）：knowledge.search 的
     # 结构化摘录进 ctx.knowledge_evidence，由 pipeline 套独立预算后渲染引用段；
@@ -253,11 +258,12 @@ async def _run_skills(ctx: ChatContext, route: Any) -> None:
     manifest = rt.catalog.snapshot.get(top.name)
     if manifest is None:  # 目录刚好刷新掉了这个候选：这轮放弃，下轮再说
         return
-    result = await rt.orchestrator.invoke(
-        ctx.message,
-        manifest,
-        session_id=str(ctx.group_shared_space or ctx.group_id or ""),
-    )
+    with _flow_span(ctx, "skills.invoke", instance_key=top.name):
+        result = await rt.orchestrator.invoke(
+            ctx.message,
+            manifest,
+            session_id=str(ctx.group_shared_space or ctx.group_id or ""),
+        )
     ctx.skill_results = [result]
     if result.summary:
         ctx.skill_summaries = [result.summary]
@@ -325,6 +331,43 @@ async def _build_astr_event(ctx: ChatContext) -> Any:
 # ============================================================
 
 
+def _flow_of(ctx: ChatContext):
+    """消息流程 context（计划 §6.2）：未接入/已结束返回 None。"""
+    try:
+        from core.observability import message_flow
+
+        found = message_flow.flow_of(ctx)
+        return None if (found is None or found.ended) else found
+    except Exception:
+        return None
+
+
+def _flow_span(ctx_or_fctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        fctx = ctx_or_fctx
+        if fctx is not None and hasattr(fctx, "group_id"):
+            fctx = _flow_of(fctx)
+        return message_flow.span(fctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+def _flow_decision(ctx_or_fctx, node_id: str, **kw) -> None:
+    try:
+        from core.observability import message_flow
+
+        fctx = ctx_or_fctx
+        if fctx is not None and hasattr(fctx, "group_id"):
+            fctx = _flow_of(fctx)
+        message_flow.decision(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
 async def activate_capabilities(ctx: ChatContext) -> ChatContext:
     """Router 判定 + 并行激活 Memory / Comes。**绝不抛异常。**
 
@@ -333,16 +376,20 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
     """
     s = _settings()
 
-    try:
-        from capability.router import route as route_request
+    with _flow_span(ctx, "capability.route") as route_span:
+        try:
+            from capability.router import route as route_request
 
-        route = await route_request(ctx.message, intent=ctx.intent, trigger=ctx.trigger)
-    except Exception as e:
-        # route() 内部已有全套降级，走到这里说明 import 或更底层出了问题
-        from capability.router.types import default_route
+            route = await route_request(ctx.message, intent=ctx.intent, trigger=ctx.trigger)
+        except Exception as e:
+            # route() 内部已有全套降级，走到这里说明 import 或更底层出了问题
+            from capability.router.types import default_route
 
-        _logger().warning(f"⚠️ [Router] 路由入口异常，降级为 chat+memory: {e}")
-        route = default_route(f"路由入口异常: {e}")
+            _logger().warning(f"⚠️ [Router] 路由入口异常，降级为 chat+memory: {e}")
+            route = default_route(f"路由入口异常: {e}")
+        route_span.finish(status="succeeded", metrics={
+            "memory": bool(route.memory), "tool": bool(getattr(route, "tool", False)),
+        })
     ctx.route = route
 
     # Cometa 委派分支（design_docs/Cometa 外部 Agent 任务运行层实施方案 §6.4）：
@@ -351,12 +398,17 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
     # 分支内部吞掉一切异常：委派层坏了的后果是「当普通聊天处理」。
     delegation_handled = False
     if s.COMETA_ENABLED:
+        _flow_decision(ctx, "capability.cometa", status="waiting",
+                       reason_code="delegation_check")
         try:
             from capability.delegation import handle_delegation_turn
 
             delegation_handled = await handle_delegation_turn(ctx, route)
         except Exception as e:
             _logger().warning(f"⚠️ [Cometa] 委派分支异常（已跳过）: {e!r}")
+        _flow_decision(ctx, "capability.cometa",
+                       status="succeeded" if delegation_handled else "skipped",
+                       reason_code="delegated" if delegation_handled else "local")
 
     jobs: list[Any] = []
     labels: list[str] = []
@@ -383,11 +435,23 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
         labels.append("skills")
 
     if not jobs:
+        _flow_decision(ctx, "capability.fanout", status="skipped",
+                       reason_code="no_branch_enabled")
         return ctx
 
     # return_exceptions=True：一条分支炸了不能拖掉另一条。
     # 记忆挂了这轮就少几条记忆，工具挂了这轮就没有工具结果，两者都不该中断回复。
-    outcomes = await asyncio.gather(*jobs, return_exceptions=True)
+    with _flow_span(ctx, "capability.fanout") as fan_span:
+        outcomes = await asyncio.gather(*jobs, return_exceptions=True)
+        fan_span.finish(status="succeeded", metrics={"branches": labels})
+    failures = sum(1 for o in outcomes if isinstance(o, BaseException))
+    # isolation 的语义是「失败分支已被隔离」：只要 gather 正常返回就是成功事实
+    _flow_decision(
+        ctx, "capability.isolation",
+        status="succeeded",
+        reason_code="branch_isolated" if failures else "all_ok",
+        metrics={"branches": labels, "failures": failures},
+    )
     for label, outcome in zip(labels, outcomes, strict=False):
         if isinstance(outcome, BaseException):
             _logger().warning(f"⚠️ [Capability] {label} 分支异常（已跳过）: {outcome!r}")

@@ -63,8 +63,23 @@ def _resolve_pipeline():
     return ai_gateway.pipeline
 
 
-async def run_turn(message: str, username: str) -> dict:
-    """跑一轮 WebChat 对话，返回 {lines, thought, ts}。"""
+def _flow_span(flow_ctx, node_id: str, **kw):
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(flow_ctx, node_id, **kw)
+    except Exception:
+        import contextlib
+
+        return contextlib.nullcontext()
+
+
+async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
+    """跑一轮 WebChat 对话，返回 {lines, thought, ts}。
+
+    ``flow_ctx``：router 鉴权后建的流程 root（计划 §6.2）；缺省时这里
+    兜底自建（直连调用方仍可观测）。
+    """
     from core.context import ChatContext
     from core.social.contracts import (
         DELIVERY_ACKNOWLEDGED,
@@ -77,6 +92,16 @@ async def run_turn(message: str, username: str) -> dict:
     from memory.pre_processors import record_message
 
     _ensure_webchat_space()
+    if flow_ctx is None:
+        try:
+            from core.observability import message_flow
+
+            flow_ctx = message_flow.begin_trace(
+                root_kind="webchat", platform="webchat", scope="webchat",
+                source_message_key=f"webchat:{username}:{new_trace_id()[:8]}",
+            )
+        except Exception:
+            flow_ctx = None
     ctx = ChatContext(
         user_id=WEBCHAT_USER_ID,
         group_id=WEBCHAT_GROUP_ID,
@@ -85,31 +110,51 @@ async def run_turn(message: str, username: str) -> dict:
         source_kind="AT_MENTION",
         group_shared_space=WEBCHAT_SPACE,
         trigger="reply",
-        trace_id=new_trace_id(),
+        # 身份绑定：root 已有 trace_id 就共用（facade 不再另造，计划 §6.2）
+        trace_id=getattr(flow_ctx, "trace_id", "") or new_trace_id(),
     )
-    await record_message(ctx)
+    try:
+        from core.observability import message_flow
 
+        message_flow.attach(ctx, flow_ctx)
+    except Exception:
+        pass
+    with _flow_span(flow_ctx, "web.space_context"):
+        await record_message(ctx)
+
+    outcome = "delivered"
     pipeline = _resolve_pipeline()
-    async with _lock:  # 同群串行（等价群级锁语义）
-        # 轮次经 facade（prepare/finalize 留 Python，生成是进程内 provider
-        # 调用）；锁语义由 facade per-key owner 接管
-        from core.runtime.facade import ensure_shared_facade_started
+    with _flow_span(flow_ctx, "web.session_lock"):
+        async with _lock:  # 同群串行（等价群级锁语义）
+            # 轮次经 facade（prepare/finalize 留 Python，生成是进程内 provider
+            # 调用）；锁语义由 facade per-key owner 接管
+            from core.runtime.facade import ensure_shared_facade_started
 
-        facade = await ensure_shared_facade_started()
-        ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
+            facade = await ensure_shared_facade_started()
+            try:
+                ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
+            except Exception as e:
+                # reset 取消不是失败（计划 §6.9）：root 终态照实区分后原样上抛
+                cancelled = type(e).__name__ == "RuntimeTurnError" and getattr(e, "code", "") == "E_CANCELLED"
+                _end_flow(flow_ctx, "cancelled" if cancelled else "error")
+                raise
 
     lines = [line for line in (ctx.lines or []) if line.strip()]
-    for line in lines:  # 回复按 BOT_SELF 落库，给下一轮整合提供语境
-        await record_message(
-            ChatContext(
-                user_id=WEBCHAT_USER_ID,
-                group_id=WEBCHAT_GROUP_ID,
-                msg_id=0,
-                message=line,
-                source_kind="BOT_SELF",
-                group_shared_space=WEBCHAT_SPACE,
+    with _flow_span(flow_ctx, "web.output") as out_span:
+        for line in lines:  # 回复按 BOT_SELF 落库，给下一轮整合提供语境
+            await record_message(
+                ChatContext(
+                    user_id=WEBCHAT_USER_ID,
+                    group_id=WEBCHAT_GROUP_ID,
+                    msg_id=0,
+                    message=line,
+                    source_kind="BOT_SELF",
+                    group_shared_space=WEBCHAT_SPACE,
+                )
             )
-        )
+        out_span.finish(status="succeeded" if lines else "skipped",
+                        reason_code="" if lines else "empty_lines",
+                        metrics={"lines": len(lines)})
     # server_emitted 投递事实（计划 §6.1）：面板对话的「服务端已产出回复」
     # 与 QQ 平台 acknowledged 是两种投递语义，以 platform='webchat' 区分；
     # 群社交效果学习默认只认 platform='qq'，WebChat 行不进入任何群归因。
@@ -130,7 +175,19 @@ async def run_turn(message: str, username: str) -> dict:
                         scope=scope,
                     )
                 )
+    else:
+        outcome = "empty"
+    _end_flow(flow_ctx, outcome)
     return {"lines": lines, "thought": ctx.thought}
+
+
+def _end_flow(flow_ctx, outcome: str) -> None:
+    try:
+        from core.observability import message_flow
+
+        message_flow.end_trace(flow_ctx, outcome=outcome)
+    except Exception:
+        pass
 
 
 async def reset_webchat_runtime() -> None:

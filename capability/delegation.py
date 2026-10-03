@@ -206,6 +206,33 @@ def _origin_of(ctx: ChatContext) -> dict | None:
     return None
 
 
+def _flow_on_submit(ctx: ChatContext, receipt) -> None:
+    """受理事实入流程（计划 §6.3 G）：提交决策 + 独立 cometa root + 关联。
+
+    任务执行可能跨进程，root 在受理时即创建（worker 经 by_source_key
+    复用同一 root）；关联是显式 relation，不依赖 ContextVar 跨进程。
+    """
+    try:
+        from core.observability import message_flow
+
+        fctx = message_flow.flow_of(ctx)
+        if fctx is not None and not fctx.ended:
+            message_flow.decision(
+                fctx, "delegation.submit", status="succeeded",
+                metrics={"task_id": receipt.task_id[:8]})
+        task_key = f"cometa:{receipt.task_id}"
+        root = message_flow.by_source_key(task_key)
+        if root is None:
+            root = message_flow.begin_trace(
+                root_kind="cometa_task", platform="cometa", scope="",
+                source_message_key=task_key)
+        if fctx is not None:
+            message_flow.link(fctx.trace_id, root.trace_id,
+                              kind="spawned", evidence="delegation_submit")
+    except Exception:
+        pass
+
+
 async def handle_delegation_turn(ctx: ChatContext, route) -> bool:
     """委派层接管本轮则返回 True（已写 ctx.reply/lines，prepare_turn 直回）。
 
@@ -267,6 +294,7 @@ async def _handle(ctx: ChatContext, route) -> bool:
             return True
         if receipt is None:
             return False  # 提交未成功：按普通聊天继续（不做假回执）
+        _flow_on_submit(ctx, receipt)
         return _set_ack(ctx, service, receipt)
 
     if decision.action in ("status", "result", "cancel", "input"):

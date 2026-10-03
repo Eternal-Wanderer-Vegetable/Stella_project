@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { formatDbTime } from '@/utils/time';
 
 import { api, unwrap } from '@/api/http';
 
@@ -182,7 +183,7 @@ onBeforeUnmount(() => {
             {{ item.message || '(空)' }}
           </v-list-item-title>
           <v-list-item-subtitle>
-            {{ item.ts }} · 群 {{ item.group_id }} · 用户 {{ item.user_id }} ·
+            {{ formatDbTime(item.ts) }} · 群 {{ item.group_id }} · 用户 {{ item.user_id }} ·
             采纳 {{ item.counts.final }} / 候选 {{ item.counts.candidates }} · 淘汰
             {{ item.counts.rejected }}
           </v-list-item-subtitle>
@@ -209,7 +210,7 @@ onBeforeUnmount(() => {
             得分 {{ Math.round(item.final_score) }} · 话题相关度 {{ item.relevance?.toFixed?.(2) }}
           </v-list-item-title>
           <v-list-item-subtitle>
-            {{ item.ts }} · 群 {{ item.group_id }}
+            {{ formatDbTime(item.ts) }} · 群 {{ item.group_id }}
             <v-chip
               v-for="flag in item.reason_flags"
               :key="flag"
