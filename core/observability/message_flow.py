@@ -423,7 +423,12 @@ class _Writer:
 
     def _run(self) -> None:  # pragma: no cover - 线程主循环（由 flush 驱动测试）
         while True:
-            item, extra = self._q.get()
+            try:
+                item, extra = self._q.get(timeout=_HEARTBEAT_INTERVAL)
+            except queue.Empty:
+                # 空闲唤醒：为在跑 run 跳一次心跳（长静默 run 的 O01 活性）
+                self._heartbeat_tick()
+                continue
             if item is _WRITER_STOP:
                 return
             batch: list[tuple] = []
@@ -446,7 +451,10 @@ class _Writer:
                 batch.append((item2, extra2))
             if batch:
                 self._write_batch(batch)
-            self._heartbeat_tick(force=bool(batch))
+            # 心跳按间隔节流（15s）：逐批 UPDATE+commit 的 fsync 会把吞吐
+            # 压掉一个量级（容量基准实测），心跳只需秒级新鲜度（O01 判定
+            # 阈值 120s）
+            self._heartbeat_tick()
             if barrier is not None:
                 barrier.set()
 

@@ -1,0 +1,40 @@
+{
+ "date": "2026-10-03",
+ "dataset_100k": {
+  "bench": "dataset_export_100k",
+  "exported": 100000,
+  "seconds": 1.45,
+  "rows_per_second": 69071,
+  "jsonl_mb": 23.5
+ },
+ "long_run_drain": {
+  "bench": "long_run_backlog_drain",
+  "runs": 200,
+  "sustained": {
+   "profile": "200 runs x 50 rows @ ~5K rows/s（生产行数量级）",
+   "seconds": 2.11,
+   "dropped": 0
+  },
+  "burst_overload": {
+   "profile": "26K rows in a 0.2s burst（远超生产行数量级）",
+   "seconds": 0.12,
+   "dropped_total": 17952,
+   "note": "有界队列按设计丢弃并按 run 归账；热路径不受影响"
+  },
+  "drain_seconds": 0.71,
+  "queue_after": 0,
+  "integrity_complete": 200,
+  "integrity_partial": 64,
+  "events_persisted": 20189
+ },
+ "prune": {
+  "bench": "prune_retention",
+  "pruned": {
+   "traces": 1,
+   "events": 2,
+   "spans": 1,
+   "entity_events": 0
+  },
+  "traces_kept": 1
+ }
+}
