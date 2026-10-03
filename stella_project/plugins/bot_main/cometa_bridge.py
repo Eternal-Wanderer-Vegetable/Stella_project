@@ -208,17 +208,30 @@ def make_notification_sender(
                 return receipt or None
 
             payload = payload or {}
+            full_ref = str(payload.get("full_text_ref") or "")
             full_chars = int(payload.get("full_text_chars") or 0)
-            note = ""
-            if full_chars > 0:
-                # 长结果私聊降级（计划 §6.8/§12 假设 4）：私聊文件/转发 API 能力
-                # 未经真实 adapter 验证，不做 upload_private_file 尝试，直接
-                # 文本摘要 + WebUI 任务页指针；绝不把 user_id 塞进群投递 API。
-                note = (
-                    f"\n📄 完整结果约 {full_chars} 字，过长未全文附上；"
+            body = text
+            if full_ref and 0 < full_chars <= file_above_chars:
+                # 阈值内的短结果：**完整结果直接进私聊**（摘要只是首行截取，
+                # 藏全文违背交付预期——2026-10-03 真机反馈）。私聊不做
+                # 文件/转发（能力未验证），但短文本全量送达没有障碍。
+                full_path = artifacts_dir / task_id / full_ref
+                try:
+                    full_text = full_path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    full_text = ""
+                if full_text:
+                    head_line = text.split("\n", 1)[0]
+                    body = f"{head_line}\n\n{full_text}"
+            elif full_chars > file_above_chars:
+                # 真超长：私聊降级（计划 §6.8/§12 假设 4）——不做
+                # upload_private_file 尝试，文本摘要 + WebUI 任务页指针；
+                # 绝不把 user_id 塞进群投递 API。
+                body = (
+                    f"{text}\n📄 完整结果约 {full_chars} 字，过长未全文附上；"
                     "可在 WebUI 任务页查看全文。"
                 )
-            receipt = await send_private_text(f"{text}{note}")
+            receipt = await send_private_text(body)
             with contextlib.suppress(Exception):
                 logger.info(
                     f"📤 [Cometa] 通知已投递到私聊 {private_peer}"
