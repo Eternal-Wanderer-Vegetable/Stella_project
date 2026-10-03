@@ -23,6 +23,7 @@ import time
 import uuid
 
 from nonebot import logger
+from typing_extensions import Self
 
 from config import (
     DB_PATH,
@@ -53,6 +54,78 @@ from memory.schema import (
 )
 from memory.text_similarity import is_similar, merge_content, same_normalized_text
 
+# ── 晋升流程观测探针（计划 §6.3 memory.promotion.*；M2）────────────────
+# 旁路纪律（最高优先级）：ctx 为 None（观测未接入）或任何观测异常都不影响
+# 晋升业务；探针绝不进入业务事务/锁——flow 事件与 entity_history 都走
+# message_flow 有界 writer 队列（put_nowait），与业务连接无关。
+# metrics 只记 id / 计数 / 阈值 / 数值，不记候选正文（计划 §6.1 隐私）。
+
+
+class _NoopSpan:
+    """空转 span：观测通道故障时保证 with 与显式 finish() 都安全。"""
+
+    def finish(self, **kw) -> None:
+        pass
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+def _probe_span(ctx, node_id: str, **kw):
+    """开观测 span；ctx=None 时 message_flow.span 自带空转实现，异常降级 _NoopSpan。"""
+    if ctx is None:
+        return _NoopSpan()
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(ctx, node_id, **kw)
+    except Exception:
+        return _NoopSpan()
+
+
+def _probe_decision(ctx, node_id: str, **kw) -> None:
+    """决策点探针：全量 fail-open，绝不抛。"""
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(ctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _probe_checkpoint(ctx, node_id: str, **kw) -> None:
+    """过程事实探针：全量 fail-open，绝不抛。"""
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        message_flow.checkpoint(ctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _gate_reason_code(reason: str) -> str:
+    """Gate 1 原因文案 → 稳定 reason_code（决策事实可按码聚合，计划 §6.3）。"""
+    if "重要度不足" in reason:
+        return "importance_below_min"
+    if "高置信" in reason:
+        return "high_confidence"
+    if "AT_MENTION" in reason:
+        return "at_mention_single_shot"
+    if "交叉验证" in reason:
+        return "occurrence_threshold"
+    if "证据不足" in reason:
+        return "insufficient_evidence"
+    if "置信度不足" in reason:
+        return "low_confidence"
+    return "other"
+
 
 class MemoryManager:
     """记忆候选晋升为长期记忆的管理器。
@@ -66,6 +139,10 @@ class MemoryManager:
     """
 
     def __init__(self):
+        # 对象履历缓冲：本批次业务事务内的状态写入先攒在这里，等
+        # conn.commit() 成功后再统一落账（_flush_history，计划 §6.1）；
+        # 提交失败即随事务丢弃——回滚了的写入不能留下「已发生」的履历。
+        self._history_buffer: list[tuple[str, str, str, str, str, dict]] = []
         self._ensure_tables()
 
     def _connect(self) -> sqlite3.Connection:
@@ -99,47 +176,123 @@ class MemoryManager:
         with contextlib.suppress(Exception):
             ensure_v2_schema(DB_PATH)
 
-    def process_new_candidates(self) -> None:
+    def process_new_candidates(self, *, flow_ctx=None) -> None:
         """Process candidates with the configured backend.
 
         Python remains the default. Rust is only asked to handle the bounded
         database transaction; the Python gate and post-commit hooks stay here.
+
+        ``flow_ctx``（计划 §6.3 memory.promotion.batch，M2）：调用方已有父 trace
+        （consolidate_group 整合批次）时显式传入——复用调用方 ctx 开子 span，
+        不自建 root 也不 end_trace；None 时自建独立 ``memory_promotion`` root
+        （origin=spawn，scope=共享空间键）。晋升批可能处理当前群以外的既存候选，
+        与触发消息只有 cause 关联（actual scope 落在 memory.promotion.batch
+        checkpoint 的 spaces metrics 里），不冒充触发消息的子步骤。
         """
         from memory_rust.selector import configured_mode, resolve_backend
 
-        mode = configured_mode()
-        if mode in {"auto", "rust", "strict"}:
-            decision, backend = resolve_backend(mode)
-            logger.info(
-                f"[MemoryBackend] promotion backend selected: {backend.name} (requested={decision.requested})"
-            )
-            if backend.name == "rust":
-                started = time.perf_counter()
-                try:
-                    self._process_new_candidates_rust(decision, backend)
-                except Exception as exc:
-                    elapsed_ms = (time.perf_counter() - started) * 1000
-                    if decision.requested != "auto":
-                        logger.error(
-                            f"[MemoryBackend] Rust promotion failed in non-fallback mode "
+        # root 生命周期：只在无人传父 trace 时自建（旁路：创建失败按 None 空转）。
+        own_root = None
+        if flow_ctx is None:
+            try:
+                from core.observability import message_flow
+
+                own_root = message_flow.begin_trace(
+                    root_kind="memory_promotion", origin="spawn",
+                    scope="memory_shared",
+                )
+            except Exception:
+                own_root = None
+        # ctx 经实例属性下传给内部方法：既有测试用零参替身替换
+        # _process_new_candidates_python，内部签名必须保持零参兼容。
+        # process_new_candidates 全程同步（无 await），事件循环内不会重入。
+        self._flow_ctx = flow_ctx if flow_ctx is not None else own_root
+        self._batch_span = (
+            _NoopSpan() if own_root is not None
+            else _probe_span(self._flow_ctx, "memory.promotion.batch")
+        )
+        outcome = "done"
+        try:
+            mode = configured_mode()
+            if mode in {"auto", "rust", "strict"}:
+                decision, backend = resolve_backend(mode)
+                logger.info(
+                    f"[MemoryBackend] promotion backend selected: {backend.name} (requested={decision.requested})"
+                )
+                # 后端解析事实（计划 §6.3 memory.promotion.backend）：实际
+                # backend / 请求模式 / fallback 原因分开记录，不统一画成假想事务。
+                _probe_decision(self._flow_ctx, "memory.promotion.backend",
+                                status="succeeded", reason_code=backend.name,
+                                metrics={"mode": mode, "requested": decision.requested,
+                                         "backend": backend.name,
+                                         "fallback_reason": decision.fallback_reason or ""})
+                if backend.name == "rust":
+                    started = time.perf_counter()
+                    try:
+                        self._process_new_candidates_rust(decision, backend)
+                    except Exception as exc:
+                        elapsed_ms = (time.perf_counter() - started) * 1000
+                        _probe_decision(self._flow_ctx, "memory.promotion.backend",
+                                        status="failed", reason_code="rust_error",
+                                        error_code=type(exc).__name__,
+                                        metrics={"mode": mode,
+                                                 "elapsed_ms": round(elapsed_ms, 1)})
+                        if decision.requested != "auto":
+                            logger.error(
+                                f"[MemoryBackend] Rust promotion failed in non-fallback mode "
+                                f"(elapsed_ms={elapsed_ms:.1f}): {type(exc).__name__}: {exc}"
+                            )
+                            outcome = "rust_failed"
+                            # strict 模式失败原样上抛：观测不吞（计划 §6.3）
+                            raise
+                        logger.warning(
+                            f"[MemoryBackend] Rust promotion fallback to Python "
                             f"(elapsed_ms={elapsed_ms:.1f}): {type(exc).__name__}: {exc}"
                         )
-                        raise
-                    logger.warning(
-                        f"[MemoryBackend] Rust promotion fallback to Python "
-                        f"(elapsed_ms={elapsed_ms:.1f}): {type(exc).__name__}: {exc}"
+                        outcome = "fallback_python"
+                        _probe_decision(self._flow_ctx, "memory.promotion.backend",
+                                        status="skipped", reason_code="auto_fallback_python",
+                                        metrics={"mode": mode,
+                                                 "error_code": type(exc).__name__})
+                        try:
+                            return self._process_new_candidates_python()
+                        except BaseException:
+                            outcome = "error"
+                            raise
+                    logger.info(
+                        f"[MemoryBackend] Rust promotion committed "
+                        f"(elapsed_ms={(time.perf_counter() - started) * 1000:.1f})"
                     )
-                    return self._process_new_candidates_python()
-                logger.info(
-                    f"[MemoryBackend] Rust promotion committed "
-                    f"(elapsed_ms={(time.perf_counter() - started) * 1000:.1f})"
-                )
-                return None
-            if decision.fallback_reason:
-                logger.warning(
-                    f"[MemoryBackend] Rust promotion unavailable; using Python: {decision.fallback_reason}"
-                )
-        return self._process_new_candidates_python()
+                    return None
+                if decision.fallback_reason:
+                    logger.warning(
+                        f"[MemoryBackend] Rust promotion unavailable; using Python: {decision.fallback_reason}"
+                    )
+            else:
+                _probe_decision(self._flow_ctx, "memory.promotion.backend",
+                                status="succeeded", reason_code="python",
+                                metrics={"mode": mode, "backend": "python"})
+            return self._process_new_candidates_python()
+        except BaseException:
+            if outcome == "done":
+                outcome = "error"
+            raise
+        finally:
+            if self._batch_span is not None:
+                with contextlib.suppress(Exception):
+                    self._batch_span.finish(
+                        status="failed" if outcome in ("error", "rust_failed") else "succeeded",
+                        reason_code="" if outcome == "done" else outcome)
+            self._flow_ctx = None
+            self._batch_span = None
+            if own_root is not None:
+                try:
+                    from core.observability import message_flow
+
+                    if not own_root.ended:
+                        message_flow.end_trace(own_root, outcome=outcome)
+                except Exception:
+                    pass
 
     @staticmethod
     def _candidate_from_row(row) -> dict:
@@ -162,12 +315,64 @@ class MemoryManager:
             "source_kind": row[15] or "PASSIVE",
         }
 
+    # ── 观测辅助（计划 §6.1 对象履历；旁路纪律见模块头注释）──────────
+
+    def _history_buffer_append(self, event: tuple[str, str, str, str, str, dict]) -> None:
+        """把一条状态变化写入本批履历缓冲（业务 commit 成功后由 _flush_history 落账）。
+
+        缓冲不存在（未走 process_new_candidates 的直接方法调用，如单测）时静默丢弃。
+        """
+        buf = getattr(self, "_history_buffer", None)
+        if buf is not None:
+            buf.append(event)
+
+    def _flush_history(self) -> None:
+        """把履历缓冲落账（只在业务 conn.commit() 成功之后调用，计划 §6.1）。
+
+        entity_history.record 走 message_flow 有界 writer 队列（put_nowait），
+        不在业务事务/锁内；单条失败返回 "" 不抛（旁路绝不影响业务）。
+        trace_id 只在显式传入 flow_ctx 时可关联，否则为空（不猜）。
+        """
+        events = getattr(self, "_history_buffer", None)
+        self._history_buffer = []
+        if not events:
+            return
+        ctx = getattr(self, "_flow_ctx", None)
+        trace_id = str(getattr(ctx, "trace_id", "") or "") if ctx is not None else ""
+        try:
+            from core.observability import entity_history
+
+            for etype, eid, scope, from_state, to_state, changed in events:
+                entity_history.record(
+                    etype, eid, scope=scope, trace_id=trace_id,
+                    from_state=from_state, to_state=to_state,
+                    changed_fields=changed,
+                )
+        except Exception:
+            pass
+
+    @staticmethod
+    def _gate_metrics(candidate: dict) -> dict:
+        """Gate 1 门槛事实：阈值与实际值同落（计划 §6.3 memory.promotion.gate）。"""
+        return {
+            "importance": candidate["importance"],
+            "confidence": candidate["confidence"],
+            "occurrence": candidate["occurrence_count"],
+            "at_mention_evidence": MemoryManager._has_at_mention(candidate["source_kinds"]),
+            "threshold_min_importance": MEMORY_PROMOTE_MIN_IMPORTANCE,
+            "threshold_high_confidence": MEMORY_CONFIRM_HIGH_CONFIDENCE,
+            "threshold_low_confidence": MEMORY_OBSERVE_LOW_CONFIDENCE,
+            "threshold_min_occurrence": MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE,
+            "at_mention_single_shot": MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT,
+        }
+
     def _process_new_candidates_rust(self, decision, backend) -> None:
         """Run one native transaction per candidate and keep Python side effects."""
         from memory_rust.backend import PromotionRequest
 
         if not DB_PATH.exists():
             return
+        ctx = getattr(self, "_flow_ctx", None)
         conn = self._connect()
         cursor = conn.cursor()
         self._ensure_tables()
@@ -183,49 +388,103 @@ class MemoryManager:
         logger.info(
             f"[MemoryBackend] Rust promotion candidates={len(rows)}"
         )
+        # 批次事实（计划 §6.3 memory.promotion.batch）：actual scope（候选可能
+        # 来自当前群以外的空间）与条数，不把全部结果归到触发消息。
+        _probe_checkpoint(ctx, "memory.promotion.batch",
+                          metrics={"candidates": len(rows), "backend": "rust",
+                                   "spaces": sorted({str(r[1]) for r in rows})[:8]})
 
         promoted = False
         for row in rows:
             candidate = self._candidate_from_row(row)
-            should_promote, reason = self._decide_promotion(candidate)
-            if not should_promote:
-                status_conn = self._connect()
-                status_conn.execute(
-                    "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    ("OBSERVING", candidate["id"]),
-                )
-                status_conn.commit()
-                status_conn.close()
-                logger.debug(
-                    f"[MemoryManager] candidate {candidate['id']} -> OBSERVING: {reason}"
-                )
-                continue
+            instance_key = f"cand:{candidate['id']}"
+            with _probe_span(ctx, "memory.promotion.gate",
+                             instance_key=instance_key) as gate_span:
+                should_promote, reason = self._decide_promotion(candidate)
+                # 逐候选门槛事实（计划 §6.3 memory.promotion.gate）：阈值与
+                # 实际值（importance/confidence/occurrence/来源认可）同落。
+                _probe_decision(ctx, "memory.promotion.gate",
+                                status="succeeded" if should_promote else "skipped",
+                                reason_code=_gate_reason_code(reason), summary=reason,
+                                instance_key=instance_key,
+                                metrics=self._gate_metrics(candidate))
+                if not should_promote:
+                    status_conn = self._connect()
+                    status_conn.execute(
+                        "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        ("OBSERVING", candidate["id"]),
+                    )
+                    status_conn.commit()
+                    status_conn.close()
+                    # Rust 侧 OBSERVING 是独立小事务：提交成功后再落履历（计划 §5）
+                    self._history_buffer_append((
+                        "memory_candidate", str(candidate["id"]),
+                        str(candidate["group_shared_space"]),
+                        candidate["status"], "OBSERVING",
+                        {"action": "gate_hold", "backend": "rust",
+                         "reason_code": _gate_reason_code(reason)},
+                    ))
+                    self._flush_history()
+                    gate_span.finish(status="skipped",
+                                     reason_code=_gate_reason_code(reason))
+                    logger.debug(
+                        f"[MemoryManager] candidate {candidate['id']} -> OBSERVING: {reason}"
+                    )
+                    continue
 
-            request = PromotionRequest(
-                db_path=DB_PATH,
-                candidate_id=str(candidate["id"]),
-                group_shared_space=str(candidate["group_shared_space"]),
-                user_id=str(candidate["user_id"]),
-                memory_type=str(candidate["type"]),
-                quota_limit=MEMORY_USER_QUOTA,
-                quota_enforce=MEMORY_QUOTA_ENFORCE,
-                quota_confirmation_cap=MEMORY_QUOTA_CONFIRMATION_CAP,
-                quota_weight_importance=MEMORY_QUOTA_W_IMPORTANCE,
-                quota_weight_confirmation=MEMORY_QUOTA_W_CONFIRMATION,
-                quota_weight_recency=MEMORY_QUOTA_W_RECENCY,
-                fts_enabled=RAG_ENABLED and RAG_SQLITE_FTS_ENABLED,
-            )
-            result = backend.promote(request)
-            result_promoted = (
-                result.get("promoted", False)
-                if isinstance(result, dict)
-                else bool(getattr(result, "promoted", False))
-            )
-            if result_promoted:
-                promoted = True
-                logger.info(
-                    f"[MemoryManager] Rust promoted candidate {candidate['id']}: {reason}"
+                request = PromotionRequest(
+                    db_path=DB_PATH,
+                    candidate_id=str(candidate["id"]),
+                    group_shared_space=str(candidate["group_shared_space"]),
+                    user_id=str(candidate["user_id"]),
+                    memory_type=str(candidate["type"]),
+                    quota_limit=MEMORY_USER_QUOTA,
+                    quota_enforce=MEMORY_QUOTA_ENFORCE,
+                    quota_confirmation_cap=MEMORY_QUOTA_CONFIRMATION_CAP,
+                    quota_weight_importance=MEMORY_QUOTA_W_IMPORTANCE,
+                    quota_weight_confirmation=MEMORY_QUOTA_W_CONFIRMATION,
+                    quota_weight_recency=MEMORY_QUOTA_W_RECENCY,
+                    fts_enabled=RAG_ENABLED and RAG_SQLITE_FTS_ENABLED,
                 )
+                try:
+                    result = backend.promote(request)
+                except Exception as exc:
+                    # Rust 事务失败：attempted/rolled_back 事实（计划 §5/§6.1）。
+                    # 异常继续上抛，由 strict/auto 策略决定后续（观测不吞）。
+                    _probe_decision(ctx, "memory.promotion.commit",
+                                    status="failed", reason_code="rolled_back",
+                                    fact_kind="commit", instance_key=instance_key,
+                                    error_code=type(exc).__name__,
+                                    metrics={"backend": "rust"})
+                    raise
+                result_promoted = (
+                    result.get("promoted", False)
+                    if isinstance(result, dict)
+                    else bool(getattr(result, "promoted", False))
+                )
+                if result_promoted:
+                    promoted = True
+                    action = (
+                        str(result.get("action", "") or "")
+                        if isinstance(result, dict)
+                        else str(getattr(result, "action", "") or "")
+                    )
+                    # Rust 的 IMMEDIATE 事务在 promote 返回前已提交
+                    # （promotion.rs）：返回即提交确认，commit 事实在此之后。
+                    _probe_decision(ctx, "memory.promotion.commit",
+                                    status="succeeded", fact_kind="commit",
+                                    instance_key=instance_key,
+                                    metrics={"backend": "rust", "action": action})
+                    self._history_buffer_append((
+                        "memory_candidate", str(candidate["id"]),
+                        str(candidate["group_shared_space"]),
+                        candidate["status"], "CONFIRMED",
+                        {"action": action or "promoted", "backend": "rust"},
+                    ))
+                    self._flush_history()
+                    logger.info(
+                        f"[MemoryManager] Rust promoted candidate {candidate['id']}: {reason}"
+                    )
 
         if promoted:
             bump_memory_history()
@@ -244,15 +503,23 @@ class MemoryManager:
         3. 新旧都同步 FTS 索引；
         4. 提交后驱动轻量压缩（见注释）。
         副作用：修改 memory_candidates / memories / FTS 等表。
+
+        观测（计划 §6.3，M2）：逐候选 gate/conflict/merge/create/quota 节点；
+        memory.promotion.commit 事实节点在业务 ``conn.commit()`` 成功**之后**
+        发 succeeded（fact_kind=commit），失败发 failed(rolled_back)——事务
+        诚实：未提交的晋升绝不显示为已提交。对象履历在提交成功后统一落账。
         """
         if not DB_PATH.exists():
             return
+        ctx = getattr(self, "_flow_ctx", None)
         conn = self._connect()
         cursor = conn.cursor()
         self._ensure_tables()
 
         # 先淘汰超期候选，避免它们参与本轮评估
-        self._reject_stale_candidates(cursor)
+        stale_rejected = self._reject_stale_candidates(cursor)
+        _probe_checkpoint(ctx, "memory.promotion.batch",
+                          metrics={"stale_rejected": stale_rejected, "backend": "python"})
 
         # 按创建时间先后处理，避免同批候选间的顺序抖动
         candidates = cursor.execute(
@@ -261,7 +528,13 @@ class MemoryManager:
             "occurrence_count, source_kinds, source_kind, origin_group_id"
             " FROM memory_candidates WHERE status IN ('NEW', 'OBSERVING') ORDER BY created_at ASC"
         ).fetchall()
+        # 批次事实：actual scope（候选可能来自当前群以外的空间）与条数
+        _probe_checkpoint(ctx, "memory.promotion.batch",
+                          metrics={"candidates": len(candidates), "backend": "python",
+                                   "spaces": sorted({str(r[1]) for r in candidates})[:8]})
 
+        # 本批状态写入都在同一个业务事务里：履历先入缓冲，提交成功后落账
+        self._history_buffer = []
         promoted = False
         for row in candidates:
             candidate = {
@@ -282,43 +555,102 @@ class MemoryManager:
                 "source_kinds": row[14] or '["PASSIVE"]',
                 "source_kind": row[15] or "PASSIVE",
             }
+            instance_key = f"cand:{candidate['id']}"
 
-            # ── Gate 1 三档判定：置信度 + 证据充分度（来源等级 / 复现次数） ──
-            should_promote, reason = self._decide_promotion(candidate)
-            if not should_promote:
+            # ── 逐候选实例 span（计划 §6.1 instance 合同）：同节点的多个候选
+            # 各自独立成实例，聚合状态不会互相覆盖 ──
+            with _probe_span(ctx, "memory.promotion.gate",
+                             instance_key=instance_key) as gate_span:
+                # ── Gate 1 三档判定：置信度 + 证据充分度（来源等级 / 复现次数） ──
+                should_promote, reason = self._decide_promotion(candidate)
+                _probe_decision(ctx, "memory.promotion.gate",
+                                status="succeeded" if should_promote else "skipped",
+                                reason_code=_gate_reason_code(reason), summary=reason,
+                                instance_key=instance_key,
+                                metrics=self._gate_metrics(candidate))
+                if not should_promote:
+                    cursor.execute(
+                        "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        ("OBSERVING", candidate["id"]),
+                    )
+                    self._history_buffer_append((
+                        "memory_candidate", str(candidate["id"]),
+                        str(candidate["group_shared_space"]),
+                        candidate["status"], "OBSERVING",
+                        {"action": "gate_hold",
+                         "reason_code": _gate_reason_code(reason)},
+                    ))
+                    gate_span.finish(status="skipped",
+                                     reason_code=_gate_reason_code(reason))
+                    logger.debug(
+                        f"👀 [MemoryManager] 候选转 OBSERVING {candidate['id']}：{reason}"
+                    )
+                    continue
+
+                # 冲突解决（Conflict Resolution）：新候选与旧记忆矛盾时，标记旧记忆为 CONFLICT
+                with _probe_span(ctx, "memory.promotion.conflict",
+                                 instance_key=instance_key):
+                    weak_demoted = self._resolve_conflicts(cursor, candidate)
+
+                # 相似度合并：与已有的活跃同类型记忆比对，相似则合并而非重复新建
+                existing_id = self._find_similar_memory(cursor, candidate)
+                if existing_id:
+                    with _probe_span(ctx, "memory.promotion.merge",
+                                     instance_key=instance_key):
+                        self._merge_into_memory(cursor, existing_id, candidate)
+                else:
+                    with _probe_span(ctx, "memory.promotion.create",
+                                     instance_key=instance_key):
+                        self._create_memory(cursor, candidate)
+                    # 新建才可能突破配额；合并不增加条数（计划 §5：quota 在
+                    # create 分支，不虚构为每次 merge 都执行）
+                    with _probe_span(ctx, "memory.promotion.quota",
+                                     instance_key=instance_key) as quota_span:
+                        archived = self._enforce_user_quota(
+                            cursor, candidate["group_shared_space"], candidate["user_id"]
+                        )
+                        quota_span.finish(
+                            status="succeeded",
+                            metrics={"archived": archived,
+                                     "quota_limit": MEMORY_USER_QUOTA,
+                                     "enforce": bool(MEMORY_QUOTA_ENFORCE)})
+
+                logger.info(f"⬆️ [MemoryManager] 候选晋升 {candidate['id']}：{reason}")
+
                 cursor.execute(
                     "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    ("OBSERVING", candidate["id"]),
+                    ("CONFIRMED", candidate["id"]),
                 )
-                logger.debug(
-                    f"👀 [MemoryManager] 候选转 OBSERVING {candidate['id']}：{reason}"
-                )
-                continue
+                # 弱候选冲突场景（计划 §5 登记的 Python/Rust parity 案例）：
+                # _resolve_conflicts 已把候选写成 OBSERVING，这里又改写为
+                # CONFIRMED——履历如实记录这两次业务写入，不替业务圆场。
+                self._history_buffer_append((
+                    "memory_candidate", str(candidate["id"]),
+                    str(candidate["group_shared_space"]),
+                    "OBSERVING" if weak_demoted else candidate["status"], "CONFIRMED",
+                    {"action": "promoted",
+                     "reason_code": _gate_reason_code(reason)},
+                ))
+                # 只记录有晋升（CONFIRMED）的批次，用于提交后统一触发压缩
+                promoted = True
 
-            # 冲突解决（Conflict Resolution）：新候选与旧记忆矛盾时，标记旧记忆为 CONFLICT
-            self._resolve_conflicts(cursor, candidate)
-
-            # 相似度合并：与已有的活跃同类型记忆比对，相似则合并而非重复新建
-            existing_id = self._find_similar_memory(cursor, candidate)
-            if existing_id:
-                self._merge_into_memory(cursor, existing_id, candidate)
-            else:
-                self._create_memory(cursor, candidate)
-                # 新建才可能突破配额；合并不增加条数
-                self._enforce_user_quota(
-                    cursor, candidate["group_shared_space"], candidate["user_id"]
-                )
-
-            logger.info(f"⬆️ [MemoryManager] 候选晋升 {candidate['id']}：{reason}")
-
-            cursor.execute(
-                "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                ("CONFIRMED", candidate["id"]),
-            )
-            # 只记录有晋升（CONFIRMED）的批次，用于提交后统一触发压缩
-            promoted = True
-        conn.commit()
-        conn.close()
+        # ── 事务提交（memory.promotion.commit 事实节点，计划 §6.1 事务诚实）──
+        try:
+            conn.commit()
+        except Exception as exc:
+            _probe_decision(ctx, "memory.promotion.commit",
+                            status="failed", reason_code="rolled_back",
+                            fact_kind="commit", error_code=type(exc).__name__,
+                            metrics={"backend": "python", "promoted": promoted})
+            raise
+        finally:
+            conn.close()
+        # 提交确认（conn.commit() 成功之后，计划 §5：attempted/committed 分离）
+        _probe_decision(ctx, "memory.promotion.commit",
+                        status="succeeded", fact_kind="commit",
+                        metrics={"backend": "python", "promoted": promoted,
+                                 "history_events": len(self._history_buffer)})
+        self._flush_history()
 
         # 记忆库内容变了（新建/合并/冲突标记都发生在 promoted 批次内）：
         # 递增历史版本，让语义检索缓存立即换桶，@ 对话前刚整合出的新记忆
@@ -543,6 +875,15 @@ class MemoryManager:
             str(candidate["user_id"]),
             candidate["content"],
         )
+        # 新建履历（from 空 = 创建，计划 §6.1 entity_change 允许表示创建）；
+        # 业务提交成功后由 _flush_history 统一落账。
+        self._history_buffer_append((
+            "long_term_memory", memory_id,
+            str(candidate["group_shared_space"]),
+            "NEW", "active",
+            {"action": "create", "type": candidate["type"],
+             "candidate": candidate["id"]},
+        ))
         logger.info(f"🧠 [MemoryManager] 新增长期记忆 {memory_id} ({candidate['type']})")
 
     @staticmethod
@@ -636,6 +977,13 @@ class MemoryManager:
                 "UPDATE memories SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (mem_id,),
             )
+            # 配额淘汰履历（active → archived；dry-run 不改业务，不落履历）
+            self._history_buffer_append((
+                "long_term_memory", str(mem_id),
+                str(group_shared_space),
+                "active", "archived",
+                {"action": "quota_archive", "score": round(score, 3)},
+            ))
             logger.info(
                 f"📦 [Quota] 用户 {user_id} 超额（{len(rows)}/{MEMORY_USER_QUOTA}），"
                 f"归档最弱记忆 {mem_id}（分 {score:.3f}）「{content[:40]}」"
@@ -690,6 +1038,16 @@ class MemoryManager:
             str(candidate["user_id"]),
             merged_content,
         )
+        # 合并履历：记忆保持 active（业务状态词），动作与证据增量记入
+        # changed_fields；业务提交成功后由 _flush_history 统一落账。
+        self._history_buffer_append((
+            "long_term_memory", str(memory_id),
+            str(candidate["group_shared_space"]),
+            "active", "active",
+            {"action": "merge", "candidate": candidate.get("id", ""),
+             "confirmation_count": (count or 0) + 1,
+             "confidence": round(merged_confidence, 3)},
+        ))
         logger.info(f"🧠 [MemoryManager] 合并入已有记忆 {memory_id}")
 
     @staticmethod
@@ -725,15 +1083,23 @@ class MemoryManager:
         order = {VISIBILITY_INTERNAL: 0, VISIBILITY_RESTRICTED: 1, "CONTEXTUAL": 2, "OPEN": 3}
         return new_vis if order.get(new_vis, 3) <= order.get(old_vis, 3) else old_vis
 
-    def _resolve_conflicts(self, cursor: sqlite3.Cursor, candidate: dict) -> None:
+    def _resolve_conflicts(self, cursor: sqlite3.Cursor, candidate: dict) -> bool:
         """冲突解决（Conflict Resolution）：检测候选是否与已有活跃记忆矛盾。
 
         矛盾判定：同用户、同类型，两者共享关键对象词，但情感极性相反
         （旧=肯定、新=否定，反之亦然）。若新候选置信度更高，旧记忆标记为
         CONFLICT（不再参与检索），新候选晋升；否则新候选压入 OBSERVING 等更多证据。
+
+        返回是否走了「弱候选置 OBSERVING」分支。**这是计划 §5 登记的
+        Python/Rust parity 案例**：Python 把弱候选写成 OBSERVING，但上层晋升
+        循环会继续合并/新建并把最终状态改写为 CONFIRMED（Rust 则立即返回
+        observing_conflict）。现存业务疑点本轮不修——观测只如实记录这两次
+        业务写入（NEW→OBSERVING→CONFIRMED），不替业务圆场。
         """
+        ctx = getattr(self, "_flow_ctx", None)
+        instance_key = f"cand:{candidate['id']}"
         if not candidate["content"]:
-            return
+            return False
         rows = cursor.execute(
             "SELECT id, content, confidence FROM memories WHERE status = 'active' AND group_shared_space = ? AND user_id = ? AND type = ?",
             (str(candidate["group_shared_space"]), str(candidate["user_id"]), candidate["type"]),
@@ -748,14 +1114,41 @@ class MemoryManager:
                         "UPDATE memories SET status = 'conflict', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                         (mem_id,),
                     )
+                    self._history_buffer_append((
+                        "long_term_memory", str(mem_id),
+                        str(candidate["group_shared_space"]),
+                        "active", "conflict",
+                        {"action": "conflict", "candidate": candidate["id"]},
+                    ))
+                    _probe_decision(ctx, "memory.promotion.conflict",
+                                    status="succeeded",
+                                    reason_code="old_memory_conflict",
+                                    instance_key=instance_key,
+                                    metrics={"old_memory_id": mem_id,
+                                             "candidate_confidence": candidate["confidence"],
+                                             "old_confidence": old_conf})
                     logger.info(f"⚔️ [MemoryManager] 候选与旧记忆冲突，旧记忆标记 CONFLICT: {mem_id}")
-                else:
-                    cursor.execute(
-                        "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        ("OBSERVING", candidate["id"]),
-                    )
-                    logger.info("⚔️ [MemoryManager] 候选与旧记忆冲突但置信度更低，转为 OBSERVING")
-                return
+                    return False
+                cursor.execute(
+                    "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    ("OBSERVING", candidate["id"]),
+                )
+                self._history_buffer_append((
+                    "memory_candidate", str(candidate["id"]),
+                    str(candidate["group_shared_space"]),
+                    candidate["status"], "OBSERVING",
+                    {"action": "conflict_weak", "old_memory_id": mem_id},
+                ))
+                _probe_decision(ctx, "memory.promotion.conflict",
+                                status="skipped",
+                                reason_code="weak_candidate_observing",
+                                instance_key=instance_key,
+                                metrics={"old_memory_id": mem_id,
+                                         "candidate_confidence": candidate["confidence"],
+                                         "old_confidence": old_conf})
+                logger.info("⚔️ [MemoryManager] 候选与旧记忆冲突但置信度更低，转为 OBSERVING")
+                return True
+        return False
 
     @staticmethod
     def _detect_contradiction(a: str, b: str) -> bool:

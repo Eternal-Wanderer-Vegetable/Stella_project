@@ -332,7 +332,7 @@ def _bundled_spec(version: str) -> dict | None:
 # ============================================================
 
 # 有用户输入的 root：输入行按来源键/窗口匹配
-_INPUT_ROOTS = {"qq_passive", "qq_chat", "qq_command", "webchat", "proactive"}
+_INPUT_ROOTS = {"qq_passive", "qq_chat", "qq_command", "webchat"}
 # 无消息 IO 的后台 root（备注说明）
 _BACKGROUND_ROOTS = {"consolidate", "compact", "cometa_task", "effect",
                      "memory_consolidate", "memory_promotion",
