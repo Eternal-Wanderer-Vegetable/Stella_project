@@ -595,13 +595,25 @@ class CometaStore:
         if row is None:
             return {}
         origin = Origin.from_dict(_loads_json(row["origin_json"], {}))
+        # v2 Origin（计划 §6.8）：kind/peer 是投递地址真相源；v1 行按历史约定
+        # 解释（QQ→群、webchat→webchat）。private 的 group_id 必须为空。
+        kind = origin.conversation_kind or (
+            "webchat" if origin.platform == "webchat" else "group"
+        )
         return {
             "platform": origin.platform,
             "bot_id": origin.bot_id,
             "conversation_id": origin.conversation_id,
             "requester_id": origin.requester_id,
             "reply_to_message_id": origin.reply_to_message_id,
-            "group_id": origin.conversation_id if origin.platform == "qq" else "",
+            "conversation_kind": kind,
+            "peer_id": origin.peer_id or origin.conversation_id,
+            "conversation_key": origin.conversation_key,
+            "group_id": (
+                origin.conversation_id
+                if (origin.platform == "qq" and kind == "group")
+                else ""
+            ),
             "task_id": task_id,
         }
 

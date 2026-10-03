@@ -27,6 +27,9 @@ from enum import Enum
 UTC = timezone.utc
 
 SCHEMA_VERSION = 1
+# Origin 独立的 schema 版本（计划 §6.8）：新增 conversation_kind/peer_id/
+# conversation_key 时升到 2。**不**随动全包 SCHEMA_VERSION——那会影响所有 DTO。
+ORIGIN_SCHEMA_VERSION = 2
 
 
 # ============================================================
@@ -291,9 +294,24 @@ class Origin:
     reply_to_message_id: str = ""
     # 会话代际：WebChat reset 推进代际，旧代际结果留在任务中心不回写聊天。
     conversation_generation: int = 1
+    # ---- Origin v2（计划 §6.8）：持久会话种类与对端，投递地址的真相源 ----
+    # group 会话才有真实 group_id（=conversation_id）；private 的 peer 是
+    # sender QQ 号，conversation_id 不再被当群 ID 使用。v2 Origin 缺 kind/peer
+    # 校验失败——不猜默认群。
+    conversation_kind: str = ""  # group | private | webchat
+    peer_id: str = ""
+    conversation_key: str = ""  # 规范键 qq:<bot_id>:group:<gid> / qq:<bot_id>:private:<uid>
+
+    def __post_init__(self) -> None:
+        if self.conversation_kind and self.conversation_kind not in (
+            "group",
+            "private",
+            "webchat",
+        ):
+            raise ValueError(f"非法 conversation_kind: {self.conversation_kind!r}")
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "schema_version": SCHEMA_VERSION,
             "instance_id": self.instance_id,
             "platform": self.platform,
@@ -304,9 +322,34 @@ class Origin:
             "reply_to_message_id": self.reply_to_message_id,
             "conversation_generation": self.conversation_generation,
         }
+        if not self.conversation_kind:
+            # 部分 v1 形状（无 kind）：序列化为 legacy dict，读回时按平台解释
+            # （QQ→群 / webchat→webchat）。可信入口构造的 Origin 必须带 kind。
+            return data
+        data["origin_schema_version"] = ORIGIN_SCHEMA_VERSION
+        data["conversation_kind"] = self.conversation_kind
+        data["peer_id"] = self.peer_id
+        data["conversation_key"] = self.conversation_key
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> "Origin":
+        kind = str(data.get("conversation_kind", "") or "")
+        peer = str(data.get("peer_id", "") or "")
+        version = int(data.get("origin_schema_version", 0) or 0)
+        if not kind:
+            if version >= ORIGIN_SCHEMA_VERSION:
+                # v2 起缺 kind 是数据损坏，不猜默认群（计划 §6.8）
+                raise ValueError("Origin v2 缺少 conversation_kind，拒绝解析")
+            # v1 兼容：旧 QQ Origin 全部按历史群解释；webchat 按其平台解释。
+            kind = "webchat" if str(data.get("platform", "")) == "webchat" else "group"
+            peer = str(data.get("conversation_id", "") or "")
+        if not peer:
+            raise ValueError("Origin 缺少 peer_id，拒绝解析")
+        if version >= ORIGIN_SCHEMA_VERSION and not str(
+            data.get("conversation_key", "") or ""
+        ):
+            raise ValueError("Origin v2 缺少 conversation_key，拒绝解析")
         return cls(
             instance_id=str(data.get("instance_id", "")),
             platform=str(data.get("platform", "")),
@@ -316,6 +359,9 @@ class Origin:
             source_request_id=str(data.get("source_request_id", "")),
             reply_to_message_id=str(data.get("reply_to_message_id", "")),
             conversation_generation=int(data.get("conversation_generation", 1)),
+            conversation_kind=kind,
+            peer_id=peer,
+            conversation_key=str(data.get("conversation_key", "") or ""),
         )
 
 
