@@ -291,7 +291,8 @@ class TestOriginV2:
         origin = Origin.from_dict(self._v1_qq())
         assert origin.conversation_kind == "group"
         assert origin.peer_id == "263402786"
-        assert origin.conversation_key == ""
+        # legacy 行推导出规范键（roundtrip 闭环，见 from_dict）
+        assert origin.conversation_key == "qq:10000:group:263402786"
 
     def test_v1_webchat_legacy_parses_as_webchat(self):
         from cometa.models import Origin
@@ -331,13 +332,17 @@ class TestOriginV2:
         with pytest.raises(ValueError):
             Origin.from_dict(data)
 
-    def test_v2_missing_conversation_key_rejected(self):
+    def test_v2_missing_conversation_key_is_derived(self):
+        """conversation_key 是其余字段的规范函数：缺失时推导（roundtrip 闭环），
+        不作猜测——kind/peer 缺失才拒绝。"""
         from cometa.models import Origin
 
         data = self._v1_qq()
-        data.update({"origin_schema_version": 2, "conversation_kind": "private", "peer_id": "20001"})
-        with pytest.raises(ValueError):
-            Origin.from_dict(data)
+        data.update(
+            {"origin_schema_version": 2, "conversation_kind": "private", "peer_id": "20001"}
+        )
+        origin = Origin.from_dict(data)
+        assert origin.conversation_key == "qq:10000:private:20001"
 
     def test_invalid_kind_rejected_at_construction(self):
         from cometa.models import Origin

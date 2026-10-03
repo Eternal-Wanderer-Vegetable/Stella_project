@@ -39,6 +39,9 @@ from memory.text_similarity import coverage_ratio, is_similar
 # 这道闸会静默失效——表现为「阶段2 还是收到整批消息」，没有任何报错。
 AT_MENTION_MARKER = "[对Bot说]"
 BOT_SELF_MARKER = "[这是机器人自己发送的消息，不属于任何用户]"
+# 私聊里的直接对话（计划 §6.3）：与 AT_MENTION 同为「用户直接对 Bot 说」的
+# 高密度证据，用同一个标注语义但独立常量，便于区分来源统计。
+PRIVATE_DIRECT_MARKER = "[私聊对Bot说]"
 
 # 语义新颖度阈值。取得很高（= 很难触发）是故意的：这道闸的误判方向是
 # 「把有新信息的一批当成重复跳掉」，代价是记忆缺失，比多花一次钱严重得多。

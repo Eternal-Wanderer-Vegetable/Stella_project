@@ -65,6 +65,7 @@ from memory.consolidation_prompt import format_consolidation_prompt
 from memory.cost_gates import (
     AT_MENTION_MARKER,
     BOT_SELF_MARKER,
+    PRIVATE_DIRECT_MARKER,
     at_mention_slice,
     should_skip_by_novelty,
     should_skip_by_source_ratio,
@@ -597,6 +598,26 @@ class MemoryConsolidator:
         ``memory_consolidate`` root——它是后台批任务，与触发消息只有因果关联；
         root 在任何前置 return 之前创建，DB 缺失 / 攒批跳过也留下可查询的运行事实。
         """
+        return await self._consolidate_with_root(
+            group_id, force, flow_ctx, memory_space=None, scope=f"qq:{group_id}"
+        )
+
+    async def consolidate_conversation(self, ref, force: bool = False, *, flow_ctx=None):
+        """已注册会话（群/私聊/WebChat）的整合入口（计划 §6.3）。
+
+        与 :meth:`consolidate_group` 的唯一区别：空间归属来自**可信注册表**
+        （ref.memory_space，私聊是隔离空间），绝不拿 storage_session_id 调
+        resolve_space；checkpoint/消息查询按 ref.storage_session_id。
+        """
+        return await self._consolidate_with_root(
+            ref.storage_session_id, force, flow_ctx,
+            memory_space=ref.memory_space, scope=ref.runtime_key,
+        )
+
+    async def _consolidate_with_root(
+        self, session_key: int, force: bool, flow_ctx, *, memory_space: str | None, scope: str
+    ):
+        """整合 root 的生命周期包装（群/注册会话共用）。"""
         # ── 记忆整合独立 root（观测旁路：创建失败按 None 全程空转）──
         mem_root = None
         try:
@@ -604,7 +625,7 @@ class MemoryConsolidator:
 
             mem_root = message_flow.begin_trace(
                 root_kind="memory_consolidate", origin="spawn",
-                scope=f"qq:{group_id}", detail={"force": force},
+                scope=scope, detail={"force": force},
             )
             if flow_ctx is not None and getattr(flow_ctx, "trace_id", ""):
                 message_flow.link(flow_ctx.trace_id, mem_root.trace_id,
@@ -614,7 +635,10 @@ class MemoryConsolidator:
         outcome = "no_db"
         try:
             if DB_PATH.exists():
-                outcome = await self._consolidate_group_core(group_id, force, mem_root)
+                outcome = await self._consolidate_group_core(
+                    session_key, force, mem_root,
+                    memory_space=memory_space, scope=scope,
+                )
         except BaseException:
             outcome = "error"
             raise
@@ -628,19 +652,29 @@ class MemoryConsolidator:
                 except Exception:
                     pass
 
-    async def _consolidate_group_core(self, group_id: int, force: bool, mctx) -> str:
+    async def _consolidate_group_core(
+        self, group_id: int, force: bool, mctx, *, memory_space: str | None = None, scope: str = ""
+    ) -> str:
         """consolidate_group 的业务主体（root 生命周期在外层方法管理）。
 
         返回 outcome（推进/停止策略，计划 §6.3 memory.consolidate.entry）：
         checkpoint 是否推进、为什么停，是本 root 最重要的一个事实。
+
+        ``memory_space``/``scope``：注册会话入口（consolidate_conversation）
+        传入注册表解析的空间与运行时键；群包装入口留空 → 按真实群号解析
+        （resolve_space 的语义只对真实群号有效，私聊的负存储 ID 绝不能进来）。
         """
         # 群级串行（不再整段持有阶段1 闸门）：模型闸门只在各自的 generate 调用处
         # 短暂持有，两把闸门从不同时持有，因此阶段1 与阶段2 的端点可真正并行，
         # 且同一端点上的任务仍按其并发度排队（本地默认 1，即 FIFO 一次一个）。
         async with self._get_group_lock(group_id):
             try:
-                # 空间归属：多个 QQ 群可映射到同一共享空间（隐式空间=群号字符串）
-                group_shared_space = resolve_space(group_id)
+                # 空间归属：多个 QQ 群可映射到同一共享空间（隐式空间=群号字符串）。
+                # 注册会话入口显式携带空间；只有群包装入口才允许触发解析。
+                if memory_space is None:
+                    group_shared_space = resolve_space(group_id)
+                else:
+                    group_shared_space = memory_space
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
@@ -909,6 +943,68 @@ class MemoryConsolidator:
             rounds += 1
         return rounds
 
+    async def drain_conversation(self, ref, max_rounds: int = 1) -> int:
+        """注册会话版 drain（群/私聊共用；空间来自注册表，见 consolidate_conversation）。"""
+        key = ref.storage_session_id
+        rounds = 0
+        for _ in range(max(1, max_rounds)):
+            last_id = self._get_last_processed_id(key)
+            if self._count_new_messages(key, last_id) < _batch_size(False):
+                break
+            before = last_id
+            await self.consolidate_conversation(ref)
+            if self._get_last_processed_id(key) <= before:
+                logger.warning(
+                    f"⚠️ [Consolidator] 会话 {ref.runtime_key} 批次未推进，停止本轮排空"
+                )
+                break
+            rounds += 1
+        return rounds
+
+    async def drain_registered_sessions(
+        self, max_rounds: int = 1, *, allowed_groups=None
+    ) -> int:
+        """遍历注册表中待整合的会话排空积压，**覆盖私聊**（计划 §6.3）。
+
+        群会话仍受 ``allowed_groups`` 门控（ALLOWED_GROUPS）；私聊/WebChat
+        没有群门控。不可把 ALLOWED_GROUPS 当成完整会话列表——私聊根本不在
+        里面。尚未注册的 legacy 群由旧 drain 循环继续覆盖（AI 网关定时任务
+        两者都跑，backlog 检查让重复访问无副作用）。
+        """
+        from memory import conversation_registry
+
+        rounds = 0
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                refs = conversation_registry.all_registered(conn)
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.debug(f"[Consolidator] 注册表不可读，跳过注册会话排空: {e}")
+            return 0
+        for ref in refs:
+            if ref.is_group and allowed_groups is not None:
+                try:
+                    if int(ref.peer_id) not in allowed_groups:
+                        continue
+                except ValueError:
+                    continue
+            try:
+                pending = self.backlog(ref.storage_session_id)
+                if pending < _batch_size(False):
+                    continue
+                done = await self.drain_conversation(ref, max_rounds=max_rounds)
+                if done:
+                    logger.info(
+                        f"🧠 [Drain] 会话 {ref.runtime_key} 整合 {done} 批，"
+                        f"剩余积压 {self.backlog(ref.storage_session_id)} 条"
+                    )
+                rounds += done
+            except Exception as e:
+                logger.warning(f"⚠️ 定时整合异常（会话 {ref.runtime_key}）: {e}")
+        return rounds
+
     def backlog(self, group_id: int) -> int:
         """该群当前积压的未整合消息数。"""
         return self._count_new_messages(group_id, self._get_last_processed_id(group_id))
@@ -971,6 +1067,10 @@ class MemoryConsolidator:
                 lines.append(f"消息ID({mid}) {BOT_SELF_MARKER}: {content}")
             elif source_kind == "AT_MENTION":
                 lines.append(f"消息ID({mid}) 用户({uid}) {AT_MENTION_MARKER}: {content}")
+            elif source_kind == "PRIVATE_DIRECT":
+                # 私聊直接对话（计划 §6.3）：与 @ 同为直接证据，标注来源供
+                # 提取模型区分；证据强度归并到同一条通道（at_senders）。
+                lines.append(f"消息ID({mid}) 用户({uid}) {PRIVATE_DIRECT_MARKER}: {content}")
             else:
                 lines.append(f"消息ID({mid}) 用户({uid}): {content}")
         text = "\n".join(lines)
@@ -979,9 +1079,13 @@ class MemoryConsolidator:
                 str(uid) for _, uid, _, kind in rows if kind != "BOT_SELF"
             )
         )
+        # 直接对话证据（计划 §6.3）：AT_MENTION 与 PRIVATE_DIRECT 同通道——
+        # 单次晋升/验证模式对「用户直接对 Bot 说」生效，与具体入口无关。
         at_senders = list(
             dict.fromkeys(
-                str(uid) for _, uid, _, source_kind in rows if source_kind == "AT_MENTION"
+                str(uid)
+                for _, uid, _, source_kind in rows
+                if source_kind in ("AT_MENTION", "PRIVATE_DIRECT")
             )
         )
         # AT_MENTION 缺失告警：本批有 Bot 发言却没有任何 AT_MENTION 来源，

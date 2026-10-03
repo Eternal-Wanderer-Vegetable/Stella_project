@@ -442,7 +442,7 @@ class TurnService:
             turn_trace.record_event(
                 trace_id=ctx.trace_id, turn_id=ctx.turn_id, stage="budget",
                 status="ok",
-                scope=f"qq:{ctx.group_id}",
+                scope=ctx.trace_scope,
                 metrics={
                     "estimated_tokens": budgeted.estimated_tokens,
                     "budget_tokens": budgeted.budget_tokens,
@@ -459,7 +459,7 @@ class TurnService:
                     "truncated": budgeted.truncated,
                     "social_snapshot": getattr(ctx, "social_context_snapshot", ""),
                 }
-                if turn_trace.detailed_enabled_for_scope(f"qq:{ctx.group_id}") else None,
+                if turn_trace.detailed_enabled_for_scope(ctx.trace_scope) else None,
             )
         except Exception:
             pass
@@ -488,7 +488,7 @@ class TurnService:
         # 代码自动变成并行。交互回复标记为高优先级意图（当前优先级未启用，
         # 仅按 FIFO 处理）。
         async with acquire(
-            gate_of(ROLE_CHAT), tag=f"reply:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
+            gate_of(ROLE_CHAT), tag=f"reply:{ctx.trace_scope}", priority=PRIORITY_INTERACTIVE
         ):
             import time as _time
             _t0 = _time.monotonic()
@@ -545,6 +545,12 @@ class TurnService:
                     ],
                     prompt_snapshot=ctx.prompt_log,
                     output=ctx.raw_output,
+                    # v15 会话身份（计划 §6.3）：私聊的 group_id 是 0（trace 层
+                    # 落空），真实身份由这四列承载
+                    conversation_key=getattr(ctx, "conversation_key", ""),
+                    conversation_kind=getattr(ctx, "conversation_kind", ""),
+                    peer_id=getattr(ctx, "peer_id", ""),
+                    storage_session_id=getattr(ctx, "storage_session_id", 0) or None,
                 )
             except Exception as e:
                 logger.debug(f"📊 [Pipeline] 记录决策追踪失败: {e}")

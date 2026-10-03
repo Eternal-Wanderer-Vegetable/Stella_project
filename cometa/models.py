@@ -336,6 +336,7 @@ class Origin:
     def from_dict(cls, data: dict) -> "Origin":
         kind = str(data.get("conversation_kind", "") or "")
         peer = str(data.get("peer_id", "") or "")
+        conv_key = str(data.get("conversation_key", "") or "")
         version = int(data.get("origin_schema_version", 0) or 0)
         if not kind:
             if version >= ORIGIN_SCHEMA_VERSION:
@@ -346,10 +347,17 @@ class Origin:
             peer = str(data.get("conversation_id", "") or "")
         if not peer:
             raise ValueError("Origin 缺少 peer_id，拒绝解析")
-        if version >= ORIGIN_SCHEMA_VERSION and not str(
-            data.get("conversation_key", "") or ""
-        ):
-            raise ValueError("Origin v2 缺少 conversation_key，拒绝解析")
+        if not conv_key:
+            # conversation_key 是其余字段的规范函数（非猜测）：v1 遗留行与
+            # 「legacy 解析后再持久化」的 roundtrip 都在这里补齐。kind/peer
+            # 缺失没有规范推导，仍然拒绝。
+            if kind == "webchat":
+                conv_key = f"webchat:{peer}"
+            else:
+                conv_key = (
+                    f"{data.get('platform', 'qq')}:{data.get('bot_id', '')}"
+                    f":{kind}:{peer}"
+                )
         return cls(
             instance_id=str(data.get("instance_id", "")),
             platform=str(data.get("platform", "")),
@@ -361,7 +369,7 @@ class Origin:
             conversation_generation=int(data.get("conversation_generation", 1)),
             conversation_kind=kind,
             peer_id=peer,
-            conversation_key=str(data.get("conversation_key", "") or ""),
+            conversation_key=conv_key,
         )
 
 

@@ -88,10 +88,24 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         new_trace_id,
         utc_now_iso,
     )
-    from memory import social_store
+    from memory import conversation_registry, social_store
     from memory.pre_processors import record_message
 
     _ensure_webchat_space()
+    # 注册表登记（计划 §6.1）：WebChat 保留 -1 存储/独立主体，不被私聊复用
+    import sqlite3 as _sqlite3
+
+    from config import DB_PATH
+
+    ref = None
+    if DB_PATH.parent.exists():
+        conn = _sqlite3.connect(DB_PATH)
+        try:
+            ref = conversation_registry.get_or_register_webchat(conn, WEBCHAT_USER_ID)
+        except Exception:
+            ref = None
+        finally:
+            conn.close()
     if flow_ctx is None:
         try:
             from core.observability import message_flow
@@ -109,6 +123,11 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         message=message.strip(),
         source_kind="AT_MENTION",
         group_shared_space=WEBCHAT_SPACE,
+        # v3 会话身份（计划 §6.1）：WebChat kind 不可被认作 QQ 用户
+        conversation_kind="webchat" if ref else "",
+        conversation_key=ref.conversation_key if ref else "",
+        peer_id=str(WEBCHAT_USER_ID) if ref else "",
+        storage_session_id=ref.storage_session_id if ref else 0,
         trigger="reply",
         # 身份绑定：root 已有 trace_id 就共用（facade 不再另造，计划 §6.2）
         trace_id=getattr(flow_ctx, "trace_id", "") or new_trace_id(),

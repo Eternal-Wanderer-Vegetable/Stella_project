@@ -99,7 +99,7 @@ async def record_message(ctx: ChatContext) -> ChatContext:
         cursor.execute("""
             INSERT INTO group_messages (group_id, user_id, content, source_kind, msg_id)
             VALUES (?, ?, ?, ?, ?)
-        """, (str(ctx.group_id), str(ctx.user_id), ctx.message,
+        """, (str(ctx.storage_key()), str(ctx.user_id), ctx.message,
               normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0)))
         conn.commit()
         conn.close()
@@ -139,7 +139,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             cursor.execute(
                 "SELECT active_summary, pending_topic, updated_at FROM short_term_context "
                 "WHERE group_id = ?",
-                (str(ctx.group_id),),
+                (str(ctx.storage_key()),),
             )
             row = cursor.fetchone()
             if row:
@@ -160,14 +160,14 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 
         # ── 1.5) 会话上下文缓存：历史版本未变则整段复用，跳过尾巴等重查询 ──
         history_version = (
-            _max_message_id(cursor, ctx.group_id),
+            _max_message_id(cursor, ctx.storage_key()),
             stc_updated_at,
-            session_summary_version(ctx.group_id),
+            session_summary_version(ctx.storage_key()),
         )
         # key 含 DB_PATH：与检索缓存同款隔离（换库/测试临时库绝不互读缓存）
         cache_key = (
             str(DB_PATH),
-            str(ctx.group_id),
+            str(ctx.storage_key()),
             history_version,
             getattr(ctx, "memory_mode", "") or "",
             POLICY_VERSION,
@@ -187,21 +187,21 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             return ctx
 
         # ── 2) 最近原始消息（含 Bot 自己的发言，带来源标注） ──
-        tail, tail_start_id = _fetch_recent_tail(cursor, ctx.group_id, RECENT_TAIL_LIMIT)
+        tail, tail_start_id = _fetch_recent_tail(cursor, ctx.storage_key(), RECENT_TAIL_LIMIT)
 
         # ── 2.5) 会话摘要：覆盖已滚出尾巴窗口的较早内容 ──
         # 先对齐起点再取摘要：首次使用时把已压缩位置对齐到尾巴起点，
         # 避免把整个历史当成待压缩内容。
         if tail_start_id > 0:
-            session_ensure_initialized(ctx.group_id, tail_start_id)
-        session_summary = get_session_summary(ctx.group_id)
+            session_ensure_initialized(ctx.storage_key(), tail_start_id)
+        session_summary = get_session_summary(ctx.storage_key())
         # 供 post 侧触发压缩（回复发出后异步进行，不阻塞本次回复）
         ctx.tail_start_id = tail_start_id
 
         # ── 3) recent_exchanges 只在没有原始尾巴时兜底 ──
         # 它是整合器产出的滞后快照，与原始尾巴并存会出现同一段对话的两个版本，
         # 模型会以摘要为准从而接错话题（2026-08-13 bug）。
-        exchanges_text = "" if tail else _fetch_recent_exchanges_text(cursor, ctx.group_id)
+        exchanges_text = "" if tail else _fetch_recent_exchanges_text(cursor, ctx.storage_key())
 
         conn.close()
 

@@ -359,6 +359,7 @@ class MemoryManager:
             "confidence": candidate["confidence"],
             "occurrence": candidate["occurrence_count"],
             "at_mention_evidence": MemoryManager._has_at_mention(candidate["source_kinds"]),
+            "direct_evidence": MemoryManager._has_direct_evidence(candidate["source_kinds"]),
             "threshold_min_importance": MEMORY_PROMOTE_MIN_IMPORTANCE,
             "threshold_high_confidence": MEMORY_CONFIRM_HIGH_CONFIDENCE,
             "threshold_low_confidence": MEMORY_OBSERVE_LOW_CONFIDENCE,
@@ -720,6 +721,29 @@ class MemoryManager:
             str(k).strip().upper() == "AT_MENTION" for k in kinds
         )
 
+    # 直接对话证据的合法来源（计划 §6.3）：AT_MENTION 与 PRIVATE_DIRECT 同为
+    # 「用户直接对 Bot 说」；PRIVATE_DIRECT 只代表直接性，不代表可跨群共享
+    # （共享由 audience 管）。BOT_SELF 永远不在其中。
+    DIRECT_EVIDENCE_SOURCE_KINDS = frozenset({"AT_MENTION", "PRIVATE_DIRECT"})
+
+    @staticmethod
+    def _has_direct_evidence(source_kinds: str | None) -> bool:
+        """历次证据中是否包含「用户直接对 Bot 说」（AT_MENTION 或 PRIVATE_DIRECT）。
+
+        中性命名的判定入口（计划 §6.3）：晋升/验证的「直接对话高密度证据」
+        语义与具体入口无关；旧 ``_has_at_mention`` 保留兼容。
+        """
+        try:
+            kinds = json.loads(source_kinds or "[]")
+        except (ValueError, TypeError):
+            return False
+        if not isinstance(kinds, list):
+            return False
+        return any(
+            str(k).strip().upper() in MemoryManager.DIRECT_EVIDENCE_SOURCE_KINDS
+            for k in kinds
+        )
+
     @staticmethod
     def _decide_promotion(candidate: dict) -> tuple[bool, str]:
         """Gate 1 三档判定：返回 (是否晋升, 原因说明)。
@@ -750,15 +774,15 @@ class MemoryManager:
             return True, f"高置信直接晋升（conf={conf:.2f}）"
 
         if conf >= MEMORY_OBSERVE_LOW_CONFIDENCE:
-            if MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT and MemoryManager._has_at_mention(
+            if MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT and MemoryManager._has_direct_evidence(
                 candidate["source_kinds"]
             ):
-                return True, f"AT_MENTION 高密度证据单次晋升（conf={conf:.2f}）"
+                return True, f"直接对话高密度证据单次晋升（conf={conf:.2f}）"
             if occurrence >= MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE:
                 return True, f"交叉验证通过（conf={conf:.2f}，观察 {occurrence} 次）"
             return False, (
                 f"置信度中等但证据不足（conf={conf:.2f}，观察 {occurrence} 次 < "
-                f"{MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE}，无 AT_MENTION）"
+                f"{MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE}，无直接对话证据）"
             )
 
         return False, f"置信度不足（conf={conf:.2f} < {MEMORY_OBSERVE_LOW_CONFIDENCE}）"

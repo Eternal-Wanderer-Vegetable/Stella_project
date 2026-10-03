@@ -24,27 +24,45 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from nonebot import logger
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 
 AckSender = Callable[[str], Awaitable[str | None]]
 
 
-def build_origin(event, bot, *, instance_id: str) -> dict | None:
-    """从真实群消息事件构造可信 Origin dict（方案 §6.1）。
+def build_origin(event: MessageEvent, bot, *, instance_id: str) -> dict | None:
+    """从真实消息事件构造可信 Origin dict v2（方案 §6.1，计划 §6.8）。
 
-    只在 handle_chat（@ 触达）路径调用；被动摄入与主动发言路径不会构造
-    Origin——这是「委派只由用户显式请求触发」的入口保证（§6.4.1）。
+    只在用户显式触达路径（群 @ / 私聊消息）调用；被动摄入与主动发言路径不会
+    构造 Origin——这是「委派只由用户显式请求触发」的入口保证（§6.4.1）。
+
+    v2 携带完整会话身份：群会话 conversation_id 保持旧口径（群号字符串，
+    旧任务行兼容），私聊会话 conversation_id 用规范会话键；kind/peer/键是
+    持久投递地址的真相源。
     """
     if not instance_id:
         return None
+    bot_id = str(getattr(event, "self_id", "") or getattr(bot, "self_id", ""))
+    if isinstance(event, GroupMessageEvent):
+        kind, peer = "group", str(event.group_id)
+        conversation_id = str(event.group_id)
+    else:
+        peer = str(getattr(event, "user_id", "") or "")
+        kind = "private"
+        conversation_id = f"qq:{bot_id}:private:{peer}"
+    conversation_key = f"qq:{bot_id}:{kind}:{peer}"
     return {
+        "origin_schema_version": 2,
         "instance_id": instance_id,
         "platform": "qq",
-        "bot_id": str(getattr(event, "self_id", "") or getattr(bot, "self_id", "")),
-        "conversation_id": str(event.group_id),
+        "bot_id": bot_id,
+        "conversation_id": conversation_id,
         "requester_id": str(event.user_id),
         "source_request_id": f"msg-{event.message_id}",
         "reply_to_message_id": str(event.message_id),
         "conversation_generation": 1,
+        "conversation_kind": kind,
+        "peer_id": peer,
+        "conversation_key": conversation_key,
     }
 
 
@@ -173,6 +191,40 @@ def make_notification_sender(
             bot = get_bot(bot_id or None)
         except Exception as e:
             raise SenderUnavailable(f"bot {bot_id or '<default>'} 不在线") from e
+
+        # ── 私聊投递（计划 §6.8）：持久 target 的 kind 决定 API，绝不用群口 ──
+        conversation_kind = str(target.get("conversation_kind") or "")
+        private_peer = str(target.get("peer_id") or "")
+        if conversation_kind == "private" and private_peer.isdigit():
+            async def send_private_text(body: str) -> str | None:
+                resp = await bot.send_private_msg(
+                    user_id=int(private_peer), message=Message(body)
+                )
+                receipt = ""
+                if isinstance(resp, dict):
+                    receipt = str(resp.get("message_id") or "")
+                elif resp is not None:
+                    receipt = str(getattr(resp, "message_id", "") or "")
+                return receipt or None
+
+            payload = payload or {}
+            full_chars = int(payload.get("full_text_chars") or 0)
+            note = ""
+            if full_chars > 0:
+                # 长结果私聊降级（计划 §6.8/§12 假设 4）：私聊文件/转发 API 能力
+                # 未经真实 adapter 验证，不做 upload_private_file 尝试，直接
+                # 文本摘要 + WebUI 任务页指针；绝不把 user_id 塞进群投递 API。
+                note = (
+                    f"\n📄 完整结果约 {full_chars} 字，过长未全文附上；"
+                    "可在 WebUI 任务页查看全文。"
+                )
+            receipt = await send_private_text(f"{text}{note}")
+            with contextlib.suppress(Exception):
+                logger.info(
+                    f"📤 [Cometa] 通知已投递到私聊 {private_peer}"
+                    f"（回执 {receipt or '无'}）"
+                )
+            return receipt
 
         def cover(extra_note: str = "") -> Message:
             segments: list = []
@@ -309,7 +361,6 @@ async def notification_sender(target: dict, text: str, payload: dict | None = No
     if platform != "qq":
         # WebChat 没有后台推送通道；结果留在任务中心（WebUI 可查/可订阅）
         return "server_emitted"
-    group_id = int(target.get("group_id") or 0)
     bot_id = str(target.get("bot_id") or "")
     reply_to = str(target.get("reply_to_message_id") or "")
     requester = str(target.get("requester_id") or "")
@@ -317,6 +368,24 @@ async def notification_sender(target: dict, text: str, payload: dict | None = No
         bot = get_bot(bot_id or None)
     except Exception as e:
         raise SenderUnavailable(f"bot {bot_id or '<default>'} 不在线") from e
+    # 私聊 target（计划 §6.8）：纯文本直发，不构造群 @ / 群 API
+    if str(target.get("conversation_kind") or "") == "private":
+        peer = str(target.get("peer_id") or "")
+        if not peer.isdigit():
+            raise RuntimeError("private target 缺少合法 peer_id")
+        try:
+            resp = await bot.send_private_msg(user_id=int(peer), message=Message(text))
+        except Exception as e:
+            raise RuntimeError(f"send_private_msg failed: {type(e).__name__}") from e
+        receipt = ""
+        if isinstance(resp, dict):
+            receipt = str(resp.get("message_id") or "")
+        elif resp is not None:
+            receipt = str(getattr(resp, "message_id", "") or "")
+        with contextlib.suppress(Exception):
+            logger.info(f"📤 [Cometa] 通知已投递到私聊 {peer}（回执 {receipt or '无'}）")
+        return receipt or None
+    group_id = int(target.get("group_id") or 0)
     segments: list = []
     if reply_to.isdigit():
         segments.append(MessageSegment.reply(int(reply_to)))
