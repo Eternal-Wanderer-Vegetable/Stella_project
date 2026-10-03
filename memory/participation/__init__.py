@@ -23,6 +23,7 @@ design_docs/Stella_主动插话机制实现方案.md（落地映射）。
 """
 from __future__ import annotations
 
+import contextlib
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -33,6 +34,8 @@ from nonebot import logger
 from memory.participation.buffer import BufferedMessage, MessageBuffer
 from memory.participation.decision import (
     ALLOW_LLM,
+    CANDIDATE,
+    OBSERVE,
     DecisionTracker,
     ParticipationDecision,
 )
@@ -57,6 +60,35 @@ __all__ = [
     "ParticipationTableError",
     "get_participation_manager",
 ]
+
+
+# ── 流程观测探针（计划 §6.4 消息驱动 participation 全等级）──────────
+# 旁路纪律：ctx 为 None（观测未接入）或任何异常都不影响决策业务；
+# metrics 只记 id/计数/阈值/score 数值，不记消息原文（计划 §6.1 隐私）。
+
+
+def _flow_probe(ctx, node_id: str, **kw) -> None:
+    """发一条 decision 事件；观测通道整体 fail-open。"""
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        message_flow.decision(ctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _flow_probe_span(ctx, node_id: str, **kw):
+    """开观测 span；失败返回 None（调用方跳过 finish，业务照常）。"""
+    if ctx is None:
+        return None
+    try:
+        from core.observability import message_flow
+
+        return message_flow.span(ctx, node_id, **kw)
+    except Exception:
+        return None
 
 
 class ParticipationManager:
@@ -205,15 +237,24 @@ class ParticipationManager:
         has_emoji: bool = False,
         message_type: str = "text",
         now: float | None = None,
+        flow_ctx=None,
     ) -> ParticipationDecision | None:
         """处理一条被动群消息；返回决策（不可评分时返回 None）。
 
         Hard Trigger（@/回复/点名）的消息**不调用本方法**——那是
         handle_chat 的职责（上游原则 7）。is_tome 仅用于 Current Relevance
         的时间戳记录。
+
+        ``flow_ctx``：调用方显式传入的消息 root 观测上下文（计划 §6.2
+        拒绝 ambient 传播）；None 时探针全部空转，业务等价。
         """
         tables = self._store.tables
         if tables is None:
+            # 计划 §3.2/§6.4：禁用/无表早退也必须可查询，不能只展示
+            # 触发说话的样本——否则「为什么没说」永远查不到证据。
+            _flow_probe(flow_ctx, "participation.decision", status="blocked",
+                        reason_code="tables_unavailable",
+                        metrics={"group_id": group_id})
             return None
         now = now if now is not None else self._clock()
         state = self._state_for(group_id)
@@ -250,6 +291,14 @@ class ParticipationManager:
 
         # 热身：缓冲不足时不评分（信息量不够，避免开局乱插话）
         if len(state.buffer) < tables.thresholds.warmup_messages:
+            # 计划 §6.4：预热早退也是决策事实（buffer/阈值计数，不含原文）
+            _flow_probe(flow_ctx, "participation.decision", status="skipped",
+                        reason_code="warmup_buffering",
+                        metrics={
+                            "group_id": group_id,
+                            "buffer_size": len(state.buffer),
+                            "warmup_messages": tables.thresholds.warmup_messages,
+                        })
             return None
 
         recent_texts = state.buffer.texts(10)
@@ -275,14 +324,87 @@ class ParticipationManager:
             if tw is not None and state.recent_bot_texts
             else None
         )
+        # 评分观测（计划 §6.4）：span 包住统一评分调用，metrics 记分项与
+        # embedding 回退事实（布尔与数值，不含任何原文）。
+        embedding_available = self._embedding_service() is not None
+        score_span = _flow_probe_span(
+            flow_ctx, "participation.score_compute",
+            summary="统一评分（关键词 + embedding 增强或回退）",
+        )
         breakdown = await self._score_with_embedding(
             state, signals, tables, velocity_level, velocity_count, recent_texts,
             _anchor_sim, now, speech_share=share, novelty=novelty,
         )
+        if score_span is not None:
+            with contextlib.suppress(Exception):
+                score_span.finish(status="succeeded", metrics={
+                    "final_score": round(breakdown.final_score, 1),
+                    "velocity_level": breakdown.velocity_level,
+                    "velocity_count": breakdown.velocity_count,
+                    "speech_share": (
+                        round(breakdown.speech_share, 3)
+                        if breakdown.speech_share is not None else None),
+                    "novelty": (
+                        round(breakdown.novelty, 3)
+                        if breakdown.novelty is not None else None),
+                    # embedding 服务缺席/失败时评分为关键词回退（§6.9 层 2）
+                    "embedding_fallback": not embedding_available,
+                })
 
+        # slot before（计划 §6.4 决策 tracker 观测）：decide 前后槽位快照。
+        # 注意槽位是可变对象——before 必须在 decide 前取**值**，否则读到 after。
+        _slot = self._tracker._slots.get(group_id)
+        slot_before = (
+            (_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)
+            if _slot is not None else (0, 0.0, 0)
+        )
         decision = self._tracker.decide(
             group_id, breakdown, signals, tables.thresholds, topic.topic_id, msg_id,
             now=now, novelty=novelty, is_tome=False,
+        )
+        slot_after = self._tracker._slots.get(group_id)
+
+        # 全等级决策事件（计划 §6.4 表「消息驱动 participation」）：四等级
+        # IGNORE/OBSERVE/CANDIDATE/ALLOW 全部落 participation.decision，
+        # reason_code 记实际退出原因（为什么没说与为什么说同表可查）。
+        if decision.level == ALLOW_LLM:
+            level_status, level_reason = "succeeded", "thresholds_passed"
+        elif decision.level == CANDIDATE:
+            level_status = "waiting"
+            level_reason = (
+                "idle_backoff" if "idle_backoff" in decision.reason_flags
+                else "candidate_pending_confirmation")
+        elif decision.level == OBSERVE:
+            level_status, level_reason = "skipped", "below_candidate_threshold"
+        else:  # IGNORE
+            level_status, level_reason = "skipped", "below_ignore_threshold"
+        _flow_probe(
+            flow_ctx, "participation.decision", status=level_status,
+            reason_code=level_reason,
+            metrics={
+                "level": decision.level,
+                "mode": decision.mode,
+                "score": round(decision.score, 1),
+                "confidence": round(decision.confidence, 2),
+                "topic_id": decision.topic_id,
+                "msg_id": decision.trigger_msg_id,
+            },
+        )
+        # tracker 槽位观测（计划 §5/§6.4）：slot before/after、streak、
+        # backoff_until 与话题版本，回答「为什么现在说/为什么还不说」。
+        _flow_probe(
+            flow_ctx, "participation.mode", status="succeeded",
+            metrics={
+                "streak_before": slot_before[0],
+                "streak": slot_after.streak if slot_after else 0,
+                "backoff_until_before": slot_before[1],
+                "backoff_until": slot_after.backoff_until if slot_after else 0.0,
+                "low_novelty_streak": (
+                    slot_after.low_novelty_streak if slot_after else 0),
+                "topic_revision": self.topic_revision(group_id),
+                "mode": decision.mode,
+                "level": decision.level,
+            },
         )
 
         # 可观测性（loguru + JSONL + MD；落库在 persist 开启时）

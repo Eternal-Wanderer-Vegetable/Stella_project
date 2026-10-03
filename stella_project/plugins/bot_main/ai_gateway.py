@@ -735,6 +735,9 @@ async def record_group_chat(event: GroupMessageEvent):
                 is_tome=event.is_tome(),
                 has_image=bool(extract_image_sources(event)) if vision_available() else False,
                 has_emoji=bool(expression_learning._EMOJI_RE.search(text)),
+                # 消息链上的 participation 探针显式挂在消息 root（计划 §6.2：
+                # 显式传递优先于环境隐式传播），全等级决策事件随消息 trace 可查
+                flow_ctx=fctx,
             )
             part_span.finish(
                 status="succeeded",
@@ -2286,7 +2289,7 @@ async def _check_reply_later(group_id: int, user_id: int, asked_at: float) -> No
         logger.warning(f"⚠️ [主动@] 回应检测异常（跳过）: {e}")
 
 
-async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
+async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
     """尝试主动 @ 一位活跃用户以获取/验证记忆；返回是否已发言。
 
     与话题插话互斥：本函数返回 True 时调用方不再尝试话题插话，
@@ -2294,142 +2297,232 @@ async def _proactive_at_user(bot: Bot, group_id: int) -> bool:
 
     流程：选目标（配额/冷却/退避过滤）→ 生成指令 → 跑 Pipeline →
     发送（带 @ 段）→ 记账（发出即计数）→ 起延迟任务检测回应。
+
+    流程观测（计划 §6.4）：``flow_ctx`` 缺省时自建 ``proactive_at`` 独立
+    root（避免只在生成开始后才有 trace）；定时任务传入其 timer root 时
+    复用之开子 span，不另建 root。
     """
-    allowed, reason = can_speak(group_id, "at")
-    if not allowed:
-        logger.debug(f"[主动@] 群 {group_id} 跳过：{reason}")
-        return False
-    proactive = get_proactive()
-
-    # 排除 Bot 自身，避免自问自答
-    try:
-        self_id = int(bot.self_id)
-    except (TypeError, ValueError):
-        self_id = 0
-    target = pick_target(group_id, exclude_user_ids={self_id, 0})
-    if target is None:
-        return False
-
-    target.nickname = await _resolve_nickname(bot, group_id, target.user_id)
-    logger.info(
-        f"🎯 [主动@] 群 {group_id} 选定用户 {target.user_id}"
-        f"（{target.nickname}）：{target.reason}"
-    )
-
-    lock = _group_locks[group_id]
-    async with lock:
-        ctx = ChatContext(
-            user_id=target.user_id,
-            group_id=group_id,
-            msg_id=0,
-            message=build_instruction(target),
-            # trigger 用 reply：主动 @ 是「对着某个具体人说话」，
-            # 需要该用户的画像与记忆参与上下文构建（proactive 走的是群级检索）
-            trigger="reply",
-            # 纯诊断字段：日志据此区分「用户 @ 我」与「我主动 @ 人」
-            intent="proactive_at",
-            trace_id=new_trace_id(),
-        )
+    own_root = flow_ctx is None
+    caller_flow_ctx = flow_ctx
+    if own_root:
         try:
-            ctx = await _run_turn_via_engine(group_id, ctx)
-        except RuntimeTurnError as e:
-            # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
-            if e.code == E_CANCELLED:
-                logger.info(f"🔇 [主动@] 群 {group_id} 轮次已取消，静默退出")
+            from core.observability import message_flow
+
+            flow_ctx = message_flow.begin_trace(
+                root_kind="proactive_at", platform="qq",
+                scope=f"qq:{group_id}", origin="spawn",
+                source_message_key=f"proactive_at:{group_id}:{new_trace_id()[:8]}",
+            )
+        except Exception:
+            flow_ctx = None
+
+        def _at_end(outcome: str) -> None:
+            try:
+                from core.observability import message_flow
+
+                if flow_ctx is not None and not flow_ctx.ended:
+                    message_flow.end_trace(flow_ctx, outcome=outcome)
+            except Exception:
+                pass
+    else:
+        def _at_end(outcome: str) -> None:
+            return None
+
+    outcome = ""
+    try:
+        allowed, reason = can_speak(group_id, "at")
+        if not allowed:
+            # 门控拒绝也有可查询原因（计划 §6.4）
+            _flow_decision(flow_ctx, "proactive.at.preflight", status="blocked",
+                           reason_code=f"can_speak:{reason}",
+                           instance_key=f"grp:{group_id}")
+            logger.debug(f"[主动@] 群 {group_id} 跳过：{reason}")
+            outcome = "gate_blocked"
+            return False
+        proactive = get_proactive()
+
+        # 排除 Bot 自身，避免自问自答
+        try:
+            self_id = int(bot.self_id)
+        except (TypeError, ValueError):
+            self_id = 0
+        # 选人观测只在调用方显式传入 ctx 时下发（计划 §6.2 显式传递）；
+        # 调用方未传时保持原调用形状——自建 root 记录网关级决策，
+        # 逐用户/候选事实由 pick_target 的直接调用方按需传递。
+        if caller_flow_ctx is not None:
+            target = pick_target(group_id, exclude_user_ids={self_id, 0},
+                                 flow_ctx=flow_ctx,
+                                 instance_key=f"grp:{group_id}")
+        else:
+            target = pick_target(group_id, exclude_user_ids={self_id, 0})
+        if target is None:
+            # 无候选 = noop 有原因：逐项原因已由 pick_target 落
+            # at.preflight/at.select（计划 §6.4）
+            outcome = "no_candidate"
+            return False
+
+        target.nickname = await _resolve_nickname(bot, group_id, target.user_id)
+        logger.info(
+            f"🎯 [主动@] 群 {group_id} 选定用户 {target.user_id}"
+            f"（{target.nickname}）：{target.reason}"
+        )
+
+        lock = _group_locks[group_id]
+        async with lock:
+            ctx = ChatContext(
+                user_id=target.user_id,
+                group_id=group_id,
+                msg_id=0,
+                message=build_instruction(target),
+                # trigger 用 reply：主动 @ 是「对着某个具体人说话」，
+                # 需要该用户的画像与记忆参与上下文构建（proactive 走的是群级检索）
+                trigger="reply",
+                # 纯诊断字段：日志据此区分「用户 @ 我」与「我主动 @ 人」
+                intent="proactive_at",
+                trace_id=new_trace_id(),
+            )
+            try:
+                ctx = await _run_turn_via_engine(group_id, ctx)
+            except RuntimeTurnError as e:
+                # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
+                if e.code == E_CANCELLED:
+                    logger.info(f"🔇 [主动@] 群 {group_id} 轮次已取消，静默退出")
+                    _flow_decision(flow_ctx, "proactive.turn", status="cancelled",
+                                   reason_code="turn_cancelled",
+                                   instance_key=f"grp:{group_id}")
+                    outcome = "cancelled"
+                    return False
+                raise
+            except Exception as e:
+                logger.error(f"主动 @ Pipeline 异常: {e}")
+                _flow_decision(flow_ctx, "proactive.turn", status="failed",
+                               reason_code="pipeline_error",
+                               instance_key=f"grp:{group_id}")
+                outcome = "turn_error"
                 return False
-            raise
-        except Exception as e:
-            logger.error(f"主动 @ Pipeline 异常: {e}")
-            return False
 
-        if not ctx.lines:
-            return False
+            if not ctx.lines:
+                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
+                               reason_code="empty_output",
+                               instance_key=f"grp:{group_id}")
+                outcome = "empty_output"
+                return False
 
-        if is_proactive_skip(ctx.lines):
-            proactive.mark_proactive_skip(
-                group_id,
-                target.user_id,
-                target.skip_subject,
+            if is_proactive_skip(ctx.lines):
+                proactive.mark_proactive_skip(
+                    group_id,
+                    target.user_id,
+                    target.skip_subject,
+                )
+                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
+                               reason_code="naturalness_skip",
+                               instance_key=f"grp:{group_id}")
+                logger.info(
+                    f"⏭️ [主动@] 群 {group_id} 用户 {target.user_id} "
+                    f"当前没有自然承接，跳过发送与记账（subject={target.skip_subject}）"
+                )
+                outcome = "naturalness_skip"
+                return False
+
+            # 主动 @ 只发一句：追问必须简短，多行会像连续质询
+            line = _join_lines_naturally(ctx.lines) if len(ctx.lines) > 1 else ctx.lines[0].strip()
+            if not line:
+                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
+                               reason_code="empty_joined_line",
+                               instance_key=f"grp:{group_id}")
+                outcome = "empty_output"
+                return False
+
+            if proactive.recently_spoken(group_id, [line]):
+                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
+                               reason_code="duplicate_output",
+                               instance_key=f"grp:{group_id}")
+                logger.info(f"🛑 [主动@] 群 {group_id} 与已发言内容重复，跳过")
+                outcome = "duplicate_output"
+                return False
+
+            # 逐段发送 + 回执收集（计划 §6.1）：发送确认之后才记账。原实现先记账
+            # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
+            scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+
+            async def _send_at_segment(seg_line: str, _i: int) -> str | None:
+                message = Message([
+                    MessageSegment.at(target.user_id),
+                    MessageSegment.text(" " + seg_line),
+                ])
+                return await bot.send_group_msg(group_id=group_id, message=message)
+
+            receipts = await deliver_lines(
+                [line],
+                scope=scope,
+                trace_id=ctx.trace_id,
+                turn_id=ctx.turn_id,
+                send_one=_send_at_segment,
             )
-            logger.info(
-                f"⏭️ [主动@] 群 {group_id} 用户 {target.user_id} "
-                f"当前没有自然承接，跳过发送与记账（subject={target.skip_subject}）"
-            )
-            return False
+            delivered = delivered_texts(receipts)
+            if not delivered:
+                logger.error(f"[主动@] 群 {group_id} 发送失败，不记账不学习")
+                _flow_decision(flow_ctx, "proactive.send", status="failed",
+                               reason_code="no_segment_delivered",
+                               instance_key=f"grp:{group_id}")
+                outcome = "not_delivered"
+                return False
 
-        # 主动 @ 只发一句：追问必须简短，多行会像连续质询
-        line = _join_lines_naturally(ctx.lines) if len(ctx.lines) > 1 else ctx.lines[0].strip()
-        if not line:
-            return False
+            # 只对确认送达的段记账（计划 §6.4）：记账事实随 span 可查
+            with _flow_span(flow_ctx, "proactive.after",
+                            instance_key=f"grp:{group_id}"):
+                _flow_checkpoint(flow_ctx, "proactive.after",
+                                 summary="acknowledged-only bookkeeping",
+                                 metrics={"delivered_segments": len(delivered),
+                                          "total_segments": len(receipts)})
+                proactive.mark_spoke(group_id)
+                proactive.record_spoken(group_id, delivered)
+                # 评分层记账：主动 @ 同样算主动发言（上游 §14 的区分只针对被动应答）
+                with contextlib.suppress(Exception):
+                    get_participation_manager().note_stella_spoke(group_id, "proactive")
+                _flow_checkpoint(flow_ctx, "proactive.after",
+                                 summary="note_stella_spoke(proactive)")
+                # 回复效果学习（设计阶段六）：目标是「主动 @ 是否被回应/忽略」；
+                # message 传空——build_instruction 的罐头指令不是用户的表达素材。
+                expression_learning.on_reply_sent(
+                    group_id=group_id,
+                    group_shared_space=ctx.group_shared_space,
+                    user_id=target.user_id,
+                    message="",
+                    lines=delivered,
+                    trigger="proactive",
+                    turn_id=ctx.turn_id,
+                    trace_id=ctx.trace_id,
+                    intent="proactive_at",
+                )
+                logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
-        if proactive.recently_spoken(group_id, [line]):
-            logger.info(f"🛑 [主动@] 群 {group_id} 与已发言内容重复，跳过")
-            return False
+                await _record_bot_lines(self_id, group_id, delivered)
 
-        # 逐段发送 + 回执收集（计划 §6.1）：发送确认之后才记账。原实现先记账
-        # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
-        scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+                # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
+                if ctx.tail_start_id:
+                    schedule_compact(group_id, ctx.tail_start_id)
+                    _flow_checkpoint(flow_ctx, "proactive.after",
+                                     summary="compact spawned, not awaited")
 
-        async def _send_at_segment(seg_line: str, _i: int) -> str | None:
-            message = Message([
-                MessageSegment.at(target.user_id),
-                MessageSegment.text(" " + seg_line),
-            ])
-            return await bot.send_group_msg(group_id=group_id, message=message)
-
-        receipts = await deliver_lines(
-            [line],
-            scope=scope,
-            trace_id=ctx.trace_id,
-            turn_id=ctx.turn_id,
-            send_one=_send_at_segment,
+        # 发出即计数（不论是否获得回应），否则无回应的追问不占配额，
+        # 会导致对同一个人连续搭话
+        record_at(
+            group_id,
+            target.user_id,
+            candidate_id=target.candidate_id,
         )
-        delivered = delivered_texts(receipts)
-        if not delivered:
-            logger.error(f"[主动@] 群 {group_id} 发送失败，不记账不学习")
-            return False
 
-        proactive.mark_spoke(group_id)
-        proactive.record_spoken(group_id, delivered)
-        # 评分层记账：主动 @ 同样算主动发言（上游 §14 的区分只针对被动应答）
-        with contextlib.suppress(Exception):
-            get_participation_manager().note_stella_spoke(group_id, "proactive")
-        # 回复效果学习（设计阶段六）：目标是「主动 @ 是否被回应/忽略」；
-        # message 传空——build_instruction 的罐头指令不是用户的表达素材。
-        expression_learning.on_reply_sent(
-            group_id=group_id,
-            group_shared_space=ctx.group_shared_space,
-            user_id=target.user_id,
-            message="",
-            lines=delivered,
-            trigger="proactive",
-            turn_id=ctx.turn_id,
-            trace_id=ctx.trace_id,
-            intent="proactive_at",
+        # 起后台任务检测回应；登记到集合防止被 GC 回收
+        task = asyncio.create_task(
+            _check_reply_later(group_id, target.user_id, time.monotonic())
         )
-        logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
-
-        await _record_bot_lines(self_id, group_id, delivered)
-
-        # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
-        if ctx.tail_start_id:
-            schedule_compact(group_id, ctx.tail_start_id)
-
-    # 发出即计数（不论是否获得回应），否则无回应的追问不占配额，
-    # 会导致对同一个人连续搭话
-    record_at(
-        group_id,
-        target.user_id,
-        candidate_id=target.candidate_id,
-    )
-
-    # 起后台任务检测回应；登记到集合防止被 GC 回收
-    task = asyncio.create_task(
-        _check_reply_later(group_id, target.user_id, time.monotonic())
-    )
-    _reply_check_tasks.add(task)
-    task.add_done_callback(_reply_check_tasks.discard)
-    return True
+        _reply_check_tasks.add(task)
+        task.add_done_callback(_reply_check_tasks.discard)
+        outcome = "delivered"
+        return True
+    finally:
+        _at_end(outcome or "closed")
 
 
 async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
@@ -2834,6 +2927,9 @@ async def _proactive_speak_impl(
                 for i in range(0, len(ctx.lines), per_chunk)
             ]
         if not ctx.lines:
+            # 行合并后的空输出也是一次过滤器退出（计划 §6.4：每次退出有原因）
+            _flow_decision(fctx, "proactive.filter", status="skipped",
+                           reason_code="empty_after_merge")
             return
 
         # 防刷屏：与最近一次主动/回复高度相似时，本次主动发言直接放弃
@@ -2867,50 +2963,86 @@ async def _proactive_speak_impl(
             logger.error(f"[主动发言] 群 {group_id} 全部片段发送失败（不记账不学习）")
             return
 
-        with _flow_span(fctx, "proactive.after"):
-            pass
         _flow_set_outcome(fctx, "delivered")
-        # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
-        proactive.mark_spoke(group_id)
-        get_proactive().record_spoken(group_id, delivered)
-        # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty），
-        # 一次逻辑发言只更新一次，不按片段重复计数；文本进 novelty 比对语料
-        with contextlib.suppress(Exception):
-            get_participation_manager().note_stella_spoke(
-                group_id, "proactive", text=delivered[0]
+        # 发送后动作（计划 §6.4：不用空 span 冒充——记账/学习/记录/压缩
+        # 都真实发生在确认送达之后，proactive.after span 包住它们）
+        with _flow_span(fctx, "proactive.after"):
+            # 只对 acknowledged 段记账（计划 §6.1/§6.4）：delivered 是发送
+            # 确认后的片段，未确认段不进入任何记账/学习
+            _flow_checkpoint(fctx, "proactive.after",
+                             summary="acknowledged-only bookkeeping",
+                             metrics={"delivered_segments": len(delivered),
+                                      "total_segments": len(receipts)})
+            # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
+            proactive.mark_spoke(group_id)
+            get_proactive().record_spoken(group_id, delivered)
+            # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty），
+            # 一次逻辑发言只更新一次，不按片段重复计数；文本进 novelty 比对语料
+            with contextlib.suppress(Exception):
+                get_participation_manager().note_stella_spoke(
+                    group_id, "proactive", text=delivered[0]
+                )
+            _flow_checkpoint(fctx, "proactive.after",
+                             summary="note_stella_spoke(proactive)")
+            # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」；
+            # user_id=0 表示全群目标，效果结算按群归因（不再作为过滤条件）。
+            expression_learning.on_reply_sent(
+                group_id=group_id,
+                group_shared_space=ctx.group_shared_space,
+                user_id=0,
+                message="",
+                lines=delivered,
+                trigger="proactive",
+                turn_id=ctx.turn_id,
+                trace_id=ctx.trace_id,
+                intent=intent,
             )
-        # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」；
-        # user_id=0 表示全群目标，效果结算按群归因（不再作为过滤条件）。
-        expression_learning.on_reply_sent(
-            group_id=group_id,
-            group_shared_space=ctx.group_shared_space,
-            user_id=0,
-            message="",
-            lines=delivered,
-            trigger="proactive",
-            turn_id=ctx.turn_id,
-            trace_id=ctx.trace_id,
-            intent=intent,
-        )
-        logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
-        await _record_bot_lines(int(bot.self_id), group_id, delivered)
+            logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
+            await _record_bot_lines(int(bot.self_id), group_id, delivered)
 
-        # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
-        if ctx.tail_start_id:
-            schedule_compact(
-                group_id, ctx.tail_start_id,
-                parent_trace_id=fctx.trace_id if fctx is not None else "")
+            # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
+            if ctx.tail_start_id:
+                schedule_compact(
+                    group_id, ctx.tail_start_id,
+                    parent_trace_id=fctx.trace_id if fctx is not None else "")
+                _flow_checkpoint(fctx, "proactive.after",
+                                 summary="compact spawned, not awaited")
 
-        _log_participation_event(
-            decision, "sent", aggregate_delivery_status([r.status for r in receipts])
-        )
+            _log_participation_event(
+                decision, "sent", aggregate_delivery_status([r.status for r in receipts])
+            )
 
 
 # 定时主动发言：每 PROACTIVE_CHECK_INTERVAL 秒检查一次所有启用群
 if scheduler is not None and PROACTIVE_ENABLED:
     @scheduler.scheduled_job("interval", seconds=PROACTIVE_CHECK_INTERVAL, id="proactive_speak")
     async def proactive_speak_job():
+        # 计划 §6.4：root 在前置 return 之前创建——feature 开关关/无 Bot 等
+        # 门控拒绝也有可查询原因，而不是一条空跑的定时任务。
+        fctx = None
+        try:
+            from core.observability import message_flow
+
+            fctx = message_flow.begin_trace(
+                root_kind="proactive_timer", platform="qq", scope="qq:timer",
+                origin="timer", trigger="proactive_check_interval",
+            )
+        except Exception:
+            fctx = None
+
+        def _timer_end(outcome: str) -> None:
+            try:
+                from core.observability import message_flow
+
+                if fctx is not None and not fctx.ended:
+                    message_flow.end_trace(fctx, outcome=outcome)
+            except Exception:
+                pass
+
         if not PROACTIVE_ENABLED:
+            _flow_decision(fctx, "proactive.timer.preflight", status="skipped",
+                           reason_code="proactive_disabled")
+            _timer_end("disabled")
             return
         # 每个循环重新取 bot，避免 Bot 对象失效
         try:
@@ -2918,6 +3050,9 @@ if scheduler is not None and PROACTIVE_ENABLED:
             bot = get_bot()
         except Exception as e:
             logger.debug(f"主动发言跳过：无可用 Bot（{e}）")
+            _flow_decision(fctx, "proactive.timer.preflight", status="skipped",
+                           reason_code="no_bot")
+            _timer_end("no_bot")
             return
         # 逐个群尝试主动发言；单个群失败不拖垮其他群
         for group_id in ALLOWED_GROUPS:
@@ -2931,15 +3066,23 @@ if scheduler is not None and PROACTIVE_ENABLED:
                 # 主动 @ 优先：它有明确目的（获取/验证记忆），
                 # 且已受每用户配额与冷却约束。命中即跳过本轮话题插话，
                 # 同一轮只发一次言。
-                if await _proactive_at_user(bot, group_id):
+                if await _proactive_at_user(bot, group_id, flow_ctx=fctx):
+                    _flow_decision(fctx, "proactive.timer.preflight",
+                                   status="succeeded", reason_code="at_spoke",
+                                   instance_key=f"grp:{group_id}")
                     continue
                 if PARTICIPATION_ENABLED:
                     # 评分层接管「什么时候说」：掷骰子路径停用，
                     # 话题插话由被动消息上的 observe() 事件驱动。
+                    _flow_decision(fctx, "proactive.timer.preflight",
+                                   status="skipped",
+                                   reason_code="participation_event_driven",
+                                   instance_key=f"grp:{group_id}")
                     continue
                 await _proactive_speak_for_group(bot, group_id)
             except Exception as e:
                 logger.error(f"主动发言异常（群 {group_id}）: {e}")
+        _timer_end("closed")
 
 
 # 评分层的状态机推进：COOLING→EXPIRED 不依赖新消息，必须靠定时任务推进，

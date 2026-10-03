@@ -517,8 +517,7 @@ class TurnService:
         fctx = _flow_of(ctx)
         with _flow_span(fctx, "finalize.trace") as fin_span:
             await self._finalize_trace(ctx)
-            ctx = await self._run_post_hooks(ctx, fctx, fin_span)
-        return ctx
+            return await self._run_post_hooks(ctx, fctx, fin_span)
 
     async def _finalize_trace(self, ctx: ChatContext) -> None:
         # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）

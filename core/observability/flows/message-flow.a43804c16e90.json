@@ -1,6 +1,6 @@
 {
  "coverage": {
-  "closure_sites": 6331,
+  "closure_sites": 6334,
   "core_unresolved_allowed": 0,
   "declared_runtime_entries": 20,
   "derived_or_opaque": 13,
@@ -2038,7 +2038,7 @@
    "label": "记忆决策轨迹",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "5d382aabbcb26d69",
+    "body_hash": "c4e1cf1c693c4b0d",
     "features": {
      "awaits": 2,
      "branches": 0,
@@ -2165,16 +2165,16 @@
    "label": "参与评分",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "6563598a356f5387",
+    "body_hash": "6a2860bdcc92631f",
     "features": {
      "awaits": 4,
      "branches": 22,
-     "calls": 36,
+     "calls": 37,
      "loops": 1,
      "raises": 0,
      "returns": 0,
      "spawns": 0,
-     "try": 1
+     "try": 0
     },
     "file": "memory/participation/__init__.py",
     "symbol": "ParticipationManager.observe"
@@ -2779,16 +2779,16 @@
    "label": "参与决策（全等级退出）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "6563598a356f5387",
+    "body_hash": "6a2860bdcc92631f",
     "features": {
      "awaits": 4,
      "branches": 22,
-     "calls": 36,
+     "calls": 37,
      "loops": 1,
      "raises": 0,
      "returns": 0,
      "spawns": 0,
-     "try": 1
+     "try": 0
     },
     "file": "memory/participation/__init__.py",
     "symbol": "ParticipationManager.observe"
@@ -2821,16 +2821,16 @@
    "label": "参与评分决策",
    "lane": "background",
    "source_ref": {
-    "body_hash": "6563598a356f5387",
+    "body_hash": "6a2860bdcc92631f",
     "features": {
      "awaits": 4,
      "branches": 22,
-     "calls": 36,
+     "calls": 37,
      "loops": 1,
      "raises": 0,
      "returns": 0,
      "spawns": 0,
-     "try": 1
+     "try": 0
     },
     "file": "memory/participation/__init__.py",
     "symbol": "ParticipationManager.observe"
@@ -17127,14 +17127,14 @@
       "line": 518
      },
      {
-      "kind": "return",
-      "line": 521
-     },
-     {
       "kind": "call",
       "line": 517,
       "resolved": "local:_flow_of",
       "target": "_flow_of"
+     },
+     {
+      "kind": "return",
+      "line": 520
      },
      {
       "kind": "call",
@@ -18857,323 +18857,333 @@
     "counts": {
      "await": 4,
      "branch": 22,
-     "call": 36,
+     "call": 37,
      "loop": 1,
      "return": 6,
-     "try": 1
+     "with": 1
     },
     "items": [
      {
       "condition": "tables is None",
       "kind": "branch",
-      "line": 251
+      "line": 252
      },
      {
       "condition": "is_tome",
       "kind": "branch",
-      "line": 274
+      "line": 275
      },
      {
       "condition": "len(state.buffer) < tables.thresholds.warmup_messages",
       "kind": "branch",
-      "line": 292
+      "line": 293
      },
      {
       "condition": "score_span is not None",
       "kind": "branch",
-      "line": 337
+      "line": 338
      },
      {
       "condition": "decision.level == ALLOW_LLM",
       "kind": "branch",
-      "line": 371
+      "line": 370
      },
      {
       "condition": "self._persist and decision.level in ('CANDIDATE', ALLOW_LLM)",
       "kind": "branch",
-      "line": 420
+      "line": 419
      },
      {
       "condition": "topic.status.value in ('COOLING', 'EXPIRED')",
       "kind": "branch",
-      "line": 423
+      "line": 422
      },
      {
       "kind": "return",
-      "line": 426
+      "line": 425
      },
      {
       "kind": "return",
-      "line": 257
+      "line": 258
      },
      {
       "condition": "now",
       "kind": "branch",
-      "line": 258
+      "line": 259
      },
      {
       "kind": "call",
-      "line": 259,
+      "line": 260,
       "resolved": "local:ParticipationManager._state_for",
       "target": "self._state_for"
      },
      {
       "kind": "call",
-      "line": 261,
+      "line": 262,
       "resolved": "unresolved",
       "target": "state.note_speech"
      },
      {
       "kind": "call",
-      "line": 263,
+      "line": 264,
       "resolved": "external:memory.participation.buffer",
       "target": "BufferedMessage"
      },
      {
       "condition": "svc is None or not texts_",
       "kind": "branch",
-      "line": 280
+      "line": 281
      },
      {
       "iterate": "texts_[-tables.thresholds.topic_switch.recent_texts:]",
       "kind": "loop",
-      "line": 283
+      "line": 284
      },
      {
       "kind": "return",
-      "line": 287
+      "line": 288
      },
      {
       "kind": "await",
-      "line": 289
+      "line": 290
      },
      {
       "kind": "return",
-      "line": 301
+      "line": 302
      },
      {
       "kind": "call",
-      "line": 303,
+      "line": 304,
       "resolved": "unresolved",
       "target": "state.buffer.texts"
      },
      {
       "kind": "call",
-      "line": 304,
+      "line": 305,
       "resolved": "external:memory.participation.signals",
       "target": "extract_signals"
      },
      {
       "kind": "call",
-      "line": 305,
+      "line": 306,
       "resolved": "unresolved",
       "target": "state.velocity_level"
      },
      {
       "kind": "return",
-      "line": 310
+      "line": 311
      },
      {
       "kind": "call",
-      "line": 313,
+      "line": 314,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "condition": "state.speech_share(tw.share_window_seconds, now=now)",
       "kind": "branch",
-      "line": 314
+      "line": 315
      },
      {
       "condition": "max((ngram_jaccard(text, bot_text, tw.ngram_size) for bot_text in state.recent_bot_texts), default=0.0)",
       "kind": "branch",
-      "line": 316
+      "line": 317
      },
      {
       "kind": "call",
-      "line": 329,
+      "line": 330,
       "resolved": "local:_flow_probe_span",
       "target": "_flow_probe_span"
      },
      {
       "kind": "await",
-      "line": 333
+      "line": 334
      },
      {
-      "finally": false,
-      "handlers": [
-       "Exception"
-      ],
-      "kind": "try",
-      "line": 338
+      "async": false,
+      "context": "contextlib.suppress(Exception)",
+      "kind": "with",
+      "line": 339
      },
      {
       "kind": "call",
-      "line": 357,
+      "line": 356,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
       "kind": "branch",
-      "line": 359
+      "line": 358
      },
      {
       "kind": "call",
-      "line": 362,
+      "line": 361,
       "resolved": "self:self._tracker.decide",
       "target": "self._tracker.decide"
      },
      {
       "kind": "call",
-      "line": 366,
+      "line": 365,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "decision.level == CANDIDATE",
       "kind": "branch",
-      "line": 373
+      "line": 372
      },
      {
       "kind": "call",
-      "line": 382,
+      "line": 381,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 396,
+      "line": 395,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 412,
+      "line": 411,
       "resolved": "external:memory.participation.observability",
       "target": "log_decision"
      },
      {
       "kind": "call",
-      "line": 254,
+      "line": 255,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 258,
+      "line": 259,
       "resolved": "self:self._clock",
       "target": "self._clock"
      },
      {
       "kind": "call",
-      "line": 279,
+      "line": 280,
       "resolved": "local:ParticipationManager._embedding_service",
       "target": "self._embedding_service"
      },
      {
       "kind": "return",
-      "line": 281
+      "line": 282
      },
      {
       "condition": "sim is not None and (best is None or sim > best)",
       "kind": "branch",
-      "line": 285
+      "line": 286
      },
      {
       "kind": "call",
-      "line": 289,
+      "line": 290,
       "resolved": "unresolved",
       "target": "state.ingest"
      },
      {
       "kind": "call",
-      "line": 292,
+      "line": 293,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 294,
+      "line": 295,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "await",
-      "line": 310
+      "line": 311
      },
      {
       "kind": "call",
-      "line": 314,
+      "line": 315,
       "resolved": "unresolved",
       "target": "state.speech_share"
      },
      {
       "kind": "call",
-      "line": 316,
+      "line": 317,
       "resolved": "unresolved",
       "target": "max"
      },
      {
       "kind": "call",
-      "line": 328,
+      "line": 329,
       "resolved": "local:ParticipationManager._embedding_service",
       "target": "self._embedding_service"
      },
      {
       "kind": "call",
-      "line": 333,
+      "line": 334,
       "resolved": "local:ParticipationManager._score_with_embedding",
       "target": "self._score_with_embedding"
      },
      {
       "condition": "decision.level == OBSERVE",
       "kind": "branch",
-      "line": 378
+      "line": 377
      },
      {
       "kind": "call",
-      "line": 421,
+      "line": 420,
       "resolved": "external:memory.participation.observability",
       "target": "record_to_db"
      },
      {
       "kind": "await",
-      "line": 284
+      "line": 285
      },
      {
       "kind": "call",
-      "line": 310,
+      "line": 311,
       "resolved": "local:ParticipationManager._async_similarity",
       "target": "self._async_similarity"
      },
      {
       "kind": "call",
       "line": 339,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 340,
       "resolved": "unresolved",
       "target": "score_span.finish"
      },
      {
       "condition": "'idle_backoff'",
       "kind": "branch",
-      "line": 376
+      "line": 375
      },
      {
       "condition": "'decision_allow'",
       "kind": "branch",
-      "line": 418
+      "line": 417
      },
      {
       "kind": "call",
-      "line": 284,
+      "line": 285,
       "resolved": "local:ParticipationManager._async_similarity",
       "target": "self._async_similarity"
      },
      {
       "kind": "call",
-      "line": 318,
+      "line": 319,
       "resolved": "external:memory.participation.scorer",
       "target": "ngram_jaccard"
+     },
+     {
+      "kind": "call",
+      "line": 387,
+      "resolved": "unresolved",
+      "target": "round"
      },
      {
       "kind": "call",
@@ -19182,63 +19192,57 @@
       "target": "round"
      },
      {
-      "kind": "call",
-      "line": 389,
-      "resolved": "unresolved",
-      "target": "round"
-     },
-     {
       "condition": "slot_after.streak",
       "kind": "branch",
-      "line": 400
+      "line": 399
      },
      {
       "condition": "slot_after.backoff_until",
       "kind": "branch",
-      "line": 402
+      "line": 401
      },
      {
       "condition": "slot_after.low_novelty_streak",
       "kind": "branch",
-      "line": 404
+      "line": 403
      },
      {
       "kind": "call",
-      "line": 405,
+      "line": 404,
       "resolved": "local:ParticipationManager.topic_revision",
       "target": "self.topic_revision"
      },
      {
       "kind": "call",
-      "line": 298,
+      "line": 299,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 340,
+      "line": 341,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "condition": "round(breakdown.speech_share, 3)",
       "kind": "branch",
-      "line": 344
+      "line": 345
      },
      {
       "condition": "round(breakdown.novelty, 3)",
       "kind": "branch",
-      "line": 347
+      "line": 348
      },
      {
       "kind": "call",
-      "line": 344,
+      "line": 345,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "kind": "call",
-      "line": 347,
+      "line": 348,
       "resolved": "unresolved",
       "target": "round"
      }
@@ -26132,323 +26136,333 @@
     "counts": {
      "await": 4,
      "branch": 22,
-     "call": 36,
+     "call": 37,
      "loop": 1,
      "return": 6,
-     "try": 1
+     "with": 1
     },
     "items": [
      {
       "condition": "tables is None",
       "kind": "branch",
-      "line": 251
+      "line": 252
      },
      {
       "condition": "is_tome",
       "kind": "branch",
-      "line": 274
+      "line": 275
      },
      {
       "condition": "len(state.buffer) < tables.thresholds.warmup_messages",
       "kind": "branch",
-      "line": 292
+      "line": 293
      },
      {
       "condition": "score_span is not None",
       "kind": "branch",
-      "line": 337
+      "line": 338
      },
      {
       "condition": "decision.level == ALLOW_LLM",
       "kind": "branch",
-      "line": 371
+      "line": 370
      },
      {
       "condition": "self._persist and decision.level in ('CANDIDATE', ALLOW_LLM)",
       "kind": "branch",
-      "line": 420
+      "line": 419
      },
      {
       "condition": "topic.status.value in ('COOLING', 'EXPIRED')",
       "kind": "branch",
-      "line": 423
+      "line": 422
      },
      {
       "kind": "return",
-      "line": 426
+      "line": 425
      },
      {
       "kind": "return",
-      "line": 257
+      "line": 258
      },
      {
       "condition": "now",
       "kind": "branch",
-      "line": 258
+      "line": 259
      },
      {
       "kind": "call",
-      "line": 259,
+      "line": 260,
       "resolved": "local:ParticipationManager._state_for",
       "target": "self._state_for"
      },
      {
       "kind": "call",
-      "line": 261,
+      "line": 262,
       "resolved": "unresolved",
       "target": "state.note_speech"
      },
      {
       "kind": "call",
-      "line": 263,
+      "line": 264,
       "resolved": "external:memory.participation.buffer",
       "target": "BufferedMessage"
      },
      {
       "condition": "svc is None or not texts_",
       "kind": "branch",
-      "line": 280
+      "line": 281
      },
      {
       "iterate": "texts_[-tables.thresholds.topic_switch.recent_texts:]",
       "kind": "loop",
-      "line": 283
+      "line": 284
      },
      {
       "kind": "return",
-      "line": 287
+      "line": 288
      },
      {
       "kind": "await",
-      "line": 289
+      "line": 290
      },
      {
       "kind": "return",
-      "line": 301
+      "line": 302
      },
      {
       "kind": "call",
-      "line": 303,
+      "line": 304,
       "resolved": "unresolved",
       "target": "state.buffer.texts"
      },
      {
       "kind": "call",
-      "line": 304,
+      "line": 305,
       "resolved": "external:memory.participation.signals",
       "target": "extract_signals"
      },
      {
       "kind": "call",
-      "line": 305,
+      "line": 306,
       "resolved": "unresolved",
       "target": "state.velocity_level"
      },
      {
       "kind": "return",
-      "line": 310
+      "line": 311
      },
      {
       "kind": "call",
-      "line": 313,
+      "line": 314,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "condition": "state.speech_share(tw.share_window_seconds, now=now)",
       "kind": "branch",
-      "line": 314
+      "line": 315
      },
      {
       "condition": "max((ngram_jaccard(text, bot_text, tw.ngram_size) for bot_text in state.recent_bot_texts), default=0.0)",
       "kind": "branch",
-      "line": 316
+      "line": 317
      },
      {
       "kind": "call",
-      "line": 329,
+      "line": 330,
       "resolved": "local:_flow_probe_span",
       "target": "_flow_probe_span"
      },
      {
       "kind": "await",
-      "line": 333
+      "line": 334
      },
      {
-      "finally": false,
-      "handlers": [
-       "Exception"
-      ],
-      "kind": "try",
-      "line": 338
+      "async": false,
+      "context": "contextlib.suppress(Exception)",
+      "kind": "with",
+      "line": 339
      },
      {
       "kind": "call",
-      "line": 357,
+      "line": 356,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
       "kind": "branch",
-      "line": 359
+      "line": 358
      },
      {
       "kind": "call",
-      "line": 362,
+      "line": 361,
       "resolved": "self:self._tracker.decide",
       "target": "self._tracker.decide"
      },
      {
       "kind": "call",
-      "line": 366,
+      "line": 365,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "decision.level == CANDIDATE",
       "kind": "branch",
-      "line": 373
+      "line": 372
      },
      {
       "kind": "call",
-      "line": 382,
+      "line": 381,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 396,
+      "line": 395,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 412,
+      "line": 411,
       "resolved": "external:memory.participation.observability",
       "target": "log_decision"
      },
      {
       "kind": "call",
-      "line": 254,
+      "line": 255,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 258,
+      "line": 259,
       "resolved": "self:self._clock",
       "target": "self._clock"
      },
      {
       "kind": "call",
-      "line": 279,
+      "line": 280,
       "resolved": "local:ParticipationManager._embedding_service",
       "target": "self._embedding_service"
      },
      {
       "kind": "return",
-      "line": 281
+      "line": 282
      },
      {
       "condition": "sim is not None and (best is None or sim > best)",
       "kind": "branch",
-      "line": 285
+      "line": 286
      },
      {
       "kind": "call",
-      "line": 289,
+      "line": 290,
       "resolved": "unresolved",
       "target": "state.ingest"
      },
      {
       "kind": "call",
-      "line": 292,
+      "line": 293,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 294,
+      "line": 295,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "await",
-      "line": 310
+      "line": 311
      },
      {
       "kind": "call",
-      "line": 314,
+      "line": 315,
       "resolved": "unresolved",
       "target": "state.speech_share"
      },
      {
       "kind": "call",
-      "line": 316,
+      "line": 317,
       "resolved": "unresolved",
       "target": "max"
      },
      {
       "kind": "call",
-      "line": 328,
+      "line": 329,
       "resolved": "local:ParticipationManager._embedding_service",
       "target": "self._embedding_service"
      },
      {
       "kind": "call",
-      "line": 333,
+      "line": 334,
       "resolved": "local:ParticipationManager._score_with_embedding",
       "target": "self._score_with_embedding"
      },
      {
       "condition": "decision.level == OBSERVE",
       "kind": "branch",
-      "line": 378
+      "line": 377
      },
      {
       "kind": "call",
-      "line": 421,
+      "line": 420,
       "resolved": "external:memory.participation.observability",
       "target": "record_to_db"
      },
      {
       "kind": "await",
-      "line": 284
+      "line": 285
      },
      {
       "kind": "call",
-      "line": 310,
+      "line": 311,
       "resolved": "local:ParticipationManager._async_similarity",
       "target": "self._async_similarity"
      },
      {
       "kind": "call",
       "line": 339,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 340,
       "resolved": "unresolved",
       "target": "score_span.finish"
      },
      {
       "condition": "'idle_backoff'",
       "kind": "branch",
-      "line": 376
+      "line": 375
      },
      {
       "condition": "'decision_allow'",
       "kind": "branch",
-      "line": 418
+      "line": 417
      },
      {
       "kind": "call",
-      "line": 284,
+      "line": 285,
       "resolved": "local:ParticipationManager._async_similarity",
       "target": "self._async_similarity"
      },
      {
       "kind": "call",
-      "line": 318,
+      "line": 319,
       "resolved": "external:memory.participation.scorer",
       "target": "ngram_jaccard"
+     },
+     {
+      "kind": "call",
+      "line": 387,
+      "resolved": "unresolved",
+      "target": "round"
      },
      {
       "kind": "call",
@@ -26457,63 +26471,57 @@
       "target": "round"
      },
      {
-      "kind": "call",
-      "line": 389,
-      "resolved": "unresolved",
-      "target": "round"
-     },
-     {
       "condition": "slot_after.streak",
       "kind": "branch",
-      "line": 400
+      "line": 399
      },
      {
       "condition": "slot_after.backoff_until",
       "kind": "branch",
-      "line": 402
+      "line": 401
      },
      {
       "condition": "slot_after.low_novelty_streak",
       "kind": "branch",
-      "line": 404
+      "line": 403
      },
      {
       "kind": "call",
-      "line": 405,
+      "line": 404,
       "resolved": "local:ParticipationManager.topic_revision",
       "target": "self.topic_revision"
      },
      {
       "kind": "call",
-      "line": 298,
+      "line": 299,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 340,
+      "line": 341,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "condition": "round(breakdown.speech_share, 3)",
       "kind": "branch",
-      "line": 344
+      "line": 345
      },
      {
       "condition": "round(breakdown.novelty, 3)",
       "kind": "branch",
-      "line": 347
+      "line": 348
      },
      {
       "kind": "call",
-      "line": 344,
+      "line": 345,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "kind": "call",
-      "line": 347,
+      "line": 348,
       "resolved": "unresolved",
       "target": "round"
      }
@@ -26707,323 +26715,333 @@
     "counts": {
      "await": 4,
      "branch": 22,
-     "call": 36,
+     "call": 37,
      "loop": 1,
      "return": 6,
-     "try": 1
+     "with": 1
     },
     "items": [
      {
       "condition": "tables is None",
       "kind": "branch",
-      "line": 251
+      "line": 252
      },
      {
       "condition": "is_tome",
       "kind": "branch",
-      "line": 274
+      "line": 275
      },
      {
       "condition": "len(state.buffer) < tables.thresholds.warmup_messages",
       "kind": "branch",
-      "line": 292
+      "line": 293
      },
      {
       "condition": "score_span is not None",
       "kind": "branch",
-      "line": 337
+      "line": 338
      },
      {
       "condition": "decision.level == ALLOW_LLM",
       "kind": "branch",
-      "line": 371
+      "line": 370
      },
      {
       "condition": "self._persist and decision.level in ('CANDIDATE', ALLOW_LLM)",
       "kind": "branch",
-      "line": 420
+      "line": 419
      },
      {
       "condition": "topic.status.value in ('COOLING', 'EXPIRED')",
       "kind": "branch",
-      "line": 423
+      "line": 422
      },
      {
       "kind": "return",
-      "line": 426
+      "line": 425
      },
      {
       "kind": "return",
-      "line": 257
+      "line": 258
      },
      {
       "condition": "now",
       "kind": "branch",
-      "line": 258
+      "line": 259
      },
      {
       "kind": "call",
-      "line": 259,
+      "line": 260,
       "resolved": "local:ParticipationManager._state_for",
       "target": "self._state_for"
      },
      {
       "kind": "call",
-      "line": 261,
+      "line": 262,
       "resolved": "unresolved",
       "target": "state.note_speech"
      },
      {
       "kind": "call",
-      "line": 263,
+      "line": 264,
       "resolved": "external:memory.participation.buffer",
       "target": "BufferedMessage"
      },
      {
       "condition": "svc is None or not texts_",
       "kind": "branch",
-      "line": 280
+      "line": 281
      },
      {
       "iterate": "texts_[-tables.thresholds.topic_switch.recent_texts:]",
       "kind": "loop",
-      "line": 283
+      "line": 284
      },
      {
       "kind": "return",
-      "line": 287
+      "line": 288
      },
      {
       "kind": "await",
-      "line": 289
+      "line": 290
      },
      {
       "kind": "return",
-      "line": 301
+      "line": 302
      },
      {
       "kind": "call",
-      "line": 303,
+      "line": 304,
       "resolved": "unresolved",
       "target": "state.buffer.texts"
      },
      {
       "kind": "call",
-      "line": 304,
+      "line": 305,
       "resolved": "external:memory.participation.signals",
       "target": "extract_signals"
      },
      {
       "kind": "call",
-      "line": 305,
+      "line": 306,
       "resolved": "unresolved",
       "target": "state.velocity_level"
      },
      {
       "kind": "return",
-      "line": 310
+      "line": 311
      },
      {
       "kind": "call",
-      "line": 313,
+      "line": 314,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "condition": "state.speech_share(tw.share_window_seconds, now=now)",
       "kind": "branch",
-      "line": 314
+      "line": 315
      },
      {
       "condition": "max((ngram_jaccard(text, bot_text, tw.ngram_size) for bot_text in state.recent_bot_texts), default=0.0)",
       "kind": "branch",
-      "line": 316
+      "line": 317
      },
      {
       "kind": "call",
-      "line": 329,
+      "line": 330,
       "resolved": "local:_flow_probe_span",
       "target": "_flow_probe_span"
      },
      {
       "kind": "await",
-      "line": 333
+      "line": 334
      },
      {
-      "finally": false,
-      "handlers": [
-       "Exception"
-      ],
-      "kind": "try",
-      "line": 338
+      "async": false,
+      "context": "contextlib.suppress(Exception)",
+      "kind": "with",
+      "line": 339
      },
      {
       "kind": "call",
-      "line": 357,
+      "line": 356,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
       "kind": "branch",
-      "line": 359
+      "line": 358
      },
      {
       "kind": "call",
-      "line": 362,
+      "line": 361,
       "resolved": "self:self._tracker.decide",
       "target": "self._tracker.decide"
      },
      {
       "kind": "call",
-      "line": 366,
+      "line": 365,
       "resolved": "self:self._tracker._slots.get",
       "target": "self._tracker._slots.get"
      },
      {
       "condition": "decision.level == CANDIDATE",
       "kind": "branch",
-      "line": 373
+      "line": 372
      },
      {
       "kind": "call",
-      "line": 382,
+      "line": 381,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 396,
+      "line": 395,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 412,
+      "line": 411,
       "resolved": "external:memory.participation.observability",
       "target": "log_decision"
      },
      {
       "kind": "call",
-      "line": 254,
+      "line": 255,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "call",
-      "line": 258,
+      "line": 259,
       "resolved": "self:self._clock",
       "target": "self._clock"
      },
      {
       "kind": "call",
-      "line": 279,
+      "line": 280,
       "resolved": "local:ParticipationManager._embedding_service",
       "target": "self._embedding_service"
      },
      {
       "kind": "return",
-      "line": 281
+      "line": 282
      },
      {
       "condition": "sim is not None and (best is None or sim > best)",
       "kind": "branch",
-      "line": 285
+      "line": 286
      },
      {
       "kind": "call",
-      "line": 289,
+      "line": 290,
       "resolved": "unresolved",
       "target": "state.ingest"
      },
      {
       "kind": "call",
-      "line": 292,
+      "line": 293,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 294,
+      "line": 295,
       "resolved": "local:_flow_probe",
       "target": "_flow_probe"
      },
      {
       "kind": "await",
-      "line": 310
+      "line": 311
      },
      {
       "kind": "call",
-      "line": 314,
+      "line": 315,
       "resolved": "unresolved",
       "target": "state.speech_share"
      },
      {
       "kind": "call",
-      "line": 316,
+      "line": 317,
       "resolved": "unresolved",
       "target": "max"
      },
      {
       "kind": "call",
-      "line": 328,
+      "line": 329,
       "resolved": "local:ParticipationManager._embedding_service",
       "target": "self._embedding_service"
      },
      {
       "kind": "call",
-      "line": 333,
+      "line": 334,
       "resolved": "local:ParticipationManager._score_with_embedding",
       "target": "self._score_with_embedding"
      },
      {
       "condition": "decision.level == OBSERVE",
       "kind": "branch",
-      "line": 378
+      "line": 377
      },
      {
       "kind": "call",
-      "line": 421,
+      "line": 420,
       "resolved": "external:memory.participation.observability",
       "target": "record_to_db"
      },
      {
       "kind": "await",
-      "line": 284
+      "line": 285
      },
      {
       "kind": "call",
-      "line": 310,
+      "line": 311,
       "resolved": "local:ParticipationManager._async_similarity",
       "target": "self._async_similarity"
      },
      {
       "kind": "call",
       "line": 339,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 340,
       "resolved": "unresolved",
       "target": "score_span.finish"
      },
      {
       "condition": "'idle_backoff'",
       "kind": "branch",
-      "line": 376
+      "line": 375
      },
      {
       "condition": "'decision_allow'",
       "kind": "branch",
-      "line": 418
+      "line": 417
      },
      {
       "kind": "call",
-      "line": 284,
+      "line": 285,
       "resolved": "local:ParticipationManager._async_similarity",
       "target": "self._async_similarity"
      },
      {
       "kind": "call",
-      "line": 318,
+      "line": 319,
       "resolved": "external:memory.participation.scorer",
       "target": "ngram_jaccard"
+     },
+     {
+      "kind": "call",
+      "line": 387,
+      "resolved": "unresolved",
+      "target": "round"
      },
      {
       "kind": "call",
@@ -27032,63 +27050,57 @@
       "target": "round"
      },
      {
-      "kind": "call",
-      "line": 389,
-      "resolved": "unresolved",
-      "target": "round"
-     },
-     {
       "condition": "slot_after.streak",
       "kind": "branch",
-      "line": 400
+      "line": 399
      },
      {
       "condition": "slot_after.backoff_until",
       "kind": "branch",
-      "line": 402
+      "line": 401
      },
      {
       "condition": "slot_after.low_novelty_streak",
       "kind": "branch",
-      "line": 404
+      "line": 403
      },
      {
       "kind": "call",
-      "line": 405,
+      "line": 404,
       "resolved": "local:ParticipationManager.topic_revision",
       "target": "self.topic_revision"
      },
      {
       "kind": "call",
-      "line": 298,
+      "line": 299,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 340,
+      "line": 341,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "condition": "round(breakdown.speech_share, 3)",
       "kind": "branch",
-      "line": 344
+      "line": 345
      },
      {
       "condition": "round(breakdown.novelty, 3)",
       "kind": "branch",
-      "line": 347
+      "line": 348
      },
      {
       "kind": "call",
-      "line": 344,
+      "line": 345,
       "resolved": "unresolved",
       "target": "round"
      },
      {
       "kind": "call",
-      "line": 347,
+      "line": 348,
       "resolved": "unresolved",
       "target": "round"
      }
@@ -27124,41 +27136,88 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 442
+      "line": 441
      },
      {
       "kind": "return",
-      "line": 474
+      "line": 473
      },
      {
       "kind": "call",
-      "line": 438,
+      "line": 437,
       "resolved": "external:memory.participation.scorer",
       "target": "score_message"
      },
      {
       "condition": "not corpus.strip()",
       "kind": "branch",
-      "line": 444
+      "line": 443
      },
      {
       "iterate": "tables.topics.interests",
       "kind": "loop",
-      "line": 447
+      "line": 446
      },
      {
       "condition": "best is None",
       "kind": "branch",
-      "line": 453
+      "line": 452
      },
      {
       "condition": "best <= w.embedding_zero_at",
       "kind": "branch",
-      "line": 457
+      "line": 456
      },
      {
       "kind": "call",
-      "line": 473,
+      "line": 472,
+      "resolved": "external:memory.participation.scorer",
+      "target": "compose_final_score"
+     },
+     {
+      "kind": "call",
+      "line": 442,
+      "resolved": "unresolved",
+      "target": "' '.join"
+     },
+     {
+      "kind": "return",
+      "line": 444
+     },
+     {
+      "condition": "not anchor.description",
+      "kind": "branch",
+      "line": 447
+     },
+     {
+      "condition": "sim is not None and (best is None or sim > best)",
+      "kind": "branch",
+      "line": 450
+     },
+     {
+      "kind": "return",
+      "line": 453
+     },
+     {
+      "condition": "best >= w.embedding_full_at",
+      "kind": "branch",
+      "line": 458
+     },
+     {
+      "kind": "call",
+      "line": 465,
+      "resolved": "unresolved",
+      "target": "min"
+     },
+     {
+      "kind": "call",
+      "line": 467,
+      "resolved": "unresolved",
+      "target": "max"
+     },
+     {
+      "kind": "call",
+      "line": 469,
       "resolved": "external:memory.participation.scorer",
       "target": "compose_final_score"
      },
@@ -27166,74 +27225,27 @@
       "kind": "call",
       "line": 443,
       "resolved": "unresolved",
-      "target": "' '.join"
-     },
-     {
-      "kind": "return",
-      "line": 445
-     },
-     {
-      "condition": "not anchor.description",
-      "kind": "branch",
-      "line": 448
-     },
-     {
-      "condition": "sim is not None and (best is None or sim > best)",
-      "kind": "branch",
-      "line": 451
-     },
-     {
-      "kind": "return",
-      "line": 454
-     },
-     {
-      "condition": "best >= w.embedding_full_at",
-      "kind": "branch",
-      "line": 459
-     },
-     {
-      "kind": "call",
-      "line": 466,
-      "resolved": "unresolved",
-      "target": "min"
-     },
-     {
-      "kind": "call",
-      "line": 468,
-      "resolved": "unresolved",
-      "target": "max"
-     },
-     {
-      "kind": "call",
-      "line": 470,
-      "resolved": "external:memory.participation.scorer",
-      "target": "compose_final_score"
-     },
-     {
-      "kind": "call",
-      "line": 444,
-      "resolved": "unresolved",
       "target": "corpus.strip"
      },
      {
       "kind": "await",
-      "line": 450
+      "line": 449
      },
      {
       "kind": "call",
-      "line": 468,
+      "line": 467,
       "resolved": "unresolved",
       "target": "min"
      },
      {
       "kind": "call",
-      "line": 450,
+      "line": 449,
       "resolved": "unresolved",
       "target": "anchor_sim"
      },
      {
       "kind": "call",
-      "line": 468,
+      "line": 467,
       "resolved": "unresolved",
       "target": "max"
      }
@@ -43177,6 +43189,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "08b703556bfc40203c0b1f79d4039d5e3f9a7e11",
+ "source_revision": "bb03e5d9258f4942753b322c9c5811588f3d3de3",
  "topology_version": "2026.10.03"
 }

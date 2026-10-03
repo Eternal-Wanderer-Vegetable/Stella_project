@@ -39,8 +39,7 @@ def _events(db, trace_id: str, kinds: tuple[str, ...] | None = None) -> list[tup
         if kinds:
             marks = ",".join("?" * len(kinds))
             sql += f" AND kind IN ({marks})"
-        rows = conn.execute(sql, (trace_id, *(kinds or ()))).fetchall()
-        return rows
+        return conn.execute(sql, (trace_id, *(kinds or ()))).fetchall()
     finally:
         conn.close()
 
@@ -116,9 +115,9 @@ class TestFacadeTurnFacts:
 
         p.register_pre_hook(hook, priority=10)
         facade = RuntimeFacade(store=None)
-        out = await _submit(facade, p, ChatContext(user_id=2, group_id=1,
-                                                   msg_id=1, message="x",
-                                                   trace_id=root.trace_id))
+        await _submit(facade, p, ChatContext(user_id=2, group_id=1,
+                                             msg_id=1, message="x",
+                                             trace_id=root.trace_id))
         message_flow.flush()
         nodes = _nodes(flow_db, "rf-2")
         assert ("prepare.direct", "succeeded") in nodes
@@ -314,7 +313,7 @@ class TestAsyncLoopLinks:
         """schedule_compact 建独立 root 并 caused_by 关联触发 trace（计划 §6.2）。"""
         import memory.session_compact as sc
 
-        parent = message_flow.begin_trace(root_kind="qq_chat", trace_id="rp-1")
+        message_flow.begin_trace(root_kind="qq_chat", trace_id="rp-1")
         called = []
 
         async def fake_compact_once(group_id, tail_start_id):

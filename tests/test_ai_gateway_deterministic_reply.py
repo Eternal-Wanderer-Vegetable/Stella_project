@@ -77,7 +77,6 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
 @pytest.mark.asyncio
 async def test_flow_watch_finish_captures_reply_text(ai_gateway_module):
     """matcher.finish 包装：发出的文本成为 command.reply 检查点（计划 §6.3 A04）。"""
-    import asyncio
 
     from core.observability import message_flow, turn_trace
 

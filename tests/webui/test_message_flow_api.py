@@ -162,8 +162,9 @@ class TestFlowMessageContext:
                                          auth_header, flow_home,
                                          isolated_home, monkeypatch):
         """输入按 (group, msg_id) 精确命中；输出 = 窗口内 BOT_SELF 行。"""
-        import config.settings as settings
         import sqlite3 as s3
+
+        import config.settings as settings
 
         db = isolated_home / "memory" / "agent_memory.db"
         db.parent.mkdir(parents=True, exist_ok=True)
@@ -212,7 +213,6 @@ class TestFlowMessageContext:
         import sqlite3
 
         import config.settings as settings
-
         from core.observability import message_flow as mf
 
         db = isolated_home / "memory" / "agent_memory.db"

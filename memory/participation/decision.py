@@ -14,11 +14,18 @@ IGNORE / OBSERVE / CANDIDATE / ALLOW_LLM 四级 + Candidate 二次确认：
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from memory.participation.scorer import ScoreBreakdown
 from memory.participation.signals import SignalSnapshot
 from memory.participation.tables import Thresholds
+
+# 可注入业务时钟（计划 §5/§6.4「移除业务逻辑的实时时钟漏洞」最小实现）：
+# decide 内部的缺省 now 与 candidate streak 起点统一走 _clock，默认
+# time.time 行为不变；测试/离线回放注入冻结时钟后，二次确认与退避窗口
+# 才能确定性复现。只换时钟来源，不改任何决策规则。
+_clock: Callable[[], float] = time.time
 
 # 决策级别（上游 §18）
 IGNORE = "IGNORE"
@@ -101,7 +108,7 @@ class DecisionTracker:
         is_tome: bool = False,
     ) -> ParticipationDecision:
         score = breakdown.final_score
-        now = now if now is not None else time.time()
+        now = now if now is not None else _clock()
         slot = self._slots.setdefault(group_id, _CandidateSlot())
 
         # 名义级别
@@ -119,7 +126,7 @@ class DecisionTracker:
             if slot.topic_id != topic_id:
                 slot.topic_id = topic_id
                 slot.streak = 0
-                slot.since = time.time()
+                slot.since = _clock()
             slot.streak += 1
         else:
             slot.streak = 0
