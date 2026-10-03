@@ -22,6 +22,23 @@ pub struct PromotionRequest {
     pub quota_weight_confirmation: f64,
     pub quota_weight_recency: f64,
     pub fts_enabled: bool,
+    // v2 owner 归属（计划 §6.5/§6.7）：留空时回退候选行自身的 owner 列
+    // （再回退 legacy SPACE 语义）。晋升/相似/配额全部按 owner 生效值收口，
+    // PERSON 记忆不会跟空间记忆抢同一份配额，也不会互相合并。
+    #[serde(default)]
+    pub owner_type: String,
+    #[serde(default)]
+    pub owner_key: String,
+    #[serde(default)]
+    pub subject_key: String,
+    #[serde(default)]
+    pub audience: String,
+    #[serde(default)]
+    pub source_conversation_key: String,
+    #[serde(default)]
+    pub fact_key: String,
+    #[serde(default)]
+    pub policy_version: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -48,6 +65,79 @@ struct Candidate {
     visibility: String,
     behavior_rule: String,
     source_kind: String,
+    owner_type: String,
+    owner_key: String,
+    subject_key: String,
+    audience: String,
+    source_conversation_key: String,
+    fact_key: String,
+    policy_version: String,
+}
+
+/// 晋升事务内使用的生效 owner：请求显式提供时以请求为准，否则回退候选行
+/// （再回退 legacy SPACE 语义）。相似/冲突/配额/INSERT 全部用它。
+struct EffectiveOwner {
+    owner_type: String,
+    owner_key: String,
+    subject_key: String,
+    audience: String,
+    source_conversation_key: String,
+    fact_key: String,
+    policy_version: String,
+}
+
+fn effective_owner(request: &PromotionRequest, candidate: &Candidate) -> EffectiveOwner {
+    let owner_type = if request.owner_type.is_empty() {
+        if candidate.owner_type.is_empty() {
+            "SPACE".to_string()
+        } else {
+            candidate.owner_type.clone()
+        }
+    } else {
+        request.owner_type.clone()
+    };
+    let owner_key = if request.owner_key.is_empty() {
+        if candidate.owner_key.is_empty() {
+            format!("space:{}", candidate.group_shared_space)
+        } else {
+            candidate.owner_key.clone()
+        }
+    } else {
+        request.owner_key.clone()
+    };
+    EffectiveOwner {
+        owner_type,
+        owner_key,
+        subject_key: if request.subject_key.is_empty() {
+            candidate.subject_key.clone()
+        } else {
+            request.subject_key.clone()
+        },
+        audience: if request.audience.is_empty() {
+            if candidate.audience.is_empty() {
+                "CURRENT_SPACE".to_string()
+            } else {
+                candidate.audience.clone()
+            }
+        } else {
+            request.audience.clone()
+        },
+        source_conversation_key: if request.source_conversation_key.is_empty() {
+            candidate.source_conversation_key.clone()
+        } else {
+            request.source_conversation_key.clone()
+        },
+        fact_key: if request.fact_key.is_empty() {
+            candidate.fact_key.clone()
+        } else {
+            request.fact_key.clone()
+        },
+        policy_version: if request.policy_version.is_empty() {
+            candidate.policy_version.clone()
+        } else {
+            request.policy_version.clone()
+        },
+    }
 }
 
 type QuotaRow = (String, Option<f64>, Option<i64>, Option<String>);
@@ -298,7 +388,9 @@ fn load_candidate(
 ) -> Result<Option<Candidate>, String> {
     tx.query_row(
         "SELECT group_shared_space, user_id, type, content, importance, confidence, status,
-                content_raw, usage_tags, visibility, behavior_rule, source_kind
+                content_raw, usage_tags, visibility, behavior_rule, source_kind,
+                owner_type, owner_key, subject_key, audience,
+                source_conversation_key, fact_key, policy_version
          FROM memory_candidates WHERE id = ?",
         [&request.candidate_id],
         |row| {
@@ -325,6 +417,15 @@ fn load_candidate(
                 source_kind: row
                     .get::<_, Option<String>>(11)?
                     .unwrap_or_else(|| "PASSIVE".to_string()),
+                owner_type: row.get::<_, Option<String>>(12)?.unwrap_or_default(),
+                owner_key: row.get::<_, Option<String>>(13)?.unwrap_or_default(),
+                subject_key: row.get::<_, Option<String>>(14)?.unwrap_or_default(),
+                audience: row
+                    .get::<_, Option<String>>(15)?
+                    .unwrap_or_else(|| "CURRENT_SPACE".to_string()),
+                source_conversation_key: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
+                fact_key: row.get::<_, Option<String>>(17)?.unwrap_or_default(),
+                policy_version: row.get::<_, Option<String>>(18)?.unwrap_or_default(),
             })
         },
     )
@@ -343,10 +444,7 @@ fn promote_inner(
     {
         return Err("promotion scope does not match the candidate row".to_string());
     }
-    if !matches!(
-        candidate.status.to_uppercase().as_str(),
-        "NEW" | "OBSERVING"
-    ) {
+    if !matches!(candidate.status.to_uppercase().as_str(), "NEW" | "OBSERVING") {
         return Ok(PromotionOutput {
             candidate_id: request.candidate_id.clone(),
             promoted: false,
@@ -357,20 +455,24 @@ fn promote_inner(
             fts_updated: false,
         });
     }
+    let owner = effective_owner(request, &candidate);
 
     let conflicts: Vec<(String, String, f64)> = {
         let mut statement = tx
             .prepare(
                 "SELECT id, content, confidence FROM memories
-                 WHERE status = 'active' AND group_shared_space = ? AND user_id = ? AND type = ?",
+                 WHERE status = 'active' AND user_id = ? AND type = ?
+                   AND COALESCE(owner_type, 'SPACE') = ?
+                   AND COALESCE(owner_key, 'space:' || group_shared_space) = ?",
             )
             .map_err(|err| format!("conflict query prepare failed: {err}"))?;
         let rows = statement
             .query_map(
                 (
-                    &candidate.group_shared_space,
                     &candidate.user_id,
                     &candidate.memory_type,
+                    &owner.owner_type,
+                    &owner.owner_key,
                 ),
                 |row| {
                     Ok((
@@ -420,16 +522,19 @@ fn promote_inner(
         let mut statement = tx
             .prepare(
                 "SELECT id, content FROM memories
-                 WHERE status = 'active' AND group_shared_space = ? AND user_id = ? AND type = ?
+                 WHERE status = 'active' AND user_id = ? AND type = ?
+                   AND COALESCE(owner_type, 'SPACE') = ?
+                   AND COALESCE(owner_key, 'space:' || group_shared_space) = ?
                  ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC",
             )
             .map_err(|err| format!("similarity query prepare failed: {err}"))?;
         let rows = statement
             .query_map(
                 (
-                    &candidate.group_shared_space,
                     &candidate.user_id,
                     &candidate.memory_type,
+                    &owner.owner_type,
+                    &owner.owner_key,
                 ),
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )
@@ -513,10 +618,13 @@ fn promote_inner(
                 id, group_shared_space, user_id, type, content, content_raw, importance, confidence,
                 status, confirmation_count, last_confirmed_at, last_accessed_at, compressed_at,
                 compression_version, is_atomized, usage_tags, visibility, trigger_data,
-                behavior_rule, source_kind
+                behavior_rule, source_kind,
+                owner_type, owner_key, subject_key, audience,
+                source_conversation_key, fact_key, policy_version
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-                       NULL, 0, 0, ?, ?, NULL, ?, ?)",
-            (
+                       NULL, 0, 0, ?, ?, NULL, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
                 &memory_id,
                 &candidate.group_shared_space,
                 &candidate.user_id,
@@ -533,7 +641,14 @@ fn promote_inner(
                 &candidate.visibility,
                 &candidate.behavior_rule,
                 &candidate.source_kind,
-            ),
+                &owner.owner_type,
+                &owner.owner_key,
+                &owner.subject_key,
+                &owner.audience,
+                &owner.source_conversation_key,
+                &owner.fact_key,
+                &owner.policy_version,
+            ],
         )
         .map_err(|err| format!("memory insert failed: {err}"))?;
         let fts_updated = sync_fts(
@@ -553,13 +668,20 @@ fn promote_inner(
             let mut statement = tx
                 .prepare(
                     "SELECT id, importance, confirmation_count, last_accessed_at
-                     FROM memories WHERE status = 'active' AND group_shared_space = ? AND user_id = ?",
+                     FROM memories WHERE status = 'active' AND user_id = ?
+                       AND COALESCE(owner_type, 'SPACE') = ?
+                       AND COALESCE(owner_key, 'space:' || group_shared_space) = ?",
                 )
                 .map_err(|err| format!("quota query prepare failed: {err}"))?;
             let result = statement
-                .query_map((&candidate.group_shared_space, &candidate.user_id), |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-                })
+                .query_map(
+                    (
+                        &candidate.user_id,
+                        &owner.owner_type,
+                        &owner.owner_key,
+                    ),
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
                 .map_err(|err| format!("quota query failed: {err}"))?;
             result
                 .collect::<rusqlite::Result<Vec<_>>>()
@@ -665,6 +787,13 @@ mod tests {
             quota_weight_confirmation: 0.3,
             quota_weight_recency: 0.3,
             fts_enabled: true,
+            owner_type: String::new(),
+            owner_key: String::new(),
+            subject_key: String::new(),
+            audience: String::new(),
+            source_conversation_key: String::new(),
+            fact_key: String::new(),
+            policy_version: String::new(),
         }
     }
 
@@ -673,12 +802,16 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open db");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 14);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 15);
              CREATE TABLE memory_candidates (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, content_raw TEXT, importance REAL, confidence REAL,
                status TEXT, usage_tags TEXT, visibility TEXT, behavior_rule TEXT,
-               source_kind TEXT, updated_at TEXT
+               source_kind TEXT, updated_at TEXT,
+               owner_type TEXT DEFAULT 'SPACE', owner_key TEXT,
+               subject_key TEXT DEFAULT '', audience TEXT DEFAULT 'CURRENT_SPACE',
+               source_conversation_key TEXT DEFAULT '', fact_key TEXT DEFAULT '',
+               policy_version TEXT DEFAULT ''
              );
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
@@ -686,7 +819,11 @@ mod tests {
                confirmation_count INTEGER, last_confirmed_at TEXT, last_accessed_at TEXT,
                compressed_at TEXT, compression_version INTEGER, is_atomized INTEGER,
                usage_tags TEXT, visibility TEXT, trigger_data TEXT, behavior_rule TEXT,
-               source_kind TEXT, updated_at TEXT
+               source_kind TEXT, updated_at TEXT,
+               owner_type TEXT DEFAULT 'SPACE', owner_key TEXT,
+               subject_key TEXT DEFAULT '', audience TEXT DEFAULT 'CURRENT_SPACE',
+               source_conversation_key TEXT DEFAULT '', fact_key TEXT DEFAULT '',
+               policy_version TEXT DEFAULT ''
              );
              INSERT INTO memory_candidates
                (id, group_shared_space, user_id, type, content, content_raw, importance,

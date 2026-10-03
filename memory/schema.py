@@ -27,6 +27,12 @@
    归属在代码里不可混淆——同一个名字有时指 QQ 群、有时指空间，是必然踩坑的歧义。
 10. v10 为按空间归属的表增加溯源列 ``origin_group_id``：记住这一行原本来自哪个真实
    QQ 群，让空间合并可以回退（合并本身不可逆），也让「这条记忆来自哪个群」不用猜。
+11. v15 双层记忆归属（计划 §6.1/§6.4/§6.5/§6.6）：新增 ``conversation_registry``
+   （会话注册表）、``memory_evidence``（证据去重）、``personal_profile_facts``
+   （跨群画像事实）、``memory_scope_versions``（检索缓存持久版本）；为
+   ``memories`` / ``memory_candidates`` / ``atomic_facts`` 增加 owner 列
+   （owner_type/owner_key/subject_key/audience/source_conversation_key/fact_key/
+   policy_version），旧行回填为 SPACE。``source_kind`` 合法值扩充 PRIVATE_DIRECT。
 
 **v7 / v8 的数据迁移已在 2026-08-27 补齐**（`memory/migrations.py`）。此前两版都声明
 「本版不做数据迁移、归档旧库重建」，而公开发布的 2.x 全是 schema v2/v5（带 ``group_id``
@@ -52,8 +58,9 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v14：新增用户个性化称呼偏好表）
-SCHEMA_VERSION = 14
+# 当前 Schema 版本（v15：会话注册表 + 记忆归属/证据/个人画像/缓存版本，
+# 见 memory/migrations.py migrate_v15 与计划 §6.1/§6.4）
+SCHEMA_VERSION = 15
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -61,8 +68,12 @@ BACKUP_FILENAME = "stella_memory_backup.db"
 # AT_MENTION：用户直接对 Bot 说（高密度证据，单次可晋升）
 # PASSIVE   ：被动摄入的群聊（需复现才可晋升）
 # BOT_SELF  ：Bot 自己的发言（**只作上下文，绝不产出候选**）
-SOURCE_KINDS = frozenset({"AT_MENTION", "PASSIVE", "BOT_SELF"})
+# PRIVATE_DIRECT：用户在私聊里直接对 Bot 说（与 AT_MENTION 同为直接对话
+# 证据；代表「对 Bot 说的」，**不**代表允许跨群共享——共享由 audience 管）
+SOURCE_KINDS = frozenset({"AT_MENTION", "PASSIVE", "BOT_SELF", "PRIVATE_DIRECT"})
 DEFAULT_SOURCE_KIND = "PASSIVE"
+# 直接对话证据（高密度）来源集合：单次可晋升判断与整合提示都要同时认这两种
+DIRECT_EVIDENCE_SOURCE_KINDS = frozenset({"AT_MENTION", "PRIVATE_DIRECT"})
 
 
 def normalize_source_kind(value: str | None) -> str:
@@ -233,6 +244,35 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "origin_group_id",
         "ALTER TABLE user_profiles ADD COLUMN origin_group_id TEXT",
     ),
+    # v15：双层记忆归属（计划 §6.4）。旧行默认 SPACE；owner_key 由迁移按
+    # group_shared_space 回填为 `space:<空间名>`。PERSON 行只能由写入路由
+    # （PERSONAL_MEMORY_WRITE_ENABLED，默认关）创建，受众 audience 与既有
+    # visibility 正交。source_conversation_key 来自可信会话注册表；旧行无法
+    # 恢复的为空（backfill 工具标 legacy_unknown）。
+    *[
+        (table, column, f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        for table in ("memories", "memory_candidates")
+        for column, decl in (
+            ("owner_type", "TEXT DEFAULT 'SPACE'"),
+            ("owner_key", "TEXT"),
+            ("subject_key", "TEXT DEFAULT ''"),
+            ("audience", "TEXT DEFAULT 'CURRENT_SPACE'"),
+            ("source_conversation_key", "TEXT DEFAULT ''"),
+            ("fact_key", "TEXT DEFAULT ''"),
+            ("policy_version", "TEXT DEFAULT ''"),
+        )
+    ],
+    *[
+        ("atomic_facts", column, f"ALTER TABLE atomic_facts ADD COLUMN {column} {decl}")
+        for column, decl in (
+            ("owner_type", "TEXT DEFAULT 'SPACE'"),
+            ("owner_key", "TEXT"),
+            ("subject_key", "TEXT DEFAULT ''"),
+            ("audience", "TEXT DEFAULT 'CURRENT_SPACE'"),
+            ("fact_key", "TEXT DEFAULT ''"),
+            ("policy_version", "TEXT DEFAULT ''"),
+        )
+    ],
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -280,6 +320,33 @@ _INDEXES: list[tuple[str, str, str]] = [
         "CREATE INDEX IF NOT EXISTS idx_astrbot_conversations_user "
         "ON astrbot_conversations (user_id, updated_at DESC)",
     ),
+    # v15：双层归属检索索引（计划 §6.4/§6.6）。检索谓词按 owner/subject/audience
+    # 下推到候选构造层，没有索引就是全表扫。EXPLAIN QUERY PLAN 验证见
+    # tests/test_personal_memory_scope.py（M3）。
+    (
+        "idx_memories_owner_scope",
+        "memories",
+        "CREATE INDEX IF NOT EXISTS idx_memories_owner_scope "
+        "ON memories (owner_type, owner_key, subject_key, audience, status)",
+    ),
+    (
+        "idx_candidates_owner_scope",
+        "memory_candidates",
+        "CREATE INDEX IF NOT EXISTS idx_candidates_owner_scope "
+        "ON memory_candidates (owner_type, owner_key, subject_key, audience, status)",
+    ),
+    (
+        "idx_evidence_candidate",
+        "memory_evidence",
+        "CREATE INDEX IF NOT EXISTS idx_evidence_candidate "
+        "ON memory_evidence (candidate_id)",
+    ),
+    (
+        "idx_personal_facts_subject",
+        "personal_profile_facts",
+        "CREATE INDEX IF NOT EXISTS idx_personal_facts_subject "
+        "ON personal_profile_facts (subject_key, status)",
+    ),
 ]
 
 
@@ -308,6 +375,13 @@ CREATE TABLE IF NOT EXISTS memories (
     behavior_rule TEXT,
     source_kind TEXT DEFAULT 'PASSIVE',
     origin_group_id TEXT,
+    owner_type TEXT DEFAULT 'SPACE',
+    owner_key TEXT,
+    subject_key TEXT DEFAULT '',
+    audience TEXT DEFAULT 'CURRENT_SPACE',
+    source_conversation_key TEXT DEFAULT '',
+    fact_key TEXT DEFAULT '',
+    policy_version TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -446,6 +520,13 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     first_seen_at DATETIME,
     source_kinds TEXT DEFAULT '["PASSIVE"]',
     origin_group_id TEXT,
+    owner_type TEXT DEFAULT 'SPACE',
+    owner_key TEXT,
+    subject_key TEXT DEFAULT '',
+    audience TEXT DEFAULT 'CURRENT_SPACE',
+    source_conversation_key TEXT DEFAULT '',
+    fact_key TEXT DEFAULT '',
+    policy_version TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -474,6 +555,12 @@ CREATE TABLE IF NOT EXISTS atomic_facts (
     object TEXT,
     confidence REAL,
     origin_group_id TEXT,
+    owner_type TEXT DEFAULT 'SPACE',
+    owner_key TEXT,
+    subject_key TEXT DEFAULT '',
+    audience TEXT DEFAULT 'CURRENT_SPACE',
+    fact_key TEXT DEFAULT '',
+    policy_version TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )
@@ -487,6 +574,102 @@ def create_atomic_facts_table(conn: sqlite3.Connection) -> None:
     ``group_shared_space``。v8 起本处为单一真相源。
     """
     conn.execute(ATOMIC_FACTS_TABLE_DDL)
+
+
+# 会话注册表（v15 起，计划 §6.1）：规范会话键 ↔ 存储/运行时身份的唯一映射。
+# storage_session_id 是历史 SQLite/摘要接口的物理键：群=原正整数群号、
+# WebChat=-1、私聊=注册表分配的负整数。kind 才是种类真相，不能从正负号反推。
+CONVERSATION_REGISTRY_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_registry (
+    conversation_key TEXT PRIMARY KEY,
+    platform TEXT NOT NULL,
+    bot_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    peer_id TEXT NOT NULL,
+    storage_session_id INTEGER NOT NULL UNIQUE,
+    runtime_key TEXT NOT NULL UNIQUE,
+    memory_space TEXT NOT NULL,
+    legacy_binding TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(platform, bot_id, kind, peer_id)
+)
+"""
+
+
+def create_conversation_registry_table(conn: sqlite3.Connection) -> None:
+    """确保 conversation_registry 表存在（幂等）。"""
+    conn.execute(CONVERSATION_REGISTRY_TABLE_DDL)
+
+
+# 记忆证据去重表（v15 起，计划 §6.5）：同一条 (owner, audience, fact) 对同一
+# 来源消息行只有一条证据——消息重放/整合重试不累加 occurrence/confirmation；
+# 不同会话的真实新证据各自成行，可在晋升时把同一共享事实强化。
+MEMORY_EVIDENCE_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS memory_evidence (
+    id TEXT PRIMARY KEY,
+    owner_type TEXT NOT NULL,
+    owner_key TEXT NOT NULL,
+    subject_key TEXT NOT NULL DEFAULT '',
+    audience TEXT NOT NULL,
+    fact_key TEXT NOT NULL,
+    source_conversation_key TEXT NOT NULL,
+    source_row_id INTEGER NOT NULL,
+    candidate_id TEXT NOT NULL DEFAULT '',
+    first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(owner_key, audience, fact_key, source_conversation_key, source_row_id)
+)
+"""
+
+
+def create_memory_evidence_table(conn: sqlite3.Connection) -> None:
+    """确保 memory_evidence 表存在（幂等）。"""
+    conn.execute(MEMORY_EVIDENCE_TABLE_DDL)
+
+
+# 跨群稳定画像事实表（v15 起，计划 §6.4）：从同一事实/证据链派生（非另一套
+# 抽取引擎），支持「在另一群已经认识我」。原 user_profiles（agent_attitude、
+# 群关系）仍按空间隔离，不整包搬进这里。
+PERSONAL_PROFILE_FACTS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS personal_profile_facts (
+    id TEXT PRIMARY KEY,
+    owner_type TEXT NOT NULL,
+    owner_key TEXT NOT NULL,
+    subject_key TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    fact_key TEXT NOT NULL,
+    fact_kind TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    evidence_id TEXT NOT NULL DEFAULT '',
+    source_memory_id TEXT NOT NULL DEFAULT '',
+    confidence REAL DEFAULT 1.0,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(owner_key, audience, fact_key)
+)
+"""
+
+
+def create_personal_profile_facts_table(conn: sqlite3.Connection) -> None:
+    """确保 personal_profile_facts 表存在（幂等）。"""
+    conn.execute(PERSONAL_PROFILE_FACTS_TABLE_DDL)
+
+
+# 检索缓存持久版本（v15 起，计划 §6.6）：共享撤销/删除/回填后按 owner 推进
+# 版本，其他进程的热缓存靠版本可见性失效——不能用进程内 bump 代替。
+MEMORY_SCOPE_VERSIONS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS memory_scope_versions (
+    scope_key TEXT PRIMARY KEY,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_memory_scope_versions_table(conn: sqlite3.Connection) -> None:
+    """确保 memory_scope_versions 表存在（幂等）。"""
+    conn.execute(MEMORY_SCOPE_VERSIONS_TABLE_DDL)
 
 
 # AstrBot 插件兼容层的对话表（v9 起）。
@@ -753,6 +936,14 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             create_llm_usage_daily_table(conn)
+    # v15：会话注册表 / 记忆证据 / 个人画像事实 / 缓存版本表（新表，
+    # 不属于 additive column 范畴；见各 DDL 注释与计划 §6.1/§6.4/§6.5/§6.6）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            create_conversation_registry_table(conn)
+            create_memory_evidence_table(conn)
+            create_personal_profile_facts_table(conn)
+            create_memory_scope_versions_table(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

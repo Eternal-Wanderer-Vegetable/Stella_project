@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 
-pub const BACKEND_API_VERSION: u32 = 1;
-pub const MEMORY_SCHEMA_VERSION: i64 = 14;
+pub const BACKEND_API_VERSION: u32 = 2;
+pub const MEMORY_SCHEMA_VERSION: i64 = 15;
 
 pub fn ensure_supported(conn: &Connection) -> Result<(), String> {
     let table_exists = conn

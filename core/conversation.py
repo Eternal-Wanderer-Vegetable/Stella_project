@@ -108,8 +108,10 @@ def qq_group_ref(
 ) -> ConversationRef:
     """构造 QQ 群会话引用。
 
-    群历史沿用正整数群号作存储键；runtime_key 默认保留旧 ``qq:<group_id>``
-    别名（注册表按 Bot 绑定决定，多 Bot 历史归属不明的群不盲绑）。空间由
+    群历史默认沿用正整数群号作存储键；多 Bot 场景下若历史群已绑定其他
+    Bot（存储冲突），注册表会为新 Bot 分配专用负整数存储 ID（计划 §6.1），
+    此时 ``storage_session_id`` 显式传入负值。runtime_key 默认保留旧
+    ``qq:<group_id>`` 别名（注册表按绑定决定，新 Bot 用规范键）。空间由
     真实群号解析——**绝不允许**拿 storage_session_id/负数调用空间解析。
     """
     group_id = int(group_id)
@@ -117,8 +119,12 @@ def qq_group_ref(
         raise ValueError(f"QQ 群号必须为正整数，收到 {group_id}")
     if storage_session_id is None:
         storage_session_id = group_id
-    if storage_session_id != group_id:
-        raise ValueError("群会话的 storage_session_id 必须等于真实群号")
+    storage_session_id = int(storage_session_id)
+    if storage_session_id != group_id and storage_session_id >= 0:
+        raise ValueError(
+            "群会话的 storage_session_id 只能是真实群号（legacy 绑定）或注册表"
+            f"分配的负整数（新 Bot 存储冲突），收到 {storage_session_id}"
+        )
     if runtime_key is None:
         runtime_key = f"qq:{group_id}"
     if memory_space is None:
@@ -212,7 +218,9 @@ def ref_from_conversation_key(
     if runtime_key is None:
         runtime_key = key
     if kind == KIND_GROUP:
-        return qq_group_ref(bot_id, int(peer_id), storage_session_id=int(peer_id), runtime_key=runtime_key)
+        return qq_group_ref(
+            bot_id, int(peer_id), storage_session_id=int(storage_session_id), runtime_key=runtime_key
+        )
     if kind == KIND_PRIVATE:
         return qq_private_ref(bot_id, int(peer_id), storage_session_id=storage_session_id, runtime_key=runtime_key)
     return webchat_ref(user_id=int(peer_id), storage_session_id=storage_session_id, runtime_key=runtime_key)

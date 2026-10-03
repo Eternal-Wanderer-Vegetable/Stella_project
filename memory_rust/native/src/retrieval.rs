@@ -21,6 +21,30 @@ pub struct RetrievalRequest {
     pub pool_limit: usize,
     #[serde(default)]
     pub semantic_scores: HashMap<String, f64>,
+    // v2 owner scope（计划 §6.6/§6.7）：全部缺省/空 = SPACE-only legacy 行为。
+    // scope 存在时，候选池谓词切换为 owner/audience 下推（不再按
+    // group_shared_space 过滤——PERSON 行写在 personal:* 兼容 namespace 里）。
+    #[serde(default)]
+    pub scope_space_key: String,
+    #[serde(default)]
+    pub scope_person_owner_key: String,
+    #[serde(default)]
+    pub scope_subject_key: String,
+    #[serde(default)]
+    pub scope_person_audiences: Vec<String>,
+}
+
+impl RetrievalRequest {
+    fn has_person_scope(&self) -> bool {
+        !self.scope_space_key.is_empty()
+            && !self.scope_person_owner_key.is_empty()
+            && !self.scope_subject_key.is_empty()
+            && !self.scope_person_audiences.is_empty()
+    }
+
+    fn has_scope(&self) -> bool {
+        !self.scope_space_key.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -93,6 +117,39 @@ fn visibility_params(mode: &str) -> (&'static str, Vec<&'static str>) {
     }
 }
 
+/// 候选池授权谓词（计划 §6.6）：授权在候选构造阶段下推到 SQL，不是先召回
+/// 再过滤。无 scope → legacy 的 space 过滤（行为与 v1 完全一致）；
+/// 有 scope → owner/audience 谓词，legacy 行经 COALESCE 兜底（迁移回填前
+/// 写入的行 owner_key 为空时按 space 列还原），PERSON 分支只在 scope 声明
+/// 了受众时生成——没有受众就没有 PERSON 行。
+fn scope_predicate(request: &RetrievalRequest) -> (String, Vec<String>) {
+    if !request.has_scope() {
+        return (
+            " AND m.group_shared_space = ?".to_string(),
+            vec![request.group_shared_space.clone()],
+        );
+    }
+    let mut params = vec![request.scope_space_key.clone()];
+    let mut person = String::new();
+    if request.has_person_scope() {
+        let placeholders = vec!["?"; request.scope_person_audiences.len()].join(", ");
+        person = format!(
+            " OR (m.owner_type = 'PERSON' AND m.owner_key = ? \
+             AND m.subject_key = ? AND m.audience IN ({placeholders}))"
+        );
+        params.push(request.scope_person_owner_key.clone());
+        params.push(request.scope_subject_key.clone());
+        params.extend(request.scope_person_audiences.iter().cloned());
+    }
+    (
+        format!(
+            " AND ((COALESCE(m.owner_type, 'SPACE') = 'SPACE' \
+             AND COALESCE(m.owner_key, 'space:' || m.group_shared_space) = ?){person})"
+        ),
+        params,
+    )
+}
+
 fn load_candidates(
     conn: &Connection,
     request: &RetrievalRequest,
@@ -103,17 +160,17 @@ fn load_candidates(
     } else {
         " AND m.user_id = ?".to_string()
     };
+    let (scope_sql, mut values) = scope_predicate(request);
     let mut sql = format!(
         "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance,
                 m.confidence, m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule,
                 m.last_accessed_at, m.last_confirmed_at
          FROM memories m
-         WHERE m.status = 'active' AND m.group_shared_space = ?{user_clause}
+         WHERE m.status = 'active'{scope_sql}{user_clause}
            AND {visibility_sql}
          ORDER BY COALESCE(m.last_confirmed_at, m.last_accessed_at) DESC, m.id ASC
          LIMIT ?"
     );
-    let mut values: Vec<String> = vec![request.group_shared_space.clone()];
     if !user_clause.is_empty() {
         values.push(request.user_id.to_string());
     }
@@ -151,18 +208,18 @@ fn load_fts_candidates(
     } else {
         " AND m.user_id = ?".to_string()
     };
+    let (scope_sql, mut values) = scope_predicate(request);
     let sql = format!(
         "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance,
                 m.confidence, m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule,
                 m.last_accessed_at, m.last_confirmed_at
          FROM memories_fts f
          JOIN memories m ON f.mem_id = m.id
-         WHERE f.group_shared_space = ? AND m.status = 'active'{user_clause}
+         WHERE m.status = 'active'{scope_sql}{user_clause}
            AND {visibility_sql} AND f.content MATCH ?
          ORDER BY bm25(memories_fts), m.id ASC
          LIMIT ?"
     );
-    let mut values: Vec<String> = vec![request.group_shared_space.clone()];
     if !user_clause.is_empty() {
         values.push(request.user_id.to_string());
     }
@@ -233,13 +290,30 @@ mod tests {
     use rusqlite::Connection;
     use tempfile::NamedTempFile;
 
+    fn test_request(db_path: &str, space: &str, user: i64) -> RetrievalRequest {
+        RetrievalRequest {
+            db_path: db_path.to_string(),
+            group_shared_space: space.to_string(),
+            user_id: user,
+            query: "推荐游戏".to_string(),
+            trigger: "reply".to_string(),
+            mode: "RECOMMEND".to_string(),
+            pool_limit: 20,
+            semantic_scores: Default::default(),
+            scope_space_key: String::new(),
+            scope_person_owner_key: String::new(),
+            scope_subject_key: String::new(),
+            scope_person_audiences: Vec::new(),
+        }
+    }
+
     #[test]
     fn retrieval_respects_space_and_user_scope() {
         let file = NamedTempFile::new().expect("temp db");
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 14);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 15);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -256,18 +330,63 @@ mod tests {
         )
         .expect("schema");
         drop(conn);
-        let output = retrieve(RetrievalRequest {
-            db_path: file.path().display().to_string(),
-            group_shared_space: "space-a".to_string(),
-            user_id: 1,
-            query: "推荐游戏".to_string(),
-            trigger: "reply".to_string(),
-            mode: "RECOMMEND".to_string(),
-            pool_limit: 20,
-            semantic_scores: Default::default(),
-        })
+        let output = retrieve(test_request(
+            &file.path().display().to_string(),
+            "space-a",
+            1,
+        ))
         .expect("retrieve");
         assert_eq!(output.conversation_memories.len(), 1);
         assert_eq!(output.conversation_memories[0].id, "ok");
+    }
+
+    #[test]
+    fn scope_predicate_returns_space_and_shared_person_rows() {
+        // v2 scope：SPACE 行经 COALESCE 兜底命中；USER_SHARED 的 PERSON 行
+        // 命中；PRIVATE_ONLY / 他人 PERSON 行绝不出现（计划 §8.1 矩阵）。
+        let file = NamedTempFile::new().expect("temp db");
+        let conn = Connection::open(file.path()).expect("open");
+        conn.execute_batch(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 15);
+             CREATE TABLE memories (
+               id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
+               content TEXT, importance REAL, confidence REAL, status TEXT,
+               usage_tags TEXT, visibility TEXT, trigger_data TEXT, behavior_rule TEXT,
+               last_accessed_at TEXT, last_confirmed_at TEXT,
+               owner_type TEXT DEFAULT 'SPACE', owner_key TEXT,
+               subject_key TEXT DEFAULT '', audience TEXT DEFAULT 'CURRENT_SPACE'
+             );
+             INSERT INTO memories VALUES
+               ('legacy-space', 'space-a', '2', 'FACT', '旧空间行', .8, .9, 'active',
+                '[]', 'OPEN', NULL, NULL, '2026-09-01 00:00:00', NULL,
+                NULL, NULL, '', 'CURRENT_SPACE'),
+               ('person-shared', 'personal:x', '2', 'FACT', '共享偏好', .8, .9, 'active',
+                '[]', 'OPEN', NULL, NULL, '2026-09-01 00:00:00', NULL,
+                'PERSON', 'person:qq:10000:2', 'qq:2', 'USER_SHARED'),
+               ('person-private', 'personal:y', '2', 'FACT', '私密事实', .8, .9, 'active',
+                '[]', 'OPEN', NULL, NULL, '2026-09-01 00:00:00', NULL,
+                'PERSON', 'person:qq:10000:2', 'qq:2', 'PRIVATE_ONLY'),
+               ('person-other', 'personal:z', '3', 'FACT', '他人事实', .8, .9, 'active',
+                '[]', 'OPEN', NULL, NULL, '2026-09-01 00:00:00', NULL,
+                'PERSON', 'person:qq:10000:3', 'qq:3', 'USER_SHARED');",
+        )
+        .expect("schema");
+        drop(conn);
+        let mut request = test_request(&file.path().display().to_string(), "space-a", 2);
+        request.scope_space_key = "space:space-a".to_string();
+        request.scope_person_owner_key = "person:qq:10000:2".to_string();
+        request.scope_subject_key = "qq:2".to_string();
+        request.scope_person_audiences = vec!["USER_SHARED".to_string()];
+        let output = retrieve(request).expect("retrieve");
+        let ids: Vec<&str> = output
+            .conversation_memories
+            .iter()
+            .map(|m| m.id.as_str())
+            .collect();
+        assert!(ids.contains(&"legacy-space"));
+        assert!(ids.contains(&"person-shared"));
+        assert!(!ids.contains(&"person-private"));
+        assert!(!ids.contains(&"person-other"));
     }
 }

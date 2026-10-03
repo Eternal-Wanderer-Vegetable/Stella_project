@@ -574,3 +574,87 @@ def test_v12_db_only_gains_participation_tables(tmp_path):
                 "recent_speech_penalty", "velocity_penalty", "repetition_penalty",
                 "expired_penalty", "final_score", "mode", "decision", "reason_flags"):
         assert col in log_cols
+
+
+def test_v14_db_gains_owner_columns_and_space_backfill(tmp_path):
+    """schema v14 旧库升级：owner 列就位、存量行回填 SPACE（计划 §6.1/§6.4）。
+
+    ``SCHEMA_VERSION`` 每 +1 都要配一个旧库夹具回归测试（memory/schema.py 的硬规矩）。
+    v15 的关键不变量：
+    - 迁移**不做任何个人化改写**——所有存量行 owner_type=SPACE；
+    - owner_key = 'space:' || group_shared_space，与检索谓词的 COALESCE 兜底一致；
+    - 四张新表（registry/evidence/personal_facts/scope_versions）就绪且为空；
+    - 重复迁移幂等（第二次 report 无变更行）。
+    """
+    from memory.ownership import POLICY_VERSION
+
+    path = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(path)
+    try:
+        # v14 形状：MEMORIES_TABLE_DDL 减去 v15 新增的 owner 列
+        conn.execute(
+            """CREATE TABLE memories (
+                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
+                content TEXT, content_raw TEXT, importance REAL, confidence REAL,
+                status TEXT, confirmation_count INTEGER, last_confirmed_at DATETIME,
+                last_accessed_at DATETIME, compressed_at DATETIME,
+                compression_version INTEGER, is_atomized INTEGER, usage_tags TEXT,
+                visibility TEXT DEFAULT 'OPEN', trigger_data TEXT, behavior_rule TEXT,
+                source_kind TEXT DEFAULT 'PASSIVE', origin_group_id TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"""
+        )
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, content, status)"
+            " VALUES ('m1','casual','u1','喜欢猫','active')"
+        )
+        conn.execute(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER,"
+            " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 14)")
+        conn.commit()
+    finally:
+        conn.close()
+    spaces_dir = tmp_path / "spaces"
+    spaces_dir.mkdir()
+    (spaces_dir / "casual.toml").write_text("qq_groups = [1001]\n", encoding="utf-8")
+    ctx = migrations.context_from_paths(spaces_dir, tmp_path / "ledger.json", (1001,))
+
+    report = schema.migrate_to_latest(path, ctx)
+
+    assert report.error is None
+    assert report.problems == []
+    assert report.to_version == schema.SCHEMA_VERSION
+
+    rows = _rows(
+        path,
+        "SELECT owner_type, owner_key, audience, policy_version FROM memories"
+        " WHERE id = 'm1'",
+    )
+    assert rows == [("SPACE", "space:casual", "CURRENT_SPACE", POLICY_VERSION)]
+    for table in (
+        "conversation_registry",
+        "memory_evidence",
+        "personal_profile_facts",
+        "memory_scope_versions",
+    ):
+        assert _rows(path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
+    cols = _columns(path, "memories")
+    for col in ("owner_type", "owner_key", "subject_key", "audience",
+                "source_conversation_key", "fact_key", "policy_version"):
+        assert col in cols
+
+    # 幂等：重跑无变更（owner_type 已非空，WHERE 不再命中）
+    second = schema.migrate_to_latest(path, ctx)
+    assert second.error is None
+    assert second.problems == []
+    assert second.changed_rows == 0
+
+
+def test_reserved_namespaces_pass_space_validation(tmp_path):
+    """personal:/private: 前缀是保留命名空间，校验不得当成未知空间报问题。"""
+    name = "personal:person:qq:10000:20001:USER_SHARED"
+    assert migrations._is_reserved_namespace(name)
+    assert migrations._is_reserved_namespace("private:qq:10000:20001")
+    assert not migrations._is_reserved_namespace("casual")
