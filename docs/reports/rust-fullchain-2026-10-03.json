@@ -7,11 +7,11 @@
  },
  "rust_run": {
   "mode": "rust",
-  "db": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\rust-fullchain-r217_kd5\\memory.db",
+  "db": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\rust-fullchain-qx241k7l\\memory.db",
   "candidate_strong": "CONFIRMED",
   "candidate_weak": "OBSERVING",
   "new_memory": [
-   "99cbf806a1be4c7688ade3b4e66fcf6c",
+   "6db1785e8ffa49d885b6eadd92b50d0c",
    "用户名叫小明，住在杭州",
    "active"
   ],
@@ -52,11 +52,11 @@
  },
  "python_run": {
   "mode": "python",
-  "db": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\rust-fullchain-7kv_kjzs\\memory.db",
+  "db": "C:\\Users\\VEGETA~1\\AppData\\Local\\Temp\\rust-fullchain-jqjjqk1e\\memory.db",
   "candidate_strong": "CONFIRMED",
-  "candidate_weak": "CONFIRMED",
+  "candidate_weak": "OBSERVING",
   "new_memory": [
-   "9ee64e2d4ef44387a40c313def3d8840",
+   "be9c2648cd1b4a8d95f0399ab9fb00f7",
    "用户名叫小明，住在杭州",
    "active"
   ],
@@ -125,10 +125,10 @@
   },
   "python": {
    "old_memory": "active",
-   "weak_candidate": "CONFIRMED",
-   "action": "weak_candidate_observing 后被晋升循环改写 CONFIRMED"
+   "weak_candidate": "OBSERVING",
+   "action": "见 python_run"
   },
-  "differ": true
+  "differ": false
  },
  "verdict": "PASS"
 }

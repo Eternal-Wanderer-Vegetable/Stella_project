@@ -615,6 +615,20 @@ class MemoryManager:
                 with _probe_span(ctx, "memory.promotion.conflict",
                                  instance_key=instance_key):
                     weak_demoted = self._resolve_conflicts(cursor, candidate)
+                if weak_demoted:
+                    # 弱矛盾候选压回 OBSERVING（行为变更，2026-10-03 parity
+                    # 修复，与 Rust observing_conflict / 冲突解决器文档意图
+                    # 一致）：本轮不再合并/新建/确认——旧决策此前会被循环
+                    # 改写 CONFIRMED，造成矛盾两条 active 记忆并存。候选仍
+                    # 在 OBSERVING 池中逐批重估，复现推高 confidence 反超
+                    # 旧记忆时走「强候选」分支自然翻案（旧记忆标 CONFLICT）。
+                    gate_span.finish(status="skipped",
+                                     reason_code="conflict_weak_observing")
+                    logger.info(
+                        f"⚔️ [MemoryManager] 候选与更强旧记忆矛盾，保持 OBSERVING 等更多证据: "
+                        f"{candidate['id']}"
+                    )
+                    continue
 
                 # 相似度合并：与已有的活跃同类型记忆比对，相似则合并而非重复新建
                 existing_id = self._find_similar_memory(cursor, candidate)
@@ -1111,14 +1125,13 @@ class MemoryManager:
         """冲突解决（Conflict Resolution）：检测候选是否与已有活跃记忆矛盾。
 
         矛盾判定：同用户、同类型，两者共享关键对象词，但情感极性相反
-        （旧=肯定、新=否定，反之亦然）。若新候选置信度更高，旧记忆标记为
+        （旧=肯定、新=否定，反之亦亦）。若新候选置信度更高，旧记忆标记为
         CONFLICT（不再参与检索），新候选晋升；否则新候选压入 OBSERVING 等更多证据。
 
-        返回是否走了「弱候选置 OBSERVING」分支。**这是计划 §5 登记的
-        Python/Rust parity 案例**：Python 把弱候选写成 OBSERVING，但上层晋升
-        循环会继续合并/新建并把最终状态改写为 CONFIRMED（Rust 则立即返回
-        observing_conflict）。现存业务疑点本轮不修——观测只如实记录这两次
-        业务写入（NEW→OBSERVING→CONFIRMED），不替业务圆场。
+        返回是否走了「弱候选置 OBSERVING」分支——调用方**必须**据此跳过
+        本轮合并/新建/确认（2026-10-03 parity 修复前循环会无视该返回值把
+        候选改写 CONFIRMED，与 Rust observing_conflict 语义相悖；现两侧
+        语义一致，弱候选留在观察池逐批重估，证据反超时自然翻案）。
         """
         ctx = getattr(self, "_flow_ctx", None)
         instance_key = f"cand:{candidate['id']}"

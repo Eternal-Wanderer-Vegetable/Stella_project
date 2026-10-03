@@ -438,11 +438,14 @@ class TestCommitFacts:
 
 
 class TestWeakConflictParity:
-    def test_weak_candidate_observing_then_confirmed(self, flow_db, mem_env):
-        """Python 现状：弱候选（置信度低于旧记忆）被置 OBSERVING，但上层晋升
-        继续合并/新建并把最终状态改写为 CONFIRMED（Rust 则立即返回
-        observing_conflict）。本轮只忠实观测，不修业务——履历必须如实记录
-        这两次业务写入，决策面必须能看到 weak_candidate_observing 分支。
+    def test_weak_candidate_stays_observing(self, flow_db, mem_env):
+        """行为变更（2026-10-03 parity 修复，对齐 Rust observing_conflict）：
+        弱候选（置信度低于旧记忆）被冲突解决压回 OBSERVING 后，晋升循环
+        **不再**合并/新建/确认——终态保持 OBSERVING，不产生新记忆，旧记忆
+        不动。履历只记录 NEW→OBSERVING 一次业务写入。
+
+        修复前（bug 现状）：循环无视 weak_demoted 返回值，候选被改写
+        CONFIRMED，矛盾两条 active 记忆并存。
         """
         db = mem_env
         manager = memory_manager.MemoryManager()
@@ -465,11 +468,14 @@ class TestWeakConflictParity:
                 "SELECT status FROM memories WHERE id='old1'").fetchone()[0]
             cand_status = conn.execute(
                 "SELECT status FROM memory_candidates WHERE id='c1'").fetchone()[0]
+            new_memories = conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE id != 'old1'").fetchone()[0]
         finally:
             conn.close()
-        # 现状复现：旧记忆保持 active；弱候选最终仍 CONFIRMED
+        # 修复合同：弱候选终态 OBSERVING；旧记忆不动；没有新记忆产生
         assert old_status == "active"
-        assert cand_status == "CONFIRMED"
+        assert cand_status == "OBSERVING"
+        assert new_memories == 0
         row = _latest_trace(flow_db, "memory_promotion")
         conflicts = _events(flow_db, row[0], node_id="memory.promotion.conflict",
                             kind="decision")
@@ -477,10 +483,54 @@ class TestWeakConflictParity:
         assert conflicts[0].reason_code == "weak_candidate_observing"
         assert conflicts[0].status == "skipped"
         assert conflicts[0].metrics["old_confidence"] == pytest.approx(0.9)
-        # 履历如实记录 NEW→OBSERVING（冲突解决）→ CONFIRMED（晋升循环改写）
+        # gate span 以 conflict_weak_observing 收尾（跳过合并/新建的可见事实）
+        gates = _events(flow_db, row[0], node_id="memory.promotion.gate",
+                        kind="finish")
+        assert any(g.reason_code == "conflict_weak_observing" for g in gates)
+        # 履历只记录 NEW→OBSERVING 一次业务写入，无 CONFIRMED 改写
         states = [e["to_state"] for e in entity_history.history("memory_candidate", "c1")]
-        assert "OBSERVING" in states
+        assert states == ["OBSERVING"]
+
+    def test_evidence_reversal_promotes_and_marks_old_conflict(
+            self, flow_db, mem_env, monkeypatch):
+        """翻案语义保留：弱候选留 OBSERVING 后，复现推高 confidence 反超
+        旧记忆时走「强候选」分支——旧记忆标 CONFLICT、候选正常晋升。"""
+        db = mem_env
+        manager = memory_manager.MemoryManager()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, "
+            "importance, confidence, status) "
+            "VALUES ('old1', '1', '100', 'PREFERENCE', '用户喜欢Helldivers2', 0.8, 0.9, 'active')")
+        conn.commit()
+        conn.close()
+        _insert_candidate(db, "c1", "用户不喜欢Helldivers2", confidence=0.7,
+                          importance=0.9, occurrence=2, type_="PREFERENCE")
+        manager.process_new_candidates()
+        message_flow.flush()
+        # 态度真的变了：更多证据把 confidence 推过旧记忆（0.9）
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "UPDATE memory_candidates SET confidence = 0.95 WHERE id = 'c1'")
+        conn.commit()
+        conn.close()
+        manager.process_new_candidates()
+        message_flow.flush()
+
+        conn = sqlite3.connect(db)
+        try:
+            old_status = conn.execute(
+                "SELECT status FROM memories WHERE id='old1'").fetchone()[0]
+            cand_status = conn.execute(
+                "SELECT status FROM memory_candidates WHERE id='c1'").fetchone()[0]
+        finally:
+            conn.close()
+        assert old_status == "conflict"   # 旧记忆让位
+        assert cand_status == "CONFIRMED"  # 新态度晋升
+        states = [e["to_state"] for e in entity_history.history("memory_candidate", "c1")]
         assert states[-1] == "CONFIRMED"
+        old_states = [e["to_state"] for e in entity_history.history("long_term_memory", "old1")]
+        assert old_states[-1] == "conflict"
 
 
 # ── (e) quota 只在新建分支记录 ───────────────────────────────────────
