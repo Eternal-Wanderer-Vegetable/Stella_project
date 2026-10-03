@@ -116,8 +116,14 @@ def structural_features(node: ast.AST) -> dict:
 
 
 def body_hash(node: ast.AST) -> str:
-    """语义体 hash：``ast.dump`` 归一化（与注释/空格/行号无关）。"""
-    payload = ast.dump(node, annotate_fields=False, include_attributes=False)
+    """语义体 hash：``ast.unparse`` 归一化源码文本（与注释/空格/行号无关）。
+
+    版本可移植性（CI 实测教训 2026-10-03）：``ast.dump`` 的输出随 Python
+    版本变化（3.12 给函数节点加 ``type_params`` 等字段都会改变 dump 文本），
+    本机生成、CI（3.10–3.12）校验必然漂移。``unparse`` 产出归一化源码，
+    同一源码跨 3.10–3.14 文本一致（本仓无版本专属语法）。
+    """
+    payload = ast.unparse(node)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -197,10 +203,9 @@ def closure_of(func_node: ast.AST, ctx: _ModuleContext,
                 {"target": target[:80],
                  "resolved": _resolve_call(target, ctx, class_name_holder)})
         elif isinstance(sub, (ast.If, ast.IfExp)):
-            cond = sub.test if isinstance(sub, ast.If) else sub.body
+            # If 与 IfExp 的条件都在 .test（IfExp 的 .body 是「then」值）
             add("branch", getattr(sub, "lineno", 0),
-                {"condition": _safe_unparse(
-                    sub.test if isinstance(sub, ast.If) else cond)[:120]})
+                {"condition": _safe_unparse(sub.test)[:120]})
         elif isinstance(sub, ast.Match):
             add("branch", getattr(sub, "lineno", 0),
                 {"condition": _safe_unparse(sub.subject)[:120]})

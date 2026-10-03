@@ -1214,7 +1214,7 @@
    "label": "插件事件桥",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "7f2efe7478f43179",
+    "body_hash": "0b276a98b2abd25b",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1235,7 +1235,7 @@
    "label": "Cometa 委派判定",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "b63835c4f9005dfa",
+    "body_hash": "67c2df735e800e2e",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -1256,7 +1256,7 @@
    "label": "Memory/Comes/Skills 并行",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "634476b06d484e78",
+    "body_hash": "10ed8ef69937fe23",
     "features": {
      "awaits": 3,
      "branches": 10,
@@ -1277,7 +1277,7 @@
    "label": "分支异常隔离",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "634476b06d484e78",
+    "body_hash": "10ed8ef69937fe23",
     "features": {
      "awaits": 3,
      "branches": 10,
@@ -1298,7 +1298,7 @@
    "label": "Router 路由判定",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "634476b06d484e78",
+    "body_hash": "10ed8ef69937fe23",
     "features": {
      "awaits": 3,
      "branches": 10,
@@ -1319,7 +1319,7 @@
    "label": "按需整合触发",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1340,7 +1340,7 @@
    "label": "话题版本与 Cometa Origin",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1361,7 +1361,7 @@
    "label": "日预算阻断",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1382,7 +1382,7 @@
    "label": "群锁排队",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1403,7 +1403,7 @@
    "label": "插件已接管短路",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1424,7 +1424,7 @@
    "label": "回复闸门评估",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1445,7 +1445,7 @@
    "label": "运行时结果分派",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -1466,7 +1466,7 @@
    "label": "工具结果分发",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "cd8ad6e473a9cbca",
+    "body_hash": "53c2962ac311cfac",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -1488,7 +1488,7 @@
    "lane": "capability",
    "opaque": true,
    "source_ref": {
-    "body_hash": "353080bdcfe32c72",
+    "body_hash": "adf2993374dff05a",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1509,7 +1509,7 @@
    "label": "工具任务构建",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "cd8ad6e473a9cbca",
+    "body_hash": "53c2962ac311cfac",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -1530,7 +1530,7 @@
    "label": "任务入库与去重",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "a4378788669005ac",
+    "body_hash": "586656ce049ae3ed",
     "features": {
      "awaits": 0,
      "branches": 7,
@@ -1551,7 +1551,7 @@
    "label": "worker 认领",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "38c31f2b5dcb5fca",
+    "body_hash": "31e8e3b4ef8a487f",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -1573,7 +1573,7 @@
    "lane": "cometa",
    "opaque": true,
    "source_ref": {
-    "body_hash": "229d1c0420b0a7c7",
+    "body_hash": "87fb822108047ac3",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1594,7 +1594,7 @@
    "label": "结果通知发送",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "0b253f86bb617e7d",
+    "body_hash": "4b90f88d913b180d",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1615,7 +1615,7 @@
    "label": "通知投递终态",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "b1e0fad4c6c7fd47",
+    "body_hash": "ad524383169db704",
     "features": {
      "awaits": 1,
      "branches": 1,
@@ -1636,7 +1636,7 @@
    "label": "执行预检",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "229d1c0420b0a7c7",
+    "body_hash": "87fb822108047ac3",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1658,7 +1658,7 @@
    "lane": "cometa",
    "opaque": true,
    "source_ref": {
-    "body_hash": "229d1c0420b0a7c7",
+    "body_hash": "87fb822108047ac3",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -1679,7 +1679,7 @@
    "label": "个性化称呼命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "1c75435d61c3ae45",
+    "body_hash": "6f8ba3e40ade10ff",
     "features": {
      "awaits": 5,
      "branches": 12,
@@ -1700,7 +1700,7 @@
    "label": "能力查询命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "5e232a0142cb7a34",
+    "body_hash": "f22b33cb89b21790",
     "features": {
      "awaits": 3,
      "branches": 1,
@@ -1721,7 +1721,7 @@
    "label": "重载命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "915c332f61a9a06c",
+    "body_hash": "0956ef50d5751af5",
     "features": {
      "awaits": 5,
      "branches": 5,
@@ -1742,7 +1742,7 @@
    "label": "定时任务命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "7e234a0f922d5fec",
+    "body_hash": "a620ee18a31cb764",
     "features": {
      "awaits": 2,
      "branches": 2,
@@ -1763,7 +1763,7 @@
    "label": "开关命令",
    "lane": "command",
    "source_ref": {
-    "body_hash": "183d32d0e257b03b",
+    "body_hash": "337b440e2c34a6eb",
     "features": {
      "awaits": 2,
      "branches": 3,
@@ -1785,7 +1785,7 @@
    "lane": "background",
    "opaque": true,
    "source_ref": {
-    "body_hash": "836db4f97c750b64",
+    "body_hash": "8ca278d41f1431a3",
     "features": {
      "awaits": 1,
      "branches": 7,
@@ -1806,7 +1806,7 @@
    "label": "压缩预检",
    "lane": "background",
    "source_ref": {
-    "body_hash": "836db4f97c750b64",
+    "body_hash": "8ca278d41f1431a3",
     "features": {
      "awaits": 1,
      "branches": 7,
@@ -1827,7 +1827,7 @@
    "label": "压缩派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "91baebdae01717d2",
+    "body_hash": "d984e314b15b9a8f",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -1849,7 +1849,7 @@
    "lane": "background",
    "opaque": true,
    "source_ref": {
-    "body_hash": "21924d039ed444f1",
+    "body_hash": "a4db8fdb2f135a0f",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -1870,7 +1870,7 @@
    "label": "整合预检",
    "lane": "background",
    "source_ref": {
-    "body_hash": "21924d039ed444f1",
+    "body_hash": "a4db8fdb2f135a0f",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -1891,7 +1891,7 @@
    "label": "整合派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "0500e581de823d6f",
+    "body_hash": "3be5971a87ec9590",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -1912,7 +1912,7 @@
    "label": "整合写入",
    "lane": "background",
    "source_ref": {
-    "body_hash": "21924d039ed444f1",
+    "body_hash": "a4db8fdb2f135a0f",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -1933,7 +1933,7 @@
    "label": "短期上下文组装",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "b9190da5bc6194ed",
+    "body_hash": "a2ab5f112d901a11",
     "features": {
      "awaits": 0,
      "branches": 22,
@@ -1954,7 +1954,7 @@
    "label": "受理确认回复",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "95d7597816ed6e75",
+    "body_hash": "f7a535ab5b89ce0c",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -1975,7 +1975,7 @@
    "label": "任务受理",
    "lane": "cometa",
    "source_ref": {
-    "body_hash": "124ddcc1316a6602",
+    "body_hash": "8c346e199b3ef8ac",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -1996,7 +1996,7 @@
    "label": "效果窗口观察",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "46831349bc37e460",
+    "body_hash": "633d53bd9d88421a",
     "features": {
      "awaits": 0,
      "branches": 2,
@@ -2017,7 +2017,7 @@
    "label": "效果结算",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "f18362776ccc1f09",
+    "body_hash": "80e8f0ed1543c077",
     "features": {
      "awaits": 0,
      "branches": 10,
@@ -2038,7 +2038,7 @@
    "label": "记忆决策轨迹",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "c4e1cf1c693c4b0d",
+    "body_hash": "0427a899241bf530",
     "features": {
      "awaits": 2,
      "branches": 0,
@@ -2059,7 +2059,7 @@
    "label": "图片转述钩子",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "00fe71620fd274b4",
+    "body_hash": "d19819b4b9a9976f",
     "features": {
      "awaits": 2,
      "branches": 2,
@@ -2080,7 +2080,7 @@
    "label": "聊天触发判定",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "32493a90ebfb7167",
+    "body_hash": "f08146966fd4388e",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -2102,7 +2102,7 @@
    "label": "命令候选选择",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -2123,7 +2123,7 @@
    "label": "被动表达观察",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "45b3fcd73cf955cf",
+    "body_hash": "aa3ce2d7e59e4086",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -2144,7 +2144,7 @@
    "label": "群过滤/自我/slash/空文本",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "7decbe91923bbfbc",
+    "body_hash": "b5d57a299ab1445e",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2165,7 +2165,7 @@
    "label": "参与评分",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "6a2860bdcc92631f",
+    "body_hash": "4b4b60e78607873a",
     "features": {
      "awaits": 4,
      "branches": 22,
@@ -2186,7 +2186,7 @@
    "label": "消息落库",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "30e01357682d3425",
+    "body_hash": "9b42276814bb5b1f",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -2207,7 +2207,7 @@
    "label": "社交证据标准化",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "7decbe91923bbfbc",
+    "body_hash": "b5d57a299ab1445e",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2228,7 +2228,7 @@
    "label": "主动状态观察",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "7decbe91923bbfbc",
+    "body_hash": "b5d57a299ab1445e",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2249,7 +2249,7 @@
    "label": "插件分发",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "e860f81f306d2dd2",
+    "body_hash": "3aa66ba5f4568cde",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -2270,7 +2270,7 @@
    "label": "收到群消息",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "7decbe91923bbfbc",
+    "body_hash": "b5d57a299ab1445e",
     "features": {
      "awaits": 2,
      "branches": 13,
@@ -2291,7 +2291,7 @@
    "label": "知识导入入口",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "417865229274f448",
+    "body_hash": "c428ff6af9e0e6fa",
     "features": {
      "awaits": 0,
      "branches": 9,
@@ -2312,7 +2312,7 @@
    "label": "知识解析",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "f387ead1bfb19081",
+    "body_hash": "1a965b613608b859",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -2333,7 +2333,7 @@
    "label": "版本构建与嵌入",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "1964a48a05fa286d",
+    "body_hash": "f72f6a7c793a0bb1",
     "features": {
      "awaits": 0,
      "branches": 6,
@@ -2354,7 +2354,7 @@
    "label": "表达学习开启",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "e58a85afaf12f799",
+    "body_hash": "fea51d7fadb237c8",
     "features": {
      "awaits": 0,
      "branches": 6,
@@ -2375,7 +2375,7 @@
    "label": "Provider 直连生成",
    "lane": "generate",
    "source_ref": {
-    "body_hash": "941c9ae985e63d3c",
+    "body_hash": "679fc69469644c18",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -2397,7 +2397,7 @@
    "lane": "generate",
    "opaque": true,
    "source_ref": {
-    "body_hash": "35b4331e972f431d",
+    "body_hash": "263d4a50f55db2dc",
     "features": {
      "awaits": 3,
      "branches": 11,
@@ -2419,7 +2419,7 @@
    "lane": "generate",
    "opaque": true,
    "source_ref": {
-    "body_hash": "35b4331e972f431d",
+    "body_hash": "263d4a50f55db2dc",
     "features": {
      "awaits": 3,
      "branches": 11,
@@ -2441,7 +2441,7 @@
    "lane": "generate",
    "opaque": true,
    "source_ref": {
-    "body_hash": "35b4331e972f431d",
+    "body_hash": "263d4a50f55db2dc",
     "features": {
      "awaits": 3,
      "branches": 11,
@@ -2462,7 +2462,7 @@
    "label": "候选写入与归一化（Gate3）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "23abb1d6718412a5",
+    "body_hash": "29d14f7b24ab0a3c",
     "features": {
      "awaits": 0,
      "branches": 14,
@@ -2483,7 +2483,7 @@
    "label": "整合入口（触发/预检/锁）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "21924d039ed444f1",
+    "body_hash": "a4db8fdb2f135a0f",
     "features": {
      "awaits": 1,
      "branches": 4,
@@ -2504,7 +2504,7 @@
    "label": "消息窗口与检查点",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "cfca07d2a39d5311",
+    "body_hash": "bb8bcb97fe1fb362",
     "features": {
      "awaits": 0,
      "branches": 6,
@@ -2525,7 +2525,7 @@
    "label": "自我披露门控→精确抽取（stage2）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "507a50234ab846f3",
+    "body_hash": "3d626d30aee1b187",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2547,7 +2547,7 @@
    "lane": "memory",
    "opaque": true,
    "source_ref": {
-    "body_hash": "79c3e254b98784ee",
+    "body_hash": "811efb6548547e9c",
     "features": {
      "awaits": 1,
      "branches": 6,
@@ -2568,7 +2568,7 @@
    "label": "记忆维护（压缩/去重/衰减）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "42751c15bf1f5f4d",
+    "body_hash": "f7f661278102a537",
     "features": {
      "awaits": 0,
      "branches": 5,
@@ -2589,7 +2589,7 @@
    "label": "后端解析（Python/Rust/auto 回退）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "c204064d0584b41d",
+    "body_hash": "ab87e0b826d3cdb9",
     "features": {
      "awaits": 0,
      "branches": 13,
@@ -2610,7 +2610,7 @@
    "label": "晋升批处理入口",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "c204064d0584b41d",
+    "body_hash": "ab87e0b826d3cdb9",
     "features": {
      "awaits": 0,
      "branches": 13,
@@ -2631,7 +2631,7 @@
    "label": "事务提交确认",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "39ae217e67ef5f69",
+    "body_hash": "b00cbb443618890d",
     "features": {
      "awaits": 0,
      "branches": 8,
@@ -2652,7 +2652,7 @@
    "label": "冲突扫描与处理",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "bc300120994c2cc0",
+    "body_hash": "73dab3339fd7aa3a",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -2673,7 +2673,7 @@
    "label": "新建长期记忆",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "fa014cec64c7be29",
+    "body_hash": "f34b972c422280f3",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -2694,7 +2694,7 @@
    "label": "晋升门槛判定（逐候选）",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "e88fee12fb6b6d42",
+    "body_hash": "5eb8d89ffd40a02f",
     "features": {
      "awaits": 0,
      "branches": 5,
@@ -2715,7 +2715,7 @@
    "label": "相似合并",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "39874518df8bc160",
+    "body_hash": "121ced2eaef7a178",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2736,7 +2736,7 @@
    "label": "用户配额排序与归档",
    "lane": "memory",
    "source_ref": {
-    "body_hash": "8b3c174b2cf3a03c",
+    "body_hash": "f8218782febe9a2e",
     "features": {
      "awaits": 0,
      "branches": 2,
@@ -2758,7 +2758,7 @@
    "lane": "capability",
    "opaque": true,
    "source_ref": {
-    "body_hash": "5f4447be38cccbad",
+    "body_hash": "7c7917167016f07b",
     "features": {
      "awaits": 0,
      "branches": 10,
@@ -2779,7 +2779,7 @@
    "label": "参与决策（全等级退出）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "6a2860bdcc92631f",
+    "body_hash": "4b4b60e78607873a",
     "features": {
      "awaits": 4,
      "branches": 22,
@@ -2800,7 +2800,7 @@
    "label": "决策 tracker（streak/backoff/strong hook）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "88b0b2e1b21bda16",
+    "body_hash": "fa8c083f623f34cb",
     "features": {
      "awaits": 0,
      "branches": 13,
@@ -2821,7 +2821,7 @@
    "label": "参与评分决策",
    "lane": "background",
    "source_ref": {
-    "body_hash": "6a2860bdcc92631f",
+    "body_hash": "4b4b60e78607873a",
     "features": {
      "awaits": 4,
      "branches": 22,
@@ -2842,7 +2842,7 @@
    "label": "评分计算（embedding/keyword 回退）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "47205c77ea52a28a",
+    "body_hash": "994b88816bd3034a",
     "features": {
      "awaits": 1,
      "branches": 6,
@@ -2863,7 +2863,7 @@
    "label": "主动发言派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "b1a6df16f338ea00",
+    "body_hash": "c3d9347f03572813",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -2884,7 +2884,7 @@
    "label": "Planner LLM 决策",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "f458576da8b95fe9",
+    "body_hash": "347eb826c5c3aed1",
     "features": {
      "awaits": 1,
      "branches": 0,
@@ -2905,7 +2905,7 @@
    "label": "Planner 结果解析",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "eac7b6272d99155b",
+    "body_hash": "1b916eea4a1d69a9",
     "features": {
      "awaits": 1,
      "branches": 9,
@@ -2926,7 +2926,7 @@
    "label": "Planner 触发判定",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "eac7b6272d99155b",
+    "body_hash": "1b916eea4a1d69a9",
     "features": {
      "awaits": 1,
      "branches": 9,
@@ -2947,7 +2947,7 @@
    "label": "违禁语过滤",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "35ee1ad8eef0f9b7",
+    "body_hash": "82d73c055c7e4088",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2975,7 +2975,7 @@
    "label": "输出解析",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "7797c4ac144e15cc",
+    "body_hash": "dd24adc696bfbda7",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -2996,7 +2996,7 @@
    "label": "分行",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "cf51ed417551ab4d",
+    "body_hash": "ba879bfe1b63b639",
     "features": {
      "awaits": 0,
      "branches": 1,
@@ -3017,7 +3017,7 @@
    "label": "思维链日志",
    "lane": "finalize",
    "source_ref": {
-    "body_hash": "a0c11db01e5b17d4",
+    "body_hash": "0147162c0cb238e7",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -3038,7 +3038,7 @@
    "label": "无后端/调用预算",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "fc64327aeae03941",
+    "body_hash": "0dc11ceb0636aa29",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3059,7 +3059,7 @@
    "label": "直回短路 (DIRECT)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "fc64327aeae03941",
+    "body_hash": "0dc11ceb0636aa29",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3080,7 +3080,7 @@
    "label": "前置钩子链",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "fc64327aeae03941",
+    "body_hash": "0dc11ceb0636aa29",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3101,7 +3101,7 @@
    "label": "等待更多消息 (SILENT)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "fc64327aeae03941",
+    "body_hash": "0dc11ceb0636aa29",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3122,7 +3122,7 @@
    "label": "主动发言记账",
    "lane": "background",
    "source_ref": {
-    "body_hash": "2315e339d7fd2caa",
+    "body_hash": "208e0fb07c8e2325",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3143,7 +3143,7 @@
    "label": "主动@资格预检",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "18d013fd3dd5a7c5",
+    "body_hash": "7b1a787904318096",
     "features": {
      "awaits": 5,
      "branches": 14,
@@ -3164,7 +3164,7 @@
    "label": "验证候选选择与淘汰原因",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "ed24eb2ff2c8bef1",
+    "body_hash": "f92d565e83d69341",
     "features": {
      "awaits": 0,
      "branches": 8,
@@ -3185,7 +3185,7 @@
    "label": "主动输出过滤",
    "lane": "background",
    "source_ref": {
-    "body_hash": "2315e339d7fd2caa",
+    "body_hash": "208e0fb07c8e2325",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3206,7 +3206,7 @@
    "label": "主动发言预检",
    "lane": "background",
    "source_ref": {
-    "body_hash": "2315e339d7fd2caa",
+    "body_hash": "208e0fb07c8e2325",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3227,7 +3227,7 @@
    "label": "主动逐段发送",
    "lane": "background",
    "source_ref": {
-    "body_hash": "2315e339d7fd2caa",
+    "body_hash": "208e0fb07c8e2325",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3248,7 +3248,7 @@
    "label": "定时主动预检（独立 root）",
    "lane": "proactive",
    "source_ref": {
-    "body_hash": "db233332e672baba",
+    "body_hash": "e5bcb2034cf7c812",
     "features": {
      "awaits": 3,
      "branches": 4,
@@ -3269,7 +3269,7 @@
    "label": "主动发言轮次",
    "lane": "background",
    "source_ref": {
-    "body_hash": "2315e339d7fd2caa",
+    "body_hash": "208e0fb07c8e2325",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3290,7 +3290,7 @@
    "label": "窗口预算裁剪",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "896e153c5acb9b9e",
+    "body_hash": "da944b8fb199d641",
     "features": {
      "awaits": 0,
      "branches": 0,
@@ -3311,7 +3311,7 @@
    "label": "记忆分区注入",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "fc64327aeae03941",
+    "body_hash": "0dc11ceb0636aa29",
     "features": {
      "awaits": 2,
      "branches": 10,
@@ -3332,7 +3332,7 @@
    "label": "提示词分段组装",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "2f9206cc30b6e6b7",
+    "body_hash": "f82300ca4eab2527",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -3353,7 +3353,7 @@
    "label": "确认段记账与学习",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -3374,7 +3374,7 @@
    "label": "回复后压缩派生",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "91baebdae01717d2",
+    "body_hash": "d984e314b15b9a8f",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3395,7 +3395,7 @@
    "label": "全部未送达（不记账）",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -3416,7 +3416,7 @@
    "label": "预约 Agent 执行",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "fad01e19499d2734",
+    "body_hash": "a9097bfa31ea1aab",
     "features": {
      "awaits": 2,
      "branches": 11,
@@ -3437,7 +3437,7 @@
    "label": "预约投递",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "e83484a2d145af99",
+    "body_hash": "da65ad8280ec6e81",
     "features": {
      "awaits": 1,
      "branches": 10,
@@ -3458,7 +3458,7 @@
    "label": "预约运行门控（静音/睡眠/冷却）",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "c60d0cdeccfffbdb",
+    "body_hash": "e72f33fab094a28d",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3479,7 +3479,7 @@
    "label": "预约调度 tick（租约/恢复/执行）",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "2e8ccf0c2a8ad589",
+    "body_hash": "7d43dba067ae4318",
     "features": {
      "awaits": 1,
      "branches": 2,
@@ -3500,7 +3500,7 @@
    "label": "回执聚合",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "8e9f731d35623683",
+    "body_hash": "d6e0ef4fa8ce837c",
     "features": {
      "awaits": 0,
      "branches": 3,
@@ -3521,7 +3521,7 @@
    "label": "Cometa 受理确认",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "3e129f1aa02e3343",
+    "body_hash": "715f97eb932d82c7",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3542,7 +3542,7 @@
    "label": "发送准备",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "b36668033b6d34c3",
+    "body_hash": "d5a67e43bc266230",
     "features": {
      "awaits": 8,
      "branches": 20,
@@ -3563,7 +3563,7 @@
    "label": "回执落库",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "e812a6f6ac57da3e",
+    "body_hash": "a199e884b7a46a50",
     "features": {
      "awaits": 0,
      "branches": 4,
@@ -3584,7 +3584,7 @@
    "label": "逐段发送",
    "lane": "delivery",
    "source_ref": {
-    "body_hash": "96cba01e4bfe27fe",
+    "body_hash": "0b46c3dff0f0bcc8",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3606,7 +3606,7 @@
    "lane": "capability",
    "opaque": true,
    "source_ref": {
-    "body_hash": "0f1da55f8d4d3440",
+    "body_hash": "7874e68d401b58b6",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3627,7 +3627,7 @@
    "label": "技能预检",
    "lane": "capability",
    "source_ref": {
-    "body_hash": "0f1da55f8d4d3440",
+    "body_hash": "7874e68d401b58b6",
     "features": {
      "awaits": 2,
      "branches": 6,
@@ -3648,7 +3648,7 @@
    "label": "社交 worker 到期租约处理",
    "lane": "ops",
    "source_ref": {
-    "body_hash": "e1f8b142a1f015fc",
+    "body_hash": "54bed1cb173873bd",
     "features": {
      "awaits": 0,
      "branches": 7,
@@ -3669,7 +3669,7 @@
    "label": "轮次取消",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3690,7 +3690,7 @@
    "label": "Provider 异常兜底",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3711,7 +3711,7 @@
    "label": "本地兜底 (budget/no_backend)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3732,7 +3732,7 @@
    "label": "生成调用（wait_for 围 provider）",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3753,7 +3753,7 @@
    "label": "生成完成",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3774,7 +3774,7 @@
    "label": "轮次身份",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3795,7 +3795,7 @@
    "label": "prepare 阶段",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3816,7 +3816,7 @@
    "label": "生成超时兜底",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "3e03cfba5c850502",
+    "body_hash": "dc9c7973ce466880",
     "features": {
      "awaits": 7,
      "branches": 9,
@@ -3837,7 +3837,7 @@
    "label": "鉴权与输入检查",
    "lane": "web",
    "source_ref": {
-    "body_hash": "126c5c2e1305e4d1",
+    "body_hash": "ad9f742c161228bd",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3858,7 +3858,7 @@
    "label": "整轮外层超时",
    "lane": "web",
    "source_ref": {
-    "body_hash": "126c5c2e1305e4d1",
+    "body_hash": "ad9f742c161228bd",
     "features": {
      "awaits": 1,
      "branches": 3,
@@ -3879,7 +3879,7 @@
    "label": "回复落库与 server_emitted",
    "lane": "web",
    "source_ref": {
-    "body_hash": "388e959559d002c6",
+    "body_hash": "b449014145ef8a16",
     "features": {
      "awaits": 4,
      "branches": 6,
@@ -3900,7 +3900,7 @@
    "label": "WebChat 串行锁",
    "lane": "web",
    "source_ref": {
-    "body_hash": "388e959559d002c6",
+    "body_hash": "b449014145ef8a16",
     "features": {
      "awaits": 4,
      "branches": 6,
@@ -3921,7 +3921,7 @@
    "label": "虚拟空间与记录消息",
    "lane": "web",
    "source_ref": {
-    "body_hash": "388e959559d002c6",
+    "body_hash": "b449014145ef8a16",
     "features": {
      "awaits": 4,
      "branches": 6,
@@ -4339,7 +4339,7 @@
       "target": "asyncio.gather"
      },
      {
-      "condition": "'branch_isolated'",
+      "condition": "failures",
       "kind": "branch",
       "line": 452
      },
@@ -4380,12 +4380,12 @@
       "target": "_logger().warning"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "delegation_handled",
       "kind": "branch",
       "line": 410
      },
      {
-      "condition": "'delegated'",
+      "condition": "delegation_handled",
       "kind": "branch",
       "line": 411
      },
@@ -4722,7 +4722,7 @@
       "target": "asyncio.gather"
      },
      {
-      "condition": "'branch_isolated'",
+      "condition": "failures",
       "kind": "branch",
       "line": 452
      },
@@ -4763,12 +4763,12 @@
       "target": "_logger().warning"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "delegation_handled",
       "kind": "branch",
       "line": 410
      },
      {
-      "condition": "'delegated'",
+      "condition": "delegation_handled",
       "kind": "branch",
       "line": 411
      },
@@ -5105,7 +5105,7 @@
       "target": "asyncio.gather"
      },
      {
-      "condition": "'branch_isolated'",
+      "condition": "failures",
       "kind": "branch",
       "line": 452
      },
@@ -5146,12 +5146,12 @@
       "target": "_logger().warning"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "delegation_handled",
       "kind": "branch",
       "line": 410
      },
      {
-      "condition": "'delegated'",
+      "condition": "delegation_handled",
       "kind": "branch",
       "line": 411
      },
@@ -5448,7 +5448,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -5830,7 +5830,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -5847,12 +5847,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -5987,7 +5987,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -6028,7 +6028,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -6045,7 +6045,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -6309,7 +6309,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -6691,7 +6691,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -6708,12 +6708,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -6848,7 +6848,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -6889,7 +6889,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -6906,7 +6906,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -7170,7 +7170,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -7552,7 +7552,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -7569,12 +7569,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -7709,7 +7709,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -7750,7 +7750,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -7767,7 +7767,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -8031,7 +8031,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -8413,7 +8413,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -8430,12 +8430,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -8570,7 +8570,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -8611,7 +8611,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -8628,7 +8628,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -8892,7 +8892,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -9274,7 +9274,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -9291,12 +9291,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -9431,7 +9431,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -9472,7 +9472,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -9489,7 +9489,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -9753,7 +9753,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -10135,7 +10135,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -10152,12 +10152,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -10292,7 +10292,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -10333,7 +10333,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -10350,7 +10350,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -10614,7 +10614,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -10996,7 +10996,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -11013,12 +11013,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -11153,7 +11153,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -11194,7 +11194,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -11211,7 +11211,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -11364,7 +11364,7 @@
       "line": 185
      },
      {
-      "condition": "_knowledge_evidence_of(result)",
+      "condition": "result.metadata.get('capability') == KNOWLEDGE_SEARCH_CAPABILITY",
       "kind": "branch",
       "line": 200
      },
@@ -11646,7 +11646,7 @@
       "line": 185
      },
      {
-      "condition": "_knowledge_evidence_of(result)",
+      "condition": "result.metadata.get('capability') == KNOWLEDGE_SEARCH_CAPABILITY",
       "kind": "branch",
       "line": 200
      },
@@ -11932,7 +11932,7 @@
       "target": "CometaServiceError"
      },
      {
-      "condition": "origin.conversation_id",
+      "condition": "origin.platform == 'qq'",
       "kind": "branch",
       "line": 167
      },
@@ -12337,12 +12337,12 @@
       "target": "sp.__exit__"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "sent",
       "kind": "branch",
       "line": 149
      },
      {
-      "condition": "''",
+      "condition": "sent",
       "kind": "branch",
       "line": 150
      },
@@ -12696,7 +12696,7 @@
       "line": 1213
      },
      {
-      "condition": "target_ids[0]",
+      "condition": "target_ids",
       "kind": "branch",
       "line": 1215
      },
@@ -12879,7 +12879,7 @@
       "target": "addressing.get_preference"
      },
      {
-      "condition": "f'我现在称呼你「{preference.address_term}」。'",
+      "condition": "preference",
       "kind": "branch",
       "line": 1250
      },
@@ -12959,7 +12959,7 @@
       "line": 1501
      },
      {
-      "condition": "MessageSegment.image(image)",
+      "condition": "image",
       "kind": "branch",
       "line": 1502
      },
@@ -13166,7 +13166,7 @@
       "target": "get_participation_manager().reload_tables"
      },
      {
-      "condition": "f'✅ {msg}'",
+      "condition": "ok",
       "kind": "branch",
       "line": 1620
      },
@@ -13195,7 +13195,7 @@
       "target": "get_failed_plugins().get"
      },
      {
-      "condition": "f'：{reason}'",
+      "condition": "reason",
       "kind": "branch",
       "line": 1638
      },
@@ -13529,7 +13529,7 @@
       "line": 1358
      },
      {
-      "condition": "'好，我不主动说话了，被 @ 还是会回的'",
+      "condition": "mute",
       "kind": "branch",
       "line": 1361
      },
@@ -14979,7 +14979,7 @@
       "target": "get_session_summary"
      },
      {
-      "condition": "''",
+      "condition": "tail",
       "kind": "branch",
       "line": 204
      },
@@ -15065,7 +15065,7 @@
       "target": "_fetch_recent_exchanges_text"
      },
      {
-      "condition": "'之前未聊完的话题'",
+      "condition": "summary_age",
       "kind": "branch",
       "line": 216
      },
@@ -15130,12 +15130,12 @@
       "target": "logger.warning"
      },
      {
-      "condition": "row[2]",
+      "condition": "len(row) > 2",
       "kind": "branch",
       "line": 147
      },
      {
-      "condition": "seconds_since(row[2])",
+      "condition": "len(row) > 2",
       "kind": "branch",
       "line": 150
      },
@@ -15212,17 +15212,17 @@
       "target": "len"
      },
      {
-      "condition": "'过期'",
+      "condition": "summary_age",
       "kind": "branch",
       "line": 228
      },
      {
-      "condition": "len(tail.splitlines())",
+      "condition": "tail",
       "kind": "branch",
       "line": 229
      },
      {
-      "condition": "' 会话摘要=有'",
+      "condition": "session_summary",
       "kind": "branch",
       "line": 230
      },
@@ -15233,7 +15233,7 @@
       "target": "len"
      },
      {
-      "condition": "'有'",
+      "condition": "active_summary",
       "kind": "branch",
       "line": 228
      },
@@ -15344,7 +15344,7 @@
       "target": "service.submit"
      },
      {
-      "condition": "'webchat_admin'",
+      "condition": "origin.get('platform') == 'webchat'",
       "kind": "branch",
       "line": 330
      },
@@ -15504,7 +15504,7 @@
       "target": "log_sqlite_error"
      },
      {
-      "condition": "str(user_id)",
+      "condition": "str(user_id) not in ('', '0')",
       "kind": "branch",
       "line": 114
      },
@@ -15681,7 +15681,7 @@
       "target": "str"
      },
      {
-      "condition": "'complete'",
+      "condition": "not capped",
       "kind": "branch",
       "line": 323
      },
@@ -15767,7 +15767,7 @@
       "target": "conn.execute"
      },
      {
-      "condition": "'reeval'",
+      "condition": "cur.rowcount == 1",
       "kind": "branch",
       "line": 346
      },
@@ -16343,7 +16343,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -16725,7 +16725,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -16742,12 +16742,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -16882,7 +16882,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -16923,7 +16923,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -16940,7 +16940,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -17336,12 +17336,12 @@
       "target": "_flow_decision"
      },
      {
-      "condition": "'AT_MENTION'",
+      "condition": "event.is_tome()",
       "kind": "branch",
       "line": 672
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 675
      },
@@ -17464,7 +17464,7 @@
       "target": "get_participation_manager"
      },
      {
-      "condition": "int(reply_to_id)",
+      "condition": "(reply_to_id or '').isdigit()",
       "kind": "branch",
       "line": 733
      },
@@ -17481,7 +17481,7 @@
       "target": "event.is_tome"
      },
      {
-      "condition": "bool(extract_image_sources(event))",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 736
      },
@@ -17650,7 +17650,7 @@
       "line": 258
      },
      {
-      "condition": "now",
+      "condition": "now is not None",
       "kind": "branch",
       "line": 259
      },
@@ -17723,12 +17723,12 @@
       "target": "getattr"
      },
      {
-      "condition": "state.speech_share(tw.share_window_seconds, now=now)",
+      "condition": "tw is not None",
       "kind": "branch",
       "line": 315
      },
      {
-      "condition": "max((ngram_jaccard(text, bot_text, tw.ngram_size) for bot_text in state.recent_bot_texts), default=0.0)",
+      "condition": "tw is not None and state.recent_bot_texts",
       "kind": "branch",
       "line": 317
      },
@@ -17755,7 +17755,7 @@
       "target": "self._tracker._slots.get"
      },
      {
-      "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
+      "condition": "_slot is not None",
       "kind": "branch",
       "line": 358
      },
@@ -17901,12 +17901,12 @@
       "target": "score_span.finish"
      },
      {
-      "condition": "'idle_backoff'",
+      "condition": "'idle_backoff' in decision.reason_flags",
       "kind": "branch",
       "line": 375
      },
      {
-      "condition": "'decision_allow'",
+      "condition": "decision.should_speak",
       "kind": "branch",
       "line": 417
      },
@@ -17935,17 +17935,17 @@
       "target": "round"
      },
      {
-      "condition": "slot_after.streak",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 399
      },
      {
-      "condition": "slot_after.backoff_until",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 401
      },
      {
-      "condition": "slot_after.low_novelty_streak",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 403
      },
@@ -17968,12 +17968,12 @@
       "target": "round"
      },
      {
-      "condition": "round(breakdown.speech_share, 3)",
+      "condition": "breakdown.speech_share is not None",
       "kind": "branch",
       "line": 345
      },
      {
-      "condition": "round(breakdown.novelty, 3)",
+      "condition": "breakdown.novelty is not None",
       "kind": "branch",
       "line": 348
      },
@@ -18381,12 +18381,12 @@
       "target": "_flow_decision"
      },
      {
-      "condition": "'AT_MENTION'",
+      "condition": "event.is_tome()",
       "kind": "branch",
       "line": 672
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 675
      },
@@ -18509,7 +18509,7 @@
       "target": "get_participation_manager"
      },
      {
-      "condition": "int(reply_to_id)",
+      "condition": "(reply_to_id or '').isdigit()",
       "kind": "branch",
       "line": 733
      },
@@ -18526,7 +18526,7 @@
       "target": "event.is_tome"
      },
      {
-      "condition": "bool(extract_image_sources(event))",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 736
      },
@@ -18875,12 +18875,12 @@
       "target": "_flow_decision"
      },
      {
-      "condition": "'AT_MENTION'",
+      "condition": "event.is_tome()",
       "kind": "branch",
       "line": 672
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 675
      },
@@ -19003,7 +19003,7 @@
       "target": "get_participation_manager"
      },
      {
-      "condition": "int(reply_to_id)",
+      "condition": "(reply_to_id or '').isdigit()",
       "kind": "branch",
       "line": 733
      },
@@ -19020,7 +19020,7 @@
       "target": "event.is_tome"
      },
      {
-      "condition": "bool(extract_image_sources(event))",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 736
      },
@@ -19158,7 +19158,7 @@
       "target": "plugin_handler.handle"
      },
      {
-      "condition": "_flow_root_for(event)",
+      "condition": "isinstance(event, GroupMessageEvent)",
       "kind": "branch",
       "line": 819
      },
@@ -19523,12 +19523,12 @@
       "target": "_flow_decision"
      },
      {
-      "condition": "'AT_MENTION'",
+      "condition": "event.is_tome()",
       "kind": "branch",
       "line": 672
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 675
      },
@@ -19651,7 +19651,7 @@
       "target": "get_participation_manager"
      },
      {
-      "condition": "int(reply_to_id)",
+      "condition": "(reply_to_id or '').isdigit()",
       "kind": "branch",
       "line": 733
      },
@@ -19668,7 +19668,7 @@
       "target": "event.is_tome"
      },
      {
-      "condition": "bool(extract_image_sources(event))",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 736
      },
@@ -19840,12 +19840,12 @@
       "target": "_ingest_flow_root"
      },
      {
-      "condition": "message_flow.span(root, 'knowledge.parse')",
+      "condition": "root",
       "kind": "branch",
       "line": 100
      },
      {
-      "condition": "message_flow.span(root, 'knowledge.version')",
+      "condition": "root",
       "kind": "branch",
       "line": 122
      },
@@ -20023,7 +20023,7 @@
       "target": "version_span.finish"
      },
      {
-      "condition": "{'chunks': outcome.chunk_count}",
+      "condition": "hasattr(outcome, 'chunk_count')",
       "kind": "branch",
       "line": 142
      },
@@ -20342,7 +20342,7 @@
       "target": "len"
      },
      {
-      "condition": "DOC_STATE_IN_REVIEW",
+      "condition": "needs_review",
       "kind": "branch",
       "line": 240
      },
@@ -20655,7 +20655,7 @@
       "target": "logger.info"
      },
      {
-      "condition": "{'Authorization': f'Bearer {self.api_key}'}",
+      "condition": "self.api_key",
       "kind": "branch",
       "line": 144
      },
@@ -20813,7 +20813,7 @@
       "target": "logger.warning"
      },
      {
-      "condition": "estimate_local_prefix(payload.get('messages') or [], slot=self.slot, model=self.model)",
+      "condition": "self.kind == 'local'",
       "kind": "branch",
       "line": 176
      },
@@ -20824,7 +20824,7 @@
       "target": "record_usage"
      },
      {
-      "condition": "f'，缓存命中 {record.cached_tokens}'",
+      "condition": "record.cached_tokens",
       "kind": "branch",
       "line": 195
      },
@@ -20875,12 +20875,12 @@
       "target": "asyncio.sleep"
      },
      {
-      "condition": "estimate.prompt_tokens",
+      "condition": "estimate",
       "kind": "branch",
       "line": 190
      },
      {
-      "condition": "estimate.cached_tokens",
+      "condition": "estimate",
       "kind": "branch",
       "line": 191
      },
@@ -20967,7 +20967,7 @@
       "target": "logger.info"
      },
      {
-      "condition": "{'Authorization': f'Bearer {self.api_key}'}",
+      "condition": "self.api_key",
       "kind": "branch",
       "line": 144
      },
@@ -21125,7 +21125,7 @@
       "target": "logger.warning"
      },
      {
-      "condition": "estimate_local_prefix(payload.get('messages') or [], slot=self.slot, model=self.model)",
+      "condition": "self.kind == 'local'",
       "kind": "branch",
       "line": 176
      },
@@ -21136,7 +21136,7 @@
       "target": "record_usage"
      },
      {
-      "condition": "f'，缓存命中 {record.cached_tokens}'",
+      "condition": "record.cached_tokens",
       "kind": "branch",
       "line": 195
      },
@@ -21187,12 +21187,12 @@
       "target": "asyncio.sleep"
      },
      {
-      "condition": "estimate.prompt_tokens",
+      "condition": "estimate",
       "kind": "branch",
       "line": 190
      },
      {
-      "condition": "estimate.cached_tokens",
+      "condition": "estimate",
       "kind": "branch",
       "line": 191
      },
@@ -21279,7 +21279,7 @@
       "target": "logger.info"
      },
      {
-      "condition": "{'Authorization': f'Bearer {self.api_key}'}",
+      "condition": "self.api_key",
       "kind": "branch",
       "line": 144
      },
@@ -21437,7 +21437,7 @@
       "target": "logger.warning"
      },
      {
-      "condition": "estimate_local_prefix(payload.get('messages') or [], slot=self.slot, model=self.model)",
+      "condition": "self.kind == 'local'",
       "kind": "branch",
       "line": 176
      },
@@ -21448,7 +21448,7 @@
       "target": "record_usage"
      },
      {
-      "condition": "f'，缓存命中 {record.cached_tokens}'",
+      "condition": "record.cached_tokens",
       "kind": "branch",
       "line": 195
      },
@@ -21499,12 +21499,12 @@
       "target": "asyncio.sleep"
      },
      {
-      "condition": "estimate.prompt_tokens",
+      "condition": "estimate",
       "kind": "branch",
       "line": 190
      },
      {
-      "condition": "estimate.cached_tokens",
+      "condition": "estimate",
       "kind": "branch",
       "line": 191
      },
@@ -21673,7 +21673,7 @@
       "target": "self._normalize_user_id"
      },
      {
-      "condition": "'AT_MENTION'",
+      "condition": "uid in at_sender_set",
       "kind": "branch",
       "line": 1304
      },
@@ -21798,7 +21798,7 @@
       "target": "history_events.append"
      },
      {
-      "condition": "str(getattr(flow_ctx, 'trace_id', '') or '')",
+      "condition": "flow_ctx is not None",
       "kind": "branch",
       "line": 1477
      },
@@ -21982,7 +21982,7 @@
       "target": "uuid.uuid4"
      },
      {
-      "condition": "str(origin_group_id)",
+      "condition": "origin_group_id",
       "kind": "branch",
       "line": 1460
      },
@@ -22712,7 +22712,7 @@
       "target": "parsed.get"
      },
      {
-      "condition": "extracted",
+      "condition": "isinstance(extracted, list)",
       "kind": "branch",
       "line": 353
      },
@@ -23190,12 +23190,12 @@
       "line": 197
      },
      {
-      "condition": "flow_ctx",
+      "condition": "flow_ctx is not None",
       "kind": "branch",
       "line": 209
      },
      {
-      "condition": "_NoopSpan()",
+      "condition": "own_root is not None",
       "kind": "branch",
       "line": 211
      },
@@ -23406,12 +23406,12 @@
       "line": 258
      },
      {
-      "condition": "'failed'",
+      "condition": "outcome in ('error', 'rust_failed')",
       "kind": "branch",
       "line": 284
      },
      {
-      "condition": "''",
+      "condition": "outcome == 'done'",
       "kind": "branch",
       "line": 285
      },
@@ -23539,12 +23539,12 @@
       "line": 197
      },
      {
-      "condition": "flow_ctx",
+      "condition": "flow_ctx is not None",
       "kind": "branch",
       "line": 209
      },
      {
-      "condition": "_NoopSpan()",
+      "condition": "own_root is not None",
       "kind": "branch",
       "line": 211
      },
@@ -23755,12 +23755,12 @@
       "line": 258
      },
      {
-      "condition": "'failed'",
+      "condition": "outcome in ('error', 'rust_failed')",
       "kind": "branch",
       "line": 284
      },
      {
-      "condition": "''",
+      "condition": "outcome == 'done'",
       "kind": "branch",
       "line": 285
      },
@@ -24192,7 +24192,7 @@
       "target": "sorted"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "should_promote",
       "kind": "branch",
       "line": 591
      },
@@ -24263,7 +24263,7 @@
       "target": "str"
      },
      {
-      "condition": "'OBSERVING'",
+      "condition": "weak_demoted",
       "kind": "branch",
       "line": 668
      },
@@ -25057,7 +25057,7 @@
       "target": "normalize_mode"
      },
      {
-      "condition": "''",
+      "condition": "trigger == 'proactive'",
       "kind": "branch",
       "line": 517
      },
@@ -25183,7 +25183,7 @@
       "target": "memory_history_version"
      },
      {
-      "condition": "None",
+      "condition": "trigger == 'proactive'",
       "kind": "branch",
       "line": 537
      },
@@ -25296,7 +25296,7 @@
       "target": "round"
      },
      {
-      "condition": "''",
+      "condition": "m.get('id') in final_id_set",
       "kind": "branch",
       "line": 594
      },
@@ -25343,7 +25343,7 @@
       "target": "float"
      },
      {
-      "condition": "'behavior'",
+      "condition": "m.get('id') in behavior_id_set",
       "kind": "branch",
       "line": 596
      },
@@ -25384,7 +25384,7 @@
       "target": "m.get"
      },
      {
-      "condition": "'thresh'",
+      "condition": "m.get('id') in threshold_cut_ids",
       "kind": "branch",
       "line": 598
      },
@@ -25494,7 +25494,7 @@
       "line": 258
      },
      {
-      "condition": "now",
+      "condition": "now is not None",
       "kind": "branch",
       "line": 259
      },
@@ -25567,12 +25567,12 @@
       "target": "getattr"
      },
      {
-      "condition": "state.speech_share(tw.share_window_seconds, now=now)",
+      "condition": "tw is not None",
       "kind": "branch",
       "line": 315
      },
      {
-      "condition": "max((ngram_jaccard(text, bot_text, tw.ngram_size) for bot_text in state.recent_bot_texts), default=0.0)",
+      "condition": "tw is not None and state.recent_bot_texts",
       "kind": "branch",
       "line": 317
      },
@@ -25599,7 +25599,7 @@
       "target": "self._tracker._slots.get"
      },
      {
-      "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
+      "condition": "_slot is not None",
       "kind": "branch",
       "line": 358
      },
@@ -25745,12 +25745,12 @@
       "target": "score_span.finish"
      },
      {
-      "condition": "'idle_backoff'",
+      "condition": "'idle_backoff' in decision.reason_flags",
       "kind": "branch",
       "line": 375
      },
      {
-      "condition": "'decision_allow'",
+      "condition": "decision.should_speak",
       "kind": "branch",
       "line": 417
      },
@@ -25779,17 +25779,17 @@
       "target": "round"
      },
      {
-      "condition": "slot_after.streak",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 399
      },
      {
-      "condition": "slot_after.backoff_until",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 401
      },
      {
-      "condition": "slot_after.low_novelty_streak",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 403
      },
@@ -25812,12 +25812,12 @@
       "target": "round"
      },
      {
-      "condition": "round(breakdown.speech_share, 3)",
+      "condition": "breakdown.speech_share is not None",
       "kind": "branch",
       "line": 345
      },
      {
-      "condition": "round(breakdown.novelty, 3)",
+      "condition": "breakdown.novelty is not None",
       "kind": "branch",
       "line": 348
      },
@@ -25886,7 +25886,7 @@
       "line": 177
      },
      {
-      "condition": "now",
+      "condition": "now is not None",
       "kind": "branch",
       "line": 111
      },
@@ -26073,7 +26073,7 @@
       "line": 258
      },
      {
-      "condition": "now",
+      "condition": "now is not None",
       "kind": "branch",
       "line": 259
      },
@@ -26146,12 +26146,12 @@
       "target": "getattr"
      },
      {
-      "condition": "state.speech_share(tw.share_window_seconds, now=now)",
+      "condition": "tw is not None",
       "kind": "branch",
       "line": 315
      },
      {
-      "condition": "max((ngram_jaccard(text, bot_text, tw.ngram_size) for bot_text in state.recent_bot_texts), default=0.0)",
+      "condition": "tw is not None and state.recent_bot_texts",
       "kind": "branch",
       "line": 317
      },
@@ -26178,7 +26178,7 @@
       "target": "self._tracker._slots.get"
      },
      {
-      "condition": "(_slot.streak, _slot.backoff_until, _slot.low_novelty_streak)",
+      "condition": "_slot is not None",
       "kind": "branch",
       "line": 358
      },
@@ -26324,12 +26324,12 @@
       "target": "score_span.finish"
      },
      {
-      "condition": "'idle_backoff'",
+      "condition": "'idle_backoff' in decision.reason_flags",
       "kind": "branch",
       "line": 375
      },
      {
-      "condition": "'decision_allow'",
+      "condition": "decision.should_speak",
       "kind": "branch",
       "line": 417
      },
@@ -26358,17 +26358,17 @@
       "target": "round"
      },
      {
-      "condition": "slot_after.streak",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 399
      },
      {
-      "condition": "slot_after.backoff_until",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 401
      },
      {
-      "condition": "slot_after.low_novelty_streak",
+      "condition": "slot_after",
       "kind": "branch",
       "line": 403
      },
@@ -26391,12 +26391,12 @@
       "target": "round"
      },
      {
-      "condition": "round(breakdown.speech_share, 3)",
+      "condition": "breakdown.speech_share is not None",
       "kind": "branch",
       "line": 345
      },
      {
-      "condition": "round(breakdown.novelty, 3)",
+      "condition": "breakdown.novelty is not None",
       "kind": "branch",
       "line": 348
      },
@@ -27394,7 +27394,7 @@
       "target": "ctx.thought.replace"
      },
      {
-      "condition": "ctx.raw_output.replace('\\n', '\\n  > ')",
+      "condition": "ctx.raw_output",
       "kind": "branch",
       "line": 129
      },
@@ -27440,7 +27440,7 @@
       "target": "_route_log_line"
      },
      {
-      "condition": "ctx.prompt_log.replace(chr(10), chr(10) + '  > ')",
+      "condition": "ctx.prompt_log",
       "kind": "branch",
       "line": 143
      },
@@ -27928,7 +27928,7 @@
       "target": "bool"
      },
      {
-      "condition": "{'system_prompt': system_prompt, 'user_prompt': budgeted.prompt, 'budget_tokens': budgeted.budget_tokens, 'estimated_tok",
+      "condition": "turn_trace.detailed_enabled_for_scope(f'qq:{ctx.group_id}')",
       "kind": "branch",
       "line": 453
      },
@@ -28447,7 +28447,7 @@
       "target": "bool"
      },
      {
-      "condition": "{'system_prompt': system_prompt, 'user_prompt': budgeted.prompt, 'budget_tokens': budgeted.budget_tokens, 'estimated_tok",
+      "condition": "turn_trace.detailed_enabled_for_scope(f'qq:{ctx.group_id}')",
       "kind": "branch",
       "line": 453
      },
@@ -28966,7 +28966,7 @@
       "target": "bool"
      },
      {
-      "condition": "{'system_prompt': system_prompt, 'user_prompt': budgeted.prompt, 'budget_tokens': budgeted.budget_tokens, 'estimated_tok",
+      "condition": "turn_trace.detailed_enabled_for_scope(f'qq:{ctx.group_id}')",
       "kind": "branch",
       "line": 453
      },
@@ -29485,7 +29485,7 @@
       "target": "bool"
      },
      {
-      "condition": "{'system_prompt': system_prompt, 'user_prompt': budgeted.prompt, 'budget_tokens': budgeted.budget_tokens, 'estimated_tok",
+      "condition": "turn_trace.detailed_enabled_for_scope(f'qq:{ctx.group_id}')",
       "kind": "branch",
       "line": 453
      },
@@ -29929,7 +29929,7 @@
       "line": 2425
      },
      {
-      "condition": "_join_lines_naturally(ctx.lines)",
+      "condition": "len(ctx.lines) > 1",
       "kind": "branch",
       "line": 2428
      },
@@ -29948,7 +29948,7 @@
       "line": 2442
      },
      {
-      "condition": "ConversationScope.for_qq(group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 2446
      },
@@ -30506,7 +30506,7 @@
       "target": "set"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ok",
       "kind": "branch",
       "line": 260
      },
@@ -31712,7 +31712,7 @@
       "target": "bool"
      },
      {
-      "condition": "{'system_prompt': system_prompt, 'user_prompt': budgeted.prompt, 'budget_tokens': budgeted.budget_tokens, 'estimated_tok",
+      "condition": "turn_trace.detailed_enabled_for_scope(f'qq:{ctx.group_id}')",
       "kind": "branch",
       "line": 453
      },
@@ -31853,7 +31853,7 @@
       "line": 223
      },
      {
-      "condition": "f'用户({ctx.user_id})'",
+      "condition": "ctx.user_id",
       "kind": "branch",
       "line": 224
      },
@@ -32091,7 +32091,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -32473,7 +32473,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -32490,12 +32490,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -32630,7 +32630,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -32671,7 +32671,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -32688,7 +32688,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -33099,7 +33099,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -33481,7 +33481,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -33498,12 +33498,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -33638,7 +33638,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -33679,7 +33679,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -33696,7 +33696,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -33816,7 +33816,7 @@
       "target": "AgentRunLimits"
      },
      {
-      "condition": "message_flow.span(root, 'scheduled.agent', instance_key=f'run:{run.run_id}')",
+      "condition": "root is not None",
       "kind": "branch",
       "line": 344
      },
@@ -34046,7 +34046,7 @@
       "line": 121
      },
      {
-      "condition": "run.scheduled_for_utc.isoformat()",
+      "condition": "run.scheduled_for_utc",
       "kind": "branch",
       "line": 124
      },
@@ -34226,7 +34226,7 @@
       "target": "str"
      },
      {
-      "condition": "'有'",
+      "condition": "receipt",
       "kind": "branch",
       "line": 163
      },
@@ -34562,7 +34562,7 @@
       "line": 195
      },
      {
-      "condition": "f'qq:{scope.group_id}'",
+      "condition": "scope",
       "kind": "branch",
       "line": 200
      },
@@ -34579,7 +34579,7 @@
       "target": "aggregate_delivery_status"
      },
      {
-      "condition": "{'receipts': [{'part': r.part_index, 'status': r.status, 'platform_message_id': r.platform_message_id, 'text': r.text} f",
+      "condition": "turn_trace.detailed_enabled_for_scope(scope_str)",
       "kind": "branch",
       "line": 209
      },
@@ -34967,7 +34967,7 @@
       "target": "logger.success"
      },
      {
-      "condition": "ConversationScope.for_qq(event.group_id)",
+      "condition": "_social_delivery_enabled()",
       "kind": "branch",
       "line": 984
      },
@@ -35349,7 +35349,7 @@
       "line": 1060
      },
      {
-      "condition": "'delivered'",
+      "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
       "line": 1070
      },
@@ -35366,12 +35366,12 @@
       "target": "event.get_plaintext"
      },
      {
-      "condition": "extract_image_sources(event)",
+      "condition": "vision_available()",
       "kind": "branch",
       "line": 890
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 892
      },
@@ -35506,7 +35506,7 @@
       "target": "expression_selector.mark_applied"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 1085
      },
@@ -35547,7 +35547,7 @@
       "target": "MessageSegment.text"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "ack_outcome == 'sent'",
       "kind": "branch",
       "line": 1005
      },
@@ -35564,7 +35564,7 @@
       "target": "len"
      },
      {
-      "condition": "fctx.trace_id",
+      "condition": "fctx is not None",
       "kind": "branch",
       "line": 924
      },
@@ -35678,7 +35678,7 @@
       "target": "logger.info"
      },
      {
-      "condition": "utc_now_iso()",
+      "condition": "status == DELIVERY_ACKNOWLEDGED",
       "kind": "branch",
       "line": 243
      },
@@ -35915,7 +35915,7 @@
       "target": "_aggregate_flow_status"
      },
      {
-      "condition": "'partial'",
+      "condition": "0 < ack < len(lines)",
       "kind": "branch",
       "line": 169
      },
@@ -35974,7 +35974,7 @@
       "target": "len"
      },
      {
-      "condition": "scope.group_id",
+      "condition": "scope",
       "kind": "branch",
       "line": 148
      },
@@ -36344,7 +36344,7 @@
       "target": "len"
      },
      {
-      "condition": "message_flow.span(root, 'social.worker.run_due', instance_key=f'job:{job_id}', summary=job['type'])",
+      "condition": "root is not None",
       "kind": "branch",
       "line": 211
      },
@@ -36771,7 +36771,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -36782,7 +36782,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -36942,7 +36942,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -37346,7 +37346,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -37357,7 +37357,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -37517,7 +37517,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -37921,7 +37921,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -37932,7 +37932,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -38092,7 +38092,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -38496,7 +38496,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -38507,7 +38507,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -38667,7 +38667,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -39071,7 +39071,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -39082,7 +39082,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -39242,7 +39242,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -39646,7 +39646,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -39657,7 +39657,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -39817,7 +39817,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -40221,7 +40221,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -40232,7 +40232,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -40392,7 +40392,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -40796,7 +40796,7 @@
       "target": "pipeline.finalize_turn"
      },
      {
-      "condition": "{'key': key, 'user_id': ctx.user_id, 'trigger': ctx.trigger, 'intent': ctx.intent}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 253
      },
@@ -40807,7 +40807,7 @@
       "target": "pipeline.prepare_turn"
      },
      {
-      "condition": "provider(key, prompt)",
+      "condition": "self._provider",
       "kind": "branch",
       "line": 292
      },
@@ -40967,7 +40967,7 @@
       "target": "time.time"
      },
      {
-      "condition": "{'prompt_chars': len(prompt), 'output_chars': len(ctx.raw_output)}",
+      "condition": "_detail_on(ctx)",
       "kind": "branch",
       "line": 371
      },
@@ -41768,12 +41768,12 @@
       "target": "record_message"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "lines",
       "kind": "branch",
       "line": 155
      },
      {
-      "condition": "''",
+      "condition": "lines",
       "kind": "branch",
       "line": 156
      },
@@ -41820,7 +41820,7 @@
       "target": "DeliveryReceipt"
      },
      {
-      "condition": "'cancelled'",
+      "condition": "cancelled",
       "kind": "branch",
       "line": 139
      },
@@ -42086,12 +42086,12 @@
       "target": "record_message"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "lines",
       "kind": "branch",
       "line": 155
      },
      {
-      "condition": "''",
+      "condition": "lines",
       "kind": "branch",
       "line": 156
      },
@@ -42138,7 +42138,7 @@
       "target": "DeliveryReceipt"
      },
      {
-      "condition": "'cancelled'",
+      "condition": "cancelled",
       "kind": "branch",
       "line": 139
      },
@@ -42404,12 +42404,12 @@
       "target": "record_message"
      },
      {
-      "condition": "'succeeded'",
+      "condition": "lines",
       "kind": "branch",
       "line": 155
      },
      {
-      "condition": "''",
+      "condition": "lines",
       "kind": "branch",
       "line": 156
      },
@@ -42456,7 +42456,7 @@
       "target": "DeliveryReceipt"
      },
      {
-      "condition": "'cancelled'",
+      "condition": "cancelled",
       "kind": "branch",
       "line": 139
      },
@@ -42497,6 +42497,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "1047a0b79242ea932c850af29574a0814bee219d",
+ "source_revision": "df87d45fd12276d17295904ad5e175ea925389b3",
  "topology_version": "2026.10.03"
 }
