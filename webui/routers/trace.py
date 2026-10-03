@@ -163,8 +163,12 @@ async def flow_message_stream(
 ) -> StreamingResponse:
     """SSE 事件流：持久读兜底（广播只作唤醒，这里直接轮询增量，计划 §6.6）。
 
-    帧：``id: <row_id>`` + ``data: <event json>``；trace 关闭且增量排空后发
-    ``{"type": "trace_end"}`` 并断开；客户端用 Last-Event-ID + /events 补漏。
+    帧：``id: <row_id>`` + ``data: <event json>``；结束语义（O01 修复）：
+    - producer 已关闭（``ended_utc`` 非空）且增量排空 → ``trace_end`` 断开；
+    - running 且**活跃**（同进程化身/心跳新鲜）→ 保持连接（心跳 ping），
+      绝不因暂时没有事件误判结束；
+    - running 且已过期（旧化身心跳超时）→ ``{"type": "interrupted"}`` 断开。
+    客户端用 Last-Event-ID + /events 补漏。
     """
     from webui.services import flow as flow_service
 
@@ -188,8 +192,13 @@ async def flow_message_stream(
             if detail is None:
                 yield 'data: {"type": "missing"}\n\n'
                 return
-            if detail["status"] in ("closed", "interrupted"):
+            status = detail["status"]
+            producer_ended = bool(detail.get("ended_utc"))
+            if producer_ended:
                 yield 'data: {"type": "trace_end"}\n\n'
+                return
+            if status == "interrupted":
+                yield 'data: {"type": "interrupted"}\n\n'
                 return
             yield ": ping\n\n"
             await asyncio.sleep(1.0)

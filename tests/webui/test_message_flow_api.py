@@ -80,9 +80,26 @@ class TestFlowMessagesApi:
         resp = client.get("/api/v1/trace/messages/nope", headers=auth_header)
         assert resp.status_code == 404
 
-    def test_running_trace_reported_interrupted(self, client: TestClient,
-                                                auth_header, flow_home):
+    def test_running_trace_with_live_process_stays_running(self, client: TestClient,
+                                                            auth_header, flow_home):
+        """O01 正确合同：running + 活进程（同化身）→ 保持 running，不误判中断。"""
         _seed_trace("rt-open", close=False)
+        item = client.get("/api/v1/trace/messages",
+                          headers=auth_header).json()["data"]["items"][0]
+        assert item["status"] == "running"
+
+    def test_running_trace_with_dead_incarnation_interrupted(
+            self, client: TestClient, auth_header, flow_home):
+        """O01：旧化身 + 心跳过期 → interrupted（进程已死的残留）。"""
+        import sqlite3
+
+        _seed_trace("rt-dead", close=False)
+        conn = sqlite3.connect(flow_home)
+        conn.execute(
+            "UPDATE message_traces SET process_instance_id='dead0001', "
+            "last_heartbeat_utc='2020-01-01T00:00:00.000' WHERE trace_id='rt-dead'")
+        conn.commit()
+        conn.close()
         item = client.get("/api/v1/trace/messages",
                           headers=auth_header).json()["data"]["items"][0]
         assert item["status"] == "interrupted"
@@ -182,7 +199,58 @@ class TestFlowMessageContext:
         assert data["input"]["content"] == "你好呀"
         assert data["input"]["msg_id"] == 7
         assert data["output"]["lines"] == ["你也好", "在听"]
-        assert data["notes"] == []
+        # 输出来自时间窗 fallback（该轨迹无回执档案）：来源必须显式说明
+        assert any("BOT_SELF" in n for n in data["notes"])
+
+    def test_output_prefers_acknowledged_receipts(self, client: TestClient,
+                                                  auth_header, flow_home,
+                                                  isolated_home, monkeypatch):
+        """O02 正确合同：有回执档案时输出按业务 ID 关联，不看 root 分类。
+
+        qq_passive root 也可能有已送达回复；回执优先于时间窗猜测。
+        """
+        import sqlite3
+
+        import config.settings as settings
+
+        from core.observability import message_flow as mf
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+
+        root = mf.begin_trace(root_kind="qq_passive", platform="qq",
+                              scope="qq:55", source_message_key="qq:b:55:3",
+                              trace_id="rc-rec")
+        mf.end_trace(root, outcome="delivered")
+        mf.flush()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY "
+            "AUTOINCREMENT, group_id TEXT, user_id TEXT, content TEXT, "
+            "source_kind TEXT, msg_id INTEGER, timestamp DATETIME)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS social_deliveries (delivery_id TEXT "
+            "PRIMARY KEY, turn_id TEXT, part_index INTEGER, trace_id TEXT, "
+            "epoch INTEGER, platform TEXT, bot_id TEXT, group_id TEXT, "
+            "status TEXT, platform_message_id TEXT, acknowledged_at_utc TEXT, "
+            "text TEXT, text_hash TEXT, created_at_utc TEXT, updated_at_utc TEXT)")
+        conn.executemany(
+            "INSERT INTO social_deliveries (delivery_id, turn_id, part_index, "
+            "trace_id, status, text, platform_message_id) VALUES (?,?,?,?,?,?,?)",
+            [("d1", "t", 0, "rc-rec", "acknowledged", "回执第一段", "9001"),
+             ("d2", "t", 1, "rc-rec", "acknowledged", "回执第二段", "9002"),
+             ("d3", "t", 2, "rc-rec", "failed", "", None)])
+        # 时间窗内另一条 BOT_SELF 干扰行：不该出现在输出里
+        conn.execute(
+            "INSERT INTO group_messages (group_id, user_id, content, "
+            "source_kind, msg_id, timestamp) VALUES ('55','bot','窗口噪声','BOT_SELF',0,'2020-01-01 00:00:00')")
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/rc-rec/context",
+                          headers=auth_header).json()["data"]
+        assert data["output"]["lines"] == ["回执第一段", "回执第二段"]
+        assert any("发送失败" in n for n in data["notes"])
 
     def test_passive_trace_notes_no_reply(self, client: TestClient,
                                           auth_header, flow_home):

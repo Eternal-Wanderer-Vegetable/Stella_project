@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 # 语义拓扑版本：节点/边/条件的**语义**变化时手工递增（内容 hash 由生成器
 # 另算，二者独立——见计划 §6.1 manifest 字段说明）。
-TOPOLOGY_VERSION = "2026.10.02"
+TOPOLOGY_VERSION = "2026.10.03"
 CATALOG_SCHEMA_VERSION = 1
 
 GENERATOR_VERSION = 1
@@ -62,8 +62,11 @@ LANES: list[tuple[str, str]] = [
     ("generate", "生成"),
     ("finalize", "后处理"),
     ("delivery", "发送与记账"),
+    ("memory", "记忆整合与晋升"),
+    ("proactive", "参与度与主动决策"),
     ("background", "后台派生"),
     ("cometa", "Cometa 任务"),
+    ("ops", "后台运行与维护"),
 ]
 
 _N = NodeSpec
@@ -294,6 +297,58 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
        ("cometa/delivery.py", "deliver_one")),
     _N("cometa.notification_result", "通知投递终态", "cometa", "decision",
        ("cometa/delivery.py", "NotificationPump.pump_once")),
+
+    # ── 记忆整合与晋升（计划 §6.3 表：独立 process，逐候选/逐记忆实例）──
+    _N("memory.consolidate.entry", "整合入口（触发/预检/锁）", "memory", "entry",
+       ("memory/consolidator.py", "MemoryConsolidator.consolidate_group")),
+    _N("memory.consolidate.window", "消息窗口与检查点", "memory", "persist",
+       ("memory/consolidator.py", "MemoryConsolidator._fetch_next_messages")),
+    _N("memory.extract.stage1", "粗抽取（stage1 模型）", "memory", "task",
+       ("memory/consolidator.py", "MemoryConsolidator._extract_candidates"), opaque=True),
+    _N("memory.extract.gate2", "自我披露门控→精确抽取（stage2）", "memory", "gate",
+       ("memory/consolidator.py", "MemoryConsolidator._has_self_disclosure")),
+    _N("memory.candidate.write", "候选写入与归一化（Gate3）", "memory", "persist",
+       ("memory/consolidator.py", "MemoryConsolidator._write_memory_candidates")),
+    _N("memory.promotion.batch", "晋升批处理入口", "memory", "entry",
+       ("memory/memory_manager.py", "MemoryManager.process_new_candidates")),
+    _N("memory.promotion.backend", "后端解析（Python/Rust/auto 回退）", "memory", "state",
+       ("memory/memory_manager.py", "MemoryManager.process_new_candidates")),
+    _N("memory.promotion.gate", "晋升门槛判定（逐候选）", "memory", "gate",
+       ("memory/memory_manager.py", "MemoryManager._decide_promotion")),
+    _N("memory.promotion.conflict", "冲突扫描与处理", "memory", "state",
+       ("memory/memory_manager.py", "MemoryManager._resolve_conflicts")),
+    _N("memory.promotion.merge", "相似合并", "memory", "state",
+       ("memory/memory_manager.py", "MemoryManager._merge_into_memory")),
+    _N("memory.promotion.create", "新建长期记忆", "memory", "persist",
+       ("memory/memory_manager.py", "MemoryManager._create_memory")),
+    _N("memory.promotion.quota", "用户配额排序与归档", "memory", "gate",
+       ("memory/memory_manager.py", "MemoryManager._enforce_user_quota")),
+    _N("memory.promotion.commit", "事务提交确认", "memory", "state",
+       ("memory/memory_manager.py", "MemoryManager._process_new_candidates_python")),
+    _N("memory.maintenance.run", "记忆维护（压缩/去重/衰减）", "memory", "task",
+       ("memory/compressor.py", "MemoryCompressor.run_weekly")),
+
+    # ── 参与度与主动决策（计划 §6.4 表：全等级/前置 root/回执）──
+    _N("participation.decision", "参与决策（全等级退出）", "proactive", "decision",
+       ("memory/participation/__init__.py", "ParticipationManager.observe")),
+    _N("participation.score_compute", "评分计算（embedding/keyword 回退）", "proactive", "task",
+       ("memory/participation/__init__.py", "ParticipationManager._score_with_embedding")),
+    _N("participation.mode", "决策 tracker（streak/backoff/strong hook）", "proactive", "decision",
+       ("memory/participation/decision.py", "DecisionTracker.decide")),
+    _N("proactive.timer.preflight", "定时主动预检（独立 root）", "proactive", "entry",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "proactive_speak_job")),
+    _N("proactive.at.preflight", "主动@资格预检", "proactive", "gate",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "_proactive_at_user")),
+    _N("proactive.at.select", "验证候选选择与淘汰原因", "proactive", "decision",
+       ("memory/proactive_target.py", "pick_target")),
+
+    # ── 后台运行与维护（计划 §6.5：social/scheduling/knowledge 入口）──
+    _N("social.worker.run_due", "社交 worker 到期租约处理", "ops", "entry",
+       ("memory/social_worker.py", "run_due_jobs")),
+    _N("scheduled.runtime.tick", "预约调度 tick（租约/恢复/执行）", "ops", "entry",
+       ("stella_project/plugins/bot_main/scheduling/runtime.py", "tick_once")),
+    _N("knowledge.ingest.entry", "知识导入入口", "ops", "entry",
+       ("knowledge/ingest.py", "ingest_content")),
 ]}
 
 # ---- 静态边（主链；条件边带 label，spawn/cause 是虚线）----
@@ -412,6 +467,28 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("cometa.launch", "cometa.stream"),
     EdgeSpec("cometa.stream", "cometa.notification", kind="cause", label="任务终态"),
     EdgeSpec("cometa.notification", "cometa.notification_result"),
+    # 记忆整合与晋升（计划 §6.3：整合批次独立于晋升批，cause 相连）
+    EdgeSpec("memory.consolidate.entry", "memory.consolidate.window"),
+    EdgeSpec("memory.consolidate.window", "memory.extract.stage1", label="过阈值"),
+    EdgeSpec("memory.extract.stage1", "memory.extract.gate2"),
+    EdgeSpec("memory.extract.gate2", "memory.candidate.write", label="有候选"),
+    EdgeSpec("memory.candidate.write", "memory.promotion.batch", kind="cause"),
+    EdgeSpec("memory.promotion.batch", "memory.promotion.backend"),
+    EdgeSpec("memory.promotion.backend", "memory.promotion.gate", label="逐候选"),
+    EdgeSpec("memory.promotion.gate", "memory.promotion.conflict", kind="condition", label=" eligible"),
+    EdgeSpec("memory.promotion.conflict", "memory.promotion.merge", kind="condition", label="相似命中"),
+    EdgeSpec("memory.promotion.conflict", "memory.promotion.create", kind="condition", label="无冲突/新建"),
+    EdgeSpec("memory.promotion.merge", "memory.promotion.quota"),
+    EdgeSpec("memory.promotion.create", "memory.promotion.quota"),
+    EdgeSpec("memory.promotion.quota", "memory.promotion.commit"),
+    EdgeSpec("memory.promotion.commit", "memory.maintenance.run", kind="cause", label="晋升后压缩"),
+    # 参与度与主动决策（计划 §6.4：timer/主动@/群插话三前置 root）
+    EdgeSpec("participation.decision", "participation.score_compute", kind="order"),
+    EdgeSpec("participation.score_compute", "participation.mode"),
+    EdgeSpec("proactive.timer.preflight", "proactive.at.preflight", kind="condition", label="有验证候选"),
+    EdgeSpec("proactive.timer.preflight", "proactive.preflight", label="参与度未启用"),
+    EdgeSpec("proactive.at.preflight", "proactive.at.select"),
+    EdgeSpec("proactive.at.select", "proactive.preflight", kind="condition", label="命中候选"),
 ]
 
 # ---- 入口 root 种类（message_traces.root_kind 的合法值）----
@@ -425,6 +502,17 @@ ENTRY_ROOTS: dict[str, str] = {
     "compact": "compact.preflight",
     "cometa_task": "cometa.claim",
     "effect": "effect.resolve",
+    # 计划 §6.3/§6.4：记忆与主动决策独立 process root
+    "memory_consolidate": "memory.consolidate.entry",
+    "memory_promotion": "memory.promotion.batch",
+    "memory_maintenance": "memory.maintenance.run",
+    "participation": "participation.decision",
+    "proactive_timer": "proactive.timer.preflight",
+    "proactive_at": "proactive.at.preflight",
+    # 计划 §6.5：其余运行族入口（M4 探针接入）
+    "social_worker": "social.worker.run_due",
+    "scheduled_task": "scheduled.runtime.tick",
+    "knowledge_ingest": "knowledge.ingest.entry",
 }
 
 # 运行时钩子名 → 语义节点（turn_service prepare/post hook 包装用）

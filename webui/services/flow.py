@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，全文见项目根目录 LICENSE.
-"""消息流程取数（计划 §6.5/§6.6）：message_traces / flow_events 只读投影。
+"""内部流程取数（计划 §6.5/§6.6）：message_traces / flow_events 只读投影。
 
-诚实边界（计划 §2.3）：
-- ``complete`` 按存储原样返回；``status='running'`` 且久无事件的 trace 由
-  reader 标 ``interrupted``（进程重启后未闭合的 root），绝不显示成成功。
+诚实边界（计划 §2.3，O01/O03/O10 修复后合同）：
+- **活跃判定**：``status='running'`` 不再一律改判 interrupted。本进程
+  在跑（process_instance_id == 当前进程化身）或心跳新鲜 → ``running``；
+  旧化身且心跳过期 → ``interrupted``。已知终态原样返回。
+- **完整性**：``complete/loss`` 是 producer 粗视角；``integrity``（writer
+  提交确认后落终值）与 ``lost_events/persisted_events`` 是权威账本。
 - 事件按 ``id`` 增量拉取（SSE/轮询共用），``event_id`` 做客户端去重键。
 - spec 缺失（旧版本/未随包）显式返回 null，由前端标 unmapped，不猜。
 """
@@ -13,12 +16,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from core.observability.flow_catalog import TOPOLOGY_VERSION
 
-# running 且超过该时长无任何事件 → interrupted（重启残留）
-_INTERRUPTED_AFTER_SECONDS = 3600.0
+# running 且心跳超过该时长 → interrupted（进程已死/停写的残留）
+_HEARTBEAT_STALE_SECONDS = 120.0
 
 
 def _trace_db():
@@ -48,6 +52,39 @@ def _table_exists(conn, table: str) -> bool:
     return row is not None
 
 
+def _trace_columns(conn) -> set[str]:
+    try:
+        return {r[1] for r in conn.execute("PRAGMA table_info(message_traces)")}
+    except Exception:
+        return set()
+
+
+def _live_status(status: str, process_instance_id: str, last_heartbeat: str,
+                 ended_utc: str) -> str:
+    """O01 活跃判定：已知终态原样；running 按化身/心跳判 running/interrupted。
+
+    - 本进程在写（同一化身，或心跳在阈值内）→ running（SSE 继续等）。
+    - 旧化身且心跳过期/为空（旧 schema 迁移行）→ interrupted。
+    """
+    if status != "running" or ended_utc:
+        return status
+    from core.observability import message_flow
+
+    if process_instance_id == message_flow.PROCESS_INCARNATION:
+        return "running"
+    if last_heartbeat:
+        try:
+            hb = datetime.fromisoformat(last_heartbeat)
+            if hb.tzinfo is None:
+                hb = hb.replace(tzinfo=timezone.utc)  # 存储恒 UTC
+            age = (datetime.now(timezone.utc) - hb).total_seconds()
+            if age <= _HEARTBEAT_STALE_SECONDS:
+                return "running"
+        except (ValueError, TypeError):
+            pass
+    return "interrupted"
+
+
 def messages(
     *,
     platform: str | None = None,
@@ -61,6 +98,10 @@ def messages(
     if conn is None or not _table_exists(conn, "message_traces"):
         return {"total": 0, "items": []}
     try:
+        cols = _trace_columns(conn)
+        extra = [c for c in ("integrity", "lost_events", "last_heartbeat_utc",
+                             "process_kind", "producer_ended")
+                 if c in cols]
         conds, params = [], []
         if platform:
             conds.append("platform = ?")
@@ -77,8 +118,10 @@ def messages(
         ).fetchone()[0]
         rows = conn.execute(
             "SELECT trace_id, root_kind, platform, scope, source_message_key, "
-            "started_utc, ended_utc, outcome, status, complete, loss, detail "
-            f"FROM message_traces {where} "
+            "started_utc, ended_utc, outcome, status, complete, loss, detail, "
+            "process_instance_id, last_heartbeat_utc"
+            + (", " + ", ".join(extra) if extra else "")
+            + f" FROM message_traces {where} "
             "ORDER BY started_utc DESC, trace_id DESC LIMIT ? OFFSET ?",
             (*params, int(limit), int(offset)),
         ).fetchall()
@@ -90,8 +133,22 @@ def messages(
                 "started_utc": r[5], "ended_utc": r[6], "outcome": r[7],
                 "status": r[8], "complete": bool(r[9]), "loss": bool(r[10]),
             }
-            if item["status"] == "running":
-                item["status"] = "interrupted"
+            base = 12
+            if len(r) > 12:
+                item["process_instance_id"] = r[12]
+                item["status"] = _live_status(
+                    item["status"], r[12], r[13] if len(r) > 13 else "",
+                    item["ended_utc"])
+            idx = 14
+            for name in extra:
+                val = r[idx]
+                idx += 1
+                if name in ("lost_events", "producer_ended"):
+                    item[name] = int(val or 0)
+                    if name == "producer_ended":
+                        item[name] = bool(val)
+                else:
+                    item[name] = val or ""
             items.append(item)
         return {"total": int(total), "items": items}
     except Exception:
@@ -101,11 +158,12 @@ def messages(
 
 
 def message_detail(trace_id: str) -> dict | None:
-    """单条轨迹：root 元数据 + span 投影 + 双向关联 + 事件计数。"""
+    """单条轨迹：root 元数据 + span 投影 + 双向关联 + 事件计数 + 完整性。"""
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
         return None
     try:
+        cols = _trace_columns(conn)
         row = conn.execute(
             "SELECT trace_id, root_kind, platform, scope, source_message_key, "
             "topology_version, process_instance_id, started_utc, ended_utc, "
@@ -115,9 +173,20 @@ def message_detail(trace_id: str) -> dict | None:
         ).fetchone()
         if row is None:
             return None
+        extra_vals: dict[str, object] = {}
+        if cols:
+            want = [c for c in ("process_kind", "origin", "trigger", "route",
+                                "business_ts", "last_heartbeat_utc",
+                                "spec_digest", "producer_ended", "integrity",
+                                "lost_events", "persisted_events") if c in cols]
+            if want:
+                erow = conn.execute(
+                    f"SELECT {', '.join(want)} FROM message_traces "
+                    "WHERE trace_id = ?", (trace_id,)).fetchone()
+                extra_vals = dict(zip(want, erow))
         spans = conn.execute(
             "SELECT span_id, node_id, instance_key, parent_span_id, seq, "
-            "started_utc, ended_utc, duration_ms, status, reason_code "
+            "started_utc, ended_utc, duration_ms, status, reason_code, attempt "
             "FROM flow_spans WHERE trace_id = ? ORDER BY seq ASC",
             (trace_id,),
         ).fetchall()
@@ -148,6 +217,7 @@ def message_detail(trace_id: str) -> dict | None:
                 "parent_span_id": sp[3], "seq": sp[4],
                 "started_utc": sp[5], "ended_utc": sp[6],
                 "duration_ms": sp[7], "status": sp[8], "reason_code": sp[9],
+                "attempt": int(sp[10] or 0) if len(sp) > 10 else 0,
             }
             for sp in spans
         ],
@@ -160,8 +230,20 @@ def message_detail(trace_id: str) -> dict | None:
             for r in relations
         ],
     }
-    if item["status"] == "running":
-        item["status"] = "interrupted"
+    item["status"] = _live_status(
+        item["status"], row[6], str(extra_vals.get("last_heartbeat_utc", "")),
+        item["ended_utc"])
+    item.update(extra_vals)
+    item.setdefault("process_kind", item["root_kind"])
+    item.setdefault("origin", "")
+    item.setdefault("trigger", "")
+    item.setdefault("route", "")
+    item.setdefault("business_ts", "")
+    item.setdefault("spec_digest", "")
+    item.setdefault("producer_ended", False)
+    item.setdefault("integrity", "")
+    item.setdefault("lost_events", 0)
+    item.setdefault("persisted_events", 0)
     return item
 
 
@@ -174,7 +256,7 @@ def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[
         rows = conn.execute(
             "SELECT id, event_id, span_id, parent_span_id, node_id, "
             "instance_key, seq, kind, status, reason_code, ts_utc, "
-            "duration_ms, summary, metrics "
+            "duration_ms, summary, metrics, attempt, fact_kind, error_code "
             "FROM flow_events WHERE trace_id = ? AND id > ? "
             "ORDER BY id ASC LIMIT ?",
             (trace_id, int(after_id), int(limit)),
@@ -190,6 +272,9 @@ def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[
             "seq": r[6], "kind": r[7], "status": r[8], "reason_code": r[9],
             "ts_utc": r[10], "duration_ms": r[11], "summary": r[12],
             "metrics": _loads(r[13], {}),
+            "attempt": int(r[14] or 0) if len(r) > 14 else 0,
+            "fact_kind": r[15] if len(r) > 15 else "",
+            "error_code": r[16] if len(r) > 16 else "",
         }
         for r in rows
     ]
@@ -204,7 +289,7 @@ def spec(version: str) -> dict | None:
                 "SELECT spec_json FROM flow_specs WHERE topology_version = ?",
                 (version,),
             ).fetchone()
-            if row is not None:
+            if row is not None and (row[0] or "") not in ("", "{}"):
                 return _loads(row[0], None)
         except Exception:
             pass
@@ -246,10 +331,13 @@ def _bundled_spec(version: str) -> dict | None:
 # 输入 / 输出（用户验收：页面要能看到消息进去什么样、回复出来什么样）
 # ============================================================
 
-# 可产生回复的 root：窗口内找 BOT_SELF 落库行
-_REPLY_ROOTS = {"qq_chat", "proactive", "webchat"}
 # 有用户输入的 root：输入行按来源键/窗口匹配
-_INPUT_ROOTS = {"qq_passive", "qq_chat", "qq_command", "webchat"}
+_INPUT_ROOTS = {"qq_passive", "qq_chat", "qq_command", "webchat", "proactive"}
+# 无消息 IO 的后台 root（备注说明）
+_BACKGROUND_ROOTS = {"consolidate", "compact", "cometa_task", "effect",
+                     "memory_consolidate", "memory_promotion",
+                     "memory_maintenance", "participation",
+                     "scheduled_task", "social_worker", "knowledge_ingest"}
 _OUTPUT_WINDOW_FALLBACK_SECONDS = 900
 _OUTPUT_MAX_LINES = 20
 
@@ -279,13 +367,14 @@ def _group_id_of(scope: str, root_kind: str) -> str | None:
 
 
 def message_io(trace_id: str) -> dict | None:
-    """一条轨迹的真实输入（用户消息）与输出（确认送达的 BOT_SELF 回复行）。
+    """一条轨迹的真实输入（用户消息）与输出（确认送达的回复片段）。
 
-    内容来自记忆库 ``group_messages``（会话页同一来源，鉴权相同）：
-    输入按 (group, msg_id) 精确命中（QQ）或窗口内首条非 BOT_SELF 行
-    （WebChat，msg_id 恒为 0）；输出 = 轨迹时间窗内的 BOT_SELF 行——
-    只有确认送达的片段才会落库，空输出 ≠ 发送失败（备注说明）。
-    命令回复不经 BOT_SELF 落库，输出为空属预期。
+    O02 修复后的取数合同——不再按 root_kind 白名单猜，输出优先取
+    **业务发送回执表** ``social_deliveries``（按 trace_id 精确关联，
+    acknowledged 片段带平台消息 ID），fallback 才是记忆库 BOT_SELF
+    时间窗；命令回复走 ``command.reply`` 检查点。输入按
+    (group, msg_id) 精确命中（QQ）或窗口内首条非 BOT_SELF 行（WebChat）。
+    空输出 ≠ 发送失败（notes 说明数据来源）。
     """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
@@ -327,68 +416,111 @@ def message_io(trace_id: str) -> dict | None:
     end_key = _window_end(started_utc, ended_utc)
     group_id = _group_id_of(scope, root_kind)
 
-    mem = _memory_conn()
-    if mem is None:
-        return {
-            "input": None,
-            "output": {
-                "lines": command_lines[:_OUTPUT_MAX_LINES],
-                "count": len(command_lines[:_OUTPUT_MAX_LINES]),
-            },
-            "notes": ["记忆库不可读，无法展示消息内容"],
-        }
+    # ---- 输出：业务回执优先（O02——root 分类不再决定输出有无）----
+    receipt_lines: list[str] = []
+    receipt_notes: list[str] = []
+    tried_receipts = False
+    rconn = None
     try:
-        inp = None
-        if root_kind in _INPUT_ROOTS and group_id is not None:
-            if root_kind == "webchat":
-                row_in = mem.execute(
-                    "SELECT user_id, content, msg_id FROM group_messages "
-                    "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
-                    "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
-                    (group_id, started_key),
-                ).fetchone()
-            else:
-                parts = (source_key or "").split(":")
-                try:
-                    msg_id = int(parts[3]) if len(parts) >= 4 else None
-                except ValueError:
-                    msg_id = None
-                row_in = None
-                if msg_id is not None:
+        rconn = _receipts_conn()
+        if rconn is not None and _table_exists(rconn, "social_deliveries"):
+            tried_receipts = True
+            rows = rconn.execute(
+                "SELECT text, status FROM social_deliveries WHERE trace_id = ? "
+                "ORDER BY part_index ASC LIMIT ?", (trace_id, _OUTPUT_MAX_LINES + 1),
+            ).fetchall()
+            ack = [t for (t, s) in rows if s == "acknowledged" and t]
+            other = [(t, s) for (t, s) in rows if s != "acknowledged"]
+            receipt_lines = ack[:_OUTPUT_MAX_LINES]
+            if len(ack) > _OUTPUT_MAX_LINES:
+                receipt_notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行回执")
+            if other:
+                n_unknown = sum(1 for _, s in other if s == "unknown")
+                n_failed = sum(1 for _, s in other if s == "failed")
+                if n_unknown:
+                    receipt_notes.append(f"{n_unknown} 段发送状态未知")
+                if n_failed:
+                    receipt_notes.append(f"{n_failed} 段发送失败")
+    except Exception:
+        tried_receipts = tried_receipts  # 回执读不到就走 fallback
+    finally:
+        if rconn is not None:
+            try:
+                rconn.close()
+            except Exception:
+                pass
+
+    mem = _memory_conn()
+    lines: list[str] = []
+    source_note = ""
+    inp = None
+    try:
+        if mem is not None:
+            if root_kind in _INPUT_ROOTS and group_id is not None:
+                if root_kind == "webchat":
                     row_in = mem.execute(
                         "SELECT user_id, content, msg_id FROM group_messages "
-                        "WHERE group_id = ? AND msg_id = ? ORDER BY id DESC LIMIT 1",
-                        (group_id, msg_id),
+                        "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
+                        "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
+                        (group_id, started_key),
                     ).fetchone()
-            if row_in is not None:
-                inp = {"user_id": row_in[0], "content": row_in[1], "msg_id": row_in[2]}
-        elif root_kind == "proactive":
-            notes.append("主动发言：无用户输入")
+                else:
+                    parts = (source_key or "").split(":")
+                    try:
+                        msg_id = int(parts[3]) if len(parts) >= 4 else None
+                    except ValueError:
+                        msg_id = None
+                    row_in = None
+                    if msg_id is not None:
+                        row_in = mem.execute(
+                            "SELECT user_id, content, msg_id FROM group_messages "
+                            "WHERE group_id = ? AND msg_id = ? ORDER BY id DESC LIMIT 1",
+                            (group_id, msg_id),
+                        ).fetchone()
+                if row_in is not None:
+                    inp = {"user_id": row_in[0], "content": row_in[1],
+                           "msg_id": row_in[2]}
+            elif root_kind == "proactive":
+                notes.append("主动发言：无用户输入")
 
-        lines: list[str] = []
-        if root_kind in _REPLY_ROOTS and group_id is not None:
-            rows_out = mem.execute(
-                "SELECT content FROM group_messages WHERE group_id = ? "
-                "AND source_kind = 'BOT_SELF' AND timestamp >= ? AND timestamp <= ? "
-                "ORDER BY id ASC LIMIT ?",
-                (group_id, started_key, end_key, _OUTPUT_MAX_LINES + 1),
-            ).fetchall()
-            lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
-            if len(rows_out) > _OUTPUT_MAX_LINES:
-                notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
-        elif root_kind in ("consolidate", "compact", "cometa_task", "effect"):
-            notes.append("后台任务：无消息输入输出")
+            if not receipt_lines and root_kind not in _BACKGROUND_ROOTS:
+                if group_id is not None:
+                    rows_out = mem.execute(
+                        "SELECT content FROM group_messages WHERE group_id = ? "
+                        "AND source_kind = 'BOT_SELF' AND timestamp >= ? "
+                        "AND timestamp <= ? ORDER BY id ASC LIMIT ?",
+                        (group_id, started_key, end_key, _OUTPUT_MAX_LINES + 1),
+                    ).fetchall()
+                    lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
+                    if lines:
+                        source_note = "输出取自时间窗内 BOT_SELF 行（无该轨迹的回执档案）"
+                    if len(rows_out) > _OUTPUT_MAX_LINES:
+                        notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
+        else:
+            notes.append("记忆库不可读，无法展示消息内容")
     finally:
-        mem.close()
+        if mem is not None:
+            mem.close()
 
-    if root_kind == "qq_passive":
+    if receipt_lines:
+        lines = receipt_lines
+        if receipt_notes:
+            notes.extend(receipt_notes)
+    else:
+        if tried_receipts and not lines:
+            source_note = ""
+        if source_note:
+            notes.append(source_note)
+    lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
+
+    if root_kind in _BACKGROUND_ROOTS:
+        notes.append("后台任务：无消息输入输出")
+    if root_kind == "qq_passive" and not lines:
         notes.append("被动消息：仅记录，不产生回复")
-    if command_lines:
-        lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
     if root_kind == "qq_command" and not lines:
         notes.append("该命令没有可展示的回复（未回复或发送失败）")
-    if root_kind in _REPLY_ROOTS and not lines:
-        notes.append("时间窗内没有确认送达的回复行（未回复或全部未送达）")
+    if (root_kind in ("qq_chat", "webchat") and not lines):
+        notes.append("没有确认送达的回复行（未回复或全部未送达）")
     return {
         "input": inp,
         "output": {"lines": lines, "count": len(lines)},
@@ -396,14 +528,19 @@ def message_io(trace_id: str) -> dict | None:
     }
 
 
-def _memory_conn():
-    """记忆库只读连接（与 conversations 服务同一来源）；缺表返回 None。"""
+def _receipts_conn():
+    """业务回执库只读连接（social_deliveries 与记忆库同库）。"""
     from pathlib import Path
 
     import config.settings as settings
     from webui.db import connect_ro
 
-    conn = connect_ro(Path(settings.DB_PATH))
+    return connect_ro(Path(settings.DB_PATH))
+
+
+def _memory_conn():
+    """记忆库只读连接（与 conversations 服务同一来源）；缺表返回 None。"""
+    conn = _receipts_conn()
     if conn is None:
         return None
     if not _table_exists(conn, "group_messages"):
