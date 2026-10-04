@@ -436,6 +436,28 @@ export function zoomAround(
   };
 }
 
+/** 以内容包围盒适配视口：返回整体缩放 + 居中平移（外观反馈 2）。 */
+export function fitAround(
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  viewport: { width: number; height: number },
+  pad = 28,
+  maxScale = 1.25,
+): ViewState {
+  const bw = bounds.maxX - bounds.minX + pad * 2;
+  const bh = bounds.maxY - bounds.minY + pad * 2;
+  const scale = Math.min(
+    ZOOM_MAX,
+    Math.max(ZOOM_MIN, Math.min(viewport.width / bw, viewport.height / bh, maxScale)),
+  );
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  return {
+    scale,
+    x: viewport.width / 2 - cx * scale,
+    y: viewport.height / 2 - cy * scale,
+  };
+}
+
 /** 节点间的贝塞尔路径（同列为直线，跨列走曲线）。 */
 export function edgePath(a: LaidNode, b: LaidNode): string {
   const isAnchorA = a.anchor !== undefined;

@@ -319,3 +319,40 @@ describe('zoomAround anchor math', () => {
     expect(huge.scale).toBe(ZOOM_MAX);
   });
 });
+
+// ============================================================
+// 外观反馈 2：视图适配——内容包围盒 → 整体缩放 + 居中。
+// ============================================================
+describe('fitAround centers and scales content into the viewport', async () => {
+  const { fitAround, ZOOM_MIN, ZOOM_MAX } = await import('@/views/data/flowLayout');
+
+  it('centers the content bounding box', () => {
+    const next = fitAround(
+      { minX: 100, minY: 50, maxX: 300, maxY: 250 },
+      { width: 800, height: 600 },
+    );
+    // 内容中心 (200,150) 应映射到视口中心 (400,300)
+    expect(200 * next.scale + next.x).toBeCloseTo(400);
+    expect(150 * next.scale + next.y).toBeCloseTo(300);
+  });
+
+  it('scales down large graphs and caps upscaling of small ones', () => {
+    // 大图（缩放比在钳制区间内）：按视口/内容取最小比率（含四周留白）
+    const big = fitAround(
+      { minX: 0, minY: 0, maxX: 1600, maxY: 700 },
+      { width: 800, height: 600 },
+    );
+    expect(big.scale).toBeCloseTo(Math.min(800 / 1656, 600 / 756));
+    // 小图：放大但不超过 1.25 上限
+    const small = fitAround(
+      { minX: 0, minY: 0, maxX: 100, maxY: 80 },
+      { width: 800, height: 600 },
+    );
+    expect(small.scale).toBe(1.25);
+    // 极端比率仍被 ZOOM_MIN/ZOOM_MAX 钳制
+    const tiny = fitAround({ minX: 0, minY: 0, maxX: 99999, maxY: 99999 },
+      { width: 200, height: 200 });
+    expect(tiny.scale).toBe(ZOOM_MIN);
+    expect(ZOOM_MAX).toBeGreaterThan(0);
+  });
+});

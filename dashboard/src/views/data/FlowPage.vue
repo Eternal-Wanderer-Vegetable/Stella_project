@@ -3,14 +3,17 @@
 // 布局为 ComfyUI 式左→右分层流（有始有终：开始/结束锚点见 flowLayout）。
 // 「完整流程/实际路径」共用同一套坐标：切换只是淡出未走过的节点与边
 // （CSS 过渡），不是两张图硬切。未走过的路径灰色「未走到」，绝不标 skipped。
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
 import { fitNodeText } from '@/stores/flowReducer';
 import { formatDbTime } from '@/utils/time';
 import {
+  ANCHOR_H,
+  ANCHOR_W,
   edgePath,
+  fitAround,
   layoutExecuted,
   layoutLayered,
   ZOOM_MAX,
@@ -99,14 +102,19 @@ let playTimer: ReturnType<typeof setInterval> | null = null;
 const playbackSpeed = ref(1);
 const SPEED_OPTIONS = [0.5, 1, 2, 4];
 
-// 两种视图共用同一布局坐标；'executed' 只是把未走过的元素淡出
+// 两种视图共用同一布局坐标；'executed' 只是把未走过的元素淡出。
+// viewMode 是按钮绑定值；appliedView 是**已生效**视图——切换时先整图淡出，
+// 再换布局并适配缩放，最后淡入（外观反馈 3：消除撕裂感）。
 const viewMode = ref<'full' | 'executed'>('full');
+const appliedView = ref<'full' | 'executed'>('full');
 const canvasEl = ref<HTMLElement | null>(null);
 // 浮动详情卡：锚在节点点击位置（相对画布容器）
 const card = ref<{ nodeId: string; x: number; y: number } | null>(null);
-// 视图切换的边淡出窗口：节点在滑动到位前，先把旧路径藏起来
+// 整图淡出窗口：淡出完成后才真正切换布局（appliedView），此时新节点/新边
+// 在透明态挂载，绝不会看到跳变；淡入时节点再滑到最终坐标
 const morphing = ref(false);
-let morphTimer: ReturnType<typeof setTimeout> | null = null;
+let morphFadeTimer: ReturnType<typeof setTimeout> | null = null;
+let morphSwapTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 画布平移/缩放（外观反馈 2）：右键按住拖拽平移、滚轮以光标为锚缩放。
 // transform 只作用于 <svg> 视觉层，节点坐标/详情卡锚点仍在容器屏幕空间。
@@ -197,7 +205,8 @@ onBeforeUnmount(() => {
   store.stopListPolling();
   store.stopStream();
   stopPlay();
-  if (morphTimer) clearTimeout(morphTimer);
+  if (morphFadeTimer) clearTimeout(morphFadeTimer);
+  if (morphSwapTimer) clearTimeout(morphSwapTimer);
   onCanvasPanUp(); // 拖拽中卸载：摘掉 window 监听
 });
 
@@ -257,7 +266,7 @@ const graphLayout = computed(() => {
     transitions: store.transitionFacts,
     rootEnded: store.rootEnded,
   };
-  return viewMode.value === 'full'
+  return appliedView.value === 'full'
     ? layoutLayered(input)
     : layoutExecuted(input);
 });
@@ -277,16 +286,15 @@ function edgeClass(e: LaidEdge): Record<string, boolean> {
   return {
     'flow-edge': true,
     [`edge-${e.kind}`]: true,
-    active: Boolean(e.active) && viewMode.value === 'full',
+    active: Boolean(e.active) && appliedView.value === 'full',
     dim:
-      viewMode.value === 'full' &&
+      appliedView.value === 'full' &&
       !e.active &&
       e.kind !== 'spawn' &&
       e.kind !== 'cause',
     // O05：实际视图里两端都执行过、但没有真实 transition 事实的边
     //（如只走了另一条分支）画成虚线淡显，不冒充走过的路径
-    untaken: viewMode.value === 'executed' && e.traversed === false,
-    morph: morphing.value,
+    untaken: appliedView.value === 'executed' && e.traversed === false,
   };
 }
 
@@ -433,15 +441,61 @@ function closeCard() {
   store.selectNode('');
 }
 
-watch(viewMode, () => {
-  // 布局变化：卡锚点失效；边先淡出，节点滑到新坐标后再淡入
+// 视图切换（外观反馈 2/3）：整图淡出 → 切布局 + 适配缩放居中 → 淡入。
+// 淡出/淡入各 ~0.22s，期间新元素在透明态完成挂载，看不到跳变；
+// 缩放平移经由 .flow-svg 的 transform 过渡滑向适配结果。
+watch(viewMode, (mode) => {
   closeCard();
-  if (reducedMotion) return;
+  if (reducedMotion) {
+    appliedView.value = mode;
+    fitView();
+    return;
+  }
   morphing.value = true;
-  if (morphTimer) clearTimeout(morphTimer);
-  morphTimer = setTimeout(() => {
-    morphing.value = false;
-  }, 480);
+  if (morphFadeTimer) clearTimeout(morphFadeTimer);
+  if (morphSwapTimer) clearTimeout(morphSwapTimer);
+  morphFadeTimer = setTimeout(() => {
+    appliedView.value = mode;
+    fitView();
+    // 布局已切换且视图变换开始滑向适配值：恢复不透明，边淡入边滑
+    morphSwapTimer = setTimeout(() => {
+      morphing.value = false;
+    }, 60);
+  }, 230);
+});
+
+/** 把当前布局整体适配进画布视口并居中（外观反馈 2）。 */
+function fitView() {
+  const rect = canvasEl.value?.getBoundingClientRect();
+  if (!rect || !laidNodes.value.length) {
+    resetView();
+    return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of laidNodes.value) {
+    const w = n.anchor !== undefined ? ANCHOR_W : NODE_W;
+    const h = n.anchor !== undefined ? ANCHOR_H : NODE_H;
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x + w > maxX) maxX = n.x + w;
+    if (n.y + h > maxY) maxY = n.y + h;
+  }
+  const next = fitAround(
+    { minX, minY, maxX, maxY },
+    { width: rect.width, height: rect.height },
+  );
+  viewX.value = next.x;
+  viewY.value = next.y;
+  viewScale.value = next.scale;
+}
+
+// 打开新轨迹 / spec 就位后布局成形 → 适配一次（overflow hidden 下必须有
+// 初始适配，否则大图只露出左上角）
+watch(() => store.detail?.trace_id, () => {
+  void nextTick(() => fitView());
+});
+watch(() => store.spec, () => {
+  void nextTick(() => fitView());
 });
 
 // O10：按当前速率启动步进定时器（间隔 = 300ms / speed）
@@ -783,8 +837,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 icon="mdi-arrow-expand-all"
                 size="x-small"
                 variant="text"
-                title="重置视图"
-                @click="resetView"
+                title="适配视图（缩放并居中）"
+                @click="fitView"
               />
             </div>
             <div class="canvas-hint text-caption text-medium-emphasis">
@@ -794,6 +848,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               :width="canvasSize.w"
               :height="canvasSize.h"
               :viewBox="`0 0 ${canvasSize.w} ${canvasSize.h}`"
+              class="flow-svg"
+              :class="{ morph: morphing }"
               :style="{
                 transform: `translate(${viewX}px, ${viewY}px) scale(${viewScale})`,
                 transformOrigin: '0 0',
@@ -1155,7 +1211,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .flow-canvas {
   position: relative;
-  overflow: auto;
+  /* 平移/缩放已由右键拖拽 + 滚轮承担：原生滚动条纯属视觉噪音（外观反馈 1） */
+  overflow: hidden;
   max-height: 560px;
   background:
     radial-gradient(rgba(var(--v-theme-on-surface), 0.05) 1px, transparent 1px);
@@ -1164,6 +1221,18 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .flow-canvas.panning {
   cursor: grabbing;
+}
+/* 视图变换/淡入淡出过渡：拖拽时禁用（1:1 跟手），程序化适配时平滑滑动 */
+.flow-svg {
+  transition:
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease;
+}
+.flow-canvas.panning .flow-svg {
+  transition: none;
+}
+.flow-svg.morph {
+  opacity: 0;
 }
 /* 桌面端（≥md）：两卡片等高撑满视口剩余空间，底部对齐（外观反馈 1）。
    偏移 = 顶栏 64 + 容器 padding 48 + tab 行 ~49；窄屏保持自然高度。
@@ -1252,9 +1321,6 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   stroke-width: 1.2;
   transition: opacity 0.25s ease, stroke 0.4s ease;
 }
-.flow-edge.morph {
-  opacity: 0.06;
-}
 .edge-spawn,
 .edge-cause {
   stroke-dasharray: 4 3;
@@ -1324,7 +1390,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .reduce-motion .flow-node,
 .reduce-motion .flow-node-pos,
-.reduce-motion .flow-edge {
+.reduce-motion .flow-edge,
+.reduce-motion .flow-svg {
   transition: none;
 }
 @keyframes flow-pulse {
