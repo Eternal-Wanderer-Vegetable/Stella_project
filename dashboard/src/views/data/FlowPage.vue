@@ -21,6 +21,7 @@ import {
   zoomAround,
   type LaidEdge,
   type LaidNode,
+  type LayoutResult,
 } from '@/views/data/flowLayout';
 
 const store = useFlowStore();
@@ -98,7 +99,8 @@ const reducedMotion =
 
 const playing = ref(false);
 let playTimer: ReturnType<typeof setInterval> | null = null;
-// O10：播放速率（0.5x/1x/2x/4x），步进间隔 = 300ms / speed
+// O10：播放速率（0.5x/1x/2x/4x），步进间隔 = 600ms / speed
+//（1x 从 300ms 降为 600ms：默认速度减半，外观反馈 6）
 const playbackSpeed = ref(1);
 const SPEED_OPTIONS = [0.5, 1, 2, 4];
 
@@ -110,11 +112,15 @@ const appliedView = ref<'full' | 'executed'>('full');
 const canvasEl = ref<HTMLElement | null>(null);
 // 浮动详情卡：锚在节点点击位置（相对画布容器）
 const card = ref<{ nodeId: string; x: number; y: number } | null>(null);
-// 整图淡出窗口：淡出完成后才真正切换布局（appliedView），此时新节点/新边
-// 在透明态挂载，绝不会看到跳变；淡入时节点再滑到最终坐标
-const morphing = ref(false);
-let morphFadeTimer: ReturnType<typeof setTimeout> | null = null;
-let morphSwapTimer: ReturnType<typeof setTimeout> | null = null;
+// 几何连续视图变换（外观反馈 4）：切换时对布局做逐帧补间——持久节点位置
+// 插值滑动、边的路径每帧按插值后端点重算（SVG path 的 d 无法 CSS 过渡）、
+// 进入/离开的节点与边在原地缩放淡入淡出。全程无黑场、无跳变。
+type DisplayNode = LaidNode & { opacity: number };
+type DisplayEdge = LaidEdge & { opacity: number };
+const viewMorphing = ref(false);
+let morphRaf = 0;
+let morphNodeMap: Map<string, { from: DisplayNode | null; to: LaidNode | null }> | null = null;
+let morphEdgeMap: Map<string, { from: DisplayEdge | null; to: LaidEdge | null }> | null = null;
 
 // 画布平移/缩放（外观反馈 2）：右键按住拖拽平移、滚轮以光标为锚缩放。
 // transform 只作用于 <svg> 视觉层，节点坐标/详情卡锚点仍在容器屏幕空间。
@@ -205,8 +211,7 @@ onBeforeUnmount(() => {
   store.stopListPolling();
   store.stopStream();
   stopPlay();
-  if (morphFadeTimer) clearTimeout(morphFadeTimer);
-  if (morphSwapTimer) clearTimeout(morphSwapTimer);
+  if (morphRaf) cancelAnimationFrame(morphRaf);
   onCanvasPanUp(); // 拖拽中卸载：摘掉 window 监听
 });
 
@@ -270,8 +275,20 @@ const graphLayout = computed(() => {
     ? layoutLayered(input)
     : layoutExecuted(input);
 });
-const laidNodes = computed<LaidNode[]>(() => graphLayout.value?.nodes ?? []);
-const laidEdges = computed<LaidEdge[]>(() => graphLayout.value?.edges ?? []);
+// 渲染数组：常态与 graphLayout 同步；视图变换期间由 RAF 补间驱动
+const laidNodes = ref<DisplayNode[]>([]);
+const laidEdges = ref<DisplayEdge[]>([]);
+
+function syncDisplay(layout: LayoutResult | null) {
+  laidNodes.value = (layout?.nodes ?? []).map((n) => ({ ...n, opacity: 1 }));
+  laidEdges.value = (layout?.edges ?? []).map((e) => ({ ...e, opacity: 1 }));
+}
+
+watch(graphLayout, (layout) => {
+  // 变换进行中：目标布局由补间收尾落地，跳过中间态
+  if (morphRaf) return;
+  syncDisplay(layout);
+}, { immediate: true });
 const canvasSize = computed(() => ({
   w: graphLayout.value?.width ?? 400,
   h: graphLayout.value?.height ?? 200,
@@ -441,9 +458,8 @@ function closeCard() {
   store.selectNode('');
 }
 
-// 视图切换（外观反馈 2/3）：整图淡出 → 切布局 + 适配缩放居中 → 淡入。
-// 淡出/淡入各 ~0.22s，期间新元素在透明态完成挂载，看不到跳变；
-// 缩放平移经由 .flow-svg 的 transform 过渡滑向适配结果。
+// 视图切换（外观反馈 2/4）：几何连续变换——持久节点位置补间滑动、边路径
+// 每帧重算、进入/离开元素原地淡入淡出；同时视图变换滑向适配后的缩放/居中。
 watch(viewMode, (mode) => {
   closeCard();
   if (reducedMotion) {
@@ -451,28 +467,105 @@ watch(viewMode, (mode) => {
     fitView();
     return;
   }
-  morphing.value = true;
-  if (morphFadeTimer) clearTimeout(morphFadeTimer);
-  if (morphSwapTimer) clearTimeout(morphSwapTimer);
-  morphFadeTimer = setTimeout(() => {
-    appliedView.value = mode;
-    fitView();
-    // 布局已切换且视图变换开始滑向适配值：恢复不透明，边淡入边滑
-    morphSwapTimer = setTimeout(() => {
-      morphing.value = false;
-    }, 60);
-  }, 230);
+  const fromNodes = laidNodes.value;
+  const fromEdges = laidEdges.value;
+  appliedView.value = mode;
+  const to = graphLayout.value;
+  fitView(to);
+  if (!to) {
+    syncDisplay(to);
+    return;
+  }
+  startLayoutMorph(fromNodes, fromEdges, to);
 });
 
-/** 把当前布局整体适配进画布视口并居中（外观反馈 2）。 */
-function fitView() {
+const MORPH_DURATION_MS = 480;
+
+function startLayoutMorph(
+  fromNodes: DisplayNode[],
+  fromEdges: DisplayEdge[],
+  to: LayoutResult,
+) {
+  if (morphRaf) cancelAnimationFrame(morphRaf);
+  const nodes = morphNodeMap ?? new Map();
+  nodes.clear();
+  for (const n of fromNodes) nodes.set(n.nodeId, { from: n, to: null });
+  for (const n of to.nodes) {
+    const m = nodes.get(n.nodeId);
+    if (m) m.to = n;
+    else nodes.set(n.nodeId, { from: null, to: n });
+  }
+  const edges = morphEdgeMap ?? new Map();
+  edges.clear();
+  for (const e of fromEdges) edges.set(e.id, { from: e, to: null });
+  for (const e of to.edges) {
+    const m = edges.get(e.id);
+    if (m) m.to = e;
+    else edges.set(e.id, { from: null, to: e });
+  }
+  morphNodeMap = nodes;
+  morphEdgeMap = edges;
+  viewMorphing.value = true;
+  const start = performance.now();
+  const ease = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const frame = (now: number) => {
+    const t = ease(Math.min(1, (now - start) / MORPH_DURATION_MS));
+    const pos = new Map<string, { x: number; y: number; opacity: number }>();
+    const outNodes: DisplayNode[] = [];
+    for (const m of nodes.values()) {
+      if (m.from && m.to) {
+        const x = m.from.x + (m.to.x - m.from.x) * t;
+        const y = m.from.y + (m.to.y - m.from.y) * t;
+        pos.set(m.to.nodeId, { x, y, opacity: 1 });
+        outNodes.push({ ...m.to, x, y, opacity: 1 });
+      } else if (m.to) {
+        // 进入：目标位原地淡入
+        pos.set(m.to.nodeId, { x: m.to.x, y: m.to.y, opacity: t });
+        outNodes.push({ ...m.to, opacity: t });
+      } else if (m.from) {
+        // 离开：原位淡出
+        pos.set(m.from.nodeId, { x: m.from.x, y: m.from.y, opacity: 1 - t });
+        outNodes.push({ ...m.from, opacity: 1 - t });
+      }
+    }
+    const outEdges: DisplayEdge[] = [];
+    for (const m of edges.values()) {
+      const base = m.to ?? m.from;
+      if (!base) continue;
+      const s = pos.get(base.from.nodeId);
+      const d = pos.get(base.to.nodeId);
+      if (!s || !d) continue;
+      outEdges.push({
+        ...base,
+        from: { ...base.from, x: s.x, y: s.y },
+        to: { ...base.to, x: d.x, y: d.y },
+        opacity: m.from && m.to ? 1 : m.to ? t : 1 - t,
+      });
+    }
+    laidNodes.value = outNodes;
+    laidEdges.value = outEdges;
+    if (t < 1) {
+      morphRaf = requestAnimationFrame(frame);
+    } else {
+      morphRaf = 0;
+      viewMorphing.value = false;
+      syncDisplay(graphLayout.value);
+    }
+  };
+  morphRaf = requestAnimationFrame(frame);
+}
+
+/** 把布局整体适配进画布视口并居中（外观反馈 2）。 */
+function fitView(layout: LayoutResult | null = graphLayout.value) {
   const rect = canvasEl.value?.getBoundingClientRect();
-  if (!rect || !laidNodes.value.length) {
+  if (!rect || !layout?.nodes.length) {
     resetView();
     return;
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const n of laidNodes.value) {
+  for (const n of layout.nodes) {
     const w = n.anchor !== undefined ? ANCHOR_W : NODE_W;
     const h = n.anchor !== undefined ? ANCHOR_H : NODE_H;
     if (n.x < minX) minX = n.x;
@@ -498,7 +591,7 @@ watch(() => store.spec, () => {
   void nextTick(() => fitView());
 });
 
-// O10：按当前速率启动步进定时器（间隔 = 300ms / speed）
+// O10：按当前速率启动步进定时器（间隔 = 600ms / speed）
 function startPlayTimer() {
   stopPlayTimer();
   playTimer = setInterval(() => {
@@ -507,7 +600,7 @@ function startPlayTimer() {
       return;
     }
     store.stepPlayback(1);
-  }, reducedMotion ? 0 : 300 / playbackSpeed.value);
+  }, reducedMotion ? 0 : 600 / playbackSpeed.value);
 }
 
 function stopPlayTimer() {
@@ -517,12 +610,26 @@ function stopPlayTimer() {
   }
 }
 
+// 播放到末尾后按钮变重播（外观反馈 5）：再次点击从头重放
+const playbackFinished = computed(() => {
+  const len = store.orderedEvents.length;
+  return len > 0 && store.playbackIndex >= len - 1;
+});
+const playbackIcon = computed(() =>
+  playing.value
+    ? 'mdi-pause'
+    : playbackFinished.value
+      ? 'mdi-replay'
+      : 'mdi-play',
+);
+
 function togglePlay() {
   if (playing.value) {
     stopPlay();
     return;
   }
-  if (store.playbackIndex < 0) store.setPlayback(0);
+  // -1 = 实时位；已播完 → 从头重播
+  if (store.playbackIndex < 0 || playbackFinished.value) store.setPlayback(0);
   playing.value = true;
   startPlayTimer();
   if (reducedMotion) {
@@ -809,7 +916,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
           <div
             ref="canvasEl"
             class="flow-canvas"
-            :class="{ 'reduce-motion': reducedMotion, panning }"
+            :class="{ 'reduce-motion': reducedMotion, panning, 'view-morph': viewMorphing }"
             @click.self="closeCard"
             @contextmenu.prevent
             @mousedown="onCanvasMouseDown"
@@ -849,7 +956,6 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               :height="canvasSize.h"
               :viewBox="`0 0 ${canvasSize.w} ${canvasSize.h}`"
               class="flow-svg"
-              :class="{ morph: morphing }"
               :style="{
                 transform: `translate(${viewX}px, ${viewY}px) scale(${viewScale})`,
                 transformOrigin: '0 0',
@@ -878,6 +984,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   :key="e.id"
                   :d="edgePath(e.from, e.to)"
                   :class="edgeClass(e)"
+                  :opacity="e.opacity"
                   marker-end="url(#flow-arrow)"
                 />
               </g>
@@ -886,7 +993,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 v-for="n in laidNodes"
                 :key="n.nodeId"
                 class="flow-node-pos"
-                :style="{ transform: `translate(${n.x}px, ${n.y}px)` }"
+                :style="{ transform: `translate(${n.x}px, ${n.y}px)`, opacity: n.opacity }"
               >
                 <g
                   class="flow-node"
@@ -1066,13 +1173,14 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 @click="store.resetPlayback(); stopPlay()"
               />
               <v-btn
-                :icon="playing ? 'mdi-pause' : 'mdi-play'"
+                :icon="playbackIcon"
                 size="small"
                 variant="tonal"
                 :disabled="store.orderedEvents.length < 2"
+                :title="playbackFinished && !playing ? '重新播放' : undefined"
                 @click="togglePlay"
               />
-              <!-- O10：播放速率 0.5x/1x/2x/4x（间隔 = 300ms / speed） -->
+              <!-- O10：播放速率 0.5x/1x/2x/4x（间隔 = 600ms / speed） -->
               <v-btn-toggle
                 v-model="playbackSpeed"
                 mandatory
@@ -1231,8 +1339,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 .flow-canvas.panning .flow-svg {
   transition: none;
 }
-.flow-svg.morph {
-  opacity: 0;
+/* 几何补间期间禁用节点的 CSS 位移过渡：位置由 RAF 每帧给出，CSS 过渡会
+   二次平滑导致拖影/滞后 */
+.flow-canvas.view-morph .flow-node-pos {
+  transition: none;
 }
 /* 桌面端（≥md）：两卡片等高撑满视口剩余空间，底部对齐（外观反馈 1）。
    偏移 = 顶栏 64 + 容器 padding 48 + tab 行 ~49；窄屏保持自然高度。
