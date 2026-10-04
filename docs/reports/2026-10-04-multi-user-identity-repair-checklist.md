@@ -25,10 +25,18 @@
   `tests/test_message_relations.py`（T08–T11）、`tests/test_conversation_identity.py`（T03–T06/T15）、
   `tests/test_structured_conversation_budget.py`（T12/T13/T19）、`tests/test_session_compact.py`（T14 CAS）。
 - 已知抖动项（复跑确认非本分支回归）：`test_query_daily_reads_temp_db`（xdist 偶发）、
-  `test_scheduling_settings_defaults`（子批隔离抖动，全量下通过）。
+  `test_scheduling_settings_defaults`（子批隔离抖动，全量下通过）、
+  `test_flow_watch_finish_captures_reply_text`（xdist 偶发，单独跑恒过）。
 - 本机差异：pytest-timeout 未安装，全量命令去掉 `--timeout` 参数（CI 不受影响）。
 
 ## B. 副本迁移与回退演练（本机，用副本，不碰生产库）
+
+> **PR 合并 CI 修复记录（2026-10-04，`4e6fe97`）**：linux py3.12 的
+> `test_concurrent_replay_bounded_by_unique_constraint` 因「两线程各自懒加载
+> ensure_v2_schema + deferred BEGIN 升级死锁」报 no such table。修复：迁移事务
+> 改 BEGIN IMMEDIATE 串行化、迁移连接 timeout 30s、备份 O_EXCL 并发选举；
+> 该夹具改为单线程预迁移；新增并发迁移回归测试 + BEGIN IMMEDIATE 源码锚点。
+> 原用例连跑 10 次全绿，全量 3394 passed。
 
 - [x] B1 生产库副本 dry-run：sqlite backup API 拷贝 → 隔离 STELLA_HOME 迁移。
   实际：v15→v16 成功，changed_rows=0、additive=14、group_messages 2554/memories 1136/candidates 1421/atomic_facts 2/user_profiles 48 全部守恒，信封列与身份两表就绪。
