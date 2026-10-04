@@ -43,16 +43,25 @@ export function dedupeAndOrder(events: FlowEvent[]): FlowEvent[] {
   return uniq.sort((a, b) => a.row_id - b.row_id);
 }
 
-/** 实例键（计划 §6.1 instance 合同）：instance_key || span_id，与 attempt
- * 组合。两者都缺（legacy 形状）时归入同一匿名桶——按 event_id 拆会把同一段
+/** 实例键（修复计划 §6.4 R9）：优先真实 span_id，再退 instance_key，与
+ * attempt 组合。不同 span 即使共享业务 instance_key 也保持独立生命周期；
+ * 两者都缺（legacy 形状）时归入同一匿名桶——按 event_id 拆会把同一段
  * 连续事实撕成互不相干的"实例"，旧 finish 反过来吞掉后续 start。 */
 function instanceKeyOf(ev: FlowEvent): string {
-  const base = ev.instance_key || ev.span_id || '__anon__';
+  const base = ev.span_id || ev.instance_key || '__anon__';
   return `${base}#${ev.attempt ?? 0}`;
 }
 
-/** 单实例投影：与旧「最近事件定状态」语义一致，只是作用域缩到一个实例
- * （计划 §6.2：start 无 finish 是中断/在途，绝不显示成 skipped/succeeded）。 */
+/** 事件投影序（修复计划 §6.4）：按 seq/row_id 水位排序——乱序到达的
+ * 事件不得把已终态实例拉回 running。 */
+function projectionOrder(a: FlowEvent, b: FlowEvent): number {
+  return (a.seq || 0) - (b.seq || 0) || (a.row_id || 0) - (b.row_id || 0);
+}
+
+/** 单实例投影（修复计划 §6.4 checkpoint 合同）：checkpoint 是过程事实，
+ * 更新摘要/last_seen，绝不把 running 实例改判 succeeded；已有终态不被
+ * 迟到 checkpoint 覆盖；无 span 的纯 checkpoint（如 command.reply）保留
+ * 「过程事实完成」展示。 */
 function projectInstance(key: string, events: FlowEvent[]): FlowInstanceState {
   let status = 'not_observed';
   let businessOutcome = '';
@@ -68,8 +77,13 @@ function projectInstance(key: string, events: FlowEvent[]): FlowInstanceState {
       status = ev.status || status;
       businessOutcome = ev.reason_code || ev.summary || businessOutcome;
     } else if (ev.kind === 'checkpoint') {
-      status = 'succeeded';
-      businessOutcome = ev.summary || businessOutcome;
+      if (status === 'not_observed') {
+        // 无 start/finish 的纯过程事实（command.reply 等）：展示为完成，
+        // 没有任何 span 被此终态化
+        status = 'succeeded';
+      }
+      // running 保持 running（R9）；终态保持终态；已有业务事实不被覆盖
+      businessOutcome = businessOutcome || ev.summary || businessOutcome;
     } else if (ev.kind === 'start' && status === 'not_observed') {
       status = 'running';
     }
@@ -88,17 +102,18 @@ function projectInstance(key: string, events: FlowEvent[]): FlowInstanceState {
 
 const FAILED_STATUSES = new Set(['failed', 'timed_out', 'error']);
 
-/** 单节点投影：先按实例投影（O06），再聚合出节点级计数与 latest。
- * 节点 status：任一实例在跑 → running（新 start 不被旧 finish 吞掉）；
- * 否则取最新实例的状态。businessOutcome 只取 latest 实例自己的事实，
- * 失败 reason 不随新实例延续。 */
+/** 单节点投影（修复计划 §6.4）：先按实例投影（O06），再聚合出节点级计数
+ * 与 latest。transition（fact_kind='transition'）是**边级**事实，不参与
+ * 节点投影。节点 status：任一实例在跑 → running；否则取最新实例状态。 */
 export function projectNode(
   nodeId: string,
   events: FlowEvent[],
   label: string,
 ): FlowNodeState {
+  const nodeEvents = events.filter((e) => e.fact_kind !== 'transition');
+  const sorted = [...nodeEvents].sort(projectionOrder);
   const byInstance = new Map<string, FlowEvent[]>();
-  for (const ev of events) {
+  for (const ev of sorted) {
     const key = instanceKeyOf(ev);
     const list = byInstance.get(key);
     if (list) list.push(ev);
@@ -116,7 +131,7 @@ export function projectNode(
   const failed_count = instanceStates.filter((s) =>
     FAILED_STATUSES.has(s.status),
   ).length;
-  // latest：按实例内最后事件的 seq 取（事件按 encounter 序进入，尾即最新）
+  // latest：按实例内最后事件的 seq 取（事件按 seq 水位排序，尾即最新）
   let latest: FlowInstanceState | null = null;
   for (const s of instanceStates) {
     if (!latest || s.lastSeq >= latest.lastSeq) latest = s;
@@ -124,7 +139,7 @@ export function projectNode(
   let durationMs: number | null = null;
   const metrics: Array<Record<string, unknown>> = [];
   let lastTs = '';
-  for (const ev of events) {
+  for (const ev of sorted) {
     lastTs = ev.ts_utc || lastTs;
     if (ev.duration_ms != null) durationMs = ev.duration_ms;
     if (Object.keys(ev.metrics ?? {}).length > 0) metrics.push(ev.metrics);
@@ -136,11 +151,11 @@ export function projectNode(
       running_count > 0 ? 'running' : latest?.status ?? 'not_observed',
     businessOutcome: latest?.businessOutcome ?? '',
     instances: instanceStates.length,
-    firstSeq: events.length ? events[0].seq : 0,
+    firstSeq: sorted.length ? sorted[0].seq : 0,
     lastTs,
     durationMs,
     metrics,
-    events,
+    events: sorted,
     running_count,
     succeeded_count,
     failed_count,
@@ -148,13 +163,14 @@ export function projectNode(
   };
 }
 
-/** 事件流 → 节点状态列表（按首次出现顺序）。 */
+/** 事件流 → 节点状态列表（按首次出现顺序）。transition 边级事实不建节点。 */
 export function projectNodes(
   events: FlowEvent[],
   labelOf: (nodeId: string) => string,
 ): FlowNodeState[] {
   const byNode = new Map<string, FlowEvent[]>();
   for (const ev of events) {
+    if (ev.fact_kind === 'transition') continue;
     const list = byNode.get(ev.node_id) ?? [];
     list.push(ev);
     byNode.set(ev.node_id, list);

@@ -339,3 +339,53 @@ class TestAsyncLoopLinks:
         conn.close()
         assert rows and rows[0][0] == "rp-1" and rows[0][2] == "caused_by"
         assert roots == [("compact",)]
+
+
+class TestTransitionFacts:
+    """修复计划 §6.4（M3）：显式边级跳转事实合同。"""
+
+    def test_transition_writes_versioned_fact(self, flow_db):
+        root = message_flow.begin_trace(root_kind="webchat", trace_id="tr-1")
+        with message_flow.span(root, "turn.prepare") as sp:
+            message_flow.transition(
+                root, from_node="turn.prepare", to_node="turn.generate",
+                from_span=sp, attempt=0)
+        message_flow.end_trace(root)
+        message_flow.flush()
+        conn = sqlite3.connect(flow_db)
+        try:
+            row = conn.execute(
+                "SELECT kind, fact_kind, node_id, metrics FROM flow_events "
+                "WHERE trace_id='tr-1' AND fact_kind='transition'").fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+        kind, fact_kind, node_id, metrics = row
+        assert kind == "decision" and fact_kind == "transition"
+        assert node_id == "turn.prepare"
+        import json
+
+        m = json.loads(metrics)
+        assert m["transition_v"] == 1
+        assert m["edge_id"] == "turn.prepare->turn.generate:order"
+        assert m["from_node"] == "turn.prepare" and m["to_node"] == "turn.generate"
+        assert m["from_span_id"]  # 真实 span 句柄被记录
+
+    def test_transition_no_span_occurrence_still_records(self, flow_db):
+        """无 span 的 decision 边（occurrence 事实）不臆造 parent span。"""
+        root = message_flow.begin_trace(root_kind="webchat", trace_id="tr-2")
+        message_flow.transition(
+            root, from_node="chat.daily_budget", to_node="turn.identity",
+            relation_kind="condition", summary="放行")
+        message_flow.end_trace(root)
+        message_flow.flush()
+        conn = sqlite3.connect(flow_db)
+        try:
+            m = conn.execute(
+                "SELECT metrics FROM flow_events WHERE trace_id='tr-2' "
+                "AND fact_kind='transition'").fetchone()[0]
+        finally:
+            conn.close()
+        import json
+
+        assert json.loads(m)["edge_id"] == "chat.daily_budget->turn.identity:condition"

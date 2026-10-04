@@ -93,16 +93,33 @@ describe('layoutExecuted', () => {
     ],
   });
 
-  function runExecuted() {
-    return layoutExecuted({
-      spec: fullSpec,
-      executed: new Map(
-        [exec('entry'), exec('a'), exec('b')].map((n) => [n.nodeId, n]),
-      ),
-      labelOf: (id) => id,
-      laneOf: (id) =>
-        ({ entry: 'ingress', skip: 'ingress', a: 'generate', b: 'delivery' })[id]!,
+  // R3 合同：边激活只看显式 transition 事实；这里给出 entry→a→b 的
+  // 真实跳转事实，root 已真实结束。
+  function transitionFact(from: string, to: string): FlowEvent {
+    return evFact(`t-${from}-${to}`, from, 'decision', 'succeeded', {
+      fact_kind: 'transition',
+      metrics: { transition_v: 1, from_node: from, to_node: to },
     });
+  }
+
+  function layoutArgs(executed: Map<string, FlowNodeState>) {
+    return {
+      spec: fullSpec,
+      executed,
+      labelOf: (id: string) => id,
+      laneOf: (id: string) =>
+        ({ entry: 'ingress', skip: 'ingress', a: 'generate', b: 'delivery' })[id]!,
+      transitions: [transitionFact('entry', 'a'), transitionFact('a', 'b')],
+      rootEnded: true,
+    };
+  }
+
+  function runExecuted() {
+    return layoutExecuted(
+      layoutArgs(new Map(
+        [exec('entry'), exec('a'), exec('b')].map((n) => [n.nodeId, n]),
+      )),
+    );
   }
 
   it('contains ONLY executed nodes (unvisited never occupy positions)', () => {
@@ -125,15 +142,11 @@ describe('layoutExecuted', () => {
   });
 
   it('is strictly narrower than the full layout for the same spec', () => {
-    const full = layoutLayered({
-      spec: fullSpec,
-      executed: new Map(
+    const full = layoutLayered(
+      layoutArgs(new Map(
         [exec('entry'), exec('a'), exec('b')].map((n) => [n.nodeId, n]),
-      ),
-      labelOf: (id) => id,
-      laneOf: (id) =>
-        ({ entry: 'ingress', skip: 'ingress', a: 'generate', b: 'delivery' })[id]!,
-    });
+      )),
+    );
     expect(runExecuted().width).toBeLessThan(full.width);
   });
 
@@ -169,11 +182,11 @@ describe('layoutExecuted', () => {
 });
 
 // ============================================================
-// O05（计划 §2.2/§6.6）：「端点出现过」≠「条件边已执行」。
-// traversed 需要真实 transition 事实：src 发起之后，同实例链上有
-// finish/decision 到达 dst。
+// R3（修复计划 §6.4）：边激活只看显式 transition 事实。端点出现过、
+// 同 instance_key、span 父子都不再激活边；transition 携带 attempt，
+// 跨 attempt 不串边。
 // ============================================================
-describe('layoutExecuted: edge traversed needs real transition facts (O05)', () => {
+describe('layoutExecuted: edge traversed needs explicit transition facts (R3)', () => {
   const transitionSpec = spec({
     lanes: LANES,
     nodes: [node('a', 'ingress'), node('b', 'delivery')],
@@ -199,12 +212,26 @@ describe('layoutExecuted: edge traversed needs real transition facts (O05)', () 
     };
   }
 
-  function layoutWith(executed: Map<string, FlowNodeState>) {
+  function transitionFact(over: Partial<FlowEvent> = {}): FlowEvent {
+    return evFact(`t-${Math.random()}`, 'a', 'decision', 'succeeded', {
+      fact_kind: 'transition',
+      metrics: { transition_v: 1, from_node: 'a', to_node: 'b' },
+      ...over,
+    });
+  }
+
+  function layoutWith(
+    executed: Map<string, FlowNodeState>,
+    transitions: FlowEvent[] = [],
+    rootEnded = false,
+  ) {
     return layoutExecuted({
       spec: transitionSpec,
       executed,
       labelOf: (id) => id,
       laneOf: (id) => (id === 'a' ? 'ingress' : 'delivery'),
+      transitions,
+      rootEnded,
     });
   }
 
@@ -212,7 +239,7 @@ describe('layoutExecuted: edge traversed needs real transition facts (O05)', () 
     return out.edges.find((e) => e.kind === 'condition')!;
   }
 
-  it('a→b with full start→finish chain on both ends IS traversed', () => {
+  it('full chain WITHOUT transition fact is NOT traversed (no endpoint inference)', () => {
     const out = layoutWith(new Map([
       ['a', execRaw('a', [
         evFact('a:s', 'a', 'start', 'running', { row_id: 1, span_id: 's1' }),
@@ -223,23 +250,41 @@ describe('layoutExecuted: edge traversed needs real transition facts (O05)', () 
         evFact('b:f', 'b', 'finish', 'succeeded', { row_id: 4, span_id: 's2' }),
       ])],
     ]));
-    expect(condEdge(out).traversed).toBe(true);
+    expect(condEdge(out).traversed).toBe(false);
   });
 
-  it('arrival without a real transition (start-only / checkpoint-only) is NOT traversed', () => {
+  it('explicit transition fact (matching endpoints, same attempt) IS traversed', () => {
+    const out = layoutWith(
+      new Map([
+        ['a', execRaw('a', [
+          evFact('a:s', 'a', 'start', 'running', { row_id: 1, span_id: 's1' }),
+          evFact('a:f', 'a', 'finish', 'succeeded', { row_id: 2, span_id: 's1' }),
+        ])],
+        ['b', execRaw('b', [
+          evFact('b:s', 'b', 'start', 'running', { row_id: 3, span_id: 's2' }),
+          evFact('b:f', 'b', 'finish', 'succeeded', { row_id: 4, span_id: 's2' }),
+        ])],
+      ]),
+      [transitionFact({ row_id: 2, span_id: 's1' })],
+      true,
+    );
+    expect(condEdge(out).traversed).toBe(true);
+    expect(condEdge(out).active).toBe(true);
+  });
+
+  it('arrival without transition (start-only / checkpoint-only) is NOT traversed', () => {
     const a = execRaw('a', [
       evFact('a:s', 'a', 'start', 'running', { row_id: 1, span_id: 's1' }),
       evFact('a:f', 'a', 'finish', 'succeeded', { row_id: 2, span_id: 's1' }),
     ]);
-    // b 只 start（在途/中断）：没有 finish/decision 到达
     const startOnly = layoutWith(new Map([
       ['a', a],
       ['b', execRaw('b', [
         evFact('b:s', 'b', 'start', 'running', { row_id: 3 }),
       ])],
-    ]));
+    ]), [transitionFact({ row_id: 2, span_id: 's1' })]);
+    // dst 无到达事实：即使有 transition 也不激活（attempt/端点不匹配）
     expect(condEdge(startOnly).traversed).toBe(false);
-    // b 只有 checkpoint（过程事实，无终态语义）：同样不算到达
     const checkpointOnly = layoutWith(new Map([
       ['a', a],
       ['b', execRaw('b', [
@@ -249,41 +294,44 @@ describe('layoutExecuted: edge traversed needs real transition facts (O05)', () 
     expect(condEdge(checkpointOnly).traversed).toBe(false);
   });
 
-  it('different instance chains do not mark the edge; shared chain or span parent does', () => {
-    const aSeg0 = execRaw('a', [
-      evFact('a:s', 'a', 'start', 'running',
-        { row_id: 1, span_id: 's1', instance_key: 'seg:0' }),
-    ]);
-    // dst 到达挂在另一条实例链上：即便两端都"出现过"也不算这条边
-    const otherChain = layoutWith(new Map([
-      ['a', aSeg0],
-      ['b', execRaw('b', [
-        evFact('b:f', 'b', 'finish', 'succeeded',
-          { row_id: 4, instance_key: 'seg:1' }),
-      ])],
-    ]));
-    expect(condEdge(otherChain).traversed).toBe(false);
-    // 同实例链（instance_key 相同）：算走过
-    const sameChain = layoutWith(new Map([
-      ['a', aSeg0],
-      ['b', execRaw('b', [
-        evFact('b:f', 'b', 'finish', 'succeeded',
-          { row_id: 4, instance_key: 'seg:0' }),
-      ])],
-    ]));
-    expect(condEdge(sameChain).traversed).toBe(true);
-    // span 父子链（dst 事件挂在 src 开启的 span 下）：也算走过
-    const spanChain = layoutWith(new Map([
-      ['a', aSeg0],
-      ['b', execRaw('b', [
-        evFact('b:f', 'b', 'finish', 'succeeded',
-          { row_id: 4, instance_key: 'seg:1', parent_span_id: 's1' }),
-      ])],
-    ]));
-    expect(condEdge(spanChain).traversed).toBe(true);
+  it('transition on another attempt does not cross-activate', () => {
+    const out = layoutWith(
+      new Map([
+        ['a', execRaw('a', [
+          evFact('a:s0', 'a', 'start', 'running', { row_id: 1, span_id: 's-a0', attempt: 0 }),
+        ])],
+        ['b', execRaw('b', [
+          evFact('b:f1', 'b', 'finish', 'succeeded', { row_id: 3, span_id: 's-b1', attempt: 1 }),
+        ])],
+      ]),
+      [transitionFact({
+        row_id: 2, span_id: 's-a1', attempt: 1,
+        metrics: { transition_v: 1, from_node: 'a', to_node: 'b', attempt: 1 },
+      })],
+    );
+    expect(condEdge(out).traversed).toBe(false);
   });
 
-  it('unknown nodes (in events, missing from spec) stay visible in both views', () => {
+  it('end anchor requires a real root finish (rootEnded), not static sink arrival', () => {
+    const executed = new Map([
+      ['a', execRaw('a', [
+        evFact('a:s', 'a', 'start', 'running', { row_id: 1 }),
+        evFact('a:f', 'a', 'finish', 'succeeded', { row_id: 2 }),
+      ])],
+      ['b', execRaw('b', [
+        evFact('b:s', 'b', 'start', 'running', { row_id: 3 }),
+        evFact('b:f', 'b', 'finish', 'succeeded', { row_id: 4 }),
+      ])],
+    ]);
+    const running = layoutWith(executed, [], false);
+    expect(running.edges.filter((e) => e.to.anchor === 'end')
+      .every((e) => e.traversed === false)).toBe(true);
+    const ended = layoutWith(executed, [], true);
+    expect(ended.edges.filter((e) => e.to.anchor === 'end')
+      .every((e) => e.traversed === true)).toBe(true);
+  });
+
+    it('unknown nodes (in events, missing from spec) stay visible in both views', () => {
     const executed = new Map<string, FlowNodeState>([
       ['a', exec('a')],
       ['hook.custom:ext', execRaw('hook.custom:ext', [

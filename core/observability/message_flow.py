@@ -1475,6 +1475,59 @@ def decision(
                 attempt=attempt, fact_kind=fact_kind, error_code=error_code)
 
 
+def transition(
+    ctx: FlowContext | None,
+    *,
+    from_node: str,
+    to_node: str,
+    from_span: "FlowSpan | str | None" = None,
+    to_span: "FlowSpan | str | None" = None,
+    from_instance: str = "",
+    to_instance: str = "",
+    attempt: int = 0,
+    relation_kind: str = "order",
+    status: str = ST_SUCCEEDED,
+    summary: str = "",
+    reason_code: str = "",
+) -> None:
+    """显式边级跳转事实（修复计划 §6.4，R3）：只有真实控制边界才发。
+
+    写 ``kind='decision', fact_kind='transition'`` 事件（不扩展旧 kind 枚举），
+    metrics 携带版本化字段：``transition_v/edge_id/from_node/to_node/
+    from_span_id/to_span_id/from_instance/to_instance/attempt/relation_kind``。
+    ``edge_id`` 是确定性静态边标识（``src->dst:kind``）；字段走统一脱敏，
+    不含正文。发出失败按本 run loss 归账（writer 旁路纪律）。
+
+    事实由实际控制边界发出：确定分支且真正调用下一阶段、重试启动、派生
+    worker 成功创建时记录；**不能**由两端状态或时间先后推导。异步派生同
+    时用 :func:`link` 记 trace relation，relation_kind 不与同步调用混写。
+    """
+    if ctx is None or ctx.ended:
+        return
+    from_span_id = from_span.span_id if isinstance(from_span, FlowSpan) else (
+        str(from_span) if from_span else "")
+    to_span_id = to_span.span_id if isinstance(to_span, FlowSpan) else (
+        str(to_span) if to_span else "")
+    edge_id = f"{from_node}->{to_node}:{relation_kind}"
+    _emit_event(
+        ctx, kind=KIND_DECISION, node_id=from_node,
+        span_id=from_span_id, instance_key=from_instance,
+        status=status, reason_code=reason_code, summary=summary,
+        attempt=attempt, fact_kind="transition",
+        metrics={
+            "transition_v": 1,
+            "edge_id": edge_id,
+            "from_node": from_node,
+            "to_node": to_node,
+            "from_span_id": from_span_id,
+            "to_span_id": to_span_id,
+            "from_instance": from_instance,
+            "to_instance": to_instance,
+            "attempt": attempt,
+            "relation_kind": relation_kind,
+        })
+
+
 def checkpoint(
     ctx: FlowContext | None,
     node_id: str,

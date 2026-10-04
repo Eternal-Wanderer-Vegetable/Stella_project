@@ -95,6 +95,16 @@ def _flow_decision(fctx, node_id: str, **kw) -> None:
         pass
 
 
+def _flow_transition(fctx, *, from_node: str, to_node: str, **kw) -> None:
+    """显式边级跳转事实（修复计划 §6.4）：fail-open。"""
+    try:
+        from core.observability import message_flow
+
+        message_flow.transition(fctx, from_node=from_node, to_node=to_node, **kw)
+    except Exception:
+        pass
+
+
 async def deliver_lines(
     lines: list[str],
     *,
@@ -172,6 +182,7 @@ async def deliver_lines(
         )
     _trace_delivery(trace_id, turn_id, scope, receipts, started_at)
     if fctx is not None:
+        _flow_transition(fctx, from_node="send.segment", to_node="send.aggregate")
         statuses = [r.status for r in receipts]
         ack = statuses.count("acknowledged")
         _flow_decision(

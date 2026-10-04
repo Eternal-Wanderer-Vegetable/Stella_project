@@ -333,6 +333,16 @@ def _flow_checkpoint(fctx, node_id: str, **kw) -> None:
         pass
 
 
+def _flow_transition(fctx, *, from_node: str, to_node: str, **kw) -> None:
+    """显式边级跳转事实（修复计划 §6.4）：真实控制边界调用，fail-open。"""
+    try:
+        from core.observability import message_flow
+
+        message_flow.transition(fctx, from_node=from_node, to_node=to_node, **kw)
+    except Exception:
+        pass
+
+
 def _flow_set_outcome(fctx, outcome: str) -> None:
     try:
         if fctx is not None and not fctx.ended:
@@ -1015,11 +1025,15 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         _flow_set_outcome(fctx, "plugin_handled")
         logger.debug(f"[chat] 已由插件处理，跳过 LLM (group {event.group_id})")
         return
+    # 显式 transition（修复计划 §6.4）：未接管 → 真实进入群锁
+    _flow_transition(fctx, from_node="chat.plugin_shortcut",
+                     to_node="chat.group_lock", summary="未接管")
     lock = _group_locks[event.group_id]
     lock_span = _flow_span(fctx, "chat.group_lock")
     lock_span.__enter__()  # 覆盖「排队等待」；获取后立即闭合（计划 §6.3 A）
     async with lock:
         lock_span.__exit__(None, None, None)
+        _flow_transition(fctx, from_node="chat.group_lock", to_node="chat.context")
         # 新的直接请求 = 显式取消信号（计划 §6.9 层 3）：推进话题版本，
         # 让仍在途/待发送的旧主动输出在发送前判为过期。
         with contextlib.suppress(Exception):
@@ -1132,6 +1146,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             )
             return
         _flow_checkpoint(fctx, "chat.daily_budget", summary="allowed")
+        _flow_transition(fctx, from_node="chat.daily_budget",
+                         to_node="turn.identity", summary="放行")
 
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
@@ -1213,6 +1229,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 计发言、写 BOT_SELF、进学习——发送失败不再被记成「说过」。原实现把
         # 最后一段交给 chat_handler.finish(msg)（抛 FinishedException、拿不到
         # 回执且无法补记账），现在全部用 send、finish 只结束流程。
+        _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
+                         summary="普通回复")
         receipts = await deliver_lines(
             ctx.lines,
             scope=scope,
@@ -1275,6 +1293,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         if ctx.tail_start_id:
             _flow_checkpoint(fctx, "reply.compact",
                              summary="schedule_compact spawned, not awaited")
+            _flow_transition(fctx, from_node="reply.bookkeeping",
+                             to_node="reply.compact", relation_kind="spawn",
+                             summary="compact worker spawned")
             schedule_compact(event.group_id, ctx.tail_start_id,
                              parent_trace_id=fctx.trace_id if fctx is not None else "")
 
@@ -1433,6 +1454,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             )
             return
         _flow_checkpoint(fctx, "chat.daily_budget", summary="allowed")
+        _flow_transition(fctx, from_node="chat.daily_budget",
+                         to_node="turn.identity", summary="放行")
 
         try:
             with _flow_span(fctx, "chat.runtime"):
@@ -1497,6 +1520,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             _flow_set_outcome(fctx, "cometa_ack_" + str(ack_outcome))
             await private_chat_handler.finish()
 
+        _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
+                         summary="普通回复")
         receipts = await deliver_lines(
             ctx.lines,
             scope=scope,
@@ -1528,6 +1553,9 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         if ctx.tail_start_id:
             _flow_checkpoint(fctx, "reply.compact",
                              summary="schedule_compact spawned, not awaited")
+            _flow_transition(fctx, from_node="reply.bookkeeping",
+                             to_node="reply.compact", relation_kind="spawn",
+                             summary="compact worker spawned")
             schedule_compact(ref.storage_session_id, ctx.tail_start_id,
                              parent_trace_id=fctx.trace_id if fctx is not None else "")
 

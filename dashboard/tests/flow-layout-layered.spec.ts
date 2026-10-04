@@ -52,6 +52,7 @@ function evFact(
   nodeId: string,
   kind: FlowEvent['kind'],
   status: string,
+  over: Partial<FlowEvent> = {},
 ): FlowEvent {
   return {
     row_id: 0,
@@ -68,7 +69,8 @@ function evFact(
     duration_ms: null,
     summary: '',
     metrics: {},
-  };
+    ...over,
+  } as FlowEvent;
 }
 
 function execMap(...nodes: ReturnType<typeof exec>[]) {
@@ -231,15 +233,30 @@ describe('layoutLayered executed overlay', () => {
       nodes: [node('a', 'ingress'), node('bg', 'background')],
       edges: [{ src: 'a', dst: 'bg', kind: 'spawn', label: '' }],
     });
-    const out = layoutLayered({
+    // R3 合同：spawn 边由显式 transition 事实（relation_kind=spawn）激活；
+    // 没有事实时保持静态未确认。
+    const noFact = layoutLayered({
       spec: s,
       executed: execMap(exec('a'), exec('bg')),
       labelOf: (id) => id,
       laneOf: (id) => (id === 'a' ? 'ingress' : 'background'),
     });
-    const spawn = out.edges.find((e) => e.kind === 'spawn')!;
+    const unconfirmed = noFact.edges.find((e) => e.kind === 'spawn')!;
+    expect(unconfirmed.traversed).toBe(false);
+    const withFact = layoutLayered({
+      spec: s,
+      executed: execMap(exec('a'), exec('bg')),
+      labelOf: (id) => id,
+      laneOf: (id) => (id === 'a' ? 'ingress' : 'background'),
+      transitions: [evFact('t1', 'a', 'decision', 'succeeded', {
+        fact_kind: 'transition',
+        metrics: { transition_v: 1, from_node: 'a', to_node: 'bg', relation_kind: 'spawn' },
+      })],
+      rootEnded: true,
+    });
+    const spawn = withFact.edges.find((e) => e.kind === 'spawn')!;
     expect(spawn.traversed).toBe(true); // 实际路径视图可见
-    expect(spawn.active).toBe(false); // 完整视图不做实线高亮
+    expect(spawn.active).toBe(false); // spawn 不做实线高亮
   });
 });
 
