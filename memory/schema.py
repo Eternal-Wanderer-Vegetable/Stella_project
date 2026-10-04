@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -952,15 +953,28 @@ def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
     )
 
 
+def _create_exclusive(path: Path) -> None:
+    """独占创建空文件（O_EXCL）：并发迁移下选举唯一一方负责写备份文件。"""
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    os.close(fd)
+
+
 def backup_database(db_path: Path = DB_PATH) -> Path:
     """把数据库备份为同目录下 ``stella_memory_backup.db``。
 
     用 SQLite 在线备份 API 复制，避免文件被占用时直接复制失败。
     若备份已存在则跳过（保留第一次的原始库，防止误覆盖）。
+    并发懒加载 ensure 下两线程可能同时到达：O_EXCL 独占创建选举出唯一
+    写入方，输家按「已存在」处理——绝不互相覆盖或写坏首份备份。
     """
     backup = db_path.parent / BACKUP_FILENAME
     if backup.exists():
         logger.info(f"📦 [Schema] 备份已存在，跳过: {backup}")
+        return backup
+    try:
+        _create_exclusive(backup)
+    except FileExistsError:
+        logger.info(f"📦 [Schema] 备份已存在（并发迁移另一方已创建），跳过: {backup}")
         return backup
     conn = sqlite3.connect(db_path)
     try:
@@ -1086,10 +1100,17 @@ def backup_snapshot(db_path: Path, tag: str) -> Path | None:
 
     刻意不复用 ``stella_memory_backup.db``：后者「已存在就跳过」（保留第一次的原始
     库），在多次升级/合并的场景下拿不到「这次操作前」的状态。备份失败不该阻止操作，
-    但报告里要说清楚。
+    但报告里要说清楚。同秒并发的两次快照（tag 相同）经 O_EXCL 选举后用序号后缀
+    错开，绝不写坏彼此的文件。
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = db_path.with_name(f"{db_path.name}.{tag}-{stamp}.bak")
+    for attempt in range(1, 9):
+        try:
+            _create_exclusive(backup)
+            break
+        except FileExistsError:
+            backup = db_path.with_name(f"{db_path.name}.{tag}-{stamp}-{attempt}.bak")
     try:
         conn = sqlite3.connect(db_path)
         try:
@@ -1140,7 +1161,9 @@ def _migrate_db(db_path: Path, ctx, *, dry_run: bool):
     """真正执行：版本化迁移 → 收尾加列/建表/建索引 → 校验。"""
     from memory import migrations
 
-    conn = sqlite3.connect(db_path)
+    # timeout=30：并发懒加载 ensure 时，后到者在 BEGIN IMMEDIATE 上排队
+    # （默认 5s 对大库的迁移事务可能不够）；单进程路径不受影响。
+    conn = sqlite3.connect(db_path, timeout=30.0)
     try:
         current = _get_schema_version(conn)
         report = migrations.MigrationReport(

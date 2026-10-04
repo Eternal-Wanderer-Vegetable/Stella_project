@@ -738,3 +738,73 @@ def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
     assert second.problems == []
     assert second.changed_rows == 0
     assert _rows(path, "SELECT COUNT(*) FROM group_messages") == [(1,)]
+
+
+# ── 并发迁移序列化（CI linux 3.12 回归，多人身份修复分支 PR） ────────────
+
+
+def test_concurrent_migrations_serialize_on_fresh_db(tmp_path, monkeypatch):
+    """两线程同时迁移全新库：BEGIN IMMEDIATE 串行化，双方 report.error 均空。
+
+    回归背景：「全新库首写」在 v16 起才是真实迁移工作（v15 为最新版本时
+    ensure 是毫秒级空操作）。两条线程各自懒加载 ensure 时，deferred BEGIN
+    的「先读后写」升级会触发 SQLite 的立即死锁规避——一方直接
+    「database is locked」回滚，调用方随即带病写库撞 no such table。
+    """
+    import threading
+
+    def round_once(tag: str) -> None:
+        db = tmp_path / f"agent_memory-{tag}.db"
+        db.touch()  # ensure 对不存在的文件直接返回 False，先建空文件
+        # 桩掉两次备份：备份耗时会把两线程去同步、掩盖竞态窗口（真实 CI
+        # 命中发生在 xdist 负载下）。锁语义与备份无关。
+        monkeypatch.setattr(schema, "backup_database", lambda p: None)
+        monkeypatch.setattr(schema, "backup_before_migration", lambda p, t: None)
+        reports: list = []
+        errors: list = []
+        barrier = threading.Barrier(2)
+
+        def worker():
+            try:
+                barrier.wait(timeout=10)
+                reports.append(schema._migrate_db(db, None, dry_run=False))
+            except Exception as e:  # pragma: no cover —— 回归信号
+                errors.append(repr(e))
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors, errors
+        assert [r.error for r in reports] == [None, None]
+
+        conn = sqlite3.connect(db)
+        try:
+            version = conn.execute(
+                "SELECT version FROM schema_meta WHERE k='version'"
+            ).fetchone()[0]
+            evidence = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+                " AND name='memory_evidence'"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert version == schema.SCHEMA_VERSION
+        assert evidence is not None
+
+    for i in range(3):
+        round_once(f"r{i}")
+
+
+def test_run_migrations_begins_immediate():
+    """迁移事务必须是 BEGIN IMMEDIATE（防回退到 deferred BEGIN 的锚点）。
+
+    deferred BEGIN 在并发迁移下的失败模式依赖时序（见
+    test_concurrent_migrations_serialize_on_fresh_db 的 docstring），行为
+    测试在快机器上可能不触发；此断言确定性钉住串行化语义。
+    """
+    import inspect
+
+    source = inspect.getsource(migrations.run_migrations)
+    assert "BEGIN IMMEDIATE" in source

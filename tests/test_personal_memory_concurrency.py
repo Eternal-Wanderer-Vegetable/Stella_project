@@ -20,6 +20,7 @@ from core.conversation import qq_private_ref
 @pytest.fixture()
 def writer_env(tmp_path, monkeypatch):
     db = tmp_path / "agent_memory.db"
+    db.touch()
     monkeypatch.setattr("memory.consolidator.DB_PATH", db)
     monkeypatch.setattr("memory.memory_manager.DB_PATH", db)
     import config
@@ -28,6 +29,14 @@ def writer_env(tmp_path, monkeypatch):
     import config.settings as settings
 
     monkeypatch.setattr(settings, "PERSONAL_MEMORY_WRITE_ENABLED", True)
+    # 本组测试测的是「证据去重的并发写」，不是迁移竞态：单线程预先把 schema
+    # 建到当前版本。否则两条工作线程会各自懒加载迁移——v16 起「全新库首写」
+    # 才是真实迁移工作，线程间抢锁会让其中一方失败后被 suppress 吞掉、
+    # 随即写库撞 no such table（CI linux 3.12 回归）。迁移并发本身由
+    # tests/test_migrations.py 的并发序列化回归覆盖。
+    from memory.schema import ensure_v2_schema
+
+    assert ensure_v2_schema(db)
     return db
 
 

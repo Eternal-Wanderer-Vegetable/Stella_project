@@ -893,7 +893,14 @@ def run_migrations(
             step = MIGRATIONS.get(version)
             if step is None:
                 continue
-            conn.execute("BEGIN")
+            # BEGIN IMMEDIATE 而非 deferred BEGIN：并发迁移（两个线程各自的
+            # 懒加载 ensure、或 bot 与 deploy migrate 双进程）下，deferred
+            # 事务「先读后写」升级会触发 SQLite 的立即死锁规避——一方直接
+            # 「database is locked」失败而非等待，调用方随即带病写库（CI
+            # linux 3.12 曾因此回归）。IMMEDIATE 一开始就取写锁，后到者在
+            # 连接 timeout 内排队，迁移天然串行；迁移本身幂等，输家重跑
+            # 全是 no-op。
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 result = step(conn, ctx)
                 if dry_run:
