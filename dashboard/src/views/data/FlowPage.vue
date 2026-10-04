@@ -1166,7 +1166,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   cursor: grabbing;
 }
 /* 桌面端（≥md）：两卡片等高撑满视口剩余空间，底部对齐（外观反馈 1）。
-   偏移 = 顶栏 64 + 容器 padding 48 + tab 行 ~49；窄屏保持自然高度。 */
+   偏移 = 顶栏 64 + 容器 padding 48 + tab 行 ~49；窄屏保持自然高度。
+   关键：Vuetify 的 .v-card-text 自带 flex: 1 1 auto，在 flex column 卡片
+   里会把中间 section 全部撑开、把列表/画布挤到底部——这里显式压回
+   flex:none，只让 .flow-list / .flow-canvas 伸缩。 */
 @media (min-width: 960px) {
   .flow-row {
     height: calc(100vh - 165px);
@@ -1175,6 +1178,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   .flow-card-full {
     height: 100%;
     min-height: 0;
+  }
+  .flow-card-full > .v-card-title,
+  .flow-card-full > .v-card-text {
+    flex: 0 0 auto;
   }
   .flow-list {
     flex: 1 1 0;
