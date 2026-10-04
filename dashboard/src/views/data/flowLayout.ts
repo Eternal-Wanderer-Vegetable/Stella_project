@@ -36,6 +36,7 @@ export interface LaidNode {
   lane: string;
   spec?: FlowNodeSpec;
   anchor?: 'start' | 'end'; // 合成锚点（非目录节点）
+  component?: number; // 锚点所属连通分量（不同流程的起止相互分离）
 }
 
 export interface LaidEdge {
@@ -59,6 +60,9 @@ export interface FullLayoutInput {
   /** root 是否已真实结束（trace_end + writer finality）；未结束不得把
    * 汇节点接到「结束」锚点装作运行完成（R3/R8）。 */
   rootEnded?: boolean;
+  /** 是否渲染「结束」锚点（外观反馈 5）：运行未真实结束前显示「结束」
+   * 具有欺骗性——回放场景按已播到的 trace_end 事实控制。默认 true。 */
+  showEndAnchors?: boolean;
 }
 
 export interface LayoutResult {
@@ -81,6 +85,7 @@ export function layoutLayered(input: FullLayoutInput): LayoutResult {
     laneOf: input.laneOf,
     transitions: input.transitions,
     rootEnded: input.rootEnded,
+    showEndAnchors: input.showEndAnchors,
   });
 }
 
@@ -118,6 +123,7 @@ export function layoutExecuted(input: FullLayoutInput): LayoutResult {
     laneOf: input.laneOf,
     transitions: input.transitions,
     rootEnded: input.rootEnded,
+    showEndAnchors: input.showEndAnchors,
   });
 }
 
@@ -130,6 +136,7 @@ interface LayeredInput {
   laneOf: (nodeId: string) => string;
   transitions?: FlowEvent[];
   rootEnded?: boolean;
+  showEndAnchors?: boolean;
 }
 
 /**
@@ -261,43 +268,52 @@ function layered(input: LayeredInput): LayoutResult {
   // ── 源 / 汇（沿全部静态边的入度/出度为零者；渲染边与排名边一致口径）──
   const hasIn = new Set(edges.map((e) => e.dst));
   const hasOut = new Set(edges.map((e) => e.src));
-  const sources = specNodes.map((n) => n.id).filter((id) => !hasIn.has(id));
-  const sinks = specNodes.map((n) => n.id).filter((id) => !hasOut.has(id));
 
   const contentW =
     CANVAS_PAD + ANCHOR_W + 32 + columns.length * (NODE_W + COL_GAP);
   const height = Math.max(maxRows * ROW_PITCH + 2 * CANVAS_PAD, 120);
 
-  // ── start / end 锚点（垂直对齐各自接入节点的均值）──
+  // ── 起止锚点（外观反馈 6/7）：按**弱连通分量**各配一对开始/结束——
+  // 不同流程（消息链/记忆链/知识链…）不再共享同一对锚点；纯环分量
+  // （无源无汇）不设锚。「结束」锚整体可隐藏：运行未真实结束前显示
+  // 「结束」在视觉上具有欺骗性（回放场景按已播到的 trace_end 控制）。
+  const showEnd = input.showEndAnchors !== false;
+  const parent = new Map<string, string>();
+  for (const n of specNodes) parent.set(n.id, n.id);
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (cur !== root) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const e of edges) {
+    const a = find(e.src);
+    const b = find(e.dst);
+    if (a !== b) parent.set(a, b);
+  }
+  const compIndex = new Map<string, number>();
+  for (const n of specNodes) {
+    const root = find(n.id);
+    if (!compIndex.has(root)) compIndex.set(root, compIndex.size);
+  }
+  const compCount = compIndex.size;
+  const compSources: string[][] = Array.from({ length: compCount }, () => []);
+  const compSinks: string[][] = Array.from({ length: compCount }, () => []);
+  for (const n of specNodes) {
+    const ci = compIndex.get(find(n.id))!;
+    if (!hasIn.has(n.id)) compSources[ci].push(n.id);
+    if (!hasOut.has(n.id)) compSinks[ci].push(n.id);
+  }
+
   const centerY = (ids: string[]) => {
     const ys = ids.map((id) => nodeById.get(id)!.y + NODE_H / 2);
     return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : height / 2;
   };
-  const startY = centerY(sources);
-  const endY = centerY(sinks);
-  const startAnchor: LaidNode = {
-    nodeId: '__start__',
-    label: '开始',
-    status: 'anchor',
-    outcome: '',
-    instances: 0,
-    lane: '',
-    x: CANVAS_PAD,
-    y: startY - ANCHOR_H / 2,
-    anchor: 'start',
-  };
-  const endAnchor: LaidNode = {
-    nodeId: '__end__',
-    label: '结束',
-    status: 'anchor',
-    outcome: '',
-    instances: 0,
-    lane: '',
-    x: contentW,
-    y: endY - ANCHOR_H / 2,
-    anchor: 'end',
-  };
-  nodes.push(startAnchor, endAnchor);
 
   // ── 边：普通边 + 锚点接入边；traversed 由显式 transition 事实判定 ──
   const transitions = input.transitions ?? [];
@@ -318,37 +334,70 @@ function layered(input: LayeredInput): LayoutResult {
       active: traversed && e.kind !== 'spawn' && e.kind !== 'cause',
     };
   });
-  for (const id of sources) {
-    const traversed = nodeStarted(input.executed.get(id));
-    layoutEdges.push({
-      id: `__start__->${id}`,
-      from: startAnchor,
-      to: nodeById.get(id)!,
-      kind: 'order',
-      label: '',
-      traversed,
-      active: traversed,
-    });
-  }
-  for (const id of sinks) {
-    // 终点锚（修复计划 §6.4）：依据真实 root finish（rootEnded），不再由
-    // 静态 sink + 节点到达推断「运行结束」；未结束的 root 不接「结束」。
-    const traversed = rootEnded && nodeArrived(input.executed.get(id));
-    layoutEdges.push({
-      id: `${id}->__end__`,
-      from: nodeById.get(id)!,
-      to: endAnchor,
-      kind: 'order',
-      label: '',
-      traversed,
-      active: traversed,
-    });
+
+  for (let ci = 0; ci < compCount; ci += 1) {
+    if (compSources[ci].length) {
+      const startAnchor: LaidNode = {
+        nodeId: `__start__#${ci}`,
+        label: '开始',
+        status: 'anchor',
+        outcome: '',
+        instances: 0,
+        lane: '',
+        x: CANVAS_PAD,
+        y: centerY(compSources[ci]) - ANCHOR_H / 2,
+        anchor: 'start',
+        component: ci,
+      };
+      nodes.push(startAnchor);
+      for (const id of compSources[ci]) {
+        const traversed = nodeStarted(input.executed.get(id));
+        layoutEdges.push({
+          id: `${startAnchor.nodeId}->${id}`,
+          from: startAnchor,
+          to: nodeById.get(id)!,
+          kind: 'order',
+          label: '',
+          traversed,
+          active: traversed,
+        });
+      }
+    }
+    if (showEnd && compSinks[ci].length) {
+      const endAnchor: LaidNode = {
+        nodeId: `__end__#${ci}`,
+        label: '结束',
+        status: 'anchor',
+        outcome: '',
+        instances: 0,
+        lane: '',
+        x: contentW,
+        y: centerY(compSinks[ci]) - ANCHOR_H / 2,
+        anchor: 'end',
+        component: ci,
+      };
+      nodes.push(endAnchor);
+      for (const id of compSinks[ci]) {
+        // 终点锚（修复计划 §6.4）：依据真实 root finish（rootEnded），
+        // 不由静态 sink + 节点到达推断「运行结束」。
+        const traversed = rootEnded && nodeArrived(input.executed.get(id));
+        layoutEdges.push({
+          id: `${id}->${endAnchor.nodeId}`,
+          from: nodeById.get(id)!,
+          to: endAnchor,
+          kind: 'order',
+          label: '',
+          traversed,
+          active: traversed,
+        });
+      }
+    }
   }
 
   return {
     nodes,
     edges: layoutEdges,
-    width: contentW + ANCHOR_W + CANVAS_PAD,
+    width: contentW + CANVAS_PAD + (showEnd ? ANCHOR_W : 0),
     height,
   };
 }

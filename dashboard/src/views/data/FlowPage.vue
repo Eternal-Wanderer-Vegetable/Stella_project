@@ -259,6 +259,12 @@ const fallbackSpec = computed(() => {
   };
 });
 
+// 「结束」锚只在运行真实结束时出现（外观反馈 5）：回放场景按已播到的
+// trace_end 事实判定——动画一开始不会有「结束」，播到终帧才浮现
+const endReached = computed(() =>
+  store.visibleEvents.some((e) => e.kind === 'trace_end'),
+);
+
 const graphLayout = computed(() => {
   const spec = store.spec ?? fallbackSpec.value;
   if (!store.detail) return null;
@@ -270,6 +276,7 @@ const graphLayout = computed(() => {
     laneOf: (nodeId: string) => store.nodeLane(nodeId),
     transitions: store.transitionFacts,
     rootEnded: store.rootEnded,
+    showEndAnchors: endReached.value,
   };
   return appliedView.value === 'full'
     ? layoutLayered(input)
@@ -1166,13 +1173,6 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
           <v-card-text class="pt-2">
             <div class="d-flex align-center ga-2">
               <v-btn
-                icon="mdi-skip-previous"
-                size="x-small"
-                variant="text"
-                :disabled="!store.orderedEvents.length"
-                @click="store.resetPlayback(); stopPlay()"
-              />
-              <v-btn
                 :icon="playbackIcon"
                 size="small"
                 variant="tonal"
@@ -1423,7 +1423,9 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   flex: none;
 }
 .flow-node-pos {
-  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease;
 }
 .flow-edge {
   fill: none;

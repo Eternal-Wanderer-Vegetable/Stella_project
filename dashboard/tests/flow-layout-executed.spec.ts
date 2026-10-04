@@ -169,15 +169,15 @@ describe('layoutExecuted', () => {
     expect(endEdges.map((e) => e.from.nodeId)).toEqual(['b']);
   });
 
-  it('empty execution yields just the anchors', () => {
+  it('empty execution yields an empty canvas (anchors need components)', () => {
     const out = layoutExecuted({
       spec: fullSpec,
       executed: new Map(),
       labelOf: (id) => id,
       laneOf: () => 'ingress',
     });
-    expect(out.nodes.filter((n) => n.anchor === undefined)).toHaveLength(0);
-    expect(out.nodes.filter((n) => n.anchor !== undefined)).toHaveLength(2);
+    // 没有任何已执行内容时连锚点也不渲染——没有流程就没有起止
+    expect(out.nodes).toHaveLength(0);
   });
 });
 

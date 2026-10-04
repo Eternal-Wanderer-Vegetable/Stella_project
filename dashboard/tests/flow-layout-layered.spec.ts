@@ -356,3 +356,64 @@ describe('fitAround centers and scales content into the viewport', async () => {
     expect(ZOOM_MAX).toBeGreaterThan(0);
   });
 });
+
+// ============================================================
+// 外观反馈 6/7：起止锚按连通分量分离；「结束」锚可整体隐藏。
+// ============================================================
+describe('per-component anchors', () => {
+  function twoChainsSpec() {
+    return spec({
+      lanes: LANES,
+      nodes: [node('a', 'ingress'), node('b', 'ingress'),
+              node('x', 'delivery'), node('y', 'delivery')],
+      edges: [
+        { src: 'a', dst: 'b', kind: 'order', label: '' },
+        { src: 'x', dst: 'y', kind: 'order', label: '' },
+      ],
+    });
+  }
+
+  it('disconnected components get separate start/end anchor pairs', () => {
+    const out = layoutLayered({
+      spec: twoChainsSpec(),
+      executed: new Map(),
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+      rootEnded: true,
+    });
+    const starts = out.nodes.filter((n) => n.anchor === 'start');
+    const ends = out.nodes.filter((n) => n.anchor === 'end');
+    expect(starts.length).toBe(2);
+    expect(ends.length).toBe(2);
+    // 两条链不在同一行：各自的开始锚 y 不同（不再全图共享一个均值点）
+    expect(new Set(starts.map((n) => n.y)).size).toBe(2);
+    // 每条链的汇接各自分量的结束锚
+    expect(out.edges.filter((e) => e.to.anchor === 'end')
+      .map((e) => e.from.nodeId).sort()).toEqual(['b', 'y']);
+    expect(out.edges.filter((e) => e.from.anchor === 'start')
+      .map((e) => e.to.nodeId).sort()).toEqual(['a', 'x']);
+  });
+
+  it('showEndAnchors:false hides end anchors and their edges, narrows width', () => {
+    const withEnd = layoutLayered({
+      spec: twoChainsSpec(),
+      executed: new Map(),
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+      rootEnded: true,
+    });
+    const without = layoutLayered({
+      spec: twoChainsSpec(),
+      executed: new Map(),
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+      rootEnded: true,
+      showEndAnchors: false,
+    });
+    expect(without.nodes.filter((n) => n.anchor === 'end')).toHaveLength(0);
+    expect(without.edges.filter((e) => e.to.anchor === 'end')).toHaveLength(0);
+    // 开始锚不受影响
+    expect(without.nodes.filter((n) => n.anchor === 'start')).toHaveLength(2);
+    expect(without.width).toBeLessThan(withEnd.width);
+  });
+});
