@@ -226,8 +226,12 @@ async def reset_webchat_runtime() -> None:
     """WebChat reset 协调（计划 §R.5）：
 
     先 fence/cancel 在途轮次 + epoch 递增（拒旧轮晚到），再由调用方清消息库
-    ——已取消旧轮不能晚到后重建历史。
+    ——已取消旧轮不能晚到后重建历史。会话压缩状态同步重置（多人身份修复
+    计划 §6.4）：generation 递增使在途 compact 的 CAS 拒绝旧摘要提交。
     """
+    from memory import session_context as sc
+
+    sc.bump_reset_generation(WEBCHAT_GROUP_ID)
     from core.runtime.facade import ensure_shared_facade_started
 
     facade = await ensure_shared_facade_started()

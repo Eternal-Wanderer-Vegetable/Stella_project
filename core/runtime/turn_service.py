@@ -371,13 +371,16 @@ class TurnService:
 
         user_prompt = ctx.message
         context_text = ""
+        v2_sections: list[tuple[str, str]] = []
         # 使用 structured context 经 memory.prompt_builder 构建更自然的 prompt
         with _flow_span(fctx, "prompt.memory"):
             if MEMORY_V2_ENABLED:
-                # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹
-                from memory.prompt_builder import build_v2_prompt_context
+                # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹。
+                # v16（多人身份修复计划 §6.4）：分节产出同时供结构化预算
+                # 使用——不截断时两条路径拼出的 prompt 逐字节一致。
+                from memory.prompt_builder import build_v2_named_sections
 
-                context_text = build_v2_prompt_context(
+                v2_sections = build_v2_named_sections(
                     getattr(ctx, "short_term", "") or "",
                     getattr(ctx, "user_profile", "") or "",
                     getattr(ctx, "conversation_memories", []) or [],
@@ -387,6 +390,7 @@ class TurnService:
                     preferred_address=getattr(ctx, "preferred_address", None),
                     identity_capsule=getattr(ctx, "identity_capsule", "") or None,
                 )
+                context_text = "\n\n".join(text for _, text in v2_sections)
                 user_prompt = _compose_prompt(context_text, ctx)
             else:
                 from memory.prompt_builder import build_prompt_context
@@ -411,6 +415,7 @@ class TurnService:
             system_prompt = self.system_prompt_resolver(ctx)
         # ── 社交插槽（计划 §6.5）：先有无学习基线，再按剩余预算放可选片段 ──
         # 可选学习先裁、不靠通用截断碰运气；任何异常退回基线（可选增强纪律）。
+        social_text = ""
         with _flow_span(fctx, "prompt.parts", instance_key="social_slot"):
             try:
                 from core.social.context_builder import (
@@ -428,38 +433,118 @@ class TurnService:
             except Exception as e:
                 logger.debug(f"[Social] 上下文插槽失败（按无学习基线继续）: {e}")
 
+        # ── 预算（多人身份修复计划 §6.4）：v2 走结构化 parts 路径——身份
+        # capsule 与当前输入受保护、整节按语义丢弃、超保护走 DIRECT；v1 与
+        # Planner 等 generic 消费者继续 fit_prompt_to_window（逐字不动）。
         with _flow_span(fctx, "prompt.fit"):
-            budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+            if MEMORY_V2_ENABLED:
+                from core.context_budget import (
+                    ConversationPromptParts,
+                    fit_conversation_parts,
+                )
+
+                evidence_text = "\n\n".join(
+                    p
+                    for p in (
+                        _tool_result_section(ctx),
+                        _knowledge_evidence_section(ctx),
+                        _skill_result_section(ctx),
+                        social_text,
+                    )
+                    if p
+                )
+                parts_obj = ConversationPromptParts(
+                    identity_block=next(
+                        (t for n, t in v2_sections if n == "identity"), ""
+                    ),
+                    behavior_text=next(
+                        (t for n, t in v2_sections if n == "behavior"), ""
+                    ),
+                    time_text=next((t for n, t in v2_sections if n == "time"), ""),
+                    history_text=next(
+                        (t for n, t in v2_sections if n == "history"), ""
+                    ),
+                    profile_text=next(
+                        (t for n, t in v2_sections if n == "profile"), ""
+                    ),
+                    memories_text=next(
+                        (t for n, t in v2_sections if n == "memories"), ""
+                    ),
+                    evidence_text=evidence_text,
+                    current_speaker=f"用户({ctx.user_id})" if ctx.user_id else "对方",
+                    current_body=ctx.message,
+                    instruction_first=ctx.intent in _INSTRUCTION_INTENTS,
+                )
+                fitted_parts = fit_conversation_parts(parts_obj, system_prompt)
+                budgeted = fitted_parts  # 鸭子类型：prompt/estimated/budget/window/truncated 同名
+                budget_snapshot = fitted_parts.parts_snapshot
+                if fitted_parts.over_protected:
+                    # 受保护最小集（身份+当前输入）仍超预算：DIRECT 简短回复，
+                    # 不调用超额 LLM，也不默默删掉身份
+                    _flow_decision(fctx, "prompt.fit", status="blocked",
+                                   reason_code="over_protected")
+                    short = "……你这条太长了，先简化一下再发我一次？"
+                    ctx.reply = short
+                    ctx.lines = [short]
+                    return TurnPlan(ctx, DIRECT)
+            else:
+                budgeted = fit_prompt_to_window(user_prompt, system_prompt)
+                budget_snapshot = None
         _flow_decision(fctx, "prompt.fit", status="succeeded",
                        metrics={
                            "estimated_tokens": budgeted.estimated_tokens,
                            "budget_tokens": budgeted.budget_tokens,
                            "truncated": bool(budgeted.truncated),
+                           "budget_format_version": 2 if budget_snapshot else 1,
                        })
-        # 预算快照（计划 §6.5/§6.8）：实际裁掉的资产与原因 + 可重放输入档
+        # 预算快照（计划 §6.5/§6.8）：实际裁掉的资产与原因 + 可重放输入档。
+        # v2 parts 快照只含版本/分节 token/丢弃原因/sender ID——常规 trace
+        # 不新增任何正文全文；原文仍受既有 detailed 开关约束。
         try:
             from core.observability import turn_trace
 
+            metrics = {
+                "estimated_tokens": budgeted.estimated_tokens,
+                "budget_tokens": budgeted.budget_tokens,
+                "window_tokens": budgeted.window_tokens,
+                "truncated": budgeted.truncated,
+                "social_snapshot": bool(getattr(ctx, "social_context_snapshot", "")),
+            }
+            detailed = {
+                "system_prompt": system_prompt,
+                "user_prompt": budgeted.prompt,
+                "budget_tokens": budgeted.budget_tokens,
+                "estimated_tokens": budgeted.estimated_tokens,
+                "context_window_tokens": budgeted.window_tokens,
+                "truncated": budgeted.truncated,
+                "social_snapshot": getattr(ctx, "social_context_snapshot", ""),
+            }
+            if budget_snapshot is not None:
+                metrics["budget_format_version"] = int(
+                    budget_snapshot.get("budget_format_version", 2)
+                )
+                metrics["dropped_parts"] = ",".join(
+                    str(d) for d in budget_snapshot.get("dropped", ())
+                )
+                detailed["budget_format_version"] = int(
+                    budget_snapshot.get("budget_format_version", 2)
+                )
+                detailed["parts_snapshot"] = budget_snapshot
+                # v2 冻结回放输入（计划 §6.5）：分节原文随 detailed 档冻结，
+                # 离线重放不查当前库、不依赖 TTL；仅 detailed 开启时收集。
+                detailed["parts_input"] = {
+                    **{n: t for n, t in v2_sections},
+                    "evidence_text": evidence_text,
+                    "current_speaker": f"用户({ctx.user_id})" if ctx.user_id else "对方",
+                    "current_body": ctx.message,
+                    "instruction_first": ctx.intent in _INSTRUCTION_INTENTS,
+                }
             turn_trace.record_event(
                 trace_id=ctx.trace_id, turn_id=ctx.turn_id, stage="budget",
                 status="ok",
                 scope=ctx.trace_scope,
-                metrics={
-                    "estimated_tokens": budgeted.estimated_tokens,
-                    "budget_tokens": budgeted.budget_tokens,
-                    "window_tokens": budgeted.window_tokens,
-                    "truncated": budgeted.truncated,
-                    "social_snapshot": bool(getattr(ctx, "social_context_snapshot", "")),
-                },
-                detailed={
-                    "system_prompt": system_prompt,
-                    "user_prompt": budgeted.prompt,
-                    "budget_tokens": budgeted.budget_tokens,
-                    "estimated_tokens": budgeted.estimated_tokens,
-                    "context_window_tokens": budgeted.window_tokens,
-                    "truncated": budgeted.truncated,
-                    "social_snapshot": getattr(ctx, "social_context_snapshot", ""),
-                }
+                metrics=metrics,
+                detailed=detailed
                 if turn_trace.detailed_enabled_for_scope(ctx.trace_scope) else None,
             )
         except Exception:

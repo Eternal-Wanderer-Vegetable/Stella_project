@@ -38,6 +38,7 @@ from memory.retriever import get_group_memories, get_related_memories, get_user_
 from memory.schema import normalize_source_kind
 from memory.session_context import ensure_initialized as session_ensure_initialized
 from memory.session_context import get_summary as get_session_summary
+from memory.session_context import observe_identity_revision as session_observe_identity_revision
 from memory.session_context import summary_version as session_summary_version
 from memory.timeutil import (
     humanize_duration,
@@ -276,10 +277,22 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             log_sqlite_error("PreProcessors.build_context", e)
 
         # ── 1.5) 会话上下文缓存：历史版本未变则整段复用，跳过尾巴等重查询 ──
+        # v16（多人身份修复计划 §6.4）：身份版本入键——本人更名/第三人纠正
+        # bump revision 后，携带旧身份的缓存立即失效，不等 TTL。
+        identity_rev = 0
+        if getattr(ctx, "conversation_key", ""):
+            try:
+                from memory.conversation_identity import get_identity_revision
+
+                identity_rev = get_identity_revision(str(ctx.conversation_key))
+            except Exception:
+                identity_rev = 0
+        session_observe_identity_revision(ctx.storage_key(), identity_rev)
         history_version = (
             _max_message_id(cursor, ctx.storage_key()),
             stc_updated_at,
             session_summary_version(ctx.storage_key()),
+            identity_rev,
         )
         # key 含 DB_PATH：与检索缓存同款隔离（换库/测试临时库绝不互读缓存）
         cache_key = (
@@ -370,7 +383,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 SESSION_CONTEXT_CACHE_TTL = 300.0  # 5 分钟
 _SESSION_CONTEXT_CACHE_MAX_ENTRIES = 64
 _SESSION_CONTEXT_CACHE: dict[
-    tuple[str, str, tuple[int, str | None, int], str, str],
+    tuple[str, str, tuple[int, str | None, int, int], str, str],
     tuple[float, str, int],
 ] = {}
 

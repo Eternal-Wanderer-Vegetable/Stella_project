@@ -86,10 +86,14 @@ def replay_budget_decision(
     turn_id: str,
     scope: str = "",
 ) -> ReplayReport:
-    """重放预算决策：冻结的 system+user prompt 重新过 fit_prompt_to_window。
+    """重放预算决策：按快照版本分派（多人身份修复计划 §6.5）。
 
-    比较预算、估算 token 与截断标记。快照缺字段（仅 metadata 档）→
-    verdict=browsable_only——绝不声称可重放。
+    - v2（结构化 parts）：从冻结的 ``parts_input`` 重建分节，重放
+      ``fit_conversation_parts``——比较预算、估算、截断与丢弃集合；重放
+      **不查当前数据库的别名/身份**，全部输入来自快照；
+    - v1 / 缺版本：generic ``fit_prompt_to_window``（旧行为）。
+
+    快照缺字段（仅 metadata 档）→ verdict=browsable_only——绝不声称可重放。
     """
     report = ReplayReport(
         replay_id=uuid.uuid4().hex,
@@ -117,6 +121,63 @@ def replay_budget_decision(
     )
     stubs = ReadOnlyStubs()  # 供调用方确认桩存在；回放本身不触碰任何桩
     del stubs
+
+    parts_input = original.get("parts_input")
+    if (
+        int(original.get("budget_format_version") or 1) >= 2
+        and isinstance(parts_input, dict)
+        and "current_body" in parts_input
+    ):
+        from core.context_budget import ConversationPromptParts, fit_conversation_parts
+
+        def _part(key: str) -> str:
+            return str(parts_input.get(key) or "")
+
+        parts_obj = ConversationPromptParts(
+            identity_block=_part("identity"),
+            behavior_text=_part("behavior"),
+            time_text=_part("time"),
+            history_text=_part("history"),
+            profile_text=_part("profile"),
+            memories_text=_part("memories"),
+            evidence_text=_part("evidence_text"),
+            current_speaker=_part("current_speaker"),
+            current_body=_part("current_body"),
+            instruction_first=bool(parts_input.get("instruction_first")),
+        )
+        recomputed_parts = fit_conversation_parts(
+            parts_obj,
+            frozen.system_prompt,
+            context_window_tokens=frozen.context_window_tokens,
+            output_reserve_tokens=frozen.output_reserve_tokens,
+            safety_tokens=frozen.safety_tokens,
+        )
+        original_dropped = tuple(
+            str(d) for d in (original.get("parts_snapshot") or {}).get("dropped", ())
+        )
+        report.original = {
+            "budget_tokens": int(original["budget_tokens"]),
+            "estimated_tokens": int(original["estimated_tokens"]),
+            "truncated": bool(original.get("truncated")),
+            "dropped": original_dropped,
+            "over_protected": False,
+        }
+        report.replayed = {
+            "budget_tokens": recomputed_parts.budget_tokens,
+            "estimated_tokens": recomputed_parts.estimated_tokens,
+            "truncated": recomputed_parts.truncated,
+            "dropped": tuple(recomputed_parts.dropped),
+            "over_protected": bool(recomputed_parts.over_protected),
+        }
+        report.verdict = (
+            "match" if report.original == report.replayed else "mismatch"
+        )
+        if report.verdict == "mismatch":
+            report.notes.append(
+                "v2 parts 重放与原决策不一致：分节内容或窗口常量可能已变化（差异可见，不静默）"
+            )
+        return report
+
     recomputed = fit_prompt_to_window(
         frozen.user_prompt,
         frozen.system_prompt,
