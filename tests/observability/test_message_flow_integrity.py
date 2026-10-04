@@ -249,7 +249,9 @@ class TestSpecExactBinding:
         import hashlib
         import json
 
-        version = "2026.10.03"
+        from core.observability.flow_catalog import TOPOLOGY_VERSION
+
+        version = TOPOLOGY_VERSION
         payloads = iter([self._payload(version, "old"), self._payload(version, "new")])
 
         def fake_bundled(v):
