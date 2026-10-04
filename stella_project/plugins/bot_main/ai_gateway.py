@@ -2695,6 +2695,15 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 trigger="reply",
                 # 纯诊断字段：日志据此区分「用户 @ 我」与「我主动 @ 人」
                 intent="proactive_at",
+                # v3 会话身份（计划 §6.1）：主体是 pick_target 验证过的目标
+                # uid（ctx.user_id）；不补会话身份字段的话 scope_for_chat_context
+                # 会按旧入口处理，目标的 USER_SHARED 个人事实永远进不来
+                # （多人身份修复计划 §6.1/T18）。
+                conversation_kind="group",
+                conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+                bot_id=str(bot.self_id),
+                peer_id=str(group_id),
+                storage_session_id=group_id,
                 trace_id=new_trace_id(),
             )
             try:

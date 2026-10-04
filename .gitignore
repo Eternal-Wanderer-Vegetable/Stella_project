@@ -121,3 +121,5 @@ start_claude_command.txt
 vendor/cortico/node_modules/
 vendor/cortico/dist/
 memory_rust/_native.pyd
+memory_rust/_native.pyd.api1.bak
+memory_rust/dist/

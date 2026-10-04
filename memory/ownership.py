@@ -131,6 +131,41 @@ def space_only_scope(space: str) -> MemoryAccessScope:
     return MemoryAccessScope(space_key=space_owner_key(space))
 
 
+def scope_for_chat_context(ctx: Any, *, memory_space: str) -> "MemoryAccessScope | None":
+    """从可信 ``ChatContext`` 决定当前检索的权限主体（多人身份修复计划 §6.1）。
+
+    权威链：当前发言者只由平台事件确定（``ctx.user_id``）；``peer_id`` 在群聊
+    里是**会话地址（群号）不是人**，绝不参与 PERSON 构造。各路径：
+
+    - 普通群聊 / 私聊 / WebChat：主体 = ``ctx.user_id``（平台 sender；主动 @
+      路径上它是经过 pick_target 触发链验证的目标 uid）；
+    - 群级主动发言（``trigger == "proactive"``）：无当前个人主体 → ``None``
+      （调用方保持 SPACE-only / 旧 user_id 过滤，不会用群号或 0 构造 PERSON）；
+    - 旧入口（``conversation_kind`` 为空）：``None``，与升级前行为逐字一致。
+
+    返回 ``None`` 表示「本轮不应用 owner scope」——不是授权放行：检索侧对
+    ``None`` 的处理是旧有行为（SPACE / user_id 过滤），永远不会扩大可见范围。
+    """
+    if getattr(ctx, "trigger", "") == "proactive":
+        return None
+    kind = str(getattr(ctx, "conversation_kind", "") or "")
+    if kind not in ("group", "private", "webchat"):
+        return None
+    user_id = getattr(ctx, "user_id", 0) or 0
+    try:
+        if int(user_id) <= 0:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return scope_for_conversation(
+        kind=kind,
+        memory_space=memory_space,
+        platform="webchat" if kind == "webchat" else "qq",
+        bot_id=str(getattr(ctx, "bot_id", "") or ""),
+        user_id=str(user_id),
+    )
+
+
 def scope_for_conversation(
     *,
     kind: str,

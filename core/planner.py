@@ -294,22 +294,14 @@ class RestrictedPlanner:
         """
         try:
             from config.spaces import resolve_space
-            from memory.ownership import scope_for_conversation
+            from memory.ownership import scope_for_chat_context
             from memory.retrieval_v2 import retrieve_memories
 
             space = ctx.group_shared_space or resolve_space(ctx.group_id)
             # 深度查询与快速路径同一份访问范围（计划 §6.6）：Planner 的改写
-            # 只改 query，不改授权——服务端 scope 由会话身份生成，模型改写词
-            # 不能扩大候选池。
-            access_scope = None
-            if ctx.trigger != "proactive" and getattr(ctx, "conversation_kind", ""):
-                access_scope = scope_for_conversation(
-                    kind=ctx.conversation_kind,
-                    memory_space=space,
-                    platform="qq" if ctx.conversation_kind != "webchat" else "webchat",
-                    bot_id=getattr(ctx, "bot_id", ""),
-                    user_id=ctx.peer_id or ctx.user_id,
-                )
+            # 只改 query，不改授权——主体由可信 helper 统一决定（多人身份
+            # 修复计划 §6.1），与 _build_user_context_v2 逐字同源。
+            access_scope = scope_for_chat_context(ctx, memory_space=space)
             result = retrieve_memories(
                 space, ctx.user_id, query, trigger=ctx.trigger,
                 access_scope=access_scope,

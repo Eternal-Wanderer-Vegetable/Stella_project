@@ -157,22 +157,57 @@ def estimate_tokens(text: str) -> int:
     return int(cjk * 1.5 + other_words * 1.3)
 
 
+def _attribution_header(mem: dict, current_user_id) -> str:
+    """单条记忆的归属头（多人身份修复计划 §6.1）。
+
+    分类只依赖可信结构化字段，绝不从正文反推：
+    - owner_type=PERSON 且 subject 是当前用户 →「当前用户的记忆」；
+    - owner_type=PERSON 其他 subject →「其他成员的公开背景」；
+    - SPACE / owner 信息缺失（旧库回退、native 结果）→ 旧 SPACE 语义：
+      user_id 只解释为**记录归属用户**，事实主语未确认——含糊长记忆不能
+      成为当前用户的身份依据。
+    """
+    owner_type = str(mem.get("owner_type") or "").strip().upper()
+    subject_key = str(mem.get("subject_key") or "")
+    uid = str(mem.get("user_id") or "").strip()
+    cur = str(current_user_id) if current_user_id not in (None, 0, "") else ""
+    if owner_type == "PERSON":
+        subject_uid = subject_key.split(":", 1)[-1] if subject_key else uid
+        if cur and subject_uid == cur:
+            return f"当前用户的记忆 [subject=用户({subject_uid})]"
+        return f"其他成员的公开背景 [subject=用户({subject_uid})]"
+    if uid:
+        return f"群共享背景 [记录=用户({uid})；事实主语未确认]"
+    return "群共享事实 [subject=群/无个人主体]"
+
+
 def build_conversation_section(
     memories: Iterable[dict],
     max_tokens: int = MEMORY_CONVERSATION_MAX_TOKENS,
+    *,
+    current_user_id=None,
 ) -> str:
     """把聊天素材记忆拼成分区文本（可参考的聊天背景），超预算时截断。
 
     内容不再附带“重要性/置信度”等元信息——这些是给系统看的数据，塞给模型
     会让回复听起来像在念数据库。
+
+    ``current_user_id``（多人身份修复计划 §6.1，keyword-only）：给出时每条
+    记忆带**不可裁断的归属头**，先拼完整条目再算 token——不能预算时算无标签
+    正文、之后再补标签导致超额。缺省 None 保持旧格式逐字节不变（旧调用/旧
+    测试兼容）。
     """
+    attributed = current_user_id not in (None, 0, "")
     items: list[str] = []
     budget = max_tokens
     for mem in memories:
         content = (mem.get("content") or "").strip()
         if not content:
             continue
-        text = f"- {content}"
+        if attributed:
+            text = f"- {_attribution_header(mem, current_user_id)}：{content}"
+        else:
+            text = f"- {content}"
         tokens = estimate_tokens(text)
         if items and budget - tokens < 0:
             break
@@ -180,6 +215,11 @@ def build_conversation_section(
         budget -= tokens
     if not items:
         return ""
+    if attributed:
+        return (
+            "可参考的聊天背景（每条已标注归属；只有标注为当前用户本人的条目才属于当前用户，"
+            "其余只是同群其他成员或群共享背景）：\n" + "\n".join(items)
+        )
     return "可参考的聊天背景：\n" + "\n".join(items)
 
 
@@ -278,7 +318,9 @@ def build_v2_prompt_context(
     else:
         conv_max = MEMORY_CONVERSATION_MAX_TOKENS
 
-    conv = build_conversation_section(conversation_memories, max_tokens=conv_max)
+    conv = build_conversation_section(
+        conversation_memories, max_tokens=conv_max, current_user_id=current_user_id
+    )
     if conv:
         parts.append(conv)
 
