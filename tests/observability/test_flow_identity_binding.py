@@ -28,8 +28,8 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, PrivateMessa
 
 nonebot.init()
 
-from stella_project.plugins.bot_main import ai_gateway as gateway
 from core.observability import message_flow, turn_trace
+from stella_project.plugins.bot_main import ai_gateway as gateway
 
 
 def _private_event(user_id=20001, message_id=7, self_id="10001", text="hi"):

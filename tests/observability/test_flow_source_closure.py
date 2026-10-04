@@ -19,7 +19,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -145,6 +144,6 @@ class TestEntryDiscovery:
                      if c["resolution"] == "external"}
         dynamic = closure.get("boundaries", [])
         # nonebot 属于显式 boundary registry（如果出现），不标 unresolved
-        for name, info in externals.items():
+        for info in externals.values():
             assert info["resolution"] == "external"
         assert isinstance(dynamic, list)

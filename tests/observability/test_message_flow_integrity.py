@@ -330,7 +330,7 @@ class TestSpecExactBinding:
 
     def test_legacy_empty_digest_stays_unbound(self, flow_db):
         """历史行为：空 digest root 不得事后伪绑定到当前版本 spec。"""
-        root = message_flow.begin_trace(root_kind="webchat", trace_id="sp-legacy")
+        message_flow.begin_trace(root_kind="webchat", trace_id="sp-legacy")
         message_flow.flush()
         # 模拟旧数据：直接清空 digest
         conn = sqlite3.connect(flow_db)

@@ -397,8 +397,7 @@ class ProjectIndex:
             for path in sorted(base.rglob("*.py")):
                 rel = path.relative_to(self.root).as_posix()
                 module = rel[:-3].replace("/", ".")
-                if module.endswith(".__init__"):
-                    module = module[: -len(".__init__")]
+                module = module.removesuffix(".__init__")
                 try:
                     tree = ast.parse(path.read_text(encoding="utf-8"))
                 except (OSError, SyntaxError):
@@ -538,8 +537,7 @@ def reachable_symbols_cross(
                 if len(seen) >= cap:
                     truncated = True
                     continue
-                h_node = _find_in_ctx(index.ctx_for(f) if index.ctx_for(f)
-                                      else ctx, qual)
+                h_node = _find_in_ctx(index.ctx_for(f) or ctx, qual)
                 if h_node is None:
                     continue
                 seen[key] = {
@@ -667,9 +665,9 @@ def _file_declares_symbol(ctx: _ModuleContext, symbol: str) -> bool:
             for t in node.targets:
                 if isinstance(t, ast.Name) and t.id == symbol:
                     return True
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == symbol:
-                return True
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
+                and node.target.id == symbol:
+            return True
     return False
 
 
@@ -687,16 +685,15 @@ def _scan_entries_in_file(ctx: _ModuleContext) -> list[dict]:
                     found.append({"symbol": node.name, "kind": "lifecycle_hook",
                                   "line": getattr(node, "lineno", 0)})
                     break
-        elif isinstance(node, ast.Assign):
-            if isinstance(node.value, ast.Call):
-                name = getattr(node.value.func, "attr", "") \
-                    or getattr(node.value.func, "id", "")
-                if name in _ENTRY_PATTERN_CALLS:
-                    for t in node.targets:
-                        if isinstance(t, ast.Name):
-                            found.append({"symbol": t.id,
-                                          "kind": "matcher",
-                                          "line": getattr(node, "lineno", 0)})
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            name = getattr(node.value.func, "attr", "") \
+                or getattr(node.value.func, "id", "")
+            if name in _ENTRY_PATTERN_CALLS:
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        found.append({"symbol": t.id,
+                                      "kind": "matcher",
+                                      "line": getattr(node, "lineno", 0)})
     return found
 
 
@@ -719,7 +716,6 @@ def discovered_entries_diff(
             discovered.append({"file": rel, "symbol": hit["symbol"],
                                "kind": hit["kind"]})
     declared_set = {(f, s) for f, s in declared}
-    discovered_set = {(d["file"], d["symbol"]) for d in discovered}
     undeclared = [d for d in discovered
                   if (d["file"], d["symbol"]) not in declared_set]
     # missing = 声明锚点在源码里已不存在（文件缺失或符号消失）；声明锚点是

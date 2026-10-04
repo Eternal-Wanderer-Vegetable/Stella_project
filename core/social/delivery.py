@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from nonebot import logger
 from nonebot.exception import FinishedException

@@ -580,7 +580,7 @@ def message_io(trace_id: str) -> dict | None:
                 # 旧轨迹 legacy 兜底：群 scope 可给群号但不能推断 Bot；
                 # 私聊 scope 缺 peer/storage 键时**禁止**按时间窗猜身份
                 group_id = _legacy_group_id(scope, root_kind, conversation_kind)
-                if identity_state in ("exact",) and conversation_kind == "private":
+                if identity_state == "exact" and conversation_kind == "private":
                     notes.append("私聊旧轨迹缺存储身份：不按时间窗猜测输入")
                 else:
                     parts = (source_key or "").split(":")

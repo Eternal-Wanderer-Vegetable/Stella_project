@@ -581,7 +581,7 @@ def ensure_social_schema(
     stats: dict[str, int] = {}
     try:
         conn.execute("BEGIN IMMEDIATE")
-        for ddl in _TABLES + (_MAP_TABLE,):
+        for ddl in (*_TABLES, _MAP_TABLE):
             conn.execute(ddl)
         # 组件内增量迁移（v1→v2）：CREATE 之后、索引之前
         _migrate_social_v2(conn)
