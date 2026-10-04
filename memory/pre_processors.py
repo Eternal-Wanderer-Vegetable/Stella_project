@@ -38,7 +38,9 @@ from memory.retriever import get_group_memories, get_related_memories, get_user_
 from memory.schema import normalize_source_kind
 from memory.session_context import ensure_initialized as session_ensure_initialized
 from memory.session_context import get_summary as get_session_summary
-from memory.session_context import observe_identity_revision as session_observe_identity_revision
+from memory.session_context import (
+    observe_identity_revision as session_observe_identity_revision,
+)
 from memory.session_context import summary_version as session_summary_version
 from memory.timeutil import (
     humanize_duration,
@@ -479,10 +481,7 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
         return "", 0
 
     rel_rows = _query_tail_rows_with_relations(cursor, group_id, _TAIL_SCAN_ROW_CAP)
-    if rel_rows is None:
-        rows = _query_tail_rows(cursor, group_id, limit)
-    else:
-        rows = rel_rows
+    rows = _query_tail_rows(cursor, group_id, limit) if rel_rows is None else rel_rows
     if not rows:
         return "", 0
     rows.reverse()  # id 倒序 → 时间正序
@@ -579,7 +578,7 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
 
         total = len(unit_rows)
         is_grouped = bool(unit["logical_id"]) and total > 1
-        for idx, (mid, uid, text, kind, epoch, rel) in enumerate(unit_rows):
+        for idx, (_mid, uid, text, kind, epoch, rel) in enumerate(unit_rows):
             if is_grouped and idx > 0:
                 lines.append(f"我（同一条回复，第{idx + 1}/{total}条）: {text}")
             else:

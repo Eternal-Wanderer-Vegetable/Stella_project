@@ -223,7 +223,6 @@ def test_attribution_header_counts_into_token_budget():
         [long_mem], max_tokens=prompt_builder.estimate_tokens("喜欢" * 200) + 2,
         current_user_id=B,
     )
-    plain_tokens = prompt_builder.estimate_tokens("- " + long_mem["content"])
     # 标签有成本：同样预算下带标签版本应更早触达截断
     assert len(with_header) < len("- " + long_mem["content"]) + len(
         prompt_builder._attribution_header(long_mem, B)

@@ -11,10 +11,6 @@ over_protected（调用方 DIRECT）、不截断时与旧路径逐字节一致�
 
 from __future__ import annotations
 
-import asyncio
-
-import pytest
-
 from core.context_budget import (
     BUDGET_FORMAT_VERSION,
     ConversationPromptParts,
@@ -26,17 +22,17 @@ from core.observability.replay import replay_budget_decision
 
 
 def _parts(**kw) -> ConversationPromptParts:
-    base = dict(
-        identity_block="当前与你对话的用户 QQ 号：2002。当前发言者身份（平台稳定 ID）：用户(2002)。",
-        behavior_text="交流注意：\n- 避免对该用户进行摸头互动。",
-        time_text="现在是 2026-10-04 10:00，星期日。",
-        history_text="当前对话摘要：\n用户(2001): 昨天我们聊了部署\n最近的对话（时间正序，「我」是你自己说过的话）:\n用户(2001): 服务器又挂了\n我（回复给 用户(2001)）: 我看看",
-        profile_text="关于当前用户：\n关于用户2002的可观察特征: 常写 Python",
-        memories_text="可参考的聊天背景（每条已标注归属；只有标注为当前用户本人的条目才属于当前用户，其余只是同群其他成员或群共享背景）：\n- 其他成员的公开背景 [subject=用户(2001)]：希望被称呼为 Allets",
-        evidence_text="【刚刚查到的信息（真实数据，回答时以此为准）】\n- 明天晴",
-        current_speaker="用户(2002)",
-        current_body="那今天怎么办",
-    )
+    base = {
+        "identity_block": "当前与你对话的用户 QQ 号：2002。当前发言者身份（平台稳定 ID）：用户(2002)。",
+        "behavior_text": "交流注意：\n- 避免对该用户进行摸头互动。",
+        "time_text": "现在是 2026-10-04 10:00，星期日。",
+        "history_text": "当前对话摘要：\n用户(2001): 昨天我们聊了部署\n最近的对话（时间正序，「我」是你自己说过的话）:\n用户(2001): 服务器又挂了\n我（回复给 用户(2001)）: 我看看",
+        "profile_text": "关于当前用户：\n关于用户2002的可观察特征: 常写 Python",
+        "memories_text": "可参考的聊天背景（每条已标注归属；只有标注为当前用户本人的条目才属于当前用户，其余只是同群其他成员或群共享背景）：\n- 其他成员的公开背景 [subject=用户(2001)]：希望被称呼为 Allets",
+        "evidence_text": "【刚刚查到的信息（真实数据，回答时以此为准）】\n- 明天晴",
+        "current_speaker": "用户(2002)",
+        "current_body": "那今天怎么办",
+    }
     base.update(kw)
     return ConversationPromptParts(**base)
 
@@ -48,7 +44,6 @@ def test_no_truncation_matches_legacy_compose():
     """v2 parts 不截断时拼出的 prompt 与 _compose_prompt 逐字节一致。"""
     from memory.prompt_builder import (
         build_v2_named_sections,
-        build_v2_prompt_context,
     )
 
     sections = build_v2_named_sections(

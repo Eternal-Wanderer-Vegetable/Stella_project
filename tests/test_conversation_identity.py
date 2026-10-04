@@ -390,8 +390,8 @@ class TestOriginV2:
 
 import sqlite3 as _sqlite3
 
-from core.context import ChatContext
 import memory.conversation_identity as identity
+from core.context import ChatContext
 from memory.conversation_identity import (
     build_identity_capsule,
     get_identity_revision,
@@ -413,14 +413,14 @@ def ident_db(tmp_path, monkeypatch):
 
 
 def _msg_ctx(**kw):
-    base = dict(
-        user_id=2001, group_id=7777, msg_id=1, message="我是阿呆",
-        source_kind="AT_MENTION",
-        conversation_kind="group",
-        conversation_key="qq:10000:group:7777",
-        bot_id="10000", peer_id="7777", storage_session_id=7777,
-        recorded_row_id=42,
-    )
+    base = {
+        "user_id": 2001, "group_id": 7777, "msg_id": 1, "message": "我是阿呆",
+        "source_kind": "AT_MENTION",
+        "conversation_kind": "group",
+        "conversation_key": "qq:10000:group:7777",
+        "bot_id": "10000", "peer_id": "7777", "storage_session_id": 7777,
+        "recorded_row_id": 42,
+    }
     base.update(kw)
     return ChatContext(**base)
 
@@ -630,7 +630,7 @@ def test_preference_table_never_touched_by_claims(ident_db):
 def test_claim_transaction_atomic_on_failure(ident_db, monkeypatch):
     key = "qq:10000:group:7777"
 
-    class _Boom(Exception):
+    class _BoomError(Exception):
         pass
 
     real_connect = identity._connect
@@ -641,7 +641,7 @@ def test_claim_transaction_atomic_on_failure(ident_db, monkeypatch):
 
         def execute(self, sql, *a, **kw):
             if "INSERT INTO conversation_identity_claims" in sql:
-                raise _Boom("sqlite lock")
+                raise _BoomError("sqlite lock")
             return self._inner.execute(sql, *a, **kw)
 
         def __getattr__(self, name):

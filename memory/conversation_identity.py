@@ -25,6 +25,7 @@ source_row_id 指向该会话已入库原消息）+ conversation_identity_versio
 
 from __future__ import annotations
 
+import contextlib
 import re
 import sqlite3
 import uuid
@@ -273,10 +274,8 @@ def record_self_alias_claim(
             conn.execute("ROLLBACK")
             raise
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
     except sqlite3.OperationalError as e:
         logger.warning(f"⚠️ [Identity] 写入本人声明失败（跳过）: {e}")
         return False
@@ -419,10 +418,8 @@ def record_third_person_correction(
             conn.execute("ROLLBACK")
             raise
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
     except sqlite3.OperationalError as e:
         logger.warning(f"⚠️ [Identity] 写入纠正证据失败（跳过）: {e}")
         return False
@@ -596,7 +593,7 @@ def process_message_identity(ctx) -> None:
             source_row_id=row_id,
             evidence_excerpt=text,
         )
-    except Exception as e:  # noqa: BLE001 — hook 绝不拖垮消息链路
+    except Exception as e:
         logger.warning(f"⚠️ [Identity] 身份解析异常（跳过）: {e}")
 
 

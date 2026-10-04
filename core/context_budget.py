@@ -195,7 +195,6 @@ def fit_conversation_parts(
         - estimate_tokens(system_prompt),
     )
     notice = TRUNCATION_NOTICE + "\n"
-    notice_tokens = estimate_tokens(notice)
 
     texts = {
         "identity": parts.identity_block or "",
@@ -271,7 +270,6 @@ def fit_conversation_parts(
             dropped.append("history")
 
     # Phase 3：当前正文只裁正文（尾部保留），作者/对象字段不切
-    trimmed_body = False
     if total > budget and body:
         header_tokens = _current_t("")
         body_allowance = budget - sum(sizes.values()) - header_tokens
@@ -279,7 +277,6 @@ def fit_conversation_parts(
         if trimmed != body:
             total = total - _current_t(body) + _current_t(trimmed)
             body = trimmed
-            trimmed_body = True
             snapshot["current_body_trimmed"] = True
 
     over_protected = total > budget

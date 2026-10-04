@@ -1,6 +1,6 @@
 {
  "coverage": {
-  "closure_sites": 6720,
+  "closure_sites": 6725,
   "core_unresolved_allowed": 0,
   "declared_runtime_entries": 20,
   "derived_or_opaque": 13,
@@ -16,7 +16,7 @@
   ],
   "source_resolved": 129,
   "total_nodes": 130,
-  "unresolved_calls": 1803
+  "unresolved_calls": 1808
  },
  "edges": [
   {
@@ -3038,11 +3038,11 @@
    "label": "无后端/调用预算",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "a5096b9494e4c962",
+    "body_hash": "b4ab487616d06002",
     "features": {
      "awaits": 2,
      "branches": 16,
-     "calls": 82,
+     "calls": 83,
      "loops": 1,
      "raises": 0,
      "returns": 0,
@@ -3059,11 +3059,11 @@
    "label": "直回短路 (DIRECT)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "a5096b9494e4c962",
+    "body_hash": "b4ab487616d06002",
     "features": {
      "awaits": 2,
      "branches": 16,
-     "calls": 82,
+     "calls": 83,
      "loops": 1,
      "raises": 0,
      "returns": 0,
@@ -3080,11 +3080,11 @@
    "label": "前置钩子链",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "a5096b9494e4c962",
+    "body_hash": "b4ab487616d06002",
     "features": {
      "awaits": 2,
      "branches": 16,
-     "calls": 82,
+     "calls": 83,
      "loops": 1,
      "raises": 0,
      "returns": 0,
@@ -3101,11 +3101,11 @@
    "label": "等待更多消息 (SILENT)",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "a5096b9494e4c962",
+    "body_hash": "b4ab487616d06002",
     "features": {
      "awaits": 2,
      "branches": 16,
-     "calls": 82,
+     "calls": 83,
      "loops": 1,
      "raises": 0,
      "returns": 0,
@@ -3311,11 +3311,11 @@
    "label": "记忆分区注入",
    "lane": "prepare",
    "source_ref": {
-    "body_hash": "a5096b9494e4c962",
+    "body_hash": "b4ab487616d06002",
     "features": {
      "awaits": 2,
      "branches": 16,
-     "calls": 82,
+     "calls": 83,
      "loops": 1,
      "raises": 0,
      "returns": 0,
@@ -15453,7 +15453,7 @@
      {
       "condition": "not DB_PATH.exists()",
       "kind": "branch",
-      "line": 246
+      "line": 248
      },
      {
       "finally": false,
@@ -15461,15 +15461,15 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 248
+      "line": 250
      },
      {
       "kind": "return",
-      "line": 376
+      "line": 378
      },
      {
       "kind": "return",
-      "line": 247
+      "line": 249
      },
      {
       "finally": false,
@@ -15477,84 +15477,84 @@
        "sqlite3.OperationalError"
       ],
       "kind": "try",
-      "line": 256
+      "line": 258
      },
      {
       "condition": "getattr(ctx, 'conversation_key', '')",
       "kind": "branch",
-      "line": 283
+      "line": 285
      },
      {
       "condition": "cached is not None and time.monotonic() - cached[0] < SESSION_CONTEXT_CACHE_TTL",
       "kind": "branch",
-      "line": 306
+      "line": 308
      },
      {
       "condition": "tail_start_id > 0",
       "kind": "branch",
-      "line": 325
+      "line": 327
      },
      {
       "condition": "active_summary",
       "kind": "branch",
-      "line": 339
+      "line": 341
      },
      {
       "condition": "pending_topic and pending_topic != '无'",
       "kind": "branch",
-      "line": 344
+      "line": 346
      },
      {
       "condition": "exchanges_text",
       "kind": "branch",
-      "line": 348
+      "line": 350
      },
      {
       "condition": "session_summary",
       "kind": "branch",
-      "line": 350
+      "line": 352
      },
      {
       "condition": "tail",
       "kind": "branch",
-      "line": 352
+      "line": 354
      },
      {
       "condition": "parts",
       "kind": "branch",
-      "line": 355
+      "line": 357
      },
      {
       "condition": "len(_SESSION_CONTEXT_CACHE) > _SESSION_CONTEXT_CACHE_MAX_ENTRIES",
       "kind": "branch",
-      "line": 369
+      "line": 371
      },
      {
       "kind": "call",
-      "line": 246,
+      "line": 248,
       "resolved": "external:config.DB_PATH.exists",
       "target": "DB_PATH.exists"
      },
      {
       "kind": "call",
-      "line": 249,
+      "line": 251,
       "resolved": "external:sqlite3.sqlite3.connect",
       "target": "sqlite3.connect"
      },
      {
       "kind": "call",
-      "line": 250,
+      "line": 252,
       "resolved": "unresolved",
       "target": "conn.cursor"
      },
      {
       "condition": "row",
       "kind": "branch",
-      "line": 263
+      "line": 265
      },
      {
       "kind": "call",
-      "line": 283,
+      "line": 285,
       "resolved": "unresolved",
       "target": "getattr"
      },
@@ -15564,155 +15564,149 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 284
+      "line": 286
      },
      {
       "kind": "call",
-      "line": 290,
+      "line": 292,
       "resolved": "external:memory.session_context",
       "target": "session_observe_identity_revision"
      },
      {
       "kind": "call",
-      "line": 305,
+      "line": 307,
       "resolved": "unresolved",
       "target": "_SESSION_CONTEXT_CACHE.get"
      },
      {
       "condition": "cached[1]",
       "kind": "branch",
-      "line": 310
+      "line": 312
      },
      {
       "kind": "return",
-      "line": 317
+      "line": 319
      },
      {
       "kind": "call",
-      "line": 320,
+      "line": 322,
       "resolved": "local:_fetch_recent_tail",
       "target": "_fetch_recent_tail"
      },
      {
       "kind": "call",
-      "line": 327,
+      "line": 329,
       "resolved": "external:memory.session_context",
       "target": "get_session_summary"
      },
      {
       "condition": "tail",
       "kind": "branch",
-      "line": 334
+      "line": 336
      },
      {
       "kind": "call",
-      "line": 336,
+      "line": 338,
       "resolved": "unresolved",
       "target": "conn.close"
      },
      {
       "condition": "summary_age",
       "kind": "branch",
-      "line": 340
+      "line": 342
      },
      {
       "iterate": "list(_SESSION_CONTEXT_CACHE)[:len(_SESSION_CONTEXT_CACHE) - _SESSION_CONTEXT_CACHE_MAX_ENTRIES]",
       "kind": "loop",
-      "line": 370
+      "line": 372
      },
      {
       "kind": "call",
-      "line": 257,
+      "line": 259,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
       "kind": "call",
-      "line": 262,
+      "line": 264,
       "resolved": "unresolved",
       "target": "cursor.fetchone"
      },
      {
       "condition": "elapsed is not None and SHORT_TERM_SUMMARY_STALE_MINUTES > 0 and (elapsed > SHORT_TERM_SUMMARY_STALE_MINUTES * 60.0)",
       "kind": "branch",
-      "line": 269
+      "line": 271
      },
      {
       "kind": "call",
-      "line": 290,
+      "line": 292,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
      },
      {
       "kind": "call",
-      "line": 292,
+      "line": 294,
       "resolved": "local:_max_message_id",
       "target": "_max_message_id"
      },
      {
       "kind": "call",
-      "line": 294,
+      "line": 296,
       "resolved": "external:memory.session_context",
       "target": "session_summary_version"
      },
      {
       "kind": "call",
-      "line": 299,
+      "line": 301,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 300,
+      "line": 302,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 307,
+      "line": 309,
       "resolved": "unresolved",
       "target": "conn.close"
      },
      {
       "kind": "call",
-      "line": 313,
+      "line": 315,
       "resolved": "external:nonebot.logger.debug",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 320,
+      "line": 322,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
      },
      {
       "kind": "call",
-      "line": 326,
+      "line": 328,
       "resolved": "external:memory.session_context",
       "target": "session_ensure_initialized"
      },
      {
       "kind": "call",
-      "line": 327,
+      "line": 329,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
      },
      {
       "kind": "call",
-      "line": 334,
+      "line": 336,
       "resolved": "local:_fetch_recent_exchanges_text",
       "target": "_fetch_recent_exchanges_text"
      },
      {
       "condition": "summary_age",
       "kind": "branch",
-      "line": 346
-     },
-     {
-      "kind": "call",
-      "line": 347,
-      "resolved": "unresolved",
-      "target": "parts.append"
+      "line": 348
      },
      {
       "kind": "call",
@@ -15734,67 +15728,67 @@
      },
      {
       "kind": "call",
-      "line": 356,
+      "line": 355,
+      "resolved": "unresolved",
+      "target": "parts.append"
+     },
+     {
+      "kind": "call",
+      "line": 358,
       "resolved": "unresolved",
       "target": "'\\n'.join"
      },
      {
       "kind": "call",
-      "line": 357,
+      "line": 359,
       "resolved": "external:nonebot.logger.info",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 365,
+      "line": 367,
       "resolved": "external:time.time.monotonic",
       "target": "time.monotonic"
      },
      {
       "kind": "call",
-      "line": 366,
+      "line": 368,
       "resolved": "unresolved",
       "target": "'\\n'.join"
      },
      {
       "kind": "call",
-      "line": 369,
+      "line": 371,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 375,
+      "line": 377,
       "resolved": "external:nonebot.logger.warning",
       "target": "logger.warning"
      },
      {
       "condition": "len(row) > 2",
       "kind": "branch",
-      "line": 265
+      "line": 267
      },
      {
       "condition": "len(row) > 2",
       "kind": "branch",
-      "line": 268
+      "line": 270
      },
      {
       "kind": "call",
-      "line": 277,
+      "line": 279,
       "resolved": "external:memory.timeutil",
       "target": "log_sqlite_error"
      },
      {
       "kind": "call",
-      "line": 287,
+      "line": 289,
       "resolved": "external:memory.conversation_identity",
       "target": "get_identity_revision"
-     },
-     {
-      "kind": "call",
-      "line": 292,
-      "resolved": "unresolved",
-      "target": "ctx.storage_key"
      },
      {
       "kind": "call",
@@ -15804,7 +15798,7 @@
      },
      {
       "kind": "call",
-      "line": 300,
+      "line": 296,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
      },
@@ -15812,25 +15806,25 @@
       "kind": "call",
       "line": 302,
       "resolved": "unresolved",
+      "target": "ctx.storage_key"
+     },
+     {
+      "kind": "call",
+      "line": 304,
+      "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 326,
+      "line": 328,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
      },
      {
       "kind": "call",
-      "line": 334,
+      "line": 336,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
-     },
-     {
-      "kind": "call",
-      "line": 341,
-      "resolved": "unresolved",
-      "target": "parts.append"
      },
      {
       "kind": "call",
@@ -15840,99 +15834,105 @@
      },
      {
       "kind": "call",
-      "line": 370,
+      "line": 345,
+      "resolved": "unresolved",
+      "target": "parts.append"
+     },
+     {
+      "kind": "call",
+      "line": 372,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "kind": "call",
-      "line": 373,
+      "line": 375,
       "resolved": "unresolved",
       "target": "_SESSION_CONTEXT_CACHE.pop"
      },
      {
       "kind": "call",
-      "line": 260,
+      "line": 262,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 268,
+      "line": 270,
       "resolved": "external:memory.timeutil",
       "target": "seconds_since"
      },
      {
       "kind": "call",
-      "line": 274,
+      "line": 276,
       "resolved": "external:memory.timeutil",
       "target": "humanize_duration"
      },
      {
       "kind": "call",
-      "line": 287,
+      "line": 289,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 306,
+      "line": 308,
       "resolved": "external:time.time.monotonic",
       "target": "time.monotonic"
      },
      {
       "kind": "call",
-      "line": 260,
+      "line": 262,
       "resolved": "unresolved",
       "target": "ctx.storage_key"
      },
      {
       "kind": "call",
-      "line": 265,
+      "line": 267,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 268,
+      "line": 270,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "condition": "summary_age",
       "kind": "branch",
-      "line": 358
+      "line": 360
      },
      {
       "condition": "tail",
       "kind": "branch",
-      "line": 359
+      "line": 361
      },
      {
       "condition": "session_summary",
       "kind": "branch",
-      "line": 360
+      "line": 362
      },
      {
       "kind": "call",
-      "line": 371,
+      "line": 373,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "condition": "active_summary",
       "kind": "branch",
-      "line": 358
+      "line": 360
      },
      {
       "kind": "call",
-      "line": 359,
+      "line": 361,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 359,
+      "line": 361,
       "resolved": "unresolved",
       "target": "tail.splitlines"
      }
@@ -18893,17 +18893,11 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 126
+      "line": 128
      },
      {
       "kind": "return",
-      "line": 186
-     },
-     {
-      "async": false,
-      "context": "contextlib.suppress(sqlite3.OperationalError)",
-      "kind": "with",
-      "line": 132
+      "line": 188
      },
      {
       "async": false,
@@ -18912,80 +18906,74 @@
       "line": 134
      },
      {
-      "iterate": "_ENVELOPE_COLUMNS",
-      "kind": "loop",
+      "async": false,
+      "context": "contextlib.suppress(sqlite3.OperationalError)",
+      "kind": "with",
       "line": 136
      },
      {
+      "iterate": "_ENVELOPE_COLUMNS",
+      "kind": "loop",
+      "line": 138
+     },
+     {
       "kind": "call",
-      "line": 127,
+      "line": 129,
       "resolved": "external:sqlite3.sqlite3.connect",
       "target": "sqlite3.connect"
      },
      {
       "kind": "call",
-      "line": 128,
+      "line": 130,
       "resolved": "unresolved",
       "target": "conn.cursor"
      },
      {
       "kind": "call",
-      "line": 129,
+      "line": 131,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
       "condition": "not _has_column(cursor, 'group_messages', column)",
       "kind": "branch",
-      "line": 137
+      "line": 139
      },
      {
       "kind": "call",
-      "line": 143,
+      "line": 145,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
       "kind": "call",
-      "line": 152,
+      "line": 154,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
       "kind": "call",
-      "line": 156,
+      "line": 158,
       "resolved": "unresolved",
       "target": "cursor.execute"
-     },
-     {
-      "kind": "call",
-      "line": 181,
-      "resolved": "unresolved",
-      "target": "int"
-     },
-     {
-      "kind": "call",
-      "line": 182,
-      "resolved": "unresolved",
-      "target": "conn.commit"
      },
      {
       "kind": "call",
       "line": 183,
       "resolved": "unresolved",
-      "target": "conn.close"
+      "target": "int"
      },
      {
       "kind": "call",
-      "line": 132,
-      "resolved": "external:contextlib.contextlib.suppress",
-      "target": "contextlib.suppress"
-     },
-     {
-      "kind": "call",
-      "line": 133,
+      "line": 184,
       "resolved": "unresolved",
-      "target": "cursor.execute"
+      "target": "conn.commit"
+     },
+     {
+      "kind": "call",
+      "line": 185,
+      "resolved": "unresolved",
+      "target": "conn.close"
      },
      {
       "kind": "call",
@@ -19000,154 +18988,154 @@
       "target": "cursor.execute"
      },
      {
-      "async": false,
-      "context": "contextlib.suppress(sqlite3.OperationalError)",
-      "kind": "with",
-      "line": 138
-     },
-     {
       "kind": "call",
-      "line": 185,
-      "resolved": "external:nonebot.logger.error",
-      "target": "logger.error"
-     },
-     {
-      "kind": "call",
-      "line": 137,
-      "resolved": "local:_has_column",
-      "target": "_has_column"
-     },
-     {
-      "kind": "call",
-      "line": 166,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 166,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 167,
-      "resolved": "external:memory.schema",
-      "target": "normalize_source_kind"
-     },
-     {
-      "kind": "call",
-      "line": 167,
-      "resolved": "unresolved",
-      "target": "int"
-     },
-     {
-      "kind": "call",
-      "line": 168,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 169,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 170,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 171,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 172,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 173,
-      "resolved": "external:json.json.dumps",
-      "target": "json.dumps"
-     },
-     {
-      "kind": "call",
-      "line": 174,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 175,
-      "resolved": "unresolved",
-      "target": "int"
-     },
-     {
-      "kind": "call",
-      "line": 176,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 177,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 178,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 179,
-      "resolved": "unresolved",
-      "target": "int"
-     },
-     {
-      "kind": "call",
-      "line": 138,
+      "line": 136,
       "resolved": "external:contextlib.contextlib.suppress",
       "target": "contextlib.suppress"
      },
      {
       "kind": "call",
-      "line": 139,
+      "line": 137,
       "resolved": "unresolved",
       "target": "cursor.execute"
      },
      {
-      "kind": "call",
-      "line": 166,
-      "resolved": "unresolved",
-      "target": "ctx.storage_key"
+      "async": false,
+      "context": "contextlib.suppress(sqlite3.OperationalError)",
+      "kind": "with",
+      "line": 140
      },
      {
       "kind": "call",
-      "line": 173,
-      "resolved": "unresolved",
-      "target": "list"
+      "line": 187,
+      "resolved": "external:nonebot.logger.error",
+      "target": "logger.error"
+     },
+     {
+      "kind": "call",
+      "line": 139,
+      "resolved": "local:_has_column",
+      "target": "_has_column"
      },
      {
       "kind": "call",
       "line": 168,
       "resolved": "unresolved",
-      "target": "getattr"
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 168,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 169,
+      "resolved": "external:memory.schema",
+      "target": "normalize_source_kind"
      },
      {
       "kind": "call",
       "line": 169,
       "resolved": "unresolved",
-      "target": "getattr"
+      "target": "int"
+     },
+     {
+      "kind": "call",
+      "line": 170,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 171,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 172,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 173,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 174,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 175,
+      "resolved": "external:json.json.dumps",
+      "target": "json.dumps"
+     },
+     {
+      "kind": "call",
+      "line": 176,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 177,
+      "resolved": "unresolved",
+      "target": "int"
+     },
+     {
+      "kind": "call",
+      "line": 178,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 179,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 180,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 181,
+      "resolved": "unresolved",
+      "target": "int"
+     },
+     {
+      "kind": "call",
+      "line": 140,
+      "resolved": "external:contextlib.contextlib.suppress",
+      "target": "contextlib.suppress"
+     },
+     {
+      "kind": "call",
+      "line": 141,
+      "resolved": "unresolved",
+      "target": "cursor.execute"
+     },
+     {
+      "kind": "call",
+      "line": 168,
+      "resolved": "unresolved",
+      "target": "ctx.storage_key"
+     },
+     {
+      "kind": "call",
+      "line": 175,
+      "resolved": "unresolved",
+      "target": "list"
      },
      {
       "kind": "call",
@@ -19169,13 +19157,13 @@
      },
      {
       "kind": "call",
-      "line": 174,
+      "line": 173,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 175,
+      "line": 174,
       "resolved": "unresolved",
       "target": "getattr"
      },
@@ -19205,7 +19193,19 @@
      },
      {
       "kind": "call",
-      "line": 173,
+      "line": 180,
+      "resolved": "unresolved",
+      "target": "getattr"
+     },
+     {
+      "kind": "call",
+      "line": 181,
+      "resolved": "unresolved",
+      "target": "getattr"
+     },
+     {
+      "kind": "call",
+      "line": 175,
       "resolved": "unresolved",
       "target": "getattr"
      }
@@ -29146,7 +29146,7 @@
     "counts": {
      "await": 2,
      "branch": 16,
-     "call": 82,
+     "call": 83,
      "loop": 1,
      "return": 6,
      "try": 3,
@@ -29674,6 +29674,12 @@
       "line": 530,
       "resolved": "unresolved",
       "target": "budget_snapshot.get"
+     },
+     {
+      "kind": "call",
+      "line": 536,
+      "resolved": "unresolved",
+      "target": "dict"
      },
      {
       "condition": "ctx.user_id",
@@ -29837,7 +29843,7 @@
     "counts": {
      "await": 2,
      "branch": 16,
-     "call": 82,
+     "call": 83,
      "loop": 1,
      "return": 6,
      "try": 3,
@@ -30365,6 +30371,12 @@
       "line": 530,
       "resolved": "unresolved",
       "target": "budget_snapshot.get"
+     },
+     {
+      "kind": "call",
+      "line": 536,
+      "resolved": "unresolved",
+      "target": "dict"
      },
      {
       "condition": "ctx.user_id",
@@ -30528,7 +30540,7 @@
     "counts": {
      "await": 2,
      "branch": 16,
-     "call": 82,
+     "call": 83,
      "loop": 1,
      "return": 6,
      "try": 3,
@@ -31056,6 +31068,12 @@
       "line": 530,
       "resolved": "unresolved",
       "target": "budget_snapshot.get"
+     },
+     {
+      "kind": "call",
+      "line": 536,
+      "resolved": "unresolved",
+      "target": "dict"
      },
      {
       "condition": "ctx.user_id",
@@ -31219,7 +31237,7 @@
     "counts": {
      "await": 2,
      "branch": 16,
-     "call": 82,
+     "call": 83,
      "loop": 1,
      "return": 6,
      "try": 3,
@@ -31747,6 +31765,12 @@
       "line": 530,
       "resolved": "unresolved",
       "target": "budget_snapshot.get"
+     },
+     {
+      "kind": "call",
+      "line": 536,
+      "resolved": "unresolved",
+      "target": "dict"
      },
      {
       "condition": "ctx.user_id",
@@ -33630,7 +33654,7 @@
     "counts": {
      "await": 2,
      "branch": 16,
-     "call": 82,
+     "call": 83,
      "loop": 1,
      "return": 6,
      "try": 3,
@@ -34158,6 +34182,12 @@
       "line": 530,
       "resolved": "unresolved",
       "target": "budget_snapshot.get"
+     },
+     {
+      "kind": "call",
+      "line": 536,
+      "resolved": "unresolved",
+      "target": "dict"
      },
      {
       "condition": "ctx.user_id",
@@ -45624,6 +45654,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "d77bee29acdd25f0532f9f4f1ce85b518657aee4",
+ "source_revision": "5ada13b00ae57edd547d3f449948aadba22adf90",
  "topology_version": "2026.10.03"
 }

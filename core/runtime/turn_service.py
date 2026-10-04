@@ -533,7 +533,7 @@ class TurnService:
                 # v2 冻结回放输入（计划 §6.5）：分节原文随 detailed 档冻结，
                 # 离线重放不查当前库、不依赖 TTL；仅 detailed 开启时收集。
                 detailed["parts_input"] = {
-                    **{n: t for n, t in v2_sections},
+                    **dict(v2_sections),
                     "evidence_text": evidence_text,
                     "current_speaker": f"用户({ctx.user_id})" if ctx.user_id else "对方",
                     "current_body": ctx.message,

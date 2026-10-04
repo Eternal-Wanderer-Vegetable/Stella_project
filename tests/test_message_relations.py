@@ -40,18 +40,18 @@ def msg_db(tmp_path, monkeypatch):
 
 
 def _ctx(**kw) -> ChatContext:
-    base = dict(
-        user_id=int(B),
-        group_id=GROUP,
-        msg_id=555,
-        message="阿呆是我",
-        source_kind="AT_MENTION",
-        conversation_kind="group",
-        conversation_key=KEY,
-        bot_id=BOT,
-        peer_id=str(GROUP),
-        storage_session_id=GROUP,
-    )
+    base = {
+        "user_id": int(B),
+        "group_id": GROUP,
+        "msg_id": 555,
+        "message": "阿呆是我",
+        "source_kind": "AT_MENTION",
+        "conversation_kind": "group",
+        "conversation_key": KEY,
+        "bot_id": BOT,
+        "peer_id": str(GROUP),
+        "storage_session_id": GROUP,
+    }
     base.update(kw)
     return ChatContext(**base)
 
