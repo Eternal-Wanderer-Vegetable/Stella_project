@@ -139,7 +139,9 @@ def _stable_dump(node: ast.AST) -> str:
         return "(" + ",".join(parts) + ")"
     if isinstance(node, list):
         return "[" + ",".join(_stable_dump(v) for v in node) + "]"
-    return f"{type(node).__name__}:{node!r}"
+    # ascii() 而非 repr()：字符串常量的转义不随解释器内置 Unicode 版本变化
+    # （U+9FFF 在 Unicode 14 才分配，3.10 的 repr 转义、3.14 的 repr 直出）
+    return f"{type(node).__name__}:{node!a}"
 
 
 def body_hash(node: ast.AST) -> str:
@@ -242,7 +244,7 @@ def closure_of(func_node: ast.AST, ctx: _ModuleContext,
     for sub in ast.walk(func_node):
         if isinstance(sub, ast.Call):
             try:
-                target = ast.unparse(sub.func)
+                target = _ascii_safe(ast.unparse(sub.func))
             except Exception:
                 target = "<complex>"
             resolved = (index.resolve_target(ctx, target, class_name_holder)
@@ -298,11 +300,17 @@ def closure_of(func_node: ast.AST, ctx: _ModuleContext,
     }
 
 
+def _ascii_safe(text: str) -> str:
+    r"""非 ASCII 统一 \uXXXX 转义：ast.unparse 的字符串转义随内置 Unicode
+    版本变化（同 _stable_dump 叶子的 repr 问题），哈希前先归一。"""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
 def _safe_unparse(node: ast.AST | None) -> str:
     if node is None:
         return ""
     try:
-        return ast.unparse(node)
+        return _ascii_safe(ast.unparse(node))
     except Exception:
         return "<complex>"
 
@@ -519,7 +527,7 @@ def reachable_symbols_cross(
             if not isinstance(sub, ast.Call):
                 continue
             try:
-                target = ast.unparse(sub.func)
+                target = _ascii_safe(ast.unparse(sub.func))
             except Exception:
                 continue
             resolved = index.resolve_target(ctx, target, class_name)
@@ -588,7 +596,7 @@ def analyze_project_closure(
                 if not isinstance(sub, ast.Call):
                     continue
                 try:
-                    target = ast.unparse(sub.func)
+                    target = _ascii_safe(ast.unparse(sub.func))
                 except Exception:
                     continue
                 resolved = index.resolve_target(ctx, target, class_name)
