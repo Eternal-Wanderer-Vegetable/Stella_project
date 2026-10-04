@@ -7,9 +7,10 @@
 >
 > **执行记录（2026-10-04）**：
 > - A 组全绿（全量 3392 passed ×2、ruff 全仓干净、manifest 门禁、detect-changes 无 partial/truncated）。
-> - B1 完成：生产库**副本** v15→v16 dry-run 干净（0 行改动、加列/索引 14 项、五表行数守恒、信封列就绪）。校验器两类报警均为**非 v16 问题**：空间名报警是隔离临时目录缺账本所致（真实账本含 space_1/space_2）；FTS 漂移在未迁移的 v15 副本上即存在（19 行，存量问题，10-03 记录为 12 行后自然增长，建议单列修复）。
+> - B 组全部完成（B1–B4，见下）；F1 完成：两轮测量总 p95 增量 **+2.51 / +2.55ms**，远低于 ≤20ms 门槛。
 > - **运行时冒烟（重启）**：旧进程（PID 19992，run6）已终止，新进程 PID 46184 于 10:34 启动；生产库自动迁移 v15→v16 成功（迁移前自动备份 `agent_memory.db.pre-v16-20261004-103415.bak`）；8080 起服、OneBot Bot 1694717255 已连接；带白群新消息已带 v16 信封落库（conversation_key + relation_version=1，无关系字段为空 = unknown 语义正确）。
 > - **native 后端注意**：bot 跑在 conda stella（py3.10）可加载 cp310 `.pyd`，但 pyd 仍是 schema 15 合同——首次检索时会因 15≠16 被拒并**回退 Python 后端**（预期，见 C1）。日志当前无 backend 告警是因为检索尚未触发（懒加载）。
+> - **B1 校验器报警甄别**：空间名报警是隔离临时目录缺账本所致（真实账本含 space_1/space_2）；FTS 漂移在未迁移的 v15 副本上即存在（19 行，存量问题，10-03 记录为 12 行后自然增长，建议单列修复）。
 
 ---
 
@@ -31,9 +32,15 @@
 
 - [x] B1 生产库副本 dry-run：sqlite backup API 拷贝 → 隔离 STELLA_HOME 迁移。
   实际：v15→v16 成功，changed_rows=0、additive=14、group_messages 2554/memories 1136/candidates 1421/atomic_facts 2/user_profiles 48 全部守恒，信封列与身份两表就绪。
-- [ ] B2 副本真实升级后功能抽测：对升级后副本跑一轮检索/tail 组装，确认信封列与 FTS 行为。
-- [ ] B3 回退演练：切回 038e419 代码 + v16 库启动/跑测试（additive 生效，旧代码照常运行）。
-- [ ] B4 双进程约束：演练期间确认新旧进程不共享可写会话库。
+- [x] B2 升级后副本功能抽测（生产库 v16 实拷贝）：幂等 `ensure_v2_schema`→False（不重复迁移）；
+  `build_context` 正常（short_term 561 字、tail_start_id=35536，重启后暂无 BOT_SELF 行故无「我：」渲染，逻辑有测试覆盖）；
+  `retrieve_memories` 5 条候选**全带 owner 字段**、scope=PERSON（主体=真实 sender）；FTS 1137 行、版本 16；
+  身份面 revision=0 / alias=''（空声明零异常）。
+- [x] B3 回退演练（git worktree @ 516f79f 旧代码 × 生产库 v16 实拷贝）：旧 `ensure_v2_schema`→False 且版本保持 16
+  （不降级、不回写）；旧 `record_message` 插入 v16 表成功（信封列取默认 NULL/0/'[]'）；旧 `build_context`、
+  `retrieve_memories`（13 列、无 owner 键）、`fetch_pending_messages`（50 条）全链路可运行。**结论：回退应用+v16 库可正常运行。**
+- [x] B4 双进程约束：演练全程探针只读写独立临时副本（B3 插入的 msg_id=990001 仅存在于副本），生产库仅由 bot
+  进程（PID 46184）写入（行数 2554→2633 全部来自真实流量），bot 全程存活。**运维规则不变：真实回退时先停新进程再起旧进程。**
 
 ## C. native 双后端 —— **待测试（环境阻塞）**
 
@@ -70,10 +77,22 @@
 - [ ] E8 SOCIAL_ENABLED=false 时发带 reply/@ 消息（T11）：主历史关系照常入库。
 - [ ] E9 私聊路径回归：上一分支 C1–C6 结论不倒退（含短结果直发全文）。
 
-## F. 性能门槛（本机可执行，待执行）
+## F. 性能门槛（已执行 ✅）
 
-- [ ] F1 preprocess+compose+budget p50/p95：同一 fixture 库，基线（a470ce5^）与当前各测一轮（不含 LLM）。
-  期望：p95 增加 ≤20ms；超标先合并查询/利用 revision 缓存，不得删归属头换速度。
+- [x] F1 preprocess（record_message + build_context + build_user_context）+ compose+budget p50/p95：
+  同一 v16 夹具（220 消息含 10×2 BOT_SELF 逻辑单元 + 42 记忆 + FTS）、隔离副本、N=120/轮、不含 LLM，
+  基线=516f79f（generic 预算路径）vs 当前=HEAD（parts 预算路径），共两轮：
+
+  | 阶段 | 基线 p50/p95 (ms) | 当前 p50/p95 (ms) | Δp95 |
+  | --- | --- | --- | --- |
+  | record | 2.97 / 4.11 | 3.36 / 4.45 | +0.34 |
+  | context(tail) | 1.25 / 1.64 | 1.87 / 2.55 | +0.91 |
+  | userctx(检索) | 2.63 / 3.24 | 3.53 / 4.34 | +1.10 |
+  | budget | 0.16 / 0.26 | 0.21 / 0.33 | +0.07 |
+  | **总 pipeline** | 7.10 / 8.40（次轮 8.08） | 9.07 / 10.91（次轮 10.63） | **+2.51 / +2.55** |
+
+  **结论：总 p95 增量 ≈ +2.5ms，远低于 ≤20ms 门槛。** 增量来源符合预期：tail 关系列查询（48 行×11 列 vs 12 行×5 列）、
+  身份 capsule 的 2–3 个小 SELECT、检索 owner 呈现列、record 17 列插入。budget 阶段（结构化 parts）本身仅 +0.07ms。
 
 ---
 
