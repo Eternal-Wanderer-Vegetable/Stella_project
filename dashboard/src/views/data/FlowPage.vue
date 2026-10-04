@@ -13,6 +13,9 @@ import {
   edgePath,
   layoutExecuted,
   layoutLayered,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  zoomAround,
   type LaidEdge,
   type LaidNode,
 } from '@/views/data/flowLayout';
@@ -105,6 +108,79 @@ const card = ref<{ nodeId: string; x: number; y: number } | null>(null);
 const morphing = ref(false);
 let morphTimer: ReturnType<typeof setTimeout> | null = null;
 
+// 画布平移/缩放（外观反馈 2）：右键按住拖拽平移、滚轮以光标为锚缩放。
+// transform 只作用于 <svg> 视觉层，节点坐标/详情卡锚点仍在容器屏幕空间。
+const viewX = ref(0);
+const viewY = ref(0);
+const viewScale = ref(1);
+const panning = ref(false);
+let panStart: { x: number; y: number; vx: number; vy: number } | null = null;
+
+function onCanvasMouseDown(e: MouseEvent) {
+  if (e.button !== 2) return; // 仅右键拖拽；左键保留给节点选择
+  if ((e.target as HTMLElement | null)?.closest('.flow-card')) return;
+  e.preventDefault();
+  panStart = { x: e.clientX, y: e.clientY, vx: viewX.value, vy: viewY.value };
+  panning.value = true;
+  window.addEventListener('mousemove', onCanvasPanMove);
+  window.addEventListener('mouseup', onCanvasPanUp);
+}
+
+function onCanvasPanMove(e: MouseEvent) {
+  if (!panStart) return;
+  viewX.value = panStart.vx + (e.clientX - panStart.x);
+  viewY.value = panStart.vy + (e.clientY - panStart.y);
+}
+
+function onCanvasPanUp() {
+  panStart = null;
+  panning.value = false;
+  window.removeEventListener('mousemove', onCanvasPanMove);
+  window.removeEventListener('mouseup', onCanvasPanUp);
+}
+
+function onCanvasWheel(e: WheelEvent) {
+  // 悬浮详情卡内部保留原生滚动（metrics/全文展开），不劫持缩放
+  if ((e.target as HTMLElement | null)?.closest('.flow-card')) return;
+  const rect = canvasEl.value?.getBoundingClientRect();
+  if (!rect) return;
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  const next = zoomAround(
+    { x: viewX.value, y: viewY.value, scale: viewScale.value },
+    e.clientX - rect.left,
+    e.clientY - rect.top,
+    factor,
+  );
+  viewX.value = next.x;
+  viewY.value = next.y;
+  viewScale.value = next.scale;
+}
+
+function zoomStep(factor: number) {
+  const rect = canvasEl.value?.getBoundingClientRect();
+  const cx = (rect?.width ?? 800) / 2;
+  const cy = (rect?.height ?? 480) / 2;
+  const next = zoomAround(
+    { x: viewX.value, y: viewY.value, scale: viewScale.value },
+    cx, cy, factor,
+  );
+  viewX.value = next.x;
+  viewY.value = next.y;
+  viewScale.value = next.scale;
+}
+
+function resetView() {
+  viewX.value = 0;
+  viewY.value = 0;
+  viewScale.value = 1;
+}
+
+// 缩放越界兜底（zoomStep/zoomAround 已钳制，这里保证外部赋值也安全）
+watch(viewScale, (s) => {
+  if (s < ZOOM_MIN) viewScale.value = ZOOM_MIN;
+  else if (s > ZOOM_MAX) viewScale.value = ZOOM_MAX;
+});
+
 // O09 生命周期：页面隐藏停 SSE、恢复补读重连；列表轮询随页面挂载/卸载
 function onVisibility() {
   store.onVisibilityChange();
@@ -122,6 +198,7 @@ onBeforeUnmount(() => {
   store.stopStream();
   stopPlay();
   if (morphTimer) clearTimeout(morphTimer);
+  onCanvasPanUp(); // 拖拽中卸载：摘掉 window 监听
 });
 
 const laneLegend = computed<Array<{ id: string; label: string; color: string }>>(
@@ -415,10 +492,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 </script>
 
 <template>
-  <v-row dense>
+  <v-row dense class="flow-row">
     <!-- 左：消息列表 -->
-    <v-col cols="12" md="3">
-      <v-card variant="flat" :elevation="1">
+    <v-col cols="12" md="3" class="d-flex flex-column">
+      <v-card variant="flat" :elevation="1" class="flow-card-full d-flex flex-column">
         <v-card-title class="text-subtitle-1">消息</v-card-title>
         <v-card-text class="pb-0">
           <v-select
@@ -486,8 +563,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
     </v-col>
 
     <!-- 中：画布 + 播放 -->
-    <v-col cols="12" md="9">
-      <v-card variant="flat" :elevation="1">
+    <v-col cols="12" md="9" class="d-flex flex-column">
+      <v-card variant="flat" :elevation="1" class="flow-card-full d-flex flex-column">
         <v-card-text v-if="!store.detail" class="text-medium-emphasis">
           选择左侧一条消息，查看它从「开始」到「结束」经过的完整处理流程（灰色虚线节点是本次未观测到的路径——没有事实，不解释为跳过或未执行）。
         </v-card-text>
@@ -678,13 +755,49 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
           <div
             ref="canvasEl"
             class="flow-canvas"
-            :class="{ 'reduce-motion': reducedMotion }"
+            :class="{ 'reduce-motion': reducedMotion, panning }"
             @click.self="closeCard"
+            @contextmenu.prevent
+            @mousedown="onCanvasMouseDown"
+            @wheel.prevent="onCanvasWheel"
           >
+            <div class="canvas-tools">
+              <v-btn
+                icon="mdi-plus"
+                size="x-small"
+                variant="tonal"
+                title="放大"
+                @click="zoomStep(1.2)"
+              />
+              <span class="text-caption canvas-zoom-label">
+                {{ Math.round(viewScale * 100) }}%
+              </span>
+              <v-btn
+                icon="mdi-minus"
+                size="x-small"
+                variant="tonal"
+                title="缩小"
+                @click="zoomStep(1 / 1.2)"
+              />
+              <v-btn
+                icon="mdi-arrow-expand-all"
+                size="x-small"
+                variant="text"
+                title="重置视图"
+                @click="resetView"
+              />
+            </div>
+            <div class="canvas-hint text-caption text-medium-emphasis">
+              右键拖拽平移 · 滚轮缩放
+            </div>
             <svg
               :width="canvasSize.w"
               :height="canvasSize.h"
               :viewBox="`0 0 ${canvasSize.w} ${canvasSize.h}`"
+              :style="{
+                transform: `translate(${viewX}px, ${viewY}px) scale(${viewScale})`,
+                transformOrigin: '0 0',
+              }"
               role="img"
               aria-label="消息处理流程图：从开始到结束的分层流式布局"
               @click.self="closeCard"
@@ -1047,6 +1160,56 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   background:
     radial-gradient(rgba(var(--v-theme-on-surface), 0.05) 1px, transparent 1px);
   background-size: 22px 22px;
+  user-select: none;
+}
+.flow-canvas.panning {
+  cursor: grabbing;
+}
+/* 桌面端（≥md）：两卡片等高撑满视口剩余空间，底部对齐（外观反馈 1）。
+   偏移 = 顶栏 64 + 容器 padding 48 + tab 行 ~49；窄屏保持自然高度。 */
+@media (min-width: 960px) {
+  .flow-row {
+    height: calc(100vh - 165px);
+    min-height: 540px;
+  }
+  .flow-card-full {
+    height: 100%;
+    min-height: 0;
+  }
+  .flow-list {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+  }
+  .flow-canvas {
+    flex: 1 1 0;
+    min-height: 240px;
+    max-height: none;
+  }
+}
+.canvas-tools {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-surface), 0.82);
+}
+.canvas-zoom-label {
+  min-width: 38px;
+  text-align: center;
+}
+.canvas-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 14px;
+  z-index: 5;
+  opacity: 0.75;
+  pointer-events: none;
 }
 .flow-card {
   position: absolute;

@@ -283,3 +283,39 @@ describe('layoutLayered geometry', () => {
     expect(straight).toMatch(/^M \d+ \d+ L/);
   });
 });
+
+// ============================================================
+// 外观反馈 2：画布缩放锚点数学——以光标为锚缩放时该点保持原位。
+// ============================================================
+describe('zoomAround anchor math', () => {
+  it('keeps the anchored point fixed while scaling', async () => {
+    const { zoomAround } = await import('@/views/data/flowLayout');
+    const view = { x: 0, y: 0, scale: 1 };
+    // 锚点 (200, 100)：放大 1.25x 后该点仍映射到 (200, 100)
+    const next = zoomAround(view, 200, 100, 1.25);
+    expect(next.scale).toBeCloseTo(1.25);
+    // 点在视图中的位置 = p * scale + translate；缩放前后应相等
+    expect(200 * next.scale + next.x).toBeCloseTo(200);
+    expect(100 * next.scale + next.y).toBeCloseTo(100);
+  });
+
+  it('pans the view when zooming on an off-center anchor', async () => {
+    const { zoomAround } = await import('@/views/data/flowLayout');
+    const view = { x: 0, y: 0, scale: 1 };
+    const next = zoomAround(view, 0, 0, 2); // 以左上角为锚放大：无位移
+    expect(next.x).toBeCloseTo(0);
+    expect(next.y).toBeCloseTo(0);
+    expect(next.scale).toBeCloseTo(2);
+    const corner = zoomAround(view, 400, 300, 2); // 以右下区域为锚：视图反向平移
+    expect(corner.x).toBeCloseTo(-400);
+    expect(corner.y).toBeCloseTo(-300);
+  });
+
+  it('clamps scale into [ZOOM_MIN, ZOOM_MAX]', async () => {
+    const { zoomAround, ZOOM_MIN, ZOOM_MAX } = await import('@/views/data/flowLayout');
+    const tiny = zoomAround({ x: 0, y: 0, scale: 0.4 }, 0, 0, 0.01);
+    expect(tiny.scale).toBe(ZOOM_MIN);
+    const huge = zoomAround({ x: 0, y: 0, scale: 2.9 }, 0, 0, 10);
+    expect(huge.scale).toBe(ZOOM_MAX);
+  });
+});

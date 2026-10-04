@@ -410,6 +410,32 @@ export function edgeTraversed(
   });
 }
 
+/** 画布视图状态（修复计划外外观反馈：右键平移 + 滚轮缩放）。 */
+export interface ViewState {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export const ZOOM_MIN = 0.35;
+export const ZOOM_MAX = 3;
+
+/** 以画布上的一点 (px, py) 为锚缩放：该点在缩放前后保持原位。 */
+export function zoomAround(
+  view: ViewState,
+  px: number,
+  py: number,
+  factor: number,
+): ViewState {
+  const scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.scale * factor));
+  const ratio = scale / view.scale;
+  return {
+    scale,
+    x: px - (px - view.x) * ratio,
+    y: py - (py - view.y) * ratio,
+  };
+}
+
 /** 节点间的贝塞尔路径（同列为直线，跨列走曲线）。 */
 export function edgePath(a: LaidNode, b: LaidNode): string {
   const isAnchorA = a.anchor !== undefined;
