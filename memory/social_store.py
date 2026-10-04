@@ -64,6 +64,10 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
 
     ACK 后落库失败（库暂时不可写）由调用方记日志：发送成功但事实缺档，
     属于可接受的 unknown 降级，绝不能反向重发。
+
+    修复计划 §6.3：scope 非空沿用既有群存档（learning_eligible 按 QQ 群
+    scope 判定）；scope=None 但带规范会话身份的中立回执（私聊）落
+    group_id=''、learning_eligible=0 行——可查询、不进群学习。
     """
     scope = receipt.scope
     try:
@@ -73,8 +77,10 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
             conn.execute(
                 "INSERT OR IGNORE INTO social_deliveries (delivery_id, turn_id, part_index, "
                 "trace_id, epoch, platform, bot_id, group_id, status, platform_message_id, "
-                "acknowledged_at_utc, text, text_hash, created_at_utc, updated_at_utc) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "acknowledged_at_utc, text, text_hash, created_at_utc, updated_at_utc, "
+                "conversation_key, conversation_kind, peer_id, storage_session_id, "
+                "learning_eligible) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     uuid.uuid4().hex, receipt.turn_id, int(receipt.part_index),
                     receipt.trace_id, int(receipt.epoch),
@@ -84,6 +90,12 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
                     receipt.acknowledged_at_utc or None,
                     receipt.text, receipt.text_hash,
                     receipt.created_at_utc, utc_now_iso(),
+                    receipt.conversation_key or "",
+                    receipt.conversation_kind or "",
+                    receipt.peer_id or "",
+                    None if receipt.storage_session_id is None
+                    else int(receipt.storage_session_id),
+                    1 if receipt.learning_eligible else 0,
                 ),
             )
             conn.commit()
@@ -95,17 +107,39 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
         return False
 
 
-def deliveries_for_turn(turn_id: str) -> list[dict[str, Any]]:
-    """一次逻辑回复的全部片段回执（按片段序）。"""
+def deliveries_for_turn(
+    turn_id: str,
+    *,
+    platform: str | None = None,
+    group_id: str | None = None,
+    learning_eligible: bool | None = None,
+) -> list[dict[str, Any]]:
+    """一次逻辑回复的全部片段回执（按片段序）。
+
+    修复计划 §6.3：群学习/引用归因消费方必须显式传
+    ``learning_eligible=True``（可再带 platform/group_id 核对）——中立
+    私聊行永远不会出现在该口径里。
+    """
     try:
         ensure_tables()
         conn = _connect()
         try:
-            rows = conn.execute(
+            sql = (
                 "SELECT part_index, status, platform_message_id, acknowledged_at_utc, "
-                "text, text_hash FROM social_deliveries WHERE turn_id = ? ORDER BY part_index",
-                (turn_id,),
-            ).fetchall()
+                "text, text_hash FROM social_deliveries WHERE turn_id = ?"
+            )
+            params: list[Any] = [turn_id]
+            if platform is not None:
+                sql += " AND platform = ?"
+                params.append(platform)
+            if group_id is not None:
+                sql += " AND group_id = ?"
+                params.append(group_id)
+            if learning_eligible is not None:
+                sql += " AND learning_eligible = ?"
+                params.append(1 if learning_eligible else 0)
+            sql += " ORDER BY part_index"
+            rows = conn.execute(sql, params).fetchall()
             return [
                 {
                     "part_index": r[0], "status": r[1], "platform_message_id": r[2],
@@ -120,21 +154,37 @@ def deliveries_for_turn(turn_id: str) -> list[dict[str, Any]]:
         return []
 
 
-def find_delivery_by_platform_id(platform_message_id: str) -> dict[str, Any] | None:
-    """按平台消息 ID 反查回执（引用归因的锚点）。"""
+def find_delivery_by_platform_id(
+    platform_message_id: str, *, scope: ConversationScope | None = None
+) -> dict[str, Any] | None:
+    """按平台消息 ID 反查回执（引用归因的锚点）。
+
+    修复计划 §6.3 边界收紧：
+    - 不带 scope（旧仅 ID 调用）：只查学习可用群行（learning_eligible=1），
+      且歧义（同 ID 命中多行）返回 None——不猜第一行；
+    - 带 scope：只在匹配该群身份的行内查找。
+    中立私聊行永远不会被归因反查命中。
+    """
     if not platform_message_id:
         return None
     try:
         ensure_tables()
         conn = _connect()
         try:
-            row = conn.execute(
+            sql = (
                 "SELECT turn_id, part_index, platform, bot_id, group_id, status, text "
-                "FROM social_deliveries WHERE platform_message_id = ? LIMIT 1",
-                (str(platform_message_id),),
-            ).fetchone()
-            if not row:
+                "FROM social_deliveries WHERE platform_message_id = ?"
+            )
+            params: list[Any] = [str(platform_message_id)]
+            if scope is not None:
+                sql += " AND platform = ? AND bot_id = ? AND group_id = ? AND learning_eligible = 1"
+                params.extend([scope.platform, scope.bot_id, scope.group_id])
+            else:
+                sql += " AND learning_eligible = 1"
+            rows = conn.execute(sql + " LIMIT 2", params).fetchall()
+            if not rows or len(rows) > 1:
                 return None
+            row = rows[0]
             return {
                 "turn_id": row[0], "part_index": row[1], "platform": row[2],
                 "bot_id": row[3], "group_id": row[4], "status": row[5], "text": row[6],

@@ -32,7 +32,18 @@ from nonebot import logger
 
 from memory.timeutil import log_sqlite_error, utc_now
 
-SOCIAL_SCHEMA_VERSION = 1
+SOCIAL_SCHEMA_VERSION = 2
+
+# schema 2（修复计划 §6.3）：social_deliveries 追加规范会话身份与群学习
+# 资格列。保留 bot_id/platform/trace_id/turn_id/part_index 原状；旧行以
+# 可信 QQ 群字段回填 eligibility，不为缺 Bot 的行捏造 canonical key。
+_V2_DELIVERY_COLUMNS: tuple[str, ...] = (
+    "conversation_key TEXT NOT NULL DEFAULT ''",
+    "conversation_kind TEXT NOT NULL DEFAULT ''",
+    "peer_id TEXT NOT NULL DEFAULT ''",
+    "storage_session_id INTEGER",
+    "learning_eligible INTEGER NOT NULL DEFAULT 0",
+)
 
 # ---- 表清单（单事务创建；字段与索引的最小集，见计划 §6.2 表格） ----
 _TABLES = (
@@ -526,13 +537,33 @@ def import_legacy_data(conn: sqlite3.Connection, now: str) -> dict[str, int]:
 # ============================================================
 
 
+def _migrate_social_v2(conn: sqlite3.Connection) -> None:
+    """social_deliveries v1 → v2 幂等补列 + 可信旧行 eligibility 回填。
+
+    必须在 CREATE 表之后、新增列相关索引之前执行（修复计划 §6.3）。
+    回填只认可信 QQ 群字段（platform='qq' 且 group_id 非空）；中立/缺
+    Bot 行保持 eligibility=0，canonical key 不猜测。
+    """
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(social_deliveries)")}
+    if not existing:
+        return  # 新库路径：表随后由 _TABLES 建（CREATE IF NOT EXISTS 已含）
+    for col_def in _V2_DELIVERY_COLUMNS:
+        col_name = col_def.split()[0]
+        if col_name not in existing:
+            conn.execute(f"ALTER TABLE social_deliveries ADD COLUMN {col_def}")
+    conn.execute(
+        "UPDATE social_deliveries SET learning_eligible = 1 "
+        "WHERE learning_eligible = 0 AND platform = 'qq' AND group_id != ''"
+    )
+
+
 def ensure_social_schema(
     db_path: Path | str | None = None, *, backup: bool = True
 ) -> dict[str, int]:
     """幂等初始化与升级社交旁表。返回导入/跳过统计（首建时）。
 
-    单事务：建表 + 索引 + 映射表 + 旧库导入 + 版本提升，全部成功才提交；
-    中途任何异常整体回滚，组件版本保持不变。
+    单事务：建表 + 增量迁移 + 索引 + 映射表 + 旧库导入 + 版本提升，全部
+    成功才提交；中途任何异常整体回滚，组件版本保持不变。
     """
     if db_path is None:
         from config import settings
@@ -550,7 +581,11 @@ def ensure_social_schema(
     stats: dict[str, int] = {}
     try:
         conn.execute("BEGIN IMMEDIATE")
-        for ddl in _TABLES + _INDEXES + (_MAP_TABLE,):
+        for ddl in _TABLES + (_MAP_TABLE,):
+            conn.execute(ddl)
+        # 组件内增量迁移（v1→v2）：CREATE 之后、索引之前
+        _migrate_social_v2(conn)
+        for ddl in _INDEXES:
             conn.execute(ddl)
         # 旧库导入只在这台库有旧表达系统数据时才有行可导
         legacy_present = (

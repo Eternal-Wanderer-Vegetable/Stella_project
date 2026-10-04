@@ -195,6 +195,11 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
 
         if SOCIAL_ENABLED:
             scope = ConversationScope(platform="webchat", bot_id="", group_id=str(WEBCHAT_GROUP_ID))
+            # 规范身份（修复计划 §6.3）：WebChat 回执带 canonical 字段，
+            # learning_eligible=0（非 QQ 群），不进任何群归因
+            conv_key = str(getattr(ctx, "conversation_key", "") or WEBCHAT_CONV_KEY)
+            conv_kind = str(getattr(ctx, "conversation_kind", "") or "webchat")
+            conv_peer = str(getattr(ctx, "peer_id", "") or str(WEBCHAT_USER_ID))
             for i, line in enumerate(lines):
                 social_store.record_delivery(
                     DeliveryReceipt(
@@ -205,6 +210,10 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
                         text=line,
                         acknowledged_at_utc=utc_now_iso(),
                         scope=scope,
+                        conversation_key=conv_key,
+                        conversation_kind=conv_kind,
+                        peer_id=conv_peer,
+                        storage_session_id=WEBCHAT_GROUP_ID,
                     )
                 )
     else:

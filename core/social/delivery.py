@@ -106,8 +106,16 @@ async def deliver_lines(
     interval_seconds: float = 0.0,
     stop_on_failure: bool = True,
     abort_check: Callable[[], bool] | None = None,
+    receipt_conversation: Any = None,
 ) -> list[DeliveryReceipt]:
     """逐段发送并收集回执。scope 为 None 时只发送、不落库（社交总开关关闭）。
+
+    ``receipt_conversation``（修复计划 §6.3）：可选的规范会话身份
+    （:class:`core.conversation.ConversationRef` 或带
+    conversation_key/conversation_kind/peer_id/storage_session_id/bot_id
+    属性的对象）。``scope=None`` 且身份明确合法时，回执按**会话中立行**
+    落库（group_id=''、learning_eligible=0）——私聊发送事实可查，绝不进
+    群学习；scope=None 且无身份的旧调用仍完全跳过持久化（原合同保留）。
 
     ``abort_check``（计划 §6.9 层 3）：每个片段发送前调用，返回 True 表示
     本轮输出已过期（转题/撤销/静音/新直接请求）——停止后续片段并保留已
@@ -141,6 +149,7 @@ async def deliver_lines(
             _append_and_persist(
                 receipts, scope, trace_id, turn_id, epoch, i,
                 status=DELIVERY_UNKNOWN, text=line, platform_id=None, detail="cancelled",
+                receipt_conversation=receipt_conversation,
             )
             raise
         except Exception as e:
@@ -150,6 +159,7 @@ async def deliver_lines(
             _append_and_persist(
                 receipts, scope, trace_id, turn_id, epoch, i,
                 status=DELIVERY_FAILED, text=line, platform_id=None, detail=str(e)[:160],
+                receipt_conversation=receipt_conversation,
             )
             if stop_on_failure:
                 break
@@ -158,6 +168,7 @@ async def deliver_lines(
         _append_and_persist(
             receipts, scope, trace_id, turn_id, epoch, i,
             status=status, text=line, platform_id=platform_id,
+            receipt_conversation=receipt_conversation,
         )
     _trace_delivery(trace_id, turn_id, scope, receipts, started_at)
     if fctx is not None:
@@ -232,7 +243,31 @@ def _append_and_persist(
     text: str,
     platform_id: str | None,
     detail: str = "",
+    receipt_conversation: Any = None,
 ) -> DeliveryReceipt:
+    """落库三分合同（修复计划 §6.3）：见 deliver_lines 文档。
+
+    - scope 非空：沿用既有群存档（learning_eligible 由 scope 判定）；
+    - scope=None 且 receipt_conversation 提供明确合法身份：存**会话中立
+      回执**（group_id=''、learning_eligible=0），只存档不学习；
+    - scope=None 且无身份：完全跳过持久化（原合同保留）。
+
+    落库失败只记 receipt persistence unknown，不取消已确认发送、不重发。
+    """
+    conversation_key = str(getattr(receipt_conversation, "conversation_key", "") or "")
+    conversation_kind = str(getattr(receipt_conversation, "conversation_kind", "") or "")
+    peer_id = str(getattr(receipt_conversation, "peer_id", "") or "")
+    raw_storage = getattr(receipt_conversation, "storage_session_id", None)
+    try:
+        storage_session_id = int(raw_storage) if raw_storage is not None else None
+    except (TypeError, ValueError):
+        storage_session_id = None
+    if not conversation_key or not conversation_kind:
+        # 身份不完整 = 不明确合法：退回旧合同（不持久化），不猜
+        conversation_key, conversation_kind, peer_id = "", "", ""
+        storage_session_id = None
+
+    neutral = scope is None and bool(conversation_key)
     receipt = DeliveryReceipt(
         trace_id=trace_id,
         turn_id=turn_id,
@@ -243,9 +278,14 @@ def _append_and_persist(
         acknowledged_at_utc=utc_now_iso() if status == DELIVERY_ACKNOWLEDGED else "",
         text=text,
         scope=scope,
+        conversation_key=conversation_key,
+        conversation_kind=conversation_kind,
+        peer_id=peer_id,
+        storage_session_id=storage_session_id,
     )
     receipts.append(receipt)
-    if scope is not None and not social_store.record_delivery(receipt):
+    should_persist = scope is not None or neutral
+    if should_persist and not social_store.record_delivery(receipt):
         # 落库失败 = 发送成功但事实缺档（unknown 降级）：记日志，不阻塞后续片段
         logger.warning(f"[Delivery] 回执落库失败（turn={turn_id} part={part_index}）")
         # transmission 与 persistence 是两种独立事实（计划 A17）：发送已

@@ -423,38 +423,43 @@ def _window_end(started_utc: str, ended_utc: str) -> str:
     )
 
 
-def _group_id_of(scope: str, root_kind: str) -> str | None:
-    if root_kind == "webchat":
-        return "-1"
-    if scope.startswith("qq:"):
-        return scope.split(":", 1)[1]
-    return None
-
-
 def message_io(trace_id: str) -> dict | None:
     """一条轨迹的真实输入（用户消息）与输出（确认送达的回复片段）。
 
-    O02 修复后的取数合同——不再按 root_kind 白名单猜，输出优先取
-    **业务发送回执表** ``social_deliveries``（按 trace_id 精确关联，
-    acknowledged 片段带平台消息 ID），fallback 才是记忆库 BOT_SELF
-    时间窗；命令回复走 ``command.reply`` 检查点。输入按
-    (group, msg_id) 精确命中（QQ）或窗口内首条非 BOT_SELF 行（WebChat）。
-    空输出 ≠ 发送失败（notes 说明数据来源）。
+    修复计划 §6.3 取数合同：先读 trace 的规范身份列（schema 3），输入按
+    ``storage_session_id + source_message_id`` 精确命中并核对来源，绝不把
+    scope 展示键拆成 group_id（私聊 `qq:<bot>:private:<user>` 旧路径正是
+    R1 的串线根源）。私聊输出按 trace_id 关联会话中立回执（learning_
+    eligible=0，只展示不学习）。无精确身份的旧轨迹退回群号/时间窗兜底，
+    且必须标注 ``provenance=legacy_time_window``，不冒充 exact。
     """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
         return None
     try:
+        cols = _trace_columns(conn)
+        identity_cols = [c for c in ("conversation_key", "bot_id",
+                                     "conversation_kind", "peer_id",
+                                     "storage_session_id", "source_message_id",
+                                     "identity_state") if c in cols]
         row = conn.execute(
-            "SELECT root_kind, scope, source_message_key, started_utc, ended_utc "
-            "FROM message_traces WHERE trace_id = ?",
+            "SELECT root_kind, scope, source_message_key, started_utc, ended_utc"
+            + (", " + ", ".join(identity_cols) if identity_cols else "")
+            + " FROM message_traces WHERE trace_id = ?",
             (trace_id,),
         ).fetchone()
     finally:
         conn.close()
     if row is None:
         return None
-    root_kind, scope, source_key, started_utc, ended_utc = row
+    root_kind, scope, source_key, started_utc, ended_utc = row[:5]
+    identity: dict[str, object] = {}
+    if identity_cols:
+        identity = dict(zip(identity_cols, row[5:], strict=True))
+    conversation_kind = str(identity.get("conversation_kind") or "")
+    storage_session_id = identity.get("storage_session_id")
+    source_message_id = str(identity.get("source_message_id") or "")
+    identity_state = str(identity.get("identity_state") or "")
     notes: list[str] = []
     # 命令回复不经 BOT_SELF 落库，唯一的记录通道是流程事件里的
     # command.reply 检查点（发送文本摘要，≤500 字）
@@ -479,7 +484,6 @@ def message_io(trace_id: str) -> dict | None:
         command_lines = []
     started_key = _norm_key(started_utc)
     end_key = _window_end(started_utc, ended_utc)
-    group_id = _group_id_of(scope, root_kind)
 
     # ---- 输出：业务回执优先（O02——root 分类不再决定输出有无）----
     receipt_lines: list[str] = []
@@ -519,14 +523,34 @@ def message_io(trace_id: str) -> dict | None:
     inp = None
     try:
         if mem is not None:
-            if root_kind in _INPUT_ROOTS and group_id is not None:
-                if root_kind == "webchat":
-                    row_in = mem.execute(
-                        "SELECT user_id, content, msg_id FROM group_messages "
-                        "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
-                        "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
-                        (group_id, started_key),
-                    ).fetchone()
+            # ---- 输入：精确身份优先（修复计划 §6.3）----
+            if storage_session_id is not None and source_message_id:
+                row_in = _exact_input_row(
+                    mem, int(storage_session_id), source_message_id,
+                    conversation_kind)
+                if row_in is not None:
+                    inp = {"user_id": row_in[0], "content": row_in[1],
+                           "msg_id": row_in[2],
+                           "identity_state": identity_state or "exact"}
+                else:
+                    notes.append("精确身份未命中输入行（消息未持久化或已清理）")
+            elif root_kind == "webchat":
+                row_in = mem.execute(
+                    "SELECT user_id, content, msg_id FROM group_messages "
+                    "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
+                    "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
+                    ("-1", started_key),
+                ).fetchone()
+                if row_in is not None:
+                    inp = {"user_id": row_in[0], "content": row_in[1],
+                           "msg_id": row_in[2]}
+            elif (root_kind in _INPUT_ROOTS
+                  and _legacy_group_id(scope, root_kind, conversation_kind) is not None):
+                # 旧轨迹 legacy 兜底：群 scope 可给群号但不能推断 Bot；
+                # 私聊 scope 缺 peer/storage 键时**禁止**按时间窗猜身份
+                group_id = _legacy_group_id(scope, root_kind, conversation_kind)
+                if identity_state in ("exact",) and conversation_kind == "private":
+                    notes.append("私聊旧轨迹缺存储身份：不按时间窗猜测输入")
                 else:
                     parts = (source_key or "").split(":")
                     try:
@@ -540,24 +564,29 @@ def message_io(trace_id: str) -> dict | None:
                             "WHERE group_id = ? AND msg_id = ? ORDER BY id DESC LIMIT 1",
                             (group_id, msg_id),
                         ).fetchone()
-                if row_in is not None:
-                    inp = {"user_id": row_in[0], "content": row_in[1],
-                           "msg_id": row_in[2]}
+                    if row_in is not None:
+                        inp = {"user_id": row_in[0], "content": row_in[1],
+                               "msg_id": row_in[2],
+                               "identity_state": "legacy_partial"}
             elif root_kind == "proactive":
                 notes.append("主动发言：无用户输入")
 
-            if not receipt_lines and root_kind not in _BACKGROUND_ROOTS                     and group_id is not None:
-                    rows_out = mem.execute(
-                        "SELECT content FROM group_messages WHERE group_id = ? "
-                        "AND source_kind = 'BOT_SELF' AND timestamp >= ? "
-                        "AND timestamp <= ? ORDER BY id ASC LIMIT ?",
-                        (group_id, started_key, end_key, _OUTPUT_MAX_LINES + 1),
-                    ).fetchall()
-                    lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
-                    if lines:
-                        source_note = "输出取自时间窗内 BOT_SELF 行（无该轨迹的回执档案）"
-                    if len(rows_out) > _OUTPUT_MAX_LINES:
-                        notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
+            # ---- 输出兜底：仅真实群号的群轨迹走 BOT_SELF 时间窗 ----
+            fallback_group = _legacy_group_id(scope, root_kind, conversation_kind)
+            if (not receipt_lines and root_kind not in _BACKGROUND_ROOTS
+                    and fallback_group is not None):
+                rows_out = mem.execute(
+                    "SELECT content FROM group_messages WHERE group_id = ? "
+                    "AND source_kind = 'BOT_SELF' AND timestamp >= ? "
+                    "AND timestamp <= ? ORDER BY id ASC LIMIT ?",
+                    (fallback_group, started_key, end_key, _OUTPUT_MAX_LINES + 1),
+                ).fetchall()
+                lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
+                if lines:
+                    source_note = ("provenance=legacy_time_window：输出取自时间窗内 "
+                                   "BOT_SELF 行（无该轨迹的回执档案），非精确关联")
+                if len(rows_out) > _OUTPUT_MAX_LINES:
+                    notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
         else:
             notes.append("记忆库不可读，无法展示消息内容")
     finally:
@@ -581,13 +610,50 @@ def message_io(trace_id: str) -> dict | None:
         notes.append("被动消息：仅记录，不产生回复")
     if root_kind == "qq_command" and not lines:
         notes.append("该命令没有可展示的回复（未回复或发送失败）")
-    if (root_kind in ("qq_chat", "webchat") and not lines):
+    if root_kind in ("qq_chat", "qq_private", "webchat") and not lines:
         notes.append("没有确认送达的回复行（未回复或全部未送达）")
+    if root_kind == "qq_private" and inp is None and storage_session_id is None:
+        notes.append("私聊输入不可用：身份缺失（identity_state="
+                     f"{identity_state or 'missing'}）")
     return {
         "input": inp,
         "output": {"lines": lines, "count": len(lines)},
         "notes": notes,
     }
+
+
+def _exact_input_row(mem, storage_session_id: int, source_message_id: str,
+                     conversation_kind: str) -> tuple | None:
+    """按注册表存储键 + 来源消息 ID 精确取输入行（修复计划 §6.3）。
+
+    负 storage ID 是私聊注册表键（绝不当群号展示）；同会话同号消息才允许
+    DESC 取最新（重发/编辑场景），跨会话同号永远隔离。
+    """
+    try:
+        return mem.execute(
+            "SELECT user_id, content, msg_id FROM group_messages "
+            "WHERE group_id = ? AND msg_id = ? AND source_kind != 'BOT_SELF' "
+            "ORDER BY id DESC LIMIT 1",
+            (int(storage_session_id), int(source_message_id)),
+        ).fetchone()
+    except (ValueError, TypeError):
+        return None
+
+
+def _legacy_group_id(scope: str, root_kind: str,
+                     conversation_kind: str) -> str | None:
+    """旧轨迹输出兜底的群号：仅真实群（webchat 固定 -1）。
+
+    私聊的规范 scope 含两个以上冒号且 storage 键是注册表负整数——绝不把
+    `qq:<bot>:private:<user>` 拆成 group_id（R1 串线根源）。
+    """
+    if root_kind == "webchat":
+        return "-1"
+    if conversation_kind == "private":
+        return None
+    if scope.startswith("qq:") and scope.count(":") == 1:
+        return scope.split(":", 1)[1]
+    return None
 
 
 def entity_history(entity_type: str, entity_id: str, *,

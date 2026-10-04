@@ -1466,7 +1466,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-        # 第一版私聊不进群 social scope（计划 §6.8）：scope=None 只记本地事实
+        # 第一版私聊不进群 social scope（计划 §6.8）：scope=None 只记本地事实。
+        # 修复计划 §6.3：携带 ref 的明确身份 → 会话中立回执可查（不进群学习）
         scope = None
 
         async def _send_reply_segment(line: str, i: int) -> str | None:
@@ -1503,6 +1504,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            receipt_conversation=ref,
         )
         delivered = delivered_texts(receipts)
         if delivered:

@@ -137,6 +137,11 @@ class DeliveryReceipt:
 
     ``platform_message_id`` 只在平台回执里真实拿到时才有值；它是后续
     「引用归因」的强证据锚点（用户回复这条 ID → direct attribution）。
+
+    规范会话身份（修复计划 §6.3，全部 optional 默认兼容）：群回执由
+    ``scope`` 承载身份；私聊/WebChat 等无群 scope 的回执在 scope=None 时
+    携带 canonical 字段（conversation_key/kind/peer/storage），落库为
+    会话中立行（group_id=''、learning_eligible=0）——可查询、绝不进群学习。
     """
 
     trace_id: str
@@ -149,6 +154,10 @@ class DeliveryReceipt:
     text: str = ""
     text_hash: str = ""
     scope: ConversationScope | None = None
+    conversation_key: str = ""
+    conversation_kind: str = ""
+    peer_id: str = ""
+    storage_session_id: int | None = None
     created_at_utc: str = field(default_factory=utc_now_iso)
 
     def __post_init__(self) -> None:
@@ -157,6 +166,18 @@ class DeliveryReceipt:
     @property
     def delivered(self) -> bool:
         return self.status == DELIVERY_ACKNOWLEDGED
+
+    @property
+    def learning_eligible(self) -> bool:
+        """群学习可用性：仅真实 QQ 群 scope 行为 True（修复计划 §6.3）。
+
+        中立回执（scope=None）与 WebChat 等非 QQ 群 scope 一律 False。
+        """
+        return (
+            self.scope is not None
+            and self.scope.platform == "qq"
+            and bool(self.scope.group_id)
+        )
 
 
 def aggregate_delivery_status(statuses: list[str]) -> str:
