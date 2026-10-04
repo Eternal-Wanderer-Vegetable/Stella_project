@@ -78,8 +78,23 @@ def test_prompt_contains_anti_fabrication_clauses():
 
 
 def test_prompt_preserves_own_speech_clause():
-    """必须要求保留「我」的发言，否则 Bot 会忘记自己说过什么。"""
-    assert "标注「我」的是你自己说过的话" in compact.build_compact_prompt("我: 在吗")
+    """必须要求保留「我」的发言，否则 Bot 会忘记自己说过什么。
+
+    归属修复计划 §6.4： wording 覆盖旧「我:」与新「作者=Bot(...)」两种
+    渲染，且明确「回顾时写明对谁说的、不把自己的话归给用户」。
+    """
+    prompt = compact.build_compact_prompt("我: 在吗")
+    assert "「我:」或「作者=Bot(...)」开头的行是你自己说过的话" in prompt
+    assert "写明你对谁说的" in prompt and "把你的台词" in prompt
+
+
+def test_prompt_preserves_state_and_quoted_speech():
+    """条件/否定/转述保持原样，不得升级成已发生事实（归属修复计划 §6.4）。"""
+    prompt = compact.build_compact_prompt("用户(1001): 下次再乱摸我手给你冻上")
+    assert "必须保持原样" in prompt
+    for word in ("如果", "下次", "没有", "听说"):
+        assert word in prompt
+    assert "不得升级成已经发生的事实" in prompt
 
 
 def test_prompt_merges_existing_summary():
@@ -142,6 +157,89 @@ def test_fetch_skips_empty_content(db):
     assert count == 1
     assert max_id == 2          # 位置仍推进到最后一条，避免空消息卡住区间
     assert text == "用户(1001): 有内容"
+
+
+# ── G9/G10：v16 关系列同投影（归属修复计划 §6.4） ─────────────────────
+
+
+def _insert_v16(db, user_id, content, kind="PASSIVE", *, msg_id=0, logical="",
+                part=0, recipient="", origin=""):
+    """往 v16 全列表插一行（带关系信封）。"""
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO group_messages (group_id, user_id, content, source_kind,"
+        " msg_id, conversation_key, bot_id, logical_message_id, part_index,"
+        " origin_msg_id, reply_recipient_user_id, relation_version)"
+        " VALUES ('1', ?, ?, ?, ?, 'qq:5000:group:1', '5000', ?, ?, ?, ?, 1)",
+        (
+            str(user_id), content, kind, msg_id or None, logical, part,
+            origin, recipient,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _make_v16_db(tmp_path):
+    path = tmp_path / "compact_v16.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE group_messages ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT, user_id TEXT, "
+        "content TEXT, source_kind TEXT DEFAULT 'PASSIVE', "
+        "msg_id INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, "
+        "conversation_key TEXT, bot_id TEXT, sender_display_name TEXT, "
+        "reply_to_msg_id TEXT, reply_target_user_id TEXT, "
+        "mentioned_user_ids_json TEXT DEFAULT '[]', "
+        "logical_message_id TEXT, part_index INTEGER DEFAULT 0, "
+        "origin_msg_id TEXT, reply_recipient_user_id TEXT, "
+        "turn_id TEXT, relation_version INTEGER DEFAULT 0)"
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_fetch_v16_groups_unit_with_recipient(tmp_path, monkeypatch):
+    """带关系列：多气泡单元一行渲染，收件人显式；count 仍是原始行数。"""
+    db = _make_v16_db(tmp_path)
+    monkeypatch.setattr(compact, "DB_PATH", db)
+    _insert_v16(db, 1001, "摸摸")
+    _insert_v16(db, 5000, "诶？怎么啦", "BOT_SELF", msg_id=-558868042,
+                logical="u1", part=0, recipient="1001", origin="-1337665775")
+    _insert_v16(db, 5000, "不许摸我", "BOT_SELF", msg_id=-558868043,
+                logical="u1", part=1, recipient="1001", origin="-1337665775")
+
+    text, max_id, count = compact.fetch_pending_messages(1, 0, 999, limit=100)
+    assert count == 3            # 原始非空行数，不因合组变 2
+    assert max_id == 3
+    unit = next(line for line in text.splitlines() if "作者=Bot(" in line)
+    assert unit.startswith("[作者=Bot(5000); 回复给=用户(1001); 原输入=-1337665775]")
+    assert "诶？怎么啦" in unit and "不许摸我" in unit  # 两气泡一行
+    assert "[作者=用户(1001)] 说过: " in text
+
+
+def test_fetch_v16_batch_split_keeps_each_segment_self_contained(tmp_path, monkeypatch):
+    """批次切在逻辑单元中间：每段仍带完整作者/收件人，不越界推进。"""
+    db = _make_v16_db(tmp_path)
+    monkeypatch.setattr(compact, "DB_PATH", db)
+    _insert_v16(db, 5000, "第一句", "BOT_SELF", msg_id=1,
+                logical="u1", part=0, recipient="1001", origin="9")
+    _insert_v16(db, 5000, "第二句", "BOT_SELF", msg_id=2,
+                logical="u1", part=1, recipient="1001", origin="9")
+    _insert_v16(db, 5000, "第三句", "BOT_SELF", msg_id=3,
+                logical="u1", part=2, recipient="1001", origin="9")
+
+    text1, max_id1, count1 = compact.fetch_pending_messages(1, 0, 999, limit=2)
+    assert count1 == 2 and max_id1 == 2
+    assert "第一句" in text1 and "第三句" not in text1
+    # 切在前两泡：这一段仍是带收件人的自足行
+    assert "回复给=用户(1001)" in text1
+
+    text2, max_id2, count2 = compact.fetch_pending_messages(1, max_id1, 999, limit=2)
+    assert count2 == 1 and max_id2 == 3
+    assert "第三句" in text2
+    assert "回复给=用户(1001)" in text2  # 收件人不靠上一批继承
 
 
 # ── compact_once 的四种结果 ───────────────────────────
