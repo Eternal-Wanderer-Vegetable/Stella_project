@@ -226,6 +226,117 @@ class TestSpecArchive:
         assert row[4]  # 初始心跳 = started
 
 
+class TestSpecExactBinding:
+    """R5（修复计划 M1/M0 探针固化）：同拓扑版本不同内容必须各自精确绑定。
+
+    - spec digest = canonical payload 的完整 64 位 SHA-256（排除
+      source_revision；stella-flow-content-v1 规范化）；
+    - 新 root 的 spec_digest 非空且指向**自己**那份 payload；
+    - 同 version 不同 digest 并存，读取按 digest 精确匹配（404 不回退）。
+    """
+
+    @staticmethod
+    def _payload(version: str, marker: str) -> str:
+        import json
+
+        return json.dumps({
+            "schema_version": 2, "topology_version": version,
+            "nodes": [{"id": "n", "label": marker}], "edges": [],
+        }, sort_keys=True, separators=(",", ":"))
+
+    def test_same_version_two_payloads_bind_exact_digests(
+            self, flow_db, monkeypatch):
+        version = "2026.10.03"
+        payloads = iter([self._payload(version, "old"), self._payload(version, "new")])
+        monkeypatch.setattr(message_flow, "_bundled_spec_json",
+                            lambda v: next(payloads) if v == version else None)
+        root_old = message_flow.begin_trace(
+            root_kind="webchat", trace_id="sp-exact-old")
+        root_new = message_flow.begin_trace(
+            root_kind="webchat", trace_id="sp-exact-new")
+        message_flow.end_trace(root_old)
+        message_flow.end_trace(root_new)
+        message_flow.flush()
+        conn = sqlite3.connect(flow_db)
+        try:
+            digests = dict(conn.execute(
+                "SELECT trace_id, spec_digest FROM message_traces "
+                "WHERE trace_id IN ('sp-exact-old','sp-exact-new')").fetchall())
+            blobs = dict(conn.execute(
+                "SELECT spec_digest, spec_json FROM flow_spec_blobs "
+                "WHERE topology_version=?").fetchall())
+        finally:
+            conn.close()
+        # 新 root 各自持有非空且互不相同的 digest
+        assert digests["sp-exact-old"], "旧合同空 digest 是 R5 缺口"
+        assert digests["sp-exact-new"]
+        assert digests["sp-exact-old"] != digests["sp-exact-new"]
+        # digest 精确回放自己的 payload
+        import hashlib
+        import json
+
+        for tid, marker in (("sp-exact-old", "old"), ("sp-exact-new", "new")):
+            blob = blobs.get(digests[tid])
+            assert blob is not None
+            data = json.loads(blob)
+            assert data["nodes"][0]["label"] == marker
+            canonical = json.dumps(
+                {k: v for k, v in data.items() if k != "source_revision"},
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == digests[tid]
+
+    def test_owned_bundle_replays_spec_before_trace_after_batch_failure(
+            self, flow_db, monkeypatch):
+        """批事务失败 → per-trace 重试必须重放整个 owned bundle
+        （spec prerequisite + trace 行 + root start 事件），不留半提交。"""
+        original_insert = message_flow._Writer._insert
+        failed_once = {"hit": False}
+
+        def flaky_insert(self, conn, table, v):
+            if table == "trace" and not failed_once["hit"]:
+                failed_once["hit"] = True
+                raise RuntimeError("simulated transient failure")
+            return original_insert(self, conn, table, v)
+
+        monkeypatch.setattr(message_flow._Writer, "_insert", flaky_insert)
+        root = message_flow.begin_trace(root_kind="webchat", trace_id="sp-bundle")
+        monkeypatch.undo()
+        message_flow.end_trace(root)
+        message_flow.flush()
+        conn = sqlite3.connect(flow_db)
+        try:
+            trace = conn.execute(
+                "SELECT spec_digest FROM message_traces WHERE trace_id='sp-bundle'"
+            ).fetchone()
+            blob = conn.execute(
+                "SELECT COUNT(*) FROM flow_spec_blobs").fetchone()[0]
+            start = conn.execute(
+                "SELECT COUNT(*) FROM flow_events WHERE trace_id='sp-bundle' "
+                "AND kind='start' AND span_id='root'").fetchone()[0]
+        finally:
+            conn.close()
+        assert trace is not None and trace[0], "trace 行必须带 spec digest"
+        assert blob == 1 and start == 1, "bundle 重试必须完整重放"
+        assert root.spec_digest == trace[0]
+
+    def test_legacy_empty_digest_stays_unbound(self, flow_db):
+        """历史行为：空 digest root 不得事后伪绑定到当前版本 spec。"""
+        root = message_flow.begin_trace(root_kind="webchat", trace_id="sp-legacy")
+        # 模拟旧数据：直接清空 digest
+        conn = sqlite3.connect(flow_db)
+        conn.execute("UPDATE message_traces SET spec_digest='' "
+                     "WHERE trace_id='sp-legacy'")
+        conn.commit()
+        conn.close()
+        message_flow.flush()
+        from webui.services import flow as flow_service
+
+        detail = flow_service.message_detail("sp-legacy")
+        assert detail is not None
+        assert detail["spec_digest"] == ""
+        assert detail["spec_binding"] == "legacy_unverified"
+
+
 class TestHeartbeat:
     def test_heartbeat_tick_touches_running_runs(self, flow_db):
         root = message_flow.begin_trace(root_kind="webchat", trace_id="hb-1")

@@ -310,3 +310,86 @@ describe('layoutExecuted: edge traversed needs real transition facts (O05)', () 
     expect(fullView.nodes.map((n) => n.nodeId)).toContain('hook.custom:ext');
   });
 });
+
+// ============================================================
+// M0/M3（修复计划 R3 探针固化）：兄弟 span 无 transition 事实不得激活边。
+// 旧实现退化为端点时序推断（A start + B finish → true），是误报来源；
+// 新合同：只有显式 transition 事实（fact_kind='transition'，携带 edge_id、
+// attempt 与端点 span/occurrence）才激活，legacy 事件一律不虚构路径。
+// ============================================================
+describe('edgeTraversed transition facts (R3)', () => {
+  function siblingExec(id: string, events: FlowEvent[]): FlowNodeState {
+    return {
+      nodeId: id, label: id, status: 'succeeded', businessOutcome: '',
+      instances: 1, firstSeq: 0, lastTs: '', durationMs: null, metrics: [],
+      events, running_count: 0, succeeded_count: 1, failed_count: 0,
+      latest: null,
+    };
+  }
+
+  function transitionEvent(over: Partial<FlowEvent>): FlowEvent {
+    return evFact(`t-${Math.random()}`, 'x', 'decision', 'succeeded', {
+      fact_kind: 'transition',
+      metrics: { transition_v: 1, edge_id: 'a->b:order', from_node: 'a', to_node: 'b' },
+      ...over,
+    });
+  }
+
+  it('sibling spans without transition facts do NOT activate the edge', async () => {
+    const { edgeTraversed } = await import('@/views/data/flowLayout');
+    const a = siblingExec('a', [
+      evFact('a:s', 'a', 'start', 'running', { row_id: 1, span_id: 's-a' }),
+    ]);
+    const b = siblingExec('b', [
+      evFact('b:f', 'b', 'finish', 'succeeded', { row_id: 2, span_id: 's-b' }),
+    ]);
+    // 无任何 transition 事实：不证明 A→B（旧实现返回 true）
+    expect(edgeTraversed(a, b, [])).toBe(false);
+  });
+
+  it('explicit transition fact activates the edge', async () => {
+    const { edgeTraversed } = await import('@/views/data/flowLayout');
+    const a = siblingExec('a', [
+      evFact('a:s', 'a', 'start', 'running', { row_id: 1, span_id: 's-a' }),
+    ]);
+    const b = siblingExec('b', [
+      evFact('b:f', 'b', 'finish', 'succeeded', { row_id: 3, span_id: 's-a' }),
+    ]);
+    const t = transitionEvent({ row_id: 2, span_id: 's-a' });
+    expect(edgeTraversed(a, b, [t])).toBe(true);
+  });
+
+  it('transition on another attempt does not cross-activate', async () => {
+    const { edgeTraversed } = await import('@/views/data/flowLayout');
+    const a0 = siblingExec('a', [
+      evFact('a:s0', 'a', 'start', 'running', { row_id: 1, span_id: 's-a0', attempt: 0 }),
+    ]);
+    const b1 = siblingExec('b', [
+      evFact('b:f1', 'b', 'finish', 'succeeded', { row_id: 3, span_id: 's-b1', attempt: 1 }),
+    ]);
+    const tAttempt1 = transitionEvent({
+      row_id: 2, span_id: 's-a1', attempt: 1,
+      metrics: { transition_v: 1, edge_id: 'a->b:order', from_node: 'a', to_node: 'b', attempt: 1 },
+    });
+    expect(edgeTraversed(a0, b1, [tAttempt1])).toBe(false);
+  });
+
+  it('legacy events without transitions never fabricate paths', async () => {
+    const { edgeTraversed } = await import('@/views/data/flowLayout');
+    const a = siblingExec('a', [
+      evFact('a:s', 'a', 'start', 'running', { row_id: 1 }),
+    ]);
+    const b = siblingExec('b', [
+      evFact('b:f', 'b', 'finish', 'succeeded', { row_id: 2 }),
+    ]);
+    expect(edgeTraversed(a, b, [])).toBe(false);
+    // 同 instance_key 也不足够（R3：同轮业务≠经过某条静态边）
+    const a2 = siblingExec('a', [
+      evFact('a:s2', 'a', 'start', 'running', { row_id: 1, instance_key: 'seg:1' }),
+    ]);
+    const b2 = siblingExec('b', [
+      evFact('b:f2', 'b', 'finish', 'succeeded', { row_id: 2, instance_key: 'seg:1' }),
+    ]);
+    expect(edgeTraversed(a2, b2, [])).toBe(false);
+  });
+});

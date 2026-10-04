@@ -268,6 +268,103 @@ class TestFlowMessageContext:
         assert resp.status_code == 404
 
 
+class TestPrivateChatIoIdentity:
+    """R1（修复计划 M0/M2 探针固化）：私聊输入输出按注册表存储键精确命中。
+
+    私聊真实存储 ID 是注册表负整数；scope 展示键绝不能当 group_id 查询，
+    更不能把负 storage ID 展示成群号。输出可来自会话中立回执
+    （learning_eligible=0，不参与群学习）。
+    """
+
+    def test_private_input_via_storage_session_id(self, client, auth_header,
+                                                  flow_home, isolated_home,
+                                                  monkeypatch):
+        import sqlite3
+
+        import config.settings as settings
+        from core.observability import message_flow as mf
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+
+        root = mf.begin_trace(
+            root_kind="qq_private", platform="qq",
+            scope="qq:10001:private:20001",
+            conversation_key="qq:10001:private:20001",
+            bot_id="10001", conversation_kind="private", peer_id="20001",
+            storage_session_id=-11, source_message_id="7",
+            source_message_key="qq:10001:private:20001:msg:7",
+            trace_id="rc-priv")
+        mf.end_trace(root, outcome="delivered")
+        mf.flush()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY "
+            "AUTOINCREMENT, group_id TEXT, user_id TEXT, content TEXT, "
+            "source_kind TEXT, msg_id INTEGER, timestamp DATETIME)")
+        # 私聊行真实存储键 = 注册表负整数；msg_id 唯一性只在本会话内成立
+        conn.execute(
+            "INSERT INTO group_messages (group_id, user_id, content, "
+            "source_kind, msg_id, timestamp) VALUES ('-11','20001','私聊在吗',"
+            "'PRIVATE_DIRECT',7,'2026-10-04 12:00:00')")
+        # 干扰行：另一 Bot 同 msg_id（不同 storage 键）绝不能串线
+        conn.execute(
+            "INSERT INTO group_messages (group_id, user_id, content, "
+            "source_kind, msg_id, timestamp) VALUES ('-99','20002','别的会话',"
+            "'PRIVATE_DIRECT',7,'2026-10-04 12:00:00')")
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/rc-priv/context",
+                          headers=auth_header).json()["data"]
+        assert data["input"] is not None, "私聊输入必须可查（R1 缺口）"
+        assert data["input"]["content"] == "私聊在吗"
+        assert data["input"]["identity_state"] == "exact"
+
+    def test_private_output_from_neutral_receipts(self, client, auth_header,
+                                                  flow_home, isolated_home,
+                                                  monkeypatch):
+        """会话中立回执（scope=None + 明确 ref）可查且不进群学习口径。"""
+        import sqlite3
+
+        import config.settings as settings
+        from core.observability import message_flow as mf
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        root = mf.begin_trace(
+            root_kind="qq_private", platform="qq",
+            scope="qq:10001:private:20001",
+            conversation_key="qq:10001:private:20001",
+            bot_id="10001", conversation_kind="private", peer_id="20001",
+            storage_session_id=-11, source_message_id="8",
+            trace_id="rc-priv-out")
+        mf.end_trace(root, outcome="delivered")
+        mf.flush()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS social_deliveries (delivery_id TEXT "
+            "PRIMARY KEY, turn_id TEXT, part_index INTEGER, trace_id TEXT, "
+            "epoch INTEGER, platform TEXT, bot_id TEXT, group_id TEXT, "
+            "status TEXT, platform_message_id TEXT, acknowledged_at_utc TEXT, "
+            "text TEXT, text_hash TEXT, created_at_utc TEXT, updated_at_utc TEXT)")
+        conn.executemany(
+            "INSERT INTO social_deliveries (delivery_id, turn_id, part_index, "
+            "trace_id, platform, bot_id, group_id, status, text) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            [("dp1", "tp", 0, "rc-priv-out", "qq", "10001", "",
+              "acknowledged", "私聊回复第一段"),
+             ("dp2", "tp", 1, "rc-priv-out", "qq", "10001", "",
+              "failed", "私聊回复第二段")])
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/rc-priv-out/context",
+                          headers=auth_header).json()["data"]
+        assert data["output"]["lines"] == ["私聊回复第一段"]
+        assert any("发送失败" in n for n in data["notes"])
+
+
 class TestCommandReplyVisible:
     def test_command_reply_merged_into_output(self, client: TestClient,
                                               auth_header, flow_home):
