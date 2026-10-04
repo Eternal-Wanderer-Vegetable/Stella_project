@@ -1,0 +1,29 @@
+{
+  "fixture_id": "matrix-t05-duplicate-alias",
+  "matrix_class": "T20-original",
+  "description": "A/B 同名并存不合并；当前输入来自 A",
+  "bot_id": "1694717255",
+  "group_id": 99990005,
+  "participants": {"A": "815001", "B": "815002"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我是小可"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "小可你好呀"},
+    {"seq": 2, "kind": "user", "author": "B", "reply_to_seq": null, "content": "我也是小可"},
+    {"seq": 3, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 2, "content": "两个小可！那我叫这位小可2号好不好"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "900401"},
+    {"unit": "u2", "seqs": [3], "recipient": "B", "origin_msg_id": "900402"}
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "我是谁呀",
+    "claims": [{"subject": "A", "alias": "小可"}]
+  },
+  "oracle": {
+    "task": "回答 A 的身份问句",
+    "acceptable": ["回答「小可」（A 本人的自称）"],
+    "critical_classes": ["bot_user_name_mixing", "recipient_carry_over"],
+    "critical_fail": ["回答「小可2号」（那是 B 的称呼）", "把 B 的发言当成 A 说的"]
+  }
+}

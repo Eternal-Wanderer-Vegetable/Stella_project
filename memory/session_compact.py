@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 
 from nonebot import logger
@@ -34,6 +35,11 @@ from core.llm import ROLE_COMPACT, acquire, backend_for, gate_of
 from core.llm.base import LLMBackend
 from core.llm.usage_store import budget_blocked
 from memory import session_context as sc
+from memory.conversation_projection import (
+    TranscriptBubble,
+    TranscriptRecord,
+    render_transcript_record,
+)
 
 # 温度与生成上限现在是端点×角色配置的一部分：
 # LLM_ROLE_COMPACT_TEMPERATURE（默认 0.3，信息提炼而非创作，稳定优先）、
@@ -62,7 +68,11 @@ COMPACT_PROMPT = """你的任务：把一段群聊对话的较早部分压缩成
 - 输出一段连续的自然语言，不要分条、不要输出 JSON
 - 保留：谁说过的关键信息、正在讨论的话题、已达成的结论、尚未解决的问题
 - 舍弃：寒暄、表情、刷屏、重复的附和
-- 标注「我」的是你自己说过的话，回顾时同样保留（否则你会忘记自己说过什么）
+- 「我:」或「作者=Bot(...)」开头的行是你自己说过的话，回顾时同样保留
+  （否则你会忘记自己说过什么）；描述时写明你对谁说的，绝不把你的台词
+  当成某个用户说的话
+- 原文里的条件、假设、玩笑、否定与转述（如「如果」「下次」「没有」
+  「听说」）必须保持原样，不得升级成已经发生的事实
 - 不要推断任何人的动机或心理状态，只记录实际说过的话
 - **严禁编造对话中没有出现过的内容**
 - 如果这段对话确实没有任何值得保留的内容，只输出一个字：无
@@ -106,6 +116,92 @@ def _get_backend() -> LLMBackend | None:
     return backend_for(ROLE_COMPACT)
 
 
+def _fetch_rows_with_relations(
+    conn: sqlite3.Connection, group_id: int, low_id: int, high_id: int, limit: int
+) -> list[tuple] | None:
+    """读区间原始行（带 v16 关系列）；关系列不可用返回 None（旧路径降级）。"""
+    try:
+        return conn.execute(
+            "SELECT id, user_id, content, source_kind, "
+            "reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json, "
+            "logical_message_id, part_index, reply_recipient_user_id, "
+            "origin_msg_id, bot_id "
+            "FROM group_messages "
+            "WHERE group_id = ? AND id > ? AND id < ? ORDER BY id ASC LIMIT ?",
+            (str(group_id), low_id, high_id, limit),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+
+
+def _render_relation_rows(rows: list[tuple]) -> list[str]:
+    """把带关系的行渲染成与实时尾巴同款的自足投影（归属修复计划 §6.4）。
+
+    连续 BOT_SELF 且签名一致（logical ID/作者/收件人/来源）的行合为一个
+    逻辑单元、渲染成一个物理行；任何元数据冲突都拆开呈现。每行自足，
+    批次切在单元中间时每段仍带完整作者/收件人。
+    """
+    rows = [row for row in rows if (row[2] or "").strip()]  # 空内容行不渲染
+    units: list[list[tuple]] = []
+
+    def _signature(row: tuple) -> tuple:
+        return (
+            str(row[7] or ""),
+            str(row[1] or ""),
+            str(row[3] or ""),
+            str(row[9] or ""),
+            str(row[10] or ""),
+            str(row[11] or ""),
+        )
+
+    for row in rows:
+        if (
+            row[3] == "BOT_SELF"
+            and str(row[7] or "")
+            and units
+            and _signature(units[-1][-1]) == _signature(row)
+        ):
+            units[-1].append(row)
+            continue
+        units.append([row])
+
+    lines: list[str] = []
+    for unit in units:
+        first = unit[0]
+        if first[3] == "BOT_SELF":
+            record = TranscriptRecord(
+                author_id=str(first[1] or ""),
+                author_is_bot=True,
+                bubbles=tuple(
+                    TranscriptBubble(part_index=int(row[8] or 0), text=(row[2] or "").strip())
+                    for row in unit
+                ),
+                recipient_id=str(first[9] or ""),
+                origin_msg_id=str(first[10] or ""),
+            )
+        else:
+            try:
+                mentioned = tuple(
+                    str(m)
+                    for m in (json.loads(first[6]) if first[6] else [])
+                    if str(m or "").strip()
+                )
+            except (ValueError, TypeError):
+                mentioned = ()
+            record = TranscriptRecord(
+                author_id=str(first[1] or ""),
+                author_is_bot=False,
+                bubbles=(TranscriptBubble(0, (first[2] or "").strip()),),
+                reply_to_msg_id=str(first[4] or ""),
+                reply_target_user_id=str(first[5] or ""),
+                mentioned_user_ids=mentioned,
+            )
+        line = render_transcript_record(record)
+        if line:
+            lines.append(line)
+    return lines
+
+
 def fetch_pending_messages(
     group_id: int, low_id: int, high_id: int, limit: int
 ) -> tuple[str, int, int]:
@@ -116,14 +212,23 @@ def fetch_pending_messages(
 
     条数超过 limit 时只取**最旧的 limit 条**并返回其末尾 id，
     剩余部分留给下一次压缩，保证增量推进而非一次吞下全部。
+
+    v16 关系列可用时，渲染与实时尾巴共用同一纯投影（作者/收件人/状态
+    保留；归属修复计划 §6.4）；``count`` 恒为**原始非空行数**——合组只
+    改变呈现，不改变计数与水位语义。旧库（无关系列）保持旧格式逐字不变。
     """
     try:
         conn = sqlite3.connect(DB_PATH)
-        rows = conn.execute(
-            "SELECT id, user_id, content, source_kind FROM group_messages "
-            "WHERE group_id = ? AND id > ? AND id < ? ORDER BY id ASC LIMIT ?",
-            (str(group_id), low_id, high_id, limit),
-        ).fetchall()
+        rel_rows = _fetch_rows_with_relations(conn, group_id, low_id, high_id, limit)
+        rows: list[tuple]
+        if rel_rows is None:
+            rows = conn.execute(
+                "SELECT id, user_id, content, source_kind FROM group_messages "
+                "WHERE group_id = ? AND id > ? AND id < ? ORDER BY id ASC LIMIT ?",
+                (str(group_id), low_id, high_id, limit),
+            ).fetchall()
+        else:
+            rows = [(r[0], r[1], r[2], r[3]) for r in rel_rows]
         conn.close()
     except sqlite3.Error as e:
         logger.warning(f"⚠️ [Compact] 读取待压缩消息失败: {e}")
@@ -131,14 +236,22 @@ def fetch_pending_messages(
 
     lines: list[str] = []
     max_id = low_id
-    for mid, uid, content, kind in rows:
-        max_id = mid
-        text = (content or "").strip()
-        if not text:
+    non_empty = 0
+    for row in rows:
+        max_id = row[0]
+        if not (row[2] or "").strip():
             continue
-        lines.append(f"我: {text}" if kind == "BOT_SELF" else f"用户({uid}): {text}")
+        non_empty += 1
+    if rel_rows is not None:
+        lines = _render_relation_rows(rel_rows)
+    else:
+        for _mid, uid, content, kind in rows:
+            text = (content or "").strip()
+            if not text:
+                continue
+            lines.append(f"我: {text}" if kind == "BOT_SELF" else f"用户({uid}): {text}")
 
-    return "\n".join(lines), max_id, len(lines)
+    return "\n".join(lines), max_id, non_empty
 
 
 def _is_empty_result(text: str) -> bool:

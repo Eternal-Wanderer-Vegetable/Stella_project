@@ -137,6 +137,10 @@ from memory.addressing_intent import (
 )
 from memory.compressor import get_compressor
 from memory.consolidator import get_consolidator, maybe_consolidate
+from memory.conversation_projection import (
+    canonical_message_id_text,
+    parse_platform_message_id,
+)
 from memory.participation import get_participation_manager
 from memory.post_processors import (
     bad_phrase_filter,
@@ -936,25 +940,96 @@ def _maybe_identity_direct_reply(ctx) -> None:
         logger.info(f"🪪 [Identity] 身份问句确定性直复（用户 {ctx.user_id}）")
 
 
-def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
-    """提取回复引用与 @ 目标（除 Stella 自身、拒绝 @all），供证据与评分层使用。"""
-    reply_to: str | None = None
-    mentioned: list[str] = []
+def _unique_reply_candidate(raw_candidates: list[str]) -> str | None:
+    """把候选 reply ID 规范成唯一有符号值；冲突/非法/多义 = unknown。"""
+    canonical = {
+        canonical_message_id_text(raw) for raw in raw_candidates
+    } - {""}
+    if len(canonical) != 1:
+        return None
+    return canonical.pop()
+
+
+def _relation_segments(event) -> list | None:
+    """适配器保全的原始消息段（original_message）；不可用返回 None。"""
+    original = getattr(event, "original_message", None)
+    if original is None:
+        return None
     try:
-        segments = list(event.get_message())
+        return list(original)
     except Exception:
-        # 事件对象不提供消息段（异常适配器/桩）→ 关系 unknown，不猜
-        return None, ()
+        return None
+
+
+def _extract_reply_candidate(event) -> str | None:
+    """按可信度链提取唯一 reply 引用（多人对话归属修复计划 §6.1）。
+
+    生产适配器把 reply 段从 ``event.message`` 清洗掉（先 deepcopy 进
+    ``original_message`` 再删除并写 ``event.reply``），只扫处理后的消息
+    会把真实引用丢成 unknown。候选来源按可信度排序：
+
+    1. ``original_message`` 里的 reply 段（适配器保全的原始事件）；
+    2. ``event.reply.message_id``（适配器经 get_msg 校验的可信 ID）；
+    3. 处理后的消息段（兼容测试桩/其他事件形状）。
+
+    收集到的**不同**合法引用必须唯一；冲突、多义、非法（含 0/非整数）
+    一律 unknown。注意 ``event.reply`` 的**作者**字段不在此使用——身份
+    主体仍由 resolve_reply_target 按同 canonical conversation+bot 查库
+    解析，平台侧信息不绕过入库校验。
+    """
+    segments = _relation_segments(event)
+    if segments is not None:
+        candidate = _unique_reply_candidate(
+            [
+                str(_message_segment_data(seg).get("id") or "")
+                for seg in segments
+                if _message_segment_type(seg) == "reply"
+            ]
+        )
+        if candidate is not None:
+            return candidate
+    reply = getattr(event, "reply", None)
+    if reply is not None:
+        trusted = canonical_message_id_text(getattr(reply, "message_id", ""))
+        if trusted:
+            return trusted
+    try:
+        processed = list(event.get_message())
+    except Exception:
+        return None
+    return _unique_reply_candidate(
+        [
+            str(_message_segment_data(seg).get("id") or "")
+            for seg in processed
+            if _message_segment_type(seg) == "reply"
+        ]
+    )
+
+
+def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
+    """提取回复引用与 @ 目标（除 Stella 自身、拒绝 @all），供证据与评分层使用。
+
+    reply 引用走 ``_extract_reply_candidate`` 的可信度链（原始事件 →
+    适配器校验回执 → 处理后段）；@ 目标优先取原始消息段（清洗只删
+    @Bot/@all，不新增），不可用时回退处理后段并去重。
+    """
+    reply_to = _extract_reply_candidate(event)
+    mentioned: list[str] = []
+    segments = _relation_segments(event)
+    if segments is None:
+        try:
+            segments = list(event.get_message())
+        except Exception:
+            # 事件对象不提供消息段（异常适配器/桩）→ 关系 unknown，不猜
+            return reply_to, ()
     for segment in segments:
-        seg_type = _message_segment_type(segment)
-        if seg_type == "reply":
-            reply_to = str(_message_segment_data(segment).get("id") or "") or None
-        elif seg_type == "at":
-            qq = str(_message_segment_data(segment).get("qq") or "").strip()
-            if not qq or qq.lower() == "all" or qq == str(event.self_id):
-                continue
-            if qq not in mentioned:
-                mentioned.append(qq)
+        if _message_segment_type(segment) != "at":
+            continue
+        qq = str(_message_segment_data(segment).get("qq") or "").strip()
+        if not qq or qq.lower() == "all" or qq == str(event.self_id):
+            continue
+        if qq not in mentioned:
+            mentioned.append(qq)
     return reply_to, tuple(mentioned)
 
 
@@ -2816,12 +2891,15 @@ async def _record_bot_lines(
         # 纯标点/单字兜底行（如 "......？"）无信息量，只会占用上下文尾巴窗口
         if len(text) < 2 or not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
             continue
+        # 平台回执 message ID 可为负数（真实回执 -558868042）：统一走投影
+        # 模块的有符号解析；0/非法 = 平台 ID 缺失，不猜（归属修复计划 §6.1）
+        platform_id_num = parse_platform_message_id(platform_id) or 0
         try:
             await record_message(
                 ChatContext(
                     user_id=self_id,
                     group_id=group_id,
-                    msg_id=int(platform_id) if platform_id.isdigit() else 0,
+                    msg_id=platform_id_num,
                     message=text,
                     source_kind="BOT_SELF",
                     conversation_kind=getattr(origin, "conversation_kind", "") or "",

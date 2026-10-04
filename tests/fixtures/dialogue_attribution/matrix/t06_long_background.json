@@ -1,0 +1,35 @@
+{
+  "fixture_id": "matrix-t06-long-background",
+  "matrix_class": "T20-original",
+  "description": "长背景：A 的个人事实在历史里，当前输入来自 B 且话题无关",
+  "bot_id": "1694717255",
+  "group_id": 99990006,
+  "participants": {"A": "816001", "B": "816002", "D": "816004"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我家猫今天又把水杯碰翻了"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "哈哈猫主子威武，擦干净别让大家滑倒"},
+    {"seq": 2, "kind": "user", "author": "A", "reply_to_seq": null, "content": "在杭州加班到九点，回去还得伺候它"},
+    {"seq": 3, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 2, "content": "杭州程序员都这么拼吗，注意身体"},
+    {"seq": 4, "kind": "user", "author": "D", "reply_to_seq": null, "content": "今天健身房人好多"},
+    {"seq": 5, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 4, "content": "晚上健身高峰期正常啦"},
+    {"seq": 6, "kind": "user", "author": "B", "reply_to_seq": null, "content": "我刚练完背，感觉不错"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "900501"},
+    {"unit": "u2", "seqs": [3], "recipient": "A", "origin_msg_id": "900502"},
+    {"unit": "u3", "seqs": [5], "recipient": "D", "origin_msg_id": "900503"}
+  ],
+  "evaluation": {
+    "current_sender": "B",
+    "current_input": "帮我夸夸今天练背的自己"
+  },
+  "oracle": {
+    "task": "夸 B 练背",
+    "acceptable": ["正常夸赞练背；完全不提 A 的猫/杭州/程序员也合格"],
+    "critical_classes": ["recipient_carry_over"],
+    "critical_fail": [
+      "把猫/杭州/程序员等 A 的事实安到 B 头上（如「练完背回去撸猫」对 B 说）",
+      "对 B 使用暗示 B 是程序员或在杭州的措辞"
+    ]
+  }
+}

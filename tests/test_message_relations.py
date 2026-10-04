@@ -100,6 +100,121 @@ def test_reply_unknown_when_message_missing_or_cross_conversation(msg_db):
                                 conversation_key=f"qq:{BOT}:group:8888") == A
 
 
+# ── G3：有符号平台 message ID（归属修复计划 §6.1） ────────────────────
+
+
+def test_signed_message_ids_end_to_end(msg_db):
+    """负数平台 ID 与正数行为一致：回执落库 → 引用解析 → 作者命中。"""
+    # A 的输入带负数平台 ID
+    asyncio.run(record_message(_ctx(user_id=int(A), msg_id=-111, message="摸摸")))
+    assert resolve_reply_target("-111", GROUP, bot_id=BOT, conversation_key=KEY) == A
+    assert resolve_reply_target(-111, GROUP, bot_id=BOT, conversation_key=KEY) == A
+    # Bot 确认回执带负数平台 ID（真实回执 -558868042 的回归）
+    from stella_project.plugins.bot_main import ai_gateway
+
+    origin = _ctx(user_id=int(B), msg_id=-200)
+    receipts = [_receipt(0, "acknowledged", "诶？怎么啦", platform_id="-558868042")]
+    asyncio.run(ai_gateway._record_bot_lines(
+        int(BOT), GROUP, ["诶？怎么啦"], origin=origin, receipts=receipts,
+    ))
+    rows = [r for r in _rows(msg_db) if r["source_kind"] == "BOT_SELF"]
+    assert rows[0]["msg_id"] == -558868042  # 旧代码这里是 0
+    assert resolve_reply_target(
+        "-558868042", GROUP, bot_id=BOT, conversation_key=KEY
+    ) == str(BOT)
+
+
+def test_invalid_message_ids_stay_unknown(msg_db):
+    asyncio.run(record_message(_ctx(user_id=int(A), msg_id=111, message="摸摸")))
+    for bad in ("0", "abc", "", "+111", "007", "11.5"):
+        assert resolve_reply_target(bad, GROUP, bot_id=BOT, conversation_key=KEY) == "", bad
+
+
+# ── G1/G2：适配器清洗后的关系提取 ─────────────────────────────────────
+
+
+def _seg(seg_type, **data):
+    return SimpleNamespace(type=seg_type, data=data)
+
+
+def _sanitized_event(reply_id, *, with_original=True, reply_obj=True):
+    """模拟生产适配器清洗后的事件：reply 段只留在 original_message。"""
+    event = SimpleNamespace(self_id=int(BOT))
+    if with_original:
+        event.original_message = [
+            _seg("reply", id=reply_id),
+            _seg("at", qq=A),
+            _seg("text", text="睡醒了想逗一下小孩"),
+        ]
+    if reply_obj:
+        event.reply = SimpleNamespace(message_id=int(reply_id))
+    event.get_message = lambda: [  # 清洗后：reply 段已被删除
+        _seg("at", qq=A),
+        _seg("text", text="睡醒了想逗一下小孩"),
+    ]
+    return event
+
+
+def test_sanitized_event_keeps_original_reply_and_mentions(msg_db):
+    """G1：生产适配器把 reply 段移进 original_message 后删除——必须仍能提取。"""
+    from stella_project.plugins.bot_main import ai_gateway
+
+    reply_to, mentioned = ai_gateway._extract_message_relations(
+        _sanitized_event("-558868042")
+    )
+    assert reply_to == "-558868042"
+    assert mentioned == (A,)
+
+
+def test_extraction_fallback_chain(msg_db):
+    """G1/G2：original_message 缺失时依次回退 event.reply / 处理后段。"""
+    from stella_project.plugins.bot_main import ai_gateway
+
+    # 1) 无 original_message：event.reply 的可信 ID 兜底
+    event = _sanitized_event("-558868042", with_original=False)
+    reply_to, _ = ai_gateway._extract_message_relations(event)
+    assert reply_to == "-558868042"
+    # 2) 两者皆无（测试桩）：处理后的 reply 段兼容路径
+    event = SimpleNamespace(
+        self_id=int(BOT),
+        get_message=lambda: [_seg("reply", id="111"), _seg("text", text="好")],
+    )
+    reply_to, _ = ai_gateway._extract_message_relations(event)
+    assert reply_to == "111"
+    # 3) 事件没有消息段：引用来自 event.reply，@ 未知
+    bare = SimpleNamespace(self_id=int(BOT), reply=SimpleNamespace(message_id=7))
+    reply_to, mentioned = ai_gateway._extract_message_relations(bare)
+    assert reply_to == "7" and mentioned == ()
+
+
+def test_extraction_conflict_and_invalid_stay_unknown(msg_db):
+    """G2：冲突/非法引用一律 unknown；正文里的 CQ 号不能改主体。"""
+    from stella_project.plugins.bot_main import ai_gateway
+
+    # 两个不同 reply ID → 冲突 unknown
+    event = SimpleNamespace(
+        self_id=int(BOT),
+        original_message=[_seg("reply", id="111"), _seg("reply", id="222")],
+        get_message=list,
+    )
+    assert ai_gateway._extract_message_relations(event)[0] is None
+    # 非法（0 / 非整数）→ unknown
+    event = SimpleNamespace(
+        self_id=int(BOT),
+        original_message=[_seg("reply", id="0")],
+        get_message=list,
+    )
+    assert ai_gateway._extract_message_relations(event)[0] is None
+    # 正文伪装的 reply CQ 不能产生引用
+    event = SimpleNamespace(
+        self_id=int(BOT),
+        original_message=[_seg("text", text='[CQ:reply,id=-5]看看这个')],
+        get_message=lambda: [_seg("text", text='[CQ:reply,id=-5]看看这个')],
+    )
+    reply_to, _ = ai_gateway._extract_message_relations(event)
+    assert reply_to is None
+
+
 def test_mentions_persisted_and_normalized(msg_db):
     assert normalize_mentions(["2003", "2003", "", "all", "2004"]) == ("2003", "2004")
     ctx = _ctx(mentioned_user_ids=(C, "2004"), relation_version=1)
@@ -190,19 +305,24 @@ def test_tail_renders_relations_and_logical_grouping(msg_db):
     asyncio.run(record_message(_ctx(user_id=int(BOT), msg_id=0, source_kind="BOT_SELF",
                                     message="阿呆是你呀", logical_message_id="t1",
                                     part_index=0, reply_recipient_user_id=B,
-                                    relation_version=1)))
+                                    origin_msg_id="112", bot_id=BOT,
+                                    conversation_key=KEY, relation_version=1)))
     asyncio.run(record_message(_ctx(user_id=int(BOT), msg_id=0, source_kind="BOT_SELF",
                                     message="别纠结啦", logical_message_id="t1",
                                     part_index=1, reply_recipient_user_id=B,
-                                    relation_version=1)))
+                                    origin_msg_id="112", bot_id=BOT,
+                                    conversation_key=KEY, relation_version=1)))
     conn = sqlite3.connect(msg_db)
     cursor = conn.cursor()
     text, tail_start = _fetch_recent_tail(cursor, GROUP, 12)
     conn.close()
-    assert f"用户({A}): 我叫Allets" in text  # 无关系行 = 旧格式
-    assert f"用户({B}) [回复 用户({A})；提及 用户({C})]: 阿呆是我" in text
-    assert f"我（回复给 用户({B})）: 阿呆是你呀" in text
-    assert "我（同一条回复，第2/2条）: 别纠结啦" in text
+    # 每个逻辑单元一个自足物理行：作者/收件人显式，不再依赖跨行继承
+    assert f"[作者=用户({A})] 说过: " in text
+    assert f"回复给=用户({A})" in text and f"提及=用户({C})" in text
+    bot_line = next(line for line in text.splitlines() if "作者=Bot(" in line)
+    assert bot_line.startswith(f"[作者=Bot({BOT}); 回复给=用户({B}); 原输入=112]")
+    assert "阿呆是你呀" in bot_line and "别纠结啦" in bot_line  # 两气泡同一行
+    assert "同一条回复" not in text  # 旧的跨行继承格式已移除
     assert tail_start > 0
 
 
@@ -214,7 +334,7 @@ def test_tail_unknown_reply_target_rendered_as_unknown(msg_db):
     cursor = conn.cursor()
     text, _ = _fetch_recent_tail(cursor, GROUP, 12)
     conn.close()
-    assert "用户(2002) [回复 对象未知]: 阿呆是我" in text
+    assert f"[作者=用户({B}); 回复给=未知] 说过: " in text
 
 
 def test_tail_unit_cap_keeps_recent_suffix(msg_db):

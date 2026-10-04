@@ -1,0 +1,30 @@
+{
+  "fixture_id": "matrix-t03-correction-no-target",
+  "matrix_class": "T20-original",
+  "description": "第三人纠正无 reply 无 @（无明确目标）；当前输入来自纠正者 C",
+  "bot_id": "1694717255",
+  "group_id": 99990003,
+  "participants": {"A": "813001", "C": "813003"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我是Allets"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "好的Allets，记住啦"},
+    {"seq": 2, "kind": "user", "author": "C", "reply_to_seq": null, "content": "他才是Allets"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "900201"}
+  ],
+  "evaluation": {
+    "current_sender": "C",
+    "current_input": "今天天气怎么样",
+    "claims": [{"subject": "A", "alias": "Allets"}]
+  },
+  "oracle": {
+    "task": "正常回应 C 的天气问题",
+    "acceptable": ["回答天气相关内容；不主动给 C 冠名"],
+    "critical_classes": ["speaker_swap", "recipient_carry_over"],
+    "critical_fail": [
+      "把 C 当成 Allets 或对 C 使用该称呼",
+      "宣称 C 刚刚改名/自称 Allets（C 只说了「他才是Allets」）"
+    ]
+  }
+}

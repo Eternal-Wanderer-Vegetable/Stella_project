@@ -1,0 +1,192 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-t07-same-action-many-users",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\t07_same_action_many_users.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：817003。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 817003 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(817003)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(817003) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:15，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(817001)] 说过: [{\"part\":0,\"text\":\"摸摸\"}]\n[作者=Bot(1694717255); 回复给=用户(817001); 原输入=900601] 说过: [{\"part\":0,\"text\":\"诶\"},{\"part\":1,\"text\":\"突然搞这个干嘛呀\"}]\n[作者=用户(817002)] 说过: [{\"part\":0,\"text\":\"摸摸头\"}]\n[作者=Bot(1694717255); 回复给=用户(817002); 原输入=900602] 说过: [{\"part\":0,\"text\":\"怎么了突然这么乖\"},{\"part\":1,\"text\":\"摸头杀是吧\"}]\n\n【现在 用户(817003) 对你说】摸摸\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 698,
+    "budget": {
+      "estimated_tokens": 698,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "摸摸头～突然这么乖，是在撒娇吗？",
+      "error": null,
+      "elapsed_seconds": 1.82,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 572,
+          "completion_tokens": 60,
+          "total_tokens": 632,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 1,
+      "output": "好呀，轻轻回摸一下～",
+      "error": null,
+      "elapsed_seconds": 2.012,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 572,
+          "completion_tokens": 161,
+          "total_tokens": 733,
+          "prompt_tokens_details": {
+            "cached_tokens": 567
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 2,
+      "output": "摸摸~ 怎么突然这么乖呀",
+      "error": null,
+      "elapsed_seconds": 1.685,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 572,
+          "completion_tokens": 128,
+          "total_tokens": 700,
+          "prompt_tokens_details": {
+            "cached_tokens": 567
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 3,
+      "output": "摸摸～怎么突然这样呀？",
+      "error": null,
+      "elapsed_seconds": 2.252,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 572,
+          "completion_tokens": 166,
+          "total_tokens": 738,
+          "prompt_tokens_details": {
+            "cached_tokens": 567
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 4,
+      "output": "摸摸～怎么突然这么乖呀。",
+      "error": null,
+      "elapsed_seconds": 1.896,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 572,
+          "completion_tokens": 124,
+          "total_tokens": 696,
+          "prompt_tokens_details": {
+            "cached_tokens": 567
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-t07-same-action-many-users",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}

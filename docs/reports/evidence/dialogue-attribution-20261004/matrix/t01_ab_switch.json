@@ -1,0 +1,192 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-t01-ab-switch",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\t01_ab_switch.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：811002。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 811002 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(811002)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(811002) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:12，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(811001)] 说过: [{\"part\":0,\"text\":\"我是阿呆，你们机器人挺好玩\"}]\n[作者=Bot(1694717255); 回复给=用户(811001); 原输入=900001] 说过: [{\"part\":0,\"text\":\"你好呀阿呆，我是Stella\"},{\"part\":1,\"text\":\"有事随时叫我\"}]\n[作者=用户(811002)] 说过: [{\"part\":0,\"text\":\"在吗？帮我看看这个配置行不行\"}]\n\n【现在 用户(811002) 对你说】我这个显卡4060能跑大模型吗\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 704,
+    "budget": {
+      "estimated_tokens": 704,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "可以，但要看具体是哪块 4060、显存大小，以及你想跑多大的模型。\n\n如果是 **RTX 4060 8GB 显存**：\n\n- **7B / 8B 模型**：通常能跑，建议用 **Q4 量化**，例如 Llama 3 8B、Qwen2.5 7B/9B、Mistral 7B 这类，比较合适。\n- **13B / 14B 模型**：可以跑，但显存会紧张，长上下文容易爆显存，速度也会慢一些。\n- **16B / 24B 模型**：基本要看量化和 CPU offload，体验会比较慢。\n- **30B 以上模型**：8GB 显存通常不适合纯本地流畅运行。\n\n推荐方式：\n\n- 使用 **Ollama / LM Studio / llama.cpp**\n- 模型选择 **Q4_K_M** 或 **Q5_K_M**\n- 上下文不要开太大，比如 **2K–4K**\n- 如果显存不够，会有一部分加载到 CPU，速度会下降\n\n简单判断：  \n**4060 8GB 跑 7B/8B 量化模型没问题；跑 13B/14B 勉强；更大模型不建议本地直接跑。**\n\n如果你告诉我具体是 **4060 还是 4060 Ti**、显存是 **8GB/16GB**，以及想跑哪个模型，我可以直接帮你看配置行不行。",
+      "error": null,
+      "elapsed_seconds": 10.416,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 532,
+          "completion_tokens": 708,
+          "total_tokens": 1240,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 1,
+      "output": "能跑，但看“多大模型”。\n\n- 4060 一般显存是 **8GB**：适合跑 **7B 左右小模型**，建议用 **GGUF 4-bit 量化**（比如 Q4_K_M）。\n- 13B/14B 模型：如果内存够、量化好，可能能跑，但显存容易紧张，速度也慢。\n- 70B 这种大模型：4060 基本跑不了，显存不够。\n\n如果你电脑内存有 **16GB 或 32GB**，用 `llama.cpp` 或 `Ollama` 会比较友好；纯显存不够时可以 CPU 参与，但会慢。\n\n你可以说一下你的具体显卡是 **4060 还是 4060 Ti/16GB版**，以及想跑哪个模型，我可以帮你判断能不能跑。",
+      "error": null,
+      "elapsed_seconds": 6.677,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 532,
+          "completion_tokens": 461,
+          "total_tokens": 993,
+          "prompt_tokens_details": {
+            "cached_tokens": 527
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 2,
+      "output": "可以跑，但要看你说的“大模型”多大，以及你这块 4060 的显存是多少。\n\n一般判断：\n\n- **7B 左右模型**：通常能跑，比如常见的 7B/8B 模型，用量化版本（如 Q4/Q5）比较稳，适合本地跑问答、聊天、文本生成。\n- **10B～14B**：如果显存是 **8GB**，会比较勉强，容易受上下文长度、批大小和显存占用影响；如果显存是 **16GB**，会舒服很多。\n- **20B 以上或“真正的大模型”**：8GB 显存基本不够，容易爆显存；16GB 也只能跑部分模型或低量化版本。\n\n所以如果你只是问“4060 能不能跑大模型”，简短答案是：\n\n> **能跑小模型和中模型，但跑真正的大模型要看显存和模型大小。**\n\n如果你把具体配置发我，我可以帮你判断能跑哪些模型，比如显存是 8GB 还是 16GB、CPU/内存多少、准备跑什么模型、用 Ollama、llama.cpp、vLLM 还是其他框架。",
+      "error": null,
+      "elapsed_seconds": 8.124,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 532,
+          "completion_tokens": 544,
+          "total_tokens": 1076,
+          "prompt_tokens_details": {
+            "cached_tokens": 527
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 3,
+      "output": "可以，但要看模型大小和显存。\n\nRTX 4060 通常有 8GB 显存，跑大模型的话：\n\n- **7B / 8B 小模型**：可以跑，量化后比较稳，比如 Qwen、Llama 的 7B/8B 量化版。\n- **13B**：能跑，但显存会比较紧，上下文多了容易卡，最好用 4-bit 量化。\n- **70B 及以上**：基本不建议，显存不够，除非用 CPU 辅助或极小量化，但速度会很慢。\n\n所以结论是：**4060 能跑小模型，不适合跑真正的大模型**。  \n如果你是想本地玩聊天模型，建议选 **7B/8B 的 Q4 量化版本**，体验会好很多。",
+      "error": null,
+      "elapsed_seconds": 5.031,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 532,
+          "completion_tokens": 328,
+          "total_tokens": 860,
+          "prompt_tokens_details": {
+            "cached_tokens": 527
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 4,
+      "output": "可以，但要看“大模型”多大、显存多少。\n\n- 如果是 RTX 4060 8GB：能跑一些 7B/8B 级别模型，通常用量化版本比较稳。\n- 13B/14B 这类：可以试，但显存会比较紧张，速度也可能下降。\n- 20B 以上：本地跑会比较吃力，通常需要 CPU 卸载、低量化，或者显存不够会报错。\n\n所以 4060 适合跑中小模型、量化模型，不适合跑真正的大模型全量版本。  \n如果你想跑具体模型，可以发模型名、显存大小、显存占用或配置，我帮你判断。",
+      "error": null,
+      "elapsed_seconds": 8.048,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 532,
+          "completion_tokens": 472,
+          "total_tokens": 1004,
+          "prompt_tokens_details": {
+            "cached_tokens": 527
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-t01-ab-switch",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}

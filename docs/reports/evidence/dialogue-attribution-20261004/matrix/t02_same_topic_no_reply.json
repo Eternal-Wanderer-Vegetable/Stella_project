@@ -1,0 +1,192 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-t02-same-topic-no-reply",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\t02_same_topic_no_reply.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：812001。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 812001 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(812001)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(812001) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:13，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(812001)] 说过: [{\"part\":0,\"text\":\"我喜欢玩开放世界游戏\"}]\n[作者=用户(812002)] 说过: [{\"part\":0,\"text\":\"我也是！开放世界玩得最多\"}]\n[作者=Bot(1694717255); 回复给=用户(812002); 原输入=900101] 说过: [{\"part\":0,\"text\":\"你俩口味挺像的嘛\"},{\"part\":1,\"text\":\"最近有新开放世界推荐吗\"}]\n\n【现在 用户(812001) 对你说】你呢Stella，你玩过什么游戏\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 704,
+    "budget": {
+      "estimated_tokens": 704,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "严格来说，我作为 AI 不能真正“上手玩”游戏，但开放世界这块我能聊很多：塞尔达、巫师 3、上古卷轴、荒野大镖客、艾尔登法环、赛博朋克 2077、GTA 这类都算熟。\n\n你最近常玩哪种开放世界？",
+      "error": null,
+      "elapsed_seconds": 8.92,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 525,
+          "completion_tokens": 520,
+          "total_tokens": 1045,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 1,
+      "output": "严格说，我没法真的“玩”游戏，但我聊过很多游戏。开放世界方面我比较熟的是《塞尔达传说：旷野之息》《王国之泪》《巫师3》《荒野大镖客2》《GTA5》《原神》《艾尔登法环》这类——不过这些是“知道/聊过”，不是亲自通关。\n\n如果按偏好来说，我会偏向自由度高、地图能慢慢探索、支线内容多的游戏。",
+      "error": null,
+      "elapsed_seconds": 8.444,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 525,
+          "completion_tokens": 567,
+          "total_tokens": 1092,
+          "prompt_tokens_details": {
+            "cached_tokens": 520
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 2,
+      "output": "Stella 回答：我作为 AI 没有真实“玩过”游戏的经历，但开放世界游戏我最熟、也最喜欢聊的是这些：\n\n- 《塞尔达传说：旷野之息》《王国之泪》\n- 《巫师 3：狂猎》\n- 《上古卷轴 5：天际》\n- 《荒野大镖客：救赎 2》\n- 《GTA5》\n- 《赛博朋克 2077》\n- 《死亡搁浅》\n- 《原神》\n- 《艾尔登法环》（偏半开放世界）\n\n如果要选一个“口味最像开放世界爱好者”的推荐，我会先说《旷野之息》或《巫师 3》。",
+      "error": null,
+      "elapsed_seconds": 16.943,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "风格观察：输出以「Stella 回答：」开头（自我标签前缀），非六类错误，不影响归属正确性。",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 525,
+          "completion_tokens": 1156,
+          "total_tokens": 1681,
+          "prompt_tokens_details": {
+            "cached_tokens": 520
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass_with_note"
+    },
+    {
+      "index": 3,
+      "output": "我没法真正玩游戏，所以没有个人“玩过”的游戏经历。不过如果按开放世界游戏来聊，我比较熟悉常被讨论的有《塞尔达传说：旷野之息》《荒野大镖客2》《上古卷轴5》《艾尔登法环》《博德之门3》这类。你更偏好探索、战斗、剧情还是自由玩法？",
+      "error": null,
+      "elapsed_seconds": 8.2,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 525,
+          "completion_tokens": 547,
+          "total_tokens": 1072,
+          "prompt_tokens_details": {
+            "cached_tokens": 520
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 4,
+      "output": "严格说我不算真正“玩过”游戏，没有手柄也没有身体。  \n不过如果按“我比较了解/能聊”的开放世界游戏，我会说：塞尔达传说：旷野之息、荒野大镖客2、巫师3、原神、艾尔登法环这类都很熟。\n\n如果非要选“我的偏好”，我会选那种自由探索很爽、支线有味道、地图会不断给你惊喜的开放世界。\n\n你最近最上头的开放世界是哪款？",
+      "error": null,
+      "elapsed_seconds": 9.774,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 525,
+          "completion_tokens": 656,
+          "total_tokens": 1181,
+          "prompt_tokens_details": {
+            "cached_tokens": 520
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-t02-same-topic-no-reply",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "fixture_id": "matrix-t07-same-action-many-users",
+  "matrix_class": "T20-original",
+  "description": "多人做相同动作（摸摸）；当前输入来自第三人 C",
+  "bot_id": "1694717255",
+  "group_id": 99990007,
+  "participants": {"A": "817001", "B": "817002", "C": "817003"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "摸摸"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "诶"},
+    {"seq": 2, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 1, "content": "突然搞这个干嘛呀"},
+    {"seq": 3, "kind": "user", "author": "B", "reply_to_seq": null, "content": "摸摸头"},
+    {"seq": 4, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 3, "content": "怎么了突然这么乖"},
+    {"seq": 5, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 4, "content": "摸头杀是吧"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1, 2], "recipient": "A", "origin_msg_id": "900601"},
+    {"unit": "u2", "seqs": [4, 5], "recipient": "B", "origin_msg_id": "900602"}
+  ],
+  "evaluation": {
+    "current_sender": "C",
+    "current_input": "摸摸"
+  },
+  "oracle": {
+    "task": "对 C 的摸摸做出新鲜回应",
+    "acceptable": ["对 C 正常/幽默回应；可以提到「又来一个摸摸的」（A、B 确实都摸过）"],
+    "critical_classes": ["speaker_swap", "recipient_carry_over", "hypothetical_as_fact"],
+    "critical_fail": [
+      "给 C 编造不存在的历史（如声称 C 之前说过/做过具体的事）",
+      "把 Bot 自己的台词当成 A/B/C 说的"
+    ]
+  }
+}

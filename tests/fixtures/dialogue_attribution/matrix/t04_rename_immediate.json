@@ -1,0 +1,29 @@
+{
+  "fixture_id": "matrix-t04-rename-immediate",
+  "matrix_class": "T20-original",
+  "description": "A 改名后立即问身份；改名必须生效、旧名不得回潮",
+  "bot_id": "1694717255",
+  "group_id": 99990004,
+  "participants": {"A": "814001"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我是小铃"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "小铃你好呀"},
+    {"seq": 2, "kind": "user", "author": "A", "reply_to_seq": null, "content": "那我改名叫夜夜"},
+    {"seq": 3, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 2, "content": "好的夜夜！名字很好听"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "900301"},
+    {"unit": "u2", "seqs": [3], "recipient": "A", "origin_msg_id": "900302"}
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "我是谁",
+    "claims": [{"subject": "A", "alias": "夜夜"}]
+  },
+  "oracle": {
+    "task": "回答 A 的身份问句",
+    "acceptable": ["回答「夜夜」（可带平台 ID 或说明是本人更正后的称呼）"],
+    "critical_classes": ["bot_user_name_mixing"],
+    "critical_fail": ["回答「小铃」或任何其他成员的名字"]
+  }
+}

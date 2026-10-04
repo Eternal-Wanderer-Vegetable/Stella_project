@@ -1,0 +1,801 @@
+{
+  "fixture_id": "matrix-n07-budget-trimmed-unit",
+  "matrix_class": "new-state-role",
+  "description": "多泡预算裁剪：早期 Bot 单元（薰衣草味）应被预算整体裁掉；当前 F 问签名",
+  "bot_id": "1694717255",
+  "group_id": 99991007,
+  "participants": {
+    "A": "827001",
+    "F": "827006"
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "随便聊聊吧，今天好无聊"
+    },
+    {
+      "seq": 1,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": 0,
+      "content": "哈哈那我陪你说说话"
+    },
+    {
+      "seq": 2,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": 1,
+      "content": "对了，我一直觉得薰衣草味的东西最好闻了"
+    },
+    {
+      "seq": 3,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": 2,
+      "content": "你呢，喜欢什么味道"
+    },
+    {
+      "seq": 4,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 5,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 6,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 7,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 8,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 9,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 10,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 11,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 12,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 13,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 14,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 15,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 16,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 17,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 18,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 19,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 20,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 21,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 22,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 23,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 24,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 25,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 26,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 27,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 28,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 29,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 30,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 31,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 32,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 33,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 34,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 35,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 36,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 37,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 38,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 39,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 40,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 41,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 42,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 43,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上准备把攒的电影清两部，再不看好几部都要从片单里过期下架了，爆米花已经提前备好了。"
+    },
+    {
+      "seq": 44,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "今天地铁又挤成沙丁鱼罐头了，挤得我背包带都断了一根，只好一路抱着包站了四十分钟，到公司手都是麻的。"
+    },
+    {
+      "seq": 45,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "中午楼下新开的面馆排了半个多小时的队，味道还行但也没到值得排这么久的程度，下次还是错峰去吧。"
+    },
+    {
+      "seq": 46,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午开会开到三点，投影仪又坏了，换了间会议室继续，一下午什么正经事都没干成，人都坐僵了。"
+    },
+    {
+      "seq": 47,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "刚下楼取了个快递，是我上周买的键盘，轴体手感比想象中轻一点，今晚回去试试打游戏顺不顺手。"
+    },
+    {
+      "seq": 48,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 49,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 50,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 51,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 52,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 53,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 54,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 55,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 56,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 57,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 58,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 59,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 60,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 61,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 62,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 63,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 64,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 65,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 66,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 67,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 68,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 69,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 70,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 71,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 72,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 73,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 74,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 75,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 76,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 77,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 78,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 79,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 80,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 81,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 82,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 83,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 84,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 85,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 86,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 87,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 88,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 89,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 90,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 91,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 92,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 93,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 94,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 95,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 96,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 97,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 98,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 99,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 100,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 101,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 102,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    },
+    {
+      "seq": 103,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "下午茶时间部门群里又开始接龙点奶茶了，我纠结了十分钟最后还是点了全糖去冰，喝完又开始后悔，第二天大概率还是一样。"
+    },
+    {
+      "seq": 104,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "周末本来计划去爬山的，结果一看天气预报周六周日都有雨，只能宅家里把新买的拼装模型开箱，说明书看了三页就头晕。"
+    },
+    {
+      "seq": 105,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "最近在追的那部剧终于更新了，一口气看完两集，剧情终于开始反转了，但是下周又要等七天，追更的人真的好惨。"
+    },
+    {
+      "seq": 106,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "晚上去夜跑五公里，跑到一半开始下雨，淋着雨跑回来的，回家第一件事就是冲热水澡，感觉要感冒了赶紧泡了感冒灵。"
+    },
+    {
+      "seq": 107,
+      "kind": "user",
+      "author": "F",
+      "reply_to_seq": null,
+      "content": "楼下便利店关东煮换了新汤底，我连续三天晚上都去吃了一杯，老板都认识我了，今天主动问我还是老样子吗。"
+    }
+  ],
+  "logical_units": [
+    {
+      "unit": "u1",
+      "seqs": [
+        1,
+        2,
+        3
+      ],
+      "recipient": "A",
+      "origin_msg_id": "910701"
+    }
+  ],
+  "filler_messages_after_unit": 40,
+  "evaluation": {
+    "current_sender": "F",
+    "current_input": "帮我看看这句签名好不好：春风十里不如你",
+    "note": "seq 4 起由生成脚本追加大量填充消息，把早期单元推出预算窗口"
+  },
+  "oracle": {
+    "task": "评价 F 的签名「春风十里不如你」",
+    "acceptable": [
+      "正常评价签名",
+      "完全不提薰衣草/香味话题也合格"
+    ],
+    "critical_classes": [
+      "recipient_carry_over"
+    ],
+    "critical_fail": [
+      "提及薰衣草/喜欢的味道（该单元应已被裁剪，提及即泄露或错误引用）",
+      "把「喜欢薰衣草味」归到 F 头上"
+    ]
+  }
+}

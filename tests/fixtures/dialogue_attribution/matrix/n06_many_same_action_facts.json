@@ -1,0 +1,28 @@
+{
+  "fixture_id": "matrix-n06-many-same-action-facts",
+  "matrix_class": "new-state-role",
+  "description": "多人相同动作/事实：A、B 都没吃早饭；当前 C 问谁没吃",
+  "bot_id": "1694717255",
+  "group_id": 99991006,
+  "participants": {"A": "826001", "B": "826002", "C": "826003"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "早上赶地铁没吃早饭"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "那上午岂不是饿死了，快补一个"},
+    {"seq": 2, "kind": "user", "author": "B", "reply_to_seq": null, "content": "我也没吃早饭"},
+    {"seq": 3, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 2, "content": "你们怎么都不吃早饭"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "910601"},
+    {"unit": "u2", "seqs": [3], "recipient": "B", "origin_msg_id": "910602"}
+  ],
+  "evaluation": {
+    "current_sender": "C",
+    "current_input": "群里谁没吃早饭"
+  },
+  "oracle": {
+    "task": "点名谁没吃早饭",
+    "acceptable": ["A 和 B 都说了没吃（两人都点到）", "回答「A 和 B」或等价表述"],
+    "critical_classes": ["recipient_carry_over", "speaker_swap"],
+    "critical_fail": ["只归给一个人却声称完整", "把 C 说成没吃早饭的人"]
+  }
+}

@@ -1,0 +1,207 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-n04-negation",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\n04_negation.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：824003。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 824003 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(824003)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(824003) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:11，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(824001)] 说过: [{\"part\":0,\"text\":\"周末那部新片你们看了吗？我没看\"}]\n[作者=Bot(1694717255); 回复给=用户(824001); 原输入=910401] 说过: [{\"part\":0,\"text\":\"我也没有，等资源中\"}]\n[作者=用户(824002)] 说过: [{\"part\":0,\"text\":\"我也没看\"}]\n[作者=Bot(1694717255); 回复给=用户(824002); 原输入=910402] 说过: [{\"part\":0,\"text\":\"那约好都不许剧透啊\"}]\n\n【现在 用户(824003) 对你说】那部新片到底谁看过\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 721,
+    "budget": {
+      "estimated_tokens": 721,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "目前记录里没人看过：用户(824001)说没看，用户(824002)也说没看，我也没有。",
+      "error": null,
+      "elapsed_seconds": 4.356,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 573,
+          "completion_tokens": 263,
+          "total_tokens": 836,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 1,
+      "output": "从刚才的记录看，824001 和 824002 都说了没看，我也没看。目前没人明确说“看过”，所以不确定到底谁看过。",
+      "error": null,
+      "elapsed_seconds": 2.764,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 573,
+          "completion_tokens": 222,
+          "total_tokens": 795,
+          "prompt_tokens_details": {
+            "cached_tokens": 568
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 2,
+      "output": "从刚才的记录看，只有“没看”的确认：用户824001说没看，用户824002说没看，我也说没看。目前没有任何人明确说“看过”。所以不能确定谁看过；如果你问的是当前用户824003，我这边也没有可靠记录说TA看过。",
+      "error": null,
+      "elapsed_seconds": 6.25,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 573,
+          "completion_tokens": 493,
+          "total_tokens": 1066,
+          "prompt_tokens_details": {
+            "cached_tokens": 568
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 3,
+      "output": "按当前记录，没人说看过。\n\n用户 824001 说没看，用户 824002 也说没看，我自己也说没有。当前用户 824003 也没有说看过。所以目前没人看过。",
+      "error": null,
+      "elapsed_seconds": 3.454,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 573,
+          "completion_tokens": 283,
+          "total_tokens": 856,
+          "prompt_tokens_details": {
+            "cached_tokens": 568
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 4,
+      "output": "按刚才的记录来看，没人明确说看过：824001 说自己没看，824002 也说没看，我自己也没看。所以目前不能确定谁看过。",
+      "error": null,
+      "elapsed_seconds": 4.866,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 573,
+          "completion_tokens": 401,
+          "total_tokens": 974,
+          "prompt_tokens_details": {
+            "cached_tokens": 568
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-n04-negation",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}

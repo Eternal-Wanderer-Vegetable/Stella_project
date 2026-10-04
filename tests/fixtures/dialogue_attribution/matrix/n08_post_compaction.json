@@ -1,0 +1,29 @@
+{
+  "fixture_id": "matrix-n08-post-compaction",
+  "matrix_class": "new-state-role",
+  "description": "压缩后接续：摘要保留条件句与作者；A 问周六安排",
+  "bot_id": "1694717255",
+  "group_id": 99991008,
+  "participants": {"A": "828001"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "天气预报说周六是大晴天！"}
+  ],
+  "logical_units": [],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "那露营还去得成吗",
+    "compacted_summary": "大家在商量周六去露营。你（Bot）对A说过，如果周六下雨露营就改期；A说他可以开车带装备。此前一直在等天气预报。"
+  },
+  "oracle": {
+    "task": "回答周六露营是否去得成",
+    "acceptable": [
+      "按天气预报晴天推断可以去/按计划准备去",
+      "保留条件语义（雨才改期，现在预报晴）"
+    ],
+    "critical_classes": ["hypothetical_as_fact", "speaker_swap"],
+    "critical_fail": [
+      "声称露营已经取消/去不成了（把「下雨才改期」当成已取消的事实）",
+      "把「开车带装备」说成别人说的或 Bot 自己说的（那是 A 说的）"
+    ]
+  }
+}

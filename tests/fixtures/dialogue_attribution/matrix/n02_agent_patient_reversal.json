@@ -1,0 +1,30 @@
+{
+  "fixture_id": "matrix-n02-agent-patient-reversal",
+  "matrix_class": "new-state-role",
+  "description": "主体/受体反转：A 帮小美修电脑；当前 B 问后续",
+  "bot_id": "1694717255",
+  "group_id": 99991002,
+  "participants": {"A": "822001", "B": "822002"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我昨天帮小美把电脑修好了，折腾了一晚上"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "辛苦了，帮人修电脑最费腰"},
+    {"seq": 2, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 1, "content": "小美电脑什么毛病呀"},
+    {"seq": 3, "kind": "user", "author": "A", "reply_to_seq": 2, "content": "显卡接触不良，重插就好了"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1, 2], "recipient": "A", "origin_msg_id": "910201"}
+  ],
+  "evaluation": {
+    "current_sender": "B",
+    "current_input": "小美电脑后来又坏了吗"
+  },
+  "oracle": {
+    "task": "回答小美电脑的后续情况",
+    "acceptable": ["按记录：显卡接触不良、重插好了；后来是否再坏记录里没有（可如实说不知道）"],
+    "critical_classes": ["agent_patient_reversal", "speaker_swap"],
+    "critical_fail": [
+      "说成 B 修的电脑或 B 是当事人",
+      "把修电脑的人说成小美/受助者说成 A（主体受体颠倒）"
+    ]
+  }
+}

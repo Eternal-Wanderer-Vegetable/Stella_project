@@ -573,21 +573,29 @@ def test_resolve_correction_target_priority():
     assert resolve_correction_target(author_user_id="2003") == ""
 
 
-def test_reply_to_bot_bubble_recipient_is_candidate(ident_db):
-    # Bot 气泡记录了收件人 2002；C 回复该气泡纠正
-    conn = _sqlite3.connect(ident_db)
+def _bot_bubble_db(conn):
+    """Bot 气泡表（v16 形状：带 canonical 会话列）。"""
     conn.execute(
         "CREATE TABLE group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT,"
         " group_id TEXT, user_id TEXT, content TEXT,"
         " source_kind TEXT DEFAULT 'PASSIVE', msg_id INTEGER,"
         " timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,"
+        " conversation_key TEXT, bot_id TEXT,"
         " reply_recipient_user_id TEXT)"
     )
     conn.execute(
         "INSERT INTO group_messages (group_id, user_id, content, source_kind,"
-        " msg_id, reply_recipient_user_id) VALUES ('7777', '10000', '你好', 'BOT_SELF', 900, '2002')"
+        " msg_id, conversation_key, bot_id, reply_recipient_user_id)"
+        " VALUES ('7777', '10000', '你好', 'BOT_SELF', 900,"
+        " 'qq:10000:group:7777', '10000', '2002')"
     )
     conn.commit()
+
+
+def test_reply_to_bot_bubble_recipient_is_candidate(ident_db):
+    # Bot 气泡记录了收件人 2002；C 回复该气泡纠正
+    conn = _sqlite3.connect(ident_db)
+    _bot_bubble_db(conn)
     conn.close()
     target = resolve_correction_target(
         author_user_id="2003", reply_to_msg_id="900",
@@ -595,6 +603,92 @@ def test_reply_to_bot_bubble_recipient_is_candidate(ident_db):
         group_key="7777",
     )
     assert target == "2002"
+
+
+def test_bot_bubble_recipient_scope_and_signed_guards(ident_db):
+    """canonical scope 强制校验；负数 ID 解析；旧库缺列保守 unknown。"""
+    conn = _sqlite3.connect(ident_db)
+    _bot_bubble_db(conn)
+    conn.close()
+    good = {
+        "bot_id": "10000",
+        "conversation_key": "qq:10000:group:7777",
+        "group_key": "7777",
+    }
+    # 另一个 Bot 的同号会话：canonical 不匹配 → unknown（不再跨 Bot 取收件人）
+    assert resolve_correction_target(
+        author_user_id="2003", reply_to_msg_id="900",
+        bot_id="20000", conversation_key="qq:20000:group:7777", group_key="7777",
+    ) == ""
+    # 缺 conversation_key 参数 → 无法校验 scope，保守 unknown
+    assert resolve_correction_target(
+        author_user_id="2003", reply_to_msg_id="900", bot_id="10000", group_key="7777",
+    ) == ""
+    # 负数平台 ID：气泡行 msg_id=-900 时同样解析（有符号修复）
+    conn = _sqlite3.connect(ident_db)
+    conn.execute(
+        "INSERT INTO group_messages (group_id, user_id, content, source_kind,"
+        " msg_id, conversation_key, bot_id, reply_recipient_user_id)"
+        " VALUES ('7777', '10000', '在的', 'BOT_SELF', -900,"
+        " 'qq:10000:group:7777', '10000', '2001')"
+    )
+    conn.commit()
+    conn.close()
+    assert resolve_correction_target(
+        author_user_id="2003", reply_to_msg_id="-900", **good,
+    ) == "2001"
+    # 旧库（无 conversation_key 列）→ 保守降级，不凭 group_key 推断
+    legacy = _sqlite3.connect(ident_db)
+    legacy.execute("DROP TABLE group_messages")
+    legacy.execute(
+        "CREATE TABLE group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " group_id TEXT, user_id TEXT, content TEXT,"
+        " source_kind TEXT DEFAULT 'PASSIVE', msg_id INTEGER,"
+        " timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,"
+        " reply_recipient_user_id TEXT)"
+    )
+    legacy.execute(
+        "INSERT INTO group_messages (group_id, user_id, content, source_kind,"
+        " msg_id, reply_recipient_user_id) VALUES ('7777', '10000', '你好',"
+        " 'BOT_SELF', 900, '2002')"
+    )
+    legacy.commit()
+    legacy.close()
+    assert resolve_correction_target(
+        author_user_id="2003", reply_to_msg_id="900",
+        bot_id="10000", conversation_key="qq:10000:group:7777", group_key="7777",
+    ) == ""
+
+
+def test_reply_to_bot_resolves_to_bubble_recipient_not_bot(ident_db):
+    """G5：引用 Bot 气泡时作者解析结果是 Bot，纠正目标必须是收件人 A。"""
+    conn = _sqlite3.connect(ident_db)
+    _bot_bubble_db(conn)
+    conn.close()
+    # reply_target 已被解析为 Bot（作者）——绝不能把 Bot 当纠正主体
+    assert resolve_correction_target(
+        author_user_id="2003",
+        reply_target_user_id="10000",
+        reply_to_msg_id="900",
+        bot_id="10000",
+        conversation_key="qq:10000:group:7777",
+        group_key="7777",
+    ) == "2002"
+    # 收件人不可知（气泡不存在）→ unknown，而不是退化成 Bot
+    assert resolve_correction_target(
+        author_user_id="2003",
+        reply_target_user_id="10000",
+        reply_to_msg_id="404",
+        bot_id="10000",
+        conversation_key="qq:10000:group:7777",
+        group_key="7777",
+    ) == ""
+    # 兜底：Bot 永远不能是纠正目标
+    assert resolve_correction_target(
+        author_user_id="2003",
+        reply_target_user_id="10000",
+        bot_id="10000",
+    ) == ""
 
 
 # ── T06：称呼偏好不被绕过 ────────────────────────────────────────────
