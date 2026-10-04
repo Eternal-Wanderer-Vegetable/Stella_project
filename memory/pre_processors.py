@@ -33,7 +33,13 @@ from config import (
 from config.spaces import resolve_space
 from core.context import ChatContext
 from memory.cache_keys import POLICY_VERSION
-from memory.conversation_projection import canonical_message_id_text
+from memory.conversation_projection import (
+    PROJECTION_FORMAT_VERSION,
+    TranscriptBubble,
+    TranscriptRecord,
+    canonical_message_id_text,
+    render_transcript_record,
+)
 from memory.prompt_builder import build_memory_context, estimate_tokens
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
@@ -356,7 +362,12 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         if session_summary:
             parts.append("本场对话较早的内容（已压缩）:\n" + session_summary)
         if tail:
-            parts.append("最近的对话（时间正序，「我」是你自己说过的话）:\n" + tail)
+            # 段头声明投影版本与作者语义（归属修复计划 §6.2）：新投影以
+            # 「作者=Bot(uid)」标注 Bot 自己的话；旧库降级路径仍是「我: 」。
+            parts.append(
+                f"最近的对话（时间正序，投影v{PROJECTION_FORMAT_VERSION}；"
+                "「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n" + tail
+            )
 
         if parts:
             ctx.short_term = "\n".join(parts)
@@ -416,15 +427,18 @@ def _query_tail_rows_with_relations(
 ) -> list[tuple] | None:
     """取尾巴原始行（含 v16 关系列，id 倒序）；关系列不可用返回 None。
 
-    返回行结构：(id, user_id, content, source_kind, timestamp,
+    返回行结构（前 11 列为既有索引含义，不得移动；11–14 为投影追加列，
+    归属修复计划 §6.2）：(id, user_id, content, source_kind, timestamp,
     reply_to_msg_id, reply_target_user_id, mentioned_json,
-    logical_message_id, part_index, reply_recipient_user_id)。
+    logical_message_id, part_index, reply_recipient_user_id,
+    msg_id, origin_msg_id, bot_id, conversation_key)。
     """
     try:
         return cursor.execute(
             "SELECT id, user_id, content, source_kind, timestamp, "
             "reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json, "
-            "logical_message_id, part_index, reply_recipient_user_id "
+            "logical_message_id, part_index, reply_recipient_user_id, "
+            "msg_id, origin_msg_id, bot_id, conversation_key "
             "FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
             (str(group_id), row_cap),
         ).fetchall()
@@ -464,6 +478,54 @@ def _render_tail_line(uid: str, text: str, kind: str, rel: dict) -> str:
     return f"用户({uid}){suffix}: {text}"
 
 
+def _unit_signature(uid: str, kind: str, rel: dict) -> tuple:
+    """逻辑单元的合组签名：logical ID + 作者/来源/收件人必须全部一致。
+
+    归属修复计划 §6.2：连续 BOT_SELF 行只有 logical_message_id、作者、
+    源输入、收件人（及 bot 维度）完全一致才允许合成一个「人」的发言；
+    任何一项冲突都拆成独立记录、关系按各自行呈现——绝不合并成一个人。
+    """
+    return (
+        str(rel.get("logical_message_id") or ""),
+        uid,
+        kind,
+        str(rel.get("reply_recipient_user_id") or ""),
+        str(rel.get("origin_msg_id") or ""),
+        str(rel.get("bot_id") or ""),
+    )
+
+
+def _unit_record(unit: dict) -> TranscriptRecord:
+    """把一个逻辑单元转成自足的投影记录（作者/收件人逐行显式）。"""
+    rows = unit["rows"]
+    uid, kind = rows[0][1], rows[0][3]
+    rel = rows[0][5] or {}
+    bubbles = tuple(
+        TranscriptBubble(
+            part_index=int((row[5] or {}).get("part_index") or 0), text=row[2]
+        )
+        for row in rows
+    )
+    if kind == "BOT_SELF":
+        return TranscriptRecord(
+            author_id=uid,
+            author_is_bot=True,
+            bubbles=bubbles,
+            recipient_id=str(rel.get("reply_recipient_user_id") or ""),
+            origin_msg_id=str(rel.get("origin_msg_id") or ""),
+        )
+    first = rows[0]
+    mentions = tuple(first[5].get("mentions") or ()) if first[5] else ()
+    return TranscriptRecord(
+        author_id=uid,
+        author_is_bot=False,
+        bubbles=bubbles,
+        reply_to_msg_id=str(first[5].get("reply_to_msg_id") or "") if first[5] else "",
+        reply_target_user_id=str(first[5].get("reply_target_user_id") or "") if first[5] else "",
+        mentioned_user_ids=mentions,
+    )
+
+
 def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tuple[str, int]:
     """取最近消息，按时间正序拼成文本（v16：按逻辑单元选取与渲染）。
 
@@ -473,19 +535,22 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
 
     与旧行为的关系（多人身份修复计划 §6.2）：
 
-    1. **关系渲染**：带 v16 关系列时，用户消息标注回复对象/被提及者；一次
-       多气泡机器人回复（共享 logical_message_id）作为**同一逻辑单元**，
-       收件人显式标注——对谁说的话不能被后来者继承；
+    1. **自足单行投影**：带 v16 关系列时，每个逻辑单元（一次多气泡机器人
+       回复，或单条用户消息）渲染为**一个物理行**，作者/收件人/源输入逐行
+       显式——收件人不靠跨行继承，预算按物理行整存整取，不会留下孤立的
+       第 2/3 气泡；正文经 JSON 转义，换行/伪造头不会变成新的说话人；
     2. **逻辑单元选取**：连续后缀最多 ``limit`` 个单元（缺省 12），扫描上限
-       48 行、token 上限防极多气泡膨胀；
+       48 行；token 限额按**最终渲染文本**（含作者/ID/引用/转义开销）计算，
+       超出时更早的单元整体让位，不切半条；
     3. 其余（时间窗过滤、断层标记、BOT_SELF 占比告警、旧库降级）与旧实现
-       逐字一致；无任何关系信息的行渲染为旧格式（``我: `` / ``用户(uid): ``）。
+       一致；旧库（无关系列）逐字保持旧格式（``我: `` / ``用户(uid): ``）。
     """
     if limit <= 0:
         return "", 0
 
     rel_rows = _query_tail_rows_with_relations(cursor, group_id, _TAIL_SCAN_ROW_CAP)
-    rows = _query_tail_rows(cursor, group_id, limit) if rel_rows is None else rel_rows
+    legacy = rel_rows is None
+    rows = _query_tail_rows(cursor, group_id, limit) if legacy else rel_rows
     if not rows:
         return "", 0
     rows.reverse()  # id 倒序 → 时间正序
@@ -494,20 +559,23 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
     max_age = RECENT_TAIL_MAX_AGE_MINUTES * 60.0
     gap_threshold = RECENT_TAIL_GAP_MARK_MINUTES * 60.0
 
-    # 先把行归组成逻辑单元：BOT_SELF 且共享 logical_message_id 的相邻行合组
+    # 先把行归组成逻辑单元：BOT_SELF 且签名完全一致的相邻行合组
     units: list[dict] = []
     for row in rows:
         mid, uid, content, kind, ts = row[0], row[1], row[2], row[3], row[4]
         text = (content or "").strip()
-        logical_id = str(row[8] or "") if len(row) > 8 else ""
-        rel = {}
-        if len(row) > 8:
+        if legacy or len(row) <= 8:
+            rel: dict = {}
+        else:
             rel = {
                 "reply_to_msg_id": str(row[5] or ""),
                 "reply_target_user_id": str(row[6] or ""),
                 "mentions": _mentioned_uids(str(row[7] or "")),
-                "logical_message_id": logical_id,
+                "logical_message_id": str(row[8] or ""),
                 "reply_recipient_user_id": str(row[10] or ""),
+                "part_index": int(row[9] or 0),
+                "origin_msg_id": str(row[12] or "") if len(row) > 12 else "",
+                "bot_id": str(row[13] or "") if len(row) > 13 else "",
             }
         if not text:
             continue
@@ -517,41 +585,56 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
         if max_age > 0 and epoch is not None and (now - epoch) > max_age:
             continue
 
+        signature = _unit_signature(uid, kind, rel)
         joins_previous = (
             kind == "BOT_SELF"
-            and logical_id
+            and bool(signature[0])
             and units
-            and units[-1]["logical_id"] == logical_id
+            and units[-1]["signature"] == signature
         )
         if joins_previous:
             units[-1]["rows"].append((mid, uid, text, kind, epoch, rel))
             continue
         units.append(
             {
-                "logical_id": logical_id,
+                "signature": signature,
                 "rows": [(mid, uid, text, kind, epoch, rel)],
             }
         )
 
-    # 从最新单元向回收集连续后缀：单元数 ≤ limit，token 不超上限
+    # 先渲染每个单元（单物理行），再按**最终渲染成本**从最新向回收集
+    rendered: list[tuple[dict, str]] = []
+    for unit in units:
+        unit_rows = unit["rows"]
+        if legacy or not unit_rows[0][5]:
+            # 旧库/无关系行：逐字旧行为（BOT_SELF 逐行「我: 」，无合组）
+            line = "\n".join(
+                _render_tail_line(r[1], r[2], r[3], {}) for r in unit_rows
+            )
+        else:
+            line = render_transcript_record(_unit_record(unit))
+        if line:
+            rendered.append((unit, line))
+
     token_budget = _TAIL_UNIT_TOKEN_CAP
-    selected: list[dict] = []
-    for unit in reversed(units):
+    selected: list[tuple[dict, str]] = []
+    for unit, line in reversed(rendered):
         if len(selected) >= limit:
             break
-        unit_tokens = sum(
-            estimate_tokens(text) for _, _, text, _, _, _ in unit["rows"]
-        )
-        if selected and token_budget - unit_tokens < 0:
+        line_tokens = estimate_tokens(line)
+        if selected and token_budget - line_tokens < 0:
             break
-        selected.append(unit)
-        token_budget -= unit_tokens
+        selected.append((unit, line))
+        token_budget -= line_tokens
     selected.reverse()
 
     # BOT_SELF 占比告警：尾巴里几乎全是 Bot 自己的发言 = 用户消息疑似未入库
-    tail_total = sum(len(u["rows"]) for u in selected)
+    tail_total = sum(len(u["rows"]) for u, _ in selected)
     tail_bot_self = sum(
-        1 for u in selected for _, _, _, kind, _, _ in u["rows"] if kind == "BOT_SELF"
+        1
+        for u, _ in selected
+        for row in u["rows"]
+        if row[3] == "BOT_SELF"
     )
     if (
         tail_total >= 5
@@ -567,7 +650,7 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
     lines: list[str] = []
     prev_epoch: float | None = None
     tail_start_id = 0
-    for unit in selected:
+    for unit, line in selected:
         unit_rows = unit["rows"]
         if tail_start_id == 0:
             tail_start_id = int(unit_rows[0][0])
@@ -579,16 +662,10 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
             and (first_epoch - prev_epoch) > gap_threshold
         ):
             lines.append(f"（……中间隔了{humanize_duration(first_epoch - prev_epoch)}……）")
-
-        total = len(unit_rows)
-        is_grouped = bool(unit["logical_id"]) and total > 1
-        for idx, (_mid, uid, text, kind, epoch, rel) in enumerate(unit_rows):
-            if is_grouped and idx > 0:
-                lines.append(f"我（同一条回复，第{idx + 1}/{total}条）: {text}")
-            else:
-                lines.append(_render_tail_line(uid, text, kind, rel))
-            if epoch is not None:
-                prev_epoch = epoch
+        lines.append(line)
+        for row in unit_rows:
+            if row[4] is not None:
+                prev_epoch = row[4]
 
     return "\n".join(lines), tail_start_id
 

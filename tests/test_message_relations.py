@@ -305,19 +305,24 @@ def test_tail_renders_relations_and_logical_grouping(msg_db):
     asyncio.run(record_message(_ctx(user_id=int(BOT), msg_id=0, source_kind="BOT_SELF",
                                     message="阿呆是你呀", logical_message_id="t1",
                                     part_index=0, reply_recipient_user_id=B,
-                                    relation_version=1)))
+                                    origin_msg_id="112", bot_id=BOT,
+                                    conversation_key=KEY, relation_version=1)))
     asyncio.run(record_message(_ctx(user_id=int(BOT), msg_id=0, source_kind="BOT_SELF",
                                     message="别纠结啦", logical_message_id="t1",
                                     part_index=1, reply_recipient_user_id=B,
-                                    relation_version=1)))
+                                    origin_msg_id="112", bot_id=BOT,
+                                    conversation_key=KEY, relation_version=1)))
     conn = sqlite3.connect(msg_db)
     cursor = conn.cursor()
     text, tail_start = _fetch_recent_tail(cursor, GROUP, 12)
     conn.close()
-    assert f"用户({A}): 我叫Allets" in text  # 无关系行 = 旧格式
-    assert f"用户({B}) [回复 用户({A})；提及 用户({C})]: 阿呆是我" in text
-    assert f"我（回复给 用户({B})）: 阿呆是你呀" in text
-    assert "我（同一条回复，第2/2条）: 别纠结啦" in text
+    # 每个逻辑单元一个自足物理行：作者/收件人显式，不再依赖跨行继承
+    assert f"[作者=用户({A})] 说过: " in text
+    assert f"回复给=用户({A})" in text and f"提及=用户({C})" in text
+    bot_line = next(line for line in text.splitlines() if "作者=Bot(" in line)
+    assert bot_line.startswith(f"[作者=Bot({BOT}); 回复给=用户({B}); 原输入=112]")
+    assert "阿呆是你呀" in bot_line and "别纠结啦" in bot_line  # 两气泡同一行
+    assert "同一条回复" not in text  # 旧的跨行继承格式已移除
     assert tail_start > 0
 
 
@@ -329,7 +334,7 @@ def test_tail_unknown_reply_target_rendered_as_unknown(msg_db):
     cursor = conn.cursor()
     text, _ = _fetch_recent_tail(cursor, GROUP, 12)
     conn.close()
-    assert "用户(2002) [回复 对象未知]: 阿呆是我" in text
+    assert f"[作者=用户({B}); 回复给=未知] 说过: " in text
 
 
 def test_tail_unit_cap_keeps_recent_suffix(msg_db):
