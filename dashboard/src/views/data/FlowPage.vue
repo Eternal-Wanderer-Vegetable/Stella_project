@@ -141,14 +141,44 @@ const laneLabels = computed<Record<string, string>>(() => {
 /**
  * 分层流式布局：完整 = 目录全图；实际 = 已执行子图收束成一条连通路径。
  * 切换时节点按 CSS transform 过渡滑到新坐标（边淡出再淡入），不是硬切。
+ *
+ * 修复计划 §6.6（R8）：缺 spec（unmapped/invalid）时从事件事实回退——
+ * 节点来自运行事实（unknown 占位），边只来自合法 transition 事实，
+ * 绝不返回 graphLayout=null 让「实际路径」空白误导。
  */
+const fallbackSpec = computed(() => {
+  const transitions = store.transitionFacts;
+  const edges: Array<{ src: string; dst: string; kind: string; label: string }> = [];
+  const seen = new Set<string>();
+  for (const t of transitions) {
+    const m = (t.metrics ?? {}) as Record<string, unknown>;
+    const from = String(m.from_node ?? '');
+    const to = String(m.to_node ?? '');
+    if (!from || !to || from === to) continue;
+    const key = `${from}->${to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push({ src: from, dst: to, kind: String(m.relation_kind ?? 'order'), label: '' });
+  }
+  return {
+    lanes: [] as Array<[string, string]>,
+    nodes: [],
+    edges,
+    entry_roots: {},
+  };
+});
+
 const graphLayout = computed(() => {
-  if (!store.spec) return null;
+  const spec = store.spec ?? fallbackSpec.value;
+  if (!store.detail) return null;
+  if (!store.spec && !store.executedNodeMap.size) return null;
   const input = {
-    spec: store.spec,
+    spec,
     executed: store.executedNodeMap,
     labelOf: (nodeId: string) => store.nodeLabel(nodeId),
     laneOf: (nodeId: string) => store.nodeLane(nodeId),
+    transitions: store.transitionFacts,
+    rootEnded: store.rootEnded,
   };
   return viewMode.value === 'full'
     ? layoutLayered(input)
@@ -214,6 +244,14 @@ const completenessText = computed(() => {
 const rootKindLabel = (item: FlowMessageSummary) =>
   ROOT_KIND_LABELS[item.root_kind] ?? item.root_kind;
 
+// 修复计划 §6.2（R5/R8）：spec 缺失的诚实文案——不猜绑定，事实仍可读
+const specMissingText = computed(() => {
+  const binding = store.detail?.spec_binding ?? '';
+  if (binding === 'invalid') return 'spec 归档缺失（invalid）：事件事实如下';
+  if (binding === 'legacy_unverified') return '旧版拓扑（未验证绑定）：事件事实如下';
+  return '拓扑版本缺失（unmapped）：按事件回退展示';
+});
+
 // 列表图标按 O01 修复后的活跃判定：running=在跑，interrupted=过期化身，
 // 其余为已知终态（closed/outcome 落定）
 function listIcon(status: string): string {
@@ -237,6 +275,34 @@ function pick(item: FlowMessageSummary) {
     if (store.detail?.status === 'interrupted') return;
     void store.startStream();
   });
+}
+
+// 修复计划 §6.6（R8）：输出/全部指标可展开——「前 4 行输出 / 最近一组
+// metrics」不再被当成全部；截断/不可用必须显式可展开
+const showAllOutput = ref(false);
+const showAllMetrics = ref(false);
+
+// 修复计划 §6.6（R7）：关联轨迹可跳转；对象履历可反查并回跳运行
+function openRelatedTrace(traceId: string) {
+  if (!traceId) return;
+  void store.openTrace(traceId).then(() => {
+    void store.loadSpec();
+  });
+}
+
+const entityDialog = ref(false);
+const entityHistory = ref<Array<Record<string, unknown>>>([]);
+const entityHistoryKey = ref('');
+
+async function openEntityHistory(entityType: string, entityId: string) {
+  entityHistoryKey.value = `${entityType}:${entityId}`;
+  try {
+    const { getEntityHistory } = await import('@/api/flow');
+    entityHistory.value = await getEntityHistory(entityType, entityId) as Array<Record<string, unknown>>;
+  } catch {
+    entityHistory.value = [];
+  }
+  entityDialog.value = true;
 }
 
 function statusColor(status: string): string {
@@ -404,6 +470,17 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               暂无消息轨迹（开启 Bot 后处理消息即会出现）
             </v-list-item-title>
           </v-list-item>
+          <v-list-item v-if="store.messagesCursor">
+            <v-btn
+              block
+              size="small"
+              variant="text"
+              :loading="store.loadingList"
+              @click="store.loadMoreMessages()"
+            >
+              加载更早的轨迹（已载 {{ store.messages.length }} / 共 {{ store.messagesTotal }}）
+            </v-btn>
+          </v-list-item>
         </v-list>
       </v-card>
     </v-col>
@@ -437,9 +514,11 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             </v-chip>
             <v-chip v-if="store.spec" size="x-small" label>
               图版本 {{ store.spec.topology_version }}
+              <template v-if="store.detail.spec_binding === 'exact'"> · 精确绑定</template>
+              <template v-else-if="store.detail.spec_binding === 'legacy_unverified'"> · 旧版未验证</template>
             </v-chip>
             <v-chip v-else size="x-small" label color="warning">
-              拓扑版本缺失（unmapped）
+              {{ specMissingText }}
             </v-chip>
             <v-spacer />
             <v-btn-toggle
@@ -470,12 +549,17 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             >
               停止
             </v-btn>
-            <v-btn size="x-small" variant="text" @click="store.fetchEvents()">
+            <v-btn
+              size="x-small"
+              variant="text"
+              :loading="store.eventsLoading"
+              @click="store.refreshTraceBundle()"
+            >
               刷新
             </v-btn>
           </v-card-text>
 
-          <!-- 关联轨迹（trace 间因果，独立于画布节点） -->
+          <!-- 关联轨迹（trace 间因果，独立于画布节点）：可点击跳转（R7） -->
           <v-card-text
             v-if="store.detail.relations.length"
             class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
@@ -487,12 +571,40 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               size="x-small"
               label
               variant="tonal"
+              class="flow-relation-chip"
+              :title="`打开关联轨迹 ${rel.trace_id.slice(0, 8)}…`"
+              @click="openRelatedTrace(rel.trace_id)"
             >
               <v-icon start size="x-small">mdi-link-variant</v-icon>
               {{ rel.direction === 'out' ? '派生' : '触发自' }}
               {{ rel.trace_id.slice(0, 8) }}…
               <template v-if="rel.evidence">（{{ rel.evidence }}）</template>
             </v-chip>
+          </v-card-text>
+
+          <!-- 对象履历（修复计划 §6.6 R7）：消息 → 整合/候选/通知对象可追踪 -->
+          <v-card-text
+            v-if="store.traceEntities.length"
+            class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
+          >
+            <span class="text-caption text-medium-emphasis">对象：</span>
+            <v-chip
+              v-for="(ent, i) in store.traceEntities.slice(0, 12)"
+              :key="i"
+              size="x-small"
+              label
+              variant="outlined"
+              class="flow-relation-chip"
+              :title="`${ent.entity_type}:${ent.entity_id} 的状态履历`"
+              @click="openEntityHistory(String(ent.entity_type), String(ent.entity_id))"
+            >
+              <v-icon start size="x-small">mdi-shape-outline</v-icon>
+              {{ ent.entity_type }}:{{ String(ent.entity_id).slice(0, 10) }}
+              <template v-if="ent.to_state"> → {{ ent.to_state }}</template>
+            </v-chip>
+            <span v-if="store.traceEntities.length > 12" class="text-caption text-medium-emphasis">
+              …共 {{ store.traceEntities.length }} 条对象变化
+            </span>
           </v-card-text>
 
           <!-- 输入 / 输出：这条消息进去什么样、回复出来什么样 -->
@@ -517,19 +629,26 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 </div>
                 <div v-if="store.io.output.lines.length">
                   <div
-                    v-for="(line, i) in store.io.output.lines.slice(0, 4)"
+                    v-for="(line, i) in (showAllOutput
+                      ? store.io.output.lines
+                      : store.io.output.lines.slice(0, 4))"
                     :key="i"
                     class="io-text"
                     :title="line"
                   >
                     {{ line }}
                   </div>
-                  <div
+                  <v-btn
                     v-if="store.io.output.lines.length > 4"
-                    class="text-caption text-medium-emphasis"
+                    size="x-small"
+                    variant="text"
+                    class="px-0"
+                    @click="showAllOutput = !showAllOutput"
                   >
-                    …共 {{ store.io.output.lines.length }} 行
-                  </div>
+                    {{ showAllOutput
+                      ? '收起'
+                      : `展开全部 ${store.io.output.lines.length} 行` }}
+                  </v-btn>
                 </div>
                 <div v-else class="text-caption text-medium-emphasis">（无）</div>
               </div>
@@ -716,7 +835,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   </template>
                 </div>
                 <div v-else class="text-caption text-medium-emphasis mb-1">
-                  本次消息没有经过这个节点（无事实，不猜测原因）。
+                  本次消息未观测到这个节点（无事实，不猜测原因）。
                 </div>
                 <template v-if="selectedNodeDetail?.events?.length">
                   <v-divider class="my-2" />
@@ -746,9 +865,22 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 <template v-if="selectedNodeDetail?.metrics?.length">
                   <v-divider class="my-2" />
                   <pre class="flow-metrics">{{ JSON.stringify(
-                    selectedNodeDetail.metrics[selectedNodeDetail.metrics.length - 1],
+                    showAllMetrics
+                      ? selectedNodeDetail.metrics
+                      : selectedNodeDetail.metrics[selectedNodeDetail.metrics.length - 1],
                     null, 1
                   ) }}</pre>
+                  <v-btn
+                    v-if="selectedNodeDetail.metrics.length > 1"
+                    size="x-small"
+                    variant="text"
+                    class="px-0"
+                    @click="showAllMetrics = !showAllMetrics"
+                  >
+                    {{ showAllMetrics
+                      ? '只看最近一组'
+                      : `展开全部 ${selectedNodeDetail.metrics.length} 组指标` }}
+                  </v-btn>
                 </template>
               </v-card-text>
             </v-card>
@@ -808,6 +940,25 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               <v-chip size="x-small" label>
                 {{ store.visibleEvents.length }} / {{ store.orderedEvents.length }} 事件
               </v-chip>
+              <v-chip
+                v-if="store.detail.persisted_events"
+                size="x-small"
+                label
+                :color="store.eventsTruncated ? 'warning' : undefined"
+                :title="`存储已提交 ${store.detail.persisted_events} 条事件；浏览器已加载 ${store.orderedEvents.length} 条——两者独立（修复计划 §6.6 R8）`"
+              >
+                已载 {{ store.orderedEvents.length }} / 存储 {{ store.detail.persisted_events }}
+              </v-chip>
+              <v-btn
+                v-if="store.eventsTruncated"
+                size="x-small"
+                variant="tonal"
+                color="warning"
+                :loading="store.eventsLoading"
+                @click="store.loadMoreEvents()"
+              >
+                继续加载事件（当前为部分加载）
+              </v-btn>
             </div>
             <div v-if="currentEvent" class="text-caption text-medium-emphasis mt-1">
               {{ fmtTime(currentEvent.ts_utc) }} ·
@@ -826,6 +977,41 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
       </v-card>
     </v-col>
   </v-row>
+
+  <!-- 对象履历（修复计划 §6.6 R7）：对象视角 ↔ 运行视角互查 -->
+  <v-dialog v-model="entityDialog" max-width="640">
+    <v-card>
+      <v-card-title class="text-subtitle-1 d-flex align-center">
+        对象履历
+        <v-chip size="x-small" label class="ml-2">{{ entityHistoryKey }}</v-chip>
+        <v-spacer />
+        <v-btn icon="mdi-close" size="small" variant="text" @click="entityDialog = false" />
+      </v-card-title>
+      <v-card-text>
+        <div
+          v-for="(h, i) in entityHistory"
+          :key="i"
+          class="d-flex align-center ga-2 py-1 flex-wrap"
+          style="border-bottom: 1px solid rgba(128,128,128,.15)"
+        >
+          <span class="text-caption">{{ fmtTime(String(h.ts_utc ?? '')) }}</span>
+          <v-chip size="x-small" label>{{ h.from_state || '∅' }} → {{ h.to_state || '∅' }}</v-chip>
+          <v-spacer />
+          <v-btn
+            v-if="h.trace_id"
+            size="x-small"
+            variant="text"
+            @click="entityDialog = false; openRelatedTrace(String(h.trace_id))"
+          >
+            打开运行 {{ String(h.trace_id).slice(0, 8) }}…
+          </v-btn>
+        </div>
+        <div v-if="!entityHistory.length" class="text-caption text-medium-emphasis">
+          该对象没有状态变化事实。
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
@@ -876,6 +1062,9 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
+}
+.flow-relation-chip {
+  cursor: pointer;
 }
 .lane-dot {
   display: inline-block;

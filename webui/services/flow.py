@@ -93,11 +93,18 @@ def messages(
     outcome: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    cursor: str | None = None,
 ) -> dict:
-    """消息轨迹列表（含无 Turn 的被动/命令/过滤路径）。"""
+    """消息轨迹列表（含无 Turn 的被动/命令/过滤路径）。
+
+    修复计划 §6.6（R8）：保留 limit/offset 兼容；新增 keyset ``cursor``
+    （``<started_utc>|<trace_id>``，首屏查询快照上界）——不断插入的列表里
+    用 offset 翻页会漏行/重复，cursor 以 (started_utc, trace_id) 稳定续读。
+    返回 ``next_cursor``：本页最后一行的键；取尽为 None。
+    """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
-        return {"total": 0, "items": []}
+        return {"total": 0, "items": [], "next_cursor": None}
     try:
         cols = _trace_columns(conn)
         extra = [c for c in ("integrity", "lost_events", "last_heartbeat_utc",
@@ -113,6 +120,16 @@ def messages(
         if outcome:
             conds.append("outcome = ?")
             params.append(outcome)
+        if cursor:
+            # keyset 续读：严格晚于游标行（started, trace_id 双键稳定序）
+            try:
+                cur_started, cur_trace = str(cursor).split("|", 1)
+            except ValueError:
+                cur_started, cur_trace = "", ""
+            if cur_started:
+                conds.append(
+                    "(started_utc > ? OR (started_utc = ? AND trace_id > ?))")
+                params.extend([cur_started, cur_started, cur_trace])
         where = ("WHERE " + " AND ".join(conds)) if conds else ""
         total = conn.execute(
             f"SELECT COUNT(*) FROM message_traces {where}", params
@@ -123,8 +140,8 @@ def messages(
             "process_instance_id, last_heartbeat_utc"
             + (", " + ", ".join(extra) if extra else "")
             + f" FROM message_traces {where} "
-            "ORDER BY started_utc DESC, trace_id DESC LIMIT ? OFFSET ?",
-            (*params, int(limit), int(offset)),
+            "ORDER BY started_utc DESC, trace_id DESC LIMIT ?",
+            (*params, int(limit)),
         ).fetchall()
         items = []
         for r in rows:
@@ -150,9 +167,13 @@ def messages(
                 else:
                     item[name] = val or ""
             items.append(item)
-        return {"total": int(total), "items": items}
+        next_cursor = None
+        if items and len(items) == int(limit):
+            last = items[-1]
+            next_cursor = f"{last['started_utc']}|{last['trace_id']}"
+        return {"total": int(total), "items": items, "next_cursor": next_cursor}
     except Exception:
-        return {"total": 0, "items": []}
+        return {"total": 0, "items": [], "next_cursor": None}
     finally:
         conn.close()
 
@@ -291,20 +312,30 @@ def _spec_binding(spec_digest: str, topology_version: str) -> str:
         conn.close()
 
 
-def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[dict]:
-    """按自增 id 增量取事件（SSE 去重/补漏共用；升序）。"""
+def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500,
+                 until_id: int | None = None) -> list[dict]:
+    """按自增 id 增量取事件（SSE 去重/补漏共用；升序）。
+
+    ``until_id``（修复计划 §6.6 R8）：首读固定已提交上界（detail 的
+    high_watermark）——读满上界才追 SSE，避免把进行中的写入误当快照。
+    """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "flow_events"):
         return []
     try:
-        rows = conn.execute(
+        sql = (
             "SELECT id, event_id, span_id, parent_span_id, node_id, "
             "instance_key, seq, kind, status, reason_code, ts_utc, "
             "duration_ms, summary, metrics, attempt, fact_kind, error_code "
-            "FROM flow_events WHERE trace_id = ? AND id > ? "
-            "ORDER BY id ASC LIMIT ?",
-            (trace_id, int(after_id), int(limit)),
-        ).fetchall()
+            "FROM flow_events WHERE trace_id = ? AND id > ?"
+        )
+        params: list[object] = [trace_id, int(after_id)]
+        if until_id is not None:
+            sql += " AND id <= ?"
+            params.append(int(until_id))
+        sql += " ORDER BY id ASC LIMIT ?"
+        params.append(int(limit))
+        rows = conn.execute(sql, params).fetchall()
     except Exception:
         return []
     finally:

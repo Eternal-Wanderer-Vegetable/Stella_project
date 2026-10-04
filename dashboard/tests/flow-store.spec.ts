@@ -20,6 +20,9 @@ vi.mock('@/api/flow', () => ({
   getMessage: vi.fn(),
   getMessageIo: vi.fn(),
   getSpec: vi.fn(),
+  getSpecByDigest: vi.fn(),
+  getTraceEntities: vi.fn(async () => []),
+  getEntityHistory: vi.fn(async () => []),
   listMessages: vi.fn(),
 }));
 
@@ -106,6 +109,11 @@ function hangSse(
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.useFakeTimers();
+  // 全局缺省 mock（各用例可覆盖）：M5 的 bundle 刷新会同时触达
+  // getMessageIo / getTraceEntities，未 mock 的调用返回 undefined 会炸
+  vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+  vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+  vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -327,9 +335,10 @@ describe('flow store: event pagination to high watermark (O09)', () => {
     });
     await store.fetchEvents();
     expect(flowApi.getEvents).toHaveBeenCalledTimes(3);
-    expect(flowApi.getEvents).toHaveBeenNthCalledWith(1, 'big', 0, 1000);
-    expect(flowApi.getEvents).toHaveBeenNthCalledWith(2, 'big', 1000, 1000);
-    expect(flowApi.getEvents).toHaveBeenNthCalledWith(3, 'big', 2000, 1000);
+    // M5（修复计划 §6.6）：首读固定快照上界 until=high_watermark
+    expect(flowApi.getEvents).toHaveBeenNthCalledWith(1, 'big', 0, 1000, 2500);
+    expect(flowApi.getEvents).toHaveBeenNthCalledWith(2, 'big', 1000, 1000, 0);
+    expect(flowApi.getEvents).toHaveBeenNthCalledWith(3, 'big', 2000, 1000, 0);
     expect(store.events).toHaveLength(2500);
     expect(store.orderedEvents.at(-1)?.row_id).toBe(2500);
   });
@@ -443,5 +452,138 @@ describe('flow store: SSE reconnect & lifecycle (O09)', () => {
     store.onVisibilityChange(true);
     await vi.advanceTimersByTimeAsync(0);
     expect(store.streaming).toBe(false);
+  });
+});
+
+// ============================================================
+// M5（修复计划 §6.6，R6/R8）：bundle 刷新、keyset 列表、事件软上限。
+// ============================================================
+describe('flow store M5 contracts', () => {
+  it('refreshTraceBundle refreshes detail, IO and entities with generation guard', async () => {
+    const store = useFlowStore();
+    const d1 = detail({ trace_id: 'rt-1', ended_utc: '' });
+    vi.mocked(flowApi.getMessage).mockResolvedValue(d1);
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(
+      { ...EMPTY_IO, output: { lines: ['第一段'], count: 1 } });
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    await store.openTrace('rt-1');
+    // 轨迹结束后（R6）：IO/详情/对象一次刷新——不再停留打开时快照
+    vi.mocked(flowApi.getMessage).mockResolvedValue(
+      detail({ trace_id: 'rt-1', ended_utc: '2026-10-03T01:00:00' }));
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(
+      { ...EMPTY_IO, output: { lines: ['第一段', '第二段'], count: 2 } });
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([
+      { entity_type: 'memory_candidate', entity_id: 'c1', from_state: 'NEW',
+        to_state: 'OBSERVING', ts_utc: '2026-10-03T01:00:00' },
+    ]);
+    await store.refreshTraceBundle();
+    expect(store.io?.output.lines).toEqual(['第一段', '第二段']);
+    expect(store.detail?.ended_utc).toBe('2026-10-03T01:00:00');
+    expect(store.traceEntities).toHaveLength(1);
+  });
+
+  it('quick switch invalidates late bundle responses', async () => {
+    const store = useFlowStore();
+    vi.mocked(flowApi.getMessage)
+      .mockResolvedValueOnce(detail({ trace_id: 'a' }))
+      .mockResolvedValueOnce(detail({ trace_id: 'b' }));
+    // A 的 IO 慢返回：代际已切换到 B，旧响应不得覆盖
+    let releaseA!: (io: FlowMessageIo) => void;
+    vi.mocked(flowApi.getMessageIo).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseA = resolve; }));
+    await store.openTrace('a');
+    await store.openTrace('b');
+    releaseA({ ...EMPTY_IO, output: { lines: ['A 的回复'], count: 1 } });
+    await vi.waitFor(() => {
+      expect(store.detail?.trace_id).toBe('b');
+      expect(store.io).toEqual(EMPTY_IO);
+    });
+  });
+
+  it('loadMoreMessages appends via keyset cursor without overlap', async () => {
+    const store = useFlowStore();
+    const page1 = { total: 3, next_cursor: 'c1', items: [
+      { trace_id: 't1', root_kind: 'qq_chat', platform: 'qq', scope: '',
+        source_message_key: '', started_utc: '2026-10-03T00:00:00', ended_utc: '',
+        outcome: '', status: 'closed', complete: true, loss: false },
+      { trace_id: 't2', root_kind: 'qq_chat', platform: 'qq', scope: '',
+        source_message_key: '', started_utc: '2026-10-03T00:00:01', ended_utc: '',
+        outcome: '', status: 'closed', complete: true, loss: false },
+    ] as FlowMessageSummary[] };
+    const page2 = { total: 3, next_cursor: null, items: [
+      { trace_id: 't3', root_kind: 'qq_chat', platform: 'qq', scope: '',
+        source_message_key: '', started_utc: '2026-10-03T00:00:02', ended_utc: '',
+        outcome: '', status: 'closed', complete: true, loss: false },
+    ] as FlowMessageSummary[] };
+    vi.mocked(flowApi.listMessages)
+      .mockResolvedValueOnce(page1)
+      .mockResolvedValueOnce(page2);
+    await store.loadMessages();
+    expect(store.messages).toHaveLength(2);
+    expect(store.messagesCursor).toBe('c1');
+    await store.loadMoreMessages();
+    expect(store.messages.map((m) => m.trace_id)).toEqual(['t1', 't2', 't3']);
+    expect(store.messagesCursor).toBe('');
+  });
+
+  it('fetchEvents marks truncated against persisted_events and loadMoreEvents continues', async () => {
+    const store = useFlowStore();
+    // persisted 3 条，第一页只给 1 条（满页语义由 len>=LIMIT 判定→这里直接
+    // 用 persisted 高水位差表达 partial：maxRow(1) < persisted(3)）
+    vi.mocked(flowApi.getMessage).mockResolvedValue(detail({
+      trace_id: 'rt-big', high_watermark: 3, persisted_events: 3,
+    }));
+    vi.mocked(flowApi.getEvents)
+      .mockResolvedValueOnce([ev({ event_id: 'e1', row_id: 1 })])
+      .mockResolvedValueOnce([ev({ event_id: 'e2', row_id: 2 }),
+                              ev({ event_id: 'e3', row_id: 3 })]);
+    await store.openTrace('rt-big');
+    expect(store.eventsTruncated).toBe(true);
+    await store.loadMoreEvents();
+    expect(store.eventsTruncated).toBe(false);
+    expect(store.orderedEvents).toHaveLength(3);
+  });
+
+  it('loadSpec uses digest-exact cache for digest traces and version fallback for legacy', async () => {
+    const store = useFlowStore();
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
+    const digestSpec = makeSpec('2026.10.04');
+    vi.mocked(flowApi.getSpecByDigest).mockResolvedValue(digestSpec);
+    vi.mocked(flowApi.getMessage).mockResolvedValue(detail({
+      trace_id: 'rt-digest', topology_version: '2026.10.04',
+      spec_digest: 'a'.repeat(64),
+    }));
+    await store.openTrace('rt-digest');
+    await store.loadSpec();
+    expect(flowApi.getSpecByDigest).toHaveBeenCalledWith(
+      '2026.10.04', 'a'.repeat(64));
+    expect(flowApi.getSpec).not.toHaveBeenCalled();
+    expect(store.spec?.topology_version).toBe('2026.10.04');
+    // legacy：无 digest → 按版本回退
+    vi.mocked(flowApi.getSpec).mockResolvedValue(makeSpec('old-v'));
+    vi.mocked(flowApi.getMessage).mockResolvedValue(detail({
+      trace_id: 'rt-legacy', topology_version: 'old-v', spec_digest: '',
+    }));
+    await store.openTrace('rt-legacy');
+    await store.loadSpec();
+    expect(flowApi.getSpec).toHaveBeenCalledWith('old-v');
+    expect(store.spec?.topology_version).toBe('old-v');
+  });
+
+  it('scheduleIoRefresh throttles burst receipt facts into one refresh', async () => {
+    const store = useFlowStore();
+    vi.mocked(flowApi.getMessage).mockResolvedValue(detail({ trace_id: 'rt-io' }));
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    await store.openTrace('rt-io');
+    vi.mocked(flowApi.getMessageIo).mockClear();
+    store.scheduleIoRefresh();
+    store.scheduleIoRefresh();
+    store.scheduleIoRefresh();
+    await vi.advanceTimersByTimeAsync(2100);
+    // 节流窗口内三次触发合并为一次 IO 查询
+    expect(flowApi.getMessageIo).toHaveBeenCalledTimes(1);
   });
 });

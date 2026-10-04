@@ -93,13 +93,14 @@ async def flow_messages(
     outcome: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    cursor: str | None = None,
 ) -> Any:
     from webui.services import flow as flow_service
 
     return ok(
         flow_service.messages(
             platform=platform, root_kind=root_kind, outcome=outcome,
-            limit=limit, offset=offset,
+            limit=limit, offset=offset, cursor=cursor or None,
         )
     )
 
@@ -130,11 +131,18 @@ async def flow_message_events(
     trace_id: str,
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    until: Annotated[int, Query(ge=0)] = 0,
 ) -> Any:
-    """持久事件增量分页（断线补漏/轮询兜底共用；升序，按 row_id 去重）。"""
+    """持久事件增量分页（断线补漏/轮询兜底共用；升序，按 row_id 去重）。
+
+    ``until``（修复计划 §6.6）：固定已提交上界（row_id），首读快照用；
+    0 = 不设上界（SSE 补漏语义）。
+    """
     from webui.services import flow as flow_service
 
-    return ok({"items": flow_service.events_after(trace_id, after_id=after, limit=limit)})
+    return ok({"items": flow_service.events_after(
+        trace_id, after_id=after, limit=limit,
+        until_id=until or None)})
 
 
 @router.get("/api/v1/trace/flow/specs/{version}")

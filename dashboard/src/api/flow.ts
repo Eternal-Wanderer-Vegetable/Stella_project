@@ -64,6 +64,15 @@ export interface FlowMessageDetail extends FlowMessageSummary {
   lost_events?: number;
   persisted_events?: number;
   producer_ended?: boolean;
+  // 修复计划 §6.1/§6.2（M5）：规范身份与 spec 绑定完整性
+  conversation_key?: string;
+  bot_id?: string;
+  conversation_kind?: string;
+  peer_id?: string;
+  storage_session_id?: number | null;
+  source_message_id?: string;
+  identity_state?: string;
+  spec_binding?: 'exact' | 'legacy_unverified' | 'missing' | 'invalid' | string;
 }
 
 export interface FlowEvent {
@@ -121,15 +130,18 @@ export interface MessageQuery {
   outcome?: string;
   limit?: number;
   offset?: number;
+  // 修复计划 §6.6（R8）：keyset 续读游标（started_utc|trace_id）
+  cursor?: string;
 }
 
 export async function listMessages(q: MessageQuery = {}): Promise<{
   total: number;
   items: FlowMessageSummary[];
+  next_cursor?: string | null;
 }> {
   return unwrap(
     api.get('/trace/messages', { params: q }),
-  ) as Promise<{ total: number; items: FlowMessageSummary[] }>;
+  ) as Promise<{ total: number; items: FlowMessageSummary[]; next_cursor?: string | null }>;
 }
 
 export async function getMessage(traceId: string): Promise<FlowMessageDetail> {
@@ -140,15 +152,24 @@ export async function getEvents(
   traceId: string,
   after = 0,
   limit = 1000,
+  until = 0,
 ): Promise<FlowEvent[]> {
   const data = (await unwrap(
-    api.get(`/trace/messages/${traceId}/events`, { params: { after, limit } }),
+    api.get(`/trace/messages/${traceId}/events`, {
+      params: until > 0 ? { after, limit, until } : { after, limit },
+    }),
   )) as { items: FlowEvent[] };
   return data.items;
 }
 
 export interface FlowMessageIo {
-  input: { user_id: string; content: string; msg_id: number } | null;
+  input: {
+    user_id: string;
+    content: string;
+    msg_id: number;
+    // 修复计划 §6.3（M5）：exact=注册表存储键精确命中；legacy_partial=旧兜底
+    identity_state?: string;
+  } | null;
   output: { lines: string[]; count: number };
   notes: string[];
 }
@@ -162,6 +183,18 @@ export async function getMessageIo(traceId: string): Promise<FlowMessageIo> {
 export async function getSpec(version: string): Promise<FlowSpec> {
   return unwrap(
     api.get(`/trace/flow/specs/${encodeURIComponent(version)}`),
+  ) as Promise<FlowSpec>;
+}
+
+/** 按内容 digest 精确读取归档 spec（修复计划 §6.2/M5）：404 不回退。 */
+export async function getSpecByDigest(
+  version: string,
+  digest: string,
+): Promise<FlowSpec> {
+  return unwrap(
+    api.get(`/trace/flow/specs/${encodeURIComponent(version)}`, {
+      params: { digest },
+    }),
   ) as Promise<FlowSpec>;
 }
 
