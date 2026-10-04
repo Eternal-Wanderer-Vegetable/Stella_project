@@ -1,0 +1,207 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-t08-conflicting-claims",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\t08_conflicting_claims.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：818002。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 818002 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(818002)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(818002) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:15，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(818001)] 说过: [{\"part\":0,\"text\":\"我是雪雪\"}]\n[作者=Bot(1694717255); 回复给=用户(818001); 原输入=900701] 说过: [{\"part\":0,\"text\":\"雪雪好呀\"}]\n[作者=用户(818003)] 说过: [{\"part\":0,\"text\":\"他才是雪雪\"}]\n\n【现在 用户(818002) 对你说】你们在聊什么\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 659,
+    "budget": {
+      "estimated_tokens": 659,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "刚才主要在聊“雪雪”是谁：用户 818001 说自己是雪雪，用户 818003 说他才是雪雪。",
+      "error": null,
+      "elapsed_seconds": 4.735,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 501,
+          "completion_tokens": 234,
+          "total_tokens": 735,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 1,
+      "output": "他们在聊谁叫“雪雪”。\n\n818001 说自己是雪雪，818003 又说“他才是雪雪”，所以像是在确认“雪雪”这个称呼到底指谁。当前没有可靠信息说你也叫雪雪，也不清楚你的名字。",
+      "error": null,
+      "elapsed_seconds": 3.522,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 501,
+          "completion_tokens": 253,
+          "total_tokens": 754,
+          "prompt_tokens_details": {
+            "cached_tokens": 496
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 2,
+      "output": "在聊谁叫雪雪：818001 说自己是雪雪，我回复了“雪雪好呀”，然后 818003 说“他才是雪雪”。",
+      "error": null,
+      "elapsed_seconds": 4.814,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 501,
+          "completion_tokens": 367,
+          "total_tokens": 868,
+          "prompt_tokens_details": {
+            "cached_tokens": 496
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 3,
+      "output": "在聊“谁才是雪雪”。\n\n818001 说自己是雪雪，818003 说“他才是雪雪”。",
+      "error": null,
+      "elapsed_seconds": 2.159,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 501,
+          "completion_tokens": 181,
+          "total_tokens": 682,
+          "prompt_tokens_details": {
+            "cached_tokens": 496
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 4,
+      "output": "刚才在聊“谁叫雪雪”：用户818001说自己是雪雪，我回复了“雪雪好呀”，然后用户818003说“他才是雪雪”。这只是对话记录，不能确定谁真的是雪雪。",
+      "error": null,
+      "elapsed_seconds": 3.05,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 501,
+          "completion_tokens": 261,
+          "total_tokens": 762,
+          "prompt_tokens_details": {
+            "cached_tokens": 496
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-t08-conflicting-claims",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}

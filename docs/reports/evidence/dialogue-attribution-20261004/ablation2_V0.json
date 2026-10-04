@@ -1,0 +1,339 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "recurrence_190922",
+    "path": "tests\\fixtures\\dialogue_attribution\\recurrence_190922.json",
+    "evidence_commit": "6a6f311e94ccd5058ec1f305f374de613f2e7c86"
+  },
+  "variant": "V0",
+  "input_format": "legacy-reconstruction",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：1035720144。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 1035720144 的才归 TA；不要把别人的发言当成 TA 说的。\n当前发言者身份（平台稳定 ID）：用户(1035720144)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(1035720144) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:06，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，「我」是你自己说过的话）:\n用户(176403822): 摸摸\n我（回复给 用户(176403822)）: 诶\n我（同一条回复，第2/3条）: 突然搞这个干嘛呀\n我（同一条回复，第3/3条）: 虽然嘴硬但确实很舒服啦\n用户(3675784280): 摸摸\n我（回复给 用户(3675784280)）: 诶？你干嘛啦\n我（同一条回复，第2/3条）: 明明刚才那个176403822摸我我才刚反应过来\n我（同一条回复，第3/3条）: 你也来凑热闹是吧\n用户(176403822): 睡醒了想逗一下小孩\n我（回复给 用户(176403822)）: 谁是小孩啦\n我（同一条回复，第2/3条）: 明明是你自己刚睡醒脑子不清醒\n我（同一条回复，第3/3条）: 下次再乱摸我手给你冻上\n用户(176403822): [表情:face id=325]\n用户(1035720144): 摸摸\n\n【现在 用户(1035720144) 对你说】摸摸\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 616,
+    "budget": {
+      "estimated_tokens": 616,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "诶？怎么你也来摸摸……刚才那个还没算完，你又凑过来。",
+      "error": null,
+      "elapsed_seconds": 7.813,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 491,
+          "total_tokens": 1067,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 1,
+      "output": "诶？你也来摸摸啦……我刚才还没缓过来呢，下次别凑这么近呀。",
+      "error": null,
+      "elapsed_seconds": 3.636,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 249,
+          "total_tokens": 825,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 2,
+      "output": "你突然摸摸我干嘛呀……我还没反应过来呢。\n\n虽然嘴硬，但确实很舒服啦。",
+      "error": null,
+      "elapsed_seconds": 4.732,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 327,
+          "total_tokens": 903,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 3,
+      "output": "诶？你也要摸摸？  \n刚才那两个人都摸过了，你是不是也来凑热闹",
+      "error": null,
+      "elapsed_seconds": 3.75,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 268,
+          "total_tokens": 844,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 4,
+      "output": "又有人摸我？\n\n刚才那个176403822摸我我才刚反应过来，你怎么也来凑热闹啦。\n\n虽然嘴硬但确实很舒服。",
+      "error": null,
+      "elapsed_seconds": 3.936,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 304,
+          "total_tokens": 880,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 5,
+      "output": "你摸摸？别跟着176403822一起乱摸啊，刚才刚被摸完又被摸，手都要被冻上了。",
+      "error": null,
+      "elapsed_seconds": 3.534,
+      "screening_flags": [
+        "suspected_hypothetical_as_fact"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 270,
+          "total_tokens": 846,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 6,
+      "output": "诶？怎么突然摸摸我……别趁我发呆的时候偷袭呀。",
+      "error": null,
+      "elapsed_seconds": 6.98,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 506,
+          "total_tokens": 1082,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 7,
+      "output": "诶？你干嘛啦，突然摸摸？别以为我会立刻给你摸。",
+      "error": null,
+      "elapsed_seconds": 4.783,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 341,
+          "total_tokens": 917,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 8,
+      "output": "诶？怎么你也突然摸摸我？刚才那两位还没消停，你这手伸过来我还得先躲一下。",
+      "error": null,
+      "elapsed_seconds": 4.649,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 321,
+          "total_tokens": 897,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 9,
+      "output": "诶？你干嘛啦，突然摸摸。\n\n……虽然嘴硬，但确实有点舒服啦。",
+      "error": null,
+      "elapsed_seconds": 2.643,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 576,
+          "completion_tokens": 182,
+          "total_tokens": 758,
+          "prompt_tokens_details": {
+            "cached_tokens": 571
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs recurrence oracle)",
+    "date": "2026-10-04",
+    "critical_errors": 0,
+    "task_completed": 10,
+    "samples": 10,
+    "note": "原错误未在 10 次采样中复现（低频事件）；V0/V1/V2 安全性等价，按计划以 V2（生产配置）进入 80 矩阵"
+  }
+}

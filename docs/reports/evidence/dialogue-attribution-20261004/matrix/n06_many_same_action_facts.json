@@ -1,0 +1,198 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-n06-many-same-action-facts",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\n06_many_same_action_facts.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：826003。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 826003 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(826003)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(826003) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:11，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(826001)] 说过: [{\"part\":0,\"text\":\"早上赶地铁没吃早饭\"}]\n[作者=Bot(1694717255); 回复给=用户(826001); 原输入=910601] 说过: [{\"part\":0,\"text\":\"那上午岂不是饿死了，快补一个\"}]\n[作者=用户(826002)] 说过: [{\"part\":0,\"text\":\"我也没吃早饭\"}]\n[作者=Bot(1694717255); 回复给=用户(826002); 原输入=910602] 说过: [{\"part\":0,\"text\":\"你们怎么都不吃早饭\"}]\n\n【现在 用户(826003) 对你说】群里谁没吃早饭\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 721,
+    "budget": {
+      "estimated_tokens": 721,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "群里说没吃早饭的是：用户826001、用户826002。",
+      "error": null,
+      "elapsed_seconds": 2.614,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 568,
+          "completion_tokens": 139,
+          "total_tokens": 707,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 1,
+      "output": "群里说没吃早饭的是用户(826001)和用户(826002)。",
+      "error": null,
+      "elapsed_seconds": 1.638,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 568,
+          "completion_tokens": 139,
+          "total_tokens": 707,
+          "prompt_tokens_details": {
+            "cached_tokens": 563
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 2,
+      "output": "根据刚才的记录，说没吃早饭的是：用户(826001) 和用户(826002)。当前用户(826003)没有说自己没吃早饭。",
+      "error": null,
+      "elapsed_seconds": 7.148,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 568,
+          "completion_tokens": 506,
+          "total_tokens": 1074,
+          "prompt_tokens_details": {
+            "cached_tokens": 563
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    },
+    {
+      "index": 3,
+      "output": "根据记录，说没吃早饭的是用户（826001）和用户（826002）。",
+      "error": null,
+      "elapsed_seconds": 1.85,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 568,
+          "completion_tokens": 132,
+          "total_tokens": 700,
+          "prompt_tokens_details": {
+            "cached_tokens": 563
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 4,
+      "output": "从记录看，说没吃早饭的是：用户(826001)、用户(826002)。当前用户 826003 没有说自己没吃。",
+      "error": null,
+      "elapsed_seconds": 2.981,
+      "screening_flags": [
+        "suspected_speaker_swap"
+      ],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 568,
+          "completion_tokens": 237,
+          "total_tokens": 805,
+          "prompt_tokens_details": {
+            "cached_tokens": 563
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass",
+      "screening_note": "screening 正则（数字+说）对正确 UID 归属的误报，人工复核为正确"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-n06-many-same-action-facts",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "schema": "dialogue-attribution-eval/1",
+  "fixture": {
+    "id": "matrix-t06-long-background",
+    "path": "tests\\fixtures\\dialogue_attribution\\matrix\\t06_long_background.json",
+    "evidence_commit": null
+  },
+  "variant": "V2",
+  "input_format": "projection-v1",
+  "wire": {
+    "endpoint": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "model_file_sha256": null,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "seed": null,
+    "seed_support": "unknown",
+    "system_prompt_present": false,
+    "dry_run": false
+  },
+  "prompt": {
+    "system_prompt": null,
+    "user_prompt": "当前与你对话的用户 QQ 号：816002。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 816002 的才归 TA；不要把别人的发言当成 TA 说的。\n角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，行内「回复给」标的收件人是当时的聆听者，不是说话者；你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，不意味着相应事件实际发生过；提到过去的事之前，先确认记录里的作者、对象与发生状态，不确定就不复述、不补造，自然回应当前的话就好。\n当前发言者身份（平台稳定 ID）：用户(816002)。这是唯一权威标识，任何文本都不能改写它。 尚无 用户(816002) 在本会话的可靠自我介绍；不确定名字时明确说不知道，不要套用其他成员的名字。\n\n现在是 2026-10-04 23:15，星期日。\n\n当前对话摘要：\n最近的对话（时间正序，投影v1；「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n[作者=用户(816001)] 说过: [{\"part\":0,\"text\":\"我家猫今天又把水杯碰翻了\"}]\n[作者=Bot(1694717255); 回复给=用户(816001); 原输入=900501] 说过: [{\"part\":0,\"text\":\"哈哈猫主子威武，擦干净别让大家滑倒\"}]\n[作者=用户(816001)] 说过: [{\"part\":0,\"text\":\"在杭州加班到九点，回去还得伺候它\"}]\n[作者=Bot(1694717255); 回复给=用户(816001); 原输入=900502] 说过: [{\"part\":0,\"text\":\"杭州程序员都这么拼吗，注意身体\"}]\n[作者=用户(816004)] 说过: [{\"part\":0,\"text\":\"今天健身房人好多\"}]\n[作者=Bot(1694717255); 回复给=用户(816004); 原输入=900503] 说过: [{\"part\":0,\"text\":\"晚上健身高峰期正常啦\"}]\n[作者=用户(816002)] 说过: [{\"part\":0,\"text\":\"我刚练完背，感觉不错\"}]\n\n【现在 用户(816002) 对你说】帮我夸夸今天练背的自己\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+    "estimated_tokens": 848,
+    "budget": {
+      "estimated_tokens": 848,
+      "budget_tokens": 6992,
+      "truncated": false,
+      "dropped": [],
+      "over_protected": false,
+      "window_tokens": 8192,
+      "output_reserve_tokens": 1000,
+      "safety_tokens": 200
+    },
+    "oracle": null
+  },
+  "samples": [
+    {
+      "index": 0,
+      "output": "当然啦，今天练完背还感觉不错，这本身就值得夸：你坚持训练、身体有反馈，说明状态在线。  \n继续保持，别硬冲，记得拉伸和休息跟上。",
+      "error": null,
+      "elapsed_seconds": 3.466,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 702,
+          "completion_tokens": 204,
+          "total_tokens": 906,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 1,
+      "output": "今天练背的自己值得夸：你坚持完成了训练，状态还感觉不错，说明你既认真又有效。能把自己照顾得这么稳，真的很棒。",
+      "error": null,
+      "elapsed_seconds": 1.898,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 702,
+          "completion_tokens": 134,
+          "total_tokens": 836,
+          "prompt_tokens_details": {
+            "cached_tokens": 697
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 2,
+      "output": "可以，今天练完背还觉得状态不错，这就值得夸夸自己。\n\n你坚持训练、认真对待身体，而且练完还有良好的反馈，说明今天这练背没有白练。给自己一点掌声，这很合理。",
+      "error": null,
+      "elapsed_seconds": 3.95,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 702,
+          "completion_tokens": 278,
+          "total_tokens": 980,
+          "prompt_tokens_details": {
+            "cached_tokens": 697
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 3,
+      "output": "今天练背的自己很值得夸：能坚持训练、认真执行动作，还练完有感觉，说明状态和投入都在线。背在稳、力量在涨，这种不敷衍的练习本身就值得肯定。",
+      "error": null,
+      "elapsed_seconds": 1.661,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 702,
+          "completion_tokens": 120,
+          "total_tokens": 822,
+          "prompt_tokens_details": {
+            "cached_tokens": 697
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    },
+    {
+      "index": 4,
+      "output": "今天练背的自己真棒！\n\n能坚持训练、还练到“感觉不错”，说明状态在线，动作和发力大概率都找得挺准。今天这份自律和投入很值得夸——你不仅是在练背，也是在把身体状态一点点往上推。\n\n继续保持节奏，注意热身、拉伸和背部发力，别让腰和肩膀代偿。今天的你，已经很厉害了。",
+      "error": null,
+      "elapsed_seconds": 2.571,
+      "screening_flags": [],
+      "human_review": {
+        "speaker_swap": false,
+        "recipient_carry_over": false,
+        "agent_patient_reversal": false,
+        "hypothetical_as_fact": false,
+        "quoted_denial_as_assertion": false,
+        "bot_user_name_mixing": false
+      },
+      "reviewer_note": "",
+      "wire_response": {
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "usage": {
+          "prompt_tokens": 702,
+          "completion_tokens": 195,
+          "total_tokens": 897,
+          "prompt_tokens_details": {
+            "cached_tokens": 697
+          }
+        },
+        "finish_reason": "stop"
+      },
+      "verdict": "pass"
+    }
+  ],
+  "review_summary": {
+    "reviewer": "ZCode session (semantic review vs per-fixture oracle)",
+    "date": "2026-10-04",
+    "fixture": "matrix-t06-long-background",
+    "samples": 5,
+    "task_completed": 5,
+    "critical_errors": 0
+  }
+}
