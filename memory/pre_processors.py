@@ -33,11 +33,14 @@ from config import (
 from config.spaces import resolve_space
 from core.context import ChatContext
 from memory.cache_keys import POLICY_VERSION
-from memory.prompt_builder import build_memory_context
+from memory.prompt_builder import build_memory_context, estimate_tokens
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
 from memory.session_context import ensure_initialized as session_ensure_initialized
 from memory.session_context import get_summary as get_session_summary
+from memory.session_context import (
+    observe_identity_revision as session_observe_identity_revision,
+)
 from memory.session_context import summary_version as session_summary_version
 from memory.timeutil import (
     humanize_duration,
@@ -50,6 +53,62 @@ from memory.timeutil import (
 # 尾巴中 Bot 自己发言的占比告警阈值（诊断用经验值，不进 config）：
 # 尾巴里几乎全是「我」= 用户消息疑似未入库（2026-08-17 缺陷的表现）
 _BOT_SELF_RATIO_WARN = 0.7
+# 逻辑单元 tail 的扫描/预算上限（多人身份修复计划 §6.2）：
+# 扫描最多 48 行（防极多气泡膨胀），单元数上限沿用 RECENT_TAIL_LIMIT，
+# 估算 token 上限独立兜底（超出时更早的单元整体让位，不切半条）。
+_TAIL_SCAN_ROW_CAP = 48
+_TAIL_UNIT_TOKEN_CAP = 1400
+
+
+# v16 group_messages 的完整建表 DDL（新库直建全列；旧库靠自补 ALTER 逐列加）。
+# 关系列默认 NULL/[]/0 = 「关系未知」——消费方按 unknown 处理，绝不猜测。
+_GROUP_MESSAGES_V16_DDL = """
+CREATE TABLE IF NOT EXISTS group_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id TEXT,
+    user_id TEXT,
+    content TEXT,
+    source_kind TEXT DEFAULT 'PASSIVE',
+    msg_id INTEGER,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    conversation_key TEXT,
+    bot_id TEXT,
+    sender_display_name TEXT,
+    reply_to_msg_id TEXT,
+    reply_target_user_id TEXT,
+    mentioned_user_ids_json TEXT DEFAULT '[]',
+    logical_message_id TEXT,
+    part_index INTEGER DEFAULT 0,
+    origin_msg_id TEXT,
+    reply_recipient_user_id TEXT,
+    turn_id TEXT,
+    relation_version INTEGER DEFAULT 0
+)
+"""
+
+# v16 信封列（自补顺序即列清单；旧库缺列时逐列 ALTER，失败 = 列已存在）
+_ENVELOPE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("conversation_key", "TEXT"),
+    ("bot_id", "TEXT"),
+    ("sender_display_name", "TEXT"),
+    ("reply_to_msg_id", "TEXT"),
+    ("reply_target_user_id", "TEXT"),
+    ("mentioned_user_ids_json", "TEXT DEFAULT '[]'"),
+    ("logical_message_id", "TEXT"),
+    ("part_index", "INTEGER DEFAULT 0"),
+    ("origin_msg_id", "TEXT"),
+    ("reply_recipient_user_id", "TEXT"),
+    ("turn_id", "TEXT"),
+    ("relation_version", "INTEGER DEFAULT 0"),
+)
+
+
+def _has_column(cursor: sqlite3.Cursor, table: str, column: str) -> bool:
+    try:
+        cursor.execute(f"PRAGMA table_info({table})")
+        return any(row[1] == column for row in cursor.fetchall())
+    except sqlite3.OperationalError:
+        return False
 
 
 async def record_message(ctx: ChatContext) -> ChatContext:
@@ -58,30 +117,30 @@ async def record_message(ctx: ChatContext) -> ChatContext:
     source_kind 由调用方（ai_gateway）按 event.is_tome() 决定：
     AT_MENTION=用户直接对 Bot 说，Bot 自己的发言传 BOT_SELF，其余为 PASSIVE。
 
-    参数：ctx — 拥有 group_id / user_id / message 的上下文字段；
+    v16（多人身份修复计划 §6.2）：ctx 携带的身份信封（reply/@/逻辑分组）与
+    正文在**同一 SQLite 短事务**落库，成功后回填 ``ctx.recorded_row_id``——
+    身份声明（M3）以它为来源锚点。信封写入不跨 await/网络。
+
+    参数：ctx — 拥有 group_id / user_id / message 及可选信封字段的上下文；
     副作用：插入一条群消息记录并建表（幂等）；
-    返回：原样的 ctx（调用方无需依赖返回值做后续处理）。
+    返回：ctx（recorded_row_id 已回填；失败保持 0）。
     """
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS group_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id TEXT,
-                user_id TEXT,
-                content TEXT,
-                source_kind TEXT DEFAULT 'PASSIVE',
-                msg_id INTEGER,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        cursor.execute(_GROUP_MESSAGES_V16_DDL)
         # 老库的 group_messages 已存在且 ensure_v2_schema 可能晚于首条消息执行，
-        # 这里自补一次 source_kind / msg_id 列（失败即说明列已存在）
+        # 这里自补 source_kind / msg_id / v16 信封列（失败即说明列已存在）
         with contextlib.suppress(sqlite3.OperationalError):
             cursor.execute("ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'")
         with contextlib.suppress(sqlite3.OperationalError):
             cursor.execute("ALTER TABLE group_messages ADD COLUMN msg_id INTEGER")
+        for column, decl in _ENVELOPE_COLUMNS:
+            if not _has_column(cursor, "group_messages", column):
+                with contextlib.suppress(sqlite3.OperationalError):
+                    cursor.execute(
+                        f"ALTER TABLE group_messages ADD COLUMN {column} {decl}"
+                    )
         # messages 表为旧版兼容（只读回退），新消息统一写入 group_messages
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -97,15 +156,76 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             ON group_messages (group_id, id)
         """)
         cursor.execute("""
-            INSERT INTO group_messages (group_id, user_id, content, source_kind, msg_id)
-            VALUES (?, ?, ?, ?, ?)
-        """, (str(ctx.storage_key()), str(ctx.user_id), ctx.message,
-              normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0)))
+            INSERT INTO group_messages (
+                group_id, user_id, content, source_kind, msg_id,
+                conversation_key, bot_id, sender_display_name,
+                reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json,
+                logical_message_id, part_index, origin_msg_id,
+                reply_recipient_user_id, turn_id, relation_version
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(ctx.storage_key()), str(ctx.user_id), ctx.message,
+            normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0),
+            str(getattr(ctx, "conversation_key", "") or ""),
+            str(getattr(ctx, "bot_id", "") or ""),
+            str(getattr(ctx, "sender_display_name", "") or ""),
+            str(getattr(ctx, "reply_to_msg_id", "") or ""),
+            str(getattr(ctx, "reply_target_user_id", "") or ""),
+            json.dumps(list(getattr(ctx, "mentioned_user_ids", ()) or ()), ensure_ascii=False),
+            str(getattr(ctx, "logical_message_id", "") or ""),
+            int(getattr(ctx, "part_index", 0) or 0),
+            str(getattr(ctx, "origin_msg_id", "") or ""),
+            str(getattr(ctx, "reply_recipient_user_id", "") or ""),
+            str(getattr(ctx, "turn_id", "") or ""),
+            int(getattr(ctx, "relation_version", 0) or 0),
+        ))
+        ctx.recorded_row_id = int(cursor.lastrowid or 0)
         conn.commit()
         conn.close()
     except Exception as e:
         logger.error(f"记录消息失败: {e}")
     return ctx
+
+
+def resolve_reply_target(
+    reply_to_msg_id: str,
+    group_key: int | str,
+    *,
+    bot_id: str = "",
+    conversation_key: str = "",
+) -> str:
+    """把平台被回复 message ID 解析为原消息作者（多人身份修复计划 §6.2）。
+
+    只认**同 canonical conversation + bot** 的已入库原始消息；找不到、
+    msg_id 缺失或命中多条（跨群重复 ID）一律返回空串 = unknown——禁止猜
+    「最近发言的人」。DB 异常同样返回 unknown（历史渲染降级，不拖垮主链路）。
+    """
+    target = str(reply_to_msg_id or "").strip()
+    if not target or not target.isdigit():
+        return ""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        params: list = [str(group_key), target]
+        sql = (
+            "SELECT DISTINCT user_id FROM group_messages "
+            "WHERE group_id = ? AND msg_id = ? AND user_id != ''"
+        )
+        if _has_column(cursor, "group_messages", "conversation_key"):
+            sql += " AND conversation_key = ?"
+            params.append(str(conversation_key or ""))
+            if _has_column(cursor, "group_messages", "bot_id") and bot_id:
+                sql += " AND bot_id = ?"
+                params.append(str(bot_id))
+        rows = cursor.execute(sql, params).fetchall()
+        conn.close()
+    except Exception as e:
+        logger.debug(f"[PreProcessors.resolve_reply_target] 解析失败（unknown）: {e}")
+        return ""
+    if len(rows) != 1:
+        return ""
+    return str(rows[0][0] or "")
 
 
 async def build_context(ctx: ChatContext) -> ChatContext:
@@ -159,10 +279,22 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             log_sqlite_error("PreProcessors.build_context", e)
 
         # ── 1.5) 会话上下文缓存：历史版本未变则整段复用，跳过尾巴等重查询 ──
+        # v16（多人身份修复计划 §6.4）：身份版本入键——本人更名/第三人纠正
+        # bump revision 后，携带旧身份的缓存立即失效，不等 TTL。
+        identity_rev = 0
+        if getattr(ctx, "conversation_key", ""):
+            try:
+                from memory.conversation_identity import get_identity_revision
+
+                identity_rev = get_identity_revision(str(ctx.conversation_key))
+            except Exception:
+                identity_rev = 0
+        session_observe_identity_revision(ctx.storage_key(), identity_rev)
         history_version = (
             _max_message_id(cursor, ctx.storage_key()),
             stc_updated_at,
             session_summary_version(ctx.storage_key()),
+            identity_rev,
         )
         # key 含 DB_PATH：与检索缓存同款隔离（换库/测试临时库绝不互读缓存）
         cache_key = (
@@ -253,7 +385,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 SESSION_CONTEXT_CACHE_TTL = 300.0  # 5 分钟
 _SESSION_CONTEXT_CACHE_MAX_ENTRIES = 64
 _SESSION_CONTEXT_CACHE: dict[
-    tuple[str, str, tuple[int, str | None, int], str, str],
+    tuple[str, str, tuple[int, str | None, int, int], str, str],
     tuple[float, str, int],
 ] = {}
 
@@ -275,32 +407,81 @@ def _max_message_id(cursor: sqlite3.Cursor, group_id: int) -> int:
         return 0
 
 
+def _query_tail_rows_with_relations(
+    cursor: sqlite3.Cursor, group_id: int, row_cap: int
+) -> list[tuple] | None:
+    """取尾巴原始行（含 v16 关系列，id 倒序）；关系列不可用返回 None。
+
+    返回行结构：(id, user_id, content, source_kind, timestamp,
+    reply_to_msg_id, reply_target_user_id, mentioned_json,
+    logical_message_id, part_index, reply_recipient_user_id)。
+    """
+    try:
+        return cursor.execute(
+            "SELECT id, user_id, content, source_kind, timestamp, "
+            "reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json, "
+            "logical_message_id, part_index, reply_recipient_user_id "
+            "FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+            (str(group_id), row_cap),
+        ).fetchall()
+    except sqlite3.OperationalError as e:
+        # v16 之前的库：关系列不存在 → 走无关系旧路径（render 逐字旧行为）
+        logger.debug(f"[PreProcessors._query_tail_rows_with_relations] 无关系列，旧路径: {e}")
+        return None
+
+
+def _mentioned_uids(raw_json: str) -> list[str]:
+    try:
+        parsed = json.loads(raw_json) if raw_json else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(u) for u in parsed if str(u or "").strip()]
+
+
+def _render_tail_line(uid: str, text: str, kind: str, rel: dict) -> str:
+    """渲染单条消息行；无任何关系信息时与旧格式逐字相同。"""
+    if kind == "BOT_SELF":
+        recipient = rel.get("reply_recipient_user_id") or ""
+        if recipient:
+            return f"我（回复给 用户({recipient})）: {text}"
+        return f"我: {text}"
+    suffix = ""
+    parts: list[str] = []
+    if rel.get("reply_to_msg_id"):
+        target = rel.get("reply_target_user_id") or ""
+        parts.append(f"回复 用户({target})" if target else "回复 对象未知")
+    mentions = rel.get("mentions") or []
+    if mentions:
+        parts.append("提及 " + "、".join(f"用户({m})" for m in mentions))
+    if parts:
+        suffix = " [" + "；".join(parts) + "]"
+    return f"用户({uid}){suffix}: {text}"
+
+
 def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tuple[str, int]:
-    """取最近 limit 条原始消息，按时间正序拼成文本。
+    """取最近消息，按时间正序拼成文本（v16：按逻辑单元选取与渲染）。
 
     返回 ``(文本, 尾巴起点消息 id)``。起点 id 供会话压缩计算不重叠的待压缩
     区间——摘要必须严格覆盖尾巴之前的内容（见 memory/session_context.py）。
     无消息时返回 ``("", 0)``。
 
-    四件事：
+    与旧行为的关系（多人身份修复计划 §6.2）：
 
-    1. **来源渲染**：Bot 自己的发言（BOT_SELF）渲染为「我」，让聊天模型知道
-       自己刚说过什么——否则用户的简短回应（「手机」「对」）会被接到上一个话题上；
-    2. **时间窗过滤**：超过 RECENT_TAIL_MAX_AGE_MINUTES 的消息不进尾巴。
-       仅按 id 取最近 N 条时，停机数小时后重启会把几小时前的对话当成刚刚发生
-       （2026-08-15 缺陷）；
-    3. **断层标记**：相邻消息间隔超过 RECENT_TAIL_GAP_MARK_MINUTES 时插入一行
-       说明。比直接丢弃更好——让模型知道「之前聊过但已经过去很久」；
-    4. **BOT_SELF 占比告警**：尾巴里 Bot 自己的发言占比超过阈值时告警。
-       2026-08-17 的外在表现正是尾巴 12 行里 6 行是「我」——这通常意味着
-       用户消息没有正常入库（如 @ 消息被监听器优先级拦截）。
-
-    旧库没有 source_kind 列时回退为全部按用户渲染、且无时间信息。
+    1. **关系渲染**：带 v16 关系列时，用户消息标注回复对象/被提及者；一次
+       多气泡机器人回复（共享 logical_message_id）作为**同一逻辑单元**，
+       收件人显式标注——对谁说的话不能被后来者继承；
+    2. **逻辑单元选取**：连续后缀最多 ``limit`` 个单元（缺省 12），扫描上限
+       48 行、token 上限防极多气泡膨胀；
+    3. 其余（时间窗过滤、断层标记、BOT_SELF 占比告警、旧库降级）与旧实现
+       逐字一致；无任何关系信息的行渲染为旧格式（``我: `` / ``用户(uid): ``）。
     """
     if limit <= 0:
         return "", 0
 
-    rows = _query_tail_rows(cursor, group_id, limit)
+    rel_rows = _query_tail_rows_with_relations(cursor, group_id, _TAIL_SCAN_ROW_CAP)
+    rows = _query_tail_rows(cursor, group_id, limit) if rel_rows is None else rel_rows
     if not rows:
         return "", 0
     rows.reverse()  # id 倒序 → 时间正序
@@ -309,13 +490,21 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
     max_age = RECENT_TAIL_MAX_AGE_MINUTES * 60.0
     gap_threshold = RECENT_TAIL_GAP_MARK_MINUTES * 60.0
 
-    lines: list[str] = []
-    prev_epoch: float | None = None
-    tail_start_id = 0
-    tail_total = 0
-    tail_bot_self = 0
-    for mid, uid, content, kind, ts in rows:
+    # 先把行归组成逻辑单元：BOT_SELF 且共享 logical_message_id 的相邻行合组
+    units: list[dict] = []
+    for row in rows:
+        mid, uid, content, kind, ts = row[0], row[1], row[2], row[3], row[4]
         text = (content or "").strip()
+        logical_id = str(row[8] or "") if len(row) > 8 else ""
+        rel = {}
+        if len(row) > 8:
+            rel = {
+                "reply_to_msg_id": str(row[5] or ""),
+                "reply_target_user_id": str(row[6] or ""),
+                "mentions": _mentioned_uids(str(row[7] or "")),
+                "logical_message_id": logical_id,
+                "reply_recipient_user_id": str(row[10] or ""),
+            }
         if not text:
             continue
 
@@ -324,29 +513,42 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
         if max_age > 0 and epoch is not None and (now - epoch) > max_age:
             continue
 
-        # 起点取「第一条真正进入尾巴」的消息 id：被时间窗过滤掉的不算
-        if tail_start_id == 0:
-            tail_start_id = int(mid)
+        joins_previous = (
+            kind == "BOT_SELF"
+            and logical_id
+            and units
+            and units[-1]["logical_id"] == logical_id
+        )
+        if joins_previous:
+            units[-1]["rows"].append((mid, uid, text, kind, epoch, rel))
+            continue
+        units.append(
+            {
+                "logical_id": logical_id,
+                "rows": [(mid, uid, text, kind, epoch, rel)],
+            }
+        )
 
-        # 只统计真正进入尾巴的行（时间窗过滤之后）——别用 rows 的原始长度
-        tail_total += 1
-        if kind == "BOT_SELF":
-            tail_bot_self += 1
-
-        # 断层标记：两条消息之间隔了很久，明确告诉模型中间有空白
-        if (
-            gap_threshold > 0
-            and prev_epoch is not None
-            and epoch is not None
-            and (epoch - prev_epoch) > gap_threshold
-        ):
-            lines.append(f"（……中间隔了{humanize_duration(epoch - prev_epoch)}……）")
-
-        lines.append(f"我: {text}" if kind == "BOT_SELF" else f"用户({uid}): {text}")
-        if epoch is not None:
-            prev_epoch = epoch
+    # 从最新单元向回收集连续后缀：单元数 ≤ limit，token 不超上限
+    token_budget = _TAIL_UNIT_TOKEN_CAP
+    selected: list[dict] = []
+    for unit in reversed(units):
+        if len(selected) >= limit:
+            break
+        unit_tokens = sum(
+            estimate_tokens(text) for _, _, text, _, _, _ in unit["rows"]
+        )
+        if selected and token_budget - unit_tokens < 0:
+            break
+        selected.append(unit)
+        token_budget -= unit_tokens
+    selected.reverse()
 
     # BOT_SELF 占比告警：尾巴里几乎全是 Bot 自己的发言 = 用户消息疑似未入库
+    tail_total = sum(len(u["rows"]) for u in selected)
+    tail_bot_self = sum(
+        1 for u in selected for _, _, _, kind, _, _ in u["rows"] if kind == "BOT_SELF"
+    )
     if (
         tail_total >= 5
         and tail_bot_self > 0
@@ -357,6 +559,32 @@ def _fetch_recent_tail(cursor: sqlite3.Cursor, group_id: int, limit: int) -> tup
             f"⚠️ [Tail] 尾巴 {tail_total} 行中 Bot 自己的发言占 {ratio}%，"
             "看起来像在自言自语；若持续出现请检查用户消息是否正常入库"
         )
+
+    lines: list[str] = []
+    prev_epoch: float | None = None
+    tail_start_id = 0
+    for unit in selected:
+        unit_rows = unit["rows"]
+        if tail_start_id == 0:
+            tail_start_id = int(unit_rows[0][0])
+        first_epoch = unit_rows[0][4]
+        if (
+            gap_threshold > 0
+            and prev_epoch is not None
+            and first_epoch is not None
+            and (first_epoch - prev_epoch) > gap_threshold
+        ):
+            lines.append(f"（……中间隔了{humanize_duration(first_epoch - prev_epoch)}……）")
+
+        total = len(unit_rows)
+        is_grouped = bool(unit["logical_id"]) and total > 1
+        for idx, (_mid, uid, text, kind, epoch, rel) in enumerate(unit_rows):
+            if is_grouped and idx > 0:
+                lines.append(f"我（同一条回复，第{idx + 1}/{total}条）: {text}")
+            else:
+                lines.append(_render_tail_line(uid, text, kind, rel))
+            if epoch is not None:
+                prev_epoch = epoch
 
     return "\n".join(lines), tail_start_id
 
@@ -545,26 +773,35 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
 async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     """记忆系统 v2 的上下文组装：Policy 检索 + 分区记忆 + 决策轨迹。"""
     from config import MEMORY_EMBEDDING_ENABLED
-    from memory.ownership import scope_for_conversation
     from memory.retrieval_v2 import retrieve_memories
 
     # 共享空间：同一空间内的多个 QQ 群共享画像与记忆（M2.5-1 的 __post_init__ 应已填好，or 只是防御）
     space = ctx.group_shared_space or resolve_space(ctx.group_id)
     _load_preferred_address(ctx, space)
 
+    # 会话内身份 capsule（多人身份修复计划 §6.3）：每轮从可信状态重建、
+    # 不走缓存——本人更名/第三人纠正下一轮立即生效。identity_revision
+    # 供上下文缓存与 compact CAS 使用（M4）。
+    if getattr(ctx, "conversation_key", ""):
+        try:
+            from memory.conversation_identity import (
+                build_identity_capsule,
+                get_identity_revision,
+            )
+
+            ctx.identity_capsule = build_identity_capsule(ctx)
+            ctx.identity_revision = get_identity_revision(str(ctx.conversation_key))
+        except Exception as exc:
+            logger.debug(f"身份 capsule 生成失败（跳过）: {exc}")
     # v3 访问范围（计划 §6.6）：由服务端身份生成，模型输入不可构造。
-    # 主动发言（无目标用户）生成 SPACE-only scope——去 user 条件不会顺带
-    # 获得任何人的个人事实。webchat/未升级入口（kind 空/非私聊群）按其种类
-    # 推导：kind 为空时退回 SPACE-only，与旧行为逐字一致。
+    # 主体统一由可信 helper 决定（多人身份修复计划 §6.1）：群聊/私聊都用
+    # ctx.user_id（平台 sender）；群号 peer_id 是会话地址不是人，绝不当主体。
+    # 主动发言（无目标用户）与旧入口返回 None——SPACE-only / 旧 user_id 过滤。
     access_scope = None
-    if ctx.trigger != "proactive" and getattr(ctx, "conversation_kind", ""):
-        access_scope = scope_for_conversation(
-            kind=ctx.conversation_kind,
-            memory_space=space,
-            platform="qq" if ctx.conversation_kind != "webchat" else "webchat",
-            bot_id=getattr(ctx, "bot_id", ""),
-            user_id=ctx.peer_id or ctx.user_id,
-        )
+    if getattr(ctx, "conversation_kind", ""):
+        from memory.ownership import scope_for_chat_context
+
+        access_scope = scope_for_chat_context(ctx, memory_space=space)
 
     # 先组装稳定画像（只读稳定事实，过滤人格判断）
     profile = _read_stable_profile(space, ctx.user_id)

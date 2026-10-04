@@ -237,6 +237,9 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             return False
 
     try:
+        # CAS 快照（多人身份修复计划 §6.4）：await 前捕获 generation/身份
+        # 版本/压缩位置；await 后任一变化即丢弃结果，不推进位置，下轮重试。
+        guard = sc.compact_guard(group_id)
         with _flow_span(fctx, "compact.generate"):
             async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
                 result = await backend.generate(prompt)
@@ -245,6 +248,14 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
     except Exception as e:
         # 调用失败**不推进**位置，这批消息留待下次重试
         logger.warning(f"⚠️ [Compact] 群 {group_id} 压缩失败（保留待重试）: {e}")
+        return False
+
+    if not sc.compact_guard_ok(group_id, guard):
+        # await 期间发生了身份更正/会话重置/位置推进：旧摘要携带的称呼与
+        # 归属已过期——丢弃结果，待压缩区间原样保留，下一轮重新压缩。
+        _flow_decision(fctx, "compact.commit", status="skipped",
+                       reason_code="stale_guard")
+        logger.info(f"🗜️ [Compact] 群 {group_id} 丢弃过期压缩结果（guard 变化，待重试）")
         return False
 
     if _is_empty_result(result):

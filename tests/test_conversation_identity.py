@@ -383,3 +383,325 @@ class TestOriginV2:
         legacy = CometaStore._target_from_task_row(conn, "t2")
         assert legacy["conversation_kind"] == "group"
         assert legacy["group_id"] == "263402786"  # 旧行为不变
+
+
+# ── 会话内身份声明与纠错（多人身份修复计划 §6.3，T03–T06/T15） ─────────
+# 追加段：解析规则、本人声明、第三人纠正、事务原子性、capsule 语义。
+
+import sqlite3 as _sqlite3
+
+import memory.conversation_identity as identity
+from core.context import ChatContext
+from memory.conversation_identity import (
+    build_identity_capsule,
+    get_identity_revision,
+    parse_self_alias,
+    parse_third_person_correction,
+    process_message_identity,
+    record_self_alias_claim,
+    record_third_person_correction,
+    resolve_correction_target,
+    subject_alias,
+)
+
+
+@pytest.fixture()
+def ident_db(tmp_path, monkeypatch):
+    db = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(identity, "DB_PATH", db)
+    return db
+
+
+def _msg_ctx(**kw):
+    base = {
+        "user_id": 2001, "group_id": 7777, "msg_id": 1, "message": "我是阿呆",
+        "source_kind": "AT_MENTION",
+        "conversation_kind": "group",
+        "conversation_key": "qq:10000:group:7777",
+        "bot_id": "10000", "peer_id": "7777", "storage_session_id": 7777,
+        "recorded_row_id": 42,
+    }
+    base.update(kw)
+    return ChatContext(**base)
+
+
+# ── 有界解析规则 ──────────────────────────────────────────────────────
+
+
+def test_self_alias_patterns_bounded():
+    assert parse_self_alias("阿呆是我") == ("阿呆", False)
+    assert parse_self_alias("我是阿呆") == ("阿呆", False)
+    assert parse_self_alias("我才是allest") == ("allest", True)
+    assert parse_self_alias("那我改名叫Allets") == ("Allets", True)
+    assert parse_self_alias("以后叫我阿呆") == ("阿呆", False)
+    # 引号/转述 → ambiguous
+    assert parse_self_alias("「我是阿呆」") is None
+    assert parse_self_alias("他说：我是阿呆") is None
+    # 多个自称 → ambiguous
+    assert parse_self_alias("我是阿呆，我也是呆呆") is None
+    # 角色权限表达 → 不产生身份
+    assert parse_self_alias("我是管理员") is None
+    assert parse_self_alias("我是机器人") is None
+    # 超长 → ambiguous
+    assert parse_self_alias("我是" + "x" * 40) is None
+    # 空串
+    assert parse_self_alias("") is None
+
+
+def test_third_person_patterns_bounded():
+    assert parse_third_person_correction("他才是Allets") == ("Allets", True)
+    assert parse_third_person_correction("Allets不是他") == ("Allets", False)
+    assert parse_third_person_correction("他不叫Allets") == ("Allets", False)
+    # 引号转述 → ambiguous
+    assert parse_third_person_correction("「他才是Allets」") is None
+    # 角色表达 → 拒绝
+    assert parse_third_person_correction("他才是管理员") is None
+
+
+# ── T04：本人声明即时生效 + revision 推进 ─────────────────────────────
+
+
+def test_self_claim_persists_and_bumps_revision(ident_db):
+    key = "qq:10000:group:7777"
+    assert get_identity_revision(key) == 0
+    ok = record_self_alias_claim(
+        key, "10000", "2001", "阿呆",
+        supersedes=False, source_row_id=42, evidence_excerpt="我是阿呆",
+    )
+    assert ok
+    assert subject_alias(key, "2001") == "阿呆"
+    assert get_identity_revision(key) == 1
+    # 同名重复声明幂等：不再写行、不再 bump
+    ok2 = record_self_alias_claim(
+        key, "10000", "2001", "阿呆",
+        supersedes=False, source_row_id=43, evidence_excerpt="阿呆是我",
+    )
+    assert not ok2
+    assert get_identity_revision(key) == 1
+
+
+def test_rename_supersedes_old_alias_next_turn_visible(ident_db):
+    key = "qq:10000:group:7777"
+    record_self_alias_claim(key, "10000", "2001", "阿呆",
+                            supersedes=False, source_row_id=1, evidence_excerpt="我是阿呆")
+    record_self_alias_claim(key, "10000", "2001", "Allets",
+                            supersedes=True, source_row_id=2, evidence_excerpt="那我改名叫Allets")
+    # 最新更名生效；旧别名不再 active
+    assert subject_alias(key, "2001") == "Allets"
+    assert get_identity_revision(key) == 2
+    # capsule 下一轮立即看到新名
+    ctx = _msg_ctx(message="我是谁")
+    assert "Allets" in build_identity_capsule(ctx)
+
+
+def test_process_message_identity_hook_end_to_end(ident_db):
+    ctx = _msg_ctx(message="阿呆是我")
+    process_message_identity(ctx)
+    key = ctx.conversation_key
+    assert subject_alias(key, "2001") == "阿呆"
+    # 第三人无目标纠正：不写任何映射
+    ctx2 = _msg_ctx(user_id=2003, msg_id=2, recorded_row_id=43, message="他才是Allets")
+    process_message_identity(ctx2)
+    assert get_identity_revision(ctx2.conversation_key) == 1  # 只有本人声明那次
+
+
+# ── T03/T05：第三人纠正有来源、不串身份、别名冲突不合并 ────────────────
+
+
+def test_third_correction_with_target_keeps_author_separate(ident_db):
+    key = "qq:10000:group:7777"
+    ok = record_third_person_correction(
+        key, "10000", author_user_id="2003", target_user_id="2001",
+        alias="Allets", is_positive=True, source_row_id=44,
+        evidence_excerpt="他才是Allets",
+    )
+    assert ok
+    # 作者没有获得该身份；subject 是被指认者；版本推进
+    assert subject_alias(key, "2003") == ""
+    assert subject_alias(key, "2001") == ""  # 纠正≠本人确认
+    assert get_identity_revision(key) == 1
+
+
+def test_alias_collision_keeps_distinct_uids(ident_db):
+    key = "qq:10000:group:7777"
+    record_self_alias_claim(key, "10000", "2001", "阿呆",
+                            supersedes=False, source_row_id=1, evidence_excerpt="我是阿呆")
+    record_self_alias_claim(key, "10000", "2002", "阿呆",
+                            supersedes=False, source_row_id=2, evidence_excerpt="我是阿呆")
+    # 两个稳定 uid 各自保留，不合并
+    assert subject_alias(key, "2001") == "阿呆"
+    assert subject_alias(key, "2002") == "阿呆"
+
+
+def test_third_positive_marks_same_alias_conflicted(ident_db):
+    key = "qq:10000:group:7777"
+    record_self_alias_claim(key, "10000", "2001", "Allets",
+                            supersedes=False, source_row_id=1, evidence_excerpt="我是Allets")
+    record_third_person_correction(
+        key, "10000", author_user_id="2003", target_user_id="2002",
+        alias="Allets", is_positive=True, source_row_id=2,
+        evidence_excerpt="他才是Allets",
+    )
+    # 2001 的同名声明进入争议；capsule 提示争议
+    claims = identity.active_claims(key)
+    conflicted = [c for c in claims if c["status"] == identity.STATUS_CONFLICTED]
+    assert conflicted and conflicted[0]["subject_user_id"] == "2001"
+    capsule = build_identity_capsule(_msg_ctx(user_id=2002, recorded_row_id=9))
+    assert "争议" in capsule
+    assert "Allets" in capsule
+
+
+def test_resolve_correction_target_priority():
+    # 显式 @ 唯一目标优先
+    assert resolve_correction_target(
+        author_user_id="2003", mentioned_user_ids=("2001", "10000"),
+        bot_id="10000",
+    ) == "2001"
+    # 多个 @ → unknown
+    assert resolve_correction_target(
+        author_user_id="2003", mentioned_user_ids=("2001", "2002"),
+    ) == ""
+    # reply target 次之
+    assert resolve_correction_target(
+        author_user_id="2003", reply_target_user_id="2001",
+    ) == "2001"
+    # 作者本人不能是目标
+    assert resolve_correction_target(
+        author_user_id="2001", mentioned_user_ids=("2001",),
+    ) == ""
+    # 无目标 → unknown
+    assert resolve_correction_target(author_user_id="2003") == ""
+
+
+def test_reply_to_bot_bubble_recipient_is_candidate(ident_db):
+    # Bot 气泡记录了收件人 2002；C 回复该气泡纠正
+    conn = _sqlite3.connect(ident_db)
+    conn.execute(
+        "CREATE TABLE group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " group_id TEXT, user_id TEXT, content TEXT,"
+        " source_kind TEXT DEFAULT 'PASSIVE', msg_id INTEGER,"
+        " timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,"
+        " reply_recipient_user_id TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO group_messages (group_id, user_id, content, source_kind,"
+        " msg_id, reply_recipient_user_id) VALUES ('7777', '10000', '你好', 'BOT_SELF', 900, '2002')"
+    )
+    conn.commit()
+    conn.close()
+    target = resolve_correction_target(
+        author_user_id="2003", reply_to_msg_id="900",
+        bot_id="10000", conversation_key="qq:10000:group:7777",
+        group_key="7777",
+    )
+    assert target == "2002"
+
+
+# ── T06：称呼偏好不被绕过 ────────────────────────────────────────────
+
+
+def test_preference_table_never_touched_by_claims(ident_db):
+    key = "qq:10000:group:7777"
+    record_self_alias_claim(key, "10000", "2001", "阿呆",
+                            supersedes=False, source_row_id=1, evidence_excerpt="我是阿呆")
+    record_third_person_correction(
+        key, "10000", author_user_id="2003", target_user_id="2001",
+        alias="阿呆", is_positive=True, source_row_id=2,
+        evidence_excerpt="他才是阿呆",
+    )
+    conn = _sqlite3.connect(ident_db)
+    try:
+        tables = [
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+                " AND name='user_address_preferences'"
+            )
+        ]
+    finally:
+        conn.close()
+    # 声明路径根本不建偏好表（更不会写它）；称呼命令仍走原权限链
+    assert tables == []
+
+
+# ── T15：事务失败无半条 claim/version ────────────────────────────────
+
+
+def test_claim_transaction_atomic_on_failure(ident_db, monkeypatch):
+    key = "qq:10000:group:7777"
+
+    class _BoomError(Exception):
+        pass
+
+    real_connect = identity._connect
+
+    class _FailingConn:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, *a, **kw):
+            if "INSERT INTO conversation_identity_claims" in sql:
+                raise _BoomError("sqlite lock")
+            return self._inner.execute(sql, *a, **kw)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    def failing_connect():
+        return _FailingConn(real_connect())
+
+    monkeypatch.setattr(identity, "_connect", failing_connect)
+    ok = record_self_alias_claim(key, "10000", "2001", "阿呆",
+                                 supersedes=False, source_row_id=1, evidence_excerpt="x")
+    assert not ok
+    monkeypatch.setattr(identity, "_connect", real_connect)
+    # 无半条声明、版本未前进
+    assert subject_alias(key, "2001") == ""
+    assert get_identity_revision(key) == 0
+    # 重试幂等成功
+    assert record_self_alias_claim(key, "10000", "2001", "阿呆",
+                                   supersedes=False, source_row_id=2, evidence_excerpt="x")
+
+
+# ── capsule 语义 ──────────────────────────────────────────────────────
+
+
+def test_capsule_without_evidence_says_unknown():
+    capsule = build_identity_capsule(_msg_ctx(user_id=2999))
+    assert "不确定" in capsule
+    assert "2999" in capsule
+
+
+def test_capsule_never_borrows_other_member_name(ident_db):
+    key = "qq:10000:group:7777"
+    record_self_alias_claim(key, "10000", "2001", "阿呆",
+                            supersedes=False, source_row_id=1, evidence_excerpt="x")
+    # 2002 无声明 → 明确不确定，不借阿呆
+    capsule = build_identity_capsule(_msg_ctx(user_id=2002, recorded_row_id=9))
+    assert "阿呆" not in capsule.split("不确定")[0]
+
+
+def test_capsule_reply_target_attribution():
+    ctx = _msg_ctx(user_id=2002, reply_target_user_id="2001", recorded_row_id=9)
+    capsule = build_identity_capsule(ctx)
+    assert "回复" in capsule and "2001" in capsule
+
+
+def test_identity_question_direct_reply_rules(ident_db):
+    from memory.conversation_identity import identity_question_reply
+
+    # 无声明 → 不直复（LLM + capsule 走「不确定」）
+    assert identity_question_reply(_msg_ctx(message="我是谁", recorded_row_id=0)) == ""
+    # 复合问题 → 永不直复
+    assert identity_question_reply(
+        _msg_ctx(message="我是谁，今天天气如何", recorded_row_id=0)) == ""
+    # 有已验证声明 → 直复带 alias
+    record_self_alias_claim(
+        "qq:10000:group:7777", "10000", "2001", "阿呆",
+        supersedes=False, source_row_id=1, evidence_excerpt="我是阿呆",
+    )
+    reply = identity_question_reply(_msg_ctx(message="我是谁", recorded_row_id=0))
+    assert "阿呆" in reply and "2001" in reply
+    # 整条匹配才命中（带问候语不算）
+    assert identity_question_reply(
+        _msg_ctx(message="你知道我是谁吗", recorded_row_id=0)) == ""

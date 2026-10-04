@@ -658,3 +658,83 @@ def test_reserved_namespaces_pass_space_validation(tmp_path):
     assert migrations._is_reserved_namespace(name)
     assert migrations._is_reserved_namespace("private:qq:10000:20001")
     assert not migrations._is_reserved_namespace("casual")
+
+
+# ── v16：消息身份信封 + 会话身份声明表（多人身份修复计划 §6.2/§6.3，T16） ──
+
+
+def _build_v15_db(path: Path) -> None:
+    """schema15 形状的最小库：带 owner 列的 memories + 旧形状 group_messages。"""
+    conn = sqlite3.connect(path)
+    try:
+        from memory.schema import MEMORIES_TABLE_DDL
+
+        conn.execute(MEMORIES_TABLE_DDL)
+        conn.execute(
+            "CREATE TABLE group_messages ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " group_id TEXT, user_id TEXT, content TEXT,"
+            " source_kind TEXT DEFAULT 'PASSIVE', msg_id INTEGER,"
+            " timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute(
+            "INSERT INTO group_messages (group_id, user_id, content, source_kind, msg_id)"
+            " VALUES ('7777', '2001', '你好', 'AT_MENTION', 111)"
+        )
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content,"
+            " importance, confidence, status, owner_type, owner_key, subject_key, audience)"
+            " VALUES ('m16', 'space_1', '2001', 'FACT', '旧记忆', .8, .9, 'active',"
+            " 'SPACE', 'space:space_1', '', 'CURRENT_SPACE')"
+        )
+        conn.execute(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER,"
+            " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 15)")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
+    """v15 → v16：信封加列、身份声明表就绪、行数与旧内容零改动、幂等。"""
+    path = tmp_path / "agent_memory.db"
+    _build_v15_db(path)
+    # space_1 必须是校验器可解析的空间（自动命名账本登记）
+    (tmp_path / ".space_assignments.json").write_text(
+        '{"1001": "space_1"}', encoding="utf-8"
+    )
+    ctx = migrations.context_from_paths(
+        tmp_path / "spaces", tmp_path / ".space_assignments.json", KNOWN_GROUPS
+    )
+
+    report = schema.migrate_to_latest(path, ctx)
+    assert report.error is None, report.error
+    assert report.problems == [], report.problems
+    assert report.to_version == 16
+
+    # 旧行与旧内容一字不动
+    assert _rows(path, "SELECT content, source_kind, msg_id FROM group_messages") == [
+        ("你好", "AT_MENTION", 111)
+    ]
+    assert _rows(path, "SELECT content, owner_type FROM memories WHERE id='m16'") == [
+        ("旧记忆", "SPACE")
+    ]
+    # 信封列可用（默认 = 关系未知）
+    cols = _columns(path, "group_messages")
+    for col in ("conversation_key", "reply_to_msg_id", "reply_target_user_id",
+                "mentioned_user_ids_json", "logical_message_id", "part_index",
+                "origin_msg_id", "reply_recipient_user_id", "turn_id",
+                "relation_version"):
+        assert col in cols, col
+    # 身份表就绪且为空
+    for table in ("conversation_identity_claims", "conversation_identity_versions"):
+        assert _rows(path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
+
+    # 幂等：重跑零变更
+    second = schema.migrate_to_latest(path, ctx)
+    assert second.error is None
+    assert second.problems == []
+    assert second.changed_rows == 0
+    assert _rows(path, "SELECT COUNT(*) FROM group_messages") == [(1,)]

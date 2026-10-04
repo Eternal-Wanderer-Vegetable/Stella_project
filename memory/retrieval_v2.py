@@ -87,8 +87,13 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
 
     两个时间戳都带上：排序的新鲜度维度读 last_confirmed_at（证据有多新），
     last_accessed_at 只在旧库缺 last_confirmed_at 时作为回退（见 policy._mem_timestamp）。
+
+    v16 起（多人身份修复计划 §6.1）追加归属列（owner_type/owner_key/subject_key/
+    audience，按列可用性防御读取）：prompt 渲染用它区分「当前用户的记忆」与
+    「其他成员的公开背景」。缺列（旧库回退/native 结果）时键不存在——渲染侧
+    按 legacy SPACE 语义降级，不得据此伪造归属。
     """
-    return {
+    mem = {
         "id": row[0],
         "group_shared_space": row[1],
         "user_id": row[2],
@@ -103,6 +108,12 @@ def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
         "last_accessed_at": row[11],
         "last_confirmed_at": row[12] if len(row) > 12 else None,
     }
+    if len(row) > 16:
+        mem["owner_type"] = row[13] or ""
+        mem["owner_key"] = row[14] or ""
+        mem["subject_key"] = row[15] or ""
+        mem["audience"] = row[16] or ""
+    return mem
 
 
 def _select_columns() -> str:
@@ -111,6 +122,29 @@ def _select_columns() -> str:
         "visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at, "
         "last_confirmed_at"
     )
+
+
+# 归属呈现列（多人身份修复计划 §6.1）：只加在 Python 主检索路径的 SELECT 尾部，
+# _row_to_memory 按行长度防御读取。列是否存在以 PRAGMA 探测为准——v2 形状表
+# （无 owner 列）继续走原 13 列查询与原评分行为，不因多出的列跌进 legacy 回退。
+_OWNER_COLUMNS = "m.owner_type, m.owner_key, m.subject_key, m.audience"
+_OWNER_COLUMN_NAMES = ("owner_type", "owner_key", "subject_key", "audience")
+
+
+def _owner_columns_available(cursor: sqlite3.Cursor, table: str = "memories") -> bool:
+    try:
+        cursor.execute(f"PRAGMA table_info({table})")
+        cols = {row[1] for row in cursor.fetchall()}
+    except sqlite3.OperationalError:
+        return False
+    return set(_OWNER_COLUMN_NAMES) <= cols
+
+
+def _select_clause(cursor: sqlite3.Cursor) -> str:
+    base = _select_columns()
+    if _owner_columns_available(cursor):
+        base += ", " + _OWNER_COLUMNS
+    return base
 
 
 # 候选池排序用的新鲜度表达式：证据新鲜度优先，旧库/测试夹具只有 last_accessed_at 时回退。
@@ -183,7 +217,7 @@ def _fetch_candidates(
         rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode, access_scope)
     if not rows:
         sql = (
-            f"SELECT {_select_columns()} FROM memories m WHERE {where} "
+            f"SELECT {_select_clause(cursor)} FROM memories m WHERE {where} "
             f"ORDER BY {_FRESHNESS} DESC LIMIT ?"
         )
         params.append(pool_limit)
@@ -288,11 +322,13 @@ def _query_fts(
         return []
     try:
         params: list[Any] = []
+        owner_ok = _owner_columns_available(cursor)
         sql = (
             "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance, m.confidence, "
             "m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule, m.last_accessed_at, "
-            "m.last_confirmed_at "
-            "FROM memories_fts f "
+            "m.last_confirmed_at"
+            + (f", {_OWNER_COLUMNS} " if owner_ok else " ")
+            + "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
             "WHERE m.status = 'active' "
         )

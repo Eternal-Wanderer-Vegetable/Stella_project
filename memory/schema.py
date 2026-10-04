@@ -58,9 +58,9 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v15：会话注册表 + 记忆归属/证据/个人画像/缓存版本，
-# 见 memory/migrations.py migrate_v15 与计划 §6.1/§6.4）
-SCHEMA_VERSION = 15
+# 当前 Schema 版本（v16：消息身份信封 + 会话身份声明表，见 memory/migrations.py
+# migrate_v16 与多人身份修复计划 §6.2/§6.3）
+SCHEMA_VERSION = 16
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -273,6 +273,26 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
             ("policy_version", "TEXT DEFAULT ''"),
         )
     ],
+    # v16：消息身份信封（多人身份修复计划 §6.2）。加列全部有默认值，旧行保持
+    # NULL/默认 = 「关系未知」——绝不按相邻文本补写回复对象。文本/可选 ID 默认
+    # NULL，mentions 默认 '[]'，part_index/relation_version 默认 0。
+    *[
+        ("group_messages", column, f"ALTER TABLE group_messages ADD COLUMN {column} {decl}")
+        for column, decl in (
+            ("conversation_key", "TEXT"),
+            ("bot_id", "TEXT"),
+            ("sender_display_name", "TEXT"),
+            ("reply_to_msg_id", "TEXT"),
+            ("reply_target_user_id", "TEXT"),
+            ("mentioned_user_ids_json", "TEXT DEFAULT '[]'"),
+            ("logical_message_id", "TEXT"),
+            ("part_index", "INTEGER DEFAULT 0"),
+            ("origin_msg_id", "TEXT"),
+            ("reply_recipient_user_id", "TEXT"),
+            ("turn_id", "TEXT"),
+            ("relation_version", "INTEGER DEFAULT 0"),
+        )
+    ],
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -346,6 +366,21 @@ _INDEXES: list[tuple[str, str, str]] = [
         "personal_profile_facts",
         "CREATE INDEX IF NOT EXISTS idx_personal_facts_subject "
         "ON personal_profile_facts (subject_key, status)",
+    ),
+    # v16：消息关系查找（多人身份修复计划 §6.2）。两者都是**非唯一**索引——
+    # 跨群重复 message_id / 一次回复多气泡是合法数据，唯一约束会误删关系。
+    # 关系查找必须同时约束 canonical conversation/bot，不能只按 msg_id。
+    (
+        "idx_group_messages_msg_id",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_msg_id "
+        "ON group_messages (group_id, msg_id)",
+    ),
+    (
+        "idx_group_messages_logical",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_logical "
+        "ON group_messages (conversation_key, logical_message_id, part_index)",
     ),
 ]
 
@@ -672,6 +707,54 @@ def create_memory_scope_versions_table(conn: sqlite3.Connection) -> None:
     conn.execute(MEMORY_SCOPE_VERSIONS_TABLE_DDL)
 
 
+# 会话内身份声明表（v16 起，多人身份修复计划 §6.3）：每条声明携带来源
+# （source_row_id 指向该会话已入库原消息），可 active/conflicted/inactive；
+# subject 只能由平台 sender（本人声明）或带来源的否定线索产生。
+# 职责边界：仅当前会话别名，不做跨群身份图，不是 PERSON 授权来源。
+CONVERSATION_IDENTITY_CLAIMS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_identity_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_key TEXT NOT NULL,
+    bot_id TEXT NOT NULL DEFAULT '',
+    subject_user_id TEXT NOT NULL,
+    author_user_id TEXT NOT NULL DEFAULT '',
+    claim_kind TEXT NOT NULL DEFAULT 'self_alias',
+    alias TEXT NOT NULL DEFAULT '',
+    source_row_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'active',
+    supersedes_id INTEGER,
+    evidence_excerpt TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_conversation_identity_claims_table(conn: sqlite3.Connection) -> None:
+    """确保 conversation_identity_claims 表存在（幂等）。"""
+    conn.execute(CONVERSATION_IDENTITY_CLAIMS_TABLE_DDL)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_identity_claims_subject "
+        "ON conversation_identity_claims (conversation_key, subject_user_id, status)"
+    )
+
+
+# 会话身份版本表（v16 起，多人身份修复计划 §6.3/§6.4）：每会话单调 revision，
+# 身份纠正/更名即 +1；上下文缓存与 compact CAS 用它拒绝携带旧身份的结果。
+CONVERSATION_IDENTITY_VERSIONS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_identity_versions (
+    conversation_key TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+
+def create_conversation_identity_versions_table(conn: sqlite3.Connection) -> None:
+    """确保 conversation_identity_versions 表存在（幂等）。"""
+    conn.execute(CONVERSATION_IDENTITY_VERSIONS_TABLE_DDL)
+
+
 # AstrBot 插件兼容层的对话表（v9 起）。
 # 刻意与 Stella 自己的记忆系统隔离：插件的多轮对话不参与记忆整合，也不会被记忆
 # 压缩任务动到。user_id 存的是 unified_msg_origin（platform:type:session_id），
@@ -944,6 +1027,11 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
             create_memory_evidence_table(conn)
             create_personal_profile_facts_table(conn)
             create_memory_scope_versions_table(conn)
+    # v16：消息身份信封索引 + 会话身份声明表（多人身份修复计划 §6.2/§6.3）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            create_conversation_identity_claims_table(conn)
+            create_conversation_identity_versions_table(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

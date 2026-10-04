@@ -157,22 +157,57 @@ def estimate_tokens(text: str) -> int:
     return int(cjk * 1.5 + other_words * 1.3)
 
 
+def _attribution_header(mem: dict, current_user_id) -> str:
+    """单条记忆的归属头（多人身份修复计划 §6.1）。
+
+    分类只依赖可信结构化字段，绝不从正文反推：
+    - owner_type=PERSON 且 subject 是当前用户 →「当前用户的记忆」；
+    - owner_type=PERSON 其他 subject →「其他成员的公开背景」；
+    - SPACE / owner 信息缺失（旧库回退、native 结果）→ 旧 SPACE 语义：
+      user_id 只解释为**记录归属用户**，事实主语未确认——含糊长记忆不能
+      成为当前用户的身份依据。
+    """
+    owner_type = str(mem.get("owner_type") or "").strip().upper()
+    subject_key = str(mem.get("subject_key") or "")
+    uid = str(mem.get("user_id") or "").strip()
+    cur = str(current_user_id) if current_user_id not in (None, 0, "") else ""
+    if owner_type == "PERSON":
+        subject_uid = subject_key.split(":", 1)[-1] if subject_key else uid
+        if cur and subject_uid == cur:
+            return f"当前用户的记忆 [subject=用户({subject_uid})]"
+        return f"其他成员的公开背景 [subject=用户({subject_uid})]"
+    if uid:
+        return f"群共享背景 [记录=用户({uid})；事实主语未确认]"
+    return "群共享事实 [subject=群/无个人主体]"
+
+
 def build_conversation_section(
     memories: Iterable[dict],
     max_tokens: int = MEMORY_CONVERSATION_MAX_TOKENS,
+    *,
+    current_user_id=None,
 ) -> str:
     """把聊天素材记忆拼成分区文本（可参考的聊天背景），超预算时截断。
 
     内容不再附带“重要性/置信度”等元信息——这些是给系统看的数据，塞给模型
     会让回复听起来像在念数据库。
+
+    ``current_user_id``（多人身份修复计划 §6.1，keyword-only）：给出时每条
+    记忆带**不可裁断的归属头**，先拼完整条目再算 token——不能预算时算无标签
+    正文、之后再补标签导致超额。缺省 None 保持旧格式逐字节不变（旧调用/旧
+    测试兼容）。
     """
+    attributed = current_user_id not in (None, 0, "")
     items: list[str] = []
     budget = max_tokens
     for mem in memories:
         content = (mem.get("content") or "").strip()
         if not content:
             continue
-        text = f"- {content}"
+        if attributed:
+            text = f"- {_attribution_header(mem, current_user_id)}：{content}"
+        else:
+            text = f"- {content}"
         tokens = estimate_tokens(text)
         if items and budget - tokens < 0:
             break
@@ -180,6 +215,11 @@ def build_conversation_section(
         budget -= tokens
     if not items:
         return ""
+    if attributed:
+        return (
+            "可参考的聊天背景（每条已标注归属；只有标注为当前用户本人的条目才属于当前用户，"
+            "其余只是同群其他成员或群共享背景）：\n" + "\n".join(items)
+        )
     return "可参考的聊天背景：\n" + "\n".join(items)
 
 
@@ -208,6 +248,66 @@ def build_behavior_section(
     return "交流注意：\n" + "\n".join(items)
 
 
+def build_v2_named_sections(
+    short_term: str,
+    user_profile: str,
+    conversation_memories: Iterable[dict],
+    behavior_constraints: Iterable[dict],
+    current_user_id=None,
+    mode: str = "CASUAL_REPLY",
+    *,
+    preferred_address=None,
+    identity_capsule: str | None = None,
+) -> list[tuple[str, str]]:
+    """v2 prompt 的**命名分节**（多人身份修复计划 §6.4）。
+
+    返回按稳定区→动态区排列的 ``(name, text)`` 列表：identity / behavior /
+    time / history / profile / memories。:func:`build_v2_prompt_context` 与
+    TurnService 的结构化预算（``fit_conversation_parts``）共用这**同一份**
+    分节产出——不截断时两边拼出的 prompt 逐字节一致，截断时预算器按名丢弃
+    整节而不再依赖用户可伪造的文本 marker 定位身份块。
+    """
+    sections: list[tuple[str, str]] = []
+    # ── 稳定区：先于一切随时间/轮次变动的内容 ──
+    identity_lines: list[str] = []
+    if current_user_id not in (None, 0):
+        identity_lines.append(
+            f"当前与你对话的用户 QQ 号：{current_user_id}。"
+            f"注意：上下文里标注了用户QQ号的内容属于对应的人，"
+            f"只有明确写着当前用户 {current_user_id} 的才归 TA；不要把别人的发言当成 TA 说的。"
+        )
+        capsule = (identity_capsule or "").strip()
+        if capsule:
+            identity_lines.append(capsule)
+        addressing = _build_addressing_section(preferred_address)
+        if addressing:
+            identity_lines.append(addressing)
+    if identity_lines:
+        sections.append(("identity", "\n".join(identity_lines)))
+    # 行为约束与聊天素材严格分离，且属于稳定行为规则区
+    behavior = build_behavior_section(behavior_constraints)
+    if behavior:
+        sections.append(("behavior", behavior))
+    # ── 动态区 ──
+    sections.append(("time", build_time_section()))
+    if short_term:
+        sections.append(("history", f"当前对话摘要：\n{short_term}"))
+    if user_profile:
+        sections.append(("profile", f"关于当前用户：\n{user_profile}"))
+    if mode == MODE_TECH_HELP:
+        conv_max = MEMORY_CONVERSATION_TECH_MAX_TOKENS
+    elif mode == MODE_CONFLICT_AVOID:
+        conv_max = max(100, MEMORY_CONVERSATION_MAX_TOKENS // 2)
+    else:
+        conv_max = MEMORY_CONVERSATION_MAX_TOKENS
+    conv = build_conversation_section(
+        conversation_memories, max_tokens=conv_max, current_user_id=current_user_id
+    )
+    if conv:
+        sections.append(("memories", conv))
+    return sections
+
+
 def build_v2_prompt_context(
     short_term: str,
     user_profile: str,
@@ -217,6 +317,7 @@ def build_v2_prompt_context(
     mode: str = "CASUAL_REPLY",
     *,
     preferred_address=None,
+    identity_capsule: str | None = None,
 ) -> str:
     """v2 分区版 Prompt 组装：稳定区在前、动态区在后（设计阶段四：Prompt 前缀稳定化）。
 
@@ -243,43 +344,14 @@ def build_v2_prompt_context(
     :param current_user_id: 当前用户 QQ 号（主动发言时为 0/None）；
     :param mode: Stella 行为模式（决定聊天素材 token 预算）。
     """
-    parts: list[str] = []
-    # ── 稳定区：先于一切随时间/轮次变动的内容 ──
-    # 明确当前说话人身份，避免模型把摘要/记忆中其他用户的发言归属到当前用户
-    if current_user_id not in (None, 0):
-        parts.append(
-            f"当前与你对话的用户 QQ 号：{current_user_id}。"
-            f"注意：上下文里标注了用户QQ号的内容属于对应的人，"
-            f"只有明确写着当前用户 {current_user_id} 的才归 TA；不要把别人的发言当成 TA 说的。"
-        )
-        addressing = _build_addressing_section(preferred_address)
-        if addressing:
-            parts.append(addressing)
-    # 行为约束与聊天素材严格分离，且属于稳定行为规则区（见 docstring）
-    behavior = build_behavior_section(behavior_constraints)
-    if behavior:
-        parts.append(behavior)
-
-    # ── 动态区 ──
-    # 环境事实：当前时间先于任何对话内容（不先于稳定区——它分钟级变动，
-    # 放最前会把身份段与行为约束挤出可缓存前缀）。
-    parts.append(build_time_section())
-    if short_term:
-        parts.append(f"当前对话摘要：\n{short_term}")
-    if user_profile:
-        parts.append(f"关于当前用户：\n{user_profile}")
-
-    # 技术/冲突场景放宽聊天素材预算
-    if mode == MODE_TECH_HELP:
-        conv_max = MEMORY_CONVERSATION_TECH_MAX_TOKENS
-    elif mode == MODE_CONFLICT_AVOID:
-        # 安全优先：冲突场景给行为约束更多空间
-        conv_max = max(100, MEMORY_CONVERSATION_MAX_TOKENS // 2)
-    else:
-        conv_max = MEMORY_CONVERSATION_MAX_TOKENS
-
-    conv = build_conversation_section(conversation_memories, max_tokens=conv_max)
-    if conv:
-        parts.append(conv)
-
-    return "\n\n".join(parts)
+    sections = build_v2_named_sections(
+        short_term,
+        user_profile,
+        conversation_memories,
+        behavior_constraints,
+        current_user_id,
+        mode,
+        preferred_address=preferred_address,
+        identity_capsule=identity_capsule,
+    )
+    return "\n\n".join(text for _, text in sections)

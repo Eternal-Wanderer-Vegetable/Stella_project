@@ -160,7 +160,12 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
 
     lines = [line for line in (ctx.lines or []) if line.strip()]
     with _flow_span(flow_ctx, "web.output") as out_span:
-        for line in lines:  # 回复按 BOT_SELF 落库，给下一轮整合提供语境
+        # 回复按 BOT_SELF 落库，给下一轮整合提供语境。v16 信封契约与 QQ 侧
+        # 一致（多人身份修复计划 §6.2）：一次回复共享 logical_message_id、
+        # 递增 part_index，收件人 = 面板用户；WebChat 无平台 message ID，
+        # msg_id 保持未知（不伪造）。
+        logical_id = ctx.turn_id or ctx.trace_id
+        for i, line in enumerate(lines):
             await record_message(
                 ChatContext(
                     user_id=WEBCHAT_USER_ID,
@@ -169,6 +174,14 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
                     message=line,
                     source_kind="BOT_SELF",
                     group_shared_space=WEBCHAT_SPACE,
+                    conversation_kind=getattr(ctx, "conversation_kind", "") or "",
+                    conversation_key=getattr(ctx, "conversation_key", "") or "",
+                    bot_id=str(getattr(ctx, "bot_id", "") or ""),
+                    logical_message_id=logical_id,
+                    part_index=i,
+                    reply_recipient_user_id=str(WEBCHAT_USER_ID),
+                    turn_id=ctx.turn_id,
+                    relation_version=1 if logical_id else 0,
                 )
             )
         out_span.finish(status="succeeded" if lines else "skipped",
@@ -213,8 +226,12 @@ async def reset_webchat_runtime() -> None:
     """WebChat reset 协调（计划 §R.5）：
 
     先 fence/cancel 在途轮次 + epoch 递增（拒旧轮晚到），再由调用方清消息库
-    ——已取消旧轮不能晚到后重建历史。
+    ——已取消旧轮不能晚到后重建历史。会话压缩状态同步重置（多人身份修复
+    计划 §6.4）：generation 递增使在途 compact 的 CAS 拒绝旧摘要提交。
     """
+    from memory import session_context as sc
+
+    sc.bump_reset_generation(WEBCHAT_GROUP_ID)
     from core.runtime.facade import ensure_shared_facade_started
 
     facade = await ensure_shared_facade_started()

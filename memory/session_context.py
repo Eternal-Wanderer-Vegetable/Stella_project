@@ -41,6 +41,12 @@ class SessionState:
     summarized_up_to_id 为 0 表示会话尚未初始化——此时首次调用
     ``ensure_initialized()`` 会把它对齐到当前尾巴起点，即「本场会话从现在开始」，
     避免把整个历史当作待压缩内容。
+
+    v16（多人身份修复计划 §6.4）：reset_generation 在会话重置时递增；
+    identity_revision 跟踪最近一次观察到的会话身份版本（由 build_context
+    写入）。async 压缩在 await 前捕获 (generation, identity_revision,
+    summarized_up_to_id, tail_start_id)，提交前比较——任一不匹配即丢弃结果，
+    不推进位置（CAS；防止更名/重置期间旧摘要或 skip 覆盖新状态）。
     """
 
     summarized_up_to_id: int = 0
@@ -49,6 +55,9 @@ class SessionState:
     compact_count: int = 0
     # 已压缩的消息条数（仅用于日志与诊断）
     compacted_messages: int = 0
+    # 会话重置代数（reset 时 +1）与最近观察到的身份版本（CAS 用）
+    reset_generation: int = 0
+    identity_revision: int = 0
 
 
 _sessions: dict[int, SessionState] = {}
@@ -212,6 +221,44 @@ def end_session(group_id: int) -> bool:
             f"（共压缩 {state.compact_count} 次 / {state.compacted_messages} 条）"
         )
     return had_content
+
+
+# ── reset generation / identity revision（多人身份修复计划 §6.4 CAS） ──
+
+
+def bump_reset_generation(group_id: int) -> int:
+    """会话重置：代数 +1。在途压缩提交前的 CAS 会因此拒绝旧结果。"""
+    state = _state(group_id)
+    state.reset_generation += 1
+    state.summarized_up_to_id = 0
+    state.summary = ""
+    logger.info(f"🔄 [Session] 群 {group_id} 会话重置（generation={state.reset_generation}）")
+    return state.reset_generation
+
+
+def observe_identity_revision(group_id: int, revision: int) -> None:
+    """记录本轮观察到的身份版本（build_context 每轮调用；零 DB）。
+
+    **不为观察创建状态**：无状态的会话保持「从未初始化」语义
+    （summary_version 仍为 -1），compact 的 CAS 只需覆盖已初始化会话。
+    """
+    state = _sessions.get(group_id)
+    if state is None:
+        return
+    state.identity_revision = max(state.identity_revision, int(revision or 0))
+
+
+def compact_guard(group_id: int) -> tuple[int, int, int]:
+    """捕获 CAS 快照 ``(reset_generation, identity_revision, summarized_up_to_id)``。"""
+    state = _sessions.get(group_id)
+    if state is None:
+        return (0, 0, 0)
+    return (state.reset_generation, state.identity_revision, state.summarized_up_to_id)
+
+
+def compact_guard_ok(group_id: int, guard: tuple[int, int, int]) -> bool:
+    """提交前比较：任一维度变化即 False（丢弃结果，不推进位置，下轮重试）。"""
+    return compact_guard(group_id) == tuple(guard)
 
 
 def session_stats(group_id: int) -> dict:

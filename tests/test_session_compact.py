@@ -216,3 +216,72 @@ def test_empty_result_variants():
     # 正常回顾不得被误判为空
     for text in ("无法确定他的意思，大家在聊显卡", "大家在聊无人机"):
         assert not compact._is_empty_result(text), text
+
+
+# ── T14：compact await 期间身份更正/重置 → CAS 拒绝提交（多人身份修复计划 §6.4） ──
+
+
+class _GuardBumpBackend:
+    """await 期间改变会话守卫状态的假后端（模拟并发身份更正/重置）。"""
+
+    def __init__(self, result, mutate):
+        self.result = result
+        self.mutate = mutate
+
+    async def generate(self, prompt, system_prompt=""):
+        self.mutate()
+        return self.result
+
+
+def test_compact_discards_stale_result_on_identity_revision(db, monkeypatch):
+    """await 期间 identity_revision 前进：旧摘要不提交、watermark 不推进。"""
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"这是第{i}句比较长的发言内容")
+    backend = _GuardBumpBackend(
+        "还在用旧称呼的回顾", lambda: sc.observe_identity_revision(1, 5)
+    )
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert sc.get_summary(1) == ""
+    # watermark 停在初始化对齐点（1），绝未推进到压缩终点 6/7
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+
+
+def test_compact_discards_stale_result_on_reset(db, monkeypatch):
+    """await 期间会话重置（generation +1）：apply 与 skip 都被拒绝。"""
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"这是第{i}句比较长的发言内容")
+    backend = _GuardBumpBackend("无", lambda: sc.bump_reset_generation(1))
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    # 重置清空状态：摘要与位置都不存在旧值
+    assert sc.get_summary(1) == ""
+    assert sc.session_stats(1)["summarized_up_to_id"] == 0
+
+
+def test_compact_skip_also_blocked_by_guard(db, monkeypatch):
+    """skip_range 同样过 CAS：模型判「无」但守卫变化 → 位置不推进。"""
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"哈哈哈哈哈{i}")
+    backend = _GuardBumpBackend("无", lambda: sc.observe_identity_revision(1, 9))
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+
+
+def test_guard_recovers_next_round(db, monkeypatch):
+    """守卫稳定后下一轮压缩正常提交（可重试语义）。"""
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"这是第{i}句比较长的发言内容")
+    state = {"round": 0}
+
+    def mutate():
+        state["round"] += 1
+        if state["round"] == 1:
+            sc.observe_identity_revision(1, 3)
+
+    backend = _GuardBumpBackend("正常的回顾", mutate)
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert asyncio.run(compact.compact_once(1, 7)) is True
+    assert sc.get_summary(1) == "正常的回顾"

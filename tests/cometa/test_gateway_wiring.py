@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 from nonebot.exception import FinishedException
@@ -129,7 +129,8 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     send.assert_awaited_once()
     assert ack_text[:12] in send.call_args.args[0].extract_plain_text()
     finish.assert_awaited_once_with()
-    gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ack_text])
+    # v16 契约：origin ctx 随行（多人身份修复计划 §6.2）
+    gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ack_text], origin=ANY)
     ack = service.store.notification_of_dedupe(
         receipt.task_id, f"ack:{receipt.task_id}"
     )
