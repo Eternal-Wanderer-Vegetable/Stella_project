@@ -41,10 +41,12 @@ def _private_event(user_id=20001, message_id=7, self_id="10001", text="hi"):
     )
 
 
-def _group_event(group_id=30001, message_id=7, self_id="10001", text="hi"):
+def _group_event(group_id=30001, message_id=7, self_id="10001", text="hi",
+                 user_id=20001):
     return GroupMessageEvent(
         time=0, self_id=self_id, post_type="message", sub_type="normal",
-        group_id=group_id, message_type="group", message_id=message_id,
+        group_id=group_id, user_id=user_id, message_type="group",
+        message_id=message_id,
         message=Message(text), original_message=Message(text),
         raw_message=text, font=0, sender={"nickname": "u"},
     )
@@ -184,9 +186,10 @@ class TestCanonicalIdentityOnTrace:
         trace_id = root.trace_id
         assert message_flow.update_trace_identity(
             root, storage_session_id=-11) is True
-        # 冲突：已有可信值 → 拒绝
+        # 冲突：已有可信值 → 拒绝并标 conflict（原值保持）
         assert message_flow.update_trace_identity(
             root, storage_session_id=-99) is False
+        assert root.storage_session_id == -11
         message_flow.flush()
         conn = sqlite3.connect(flow_db)
         try:
@@ -196,15 +199,27 @@ class TestCanonicalIdentityOnTrace:
         finally:
             conn.close()
         assert row[0] == -11
-        assert row[1] == "exact"
+        assert row[1] == "conflict"
 
     @pytest.mark.asyncio
     async def test_cache_eviction_marks_active_unknown(self, flow_db):
-        """缓存淘汰不得让活跃 root 静默失踪：被淘汰的活跃 root 标 partial。"""
-        ev = _private_event(user_id=20001, message_id=7, self_id="10001")
+        """缓存淘汰不得让活跃 root 静默失踪：留痕 + 结束路径可回查兜底。"""
+        ev = _private_event(user_id=29901, message_id=71, self_id="10901")
         await gateway._flow_ingress_root(ev)
         root = gateway._flow_roots.get(gateway._flow_key(ev))
         assert root is not None
-        # 强制淘汰（正常路径由 _FLOW_ROOTS_MAX 触发；这里直接调淘汰语义）
+        # 强制淘汰（正常路径由 _FLOW_ROOTS_MAX 触发；0 = 全部淘汰）
         gateway._evict_flow_roots(0)
-        assert root.identity_state == "partial"
+        assert not root.ended, "淘汰只摘缓存，不伪造结束"
+        # postprocessor 仍能按来源键回查并收口（不静默失踪）
+        await gateway._flow_ingress_end(ev)
+        assert root.ended
+        message_flow.flush()
+        conn = sqlite3.connect(flow_db)
+        try:
+            marked = conn.execute(
+                "SELECT COUNT(*) FROM flow_events WHERE trace_id=? AND "
+                "reason_code='ingress_cache_evicted'", (root.trace_id,)).fetchone()[0]
+        finally:
+            conn.close()
+        assert marked == 1

@@ -246,10 +246,20 @@ class TestSpecExactBinding:
 
     def test_same_version_two_payloads_bind_exact_digests(
             self, flow_db, monkeypatch):
+        import hashlib
+        import json
+
         version = "2026.10.03"
         payloads = iter([self._payload(version, "old"), self._payload(version, "new")])
-        monkeypatch.setattr(message_flow, "_bundled_spec_json",
-                            lambda v: next(payloads) if v == version else None)
+
+        def fake_bundled(v):
+            if v != version:
+                return None
+            payload = json.loads(next(payloads))
+            digest = message_flow.spec_digest_of(payload)
+            return (digest, message_flow.json_dumps(payload), 2)
+
+        monkeypatch.setattr(message_flow, "_bundled_spec", fake_bundled)
         root_old = message_flow.begin_trace(
             root_kind="webchat", trace_id="sp-exact-old")
         root_new = message_flow.begin_trace(
@@ -264,7 +274,7 @@ class TestSpecExactBinding:
                 "WHERE trace_id IN ('sp-exact-old','sp-exact-new')").fetchall())
             blobs = dict(conn.execute(
                 "SELECT spec_digest, spec_json FROM flow_spec_blobs "
-                "WHERE topology_version=?").fetchall())
+                "WHERE topology_version=?", (version,)).fetchall())
         finally:
             conn.close()
         # 新 root 各自持有非空且互不相同的 digest
@@ -272,9 +282,6 @@ class TestSpecExactBinding:
         assert digests["sp-exact-new"]
         assert digests["sp-exact-old"] != digests["sp-exact-new"]
         # digest 精确回放自己的 payload
-        import hashlib
-        import json
-
         for tid, marker in (("sp-exact-old", "old"), ("sp-exact-new", "new")):
             blob = blobs.get(digests[tid])
             assert blob is not None
@@ -322,6 +329,7 @@ class TestSpecExactBinding:
     def test_legacy_empty_digest_stays_unbound(self, flow_db):
         """历史行为：空 digest root 不得事后伪绑定到当前版本 spec。"""
         root = message_flow.begin_trace(root_kind="webchat", trace_id="sp-legacy")
+        message_flow.flush()
         # 模拟旧数据：直接清空 digest
         conn = sqlite3.connect(flow_db)
         conn.execute("UPDATE message_traces SET spec_digest='' "

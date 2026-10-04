@@ -225,13 +225,34 @@ _addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
 # root 在 NoneBot event preprocessor（所有 matcher 之前）创建，多个 matcher
 # （静默/命令/插件/聊天）共用同一 root；postprocessor 在全部 matcher 结束后
 # 关闭。root 里只存安全关联键（platform/bot/group/msg_id），绝不存原文。
-_flow_roots: "OrderedDict[tuple[int, int], Any]" = OrderedDict()
+_flow_roots: "OrderedDict[tuple[str, str], Any]" = OrderedDict()
 _FLOW_ROOTS_MAX = 256
 
 
-def _flow_key(event: MessageEvent) -> tuple[int, int]:
-    """流程 root 的键：群=(群号, msg_id)；私聊=(0, msg_id)（计划 §6.2）。"""
-    return (getattr(event, "group_id", 0) or 0, event.message_id)
+def _flow_conversation_key(event: MessageEvent) -> str:
+    """规范会话键（修复计划 §6.1）：qq:<bot>:group:<群号> / qq:<bot>:private:<QQ号>。
+
+    preprocessor 阶段不查业务库即可从事件字段构造；私聊 storage ID 由注册表
+    分配后在 matcher 内幂等补充。
+    """
+    if isinstance(event, GroupMessageEvent):
+        return f"qq:{event.self_id}:group:{event.group_id}"
+    return f"qq:{event.self_id}:private:{getattr(event, 'user_id', 0)}"
+
+
+def _flow_key(event: MessageEvent) -> tuple[str, str]:
+    """流程 root 的键（修复计划 §6.1 R2）：完整事件身份。
+
+    旧键 (group_id|0, message_id) 让不同 Bot/不同私聊 peer 的同号消息碰撞
+    （复核报告 R2 探针：Bot10001/20001 与 Bot10002/20002 的消息 7 同为
+    (0,7)）。新键 = (conversation_key, message_id)，message ID 原样字符串化。
+    """
+    return (_flow_conversation_key(event), str(event.message_id))
+
+
+def _flow_source_key(event: MessageEvent) -> str:
+    """来源消息键：<conversation_key>:msg:<message_id>（修复计划 §6.1）。"""
+    return f"{_flow_conversation_key(event)}:msg:{event.message_id}"
 
 
 def _flow_scope_of(event: MessageEvent) -> str:
@@ -254,15 +275,33 @@ def _flow_root_or_create(event: MessageEvent, root_kind: str):
     try:
         from core.observability import message_flow
 
-        key = _flow_key(event)
         return message_flow.begin_trace(
             root_kind=root_kind, platform="qq",
             scope=_flow_scope_of(event),
-            source_message_key=(
-                f"qq:{event.self_id}:{key[0]}:{event.message_id}"),
+            conversation_key=_flow_conversation_key(event),
+            bot_id=str(event.self_id),
+            conversation_kind="group" if isinstance(event, GroupMessageEvent)
+            else "private",
+            peer_id=str(event.group_id if isinstance(event, GroupMessageEvent)
+                        else getattr(event, "user_id", 0)),
+            source_message_id=str(event.message_id),
+            source_message_key=_flow_source_key(event),
         )
     except Exception:
         return None
+
+
+def _evict_flow_roots(max_active: int = _FLOW_ROOTS_MAX) -> None:
+    """缓存淘汰（修复计划 §6.1）：活跃 root 显式留痕，绝不静默失踪。"""
+    while len(_flow_roots) > max_active:
+        _key, evicted = _flow_roots.popitem(last=False)
+        try:
+            if evicted is not None and not evicted.ended:
+                _flow_decision(evicted, "flow.ingress", status="unknown",
+                               reason_code="ingress_cache_evicted",
+                               summary="root 缓存淘汰：结束路径改走注册表回查")
+        except Exception:
+            pass
 
 
 def _flow_span(fctx, node_id: str, **kw):
@@ -389,7 +428,7 @@ try:
         """每条消息最早的处理点：建 shared root（规则/过滤之前，计划 §6.2）。
 
         群与私聊都建（私聊此前被 group-only skip 跳过，trace 缺失）；
-        scope 用规范会话身份。
+        scope 用规范会话身份；完整事件身份进 root 键（修复计划 §6.1）。
         """
         if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return
@@ -403,26 +442,40 @@ try:
                 root_kind="qq_private" if isinstance(event, PrivateMessageEvent) else "qq_passive",
                 platform="qq",
                 scope=_flow_scope_of(event),
-                source_message_key=(
-                    f"qq:{event.self_id}:{key[0]}:{event.message_id}"),
+                conversation_key=_flow_conversation_key(event),
+                bot_id=str(event.self_id),
+                conversation_kind="group" if isinstance(event, GroupMessageEvent)
+                else "private",
+                peer_id=str(event.group_id if isinstance(event, GroupMessageEvent)
+                            else getattr(event, "user_id", 0)),
+                source_message_id=str(event.message_id),
+                source_message_key=_flow_source_key(event),
             )
             _flow_roots[key] = root
             _flow_roots.move_to_end(key)
-            while len(_flow_roots) > _FLOW_ROOTS_MAX:
-                _flow_roots.popitem(last=False)
+            _evict_flow_roots()
         except Exception:
             pass
 
     @event_postprocessor
     async def _flow_ingress_end(event: MessageEvent):
-        """全部 matcher 结束后关闭 root（root 同步边界 = 事件处理结束）。"""
+        """全部 matcher 结束后关闭 root（root 同步边界 = 事件处理结束）。
+
+        compare-and-pop（修复计划 §6.1）：以缓存键取得 ctx 后核对身份，
+        另一事件/ctx 的迟到 postprocessor 不得关闭本 root；缓存键未命中
+        （淘汰）时按来源键回查活跃注册表兜底收口。
+        """
         if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return
         try:
             from core.observability import message_flow
 
             root = _flow_roots.pop(_flow_key(event), None)
-            if root is not None and not root.ended:
+            if root is None:
+                root = message_flow.by_source_key(_flow_source_key(event))
+            if (root is not None and not root.ended
+                    and (not root.conversation_key
+                         or root.conversation_key == _flow_conversation_key(event))):
                 message_flow.end_trace(
                     root, outcome=root.outcome or "passive_only")
         except Exception:
@@ -1027,6 +1080,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 from core.observability import message_flow
 
                 message_flow.attach(ctx, fctx)
+                # storage ID 幂等补充（修复计划 §6.1）：群轮次的可信存储键
+                message_flow.update_trace_identity(
+                    fctx, storage_session_id=ctx.storage_session_id)
             except Exception:
                 pass
         with _flow_span(fctx, "chat.reply_gate"):
@@ -1333,6 +1389,10 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 from core.observability import message_flow
 
                 message_flow.attach(ctx, fctx)
+                # storage ID 幂等补充（修复计划 §6.1）：私聊真实存储 ID 是
+                # 注册表负整数，preprocessor 阶段不查业务库，这里补可信值
+                message_flow.update_trace_identity(
+                    fctx, storage_session_id=ref.storage_session_id)
             except Exception:
                 pass
         # 用户消息**先**持久化（source PRIVATE_DIRECT，锁内落库），再组上下文

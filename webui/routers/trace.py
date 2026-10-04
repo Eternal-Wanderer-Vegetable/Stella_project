@@ -138,11 +138,18 @@ async def flow_message_events(
 
 
 @router.get("/api/v1/trace/flow/specs/{version}")
-async def flow_spec(version: str) -> Any:
-    """不可变拓扑 manifest（计划 §6.6）；缺版本显式 404，前端标 unmapped。"""
+async def flow_spec(
+    version: str,
+    digest: Annotated[str | None, Query()] = None,
+) -> Any:
+    """不可变拓扑 manifest（计划 §6.6）；缺版本显式 404，前端标 unmapped。
+
+    带 ``digest`` 查询时按内容归档精确匹配（修复计划 §6.2）：不命中 404，
+    绝不回退 current/latest。
+    """
     from webui.services import flow as flow_service
 
-    data = flow_service.spec(version)
+    data = flow_service.spec(version, digest=digest or None)
     if data is None:
         raise ApiError("该版本的拓扑清单不存在", status_code=404)
     return ok(data)

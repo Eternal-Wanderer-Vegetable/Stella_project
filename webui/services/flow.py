@@ -178,7 +178,11 @@ def message_detail(trace_id: str) -> dict | None:
             want = [c for c in ("process_kind", "origin", "trigger", "route",
                                 "business_ts", "last_heartbeat_utc",
                                 "spec_digest", "producer_ended", "integrity",
-                                "lost_events", "persisted_events") if c in cols]
+                                "lost_events", "persisted_events",
+                                "conversation_key", "bot_id",
+                                "conversation_kind", "peer_id",
+                                "storage_session_id", "source_message_id",
+                                "identity_state") if c in cols]
             if want:
                 erow = conn.execute(
                     f"SELECT {', '.join(want)} FROM message_traces "
@@ -244,7 +248,47 @@ def message_detail(trace_id: str) -> dict | None:
     item.setdefault("integrity", "")
     item.setdefault("lost_events", 0)
     item.setdefault("persisted_events", 0)
+    # 规范身份（修复计划 §6.1）：旧库/旧行缺列时给中性缺省，不伪造 0
+    for field in ("conversation_key", "bot_id", "conversation_kind",
+                  "peer_id", "source_message_id", "identity_state"):
+        item.setdefault(field, "")
+    item.setdefault("storage_session_id", None)
+    # spec 绑定完整性（修复计划 §6.2）：与 runtime integrity 分别表达
+    item["spec_binding"] = _spec_binding(
+        str(item["spec_digest"]), str(item["topology_version"]))
     return item
+
+
+def _spec_binding(spec_digest: str, topology_version: str) -> str:
+    """spec_digest → exact | invalid | legacy_unverified | missing。
+
+    - exact：digest 非空且 flow_spec_blobs 里有同 digest 归档；
+    - invalid：digest 非空但归档缺失（不可回放）；
+    - legacy_unverified：digest 空、旧 flow_specs 有该版本归档（按版本读，
+      不承诺精确匹配）；
+    - missing：两者皆无。
+    """
+    conn = _connect_ro()
+    if conn is None:
+        return "missing"
+    try:
+        if spec_digest:
+            row = conn.execute(
+                "SELECT 1 FROM flow_spec_blobs WHERE spec_digest = ?",
+                (spec_digest,)).fetchone() if _table_exists(
+                    conn, "flow_spec_blobs") else None
+            return "exact" if row else "invalid"
+        if _table_exists(conn, "flow_specs"):
+            row = conn.execute(
+                "SELECT 1 FROM flow_specs WHERE topology_version = ? AND "
+                "spec_json != ''", (topology_version,)).fetchone()
+            if row:
+                return "legacy_unverified"
+        return "missing"
+    except Exception:
+        return "missing"
+    finally:
+        conn.close()
 
 
 def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[dict]:
@@ -280,8 +324,29 @@ def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[
     ]
 
 
-def spec(version: str) -> dict | None:
-    """静态拓扑 manifest：先查归档表，再回退随包文件；缺版本显式 None。"""
+def spec(version: str, digest: str | None = None) -> dict | None:
+    """静态拓扑 manifest。
+
+    - 带 ``digest``：只在 flow_spec_blobs 里精确匹配该内容归档；不命中
+      返回 None（调用方 404），**绝不回退** current/latest（修复计划
+      §6.2：无精确证据不冒充 exact）。
+    - 不带 digest：旧行为（归档表 → 随包文件），供 legacy 客户端与
+      legacy_unverified 轨迹按语义版本读取。
+    """
+    if digest:
+        conn = _connect_ro()
+        if conn is None or not _table_exists(conn, "flow_spec_blobs"):
+            return None
+        try:
+            row = conn.execute(
+                "SELECT spec_json FROM flow_spec_blobs WHERE spec_digest = ?",
+                (digest,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return _loads(row[0], None)
     conn = _connect_ro()
     if conn is not None and _table_exists(conn, "flow_specs"):
         try:
