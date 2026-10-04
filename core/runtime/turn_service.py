@@ -385,6 +385,7 @@ class TurnService:
                     current_user_id=ctx.user_id,
                     mode=getattr(ctx, "memory_mode", "CASUAL_REPLY") or "CASUAL_REPLY",
                     preferred_address=getattr(ctx, "preferred_address", None),
+                    identity_capsule=getattr(ctx, "identity_capsule", "") or None,
                 )
                 user_prompt = _compose_prompt(context_text, ctx)
             else:

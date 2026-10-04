@@ -170,6 +170,9 @@ class ChatContext:
     recorded_row_id: int = 0  # record_message 写入后的行 id（0=未入库）
     relation_version: int = 0  # 信封写入时的关系 schema 版本（0=无关系）
     identity_revision: int = 0  # 会话身份版本快照（M3 写入；缓存/CAS 用）
+    # 每轮重新生成的当前用户身份 capsule（多人身份修复计划 §6.3，M3）：
+    # 从平台 ID/已验证 alias/reply target/冲突状态构造，进 prompt 稳定区。
+    identity_capsule: str = ""
 
     def storage_key(self) -> int:
         """历史消息/摘要/checkpoint 的物理会话键。
@@ -337,7 +340,7 @@ class ChatContext:
         "sender_display_name", "reply_to_msg_id", "reply_target_user_id",
         "mentioned_user_ids", "logical_message_id", "part_index", "origin_msg_id",
         "reply_recipient_user_id", "recorded_row_id", "relation_version",
-        "identity_revision",
+        "identity_revision", "identity_capsule",
         # pre/prepare 侧
         "short_term", "user_profile", "preferred_address", "memories_for_prompt",
         "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",

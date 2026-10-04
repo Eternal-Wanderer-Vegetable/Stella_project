@@ -257,6 +257,7 @@ def build_v2_prompt_context(
     mode: str = "CASUAL_REPLY",
     *,
     preferred_address=None,
+    identity_capsule: str | None = None,
 ) -> str:
     """v2 分区版 Prompt 组装：稳定区在前、动态区在后（设计阶段四：Prompt 前缀稳定化）。
 
@@ -292,6 +293,11 @@ def build_v2_prompt_context(
             f"注意：上下文里标注了用户QQ号的内容属于对应的人，"
             f"只有明确写着当前用户 {current_user_id} 的才归 TA；不要把别人的发言当成 TA 说的。"
         )
+        # 会话内身份 capsule（多人身份修复计划 §6.3）：可信身份状态紧跟
+        # 当前用户身份段，同属稳定区；裁剪时（M4 parts 路径）受保护。
+        capsule = (identity_capsule or "").strip()
+        if capsule:
+            parts.append(capsule)
         addressing = _build_addressing_section(preferred_address)
         if addressing:
             parts.append(addressing)

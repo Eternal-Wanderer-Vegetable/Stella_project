@@ -763,6 +763,12 @@ async def record_group_chat(event: GroupMessageEvent):
         pass
     with _flow_span(fctx, "ingress.passive.persist"):
         await record_message(ctx)
+        # 身份声明 hook（多人身份修复计划 §6.3）：入库拿到 source_row_id 后
+        # 解析本人自我介绍/有目标纠正；零命中零写库，异常不拖垮消息链路。
+        with contextlib.suppress(Exception):
+            from memory.conversation_identity import process_message_identity
+
+            process_message_identity(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
     with _flow_span(fctx, "ingress.passive.state"):
@@ -830,6 +836,25 @@ async def record_group_chat(event: GroupMessageEvent):
                              metrics={"trigger_text_chars": len(text)})
             _spawn_participation_speak(event.group_id, decision, trigger_text=text,
                                        parent_trace_id=ctx.trace_id)
+
+
+def _maybe_identity_direct_reply(ctx) -> None:
+    """整条身份问句的确定性直复（多人身份修复计划 §6.3）。
+
+    命中（整条「我是谁」+ 本会话已验证本人声明）时填好 reply/lines：轮次
+    进入管线后 prepare_turn 见 ctx.reply 直接 DIRECT，零 LLM；未命中不动
+    ctx（含复合问题——照常交给 LLM）。失败静默，绝不阻塞正常回复。
+    """
+    try:
+        from memory.conversation_identity import identity_question_reply
+
+        direct = identity_question_reply(ctx)
+    except Exception:
+        return
+    if direct:
+        ctx.reply = direct
+        ctx.lines = [direct]
+        logger.info(f"🪪 [Identity] 身份问句确定性直复（用户 {ctx.user_id}）")
 
 
 def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
@@ -1013,6 +1038,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             ctx.gate_path = gate.path
             ctx.gate_score = gate.score
             ctx.gate_reasons = gate.reasons
+
+        # 整条身份问句直复（多人身份修复计划 §6.3）：未命中时 ctx 不变
+        _maybe_identity_direct_reply(ctx)
 
         # @ 触发对话时：若距上次总结已累积足够新消息，后台触发一次短期记忆总结，
         # 避免每次群消息都做无用总结，同时保证对话用到的短期记忆是最新的。
@@ -1311,6 +1339,13 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         # ——锁覆盖「历史插入 ↔ 压缩」竞态（计划 §6.2）。
         with _flow_span(fctx, "chat.persist"):
             await record_message(ctx)
+            # 身份声明 hook（多人身份修复计划 §6.3）：私聊同契约
+            with contextlib.suppress(Exception):
+                from memory.conversation_identity import process_message_identity
+
+                process_message_identity(ctx)
+        # 整条身份问句直复（多人身份修复计划 §6.3）
+        _maybe_identity_direct_reply(ctx)
         try:
             with _flow_span(fctx, "chat.consolidate_trigger"):
                 consolidator = get_consolidator()

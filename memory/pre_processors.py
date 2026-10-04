@@ -767,6 +767,20 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     space = ctx.group_shared_space or resolve_space(ctx.group_id)
     _load_preferred_address(ctx, space)
 
+    # 会话内身份 capsule（多人身份修复计划 §6.3）：每轮从可信状态重建、
+    # 不走缓存——本人更名/第三人纠正下一轮立即生效。identity_revision
+    # 供上下文缓存与 compact CAS 使用（M4）。
+    if getattr(ctx, "conversation_key", ""):
+        try:
+            from memory.conversation_identity import (
+                build_identity_capsule,
+                get_identity_revision,
+            )
+
+            ctx.identity_capsule = build_identity_capsule(ctx)
+            ctx.identity_revision = get_identity_revision(str(ctx.conversation_key))
+        except Exception as exc:
+            logger.debug(f"身份 capsule 生成失败（跳过）: {exc}")
     # v3 访问范围（计划 §6.6）：由服务端身份生成，模型输入不可构造。
     # 主体统一由可信 helper 决定（多人身份修复计划 §6.1）：群聊/私聊都用
     # ctx.user_id（平台 sender）；群号 peer_id 是会话地址不是人，绝不当主体。
