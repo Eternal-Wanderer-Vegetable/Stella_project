@@ -797,6 +797,43 @@ def migrate_v15(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v16(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v16：消息身份信封 + 会话身份声明（多人身份修复计划 §6.2/§6.3）。
+
+    - 建 conversation_identity_claims / conversation_identity_versions 两张新表；
+    - group_messages 的信封列由 schema._ADDITIVE_COLUMNS 统一补（加列全带默认值，
+      旧行 = 关系未知，绝不按相邻文本补写回复对象）；
+    - 索引（msg_id / 逻辑单元）同样由 _INDEXES 统一建，这里只做新表；
+    - **additive**：不改旧列、不删行、不改 memory owner 语义（v15 存量保持
+      SPACE），回退应用保留新列/表即可继续运行。
+    """
+    from memory.schema import (
+        create_conversation_identity_claims_table,
+        create_conversation_identity_versions_table,
+    )
+
+    result = MigrationResult(version=16)
+    create_conversation_identity_claims_table(conn)
+    create_conversation_identity_versions_table(conn)
+    result.notes.append(
+        "conversation_identity_claims / conversation_identity_versions 已就绪；"
+        "group_messages 信封列与关系索引由 additive 阶段统一补齐"
+    )
+    cursor = conn.cursor()
+    added = sum(
+        1
+        for table, column, _ in (
+            ("group_messages", "conversation_key", ""),
+            ("group_messages", "reply_to_msg_id", ""),
+            ("group_messages", "logical_message_id", ""),
+        )
+        if _columns(cursor, table) and column in _columns(cursor, table)
+    )
+    if added:
+        result.notes.append(f"group_messages 信封列已可见 {added}/3（其余由补列路径写入）")
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -807,6 +844,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     13: migrate_v13,
     14: migrate_v14,
     15: migrate_v15,
+    16: migrate_v16,
 }
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 from nonebot.exception import FinishedException
@@ -71,7 +71,10 @@ async def test_handle_chat_sends_deterministic_reply_once(ai_gateway_module, mon
     gateway._run_turn_via_engine.assert_awaited_once()
     send.assert_awaited_once()
     finish.assert_awaited_once_with()
-    gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ctx.reply])
+    # v16 契约：origin（本轮 ctx）+ 确认回执随行（多人身份修复计划 §6.2）
+    gateway._record_bot_lines.assert_awaited_once_with(
+        9, 1, [ctx.reply], origin=ANY, receipts=ANY
+    )
 
 
 @pytest.mark.asyncio

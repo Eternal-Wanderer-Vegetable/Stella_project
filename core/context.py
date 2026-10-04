@@ -12,6 +12,111 @@ thought/action/reply、多行回复）以及供日志与 prompt 构建用的诊�
 from dataclasses import dataclass, field
 from typing import Any
 
+# 消息身份信封的边界值（多人身份修复计划 §6.2 字段规格）
+_ENVELOPE_DISPLAY_NAME_MAX = 64
+_ENVELOPE_MENTIONS_MAX = 32
+
+
+def normalize_display_name(raw: str | None) -> str:
+    """展示用昵称规范化：去控制字符/提示标记、截到 64 字符。
+
+    display name 只是展示数据，**永远不能作稳定身份键**；清理它是因为群名片
+    是用户可控文本，可能携带 【现在 】等 prompt 结构标记或换行注入。
+    """
+    text = str(raw or "")
+    cleaned = "".join(
+        ch for ch in text if ch not in "\r\n\t" and _not_prompt_marker_char(ch)
+    )
+    return cleaned.strip()[:_ENVELOPE_DISPLAY_NAME_MAX]
+
+
+def _not_prompt_marker_char(ch: str) -> bool:
+    import unicodedata
+
+    return unicodedata.category(ch) != "Cc" and ch not in "【】"
+
+
+def normalize_mentions(raw) -> tuple[str, ...]:
+    """@ 目标规范化：字符串化、去重、剔除空值，上限 32 个。"""
+    out: list[str] = []
+    for item in raw or ():
+        uid = str(item or "").strip()
+        if not uid or uid.lower() == "all" or uid in out:
+            continue
+        out.append(uid)
+        if len(out) >= _ENVELOPE_MENTIONS_MAX:
+            break
+    return tuple(out)
+
+
+@dataclass(frozen=True)
+class MessageIdentityEnvelope:
+    """一条平台消息的身份信封（多人身份修复计划 §6.2）。
+
+    全部字段来自**平台事件/可信 ctx/已入库行**，绝不从正文、昵称或话题连续性
+    推导。uid 一律是项目现有的稳定 uid 字符串；平台 message ID 在持久化边界
+    统一成字符串。``apply`` 把值落到 ChatContext 的扁平字段上（投影只传有界
+    JSON primitive，见 ChatContext._PROJECTION_FIELDS v4）。
+    """
+
+    sender_display_name: str = ""
+    reply_to_msg_id: str = ""
+    reply_target_user_id: str = ""
+    mentioned_user_ids: tuple[str, ...] = ()
+    logical_message_id: str = ""
+    part_index: int = 0
+    origin_msg_id: str = ""
+    reply_recipient_user_id: str = ""
+    turn_id: str = ""
+    recorded_row_id: int = 0
+    relation_version: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "sender_display_name", normalize_display_name(self.sender_display_name)
+        )
+        object.__setattr__(self, "mentioned_user_ids", normalize_mentions(self.mentioned_user_ids))
+        object.__setattr__(self, "part_index", max(0, int(self.part_index or 0)))
+        object.__setattr__(self, "reply_to_msg_id", str(self.reply_to_msg_id or ""))
+        object.__setattr__(self, "reply_target_user_id", str(self.reply_target_user_id or ""))
+        object.__setattr__(self, "origin_msg_id", str(self.origin_msg_id or ""))
+        object.__setattr__(
+            self, "reply_recipient_user_id", str(self.reply_recipient_user_id or "")
+        )
+
+    def apply(self, ctx: "ChatContext") -> "ChatContext":
+        """把信封写入 ChatContext 的扁平字段（返回同一 ctx，链式友好）。"""
+        ctx.sender_display_name = self.sender_display_name
+        ctx.reply_to_msg_id = self.reply_to_msg_id
+        ctx.reply_target_user_id = self.reply_target_user_id
+        ctx.mentioned_user_ids = self.mentioned_user_ids
+        ctx.logical_message_id = self.logical_message_id
+        ctx.part_index = self.part_index
+        ctx.origin_msg_id = self.origin_msg_id
+        ctx.reply_recipient_user_id = self.reply_recipient_user_id
+        if self.turn_id:
+            ctx.turn_id = self.turn_id
+        ctx.recorded_row_id = self.recorded_row_id
+        ctx.relation_version = self.relation_version
+        return ctx
+
+    @classmethod
+    def from_context(cls, ctx: "ChatContext") -> "MessageIdentityEnvelope":
+        """从已带信封字段的 ctx 取回（round-trip 用）。"""
+        return cls(
+            sender_display_name=ctx.sender_display_name,
+            reply_to_msg_id=ctx.reply_to_msg_id,
+            reply_target_user_id=ctx.reply_target_user_id,
+            mentioned_user_ids=tuple(ctx.mentioned_user_ids),
+            logical_message_id=ctx.logical_message_id,
+            part_index=ctx.part_index,
+            origin_msg_id=ctx.origin_msg_id,
+            reply_recipient_user_id=ctx.reply_recipient_user_id,
+            turn_id=ctx.turn_id,
+            recorded_row_id=ctx.recorded_row_id,
+            relation_version=ctx.relation_version,
+        )
+
 
 @dataclass
 class ChatContext:
@@ -49,6 +154,22 @@ class ChatContext:
     bot_id: str = ""  # 接入 Bot 的 self_id（个人 owner 键 person:qq:<bot>:<uid> 用）
     peer_id: str = ""  # 群=群号；私聊=sender QQ 号；WebChat=主体
     storage_session_id: int = 0  # 0 = 未升级入口，按 group_id 兼容
+
+    # ---- 消息身份信封（多人身份修复计划 §6.2，v4 投影） ----
+    # 全部来自平台事件/可信 ctx/已入库行；缺省空值 = 「关系未知」，消费方
+    # （tail 渲染/纠正解析）按 unknown 处理，绝不按相邻文本或最近发言人补。
+    # sender_display_name 是展示数据，不作稳定身份键。
+    sender_display_name: str = ""
+    reply_to_msg_id: str = ""  # 平台 message ID（字符串）
+    reply_target_user_id: str = ""  # 被回复消息作者（同 canonical conversation+bot 解析）
+    mentioned_user_ids: tuple[str, ...] = ()
+    logical_message_id: str = ""  # 一次多气泡回复共享的逻辑单元 ID
+    part_index: int = 0  # 逻辑单元内的气泡序号（非负）
+    origin_msg_id: str = ""  # BOT_SELF 逻辑单元对应的源消息（被回复/被触发那条）
+    reply_recipient_user_id: str = ""  # BOT_SELF 逻辑单元的收件人（不是作者）
+    recorded_row_id: int = 0  # record_message 写入后的行 id（0=未入库）
+    relation_version: int = 0  # 信封写入时的关系 schema 版本（0=无关系）
+    identity_revision: int = 0  # 会话身份版本快照（M3 写入；缓存/CAS 用）
 
     def storage_key(self) -> int:
         """历史消息/摘要/checkpoint 的物理会话键。
@@ -198,7 +319,10 @@ class ChatContext:
     # v3：新增会话身份四字段（conversation_kind/key/peer/storage_session_id，
     # 计划 §6.1）。旧 v2 投影缺这些字段 → 按旧 QQ 群/WebChat 格式恢复
     # （group_id 即存储键），不猜测新格式缺失字段的会话种类。
-    PROJECTION_SCHEMA_VERSION = 3
+    # v4：消息身份信封扁平字段（多人身份修复计划 §6.2）。旧 v3 输入缺这些
+    # 字段 → 关系一律 unknown；任何来源不明的投影不得仅凭传入 uid 获得权限
+    # ——权限主体仍由既有可信入口（scope_for_chat_context 等）确定。
+    PROJECTION_SCHEMA_VERSION = 4
     # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
     # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
     # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
@@ -209,6 +333,11 @@ class ChatContext:
         "trace_id", "turn_id",
         # 会话身份（v3）
         "conversation_kind", "conversation_key", "bot_id", "peer_id", "storage_session_id",
+        # 消息身份信封（v4）
+        "sender_display_name", "reply_to_msg_id", "reply_target_user_id",
+        "mentioned_user_ids", "logical_message_id", "part_index", "origin_msg_id",
+        "reply_recipient_user_id", "recorded_row_id", "relation_version",
+        "identity_revision",
         # pre/prepare 侧
         "short_term", "user_profile", "preferred_address", "memories_for_prompt",
         "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",
@@ -247,6 +376,9 @@ class ChatContext:
             elif name == "gate_reasons":
                 # tuple → list：投影必须 JSON 安全
                 value = list(value or [])
+            elif name == "mentioned_user_ids":
+                # tuple → list：投影必须 JSON 安全（v4 信封）
+                value = list(value or [])
             out[name] = value
         return out
 
@@ -260,3 +392,9 @@ class ChatContext:
             from config.spaces import resolve_space
 
             self.group_shared_space = resolve_space(self.group_id)
+        # v4 信封字段的统一入口规范化（多人身份修复计划 §6.2）：无论哪个
+        # 入口构造 ctx，展示昵称都不携带控制字符/提示标记，mentions 有界去重。
+        if self.sender_display_name:
+            self.sender_display_name = normalize_display_name(self.sender_display_name)
+        if self.mentioned_user_ids:
+            self.mentioned_user_ids = normalize_mentions(self.mentioned_user_ids)

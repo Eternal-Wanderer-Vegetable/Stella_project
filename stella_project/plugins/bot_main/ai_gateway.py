@@ -36,6 +36,7 @@ import asyncio
 import contextlib
 import contextvars
 import functools
+import uuid
 import inspect
 import math
 import os
@@ -103,7 +104,7 @@ from config import (
     SYSTEM_PROMPT_PATH,
 )
 from config.spaces import prompt_text, resolve_space
-from core.context import ChatContext
+from core.context import ChatContext, normalize_display_name
 from core.llm import ROLE_CHAT, backend_for
 from core.llm.registry import log_summary as log_llm_summary
 from core.llm.usage_store import budget_blocked
@@ -143,7 +144,11 @@ from memory.post_processors import (
     parse_output,
     split_lines,
 )
-from memory.pre_processors import build_context, record_message
+from memory.pre_processors import (
+    build_context,
+    record_message,
+    resolve_reply_target,
+)
 from memory.proactive import get_proactive
 from memory.proactive_gate import (
     can_speak,
@@ -713,6 +718,21 @@ async def record_group_chat(event: GroupMessageEvent):
             return
         text = "[图片]"
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
+    # 消息关系提取（多人身份修复计划 §6.2）：无条件执行（不依赖 SOCIAL_ENABLED），
+    # 在 record_message **之前**写入 ctx 信封，与正文同一短事务落库。社会学习
+    # 消费同一份解析结果，但主历史关系不再只存在于旁表。
+    reply_to_id, mentioned_users = _extract_message_relations(event)
+    sender_display = normalize_display_name(
+        getattr(getattr(event, "sender", None), "card", "")
+        or getattr(getattr(event, "sender", None), "nickname", "")
+    )
+    conversation_key = f"qq:{event.self_id}:group:{event.group_id}"
+    reply_target_uid = resolve_reply_target(
+        reply_to_id or "",
+        event.group_id,
+        bot_id=str(event.self_id),
+        conversation_key=conversation_key,
+    )
     ctx = ChatContext(
         user_id=event.user_id,
         group_id=event.group_id,
@@ -723,6 +743,17 @@ async def record_group_chat(event: GroupMessageEvent):
         # 追踪 ID 在接入入口、硬门禁前创建（计划 §6.1）；与流程 root 共用
         # 同一身份（§6.2 入口绑定），证据行/投递/派生全部挂同一 trace。
         trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+        # v3 会话身份 + v4 信封（关系权威来自平台事件，正文不可伪造）
+        conversation_kind="group",
+        conversation_key=conversation_key,
+        bot_id=str(event.self_id),
+        peer_id=str(event.group_id),
+        storage_session_id=event.group_id,
+        sender_display_name=sender_display,
+        reply_to_msg_id=str(reply_to_id or ""),
+        reply_target_user_id=reply_target_uid,
+        mentioned_user_ids=tuple(mentioned_users),
+        relation_version=1,
     )
     try:
         from core.observability import message_flow
@@ -744,12 +775,10 @@ async def record_group_chat(event: GroupMessageEvent):
         # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
         session_touch(ctx.group_id)
 
-    # 消息关系提取（供证据落库与参与评分共用）
-    reply_to_id, mentioned_users = _extract_message_relations(event)
-    # 标准化消息证据（计划 §6.1）：reply/@ 关系此前只存在于事件对象上，落不进
-    # 任何表，效果观察就无法做引用归因。总开关关闭时不碰旁表；两个 matcher
-    # 重复处理同一消息由 (platform, bot, group, platform_message_id) 复合唯一
-    # 索引幂等兜底，first-writer-wins。
+    # 消息证据（计划 §6.1）：关系解析已在入库前完成（ctx 信封），这里只消费
+    # 同一份结果。总开关关闭时不碰旁表；两个 matcher 重复处理同一消息由
+    # (platform, bot, group, platform_message_id) 复合唯一索引幂等兜底，
+    # first-writer-wins。
     social_event_id = ""
     if _social_delivery_enabled():
         with contextlib.suppress(Exception), _flow_span(fctx, "ingress.passive.social"):
@@ -807,7 +836,12 @@ def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tu
     """提取回复引用与 @ 目标（除 Stella 自身、拒绝 @all），供证据与评分层使用。"""
     reply_to: str | None = None
     mentioned: list[str] = []
-    for segment in event.get_message():
+    try:
+        segments = list(event.get_message())
+    except Exception:
+        # 事件对象不提供消息段（异常适配器/桩）→ 关系 unknown，不猜
+        return None, ()
+    for segment in segments:
         seg_type = _message_segment_type(segment)
         if seg_type == "reply":
             reply_to = str(_message_segment_data(segment).get("id") or "") or None
@@ -924,6 +958,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 )
             else:
                 ctx_origin = None
+            _reply_to_id, _mentioned = _extract_message_relations(event)
             ctx = ChatContext(
                 user_id=event.user_id,
                 group_id=event.group_id,
@@ -936,6 +971,21 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 bot_id=str(event.self_id),
                 peer_id=str(event.group_id),
                 storage_session_id=event.group_id,
+                # v4 当前输入信封（多人身份修复计划 §6.2）：纠正解析/预算
+                # parts 都从这里读关系，权威来自平台事件
+                sender_display_name=normalize_display_name(
+                    getattr(getattr(event, "sender", None), "card", "")
+                    or getattr(getattr(event, "sender", None), "nickname", "")
+                ),
+                reply_to_msg_id=str(_reply_to_id or ""),
+                reply_target_user_id=resolve_reply_target(
+                    _reply_to_id or "",
+                    event.group_id,
+                    bot_id=str(event.self_id),
+                    conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                ),
+                mentioned_user_ids=tuple(_mentioned),
+                relation_version=1,
                 # 平台原始句柄：Comes 调插件工具时，工具 handler 内部会用 event.send() /
                 # event.bot.call_action()，必须是真实对象。只有 @ 回复这条路径能提供它们
                 # （主动发言没有对应的用户事件，那条路径上工具能力自然不可用）。
@@ -1064,7 +1114,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
-                        event.self_id, event.group_id, list(ctx.lines)
+                        event.self_id, event.group_id, list(ctx.lines), origin=ctx
                     )
             elif ack_outcome == "unknown":
                 logger.warning(
@@ -1114,7 +1164,10 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
                 # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
                 # 整合提供「我刚说过什么」的真实语境
-                await _record_bot_lines(event.self_id, event.group_id, delivered)
+                await _record_bot_lines(
+                    event.self_id, event.group_id, delivered,
+                    origin=ctx, receipts=receipts,
+                )
 
                 # 输出匹配（计划 §6.3.4）：注入的表达真的出现在已发文本 → applied=1，
                 # 只有 applied 的表达才关联使用结果；未匹配保持 unknown
@@ -1214,6 +1267,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 )
             else:
                 ctx_origin = None
+            # 私聊引用段极少见，防御性提取；解析不到 = unknown（不猜）
+            _reply_to_id, _mentioned = _extract_message_relations(event)
             ctx = ChatContext(
                 user_id=event.user_id,
                 group_id=0,  # 私聊没有群号；存储/身份走以下字段（计划 §6.1）
@@ -1227,6 +1282,19 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 peer_id=ref.peer_id,
                 storage_session_id=ref.storage_session_id,
                 trigger="reply",
+                # v4 当前输入信封（多人身份修复计划 §6.2）
+                sender_display_name=normalize_display_name(
+                    getattr(getattr(event, "sender", None), "nickname", "")
+                ),
+                reply_to_msg_id=str(_reply_to_id or ""),
+                reply_target_user_id=resolve_reply_target(
+                    _reply_to_id or "",
+                    ref.storage_session_id,
+                    bot_id=bot_id,
+                    conversation_key=ref.conversation_key,
+                ),
+                mentioned_user_ids=tuple(_mentioned),
+                relation_version=1,
                 raw_event=event,
                 bot=bot,
                 cometa_origin=ctx_origin,
@@ -1323,7 +1391,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
-                        event.self_id, ref.storage_session_id, list(ctx.lines)
+                        event.self_id, ref.storage_session_id, list(ctx.lines), origin=ctx
                     )
             elif ack_outcome == "unknown":
                 logger.warning(
@@ -1345,7 +1413,10 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         if delivered:
             with _flow_span(fctx, "reply.bookkeeping"):
                 # Bot 台词落库（BOT_SELF）：只记确认送达的片段（计划 §6.3）
-                await _record_bot_lines(event.self_id, ref.storage_session_id, delivered)
+                await _record_bot_lines(
+                    event.self_id, ref.storage_session_id, delivered,
+                    origin=ctx, receipts=receipts,
+                )
             ack_count = sum(1 for r in receipts if r.status == "acknowledged")
             _flow_set_outcome(
                 fctx, "delivered" if ack_count == len(ctx.lines) else "partial")
@@ -2534,15 +2605,69 @@ def _join_lines_naturally(lines: list[str]) -> str:
     return text
 
 
-async def _record_bot_lines(self_id: int, group_id: int, lines: list[str]) -> None:
+async def _record_bot_lines(
+    self_id: int,
+    group_id: int,
+    lines: list[str],
+    *,
+    origin: "ChatContext | None" = None,
+    receipts: list | None = None,
+) -> None:
     """把 Bot 自己发出的台词写入 group_messages（source_kind=BOT_SELF）。
 
     目的：让下一轮整合能看到「我问了什么」，否则用户回答「对」「是的」时
     整合模型缺少语境，只能放弃或自行编造。BOT_SELF 只作上下文，
     consolidator 已保证它不进候选发送者白名单。
+
+    v16（多人身份修复计划 §6.2）：``origin``（本轮可信 ctx）与 ``receipts``
+    （deliver_lines 确认回执，keyword-only）给定时，每个确认气泡落自身的
+    平台 message ID 与信封关系：同一次回复共享 logical_message_id/turn_id、
+    递增 part_index、相同 origin_msg_id 与 reply_recipient_user_id——历史
+    作者是 BOT_SELF，**回复对象不是作者**。receipt 缺平台 ID 时仍记录已确认
+    的逻辑关系（msg_id 保持未知）；failed/unknown 不写。origin 为 None 时
+    保持旧行为（无关系列值），兼容旧调用。
     """
-    for line in lines:
-        text = (line or "").strip()
+    # 确认气泡序列：有 receipts 时只记 acknowledged 段（按原始 part_index），
+    # 否则退回调用方给的 lines（旧调用方：cometa ack / WebChat 等已确认路径）。
+    segments: list[tuple[int, str, str]] = []  # (part_index, text, platform_id)
+    if receipts:
+        for r in receipts:
+            status = str(getattr(r, "status", "") or "")
+            if status != "acknowledged":
+                continue
+            text = str(getattr(r, "text", "") or "").strip()
+            segments.append(
+                (
+                    int(getattr(r, "part_index", 0) or 0),
+                    text,
+                    str(getattr(r, "platform_message_id", "") or ""),
+                )
+            )
+        segments.sort(key=lambda s: s[0])
+    else:
+        segments = [(i, (line or "").strip(), "") for i, line in enumerate(lines)]
+
+    logical_id = ""
+    turn_id = ""
+    origin_msg_id = ""
+    recipient = ""
+    if origin is not None:
+        turn_id = str(getattr(origin, "turn_id", "") or "")
+        trace_id = str(getattr(origin, "trace_id", "") or "")
+        # 逻辑单元 ID：turn_id 优先，trace 兜底，再兜底局部 UUID——同一次
+        # 调用内的全部气泡必须共享同一个 ID（没有 turn 追踪的入口也能归组）
+        logical_id = turn_id or trace_id or uuid.uuid4().hex
+        origin_msg_id = str(getattr(origin, "msg_id", 0) or 0)
+        origin_msg_id = str(origin_msg_id) if origin_msg_id not in ("", "0") else ""
+        # 收件人 = 本轮回复针对的用户（@ 触发即 sender；proactive_at 即目标）；
+        # 群级主动（user_id=0）无个人收件人，保持空
+        recipient = str(getattr(origin, "user_id", 0) or 0)
+        recipient = recipient if recipient not in ("", "0") else ""
+        if str(getattr(origin, "bot_id", "")) == str(self_id) and origin.group_id != group_id:
+            # origin 与落库会话不一致（防御）：宁缺勿错
+            origin_msg_id = ""
+
+    for part_index, text, platform_id in segments:
         # 纯标点/单字兜底行（如 "......？"）无信息量，只会占用上下文尾巴窗口
         if len(text) < 2 or not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
             continue
@@ -2551,9 +2676,18 @@ async def _record_bot_lines(self_id: int, group_id: int, lines: list[str]) -> No
                 ChatContext(
                     user_id=self_id,
                     group_id=group_id,
-                    msg_id=0,
+                    msg_id=int(platform_id) if platform_id.isdigit() else 0,
                     message=text,
                     source_kind="BOT_SELF",
+                    conversation_kind=getattr(origin, "conversation_kind", "") or "",
+                    conversation_key=getattr(origin, "conversation_key", "") or "",
+                    bot_id=str(self_id),
+                    logical_message_id=logical_id,
+                    part_index=part_index,
+                    origin_msg_id=origin_msg_id,
+                    reply_recipient_user_id=recipient,
+                    turn_id=turn_id,
+                    relation_version=1 if logical_id else 0,
                 )
             )
         except Exception as e:
@@ -2822,7 +2956,9 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 )
                 logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
-                await _record_bot_lines(self_id, group_id, delivered)
+                await _record_bot_lines(
+                    self_id, group_id, delivered, origin=ctx, receipts=receipts
+                )
 
                 # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
                 if ctx.tail_start_id:
@@ -3323,7 +3459,11 @@ async def _proactive_speak_impl(
                 intent=intent,
             )
             logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
-            await _record_bot_lines(int(bot.self_id), group_id, delivered)
+            # 群级主动（user_id=0）：origin 给出但无个人收件人——
+            # _record_bot_lines 内部把收件人与源消息留空（unknown），不猜目标
+            await _record_bot_lines(
+                int(bot.self_id), group_id, delivered, origin=ctx, receipts=receipts
+            )
 
             # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
             if ctx.tail_start_id:
