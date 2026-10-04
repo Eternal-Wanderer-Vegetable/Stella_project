@@ -567,6 +567,20 @@ ENTRY_ROOTS: dict[str, str] = {
 # ---- 显式埋点边（修复计划 §6.4）：这些 (src, dst) 已在真实控制边界发出
 # transition 事实；其余边为 static_only（静态目录关系，运行未确认）----
 EXPLICIT_EDGES: frozenset[tuple[str, str]] = frozenset({
+    # 消息入口与被动记录链（修复计划 §6.4 第二批）
+    ("ingress.receive", "ingress.passive.filter"),
+    ("ingress.receive", "ingress.plugin"),
+    ("ingress.receive", "ingress.chat.rule"),
+    ("ingress.chat.rule", "chat.plugin_shortcut"),
+    ("ingress.passive.filter", "ingress.passive.persist"),
+    ("ingress.passive.persist", "ingress.passive.state"),
+    ("ingress.passive.state", "ingress.passive.social"),
+    ("ingress.passive.social", "ingress.passive.expression"),
+    ("ingress.passive.expression", "ingress.passive.participation"),
+    # 参与决策链
+    ("participation.decision", "participation.score_compute"),
+    ("participation.score_compute", "participation.mode"),
+    # 对话/闸门/生成/发送/压缩（首批）
     ("chat.plugin_shortcut", "chat.group_lock"),
     ("chat.group_lock", "chat.context"),
     ("chat.daily_budget", "turn.identity"),

@@ -758,6 +758,9 @@ group_silent_listener = on_message(priority=_PRIORITY_SILENT, block=False)
 async def record_group_chat(event: GroupMessageEvent):
     """记录群聊消息到短期记忆（静默侧，不触发总结/推理）。"""
     fctx = _flow_root_for(event)
+    # 真实控制边界（修复计划 §6.4）：监听器被调用 = 进入过滤段
+    _flow_transition(fctx, from_node="ingress.receive",
+                     to_node="ingress.passive.filter")
     if event.group_id not in ALLOWED_GROUPS:
         _flow_decision(fctx, "ingress.passive.filter", status="skipped",
                        reason_code="group_not_allowed")
@@ -781,6 +784,8 @@ async def record_group_chat(event: GroupMessageEvent):
             return
         text = "[图片]"
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
+    _flow_transition(fctx, from_node="ingress.passive.filter",
+                     to_node="ingress.passive.persist")
     # 消息关系提取（多人身份修复计划 §6.2）：无条件执行（不依赖 SOCIAL_ENABLED），
     # 在 record_message **之前**写入 ctx 信封，与正文同一短事务落库。社会学习
     # 消费同一份解析结果，但主历史关系不再只存在于旁表。
@@ -834,6 +839,8 @@ async def record_group_chat(event: GroupMessageEvent):
             process_message_identity(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
+    _flow_transition(fctx, from_node="ingress.passive.persist",
+                     to_node="ingress.passive.state")
     with _flow_span(fctx, "ingress.passive.state"):
         get_proactive().record_message(ctx.group_id, ctx.user_id)
         if ctx.source_kind == "AT_MENTION":
@@ -850,6 +857,8 @@ async def record_group_chat(event: GroupMessageEvent):
     # first-writer-wins。
     social_event_id = ""
     if _social_delivery_enabled():
+        _flow_transition(fctx, from_node="ingress.passive.state",
+                         to_node="ingress.passive.social")
         with contextlib.suppress(Exception), _flow_span(fctx, "ingress.passive.social"):
             social_event_id = social_store.record_event(
                 MessageEvidence(
@@ -865,6 +874,11 @@ async def record_group_chat(event: GroupMessageEvent):
             ) or ""
     # 黑话信号采集（设计阶段六 → 计划 §6.4）：社交模式接管时逐 hit 落
     # occurrence 证据（event_id 幂等）；未接管时走进程内计数器，热路径开销不变。
+    if social_event_id or _social_delivery_enabled():
+        # 目录边 social→expression 只在 social 真正运行时点亮；social 被开关
+        # 跳过时 expression 仍执行，但不虚构这条跳转事实
+        _flow_transition(fctx, from_node="ingress.passive.social",
+                         to_node="ingress.passive.expression")
     with _flow_span(fctx, "ingress.passive.expression"):
         expression_learning.note_passive_message(
             ctx.group_shared_space, ctx.user_id, text,
@@ -872,6 +886,8 @@ async def record_group_chat(event: GroupMessageEvent):
         )
 
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
+        _flow_transition(fctx, from_node="ingress.passive.expression",
+                         to_node="ingress.passive.participation")
         with _flow_span(fctx, "ingress.passive.participation") as part_span:
             decision = await get_participation_manager().observe(
                 ctx.group_id,
@@ -989,6 +1005,7 @@ plugin_handler = on_message(rule=Rule(is_plugin_trigger), priority=_PRIORITY_PLU
 async def handle_plugin(bot: Bot, event: MessageEvent):
     """AstrBot 插件分发。无插件安装时 dispatch 会立即返回，开销可忽略。"""
     fctx = _flow_root_for(event) if isinstance(event, GroupMessageEvent) else None
+    _flow_transition(fctx, from_node="ingress.receive", to_node="ingress.plugin")
     plugin_span = _flow_span(fctx, "ingress.plugin")
     plugin_span.__enter__()
     try:
@@ -1018,6 +1035,9 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
     fctx = _flow_root_or_create(event, "qq_chat")
+    # matcher 命中即聊天触发规则通过（修复计划 §6.4 真实边界）
+    _flow_transition(fctx, from_node="ingress.chat.rule",
+                     to_node="chat.plugin_shortcut")
     if _event_key(event) in _plugin_handled_msgs:
         _plugin_handled_msgs.pop(_event_key(event), None)
         _flow_decision(fctx, "chat.plugin_shortcut", status="skipped",

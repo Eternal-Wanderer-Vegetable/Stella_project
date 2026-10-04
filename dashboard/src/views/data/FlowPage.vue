@@ -905,7 +905,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             </div>
           </v-card-text>
 
-          <!-- 泳道图例（节点圆点颜色 ↔ 处理阶段） -->
+          <!-- 泳道图例（节点圆点颜色 ↔ 处理阶段）+ 线型图例（外观反馈 11） -->
           <v-card-text
             v-if="laneLegend.length"
             class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
@@ -919,6 +919,32 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 class="lane-dot"
                 :style="{ background: lane.color }"
               />{{ lane.label }}
+            </span>
+            <v-divider vertical inset class="mx-1" style="max-height: 14px" />
+            <span class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+              <svg width="26" height="8" aria-hidden="true">
+                <line x1="0" y1="4" x2="26" y2="4"
+                      stroke="rgb(var(--v-theme-success))" stroke-width="2" />
+              </svg>
+              实际走过
+            </span>
+            <span class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+              <svg width="26" height="8" aria-hidden="true">
+                <line x1="0" y1="4" x2="26" y2="4"
+                      stroke="rgba(var(--v-theme-on-surface), 0.35)" stroke-width="1.2"
+                      stroke-dasharray="4 3" />
+              </svg>
+              静态未确认（无跳转事实）
+            </span>
+            <span class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+              <svg width="26" height="8" aria-hidden="true">
+                <line x1="0" y1="4" x2="26" y2="4"
+                      stroke="rgba(var(--v-theme-on-surface), 0.35)" stroke-width="1.2"
+                      stroke-dasharray="4 3" />
+                <circle cx="4" cy="4" r="2.4" fill="rgba(var(--v-theme-on-surface), 0.35)" />
+                <circle cx="22" cy="4" r="2.4" fill="rgba(var(--v-theme-on-surface), 0.35)" />
+              </svg>
+              异步派生 / 因果
             </span>
           </v-card-text>
 
