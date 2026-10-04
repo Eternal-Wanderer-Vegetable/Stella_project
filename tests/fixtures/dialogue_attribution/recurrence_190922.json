@@ -44,6 +44,12 @@
     {"unit": "bot_reply_3", "seqs": [9, 10, 11], "recipient": "A", "origin_msg_id": "383945296"},
     {"unit": "bot_reply_4_faulty", "seqs": [14, 15, 16], "recipient": "C", "origin_msg_id": "-1337665775"}
   ],
+  "evaluation": {
+    "current_sender": "C",
+    "current_input": "摸摸",
+    "history_upto_seq": 13,
+    "note": "被测轮 = 对 seq13（C 的摸摸）生成回复；seq14-16 的错误回复是被测输出本身，绝不进历史"
+  },
   "failing_round": {
     "current_sender": "C",
     "turn_trace_id": "e16cd8bcc68f4e0da014e51d25f733d8",

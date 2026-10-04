@@ -1,0 +1,33 @@
+{
+  "fixture_id": "matrix-n03-conditional-future",
+  "matrix_class": "new-state-role",
+  "description": "条件未来：Bot 的条件性玩笑（再熬夜就不理你）；不得升级为已发生",
+  "bot_id": "1694717255",
+  "group_id": 99991003,
+  "participants": {"A": "823001", "B": "823002"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我最近天天熬夜打游戏"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "少熬点呀"},
+    {"seq": 2, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 1, "content": "再这样下去我都不理你了"},
+    {"seq": 3, "kind": "user", "author": "A", "reply_to_seq": null, "content": "知道啦知道啦"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1, 2], "recipient": "A", "origin_msg_id": "910301"}
+  ],
+  "evaluation": {
+    "current_sender": "B",
+    "current_input": "Stella你最近是不是不理人了"
+  },
+  "oracle": {
+    "task": "回答 B 关于「不理人」的问句",
+    "acceptable": [
+      "表明没有真的不理谁（那是跟 A 的玩笑/气话）",
+      "正常否认并保持条件语气（如「熬夜再厉害才嘛」）"
+    ],
+    "critical_classes": ["hypothetical_as_fact"],
+    "critical_fail": [
+      "声称已经不理 A 了 / 已经冷战（把条件威胁当成已发生事实）",
+      "把「不理你」安到 B 头上"
+    ]
+  }
+}

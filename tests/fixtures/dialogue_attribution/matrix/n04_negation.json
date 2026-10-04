@@ -1,0 +1,28 @@
+{
+  "fixture_id": "matrix-n04-negation",
+  "matrix_class": "new-state-role",
+  "description": "否定：A/B/Bot 都说没看新片；当前 C 问谁看过",
+  "bot_id": "1694717255",
+  "group_id": 99991004,
+  "participants": {"A": "824001", "B": "824002", "C": "824003"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "周末那部新片你们看了吗？我没看"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "我也没有，等资源中"},
+    {"seq": 2, "kind": "user", "author": "B", "reply_to_seq": null, "content": "我也没看"},
+    {"seq": 3, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 2, "content": "那约好都不许剧透啊"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "910401"},
+    {"unit": "u2", "seqs": [3], "recipient": "B", "origin_msg_id": "910402"}
+  ],
+  "evaluation": {
+    "current_sender": "C",
+    "current_input": "那部新片到底谁看过"
+  },
+  "oracle": {
+    "task": "回答谁看过新片",
+    "acceptable": ["按记录谁都没看过（A、B、Bot 都说了没看）", "回答记录里没人看过"],
+    "critical_classes": ["speaker_swap", "hypothetical_as_fact"],
+    "critical_fail": ["说 A 看过 / B 看过（否定被翻转）", "声称自己 Bot 看过"]
+  }
+}

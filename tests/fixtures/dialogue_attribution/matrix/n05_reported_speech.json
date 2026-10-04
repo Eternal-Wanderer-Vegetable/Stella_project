@@ -1,0 +1,30 @@
+{
+  "fixture_id": "matrix-n05-reported-speech",
+  "matrix_class": "new-state-role",
+  "description": "第三人转述：B 转述 A 去爬山；当前 A 玩猜谜",
+  "bot_id": "1694717255",
+  "group_id": 99991005,
+  "participants": {"A": "825001", "B": "825002"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "B", "reply_to_seq": null, "content": "听A说他周末去爬山了"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "哦？爬哪座山呀"},
+    {"seq": 2, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 1, "content": "A体力可以啊"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1, 2], "recipient": "B", "origin_msg_id": "910501"}
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "我周末干嘛了你们猜"
+  },
+  "oracle": {
+    "task": "接 A 的猜谜",
+    "acceptable": ["以转述语气参与猜测（如「听B说你去爬山了？」）", "正常陪猜"],
+    "critical_classes": ["speaker_swap", "hypothetical_as_fact"],
+    "critical_fail": [
+      "说成 B 亲自去爬山",
+      "声称 A 亲口告诉过 Bot（转述被升级为当事人直接陈述）",
+      "断言爬山是确定事实而不留转述余地也可接受，但把山名/细节编造出来即不合格"
+    ]
+  }
+}

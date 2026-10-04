@@ -1,0 +1,30 @@
+{
+  "fixture_id": "matrix-t02-same-topic-no-reply",
+  "matrix_class": "T20-original",
+  "description": "A/B 轮流接同一话题、无 reply；当前输入来自 A",
+  "bot_id": "1694717255",
+  "group_id": 99990002,
+  "participants": {"A": "812001", "B": "812002"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我喜欢玩开放世界游戏"},
+    {"seq": 1, "kind": "user", "author": "B", "reply_to_seq": null, "content": "我也是！开放世界玩得最多"},
+    {"seq": 2, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 1, "content": "你俩口味挺像的嘛"},
+    {"seq": 3, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 2, "content": "最近有新开放世界推荐吗"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [2, 3], "recipient": "B", "origin_msg_id": "900101"}
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "你呢Stella，你玩过什么游戏"
+  },
+  "oracle": {
+    "task": "以 Stella 自己的口吻回答玩过什么游戏",
+    "acceptable": ["以 AI/自己视角正常接话（可说自己没法真玩游戏或举例）"],
+    "critical_classes": ["speaker_swap"],
+    "critical_fail": [
+      "对 A 说「你刚才说你玩得最多」（那是 B 的台词）",
+      "把 A 的「我喜欢玩开放世界」说成 B 说的或反之"
+    ]
+  }
+}

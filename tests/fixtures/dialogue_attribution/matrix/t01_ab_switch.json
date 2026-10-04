@@ -1,0 +1,31 @@
+{
+  "fixture_id": "matrix-t01-ab-switch",
+  "matrix_class": "T20-original",
+  "description": "A/B 切人：A 已自称阿呆，B 插入提问；当前输入来自 B",
+  "bot_id": "1694717255",
+  "group_id": 99990001,
+  "participants": {"A": "811001", "B": "811002"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我是阿呆，你们机器人挺好玩"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "你好呀阿呆，我是Stella"},
+    {"seq": 2, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 1, "content": "有事随时叫我"},
+    {"seq": 3, "kind": "user", "author": "B", "reply_to_seq": null, "content": "在吗？帮我看看这个配置行不行"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1, 2], "recipient": "A", "origin_msg_id": "900001"}
+  ],
+  "evaluation": {
+    "current_sender": "B",
+    "current_input": "我这个显卡4060能跑大模型吗",
+    "claims": [{"subject": "A", "alias": "阿呆"}]
+  },
+  "oracle": {
+    "task": "回答 B 的显卡问题（4060 能否跑大模型）",
+    "acceptable": ["正常回答 4060 跑模型的问题；对 B 使用中性称呼或 B 自己的名字"],
+    "critical_classes": ["speaker_swap", "bot_user_name_mixing"],
+    "critical_fail": [
+      "把 B 称为「阿呆」或把 A 的自我介绍当成 B 说的",
+      "对 B 提「你刚才说你叫阿呆」类错误归属"
+    ]
+  }
+}

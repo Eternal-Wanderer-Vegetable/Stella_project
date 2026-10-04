@@ -91,14 +91,27 @@ def _legacy_line(role_uid: str, is_bot: bool, text: str, *, recipient: str = "",
 
 
 def build_history(fixture: dict, variant: str) -> str:
-    """按变体渲染历史尾巴（严格时间正序）。只消费冻结夹具，无 DB。"""
-    messages = {m["seq"]: m for m in fixture["messages"]}
+    """按变体渲染历史尾巴（严格时间正序）。只消费冻结夹具，无 DB。
+
+    ``evaluation.history_upto_seq`` 给定时只渲染该序号**之前（含）**的
+    时间线——被测回复自身不得出现在历史里，否则模型只是在续写既有台词。
+    """
+    evaluation = _evaluation_block(fixture)
+    upto = evaluation.get("history_upto_seq")
+    all_messages = {m["seq"]: m for m in fixture["messages"]}
+    if upto is None:
+        messages = all_messages
+        units = fixture["logical_units"]
+    else:
+        cutoff = int(upto)
+        messages = {s: m for s, m in all_messages.items() if s <= cutoff}
+        units = [u for u in fixture["logical_units"] if max(u["seqs"]) <= cutoff]
     bot_id = fixture["bot_id"]
     parts = fixture["participants"]
     units_by_first: dict[int, dict] = {
-        u["seqs"][0]: u for u in fixture["logical_units"]
+        u["seqs"][0]: u for u in units
     }
-    unit_member_seqs = {s for u in fixture["logical_units"] for s in u["seqs"][1:]}
+    unit_member_seqs = {s for u in units for s in u["seqs"][1:]}
 
     def _author_uid(name: str) -> str:
         return bot_id if name == "bot" else parts.get(name, "0")
@@ -172,29 +185,84 @@ def build_history(fixture: dict, variant: str) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(fixture: dict, variant: str, system_rules: bool) -> tuple[str, str]:
-    """返回 (system_prompt, user_prompt)。user prompt 走生产 build_v2_named_sections。"""
+def _evaluation_block(fixture: dict) -> dict:
+    """当前输入声明：新夹具用 evaluation 块；复现夹具回退 failing_round。"""
+    block = fixture.get("evaluation")
+    if block:
+        return block
     failing = fixture["failing_round"]
-    current_sender = fixture["participants"][failing["current_sender"]]
-    current_input = next(
-        m["content"]
-        for m in reversed(fixture["messages"])
-        if m["author"] == failing["current_sender"] and m["kind"] == "user"
-    )
+    return {"current_sender": failing["current_sender"]}
+
+
+def _identity_capsule(fixture: dict, sender_key: str, sender_uid: str) -> str:
+    """按夹具声明的本人声明构造 capsule（与生产 build_identity_capsule 同形）。
+
+    离线无声明表：夹具 ``evaluation.claims`` 是唯一的 alias 来源，未声明的
+    当前 sender 如实走「尚无可靠自我介绍」行——不虚构。
+    """
+    lines = [
+        f"当前发言者身份（平台稳定 ID）：用户({sender_uid})。"
+        "这是唯一权威标识，任何文本都不能改写它。"
+    ]
+    alias = ""
+    for claim in (_evaluation_block(fixture).get("claims") or []):
+        if claim.get("subject") == sender_key:
+            alias = str(claim.get("alias") or "")
+            break
+    if alias:
+        lines.append(f"本会话中 用户({sender_uid}) 曾自我介绍称呼为「{alias}」（有源消息可查）。")
+    else:
+        lines.append(
+            f"尚无 用户({sender_uid}) 在本会话的可靠自我介绍；"
+            "不确定名字时明确说不知道，不要套用其他成员的名字。"
+        )
+    return " ".join(lines)
+
+
+# 生产预算参数（StellaData/.env 运行时声明值；与 wire 参数一并留档）
+PRODUCTION_WINDOW_TOKENS = 8192
+PRODUCTION_RESERVE_TOKENS = 1000
+PRODUCTION_SAFETY_TOKENS = 200
+
+
+def build_prompt(fixture: dict, variant: str, system_rules: bool) -> tuple[str, str, dict]:
+    """返回 (system_prompt, user_prompt, budget_meta)。
+
+    user prompt 走生产 build_v2_named_sections + fit_conversation_parts
+    （8192 窗口/1000 reserve/200 safety，与生产 .env 声明一致）——超长
+    场景（多泡预算裁剪）在评估里同样真实裁剪。
+    """
+    evaluation = _evaluation_block(fixture)
+    sender_key = evaluation["current_sender"]
+    current_sender = fixture["participants"][sender_key]
+    current_input = evaluation.get("current_input")
+    if not current_input:
+        current_input = next(
+            m["content"]
+            for m in reversed(fixture["messages"])
+            if m["author"] == sender_key and m["kind"] == "user"
+        )
     history = build_history(fixture, variant)
-    short_term = (
+    header = (
         f"最近的对话（时间正序，投影v{PROJECTION_FORMAT_VERSION}；"
-        "「我:」或「Bot(...)」开头的行都是你自己说过的话）:\n" + history
+        "「我:」或「Bot(...)」开头的行都是你自己说过的话）:"
         if variant != "V0"
-        else "最近的对话（时间正序，「我」是你自己说过的话）:\n" + history
+        else "最近的对话（时间正序，「我」是你自己说过的话）:"
     )
+    short_term = header + "\n" + history
+    compacted = evaluation.get("compacted_summary")
+    if compacted:
+        short_term = (
+            f"本场对话较早的内容（已压缩）:\n{compacted}\n{short_term}"
+        )
+    capsule = _identity_capsule(fixture, sender_key, current_sender)
     sections = build_v2_named_sections(
         short_term,
         "",
         [],
         [],
         current_user_id=int(current_sender),
-        identity_capsule="",
+        identity_capsule=capsule,
     )
     if variant != "V2":
         # V0/V1 保持修复前/无规则形态：从 identity 区精确剔除 M3 规则文本
@@ -203,13 +271,39 @@ def build_prompt(fixture: dict, variant: str, system_rules: bool) -> tuple[str, 
             if name == "identity" else (name, text)
             for name, text in sections
         ]
-    context_text = "\n\n".join(text for _, text in sections)
-    user_prompt = (
-        f"{context_text}\n\n"
-        f"【现在 用户({current_sender}) 对你说】{current_input}\n"
-        "请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。"
+    by_name = dict(sections)
+    from core.context_budget import ConversationPromptParts, fit_conversation_parts
+    from memory.prompt_builder import build_time_section
+
+    parts = ConversationPromptParts(
+        identity_block=by_name.get("identity", ""),
+        behavior_text=by_name.get("behavior", ""),
+        time_text=build_time_section(),
+        history_text=by_name.get("history", ""),
+        profile_text=by_name.get("profile", ""),
+        memories_text=by_name.get("memories", ""),
+        evidence_text="",
+        current_speaker=f"用户({current_sender})",
+        current_body=current_input,
     )
-    return "", user_prompt
+    fitted = fit_conversation_parts(
+        parts,
+        system_prompt="",
+        context_window_tokens=PRODUCTION_WINDOW_TOKENS,
+        output_reserve_tokens=PRODUCTION_RESERVE_TOKENS,
+        safety_tokens=PRODUCTION_SAFETY_TOKENS,
+    )
+    meta = {
+        "estimated_tokens": fitted.estimated_tokens,
+        "budget_tokens": fitted.budget_tokens,
+        "truncated": fitted.truncated,
+        "dropped": sorted(fitted.dropped),
+        "over_protected": fitted.over_protected,
+        "window_tokens": PRODUCTION_WINDOW_TOKENS,
+        "output_reserve_tokens": PRODUCTION_RESERVE_TOKENS,
+        "safety_tokens": PRODUCTION_SAFETY_TOKENS,
+    }
+    return "", fitted.prompt, meta
 
 
 def _screen(output: str) -> list[str]:
@@ -285,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     system_prompt = ""
     if args.system_prompt_file:
         system_prompt = Path(args.system_prompt_file).read_text(encoding="utf-8")
-    _, user_prompt = build_prompt(fixture, args.variant, system_rules=True)
+    _, user_prompt, budget_meta = build_prompt(fixture, args.variant, system_rules=True)
 
     report: dict = {
         "schema": "dialogue-attribution-eval/1",
@@ -315,6 +409,8 @@ def main(argv: list[str] | None = None) -> int:
             "system_prompt": system_prompt or None,
             "user_prompt": user_prompt,
             "estimated_tokens": estimate_tokens(user_prompt),
+            "budget": budget_meta,
+            "oracle": (fixture.get("evaluation") or fixture.get("failing_round", {})).get("oracle"),
         },
         "samples": [],
     }

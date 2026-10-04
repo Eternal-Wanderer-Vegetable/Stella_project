@@ -1,0 +1,27 @@
+{
+  "fixture_id": "matrix-t08-conflicting-claims",
+  "matrix_class": "T20-original",
+  "description": "A 自称雪雪，C 用 reply 指认「他才是雪雪」；当前输入来自无关的 B",
+  "bot_id": "1694717255",
+  "group_id": 99990008,
+  "participants": {"A": "818001", "B": "818002", "C": "818003"},
+  "messages": [
+    {"seq": 0, "kind": "user", "author": "A", "reply_to_seq": null, "content": "我是雪雪", "platform_msg_id": "900701"},
+    {"seq": 1, "kind": "bot_bubble", "author": "bot", "reply_to_seq": 0, "content": "雪雪好呀"},
+    {"seq": 2, "kind": "user", "author": "C", "reply_to_seq": 0, "content": "他才是雪雪"}
+  ],
+  "logical_units": [
+    {"unit": "u1", "seqs": [1], "recipient": "A", "origin_msg_id": "900701"}
+  ],
+  "evaluation": {
+    "current_sender": "B",
+    "current_input": "你们在聊什么",
+    "claims": [{"subject": "A", "alias": "雪雪"}]
+  },
+  "oracle": {
+    "task": "向 B 概括当前话题",
+    "acceptable": ["概括大家在聊称呼/名字的事，或正常描述刚才的对话"],
+    "critical_classes": ["bot_user_name_mixing"],
+    "critical_fail": ["称 B 为雪雪", "把 C 的指认当成 A 本人确认"]
+  }
+}
