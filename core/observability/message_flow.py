@@ -47,6 +47,7 @@ flow_spans / trace_relations / flow_specs`` 五张表，schema 2 增量新增
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import itertools
 import queue
 import re
@@ -88,7 +89,25 @@ INTEGRITY_COMPLETE = "complete"
 INTEGRITY_PARTIAL = "partial"
 INTEGRITY_UNKNOWN = "unknown"
 
-FLOW_SCHEMA_VERSION = 2
+FLOW_SCHEMA_VERSION = 3
+
+# spec 归档规范化标识（修复计划 §6.2）：digest = canonical payload 的完整
+# 64 位 SHA-256（排除 source_revision、排序键、紧凑 UTF-8），与生成器
+# content_hash 同一算法；archived payload 即该 canonical 形态。
+SPEC_CANONICALIZATION = "stella-flow-content-v1"
+
+# 身份完整性（修复计划 §6.1）：exact=规范身份齐备；legacy_partial=旧键缺
+# 字段；conflict=补充时与可信值冲突；missing=无任何身份。空串=未标注。
+IDENTITY_EXACT = "exact"
+IDENTITY_LEGACY_PARTIAL = "legacy_partial"
+IDENTITY_CONFLICT = "conflict"
+IDENTITY_MISSING = "missing"
+
+# spec 绑定完整性（修复计划 §6.2）：与 runtime integrity 分别表达。
+SPEC_BINDING_EXACT = "exact"
+SPEC_BINDING_LEGACY = "legacy_unverified"
+SPEC_BINDING_MISSING = "missing"
+SPEC_BINDING_INVALID = "invalid"
 
 # 进程化身：每次进程启动唯一（活跃判定 O01 的第一信号）。
 PROCESS_INCARNATION = uuid.uuid4().hex[:12]
@@ -191,9 +210,18 @@ _SCHEMA = (
         producer_ended INTEGER NOT NULL DEFAULT 0,
         integrity TEXT NOT NULL DEFAULT '',
         lost_events INTEGER NOT NULL DEFAULT 0,
-        persisted_events INTEGER NOT NULL DEFAULT 0
+        persisted_events INTEGER NOT NULL DEFAULT 0,
+        conversation_key TEXT NOT NULL DEFAULT '',
+        bot_id TEXT NOT NULL DEFAULT '',
+        conversation_kind TEXT NOT NULL DEFAULT '',
+        peer_id TEXT NOT NULL DEFAULT '',
+        storage_session_id INTEGER,
+        source_message_id TEXT NOT NULL DEFAULT '',
+        identity_state TEXT NOT NULL DEFAULT ''
     )
     """,
+    "CREATE INDEX IF NOT EXISTS idx_message_traces_identity "
+    "ON message_traces (conversation_key, started_utc DESC)",
     "CREATE INDEX IF NOT EXISTS idx_message_traces_started "
     "ON message_traces (started_utc DESC)",
     "CREATE INDEX IF NOT EXISTS idx_message_traces_root "
@@ -291,9 +319,23 @@ _SCHEMA = (
     "ON entity_events (entity_type, entity_id, id)",
     "CREATE INDEX IF NOT EXISTS idx_entity_events_trace "
     "ON entity_events (trace_id)",
+    # spec 不可变归档（修复计划 §6.2，schema 3）：按内容 digest 精确绑定，
+    # 同 topology_version 不同内容可并存；保留旧 flow_specs 不重建。
+    """
+    CREATE TABLE IF NOT EXISTS flow_spec_blobs (
+        spec_digest TEXT PRIMARY KEY,
+        topology_version TEXT NOT NULL,
+        manifest_schema INTEGER NOT NULL,
+        canonicalization TEXT NOT NULL,
+        spec_json TEXT NOT NULL,
+        archived_at_utc TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_flow_spec_blobs_version "
+    "ON flow_spec_blobs (topology_version, spec_digest)",
 )
 
-# 旧库增量迁移（schema 1 → 2）：幂等 ALTER，缺列才补（计划 §9.2 additive）
+# 旧库增量迁移（schema 1/2 → 3）：幂等 ALTER，缺列才补（计划 §9.2 additive）
 _MIGRATIONS: dict[str, tuple[str, ...]] = {
     "message_traces": (
         "process_kind TEXT NOT NULL DEFAULT ''",
@@ -307,6 +349,15 @@ _MIGRATIONS: dict[str, tuple[str, ...]] = {
         "integrity TEXT NOT NULL DEFAULT ''",
         "lost_events INTEGER NOT NULL DEFAULT 0",
         "persisted_events INTEGER NOT NULL DEFAULT 0",
+        # schema 3（修复计划 §6.1）：规范会话身份列；storage_session_id 保持
+        # 可空（未知 = NULL，绝不伪造 0）
+        "conversation_key TEXT NOT NULL DEFAULT ''",
+        "bot_id TEXT NOT NULL DEFAULT ''",
+        "conversation_kind TEXT NOT NULL DEFAULT ''",
+        "peer_id TEXT NOT NULL DEFAULT ''",
+        "storage_session_id INTEGER",
+        "source_message_id TEXT NOT NULL DEFAULT ''",
+        "identity_state TEXT NOT NULL DEFAULT ''",
     ),
     "flow_events": (
         "attempt INTEGER NOT NULL DEFAULT 0",
@@ -337,9 +388,15 @@ def _connect() -> sqlite3.Connection | None:
         conn = sqlite3.connect(str(path), timeout=10.0)
         key = str(path)
         if not _flow_initialized.get(key):
+            # 顺序（旧库迁移正确性）：先建缺失表 → 再 ALTER 补列 → 最后建
+            # 索引。索引若在补列前创建，旧库会因缺列而失败（schema 3 教训）。
             for ddl in _SCHEMA:
-                conn.execute(ddl)
+                if ddl.lstrip().startswith("CREATE TABLE"):
+                    conn.execute(ddl)
             _migrate(conn)
+            for ddl in _SCHEMA:
+                if not ddl.lstrip().startswith("CREATE TABLE"):
+                    conn.execute(ddl)
             conn.commit()
             _flow_initialized[key] = True
         return conn
@@ -644,14 +701,23 @@ class _Writer:
 
     def _insert(self, conn: sqlite3.Connection, table: str, v: tuple) -> str:
         """写一行；返回归属 trace_id（per-run 账本用），无归属返回 ''。"""
+        if table == "bundle":
+            # owned root bundle（修复计划 §6.2）：spec prerequisite + trace 行
+            # + root start 在同一事务单元；重试整组重放，不留半提交。
+            trace_id = str(v[0])
+            for inner_table, inner_values in v[1]:
+                self._insert(conn, inner_table, inner_values)
+            return trace_id
         if table == "trace":
             conn.execute(
                 "INSERT OR REPLACE INTO message_traces (trace_id, root_kind, "
                 "platform, scope, source_message_key, topology_version, "
                 "process_instance_id, started_utc, ended_utc, outcome, status, "
                 "complete, loss, detail, process_kind, origin, trigger, route, "
-                "business_ts, last_heartbeat_utc, spec_digest) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v)
+                "business_ts, last_heartbeat_utc, spec_digest, "
+                "conversation_key, bot_id, conversation_kind, peer_id, "
+                "storage_session_id, source_message_id, identity_state) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v)
             return v[0]
         if table == "trace_end":
             conn.execute(
@@ -689,6 +755,35 @@ class _Writer:
                 "INSERT OR IGNORE INTO flow_specs (topology_version, spec_json, "
                 "created_utc) VALUES (?,?,?)", v)
             return ""
+        if table == "spec_blob":
+            # 不可变内容归档（修复计划 §6.2）：同 digest 幂等；不同内容必然
+            # 产生不同 digest（SHA-256），不存在同键不同内容覆盖。
+            conn.execute(
+                "INSERT OR IGNORE INTO flow_spec_blobs (spec_digest, "
+                "topology_version, manifest_schema, canonicalization, "
+                "spec_json, archived_at_utc) VALUES (?,?,?,?,?,?)", v)
+            return ""
+        if table == "trace_identity":
+            # 幂等身份补充（修复计划 §6.1）：只允许空→可信；冲突由调用方
+            # 标 conflict 后在这里保持原值不变。
+            (trace_id, conv_key, bot_id, kind, peer_id, storage_id,
+             source_msg_id, identity_state) = v
+            conn.execute(
+                "UPDATE message_traces SET "
+                "conversation_key = CASE WHEN conversation_key='' THEN ? "
+                "  ELSE conversation_key END, "
+                "bot_id = CASE WHEN bot_id='' THEN ? ELSE bot_id END, "
+                "conversation_kind = CASE WHEN conversation_kind='' THEN ? "
+                "  ELSE conversation_kind END, "
+                "peer_id = CASE WHEN peer_id='' THEN ? ELSE peer_id END, "
+                "storage_session_id = COALESCE(storage_session_id, ?), "
+                "source_message_id = CASE WHEN source_message_id='' THEN ? "
+                "  ELSE source_message_id END, "
+                "identity_state = CASE WHEN ? != '' THEN ? ELSE identity_state END "
+                "WHERE trace_id = ?",
+                (conv_key, bot_id, kind, peer_id, storage_id, source_msg_id,
+                 identity_state, identity_state, trace_id))
+            return trace_id
         if table == "entity":
             conn.execute(
                 "INSERT OR IGNORE INTO entity_events (event_id, entity_type, "
@@ -716,6 +811,10 @@ def _row_trace_id(row: tuple) -> str:
     """从待写行提取归属 trace_id（队列满时 per-run 归账用）。"""
     try:
         table, values = row
+        if table == "bundle":
+            return str(values[0])
+        if table == "trace_identity":
+            return str(values[0])
         if table == "trace":
             return str(values[0])
         if table == "trace_end":
@@ -800,6 +899,15 @@ class FlowContext:
     route: str = ""
     business_ts: str = ""
     spec_digest: str = ""
+    # 规范会话身份（修复计划 §6.1）：preprocessor 阶段即可从事件字段填写，
+    # matcher 拿到注册表 ref 后经 update_trace_identity 幂等补充 storage ID
+    conversation_key: str = ""
+    bot_id: str = ""
+    conversation_kind: str = ""
+    peer_id: str = ""
+    storage_session_id: int | None = None
+    source_message_id: str = ""
+    identity_state: str = ""
     started_mono: float = field(default_factory=time.monotonic)
     started_utc: str = field(default_factory=lambda: utc_now().isoformat(timespec="milliseconds"))
     drops_at_start: int = 0
@@ -835,41 +943,71 @@ def by_trace(trace_id: str) -> FlowContext | None:
 
 
 def by_source_key(key: str) -> FlowContext | None:
-    """按 source_message_key 查活跃 context（跨层关联：task_id → trace）。"""
+    """按 source_message_key 查活跃 context（跨层关联：task_id → trace）。
+
+    同键多次命中（同事件重入的旧 ctx 未及时清理）时取最新注册的活跃项。
+    """
     if not key:
         return None
+    found: FlowContext | None = None
     for ctx in _active.values():
         if ctx.source_message_key == key and not ctx.ended:
-            return ctx
-    return None
+            found = ctx
+    return found
 
 
 def active_traces() -> list[str]:
     return list(_active)
 
 
-# ---- spec 归档（O08）：首次 root 引用前持久化不可变 content digest spec ----
+# ---- spec 归档（O08 + 修复计划 §6.2）：不可变内容 digest 精确归档 ----
 
-_spec_cache: dict[str, str | None] = {}
+# 缓存 topology_version → (spec_digest, canonical_json, manifest_schema)；
+# None 表示该版本无随包 spec（binding missing，不归档 {}）。
+_spec_cache: dict[str, tuple[str, str, int] | None] = {}
 
 
-def _bundled_spec_json(version: str) -> str | None:
-    """读随包 manifest 字节（core/observability/flows/message-flow.*.json）。"""
+def spec_digest_of(payload: dict) -> str:
+    """canonical payload 的完整 64 位 SHA-256（stella-flow-content-v1）。
+
+    与生成器 content_hash 同一算法：排除 source_revision（构建独立
+    provenance，不参与内容身份）、排序键、紧凑 UTF-8 JSON。
+    """
+    body = {k: v for k, v in payload.items() if k != "source_revision"}
+    return hashlib.sha256(json_dumps(body).encode("utf-8")).hexdigest()
+
+
+def _bundled_spec(version: str) -> tuple[str, str, int] | None:
+    """随包 manifest → (digest, canonical payload, manifest_schema)。
+
+    canonical payload 保存进归档；source_revision 只作独立 provenance。
+    失配/丢失返回 None（binding missing，**不归档 {}**，修复计划 §6.2）。
+    """
     if version in _spec_cache:
         return _spec_cache[version]
-    spec_json: str | None = None
+    bundled: tuple[str, str, int] | None = None
     try:
         flows_dir = Path(__file__).resolve().parent / "flows"
         if flows_dir.exists():
             for path in sorted(flows_dir.glob("message-flow.*.json")):
                 data = json_loads(path.read_text(encoding="utf-8"))
                 if isinstance(data, dict) and data.get("topology_version") == version:
-                    spec_json = json_dumps(data)
+                    payload = {k: v for k, v in data.items()
+                               if k != "source_revision"}
+                    digest = spec_digest_of(payload)
+                    schema = int(payload.get("schema_version") or 0)
+                    bundled = (digest, json_dumps(payload), schema)
                     break
     except Exception:
-        spec_json = None
-    _spec_cache[version] = spec_json
-    return spec_json
+        bundled = None
+    _spec_cache[version] = bundled
+    return bundled
+
+
+def _bundled_spec_json(version: str) -> str | None:
+    """旧接口：随包 manifest 的 canonical JSON（无版本时 None）。"""
+    found = _bundled_spec(version)
+    return found[1] if found else None
 
 
 def json_loads(text: str) -> Any:
@@ -897,6 +1035,12 @@ def begin_trace(
     origin: str = "",
     trigger: str = "",
     business_ts: str = "",
+    conversation_key: str = "",
+    bot_id: str = "",
+    conversation_kind: str = "",
+    peer_id: str = "",
+    storage_session_id: int | None = None,
+    source_message_id: str = "",
 ) -> FlowContext:
     """入口建 root：写入 message_traces 行 + root span start 事件。
 
@@ -908,6 +1052,18 @@ def begin_trace(
     （缺省沿用 root_kind 的 legacy 映射）、``origin`` 运行来源
     （message/timer/worker/spawn/startup）、``trigger`` 业务触发键、
     ``business_ts`` 业务事件时间（与观测时钟独立）。
+
+    规范会话身份（修复计划 §6.1）：``conversation_key/bot_id/
+    conversation_kind/peer_id/source_message_id`` 由调用方从事件字段直接
+    填写（preprocessor 无业务库即可填）；``storage_session_id`` 由注册表
+    分配后经 :func:`update_trace_identity` 幂等补充。identity_state 由此
+    推导：有 conversation_key → exact；仅 legacy scope → legacy_partial；
+    全空 → missing。
+
+    spec 归档（修复计划 §6.2）：owned bundle 在同一提交单元内落
+    spec prerequisite（flow_spec_blobs 按 digest）+ legacy flow_specs +
+    trace 行 + root start；批失败按 trace 分组整包重放，绝不产生
+    「root 已建、spec 丢失」的半提交。
     """
     from core.observability.flow_catalog import TOPOLOGY_VERSION
 
@@ -917,6 +1073,12 @@ def begin_trace(
             return found
     from core.observability.flow_catalog import ENTRY_ROOTS
 
+    if conversation_key:
+        identity_state = IDENTITY_EXACT
+    elif scope:
+        identity_state = IDENTITY_LEGACY_PARTIAL
+    else:
+        identity_state = IDENTITY_MISSING
     ctx = FlowContext(
         trace_id=trace_id or _new_id(),
         root_kind=root_kind,
@@ -931,23 +1093,117 @@ def begin_trace(
         origin=origin,
         trigger=trigger,
         business_ts=business_ts,
+        conversation_key=conversation_key,
+        bot_id=bot_id,
+        conversation_kind=conversation_kind,
+        peer_id=peer_id,
+        storage_session_id=storage_session_id,
+        source_message_id=source_message_id,
+        identity_state=identity_state,
         drops_at_start=_writer.dropped(),
     )
     _register(ctx)
-    _writer.submit(("trace", (
+    ts = ctx.started_utc
+    bundled = _bundled_spec(TOPOLOGY_VERSION)
+    if bundled is not None:
+        spec_digest, spec_json, manifest_schema = bundled
+        ctx.spec_digest = spec_digest
+    else:
+        spec_digest, spec_json, manifest_schema = "", "", 0
+    # owned bundle：spec prerequisite 先于 root 行，同一事务单元
+    bundle: list[tuple[str, tuple]] = []
+    if bundled is not None:
+        bundle.append(("spec_blob", (
+            spec_digest, TOPOLOGY_VERSION, manifest_schema,
+            SPEC_CANONICALIZATION, spec_json, ts)))
+        bundle.append(("spec", (TOPOLOGY_VERSION, spec_json, ts)))
+    bundle.append(("trace", (
         ctx.trace_id, root_kind, platform, scope, source_message_key,
         ctx.topology_version, ctx.process_instance_id, ctx.started_utc,
         "", "", "running", 0, 0,
         _dump(_scrub(detail or {})),
         ctx.process_kind, ctx.origin, ctx.trigger, ctx.route,
-        ctx.business_ts, ctx.started_utc, "",
+        ctx.business_ts, ctx.started_utc, spec_digest,
+        conversation_key, bot_id, conversation_kind, peer_id,
+        storage_session_id, source_message_id, identity_state,
     )))
-    _writer.submit(("spec", (
-        TOPOLOGY_VERSION, _bundled_spec_json(TOPOLOGY_VERSION) or "{}",
-        ctx.started_utc)))
-    _emit_span_start(ctx, span_id="root", node_id=ctx.entry_node,
-                     parent_span_id="", instance_key="", summary="")
+    root_start = _root_start_rows(ctx)
+    bundle.extend(root_start)
+    _writer.submit(("bundle", (ctx.trace_id, bundle)))
     return ctx
+
+
+def update_trace_identity(
+    ctx: FlowContext | None,
+    *,
+    conversation_key: str | None = None,
+    bot_id: str | None = None,
+    conversation_kind: str | None = None,
+    peer_id: str | None = None,
+    storage_session_id: int | None = None,
+    source_message_id: str | None = None,
+) -> bool:
+    """幂等补充可信身份（修复计划 §6.1）：只允许空→可信，冲突拒绝。
+
+    matcher 拿到已注册 ConversationRef 后调用；不重建 root，写同 trace 的
+    metadata update。任何字段与已持有的可信值冲突 → 整体拒绝并标
+    ``identity_state=conflict``（保持原值），返回 False；全部兼容返回
+    True。``None`` 字段跳过。DB lookup/query 只读场景不得调用本接口。
+    """
+    if ctx is None or ctx.ended:
+        return False
+    provided = {
+        "conversation_key": conversation_key,
+        "bot_id": bot_id,
+        "conversation_kind": conversation_kind,
+        "peer_id": peer_id,
+        "source_message_id": source_message_id,
+    }
+    conflict = False
+    updates: dict[str, str] = {}
+    for name, value in provided.items():
+        if value is None or value == "":
+            continue
+        current = getattr(ctx, name)
+        if current == "":
+            updates[name] = str(value)
+        elif current != str(value):
+            conflict = True
+    if (storage_session_id is not None
+            and ctx.storage_session_id is not None
+            and int(ctx.storage_session_id) != int(storage_session_id)):
+        conflict = True
+    if conflict:
+        ctx.identity_state = IDENTITY_CONFLICT
+        _writer.submit(("trace_identity", (
+            ctx.trace_id, "", "", "", "", None, "", IDENTITY_CONFLICT)))
+        return False
+    for name, value in updates.items():
+        setattr(ctx, name, value)
+    if storage_session_id is not None and ctx.storage_session_id is None:
+        ctx.storage_session_id = int(storage_session_id)
+    if ctx.identity_state != IDENTITY_EXACT:
+        ctx.identity_state = IDENTITY_EXACT
+    _writer.submit(("trace_identity", (
+        ctx.trace_id, ctx.conversation_key, ctx.bot_id, ctx.conversation_kind,
+        ctx.peer_id,
+        None if ctx.storage_session_id is None else int(ctx.storage_session_id),
+        ctx.source_message_id, IDENTITY_EXACT)))
+    return True
+
+
+def _root_start_rows(ctx: FlowContext) -> list[tuple[str, tuple]]:
+    """root span start 的事件行 + span 行（owned bundle 的尾部成员）。"""
+    ts = ctx.started_utc
+    event_id = _new_id()
+    event_row = ("event", (
+        event_id, ctx.trace_id, "root", "", ctx.entry_node,
+        "", ctx.next_seq(), KIND_START, ST_RUNNING,
+        "", ts, None, "", _dump({}), 1, 0, "", ""))
+    span_row = ("span", (
+        ctx.trace_id, "root", ctx.entry_node, "", "",
+        ctx.next_seq(), ts, "", None, ST_RUNNING, "", 0))
+    return [event_row, span_row]
 
 
 def end_trace(
@@ -1217,6 +1473,59 @@ def decision(
                 instance_key=instance_key, status=status,
                 reason_code=reason_code, summary=summary, metrics=metrics,
                 attempt=attempt, fact_kind=fact_kind, error_code=error_code)
+
+
+def transition(
+    ctx: FlowContext | None,
+    *,
+    from_node: str,
+    to_node: str,
+    from_span: "FlowSpan | str | None" = None,
+    to_span: "FlowSpan | str | None" = None,
+    from_instance: str = "",
+    to_instance: str = "",
+    attempt: int = 0,
+    relation_kind: str = "order",
+    status: str = ST_SUCCEEDED,
+    summary: str = "",
+    reason_code: str = "",
+) -> None:
+    """显式边级跳转事实（修复计划 §6.4，R3）：只有真实控制边界才发。
+
+    写 ``kind='decision', fact_kind='transition'`` 事件（不扩展旧 kind 枚举），
+    metrics 携带版本化字段：``transition_v/edge_id/from_node/to_node/
+    from_span_id/to_span_id/from_instance/to_instance/attempt/relation_kind``。
+    ``edge_id`` 是确定性静态边标识（``src->dst:kind``）；字段走统一脱敏，
+    不含正文。发出失败按本 run loss 归账（writer 旁路纪律）。
+
+    事实由实际控制边界发出：确定分支且真正调用下一阶段、重试启动、派生
+    worker 成功创建时记录；**不能**由两端状态或时间先后推导。异步派生同
+    时用 :func:`link` 记 trace relation，relation_kind 不与同步调用混写。
+    """
+    if ctx is None or ctx.ended:
+        return
+    from_span_id = from_span.span_id if isinstance(from_span, FlowSpan) else (
+        str(from_span) if from_span else "")
+    to_span_id = to_span.span_id if isinstance(to_span, FlowSpan) else (
+        str(to_span) if to_span else "")
+    edge_id = f"{from_node}->{to_node}:{relation_kind}"
+    _emit_event(
+        ctx, kind=KIND_DECISION, node_id=from_node,
+        span_id=from_span_id, instance_key=from_instance,
+        status=status, reason_code=reason_code, summary=summary,
+        attempt=attempt, fact_kind="transition",
+        metrics={
+            "transition_v": 1,
+            "edge_id": edge_id,
+            "from_node": from_node,
+            "to_node": to_node,
+            "from_span_id": from_span_id,
+            "to_span_id": to_span_id,
+            "from_instance": from_instance,
+            "to_instance": to_instance,
+            "attempt": attempt,
+            "relation_kind": relation_kind,
+        })
 
 
 def checkpoint(

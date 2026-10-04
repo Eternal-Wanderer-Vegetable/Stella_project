@@ -93,7 +93,11 @@ def open_effect(
         from config import settings
 
         scope = ConversationScope.for_qq(group_id)
-        deliveries = social_store.deliveries_for_turn(turn_id)
+        # 群学习守卫（修复计划 §6.3）：只接纳匹配当前群身份且
+        # learning_eligible 的确认回执——中立私聊行/其他群行不进学习分母
+        deliveries = social_store.deliveries_for_turn(
+            turn_id, platform=scope.platform, group_id=scope.group_id,
+            learning_eligible=True)
         acked = [d for d in deliveries if d["status"] == "acknowledged" and d["acknowledged_at_utc"]]
         if not acked:
             return None
@@ -312,7 +316,9 @@ def resolve_effect(effect_id: str, *, evaluation_version: str = RULE_VERSION) ->
                 capped = True
         acked_ids = {
             str(d["platform_message_id"])
-            for d in social_store.deliveries_for_turn(row["turn_id"])
+            for d in social_store.deliveries_for_turn(
+                row["turn_id"], platform=str(row["platform"] or ""),
+                group_id=str(row["group_id"] or ""), learning_eligible=True)
             if d["status"] == "acknowledged" and d["platform_message_id"]
         }
         attributed = attribute_events(

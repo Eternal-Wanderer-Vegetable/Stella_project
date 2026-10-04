@@ -93,13 +93,14 @@ async def flow_messages(
     outcome: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    cursor: str | None = None,
 ) -> Any:
     from webui.services import flow as flow_service
 
     return ok(
         flow_service.messages(
             platform=platform, root_kind=root_kind, outcome=outcome,
-            limit=limit, offset=offset,
+            limit=limit, offset=offset, cursor=cursor or None,
         )
     )
 
@@ -130,19 +131,33 @@ async def flow_message_events(
     trace_id: str,
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    until: Annotated[int, Query(ge=0)] = 0,
 ) -> Any:
-    """持久事件增量分页（断线补漏/轮询兜底共用；升序，按 row_id 去重）。"""
+    """持久事件增量分页（断线补漏/轮询兜底共用；升序，按 row_id 去重）。
+
+    ``until``（修复计划 §6.6）：固定已提交上界（row_id），首读快照用；
+    0 = 不设上界（SSE 补漏语义）。
+    """
     from webui.services import flow as flow_service
 
-    return ok({"items": flow_service.events_after(trace_id, after_id=after, limit=limit)})
+    return ok({"items": flow_service.events_after(
+        trace_id, after_id=after, limit=limit,
+        until_id=until or None)})
 
 
 @router.get("/api/v1/trace/flow/specs/{version}")
-async def flow_spec(version: str) -> Any:
-    """不可变拓扑 manifest（计划 §6.6）；缺版本显式 404，前端标 unmapped。"""
+async def flow_spec(
+    version: str,
+    digest: Annotated[str | None, Query()] = None,
+) -> Any:
+    """不可变拓扑 manifest（计划 §6.6）；缺版本显式 404，前端标 unmapped。
+
+    带 ``digest`` 查询时按内容归档精确匹配（修复计划 §6.2）：不命中 404，
+    绝不回退 current/latest。
+    """
     from webui.services import flow as flow_service
 
-    data = flow_service.spec(version)
+    data = flow_service.spec(version, digest=digest or None)
     if data is None:
         raise ApiError("该版本的拓扑清单不存在", status_code=404)
     return ok(data)

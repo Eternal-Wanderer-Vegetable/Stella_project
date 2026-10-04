@@ -298,6 +298,16 @@ def schedule_compact(group_id: int, tail_start_id: int,
             if parent_trace_id:
                 message_flow.link(parent_trace_id, fctx.trace_id,
                                   kind="caused_by", evidence="post_reply_compact")
+                # 实际派生事实（修复计划 §6.4）：worker 成功创建才记录
+                parent_ctx = message_flow.by_trace(parent_trace_id)
+                if parent_ctx is not None and not parent_ctx.ended:
+                    message_flow.transition(
+                        parent_ctx, from_node="reply.compact",
+                        to_node="compact.spawn", relation_kind="spawn",
+                        summary="compact worker spawned")
+            message_flow.transition(
+                fctx, from_node="compact.spawn", to_node="compact.preflight",
+                relation_kind="cause")
         except Exception:
             fctx = None
         outcome = "done"

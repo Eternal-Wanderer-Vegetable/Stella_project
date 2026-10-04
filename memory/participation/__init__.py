@@ -79,6 +79,18 @@ def _flow_probe(ctx, node_id: str, **kw) -> None:
         pass
 
 
+def _flow_transition(ctx, *, from_node: str, to_node: str, **kw) -> None:
+    """发一条显式跳转事实（修复计划 §6.4）；观测通道整体 fail-open。"""
+    if ctx is None:
+        return
+    try:
+        from core.observability import message_flow
+
+        message_flow.transition(ctx, from_node=from_node, to_node=to_node, **kw)
+    except Exception:
+        pass
+
+
 def _flow_probe_span(ctx, node_id: str, **kw):
     """开观测 span；失败返回 None（调用方跳过 finish，业务照常）。"""
     if ctx is None:
@@ -326,6 +338,10 @@ class ParticipationManager:
         )
         # 评分观测（计划 §6.4）：span 包住统一评分调用，metrics 记分项与
         # embedding 回退事实（布尔与数值，不含任何原文）。
+        # 真实控制边界（修复计划 §6.4）：前置门控全部通过才会到达评分
+        _flow_transition(
+            flow_ctx, from_node="participation.decision",
+            to_node="participation.score_compute")
         embedding_available = self._embedding_service() is not None
         score_span = _flow_probe_span(
             flow_ctx, "participation.score_compute",
@@ -392,6 +408,9 @@ class ParticipationManager:
         )
         # tracker 槽位观测（计划 §5/§6.4）：slot before/after、streak、
         # backoff_until 与话题版本，回答「为什么现在说/为什么还不说」。
+        _flow_transition(
+            flow_ctx, from_node="participation.score_compute",
+            to_node="participation.mode")
         _flow_probe(
             flow_ctx, "participation.mode", status="succeeded",
             metrics={

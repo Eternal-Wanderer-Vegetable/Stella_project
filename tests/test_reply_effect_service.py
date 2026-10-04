@@ -120,6 +120,30 @@ class TestOpenEffect:
         assert svc.open_effect(group_id=123, user_id=100, trigger="reply",
                                turn_id="turn-failed") is None
 
+    def test_neutral_private_receipt_never_opens_effect(self, social_db):
+        """修复计划 §6.3（M2）：中立私聊回执（learning_eligible=0）
+        不进入群学习分母——同平台 ID 也不开群效果作业。"""
+        social_store.record_delivery(
+            DeliveryReceipt(trace_id="tp", turn_id="turn-priv", part_index=0,
+                            status="acknowledged", text="私聊回复",
+                            platform_message_id="p-1",
+                            conversation_key="qq:10001:private:20001",
+                            conversation_kind="private", peer_id="20001",
+                            storage_session_id=-11)
+        )
+        assert svc.open_effect(group_id=123, user_id=100, trigger="reply",
+                               turn_id="turn-priv") is None
+
+    def test_other_group_receipt_does_not_open_effect_here(self, social_db):
+        """群学习守卫：回执属于别的群（group 不匹配）→ 本群不开效果。"""
+        social_store.record_delivery(
+            DeliveryReceipt(trace_id="t", turn_id="turn-other", part_index=0,
+                            status="acknowledged", text="别的群的回复",
+                            scope=ConversationScope.for_qq(456, bot_id="10001"))
+        )
+        assert svc.open_effect(group_id=123, user_id=100, trigger="reply",
+                               turn_id="turn-other") is None
+
     def test_same_turn_cannot_open_twice(self, social_db):
         _ack_receipt("turn-dup", 0, "p-dup-0")
         first = svc.open_effect(group_id=123, user_id=100, trigger="reply",

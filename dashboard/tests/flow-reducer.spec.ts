@@ -148,3 +148,47 @@ describe('fitNodeText', () => {
     expect(fitNodeText('回复闸门评估abcdef', 9)).not.toBe('回复闸门评估abcdef');
   });
 });
+
+// ============================================================
+// M0/M3（修复计划 R9 探针固化）：checkpoint 是过程事实，不结束 running span。
+// ============================================================
+describe('checkpoint does not terminalize (R9)', () => {
+  it('start -> checkpoint (no finish) stays running', () => {
+    const state = projectNode('n', [
+      ev({ event_id: 's', kind: 'start', status: 'running', span_id: 'sp1', attempt: 0 }),
+      ev({ event_id: 'c', kind: 'checkpoint', status: 'succeeded', summary: 'midway', span_id: 'sp1', attempt: 0 }),
+    ], 'N');
+    // 旧实现把 checkpoint 投影成 succeeded —— R9 缺口
+    expect(state.status).toBe('running');
+    expect(state.latest?.status).toBe('running');
+  });
+
+  it('checkpoint after terminal does not reopen or overwrite', () => {
+    const state = projectNode('n', [
+      ev({ event_id: 's', kind: 'start', status: 'running', span_id: 'sp1' }),
+      ev({ event_id: 'f', kind: 'finish', status: 'failed', reason_code: 'boom', span_id: 'sp1' }),
+      ev({ event_id: 'c', kind: 'checkpoint', status: 'succeeded', summary: 'late', span_id: 'sp1' }),
+    ], 'N');
+    expect(state.status).toBe('failed');
+    expect(state.latest?.businessOutcome).toBe('boom');
+  });
+
+  it('same instance_key different spans stay separate lifecycles', () => {
+    const state = projectNode('n', [
+      ev({ event_id: 's1', kind: 'start', status: 'running', span_id: 'a', instance_key: 'turn:1' }),
+      ev({ event_id: 'f1', kind: 'finish', status: 'failed', span_id: 'a', instance_key: 'turn:1' }),
+      ev({ event_id: 's2', kind: 'start', status: 'running', span_id: 'b', instance_key: 'turn:1' }),
+    ], 'N');
+    // span b 仍在跑：节点 running；a 的失败不吞掉 b 的 start
+    expect(state.status).toBe('running');
+    expect(state.instances).toBe(2);
+  });
+
+  it('out-of-order duplicate events dedupe by seq watermark', () => {
+    const a = ev({ event_id: 'x', kind: 'finish', status: 'failed', seq: 7 });
+    const b = ev({ event_id: 'y', kind: 'start', status: 'running', seq: 3 });
+    const state = projectNode('n', [a, b], 'N');
+    // finish(seq=7) 是最新事实：乱序 start(seq=3) 不能把状态拉回 running
+    expect(state.status).toBe('failed');
+  });
+});

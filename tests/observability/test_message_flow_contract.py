@@ -48,7 +48,10 @@ def _committed_manifest(manifest: dict) -> dict:
 
 class TestCatalogContract:
     def test_manifest_internal_consistency(self, manifest):
-        assert manifest["schema_version"] == 2
+        assert manifest["schema_version"] == 3
+        assert manifest["canonicalization"] == "stella-flow-content-v1"
+        assert manifest["entry_discovery"]["undeclared"] == []
+        assert manifest["entry_discovery"]["missing"] == []
         assert manifest["topology_version"] == flow_catalog.TOPOLOGY_VERSION
         ids = [n["id"] for n in manifest["nodes"]]
         assert len(ids) == len(set(ids))
@@ -72,6 +75,32 @@ class TestCatalogContract:
             assert isinstance(closure[node["id"]]["reachable_symbols"], list)
         assert manifest["coverage"]["closure_sites"] > 0
         assert manifest["coverage"]["reachable_symbols"] > 0
+
+    def test_cross_file_helpers_carry_body_hashes(self, manifest):
+        """修复计划 §6.5（R4）：可达辅助符号带真实函数体 hash——辅助函数
+        实现变化即可漂移 manifest（旧实现只存名字列表，漂移不可见）。"""
+        closure = manifest["source_closure"]
+        private = closure["ingress.private.receive"]
+        helpers = private["reachable_symbols"]
+        assert helpers, "私聊主链必须有可达辅助符号"
+        for h in helpers:
+            assert {"file", "qualname", "body_hash", "resolution"} <= set(h)
+            assert h["resolution"] == "local"
+            assert len(h["body_hash"]) == 16
+        # 项目内 import 目标不得再统一归 external（旧探针：跨文件调用全 external）
+        assert private["boundaries"], "边界分类必须显式（dynamic/native/external）"
+
+    def test_core_truncations_resolved(self, manifest):
+        """修复计划 §6.5：四个已知核心截断收口（cap 覆盖真实闭包规模）。"""
+        assert manifest["coverage"]["reachable_truncated_nodes"] == []
+
+    def test_edge_runtime_evidence_classified(self, manifest):
+        """修复计划 §6.4：边标注 explicit/static_only 运行证据。"""
+        kinds = {e["runtime_evidence"] for e in manifest["edges"]}
+        assert kinds == {"explicit", "static_only"}
+        explicit = [e for e in manifest["edges"]
+                    if e["runtime_evidence"] == "explicit"]
+        assert explicit, "first-batch instrumented edges must exist"
 
     def test_entry_inventory_in_manifest(self, manifest):
         """计划 §6.2 第 1 点：入口 inventory/流程族/显式边界随包发布。"""

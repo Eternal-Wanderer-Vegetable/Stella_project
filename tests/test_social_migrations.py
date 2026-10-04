@@ -270,3 +270,93 @@ class TestFailureSemantics:
         assert len(backups) == 1
         # 备份可打开且含旧数据
         assert _count(backups[0], "SELECT COUNT(*) FROM expression_examples") == 3
+
+
+class TestSchemaV2:
+    """修复计划 §6.3（M2）：social_deliveries v1→v2 增量迁移。
+
+    - v1 库直接打开即补列（conversation/kind/peer/storage/learning_eligible）；
+    - 旧行以可信 QQ 群字段回填 eligibility（platform='qq' 且 group_id 非空）；
+      缺 Bot/中立行不捏造 canonical key，保持 0；
+    - 重复执行幂等；单事务失败回滚保持 v1。
+    """
+
+    def _make_v1_db(self, path) -> None:
+        conn = sqlite3.connect(path)
+        conn.executescript(
+            """
+            CREATE TABLE social_deliveries (
+                delivery_id TEXT PRIMARY KEY,
+                turn_id TEXT NOT NULL,
+                part_index INTEGER NOT NULL,
+                trace_id TEXT NOT NULL DEFAULT '',
+                epoch INTEGER NOT NULL DEFAULT 0,
+                platform TEXT NOT NULL DEFAULT '',
+                bot_id TEXT NOT NULL DEFAULT '',
+                group_id TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                platform_message_id TEXT,
+                acknowledged_at_utc TEXT,
+                text TEXT NOT NULL DEFAULT '',
+                text_hash TEXT NOT NULL DEFAULT '',
+                created_at_utc TEXT NOT NULL,
+                updated_at_utc TEXT NOT NULL,
+                UNIQUE (turn_id, part_index)
+            );
+            CREATE TABLE social_schema_meta (
+                component TEXT PRIMARY KEY,
+                version INTEGER NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO social_schema_meta (component, version) VALUES ('social', 1);
+            INSERT INTO social_deliveries (delivery_id, turn_id, part_index, platform,
+                bot_id, group_id, status, text, created_at_utc, updated_at_utc)
+                VALUES ('g1', 't1', 0, 'qq', '10001', '123',
+                        'acknowledged', '群回复', '2026-09-01T00:00:00.000',
+                        '2026-09-01T00:00:00.000');
+            INSERT INTO social_deliveries (delivery_id, turn_id, part_index, platform,
+                bot_id, group_id, status, text, created_at_utc, updated_at_utc)
+                VALUES ('n1', 't2', 0, '', '', '',
+                        'acknowledged', '无身份旧行', '2026-09-01T00:00:00.000',
+                        '2026-09-01T00:00:00.000');
+            """
+        )
+        conn.commit()
+        conn.close()
+
+    def test_v1_database_migrates_to_v2_with_eligibility_backfill(self, tmp_path):
+        db = tmp_path / "social-v1.db"
+        self._make_v1_db(db)
+        ensure_social_schema(db, backup=False)
+        assert social_schema_version(db) == SOCIAL_SCHEMA_VERSION
+        conn = sqlite3.connect(db)
+        try:
+            rows = dict(conn.execute(
+                "SELECT delivery_id, learning_eligible FROM social_deliveries"
+            ).fetchall())
+            cols = {r[1] for r in conn.execute(
+                "PRAGMA table_info(social_deliveries)")}
+        finally:
+            conn.close()
+        assert rows == {"g1": 1, "n1": 0}, "可信 QQ 群行=1，无身份行保持 0"
+        for col in ("conversation_key", "conversation_kind", "peer_id",
+                    "storage_session_id", "learning_eligible"):
+            assert col in cols, col
+
+    def test_re_run_after_v2_is_noop(self, tmp_path):
+        db = tmp_path / "social-v1.db"
+        self._make_v1_db(db)
+        ensure_social_schema(db, backup=False)
+        assert ensure_social_schema(db, backup=False) == {}
+        assert social_schema_version(db) == SOCIAL_SCHEMA_VERSION
+
+    def test_empty_database_directly_v2(self, tmp_path):
+        db = tmp_path / "fresh.db"
+        ensure_social_schema(db, backup=False)
+        conn = sqlite3.connect(db)
+        try:
+            cols = {r[1] for r in conn.execute(
+                "PRAGMA table_info(social_deliveries)")}
+        finally:
+            conn.close()
+        assert "learning_eligible" in cols

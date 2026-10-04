@@ -111,6 +111,16 @@ def _flow_decision(fctx: Any, node_id: str, **kw: Any) -> None:
         pass
 
 
+def _flow_transition(fctx: Any, *, from_node: str, to_node: str, **kw: Any) -> None:
+    """显式边级跳转事实（修复计划 §6.4）：由真实控制边界调用，fail-open。"""
+    try:
+        from core.observability import message_flow
+
+        message_flow.transition(fctx, from_node=from_node, to_node=to_node, **kw)
+    except Exception:
+        pass
+
+
 @dataclass
 class KeyState:
     """每会话状态：提交锁 + owner_epoch + 最近轮次 + 在途任务句柄。"""
@@ -268,6 +278,9 @@ class RuntimeFacade:
                        scope=ctx.trace_scope, started_at=started)
                 _flow_decision(fctx, "turn.cancel", status="cancelled",
                                reason_code="reset_during_prepare")
+                _flow_transition(fctx, from_node="turn.prepare",
+                                 to_node="turn.cancel", relation_kind="condition",
+                                 status="cancelled")
                 raise RuntimeTurnError(E_CANCELLED, "prepare 期间发生 reset，本轮作废")
             self._record(
                 turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
@@ -283,6 +296,7 @@ class RuntimeFacade:
                 prompt = ctx.prompt_log
                 provider = self._provider or _pipeline_provider
                 state.cancel_requested = False
+                _flow_transition(fctx, from_node="turn.prepare", to_node="turn.generate")
                 # 与 legacy generate_reply 同口径：进入生成即计一次调用、记耗时
                 # （prepare 的调用上限守卫与 thought 日志的「耗时」字段都依赖它们）。
                 ctx.llm_call_count += 1
@@ -301,6 +315,9 @@ class RuntimeFacade:
                     gen_span.__exit__(asyncio.TimeoutError, None, None)
                     _flow_decision(fctx, "turn.timeout", status="timed_out",
                                    reason_code="provider_deadline")
+                    _flow_transition(fctx, from_node="turn.generate",
+                                     to_node="turn.timeout", relation_kind="condition",
+                                     status="timed_out")
                     ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
@@ -328,9 +345,15 @@ class RuntimeFacade:
                                scope=ctx.trace_scope, started_at=started)
                         _flow_decision(fctx, "turn.cancel", status="cancelled",
                                        reason_code="cancel_requested")
+                        _flow_transition(fctx, from_node="turn.generate",
+                                         to_node="turn.cancel", relation_kind="condition",
+                                         status="cancelled")
                         raise RuntimeTurnError(E_CANCELLED, "轮次已被取消") from None
                     _flow_decision(fctx, "turn.cancel", status="cancelled",
                                    reason_code="external_cancel")
+                    _flow_transition(fctx, from_node="turn.generate",
+                                     to_node="turn.cancel", relation_kind="condition",
+                                     status="cancelled")
                     raise  # 外部取消（调用方断开等）：原样传播
                 except Exception as e:
                     # provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——
@@ -338,6 +361,9 @@ class RuntimeFacade:
                     gen_span.__exit__(type(e), e, e.__traceback__)
                     _flow_decision(fctx, "turn.error", status="failed",
                                    reason_code="provider_error")
+                    _flow_transition(fctx, from_node="turn.generate",
+                                     to_node="turn.error", relation_kind="condition",
+                                     status="failed")
                     ctx.llm_elapsed = time.monotonic() - gen_started
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
@@ -354,6 +380,8 @@ class RuntimeFacade:
                 finally:
                     state.inflight = None
                 gen_span.__exit__(None, None, None)
+                _flow_transition(fctx, from_node="turn.generate",
+                                 to_node="turn.generated")
                 _flow_decision(fctx, "turn.generated", status="succeeded",
                                metrics={"elapsed_ms": round(
                                    (time.monotonic() - gen_started) * 1000.0, 1)})

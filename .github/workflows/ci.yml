@@ -246,6 +246,25 @@ jobs:
                 'families:', coverage['runtime']['families'])
           "
 
+      - name: Discovered entry reconciliation gate
+        # 修复计划 §6.5/§8：独立扫描生产模块的注册语句并与 inventory 双向
+        # 对账——未登记的新入口/失效锚点直接失败，GitNexus 可建库不豁免
+        run: |
+          python -c "
+          from pathlib import Path
+          from scripts.generate_message_flow import discovered_entries_diff, ProjectIndex
+          from core.observability import internal_flow_catalog
+          diff = discovered_entries_diff(
+              Path('.'),
+              declared=[(e.source[0], e.source[1])
+                        for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY],
+              package_dirs=ProjectIndex.PACKAGE_DIRS)
+          assert diff['undeclared'] == [], diff['undeclared']
+          assert diff['missing'] == [], diff['missing']
+          print('discovered entries:', len(diff['discovered']),
+                '- reconciliation clean')
+          "
+
   # ============ 通知（可选） ============
   notify:
     needs: [test, lint, security, cli, flow-manifest, flow-closure]

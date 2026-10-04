@@ -225,13 +225,34 @@ _addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
 # root 在 NoneBot event preprocessor（所有 matcher 之前）创建，多个 matcher
 # （静默/命令/插件/聊天）共用同一 root；postprocessor 在全部 matcher 结束后
 # 关闭。root 里只存安全关联键（platform/bot/group/msg_id），绝不存原文。
-_flow_roots: "OrderedDict[tuple[int, int], Any]" = OrderedDict()
+_flow_roots: "OrderedDict[tuple[str, str], Any]" = OrderedDict()
 _FLOW_ROOTS_MAX = 256
 
 
-def _flow_key(event: MessageEvent) -> tuple[int, int]:
-    """流程 root 的键：群=(群号, msg_id)；私聊=(0, msg_id)（计划 §6.2）。"""
-    return (getattr(event, "group_id", 0) or 0, event.message_id)
+def _flow_conversation_key(event: MessageEvent) -> str:
+    """规范会话键（修复计划 §6.1）：qq:<bot>:group:<群号> / qq:<bot>:private:<QQ号>。
+
+    preprocessor 阶段不查业务库即可从事件字段构造；私聊 storage ID 由注册表
+    分配后在 matcher 内幂等补充。
+    """
+    if isinstance(event, GroupMessageEvent):
+        return f"qq:{event.self_id}:group:{event.group_id}"
+    return f"qq:{event.self_id}:private:{getattr(event, 'user_id', 0)}"
+
+
+def _flow_key(event: MessageEvent) -> tuple[str, str]:
+    """流程 root 的键（修复计划 §6.1 R2）：完整事件身份。
+
+    旧键 (group_id|0, message_id) 让不同 Bot/不同私聊 peer 的同号消息碰撞
+    （复核报告 R2 探针：Bot10001/20001 与 Bot10002/20002 的消息 7 同为
+    (0,7)）。新键 = (conversation_key, message_id)，message ID 原样字符串化。
+    """
+    return (_flow_conversation_key(event), str(event.message_id))
+
+
+def _flow_source_key(event: MessageEvent) -> str:
+    """来源消息键：<conversation_key>:msg:<message_id>（修复计划 §6.1）。"""
+    return f"{_flow_conversation_key(event)}:msg:{event.message_id}"
 
 
 def _flow_scope_of(event: MessageEvent) -> str:
@@ -254,15 +275,33 @@ def _flow_root_or_create(event: MessageEvent, root_kind: str):
     try:
         from core.observability import message_flow
 
-        key = _flow_key(event)
         return message_flow.begin_trace(
             root_kind=root_kind, platform="qq",
             scope=_flow_scope_of(event),
-            source_message_key=(
-                f"qq:{event.self_id}:{key[0]}:{event.message_id}"),
+            conversation_key=_flow_conversation_key(event),
+            bot_id=str(event.self_id),
+            conversation_kind="group" if isinstance(event, GroupMessageEvent)
+            else "private",
+            peer_id=str(event.group_id if isinstance(event, GroupMessageEvent)
+                        else getattr(event, "user_id", 0)),
+            source_message_id=str(event.message_id),
+            source_message_key=_flow_source_key(event),
         )
     except Exception:
         return None
+
+
+def _evict_flow_roots(max_active: int = _FLOW_ROOTS_MAX) -> None:
+    """缓存淘汰（修复计划 §6.1）：活跃 root 显式留痕，绝不静默失踪。"""
+    while len(_flow_roots) > max_active:
+        _key, evicted = _flow_roots.popitem(last=False)
+        try:
+            if evicted is not None and not evicted.ended:
+                _flow_decision(evicted, "flow.ingress", status="unknown",
+                               reason_code="ingress_cache_evicted",
+                               summary="root 缓存淘汰：结束路径改走注册表回查")
+        except Exception:
+            pass
 
 
 def _flow_span(fctx, node_id: str, **kw):
@@ -290,6 +329,16 @@ def _flow_checkpoint(fctx, node_id: str, **kw) -> None:
         from core.observability import message_flow
 
         message_flow.checkpoint(fctx, node_id, **kw)
+    except Exception:
+        pass
+
+
+def _flow_transition(fctx, *, from_node: str, to_node: str, **kw) -> None:
+    """显式边级跳转事实（修复计划 §6.4）：真实控制边界调用，fail-open。"""
+    try:
+        from core.observability import message_flow
+
+        message_flow.transition(fctx, from_node=from_node, to_node=to_node, **kw)
     except Exception:
         pass
 
@@ -389,7 +438,7 @@ try:
         """每条消息最早的处理点：建 shared root（规则/过滤之前，计划 §6.2）。
 
         群与私聊都建（私聊此前被 group-only skip 跳过，trace 缺失）；
-        scope 用规范会话身份。
+        scope 用规范会话身份；完整事件身份进 root 键（修复计划 §6.1）。
         """
         if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return
@@ -403,26 +452,40 @@ try:
                 root_kind="qq_private" if isinstance(event, PrivateMessageEvent) else "qq_passive",
                 platform="qq",
                 scope=_flow_scope_of(event),
-                source_message_key=(
-                    f"qq:{event.self_id}:{key[0]}:{event.message_id}"),
+                conversation_key=_flow_conversation_key(event),
+                bot_id=str(event.self_id),
+                conversation_kind="group" if isinstance(event, GroupMessageEvent)
+                else "private",
+                peer_id=str(event.group_id if isinstance(event, GroupMessageEvent)
+                            else getattr(event, "user_id", 0)),
+                source_message_id=str(event.message_id),
+                source_message_key=_flow_source_key(event),
             )
             _flow_roots[key] = root
             _flow_roots.move_to_end(key)
-            while len(_flow_roots) > _FLOW_ROOTS_MAX:
-                _flow_roots.popitem(last=False)
+            _evict_flow_roots()
         except Exception:
             pass
 
     @event_postprocessor
     async def _flow_ingress_end(event: MessageEvent):
-        """全部 matcher 结束后关闭 root（root 同步边界 = 事件处理结束）。"""
+        """全部 matcher 结束后关闭 root（root 同步边界 = 事件处理结束）。
+
+        compare-and-pop（修复计划 §6.1）：以缓存键取得 ctx 后核对身份，
+        另一事件/ctx 的迟到 postprocessor 不得关闭本 root；缓存键未命中
+        （淘汰）时按来源键回查活跃注册表兜底收口。
+        """
         if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return
         try:
             from core.observability import message_flow
 
             root = _flow_roots.pop(_flow_key(event), None)
-            if root is not None and not root.ended:
+            if root is None:
+                root = message_flow.by_source_key(_flow_source_key(event))
+            if (root is not None and not root.ended
+                    and (not root.conversation_key
+                         or root.conversation_key == _flow_conversation_key(event))):
                 message_flow.end_trace(
                     root, outcome=root.outcome or "passive_only")
         except Exception:
@@ -695,6 +758,9 @@ group_silent_listener = on_message(priority=_PRIORITY_SILENT, block=False)
 async def record_group_chat(event: GroupMessageEvent):
     """记录群聊消息到短期记忆（静默侧，不触发总结/推理）。"""
     fctx = _flow_root_for(event)
+    # 真实控制边界（修复计划 §6.4）：监听器被调用 = 进入过滤段
+    _flow_transition(fctx, from_node="ingress.receive",
+                     to_node="ingress.passive.filter")
     if event.group_id not in ALLOWED_GROUPS:
         _flow_decision(fctx, "ingress.passive.filter", status="skipped",
                        reason_code="group_not_allowed")
@@ -718,6 +784,8 @@ async def record_group_chat(event: GroupMessageEvent):
             return
         text = "[图片]"
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
+    _flow_transition(fctx, from_node="ingress.passive.filter",
+                     to_node="ingress.passive.persist")
     # 消息关系提取（多人身份修复计划 §6.2）：无条件执行（不依赖 SOCIAL_ENABLED），
     # 在 record_message **之前**写入 ctx 信封，与正文同一短事务落库。社会学习
     # 消费同一份解析结果，但主历史关系不再只存在于旁表。
@@ -771,6 +839,8 @@ async def record_group_chat(event: GroupMessageEvent):
             process_message_identity(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
     # 只记录时间戳用于频率估算，总结改由 @ 触发或主动发言前按需触发。
+    _flow_transition(fctx, from_node="ingress.passive.persist",
+                     to_node="ingress.passive.state")
     with _flow_span(fctx, "ingress.passive.state"):
         get_proactive().record_message(ctx.group_id, ctx.user_id)
         if ctx.source_kind == "AT_MENTION":
@@ -787,6 +857,8 @@ async def record_group_chat(event: GroupMessageEvent):
     # first-writer-wins。
     social_event_id = ""
     if _social_delivery_enabled():
+        _flow_transition(fctx, from_node="ingress.passive.state",
+                         to_node="ingress.passive.social")
         with contextlib.suppress(Exception), _flow_span(fctx, "ingress.passive.social"):
             social_event_id = social_store.record_event(
                 MessageEvidence(
@@ -802,6 +874,11 @@ async def record_group_chat(event: GroupMessageEvent):
             ) or ""
     # 黑话信号采集（设计阶段六 → 计划 §6.4）：社交模式接管时逐 hit 落
     # occurrence 证据（event_id 幂等）；未接管时走进程内计数器，热路径开销不变。
+    if social_event_id or _social_delivery_enabled():
+        # 目录边 social→expression 只在 social 真正运行时点亮；social 被开关
+        # 跳过时 expression 仍执行，但不虚构这条跳转事实
+        _flow_transition(fctx, from_node="ingress.passive.social",
+                         to_node="ingress.passive.expression")
     with _flow_span(fctx, "ingress.passive.expression"):
         expression_learning.note_passive_message(
             ctx.group_shared_space, ctx.user_id, text,
@@ -809,6 +886,8 @@ async def record_group_chat(event: GroupMessageEvent):
         )
 
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
+        _flow_transition(fctx, from_node="ingress.passive.expression",
+                         to_node="ingress.passive.participation")
         with _flow_span(fctx, "ingress.passive.participation") as part_span:
             decision = await get_participation_manager().observe(
                 ctx.group_id,
@@ -926,6 +1005,7 @@ plugin_handler = on_message(rule=Rule(is_plugin_trigger), priority=_PRIORITY_PLU
 async def handle_plugin(bot: Bot, event: MessageEvent):
     """AstrBot 插件分发。无插件安装时 dispatch 会立即返回，开销可忽略。"""
     fctx = _flow_root_for(event) if isinstance(event, GroupMessageEvent) else None
+    _flow_transition(fctx, from_node="ingress.receive", to_node="ingress.plugin")
     plugin_span = _flow_span(fctx, "ingress.plugin")
     plugin_span.__enter__()
     try:
@@ -955,6 +1035,9 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
     fctx = _flow_root_or_create(event, "qq_chat")
+    # matcher 命中即聊天触发规则通过（修复计划 §6.4 真实边界）
+    _flow_transition(fctx, from_node="ingress.chat.rule",
+                     to_node="chat.plugin_shortcut")
     if _event_key(event) in _plugin_handled_msgs:
         _plugin_handled_msgs.pop(_event_key(event), None)
         _flow_decision(fctx, "chat.plugin_shortcut", status="skipped",
@@ -962,11 +1045,15 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         _flow_set_outcome(fctx, "plugin_handled")
         logger.debug(f"[chat] 已由插件处理，跳过 LLM (group {event.group_id})")
         return
+    # 显式 transition（修复计划 §6.4）：未接管 → 真实进入群锁
+    _flow_transition(fctx, from_node="chat.plugin_shortcut",
+                     to_node="chat.group_lock", summary="未接管")
     lock = _group_locks[event.group_id]
     lock_span = _flow_span(fctx, "chat.group_lock")
     lock_span.__enter__()  # 覆盖「排队等待」；获取后立即闭合（计划 §6.3 A）
     async with lock:
         lock_span.__exit__(None, None, None)
+        _flow_transition(fctx, from_node="chat.group_lock", to_node="chat.context")
         # 新的直接请求 = 显式取消信号（计划 §6.9 层 3）：推进话题版本，
         # 让仍在途/待发送的旧主动输出在发送前判为过期。
         with contextlib.suppress(Exception):
@@ -1027,6 +1114,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 from core.observability import message_flow
 
                 message_flow.attach(ctx, fctx)
+                # storage ID 幂等补充（修复计划 §6.1）：群轮次的可信存储键
+                message_flow.update_trace_identity(
+                    fctx, storage_session_id=ctx.storage_session_id)
             except Exception:
                 pass
         with _flow_span(fctx, "chat.reply_gate"):
@@ -1076,6 +1166,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             )
             return
         _flow_checkpoint(fctx, "chat.daily_budget", summary="allowed")
+        _flow_transition(fctx, from_node="chat.daily_budget",
+                         to_node="turn.identity", summary="放行")
 
         # 跑完整 Pipeline（前钩子组装上下文 → LLM 生成 → 后钩子解析/过滤/分段/日志）
         try:
@@ -1157,6 +1249,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 计发言、写 BOT_SELF、进学习——发送失败不再被记成「说过」。原实现把
         # 最后一段交给 chat_handler.finish(msg)（抛 FinishedException、拿不到
         # 回执且无法补记账），现在全部用 send、finish 只结束流程。
+        _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
+                         summary="普通回复")
         receipts = await deliver_lines(
             ctx.lines,
             scope=scope,
@@ -1219,6 +1313,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         if ctx.tail_start_id:
             _flow_checkpoint(fctx, "reply.compact",
                              summary="schedule_compact spawned, not awaited")
+            _flow_transition(fctx, from_node="reply.bookkeeping",
+                             to_node="reply.compact", relation_kind="spawn",
+                             summary="compact worker spawned")
             schedule_compact(event.group_id, ctx.tail_start_id,
                              parent_trace_id=fctx.trace_id if fctx is not None else "")
 
@@ -1333,6 +1430,10 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 from core.observability import message_flow
 
                 message_flow.attach(ctx, fctx)
+                # storage ID 幂等补充（修复计划 §6.1）：私聊真实存储 ID 是
+                # 注册表负整数，preprocessor 阶段不查业务库，这里补可信值
+                message_flow.update_trace_identity(
+                    fctx, storage_session_id=ref.storage_session_id)
             except Exception:
                 pass
         # 用户消息**先**持久化（source PRIVATE_DIRECT，锁内落库），再组上下文
@@ -1373,6 +1474,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             )
             return
         _flow_checkpoint(fctx, "chat.daily_budget", summary="allowed")
+        _flow_transition(fctx, from_node="chat.daily_budget",
+                         to_node="turn.identity", summary="放行")
 
         try:
             with _flow_span(fctx, "chat.runtime"):
@@ -1406,7 +1509,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-        # 第一版私聊不进群 social scope（计划 §6.8）：scope=None 只记本地事实
+        # 第一版私聊不进群 social scope（计划 §6.8）：scope=None 只记本地事实。
+        # 修复计划 §6.3：携带 ref 的明确身份 → 会话中立回执可查（不进群学习）
         scope = None
 
         async def _send_reply_segment(line: str, i: int) -> str | None:
@@ -1436,6 +1540,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             _flow_set_outcome(fctx, "cometa_ack_" + str(ack_outcome))
             await private_chat_handler.finish()
 
+        _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
+                         summary="普通回复")
         receipts = await deliver_lines(
             ctx.lines,
             scope=scope,
@@ -1443,6 +1549,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            receipt_conversation=ref,
         )
         delivered = delivered_texts(receipts)
         if delivered:
@@ -1466,6 +1573,9 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         if ctx.tail_start_id:
             _flow_checkpoint(fctx, "reply.compact",
                              summary="schedule_compact spawned, not awaited")
+            _flow_transition(fctx, from_node="reply.bookkeeping",
+                             to_node="reply.compact", relation_kind="spawn",
+                             summary="compact worker spawned")
             schedule_compact(ref.storage_session_id, ctx.tail_start_id,
                              parent_trace_id=fctx.trace_id if fctx is not None else "")
 

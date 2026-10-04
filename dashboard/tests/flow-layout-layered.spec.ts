@@ -5,6 +5,7 @@ import {
   ANCHOR_W,
   CANVAS_PAD,
   edgePath,
+  layoutExecuted,
   layoutLayered,
   NODE_H,
   NODE_W,
@@ -52,6 +53,7 @@ function evFact(
   nodeId: string,
   kind: FlowEvent['kind'],
   status: string,
+  over: Partial<FlowEvent> = {},
 ): FlowEvent {
   return {
     row_id: 0,
@@ -68,7 +70,8 @@ function evFact(
     duration_ms: null,
     summary: '',
     metrics: {},
-  };
+    ...over,
+  } as FlowEvent;
 }
 
 function execMap(...nodes: ReturnType<typeof exec>[]) {
@@ -231,15 +234,30 @@ describe('layoutLayered executed overlay', () => {
       nodes: [node('a', 'ingress'), node('bg', 'background')],
       edges: [{ src: 'a', dst: 'bg', kind: 'spawn', label: '' }],
     });
-    const out = layoutLayered({
+    // R3 合同：spawn 边由显式 transition 事实（relation_kind=spawn）激活；
+    // 没有事实时保持静态未确认。
+    const noFact = layoutLayered({
       spec: s,
       executed: execMap(exec('a'), exec('bg')),
       labelOf: (id) => id,
       laneOf: (id) => (id === 'a' ? 'ingress' : 'background'),
     });
-    const spawn = out.edges.find((e) => e.kind === 'spawn')!;
+    const unconfirmed = noFact.edges.find((e) => e.kind === 'spawn')!;
+    expect(unconfirmed.traversed).toBe(false);
+    const withFact = layoutLayered({
+      spec: s,
+      executed: execMap(exec('a'), exec('bg')),
+      labelOf: (id) => id,
+      laneOf: (id) => (id === 'a' ? 'ingress' : 'background'),
+      transitions: [evFact('t1', 'a', 'decision', 'succeeded', {
+        fact_kind: 'transition',
+        metrics: { transition_v: 1, from_node: 'a', to_node: 'bg', relation_kind: 'spawn' },
+      })],
+      rootEnded: true,
+    });
+    const spawn = withFact.edges.find((e) => e.kind === 'spawn')!;
     expect(spawn.traversed).toBe(true); // 实际路径视图可见
-    expect(spawn.active).toBe(false); // 完整视图不做实线高亮
+    expect(spawn.active).toBe(false); // spawn 不做实线高亮
   });
 });
 
@@ -264,5 +282,182 @@ describe('layoutLayered geometry', () => {
     expect(d).toMatch(/^M \d+ \d+ [LC]/);
     const straight = edgePath(a, out.nodes.find((n) => n.nodeId === 'b')!);
     expect(straight).toMatch(/^M \d+ \d+ L/);
+  });
+});
+
+// ============================================================
+// 外观反馈 2：画布缩放锚点数学——以光标为锚缩放时该点保持原位。
+// ============================================================
+describe('zoomAround anchor math', () => {
+  it('keeps the anchored point fixed while scaling', async () => {
+    const { zoomAround } = await import('@/views/data/flowLayout');
+    const view = { x: 0, y: 0, scale: 1 };
+    // 锚点 (200, 100)：放大 1.25x 后该点仍映射到 (200, 100)
+    const next = zoomAround(view, 200, 100, 1.25);
+    expect(next.scale).toBeCloseTo(1.25);
+    // 点在视图中的位置 = p * scale + translate；缩放前后应相等
+    expect(200 * next.scale + next.x).toBeCloseTo(200);
+    expect(100 * next.scale + next.y).toBeCloseTo(100);
+  });
+
+  it('pans the view when zooming on an off-center anchor', async () => {
+    const { zoomAround } = await import('@/views/data/flowLayout');
+    const view = { x: 0, y: 0, scale: 1 };
+    const next = zoomAround(view, 0, 0, 2); // 以左上角为锚放大：无位移
+    expect(next.x).toBeCloseTo(0);
+    expect(next.y).toBeCloseTo(0);
+    expect(next.scale).toBeCloseTo(2);
+    const corner = zoomAround(view, 400, 300, 2); // 以右下区域为锚：视图反向平移
+    expect(corner.x).toBeCloseTo(-400);
+    expect(corner.y).toBeCloseTo(-300);
+  });
+
+  it('clamps scale into [ZOOM_MIN, ZOOM_MAX]', async () => {
+    const { zoomAround, ZOOM_MIN, ZOOM_MAX } = await import('@/views/data/flowLayout');
+    const tiny = zoomAround({ x: 0, y: 0, scale: 0.4 }, 0, 0, 0.01);
+    expect(tiny.scale).toBe(ZOOM_MIN);
+    const huge = zoomAround({ x: 0, y: 0, scale: 2.9 }, 0, 0, 10);
+    expect(huge.scale).toBe(ZOOM_MAX);
+  });
+});
+
+// ============================================================
+// 外观反馈 2：视图适配——内容包围盒 → 整体缩放 + 居中。
+// ============================================================
+describe('fitAround centers and scales content into the viewport', async () => {
+  const { fitAround, ZOOM_MIN, ZOOM_MAX } = await import('@/views/data/flowLayout');
+
+  it('centers the content bounding box', () => {
+    const next = fitAround(
+      { minX: 100, minY: 50, maxX: 300, maxY: 250 },
+      { width: 800, height: 600 },
+    );
+    // 内容中心 (200,150) 应映射到视口中心 (400,300)
+    expect(200 * next.scale + next.x).toBeCloseTo(400);
+    expect(150 * next.scale + next.y).toBeCloseTo(300);
+  });
+
+  it('scales down large graphs and caps upscaling of small ones', () => {
+    // 大图（缩放比在钳制区间内）：按视口/内容取最小比率（含四周留白）
+    const big = fitAround(
+      { minX: 0, minY: 0, maxX: 1600, maxY: 700 },
+      { width: 800, height: 600 },
+    );
+    expect(big.scale).toBeCloseTo(Math.min(800 / 1656, 600 / 756));
+    // 小图：放大但不超过 1.25 上限
+    const small = fitAround(
+      { minX: 0, minY: 0, maxX: 100, maxY: 80 },
+      { width: 800, height: 600 },
+    );
+    expect(small.scale).toBe(1.25);
+    // 极端比率仍被 ZOOM_MIN/ZOOM_MAX 钳制
+    const tiny = fitAround({ minX: 0, minY: 0, maxX: 99999, maxY: 99999 },
+      { width: 200, height: 200 });
+    expect(tiny.scale).toBe(ZOOM_MIN);
+    expect(ZOOM_MAX).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// 外观反馈 6/7：起止锚按连通分量分离；「结束」锚可整体隐藏。
+// ============================================================
+describe('per-component anchors', () => {
+  function twoChainsSpec() {
+    return spec({
+      lanes: LANES,
+      nodes: [node('a', 'ingress'), node('b', 'ingress'),
+              node('x', 'delivery'), node('y', 'delivery')],
+      edges: [
+        { src: 'a', dst: 'b', kind: 'order', label: '' },
+        { src: 'x', dst: 'y', kind: 'order', label: '' },
+      ],
+    });
+  }
+
+  it('disconnected components get separate start/end anchor pairs', () => {
+    const out = layoutLayered({
+      spec: twoChainsSpec(),
+      executed: new Map(),
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+      rootEnded: true,
+    });
+    const starts = out.nodes.filter((n) => n.anchor === 'start');
+    const ends = out.nodes.filter((n) => n.anchor === 'end');
+    expect(starts.length).toBe(2);
+    expect(ends.length).toBe(2);
+    // 两条链不在同一行：各自的开始锚 y 不同（不再全图共享一个均值点）
+    expect(new Set(starts.map((n) => n.y)).size).toBe(2);
+    // 每条链的汇接各自分量的结束锚
+    expect(out.edges.filter((e) => e.to.anchor === 'end')
+      .map((e) => e.from.nodeId).sort()).toEqual(['b', 'y']);
+    expect(out.edges.filter((e) => e.from.anchor === 'start')
+      .map((e) => e.to.nodeId).sort()).toEqual(['a', 'x']);
+  });
+
+  it('showEndAnchors:false hides end anchors and their edges, narrows width', () => {
+    const withEnd = layoutLayered({
+      spec: twoChainsSpec(),
+      executed: new Map(),
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+      rootEnded: true,
+    });
+    const without = layoutLayered({
+      spec: twoChainsSpec(),
+      executed: new Map(),
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+      rootEnded: true,
+      showEndAnchors: false,
+    });
+    expect(without.nodes.filter((n) => n.anchor === 'end')).toHaveLength(0);
+    expect(without.edges.filter((e) => e.to.anchor === 'end')).toHaveLength(0);
+    // 开始锚不受影响
+    expect(without.nodes.filter((n) => n.anchor === 'start')).toHaveLength(2);
+    expect(without.width).toBeLessThan(withEnd.width);
+  });
+});
+
+// ============================================================
+// 外观反馈 8/10：观测缺口不把同一条目录流程撕成多个「开始」；
+// 同侧锚点最小间距摊开。
+// ============================================================
+describe('catalog-level components and anchor spreading', () => {
+  it('observation gaps do not split one catalog flow into multiple starts', () => {
+    // 目录链 a → mid → b；执行视图只有 a、b（mid 无事件）
+    const s = spec({
+      lanes: LANES,
+      nodes: [node('a', 'ingress'), node('mid', 'ingress'), node('b', 'ingress')],
+      edges: [
+        { src: 'a', dst: 'mid', kind: 'order', label: '' },
+        { src: 'mid', dst: 'b', kind: 'order', label: '' },
+      ],
+    });
+    const executed = new Map<string, FlowNodeState>([
+      ['a', exec('a')],
+      ['b', exec('b')],
+    ]);
+    const out = layoutExecuted({
+      spec: s,
+      executed,
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+    });
+    expect(out.nodes.filter((n) => n.anchor === 'start')).toHaveLength(1);
+    expect(out.nodes.filter((n) => n.anchor === 'end')).toHaveLength(1);
+  });
+
+  it('spreads coinciding anchor ys to a minimum gap', async () => {
+    const { spreadAnchorYs, ANCHOR_H } = await import('@/views/data/flowLayout');
+    const out = spreadAnchorYs([100, 100, 100]);
+    const ys = out.map((y) => y as number);
+    expect(ys[0]).toBeCloseTo(100);
+    expect(ys[1]).toBeCloseTo(100 + ANCHOR_H + 8);
+    expect(ys[2]).toBeCloseTo(100 + 2 * (ANCHOR_H + 8));
+    // null 穿透：该侧无锚的分量不受影响
+    const mixed = spreadAnchorYs([null, 50, 50]);
+    expect(mixed[0]).toBeNull();
+    expect(mixed[1]! + ANCHOR_H + 8).toBeCloseTo(mixed[2]!);
   });
 });

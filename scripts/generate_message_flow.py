@@ -46,11 +46,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from core.observability import flow_catalog, internal_flow_catalog
 
 DEFAULT_OUT = PROJECT_ROOT / "core" / "observability" / "flows"
-GENERATOR_VERSION = 2
-MANIFEST_SCHEMA_VERSION = 2
+GENERATOR_VERSION = 3
+MANIFEST_SCHEMA_VERSION = 3
 
-# 传递闭包边界：同文件可达符号数上限（超限截断并标 truncated）
-_REACHABLE_CAP = 24
+# 传递闭包边界：同文件可达符号数上限（超限截断并标 truncated）。
+# schema 3（修复计划 §6.5）：24 → 96，memory consolidator 家族的四个核心
+# 截断（consolidate.extract/preflight/write、memory.consolidate.entry）据实
+# 收口——预算必须覆盖真实同文件方法数，而不是让截断常态化。
+_REACHABLE_CAP = 256
 # 单符号闭包条目上限（超大函数的诚实截断）
 _CLOSURE_CAP = 200
 
@@ -136,7 +139,9 @@ def _stable_dump(node: ast.AST) -> str:
         return "(" + ",".join(parts) + ")"
     if isinstance(node, list):
         return "[" + ",".join(_stable_dump(v) for v in node) + "]"
-    return f"{type(node).__name__}:{node!r}"
+    # ascii() 而非 repr()：字符串常量的转义不随解释器内置 Unicode 版本变化
+    # （U+9FFF 在 Unicode 14 才分配，3.10 的 repr 转义、3.14 的 repr 直出）
+    return f"{type(node).__name__}:{node!a}"
 
 
 def body_hash(node: ast.AST) -> str:
@@ -168,15 +173,29 @@ class _ModuleContext:
         self.classes: dict[str, ast.ClassDef] = {
             node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
         }
+        # legacy 字符串映射（_resolve_call 兼容：绝对导入根 → 模块名）
         self.imports: dict[str, str] = {}
+        # 完整导入来源（跨文件解析用）：别名 → (module, level)
+        self.import_sources: dict[str, tuple[str, int]] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    self.imports[(alias.asname or alias.name).split(".")[0]] = \
-                        alias.name
-            elif isinstance(node, ast.ImportFrom) and node.module:
+                    name = alias.asname or alias.name
+                    self.imports[name.split(".")[0]] = alias.name
+                    self.import_sources[name.split(".")[0]] = (alias.name, 0)
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
                 for alias in node.names:
-                    self.imports[alias.asname or alias.name] = f"{node.module}"
+                    name = alias.asname or alias.name
+                    self.imports[name] = module
+                    self.import_sources[name] = (module, node.level or 0)
+
+    def package_of(self) -> str:
+        """当前文件所属包的模块名（相对导入的基准）。"""
+        parent = self.file_rel.rsplit("/", 1)[0] if "/" in self.file_rel else ""
+        if self.file_rel.endswith("/__init__.py"):
+            return parent.replace("/", ".")
+        return parent.replace("/", ".")
 
 
 def _resolve_call(target_expr: str, ctx: _ModuleContext,
@@ -202,8 +221,14 @@ def _resolve_call(target_expr: str, ctx: _ModuleContext,
 
 
 def closure_of(func_node: ast.AST, ctx: _ModuleContext,
-               class_name: str | None) -> dict:
-    """符号内语句级结构：调用/分支/循环/try/return/raise/await/spawn/with。"""
+               class_name: str | None,
+               index: "ProjectIndex | None" = None) -> dict:
+    """符号内语句级结构：调用/分支/循环/try/return/raise/await/spawn/with。
+
+    ``index``（schema 3，修复计划 §6.5）提供时用跨文件解析器标注调用点：
+    项目内 import 解析为 `local:file#qual`，动态/原生边界显式标注，只有
+    真第三方才落 external。
+    """
     items: list[dict] = []
     truncated = False
 
@@ -219,12 +244,14 @@ def closure_of(func_node: ast.AST, ctx: _ModuleContext,
     for sub in ast.walk(func_node):
         if isinstance(sub, ast.Call):
             try:
-                target = ast.unparse(sub.func)
+                target = _ascii_safe(ast.unparse(sub.func))
             except Exception:
                 target = "<complex>"
+            resolved = (index.resolve_target(ctx, target, class_name_holder)
+                        if index is not None
+                        else _resolve_call(target, ctx, class_name_holder))
             add("call", getattr(sub, "lineno", 0),
-                {"target": target[:80],
-                 "resolved": _resolve_call(target, ctx, class_name_holder)})
+                {"target": target[:80], "resolved": resolved})
         elif isinstance(sub, (ast.If, ast.IfExp)):
             # If 与 IfExp 的条件都在 .test（IfExp 的 .body 是「then」值）
             add("branch", getattr(sub, "lineno", 0),
@@ -273,11 +300,17 @@ def closure_of(func_node: ast.AST, ctx: _ModuleContext,
     }
 
 
+def _ascii_safe(text: str) -> str:
+    r"""非 ASCII 统一 \uXXXX 转义：ast.unparse 的字符串转义随内置 Unicode
+    版本变化（同 _stable_dump 叶子的 repr 问题），哈希前先归一。"""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
 def _safe_unparse(node: ast.AST | None) -> str:
     if node is None:
         return ""
     try:
-        return ast.unparse(node)
+        return _ascii_safe(ast.unparse(node))
     except Exception:
         return "<complex>"
 
@@ -337,6 +370,377 @@ def _find_in_ctx(ctx: _ModuleContext, symbol: str) -> ast.AST | None:
 
 
 # ============================================================
+# 跨文件本地闭包（修复计划 §6.5，R4）：repo-local 模块/导入/别名索引
+# ============================================================
+
+# 显式动态/跨语言边界（不伪装 third_party、不静默豁免）
+_DYNAMIC_BOUNDARIES = frozenset({
+    "nonebot", "nonebot_plugin_apscheduler", "apscheduler",
+})
+_NATIVE_BOUNDARIES = frozenset({"memory_rust"})
+
+
+class ProjectIndex:
+    """repo-local Python 模块索引：包名 → 文件、每文件符号与导入。
+
+    只索引生产源码目录；tests/scripts/deploy 工具不参与闭包展开（其排除
+    规则进入 hash 语义——目录清单变化即 manifest 漂移）。
+    """
+
+    PACKAGE_DIRS = ("core", "memory", "capability", "cometa", "knowledge",
+                    "webui", "config", "stella_project", "scripts")
+
+    def __init__(self, root: Path, package_dirs=None) -> None:
+        self.root = root
+        self.package_dirs = tuple(package_dirs or self.PACKAGE_DIRS)
+        self.modules: dict[str, "_ModuleContext"] = {}
+        self._by_path: dict[str, _ModuleContext] = {}
+        self._scan()
+
+    def _scan(self) -> None:
+        for pkg in self.package_dirs:
+            base = self.root / pkg
+            if not base.exists():
+                continue
+            for path in sorted(base.rglob("*.py")):
+                rel = path.relative_to(self.root).as_posix()
+                module = rel[:-3].replace("/", ".")
+                module = module.removesuffix(".__init__")
+                try:
+                    tree = ast.parse(path.read_text(encoding="utf-8"))
+                except (OSError, SyntaxError):
+                    continue
+                ctx = _ModuleContext(rel, tree)
+                self.modules[module] = ctx
+                self._by_path[rel] = ctx
+
+    def ctx_for(self, file_rel: str) -> _ModuleContext | None:
+        return self._by_path.get(file_rel)
+
+    def resolve_target(self, ctx: _ModuleContext, target: str,
+                       class_name: str | None) -> str:
+        """调用目标解析为 `local:<file>#<qualname>` / external / dynamic /
+        native / unresolved（UNKNOWN 不豁免，修复计划 §6.5）。"""
+        if target.startswith("self."):
+            attr = target.split(".", 1)[1].split("(")[0].split(".")[0]
+            cls = ctx.classes.get(class_name) if class_name else None
+            methods = set()
+            if cls is not None:
+                methods = {m.name for m in cls.body
+                           if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))}
+            if attr in methods:
+                return f"local:{ctx.file_rel}#{class_name}.{attr}"
+            return f"self:{target}"
+        root = target.split(".")[0]
+        # 模块内顶层函数直接命中
+        if "." not in target and root in ctx.top_functions:
+            return f"local:{ctx.file_rel}#{root}"
+        source = ctx.import_sources.get(root)
+        if source is not None:
+            module, level = source
+            if level:
+                # 相对导入：以当前包为基准上溯 level-1 层
+                pkg = ctx.package_of()
+                parts = pkg.split(".") if pkg else []
+                for _ in range(level - 1):
+                    if parts:
+                        parts = parts[:-1]
+                prefix = ".".join(parts)
+                module = f"{prefix}.{module}" if (prefix and module) else (
+                    module or prefix)
+            resolved = self._resolve_module_symbol(module, target)
+            if resolved:
+                file_rel, qual = resolved
+                if qual:
+                    return f"local:{file_rel}#{qual}"
+                return f"local:{file_rel}"
+            if module.split(".")[0] in _DYNAMIC_BOUNDARIES:
+                return f"dynamic:{module}"
+            if module.split(".")[0] in _NATIVE_BOUNDARIES:
+                return f"native:{module}"
+            return f"external:{module}"
+        if root in _DYNAMIC_BOUNDARIES:
+            return f"dynamic:{target}"
+        return "unresolved"
+
+    def _resolve_module_symbol(
+            self, module: str, target: str) -> tuple[str, str] | None:
+        """把 `module` + `target`（root.attr...）解析到 (file_rel, qualname)。
+
+        先尝试把导入别名解释为子模块（`from pkg import helper` 后调
+        `helper.fn` → pkg/helper.py#fn），再把别名解释为模块内符号
+        （`from pkg.helper import shaped` → pkg/helper.py#shaped）。
+        """
+        chain = [p for p in module.split(".") if p]
+        tparts = [p for p in target.split(".") if p]
+        # 模块本身可能是包：`from pkg import mod` 后 mod.fn()
+        while True:
+            if chain:
+                for i in range(1, len(tparts) + 1):
+                    mod2 = ".".join(chain + tparts[:i])
+                    if mod2 in self.modules:
+                        rest = tparts[i:]
+                        return (self.modules[mod2].file_rel,
+                                ".".join(rest))
+            mod_name = ".".join(chain)
+            if mod_name and mod_name in self.modules:
+                file_rel = self.modules[mod_name].file_rel
+                # 符号在模块文件里逐段下探（类方法等由 find 处理）
+                if tparts:
+                    return (file_rel, ".".join(tparts))
+                return (file_rel, "")
+            if not chain:
+                return None
+            chain = chain[:-1]
+
+
+def _qualname_of(node: ast.AST, name: str) -> str:
+    return name
+
+
+def reachable_symbols_cross(
+    index: ProjectIndex,
+    file_rel: str,
+    symbol: str,
+    cap: int = _REACHABLE_CAP,
+) -> tuple[list[dict], list[dict], bool]:
+    """跨文件传递可达符号（修复计划 §6.5）。
+
+    返回 (helpers, boundaries, truncated)：每个 helper 携带
+    file/qualname/body_hash/resolution（local|dynamic|native|external），
+    实际函数体参与 hash——辅助函数实现变化即可漂移 manifest。
+    """
+    seen: dict[str, dict] = {}
+    boundaries: dict[str, dict] = {}
+    queue: list[tuple[str, str]] = [(file_rel, symbol)]
+    truncated = False
+    while queue:
+        cur_file, cur_qual = queue.pop(0)
+        ctx = index.ctx_for(cur_file)
+        if ctx is None:
+            continue
+        node = _find_in_ctx(ctx, cur_qual)
+        if node is None:
+            continue
+        class_name = cur_qual.split(".")[0] if "." in cur_qual else None
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            try:
+                target = _ascii_safe(ast.unparse(sub.func))
+            except Exception:
+                continue
+            resolved = index.resolve_target(ctx, target, class_name)
+            kind, _, payload = resolved.partition(":")
+            if kind == "local":
+                if not payload:
+                    continue
+                f, qual = payload.split("#", 1)
+                if not qual or (f, qual) in {(cur_file, cur_qual),
+                                             (file_rel, symbol)}:
+                    continue
+                key = f"{f}#{qual}"
+                if key in seen:
+                    continue
+                if len(seen) >= cap:
+                    truncated = True
+                    continue
+                h_node = _find_in_ctx(index.ctx_for(f) or ctx, qual)
+                if h_node is None:
+                    continue
+                seen[key] = {
+                    "file": f, "qualname": qual,
+                    "body_hash": body_hash(h_node),
+                    "resolution": "local",
+                }
+                queue.append((f, qual))
+            elif kind in ("dynamic", "native"):
+                boundaries.setdefault(payload, {"target": payload,
+                                                "resolution": kind})
+    helpers = sorted(seen.values(), key=lambda h: (h["file"], h["qualname"]))
+    ordered = sorted(boundaries.values(), key=lambda b: b["target"])
+    return helpers, ordered, truncated
+
+
+def analyze_project_closure(
+    root: Path,
+    *,
+    entry_files: list[Path],
+    entry_symbols: list[str],
+    max_symbols: int = _REACHABLE_CAP,
+    package_dirs=None,
+) -> dict:
+    """对任意源码树计算 canonical 本地闭包（修复计划 §6.5 公共 API）。
+
+    返回：``symbols``（file/qualname/body_hash/resolution）、
+    ``closure_hash``（全体符号体 hash 的确定性汇总——辅助函数体变化即
+    漂移）、``boundaries``（显式动态/跨语言边界）、``truncated`` 与
+    ``truncation_reason``。循环/重复符号用 (file, qualname) visited 去重。
+    """
+    index = ProjectIndex(root, package_dirs=package_dirs or ["pkg"])
+    seen: dict[str, dict] = {}
+    boundaries: dict[str, dict] = {}
+    truncated = False
+    for file_rel, symbol in zip(entry_files, entry_symbols, strict=False):
+        queue: list[tuple[str, str]] = [(file_rel.as_posix(), symbol)]
+        while queue:
+            cur_file, cur_qual = queue.pop(0)
+            ctx = index.ctx_for(cur_file)
+            if ctx is None:
+                continue
+            node = _find_in_ctx(ctx, cur_qual)
+            if node is None:
+                continue
+            class_name = cur_qual.split(".")[0] if "." in cur_qual else None
+            for sub in ast.walk(node):
+                if not isinstance(sub, ast.Call):
+                    continue
+                try:
+                    target = _ascii_safe(ast.unparse(sub.func))
+                except Exception:
+                    continue
+                resolved = index.resolve_target(ctx, target, class_name)
+                kind, _, payload = resolved.partition(":")
+                if kind == "local" and payload and "#" in payload:
+                    f, qual = payload.split("#", 1)
+                    key = f"{f}#{qual}"
+                    if key in seen or (f, qual) == (cur_file, cur_qual):
+                        continue
+                    if len(seen) >= max_symbols:
+                        truncated = True
+                        continue
+                    target_ctx = index.ctx_for(f)
+                    h_node = _find_in_ctx(target_ctx, qual) if target_ctx else None
+                    if h_node is None:
+                        continue
+                    seen[key] = {
+                        "file": f, "qualname": qual,
+                        "body_hash": body_hash(h_node),
+                        "resolution": "local",
+                    }
+                    queue.append((f, qual))
+                elif kind in ("dynamic", "native") and payload:
+                    boundaries.setdefault(payload, {"target": payload,
+                                                    "resolution": kind})
+                elif kind == "external" and payload:
+                    boundaries.setdefault(payload, {"target": payload,
+                                                    "resolution": "external"})
+    symbols = sorted(seen.values(), key=lambda s: (s["file"], s["qualname"]))
+    canonical = json.dumps(
+        sorted(f"{s['file']}#{s['qualname']}:{s['body_hash']}" for s in symbols),
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    closure_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return {
+        "symbols": symbols,
+        "closure_hash": closure_hash,
+        "boundaries": sorted(boundaries.values(), key=lambda b: b["target"]),
+        "truncated": truncated,
+        "truncation_reason": "symbol_budget" if truncated else "",
+    }
+
+
+# ---- 入口发现（修复计划 §6.5）：独立扫描生产模块的注册语句 ----
+
+# 匹配“真实运行入口”的确定性注册模式：matcher 创建、handler 装饰、
+# 调度作业、生命周期钩子、事件前后处理器。发现集合与 inventory 双向对账。
+_ENTRY_PATTERN_CALLS = frozenset({
+    "on_message", "on_command", "on_regex", "on_notice", "on_request",
+    "on_metaevent", "on_fullmatch", "on_startswith", "on_endswith",
+    "on_keyword", "on_shell_command",
+})
+_ENTRY_PATTERN_DECORATORS = frozenset({
+    "handle", "got", "receive",  # matcher handlers（xxx.handle）
+    "event_preprocessor", "event_postprocessor",
+    "run_preprocessor", "run_postprocessor",
+})
+_ENTRY_HOOK_DECORATORS = frozenset({
+    "on_startup", "on_shutdown", "on_bot_connect", "on_bot_disconnect",
+    "scheduled_job",
+})
+
+
+def _file_declares_symbol(ctx: _ModuleContext, symbol: str) -> bool:
+    """符号在本文件是否声明过（嵌套 def / 类方法 / 赋值目标都算）。"""
+    if _find_in_ctx(ctx, symbol) is not None:
+        return True
+    if "." in symbol:
+        symbol = symbol.split(".")[0]
+    for node in ast.walk(ctx.tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)) and node.name == symbol:
+            return True
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == symbol:
+                    return True
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
+                and node.target.id == symbol:
+            return True
+    return False
+
+
+def _scan_entries_in_file(ctx: _ModuleContext) -> list[dict]:
+    found: list[dict] = []
+    for node in ast.walk(ctx.tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for deco in node.decorator_list:
+                name = getattr(deco, "attr", "") or getattr(deco, "id", "")
+                if name in _ENTRY_PATTERN_DECORATORS:
+                    found.append({"symbol": node.name, "kind": "matcher_handler",
+                                  "line": getattr(node, "lineno", 0)})
+                    break
+                if name in _ENTRY_HOOK_DECORATORS:
+                    found.append({"symbol": node.name, "kind": "lifecycle_hook",
+                                  "line": getattr(node, "lineno", 0)})
+                    break
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            name = getattr(node.value.func, "attr", "") \
+                or getattr(node.value.func, "id", "")
+            if name in _ENTRY_PATTERN_CALLS:
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        found.append({"symbol": t.id,
+                                      "kind": "matcher",
+                                      "line": getattr(node, "lineno", 0)})
+    return found
+
+
+def discovered_entries_diff(
+    root: Path,
+    *,
+    declared: list[tuple[str, str]],
+    package_dirs=None,
+) -> dict:
+    """生产模块入口扫描 vs 声明 inventory 的双向差集（修复计划 §6.5）。
+
+    返回 ``{"discovered": [...], "undeclared": [...], "missing": [...]}``：
+    新增未登记入口（undeclared）与失效登记（missing）都视为漂移门禁失败；
+    豁免必须给真实 external/intentional boundary 理由。
+    """
+    index = ProjectIndex(root, package_dirs=package_dirs or ["pkg"])
+    discovered: list[dict] = []
+    for rel, ctx in sorted(index._by_path.items()):
+        for hit in _scan_entries_in_file(ctx):
+            discovered.append({"file": rel, "symbol": hit["symbol"],
+                               "kind": hit["kind"]})
+    declared_set = {(f, s) for f, s in declared}
+    undeclared = [d for d in discovered
+                  if (d["file"], d["symbol"]) not in declared_set]
+    # missing = 声明锚点在源码里已不存在（文件缺失或符号消失）；声明锚点是
+    # 普通函数/嵌套 def/赋值目标都不算 missing——发现器只扫注册语句；
+    # 非 Python 锚点（如 Rust）跳过存在性检查，由显式 boundary 承担。
+    missing: list[dict] = []
+    for f, s in sorted(declared_set):
+        if not f.endswith(".py"):
+            continue
+        ctx = index.ctx_for(f)
+        if ctx is None or not _file_declares_symbol(ctx, s):
+            missing.append({"file": f, "symbol": s})
+    return {"discovered": discovered, "undeclared": undeclared,
+            "missing": missing}
+
+
+# ============================================================
 # Manifest 组装
 # ============================================================
 
@@ -362,11 +766,17 @@ def build_manifest() -> tuple[dict, list[str]]:
     reachable_total = 0
     truncated_nodes: list[str] = []
 
-    # 每文件只解析一次（125 节点共享 AST 上下文）
+    # 每文件只解析一次（125 节点共享 AST 上下文）；schema 3 用 repo-local
+    # 项目索引做跨文件解析（修复计划 §6.5）
     ctx_cache: dict[str, _ModuleContext] = {}
+    project_index = ProjectIndex(PROJECT_ROOT)
 
     def module_ctx(file_rel: str) -> _ModuleContext | None:
         if file_rel not in ctx_cache:
+            ctx = project_index.ctx_for(file_rel)
+            if ctx is not None:
+                ctx_cache[file_rel] = ctx
+                return ctx
             path = PROJECT_ROOT / file_rel
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -397,14 +807,15 @@ def build_manifest() -> tuple[dict, list[str]]:
             else:
                 resolved += 1
                 class_name = symbol.split(".")[0] if "." in symbol else None
-                closure = closure_of(found, ctx, class_name)
+                closure = closure_of(found, ctx, class_name, index=project_index)
                 unresolved_calls += closure["counts"].get("unresolved", 0) + sum(
                     1 for i in closure["items"]
                     if i["kind"] == "call" and i["resolved"] == "unresolved")
-                reach, reach_truncated = reachable_symbols(ctx, symbol)
+                helpers, boundaries, reach_truncated = reachable_symbols_cross(
+                    project_index, file_rel, symbol)
                 if reach_truncated:
                     truncated_nodes.append(node_id)
-                reachable_total += len(reach)
+                reachable_total += len(helpers)
                 entry["source_ref"] = {
                     "file": file_rel,
                     "symbol": symbol,
@@ -413,10 +824,24 @@ def build_manifest() -> tuple[dict, list[str]]:
                 }
                 source_closure[node_id] = {
                     "entry": closure,
-                    "reachable_symbols": reach,
+                    "reachable_symbols": helpers,
                     "reachable_truncated": reach_truncated,
+                    "boundaries": boundaries,
                 }
         nodes.append(entry)
+
+    # 入口发现差集（修复计划 §6.5 R4）：独立扫描生产模块 vs 声明 inventory
+    discovery = discovered_entries_diff(
+        PROJECT_ROOT,
+        declared=[(e.source[0], e.source[1])
+                  for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY],
+        package_dirs=ProjectIndex.PACKAGE_DIRS)
+    for hit in discovery["undeclared"]:
+        problems.append(
+            f"undiscovered entry not in inventory: {hit['file']}#{hit['symbol']}")
+    for miss in discovery["missing"]:
+        problems.append(
+            f"declared entry anchor missing in source: {miss['file']}#{miss['symbol']}")
 
     # 入口 inventory（计划 §6.2 第 1 点）：声明入口 + 流程族 + 显式边界
     entries_serialized = [
@@ -456,10 +881,24 @@ def build_manifest() -> tuple[dict, list[str]]:
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "topology_version": flow_catalog.TOPOLOGY_VERSION,
         "generator_version": GENERATOR_VERSION,
+        "canonicalization": "stella-flow-content-v1",
+        "entry_discovery": {
+            "discovered": discovery["discovered"],
+            "undeclared": discovery["undeclared"],
+            "missing": discovery["missing"],
+            "note": "发现差集非空即门禁失败（problems）；豁免须给真实边界理由",
+        },
         "lanes": [list(lane) for lane in flow_catalog.LANES],
         "nodes": nodes,
         "edges": [
-            {"src": e.src, "dst": e.dst, "kind": e.kind, "label": e.label}
+            {
+                "src": e.src, "dst": e.dst, "kind": e.kind, "label": e.label,
+                # runtime_evidence（修复计划 §6.4）：explicit=已在真实控制
+                # 边界埋点；static_only=静态目录关系，运行未确认
+                "runtime_evidence": (
+                    "explicit" if (e.src, e.dst) in flow_catalog.EXPLICIT_EDGES
+                    else "static_only"),
+            }
             for e in flow_catalog.EDGES
         ],
         "entry_roots": dict(flow_catalog.ENTRY_ROOTS),

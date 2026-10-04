@@ -7,8 +7,18 @@ on:
       - "dashboard/**"
       - "webui/**"
       # 流程目录/manifest 是 Dashboard FlowSpec 的直接数据源（计划 §10：
-      # 跨语言流程变化触发前端合同）
+      # 跨语言流程变化触发前端合同）。修复计划 §8：业务埋点/身份/回执来源
+      # （gateway、social、memory、knowledge、scheduler、runtime 等）变化
+      # 也必须触发前端合同/生成物检查
       - "core/observability/**"
+      - "core/social/**"
+      - "core/runtime/**"
+      - "core/conversation.py"
+      - "memory/**"
+      - "knowledge/**"
+      - "capability/**"
+      - "cometa/**"
+      - "stella_project/plugins/bot_main/**"
       - "scripts/generate_message_flow.py"
       - ".github/workflows/dashboard_ci.yml"
   pull_request:
@@ -17,6 +27,14 @@ on:
       - "dashboard/**"
       - "webui/**"
       - "core/observability/**"
+      - "core/social/**"
+      - "core/runtime/**"
+      - "core/conversation.py"
+      - "memory/**"
+      - "knowledge/**"
+      - "capability/**"
+      - "cometa/**"
+      - "stella_project/plugins/bot_main/**"
       - "scripts/generate_message_flow.py"
       - ".github/workflows/dashboard_ci.yml"
 

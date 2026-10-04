@@ -155,3 +155,93 @@ class TestLookup:
             )
         data = social_store.deliveries_for_turn("x")
         assert [d["text"] for d in data] == ["a", "b", "c"]
+
+
+class TestNeutralReceipts:
+    """修复计划 §6.3（M2）：scope=None + 明确规范身份 → 会话中立回执。
+
+    中立行可查询（流程页输出），但 learning_eligible=0：永远不进群学习、
+    不被引用归因反查命中。scope=None 且无身份的旧合同保留（不落库）。
+    """
+
+    def _private_ref(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            conversation_key="qq:10001:private:20001",
+            conversation_kind="private",
+            peer_id="20001",
+            storage_session_id=-11,
+            bot_id="10001",
+        )
+
+    async def test_private_ref_persists_neutral_receipt(self, social_db):
+        adapter = FakeAdapter()
+        receipts = await deliver_lines(
+            ["私聊第一段"], scope=None, trace_id="t-priv", turn_id="tn-priv",
+            send_one=adapter.send, receipt_conversation=self._private_ref(),
+        )
+        assert receipts[0].status == "acknowledged"
+        rows = _rows(social_db, "SELECT group_id, learning_eligible, "
+                                 "conversation_key, conversation_kind, peer_id, "
+                                 "storage_session_id FROM social_deliveries")
+        assert len(rows) == 1
+        group_id, eligible, conv_key, kind, peer, storage = rows[0]
+        assert group_id == "", "中立行绝不能带群号"
+        assert eligible == 0
+        assert (conv_key, kind, peer, storage) == (
+            "qq:10001:private:20001", "private", "20001", -11)
+
+    async def test_no_scope_without_ref_still_skips(self, social_db):
+        """原 scope=None 合同保留：无明确身份不落库。"""
+        adapter = FakeAdapter()
+        await deliver_lines(
+            ["一句"], scope=None, trace_id="t-skip", turn_id="tn-skip",
+            send_one=adapter.send,
+        )
+        assert _rows(social_db, "SELECT COUNT(*) FROM social_deliveries") == [(0,)]
+
+    async def test_incomplete_identity_does_not_persist(self, social_db):
+        """身份不完整（缺 conversation_kind）= 不明确合法：退回不落库。"""
+        from types import SimpleNamespace
+
+        adapter = FakeAdapter()
+        await deliver_lines(
+            ["一句"], scope=None, trace_id="t-bad", turn_id="tn-bad",
+            send_one=adapter.send,
+            receipt_conversation=SimpleNamespace(
+                conversation_key="qq:10001:private:20001"),
+        )
+        assert _rows(social_db, "SELECT COUNT(*) FROM social_deliveries") == [(0,)]
+
+    async def test_neutral_receipt_not_attribution_visible(self, social_db):
+        """中立回执对旧仅 ID 反查不可见；歧义（同 ID 多行）返回 None。"""
+        from types import SimpleNamespace
+
+        adapter = FakeAdapter()
+        await deliver_lines(
+            ["私聊段"], scope=None, trace_id="t-p2", turn_id="tn-p2",
+            send_one=adapter.send,
+            receipt_conversation=SimpleNamespace(
+                conversation_key="qq:10001:private:20001",
+                conversation_kind="private", peer_id="20001",
+                storage_session_id=-11),
+        )
+        # 平台 ID 只有私聊中立行持有：学习口径反查必须 None
+        assert social_store.find_delivery_by_platform_id("10000") is None
+
+    async def test_scope_none_neutral_receipt_can_be_ambiguous(self, social_db):
+        """同平台 ID 出现在两个群回执 → 反查 None（不猜第一行）。"""
+        social_store.record_delivery(DeliveryReceipt(
+            trace_id="t", turn_id="a", part_index=0, status="acknowledged",
+            text="x", platform_message_id="900",
+            scope=ConversationScope.for_qq(1, bot_id="10001")))
+        social_store.record_delivery(DeliveryReceipt(
+            trace_id="t", turn_id="b", part_index=0, status="acknowledged",
+            text="x", platform_message_id="900",
+            scope=ConversationScope.for_qq(2, bot_id="10002")))
+        assert social_store.find_delivery_by_platform_id("900") is None
+        # scoped 反查仍可精确命中
+        found = social_store.find_delivery_by_platform_id(
+            "900", scope=ConversationScope.for_qq(1, bot_id="10001"))
+        assert found is not None and found["turn_id"] == "a"

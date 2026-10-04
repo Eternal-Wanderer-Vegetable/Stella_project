@@ -3,18 +3,25 @@
 // 布局为 ComfyUI 式左→右分层流（有始有终：开始/结束锚点见 flowLayout）。
 // 「完整流程/实际路径」共用同一套坐标：切换只是淡出未走过的节点与边
 // （CSS 过渡），不是两张图硬切。未走过的路径灰色「未走到」，绝不标 skipped。
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import type { FlowEvent, FlowMessageSummary } from '@/api/flow';
 import { useFlowStore } from '@/stores/flow';
 import { fitNodeText } from '@/stores/flowReducer';
 import { formatDbTime } from '@/utils/time';
 import {
+  ANCHOR_H,
+  ANCHOR_W,
   edgePath,
+  fitAround,
   layoutExecuted,
   layoutLayered,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  zoomAround,
   type LaidEdge,
   type LaidNode,
+  type LayoutResult,
 } from '@/views/data/flowLayout';
 
 const store = useFlowStore();
@@ -92,18 +99,101 @@ const reducedMotion =
 
 const playing = ref(false);
 let playTimer: ReturnType<typeof setInterval> | null = null;
-// O10：播放速率（0.5x/1x/2x/4x），步进间隔 = 300ms / speed
+// O10：播放速率（0.5x/1x/2x/4x），步进间隔 = 600ms / speed
+//（1x 从 300ms 降为 600ms：默认速度减半，外观反馈 6）
 const playbackSpeed = ref(1);
 const SPEED_OPTIONS = [0.5, 1, 2, 4];
 
-// 两种视图共用同一布局坐标；'executed' 只是把未走过的元素淡出
+// 两种视图共用同一布局坐标；'executed' 只是把未走过的元素淡出。
+// viewMode 是按钮绑定值；appliedView 是**已生效**视图——切换时先整图淡出，
+// 再换布局并适配缩放，最后淡入（外观反馈 3：消除撕裂感）。
 const viewMode = ref<'full' | 'executed'>('full');
+const appliedView = ref<'full' | 'executed'>('full');
 const canvasEl = ref<HTMLElement | null>(null);
 // 浮动详情卡：锚在节点点击位置（相对画布容器）
 const card = ref<{ nodeId: string; x: number; y: number } | null>(null);
-// 视图切换的边淡出窗口：节点在滑动到位前，先把旧路径藏起来
-const morphing = ref(false);
-let morphTimer: ReturnType<typeof setTimeout> | null = null;
+// 几何连续视图变换（外观反馈 4）：切换时对布局做逐帧补间——持久节点位置
+// 插值滑动、边的路径每帧按插值后端点重算（SVG path 的 d 无法 CSS 过渡）、
+// 进入/离开的节点与边在原地缩放淡入淡出。全程无黑场、无跳变。
+type DisplayNode = LaidNode & { opacity: number };
+type DisplayEdge = LaidEdge & { opacity: number };
+const viewMorphing = ref(false);
+let morphRaf = 0;
+let morphNodeMap: Map<string, { from: DisplayNode | null; to: LaidNode | null }> | null = null;
+let morphEdgeMap: Map<string, { from: DisplayEdge | null; to: LaidEdge | null }> | null = null;
+
+// 画布平移/缩放（外观反馈 2）：右键按住拖拽平移、滚轮以光标为锚缩放。
+// transform 只作用于 <svg> 视觉层，节点坐标/详情卡锚点仍在容器屏幕空间。
+const viewX = ref(0);
+const viewY = ref(0);
+const viewScale = ref(1);
+const panning = ref(false);
+let panStart: { x: number; y: number; vx: number; vy: number } | null = null;
+
+function onCanvasMouseDown(e: MouseEvent) {
+  if (e.button !== 2) return; // 仅右键拖拽；左键保留给节点选择
+  if ((e.target as HTMLElement | null)?.closest('.flow-card')) return;
+  e.preventDefault();
+  panStart = { x: e.clientX, y: e.clientY, vx: viewX.value, vy: viewY.value };
+  panning.value = true;
+  window.addEventListener('mousemove', onCanvasPanMove);
+  window.addEventListener('mouseup', onCanvasPanUp);
+}
+
+function onCanvasPanMove(e: MouseEvent) {
+  if (!panStart) return;
+  viewX.value = panStart.vx + (e.clientX - panStart.x);
+  viewY.value = panStart.vy + (e.clientY - panStart.y);
+}
+
+function onCanvasPanUp() {
+  panStart = null;
+  panning.value = false;
+  window.removeEventListener('mousemove', onCanvasPanMove);
+  window.removeEventListener('mouseup', onCanvasPanUp);
+}
+
+function onCanvasWheel(e: WheelEvent) {
+  // 悬浮详情卡内部保留原生滚动（metrics/全文展开），不劫持缩放
+  if ((e.target as HTMLElement | null)?.closest('.flow-card')) return;
+  const rect = canvasEl.value?.getBoundingClientRect();
+  if (!rect) return;
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  const next = zoomAround(
+    { x: viewX.value, y: viewY.value, scale: viewScale.value },
+    e.clientX - rect.left,
+    e.clientY - rect.top,
+    factor,
+  );
+  viewX.value = next.x;
+  viewY.value = next.y;
+  viewScale.value = next.scale;
+}
+
+function zoomStep(factor: number) {
+  const rect = canvasEl.value?.getBoundingClientRect();
+  const cx = (rect?.width ?? 800) / 2;
+  const cy = (rect?.height ?? 480) / 2;
+  const next = zoomAround(
+    { x: viewX.value, y: viewY.value, scale: viewScale.value },
+    cx, cy, factor,
+  );
+  viewX.value = next.x;
+  viewY.value = next.y;
+  viewScale.value = next.scale;
+}
+
+function resetView() {
+  viewX.value = 0;
+  viewY.value = 0;
+  viewScale.value = 1;
+}
+
+// 缩放越界兜底（zoomStep/zoomAround 已钳制，这里保证外部赋值也安全）
+watch(viewScale, (s) => {
+  if (s < ZOOM_MIN) viewScale.value = ZOOM_MIN;
+  else if (s > ZOOM_MAX) viewScale.value = ZOOM_MAX;
+});
 
 // O09 生命周期：页面隐藏停 SSE、恢复补读重连；列表轮询随页面挂载/卸载
 function onVisibility() {
@@ -121,7 +211,8 @@ onBeforeUnmount(() => {
   store.stopListPolling();
   store.stopStream();
   stopPlay();
-  if (morphTimer) clearTimeout(morphTimer);
+  if (morphRaf) cancelAnimationFrame(morphRaf);
+  onCanvasPanUp(); // 拖拽中卸载：摘掉 window 监听
 });
 
 const laneLegend = computed<Array<{ id: string; label: string; color: string }>>(
@@ -141,21 +232,70 @@ const laneLabels = computed<Record<string, string>>(() => {
 /**
  * 分层流式布局：完整 = 目录全图；实际 = 已执行子图收束成一条连通路径。
  * 切换时节点按 CSS transform 过渡滑到新坐标（边淡出再淡入），不是硬切。
+ *
+ * 修复计划 §6.6（R8）：缺 spec（unmapped/invalid）时从事件事实回退——
+ * 节点来自运行事实（unknown 占位），边只来自合法 transition 事实，
+ * 绝不返回 graphLayout=null 让「实际路径」空白误导。
  */
+const fallbackSpec = computed(() => {
+  const transitions = store.transitionFacts;
+  const edges: Array<{ src: string; dst: string; kind: string; label: string }> = [];
+  const seen = new Set<string>();
+  for (const t of transitions) {
+    const m = (t.metrics ?? {}) as Record<string, unknown>;
+    const from = String(m.from_node ?? '');
+    const to = String(m.to_node ?? '');
+    if (!from || !to || from === to) continue;
+    const key = `${from}->${to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push({ src: from, dst: to, kind: String(m.relation_kind ?? 'order'), label: '' });
+  }
+  return {
+    lanes: [] as Array<[string, string]>,
+    nodes: [],
+    edges,
+    entry_roots: {},
+  };
+});
+
+// 「结束」锚只在运行真实结束时出现（外观反馈 5）：回放场景按已播到的
+// trace_end 事实判定——动画一开始不会有「结束」，播到终帧才浮现
+const endReached = computed(() =>
+  store.visibleEvents.some((e) => e.kind === 'trace_end'),
+);
+
 const graphLayout = computed(() => {
-  if (!store.spec) return null;
+  const spec = store.spec ?? fallbackSpec.value;
+  if (!store.detail) return null;
+  if (!store.spec && !store.executedNodeMap.size) return null;
   const input = {
-    spec: store.spec,
+    spec,
     executed: store.executedNodeMap,
     labelOf: (nodeId: string) => store.nodeLabel(nodeId),
     laneOf: (nodeId: string) => store.nodeLane(nodeId),
+    transitions: store.transitionFacts,
+    rootEnded: store.rootEnded,
+    showEndAnchors: endReached.value,
   };
-  return viewMode.value === 'full'
+  return appliedView.value === 'full'
     ? layoutLayered(input)
     : layoutExecuted(input);
 });
-const laidNodes = computed<LaidNode[]>(() => graphLayout.value?.nodes ?? []);
-const laidEdges = computed<LaidEdge[]>(() => graphLayout.value?.edges ?? []);
+// 渲染数组：常态与 graphLayout 同步；视图变换期间由 RAF 补间驱动
+const laidNodes = ref<DisplayNode[]>([]);
+const laidEdges = ref<DisplayEdge[]>([]);
+
+function syncDisplay(layout: LayoutResult | null) {
+  laidNodes.value = (layout?.nodes ?? []).map((n) => ({ ...n, opacity: 1 }));
+  laidEdges.value = (layout?.edges ?? []).map((e) => ({ ...e, opacity: 1 }));
+}
+
+watch(graphLayout, (layout) => {
+  // 变换进行中：目标布局由补间收尾落地，跳过中间态
+  if (morphRaf) return;
+  syncDisplay(layout);
+}, { immediate: true });
 const canvasSize = computed(() => ({
   w: graphLayout.value?.width ?? 400,
   h: graphLayout.value?.height ?? 200,
@@ -170,16 +310,17 @@ function edgeClass(e: LaidEdge): Record<string, boolean> {
   return {
     'flow-edge': true,
     [`edge-${e.kind}`]: true,
-    active: Boolean(e.active) && viewMode.value === 'full',
+    // 已走过的边高对比显示（外观反馈 9）：激活路径是画面主角
+    traversed: e.traversed === true,
+    active: Boolean(e.active) && appliedView.value === 'full',
     dim:
-      viewMode.value === 'full' &&
+      appliedView.value === 'full' &&
       !e.active &&
       e.kind !== 'spawn' &&
       e.kind !== 'cause',
     // O05：实际视图里两端都执行过、但没有真实 transition 事实的边
     //（如只走了另一条分支）画成虚线淡显，不冒充走过的路径
-    untaken: viewMode.value === 'executed' && e.traversed === false,
-    morph: morphing.value,
+    untaken: appliedView.value === 'executed' && e.traversed === false,
   };
 }
 
@@ -214,6 +355,14 @@ const completenessText = computed(() => {
 const rootKindLabel = (item: FlowMessageSummary) =>
   ROOT_KIND_LABELS[item.root_kind] ?? item.root_kind;
 
+// 修复计划 §6.2（R5/R8）：spec 缺失的诚实文案——不猜绑定，事实仍可读
+const specMissingText = computed(() => {
+  const binding = store.detail?.spec_binding ?? '';
+  if (binding === 'invalid') return 'spec 归档缺失（invalid）：事件事实如下';
+  if (binding === 'legacy_unverified') return '旧版拓扑（未验证绑定）：事件事实如下';
+  return '拓扑版本缺失（unmapped）：按事件回退展示';
+});
+
 // 列表图标按 O01 修复后的活跃判定：running=在跑，interrupted=过期化身，
 // 其余为已知终态（closed/outcome 落定）
 function listIcon(status: string): string {
@@ -237,6 +386,34 @@ function pick(item: FlowMessageSummary) {
     if (store.detail?.status === 'interrupted') return;
     void store.startStream();
   });
+}
+
+// 修复计划 §6.6（R8）：输出/全部指标可展开——「前 4 行输出 / 最近一组
+// metrics」不再被当成全部；截断/不可用必须显式可展开
+const showAllOutput = ref(false);
+const showAllMetrics = ref(false);
+
+// 修复计划 §6.6（R7）：关联轨迹可跳转；对象履历可反查并回跳运行
+function openRelatedTrace(traceId: string) {
+  if (!traceId) return;
+  void store.openTrace(traceId).then(() => {
+    void store.loadSpec();
+  });
+}
+
+const entityDialog = ref(false);
+const entityHistory = ref<Array<Record<string, unknown>>>([]);
+const entityHistoryKey = ref('');
+
+async function openEntityHistory(entityType: string, entityId: string) {
+  entityHistoryKey.value = `${entityType}:${entityId}`;
+  try {
+    const { getEntityHistory } = await import('@/api/flow');
+    entityHistory.value = await getEntityHistory(entityType, entityId) as Array<Record<string, unknown>>;
+  } catch {
+    entityHistory.value = [];
+  }
+  entityDialog.value = true;
 }
 
 function statusColor(status: string): string {
@@ -290,18 +467,140 @@ function closeCard() {
   store.selectNode('');
 }
 
-watch(viewMode, () => {
-  // 布局变化：卡锚点失效；边先淡出，节点滑到新坐标后再淡入
+// 视图切换（外观反馈 2/4）：几何连续变换——持久节点位置补间滑动、边路径
+// 每帧重算、进入/离开元素原地淡入淡出；同时视图变换滑向适配后的缩放/居中。
+watch(viewMode, (mode) => {
   closeCard();
-  if (reducedMotion) return;
-  morphing.value = true;
-  if (morphTimer) clearTimeout(morphTimer);
-  morphTimer = setTimeout(() => {
-    morphing.value = false;
-  }, 480);
+  if (reducedMotion) {
+    appliedView.value = mode;
+    fitView();
+    return;
+  }
+  const fromNodes = laidNodes.value;
+  const fromEdges = laidEdges.value;
+  appliedView.value = mode;
+  const to = graphLayout.value;
+  fitView(to);
+  if (!to) {
+    syncDisplay(to);
+    return;
+  }
+  startLayoutMorph(fromNodes, fromEdges, to);
 });
 
-// O10：按当前速率启动步进定时器（间隔 = 300ms / speed）
+const MORPH_DURATION_MS = 480;
+
+function startLayoutMorph(
+  fromNodes: DisplayNode[],
+  fromEdges: DisplayEdge[],
+  to: LayoutResult,
+) {
+  if (morphRaf) cancelAnimationFrame(morphRaf);
+  const nodes = morphNodeMap ?? new Map();
+  nodes.clear();
+  for (const n of fromNodes) nodes.set(n.nodeId, { from: n, to: null });
+  for (const n of to.nodes) {
+    const m = nodes.get(n.nodeId);
+    if (m) m.to = n;
+    else nodes.set(n.nodeId, { from: null, to: n });
+  }
+  const edges = morphEdgeMap ?? new Map();
+  edges.clear();
+  for (const e of fromEdges) edges.set(e.id, { from: e, to: null });
+  for (const e of to.edges) {
+    const m = edges.get(e.id);
+    if (m) m.to = e;
+    else edges.set(e.id, { from: null, to: e });
+  }
+  morphNodeMap = nodes;
+  morphEdgeMap = edges;
+  viewMorphing.value = true;
+  const start = performance.now();
+  const ease = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const frame = (now: number) => {
+    const t = ease(Math.min(1, (now - start) / MORPH_DURATION_MS));
+    const pos = new Map<string, { x: number; y: number; opacity: number }>();
+    const outNodes: DisplayNode[] = [];
+    for (const m of nodes.values()) {
+      if (m.from && m.to) {
+        const x = m.from.x + (m.to.x - m.from.x) * t;
+        const y = m.from.y + (m.to.y - m.from.y) * t;
+        pos.set(m.to.nodeId, { x, y, opacity: 1 });
+        outNodes.push({ ...m.to, x, y, opacity: 1 });
+      } else if (m.to) {
+        // 进入：目标位原地淡入
+        pos.set(m.to.nodeId, { x: m.to.x, y: m.to.y, opacity: t });
+        outNodes.push({ ...m.to, opacity: t });
+      } else if (m.from) {
+        // 离开：原位淡出
+        pos.set(m.from.nodeId, { x: m.from.x, y: m.from.y, opacity: 1 - t });
+        outNodes.push({ ...m.from, opacity: 1 - t });
+      }
+    }
+    const outEdges: DisplayEdge[] = [];
+    for (const m of edges.values()) {
+      const base = m.to ?? m.from;
+      if (!base) continue;
+      const s = pos.get(base.from.nodeId);
+      const d = pos.get(base.to.nodeId);
+      if (!s || !d) continue;
+      outEdges.push({
+        ...base,
+        from: { ...base.from, x: s.x, y: s.y },
+        to: { ...base.to, x: d.x, y: d.y },
+        opacity: m.from && m.to ? 1 : m.to ? t : 1 - t,
+      });
+    }
+    laidNodes.value = outNodes;
+    laidEdges.value = outEdges;
+    if (t < 1) {
+      morphRaf = requestAnimationFrame(frame);
+    } else {
+      morphRaf = 0;
+      viewMorphing.value = false;
+      syncDisplay(graphLayout.value);
+    }
+  };
+  morphRaf = requestAnimationFrame(frame);
+}
+
+/** 把布局整体适配进画布视口并居中（外观反馈 2）。 */
+function fitView(layout: LayoutResult | null = graphLayout.value) {
+  const rect = canvasEl.value?.getBoundingClientRect();
+  if (!rect || !layout?.nodes.length) {
+    resetView();
+    return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of layout.nodes) {
+    const w = n.anchor !== undefined ? ANCHOR_W : NODE_W;
+    const h = n.anchor !== undefined ? ANCHOR_H : NODE_H;
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x + w > maxX) maxX = n.x + w;
+    if (n.y + h > maxY) maxY = n.y + h;
+  }
+  const next = fitAround(
+    { minX, minY, maxX, maxY },
+    { width: rect.width, height: rect.height },
+  );
+  viewX.value = next.x;
+  viewY.value = next.y;
+  viewScale.value = next.scale;
+}
+
+// 打开新轨迹 / spec 就位后布局成形 → 适配一次（overflow hidden 下必须有
+// 初始适配，否则大图只露出左上角）
+watch(() => store.detail?.trace_id, () => {
+  void nextTick(() => fitView());
+});
+watch(() => store.spec, () => {
+  void nextTick(() => fitView());
+});
+
+// O10：按当前速率启动步进定时器（间隔 = 600ms / speed）
 function startPlayTimer() {
   stopPlayTimer();
   playTimer = setInterval(() => {
@@ -310,7 +609,7 @@ function startPlayTimer() {
       return;
     }
     store.stepPlayback(1);
-  }, reducedMotion ? 0 : 300 / playbackSpeed.value);
+  }, reducedMotion ? 0 : 600 / playbackSpeed.value);
 }
 
 function stopPlayTimer() {
@@ -320,12 +619,26 @@ function stopPlayTimer() {
   }
 }
 
+// 播放到末尾后按钮变重播（外观反馈 5）：再次点击从头重放
+const playbackFinished = computed(() => {
+  const len = store.orderedEvents.length;
+  return len > 0 && store.playbackIndex >= len - 1;
+});
+const playbackIcon = computed(() =>
+  playing.value
+    ? 'mdi-pause'
+    : playbackFinished.value
+      ? 'mdi-replay'
+      : 'mdi-play',
+);
+
 function togglePlay() {
   if (playing.value) {
     stopPlay();
     return;
   }
-  if (store.playbackIndex < 0) store.setPlayback(0);
+  // -1 = 实时位；已播完 → 从头重播
+  if (store.playbackIndex < 0 || playbackFinished.value) store.setPlayback(0);
   playing.value = true;
   startPlayTimer();
   if (reducedMotion) {
@@ -349,10 +662,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 </script>
 
 <template>
-  <v-row dense>
+  <v-row dense class="flow-row">
     <!-- 左：消息列表 -->
-    <v-col cols="12" md="3">
-      <v-card variant="flat" :elevation="1">
+    <v-col cols="12" md="3" class="d-flex flex-column">
+      <v-card variant="flat" :elevation="1" class="flow-card-full d-flex flex-column">
         <v-card-title class="text-subtitle-1">消息</v-card-title>
         <v-card-text class="pb-0">
           <v-select
@@ -404,13 +717,24 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               暂无消息轨迹（开启 Bot 后处理消息即会出现）
             </v-list-item-title>
           </v-list-item>
+          <v-list-item v-if="store.messagesCursor">
+            <v-btn
+              block
+              size="small"
+              variant="text"
+              :loading="store.loadingList"
+              @click="store.loadMoreMessages()"
+            >
+              加载更早的轨迹（已载 {{ store.messages.length }} / 共 {{ store.messagesTotal }}）
+            </v-btn>
+          </v-list-item>
         </v-list>
       </v-card>
     </v-col>
 
     <!-- 中：画布 + 播放 -->
-    <v-col cols="12" md="9">
-      <v-card variant="flat" :elevation="1">
+    <v-col cols="12" md="9" class="d-flex flex-column">
+      <v-card variant="flat" :elevation="1" class="flow-card-full d-flex flex-column">
         <v-card-text v-if="!store.detail" class="text-medium-emphasis">
           选择左侧一条消息，查看它从「开始」到「结束」经过的完整处理流程（灰色虚线节点是本次未观测到的路径——没有事实，不解释为跳过或未执行）。
         </v-card-text>
@@ -437,9 +761,11 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             </v-chip>
             <v-chip v-if="store.spec" size="x-small" label>
               图版本 {{ store.spec.topology_version }}
+              <template v-if="store.detail.spec_binding === 'exact'"> · 精确绑定</template>
+              <template v-else-if="store.detail.spec_binding === 'legacy_unverified'"> · 旧版未验证</template>
             </v-chip>
             <v-chip v-else size="x-small" label color="warning">
-              拓扑版本缺失（unmapped）
+              {{ specMissingText }}
             </v-chip>
             <v-spacer />
             <v-btn-toggle
@@ -470,12 +796,17 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             >
               停止
             </v-btn>
-            <v-btn size="x-small" variant="text" @click="store.fetchEvents()">
+            <v-btn
+              size="x-small"
+              variant="text"
+              :loading="store.eventsLoading"
+              @click="store.refreshTraceBundle()"
+            >
               刷新
             </v-btn>
           </v-card-text>
 
-          <!-- 关联轨迹（trace 间因果，独立于画布节点） -->
+          <!-- 关联轨迹（trace 间因果，独立于画布节点）：可点击跳转（R7） -->
           <v-card-text
             v-if="store.detail.relations.length"
             class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
@@ -487,12 +818,40 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               size="x-small"
               label
               variant="tonal"
+              class="flow-relation-chip"
+              :title="`打开关联轨迹 ${rel.trace_id.slice(0, 8)}…`"
+              @click="openRelatedTrace(rel.trace_id)"
             >
               <v-icon start size="x-small">mdi-link-variant</v-icon>
               {{ rel.direction === 'out' ? '派生' : '触发自' }}
               {{ rel.trace_id.slice(0, 8) }}…
               <template v-if="rel.evidence">（{{ rel.evidence }}）</template>
             </v-chip>
+          </v-card-text>
+
+          <!-- 对象履历（修复计划 §6.6 R7）：消息 → 整合/候选/通知对象可追踪 -->
+          <v-card-text
+            v-if="store.traceEntities.length"
+            class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
+          >
+            <span class="text-caption text-medium-emphasis">对象：</span>
+            <v-chip
+              v-for="(ent, i) in store.traceEntities.slice(0, 12)"
+              :key="i"
+              size="x-small"
+              label
+              variant="outlined"
+              class="flow-relation-chip"
+              :title="`${ent.entity_type}:${ent.entity_id} 的状态履历`"
+              @click="openEntityHistory(String(ent.entity_type), String(ent.entity_id))"
+            >
+              <v-icon start size="x-small">mdi-shape-outline</v-icon>
+              {{ ent.entity_type }}:{{ String(ent.entity_id).slice(0, 10) }}
+              <template v-if="ent.to_state"> → {{ ent.to_state }}</template>
+            </v-chip>
+            <span v-if="store.traceEntities.length > 12" class="text-caption text-medium-emphasis">
+              …共 {{ store.traceEntities.length }} 条对象变化
+            </span>
           </v-card-text>
 
           <!-- 输入 / 输出：这条消息进去什么样、回复出来什么样 -->
@@ -517,19 +876,26 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 </div>
                 <div v-if="store.io.output.lines.length">
                   <div
-                    v-for="(line, i) in store.io.output.lines.slice(0, 4)"
+                    v-for="(line, i) in (showAllOutput
+                      ? store.io.output.lines
+                      : store.io.output.lines.slice(0, 4))"
                     :key="i"
                     class="io-text"
                     :title="line"
                   >
                     {{ line }}
                   </div>
-                  <div
+                  <v-btn
                     v-if="store.io.output.lines.length > 4"
-                    class="text-caption text-medium-emphasis"
+                    size="x-small"
+                    variant="text"
+                    class="px-0"
+                    @click="showAllOutput = !showAllOutput"
                   >
-                    …共 {{ store.io.output.lines.length }} 行
-                  </div>
+                    {{ showAllOutput
+                      ? '收起'
+                      : `展开全部 ${store.io.output.lines.length} 行` }}
+                  </v-btn>
                 </div>
                 <div v-else class="text-caption text-medium-emphasis">（无）</div>
               </div>
@@ -539,7 +905,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
             </div>
           </v-card-text>
 
-          <!-- 泳道图例（节点圆点颜色 ↔ 处理阶段） -->
+          <!-- 泳道图例（节点圆点颜色 ↔ 处理阶段）+ 线型图例（外观反馈 11） -->
           <v-card-text
             v-if="laneLegend.length"
             class="pt-1 pb-0 d-flex flex-wrap ga-2 align-center"
@@ -554,18 +920,81 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 :style="{ background: lane.color }"
               />{{ lane.label }}
             </span>
+            <v-divider vertical inset class="mx-1" style="max-height: 14px" />
+            <span class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+              <svg width="26" height="8" aria-hidden="true">
+                <line x1="0" y1="4" x2="26" y2="4"
+                      stroke="rgb(var(--v-theme-success))" stroke-width="2" />
+              </svg>
+              实际走过
+            </span>
+            <span class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+              <svg width="26" height="8" aria-hidden="true">
+                <line x1="0" y1="4" x2="26" y2="4"
+                      stroke="rgba(var(--v-theme-on-surface), 0.35)" stroke-width="1.2"
+                      stroke-dasharray="4 3" />
+              </svg>
+              静态未确认（无跳转事实）
+            </span>
+            <span class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+              <svg width="26" height="8" aria-hidden="true">
+                <line x1="0" y1="4" x2="26" y2="4"
+                      stroke="rgba(var(--v-theme-on-surface), 0.35)" stroke-width="1.2"
+                      stroke-dasharray="4 3" />
+                <circle cx="4" cy="4" r="2.4" fill="rgba(var(--v-theme-on-surface), 0.35)" />
+                <circle cx="22" cy="4" r="2.4" fill="rgba(var(--v-theme-on-surface), 0.35)" />
+              </svg>
+              异步派生 / 因果
+            </span>
           </v-card-text>
 
           <div
             ref="canvasEl"
             class="flow-canvas"
-            :class="{ 'reduce-motion': reducedMotion }"
+            :class="{ 'reduce-motion': reducedMotion, panning, 'view-morph': viewMorphing }"
             @click.self="closeCard"
+            @contextmenu.prevent
+            @mousedown="onCanvasMouseDown"
+            @wheel.prevent="onCanvasWheel"
           >
+            <div class="canvas-tools">
+              <v-btn
+                icon="mdi-plus"
+                size="x-small"
+                variant="tonal"
+                title="放大"
+                @click="zoomStep(1.2)"
+              />
+              <span class="text-caption canvas-zoom-label">
+                {{ Math.round(viewScale * 100) }}%
+              </span>
+              <v-btn
+                icon="mdi-minus"
+                size="x-small"
+                variant="tonal"
+                title="缩小"
+                @click="zoomStep(1 / 1.2)"
+              />
+              <v-btn
+                icon="mdi-arrow-expand-all"
+                size="x-small"
+                variant="text"
+                title="适配视图（缩放并居中）"
+                @click="fitView"
+              />
+            </div>
+            <div class="canvas-hint text-caption text-medium-emphasis">
+              右键拖拽平移 · 滚轮缩放
+            </div>
             <svg
               :width="canvasSize.w"
               :height="canvasSize.h"
               :viewBox="`0 0 ${canvasSize.w} ${canvasSize.h}`"
+              class="flow-svg"
+              :style="{
+                transform: `translate(${viewX}px, ${viewY}px) scale(${viewScale})`,
+                transformOrigin: '0 0',
+              }"
               role="img"
               aria-label="消息处理流程图：从开始到结束的分层流式布局"
               @click.self="closeCard"
@@ -582,6 +1011,17 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 >
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--v-theme-on-surface)" opacity="0.5" />
                 </marker>
+                <marker
+                  id="flow-arrow-active"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(var(--v-theme-success))" />
+                </marker>
               </defs>
               <!-- 边 -->
               <g>
@@ -590,7 +1030,10 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   :key="e.id"
                   :d="edgePath(e.from, e.to)"
                   :class="edgeClass(e)"
-                  marker-end="url(#flow-arrow)"
+                  :opacity="e.opacity"
+                  :marker-end="e.traversed
+                    ? 'url(#flow-arrow-active)'
+                    : 'url(#flow-arrow)'"
                 />
               </g>
               <!-- 节点（外层 g 以 CSS transform 定位：视图切换时滑动过渡） -->
@@ -598,7 +1041,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 v-for="n in laidNodes"
                 :key="n.nodeId"
                 class="flow-node-pos"
-                :style="{ transform: `translate(${n.x}px, ${n.y}px)` }"
+                :style="{ transform: `translate(${n.x}px, ${n.y}px)`, opacity: n.opacity }"
               >
                 <g
                   class="flow-node"
@@ -716,7 +1159,7 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   </template>
                 </div>
                 <div v-else class="text-caption text-medium-emphasis mb-1">
-                  本次消息没有经过这个节点（无事实，不猜测原因）。
+                  本次消息未观测到这个节点（无事实，不猜测原因）。
                 </div>
                 <template v-if="selectedNodeDetail?.events?.length">
                   <v-divider class="my-2" />
@@ -746,9 +1189,22 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 <template v-if="selectedNodeDetail?.metrics?.length">
                   <v-divider class="my-2" />
                   <pre class="flow-metrics">{{ JSON.stringify(
-                    selectedNodeDetail.metrics[selectedNodeDetail.metrics.length - 1],
+                    showAllMetrics
+                      ? selectedNodeDetail.metrics
+                      : selectedNodeDetail.metrics[selectedNodeDetail.metrics.length - 1],
                     null, 1
                   ) }}</pre>
+                  <v-btn
+                    v-if="selectedNodeDetail.metrics.length > 1"
+                    size="x-small"
+                    variant="text"
+                    class="px-0"
+                    @click="showAllMetrics = !showAllMetrics"
+                  >
+                    {{ showAllMetrics
+                      ? '只看最近一组'
+                      : `展开全部 ${selectedNodeDetail.metrics.length} 组指标` }}
+                  </v-btn>
                 </template>
               </v-card-text>
             </v-card>
@@ -758,20 +1214,14 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
           <v-card-text class="pt-2">
             <div class="d-flex align-center ga-2">
               <v-btn
-                icon="mdi-skip-previous"
-                size="x-small"
-                variant="text"
-                :disabled="!store.orderedEvents.length"
-                @click="store.resetPlayback(); stopPlay()"
-              />
-              <v-btn
-                :icon="playing ? 'mdi-pause' : 'mdi-play'"
+                :icon="playbackIcon"
                 size="small"
                 variant="tonal"
                 :disabled="store.orderedEvents.length < 2"
+                :title="playbackFinished && !playing ? '重新播放' : undefined"
                 @click="togglePlay"
               />
-              <!-- O10：播放速率 0.5x/1x/2x/4x（间隔 = 300ms / speed） -->
+              <!-- O10：播放速率 0.5x/1x/2x/4x（间隔 = 600ms / speed） -->
               <v-btn-toggle
                 v-model="playbackSpeed"
                 mandatory
@@ -808,6 +1258,25 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
               <v-chip size="x-small" label>
                 {{ store.visibleEvents.length }} / {{ store.orderedEvents.length }} 事件
               </v-chip>
+              <v-chip
+                v-if="store.detail.persisted_events"
+                size="x-small"
+                label
+                :color="store.eventsTruncated ? 'warning' : undefined"
+                :title="`存储已提交 ${store.detail.persisted_events} 条事件；浏览器已加载 ${store.orderedEvents.length} 条——两者独立（修复计划 §6.6 R8）`"
+              >
+                已载 {{ store.orderedEvents.length }} / 存储 {{ store.detail.persisted_events }}
+              </v-chip>
+              <v-btn
+                v-if="store.eventsTruncated"
+                size="x-small"
+                variant="tonal"
+                color="warning"
+                :loading="store.eventsLoading"
+                @click="store.loadMoreEvents()"
+              >
+                继续加载事件（当前为部分加载）
+              </v-btn>
             </div>
             <div v-if="currentEvent" class="text-caption text-medium-emphasis mt-1">
               {{ fmtTime(currentEvent.ts_utc) }} ·
@@ -826,6 +1295,41 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
       </v-card>
     </v-col>
   </v-row>
+
+  <!-- 对象履历（修复计划 §6.6 R7）：对象视角 ↔ 运行视角互查 -->
+  <v-dialog v-model="entityDialog" max-width="640">
+    <v-card>
+      <v-card-title class="text-subtitle-1 d-flex align-center">
+        对象履历
+        <v-chip size="x-small" label class="ml-2">{{ entityHistoryKey }}</v-chip>
+        <v-spacer />
+        <v-btn icon="mdi-close" size="small" variant="text" @click="entityDialog = false" />
+      </v-card-title>
+      <v-card-text>
+        <div
+          v-for="(h, i) in entityHistory"
+          :key="i"
+          class="d-flex align-center ga-2 py-1 flex-wrap"
+          style="border-bottom: 1px solid rgba(128,128,128,.15)"
+        >
+          <span class="text-caption">{{ fmtTime(String(h.ts_utc ?? '')) }}</span>
+          <v-chip size="x-small" label>{{ h.from_state || '∅' }} → {{ h.to_state || '∅' }}</v-chip>
+          <v-spacer />
+          <v-btn
+            v-if="h.trace_id"
+            size="x-small"
+            variant="text"
+            @click="entityDialog = false; openRelatedTrace(String(h.trace_id))"
+          >
+            打开运行 {{ String(h.trace_id).slice(0, 8) }}…
+          </v-btn>
+        </div>
+        <div v-if="!entityHistory.length" class="text-caption text-medium-emphasis">
+          该对象没有状态变化事实。
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
@@ -856,11 +1360,83 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .flow-canvas {
   position: relative;
-  overflow: auto;
+  /* 平移/缩放已由右键拖拽 + 滚轮承担：原生滚动条纯属视觉噪音（外观反馈 1） */
+  overflow: hidden;
   max-height: 560px;
   background:
     radial-gradient(rgba(var(--v-theme-on-surface), 0.05) 1px, transparent 1px);
   background-size: 22px 22px;
+  user-select: none;
+}
+.flow-canvas.panning {
+  cursor: grabbing;
+}
+/* 视图变换/淡入淡出过渡：拖拽时禁用（1:1 跟手），程序化适配时平滑滑动 */
+.flow-svg {
+  transition:
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease;
+}
+.flow-canvas.panning .flow-svg {
+  transition: none;
+}
+/* 几何补间期间禁用节点的 CSS 位移过渡：位置由 RAF 每帧给出，CSS 过渡会
+   二次平滑导致拖影/滞后 */
+.flow-canvas.view-morph .flow-node-pos {
+  transition: none;
+}
+/* 桌面端（≥md）：两卡片等高撑满视口剩余空间，底部对齐（外观反馈 1）。
+   偏移 = 顶栏 64 + 容器 padding 48 + tab 行 ~49；窄屏保持自然高度。
+   关键：Vuetify 的 .v-card-text 自带 flex: 1 1 auto，在 flex column 卡片
+   里会把中间 section 全部撑开、把列表/画布挤到底部——这里显式压回
+   flex:none，只让 .flow-list / .flow-canvas 伸缩。 */
+@media (min-width: 960px) {
+  .flow-row {
+    height: calc(100vh - 165px);
+    min-height: 540px;
+  }
+  .flow-card-full {
+    height: 100%;
+    min-height: 0;
+  }
+  .flow-card-full > .v-card-title,
+  .flow-card-full > .v-card-text {
+    flex: 0 0 auto;
+  }
+  .flow-list {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+  }
+  .flow-canvas {
+    flex: 1 1 0;
+    min-height: 240px;
+    max-height: none;
+  }
+}
+.canvas-tools {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-surface), 0.82);
+}
+.canvas-zoom-label {
+  min-width: 38px;
+  text-align: center;
+}
+.canvas-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 14px;
+  z-index: 5;
+  opacity: 0.75;
+  pointer-events: none;
 }
 .flow-card {
   position: absolute;
@@ -877,6 +1453,9 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   word-break: break-word;
   white-space: normal;
 }
+.flow-relation-chip {
+  cursor: pointer;
+}
 .lane-dot {
   display: inline-block;
   width: 8px;
@@ -885,16 +1464,15 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
   flex: none;
 }
 .flow-node-pos {
-  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease;
 }
 .flow-edge {
   fill: none;
   stroke: rgba(var(--v-theme-on-surface), 0.35);
   stroke-width: 1.2;
   transition: opacity 0.25s ease, stroke 0.4s ease;
-}
-.flow-edge.morph {
-  opacity: 0.06;
 }
 .edge-spawn,
 .edge-cause {
@@ -907,14 +1485,23 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 .flow-edge.dim {
   opacity: 0.15;
 }
+/* 已走过的边：success 绿实线 + 绿箭头（深浅主题都高对比）；未激活保持
+   低对比灰，视觉焦点自然落在实际路径上（外观反馈 9） */
+.flow-edge.traversed {
+  stroke: rgb(var(--v-theme-success));
+  opacity: 1;
+  stroke-width: 2;
+}
 /* O05：实际视图里没有真实 transition 事实的边——虚线淡显，不冒充走过 */
 .flow-edge.untaken {
   stroke-dasharray: 3 3;
   opacity: 0.25;
 }
 .flow-edge.active {
-  stroke: rgba(var(--v-theme-primary), 0.9);
-  stroke-width: 1.8;
+  stroke: rgb(var(--v-theme-success));
+  opacity: 1;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 0 2px rgba(var(--v-theme-success), 0.45));
 }
 .flow-edge.gone {
   opacity: 0;
@@ -965,7 +1552,8 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 }
 .reduce-motion .flow-node,
 .reduce-motion .flow-node-pos,
-.reduce-motion .flow-edge {
+.reduce-motion .flow-edge,
+.reduce-motion .flow-svg {
   transition: none;
 }
 @keyframes flow-pulse {

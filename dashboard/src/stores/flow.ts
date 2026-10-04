@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 import type {
+  FlowEntityChange,
   FlowEvent,
   FlowMessageDetail,
   FlowMessageIo,
@@ -8,7 +9,15 @@ import type {
   FlowNodeSpec,
   FlowSpec,
 } from '@/api/flow';
-import { getEvents, getMessage, getMessageIo, getSpec, listMessages } from '@/api/flow';
+import {
+  getEvents,
+  getMessage,
+  getMessageIo,
+  getSpec,
+  getSpecByDigest,
+  getTraceEntities,
+  listMessages,
+} from '@/api/flow';
 import { SseAuthError, sseStream } from '@/api/sse';
 import {
   dedupeAndOrder,
@@ -16,37 +25,60 @@ import {
   projectNodes,
 } from '@/stores/flowReducer';
 
-// 消息流程 store（计划 §6.7）：纯 reducer 投影 + 历史播放。
+// 消息流程 store（计划 §6.7 + 修复计划 §6.6）：纯 reducer 投影 + 历史播放。
 // 播放状态完全留在前端；任何动作都不发消息、不写业务（回放零副作用）。
 // 投影逻辑在 flowReducer.ts（纯函数，tests/ 下有单测）。
 //
-// O04/O09（计划 §2.2/§6.6）：spec 按 topology_version 缓存；打开轨迹用请求
-// 代际（generation counter）防护快速切换；事件分页拉到快照高水位；SSE 断线
-// 带 cursor 指数退避重连（1s 起、15s 封顶），终帧/401/页面隐藏时停止。
+// O04/O09：spec 缓存；打开轨迹用请求代际（generation counter）防护快速
+// 切换；事件分页拉到快照高水位；SSE 断线带 cursor 指数退避重连（1s 起、
+// 15s 封顶），终帧/401/页面隐藏时停止。
+//
+// 修复计划 §6.6（M5，R6/R8）：refreshTraceBundle 一次刷新 detail/IO/实体
+// （trace_end 与手动刷新必触发，receipt 事实节流触发）；列表 keyset 游标
+// 加载更多；事件分页区分「已加载」与「存储总量」，达页数上限显式 partial
+// 并可继续加载；spec 按 digest 精确缓存，缺 spec 时回退事件时间线。
 
 // 事件单页上限（与 api/flow.getEvents 缺省一致；后端 route 上限 1000）
 const EVENT_PAGE_LIMIT = 1000;
-// 分页硬上限：100 页 ≈ 10 万事件，防历史超长轨迹把页面拖死
+// 分页软上限：100 页 ≈ 10 万事件；达到后显式 partial + 可手动继续
 const MAX_EVENT_PAGES = 100;
 // 断线重连退避：1s 起，指数翻倍，15s 封顶
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
+// receipt 事实触发的 IO 刷新节流（毫秒）
+const IO_REFRESH_THROTTLE_MS = 2000;
+// 消息列表单页条数（keyset 游标续读）
+const LIST_PAGE_LIMIT = 100;
+
+/** 循环累计取最大 row_id（修复计划 §6.6：大数组禁用 Math.max(...) 展开）。 */
+function maxRowId(events: Array<{ row_id: number }>): number {
+  let max = 0;
+  for (const e of events) {
+    if (e.row_id > max) max = e.row_id;
+  }
+  return max;
+}
 
 export const useFlowStore = defineStore('flow', {
   state: () => ({
     messages: [] as FlowMessageSummary[],
     messagesTotal: 0,
+    messagesCursor: '' as string, // keyset 游标；'' = 无更多
     loadingList: false,
     platformFilter: '' as string,
     rootKindFilter: '' as string,
     detail: null as FlowMessageDetail | null,
     io: null as FlowMessageIo | null,
+    ioLoading: false,
     detailLoading: false,
     events: [] as FlowEvent[],
     seenEventIds: new Set<string>(),
+    eventsTruncated: false, // 达到 MAX_EVENT_PAGES 软上限：partial，可继续
+    eventsLoading: false,
+    traceEntities: [] as FlowEntityChange[],
     spec: null as FlowSpec | null,
     specVersion: '',
-    specCache: new Map<string, FlowSpec>(), // O04：按 topology_version 缓存
+    specCache: new Map<string, FlowSpec>(), // 按 digest（legacy 按 version+binding）
     traceGeneration: 0, // O04：openTrace 代际，旧响应按代际丢弃
     playbackIndex: -1, // -1 = 实时（最新）；>=0 = 历史播放位置（events 下标）
     live: false, // SSE 订阅中
@@ -58,6 +90,7 @@ export const useFlowStore = defineStore('flow', {
     selectedNodeId: '' as string,
     abort: null as AbortController | null,
     listTimer: null as number | null,
+    ioRefreshTimer: null as number | null,
   }),
 
   getters: {
@@ -71,6 +104,18 @@ export const useFlowStore = defineStore('flow', {
       const all = this.orderedEvents;
       if (this.playbackIndex < 0) return all;
       return all.slice(0, this.playbackIndex + 1);
+    },
+
+    /** 边级 transition 事实（修复计划 §6.4）：布局边激活的唯一依据。 */
+    transitionFacts(): FlowEvent[] {
+      return this.visibleEvents.filter(
+        (e) => e.fact_kind === 'transition',
+      );
+    },
+
+    /** root 是否已真实结束（修复计划 §6.4：终点锚依据真实 trace end）。 */
+    rootEnded(state): boolean {
+      return Boolean(state.detail?.ended_utc);
     },
 
     nodeStates(): ReturnType<typeof projectNodes> {
@@ -146,10 +191,41 @@ export const useFlowStore = defineStore('flow', {
         const data = await listMessages({
           platform: this.platformFilter || undefined,
           root_kind: this.rootKindFilter || undefined,
-          limit: 100,
+          limit: LIST_PAGE_LIMIT,
         });
         this.messages = data.items;
         this.messagesTotal = data.total;
+        this.messagesCursor = data.next_cursor ?? '';
+      } finally {
+        this.loadingList = false;
+      }
+    },
+
+    /**
+     * 加载更多（修复计划 §6.6 R8）：keyset 游标续读——offset 在不断插入的
+     * 列表里会漏行/重复；游标以 (started_utc, trace_id) 稳定续读。默认 100
+     * 条只是单页大小，不是总量上限。
+     */
+    async loadMoreMessages() {
+      if (!this.messagesCursor || this.loadingList) return;
+      this.loadingList = true;
+      try {
+        const data = await listMessages({
+          platform: this.platformFilter || undefined,
+          root_kind: this.rootKindFilter || undefined,
+          limit: LIST_PAGE_LIMIT,
+          cursor: this.messagesCursor,
+        });
+        // 按已加载集合去重（游标语义下理论无重叠，防御性合并）
+        const seen = new Set(this.messages.map((m) => m.trace_id));
+        for (const item of data.items) {
+          if (!seen.has(item.trace_id)) {
+            this.messages.push(item);
+            seen.add(item.trace_id);
+          }
+        }
+        this.messagesTotal = data.total;
+        this.messagesCursor = data.next_cursor ?? '';
       } finally {
         this.loadingList = false;
       }
@@ -166,11 +242,13 @@ export const useFlowStore = defineStore('flow', {
       this.detailLoading = true;
       this.events = [];
       this.seenEventIds = new Set();
+      this.eventsTruncated = false;
+      this.traceEntities = [];
       this.playbackIndex = -1;
       this.selectedNodeId = '';
       this.io = null;
-      // spec 先清空：等 loadSpec 按（缓存命中的）版本就位，绝不用上一条
-      // 轨迹的图解释这条轨迹（O04；缺版本显式 unmapped，计划 §6.6）
+      // spec 先清空：等 loadSpec 按（缓存命中的）digest/版本就位，绝不用
+      // 上一条轨迹的图解释这条轨迹（O04；缺版本显式 unmapped，计划 §6.6）
       this.spec = null;
       this.specVersion = '';
       this.streamEnded = false;
@@ -180,42 +258,133 @@ export const useFlowStore = defineStore('flow', {
         if (gen !== this.traceGeneration) return;
         this.detail = detail;
         // 输入/输出是独立来源（记忆库），失败不阻塞拓扑展示
+        this.ioLoading = true;
         void getMessageIo(traceId)
           .then((io) => {
             if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
               this.io = io;
             }
           })
+          .catch(() => {})
+          .finally(() => {
+            if (gen === this.traceGeneration) this.ioLoading = false;
+          });
+        const entitiesPromise = getTraceEntities(traceId)
+          .then((entities) => {
+            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
+              this.traceEntities = entities;
+            }
+          })
           .catch(() => {});
-        await this.fetchEvents();
+        await Promise.all([this.fetchEvents(), entitiesPromise]);
       } finally {
         if (gen === this.traceGeneration) this.detailLoading = false;
       }
     },
 
     /**
-     * 事件分页拉取（O09）：循环 after=已取最大 row_id，直到空页/不满页或
-     * 到达详情快照的 high_watermark——>1000 事件的轨迹不再只读一页。
-     * 拉取期间切换轨迹（代际变化）即中止，不污染新轨迹的事件。
+     * bundle 刷新（修复计划 §6.6 R6）：一次刷新 detail（含 relations）、IO
+     * 与对象事实。trace_end 与手动刷新必须触发；receipt 事实走节流入口
+     * {@link scheduleIoRefresh}。每个回包都校验代际与当前轨迹。
+     */
+    async refreshTraceBundle() {
+      const gen = this.traceGeneration;
+      const traceId = this.detail?.trace_id;
+      if (!traceId) return;
+      const tasks: Array<Promise<void>> = [
+        getMessage(traceId)
+          .then((d) => {
+            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
+              this.detail = d;
+            }
+          })
+          .catch(() => {}),
+        getMessageIo(traceId)
+          .then((io) => {
+            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
+              this.io = io;
+            }
+          })
+          .catch(() => {}),
+        getTraceEntities(traceId)
+          .then((entities) => {
+            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
+              this.traceEntities = entities;
+            }
+          })
+          .catch(() => {}),
+      ];
+      await Promise.all(tasks);
+    },
+
+    /**
+     * receipt 事实的节流 IO 刷新（修复计划 §6.6）：发送/回执类事件高频，
+     * 不能每条事件全量查 IO——节流窗口内的多次触发合并为一次。
+     */
+    scheduleIoRefresh() {
+      if (this.ioRefreshTimer !== null) return;
+      // node 环境无 window：用全局 setTimeout（浏览器返回 number）
+      this.ioRefreshTimer = setTimeout(() => {
+        this.ioRefreshTimer = null;
+        void this.refreshTraceBundle();
+      }, IO_REFRESH_THROTTLE_MS) as unknown as number;
+    },
+
+    /**
+     * 事件分页拉取（O09 + 修复计划 §6.6）：循环 after=已取最大 row_id，
+     * 首读固定快照高水位（until）；到达 MAX_EVENT_PAGES 软上限时标
+     * truncated（partial + 可 loadMoreEvents），绝不当成完整。
      */
     async fetchEvents() {
       if (!this.detail) return;
       const gen = this.traceGeneration;
       const traceId = this.detail.trace_id;
       const highWatermark = Number(this.detail.high_watermark ?? 0);
-      for (let page = 0; page < MAX_EVENT_PAGES; page += 1) {
-        const after = this.events.length
-          ? Math.max(...this.events.map((e) => e.row_id))
-          : 0;
+      this.eventsLoading = true;
+      try {
+        for (let page = 0; page < MAX_EVENT_PAGES; page += 1) {
+          const after = maxRowId(this.events);
+          const items = await getEvents(
+            traceId, after, EVENT_PAGE_LIMIT,
+            page === 0 ? highWatermark : 0);
+          if (gen !== this.traceGeneration || this.detail?.trace_id !== traceId) {
+            return;
+          }
+          if (!items.length) break; // 空页：服务端已取尽
+          this.mergeEvents(items);
+          if (items.length < EVENT_PAGE_LIMIT) break; // 不满页：没有更多
+          const maxRow = maxRowId(items);
+          if (highWatermark > 0 && maxRow >= highWatermark) break; // 已到快照高水位
+        }
+        // 软上限判定：还有已提交事件未加载 → 显式 partial（R8）
+        const persisted = Number(this.detail.persisted_events ?? 0);
+        this.eventsTruncated =
+          persisted > 0 && maxRowId(this.events) < persisted;
+      } finally {
+        if (gen === this.traceGeneration) this.eventsLoading = false;
+      }
+    },
+
+    /** 超长轨迹的显式「继续加载」（修复计划 §6.6 R8）：不设上界续读。 */
+    async loadMoreEvents() {
+      if (!this.detail || !this.eventsTruncated || this.eventsLoading) return;
+      const gen = this.traceGeneration;
+      const traceId = this.detail.trace_id;
+      this.eventsLoading = true;
+      try {
+        const after = maxRowId(this.events);
         const items = await getEvents(traceId, after, EVENT_PAGE_LIMIT);
         if (gen !== this.traceGeneration || this.detail?.trace_id !== traceId) {
           return;
         }
-        if (!items.length) break; // 空页：服务端已取尽
         this.mergeEvents(items);
-        if (items.length < EVENT_PAGE_LIMIT) break; // 不满页：没有更多
-        const maxRow = Math.max(...items.map((e) => e.row_id));
-        if (highWatermark > 0 && maxRow >= highWatermark) break; // 已到快照高水位
+        const persisted = Number(this.detail.persisted_events ?? 0);
+        this.eventsTruncated =
+          items.length >= EVENT_PAGE_LIMIT &&
+          persisted > 0 &&
+          maxRowId(this.events) < persisted;
+      } finally {
+        if (gen === this.traceGeneration) this.eventsLoading = false;
       }
     },
 
@@ -228,33 +397,38 @@ export const useFlowStore = defineStore('flow', {
     },
 
     /**
-     * spec 目录加载（O04）：按 topology_version 缓存（Map），同版本不重复
-     * 请求；响应返回时若已切换轨迹（代际变化）则只进缓存、不进视图。
+     * spec 目录加载（O04 + 修复计划 §6.2/§6.6）：有 spec_digest 时按 digest
+     * 精确读取/缓存（同 version 不同 digest 并存，绝不互串）；digest 为空
+     * 的 legacy 轨迹按版本回退读取（legacy_unverified，明确不保证精确）。
      * 404（缺版本）不缓存，保留之后重试的机会。
      */
     async loadSpec() {
       const version = this.detail?.topology_version || '';
+      const digest = this.detail?.spec_digest || '';
       const gen = this.traceGeneration;
       if (!version) {
         this.spec = null;
         this.specVersion = '';
         return;
       }
-      const cached = this.specCache.get(version);
+      const cacheKey = digest ? `digest:${digest}` : `legacy:${version}`;
+      const cached = this.specCache.get(cacheKey);
       if (cached) {
         this.spec = cached;
         this.specVersion = cached.topology_version;
         return;
       }
       try {
-        const spec = await getSpec(version);
-        this.specCache.set(version, spec);
+        const spec = digest
+          ? await getSpecByDigest(version, digest)
+          : await getSpec(version);
+        this.specCache.set(cacheKey, spec);
         if (gen !== this.traceGeneration) return;
         this.spec = spec;
         this.specVersion = spec.topology_version;
       } catch {
         if (gen !== this.traceGeneration) return;
-        // 版本缺失：显式 unmapped，不用最新图解释旧轨迹（计划 §6.6）
+        // 版本缺失/无精确归档：显式 unmapped，不用最新图解释旧轨迹
         this.spec = null;
       }
     },
@@ -295,9 +469,7 @@ export const useFlowStore = defineStore('flow', {
         while (this.streamAlive(gen, session, traceId)) {
           const controller = new AbortController();
           this.abort = controller;
-          const after = this.events.length
-            ? Math.max(...this.events.map((e) => e.row_id))
-            : 0;
+          const after = maxRowId(this.events);
           try {
             await sseStream(streamUrlSafe(traceId, after), (_id, data) => {
               try {
@@ -309,23 +481,23 @@ export const useFlowStore = defineStore('flow', {
                   this.streamEnded = true;
                   this.live = false;
                   if (parsed.type === 'trace_end') {
-                    // 终帧后补一次元数据（integrity/outcome 可能已更新）
-                    void getMessage(traceId)
-                      .then((d) => {
-                        if (
-                          gen === this.traceGeneration &&
-                          this.detail?.trace_id === traceId
-                        ) {
-                          this.detail = d;
-                        }
-                      })
-                      .catch(() => {});
+                    // 终帧后 bundle 刷新（修复计划 §6.6 R6）：detail/IO/
+                    // 关系/对象一次到位，输出不再停留在打开时的快照
+                    void this.refreshTraceBundle();
                   }
                   controller.abort();
                   return;
                 }
                 this.reconnectAttempts = 0; // 有数据流动：重置退避
                 this.mergeEvents([parsed]);
+                // receipt/投递事实 → 节流刷新 IO（修复计划 §6.6）：
+                // 不给每条 SSE 事件做全量 IO 查询
+                if (
+                  parsed.node_id.startsWith('send.') ||
+                  parsed.node_id === 'reply.bookkeeping'
+                ) {
+                  this.scheduleIoRefresh();
+                }
               } catch {
                 /* 忽略坏帧 */
               }

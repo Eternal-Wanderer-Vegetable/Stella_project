@@ -99,12 +99,16 @@ def _faketicks():
 
 
 def _events(db, trace_id: str, node_id: str | None = None,
-            kind: str | None = None) -> list[SimpleNamespace]:
+            kind: str | None = None, *,
+            include_transitions: bool = False) -> list[SimpleNamespace]:
     conn = sqlite3.connect(db)
     try:
         sql = ("SELECT kind, node_id, status, reason_code, metrics "
                "FROM flow_events WHERE trace_id=?")
         params: list[str] = [trace_id]
+        if not include_transitions:
+            # transition 是边级事实（挂在 from_node 上），不属于节点事实
+            sql += " AND fact_kind != 'transition'"
         if node_id:
             sql += " AND node_id=?"
             params.append(node_id)

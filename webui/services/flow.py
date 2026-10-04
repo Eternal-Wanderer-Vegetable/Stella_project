@@ -93,11 +93,18 @@ def messages(
     outcome: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    cursor: str | None = None,
 ) -> dict:
-    """消息轨迹列表（含无 Turn 的被动/命令/过滤路径）。"""
+    """消息轨迹列表（含无 Turn 的被动/命令/过滤路径）。
+
+    修复计划 §6.6（R8）：保留 limit/offset 兼容；新增 keyset ``cursor``
+    （``<started_utc>|<trace_id>``，首屏查询快照上界）——不断插入的列表里
+    用 offset 翻页会漏行/重复，cursor 以 (started_utc, trace_id) 稳定续读。
+    返回 ``next_cursor``：本页最后一行的键；取尽为 None。
+    """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
-        return {"total": 0, "items": []}
+        return {"total": 0, "items": [], "next_cursor": None}
     try:
         cols = _trace_columns(conn)
         extra = [c for c in ("integrity", "lost_events", "last_heartbeat_utc",
@@ -113,6 +120,16 @@ def messages(
         if outcome:
             conds.append("outcome = ?")
             params.append(outcome)
+        if cursor:
+            # keyset 续读：严格晚于游标行（started, trace_id 双键稳定序）
+            try:
+                cur_started, cur_trace = str(cursor).split("|", 1)
+            except ValueError:
+                cur_started, cur_trace = "", ""
+            if cur_started:
+                conds.append(
+                    "(started_utc > ? OR (started_utc = ? AND trace_id > ?))")
+                params.extend([cur_started, cur_started, cur_trace])
         where = ("WHERE " + " AND ".join(conds)) if conds else ""
         total = conn.execute(
             f"SELECT COUNT(*) FROM message_traces {where}", params
@@ -123,8 +140,8 @@ def messages(
             "process_instance_id, last_heartbeat_utc"
             + (", " + ", ".join(extra) if extra else "")
             + f" FROM message_traces {where} "
-            "ORDER BY started_utc DESC, trace_id DESC LIMIT ? OFFSET ?",
-            (*params, int(limit), int(offset)),
+            "ORDER BY started_utc DESC, trace_id DESC LIMIT ?",
+            (*params, int(limit)),
         ).fetchall()
         items = []
         for r in rows:
@@ -150,9 +167,13 @@ def messages(
                 else:
                     item[name] = val or ""
             items.append(item)
-        return {"total": int(total), "items": items}
+        next_cursor = None
+        if items and len(items) == int(limit):
+            last = items[-1]
+            next_cursor = f"{last['started_utc']}|{last['trace_id']}"
+        return {"total": int(total), "items": items, "next_cursor": next_cursor}
     except Exception:
-        return {"total": 0, "items": []}
+        return {"total": 0, "items": [], "next_cursor": None}
     finally:
         conn.close()
 
@@ -178,7 +199,11 @@ def message_detail(trace_id: str) -> dict | None:
             want = [c for c in ("process_kind", "origin", "trigger", "route",
                                 "business_ts", "last_heartbeat_utc",
                                 "spec_digest", "producer_ended", "integrity",
-                                "lost_events", "persisted_events") if c in cols]
+                                "lost_events", "persisted_events",
+                                "conversation_key", "bot_id",
+                                "conversation_kind", "peer_id",
+                                "storage_session_id", "source_message_id",
+                                "identity_state") if c in cols]
             if want:
                 erow = conn.execute(
                     f"SELECT {', '.join(want)} FROM message_traces "
@@ -244,23 +269,73 @@ def message_detail(trace_id: str) -> dict | None:
     item.setdefault("integrity", "")
     item.setdefault("lost_events", 0)
     item.setdefault("persisted_events", 0)
+    # 规范身份（修复计划 §6.1）：旧库/旧行缺列时给中性缺省，不伪造 0
+    for field in ("conversation_key", "bot_id", "conversation_kind",
+                  "peer_id", "source_message_id", "identity_state"):
+        item.setdefault(field, "")
+    item.setdefault("storage_session_id", None)
+    # spec 绑定完整性（修复计划 §6.2）：与 runtime integrity 分别表达
+    item["spec_binding"] = _spec_binding(
+        str(item["spec_digest"]), str(item["topology_version"]))
     return item
 
 
-def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[dict]:
-    """按自增 id 增量取事件（SSE 去重/补漏共用；升序）。"""
+def _spec_binding(spec_digest: str, topology_version: str) -> str:
+    """spec_digest → exact | invalid | legacy_unverified | missing。
+
+    - exact：digest 非空且 flow_spec_blobs 里有同 digest 归档；
+    - invalid：digest 非空但归档缺失（不可回放）；
+    - legacy_unverified：digest 空、旧 flow_specs 有该版本归档（按版本读，
+      不承诺精确匹配）；
+    - missing：两者皆无。
+    """
+    conn = _connect_ro()
+    if conn is None:
+        return "missing"
+    try:
+        if spec_digest:
+            row = conn.execute(
+                "SELECT 1 FROM flow_spec_blobs WHERE spec_digest = ?",
+                (spec_digest,)).fetchone() if _table_exists(
+                    conn, "flow_spec_blobs") else None
+            return "exact" if row else "invalid"
+        if _table_exists(conn, "flow_specs"):
+            row = conn.execute(
+                "SELECT 1 FROM flow_specs WHERE topology_version = ? AND "
+                "spec_json != ''", (topology_version,)).fetchone()
+            if row:
+                return "legacy_unverified"
+        return "missing"
+    except Exception:
+        return "missing"
+    finally:
+        conn.close()
+
+
+def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500,
+                 until_id: int | None = None) -> list[dict]:
+    """按自增 id 增量取事件（SSE 去重/补漏共用；升序）。
+
+    ``until_id``（修复计划 §6.6 R8）：首读固定已提交上界（detail 的
+    high_watermark）——读满上界才追 SSE，避免把进行中的写入误当快照。
+    """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "flow_events"):
         return []
     try:
-        rows = conn.execute(
+        sql = (
             "SELECT id, event_id, span_id, parent_span_id, node_id, "
             "instance_key, seq, kind, status, reason_code, ts_utc, "
             "duration_ms, summary, metrics, attempt, fact_kind, error_code "
-            "FROM flow_events WHERE trace_id = ? AND id > ? "
-            "ORDER BY id ASC LIMIT ?",
-            (trace_id, int(after_id), int(limit)),
-        ).fetchall()
+            "FROM flow_events WHERE trace_id = ? AND id > ?"
+        )
+        params: list[object] = [trace_id, int(after_id)]
+        if until_id is not None:
+            sql += " AND id <= ?"
+            params.append(int(until_id))
+        sql += " ORDER BY id ASC LIMIT ?"
+        params.append(int(limit))
+        rows = conn.execute(sql, params).fetchall()
     except Exception:
         return []
     finally:
@@ -280,8 +355,29 @@ def events_after(trace_id: str, *, after_id: int = 0, limit: int = 500) -> list[
     ]
 
 
-def spec(version: str) -> dict | None:
-    """静态拓扑 manifest：先查归档表，再回退随包文件；缺版本显式 None。"""
+def spec(version: str, digest: str | None = None) -> dict | None:
+    """静态拓扑 manifest。
+
+    - 带 ``digest``：只在 flow_spec_blobs 里精确匹配该内容归档；不命中
+      返回 None（调用方 404），**绝不回退** current/latest（修复计划
+      §6.2：无精确证据不冒充 exact）。
+    - 不带 digest：旧行为（归档表 → 随包文件），供 legacy 客户端与
+      legacy_unverified 轨迹按语义版本读取。
+    """
+    if digest:
+        conn = _connect_ro()
+        if conn is None or not _table_exists(conn, "flow_spec_blobs"):
+            return None
+        try:
+            row = conn.execute(
+                "SELECT spec_json FROM flow_spec_blobs WHERE spec_digest = ?",
+                (digest,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return _loads(row[0], None)
     conn = _connect_ro()
     if conn is not None and _table_exists(conn, "flow_specs"):
         try:
@@ -358,38 +454,43 @@ def _window_end(started_utc: str, ended_utc: str) -> str:
     )
 
 
-def _group_id_of(scope: str, root_kind: str) -> str | None:
-    if root_kind == "webchat":
-        return "-1"
-    if scope.startswith("qq:"):
-        return scope.split(":", 1)[1]
-    return None
-
-
 def message_io(trace_id: str) -> dict | None:
     """一条轨迹的真实输入（用户消息）与输出（确认送达的回复片段）。
 
-    O02 修复后的取数合同——不再按 root_kind 白名单猜，输出优先取
-    **业务发送回执表** ``social_deliveries``（按 trace_id 精确关联，
-    acknowledged 片段带平台消息 ID），fallback 才是记忆库 BOT_SELF
-    时间窗；命令回复走 ``command.reply`` 检查点。输入按
-    (group, msg_id) 精确命中（QQ）或窗口内首条非 BOT_SELF 行（WebChat）。
-    空输出 ≠ 发送失败（notes 说明数据来源）。
+    修复计划 §6.3 取数合同：先读 trace 的规范身份列（schema 3），输入按
+    ``storage_session_id + source_message_id`` 精确命中并核对来源，绝不把
+    scope 展示键拆成 group_id（私聊 `qq:<bot>:private:<user>` 旧路径正是
+    R1 的串线根源）。私聊输出按 trace_id 关联会话中立回执（learning_
+    eligible=0，只展示不学习）。无精确身份的旧轨迹退回群号/时间窗兜底，
+    且必须标注 ``provenance=legacy_time_window``，不冒充 exact。
     """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
         return None
     try:
+        cols = _trace_columns(conn)
+        identity_cols = [c for c in ("conversation_key", "bot_id",
+                                     "conversation_kind", "peer_id",
+                                     "storage_session_id", "source_message_id",
+                                     "identity_state") if c in cols]
         row = conn.execute(
-            "SELECT root_kind, scope, source_message_key, started_utc, ended_utc "
-            "FROM message_traces WHERE trace_id = ?",
+            "SELECT root_kind, scope, source_message_key, started_utc, ended_utc"
+            + (", " + ", ".join(identity_cols) if identity_cols else "")
+            + " FROM message_traces WHERE trace_id = ?",
             (trace_id,),
         ).fetchone()
     finally:
         conn.close()
     if row is None:
         return None
-    root_kind, scope, source_key, started_utc, ended_utc = row
+    root_kind, scope, source_key, started_utc, ended_utc = row[:5]
+    identity: dict[str, object] = {}
+    if identity_cols:
+        identity = dict(zip(identity_cols, row[5:], strict=True))
+    conversation_kind = str(identity.get("conversation_kind") or "")
+    storage_session_id = identity.get("storage_session_id")
+    source_message_id = str(identity.get("source_message_id") or "")
+    identity_state = str(identity.get("identity_state") or "")
     notes: list[str] = []
     # 命令回复不经 BOT_SELF 落库，唯一的记录通道是流程事件里的
     # command.reply 检查点（发送文本摘要，≤500 字）
@@ -414,7 +515,6 @@ def message_io(trace_id: str) -> dict | None:
         command_lines = []
     started_key = _norm_key(started_utc)
     end_key = _window_end(started_utc, ended_utc)
-    group_id = _group_id_of(scope, root_kind)
 
     # ---- 输出：业务回执优先（O02——root 分类不再决定输出有无）----
     receipt_lines: list[str] = []
@@ -454,14 +554,34 @@ def message_io(trace_id: str) -> dict | None:
     inp = None
     try:
         if mem is not None:
-            if root_kind in _INPUT_ROOTS and group_id is not None:
-                if root_kind == "webchat":
-                    row_in = mem.execute(
-                        "SELECT user_id, content, msg_id FROM group_messages "
-                        "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
-                        "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
-                        (group_id, started_key),
-                    ).fetchone()
+            # ---- 输入：精确身份优先（修复计划 §6.3）----
+            if storage_session_id is not None and source_message_id:
+                row_in = _exact_input_row(
+                    mem, int(storage_session_id), source_message_id,
+                    conversation_kind)
+                if row_in is not None:
+                    inp = {"user_id": row_in[0], "content": row_in[1],
+                           "msg_id": row_in[2],
+                           "identity_state": identity_state or "exact"}
+                else:
+                    notes.append("精确身份未命中输入行（消息未持久化或已清理）")
+            elif root_kind == "webchat":
+                row_in = mem.execute(
+                    "SELECT user_id, content, msg_id FROM group_messages "
+                    "WHERE group_id = ? AND source_kind != 'BOT_SELF' "
+                    "AND timestamp >= ? ORDER BY id ASC LIMIT 1",
+                    ("-1", started_key),
+                ).fetchone()
+                if row_in is not None:
+                    inp = {"user_id": row_in[0], "content": row_in[1],
+                           "msg_id": row_in[2]}
+            elif (root_kind in _INPUT_ROOTS
+                  and _legacy_group_id(scope, root_kind, conversation_kind) is not None):
+                # 旧轨迹 legacy 兜底：群 scope 可给群号但不能推断 Bot；
+                # 私聊 scope 缺 peer/storage 键时**禁止**按时间窗猜身份
+                group_id = _legacy_group_id(scope, root_kind, conversation_kind)
+                if identity_state == "exact" and conversation_kind == "private":
+                    notes.append("私聊旧轨迹缺存储身份：不按时间窗猜测输入")
                 else:
                     parts = (source_key or "").split(":")
                     try:
@@ -475,24 +595,29 @@ def message_io(trace_id: str) -> dict | None:
                             "WHERE group_id = ? AND msg_id = ? ORDER BY id DESC LIMIT 1",
                             (group_id, msg_id),
                         ).fetchone()
-                if row_in is not None:
-                    inp = {"user_id": row_in[0], "content": row_in[1],
-                           "msg_id": row_in[2]}
+                    if row_in is not None:
+                        inp = {"user_id": row_in[0], "content": row_in[1],
+                               "msg_id": row_in[2],
+                               "identity_state": "legacy_partial"}
             elif root_kind == "proactive":
                 notes.append("主动发言：无用户输入")
 
-            if not receipt_lines and root_kind not in _BACKGROUND_ROOTS                     and group_id is not None:
-                    rows_out = mem.execute(
-                        "SELECT content FROM group_messages WHERE group_id = ? "
-                        "AND source_kind = 'BOT_SELF' AND timestamp >= ? "
-                        "AND timestamp <= ? ORDER BY id ASC LIMIT ?",
-                        (group_id, started_key, end_key, _OUTPUT_MAX_LINES + 1),
-                    ).fetchall()
-                    lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
-                    if lines:
-                        source_note = "输出取自时间窗内 BOT_SELF 行（无该轨迹的回执档案）"
-                    if len(rows_out) > _OUTPUT_MAX_LINES:
-                        notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
+            # ---- 输出兜底：仅真实群号的群轨迹走 BOT_SELF 时间窗 ----
+            fallback_group = _legacy_group_id(scope, root_kind, conversation_kind)
+            if (not receipt_lines and root_kind not in _BACKGROUND_ROOTS
+                    and fallback_group is not None):
+                rows_out = mem.execute(
+                    "SELECT content FROM group_messages WHERE group_id = ? "
+                    "AND source_kind = 'BOT_SELF' AND timestamp >= ? "
+                    "AND timestamp <= ? ORDER BY id ASC LIMIT ?",
+                    (fallback_group, started_key, end_key, _OUTPUT_MAX_LINES + 1),
+                ).fetchall()
+                lines = [r[0] for r in rows_out[:_OUTPUT_MAX_LINES]]
+                if lines:
+                    source_note = ("provenance=legacy_time_window：输出取自时间窗内 "
+                                   "BOT_SELF 行（无该轨迹的回执档案），非精确关联")
+                if len(rows_out) > _OUTPUT_MAX_LINES:
+                    notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行")
         else:
             notes.append("记忆库不可读，无法展示消息内容")
     finally:
@@ -516,13 +641,50 @@ def message_io(trace_id: str) -> dict | None:
         notes.append("被动消息：仅记录，不产生回复")
     if root_kind == "qq_command" and not lines:
         notes.append("该命令没有可展示的回复（未回复或发送失败）")
-    if (root_kind in ("qq_chat", "webchat") and not lines):
+    if root_kind in ("qq_chat", "qq_private", "webchat") and not lines:
         notes.append("没有确认送达的回复行（未回复或全部未送达）")
+    if root_kind == "qq_private" and inp is None and storage_session_id is None:
+        notes.append("私聊输入不可用：身份缺失（identity_state="
+                     f"{identity_state or 'missing'}）")
     return {
         "input": inp,
         "output": {"lines": lines, "count": len(lines)},
         "notes": notes,
     }
+
+
+def _exact_input_row(mem, storage_session_id: int, source_message_id: str,
+                     conversation_kind: str) -> tuple | None:
+    """按注册表存储键 + 来源消息 ID 精确取输入行（修复计划 §6.3）。
+
+    负 storage ID 是私聊注册表键（绝不当群号展示）；同会话同号消息才允许
+    DESC 取最新（重发/编辑场景），跨会话同号永远隔离。
+    """
+    try:
+        return mem.execute(
+            "SELECT user_id, content, msg_id FROM group_messages "
+            "WHERE group_id = ? AND msg_id = ? AND source_kind != 'BOT_SELF' "
+            "ORDER BY id DESC LIMIT 1",
+            (int(storage_session_id), int(source_message_id)),
+        ).fetchone()
+    except (ValueError, TypeError):
+        return None
+
+
+def _legacy_group_id(scope: str, root_kind: str,
+                     conversation_kind: str) -> str | None:
+    """旧轨迹输出兜底的群号：仅真实群（webchat 固定 -1）。
+
+    私聊的规范 scope 含两个以上冒号且 storage 键是注册表负整数——绝不把
+    `qq:<bot>:private:<user>` 拆成 group_id（R1 串线根源）。
+    """
+    if root_kind == "webchat":
+        return "-1"
+    if conversation_kind == "private":
+        return None
+    if scope.startswith("qq:") and scope.count(":") == 1:
+        return scope.split(":", 1)[1]
+    return None
 
 
 def entity_history(entity_type: str, entity_id: str, *,

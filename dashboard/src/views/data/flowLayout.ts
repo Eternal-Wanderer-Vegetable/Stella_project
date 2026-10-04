@@ -36,6 +36,7 @@ export interface LaidNode {
   lane: string;
   spec?: FlowNodeSpec;
   anchor?: 'start' | 'end'; // 合成锚点（非目录节点）
+  component?: number; // 锚点所属连通分量（不同流程的起止相互分离）
 }
 
 export interface LaidEdge {
@@ -54,6 +55,14 @@ export interface FullLayoutInput {
   executed: Map<string, FlowNodeState>;
   labelOf: (nodeId: string) => string;
   laneOf: (nodeId: string) => string;
+  /** 边级 transition 事实（修复计划 §6.4 R3）：只有这些显式事实激活边。 */
+  transitions?: FlowEvent[];
+  /** root 是否已真实结束（trace_end + writer finality）；未结束不得把
+   * 汇节点接到「结束」锚点装作运行完成（R3/R8）。 */
+  rootEnded?: boolean;
+  /** 是否渲染「结束」锚点（外观反馈 5）：运行未真实结束前显示「结束」
+   * 具有欺骗性——回放场景按已播到的 trace_end 事实控制。默认 true。 */
+  showEndAnchors?: boolean;
 }
 
 export interface LayoutResult {
@@ -66,6 +75,37 @@ export interface LayoutResult {
 /**
  * 完整流程布局：目录全节点分层（见 {@link layered}）。
  */
+/** 全目录图的弱连通分量：nodeId → 分量序号（声明序稳定）。 */
+export function computeCatalogComponents(spec: SpecLike): Map<string, number> {
+  const parent = new Map<string, string>();
+  for (const n of spec.nodes) parent.set(n.id, n.id);
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (cur !== root) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const e of spec.edges) {
+    if (e.src === e.dst) continue;
+    const a = find(e.src);
+    const b = find(e.dst);
+    if (a !== b) parent.set(a, b);
+  }
+  const indexOf = new Map<string, number>();
+  const out = new Map<string, number>();
+  for (const n of spec.nodes) {
+    const root = find(n.id);
+    if (!indexOf.has(root)) indexOf.set(root, indexOf.size);
+    out.set(n.id, indexOf.get(root)!);
+  }
+  return out;
+}
+
 export function layoutLayered(input: FullLayoutInput): LayoutResult {
   return layered({
     nodes: input.spec.nodes,
@@ -74,14 +114,18 @@ export function layoutLayered(input: FullLayoutInput): LayoutResult {
     executed: input.executed,
     labelOf: input.labelOf,
     laneOf: input.laneOf,
+    transitions: input.transitions,
+    rootEnded: input.rootEnded,
+    showEndAnchors: input.showEndAnchors,
+    componentOf: computeCatalogComponents(input.spec),
   });
 }
 
 /**
  * 实际路径布局：**只取已执行节点与其间的边**再走同一套分层算法——
  * 未走过的节点不占位，路径收束成一条连通的左→右流（用户验收 #2）。
- * 边 traversed 由真实 transition 事实判定（O05）；unknown 节点（事件里有、
- * spec 里没有）以占位节点参与布局，始终可见（O05）。
+ * 边 traversed 由真实 transition 事实判定（O05/R3）；unknown 节点（事件
+ * 里有、spec 里没有）以占位节点参与布局，始终可见（O05）。
  */
 export function layoutExecuted(input: FullLayoutInput): LayoutResult {
   const known = new Set(input.spec.nodes.map((n) => n.id));
@@ -109,6 +153,10 @@ export function layoutExecuted(input: FullLayoutInput): LayoutResult {
     executed: input.executed,
     labelOf: input.labelOf,
     laneOf: input.laneOf,
+    transitions: input.transitions,
+    rootEnded: input.rootEnded,
+    showEndAnchors: input.showEndAnchors,
+    componentOf: computeCatalogComponents(input.spec),
   });
 }
 
@@ -119,6 +167,13 @@ interface LayeredInput {
   executed: Map<string, FlowNodeState>;
   labelOf: (nodeId: string) => string;
   laneOf: (nodeId: string) => string;
+  transitions?: FlowEvent[];
+  rootEnded?: boolean;
+  showEndAnchors?: boolean;
+  /** 全目录图上预算好的分量归属（外观反馈 8）：执行子图按渲染边算连通会
+   * 被观测缺口撕成多段（出现多个「开始」）；目录分量保证同一逻辑流程的
+   * 片段共享同一对起止锚。缺省时按渲染边现算。 */
+  componentOf?: Map<string, number>;
 }
 
 /**
@@ -250,49 +305,76 @@ function layered(input: LayeredInput): LayoutResult {
   // ── 源 / 汇（沿全部静态边的入度/出度为零者；渲染边与排名边一致口径）──
   const hasIn = new Set(edges.map((e) => e.dst));
   const hasOut = new Set(edges.map((e) => e.src));
-  const sources = specNodes.map((n) => n.id).filter((id) => !hasIn.has(id));
-  const sinks = specNodes.map((n) => n.id).filter((id) => !hasOut.has(id));
 
   const contentW =
     CANVAS_PAD + ANCHOR_W + 32 + columns.length * (NODE_W + COL_GAP);
   const height = Math.max(maxRows * ROW_PITCH + 2 * CANVAS_PAD, 120);
 
-  // ── start / end 锚点（垂直对齐各自接入节点的均值）──
+  // ── 起止锚点（外观反馈 6/7/8）：按分量各配一对开始/结束。分量优先取
+  // **全目录图**的归属（componentOf）——执行子图若按渲染边算连通，观测
+  // 缺口会把同一条流程撕成多段、出现多个「开始」；目录分量保证同一逻辑
+  // 流程的片段共享同一对起止锚。目录之外的 unknown 节点按孤立碎片处理
+  // （无目录边 → 不设锚）；纯环分量（无源无汇）同样不设锚。「结束」锚
+  // 整体可隐藏：运行未真实结束前显示「结束」具有欺骗性（回放场景按已
+  // 播到的 trace_end 控制）。
+  const showEnd = input.showEndAnchors !== false;
+  const usingCatalog = input.componentOf != null;
+  const compKeyOf = (id: string): string => {
+    const known = input.componentOf?.get(id);
+    return known !== undefined ? `c${known}` : `self:${id}`;
+  };
+  // 渲染边上的并查集：目录模式下同分量节点本就同键；回退模式（无目录）
+  // 靠渲染边把孤立键并成真实观测流
+  const parent = new Map<string, string>();
+  for (const n of specNodes) parent.set(compKeyOf(n.id), compKeyOf(n.id));
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (cur !== root) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const e of edges) {
+    const a = find(compKeyOf(e.src));
+    const b = find(compKeyOf(e.dst));
+    if (a !== b) parent.set(a, b);
+  }
+  const compIndexOf = new Map<string, number>();
+  for (const n of specNodes) {
+    const root = find(compKeyOf(n.id));
+    if (!compIndexOf.has(root)) compIndexOf.set(root, compIndexOf.size);
+  }
+  const compCount = compIndexOf.size;
+  const compSources: string[][] = Array.from({ length: compCount }, () => []);
+  const compSinks: string[][] = Array.from({ length: compCount }, () => []);
+  const compAnchorable: boolean[] = new Array(compCount).fill(!usingCatalog);
+  for (const n of specNodes) {
+    const key = compKeyOf(n.id);
+    const ci = compIndexOf.get(find(key))!;
+    if (key.startsWith('c')) compAnchorable[ci] = true;
+    if (!hasIn.has(n.id)) compSources[ci].push(n.id);
+    if (!hasOut.has(n.id)) compSinks[ci].push(n.id);
+  }
+
   const centerY = (ids: string[]) => {
     const ys = ids.map((id) => nodeById.get(id)!.y + NODE_H / 2);
     return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : height / 2;
   };
-  const startY = centerY(sources);
-  const endY = centerY(sinks);
-  const startAnchor: LaidNode = {
-    nodeId: '__start__',
-    label: '开始',
-    status: 'anchor',
-    outcome: '',
-    instances: 0,
-    lane: '',
-    x: CANVAS_PAD,
-    y: startY - ANCHOR_H / 2,
-    anchor: 'start',
-  };
-  const endAnchor: LaidNode = {
-    nodeId: '__end__',
-    label: '结束',
-    status: 'anchor',
-    outcome: '',
-    instances: 0,
-    lane: '',
-    x: contentW,
-    y: endY - ANCHOR_H / 2,
-    anchor: 'end',
-  };
-  nodes.push(startAnchor, endAnchor);
+  const clampY = (y: number) =>
+    Math.min(Math.max(y, ANCHOR_H / 2 + 4), height - ANCHOR_H / 2 - 4);
 
-  // ── 边：普通边 + 锚点接入边；traversed 由真实 transition 事实判定 ──
+  // ── 边：普通边 + 锚点接入边；traversed 由显式 transition 事实判定 ──
+  const transitions = input.transitions ?? [];
+  const rootEnded = input.rootEnded ?? false;
   const layoutEdges: LaidEdge[] = edges.map((e) => {
     const traversed = edgeTraversed(
       input.executed.get(e.src),
       input.executed.get(e.dst),
+      transitions,
     );
     return {
       id: `${e.src}->${e.dst}:${e.kind}`,
@@ -304,46 +386,119 @@ function layered(input: LayeredInput): LayoutResult {
       active: traversed && e.kind !== 'spawn' && e.kind !== 'cause',
     };
   });
-  for (const id of sources) {
-    const traversed = nodeStarted(input.executed.get(id));
-    layoutEdges.push({
-      id: `__start__->${id}`,
-      from: startAnchor,
-      to: nodeById.get(id)!,
-      kind: 'order',
-      label: '',
-      traversed,
-      active: traversed,
-    });
+
+  // 锚 y 先集齐再摊开（外观反馈 10）：不同分量的汇/源中心可能重合，
+  // 同侧锚按最小间距（锚高 + 8px）上下摊开，避免「结束」叠「结束」
+  const startYs: Array<number | null> = [];
+  const endYs: Array<number | null> = [];
+  for (let ci = 0; ci < compCount; ci += 1) {
+    if (!compAnchorable[ci]) continue;
+    startYs.push(compSources[ci].length ? clampY(centerY(compSources[ci])) : null);
+    endYs.push(showEnd && compSinks[ci].length
+      ? clampY(centerY(compSinks[ci]))
+      : null);
   }
-  for (const id of sinks) {
-    const traversed = nodeArrived(input.executed.get(id));
-    layoutEdges.push({
-      id: `${id}->__end__`,
-      from: nodeById.get(id)!,
-      to: endAnchor,
-      kind: 'order',
-      label: '',
-      traversed,
-      active: traversed,
-    });
+  const spreadStart = spreadAnchorYs(startYs);
+  const spreadEnd = spreadAnchorYs(endYs);
+
+  for (let ci = 0, si = 0, ei = 0; ci < compCount; ci += 1) {
+    if (!compAnchorable[ci]) continue;
+    const sy = spreadStart[si];
+    si += 1;
+    if (sy !== null && compSources[ci].length) {
+      const startAnchor: LaidNode = {
+        nodeId: `__start__#${ci}`,
+        label: '开始',
+        status: 'anchor',
+        outcome: '',
+        instances: 0,
+        lane: '',
+        x: CANVAS_PAD,
+        y: sy - ANCHOR_H / 2,
+        anchor: 'start',
+        component: ci,
+      };
+      nodes.push(startAnchor);
+      for (const id of compSources[ci]) {
+        const traversed = nodeStarted(input.executed.get(id));
+        layoutEdges.push({
+          id: `${startAnchor.nodeId}->${id}`,
+          from: startAnchor,
+          to: nodeById.get(id)!,
+          kind: 'order',
+          label: '',
+          traversed,
+          active: traversed,
+        });
+      }
+    }
+    const ey = spreadEnd[ei];
+    ei += 1;
+    if (ey !== null && showEnd && compSinks[ci].length) {
+      const endAnchor: LaidNode = {
+        nodeId: `__end__#${ci}`,
+        label: '结束',
+        status: 'anchor',
+        outcome: '',
+        instances: 0,
+        lane: '',
+        x: contentW,
+        y: ey - ANCHOR_H / 2,
+        anchor: 'end',
+        component: ci,
+      };
+      nodes.push(endAnchor);
+      for (const id of compSinks[ci]) {
+        // 终点锚（修复计划 §6.4）：依据真实 root finish（rootEnded），
+        // 不由静态 sink + 节点到达推断「运行结束」。
+        const traversed = rootEnded && nodeArrived(input.executed.get(id));
+        layoutEdges.push({
+          id: `${id}->${endAnchor.nodeId}`,
+          from: nodeById.get(id)!,
+          to: endAnchor,
+          kind: 'order',
+          label: '',
+          traversed,
+          active: traversed,
+        });
+      }
+    }
   }
 
   return {
     nodes,
     edges: layoutEdges,
-    width: contentW + ANCHOR_W + CANVAS_PAD,
+    width: contentW + CANVAS_PAD + (showEnd ? ANCHOR_W : 0),
     height,
   };
 }
 
+/** 同侧锚点的最小间距摊开：按 y 排序，前后两趟夹逼到相邻间距 ≥ 锚高+8。
+ * 输入 null（该分量此侧无锚）原样输出 null。 */
+export function spreadAnchorYs(ys: Array<number | null>): Array<number | null> {
+  const gap = ANCHOR_H + 8;
+  const order = ys
+    .map((y, i) => ({ y, i }))
+    .filter((o): o is { y: number; i: number } => o.y !== null)
+    .map((o) => ({ ...o }));
+  order.sort((a, b) => a.y - b.y);
+  for (let k = 1; k < order.length; k += 1) {
+    if (order[k].y < order[k - 1].y + gap) order[k].y = order[k - 1].y + gap;
+  }
+  for (let k = order.length - 2; k >= 0; k -= 1) {
+    if (order[k].y > order[k + 1].y - gap) order[k].y = order[k + 1].y - gap;
+  }
+  const out: Array<number | null> = [...ys];
+  for (const o of order) out[o.i] = o.y;
+  return out;
+}
+
 // ============================================================
-// O05（计划 §2.2/§6.6）：「两端点出现过」≠「边已执行」。
-// traversed 需要真实 transition 事实：src 发起（start/decision）之后，
-// 同实例链上有 finish/decision 到达 dst。span 父子（dst 事件挂在 src 开启
-// 的 span 下）或相同 instance_key 视为同链；双方都无实例信息时退化为
-// 时序事实（dst 的到达不早于 src 的发起）。checkpoint 是过程事实、
-// start-only 是在途/中断，都不构成到达。
+// O05/R3（修复计划 §6.4）：「两端点出现过」≠「边已执行」。
+// traversed 只由**显式 transition 事实**激活（fact_kind='transition'，
+// 携带 transition_v=1、from_node/to_node 与 attempt）；兄弟 span、同
+// instance_key、时间先后都不构成到达。legacy 事件（无 transition）一律
+// 显示为静态未确认，不虚构路径。
 // ============================================================
 
 /** 流程确实在该节点启动过（start 事件）。 */
@@ -351,42 +506,96 @@ function nodeStarted(state: FlowNodeState | undefined): boolean {
   return Boolean(state?.events.some((e) => e.kind === 'start'));
 }
 
-/** 有真实 transition 到达并收束在该节点（finish/decision）。 */
+/** 有真实到达事实收束在该节点（finish/decision，不含边级 transition）。 */
 function nodeArrived(state: FlowNodeState | undefined): boolean {
   return Boolean(
-    state?.events.some((e) => e.kind === 'finish' || e.kind === 'decision'),
+    state?.events.some(
+      (e) =>
+        e.fact_kind !== 'transition' &&
+        (e.kind === 'finish' || e.kind === 'decision'),
+    ),
   );
 }
 
-/** 两个事件是否在同一条实例链上。 */
-function sameChain(departure: FlowEvent, arrival: FlowEvent): boolean {
-  if (departure.span_id && departure.span_id === arrival.parent_span_id) {
-    return true; // span 父子链：dst 事件挂在 src 开启的 span 下
-  }
-  if (departure.instance_key && arrival.instance_key) {
-    return departure.instance_key === arrival.instance_key;
-  }
-  return true; // 双方都无链信息：交给时序判定
-}
-
-/** spec 边 src→dst 是否真实走过（实际视图可见性 / 完整视图高亮的判据）。 */
+/** transition 事实是否激活 spec 边 src→dst（修复计划 §6.4 合同）：
+ * 1. metrics.transition_v === 1 且 from/to 节点与边端点一致；
+ * 2. attempt 匹配：transition 的 attempt 必须在两端各有一条同 attempt 的
+ *    发起/到达事实（跨 attempt 不串边）；
+ * 3. 事件归属由调用方保证同 trace（事件按 trace 拉取）。 */
 export function edgeTraversed(
   src: FlowNodeState | undefined,
   dst: FlowNodeState | undefined,
+  transitions: FlowEvent[] = [],
 ): boolean {
   if (!src || !dst) return false;
-  const departures = src.events.filter(
-    (e) => e.kind === 'start' || e.kind === 'decision',
+  return transitions.some((t) => {
+    const m = (t.metrics ?? {}) as Record<string, unknown>;
+    if (Number(m.transition_v ?? 0) !== 1) return false;
+    if (String(m.from_node ?? '') !== src.nodeId) return false;
+    if (String(m.to_node ?? '') !== dst.nodeId) return false;
+    const tAttempt = Number(t.attempt ?? 0) || 0;
+    const departed = src.events.some(
+      (e) =>
+        e.fact_kind !== 'transition' &&
+        (e.kind === 'start' || e.kind === 'decision') &&
+        (e.attempt ?? 0) === tAttempt,
+    );
+    const arrived = dst.events.some(
+      (e) =>
+        e.fact_kind !== 'transition' &&
+        (e.kind === 'finish' || e.kind === 'decision') &&
+        (e.attempt ?? 0) === tAttempt,
+    );
+    return departed && arrived;
+  });
+}
+
+/** 画布视图状态（修复计划外外观反馈：右键平移 + 滚轮缩放）。 */
+export interface ViewState {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export const ZOOM_MIN = 0.35;
+export const ZOOM_MAX = 3;
+
+/** 以画布上的一点 (px, py) 为锚缩放：该点在缩放前后保持原位。 */
+export function zoomAround(
+  view: ViewState,
+  px: number,
+  py: number,
+  factor: number,
+): ViewState {
+  const scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.scale * factor));
+  const ratio = scale / view.scale;
+  return {
+    scale,
+    x: px - (px - view.x) * ratio,
+    y: py - (py - view.y) * ratio,
+  };
+}
+
+/** 以内容包围盒适配视口：返回整体缩放 + 居中平移（外观反馈 2）。 */
+export function fitAround(
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  viewport: { width: number; height: number },
+  pad = 28,
+  maxScale = 1.25,
+): ViewState {
+  const bw = bounds.maxX - bounds.minX + pad * 2;
+  const bh = bounds.maxY - bounds.minY + pad * 2;
+  const scale = Math.min(
+    ZOOM_MAX,
+    Math.max(ZOOM_MIN, Math.min(viewport.width / bw, viewport.height / bh, maxScale)),
   );
-  const arrivals = dst.events.filter(
-    (e) => e.kind === 'finish' || e.kind === 'decision',
-  );
-  return arrivals.some((arrival) =>
-    departures.some(
-      (departure) =>
-        sameChain(departure, arrival) && arrival.row_id >= departure.row_id,
-    ),
-  );
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  return {
+    scale,
+    x: viewport.width / 2 - cx * scale,
+    y: viewport.height / 2 - cy * scale,
+  };
 }
 
 /** 节点间的贝塞尔路径（同列为直线，跨列走曲线）。 */
