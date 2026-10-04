@@ -84,9 +84,9 @@ class TestCrossFileClosure:
         closure = analyze_project_closure(
             fixture_root, entry_files=[Path("pkg/caller.py")],
             entry_symbols=["entry"])
-        helpers = {c["qualname"] for c in closure["symbols"]}
-        assert "helper.normalize" in helpers
-        assert "helper.shaped" in helpers
+        helpers = {(c["file"], c["qualname"]) for c in closure["symbols"]}
+        assert ("pkg/helper.py", "normalize") in helpers
+        assert ("pkg/helper.py", "shaped") in helpers
         assert all(c["resolution"] == "local" for c in closure["symbols"])
 
     def test_helper_body_change_drifts_hash(self, fixture_root):
@@ -99,9 +99,12 @@ class TestCrossFileClosure:
         after = analyze_project_closure(
             fixture_root, entry_files=[Path("pkg/caller.py")],
             entry_symbols=["entry"])
-        hash_before = {c["qualname"]: c["body_hash"] for c in before["symbols"]}
-        hash_after = {c["qualname"]: c["body_hash"] for c in after["symbols"]}
-        assert hash_before["helper.normalize"] != hash_after["helper.normalize"]
+        hash_before = {(c["file"], c["qualname"]): c["body_hash"]
+                       for c in before["symbols"]}
+        hash_after = {(c["file"], c["qualname"]): c["body_hash"]
+                      for c in after["symbols"]}
+        key = ("pkg/helper.py", "normalize")
+        assert hash_before[key] != hash_after[key]
         assert before["closure_hash"] != after["closure_hash"]
 
     def test_cycle_and_budget_truncated_honestly(self, fixture_root):
@@ -109,7 +112,7 @@ class TestCrossFileClosure:
         _write(fixture_root / "pkg" / "loop_a.py",
                "from .loop_b import ping\n\n\ndef loop_a():\n    return ping()\n")
         _write(fixture_root / "pkg" / "loop_b.py",
-               "from .loop_a import loop_a\n\n\ndef ping():\n    return loop_a\n")
+               "from .loop_a import loop_a\n\n\ndef ping():\n    return loop_a()\n")
         closure = analyze_project_closure(
             fixture_root, entry_files=[Path("pkg/loop_a.py")],
             entry_symbols=["loop_a"], max_symbols=1)

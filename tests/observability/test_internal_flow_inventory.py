@@ -29,7 +29,7 @@ class TestRuntimeEntryInventory:
         for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY:
             assert entry.family in internal_flow_catalog.PROCESS_FAMILIES
             assert entry.origin in ("message", "timer", "worker", "spawn",
-                                    "startup", "api"), entry.entry_id
+                                    "startup", "shutdown", "api"), entry.entry_id
             assert entry.source[0] and entry.source[1]
 
     def test_explicit_boundaries_are_not_silently_waived(self):
@@ -57,14 +57,20 @@ class TestRuntimeEntryInventory:
         Rust/其它语言锚点（如 memory_rust/native/src/promotion.rs）是显式
         跨语言边界，不走 Python AST 解析（计划 §6.2 第 4 点）。
         """
-        from scripts.generate_message_flow import find_symbol
+        from scripts.generate_message_flow import (
+            ProjectIndex,
+            _file_declares_symbol,
+        )
 
         missing = []
+        index = ProjectIndex(PROJECT_ROOT)
         for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY:
             path = PROJECT_ROOT / entry.source[0]
             if not path.exists() or path.suffix != ".py":
                 continue
-            if find_symbol(path, entry.source[1]) is None:
+            # 声明存在性（修复计划 §6.5）：嵌套 def / matcher 赋值目标也算
+            ctx = index.ctx_for(entry.source[0])
+            if ctx is None or not _file_declares_symbol(ctx, entry.source[1]):
                 missing.append(f"{entry.entry_id}: {entry.source[1]} not in "
                                f"{entry.source[0]}")
         assert missing == []

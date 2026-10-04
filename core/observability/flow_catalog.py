@@ -22,10 +22,11 @@ from dataclasses import dataclass
 
 # 语义拓扑版本：节点/边/条件的**语义**变化时手工递增（内容 hash 由生成器
 # 另算，二者独立——见计划 §6.1 manifest 字段说明）。
-TOPOLOGY_VERSION = "2026.10.03"
-CATALOG_SCHEMA_VERSION = 1
+# 2026.10.04：私聊入口/固定节点补登记（修复计划 §6.5，R1）。
+TOPOLOGY_VERSION = "2026.10.04"
+CATALOG_SCHEMA_VERSION = 2
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,10 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
     # ── 收到消息与分流（表 A）──
     _N("ingress.receive", "收到群消息", "ingress", "entry",
        ("stella_project/plugins/bot_main/ai_gateway.py", "record_group_chat")),
+    _N("ingress.private.receive", "收到私聊消息", "ingress", "entry",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "handle_private_chat")),
+    _N("flow.ingress", "流程观测 root 生命周期", "ingress", "hook",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "_flow_ingress_root")),
     _N("ingress.passive.filter", "群过滤/自我/slash/空文本", "ingress", "filter",
        ("stella_project/plugins/bot_main/ai_gateway.py", "record_group_chat")),
     _N("ingress.passive.persist", "消息落库", "ingress", "persist",
@@ -124,6 +129,12 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
        ("stella_project/plugins/bot_main/ai_gateway.py", "handle_chat")),
     _N("chat.group_lock", "群锁排队", "gate", "lock",
        ("stella_project/plugins/bot_main/ai_gateway.py", "handle_chat")),
+    _N("chat.conversation_lock", "私聊会话锁", "gate", "lock",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "handle_private_chat")),
+    _N("chat.persist", "私聊消息落库", "gate", "persist",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "handle_private_chat")),
+    _N("chat.runtime", "共享 runtime 轮次", "gate", "task",
+       ("core/runtime/facade.py", "RuntimeFacade.submit_turn")),
     _N("chat.context", "话题版本与 Cometa Origin", "gate", "state",
        ("stella_project/plugins/bot_main/ai_gateway.py", "handle_chat")),
     _N("chat.reply_gate", "回复闸门评估", "gate", "gate",
@@ -176,6 +187,15 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
        ("core/runtime/facade.py", "RuntimeFacade.submit_turn")),
     _N("turn.fallback", "本地兜底 (budget/no_backend)", "prepare", "decision",
        ("core/runtime/facade.py", "RuntimeFacade.submit_turn")),
+    _N("turn.direct_silent", "直回/静默早退（无 finalize）", "prepare", "decision",
+       ("core/runtime/facade.py", "RuntimeFacade.submit_turn")),
+
+    # ── 固定语义节点（修复计划 §6.5，R1：已使用未登记的节点转正）──
+    _N("command.reply", "命令回复检查点", "delivery", "derived", derived=True),
+    _N("compact.commit", "压缩提交", "background", "persist",
+       ("memory/session_compact.py", "compact_once")),
+    _N("proactive.consolidate", "主动发言后整合", "proactive", "background",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "_proactive_speak_for_group")),
 
     # ── 并行能力（表 C）──
     _N("capability.route", "Router 路由判定", "capability", "decision",
@@ -372,6 +392,14 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("web.space_context", "web.session_lock"),
     EdgeSpec("web.session_lock", "turn.identity"),
     EdgeSpec("web.output", "web.output", kind="cause", label="每段 BOT_SELF 落库"),
+    # QQ 私聊入口（修复计划 §6.5 R1）
+    EdgeSpec("ingress.private.receive", "chat.conversation_lock"),
+    EdgeSpec("chat.conversation_lock", "chat.context"),
+    EdgeSpec("chat.context", "chat.persist"),
+    EdgeSpec("chat.persist", "chat.consolidate_trigger"),
+    EdgeSpec("chat.persist", "turn.identity", kind="condition", label="无总结触发"),
+    EdgeSpec("chat.daily_budget", "chat.runtime", kind="condition", label="私聊放行"),
+    EdgeSpec("chat.runtime", "chat.runtime_result"),
     # QQ 入口
     EdgeSpec("ingress.receive", "ingress.passive.filter"),
     EdgeSpec("ingress.passive.filter", "ingress.passive.persist", label="通过过滤"),
@@ -398,6 +426,8 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("chat.daily_budget", "chat.runtime_result", kind="condition", label="blocked"),
     # prepare 链
     EdgeSpec("turn.identity", "turn.prepare"),
+    EdgeSpec("turn.prepare", "turn.direct_silent", kind="condition",
+             label="DIRECT/SILENT"),
     EdgeSpec("turn.prepare", "prepare.hooks"),
     EdgeSpec("prepare.hooks", "hook.vision", kind="order"),
     EdgeSpec("prepare.hooks", "context.session", kind="order"),
@@ -447,6 +477,8 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("post.thought", "post.done"),
     # 发送
     EdgeSpec("post.done", "send.prepare"),
+    EdgeSpec("ingress.command.select", "command.reply", label="命令回复"),
+    EdgeSpec("post.done", "command.reply", kind="condition", label="命令文本"),
     EdgeSpec("send.prepare", "send.cometa_ack", kind="condition", label="委派受理"),
     EdgeSpec("send.prepare", "send.segment", label="普通回复"),
     EdgeSpec("send.segment", "send.receipt", kind="order"),
@@ -471,6 +503,9 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("reply.compact", "compact.spawn", kind="spawn"),
     EdgeSpec("compact.spawn", "compact.preflight", kind="cause"),
     EdgeSpec("compact.preflight", "compact.generate", kind="condition"),
+    EdgeSpec("compact.generate", "compact.commit", label="推进压缩位置"),
+    EdgeSpec("proactive.after", "proactive.consolidate", kind="spawn",
+             label="发言后按需整合"),
     # Cometa
     EdgeSpec("delegation.submit", "cometa.accept", kind="cause"),
     EdgeSpec("delegation.submit", "delegation.ack"),
@@ -509,6 +544,7 @@ ENTRY_ROOTS: dict[str, str] = {
     "qq_passive": "ingress.receive",       # 静默监听（每条群消息最早处理点）
     "qq_chat": "ingress.chat.rule",        # @ 对话（root 缺失时的兜底入口）
     "qq_command": "ingress.command.select",
+    "qq_private": "ingress.private.receive",  # 私聊主链（修复计划 §6.5 R1）
     "webchat": "web.auth_input",
     "proactive": "proactive.preflight",    # 主动发言（独立 root）
     "consolidate": "consolidate.preflight",
@@ -527,6 +563,24 @@ ENTRY_ROOTS: dict[str, str] = {
     "scheduled_task": "scheduled.runtime.tick",
     "knowledge_ingest": "knowledge.ingest.entry",
 }
+
+# ---- 显式埋点边（修复计划 §6.4）：这些 (src, dst) 已在真实控制边界发出
+# transition 事实；其余边为 static_only（静态目录关系，运行未确认）----
+EXPLICIT_EDGES: frozenset[tuple[str, str]] = frozenset({
+    ("chat.plugin_shortcut", "chat.group_lock"),
+    ("chat.group_lock", "chat.context"),
+    ("chat.daily_budget", "turn.identity"),
+    ("turn.prepare", "turn.generate"),
+    ("turn.generate", "turn.generated"),
+    ("turn.generate", "turn.timeout"),
+    ("turn.generate", "turn.cancel"),
+    ("turn.generate", "turn.error"),
+    ("send.prepare", "send.segment"),
+    ("send.segment", "send.aggregate"),
+    ("reply.bookkeeping", "reply.compact"),
+    ("compact.spawn", "compact.preflight"),
+})
+
 
 # 运行时钩子名 → 语义节点（turn_service prepare/post hook 包装用）
 HOOK_NODE_IDS: dict[str, str] = {
