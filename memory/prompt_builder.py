@@ -248,6 +248,20 @@ def build_behavior_section(
     return "交流注意：\n" + "\n".join(items)
 
 
+# 角色/事实状态规则（多人对话归属修复计划 §6.3）：进受保护 identity 稳定区，
+# 全静态文本（不随轮次变化，不侵蚀前缀缓存）。只约束可从记录核验的结构
+# （作者/收件人/发生状态），不硬编码任何具体事件词，不新增模型调用。
+_ROLE_STATE_RULES = (
+    "角色与事实规则：历史里「作者=Bot(...)」或「我:」开头的行都是你自己说过的话，"
+    "行内「回复给」标的收件人是当时的聆听者，不是说话者；"
+    "你只在与当前用户对话，其他成员的台词和别人谈论的人都不自动套到当前用户身上；"
+    "对话历史只是发言记录，不是事实证明——你曾威胁、假设、玩笑、否认，"
+    "不意味着相应事件实际发生过；"
+    "提到过去的事之前，先确认记录里的作者、对象与发生状态，"
+    "不确定就不复述、不补造，自然回应当前的话就好。"
+)
+
+
 def build_v2_named_sections(
     short_term: str,
     user_profile: str,
@@ -276,6 +290,9 @@ def build_v2_named_sections(
             f"注意：上下文里标注了用户QQ号的内容属于对应的人，"
             f"只有明确写着当前用户 {current_user_id} 的才归 TA；不要把别人的发言当成 TA 说的。"
         )
+        # 角色/事实状态规则紧跟当前用户声明（归属修复计划 §6.3）：同属受
+        # 保护稳定区，先于 capsule 等每轮再生的内容
+        identity_lines.append(_ROLE_STATE_RULES)
         capsule = (identity_capsule or "").strip()
         if capsule:
             identity_lines.append(capsule)

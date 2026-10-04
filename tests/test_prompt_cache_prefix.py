@@ -118,7 +118,7 @@ def test_enum_placeholders_may_stay_in_the_prefix():
 # 聊天主链路（阶段四：Prompt 前缀稳定化）
 # ============================================================
 
-from memory.prompt_builder import build_v2_prompt_context
+from memory.prompt_builder import build_v2_named_sections, build_v2_prompt_context
 
 
 def test_chat_prompt_stable_zone_is_cacheable_prefix():
@@ -156,3 +156,45 @@ def test_chat_prompt_section_order_stable_before_dynamic():
     assert out.index("交流注意") < out.index("现在是 ")
     # 环境事实不变量保留：时间先于任何对话内容
     assert out.index("现在是 ") < out.index("当前对话摘要")
+
+
+# ── 角色/事实状态规则（多人对话归属修复计划 §6.3） ────────────────────
+
+
+def test_role_state_rules_in_protected_identity_zone():
+    """角色/事实规则进受保护 identity 区：静态、先于动态区。"""
+    sections = dict(
+        build_v2_named_sections(
+            "摘要", "", [], [], current_user_id=1001, mode="CASUAL_REPLY",
+        )
+    )
+    identity = sections["identity"]
+    assert "角色与事实规则" in identity
+    assert "作者=Bot(" in identity  # 新投影的作者语义
+    assert "发言记录" in identity and "不是事实证明" in identity
+    assert "不确定就不复述" in identity
+    # 规则属于稳定区：位于时间/摘要等动态内容之前
+    joined = "\n\n".join(t for _, t in build_v2_named_sections(
+        "摘要", "", [], [], current_user_id=1001,
+    ))
+    assert joined.index("角色与事实规则") < joined.index("现在是 ")
+
+
+def test_role_state_rules_stay_byte_stable_across_dynamic_changes():
+    """规则全静态：动态内容变化不侵蚀它的前缀缓存位置。"""
+    a = build_v2_prompt_context(
+        "摘要A", "", [], [], current_user_id=1001,
+    )
+    b = build_v2_prompt_context(
+        "摘要B", "", [], [], current_user_id=1001,
+    )
+    shared = a[: _common_prefix_len(a, b)]
+    assert "角色与事实规则" in shared
+
+
+def test_role_state_rules_absent_without_current_user():
+    """群级主动发言（无当前 sender）不注入「当前用户」向的规则。"""
+    sections = build_v2_named_sections(
+        "摘要", "", [], [], current_user_id=None,
+    )
+    assert all("角色与事实规则" not in text for _, text in sections)
