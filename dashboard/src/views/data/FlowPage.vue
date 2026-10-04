@@ -310,6 +310,8 @@ function edgeClass(e: LaidEdge): Record<string, boolean> {
   return {
     'flow-edge': true,
     [`edge-${e.kind}`]: true,
+    // 已走过的边高对比显示（外观反馈 9）：激活路径是画面主角
+    traversed: e.traversed === true,
     active: Boolean(e.active) && appliedView.value === 'full',
     dim:
       appliedView.value === 'full' &&
@@ -983,6 +985,17 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 >
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--v-theme-on-surface)" opacity="0.5" />
                 </marker>
+                <marker
+                  id="flow-arrow-active"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="rgb(var(--v-theme-success))" />
+                </marker>
               </defs>
               <!-- 边 -->
               <g>
@@ -992,7 +1005,9 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                   :d="edgePath(e.from, e.to)"
                   :class="edgeClass(e)"
                   :opacity="e.opacity"
-                  marker-end="url(#flow-arrow)"
+                  :marker-end="e.traversed
+                    ? 'url(#flow-arrow-active)'
+                    : 'url(#flow-arrow)'"
                 />
               </g>
               <!-- 节点（外层 g 以 CSS transform 定位：视图切换时滑动过渡） -->
@@ -1444,14 +1459,23 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
 .flow-edge.dim {
   opacity: 0.15;
 }
+/* 已走过的边：success 绿实线 + 绿箭头（深浅主题都高对比）；未激活保持
+   低对比灰，视觉焦点自然落在实际路径上（外观反馈 9） */
+.flow-edge.traversed {
+  stroke: rgb(var(--v-theme-success));
+  opacity: 1;
+  stroke-width: 2;
+}
 /* O05：实际视图里没有真实 transition 事实的边——虚线淡显，不冒充走过 */
 .flow-edge.untaken {
   stroke-dasharray: 3 3;
   opacity: 0.25;
 }
 .flow-edge.active {
-  stroke: rgba(var(--v-theme-primary), 0.9);
-  stroke-width: 1.8;
+  stroke: rgb(var(--v-theme-success));
+  opacity: 1;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 0 2px rgba(var(--v-theme-success), 0.45));
 }
 .flow-edge.gone {
   opacity: 0;

@@ -75,6 +75,37 @@ export interface LayoutResult {
 /**
  * 完整流程布局：目录全节点分层（见 {@link layered}）。
  */
+/** 全目录图的弱连通分量：nodeId → 分量序号（声明序稳定）。 */
+export function computeCatalogComponents(spec: SpecLike): Map<string, number> {
+  const parent = new Map<string, string>();
+  for (const n of spec.nodes) parent.set(n.id, n.id);
+  const find = (x: string): string => {
+    let root = x;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = x;
+    while (cur !== root) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  for (const e of spec.edges) {
+    if (e.src === e.dst) continue;
+    const a = find(e.src);
+    const b = find(e.dst);
+    if (a !== b) parent.set(a, b);
+  }
+  const indexOf = new Map<string, number>();
+  const out = new Map<string, number>();
+  for (const n of spec.nodes) {
+    const root = find(n.id);
+    if (!indexOf.has(root)) indexOf.set(root, indexOf.size);
+    out.set(n.id, indexOf.get(root)!);
+  }
+  return out;
+}
+
 export function layoutLayered(input: FullLayoutInput): LayoutResult {
   return layered({
     nodes: input.spec.nodes,
@@ -86,6 +117,7 @@ export function layoutLayered(input: FullLayoutInput): LayoutResult {
     transitions: input.transitions,
     rootEnded: input.rootEnded,
     showEndAnchors: input.showEndAnchors,
+    componentOf: computeCatalogComponents(input.spec),
   });
 }
 
@@ -124,6 +156,7 @@ export function layoutExecuted(input: FullLayoutInput): LayoutResult {
     transitions: input.transitions,
     rootEnded: input.rootEnded,
     showEndAnchors: input.showEndAnchors,
+    componentOf: computeCatalogComponents(input.spec),
   });
 }
 
@@ -137,6 +170,10 @@ interface LayeredInput {
   transitions?: FlowEvent[];
   rootEnded?: boolean;
   showEndAnchors?: boolean;
+  /** 全目录图上预算好的分量归属（外观反馈 8）：执行子图按渲染边算连通会
+   * 被观测缺口撕成多段（出现多个「开始」）；目录分量保证同一逻辑流程的
+   * 片段共享同一对起止锚。缺省时按渲染边现算。 */
+  componentOf?: Map<string, number>;
 }
 
 /**
@@ -273,13 +310,23 @@ function layered(input: LayeredInput): LayoutResult {
     CANVAS_PAD + ANCHOR_W + 32 + columns.length * (NODE_W + COL_GAP);
   const height = Math.max(maxRows * ROW_PITCH + 2 * CANVAS_PAD, 120);
 
-  // ── 起止锚点（外观反馈 6/7）：按**弱连通分量**各配一对开始/结束——
-  // 不同流程（消息链/记忆链/知识链…）不再共享同一对锚点；纯环分量
-  // （无源无汇）不设锚。「结束」锚整体可隐藏：运行未真实结束前显示
-  // 「结束」在视觉上具有欺骗性（回放场景按已播到的 trace_end 控制）。
+  // ── 起止锚点（外观反馈 6/7/8）：按分量各配一对开始/结束。分量优先取
+  // **全目录图**的归属（componentOf）——执行子图若按渲染边算连通，观测
+  // 缺口会把同一条流程撕成多段、出现多个「开始」；目录分量保证同一逻辑
+  // 流程的片段共享同一对起止锚。目录之外的 unknown 节点按孤立碎片处理
+  // （无目录边 → 不设锚）；纯环分量（无源无汇）同样不设锚。「结束」锚
+  // 整体可隐藏：运行未真实结束前显示「结束」具有欺骗性（回放场景按已
+  // 播到的 trace_end 控制）。
   const showEnd = input.showEndAnchors !== false;
+  const usingCatalog = input.componentOf != null;
+  const compKeyOf = (id: string): string => {
+    const known = input.componentOf?.get(id);
+    return known !== undefined ? `c${known}` : `self:${id}`;
+  };
+  // 渲染边上的并查集：目录模式下同分量节点本就同键；回退模式（无目录）
+  // 靠渲染边把孤立键并成真实观测流
   const parent = new Map<string, string>();
-  for (const n of specNodes) parent.set(n.id, n.id);
+  for (const n of specNodes) parent.set(compKeyOf(n.id), compKeyOf(n.id));
   const find = (x: string): string => {
     let root = x;
     while (parent.get(root) !== root) root = parent.get(root)!;
@@ -292,20 +339,23 @@ function layered(input: LayeredInput): LayoutResult {
     return root;
   };
   for (const e of edges) {
-    const a = find(e.src);
-    const b = find(e.dst);
+    const a = find(compKeyOf(e.src));
+    const b = find(compKeyOf(e.dst));
     if (a !== b) parent.set(a, b);
   }
-  const compIndex = new Map<string, number>();
+  const compIndexOf = new Map<string, number>();
   for (const n of specNodes) {
-    const root = find(n.id);
-    if (!compIndex.has(root)) compIndex.set(root, compIndex.size);
+    const root = find(compKeyOf(n.id));
+    if (!compIndexOf.has(root)) compIndexOf.set(root, compIndexOf.size);
   }
-  const compCount = compIndex.size;
+  const compCount = compIndexOf.size;
   const compSources: string[][] = Array.from({ length: compCount }, () => []);
   const compSinks: string[][] = Array.from({ length: compCount }, () => []);
+  const compAnchorable: boolean[] = new Array(compCount).fill(!usingCatalog);
   for (const n of specNodes) {
-    const ci = compIndex.get(find(n.id))!;
+    const key = compKeyOf(n.id);
+    const ci = compIndexOf.get(find(key))!;
+    if (key.startsWith('c')) compAnchorable[ci] = true;
     if (!hasIn.has(n.id)) compSources[ci].push(n.id);
     if (!hasOut.has(n.id)) compSinks[ci].push(n.id);
   }
@@ -314,6 +364,8 @@ function layered(input: LayeredInput): LayoutResult {
     const ys = ids.map((id) => nodeById.get(id)!.y + NODE_H / 2);
     return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : height / 2;
   };
+  const clampY = (y: number) =>
+    Math.min(Math.max(y, ANCHOR_H / 2 + 4), height - ANCHOR_H / 2 - 4);
 
   // ── 边：普通边 + 锚点接入边；traversed 由显式 transition 事实判定 ──
   const transitions = input.transitions ?? [];
@@ -335,8 +387,25 @@ function layered(input: LayeredInput): LayoutResult {
     };
   });
 
+  // 锚 y 先集齐再摊开（外观反馈 10）：不同分量的汇/源中心可能重合，
+  // 同侧锚按最小间距（锚高 + 8px）上下摊开，避免「结束」叠「结束」
+  const startYs: Array<number | null> = [];
+  const endYs: Array<number | null> = [];
   for (let ci = 0; ci < compCount; ci += 1) {
-    if (compSources[ci].length) {
+    if (!compAnchorable[ci]) continue;
+    startYs.push(compSources[ci].length ? clampY(centerY(compSources[ci])) : null);
+    endYs.push(showEnd && compSinks[ci].length
+      ? clampY(centerY(compSinks[ci]))
+      : null);
+  }
+  const spreadStart = spreadAnchorYs(startYs);
+  const spreadEnd = spreadAnchorYs(endYs);
+
+  for (let ci = 0, si = 0, ei = 0; ci < compCount; ci += 1) {
+    if (!compAnchorable[ci]) continue;
+    const sy = spreadStart[si];
+    si += 1;
+    if (sy !== null && compSources[ci].length) {
       const startAnchor: LaidNode = {
         nodeId: `__start__#${ci}`,
         label: '开始',
@@ -345,7 +414,7 @@ function layered(input: LayeredInput): LayoutResult {
         instances: 0,
         lane: '',
         x: CANVAS_PAD,
-        y: centerY(compSources[ci]) - ANCHOR_H / 2,
+        y: sy - ANCHOR_H / 2,
         anchor: 'start',
         component: ci,
       };
@@ -363,7 +432,9 @@ function layered(input: LayeredInput): LayoutResult {
         });
       }
     }
-    if (showEnd && compSinks[ci].length) {
+    const ey = spreadEnd[ei];
+    ei += 1;
+    if (ey !== null && showEnd && compSinks[ci].length) {
       const endAnchor: LaidNode = {
         nodeId: `__end__#${ci}`,
         label: '结束',
@@ -372,7 +443,7 @@ function layered(input: LayeredInput): LayoutResult {
         instances: 0,
         lane: '',
         x: contentW,
-        y: centerY(compSinks[ci]) - ANCHOR_H / 2,
+        y: ey - ANCHOR_H / 2,
         anchor: 'end',
         component: ci,
       };
@@ -400,6 +471,26 @@ function layered(input: LayeredInput): LayoutResult {
     width: contentW + CANVAS_PAD + (showEnd ? ANCHOR_W : 0),
     height,
   };
+}
+
+/** 同侧锚点的最小间距摊开：按 y 排序，前后两趟夹逼到相邻间距 ≥ 锚高+8。
+ * 输入 null（该分量此侧无锚）原样输出 null。 */
+export function spreadAnchorYs(ys: Array<number | null>): Array<number | null> {
+  const gap = ANCHOR_H + 8;
+  const order = ys
+    .map((y, i) => ({ y, i }))
+    .filter((o): o is { y: number; i: number } => o.y !== null)
+    .map((o) => ({ ...o }));
+  order.sort((a, b) => a.y - b.y);
+  for (let k = 1; k < order.length; k += 1) {
+    if (order[k].y < order[k - 1].y + gap) order[k].y = order[k - 1].y + gap;
+  }
+  for (let k = order.length - 2; k >= 0; k -= 1) {
+    if (order[k].y > order[k + 1].y - gap) order[k].y = order[k + 1].y - gap;
+  }
+  const out: Array<number | null> = [...ys];
+  for (const o of order) out[o.i] = o.y;
+  return out;
 }
 
 // ============================================================

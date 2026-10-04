@@ -5,6 +5,7 @@ import {
   ANCHOR_W,
   CANVAS_PAD,
   edgePath,
+  layoutExecuted,
   layoutLayered,
   NODE_H,
   NODE_W,
@@ -415,5 +416,48 @@ describe('per-component anchors', () => {
     // 开始锚不受影响
     expect(without.nodes.filter((n) => n.anchor === 'start')).toHaveLength(2);
     expect(without.width).toBeLessThan(withEnd.width);
+  });
+});
+
+// ============================================================
+// 外观反馈 8/10：观测缺口不把同一条目录流程撕成多个「开始」；
+// 同侧锚点最小间距摊开。
+// ============================================================
+describe('catalog-level components and anchor spreading', () => {
+  it('observation gaps do not split one catalog flow into multiple starts', () => {
+    // 目录链 a → mid → b；执行视图只有 a、b（mid 无事件）
+    const s = spec({
+      lanes: LANES,
+      nodes: [node('a', 'ingress'), node('mid', 'ingress'), node('b', 'ingress')],
+      edges: [
+        { src: 'a', dst: 'mid', kind: 'order', label: '' },
+        { src: 'mid', dst: 'b', kind: 'order', label: '' },
+      ],
+    });
+    const executed = new Map<string, FlowNodeState>([
+      ['a', exec('a')],
+      ['b', exec('b')],
+    ]);
+    const out = layoutExecuted({
+      spec: s,
+      executed,
+      labelOf: (id) => id,
+      laneOf: () => 'ingress',
+    });
+    expect(out.nodes.filter((n) => n.anchor === 'start')).toHaveLength(1);
+    expect(out.nodes.filter((n) => n.anchor === 'end')).toHaveLength(1);
+  });
+
+  it('spreads coinciding anchor ys to a minimum gap', async () => {
+    const { spreadAnchorYs, ANCHOR_H } = await import('@/views/data/flowLayout');
+    const out = spreadAnchorYs([100, 100, 100]);
+    const ys = out.map((y) => y as number);
+    expect(ys[0]).toBeCloseTo(100);
+    expect(ys[1]).toBeCloseTo(100 + ANCHOR_H + 8);
+    expect(ys[2]).toBeCloseTo(100 + 2 * (ANCHOR_H + 8));
+    // null 穿透：该侧无锚的分量不受影响
+    const mixed = spreadAnchorYs([null, 50, 50]);
+    expect(mixed[0]).toBeNull();
+    expect(mixed[1]! + ANCHOR_H + 8).toBeCloseTo(mixed[2]!);
   });
 });
