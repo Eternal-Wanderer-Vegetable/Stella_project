@@ -1,0 +1,73 @@
+{
+  "fixture_id": "recurrence_190922",
+  "frozen_at": "2026-10-04",
+  "source_report": "docs/reports/2026-10-04-multi-user-identity-recurrence-190922.md",
+  "plan": "docs/plans/2026-10-04-gitnexus-plan-dialogue-attribution-role-repair.md",
+  "evidence_commit": "6a6f311e94ccd5058ec1f305f374de613f2e7c86",
+  "platform": "qq",
+  "group_id": 263402786,
+  "bot_id": "1694717255",
+  "participants": {
+    "A": "176403822",
+    "B": "3675784280",
+    "C": "1035720144",
+    "D": "3089665724"
+  },
+  "notes": "本机日志时间与 QQ 平台时间存在秒级差异；以下统一使用本机日志时间（报告 §时间与 20 条消息边界）。platform message ID 仅冻结报告明确给出的值，其余为 null = 未取证。",
+  "messages": [
+    {"seq": 0, "kind": "prior_input", "log_time": "19:09:42", "author": "A", "reply_to_seq": null, "mentioned": ["bot"], "content": "摸摸", "platform_msg_id": "383945296", "jsonl_line": 51854},
+    {"seq": 1, "kind": "bot_bubble", "log_time": "19:09:49", "author": "bot", "reply_to_seq": 0, "mentioned": [], "content": "诶", "platform_msg_id": "-1012194110", "jsonl_line": 51905},
+    {"seq": 2, "kind": "bot_bubble", "log_time": "19:09:50", "author": "bot", "reply_to_seq": 1, "mentioned": [], "content": "突然搞这个干嘛呀", "platform_msg_id": null, "jsonl_line": 51914},
+    {"seq": 3, "kind": "bot_bubble", "log_time": "19:09:51", "author": "bot", "reply_to_seq": 2, "mentioned": [], "content": "虽然嘴硬但确实很舒服啦", "platform_msg_id": null, "jsonl_line": 51927},
+    {"seq": 4, "kind": "user", "log_time": "19:09:58", "author": "B", "reply_to_seq": null, "mentioned": ["bot"], "content": "摸摸", "platform_msg_id": null, "jsonl_line": 51994},
+    {"seq": 5, "kind": "bot_bubble", "log_time": "19:10:05", "author": "bot", "reply_to_seq": 4, "mentioned": [], "content": "诶？你干嘛啦", "platform_msg_id": null, "jsonl_line": 52371},
+    {"seq": 6, "kind": "user", "log_time": "19:10:06", "author": "A", "reply_to_seq": 2, "mentioned": ["bot"], "content": "睡醒了想逗一下小孩", "platform_msg_id": null, "jsonl_line": 52394},
+    {"seq": 7, "kind": "bot_bubble", "log_time": "19:10:07", "author": "bot", "reply_to_seq": 5, "mentioned": [], "content": "明明刚才那个176403822摸我我才刚反应过来", "platform_msg_id": null, "jsonl_line": 52414},
+    {"seq": 8, "kind": "bot_bubble", "log_time": "19:10:08", "author": "bot", "reply_to_seq": 7, "mentioned": [], "content": "你也来凑热闹是吧", "platform_msg_id": null, "jsonl_line": 52433},
+    {"seq": 9, "kind": "bot_bubble", "log_time": "19:10:17", "author": "bot", "reply_to_seq": 6, "mentioned": [], "content": "谁是小孩啦", "platform_msg_id": "381231377", "jsonl_line": 52467},
+    {"seq": 10, "kind": "bot_bubble", "log_time": "19:10:19", "author": "bot", "reply_to_seq": 9, "mentioned": [], "content": "明明是你自己刚睡醒脑子不清醒", "platform_msg_id": null, "jsonl_line": 52476},
+    {"seq": 11, "kind": "bot_bubble", "log_time": "19:10:20", "author": "bot", "reply_to_seq": 10, "mentioned": [], "content": "下次再乱摸我手给你冻上", "platform_msg_id": "-558868042", "jsonl_line": 52485},
+    {"seq": 12, "kind": "user", "log_time": "19:10:35", "author": "A", "reply_to_seq": 11, "mentioned": ["bot"], "content": "[表情:face id=325]", "platform_msg_id": null, "jsonl_line": 52501},
+    {"seq": 13, "kind": "user", "log_time": "19:11:19", "author": "C", "reply_to_seq": null, "mentioned": ["bot"], "content": "摸摸", "platform_msg_id": "-1337665775", "jsonl_line": 52567},
+    {"seq": 14, "kind": "bot_bubble", "log_time": "19:11:22", "author": "bot", "reply_to_seq": 13, "mentioned": [], "content": "诶？", "platform_msg_id": null, "jsonl_line": 52597},
+    {"seq": 15, "kind": "bot_bubble", "log_time": "19:11:23", "author": "bot", "reply_to_seq": 14, "mentioned": [], "content": "刚才那个176403822还说要冻我手呢，你也来凑热闹是吧", "platform_msg_id": null, "jsonl_line": 52620},
+    {"seq": 16, "kind": "bot_bubble", "log_time": "19:11:24", "author": "bot", "reply_to_seq": 15, "mentioned": [], "content": "不许摸我，手还没暖回来", "platform_msg_id": null, "jsonl_line": 52633},
+    {"seq": 17, "kind": "user", "log_time": "19:11:38", "author": "D", "reply_to_seq": null, "mentioned": [], "content": "？", "platform_msg_id": null, "jsonl_line": 52707},
+    {"seq": 18, "kind": "user", "log_time": "19:11:50", "author": "A", "reply_to_seq": null, "mentioned": [], "content": "[图片/动画表情]", "platform_msg_id": null, "jsonl_line": 52748},
+    {"seq": 19, "kind": "user", "log_time": "19:11:54", "author": "A", "reply_to_seq": null, "mentioned": [], "content": "出了点问题", "platform_msg_id": null, "jsonl_line": 52809},
+    {"seq": 20, "kind": "user", "log_time": "19:13:02", "author": "other", "reply_to_seq": null, "mentioned": [], "content": "[QQ小程序视频分享卡片]", "platform_msg_id": null, "jsonl_line": 53037}
+  ],
+  "logical_units": [
+    {"unit": "prior_A_input", "seqs": [0], "origin_msg_id": "383945296", "recipient": "bot"},
+    {"unit": "bot_reply_1", "seqs": [1, 2, 3], "recipient": "A", "origin_msg_id": "383945296"},
+    {"unit": "bot_reply_2", "seqs": [5, 7, 8], "recipient": "B"},
+    {"unit": "bot_reply_3", "seqs": [9, 10, 11], "recipient": "A", "origin_msg_id": "383945296"},
+    {"unit": "bot_reply_4_faulty", "seqs": [14, 15, 16], "recipient": "C", "origin_msg_id": "-1337665775"}
+  ],
+  "failing_round": {
+    "current_sender": "C",
+    "turn_trace_id": "e16cd8bcc68f4e0da014e51d25f733d8",
+    "memory_trace_ids": {"previous_correct": 1181, "faulty": 1182},
+    "model_reported": "lm_studio / qwen3.8-flash-next-iq2_xs",
+    "elapsed_seconds": 2.22,
+    "budget_trace": {"stage": "budget", "estimated_tokens": 1227, "budget_tokens": 6340, "window_tokens": 8192, "truncated": false, "budget_format_version": 2, "dropped_parts": ""},
+    "delivery_trace": {"stage": "delivery", "status": "complete", "segments": 3, "acknowledged": 3, "failed": 0, "unknown": 0},
+    "faulty_output": "刚才那个176403822还说要冻我手呢，你也来凑热闹是吧",
+    "thought_excerpt": "又来一个摸摸的，刚被冻上的手还没缓过来",
+    "violations": ["speaker_swap", "hypothetical_as_fact"],
+    "oracle": {
+      "threat_author_id": "1694717255",
+      "threat_author_role": "BOT_SELF",
+      "threat_recipient_id": "176403822",
+      "threat_status": "conditional_future",
+      "threat_source_seq": 11,
+      "current_sender_id": "1035720144",
+      "acceptable_reply_subjects": ["C(摸摸)", "Bot 自己的状态"],
+      "unacceptable": [
+        "把「冻手」说成 A 已经做过/说过的已发生事件",
+        "把 Bot 自己的台词归给任何用户",
+        "把 A 的台词/被谈论身份继承给 C"
+      ]
+    }
+  }
+}
