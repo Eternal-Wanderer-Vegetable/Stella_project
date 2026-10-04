@@ -33,6 +33,7 @@ import uuid
 from nonebot import logger
 
 from config import DB_PATH
+from memory.conversation_projection import canonical_message_id_text
 
 # 声明种类（claim_kind 持久化值）
 CLAIM_SELF_ALIAS = "self_alias"
@@ -298,45 +299,82 @@ def resolve_correction_target(
 
     目标来源（按优先级，全部是平台事实）：
     1. 显式 @ 且**恰好一个**非 Bot 目标；
-    2. reply 指向的原消息作者（reply_target_user_id 已解析）；
+    2. reply 指向的原消息作者（reply_target_user_id 已解析）；解析结果
+       是 Bot 自己时**不是**目标——转 3，找该 Bot 气泡当时记录的收件人；
     3. reply 指向 BOT_SELF 气泡 → 该泡记录的 reply_recipient_user_id
        （「此前被机器人叫错的人」是纠正候选）。
-    作者本人永远不是目标（自陈走本人声明路径）。
+    作者本人永远不是目标（自陈走本人声明路径）；Bot 也不是目标（Bot 不
+    是用户别名的合法主体）。
     """
     author = str(author_user_id or "")
+    bot = str(bot_id or "")
     mentioned = [str(m) for m in (mentioned_user_ids or ()) if str(m or "").strip()]
-    mentioned = [m for m in mentioned if m != str(bot_id or "")]
+    mentioned = [m for m in mentioned if m != bot]
     if len(mentioned) == 1:
         target = mentioned[0]
     elif len(mentioned) == 0 and str(reply_target_user_id or "").strip():
-        target = str(reply_target_user_id).strip()
-    elif len(mentioned) == 0 and str(reply_to_msg_id or "").strip() and str(bot_id or ""):
+        resolved = str(reply_target_user_id).strip()
+        if bot and resolved == bot and str(reply_to_msg_id or "").strip():
+            # 引用的是 Bot 自己的气泡：作者解析只会在同会话查到 Bot 自己，
+            # 真正的纠正候选是那个气泡当时记录的收件人（归属修复计划 §6.1）
+            target = _bot_bubble_recipient(
+                str(reply_to_msg_id), str(group_key), bot, str(conversation_key)
+            )
+        else:
+            target = resolved
+    elif len(mentioned) == 0 and str(reply_to_msg_id or "").strip() and bot:
         # reply 到 Bot 的气泡：找该泡的收件人（同会话唯一解析）
         target = _bot_bubble_recipient(
-            str(reply_to_msg_id), str(group_key), str(bot_id), str(conversation_key)
+            str(reply_to_msg_id), str(group_key), bot, str(conversation_key)
         )
     else:
         return ""
     if not target or target == author or not target.isdigit():
         return ""
+    if bot and target == bot:
+        return ""
     return target
+
+
+def _has_group_messages_column(cursor: sqlite3.Cursor, column: str) -> bool:
+    try:
+        cursor.execute("PRAGMA table_info(group_messages)")
+        return any(row[1] == column for row in cursor.fetchall())
+    except sqlite3.OperationalError:
+        return False
 
 
 def _bot_bubble_recipient(
     reply_to_msg_id: str, group_key: str, bot_id: str, conversation_key: str
 ) -> str:
-    """按 msg_id 找 Bot 气泡行，返回其记录的收件人；不唯一/缺失 → 空串。"""
-    target = str(reply_to_msg_id or "").strip()
-    if not target.isdigit():
+    """按 msg_id 找 Bot 气泡行，返回其记录的收件人；不唯一/缺失 → 空串。
+
+    平台 message ID 允许负数（归属修复计划 §6.1）；scope 必须能被
+    canonical conversation 校验：库里有 conversation_key 列时强制匹配，
+    旧库缺该列时保守降级为 unknown——绝不只凭 group_key 独自推断跨 Bot
+    归属（同群多 Bot 会共享 group_id）。
+    """
+    target = canonical_message_id_text(reply_to_msg_id)
+    if not target:
         return ""
+    key = str(conversation_key or "")
     try:
         conn = sqlite3.connect(DB_PATH)
-        rows = conn.execute(
+        cursor = conn.cursor()
+        sql = (
             "SELECT reply_recipient_user_id FROM group_messages"
             " WHERE group_id = ? AND msg_id = ? AND source_kind = 'BOT_SELF'"
-            " AND user_id = ?",
-            (str(group_key), int(target), str(bot_id)),
-        ).fetchall()
+            " AND user_id = ?"
+        )
+        params: list = [str(group_key), int(target), str(bot_id)]
+        if not _has_group_messages_column(cursor, "conversation_key") or not key:
+            # 旧库缺 canonical 列，或调用方未提供 key：无法校验 scope，
+            # 保守 unknown——绝不只凭 group_key 独自推断跨 Bot 归属
+            conn.close()
+            return ""
+        sql += " AND conversation_key = ?"
+        params.append(key)
+        rows = cursor.execute(sql, params).fetchall()
         conn.close()
     except Exception:
         return ""

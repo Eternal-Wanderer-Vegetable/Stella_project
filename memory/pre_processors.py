@@ -33,6 +33,7 @@ from config import (
 from config.spaces import resolve_space
 from core.context import ChatContext
 from memory.cache_keys import POLICY_VERSION
+from memory.conversation_projection import canonical_message_id_text
 from memory.prompt_builder import build_memory_context, estimate_tokens
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
@@ -200,14 +201,17 @@ def resolve_reply_target(
     只认**同 canonical conversation + bot** 的已入库原始消息；找不到、
     msg_id 缺失或命中多条（跨群重复 ID）一律返回空串 = unknown——禁止猜
     「最近发言的人」。DB 异常同样返回 unknown（历史渲染降级，不拖垮主链路）。
+
+    平台 message ID 允许负数（QQ 回执实测 -558868042）：统一走投影模块的
+    有符号解析；0/非法文本 = unknown（归属修复计划 §6.1）。
     """
-    target = str(reply_to_msg_id or "").strip()
-    if not target or not target.isdigit():
+    target = canonical_message_id_text(reply_to_msg_id)
+    if not target:
         return ""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        params: list = [str(group_key), target]
+        params: list = [str(group_key), int(target)]
         sql = (
             "SELECT DISTINCT user_id FROM group_messages "
             "WHERE group_id = ? AND msg_id = ? AND user_id != ''"
