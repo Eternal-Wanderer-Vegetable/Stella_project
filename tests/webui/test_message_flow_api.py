@@ -372,7 +372,7 @@ class TestPrivateChatIoIdentity:
         segs = data["output"]["segments"]
         assert [s["part_index"] for s in segs] == [0, 1]
         assert segs[0]["status"] == "acknowledged"
-        assert segs[1]["status"] == "failed" 
+        assert segs[1]["status"] == "failed"
 
 
 class TestCommandReplyVisible:
