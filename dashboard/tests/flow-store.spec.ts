@@ -335,10 +335,10 @@ describe('flow store: event pagination to high watermark (O09)', () => {
     });
     await store.fetchEvents();
     expect(flowApi.getEvents).toHaveBeenCalledTimes(3);
-    // M5（修复计划 §6.6）：首读固定快照上界 until=high_watermark
+    // M5 + 验收报告补充项：每一页都钳制在同一冻结水位（稳定快照）
     expect(flowApi.getEvents).toHaveBeenNthCalledWith(1, 'big', 0, 1000, 2500);
-    expect(flowApi.getEvents).toHaveBeenNthCalledWith(2, 'big', 1000, 1000, 0);
-    expect(flowApi.getEvents).toHaveBeenNthCalledWith(3, 'big', 2000, 1000, 0);
+    expect(flowApi.getEvents).toHaveBeenNthCalledWith(2, 'big', 1000, 1000, 2500);
+    expect(flowApi.getEvents).toHaveBeenNthCalledWith(3, 'big', 2000, 1000, 2500);
     expect(store.events).toHaveLength(2500);
     expect(store.orderedEvents.at(-1)?.row_id).toBe(2500);
   });
@@ -522,16 +522,16 @@ describe('flow store M5 contracts', () => {
     expect(store.messages).toHaveLength(2);
     expect(store.messagesCursor).toBe('c1');
     await store.loadMoreMessages();
-    expect(store.messages.map((m) => m.trace_id)).toEqual(['t1', 't2', 't3']);
+    // 合并后保持 (started_utc, trace_id) 降序（与列表展示一致，验收 M2）
+    expect(store.messages.map((m) => m.trace_id)).toEqual(['t3', 't2', 't1']);
     expect(store.messagesCursor).toBe('');
   });
 
-  it('fetchEvents marks truncated against persisted_events and loadMoreEvents continues', async () => {
+  it('fetchEvents truncation compares row_id with high_watermark (H4 units)', async () => {
     const store = useFlowStore();
-    // persisted 3 条，第一页只给 1 条（满页语义由 len>=LIMIT 判定→这里直接
-    // 用 persisted 高水位差表达 partial：maxRow(1) < persisted(3)）
+    // H4 场景：seq 水位(123)与全局 row_id 单位不同——只看 high_watermark
     vi.mocked(flowApi.getMessage).mockResolvedValue(detail({
-      trace_id: 'rt-big', high_watermark: 3, persisted_events: 3,
+      trace_id: 'rt-big', high_watermark: 3, persisted_events: 123,
     }));
     vi.mocked(flowApi.getEvents)
       .mockResolvedValueOnce([ev({ event_id: 'e1', row_id: 1 })])
@@ -542,6 +542,25 @@ describe('flow store M5 contracts', () => {
     await store.loadMoreEvents();
     expect(store.eventsTruncated).toBe(false);
     expect(store.orderedEvents).toHaveLength(3);
+  });
+
+  it('large global row_id offset does not hide remaining events (H4 probe)', async () => {
+    const store = useFlowStore();
+    // 旧实现比较 maxRowId(200000) < persisted_events(100001) → false，
+    // 继续按钮消失；新实现只比 high_watermark(200001)
+    vi.mocked(flowApi.getMessage).mockResolvedValue(detail({
+      trace_id: 'rt-offset', high_watermark: 200001, persisted_events: 100001,
+    }));
+    vi.mocked(flowApi.getEvents).mockImplementation(async (_id, after) =>
+      Array.from({ length: 1000 }, (_, i) =>
+        ev({ event_id: `e${Number(after) + i + 1}`,
+             row_id: Number(after) + i + 1 })));
+    await store.openTrace('rt-offset');
+    // 100 页后已载 100000 条、maxRow=100000 < 200001 → 仍 partial
+    expect(store.orderedEvents.length).toBe(100000);
+    expect(store.eventsTruncated).toBe(true);
+    await store.loadMoreEvents();
+    expect(store.eventsTruncated).toBe(true); // 还有余量，按钮不消失
   });
 
   it('loadSpec uses digest-exact cache for digest traces and version fallback for legacy', async () => {
@@ -570,6 +589,105 @@ describe('flow store M5 contracts', () => {
     await store.loadSpec();
     expect(flowApi.getSpec).toHaveBeenCalledWith('old-v');
     expect(store.spec?.topology_version).toBe('old-v');
+  });
+
+  it('poll keeps accumulated history pages (M2 list merge)', async () => {
+    const store = useFlowStore();
+    const tsOf: Record<string, string> = {
+      t1: '2026-10-03T00:00:01', t2: '2026-10-03T00:00:02',
+      t3: '2026-10-03T00:00:03',
+    };
+    const rows = (ids: string[], total: number, cursor: string | null) => ({
+      total,
+      next_cursor: cursor,
+      items: ids.map((id) => ({
+        trace_id: id, root_kind: 'qq_chat', platform: 'qq', scope: '',
+        source_message_key: '', started_utc: tsOf[id],
+        ended_utc: '', outcome: '', status: 'closed', complete: true,
+        loss: false,
+      })) as FlowMessageSummary[],
+    });
+    vi.mocked(flowApi.listMessages)
+      .mockResolvedValueOnce(rows(['t2', 't1'], 3, 'c1'))
+      .mockResolvedValueOnce(rows(['t3'], 3, null))          // loadMore
+      .mockResolvedValueOnce(rows(['t2', 't1'], 3, 'c1'));   // 轮询首屏
+    await store.loadMessages();
+    await store.loadMoreMessages();
+    expect(store.messages.map((m) => m.trace_id)).toEqual(['t3', 't2', 't1']);
+    await store.loadMessages(); // 5s 轮询：只刷新首屏
+    // 历史页 t3 不被首屏替换掉（旧实现直接替换 → t3 消失）
+    expect(store.messages.map((m) => m.trace_id)).toEqual(['t3', 't2', 't1']);
+  });
+
+  it('loadMore discards the page when filters changed mid-flight (M2)', async () => {
+    const store = useFlowStore();
+    vi.mocked(flowApi.listMessages)
+      .mockResolvedValueOnce({ total: 2, next_cursor: 'c1', items: [
+        { trace_id: 'q1', root_kind: 'qq_chat', platform: 'qq', scope: '',
+          source_message_key: '', started_utc: '2026-10-03T00:00:00',
+          ended_utc: '', outcome: '', status: 'closed', complete: true,
+          loss: false },
+      ] as FlowMessageSummary[] })
+      .mockResolvedValueOnce({ total: 1, next_cursor: null, items: [
+        { trace_id: 'w1', root_kind: 'webchat', platform: 'webchat', scope: '',
+          source_message_key: '', started_utc: '2026-10-03T00:00:00',
+          ended_utc: '', outcome: '', status: 'closed', complete: true,
+          loss: false },
+      ] as FlowMessageSummary[] });
+    await store.loadMessages();
+    const pending = store.loadMoreMessages();
+    // 请求在途时切换过滤（QQ → WebChat）：旧过滤的游标页必须整包丢弃，
+    // 不得混入新过滤的列表（下一次 loadMessages 会按新键重置）
+    store.platformFilter = 'webchat';
+    await pending;
+    expect(store.messages.map((m) => m.trace_id)).toEqual(['q1']);
+  });
+
+  it('stale bundle response cannot overwrite terminal detail (M2 seq)', async () => {
+    const store = useFlowStore();
+    store.detail = detail({ trace_id: 'rt-seq' }); // 先有当前轨迹
+    let releaseFirst!: (d: FlowMessageDetail) => void;
+    const first = new Promise<FlowMessageDetail>((r) => { releaseFirst = r; });
+    vi.mocked(flowApi.getMessage)
+      .mockImplementationOnce(() => first)
+      .mockResolvedValue(detail({
+        trace_id: 'rt-seq', ended_utc: '2026-10-03T01:00:00',
+        event_count: 9, high_watermark: 9,
+      }));
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
+    const p1 = store.refreshTraceBundle();       // 挂起（seq=1）
+    const p2 = store.refreshTraceBundle();       // 立即返回终态（seq=2）
+    await p2;
+    expect(store.detail?.ended_utc).toBe('2026-10-03T01:00:00');
+    releaseFirst(detail({ trace_id: 'rt-seq', ended_utc: '' })); // 旧响应迟到
+    await p1;
+    // 旧响应不得把 ended 清空（M2 反例：ended 被清空、水位降回）
+    expect(store.detail?.ended_utc).toBe('2026-10-03T01:00:00');
+    expect(store.detail?.high_watermark).toBe(9);
+  });
+
+  it('manual refresh refetches events after watermark advanced (H5)', async () => {
+    const store = useFlowStore();
+    vi.mocked(flowApi.getMessage).mockResolvedValue(
+      detail({ trace_id: 'rt-h5', event_count: 2, high_watermark: 2 }));
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
+    await store.openTrace('rt-h5');
+    expect(store.orderedEvents).toHaveLength(0);
+    vi.mocked(flowApi.getMessage).mockResolvedValue(
+      detail({ trace_id: 'rt-h5', event_count: 2, high_watermark: 2 }));
+    vi.mocked(flowApi.getEvents).mockResolvedValue([
+      ev({ event_id: 'e1', row_id: 1 }),
+      ev({ event_id: 'e2', row_id: 2 }),
+    ]);
+    vi.mocked(flowApi.getEvents).mockClear();
+    await store.refreshTraceBundle();
+    // 手动刷新必须补读事件（旧实现 eventCalls=0）
+    expect(flowApi.getEvents).toHaveBeenCalled();
+    expect(store.orderedEvents).toHaveLength(2);
   });
 
   it('scheduleIoRefresh throttles burst receipt facts into one refresh', async () => {

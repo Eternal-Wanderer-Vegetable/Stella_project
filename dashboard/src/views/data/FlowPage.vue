@@ -1259,13 +1259,13 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 {{ store.visibleEvents.length }} / {{ store.orderedEvents.length }} 事件
               </v-chip>
               <v-chip
-                v-if="store.detail.persisted_events"
+                v-if="store.detail.event_count"
                 size="x-small"
                 label
                 :color="store.eventsTruncated ? 'warning' : undefined"
-                :title="`存储已提交 ${store.detail.persisted_events} 条事件；浏览器已加载 ${store.orderedEvents.length} 条——两者独立（修复计划 §6.6 R8）`"
+                :title="`存储已提交 ${store.detail.event_count} 条事件（COUNT）；浏览器已加载 ${store.orderedEvents.length} 条——验收报告 H4：两者同为事件条数，分页游标另用 row_id 水位`"
               >
-                已载 {{ store.orderedEvents.length }} / 存储 {{ store.detail.persisted_events }}
+                已载 {{ store.orderedEvents.length }} / 存储 {{ store.detail.event_count }}
               </v-chip>
               <v-btn
                 v-if="store.eventsTruncated"
