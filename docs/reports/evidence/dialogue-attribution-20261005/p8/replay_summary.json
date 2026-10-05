@@ -1,0 +1,421 @@
+{
+  "jobs": [
+    {
+      "fixture": "scene-090046-private-share.json",
+      "repeats": 30,
+      "elapsed_s": 462.6,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 30,
+        "blocked": 4,
+        "fallback": 1,
+        "passed": 25
+      },
+      "error": ""
+    },
+    {
+      "fixture": "scene-131951-nox-compound.json",
+      "repeats": 30,
+      "elapsed_s": 560.3,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 30,
+        "blocked": 0,
+        "fallback": 4,
+        "passed": 26
+      },
+      "error": ""
+    },
+    {
+      "fixture": "scene-132230-author-inversion.json",
+      "repeats": 30,
+      "elapsed_s": 454.0,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 30,
+        "blocked": 0,
+        "fallback": 3,
+        "passed": 27
+      },
+      "error": ""
+    },
+    {
+      "fixture": "scene-140919-proactive-third-party.json",
+      "repeats": 30,
+      "elapsed_s": 328.3,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 30,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 30
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n02_agent_patient_reversal.json",
+      "repeats": 5,
+      "elapsed_s": 76.7,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n03_conditional_future.json",
+      "repeats": 5,
+      "elapsed_s": 68.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n04_negation.json",
+      "repeats": 5,
+      "elapsed_s": 80.2,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n05_reported_speech.json",
+      "repeats": 5,
+      "elapsed_s": 72.0,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 1,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n06_many_same_action_facts.json",
+      "repeats": 5,
+      "elapsed_s": 80.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 1,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n07_budget_trimmed_unit.json",
+      "repeats": 5,
+      "elapsed_s": 83.1,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "n08_post_compaction.json",
+      "repeats": 5,
+      "elapsed_s": 80.2,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t01_ab_switch.json",
+      "repeats": 5,
+      "elapsed_s": 108.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 1,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t02_same_topic_no_reply.json",
+      "repeats": 5,
+      "elapsed_s": 84.0,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 1,
+        "fallback": 0,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t03_correction_no_target.json",
+      "repeats": 5,
+      "elapsed_s": 66.1,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t04_rename_immediate.json",
+      "repeats": 5,
+      "elapsed_s": 56.9,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t05_duplicate_alias.json",
+      "repeats": 5,
+      "elapsed_s": 60.7,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t06_long_background.json",
+      "repeats": 5,
+      "elapsed_s": 74.9,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t07_same_action_many_users.json",
+      "repeats": 5,
+      "elapsed_s": 74.9,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "t08_conflicting_claims.json",
+      "repeats": 5,
+      "elapsed_s": 76.2,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "recurrence_190922.json",
+      "repeats": 5,
+      "elapsed_s": 58.7,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e01-compound-correction.json",
+      "repeats": 5,
+      "elapsed_s": 100.4,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 1,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e02-question-misname.json",
+      "repeats": 5,
+      "elapsed_s": 63.7,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e03-negation-misname.json",
+      "repeats": 5,
+      "elapsed_s": 99.9,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 1,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e04-relation-description.json",
+      "repeats": 5,
+      "elapsed_s": 66.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e05-missing-source-candidate.json",
+      "repeats": 5,
+      "elapsed_s": 62.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e06-candidate-drift.json",
+      "repeats": 5,
+      "elapsed_s": 74.5,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e07-cross-person-bridge.json",
+      "repeats": 5,
+      "elapsed_s": 61.4,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e08-sharing-explicit.json",
+      "repeats": 5,
+      "elapsed_s": 71.9,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e09-sharing-denial.json",
+      "repeats": 5,
+      "elapsed_s": 80.9,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e10-revoke-warm-cache.json",
+      "repeats": 5,
+      "elapsed_s": 88.7,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 1,
+        "passed": 4
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e11-cross-bot-same-user.json",
+      "repeats": 5,
+      "elapsed_s": 71.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    },
+    {
+      "fixture": "edge-e12-guard-malformed.json",
+      "repeats": 5,
+      "elapsed_s": 85.8,
+      "guard": {
+        "mode": "enforce",
+        "sampled": 5,
+        "blocked": 0,
+        "fallback": 0,
+        "passed": 5
+      },
+      "error": ""
+    }
+  ],
+  "finished_at": "2026-10-05 23:18:21"
+}

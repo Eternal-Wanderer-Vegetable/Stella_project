@@ -1,0 +1,15 @@
+{
+  "batch_id": "repair_20261005_140442",
+  "applied": 13,
+  "skipped": [],
+  "revoked": true,
+  "audit_rows": 13,
+  "all_revoked": true,
+  "deprecated_after_revoke": {
+    "memories": 0,
+    "memory_candidates": 0
+  },
+  "column_mismatches": [],
+  "vs_production_row_mismatches": [],
+  "verdict": "PASS"
+}

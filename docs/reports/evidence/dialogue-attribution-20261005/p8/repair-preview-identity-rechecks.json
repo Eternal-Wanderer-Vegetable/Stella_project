@@ -1,0 +1,274 @@
+[
+  {
+    "record_id": "16",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "老板"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3089665724",
+      "evidence_excerpt": "我是老板"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "15",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "说这边之前荒了很久草都两人高了"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "176403822",
+      "evidence_excerpt": "我是说这边之前荒了很久草都两人高了"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "14",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "这是Lumi不"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3559802578",
+      "evidence_excerpt": "这是Lumi不是我"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "13",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "老人"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3996233487",
+      "evidence_excerpt": "我是老人"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "12",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "直接走了（"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3847839488",
+      "evidence_excerpt": "我是直接走了（"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "11",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "啊"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "2873089182",
+      "evidence_excerpt": "我是啊"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "10",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "你教父了吗"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3644282359",
+      "evidence_excerpt": "我是你教父了吗"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "9",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "谁"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "2384697060",
+      "evidence_excerpt": "我是谁"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "8",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "谁"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3263474916",
+      "evidence_excerpt": "我是谁"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "7",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "谁"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "176403822",
+      "evidence_excerpt": "我是谁"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "6",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "她姐"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3559802578",
+      "evidence_excerpt": "我是她姐"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "5",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "笨蛋"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "860908091",
+      "evidence_excerpt": "我是笨蛋"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "4",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "谁"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3644282359",
+      "evidence_excerpt": "我是谁"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "3",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "谁"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "3883589893",
+      "evidence_excerpt": "我是谁"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "2",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "歌姬吧"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "176403822",
+      "evidence_excerpt": "以后叫我歌姬吧"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "1",
+    "table_name": "conversation_identity_claims",
+    "operation": "identity_claim_recheck",
+    "issue_class": "identity_recheck",
+    "expected_old": {
+      "status": "active",
+      "alias": "lumi"
+    },
+    "payload": {
+      "conversation_key": "qq:1694717255:group:263402786",
+      "subject_user_id": "176403822",
+      "evidence_excerpt": "以后叫我lumi"
+    },
+    "reason": "recheck_with_current_parser",
+    "requires_confirm": true
+  }
+]

@@ -1,0 +1,262 @@
+[
+  {
+    "record_id": "24382634d00a458e99158a50da7dc22c",
+    "table_name": "memories",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "6628901c944a5c90",
+      "status": "active",
+      "content_digest": "150d41a8a706f1db"
+    },
+    "payload": {
+      "keep_id": "faeb1e280a074d35b0cd9f5fdc095bd4"
+    },
+    "reason": "scoped_duplicate_keep:faeb1e280a074d35b0cd9f5fdc095bd4",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "b22cd009429d4463a3a9c9c21dfa94ee",
+    "table_name": "memories",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "c98679ff8b271c85",
+      "status": "active",
+      "content_digest": "574786651b958fd1"
+    },
+    "payload": {
+      "keep_id": "2c78d858631a44da8d29941d33ab767d"
+    },
+    "reason": "scoped_duplicate_keep:2c78d858631a44da8d29941d33ab767d",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "e2080cc7c190498a832d7e0244dd94f8",
+    "table_name": "memories",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "b78c8d62ca6b2e62",
+      "status": "active",
+      "content_digest": "5c39cb86e8d01f64"
+    },
+    "payload": {
+      "keep_id": "5676f037a90743649638e37eece9c91e"
+    },
+    "reason": "scoped_duplicate_keep:5676f037a90743649638e37eece9c91e",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "5f790ab87c5d46a9a5b20b39e10a08c5",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "6628901c944a5c90",
+      "status": "CONFIRMED",
+      "content_digest": "150d41a8a706f1db"
+    },
+    "payload": {
+      "keep_id": "6460fffc2e2943ebbcc7ef50b022d734"
+    },
+    "reason": "scoped_duplicate_keep:6460fffc2e2943ebbcc7ef50b022d734",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "c6a0be170c2e48a4a76c2a67d37035ef",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "17a3a7662f7273b0",
+      "status": "CONFIRMED",
+      "content_digest": "06d86c3832770e2c"
+    },
+    "payload": {
+      "keep_id": "83b7280555b34876819e5885e7281f7a"
+    },
+    "reason": "scoped_duplicate_keep:83b7280555b34876819e5885e7281f7a",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "8389486623e543c3b686990057c827fb",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "5ecd4338b0a5b822",
+      "status": "CONFIRMED",
+      "content_digest": "3a44874fbd45512d"
+    },
+    "payload": {
+      "keep_id": "5790bfba5ab54b93874747b3b6f1a9a6"
+    },
+    "reason": "scoped_duplicate_keep:5790bfba5ab54b93874747b3b6f1a9a6",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "4c352f696aa544689e86d07c9207e70f",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "5ce957364c7ab232",
+      "status": "CONFIRMED",
+      "content_digest": "96a06c074956a818"
+    },
+    "payload": {
+      "keep_id": "7af7a49f04cd43c19ed05a2e1daeb6c4"
+    },
+    "reason": "scoped_duplicate_keep:7af7a49f04cd43c19ed05a2e1daeb6c4",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "3fb2fa3e4b3d4ed9b1b0c462a9ae7e83",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "e81f3eeba289bd08",
+      "status": "CONFIRMED",
+      "content_digest": "4ffe4e8c03b5035e"
+    },
+    "payload": {
+      "keep_id": "6f76db6772364a6493328e3b1ec07d2a"
+    },
+    "reason": "scoped_duplicate_keep:6f76db6772364a6493328e3b1ec07d2a",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "a5b1af72384449a08144e4fea1f9f323",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "c98679ff8b271c85",
+      "status": "CONFIRMED",
+      "content_digest": "574786651b958fd1"
+    },
+    "payload": {
+      "keep_id": "908ce8811a4144d7b02449e1d12fd8ce"
+    },
+    "reason": "scoped_duplicate_keep:908ce8811a4144d7b02449e1d12fd8ce",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "e375c9589891421d8f97a1627148c024",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_4",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "4a8981cc0ca763a6",
+      "status": "CONFIRMED",
+      "content_digest": "f0a952e423830b8d"
+    },
+    "payload": {
+      "keep_id": "56f7b5bcfaf74f648566eb08d1e88ff8"
+    },
+    "reason": "scoped_duplicate_keep:56f7b5bcfaf74f648566eb08d1e88ff8",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "9ffe3526269d4ab795680ffa81d91d4b",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "9170099cd6d6ce84",
+      "status": "CONFIRMED",
+      "content_digest": "2f9425b7534fb4ec"
+    },
+    "payload": {
+      "keep_id": "bddafc84c49d4553be951a8ed6c63acf"
+    },
+    "reason": "scoped_duplicate_keep:bddafc84c49d4553be951a8ed6c63acf",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "31f01526b0164f91af694eb8730c1e60",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "b78c8d62ca6b2e62",
+      "status": "CONFIRMED",
+      "content_digest": "5c39cb86e8d01f64"
+    },
+    "payload": {
+      "keep_id": "64a2f79df35f4ac289ae1a0d45d5fed8"
+    },
+    "reason": "scoped_duplicate_keep:64a2f79df35f4ac289ae1a0d45d5fed8",
+    "requires_confirm": false
+  },
+  {
+    "record_id": "61818eb27c224c65b4263b6f31113d92",
+    "table_name": "memory_candidates",
+    "operation": "duplicate_deprecate",
+    "issue_class": "duplicate",
+    "expected_old": {
+      "owner_type": "SPACE",
+      "owner_key": "space:space_1",
+      "subject_key": "",
+      "audience": "CURRENT_SPACE",
+      "fact_key": "abe2be70e532e86e",
+      "status": "CONFIRMED",
+      "content_digest": "7841140d15095d6f"
+    },
+    "payload": {
+      "keep_id": "fd5d0a4e70394e8ba7634d50cda27241"
+    },
+    "reason": "scoped_duplicate_keep:fd5d0a4e70394e8ba7634d50cda27241",
+    "requires_confirm": false
+  }
+]
