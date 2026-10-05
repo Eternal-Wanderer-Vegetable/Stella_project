@@ -2013,7 +2013,7 @@
      "memory_rust/backend.py": "e730cade301e8de1610d13fa2d22424eb98e9ffd20a54b7f7d6c36b71f78efc7",
      "memory_rust/native/src/lib.rs": "39030695b7c31ea448d74ebc31098a3a72480f9afc89d199b7b7077303fa6246",
      "memory_rust/native/src/policy.rs": "323c5191b03a766b8dee025bb7255b7d8767b5ac0c0f7f5d994d943f1b296563",
-     "memory_rust/native/src/retrieval.rs": "16a28965e33dfc6064b4ff8d5c666ca4d1808a577f53840f6f97dd74ff0d10b0",
+     "memory_rust/native/src/retrieval.rs": "957179ee555bcd0fc62fac2e94509e5942d1962cb9c821c25aceb15b1605ba93",
      "memory_rust/native/src/schema.rs": "c914b3646d0f665dd98e6a8af9b7b3fcbd05d705818de8ff0e51da5eb429c344",
      "memory_rust/native/src/similarity.rs": "6fa636e8e4e8e98192aa6377e1fff172462ed0b832f231811420bf2169f44a79",
      "memory_rust/python_backend.py": "39effae2c7014f41845cd12efba66860b575c792d0e90fc26e72c292f484f221",
@@ -2028,7 +2028,7 @@
      "file": "memory_rust/native/src/promotion.rs",
      "symbol": "promote"
     },
-    "source_digest": "789cf67faf33e2ca5a742a2b9066baa983c277853d8a2924760f7d0928755da6"
+    "source_digest": "e9a465a38c3614e1c36beabdc1dbe9a3e3e7f172472d2f7e4a96e700c515222d"
    }
   ],
   "families": [
@@ -111455,6 +111455,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "ebcbc8529af5a4ca48ff7000ae558afa36e5a36c",
+ "source_revision": "a8c4ec2ab02ac4e53aa5d785a67d6563174105f8",
  "topology_version": "2026.10.04"
 }
