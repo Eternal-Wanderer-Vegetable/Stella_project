@@ -197,6 +197,229 @@ def build_evidence_table(
     current_corrections: list[dict],
     max_units: int = 16,
 ) -> dict[str, SourceEvidence]:
+    """构建证据表（R6 §6.6）。
+    
+    优先级（高到低）：
+    1. current_corrections - 当前轮次的纠正
+    2. verified_facts - 已验证的事实
+    3. recent_messages - 近期消息（按时间倒序）
+    
+    Args:
+        recent_messages: 近期消息列表
+        verified_facts: 已验证事实列表
+        current_corrections: 当前纠正列表
+        max_units: 最大证据单元数
+    
+    Returns:
+        evidence_id -> SourceEvidence 映射
+    """
+    evidence_table: dict[str, SourceEvidence] = {}
+    unit_count = 0
+    
+    # 优先级1: 当前纠正
+    for corr in current_corrections:
+        if unit_count >= max_units:
+            break
+        
+        evidence_id = f"correction_{corr.get('id', unit_count)}"
+        evidence_table[evidence_id] = SourceEvidence(
+            evidence_id=evidence_id,
+            evidence_type="current_correction",
+            author_id=corr.get("author_id", 0),
+            object_id=corr.get("object_id"),
+            original_text=corr.get("text", ""),
+            conversation_key=corr.get("conversation_key", ""),
+            source_row_id=corr.get("source_row_id"),
+            timestamp=corr.get("timestamp", ""),
+            polarity=corr.get("polarity", "neutral"),
+            is_verified=True,
+        )
+        unit_count += 1
+    
+    # 优先级2: 已验证事实
+    for fact in verified_facts:
+        if unit_count >= max_units:
+            break
+        
+        evidence_id = f"fact_{fact.get('id', unit_count)}"
+        evidence_table[evidence_id] = SourceEvidence(
+            evidence_id=evidence_id,
+            evidence_type="verified_fact",
+            author_id=fact.get("author_id", 0),
+            object_id=fact.get("object_id"),
+            original_text=fact.get("content", ""),
+            conversation_key=fact.get("conversation_key", ""),
+            source_row_id=fact.get("source_row_id"),
+            timestamp=fact.get("timestamp", ""),
+            polarity=fact.get("polarity", "neutral"),
+            is_verified=True,
+        )
+        unit_count += 1
+    
+    # 优先级3: 近期消息（按时间倒序）
+    for msg in recent_messages:
+        if unit_count >= max_units:
+            break
+        
+        evidence_id = f"msg_{msg.get('id', unit_count)}"
+        evidence_table[evidence_id] = SourceEvidence(
+            evidence_id=evidence_id,
+            evidence_type="message",
+            author_id=msg.get("author_id", 0),
+            object_id=msg.get("object_id"),
+            original_text=msg.get("text", ""),
+            conversation_key=msg.get("conversation_key", ""),
+            source_row_id=msg.get("row_id"),
+            timestamp=msg.get("timestamp", ""),
+            polarity="neutral",
+            is_verified=False,
+        )
+        unit_count += 1
+    
+    return evidence_table
+
+
+def apply_guard_decision(
+    reply_plan: ReplyPlan | None,
+    evidence_table: dict[str, SourceEvidence],
+    guard_mode: Literal["off", "shadow", "enforce"],
+    identity_revision: int,
+) -> AttributionDecision:
+    """应用归属守护决策（R6 §6.6）。
+    
+    决策规则：
+    - off: 放行所有
+    - shadow: 记录问题但放行
+    - enforce: 拒绝无效引用
+    
+    Args:
+        reply_plan: 解析后的回复计划
+        evidence_table: 可用证据表
+        guard_mode: 守护模式
+        identity_revision: 身份修订版本
+    
+    Returns:
+        归属决策记录
+    """
+    if guard_mode == "off":
+        return AttributionDecision(
+            decision="pass",
+            guard_mode="off",
+            identity_revision=identity_revision,
+        )
+    
+    if reply_plan is None:
+        # 解析失败
+        if guard_mode == "enforce":
+            return AttributionDecision(
+                decision="reject",
+                rejection_reason="parse_failed",
+                guard_mode="enforce",
+                identity_revision=identity_revision,
+            )
+        else:
+            return AttributionDecision(
+                decision="fallback",
+                rejection_reason="parse_failed_shadow",
+                guard_mode="shadow",
+                identity_revision=identity_revision,
+            )
+    
+    # 验证引用
+    budget_retained_ids = set(evidence_table.keys())
+    all_valid, invalid_refs = validate_evidence_references(
+        reply_plan, evidence_table, budget_retained_ids
+    )
+    
+    if not all_valid:
+        if guard_mode == "enforce":
+            return AttributionDecision(
+                decision="reject",
+                rejection_reason="invalid_references",
+                guard_mode="enforce",
+                checked_evidence_ids=list(budget_retained_ids),
+                invalid_references=invalid_refs,
+                identity_revision=identity_revision,
+            )
+        else:
+            return AttributionDecision(
+                decision="pass",
+                rejection_reason="invalid_references_shadow",
+                guard_mode="shadow",
+                checked_evidence_ids=list(budget_retained_ids),
+                invalid_references=invalid_refs,
+                identity_revision=identity_revision,
+            )
+    
+    # 检查自由文本风险
+    is_safe, risk_pattern = check_risky_free_text(
+        reply_plan.current_response, budget_retained_ids
+    )
+    
+    if not is_safe:
+        if guard_mode == "enforce":
+            return AttributionDecision(
+                decision="reject",
+                rejection_reason=f"risky_text:{risk_pattern}",
+                guard_mode="enforce",
+                identity_revision=identity_revision,
+            )
+        else:
+            return AttributionDecision(
+                decision="pass",
+                rejection_reason=f"risky_text_shadow:{risk_pattern}",
+                guard_mode="shadow",
+                identity_revision=identity_revision,
+            )
+    
+    # 全部通过
+    return AttributionDecision(
+        decision="pass",
+        guard_mode=guard_mode,
+        checked_evidence_ids=list(budget_retained_ids),
+        identity_revision=identity_revision,
+    )
+
+
+def render_final_reply(
+    reply_plan: ReplyPlan,
+    evidence_table: dict[str, SourceEvidence],
+) -> str:
+    """服务端渲染最终回复（R6 §6.6）。
+    
+    组合规则：
+    1. current_response（自由口语）
+    2. 引用消息原话
+    3. 引用已验证事实
+    4. 纠正承认
+    
+    返回最终发送的文本。
+    """
+    parts = []
+    
+    # 1. 自由回应
+    if reply_plan.current_response:
+        parts.append(reply_plan.current_response)
+    
+    # 2. 引用历史消息
+    for ref_id in reply_plan.quote_references:
+        if ref_id in evidence_table:
+            rendered = render_evidence(ref_id, evidence_table[ref_id])
+            if rendered:
+                parts.append(rendered)
+    
+    # 3. 引用已验证事实
+    for ref_id in reply_plan.verified_fact_references:
+        if ref_id in evidence_table:
+            rendered = render_evidence(ref_id, evidence_table[ref_id])
+            if rendered:
+                parts.append(rendered)
+    
+    # 4. 纠正承认
+    if reply_plan.correction_ack:
+        parts.append(reply_plan.correction_ack)
+    
+    return " ".join(parts)
     """构建有界证据表。
     
     按计划 §6.6，证据表最多 16 单元 / 512 估算 token。
