@@ -17,8 +17,6 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from core.dialogue_attribution import (
     ReplyPlan,
     SourceEvidence,
@@ -50,7 +48,10 @@ from memory.proactive_contract import (
 from tools.data_repair import (
     RepairRecord,
     apply_repairs,
-    preview_wrong_space_records,
+    preview_duplicates,
+    preview_orphans,
+    preview_private_owner_repairs,
+    revoke_batch,
 )
 
 # ============================================================
@@ -647,96 +648,218 @@ class TestAttributionRenderAndGuard:
 
 
 class TestDataRepair:
-    """R7 数据修复测试。"""
+    """P6 数据修复测试（复核 F6-F9；正式 DDL + 真实 09:00 形状）。"""
 
-    def test_preview_wrong_space_records(self):
-        """预览错误 SPACE 归属。"""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-            db_path = tmp.name
+    def _db(self, tmp_path):
+        """正式形状临时库：memories/candidates/证据/注册表/审计。"""
+        import tools.data_repair as drm
+        from memory import schema as schema_mod
+        from memory.pre_processors import _GROUP_MESSAGES_V16_DDL
 
-        try:
-            conn = sqlite3.connect(db_path)
+        db = tmp_path / "repair.db"
+        conn = sqlite3.connect(db)
+        conn.execute(schema_mod.MEMORIES_TABLE_DDL)
+        conn.execute(schema_mod.MEMORY_CANDIDATES_TABLE_DDL)
+        conn.execute(schema_mod.MEMORY_EVIDENCE_TABLE_DDL)
+        conn.execute(schema_mod.MEMORY_SCOPE_VERSIONS_TABLE_DDL)
+        conn.execute(_GROUP_MESSAGES_V16_DDL)
+        conn.execute(
+            "CREATE TABLE conversation_registry (conversation_key TEXT PRIMARY KEY,"
+            " platform TEXT, bot_id TEXT, kind TEXT, peer_id TEXT,"
+            " storage_session_id INTEGER, runtime_key TEXT, memory_space TEXT)"
+        )
+        drm._create_audit_table(conn)
+        return conn
 
-            # 创建测试表
-            conn.execute("""
-                CREATE TABLE memories (
-                    id TEXT PRIMARY KEY,
-                    audience TEXT,
-                    owner_type TEXT,
-                    owner_key TEXT,
-                    user_id INTEGER,
-                    fact_key TEXT,
-                    status TEXT DEFAULT 'ACTIVE'
-                )
-            """)
+    def _seed_scene(self, conn):
+        """真实 09:00 形状：SPACE 公开行 + 私聊注册会话 + 私聊来源证据。"""
+        conn.execute(
+            "INSERT INTO conversation_registry VALUES ("
+            " 'qq:10000:private:20001','qq','10000','private','20001',-2,"
+            " 'qq:10000:private:20001','private:qq:10000:20001')"
+        )
+        conn.execute(
+            "INSERT INTO conversation_registry VALUES ("
+            " 'qq:10000:group:900','qq','10000','group','900',900,"
+            " 'qq:900','space_1')"
+        )
+        # 复核 F9 现场形状：SPACE / space:space_4 / CURRENT_SPACE（audience 列）
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content,"
+            " owner_type, owner_key, subject_key, audience, status, fact_key,"
+            " source_conversation_key)"
+            " VALUES ('m_bad', 'space_4', '20001', 'relation', '用户20001与Lumi是CP',"
+            " 'SPACE', 'space:space_4', '', 'CURRENT_SPACE', 'ACTIVE', 'fk_cp',"
+            " 'qq:10000:private:20001')"
+        )
+        # 合法群行（同 space 形状但来源是群）→ 不得误判
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content,"
+            " owner_type, owner_key, audience, status, fact_key,"
+            " source_conversation_key)"
+            " VALUES ('m_ok', 'space_1', '30001', 'fact', '群聊事实',"
+            " 'SPACE', 'space:space_1', 'CURRENT_SPACE', 'ACTIVE', 'fk_grp',"
+            " 'qq:10000:group:900')"
+        )
+        conn.execute(
+            "INSERT INTO memory_evidence (id, owner_type, owner_key, subject_key,"
+            " audience, fact_key, source_conversation_key, source_row_id, candidate_id)"
+            " VALUES ('e1','SPACE','space:space_4','','CURRENT_SPACE','fk_cp',"
+            " 'qq:10000:private:20001', 5, '')"
+        )
+        conn.commit()
 
-            # 插入错误记录：PERSON 但标记为 SPACE
+    def test_preview_matches_real_polluted_shape(self, tmp_path):
+        """复核 F9 主反例：SPACE/space:space_4 现场形状必须命中。"""
+        conn = self._db(tmp_path)
+        self._seed_scene(conn)
+        repairs = preview_private_owner_repairs(conn)
+        ids = {r.record_id for r in repairs}
+        assert "m_bad" in ids
+        assert "m_ok" not in ids, "合法群行不得进修复清单"
+        rec = next(r for r in repairs if r.record_id == "m_bad")
+        assert rec.payload["target_owner_key"] == "person:qq:10000:20001"
+        assert rec.expected_old["owner_key"] == "space:space_4"
+
+    def test_duplicate_scoped_by_owner_and_audience(self, tmp_path):
+        """复核 F6：双受众副本与他人同键内容都不算重复；空 key 进 unknown。"""
+        conn = self._db(tmp_path)
+        # 同 owner 同 audience 同 fact 的两条 → 真重复（保留最早 d1）
+        for rid in ("d1", "d2"):
             conn.execute(
-                "INSERT INTO memories (id, audience, owner_type, owner_key, user_id, fact_key, status) "
-                "VALUES ('m1', 'SPACE', 'PERSON', 'user:12345', 12345, 'fk1', 'ACTIVE')"
+                "INSERT INTO memories (id, owner_type, owner_key, subject_key,"
+                " audience, fact_key, status, type, content, created_at)"
+                " VALUES (?, 'PERSON', 'person:qq:10000:20001', 'qq:20001',"
+                " 'PRIVATE_ONLY', 'fk_a', 'ACTIVE', 'fact', '内容A', '2026-10-01')",
+                (rid,),
             )
+        # 双受众副本（PRIVATE_ONLY + USER_SHARED 同 owner 同 fact）→ 合法形状
+        for rid, aud in (("l1", "PRIVATE_ONLY"), ("l2", "USER_SHARED")):
+            conn.execute(
+                "INSERT INTO memories (id, owner_type, owner_key, subject_key,"
+                " audience, fact_key, status, type, content)"
+                " VALUES (?, 'PERSON', 'person:qq:10000:20001', 'qq:20001',"
+                " ?, 'fk_b', 'ACTIVE', 'fact', '内容B')",
+                (rid, aud),
+            )
+        # 另一 owner 同内容同 fact_key → 不算重复
+        conn.execute(
+            "INSERT INTO memories (id, owner_type, owner_key, subject_key,"
+            " audience, fact_key, status, type, content)"
+            " VALUES ('o1', 'PERSON', 'person:qq:10000:30001', 'qq:30001',"
+            " 'PRIVATE_ONLY', 'fk_a', 'ACTIVE', 'fact', '内容A')"
+        )
+        conn.execute(
+            "INSERT INTO memories (id, fact_key, status, type, content)"
+            " VALUES ('e1', '', 'ACTIVE', 'fact', '无键行')"
+        )
+        conn.commit()
+        duplicates, unknowns = preview_duplicates(conn)
+        dup_ids = {r.record_id for r in duplicates}
+        assert dup_ids == {"d2"}, f"只保留最早 d1，实际 {dup_ids}"
+        assert any(u.payload.get("empty_fact_key_rows") for u in unknowns)
 
-            conn.commit()
+    def test_orphan_respects_registry_and_evidence(self, tmp_path):
+        """复核 F7：注册表在册/有证据都不判孤儿；双缺失才进复核清单。"""
+        conn = self._db(tmp_path)
+        self._seed_scene(conn)
+        conn.execute(
+            "INSERT INTO memory_candidates (id, source_conversation_key, fact_key,"
+            " status, type, content)"
+            " VALUES ('c_reg', 'qq:10000:private:20001', 'fk_x', 'ACTIVE', 'fact', '在册')"
+        )
+        conn.execute(
+            "INSERT INTO memory_candidates (id, source_conversation_key, fact_key,"
+            " status, type, content)"
+            " VALUES ('c_evi', 'qq:10000:unknown', 'fk_cp', 'ACTIVE', 'fact', '有证据')"
+        )
+        conn.execute(
+            "INSERT INTO memory_candidates (id, source_conversation_key, fact_key,"
+            " status, type, content)"
+            " VALUES ('c_orp', 'qq:10000:gone', '', 'ACTIVE', 'fact', '无来源')"
+        )
+        conn.commit()
+        orphans = preview_orphans(conn)
+        ids = {r.record_id for r in orphans}
+        assert ids == {"c_orp"}, f"注册表/证据都必须救回，实际 {ids}"
+        assert all(r.requires_confirm for r in orphans)
 
-            records = preview_wrong_space_records(conn)
-            assert len(records) == 1
-            assert records[0].issue_type == "wrong_space"
-            assert records[0].proposed_value == "PRIVATE_ONLY"
+    def _scene_record(self):
+        return RepairRecord(
+            record_id="m_bad",
+            table_name="memories",
+            operation="private_owner_repair",
+            issue_class="wrong_space",
+            expected_old={
+                "owner_type": "SPACE", "owner_key": "space:space_4",
+                "audience": "CURRENT_SPACE", "status": "ACTIVE",
+                "fact_key": "fk_cp",
+                "source_conversation_key": "qq:10000:private:20001",
+            },
+            payload={
+                "platform": "qq", "bot_id": "10000", "user_id": "20001",
+                "target_owner_key": "person:qq:10000:20001",
+                "target_subject_key": "qq:20001",
+            },
+            reason="scene",
+            confidence=0.95,
+        )
 
-            conn.close()
-        finally:
-            Path(db_path).unlink(missing_ok=True)
+    def test_apply_revoke_roundtrip_column_exact(self, tmp_path, monkeypatch):
+        """复核 F8：apply→revoke 逐列还原；stale manifest 被拒；撤回需确认。"""
+        import tools.data_repair as drm
 
-    def test_apply_repairs_dry_run(self, monkeypatch):
-        """dry_run 不修改数据。"""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-            db_path = tmp.name
+        conn = self._db(tmp_path)
+        self._seed_scene(conn)
+        conn.close()
+        monkeypatch.setattr(drm, "DB_PATH", tmp_path / "repair.db")
 
-        try:
-            conn = sqlite3.connect(db_path)
+        batch = apply_repairs([self._scene_record()], operator="test")
+        assert batch is not None and batch.repair_count == 1
+        conn = sqlite3.connect(tmp_path / "repair.db")
+        copy_row = conn.execute(
+            "SELECT owner_type, owner_key, subject_key, audience, status FROM memories"
+            " WHERE id = 'm_bad:por'").fetchone()
+        assert copy_row == ("PERSON", "person:qq:10000:20001", "qq:20001",
+                            "PRIVATE_ONLY", "ACTIVE")
+        old_row = conn.execute(
+            "SELECT owner_type, owner_key, audience, status FROM memories"
+            " WHERE id = 'm_bad'").fetchone()
+        assert old_row == ("SPACE", "space:space_4", "CURRENT_SPACE", "DEPRECATED"), \
+            "归属修复只应改 status 列（列级审计，不再把 audience 塞回 status）"
+        conn.close()
 
-            conn.execute("""
-                CREATE TABLE memories (
-                    id TEXT PRIMARY KEY,
-                    status TEXT DEFAULT 'ACTIVE',
-                    updated_at TEXT
-                )
-            """)
+        # stale manifest：期望旧值与当前不符 → 跳过
+        stale = RepairRecord.from_manifest({
+            **self._scene_record().to_manifest(),
+            "expected_old": {**self._scene_record().expected_old, "status": "PENDING"},
+        })
+        batch2 = apply_repairs([stale], operator="test")
+        assert batch2 is not None and batch2.skipped, "stale 必须被跳过"
+        assert all(s.startswith("m_bad:mismatch") for s in batch2.skipped)
 
-            conn.execute("INSERT INTO memories (id, status) VALUES ('m1', 'ACTIVE')")
-            conn.commit()
-            conn.close()
+        # 撤回需显式确认；确认后逐列还原
+        assert revoke_batch(batch.batch_id) is False
+        assert revoke_batch(batch.batch_id, confirm_owner_repair=True) is True
+        conn = sqlite3.connect(tmp_path / "repair.db")
+        restored = conn.execute(
+            "SELECT owner_type, owner_key, audience, status FROM memories"
+            " WHERE id = 'm_bad'").fetchone()
+        assert restored == ("SPACE", "space:space_4", "CURRENT_SPACE", "ACTIVE")
+        conn.close()
 
-            # 工具按 CLI 设计连接全局 DB_PATH；测试把它指到临时库
-            import tools.data_repair as data_repair_module
-            monkeypatch.setattr(data_repair_module, "DB_PATH", db_path)
+    def test_apply_repairs_dry_run(self, tmp_path, monkeypatch):
+        """dry_run 零写入（工具确实指向临时库）。"""
+        import tools.data_repair as drm
 
-            # 准备修复记录
-            records = [
-                RepairRecord(
-                    record_id="m1",
-                    table_name="memories",
-                    issue_type="wrong_space",
-                    current_value="ACTIVE",
-                    proposed_value="DEPRECATED",
-                    reason="test",
-                    affected_user_id=12345,
-                    confidence=0.95,
-                )
-            ]
-
-            # Dry run
-            batch = apply_repairs(records, operator="test", dry_run=True)
-            assert batch is None
-
-            # 验证未修改
-            conn = sqlite3.connect(db_path)
-            row = conn.execute("SELECT status FROM memories WHERE id = 'm1'").fetchone()
-            assert row[0] == "ACTIVE"
-            conn.close()
-        finally:
-            Path(db_path).unlink(missing_ok=True)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        conn = self._db(tmp_path)
+        self._seed_scene(conn)
+        repairs = preview_private_owner_repairs(conn)
+        conn.close()
+        monkeypatch.setattr(drm, "DB_PATH", tmp_path / "repair.db")
+        batch = apply_repairs(repairs, operator="test", dry_run=True)
+        assert batch is None
+        conn = sqlite3.connect(tmp_path / "repair.db")
+        assert conn.execute(
+            "SELECT status FROM memories WHERE id='m_bad'").fetchone()[0] == "ACTIVE"
+        conn.close()
