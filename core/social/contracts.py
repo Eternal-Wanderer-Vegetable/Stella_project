@@ -158,6 +158,10 @@ class DeliveryReceipt:
     conversation_kind: str = ""
     peer_id: str = ""
     storage_session_id: int | None = None
+    # 中立行的平台/Bot 归属（验收报告 H1）：scope=None 时身份来自规范
+    # ConversationRef，platform/bot_id 不再从空 scope 取空值
+    platform: str = ""
+    bot_id: str = ""
     created_at_utc: str = field(default_factory=utc_now_iso)
 
     def __post_init__(self) -> None:

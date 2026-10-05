@@ -245,3 +245,58 @@ class TestNeutralReceipts:
         found = social_store.find_delivery_by_platform_id(
             "900", scope=ConversationScope.for_qq(1, bot_id="10001"))
         assert found is not None and found["turn_id"] == "a"
+
+
+class TestRealConversationRefNeutralReceipt:
+    """验收报告 H1：真实 ConversationRef（字段名 kind/platform/bot_id）经过
+    deliver_lines → record_delivery 的完整链路必须落中立回执。
+
+    旧实现读 conversation_kind（SimpleNamespace 形状），真实 ref 字段缺失
+    → 身份被清空 → scope=None 时不落库——真实库 20/20 私聊「已发送、无
+    回执」即此断点。本组用例用生产工厂对象覆盖该形状。
+    """
+
+    def _real_ref(self):
+        from core.conversation import qq_private_ref
+
+        return qq_private_ref("10001", 20001, storage_session_id=-11)
+
+    async def test_real_ref_persists_neutral_receipt(self, social_db):
+        adapter = FakeAdapter()
+        receipts = await deliver_lines(
+            ["私聊第一段"], scope=None, trace_id="t-real", turn_id="tn-real",
+            send_one=adapter.send, receipt_conversation=self._real_ref(),
+        )
+        assert receipts[0].status == "acknowledged"
+        rows = _rows(social_db, "SELECT platform, bot_id, group_id, "
+                                 "learning_eligible, conversation_key, "
+                                 "conversation_kind, peer_id, storage_session_id "
+                                 "FROM social_deliveries")
+        assert len(rows) == 1, "真实 ref 必须落中立回执（H1 断点）"
+        (platform, bot_id, group_id, eligible, conv_key, kind, peer,
+         storage) = rows[0]
+        assert (platform, bot_id) == ("qq", "10001"), "中立行保留平台/Bot 归属"
+        assert group_id == "" and eligible == 0
+        assert (conv_key, kind, peer, storage) == (
+            "qq:10001:private:20001", "private", "20001", -11)
+
+    async def test_real_ref_failed_segment_still_persisted(self, social_db):
+        """失败片段同样有中立存档事实（部分发送场景）。"""
+        adapter = FakeAdapter(fail_at={1})
+        await deliver_lines(
+            ["第一段", "第二段"], scope=None, trace_id="t-rf", turn_id="tn-rf",
+            send_one=adapter.send, receipt_conversation=self._real_ref(),
+        )
+        rows = _rows(social_db, "SELECT part_index, status FROM social_deliveries "
+                                "ORDER BY part_index")
+        assert rows == [(0, "acknowledged"), (1, "failed")]
+
+    async def test_real_ref_never_attribution_visible(self, social_db):
+        """中立回执对学习口径反查不可见（platform/bot 归属不改变 eligibility）。"""
+        adapter = FakeAdapter()
+        await deliver_lines(
+            ["私聊段"], scope=None, trace_id="t-ra", turn_id="tn-ra",
+            send_one=adapter.send, receipt_conversation=self._real_ref(),
+        )
+        assert social_store.find_delivery_by_platform_id("10000") is None
+        assert social_store.deliveries_for_turn("tn-ra", learning_eligible=True) == []

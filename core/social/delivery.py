@@ -266,9 +266,17 @@ def _append_and_persist(
 
     落库失败只记 receipt persistence unknown，不取消已确认发送、不重发。
     """
+    # 身份读取同时接受两种形状（验收报告 H1）：规范 ConversationRef 的字段
+    # 是 kind/platform/bot_id；测试与旧调用方的 SimpleNamespace 用
+    # conversation_kind。真实 ref 此前因取错字段名被清空身份、回执不落库。
     conversation_key = str(getattr(receipt_conversation, "conversation_key", "") or "")
-    conversation_kind = str(getattr(receipt_conversation, "conversation_kind", "") or "")
+    conversation_kind = str(
+        getattr(receipt_conversation, "conversation_kind", "")
+        or getattr(receipt_conversation, "kind", "")
+        or "")
     peer_id = str(getattr(receipt_conversation, "peer_id", "") or "")
+    ref_platform = str(getattr(receipt_conversation, "platform", "") or "")
+    ref_bot_id = str(getattr(receipt_conversation, "bot_id", "") or "")
     raw_storage = getattr(receipt_conversation, "storage_session_id", None)
     try:
         storage_session_id = int(raw_storage) if raw_storage is not None else None
@@ -294,6 +302,8 @@ def _append_and_persist(
         conversation_kind=conversation_kind,
         peer_id=peer_id,
         storage_session_id=storage_session_id,
+        platform=ref_platform,
+        bot_id=ref_bot_id,
     )
     receipts.append(receipt)
     should_persist = scope is not None or neutral

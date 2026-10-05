@@ -554,17 +554,20 @@ def message_io(trace_id: str) -> dict | None:
     inp = None
     try:
         if mem is not None:
-            # ---- 输入：精确身份优先（修复计划 §6.3）----
+            # ---- 输入：精确身份优先（修复计划 §6.3 + 验收报告 H2）----
             if storage_session_id is not None and source_message_id:
-                row_in = _exact_input_row(
+                row_in, row_state = _exact_input_row(
                     mem, int(storage_session_id), source_message_id,
-                    conversation_kind)
+                    conversation_kind,
+                    conversation_key=str(identity.get("conversation_key") or ""),
+                    bot_id=str(identity.get("bot_id") or ""))
                 if row_in is not None:
                     inp = {"user_id": row_in[0], "content": row_in[1],
                            "msg_id": row_in[2],
-                           "identity_state": identity_state or "exact"}
+                           "identity_state": row_state or identity_state or "exact"}
                 else:
-                    notes.append("精确身份未命中输入行（消息未持久化或已清理）")
+                    notes.append("精确身份未命中输入行"
+                                 "（消息未持久化、已清理或无当前 Bot 身份的匹配行）")
             elif root_kind == "webchat":
                 row_in = mem.execute(
                     "SELECT user_id, content, msg_id FROM group_messages "
@@ -654,21 +657,52 @@ def message_io(trace_id: str) -> dict | None:
 
 
 def _exact_input_row(mem, storage_session_id: int, source_message_id: str,
-                     conversation_kind: str) -> tuple | None:
-    """按注册表存储键 + 来源消息 ID 精确取输入行（修复计划 §6.3）。
+                     conversation_kind: str, *,
+                     conversation_key: str = "",
+                     bot_id: str = "") -> tuple[tuple | None, str]:
+    """按注册表存储键 + 来源消息 ID 精确取输入行，并核对规范身份。
 
-    负 storage ID 是私聊注册表键（绝不当群号展示）；同会话同号消息才允许
-    DESC 取最新（重发/编辑场景），跨会话同号永远隔离。
+    修复计划 §6.3 + 验收报告 H2：``storage_session_id``（群=群号，多 Bot
+    下共享）+ ``msg_id``（单 Bot 内唯一）**不足以**隔离身份——必须再核对
+    业务行的 ``conversation_key``/``bot_id``。返回 (row, identity_state)：
+
+    - 行带规范身份且匹配当前 trace → exact；
+    - 行无身份列值（legacy 单 Bot 时代）→ legacy_partial（保守标注，不冒
+      充 exact）；
+    - 有候选行但身份都不匹配当前 Bot → (None, "")——绝不能返回另一台
+      Bot 的正文。
     """
     try:
-        return mem.execute(
-            "SELECT user_id, content, msg_id FROM group_messages "
+        rows = mem.execute(
+            "SELECT user_id, content, msg_id, bot_id, conversation_key "
+            "FROM group_messages "
             "WHERE group_id = ? AND msg_id = ? AND source_kind != 'BOT_SELF' "
-            "ORDER BY id DESC LIMIT 1",
+            "ORDER BY id DESC LIMIT 8",
             (int(storage_session_id), int(source_message_id)),
-        ).fetchone()
+        ).fetchall()
     except (ValueError, TypeError):
-        return None
+        return None, ""
+    if not rows:
+        return None, ""
+    # 私聊存储键由注册表按 (bot, peer) 分配，唯一归属；但仍核对行身份
+    # （防 stale/误写），行身份缺失时按 legacy 保守处理
+    matched = None
+    legacy_rows = []
+    for r in rows:
+        r_bot, r_key = str(r[3] or ""), str(r[4] or "")
+        if not r_bot and not r_key:
+            legacy_rows.append(r)
+            continue
+        if ((not conversation_key or r_key == conversation_key)
+                and (not bot_id or r_bot == bot_id)):
+            matched = r
+            break
+    if matched is not None:
+        return matched, "exact"
+    if legacy_rows and not any(str(r[3] or "") or str(r[4] or "") for r in rows):
+        # 整批候选都是旧行：返回最新一条并保守标注
+        return legacy_rows[0], "legacy_partial"
+    return None, ""
 
 
 def _legacy_group_id(scope: str, root_kind: str,
