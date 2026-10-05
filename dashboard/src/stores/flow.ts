@@ -329,23 +329,39 @@ export const useFlowStore = defineStore('flow', {
       const gen = this.traceGeneration;
       const traceId = this.detail?.trace_id;
       if (!traceId) return;
-      // 请求代际（验收报告 M2）：同 trace 的旧 bundle 响应不得覆盖新终态
-      // ——每次调用递增，响应落地前核对仍是最新一次调用
+      // 请求代际（验收报告 M2 + 复验 A2）：旧 bundle 响应不得覆盖新终态；
+      // alive 同时绑定 session——页面隐藏（stopStream 递增 session）后，
+      // 在途 bundle 回包一律作废
       const seq = ++this.bundleSeq;
+      const session = this.streamSession;
       const alive = () =>
         seq === this.bundleSeq
         && gen === this.traceGeneration
+        && session === this.streamSession
         && this.detail?.trace_id === traceId;
-      // 先刷新 detail（事件补读需要它的新水位），再并行事件补读/IO/实体
-      //（验收报告 H5：手动刷新必须包含冻结水位后的事件补读）
-      try {
-        const detail = await getMessage(traceId);
-        if (!alive()) return;
-        this.detail = detail;
-      } catch {
-        return;
-      }
-      const tasks: Array<Promise<void>> = [
+      // detail 先行（事件补读需要它的新水位）；短暂失败进入有界重试，
+      // 绝不因此取消独立的 IO/实体/事件刷新（复验 A1）
+      const detailOk = await (async () => {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const detail = await getMessage(traceId);
+            if (!alive()) return false;
+            this.detail = detail;
+            return true;
+          } catch {
+            if (attempt === 0) {
+              await new Promise((r) => setTimeout(r, 500));
+              if (!alive()) return false;
+            }
+          }
+        }
+        return false;
+      })();
+      // 整体失效（切轨迹/隐藏页面/session 递增）→ 全部中止；仅 detail
+      // 瞬时失败时，独立来源仍照常刷新（复验 A1）
+      if (!alive()) return;
+      // 独立来源第一轮：detail 失败也照常刷新
+      await Promise.all([
         this.fetchEvents().catch(() => {}),
         getMessageIo(traceId)
           .then((io) => {
@@ -357,29 +373,48 @@ export const useFlowStore = defineStore('flow', {
             if (alive()) this.traceEntities = entities;
           })
           .catch(() => {}),
-      ];
-      await Promise.all(tasks);
-      // writer finality 有界等待（验收报告 H5）：producer 已结束但 integrity
+      ]);
+      if (!options.awaitFinality) return;
+      // writer finality 有界等待（复验 A1）：producer 已结束但 integrity
       // 尚未落账时，短暂重试直到账本确认或次数用尽（绝不无限等待）
-      if (options.awaitFinality) {
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const d = this.detail;
-          if (!alive() || !d) return;
-          if (d.producer_ended && (d.integrity === 'complete'
-              || d.integrity === 'partial' || d.integrity === 'unknown')) {
-            return;
-          }
-          await new Promise((r) => setTimeout(r, 1500));
-          try {
-            const detail = await getMessage(traceId);
-            if (!alive()) return;
-            this.detail = detail;
-          } catch {
-            return;
-          }
+      let finalized = false;
+      for (let attempt = 0; attempt < 3 && !finalized; attempt += 1) {
+        const d = this.detail;
+        if (!alive()) return;
+        finalized = Boolean(
+          d
+          && d.producer_ended
+          && (d.integrity === 'complete'
+            || d.integrity === 'partial'
+            || d.integrity === 'unknown'),
+        );
+        if (finalized) break;
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!alive()) return;
+        try {
+          const detail = await getMessage(traceId);
+          if (!alive()) return;
+          this.detail = detail;
+        } catch {
+          continue; // 瞬时失败继续重试（有界）
         }
-        await this.fetchEvents().catch(() => {});
       }
+      if (!alive()) return;
+      // finality 确认（或重试用尽→显式按当前水位）后，按新水位补齐事件
+      // 并再刷一轮独立来源（复验 A1 探针：确认后 loaded 停在旧值 = 漏补读）
+      await this.fetchEvents().catch(() => {});
+      await Promise.all([
+        getMessageIo(traceId)
+          .then((io) => {
+            if (alive()) this.io = io;
+          })
+          .catch(() => {}),
+        getTraceEntities(traceId)
+          .then((entities) => {
+            if (alive()) this.traceEntities = entities;
+          })
+          .catch(() => {}),
+      ]);
     },
 
     /**
@@ -433,20 +468,24 @@ export const useFlowStore = defineStore('flow', {
       }
     },
 
-    /** 超长轨迹的显式「继续加载」（修复计划 §6.6 R8）：不设上界续读。 */
+    /**
+     * 超长轨迹的显式「继续加载」（修复计划 §6.6 R8 + 复验 A2）：在同一
+     * 冻结快照水位内续读——继续页与首读共用快照边界，不得越过水位读到
+     * 快照外的新提交；主动刷新（refreshTraceBundle）才开启新快照。
+     */
     async loadMoreEvents() {
       if (!this.detail || !this.eventsTruncated || this.eventsLoading) return;
       const gen = this.traceGeneration;
       const traceId = this.detail.trace_id;
+      const highWatermark = Number(this.detail.high_watermark ?? 0);
       this.eventsLoading = true;
       try {
         const after = maxRowId(this.events);
-        const items = await getEvents(traceId, after, EVENT_PAGE_LIMIT);
+        const items = await getEvents(traceId, after, EVENT_PAGE_LIMIT, highWatermark);
         if (gen !== this.traceGeneration || this.detail?.trace_id !== traceId) {
           return;
         }
         this.mergeEvents(items);
-        const highWatermark = Number(this.detail.high_watermark ?? 0);
         this.eventsTruncated =
           highWatermark > 0 && maxRowId(this.events) < highWatermark;
       } finally {

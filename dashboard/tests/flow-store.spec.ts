@@ -690,6 +690,99 @@ describe('flow store M5 contracts', () => {
     expect(store.orderedEvents).toHaveLength(2);
   });
 
+  it('finality confirmation triggers final catch-up at the new watermark (A1)', async () => {
+    const store = useFlowStore();
+    // detail 1: pending（producer 未落账、水位 1）；detail 2: 终态（水位 2）
+    vi.mocked(flowApi.getMessage)
+      .mockResolvedValueOnce(detail({
+        trace_id: 'rt-fin', producer_ended: false, integrity: '',
+        event_count: 1, high_watermark: 1,
+      }))
+      .mockResolvedValue(detail({
+        trace_id: 'rt-fin', ended_utc: '2026-10-05T01:00:00',
+        producer_ended: true, integrity: 'complete',
+        event_count: 2, high_watermark: 2,
+      }));
+    vi.mocked(flowApi.getEvents)
+      .mockResolvedValueOnce([ev({ event_id: 'e1', row_id: 1 })])
+      .mockResolvedValueOnce([ev({ event_id: 'e2', row_id: 2 })]);
+    vi.mocked(flowApi.getMessageIo)
+      .mockResolvedValueOnce({ ...EMPTY_IO, output: { lines: ['part1'], count: 1 } })
+      .mockResolvedValue({ ...EMPTY_IO, output: { lines: ['part1', 'part2'], count: 2 } });
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
+    await store.openTrace('rt-fin');
+    expect(store.orderedEvents).toHaveLength(1);
+    const p = store.refreshTraceBundle({ awaitFinality: true });
+    // finality 循环内的 1.5s 退避用假计时器推进
+    await vi.advanceTimersByTimeAsync(1700);
+    await p;
+    // 确认后按新水位补齐：loaded=2、IO 已更新为最终片段（A1 反例原 loaded=1/ioCalls=1）
+    expect(store.orderedEvents).toHaveLength(2);
+    expect(store.io?.output.lines).toEqual(['part1', 'part2']);
+    // openTrace 首拉 + round1 + finality 确认后的最终补读 = 3 次
+    expect(flowApi.getEvents).toHaveBeenCalledTimes(3);
+  });
+
+  it('detail transient failure does not cancel independent IO/entities refresh (A1)', async () => {
+    const store = useFlowStore();
+    store.detail = detail({ trace_id: 'rt-tr' });
+    vi.mocked(flowApi.getMessage)
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValue(detail({ trace_id: 'rt-tr', producer_ended: true, integrity: 'complete' }));
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(
+      { ...EMPTY_IO, output: { lines: ['seg'], count: 1 } });
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([
+      { entity_type: 'x', entity_id: '1', from_state: '', to_state: 'S', ts_utc: '' },
+    ]);
+    const p = store.refreshTraceBundle();
+    await vi.advanceTimersByTimeAsync(600); // detail 瞬时重试退避
+    await p;
+    // detail 失败也照常刷新独立来源
+    expect(flowApi.getMessageIo).toHaveBeenCalled();
+    expect(flowApi.getTraceEntities).toHaveBeenCalled();
+    expect(flowApi.getEvents).toHaveBeenCalled();
+    // 有界重试恢复 detail
+    expect(store.detail?.producer_ended).toBe(true);
+  });
+
+  it('hidden page invalidates in-flight bundles via session (A2)', async () => {
+    const store = useFlowStore();
+    store.detail = detail({ trace_id: 'rt-s2' });
+    let releaseFirst!: (d: FlowMessageDetail) => void;
+    const first = new Promise<FlowMessageDetail>((r) => { releaseFirst = r; });
+    vi.mocked(flowApi.getMessage).mockImplementationOnce(() => first);
+    vi.mocked(flowApi.getEvents).mockClear();
+    vi.mocked(flowApi.getEvents).mockResolvedValue([]);
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
+    const p1 = store.refreshTraceBundle(); // 挂起（session=S）
+    const sessionAtIssue = store.streamSession;
+    store.stopStream(); // 页面隐藏：session 递增
+    expect(store.streamSession).toBeGreaterThan(sessionAtIssue || -1);
+    releaseFirst(detail({ trace_id: 'rt-s2', ended_utc: '' }));
+    await p1;
+    // 旧 session 的回包不得落地，也不得触发事件请求
+    expect(flowApi.getEvents).not.toHaveBeenCalled();
+    expect(store.detail?.ended_utc).toBe('');
+  });
+
+  it('loadMoreEvents stays inside the frozen snapshot watermark (A2)', async () => {
+    const store = useFlowStore();
+    store.detail = detail({ trace_id: 'rt-fz', high_watermark: 1500 });
+    store.events = Array.from({ length: 1000 }, (_, i) =>
+      ev({ event_id: `e${i + 1}`, row_id: i + 1 }));
+    store.eventsTruncated = true;
+    vi.mocked(flowApi.getEvents).mockResolvedValue(
+      Array.from({ length: 500 }, (_, i) =>
+        ev({ event_id: `e${i + 1001}`, row_id: i + 1001 })));
+    await store.loadMoreEvents();
+    // 继续页必须携带同一冻结水位 until=1500（旧实现不传 → 读到快照外）
+    expect(flowApi.getEvents).toHaveBeenCalledWith('rt-fz', 1000, 1000, 1500);
+    expect(store.orderedEvents).toHaveLength(1500);
+    expect(store.eventsTruncated).toBe(false);
+  });
+
   it('scheduleIoRefresh throttles burst receipt facts into one refresh', async () => {
     const store = useFlowStore();
     vi.mocked(flowApi.getMessage).mockResolvedValue(detail({ trace_id: 'rt-io' }));
