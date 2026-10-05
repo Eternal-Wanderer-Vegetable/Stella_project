@@ -64,13 +64,32 @@ class TestRuntimeEntryInventory:
 
         missing = []
         index = ProjectIndex(PROJECT_ROOT)
+        # 注册表达式符号（register_handler("x", ...) 的字符串键）不是声明，
+        # 与生成器 missing 规则同口径：出现在注册调用里即视为有效锚点
+        import ast as _ast
+
+        def _registered_symbols(ctx):
+            out = set()
+            for node in _ast.walk(ctx.tree):
+                if isinstance(node, _ast.Call) and node.args:
+                    first = node.args[0]
+                    if isinstance(first, _ast.Constant) and isinstance(
+                            first.value, str):
+                        out.add(first.value)
+            return out
+
         for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY:
             path = PROJECT_ROOT / entry.source[0]
             if not path.exists() or path.suffix != ".py":
                 continue
             # 声明存在性（修复计划 §6.5）：嵌套 def / matcher 赋值目标也算
             ctx = index.ctx_for(entry.source[0])
-            if ctx is None or not _file_declares_symbol(ctx, entry.source[1]):
+            if ctx is None:
+                missing.append(f"{entry.entry_id}: file unreadable "
+                               f"{entry.source[0]}")
+                continue
+            if (entry.source[1] not in _registered_symbols(ctx)
+                    and not _file_declares_symbol(ctx, entry.source[1])):
                 missing.append(f"{entry.entry_id}: {entry.source[1]} not in "
                                f"{entry.source[0]}")
         assert missing == []

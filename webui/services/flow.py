@@ -97,10 +97,12 @@ def messages(
 ) -> dict:
     """消息轨迹列表（含无 Turn 的被动/命令/过滤路径）。
 
-    修复计划 §6.6（R8）：保留 limit/offset 兼容；新增 keyset ``cursor``
-    （``<started_utc>|<trace_id>``，首屏查询快照上界）——不断插入的列表里
-    用 offset 翻页会漏行/重复，cursor 以 (started_utc, trace_id) 稳定续读。
-    返回 ``next_cursor``：本页最后一行的键；取尽为 None。
+    修复计划 §6.6（R8）+ 验收报告 H3：列表按 (started_utc, trace_id)
+    **降序**排列，keyset ``cursor`` 续读必须用严格**小于**（此前用大于，
+    「加载更早」实际翻回了更新的一页）；``offset`` 与 cursor 互斥但都保留
+    兼容（此前 offset 在 cursor 路径重写时丢失）；``total`` 恒为同一过滤
+    条件的总数（不含游标），分页期间稳定可比。并发插入只影响更新一侧，
+    旧方向 keyset 天然稳定。
     """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
@@ -120,28 +122,36 @@ def messages(
         if outcome:
             conds.append("outcome = ?")
             params.append(outcome)
+        filter_where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        # total = 同一过滤范围的总数（不含游标/offset，分页期间含义稳定）
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM message_traces {filter_where}", params
+        ).fetchone()[0]
+        page_conds = list(conds)
+        page_params = list(params)
         if cursor:
-            # keyset 续读：严格晚于游标行（started, trace_id 双键稳定序）
+            # 降序 keyset：严格早于游标行（started, trace_id 双键决胜）
             try:
                 cur_started, cur_trace = str(cursor).split("|", 1)
             except ValueError:
                 cur_started, cur_trace = "", ""
             if cur_started:
-                conds.append(
-                    "(started_utc > ? OR (started_utc = ? AND trace_id > ?))")
-                params.extend([cur_started, cur_started, cur_trace])
-        where = ("WHERE " + " AND ".join(conds)) if conds else ""
-        total = conn.execute(
-            f"SELECT COUNT(*) FROM message_traces {where}", params
-        ).fetchone()[0]
+                page_conds.append(
+                    "(started_utc < ? OR (started_utc = ? AND trace_id < ?))")
+                page_params.extend([cur_started, cur_started, cur_trace])
+            sql_tail = "ORDER BY started_utc DESC, trace_id DESC LIMIT ?"
+            sql_params = (*page_params, int(limit))
+        else:
+            sql_tail = "ORDER BY started_utc DESC, trace_id DESC LIMIT ? OFFSET ?"
+            sql_params = (*page_params, int(limit), int(offset))
+        page_where = ("WHERE " + " AND ".join(page_conds)) if page_conds else ""
         rows = conn.execute(
             "SELECT trace_id, root_kind, platform, scope, source_message_key, "
             "started_utc, ended_utc, outcome, status, complete, loss, detail, "
             "process_instance_id, last_heartbeat_utc"
             + (", " + ", ".join(extra) if extra else "")
-            + f" FROM message_traces {where} "
-            "ORDER BY started_utc DESC, trace_id DESC LIMIT ?",
-            (*params, int(limit)),
+            + f" FROM message_traces {page_where} " + sql_tail,
+            sql_params,
         ).fetchall()
         items = []
         for r in rows:
@@ -516,9 +526,10 @@ def message_io(trace_id: str) -> dict | None:
     started_key = _norm_key(started_utc)
     end_key = _window_end(started_utc, ended_utc)
 
-    # ---- 输出：业务回执优先（O02——root 分类不再决定输出有无）----
+    # ---- 输出：业务回执优先（O02 + 验收报告 M6：保留原片段事实）----
     receipt_lines: list[str] = []
     receipt_notes: list[str] = []
+    segments: list[dict] = []
     tried_receipts = False
     rconn = None
     try:
@@ -526,17 +537,24 @@ def message_io(trace_id: str) -> dict | None:
         if rconn is not None and _table_exists(rconn, "social_deliveries"):
             tried_receipts = True
             rows = rconn.execute(
-                "SELECT text, status FROM social_deliveries WHERE trace_id = ? "
+                "SELECT part_index, text, status, platform_message_id, "
+                "acknowledged_at_utc FROM social_deliveries WHERE trace_id = ? "
                 "ORDER BY part_index ASC LIMIT ?", (trace_id, _OUTPUT_MAX_LINES + 1),
             ).fetchall()
-            ack = [t for (t, s) in rows if s == "acknowledged" and t]
-            other = [(t, s) for (t, s) in rows if s != "acknowledged"]
+            # 片段事实按原 part_index 保留（含 failed/unknown），不压缩序号
+            segments = [
+                {"part_index": r[0], "text": r[1], "status": r[2],
+                 "platform_message_id": r[3], "acknowledged_at_utc": r[4]}
+                for r in rows
+            ]
+            ack = [s["text"] for s in segments if s["status"] == "acknowledged" and s["text"]]
+            other = [s for s in segments if s["status"] != "acknowledged"]
             receipt_lines = ack[:_OUTPUT_MAX_LINES]
             if len(ack) > _OUTPUT_MAX_LINES:
                 receipt_notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行回执")
             if other:
-                n_unknown = sum(1 for _, s in other if s == "unknown")
-                n_failed = sum(1 for _, s in other if s == "failed")
+                n_unknown = sum(1 for s in other if s["status"] == "unknown")
+                n_failed = sum(1 for s in other if s["status"] == "failed")
                 if n_unknown:
                     receipt_notes.append(f"{n_unknown} 段发送状态未知")
                 if n_failed:
@@ -554,17 +572,20 @@ def message_io(trace_id: str) -> dict | None:
     inp = None
     try:
         if mem is not None:
-            # ---- 输入：精确身份优先（修复计划 §6.3）----
+            # ---- 输入：精确身份优先（修复计划 §6.3 + 验收报告 H2）----
             if storage_session_id is not None and source_message_id:
-                row_in = _exact_input_row(
+                row_in, row_state = _exact_input_row(
                     mem, int(storage_session_id), source_message_id,
-                    conversation_kind)
+                    conversation_kind,
+                    conversation_key=str(identity.get("conversation_key") or ""),
+                    bot_id=str(identity.get("bot_id") or ""))
                 if row_in is not None:
                     inp = {"user_id": row_in[0], "content": row_in[1],
                            "msg_id": row_in[2],
-                           "identity_state": identity_state or "exact"}
+                           "identity_state": row_state or identity_state or "exact"}
                 else:
-                    notes.append("精确身份未命中输入行（消息未持久化或已清理）")
+                    notes.append("精确身份未命中输入行"
+                                 "（消息未持久化、已清理或无当前 Bot 身份的匹配行）")
             elif root_kind == "webchat":
                 row_in = mem.execute(
                     "SELECT user_id, content, msg_id FROM group_messages "
@@ -635,6 +656,9 @@ def message_io(trace_id: str) -> dict | None:
             notes.append(source_note)
     lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
 
+    # 全部失败时也保留片段事实（验收报告 M6：不再丢掉具体失败说明）
+    if segments and not any(s["status"] == "acknowledged" for s in segments):
+        notes.append("没有确认送达的片段：以下为逐段投递事实")
     if root_kind in _BACKGROUND_ROOTS:
         notes.append("后台任务：无消息输入输出")
     if root_kind == "qq_passive" and not lines:
@@ -648,27 +672,64 @@ def message_io(trace_id: str) -> dict | None:
                      f"{identity_state or 'missing'}）")
     return {
         "input": inp,
-        "output": {"lines": lines, "count": len(lines)},
+        "output": {
+            "lines": lines,
+            "count": len(lines),
+            # 逐段投递事实（验收报告 M6）：原 part_index + status，ack 文本
+            # 之外的 failed/unknown 片段同样可见
+            "segments": segments[:_OUTPUT_MAX_LINES],
+        },
         "notes": notes,
     }
 
 
 def _exact_input_row(mem, storage_session_id: int, source_message_id: str,
-                     conversation_kind: str) -> tuple | None:
-    """按注册表存储键 + 来源消息 ID 精确取输入行（修复计划 §6.3）。
+                     conversation_kind: str, *,
+                     conversation_key: str = "",
+                     bot_id: str = "") -> tuple[tuple | None, str]:
+    """按注册表存储键 + 来源消息 ID 精确取输入行，并核对规范身份。
 
-    负 storage ID 是私聊注册表键（绝不当群号展示）；同会话同号消息才允许
-    DESC 取最新（重发/编辑场景），跨会话同号永远隔离。
+    修复计划 §6.3 + 验收报告 H2：``storage_session_id``（群=群号，多 Bot
+    下共享）+ ``msg_id``（单 Bot 内唯一）**不足以**隔离身份——必须再核对
+    业务行的 ``conversation_key``/``bot_id``。返回 (row, identity_state)：
+
+    - 行带规范身份且匹配当前 trace → exact；
+    - 行无身份列值（legacy 单 Bot 时代）→ legacy_partial（保守标注，不冒
+      充 exact）；
+    - 有候选行但身份都不匹配当前 Bot → (None, "")——绝不能返回另一台
+      Bot 的正文。
     """
     try:
-        return mem.execute(
-            "SELECT user_id, content, msg_id FROM group_messages "
+        rows = mem.execute(
+            "SELECT user_id, content, msg_id, bot_id, conversation_key "
+            "FROM group_messages "
             "WHERE group_id = ? AND msg_id = ? AND source_kind != 'BOT_SELF' "
-            "ORDER BY id DESC LIMIT 1",
+            "ORDER BY id DESC LIMIT 8",
             (int(storage_session_id), int(source_message_id)),
-        ).fetchone()
+        ).fetchall()
     except (ValueError, TypeError):
-        return None
+        return None, ""
+    if not rows:
+        return None, ""
+    # 私聊存储键由注册表按 (bot, peer) 分配，唯一归属；但仍核对行身份
+    # （防 stale/误写），行身份缺失时按 legacy 保守处理
+    matched = None
+    legacy_rows = []
+    for r in rows:
+        r_bot, r_key = str(r[3] or ""), str(r[4] or "")
+        if not r_bot and not r_key:
+            legacy_rows.append(r)
+            continue
+        if ((not conversation_key or r_key == conversation_key)
+                and (not bot_id or r_bot == bot_id)):
+            matched = r
+            break
+    if matched is not None:
+        return matched, "exact"
+    if legacy_rows and not any(str(r[3] or "") or str(r[4] or "") for r in rows):
+        # 整批候选都是旧行：返回最新一条并保守标注
+        return legacy_rows[0], "legacy_partial"
+    return None, ""
 
 
 def _legacy_group_id(scope: str, root_kind: str,

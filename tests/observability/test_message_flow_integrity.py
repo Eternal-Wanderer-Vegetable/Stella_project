@@ -458,3 +458,45 @@ def _rows(db, sql):
         return conn.execute(sql).fetchall()
     finally:
         conn.close()
+
+
+class TestFlowMigrationRecovery:
+    """验收报告 M6：Flow schema 初始化是显式单事务，失败回滚 + 迁移前备份。"""
+
+    def test_failed_init_rolls_back_and_backs_up(self, tmp_path, monkeypatch):
+        db = tmp_path / "turn_trace.db"
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE message_traces (trace_id TEXT PRIMARY KEY, "
+            "root_kind TEXT NOT NULL DEFAULT '', platform TEXT NOT NULL DEFAULT '', "
+            "scope TEXT NOT NULL DEFAULT '', source_message_key TEXT NOT NULL "
+            "DEFAULT '', topology_version TEXT NOT NULL DEFAULT '', "
+            "process_instance_id TEXT NOT NULL DEFAULT '', started_utc TEXT NOT NULL, "
+            "ended_utc TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL DEFAULT '', "
+            "status TEXT NOT NULL DEFAULT 'running', complete INTEGER NOT NULL "
+            "DEFAULT 0, loss INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '{}')")
+        conn.commit()
+        conn.close()
+        turn_trace.configure(db)
+        try:
+            original_migrate = message_flow._migrate
+
+            def failing_migrate(c):
+                original_migrate(c)  # 补列已执行（事务内）
+                raise RuntimeError("late index failure")
+
+            monkeypatch.setattr(message_flow, "_migrate", failing_migrate)
+            assert message_flow._connect() is None  # 失败旁路
+            monkeypatch.undo()
+            # 回滚：identity 列不得残留（半迁移被整体撤销）
+            conn = sqlite3.connect(db)
+            cols = {r[1] for r in conn.execute(
+                "PRAGMA table_info(message_traces)")}
+            backups = list(tmp_path.glob("*.pre-flow-*.bak"))
+            conn.close()
+            assert "conversation_key" not in cols, "失败迁移必须回滚"
+            assert "spec_digest" not in cols
+            assert backups, "迁移前必须有 backup API 一致性备份"
+        finally:
+            message_flow.flush()
+            turn_trace.configure(None)

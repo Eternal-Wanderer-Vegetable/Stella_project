@@ -84,7 +84,8 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
                 (
                     uuid.uuid4().hex, receipt.turn_id, int(receipt.part_index),
                     receipt.trace_id, int(receipt.epoch),
-                    scope.platform if scope else "", scope.bot_id if scope else "",
+                    scope.platform if scope else (receipt.platform or ""),
+                    scope.bot_id if scope else (receipt.bot_id or ""),
                     scope.group_id if scope else "",
                     receipt.status, receipt.platform_message_id,
                     receipt.acknowledged_at_utc or None,

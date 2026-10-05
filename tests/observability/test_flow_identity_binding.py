@@ -58,7 +58,9 @@ def flow_db(tmp_path):
     turn_trace.configure(db)
     yield db
     message_flow.flush()
-    message_flow.end_all_active() if hasattr(message_flow, "end_all_active") else None
+    # 模块级注册表逐测试清空：by_source_key 复用路径会把上一个测试的
+    # 残留活跃 ctx 当成本事件 root（同源键 fixture 间污染）
+    message_flow._active.clear()
     gateway._flow_roots.clear()
     turn_trace.configure(None)
 
@@ -223,3 +225,40 @@ class TestCanonicalIdentityOnTrace:
         finally:
             conn.close()
         assert marked == 1
+
+
+class TestCacheReentryOccurrence:
+    """验收报告 M6：创建 → 缓存淘汰 → 同事件重入 → 迟到结束。
+
+    旧形状：重入造出第二个 root（旧 root 悬空不结束），迟到结束误关
+    替换 root。修复后重入按来源键复用活跃 root，occurrence token 使
+    结束一次且只一次。
+    """
+
+    @pytest.mark.asyncio
+    async def test_reentry_after_eviction_reuses_root(self, flow_db):
+        ev = _private_event(user_id=28001, message_id=51, self_id="10801")
+        await gateway._flow_ingress_root(ev)
+        root = gateway._flow_roots.get(gateway._flow_key(ev))
+        assert root is not None
+        trace_id = root.trace_id
+        gateway._evict_flow_roots(0)  # 缓存被淘汰
+        # 同事件重入（matcher 路径的 _flow_root_or_create）
+        reused = gateway._flow_root_or_create(ev, "qq_chat")
+        assert reused is root, "重入必须复用活跃 root，不造第二个"
+        assert reused.trace_id == trace_id
+        # 迟到结束：关闭的是同一个 root，且只此一次
+        await gateway._flow_ingress_end(ev)
+        assert root.ended
+        await gateway._flow_ingress_end(ev)  # 重复结束：幂等
+        message_flow.flush()
+        rows = _trace_rows(flow_db)
+        assert len(rows) == 1, "全程只有一条 trace"
+        conn = sqlite3.connect(flow_db)
+        try:
+            ends = conn.execute(
+                "SELECT COUNT(*) FROM flow_events WHERE trace_id=? "
+                "AND kind='trace_end'", (trace_id,)).fetchone()[0]
+        finally:
+            conn.close()
+        assert ends == 1, "trace_end 只落一次"

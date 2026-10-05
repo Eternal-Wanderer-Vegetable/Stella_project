@@ -375,6 +375,7 @@ function layered(input: LayeredInput): LayoutResult {
       input.executed.get(e.src),
       input.executed.get(e.dst),
       transitions,
+      e.kind,
     );
     return {
       id: `${e.src}->${e.dst}:${e.kind}`,
@@ -517,15 +518,22 @@ function nodeArrived(state: FlowNodeState | undefined): boolean {
   );
 }
 
-/** transition 事实是否激活 spec 边 src→dst（修复计划 §6.4 合同）：
+/** transition 事实是否激活 spec 边 src→dst（修复计划 §6.4 + 验收报告 M1）：
  * 1. metrics.transition_v === 1 且 from/to 节点与边端点一致；
- * 2. attempt 匹配：transition 的 attempt 必须在两端各有一条同 attempt 的
- *    发起/到达事实（跨 attempt 不串边）；
- * 3. 事件归属由调用方保证同 trace（事件按 trace 拉取）。 */
+ * 2. ``edge_id`` 存在时必须与**候选边**（端点 + edgeKind）完全一致
+ *    （同端点不同 kind 的平行边不串）；
+ * 3. occurrence 匹配：transition 携带 from/to span 时，两端必须各有一条
+ *    **同 span_id** 的发起/到达事实（同节点重复执行时不得借用别的
+ *    occurrence 事实点亮边）；span 缺省（纯 decision occurrence）退回
+ *    节点级匹配；
+ * 4. attempt 匹配：transition 的 attempt 必须与两端事实一致（跨 attempt
+ *    不串边）；
+ * 5. 事件归属由调用方保证同 trace（事件按 trace 拉取）。 */
 export function edgeTraversed(
   src: FlowNodeState | undefined,
   dst: FlowNodeState | undefined,
   transitions: FlowEvent[] = [],
+  edgeKind = 'order',
 ): boolean {
   if (!src || !dst) return false;
   return transitions.some((t) => {
@@ -533,18 +541,26 @@ export function edgeTraversed(
     if (Number(m.transition_v ?? 0) !== 1) return false;
     if (String(m.from_node ?? '') !== src.nodeId) return false;
     if (String(m.to_node ?? '') !== dst.nodeId) return false;
+    const edgeId = String(m.edge_id ?? '');
+    if (edgeId && edgeId !== `${src.nodeId}->${dst.nodeId}:${edgeKind}`) {
+      return false; // 同端点不同 kind 的平行边不串（验收报告 M1）
+    }
     const tAttempt = Number(t.attempt ?? 0) || 0;
+    const fromSpan = String(m.from_span_id ?? '');
+    const toSpan = String(m.to_span_id ?? '');
     const departed = src.events.some(
       (e) =>
         e.fact_kind !== 'transition' &&
         (e.kind === 'start' || e.kind === 'decision') &&
-        (e.attempt ?? 0) === tAttempt,
+        (e.attempt ?? 0) === tAttempt &&
+        (!fromSpan || e.span_id === fromSpan),
     );
     const arrived = dst.events.some(
       (e) =>
         e.fact_kind !== 'transition' &&
         (e.kind === 'finish' || e.kind === 'decision') &&
-        (e.attempt ?? 0) === tAttempt,
+        (e.attempt ?? 0) === tAttempt &&
+        (!toSpan || e.span_id === toSpan),
     );
     return departed && arrived;
   });

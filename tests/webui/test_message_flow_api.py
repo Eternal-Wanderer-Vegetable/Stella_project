@@ -302,17 +302,22 @@ class TestPrivateChatIoIdentity:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY "
             "AUTOINCREMENT, group_id TEXT, user_id TEXT, content TEXT, "
-            "source_kind TEXT, msg_id INTEGER, timestamp DATETIME)")
+            "source_kind TEXT, msg_id INTEGER, timestamp DATETIME, "
+            "bot_id TEXT DEFAULT '', conversation_key TEXT DEFAULT '')")
         # 私聊行真实存储键 = 注册表负整数；msg_id 唯一性只在本会话内成立
         conn.execute(
             "INSERT INTO group_messages (group_id, user_id, content, "
-            "source_kind, msg_id, timestamp) VALUES ('-11','20001','私聊在吗',"
-            "'PRIVATE_DIRECT',7,'2026-10-04 12:00:00')")
+            "source_kind, msg_id, timestamp, bot_id, conversation_key) "
+            "VALUES ('-11','20001','私聊在吗',"
+            "'PRIVATE_DIRECT',7,'2026-10-04 12:00:00','10001',"
+            "'qq:10001:private:20001')")
         # 干扰行：另一 Bot 同 msg_id（不同 storage 键）绝不能串线
         conn.execute(
             "INSERT INTO group_messages (group_id, user_id, content, "
-            "source_kind, msg_id, timestamp) VALUES ('-99','20002','别的会话',"
-            "'PRIVATE_DIRECT',7,'2026-10-04 12:00:00')")
+            "source_kind, msg_id, timestamp, bot_id, conversation_key) "
+            "VALUES ('-99','20002','别的会话',"
+            "'PRIVATE_DIRECT',7,'2026-10-04 12:00:00','10002',"
+            "'qq:10002:private:20002')")
         conn.commit()
         conn.close()
         data = client.get("/api/v1/trace/messages/rc-priv/context",
@@ -363,6 +368,11 @@ class TestPrivateChatIoIdentity:
                           headers=auth_header).json()["data"]
         assert data["output"]["lines"] == ["私聊回复第一段"]
         assert any("发送失败" in n for n in data["notes"])
+        # 逐段投递事实（验收报告 M6）：原 part_index + status 保留
+        segs = data["output"]["segments"]
+        assert [s["part_index"] for s in segs] == [0, 1]
+        assert segs[0]["status"] == "acknowledged"
+        assert segs[1]["status"] == "failed"
 
 
 class TestCommandReplyVisible:
@@ -381,3 +391,160 @@ class TestCommandReplyVisible:
                           headers=auth_header).json()["data"]
         assert data["input"] is None
         assert data["output"]["lines"] == ["已进入安静模式"]
+
+
+class TestExactInputCrossBot:
+    """验收报告 H2：同 storage（群号）+ 同 msg_id、不同 Bot——exact 输入
+    绝不能返回另一台 Bot 的正文。"""
+
+    def _seed_private_trace(self, trace_id, conv_key, bot_id):
+        from core.observability import message_flow as mf
+
+        root = mf.begin_trace(
+            root_kind="qq_private", platform="qq",
+            scope=f"qq:{bot_id}:private:20001",
+            conversation_key=conv_key, bot_id=bot_id,
+            conversation_kind="private", peer_id="20001",
+            storage_session_id=-11, source_message_id="7",
+            trace_id=trace_id)
+        mf.end_trace(root, outcome="delivered")
+        mf.flush()
+
+    def test_same_storage_same_msg_other_bot_never_returned(
+            self, client, auth_header, flow_home, isolated_home, monkeypatch):
+        import sqlite3
+
+        import config.settings as settings
+        from core.observability import message_flow as mf
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        self._seed_private_trace("h2-a", "qq:10001:private:20001", "10001")
+        # 两台 Bot 的同 storage 语义在群里才共享；这里用群 kind 直接种
+        # 身份列构造反例：同群号同 msg_id，两台 Bot 各有一行
+        root = mf.begin_trace(
+            root_kind="qq_chat", platform="qq", scope="qq:555",
+            conversation_key="qq:10001:group:555", bot_id="10001",
+            conversation_kind="group", peer_id="555",
+            storage_session_id=555, source_message_id="7",
+            trace_id="h2-group-a")
+        mf.end_trace(root, outcome="delivered")
+        mf.flush()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY "
+            "AUTOINCREMENT, group_id TEXT, user_id TEXT, content TEXT, "
+            "source_kind TEXT, msg_id INTEGER, timestamp DATETIME, "
+            "bot_id TEXT DEFAULT '', conversation_key TEXT DEFAULT '')")
+        conn.executemany(
+            "INSERT INTO group_messages (group_id, user_id, content, "
+            "source_kind, msg_id, bot_id, conversation_key) "
+            "VALUES (?,?,?,?,?,?,?)",
+            [("555", "u1", "甲 Bot 会话的正文", "AT_MENTION", 7,
+              "10001", "qq:10001:group:555"),
+             ("555", "u2", "乙 Bot 会话的正文", "AT_MENTION", 7,
+              "10002", "qq:10002:group:555")])
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/h2-group-a/context",
+                          headers=auth_header).json()["data"]
+        assert data["input"] is not None
+        assert data["input"]["content"] == "甲 Bot 会话的正文"
+        assert data["input"]["identity_state"] == "exact"
+
+        # 反向：trace 属于乙 Bot → 必须取乙的行，不串到甲
+        root_b = mf.begin_trace(
+            root_kind="qq_chat", platform="qq", scope="qq:555",
+            conversation_key="qq:10002:group:555", bot_id="10002",
+            conversation_kind="group", peer_id="555",
+            storage_session_id=555, source_message_id="7",
+            trace_id="h2-group-b")
+        mf.end_trace(root_b, outcome="delivered")
+        mf.flush()
+        data_b = client.get("/api/v1/trace/messages/h2-group-b/context",
+                            headers=auth_header).json()["data"]
+        assert data_b["input"]["content"] == "乙 Bot 会话的正文"
+
+    def test_identity_mismatch_returns_no_input_not_other_bot(
+            self, client, auth_header, flow_home, isolated_home, monkeypatch):
+        """候选行身份都不匹配当前 Bot → 不返回（绝不冒充 exact）。"""
+        import sqlite3
+
+        import config.settings as settings
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        self._seed_private_trace("h2-c", "qq:20002:private:20001", "20002")
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY "
+            "AUTOINCREMENT, group_id TEXT, user_id TEXT, content TEXT, "
+            "source_kind TEXT, msg_id INTEGER, timestamp DATETIME, "
+            "bot_id TEXT DEFAULT '', conversation_key TEXT DEFAULT '')")
+        conn.execute(
+            "INSERT INTO group_messages (group_id, user_id, content, "
+            "source_kind, msg_id, bot_id, conversation_key) "
+            "VALUES ('-11','u','别的 Bot 的行','PRIVATE_DIRECT',7,"
+            "'10001','qq:10001:private:20001')")
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/h2-c/context",
+                          headers=auth_header).json()["data"]
+        assert data["input"] is None
+        assert any("无当前 Bot 身份" in n for n in data["notes"])
+
+
+class TestMessagesKeysetPagination:
+    """验收报告 H3：降序 keyset 方向、offset 兼容与稳定 total。"""
+
+    def _seed_five(self, flow_home):
+        from core.observability import message_flow as mf
+
+        for i in range(1, 6):
+            root = mf.begin_trace(root_kind="webchat", trace_id=f"kt-{i}")
+            mf.end_trace(root, outcome="done")
+        mf.flush()
+
+    def test_cursor_pages_older_records(self, client, auth_header, flow_home):
+        self._seed_five(flow_home)
+        page1 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2}).json()["data"]
+        ids1 = [i["trace_id"] for i in page1["items"]]
+        assert ids1 == ["kt-5", "kt-4"]
+        assert page1["total"] == 5 and page1["next_cursor"]
+        page2 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2,
+                                   "cursor": page1["next_cursor"]}).json()["data"]
+        assert [i["trace_id"] for i in page2["items"]] == ["kt-3", "kt-2"]
+        assert page2["total"] == 5, "total 不含游标，分页期间稳定"
+        page3 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2,
+                                   "cursor": page2["next_cursor"]}).json()["data"]
+        assert [i["trace_id"] for i in page3["items"]] == ["kt-1"]
+        assert page3["next_cursor"] in (None, ""), "取尽后无游标"
+
+    def test_offset_still_works(self, client, auth_header, flow_home):
+        self._seed_five(flow_home)
+        data = client.get("/api/v1/trace/messages", headers=auth_header,
+                          params={"limit": 2, "offset": 2}).json()["data"]
+        assert [i["trace_id"] for i in data["items"]] == ["kt-3", "kt-2"]
+
+    def test_concurrent_insert_does_not_duplicate_between_pages(
+            self, client, auth_header, flow_home):
+        """翻页间隙新插入的（更新一侧）轨迹不进入后续页、不产生重复。"""
+        from core.observability import message_flow as mf
+
+        self._seed_five(flow_home)
+        page1 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2}).json()["data"]
+        root = mf.begin_trace(root_kind="webchat", trace_id="kt-new")
+        mf.end_trace(root, outcome="done")
+        mf.flush()
+        page2 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2,
+                                   "cursor": page1["next_cursor"]}).json()["data"]
+        ids = [i["trace_id"] for i in page2["items"]]
+        assert "kt-new" not in ids, "keyset 严格小于：新行不回灌旧页"
+        assert len(ids) == len(set(ids))

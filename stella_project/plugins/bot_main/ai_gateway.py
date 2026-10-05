@@ -279,6 +279,14 @@ def _flow_root_or_create(event: MessageEvent, root_kind: str):
     try:
         from core.observability import message_flow
 
+        # 缓存淘汰后同事件重入（验收报告 M6）：先按来源键回查活跃注册表
+        # 复用原 root——绝不为同一事件再造第二个 root（旧 root 悬空、迟到
+        # 结束误关替换 root 的领域探针即此形状）
+        reused = message_flow.by_source_key(_flow_source_key(event))
+        if reused is not None and not reused.ended:
+            _flow_roots[_flow_key(event)] = reused
+            _flow_roots.move_to_end(_flow_key(event))
+            return reused
         return message_flow.begin_trace(
             root_kind=root_kind, platform="qq",
             scope=_flow_scope_of(event),
@@ -343,6 +351,30 @@ def _flow_transition(fctx, *, from_node: str, to_node: str, **kw) -> None:
         from core.observability import message_flow
 
         message_flow.transition(fctx, from_node=from_node, to_node=to_node, **kw)
+    except Exception:
+        pass
+
+
+def _lifecycle_root(hook: str, origin: str):
+    """生命周期钩子的独立 flow root（验收报告 M5）：静态锚点不能替代
+    运行事实——启动/停止的真实成功、失败、取消都要有 root 与终态。
+    fail-open：观测不可用绝不拖垮启动/停止路径。"""
+    try:
+        from core.observability import message_flow
+
+        return message_flow.begin_trace(
+            root_kind="lifecycle", platform="", scope="",
+            origin=origin, process_kind="lifecycle", trigger=hook)
+    except Exception:
+        return None
+
+
+def _lifecycle_end(ctx, outcome: str, *, complete: bool | None = None) -> None:
+    try:
+        from core.observability import message_flow
+
+        if ctx is not None and not ctx.ended:
+            message_flow.end_trace(ctx, outcome=outcome, complete=complete)
     except Exception:
         pass
 
@@ -452,6 +484,12 @@ try:
             key = _flow_key(event)
             if key in _flow_roots:
                 return
+            # 淘汰后重入：来源键回查复用（验收报告 M6），不造第二 root
+            reused = message_flow.by_source_key(_flow_source_key(event))
+            if reused is not None and not reused.ended:
+                _flow_roots[key] = reused
+                _flow_roots.move_to_end(key)
+                return
             root = message_flow.begin_trace(
                 root_kind="qq_private" if isinstance(event, PrivateMessageEvent) else "qq_passive",
                 platform="qq",
@@ -465,6 +503,10 @@ try:
                 source_message_id=str(event.message_id),
                 source_message_key=_flow_source_key(event),
             )
+            # occurrence token（验收报告 M6）：compare-and-pop 的核对凭据，
+            # 结束路径只关闭携带本 token 的 occurrence，一次
+            with contextlib.suppress(Exception):
+                root._ingress_token = uuid.uuid4().hex
             _flow_roots[key] = root
             _flow_roots.move_to_end(key)
             _evict_flow_roots()
@@ -490,6 +532,15 @@ try:
             if (root is not None and not root.ended
                     and (not root.conversation_key
                          or root.conversation_key == _flow_conversation_key(event))):
+                # occurrence compare-and-pop（验收报告 M6）：同一 occurrence
+                # 的重复结束幂等；token 已消费即跳过，绝不二次关闭
+                token = getattr(root, "_ingress_token", "")
+                consumed = getattr(root, "_ingress_end_token", "")
+                if token and consumed == token:
+                    return
+                if token:
+                    with contextlib.suppress(Exception):
+                        root._ingress_end_token = token
                 message_flow.end_trace(
                     root, outcome=root.outcome or "passive_only")
         except Exception:
@@ -2673,8 +2724,10 @@ async def _start_scheduling() -> None:
     """启动调度 worker；迁移失败/初始化异常只停用本功能，绝不拖垮主进程。"""
     from config import SCHEDULING_ENABLED
 
+    lifecycle = _lifecycle_root("_start_scheduling", "startup")
     global _scheduling_runtime, _scheduling_service
     if not SCHEDULING_ENABLED:
+        _lifecycle_end(lifecycle, "disabled", complete=True)
         return
     try:
         _scheduling_runtime, _scheduling_service = _build_scheduling_stack()
@@ -2682,8 +2735,10 @@ async def _start_scheduling() -> None:
         logger.error(f"❌ [Scheduling] 初始化失败（含迁移检查），调度功能停用: {e}")
         _scheduling_runtime = None
         _scheduling_service = None
+        _lifecycle_end(lifecycle, "init_failed", complete=True)
         return
     await _scheduling_runtime.start()
+    _lifecycle_end(lifecycle, "started", complete=True)
 
 
 # ============================================================
@@ -2720,14 +2775,17 @@ async def _start_cometa() -> None:
     失败（TOML 非法/迁移失败）只停用 cometa，绝不拖垮主进程；
     COMETA_ENABLED=false 时零动作（现有聊天行为逐字节不变）。
     """
+    lifecycle = _lifecycle_root("_start_cometa", "startup")
     global _cometa_runtime_instance
     if not _cometa_enabled():
+        _lifecycle_end(lifecycle, "disabled", complete=True)
         return
     try:
         from cometa import runtime as cometa_runtime
 
         config = cometa_runtime.CometaConfig.load()
         if not config.enabled:
+            _lifecycle_end(lifecycle, "disabled", complete=True)
             return
         runtime = cometa_runtime.build_runtime(
             config,
@@ -2742,9 +2800,11 @@ async def _start_cometa() -> None:
         cometa_runtime.set_current(runtime)
         _cometa_runtime_instance = runtime
         logger.info("✅ [Cometa] 外部 Agent 任务层已装配（worker 子进程已启动）")
+        _lifecycle_end(lifecycle, "started", complete=True)
     except Exception as e:
         logger.error(f"❌ [Cometa] 初始化失败，cometa 停用: {e}")
         _cometa_runtime_instance = None
+        _lifecycle_end(lifecycle, "init_failed", complete=True)
 
 
 async def _stop_cometa() -> None:
@@ -2798,8 +2858,10 @@ if ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED and ASTRBOT_PLUGIN_HOT_RELOAD_WATCH:
     @get_driver().on_startup
     async def _start_hot_reload_watcher() -> None:
         # 插件与能力装配都挂在 on_startup 上，这里排在它们之后拿到的才是完整清单
+        lifecycle = _lifecycle_root("_start_hot_reload_watcher", "startup")
         global _hot_reload_watcher
         _hot_reload_watcher = asyncio.create_task(_watch_plugin_sources())
+        _lifecycle_end(lifecycle, "started", complete=True)
 
 
 # ============================================================
@@ -3922,9 +3984,11 @@ async def _start_stop_watcher() -> None:
     清残留必须放在最前面：上次硬杀可能留下文件，不清会导致新进程一启动就
     自杀——这是整个方案最致命的失败模式。
     """
+    lifecycle = _lifecycle_root("_start_stop_watcher", "startup")
     clear_stop_request()
     global _stop_watcher_task
     _stop_watcher_task = asyncio.create_task(watch_stop_request())
+    _lifecycle_end(lifecycle, "started", complete=True)
 
 
 async def watch_stop_request() -> None:
@@ -4049,6 +4113,8 @@ async def _graceful_shutdown() -> None:
 
     超时上界取 SHUTDOWN_GRACE_SECONDS，超时后放弃等待并告警。
     """
+    lifecycle = _lifecycle_root("_graceful_shutdown", "shutdown")
+    outcome = "stopped"
     if _stop_watcher_task is not None and _stop_watcher_task is not asyncio.current_task():
         _stop_watcher_task.cancel()
     if _hot_reload_watcher is not None:
@@ -4090,3 +4156,4 @@ async def _graceful_shutdown() -> None:
         from core.llm import usage_store
 
         usage_store.flush()
+    _lifecycle_end(lifecycle, outcome, complete=True)

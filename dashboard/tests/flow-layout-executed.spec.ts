@@ -2,6 +2,7 @@ import type { FlowEvent, FlowNodeSpec } from '@/api/flow';
 import type { SpecLike } from '@/views/data/flowLayout';
 import type { FlowNodeState } from '@/stores/flowReducer';
 import {
+  edgeTraversed,
   layoutExecuted,
   layoutLayered,
   NODE_W,
@@ -439,5 +440,80 @@ describe('edgeTraversed transition facts (R3)', () => {
       evFact('b:f2', 'b', 'finish', 'succeeded', { row_id: 2, instance_key: 'seg:1' }),
     ]);
     expect(edgeTraversed(a2, b2, [])).toBe(false);
+  });
+});
+
+// ============================================================
+// 验收报告 M1：transition 必须匹配端点 occurrence/span 与 edge_id。
+// ============================================================
+describe('edgeTraversed occurrence matching (M1)', () => {
+  function nodeState(id: string, events: FlowEvent[]): FlowNodeState {
+    return {
+      nodeId: id, label: id, status: 'succeeded', businessOutcome: '',
+      instances: 1, firstSeq: 0, lastTs: '', durationMs: null, metrics: [],
+      events, running_count: 0, succeeded_count: 1, failed_count: 0,
+      latest: null,
+    };
+  }
+
+  // 端点各只有一个真实 occurrence
+  const a = nodeState('a-real', [
+    evFact('a2', 'a-real', 'start', 'running', { row_id: 2, span_id: 's-a2' }),
+  ]);
+  const b = nodeState('b-real', [
+    evFact('b1', 'b-real', 'finish', 'succeeded', { row_id: 3, span_id: 's-b1' }),
+  ]);
+
+  it('borrowed occurrence (spans not on the endpoints) does NOT activate', () => {
+    // transition 指向 s-a1/s-b2——端点上不存在这些 occurrence（验收报告
+    // M1 反例：同节点重复执行时不得借用别的 occurrence 事实点亮边）
+    const t = evFact('t1', 'a-real', 'decision', 'succeeded', {
+      row_id: 2, fact_kind: 'transition',
+      metrics: {
+        transition_v: 1, edge_id: 'a-real->b-real:order',
+        from_node: 'a-real', to_node: 'b-real',
+        from_span_id: 's-a1', to_span_id: 's-b2', attempt: 0,
+        relation_kind: 'order',
+      },
+    });
+    expect(edgeTraversed(a, b, [t], 'order')).toBe(false);
+  });
+
+  it('matching span occurrence on both ends activates', () => {
+    const t = evFact('t2', 'a-real', 'decision', 'succeeded', {
+      row_id: 2, fact_kind: 'transition',
+      metrics: {
+        transition_v: 1, edge_id: 'a-real->b-real:order',
+        from_node: 'a-real', to_node: 'b-real',
+        from_span_id: 's-a2', to_span_id: 's-b1', attempt: 0,
+        relation_kind: 'order',
+      },
+    });
+    expect(edgeTraversed(a, b, [t], 'order')).toBe(true);
+  });
+
+  it('edge_id mismatch (same endpoints, different kind) does not activate', () => {
+    const t = evFact('t3', 'a-real', 'decision', 'succeeded', {
+      row_id: 2, fact_kind: 'transition',
+      metrics: {
+        transition_v: 1, edge_id: 'a-real->b-real:condition',
+        from_node: 'a-real', to_node: 'b-real',
+        from_span_id: 's-a2', to_span_id: 's-b1',
+        relation_kind: 'condition',
+      },
+    });
+    // 候选边是 a-real->b-real:order，transition 指向 condition 平行边
+    expect(edgeTraversed(a, b, [t], 'order')).toBe(false);
+  });
+
+  it('transition without span ids falls back to node+attempt matching', () => {
+    const t = evFact('t4', 'a-real', 'decision', 'succeeded', {
+      row_id: 2, fact_kind: 'transition',
+      metrics: {
+        transition_v: 1, edge_id: 'a-real->b-real:order',
+        from_node: 'a-real', to_node: 'b-real', relation_kind: 'order',
+      },
+    });
+    expect(edgeTraversed(a, b, [t], 'order')).toBe(true);
   });
 });

@@ -36,6 +36,16 @@ const ROOT_KIND_LABELS: Record<string, string> = {
   compact: '会话压缩',
   cometa_task: 'Cometa 任务',
   effect: '效果结算',
+  lifecycle: '生命周期',
+  social_worker: '社交 worker',
+  scheduled_task: '预约任务',
+  knowledge_ingest: '知识导入',
+  participation: '参与决策',
+  proactive_timer: '定时主动',
+  proactive_at: '主动@',
+  memory_consolidate: '记忆整合',
+  memory_promotion: '记忆晋升',
+  memory_maintenance: '记忆维护',
 };
 
 // 业务结果的中文名（root 结束时的 outcome 事实；未知值原样展示）
@@ -332,6 +342,33 @@ const selectedNode = computed<LaidNode | null>(() => {
 const selectedNodeDetail = computed(() =>
   store.executedNodeMap.get(card.value?.nodeId ?? '') ?? null,
 );
+
+// 源码闭包视图（验收报告 M5）：manifest source_closure 的页面消费——
+// 文件/符号、体哈希、可达辅助符号与边界分类（unresolved/dynamic/native）
+const selectedClosure = computed(() => {
+  const nodeId = card.value?.nodeId ?? '';
+  if (!nodeId) return null;
+  const spec = store.spec;
+  if (!spec) return null;
+  const node = (spec.nodes ?? []).find((n) => n.id === nodeId);
+  const closure = spec.source_closure?.[nodeId];
+  if (!node?.source_ref && !closure) return null;
+  const boundaries = closure?.boundaries ?? [];
+  const byResolution: Record<string, number> = {};
+  for (const b of boundaries) {
+    byResolution[b.resolution] = (byResolution[b.resolution] ?? 0) + 1;
+  }
+  return {
+    file: node?.source_ref?.file ?? '',
+    symbol: node?.source_ref?.symbol ?? '',
+    bodyHash: node?.source_ref?.body_hash ?? '',
+    helpers: closure?.reachable_symbols?.length ?? 0,
+    truncated: closure?.reachable_truncated ?? false,
+    boundarySummary: Object.entries(byResolution)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(' · ') || '无',
+  };
+});
 
 const currentEvent = computed<FlowEvent | null>(() => {
   if (store.playbackIndex < 0) return null;
@@ -658,7 +695,14 @@ function stopPlay() {
 }
 
 const platformOptions = ['qq', 'webchat', 'cometa'];
-const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
+// 入口筛选项 = 静态标签表 ∪ manifest entry_roots（验收报告 M5：不再固定 9 项，
+// 19 个声明入口全部可选；未知 root_kind 原样展示）
+const rootKindOptions = computed(() => [
+  ...new Set([
+    ...Object.keys(ROOT_KIND_LABELS),
+    ...Object.keys(store.spec?.entry_roots ?? {}),
+  ]),
+]);
 </script>
 
 <template>
@@ -896,6 +940,28 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                       ? '收起'
                       : `展开全部 ${store.io.output.lines.length} 行` }}
                   </v-btn>
+                </div>
+                <!-- 逐段投递事实（验收报告 M6）：failed/unknown 片段可见 -->
+                <div
+                  v-if="store.io.output.segments
+                    && store.io.output.segments.some((s) => s.status !== 'acknowledged')"
+                  class="mt-1"
+                >
+                  <div
+                    v-for="seg in store.io.output.segments"
+                    :key="seg.part_index"
+                    class="d-flex align-center ga-2 text-caption py-0.5"
+                  >
+                    <v-chip
+                      size="x-small"
+                      label
+                      :color="seg.status === 'acknowledged'
+                        ? 'success' : (seg.status === 'failed' ? 'error' : 'warning')"
+                    >
+                      #{{ seg.part_index }} {{ seg.status }}
+                    </v-chip>
+                    <span class="io-text flex-grow-1">{{ seg.text || '（空）' }}</span>
+                  </div>
                 </div>
                 <div v-else class="text-caption text-medium-emphasis">（无）</div>
               </div>
@@ -1186,6 +1252,23 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                     </div>
                   </div>
                 </template>
+                <template v-if="selectedClosure">
+                  <v-divider class="my-2" />
+                  <div class="text-caption text-medium-emphasis">
+                    <div>
+                      源码：{{ selectedClosure.file }}#{{ selectedClosure.symbol }}
+                    </div>
+                    <div v-if="selectedClosure.bodyHash">
+                      体哈希 {{ selectedClosure.bodyHash.slice(0, 10) }}
+                    </div>
+                    <div>
+                      可达辅助 {{ selectedClosure.helpers }} 个<template
+                        v-if="selectedClosure.truncated"
+                      >（截断）</template>
+                      · 边界：{{ selectedClosure.boundarySummary }}
+                    </div>
+                  </div>
+                </template>
                 <template v-if="selectedNodeDetail?.metrics?.length">
                   <v-divider class="my-2" />
                   <pre class="flow-metrics">{{ JSON.stringify(
@@ -1259,13 +1342,13 @@ const rootKindOptions = Object.keys(ROOT_KIND_LABELS);
                 {{ store.visibleEvents.length }} / {{ store.orderedEvents.length }} 事件
               </v-chip>
               <v-chip
-                v-if="store.detail.persisted_events"
+                v-if="store.detail.event_count"
                 size="x-small"
                 label
                 :color="store.eventsTruncated ? 'warning' : undefined"
-                :title="`存储已提交 ${store.detail.persisted_events} 条事件；浏览器已加载 ${store.orderedEvents.length} 条——两者独立（修复计划 §6.6 R8）`"
+                :title="`存储已提交 ${store.detail.event_count} 条事件（COUNT）；浏览器已加载 ${store.orderedEvents.length} 条——验收报告 H4：两者同为事件条数，分页游标另用 row_id 水位`"
               >
-                已载 {{ store.orderedEvents.length }} / 存储 {{ store.detail.persisted_events }}
+                已载 {{ store.orderedEvents.length }} / 存储 {{ store.detail.event_count }}
               </v-chip>
               <v-btn
                 v-if="store.eventsTruncated"

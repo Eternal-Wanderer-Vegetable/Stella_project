@@ -50,6 +50,21 @@ const IO_REFRESH_THROTTLE_MS = 2000;
 // 消息列表单页条数（keyset 游标续读）
 const LIST_PAGE_LIMIT = 100;
 
+/** 列表页合并（验收报告 M2）：新首屏覆盖顶部，已加载的历史页按
+ * (started_utc, trace_id) 降序保留；reset 时整体替换。 */
+function mergeListPage(
+  existing: FlowMessageSummary[],
+  incoming: FlowMessageSummary[],
+  reset: boolean,
+): FlowMessageSummary[] {
+  if (reset) return [...incoming];
+  const seen = new Set(incoming.map((m) => m.trace_id));
+  const kept = existing.filter((m) => !seen.has(m.trace_id));
+  return [...incoming, ...kept].sort((a, b) =>
+    b.started_utc.localeCompare(a.started_utc)
+    || b.trace_id.localeCompare(a.trace_id));
+}
+
 /** 循环累计取最大 row_id（修复计划 §6.6：大数组禁用 Math.max(...) 展开）。 */
 function maxRowId(events: Array<{ row_id: number }>): number {
   let max = 0;
@@ -64,6 +79,8 @@ export const useFlowStore = defineStore('flow', {
     messages: [] as FlowMessageSummary[],
     messagesTotal: 0,
     messagesCursor: '' as string, // keyset 游标；'' = 无更多
+    listFilterKey: '|', // 当前列表查询的过滤键（平台|入口）
+    listSeq: 0, // 列表请求代际：过滤变化/轮询竞态防护（验收报告 M2）
     loadingList: false,
     platformFilter: '' as string,
     rootKindFilter: '' as string,
@@ -91,6 +108,7 @@ export const useFlowStore = defineStore('flow', {
     abort: null as AbortController | null,
     listTimer: null as number | null,
     ioRefreshTimer: null as number | null,
+    bundleSeq: 0, // bundle 请求代际（验收报告 M2：旧响应不得覆盖终态）
   }),
 
   getters: {
@@ -186,6 +204,16 @@ export const useFlowStore = defineStore('flow', {
     },
 
     async loadMessages() {
+      // 过滤变化 → 重置累积；否则轮询只刷新首屏并保留已加载的历史页
+      // （验收报告 M2：直接替换会让「加载更早」的历史页在 5s 轮询后消失）
+      const filterKey = `${this.platformFilter ?? ''}|${this.rootKindFilter ?? ''}`;
+      const reset = filterKey !== this.listFilterKey;
+      const seq = ++this.listSeq;
+      if (reset) {
+        this.listFilterKey = filterKey;
+        this.messages = [];
+        this.messagesCursor = '';
+      }
       this.loadingList = true;
       try {
         const data = await listMessages({
@@ -193,11 +221,17 @@ export const useFlowStore = defineStore('flow', {
           root_kind: this.rootKindFilter || undefined,
           limit: LIST_PAGE_LIMIT,
         });
-        this.messages = data.items;
+        if (seq !== this.listSeq
+            || filterKey !== `${this.platformFilter ?? ''}|${this.rootKindFilter ?? ''}`) {
+          return; // 请求期间过滤已变：旧响应整包丢弃
+        }
+        this.messages = mergeListPage(this.messages, data.items, reset);
         this.messagesTotal = data.total;
-        this.messagesCursor = data.next_cursor ?? '';
+        if (!this.messagesCursor || reset) {
+          this.messagesCursor = data.next_cursor ?? '';
+        }
       } finally {
-        this.loadingList = false;
+        if (seq === this.listSeq) this.loadingList = false;
       }
     },
 
@@ -208,6 +242,13 @@ export const useFlowStore = defineStore('flow', {
      */
     async loadMoreMessages() {
       if (!this.messagesCursor || this.loadingList) return;
+      const filterKey = `${this.platformFilter ?? ''}|${this.rootKindFilter ?? ''}`;
+      if (filterKey !== this.listFilterKey) {
+        // 过滤已切走：不再向旧过滤的游标追加（验收报告 M2 反例）
+        this.messagesCursor = '';
+        return;
+      }
+      const seq = this.listSeq;
       this.loadingList = true;
       try {
         const data = await listMessages({
@@ -216,18 +257,15 @@ export const useFlowStore = defineStore('flow', {
           limit: LIST_PAGE_LIMIT,
           cursor: this.messagesCursor,
         });
-        // 按已加载集合去重（游标语义下理论无重叠，防御性合并）
-        const seen = new Set(this.messages.map((m) => m.trace_id));
-        for (const item of data.items) {
-          if (!seen.has(item.trace_id)) {
-            this.messages.push(item);
-            seen.add(item.trace_id);
-          }
+        const currentKey = `${this.platformFilter ?? ''}|${this.rootKindFilter ?? ''}`;
+        if (seq !== this.listSeq || currentKey !== filterKey) {
+          return; // 期间发生过滤切换/重置：旧页丢弃（验收报告 M2）
         }
+        this.messages = mergeListPage(this.messages, data.items, false);
         this.messagesTotal = data.total;
         this.messagesCursor = data.next_cursor ?? '';
       } finally {
-        this.loadingList = false;
+        if (seq === this.listSeq) this.loadingList = false;
       }
     },
 
@@ -287,34 +325,61 @@ export const useFlowStore = defineStore('flow', {
      * 与对象事实。trace_end 与手动刷新必须触发；receipt 事实走节流入口
      * {@link scheduleIoRefresh}。每个回包都校验代际与当前轨迹。
      */
-    async refreshTraceBundle() {
+    async refreshTraceBundle(options: { awaitFinality?: boolean } = {}) {
       const gen = this.traceGeneration;
       const traceId = this.detail?.trace_id;
       if (!traceId) return;
+      // 请求代际（验收报告 M2）：同 trace 的旧 bundle 响应不得覆盖新终态
+      // ——每次调用递增，响应落地前核对仍是最新一次调用
+      const seq = ++this.bundleSeq;
+      const alive = () =>
+        seq === this.bundleSeq
+        && gen === this.traceGeneration
+        && this.detail?.trace_id === traceId;
+      // 先刷新 detail（事件补读需要它的新水位），再并行事件补读/IO/实体
+      //（验收报告 H5：手动刷新必须包含冻结水位后的事件补读）
+      try {
+        const detail = await getMessage(traceId);
+        if (!alive()) return;
+        this.detail = detail;
+      } catch {
+        return;
+      }
       const tasks: Array<Promise<void>> = [
-        getMessage(traceId)
-          .then((d) => {
-            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
-              this.detail = d;
-            }
-          })
-          .catch(() => {}),
+        this.fetchEvents().catch(() => {}),
         getMessageIo(traceId)
           .then((io) => {
-            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
-              this.io = io;
-            }
+            if (alive()) this.io = io;
           })
           .catch(() => {}),
         getTraceEntities(traceId)
           .then((entities) => {
-            if (gen === this.traceGeneration && this.detail?.trace_id === traceId) {
-              this.traceEntities = entities;
-            }
+            if (alive()) this.traceEntities = entities;
           })
           .catch(() => {}),
       ];
       await Promise.all(tasks);
+      // writer finality 有界等待（验收报告 H5）：producer 已结束但 integrity
+      // 尚未落账时，短暂重试直到账本确认或次数用尽（绝不无限等待）
+      if (options.awaitFinality) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const d = this.detail;
+          if (!alive() || !d) return;
+          if (d.producer_ended && (d.integrity === 'complete'
+              || d.integrity === 'partial' || d.integrity === 'unknown')) {
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 1500));
+          try {
+            const detail = await getMessage(traceId);
+            if (!alive()) return;
+            this.detail = detail;
+          } catch {
+            return;
+          }
+        }
+        await this.fetchEvents().catch(() => {});
+      }
     },
 
     /**
@@ -339,27 +404,30 @@ export const useFlowStore = defineStore('flow', {
       if (!this.detail) return;
       const gen = this.traceGeneration;
       const traceId = this.detail.trace_id;
+      // high_watermark = 本 trace 已提交事件的最大全局 row_id（与分页游标
+      // 同单位）；persisted_events 是 MAX(seq)（trace 内序列水位），两者
+      // 单位不同，绝不可互比（验收报告 H4）
       const highWatermark = Number(this.detail.high_watermark ?? 0);
       this.eventsLoading = true;
       try {
         for (let page = 0; page < MAX_EVENT_PAGES; page += 1) {
           const after = maxRowId(this.events);
+          // 稳定快照：每一页都钳制在同一冻结水位（验收报告补充项——此前
+          // 只有首页传 until，后续页会读到快照外的新提交）
           const items = await getEvents(
-            traceId, after, EVENT_PAGE_LIMIT,
-            page === 0 ? highWatermark : 0);
+            traceId, after, EVENT_PAGE_LIMIT, highWatermark);
           if (gen !== this.traceGeneration || this.detail?.trace_id !== traceId) {
             return;
           }
           if (!items.length) break; // 空页：服务端已取尽
           this.mergeEvents(items);
           if (items.length < EVENT_PAGE_LIMIT) break; // 不满页：没有更多
-          const maxRow = maxRowId(items);
-          if (highWatermark > 0 && maxRow >= highWatermark) break; // 已到快照高水位
+          if (highWatermark > 0 && maxRowId(this.events) >= highWatermark) break;
         }
-        // 软上限判定：还有已提交事件未加载 → 显式 partial（R8）
-        const persisted = Number(this.detail.persisted_events ?? 0);
+        // 软上限判定（H4 合同）：游标单位 = row_id，对比本 trace 的
+        // high_watermark；超过软上限仍有余量 → 显式 partial
         this.eventsTruncated =
-          persisted > 0 && maxRowId(this.events) < persisted;
+          highWatermark > 0 && maxRowId(this.events) < highWatermark;
       } finally {
         if (gen === this.traceGeneration) this.eventsLoading = false;
       }
@@ -378,11 +446,9 @@ export const useFlowStore = defineStore('flow', {
           return;
         }
         this.mergeEvents(items);
-        const persisted = Number(this.detail.persisted_events ?? 0);
+        const highWatermark = Number(this.detail.high_watermark ?? 0);
         this.eventsTruncated =
-          items.length >= EVENT_PAGE_LIMIT &&
-          persisted > 0 &&
-          maxRowId(this.events) < persisted;
+          highWatermark > 0 && maxRowId(this.events) < highWatermark;
       } finally {
         if (gen === this.traceGeneration) this.eventsLoading = false;
       }
@@ -481,9 +547,10 @@ export const useFlowStore = defineStore('flow', {
                   this.streamEnded = true;
                   this.live = false;
                   if (parsed.type === 'trace_end') {
-                    // 终帧后 bundle 刷新（修复计划 §6.6 R6）：detail/IO/
-                    // 关系/对象一次到位，输出不再停留在打开时的快照
-                    void this.refreshTraceBundle();
+                    // 终帧后 bundle 刷新（修复计划 §6.6 R6 + 验收报告 H5）：
+                    // detail/事件补读/IO/关系/对象一次到位，并等待 writer
+                    // finality 落账（有界重试，不无限等待）
+                    void this.refreshTraceBundle({ awaitFinality: true });
                   }
                   controller.abort();
                   return;

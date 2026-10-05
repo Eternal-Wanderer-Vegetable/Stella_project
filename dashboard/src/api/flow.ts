@@ -103,6 +103,28 @@ export interface FlowNodeSpec {
   kind: string;
   derived?: boolean;
   opaque?: boolean;
+  // manifest schema3：真实源码锚点（验收报告 M5 闭包视图）
+  source_ref?: { file: string; symbol: string; body_hash: string };
+}
+
+export interface FlowClosureItem {
+  kind: string;
+  line: number;
+  target?: string;
+  resolved?: string;
+  [key: string]: unknown;
+}
+
+export interface FlowSourceClosure {
+  entry: { items: FlowClosureItem[]; counts: Record<string, number>; truncated?: boolean };
+  reachable_symbols: Array<{
+    file: string;
+    qualname: string;
+    body_hash: string;
+    resolution: string;
+  }>;
+  reachable_truncated?: boolean;
+  boundaries: Array<{ target: string; resolution: string }>;
 }
 
 export interface FlowEdgeSpec {
@@ -122,6 +144,8 @@ export interface FlowSpec {
   nodes: FlowNodeSpec[];
   edges: FlowEdgeSpec[];
   entry_roots: Record<string, string>;
+  // manifest schema3（验收报告 M5）：逐节点源码闭包与边界分类
+  source_closure?: Record<string, FlowSourceClosure>;
 }
 
 export interface MessageQuery {
@@ -170,7 +194,18 @@ export interface FlowMessageIo {
     // 修复计划 §6.3（M5）：exact=注册表存储键精确命中；legacy_partial=旧兜底
     identity_state?: string;
   } | null;
-  output: { lines: string[]; count: number };
+  output: {
+    lines: string[];
+    count: number;
+    // 逐段投递事实（验收报告 M6）：原 part_index + status，failed/unknown 可见
+    segments?: Array<{
+      part_index: number;
+      text: string;
+      status: string;
+      platform_message_id: string | null;
+      acknowledged_at_utc: string | null;
+    }>;
+  };
   notes: string[];
 }
 
