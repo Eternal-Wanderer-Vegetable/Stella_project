@@ -506,7 +506,7 @@ def test_compound_correction_persists_and_excludes_old_alias(ident_db):
         ).fetchall()
     finally:
         conn.close()
-    statuses = {alias: status for alias, status in rows}
+    statuses = dict(rows)
     assert statuses["红中"] == "inactive"
     assert statuses["Nox"] == "active"
     assert get_identity_revision(key) == rev + 1

@@ -150,35 +150,65 @@ class TestPersonalSharing:
         assert reason == "question"
 
     def test_grant_sharing_authorization_idempotent(self):
-        """授权操作幂等。"""
+        """授权操作幂等（P3 起须真实来源行 + 规范 DDL）。"""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
 
+        conn = sqlite3.connect(db_path)
         try:
-            conn = sqlite3.connect(db_path)
-
-            # 创建必要的表
-            from memory.personal_sharing import create_sharing_authorization_table
-            from memory.schema import create_memory_scope_versions_table
+            # 必要表（规范形状：授权表 + 台账 + scope 版本 + 来源消息表 + 原件表）
+            from memory.personal_sharing import (
+                create_sharing_authorization_table,
+                create_sharing_copies_table,
+            )
+            from memory.schema import (
+                MEMORY_CANDIDATES_TABLE_DDL,
+                create_memory_scope_versions_table,
+            )
             create_sharing_authorization_table(conn)
+            create_sharing_copies_table(conn)
             create_memory_scope_versions_table(conn)
+            conn.execute(MEMORY_CANDIDATES_TABLE_DDL)
+            conn.execute(
+                "ALTER TABLE memory_candidates ADD COLUMN verification_contract_json TEXT"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS group_messages ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT, user_id TEXT,"
+                " content TEXT, source_kind TEXT DEFAULT 'PASSIVE',"
+                " conversation_key TEXT, bot_id TEXT,"
+                " timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"
+            )
+            conn.execute(
+                "INSERT INTO group_messages (id, user_id, content, source_kind,"
+                " conversation_key, bot_id)"
+                " VALUES (100, '12345', '在群里也记得', 'AT_MENTION',"
+                " 'private:12345', '1001')"
+            )
+            conn.execute(
+                "INSERT INTO memory_candidates (id, user_id, type, content, status,"
+                " owner_type, owner_key, subject_key, audience, fact_key)"
+                " VALUES ('c1', '12345', 'relation', 'fact', 'ACTIVE', 'PERSON',"
+                " 'person:qq:1001:12345', 'qq:12345', 'PRIVATE_ONLY', 'fact_key_1')"
+            )
 
             # 首次授权
             success1, reason1 = grant_sharing_authorization(
-                conn, 1001, 12345, "fact_key_1", "private:12345", 100
+                conn, "qq", 1001, 12345, "fact_key_1", "private:12345", 100
             )
             assert success1 is True
             assert reason1 == "granted"
 
             # 重复授权应幂等
             success2, reason2 = grant_sharing_authorization(
-                conn, 1001, 12345, "fact_key_1", "private:12345", 101
+                conn, "qq", 1001, 12345, "fact_key_1", "private:12345", 100
             )
             assert success2 is True
             assert reason2 == "already_active"
 
-            conn.close()
+            conn.commit()
         finally:
+            conn.close()
             Path(db_path).unlink(missing_ok=True)
 
 

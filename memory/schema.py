@@ -59,9 +59,9 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v17：对话归属复发修复 - 候选验证合同 + 共享授权表，
-# 见 memory/migrations.py migrate_v17 与计划 §6.1/§6.3/§6.5）
-SCHEMA_VERSION = 17
+# 当前 Schema 版本（v18：共享授权 owner 绑定与副本台账——复核 F3/F4/F5/F13，
+# 见 memory/migrations.py migrate_v18 与整改计划 P3）
+SCHEMA_VERSION = 18
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -161,6 +161,24 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "memory_candidates",
         "content_raw",
         "ALTER TABLE memory_candidates ADD COLUMN content_raw TEXT",
+    ),
+    # v18（整改计划 P3，复核 F4/F5）：授权行补规范归属绑定列。owner_key 是
+    # person:{platform}:{bot_id}:{user_id}（ownership.person_owner_key），
+    # 检索缓存版本读的就是这个键；user:{uid} 是 F5 的错误键，已废弃。
+    (
+        "personal_memory_sharing",
+        "platform",
+        "ALTER TABLE personal_memory_sharing ADD COLUMN platform TEXT NOT NULL DEFAULT 'qq'",
+    ),
+    (
+        "personal_memory_sharing",
+        "owner_key",
+        "ALTER TABLE personal_memory_sharing ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "personal_memory_sharing",
+        "subject_key",
+        "ALTER TABLE personal_memory_sharing ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''",
     ),
     # memories（主表）：补上 v2 记忆字段
     (
@@ -675,6 +693,27 @@ def create_memory_evidence_table(conn: sqlite3.Connection) -> None:
     conn.execute(MEMORY_EVIDENCE_TABLE_DDL)
 
 
+# 共享副本台账（v18 起，整改计划 P3，复核 F3/F4/F5/F13）：每个授权 grant
+# 复制出的 USER_SHARED 副本逐条登记。撤回/重授权只按台账 record_id 精确
+# 操作（绝不按 fact_key 全表 UPDATE——那会动到别人的共享副本）；撤销时把
+# 副本原状态记进 prior_status，regrant 据此恢复。
+SHARING_COPIES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS personal_memory_sharing_copies (
+    grant_id INTEGER NOT NULL,
+    table_name TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    prior_status TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (grant_id, table_name, record_id)
+)
+"""
+
+
+def create_sharing_copies_table(conn: sqlite3.Connection) -> None:
+    """确保共享副本台账存在（幂等）。"""
+    conn.execute(SHARING_COPIES_TABLE_DDL)
+
+
 # 跨群稳定画像事实表（v15 起，计划 §6.4）：从同一事实/证据链派生（非另一套
 # 抽取引擎），支持「在另一群已经认识我」。原 user_profiles（agent_attitude、
 # 群关系）仍按空间隔离，不整包搬进这里。
@@ -1054,6 +1093,11 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
             create_memory_evidence_table(conn)
             create_personal_profile_facts_table(conn)
             create_memory_scope_versions_table(conn)
+    # v18：共享授权副本台账（整改计划 P3，复核 F3/F4/F5/F13；授权行加列
+    # 走上方 _ADDITIVE_COLUMNS）
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            create_sharing_copies_table(conn)
     # v16：消息身份信封索引 + 会话身份声明表（多人身份修复计划 §6.2/§6.3）
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
