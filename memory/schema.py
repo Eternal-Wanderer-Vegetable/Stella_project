@@ -737,6 +737,7 @@ CREATE TABLE IF NOT EXISTS conversation_identity_claims (
     status TEXT NOT NULL DEFAULT 'active',
     supersedes_id INTEGER,
     evidence_excerpt TEXT NOT NULL DEFAULT '',
+    parser_version TEXT DEFAULT '2026-09-27',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )

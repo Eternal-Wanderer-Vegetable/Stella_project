@@ -393,9 +393,11 @@ import sqlite3 as _sqlite3
 import memory.conversation_identity as identity
 from core.context import ChatContext
 from memory.conversation_identity import (
+    active_claims,
     build_identity_capsule,
     get_identity_revision,
     parse_self_alias,
+    parse_self_claim_structured,
     parse_third_person_correction,
     process_message_identity,
     record_self_alias_claim,
@@ -456,6 +458,100 @@ def test_third_person_patterns_bounded():
     assert parse_third_person_correction("「他才是Allets」") is None
     # 角色表达 → 拒绝
     assert parse_third_person_correction("他才是管理员") is None
+    # P1整改（复核 F2）：关系描述不是名字
+    assert parse_third_person_correction("他才是她姐") is None
+    assert parse_third_person_correction("他才是你教父了") is None
+
+
+# ── P1整改（复核 F2）：复合肯定更正 ───────────────────────────────────
+
+
+def test_compound_correction_original_sentence_registers_nox():
+    """复核原句「我是Nox，不是红中没摸鱼」必须登记 Nox（旧实现整句拒绝）。"""
+    claim = parse_self_claim_structured("我是Nox，不是红中没摸鱼")
+    assert claim is not None
+    assert claim.alias == "Nox"
+    assert claim.supersedes is False
+    # 「红中没摸鱼」是活动否认：不产生排除项，更不能变成别名
+    assert claim.excluded_aliases == ()
+    # 旧 tuple 包装同步
+    assert parse_self_alias("我是Nox，不是红中没摸鱼") == ("Nox", False)
+
+
+def test_compound_correction_excludes_named_old_alias():
+    """「我叫Nox，不叫红中」→ 登记 Nox 且排除项为红中。"""
+    claim = parse_self_claim_structured("我叫Nox，不叫红中")
+    assert claim is not None
+    assert claim.alias == "Nox"
+    assert claim.excluded_aliases == ("红中",)
+
+
+def test_compound_correction_persists_and_excludes_old_alias(ident_db):
+    key = "qq:10000:group:7777"
+    record_self_alias_claim(key, "10000", "2001", "红中",
+                            supersedes=False, source_row_id=1, evidence_excerpt="我是红中")
+    rev = get_identity_revision(key)
+    # 完整原句经 hook 落库：登记 Nox、失活红中、推进 revision
+    ctx = _msg_ctx(message="我叫Nox，不叫红中", recorded_row_id=101)
+    process_message_identity(ctx)
+    assert subject_alias(key, "2001") == "Nox"
+    # active_claims 不含 inactive 行；直接查表核对排除语义
+    conn = sqlite3.connect(ident_db)
+    try:
+        rows = conn.execute(
+            "SELECT alias, status FROM conversation_identity_claims"
+            " WHERE conversation_key = ? AND subject_user_id = '2001'"
+            " AND claim_kind = 'self_alias' ORDER BY id",
+            (key,),
+        ).fetchall()
+    finally:
+        conn.close()
+    statuses = {alias: status for alias, status in rows}
+    assert statuses["红中"] == "inactive"
+    assert statuses["Nox"] == "active"
+    assert get_identity_revision(key) == rev + 1
+
+
+def test_compound_correction_activity_clause_never_becomes_alias(ident_db):
+    key = "qq:10000:group:7777"
+    ctx = _msg_ctx(user_id=3559802578, recorded_row_id=102,
+                   message="我是Nox，不是红中没摸鱼")
+    process_message_identity(ctx)
+    assert subject_alias(key, "3559802578") == "Nox"
+    aliases = [
+        c["alias"] for c in active_claims(key)
+        if c["claim_kind"] == "self_alias" and c["status"] == "active"
+    ]
+    assert aliases == ["Nox"]
+    # parser_version 落库
+    rows = [c for c in active_claims(key) if c["alias"] == "Nox"]
+    assert rows, "Nox claim missing"
+
+
+def test_relation_statements_never_register(ident_db):
+    """「我是她姐」「我是你教父了」等关系描述不产生任何身份（P1整改）。"""
+    key = "qq:10000:group:7777"
+    for i, text in enumerate(
+        ("我是她姐", "我是你教父了", "我是管理员", "我是机器人", "你爸是我")
+    ):
+        ctx = _msg_ctx(user_id=2001 + i, msg_id=i + 1, recorded_row_id=200 + i, message=text)
+        process_message_identity(ctx)
+        assert subject_alias(key, str(2001 + i)) == "", text
+    assert get_identity_revision(key) == 0
+
+
+def test_question_and_negation_negatives_still_rejected():
+    """既有负例不回退：问句/纯否定/条件句仍整条拒绝。"""
+    assert parse_self_alias("我是谁") is None
+    assert parse_self_alias("我叫什么") is None
+    assert parse_self_alias("我叫什么名字") is None
+    assert parse_self_alias("这不是我") is None
+    assert parse_self_alias("我不是Nox") is None
+    assert parse_self_alias("如果我是Nox") is None
+    assert parse_self_alias("我是Nox吗") is None
+    assert parse_self_alias("我是不是Nox") is None
+    assert parse_self_alias("「我是阿呆」") is None
+    assert parse_self_alias("我是阿呆，我也是呆呆") is None
 
 
 # ── T04：本人声明即时生效 + revision 推进 ─────────────────────────────
