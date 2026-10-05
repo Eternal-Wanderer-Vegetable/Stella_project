@@ -489,3 +489,57 @@ class TestExactInputCrossBot:
                           headers=auth_header).json()["data"]
         assert data["input"] is None
         assert any("无当前 Bot 身份" in n for n in data["notes"])
+
+
+class TestMessagesKeysetPagination:
+    """验收报告 H3：降序 keyset 方向、offset 兼容与稳定 total。"""
+
+    def _seed_five(self, flow_home):
+        from core.observability import message_flow as mf
+
+        for i in range(1, 6):
+            root = mf.begin_trace(root_kind="webchat", trace_id=f"kt-{i}")
+            mf.end_trace(root, outcome="done")
+        mf.flush()
+
+    def test_cursor_pages_older_records(self, client, auth_header, flow_home):
+        self._seed_five(flow_home)
+        page1 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2}).json()["data"]
+        ids1 = [i["trace_id"] for i in page1["items"]]
+        assert ids1 == ["kt-5", "kt-4"]
+        assert page1["total"] == 5 and page1["next_cursor"]
+        page2 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2,
+                                   "cursor": page1["next_cursor"]}).json()["data"]
+        assert [i["trace_id"] for i in page2["items"]] == ["kt-3", "kt-2"]
+        assert page2["total"] == 5, "total 不含游标，分页期间稳定"
+        page3 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2,
+                                   "cursor": page2["next_cursor"]}).json()["data"]
+        assert [i["trace_id"] for i in page3["items"]] == ["kt-1"]
+        assert page3["next_cursor"] in (None, ""), "取尽后无游标"
+
+    def test_offset_still_works(self, client, auth_header, flow_home):
+        self._seed_five(flow_home)
+        data = client.get("/api/v1/trace/messages", headers=auth_header,
+                          params={"limit": 2, "offset": 2}).json()["data"]
+        assert [i["trace_id"] for i in data["items"]] == ["kt-3", "kt-2"]
+
+    def test_concurrent_insert_does_not_duplicate_between_pages(
+            self, client, auth_header, flow_home):
+        """翻页间隙新插入的（更新一侧）轨迹不进入后续页、不产生重复。"""
+        from core.observability import message_flow as mf
+
+        self._seed_five(flow_home)
+        page1 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2}).json()["data"]
+        root = mf.begin_trace(root_kind="webchat", trace_id="kt-new")
+        mf.end_trace(root, outcome="done")
+        mf.flush()
+        page2 = client.get("/api/v1/trace/messages", headers=auth_header,
+                           params={"limit": 2,
+                                   "cursor": page1["next_cursor"]}).json()["data"]
+        ids = [i["trace_id"] for i in page2["items"]]
+        assert "kt-new" not in ids, "keyset 严格小于：新行不回灌旧页"
+        assert len(ids) == len(set(ids))

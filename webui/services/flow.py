@@ -97,10 +97,12 @@ def messages(
 ) -> dict:
     """消息轨迹列表（含无 Turn 的被动/命令/过滤路径）。
 
-    修复计划 §6.6（R8）：保留 limit/offset 兼容；新增 keyset ``cursor``
-    （``<started_utc>|<trace_id>``，首屏查询快照上界）——不断插入的列表里
-    用 offset 翻页会漏行/重复，cursor 以 (started_utc, trace_id) 稳定续读。
-    返回 ``next_cursor``：本页最后一行的键；取尽为 None。
+    修复计划 §6.6（R8）+ 验收报告 H3：列表按 (started_utc, trace_id)
+    **降序**排列，keyset ``cursor`` 续读必须用严格**小于**（此前用大于，
+    「加载更早」实际翻回了更新的一页）；``offset`` 与 cursor 互斥但都保留
+    兼容（此前 offset 在 cursor 路径重写时丢失）；``total`` 恒为同一过滤
+    条件的总数（不含游标），分页期间稳定可比。并发插入只影响更新一侧，
+    旧方向 keyset 天然稳定。
     """
     conn = _connect_ro()
     if conn is None or not _table_exists(conn, "message_traces"):
@@ -120,28 +122,36 @@ def messages(
         if outcome:
             conds.append("outcome = ?")
             params.append(outcome)
+        filter_where = ("WHERE " + " AND ".join(conds)) if conds else ""
+        # total = 同一过滤范围的总数（不含游标/offset，分页期间含义稳定）
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM message_traces {filter_where}", params
+        ).fetchone()[0]
+        page_conds = list(conds)
+        page_params = list(params)
         if cursor:
-            # keyset 续读：严格晚于游标行（started, trace_id 双键稳定序）
+            # 降序 keyset：严格早于游标行（started, trace_id 双键决胜）
             try:
                 cur_started, cur_trace = str(cursor).split("|", 1)
             except ValueError:
                 cur_started, cur_trace = "", ""
             if cur_started:
-                conds.append(
-                    "(started_utc > ? OR (started_utc = ? AND trace_id > ?))")
-                params.extend([cur_started, cur_started, cur_trace])
-        where = ("WHERE " + " AND ".join(conds)) if conds else ""
-        total = conn.execute(
-            f"SELECT COUNT(*) FROM message_traces {where}", params
-        ).fetchone()[0]
+                page_conds.append(
+                    "(started_utc < ? OR (started_utc = ? AND trace_id < ?))")
+                page_params.extend([cur_started, cur_started, cur_trace])
+            sql_tail = "ORDER BY started_utc DESC, trace_id DESC LIMIT ?"
+            sql_params = (*page_params, int(limit))
+        else:
+            sql_tail = "ORDER BY started_utc DESC, trace_id DESC LIMIT ? OFFSET ?"
+            sql_params = (*page_params, int(limit), int(offset))
+        page_where = ("WHERE " + " AND ".join(page_conds)) if page_conds else ""
         rows = conn.execute(
             "SELECT trace_id, root_kind, platform, scope, source_message_key, "
             "started_utc, ended_utc, outcome, status, complete, loss, detail, "
             "process_instance_id, last_heartbeat_utc"
             + (", " + ", ".join(extra) if extra else "")
-            + f" FROM message_traces {where} "
-            "ORDER BY started_utc DESC, trace_id DESC LIMIT ?",
-            (*params, int(limit)),
+            + f" FROM message_traces {page_where} " + sql_tail,
+            sql_params,
         ).fetchall()
         items = []
         for r in rows:
