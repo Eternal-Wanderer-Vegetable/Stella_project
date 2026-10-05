@@ -1640,8 +1640,9 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                     logger.info(
                         f"🧠 [Trigger] 私聊 {ref.runtime_key} 触发短期记忆总结（新消息 {new_count} 条）"
                     )
+                    # R2修复：私聊使用注册会话整合（计划 §6.2）
                     maybe_consolidate(
-                        ref.storage_session_id, force=True,
+                        conversation_ref=ref, force=True,
                         parent_trace_id=fctx.trace_id if fctx is not None else "",
                     )
         except Exception as e:
