@@ -530,6 +530,7 @@ def message_io(trace_id: str) -> dict | None:
     receipt_lines: list[str] = []
     receipt_notes: list[str] = []
     segments: list[dict] = []
+    segments_truncated = False
     tried_receipts = False
     rconn = None
     try:
@@ -547,11 +548,17 @@ def message_io(trace_id: str) -> dict | None:
                  "platform_message_id": r[3], "acknowledged_at_utc": r[4]}
                 for r in rows
             ]
+            # 截断诚实（复验 A8）：读满 LIMIT+1 即说明还有更多片段——
+            # 按 segments 维度报 total/truncated，不再只按 ACK 文本行数判断
+            segments_truncated = len(rows) > _OUTPUT_MAX_LINES
+            if segments_truncated:
+                segments = segments[:_OUTPUT_MAX_LINES]
+                receipt_notes.append(
+                    f"片段事实仅展示前 {_OUTPUT_MAX_LINES} 段（共更多，"
+                    "已截断）")
             ack = [s["text"] for s in segments if s["status"] == "acknowledged" and s["text"]]
-            other = [s for s in segments if s["status"] != "acknowledged"]
             receipt_lines = ack[:_OUTPUT_MAX_LINES]
-            if len(ack) > _OUTPUT_MAX_LINES:
-                receipt_notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行回执")
+            other = [s for s in segments if s["status"] != "acknowledged"]
             if other:
                 n_unknown = sum(1 for s in other if s["status"] == "unknown")
                 n_failed = sum(1 for s in other if s["status"] == "failed")
@@ -675,9 +682,10 @@ def message_io(trace_id: str) -> dict | None:
         "output": {
             "lines": lines,
             "count": len(lines),
-            # 逐段投递事实（验收报告 M6）：原 part_index + status，ack 文本
-            # 之外的 failed/unknown 片段同样可见
-            "segments": segments[:_OUTPUT_MAX_LINES],
+            # 逐段投递事实（验收报告 M6 + 复验 A8）：原 part_index + status，
+            # ack 之外的 failed/unknown 同样可见；truncated 与总数诚实
+            "segments": segments,
+            "segments_truncated": bool(segments_truncated),
         },
         "notes": notes,
     }

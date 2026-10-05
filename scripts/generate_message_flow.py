@@ -34,8 +34,8 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
-import re
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Iterator

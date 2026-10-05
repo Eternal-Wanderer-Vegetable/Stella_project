@@ -417,7 +417,18 @@ def _connect() -> sqlite3.Connection | None:
         if not _flow_initialized.get(key):
             made_backup = False
             if path.exists() and path.stat().st_size > 0:
-                made_backup = bool(_backup_flow_db(path))
+                backup_path = _backup_flow_db(path)
+                if not backup_path:
+                    # 复验 A7：备份失败 = 无恢复保障 → 保留原库、本连接放弃，
+                    # 观测降级为不可用（绝不无备份迁移有数据的老库）
+                    log_sqlite_error(
+                        "message_flow._connect",
+                        RuntimeError("pre-migration backup failed; "
+                                     "refusing to migrate"))
+                    conn.close()
+                    _flow_initialized[key] = False
+                    return None
+                made_backup = True
             # 顺序（旧库迁移正确性）：先建缺失表 → 再 ALTER 补列 → 最后建
             # 索引。索引若在补列前创建，旧库会因缺列而失败（schema 3 教训）。
             conn.execute("BEGIN IMMEDIATE")

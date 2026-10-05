@@ -11,9 +11,13 @@ from __future__ import annotations
 
 import sqlite3
 
+import nonebot
 import pytest
 
+nonebot.init()
+
 from core.observability import entity_history, message_flow, turn_trace
+from stella_project.plugins.bot_main import ai_gateway as gateway
 
 
 @pytest.fixture()
@@ -168,3 +172,82 @@ class TestKnowledgeIngestRoot:
         outcome = ingest.ingest_content(_Store(), _KB(), "txt", "x", title="t")
         assert outcome.state == "ready"
         message_flow.flush()
+
+
+class TestLifecycleOutcomes:
+    """复验报告 A4：启动失败/取消必须收口 lifecycle root，停止失败如实记录。"""
+
+    def test_start_failure_closes_lifecycle_root(self, tmp_path, monkeypatch):
+        import asyncio
+
+        from core.observability import message_flow, turn_trace
+
+        db = tmp_path / "turn_trace.db"
+        turn_trace.configure(db)
+
+        class FakeRuntime:
+            async def start(self):
+                raise RuntimeError("boom")
+
+            async def stop(self):
+                return None
+
+        monkeypatch.setattr(
+            gateway, "_build_scheduling_stack",
+            lambda: (FakeRuntime(), object()))
+        import config as _config
+
+        monkeypatch.setattr(_config, "SCHEDULING_ENABLED", True)
+        monkeypatch.setattr(gateway, "_scheduling_runtime", None)
+        monkeypatch.setattr(gateway, "_scheduling_service", None)
+        asyncio.run(gateway._start_scheduling())
+        message_flow.flush()
+        conn = sqlite3.connect(db)
+        try:
+            row = conn.execute(
+                "SELECT outcome, complete, producer_ended FROM message_traces "
+                "WHERE root_kind='lifecycle' AND outcome='start_failed'"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None, "start 失败必须有 start_failed 终态（A4 反例）"
+        assert row[1] == 1 and row[2] == 1
+        turn_trace.configure(None)
+
+    def test_start_cancel_closes_lifecycle_root(self, tmp_path, monkeypatch):
+        import asyncio
+
+        from core.observability import message_flow, turn_trace
+
+        db = tmp_path / "turn_trace.db"
+        turn_trace.configure(db)
+
+        class FakeRuntime:
+            async def start(self):
+                raise asyncio.CancelledError
+
+            async def stop(self):
+                return None
+
+        monkeypatch.setattr(
+            gateway, "_build_scheduling_stack",
+            lambda: (FakeRuntime(), object()))
+        import config as _config
+
+        monkeypatch.setattr(_config, "SCHEDULING_ENABLED", True)
+        monkeypatch.setattr(gateway, "_scheduling_runtime", None)
+        monkeypatch.setattr(gateway, "_scheduling_service", None)
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(gateway._start_scheduling())
+        message_flow.flush()
+        conn = sqlite3.connect(db)
+        try:
+            row = conn.execute(
+                "SELECT outcome, complete FROM message_traces "
+                "WHERE root_kind='lifecycle' AND outcome='cancelled'"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None, "取消必须有 cancelled 终态（A4 反例）"
+        assert row[1] == 0
+        turn_trace.configure(None)

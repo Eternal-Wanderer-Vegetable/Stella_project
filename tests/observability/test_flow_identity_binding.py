@@ -262,3 +262,36 @@ class TestCacheReentryOccurrence:
         finally:
             conn.close()
         assert ends == 1, "trace_end 只落一次"
+
+
+class TestReplacementOccurrence:
+    """复验报告 A5：旧 occurrence 的迟到结束不得关闭替换后的新 root。
+
+    领域探针形状：旧 root 结束 → 同身份同消息号新 occurrence 建立 →
+    旧事件的重复 end 到达。token 绑定事件上下文后，expected 不符直接跳过。
+    """
+
+    @pytest.mark.asyncio
+    async def test_old_events_late_end_never_closes_replacement(self, flow_db):
+        ev_old = _private_event(user_id=30001, message_id=91, self_id="11001")
+        await gateway._flow_ingress_root(ev_old)
+        old_root = gateway._flow_roots.get(gateway._flow_key(ev_old))
+        assert old_root is not None
+        # 旧 occurrence 正常结束
+        await gateway._flow_ingress_end(ev_old)
+        assert old_root.ended
+        # 新 occurrence 建立（同身份同消息号；真实场景：重发/回放）
+        ev_new = _private_event(user_id=30001, message_id=91, self_id="11001")
+        await gateway._flow_ingress_root(ev_new)
+        new_root = gateway._flow_roots.get(gateway._flow_key(ev_new))
+        assert new_root is not None and new_root is not old_root
+        assert not new_root.ended
+        # 旧事件的迟到重复 end 到达：不得关闭新 root
+        await gateway._flow_ingress_end(ev_old)
+        assert not new_root.ended, "旧 occurrence 的迟到结束不得关闭新 root"
+        # 新事件自己的 end 正常收口
+        await gateway._flow_ingress_end(ev_new)
+        assert new_root.ended
+        message_flow.flush()
+        rows = _trace_rows(flow_db)
+        assert len(rows) == 2  # 旧 + 新各一条，互不串

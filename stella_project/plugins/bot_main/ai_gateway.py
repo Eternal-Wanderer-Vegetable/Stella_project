@@ -231,6 +231,11 @@ _addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
 # 关闭。root 里只存安全关联键（platform/bot/group/msg_id），绝不存原文。
 _flow_roots: "OrderedDict[tuple[str, str], Any]" = OrderedDict()
 _FLOW_ROOTS_MAX = 256
+# occurrence 凭据（复验 A5）：绑定**事件对象身份** id(event) →
+# (root_trace_id, token)。同身份同消息号新 occurrence 建立后，旧事件对象
+# 的迟到重复结束凭 expected 不符被拒——绝不关闭替换后的新 root。
+_flow_occurrence_tokens: "OrderedDict[int, tuple[str, str]]" = OrderedDict()
+_FLOW_TOKENS_MAX = 512
 
 
 def _flow_conversation_key(event: MessageEvent) -> str:
@@ -301,6 +306,22 @@ def _flow_root_or_create(event: MessageEvent, root_kind: str):
         )
     except Exception:
         return None
+
+
+def _remember_occurrence(event, root) -> None:
+    """登记事件对象的 occurrence 凭据（复验 A5）：id(event) →
+    (root_trace_id, token)。结束路径必须出示匹配凭据才能关闭 root。"""
+    try:
+        token = getattr(root, "_ingress_token", "")
+        if not token:
+            token = uuid.uuid4().hex
+            with contextlib.suppress(Exception):
+                root._ingress_token = token
+        _flow_occurrence_tokens[id(event)] = (root.trace_id, token)
+        while len(_flow_occurrence_tokens) > _FLOW_TOKENS_MAX:
+            _flow_occurrence_tokens.popitem(last=False)
+    except Exception:
+        pass
 
 
 def _evict_flow_roots(max_active: int = _FLOW_ROOTS_MAX) -> None:
@@ -484,11 +505,13 @@ try:
             key = _flow_key(event)
             if key in _flow_roots:
                 return
-            # 淘汰后重入：来源键回查复用（验收报告 M6），不造第二 root
+            # 淘汰后重入：来源键回查复用（验收报告 M6），不造第二 root；
+            # 复用记入 occurrence 表（本事件持有该 root 的当次 token）
             reused = message_flow.by_source_key(_flow_source_key(event))
             if reused is not None and not reused.ended:
                 _flow_roots[key] = reused
                 _flow_roots.move_to_end(key)
+                _remember_occurrence(event, reused)
                 return
             root = message_flow.begin_trace(
                 root_kind="qq_private" if isinstance(event, PrivateMessageEvent) else "qq_passive",
@@ -503,12 +526,9 @@ try:
                 source_message_id=str(event.message_id),
                 source_message_key=_flow_source_key(event),
             )
-            # occurrence token（验收报告 M6）：compare-and-pop 的核对凭据，
-            # 结束路径只关闭携带本 token 的 occurrence，一次
-            with contextlib.suppress(Exception):
-                root._ingress_token = uuid.uuid4().hex
             _flow_roots[key] = root
             _flow_roots.move_to_end(key)
+            _remember_occurrence(event, root)
             _evict_flow_roots()
         except Exception:
             pass
@@ -526,21 +546,30 @@ try:
         try:
             from core.observability import message_flow
 
-            root = _flow_roots.pop(_flow_key(event), None)
+            key = _flow_key(event)
+            expected = _flow_occurrence_tokens.get(id(event))
+            root = _flow_roots.get(key)
             if root is None:
                 root = message_flow.by_source_key(_flow_source_key(event))
             if (root is not None and not root.ended
                     and (not root.conversation_key
                          or root.conversation_key == _flow_conversation_key(event))):
-                # occurrence compare-and-pop（验收报告 M6）：同一 occurrence
-                # 的重复结束幂等；token 已消费即跳过，绝不二次关闭
+                # occurrence 凭据核对（复验 A5）：root 持有 ingress token 时，
+                # 结束事件必须出示**本事件**登记的匹配凭据 (root_id, token)。
+                # 旧 occurrence 的迟到结束面对替换后的新 root 时 expected
+                # 不符 → 直接跳过，绝不关闭新 root、不动缓存。
                 token = getattr(root, "_ingress_token", "")
-                consumed = getattr(root, "_ingress_end_token", "")
-                if token and consumed == token:
-                    return
                 if token:
+                    if (expected is None or expected[0] != root.trace_id
+                            or expected[1] != token):
+                        return
+                    consumed = getattr(root, "_ingress_end_token", "")
+                    if consumed == token:
+                        return  # 同 occurrence 的重复结束：幂等
                     with contextlib.suppress(Exception):
                         root._ingress_end_token = token
+                _flow_roots.pop(key, None)
+                _flow_occurrence_tokens.pop(id(event), None)
                 message_flow.end_trace(
                     root, outcome=root.outcome or "passive_only")
         except Exception:
@@ -2737,7 +2766,17 @@ async def _start_scheduling() -> None:
         _scheduling_service = None
         _lifecycle_end(lifecycle, "init_failed", complete=True)
         return
-    await _scheduling_runtime.start()
+    try:
+        await _scheduling_runtime.start()
+    except asyncio.CancelledError:
+        _lifecycle_end(lifecycle, "cancelled", complete=False)
+        raise
+    except Exception as e:
+        _lifecycle_end(lifecycle, "start_failed", complete=True)
+        logger.error(f"❌ [Scheduling] runtime.start 失败，调度功能停用: {e}")
+        _scheduling_runtime = None
+        _scheduling_service = None
+        return
     _lifecycle_end(lifecycle, "started", complete=True)
 
 
@@ -2801,6 +2840,9 @@ async def _start_cometa() -> None:
         _cometa_runtime_instance = runtime
         logger.info("✅ [Cometa] 外部 Agent 任务层已装配（worker 子进程已启动）")
         _lifecycle_end(lifecycle, "started", complete=True)
+    except asyncio.CancelledError:
+        _lifecycle_end(lifecycle, "cancelled", complete=False)
+        raise
     except Exception as e:
         logger.error(f"❌ [Cometa] 初始化失败，cometa 停用: {e}")
         _cometa_runtime_instance = None
@@ -4121,14 +4163,19 @@ async def _graceful_shutdown() -> None:
         _hot_reload_watcher.cancel()
     # cometa 先停（泵 + worker 子进程）：不再认领新任务，在途任务发取消请求
     # 并等有界收尾；到点未停的 attempt 交租约过期 + 下次启动恢复矩阵处理
-    # （方案 §6.8：不做无条件 running→queued）。
-    with contextlib.suppress(Exception):
+    # （方案 §6.8：不做无条件 running→queued）。停止失败如实记录（复验 A4）
+    stop_errors: list[str] = []
+    try:
         await _stop_cometa()
+    except Exception as e:
+        stop_errors.append(f"cometa: {e}")
     # 调度 worker 先停：不再认领新运行，等当前运行收尾（受 stop_grace 上界）；
     # 超时的在途运行交给租约恢复，下次启动按 delivery_unknown / 回队处理。
     if _scheduling_runtime is not None:
-        with contextlib.suppress(Exception):
+        try:
             await _scheduling_runtime.stop()
+        except Exception as e:
+            stop_errors.append(f"scheduling: {e}")
     # 先排空 facade 在途轮次（provider 调用收尾再落库/发送）。
     # 与调度 worker 同理：超时未收尾的轮次由运行记录标记，不自动重放。
     from core.runtime import facade as _rt_facade
@@ -4156,4 +4203,15 @@ async def _graceful_shutdown() -> None:
         from core.llm import usage_store
 
         usage_store.flush()
-    _lifecycle_end(lifecycle, outcome, complete=True)
+    if stop_errors:
+        _flow_decision(lifecycle, "ops.lifecycle", status="failed",
+                       reason_code="stop_errors",
+                       metrics={"errors": stop_errors[:4]})
+        _lifecycle_end(lifecycle, "stopped_with_errors", complete=True)
+    else:
+        _lifecycle_end(lifecycle, outcome, complete=True)
+    # 有界观测 flush：确保末尾观测提交落库（复验 A4），有界防拖垮退出
+    with contextlib.suppress(Exception):
+        from core.observability import message_flow as _mf
+
+        _mf.flush(timeout=3.0)

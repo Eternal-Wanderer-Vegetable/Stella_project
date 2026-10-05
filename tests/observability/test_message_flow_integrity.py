@@ -463,6 +463,36 @@ def _rows(db, sql):
 class TestFlowMigrationRecovery:
     """验收报告 M6：Flow schema 初始化是显式单事务，失败回滚 + 迁移前备份。"""
 
+    def test_backup_failure_aborts_migration(self, tmp_path, monkeypatch):
+        """复验 A7：备份失败 = 无恢复保障 → 保留原库、观测降级。"""
+        db = tmp_path / "turn_trace.db"
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE message_traces (trace_id TEXT PRIMARY KEY, "
+            "root_kind TEXT NOT NULL DEFAULT '', platform TEXT NOT NULL DEFAULT '', "
+            "scope TEXT NOT NULL DEFAULT '', source_message_key TEXT NOT NULL "
+            "DEFAULT '', topology_version TEXT NOT NULL DEFAULT '', "
+            "process_instance_id TEXT NOT NULL DEFAULT '', started_utc TEXT NOT NULL, "
+            "ended_utc TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL DEFAULT '', "
+            "status TEXT NOT NULL DEFAULT 'running', complete INTEGER NOT NULL "
+            "DEFAULT 0, loss INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '{}')")
+        conn.commit()
+        conn.close()
+        turn_trace.configure(db)
+        try:
+            monkeypatch.setattr(message_flow, "_backup_flow_db", lambda p: "")
+            assert message_flow._connect() is None, "备份失败必须拒绝迁移"
+            conn = sqlite3.connect(db)
+            cols = {r[1] for r in conn.execute(
+                "PRAGMA table_info(message_traces)")}
+            backups = list(tmp_path.glob("*.pre-flow-*.bak"))
+            conn.close()
+            assert "spec_digest" not in cols, "原库必须原样保留"
+            assert not backups
+        finally:
+            message_flow.flush()
+            turn_trace.configure(None)
+
     def test_failed_init_rolls_back_and_backs_up(self, tmp_path, monkeypatch):
         db = tmp_path / "turn_trace.db"
         conn = sqlite3.connect(db)

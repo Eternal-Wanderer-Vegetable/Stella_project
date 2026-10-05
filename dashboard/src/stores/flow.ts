@@ -79,8 +79,9 @@ export const useFlowStore = defineStore('flow', {
     messages: [] as FlowMessageSummary[],
     messagesTotal: 0,
     messagesCursor: '' as string, // keyset 游标；'' = 无更多
-    listFilterKey: '|', // 当前列表查询的过滤键（平台|入口）
+    listFilterKey: null as string | null, // 当前列表查询的过滤键（首载必 reset）
     listSeq: 0, // 列表请求代际：过滤变化/轮询竞态防护（验收报告 M2）
+    listExhausted: false, // keyset 取尽（复验 A6：与「尚未加载」区分）
     loadingList: false,
     platformFilter: '' as string,
     rootKindFilter: '' as string,
@@ -227,8 +228,13 @@ export const useFlowStore = defineStore('flow', {
         }
         this.messages = mergeListPage(this.messages, data.items, reset);
         this.messagesTotal = data.total;
-        if (!this.messagesCursor || reset) {
+        if (reset) {
           this.messagesCursor = data.next_cursor ?? '';
+          this.listExhausted = !data.next_cursor;
+        } else if (!data.next_cursor) {
+          // 续读取尽：进入 exhausted，轮询不得恢复首屏游标（复验 A6）
+          this.listExhausted = true;
+          this.messagesCursor = '';
         }
       } finally {
         if (seq === this.listSeq) this.loadingList = false;
@@ -241,7 +247,7 @@ export const useFlowStore = defineStore('flow', {
      * 条只是单页大小，不是总量上限。
      */
     async loadMoreMessages() {
-      if (!this.messagesCursor || this.loadingList) return;
+      if (this.listExhausted || !this.messagesCursor || this.loadingList) return;
       const filterKey = `${this.platformFilter ?? ''}|${this.rootKindFilter ?? ''}`;
       if (filterKey !== this.listFilterKey) {
         // 过滤已切走：不再向旧过滤的游标追加（验收报告 M2 反例）
@@ -264,6 +270,7 @@ export const useFlowStore = defineStore('flow', {
         this.messages = mergeListPage(this.messages, data.items, false);
         this.messagesTotal = data.total;
         this.messagesCursor = data.next_cursor ?? '';
+        if (!data.next_cursor) this.listExhausted = true;
       } finally {
         if (seq === this.listSeq) this.loadingList = false;
       }

@@ -548,3 +548,47 @@ class TestMessagesKeysetPagination:
         ids = [i["trace_id"] for i in page2["items"]]
         assert "kt-new" not in ids, "keyset 严格小于：新行不回灌旧页"
         assert len(ids) == len(set(ids))
+
+
+class TestSegmentsTruncationHonesty:
+    """复验报告 A8：片段超过 20 段时必须显式截断并报告。"""
+
+    def test_truncated_segments_reported(self, client, auth_header, flow_home,
+                                         isolated_home, monkeypatch):
+        import sqlite3
+
+        import config.settings as settings
+        from core.observability import message_flow as mf
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        root = mf.begin_trace(root_kind="qq_chat", platform="qq", scope="qq:777",
+                              conversation_key="qq:b:group:777", bot_id="b",
+                              conversation_kind="group", peer_id="777",
+                              storage_session_id=777, source_message_id="1",
+                              trace_id="a8-seg")
+        mf.end_trace(root, outcome="delivered")
+        mf.flush()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS social_deliveries (delivery_id TEXT "
+            "PRIMARY KEY, turn_id TEXT, part_index INTEGER, trace_id TEXT, "
+            "epoch INTEGER, platform TEXT, bot_id TEXT, group_id TEXT, "
+            "status TEXT, platform_message_id TEXT, acknowledged_at_utc TEXT, "
+            "text TEXT, text_hash TEXT, created_at_utc TEXT, updated_at_utc TEXT)")
+        conn.executemany(
+            "INSERT INTO social_deliveries (delivery_id, turn_id, part_index, "
+            "trace_id, status, text) VALUES (?,?,?,?,?,?)",
+            [(f"a8-{i}", "t", i, "a8-seg",
+              "failed" if i % 3 == 0 else "acknowledged", f"片段{i}")
+             for i in range(25)])
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/a8-seg/context",
+                          headers=auth_header).json()["data"]
+        segs = data["output"]["segments"]
+        assert len(segs) == 20, "只返回前 20 段"
+        assert max(s["part_index"] for s in segs) == 19
+        assert data["output"]["segments_truncated"] is True, "截断必须显式"
+        assert any("截断" in n for n in data["notes"])
