@@ -814,6 +814,14 @@ class TestDataRepair:
         conn.close()
         monkeypatch.setattr(drm, "DB_PATH", tmp_path / "repair.db")
 
+        # 钉住独特 updated_at：revoke 后整行必须与 apply 前逐列一致（含时间戳）
+        conn = sqlite3.connect(tmp_path / "repair.db")
+        conn.execute(
+            "UPDATE memories SET updated_at = '2026-09-01 12:00:00' WHERE id = 'm_bad'")
+        conn.commit()
+        before = conn.execute("SELECT * FROM memories WHERE id = 'm_bad'").fetchone()
+        conn.close()
+
         batch = apply_repairs([self._scene_record()], operator="test")
         assert batch is not None and batch.repair_count == 1
         conn = sqlite3.connect(tmp_path / "repair.db")
@@ -846,6 +854,8 @@ class TestDataRepair:
             "SELECT owner_type, owner_key, audience, status FROM memories"
             " WHERE id = 'm_bad'").fetchone()
         assert restored == ("SPACE", "space:space_4", "CURRENT_SPACE", "ACTIVE")
+        after = conn.execute("SELECT * FROM memories WHERE id = 'm_bad'").fetchone()
+        assert after == before, "revoke 后必须与 apply 前逐列一致（含 updated_at）"
         conn.close()
 
     def test_apply_repairs_dry_run(self, tmp_path, monkeypatch):

@@ -674,9 +674,11 @@ def revoke_batch(
                 )
                 continue
             set_sql = ", ".join(f"{c} = ?" for c in old_state)
+            # old_state 含 updated_at 时原样恢复（revoke 后行与 apply 前逐列一致）；
+            # 只有审计行本身没有 updated_at 时才退回触碰时间戳
+            suffix = "" if "updated_at" in old_state else ", updated_at = CURRENT_TIMESTAMP"
             conn.execute(
-                f"UPDATE {table_name} SET {set_sql}, updated_at = CURRENT_TIMESTAMP"
-                " WHERE id = ?",
+                f"UPDATE {table_name} SET {set_sql}{suffix} WHERE id = ?",
                 (*old_state.values(), record_id),
             )
             conn.execute(
