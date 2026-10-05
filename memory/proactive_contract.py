@@ -51,7 +51,7 @@ class VerificationContract:
     """候选验证合同 - 绑定来源证据与可验证问题。
 
     Attributes:
-        candidate_id: 候选 ID
+        candidate_id: 候选 ID（库列为 TEXT，接受 int/str；一致性按字符串比较）
         recording_author_id: 记录作者（可能不等于事实主体）
         fact_subject_id: 事实主体 UID
         fact_object_id: 事实对象 UID（若适用）
@@ -67,7 +67,7 @@ class VerificationContract:
         bridge_event_requirement: 是否需要桥接事件（需要时模型必须提供）
     """
 
-    candidate_id: int
+    candidate_id: int | str
     recording_author_id: int
     fact_subject_id: int
     fact_object_id: int | None
@@ -116,7 +116,7 @@ def validate_contract_consistency(
     Returns:
         (is_valid, reason)
     """
-    if contract.candidate_id != current_candidate.get("id"):
+    if str(contract.candidate_id) != str(current_candidate.get("id")):
         return False, "candidate_id_mismatch"
 
     digest = compute_candidate_digest(current_candidate)

@@ -213,7 +213,7 @@ def test_chat_context_storage_key_semantics():
     assert private.trace_scope == "qq:10000:private:20001"
     # 投影 v4：身份字段 + 消息信封过桥（计划 §6.1/§6.2）
     projection = private.to_json_projection()
-    assert projection["projection_schema_version"] == 4
+    assert projection["projection_schema_version"] == 5
     assert "reply_to_msg_id" in projection
     assert "mentioned_user_ids" in projection
     assert projection["conversation_key"] == "qq:10000:private:20001"

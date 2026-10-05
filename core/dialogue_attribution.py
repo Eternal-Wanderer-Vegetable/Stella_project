@@ -122,6 +122,74 @@ def _digest(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:16]
 
 
+# ── 投影序列化（复核 F1：证据表过 ctx/跨进程桥） ────────────────────────
+
+
+def evidence_projection(evidence_table: dict[str, SourceEvidence]) -> dict:
+    """证据表 → JSON 安全 dict（ctx.attribution_evidence）。"""
+    return {eid: vars(ev) for eid, ev in (evidence_table or {}).items()}
+
+
+def evidence_table_from_projection(data: dict | None) -> dict[str, SourceEvidence]:
+    """ctx.attribution_evidence → 证据表（旧/空投影返回空表，guard 按 off 处理）。"""
+    table: dict[str, SourceEvidence] = {}
+    for eid, raw in (data or {}).items():
+        try:
+            table[str(eid)] = SourceEvidence(
+                evidence_id=str(raw.get("evidence_id") or eid),
+                evidence_type=raw.get("evidence_type") or "message",
+                author_id=int(raw.get("author_id") or 0),
+                object_id=raw.get("object_id"),
+                original_text=str(raw.get("original_text") or ""),
+                conversation_key=str(raw.get("conversation_key") or ""),
+                source_row_id=raw.get("source_row_id"),
+                timestamp=str(raw.get("timestamp") or ""),
+                polarity=raw.get("polarity") or "neutral",
+                is_verified=bool(raw.get("is_verified")),
+                author_display=str(raw.get("author_display") or ""),
+            )
+        except Exception:
+            continue
+    return table
+
+
+def protocol_instructions(
+    evidence_table: dict[str, SourceEvidence],
+    budget_retained_ids: set[str],
+) -> str:
+    """生成证据表 + reply_plan 协议的 prompt 段（复核 F1）。
+
+    只在 guard 模式非 off 时进入 prompt；模型只能引用这里列出的证据 ID，
+    历史原话的作者/正文由服务端渲染。
+    """
+    usable = [
+        ev for eid, ev in evidence_table.items() if eid in budget_retained_ids
+    ]
+    if not usable:
+        return ""
+    lines = ["可引用证据（引用只能用下列 ID，不得自行改写作者或原话）："]
+    for ev in usable:
+        if ev.evidence_type == "message":
+            author = ev.author_display or f"用户({ev.author_id})"
+            lines.append(f'- [msg] id={ev.evidence_id} 作者={author}：{ev.original_text}')
+        elif ev.evidence_type == "verified_fact":
+            lines.append(f"- [fact] id={ev.evidence_id}（已验证）：{ev.original_text}")
+        else:
+            author = ev.author_display or f"用户({ev.author_id})"
+            lines.append(f"- [correction] id={ev.evidence_id} 作者={author}：{ev.original_text}")
+    lines.append(
+        "输出协议（必须遵守）：在正常输出之外给出一个 reply_plan 块，"
+        '格式：\n<reply_plan version="' + REPLY_PLAN_PROTOCOL_VERSION + '">\n'
+        "<now>你对当前输入的自由回应（不要在此复述历史事实，除非有对应证据）</now>\n"
+        '<ref id="要引用的历史原话证据ID"/>\n'
+        '<fact id="要引用的已验证事实证据ID"/>\n'
+        "<ack/>（仅当本轮用户纠正了你时保留，承认内容由系统生成）\n"
+        "</reply_plan>\n"
+        "没有对应证据的引用槽请整行省略；历史里谁说过什么以证据表标注的作者为准。"
+    )
+    return "\n".join(lines)
+
+
 def parse_reply_plan(raw_output: str) -> tuple[ReplyPlan | None, str]:
     """解析模型输出中的 versioned reply_plan（复核 F12：真实解析器）。
 

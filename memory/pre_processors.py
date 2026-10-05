@@ -890,13 +890,16 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
 
     # v2 检索（Context-aware Memory Activation），按群组共享空间检索。
     # 开启 MEMORY_EMBEDDING_ENABLED 时走 embedding 语义分（失败自动回退规则版）。
+    # 复核 F1：typed 检索查询优先——主动验证等场景由服务端生成查询文本
+    # （候选主题+目标近期对话），不再拿整段任务指令当查询。
+    retrieval_query = (getattr(ctx, "retrieval_query", "") or "").strip() or ctx.message
     if MEMORY_EMBEDDING_ENABLED:
         from memory.retrieval_v2 import retrieve_memories_emb
 
         result = await retrieve_memories_emb(
             group_shared_space=space,
             user_id=ctx.user_id,
-            query=ctx.message,
+            query=retrieval_query,
             trigger=ctx.trigger,
             access_scope=access_scope,
         )
@@ -904,7 +907,7 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
         result = retrieve_memories(
             group_shared_space=space,
             user_id=ctx.user_id,
-            query=ctx.message,
+            query=retrieval_query,
             trigger=ctx.trigger,
             access_scope=access_scope,
         )
@@ -915,6 +918,14 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     # 兼容旧字段（memories_for_prompt），供仍读取它的模块使用
     ctx.memories_for_prompt = result.conversation_memories
 
+    # 归属证据表（复核 F1）：guard 模式非 off 时由服务端构建（可信近期消息
+    # + 受众内已检索事实 + 当前纠正），供 prompt 协议段与发送前 guard 使用。
+    if _reply_guard_mode() != "off":
+        try:
+            ctx.attribution_evidence = build_attribution_evidence(ctx)
+        except Exception as exc:
+            logger.debug(f"归属证据表构建失败（按无证据继续）: {exc}")
+
     if ctx.conversation_memories or ctx.behavior_constraints:
         logger.info(
             f"🧠 [Context v2] 空间={space} 模式={result.mode} 聊天素材={len(result.conversation_memories)} "
@@ -923,19 +934,139 @@ async def _build_user_context_v2(ctx: ChatContext) -> ChatContext:
     return ctx
 
 
-def _load_preferred_address(ctx: ChatContext, space: str) -> None:
+def _load_preferred_address(ctx: ChatContext, space: str) -> str | None:
     """只为明确的目标用户读取称呼偏好，群级主动发言保持为空。"""
     ctx.preferred_address = None
     if ctx.trigger == "proactive" or ctx.user_id in (None, 0):
-        return
+        return None
     try:
         from memory.addressing import get_preference
 
         preference = get_preference(space, ctx.user_id)
         if preference is not None:
             ctx.preferred_address = preference.address_term
+            return preference.address_term
     except Exception as error:
         logger.debug(f"读取称呼偏好失败（跳过）: {error}")
+    return None
+
+
+def _reply_guard_mode() -> str:
+    """回复归属守护模式（复核 F1）：读取配置，异常按 off。"""
+    try:
+        from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
+
+        return str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
+    except Exception:
+        return "off"
+
+
+_RECENT_EVIDENCE_MESSAGES = 8
+_EVIDENCE_FACTS = 6
+_EVIDENCE_TEXT_MAX = 120
+
+
+def _recent_trusted_messages(ctx: ChatContext, limit: int = _RECENT_EVIDENCE_MESSAGES) -> list[dict]:
+    """同会话近期真实消息（作者来自库行，复核 F12：作者边界由服务端定）。"""
+    key = str(getattr(ctx, "conversation_key", "") or "")
+    if not key:
+        return []
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT id, user_id, content, sender_display_name, timestamp"
+            " FROM group_messages WHERE conversation_key = ?"
+            " AND source_kind != 'BOT_SELF' AND content != ''"
+            " ORDER BY id DESC LIMIT ?",
+            (key, int(limit)),
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return []
+    messages = []
+    for row_id, user_id, content, display, ts in reversed(rows):
+        author_id = int(user_id) if str(user_id or "").isdigit() else 0
+        messages.append(
+            {
+                "id": row_id,
+                "text": str(content or "")[:_EVIDENCE_TEXT_MAX],
+                "author_id": author_id,
+                "author_display": str(display or "") or (f"用户({user_id})" if user_id else ""),
+                "object_id": None,
+                "row_id": row_id,
+                "conversation_key": key,
+                "timestamp": str(ts or ""),
+            }
+        )
+    return messages
+
+
+def _current_corrections(ctx: ChatContext, limit: int = 2) -> list[dict]:
+    """当前会话的纠正证据（conflicted/第三人纠正行；复核 F12：受限 ack 来源）。"""
+    key = str(getattr(ctx, "conversation_key", "") or "")
+    if not key:
+        return []
+    try:
+        from memory.conversation_identity import active_claims
+
+        claims = [
+            c for c in active_claims(key)
+            if c.get("status") == "conflicted"
+            or c.get("claim_kind") == "third_person_correction"
+        ][-int(limit):]
+    except Exception:
+        return []
+    corrections = []
+    for c in claims:
+        author = str(c.get("author_user_id") or "")
+        corrections.append(
+            {
+                "id": c.get("source_row_id") or 0,
+                "author_id": int(author) if author.isdigit() else 0,
+                "author_display": f"用户({author})" if author else "",
+                "text": str(c.get("alias") or ""),
+                "conversation_key": key,
+                "source_row_id": c.get("source_row_id"),
+                "timestamp": "",
+                "polarity": "negative",
+            }
+        )
+    return [c for c in corrections if c["text"]]
+
+
+def build_attribution_evidence(ctx: ChatContext) -> dict:
+    """构建归属证据表投影（复核 F1/F12）。
+
+    来源全部服务端可信：同会话近期消息（真实作者）、受众内已检索的
+    PERSON 事实（access_scope 决定可见性，不复权）、当前纠正。上限
+    16 单元（build_evidence_table 内截断）。
+    """
+    from core.dialogue_attribution import build_evidence_table, evidence_projection
+
+    recent = _recent_trusted_messages(ctx)
+    facts = []
+    for mem in (getattr(ctx, "conversation_memories", None) or [])[:_EVIDENCE_FACTS]:
+        content = str(mem.get("content") or "").strip()
+        if not content:
+            continue
+        subject_key = str(mem.get("subject_key") or "")
+        subject_uid = subject_key.split(":", 1)[-1] if subject_key else str(mem.get("user_id") or "")
+        facts.append(
+            {
+                "id": mem.get("id") or mem.get("fact_key") or len(facts),
+                "content": content[:_EVIDENCE_TEXT_MAX],
+                "author_id": int(subject_uid) if subject_uid.isdigit() else 0,
+                "author_display": f"用户({subject_uid})" if subject_uid else "",
+                "object_id": None,
+                "source_row_id": None,
+                "conversation_key": getattr(ctx, "conversation_key", ""),
+                "timestamp": "",
+                "polarity": "neutral",
+            }
+        )
+    corrections = _current_corrections(ctx)
+    table = build_evidence_table(recent, facts, corrections, max_units=16)
+    return evidence_projection(table)
 
 
 def _read_stable_profile(group_shared_space: str, user_id: int) -> str:

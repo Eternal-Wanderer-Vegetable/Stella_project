@@ -694,18 +694,21 @@ def grant_sharing_authorization(
 
 def promote_pending_grants_for_fact(
     conn: sqlite3.Connection,
-    platform: str,
-    bot_id: str | int,
-    user_id: str | int,
+    owner_key: str,
+    subject_key: str,
     fact_key: str,
-    source_conversation_key: str = "",
+    bot_id: str | int = "",
+    user_id: str | int = "",
 ) -> int:
     """事实整合写入后，提升同 owner/fact 的 pending 授权为 active（复核 F4）。
 
     由整合写入路径在**同一事务**内调用（PERSON/PRIVATE_ONLY 行落库后）。
-    返回提升的授权数。来源绑定用授权消息本身的 row（创建 pending 时已存）。
+    owner_key/subject_key 直接传整合写入时的归属列
+    （person:{platform}:{bot}:{uid}，与授权表同一绑定键）；bot_id/user_id
+    仅用于审计行，可省略。返回提升的授权数。
     """
-    _owner_type, owner_key, subject_key = canonical_owner(platform, bot_id, user_id)
+    owner_key = str(owner_key or "")
+    subject_key = str(subject_key or "")
     fact_key = str(fact_key or "").strip()
     if not owner_key or not fact_key:
         return 0
@@ -733,8 +736,8 @@ def promote_pending_grants_for_fact(
         _write_copy_evidence(
             conn, grant_id, owner_key, subject_key, fact_key, src_conv, src_row
         )
-        _write_audit(conn, "promote", grant_id, bot_id, user_id, fact_key,
-                     {"copied": copied})
+        _write_audit(conn, "promote", grant_id, bot_id or owner_key, user_id or subject_key,
+                     fact_key, {"copied": copied})
         promoted += 1
     if promoted:
         _bump_owner_version(conn, owner_key)

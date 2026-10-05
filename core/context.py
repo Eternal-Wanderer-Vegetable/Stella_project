@@ -250,6 +250,23 @@ class ChatContext:
     # 0 表示无尾巴（新群或全部消息都超出时间窗）。
     tail_start_id: int = 0
 
+    # ---- 归属整改（复核 F1，v5 投影）：typed 检索 / 合同 / 证据 / 决策 / 处置 ----
+    # typed 检索查询：主动验证等场景由服务端生成（候选主题+目标近期对话），
+    # 非空时检索消费它而不是任务指令模板；空 = 沿用旧推导（行为不变）。
+    retrieval_query: str = ""
+    # 主动验证合同（memory/proactive_contract.VerificationContract 的 JSON 投影；
+    # 空 dict = 无合同）。合同只由服务端在 pick_target 后构造。
+    verification_contract: dict = field(default_factory=dict)
+    # 证据表投影（core/dialogue_attribution.SourceEvidence 的 JSON；guard 模式
+    # 非.off 时由 prepare 侧构建，empty = 关闭或无证据）。
+    attribution_evidence: dict = field(default_factory=dict)
+    # guard 决策（AttributionDecision 的 JSON；finalize 侧写入）。
+    attribution_decision: dict = field(default_factory=dict)
+    # 最终回复处置：deliver=按 lines 交付 / fallback=交付受限兜底 /
+    # suppressed=本轮不交付（guard 拒绝且无合格段）。split_lines 等后置钩子
+    # 必须尊重 suppressed——不得用「......？」默认值顶替。
+    reply_disposition: str = ""
+
     # ---- Capability Router / Comes（任务调度层） ----
     # Router 的判定结论（capability.router.types.Route）。类型写 Any 是刻意的：
     # core 是「与业务无关的编排骨架」，不该 import capability——反向依赖会成环。
@@ -325,7 +342,11 @@ class ChatContext:
     # v4：消息身份信封扁平字段（多人身份修复计划 §6.2）。旧 v3 输入缺这些
     # 字段 → 关系一律 unknown；任何来源不明的投影不得仅凭传入 uid 获得权限
     # ——权限主体仍由既有可信入口（scope_for_chat_context 等）确定。
-    PROJECTION_SCHEMA_VERSION = 4
+    # v5：归属整改五字段（复核 F1）：retrieval_query / verification_contract /
+    # attribution_evidence / attribution_decision / reply_disposition。旧 v4
+    # 输入缺这些字段 → typed 查询为空（沿用旧推导）、合同/证据为空（guard
+    # 按 feature-off 处理）、处置为空（按 deliver 兼容）——不放宽任何权限。
+    PROJECTION_SCHEMA_VERSION = 5
     # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
     # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
     # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
@@ -346,6 +367,9 @@ class ChatContext:
         "memory_mode", "conversation_memories", "behavior_constraints", "tail_start_id",
         "tool_summaries", "knowledge_evidence", "skill_summaries", "skill_artifacts",
         "image_captions",
+        # 归属整改（v5，复核 F1）
+        "retrieval_query", "verification_contract", "attribution_evidence",
+        "attribution_decision", "reply_disposition",
         # 诊断
         "llm_backend", "llm_model", "llm_call_count", "context_window_tokens",
         "prompt_budget_tokens", "prompt_estimated_tokens", "prompt_truncated",

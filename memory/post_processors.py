@@ -65,6 +65,11 @@ async def bad_phrase_filter(ctx: ChatContext) -> ChatContext:
 
 
 async def split_lines(ctx: ChatContext) -> ChatContext:
+    # 归属 guard 拒绝（复核 F1）：处置为 suppressed 时本轮不交付——
+    # 「......？」默认值不得顶替 guard 决定压下的内容
+    if getattr(ctx, "reply_disposition", "") == "suppressed":
+        ctx.lines = []
+        return ctx
     if not ctx.reply:
         ctx.reply = "......？"
     ctx.reply = ctx.reply.replace("\\n", "\n")

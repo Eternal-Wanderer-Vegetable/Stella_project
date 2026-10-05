@@ -261,7 +261,13 @@ def test_grant_pending_then_promote_after_consolidation(sharing_db):
     # 整合写入（同事务语义由调用方保证；这里验证提升结果）
     _insert_private_fact(sharing_db)
     promoted = promote_pending_grants_for_fact(
-        sharing_db, "qq", _BOT, _U1, _FACT)
+        sharing_db,
+        person_owner_key("qq", _BOT, _U1),
+        f"qq:{_U1}",
+        _FACT,
+        bot_id=_BOT,
+        user_id=_U1,
+    )
     sharing_db.commit()
     assert promoted == 1
     status = sharing_db.execute(

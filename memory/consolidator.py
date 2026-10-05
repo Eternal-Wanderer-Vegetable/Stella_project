@@ -1730,6 +1730,29 @@ class MemoryConsolidator:
                     (candidate_id, row_owner_key, fact_key, *new_evidence_rows),
                 )
             counts["written"] += 1
+            # 共享授权提升（整改计划 P5，复核 F4）：本人事实落库的同一事务内，
+            # 把同 owner/fact 的 pending 授权提升为 active 并复制共享副本、
+            # 推进规范版本键。提升失败 = 整体异常（checkpoint 不推进），与
+            # 「授权一致性必须严格」合同一致。
+            if row_owner_type == OWNER_TYPE_PERSON:
+                try:
+                    from config.settings import PERSONAL_MEMORY_SHARE_ENABLED
+
+                    sharing_enabled = bool(PERSONAL_MEMORY_SHARE_ENABLED)
+                except Exception:
+                    sharing_enabled = False
+                if sharing_enabled:
+                    from memory.personal_sharing import promote_pending_grants_for_fact
+
+                    promoted = promote_pending_grants_for_fact(
+                        conn, row_owner_key, row_subject, fact_key,
+                        bot_id="", user_id=uid,
+                    )
+                    if promoted:
+                        logger.info(
+                            f"🔗 [Consolidator] 事实 {fact_key} 落库，"
+                            f"提升 {promoted} 条 pending 共享授权"
+                        )
             # 创建履历（from 空 = 新建，计划 §6.1 entity_change 允许表示创建）
             history_events.append((
                 "memory_candidate", str(candidate_id),
