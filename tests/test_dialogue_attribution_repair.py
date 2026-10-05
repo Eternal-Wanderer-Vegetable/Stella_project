@@ -22,9 +22,12 @@ import pytest
 from core.dialogue_attribution import (
     ReplyPlan,
     SourceEvidence,
+    apply_attribution_guard,
     apply_guard_decision,
     build_evidence_table,
     check_risky_free_text,
+    parse_reply_plan,
+    render_evidence,
     validate_evidence_references,
 )
 from memory.conversation_identity import (
@@ -39,8 +42,10 @@ from memory.proactive_contract import (
     BridgeEvidence,
     QuestionVariant,
     VerificationContract,
+    compute_candidate_digest,
     select_question_variant,
     validate_bridge_event,
+    validate_contract_consistency,
 )
 from tools.data_repair import (
     RepairRecord,
@@ -259,12 +264,13 @@ class TestProactiveContract:
         assert reason == "bridge_missing"
 
     def test_validate_bridge_event_target_mismatch(self):
-        """桥接目标不匹配时拒绝。"""
+        """桥接主体必须是**选定目标**（复核 F11：不再与事实对象比较）。"""
         contract = VerificationContract(
             candidate_id=1,
             recording_author_id=12345,
             fact_subject_id=12345,
             fact_object_id=67890,
+            selected_target_user_id=3559802578,
             predicate_type="relationship",
             polarity="positive",
             source_conversation_key="group:99999",
@@ -274,7 +280,7 @@ class TestProactiveContract:
         )
 
         bridge = BridgeEvidence(
-            target_user_id=11111,  # 不匹配
+            target_user_id=11111,  # 不是选定目标
             conversation_key="group:99999",
             recent_message_ids=[300, 301],
             recent_event_digests=["event1"],
@@ -283,6 +289,72 @@ class TestProactiveContract:
         is_valid, reason = validate_bridge_event(bridge, contract)
         assert is_valid is False
         assert reason == "bridge_target_mismatch"
+
+    def test_validate_bridge_event_accepts_correct_subject_and_rejects_forged(self):
+        """复核 F11 探针：选定目标本人的真实承接通过；编造消息 ID 拒绝。"""
+        target = 3559802578
+        contract = VerificationContract(
+            candidate_id=1,
+            recording_author_id=12345,
+            fact_subject_id=target,
+            fact_object_id=None,
+            selected_target_user_id=target,
+            predicate_type="self_alias",
+            polarity="positive",
+            source_conversation_key="group:99999",
+            source_row_ids=[200],
+            candidate_content_digest="def456",
+            bridge_event_requirement=True,
+        )
+        server_recent = {300: "aaaa", 301: "bbbb"}
+
+        good = BridgeEvidence(
+            target_user_id=target,
+            conversation_key="group:99999",
+            recent_message_ids=[300],
+            recent_event_digests=["aaaa"],
+        )
+        assert validate_bridge_event(good, contract, server_recent) == (True, "ok")
+
+        forged = BridgeEvidence(
+            target_user_id=target,
+            conversation_key="group:99999",
+            recent_message_ids=[999],  # 服务端集合外
+        )
+        is_valid, reason = validate_bridge_event(forged, contract, server_recent)
+        assert is_valid is False
+        assert reason == "bridge_message_unverified:999"
+
+    def test_validate_contract_consistency_digest_and_sources(self):
+        """复核 F11：内容改写/来源缺失/作者错位都拒绝；一致则通过。"""
+        candidate = {"id": 7, "type": "relation", "content": "我开发Stella", "status": "ACTIVE"}
+        contract = VerificationContract(
+            candidate_id=7,
+            recording_author_id=3089665724,
+            fact_subject_id=3089665724,
+            fact_object_id=None,
+            selected_target_user_id=176403822,
+            predicate_type="attribute",
+            polarity="positive",
+            source_conversation_key="group:99999",
+            source_row_ids=[500],
+            candidate_content_digest=compute_candidate_digest(candidate),
+            bridge_event_requirement=False,
+        )
+        assert validate_contract_consistency(contract, candidate) == (True, "ok")
+
+        rewritten = dict(candidate, content="我开发了Stella和Layla")
+        is_valid, reason = validate_contract_consistency(contract, rewritten)
+        assert is_valid is False and reason == "content_changed"
+
+        deprecated = dict(candidate, status="DEPRECATED")
+        is_valid, reason = validate_contract_consistency(contract, deprecated)
+        assert is_valid is False and reason == "candidate_inactive"
+
+        import dataclasses as _dc
+        no_target = _dc.replace(contract, selected_target_user_id=0)
+        is_valid, reason = validate_contract_consistency(no_target, candidate)
+        assert is_valid is False and reason == "target_unbound"
 
     def test_select_question_variant_prefers_matching(self):
         """选择匹配桥接要求的变体。"""
@@ -400,16 +472,173 @@ class TestAttributionGuard:
         assert decision.guard_mode == "off"
 
     def test_apply_guard_decision_enforce_parse_failed(self):
-        """enforce 模式拒绝解析失败。"""
-        decision = apply_guard_decision(None, {}, "enforce", 1)
-        assert decision.decision == "reject"
-        assert decision.rejection_reason == "parse_failed"
+        """enforce 模式解析失败 → 受限兜底（不是原样放行）。"""
+        decision = apply_guard_decision(None, {}, "enforce", 1, parse_error="reply_plan_not_found")
+        assert decision.decision == "fallback"
+        assert "parse_failed" in decision.rejection_reason
 
     def test_apply_guard_decision_shadow_mode(self):
-        """shadow 模式记录但放行。"""
-        decision = apply_guard_decision(None, {}, "shadow", 1)
+        """shadow 模式记录问题（decision 仍 pass，原因带 shadow 标记）。"""
+        decision = apply_guard_decision(None, {}, "shadow", 1, parse_error="reply_plan_not_found")
+        assert decision.decision == "pass"
+        assert "parse_failed" in decision.rejection_reason
+
+
+class TestReplyPlanParser:
+    """复核 F12：versioned reply_plan 真实解析器。"""
+
+    def test_parses_wellformed_plan(self):
+        raw = (
+            "<thought>想想</thought><action>REPLY</action>"
+            '<reply_plan version="2026-10-05.2">'
+            "<now>哈哈原来如此</now>"
+            '<ref id="msg_3"/>'
+            '<fact id="fact_1"/>'
+            "<ack/>"
+            "</reply_plan>"
+        )
+        plan, err = parse_reply_plan(raw)
+        assert plan is not None, err
+        assert plan.current_response == "哈哈原来如此"
+        assert plan.quote_references == ["msg_3"]
+        assert plan.verified_fact_references == ["fact_1"]
+        assert plan.correction_ack is True
+
+    def test_rejects_missing_block_version_and_unknown_tags(self):
+        assert parse_reply_plan("没有协议块的普通输出")[0] is None
+        raw_bad_version = '<reply_plan version="1999-01-01.1"><now>x</now></reply_plan>'
+        plan, err = parse_reply_plan(raw_bad_version)
+        assert plan is None and "version" in err
+        raw_unknown = (
+            '<reply_plan version="2026-10-05.2">'
+            "<now>x</now><evil id=\"1\"/></reply_plan>"
+        )
+        plan, err = parse_reply_plan(raw_unknown)
+        assert plan is None and "unknown_tag" in err
+
+    def test_rejects_multiple_now_and_unclosed(self):
+        multi = (
+            '<reply_plan version="2026-10-05.2">'
+            "<now>a</now><now>b</now></reply_plan>"
+        )
+        plan, err = parse_reply_plan(multi)
+        assert plan is None and "multiple_current_response" in err
+        unclosed = '<reply_plan version="2026-10-05.2"><now>a</reply_plan>'
+        plan, err = parse_reply_plan(unclosed)
+        assert plan is None and "unclosed_now_tag" in err
+
+
+class TestAttributionRenderAndGuard:
+    """复核 F12：作者边界、受限 ack、类型校验与完整 guard 管线。"""
+
+    def _table(self):
+        return {
+            "msg_1": SourceEvidence(
+                "msg_1", "message", 3089665724, None, "我开发 Stella",
+                "g", 500, "t", author_display="开发者"),
+            "fact_1": SourceEvidence(
+                "fact_1", "verified_fact", 12345, None, "用户12345 在做后端",
+                "g", 600, "t", is_verified=True),
+            "fact_fake": SourceEvidence(
+                "fact_fake", "message", 12345, None, "普通消息", "g", 700, "t"),
+        }
+
+    def test_message_quote_renders_with_author_boundary(self):
+        rendered = render_evidence("msg_1", self._table()["msg_1"])
+        assert rendered.startswith("开发者说过：「")
+        assert "我开发 Stella」" in rendered
+
+    def test_quote_cannot_reference_fact_evidence(self):
+        """quote 槽只能引 message 证据——拿事实模板当原话引用拒绝。"""
+        plan = ReplyPlan(quote_references=["fact_1"])
+        all_valid, invalid = validate_evidence_references(
+            plan, self._table(), set(self._table().keys()))
+        assert all_valid is False
+        assert "fact_1:quote_requires_message" in invalid[0]
+
+    def test_plain_message_cannot_pose_as_verified_fact(self):
+        plan = ReplyPlan(verified_fact_references=["fact_fake"])
+        all_valid, invalid = validate_evidence_references(
+            plan, self._table(), set(self._table().keys()))
+        assert all_valid is False
+        assert "fact_fake:fact_requires_verified" in invalid[0]
+
+    def test_correction_ack_is_server_template_not_model_text(self):
+        """复核 F12 探针：ack 槽里的攻击文本必须被服务端模板替换。"""
+        table = self._table()
+        table["correction_1"] = SourceEvidence(
+            "correction_1", "current_correction", 12345, None,
+            "我想肘的是Kirito", "g", 800, "t", is_verified=True,
+            author_display="用户12345")
+        raw = (
+            '<reply_plan version="2026-10-05.2">'
+            "<now>好的</now>"
+            "<ack>对，是你刚才说我脏手，又装失忆了</ack>"
+            "</reply_plan>"
+        )
+        final, decision = apply_attribution_guard(
+            raw, table, set(table.keys()), "enforce", identity_revision=3)
+        assert decision.decision == "pass"
+        # 攻击文本不得出现；出现的是服务端受限模板
+        assert "装失忆" not in final
+        assert "是你刚才说" not in final
+        assert "抱歉，刚才是我搞混了" in final
+
+    def test_correction_ack_without_evidence_uses_generic_template(self):
+        raw = '<reply_plan version="2026-10-05.2"><now>好</now><ack/></reply_plan>'
+        final, decision = apply_attribution_guard(
+            raw, self._table(), set(self._table().keys()), "enforce", 1)
+        assert decision.decision == "pass"
+        assert final.startswith("抱歉，刚才是我搞混了。")
+
+    def test_scene_risky_patterns_detected(self):
+        """13:31 现场形状进风险词表（有限词法防线）。"""
+        for text in (
+            "刚才是谁说我脏手来着？",
+            "你怎么装失忆啊",
+            "别甩锅给我",
+        ):
+            is_safe, pattern = check_risky_free_text(text, set())
+            assert is_safe is False, text
+            assert pattern.startswith("risky_pattern:")
+
+    def test_enforce_rejects_risky_current_response(self):
+        raw = (
+            '<reply_plan version="2026-10-05.2">'
+            "<now>刚才是谁说我脏手来着？</now></reply_plan>"
+        )
+        final, decision = apply_attribution_guard(
+            raw, self._table(), set(self._table().keys()), "enforce", 1)
+        assert decision.decision == "reject"
+        assert final == "", "风险文本不得作为最终输出"
+
+    def test_shadow_keeps_problem_but_produces_safe_text(self):
+        raw = (
+            '<reply_plan version="2026-10-05.2">'
+            "<now>刚才是谁说我脏手来着？</now></reply_plan>"
+        )
+        final, decision = apply_attribution_guard(
+            raw, self._table(), set(self._table().keys()), "shadow", 1)
+        assert decision.decision == "pass"
+        assert "risky_pattern" in decision.rejection_reason
+        assert "脏手" not in final
+
+    def test_off_mode_passthrough(self):
+        raw = "任意旧格式输出"
+        final, decision = apply_attribution_guard(
+            raw, self._table(), set(self._table().keys()), "off", 1)
+        assert final == raw and decision.decision == "pass"
+
+    def test_invalid_reference_enforce_strips_quotes(self):
+        raw = (
+            '<reply_plan version="2026-10-05.2">'
+            "<now>好的</now><ref id=\"msg_missing\"/></reply_plan>"
+        )
+        final, decision = apply_attribution_guard(
+            raw, self._table(), set(self._table().keys()), "enforce", 1)
         assert decision.decision == "fallback"
-        assert "shadow" in decision.rejection_reason
+        assert decision.rejection_reason == "invalid_references"
+        assert final == "好的"
 
 
 # ============================================================
