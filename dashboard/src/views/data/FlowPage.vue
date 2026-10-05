@@ -946,9 +946,16 @@ const rootKindOptions = computed(() => [
                 <!-- 逐段投递事实（验收报告 M6）：failed/unknown 片段可见 -->
                 <div
                   v-if="store.io.output.segments
-                    && store.io.output.segments.some((s) => s.status !== 'acknowledged')"
+                    && (store.io.output.segments.some((s) => s.status !== 'acknowledged')
+                      || store.io.output.segments_truncated)"
                   class="mt-1"
                 >
+                  <div
+                    v-if="store.io.output.segments_truncated"
+                    class="text-caption text-warning mb-1"
+                  >
+                    片段事实已截断：仅展示前 {{ store.io.output.segments.length }} 段
+                  </div>
                   <div
                     v-for="seg in store.io.output.segments"
                     :key="seg.part_index"

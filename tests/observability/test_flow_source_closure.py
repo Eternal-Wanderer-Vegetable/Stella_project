@@ -302,3 +302,89 @@ class TestModuleAliasAndReverseDiff:
                          if d["symbol"] == "resolve")
         assert rec_after["handler"] == "_handle_b"
         assert rec_before["handler_body_hash"] != rec_after["handler_body_hash"]
+
+
+class TestB3Closure:
+    """复验报告 B3：无 as 模块导入、handler 传递闭包、生命周期注册注销。"""
+
+    def test_plain_module_import_resolves_and_drifts(self, fixture_root):
+        """`import pkg.helper` + pkg.helper.normalize(v) → 解析到 normalize。"""
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 1\n")
+        _write(fixture_root / "pkg" / "caller.py",
+               "import pkg.helper\n\n\n"
+               "def entry(v):\n    return pkg.helper.normalize(v)\n")
+        before = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        helpers = {(c["file"], c["qualname"]) for c in before["symbols"]}
+        assert ("pkg/helper.py", "normalize") in helpers, (
+            "无 as 模块导入必须解析到真实符号")
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 2\n")
+        after = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        assert before["closure_hash"] != after["closure_hash"]
+
+    def test_single_segment_module_import(self, fixture_root):
+        """`import helper as h`（单段本地模块）同样解析。"""
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 1\n")
+        _write(fixture_root / "pkg" / "caller.py",
+               "import helper as h\n\n\n"
+               "def entry(v):\n    return h.normalize(v)\n")
+        closure = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        helpers = {(c["file"], c["qualname"]) for c in closure["symbols"]}
+        assert ("pkg/helper.py", "normalize") in helpers
+
+    def test_handler_downstream_helper_in_closure_record(self, fixture_root):
+        """worker 注册的 handler 的**传递本地依赖**进 discovered 记录。"""
+        _write(fixture_root / "pkg" / "worker.py",
+               "def register_handler(job_type, handler):\n"
+               "    return None\n\n\n"
+               "def _handle_a():\n    return _downstream()\n\n\n"
+               "def _downstream():\n    return 42\n\n\n"
+               "register_handler('resolve', _handle_a)\n")
+        before = discovered_entries_diff(
+            fixture_root, declared=[("pkg/worker.py", "resolve")],
+            package_dirs=["pkg"])
+        rec = next(d for d in before["discovered"] if d["symbol"] == "resolve")
+        assert any("_downstream" in c for c in rec["handler_closure"]), (
+            "handler 的传递本地依赖必须在闭包记录里")
+        # 下游 helper 体变化 → 记录漂移
+        _write(fixture_root / "pkg" / "worker.py",
+               "def register_handler(job_type, handler):\n"
+               "    return None\n\n\n"
+               "def _handle_a():\n    return _downstream()\n\n\n"
+               "def _downstream():\n    return 43\n\n\n"
+               "register_handler('resolve', _handle_a)\n")
+        after = discovered_entries_diff(
+            fixture_root, declared=[("pkg/worker.py", "resolve")],
+            package_dirs=["pkg"])
+        rec_after = next(d for d in after["discovered"]
+                         if d["symbol"] == "resolve")
+        assert rec["handler_closure"] != rec_after["handler_closure"]
+
+    def test_lifecycle_decorator_removal_blocks(self, fixture_root):
+        """生命周期 entry 的注册装饰器被删除（函数保留）→ missing。"""
+        _write(fixture_root / "pkg" / "boot.py",
+               "from nonebot import get_driver\n\n\n"
+               "@get_driver().on_startup\n"
+               "async def boot_hook():\n    return None\n")
+        declared_meta = [{"file": "pkg/boot.py", "symbol": "boot_hook",
+                          "registration": "lifecycle_hook"}]
+        ok = discovered_entries_diff(
+            fixture_root, declared=[("pkg/boot.py", "boot_hook")],
+            package_dirs=["pkg"], declared_entries_meta=declared_meta)
+        assert ok["missing"] == []
+        # 删除装饰器、保留函数
+        _write(fixture_root / "pkg" / "boot.py",
+               "async def boot_hook():\n    return None\n")
+        bad = discovered_entries_diff(
+            fixture_root, declared=[("pkg/boot.py", "boot_hook")],
+            package_dirs=["pkg"], declared_entries_meta=declared_meta)
+        assert any(m["reason"] == "registration_removed"
+                   for m in bad["missing"])

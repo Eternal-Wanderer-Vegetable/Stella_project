@@ -457,10 +457,20 @@ class ProjectIndex:
                 prefix = ".".join(parts)
                 module = f"{prefix}.{module}" if (prefix and module) else (
                     module or prefix)
-            if level == 0 and original and "." in original and original == module:
-                # 模块别名（复验 A3）：`import pkg.helper as h` 的 h.normalize
-                # → 模块 pkg.helper 的符号路径 normalize
+            alias_is_module = module in self.modules or any(
+                k.endswith("." + module) for k in self.modules)
+            if (level == 0 and original and original == module
+                    and alias_is_module):
+                # 模块别名（复验 A3/B3）：`import pkg.helper as h` 的
+                # h.normalize 与 `import pkg.helper` 的 pkg.helper.normalize
+                # 都解析到模块 pkg.helper 的符号 normalize——先剥掉 remainder
+                # 里与模块末段重复的部分
                 remainder = target[len(root):].lstrip(".")
+                mod_tail = module.rsplit(".", 1)[-1]
+                if remainder == mod_tail:
+                    remainder = ""
+                elif remainder.startswith(mod_tail + "."):
+                    remainder = remainder[len(mod_tail) + 1:]
                 resolved = self._resolve_module_symbol(module, remainder)
             else:
                 # 符号别名还原原名（M4）：调用走别名，模块内符号是原名
@@ -481,6 +491,14 @@ class ProjectIndex:
             return f"dynamic:{target}"
         return "unresolved"
 
+    def _module_key(self, name: str) -> str | None:
+        """裸模块名 → 索引键（复验 B3）：单段 `import helper` 的索引键是
+        `pkg.helper`——按后缀匹配。"""
+        if name in self.modules:
+            return name
+        cands = sorted(k for k in self.modules if k.endswith("." + name))
+        return cands[0] if cands else None
+
     def _resolve_module_symbol(
             self, module: str, target: str) -> tuple[str, str] | None:
         """把 `module` + `target`（root.attr...）解析到 (file_rel, qualname)。
@@ -496,13 +514,15 @@ class ProjectIndex:
             if chain:
                 for i in range(1, len(tparts) + 1):
                     mod2 = ".".join(chain + tparts[:i])
-                    if mod2 in self.modules:
+                    mod2_key = self._module_key(mod2)
+                    if mod2_key is not None:
                         rest = tparts[i:]
-                        return (self.modules[mod2].file_rel,
+                        return (self.modules[mod2_key].file_rel,
                                 ".".join(rest))
             mod_name = ".".join(chain)
-            if mod_name and mod_name in self.modules:
-                file_rel = self.modules[mod_name].file_rel
+            mod_key = self._module_key(mod_name) if mod_name else None
+            if mod_key is not None:
+                file_rel = self.modules[mod_key].file_rel
                 # 符号在模块文件里逐段下探（类方法等由 find 处理）
                 if tparts:
                     return (file_rel, ".".join(tparts))
@@ -788,14 +808,23 @@ def discovered_entries_diff(
         for hit in _scan_entries_in_file(ctx):
             record = {"file": rel, "symbol": hit["symbol"],
                       "kind": hit["kind"]}
-            # handler 绑定进漂移合同（复验 A3）：同键换绑或 handler 体变化
-            # 都改变 discovered 记录 → manifest hash 漂移
+            # handler 绑定进漂移合同（复验 A3 + B3）：同键换绑、handler 体
+            # 变化、**handler 的传递本地依赖**变化都改变 discovered 记录 →
+            # manifest hash 漂移（真实链：resolve_effect → handle_effect_
+            # feedback → log_settlement）
             handler = hit.get("handler", "")
             if handler:
                 record["handler"] = handler
                 h_node = _find_in_ctx(ctx, handler)
                 if h_node is not None:
                     record["handler_body_hash"] = body_hash(h_node)
+                    seed_helpers, _seed_bounds, seed_trunc = \
+                        reachable_symbols_cross(index, rel, handler)
+                    record["handler_closure"] = sorted(
+                        f"{h['file']}#{h['qualname']}:{h['body_hash']}"
+                        for h in seed_helpers)
+                    if seed_trunc:
+                        record["handler_closure_truncated"] = True
                 else:
                     record["handler_body_hash"] = ""
             discovered.append(record)
