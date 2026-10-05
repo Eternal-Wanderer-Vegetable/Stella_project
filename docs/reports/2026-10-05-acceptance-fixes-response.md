@@ -76,3 +76,23 @@
 ## 仍待现场验收（与本轮代码修复无关的既有缺口）
 
 真实 QQ 全场景矩阵（私聊文本/图片/命令/部分发送的新轨迹验证——H1 修复后新轨迹即可存档回执）、浏览器/桌面完整导航矩阵、最终安装包验收。逐项证据口径见验收报告 §Coverage；每项修复的 trace/digest/水位证据在上述各回归中。
+
+
+---
+
+## 第二轮复验响应（2026-10-05，A1–A8）
+
+回应 [第二轮复验](2026-10-05-dashboard-flow-plan-acceptance-recheck.md)，提交 `3436a49`（A1/A2）、`aef202d`（A3）、`49f11f7`/`2a00b8f` 上轮关联、本轮 A4–A8（c315495）。
+
+| 项 | 修复 | 回归 |
+| --- | --- | --- |
+| A1 | finality 确认后按新水位**最终补读**事件 + 再刷 IO/实体；detail 瞬时失败有界 2 次重试且**不取消**独立来源刷新 | pending→final 探针（3 次 event 调用、IO 更新）；detail 瞬时失败仍刷新独立来源并恢复 |
+| A2 | bundle 回包绑定 streamSession（隐藏页面即在途作废）；loadMoreEvents 钳制同一冻结水位；整体失效时跳过 round-1 派发 | 挂起→隐藏→迟到回包不落地不触发事件；继续页 until=1500 断言 |
+| A3 | `import pkg.helper as h` 模块别名解析原名（体变化即漂移）；RuntimeEntry.registration 反向注销差集（删注册即 missing）；worker 注册记录 handler 绑定+体哈希（换绑即漂移）；rust.promotion 补 contract_files 摘要（backend/selector/python_backend/__init__ + 5 个 .rs + settings 按 MEMORY_BACKEND\|RUST 行过滤，CRLF 归一） | 模块别名漂移、反向注销、换绑漂移三组 fixture |
+| A4 | `_start_scheduling` 的 runtime.start 包入 cancelled/start_failed 收口；`_graceful_shutdown` 如实记录 cometa/scheduling 停止失败（failed decision + stopped_with_errors）并以有界 flush 确认末尾观测落库 | start 抛 RuntimeError → start_failed；抛 CancelledError → cancelled 且 complete=0 |
+| A5 | occurrence 凭据改绑**事件对象身份**（id(event) → root trace + token），结束须出示匹配凭据；凭据消费即幂等 | 替换 occurrence 探针：旧事件迟到 end 不再关闭新 root |
+| A6 | 输出「（无）」占位改按真实空输出判定（与 segments 条件解耦）；静态标签表含 qq_private，入口下拉 = 静态 ∪ entry_roots ∪ 已见 root（初始即 20 项）；列表新增 exhausted 状态——取尽后轮询不再恢复首屏游标 | DOM 条件变更 + store 状态测试 |
+| A7 | 备份失败 → 拒绝迁移（连接返回 None、原库原样、观测降级） | 注入备份失败：无 .bak、无新列 |
+| A8 | segments 截断按片段维度显式报告（segments_truncated + note），25 段探针返回 20 段 + 截断标记；命令完整正文继续列为现场待验（未标完成） | 25 段探针 |
+
+门禁：pytest 224+ 全绿、dashboard 98 测试 + typecheck + build + 三快照同步、ruff 全绿、manifest `4a5fbef6b7ea` --check 通过。仍未完成：命令完整正文合同（A8 保留项）、真实 QQ 全场景矩阵、浏览器/桌面完整导航、最终安装包验收。

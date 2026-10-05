@@ -30,6 +30,7 @@ const ROOT_KIND_LABELS: Record<string, string> = {
   qq_passive: 'QQ 被动消息',
   qq_chat: 'QQ 对话',
   qq_command: 'QQ 命令',
+  qq_private: 'QQ 私聊',
   webchat: 'WebChat',
   proactive: '主动发言',
   consolidate: '记忆整合',
@@ -695,12 +696,13 @@ function stopPlay() {
 }
 
 const platformOptions = ['qq', 'webchat', 'cometa'];
-// 入口筛选项 = 静态标签表 ∪ manifest entry_roots（验收报告 M5：不再固定 9 项，
-// 19 个声明入口全部可选；未知 root_kind 原样展示）
+// 入口筛选项 = 静态标签表 ∪ manifest entry_roots ∪ 列表已见 root
+// （复验 A6：不依赖已选轨迹的 spec——初始下拉必须含 qq_private）
 const rootKindOptions = computed(() => [
   ...new Set([
     ...Object.keys(ROOT_KIND_LABELS),
     ...Object.keys(store.spec?.entry_roots ?? {}),
+    ...store.messages.map((m) => m.root_kind),
   ]),
 ]);
 </script>
@@ -963,7 +965,13 @@ const rootKindOptions = computed(() => [
                     <span class="io-text flex-grow-1">{{ seg.text || '（空）' }}</span>
                   </div>
                 </div>
-                <div v-else class="text-caption text-medium-emphasis">（无）</div>
+                <div
+                  v-if="!store.io.output.lines.length
+                    && !(store.io.output.segments && store.io.output.segments.length)"
+                  class="text-caption text-medium-emphasis"
+                >
+                  （无）
+                </div>
               </div>
             </div>
             <div v-if="store.io.notes.length" class="text-caption text-medium-emphasis mt-1">
