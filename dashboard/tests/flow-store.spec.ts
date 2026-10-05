@@ -783,6 +783,61 @@ describe('flow store M5 contracts', () => {
     expect(store.eventsTruncated).toBe(false);
   });
 
+  it('events in flight when page hides do not merge (B1)', async () => {
+    const store = useFlowStore();
+    store.detail = detail({ trace_id: 'rt-b1', high_watermark: 2 });
+    let releaseEvents!: (items: FlowEvent[]) => void;
+    vi.mocked(flowApi.getMessage).mockResolvedValue(
+      detail({ trace_id: 'rt-b1', high_watermark: 2 }));
+    vi.mocked(flowApi.getEvents).mockImplementationOnce(
+      () => new Promise((r) => { releaseEvents = r; }));
+    vi.mocked(flowApi.getMessageIo).mockResolvedValue(EMPTY_IO);
+    vi.mocked(flowApi.getTraceEntities).mockResolvedValue([]);
+    const sessionBefore = store.streamSession;
+    const p = store.refreshTraceBundle(); // detail 完成，events 在途
+    await vi.advanceTimersByTimeAsync(10);
+    store.stopStream(); // 隐藏页面：session 递增 → bundle 失效
+    expect(store.streamSession).toBeGreaterThan(sessionBefore);
+    releaseEvents([ev({ event_id: 'e2', row_id: 2 })]);
+    await p;
+    // 旧 session 的 events 回包不得合并（复验 B1 探针：lateEvents=['e2']）
+    expect(store.orderedEvents).toHaveLength(0);
+  });
+
+  it('new-gap reopen after exhaustion (B2)', async () => {
+    const store = useFlowStore();
+    const tsOf: Record<string, string> = { old: '2026-10-05T00:00:00' };
+    const rows = (ids: string[], total: number, cursor: string | null) => ({
+      total,
+      next_cursor: cursor,
+      items: ids.map((id, i) => ({
+        trace_id: id, root_kind: 'qq_chat', platform: 'qq', scope: '',
+        source_message_key: '',
+        started_utc: tsOf[id] ?? `2026-10-05T01:${String(i % 60).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}.00`,
+        ended_utc: '', outcome: '', status: 'closed', complete: true,
+        loss: false,
+      })) as FlowMessageSummary[],
+    });
+    // 初始 1 条已取尽
+    vi.mocked(flowApi.listMessages)
+      .mockResolvedValueOnce(rows(['old'], 1, null))
+      // 隐藏期间新增 101 条 → 新首屏（100 条全新 + cursor）
+      .mockResolvedValueOnce(rows(
+        Array.from({ length: 100 }, (_, i) => `new${String(i).padStart(3, '0')}`),
+        102, 'c2'))
+      // 从新游标继续：命中缺口记录
+      .mockResolvedValueOnce(rows(['old'], 102, null));
+    await store.loadMessages();
+    expect(store.listExhausted).toBe(true);
+    await store.loadMessages(); // 恢复后首屏：新缺口重开游标
+    expect(store.listExhausted).toBe(false);
+    expect(store.messagesCursor).toBe('c2');
+    await store.loadMoreMessages();
+    const ids = store.messages.map((m) => m.trace_id);
+    expect(ids).toContain('old');
+    expect(store.listExhausted).toBe(true);
+  });
+
   it('scheduleIoRefresh throttles burst receipt facts into one refresh', async () => {
     const store = useFlowStore();
     vi.mocked(flowApi.getMessage).mockResolvedValue(detail({ trace_id: 'rt-io' }));
