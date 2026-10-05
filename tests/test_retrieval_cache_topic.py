@@ -15,8 +15,16 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 import memory.retrieval_v2 as retrieval_v2
 from memory.cache_keys import bump_memory_history
+
+
+@pytest.fixture(autouse=True)
+def _pin_python_backend(monkeypatch):
+    """本文件验收 python 侧检索缓存（_CACHE）；native 后端不经过它。"""
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
 
 
 def _create_v2_db(db_path: Path):
@@ -48,6 +56,8 @@ def _create_v2_db(db_path: Path):
         )
         """
     )
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_meta (k TEXT PRIMARY KEY, version INTEGER)")
+    conn.execute("INSERT OR REPLACE INTO schema_meta (k, version) VALUES ('version', 18)")
     conn.commit()
     conn.close()
 

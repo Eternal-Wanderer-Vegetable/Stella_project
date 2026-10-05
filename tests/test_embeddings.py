@@ -10,10 +10,17 @@
 import asyncio
 
 import httpx
+import pytest
 
 import memory.policy as policy
 from memory.embeddings import EmbeddingService, cosine_similarity, normalize
 
+
+@pytest.fixture(autouse=True)
+def _pin_python_backend(monkeypatch):
+    """本文件验收 python 检索路径行为（访问记账/embedding 路由/FTS 回退）；
+    native 检索路径的行为差异由 native 侧测试覆盖。"""
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
 
 def _run(coro):
     return asyncio.run(coro)

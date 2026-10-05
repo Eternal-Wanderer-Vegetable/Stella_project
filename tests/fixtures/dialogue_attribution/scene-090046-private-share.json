@@ -53,7 +53,9 @@
    "asker": "V",
    "input": "我和你是什么关系来着？",
    "expect_recalled": false
-  }
+  },
+  "current_sender": "U",
+  "current_input": "我们的关系是什么来着？"
  },
  "oracle": {
   "task": "本人 CP 事实归属 PERSON 且仅按授权共享",
@@ -71,5 +73,6 @@
    "未授权时 V 或群内任何人可见",
    "撤回后仍可召回"
   ]
- }
+ },
+ "logical_units": []
 }

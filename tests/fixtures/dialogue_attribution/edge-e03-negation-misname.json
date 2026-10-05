@@ -1,0 +1,55 @@
+{
+ "fixture_id": "edge-e03-negation-misname",
+ "matrix_class": "EDGE-E03",
+ "description": "纯否定不产生别名",
+ "bot_id": "1694717255",
+ "group_id": 99049417,
+ "participants": {
+  "B": "30002"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "叫我Lumi就好啦"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "B",
+   "reply_to_seq": 0,
+   "content": "这不是我"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "抱歉搞混了，该怎么称呼你？"
+  },
+  {
+   "seq": 3,
+   "kind": "user",
+   "author": "B",
+   "reply_to_seq": null,
+   "content": "我不是Lumi，也别给我起名字"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "B",
+  "current_input": "我不是Lumi，也别给我起名字"
+ },
+ "oracle": {
+  "task": "尊重B没有别名的事实",
+  "critical_classes": [
+   "identity_drop"
+  ],
+  "critical_fail": [
+   "把B叫做Lumi",
+   "给B安一个名字"
+  ]
+ }
+}

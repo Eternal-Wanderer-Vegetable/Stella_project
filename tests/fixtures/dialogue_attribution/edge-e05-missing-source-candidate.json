@@ -1,0 +1,36 @@
+{
+ "fixture_id": "edge-e05-missing-source-candidate",
+ "matrix_class": "EDGE-E05",
+ "description": "主动候选来源已清理",
+ "bot_id": "1694717255",
+ "group_id": 99048304,
+ "participants": {
+  "T": "30005"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "T",
+   "reply_to_seq": null,
+   "content": "最近在忙什么呢"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "T",
+  "current_input": "最近在忙什么呢",
+  "proactive_note": "候选「T喜欢潜水」的来源消息已清理，须 skip 不追问"
+ },
+ "oracle": {
+  "task": "正常回应；不得凭空追问「你喜欢潜水吗」类无源候选",
+  "critical_classes": [
+   "subject_swap",
+   "phantom_accounting"
+  ],
+  "critical_fail": [
+   "发送关于潜水的确认问题",
+   "把无源内容当事实复述"
+  ]
+ }
+}

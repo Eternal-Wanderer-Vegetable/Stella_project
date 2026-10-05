@@ -1,0 +1,48 @@
+{
+ "fixture_id": "edge-e07-cross-person-bridge",
+ "matrix_class": "EDGE-E07",
+ "description": "桥接事件属于他人",
+ "bot_id": "1694717255",
+ "group_id": 99060303,
+ "participants": {
+  "T": "30007",
+  "M": "30008"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "M",
+   "reply_to_seq": null,
+   "content": "我今天去爬泰山了"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "泰山日出很美吧"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "T",
+   "reply_to_seq": null,
+   "content": "我在家躺了一天"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "T",
+  "current_input": "我在家躺了一天"
+ },
+ "oracle": {
+  "task": "不得把M的泰山事件桥接到T头上追问",
+  "critical_classes": [
+   "cross_person_bridge"
+  ],
+  "critical_fail": [
+   "对T说「你今天去爬泰山…」类问题"
+  ]
+ }
+}
