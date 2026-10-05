@@ -130,13 +130,14 @@ def grant_sharing_authorization(
     
     必须在短事务内完成：
     1. 插入或更新授权记录
-    2. 复制为 USER_SHARED 副本（若事实已存在）
-    3. 记录 memory_evidence
-    4. 推进 scope_version
+    2. 将对应的 PRIVATE_ONLY 记忆/候选复制为 USER_SHARED
+    3. 推进 scope_version（strict mode，失败则事务回滚）
     
     Returns:
         (success, reason)
     """
+    from memory import scope_versions
+    
     cursor = conn.cursor()
     
     # 检查是否已存在
@@ -171,16 +172,98 @@ def grant_sharing_authorization(
             INSERT INTO personal_memory_sharing
             (bot_id, user_id, fact_key, source_conversation_key, 
              source_message_row_id, audience, status, granted_at, scope_version)
-            VALUES (?, ?, ?, ?, ?, 'USER_SHARED', 'pending', ?, 0)
+            VALUES (?, ?, ?, ?, ?, 'USER_SHARED', 'active', ?, 0)
             """,
             (bot_id, user_id, fact_key, source_conversation_key, 
              source_message_row_id, now),
         )
     
-    # TODO: 复制为 USER_SHARED 副本（需要在整合完成后）
-    # TODO: 推进 scope_version
+    # 复制 PRIVATE_ONLY 记忆/候选为 USER_SHARED（如果存在）
+    _replicate_as_user_shared(conn, bot_id, user_id, fact_key)
+    
+    # 推进 scope_version（严格模式：失败则整个事务回滚）
+    try:
+        scope_key = f"user:{user_id}"
+        scope_versions.bump(scope_key, conn=conn, strict=True)
+    except Exception as e:
+        logger.error(f"❌ [Sharing] scope_version bump failed for {scope_key}: {e}")
+        raise
     
     return True, "granted"
+
+
+def _replicate_as_user_shared(
+    conn: sqlite3.Connection,
+    bot_id: int,
+    user_id: int,
+    fact_key: str,
+) -> None:
+    """复制 PRIVATE_ONLY 记忆/候选为 USER_SHARED 副本（幂等）。"""
+    cursor = conn.cursor()
+    
+    # 检查是否已有 USER_SHARED 副本
+    existing = cursor.execute(
+        """
+        SELECT id FROM memories
+        WHERE fact_key = ? AND audience = 'USER_SHARED'
+        """,
+        (fact_key,),
+    ).fetchone()
+    
+    if existing:
+        return  # 已存在，跳过复制
+    
+    # 复制 memories 表中的 PRIVATE_ONLY 行
+    cursor.execute(
+        """
+        INSERT INTO memories (
+            id, group_shared_space, user_id, type, content, content_raw,
+            importance, confidence, status, confirmation_count,
+            last_confirmed_at, last_accessed_at, compressed_at, compression_version,
+            is_atomized, usage_tags, visibility, trigger_data, behavior_rule,
+            source_kind, origin_group_id, owner_type, owner_key, subject_key,
+            audience, source_conversation_key, fact_key, policy_version,
+            created_at, updated_at
+        )
+        SELECT
+            id || '-shared', group_shared_space, user_id, type, content, content_raw,
+            importance, confidence, status, confirmation_count,
+            last_confirmed_at, last_accessed_at, compressed_at, compression_version,
+            is_atomized, usage_tags, visibility, trigger_data, behavior_rule,
+            source_kind, origin_group_id, owner_type, owner_key, subject_key,
+            'USER_SHARED', source_conversation_key, fact_key, policy_version,
+            created_at, CURRENT_TIMESTAMP
+        FROM memories
+        WHERE fact_key = ? AND audience = 'PRIVATE_ONLY'
+        ON CONFLICT(id) DO NOTHING
+        """,
+        (fact_key,),
+    )
+    
+    # 复制 memory_candidates 表中的 PRIVATE_ONLY 行
+    cursor.execute(
+        """
+        INSERT INTO memory_candidates (
+            id, group_shared_space, user_id, type, content, content_raw,
+            importance, confidence, status, confirmation_count,
+            last_confirmed_at, visibility, trigger_data, behavior_rule,
+            source_kind, origin_group_id, owner_type, owner_key, subject_key,
+            audience, source_conversation_key, fact_key, policy_version,
+            verification_contract_json, created_at, updated_at
+        )
+        SELECT
+            id || '-shared', group_shared_space, user_id, type, content, content_raw,
+            importance, confidence, status, confirmation_count,
+            last_confirmed_at, visibility, trigger_data, behavior_rule,
+            source_kind, origin_group_id, owner_type, owner_key, subject_key,
+            'USER_SHARED', source_conversation_key, fact_key, policy_version,
+            verification_contract_json, created_at, CURRENT_TIMESTAMP
+        FROM memory_candidates
+        WHERE fact_key = ? AND audience = 'PRIVATE_ONLY'
+        ON CONFLICT(id) DO NOTHING
+        """,
+        (fact_key,),
+    )
 
 
 def revoke_sharing_authorization(
@@ -197,6 +280,8 @@ def revoke_sharing_authorization(
     Returns:
         (success, reason)
     """
+    from memory import scope_versions
+    
     cursor = conn.cursor()
     
     # 检查授权是否存在
@@ -227,8 +312,32 @@ def revoke_sharing_authorization(
         (now, grant_id),
     )
     
-    # TODO: 失活对应的 USER_SHARED 副本
-    # TODO: 推进 scope_version（必须验证成功）
+    # 失活对应的 USER_SHARED 副本（标记为 DEPRECATED）
+    cursor.execute(
+        """
+        UPDATE memories
+        SET status = 'DEPRECATED', updated_at = CURRENT_TIMESTAMP
+        WHERE fact_key = ? AND audience = 'USER_SHARED'
+        """,
+        (fact_key,),
+    )
+    
+    cursor.execute(
+        """
+        UPDATE memory_candidates
+        SET status = 'DEPRECATED', updated_at = CURRENT_TIMESTAMP
+        WHERE fact_key = ? AND audience = 'USER_SHARED'
+        """,
+        (fact_key,),
+    )
+    
+    # 推进 scope_version（严格模式：失败则整个事务回滚）
+    try:
+        scope_key = f"user:{user_id}"
+        scope_versions.bump(scope_key, conn=conn, strict=True)
+    except Exception as e:
+        logger.error(f"❌ [Sharing] scope_version bump failed for {scope_key}: {e}")
+        raise
     
     return True, "revoked"
 

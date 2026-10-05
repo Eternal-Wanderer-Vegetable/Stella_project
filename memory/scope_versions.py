@@ -40,13 +40,20 @@ def current_version(scope_keys: list[str] | tuple[str, ...]) -> int:
         return 0
 
 
-def bump(scope_key: str, conn: sqlite3.Connection | None = None) -> None:
-    """推进某 owner 的持久版本（幂等 upsert）。传入 conn 时在调用方事务内。"""
+def bump(scope_key: str, conn: sqlite3.Connection | None = None, *, strict: bool = False) -> None:
+    """推进某 owner 的持久版本（幂等 upsert）。传入 conn 时在调用方事务内。
+    
+    R3修复（计划 §6.3）：
+    - strict=True 时失败抛异常（授权/撤回路径必须成功，否则缓存会脏读）
+    - strict=False 时静默跳过（默认行为，不拖垮业务写入）
+    """
     own = conn is None
     if own:
         try:
             conn = sqlite3.connect(DB_PATH)
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            if strict:
+                raise RuntimeError(f"Failed to connect for scope version bump: {e}") from e
             return
     assert conn is not None
     try:
@@ -59,8 +66,10 @@ def bump(scope_key: str, conn: sqlite3.Connection | None = None) -> None:
         )
         if own:
             conn.commit()
-    except sqlite3.Error:
-        pass  # 版本推进失败只损失缓存及时性，不拖垮业务写入
+    except sqlite3.Error as e:
+        if strict:
+            raise RuntimeError(f"Failed to bump scope version: {e}") from e
+        # 非严格模式：版本推进失败只损失缓存及时性，不拖垮业务写入
     finally:
         if own:
             with contextlib.suppress(Exception):
