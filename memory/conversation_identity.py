@@ -58,65 +58,65 @@ _ROLE_TERMS = ("管理员", "群主", "机器人", "bot", "Bot", "AI", "ai", "�
 # 语义 → supersede；「我是X / X是我」是无更正语义的自我介绍 → 并存。
 # R4扩展（计划 §6.4）：拒绝问句、否定句、条件句，避免「我是谁」「不是我」误判。
 _SELF_PATTERNS: tuple[tuple[re.Pattern[str], bool], ...] = (
-    (re.compile(r”^我才是(.+)$”), True),
-    (re.compile(r”^那我改名叫(.+)$”), True),
-    (re.compile(r”^我改名叫(.+)$”), True),
-    (re.compile(r”^以后叫我(.+)$”), False),
-    (re.compile(r”^我是(.+)$”), False),
-    (re.compile(r”^(.+?)是我$”), False),
+    (re.compile(r"^我才是(.+)$"), True),
+    (re.compile(r"^那我改名叫(.+)$"), True),
+    (re.compile(r"^我改名叫(.+)$"), True),
+    (re.compile(r"^以后叫我(.+)$"), False),
+    (re.compile(r"^我是(.+)$"), False),
+    (re.compile(r"^(.+?)是我$"), False),
 )
 
 # 第三人纠正：他/她才是X（肯定指认）；X不是他 / 他不叫X（否定）。
-_THIRD_POSITIVE = re.compile(r”^[他她它]才是(.+)$”)
-_THIRD_NEGATIVE = re.compile(r”^(.+?)(?:不是[他她它])$”)
-_THIRD_NEGATIVE2 = re.compile(r”^[他她它]不叫(.+)$”)
+_THIRD_POSITIVE = re.compile(r"^[他她它]才是(.+)$")
+_THIRD_NEGATIVE = re.compile(r"^(.+?)(?:不是[他她它])$")
+_THIRD_NEGATIVE2 = re.compile(r"^[他她它]不叫(.+)$")
 
 # 分句符：多个分句各自命中自称模式 → ambiguous（一句话多个自称）
-_CLAUSE_SPLIT = re.compile(r”[,，。！？!?；;]”)
+_CLAUSE_SPLIT = re.compile(r"[,，。！？!?；;]")
 
 # 引号/转述标记：出现即判 ambiguous（转述别人的话不能当说话人自己的声明）
-_QUOTE_MARKS = (“「”, “」”, “””, “””, “’”, “’”, “\””, “’”)
+_QUOTE_MARKS = ("「", "」", "“", "”", "‘", "’", "\"", "'")
 
 # R4新增：问句标记（「我是谁」「是我吗」不是声明）
-_QUESTION_MARKS = (“吗”, “呢”, “?”, “？”)
+_QUESTION_MARKS = ("吗", "呢", "谁", "?", "？")
 
 # R4新增：否定/条件标记（「不是我」「如果我是」不是声明）
-_NEGATION_COND_MARKS = (“不是”, “不叫”, “如果”, “要是”, “假如”, “假设”)
+_NEGATION_COND_MARKS = ("不是", "不叫", "如果", "要是", "假如", "假设")
 
 
 def normalize_alias(raw: str) -> str:
-    “””声明名字规范化：与 display name 同一清理规则 + 32 字符上限。”””
+    """声明名字规范化：与 display name 同一清理规则 + 32 字符上限。"""
     from core.context import normalize_display_name
 
     return normalize_display_name(raw).strip()[:ALIAS_MAX_CHARS]
 
 
 def parse_self_alias(text: str) -> tuple[str, bool] | None:
-    “””解析本人自我介绍/改名声明。返回 ``(alias, supersedes)`` 或 None。
+    """解析本人自我介绍/改名声明。返回 ``(alias, supersedes)`` 或 None。
 
     只匹配**整条**文本（strip 后全串）；含引号/转述标记、名字超限、名字是
     角色权限表达、一句话里有多个自称 → None（ambiguous，不落库）。
-    
+
     R4修复（计划 §6.4）：拒绝问句、否定句、条件句。
     - 「我是谁」「是我吗」→ 问句，返回 None
     - 「不是我」「这不是我」→ 否定句，返回 None
     - 「如果我是Nox」→ 条件句，返回 None
-    “””
-    stripped = (text or “”).strip()
+    """
+    stripped = (text or "").strip()
     if not stripped or len(stripped) > 64:
         # 超长内容不是干净的自我介绍（聊天长句误命中风险）
         return None
     if any(mark in stripped for mark in _QUOTE_MARKS):
         return None
-    
+
     # R4: 拒绝问句
     if any(mark in stripped for mark in _QUESTION_MARKS):
         return None
-    
+
     # R4: 拒绝否定/条件句（检查整条文本，不只是捕获组）
     if any(mark in stripped for mark in _NEGATION_COND_MARKS):
         return None
-    
+
     match_count = 0
     parsed: tuple[str, bool] | None = None
     for pattern, supersedes in _SELF_PATTERNS:
@@ -136,13 +136,13 @@ def parse_self_alias(text: str) -> tuple[str, bool] | None:
         if any(term in alias for term in _ROLE_TERMS):
             # 「我是管理员/机器人」是角色表达，不是身份声明
             continue
-        
+
         # R4: 再次检查捕获组本身（防止「我是不是Nox」误过）
         if any(mark in raw_name for mark in _QUESTION_MARKS):
             continue
         if any(mark in raw_name for mark in _NEGATION_COND_MARKS):
             continue
-        
+
         match_count += 1
         parsed = (alias, supersedes)
     if match_count != 1 or parsed is None:

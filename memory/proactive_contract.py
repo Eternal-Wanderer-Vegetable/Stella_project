@@ -16,7 +16,7 @@ from typing import Literal
 @dataclass
 class VerificationContract:
     """候选验证合同 - 绑定来源证据与可验证问题。
-    
+
     Attributes:
         candidate_id: 候选 ID
         recording_author_id: 记录作者（可能不等于事实主体）
@@ -31,7 +31,7 @@ class VerificationContract:
         question_variants: 服务端生成的问题变体列表
         bridge_event_requirement: 是否需要桥接事件（需要时模型必须提供）
     """
-    
+
     candidate_id: int
     recording_author_id: int
     fact_subject_id: int
@@ -49,10 +49,10 @@ class VerificationContract:
 @dataclass
 class QuestionVariant:
     """服务端生成的问题变体。
-    
+
     模型只能选择一个 variant_id，不能自由改写主体或对象。
     """
-    
+
     variant_id: str  # 例如 "variant_A"
     question_template: str  # 例如 "你平时会叫{object_display_name}{candidate_term}吗？"
     filled_question: str  # 实际填充后的问题文本
@@ -62,14 +62,14 @@ class QuestionVariant:
 @dataclass
 class BridgeEvidence:
     """桥接事件证据 - 用于验证模型提供的近期事件确实属于目标用户。
-    
+
     Attributes:
         target_user_id: 目标用户 UID
         conversation_key: 会话键
         recent_message_ids: 目标用户近期消息 ID（可验证集合）
         recent_event_digests: 近期事件摘要（用于模糊匹配）
     """
-    
+
     target_user_id: int
     conversation_key: str
     recent_message_ids: list[int]
@@ -81,22 +81,22 @@ def validate_contract_consistency(
     current_candidate: dict,
 ) -> tuple[bool, str]:
     """验证合同与当前候选一致性。
-    
+
     在发送前检查：
     - candidate_id 匹配
     - 内容 digest 未变化
     - 来源消息仍然存在
-    
+
     Returns:
         (is_valid, reason)
     """
     if contract.candidate_id != current_candidate.get("id"):
         return False, "candidate_id_mismatch"
-    
+
     # TODO: 实际实现需要计算当前候选内容的 digest 并比对
     # if contract.candidate_content_digest != compute_digest(current_candidate["content"]):
     #     return False, "content_changed"
-    
+
     return True, "ok"
 
 
@@ -105,28 +105,28 @@ def can_generate_question(
     source_messages_available: bool,
 ) -> tuple[bool, str]:
     """判断是否可以为此合同生成问题。
-    
+
     不可发送的情况：
     - 来源消息已清理
     - 事实主体不明
     - 谓词类型不支持
     - 极性未知且无法询问
-    
+
     Returns:
         (can_send, skip_reason)
     """
     if not source_messages_available:
         return False, "source_missing"
-    
+
     if contract.fact_subject_id <= 0:
         return False, "subject_unknown"
-    
+
     if contract.predicate_type == "other":
         return False, "predicate_unsupported"
-    
+
     if contract.polarity == "unknown" and not contract.question_variants:
         return False, "no_valid_template"
-    
+
     return True, "ok"
 
 
@@ -135,28 +135,28 @@ def validate_bridge_event(
     contract: VerificationContract,
 ) -> tuple[bool, str]:
     """验证桥接事件是否合法（R5 §6.5）。
-    
+
     桥接事件要求：
     - 必须属于目标用户
     - 必须在近期消息范围内
     - 不能引用无关用户的动作
-    
+
     Returns:
         (is_valid, reason)
     """
     if not contract.bridge_event_requirement:
         # 不需要桥接，直接通过
         return True, "not_required"
-    
+
     if bridge is None:
         return False, "bridge_missing"
-    
+
     if bridge.target_user_id != contract.fact_object_id:
         return False, "bridge_target_mismatch"
-    
+
     if not bridge.recent_message_ids:
         return False, "bridge_no_evidence"
-    
+
     return True, "ok"
 
 
@@ -165,7 +165,7 @@ def select_question_variant(
     has_bridge: bool,
 ) -> QuestionVariant | None:
     """选择合适的问题变体（R5 §6.5）。
-    
+
     选择规则：
     - 如果有桥接事件，优先选择需要桥接的变体
     - 如果没有桥接，只能选择不需要桥接的变体
@@ -173,16 +173,16 @@ def select_question_variant(
     """
     if not contract.question_variants:
         return None
-    
+
     # 优先选择匹配桥接要求的变体
     for variant in contract.question_variants:
         if variant.requires_bridge == has_bridge:
             return variant
-    
+
     # 如果没有完美匹配，且不需要桥接，选择第一个不需要桥接的变体
     if not has_bridge:
         for variant in contract.question_variants:
             if not variant.requires_bridge:
                 return variant
-    
+
     return None

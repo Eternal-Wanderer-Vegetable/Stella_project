@@ -1,14 +1,14 @@
 {
  "canonicalization": "stella-flow-content-v1",
  "coverage": {
-  "closure_sites": 7685,
+  "closure_sites": 7692,
   "core_unresolved_allowed": 0,
   "declared_runtime_entries": 49,
   "derived_or_opaque": 14,
   "edges": 148,
   "explicit_boundaries": 13,
   "lanes": 14,
-  "reachable_symbols": 9089,
+  "reachable_symbols": 9115,
   "reachable_truncated_nodes": [],
   "source_resolved": 138,
   "total_nodes": 140,
@@ -2003,11 +2003,11 @@
     "contract_digests": {
      "config/settings.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
      "memory_rust/__init__.py": "83eb71c1b1bdaeb74667b9bcbfcb3d5ef76cded78369cb1f6420aaa98cc4af76",
-     "memory_rust/backend.py": "07a828ee4f9243c947a949cda7fb986af4a6605f58eeeeaea230c5e9da82a264",
+     "memory_rust/backend.py": "904aa057b663a2950a42e8de4fee3d1abb71a84722d8c8ed5428ad21d6d7e374",
      "memory_rust/native/src/lib.rs": "39030695b7c31ea448d74ebc31098a3a72480f9afc89d199b7b7077303fa6246",
      "memory_rust/native/src/policy.rs": "323c5191b03a766b8dee025bb7255b7d8767b5ac0c0f7f5d994d943f1b296563",
      "memory_rust/native/src/retrieval.rs": "16a28965e33dfc6064b4ff8d5c666ca4d1808a577f53840f6f97dd74ff0d10b0",
-     "memory_rust/native/src/schema.rs": "adeb6fbb2f5deb7550dc6f4b1ddc26b0b51c624185ee58dded33a3ce981cdf99",
+     "memory_rust/native/src/schema.rs": "7818acd142b8c1ef7646675843a77de9a192269ada2650de3b229fb81738ec54",
      "memory_rust/native/src/similarity.rs": "6fa636e8e4e8e98192aa6377e1fff172462ed0b832f231811420bf2169f44a79",
      "memory_rust/python_backend.py": "39effae2c7014f41845cd12efba66860b575c792d0e90fc26e72c292f484f221",
      "memory_rust/selector.py": "9de15ee47159c4fedf7a74d846b5008a81f7ca9afbd6aabefc8ec5831744e790"
@@ -2321,7 +2321,7 @@
    "label": "私聊会话锁",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "e0d4b2a39cfa14a6",
+    "body_hash": "a11918d98d4e7477",
     "features": {
      "awaits": 9,
      "branches": 18,
@@ -2384,7 +2384,7 @@
    "label": "私聊消息落库",
    "lane": "gate",
    "source_ref": {
-    "body_hash": "e0d4b2a39cfa14a6",
+    "body_hash": "a11918d98d4e7477",
     "features": {
      "awaits": 9,
      "branches": 18,
@@ -2942,15 +2942,15 @@
    "label": "整合派生",
    "lane": "background",
    "source_ref": {
-    "body_hash": "744896d06ff2dd07",
+    "body_hash": "3d8671c54a3b58b5",
     "features": {
      "awaits": 0,
-     "branches": 1,
-     "calls": 10,
+     "branches": 4,
+     "calls": 13,
      "loops": 0,
      "raises": 0,
      "returns": 0,
-     "spawns": 1,
+     "spawns": 2,
      "try": 0
     },
     "file": "memory/consolidator.py",
@@ -3342,7 +3342,7 @@
    "label": "收到私聊消息",
    "lane": "ingress",
    "source_ref": {
-    "body_hash": "e0d4b2a39cfa14a6",
+    "body_hash": "a11918d98d4e7477",
     "features": {
      "awaits": 9,
      "branches": 18,
@@ -12408,6 +12408,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -12420,7 +12426,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -14478,6 +14484,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -14490,7 +14502,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -15246,7 +15258,7 @@
      {
       "condition": "chat_blocked",
       "kind": "branch",
-      "line": 1651
+      "line": 1652
      },
      {
       "finally": false,
@@ -15256,32 +15268,32 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 1663
+      "line": 1664
      },
      {
       "condition": "getattr(ctx, 'planner_wait', False)",
       "kind": "branch",
-      "line": 1683
+      "line": 1684
      },
      {
       "condition": "not ctx.lines",
       "kind": "branch",
-      "line": 1690
+      "line": 1691
      },
      {
       "condition": "cometa_submission",
       "kind": "branch",
-      "line": 1705
+      "line": 1706
      },
      {
       "condition": "delivered",
       "kind": "branch",
-      "line": 1738
+      "line": 1739
      },
      {
       "condition": "ctx.tail_start_id",
       "kind": "branch",
-      "line": 1756
+      "line": 1757
      },
      {
       "kind": "call",
@@ -15352,23 +15364,23 @@
      },
      {
       "kind": "call",
-      "line": 1650,
+      "line": 1651,
       "resolved": "local:core/llm/usage_store.py#budget_blocked",
       "target": "budget_blocked"
      },
      {
       "kind": "return",
-      "line": 1658
+      "line": 1659
      },
      {
       "kind": "call",
-      "line": 1659,
+      "line": 1660,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 1660,
+      "line": 1661,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
@@ -15376,31 +15388,31 @@
       "async": false,
       "context": "_flow_span(fctx, 'chat.runtime')",
       "kind": "with",
-      "line": 1664
+      "line": 1665
      },
      {
       "kind": "call",
-      "line": 1683,
+      "line": 1684,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "return",
-      "line": 1688
+      "line": 1689
      },
      {
       "kind": "call",
-      "line": 1693,
+      "line": 1694,
       "resolved": "dynamic:nonebot",
       "target": "logger.success"
      },
      {
       "kind": "return",
-      "line": 1702
+      "line": 1703
      },
      {
       "kind": "call",
-      "line": 1704,
+      "line": 1705,
       "resolved": "unresolved",
       "target": "getattr"
      },
@@ -15408,26 +15420,26 @@
       "async": false,
       "context": "_flow_span(fctx, 'send.cometa_ack')",
       "kind": "with",
-      "line": 1706
+      "line": 1707
      },
      {
       "condition": "ack_outcome == 'sent'",
       "kind": "branch",
-      "line": 1713
+      "line": 1714
      },
      {
       "kind": "call",
-      "line": 1726,
+      "line": 1727,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
      {
       "kind": "await",
-      "line": 1728
+      "line": 1729
      },
      {
       "kind": "call",
-      "line": 1737,
+      "line": 1738,
       "resolved": "local:core/social/contracts.py#delivered_texts",
       "target": "delivered_texts"
      },
@@ -15435,11 +15447,11 @@
       "async": false,
       "context": "_flow_span(fctx, 'reply.bookkeeping')",
       "kind": "with",
-      "line": 1739
+      "line": 1740
      },
      {
       "kind": "await",
-      "line": 1765
+      "line": 1766
      },
      {
       "kind": "call",
@@ -15494,137 +15506,137 @@
      },
      {
       "kind": "call",
-      "line": 1652,
+      "line": 1653,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1654,
+      "line": 1655,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1655,
+      "line": 1656,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 1667
+      "line": 1668
      },
      {
       "condition": "e.code == E_CANCELLED",
       "kind": "branch",
-      "line": 1669
+      "line": 1670
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 1675
+      "line": 1676
      },
      {
       "kind": "call",
-      "line": 1684,
+      "line": 1685,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1686,
+      "line": 1687,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1687,
+      "line": 1688,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "await",
-      "line": 1702
+      "line": 1703
      },
      {
       "async": false,
       "context": "contextlib.suppress(Exception)",
       "kind": "with",
-      "line": 1714
+      "line": 1715
      },
      {
       "condition": "ack_outcome == 'unknown'",
       "kind": "branch",
-      "line": 1718
+      "line": 1719
      },
      {
       "kind": "call",
-      "line": 1723,
+      "line": 1724,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "await",
-      "line": 1724
+      "line": 1725
      },
      {
       "kind": "call",
-      "line": 1728,
+      "line": 1729,
       "resolved": "local:core/social/delivery.py#deliver_lines",
       "target": "deliver_lines"
      },
      {
       "kind": "call",
-      "line": 1745,
+      "line": 1746,
       "resolved": "unresolved",
       "target": "sum"
      },
      {
       "kind": "call",
-      "line": 1746,
+      "line": 1747,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1749,
+      "line": 1750,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1751,
+      "line": 1752,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1752,
+      "line": 1753,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1757,
+      "line": 1758,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 1759,
+      "line": 1760,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
      {
       "kind": "call",
-      "line": 1762,
+      "line": 1763,
       "resolved": "local:memory/session_compact.py#schedule_compact",
       "target": "schedule_compact"
      },
      {
       "kind": "call",
-      "line": 1765,
+      "line": 1766,
       "resolved": "unresolved",
       "target": "private_chat_handler.finish"
      },
@@ -15690,78 +15702,78 @@
      },
      {
       "kind": "call",
-      "line": 1648,
+      "line": 1649,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1664,
+      "line": 1665,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1665
+      "line": 1666
      },
      {
       "kind": "return",
-      "line": 1674
+      "line": 1675
      },
      {
       "kind": "call",
-      "line": 1677,
+      "line": 1678,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1679,
+      "line": 1680,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 1702,
+      "line": 1703,
       "resolved": "unresolved",
       "target": "private_chat_handler.send"
      },
      {
       "kind": "call",
-      "line": 1706,
+      "line": 1707,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1707
+      "line": 1708
      },
      {
       "kind": "call",
-      "line": 1711,
+      "line": 1712,
       "resolved": "unresolved",
       "target": "ack_span.finish"
      },
      {
       "kind": "call",
-      "line": 1724,
+      "line": 1725,
       "resolved": "unresolved",
       "target": "private_chat_handler.finish"
      },
      {
       "kind": "call",
-      "line": 1739,
+      "line": 1740,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1741
+      "line": 1742
      },
      {
       "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
-      "line": 1747
+      "line": 1748
      },
      {
       "kind": "call",
@@ -15805,90 +15817,90 @@
      },
      {
       "kind": "call",
-      "line": 1643,
+      "line": 1644,
       "resolved": "local:memory/consolidator.py#maybe_consolidate",
       "target": "maybe_consolidate"
      },
      {
       "kind": "call",
-      "line": 1653,
+      "line": 1654,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1665,
+      "line": 1666,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_run_turn_via_engine",
       "target": "_run_turn_via_engine"
      },
      {
       "kind": "call",
-      "line": 1670,
+      "line": 1671,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1672,
+      "line": 1673,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1673,
+      "line": 1674,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 1693,
+      "line": 1694,
       "resolved": "unresolved",
       "target": "' | '.join"
      },
      {
       "kind": "call",
-      "line": 1702,
+      "line": 1703,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 1707,
+      "line": 1708,
       "resolved": "local:stella_project/plugins/bot_main/cometa_bridge.py#deliver_ack",
       "target": "cometa_bridge.deliver_ack"
      },
      {
       "kind": "call",
-      "line": 1714,
+      "line": 1715,
       "resolved": "external:contextlib",
       "target": "contextlib.suppress"
      },
      {
       "kind": "await",
-      "line": 1715
+      "line": 1716
      },
      {
       "kind": "call",
-      "line": 1719,
+      "line": 1720,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1723,
+      "line": 1724,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1741,
+      "line": 1742,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "condition": "fctx is not None",
       "kind": "branch",
-      "line": 1763
+      "line": 1764
      },
      {
       "kind": "call",
@@ -15929,17 +15941,17 @@
      {
       "condition": "ack_outcome == 'sent'",
       "kind": "branch",
-      "line": 1711
+      "line": 1712
      },
      {
       "kind": "call",
-      "line": 1715,
+      "line": 1716,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 1747,
+      "line": 1748,
       "resolved": "unresolved",
       "target": "len"
      },
@@ -15952,23 +15964,23 @@
      {
       "condition": "fctx is not None",
       "kind": "branch",
-      "line": 1645
+      "line": 1646
      },
      {
       "kind": "call",
-      "line": 1709,
+      "line": 1710,
       "resolved": "unresolved",
       "target": "_send_reply_segment"
      },
      {
       "kind": "call",
-      "line": 1716,
+      "line": 1717,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "kind": "call",
-      "line": 1721,
+      "line": 1722,
       "resolved": "unresolved",
       "target": "cometa_submission.get"
      }
@@ -16374,6 +16386,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -16386,7 +16404,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -16440,7 +16458,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -18396,6 +18414,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -18408,7 +18432,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -20466,6 +20490,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -20478,7 +20508,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -21234,7 +21264,7 @@
      {
       "condition": "chat_blocked",
       "kind": "branch",
-      "line": 1651
+      "line": 1652
      },
      {
       "finally": false,
@@ -21244,32 +21274,32 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 1663
+      "line": 1664
      },
      {
       "condition": "getattr(ctx, 'planner_wait', False)",
       "kind": "branch",
-      "line": 1683
+      "line": 1684
      },
      {
       "condition": "not ctx.lines",
       "kind": "branch",
-      "line": 1690
+      "line": 1691
      },
      {
       "condition": "cometa_submission",
       "kind": "branch",
-      "line": 1705
+      "line": 1706
      },
      {
       "condition": "delivered",
       "kind": "branch",
-      "line": 1738
+      "line": 1739
      },
      {
       "condition": "ctx.tail_start_id",
       "kind": "branch",
-      "line": 1756
+      "line": 1757
      },
      {
       "kind": "call",
@@ -21340,23 +21370,23 @@
      },
      {
       "kind": "call",
-      "line": 1650,
+      "line": 1651,
       "resolved": "local:core/llm/usage_store.py#budget_blocked",
       "target": "budget_blocked"
      },
      {
       "kind": "return",
-      "line": 1658
+      "line": 1659
      },
      {
       "kind": "call",
-      "line": 1659,
+      "line": 1660,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 1660,
+      "line": 1661,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
@@ -21364,31 +21394,31 @@
       "async": false,
       "context": "_flow_span(fctx, 'chat.runtime')",
       "kind": "with",
-      "line": 1664
+      "line": 1665
      },
      {
       "kind": "call",
-      "line": 1683,
+      "line": 1684,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "return",
-      "line": 1688
+      "line": 1689
      },
      {
       "kind": "call",
-      "line": 1693,
+      "line": 1694,
       "resolved": "dynamic:nonebot",
       "target": "logger.success"
      },
      {
       "kind": "return",
-      "line": 1702
+      "line": 1703
      },
      {
       "kind": "call",
-      "line": 1704,
+      "line": 1705,
       "resolved": "unresolved",
       "target": "getattr"
      },
@@ -21396,26 +21426,26 @@
       "async": false,
       "context": "_flow_span(fctx, 'send.cometa_ack')",
       "kind": "with",
-      "line": 1706
+      "line": 1707
      },
      {
       "condition": "ack_outcome == 'sent'",
       "kind": "branch",
-      "line": 1713
+      "line": 1714
      },
      {
       "kind": "call",
-      "line": 1726,
+      "line": 1727,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
      {
       "kind": "await",
-      "line": 1728
+      "line": 1729
      },
      {
       "kind": "call",
-      "line": 1737,
+      "line": 1738,
       "resolved": "local:core/social/contracts.py#delivered_texts",
       "target": "delivered_texts"
      },
@@ -21423,11 +21453,11 @@
       "async": false,
       "context": "_flow_span(fctx, 'reply.bookkeeping')",
       "kind": "with",
-      "line": 1739
+      "line": 1740
      },
      {
       "kind": "await",
-      "line": 1765
+      "line": 1766
      },
      {
       "kind": "call",
@@ -21482,137 +21512,137 @@
      },
      {
       "kind": "call",
-      "line": 1652,
+      "line": 1653,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1654,
+      "line": 1655,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1655,
+      "line": 1656,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 1667
+      "line": 1668
      },
      {
       "condition": "e.code == E_CANCELLED",
       "kind": "branch",
-      "line": 1669
+      "line": 1670
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 1675
+      "line": 1676
      },
      {
       "kind": "call",
-      "line": 1684,
+      "line": 1685,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1686,
+      "line": 1687,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1687,
+      "line": 1688,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "await",
-      "line": 1702
+      "line": 1703
      },
      {
       "async": false,
       "context": "contextlib.suppress(Exception)",
       "kind": "with",
-      "line": 1714
+      "line": 1715
      },
      {
       "condition": "ack_outcome == 'unknown'",
       "kind": "branch",
-      "line": 1718
+      "line": 1719
      },
      {
       "kind": "call",
-      "line": 1723,
+      "line": 1724,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "await",
-      "line": 1724
+      "line": 1725
      },
      {
       "kind": "call",
-      "line": 1728,
+      "line": 1729,
       "resolved": "local:core/social/delivery.py#deliver_lines",
       "target": "deliver_lines"
      },
      {
       "kind": "call",
-      "line": 1745,
+      "line": 1746,
       "resolved": "unresolved",
       "target": "sum"
      },
      {
       "kind": "call",
-      "line": 1746,
+      "line": 1747,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1749,
+      "line": 1750,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1751,
+      "line": 1752,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1752,
+      "line": 1753,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1757,
+      "line": 1758,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 1759,
+      "line": 1760,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
      {
       "kind": "call",
-      "line": 1762,
+      "line": 1763,
       "resolved": "local:memory/session_compact.py#schedule_compact",
       "target": "schedule_compact"
      },
      {
       "kind": "call",
-      "line": 1765,
+      "line": 1766,
       "resolved": "unresolved",
       "target": "private_chat_handler.finish"
      },
@@ -21678,78 +21708,78 @@
      },
      {
       "kind": "call",
-      "line": 1648,
+      "line": 1649,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1664,
+      "line": 1665,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1665
+      "line": 1666
      },
      {
       "kind": "return",
-      "line": 1674
+      "line": 1675
      },
      {
       "kind": "call",
-      "line": 1677,
+      "line": 1678,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1679,
+      "line": 1680,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 1702,
+      "line": 1703,
       "resolved": "unresolved",
       "target": "private_chat_handler.send"
      },
      {
       "kind": "call",
-      "line": 1706,
+      "line": 1707,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1707
+      "line": 1708
      },
      {
       "kind": "call",
-      "line": 1711,
+      "line": 1712,
       "resolved": "unresolved",
       "target": "ack_span.finish"
      },
      {
       "kind": "call",
-      "line": 1724,
+      "line": 1725,
       "resolved": "unresolved",
       "target": "private_chat_handler.finish"
      },
      {
       "kind": "call",
-      "line": 1739,
+      "line": 1740,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1741
+      "line": 1742
      },
      {
       "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
-      "line": 1747
+      "line": 1748
      },
      {
       "kind": "call",
@@ -21793,90 +21823,90 @@
      },
      {
       "kind": "call",
-      "line": 1643,
+      "line": 1644,
       "resolved": "local:memory/consolidator.py#maybe_consolidate",
       "target": "maybe_consolidate"
      },
      {
       "kind": "call",
-      "line": 1653,
+      "line": 1654,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1665,
+      "line": 1666,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_run_turn_via_engine",
       "target": "_run_turn_via_engine"
      },
      {
       "kind": "call",
-      "line": 1670,
+      "line": 1671,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1672,
+      "line": 1673,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1673,
+      "line": 1674,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 1693,
+      "line": 1694,
       "resolved": "unresolved",
       "target": "' | '.join"
      },
      {
       "kind": "call",
-      "line": 1702,
+      "line": 1703,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 1707,
+      "line": 1708,
       "resolved": "local:stella_project/plugins/bot_main/cometa_bridge.py#deliver_ack",
       "target": "cometa_bridge.deliver_ack"
      },
      {
       "kind": "call",
-      "line": 1714,
+      "line": 1715,
       "resolved": "external:contextlib",
       "target": "contextlib.suppress"
      },
      {
       "kind": "await",
-      "line": 1715
+      "line": 1716
      },
      {
       "kind": "call",
-      "line": 1719,
+      "line": 1720,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1723,
+      "line": 1724,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1741,
+      "line": 1742,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "condition": "fctx is not None",
       "kind": "branch",
-      "line": 1763
+      "line": 1764
      },
      {
       "kind": "call",
@@ -21917,17 +21947,17 @@
      {
       "condition": "ack_outcome == 'sent'",
       "kind": "branch",
-      "line": 1711
+      "line": 1712
      },
      {
       "kind": "call",
-      "line": 1715,
+      "line": 1716,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 1747,
+      "line": 1748,
       "resolved": "unresolved",
       "target": "len"
      },
@@ -21940,23 +21970,23 @@
      {
       "condition": "fctx is not None",
       "kind": "branch",
-      "line": 1645
+      "line": 1646
      },
      {
       "kind": "call",
-      "line": 1709,
+      "line": 1710,
       "resolved": "unresolved",
       "target": "_send_reply_segment"
      },
      {
       "kind": "call",
-      "line": 1716,
+      "line": 1717,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "kind": "call",
-      "line": 1721,
+      "line": 1722,
       "resolved": "unresolved",
       "target": "cometa_submission.get"
      }
@@ -22362,6 +22392,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -22374,7 +22410,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -22428,7 +22464,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -24384,6 +24420,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -24396,7 +24438,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -26454,6 +26496,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -26466,7 +26514,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -29328,6 +29376,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -29340,7 +29394,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -33358,37 +33412,37 @@
      {
       "condition": "result is None",
       "kind": "branch",
-      "line": 1908
+      "line": 1909
      },
      {
       "condition": "result.operation == NOT_ADDRESS_REQUEST",
       "kind": "branch",
-      "line": 1910
+      "line": 1911
      },
      {
       "condition": "result.needs_clarification or len(target_ids) > 1",
       "kind": "branch",
-      "line": 1915
+      "line": 1916
      },
      {
       "condition": "explicit_target and result.operation == SET_SELF_ADDRESS",
       "kind": "branch",
-      "line": 1920
+      "line": 1921
      },
      {
       "condition": "result.operation == SET_OTHER_ADDRESS and (not explicit_target)",
       "kind": "branch",
-      "line": 1924
+      "line": 1925
      },
      {
       "condition": "is_private",
       "kind": "branch",
-      "line": 1927
+      "line": 1928
      },
      {
       "condition": "is_private",
       "kind": "branch",
-      "line": 1941
+      "line": 1942
      },
      {
       "finally": false,
@@ -33397,296 +33451,296 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 1946
+      "line": 1947
      },
      {
       "kind": "call",
-      "line": 1898,
+      "line": 1899,
       "resolved": "unresolved",
       "target": "addressing_handler.handle"
      },
      {
       "kind": "call",
-      "line": 1899,
+      "line": 1900,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_command",
       "target": "_flow_command"
      },
      {
       "kind": "call",
-      "line": 1907,
+      "line": 1908,
       "resolved": "unresolved",
       "target": "_addressing_decisions.pop"
      },
      {
       "kind": "return",
-      "line": 1911
+      "line": 1912
      },
      {
       "kind": "call",
-      "line": 1913,
+      "line": 1914,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "condition": "is_private",
       "kind": "branch",
-      "line": 1914
+      "line": 1915
      },
      {
       "kind": "return",
-      "line": 1917
+      "line": 1918
      },
      {
       "condition": "target_ids",
       "kind": "branch",
-      "line": 1919
+      "line": 1920
      },
      {
       "kind": "return",
-      "line": 1926
+      "line": 1927
      },
      {
       "condition": "result.operation == SET_OTHER_ADDRESS or target_user_id != str(event.user_id)",
       "kind": "branch",
-      "line": 1929
+      "line": 1930
      },
      {
       "condition": "target_user_id != str(event.user_id) and (not _is_group_admin(event))",
       "kind": "branch",
-      "line": 1934
+      "line": 1935
      },
      {
       "condition": "result.operation in (SET_SELF_ADDRESS, SET_OTHER_ADDRESS)",
       "kind": "branch",
-      "line": 1947
+      "line": 1948
      },
      {
       "kind": "await",
-      "line": 1977
+      "line": 1978
      },
      {
       "kind": "call",
-      "line": 1907,
+      "line": 1908,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_event_key",
       "target": "_event_key"
      },
      {
       "kind": "await",
-      "line": 1909
+      "line": 1910
      },
      {
       "kind": "call",
-      "line": 1914,
+      "line": 1915,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_addressing_target_ids",
       "target": "_addressing_target_ids"
      },
      {
       "kind": "await",
-      "line": 1916
+      "line": 1917
      },
      {
       "kind": "call",
-      "line": 1921,
+      "line": 1922,
       "resolved": "external:dataclasses",
       "target": "replace"
      },
      {
       "kind": "call",
-      "line": 1922,
+      "line": 1923,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "await",
-      "line": 1925
+      "line": 1926
      },
      {
       "kind": "return",
-      "line": 1933
+      "line": 1934
      },
      {
       "kind": "return",
-      "line": 1939
+      "line": 1940
      },
      {
       "kind": "call",
-      "line": 1942,
+      "line": 1943,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_register_private_conversation",
       "target": "_register_private_conversation"
      },
      {
       "kind": "call",
-      "line": 1945,
+      "line": 1946,
       "resolved": "local:config/spaces.py#resolve_space",
       "target": "resolve_space"
      },
      {
       "condition": "target_user_id == str(event.user_id)",
       "kind": "branch",
-      "line": 1955
+      "line": 1956
      },
      {
       "condition": "result.operation == CLEAR_ADDRESS",
       "kind": "branch",
-      "line": 1959
+      "line": 1960
      },
      {
       "kind": "call",
-      "line": 1977,
+      "line": 1978,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_finish_addressing",
       "target": "_finish_addressing"
      },
      {
       "kind": "call",
-      "line": 1909,
+      "line": 1910,
       "resolved": "local:memory/addressing_intent.py#classify_addressing",
       "target": "classify_addressing"
      },
      {
       "kind": "call",
-      "line": 1915,
+      "line": 1916,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 1916,
+      "line": 1917,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_finish_addressing",
       "target": "_finish_addressing"
      },
      {
       "kind": "call",
-      "line": 1925,
+      "line": 1926,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_finish_addressing",
       "target": "_finish_addressing"
      },
      {
       "kind": "await",
-      "line": 1930
+      "line": 1931
      },
      {
       "kind": "call",
-      "line": 1935,
+      "line": 1936,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "await",
-      "line": 1938
+      "line": 1939
      },
      {
       "kind": "call",
-      "line": 1948,
+      "line": 1949,
       "resolved": "local:memory/addressing.py#set_preference",
       "target": "addressing.set_preference"
      },
      {
       "condition": "result.operation == QUERY_ADDRESS",
       "kind": "branch",
-      "line": 1962
+      "line": 1963
      },
      {
       "kind": "call",
-      "line": 1972,
+      "line": 1973,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 1975,
+      "line": 1976,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1909,
+      "line": 1910,
       "resolved": "unresolved",
       "target": "event.get_plaintext().strip"
      },
      {
       "kind": "call",
-      "line": 1916,
+      "line": 1917,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_addressing_clarification",
       "target": "_addressing_clarification"
      },
      {
       "kind": "call",
-      "line": 1925,
+      "line": 1926,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_addressing_clarification",
       "target": "_addressing_clarification"
      },
      {
       "kind": "call",
-      "line": 1929,
+      "line": 1930,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1930,
+      "line": 1931,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_finish_addressing",
       "target": "_finish_addressing"
      },
      {
       "kind": "call",
-      "line": 1934,
+      "line": 1935,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1934,
+      "line": 1935,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_is_group_admin",
       "target": "_is_group_admin"
      },
      {
       "kind": "call",
-      "line": 1938,
+      "line": 1939,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_finish_addressing",
       "target": "_finish_addressing"
      },
      {
       "kind": "call",
-      "line": 1955,
+      "line": 1956,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1960,
+      "line": 1961,
       "resolved": "local:memory/addressing.py#clear_preference",
       "target": "addressing.clear_preference"
      },
      {
       "kind": "return",
-      "line": 1970
+      "line": 1971
      },
      {
       "kind": "call",
-      "line": 1963,
+      "line": 1964,
       "resolved": "local:memory/addressing.py#get_preference",
       "target": "addressing.get_preference"
      },
      {
       "condition": "preference",
       "kind": "branch",
-      "line": 1965
+      "line": 1966
      },
      {
       "kind": "call",
-      "line": 1909,
+      "line": 1910,
       "resolved": "unresolved",
       "target": "event.get_plaintext"
      },
      {
       "kind": "call",
-      "line": 1972,
+      "line": 1973,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 1975,
+      "line": 1976,
       "resolved": "unresolved",
       "target": "getattr"
      }
@@ -34241,136 +34295,136 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2199
+      "line": 2200
      },
      {
       "kind": "call",
-      "line": 2182,
+      "line": 2183,
       "resolved": "unresolved",
       "target": "capability_handler.handle"
      },
      {
       "kind": "call",
-      "line": 2183,
+      "line": 2184,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_command",
       "target": "_flow_command"
      },
      {
       "kind": "call",
-      "line": 2206,
+      "line": 2207,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 2213,
+      "line": 2214,
       "resolved": "unresolved",
       "target": "next"
      },
      {
       "kind": "await",
-      "line": 2214
+      "line": 2215
      },
      {
       "kind": "await",
-      "line": 2216
+      "line": 2217
      },
      {
       "condition": "image",
       "kind": "branch",
-      "line": 2217
-     },
-     {
-      "kind": "await",
       "line": 2218
      },
      {
+      "kind": "await",
+      "line": 2219
+     },
+     {
       "kind": "call",
-      "line": 2196,
+      "line": 2197,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 2202,
+      "line": 2203,
       "resolved": "local:capability/inventory.py#chat_overview",
       "target": "chat_overview"
      },
      {
       "kind": "call",
-      "line": 2214,
+      "line": 2215,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 2216,
+      "line": 2217,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_capability_image",
       "target": "_capability_image"
      },
      {
       "kind": "call",
-      "line": 2217,
+      "line": 2218,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.image"
      },
      {
       "kind": "call",
-      "line": 2217,
+      "line": 2218,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.text"
      },
      {
       "kind": "call",
-      "line": 2218,
+      "line": 2219,
       "resolved": "unresolved",
       "target": "capability_handler.finish"
      },
      {
       "kind": "call",
-      "line": 2196,
+      "line": 2197,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 2204,
+      "line": 2205,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 2214,
+      "line": 2215,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 2219,
+      "line": 2220,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 2208,
+      "line": 2209,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 2213,
+      "line": 2214,
       "resolved": "unresolved",
       "target": "reply.splitlines"
      },
      {
       "kind": "call",
-      "line": 2213,
+      "line": 2214,
       "resolved": "unresolved",
       "target": "ln.strip"
      },
      {
       "kind": "call",
-      "line": 2219,
+      "line": 2220,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.reply"
      }
@@ -35011,12 +35065,12 @@
      {
       "condition": "event.user_id not in PROACTIVE_TOGGLE_ADMINS and role not in ('owner', 'admin')",
       "kind": "branch",
-      "line": 2328
+      "line": 2329
      },
      {
       "condition": "_is_tables_reload(event.get_plaintext())",
       "kind": "branch",
-      "line": 2333
+      "line": 2334
      },
      {
       "finally": true,
@@ -35024,80 +35078,76 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2343
+      "line": 2344
      },
      {
       "condition": "md is None",
       "kind": "branch",
-      "line": 2352
+      "line": 2353
      },
      {
       "kind": "call",
-      "line": 2308,
+      "line": 2309,
       "resolved": "unresolved",
       "target": "reload_handler.handle"
      },
      {
       "kind": "call",
-      "line": 2309,
+      "line": 2310,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_command",
       "target": "_flow_command"
      },
      {
       "kind": "return",
-      "line": 2330
+      "line": 2331
      },
      {
       "kind": "call",
-      "line": 2333,
+      "line": 2334,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_is_tables_reload",
       "target": "_is_tables_reload"
      },
      {
       "kind": "call",
-      "line": 2342,
+      "line": 2343,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
-     },
-     {
-      "kind": "await",
-      "line": 2360
      },
      {
       "kind": "await",
       "line": 2361
      },
      {
+      "kind": "await",
+      "line": 2362
+     },
+     {
       "kind": "call",
-      "line": 2327,
+      "line": 2328,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 2329,
+      "line": 2330,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 2333,
+      "line": 2334,
       "resolved": "unresolved",
       "target": "event.get_plaintext"
      },
      {
       "kind": "call",
-      "line": 2334,
+      "line": 2335,
       "resolved": "unresolved",
       "target": "get_participation_manager().reload_tables"
      },
      {
       "condition": "ok",
       "kind": "branch",
-      "line": 2335
-     },
-     {
-      "kind": "await",
       "line": 2336
      },
      {
@@ -35105,137 +35155,141 @@
       "line": 2337
      },
      {
+      "kind": "await",
+      "line": 2338
+     },
+     {
       "kind": "call",
-      "line": 2341,
+      "line": 2342,
       "resolved": "local:astrbot_compat/loader.py#parse_reload_command",
       "target": "parse_reload_command"
      },
      {
       "kind": "await",
-      "line": 2344
+      "line": 2345
      },
      {
       "kind": "call",
-      "line": 2350,
+      "line": 2351,
       "resolved": "unresolved",
       "target": "get_failed_plugins().get"
      },
      {
       "condition": "reason",
       "kind": "branch",
-      "line": 2353
+      "line": 2354
      },
      {
       "kind": "call",
-      "line": 2360,
+      "line": 2361,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 2361,
+      "line": 2362,
       "resolved": "unresolved",
       "target": "reload_handler.finish"
      },
      {
       "kind": "call",
-      "line": 2327,
+      "line": 2328,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 2336,
+      "line": 2337,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 2337,
+      "line": 2338,
       "resolved": "unresolved",
       "target": "reload_handler.finish"
      },
      {
       "kind": "call",
-      "line": 2341,
+      "line": 2342,
       "resolved": "unresolved",
       "target": "event.get_plaintext"
      },
      {
       "kind": "call",
-      "line": 2344,
+      "line": 2345,
       "resolved": "local:astrbot_compat/loader.py#reload_plugin",
       "target": "reload_plugin"
      },
      {
       "kind": "call",
-      "line": 2346,
+      "line": 2347,
       "resolved": "dynamic:nonebot",
       "target": "logger.exception"
      },
      {
       "kind": "call",
-      "line": 2348,
+      "line": 2349,
       "resolved": "unresolved",
       "target": "repr"
      },
      {
       "kind": "call",
-      "line": 2360,
+      "line": 2361,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 2362,
+      "line": 2363,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 2334,
+      "line": 2335,
       "resolved": "local:memory/participation/__init__.py#get_participation_manager",
       "target": "get_participation_manager"
      },
      {
       "kind": "call",
-      "line": 2336,
+      "line": 2337,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 2338,
+      "line": 2339,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 2350,
+      "line": 2351,
       "resolved": "local:astrbot_compat/loader.py#get_failed_plugins",
       "target": "get_failed_plugins"
      },
      {
       "kind": "call",
-      "line": 2362,
+      "line": 2363,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.reply"
      },
      {
       "kind": "call",
-      "line": 2362,
+      "line": 2363,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.text"
      },
      {
       "kind": "call",
-      "line": 2338,
+      "line": 2339,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.reply"
      },
      {
       "kind": "call",
-      "line": 2338,
+      "line": 2339,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.text"
      }
@@ -35888,34 +35942,34 @@
      {
       "condition": "cmd is None",
       "kind": "branch",
-      "line": 2664
+      "line": 2665
      },
      {
       "condition": "_scheduling_service is None",
       "kind": "branch",
-      "line": 2666
+      "line": 2667
      },
      {
       "kind": "call",
-      "line": 2647,
+      "line": 2648,
       "resolved": "unresolved",
       "target": "scheduling_handler.handle"
      },
      {
       "kind": "call",
-      "line": 2648,
+      "line": 2649,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_command",
       "target": "_flow_command"
      },
      {
       "kind": "call",
-      "line": 2663,
+      "line": 2664,
       "resolved": "local:stella_project/plugins/bot_main/scheduling/commands.py#parse_scheduling_command",
       "target": "parse_scheduling_command"
      },
      {
       "kind": "return",
-      "line": 2665
+      "line": 2666
      },
      {
       "finally": false,
@@ -35925,79 +35979,79 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2669
-     },
-     {
-      "kind": "await",
-      "line": 2678
+      "line": 2670
      },
      {
       "kind": "await",
       "line": 2679
      },
      {
+      "kind": "await",
+      "line": 2680
+     },
+     {
       "kind": "call",
-      "line": 2663,
+      "line": 2664,
       "resolved": "unresolved",
       "target": "event.get_plaintext().strip"
      },
      {
       "kind": "call",
-      "line": 2678,
+      "line": 2679,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 2679,
+      "line": 2680,
       "resolved": "unresolved",
       "target": "scheduling_handler.finish"
      },
      {
       "kind": "call",
-      "line": 2670,
+      "line": 2671,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_dispatch_scheduling_command",
       "target": "_dispatch_scheduling_command"
      },
      {
       "kind": "call",
-      "line": 2678,
+      "line": 2679,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 2680,
+      "line": 2681,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 2663,
+      "line": 2664,
       "resolved": "unresolved",
       "target": "event.get_plaintext"
      },
      {
       "kind": "call",
-      "line": 2672,
+      "line": 2673,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 2676,
+      "line": 2677,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 2680,
+      "line": 2681,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.reply"
      },
      {
       "kind": "call",
-      "line": 2680,
+      "line": 2681,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.text"
      }
@@ -36296,38 +36350,38 @@
      {
       "condition": "user_id not in PROACTIVE_TOGGLE_ADMINS and role not in ('owner', 'admin')",
       "kind": "branch",
-      "line": 2065
+      "line": 2066
      },
      {
       "condition": "mute",
       "kind": "branch",
-      "line": 2071
+      "line": 2072
      },
      {
       "kind": "call",
-      "line": 2054,
+      "line": 2055,
       "resolved": "unresolved",
       "target": "toggle_handler.handle"
      },
      {
       "kind": "call",
-      "line": 2055,
+      "line": 2056,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_command",
       "target": "_flow_command"
      },
      {
       "kind": "return",
-      "line": 2067
+      "line": 2068
      },
      {
       "kind": "call",
-      "line": 2069,
+      "line": 2070,
       "resolved": "unresolved",
       "target": "any"
      },
      {
       "kind": "call",
-      "line": 2070,
+      "line": 2071,
       "resolved": "local:memory/proactive_state.py#set_proactive_muted",
       "target": "set_proactive_muted"
      },
@@ -36335,15 +36389,11 @@
       "async": false,
       "context": "contextlib.suppress(Exception)",
       "kind": "with",
-      "line": 2073
+      "line": 2074
      },
      {
       "condition": "mute",
       "kind": "branch",
-      "line": 2076
-     },
-     {
-      "kind": "await",
       "line": 2077
      },
      {
@@ -36351,80 +36401,84 @@
       "line": 2078
      },
      {
+      "kind": "await",
+      "line": 2079
+     },
+     {
       "kind": "call",
-      "line": 2064,
+      "line": 2065,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 2066,
+      "line": 2067,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 2077,
+      "line": 2078,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 2078,
+      "line": 2079,
       "resolved": "unresolved",
       "target": "toggle_handler.finish"
      },
      {
       "kind": "call",
-      "line": 2064,
+      "line": 2065,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 2073,
+      "line": 2074,
       "resolved": "external:contextlib",
       "target": "contextlib.suppress"
      },
      {
       "kind": "call",
-      "line": 2074,
+      "line": 2075,
       "resolved": "unresolved",
       "target": "get_participation_manager().bump_topic_revision"
      },
      {
       "kind": "call",
-      "line": 2077,
+      "line": 2078,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 2079,
+      "line": 2080,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 2069,
+      "line": 2070,
       "resolved": "unresolved",
       "target": "event.get_plaintext"
      },
      {
       "kind": "call",
-      "line": 2074,
+      "line": 2075,
       "resolved": "local:memory/participation/__init__.py#get_participation_manager",
       "target": "get_participation_manager"
      },
      {
       "kind": "call",
-      "line": 2079,
+      "line": 2080,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.reply"
      },
      {
       "kind": "call",
-      "line": 2079,
+      "line": 2080,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.text"
      }
@@ -40940,83 +40994,121 @@
    ],
    "entry": {
     "counts": {
-     "branch": 1,
-     "call": 10,
-     "return": 1
+     "branch": 4,
+     "call": 13,
+     "return": 2
     },
     "items": [
      {
-      "condition": "key in _pending_groups",
+      "condition": "conversation_ref is not None",
       "kind": "branch",
-      "line": 1968
+      "line": 2003
      },
      {
-      "kind": "call",
-      "line": 1967,
-      "resolved": "unresolved",
-      "target": "str"
+      "condition": "key in _pending_groups",
+      "kind": "branch",
+      "line": 2017
+     },
+     {
+      "condition": "is_conversation",
+      "kind": "branch",
+      "line": 2024
+     },
+     {
+      "condition": "group_id is not None and group_id > 0",
+      "kind": "branch",
+      "line": 2006
      },
      {
       "kind": "return",
-      "line": 1970
+      "line": 2019
      },
      {
       "kind": "call",
-      "line": 1971,
+      "line": 2021,
       "resolved": "unresolved",
       "target": "_pending_groups.add"
      },
      {
       "kind": "call",
-      "line": 1972,
+      "line": 2022,
       "resolved": "local:memory/consolidator.py#get_consolidator",
       "target": "get_consolidator"
      },
      {
       "kind": "call",
-      "line": 1973,
-      "resolved": "external:asyncio",
-      "target": "asyncio.create_task"
-     },
-     {
-      "kind": "call",
-      "line": 1975,
+      "line": 2035,
       "resolved": "unresolved",
       "target": "_consolidation_tasks.add"
      },
      {
       "kind": "call",
-      "line": 1981,
+      "line": 2041,
       "resolved": "unresolved",
       "target": "task.add_done_callback"
      },
      {
+      "kind": "return",
+      "line": 2015
+     },
+     {
       "kind": "call",
-      "line": 1969,
+      "line": 2018,
       "resolved": "dynamic:nonebot",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 1974,
-      "resolved": "local:memory/consolidator.py#_consolidate_with_flow",
-      "target": "_consolidate_with_flow"
+      "line": 2025,
+      "resolved": "external:asyncio",
+      "target": "asyncio.create_task"
      },
      {
       "kind": "call",
-      "line": 1978,
+      "line": 2031,
+      "resolved": "external:asyncio",
+      "target": "asyncio.create_task"
+     },
+     {
+      "kind": "call",
+      "line": 2038,
       "resolved": "unresolved",
       "target": "_consolidation_tasks.discard"
      },
      {
       "kind": "call",
-      "line": 1979,
+      "line": 2039,
       "resolved": "unresolved",
       "target": "_pending_groups.discard"
+     },
+     {
+      "kind": "call",
+      "line": 2008,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 2012,
+      "resolved": "dynamic:nonebot",
+      "target": "logger.warning"
+     },
+     {
+      "kind": "call",
+      "line": 2026,
+      "resolved": "local:memory/consolidator.py#_consolidate_conversation_with_flow",
+      "target": "_consolidate_conversation_with_flow"
+     },
+     {
+      "kind": "call",
+      "line": 2032,
+      "resolved": "local:memory/consolidator.py#_consolidate_with_flow",
+      "target": "_consolidate_with_flow"
      }
     ],
     "spawn_lines": [
-     1973
+     2025,
+     2031
     ],
     "truncated": false
    },
@@ -41109,6 +41201,12 @@
      "body_hash": "1b75d5489bd7f7cb",
      "file": "core/observability/message_flow.py",
      "qualname": "spec_digest_of",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
      "resolution": "local"
     },
     {
@@ -46001,6 +46099,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -46013,7 +46117,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -47933,6 +48037,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -47945,7 +48055,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -47993,7 +48103,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -50931,6 +51041,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -50943,7 +51059,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -50991,7 +51107,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -52824,6 +52940,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -52836,7 +52958,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -52884,7 +53006,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -54311,7 +54433,7 @@
      {
       "condition": "chat_blocked",
       "kind": "branch",
-      "line": 1651
+      "line": 1652
      },
      {
       "finally": false,
@@ -54321,32 +54443,32 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 1663
+      "line": 1664
      },
      {
       "condition": "getattr(ctx, 'planner_wait', False)",
       "kind": "branch",
-      "line": 1683
+      "line": 1684
      },
      {
       "condition": "not ctx.lines",
       "kind": "branch",
-      "line": 1690
+      "line": 1691
      },
      {
       "condition": "cometa_submission",
       "kind": "branch",
-      "line": 1705
+      "line": 1706
      },
      {
       "condition": "delivered",
       "kind": "branch",
-      "line": 1738
+      "line": 1739
      },
      {
       "condition": "ctx.tail_start_id",
       "kind": "branch",
-      "line": 1756
+      "line": 1757
      },
      {
       "kind": "call",
@@ -54417,23 +54539,23 @@
      },
      {
       "kind": "call",
-      "line": 1650,
+      "line": 1651,
       "resolved": "local:core/llm/usage_store.py#budget_blocked",
       "target": "budget_blocked"
      },
      {
       "kind": "return",
-      "line": 1658
+      "line": 1659
      },
      {
       "kind": "call",
-      "line": 1659,
+      "line": 1660,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 1660,
+      "line": 1661,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
@@ -54441,31 +54563,31 @@
       "async": false,
       "context": "_flow_span(fctx, 'chat.runtime')",
       "kind": "with",
-      "line": 1664
+      "line": 1665
      },
      {
       "kind": "call",
-      "line": 1683,
+      "line": 1684,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "return",
-      "line": 1688
+      "line": 1689
      },
      {
       "kind": "call",
-      "line": 1693,
+      "line": 1694,
       "resolved": "dynamic:nonebot",
       "target": "logger.success"
      },
      {
       "kind": "return",
-      "line": 1702
+      "line": 1703
      },
      {
       "kind": "call",
-      "line": 1704,
+      "line": 1705,
       "resolved": "unresolved",
       "target": "getattr"
      },
@@ -54473,26 +54595,26 @@
       "async": false,
       "context": "_flow_span(fctx, 'send.cometa_ack')",
       "kind": "with",
-      "line": 1706
+      "line": 1707
      },
      {
       "condition": "ack_outcome == 'sent'",
       "kind": "branch",
-      "line": 1713
+      "line": 1714
      },
      {
       "kind": "call",
-      "line": 1726,
+      "line": 1727,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
      {
       "kind": "await",
-      "line": 1728
+      "line": 1729
      },
      {
       "kind": "call",
-      "line": 1737,
+      "line": 1738,
       "resolved": "local:core/social/contracts.py#delivered_texts",
       "target": "delivered_texts"
      },
@@ -54500,11 +54622,11 @@
       "async": false,
       "context": "_flow_span(fctx, 'reply.bookkeeping')",
       "kind": "with",
-      "line": 1739
+      "line": 1740
      },
      {
       "kind": "await",
-      "line": 1765
+      "line": 1766
      },
      {
       "kind": "call",
@@ -54559,137 +54681,137 @@
      },
      {
       "kind": "call",
-      "line": 1652,
+      "line": 1653,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1654,
+      "line": 1655,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1655,
+      "line": 1656,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 1667
+      "line": 1668
      },
      {
       "condition": "e.code == E_CANCELLED",
       "kind": "branch",
-      "line": 1669
+      "line": 1670
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 1675
+      "line": 1676
      },
      {
       "kind": "call",
-      "line": 1684,
+      "line": 1685,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1686,
+      "line": 1687,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1687,
+      "line": 1688,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "await",
-      "line": 1702
+      "line": 1703
      },
      {
       "async": false,
       "context": "contextlib.suppress(Exception)",
       "kind": "with",
-      "line": 1714
+      "line": 1715
      },
      {
       "condition": "ack_outcome == 'unknown'",
       "kind": "branch",
-      "line": 1718
+      "line": 1719
      },
      {
       "kind": "call",
-      "line": 1723,
+      "line": 1724,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "await",
-      "line": 1724
+      "line": 1725
      },
      {
       "kind": "call",
-      "line": 1728,
+      "line": 1729,
       "resolved": "local:core/social/delivery.py#deliver_lines",
       "target": "deliver_lines"
      },
      {
       "kind": "call",
-      "line": 1745,
+      "line": 1746,
       "resolved": "unresolved",
       "target": "sum"
      },
      {
       "kind": "call",
-      "line": 1746,
+      "line": 1747,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1749,
+      "line": 1750,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1751,
+      "line": 1752,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1752,
+      "line": 1753,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1757,
+      "line": 1758,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 1759,
+      "line": 1760,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_transition",
       "target": "_flow_transition"
      },
      {
       "kind": "call",
-      "line": 1762,
+      "line": 1763,
       "resolved": "local:memory/session_compact.py#schedule_compact",
       "target": "schedule_compact"
      },
      {
       "kind": "call",
-      "line": 1765,
+      "line": 1766,
       "resolved": "unresolved",
       "target": "private_chat_handler.finish"
      },
@@ -54755,78 +54877,78 @@
      },
      {
       "kind": "call",
-      "line": 1648,
+      "line": 1649,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1664,
+      "line": 1665,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1665
+      "line": 1666
      },
      {
       "kind": "return",
-      "line": 1674
+      "line": 1675
      },
      {
       "kind": "call",
-      "line": 1677,
+      "line": 1678,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1679,
+      "line": 1680,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 1702,
+      "line": 1703,
       "resolved": "unresolved",
       "target": "private_chat_handler.send"
      },
      {
       "kind": "call",
-      "line": 1706,
+      "line": 1707,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1707
+      "line": 1708
      },
      {
       "kind": "call",
-      "line": 1711,
+      "line": 1712,
       "resolved": "unresolved",
       "target": "ack_span.finish"
      },
      {
       "kind": "call",
-      "line": 1724,
+      "line": 1725,
       "resolved": "unresolved",
       "target": "private_chat_handler.finish"
      },
      {
       "kind": "call",
-      "line": 1739,
+      "line": 1740,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 1741
+      "line": 1742
      },
      {
       "condition": "ack_count == len(ctx.lines)",
       "kind": "branch",
-      "line": 1747
+      "line": 1748
      },
      {
       "kind": "call",
@@ -54870,90 +54992,90 @@
      },
      {
       "kind": "call",
-      "line": 1643,
+      "line": 1644,
       "resolved": "local:memory/consolidator.py#maybe_consolidate",
       "target": "maybe_consolidate"
      },
      {
       "kind": "call",
-      "line": 1653,
+      "line": 1654,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1665,
+      "line": 1666,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_run_turn_via_engine",
       "target": "_run_turn_via_engine"
      },
      {
       "kind": "call",
-      "line": 1670,
+      "line": 1671,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 1672,
+      "line": 1673,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 1673,
+      "line": 1674,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 1693,
+      "line": 1694,
       "resolved": "unresolved",
       "target": "' | '.join"
      },
      {
       "kind": "call",
-      "line": 1702,
+      "line": 1703,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "call",
-      "line": 1707,
+      "line": 1708,
       "resolved": "local:stella_project/plugins/bot_main/cometa_bridge.py#deliver_ack",
       "target": "cometa_bridge.deliver_ack"
      },
      {
       "kind": "call",
-      "line": 1714,
+      "line": 1715,
       "resolved": "external:contextlib",
       "target": "contextlib.suppress"
      },
      {
       "kind": "await",
-      "line": 1715
+      "line": 1716
      },
      {
       "kind": "call",
-      "line": 1719,
+      "line": 1720,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 1723,
+      "line": 1724,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 1741,
+      "line": 1742,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "condition": "fctx is not None",
       "kind": "branch",
-      "line": 1763
+      "line": 1764
      },
      {
       "kind": "call",
@@ -54994,17 +55116,17 @@
      {
       "condition": "ack_outcome == 'sent'",
       "kind": "branch",
-      "line": 1711
+      "line": 1712
      },
      {
       "kind": "call",
-      "line": 1715,
+      "line": 1716,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 1747,
+      "line": 1748,
       "resolved": "unresolved",
       "target": "len"
      },
@@ -55017,23 +55139,23 @@
      {
       "condition": "fctx is not None",
       "kind": "branch",
-      "line": 1645
+      "line": 1646
      },
      {
       "kind": "call",
-      "line": 1709,
+      "line": 1710,
       "resolved": "unresolved",
       "target": "_send_reply_segment"
      },
      {
       "kind": "call",
-      "line": 1716,
+      "line": 1717,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "kind": "call",
-      "line": 1721,
+      "line": 1722,
       "resolved": "unresolved",
       "target": "cometa_submission.get"
      }
@@ -55439,6 +55561,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -55451,7 +55579,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -55505,7 +55633,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -57074,6 +57202,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -57086,7 +57220,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -57134,7 +57268,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2b1cc05b4e04f1e7",
+     "body_hash": "4ce0a6c10bc4f838",
      "file": "memory/conversation_identity.py",
      "qualname": "parse_self_alias",
      "resolution": "local"
@@ -64871,7 +65005,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "4a705182fd4c22eb",
+     "body_hash": "c06d259654457a17",
      "file": "memory/scope_versions.py",
      "qualname": "bump",
      "resolution": "local"
@@ -65818,7 +65952,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "4a705182fd4c22eb",
+     "body_hash": "c06d259654457a17",
      "file": "memory/scope_versions.py",
      "qualname": "bump",
      "resolution": "local"
@@ -68702,7 +68836,7 @@
      {
       "condition": "not SCHEDULING_ENABLED",
       "kind": "branch",
-      "line": 2786
+      "line": 2787
      },
      {
       "finally": false,
@@ -68710,7 +68844,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2789
+      "line": 2790
      },
      {
       "finally": false,
@@ -68719,92 +68853,92 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 2797
+      "line": 2798
      },
      {
       "kind": "call",
-      "line": 2784,
+      "line": 2785,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_root",
       "target": "_lifecycle_root"
      },
      {
       "kind": "return",
-      "line": 2788
+      "line": 2789
      },
      {
       "kind": "call",
-      "line": 2808,
+      "line": 2809,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_end",
       "target": "_lifecycle_end"
      },
      {
       "kind": "call",
-      "line": 2779,
+      "line": 2780,
       "resolved": "dynamic:nonebot",
       "target": "get_driver"
      },
      {
       "kind": "call",
-      "line": 2787,
+      "line": 2788,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_end",
       "target": "_lifecycle_end"
      },
      {
       "kind": "call",
-      "line": 2790,
+      "line": 2791,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_build_scheduling_stack",
       "target": "_build_scheduling_stack"
      },
      {
       "kind": "return",
-      "line": 2796
+      "line": 2797
      },
      {
       "kind": "await",
-      "line": 2798
+      "line": 2799
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 2801
+      "line": 2802
      },
      {
       "kind": "return",
-      "line": 2807
+      "line": 2808
      },
      {
       "kind": "call",
-      "line": 2792,
+      "line": 2793,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 2795,
+      "line": 2796,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_end",
       "target": "_lifecycle_end"
      },
      {
       "kind": "call",
-      "line": 2798,
+      "line": 2799,
       "resolved": "unresolved",
       "target": "_scheduling_runtime.start"
      },
      {
       "kind": "call",
-      "line": 2800,
-      "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_end",
-      "target": "_lifecycle_end"
-     },
-     {
-      "kind": "call",
-      "line": 2803,
+      "line": 2801,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_end",
       "target": "_lifecycle_end"
      },
      {
       "kind": "call",
       "line": 2804,
+      "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_lifecycle_end",
+      "target": "_lifecycle_end"
+     },
+     {
+      "kind": "call",
+      "line": 2805,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      }
@@ -70858,7 +70992,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3517
+      "line": 3518
      },
      {
       "finally": false,
@@ -70866,91 +71000,91 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3524
+      "line": 3525
      },
      {
       "kind": "call",
-      "line": 3543,
+      "line": 3544,
       "resolved": "external:asyncio",
       "target": "asyncio.create_task"
      },
      {
       "kind": "call",
-      "line": 3544,
+      "line": 3545,
       "resolved": "unresolved",
       "target": "_reply_check_tasks.add"
      },
      {
       "kind": "call",
-      "line": 3545,
+      "line": 3546,
       "resolved": "unresolved",
       "target": "task.add_done_callback"
      },
      {
       "kind": "call",
-      "line": 3543,
+      "line": 3544,
       "resolved": "unresolved",
       "target": "_runner"
      },
      {
       "kind": "call",
-      "line": 3520,
+      "line": 3521,
       "resolved": "dynamic:nonebot",
       "target": "get_bot"
      },
      {
       "kind": "return",
-      "line": 3523
+      "line": 3524
      },
      {
       "kind": "call",
-      "line": 3525,
+      "line": 3526,
       "resolved": "local:memory/participation/__init__.py#get_participation_manager",
       "target": "get_participation_manager"
      },
      {
       "kind": "call",
-      "line": 3526,
+      "line": 3527,
       "resolved": "unresolved",
       "target": "manager.snapshot"
      },
      {
       "kind": "call",
-      "line": 3527,
+      "line": 3528,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_build_participation_evidence",
       "target": "_build_participation_evidence"
      },
      {
       "kind": "await",
-      "line": 3528
+      "line": 3529
      },
      {
       "kind": "call",
-      "line": 3522,
+      "line": 3523,
       "resolved": "dynamic:nonebot",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 3528,
+      "line": 3529,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_for_group",
       "target": "_proactive_speak_for_group"
      },
      {
       "kind": "call",
-      "line": 3541,
+      "line": 3542,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 3532,
+      "line": 3533,
       "resolved": "unresolved",
       "target": "_PARTICIPATION_INSTRUCTIONS.get"
      }
     ],
     "spawn_lines": [
-     3543
+     3544
     ],
     "truncated": false
    },
@@ -71310,6 +71444,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -71322,7 +71462,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -78587,7 +78727,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3565
+      "line": 3566
      },
      {
       "finally": true,
@@ -78595,12 +78735,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3577
+      "line": 3578
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 3572
+      "line": 3573
      },
      {
       "finally": false,
@@ -78608,55 +78748,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3586
+      "line": 3587
      },
      {
       "kind": "call",
-      "line": 3568,
+      "line": 3569,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 3578
+      "line": 3579
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3584
+      "line": 3585
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3589
+      "line": 3590
      },
      {
       "kind": "call",
-      "line": 3573,
+      "line": 3574,
       "resolved": "local:core/observability/message_flow.py#link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 3578,
+      "line": 3579,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 3583,
+      "line": 3584,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 3590,
+      "line": 3591,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3570,
+      "line": 3571,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
@@ -79020,6 +79160,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -79032,7 +79178,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -79675,13 +79821,13 @@
      {
       "condition": "own_root",
       "kind": "branch",
-      "line": 3117
+      "line": 3118
      },
      {
       "finally": true,
       "handlers": [],
       "kind": "try",
-      "line": 3142
+      "line": 3143
      },
      {
       "finally": false,
@@ -79689,12 +79835,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3118
+      "line": 3119
      },
      {
       "condition": "not allowed",
       "kind": "branch",
-      "line": 3144
+      "line": 3145
      },
      {
       "finally": false,
@@ -79702,27 +79848,27 @@
        "(TypeError, ValueError)"
       ],
       "kind": "try",
-      "line": 3155
+      "line": 3156
      },
      {
       "condition": "caller_flow_ctx is not None",
       "kind": "branch",
-      "line": 3162
+      "line": 3163
      },
      {
       "condition": "target is None",
       "kind": "branch",
-      "line": 3168
+      "line": 3169
      },
      {
       "async": true,
       "context": "lock",
       "kind": "with",
-      "line": 3181
+      "line": 3182
      },
      {
       "kind": "return",
-      "line": 3344
+      "line": 3345
      },
      {
       "finally": false,
@@ -79730,39 +79876,39 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3130
+      "line": 3131
      },
      {
       "kind": "return",
-      "line": 3139
+      "line": 3140
      },
      {
       "kind": "call",
-      "line": 3143,
+      "line": 3144,
       "resolved": "local:memory/proactive_gate.py#can_speak",
       "target": "can_speak"
      },
      {
       "kind": "return",
-      "line": 3151
+      "line": 3152
      },
      {
       "kind": "call",
-      "line": 3152,
+      "line": 3153,
       "resolved": "local:memory/proactive.py#get_proactive",
       "target": "get_proactive"
      },
      {
       "kind": "return",
-      "line": 3172
+      "line": 3173
      },
      {
       "kind": "await",
-      "line": 3174
+      "line": 3175
      },
      {
       "kind": "call",
-      "line": 3175,
+      "line": 3176,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
@@ -79773,376 +79919,370 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3203
+      "line": 3204
      },
      {
       "condition": "not ctx.lines",
       "kind": "branch",
-      "line": 3223
+      "line": 3224
      },
      {
       "condition": "is_proactive_skip(ctx.lines)",
       "kind": "branch",
-      "line": 3230
+      "line": 3231
      },
      {
       "condition": "not line",
       "kind": "branch",
-      "line": 3248
+      "line": 3249
      },
      {
       "condition": "proactive.recently_spoken(group_id, [line])",
       "kind": "branch",
-      "line": 3255
+      "line": 3256
      },
      {
       "condition": "not delivered",
       "kind": "branch",
-      "line": 3282
+      "line": 3283
      },
      {
       "async": false,
       "context": "_flow_span(flow_ctx, 'proactive.after', instance_key=f'grp:{group_id}')",
       "kind": "with",
-      "line": 3291
+      "line": 3292
      },
      {
       "kind": "call",
-      "line": 3331,
+      "line": 3332,
       "resolved": "local:memory/proactive_state.py#record_at",
       "target": "record_at"
      },
      {
       "kind": "call",
-      "line": 3338,
+      "line": 3339,
       "resolved": "external:asyncio",
       "target": "asyncio.create_task"
      },
      {
       "kind": "call",
-      "line": 3341,
+      "line": 3342,
       "resolved": "unresolved",
       "target": "_reply_check_tasks.add"
      },
      {
       "kind": "call",
-      "line": 3342,
+      "line": 3343,
       "resolved": "unresolved",
       "target": "task.add_done_callback"
      },
      {
       "kind": "call",
-      "line": 3346,
+      "line": 3347,
       "resolved": "unresolved",
       "target": "_at_end"
      },
      {
       "kind": "call",
-      "line": 3121,
+      "line": 3122,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "condition": "flow_ctx is not None and (not flow_ctx.ended)",
       "kind": "branch",
-      "line": 3133
+      "line": 3134
      },
      {
       "kind": "call",
-      "line": 3146,
+      "line": 3147,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3149,
+      "line": 3150,
       "resolved": "dynamic:nonebot",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 3156,
+      "line": 3157,
       "resolved": "unresolved",
       "target": "int"
      },
      {
       "kind": "call",
-      "line": 3163,
+      "line": 3164,
       "resolved": "local:memory/proactive_target.py#pick_target",
       "target": "pick_target"
      },
      {
       "kind": "call",
-      "line": 3167,
+      "line": 3168,
       "resolved": "local:memory/proactive_target.py#pick_target",
       "target": "pick_target"
      },
      {
       "kind": "call",
-      "line": 3174,
+      "line": 3175,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_resolve_nickname",
       "target": "_resolve_nickname"
      },
      {
       "kind": "call",
-      "line": 3182,
+      "line": 3183,
       "resolved": "local:core/context.py#ChatContext",
       "target": "ChatContext"
      },
      {
       "kind": "return",
-      "line": 3228
+      "line": 3229
      },
      {
       "kind": "call",
-      "line": 3230,
+      "line": 3231,
       "resolved": "local:memory/proactive_prompt.py#is_proactive_skip",
       "target": "is_proactive_skip"
      },
      {
       "kind": "return",
-      "line": 3244
+      "line": 3245
      },
      {
       "condition": "len(ctx.lines) > 1",
       "kind": "branch",
-      "line": 3247
+      "line": 3248
      },
      {
       "kind": "return",
-      "line": 3253
+      "line": 3254
      },
      {
       "kind": "call",
-      "line": 3255,
+      "line": 3256,
       "resolved": "unresolved",
       "target": "proactive.recently_spoken"
      },
      {
       "kind": "return",
-      "line": 3261
+      "line": 3262
      },
      {
       "condition": "_social_delivery_enabled()",
       "kind": "branch",
-      "line": 3265
+      "line": 3266
      },
      {
       "kind": "return",
-      "line": 3272
+      "line": 3273
      },
      {
       "kind": "await",
-      "line": 3274
+      "line": 3275
      },
      {
       "kind": "call",
-      "line": 3281,
+      "line": 3282,
       "resolved": "local:core/social/contracts.py#delivered_texts",
       "target": "delivered_texts"
      },
      {
       "kind": "return",
-      "line": 3288
+      "line": 3289
      },
      {
       "async": false,
       "context": "contextlib.suppress(Exception)",
       "kind": "with",
-      "line": 3300
+      "line": 3301
      },
      {
       "condition": "ctx.tail_start_id",
       "kind": "branch",
-      "line": 3324
+      "line": 3325
      },
      {
       "kind": "call",
-      "line": 3339,
+      "line": 3340,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_check_reply_later",
       "target": "_check_reply_later"
      },
      {
       "kind": "await",
-      "line": 3204
+      "line": 3205
      },
      {
       "condition": "e.code == E_CANCELLED",
       "kind": "branch",
-      "line": 3207
+      "line": 3208
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3214
+      "line": 3215
      },
      {
       "kind": "return",
-      "line": 3221
+      "line": 3222
      },
      {
       "kind": "call",
-      "line": 3224,
+      "line": 3225,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3231,
+      "line": 3232,
       "resolved": "unresolved",
       "target": "proactive.mark_proactive_skip"
      },
      {
       "kind": "call",
-      "line": 3236,
+      "line": 3237,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3239,
+      "line": 3240,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 3247,
+      "line": 3248,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_join_lines_naturally",
       "target": "_join_lines_naturally"
      },
      {
       "kind": "call",
-      "line": 3247,
+      "line": 3248,
       "resolved": "unresolved",
       "target": "ctx.lines[0].strip"
      },
      {
       "kind": "call",
-      "line": 3249,
+      "line": 3250,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3256,
+      "line": 3257,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3259,
+      "line": 3260,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 3265,
+      "line": 3266,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_social_delivery_enabled",
       "target": "_social_delivery_enabled"
      },
      {
       "kind": "call",
-      "line": 3265,
+      "line": 3266,
       "resolved": "local:core/social/contracts.py#ConversationScope.for_qq",
       "target": "ConversationScope.for_qq"
      },
      {
       "kind": "call",
-      "line": 3268,
+      "line": 3269,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "Message"
      },
      {
       "kind": "await",
-      "line": 3272
+      "line": 3273
      },
      {
       "kind": "call",
-      "line": 3274,
+      "line": 3275,
       "resolved": "local:core/social/delivery.py#deliver_lines",
       "target": "deliver_lines"
      },
      {
       "kind": "call",
-      "line": 3283,
+      "line": 3284,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 3284,
+      "line": 3285,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3291,
+      "line": 3292,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "call",
-      "line": 3293,
+      "line": 3294,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
-     },
-     {
-      "kind": "call",
-      "line": 3297,
-      "resolved": "unresolved",
-      "target": "proactive.mark_spoke"
      },
      {
       "kind": "call",
       "line": 3298,
       "resolved": "unresolved",
+      "target": "proactive.mark_spoke"
+     },
+     {
+      "kind": "call",
+      "line": 3299,
+      "resolved": "unresolved",
       "target": "proactive.record_spoken"
      },
      {
       "kind": "call",
-      "line": 3302,
+      "line": 3303,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 3306,
+      "line": 3307,
       "resolved": "local:memory/expression_learning.py#on_reply_sent",
       "target": "expression_learning.on_reply_sent"
      },
      {
       "kind": "call",
-      "line": 3317,
+      "line": 3318,
       "resolved": "dynamic:nonebot",
       "target": "logger.success"
      },
      {
       "kind": "await",
-      "line": 3319
+      "line": 3320
      },
      {
       "kind": "call",
-      "line": 3339,
+      "line": 3340,
       "resolved": "external:time",
       "target": "time.monotonic"
      },
      {
       "kind": "call",
-      "line": 3134,
+      "line": 3135,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3186,
+      "line": 3187,
       "resolved": "local:memory/proactive_prompt.py#build_instruction",
       "target": "build_instruction"
-     },
-     {
-      "kind": "call",
-      "line": 3198,
-      "resolved": "unresolved",
-      "target": "str"
      },
      {
       "kind": "call",
@@ -80152,103 +80292,103 @@
      },
      {
       "kind": "call",
-      "line": 3201,
+      "line": 3200,
+      "resolved": "unresolved",
+      "target": "str"
+     },
+     {
+      "kind": "call",
+      "line": 3202,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      },
      {
       "kind": "call",
-      "line": 3204,
+      "line": 3205,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_run_turn_via_engine",
       "target": "_run_turn_via_engine"
      },
      {
       "kind": "return",
-      "line": 3213
+      "line": 3214
      },
      {
       "kind": "call",
-      "line": 3216,
+      "line": 3217,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      },
      {
       "kind": "call",
-      "line": 3217,
+      "line": 3218,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3247,
+      "line": 3248,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 3272,
+      "line": 3273,
       "resolved": "unresolved",
       "target": "bot.send_group_msg"
      },
      {
       "kind": "call",
-      "line": 3300,
+      "line": 3301,
       "resolved": "external:contextlib",
       "target": "contextlib.suppress"
      },
      {
       "kind": "call",
-      "line": 3301,
+      "line": 3302,
       "resolved": "unresolved",
       "target": "get_participation_manager().note_stella_spoke"
      },
      {
       "kind": "call",
-      "line": 3319,
+      "line": 3320,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_record_bot_lines",
       "target": "_record_bot_lines"
      },
      {
       "kind": "call",
-      "line": 3325,
+      "line": 3326,
       "resolved": "local:memory/session_compact.py#schedule_compact",
       "target": "schedule_compact"
      },
      {
       "kind": "call",
-      "line": 3326,
+      "line": 3327,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_checkpoint",
       "target": "_flow_checkpoint"
      },
      {
       "kind": "call",
-      "line": 3208,
+      "line": 3209,
       "resolved": "dynamic:nonebot",
       "target": "logger.info"
      },
      {
       "kind": "call",
-      "line": 3209,
+      "line": 3210,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3269,
+      "line": 3270,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.at"
      },
      {
       "kind": "call",
-      "line": 3270,
+      "line": 3271,
       "resolved": "dynamic:nonebot.adapters.onebot.v11",
       "target": "MessageSegment.text"
-     },
-     {
-      "kind": "call",
-      "line": 3295,
-      "resolved": "unresolved",
-      "target": "len"
      },
      {
       "kind": "call",
@@ -80258,19 +80398,25 @@
      },
      {
       "kind": "call",
-      "line": 3301,
+      "line": 3297,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 3302,
       "resolved": "local:memory/participation/__init__.py#get_participation_manager",
       "target": "get_participation_manager"
      },
      {
       "kind": "call",
-      "line": 3124,
+      "line": 3125,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
     ],
     "spawn_lines": [
-     3338
+     3339
     ],
     "truncated": false
    },
@@ -81894,7 +82040,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3565
+      "line": 3566
      },
      {
       "finally": true,
@@ -81902,12 +82048,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3577
+      "line": 3578
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 3572
+      "line": 3573
      },
      {
       "finally": false,
@@ -81915,55 +82061,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3586
+      "line": 3587
      },
      {
       "kind": "call",
-      "line": 3568,
+      "line": 3569,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 3578
+      "line": 3579
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3584
+      "line": 3585
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3589
+      "line": 3590
      },
      {
       "kind": "call",
-      "line": 3573,
+      "line": 3574,
       "resolved": "local:core/observability/message_flow.py#link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 3578,
+      "line": 3579,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 3583,
+      "line": 3584,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 3590,
+      "line": 3591,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3570,
+      "line": 3571,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
@@ -82327,6 +82473,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -82339,7 +82491,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -82979,7 +83131,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3565
+      "line": 3566
      },
      {
       "finally": true,
@@ -82987,12 +83139,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3577
+      "line": 3578
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 3572
+      "line": 3573
      },
      {
       "finally": false,
@@ -83000,55 +83152,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3586
+      "line": 3587
      },
      {
       "kind": "call",
-      "line": 3568,
+      "line": 3569,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 3578
+      "line": 3579
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3584
+      "line": 3585
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3589
+      "line": 3590
      },
      {
       "kind": "call",
-      "line": 3573,
+      "line": 3574,
       "resolved": "local:core/observability/message_flow.py#link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 3578,
+      "line": 3579,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 3583,
+      "line": 3584,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 3590,
+      "line": 3591,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3570,
+      "line": 3571,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
@@ -83412,6 +83564,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -83424,7 +83582,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -84064,7 +84222,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3565
+      "line": 3566
      },
      {
       "finally": true,
@@ -84072,12 +84230,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3577
+      "line": 3578
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 3572
+      "line": 3573
      },
      {
       "finally": false,
@@ -84085,55 +84243,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3586
+      "line": 3587
      },
      {
       "kind": "call",
-      "line": 3568,
+      "line": 3569,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 3578
+      "line": 3579
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3584
+      "line": 3585
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3589
+      "line": 3590
      },
      {
       "kind": "call",
-      "line": 3573,
+      "line": 3574,
       "resolved": "local:core/observability/message_flow.py#link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 3578,
+      "line": 3579,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 3583,
+      "line": 3584,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 3590,
+      "line": 3591,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3570,
+      "line": 3571,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
@@ -84497,6 +84655,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -84509,7 +84673,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -85149,7 +85313,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3565
+      "line": 3566
      },
      {
       "finally": true,
@@ -85157,12 +85321,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3577
+      "line": 3578
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 3572
+      "line": 3573
      },
      {
       "finally": false,
@@ -85170,55 +85334,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3586
+      "line": 3587
      },
      {
       "kind": "call",
-      "line": 3568,
+      "line": 3569,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 3578
+      "line": 3579
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3584
+      "line": 3585
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3589
+      "line": 3590
      },
      {
       "kind": "call",
-      "line": 3573,
+      "line": 3574,
       "resolved": "local:core/observability/message_flow.py#link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 3578,
+      "line": 3579,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 3583,
+      "line": 3584,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 3590,
+      "line": 3591,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3570,
+      "line": 3571,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
@@ -85582,6 +85746,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -85594,7 +85764,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -86190,12 +86360,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3848
+      "line": 3849
      },
      {
       "condition": "not PROACTIVE_ENABLED",
       "kind": "branch",
-      "line": 3867
+      "line": 3868
      },
      {
       "finally": false,
@@ -86203,16 +86373,16 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3873
+      "line": 3874
      },
      {
       "iterate": "ALLOWED_GROUPS",
       "kind": "loop",
-      "line": 3883
+      "line": 3884
      },
      {
       "kind": "call",
-      "line": 3843,
+      "line": 3844,
       "resolved": "dynamic:nonebot_plugin_apscheduler",
       "target": "scheduler.scheduled_job"
      },
@@ -86222,11 +86392,11 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3859
+      "line": 3860
      },
      {
       "kind": "return",
-      "line": 3871
+      "line": 3872
      },
      {
       "finally": false,
@@ -86234,7 +86404,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3884
+      "line": 3885
      },
      {
       "finally": false,
@@ -86242,132 +86412,132 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3890
+      "line": 3891
      },
      {
       "kind": "call",
-      "line": 3910,
+      "line": 3911,
       "resolved": "unresolved",
       "target": "_timer_end"
      },
      {
       "kind": "call",
-      "line": 3851,
+      "line": 3852,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3862
+      "line": 3863
      },
      {
       "kind": "call",
-      "line": 3868,
+      "line": 3869,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3870,
+      "line": 3871,
       "resolved": "unresolved",
       "target": "_timer_end"
      },
      {
       "kind": "call",
-      "line": 3875,
+      "line": 3876,
       "resolved": "dynamic:nonebot",
       "target": "get_bot"
      },
      {
       "kind": "return",
-      "line": 3881
+      "line": 3882
      },
      {
       "condition": "await _proactive_at_user(bot, group_id, flow_ctx=fctx)",
       "kind": "branch",
-      "line": 3894
+      "line": 3895
      },
      {
       "condition": "PARTICIPATION_ENABLED",
       "kind": "branch",
-      "line": 3899
+      "line": 3900
      },
      {
       "kind": "call",
-      "line": 3877,
+      "line": 3878,
       "resolved": "dynamic:nonebot",
       "target": "logger.debug"
      },
      {
       "kind": "call",
-      "line": 3878,
+      "line": 3879,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3880,
+      "line": 3881,
       "resolved": "unresolved",
       "target": "_timer_end"
      },
      {
       "kind": "await",
-      "line": 3886
+      "line": 3887
      },
      {
       "kind": "await",
-      "line": 3894
+      "line": 3895
      },
      {
       "kind": "await",
-      "line": 3907
+      "line": 3908
      },
      {
       "kind": "call",
-      "line": 3863,
+      "line": 3864,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3886,
+      "line": 3887,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_announce_sleep_transition",
       "target": "_announce_sleep_transition"
      },
      {
       "kind": "call",
-      "line": 3888,
+      "line": 3889,
       "resolved": "dynamic:nonebot",
       "target": "logger.warning"
      },
      {
       "kind": "call",
-      "line": 3894,
+      "line": 3895,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_at_user",
       "target": "_proactive_at_user"
      },
      {
       "kind": "call",
-      "line": 3895,
+      "line": 3896,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3902,
+      "line": 3903,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 3907,
+      "line": 3908,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_for_group",
       "target": "_proactive_speak_for_group"
      },
      {
       "kind": "call",
-      "line": 3909,
+      "line": 3910,
       "resolved": "dynamic:nonebot",
       "target": "logger.error"
      }
@@ -86440,7 +86610,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3565
+      "line": 3566
      },
      {
       "finally": true,
@@ -86448,12 +86618,12 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3577
+      "line": 3578
      },
      {
       "condition": "parent_trace_id",
       "kind": "branch",
-      "line": 3572
+      "line": 3573
      },
      {
       "finally": false,
@@ -86461,55 +86631,55 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 3586
+      "line": 3587
      },
      {
       "kind": "call",
-      "line": 3568,
+      "line": 3569,
       "resolved": "local:core/observability/message_flow.py#begin_trace",
       "target": "message_flow.begin_trace"
      },
      {
       "kind": "await",
-      "line": 3578
+      "line": 3579
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 3584
+      "line": 3585
      },
      {
       "condition": "fctx is not None and (not fctx.ended)",
       "kind": "branch",
-      "line": 3589
+      "line": 3590
      },
      {
       "kind": "call",
-      "line": 3573,
+      "line": 3574,
       "resolved": "local:core/observability/message_flow.py#link",
       "target": "message_flow.link"
      },
      {
       "kind": "call",
-      "line": 3578,
+      "line": 3579,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_proactive_speak_impl",
       "target": "_proactive_speak_impl"
      },
      {
       "kind": "call",
-      "line": 3583,
+      "line": 3584,
       "resolved": "local:stella_project/plugins/bot_main/ai_gateway.py#_flow_set_outcome",
       "target": "_flow_set_outcome"
      },
      {
       "kind": "call",
-      "line": 3590,
+      "line": 3591,
       "resolved": "local:core/observability/message_flow.py#end_trace",
       "target": "message_flow.end_trace"
      },
      {
       "kind": "call",
-      "line": 3570,
+      "line": 3571,
       "resolved": "local:core/social/contracts.py#new_trace_id",
       "target": "new_trace_id"
      }
@@ -86873,6 +87043,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -86885,7 +87061,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -90200,6 +90376,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -90212,7 +90394,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -92820,6 +93002,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -92832,7 +93020,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -96351,6 +96539,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "069521e036fece32",
+     "file": "memory/consolidator.py",
+     "qualname": "_consolidate_conversation_with_flow",
+     "resolution": "local"
+    },
+    {
      "body_hash": "d18423994dda0b26",
      "file": "memory/consolidator.py",
      "qualname": "_consolidate_with_flow",
@@ -96363,7 +96557,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "744896d06ff2dd07",
+     "body_hash": "3d8671c54a3b58b5",
      "file": "memory/consolidator.py",
      "qualname": "maybe_consolidate",
      "resolution": "local"
@@ -109515,6 +109709,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "aa25537f19f48e7f65e241bb01373e5f989550b0",
+ "source_revision": "74e3df9eb4ede6c7201d522ab4f398a80abb1482",
  "topology_version": "2026.10.04"
 }

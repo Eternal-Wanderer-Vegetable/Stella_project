@@ -19,6 +19,14 @@ from pathlib import Path
 
 import pytest
 
+from core.dialogue_attribution import (
+    ReplyPlan,
+    SourceEvidence,
+    apply_guard_decision,
+    build_evidence_table,
+    check_risky_free_text,
+    validate_evidence_references,
+)
 from memory.conversation_identity import (
     parse_self_alias,
     parse_third_person_correction,
@@ -26,7 +34,6 @@ from memory.conversation_identity import (
 from memory.personal_sharing import (
     detect_sharing_intent,
     grant_sharing_authorization,
-    revoke_sharing_authorization,
 )
 from memory.proactive_contract import (
     BridgeEvidence,
@@ -35,24 +42,11 @@ from memory.proactive_contract import (
     select_question_variant,
     validate_bridge_event,
 )
-from core.dialogue_attribution import (
-    AttributionDecision,
-    ReplyPlan,
-    SourceEvidence,
-    apply_guard_decision,
-    build_evidence_table,
-    check_risky_free_text,
-    validate_evidence_references,
-)
 from tools.data_repair import (
     RepairRecord,
     apply_repairs,
-    preview_duplicate_records,
-    preview_repairs,
     preview_wrong_space_records,
-    revoke_batch,
 )
-
 
 # ============================================================
 # R4: Identity Parser Tests
@@ -159,28 +153,30 @@ class TestPersonalSharing:
         """授权操作幂等。"""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
-        
+
         try:
             conn = sqlite3.connect(db_path)
-            
+
             # 创建必要的表
             from memory.personal_sharing import create_sharing_authorization_table
+            from memory.schema import create_memory_scope_versions_table
             create_sharing_authorization_table(conn)
-            
+            create_memory_scope_versions_table(conn)
+
             # 首次授权
             success1, reason1 = grant_sharing_authorization(
                 conn, 1001, 12345, "fact_key_1", "private:12345", 100
             )
             assert success1 is True
             assert reason1 == "granted"
-            
+
             # 重复授权应幂等
             success2, reason2 = grant_sharing_authorization(
                 conn, 1001, 12345, "fact_key_1", "private:12345", 101
             )
             assert success2 is True
             assert reason2 == "already_active"
-            
+
             conn.close()
         finally:
             Path(db_path).unlink(missing_ok=True)
@@ -208,7 +204,7 @@ class TestProactiveContract:
             candidate_content_digest="abc123",
             bridge_event_requirement=False,
         )
-        
+
         is_valid, reason = validate_bridge_event(None, contract)
         assert is_valid is True
         assert reason == "not_required"
@@ -227,7 +223,7 @@ class TestProactiveContract:
             candidate_content_digest="def456",
             bridge_event_requirement=True,
         )
-        
+
         is_valid, reason = validate_bridge_event(None, contract)
         assert is_valid is False
         assert reason == "bridge_missing"
@@ -246,14 +242,14 @@ class TestProactiveContract:
             candidate_content_digest="def456",
             bridge_event_requirement=True,
         )
-        
+
         bridge = BridgeEvidence(
             target_user_id=11111,  # 不匹配
             conversation_key="group:99999",
             recent_message_ids=[300, 301],
             recent_event_digests=["event1"],
         )
-        
+
         is_valid, reason = validate_bridge_event(bridge, contract)
         assert is_valid is False
         assert reason == "bridge_target_mismatch"
@@ -285,12 +281,12 @@ class TestProactiveContract:
                 ),
             ],
         )
-        
+
         # 没有桥接，选择不需要桥接的变体
         variant = select_question_variant(contract, has_bridge=False)
         assert variant is not None
         assert variant.variant_id == "A"
-        
+
         # 有桥接，选择需要桥接的变体
         variant = select_question_variant(contract, has_bridge=True)
         assert variant is not None
@@ -310,9 +306,9 @@ class TestAttributionGuard:
         corrections = [{"id": "c1", "author_id": 12345, "text": "correction", "conversation_key": "test", "timestamp": "2026-10-05T10:00:00"}]
         facts = [{"id": "f1", "author_id": 12345, "content": "fact", "conversation_key": "test", "timestamp": "2026-10-05T09:00:00"}]
         messages = [{"id": "m1", "author_id": 12345, "text": "message", "conversation_key": "test", "timestamp": "2026-10-05T08:00:00"}]
-        
+
         table = build_evidence_table(messages, facts, corrections, max_units=10)
-        
+
         # 优先级：correction > fact > message
         ids = list(table.keys())
         assert ids[0].startswith("correction_")
@@ -324,7 +320,7 @@ class TestAttributionGuard:
         is_safe, pattern = check_risky_free_text("你之前说过喜欢咖啡", set())
         assert is_safe is False
         assert "你之前说" in pattern
-        
+
         is_safe, pattern = check_risky_free_text("你怎么忘了呢", set())
         assert is_safe is False
         assert "你怎么忘了" in pattern
@@ -336,15 +332,15 @@ class TestAttributionGuard:
             quote_references=["msg_1", "msg_2"],
             verified_fact_references=["fact_1"],
         )
-        
+
         evidence = {
             "msg_1": SourceEvidence("msg_1", "message", 12345, None, "text1", "key", 100, "2026-10-05T10:00:00"),
             "msg_2": SourceEvidence("msg_2", "message", 12345, None, "text2", "key", 101, "2026-10-05T10:01:00"),
             "fact_1": SourceEvidence("fact_1", "verified_fact", 12345, None, "fact", "key", 200, "2026-10-05T09:00:00", is_verified=True),
         }
-        
+
         budget = {"msg_1", "msg_2", "fact_1"}
-        
+
         all_valid, invalid = validate_evidence_references(plan, evidence, budget)
         assert all_valid is True
         assert len(invalid) == 0
@@ -355,13 +351,13 @@ class TestAttributionGuard:
             current_response="好的",
             quote_references=["msg_999"],  # 不存在
         )
-        
+
         evidence = {
             "msg_1": SourceEvidence("msg_1", "message", 12345, None, "text1", "key", 100, "2026-10-05T10:00:00"),
         }
-        
+
         budget = {"msg_1"}
-        
+
         all_valid, invalid = validate_evidence_references(plan, evidence, budget)
         assert all_valid is False
         assert len(invalid) == 1
@@ -398,10 +394,10 @@ class TestDataRepair:
         """预览错误 SPACE 归属。"""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
-        
+
         try:
             conn = sqlite3.connect(db_path)
-            
+
             # 创建测试表
             conn.execute("""
                 CREATE TABLE memories (
@@ -414,32 +410,32 @@ class TestDataRepair:
                     status TEXT DEFAULT 'ACTIVE'
                 )
             """)
-            
+
             # 插入错误记录：PERSON 但标记为 SPACE
             conn.execute(
                 "INSERT INTO memories (id, audience, owner_type, owner_key, user_id, fact_key, status) "
                 "VALUES ('m1', 'SPACE', 'PERSON', 'user:12345', 12345, 'fk1', 'ACTIVE')"
             )
-            
+
             conn.commit()
-            
+
             records = preview_wrong_space_records(conn)
             assert len(records) == 1
             assert records[0].issue_type == "wrong_space"
             assert records[0].proposed_value == "PRIVATE_ONLY"
-            
+
             conn.close()
         finally:
             Path(db_path).unlink(missing_ok=True)
 
-    def test_apply_repairs_dry_run(self):
+    def test_apply_repairs_dry_run(self, monkeypatch):
         """dry_run 不修改数据。"""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
-        
+
         try:
             conn = sqlite3.connect(db_path)
-            
+
             conn.execute("""
                 CREATE TABLE memories (
                     id TEXT PRIMARY KEY,
@@ -447,11 +443,15 @@ class TestDataRepair:
                     updated_at TEXT
                 )
             """)
-            
+
             conn.execute("INSERT INTO memories (id, status) VALUES ('m1', 'ACTIVE')")
             conn.commit()
             conn.close()
-            
+
+            # 工具按 CLI 设计连接全局 DB_PATH；测试把它指到临时库
+            import tools.data_repair as data_repair_module
+            monkeypatch.setattr(data_repair_module, "DB_PATH", db_path)
+
             # 准备修复记录
             records = [
                 RepairRecord(
@@ -465,11 +465,11 @@ class TestDataRepair:
                     confidence=0.95,
                 )
             ]
-            
+
             # Dry run
             batch = apply_repairs(records, operator="test", dry_run=True)
             assert batch is None
-            
+
             # 验证未修改
             conn = sqlite3.connect(db_path)
             row = conn.execute("SELECT status FROM memories WHERE id = 'm1'").fetchone()

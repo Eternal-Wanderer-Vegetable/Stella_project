@@ -28,7 +28,7 @@ from config import DB_PATH
 @dataclass
 class RepairRecord:
     """修复记录 - 单个待修复的记忆条目。
-    
+
     Attributes:
         record_id: 记录 ID
         table_name: 表名（memories / memory_candidates）
@@ -39,7 +39,7 @@ class RepairRecord:
         affected_user_id: 受影响的用户 ID
         confidence: 修复置信度（0.0-1.0）
     """
-    
+
     record_id: str
     table_name: Literal["memories", "memory_candidates"]
     issue_type: Literal["wrong_space", "wrong_fact_key", "duplicate", "orphan"]
@@ -53,7 +53,7 @@ class RepairRecord:
 @dataclass
 class RepairBatch:
     """修复批次 - 一次修复操作的元数据。
-    
+
     Attributes:
         batch_id: 批次 ID
         repair_count: 修复记录数
@@ -62,7 +62,7 @@ class RepairBatch:
         rollback_available: 是否可回滚
         audit_log_ids: 审计日志 ID 列表
     """
-    
+
     batch_id: str
     repair_count: int
     applied_at: str
@@ -75,29 +75,29 @@ def preview_wrong_space_records(
     conn: sqlite3.Connection,
 ) -> list[RepairRecord]:
     """预览错误 SPACE 归属的记录（R7 §6.7）。
-    
+
     识别规则：
     - 私聊记忆标记为 SPACE
     - 群聊记忆标记为 PRIVATE_ONLY
     - group_shared_space 不匹配 origin_group_id
-    
+
     Returns:
         待修复记录列表
     """
     records = []
     cursor = conn.cursor()
-    
+
     # 查找私聊记忆标记为 SPACE 的情况
     rows = cursor.execute("""
         SELECT id, audience, owner_type, owner_key, user_id, fact_key
         FROM memories
-        WHERE audience = 'SPACE' 
+        WHERE audience = 'SPACE'
         AND owner_type = 'PERSON'
         AND status != 'DEPRECATED'
     """).fetchall()
-    
+
     for row in rows:
-        record_id, audience, owner_type, owner_key, user_id, fact_key = row
+        record_id, audience, _owner_type, _owner_key, user_id, _fact_key = row
         records.append(RepairRecord(
             record_id=str(record_id),
             table_name="memories",
@@ -108,7 +108,7 @@ def preview_wrong_space_records(
             affected_user_id=int(user_id),
             confidence=0.95,
         ))
-    
+
     # 查找群聊记忆标记为 PRIVATE_ONLY 的情况
     rows = cursor.execute("""
         SELECT id, audience, owner_type, owner_key, user_id, fact_key
@@ -117,9 +117,9 @@ def preview_wrong_space_records(
         AND owner_type = 'SPACE'
         AND status != 'DEPRECATED'
     """).fetchall()
-    
+
     for row in rows:
-        record_id, audience, owner_type, owner_key, user_id, fact_key = row
+        record_id, audience, _owner_type, _owner_key, user_id, _fact_key = row
         records.append(RepairRecord(
             record_id=str(record_id),
             table_name="memories",
@@ -130,7 +130,7 @@ def preview_wrong_space_records(
             affected_user_id=int(user_id),
             confidence=0.95,
         ))
-    
+
     return records
 
 
@@ -138,17 +138,17 @@ def preview_duplicate_records(
     conn: sqlite3.Connection,
 ) -> list[RepairRecord]:
     """预览重复记录（R7 §6.7）。
-    
+
     识别规则：
     - 相同 fact_key 但不同 audience 的记录
     - 相同内容但不同 ID 的记录
-    
+
     Returns:
         待修复记录列表
     """
     records = []
     cursor = conn.cursor()
-    
+
     # 查找同一 fact_key 的多个 audience 副本
     rows = cursor.execute("""
         SELECT fact_key, COUNT(*) as cnt, GROUP_CONCAT(id) as ids
@@ -157,9 +157,9 @@ def preview_duplicate_records(
         GROUP BY fact_key
         HAVING cnt > 1
     """).fetchall()
-    
+
     for row in rows:
-        fact_key, cnt, ids = row
+        fact_key, _cnt, ids = row
         # 保留第一个，标记其余为重复
         id_list = ids.split(',')
         for duplicate_id in id_list[1:]:
@@ -173,7 +173,7 @@ def preview_duplicate_records(
                 affected_user_id=0,
                 confidence=0.90,
             ))
-    
+
     return records
 
 
@@ -181,13 +181,13 @@ def preview_orphan_candidates(
     conn: sqlite3.Connection,
 ) -> list[RepairRecord]:
     """预览孤儿候选（source row 已删除）（R7 §6.7）。
-    
+
     Returns:
         待修复记录列表
     """
     records = []
     cursor = conn.cursor()
-    
+
     # 查找 source_conversation_key 指向不存在会话的候选
     rows = cursor.execute("""
         SELECT c.id, c.source_conversation_key, c.user_id, c.fact_key
@@ -198,9 +198,9 @@ def preview_orphan_candidates(
             WHERE v.conversation_key = c.source_conversation_key
         )
     """).fetchall()
-    
+
     for row in rows:
-        candidate_id, source_key, user_id, fact_key = row
+        candidate_id, source_key, user_id, _fact_key = row
         records.append(RepairRecord(
             record_id=str(candidate_id),
             table_name="memory_candidates",
@@ -211,7 +211,7 @@ def preview_orphan_candidates(
             affected_user_id=int(user_id),
             confidence=0.85,
         ))
-    
+
     return records
 
 
@@ -219,26 +219,26 @@ def preview_repairs(
     issue_types: list[str] | None = None,
 ) -> list[RepairRecord]:
     """预览所有待修复记录（R7 §6.7）。
-    
+
     Args:
         issue_types: 限定问题类型，None 表示全部
-    
+
     Returns:
         待修复记录列表
     """
     conn = sqlite3.connect(DB_PATH)
     try:
         all_records = []
-        
+
         if issue_types is None or "wrong_space" in issue_types:
             all_records.extend(preview_wrong_space_records(conn))
-        
+
         if issue_types is None or "duplicate" in issue_types:
             all_records.extend(preview_duplicate_records(conn))
-        
+
         if issue_types is None or "orphan" in issue_types:
             all_records.extend(preview_orphan_candidates(conn))
-        
+
         return all_records
     finally:
         conn.close()
@@ -261,7 +261,7 @@ def _create_audit_table(conn: sqlite3.Connection) -> None:
             operator TEXT NOT NULL
         )
     """)
-    
+
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_audit_batch
         ON data_repair_audit(batch_id)
@@ -274,7 +274,7 @@ def apply_repairs(
     dry_run: bool = False,
 ) -> RepairBatch | None:
     """应用修复（R7 §6.7）。
-    
+
     操作步骤：
     1. 创建审计日志表
     2. 开启事务
@@ -282,28 +282,28 @@ def apply_repairs(
        - 标记旧记录为 DEPRECATED
        - 写入审计日志
     4. 提交事务
-    
+
     Args:
         records: 待修复记录列表
         operator: 操作者标识
         dry_run: 是否仅模拟（不实际修改）
-    
+
     Returns:
         修复批次元数据，失败返回 None
     """
     if not records:
         logger.info("✅ [DataRepair] No records to repair")
         return None
-    
+
     conn = sqlite3.connect(DB_PATH)
     try:
         _create_audit_table(conn)
-        
+
         batch_id = f"repair_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
         audit_log_ids = []
-        
+
         conn.execute("BEGIN")
-        
+
         for record in records:
             # 标记为 DEPRECATED
             if record.table_name == "memories":
@@ -318,7 +318,7 @@ def apply_repairs(
                     "WHERE id = ?",
                     (record.record_id,),
                 )
-            
+
             # 写入审计日志
             cursor = conn.execute(
                 "INSERT INTO data_repair_audit "
@@ -337,23 +337,22 @@ def apply_repairs(
                 ),
             )
             audit_log_ids.append(cursor.lastrowid)
-        
+
         if dry_run:
             conn.execute("ROLLBACK")
             logger.info(f"🧪 [DataRepair] Dry run: would repair {len(records)} records")
             return None
-        else:
-            conn.execute("COMMIT")
-            logger.info(f"✅ [DataRepair] Applied {len(records)} repairs in batch {batch_id}")
-            
-            return RepairBatch(
-                batch_id=batch_id,
-                repair_count=len(records),
-                applied_at=datetime.utcnow().isoformat(),
-                operator=operator,
-                rollback_available=True,
-                audit_log_ids=audit_log_ids,
-            )
+        conn.execute("COMMIT")
+        logger.info(f"✅ [DataRepair] Applied {len(records)} repairs in batch {batch_id}")
+
+        return RepairBatch(
+            batch_id=batch_id,
+            repair_count=len(records),
+            applied_at=datetime.utcnow().isoformat(),
+            operator=operator,
+            rollback_available=True,
+            audit_log_ids=audit_log_ids,
+        )
     except Exception as e:
         conn.execute("ROLLBACK")
         logger.error(f"❌ [DataRepair] Failed to apply repairs: {e}")
@@ -366,36 +365,36 @@ def revoke_batch(
     batch_id: str,
 ) -> bool:
     """撤销修复批次（R7 §6.7）。
-    
+
     操作步骤：
     1. 查找批次的所有审计记录
     2. 对每条记录：
        - 恢复旧值
        - 标记审计记录为已撤销
     3. 提交事务
-    
+
     Args:
         batch_id: 批次 ID
-    
+
     Returns:
         是否成功
     """
     conn = sqlite3.connect(DB_PATH)
     try:
         conn.execute("BEGIN")
-        
+
         # 查找批次记录
         rows = conn.execute(
             "SELECT audit_id, record_id, table_name, old_value FROM data_repair_audit "
             "WHERE batch_id = ? AND revoked_at IS NULL",
             (batch_id,),
         ).fetchall()
-        
+
         if not rows:
             logger.warning(f"⚠️ [DataRepair] Batch {batch_id} not found or already revoked")
             conn.execute("ROLLBACK")
             return False
-        
+
         for audit_id, record_id, table_name, old_value in rows:
             # 恢复状态
             if table_name == "memories":
@@ -408,13 +407,13 @@ def revoke_batch(
                     "UPDATE memory_candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (old_value, record_id),
                 )
-            
+
             # 标记审计记录为已撤销
             conn.execute(
                 "UPDATE data_repair_audit SET revoked_at = ? WHERE audit_id = ?",
                 (datetime.utcnow().isoformat(), audit_id),
             )
-        
+
         conn.execute("COMMIT")
         logger.info(f"✅ [DataRepair] Revoked batch {batch_id} ({len(rows)} records)")
         return True
@@ -428,7 +427,7 @@ def revoke_batch(
 
 def list_batches() -> list[RepairBatch]:
     """列出所有修复批次。
-    
+
     Returns:
         批次列表（按时间倒序）
     """
@@ -441,7 +440,7 @@ def list_batches() -> list[RepairBatch]:
             GROUP BY batch_id
             ORDER BY applied_at DESC
         """).fetchall()
-        
+
         batches = []
         for batch_id, cnt, applied_at, operator, active_cnt in rows:
             batches.append(RepairBatch(
@@ -452,7 +451,7 @@ def list_batches() -> list[RepairBatch]:
                 rollback_available=(active_cnt > 0),
                 audit_log_ids=[],
             ))
-        
+
         return batches
     finally:
         conn.close()

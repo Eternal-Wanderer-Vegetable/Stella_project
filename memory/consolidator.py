@@ -1952,7 +1952,7 @@ async def _consolidate_with_flow(consolidator, group_id: int, force: bool,
             pass
 
 
-async def _consolidate_conversation_with_flow(consolidator, conversation_ref, 
+async def _consolidate_conversation_with_flow(consolidator, conversation_ref,
                                              force: bool, parent_trace_id: str):
     """注册会话整合后台任务（R2新增，计划 §6.2）。"""
     from core.observability import message_flow
@@ -1982,7 +1982,7 @@ async def _consolidate_conversation_with_flow(consolidator, conversation_ref,
             pass
 
 
-def maybe_consolidate(group_id: int | None = None, force: bool = False, 
+def maybe_consolidate(group_id: int | None = None, force: bool = False,
                      parent_trace_id: str = "", *, conversation_ref=None):
     """异步触发一次整合（后台任务），并登记以跟踪完成与否（不等待）。
 
@@ -2017,10 +2017,10 @@ def maybe_consolidate(group_id: int | None = None, force: bool = False,
     if key in _pending_groups:
         logger.debug(f"⏭️ [Consolidator] 会话 {key} 已有整合任务在途，跳过本次触发")
         return
-    
+
     _pending_groups.add(key)
     consolidator = get_consolidator()
-    
+
     if is_conversation:
         task = asyncio.create_task(
             _consolidate_conversation_with_flow(
@@ -2031,7 +2031,7 @@ def maybe_consolidate(group_id: int | None = None, force: bool = False,
         task = asyncio.create_task(
             _consolidate_with_flow(consolidator, group_id, force, parent_trace_id)
         )
-    
+
     _consolidation_tasks.add(task)
 
     def _done(t: asyncio.Task):

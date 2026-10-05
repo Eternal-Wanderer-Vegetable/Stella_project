@@ -42,7 +42,7 @@ def current_version(scope_keys: list[str] | tuple[str, ...]) -> int:
 
 def bump(scope_key: str, conn: sqlite3.Connection | None = None, *, strict: bool = False) -> None:
     """推进某 owner 的持久版本（幂等 upsert）。传入 conn 时在调用方事务内。
-    
+
     R3修复（计划 §6.3）：
     - strict=True 时失败抛异常（授权/撤回路径必须成功，否则缓存会脏读）
     - strict=False 时静默跳过（默认行为，不拖垮业务写入）

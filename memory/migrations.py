@@ -842,16 +842,16 @@ def migrate_v17(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     - conversation_identity_claims.parser_version：身份解析器版本
     - personal_memory_sharing 表：事实级共享授权
     - sharing_audit_log 表：授权操作审计
-    
+
     **additive**：不改旧列、不删行、默认值兼容旧行为。
     """
     from memory.personal_sharing import create_sharing_authorization_table
 
     result = MigrationResult(version=17)
-    
+
     # 新增共享授权表
     create_sharing_authorization_table(conn)
-    
+
     # 新增审计日志表
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sharing_audit_log (
@@ -865,17 +865,17 @@ def migrate_v17(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
             details TEXT
         )
     """)
-    
+
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_audit_bot_user_time
         ON sharing_audit_log(bot_id, user_id, performed_at DESC)
     """)
-    
+
     result.notes.append(
         "personal_memory_sharing / sharing_audit_log 已创建；"
         "memory_candidates.verification_contract_json 等列由 additive 阶段补齐"
     )
-    
+
     return result
 
 

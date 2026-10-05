@@ -697,8 +697,9 @@ def _build_v15_db(path: Path) -> None:
         conn.close()
 
 
-def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
-    """v15 → v16：信封加列、身份声明表就绪、行数与旧内容零改动、幂等。"""
+def test_v15_to_v17_additive_envelope_identity_and_contract_tables(tmp_path):
+    """v15 → v17（经 v16）：信封加列、身份声明表、v17 合同/共享表就绪、
+    行数与旧内容零改动、幂等。"""
     path = tmp_path / "agent_memory.db"
     _build_v15_db(path)
     # space_1 必须是校验器可解析的空间（自动命名账本登记）
@@ -712,7 +713,7 @@ def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
     report = schema.migrate_to_latest(path, ctx)
     assert report.error is None, report.error
     assert report.problems == [], report.problems
-    assert report.to_version == 16
+    assert report.to_version == 17
 
     # 旧行与旧内容一字不动
     assert _rows(path, "SELECT content, source_kind, msg_id FROM group_messages") == [
@@ -730,6 +731,12 @@ def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
         assert col in cols, col
     # 身份表就绪且为空
     for table in ("conversation_identity_claims", "conversation_identity_versions"):
+        assert _rows(path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
+
+    # v17 产物：合同列与共享/审计表就绪且为空
+    assert "verification_contract_json" in _columns(path, "memory_candidates")
+    assert "parser_version" in _columns(path, "conversation_identity_claims")
+    for table in ("personal_memory_sharing", "sharing_audit_log"):
         assert _rows(path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
 
     # 幂等：重跑零变更
