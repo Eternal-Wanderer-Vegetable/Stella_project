@@ -205,6 +205,8 @@ export interface FlowMessageIo {
       platform_message_id: string | null;
       acknowledged_at_utc: string | null;
     }>;
+    // 复验 B5：片段超限时显式标记（剩余段暂不可分页读取）
+    segments_truncated?: boolean;
   };
   notes: string[];
 }

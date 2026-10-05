@@ -654,14 +654,17 @@ def message_io(trace_id: str) -> dict | None:
 
     if receipt_lines:
         lines = receipt_lines
-        if receipt_notes:
-            notes.extend(receipt_notes)
-    else:
+    # 回执诊断不依赖 ACK 行存在（复验 B5）：全失败/截断同样到达页面
+    if receipt_notes:
+        notes.extend(receipt_notes)
+    if not receipt_lines:
         if tried_receipts and not lines:
             source_note = ""
         if source_note:
             notes.append(source_note)
-    lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
+        # 命令回复已走完整回执路径（复验 B5）：checkpoint 摘要通道仅在
+        # 无回执档案的旧轨迹上兜底
+        lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
 
     # 全部失败时也保留片段事实（验收报告 M6：不再丢掉具体失败说明）
     if segments and not any(s["status"] == "acknowledged" for s in segments):

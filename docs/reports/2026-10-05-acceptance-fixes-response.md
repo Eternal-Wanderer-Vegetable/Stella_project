@@ -96,3 +96,22 @@
 | A8 | segments 截断按片段维度显式报告（segments_truncated + note），25 段探针返回 20 段 + 截断标记；命令完整正文继续列为现场待验（未标完成） | 25 段探针 |
 
 门禁：pytest 224+ 全绿、dashboard 98 测试 + typecheck + build + 三快照同步、ruff 全绿、manifest `4a5fbef6b7ea` --check 通过。仍未完成：命令完整正文合同（A8 保留项）、真实 QQ 全场景矩阵、浏览器/桌面完整导航、最终安装包验收。
+
+
+---
+
+## 第三轮复验响应（2026-10-05，B1–B5）
+
+回应 [第三轮复验](2026-10-05-dashboard-flow-plan-acceptance-third-review.md)，提交 `aa25537`（B1/B2）、`fca2457`（B3/B4/B5）。
+
+| 项 | 修复 | 回归 |
+| --- | --- | --- |
+| B1 | fetchEvents 接受 staleness 回调；bundle 的两轮事件补读贯穿 alive()（session/seq/trace）——隐藏页面后的旧事件回包不合并、不污染截断标志 | detail 完成→events 在途→隐藏→释放：合并数保持 0 |
+| B2 | 旧快照取尽后若新首屏含未知记录 → 以新快照游标重开 keyset（有界、历史保留、去重合并）；known 集取自合并前快照 | 1 条取尽→新增 101 条→恢复：缺口记录可达、最终 exhausted |
+| B3.1 | `import pkg.helper`（无 as）与单段 `import helper as h` 经模块键后缀回退解析到真实符号——normalize 体 +1→+2 即漂移 | 无 as 漂移、单段解析两例 |
+| B3.2 | worker 注册记录 handler 的**传递本地闭包**（handler_closure = file#qual:hash 列表 + truncated 标记）——下游 helper（如 handle_effect_feedback→log_settlement）体变化即漂移 | _downstream 42→43 记录漂移 |
+| B3.3 | 五个生产 lifecycle entry（start_scheduling/start_cometa/start_stop_watcher/start_hot_reload_watcher/graceful_shutdown）声明 registration=lifecycle_hook——装饰器删除（函数保留）即 registration_removed 阻断 | 装饰器删除反例 |
+| B4 | _stop_cometa 真实停止错误外传（注册表清空放 finally）；facade drain/stop 失败进 stop_errors；shutdown 主体拆分——CancelledError → cancelled(complete=0)、Exception → shutdown_failed，均收口 + 有界 flush；成功路径 flush 后**核对 lifecycle 行已落账**（producer_ended），未落账打降级日志 | fake runtime 注入两例 + 既有 17 项生命周期测试 |
+| B5 | 回执诊断（截断/failed/unknown 计数）不依赖 ACK 行存在——全失败超限的截断说明到达 notes；页面渲染 segments_truncated 提示；**命令回复进入完整回执路径**（turn=trace、part 0、acknowledged、全文 social_deliveries——600 字可查；500 字 checkpoint 摘要降级为无档案旧轨迹的兜底） | 25 全失败探针 + 600 字命令全文探针（content_hash 核对） |
+
+门禁：pytest 231 全绿、dashboard 100 测试 + typecheck + build + 三快照同步、ruff 全绿、manifest `b695e0f2eab9` --check 通过（同版本旧文件已清）。仍未完成（现场）：真实 QQ 全场景矩阵、浏览器/桌面完整导航矩阵、最终安装包验收；命令回复的平台消息 ID 关联（当前 turn=trace、part 0，平台 ID 在 OneBot 命令路径不可得）列为下轮剩余合同。

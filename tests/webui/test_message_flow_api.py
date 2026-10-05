@@ -592,3 +592,90 @@ class TestSegmentsTruncationHonesty:
         assert max(s["part_index"] for s in segs) == 19
         assert data["output"]["segments_truncated"] is True, "截断必须显式"
         assert any("截断" in n for n in data["notes"])
+
+    def test_command_full_text_via_receipt_path(self, client, auth_header,
+                                                flow_home, isolated_home,
+                                                monkeypatch):
+        """复验 B5：命令回复进入完整回执路径——600 字全文可查（旧合同
+        只有 command.reply checkpoint 的 500 字摘要）。"""
+
+        import config.settings as settings
+        from core.observability import message_flow as mf
+        from core.social.contracts import (
+            DELIVERY_ACKNOWLEDGED,
+            DeliveryReceipt,
+            content_hash,
+        )
+        from memory import social_store
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        # 跨测试隔离：social_store 的表就绪缓存可能指向别的库
+        monkeypatch.setattr(social_store, "_TABLES_READY", False)
+        root = mf.begin_trace(root_kind="qq_command", platform="qq",
+                              scope="qq:b:group:42",
+                              conversation_key="qq:b:group:42", bot_id="b",
+                              conversation_kind="group", peer_id="42",
+                              storage_session_id=42, source_message_id="9",
+                              trace_id="cmd-full")
+        mf.checkpoint(root, "command.reply", summary="摘要" * 250)
+        long_text = "很长" * 300
+        social_store.record_delivery(DeliveryReceipt(
+            trace_id="cmd-full", turn_id="cmd-full", part_index=0,
+            status=DELIVERY_ACKNOWLEDGED, text=long_text, scope=None,
+            conversation_key="qq:b:group:42", conversation_kind="group",
+            peer_id="42", storage_session_id=42, platform="qq", bot_id="b"))
+        mf.end_trace(root, outcome="command_sent")
+        mf.flush()
+        data = client.get("/api/v1/trace/messages/cmd-full/context",
+                          headers=auth_header).json()["data"]
+        # 回执优先：全文（600 字）替代 500 字摘要通道
+        assert data["output"]["lines"] == [long_text]
+        assert len(data["output"]["lines"][0]) == 600
+        segs = data["output"]["segments"]
+        assert segs and segs[0]["text"] == long_text
+        assert content_hash(segs[0]["text"]) == content_hash(long_text)
+
+    def test_all_failed_overflow_still_reports_truncation(self, client,
+                                                          auth_header,
+                                                          flow_home,
+                                                          isolated_home,
+                                                          monkeypatch):
+        """复验 B5：全失败超限时截断提示不依赖 ACK 行存在。"""
+        import sqlite3
+
+        import config.settings as settings
+        from core.observability import message_flow as mf
+
+        db = isolated_home / "memory" / "agent_memory.db"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(settings, "DB_PATH", db)
+        root = mf.begin_trace(root_kind="qq_chat", platform="qq", scope="qq:888",
+                              conversation_key="qq:b:group:888", bot_id="b",
+                              conversation_kind="group", peer_id="888",
+                              storage_session_id=888, source_message_id="2",
+                              trace_id="b5-allfailed")
+        mf.end_trace(root, outcome="not_delivered")
+        mf.flush()
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS social_deliveries (delivery_id TEXT "
+            "PRIMARY KEY, turn_id TEXT, part_index INTEGER, trace_id TEXT, "
+            "epoch INTEGER, platform TEXT, bot_id TEXT, group_id TEXT, "
+            "status TEXT, platform_message_id TEXT, acknowledged_at_utc TEXT, "
+            "text TEXT, text_hash TEXT, created_at_utc TEXT, updated_at_utc TEXT)")
+        conn.executemany(
+            "INSERT INTO social_deliveries (delivery_id, turn_id, part_index, "
+            "trace_id, status, text) VALUES (?,?,?,?,?,?)",
+            [(f"b5-{i}", "t", i, "b5-allfailed", "failed", f"失败片段{i}")
+             for i in range(25)])
+        conn.commit()
+        conn.close()
+        data = client.get("/api/v1/trace/messages/b5-allfailed/context",
+                          headers=auth_header).json()["data"]
+        assert len(data["output"]["segments"]) == 20
+        assert data["output"]["segments_truncated"] is True
+        assert any("截断" in n for n in data["notes"]), (
+            "全失败场景截断说明必须到达 notes")
+        assert any("发送失败" in n for n in data["notes"])

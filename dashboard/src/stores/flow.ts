@@ -226,6 +226,7 @@ export const useFlowStore = defineStore('flow', {
             || filterKey !== `${this.platformFilter ?? ''}|${this.rootKindFilter ?? ''}`) {
           return; // 请求期间过滤已变：旧响应整包丢弃
         }
+        const prior = this.messages; // 合并前快照（B2 缺口检测用）
         this.messages = mergeListPage(this.messages, data.items, reset);
         this.messagesTotal = data.total;
         if (reset) {
@@ -235,6 +236,14 @@ export const useFlowStore = defineStore('flow', {
           // 续读取尽：进入 exhausted，轮询不得恢复首屏游标（复验 A6）
           this.listExhausted = true;
           this.messagesCursor = '';
+        } else if (this.listExhausted) {
+          // 旧快照取尽后出现新数据区间（复验 B2）：首屏含未加载记录 →
+          // 用新快照游标重开有界 keyset 补读；历史页保留、去重合并
+          const known = new Set(prior.map((m) => m.trace_id));
+          if (data.items.some((m) => !known.has(m.trace_id))) {
+            this.messagesCursor = data.next_cursor;
+            this.listExhausted = false;
+          }
         }
       } finally {
         if (seq === this.listSeq) this.loadingList = false;
@@ -369,7 +378,7 @@ export const useFlowStore = defineStore('flow', {
       if (!alive()) return;
       // 独立来源第一轮：detail 失败也照常刷新
       await Promise.all([
-        this.fetchEvents().catch(() => {}),
+        this.fetchEvents({ isStale: () => !alive() }).catch(() => {}),
         getMessageIo(traceId)
           .then((io) => {
             if (alive()) this.io = io;
@@ -409,7 +418,7 @@ export const useFlowStore = defineStore('flow', {
       if (!alive()) return;
       // finality 确认（或重试用尽→显式按当前水位）后，按新水位补齐事件
       // 并再刷一轮独立来源（复验 A1 探针：确认后 loaded 停在旧值 = 漏补读）
-      await this.fetchEvents().catch(() => {});
+      await this.fetchEvents({ isStale: () => !alive() }).catch(() => {});
       await Promise.all([
         getMessageIo(traceId)
           .then((io) => {
@@ -442,10 +451,16 @@ export const useFlowStore = defineStore('flow', {
      * 首读固定快照高水位（until）；到达 MAX_EVENT_PAGES 软上限时标
      * truncated（partial + 可 loadMoreEvents），绝不当成完整。
      */
-    async fetchEvents() {
+    async fetchEvents(opts: { isStale?: () => boolean } = {}) {
       if (!this.detail) return;
       const gen = this.traceGeneration;
       const traceId = this.detail.trace_id;
+      // 失效条件（复验 B1）：bundle 发起的补读贯穿 bundle 的 session/seq
+      // 上下文——页面隐藏后旧事件回包一律不合并
+      const stale = () =>
+        gen !== this.traceGeneration
+        || this.detail?.trace_id !== traceId
+        || (opts.isStale?.() ?? false);
       // high_watermark = 本 trace 已提交事件的最大全局 row_id（与分页游标
       // 同单位）；persisted_events 是 MAX(seq)（trace 内序列水位），两者
       // 单位不同，绝不可互比（验收报告 H4）
@@ -458,8 +473,8 @@ export const useFlowStore = defineStore('flow', {
           // 只有首页传 until，后续页会读到快照外的新提交）
           const items = await getEvents(
             traceId, after, EVENT_PAGE_LIMIT, highWatermark);
-          if (gen !== this.traceGeneration || this.detail?.trace_id !== traceId) {
-            return;
+          if (stale()) {
+            return; // 回包作废：不合并（复验 B1 探针原样）
           }
           if (!items.length) break; // 空页：服务端已取尽
           this.mergeEvents(items);
@@ -468,8 +483,10 @@ export const useFlowStore = defineStore('flow', {
         }
         // 软上限判定（H4 合同）：游标单位 = row_id，对比本 trace 的
         // high_watermark；超过软上限仍有余量 → 显式 partial
-        this.eventsTruncated =
-          highWatermark > 0 && maxRowId(this.events) < highWatermark;
+        if (!stale()) {
+          this.eventsTruncated =
+            highWatermark > 0 && maxRowId(this.events) < highWatermark;
+        }
       } finally {
         if (gen === this.traceGeneration) this.eventsLoading = false;
       }

@@ -242,3 +242,4 @@ class TestDirectEvidence:
         }
         ok, reason = MemoryManager._decide_promotion(candidate)
         assert ok and "直接对话" in reason
+
