@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import re
 import json
 import subprocess
 import sys
@@ -184,7 +185,11 @@ class _ModuleContext:
                 for alias in node.names:
                     name = alias.asname or alias.name
                     self.imports[name.split(".")[0]] = alias.name
-                    self.import_sources[name.split(".")[0]] = (alias.name, 0, "")
+                    # `import pkg.helper as h`：别名是模块别名，original 记
+                    # 完整模块路径（复验 A3：此前为空 → h.normalize 解析到
+                    # 不存在的 helper.py#h.normalize，体变化不漂移）
+                    self.import_sources[name.split(".")[0]] = (
+                        alias.name, 0, alias.name)
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 for alias in node.names:
@@ -452,10 +457,16 @@ class ProjectIndex:
                 prefix = ".".join(parts)
                 module = f"{prefix}.{module}" if (prefix and module) else (
                     module or prefix)
-            # 别名还原原名（M4）：调用走别名，模块内符号是原名
-            if original and original != root:
-                target = original + target[len(root):]
-            resolved = self._resolve_module_symbol(module, target)
+            if level == 0 and original and "." in original and original == module:
+                # 模块别名（复验 A3）：`import pkg.helper as h` 的 h.normalize
+                # → 模块 pkg.helper 的符号路径 normalize
+                remainder = target[len(root):].lstrip(".")
+                resolved = self._resolve_module_symbol(module, remainder)
+            else:
+                # 符号别名还原原名（M4）：调用走别名，模块内符号是原名
+                if original and original != root:
+                    target = original + target[len(root):]
+                resolved = self._resolve_module_symbol(module, target)
             if resolved:
                 file_rel, qual = resolved
                 if qual:
@@ -746,8 +757,13 @@ def _scan_entries_in_file(ctx: _ModuleContext) -> list[dict]:
                 else:
                     symbol = (getattr(call.func, "attr", "")
                               or getattr(call.func, "id", ""))
+                # handler 绑定（复验 A3）：第二个实参是被绑定的处理函数——
+                # 同键换绑是生产行为变化，必须进入漂移合同
+                second = call.args[1] if len(call.args) > 1 else None
+                handler = (second.id if isinstance(second, ast.Name) else "")
                 found.append({"symbol": symbol,
                               "kind": "worker_registration",
+                              "handler": handler,
                               "line": getattr(node, "lineno", 0)})
     return found
 
@@ -757,6 +773,7 @@ def discovered_entries_diff(
     *,
     declared: list[tuple[str, str]],
     package_dirs=None,
+    declared_entries_meta: list[dict] | None = None,
 ) -> dict:
     """生产模块入口扫描 vs 声明 inventory 的双向差集（修复计划 §6.5）。
 
@@ -765,11 +782,23 @@ def discovered_entries_diff(
     豁免必须给真实 external/intentional boundary 理由。
     """
     index = ProjectIndex(root, package_dirs=package_dirs or ["pkg"])
+    declared_entries_meta = declared_entries_meta or []
     discovered: list[dict] = []
     for rel, ctx in sorted(index._by_path.items()):
         for hit in _scan_entries_in_file(ctx):
-            discovered.append({"file": rel, "symbol": hit["symbol"],
-                               "kind": hit["kind"]})
+            record = {"file": rel, "symbol": hit["symbol"],
+                      "kind": hit["kind"]}
+            # handler 绑定进漂移合同（复验 A3）：同键换绑或 handler 体变化
+            # 都改变 discovered 记录 → manifest hash 漂移
+            handler = hit.get("handler", "")
+            if handler:
+                record["handler"] = handler
+                h_node = _find_in_ctx(ctx, handler)
+                if h_node is not None:
+                    record["handler_body_hash"] = body_hash(h_node)
+                else:
+                    record["handler_body_hash"] = ""
+            discovered.append(record)
     declared_set = {(f, s) for f, s in declared}
     undeclared = [d for d in discovered
                   if (d["file"], d["symbol"]) not in declared_set]
@@ -788,6 +817,16 @@ def discovered_entries_diff(
         ctx = index.ctx_for(f)
         if ctx is None or not _file_declares_symbol(ctx, s):
             missing.append({"file": f, "symbol": s})
+    # 反向注销差集（复验 A3）：声明了 registration 期望的锚点，发现器却
+    # 没扫到——注册被删除（即使函数保留）即漂移，阻断生成
+    for entry in declared_entries_meta:
+        key = (entry["file"], entry["symbol"])
+        if key in discovered_syms:
+            continue
+        if entry.get("registration"):
+            missing.append({"file": entry["file"], "symbol": entry["symbol"],
+                            "reason": "registration_removed",
+                            "expected": entry["registration"]})
     return {"discovered": discovered, "undeclared": undeclared,
             "missing": missing}
 
@@ -887,7 +926,11 @@ def build_manifest() -> tuple[dict, list[str]]:
         PROJECT_ROOT,
         declared=[(e.source[0], e.source[1])
                   for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY],
-        package_dirs=ProjectIndex.PACKAGE_DIRS)
+        package_dirs=ProjectIndex.PACKAGE_DIRS,
+        declared_entries_meta=[
+            {"file": e.source[0], "symbol": e.source[1],
+             "registration": e.registration}
+            for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY])
     for hit in discovery["undeclared"]:
         problems.append(
             f"undiscovered entry not in inventory: {hit['file']}#{hit['symbol']}")
@@ -896,6 +939,28 @@ def build_manifest() -> tuple[dict, list[str]]:
             f"declared entry anchor missing in source: {miss['file']}#{miss['symbol']}")
 
     # 入口 inventory（计划 §6.2 第 1 点）：声明入口 + 流程族 + 显式边界
+    def _contract_digests(
+            entry) -> dict:
+        """合同/配置依赖摘要（复验 A3）：(file, line_filter_regex) →
+        LF 归一内容（可按行过滤）的 sha256——合同/配置变化漂移 manifest。"""
+        out = {}
+        for file_rel, line_filter in (entry.contract_files or ()):
+            path = PROJECT_ROOT / file_rel
+            try:
+                if not path.exists():
+                    out[f"{file_rel}#missing"] = ""
+                    continue
+                raw = path.read_bytes().replace(b"\r\n", b"\n")
+                if line_filter:
+                    pat = re.compile(line_filter)
+                    kept = [ln for ln in raw.decode("utf-8", "replace").split("\n")
+                            if pat.search(ln)]
+                    raw = ("\n".join(kept)).encode("utf-8")
+                out[file_rel] = hashlib.sha256(raw).hexdigest()
+            except OSError:
+                out[f"{file_rel}#error"] = ""
+        return out
+
     def _source_digest(file_rel: str) -> str:
         """非 Python 锚点的确定性内容摘要（验收报告 M4）：Rust/配置/合同
         文件变化必须漂移 manifest——只有名称/路径不构成有效漂移合同。
@@ -910,17 +975,31 @@ def build_manifest() -> tuple[dict, list[str]]:
         except OSError:
             return ""
 
-    entries_serialized = [
-        {
+    discovered_records = {
+        (d["file"], d["symbol"]): d for d in discovery["discovered"]}
+    entries_serialized = []
+    for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY:
+        record = {
             "entry_id": e.entry_id, "family": e.family, "root_kind": e.root_kind,
             "source": {"file": e.source[0], "symbol": e.source[1]},
             "origin": e.origin, "notes": e.notes, "boundary": e.boundary,
+            # 注册证据期望（复验 A3）：反向差集的声明侧
+            **({"registration": e.registration} if e.registration else {}),
             # 非 Python 锚点附源码摘要（空 = 文件缺失，同样可审计）
             **({"source_digest": _source_digest(e.source[0])}
                if not e.source[0].endswith(".py") else {}),
         }
-        for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY
-    ]
+        # worker 注册的 handler 绑定进 manifest（复验 A3）：同键换绑或
+        # handler 体变化都会改变 discovered 记录 → hash 漂移
+        d = discovered_records.get((e.source[0], e.source[1]))
+        if d and d.get("handler"):
+            record["registration_handler"] = d["handler"]
+            record["registration_handler_body_hash"] = d.get(
+                "handler_body_hash", "")
+        # 合同/配置摘要（复验 A3 剩余合同）
+        if e.contract_files:
+            record["contract_digests"] = _contract_digests(e)
+        entries_serialized.append(record)
     boundaries = [
         {"entry_id": e.entry_id, "boundary": e.boundary, "reason": e.notes,
          "source": {"file": e.source[0], "symbol": e.source[1]}}

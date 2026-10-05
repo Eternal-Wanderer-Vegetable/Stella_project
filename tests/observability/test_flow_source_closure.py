@@ -227,3 +227,78 @@ class TestClosureAliasAndUnresolved:
         assert "unresolved" in resolutions
         assert any("helper.py#gone_fn" in b["target"]
                    for b in closure["boundaries"])
+
+
+class TestModuleAliasAndReverseDiff:
+    """复验报告 A3：模块别名解析、反向注销差集、handler 换绑漂移。"""
+
+    def test_module_import_alias_resolves_and_drifts(self, fixture_root):
+        """`import pkg.helper as h` 调 h.normalize → 解析到模块内 normalize，
+        体变化必须漂移（旧实现记录不存在的 helper.py#h.normalize）。"""
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 1\n")
+        _write(fixture_root / "pkg" / "caller.py",
+               "import pkg.helper as h\n\n\n"
+               "def entry(v):\n    return h.normalize(v)\n")
+        before = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        helpers = {(c["file"], c["qualname"]) for c in before["symbols"]}
+        assert ("pkg/helper.py", "normalize") in helpers, (
+            "模块别名必须解析到真实符号")
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 2\n")
+        after = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        assert before["closure_hash"] != after["closure_hash"]
+
+    def test_removed_registration_is_reverse_missing(self, fixture_root):
+        """注册删除但函数保留 → declared_entries_meta 反向差集必须报 missing。"""
+        _write(fixture_root / "pkg" / "tick.py",
+               "from nonebot_plugin_apscheduler import scheduler\n\n\n"
+               "@scheduler.scheduled_job('interval', seconds=30)\n"
+               "async def tick_job():\n    return None\n")
+        declared_meta = [{"file": "pkg/tick.py", "symbol": "tick_job",
+                          "registration": "lifecycle_hook"}]
+        before = discovered_entries_diff(
+            fixture_root, declared=[("pkg/tick.py", "tick_job")],
+            package_dirs=["pkg"], declared_entries_meta=declared_meta)
+        assert before["missing"] == []
+        # 删除注册装饰器，保留函数
+        _write(fixture_root / "pkg" / "tick.py",
+               "async def tick_job():\n    return None\n")
+        after = discovered_entries_diff(
+            fixture_root, declared=[("pkg/tick.py", "tick_job")],
+            package_dirs=["pkg"], declared_entries_meta=declared_meta)
+        assert any(m["reason"] == "registration_removed"
+                   for m in after["missing"]), "注销必须被反向差集抓住"
+
+    def test_worker_handler_rebinding_drifts(self, fixture_root):
+        """register_handler 同键换绑 handler → discovered 记录变化（漂移）。"""
+        _write(fixture_root / "pkg" / "worker.py",
+               "def register_handler(job_type, handler):\n"
+               "    return None\n\n\n"
+               "def _handle_a():\n    return 1\n\n\n"
+               "def _handle_b():\n    return 2\n\n\n"
+               "register_handler('resolve', _handle_a)\n")
+        before = discovered_entries_diff(
+            fixture_root, declared=[("pkg/worker.py", "resolve")],
+            package_dirs=["pkg"])
+        rec_before = next(d for d in before["discovered"]
+                          if d["symbol"] == "resolve")
+        assert rec_before["handler"] == "_handle_a"
+        # 换绑到 _handle_b：discovered 记录变化（handler + 体哈希）
+        _write(fixture_root / "pkg" / "worker.py",
+               "def register_handler(job_type, handler):\n"
+               "    return None\n\n\n"
+               "def _handle_a():\n    return 1\n\n\n"
+               "def _handle_b():\n    return 2\n\n\n"
+               "register_handler('resolve', _handle_b)\n")
+        after = discovered_entries_diff(
+            fixture_root, declared=[("pkg/worker.py", "resolve")],
+            package_dirs=["pkg"])
+        rec_after = next(d for d in after["discovered"]
+                         if d["symbol"] == "resolve")
+        assert rec_after["handler"] == "_handle_b"
+        assert rec_before["handler_body_hash"] != rec_after["handler_body_hash"]
