@@ -898,11 +898,15 @@ def build_manifest() -> tuple[dict, list[str]]:
     # 入口 inventory（计划 §6.2 第 1 点）：声明入口 + 流程族 + 显式边界
     def _source_digest(file_rel: str) -> str:
         """非 Python 锚点的确定性内容摘要（验收报告 M4）：Rust/配置/合同
-        文件变化必须漂移 manifest——只有名称/路径不构成有效漂移合同。"""
+        文件变化必须漂移 manifest——只有名称/路径不构成有效漂移合同。
+
+        换行归一为 LF 再哈希：Windows autocrlf 检出 CRLF、CI 检出 LF，
+        原始字节哈希会让同一提交在两端算出不同 digest（CI 实测）。
+        """
         path = PROJECT_ROOT / file_rel
         try:
-            return hashlib.sha256(
-                path.read_bytes()).hexdigest() if path.exists() else ""
+            raw = path.read_bytes().replace(b"\r\n", b"\n")
+            return hashlib.sha256(raw).hexdigest() if path.exists() else ""
         except OSError:
             return ""
 

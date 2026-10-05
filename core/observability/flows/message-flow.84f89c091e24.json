@@ -1953,7 +1953,7 @@
      "file": "memory_rust/native/src/promotion.rs",
      "symbol": "promote"
     },
-    "source_digest": "8e0c6a72ffc603dbf5dc64a0f7700ff1c07046d1c8e9aa4423794e6d1c2e2ed2"
+    "source_digest": "789cf67faf33e2ca5a742a2b9066baa983c277853d8a2924760f7d0928755da6"
    }
   ],
   "families": [
@@ -109361,6 +109361,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "49f11f73f0f5c977a5397640269f6cb8c1b04f2a",
+ "source_revision": "64a29172eaf0d228be333f66f53406ba94c3d10f",
  "topology_version": "2026.10.04"
 }
