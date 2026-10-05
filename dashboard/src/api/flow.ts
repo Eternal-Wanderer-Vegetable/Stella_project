@@ -194,7 +194,18 @@ export interface FlowMessageIo {
     // 修复计划 §6.3（M5）：exact=注册表存储键精确命中；legacy_partial=旧兜底
     identity_state?: string;
   } | null;
-  output: { lines: string[]; count: number };
+  output: {
+    lines: string[];
+    count: number;
+    // 逐段投递事实（验收报告 M6）：原 part_index + status，failed/unknown 可见
+    segments?: Array<{
+      part_index: number;
+      text: string;
+      status: string;
+      platform_message_id: string | null;
+      acknowledged_at_utc: string | null;
+    }>;
+  };
   notes: string[];
 }
 

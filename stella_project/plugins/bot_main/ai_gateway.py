@@ -279,6 +279,14 @@ def _flow_root_or_create(event: MessageEvent, root_kind: str):
     try:
         from core.observability import message_flow
 
+        # 缓存淘汰后同事件重入（验收报告 M6）：先按来源键回查活跃注册表
+        # 复用原 root——绝不为同一事件再造第二个 root（旧 root 悬空、迟到
+        # 结束误关替换 root 的领域探针即此形状）
+        reused = message_flow.by_source_key(_flow_source_key(event))
+        if reused is not None and not reused.ended:
+            _flow_roots[_flow_key(event)] = reused
+            _flow_roots.move_to_end(_flow_key(event))
+            return reused
         return message_flow.begin_trace(
             root_kind=root_kind, platform="qq",
             scope=_flow_scope_of(event),
@@ -476,6 +484,12 @@ try:
             key = _flow_key(event)
             if key in _flow_roots:
                 return
+            # 淘汰后重入：来源键回查复用（验收报告 M6），不造第二 root
+            reused = message_flow.by_source_key(_flow_source_key(event))
+            if reused is not None and not reused.ended:
+                _flow_roots[key] = reused
+                _flow_roots.move_to_end(key)
+                return
             root = message_flow.begin_trace(
                 root_kind="qq_private" if isinstance(event, PrivateMessageEvent) else "qq_passive",
                 platform="qq",
@@ -489,6 +503,10 @@ try:
                 source_message_id=str(event.message_id),
                 source_message_key=_flow_source_key(event),
             )
+            # occurrence token（验收报告 M6）：compare-and-pop 的核对凭据，
+            # 结束路径只关闭携带本 token 的 occurrence，一次
+            with contextlib.suppress(Exception):
+                root._ingress_token = uuid.uuid4().hex
             _flow_roots[key] = root
             _flow_roots.move_to_end(key)
             _evict_flow_roots()
@@ -514,6 +532,15 @@ try:
             if (root is not None and not root.ended
                     and (not root.conversation_key
                          or root.conversation_key == _flow_conversation_key(event))):
+                # occurrence compare-and-pop（验收报告 M6）：同一 occurrence
+                # 的重复结束幂等；token 已消费即跳过，绝不二次关闭
+                token = getattr(root, "_ingress_token", "")
+                consumed = getattr(root, "_ingress_end_token", "")
+                if token and consumed == token:
+                    return
+                if token:
+                    with contextlib.suppress(Exception):
+                        root._ingress_end_token = token
                 message_flow.end_trace(
                     root, outcome=root.outcome or "passive_only")
         except Exception:

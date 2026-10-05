@@ -526,9 +526,10 @@ def message_io(trace_id: str) -> dict | None:
     started_key = _norm_key(started_utc)
     end_key = _window_end(started_utc, ended_utc)
 
-    # ---- 输出：业务回执优先（O02——root 分类不再决定输出有无）----
+    # ---- 输出：业务回执优先（O02 + 验收报告 M6：保留原片段事实）----
     receipt_lines: list[str] = []
     receipt_notes: list[str] = []
+    segments: list[dict] = []
     tried_receipts = False
     rconn = None
     try:
@@ -536,17 +537,24 @@ def message_io(trace_id: str) -> dict | None:
         if rconn is not None and _table_exists(rconn, "social_deliveries"):
             tried_receipts = True
             rows = rconn.execute(
-                "SELECT text, status FROM social_deliveries WHERE trace_id = ? "
+                "SELECT part_index, text, status, platform_message_id, "
+                "acknowledged_at_utc FROM social_deliveries WHERE trace_id = ? "
                 "ORDER BY part_index ASC LIMIT ?", (trace_id, _OUTPUT_MAX_LINES + 1),
             ).fetchall()
-            ack = [t for (t, s) in rows if s == "acknowledged" and t]
-            other = [(t, s) for (t, s) in rows if s != "acknowledged"]
+            # 片段事实按原 part_index 保留（含 failed/unknown），不压缩序号
+            segments = [
+                {"part_index": r[0], "text": r[1], "status": r[2],
+                 "platform_message_id": r[3], "acknowledged_at_utc": r[4]}
+                for r in rows
+            ]
+            ack = [s["text"] for s in segments if s["status"] == "acknowledged" and s["text"]]
+            other = [s for s in segments if s["status"] != "acknowledged"]
             receipt_lines = ack[:_OUTPUT_MAX_LINES]
             if len(ack) > _OUTPUT_MAX_LINES:
                 receipt_notes.append(f"仅展示前 {_OUTPUT_MAX_LINES} 行回执")
             if other:
-                n_unknown = sum(1 for _, s in other if s == "unknown")
-                n_failed = sum(1 for _, s in other if s == "failed")
+                n_unknown = sum(1 for s in other if s["status"] == "unknown")
+                n_failed = sum(1 for s in other if s["status"] == "failed")
                 if n_unknown:
                     receipt_notes.append(f"{n_unknown} 段发送状态未知")
                 if n_failed:
@@ -648,6 +656,9 @@ def message_io(trace_id: str) -> dict | None:
             notes.append(source_note)
     lines = (lines + command_lines)[:_OUTPUT_MAX_LINES]
 
+    # 全部失败时也保留片段事实（验收报告 M6：不再丢掉具体失败说明）
+    if segments and not any(s["status"] == "acknowledged" for s in segments):
+        notes.append("没有确认送达的片段：以下为逐段投递事实")
     if root_kind in _BACKGROUND_ROOTS:
         notes.append("后台任务：无消息输入输出")
     if root_kind == "qq_passive" and not lines:
@@ -661,7 +672,13 @@ def message_io(trace_id: str) -> dict | None:
                      f"{identity_state or 'missing'}）")
     return {
         "input": inp,
-        "output": {"lines": lines, "count": len(lines)},
+        "output": {
+            "lines": lines,
+            "count": len(lines),
+            # 逐段投递事实（验收报告 M6）：原 part_index + status，ack 文本
+            # 之外的 failed/unknown 片段同样可见
+            "segments": segments[:_OUTPUT_MAX_LINES],
+        },
         "notes": notes,
     }
 

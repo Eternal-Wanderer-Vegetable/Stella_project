@@ -368,6 +368,11 @@ class TestPrivateChatIoIdentity:
                           headers=auth_header).json()["data"]
         assert data["output"]["lines"] == ["私聊回复第一段"]
         assert any("发送失败" in n for n in data["notes"])
+        # 逐段投递事实（验收报告 M6）：原 part_index + status 保留
+        segs = data["output"]["segments"]
+        assert [s["part_index"] for s in segs] == [0, 1]
+        assert segs[0]["status"] == "acknowledged"
+        assert segs[1]["status"] == "failed" 
 
 
 class TestCommandReplyVisible:

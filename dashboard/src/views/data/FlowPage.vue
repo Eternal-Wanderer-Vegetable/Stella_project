@@ -941,6 +941,28 @@ const rootKindOptions = computed(() => [
                       : `展开全部 ${store.io.output.lines.length} 行` }}
                   </v-btn>
                 </div>
+                <!-- 逐段投递事实（验收报告 M6）：failed/unknown 片段可见 -->
+                <div
+                  v-if="store.io.output.segments
+                    && store.io.output.segments.some((s) => s.status !== 'acknowledged')"
+                  class="mt-1"
+                >
+                  <div
+                    v-for="seg in store.io.output.segments"
+                    :key="seg.part_index"
+                    class="d-flex align-center ga-2 text-caption py-0.5"
+                  >
+                    <v-chip
+                      size="x-small"
+                      label
+                      :color="seg.status === 'acknowledged'
+                        ? 'success' : (seg.status === 'failed' ? 'error' : 'warning')"
+                    >
+                      #{{ seg.part_index }} {{ seg.status }}
+                    </v-chip>
+                    <span class="io-text flex-grow-1">{{ seg.text || '（空）' }}</span>
+                  </div>
+                </div>
                 <div v-else class="text-caption text-medium-emphasis">（无）</div>
               </div>
             </div>

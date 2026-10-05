@@ -380,25 +380,68 @@ def _migrate(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
 
 
+def _backup_flow_db(path: Path) -> str:
+    """迁移前一致性备份（验收报告 M6）：SQLite backup API，非文件拷贝。"""
+    try:
+        stamp = utc_now().strftime("%Y%m%dT%H%M%S")
+        backup_path = path.parent / f"{path.name}.pre-flow-{stamp}.bak"
+        if backup_path.exists():
+            return str(backup_path)
+        src_conn = sqlite3.connect(str(path))
+        try:
+            dst = sqlite3.connect(str(backup_path))
+            try:
+                src_conn.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src_conn.close()
+        return str(backup_path)
+    except Exception as e:
+        log_sqlite_error("message_flow._backup_flow_db", e)
+        return ""
+
+
 def _connect() -> sqlite3.Connection | None:
-    """打开 flow 库并幂等建表/迁移；失败返回 None（旁路：绝不抛）。"""
+    """打开 flow 库并幂等建表/迁移；失败返回 None（旁路：绝不抛）。
+
+    验收报告 M6：初始化（建表→补列→建索引）在**显式单事务**内完成，
+    失败整体 ROLLBACK——绝不留下「identity 列已加、索引缺失」的半迁移
+    状态；已有数据的库在事务前做一次 backup API 一致性备份。
+    """
     try:
         path = db_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(path), timeout=10.0)
         key = str(path)
         if not _flow_initialized.get(key):
+            made_backup = False
+            if path.exists() and path.stat().st_size > 0:
+                made_backup = bool(_backup_flow_db(path))
             # 顺序（旧库迁移正确性）：先建缺失表 → 再 ALTER 补列 → 最后建
             # 索引。索引若在补列前创建，旧库会因缺列而失败（schema 3 教训）。
-            for ddl in _SCHEMA:
-                if ddl.lstrip().startswith("CREATE TABLE"):
-                    conn.execute(ddl)
-            _migrate(conn)
-            for ddl in _SCHEMA:
-                if not ddl.lstrip().startswith("CREATE TABLE"):
-                    conn.execute(ddl)
-            conn.commit()
-            _flow_initialized[key] = True
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                for ddl in _SCHEMA:
+                    if ddl.lstrip().startswith("CREATE TABLE"):
+                        conn.execute(ddl)
+                _migrate(conn)
+                for ddl in _SCHEMA:
+                    if not ddl.lstrip().startswith("CREATE TABLE"):
+                        conn.execute(ddl)
+                conn.execute("COMMIT")
+                _flow_initialized[key] = True
+                if made_backup:
+                    import contextlib as _cl
+
+                    with _cl.suppress(Exception):
+                        from nonebot import logger
+
+                        logger.info(f"💾 [Flow] 迁移前备份: {path.name} → .pre-flow-*.bak")
+            except Exception:
+                with contextlib.suppress(Exception):
+                    conn.execute("ROLLBACK")
+                raise
         return conn
     except Exception as e:
         log_sqlite_error("message_flow._connect", e)
