@@ -128,3 +128,61 @@ def can_generate_question(
         return False, "no_valid_template"
     
     return True, "ok"
+
+
+def validate_bridge_event(
+    bridge: BridgeEvidence | None,
+    contract: VerificationContract,
+) -> tuple[bool, str]:
+    """验证桥接事件是否合法（R5 §6.5）。
+    
+    桥接事件要求：
+    - 必须属于目标用户
+    - 必须在近期消息范围内
+    - 不能引用无关用户的动作
+    
+    Returns:
+        (is_valid, reason)
+    """
+    if not contract.bridge_event_requirement:
+        # 不需要桥接，直接通过
+        return True, "not_required"
+    
+    if bridge is None:
+        return False, "bridge_missing"
+    
+    if bridge.target_user_id != contract.fact_object_id:
+        return False, "bridge_target_mismatch"
+    
+    if not bridge.recent_message_ids:
+        return False, "bridge_no_evidence"
+    
+    return True, "ok"
+
+
+def select_question_variant(
+    contract: VerificationContract,
+    has_bridge: bool,
+) -> QuestionVariant | None:
+    """选择合适的问题变体（R5 §6.5）。
+    
+    选择规则：
+    - 如果有桥接事件，优先选择需要桥接的变体
+    - 如果没有桥接，只能选择不需要桥接的变体
+    - 如果没有合法变体，返回 None（跳过发送）
+    """
+    if not contract.question_variants:
+        return None
+    
+    # 优先选择匹配桥接要求的变体
+    for variant in contract.question_variants:
+        if variant.requires_bridge == has_bridge:
+            return variant
+    
+    # 如果没有完美匹配，且不需要桥接，选择第一个不需要桥接的变体
+    if not has_bridge:
+        for variant in contract.question_variants:
+            if not variant.requires_bridge:
+                return variant
+    
+    return None
