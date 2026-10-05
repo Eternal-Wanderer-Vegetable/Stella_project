@@ -77,6 +77,10 @@ def cons_env(tmp_path, monkeypatch):
     monkeypatch.setattr(consolidator, "append_consolidation_log", lambda entry: None)
     # 晋升侧同库 + Dummy 压缩器；清单例让本用例的 DB_PATH 生效
     monkeypatch.setattr(memory_manager, "DB_PATH", db)
+    # 本文件验证的是 **python 晋升路径** 的 flow 观测合同（merge/create/quota
+    # span 是 python 分支的节点）；native 后端有独立测试。钉住后端保证
+    # 本机装了 v18 native 时这些用例仍然测它们声称的东西。
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
     monkeypatch.setattr(
         memory_manager, "get_compressor",
         lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})(),
@@ -110,6 +114,9 @@ def mem_env(tmp_path, monkeypatch):
     db = tmp_path / "agent_memory.db"
     db.touch()
     monkeypatch.setattr(memory_manager, "DB_PATH", db)
+    # 本文件验证 python 晋升路径的 flow 观测合同（merge/create/quota 是
+    # python 分支节点）；native 后端有独立测试（test_memory_rust_promotion）。
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
     monkeypatch.setattr(
         memory_manager, "get_compressor",
         lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})(),
@@ -320,7 +327,7 @@ class TestPromotionRootGate:
         assert row is not None
         trace_id, origin, scope, outcome, _status = row
         assert origin == "spawn" and scope == "memory_shared" and outcome == "done"
-        # 后端决策：默认 python
+        # 后端决策：mem_env 钉了 python 后端（本文件只测 python 路径的观测）
         backend = _events(flow_db, trace_id, node_id="memory.promotion.backend",
                           kind="decision")
         assert backend and backend[0].reason_code == "python"

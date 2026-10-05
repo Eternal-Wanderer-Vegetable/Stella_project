@@ -42,6 +42,10 @@ def sharing_db_path(tmp_path, monkeypatch):
     conn.execute(schema.MEMORY_CANDIDATES_TABLE_DDL)
     conn.execute(schema.MEMORY_EVIDENCE_TABLE_DDL)
     conn.execute(schema.MEMORY_SCOPE_VERSIONS_TABLE_DDL)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_meta (k TEXT PRIMARY KEY, version INTEGER)"
+    )
+    conn.execute("INSERT OR REPLACE INTO schema_meta (k, version) VALUES ('version', 18)")
     from memory.pre_processors import _GROUP_MESSAGES_V16_DDL
 
     conn.execute(_GROUP_MESSAGES_V16_DDL)
