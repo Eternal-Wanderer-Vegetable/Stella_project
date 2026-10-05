@@ -34,8 +34,8 @@ _FACT = "f" * 16
 
 
 @pytest.fixture()
-def sharing_db(tmp_path, monkeypatch):
-    """正式 v18 形状的临时库：规范 DDL 全量建表。"""
+def sharing_db_path(tmp_path, monkeypatch):
+    """正式 v18 形状的临时库：规范 DDL 全量建表；返回 (conn, db 路径)。"""
     db = tmp_path / "sharing.db"
     conn = sqlite3.connect(db)
     conn.execute(schema.MEMORIES_TABLE_DDL)
@@ -66,8 +66,14 @@ def sharing_db(tmp_path, monkeypatch):
     conn.commit()
     # scope_versions.current_version 读 config.DB_PATH；指向临时库供断言
     monkeypatch.setattr(scope_versions, "DB_PATH", db)
-    yield conn
+    yield conn, db
     conn.close()
+
+
+@pytest.fixture()
+def sharing_db(sharing_db_path):
+    conn, _db = sharing_db_path
+    return conn
 
 
 def _insert_source_row(conn, row_id: int, *, user_id: str = _U1, conv: str = _CONV,
@@ -374,3 +380,60 @@ def test_grant_idempotent_when_already_active(sharing_db):
     ok, reason = _grant(sharing_db, row_id=11)
     assert ok and reason == "already_active"
     assert len(_user_shared_rows(sharing_db, "memory_candidates")) == 1
+
+
+# ── 真实检索暖缓存撤回（复核 F5 主验收） ────────────────────────────────
+
+
+def test_revoke_invisible_through_real_retrieval_warm_cache(
+    sharing_db_path, monkeypatch
+):
+    """grant→真实检索命中→revoke 提交→同进程暖缓存立即 miss。"""
+    import memory.retrieval_v2 as rv2
+    from memory.ownership import MemoryAccessScope
+
+    conn, db = sharing_db_path
+    monkeypatch.setattr(rv2, "DB_PATH", db)
+    # conftest 全局关 v2（legacy 回退直接返回空）；本用例验收的就是 v2 检索
+    monkeypatch.setattr(rv2, "MEMORY_V2_ENABLED", True)
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5("
+        "mem_id UNINDEXED, content, group_shared_space UNINDEXED, user_id UNINDEXED)"
+    )
+    _insert_source_row(conn, 11)
+    # 检索只读 memories（候选未晋升不召回），且要求 status='active'（精确小写）
+    _insert_private_fact(conn, table="memories", record_id="mem_cp", status="active")
+    conn.commit()
+
+    ok, reason = _grant(conn)
+    assert ok and reason == "granted", reason
+
+    scope = MemoryAccessScope(
+        space_key="space:space_1",
+        person_owner_key=person_owner_key("qq", _BOT, _U1),
+        subject_key=f"qq:{_U1}",
+        person_audiences=("USER_SHARED",),
+    )
+
+    def _copy_hits() -> list[str]:
+        result = rv2.retrieve_memories(
+            group_shared_space="space_1",
+            user_id=20001,
+            query="Lumi CP 关系",
+            trigger="reply",
+            access_scope=scope,
+        )
+        return [
+            m["id"] for m in result.conversation_memories
+            if str(m["id"]).endswith(":s1")
+        ]
+
+    hits = _copy_hits()
+    assert hits, f"授权后共享副本必须可召回，实际 {hits}"
+
+    ok, reason = revoke_sharing_authorization(conn, "qq", _BOT, _U1, _FACT)
+    conn.commit()
+    assert ok and reason == "revoked"
+
+    # 同进程暖缓存：版本键已随 revoke 严格推进，下一次检索立即换桶
+    assert _copy_hits() == [], "撤回后暖缓存必须立即不可见（复核 F5）"

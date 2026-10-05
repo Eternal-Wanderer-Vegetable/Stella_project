@@ -434,12 +434,44 @@ def _replicate_as_user_shared(
                 cursor, owner_key, subject_key, fact_key, src_id, copy_id, compat_space
             ):
                 copied += 1
+                if table_name == "memories":
+                    _sync_fts_for_copy(cursor, copy_id)
                 conn.execute(
                     "INSERT OR IGNORE INTO personal_memory_sharing_copies"
                     " (grant_id, table_name, record_id) VALUES (?, ?, ?)",
                     (grant_id, table_name, copy_id),
                 )
     return copied
+
+
+def _sync_fts_for_copy(cursor: sqlite3.Cursor, copy_id: str) -> None:
+    """为 memories 副本同步 FTS 行（召回路径可见性；缺表/异常静默跳过）。
+
+    撤回无需删 FTS 行：检索的 FTS JOIN 带 ``m.status = 'active'``，
+    副本 DEPRECATED 后两条召回路径（FTS/SQL）都自然排除。
+    """
+    present = cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+        " AND name = 'memories_fts'"
+    ).fetchone()
+    if not present:
+        return
+    try:
+        from memory.retriever import _segment_text
+
+        row = cursor.execute(
+            "SELECT content, group_shared_space, user_id FROM memories WHERE id = ?",
+            (copy_id,),
+        ).fetchone()
+        if not row:
+            return
+        cursor.execute(
+            "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id)"
+            " VALUES (?,?,?,?)",
+            (copy_id, _segment_text(str(row[0] or "")), str(row[1] or ""), str(row[2] or "")),
+        )
+    except sqlite3.OperationalError:
+        return
 
 
 def _write_copy_evidence(
