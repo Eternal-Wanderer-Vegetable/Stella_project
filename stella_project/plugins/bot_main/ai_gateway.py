@@ -446,6 +446,34 @@ def _flow_watch_finish(matcher) -> None:
                 text = _flow_reply_text(args[0])
                 if text:
                     _flow_checkpoint(fctx, "command.reply", summary=text[:500])
+                    # 完整回执路径（复验 B5）：命令回复进入 social_deliveries
+                    # （turn=trace、part 0、acknowledged；中立行不进群学习），
+                    # message_io 按回执优先读全文——500 字摘要不再是唯一通道
+                    try:
+                        from core.social.contracts import (
+                            DELIVERY_ACKNOWLEDGED,
+                            DeliveryReceipt,
+                        )
+                        from memory import social_store
+
+                        social_store.record_delivery(
+                            DeliveryReceipt(
+                                trace_id=fctx.trace_id,
+                                turn_id=fctx.trace_id,
+                                part_index=0,
+                                status=DELIVERY_ACKNOWLEDGED,
+                                text=text,
+                                scope=None,
+                                conversation_key=fctx.conversation_key,
+                                conversation_kind=fctx.conversation_kind,
+                                peer_id=fctx.peer_id or "",
+                                storage_session_id=fctx.storage_session_id,
+                                platform="qq",
+                                bot_id=fctx.bot_id,
+                            )
+                        )
+                    except Exception:
+                        pass  # 旁路：存档失败不拖垮命令回复
 
     matcher.finish = _finish
 
@@ -2850,16 +2878,21 @@ async def _start_cometa() -> None:
 
 
 async def _stop_cometa() -> None:
-    """受控关闭（§6.8）：泵先停，worker 子进程有界等待（未停的交恢复矩阵）。"""
+    """受控关闭（§6.8）：泵先停，worker 子进程有界等待（未停的交恢复矩阵）。
+
+    复验 B4：真实停止错误向外传播（由 _graceful_shutdown 的错误汇总记录），
+    不再内层吞掉——注册表清空放 finally 保证。
+    """
     global _cometa_runtime_instance
     if _cometa_runtime_instance is None:
         return
-    with contextlib.suppress(Exception):
+    try:
         from cometa import runtime as cometa_runtime
 
         await _cometa_runtime_instance.stop(grace_seconds=10.0)
         cometa_runtime.set_current(None)
-    _cometa_runtime_instance = None
+    finally:
+        _cometa_runtime_instance = None
 
 
 async def _watch_plugin_sources() -> None:
@@ -4157,6 +4190,28 @@ async def _graceful_shutdown() -> None:
     """
     lifecycle = _lifecycle_root("_graceful_shutdown", "shutdown")
     outcome = "stopped"
+    stop_errors: list[str] = []
+    try:
+        return await _graceful_shutdown_body(lifecycle, stop_errors, outcome)
+    except asyncio.CancelledError:
+        _lifecycle_end(lifecycle, "cancelled", complete=False)
+        with contextlib.suppress(Exception):
+            from core.observability import message_flow as _mf
+
+            _mf.flush(timeout=3.0)
+        raise
+    except Exception:
+        _lifecycle_end(lifecycle, "shutdown_failed", complete=True)
+        with contextlib.suppress(Exception):
+            from core.observability import message_flow as _mf
+
+            _mf.flush(timeout=3.0)
+        raise
+
+
+async def _graceful_shutdown_body(lifecycle, stop_errors: list[str],
+                                  outcome: str) -> None:
+    """_graceful_shutdown 的原主体（复验 B4）：不重排资源停止顺序。"""
     if _stop_watcher_task is not None and _stop_watcher_task is not asyncio.current_task():
         _stop_watcher_task.cancel()
     if _hot_reload_watcher is not None:
@@ -4182,10 +4237,14 @@ async def _graceful_shutdown() -> None:
 
     shared = _rt_facade.peek_shared_facade()
     if shared is not None:
-        with contextlib.suppress(Exception):
+        try:
             await shared.drain()
-        with contextlib.suppress(Exception):
+        except Exception as e:
+            stop_errors.append(f"facade.drain: {e}")
+        try:
             await shared.stop()
+        except Exception as e:
+            stop_errors.append(f"facade.stop: {e}")
 
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions
@@ -4210,8 +4269,31 @@ async def _graceful_shutdown() -> None:
         _lifecycle_end(lifecycle, "stopped_with_errors", complete=True)
     else:
         _lifecycle_end(lifecycle, outcome, complete=True)
-    # 有界观测 flush：确保末尾观测提交落库（复验 A4），有界防拖垮退出
+    # 有界观测 flush：确保末尾观测提交落库（复验 B4：确认型——flush 后
+    # 核对 lifecycle root 的 producer_ended/integrity 已落账）
     with contextlib.suppress(Exception):
         from core.observability import message_flow as _mf
 
         _mf.flush(timeout=3.0)
+        _row = None
+        conn = None
+        try:
+            import sqlite3
+
+            from core.observability import message_flow as _mf2
+
+            conn = sqlite3.connect(str(_mf2.db_path()), timeout=5.0)
+            _row = conn.execute(
+                "SELECT producer_ended, integrity FROM message_traces "
+                "WHERE trace_id=? AND root_kind='lifecycle'",
+                (lifecycle.trace_id,)).fetchone()
+        except Exception:
+            pass
+        finally:
+            with contextlib.suppress(Exception):
+                conn.close()
+        if _row is None or not _row[0]:
+            from nonebot import logger
+
+            logger.warning(
+                "[Shutdown] lifecycle 观测未能确认落账（降级：可能丢末尾事件）")
