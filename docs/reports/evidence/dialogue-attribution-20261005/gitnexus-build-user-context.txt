@@ -1,0 +1,108 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/pre_processors.py:_build_user_context_v2",
+    "name": "_build_user_context_v2",
+    "kind": "Function",
+    "filePath": "memory/pre_processors.py",
+    "startLine": 854,
+    "endLine": 923
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory/pre_processors.py:build_user_context",
+        "name": "build_user_context",
+        "filePath": "memory/pre_processors.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:config/spaces.py:resolve_space",
+        "name": "resolve_space",
+        "filePath": "config/spaces.py"
+      },
+      {
+        "uid": "Function:memory/conversation_identity.py:build_identity_capsule",
+        "name": "build_identity_capsule",
+        "filePath": "memory/conversation_identity.py"
+      },
+      {
+        "uid": "Function:memory/conversation_identity.py:get_identity_revision",
+        "name": "get_identity_revision",
+        "filePath": "memory/conversation_identity.py"
+      },
+      {
+        "uid": "Function:memory/ownership.py:scope_for_chat_context",
+        "name": "scope_for_chat_context",
+        "filePath": "memory/ownership.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:_load_preferred_address",
+        "name": "_load_preferred_address",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:_read_stable_profile",
+        "name": "_read_stable_profile",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/retrieval_v2.py:retrieve_memories",
+        "name": "retrieve_memories",
+        "filePath": "memory/retrieval_v2.py"
+      },
+      {
+        "uid": "Function:memory/retrieval_v2.py:retrieve_memories_emb",
+        "name": "retrieve_memories_emb",
+        "filePath": "memory/retrieval_v2.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:core/context.py:ChatContext.behavior_constraints",
+        "name": "behavior_constraints",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.conversation_memories",
+        "name": "conversation_memories",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.identity_capsule",
+        "name": "identity_capsule",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.identity_revision",
+        "name": "identity_revision",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.memories_for_prompt",
+        "name": "memories_for_prompt",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.memory_mode",
+        "name": "memory_mode",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.memory_trace",
+        "name": "memory_trace",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.user_profile",
+        "name": "user_profile",
+        "filePath": "core/context.py"
+      }
+    ]
+  },
+  "processes": []
+}

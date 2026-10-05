@@ -1,0 +1,158 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user",
+    "name": "_proactive_at_user",
+    "kind": "Function",
+    "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+    "startLine": 3102,
+    "endLine": 3346
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:proactive_speak_job",
+        "name": "proactive_speak_job",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/observability/message_flow.py:begin_trace",
+        "name": "begin_trace",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:delivered_texts",
+        "name": "delivered_texts",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:new_trace_id",
+        "name": "new_trace_id",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:deliver_lines",
+        "name": "deliver_lines",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:memory/expression_learning.py:on_reply_sent",
+        "name": "on_reply_sent",
+        "filePath": "memory/expression_learning.py"
+      },
+      {
+        "uid": "Function:memory/participation/__init__.py:get_participation_manager",
+        "name": "get_participation_manager",
+        "filePath": "memory/participation/__init__.py"
+      },
+      {
+        "uid": "Function:memory/proactive.py:get_proactive",
+        "name": "get_proactive",
+        "filePath": "memory/proactive.py"
+      },
+      {
+        "uid": "Function:memory/proactive_gate.py:can_speak",
+        "name": "can_speak",
+        "filePath": "memory/proactive_gate.py"
+      },
+      {
+        "uid": "Function:memory/proactive_prompt.py:build_instruction",
+        "name": "build_instruction",
+        "filePath": "memory/proactive_prompt.py"
+      },
+      {
+        "uid": "Function:memory/proactive_prompt.py:is_proactive_skip",
+        "name": "is_proactive_skip",
+        "filePath": "memory/proactive_prompt.py"
+      },
+      {
+        "uid": "Function:memory/proactive_state.py:record_at",
+        "name": "record_at",
+        "filePath": "memory/proactive_state.py"
+      },
+      {
+        "uid": "Function:memory/proactive_target.py:pick_target",
+        "name": "pick_target",
+        "filePath": "memory/proactive_target.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:schedule_compact",
+        "name": "schedule_compact",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_check_reply_later",
+        "name": "_check_reply_later",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_checkpoint",
+        "name": "_flow_checkpoint",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_join_lines_naturally",
+        "name": "_join_lines_naturally",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user._at_end@3128:8",
+        "name": "_at_end",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_record_bot_lines",
+        "name": "_record_bot_lines",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_resolve_nickname",
+        "name": "_resolve_nickname",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_run_turn_via_engine",
+        "name": "_run_turn_via_engine",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_social_delivery_enabled",
+        "name": "_social_delivery_enabled",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Method:core/social/contracts.py:ConversationScope.for_qq#2",
+        "name": "for_qq",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Method:memory/participation/__init__.py:ParticipationManager.note_stella_spoke#4",
+        "name": "note_stella_spoke",
+        "filePath": "memory/participation/__init__.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:memory/proactive_target.py:ProactiveTarget.nickname",
+        "name": "nickname",
+        "filePath": "memory/proactive_target.py"
+      }
+    ]
+  },
+  "processes": []
+}

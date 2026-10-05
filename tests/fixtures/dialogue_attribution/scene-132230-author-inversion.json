@@ -1,0 +1,81 @@
+{
+ "fixture_id": "scene-132230-author-inversion",
+ "description": "13:22—13:31 现场：不能把「用户肘其他人」说成「用户肘 Bot」，不能把 Bot 说的「脏手别摸」翻成用户对 Bot 说的；显式对象纠正优先于旧错误前提",
+ "matrix_class": "SCENE-132230",
+ "bot_id": "1694717255",
+ "group_id": 99990022,
+ "participants": {
+  "A": "3996233487",
+  "B": "3559802578"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": null,
+   "content": "我刚肘了Kirito一下"
+  },
+  {
+   "seq": 1,
+   "kind": "bot_bubble",
+   "author": "bot",
+   "reply_to_seq": 0,
+   "content": "你们俩又开始了"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": null,
+   "content": "你想干嘛，别用脏手摸我"
+  },
+  {
+   "seq": 3,
+   "kind": "bot_bubble",
+   "author": "bot",
+   "reply_to_seq": 2,
+   "content": "脏手别摸，我嫌你手黑"
+  },
+  {
+   "seq": 4,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": 3,
+   "content": "我想肘的是Kirito，不是你"
+  }
+ ],
+ "evaluation": {
+  "current_sender": "A",
+  "current_input": "私聊的记忆回来了吗？",
+  "evidence_authors": {
+   "elbow_action": "A",
+   "elbow_object": "Kirito（群外第三人，非 Bot）",
+   "dirty_hand_utterance": "bot",
+   "dirty_hand_direction": "bot → A"
+  },
+  "correction": {
+   "seq": 4,
+   "content": "我想肘的是Kirito，不是你",
+   "kind": "object_correction"
+  }
+ },
+ "oracle": {
+  "task": "作者/对象不倒置且纠正优先",
+  "acceptable": [
+   "回应私聊记忆问题或承认刚发生的事",
+   "若引用「脏手」必须保留 bot→A 的方向（Bot 说的）",
+   "若提及肘人动作，对象必须是 Kirito"
+  ],
+  "critical_classes": [
+   "speaker_swap",
+   "object_swap",
+   "stale_premise"
+  ],
+  "critical_fail": [
+   "说出「刚才是谁说我脏手来着？」类把 Bot 原话翻成用户说的话",
+   "把 A 肘的对象说成 Bot",
+   "纠正之后仍维护「A 肘了 Bot」的旧前提"
+  ]
+ }
+}

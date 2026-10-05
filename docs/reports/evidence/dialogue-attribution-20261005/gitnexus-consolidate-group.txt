@@ -1,0 +1,74 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Method:memory/consolidator.py:MemoryConsolidator.consolidate_group#3",
+    "name": "consolidate_group",
+    "kind": "Method",
+    "filePath": "memory/consolidator.py",
+    "startLine": 592,
+    "endLine": 609
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "has_method": [
+      {
+        "uid": "Class:memory/consolidator.py:MemoryConsolidator",
+        "name": "MemoryConsolidator",
+        "filePath": "memory/consolidator.py"
+      }
+    ],
+    "calls": [
+      {
+        "uid": "Function:tests/test_short_term_attribution.py:test_consolidate_group_unpacks_senders",
+        "name": "test_consolidate_group_unpacks_senders",
+        "filePath": "tests/test_short_term_attribution.py"
+      },
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator.drain_group#2",
+        "name": "drain_group",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_39_consolidation_drain_",
+      "name": "Consolidation_drain_job → Alive",
+      "step_index": 3,
+      "step_count": 8
+    },
+    {
+      "id": "proc_46_consolidation_drain_",
+      "name": "Consolidation_drain_job → _row_trace_id",
+      "step_index": 3,
+      "step_count": 7
+    },
+    {
+      "id": "proc_65_consolidation_drain_",
+      "name": "Consolidation_drain_job → _new_id",
+      "step_index": 3,
+      "step_count": 6
+    },
+    {
+      "id": "proc_66_consolidation_drain_",
+      "name": "Consolidation_drain_job → _register",
+      "step_index": 3,
+      "step_count": 6
+    },
+    {
+      "id": "proc_67_consolidation_drain_",
+      "name": "Consolidation_drain_job → Dropped",
+      "step_index": 3,
+      "step_count": 6
+    }
+  ]
+}

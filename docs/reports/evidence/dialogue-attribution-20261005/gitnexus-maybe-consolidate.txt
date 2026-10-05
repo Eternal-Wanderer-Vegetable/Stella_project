@@ -1,0 +1,51 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/consolidator.py:maybe_consolidate",
+    "name": "maybe_consolidate",
+    "kind": "Function",
+    "filePath": "memory/consolidator.py",
+    "startLine": 1955,
+    "endLine": 1981
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_speak_impl",
+        "name": "_proactive_speak_impl",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:session_idle_check_job",
+        "name": "session_idle_check_job",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory/consolidator.py:_consolidate_with_flow",
+        "name": "_consolidate_with_flow",
+        "filePath": "memory/consolidator.py"
+      },
+      {
+        "uid": "Function:memory/consolidator.py:get_consolidator",
+        "name": "get_consolidator",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "processes": []
+}

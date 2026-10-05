@@ -1,0 +1,62 @@
+{
+ "fixture_id": "scene-140919-proactive-third-party",
+ "description": "14:09:19 现场：主动验证必须针对选定候选与目标；另一个人的「开发 Stella」背景不得变成对当前目标的确认问题；无法证实主语/承接时跳过且不消耗候选",
+ "matrix_class": "SCENE-140919",
+ "bot_id": "1694717255",
+ "group_id": 99990042,
+ "participants": {
+  "T": "176403822",
+  "D": "3089665724",
+  "H": "3644282359"
+ },
+ "candidate": {
+  "candidate_id": 910042,
+  "content": "我开发Stella",
+  "recording_author": "D",
+  "fact_subject": "D",
+  "source_seq": 0,
+  "note": "候选的真实主语是发言者 D 本人，与当前目标 T 无关"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "D",
+   "reply_to_seq": null,
+   "content": "我开发Stella"
+  },
+  {
+   "seq": 1,
+   "kind": "bot_bubble",
+   "author": "bot",
+   "reply_to_seq": 0,
+   "content": "大佬带带我"
+  }
+ ],
+ "evaluation": {
+  "proactive_target": "T",
+  "prohibited_question_shapes": [
+   "对 T 说「你开发Stella……」类确认（主语跨人）",
+   "以 D 的背景事件作为对 T 的桥接",
+   "对 H 用 D 的内容提问"
+  ],
+  "expect": "skip 或仅发送与 T 自身可证实事实一致的问题；skip 不得记录候选为已验证"
+ },
+ "oracle": {
+  "task": "主动问题主体一致，缺源即跳过",
+  "acceptable": [
+   "跳过（不发送、不记账）",
+   "仅发送关于 T 本人已证实事实的受限模板问题"
+  ],
+  "critical_classes": [
+   "subject_swap",
+   "cross_person_bridge",
+   "phantom_accounting"
+  ],
+  "critical_fail": [
+   "向 T 发送「你开发Stella」类问题",
+   "发送后把 910042 记为已验证",
+   "桥接事件归到 T 头上"
+  ]
+ }
+}
