@@ -1543,6 +1543,26 @@ def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
         conn.close()
 
 
+def _lookup_registered_ref(storage_session_id: int):
+    """按存储会话 ID 查注册表 ref（复核 F10）；未注册/异常返回 None。
+
+    调用方对 None 必须跳过并记原因——负存储 ID 本身不携带身份，绝不
+    从负号反推伪造私聊 ref。
+    """
+    from memory.conversation_registry import lookup_by_storage_session_id
+
+    try:
+        conn = sqlite3.connect(DB_PATH)
+    except Exception:
+        return None
+    try:
+        return lookup_by_storage_session_id(conn, int(storage_session_id))
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 @private_chat_handler.handle()
 async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
     """私聊主流程（计划 §6.2）：会话锁 → 注册/落库 → Pipeline → 逐条发送。
@@ -3955,12 +3975,29 @@ if scheduler is not None and SESSION_CONTEXT_ENABLED:
 
         会话结束时整合的理由：这一场对话的内容此前只以「压缩摘要」形式存在于
         内存，重启即失。结束时整合一次，把它沉淀为长期记忆的候选。
+
+        复核 F10 修复：key 可能是私聊的负存储 ID——先按注册表查可信
+        ConversationRef 再走统一入口；查不到的负 ID 记原因跳过（绝不从负号
+        反推身份伪造 ref），正群号保持旧路径。
         """
         for group_id in idle_session_groups():
             try:
-                if end_session(group_id):
+                if not end_session(group_id):
+                    continue
+                ref = _lookup_registered_ref(group_id)
+                if ref is not None:
+                    logger.info(
+                        f"💤 [Session] 会话 {ref.conversation_key} 空闲结束，"
+                        "按注册 ref 触发整合"
+                    )
+                    maybe_consolidate(conversation_ref=ref)
+                elif group_id > 0:
                     logger.info(f"💤 [Session] 群 {group_id} 会话空闲结束，触发整合")
                     maybe_consolidate(group_id)
+                else:
+                    logger.warning(
+                        f"⚠️ [Session] 会话 {group_id} 空闲结束但注册表无记录，跳过整合"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ 会话收尾异常（群 {group_id}）: {e}")
 
