@@ -347,6 +347,30 @@ def _flow_transition(fctx, *, from_node: str, to_node: str, **kw) -> None:
         pass
 
 
+def _lifecycle_root(hook: str, origin: str):
+    """生命周期钩子的独立 flow root（验收报告 M5）：静态锚点不能替代
+    运行事实——启动/停止的真实成功、失败、取消都要有 root 与终态。
+    fail-open：观测不可用绝不拖垮启动/停止路径。"""
+    try:
+        from core.observability import message_flow
+
+        return message_flow.begin_trace(
+            root_kind="lifecycle", platform="", scope="",
+            origin=origin, process_kind="lifecycle", trigger=hook)
+    except Exception:
+        return None
+
+
+def _lifecycle_end(ctx, outcome: str, *, complete: bool | None = None) -> None:
+    try:
+        from core.observability import message_flow
+
+        if ctx is not None and not ctx.ended:
+            message_flow.end_trace(ctx, outcome=outcome, complete=complete)
+    except Exception:
+        pass
+
+
 def _flow_set_outcome(fctx, outcome: str) -> None:
     try:
         if fctx is not None and not fctx.ended:
@@ -2673,8 +2697,10 @@ async def _start_scheduling() -> None:
     """启动调度 worker；迁移失败/初始化异常只停用本功能，绝不拖垮主进程。"""
     from config import SCHEDULING_ENABLED
 
+    lifecycle = _lifecycle_root("_start_scheduling", "startup")
     global _scheduling_runtime, _scheduling_service
     if not SCHEDULING_ENABLED:
+        _lifecycle_end(lifecycle, "disabled", complete=True)
         return
     try:
         _scheduling_runtime, _scheduling_service = _build_scheduling_stack()
@@ -2682,8 +2708,10 @@ async def _start_scheduling() -> None:
         logger.error(f"❌ [Scheduling] 初始化失败（含迁移检查），调度功能停用: {e}")
         _scheduling_runtime = None
         _scheduling_service = None
+        _lifecycle_end(lifecycle, "init_failed", complete=True)
         return
     await _scheduling_runtime.start()
+    _lifecycle_end(lifecycle, "started", complete=True)
 
 
 # ============================================================
@@ -2720,14 +2748,17 @@ async def _start_cometa() -> None:
     失败（TOML 非法/迁移失败）只停用 cometa，绝不拖垮主进程；
     COMETA_ENABLED=false 时零动作（现有聊天行为逐字节不变）。
     """
+    lifecycle = _lifecycle_root("_start_cometa", "startup")
     global _cometa_runtime_instance
     if not _cometa_enabled():
+        _lifecycle_end(lifecycle, "disabled", complete=True)
         return
     try:
         from cometa import runtime as cometa_runtime
 
         config = cometa_runtime.CometaConfig.load()
         if not config.enabled:
+            _lifecycle_end(lifecycle, "disabled", complete=True)
             return
         runtime = cometa_runtime.build_runtime(
             config,
@@ -2742,9 +2773,11 @@ async def _start_cometa() -> None:
         cometa_runtime.set_current(runtime)
         _cometa_runtime_instance = runtime
         logger.info("✅ [Cometa] 外部 Agent 任务层已装配（worker 子进程已启动）")
+        _lifecycle_end(lifecycle, "started", complete=True)
     except Exception as e:
         logger.error(f"❌ [Cometa] 初始化失败，cometa 停用: {e}")
         _cometa_runtime_instance = None
+        _lifecycle_end(lifecycle, "init_failed", complete=True)
 
 
 async def _stop_cometa() -> None:
@@ -2798,8 +2831,10 @@ if ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED and ASTRBOT_PLUGIN_HOT_RELOAD_WATCH:
     @get_driver().on_startup
     async def _start_hot_reload_watcher() -> None:
         # 插件与能力装配都挂在 on_startup 上，这里排在它们之后拿到的才是完整清单
+        lifecycle = _lifecycle_root("_start_hot_reload_watcher", "startup")
         global _hot_reload_watcher
         _hot_reload_watcher = asyncio.create_task(_watch_plugin_sources())
+        _lifecycle_end(lifecycle, "started", complete=True)
 
 
 # ============================================================
@@ -3922,9 +3957,11 @@ async def _start_stop_watcher() -> None:
     清残留必须放在最前面：上次硬杀可能留下文件，不清会导致新进程一启动就
     自杀——这是整个方案最致命的失败模式。
     """
+    lifecycle = _lifecycle_root("_start_stop_watcher", "startup")
     clear_stop_request()
     global _stop_watcher_task
     _stop_watcher_task = asyncio.create_task(watch_stop_request())
+    _lifecycle_end(lifecycle, "started", complete=True)
 
 
 async def watch_stop_request() -> None:
@@ -4049,6 +4086,8 @@ async def _graceful_shutdown() -> None:
 
     超时上界取 SHUTDOWN_GRACE_SECONDS，超时后放弃等待并告警。
     """
+    lifecycle = _lifecycle_root("_graceful_shutdown", "shutdown")
+    outcome = "stopped"
     if _stop_watcher_task is not None and _stop_watcher_task is not asyncio.current_task():
         _stop_watcher_task.cancel()
     if _hot_reload_watcher is not None:
@@ -4090,3 +4129,4 @@ async def _graceful_shutdown() -> None:
         from core.llm import usage_store
 
         usage_store.flush()
+    _lifecycle_end(lifecycle, outcome, complete=True)

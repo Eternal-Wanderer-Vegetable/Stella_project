@@ -103,6 +103,28 @@ export interface FlowNodeSpec {
   kind: string;
   derived?: boolean;
   opaque?: boolean;
+  // manifest schema3：真实源码锚点（验收报告 M5 闭包视图）
+  source_ref?: { file: string; symbol: string; body_hash: string };
+}
+
+export interface FlowClosureItem {
+  kind: string;
+  line: number;
+  target?: string;
+  resolved?: string;
+  [key: string]: unknown;
+}
+
+export interface FlowSourceClosure {
+  entry: { items: FlowClosureItem[]; counts: Record<string, number>; truncated?: boolean };
+  reachable_symbols: Array<{
+    file: string;
+    qualname: string;
+    body_hash: string;
+    resolution: string;
+  }>;
+  reachable_truncated?: boolean;
+  boundaries: Array<{ target: string; resolution: string }>;
 }
 
 export interface FlowEdgeSpec {
@@ -122,6 +144,8 @@ export interface FlowSpec {
   nodes: FlowNodeSpec[];
   edges: FlowEdgeSpec[];
   entry_roots: Record<string, string>;
+  // manifest schema3（验收报告 M5）：逐节点源码闭包与边界分类
+  source_closure?: Record<string, FlowSourceClosure>;
 }
 
 export interface MessageQuery {

@@ -365,6 +365,8 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
     # ── 后台运行与维护（计划 §6.5：social/scheduling/knowledge 入口）──
     _N("social.worker.run_due", "社交 worker 到期租约处理", "ops", "entry",
        ("memory/social_worker.py", "run_due_jobs")),
+    _N("ops.lifecycle", "生命周期钩子（启动/停止）", "ops", "entry",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "_start_scheduling")),
     _N("scheduled.runtime.tick", "预约调度 tick（租约/恢复/执行）", "ops", "entry",
        ("stella_project/plugins/bot_main/scheduling/runtime.py", "tick_once")),
     _N("scheduled.gate", "预约运行门控（静音/睡眠/冷却）", "ops", "gate",
@@ -530,6 +532,28 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("memory.promotion.create", "memory.promotion.quota"),
     EdgeSpec("memory.promotion.quota", "memory.promotion.commit"),
     EdgeSpec("memory.promotion.commit", "memory.maintenance.run", kind="cause", label="晋升后压缩"),
+    # 知识导入链（M5 孤岛收口）
+    EdgeSpec("knowledge.ingest.entry", "knowledge.parse"),
+    EdgeSpec("knowledge.parse", "knowledge.version"),
+    # 预约调度链（M5 孤岛收口）
+    EdgeSpec("scheduled.runtime.tick", "scheduled.gate"),
+    EdgeSpec("scheduled.gate", "scheduled.agent", kind="condition", label="到期运行"),
+    EdgeSpec("scheduled.agent", "scheduled.deliver"),
+    # 社交 worker 到期处理驱动效果结算
+    EdgeSpec("social.worker.run_due", "effect.resolve", kind="cause",
+             label="到期结算作业"),
+    # AstrBot 插件事件桥挂在能力并行之后
+    EdgeSpec("capability.fanout", "astrbot.bridge", kind="order"),
+    # 参与评分（background 活动面）挂在决策链之后
+    EdgeSpec("participation.decision", "participation.score", kind="order",
+             label="同一观察的活动面"),
+    # 流程观测 root 生命周期先于消息入口（M5 孤岛收口）
+    EdgeSpec("flow.ingress", "ingress.receive", label="群消息 root"),
+    EdgeSpec("flow.ingress", "ingress.private.receive", label="私聊消息 root"),
+    # 生命周期钩子（M5：真实启动/停止事实）
+    EdgeSpec("ops.lifecycle", "scheduled.runtime.tick", kind="cause",
+             label="启动调度器"),
+    EdgeSpec("ops.lifecycle", "cometa.claim", kind="cause", label="启动 worker"),
     # 参与度与主动决策（计划 §6.4：timer/主动@/群插话三前置 root）
     EdgeSpec("participation.decision", "participation.score_compute", kind="order"),
     EdgeSpec("participation.score_compute", "participation.mode"),
@@ -562,6 +586,8 @@ ENTRY_ROOTS: dict[str, str] = {
     "social_worker": "social.worker.run_due",
     "scheduled_task": "scheduled.runtime.tick",
     "knowledge_ingest": "knowledge.ingest.entry",
+    # 生命周期钩子（验收报告 M5：启动/停止真实运行事实）
+    "lifecycle": "ops.lifecycle",
 }
 
 # ---- 显式埋点边（修复计划 §6.4）：这些 (src, dst) 已在真实控制边界发出
