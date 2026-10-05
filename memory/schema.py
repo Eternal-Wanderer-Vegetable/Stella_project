@@ -59,9 +59,9 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v16：消息身份信封 + 会话身份声明表，见 memory/migrations.py
-# migrate_v16 与多人身份修复计划 §6.2/§6.3）
-SCHEMA_VERSION = 16
+# 当前 Schema 版本（v17：对话归属复发修复 - 候选验证合同 + 共享授权表，
+# 见 memory/migrations.py migrate_v17 与计划 §6.1/§6.3/§6.5）
+SCHEMA_VERSION = 17
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -294,6 +294,18 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
             ("relation_version", "INTEGER DEFAULT 0"),
         )
     ],
+    # v17：对话归属复发修复（2026-10-05 计划 §6.1/§6.3/§6.5）。
+    # 新增候选验证合同、身份解析器版本。默认值兼容旧行为。
+    (
+        "memory_candidates",
+        "verification_contract_json",
+        "ALTER TABLE memory_candidates ADD COLUMN verification_contract_json TEXT",
+    ),
+    (
+        "conversation_identity_claims",
+        "parser_version",
+        "ALTER TABLE conversation_identity_claims ADD COLUMN parser_version TEXT DEFAULT '2026-09-27'",
+    ),
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
