@@ -147,3 +147,83 @@ class TestEntryDiscovery:
         for info in externals.values():
             assert info["resolution"] == "external"
         assert isinstance(dynamic, list)
+
+
+class TestDiscoveryShapes:
+    """验收报告 M3：带参装饰器与模块级注册表达式必须被扫描到。"""
+
+    def test_argued_decorators_discovered(self, fixture_root):
+        """@scheduler.scheduled_job(...) 与 @matcher.handle() 是 ast.Call。"""
+        _write(fixture_root / "pkg" / "jobs.py", (
+            "from nonebot import get_driver, on_command\n"
+            "from nonebot_plugin_apscheduler import scheduler\n\n"
+            "cmd = on_command('/ping')\n\n\n"
+            "@cmd.handle()\n"
+            "async def ping_handler():\n"
+            "    return None\n\n\n"
+            "@scheduler.scheduled_job('interval', seconds=30)\n"
+            "async def tick_job():\n"
+            "    return None\n\n\n"
+            "@get_driver().on_startup\n"
+            "async def boot_hook():\n"
+            "    return None\n"))
+        found = discovered_entries_diff(
+            fixture_root, declared=[], package_dirs=["pkg"])
+        discovered = {(f["file"], f["symbol"], f["kind"])
+                      for f in found["discovered"]}
+        assert ("pkg/jobs.py", "ping_handler", "matcher_handler") in discovered
+        assert ("pkg/jobs.py", "tick_job", "lifecycle_hook") in discovered
+        assert ("pkg/jobs.py", "boot_hook", "lifecycle_hook") in discovered
+        assert ("pkg/jobs.py", "cmd", "matcher") in discovered
+
+    def test_worker_registration_expression_discovered(self, fixture_root):
+        """register_handler('x', fn) 不经赋值——此前完全漏检。"""
+        _write(fixture_root / "pkg" / "worker.py", (
+            "def register_handler(job_type, handler):\n"
+            "    return None\n\n\n"
+            "def _handle_job():\n"
+            "    return None\n\n\n"
+            "register_handler('resolve_effect', _handle_job)\n"))
+        found = discovered_entries_diff(
+            fixture_root, declared=[], package_dirs=["pkg"])
+        discovered = {(f["file"], f["symbol"], f["kind"])
+                      for f in found["discovered"]}
+        assert ("pkg/worker.py", "resolve_effect",
+                "worker_registration") in discovered
+
+
+class TestClosureAliasAndUnresolved:
+    """验收报告 M4：导入别名原名还原、不存在的 local 显式 unresolved。"""
+
+    def test_aliased_helper_body_drifts(self, fixture_root):
+        """`normalize as transform` 改 helper 体 → 闭包必须漂移。"""
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 1\n")
+        _write(fixture_root / "pkg" / "caller.py",
+               "from .helper import normalize as transform\n\n\n"
+               "def entry(v):\n    return transform(v)\n")
+        before = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        helpers = {(c["file"], c["qualname"]) for c in before["symbols"]}
+        # 解析到模块内**原名** normalize，而不是不存在的 transform
+        assert ("pkg/helper.py", "normalize") in helpers
+        _write(fixture_root / "pkg" / "helper.py",
+               "def normalize(v):\n    return v + 2\n")
+        after = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        assert before["closure_hash"] != after["closure_hash"]
+
+    def test_missing_local_callee_reports_unresolved(self, fixture_root):
+        """解析为 repo-local 但符号不存在 → 显式 unresolved，不静默。"""
+        _write(fixture_root / "pkg" / "caller.py",
+               "from .helper import gone_fn\n\n\n"
+               "def entry(v):\n    return gone_fn(v)\n")
+        closure = analyze_project_closure(
+            fixture_root, entry_files=[Path("pkg/caller.py")],
+            entry_symbols=["entry"])
+        resolutions = {b["resolution"] for b in closure["boundaries"]}
+        assert "unresolved" in resolutions
+        assert any("helper.py#gone_fn" in b["target"]
+                   for b in closure["boundaries"])

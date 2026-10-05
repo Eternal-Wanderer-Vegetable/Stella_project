@@ -175,20 +175,23 @@ class _ModuleContext:
         }
         # legacy 字符串映射（_resolve_call 兼容：绝对导入根 → 模块名）
         self.imports: dict[str, str] = {}
-        # 完整导入来源（跨文件解析用）：别名 → (module, level)
-        self.import_sources: dict[str, tuple[str, int]] = {}
+        # 完整导入来源（跨文件解析用）：别名 → (module, level, 原名)
+        # 验收报告 M4：`from x import extract as extract_signals` 此前丢失
+        # 原名 extract，闭包解析到不存在的 x#extract_signals
+        self.import_sources: dict[str, tuple[str, int, str]] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     name = alias.asname or alias.name
                     self.imports[name.split(".")[0]] = alias.name
-                    self.import_sources[name.split(".")[0]] = (alias.name, 0)
+                    self.import_sources[name.split(".")[0]] = (alias.name, 0, "")
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 for alias in node.names:
                     name = alias.asname or alias.name
                     self.imports[name] = module
-                    self.import_sources[name] = (module, node.level or 0)
+                    self.import_sources[name] = (module, node.level or 0,
+                                                 alias.name)
 
     def package_of(self) -> str:
         """当前文件所属包的模块名（相对导入的基准）。"""
@@ -388,7 +391,8 @@ class ProjectIndex:
     """
 
     PACKAGE_DIRS = ("core", "memory", "capability", "cometa", "knowledge",
-                    "webui", "config", "stella_project", "scripts")
+                    "webui", "config", "stella_project", "scripts",
+                    "astrbot_compat")
 
     def __init__(self, root: Path, package_dirs=None) -> None:
         self.root = root
@@ -437,7 +441,7 @@ class ProjectIndex:
             return f"local:{ctx.file_rel}#{root}"
         source = ctx.import_sources.get(root)
         if source is not None:
-            module, level = source
+            module, level, original = source
             if level:
                 # 相对导入：以当前包为基准上溯 level-1 层
                 pkg = ctx.package_of()
@@ -448,6 +452,9 @@ class ProjectIndex:
                 prefix = ".".join(parts)
                 module = f"{prefix}.{module}" if (prefix and module) else (
                     module or prefix)
+            # 别名还原原名（M4）：调用走别名，模块内符号是原名
+            if original and original != root:
+                target = original + target[len(root):]
             resolved = self._resolve_module_symbol(module, target)
             if resolved:
                 file_rel, qual = resolved
@@ -547,6 +554,11 @@ def reachable_symbols_cross(
                     continue
                 h_node = _find_in_ctx(index.ctx_for(f) or ctx, qual)
                 if h_node is None:
+                    # 解析为 repo-local 但符号不存在：显式 unresolved，
+                    # 不静默跳过（验收报告 M4）
+                    boundaries.setdefault(f"local:{f}#{qual}",
+                                          {"target": f"{f}#{qual}",
+                                           "resolution": "unresolved"})
                     continue
                 seen[key] = {
                     "file": f, "qualname": qual,
@@ -612,6 +624,9 @@ def analyze_project_closure(
                     target_ctx = index.ctx_for(f)
                     h_node = _find_in_ctx(target_ctx, qual) if target_ctx else None
                     if h_node is None:
+                        boundaries.setdefault(f"local:{f}#{qual}",
+                                              {"target": f"{f}#{qual}",
+                                               "resolution": "unresolved"})
                         continue
                     seen[key] = {
                         "file": f, "qualname": qual,
@@ -657,6 +672,10 @@ _ENTRY_HOOK_DECORATORS = frozenset({
     "on_startup", "on_shutdown", "on_bot_connect", "on_bot_disconnect",
     "scheduled_job",
 })
+# 模块级 worker/任务注册表达式（验收报告 M3）：register_handler(...) 等
+_ENTRY_REGISTRATION_CALLS = frozenset({
+    "register_handler", "register_worker", "add_handler", "register_job",
+})
 
 
 def _file_declares_symbol(ctx: _ModuleContext, symbol: str) -> bool:
@@ -679,12 +698,19 @@ def _file_declares_symbol(ctx: _ModuleContext, symbol: str) -> bool:
     return False
 
 
+def _decorator_name(deco: ast.AST) -> str:
+    """装饰器名（验收报告 M3）：带参装饰器是 ast.Call，需下钻一层取 func
+    （@scheduler.scheduled_job(...) / @matcher.handle() 此前全部漏检）。"""
+    target = deco.func if isinstance(deco, ast.Call) else deco
+    return getattr(target, "attr", "") or getattr(target, "id", "")
+
+
 def _scan_entries_in_file(ctx: _ModuleContext) -> list[dict]:
     found: list[dict] = []
     for node in ast.walk(ctx.tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for deco in node.decorator_list:
-                name = getattr(deco, "attr", "") or getattr(deco, "id", "")
+                name = _decorator_name(deco)
                 if name in _ENTRY_PATTERN_DECORATORS:
                     found.append({"symbol": node.name, "kind": "matcher_handler",
                                   "line": getattr(node, "lineno", 0)})
@@ -702,6 +728,27 @@ def _scan_entries_in_file(ctx: _ModuleContext) -> list[dict]:
                         found.append({"symbol": t.id,
                                       "kind": "matcher",
                                       "line": getattr(node, "lineno", 0)})
+        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            # 模块级注册表达式（M3）：register_handler("x", handler) 等，
+            # 不经赋值——此前完全漏检；符号取首个 Name 实参，否则取被调名
+            call = node.value
+            callee = getattr(call.func, "attr", "") \
+                or getattr(call.func, "id", "")
+            if callee in _ENTRY_REGISTRATION_CALLS:
+                first = call.args[0] if call.args else None
+                # 实参形状：Name（函数对象）或 str 常量（job 类型键，
+                # 如 register_handler("resolve_effect", _handle)）
+                if isinstance(first, ast.Name):
+                    symbol = first.id
+                elif isinstance(first, ast.Constant) and isinstance(
+                        first.value, str):
+                    symbol = first.value
+                else:
+                    symbol = (getattr(call.func, "attr", "")
+                              or getattr(call.func, "id", ""))
+                found.append({"symbol": symbol,
+                              "kind": "worker_registration",
+                              "line": getattr(node, "lineno", 0)})
     return found
 
 
@@ -730,8 +777,13 @@ def discovered_entries_diff(
     # 普通函数/嵌套 def/赋值目标都不算 missing——发现器只扫注册语句；
     # 非 Python 锚点（如 Rust）跳过存在性检查，由显式 boundary 承担。
     missing: list[dict] = []
+    discovered_syms = {(d["file"], d["symbol"]) for d in discovered}
     for f, s in sorted(declared_set):
         if not f.endswith(".py"):
+            continue
+        if (f, s) in discovered_syms:
+            # 发现器自己扫到的注册符号（如 register_handler("x", ...) 的
+            # 字符串键）不要求函数声明存在
             continue
         ctx = index.ctx_for(f)
         if ctx is None or not _file_declares_symbol(ctx, s):
@@ -844,11 +896,24 @@ def build_manifest() -> tuple[dict, list[str]]:
             f"declared entry anchor missing in source: {miss['file']}#{miss['symbol']}")
 
     # 入口 inventory（计划 §6.2 第 1 点）：声明入口 + 流程族 + 显式边界
+    def _source_digest(file_rel: str) -> str:
+        """非 Python 锚点的确定性内容摘要（验收报告 M4）：Rust/配置/合同
+        文件变化必须漂移 manifest——只有名称/路径不构成有效漂移合同。"""
+        path = PROJECT_ROOT / file_rel
+        try:
+            return hashlib.sha256(
+                path.read_bytes()).hexdigest() if path.exists() else ""
+        except OSError:
+            return ""
+
     entries_serialized = [
         {
             "entry_id": e.entry_id, "family": e.family, "root_kind": e.root_kind,
             "source": {"file": e.source[0], "symbol": e.source[1]},
             "origin": e.origin, "notes": e.notes, "boundary": e.boundary,
+            # 非 Python 锚点附源码摘要（空 = 文件缺失，同样可审计）
+            **({"source_digest": _source_digest(e.source[0])}
+               if not e.source[0].endswith(".py") else {}),
         }
         for e in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY
     ]
