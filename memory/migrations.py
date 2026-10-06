@@ -834,6 +834,91 @@ def migrate_v16(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v17(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v17：对话归属复发修复（2026-10-05 计划 §6.1/§6.3/§6.5）。
+
+    新增：
+    - memory_candidates.verification_contract_json：候选验证合同（JSON）
+    - conversation_identity_claims.parser_version：身份解析器版本
+    - personal_memory_sharing 表：事实级共享授权
+    - sharing_audit_log 表：授权操作审计
+
+    **additive**：不改旧列、不删行、默认值兼容旧行为。
+    """
+    from memory.personal_sharing import create_sharing_authorization_table
+
+    result = MigrationResult(version=17)
+
+    # 新增共享授权表
+    create_sharing_authorization_table(conn)
+
+    # 新增审计日志表
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sharing_audit_log (
+            audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation TEXT NOT NULL,
+            grant_id INTEGER,
+            bot_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            fact_key TEXT,
+            performed_at TEXT NOT NULL,
+            details TEXT
+        )
+    """)
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_audit_bot_user_time
+        ON sharing_audit_log(bot_id, user_id, performed_at DESC)
+    """)
+
+    result.notes.append(
+        "personal_memory_sharing / sharing_audit_log 已创建；"
+        "memory_candidates.verification_contract_json 等列由 additive 阶段补齐"
+    )
+
+    return result
+
+
+def migrate_v18(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v18：共享授权 owner 绑定与副本台账（2026-10-05 整改计划 P3，复核 F3/F4/F5/F13）。
+
+    新增：
+    - personal_memory_sharing.platform/owner_key/subject_key（additive 阶段补列）
+    - personal_memory_sharing_copies 副本台账表
+
+    回填：存量授权行的规范 owner 键（person:qq:{bot}:{user}）——检索缓存
+    版本读的就是这个键；旧行写过的 user:{uid} 是错误键（F5），直接覆写。
+    **additive**：不改旧列、不删行。
+    """
+    from memory.schema import create_sharing_copies_table
+
+    result = MigrationResult(version=18)
+
+    create_sharing_copies_table(conn)
+
+    # 回填存量授权行的规范归属绑定（v17 旧行三列为空）
+    cursor = conn.cursor()
+    backfilled = 0
+    if _columns(cursor, "personal_memory_sharing") and "owner_key" in _columns(
+        cursor, "personal_memory_sharing"
+    ):
+        cur = conn.execute(
+            "UPDATE personal_memory_sharing"
+            " SET owner_key = 'person:qq:' || CAST(bot_id AS TEXT) || ':' || CAST(user_id AS TEXT),"
+            "     subject_key = 'qq:' || CAST(user_id AS TEXT),"
+            "     platform = 'qq'"
+            " WHERE owner_key = ''"
+        )
+        backfilled = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    result.notes.append(
+        "personal_memory_sharing_copies 已创建；"
+        f"存量授权行规范 owner 键回填 {backfilled} 行；"
+        "platform/owner_key/subject_key 列由 additive 阶段补齐"
+    )
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -845,6 +930,8 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     14: migrate_v14,
     15: migrate_v15,
     16: migrate_v16,
+    17: migrate_v17,
+    18: migrate_v18,
 }
 
 

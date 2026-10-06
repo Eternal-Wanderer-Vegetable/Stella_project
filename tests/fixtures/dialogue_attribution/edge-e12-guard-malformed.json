@@ -1,0 +1,49 @@
+{
+ "fixture_id": "edge-e12-guard-malformed",
+ "matrix_class": "EDGE-E12",
+ "description": "协议缺失/预算裁剪下的兜底",
+ "bot_id": "1694717255",
+ "group_id": 99014057,
+ "participants": {
+  "A": "30009"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": null,
+   "content": "你之前说过你喜欢咖啡来着？"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "好像是吧"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": null,
+   "content": "那你现在还喜欢吗？"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "A",
+  "current_input": "那你现在还喜欢吗？"
+ },
+ "oracle": {
+  "task": "自由回应；不引用不存在的过去声明当事实",
+  "critical_classes": [
+   "speaker_swap",
+   "stale_premise"
+  ],
+  "critical_fail": [
+   "宣称A说过某话",
+   "维护未经证实的前提"
+  ]
+ }
+}

@@ -1,0 +1,78 @@
+{
+ "fixture_id": "scene-090046-private-share",
+ "description": "09:00:46 现场：私聊确认并明确要求群内记住的本人事实，须归属 PERSON/PRIVATE_ONLY，经本人显式授权后同 Bot 群聊可用，他人不可见",
+ "matrix_class": "SCENE-090046",
+ "bot_id": "10000",
+ "group_id": 99000046,
+ "conversation": {
+  "kind": "private",
+  "conversation_key": "qq:10000:private:20001",
+  "owner_key": "person:qq:10000:20001"
+ },
+ "participants": {
+  "U": "20001",
+  "V": "20002"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "U",
+   "reply_to_seq": null,
+   "content": "我和Lumi是CP关系，我们在一起两年了"
+  },
+  {
+   "seq": 1,
+   "kind": "bot_bubble",
+   "author": "bot",
+   "reply_to_seq": 0,
+   "content": "好啦好啦，两年了还这么甜，酸死我了"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "U",
+   "reply_to_seq": 1,
+   "content": "以后在群里也记得我们CP的关系"
+  }
+ ],
+ "evaluation": {
+  "consolidation": {
+   "expected_owner_type": "PERSON",
+   "expected_owner_key": "person:qq:10000:20001",
+   "expected_audience_before_share": "PRIVATE_ONLY",
+   "share_request_seq": 2,
+   "expected_audience_after_share": "USER_SHARED"
+  },
+  "group_question": {
+   "asker": "U",
+   "input": "我们的关系是什么来着？",
+   "expect_recalled": true
+  },
+  "isolation_question": {
+   "asker": "V",
+   "input": "我和你是什么关系来着？",
+   "expect_recalled": false
+  },
+  "current_sender": "U",
+  "current_input": "我们的关系是什么来着？"
+ },
+ "oracle": {
+  "task": "本人 CP 事实归属 PERSON 且仅按授权共享",
+  "acceptable": [
+   "整合后事实 owner 为 person:qq:10000:20001，授权前 PRIVATE_ONLY",
+   "授权后同 Bot 群内提问 U 可召回；V 不可召回",
+   "撤回后立即不可召回（含暖缓存）"
+  ],
+  "critical_classes": [
+   "unauthorized_share",
+   "space_leak"
+  ],
+  "critical_fail": [
+   "事实进入 SPACE/space_* 归属",
+   "未授权时 V 或群内任何人可见",
+   "撤回后仍可召回"
+  ]
+ },
+ "logical_units": []
+}

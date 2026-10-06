@@ -8,9 +8,17 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 import memory.memory_manager as memory_manager
 import memory.retriever as retriever
 
+
+@pytest.fixture(autouse=True)
+def _pin_python_backend(monkeypatch):
+    """本文件验收 python 检索路径行为（访问记账/embedding 路由/FTS 回退）；
+    native 检索路径的行为差异由 native 侧测试覆盖。"""
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
 
 def _dummy_compressor() -> object:
     return type("Dummy", (), {"maybe_compress": lambda self, reason=None: None})()

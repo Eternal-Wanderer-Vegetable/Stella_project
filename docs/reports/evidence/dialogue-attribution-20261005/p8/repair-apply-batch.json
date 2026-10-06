@@ -1,0 +1,10 @@
+{
+  "batch_id": "repair_20261005_234241",
+  "applied": 13,
+  "skipped": [],
+  "verified_deprecated": 13,
+  "expected": 13,
+  "keep_rows_intact": true,
+  "audit_rows": 13,
+  "rollback_hint": "dr.revoke_batch('repair_20261005_234241', confirm_owner_repair=True)"
+}

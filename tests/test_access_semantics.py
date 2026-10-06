@@ -37,6 +37,9 @@ def _v2_db(db_path: Path) -> None:
     from memory import schema
 
     schema.create_memories_table(conn)
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_meta (k TEXT PRIMARY KEY, version INTEGER)")
+    conn.execute("INSERT OR REPLACE INTO schema_meta (k, version) VALUES ('version', 18)")
+
     conn.commit()
     conn.close()
 
@@ -78,6 +81,12 @@ def _timestamps(db_path: Path, mid: str) -> tuple[str | None, str | None]:
     conn.close()
     return (row[0], row[1]) if row else (None, None)
 
+
+@pytest.fixture(autouse=True)
+def _pin_python_backend(monkeypatch):
+    """本文件验收 python 检索路径行为（访问记账/embedding 路由/FTS 回退）；
+    native 检索路径的行为差异由 native 侧测试覆盖。"""
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
 
 @pytest.fixture
 def v2_env(tmp_path, monkeypatch):

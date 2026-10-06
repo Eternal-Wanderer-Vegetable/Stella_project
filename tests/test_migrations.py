@@ -697,8 +697,9 @@ def _build_v15_db(path: Path) -> None:
         conn.close()
 
 
-def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
-    """v15 → v16：信封加列、身份声明表就绪、行数与旧内容零改动、幂等。"""
+def test_v15_to_v17_additive_envelope_identity_and_contract_tables(tmp_path):
+    """v15 → v17（经 v16）：信封加列、身份声明表、v17 合同/共享表就绪、
+    行数与旧内容零改动、幂等。"""
     path = tmp_path / "agent_memory.db"
     _build_v15_db(path)
     # space_1 必须是校验器可解析的空间（自动命名账本登记）
@@ -712,7 +713,7 @@ def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
     report = schema.migrate_to_latest(path, ctx)
     assert report.error is None, report.error
     assert report.problems == [], report.problems
-    assert report.to_version == 16
+    assert report.to_version == schema.SCHEMA_VERSION
 
     # 旧行与旧内容一字不动
     assert _rows(path, "SELECT content, source_kind, msg_id FROM group_messages") == [
@@ -732,12 +733,85 @@ def test_v15_to_v16_additive_envelope_and_identity_tables(tmp_path):
     for table in ("conversation_identity_claims", "conversation_identity_versions"):
         assert _rows(path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
 
+    # v17 产物：合同列与共享/审计表就绪且为空
+    assert "verification_contract_json" in _columns(path, "memory_candidates")
+    assert "parser_version" in _columns(path, "conversation_identity_claims")
+    for table in ("personal_memory_sharing", "sharing_audit_log"):
+        assert _rows(path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
+
     # 幂等：重跑零变更
     second = schema.migrate_to_latest(path, ctx)
     assert second.error is None
     assert second.problems == []
     assert second.changed_rows == 0
     assert _rows(path, "SELECT COUNT(*) FROM group_messages") == [(1,)]
+
+
+def test_v17_to_v18_sharing_owner_binding_and_copies_ledger(tmp_path):
+    """v17 → v18（整改计划 P3，复核 F3/F4/F5/F13）：授权表补规范归属列、
+    旧行回填 person:qq:{bot}:{user}、副本台账表就绪、行数守恒、幂等。"""
+    path = tmp_path / "agent_memory.db"
+    # 与其他用例同一起点：真实 v15 形状旧库
+    _build_v15_db(path)
+    (tmp_path / ".space_assignments.json").write_text(
+        '{"1001": "space_1"}', encoding="utf-8"
+    )
+    ctx = migrations.context_from_paths(
+        tmp_path / "spaces", tmp_path / ".space_assignments.json", KNOWN_GROUPS
+    )
+
+    # 升到 v17 形状，再造一条 v17 旧形状授权行（owner 绑定列为空）
+    report = schema.migrate_to_latest(path, ctx)
+    assert report.error is None
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA table_info(personal_memory_sharing)").fetchall()
+        # 模拟 v17 旧形状：删掉 v18 新列不可行（SQLite 无 DROP COLUMN 保证），
+        # 直接清空 owner_key 模拟旧行
+        conn.execute(
+            "INSERT INTO personal_memory_sharing (bot_id, user_id, fact_key,"
+            " source_conversation_key, source_message_row_id, audience, status,"
+            " granted_at, scope_version, owner_key, subject_key, platform)"
+            " VALUES (1001, 12345, 'fact_a', 'qq:1001:private:12345', 5,"
+            " 'USER_SHARED', 'active', '2026-10-05T00:00:00', 0, '', '', '')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # 把版本拨回 17 触发 v18 重放（additive 幂等）
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("UPDATE schema_meta SET version = 17 WHERE k = 'version'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    report2 = schema.migrate_to_latest(path, ctx)
+    assert report2.error is None, report2.error
+    assert report2.problems == [], report2.problems
+    assert report2.to_version == schema.SCHEMA_VERSION
+
+    conn = sqlite3.connect(path)
+    try:
+        cols = [r[1] for r in conn.execute(
+            "PRAGMA table_info(personal_memory_sharing)").fetchall()]
+        for col in ("platform", "owner_key", "subject_key"):
+            assert col in cols, col
+        owner = conn.execute(
+            "SELECT owner_key, subject_key, platform FROM personal_memory_sharing"
+            " WHERE fact_key = 'fact_a'"
+        ).fetchone()
+        assert owner == ("person:qq:1001:12345", "qq:12345", "qq"), \
+            "v17 旧行必须回填规范 owner 键（复核 F5：检索版本读的就是它）"
+        assert conn.execute(
+            "SELECT COUNT(*) FROM personal_memory_sharing_copies").fetchone() == (0,)
+        # 旧行其余字段零改动
+        assert conn.execute(
+            "SELECT status, source_message_row_id FROM personal_memory_sharing"
+            " WHERE fact_key = 'fact_a'").fetchone() == ("active", 5)
+    finally:
+        conn.close()
 
 
 # ── 并发迁移序列化（CI linux 3.12 回归，多人身份修复分支 PR） ────────────

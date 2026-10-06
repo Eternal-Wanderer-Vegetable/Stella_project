@@ -236,6 +236,8 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
        ("core/runtime/turn_service.py", "TurnService.finalize_turn")),
     _N("post.parse", "输出解析", "finalize", "post",
        ("memory/post_processors.py", "parse_output")),
+    _N("post.attribution_guard", "归属守护", "finalize", "post",
+       ("stella_project/plugins/bot_main/ai_gateway.py", "attribution_guard_hook")),
     _N("post.badwords", "违禁语过滤", "finalize", "post",
        ("memory/post_processors.py", "bad_phrase_filter")),
     _N("post.split", "分行", "finalize", "post",
@@ -473,7 +475,8 @@ EDGES: list[EdgeSpec] = [
     EdgeSpec("turn.timeout", "finalize.trace"),
     EdgeSpec("turn.error", "finalize.trace"),
     EdgeSpec("finalize.trace", "post.parse"),
-    EdgeSpec("post.parse", "post.badwords"),
+    EdgeSpec("post.parse", "post.attribution_guard"),
+    EdgeSpec("post.attribution_guard", "post.badwords"),
     EdgeSpec("post.badwords", "post.split"),
     EdgeSpec("post.split", "post.thought"),
     EdgeSpec("post.thought", "post.done"),
@@ -630,6 +633,7 @@ HOOK_NODE_IDS: dict[str, str] = {
 }
 POST_HOOK_NODE_IDS: dict[str, str] = {
     "parse_output": "post.parse",
+    "attribution_guard_hook": "post.attribution_guard",
     "bad_phrase_filter": "post.badwords",
     "split_lines": "post.split",
     "log_thought": "post.thought",

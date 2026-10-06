@@ -29,6 +29,7 @@ import contextlib
 import re
 import sqlite3
 import uuid
+from dataclasses import dataclass
 
 from nonebot import logger
 
@@ -56,11 +57,13 @@ _ROLE_TERMS = ("管理员", "群主", "机器人", "bot", "Bot", "AI", "ai", "�
 
 # 本人声明 →（是否 supersedes 旧 self_alias）。「改名/才是/以后叫我」带更正
 # 语义 → supersede；「我是X / X是我」是无更正语义的自我介绍 → 并存。
+# R4扩展（计划 §6.4）：拒绝问句、否定句、条件句，避免「我是谁」「不是我」误判。
 _SELF_PATTERNS: tuple[tuple[re.Pattern[str], bool], ...] = (
     (re.compile(r"^我才是(.+)$"), True),
     (re.compile(r"^那我改名叫(.+)$"), True),
     (re.compile(r"^我改名叫(.+)$"), True),
     (re.compile(r"^以后叫我(.+)$"), False),
+    (re.compile(r"^我叫(.+)$"), False),
     (re.compile(r"^我是(.+)$"), False),
     (re.compile(r"^(.+?)是我$"), False),
 )
@@ -76,6 +79,43 @@ _CLAUSE_SPLIT = re.compile(r"[,，。！？!?；;]")
 # 引号/转述标记：出现即判 ambiguous（转述别人的话不能当说话人自己的声明）
 _QUOTE_MARKS = ("「", "」", "“", "”", "‘", "’", "\"", "'")
 
+# R4新增：问句标记（「我是谁」「是我吗」不是声明）
+_QUESTION_MARKS = ("吗", "呢", "谁", "?", "？", "什么")
+
+# R4新增：否定/条件标记（名字捕获组内出现即拒绝；「不是我」这类由分句分类处理）
+_NEGATION_COND_MARKS = ("不是", "不叫", "如果", "要是", "假如", "假设")
+# P1整改（复核 F2）：条件句仍整条拒绝；否定标记**不再**整条拒绝——
+# 整条否定检查正是 F2 根因（「我是Nox，不是红中没摸鱼」被整句丢弃）
+_CONDITION_MARKS = ("如果", "要是", "假如", "假设")
+
+# P1整改（复核 F2）：人称代词——别名含代词即关系描述/指代
+# （「我是她姐」「我是你教父了」），不是名字
+_PRONOUN_MARKS = ("你", "我", "他", "她", "它", "您", "谁")
+# P1整改：句末语气词——带语气词的是陈述不是名字（「教父了」）
+_SENTENCE_FINAL_PARTICLES = ("了", "吧", "呗", "啦", "咯", "哦", "呀", "嘛", "啊", "呢", "么")
+
+# P1整改：排除语义分句（「不是X」「不叫X」→ X 不再是本人别名）
+_NEGATIVE_NAME_PATTERNS = (re.compile(r"^不是(.+)$"), re.compile(r"^不叫(.+)$"))
+# 排除候选含活动/状态标记 → 是活动否认（「不是红中没摸鱼」），不是名字
+_ACTIVITY_STATE_MARKS = ("没", "在", "了", "过", "着", "正", "想", "要", "会", "能")
+
+# P1整改：解析器版本（落库到 conversation_identity_claims.parser_version）
+PARSER_VERSION = "2026-10-05.2"
+
+
+@dataclass(frozen=True)
+class SelfClaim:
+    """结构化本人声明解析结果（复核 F2 修复）。
+
+    alias/supersedes 语义与旧 tuple 一致；excluded_aliases 是否定尾句里
+    点名的排除项（「不叫红中」→ 红中 的旧本人声明失活）。
+    """
+
+    alias: str
+    supersedes: bool
+    excluded_aliases: tuple[str, ...] = ()
+    parser_version: str = PARSER_VERSION
+
 
 def normalize_alias(raw: str) -> str:
     """声明名字规范化：与 display name 同一清理规则 + 32 字符上限。"""
@@ -84,11 +124,68 @@ def normalize_alias(raw: str) -> str:
     return normalize_display_name(raw).strip()[:ALIAS_MAX_CHARS]
 
 
-def parse_self_alias(text: str) -> tuple[str, bool] | None:
-    """解析本人自我介绍/改名声明。返回 ``(alias, supersedes)`` 或 None。
+def _clean_alias(raw: str) -> str:
+    """名字合法性共检：超长/分句符/问句/否定/条件/角色词/人称代词/语气词 → 空串。
 
-    只匹配**整条**文本（strip 后全串）；含引号/转述标记、名字超限、名字是
-    角色权限表达、一句话里有多个自称 → None（ambiguous，不落库）。
+    P1整改（复核 F2）：代词与语气词检查挡下关系描述——「她姐」「你教父」
+    含人称代词、「教父了」带句末语气词，都不是干净名字。
+    """
+    raw = (raw or "").strip()
+    if not raw or len(raw) > ALIAS_MAX_CHARS:
+        # 空名/超长原名：截断接受会伪造干净声明 → 拒绝
+        return ""
+    if _CLAUSE_SPLIT.search(raw):
+        return ""
+    if any(mark in raw for mark in _QUESTION_MARKS):
+        return ""
+    if any(mark in raw for mark in _NEGATION_COND_MARKS):
+        return ""
+    alias = normalize_alias(raw)
+    if not alias:
+        return ""
+    if any(term in alias for term in _ROLE_TERMS):
+        return ""
+    if any(mark in alias for mark in _PRONOUN_MARKS):
+        return ""
+    if alias.endswith(_SENTENCE_FINAL_PARTICLES):
+        return ""
+    # 否定尾字（复核 F2 连带）：「X是我」模式会把「这不是我」拆出「这不」
+    # 当名字；原名靠整句否定检查挡住，现在在名字本身拒绝
+    if alias.endswith(("不", "没", "别")):
+        return ""
+    return alias
+
+
+def _classify_trailing_clause(clause: str, excluded: list[str]) -> bool:
+    """分类非主句分句（P1整改，复核 F2）。
+
+    返回 True 表示该分句已被吸收（排除语义或活动否认）；False = ambiguous，
+    整条文本拒绝。否定尾句只在候选本身是干净名字时才记排除项：
+    「不叫红中」→ 排除红中；「不是红中没摸鱼」含活动标记 → 忽略不记。
+    """
+    for pattern in _NEGATIVE_NAME_PATTERNS:
+        m = pattern.match(clause)
+        if not m:
+            continue
+        candidate = m.group(1).strip()
+        if not candidate:
+            return True
+        if any(mark in candidate for mark in _ACTIVITY_STATE_MARKS):
+            return True
+        alias = _clean_alias(candidate)
+        if alias:
+            excluded.append(alias)
+            return True
+        return False
+    return False
+
+
+def parse_self_claim_structured(text: str) -> SelfClaim | None:
+    """结构化解析本人声明/复合更正（复核 F2 修复）。
+
+    「我是Nox，不是红中没摸鱼」→ 主句登记 Nox，「不是红中没摸鱼」是活动
+    否认被忽略；「我叫Nox，不叫红中」→ 登记 Nox 且排除红中。问句/引号/
+    转述/条件句/多个自称仍整条拒绝；否定不再整句拒绝（这正是 F2 的根因）。
     """
     stripped = (text or "").strip()
     if not stripped or len(stripped) > 64:
@@ -96,37 +193,56 @@ def parse_self_alias(text: str) -> tuple[str, bool] | None:
         return None
     if any(mark in stripped for mark in _QUOTE_MARKS):
         return None
-    match_count = 0
-    parsed: tuple[str, bool] | None = None
-    for pattern, supersedes in _SELF_PATTERNS:
-        m = pattern.match(stripped)
-        if not m:
+    if any(mark in stripped for mark in _QUESTION_MARKS):
+        return None
+    if any(mark in stripped for mark in _CONDITION_MARKS):
+        return None
+
+    clauses = [c.strip() for c in _CLAUSE_SPLIT.split(stripped) if c.strip()]
+    primary: SelfClaim | None = None
+    primary_count = 0
+    excluded: list[str] = []
+
+    for clause in clauses:
+        matched = False
+        for pattern, supersedes in _SELF_PATTERNS:
+            m = pattern.match(clause)
+            if not m:
+                continue
+            matched = True
+            alias = _clean_alias(m.group(1))
+            if alias:
+                primary_count += 1
+                if primary is None:
+                    primary = SelfClaim(alias=alias, supersedes=supersedes)
+            break
+        if matched:
             continue
-        raw_name = m.group(1).strip()
-        if not raw_name or len(raw_name) > ALIAS_MAX_CHARS:
-            # 空名/超长原名：截断接受会伪造干净声明 → ambiguous
-            continue
-        alias = normalize_alias(raw_name)
-        if not alias:
-            continue
-        if _CLAUSE_SPLIT.search(alias):
-            # 名字里带分句符 = 一句话多个自称/多个分句 → ambiguous
-            continue
-        if any(term in alias for term in _ROLE_TERMS):
-            # 「我是管理员/机器人」是角色表达，不是身份声明
-            continue
-        match_count += 1
-        parsed = (alias, supersedes)
-    if match_count != 1 or parsed is None:
+        if not _classify_trailing_clause(clause, excluded):
+            return None
+
+    if primary_count != 1 or primary is None:
         # 多个自称 / 零命中 → ambiguous
         return None
-    # 分句后仍有别的分句命中自称模式 → 一句话多个自称，ambiguous
-    clauses = [c.strip() for c in _CLAUSE_SPLIT.split(stripped) if c.strip()]
-    if len(clauses) > 1 and sum(
-        1 for c in clauses if any(p.match(c) for p, _ in _SELF_PATTERNS)
-    ) > 1:
+    return SelfClaim(
+        alias=primary.alias,
+        supersedes=primary.supersedes,
+        excluded_aliases=tuple(excluded),
+    )
+
+
+def parse_self_alias(text: str) -> tuple[str, bool] | None:
+    """解析本人自我介绍/改名声明。返回 ``(alias, supersedes)`` 或 None。
+
+    P1整改（复核 F2）后的 tuple 包装：内部走结构化解析，支持
+    「我是A，不是B」「我叫A，不叫B」复合更正。含引号/转述标记、名字超限、
+    名字是角色权限或关系描述、一句话里有多个自称 → None（ambiguous）。
+    问句（我是谁）、纯否定（不是我）、条件句（如果我是Nox）→ None。
+    """
+    claim = parse_self_claim_structured(text)
+    if claim is None:
         return None
-    return parsed
+    return claim.alias, claim.supersedes
 
 
 def parse_third_person_correction(text: str) -> tuple[str, bool] | None:
@@ -134,7 +250,8 @@ def parse_third_person_correction(text: str) -> tuple[str, bool] | None:
 
     is_positive=True：「他才是X」——指认目标该叫 X；False：「X不是他」——
     否定目标的 X 称呼。**两者都只是带来源的线索**：肯定不等于本人确认，
-    否定也不等于确认别人就是 X。
+    否定也不等于确认别人就是 X。名字合法性走与本人声明同一共检
+    （P1整改：关系描述「他才是她姐」同样拒绝）。
     """
     stripped = (text or "").strip()
     if not stripped or len(stripped) > 64:
@@ -143,14 +260,14 @@ def parse_third_person_correction(text: str) -> tuple[str, bool] | None:
         return None
     m = _THIRD_POSITIVE.match(stripped)
     if m:
-        alias = normalize_alias(m.group(1))
-        if alias and not any(term in alias for term in _ROLE_TERMS):
+        alias = _clean_alias(m.group(1))
+        if alias:
             return alias, True
         return None
     m = _THIRD_NEGATIVE2.match(stripped) or _THIRD_NEGATIVE.match(stripped)
     if m:
-        alias = normalize_alias(m.group(1))
-        if alias and not any(term in alias for term in _ROLE_TERMS):
+        alias = _clean_alias(m.group(1))
+        if alias:
             return alias, False
     return None
 
@@ -217,12 +334,16 @@ def record_self_alias_claim(
     supersedes: bool,
     source_row_id: int,
     evidence_excerpt: str,
+    excluded_aliases: tuple[str, ...] = (),
+    parser_version: str = "",
 ) -> bool:
     """写入本人声明（subject 恒等于平台 sender，由调用方保证）。
 
     supersedes=True（改名/才是语义）：作者本会话旧的 active self_alias 置
-    inactive 后写新行；False（纯自我介绍）：并存。版本 +1 同事务。
-    返回是否实际写入（重复同别名活跃声明幂等跳过）。
+    inactive 后写新行；False（纯自我介绍）：并存。excluded_aliases（P1整改，
+    复核 F2）：否定尾句点名的旧别名（「不叫红中」→ 红中）即使新别名重复
+    声明也要失活，并在有失活发生时推进版本。parser_version 记录解析器版本。
+    返回是否实际写入（无任何变更时幂等跳过）。
     """
     key = str(conversation_key or "")
     subject = str(subject_user_id or "")
@@ -230,6 +351,7 @@ def record_self_alias_claim(
     if not key or not subject or not alias:
         return False
     excerpt = (evidence_excerpt or "")[:EXCERPT_MAX_CHARS]
+    version = (parser_version or "").strip() or PARSER_VERSION
     try:
         conn = _connect()
         try:
@@ -241,34 +363,58 @@ def record_self_alias_claim(
                 " AND claim_kind = ? AND status = ?",
                 (key, subject, alias, CLAIM_SELF_ALIAS, STATUS_ACTIVE),
             ).fetchone()
-            if existing:
+            # 否定尾句点名的、当前仍 active 的旧别名（复核 F2：排除语义）
+            stale: list[str] = []
+            for cand in dict.fromkeys(excluded_aliases):
+                cand_alias = normalize_alias(cand)
+                if not cand_alias or cand_alias == alias:
+                    continue
+                row = conn.execute(
+                    "SELECT id FROM conversation_identity_claims"
+                    " WHERE conversation_key = ? AND subject_user_id = ? AND alias = ?"
+                    " AND claim_kind = ? AND status = ?",
+                    (key, subject, cand_alias, CLAIM_SELF_ALIAS, STATUS_ACTIVE),
+                ).fetchone()
+                if row:
+                    stale.append(cand_alias)
+            if existing and not stale:
                 conn.execute("ROLLBACK")
                 conn.close()
                 return False
-            if supersedes:
+            if supersedes and not existing:
                 conn.execute(
                     "UPDATE conversation_identity_claims SET status = ?, updated_at = CURRENT_TIMESTAMP"
                     " WHERE conversation_key = ? AND subject_user_id = ?"
                     " AND claim_kind = ? AND status = ?",
                     (STATUS_INACTIVE, key, subject, CLAIM_SELF_ALIAS, STATUS_ACTIVE),
                 )
-            conn.execute(
-                "INSERT INTO conversation_identity_claims"
-                " (conversation_key, bot_id, subject_user_id, author_user_id,"
-                "  claim_kind, alias, source_row_id, status, evidence_excerpt)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    key, str(bot_id or ""), subject, subject,
-                    CLAIM_SELF_ALIAS, alias, int(source_row_id or 0) or None,
-                    STATUS_ACTIVE, excerpt,
-                ),
-            )
+            for cand_alias in stale:
+                conn.execute(
+                    "UPDATE conversation_identity_claims SET status = ?, updated_at = CURRENT_TIMESTAMP"
+                    " WHERE conversation_key = ? AND subject_user_id = ? AND alias = ?"
+                    " AND claim_kind = ? AND status = ?",
+                    (STATUS_INACTIVE, key, subject, cand_alias, CLAIM_SELF_ALIAS, STATUS_ACTIVE),
+                )
+            if not existing:
+                conn.execute(
+                    "INSERT INTO conversation_identity_claims"
+                    " (conversation_key, bot_id, subject_user_id, author_user_id,"
+                    "  claim_kind, alias, source_row_id, status, evidence_excerpt, parser_version)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        key, str(bot_id or ""), subject, subject,
+                        CLAIM_SELF_ALIAS, alias, int(source_row_id or 0) or None,
+                        STATUS_ACTIVE, excerpt, version,
+                    ),
+                )
             _bump_revision(conn, key)
             conn.execute("COMMIT")
             conn.close()
             logger.info(
                 f"🪪 [Identity] 会话 {key} 用户 {subject} 本人声明称呼「{alias}」"
-                f"（{'更正' if supersedes else '并存'}，rev={get_identity_revision(key)}）"
+                f"（{'更正' if supersedes else '并存'}"
+                f"{('，排除' + '、'.join(stale)) if stale else ''}，"
+                f"rev={get_identity_revision(key)}，parser={version}）"
             )
             return True
         except Exception:
@@ -598,14 +744,15 @@ def process_message_identity(ctx) -> None:
         if source_kind == "BOT_SELF" or not sender or sender == 0:
             return
 
-        self_claim = parse_self_alias(text)
-        if self_claim is not None:
-            alias, supersedes = self_claim
+        claim = parse_self_claim_structured(text)
+        if claim is not None:
             record_self_alias_claim(
-                key, bot_id, sender, alias,
-                supersedes=supersedes,
+                key, bot_id, sender, claim.alias,
+                supersedes=claim.supersedes,
                 source_row_id=row_id,
                 evidence_excerpt=text,
+                excluded_aliases=claim.excluded_aliases,
+                parser_version=claim.parser_version,
             )
             return
 

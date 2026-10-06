@@ -40,6 +40,8 @@ def _create_v2_db(db_path: Path):
         )
         """
     )
+    conn.execute("CREATE TABLE IF NOT EXISTS schema_meta (k TEXT PRIMARY KEY, version INTEGER)")
+    conn.execute("INSERT OR REPLACE INTO schema_meta (k, version) VALUES ('version', 18)")
     conn.commit()
     conn.close()
 

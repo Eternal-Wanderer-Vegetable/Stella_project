@@ -232,6 +232,31 @@ def _compose_prompt(context_text: str, ctx: ChatContext, social_text: str = "") 
     )
 
 
+def _attribution_section(ctx: ChatContext) -> str:
+    """归属证据 + reply_plan 协议段（复核 F1；guard 模式 off 或无证据时为空）。
+
+    有界（≤16 单元）；只在 guard 模式非 off 且证据表非空时产出。由 prepare
+    并入受保护身份块——可引用 ID 与实际保留输入严格一致。
+    """
+    try:
+        from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
+        from core.dialogue_attribution import (
+            evidence_table_from_projection,
+            protocol_instructions,
+        )
+
+        mode = str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
+        if mode not in ("shadow", "enforce"):
+            return ""
+        data = getattr(ctx, "attribution_evidence", None) or {}
+        table = evidence_table_from_projection(data)
+        if not table:
+            return ""
+        return protocol_instructions(table, set(table.keys()))
+    except Exception:
+        return ""
+
+
 @dataclass
 class TurnPlan:
     """prepare_turn 的产出：带类型的轮次决策与更新后的上下文。"""
@@ -391,6 +416,24 @@ class TurnService:
                     identity_capsule=getattr(ctx, "identity_capsule", "") or None,
                 )
                 context_text = "\n\n".join(text for _, text in v2_sections)
+                # 归属证据协议段（复核 F1）：有界（≤16 单元），并入受保护
+                # 身份块——可引用 ID 与实际保留输入严格一致，预算不会把
+                # 协议裁掉却留下引用槽（也不能反过来）。
+                _attr_section = _attribution_section(ctx)
+                if _attr_section:
+                    identity_text = next(
+                        (t for n, t in v2_sections if n == "identity"), ""
+                    )
+                    if identity_text:
+                        context_text = context_text.replace(
+                            identity_text, identity_text + "\n\n" + _attr_section, 1
+                        )
+                        for i, (n, t) in enumerate(v2_sections):
+                            if n == "identity":
+                                v2_sections[i] = (n, t + "\n\n" + _attr_section)
+                                break
+                    else:
+                        context_text = _attr_section + "\n\n" + context_text
                 user_prompt = _compose_prompt(context_text, ctx)
             else:
                 from memory.prompt_builder import build_prompt_context

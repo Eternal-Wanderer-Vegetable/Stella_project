@@ -648,12 +648,90 @@ pipeline.register_pre_hook(describe_images_hook, priority=60)
 pipeline.register_pre_hook(build_context, priority=50)
 register_capability_hook(pipeline)
 
+async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
+    """归属守护（整改计划 P5，复核 F1；priority=90）。
+
+    parse_output 之后、bad_phrase 之前执行。模式 off 时零开销直通（行为与
+    f752538 逐字节一致）；shadow 记录问题但产出与 enforce 相同的安全文本
+    供比对；enforce 落最终处置：
+    - pass → ctx.reply = 服务端渲染文本，disposition=deliver
+    - fallback（无效引用）→ 保留合格当前回应，disposition=fallback
+    - reject（风险文本/解析失败）→ disposition=suppressed（split_lines 不
+      交付），原始 raw_output 照旧留痕 ctx.raw_output。
+    决策与 digest 记录到 ctx.attribution_decision。
+    """
+    try:
+        from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
+        from core.dialogue_attribution import (
+            apply_attribution_guard,
+            evidence_table_from_projection,
+        )
+
+        mode = str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
+        if mode not in ("shadow", "enforce"):
+            return ctx
+        evidence = evidence_table_from_projection(
+            getattr(ctx, "attribution_evidence", None)
+        )
+        if not evidence and mode != "enforce":
+            # 无证据表 = prepare 侧未构建（off 或旧入口）：shadow 无槽可审
+            return ctx
+        final_output, decision = apply_attribution_guard(
+            ctx.raw_output,
+            evidence,
+            set(evidence.keys()),
+            mode,
+            identity_revision=int(getattr(ctx, "identity_revision", 0) or 0),
+        )
+        ctx.attribution_decision = {
+            "decision": decision.decision,
+            "rejection_reason": decision.rejection_reason,
+            "invalid_references": decision.invalid_references,
+            "original_output_digest": decision.original_output_digest,
+            "final_output_digest": decision.final_output_digest,
+            "guard_mode": mode,
+            "identity_revision": decision.identity_revision,
+        }
+        if mode == "shadow":
+            # 影子：只记录，不改交付（严格隔离重放/观察期语义）
+            return ctx
+        if decision.decision == "reject":
+            ctx.reply_disposition = "suppressed"
+            ctx.reply = ""
+            ctx.lines = []
+            logger.warning(
+                f"🛡️ [Attribution] 拒绝发送（{decision.rejection_reason}）"
+                f" scope={ctx.trace_scope}"
+            )
+        elif decision.decision == "fallback":
+            ctx.reply_disposition = "fallback"
+            ctx.reply = final_output
+        else:
+            ctx.reply_disposition = "deliver"
+            ctx.reply = final_output or ctx.reply
+        return ctx
+    except Exception as e:
+        # guard 自身故障不放行错误内容也不阻断链路：enforce 按无合格段处理
+        logger.error(f"🛡️ [Attribution] guard 异常（按 suppressed 处理）: {e}")
+        try:
+            if str(REPLY_ATTRIBUTION_GUARD_MODE).strip().lower() == "enforce":
+                ctx.reply_disposition = "suppressed"
+                ctx.reply = ""
+                ctx.lines = []
+        except Exception:
+            pass
+        return ctx
+
+
 # post-hook 同样按 priority 升序执行：
 # 100 -> parse_output（解析 LLM 输出为结构化结果）
+# 90  -> attribution_guard_hook（归属守护：复核 F1——证据引用校验、服务端
+#        渲染、风险文本拦截；写 ctx.reply 与 reply_disposition）
 # 80  -> bad_phrase_filter（过滤脏词 / 违禁语）
-# 60  -> split_lines（把文本拆成可逐条发送的多行）
+# 60  -> split_lines（把文本拆成可逐条发送的多行；尊重 suppressed 处置）
 # 40  -> log_thought（记录思维链/日志）
 pipeline.register_post_hook(parse_output, priority=100)
+pipeline.register_post_hook(attribution_guard_hook, priority=90)
 pipeline.register_post_hook(bad_phrase_filter, priority=80)
 pipeline.register_post_hook(split_lines, priority=60)
 pipeline.register_post_hook(log_thought, priority=40)
@@ -1543,6 +1621,120 @@ def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
         conn.close()
 
 
+def _maybe_personal_sharing(ctx) -> None:
+    """私聊分享/撤回话术入口（整改计划 P5，复核 F1/F4；开关门控）。
+
+    分享：显式话术 + 该本人**最近的** PRIVATE_ONLY 事实 → 带来源绑定建授权
+    （无事实可绑定就不建——合同要求事实级绑定，不猜；多事实歧义的澄清话术
+    交给模型自然对话）。撤回：显式话术 → 撤回该本人最近的 active 授权
+    （台账精确失活）。授权/撤回函数自身做来源核验与规范版本推进。
+    """
+    import sqlite3 as _sqlite3
+
+    from memory.personal_sharing import (
+        canonical_owner,
+        detect_revoke_intent,
+        detect_sharing_intent,
+        grant_sharing_authorization,
+        revoke_sharing_authorization,
+    )
+
+    try:
+        from config.settings import PERSONAL_MEMORY_SHARE_ENABLED
+    except Exception:
+        return
+    if not PERSONAL_MEMORY_SHARE_ENABLED:
+        return
+
+    text = str(getattr(ctx, "message", "") or "")
+    key = str(getattr(ctx, "conversation_key", "") or "")
+    row_id = int(getattr(ctx, "recorded_row_id", 0) or 0)
+    bot_id = str(getattr(ctx, "bot_id", "") or "")
+    user_id = str(getattr(ctx, "user_id", 0) or 0)
+    if not key or not row_id or not bot_id or not user_id:
+        return
+    revoke_hit, revoke_mark = detect_revoke_intent(text)
+    share_hit, share_reason = detect_sharing_intent(text, user_id, key)
+    if not revoke_hit and not share_hit:
+        return
+
+    conn = _sqlite3.connect(DB_PATH)
+    try:
+        _owner_type, owner_key, _subject_key = canonical_owner("qq", bot_id, user_id)
+        fact_key = ""
+        for table in ("memory_candidates", "memories"):
+            try:
+                row = conn.execute(
+                    f"SELECT fact_key FROM {table}"
+                    " WHERE owner_key = ? AND audience = 'PRIVATE_ONLY'"
+                    " AND fact_key != ''"
+                    " AND (status IS NULL OR status != 'DEPRECATED')"
+                    " ORDER BY updated_at DESC LIMIT 1",
+                    (owner_key,),
+                ).fetchone()
+            except _sqlite3.OperationalError:
+                row = None
+            if row and row[0]:
+                fact_key = str(row[0])
+                break
+
+        conn.execute("BEGIN")
+        if revoke_hit:
+            if not fact_key:
+                conn.execute("ROLLBACK")
+                return
+            ok, reason = revoke_sharing_authorization(
+                conn, "qq", bot_id, user_id, fact_key
+            )
+            conn.commit() if ok else conn.execute("ROLLBACK")
+            logger.info(
+                f"🔗 [Sharing] 撤回（{revoke_mark}）user={user_id} "
+                f"fact={fact_key[:8]}… → {ok},{reason}"
+            )
+            return
+        if not fact_key:
+            conn.execute("ROLLBACK")
+            logger.info(
+                f"🔗 [Sharing] 分享话术（{share_reason}）但无可绑定事实（不猜）"
+                f" user={user_id}"
+            )
+            return
+        ok, reason = grant_sharing_authorization(
+            conn, "qq", bot_id, user_id, fact_key, key, row_id
+        )
+        conn.commit() if ok else conn.execute("ROLLBACK")
+        logger.info(
+            f"🔗 [Sharing] 分享授权（{share_reason}）user={user_id} "
+            f"fact={fact_key[:8]}… → {ok},{reason}"
+        )
+    except Exception as e:
+        with contextlib.suppress(Exception):
+            conn.execute("ROLLBACK")
+        logger.warning(f"⚠️ [Sharing] 处理异常（跳过）: {e}")
+    finally:
+        conn.close()
+
+
+def _lookup_registered_ref(storage_session_id: int):
+    """按存储会话 ID 查注册表 ref（复核 F10）；未注册/异常返回 None。
+
+    调用方对 None 必须跳过并记原因——负存储 ID 本身不携带身份，绝不
+    从负号反推伪造私聊 ref。
+    """
+    from memory.conversation_registry import lookup_by_storage_session_id
+
+    try:
+        conn = sqlite3.connect(DB_PATH)
+    except Exception:
+        return None
+    try:
+        return lookup_by_storage_session_id(conn, int(storage_session_id))
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 @private_chat_handler.handle()
 async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
     """私聊主流程（计划 §6.2）：会话锁 → 注册/落库 → Pipeline → 逐条发送。
@@ -1628,6 +1820,9 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 from memory.conversation_identity import process_message_identity
 
                 process_message_identity(ctx)
+            # 共享授权入口（整改计划 P5，复核 F1/F4）：显式分享/撤回话术
+            with contextlib.suppress(Exception):
+                _maybe_personal_sharing(ctx)
         # 整条身份问句直复（多人身份修复计划 §6.3）
         _maybe_identity_direct_reply(ctx)
         try:
@@ -1640,8 +1835,9 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                     logger.info(
                         f"🧠 [Trigger] 私聊 {ref.runtime_key} 触发短期记忆总结（新消息 {new_count} 条）"
                     )
+                    # R2修复：私聊使用注册会话整合（计划 §6.2）
                     maybe_consolidate(
-                        ref.storage_session_id, force=True,
+                        conversation_ref=ref, force=True,
                         parent_trace_id=fctx.trace_id if fctx is not None else "",
                     )
         except Exception as e:
@@ -3099,6 +3295,156 @@ async def _check_reply_later(group_id: int, user_id: int, asked_at: float) -> No
         logger.warning(f"⚠️ [主动@] 回应检测异常（跳过）: {e}")
 
 
+def _proactive_contract_mode() -> str:
+    """主动验证合同模式（复核 F1）：读配置，异常按 off。"""
+    try:
+        from config.settings import PROACTIVE_VERIFICATION_CONTRACT_MODE
+
+        return str(PROACTIVE_VERIFICATION_CONTRACT_MODE or "off").strip().lower()
+    except Exception:
+        return "off"
+
+
+def _build_proactive_contract(group_id: int, target):
+    """从候选行 + 来源行构建主动验证合同（复核 F11，服务端构建）。
+
+    支持的候选：PERSON 归属、事实主体==选定目标、谓词可模板化。其余返回
+    (None, None, reason)——enforce 下跳过，shadow 下记录原因。
+    返回 (contract, selected_variant, error_reason)。
+    """
+    import sqlite3 as _sqlite3
+
+    from memory.proactive_contract import (
+        QuestionVariant,
+        VerificationContract,
+        compute_candidate_digest,
+    )
+
+    conn = _sqlite3.connect(DB_PATH)
+    try:
+        row = conn.execute(
+            "SELECT id, type, content, status, owner_type, owner_key, subject_key, fact_key"
+            " FROM memory_candidates WHERE id = ?",
+            (str(target.candidate_id or ""),),
+        ).fetchone()
+        if row is None:
+            return None, None, "candidate_missing"
+        cid, ctype, content, _status, owner_type, owner_key, subject_key, fact_key = row
+        subject_uid = str(subject_key or "").split(":")[-1]
+        # 复核 F11：事实主体必须就是选定目标——另一个人的背景不能变成
+        # 对当前人的确认问题（14:09 现场形状）
+        if not subject_uid or subject_uid != str(target.user_id):
+            return None, None, "subject_not_target"
+        if str(owner_type or "") != "PERSON":
+            return None, None, "owner_not_person"
+
+        source_row_ids: list[int] = []
+        recording_author = 0
+        if fact_key and owner_key:
+            for (rid,) in conn.execute(
+                "SELECT source_row_id FROM memory_evidence"
+                " WHERE owner_key = ? AND fact_key = ? AND source_row_id > 0 LIMIT 5",
+                (owner_key, fact_key),
+            ).fetchall():
+                source_row_ids.append(int(rid))
+            if source_row_ids:
+                arow = conn.execute(
+                    "SELECT user_id FROM group_messages WHERE id = ?",
+                    (source_row_ids[0],),
+                ).fetchone()
+                if arow and str(arow[0] or "").isdigit():
+                    recording_author = int(arow[0])
+
+        predicate = "other"
+        t = str(ctype or "")
+        if "称呼" in t or "alias" in t:
+            predicate = "self_alias"
+        elif "关系" in t or "relation" in t:
+            predicate = "relationship"
+        elif "偏好" in t or "address" in t:
+            predicate = "address_preference"
+
+        variants: list[QuestionVariant] = []
+        term = str(content or "").strip()[:32]
+        if predicate in ("self_alias", "address_preference") and term:
+            variants.append(
+                QuestionVariant(
+                    variant_id="A",
+                    question_template="对了 {nickname}，「{term}」这个说法现在还作数吗？",
+                    filled_question=f"对了 {target.nickname}，「{term}」这个说法现在还作数吗？",
+                    requires_bridge=False,
+                )
+            )
+
+        server_recent: dict[int, str] = {}
+        for rid, rcontent in conn.execute(
+            "SELECT id, content FROM group_messages"
+            " WHERE group_id = ? AND user_id = ? AND source_kind != 'BOT_SELF'"
+            " ORDER BY id DESC LIMIT 20",
+            (str(group_id), str(target.user_id)),
+        ).fetchall():
+            server_recent[int(rid)] = compute_candidate_digest(
+                {"type": "message", "content": rcontent}
+            )
+
+        contract = VerificationContract(
+            candidate_id=str(cid),
+            recording_author_id=recording_author,
+            fact_subject_id=int(subject_uid),
+            fact_object_id=None,
+            selected_target_user_id=int(target.user_id),
+            predicate_type=predicate,
+            polarity="positive",
+            source_conversation_key=f"qq:group:{group_id}",
+            source_row_ids=source_row_ids,
+            candidate_content_digest=compute_candidate_digest(
+                {"type": ctype or "", "content": content or ""}
+            ),
+            question_variants=variants,
+            bridge_event_requirement=False,
+        )
+        return contract, variants[0] if variants else None, ""
+    finally:
+        conn.close()
+
+
+def _validate_proactive_output(
+    contract, selected_variant, contract_error: str, lines: list[str]
+) -> tuple[bool, str]:
+    """发送前合同复核（复核 F11）：候选漂移/目标未绑定/编造问题 → 拒发。"""
+    if contract_error:
+        return False, contract_error
+    if contract is None:
+        return False, "contract_missing"
+    if selected_variant is None:
+        return False, "no_valid_variant"
+    import sqlite3 as _sqlite3
+
+    from memory.proactive_contract import validate_contract_consistency
+
+    conn = _sqlite3.connect(DB_PATH)
+    try:
+        row = conn.execute(
+            "SELECT id, type, content, status FROM memory_candidates WHERE id = ?",
+            (str(contract.candidate_id),),
+        ).fetchone()
+        if row is None:
+            return False, "candidate_missing"
+        current = {
+            "id": row[0], "type": row[1], "content": row[2], "status": row[3],
+        }
+        ok, reason = validate_contract_consistency(contract, current, conn=conn)
+        if not ok:
+            return False, reason
+    finally:
+        conn.close()
+    expected = selected_variant.filled_question.strip()
+    actual = " ".join(str(line).strip() for line in (lines or []) if str(line).strip())
+    if actual != expected:
+        return False, "output_not_variant"
+    return True, "ok"
+
+
 async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
     """尝试主动 @ 一位活跃用户以获取/验证记忆；返回是否已发言。
 
@@ -3178,12 +3524,40 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
         )
 
         lock = _group_locks[group_id]
+        # 主动验证合同（整改计划 P5，复核 F1/F11）：pick_target 之后由服务端
+        # 从候选行+来源行构建；enforce 下模型只能发送合同内变体或跳过。
+        contract_mode = _proactive_contract_mode()
+        contract = None
+        selected_variant = None
+        contract_error = ""
+        contract_data: dict = {}
+        if contract_mode in ("shadow", "enforce"):
+            try:
+                from dataclasses import asdict
+
+                contract, selected_variant, contract_error = _build_proactive_contract(
+                    group_id, target
+                )
+                if contract is not None:
+                    contract_data = asdict(contract)
+            except Exception as e:
+                logger.warning(f"⚠️ [主动@] 合同构建异常（按无合同继续）: {e}")
+                contract_error = contract_error or "contract_build_error"
         async with lock:
             ctx = ChatContext(
                 user_id=target.user_id,
                 group_id=group_id,
                 msg_id=0,
-                message=build_instruction(target),
+                # enforce + 合格变体：任务指令附带受限输出约束（只能输出变体
+                # 原文或为空）；off/shadow 保持原指令逐字节不变
+                message=(
+                    build_instruction(target)
+                    if not (contract_mode == "enforce" and selected_variant)
+                    else build_instruction(target)
+                    + "\n\n【任务约束】本轮你只能逐字输出下面这条追问（不要改写、"
+                    "不要附加别的内容），如果确实没有自然承接就输出 SKIP：\n"
+                    + selected_variant.filled_question
+                ),
                 # trigger 用 reply：主动 @ 是「对着某个具体人说话」，
                 # 需要该用户的画像与记忆参与上下文构建（proactive 走的是群级检索）
                 trigger="reply",
@@ -3198,6 +3572,11 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 bot_id=str(bot.self_id),
                 peer_id=str(group_id),
                 storage_session_id=group_id,
+                # 复核 F1：typed 检索查询 = 候选主题（不再拿整段指令模板查询）
+                retrieval_query=(
+                    str(target.candidate_content or "")[:80] if contract_data else ""
+                ),
+                verification_contract=contract_data,
                 trace_id=new_trace_id(),
             )
             try:
@@ -3226,6 +3605,28 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                                instance_key=f"grp:{group_id}")
                 outcome = "empty_output"
                 return False
+
+            # 发送前合同复核（整改计划 P5，复核 F11）：候选漂移/主体错位/
+            # 编造问题一律跳过——不发送、不记账、原因落 flow。
+            if contract_mode == "enforce":
+                ok, reason = _validate_proactive_output(
+                    contract, selected_variant, contract_error, ctx.lines
+                )
+                if not ok:
+                    proactive.mark_proactive_skip(
+                        group_id, target.user_id, target.skip_subject
+                    )
+                    _flow_decision(flow_ctx, "proactive.contract", status="skipped",
+                                   reason_code=f"contract:{reason}",
+                                   instance_key=f"grp:{group_id}")
+                    logger.info(
+                        f"🛡️ [主动@] 群 {group_id} 合同复核拒绝（{reason}），"
+                        f"跳过发送与记账"
+                    )
+                    outcome = "contract_rejected"
+                    return False
+                # 输出即为服务端变体原文：回填一行，防多行拼接走样
+                ctx.lines = [selected_variant.filled_question]
 
             if is_proactive_skip(ctx.lines):
                 proactive.mark_proactive_skip(
@@ -3954,12 +4355,29 @@ if scheduler is not None and SESSION_CONTEXT_ENABLED:
 
         会话结束时整合的理由：这一场对话的内容此前只以「压缩摘要」形式存在于
         内存，重启即失。结束时整合一次，把它沉淀为长期记忆的候选。
+
+        复核 F10 修复：key 可能是私聊的负存储 ID——先按注册表查可信
+        ConversationRef 再走统一入口；查不到的负 ID 记原因跳过（绝不从负号
+        反推身份伪造 ref），正群号保持旧路径。
         """
         for group_id in idle_session_groups():
             try:
-                if end_session(group_id):
+                if not end_session(group_id):
+                    continue
+                ref = _lookup_registered_ref(group_id)
+                if ref is not None:
+                    logger.info(
+                        f"💤 [Session] 会话 {ref.conversation_key} 空闲结束，"
+                        "按注册 ref 触发整合"
+                    )
+                    maybe_consolidate(conversation_ref=ref)
+                elif group_id > 0:
                     logger.info(f"💤 [Session] 群 {group_id} 会话空闲结束，触发整合")
                     maybe_consolidate(group_id)
+                else:
+                    logger.warning(
+                        f"⚠️ [Session] 会话 {group_id} 空闲结束但注册表无记录，跳过整合"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ 会话收尾异常（群 {group_id}）: {e}")
 

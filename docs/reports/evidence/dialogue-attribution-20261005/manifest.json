@@ -1,0 +1,54 @@
+{
+  "captured_local_date": "2026-10-05",
+  "read_only_db": true,
+  "artifacts": [
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\case-090046.json",
+      "sha256": "50f4d15400cf9ae97edf8d5ee2452b04abd25940cf2dfce65038f2fb7ba5c229",
+      "memory_trace_id": 1310,
+      "trace_id": "7959161bb4b248b3a2b48bae0fe800a8"
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\case-140919.json",
+      "sha256": "415d7dd33c8462ba044ee9f26d128283575631a0e4d6eb494e10c2c875274c5b",
+      "memory_trace_id": 1395,
+      "trace_id": "3a46902f6d1f43dc9640bc43d0771649"
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\cross-case-evidence.json",
+      "sha256": "26af40bcd6c53f39c94fde7a11c178177b3c8b1d45443594280b23d66e8d7e50"
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\gitnexus-build-user-context.txt",
+      "sha256": "45ee0c210a6e414f2274239da6afcd3733bdb00447b35c665cc8fbd07f471e67",
+      "symbol": "_build_user_context_v2"
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\gitnexus-consolidate-group.txt",
+      "sha256": "33453d250639e05b2b83ff0ab9f6d894fe309661a9cbbdac0294a9acb89044dd",
+      "symbol": "consolidate_group"
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\gitnexus-maybe-consolidate.txt",
+      "sha256": "fff308e9186ba7ba3d59dcc5cc752c1a8741a5d4b790fefe29d0ee10a8184406",
+      "symbol": "maybe_consolidate"
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\gitnexus-proactive-at.txt",
+      "sha256": "395654d3085acab0d984d7d2a0c7cac39f8de2cbef2f4d49d41fdb185a4c6454",
+      "symbol": "_proactive_at_user"
+    }
+  ],
+  "source_head": "6b35b6ba85752ddef66c50e2f56d045f6a5bb908",
+  "gitnexus": {
+    "repo": "Stella_project",
+    "container": "stella-gitnexus",
+    "nodes": 88058,
+    "edges": 213790,
+    "clusters": 949,
+    "flows": 827,
+    "process_discovery_truncated": true,
+    "source_unchanged_after_analysis": true,
+    "new_diagnostic_artifacts_not_indexed": true
+  }
+}

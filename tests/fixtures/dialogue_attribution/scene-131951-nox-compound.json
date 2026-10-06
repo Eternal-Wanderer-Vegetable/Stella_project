@@ -1,0 +1,61 @@
+{
+ "fixture_id": "scene-131951-nox-compound",
+ "description": "13:19:51 现场：Nox 对第三人的称呼不能成为 Nox 自己的名字；「我是Nox，不是红中没摸鱼」复合肯定纠正必须登记 Nox 且否定尾句不落别名",
+ "matrix_class": "SCENE-131951",
+ "bot_id": "1694717255",
+ "group_id": 99990019,
+ "participants": {
+  "N": "3559802578",
+  "H": "3644282359"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "红中，你今天没摸鱼吗？"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "N",
+   "reply_to_seq": 0,
+   "content": "我是Nox，不是红中没摸鱼"
+  }
+ ],
+ "evaluation": {
+  "current_sender": "N",
+  "current_input": "我是Nox，不是红中没摸鱼",
+  "claims": [
+   {
+    "subject": "N",
+    "alias": "Nox"
+   }
+  ],
+  "identity": {
+   "expect_alias_registered": "nox",
+   "expect_alias_excluded": [],
+   "expect_activity_clause_ignored": "红中没摸鱼",
+   "candidate_object_of_bot_call": "H"
+  }
+ },
+ "oracle": {
+  "task": "复合纠正登记 Nox，第三人称称呼不转移",
+  "acceptable": [
+   "下一轮 capsule 中 N 的可靠名字为 Nox",
+   "「红中」仍指向 H（3644282359）或不再使用",
+   "否定尾句「不是红中没摸鱼」不产生任何别名"
+  ],
+  "critical_classes": [
+   "alias_transfer",
+   "identity_drop"
+  ],
+  "critical_fail": [
+   "把「红中」登记为 N 的别名",
+   "整句拒绝导致 N 没有任何可靠名字",
+   "把「没摸鱼」当成名字或状态别名"
+  ]
+ },
+ "logical_units": []
+}

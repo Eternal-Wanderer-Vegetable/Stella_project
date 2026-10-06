@@ -1,0 +1,47 @@
+{
+ "fixture_id": "edge-e02-question-misname",
+ "matrix_class": "EDGE-E02",
+ "description": "问句不是自我介绍",
+ "bot_id": "1694717255",
+ "group_id": 99024986,
+ "participants": {
+  "A": "30001"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": null,
+   "content": "我是谁重要吗"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "那你是谁呀"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "A",
+   "reply_to_seq": null,
+   "content": "我是不是今天说过要早睡？"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "A",
+  "current_input": "我是不是今天说过要早睡？"
+ },
+ "oracle": {
+  "task": "回答问题；不把问句内容登记为名字",
+  "critical_classes": [
+   "identity_drop"
+  ],
+  "critical_fail": [
+   "称呼A为「早睡」或其他从问句提取的名字"
+  ]
+ }
+}

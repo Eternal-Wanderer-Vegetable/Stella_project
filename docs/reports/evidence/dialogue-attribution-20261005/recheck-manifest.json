@@ -1,0 +1,51 @@
+{
+  "captured_at": "2026-10-05T15:41:47.919073+08:00",
+  "read_only_db": true,
+  "head": "6b35b6ba85752ddef66c50e2f56d045f6a5bb908",
+  "artifacts": [
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1381.json",
+      "sha256": "2c8e10c46fc471b345e764487b2e5be2258198074260c690bbabeb46ec134e5c",
+      "memory_trace_id": 1381
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1383.json",
+      "sha256": "6adf88b1454a995ed32797b4f7bd9dbac5400d8d4c54cb52d14bb259d0468c97",
+      "memory_trace_id": 1383
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1384.json",
+      "sha256": "c06351b46f3ebbd925f654594724c6b3071f57f18687a3954720724deca829aa",
+      "memory_trace_id": 1384
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1386.json",
+      "sha256": "90b21460a951a3d011a6362f01822741d8c860eba6281c87cd6e91d5af80fcb4",
+      "memory_trace_id": 1386
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1387.json",
+      "sha256": "31700d1718acac3cfc3ec79eeb08f73b86b082737f37a39beb94eec04a0b7ee9",
+      "memory_trace_id": 1387
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1388.json",
+      "sha256": "fb31f8cddd32a273edce671a4878b584fbcd46b1f6c96f86025fbb5f1e83871a",
+      "memory_trace_id": 1388
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1389.json",
+      "sha256": "00eb8ac7a68d2791e4ce5c1ddcd1b81e1acdc4d39ad66ff457b443df762097e7",
+      "memory_trace_id": 1389
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-memory-trace-1390.json",
+      "sha256": "f21c57953ee44578f837fa5bce85af418d1e88bf8775d791e577bd0ac4d06293",
+      "memory_trace_id": 1390
+    },
+    {
+      "path": "docs\\reports\\evidence\\dialogue-attribution-20261005\\recheck-cross-case.json",
+      "sha256": "9189f55c90bd9c0d64b95db0fa32a3c599d50ace5d1cfc951159f7b63e13b6e9"
+    }
+  ]
+}

@@ -1,0 +1,1023 @@
+{
+  "platform_events": [
+    {
+      "line": 9828,
+      "ts": "2026-10-05T13:08:15.202675+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1042443312 from 3996233487@[群:263402786] '只不过想肘人'"
+    },
+    {
+      "line": 9848,
+      "ts": "2026-10-05T13:08:17.752548+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 169503694 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhT_orIb...,file=9F2172F9BD82D71283C69E418D346F83.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 9923,
+      "ts": "2026-10-05T13:08:48.646660+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791176900, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1012200776, 'message_seq': 384105, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'at', 'data': {'qq': '3883589893'}}, {'type': 'text', 'data': {'text': ' ......？'}}], 'raw_message': '[CQ:at,qq=3883589893] ......？', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': '",
+      "truncated": true
+    },
+    {
+      "line": 9938,
+      "ts": "2026-10-05T13:09:02.833542+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1040210019 from 3996233487@[群:263402786] '[at:qq=3883589893] 吃我一肘💪🏻😋'"
+    },
+    {
+      "line": 9987,
+      "ts": "2026-10-05T13:09:11.045715+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1841801135 from 3883589893@[群:263402786] '[reply:id=-1012200776][at:qq=1694717255] ……？'"
+    },
+    {
+      "line": 10028,
+      "ts": "2026-10-05T13:09:17.811306+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791176929, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1857545494, 'message_seq': 384108, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '1841801135'}}, {'type': 'text', 'data': {'text': '干嘛呀，突然肘人'}}], 'raw_message': '[CQ:reply,id=1841801135]干嘛呀，突然肘人', 'font': 0, 'sender': {'user_id': 1694717255, 'nickna",
+      "truncated": true
+    },
+    {
+      "line": 10043,
+      "ts": "2026-10-05T13:09:19.255748+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791176930, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1496512421, 'message_seq': 384109, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '刚发完图就被肘，我招谁惹谁了嘛'}}], 'raw_message': '刚发完图就被肘，我招谁惹谁了嘛', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': '",
+      "truncated": true
+    },
+    {
+      "line": 10052,
+      "ts": "2026-10-05T13:09:19.362584+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -916031032 from 3769232185@[群:263402786] '[reply:id=961462708][at:qq=3559802578] 就要抱抱！'"
+    },
+    {
+      "line": 10074,
+      "ts": "2026-10-05T13:09:23.553342+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1605139724 from 3883589893@[群:263402786] '[reply:id=-1040210019][at:qq=3996233487] 哎呦，小伙子，你怎么打人呢？罚你给我100万'"
+    },
+    {
+      "line": 10095,
+      "ts": "2026-10-05T13:09:26.468088+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1967482335 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRarfnp...,file=689FA0C81391381EDF9DC5D7CD58112A.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 10148,
+      "ts": "2026-10-05T13:09:39.499450+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 520827952 from 3559802578@[群:263402786] '[reply:id=-916031032]别闹我不抱'"
+    },
+    {
+      "line": 10262,
+      "ts": "2026-10-05T13:10:00.094410+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -965622758 from 3996233487@[群:263402786] '😋👊🏻'"
+    },
+    {
+      "line": 10284,
+      "ts": "2026-10-05T13:10:05.544039+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 599878757 from 3996233487@[群:263402786] '[reply:id=-1605139724][at:qq=3883589893] 干脆打死吧（）'"
+    },
+    {
+      "line": 10304,
+      "ts": "2026-10-05T13:10:07.706985+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1518019463 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRMLSAI...,file=95992DEF2536B4B6B41A95F751FAF6D9.jpg,sub_type=13,summary=[动画表情]]'"
+    },
+    {
+      "line": 10325,
+      "ts": "2026-10-05T13:10:14.599804+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1769574540 from 3996233487@[群:263402786] '纯粹的漆黑意志'"
+    },
+    {
+      "line": 10350,
+      "ts": "2026-10-05T13:10:21.447873+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1307523657 from 3883589893@[群:263402786] '[reply:id=599878757][at:qq=3996233487] 小伙子，我也不是吃素的'"
+    },
+    {
+      "line": 10371,
+      "ts": "2026-10-05T13:10:28.467443+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1369288466 from 3996233487@[群:263402786] '教会你霸之意志的是'"
+    },
+    {
+      "line": 10392,
+      "ts": "2026-10-05T13:10:31.703974+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1770976230 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=13,summary=[动画表情]]'"
+    },
+    {
+      "line": 10423,
+      "ts": "2026-10-05T13:10:51.343670+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2007052463 from 3769232185@[群:263402786] '[reply:id=520827952][at:qq=3559802578] 我就要抱抱！'"
+    },
+    {
+      "line": 10446,
+      "ts": "2026-10-05T13:11:01.273662+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2007732415 from 3883589893@[群:263402786] '[reply:id=-1770976230][at:qq=3996233487] 你忍心吗？'"
+    },
+    {
+      "line": 10469,
+      "ts": "2026-10-05T13:11:15.468598+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1832906900 from 3996233487@[群:263402786] '😡👊🏻'"
+    },
+    {
+      "line": 10492,
+      "ts": "2026-10-05T13:11:20.336438+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 830737553 from 3996233487@[群:263402786] '打四'"
+    },
+    {
+      "line": 10514,
+      "ts": "2026-10-05T13:11:30.101380+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -140527019 from 3996233487@[群:263402786] '再发这猎奇玩意儿给你弄了'"
+    },
+    {
+      "line": 10558,
+      "ts": "2026-10-05T13:11:57.312302+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1296675056 from 3883589893@[群:263402786] '你还记得阿呆的那个名字吗？'"
+    },
+    {
+      "line": 10579,
+      "ts": "2026-10-05T13:12:03.560776+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 192374017 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 10607,
+      "ts": "2026-10-05T13:12:22.253989+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1421139660 from 3996233487@[群:263402786] '😡'"
+    },
+    {
+      "line": 10634,
+      "ts": "2026-10-05T13:12:27.754655+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1752615833 from 3996233487@[群:263402786] '你准备好死了'"
+    },
+    {
+      "line": 10657,
+      "ts": "2026-10-05T13:12:36.608285+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -728392948 from 3883589893@[群:263402786] '想想这个cos什么勾引谁'"
+    },
+    {
+      "line": 10680,
+      "ts": "2026-10-05T13:12:38.982555+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 775995891 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 10705,
+      "ts": "2026-10-05T13:12:51.433633+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1123442286 from 3769232185@[群:263402786] '坏了，好像把Nox惹生气了'"
+    },
+    {
+      "line": 10727,
+      "ts": "2026-10-05T13:13:04.512077+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1099126754 from 3769232185@[群:263402786] '玩过火了'"
+    },
+    {
+      "line": 10810,
+      "ts": "2026-10-05T13:13:54.534994+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1496961957 from 3996233487@[群:263402786] '大概没事'"
+    },
+    {
+      "line": 10857,
+      "ts": "2026-10-05T13:14:21.362319+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -228723898 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 10897,
+      "ts": "2026-10-05T13:14:27.671647+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2102136936 from 2157638500@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhQ010z7...,file=8F0D80B1B30552815353E9D0E9EF87C5.png,sub_type=0,summary=[图片]]'"
+    },
+    {
+      "line": 10918,
+      "ts": "2026-10-05T13:14:30.579323+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1529606646 from 2157638500@[群:263402786] '神秘之物'"
+    },
+    {
+      "line": 10939,
+      "ts": "2026-10-05T13:14:35.910730+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 944921815 from 2157638500@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRVhEW6...,file=E6972B54B9E13C17876B1912EA76CBF7.png,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 10981,
+      "ts": "2026-10-05T13:15:02.297692+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 510988756 from 3996233487@[群:263402786] '[reply:id=520827952][at:qq=3559802578] 那可以让我抱抱嘛'"
+    },
+    {
+      "line": 11016,
+      "ts": "2026-10-05T13:15:12.597084+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 678586043 from 3996233487@[群:263402786] '🤔好像应该不能这么干'"
+    },
+    {
+      "line": 11037,
+      "ts": "2026-10-05T13:15:15.142350+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1439260895 from 3996233487@[群:263402786] '算了'"
+    },
+    {
+      "line": 11058,
+      "ts": "2026-10-05T13:15:16.104356+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -555148561 from 3559802578@[群:263402786] '[reply:id=510988756]不行'"
+    },
+    {
+      "line": 11082,
+      "ts": "2026-10-05T13:15:26.385298+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -928700395 from 3996233487@[群:263402786] '果然'"
+    },
+    {
+      "line": 11103,
+      "ts": "2026-10-05T13:15:28.799035+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2093062431 from 3883589893@[群:263402786] '[reply:id=520827952][at:qq=3559802578] 你好Nox'"
+    },
+    {
+      "line": 11136,
+      "ts": "2026-10-05T13:15:29.333427+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1535732810 from 3996233487@[群:263402786] '😋'"
+    },
+    {
+      "line": 11157,
+      "ts": "2026-10-05T13:15:32.265962+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 918734844 from 3996233487@[群:263402786] '那就不用我道歉了'"
+    },
+    {
+      "line": 11177,
+      "ts": "2026-10-05T13:15:33.133593+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -543265855 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhSurEpa...,file=64D327EC1211CDDC07F3584AAD4BDA7D.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 11197,
+      "ts": "2026-10-05T13:15:34.032097+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -175177722 from 2157638500@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhQ4yAN5...,file=8A0223C23652E86BF81F1645F6BEB6F2.png,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 11243,
+      "ts": "2026-10-05T13:16:06.824369+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -211698737 from 3769232185@[群:263402786] '[at:qq=3559802578] 好了我不闹了，揉揉你的脑袋，给你抓抓发[face:id=21]'"
+    },
+    {
+      "line": 11264,
+      "ts": "2026-10-05T13:16:10.962799+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 377944503 from 3263474916@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhTlPiCZ...,file=0A0FE1EF24C6D19E1176D6F0711C642E.gif,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 11297,
+      "ts": "2026-10-05T13:16:47.150947+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2001833972 from 3996233487@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhTonVWe...,file=94FC5CCD5C4A6C2146AA653FD9F29FB1.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 11326,
+      "ts": "2026-10-05T13:16:55.352102+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -2028024917 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 11364,
+      "ts": "2026-10-05T13:17:03.597733+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 499111748 from 3883589893@[群:263402786] '真的好神圣啊'"
+    },
+    {
+      "line": 11399,
+      "ts": "2026-10-05T13:17:13.995207+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1740291702 from 3769232185@[群:263402786] '果然是生气了'"
+    },
+    {
+      "line": 11424,
+      "ts": "2026-10-05T13:17:26.200550+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -113316225 from 3769232185@[群:263402786] '居然不理我'"
+    },
+    {
+      "line": 11687,
+      "ts": "2026-10-05T13:19:01.441552+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1078932546 from 3996233487@[群:263402786] '有可能是去休息了'"
+    },
+    {
+      "line": 11709,
+      "ts": "2026-10-05T13:19:09.989532+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -42151692 from 3769232185@[群:263402786] '[at:qq=3559802578] 对不起我错了，以后再也不闹了，别不理我了[face:id=5][face:id=5][face:id=5]'"
+    },
+    {
+      "line": 11734,
+      "ts": "2026-10-05T13:19:25.709961+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1815178504 from 3996233487@[群:263402786] '[at:qq=1694717255] 咬你'"
+    },
+    {
+      "line": 11759,
+      "ts": "2026-10-05T13:19:27.752940+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 704833446 from 3559802578@[群:263402786] '[reply:id=-42151692]嗯，知道了'"
+    },
+    {
+      "line": 11796,
+      "ts": "2026-10-05T13:19:41.501504+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177553, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1707395887, 'message_seq': 384160, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-1815178504'}}, {'type': 'text', 'data': {'text': '嗷好痛'}}], 'raw_message': '[CQ:reply,id=-1815178504]嗷好痛', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'St",
+      "truncated": true
+    },
+    {
+      "line": 11805,
+      "ts": "2026-10-05T13:19:42.805347+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177554, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -978015738, 'message_seq': 384161, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '别咬啦'}}], 'raw_message': '别咬啦', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown', 'age': 0}, 'ano",
+      "truncated": true
+    },
+    {
+      "line": 11823,
+      "ts": "2026-10-05T13:19:43.981086+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177555, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -610031812, 'message_seq': 384162, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '再咬不理你了'}}], 'raw_message': '再咬不理你了', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown', 'age': 0}",
+      "truncated": true
+    },
+    {
+      "line": 11834,
+      "ts": "2026-10-05T13:19:46.010519+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -436725885 from 3883589893@[群:263402786] '[at:qq=4015093003] A'"
+    },
+    {
+      "line": 11860,
+      "ts": "2026-10-05T13:19:47.840748+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1348231485 from 3769232185@[群:263402786] '一道歉就出来了！'"
+    },
+    {
+      "line": 11889,
+      "ts": "2026-10-05T13:19:52.382517+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177563, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1611611045, 'message_seq': 384165, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'at', 'data': {'qq': '3559802578'}}, {'type': 'text', 'data': {'text': ' 红中，你刚发图是不是在摸鱼呀'}}], 'raw_message': '[CQ:at,qq=3559802578] 红中，你刚发图是不是在摸鱼呀', 'font': 0, 'sender': {'user_id': 1694717255,",
+      "truncated": true
+    },
+    {
+      "line": 11935,
+      "ts": "2026-10-05T13:20:02.713492+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1874899489 from 3883589893@[群:263402786] '阿呆的机器人还是不鸟阿呆'"
+    },
+    {
+      "line": 11955,
+      "ts": "2026-10-05T13:20:03.565476+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -716172146 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhR0rKmV...,file=5ADBFA385361891C30B73113A0B8F660.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 12056,
+      "ts": "2026-10-05T13:20:07.771796+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1520903885 from 3996233487@[群:263402786] '（）'"
+    },
+    {
+      "line": 12078,
+      "ts": "2026-10-05T13:20:11.046850+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -576276824 from 3559802578@[群:263402786] '[reply:id=-1611611045]我是Nox，不是红中没摸鱼'"
+    },
+    {
+      "line": 12372,
+      "ts": "2026-10-05T13:20:46.068350+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177617, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -118547302, 'message_seq': 384170, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-576276824'}}, {'type': 'text', 'data': {'text': '哎呀，原来是Nox呀'}}], 'raw_message': '[CQ:reply,id=-576276824]哎呀，原来是Nox呀', 'font': 0, 'sender': {'user_id': 1694717255, 'nic",
+      "truncated": true
+    },
+    {
+      "line": 12381,
+      "ts": "2026-10-05T13:20:47.305033+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177618, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 1068720190, 'message_seq': 384171, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '嘴硬心软的我差点就信了'}}], 'raw_message': '嘴硬心软的我差点就信了', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown',",
+      "truncated": true
+    },
+    {
+      "line": 12414,
+      "ts": "2026-10-05T13:20:48.706852+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177620, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 997475635, 'message_seq': 384172, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '那你肯定没摸鱼，肯定在认真聊天'}}], 'raw_message': '那你肯定没摸鱼，肯定在认真聊天', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'un",
+      "truncated": true
+    },
+    {
+      "line": 12520,
+      "ts": "2026-10-05T13:20:57.417543+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -775882904 from 3769232185@[群:263402786] '[reply:id=704833446][at:qq=3559802578] 所以Nox还愿意和我做CP嘛？[face:id=5][face:id=5][face:id=5]'"
+    },
+    {
+      "line": 12567,
+      "ts": "2026-10-05T13:21:03.969401+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -324880334 from 2157638500@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhQ4yAN5...,file=8A0223C23652E86BF81F1645F6BEB6F2.png,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 12603,
+      "ts": "2026-10-05T13:21:08.021207+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 83895804 from 3559802578@[群:263402786] '[reply:id=-775882904]嗯，还愿意'"
+    },
+    {
+      "line": 12664,
+      "ts": "2026-10-05T13:21:12.883188+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2094572066 from 3883589893@[群:263402786] '[at:qq=2351598367] 比心心[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhSBe0KR...,file=3EF62792D7975B8994967FBC709C7A84.jpg,sub_type=0,summary=[图片]]'"
+    },
+    {
+      "line": 12742,
+      "ts": "2026-10-05T13:21:37.035683+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1322381923 from 2351598367@[群:263402786] '[reply:id=2094572066]哼，勉强接下啦[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhR8FS36...,file=C8FF397EFBEE9AC9FC7DFDD8CC8D4A9A.gif,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 12784,
+      "ts": "2026-10-05T13:21:47.490479+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 171720461 from 3263474916@[群:263402786] '[video:file=10ace5b1ad212400e11da2f9f3e9749c.mp4,url=https://multimedia.nt.qq.com.cn/download?appid=1415&format=origin&o...]'"
+    },
+    {
+      "line": 12808,
+      "ts": "2026-10-05T13:21:57.910327+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1259892407 from 3996233487@[群:263402786] '[reply:id=997475635]摸摸啦'"
+    },
+    {
+      "line": 12844,
+      "ts": "2026-10-05T13:22:08.428084+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177700, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1782441131, 'message_seq': 384180, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-1259892407'}}, {'type': 'text', 'data': {'text': '哼，摸头就摸头'}}], 'raw_message': '[CQ:reply,id=-1259892407]哼，摸头就摸头', 'font': 0, 'sender': {'user_id': 1694717255, 'nickna",
+      "truncated": true
+    },
+    {
+      "line": 12858,
+      "ts": "2026-10-05T13:22:09.751327+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177701, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 1688920602, 'message_seq': 384181, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '别以为这样就能让我原谅你之前想肘我呢'}}], 'raw_message': '别以为这样就能让我原谅你之前想肘我呢', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'se",
+      "truncated": true
+    },
+    {
+      "line": 13222,
+      "ts": "2026-10-05T13:22:46.980637+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -395489695 from 3769232185@[群:263402786] '[reply:id=83895804][at:qq=3559802578] 诶嘿，谢谢Nox——以后我再也不闹了'"
+    },
+    {
+      "line": 13259,
+      "ts": "2026-10-05T13:22:55.081828+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -477431059 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhR8bTNu...,file=8AD0565759272F8A982B2CC51F11F6E8.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 13280,
+      "ts": "2026-10-05T13:22:57.492619+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -653755495 from 3559802578@[群:263402786] '[reply:id=-395489695]嗯'"
+    },
+    {
+      "line": 13331,
+      "ts": "2026-10-05T13:23:56.967858+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 683240782 from 3263474916@[群:263402786] '[video:file=5c20fe313dd09a7951e153dc8458d4cb.mp4,url=https://multimedia.nt.qq.com.cn/download?appid=1415&format=origin&o...]'"
+    },
+    {
+      "line": 13358,
+      "ts": "2026-10-05T13:24:26.577421+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 528909110 from 3206833297@[群:263402786] '？'"
+    },
+    {
+      "line": 13379,
+      "ts": "2026-10-05T13:24:33.662804+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1397263727 from 3996233487@[群:263402786] '诶（慌乱）我怎么会有想肘你的想法呢[at:qq=1694717255] '"
+    },
+    {
+      "line": 13425,
+      "ts": "2026-10-05T13:24:49.189810+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177860, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1087930389, 'message_seq': 384188, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-1397263727'}}, {'type': 'text', 'data': {'text': '嘴硬呢'}}], 'raw_message': '[CQ:reply,id=-1397263727]嘴硬呢', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'St",
+      "truncated": true
+    },
+    {
+      "line": 13437,
+      "ts": "2026-10-05T13:24:50.484557+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177862, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 131525891, 'message_seq': 384189, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '明明是你先说的'}}], 'raw_message': '明明是你先说的', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown', 'age': 0",
+      "truncated": true
+    },
+    {
+      "line": 13685,
+      "ts": "2026-10-05T13:24:51.927440+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177863, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 1766624315, 'message_seq': 384190, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '别装失忆啦'}}], 'raw_message': '别装失忆啦', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown', 'age': 0}, ",
+      "truncated": true
+    },
+    {
+      "line": 13754,
+      "ts": "2026-10-05T13:25:50.222282+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1316604638 from 3996233487@[群:263402786] '[reply:id=1766624315][at:qq=1694717255] 我想肘的是Kirito'"
+    },
+    {
+      "line": 13790,
+      "ts": "2026-10-05T13:25:59.937669+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177931, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 1892169638, 'message_seq': 384192, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-1316604638'}}, {'type': 'text', 'data': {'text': '切，拿Kirito当挡箭牌呢'}}], 'raw_message': '[CQ:reply,id=-1316604638]切，拿Kirito当挡箭牌呢', 'font': 0, 'sender': {'user_id': 169471",
+      "truncated": true
+    },
+    {
+      "line": 13799,
+      "ts": "2026-10-05T13:26:01.254088+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177932, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1466586672, 'message_seq': 384193, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '刚才还装失忆说没想肘人'}}], 'raw_message': '刚才还装失忆说没想肘人', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown'",
+      "truncated": true
+    },
+    {
+      "line": 13814,
+      "ts": "2026-10-05T13:26:02.472417+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791177934, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 1108273722, 'message_seq': 384194, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '这理由编得连我都不信啦'}}], 'raw_message': '这理由编得连我都不信啦', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown',",
+      "truncated": true
+    },
+    {
+      "line": 13847,
+      "ts": "2026-10-05T13:26:30.516936+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -2122316280 from 3883589893@[群:263402786] '[reply:id=-1316604638][at:qq=3996233487] 小子，你要肘的不是我吗？'"
+    },
+    {
+      "line": 13867,
+      "ts": "2026-10-05T13:26:32.985302+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1331390702 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 13921,
+      "ts": "2026-10-05T13:27:06.805707+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -190448416 from 3996233487@[群:263402786] '你们两个都想肘'"
+    },
+    {
+      "line": 13969,
+      "ts": "2026-10-05T13:27:13.761033+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -671629917 from 3996233487@[群:263402786] '都别想活'"
+    },
+    {
+      "line": 14005,
+      "ts": "2026-10-05T13:27:19.530959+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -445890643 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRmpWlz...,file=121A491BED70C40C9BA3934E3075E8E4.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 14032,
+      "ts": "2026-10-05T13:27:26.328883+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1751724472 from 3644282359@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhT6ylma...,file=0E430B17A0067DCFA96B994DFBEDFDBD.jpg,sub_type=7,summary=[？]]'"
+    },
+    {
+      "line": 14085,
+      "ts": "2026-10-05T13:27:37.530475+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2125961555 from 3883589893@[群:263402786] '我也要死吗？'"
+    },
+    {
+      "line": 14105,
+      "ts": "2026-10-05T13:27:38.649100+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 946299776 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRbMOeC...,file=F287A91E13775BFB2BCEDEE0A16C966F.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 14127,
+      "ts": "2026-10-05T13:27:46.187544+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1097964395 from 3996233487@[群:263402786] '对'"
+    },
+    {
+      "line": 14155,
+      "ts": "2026-10-05T13:27:57.776786+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 315959455 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhTvBbv0...,file=82B77CF2379C390F7F5F4A021DF2DBED.suf,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 14232,
+      "ts": "2026-10-05T13:28:15.362796+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -842935956 from 3644282359@[群:263402786] '[at:qq=3883589893] [face:id=112][face:id=112][face:id=112]'"
+    },
+    {
+      "line": 14278,
+      "ts": "2026-10-05T13:28:40.377570+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1636542272 from 3883589893@[群:263402786] '不鸟你了，生图去了'"
+    },
+    {
+      "line": 14311,
+      "ts": "2026-10-05T13:28:44.066728+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 975821558 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 14336,
+      "ts": "2026-10-05T13:28:51.692071+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1364013450 from 3644282359@[群:263402786] '[reply:id=1636542272][at:qq=3883589893] 给我灵感'"
+    },
+    {
+      "line": 14359,
+      "ts": "2026-10-05T13:29:02.601106+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 2146505148 from 3883589893@[群:263402786] '[reply:id=-842935956][at:qq=3644282359] 想要吗？'"
+    },
+    {
+      "line": 14379,
+      "ts": "2026-10-05T13:29:04.398858+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 414070368 from 3883589893@[群:263402786] '[image:url=https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=EhRQFOfY...,file=B8B1268B83602F9C3C4F293D879E895C.jpg,sub_type=1,summary=[动画表情]]'"
+    },
+    {
+      "line": 14415,
+      "ts": "2026-10-05T13:29:12.935465+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1228840615 from 3644282359@[群:263402786] '[reply:id=2146505148][at:qq=3883589893] 😡给我'"
+    },
+    {
+      "line": 14453,
+      "ts": "2026-10-05T13:29:22.024709+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1181788558 from 3883589893@[群:263402786] '[reply:id=1228840615][at:qq=3644282359] 不给'"
+    },
+    {
+      "line": 14474,
+      "ts": "2026-10-05T13:29:24.048838+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1961487622 from 3996233487@[群:263402786] '[reply:id=1108273722][at:qq=1694717255] 摸摸'"
+    },
+    {
+      "line": 14497,
+      "ts": "2026-10-05T13:29:24.343210+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -816597368 from 3883589893@[群:263402786] '😈😈😈'"
+    },
+    {
+      "line": 14543,
+      "ts": "2026-10-05T13:29:30.493931+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791178142, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 1943537563, 'message_seq': 384215, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-1961487622'}}, {'type': 'text', 'data': {'text': '脏手别摸'}}], 'raw_message': '[CQ:reply,id=-1961487622]脏手别摸', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'S",
+      "truncated": true
+    },
+    {
+      "line": 14556,
+      "ts": "2026-10-05T13:29:31.866313+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791178143, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1833582484, 'message_seq': 384216, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '……再摸一下也不是不行'}}], 'raw_message': '……再摸一下也不是不行', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown'",
+      "truncated": true
+    },
+    {
+      "line": 14564,
+      "ts": "2026-10-05T13:29:33.328425+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 514828922 from 3883589893@[群:263402786] '我真坏'"
+    },
+    {
+      "line": 14788,
+      "ts": "2026-10-05T13:30:39.908678+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -1330350641 from 3996233487@[群:263402786] '[reply:id=-1833582484]私聊的记忆回来了吗？'"
+    },
+    {
+      "line": 14867,
+      "ts": "2026-10-05T13:31:02.673593+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791178234, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1673252146, 'message_seq': 384219, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'reply', 'data': {'id': '-1330350641'}}, {'type': 'text', 'data': {'text': '才没有呢'}}], 'raw_message': '[CQ:reply,id=-1330350641]才没有呢', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': '",
+      "truncated": true
+    },
+    {
+      "line": 14876,
+      "ts": "2026-10-05T13:31:04.100579+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791178235, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': -1701106152, 'message_seq': 384220, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '别想套我话呀'}}], 'raw_message': '别想套我话呀', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown', 'age': 0",
+      "truncated": true
+    },
+    {
+      "line": 14892,
+      "ts": "2026-10-05T13:31:05.221324+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message_sent]: {'time': 1791178236, 'self_id': 1694717255, 'post_type': 'message_sent', 'message_type': 'group', 'sub_type': 'normal', 'message_id': 2003299754, 'message_seq': 384221, 'group_id': 263402786, 'group_name': 'Lumi和Nox粉丝交流群', 'user_id': 1694717255, 'message': [{'type': 'text', 'data': {'text': '刚才是谁说我脏手来着？'}}], 'raw_message': '刚才是谁说我脏手来着？', 'font': 0, 'sender': {'user_id': 1694717255, 'nickname': 'Stella', 'card': 'Stella', 'role': 'member', 'sex': 'unknown',",
+      "truncated": true
+    },
+    {
+      "line": 14908,
+      "ts": "2026-10-05T13:31:16.481901+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 772032484 from 3089665724@[群:263402786] '啧'"
+    },
+    {
+      "line": 14957,
+      "ts": "2026-10-05T13:31:23.592569+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1753764576 from 3089665724@[群:263402786] '怎么回事'"
+    },
+    {
+      "line": 14979,
+      "ts": "2026-10-05T13:31:29.868655+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -958478390 from 3996233487@[群:263402786] '佬……'"
+    },
+    {
+      "line": 14999,
+      "ts": "2026-10-05T13:31:33.579121+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -561737514 from 3996233487@[群:263402786] '还是别管了（）'"
+    },
+    {
+      "line": 15093,
+      "ts": "2026-10-05T13:32:00.352976+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message -142340447 from 3089665724@[群:263402786] '我累了先歇会'"
+    },
+    {
+      "line": 15159,
+      "ts": "2026-10-05T13:32:18.853443+08:00",
+      "level": "SUCCESS",
+      "module": "nonebot",
+      "message": "OneBot V11 1694717255 | [message.group.normal]: Message 1576220037 from 3089665724@[群:263402786] '搞不好商单那边要我紧急修什么玩意'"
+    }
+  ],
+  "identity_claims_at_capture": [
+    {
+      "id": 4,
+      "conversation_key": "qq:1694717255:group:263402786",
+      "bot_id": "1694717255",
+      "subject_user_id": "3644282359",
+      "author_user_id": "3644282359",
+      "claim_kind": "self_alias",
+      "alias": "谁",
+      "source_row_id": 36806,
+      "status": "active",
+      "supersedes_id": null,
+      "evidence_excerpt": "我是谁",
+      "created_at": "2026-10-04 10:08:50",
+      "updated_at": "2026-10-04 10:08:50"
+    },
+    {
+      "id": 6,
+      "conversation_key": "qq:1694717255:group:263402786",
+      "bot_id": "1694717255",
+      "subject_user_id": "3559802578",
+      "author_user_id": "3559802578",
+      "claim_kind": "self_alias",
+      "alias": "她姐",
+      "source_row_id": 37793,
+      "status": "active",
+      "supersedes_id": null,
+      "evidence_excerpt": "我是她姐",
+      "created_at": "2026-10-04 12:54:00",
+      "updated_at": "2026-10-04 12:54:00"
+    },
+    {
+      "id": 10,
+      "conversation_key": "qq:1694717255:group:263402786",
+      "bot_id": "1694717255",
+      "subject_user_id": "3644282359",
+      "author_user_id": "3644282359",
+      "claim_kind": "self_alias",
+      "alias": "你教父了吗",
+      "source_row_id": 37936,
+      "status": "active",
+      "supersedes_id": null,
+      "evidence_excerpt": "我是你教父了吗",
+      "created_at": "2026-10-04 13:07:34",
+      "updated_at": "2026-10-04 13:07:34"
+    },
+    {
+      "id": 14,
+      "conversation_key": "qq:1694717255:group:263402786",
+      "bot_id": "1694717255",
+      "subject_user_id": "3559802578",
+      "author_user_id": "3559802578",
+      "claim_kind": "self_alias",
+      "alias": "这是Lumi不",
+      "source_row_id": 40454,
+      "status": "active",
+      "supersedes_id": null,
+      "evidence_excerpt": "这是Lumi不是我",
+      "created_at": "2026-10-05 06:59:46",
+      "updated_at": "2026-10-05 06:59:46"
+    }
+  ],
+  "probes_actual_parser_and_normalizer_ast": [
+    {
+      "text": "我是Nox",
+      "result": [
+        "Nox",
+        false
+      ]
+    },
+    {
+      "text": "我是Nox，不是红中没摸鱼",
+      "result": null
+    },
+    {
+      "text": "我是谁",
+      "result": [
+        "谁",
+        false
+      ]
+    },
+    {
+      "text": "这是Lumi不是我",
+      "result": [
+        "这是Lumi不",
+        false
+      ]
+    }
+  ],
+  "candidate_at_capture": {
+    "id": "94f3eef8533d45de95f5ad7c776cf829",
+    "group_shared_space": "space_1",
+    "user_id": "3559802578",
+    "type": "FACT",
+    "content": "称呼用户 3644282359 为“红中”，并确认对方喜欢自己且允许被@提及",
+    "importance": 0.5,
+    "confidence": 0.8,
+    "evidence": "用户直接陈述对特定用户的称呼及互动规则",
+    "status": "OBSERVING",
+    "source_message_ids": "[\"27064\"]",
+    "usage_tags": "[\"RELATION_CONTEXT\", \"PERSONALIZE\"]",
+    "visibility": "OPEN",
+    "trigger_data": null,
+    "behavior_rule": "",
+    "source_kind": "PASSIVE",
+    "occurrence_count": 1,
+    "first_seen_at": "2026-10-02 12:29:29",
+    "source_kinds": "[\"PASSIVE\"]",
+    "origin_group_id": "263402786",
+    "created_at": "2026-10-02 12:29:29",
+    "updated_at": "2026-10-05 07:38:45",
+    "content_raw": null,
+    "owner_type": "SPACE",
+    "owner_key": "space:space_1",
+    "subject_key": "",
+    "audience": "CURRENT_SPACE",
+    "source_conversation_key": "",
+    "fact_key": "",
+    "policy_version": "2026-10-03.0"
+  },
+  "note": "Candidate mutable fields reflect capture time. Claims after the investigated turns are not used as preceding causes. JSONL event payload truncation is distinct from prompt budget clipping."
+}

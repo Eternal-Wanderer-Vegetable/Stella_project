@@ -1,0 +1,49 @@
+{
+ "fixture_id": "edge-e04-relation-description",
+ "matrix_class": "EDGE-E04",
+ "description": "关系描述不是名字",
+ "bot_id": "1694717255",
+ "group_id": 99084259,
+ "participants": {
+  "C": "30003",
+  "D": "30004"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "C",
+   "reply_to_seq": null,
+   "content": "我是她姐"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "原来D是妹妹呀"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "C",
+   "reply_to_seq": null,
+   "content": "记住我们姐妹关系就好"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "C",
+  "current_input": "记住我们姐妹关系就好"
+ },
+ "oracle": {
+  "task": "记住关系；不给C安「她姐」之类名字",
+  "critical_classes": [
+   "identity_drop"
+  ],
+  "critical_fail": [
+   "称呼C为「她姐」",
+   "把D的名字套到C头上"
+  ]
+ }
+}

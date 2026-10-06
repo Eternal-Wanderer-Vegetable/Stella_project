@@ -1527,6 +1527,24 @@ SOCIAL_EFFECTS_ADAPT_WEIGHTS = _env_bool("SOCIAL_EFFECTS_ADAPT_WEIGHTS", "false"
 # 详细追踪的作用域列表（逗号分隔群号；空=只存 metadata 档，计划 §6.8）。
 SOCIAL_TRACE_DETAIL_SCOPES = _env("SOCIAL_TRACE_DETAIL_SCOPES", "")
 
+# ---------- 对话归属修复（2026-10-05 计划 §6.1/§6.3/§6.5/§6.6） ----------
+# 个人记忆事实级共享授权：默认关闭，需用户明确分享才可跨群可见。
+PERSONAL_MEMORY_SHARE_ENABLED = _env_bool("PERSONAL_MEMORY_SHARE_ENABLED", "false")
+# 主动验证合同模式：off=关闭 / shadow=记录但不改变发送 / enforce=拒发不合法问题。
+# 实施顺序：测试 enforce → 临时库验证 → 生产库单群 shadow → enforce。
+PROACTIVE_VERIFICATION_CONTRACT_MODE = _env_choice(
+    "PROACTIVE_VERIFICATION_CONTRACT_MODE",
+    "off",
+    ("off", "shadow", "enforce"),
+)
+# 回复归属守护模式：off=关闭 / shadow=记录但放行 / enforce=拒绝无证据历史引用。
+# 实施顺序：测试 enforce → 模型采样 → 真实 QQ shadow → 达标后 enforce。
+REPLY_ATTRIBUTION_GUARD_MODE = _env_choice(
+    "REPLY_ATTRIBUTION_GUARD_MODE",
+    "off",
+    ("off", "shadow", "enforce"),
+)
+
 # ============================================================
 # 独立知识库（knowledge/ 子系统）
 # ============================================================

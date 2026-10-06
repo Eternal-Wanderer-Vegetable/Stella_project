@@ -353,6 +353,50 @@ def _chat(endpoint: str, api_key: str, model: str, system_prompt: str,
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _fixture_evidence(fixture: dict) -> dict:
+    """夹具派生证据表（与 guard 重放同源；协议指令与 guard 看到的一致）。"""
+    from core.dialogue_attribution import build_evidence_table
+
+    participants = fixture.get("participants") or {}
+    recent = []
+    for message in fixture.get("messages") or []:
+        if message.get("kind") != "user":
+            continue
+        author_key = message.get("author")
+        uid = str(participants.get(author_key) or "")
+        recent.append(
+            {
+                "id": message.get("seq"),
+                "text": str(message.get("content") or "")[:120],
+                "author_id": int(uid) if uid.isdigit() else 0,
+                "author_display": str(author_key or ""),
+                "object_id": None,
+                "row_id": message.get("seq"),
+                "conversation_key": str(fixture.get("fixture_id") or ""),
+                "timestamp": "",
+            }
+        )
+    return build_evidence_table(recent, [], [], max_units=16)
+
+
+def _guard_stage(fixture: dict, raw_output: str) -> dict:
+    """归属 guard 重放（整改计划 P8）：采样输出经服务端证据表 + enforce。
+
+    证据来自夹具的真实 user 消息（作者=参与者 UID）；报告
+    原始输出/最终输出/决策，供统计 阻断率/兜底率/漏过率——不只看
+    新提示词的采样结果，guard 层的拦截也是验收对象。
+    """
+    from dataclasses import asdict
+
+    from core.dialogue_attribution import apply_attribution_guard
+
+    evidence = _fixture_evidence(fixture)
+    final_output, decision = apply_attribution_guard(
+        raw_output, evidence, set(evidence.keys()), "enforce", identity_revision=0
+    )
+    return {"final_output": final_output, "decision": asdict(decision)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--fixture", required=True, help="冻结夹具 JSON 路径")
@@ -371,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--dry-run", action="store_true",
                         help="只渲染输入字节，不访问网络（CI/验收输入对照用）")
+    parser.add_argument("--guard", action="store_true",
+                        help="采样输出经归属 guard（enforce）重放，报告阻断/兜底/放行统计")
     parser.add_argument("--output", default="", help="报告 JSON 输出路径")
     args = parser.parse_args(argv)
 
@@ -380,6 +426,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.system_prompt_file:
         system_prompt = Path(args.system_prompt_file).read_text(encoding="utf-8")
     _, user_prompt, budget_meta = build_prompt(fixture, args.variant, system_rules=True)
+
+    # --guard 时把生产同源的协议段拼进 user prompt（复核 F1：生产链路里
+    # protocol_instructions 由 prepare 并入受保护块；评估链路必须一致，
+    # 否则模型自由文本没有 reply_plan，guard 会结构性全兜底）。
+    attribution_protocol_present = False
+    if args.guard:
+        from core.dialogue_attribution import protocol_instructions
+
+        evidence = _fixture_evidence(fixture)
+        protocol_section = protocol_instructions(evidence, set(evidence.keys()))
+        if protocol_section:
+            user_prompt = f"{user_prompt}\n\n{protocol_section}"
+            attribution_protocol_present = True
 
     report: dict = {
         "schema": "dialogue-attribution-eval/1",
@@ -410,6 +469,7 @@ def main(argv: list[str] | None = None) -> int:
             "user_prompt": user_prompt,
             "estimated_tokens": estimate_tokens(user_prompt),
             "budget": budget_meta,
+            "attribution_protocol": attribution_protocol_present,
             "oracle": (fixture.get("evaluation") or fixture.get("failing_round", {})).get("oracle"),
         },
         "samples": [],
@@ -445,10 +505,22 @@ def main(argv: list[str] | None = None) -> int:
                     "finish_reason": choice.get("finish_reason"),
                 }
                 sample["screening_flags"] = _screen(sample["output"] or "")
+                if args.guard:
+                    sample["guard"] = _guard_stage(fixture, sample["output"] or "")
             except Exception as exc:  # 采样失败如实记录，继续下一次
                 sample["error"] = f"{type(exc).__name__}: {exc}"
                 exit_code = 2
         report["samples"].append(sample)
+
+    if args.guard:
+        guarded = [s.get("guard") for s in report["samples"] if s.get("guard")]
+        report["guard_summary"] = {
+            "mode": "enforce",
+            "sampled": len(guarded),
+            "blocked": sum(1 for g in guarded if g["decision"]["decision"] == "reject"),
+            "fallback": sum(1 for g in guarded if g["decision"]["decision"] == "fallback"),
+            "passed": sum(1 for g in guarded if g["decision"]["decision"] == "pass"),
+        }
 
     rendered = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:

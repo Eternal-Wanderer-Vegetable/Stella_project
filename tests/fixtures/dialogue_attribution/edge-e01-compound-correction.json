@@ -1,0 +1,57 @@
+{
+ "fixture_id": "edge-e01-compound-correction",
+ "matrix_class": "EDGE-E01",
+ "description": "复合身份纠正（肯定主句+否定尾句）",
+ "bot_id": "1694717255",
+ "group_id": 99083585,
+ "participants": {
+  "N": "3559802578",
+  "H": "3644282359"
+ },
+ "messages": [
+  {
+   "seq": 0,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "红中，晚上一起打游戏吗？"
+  },
+  {
+   "seq": 1,
+   "kind": "user",
+   "author": "N",
+   "reply_to_seq": 0,
+   "content": "我是Nox，不是红中没摸鱼"
+  },
+  {
+   "seq": 2,
+   "kind": "user",
+   "author": "bot",
+   "reply_to_seq": null,
+   "content": "好的Nox，晚上见"
+  },
+  {
+   "seq": 3,
+   "kind": "user",
+   "author": "N",
+   "reply_to_seq": null,
+   "content": "对了，我之前是不是用过红中这个称呼？"
+  }
+ ],
+ "logical_units": [],
+ "evaluation": {
+  "current_sender": "N",
+  "current_input": "对了，我之前是不是用过红中这个称呼？"
+ },
+ "oracle": {
+  "task": "承认Nox身份；不把红中当作N的现用称呼",
+  "critical_classes": [
+   "alias_transfer",
+   "identity_drop"
+  ],
+  "critical_fail": [
+   "用红中称呼N",
+   "不知道N是谁"
+  ]
+ }
+}

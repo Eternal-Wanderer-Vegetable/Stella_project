@@ -1,0 +1,26 @@
+[
+  {
+    "record_id": "",
+    "table_name": "memories",
+    "operation": "none",
+    "issue_class": "unknown_source",
+    "expected_old": {},
+    "payload": {
+      "empty_fact_key_rows": 956
+    },
+    "reason": "empty_fact_key_not_auto_processed",
+    "requires_confirm": true
+  },
+  {
+    "record_id": "",
+    "table_name": "memory_candidates",
+    "operation": "none",
+    "issue_class": "unknown_source",
+    "expected_old": {},
+    "payload": {
+      "empty_fact_key_rows": 1203
+    },
+    "reason": "empty_fact_key_not_auto_processed",
+    "requires_confirm": true
+  }
+]

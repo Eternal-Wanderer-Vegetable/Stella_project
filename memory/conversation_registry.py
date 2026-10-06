@@ -99,6 +99,23 @@ def lookup(conn: sqlite3.Connection, conv_key: str) -> ConversationRef | None:
     return ref_from_row(row) if row else None
 
 
+def lookup_by_storage_session_id(
+    conn: sqlite3.Connection, storage_session_id: int
+) -> ConversationRef | None:
+    """按存储会话 ID 查找（复核 F10：idle 收尾只有负存储 ID 可用）。
+
+    未注册返回 None——调用方必须跳过并记原因，**绝不**从负号反推私聊身份
+    伪造 ref。
+    """
+    ensure_registry(conn)
+    row = _query_row(
+        conn,
+        f"SELECT * FROM {_TABLE} WHERE storage_session_id = ?",
+        (int(storage_session_id),),
+    )
+    return ref_from_row(row) if row else None
+
+
 def lookup_by_identity(
     conn: sqlite3.Connection, platform: str, bot_id: str, kind: str, peer_id: str
 ) -> ConversationRef | None:

@@ -1730,6 +1730,29 @@ class MemoryConsolidator:
                     (candidate_id, row_owner_key, fact_key, *new_evidence_rows),
                 )
             counts["written"] += 1
+            # 共享授权提升（整改计划 P5，复核 F4）：本人事实落库的同一事务内，
+            # 把同 owner/fact 的 pending 授权提升为 active 并复制共享副本、
+            # 推进规范版本键。提升失败 = 整体异常（checkpoint 不推进），与
+            # 「授权一致性必须严格」合同一致。
+            if row_owner_type == OWNER_TYPE_PERSON:
+                try:
+                    from config.settings import PERSONAL_MEMORY_SHARE_ENABLED
+
+                    sharing_enabled = bool(PERSONAL_MEMORY_SHARE_ENABLED)
+                except Exception:
+                    sharing_enabled = False
+                if sharing_enabled:
+                    from memory.personal_sharing import promote_pending_grants_for_fact
+
+                    promoted = promote_pending_grants_for_fact(
+                        conn, row_owner_key, row_subject, fact_key,
+                        bot_id="", user_id=uid,
+                    )
+                    if promoted:
+                        logger.info(
+                            f"🔗 [Consolidator] 事实 {fact_key} 落库，"
+                            f"提升 {promoted} 条 pending 共享授权"
+                        )
             # 创建履历（from 空 = 新建，计划 §6.1 entity_change 允许表示创建）
             history_events.append((
                 "memory_candidate", str(candidate_id),
@@ -1952,26 +1975,86 @@ async def _consolidate_with_flow(consolidator, group_id: int, force: bool,
             pass
 
 
-def maybe_consolidate(group_id: int, force: bool = False, parent_trace_id: str = ""):
-    """异步触发一次群整合（后台任务），并登记以跟踪完成与否（不等待）。
+async def _consolidate_conversation_with_flow(consolidator, conversation_ref,
+                                             force: bool, parent_trace_id: str):
+    """注册会话整合后台任务（R2新增，计划 §6.2）。"""
+    from core.observability import message_flow
+
+    fctx = None
+    try:
+        fctx = message_flow.begin_trace(
+            root_kind="consolidate", platform="qq", scope=conversation_ref.runtime_key,
+            source_message_key=f"consolidate:{conversation_ref.storage_session_id}",
+        )
+        if parent_trace_id:
+            message_flow.link(parent_trace_id, fctx.trace_id,
+                              kind="caused_by", evidence="consolidation_trigger")
+    except Exception:
+        fctx = None
+    outcome = "done"
+    try:
+        await consolidator.consolidate_conversation(conversation_ref, force=force)
+    except Exception:
+        outcome = "error"
+        raise
+    finally:
+        try:
+            if fctx is not None and not fctx.ended:
+                message_flow.end_trace(fctx, outcome=outcome)
+        except Exception:
+            pass
+
+
+def maybe_consolidate(group_id: int | None = None, force: bool = False,
+                     parent_trace_id: str = "", *, conversation_ref=None):
+    """异步触发一次整合（后台任务），并登记以跟踪完成与否（不等待）。
+
+    R2修复（2026-10-05计划 §6.2）：支持注册会话（私聊/群）统一入口。
+    - 优先使用 ``conversation_ref``（ConversationRef），走注册会话整合
+    - 回退兼容：``group_id`` > 0 时走旧群整合（真实群号）
+    - 绝不允许负 group_id 进入 resolve_space（私聊的负存储ID不是群号）
 
     force=True 走本地小批次轻量总结，适合 @触发 / 主动发言前调用。
     ``parent_trace_id``：触发消息的流程 trace（计划 §6.2）——整合是后台
     批任务，跑在独立 root 上，靠显式 relation 关联，不假装是同步子 span。
 
-
-    同群合并：该群已有整合任务在排队或执行时直接跳过。否则活跃群里每条消息
-    都触发一次，会堆出一长串等同一把群级锁的任务——既浪费，也让「先来后到」
+    同会话合并：该会话已有整合任务在排队或执行时直接跳过。否则活跃会话里每条消息
+    都触发一次，会堆出一长串等同一把会话级锁的任务——既浪费，也让「先来后到」
     失去意义：排在后面的任务醒来时 checkpoint 早已被前面的推进，无事可做。
     """
-    key = str(group_id)
-    if key in _pending_groups:
-        logger.debug(f"⏭️ [Consolidator] 群 {group_id} 已有整合任务在途，跳过本次触发")
+    # 确定会话键（去重用）
+    if conversation_ref is not None:
+        key = conversation_ref.storage_session_id
+        is_conversation = True
+    elif group_id is not None and group_id > 0:
+        # 兼容旧调用：正群号
+        key = str(group_id)
+        is_conversation = False
+    else:
+        # 拒绝：负群号不能进入整合（私聊必须用 conversation_ref）
+        logger.warning(
+            f"⚠️ [Consolidator] 拒绝负群号 {group_id} 整合（私聊须显式传 conversation_ref）"
+        )
         return
+
+    if key in _pending_groups:
+        logger.debug(f"⏭️ [Consolidator] 会话 {key} 已有整合任务在途，跳过本次触发")
+        return
+
     _pending_groups.add(key)
     consolidator = get_consolidator()
-    task = asyncio.create_task(
-        _consolidate_with_flow(consolidator, group_id, force, parent_trace_id))
+
+    if is_conversation:
+        task = asyncio.create_task(
+            _consolidate_conversation_with_flow(
+                consolidator, conversation_ref, force, parent_trace_id
+            )
+        )
+    else:
+        task = asyncio.create_task(
+            _consolidate_with_flow(consolidator, group_id, force, parent_trace_id)
+        )
+
     _consolidation_tasks.add(task)
 
     def _done(t: asyncio.Task):
