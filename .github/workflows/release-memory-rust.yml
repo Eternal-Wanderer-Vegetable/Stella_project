@@ -155,8 +155,8 @@ jobs:
             "Stella Rust memory engine release"
             "Release: $env:RELEASE_REF"
             "Distribution: stella-memory-rust"
-            "Backend API: 1"
-            "Memory schema: 14"
+            "Backend API: 2"
+            "Memory schema: 18"
             "Launcher: start.bat"
             "The launcher installs the bundled wheel and selects MEMORY_BACKEND=rust."
           ) | Set-Content "$root\VERSION.txt" -Encoding utf8
@@ -193,7 +193,7 @@ jobs:
             --target $wheelVerify $wheelPath
           Push-Location $wheelVerify
           try {
-            python -c "import memory_rust._native as native; assert native.BACKEND_API_VERSION == 1; assert native.MEMORY_SCHEMA_VERSION == 14"
+            python -c "import memory_rust._native as native; assert native.BACKEND_API_VERSION == 2; assert native.MEMORY_SCHEMA_VERSION == 18"
           } finally {
             Pop-Location
           }
