@@ -551,3 +551,10 @@ payload 只放结构化字段（id、domain、来源层、是否可路由、prov
 | [架构说明](architecture.md) | 目录结构、消息处理流程、AstrBot 兼容层在整体里的位置 |
 | [配置参考](configuration.md) | 本文提到的全部配置项 |
 | [模板插件](examples/astrbot_plugin_stella_template/) | 可以直接拷走的完整示例 |
+
+## 6.1.0 会话接入注意事项
+
+插件可收到群与私聊事件；需要群号的功能先按事件类型检查，不把私聊的 storage_session_id
+当作真实群号。不要从昵称、正文或模型返回值推导用户身份/收件人。能力工具仍应只读幂等，
+命令副作用走显式命令权限链；长任务委派交给 Cometa 的受理与回投合同。
+验证范例见 [模板插件](examples/astrbot_plugin_stella_template/README.md)。

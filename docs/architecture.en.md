@@ -2,14 +2,22 @@
 
 [中文](architecture.md) | English
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
-
 This document describes Stella's directory structure, module responsibilities, and the complete processing flow for a message. The design rationale for the memory system is in [Memory System](memory-system.en.md), capability routing and tool execution are in [Capability System](capability-system.en.md), and configuration options are in [Configuration Reference](configuration.en.md).
+
+## Current architecture additions in 6.1.0
+
+- **Trusted ingress:** `core/conversation.py` defines `ConversationRef` for QQ group/private and WebChat; `memory/conversation_registry.py` allocates storage IDs. Runtime ownership, cancellation, traces, deduplication, and Cometa delivery use canonical conversation identity.
+- **Personal memory:** `memory/ownership.py` defines SPACE/PERSON and audiences. Private facts default to PRIVATE_ONLY. `memory/personal_sharing.py` binds authorization to the owner, source message, and specific fact, using a copies ledger and cache revisions for revocation. Writing/sharing remain disabled by default.
+- **Attribution:** envelopes retain author, recipient, reply/quote relations, signed platform IDs, and logical turns. `memory/conversation_projection.py` serves both tails and compaction; `memory/conversation_identity.py` stores source-bound local claims. `core/dialogue_attribution.py` validates structured reply plans and evidence.
+- **Long tasks:** `cometa/` persists admission, leases, workers, workspaces, artifacts, and notifications. `capability/delegation.py` delegates outside the synchronous tool loop. Codex authentication is read from each managed backend home and configured on WebUI Providers.
+- **Flow observation:** `core/observability/` records roots, spans, transitions, message I/O, lifecycle, and loss accounting. `webui/routers/flow.py` and Dashboard FlowPage provide queries, SSE, topology, and replay. Source-manifest reachability and recorded execution are presented separately.
+
+Memory schema is 18 and Python/Rust backend API is 2. Migrations v15-v18 add conversation registration, personal ownership, envelopes, local identity claims, and sharing contracts. Knowledge, scheduling, Cometa, and observation databases version independently. Real QQ rollout and Rust ranking differences remain documented in the [index](README.en.md).
 
 ## Layered Overview
 
 ```
-QQ group message
+QQ group messages / QQ private chat / WebChat
     ↓  OneBot V11 / NapCat
 stella_project/plugins/bot_main/ai_gateway.py     ← Event ingress layer
     ↓
@@ -18,7 +26,7 @@ core/pipeline.py                                  ← Orchestration layer (pre h
 capability/*                                      ← Capability layer (Router decisions / Comes tool execution)
 memory/*                                          ← Memory layer (write / promotion / retrieval / compaction)
      ↓
-SQLite (memory/agent_memory.db)
+SQLite (STELLA_HOME/memory/agent_memory.db)
 ```
 
 The five layers are independent: the ingress layer only adapts protocols and dispatches, the orchestration layer contains no business logic, the capability layer is unaware of personality and memory content, the memory layer is unaware of QQ, and the storage layer has migrations centrally managed by `memory/schema.py`.
@@ -27,7 +35,7 @@ The capability and memory layers are **parallel** branches. Both are activated b
 
 `astrbot_compat/*` is a sixth component alongside them: it connects the AstrBot plugin ecosystem, providing tool execution for the capability layer (Comes → `llm_tools`) while also following an independent dispatch path (`plugin_handler`) to respond to plugin commands. It **does not participate** in memory or personality; see the [AstrBot Plugin Compatibility Layer](#astrbot-plugin-compatibility-layer) section below.
 
-> The storage layer has **two ownership dimensions**: `group_id` is the real QQ group, while `group_shared_space` is the shared group space. The former carries “the state of this current conversation,” and the latter carries “long-term knowledge about people.” See “Main Data Tables” below.
+> Conversation, user, and space identities are separate. Group storage IDs remain real group IDs; private IDs are allocated negative values, and WebChat reserves `-1`. Never derive conversation kind from the sign. Memory additionally enforces owner, subject, and audience.
 
 Proactive interjection also has a **Participation Decision Layer** beside the memory layer: it extracts
 recent group-chat signals, scores topic opportunity, relevance, and interruption risk locally, then
@@ -121,7 +129,7 @@ Stella_project/
 │
 ├── memory/                         # Memory system core
 │   ├── SYSTEM.md                   # Bot system prompt
-│   ├── schema.py                   # Schema migrations (Additive, currently v14) + source enum
+│   ├── schema.py                   # Schema migrations (versioned, currently v18) + source enum
 │   ├── migrations.py               # Versioned structural and data migrations
 │   ├── space_merge.py              # Space merging: fold several spaces' memories/profiles into one (deploy space-merge)
 │   ├── timeutil.py                 # Parse DB timestamps uniformly as UTC
@@ -506,20 +514,20 @@ The type annotation for `route` is `Any` rather than `Route`: `core` is a “bus
 
 ### Main Data Tables
 
-**Two levels of ownership**. `group_id` carries “the state of this current conversation,” while `group_shared_space` carries “long-term knowledge and identity about people.” Multiple QQ groups can belong to the same space and share knowledge, but never the reverse: mixing messages from two groups into one tail would cause the Bot to answer a conversation from group B in group A.
+**Conversation and memory ownership are separate**. The tables below retain historical group-field names; message, short-context, and consolidation storage also supports private/WebChat conversations. SPACE memory can be shared across configured groups; PERSON memory additionally requires matching owner, subject, and audience. Shared spaces never merge conversation tails.
 
 | Table | Ownership | Purpose |
 |---|---|---|
-| `group_messages` | QQ group | Raw group messages (including `source_kind`) |
-| `short_term_context` | QQ group | Per-group topic summary and key messages |
-| `consolidation_state` | QQ group | Per-group consolidation checkpoint |
+| `group_messages` | Conversation | Raw group messages (including `source_kind`) |
+| `short_term_context` | Conversation | Per-group topic summary and key messages |
+| `consolidation_state` | Conversation | Per-group consolidation checkpoint |
 | `proactive_state` | QQ group | Proactive @ quota, cooldown, and backoff state |
 | `group_runtime_state` | QQ group | Mute switch and sleep/wake announcement deduplication |
 | `participation_topics` | QQ group | Topic lifecycle and current participation state |
 | `participation_log` | QQ group | Per-decision Participation scores and outcomes |
-| `memory_candidates` | **Space** | Memory candidates (including `occurrence_count` / `source_kinds` / `first_seen_at`) |
-| `memories` | **Space** | Long-term memories (including `usage_tags` / `visibility` / `behavior_rule`) |
-| `memories_fts` | **Space** | FTS5 full-text index (synchronized with `memories` by `mem_id`) |
+| `memory_candidates` | **SPACE/PERSON** | Memory candidates (including `occurrence_count` / `source_kinds` / `first_seen_at`) |
+| `memories` | **SPACE/PERSON** | Long-term memories (including `usage_tags` / `visibility` / `behavior_rule`) |
+| `memories_fts` | **SPACE/PERSON** | FTS5 full-text index (synchronized with `memories` by `mem_id`) |
 | `user_profiles` | **Space** | Stable user profiles, primary key `(group_shared_space, user_id)` |
 | `user_address_preferences` | **Space** | User addressing preferences (v14), primary key `(group_shared_space, user_id)` |
 | `atomic_facts` | **Space** | Atomic facts split from long-term memories |
@@ -529,7 +537,7 @@ The type annotation for `route` is `Any` rather than `Route`: `core` is a “bus
 | `llm_usage_daily` | Global | Daily LLM usage, primary key `(date, role, slot, model)` |
 | `schema_meta` | Global | Schema version |
 
-Schema migrations use **Additive Migration**: only fields and indexes are added, and data is never deleted; an automatic backup is made before the first migration. Run independently:
+Schema uses **versioned migrations**: additive fields/indexes for simple changes, transactional rebuilds and validation for structural changes, preserving business data and backing up before migration. Run independently:
 
 ```bash
 python -m memory.schema --dry-run   # Preview
@@ -537,7 +545,7 @@ python -m memory.schema             # Execute
 python -m memory.schema --backup    # Backup only
 ```
 
-> **Structural changes and data changes live in another module**: `memory/migrations.py` registers migrations by version (`migrate_v7` / `v8` / …), with one function and one transaction per version; only after success does it advance `schema_meta.version`. The add-column/create-table work in `schema._migrate()` is the final step of each migration. The current `SCHEMA_VERSION` is **14**; v7 (profile grouping), v8 (memory tables changed to space ownership), v13 (Participation topic/decision logs), and v14 (addressing-preference table) are registered in `memory/migrations.py`. v5 → the current version is fully automatic: rename columns + rewrite values as space names + rebuild profile primary keys + rebuild FTS + create Participation tables + validate, with a full-level rollback on failure. **New rule: every increment of `SCHEMA_VERSION` must be committed together with `migrate_vN` and a legacy-database fixture test.**
+> **Structural changes and data changes live in another module**: `memory/migrations.py` registers migrations by version (`migrate_v7` / `v8` / …), with one function and one transaction per version; only after success does it advance `schema_meta.version`. The add-column/create-table work in `schema._migrate()` is the final step of each migration. The current `SCHEMA_VERSION` is **18**; v7 (profile grouping), v8 (memory tables changed to space ownership), v13 (Participation topic/decision logs), and v14 (addressing-preference table) are registered in `memory/migrations.py`. v5 → the current version is fully automatic: rename columns + rewrite values as space names + rebuild profile primary keys + rebuild FTS + create Participation tables + validate, with a full-level rollback on failure. **New rule: every increment of `SCHEMA_VERSION` must be committed together with `migrate_vN` and a legacy-database fixture test.**
 >
 > Each migration writes `agent_memory.db.pre-vN-<timestamp>.bak` (the state before that migration). `stella_memory_backup.db` is “the first original database ever”; it skips creation when a backup already exists. When archiving the old database, move it together with that file, or the system will be left in a state that “looks backed up but is actually the wrong backup.”
 

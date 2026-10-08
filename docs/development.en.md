@@ -2,8 +2,6 @@
 
 [中文](development.md) | English
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
-
 This document covers testing, probe scripts, CI, and the contribution workflow. See the [architecture guide](architecture.en.md) for architecture and the [configuration reference](configuration.en.md) for configuration.
 
 ## Environment Setup
@@ -456,7 +454,7 @@ Comparisons inside SQL (`julianday('now')` versus `julianday(col)`) use UTC on b
 
 ### Archived Records
 
-After each major refactor, the runtime database is archived to `_deprecated/` (gitignored):
+These archives in `_deprecated/` (gitignored) record early refactors; they are not current upgrade instructions:
 
 | File | Description |
 |---|---|
@@ -464,7 +462,7 @@ After each major refactor, the runtime database is archived to `_deprecated/` (g
 | `legacy_agent_memory_2026.db` | Before the v2 schema upgrade |
 | `legacy_agent_memory_pre_v4.db` | Before the two-layer filtering refactor (three Gate 1 tiers / candidate reinforcement / quota) |
 
-At startup, a new database is automatically rebuilt under `memory/` using the current schema.
+Current upgrades preserve existing data through versioned migrations; a new database is initialized only when none exists. The database is `STELLA_HOME/memory/agent_memory.db`. Do not delete or move production data to upgrade.
 
 > When archiving an old database, **move `stella_memory_backup.db` along with it**. `backup_database()` skips the backup when one already exists; leaving it behind means a future migration of the new database will not create a new backup -- a state that looks backed up but is backed up incorrectly.
 >
@@ -705,3 +703,16 @@ All of these areas have empirical evidence (recorded in `design_docs/check_point
 | `logs/` | Archives of terminal output and runtime logs |
 
 Difference from `docs/`: `docs/` contains finished documentation for users, while `design_docs/` contains process records, including disproven hypotheses and failed attempts. That information is important for understanding "why things are the way they are now", but is not suitable for user documentation.
+
+## Source contracts and release gates in 6.1.0
+
+- Memory schema 18/API 2 must agree in `memory/schema.py`, `memory_rust/backend.py`, and `memory_rust/native/src/schema.rs`. Validate exported constants, not just the wheel package version.
+- `python scripts/generate_message_flow.py --check` validates source anchors, closure, and manifest. Regenerate archived topology after source changes; static reachability is not observed execution.
+- Frontend checks: `pnpm --dir dashboard test` and `pnpm --dir dashboard build`. Synchronize the local bundle with `pnpm --dir dashboard sync:webui`.
+- Isolated evaluation: `python scripts/run_flow_evaluation.py --mode isolated_pipeline --dataset <dataset_dir> --workdir <isolated_dir> --json`. Other modes are trace_playback, decision_recompute, and model_validation. Dataset/workdir are required; production is never a fallback database.
+- `python scripts/evaluate_dialogue_attribution.py --help` describes frozen fixtures, protocol prompts, and `--guard`. Replay does not substitute for persisted identity checks or real QQ rollout.
+- Synchronize the application version across `pyproject.toml`, `cli/Cargo.toml`, `desktop/src-tauri/Cargo.toml`, Tauri configuration, and corresponding locks. The native wheel, launcher, runtime-manager, and private Dashboard package retain independent component versions.
+- Tag release builds the dashboard, candidate CPU backend, offline payload, wheel, CLI, and four installers. Each final EXE is validated on a Windows runner before publication. Manifests bind size/SHA-256 and published assets are read back for verification.
+- The workflow defaults to `VERSIONED_LAYOUT=0`; launcher-based installer relocation is not enabled by default. Hosted Windows installation checks do not equal clean-VM/GUI-first-launch acceptance; see `release_assets/VM-MATRIX.md`.
+
+Use the target commit's CI as current test evidence. Older counts are dated snapshots. See the [index](README.en.md) for QQ rollout and Rust ranking boundaries.

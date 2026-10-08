@@ -1,5 +1,7 @@
 # 定时任务：群级 Cron 提醒与有界主动 Agent
 
+中文 | [English](scheduling.en.md)
+
 Stella 支持群成员在群里预约定时任务：到点发一条提醒（reminder），或让
 模型基于群近期上下文有界地生成一段内容并发送（agent，管理员专用）。
 

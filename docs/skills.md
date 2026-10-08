@@ -1,5 +1,7 @@
 # Anthropic 风格 Skills 与受控沙盒
 
+中文 | [English](skills.en.md)
+
 Stella 支持与 Anthropic Skills 同构的任务技能：一个技能就是 `SKILL.md`
 正文 + 可选的 `scripts/` 与 `references/` 目录。模型在请求开始时只看到
 技能的**名称与描述**；命中技能后才读取正文；脚本与文件操作只在受控
@@ -142,3 +144,9 @@ front matter 只有白名单内的**标量**字段会被采纳：`name`、`descr
     daemon 不可达（状态接口 `skills.sandbox.reason` 有原因）；
   - 「插件重载后技能没更新」→ 重载只局部刷新该插件来源；刷新失败会
     保留旧快照并告警，修好后再次重载。
+
+## WebUI 管理
+
+「扩展 → Skills」通过 `/api/v1/skills` 提供目录浏览、正文编辑、ZIP 上传与删除。
+`webui/services/skillsmanage.py` 只允许修改 user/workspace 来源；builtin/plugin 来源只读。
+管理面浏览技能不等于开启脚本执行，执行仍受 `SKILLS_ENABLED`、执行模式与沙盒策略约束。

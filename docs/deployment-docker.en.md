@@ -217,3 +217,18 @@ Data is then managed by Docker (find the location via `docker volume inspect ste
 - NapCat account data and network configuration remain in the separate `napcat/`
   directory; they are not written into Runtime state and do not share Stella Core's
   upgrade lifecycle.
+
+## Persistence and upgrades in 6.1.0
+
+The `STELLA_HOME` volume also contains `webui/auth.json`,
+`knowledge/knowledge.db`, `scheduling/tasks.db`, `cometa/tasks.db`, managed
+`cometa/codex_home/` credentials, and `turn_trace.db`. Back up the entire data root.
+Use SQLite's backup API for live databases, or stop the service before copying;
+copying only a WAL database's main `.db` file is insufficient.
+QQ private chat defaults to enabled (`PRIVATE_CHAT_ENABLED=true`); an empty
+`PRIVATE_CHAT_ALLOWLIST` allows all friends, independently of `ALLOWED_GROUPS`.
+Personal writing/sharing, attribution guards, and proactive contracts default to
+disabled; migration does not automatically share old facts. Rust deployments need
+an API 2/schema 18 extension or rust/strict selection fails. See
+[configuration](configuration.en.md) and [Cometa](cometa.en.md) for defaults and
+the optional SDK.

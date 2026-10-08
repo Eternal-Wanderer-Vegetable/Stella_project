@@ -1,7 +1,9 @@
 # 独立知识库（Knowledge Base）
 
-> 状态：v1（2026-09-21 落地，对应 `docs/plans/2026-09-21-gitnexus-plan-independent-knowledge-base.md`）。
-> WebUI/ChatUI 管理面、递归爬取、OCR、外部向量库、自动记忆晋升、MCP knowledge provider 为明确的 deferred 项。
+中文 | [English](knowledge-base.en.md)
+
+> 状态：Stella 6.1.0 已包含独立知识库与 WebUI 管理。
+> 递归爬取、OCR、外部向量库、自动记忆晋升、MCP knowledge provider 仍为 deferred 项。
 
 ## 1. 这是什么
 
@@ -94,7 +96,7 @@ python -m knowledge.schema --dry-run   # 预览（SCHEMA_VERSION=1，独立于�
 python -m knowledge.schema             # 建库/迁移
 ```
 
-状态面（当前是 Python API，WebUI deferred）：`knowledge.service.get_service().kb_status(kb_id, principal)` 返回指纹锁定/匹配状态、每文档版本、最近导入作业（含失败原因）与授权摘要；`list_accessible_kbs(principal, in_group=)` 列出主体可见的库。导入失败会留在 `kb_import_job`，重启不丢。
+WebUI 的「知识库」页（`/#/knowledge-base`）已提供建库、导入、检索测试、ACL 管理与归档，走 `/api/v1/knowledge-bases`（`webui/routers/manage.py` / `webui/services/kb.py`）。管理面沿用管理员鉴权；聊天检索仍按真实会话主体校验 ACL。Python 状态 API：`knowledge.service.get_service().kb_status(kb_id, principal)` 返回指纹锁定/匹配状态、每文档版本、最近导入作业（含失败原因）与授权摘要；`list_accessible_kbs(principal, in_group=)` 列出主体可见的库。导入失败会留在 `kb_import_job`，重启不丢。
 
 ## 10. 测试
 

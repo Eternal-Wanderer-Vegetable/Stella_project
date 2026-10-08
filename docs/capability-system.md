@@ -363,3 +363,12 @@ python -m capability.router.benchmark --cases my.json
 | 每条消息都多了约 2 秒 | Router 的那次 embedding 编码。编码本身实测约 70ms；2.5s 是它与 27B 聊天模型共用同一个 LM Studio 实例时的模型换入换出，把 embedding 指到独立实例/端口即可 |
 
 配置项清单见 [配置参考](configuration.md#能力路由与工具执行)。
+
+## Cometa 长任务委派（6.1.0）
+
+`capability/delegation.py` 在同步 Comes 工具循环之外把长任务交给 `cometa/`。
+`COMETA_ENABLED=false` 为默认值，显式委派还受用户/群/操作员白名单、profile 与受理策略约束。
+受理成功仅表示任务已持久化，不代表执行完成或通知已送达。自动模式需设置
+`COMETA_DELEGATION_MODE=auto`；来源会话使用 `ConversationRef` / Origin v2。
+Skills 仍是独立选择层，`knowledge.search` 仍走原生 Provider，并保持 ACL 与证据预算。
+安装与认证见 [Cometa](cometa.md)，这些路径不证明计划中的 Laya 决策后端已经接线。

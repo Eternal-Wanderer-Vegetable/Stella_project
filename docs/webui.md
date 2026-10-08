@@ -1,5 +1,7 @@
 # WebUI（v2 控制面）
 
+中文 | [English](webui.en.md)
+
 浏览器与桌面壳共用的管理面板。与 Bot 进程同一 HTTP 服务（`HOST:PORT`，
 默认 8080），**不新增端口**。设计与契约见
 [design_docs/Stella GUI v2 与 WebUI 建设方案 v1.0.md](../design_docs/Stella%20GUI%20v2%20与%20WebUI%20建设方案%20v1.0.md)。
@@ -55,3 +57,21 @@ pnpm build          # vue-tsc 类型门禁 + vite 构建
 | M4 | WebChat（虚拟群 + webchat 空间隔离） |
 | M5 | 分包优化（vuetify/charts 独立 chunk）等打磨 |
 | M6 | 发布切换（release 流水线产出桌面壳安装器 + webui/dist 随包）、v1 冻结归档 |
+
+## 6.1.0 增补页面
+
+| 页面 | 浏览器路由 | 用途 |
+| --- | --- | --- |
+| 外部 Agent 任务 | `/#/cometa` | 委派任务、进度、产物、取消与回投状态 |
+| 提供商 | `/#/providers` | 端点/角色与 Codex 后端认证 |
+| 个人记忆 | `/#/data/personal-memory` | owner/audience 审计、导出与删除 |
+| 消息流程 | `/#/data/flow` | 版本化拓扑、真实转移、消息 I/O、历史回放与完整性诊断 |
+| 知识库 | `/#/knowledge-base` | 资料库、文档、检索与权限管理 |
+| 定时任务 | `/#/cron` | 群级任务、立即运行、历史与审计 |
+
+Codex 认证入口已移到「提供商 → 外部 Agent」，任务管理仍在 Cometa 页。
+认证变更对新任务即时生效，详见 [Cometa](cometa.md)。
+消息流程把已记录事件投影到对应历史拓扑；running、interrupted、事件损失、分页缺口
+与未知投递各有独立含义，缺事件不能直接判为跳过或成功。manifest 与隔离评估见
+[开发指南](development.md)。本地构建后用 `pnpm --dir dashboard sync:webui`
+同步 `webui/dist`；发布 CI 会构建面板并写入 Release 版本 marker。

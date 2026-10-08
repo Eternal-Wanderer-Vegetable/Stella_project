@@ -4,6 +4,36 @@
 
 本文说明 Stella 的记忆系统**为什么这样设计**，以及各道闸门的具体规则。目录结构与处理流程见 [架构说明](architecture.md)，配置项见 [配置参考](configuration.md)。
 
+## 6.1.0 会话、个人记忆与归属保护
+
+`ConversationRef` 是会话身份；平台稳定 user ID 是人物身份；`group_shared_space`
+是群共享空间。私聊与 WebChat 的旧表 storage_session_id 不是群号，不能据此授予群权限。
+`MemoryAccessScope` 将当前群的 SPACE 范围与当前本人可见的 PERSON 范围分别传入
+Python、SQL/FTS、embedding、缓存和 Rust 后端，内容相似不会扩大授权。
+
+| 归属/受众 | 可见范围 |
+| --- | --- |
+| SPACE | 对应群共享空间的既有记忆 |
+| PERSON / PRIVATE_ONLY | 对应 Bot 下本人与 Bot 的私聊 |
+| PERSON / USER_SHARED | 本人明确授权的具体事实；仍须匹配 owner/subject |
+
+个人写入 `PERSONAL_MEMORY_WRITE_ENABLED=false`，分享
+`PERSONAL_MEMORY_SHARE_ENABLED=false`。旧库迁移只保留原 SPACE 含义，不自动将旧事实
+改成公开的个人共享；回填须使用 `tools/backfill_personal_memory.py` 的审查 manifest。
+分享检测仅是第一道意图识别：服务端还核验原消息作者、会话、Bot 与事实，否定、引用、
+转述和模型猜测不能构成授权；撤回只修改该授权台账中的副本并推进缓存版本。
+
+消息投影显式保留谁说、对谁说、回复谁、是否引用/否定，以及 BOT_SELF 收件人。
+分段发送在尾巴中按 logical turn 聚合，原始关系和带符号平台 ID 不丢失；压缩使用
+同一投影，并用 revision/CAS 防止旧结果覆盖新的身份纠正。身份声明只对当前会话生效，
+别名碰撞不会合并平台用户。
+
+`REPLY_ATTRIBUTION_GUARD_MODE` 与 `PROACTIVE_VERIFICATION_CONTRACT_MODE`
+均默认 `off`，支持 `shadow` / `enforce`。启用前按 [QQ 灰度清单](reports/2026-10-05-qq-gray-rollout-checklist.md)
+验证真实模型与发送链路；主动核验缺少候选来源、对象不符或候选已变更时不应发送。
+数据修复使用 `tools/data_repair.py` 的来源驱动 preview/apply/revoke 与列级 CAS，不能把
+整片 space 批量改成某个人。schema 18 与 Rust API 2 见 [后端说明](memory-rust-backend.md)。
+
 ## 三条设计原则
 
 ### 1. 捕获宽，晋升严

@@ -2,9 +2,43 @@
 
 [中文](memory-system.md) | English
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
-
 This document explains **why Stella's memory system is designed this way** and the specific rules for each gate. See the [architecture documentation](architecture.en.md) for the directory structure and processing flow, and the [configuration reference](configuration.en.md) for configuration options.
+
+## Conversation, personal memory, and attribution in 6.1.0
+
+`ConversationRef` identifies the conversation; stable platform user IDs identify
+people; `group_shared_space` identifies a shared group space. Private/WebChat
+storage IDs are not group IDs and cannot grant group permissions. `MemoryAccessScope`
+passes SPACE and authorized PERSON scopes through Python, SQL/FTS, embedding,
+caches, and Rust. Similar content never expands authorization.
+
+| Ownership/audience | Visibility |
+| --- | --- |
+| SPACE | Existing memory in the corresponding group space |
+| PERSON / PRIVATE_ONLY | The owner and this bot in private chat |
+| PERSON / USER_SHARED | Specifically authorized facts, still owner/subject bound |
+
+`PERSONAL_MEMORY_WRITE_ENABLED` and `PERSONAL_MEMORY_SHARE_ENABLED` default to
+`false`. Migration preserves old SPACE semantics without automatically sharing
+old facts. Backfill requires a reviewed manifest through
+`tools/backfill_personal_memory.py`. Intent detection is only an initial check:
+authorization verifies the source author, conversation, bot, and fact. Negation,
+quotes, reported speech, and model guesses cannot grant sharing. Revocation changes
+only ledger-bound copies and advances cache revisions.
+
+Projection records author, recipient, reply/quote relation, polarity, and BOT_SELF
+recipients. Segmented sends form one logical tail turn while original relations
+and signed platform IDs survive. Compaction uses the same projection and revision/CAS
+checks so stale results cannot overwrite identity corrections. Identity claims
+remain conversation-local; colliding aliases do not merge platform users.
+
+`REPLY_ATTRIBUTION_GUARD_MODE` and `PROACTIVE_VERIFICATION_CONTRACT_MODE` default
+to `off`, with `shadow` and `enforce` available. Follow the dated
+[QQ rollout checklist](reports/2026-10-05-qq-gray-rollout-checklist.md) before enabling
+enforcement. Missing proactive evidence, wrong targets, or changed candidates must
+prevent delivery. `tools/data_repair.py` provides source-driven preview/apply/revoke
+with column-level CAS; do not reassign an entire space to one person. See the
+[Rust guide](memory-rust-backend.en.md) for schema 18/API 2 compatibility.
 
 ## Three Design Principles
 
