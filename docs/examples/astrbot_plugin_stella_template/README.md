@@ -50,3 +50,5 @@ python -m deploy plugin-check docs/examples/astrbot_plugin_stella_template
 | 4 | 失败**抛异常**，不 `return "查询失败……"` | 那串字不以 `error:` 开头 → 被当成成功输出 → 贴上「真实数据」进 Stella 的 prompt，于是失败文案被当事实转述，而 provider 退避永远不触发（见 `docs/plugin-spec.md` §6.6） |
 
 完整规范见 [`docs/plugin-spec.md`](../../plugin-spec.md)。
+
+英文说明见 [README.en.md](README.en.md)。安装路径以当前 `STELLA_HOME/data/plugins/` 为准。

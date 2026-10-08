@@ -2,8 +2,6 @@
 
 [中文](capability-system.md) | English
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
-
 This document describes Stella's task scheduling layer: the Router determines what capabilities are needed, Comes executes tools, and the two exchange only tasks and results with chat and memory. The design process is documented in `design_docs/Stella 智能机器人架构升级方案：基于 Capability Router 与 Comes 工具执行层的任务调度系统.md` and `design_docs/Capability Router 与 Comes 落地方案 v1.0.md`.
 
 ## Why It Is Needed
@@ -365,3 +363,14 @@ To determine online "why was no tool called this time," look only at these two l
 | Every message takes about 2 extra seconds | The Router's embedding call. The encoding itself measures about 70ms; the 2.5s comes from swapping models in and out when it shares one LM Studio instance with the 27B chat model. Point the embedding service to a separate instance/port |
 
 See [Configuration Reference](configuration.en.md#capability-routing-and-tool-execution) for the configuration option list.
+
+## Cometa long-task delegation in 6.1.0
+
+`capability/delegation.py` submits long tasks to `cometa/` outside the synchronous
+Comes tool loop. Cometa defaults to disabled; explicit delegation still requires
+user/group/operator authorization, a profile, and admission checks. Acceptance
+means persistence, not execution completion or delivered notification. Automatic
+mode requires `COMETA_DELEGATION_MODE=auto`. Origin uses `ConversationRef`/v2 identity.
+Skills retain independent selection; `knowledge.search` retains its native provider,
+ACL, and evidence budget. See [Cometa](cometa.en.md). These paths do not establish
+that the planned Laya decision backend has been integrated.

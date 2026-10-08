@@ -39,7 +39,7 @@ HTTPS_PROXY = "http://127.0.0.1:7890"
 
 ## 认证（WebUI 双路线 + 旧版迁移）
 
-入口：WebUI →「外部 Agent 任务」→「后端认证（Codex）」。三条路线任选其一，
+入口：WebUI →「提供商」→「外部 Agent」认证卡片（`/#/providers`）。任务列表与控制仍在「外部 Agent 任务」（`/#/cometa`）。三条路线任选其一，
 全部**即时生效，无需重启**——任务启动时现读认证状态。
 
 ### 1. ChatGPT 账号登录（设备码，推荐）
@@ -99,3 +99,11 @@ LM Studio 的 Responses 实现若不支持函数工具，也会在真实任务�
 | 设备码会话消失 | 登录会话在内存中，bot 重启后重新发起即可 |
 | 自定义端点任务断流 | 确认端点支持 Responses API 且支持函数工具；本地端点记得 `NO_PROXY` |
 | 版本不匹配（「模型需要更新版客户端」） | 不要用 PATH 上旧版 codex.exe；SDK 自带版本配对的 cli-bin |
+
+## 会话回投与运行边界（6.1.0）
+
+Origin v2 保存 kind/peer/bot/conversation_key，QQ 群与私聊的受理提示、进度和结果都回到原会话。
+短结果回投完整正文；长结果优先 `.md` 文件，失败后走合并转发等降级。结果生成与平台投递
+是不同状态，发送窗口内失去回执记录 `delivery_unknown`，不可据此声称成功或盲目重投。
+`COMETA_ENABLED=false` 与 `COMETA_DELEGATION_MODE=explicit` 为默认值；自动委派需另行开启。
+任务执行、认证、取消与通知的测试位于 `tests/cometa/`，原会话回投还需真实 QQ 验收。

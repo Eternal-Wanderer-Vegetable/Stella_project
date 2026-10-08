@@ -4,10 +4,20 @@
 
 本文描述 Stella 的目录结构、模块职责与一次消息的完整处理流程。记忆系统的设计理由见 [记忆系统](memory-system.md)，能力路由与工具执行见 [能力系统](capability-system.md)，配置项见 [配置参考](configuration.md)。
 
+## 6.1.0 当前架构增补
+
+- **可信接入与会话身份**：`core/conversation.py` 的 `ConversationRef` 统一 QQ 群、QQ 私聊与 WebChat；`memory/conversation_registry.py` 分配存储键。运行 owner、取消、trace、消息去重和 Cometa 回投都依赖规范会话身份。
+- **个人记忆**：`memory/ownership.py` 定义 SPACE/PERSON 与 audience；私聊事实默认 PRIVATE_ONLY。`memory/personal_sharing.py` 按本人、来源消息和具体事实授权，使用副本台账与缓存版本支持撤回。写入和分享出厂默认关闭。
+- **对话归属**：消息包络保留作者、收件人、回复/引用关系、带符号平台 ID 与逻辑轮次。`memory/conversation_projection.py` 同时服务短尾巴与压缩，`memory/conversation_identity.py` 存会话内的来源绑定声明；`core/dialogue_attribution.py` 处理结构化回复计划与证据检查。
+- **长任务**：`cometa/` 持久化受理、租约、worker、workspace、产物与通知；`capability/delegation.py` 在工具层之外委派。Codex 认证由每后端托管 home 现读，WebUI 提供商页可配置。
+- **流程观测**：`core/observability/` 记录 root/span/transition、输入输出、生命周期与损失账本；`webui/routers/flow.py` 和 Dashboard FlowPage 提供查询、SSE、拓扑与历史回放。拓扑来自源码 manifest，记录事件与设计可达路径分别呈现。
+
+记忆 schema 已到 18，Python/Rust backend API 为 2；v15-v18 迁移包含会话注册、个人归属、消息包络、身份声明与共享合同。知识库、调度、Cometa 和观测库各自版本化。真实 QQ 灰度与 Rust 排序差异见 [文档索引](README.md)。
+
 ## 分层概览
 
 ```
-QQ 群消息
+QQ 群消息 / QQ 私聊 / WebChat
     ↓  OneBot V11 / NapCat
 stella_project/plugins/bot_main/ai_gateway.py     ← 事件接入层
     ↓
@@ -16,7 +26,7 @@ core/pipeline.py                                  ← 编排层（pre hooks → 
 capability/*                                      ← 能力层（Router 判定 / Comes 执行工具）
 memory/*                                          ← 记忆层（写入 / 晋升 / 检索 / 压缩）
     ↓
-SQLite（memory/agent_memory.db）
+SQLite（STELLA_HOME/memory/agent_memory.db）
 ```
 
 五层各自独立：接入层只做协议适配与调度，编排层不含业务逻辑，能力层不感知人格与记忆内容，记忆层不感知 QQ，存储层由 `memory/schema.py` 统一管理迁移。
@@ -25,7 +35,7 @@ SQLite（memory/agent_memory.db）
 
 `astrbot_compat/*` 是横在旁边的第六块：它把 AstrBot 插件生态接进来，既供能力层执行工具（Comes → `llm_tools`），也自己走一条独立的分发通路（`plugin_handler`）响应插件指令。它**不参与**记忆与人格，见下文[兼容层](#astrbot-插件兼容层)。
 
-> 存储层有**两层归属维度**：`group_id` 是真实 QQ 群，`group_shared_space` 是群组共享空间。前者承载「当下这场对话的状态」，后者承载「对人的长期认知」。详见下文「主要数据表」。
+> 会话、用户与空间身份分别管理。群会话的 `group_id` 保持真实群号；私聊的旧表物理键是注册表分配的负数，WebChat 保留 `-1`，不得按整数正负推导会话类型。记忆另受 owner/subject/audience 约束。
 
 主动插话还有一条位于记忆层旁的 **Participation Decision Layer**：它从近期群聊提取信号，
 对话题机会、相关性与打扰风险做本地评分，输出 `IGNORE` / `OBSERVE` / `CANDIDATE` /
@@ -121,7 +131,7 @@ Stella_project/
 │
 ├── memory/                         # 记忆系统主体
 │   ├── SYSTEM.md                   # 机器人系统提示词
-│   ├── schema.py                   # Schema 迁移（Additive，当前 v14）+ 来源枚举
+│   ├── schema.py                   # Schema 迁移（版本化，当前 v18）+ 来源枚举
 │   ├── migrations.py               # 按版本执行结构与数据迁移
 │   ├── space_merge.py              # 空间合并：把若干空间的记忆/画像并进一个（deploy space-merge）
 │   ├── timeutil.py                 # DB 时间戳统一按 UTC 解析
@@ -508,20 +518,20 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 
 ### 主要数据表
 
-**两层归属**。`group_id` 承载「当下这场对话的状态」，`group_shared_space` 承载「对人的长期认知与身份」。多个 QQ 群可归入同一空间以共享认知，但绝不能反过来——把两个群的消息混进同一条尾巴，Bot 会在 A 群回应 B 群的对话。
+**会话与记忆归属分开**。以下表保留群业务字段命名；`group_messages`、`short_term_context`、`consolidation_state` 的会话物理键也承载私聊/WebChat。群空间可共享 SPACE 记忆，PERSON 记忆还必须通过 owner、subject 与 audience 判定；共享空间不会合并不同会话的消息尾巴。
 
 | 表 | 归属 | 作用 |
 |---|---|---|
-| `group_messages` | QQ 群 | 原始群消息（含 `source_kind`） |
-| `short_term_context` | QQ 群 | 每群的话题摘要与关键发言 |
-| `consolidation_state` | QQ 群 | 每群的整合 checkpoint |
+| `group_messages` | 会话 | 原始群消息（含 `source_kind`） |
+| `short_term_context` | 会话 | 每群的话题摘要与关键发言 |
+| `consolidation_state` | 会话 | 每群的整合 checkpoint |
 | `proactive_state` | QQ 群 | 主动 @ 的配额、冷却、退避状态 |
 | `group_runtime_state` | QQ 群 | 静音开关、睡眠/苏醒播报去重 |
 | `participation_topics` | QQ 群 | 话题生命周期与当前参与状态 |
 | `participation_log` | QQ 群 | Participation 每次评分与决策记录 |
-| `memory_candidates` | **空间** | 记忆候选（含 `occurrence_count` / `source_kinds` / `first_seen_at`） |
-| `memories` | **空间** | 长期记忆（含 `usage_tags` / `visibility` / `behavior_rule`） |
-| `memories_fts` | **空间** | FTS5 全文索引（按 `mem_id` 与 `memories` 同步） |
+| `memory_candidates` | **SPACE/PERSON** | 记忆候选（含 `occurrence_count` / `source_kinds` / `first_seen_at`） |
+| `memories` | **SPACE/PERSON** | 长期记忆（含 `usage_tags` / `visibility` / `behavior_rule`） |
+| `memories_fts` | **SPACE/PERSON** | FTS5 全文索引（按 `mem_id` 与 `memories` 同步） |
 | `user_profiles` | **空间** | 用户稳定画像，主键 `(group_shared_space, user_id)` |
 | `user_address_preferences` | **空间** | 用户称呼偏好（v14），主键 `(group_shared_space, user_id)` |
 | `atomic_facts` | **空间** | 长记忆拆分出的原子事实 |
@@ -531,7 +541,7 @@ log_thought        (40)  → 写 logs/stella_thought_logs.md
 | `llm_usage_daily` | 全局 | 每日 LLM 用量，主键 `(date, role, slot, model)` |
 | `schema_meta` | 全局 | Schema 版本号 |
 
-Schema 迁移采用 **Additive Migration**：只加字段与索引，绝不删数据；首次迁移前自动备份。独立执行：
+Schema 采用**版本化迁移**：简单变更加列/索引，结构调整在事务内重建与校验，保留业务数据；迁移前自动备份。独立执行：
 
 ```bash
 python -m memory.schema --dry-run   # 预览
@@ -541,7 +551,7 @@ python -m memory.schema --backup    # 仅备份
 
 > **改结构与改数据在另一个模块**：`memory/migrations.py` 按版本注册（`migrate_v7` / `v8` / …），
 > 每版一个函数、一个事务，成功后才推进 `schema_meta.version`；`schema._migrate()` 的加列/建表
-> 作为每次迁移的收尾步骤。当前 `SCHEMA_VERSION` 为 **14**；v7（画像分群）、v8（记忆表改按空间归属）、
+> 作为每次迁移的收尾步骤。当前 `SCHEMA_VERSION` 为 **18**；v7（画像分群）、v8（记忆表改按空间归属）、
 > v13（Participation 话题/决策日志）与 v14（称呼偏好表）等数据迁移均由 `memory/migrations.py` 注册，v5 → 当前版全自动：
 > 列改名 + 值重写为空间名 + 画像主键重建 + FTS 重建 + Participation 表创建与校验，
 > 失败整级回滚。**新规矩：`SCHEMA_VERSION` 每 +1 必须同时提交 `migrate_vN` 与旧库夹具测试。**

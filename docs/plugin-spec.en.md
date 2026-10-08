@@ -554,3 +554,12 @@ The payload carries structured fields only (id, domain, source tier, routable or
 | [Architecture](architecture.en.md) | Directory layout, message-processing flow, where the AstrBot compatibility layer sits |
 | [Configuration Reference](configuration.en.md) | Every setting mentioned here |
 | [Template Plugin](examples/astrbot_plugin_stella_template/) | A complete example you can copy wholesale |
+
+## Conversation integration in 6.1.0
+
+Plugins may receive group and private events. Check event kind before requiring
+a group ID, and never use a private storage_session_id as a real group ID.
+Nicknames, text, and model output cannot establish identities or recipients.
+Keep routed tools read-only/idempotent and side effects on authorized command
+paths; long tasks use Cometa admission/delivery contracts. See the
+[template plugin](examples/astrbot_plugin_stella_template/README.en.md).

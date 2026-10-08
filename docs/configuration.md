@@ -1294,3 +1294,76 @@ PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`
 | 「它突然不记得我了」 | 先查 `ROUTER_GATE_MEMORY` 是否被打开；跑 `python -m capability.router.benchmark` 看记忆假阴 |
 
 改动阈值前建议先跑一次探针验证，见 [开发指南](development.md)。
+
+## 6.1.0 补充配置参考
+
+以下补齐当前 `config/settings.py` 的 62 个未列出的字面环境键，默认值来自源码，
+不是本机 `.env`。动态路径相对 `STELLA_HOME`，空字符串写为 `""`，空 ID 集合写为 `[]`。
+所有配置需重启；Codex 登录凭据的即时变更另见 [Cometa](cometa.md)。
+
+| 键 | 源码默认值 | 作用 |
+| --- | --- | --- |
+| `PRIVATE_CHAT_ENABLED` | `true` | QQ 私聊接入总开关，独立于群白名单 |
+| `PRIVATE_CHAT_ALLOWLIST` | `[]` | 逗号分隔好友 QQ 号，空表示不限制 |
+| `PERSONAL_MEMORY_WRITE_ENABLED` | `false` | 允许新增 PERSON 事实；默认不写 |
+| `LLM_ROLE_CHAT_TEMPERATURE` | `0.7` | CHAT 采样温度 |
+| `LLM_ROLE_CHAT_MAX_TOKENS` | `2000` | CHAT 输出 token 上限；0 由调用侧处理，inherit 类型可继承 |
+| `LLM_ROLE_CHAT_FALLBACK_ENDPOINT` | `""` | CHAT 失败时回退端点槽；空=不配置 |
+| `LLM_ROLE_ROUTER_MODEL` | `""` | ROUTER 模型覆盖；空=继承端点模型 |
+| `LLM_ROLE_ROUTER_TEMPERATURE` | `0.7` | ROUTER 采样温度 |
+| `LLM_ROLE_ROUTER_MAX_TOKENS` | `2000` | ROUTER 输出 token 上限；0 由调用侧处理，inherit 类型可继承 |
+| `LLM_ROLE_ROUTER_FALLBACK_ENDPOINT` | `""` | ROUTER 失败时回退端点槽；空=不配置 |
+| `LLM_ROLE_PLUGIN_MODEL` | `""` | PLUGIN 模型覆盖；空=继承端点模型 |
+| `LLM_ROLE_PLUGIN_TEMPERATURE` | `0.7` | PLUGIN 采样温度 |
+| `LLM_ROLE_PLUGIN_MAX_TOKENS` | `1024` | PLUGIN 输出 token 上限；0 由调用侧处理，inherit 类型可继承 |
+| `LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT` | `""` | PLUGIN 失败时回退端点槽；空=不配置 |
+| `LLM_ROLE_COMPACT_MODEL` | `""` | COMPACT 模型覆盖；空=继承端点模型 |
+| `LLM_ROLE_COMPACT_TEMPERATURE` | `0.3` | COMPACT 采样温度 |
+| `LLM_ROLE_COMPACT_MAX_TOKENS` | `0` | COMPACT 输出 token 上限；0 由调用侧处理，inherit 类型可继承 |
+| `LLM_ROLE_COMPACT_FALLBACK_ENDPOINT` | `""` | COMPACT 失败时回退端点槽；空=不配置 |
+| `LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT` | `""` | CONSOLIDATION 失败时回退端点槽；空=不配置 |
+| `LLM_ROLE_EXTRACT_MAX_TOKENS` | `MEMORY_EXTRACT_MAX_TOKENS` | EXTRACT 输出 token 上限；0 由调用侧处理，inherit 类型可继承 |
+| `LLM_ROLE_EXTRACT_FALLBACK_ENDPOINT` | `""` | EXTRACT 失败时回退端点槽；空=不配置 |
+| `MCP_ENABLED` | `false` | MCP Provider 总开关 |
+| `MCP_CONFIG_FILE` | `mcp.toml` | 用户 config/ 下 MCP 配置文件名 |
+| `PERSONAL_MEMORY_SHARE_ENABLED` | `false` | 允许本人对具体事实明确授权分享 |
+| `PROACTIVE_VERIFICATION_CONTRACT_MODE` | `off` | off/shadow/enforce；主动核验的来源与对象合同 |
+| `REPLY_ATTRIBUTION_GUARD_MODE` | `off` | off/shadow/enforce；结构化回复计划与归属证据检查 |
+| `KNOWLEDGE_ENABLED` | `true` | 独立知识库总开关 |
+| `KNOWLEDGE_DB_PATH` | `<STELLA_HOME>/knowledge/knowledge.db` | 知识库独立 SQLite 路径 |
+| `KNOWLEDGE_SEARCH_TOP_K` | `8` | 每路检索候选上限 |
+| `KNOWLEDGE_RRF_K` | `60` | 混合检索 RRF 融合常数 |
+| `KNOWLEDGE_EVIDENCE_MAX_ITEMS` | `4` | 注入证据条数硬上限 |
+| `KNOWLEDGE_EVIDENCE_MAX_TOKENS` | `600` | 注入证据 token 硬上限 |
+| `KNOWLEDGE_EVIDENCE_MAX_CHARS` | `700` | 单条摘录字符上限 |
+| `KNOWLEDGE_RERANK_ENABLED` | `false` | 可选注入式 reranker 开关 |
+| `KNOWLEDGE_EMBEDDING_BASE_URL` | `""` | 空则继承记忆 embedding 地址 |
+| `KNOWLEDGE_EMBEDDING_MODEL` | `""` | 空则继承记忆 embedding 模型 |
+| `KNOWLEDGE_URL_TIMEOUT` | `15.0` | 单页 URL 请求超时，秒 |
+| `KNOWLEDGE_URL_MAX_BYTES` | `2097152` | URL 响应字节上限 |
+| `KNOWLEDGE_IMPORT_MAX_BYTES` | `20971520` | 单文件导入字节上限 |
+| `SCHEDULING_ENABLED` | `false` | 群级 Cron 总开关 |
+| `SCHEDULING_DB_PATH` | `<STELLA_HOME>/scheduling/tasks.db` | 定时任务独立 SQLite 路径 |
+| `SCHEDULING_WORKER_LEASE_TTL` | `300` | 单 worker 租约 TTL，秒 |
+| `SCHEDULING_TICK_INTERVAL` | `30` | worker 巡检间隔，秒 |
+| `SCHEDULING_DAILY_GROUP_RUN_CAP` | `40` | 每群每日运行上限 |
+| `SCHEDULING_MAX_TASKS_PER_GROUP` | `8` | 每群任务总数上限 |
+| `SCHEDULING_MAX_TASKS_PER_USER` | `3` | 每用户每群任务数上限 |
+| `SCHEDULING_RUN_TIMEOUT_SECONDS` | `300` | 单次运行墙钟上限，秒 |
+| `SCHEDULING_MAX_MODEL_ROUNDS` | `4` | Agent 模型轮数上限 |
+| `SCHEDULING_MAX_TOOL_CALLS` | `8` | Agent 工具调用上限 |
+| `SCHEDULING_OUTPUT_MAX_CHARS` | `1200` | 任务输出字符上限 |
+| `SCHEDULING_CONTEXT_MAX_CHARS` | `1200` | 只读群上下文字符上限 |
+| `SCHEDULING_SEND_TIMEOUT` | `30.0` | 平台发送超时，秒 |
+| `SCHEDULING_GLOBAL_ADMINS` | `[]` | 全局管理员 QQ 号集合 |
+| `COMETA_ENABLED` | `false` | 外部 Agent 任务总开关 |
+| `COMETA_DELEGATION_MODE` | `explicit` | explicit 或 auto；自动模式需灰度 |
+| `COMETA_CONFIG_FILE` | `cometa.toml` | 用户 config/ 下任务配置文件名 |
+| `COMETA_DB_PATH` | `<STELLA_HOME>/cometa/tasks.db` | 任务独立 SQLite 路径 |
+| `COMETA_MAX_CONCURRENT` | `2` | 最大并发长任务数 |
+| `COMETA_SUBMIT_TIMEOUT_SECONDS` | `2.0` | 受理等待超时，秒 |
+| `COMETA_TASK_TIMEOUT_SECONDS` | `1800.0` | 任务执行超时，秒 |
+| `COMETA_PROGRESS_INTERVAL_SECONDS` | `120.0` | 进度通知最小间隔，秒 |
+| `COMETA_RESULT_MAX_CHARS` | `2000` | 结果消息字符预算 |
+
+私聊默认开启且空白名单不限制；PERSON 写入/分享与两个归属合同默认关闭。启用顺序见 [记忆指南](memory-system.md)。知识库、Cron、Cometa 的完整操作分别见对应指南。

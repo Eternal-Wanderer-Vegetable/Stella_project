@@ -489,7 +489,7 @@ SQL 内部的比较（`julianday('now')` vs `julianday(col)`）两侧同为 UTC�
 
 ### 归档记录
 
-每次大重构后运行时数据库会归档到 `_deprecated/`（已 gitignore）：
+以下是早期重构留下的历史归档（`_deprecated/` 已 gitignore），不是当前升级步骤：
 
 | 文件 | 说明 |
 |---|---|
@@ -497,7 +497,8 @@ SQL 内部的比较（`julianday('now')` vs `julianday(col)`）两侧同为 UTC�
 | `legacy_agent_memory_2026.db` | v2 schema 升级前 |
 | `legacy_agent_memory_pre_v4.db` | 两层过滤重构（Gate 1 三档 / 候选强化 / 配额）之前 |
 
-启动时会按当前 schema 在 `memory/` 下自动重建新库。
+当前升级通过版本化迁移保留已有数据；仅在数据根确实没有库时才初始化新库。
+实际库路径是 `STELLA_HOME/memory/agent_memory.db`，不要为升级删除或搬走生产库。
 
 > 封存旧库时**连 `stella_memory_backup.db` 一起移走**。`backup_database()` 见备份已存在即跳过，留着它会导致新库将来迁移时不生成新备份——一个看起来有备份、实际备份错了的状态。
 >
@@ -766,3 +767,16 @@ ORDER BY ts DESC LIMIT 20;
 | `logs/` | 终端输出与运行日志存档 |
 
 与 `docs/` 的区别：`docs/` 是面向使用者的成品文档，`design_docs/` 是过程记录，包含被推翻的假设与失败的尝试——那些信息对理解「为什么现在是这样」很重要，但不适合放进使用文档。
+
+## 6.1.0 的源码合同与发布门禁
+
+- 记忆 schema 18 / backend API 2：`memory/schema.py`、`memory_rust/backend.py` 与 `memory_rust/native/src/schema.rs` 必须一致。原生包版本不能替代导出常量校验。
+- 消息流程：`python scripts/generate_message_flow.py --check` 检查源码锚点、闭包与 manifest；源码变化后按生成器更新归档，不能把静态可达性当作实际执行。
+- 前端：`pnpm --dir dashboard test`、`pnpm --dir dashboard build`；本地随包快照用 `pnpm --dir dashboard sync:webui` 同步。
+- 隔离评估：`python scripts/run_flow_evaluation.py --mode isolated_pipeline --dataset <dataset_dir> --workdir <isolated_dir> --json`；还有 trace_playback / decision_recompute / model_validation 模式。workdir 与 dataset 必填，不能默认回落生产库。
+- 归属重放：`python scripts/evaluate_dialogue_attribution.py --help` 查看冻结夹具、协议 prompt 与 `--guard`；离线重放不替代身份登记落库和真实 QQ 灰度。
+- 发布版本：`pyproject.toml`、`cli/Cargo.toml`、`desktop/src-tauri/Cargo.toml`、Tauri 配置与对应 lockfile 同步。原生 wheel、launcher、runtime-manager 与私有 Dashboard 包保留独立组件版本。
+- tag 发布依次构建面板、CPU backend 候选通道、离线负载、wheel、CLI 与四个安装器；每个 EXE 在 Windows runner 上验收后才进入发布 job。发布清单绑定大小/SHA-256，发布后回读校验。
+- `VERSIONED_LAYOUT=0` 是当前工作流默认值；版本化 launcher 搬移路径尚未默认开启。hosted Windows 安装检查不是干净 VM/GUI 首启验收；完整 VM 矩阵见 `release_assets/VM-MATRIX.md`。
+
+测试现状以目标提交 CI 为准；旧文档中的测试数字是有日期的快照。归属灰度与 Rust 排序差异见 [文档索引](README.md)。

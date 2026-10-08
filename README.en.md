@@ -24,7 +24,6 @@
 
 ---
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
 
 Stella does more than send messages to a large model and return a reply. It turns scattered information from group chats into **searchable, verifiable, and forgetful memories**, and proactively speaks up to learn about you at the right time.
 
@@ -36,6 +35,15 @@ You decide where the models come from.
 - **Hybrid**: delegate conversation generation to an online model, keep frequent, low-difficulty work such as memory consolidation and session compression local, and send only the step requiring strong reasoning online.
 
 > Note: With the all-local deployment mode, the data truly stays off the network. Networked tools (such as weather and anime lookups) send requests and return actual data themselves, while deciding whether to use a tool, compressing its result into a summary, and rendering plugin cards as images all happen locally.
+
+## Current release: 6.1.0
+
+- QQ private chat and original-conversation delivery are integrated. Private chat defaults to enabled; use `PRIVATE_CHAT_ALLOWLIST` to restrict friends.
+- Cometa manages external agent tasks, with Codex authentication on WebUI Providers. It defaults to disabled and explicit delegation.
+- Message Flow and personal-memory audit pages are available. Memory uses schema 18/backend API 2.
+- Personal writing/sharing, reply attribution guards, and proactive contracts remain disabled by default. Real QQ rollout and Rust ranking differences still have outstanding acceptance items.
+
+See the [documentation index](docs/README.en.md) for bilingual guides, defaults, and acceptance boundaries.
 
 ## 🔌 Three Deployment Modes
 
@@ -91,13 +99,13 @@ You decide where the models come from.
 
 - **🔌 Extensible** -- Pipeline pre- and post-processing Hooks, with automatic loading from the extension directory.
 
-- **🧪 Verifiable** -- 2600+ unit tests cover memory promotion, cross-user isolation, two-layer ownership, anti-fabrication safeguards, routing fallback, and tool isolation. After connecting an online endpoint, there is also a layer of **vendor-neutral contract tests** (an extra field in the request body fails the test; parameter differences may adapt only to error wording and may not use a vendor whitelist) and a prefix-cache guard. Probe scripts also perform regression checks against real models (including a case specifically reproducing "missing information in a noisy environment"), along with a benchmark quantifying four types of routing errors.
+- **🧪 Verifiable** -- Unit and integration tests cover memory promotion, cross-user isolation, two-layer ownership, anti-fabrication safeguards, routing fallback, and tool isolation. After connecting an online endpoint, there is also a layer of **vendor-neutral contract tests** (an extra field in the request body fails the test; parameter differences may adapt only to error wording and may not use a vendor whitelist) and a prefix-cache guard. Probe scripts also perform regression checks against real models (including a case specifically reproducing "missing information in a noisy environment"), along with a benchmark quantifying four types of routing errors.
 
 ## 🚀 Quick Start
 
 > This section covers **Windows desktop** deployment. For Linux / remote servers, see the [Docker Deployment Guide](docs/deployment-docker.en.md).
 >
-> **v2 control plane (current UI)**: point a browser at the bot's own port for the full management panel (auth / config / plugins / MCP / knowledge base / cron / live logs — see [docs/webui.md](docs/webui.md)); the desktop shell (Tauri 2) embeds the same panel. The legacy native UI is retired, frozen at tag `gui-v1-final`.
+> **v2 control plane (current UI)**: point a browser at the bot's own port for the full management panel (auth / config / plugins / MCP / knowledge base / cron / live logs — see [docs/webui.en.md](docs/webui.en.md)); the desktop shell (Tauri 2) embeds the same panel. The legacy native UI is retired, frozen at tag `gui-v1-final`.
 
 ### 📦 Download & Install (regular users)
 
@@ -303,7 +311,7 @@ Stage 2 is awakened only when Stage 1 determines that self-disclosure is present
 
 **Plugin compatibility and rendering**: `Jinja2` · `Playwright` (local Chromium, used only to render plugin cards as images)
 
-**Desktop installer**: `Tauri 2` · `Rust`. v1 (`stella-installer/`, native HTML/JS, frozen at tag `gui-v1-final`); v2 (`desktop/` shell + `dashboard/` panel, Vue 3 + Vuetify 3 — see `docs/webui.md`).
+**Desktop installer**: `Tauri 2` · `Rust`. v1 (`stella-installer/`, native HTML/JS, frozen at tag `gui-v1-final`); v2 (`desktop/` shell + `dashboard/` panel, Vue 3 + Vuetify 3 — see `docs/webui.en.md`).
 
 **Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with an optional `llama` profile; Chromium and CJK fonts are baked into the image; see the [Docker Deployment Guide](docs/deployment-docker.en.md))
 
@@ -344,3 +352,5 @@ This project received encouragement and support from many people and organizatio
   - **Developer community**: [Linux Do](https://linux.do)
 - Special thanks to Freya; this work is dedicated to you. My journey of exploration began with your gift, and it is time to offer an imperfect return gift.
 
+
+The versioned upgrade tool and default installer layout are separate: release CI uses `VERSIONED_LAYOUT=0`, leaving launcher relocation disabled. See [development](docs/development.en.md) for conditions.

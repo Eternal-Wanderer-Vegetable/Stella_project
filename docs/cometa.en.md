@@ -2,8 +2,6 @@
 
 [中文](cometa.md) | English
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
-
 Cometa lets Stella delegate long-running tasks (coding, research) to an
 external coding agent (currently [OpenAI Codex](https://github.com/openai/codex)).
 Tasks go through a deterministic admission gate into the local task store;
@@ -47,7 +45,7 @@ restart** (see below).
 
 ## Authentication (two WebUI routes + legacy migration)
 
-Entry: WebUI -> "External Agent Tasks" -> "Backend Authentication (Codex)".
+Entry: WebUI → **Providers → External Agent** authentication card (`/#/providers`). Task listing and control remain on External Agent Tasks (`/#/cometa`).
 All routes take effect **immediately, no restart** - auth state is read at
 probe/task start.
 
@@ -118,3 +116,14 @@ configuration is kept).
 | Device session disappeared | Sessions are in-memory; re-initiate after a bot restart |
 | Custom endpoint stream drops mid-task | Endpoint must support the Responses API incl. function tools; set `NO_PROXY` for local endpoints |
 | Version mismatch ("model requires a newer client") | Don't point at an old PATH codex.exe; the SDK bundles a matched cli-bin |
+
+## Conversation delivery and runtime boundaries in 6.1.0
+
+Origin v2 records kind, peer, bot, and conversation key. QQ group/private
+acknowledgements, progress, and results return to the original conversation.
+Short results deliver the full text; long results prefer a `.md` file with merged
+forwarding and other fallbacks. Generation and platform delivery are distinct:
+an uncertain send receipt is `delivery_unknown`, not proof of success or permission
+for blind retry. Defaults are `COMETA_ENABLED=false` and
+`COMETA_DELEGATION_MODE=explicit`; automatic delegation requires explicit enablement.
+Tests live in `tests/cometa/`; conversation delivery also needs real QQ acceptance.

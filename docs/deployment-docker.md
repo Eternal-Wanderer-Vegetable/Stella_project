@@ -201,3 +201,15 @@ volumes:
   插件、人格和日志。
 - NapCat 的账号数据和网络配置仍位于独立的 `napcat/` 目录，不写入 Stella
   Runtime state，也不与 Stella Core 共用升级生命周期。
+
+## 6.1.0 的持久化与升级
+
+同一 `STELLA_HOME` 数据卷除 `.env`、插件与记忆库外，还包括 `webui/auth.json`、
+`knowledge/knowledge.db`、`scheduling/tasks.db`、`cometa/tasks.db` 与每后端
+`cometa/codex_home/` 凭据，以及 `turn_trace.db`。备份整个数据根；SQLite 活库用
+backup API，或停服务后备份，不能只复制 WAL 模式的主 `.db` 文件。
+QQ 私聊默认启用（`PRIVATE_CHAT_ENABLED=true`，空白名单允许所有好友），与
+`ALLOWED_GROUPS` 独立；需要收窄时配置 `PRIVATE_CHAT_ALLOWLIST`。
+个人写入/分享、归属 guard 与主动验证合同默认关闭，迁移不会自动开放旧记忆。
+Rust 镜像/部署必须提供 API 2/schema 18 的原生扩展，否则 strict/rust 模式会拒绝。
+配置默认值和可选 Cometa SDK 见 [配置](configuration.md)与 [Cometa](cometa.md)。

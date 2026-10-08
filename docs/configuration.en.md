@@ -2,8 +2,6 @@
 
 [中文](configuration.md) | English
 
-> Note: This version of the document was translated from the Chinese version by GPT-5.6 luna.
-
 **Regular users (Release package)**: For first-time setup, use the `Configuration` page in `Stella.exe`: enter the group number, connection method, address, and model ID, then save to write them to `STELLA_HOME/.env`. The model list can be read automatically from the local LM Studio, or entered manually.
 
 **Developers**: Use the wizard `python -m deploy init`: answer only 5 required items (group number, connection method, address, and two model IDs). The wizard retrieves the model list from LM Studio and lets you choose by number, avoiding the common mistake of typing a complete ID but omitting the `google/` prefix. It generates `.env` line by line from `.env.example`, preserving the template comments exactly, especially the cross-NapCat OneBot connection instructions. You can also use `--answers` to save and reuse answers.
@@ -1271,3 +1269,77 @@ Shutdown flow: deploy writes the sentinel → the in-Bot watcher detects it and 
 | “It suddenly does not remember me” | First check whether `ROUTER_GATE_MEMORY` was enabled; run `python -m capability.router.benchmark` to inspect memory false negatives |
 
 Before changing thresholds, run a probe for validation; see the [Development Guide](development.en.md).
+
+## Additional configuration reference for 6.1.0
+
+These 62 previously omitted literal environment keys come from `config/settings.py`,
+not this machine's `.env`. Dynamic user paths resolve under `STELLA_HOME`; `""`
+denotes an empty string and `[]` an empty ID set. Restart after setting changes;
+live Codex credentials are covered separately in [Cometa](cometa.en.md).
+
+| Key | Source default | Purpose |
+| --- | --- | --- |
+| `PRIVATE_CHAT_ENABLED` | `true` | Enable QQ private ingress independently of allowed groups |
+| `PRIVATE_CHAT_ALLOWLIST` | `[]` | Comma-separated friend QQ IDs; empty permits all friends |
+| `PERSONAL_MEMORY_WRITE_ENABLED` | `false` | Allow new PERSON facts; disabled by default |
+| `LLM_ROLE_CHAT_TEMPERATURE` | `0.7` | CHAT sampling temperature |
+| `LLM_ROLE_CHAT_MAX_TOKENS` | `2000` | CHAT output token limit; 0 is caller-managed, inherit settings can inherit |
+| `LLM_ROLE_CHAT_FALLBACK_ENDPOINT` | `""` | CHAT fallback endpoint slot; empty means unconfigured |
+| `LLM_ROLE_ROUTER_MODEL` | `""` | ROUTER model override; empty inherits endpoint model |
+| `LLM_ROLE_ROUTER_TEMPERATURE` | `0.7` | ROUTER sampling temperature |
+| `LLM_ROLE_ROUTER_MAX_TOKENS` | `2000` | ROUTER output token limit; 0 is caller-managed, inherit settings can inherit |
+| `LLM_ROLE_ROUTER_FALLBACK_ENDPOINT` | `""` | ROUTER fallback endpoint slot; empty means unconfigured |
+| `LLM_ROLE_PLUGIN_MODEL` | `""` | PLUGIN model override; empty inherits endpoint model |
+| `LLM_ROLE_PLUGIN_TEMPERATURE` | `0.7` | PLUGIN sampling temperature |
+| `LLM_ROLE_PLUGIN_MAX_TOKENS` | `1024` | PLUGIN output token limit; 0 is caller-managed, inherit settings can inherit |
+| `LLM_ROLE_PLUGIN_FALLBACK_ENDPOINT` | `""` | PLUGIN fallback endpoint slot; empty means unconfigured |
+| `LLM_ROLE_COMPACT_MODEL` | `""` | COMPACT model override; empty inherits endpoint model |
+| `LLM_ROLE_COMPACT_TEMPERATURE` | `0.3` | COMPACT sampling temperature |
+| `LLM_ROLE_COMPACT_MAX_TOKENS` | `0` | COMPACT output token limit; 0 is caller-managed, inherit settings can inherit |
+| `LLM_ROLE_COMPACT_FALLBACK_ENDPOINT` | `""` | COMPACT fallback endpoint slot; empty means unconfigured |
+| `LLM_ROLE_CONSOLIDATION_FALLBACK_ENDPOINT` | `""` | CONSOLIDATION fallback endpoint slot; empty means unconfigured |
+| `LLM_ROLE_EXTRACT_MAX_TOKENS` | `MEMORY_EXTRACT_MAX_TOKENS` | EXTRACT output token limit; 0 is caller-managed, inherit settings can inherit |
+| `LLM_ROLE_EXTRACT_FALLBACK_ENDPOINT` | `""` | EXTRACT fallback endpoint slot; empty means unconfigured |
+| `MCP_ENABLED` | `false` | Enable MCP providers |
+| `MCP_CONFIG_FILE` | `mcp.toml` | MCP configuration filename under user config/ |
+| `PERSONAL_MEMORY_SHARE_ENABLED` | `false` | Allow explicit owner authorization of specific facts |
+| `PROACTIVE_VERIFICATION_CONTRACT_MODE` | `off` | off/shadow/enforce for proactive source/target validation |
+| `REPLY_ATTRIBUTION_GUARD_MODE` | `off` | off/shadow/enforce for reply-plan attribution evidence |
+| `KNOWLEDGE_ENABLED` | `true` | Enable independent knowledge libraries |
+| `KNOWLEDGE_DB_PATH` | `<STELLA_HOME>/knowledge/knowledge.db` | Independent knowledge SQLite database |
+| `KNOWLEDGE_SEARCH_TOP_K` | `8` | Candidate limit per retrieval channel |
+| `KNOWLEDGE_RRF_K` | `60` | Reciprocal rank fusion constant |
+| `KNOWLEDGE_EVIDENCE_MAX_ITEMS` | `4` | Hard evidence item limit |
+| `KNOWLEDGE_EVIDENCE_MAX_TOKENS` | `600` | Hard evidence token limit |
+| `KNOWLEDGE_EVIDENCE_MAX_CHARS` | `700` | Character limit per evidence excerpt |
+| `KNOWLEDGE_RERANK_ENABLED` | `false` | Enable an optional injected reranker |
+| `KNOWLEDGE_EMBEDDING_BASE_URL` | `""` | Empty inherits memory embedding URL |
+| `KNOWLEDGE_EMBEDDING_MODEL` | `""` | Empty inherits memory embedding model |
+| `KNOWLEDGE_URL_TIMEOUT` | `15.0` | Single-page URL timeout in seconds |
+| `KNOWLEDGE_URL_MAX_BYTES` | `2097152` | URL response byte limit |
+| `KNOWLEDGE_IMPORT_MAX_BYTES` | `20971520` | File import byte limit |
+| `SCHEDULING_ENABLED` | `false` | Enable group cron tasks |
+| `SCHEDULING_DB_PATH` | `<STELLA_HOME>/scheduling/tasks.db` | Independent scheduling database |
+| `SCHEDULING_WORKER_LEASE_TTL` | `300` | Single-worker lease TTL in seconds |
+| `SCHEDULING_TICK_INTERVAL` | `30` | Worker tick interval in seconds |
+| `SCHEDULING_DAILY_GROUP_RUN_CAP` | `40` | Daily runs per group |
+| `SCHEDULING_MAX_TASKS_PER_GROUP` | `8` | Tasks per group |
+| `SCHEDULING_MAX_TASKS_PER_USER` | `3` | Tasks per user per group |
+| `SCHEDULING_RUN_TIMEOUT_SECONDS` | `300` | Run wall-time limit in seconds |
+| `SCHEDULING_MAX_MODEL_ROUNDS` | `4` | Agent model-round limit |
+| `SCHEDULING_MAX_TOOL_CALLS` | `8` | Agent tool-call limit |
+| `SCHEDULING_OUTPUT_MAX_CHARS` | `1200` | Output character limit |
+| `SCHEDULING_CONTEXT_MAX_CHARS` | `1200` | Read-only group context character limit |
+| `SCHEDULING_SEND_TIMEOUT` | `30.0` | Platform send timeout in seconds |
+| `SCHEDULING_GLOBAL_ADMINS` | `[]` | Global administrator QQ IDs |
+| `COMETA_ENABLED` | `false` | Enable external agent tasks |
+| `COMETA_DELEGATION_MODE` | `explicit` | explicit or auto; roll out automatic delegation deliberately |
+| `COMETA_CONFIG_FILE` | `cometa.toml` | Task configuration filename under user config/ |
+| `COMETA_DB_PATH` | `<STELLA_HOME>/cometa/tasks.db` | Independent task database |
+| `COMETA_MAX_CONCURRENT` | `2` | Maximum concurrent long tasks |
+| `COMETA_SUBMIT_TIMEOUT_SECONDS` | `2.0` | Admission timeout in seconds |
+| `COMETA_TASK_TIMEOUT_SECONDS` | `1800.0` | Task execution timeout in seconds |
+| `COMETA_PROGRESS_INTERVAL_SECONDS` | `120.0` | Minimum progress notification interval in seconds |
+| `COMETA_RESULT_MAX_CHARS` | `2000` | Result-message character budget |
+
+Private chat defaults to enabled with an unrestricted empty allowlist. PERSON writing/sharing and both attribution contracts default to disabled. See [memory](memory-system.en.md) for rollout, and the knowledge, scheduling, and Cometa guides for operations.
