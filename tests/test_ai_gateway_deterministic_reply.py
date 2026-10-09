@@ -24,6 +24,19 @@ def ai_gateway_module():
     return ai_gateway
 
 
+@pytest.fixture()
+def flow_db(tmp_path):
+    """为流程观测测试配置独立数据库，避免依赖其他测试的全局状态。"""
+
+    from core.observability import message_flow, turn_trace
+
+    db = tmp_path / "turn_trace.db"
+    turn_trace.configure(db)
+    yield db
+    message_flow.flush()
+    turn_trace.configure(None)
+
+
 @pytest.mark.asyncio
 async def test_handle_chat_sends_deterministic_reply_once(
     ai_gateway_module, monkeypatch, tmp_path
@@ -105,10 +118,10 @@ async def test_handle_chat_sends_deterministic_reply_once(
 
 
 @pytest.mark.asyncio
-async def test_flow_watch_finish_captures_reply_text(ai_gateway_module):
+async def test_flow_watch_finish_captures_reply_text(ai_gateway_module, flow_db):
     """matcher.finish 包装：发出的文本成为 command.reply 检查点（计划 §6.3 A04）。"""
 
-    from core.observability import message_flow, turn_trace
+    from core.observability import message_flow
 
     root = message_flow.begin_trace(root_kind="qq_command", trace_id="cmd-cap")
 
@@ -131,7 +144,7 @@ async def test_flow_watch_finish_captures_reply_text(ai_gateway_module):
 
     import sqlite3
 
-    conn = sqlite3.connect(turn_trace.current_db_path())
+    conn = sqlite3.connect(flow_db)
     try:
         rows = conn.execute(
             "SELECT node_id, summary FROM flow_events "
@@ -149,7 +162,7 @@ async def test_flow_watch_finish_captures_reply_text(ai_gateway_module):
         gateway._flow_reply_ctx.reset(token)
     message_flow.end_trace(root, outcome="command_sent")
     message_flow.flush()
-    conn = sqlite3.connect(turn_trace.current_db_path())
+    conn = sqlite3.connect(flow_db)
     try:
         n = conn.execute(
             "SELECT COUNT(*) FROM flow_events "
