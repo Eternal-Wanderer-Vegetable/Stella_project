@@ -11,12 +11,10 @@ from typing import Any, Protocol
 
 # v2（计划 §6.7）：请求携带受限 owner/subject/audience scope。无新 scope 的
 # 请求明确 SPACE-only（legacy 行为），绝不默认放开全部个人记录。
-BACKEND_API_VERSION = 2
-# 与 memory/schema.py 的 SCHEMA_VERSION 同步（计划 §6.7：整体合同，
-# 旧 schema native 不能读新库，反之亦然）。v17（对话归属复发修复计划 §6.1/§6.3/§6.5）
-# 新增的 verification_contract_json / parser_version 列与 sharing 表不在
-# native 读写面上，但合同按整库版本精确匹配——native 需以本版本号重新编译才能加载。
-MEMORY_SCHEMA_VERSION = 18
+BACKEND_API_VERSION = 3
+# v19 新增 evidence source binding 与 claim lineage，promotion request 携带
+# evidence-set digest/scope epoch CAS；旧 native 必须因 API/schema 不匹配拒绝加载。
+MEMORY_SCHEMA_VERSION = 19
 
 
 class MemoryBackendError(RuntimeError):
@@ -88,6 +86,12 @@ class PromotionRequest:
     source_conversation_key: str = ""
     fact_key: str = ""
     policy_version: str = ""
+    # v3 typed CAS: 字段编码版本、scope version map、evidence-set digest 与
+    # candidate digest 均由服务端计算；native 在 IMMEDIATE 事务内重算比较。
+    cas_schema_version: int = 0
+    expected_scope_versions: Mapping[str, int] | None = None
+    expected_evidence_digest: str = ""
+    expected_candidate_digest: str = ""
 
 
 class MemoryBackend(Protocol):

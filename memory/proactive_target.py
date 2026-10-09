@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 
@@ -52,11 +53,41 @@ class ProactiveTarget:
     candidate_content: str = ""
     candidate_type: str = ""
     reason: str = ""  # 供日志与审计
+    owner_type: str = ""
+    owner_key: str = ""
+    audience: str = ""
+    fact_key: str = ""
+    fact_subject_key: str = ""
+    source_conversation_key: str = ""
+    source_bot_id: str = ""
+    evidence_ids: tuple[str, ...] = ()
+    source_row_ids: tuple[int, ...] = ()
+    source_digests: tuple[str, ...] = ()
+    captured_scope_versions: dict[str, int] | None = None
 
     @property
     def skip_subject(self) -> str:
         """用于负向冷却的稳定主题键；候选变化会自然生成新键。"""
         return f"candidate:{self.candidate_id or self.candidate_content}"
+
+
+@dataclass(frozen=True)
+class _VerifiedCandidate:
+    candidate_id: str
+    content: str
+    memory_type: str
+    confidence: float
+    owner_type: str
+    owner_key: str
+    audience: str
+    fact_key: str
+    fact_subject_key: str
+    source_conversation_key: str
+    source_bot_id: str
+    evidence_ids: tuple[str, ...]
+    source_row_ids: tuple[int, ...]
+    source_digests: tuple[str, ...]
+    scope_versions: dict[str, int]
 
 
 def at_quota(group_id: int, user_id: int) -> int:
@@ -134,11 +165,15 @@ def _fetch_observing_candidate(
     user_id: int,
     exclude_id: str = "",
     exclude_ids: set[str] | None = None,
-) -> tuple[str, str, str, float] | None:
+    *,
+    group_id: int,
+    bot_id: str,
+) -> _VerifiedCandidate | None:
     """取该用户 confidence 最接近晋升线的 OBSERVING 候选。
 
-    返回 (id, content, type, confidence)；无则 None。
-    候选按共享空间归属（``memory_candidates.group_shared_space``）。
+    只返回有当前 accepted evidence、active candidate/claim lineage 且能在原
+    group_messages 行重核的候选。群主动验证仅读取 SPACE/CURRENT_SPACE 候选；
+    PERSON 私聊事实不会因为 recording user 相同而变成群内追问依据。
 
     只取 confidence 在 [LOW-0.2, HIGH) 区间内的：太低的候选证据本身可疑，
     问了也难以定论；已达 HIGH 的会自动晋升、无需验证。
@@ -164,31 +199,134 @@ def _fetch_observing_candidate(
         placeholders = ",".join("?" * len(excluded))
         id_clause = f"AND id NOT IN ({placeholders}) "
         id_params = tuple(sorted(excluded))
+    expected_conversation = f"qq:{bot_id}:group:{group_id}"
+    if not bot_id or group_id <= 0 or not expected_conversation:
+        return None
     try:
+        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
+
         conn = sqlite3.connect(DB_PATH)
-        row = conn.execute(
-            "SELECT id, content, type, confidence FROM memory_candidates "
+        rows = conn.execute(
+            "SELECT c.id, c.content, c.type, c.confidence, c.owner_type, c.owner_key, "
+            "c.audience, c.fact_key, c.source_conversation_key "
+            "FROM memory_candidates c "
             "WHERE group_shared_space = ? AND user_id = ? AND status = 'OBSERVING' "
+            "AND c.owner_type = 'SPACE' AND c.owner_key = ? "
+            "AND c.audience = 'CURRENT_SPACE' AND c.fact_key != '' "
             "AND confidence >= ? AND confidence < ? AND content != '' "
             f"{id_clause}"
             f"{type_clause}"
-            "ORDER BY confidence DESC LIMIT 1",
+            "ORDER BY confidence DESC, c.created_at ASC, c.id ASC",
             (
                 group_shared_space,
                 str(user_id),
+                f"space:{group_shared_space}",
                 lower,
                 MEMORY_CONFIRM_HIGH_CONFIDENCE,
                 *id_params,
                 *type_params,
             ),
-        ).fetchone()
+        ).fetchall()
+        for candidate in rows:
+            (
+                candidate_id, content, memory_type, confidence, owner_type,
+                owner_key, audience, fact_key, candidate_conversation,
+            ) = candidate
+            if candidate_conversation and str(candidate_conversation) != expected_conversation:
+                continue
+            evidence_rows = conn.execute(
+                "SELECT e.id, e.source_row_id, e.source_conversation_key, e.source_digest, "
+                "e.fact_subject_key, e.provenance_json "
+                "FROM memory_evidence e "
+                "JOIN memory_claim_links l ON l.evidence_id = e.id "
+                "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+                "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+                "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+                "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+                "WHERE e.candidate_id = ? AND e.owner_key = ? AND e.audience = ? "
+                "AND e.fact_key = ? AND e.fact_subject_key = ? "
+                "AND e.verification_status = 'accepted' "
+                "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+                "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+                "AND l.status = 'active' ORDER BY e.id",
+                (
+                    str(candidate_id), str(owner_key), str(audience), str(fact_key),
+                    f"qq:{user_id}", str(candidate_id),
+                ),
+            ).fetchall()
+            if not evidence_rows:
+                continue
+            valid_evidence = []
+            for evidence in evidence_rows:
+                evidence_id, source_row_id, source_conversation, digest, subject, raw = evidence
+                try:
+                    provenance = json.loads(raw or "{}")
+                except (TypeError, ValueError):
+                    valid_evidence = []
+                    break
+                snapshot = provenance.get("source_snapshot")
+                if not isinstance(snapshot, dict):
+                    valid_evidence = []
+                    break
+                if (
+                    provenance.get("assessment_version") != ASSESSMENT_VERSION
+                    or provenance.get("verification_status") != "accepted"
+                    or provenance.get("claim_key") != fact_key
+                    or provenance.get("recording_author_key") != subject
+                    or provenance.get("fact_object_key") != subject
+                    or provenance.get("exact_support_span") != content
+                    or provenance.get("conversation_key") != source_conversation
+                    or str(provenance.get("source_id")) != str(source_row_id)
+                    or str(snapshot.get("id")) != str(source_row_id)
+                    or str(snapshot.get("group_id")) != str(group_id)
+                    or str(snapshot.get("user_id")) != str(user_id)
+                    or str(snapshot.get("bot_id")) != bot_id
+                    or str(snapshot.get("conversation_key")) != expected_conversation
+                    or str(source_conversation) != expected_conversation
+                    or str(subject) != f"qq:{user_id}"
+                    or str(snapshot.get("source_kind") or "").upper() == "BOT_SELF"
+                    or not verify_source_snapshot(snapshot, str(digest), conn=conn)
+                ):
+                    valid_evidence = []
+                    break
+                valid_evidence.append(
+                    (str(evidence_id), int(source_row_id), str(digest))
+                )
+            if len(valid_evidence) != len(evidence_rows):
+                continue
+            version_rows = conn.execute(
+                "SELECT scope_key, version FROM memory_scope_versions "
+                "WHERE scope_key IN (?, 'global')",
+                (str(owner_key),),
+            ).fetchall()
+            scope_versions = {str(key): int(version) for key, version in version_rows}
+            scope_versions.setdefault(str(owner_key), 0)
+            scope_versions.setdefault("global", 0)
+            return _VerifiedCandidate(
+                candidate_id=str(candidate_id),
+                content=str(content or ""),
+                memory_type=str(memory_type or "FACT"),
+                confidence=float(confidence or 0.0),
+                owner_type=str(owner_type or ""),
+                owner_key=str(owner_key or ""),
+                audience=str(audience or ""),
+                fact_key=str(fact_key or ""),
+                fact_subject_key=f"qq:{user_id}",
+                source_conversation_key=expected_conversation,
+                source_bot_id=bot_id,
+                evidence_ids=tuple(item[0] for item in valid_evidence),
+                source_row_ids=tuple(item[1] for item in valid_evidence),
+                source_digests=tuple(item[2] for item in valid_evidence),
+                scope_versions=scope_versions,
+            )
         conn.close()
     except sqlite3.Error as e:
         logger.warning(f"⚠️ [ProactiveTarget] 读取候选失败: {e}")
         return None
-    if not row:
-        return None
-    return str(row[0]), str(row[1] or ""), str(row[2] or "FACT"), float(row[3] or 0.0)
+    finally:
+        if "conn" in locals():
+            conn.close()
+    return None
 
 
 def _probe(ctx, node_id: str, **kw) -> None:
@@ -211,6 +349,7 @@ def pick_target(
     group_id: int,
     exclude_user_ids: set[int] | None = None,
     *,
+    bot_id: str = "",
     flow_ctx=None,
     instance_key: str = "",
 ) -> ProactiveTarget | None:
@@ -274,7 +413,7 @@ def pick_target(
 
     # 优先级 1：有可验证候选的用户（按 confidence 降序，最接近晋升线的先问）
     # 每人排除上次已经问过的那条候选，否则同一条候选会在每轮都胜出 → 复读
-    verify_pool: list[tuple[float, int, tuple[str, str, str, float]]] = []
+    verify_pool: list[tuple[float, int, _VerifiedCandidate]] = []
     for uid in eligible:
         state = get_state(group_id, uid)
         excluded_candidate_ids: set[str] = set()
@@ -284,36 +423,52 @@ def pick_target(
                 uid,
                 exclude_id=state["last_asked_candidate_id"],
                 exclude_ids=excluded_candidate_ids,
+                group_id=group_id,
+                bot_id=bot_id,
             )
             if not found:
                 break
-            if proactive.proactive_skip_active(group_id, uid, f"candidate:{found[0]}"):
+            if proactive.proactive_skip_active(group_id, uid, f"candidate:{found.candidate_id}"):
                 # 候选淘汰原因（计划 §6.4：记录被淘汰候选的原因）
                 _probe(flow_ctx, "proactive.at.select", status="skipped",
                        reason_code="候选在自然承接冷却中",
-                       metrics={"user_id": uid, "candidate_id": found[0]},
+                       metrics={"user_id": uid, "candidate_id": found.candidate_id},
                        instance_key=instance_key)
-                excluded_candidate_ids.add(found[0])
+                excluded_candidate_ids.add(found.candidate_id)
                 continue
-            verify_pool.append((found[3], uid, found))
+            verify_pool.append((found.confidence, uid, found))
             break
     if verify_pool:
         verify_pool.sort(key=lambda item: item[0], reverse=True)
-        _, uid, (cid, content, ctype, conf) = verify_pool[0]
+        _, uid, found = verify_pool[0]
         target = ProactiveTarget(
             user_id=uid,
-            candidate_id=cid,
-            candidate_content=content,
-            candidate_type=ctype,
-            reason=f"验证候选（conf={conf:.2f}，距晋升线 {MEMORY_CONFIRM_HIGH_CONFIDENCE}）",
+            candidate_id=found.candidate_id,
+            candidate_content=found.content,
+            candidate_type=found.memory_type,
+            reason=(
+                f"验证候选（conf={found.confidence:.2f}，距晋升线 "
+                f"{MEMORY_CONFIRM_HIGH_CONFIDENCE}）"
+            ),
+            owner_type=found.owner_type,
+            owner_key=found.owner_key,
+            audience=found.audience,
+            fact_key=found.fact_key,
+            fact_subject_key=found.fact_subject_key,
+            source_conversation_key=found.source_conversation_key,
+            source_bot_id=found.source_bot_id,
+            evidence_ids=found.evidence_ids,
+            source_row_ids=found.source_row_ids,
+            source_digests=found.source_digests,
+            captured_scope_versions=found.scope_versions,
         )
         _probe(flow_ctx, "proactive.at.select", status="succeeded",
                reason_code="选中验证候选",
                metrics={
                    "user_id": uid,
-                   "candidate_id": cid,
-                   "candidate_type": ctype,
-                   "confidence": round(conf, 3),
+                   "candidate_id": found.candidate_id,
+                   "candidate_type": found.memory_type,
+                   "confidence": round(found.confidence, 3),
                    "confirm_line": MEMORY_CONFIRM_HIGH_CONFIDENCE,
                },
                summary=target.reason,

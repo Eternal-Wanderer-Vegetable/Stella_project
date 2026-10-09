@@ -33,6 +33,7 @@ from core.runtime.turn_service import (
     BUDGET_LIMITED,
     DIRECT,
     GENERATE,
+    NO_BACKEND,
     SILENT,
     TurnService,
     pending_system_prompt,
@@ -228,6 +229,15 @@ class RuntimeFacade:
             state.owner_epoch = 1
         return state.owner_epoch
 
+    def delivery_is_current(self, key: str, turn_id: str, owner_epoch: int) -> bool:
+        """同步发送围栏：只允许当前未复位、未被新轮次取代的输出继续发送。"""
+        state = self._keys.get(key)
+        return bool(
+            state is not None
+            and state.last_turn_id == turn_id
+            and state.owner_epoch == owner_epoch
+        )
+
     # ---- 轮次提交 ----
 
     async def submit_turn(
@@ -252,6 +262,8 @@ class RuntimeFacade:
                     ctx.trace_id = uuid.uuid4().hex
                 ctx.turn_id = turn_id
             epoch_before = await self._ensure_epoch(state)
+            ctx.runtime_key = key
+            ctx.generation_epoch = epoch_before
             self._record(
                 turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=epoch_before,
                 outcome="", state="accepted", started_at=started,
@@ -293,6 +305,7 @@ class RuntimeFacade:
             )
 
             if plan.outcome == GENERATE:
+                ctx.delivery_source_kind = "model"
                 prompt = ctx.prompt_log
                 provider = self._provider or _pipeline_provider
                 state.cancel_requested = False
@@ -319,6 +332,7 @@ class RuntimeFacade:
                                      to_node="turn.timeout", relation_kind="condition",
                                      status="timed_out")
                     ctx.llm_elapsed = time.monotonic() - gen_started
+                    ctx.delivery_source_kind = "trusted-server-fallback"
                     ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
                         turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
@@ -365,6 +379,7 @@ class RuntimeFacade:
                                      to_node="turn.error", relation_kind="condition",
                                      status="failed")
                     ctx.llm_elapsed = time.monotonic() - gen_started
+                    ctx.delivery_source_kind = "trusted-server-fallback"
                     ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
                     self._record(
                         turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
@@ -404,6 +419,13 @@ class RuntimeFacade:
             if plan.outcome in (DIRECT, SILENT):
                 # 与 legacy 直回/WAIT 早退语义一致——不执行 finalize
                 # （post hooks 不跑，silent 不得被补成兜底 lines）；生命周期照记。
+                if plan.outcome == DIRECT:
+                    from core.social.delivery import delivery_draft_from_context
+
+                    ctx.delivery_draft = delivery_draft_from_context(ctx)
+                else:
+                    ctx.delivery_draft = {}
+                ctx.delivery_plan = {}
                 _flow_decision(fctx, "turn.direct_silent", status="skipped",
                                reason_code=plan.outcome)
                 self._record(
@@ -414,6 +436,8 @@ class RuntimeFacade:
                 return plan.ctx
 
             # BUDGET_LIMITED / NO_BACKEND：本地路径（无生成），仍产兜底 lines
+            if plan.outcome in (BUDGET_LIMITED, NO_BACKEND):
+                ctx.delivery_source_kind = "trusted-server-fallback"
             _flow_decision(fctx, "turn.fallback", status="blocked",
                            reason_code=plan.outcome)
             if plan.outcome == BUDGET_LIMITED:

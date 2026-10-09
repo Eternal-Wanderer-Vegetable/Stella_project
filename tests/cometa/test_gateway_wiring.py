@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock
 
@@ -54,6 +55,18 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     from cometa.store import CometaStore
 
     gateway = ai_gateway_module
+    from config import settings
+    from core.social.delivery import delivery_draft_from_context
+    from memory import social_store
+    from memory.schema import create_memory_scope_versions_table
+
+    delivery_db = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(settings, "DB_PATH", delivery_db)
+    monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
+    with sqlite3.connect(delivery_db) as conn:
+        create_memory_scope_versions_table(conn)
+    monkeypatch.setattr(social_store, "_TABLES_READY", False)
+    social_store.ensure_tables()
 
     # 真实服务（临时库）：受理一条任务拿到 ack 通知
     cfg = CometaConfig.load(env={"STELLA_HOME": str(tmp_path), "COMETA_ENABLED": "true"})
@@ -86,6 +99,17 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     monkeypatch.setattr(gateway, "_cometa_instance_id", lambda: "inst-gw")
     # handle_chat 的其余依赖（与 deterministic 回归同款替身）
     ctx = ChatContext(user_id=111, group_id=1, msg_id=42, message="委派 做点什么")
+    ctx.trace_id = "cometa-ack-delivery-test"
+    ctx.turn_id = "cometa-ack-delivery-turn"
+    ctx.conversation_kind = "group"
+    ctx.conversation_key = "qq:9:group:1"
+    ctx.bot_id = "9"
+    ctx.peer_id = "1"
+    ctx.storage_session_id = 1
+    ctx.delivery_source_kind = "trusted-server"
+    ctx.reply_disposition = "deliver"
+    ctx.lines = ["placeholder"]
+    ctx.delivery_draft = delivery_draft_from_context(ctx)
     ctx.cometa_origin = {
         "instance_id": "inst-gw", "platform": "qq", "bot_id": "9",
         "conversation_id": "1", "requester_id": "111",
@@ -115,6 +139,7 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     monkeypatch.setattr(
         gateway, "_social_delivery_enabled", lambda: False, raising=False
     )
+    monkeypatch.setattr(gateway, "_delivery_plan_is_current", lambda *a, **k: True)
 
     event = SimpleNamespace(
         group_id=1, user_id=111, self_id=9, message_id=42,
@@ -130,7 +155,9 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     assert ack_text[:12] in send.call_args.args[0].extract_plain_text()
     finish.assert_awaited_once_with()
     # v16 契约：origin ctx 随行（多人身份修复计划 §6.2）
-    gateway._record_bot_lines.assert_awaited_once_with(9, 1, [ack_text], origin=ANY)
+    gateway._record_bot_lines.assert_awaited_once_with(
+        9, 1, [ack_text], origin=ANY, receipts=ANY
+    )
     ack = service.store.notification_of_dedupe(
         receipt.task_id, f"ack:{receipt.task_id}"
     )

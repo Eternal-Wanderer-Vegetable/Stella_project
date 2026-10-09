@@ -241,7 +241,7 @@ def test_fast_path_prompt_has_no_tool_schema(monkeypatch):
     assert planner_backend.calls == 0  # 本地判定未命中，零 LLM
     assert reply_backend.calls == 1
     assert ctx.llm_call_count == 1
-    assert "<action>" not in ctx.prompt_log
+    assert "<action>QUERY_MEMORY" not in ctx.prompt_log
 
 
 def test_wait_skips_reply_llm_entirely(monkeypatch):

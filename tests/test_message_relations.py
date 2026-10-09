@@ -392,7 +392,7 @@ def test_projection_v4_carries_envelope_fields():
         part_index=2,
     )
     data = ctx.to_json_projection()
-    assert data["projection_schema_version"] == 5
+    assert data["projection_schema_version"] == 6
     # 控制字符与提示标记括号被清理；内部文本按原样保留
     assert data["sender_display_name"].startswith("阿呆")
     assert "【" not in data["sender_display_name"]

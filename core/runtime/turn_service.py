@@ -233,26 +233,19 @@ def _compose_prompt(context_text: str, ctx: ChatContext, social_text: str = "") 
 
 
 def _attribution_section(ctx: ChatContext) -> str:
-    """归属证据 + reply_plan 协议段（复核 F1；guard 模式 off 或无证据时为空）。
-
-    有界（≤16 单元）；只在 guard 模式非 off 且证据表非空时产出。由 prepare
-    并入受保护身份块——可引用 ID 与实际保留输入严格一致。
-    """
+    """ReplyEnvelope 协议与服务端证据；由 prepare 并入受保护 prompt 区。"""
     try:
-        from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
         from core.dialogue_attribution import (
             evidence_table_from_projection,
             protocol_instructions,
         )
 
-        mode = str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
-        if mode not in ("shadow", "enforce"):
-            return ""
         data = getattr(ctx, "attribution_evidence", None) or {}
         table = evidence_table_from_projection(data)
-        if not table:
-            return ""
-        return protocol_instructions(table, set(table.keys()))
+        return protocol_instructions(
+            table, set(table.keys()),
+            risk_context=getattr(ctx, "attribution_risk_context", None),
+        )
     except Exception:
         return ""
 
@@ -416,9 +409,7 @@ class TurnService:
                     identity_capsule=getattr(ctx, "identity_capsule", "") or None,
                 )
                 context_text = "\n\n".join(text for _, text in v2_sections)
-                # 归属证据协议段（复核 F1）：有界（≤16 单元），并入受保护
-                # 身份块——可引用 ID 与实际保留输入严格一致，预算不会把
-                # 协议裁掉却留下引用槽（也不能反过来）。
+                # 唯一 ReplyEnvelope 与预算证据并入受保护身份块。
                 _attr_section = _attribution_section(ctx)
                 if _attr_section:
                     identity_text = next(
@@ -434,6 +425,7 @@ class TurnService:
                                 break
                     else:
                         context_text = _attr_section + "\n\n" + context_text
+                        v2_sections.insert(0, ("identity", _attr_section))
                 user_prompt = _compose_prompt(context_text, ctx)
             else:
                 from memory.prompt_builder import build_prompt_context
@@ -448,6 +440,9 @@ class TurnService:
                     current_user_id=ctx.user_id,
                     preferred_address=getattr(ctx, "preferred_address", None),
                 )
+                _attr_section = _attribution_section(ctx)
+                if _attr_section:
+                    context_text = _attr_section + "\n\n" + context_text
                 user_prompt = _compose_prompt(context_text, ctx)
 
         # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
@@ -529,6 +524,8 @@ class TurnService:
                     short = "……你这条太长了，先简化一下再发我一次？"
                     ctx.reply = short
                     ctx.lines = [short]
+                    ctx.delivery_source_kind = "trusted-server-fallback"
+                    ctx.reply_disposition = "fallback"
                     return TurnPlan(ctx, DIRECT)
             else:
                 budgeted = fit_prompt_to_window(user_prompt, system_prompt)
@@ -593,6 +590,12 @@ class TurnService:
         except Exception:
             pass
         user_prompt = budgeted.prompt
+        evidence_projection = getattr(ctx, "attribution_evidence", None) or {}
+        ctx.retained_evidence_ids = tuple(
+            str(evidence_id)
+            for evidence_id in evidence_projection
+            if str(evidence_id) and str(evidence_id) in user_prompt
+        )
         ctx.context_window_tokens = budgeted.window_tokens
         ctx.prompt_budget_tokens = budgeted.budget_tokens
         ctx.prompt_estimated_tokens = budgeted.estimated_tokens
@@ -629,15 +632,18 @@ class TurnService:
                 )
                 ctx.llm_elapsed = _time.monotonic() - _t0
                 ctx.raw_output = raw
+                ctx.delivery_source_kind = "model"
             except asyncio.TimeoutError:
                 # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
                 ctx.llm_elapsed = _time.monotonic() - _t0
                 logger.error("LLM 执行超时")
+                ctx.delivery_source_kind = "trusted-server-fallback"
                 ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
             except Exception as e:
                 # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
                 ctx.llm_elapsed = _time.monotonic() - _t0
                 logger.error(f"LLM 执行异常: {e}")
+                ctx.delivery_source_kind = "trusted-server-fallback"
                 ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
         return ctx
 
@@ -646,7 +652,14 @@ class TurnService:
         fctx = _flow_of(ctx)
         with _flow_span(fctx, "finalize.trace") as fin_span:
             await self._finalize_trace(ctx)
-            return await self._run_post_hooks(ctx, fctx, fin_span)
+            ctx = await self._run_post_hooks(ctx, fctx, fin_span)
+        # finalize 只产 DeliveryDraft。Bad-phrase、主动合同变体和主动群合并
+        # 均发生在入口；最终 DeliveryPlan 必须在它们全部完成后再 seal。
+        from core.social.delivery import delivery_draft_from_context
+
+        ctx.delivery_draft = delivery_draft_from_context(ctx)
+        ctx.delivery_plan = {}
+        return ctx
 
     async def _finalize_trace(self, ctx: ChatContext) -> None:
         # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）
@@ -723,6 +736,7 @@ class TurnService:
             # 与 legacy 一致：跳过生成但仍执行 trace 与后置 hooks（split_lines
             # 会产出兜底 lines）。只有 budget 分支写 llm_backend（legacy 原样）。
             ctx = plan.ctx
+            ctx.delivery_source_kind = "trusted-server-fallback"
             if plan.outcome == BUDGET_LIMITED:
                 ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
             return await self.finalize_turn(ctx)

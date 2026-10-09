@@ -162,6 +162,10 @@ class DeliveryReceipt:
     # ConversationRef，platform/bot_id 不再从空 scope 取空值
     platform: str = ""
     bot_id: str = ""
+    # 最终封存计划与 guard decision 摘要：每条 receipt 都指回同一 sealed plan。
+    delivery_plan_id: str = ""
+    delivery_plan_digest: str = ""
+    decision_digest: str = ""
     created_at_utc: str = field(default_factory=utc_now_iso)
 
     def __post_init__(self) -> None:

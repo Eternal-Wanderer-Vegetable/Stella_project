@@ -195,10 +195,20 @@ class TestDeliverySegmentFacts:
             sent.append(line)
             return 100 + i
 
-        from core.social.delivery import deliver_lines
+        from core.social.delivery import (
+            create_delivery_draft,
+            deliver_lines,
+            seal_delivery_plan,
+        )
+
+        draft = create_delivery_draft(
+            trace_id=root.trace_id, turn_id="t-1", source_kind="model",
+            protocol_version="test", disposition="deliver",
+            conversation_key="qq:test:group:delivery", segments=["一", "二", "三"],
+        )
 
         receipts = await deliver_lines(
-            ["一", "二", "三"], scope=None, trace_id=root.trace_id,
+            seal_delivery_plan(draft), scope=None, trace_id=root.trace_id,
             turn_id="t-1", send_one=send_one)
         message_flow.end_trace(root, outcome="partial")
         message_flow.flush()
@@ -224,10 +234,20 @@ class TestDeliverySegmentFacts:
         async def send_one(line: str, i: int) -> str | None:
             return str(200 + i)
 
-        from core.social.delivery import deliver_lines
+        from core.social.delivery import (
+            create_delivery_draft,
+            deliver_lines,
+            seal_delivery_plan,
+        )
+
+        draft = create_delivery_draft(
+            trace_id=root.trace_id, turn_id="t-2", source_kind="model",
+            protocol_version="test", disposition="deliver",
+            conversation_key="qq:test:group:delivery", segments=["一", "二"],
+        )
 
         await deliver_lines(
-            ["一", "二"], scope=None, trace_id=root.trace_id,
+            seal_delivery_plan(draft), scope=None, trace_id=root.trace_id,
             turn_id="t-2", send_one=send_one, abort_check=lambda: True)
         message_flow.flush()
         rows = [(n, s) for _, n, s, _ in _events(flow_db, "rd-2")
@@ -240,13 +260,22 @@ class TestDeliverySegmentFacts:
         warm = message_flow.begin_trace(root_kind="qq_chat", trace_id="warm")
         message_flow.end_trace(warm)
         message_flow.flush()
-        from core.social.delivery import deliver_lines
+        from core.social.delivery import (
+            create_delivery_draft,
+            deliver_lines,
+            seal_delivery_plan,
+        )
 
         async def send_one(line: str, i: int) -> str | None:
             return str(300 + i)
 
+        plan = seal_delivery_plan(create_delivery_draft(
+            trace_id="no-such-trace", turn_id="t-3", source_kind="model",
+            protocol_version="test", disposition="deliver",
+            conversation_key="qq:test:group:delivery", segments=["一"],
+        ))
         receipts = await deliver_lines(
-            ["一"], scope=None, trace_id="no-such-trace", turn_id="t-3",
+            plan, scope=None, trace_id="no-such-trace", turn_id="t-3",
             send_one=send_one)
         assert receipts[0].status == "acknowledged"
         message_flow.flush()

@@ -32,7 +32,7 @@ from nonebot import logger
 
 from memory.timeutil import log_sqlite_error, utc_now
 
-SOCIAL_SCHEMA_VERSION = 2
+SOCIAL_SCHEMA_VERSION = 3
 
 # schema 2（修复计划 §6.3）：social_deliveries 追加规范会话身份与群学习
 # 资格列。保留 bot_id/platform/trace_id/turn_id/part_index 原状；旧行以
@@ -43,6 +43,12 @@ _V2_DELIVERY_COLUMNS: tuple[str, ...] = (
     "peer_id TEXT NOT NULL DEFAULT ''",
     "storage_session_id INTEGER",
     "learning_eligible INTEGER NOT NULL DEFAULT 0",
+)
+
+_V3_DELIVERY_COLUMNS: tuple[str, ...] = (
+    "delivery_plan_id TEXT NOT NULL DEFAULT ''",
+    "delivery_plan_digest TEXT NOT NULL DEFAULT ''",
+    "decision_digest TEXT NOT NULL DEFAULT ''",
 )
 
 # ---- 表清单（单事务创建；字段与索引的最小集，见计划 §6.2 表格） ----
@@ -91,9 +97,29 @@ _TABLES = (
         acknowledged_at_utc TEXT,
         text TEXT NOT NULL DEFAULT '',
         text_hash TEXT NOT NULL DEFAULT '',
+        delivery_plan_id TEXT NOT NULL DEFAULT '',
+        delivery_plan_digest TEXT NOT NULL DEFAULT '',
+        decision_digest TEXT NOT NULL DEFAULT '',
         created_at_utc TEXT NOT NULL,
         updated_at_utc TEXT NOT NULL,
         UNIQUE (turn_id, part_index)
+    )
+    """,
+    # 最终发送决策的耐久摘要。receipt 行随后携带同一 plan/decision digest。
+    """
+    CREATE TABLE IF NOT EXISTS social_delivery_plans (
+        plan_id TEXT PRIMARY KEY,
+        turn_id TEXT NOT NULL UNIQUE,
+        trace_id TEXT NOT NULL DEFAULT '',
+        plan_digest TEXT NOT NULL,
+        decision_digest TEXT NOT NULL,
+        disposition TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        conversation_key TEXT NOT NULL,
+        target_user_id TEXT NOT NULL DEFAULT '',
+        generation_epoch INTEGER NOT NULL DEFAULT 0,
+        segment_count INTEGER NOT NULL,
+        created_at_utc TEXT NOT NULL
     )
     """,
     # 效果观察行：turn 唯一（一次生成一轮效果）；窗口 deadline 持久化为 UTC
@@ -557,6 +583,17 @@ def _migrate_social_v2(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_social_v3(conn: sqlite3.Connection) -> None:
+    """持久化最终 DeliveryPlan/guard 摘要并将其连到每条 receipt。"""
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(social_deliveries)")}
+    if not existing:
+        return
+    for col_def in _V3_DELIVERY_COLUMNS:
+        col_name = col_def.split()[0]
+        if col_name not in existing:
+            conn.execute(f"ALTER TABLE social_deliveries ADD COLUMN {col_def}")
+
+
 def ensure_social_schema(
     db_path: Path | str | None = None, *, backup: bool = True
 ) -> dict[str, int]:
@@ -585,6 +622,8 @@ def ensure_social_schema(
             conn.execute(ddl)
         # 组件内增量迁移（v1→v2）：CREATE 之后、索引之前
         _migrate_social_v2(conn)
+        # 组件内增量迁移（v2→v3）：decision digest + receipt linkage。
+        _migrate_social_v3(conn)
         for ddl in _INDEXES:
             conn.execute(ddl)
         # 旧库导入只在这台库有旧表达系统数据时才有行可导

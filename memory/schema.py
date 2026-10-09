@@ -59,9 +59,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v18：共享授权 owner 绑定与副本台账——复核 F3/F4/F5/F13，
-# 见 memory/migrations.py migrate_v18 与整改计划 P3）
-SCHEMA_VERSION = 18
+# 当前 Schema 版本（v19：可审核来源证据与 claim lineage，见 migrate_v19）。
+SCHEMA_VERSION = 19
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -319,6 +318,27 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "verification_contract_json",
         "ALTER TABLE memory_candidates ADD COLUMN verification_contract_json TEXT",
     ),
+    # v19：旧 evidence 只获得明确的 legacy_unverified 默认值，不回填为 accepted。
+    (
+        "memory_evidence",
+        "fact_subject_key",
+        "ALTER TABLE memory_evidence ADD COLUMN fact_subject_key TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "memory_evidence",
+        "source_digest",
+        "ALTER TABLE memory_evidence ADD COLUMN source_digest TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "memory_evidence",
+        "verification_status",
+        "ALTER TABLE memory_evidence ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'legacy_unverified'",
+    ),
+    (
+        "memory_evidence",
+        "provenance_json",
+        "ALTER TABLE memory_evidence ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}'",
+    ),
     (
         "conversation_identity_claims",
         "parser_version",
@@ -391,6 +411,31 @@ _INDEXES: list[tuple[str, str, str]] = [
         "memory_evidence",
         "CREATE INDEX IF NOT EXISTS idx_evidence_candidate "
         "ON memory_evidence (candidate_id)",
+    ),
+    (
+        "idx_memory_evidence_subject_status",
+        "memory_evidence",
+        "CREATE INDEX IF NOT EXISTS idx_memory_evidence_subject_status "
+        "ON memory_evidence (owner_key, audience, fact_subject_key, verification_status)",
+    ),
+    (
+        "idx_memory_claim_links_lineage",
+        "memory_claim_links",
+        "CREATE INDEX IF NOT EXISTS idx_memory_claim_links_lineage "
+        "ON memory_claim_links (entity_type, entity_id, claim_key, projection_slot, status)",
+    ),
+    (
+        "idx_memory_claim_links_evidence",
+        "memory_claim_links",
+        "CREATE INDEX IF NOT EXISTS idx_memory_claim_links_evidence "
+        "ON memory_claim_links (evidence_id, status)",
+    ),
+    (
+        "ux_memory_claim_state_owner_claim",
+        "memory_claim_links",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_memory_claim_state_owner_claim "
+        "ON memory_claim_links (owner_key, audience, claim_key) "
+        "WHERE entity_type = 'claim_state' AND projection_slot = 'eligibility' AND status = 'active'",
     ),
     (
         "idx_personal_facts_subject",
@@ -682,6 +727,10 @@ CREATE TABLE IF NOT EXISTS memory_evidence (
     source_conversation_key TEXT NOT NULL,
     source_row_id INTEGER NOT NULL,
     candidate_id TEXT NOT NULL DEFAULT '',
+    fact_subject_key TEXT NOT NULL DEFAULT '',
+    source_digest TEXT NOT NULL DEFAULT '',
+    verification_status TEXT NOT NULL DEFAULT 'legacy_unverified',
+    provenance_json TEXT NOT NULL DEFAULT '{}',
     first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(owner_key, audience, fact_key, source_conversation_key, source_row_id)
 )
@@ -691,6 +740,33 @@ CREATE TABLE IF NOT EXISTS memory_evidence (
 def create_memory_evidence_table(conn: sqlite3.Connection) -> None:
     """确保 memory_evidence 表存在（幂等）。"""
     conn.execute(MEMORY_EVIDENCE_TABLE_DDL)
+
+
+MEMORY_CLAIM_LINKS_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS memory_claim_links (
+    id TEXT PRIMARY KEY,
+    evidence_id TEXT NOT NULL DEFAULT '',
+    owner_key TEXT NOT NULL DEFAULT '',
+    audience TEXT NOT NULL DEFAULT '',
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    claim_key TEXT NOT NULL,
+    projection_slot TEXT NOT NULL,
+    projection_version INTEGER NOT NULL DEFAULT 1,
+    slot_digest TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    invalidation_kind TEXT NOT NULL DEFAULT '',
+    invalidated_by_evidence_id TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(evidence_id, entity_type, entity_id, claim_key, projection_slot)
+)
+"""
+
+
+def create_memory_claim_links_table(conn: sqlite3.Connection) -> None:
+    """确保派生对象与来源 claim/evidence 的 lineage 表存在。"""
+    conn.execute(MEMORY_CLAIM_LINKS_TABLE_DDL)
 
 
 # 共享副本台账（v18 起，整改计划 P3，复核 F3/F4/F5/F13）：每个授权 grant
@@ -1093,6 +1169,7 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
             create_memory_evidence_table(conn)
             create_personal_profile_facts_table(conn)
             create_memory_scope_versions_table(conn)
+            create_memory_claim_links_table(conn)
     # v18：共享授权副本台账（整改计划 P3，复核 F3/F4/F5/F13；授权行加列
     # 走上方 _ADDITIVE_COLUMNS）
     if not dry_run:

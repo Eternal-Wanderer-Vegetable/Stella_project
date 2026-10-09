@@ -1,0 +1,28 @@
+{
+  "fixture_id": "normal-224-persona-first-person",
+  "matrix_class": "NORMAL-224-PERSONA-FIRST-PERSON",
+  "description": "正常对照：允许Stella以第一人称表达当前心情，不把合理自述误判为归属风险。",
+  "bot_id": "1694717255",
+  "group_id": 99992224,
+  "participants": {
+    "A": "9222401"
+  },
+  "messages": [],
+  "logical_units": [],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "Stella，你现在心情怎么样？用第一人称说说。"
+  },
+  "oracle": {
+    "task": "以Stella的第一人称自然表达当下拟人化心情，同时不虚构历史事实。",
+    "acceptable": [
+      "可以说“我现在挺开心/放松”，并表明是此刻感受"
+    ],
+    "critical_classes": [
+      "task_failure"
+    ],
+    "critical_fail": [
+      "拒绝一切第一人称表达或声称未经证实的历史经历"
+    ]
+  }
+}

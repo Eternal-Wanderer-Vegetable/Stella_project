@@ -882,3 +882,64 @@ def test_run_migrations_begins_immediate():
 
     source = inspect.getsource(migrations.run_migrations)
     assert "BEGIN IMMEDIATE" in source
+
+
+def test_v18_to_v19_adds_unverified_evidence_and_claim_lineage_idempotently(tmp_path):
+    """v18 evidence gains provenance columns without retroactive acceptance."""
+    path = tmp_path / "v18-evidence.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(
+            """CREATE TABLE schema_meta (
+                k TEXT PRIMARY KEY,
+                version INTEGER,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 18)")
+        conn.execute(
+            """CREATE TABLE memory_evidence (
+                id TEXT PRIMARY KEY,
+                owner_type TEXT NOT NULL,
+                owner_key TEXT NOT NULL,
+                subject_key TEXT NOT NULL DEFAULT '',
+                audience TEXT NOT NULL,
+                fact_key TEXT NOT NULL,
+                source_conversation_key TEXT NOT NULL,
+                source_row_id INTEGER NOT NULL,
+                candidate_id TEXT NOT NULL DEFAULT '',
+                first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_key, audience, fact_key, source_conversation_key, source_row_id)
+            )"""
+        )
+        conn.execute(
+            "INSERT INTO memory_evidence "
+            "(id, owner_type, owner_key, audience, fact_key, source_conversation_key, source_row_id) "
+            "VALUES ('e1','SPACE','space:1','CURRENT_SPACE','f1','qq:bot:group:1',27)"
+        )
+        conn.commit()
+
+        first = migrations.run_migrations(conn, 18, 19, None)
+        assert [step.version for step in first] == [19]
+        assert schema._migrate(conn) >= 0
+        row = conn.execute(
+            "SELECT source_row_id, fact_subject_key, source_digest, "
+            "verification_status, provenance_json FROM memory_evidence WHERE id='e1'"
+        ).fetchone()
+        assert row == (27, "", "", "legacy_unverified", "{}")
+        assert conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='memory_claim_links'"
+        ).fetchone() == (1,)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' "
+            "AND name='ux_memory_claim_state_owner_claim'"
+        ).fetchone() == (1,)
+
+        second = migrations.run_migrations(conn, 18, 19, None)
+        assert [step.version for step in second] == [19]
+        assert schema._migrate(conn) == 0
+        assert conn.execute(
+            "SELECT verification_status FROM memory_evidence WHERE id='e1'"
+        ).fetchone() == ("legacy_unverified",)
+    finally:
+        conn.close()

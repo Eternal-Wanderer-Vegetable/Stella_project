@@ -101,6 +101,15 @@ EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认
   **必须逐条自行判断后填写，不要照抄下面结构示例里的 0.0**——填 0 等于宣告
   这条信息毫无价值，它会被直接丢弃，再高的 confidence 也救不回来。
 - content 必须是可理解的自然语言，不要只写关键词
+- content 必须逐字复制一个最短、完整的原文支持片段；不要改写、归纳或补全
+- 每条候选必须附 verification_contract，包含 fact_subject_user_id、predicate_key、
+  canonical_value、polarity（positive/negative）、statement_kind、temporal_qualifiers、
+  context_qualifiers 与 supports。supports 中每项包含 source_message_id 和 exact_support_span；
+  source_message_id 必须在本批消息中，exact_support_span 必须是该条原文的连续逐字子串，
+  content 必须等于其中一个 exact_support_span
+- verification_contract 只是待审核提案；不要输出 verification_status 或声称 accepted。
+  不确定主体、条件/假设、疑问、转述、引用、玩笑或角色扮演时，仍标明对应 statement_kind，
+  由服务端审核决定能否写入正式记忆
 - 绝对不要编造记录里没有的信息。刷屏、复读、表情、单字附和不包含任何可提取信息，跳过它们
 - 一次性玩笑不要提取
 
@@ -116,7 +125,17 @@ EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认
   "importance": 0.0,
   "confidence": 0.0,
   "evidence": "这条信息的依据",
-  "source_message_ids": []
+  "source_message_ids": [123],
+  "verification_contract": {{
+    "fact_subject_user_id": "123",
+    "predicate_key": "sleep_pattern",
+    "canonical_value": "失眠",
+    "polarity": "positive",
+    "statement_kind": "self_report",
+    "temporal_qualifiers": [],
+    "context_qualifiers": [],
+    "supports": [{{"source_message_id": 123, "exact_support_span": "我时不时会失眠"}}]
+  }}
 }}
 
 ===== 以上为固定规则；以下是本次待分析的数据 =====

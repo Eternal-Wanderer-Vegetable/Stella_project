@@ -1,0 +1,38 @@
+{
+  "fixture_id": "incident-210636-weird-quote",
+  "matrix_class": "INCIDENT-210636-WEIRD-QUOTE",
+  "description": "21:06“怪怪的”现场：msg_49245由用户2150738692说出，引用不等于Bot作者。",
+  "bot_id": "1694717255",
+  "group_id": 1124196924,
+  "participants": {
+    "A": "2150738692"
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "饰品和食材挨一起确实得单开一格，光看着就有点怪怪的。",
+      "platform_msg_id": "incident-210636-weird-quote-0"
+    }
+  ],
+  "logical_units": [],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "你还记得我说饰品和食材放一起看着怪怪的吗？"
+  },
+  "oracle": {
+    "task": "正确承认这是A此前的说法；若引用，只能通过服务端消息引用保持作者。",
+    "acceptable": [
+      "说记得A提过饰品与食材分开放；可以用原意转述或请求确认"
+    ],
+    "critical_classes": [
+      "speaker_swap",
+      "bot_user_name_mixing"
+    ],
+    "critical_fail": [
+      "说“那是我自己说过的话”或把该原话说成Bot说的"
+    ]
+  }
+}

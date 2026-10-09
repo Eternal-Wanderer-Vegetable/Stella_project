@@ -1,0 +1,47 @@
+{
+  "fixture_id": "normal-226-bot-quote",
+  "matrix_class": "NORMAL-226-BOT-QUOTE",
+  "description": "正常对照：按作者正确引用Bot确实说过的历史原句。",
+  "bot_id": "1694717255",
+  "group_id": 99992226,
+  "participants": {
+    "A": "9222601"
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": null,
+      "content": "我会等你回来，我们再接着聊。",
+      "platform_msg_id": "normal-226-bot-quote-0"
+    }
+  ],
+  "logical_units": [
+    {
+      "unit": "normal-226-bot-quote-u0",
+      "seqs": [
+        0
+      ],
+      "recipient": "A",
+      "origin_msg_id": "normal-226-bot-quote-src0"
+    }
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "你上次说的原话是什么？"
+  },
+  "oracle": {
+    "task": "准确引用Bot之前说过的原话；用可用的Bot消息证据ID，不伪造作者。",
+    "acceptable": [
+      "引用“我会等你回来，我们再接着聊。”并保持它是Bot原话"
+    ],
+    "critical_classes": [
+      "speaker_swap",
+      "bot_user_name_mixing"
+    ],
+    "critical_fail": [
+      "把这句话说成A说的或虚构另一句Bot原话"
+    ]
+  }
+}

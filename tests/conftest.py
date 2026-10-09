@@ -112,3 +112,46 @@ def cometa_store(tmp_path, cometa_config):
     from cometa.store import CometaStore
 
     return CometaStore(cometa_config.db_path)
+
+
+@pytest.fixture()
+def summary_packet_factory():
+    """Build a small source-backed packet for pure session-state tests."""
+    from memory.summary_packet import (
+        SummarySourceMessage,
+        build_summary_evidence,
+        build_summary_packet,
+    )
+
+    def _build(
+        text: str,
+        *,
+        conversation_key: str = "test:group:1",
+        bot_id: str = "",
+        source_low_id: int = 0,
+        source_watermark: int = 1,
+        source_row_count: int = 1,
+        source_guard: tuple[int, int, int] | None = None,
+    ):
+        if source_watermark <= source_low_id:
+            raise ValueError("packet watermark must be after its open-range start")
+        message = SummarySourceMessage(
+            message_id=source_watermark,
+            author_id="1001",
+            source_kind="PASSIVE",
+            content=text,
+        )
+        evidence = build_summary_evidence(conversation_key, bot_id, (message,))
+        guard = source_guard or (0, 0, source_low_id)
+        return build_summary_packet(
+            conversation_key=conversation_key,
+            bot_id=bot_id,
+            source_guard=guard,
+            source_low_id=source_low_id,
+            source_high_id=source_watermark + 1,
+            source_watermark=source_watermark,
+            source_row_count=source_row_count,
+            entries=(evidence,),
+        )
+
+    return _build

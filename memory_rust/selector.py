@@ -142,6 +142,10 @@ class RustMemoryBackend:
             "source_conversation_key": request.source_conversation_key,
             "fact_key": request.fact_key,
             "policy_version": request.policy_version,
+            "cas_schema_version": request.cas_schema_version,
+            "expected_scope_versions": dict(request.expected_scope_versions or {}),
+            "expected_evidence_digest": request.expected_evidence_digest,
+            "expected_candidate_digest": request.expected_candidate_digest,
         }
         raw = self._native.promote(json.dumps(payload, ensure_ascii=False))
         return json.loads(raw) if isinstance(raw, str) else raw

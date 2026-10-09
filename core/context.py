@@ -266,6 +266,19 @@ class ChatContext:
     # suppressed=本轮不交付（guard 拒绝且无合格段）。split_lines 等后置钩子
     # 必须尊重 suppressed——不得用「......？」默认值顶替。
     reply_disposition: str = ""
+    # 新版对话协议与最终交付闭环（计划 §6.2/§6.3）；全部为 JSON 投影，
+    # 不携带平台 event/Bot 句柄。delivery_plan 仅在发送入口 seal 后赋值。
+    typed_reply: dict = field(default_factory=dict)
+    typed_reply_error: str = ""
+    reply_segments: list[str] = field(default_factory=list)
+    retained_evidence_ids: tuple[str, ...] = ()
+    attribution_risk_context: dict = field(default_factory=dict)
+    delivery_draft: dict = field(default_factory=dict)
+    delivery_plan: dict = field(default_factory=dict)
+    guard_decision: dict = field(default_factory=dict)
+    delivery_source_kind: str = ""
+    generation_epoch: int = 0
+    runtime_key: str = ""
 
     # ---- Capability Router / Comes（任务调度层） ----
     # Router 的判定结论（capability.router.types.Route）。类型写 Any 是刻意的：
@@ -346,7 +359,9 @@ class ChatContext:
     # attribution_evidence / attribution_decision / reply_disposition。旧 v4
     # 输入缺这些字段 → typed 查询为空（沿用旧推导）、合同/证据为空（guard
     # 按 feature-off 处理）、处置为空（按 deliver 兼容）——不放宽任何权限。
-    PROJECTION_SCHEMA_VERSION = 5
+    # v6：single typed reply、预算保留引用、风险上下文、DeliveryDraft/Plan、
+    # guard decision 与 runtime generation fence。旧投影不提供 seal 或新权限。
+    PROJECTION_SCHEMA_VERSION = 6
     # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
     # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
     # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
@@ -370,6 +385,10 @@ class ChatContext:
         # 归属整改（v5，复核 F1）
         "retrieval_query", "verification_contract", "attribution_evidence",
         "attribution_decision", "reply_disposition",
+        "typed_reply", "typed_reply_error", "reply_segments",
+        "retained_evidence_ids", "attribution_risk_context",
+        "delivery_draft", "delivery_plan", "guard_decision",
+        "delivery_source_kind", "generation_epoch", "runtime_key",
         # 诊断
         "llm_backend", "llm_model", "llm_call_count", "context_window_tokens",
         "prompt_budget_tokens", "prompt_estimated_tokens", "prompt_truncated",
@@ -405,6 +424,8 @@ class ChatContext:
                 value = list(value or [])
             elif name == "mentioned_user_ids":
                 # tuple → list：投影必须 JSON 安全（v4 信封）
+                value = list(value or [])
+            elif name in {"retained_evidence_ids", "reply_segments"}:
                 value = list(value or [])
             out[name] = value
         return out

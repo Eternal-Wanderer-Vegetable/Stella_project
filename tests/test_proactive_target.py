@@ -38,28 +38,122 @@ def _faketicks():
 
 
 def _provision_candidates(db, rows):
-    """建最小 memory_candidates 表（供 _fetch_observing_candidate 查询）并插入行。
+    """建候选与可信来源/lineage fixture，供主动资格读取路径使用。
 
-    候选按共享空间归属：行首的归属列是 ``group_shared_space``（用 resolve_space 得到），
-    不再用 ``group_id``——否则 ``WHERE group_shared_space = ?`` 会因缺列被吞成空结果。
+    测试 Bot 只在当前群上有证据；未绑定真实来源或 lineage 的候选不可被选中。
     """
-    conn = sqlite3.connect(db)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS memory_candidates (
-            id TEXT PRIMARY KEY,
-            group_shared_space TEXT,
-            user_id TEXT,
-            type TEXT,
-            content TEXT,
-            confidence REAL,
-            status TEXT
-        )
-    """)
-    conn.executemany(
-        "INSERT OR REPLACE INTO memory_candidates "
-        "(id, group_shared_space, user_id, type, content, confidence, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        rows,
+    import json
+
+    from memory.evidence_contract import ASSESSMENT_VERSION, source_digest
+    from memory.schema import (
+        MEMORY_CANDIDATES_TABLE_DDL,
+        MEMORY_CLAIM_LINKS_TABLE_DDL,
+        MEMORY_EVIDENCE_TABLE_DDL,
+        create_memory_scope_versions_table,
     )
+
+    conn = sqlite3.connect(db)
+    conn.execute(MEMORY_CANDIDATES_TABLE_DDL)
+    conn.execute(MEMORY_EVIDENCE_TABLE_DDL)
+    conn.execute(MEMORY_CLAIM_LINKS_TABLE_DDL)
+    create_memory_scope_versions_table(conn)
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS group_messages (
+            id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT,
+            source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT,
+            bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT,
+            mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER,
+            origin_msg_id TEXT, reply_recipient_user_id TEXT
+        )"""
+    )
+    for candidate_id, space, user_id, memory_type, content, confidence, status in rows:
+        uid = str(user_id)
+        owner_key = f"space:{space}"
+        fact_key = f"claim:v1:{candidate_id}"
+        source_id = int(conn.execute(
+            "SELECT COALESCE(MAX(id), 0) + 1 FROM group_messages"
+        ).fetchone()[0])
+        source_content = str(content)
+        conversation_key = "qq:test-bot:group:1"
+        snapshot = {
+            "id": source_id,
+            "group_id": "1",
+            "user_id": uid,
+            "content": source_content,
+            "source_kind": "AT_MENTION",
+            "timestamp": "",
+            "msg_id": f"platform-{source_id}",
+            "conversation_key": conversation_key,
+            "bot_id": "test-bot",
+            "reply_to_msg_id": "",
+            "reply_target_user_id": "",
+            "mentioned_user_ids_json": "",
+            "logical_message_id": "",
+            "part_index": 0,
+            "origin_msg_id": "",
+            "reply_recipient_user_id": "",
+        }
+        digest = source_digest(snapshot)
+        provenance = {
+            "assessment_version": ASSESSMENT_VERSION,
+            "verification_status": "accepted",
+            "claim_key": fact_key,
+            "recording_author_key": f"qq:{uid}",
+            "fact_object_key": f"qq:{uid}",
+            "predicate_key": "preference.general",
+            "canonical_value": source_content.removeprefix("我喜欢"),
+            "polarity": "positive",
+            "statement_kind": "explicit_preference",
+            "exact_support_span": source_content,
+            "conversation_key": conversation_key,
+            "source_id": source_id,
+            "source_snapshot": snapshot,
+        }
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_candidates "
+            "(id, group_shared_space, user_id, type, content, confidence, importance, "
+            "status, owner_type, owner_key, subject_key, audience, fact_key, "
+            "source_conversation_key, source_message_ids) "
+            "VALUES (?, ?, ?, ?, ?, ?, 0.8, ?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?)",
+            (candidate_id, space, uid, memory_type, content, confidence, status,
+             owner_key, fact_key, conversation_key, json.dumps([str(source_id)])),
+        )
+        conn.execute(
+            "INSERT INTO group_messages "
+            "(id, group_id, user_id, content, source_kind, timestamp, msg_id, "
+            "conversation_key, bot_id, reply_to_msg_id, reply_target_user_id, "
+            "mentioned_user_ids_json, logical_message_id, part_index, origin_msg_id, "
+            "reply_recipient_user_id) VALUES (?, '1', ?, ?, 'AT_MENTION', '', ?, ?, "
+            "'test-bot', '', '', '', '', 0, '', '')",
+            (source_id, uid, source_content, f"platform-{source_id}", conversation_key),
+        )
+        evidence_id = f"evidence:{candidate_id}:{source_id}"
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_evidence "
+            "(id, owner_type, owner_key, subject_key, audience, fact_key, "
+            "source_conversation_key, source_row_id, candidate_id, fact_subject_key, "
+            "source_digest, verification_status, provenance_json) "
+            "VALUES (?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+            (evidence_id, owner_key, fact_key, conversation_key, source_id,
+             candidate_id, f"qq:{uid}", digest,
+             json.dumps(provenance, ensure_ascii=False, separators=(",", ":"))),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_claim_links "
+            "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+            "projection_slot, projection_version, slot_digest, status) "
+            "VALUES (?, ?, ?, 'CURRENT_SPACE', 'memory_candidate', ?, ?, 'candidate', 1, ?, 'active')",
+            (f"l-candidate:{candidate_id}:{source_id}", evidence_id, owner_key,
+             candidate_id, fact_key, digest),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_claim_links "
+            "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+            "projection_slot, projection_version, slot_digest, status) "
+            "VALUES (?, ?, ?, 'CURRENT_SPACE', 'claim_state', ?, ?, 'eligibility', 1, ?, 'active')",
+            (f"l-state:{candidate_id}:{source_id}", evidence_id, owner_key,
+             fact_key, fact_key, digest),
+        )
     conn.commit()
     conn.close()
 
@@ -200,10 +294,10 @@ def test_pick_target_verify_mode(tmp_path, monkeypatch):
     monkeypatch.setattr(pt, "get_proactive", lambda: c)
     c.record_message(1, 2001)
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", resolve_space(1), "2001", "FACT", "他的显卡是5080", 0.8, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "PREFERENCE", "我喜欢候选一", 0.8, "OBSERVING"),
     ])
 
-    target = pick_target(1)
+    target = pick_target(1, bot_id="test-bot")
     assert target is not None
     assert isinstance(target, ProactiveTarget)
     assert target.user_id == 2001
@@ -222,16 +316,16 @@ def test_pick_target_skip_cooldown_is_candidate_specific(tmp_path, monkeypatch):
     monkeypatch.setattr(pt, "get_proactive", lambda: c)
     c.record_message(1, 2001)
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", resolve_space(1), "2001", "FACT", "候选一", 0.7, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "PREFERENCE", "我喜欢候选一", 0.7, "OBSERVING"),
     ])
 
     c.mark_proactive_skip(1, 2001, "candidate:cand-1")
-    assert pick_target(1) is None
+    assert pick_target(1, bot_id="test-bot") is None
 
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-2", resolve_space(1), "2001", "FACT", "候选二", 0.7, "OBSERVING"),
+        ("cand-2", resolve_space(1), "2001", "PREFERENCE", "我喜欢候选二", 0.7, "OBSERVING"),
     ])
-    target = pick_target(1)
+    target = pick_target(1, bot_id="test-bot")
     assert target is not None
     assert target.candidate_id == "cand-2"
 
@@ -245,11 +339,11 @@ def test_pick_target_verify_prefers_highest_confidence(tmp_path, monkeypatch):
     c.record_message(1, 2001)  # t=100
     c.record_message(1, 2002)  # t=101
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-low", resolve_space(1), "2001", "FACT", "低置信候选", 0.65, "OBSERVING"),
-        ("cand-high", resolve_space(1), "2002", "FACT", "高置信候选", 0.8, "OBSERVING"),
+        ("cand-low", resolve_space(1), "2001", "PREFERENCE", "我喜欢低置信", 0.65, "OBSERVING"),
+        ("cand-high", resolve_space(1), "2002", "PREFERENCE", "我喜欢高置信", 0.8, "OBSERVING"),
     ])
 
-    target = pick_target(1)
+    target = pick_target(1, bot_id="test-bot")
     assert target is not None
     assert target.user_id == 2002
     assert target.candidate_id == "cand-high"
@@ -264,14 +358,14 @@ def test_pick_target_exclude_user_ids(tmp_path, monkeypatch):
     c.record_message(1, 2001)  # t=100
     c.record_message(1, 2002)  # t=101
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", resolve_space(1), "2001", "FACT", "候选一", 0.7, "OBSERVING"),
-        ("cand-2", resolve_space(1), "2002", "FACT", "候选二", 0.8, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "PREFERENCE", "我喜欢候选一", 0.7, "OBSERVING"),
+        ("cand-2", resolve_space(1), "2002", "PREFERENCE", "我喜欢候选二", 0.8, "OBSERVING"),
     ])
 
     # 不排除时选最高置信的 2002
-    assert pick_target(1).user_id == 2002
+    assert pick_target(1, bot_id="test-bot").user_id == 2002
     # 排除 2002 后只剩 2001
-    target = pick_target(1, exclude_user_ids={2002})
+    target = pick_target(1, exclude_user_ids={2002}, bot_id="test-bot")
     assert target is not None
     assert target.user_id == 2001
     assert target.candidate_id == "cand-1"
@@ -287,21 +381,21 @@ def test_pick_target_exclude_users_config(tmp_path, monkeypatch):
     c.record_message(1, 2001)  # t=100
     c.record_message(1, 2002)  # t=101
     _provision_candidates(tmp_path / "ps.db", [
-        ("cand-1", resolve_space(1), "2001", "FACT", "候选一", 0.7, "OBSERVING"),
-        ("cand-2", resolve_space(1), "2002", "FACT", "候选二", 0.8, "OBSERVING"),
+        ("cand-1", resolve_space(1), "2001", "PREFERENCE", "我喜欢候选一", 0.7, "OBSERVING"),
+        ("cand-2", resolve_space(1), "2002", "PREFERENCE", "我喜欢候选二", 0.8, "OBSERVING"),
     ])
 
     # 不排除时选最高置信的 2002
-    assert pick_target(1).user_id == 2002
+    assert pick_target(1, bot_id="test-bot").user_id == 2002
     # 配置排除 2002 后只剩 2001 可选
     monkeypatch.setattr(pt, "PROACTIVE_AT_EXCLUDE_USERS", {2002})
-    target = pick_target(1)
+    target = pick_target(1, bot_id="test-bot")
     assert target is not None
     assert target.user_id == 2001
     assert target.candidate_id == "cand-1"
     # 名单外的用户仍可被选中：两个都排除则无目标
     monkeypatch.setattr(pt, "PROACTIVE_AT_EXCLUDE_USERS", {2001, 2002})
-    assert pick_target(1) is None
+    assert pick_target(1, bot_id="test-bot") is None
 
 
 def test_fetch_observing_candidate_window(tmp_path, monkeypatch):
@@ -310,14 +404,16 @@ def test_fetch_observing_candidate_window(tmp_path, monkeypatch):
     monkeypatch.setattr(pt, "DB_PATH", db)
     space = resolve_space(1)
     _provision_candidates(db, [
-        ("too-low", space, "2001", "FACT", "太低的", 0.2, "OBSERVING"),
-        ("too-high", space, "2001", "FACT", "已达标", 0.95, "OBSERVING"),
-        ("rejected", space, "2001", "FACT", "已拒绝", 0.7, "REJECTED"),
-        ("right", space, "2001", "FACT", "可验证", 0.7, "OBSERVING"),
+        ("too-low", space, "2001", "PREFERENCE", "我喜欢太低", 0.2, "OBSERVING"),
+        ("too-high", space, "2001", "PREFERENCE", "我喜欢达标", 0.95, "OBSERVING"),
+        ("rejected", space, "2001", "PREFERENCE", "我喜欢拒绝", 0.7, "REJECTED"),
+        ("right", space, "2001", "PREFERENCE", "我喜欢可验证", 0.7, "OBSERVING"),
     ])
-    found = _fetch_observing_candidate(space, 2001)
+    found = _fetch_observing_candidate(
+        space, 2001, group_id=1, bot_id="test-bot"
+    )
     assert found is not None
-    assert found[0] == "right"
+    assert found.candidate_id == "right"
 
 
 # ── 昵称 ─────────────────────────────────────────────────

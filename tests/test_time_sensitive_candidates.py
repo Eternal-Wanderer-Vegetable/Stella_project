@@ -189,22 +189,15 @@ def observing_db(tmp_path, monkeypatch):
         "memory.proactive_target.PROACTIVE_VERIFY_EXCLUDE_TYPES", set(TIME_SENSITIVE)
     )
 
-    from memory.schema import create_memory_candidates_table
+    from tests.test_proactive_target import _provision_candidates
 
-    conn = sqlite3.connect(path)
-    create_memory_candidates_table(conn)
-    for cid, mem_type, content, conf in (
-        ("ev", "EVENT", "听到地震预警", 0.8),
-        ("fact", "FACT", "居住地附近主要种植甘蔗", 0.65),
-    ):
-        conn.execute(
-            "INSERT INTO memory_candidates "
-            "(id, group_shared_space, user_id, type, content, importance, confidence, status) "
-            "VALUES (?, 'space_1', '1001', ?, ?, 0.5, ?, 'OBSERVING')",
-            (cid, mem_type, content, conf),
-        )
-    conn.commit()
-    conn.close()
+    _provision_candidates(
+        path,
+        [
+            ("ev", "space_1", "1001", "EVENT", "我喜欢地震预警", 0.8, "OBSERVING"),
+            ("fact", "space_1", "1001", "FACT", "我喜欢甘蔗", 0.65, "OBSERVING"),
+        ],
+    )
     return path
 
 
@@ -219,9 +212,11 @@ def test_event_is_skipped_even_when_it_has_the_highest_confidence(observing_db):
     """跳过 EVENT 后要**退到下一条**，而不是干脆放弃这一轮验证。"""
     from memory.proactive_target import _fetch_observing_candidate
 
-    found = _fetch_observing_candidate("space_1", 1001)
+    found = _fetch_observing_candidate(
+        "space_1", 1001, group_id=1, bot_id="test-bot"
+    )
     assert found is not None, "还有一条 FACT 可问，不该返回 None"
-    assert found[0] == "fact"
+    assert found.candidate_id == "fact"
 
 
 def test_returns_none_when_every_candidate_is_time_sensitive(observing_db):
@@ -229,7 +224,9 @@ def test_returns_none_when_every_candidate_is_time_sensitive(observing_db):
     from memory.proactive_target import _fetch_observing_candidate
 
     _drop(observing_db, "fact")
-    assert _fetch_observing_candidate("space_1", 1001) is None
+    assert _fetch_observing_candidate(
+        "space_1", 1001, group_id=1, bot_id="test-bot"
+    ) is None
 
 
 def test_stored_type_case_does_not_defeat_the_filter(observing_db):
@@ -242,7 +239,9 @@ def test_stored_type_case_does_not_defeat_the_filter(observing_db):
     conn.commit()
     conn.close()
 
-    assert _fetch_observing_candidate("space_1", 1001) is None
+    assert _fetch_observing_candidate(
+        "space_1", 1001, group_id=1, bot_id="test-bot"
+    ) is None
 
 
 def test_empty_exclude_config_allows_every_type(observing_db, monkeypatch):
@@ -251,16 +250,20 @@ def test_empty_exclude_config_allows_every_type(observing_db, monkeypatch):
 
     monkeypatch.setattr("memory.proactive_target.PROACTIVE_VERIFY_EXCLUDE_TYPES", set())
 
-    found = _fetch_observing_candidate("space_1", 1001)
+    found = _fetch_observing_candidate(
+        "space_1", 1001, group_id=1, bot_id="test-bot"
+    )
     assert found is not None
-    assert found[0] == "ev"
+    assert found.candidate_id == "ev"
 
 
 def test_type_filter_and_last_asked_exclusion_apply_together(observing_db):
     """两层排除叠加：EVENT 被类型挡掉，FACT 又是上次刚问过的 → 这一轮不问。"""
     from memory.proactive_target import _fetch_observing_candidate
 
-    assert _fetch_observing_candidate("space_1", 1001, exclude_id="fact") is None
+    assert _fetch_observing_candidate(
+        "space_1", 1001, exclude_id="fact", group_id=1, bot_id="test-bot"
+    ) is None
 
 
 def test_unknown_type_is_still_verifiable(observing_db):
@@ -276,9 +279,11 @@ def test_unknown_type_is_still_verifiable(observing_db):
     conn.commit()
     conn.close()
 
-    found = _fetch_observing_candidate("space_1", 1001)
+    found = _fetch_observing_candidate(
+        "space_1", 1001, group_id=1, bot_id="test-bot"
+    )
     assert found is not None
-    assert found[0] == "fact"
+    assert found.candidate_id == "fact"
 
 
 def test_shipped_default_excludes_the_time_sensitive_types():

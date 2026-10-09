@@ -41,6 +41,17 @@ def private_env(tmp_path, monkeypatch):
     """隔离 DB + 关掉外部副作用，返回事件构造与查询游标。"""
     db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(gateway, "DB_PATH", db)
+    from config import settings
+    from memory import social_store
+    from memory.schema import create_memory_scope_versions_table
+
+    monkeypatch.setattr(settings, "DB_PATH", db)
+    with sqlite3.connect(db) as conn:
+        create_memory_scope_versions_table(conn)
+    monkeypatch.setattr(social_store, "_TABLES_READY", False)
+    social_store.ensure_tables()
+    monkeypatch.setattr(gateway, "_social_delivery_enabled", lambda: False)
+    monkeypatch.setattr(gateway, "_delivery_plan_is_current", lambda *a, **k: True)
     import memory.pre_processors as pre
 
     monkeypatch.setattr(pre, "DB_PATH", db)
@@ -113,12 +124,17 @@ class TestEventKey:
 async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     """正文不带 @ 的私聊：注册 → 落库一次（PRIVATE_DIRECT/负存储键）→ 回复。"""
     env = private_env
-    turn_ctx = ChatContext(
-        user_id=20001, group_id=0, msg_id=9001, message="在吗",
-        source_kind="PRIVATE_DIRECT",
-    )
-    turn_ctx.lines = ["在的"]
-    engine = AsyncMock(return_value=turn_ctx)
+    async def reply(_session_key, turn_ctx, **_kwargs):
+        from core.social.delivery import delivery_draft_from_context
+
+        turn_ctx.lines = ["在的"]
+        turn_ctx.turn_id = "private-ingress-test"
+        turn_ctx.delivery_source_kind = "model"
+        turn_ctx.llm_call_count = 1
+        turn_ctx.delivery_draft = delivery_draft_from_context(turn_ctx)
+        return turn_ctx
+
+    engine = AsyncMock(side_effect=reply)
     monkeypatch.setattr(gateway, "_run_turn_via_engine", engine)
 
     await gateway.handle_private_chat(
@@ -213,7 +229,7 @@ def test_chat_context_storage_key_semantics():
     assert private.trace_scope == "qq:10000:private:20001"
     # 投影 v4：身份字段 + 消息信封过桥（计划 §6.1/§6.2）
     projection = private.to_json_projection()
-    assert projection["projection_schema_version"] == 5
+    assert projection["projection_schema_version"] == 6
     assert "reply_to_msg_id" in projection
     assert "mentioned_user_ids" in projection
     assert projection["conversation_key"] == "qq:10000:private:20001"
@@ -239,7 +255,7 @@ class TestDirectEvidence:
             "importance": 0.5,
             "occurrence_count": 1,
             "source_kinds": '["PRIVATE_DIRECT"]',
+            "verification_status": "accepted",
         }
         ok, reason = MemoryManager._decide_promotion(candidate)
         assert ok and "直接对话" in reason
-

@@ -13,7 +13,14 @@ get_compressor 用 Dummy 对象替换（吞掉 maybe_compress 副作用）。
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 import memory.memory_manager as memory_manager
+
+
+@pytest.fixture(autouse=True)
+def _pin_python_backend(monkeypatch):
+    monkeypatch.setenv("MEMORY_BACKEND", "python")
 
 
 def _create_temp_db(tmp_path: Path):
@@ -71,8 +78,8 @@ def test_low_value_candidate_goes_to_observing(tmp_path, monkeypatch):
     assert status == "OBSERVING"
 
 
-def test_high_value_candidate_becomes_confirmed_memory(tmp_path, monkeypatch):
-    """重要性/置信度达标的候选应转为 CONFIRMED，并写入 memories 表成为正式记忆。"""
+def test_high_value_candidate_without_verified_evidence_stays_observing(tmp_path, monkeypatch):
+    """高置信度与重要度不能替代可核验的来源证据。"""
     db_path = _create_temp_db(tmp_path)
     monkeypatch.setattr(memory_manager, "DB_PATH", db_path)
     monkeypatch.setattr(memory_manager, "get_compressor", lambda: type("Dummy", (), {"maybe_compress": lambda self, reason: None})())
@@ -117,5 +124,5 @@ def test_high_value_candidate_becomes_confirmed_memory(tmp_path, monkeypatch):
     memory_count = cursor.fetchone()[0]
     conn.close()
 
-    assert candidate_status == "CONFIRMED"
-    assert memory_count == 1
+    assert candidate_status == "OBSERVING"
+    assert memory_count == 0

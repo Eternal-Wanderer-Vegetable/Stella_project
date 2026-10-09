@@ -23,6 +23,7 @@ from memory.consolidation_prompt import (
 )
 from memory.extraction_prompt import EXTRACTION_PROMPT, format_extraction_prompt
 from memory.session_compact import COMPACT_PROMPT, build_compact_prompt
+from memory.summary_packet import SummarySourceMessage, build_summary_evidence
 
 # 三个模板共用的分隔线前缀（各自后半句不同：待分析/待压缩的数据）
 SEPARATOR = "===== 以上为固定规则"
@@ -40,13 +41,15 @@ def _common_prefix_len(a: str, b: str) -> int:
     return n
 
 
-def _assert_fixed_part_cacheable(render, first_args: tuple, second_args: tuple):
+def _assert_fixed_part_cacheable(
+    render, first_args: tuple, second_args: tuple, *, separator: str = SEPARATOR
+):
     """两次不同输入的公共前缀必须覆盖到分隔线，即固定指令全部可缓存。"""
     a = render(*first_args)
     b = render(*second_args)
     assert a != b, "两次渲染应当不同，否则这个用例没在测东西"
     shared = a[: _common_prefix_len(a, b)]
-    assert SEPARATOR in shared, (
+    assert separator in shared, (
         "可缓存前缀没能覆盖到固定规则分隔线：说明有可变占位符被写到了固定指令前面。"
         f"公共前缀只有 {len(shared)} 字符"
     )
@@ -78,10 +81,23 @@ def test_extraction_prompt_fixed_part_is_cacheable():
 
 
 def test_compact_prompt_fixed_part_is_cacheable():
+    def evidence(message_id: int, text: str):
+        return build_summary_evidence(
+            "qq:test-bot:group:1",
+            "test-bot",
+            [SummarySourceMessage(
+                message_id=message_id,
+                author_id="1001",
+                source_kind="PASSIVE",
+                content=text,
+            )],
+        )
+
     _assert_fixed_part_cacheable(
         build_compact_prompt,
-        ("用户(1001): 在聊显卡", ""),
-        ("用户(1002): 在聊出差", "更早聊过散打"),
+        ((evidence(1, "在聊显卡"),),),
+        ((evidence(2, "在聊出差"),),),
+        separator="===== 旧合法 packet 的可选原始记录 =====",
     )
 
 
@@ -93,12 +109,16 @@ def test_no_fixed_instructions_after_data_placeholders():
 
 def test_volatile_placeholders_sit_after_the_separator():
     """逐个确认：每个每次都变的占位符都在分隔线之后。"""
-    for template, placeholders in (
-        (CONSOLIDATION_PROMPT, ("{current_summary}", "{messages}")),
-        (EXTRACTION_PROMPT, ("{messages}",)),
-        (COMPACT_PROMPT, ("{existing}", "{messages}")),
+    for template, placeholders, separator in (
+        (CONSOLIDATION_PROMPT, ("{current_summary}", "{messages}"), SEPARATOR),
+        (EXTRACTION_PROMPT, ("{messages}",), SEPARATOR),
+        (
+            COMPACT_PROMPT,
+            ("{existing}", "{messages}"),
+            "===== 旧合法 packet 的可选原始记录 =====",
+        ),
     ):
-        sep = template.index(SEPARATOR)
+        sep = template.index(separator)
         for name in placeholders:
             assert template.index(name) > sep, f"{name} 必须排在分隔线之后"
 

@@ -320,23 +320,98 @@ class TestProactiveTimerRoot:
 
 
 def _provision_candidates(db: Path, rows: list[tuple]) -> None:
-    """建最小 memory_candidates 表并插入行（列首为共享空间归属）。"""
+    """Provision candidate rows with a verifiable source and active claim lineage."""
+    import json
+
+    from memory.evidence_contract import ASSESSMENT_VERSION, source_digest
+    from memory.schema import (
+        MEMORY_CANDIDATES_TABLE_DDL,
+        MEMORY_CLAIM_LINKS_TABLE_DDL,
+        MEMORY_EVIDENCE_TABLE_DDL,
+        create_memory_scope_versions_table,
+    )
+
     conn = sqlite3.connect(db)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS memory_candidates (
-            id TEXT PRIMARY KEY,
-            group_shared_space TEXT,
-            user_id TEXT,
-            type TEXT,
-            content TEXT,
-            confidence REAL,
-            status TEXT
+    conn.execute(MEMORY_CANDIDATES_TABLE_DDL)
+    conn.execute(MEMORY_EVIDENCE_TABLE_DDL)
+    conn.execute(MEMORY_CLAIM_LINKS_TABLE_DDL)
+    create_memory_scope_versions_table(conn)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+        "source_kind TEXT, conversation_key TEXT, bot_id TEXT)"
+    )
+    for candidate_id, space, user_id, memory_type, content, confidence, status in rows:
+        uid = str(user_id)
+        owner_key = f"space:{space}"
+        fact_key = f"claim:v1:{candidate_id}"
+        source_id = int(conn.execute(
+            "SELECT COALESCE(MAX(id), 0) + 1 FROM group_messages"
+        ).fetchone()[0])
+        conversation_key = "qq:test-bot:group:1"
+        snapshot = {
+            "id": source_id,
+            "group_id": "1",
+            "user_id": uid,
+            "content": str(content),
+            "source_kind": "AT_MENTION",
+            "conversation_key": conversation_key,
+            "bot_id": "test-bot",
+        }
+        digest = source_digest(snapshot)
+        provenance = {
+            "assessment_version": ASSESSMENT_VERSION,
+            "verification_status": "accepted",
+            "claim_key": fact_key,
+            "recording_author_key": f"qq:{uid}",
+            "fact_object_key": f"qq:{uid}",
+            "exact_support_span": str(content),
+            "conversation_key": conversation_key,
+            "source_id": source_id,
+            "source_snapshot": snapshot,
+        }
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_candidates "
+            "(id, group_shared_space, user_id, type, content, confidence, importance, "
+            "status, owner_type, owner_key, subject_key, audience, fact_key, "
+            "source_conversation_key, source_message_ids) "
+            "VALUES (?, ?, ?, ?, ?, ?, 0.8, ?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?)",
+            (candidate_id, space, uid, memory_type, content, confidence, status,
+             owner_key, fact_key, conversation_key, json.dumps([str(source_id)])),
         )
-    """)
-    conn.executemany(
-        "INSERT OR REPLACE INTO memory_candidates "
-        "(id, group_shared_space, user_id, type, content, confidence, status) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+        conn.execute(
+            "INSERT INTO group_messages "
+            "(id, group_id, user_id, content, source_kind, conversation_key, bot_id) "
+            "VALUES (?, '1', ?, ?, 'AT_MENTION', ?, 'test-bot')",
+            (source_id, uid, str(content), conversation_key),
+        )
+        evidence_id = f"evidence:{candidate_id}:{source_id}"
+        conn.execute(
+            "INSERT INTO memory_evidence "
+            "(id, owner_type, owner_key, subject_key, audience, fact_key, "
+            "source_conversation_key, source_row_id, candidate_id, fact_subject_key, "
+            "source_digest, verification_status, provenance_json) "
+            "VALUES (?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+            (evidence_id, owner_key, fact_key, conversation_key, source_id,
+             candidate_id, f"qq:{uid}", digest,
+             json.dumps(provenance, ensure_ascii=False, separators=(",", ":"))),
+        )
+        conn.execute(
+            "INSERT INTO memory_claim_links "
+            "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+            "projection_slot, projection_version, slot_digest, status) "
+            "VALUES (?, ?, ?, 'CURRENT_SPACE', 'memory_candidate', ?, ?, 'candidate', 1, ?, 'active')",
+            (f"l-candidate:{candidate_id}:{source_id}", evidence_id, owner_key,
+             candidate_id, fact_key, digest),
+        )
+        conn.execute(
+            "INSERT INTO memory_claim_links "
+            "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+            "projection_slot, projection_version, slot_digest, status) "
+            "VALUES (?, ?, ?, 'CURRENT_SPACE', 'claim_state', ?, ?, 'eligibility', 1, ?, 'active')",
+            (f"l-state:{candidate_id}:{source_id}", evidence_id, owner_key,
+             fact_key, fact_key, digest),
+        )
     conn.commit()
     conn.close()
 
@@ -416,7 +491,9 @@ class TestProactiveAtSelection:
         ])
         root = message_flow.begin_trace(root_kind="proactive_timer",
                                         trace_id="at-sel")
-        target = pt.pick_target(1, flow_ctx=root, instance_key="grp:1")
+        target = pt.pick_target(
+            1, bot_id="test-bot", flow_ctx=root, instance_key="grp:1"
+        )
         message_flow.end_trace(root)
         message_flow.flush()
         assert target is not None and target.candidate_id == "cand-1"

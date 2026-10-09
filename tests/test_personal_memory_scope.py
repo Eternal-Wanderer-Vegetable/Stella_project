@@ -291,11 +291,41 @@ class TestWriteRouting:
 
         ref = qq_private_ref("10000", 20001, storage_session_id=-2)
         consolidator = MemoryConsolidator.__new__(MemoryConsolidator)
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS group_messages ("
+            "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+            "source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT, "
+            "bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT, "
+            "mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER, "
+            "origin_msg_id TEXT, reply_recipient_user_id TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO group_messages "
+            "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id) "
+            "VALUES (11, '-2', '20001', '我喜欢被称呼为队长', 'PRIVATE_DIRECT', "
+            "'platform-11', ?, '10000')",
+            (ref.conversation_key,),
+        )
+        conn.commit()
+        conn.close()
         candidate = {
-            "user_id": "20001", "type": "PREFERENCE", "content": "希望被称呼为队长",
+            "user_id": "20001", "type": "PREFERENCE", "content": "我喜欢被称呼为队长",
             "confidence": 0.8, "importance": 0.6, "source_message_ids": [11],
+            "verification_contract": {
+                "fact_subject_user_id": "20001",
+                "predicate_key": "preference.general",
+                "canonical_value": "被称呼为队长",
+                "polarity": "positive",
+                "statement_kind": "explicit_preference",
+                "temporal_qualifiers": [],
+                "context_qualifiers": [],
+                "supports": [
+                    {"source_message_id": 11, "exact_support_span": "我喜欢被称呼为队长"}
+                ],
+            },
         }
-        source_rows = [(11, "20001", "我叫小王，希望被叫队长", "PRIVATE_DIRECT")]
+        source_rows = [(11, "20001", "我喜欢被称呼为队长", "PRIVATE_DIRECT")]
         kw = {
             "sender_ids": ["20001"], "at_senders": ["20001"],
             "origin_group_id": -2, "conversation": ref,

@@ -71,6 +71,13 @@ from memory.cost_gates import (
     should_skip_by_novelty,
     should_skip_by_source_ratio,
 )
+from memory.evidence_contract import (
+    ASSESSMENT_VERSION,
+    assess_candidate,
+)
+from memory.evidence_contract import (
+    canonical_json as _canonical_evidence_json,
+)
 from memory.memory_manager import get_memory_manager
 from memory.policy import validate_candidate
 from memory.schema import (
@@ -1270,58 +1277,19 @@ class MemoryConsolidator:
     def _write_user_profiles(
         self, group_shared_space: str, profiles: list, origin_group_id: int | None = None
     ):
-        """把 LLM 给出的用户画像批量写入 user_profiles：已存在则合并特征并累计互动次数。
-        写入前用 stable_profile_facts 过滤人格判断/心理状态，只保留稳定事实（User Profile 治理）。
-        画像按 (group_shared_space, user_id) 隔离——同一空间内的多个 QQ 群共享一份画像，
-        不同空间彼此独立；interaction_count 也分空间计数。
-        副作用：更新/插入 user_profiles 表；单条记录 user_id 非法（空）时跳过。"""
-        from memory.policy import stable_profile_facts
+        """Drop model profile proposals until field-level source review is wired.
 
-        if not profiles:
-            return
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        self._ensure_common_tables(conn)
-        for p in profiles:
-            uid = self._normalize_user_id(str(p.get("user_id", "")))
-            if not uid:
-                continue
-            # 只保留稳定事实，过滤人格/心理/价值判断
-            traits = "，".join(stable_profile_facts(p.get("personality_traits", "")))
-            cursor.execute(
-                "SELECT nickname, personality_traits, agent_attitude, interaction_count "
-                "FROM user_profiles WHERE group_shared_space = ? AND user_id = ?",
-                (group_shared_space, uid),
+        Stage-one profile JSON has no server-verified per-field support or claim
+        lineage. Filtering personality adjectives cannot establish authorship or
+        semantic support, so this compatibility entry point intentionally writes
+        nothing. Accepted evidence projections are handled by the promotion path.
+        """
+        del group_shared_space, origin_group_id
+        if profiles:
+            logger.warning(
+                f"[Consolidator] ignored {len(profiles)} unreviewed model profile "
+                "proposal(s); field-level evidence projection is not available"
             )
-            row = cursor.fetchone()
-            if row:
-                old_nick, old_traits, old_attitude, old_count = row
-                # 新值优先，缺失字段则保留旧值；特征合并去重
-                new_nick = p.get("nickname", "") or old_nick
-                new_traits = self._merge_traits(old_traits, traits)
-                new_attitude = self._merge_traits(old_attitude, p.get("agent_attitude", ""))
-                cursor.execute("""
-                    UPDATE user_profiles
-                    SET nickname = ?, personality_traits = ?, agent_attitude = ?,
-                        interaction_count = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE group_shared_space = ? AND user_id = ?
-                """, (new_nick, new_traits, new_attitude, old_count + 1, group_shared_space, uid))
-            else:
-                # 新用户：直接插入，互动次数初始为 1
-                cursor.execute("""
-                    INSERT INTO user_profiles (group_shared_space, user_id, nickname, personality_traits, agent_attitude, interaction_count, origin_group_id, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
-                """, (
-                    group_shared_space,
-                    uid,
-                    p.get("nickname", ""),
-                    traits,
-                    p.get("agent_attitude", ""),
-                    # 溯源列：记住这份画像最初来自哪个真实群，让空间合并可回退
-                    str(origin_group_id) if origin_group_id else None,
-                ))
-        conn.commit()
-        conn.close()
 
     @staticmethod
     def _merge_traits(old: str, new: str) -> str:
@@ -1412,8 +1380,8 @@ class MemoryConsolidator:
         第一版只有私聊 PRIVATE_ONLY 与 SPACE 两类写入（欠共享优于越权共享）。
 
         候选强化（交叉验证）：同空间同用户且内容相似的待处理候选（NEW/OBSERVING）
-        不重复插入，改为累积证据——occurrence_count +1、confidence 加
-        MEMORY_CANDIDATE_REOCCURRENCE_BONUS、source_kinds 并集、status 回 NEW。
+        不重复插入；只有新的服务端来源行才增加 occurrence_count 与 confidence，
+        并合并来源集合、将候选重新置为 NEW。来源行重放保持幂等。
         跨类型只在归一化后逐字相同时命中（类型词表对称呼类内容两可）。
         这是「单次陈述不足以晋升，复现才是证据」的实现基础（见 MemoryManager Gate 1）。
 
@@ -1496,9 +1464,9 @@ class MemoryConsolidator:
                 counts["skipped"] += 1
                 continue
 
-            # ── PERSON 路由的服务端验证（计划 §6.5）──
-            # 模型给的 user_id 只在「本批真实存在直接对话证据的发送者」中生效；
-            # 他人转述/引用/验证不过 → 保持 SPACE 候选并落原因，绝不写他人个人事实。
+            # ── 先绑定服务端来源，再决定是否接受 claim / PERSON 路由 ──
+            # 模型只提供 row IDs 与 exact span 提案；真实作者、会话、Bot、摘要和
+            # digest 均由当前 SQLite 行重建。任何缺失/冲突都不能走 promotion gate。
             row_owner_type, row_owner_key, row_subject = (
                 owner_type,
                 owner_key,
@@ -1506,7 +1474,47 @@ class MemoryConsolidator:
             )
             row_audience = audience
             candidate_row_space = row_space
-            if person_mode and uid in direct_rows_by_uid:
+            source_group_id = int(
+                origin_group_id
+                or getattr(conversation, "storage_session_id", 0)
+                or 0
+            )
+            batch_source_ids = {
+                int(source[0])
+                for source in (source_rows or [])
+                if source and str(source[0]).isdecimal()
+            }
+            assessment_candidate = dict(c)
+            assessment_candidate.update(
+                {
+                    "user_id": uid,
+                    "type": type_,
+                    "content": content,
+                    "owner_key": owner_key,
+                    "audience": audience,
+                }
+            )
+            expected_conversation_key = str(
+                getattr(conversation, "conversation_key", "") or ""
+            )
+            expected_bot_id = str(getattr(conversation, "bot_id", "") or "")
+            assessment = assess_candidate(
+                cursor.connection,
+                assessment_candidate,
+                group_id=source_group_id,
+                allowed_batch_ids=batch_source_ids,
+                expected_conversation_key=expected_conversation_key,
+                expected_bot_id=expected_bot_id,
+            )
+            person_evidence = bool(
+                assessment.get("status") == "accepted"
+                and assessment.get("sources")
+                and all(
+                    source.get("source_kind") in {"AT_MENTION", "PRIVATE_DIRECT"}
+                    for source in assessment["sources"]
+                )
+            )
+            if person_mode and uid in direct_rows_by_uid and person_evidence:
                 row_owner_type, row_owner_key, row_subject = (
                     OWNER_TYPE_PERSON,
                     owner_key,
@@ -1516,44 +1524,164 @@ class MemoryConsolidator:
                 candidate_row_space = person_compat_space(row_owner_key, row_audience)
             elif person_mode:
                 logger.info(
-                    f"[Consolidator] 候选保持 SPACE（私聊中 user_id={uid} 无本人直接对话证据，"
+                    f"[Consolidator] 候选保持 SPACE（私聊候选 {uid} 未通过来源/语义审核，"
                     "拒绝个人路由）"
                 )
-            # fact_key：类型 + 归一化内容的稳定散列（同事实跨批一致，证据去重靠它）
-            fact_key = hashlib.sha256(
-                f"{type_}:{(content or '').strip().lower()}".encode()
-            ).hexdigest()[:16]
-            new_evidence_rows: list[int] = []
-
-            if (
-                row_owner_type == OWNER_TYPE_PERSON
-                and conversation is not None
-            ):
-                # 先写证据（INSERT OR IGNORE）：同消息重放不产生新证据 →
-                # 不新增 occurrence/confirmation（计划 §6.5）。
-                for mid_ev, _kind_ev in direct_rows_by_uid.get(uid, []):
-                    cur_ev = cursor.execute(
-                        "INSERT OR IGNORE INTO memory_evidence ("
+            assessment_candidate.update(
+                {"owner_key": row_owner_key, "audience": row_audience}
+            )
+            if row_owner_type == OWNER_TYPE_PERSON:
+                assessment = assess_candidate(
+                    cursor.connection,
+                    assessment_candidate,
+                    group_id=source_group_id,
+                    allowed_batch_ids=batch_source_ids,
+                    expected_conversation_key=expected_conversation_key,
+                    expected_bot_id=expected_bot_id,
+                )
+            # 有效提案以完整 claim scope 做 key；无法核验的旧式输出仍隔离到
+            # deterministic legacy key，但没有 accepted evidence 无法被晋升。
+            fact_key = assessment.get("claim_key") or hashlib.sha256(
+                f"legacy:{type_}:{(content or '').strip().lower()}".encode()
+            ).hexdigest()
+            evidence_rows: list[tuple[str, int, str]] = []
+            has_new_evidence = False
+            has_verification_upgrade = False
+            for source in assessment.get("sources", []):
+                source_row_id = int(source["source_row_id"])
+                existing_evidence = cursor.execute(
+                    "SELECT id, source_digest, verification_status FROM memory_evidence "
+                    "WHERE owner_key = ? AND audience = ? AND fact_key = ? "
+                    "AND source_conversation_key = ? AND source_row_id = ?",
+                    (
+                        row_owner_key,
+                        row_audience,
+                        fact_key,
+                        source["source_conversation_key"],
+                        source_row_id,
+                    ),
+                ).fetchone()
+                evidence_id = str(existing_evidence[0]) if existing_evidence else uuid.uuid4().hex
+                if existing_evidence is None:
+                    cursor.execute(
+                        "INSERT INTO memory_evidence ("
                         "id, owner_type, owner_key, subject_key, audience, fact_key,"
-                        " source_conversation_key, source_row_id, candidate_id)"
-                        " VALUES (?,?,?,?,?,?,?,?,?)",
+                        "source_conversation_key, source_row_id, candidate_id, fact_subject_key,"
+                        "source_digest, verification_status, provenance_json) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
-                            uuid.uuid4().hex,
+                            evidence_id,
                             row_owner_type,
                             row_owner_key,
                             row_subject,
                             row_audience,
                             fact_key,
-                            conversation.conversation_key,
-                            mid_ev,
+                            source["source_conversation_key"],
+                            source_row_id,
                             "",
+                            source["fact_subject_key"],
+                            source["source_digest"],
+                            source["verification_status"],
+                            source["provenance_json"],
                         ),
                     )
-                    if cur_ev.rowcount:
-                        new_evidence_rows.append(mid_ev)
-                if not new_evidence_rows:
-                    counts["skipped"] += 1
-                    continue
+                    has_new_evidence = cursor.rowcount == 1
+                elif (
+                    str(existing_evidence[1] or "") == source["source_digest"]
+                    and str(existing_evidence[2] or "")
+                    in {"unknown", "legacy_unverified"}
+                ):
+                    cursor.execute(
+                        "UPDATE memory_evidence SET fact_subject_key = ?, "
+                        "verification_status = ?, provenance_json = ? WHERE id = ? "
+                        "AND source_digest = ? AND verification_status IN ('unknown', 'legacy_unverified')",
+                        (
+                            source["fact_subject_key"],
+                            source["verification_status"],
+                            source["provenance_json"],
+                            evidence_id,
+                            source["source_digest"],
+                        ),
+                    )
+                    has_verification_upgrade = (
+                        cursor.rowcount == 1
+                        and source["verification_status"] == "accepted"
+                    )
+                evidence_rows.append((evidence_id, source_row_id, source["source_digest"]))
+
+            verification_contract_json = _canonical_evidence_json(
+                {
+                    "assessment_version": ASSESSMENT_VERSION,
+                    "verification_status": assessment.get("status", "unknown"),
+                    "assessment_reason": assessment.get("reason", ""),
+                    "fact_subject_key": assessment.get("fact_subject_key", ""),
+                    "claim_key": fact_key,
+                    "source_ids": [row_id for _, row_id, _ in evidence_rows],
+                    "source_digests": [digest for _, _, digest in evidence_rows],
+                }
+            )
+
+            def _link_candidate_evidence(
+                candidate_id: str,
+                *,
+                evidence_rows=tuple(evidence_rows),
+                owner_key=row_owner_key,
+                audience=row_audience,
+                claim_key=fact_key,
+            ) -> None:
+                for evidence_id, _row_id, digest in evidence_rows:
+                    cursor.execute(
+                        "UPDATE memory_evidence SET candidate_id = ? "
+                        "WHERE id = ? AND (candidate_id = '' OR candidate_id = ?)",
+                        (candidate_id, evidence_id, candidate_id),
+                    )
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO memory_claim_links ("
+                        "id, evidence_id, owner_key, audience, entity_type, entity_id, "
+                        "claim_key, projection_slot, projection_version, slot_digest, status) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?, 'active')",
+                        (
+                            uuid.uuid4().hex,
+                            evidence_id,
+                            owner_key,
+                            audience,
+                            "memory_candidate",
+                            candidate_id,
+                            claim_key,
+                            "candidate",
+                            1,
+                            digest,
+                        ),
+                    )
+                    status_row = cursor.execute(
+                        "SELECT verification_status FROM memory_evidence WHERE id = ?",
+                        (evidence_id,),
+                    ).fetchone()
+                    if status_row and str(status_row[0]) == "accepted":
+                        state_row = cursor.execute(
+                            "SELECT status FROM memory_claim_links WHERE owner_key = ? "
+                            "AND audience = ? AND entity_type = 'claim_state' "
+                            "AND entity_id = ? AND claim_key = ? "
+                            "AND projection_slot = 'eligibility' "
+                            "ORDER BY created_at DESC LIMIT 1",
+                            (owner_key, audience, claim_key, claim_key),
+                        ).fetchone()
+                        if state_row is None:
+                            cursor.execute(
+                                "INSERT INTO memory_claim_links ("
+                                "id, evidence_id, owner_key, audience, entity_type, entity_id, "
+                                "claim_key, projection_slot, projection_version, slot_digest, status) "
+                                "VALUES (?,?,?,?, 'claim_state', ?, ?, 'eligibility', 1, ?, 'active')",
+                                (
+                                    uuid.uuid4().hex,
+                                    evidence_id,
+                                    owner_key,
+                                    audience,
+                                    claim_key,
+                                    claim_key,
+                                    digest,
+                                ),
+                            )
             importance = float(c.get("importance", 0.0) or 0.0)
             # importance 缺省/为 0 时兜底为中位值。**不能让 0 落库**：
             # MEMORY_PROMOTE_MIN_IMPORTANCE 是 _decide_promotion 的第一道检查，
@@ -1564,16 +1692,11 @@ class MemoryConsolidator:
                 importance = MEMORY_CANDIDATE_DEFAULT_IMPORTANCE
             confidence = float(c.get("confidence", 0.0) or 0.0)
             evidence = (c.get("evidence", "") or "").strip()
-            # LLM 可能返回字符串形式的消息 id 列表，做一次容错反序列化
-            source_ids = c.get("source_message_ids", [])
-            if isinstance(source_ids, str):
-                try:
-                    source_ids = json.loads(source_ids)
-                except Exception:
-                    source_ids = []
-            if not isinstance(source_ids, list):
-                source_ids = []
-            source_ids = json.dumps([str(x) for x in source_ids if str(x).strip()], ensure_ascii=False)
+            # 只持久化本次服务端成功解析、且在当前输入批次精确存在的来源 ID。
+            source_ids = json.dumps(
+                [str(source["source_row_id"]) for source in assessment.get("sources", [])],
+                ensure_ascii=False,
+            )
 
             # ── v2：Policy Validator 审核（Gate 3），修正 usage/visibility/behavior_rule ──
             validated = validate_candidate({
@@ -1592,17 +1715,17 @@ class MemoryConsolidator:
             importance = float(validated.get("importance", importance))
 
             # ── 候选强化（交叉验证）：先找同空间同用户的待处理候选 ──
-            # 命中则累积证据（occurrence_count +1、confidence 加成、status 回 NEW
-            # 重新参与晋升评估），而不是插入新行。否则同一事实会反复以新 uuid
-            # 落库、各自卡在 OBSERVING，交叉验证永远不成立。
+            # 命中则复用原候选；新增来源才累积 occurrence/confidence。相同来源重放
+            # 不可再次强化，否则批次重试会伪造交叉验证次数。
             # 类型条件分两档：同类型相似即命中；跨类型只在归一化后逐字相同时命中
             # （类型词表对「希望被称呼为X」两可，LLM 两次抽取可能给出不同 type）。
             existing = None
             for row in cursor.execute(
                 "SELECT id, type, content, confidence, importance, evidence, occurrence_count, "
                 "source_message_ids, source_kinds, status FROM memory_candidates "
-                "WHERE group_shared_space = ? AND user_id = ? AND status IN ('NEW', 'OBSERVING')",
-                (candidate_row_space, uid),
+                "WHERE group_shared_space = ? AND user_id = ? AND fact_key = ? "
+                "AND status IN ('NEW', 'OBSERVING')",
+                (candidate_row_space, uid, fact_key),
             ).fetchall():
                 row_content = row[2] or ""
                 if is_similar(content, row_content) and (
@@ -1624,34 +1747,57 @@ class MemoryConsolidator:
                     old_source_kinds,
                     old_status,
                 ) = existing
+                if not has_new_evidence and not has_verification_upgrade:
+                    # Replaying the same source row is idempotent. It may restore
+                    # a missing lineage edge, but it is not a new occurrence and
+                    # must not boost confidence or rewrite the original claim.
+                    _link_candidate_evidence(str(existing_id))
+                    counts["skipped"] += 1
+                    continue
                 merged_confidence = min(
                     1.0,
-                    max(float(old_conf or 0.0), confidence) + MEMORY_CANDIDATE_REOCCURRENCE_BONUS,
+                    max(float(old_conf or 0.0), confidence)
+                    + (MEMORY_CANDIDATE_REOCCURRENCE_BONUS if has_new_evidence else 0.0),
                 )
-                merged_evidence = merge_content(old_evidence or "", evidence)
+                merged_evidence = (
+                    merge_content(old_evidence or "", evidence)
+                    if has_new_evidence
+                    else (old_evidence or "")
+                )
                 if len(merged_evidence) > MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS:
                     merged_evidence = merged_evidence[:MEMORY_CANDIDATE_EVIDENCE_MAX_CHARS] + "…"
-                new_count = int(old_count or 1) + 1
+                new_count = int(old_count or 1) + (1 if has_new_evidence else 0)
                 cursor.execute(
                     "UPDATE memory_candidates SET content = ?, confidence = ?, importance = ?, "
                     "evidence = ?, occurrence_count = ?, source_message_ids = ?, source_kinds = ?, "
                     "usage_tags = ?, visibility = ?, behavior_rule = ?, source_kind = ?, "
+                    "verification_contract_json = ?, "
                     "status = 'NEW', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (
-                        merge_content(old_content or "", content),
+                        old_content or content,
                         merged_confidence,
                         max(float(old_imp or 0.0), importance),
                         merged_evidence,
                         new_count,
-                        self._merge_source_ids(old_source_ids, source_ids),
-                        self._merge_source_kinds(old_source_kinds, source_kind),
+                        (
+                            self._merge_source_ids(old_source_ids, source_ids)
+                            if has_new_evidence
+                            else (old_source_ids or "[]")
+                        ),
+                        (
+                            self._merge_source_kinds(old_source_kinds, source_kind)
+                            if has_new_evidence
+                            else (old_source_kinds or "[]")
+                        ),
                         usage_tags,
                         visibility,
                         behavior_rule,
                         source_kind,
+                        verification_contract_json,
                         existing_id,
                     ),
                 )
+                _link_candidate_evidence(str(existing_id))
                 logger.info(
                     f"🔁 [Consolidator] 候选获得新证据 {existing_id}（第 {new_count} 次，"
                     f"conf {float(old_conf or 0.0):.2f} → {merged_confidence:.2f}，来源 {source_kind}）"
@@ -1661,7 +1807,8 @@ class MemoryConsolidator:
                 history_events.append((
                     "memory_candidate", str(existing_id),
                     str(old_status or "NEW"), "NEW",
-                    {"action": "reinforce", "occurrence": new_count,
+                    {"action": "reinforce" if has_new_evidence else "verification_upgrade",
+                     "occurrence": new_count,
                      "confidence": round(merged_confidence, 3),
                      "previous_confidence": round(float(old_conf or 0.0), 3),
                      "source_kind": source_kind},
@@ -1671,8 +1818,8 @@ class MemoryConsolidator:
             # 无 id 时生成本地候选 id
             candidate_id = str(c.get("id", "")) or uuid.uuid4().hex
             cursor.execute("""
-                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, origin_group_id, occurrence_count, first_seen_at, source_kinds, owner_type, owner_key, subject_key, audience, source_conversation_key, fact_key, policy_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, evidence, status, source_message_ids, usage_tags, visibility, behavior_rule, source_kind, origin_group_id, occurrence_count, first_seen_at, source_kinds, owner_type, owner_key, subject_key, audience, source_conversation_key, fact_key, policy_version, verification_contract_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     group_shared_space = excluded.group_shared_space,
                     user_id = excluded.user_id,
@@ -1694,6 +1841,7 @@ class MemoryConsolidator:
                     source_conversation_key = excluded.source_conversation_key,
                     fact_key = excluded.fact_key,
                     policy_version = excluded.policy_version,
+                    verification_contract_json = excluded.verification_contract_json,
                     updated_at = CURRENT_TIMESTAMP
             """, (
                 candidate_id,
@@ -1718,17 +1866,12 @@ class MemoryConsolidator:
                 row_owner_key,
                 row_subject,
                 row_audience,
-                conversation.conversation_key if conversation is not None else "",
+                assessment.get("conversation_key") or expected_conversation_key,
                 fact_key,
                 POLICY_VERSION,
+                verification_contract_json,
             ))
-            if new_evidence_rows:
-                cursor.execute(
-                    "UPDATE memory_evidence SET candidate_id = ? "
-                    "WHERE owner_key = ? AND fact_key = ? AND source_row_id IN "
-                    f"({','.join('?' * len(new_evidence_rows))})",
-                    (candidate_id, row_owner_key, fact_key, *new_evidence_rows),
-                )
+            _link_candidate_evidence(candidate_id)
             counts["written"] += 1
             # 共享授权提升（整改计划 P5，复核 F4）：本人事实落库的同一事务内，
             # 把同 owner/fact 的 pending 授权提升为 active 并复制共享副本、

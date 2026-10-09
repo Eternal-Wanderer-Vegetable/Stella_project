@@ -44,6 +44,29 @@ def _write(db_path, ref, content, source_row_id):
     """独立连接跑一次写入（模拟并发会话各自的整合事务）。"""
     conn = sqlite3.connect(db_path)
     try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS group_messages ("
+            "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+            "source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT, "
+            "bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT, "
+            "mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER, "
+            "origin_msg_id TEXT, reply_recipient_user_id TEXT)"
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO group_messages "
+            "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id) "
+            "VALUES (?, ?, ?, ?, 'PRIVATE_DIRECT', ?, ?, ?)",
+            (
+                source_row_id,
+                str(ref.storage_session_id),
+                ref.peer_id,
+                content,
+                f"platform-{source_row_id}",
+                ref.conversation_key,
+                ref.bot_id,
+            ),
+        )
+        conn.commit()
         from memory.consolidator import MemoryConsolidator as C
 
         c = C.__new__(C)
@@ -56,6 +79,18 @@ def _write(db_path, ref, content, source_row_id):
                 "confidence": 0.8,
                 "importance": 0.6,
                 "source_message_ids": [source_row_id],
+                "verification_contract": {
+                    "fact_subject_user_id": ref.peer_id,
+                    "predicate_key": "preference.general",
+                    "canonical_value": content.removeprefix("我喜欢").removeprefix("我不喜欢"),
+                    "polarity": "negative" if content.startswith("我不喜欢") else "positive",
+                    "statement_kind": "explicit_preference",
+                    "temporal_qualifiers": [],
+                    "context_qualifiers": [],
+                    "supports": [
+                        {"source_message_id": source_row_id, "exact_support_span": content}
+                    ],
+                },
             }],
             sender_ids=[ref.peer_id],
             at_senders=[ref.peer_id],
@@ -82,8 +117,8 @@ class TestConcurrentEvidence:
         db = writer_env
         a = qq_private_ref("10000", 20001, storage_session_id=-2)
         b = qq_private_ref("10000", 20001, storage_session_id=-3)  # 同用户另一会话
-        counts_a = _write(db, a, "希望被称呼为队长", 11)
-        counts_b = _write(db, b, "希望被称呼为队长", 99)
+        counts_a = _write(db, a, "我喜欢被称呼为队长", 11)
+        counts_b = _write(db, b, "我喜欢被称呼为队长", 99)
         # B 的候选与 A 同 owner 同受众同空间（personal namespace 只由
         # owner+audience 决定）→ 走强化分支累积证据，而非重复立行
         assert counts_a["written"] == 1
@@ -100,8 +135,8 @@ class TestConcurrentEvidence:
 
     def test_replay_same_row_no_double_evidence(self, writer_env):
         a = qq_private_ref("10000", 20001, storage_session_id=-2)
-        assert _write(writer_env, a, "希望被称呼为队长", 11)["written"] == 1
-        replay = _write(writer_env, a, "希望被称呼为队长", 11)
+        assert _write(writer_env, a, "我喜欢被称呼为队长", 11)["written"] == 1
+        replay = _write(writer_env, a, "我喜欢被称呼为队长", 11)
         assert replay["written"] == 0 and replay["skipped"] == 1
         conn = sqlite3.connect(writer_env)
         try:
@@ -119,7 +154,7 @@ class TestConcurrentEvidence:
 
         def worker():
             try:
-                results.append(_write(db, ref, "希望被称呼为队长", 11))
+                results.append(_write(db, ref, "我喜欢被称呼为队长", 11))
             except Exception as e:  # pragma: no cover
                 errors.append(e)
 
@@ -144,8 +179,8 @@ class TestPromotionMergesSameOwner:
 
         db = writer_env
         a = qq_private_ref("10000", 20001, storage_session_id=-2)
-        _write(db, a, "希望被称呼为队长", 11)
-        _write(db, a, "希望被称呼为队长", 99)  # 新消息行 → 强化同一候选
+        _write(db, a, "我喜欢被称呼为队长", 11)
+        _write(db, a, "我喜欢被称呼为队长", 99)  # 新消息行 → 强化同一候选
         manager = MemoryManager()
         manager.process_new_candidates()
         conn = sqlite3.connect(db)

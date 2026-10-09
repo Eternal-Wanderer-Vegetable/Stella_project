@@ -1,0 +1,94 @@
+{
+  "format": "dialogue-attribution-reference-traces-p2-v1",
+  "isolation": "Dedicated temporary STELLA_HOME; V1 runtime switches forced off, matching the test harness; no live runtime DB used.",
+  "source": "M0 root fixtures are retained unchanged; P2 snapshots record only allowlisted, reviewed protocol migration output.",
+  "reviewed_deltas": {
+    "all_generated_scenarios": [
+      "new versioned ReplyEnvelope protocol is included before budget fitting; prompt and estimated token count change"
+    ],
+    "normal_single_call": [
+      "split_lines preserves the parenthetical joy marker as plan-required complete text"
+    ],
+    "tool_and_evidence_sections": [
+      "legacy nested ref markup is outside the bounded legacy adapter and receives the server clarification fallback"
+    ]
+  },
+  "scenarios": {
+    "normal_single_call": {
+      "m0_sha256": "98a82a0ad86279004041c885105f332c1e1c0615b12356ba8517ac10578bc7fa",
+      "p2_sha256": "a5b2dc70421ba811b0080c3418c76f478e92c58070a9e85548ce1a8c1d527d97",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.lines.0",
+        "trace.llm_calls.0.prompt",
+        "trace.reply"
+      ]
+    },
+    "direct_reply_zero_call": {
+      "m0_sha256": "cc2c0aae491e70f8cec58d8f6ac81d7f3e59ea21633cc01e9c88c144679062eb",
+      "p2_sha256": "cc2c0aae491e70f8cec58d8f6ac81d7f3e59ea21633cc01e9c88c144679062eb",
+      "changed_paths": []
+    },
+    "planner_wait_silent": {
+      "m0_sha256": "72350efbebdc49a5ac7e6b5815a40426fbeddb47c58c10a01b8dc481a2a2dd76",
+      "p2_sha256": "72350efbebdc49a5ac7e6b5815a40426fbeddb47c58c10a01b8dc481a2a2dd76",
+      "changed_paths": []
+    },
+    "planner_call_limit_exhausted": {
+      "m0_sha256": "26704304b94a0df4539b411a3ac5398bfbd2571b90ce610d5cdf62ec22cad858",
+      "p2_sha256": "26704304b94a0df4539b411a3ac5398bfbd2571b90ce610d5cdf62ec22cad858",
+      "changed_paths": []
+    },
+    "planner_deep_then_reply": {
+      "m0_sha256": "28e7891b6b8e8e182ba40b262084ef9f623f35ab88e6f1687bd8346009dd42a2",
+      "p2_sha256": "dd9f30c28da6d9b1c733499a1bdd0d04299d632082b054c209bfe8efd6fd817c",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.llm_calls.0.prompt"
+      ]
+    },
+    "timeout_fallback": {
+      "m0_sha256": "82fa964b4f4f4e7ea1b1d2e6d2e2af05b57a5f88cc2ad700165fb1ca7e813ab6",
+      "p2_sha256": "50d06ab17f44f2de52f625d7b6c63a147bc91438eee221a9afbd0cba1edd6dcc",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.llm_calls.0.prompt"
+      ]
+    },
+    "backend_error_fallback": {
+      "m0_sha256": "396f987798f407a686c1f7d8dded9e8cfadd8e2c96581ac97219c5c28624fbf4",
+      "p2_sha256": "283acc59819b7452ac2cca41aa83471f80dd1e619c9e617077a51dea4a64f8d4",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.llm_calls.0.prompt"
+      ]
+    },
+    "bad_phrase_fallback": {
+      "m0_sha256": "dd7d8b7a7ab1897218ac7960c04d7c673fc7ac94b611dda2efdb9b18cbed1f60",
+      "p2_sha256": "805aed6219b8561fae65735c0a7e9d345ea6adbdbfc0a67dd87e152c4fb2f092",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.llm_calls.0.prompt"
+      ]
+    },
+    "proactive_at_instruction_first": {
+      "m0_sha256": "3282b2a3bd90a7908b6c3b9ae557c8396a5aa9d3fd94c877b7f000b05aadb698",
+      "p2_sha256": "b335617bc7c584eff42256fd726b8bef940656042f917318e467471aa91ced3d",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.llm_calls.0.prompt"
+      ]
+    },
+    "tool_and_evidence_sections": {
+      "m0_sha256": "40b8133b3b03999464e8bd2201728a3cfe6b0314c65786199ee28ade3c3ef8f9",
+      "p2_sha256": "5508c36c1a37fae6f22d95ada28697568c06a5f82f894d360801d77db3b2b0fd",
+      "changed_paths": [
+        "trace.diagnostics.prompt_estimated_tokens",
+        "trace.lines.0",
+        "trace.llm_calls.0.prompt",
+        "trace.reply",
+        "trace.thought"
+      ]
+    }
+  }
+}

@@ -120,7 +120,12 @@ from core.social.contracts import (
     delivered_texts,
     new_trace_id,
 )
-from core.social.delivery import deliver_lines
+from core.social.delivery import (
+    DeliveryPlanError,
+    create_delivery_draft,
+    deliver_lines,
+    seal_delivery_plan,
+)
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
@@ -649,56 +654,89 @@ pipeline.register_pre_hook(build_context, priority=50)
 register_capability_hook(pipeline)
 
 async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
-    """归属守护（整改计划 P5，复核 F1；priority=90）。
-
-    parse_output 之后、bad_phrase 之前执行。模式 off 时零开销直通（行为与
-    f752538 逐字节一致）；shadow 记录问题但产出与 enforce 相同的安全文本
-    供比对；enforce 落最终处置：
-    - pass → ctx.reply = 服务端渲染文本，disposition=deliver
-    - fallback（无效引用）→ 保留合格当前回应，disposition=fallback
-    - reject（风险文本/解析失败）→ disposition=suppressed（split_lines 不
-      交付），原始 raw_output 照旧留痕 ctx.raw_output。
-    决策与 digest 记录到 ctx.attribution_decision。
-    """
+    """消费 parse_output 唯一产物；高风险槽只使用服务端 render。"""
+    mode = "off"
     try:
         from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
         from core.dialogue_attribution import (
             apply_attribution_guard,
             evidence_table_from_projection,
+            reply_envelope_from_projection,
         )
 
         mode = str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
         if mode not in ("shadow", "enforce"):
+            mode = "off"
+        typed_reply = getattr(ctx, "typed_reply", None)
+        typed_error = str(getattr(ctx, "typed_reply_error", "") or "")
+        trusted_direct_fallback = (
+            not typed_error
+            and getattr(ctx, "delivery_source_kind", "")
+            in {"trusted-server", "trusted-server-fallback"}
+            and getattr(ctx, "reply_disposition", "")
+            in {"", "direct", "fallback"}
+        )
+        if trusted_direct_fallback:
+            # parse_output may wrap the server's fixed fallback in a legacy
+            # envelope; producer provenance still makes it a trusted reply.
+            if (
+                getattr(ctx, "delivery_source_kind", "") == "trusted-server-fallback"
+                and not getattr(ctx, "reply_disposition", "")
+            ):
+                ctx.reply_disposition = "fallback"
+            return ctx
+        if mode == "off" and not typed_reply and not typed_error:
+            # DIRECT/empty generations may legitimately bypass parse_output.
+            return ctx
+        envelope, projection_error = reply_envelope_from_projection(
+            typed_reply
+        )
+        parse_error = typed_error or projection_error
+        is_typed_special = bool(
+            envelope is not None and not envelope.legacy and envelope.kind != "social"
+        )
+        # mode=off keeps legacy/social behavior; all non-social typed slots still
+        # require server evidence checks and deterministic rendering.
+        if mode == "off" and not is_typed_special and not parse_error:
             return ctx
         evidence = evidence_table_from_projection(
             getattr(ctx, "attribution_evidence", None)
         )
-        if not evidence and mode != "enforce":
-            # 无证据表 = prepare 侧未构建（off 或旧入口）：shadow 无槽可审
-            return ctx
+        effective_mode = mode if mode in {"shadow", "enforce"} else "enforce"
+        retained_ids = set(getattr(ctx, "retained_evidence_ids", ()) or ())
         final_output, decision = apply_attribution_guard(
-            ctx.raw_output,
+            ctx.typed_reply,
             evidence,
-            set(evidence.keys()),
-            mode,
+            retained_ids,
+            effective_mode,
             identity_revision=int(getattr(ctx, "identity_revision", 0) or 0),
+            generation_epoch=int(getattr(ctx, "generation_epoch", 0) or 0),
+            risk_context=getattr(ctx, "attribution_risk_context", None),
+            parse_error=parse_error,
         )
-        ctx.attribution_decision = {
+        record = {
             "decision": decision.decision,
             "rejection_reason": decision.rejection_reason,
             "invalid_references": decision.invalid_references,
             "original_output_digest": decision.original_output_digest,
             "final_output_digest": decision.final_output_digest,
-            "guard_mode": mode,
+            "guard_mode": effective_mode,
             "identity_revision": decision.identity_revision,
+            "generation_epoch": decision.generation_epoch,
+            "semantic_status": decision.semantic_status,
+            "verified": decision.verified,
+            "checked_evidence_ids": decision.checked_evidence_ids,
         }
-        if mode == "shadow":
-            # 影子：只记录，不改交付（严格隔离重放/观察期语义）
+        ctx.attribution_decision = record
+        ctx.guard_decision = dict(record)
+        if mode == "shadow" and not is_typed_special:
+            # 普通自由 social.current 仅记诊断，不把 shadow 说成 verified。
             return ctx
         if decision.decision == "reject":
             ctx.reply_disposition = "suppressed"
             ctx.reply = ""
             ctx.lines = []
+            ctx.reply_segments = []
             logger.warning(
                 f"🛡️ [Attribution] 拒绝发送（{decision.rejection_reason}）"
                 f" scope={ctx.trace_scope}"
@@ -706,18 +744,31 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
         elif decision.decision == "fallback":
             ctx.reply_disposition = "fallback"
             ctx.reply = final_output
+            ctx.reply_segments = [final_output] if final_output else []
+            ctx.delivery_source_kind = (
+                "trusted-server" if decision.semantic_status == "deterministic_render"
+                else "trusted-server-fallback"
+            )
         else:
-            ctx.reply_disposition = "deliver"
-            ctx.reply = final_output or ctx.reply
+            ctx.reply_disposition = (
+                "fallback"
+                if getattr(ctx, "delivery_source_kind", "") == "trusted-server-fallback"
+                else "deliver"
+            )
+            ctx.reply = final_output
+            ctx.reply_segments = [final_output] if final_output else []
+            if not final_output:
+                ctx.reply_disposition = "suppressed"
         return ctx
     except Exception as e:
         # guard 自身故障不放行错误内容也不阻断链路：enforce 按无合格段处理
         logger.error(f"🛡️ [Attribution] guard 异常（按 suppressed 处理）: {e}")
         try:
-            if str(REPLY_ATTRIBUTION_GUARD_MODE).strip().lower() == "enforce":
+            if mode == "enforce" or getattr(ctx, "typed_reply_error", ""):
                 ctx.reply_disposition = "suppressed"
                 ctx.reply = ""
                 ctx.lines = []
+                ctx.reply_segments = []
         except Exception:
             pass
         return ctx
@@ -807,6 +858,111 @@ async def _run_turn_via_engine(session_key: str, ctx: ChatContext) -> ChatContex
 def _social_delivery_enabled() -> bool:
     """投递回执与标准化证据是否落库（总开关；shadow 模式也记事实）。"""
     return bool(SOCIAL_ENABLED)
+
+
+def _seal_ctx_delivery_plan(
+    ctx: ChatContext,
+    lines: list[str],
+    *,
+    target_user_id: str = "",
+    variant_origin: str = "finalized_variant",
+) -> dict:
+    """入口完成所有局部变体后封存唯一计划；没有可信 Draft 时拒绝发送。"""
+    draft = getattr(ctx, "delivery_draft", None)
+    if not isinstance(draft, dict) or not draft:
+        raise DeliveryPlanError("finalize_turn did not produce a trusted DeliveryDraft")
+    plan = seal_delivery_plan(
+        draft,
+        lines,
+        target_user_id=target_user_id,
+        variant_origin=variant_origin,
+        evidence_ids=list(getattr(ctx, "retained_evidence_ids", ()) or ()),
+    )
+    ctx.delivery_plan = plan
+    return plan
+
+
+def _delivery_plan_is_current(
+    ctx: ChatContext, plan: dict, *, target_user_id: str = "",
+) -> bool:
+    """同步重核会话身份、runtime epoch 和持久 scope 版本。"""
+    if (
+        ctx.trace_id != plan.get("trace_id")
+        or ctx.turn_id != plan.get("turn_id")
+        or ctx.conversation_key != plan.get("conversation_key")
+        or ctx.identity_revision != plan.get("identity_revision")
+        or ctx.generation_epoch != plan.get("generation_epoch")
+        or str(target_user_id or "") != str(plan.get("target_user_id") or "")
+    ):
+        return False
+    try:
+        from core.runtime.facade import peek_shared_facade
+
+        facade = peek_shared_facade()
+        if facade is None or not facade.delivery_is_current(
+            ctx.runtime_key, ctx.turn_id, ctx.generation_epoch,
+        ):
+            return False
+        from memory.conversation_identity import get_identity_revision
+
+        if get_identity_revision(ctx.conversation_key) != ctx.identity_revision:
+            return False
+        if plan.get("scope_versions_available") is not True:
+            return False
+        from memory.ownership import person_owner_key, space_owner_key
+        from memory.scope_versions import current_versions_strict
+
+        scope_keys: list[str] = []
+        space = str(getattr(ctx, "group_shared_space", "") or "")
+        if space:
+            scope_keys.append(space_owner_key(space))
+        bot_id = str(getattr(ctx, "bot_id", "") or "")
+        user_id = int(getattr(ctx, "user_id", 0) or 0)
+        if bot_id and user_id > 0 and str(ctx.conversation_key).startswith("qq:"):
+            scope_keys.append(person_owner_key("qq", bot_id, user_id))
+        captured = plan.get("captured_scope_versions")
+        if not isinstance(captured, dict) or set(captured) != set(scope_keys):
+            return False
+        return current_versions_strict(scope_keys) == captured
+    except Exception:
+        return False
+
+
+def _seal_trusted_delivery_plan(
+    ctx: ChatContext,
+    lines: list[str],
+    *,
+    reason: str,
+    target_user_id: str = "",
+) -> dict:
+    """为服务端确定性 ack/fallback 单独建立可信来源，再生成最终 seal。"""
+    source_draft = getattr(ctx, "delivery_draft", None)
+    versions = (
+        source_draft.get("captured_scope_versions", {})
+        if isinstance(source_draft, dict) else {}
+    )
+    draft = create_delivery_draft(
+        trace_id=ctx.trace_id,
+        turn_id=ctx.turn_id,
+        source_kind="trusted-server",
+        protocol_version="server-deterministic-v1",
+        disposition="direct",
+        conversation_key=ctx.conversation_key,
+        target_user_id=target_user_id,
+        identity_revision=int(ctx.identity_revision or 0),
+        generation_epoch=int(ctx.generation_epoch or 0),
+        captured_scope_versions=dict(versions or {}),
+        scope_versions_available=(
+            isinstance(source_draft, dict)
+            and source_draft.get("scope_versions_available") is True
+        ),
+        segments=list(lines),
+        decision={"producer": "trusted-server", "reason": reason},
+        origin=f"trusted-server:{reason}",
+    )
+    plan = seal_delivery_plan(draft)
+    ctx.delivery_plan = plan
+    return plan
 
 # 本地状态接口：挂在 NoneBot 已有的 ASGI app 上（不新增端口）。
 # 放在扩展加载之后：link_status 来自扩展（虽是延迟导入，顺序清晰些更好）。
@@ -1123,6 +1279,8 @@ def _maybe_identity_direct_reply(ctx) -> None:
     if direct:
         ctx.reply = direct
         ctx.lines = [direct]
+        ctx.delivery_source_kind = "trusted-server"
+        ctx.reply_disposition = "direct"
         logger.info(f"🪪 [Identity] 身份问句确定性直复（用户 {ctx.user_id}）")
 
 
@@ -1463,6 +1621,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             logger.info(f"⏳ [Planner] 群 {event.group_id} 本轮不回复，等待更多消息")
             return
 
+        if getattr(ctx, "reply_disposition", "") in {"suppressed", "skip", "silent"}:
+            _flow_decision(fctx, "chat.runtime_result", status="skipped",
+                           reason_code="reply_suppressed")
+            _flow_set_outcome(fctx, "silent")
+            return
+
         # 防御：就算后钩子没产出任何行，也一定给一句兜底
         if not ctx.lines:
             ctx.lines = ["......？"]
@@ -1478,6 +1642,24 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 msg = Message(line)
             return await chat_handler.send(msg)
 
+        ack_receipts = []
+
+        async def _send_cometa_ack(line: str) -> str:
+            ctx.lines = [line]
+            plan = _seal_trusted_delivery_plan(
+                ctx, [line], reason="cometa-ack", target_user_id=str(ctx.user_id),
+            )
+            ack_receipts.extend(await deliver_lines(
+                plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
+                send_one=_send_reply_segment,
+                plan_guard=lambda current: _delivery_plan_is_current(
+                    ctx, current, target_user_id=str(ctx.user_id),
+                ),
+            ))
+            if not ack_receipts or ack_receipts[-1].status != "acknowledged":
+                raise RuntimeError("cometa ack delivery is not acknowledged")
+            return ack_receipts[-1].platform_message_id or plan["plan_id"]
+
         with _flow_span(fctx, "send.prepare"):
             pass
         # cometa 受理确认（方案 §6.5）：委派接管的本轮只发 ack 一条，经桥接
@@ -1488,14 +1670,15 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             with _flow_span(fctx, "send.cometa_ack") as ack_span:
                 ack_outcome = await cometa_bridge.deliver_ack(
                     cometa_submission,
-                    lambda line: _send_reply_segment(line, 0),
+                    _send_cometa_ack,
                 )
                 ack_span.finish(status="succeeded" if ack_outcome == "sent" else "unknown",
                                 reason_code=ack_outcome)
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
-                        event.self_id, event.group_id, list(ctx.lines), origin=ctx
+                        event.self_id, event.group_id, delivered_texts(ack_receipts),
+                        origin=ctx, receipts=ack_receipts,
                     )
             elif ack_outcome == "unknown":
                 logger.warning(
@@ -1512,13 +1695,27 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 回执且无法补记账），现在全部用 send、finish 只结束流程。
         _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
                          summary="普通回复")
+        delivery_target = str(ctx.reply_recipient_user_id or ctx.user_id)
+        try:
+            delivery_plan = _seal_ctx_delivery_plan(
+                ctx, list(ctx.lines), target_user_id=delivery_target,
+            )
+        except DeliveryPlanError as e:
+            _flow_decision(fctx, "send.plan", status="blocked",
+                           reason_code="invalid_delivery_plan",
+                           summary=str(e)[:160])
+            _flow_set_outcome(fctx, "delivery_plan_rejected")
+            return
         receipts = await deliver_lines(
-            ctx.lines,
+            delivery_plan,
             scope=scope,
             trace_id=ctx.trace_id,
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            plan_guard=lambda plan: _delivery_plan_is_current(
+                ctx, plan, target_user_id=delivery_target,
+            ),
         )
         delivered = delivered_texts(receipts)
         if delivered:
@@ -1883,6 +2080,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             logger.info(f"⏳ [Planner] 私聊 {ref.runtime_key} 本轮不回复，等待更多消息")
             return
 
+        if getattr(ctx, "reply_disposition", "") in {"suppressed", "skip", "silent"}:
+            _flow_decision(fctx, "chat.runtime_result", status="skipped",
+                           reason_code="reply_suppressed")
+            _flow_set_outcome(fctx, "silent")
+            return
+
         if not ctx.lines:
             ctx.lines = ["......？"]
 
@@ -1897,19 +2100,39 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             # （计划 §12 假设 4，M5 核验），先不构造引用段。
             return await private_chat_handler.send(Message(line))
 
+        ack_receipts = []
+
+        async def _send_cometa_ack(line: str) -> str:
+            ctx.lines = [line]
+            plan = _seal_trusted_delivery_plan(
+                ctx, [line], reason="cometa-ack", target_user_id=str(ctx.peer_id or ref.peer_id),
+            )
+            ack_receipts.extend(await deliver_lines(
+                plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
+                send_one=_send_reply_segment,
+                plan_guard=lambda current: _delivery_plan_is_current(
+                    ctx, current, target_user_id=str(ctx.peer_id or ref.peer_id),
+                ),
+                receipt_conversation=ref,
+            ))
+            if not ack_receipts or ack_receipts[-1].status != "acknowledged":
+                raise RuntimeError("cometa ack delivery is not acknowledged")
+            return ack_receipts[-1].platform_message_id or plan["plan_id"]
+
         cometa_submission = getattr(ctx, "cometa_submission", None)
         if cometa_submission:
             with _flow_span(fctx, "send.cometa_ack") as ack_span:
                 ack_outcome = await cometa_bridge.deliver_ack(
                     cometa_submission,
-                    lambda line: _send_reply_segment(line, 0),
+                    _send_cometa_ack,
                 )
                 ack_span.finish(status="succeeded" if ack_outcome == "sent" else "unknown",
                                 reason_code=ack_outcome)
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
-                        event.self_id, ref.storage_session_id, list(ctx.lines), origin=ctx
+                        event.self_id, ref.storage_session_id, delivered_texts(ack_receipts),
+                        origin=ctx, receipts=ack_receipts,
                     )
             elif ack_outcome == "unknown":
                 logger.warning(
@@ -1921,13 +2144,27 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
 
         _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
                          summary="普通回复")
+        delivery_target = str(ctx.peer_id or ref.peer_id)
+        try:
+            delivery_plan = _seal_ctx_delivery_plan(
+                ctx, list(ctx.lines), target_user_id=delivery_target,
+            )
+        except DeliveryPlanError as e:
+            _flow_decision(fctx, "send.plan", status="blocked",
+                           reason_code="invalid_delivery_plan",
+                           summary=str(e)[:160])
+            _flow_set_outcome(fctx, "delivery_plan_rejected")
+            return
         receipts = await deliver_lines(
-            ctx.lines,
+            delivery_plan,
             scope=scope,
             trace_id=ctx.trace_id,
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            plan_guard=lambda plan: _delivery_plan_is_current(
+                ctx, plan, target_user_id=delivery_target,
+            ),
             receipt_conversation=ref,
         )
         delivered = delivered_texts(receipts)
@@ -3308,10 +3545,12 @@ def _proactive_contract_mode() -> str:
 def _build_proactive_contract(group_id: int, target):
     """从候选行 + 来源行构建主动验证合同（复核 F11，服务端构建）。
 
-    支持的候选：PERSON 归属、事实主体==选定目标、谓词可模板化。其余返回
+    支持的候选：当前共享空间中的 SPACE/CURRENT_SPACE 事实、事实主体等于
+    选定目标、来源/lineage/epoch仍有效且谓词有服务端模板。其余返回
     (None, None, reason)——enforce 下跳过，shadow 下记录原因。
     返回 (contract, selected_variant, error_reason)。
     """
+    import json
     import sqlite3 as _sqlite3
 
     from memory.proactive_contract import (
@@ -3323,46 +3562,125 @@ def _build_proactive_contract(group_id: int, target):
     conn = _sqlite3.connect(DB_PATH)
     try:
         row = conn.execute(
-            "SELECT id, type, content, status, owner_type, owner_key, subject_key, fact_key"
+            "SELECT id, type, content, status, owner_type, owner_key, subject_key, fact_key, "
+            "audience, source_conversation_key, group_shared_space"
             " FROM memory_candidates WHERE id = ?",
             (str(target.candidate_id or ""),),
         ).fetchone()
         if row is None:
             return None, None, "candidate_missing"
-        cid, ctype, content, _status, owner_type, owner_key, subject_key, fact_key = row
-        subject_uid = str(subject_key or "").split(":")[-1]
-        # 复核 F11：事实主体必须就是选定目标——另一个人的背景不能变成
-        # 对当前人的确认问题（14:09 现场形状）
-        if not subject_uid or subject_uid != str(target.user_id):
+        (
+            cid, ctype, content, status, owner_type, owner_key, subject_key,
+            fact_key, audience, candidate_conversation, group_shared_space,
+        ) = row
+        expected_conversation = f"qq:{target.source_bot_id}:group:{group_id}"
+        if str(status or "").upper() != "OBSERVING":
+            return None, None, "candidate_inactive"
+        if (
+            str(owner_type or "") != "SPACE"
+            or str(audience or "") != "CURRENT_SPACE"
+            or str(owner_key or "") != f"space:{group_shared_space}"
+            or str(group_shared_space or "") == ""
+            or str(owner_key or "") != str(target.owner_key or "")
+            or str(target.owner_type or "") != "SPACE"
+            or str(target.audience or "") != "CURRENT_SPACE"
+            or str(subject_key or "") != ""
+        ):
+            return None, None, "owner_not_current_space"
+        if not target.source_bot_id:
+            return None, None, "source_binding_missing"
+        if str(candidate_conversation or "") != expected_conversation:
+            return None, None, "candidate_conversation_mismatch"
+        if str(target.source_conversation_key or "") != expected_conversation:
+            return None, None, "source_conversation_mismatch"
+        subject_key = str(target.fact_subject_key or "")
+        subject_uid = subject_key.removeprefix("qq:")
+        if subject_key != f"qq:{target.user_id}" or not subject_uid.isdecimal():
             return None, None, "subject_not_target"
-        if str(owner_type or "") != "PERSON":
-            return None, None, "owner_not_person"
+        if (
+            str(target.fact_key or "") != str(fact_key or "")
+            or not target.evidence_ids
+            or not target.source_row_ids
+            or len(target.evidence_ids) != len(target.source_row_ids)
+            or len(target.evidence_ids) != len(target.source_digests)
+            or not target.captured_scope_versions
+        ):
+            return None, None, "evidence_binding_missing"
 
-        source_row_ids: list[int] = []
-        recording_author = 0
-        if fact_key and owner_key:
-            for (rid,) in conn.execute(
-                "SELECT source_row_id FROM memory_evidence"
-                " WHERE owner_key = ? AND fact_key = ? AND source_row_id > 0 LIMIT 5",
-                (owner_key, fact_key),
-            ).fetchall():
-                source_row_ids.append(int(rid))
-            if source_row_ids:
-                arow = conn.execute(
-                    "SELECT user_id FROM group_messages WHERE id = ?",
-                    (source_row_ids[0],),
-                ).fetchone()
-                if arow and str(arow[0] or "").isdigit():
-                    recording_author = int(arow[0])
+        placeholders = ",".join("?" for _ in target.evidence_ids)
+        evidence_rows = conn.execute(
+            "SELECT e.id, e.source_row_id, e.source_conversation_key, e.source_digest, "
+            "e.fact_subject_key, e.provenance_json "
+            "FROM memory_evidence e "
+            "JOIN memory_claim_links l ON l.evidence_id = e.id "
+            "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+            "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+            "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+            "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+            "WHERE e.id IN (" + placeholders + ") AND e.candidate_id = ? "
+            "AND e.owner_key = ? AND e.audience = ? AND e.fact_key = ? "
+            "AND e.verification_status = 'accepted' "
+            "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+            "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+            "AND l.status = 'active' ORDER BY e.id",
+            (
+                *target.evidence_ids, str(cid), str(owner_key), str(audience),
+                str(fact_key), str(cid),
+            ),
+        ).fetchall()
+        evidence_by_id = {str(item[0]): item for item in evidence_rows}
+        if set(evidence_by_id) != set(target.evidence_ids):
+            return None, None, "evidence_lineage_changed"
+        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
 
-        predicate = "other"
-        t = str(ctype or "")
-        if "称呼" in t or "alias" in t:
-            predicate = "self_alias"
-        elif "关系" in t or "relation" in t:
-            predicate = "relationship"
-        elif "偏好" in t or "address" in t:
-            predicate = "address_preference"
+        provenance_rows = []
+        for index, evidence_id in enumerate(target.evidence_ids):
+            evidence = evidence_by_id[evidence_id]
+            _, source_row_id, source_conversation, source_digest, fact_subject, raw = evidence
+            try:
+                provenance = json.loads(raw or "{}")
+            except (TypeError, ValueError):
+                return None, None, "evidence_provenance_malformed"
+            snapshot = provenance.get("source_snapshot")
+            if str(fact_subject) != f"qq:{target.user_id}":
+                return None, None, "subject_not_target"
+            if (
+                str(source_row_id) != str(target.source_row_ids[index])
+                or str(source_digest) != target.source_digests[index]
+                or str(source_conversation) != expected_conversation
+                or provenance.get("assessment_version") != ASSESSMENT_VERSION
+                or provenance.get("verification_status") != "accepted"
+                or provenance.get("claim_key") != fact_key
+                or provenance.get("recording_author_key") != subject_key
+                or provenance.get("fact_object_key") != subject_key
+                or provenance.get("exact_support_span") != str(content or "")
+                or provenance.get("conversation_key") != expected_conversation
+                or str(provenance.get("source_id")) != str(source_row_id)
+                or not isinstance(snapshot, dict)
+                or str(snapshot.get("group_id")) != str(group_id)
+                or str(snapshot.get("user_id")) != str(target.user_id)
+                or str(snapshot.get("bot_id")) != str(target.source_bot_id)
+                or str(snapshot.get("conversation_key")) != expected_conversation
+                or str(snapshot.get("source_kind") or "").upper() == "BOT_SELF"
+                or not verify_source_snapshot(snapshot, str(source_digest), conn=conn)
+            ):
+                return None, None, "source_binding_changed"
+            provenance_rows.append(provenance)
+        predicates = {str(item.get("predicate_key") or "") for item in provenance_rows}
+        if len(predicates) != 1:
+            return None, None, "predicate_mismatch"
+        predicate_key = next(iter(predicates))
+        predicate = {
+            "preference.general": "address_preference",
+            "profile.nickname": "self_alias",
+        }.get(predicate_key, "other")
+        if predicate == "other":
+            return None, None, "predicate_unsupported"
+        polarities = {str(item.get("polarity") or "unknown") for item in provenance_rows}
+        if len(polarities) != 1 or next(iter(polarities)) not in {"positive", "negative"}:
+            return None, None, "polarity_unknown"
+        polarity_value = next(iter(polarities))
+        recording_author = int(subject_uid)
 
         variants: list[QuestionVariant] = []
         term = str(content or "").strip()[:32]
@@ -3376,17 +3694,6 @@ def _build_proactive_contract(group_id: int, target):
                 )
             )
 
-        server_recent: dict[int, str] = {}
-        for rid, rcontent in conn.execute(
-            "SELECT id, content FROM group_messages"
-            " WHERE group_id = ? AND user_id = ? AND source_kind != 'BOT_SELF'"
-            " ORDER BY id DESC LIMIT 20",
-            (str(group_id), str(target.user_id)),
-        ).fetchall():
-            server_recent[int(rid)] = compute_candidate_digest(
-                {"type": "message", "content": rcontent}
-            )
-
         contract = VerificationContract(
             candidate_id=str(cid),
             recording_author_id=recording_author,
@@ -3394,14 +3701,24 @@ def _build_proactive_contract(group_id: int, target):
             fact_object_id=None,
             selected_target_user_id=int(target.user_id),
             predicate_type=predicate,
-            polarity="positive",
-            source_conversation_key=f"qq:group:{group_id}",
-            source_row_ids=source_row_ids,
+            polarity=polarity_value,
+            source_conversation_key=expected_conversation,
+            source_row_ids=list(target.source_row_ids),
             candidate_content_digest=compute_candidate_digest(
                 {"type": ctype or "", "content": content or ""}
             ),
             question_variants=variants,
             bridge_event_requirement=False,
+            owner_type=str(owner_type),
+            owner_key=str(owner_key),
+            audience=str(audience),
+            fact_subject_key=subject_key,
+            fact_key=str(fact_key),
+            source_bot_id=str(target.source_bot_id),
+            source_group_id=str(group_id),
+            evidence_ids=list(target.evidence_ids),
+            source_digests=list(target.source_digests),
+            captured_scope_versions=dict(target.captured_scope_versions),
         )
         return contract, variants[0] if variants else None, ""
     finally:
@@ -3425,13 +3742,16 @@ def _validate_proactive_output(
     conn = _sqlite3.connect(DB_PATH)
     try:
         row = conn.execute(
-            "SELECT id, type, content, status FROM memory_candidates WHERE id = ?",
+            "SELECT id, type, content, status, owner_type, owner_key, audience, fact_key, "
+            "source_conversation_key FROM memory_candidates WHERE id = ?",
             (str(contract.candidate_id),),
         ).fetchone()
         if row is None:
             return False, "candidate_missing"
         current = {
             "id": row[0], "type": row[1], "content": row[2], "status": row[3],
+            "owner_type": row[4], "owner_key": row[5], "audience": row[6],
+            "fact_key": row[7], "source_conversation_key": row[8],
         }
         ok, reason = validate_contract_consistency(contract, current, conn=conn)
         if not ok:
@@ -3507,10 +3827,15 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
         # 逐用户/候选事实由 pick_target 的直接调用方按需传递。
         if caller_flow_ctx is not None:
             target = pick_target(group_id, exclude_user_ids={self_id, 0},
+                                 bot_id=str(bot.self_id),
                                  flow_ctx=flow_ctx,
                                  instance_key=f"grp:{group_id}")
         else:
-            target = pick_target(group_id, exclude_user_ids={self_id, 0})
+            target = pick_target(
+                group_id,
+                exclude_user_ids={self_id, 0},
+                bot_id=str(bot.self_id),
+            )
         if target is None:
             # 无候选 = noop 有原因：逐项原因已由 pick_target 落
             # at.preflight/at.select（计划 §6.4）
@@ -3672,12 +3997,28 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 ])
                 return await bot.send_group_msg(group_id=group_id, message=message)
 
+            delivery_target = str(target.user_id)
+            try:
+                delivery_plan = _seal_ctx_delivery_plan(
+                    ctx, [line], target_user_id=delivery_target,
+                    variant_origin=("proactive-contract" if contract_mode == "enforce"
+                                    else "proactive-at-user"),
+                )
+            except DeliveryPlanError as e:
+                _flow_decision(flow_ctx, "proactive.send", status="blocked",
+                               reason_code="invalid_delivery_plan",
+                               summary=str(e)[:160], instance_key=f"grp:{group_id}")
+                outcome = "delivery_plan_rejected"
+                return False
             receipts = await deliver_lines(
-                [line],
+                delivery_plan,
                 scope=scope,
                 trace_id=ctx.trace_id,
                 turn_id=ctx.turn_id,
                 send_one=_send_at_segment,
+                plan_guard=lambda plan: _delivery_plan_is_current(
+                    ctx, plan, target_user_id=delivery_target,
+                ),
             )
             delivered = delivered_texts(receipts)
             if not delivered:
@@ -4077,6 +4418,11 @@ async def _proactive_speak_impl(
             gate_score=gate.score,
             gate_reasons=gate.reasons,
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+            conversation_kind="group",
+            conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+            bot_id=str(bot.self_id),
+            peer_id=str(group_id),
+            storage_session_id=group_id,
         )
         try:
             from core.observability import message_flow
@@ -4169,14 +4515,25 @@ async def _proactive_speak_impl(
         async def _send_proactive_segment(seg_line: str, _i: int) -> str | None:
             return await bot.send_group_msg(group_id=group_id, message=seg_line)
 
+        try:
+            delivery_plan = _seal_ctx_delivery_plan(
+                ctx, list(ctx.lines), variant_origin="proactive-group-merge",
+            )
+        except DeliveryPlanError as e:
+            _flow_decision(fctx, "proactive.send", status="blocked",
+                           reason_code="invalid_delivery_plan", summary=str(e)[:160])
+            _flow_set_outcome(fctx, "delivery_plan_rejected")
+            _log_participation_event(decision, "generation_skip", "delivery_plan_rejected")
+            return
         receipts = await deliver_lines(
-            ctx.lines,
+            delivery_plan,
             scope=scope,
             trace_id=ctx.trace_id,
             turn_id=ctx.turn_id,
             send_one=_send_proactive_segment,
             interval_seconds=SEND_INTERVAL,
             abort_check=_stale,
+            plan_guard=lambda plan: _delivery_plan_is_current(ctx, plan),
         )
         delivered = delivered_texts(receipts)
         if not delivered:

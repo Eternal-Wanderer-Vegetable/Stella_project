@@ -44,7 +44,7 @@ from memory.prompt_builder import build_memory_context, estimate_tokens
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
 from memory.schema import normalize_source_kind
 from memory.session_context import ensure_initialized as session_ensure_initialized
-from memory.session_context import get_summary as get_session_summary
+from memory.session_context import get_summary_snapshot as get_session_summary_snapshot
 from memory.session_context import (
     observe_identity_revision as session_observe_identity_revision,
 )
@@ -245,7 +245,8 @@ async def build_context(ctx: ChatContext) -> ChatContext:
     内部空白处插入断层标记。
 
     会话上下文缓存（设计阶段四）：key = session_id + history_version + mode +
-    policy_version。历史版本 = 消息表 max(id) + 摘要 updated_at + 会话摘要版本，
+    policy_version。历史版本包含消息/话题摘要、compact_count、身份 revision、
+    独立 summary_revision 与 packet 格式/有效性，
     任一变化立即换桶；都不变时直接复用上次组装好的文本——既省重复读库，
     也保证同版本下拼出的上下文逐字节一致，不破坏 Prompt 前缀稳定性。
     尾巴的时间窗过滤随墙钟缓慢漂移，由 TTL 兜底（窗口以小时计，5 分钟内的
@@ -300,11 +301,20 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             except Exception:
                 identity_rev = 0
         session_observe_identity_revision(ctx.storage_key(), identity_rev)
+        (
+            session_summary,
+            summary_revision,
+            summary_format,
+            summary_valid,
+        ) = get_session_summary_snapshot(ctx.storage_key())
         history_version = (
             _max_message_id(cursor, ctx.storage_key()),
             stc_updated_at,
             session_summary_version(ctx.storage_key()),
             identity_rev,
+            summary_revision,
+            summary_format,
+            summary_valid,
         )
         # key 含 DB_PATH：与检索缓存同款隔离（换库/测试临时库绝不互读缓存）
         cache_key = (
@@ -336,7 +346,6 @@ async def build_context(ctx: ChatContext) -> ChatContext:
         # 避免把整个历史当成待压缩内容。
         if tail_start_id > 0:
             session_ensure_initialized(ctx.storage_key(), tail_start_id)
-        session_summary = get_session_summary(ctx.storage_key())
         # 供 post 侧触发压缩（回复发出后异步进行，不阻塞本次回复）
         ctx.tail_start_id = tail_start_id
 
@@ -400,7 +409,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
 SESSION_CONTEXT_CACHE_TTL = 300.0  # 5 分钟
 _SESSION_CONTEXT_CACHE_MAX_ENTRIES = 64
 _SESSION_CONTEXT_CACHE: dict[
-    tuple[str, str, tuple[int, str | None, int, int], str, str],
+    tuple[str, str, tuple[object, ...], str, str],
     tuple[float, str, int],
 ] = {}
 
@@ -1066,6 +1075,31 @@ def build_attribution_evidence(ctx: ChatContext) -> dict:
         )
     corrections = _current_corrections(ctx)
     table = build_evidence_table(recent, facts, corrections, max_units=16)
+    signal_codes: list[str] = []
+    correction_ids = [
+        f"correction_{item.get('id')}"
+        for item in corrections if item.get("id")
+    ]
+    if correction_ids:
+        signal_codes.append("current_correction")
+    reply_to = str(getattr(ctx, "reply_to_msg_id", "") or "")
+    target_user_id = str(getattr(ctx, "reply_target_user_id", "") or "")
+    if reply_to:
+        signal_codes.append("reply_relation")
+    ctx.attribution_risk_context = {
+        "schema_version": 1,
+        "signal_codes": signal_codes,
+        "supporting_evidence_ids": [
+            evidence_id for evidence_id in correction_ids if evidence_id in table
+        ],
+        "target_resolution": (
+            "exact" if reply_to and target_user_id
+            else "unknown" if reply_to
+            else "not_applicable"
+        ),
+        "target_user_id": target_user_id if reply_to else "",
+        "identity_revision": int(getattr(ctx, "identity_revision", 0) or 0),
+    }
     return evidence_projection(table)
 
 

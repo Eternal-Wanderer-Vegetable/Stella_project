@@ -1,0 +1,66 @@
+{
+  "fixture_id": "incident-201950-librarian",
+  "matrix_class": "INCIDENT-201950-LIBRARIAN",
+  "description": "20:19司书角色现场：司书身份属于栗子；Ain已被明确排除。",
+  "bot_id": "1694717255",
+  "group_id": 263402786,
+  "participants": {
+    "A": "3089665724",
+    "B": "457548580"
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": null,
+      "content": "改东西会很费时间吗？",
+      "platform_msg_id": "incident-201950-librarian-0"
+    },
+    {
+      "seq": 1,
+      "kind": "user",
+      "author": "B",
+      "reply_to_seq": null,
+      "content": "大家叫我司书也行，图书馆整理我来负责。",
+      "platform_msg_id": "incident-201950-librarian-1"
+    },
+    {
+      "seq": 2,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "那条是说栗子的，没点你。",
+      "platform_msg_id": "incident-201950-librarian-2"
+    }
+  ],
+  "logical_units": [
+    {
+      "unit": "incident-201950-librarian-u0",
+      "seqs": [
+        0
+      ],
+      "recipient": "A",
+      "origin_msg_id": "incident-201950-librarian-src0"
+    }
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "每天的日常罢了。"
+  },
+  "oracle": {
+    "task": "接住A关于日常工作的回答，不把栗子的司书身份或图书馆整理任务套给A。",
+    "acceptable": [
+      "自然回应A的日常工作；不称A为司书、不追问A整理图书馆"
+    ],
+    "critical_classes": [
+      "speaker_swap",
+      "recipient_carry_over",
+      "stale_premise"
+    ],
+    "critical_fail": [
+      "称A为司书",
+      "声称A负责图书馆整理或据此追问"
+    ]
+  }
+}

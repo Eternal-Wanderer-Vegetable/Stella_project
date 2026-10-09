@@ -233,8 +233,14 @@ def run_scenario(sc: Scenario) -> dict:
     return asyncio.run(_capture(sc))
 
 
-def load_frozen(name: str) -> dict | None:
-    path = FIXTURE_DIR / f"{name}.json"
+def load_frozen(name: str, generation: str = "m0") -> dict | None:
+    if generation == "m0":
+        root = FIXTURE_DIR
+    elif generation == "p2_protocol":
+        root = FIXTURE_DIR / generation
+    else:
+        raise ValueError(f"unknown trace generation: {generation}")
+    path = root / f"{name}.json"
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))

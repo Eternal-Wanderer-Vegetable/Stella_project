@@ -919,6 +919,47 @@ def migrate_v18(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v19(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v19：可审核来源合同及派生 claim lineage。
+
+    旧 evidence 只标成 legacy_unverified；没有当前原文与语义审核合同的旧行
+    不会在迁移中自动获得 accepted。字段和表在此级事务内建立，失败可整级回滚。
+    """
+    from memory.schema import (
+        create_memory_claim_links_table,
+        create_memory_evidence_table,
+    )
+
+    result = MigrationResult(version=19)
+    create_memory_evidence_table(conn)
+    create_memory_claim_links_table(conn)
+
+    evidence_columns = _columns(conn.cursor(), "memory_evidence")
+    additions = (
+        ("fact_subject_key", "TEXT NOT NULL DEFAULT ''"),
+        ("source_digest", "TEXT NOT NULL DEFAULT ''"),
+        ("verification_status", "TEXT NOT NULL DEFAULT 'legacy_unverified'"),
+        ("provenance_json", "TEXT NOT NULL DEFAULT '{}'"),
+    )
+    added = 0
+    for column, ddl in additions:
+        if column not in evidence_columns:
+            conn.execute(f"ALTER TABLE memory_evidence ADD COLUMN {column} {ddl}")
+            evidence_columns.append(column)
+            added += 1
+
+    conn.execute(
+        "UPDATE memory_evidence SET verification_status = 'legacy_unverified' "
+        "WHERE verification_status IS NULL OR verification_status = ''"
+    )
+    result.notes.append(
+        "memory_evidence v19 provenance columns ensured "
+        f"(added={added}); legacy evidence remains legacy_unverified; "
+        "memory_claim_links created"
+    )
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -932,6 +973,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     16: migrate_v16,
     17: migrate_v17,
     18: migrate_v18,
+    19: migrate_v19,
 }
 
 

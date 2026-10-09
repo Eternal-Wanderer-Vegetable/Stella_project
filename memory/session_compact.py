@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from dataclasses import dataclass
 
 from nonebot import logger
 
@@ -40,6 +41,17 @@ from memory.conversation_projection import (
     TranscriptRecord,
     render_transcript_record,
 )
+from memory.prompt_builder import estimate_tokens
+from memory.summary_packet import (
+    SummaryEvidence,
+    SummaryPacket,
+    SummarySourceMessage,
+    build_summary_evidence,
+    build_summary_packet,
+    render_summary_evidence,
+    render_summary_packet,
+    validate_summary_packet,
+)
 
 # 温度与生成上限现在是端点×角色配置的一部分：
 # LLM_ROLE_COMPACT_TEMPERATURE（默认 0.3，信息提炼而非创作，稳定优先）、
@@ -49,6 +61,8 @@ from memory.conversation_projection import (
 # 正在压缩的群：同一群不并发压缩，否则两次调用会基于同一起点各自推进
 _in_flight: set[int] = set()
 _tasks: set[asyncio.Task] = set()
+_protocol_failures: dict[tuple[int, tuple[int, int, int], int, int], int] = {}
+_paused_sessions: dict[int, tuple[int, str]] = {}
 
 
 def pending_tasks() -> set[asyncio.Task]:
@@ -61,47 +75,55 @@ def pending_tasks() -> set[asyncio.Task]:
 # 数据之后只保留一行输出格式提醒——它不进缓存，但只有十几个 token，
 # 换来「最后一条指令」的位置优势，避免模型在回顾前加「好的，这是回顾：」之类前缀。
 # 理由与守卫详见 memory/consolidation_prompt.py 的同名说明。
-COMPACT_PROMPT = """你的任务：把一段群聊对话的较早部分压缩成一段简短的回顾，供你稍后继续对话时参考。
+COMPACT_PROMPT = """你正在为后续对话筛选可回溯的原始发言记录。
 
+每一行 REF 都是服务端从一条或多条原始消息构造的完整发言单元，包含稳定作者、
+来源会话、Bot、回复对象、条件/转述元数据及原文。REF 不能拆分、改写或转交给
+其他作者。你只负责选择值得保留的 REF；不要输出摘要、事实、作者解释或新台词。
 
-要求：
-- 输出一段连续的自然语言，不要分条、不要输出 JSON
-- 保留：谁说过的关键信息、正在讨论的话题、已达成的结论、尚未解决的问题
-- 舍弃：寒暄、表情、刷屏、重复的附和
-- 「我:」或「作者=Bot(...)」开头的行是你自己说过的话，回顾时同样保留
-  （否则你会忘记自己说过什么）；描述时写明你对谁说的，绝不把你的台词
-  当成某个用户说的话
-- 原文里的条件、假设、玩笑、否定与转述（如「如果」「下次」「没有」
-  「听说」）必须保持原样，不得升级成已经发生的事实
-- 不要推断任何人的动机或心理状态，只记录实际说过的话
-- **严禁编造对话中没有出现过的内容**
-- 如果这段对话确实没有任何值得保留的内容，只输出一个字：无
-- 控制在 {max_chars} 字以内
+必须保留原文中的否定、条件、假设、玩笑、引用、疑问与角色扮演限定；Bot 发言
+只表示 Bot 说过这些话，不表示收件人实施了其中内容。无法确定是否值得保留时，
+可以不选择。确实没有值得保留的记录时，返回空数组。
 
-===== 以上为固定规则；以下是本次待压缩的数据 =====
+只返回一个 JSON 对象，结构严格为：{{"selected_refs":["ref_...", ...]}}。
+ID 必须逐字来自下方旧 packet 或本批记录；不能重复 ID，不能附带任何其他字段。
+
+===== 旧合法 packet 的可选原始记录 =====
 {existing}
-对话内容：
+===== 本次开区间来源记录 =====
 {messages}
-
-直接输出回顾文本，不要任何解释或前缀。"""
-
-EXISTING_SUMMARY_BLOCK = """
-这是你之前对更早内容的回顾，需要与下面的新内容**合并成一段**（不要分成两段，也不要丢弃其中的关键信息）：
-{summary}
 """
 
 
-def build_compact_prompt(messages: str, existing_summary: str = "") -> str:
-    """拼装压缩 prompt。存在旧摘要时要求合并，避免摘要越积越多。"""
-    existing = (
-        EXISTING_SUMMARY_BLOCK.format(summary=existing_summary.strip())
-        if existing_summary.strip()
-        else ""
-    )
-    # 中文按 1.5 token/字估算（与 prompt_builder.estimate_tokens 一致）
-    max_chars = max(50, int(SESSION_SUMMARY_MAX_TOKENS / 1.5))
-    return COMPACT_PROMPT.format(existing=existing, messages=messages, max_chars=max_chars)
+@dataclass(frozen=True, slots=True)
+class PendingSourceBatch:
+    conversation_key: str
+    bot_id: str
+    source_guard: tuple[int, int, int]
+    source_low_id: int
+    source_high_id: int
+    source_watermark: int
+    source_row_count: int
+    entries: tuple[SummaryEvidence, ...]
 
+    def render(self) -> str:
+        return "\n".join(render_summary_evidence(entry) for entry in self.entries)
+
+
+class CompactSourceError(ValueError):
+    """当前来源行缺少/冲突的会话身份或完整逻辑单元。"""
+
+
+def build_compact_prompt(
+    entries: tuple[SummaryEvidence, ...] | list[SummaryEvidence],
+    existing_packet: SummaryPacket | None = None,
+) -> str:
+    """仅向模型提供服务端 ref；旧摘要文本不再作为可改写输入。"""
+    existing = render_summary_packet(existing_packet) if existing_packet else ""
+    messages = "\n".join(render_summary_evidence(entry) for entry in entries)
+    if not messages:
+        raise ValueError("Compact requires at least one validated source ref")
+    return COMPACT_PROMPT.format(existing=existing, messages=messages)
 
 def _get_backend() -> LLMBackend | None:
     """压缩用的后端；角色 ``COMPACT`` 没绑到可用端点时返回 ``None``。
@@ -254,6 +276,283 @@ def fetch_pending_messages(
     return "\n".join(lines), max_id, non_empty
 
 
+_COMPACT_UNIT_EXTENSION_CAP = 64
+_COMPACT_SOURCE_COLUMNS = (
+    "id",
+    "group_id",
+    "user_id",
+    "content",
+    "source_kind",
+    "timestamp",
+    "msg_id",
+    "conversation_key",
+    "bot_id",
+    "reply_to_msg_id",
+    "reply_target_user_id",
+    "mentioned_user_ids_json",
+    "logical_message_id",
+    "part_index",
+    "origin_msg_id",
+    "reply_recipient_user_id",
+)
+
+
+def _source_signature(row: dict) -> tuple[str, ...]:
+    return (
+        str(row.get("logical_message_id") or ""),
+        str(row.get("user_id") or ""),
+        str(row.get("source_kind") or ""),
+        str(row.get("bot_id") or ""),
+        str(row.get("reply_recipient_user_id") or ""),
+        str(row.get("origin_msg_id") or ""),
+        str(row.get("conversation_key") or ""),
+    )
+
+
+def _decode_mentions(raw: str) -> tuple[str, ...]:
+    try:
+        value = json.loads(raw) if raw else []
+    except (json.JSONDecodeError, TypeError):
+        return ()
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(uid) for uid in value if str(uid or "").strip())
+
+
+def _complete_unit_rows(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    *,
+    group_id: int,
+    low_id: int,
+    high_id: int,
+    limit: int,
+    columns: set[str],
+) -> list[dict]:
+    """Keep a batch cut at a complete BOT_SELF logical bubble group."""
+    if len(rows) <= limit:
+        selected = rows
+    else:
+        end = limit
+        boundary = rows[end - 1]
+        signature = _source_signature(boundary)
+        logical_id = signature[0]
+        if boundary.get("source_kind") == "BOT_SELF" and logical_id:
+            while end < len(rows) and _source_signature(rows[end]) == signature:
+                end += 1
+            if (
+                end == len(rows)
+                and len(rows) == limit + _COMPACT_UNIT_EXTENSION_CAP + 1
+                and _source_signature(rows[-1]) == signature
+            ):
+                raise CompactSourceError("logical utterance exceeds bounded batch extension")
+        selected = rows[:end]
+
+    first = selected[0] if selected else None
+    if (
+        first
+        and first.get("source_kind") == "BOT_SELF"
+        and first.get("logical_message_id")
+        and columns.issuperset({"logical_message_id", "user_id", "source_kind"})
+    ):
+        cursor = conn.execute(
+            "SELECT id, user_id, source_kind, logical_message_id, "
+            "bot_id, reply_recipient_user_id, origin_msg_id, conversation_key "
+            "FROM group_messages WHERE group_id = ? AND id <= ? "
+            "AND logical_message_id = ? ORDER BY id DESC LIMIT 1",
+            (str(group_id), low_id, first["logical_message_id"]),
+        )
+        prior = cursor.fetchone()
+        if prior:
+            prior_row = dict(zip(
+                ("id", "user_id", "source_kind", "logical_message_id", "bot_id",
+                 "reply_recipient_user_id", "origin_msg_id", "conversation_key"),
+                prior,
+                strict=True,
+            ))
+            if _source_signature(prior_row) == _source_signature(first):
+                raise CompactSourceError("open range begins inside a logical utterance")
+
+    last = selected[-1] if selected else None
+    if last and last.get("source_kind") == "BOT_SELF" and last.get("logical_message_id"):
+        cursor = conn.execute(
+            "SELECT id, user_id, source_kind, logical_message_id, "
+            "bot_id, reply_recipient_user_id, origin_msg_id, conversation_key "
+            "FROM group_messages WHERE group_id = ? AND id >= ? "
+            "AND logical_message_id = ? ORDER BY id ASC LIMIT ?",
+            (str(group_id), high_id, last["logical_message_id"], _COMPACT_UNIT_EXTENSION_CAP + 1),
+        )
+        following = cursor.fetchall()
+        expected = _source_signature(last)
+        signature_columns = (
+            "id", "user_id", "source_kind", "logical_message_id", "bot_id",
+            "reply_recipient_user_id", "origin_msg_id", "conversation_key",
+        )
+        if any(
+            _source_signature(dict(zip(signature_columns, row, strict=True))) == expected
+            for row in following
+        ):
+            raise CompactSourceError("open range ends inside a logical utterance")
+    return selected
+
+
+def fetch_pending_records(
+    group_id: int,
+    low_id: int,
+    high_id: int,
+    limit: int,
+    source_guard: tuple[int, int, int],
+) -> PendingSourceBatch:
+    """Read an open ID range into complete, exact-source evidence units."""
+    if limit <= 0:
+        raise ValueError("Compact source limit must be positive")
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(group_messages)").fetchall()
+        }
+        required = {"id", "group_id", "user_id", "content", "source_kind"}
+        if not required.issubset(columns):
+            raise CompactSourceError("group_messages lacks required source columns")
+        selected_columns = [name for name in _COMPACT_SOURCE_COLUMNS if name in columns]
+        projection = ", ".join(selected_columns)
+        raw_rows = conn.execute(
+            f"SELECT {projection} FROM group_messages "
+            "WHERE group_id = ? AND id > ? AND id < ? ORDER BY id ASC LIMIT ?",
+            (
+                str(group_id),
+                low_id,
+                high_id,
+                limit + _COMPACT_UNIT_EXTENSION_CAP + 1,
+            ),
+        ).fetchall()
+        rows = [dict(row) for row in raw_rows]
+        rows = _complete_unit_rows(
+            conn,
+            rows,
+            group_id=group_id,
+            low_id=low_id,
+            high_id=high_id,
+            limit=limit,
+            columns=columns,
+        )
+    except sqlite3.Error as exc:
+        raise CompactSourceError(f"cannot read Compact source rows: {exc}") from exc
+    finally:
+        conn.close()
+
+    watermark = int(rows[-1]["id"]) if rows else low_id
+    non_empty_rows = [row for row in rows if str(row.get("content") or "").strip()]
+    conversation_values = {str(row.get("conversation_key") or "").strip() for row in rows}
+    known_conversations = {value for value in conversation_values if value}
+    if len(known_conversations) > 1 or (known_conversations and "" in conversation_values):
+        raise CompactSourceError("source rows disagree on canonical conversation")
+    if known_conversations:
+        conversation_key = next(iter(known_conversations))
+    elif group_id > 0:
+        # Pre-v16 group rows have no conversation_key; the exact group_id predicate
+        # remains the scoped legacy key and is explicitly represented in the packet.
+        conversation_key = f"legacy:group:{group_id}"
+    else:
+        raise CompactSourceError("private Compact rows require a canonical conversation_key")
+
+    known_bots = {str(row.get("bot_id") or "").strip() for row in rows}
+    known_bots.discard("")
+    if len(known_bots) > 1:
+        raise CompactSourceError("source rows disagree on Bot identity")
+    bot_id = next(iter(known_bots), "")
+    if any(
+        row.get("source_kind") == "BOT_SELF"
+        and (not bot_id or str(row.get("user_id") or "") != bot_id)
+        for row in non_empty_rows
+    ):
+        raise CompactSourceError("Bot speech lacks a matching stored Bot identity")
+
+    units: list[list[dict]] = []
+    for row in non_empty_rows:
+        if (
+            row.get("source_kind") == "BOT_SELF"
+            and row.get("logical_message_id")
+            and units
+            and _source_signature(units[-1][-1]) == _source_signature(row)
+        ):
+            units[-1].append(row)
+        else:
+            units.append([row])
+
+    entries: list[SummaryEvidence] = []
+    for unit in units:
+        messages = tuple(
+            SummarySourceMessage(
+                message_id=int(row["id"]),
+                author_id=str(row.get("user_id") or ""),
+                source_kind=str(row.get("source_kind") or ""),
+                content=str(row.get("content") or ""),
+                timestamp=str(row.get("timestamp") or ""),
+                platform_message_id=str(row.get("msg_id") or ""),
+                part_index=max(0, int(row.get("part_index") or 0)),
+                recipient_id=str(row.get("reply_recipient_user_id") or ""),
+                origin_msg_id=str(row.get("origin_msg_id") or ""),
+                reply_to_msg_id=str(row.get("reply_to_msg_id") or ""),
+                reply_target_user_id=str(row.get("reply_target_user_id") or ""),
+                mentioned_user_ids=_decode_mentions(
+                    str(row.get("mentioned_user_ids_json") or "")
+                ),
+                mentioned_user_ids_json=str(row.get("mentioned_user_ids_json") or ""),
+                logical_message_id=str(row.get("logical_message_id") or ""),
+            )
+            for row in unit
+        )
+        entry = build_summary_evidence(conversation_key, bot_id, messages)
+        if not entry.ref_id or not entry.source_digest:
+            raise CompactSourceError("could not seal source evidence")
+        entries.append(entry)
+
+    return PendingSourceBatch(
+        conversation_key=conversation_key,
+        bot_id=bot_id,
+        source_guard=tuple(source_guard),
+        source_low_id=low_id,
+        source_high_id=high_id,
+        source_watermark=watermark,
+        source_row_count=len(non_empty_rows),
+        entries=tuple(entries),
+    )
+
+
+def parse_selected_refs(result: str, allowed_refs: set[str]) -> tuple[str, ...]:
+    """Parse the only model output accepted by Compact; reject duplicates/extra keys."""
+    if not isinstance(result, str) or len(result.encode("utf-8")) > 16_384:
+        raise ValueError("Compact selection response is missing or exceeds byte limit")
+
+    def _unique_object(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate JSON object key")
+            value[key] = item
+        return value
+
+    try:
+        parsed = json.loads(result, object_pairs_hook=_unique_object)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Compact selection response is not JSON") from exc
+    if not isinstance(parsed, dict) or set(parsed) != {"selected_refs"}:
+        raise ValueError("Compact response must contain only selected_refs")
+    refs = parsed["selected_refs"]
+    if not isinstance(refs, list) or len(refs) > len(allowed_refs):
+        raise ValueError("selected_refs must be a bounded array")
+    if any(not isinstance(ref, str) or not ref for ref in refs):
+        raise ValueError("selected_refs contains a non-string/empty ref")
+    if len(refs) != len(set(refs)):
+        raise ValueError("selected_refs contains duplicate refs")
+    if any(ref not in allowed_refs for ref in refs):
+        raise ValueError("selected_refs contains an unknown ref")
+    return tuple(refs)
+
+
 def _is_empty_result(text: str) -> bool:
     """模型是否判定「无可摘要内容」。
 
@@ -295,15 +594,90 @@ def _flow_decision(fctx, node_id: str, **kw) -> None:
         pass
 
 
-async def compact_once(group_id: int, tail_start_id: int) -> bool:
-    """执行一次会话压缩；返回是否实际推进了压缩位置。
+def _packet_for_entries(batch: PendingSourceBatch, entries: list[SummaryEvidence]) -> SummaryPacket:
+    return build_summary_packet(
+        conversation_key=batch.conversation_key,
+        bot_id=batch.bot_id,
+        source_guard=batch.source_guard,
+        source_low_id=batch.source_low_id,
+        source_high_id=batch.source_high_id,
+        source_watermark=batch.source_watermark,
+        source_row_count=batch.source_row_count,
+        entries=entries,
+    )
 
-    调用方无需判断时机——本函数内部会检查区间与阈值，不满足直接返回 False。
-    """
+
+def _clear_protocol_failures(group_id: int) -> None:
+    for key in tuple(_protocol_failures):
+        if key[0] == group_id:
+            _protocol_failures.pop(key, None)
+
+
+def _record_protocol_failure(
+    key: tuple[int, tuple[int, int, int], int, int], reason: str
+) -> int:
+    attempts = _protocol_failures.get(key, 0) + 1
+    _protocol_failures[key] = attempts
+    logger.warning(
+        f"[Compact] 群 {key[0]} packet 协议/预算校验失败（同守卫区间第 {attempts} 次：{reason}）"
+    )
+    return attempts
+
+
+def _deterministic_fallback(
+    batch: PendingSourceBatch,
+    existing: SummaryPacket | None,
+) -> SummaryPacket | None:
+    """Prefer a complete old+current record packet, then bounded current-source-only."""
+    candidates: list[list[SummaryEvidence]] = []
+    if existing:
+        candidates.append([*existing.entries, *batch.entries])
+    candidates.append(list(batch.entries))
+    for entries in candidates:
+        # Database row IDs are the stable chronology, including multi-bubble units.
+        ordered = sorted(entries, key=lambda entry: min(entry.source_ids))
+        packet = _packet_for_entries(batch, ordered)
+        rendered = render_summary_packet(packet)
+        if (
+            validate_summary_packet(
+                packet,
+                conversation_key=batch.conversation_key,
+                bot_id=batch.bot_id,
+            )
+            and rendered
+            and estimate_tokens(rendered) <= SESSION_SUMMARY_MAX_TOKENS
+        ):
+            return packet
+    return None
+
+
+def _commit_packet(
+    group_id: int,
+    packet: SummaryPacket,
+    source_count: int,
+    guard: tuple[int, int, int],
+) -> bool:
+    """Keep guard validation and synchronous state CAS adjacent; there is no await."""
+    if not sc.compact_guard_ok(group_id, guard):
+        _flow_decision(None, "compact.commit", status="skipped", reason_code="stale_guard")
+        return False
+    before = sc.session_stats(group_id)
+    sc.apply_summary(group_id, packet, packet.source_watermark, source_count)
+    after = sc.session_stats(group_id)
+    committed = (
+        after.get("compact_count") == before.get("compact_count", 0) + 1
+        and after.get("summarized_up_to_id") == packet.source_watermark
+    )
+    if committed:
+        _clear_protocol_failures(group_id)
+        _paused_sessions.pop(group_id, None)
+    return committed
+
+
+async def compact_once(group_id: int, tail_start_id: int) -> bool:
+    """执行一次 source-backed Compact；协议错误不按“无内容”推进。"""
     fctx = _flow_ctx(group_id)
     with _flow_span(fctx, "compact.preflight"):
-        # 每日 token 预算：撞破之后不再花钱做压缩。返回 False 即「未推进压缩位置」，
-        # 这批消息留在待压缩区间等下一个预算周期——与「端点未配置」同一条降级路径。
         blocked = budget_blocked(ROLE_COMPACT)
         if blocked:
             _flow_decision(fctx, "compact.preflight", status="blocked",
@@ -317,27 +691,90 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
                            reason_code="no_pending_range")
             return False
         low_id, high_id = bounds
+        guard = sc.compact_guard(group_id)
+        paused = _paused_sessions.get(group_id)
+        if paused and paused[0] == guard[0]:
+            _flow_decision(fctx, "compact.preflight", status="blocked",
+                           reason_code="summary_packet_over_budget")
+            logger.warning(
+                f"[Compact] 群 {group_id} 的 Compact 因最小完整记录包超预算暂停；"
+                "保留原始尾巴，需会话 reset 后重试"
+            )
+            return False
+        if paused:
+            _paused_sessions.pop(group_id, None)
 
-        messages, max_id, count = fetch_pending_messages(
-            group_id, low_id, high_id, sc.compact_message_limit()
-        )
-        if count == 0:
-            # 区间内全是空内容消息：直接跳过，避免反复重试
-            _flow_decision(fctx, "compact.preflight", status="skipped",
-                           reason_code="empty_content")
-            if max_id > low_id:
-                sc.skip_range(group_id, max_id, 0)
+        try:
+            batch = fetch_pending_records(
+                group_id,
+                low_id,
+                high_id,
+                sc.compact_message_limit(),
+                guard,
+            )
+        except (CompactSourceError, sqlite3.Error, ValueError) as exc:
+            _flow_decision(fctx, "compact.preflight", status="blocked",
+                           reason_code="source_packet_invalid")
+            logger.warning(f"[Compact] 群 {group_id} 来源包校验失败，保留水位不动: {exc}")
             return False
 
-        if not sc.should_compact(messages):
+        if batch.source_row_count == 0:
+            _flow_decision(fctx, "compact.preflight", status="skipped",
+                           reason_code="empty_content")
+            if batch.source_watermark > low_id:
+                sc.skip_range(group_id, batch.source_watermark, 0)
+            return False
+        if not batch.entries:
+            _flow_decision(fctx, "compact.preflight", status="blocked",
+                           reason_code="source_packet_empty")
+            return False
+
+        source_text = batch.render()
+        if not sc.should_compact(source_text):
             _flow_decision(fctx, "compact.preflight", status="skipped",
                            reason_code="below_threshold")
             return False
 
-        existing = sc.get_summary(group_id)
-        prompt = build_compact_prompt(messages, existing)
-        logger.info(f"🗜️ [Compact] 群 {group_id} 开始压缩 {count} 条消息（至 id {max_id}）")
+        existing = sc.get_summary_packet(group_id)
+        if existing and not validate_summary_packet(
+            existing,
+            conversation_key=batch.conversation_key,
+            bot_id=batch.bot_id,
+        ):
+            sc.invalidate_summary(group_id, "conversation_or_bot_changed")
+            existing = None
 
+        failure_key = (group_id, guard, low_id, high_id)
+        for key in tuple(_protocol_failures):
+            if key[0] == group_id and key != failure_key:
+                _protocol_failures.pop(key, None)
+        if _protocol_failures.get(failure_key, 0) >= 2:
+            fallback = _deterministic_fallback(batch, existing)
+            if fallback is None:
+                _paused_sessions[group_id] = (
+                    guard[0],
+                    "minimum complete record packet exceeds summary budget",
+                )
+                _flow_decision(fctx, "compact.commit", status="blocked",
+                               reason_code="minimum_packet_over_budget")
+                logger.error(
+                    f"[Compact] 群 {group_id} 最小完整记录包超过预算；暂停该会话 Compact"
+                )
+                return False
+            if not sc.compact_guard_ok(group_id, guard):
+                _flow_decision(fctx, "compact.commit", status="skipped",
+                               reason_code="stale_guard")
+                return False
+            logger.warning(
+                f"[Compact] 群 {group_id} 同守卫区间连续协议失败，提交确定性原文 packet"
+            )
+            return _commit_packet(group_id, fallback, batch.source_row_count, guard)
+
+        prompt = build_compact_prompt(batch.entries, existing)
+        logger.info(
+            f"🗜️ [Compact] 群 {group_id} 开始验证式压缩 {batch.source_row_count} 条消息"
+            f"（至 id {batch.source_watermark}）"
+        )
         backend = _get_backend()
         if backend is None:
             _flow_decision(fctx, "compact.preflight", status="blocked",
@@ -350,36 +787,63 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             return False
 
     try:
-        # CAS 快照（多人身份修复计划 §6.4）：await 前捕获 generation/身份
-        # 版本/压缩位置；await 后任一变化即丢弃结果，不推进位置，下轮重试。
-        guard = sc.compact_guard(group_id)
         with _flow_span(fctx, "compact.generate"):
             async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
                 result = await backend.generate(prompt)
         _flow_decision(fctx, "compact.generate", status="succeeded",
-                       metrics={"messages": count})
-    except Exception as e:
-        # 调用失败**不推进**位置，这批消息留待下次重试
-        logger.warning(f"⚠️ [Compact] 群 {group_id} 压缩失败（保留待重试）: {e}")
+                       metrics={"messages": batch.source_row_count})
+    except Exception as exc:
+        logger.warning(f"⚠️ [Compact] 群 {group_id} 压缩失败（保留待重试）: {exc}")
         return False
 
     if not sc.compact_guard_ok(group_id, guard):
-        # await 期间发生了身份更正/会话重置/位置推进：旧摘要携带的称呼与
-        # 归属已过期——丢弃结果，待压缩区间原样保留，下一轮重新压缩。
         _flow_decision(fctx, "compact.commit", status="skipped",
                        reason_code="stale_guard")
         logger.info(f"🗜️ [Compact] 群 {group_id} 丢弃过期压缩结果（guard 变化，待重试）")
         return False
 
-    if _is_empty_result(result):
-        # 模型判定无可摘要内容：推进位置但保留旧摘要，
-        # 与调用失败区别对待，否则噪音消息会永远堆在待压缩区间
-        sc.skip_range(group_id, max_id, count)
+    allowed = {entry.ref_id: entry for entry in batch.entries}
+    if existing:
+        allowed.update({entry.ref_id: entry for entry in existing.entries})
+    try:
+        selected_refs = parse_selected_refs(result, set(allowed))
+    except ValueError as exc:
+        _record_protocol_failure(failure_key, str(exc))
+        _flow_decision(fctx, "compact.commit", status="blocked",
+                       reason_code="invalid_selection_protocol")
+        return False
+
+    if not selected_refs:
+        # 明确、合法的空选择保持旧语义：保留旧摘要，只推进本区间水位。
+        sc.skip_range(group_id, batch.source_watermark, batch.source_row_count)
+        _clear_protocol_failures(group_id)
         return True
 
-    sc.apply_summary(group_id, result, max_id, count)
-    return True
+    selected = sorted(
+        (allowed[ref] for ref in selected_refs),
+        key=lambda entry: min(entry.source_ids),
+    )
+    packet = _packet_for_entries(batch, selected)
+    rendered = render_summary_packet(packet)
+    if (
+        not validate_summary_packet(
+            packet,
+            conversation_key=batch.conversation_key,
+            bot_id=batch.bot_id,
+        )
+        or not rendered
+        or estimate_tokens(rendered) > SESSION_SUMMARY_MAX_TOKENS
+    ):
+        _record_protocol_failure(failure_key, "packet integrity/final budget check failed")
+        _flow_decision(fctx, "compact.commit", status="blocked",
+                       reason_code="invalid_or_over_budget_packet")
+        return False
 
+    committed = _commit_packet(group_id, packet, batch.source_row_count, guard)
+    if not committed:
+        _flow_decision(fctx, "compact.commit", status="blocked",
+                       reason_code="packet_commit_rejected")
+    return committed
 
 def schedule_compact(group_id: int, tail_start_id: int,
                      parent_trace_id: str = "") -> None:
@@ -449,3 +913,5 @@ def reset_state() -> None:
     global _backend
     _backend = None
     _in_flight.clear()
+    _protocol_failures.clear()
+    _paused_sessions.clear()

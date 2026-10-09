@@ -1,0 +1,55 @@
+{
+  "scenario": "normal_single_call",
+  "input": {
+    "message": "在吗",
+    "trigger": "reply",
+    "intent": "",
+    "short_term": "",
+    "tool_summaries": [],
+    "knowledge_evidence": [],
+    "system_prompt": "你是Stella，一个群聊里的伙伴。"
+  },
+  "backend_script": [
+    "<thought>想想</thought><action>NONE</action><reply>在的呀(joy)\n刚刚在整理照片</reply>"
+  ],
+  "trace": {
+    "llm_calls": [
+      {
+        "prompt": "本轮回复协议（只允许一个 response 根元素，禁止块外文本；版本固定为 2026-10-08.1）：\n<response version=\"2026-10-08.1\">\n<thought>一句简短诊断；不作为回复发送</thought>\n<action>NONE</action>\n<reply kind=\"social\"><current>对当前输入的正常回应</current></reply>\n</response>\nkind 只能为 social、quote、facts、correction、clarify、skip；social.current 只回应当前输入，\n不得声称未在服务端证据中支持的历史事实。quote/fact 只能填写下方证据 ID，作者、原文、对象由服务端渲染。\ncorrection 只能输出 <ack/>；clarify 和 skip 不带其他槽。不得输出作者名、用户 ID 或引用原文作为伪造槽。\n引用示例：<reply kind=\"quote\"><quote evidence_id=\"msg_3\"/></reply>；事实示例：<reply kind=\"facts\"><fact evidence_id=\"fact_1\"/></reply>。协议错误或证据不足时由服务端转为澄清，不要在 XML 外补充说明。\n\n现在是 <normalized-time>。\n\n当前与你对话的用户 QQ 号：1001。注意：上下文里标注了用户QQ号的内容属于对应的人，只有明确写着当前用户 1001 的才归 TA；不要把别人的发言当成 TA 说的。\n\n当前对话摘要：\n我: 昨天聚会好开心\n用户(2): 是啊下次再约\n\n【现在 用户(1001) 对你说】在吗\n请回应这句话。上面的对话记录只是背景，不要去回应其中的其他内容。",
+        "system_prompt": "你是Stella，一个群聊里的伙伴。"
+      }
+    ],
+    "llm_call_count": 1,
+    "raw_output": "<thought>想想</thought><action>NONE</action><reply>在的呀(joy)\n刚刚在整理照片</reply>",
+    "thought": "想想",
+    "action": "NONE",
+    "reply": "在的呀(joy)\n刚刚在整理照片",
+    "lines": [
+      "在的呀(joy)",
+      "刚刚在整理照片"
+    ],
+    "pre_hooks_run": [
+      "build_context"
+    ],
+    "post_hooks_run": [
+      "parse_output",
+      "bad_phrase_filter",
+      "split_lines",
+      "log_thought"
+    ],
+    "planner": {
+      "trigger": "",
+      "action": "",
+      "wait": false
+    },
+    "diagnostics": {
+      "llm_backend": "scripted",
+      "llm_model": "scripted-model",
+      "context_window_tokens": 8192,
+      "prompt_budget_tokens": 6976,
+      "prompt_estimated_tokens": 491,
+      "prompt_truncated": false,
+      "system_prompt_len": 18
+    }
+  }
+}

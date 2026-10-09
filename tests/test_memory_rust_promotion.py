@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,13 +25,83 @@ def _prepare_db(tmp_path: Path, monkeypatch) -> Path:
 
 
 def _seed(db: Path, candidate_id: str, *, confidence: float = 0.95) -> None:
+    """Seed one candidate with an accepted source packet and active claim links."""
+    from memory.evidence_contract import ASSESSMENT_VERSION, source_digest
+
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memory_candidates "
-        "(id, group_shared_space, user_id, type, content, importance, confidence, status) "
-        "VALUES (?, 'space', '100', 'FACT', '高质量候选', 0.8, ?, 'NEW')",
-        (candidate_id, confidence),
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+        "source_kind TEXT, conversation_key TEXT, bot_id TEXT)"
     )
+    group_id = "space"
+    user_id = "100"
+    content = "高质量候选"
+    source_id = int(conn.execute(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM group_messages"
+    ).fetchone()[0])
+    conversation_key = "qq:test-bot:group:space"
+    owner_key = f"space:{group_id}"
+    fact_key = f"claim:v1:{candidate_id}"
+    snapshot = {
+        "id": source_id,
+        "group_id": group_id,
+        "user_id": user_id,
+        "content": content,
+        "source_kind": "AT_MENTION",
+        "conversation_key": conversation_key,
+        "bot_id": "test-bot",
+    }
+    digest = source_digest(snapshot)
+    provenance = {
+        "assessment_version": ASSESSMENT_VERSION,
+        "verification_status": "accepted",
+        "claim_key": fact_key,
+        "recording_author_key": f"qq:{user_id}",
+        "fact_object_key": f"qq:{user_id}",
+        "exact_support_span": content,
+        "conversation_key": conversation_key,
+        "source_id": source_id,
+        "source_snapshot": snapshot,
+    }
+    conn.execute(
+        "INSERT INTO memory_candidates "
+        "(id, group_shared_space, user_id, type, content, importance, confidence, status, "
+        "owner_type, owner_key, subject_key, audience, fact_key, source_conversation_key, "
+        "source_message_ids) "
+        "VALUES (?, ?, ?, 'FACT', ?, 0.8, ?, 'NEW', 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?)",
+        (candidate_id, group_id, user_id, content, confidence, owner_key, fact_key,
+         conversation_key, json.dumps([str(source_id)])),
+    )
+    conn.execute(
+        "INSERT INTO group_messages "
+        "(id, group_id, user_id, content, source_kind, conversation_key, bot_id) "
+        "VALUES (?, ?, ?, ?, 'AT_MENTION', ?, 'test-bot')",
+        (source_id, group_id, user_id, content, conversation_key),
+    )
+    evidence_id = f"evidence:{candidate_id}:{source_id}"
+    conn.execute(
+        "INSERT INTO memory_evidence "
+        "(id, owner_type, owner_key, subject_key, audience, fact_key, "
+        "source_conversation_key, source_row_id, candidate_id, fact_subject_key, "
+        "source_digest, verification_status, provenance_json) "
+        "VALUES (?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+        (evidence_id, owner_key, fact_key, conversation_key, source_id, candidate_id,
+         f"qq:{user_id}", digest,
+         json.dumps(provenance, ensure_ascii=False, separators=(",", ":"))),
+    )
+    for entity_type, entity_id, projection_slot in (
+        ("memory_candidate", candidate_id, "candidate"),
+        ("claim_state", fact_key, "eligibility"),
+    ):
+        conn.execute(
+            "INSERT INTO memory_claim_links "
+            "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+            "projection_slot, slot_digest, status) "
+            "VALUES (?, ?, ?, 'CURRENT_SPACE', ?, ?, ?, ?, ?, 'active')",
+            (f"link:{candidate_id}:{source_id}:{projection_slot}", evidence_id,
+             owner_key, entity_type, entity_id, fact_key, projection_slot, digest),
+        )
     conn.commit()
     conn.close()
 

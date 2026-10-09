@@ -17,6 +17,8 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from core.dialogue_attribution import (
     ReplyPlan,
     SourceEvidence,
@@ -24,8 +26,10 @@ from core.dialogue_attribution import (
     apply_guard_decision,
     build_evidence_table,
     check_risky_free_text,
+    parse_reply_envelope,
     parse_reply_plan,
     render_evidence,
+    reply_envelope_from_projection,
     validate_evidence_references,
 )
 from memory.conversation_identity import (
@@ -48,6 +52,7 @@ from memory.proactive_contract import (
 from tools.data_repair import (
     RepairRecord,
     apply_repairs,
+    preview_claim_invalidation,
     preview_duplicates,
     preview_orphans,
     preview_private_owner_repairs,
@@ -328,7 +333,10 @@ class TestProactiveContract:
 
     def test_validate_contract_consistency_digest_and_sources(self):
         """复核 F11：内容改写/来源缺失/作者错位都拒绝；一致则通过。"""
-        candidate = {"id": 7, "type": "relation", "content": "我开发Stella", "status": "ACTIVE"}
+        candidate = {
+            "id": 7, "type": "relation", "content": "我开发Stella",
+            "status": "OBSERVING", "source_conversation_key": "group:99999",
+        }
         contract = VerificationContract(
             candidate_id=7,
             recording_author_id=3089665724,
@@ -342,7 +350,10 @@ class TestProactiveContract:
             candidate_content_digest=compute_candidate_digest(candidate),
             bridge_event_requirement=False,
         )
-        assert validate_contract_consistency(contract, candidate) == (True, "ok")
+        assert validate_contract_consistency(contract, candidate) == (
+            False,
+            "subject_not_target",
+        )
 
         rewritten = dict(candidate, content="我开发了Stella和Layla")
         is_valid, reason = validate_contract_consistency(contract, rewritten)
@@ -529,6 +540,96 @@ class TestReplyPlanParser:
         assert plan is None and "unclosed_now_tag" in err
 
 
+class TestReplyEnvelopeParser:
+    """新版本 single-envelope 协议与跨 runtime JSON 投影。"""
+
+    def test_parses_one_typed_envelope_and_roundtrips_projection(self):
+        raw = (
+            '<response version="2026-10-08.1">'
+            "<thought>diagnostic</thought><action>NONE</action>"
+            '<reply kind="quote" target_user_id="20001">'
+            "<current>我找到原话了。</current>"
+            '<quote evidence_id="msg_49245"/>'
+            "</reply></response>"
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is not None, error
+        assert envelope.kind == "quote"
+        assert envelope.current == "我找到原话了。"
+        assert envelope.quote_evidence_ids == ("msg_49245",)
+        assert envelope.target_user_id == "20001"
+        projected, projection_error = reply_envelope_from_projection(
+            envelope.to_projection()
+        )
+        assert projected == envelope, projection_error
+
+    def test_rejects_conflicting_roots_raw_tail_dtd_and_legacy_dual_output(self):
+        cases = (
+            '<!DOCTYPE response [<!ENTITY x "raw">]>'
+            '<response version="2026-10-08.1"><thought></thought>'
+            "<action>NONE</action><reply kind=\"social\"><current>&x;</current>"
+            "</reply></response>",
+            '<response version="2026-10-08.1"><thought></thought>'
+            '<action>NONE</action><reply kind="social"><current>好</current>'
+            "</reply></response>块外台词",
+            "<thought></thought><reply>新格式</reply>"
+            '<reply_plan version="2026-10-05.2"><now>旧格式</now></reply_plan>',
+        )
+        for raw in cases:
+            envelope, error = parse_reply_envelope(raw)
+            assert envelope is None, raw
+            assert error
+
+    def test_rejects_typed_slot_author_text_unknown_tags_and_empty_duplicate(self):
+        prefix = (
+            '<response version="2026-10-08.1"><thought></thought>'
+            "<action>NONE</action>"
+        )
+        suffix = "</reply></response>"
+        malformed_slots = (
+            '<reply kind="quote"><quote evidence_id="msg_1" author_id="20001"/>',
+            '<reply kind="quote"><quote evidence_id="msg_1">某人说</quote>',
+            '<reply kind="social"><current></current><current>第二段</current>',
+            '<reply kind="social"><current>好</current><evil>台词</evil>',
+        )
+        for slot in malformed_slots:
+            envelope, error = parse_reply_envelope(prefix + slot + suffix)
+            assert envelope is None, slot
+            assert error
+
+    def test_projection_rejects_unknown_and_mutated_fields(self):
+        envelope, error = parse_reply_envelope(
+            '<response version="2026-10-08.1"><thought></thought>'
+            '<action>NONE</action><reply kind="social"><current>好</current>'
+            "</reply></response>"
+        )
+        assert envelope is not None, error
+        projected = envelope.to_projection()
+        projected["author_id"] = "20001"
+        parsed, error = reply_envelope_from_projection(projected)
+        assert parsed is None
+        assert error == "unknown_envelope_projection_field"
+
+    def test_target_mismatch_uses_server_clarification(self):
+        raw = (
+            '<response version="2026-10-08.1"><thought></thought>'
+            "<action>NONE</action>"
+            '<reply kind="social" target_user_id="30002">'
+            "<current>你说的是那句话。</current></reply></response>"
+        )
+        final, decision = apply_attribution_guard(
+            raw, {}, set(), "enforce", identity_revision=4,
+            risk_context={
+                "signal_codes": ["reply_relation"],
+                "target_resolution": "exact",
+                "target_user_id": "20001",
+            },
+        )
+        assert decision.rejection_reason == "reply_target_mismatch"
+        assert decision.semantic_status == "deterministic_clarification"
+        assert "那句话" not in final
+
+
 class TestAttributionRenderAndGuard:
     """复核 F12：作者边界、受限 ack、类型校验与完整 guard 管线。"""
 
@@ -630,6 +731,18 @@ class TestAttributionRenderAndGuard:
             raw, self._table(), set(self._table().keys()), "off", 1)
         assert final == raw and decision.decision == "pass"
 
+    def test_untyped_legacy_reply_uses_clarification_in_active_guard_modes(self):
+        raw = "<reply>历史单槽回复</reply>"
+        for mode in ("shadow", "enforce"):
+            final, decision = apply_attribution_guard(
+                raw, self._table(), set(self._table().keys()), mode, 1)
+            assert decision.decision == "fallback"
+            assert decision.rejection_reason == (
+                "legacy_untyped_reply_requires_clarification"
+            )
+            assert decision.semantic_status == "deterministic_clarification"
+            assert "历史单槽回复" not in final
+
     def test_invalid_reference_enforce_strips_quotes(self):
         raw = (
             '<reply_plan version="2026-10-05.2">'
@@ -661,6 +774,7 @@ class TestDataRepair:
         conn.execute(schema_mod.MEMORIES_TABLE_DDL)
         conn.execute(schema_mod.MEMORY_CANDIDATES_TABLE_DDL)
         conn.execute(schema_mod.MEMORY_EVIDENCE_TABLE_DDL)
+        conn.execute(schema_mod.MEMORY_CLAIM_LINKS_TABLE_DDL)
         conn.execute(schema_mod.MEMORY_SCOPE_VERSIONS_TABLE_DDL)
         conn.execute(_GROUP_MESSAGES_V16_DDL)
         conn.execute(
@@ -670,6 +784,72 @@ class TestDataRepair:
         )
         drm._create_audit_table(conn)
         return conn
+
+    def _seed_claim_lineage(self, conn, *, with_correction=False):
+        owner = "space:space_1"
+        audience = "CURRENT_SPACE"
+        fact_key = "fact:claim-test"
+        subject = "qq:20001"
+        conn.execute(
+            "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content,"
+            " status, owner_type, owner_key, subject_key, audience, fact_key)"
+            " VALUES ('c_claim', 'space_1', '20001', 'fact', '胃疼', 'OBSERVING',"
+            " 'SPACE', ?, ?, ?, ?)",
+            (owner, subject, audience, fact_key),
+        )
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, status,"
+            " owner_type, owner_key, subject_key, audience, fact_key)"
+            " VALUES ('m_claim', 'space_1', '20001', 'fact', '胃疼', 'ACTIVE',"
+            " 'SPACE', ?, ?, ?, ?)",
+            (owner, subject, audience, fact_key),
+        )
+        for evidence_id, source_row in (("e_claim_1", 1001), ("e_claim_2", 1002)):
+            conn.execute(
+                "INSERT INTO memory_evidence (id, owner_type, owner_key, subject_key, audience,"
+                " fact_key, source_conversation_key, source_row_id, candidate_id,"
+                " fact_subject_key, source_digest, verification_status, provenance_json)"
+                " VALUES (?, 'SPACE', ?, ?, ?, ?, 'qq:10000:group:900', ?, 'c_claim', ?,"
+                " ?, 'accepted', '{}')",
+                (evidence_id, owner, subject, audience, fact_key, source_row, subject,
+                 f"sha256:{evidence_id}"),
+            )
+            for entity_type, entity_id, slot in (
+                ("memory_candidate", "c_claim", "candidate"),
+                ("memory", "m_claim", "memory"),
+            ):
+                conn.execute(
+                    "INSERT INTO memory_claim_links (id, evidence_id, owner_key, audience,"
+                    " entity_type, entity_id, claim_key, projection_slot, slot_digest, status)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+                    (f"l_{evidence_id}_{slot}", evidence_id, owner, audience,
+                     entity_type, entity_id, fact_key, slot, f"digest:{evidence_id}"),
+                )
+        conn.execute(
+            "INSERT INTO memory_claim_links (id, evidence_id, owner_key, audience,"
+            " entity_type, entity_id, claim_key, projection_slot, slot_digest, status)"
+            " VALUES ('l_claim_state', 'e_claim_1', ?, ?, 'claim_state', ?, ?,"
+            " 'eligibility', 'state-digest', 'active')",
+            (owner, audience, fact_key, fact_key),
+        )
+        if with_correction:
+            conn.execute(
+                "INSERT INTO memory_evidence (id, owner_type, owner_key, subject_key, audience,"
+                " fact_key, source_conversation_key, source_row_id, candidate_id,"
+                " fact_subject_key, source_digest, verification_status, provenance_json)"
+                " VALUES ('e_correction', 'SPACE', ?, ?, ?, 'fact:corrected',"
+                " 'qq:10000:group:900', 1003, 'c_new', ?, 'sha256:correction', 'accepted', '{}')",
+                (owner, subject, audience, subject),
+            )
+        conn.commit()
+
+    def _scope_epoch(self, db, scope_key):
+        with sqlite3.connect(db) as conn:
+            row = conn.execute(
+                "SELECT version FROM memory_scope_versions WHERE scope_key = ?",
+                (scope_key,),
+            ).fetchone()
+        return int(row[0]) if row else 0
 
     def _seed_scene(self, conn):
         """真实 09:00 形状：SPACE 公开行 + 私聊注册会话 + 私聊来源证据。"""
@@ -821,6 +1001,8 @@ class TestDataRepair:
         conn.commit()
         before = conn.execute("SELECT * FROM memories WHERE id = 'm_bad'").fetchone()
         conn.close()
+        scope_keys = ("person:qq:10000:20001", "space:space_4", "global")
+        epochs_before = {key: self._scope_epoch(tmp_path / "repair.db", key) for key in scope_keys}
 
         batch = apply_repairs([self._scene_record()], operator="test")
         assert batch is not None and batch.repair_count == 1
@@ -835,16 +1017,33 @@ class TestDataRepair:
             " WHERE id = 'm_bad'").fetchone()
         assert old_row == ("SPACE", "space:space_4", "CURRENT_SPACE", "DEPRECATED"), \
             "归属修复只应改 status 列（列级审计，不再把 audience 塞回 status）"
+        copied_evidence = conn.execute(
+            "SELECT owner_key, audience, fact_subject_key, candidate_id"
+            " FROM memory_evidence WHERE candidate_id = 'm_bad:por'"
+        ).fetchone()
+        assert copied_evidence == (
+            "person:qq:10000:20001", "PRIVATE_ONLY", "qq:20001", "m_bad:por"
+        )
         conn.close()
+        epochs_applied = {key: self._scope_epoch(tmp_path / "repair.db", key) for key in scope_keys}
+        assert all(epochs_applied[key] > epochs_before[key] for key in scope_keys)
 
         # stale manifest：期望旧值与当前不符 → 跳过
         stale = RepairRecord.from_manifest({
             **self._scene_record().to_manifest(),
             "expected_old": {**self._scene_record().expected_old, "status": "PENDING"},
         })
-        batch2 = apply_repairs([stale], operator="test")
-        assert batch2 is not None and batch2.skipped, "stale 必须被跳过"
-        assert all(s.startswith("m_bad:mismatch") for s in batch2.skipped)
+        with sqlite3.connect(tmp_path / "repair.db") as audit:
+            old_audit_count = audit.execute(
+                "SELECT COUNT(*) FROM data_repair_audit WHERE issue_class = 'wrong_space'"
+            ).fetchone()[0]
+        with pytest.raises(RuntimeError, match="manifest CAS conflict"):
+            apply_repairs([stale], operator="test")
+        with sqlite3.connect(tmp_path / "repair.db") as audit:
+            new_audit_count = audit.execute(
+                "SELECT COUNT(*) FROM data_repair_audit WHERE issue_class = 'wrong_space'"
+            ).fetchone()[0]
+        assert new_audit_count == old_audit_count, "stale manifest must create no audit rows"
 
         # 撤回需显式确认；确认后逐列还原
         assert revoke_batch(batch.batch_id) is False
@@ -856,7 +1055,137 @@ class TestDataRepair:
         assert restored == ("SPACE", "space:space_4", "CURRENT_SPACE", "ACTIVE")
         after = conn.execute("SELECT * FROM memories WHERE id = 'm_bad'").fetchone()
         assert after == before, "revoke 后必须与 apply 前逐列一致（含 updated_at）"
+        assert conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE id = 'm_bad:por'"
+        ).fetchone()[0] == 0
+        assert conn.execute(
+            "SELECT COUNT(*) FROM memory_evidence WHERE candidate_id = 'm_bad:por'"
+        ).fetchone()[0] == 0
         conn.close()
+        epochs_revoked = {key: self._scope_epoch(tmp_path / "repair.db", key) for key in scope_keys}
+        assert all(epochs_revoked[key] > epochs_applied[key] for key in scope_keys)
+
+    def test_source_invalidation_preserves_other_support_and_revoke_bumps_epochs(
+        self, tmp_path, monkeypatch
+    ):
+        import tools.data_repair as drm
+
+        db = tmp_path / "repair.db"
+        conn = self._db(tmp_path)
+        self._seed_claim_lineage(conn)
+        conn.close()
+        monkeypatch.setattr(drm, "DB_PATH", db)
+        epoch_before = self._scope_epoch(db, "space:space_1")
+        global_before = self._scope_epoch(db, "global")
+
+        preview = sqlite3.connect(db)
+        record = preview_claim_invalidation(
+            preview, evidence_id="e_claim_1", invalidation_kind="source"
+        )
+        preview.close()
+        batch = apply_repairs([record], confirm_claim_invalidation=True)
+        assert batch is not None and batch.repair_count == 1
+        with sqlite3.connect(db) as check:
+            assert check.execute(
+                "SELECT verification_status FROM memory_evidence WHERE id='e_claim_1'"
+            ).fetchone()[0] == "superseded"
+            assert check.execute(
+                "SELECT verification_status FROM memory_evidence WHERE id='e_claim_2'"
+            ).fetchone()[0] == "accepted"
+            assert check.execute(
+                "SELECT status FROM memory_candidates WHERE id='c_claim'"
+            ).fetchone()[0] == "OBSERVING"
+            assert check.execute(
+                "SELECT status FROM memories WHERE id='m_claim'"
+            ).fetchone()[0] == "ACTIVE"
+            assert check.execute(
+                "SELECT status FROM memory_claim_links WHERE id='l_claim_state'"
+            ).fetchone()[0] == "active"
+        assert self._scope_epoch(db, "space:space_1") > epoch_before
+        assert self._scope_epoch(db, "global") > global_before
+
+        epoch_applied = self._scope_epoch(db, "space:space_1")
+        assert revoke_batch(batch.batch_id) is True
+        with sqlite3.connect(db) as check:
+            assert check.execute(
+                "SELECT verification_status FROM memory_evidence WHERE id='e_claim_1'"
+            ).fetchone()[0] == "accepted"
+            assert check.execute(
+                "SELECT status FROM memory_claim_links WHERE id='l_e_claim_1_candidate'"
+            ).fetchone()[0] == "active"
+        assert self._scope_epoch(db, "space:space_1") > epoch_applied
+
+    def test_claim_correction_supersedes_all_sources_and_restores_as_one_unit(
+        self, tmp_path, monkeypatch
+    ):
+        import tools.data_repair as drm
+
+        db = tmp_path / "repair.db"
+        conn = self._db(tmp_path)
+        self._seed_claim_lineage(conn, with_correction=True)
+        conn.close()
+        monkeypatch.setattr(drm, "DB_PATH", db)
+        preview = sqlite3.connect(db)
+        record = preview_claim_invalidation(
+            preview, evidence_id="e_claim_1", invalidation_kind="claim",
+            superseded_by_evidence_id="e_correction",
+        )
+        preview.close()
+        batch = apply_repairs([record], confirm_claim_invalidation=True)
+        assert batch is not None
+        with sqlite3.connect(db) as check:
+            statuses = dict(check.execute(
+                "SELECT id, verification_status FROM memory_evidence"
+            ).fetchall())
+            assert statuses["e_claim_1"] == statuses["e_claim_2"] == "superseded"
+            assert statuses["e_correction"] == "accepted"
+            links = dict(check.execute(
+                "SELECT id, status FROM memory_claim_links WHERE claim_key='fact:claim-test'"
+            ).fetchall())
+            assert links["l_claim_state"] == "superseded"
+            assert all(value != "active" for value in links.values())
+            assert check.execute(
+                "SELECT status FROM memory_candidates WHERE id='c_claim'"
+            ).fetchone()[0] == "REJECTED"
+            assert check.execute(
+                "SELECT status FROM memories WHERE id='m_claim'"
+            ).fetchone()[0] == "DEPRECATED"
+
+        assert revoke_batch(batch.batch_id) is True
+        with sqlite3.connect(db) as check:
+            assert check.execute(
+                "SELECT status FROM memory_claim_links WHERE id='l_claim_state'"
+            ).fetchone()[0] == "active"
+            assert check.execute(
+                "SELECT status FROM memories WHERE id='m_claim'"
+            ).fetchone()[0] == "ACTIVE"
+
+    def test_claim_apply_cas_drift_rejects_entire_manifest(self, tmp_path, monkeypatch):
+        import tools.data_repair as drm
+
+        db = tmp_path / "repair.db"
+        conn = self._db(tmp_path)
+        self._seed_claim_lineage(conn)
+        conn.close()
+        monkeypatch.setattr(drm, "DB_PATH", db)
+        preview = sqlite3.connect(db)
+        record = preview_claim_invalidation(
+            preview, evidence_id="e_claim_1", invalidation_kind="source"
+        )
+        preview.close()
+        before_epoch = self._scope_epoch(db, "global")
+        with sqlite3.connect(db) as drift:
+            drift.execute("UPDATE memories SET content='changed after preview' WHERE id='m_claim'")
+        with pytest.raises(RuntimeError, match="claim lineage CAS conflict"):
+            apply_repairs([record], confirm_claim_invalidation=True)
+        with sqlite3.connect(db) as check:
+            assert check.execute(
+                "SELECT verification_status FROM memory_evidence WHERE id='e_claim_1'"
+            ).fetchone()[0] == "accepted"
+            assert check.execute(
+                "SELECT COUNT(*) FROM data_repair_audit"
+            ).fetchone()[0] == 0
+        assert self._scope_epoch(db, "global") == before_epoch
 
     def test_apply_repairs_dry_run(self, tmp_path, monkeypatch):
         """dry_run 零写入（工具确实指向临时库）。"""

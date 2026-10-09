@@ -148,8 +148,8 @@ def _write_messages(db_path: Path):
     conn.close()
 
 
-def test_full_workflow_consolidation_promotes_memory(tmp_path, monkeypatch):
-    """群消息 → 整合（Dummy 摘要） → 短期上下文/画像/候选落库 → MemoryManager 晋升长期记忆 + FTS。"""
+def test_full_workflow_rejects_unbound_profile_and_memory_claims(tmp_path, monkeypatch):
+    """无字段证据与来源行时，整合只更新短期上下文，不晋升画像或长期记忆。"""
     db_path = tmp_path / "agent_memory.db"
     conn = sqlite3.connect(db_path)
     conn.close()
@@ -197,14 +197,14 @@ def test_full_workflow_consolidation_promotes_memory(tmp_path, monkeypatch):
     assert row and row[0] == "在聊格斗训练"
     assert "练过三年散打" in json.loads(row[1])[0]["content"]
 
-    # 用户画像已合并写入
+    # 模型画像没有逐字段证据，不能投影到长期画像
     profile = cur.execute(
         "SELECT personality_traits FROM user_profiles WHERE group_shared_space = ? AND user_id = '111'",
         (resolve_space(1001),),
     ).fetchone()
-    assert profile and "散打" in profile[0]
+    assert profile is None
 
-    # 候选：白名单过滤（丢 999），晋升后状态 CONFIRMED
+    # 候选：白名单过滤（丢 999），但没有逐字段来源证据时保持 OBSERVING。
     total_candidates = cur.execute("SELECT COUNT(*) FROM memory_candidates").fetchone()[0]
     bad_candidates = cur.execute(
         "SELECT COUNT(*) FROM memory_candidates WHERE content LIKE '%没发言%'"
@@ -212,16 +212,20 @@ def test_full_workflow_consolidation_promotes_memory(tmp_path, monkeypatch):
     confirmed = cur.execute(
         "SELECT COUNT(*) FROM memory_candidates WHERE status = 'CONFIRMED'"
     ).fetchone()[0]
+    observing = cur.execute(
+        "SELECT COUNT(*) FROM memory_candidates WHERE status = 'OBSERVING'"
+    ).fetchone()[0]
     assert total_candidates == 1
     assert bad_candidates == 0
-    assert confirmed == 1
+    assert confirmed == 0
+    assert observing == 1
 
-    # 长期记忆 + FTS 索引入库
-    memory = cur.execute("SELECT content FROM memories").fetchone()
-    assert memory and "练过三年散打" in memory[0]
+    # 未验证的模型画像/主张不得进入长期记忆或 FTS 索引。
+    memory_count = cur.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
     fts_count = cur.execute("SELECT COUNT(*) FROM memories_fts").fetchone()[0]
     conn.close()
-    assert fts_count == 1
+    assert memory_count == 0
+    assert fts_count == 0
 
 
 def test_full_workflow_summary_feeds_next_reply(tmp_path, monkeypatch):

@@ -327,7 +327,7 @@ def test_tail_start_id_skips_filtered_messages(tmp_path, monkeypatch):
     conn.close()
 
 
-def test_session_summary_precedes_tail(tmp_path, monkeypatch):
+def test_session_summary_precedes_tail(tmp_path, monkeypatch, summary_packet_factory):
     """会话摘要必须出现在尾巴之前（与时间顺序一致）。"""
     from memory import session_context as sc
 
@@ -337,13 +337,17 @@ def test_session_summary_precedes_tail(tmp_path, monkeypatch):
     db = tmp_path / "ctx.db"
     _make_db(db, [])
     conn = sqlite3.connect(db)
+    _insert_message(conn, 1, 1001, "之前聊过显卡", "PASSIVE", 2)
     _insert_message(conn, 1, 1001, "最近的一句", "PASSIVE", 1)
     conn.commit()
     conn.close()
     monkeypatch.setattr(pre_processors_mod, "DB_PATH", db)
-
-    sc.ensure_initialized(1, 1)
-    sc.apply_summary(1, "之前聊过显卡", up_to_id=1)
+    monkeypatch.setattr(pre_processors_mod, "RECENT_TAIL_LIMIT", 1)
+    sc.apply_summary(
+        1,
+        summary_packet_factory("之前聊过显卡", source_watermark=1),
+        up_to_id=1,
+    )
 
     st = asyncio.run(build_context(_make_ctx(1, 1001))).short_term
     assert "本场对话较早的内容" in st

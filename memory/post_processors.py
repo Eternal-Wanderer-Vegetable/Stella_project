@@ -53,7 +53,29 @@ async def parse_output(ctx: ChatContext) -> ChatContext:
     raw = ctx.raw_output
     if not raw:
         return ctx
-    ctx.thought, ctx.action, ctx.reply = parse_raw_output(raw)
+    from core.dialogue_attribution import parse_reply_envelope
+
+    envelope, error = parse_reply_envelope(raw)
+    if envelope is None:
+        # 解析失败不把块外 raw 当台词；只允许一个受限服务器澄清退路。
+        ctx.typed_reply = {}
+        ctx.typed_reply_error = error or "invalid_reply_envelope"
+        ctx.thought = ""
+        ctx.action = "NONE"
+        ctx.reply = "我没看明白这条结构化回复，能换个说法再问一次吗？"
+        ctx.reply_segments = [ctx.reply]
+        ctx.reply_disposition = "fallback"
+        ctx.delivery_source_kind = "trusted-server-fallback"
+        return ctx
+    ctx.typed_reply = envelope.to_projection()
+    ctx.typed_reply_error = ""
+    ctx.thought = envelope.thought or "（无思考过程）"
+    ctx.action = envelope.action
+    ctx.reply = envelope.current
+    ctx.reply_segments = []
+    if envelope.kind == "skip":
+        ctx.reply_disposition = "suppressed"
+        ctx.reply = ""
     return ctx
 
 
@@ -61,22 +83,55 @@ async def bad_phrase_filter(ctx: ChatContext) -> ChatContext:
     if any(p in ctx.reply for p in BAD_PHRASES):
         ctx.reply = FALLBACK_REPLY
         ctx.thought = "破防兜底"
+        ctx.reply_segments = [FALLBACK_REPLY]
+        ctx.reply_disposition = "fallback"
+        ctx.delivery_source_kind = "trusted-server-fallback"
+        ctx.guard_decision = {
+            "decision": "fallback",
+            "reason": "bad_phrase_filter",
+            "semantic_status": "deterministic_fallback",
+            "verified": False,
+        }
     return ctx
 
 
 async def split_lines(ctx: ChatContext) -> ChatContext:
-    # 归属 guard 拒绝（复核 F1）：处置为 suppressed 时本轮不交付——
-    # 「......？」默认值不得顶替 guard 决定压下的内容
-    if getattr(ctx, "reply_disposition", "") == "suppressed":
+    # 拒绝/静默不能被默认占位符复活。
+    if getattr(ctx, "reply_disposition", "") in {"suppressed", "silent", "skip"}:
         ctx.lines = []
+        ctx.reply_segments = []
         return ctx
-    if not ctx.reply:
-        ctx.reply = "......？"
-    ctx.reply = ctx.reply.replace("\\n", "\n")
-    # 只删除半角括号 ()，保留中文括号（）和其他全角括号
-    ctx.reply = re.sub(r"\([^）\n]*\)", "", ctx.reply).strip()
-    lines = [line.strip() for line in ctx.reply.split("\n") if line.strip()][:MAX_REPLY_LINES]
-    ctx.lines = lines or ["......？"]
+    segments = list(getattr(ctx, "reply_segments", ()) or ())
+    if segments:
+        lines = [str(segment).replace("\\n", "\n").strip() for segment in segments]
+        lines = [line for line in lines if line]
+    else:
+        reply = str(getattr(ctx, "reply", "") or "").replace("\\n", "\n").strip()
+        lines = [line.strip() for line in reply.split("\n") if line.strip()]
+    if len(lines) > MAX_REPLY_LINES:
+        ctx.reply = ""
+        ctx.lines = []
+        ctx.reply_segments = []
+        ctx.reply_disposition = "suppressed"
+        ctx.guard_decision = {
+            **(getattr(ctx, "guard_decision", None) or {}),
+            "decision": "reject",
+            "reason": "too_many_atomic_segments",
+            "semantic_status": "format_rejected",
+            "verified": False,
+        }
+        return ctx
+    if not lines and getattr(ctx, "delivery_source_kind", "") == "trusted-server-fallback":
+        lines = [FALLBACK_REPLY]
+        ctx.reply = FALLBACK_REPLY
+        ctx.reply_disposition = "fallback"
+        ctx.reply_segments = [FALLBACK_REPLY]
+    elif not lines:
+        # 未知来源的空输出不能变成可发送占位文案。
+        ctx.lines = []
+        ctx.reply_disposition = "suppressed"
+        return ctx
+    ctx.lines = lines
     return ctx
 
 
