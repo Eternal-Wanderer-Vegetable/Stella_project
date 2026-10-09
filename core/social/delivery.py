@@ -446,7 +446,7 @@ async def deliver_lines(
                 decision_digest=decision_digest,
             )
             raise
-        except asyncio.TimeoutError as e:
+        except (asyncio.TimeoutError, TimeoutError) as e:
             # 平台请求超时可能已被受理；记 unknown 且禁止该 turn 重发。
             seg_span.__exit__(type(e), e, e.__traceback__)
             _append_and_persist(

@@ -670,15 +670,20 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
         typed_reply = getattr(ctx, "typed_reply", None)
         typed_error = str(getattr(ctx, "typed_reply_error", "") or "")
         trusted_direct_fallback = (
-            not typed_reply
-            and not typed_error
+            not typed_error
             and getattr(ctx, "delivery_source_kind", "")
             in {"trusted-server", "trusted-server-fallback"}
             and getattr(ctx, "reply_disposition", "")
             in {"", "direct", "fallback"}
         )
         if trusted_direct_fallback:
-            # A producer-tagged server reply does not require a model envelope.
+            # parse_output may wrap the server's fixed fallback in a legacy
+            # envelope; producer provenance still makes it a trusted reply.
+            if (
+                getattr(ctx, "delivery_source_kind", "") == "trusted-server-fallback"
+                and not getattr(ctx, "reply_disposition", "")
+            ):
+                ctx.reply_disposition = "fallback"
             return ctx
         if mode == "off" and not typed_reply and not typed_error:
             # DIRECT/empty generations may legitimately bypass parse_output.
