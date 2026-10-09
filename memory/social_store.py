@@ -54,6 +54,37 @@ def ensure_tables() -> None:
         log_sqlite_error("social_store.ensure_tables", e)
 
 
+def record_delivery_plan(plan: dict[str, Any]) -> bool:
+    """耐久记录最终决策并认领一次发送；同 turn 重放一律拒绝。"""
+    try:
+        ensure_tables()
+        conn = _connect()
+        try:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO social_delivery_plans "
+                "(plan_id, turn_id, trace_id, plan_digest, decision_digest, disposition, "
+                "source_kind, conversation_key, target_user_id, generation_epoch, "
+                "segment_count, created_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    str(plan["plan_id"]), str(plan["turn_id"]), str(plan["trace_id"]),
+                    str(plan["digest"]), str(plan["decision_digest"]),
+                    str(plan["disposition"]), str(plan["source_kind"]),
+                    str(plan["conversation_key"]), str(plan.get("target_user_id") or ""),
+                    int(plan["generation_epoch"]), len(plan["segments"]), utc_now_iso(),
+                ),
+            )
+            claimed = cursor.rowcount == 1
+            conn.commit()
+            # The unique turn row is also the one-shot send claim. A retry after
+            # ACK, failure, timeout, or crash is deliberately refused.
+            return claimed
+        finally:
+            conn.close()
+    except (sqlite3.Error, KeyError, TypeError, ValueError) as e:
+        log_sqlite_error("social_store.record_delivery_plan", e)
+        return False
+
+
 # ============================================================
 # social_deliveries（投递回执）
 # ============================================================
@@ -77,10 +108,11 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
             conn.execute(
                 "INSERT OR IGNORE INTO social_deliveries (delivery_id, turn_id, part_index, "
                 "trace_id, epoch, platform, bot_id, group_id, status, platform_message_id, "
-                "acknowledged_at_utc, text, text_hash, created_at_utc, updated_at_utc, "
+                "acknowledged_at_utc, text, text_hash, delivery_plan_id, "
+                "delivery_plan_digest, decision_digest, created_at_utc, updated_at_utc, "
                 "conversation_key, conversation_kind, peer_id, storage_session_id, "
                 "learning_eligible) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     uuid.uuid4().hex, receipt.turn_id, int(receipt.part_index),
                     receipt.trace_id, int(receipt.epoch),
@@ -90,6 +122,8 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
                     receipt.status, receipt.platform_message_id,
                     receipt.acknowledged_at_utc or None,
                     receipt.text, receipt.text_hash,
+                    receipt.delivery_plan_id, receipt.delivery_plan_digest,
+                    receipt.decision_digest,
                     receipt.created_at_utc, utc_now_iso(),
                     receipt.conversation_key or "",
                     receipt.conversation_kind or "",
@@ -127,7 +161,8 @@ def deliveries_for_turn(
         try:
             sql = (
                 "SELECT part_index, status, platform_message_id, acknowledged_at_utc, "
-                "text, text_hash FROM social_deliveries WHERE turn_id = ?"
+                "text, text_hash, delivery_plan_id, delivery_plan_digest, decision_digest "
+                "FROM social_deliveries WHERE turn_id = ?"
             )
             params: list[Any] = [turn_id]
             if platform is not None:
@@ -145,6 +180,8 @@ def deliveries_for_turn(
                 {
                     "part_index": r[0], "status": r[1], "platform_message_id": r[2],
                     "acknowledged_at_utc": r[3], "text": r[4], "text_hash": r[5],
+                    "delivery_plan_id": r[6], "delivery_plan_digest": r[7],
+                    "decision_digest": r[8],
                 }
                 for r in rows
             ]

@@ -120,7 +120,12 @@ from core.social.contracts import (
     delivered_texts,
     new_trace_id,
 )
-from core.social.delivery import deliver_lines
+from core.social.delivery import (
+    DeliveryPlanError,
+    create_delivery_draft,
+    deliver_lines,
+    seal_delivery_plan,
+)
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
@@ -808,6 +813,111 @@ def _social_delivery_enabled() -> bool:
     """投递回执与标准化证据是否落库（总开关；shadow 模式也记事实）。"""
     return bool(SOCIAL_ENABLED)
 
+
+def _seal_ctx_delivery_plan(
+    ctx: ChatContext,
+    lines: list[str],
+    *,
+    target_user_id: str = "",
+    variant_origin: str = "finalized_variant",
+) -> dict:
+    """入口完成所有局部变体后封存唯一计划；没有可信 Draft 时拒绝发送。"""
+    draft = getattr(ctx, "delivery_draft", None)
+    if not isinstance(draft, dict) or not draft:
+        raise DeliveryPlanError("finalize_turn did not produce a trusted DeliveryDraft")
+    plan = seal_delivery_plan(
+        draft,
+        lines,
+        target_user_id=target_user_id,
+        variant_origin=variant_origin,
+        evidence_ids=list(getattr(ctx, "retained_evidence_ids", ()) or ()),
+    )
+    ctx.delivery_plan = plan
+    return plan
+
+
+def _delivery_plan_is_current(
+    ctx: ChatContext, plan: dict, *, target_user_id: str = "",
+) -> bool:
+    """同步重核会话身份、runtime epoch 和持久 scope 版本。"""
+    if (
+        ctx.trace_id != plan.get("trace_id")
+        or ctx.turn_id != plan.get("turn_id")
+        or ctx.conversation_key != plan.get("conversation_key")
+        or ctx.identity_revision != plan.get("identity_revision")
+        or ctx.generation_epoch != plan.get("generation_epoch")
+        or str(target_user_id or "") != str(plan.get("target_user_id") or "")
+    ):
+        return False
+    try:
+        from core.runtime.facade import peek_shared_facade
+
+        facade = peek_shared_facade()
+        if facade is None or not facade.delivery_is_current(
+            ctx.runtime_key, ctx.turn_id, ctx.generation_epoch,
+        ):
+            return False
+        from memory.conversation_identity import get_identity_revision
+
+        if get_identity_revision(ctx.conversation_key) != ctx.identity_revision:
+            return False
+        if plan.get("scope_versions_available") is not True:
+            return False
+        from memory.ownership import person_owner_key, space_owner_key
+        from memory.scope_versions import current_versions_strict
+
+        scope_keys: list[str] = []
+        space = str(getattr(ctx, "group_shared_space", "") or "")
+        if space:
+            scope_keys.append(space_owner_key(space))
+        bot_id = str(getattr(ctx, "bot_id", "") or "")
+        user_id = int(getattr(ctx, "user_id", 0) or 0)
+        if bot_id and user_id > 0 and str(ctx.conversation_key).startswith("qq:"):
+            scope_keys.append(person_owner_key("qq", bot_id, user_id))
+        captured = plan.get("captured_scope_versions")
+        if not isinstance(captured, dict) or set(captured) != set(scope_keys):
+            return False
+        return current_versions_strict(scope_keys) == captured
+    except Exception:
+        return False
+
+
+def _seal_trusted_delivery_plan(
+    ctx: ChatContext,
+    lines: list[str],
+    *,
+    reason: str,
+    target_user_id: str = "",
+) -> dict:
+    """为服务端确定性 ack/fallback 单独建立可信来源，再生成最终 seal。"""
+    source_draft = getattr(ctx, "delivery_draft", None)
+    versions = (
+        source_draft.get("captured_scope_versions", {})
+        if isinstance(source_draft, dict) else {}
+    )
+    draft = create_delivery_draft(
+        trace_id=ctx.trace_id,
+        turn_id=ctx.turn_id,
+        source_kind="trusted-server",
+        protocol_version="server-deterministic-v1",
+        disposition="direct",
+        conversation_key=ctx.conversation_key,
+        target_user_id=target_user_id,
+        identity_revision=int(ctx.identity_revision or 0),
+        generation_epoch=int(ctx.generation_epoch or 0),
+        captured_scope_versions=dict(versions or {}),
+        scope_versions_available=(
+            isinstance(source_draft, dict)
+            and source_draft.get("scope_versions_available") is True
+        ),
+        segments=list(lines),
+        decision={"producer": "trusted-server", "reason": reason},
+        origin=f"trusted-server:{reason}",
+    )
+    plan = seal_delivery_plan(draft)
+    ctx.delivery_plan = plan
+    return plan
+
 # 本地状态接口：挂在 NoneBot 已有的 ASGI app 上（不新增端口）。
 # 放在扩展加载之后：link_status 来自扩展（虽是延迟导入，顺序清晰些更好）。
 # 注册失败只告警——状态接口是加分项，缺了只是 GUI 少一块信息，不该阻断启动。
@@ -1123,6 +1233,8 @@ def _maybe_identity_direct_reply(ctx) -> None:
     if direct:
         ctx.reply = direct
         ctx.lines = [direct]
+        ctx.delivery_source_kind = "trusted-server"
+        ctx.reply_disposition = "direct"
         logger.info(f"🪪 [Identity] 身份问句确定性直复（用户 {ctx.user_id}）")
 
 
@@ -1463,6 +1575,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             logger.info(f"⏳ [Planner] 群 {event.group_id} 本轮不回复，等待更多消息")
             return
 
+        if getattr(ctx, "reply_disposition", "") in {"suppressed", "skip", "silent"}:
+            _flow_decision(fctx, "chat.runtime_result", status="skipped",
+                           reason_code="reply_suppressed")
+            _flow_set_outcome(fctx, "silent")
+            return
+
         # 防御：就算后钩子没产出任何行，也一定给一句兜底
         if not ctx.lines:
             ctx.lines = ["......？"]
@@ -1478,6 +1596,24 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 msg = Message(line)
             return await chat_handler.send(msg)
 
+        ack_receipts = []
+
+        async def _send_cometa_ack(line: str) -> str:
+            ctx.lines = [line]
+            plan = _seal_trusted_delivery_plan(
+                ctx, [line], reason="cometa-ack", target_user_id=str(ctx.user_id),
+            )
+            ack_receipts.extend(await deliver_lines(
+                plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
+                send_one=_send_reply_segment,
+                plan_guard=lambda current: _delivery_plan_is_current(
+                    ctx, current, target_user_id=str(ctx.user_id),
+                ),
+            ))
+            if not ack_receipts or ack_receipts[-1].status != "acknowledged":
+                raise RuntimeError("cometa ack delivery is not acknowledged")
+            return ack_receipts[-1].platform_message_id or plan["plan_id"]
+
         with _flow_span(fctx, "send.prepare"):
             pass
         # cometa 受理确认（方案 §6.5）：委派接管的本轮只发 ack 一条，经桥接
@@ -1488,14 +1624,15 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             with _flow_span(fctx, "send.cometa_ack") as ack_span:
                 ack_outcome = await cometa_bridge.deliver_ack(
                     cometa_submission,
-                    lambda line: _send_reply_segment(line, 0),
+                    _send_cometa_ack,
                 )
                 ack_span.finish(status="succeeded" if ack_outcome == "sent" else "unknown",
                                 reason_code=ack_outcome)
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
-                        event.self_id, event.group_id, list(ctx.lines), origin=ctx
+                        event.self_id, event.group_id, delivered_texts(ack_receipts),
+                        origin=ctx, receipts=ack_receipts,
                     )
             elif ack_outcome == "unknown":
                 logger.warning(
@@ -1512,13 +1649,27 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 回执且无法补记账），现在全部用 send、finish 只结束流程。
         _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
                          summary="普通回复")
+        delivery_target = str(ctx.reply_recipient_user_id or ctx.user_id)
+        try:
+            delivery_plan = _seal_ctx_delivery_plan(
+                ctx, list(ctx.lines), target_user_id=delivery_target,
+            )
+        except DeliveryPlanError as e:
+            _flow_decision(fctx, "send.plan", status="blocked",
+                           reason_code="invalid_delivery_plan",
+                           summary=str(e)[:160])
+            _flow_set_outcome(fctx, "delivery_plan_rejected")
+            return
         receipts = await deliver_lines(
-            ctx.lines,
+            delivery_plan,
             scope=scope,
             trace_id=ctx.trace_id,
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            plan_guard=lambda plan: _delivery_plan_is_current(
+                ctx, plan, target_user_id=delivery_target,
+            ),
         )
         delivered = delivered_texts(receipts)
         if delivered:
@@ -1883,6 +2034,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             logger.info(f"⏳ [Planner] 私聊 {ref.runtime_key} 本轮不回复，等待更多消息")
             return
 
+        if getattr(ctx, "reply_disposition", "") in {"suppressed", "skip", "silent"}:
+            _flow_decision(fctx, "chat.runtime_result", status="skipped",
+                           reason_code="reply_suppressed")
+            _flow_set_outcome(fctx, "silent")
+            return
+
         if not ctx.lines:
             ctx.lines = ["......？"]
 
@@ -1897,19 +2054,39 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             # （计划 §12 假设 4，M5 核验），先不构造引用段。
             return await private_chat_handler.send(Message(line))
 
+        ack_receipts = []
+
+        async def _send_cometa_ack(line: str) -> str:
+            ctx.lines = [line]
+            plan = _seal_trusted_delivery_plan(
+                ctx, [line], reason="cometa-ack", target_user_id=str(ctx.peer_id or ref.peer_id),
+            )
+            ack_receipts.extend(await deliver_lines(
+                plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
+                send_one=_send_reply_segment,
+                plan_guard=lambda current: _delivery_plan_is_current(
+                    ctx, current, target_user_id=str(ctx.peer_id or ref.peer_id),
+                ),
+                receipt_conversation=ref,
+            ))
+            if not ack_receipts or ack_receipts[-1].status != "acknowledged":
+                raise RuntimeError("cometa ack delivery is not acknowledged")
+            return ack_receipts[-1].platform_message_id or plan["plan_id"]
+
         cometa_submission = getattr(ctx, "cometa_submission", None)
         if cometa_submission:
             with _flow_span(fctx, "send.cometa_ack") as ack_span:
                 ack_outcome = await cometa_bridge.deliver_ack(
                     cometa_submission,
-                    lambda line: _send_reply_segment(line, 0),
+                    _send_cometa_ack,
                 )
                 ack_span.finish(status="succeeded" if ack_outcome == "sent" else "unknown",
                                 reason_code=ack_outcome)
             if ack_outcome == "sent":
                 with contextlib.suppress(Exception):
                     await _record_bot_lines(
-                        event.self_id, ref.storage_session_id, list(ctx.lines), origin=ctx
+                        event.self_id, ref.storage_session_id, delivered_texts(ack_receipts),
+                        origin=ctx, receipts=ack_receipts,
                     )
             elif ack_outcome == "unknown":
                 logger.warning(
@@ -1921,13 +2098,27 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
 
         _flow_transition(fctx, from_node="send.prepare", to_node="send.segment",
                          summary="普通回复")
+        delivery_target = str(ctx.peer_id or ref.peer_id)
+        try:
+            delivery_plan = _seal_ctx_delivery_plan(
+                ctx, list(ctx.lines), target_user_id=delivery_target,
+            )
+        except DeliveryPlanError as e:
+            _flow_decision(fctx, "send.plan", status="blocked",
+                           reason_code="invalid_delivery_plan",
+                           summary=str(e)[:160])
+            _flow_set_outcome(fctx, "delivery_plan_rejected")
+            return
         receipts = await deliver_lines(
-            ctx.lines,
+            delivery_plan,
             scope=scope,
             trace_id=ctx.trace_id,
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            plan_guard=lambda plan: _delivery_plan_is_current(
+                ctx, plan, target_user_id=delivery_target,
+            ),
             receipt_conversation=ref,
         )
         delivered = delivered_texts(receipts)
@@ -3672,12 +3863,28 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 ])
                 return await bot.send_group_msg(group_id=group_id, message=message)
 
+            delivery_target = str(target.user_id)
+            try:
+                delivery_plan = _seal_ctx_delivery_plan(
+                    ctx, [line], target_user_id=delivery_target,
+                    variant_origin=("proactive-contract" if contract_mode == "enforce"
+                                    else "proactive-at-user"),
+                )
+            except DeliveryPlanError as e:
+                _flow_decision(flow_ctx, "proactive.send", status="blocked",
+                               reason_code="invalid_delivery_plan",
+                               summary=str(e)[:160], instance_key=f"grp:{group_id}")
+                outcome = "delivery_plan_rejected"
+                return False
             receipts = await deliver_lines(
-                [line],
+                delivery_plan,
                 scope=scope,
                 trace_id=ctx.trace_id,
                 turn_id=ctx.turn_id,
                 send_one=_send_at_segment,
+                plan_guard=lambda plan: _delivery_plan_is_current(
+                    ctx, plan, target_user_id=delivery_target,
+                ),
             )
             delivered = delivered_texts(receipts)
             if not delivered:
@@ -4169,14 +4376,25 @@ async def _proactive_speak_impl(
         async def _send_proactive_segment(seg_line: str, _i: int) -> str | None:
             return await bot.send_group_msg(group_id=group_id, message=seg_line)
 
+        try:
+            delivery_plan = _seal_ctx_delivery_plan(
+                ctx, list(ctx.lines), variant_origin="proactive-group-merge",
+            )
+        except DeliveryPlanError as e:
+            _flow_decision(fctx, "proactive.send", status="blocked",
+                           reason_code="invalid_delivery_plan", summary=str(e)[:160])
+            _flow_set_outcome(fctx, "delivery_plan_rejected")
+            _log_participation_event(decision, "generation_skip", "delivery_plan_rejected")
+            return
         receipts = await deliver_lines(
-            ctx.lines,
+            delivery_plan,
             scope=scope,
             trace_id=ctx.trace_id,
             turn_id=ctx.turn_id,
             send_one=_send_proactive_segment,
             interval_seconds=SEND_INTERVAL,
             abort_check=_stale,
+            plan_guard=lambda plan: _delivery_plan_is_current(ctx, plan),
         )
         delivered = delivered_texts(receipts)
         if not delivered:

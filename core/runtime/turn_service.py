@@ -529,6 +529,8 @@ class TurnService:
                     short = "……你这条太长了，先简化一下再发我一次？"
                     ctx.reply = short
                     ctx.lines = [short]
+                    ctx.delivery_source_kind = "trusted-server-fallback"
+                    ctx.reply_disposition = "fallback"
                     return TurnPlan(ctx, DIRECT)
             else:
                 budgeted = fit_prompt_to_window(user_prompt, system_prompt)
@@ -629,15 +631,18 @@ class TurnService:
                 )
                 ctx.llm_elapsed = _time.monotonic() - _t0
                 ctx.raw_output = raw
+                ctx.delivery_source_kind = "model"
             except asyncio.TimeoutError:
                 # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
                 ctx.llm_elapsed = _time.monotonic() - _t0
                 logger.error("LLM 执行超时")
+                ctx.delivery_source_kind = "trusted-server-fallback"
                 ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
             except Exception as e:
                 # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
                 ctx.llm_elapsed = _time.monotonic() - _t0
                 logger.error(f"LLM 执行异常: {e}")
+                ctx.delivery_source_kind = "trusted-server-fallback"
                 ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
         return ctx
 
@@ -646,7 +651,14 @@ class TurnService:
         fctx = _flow_of(ctx)
         with _flow_span(fctx, "finalize.trace") as fin_span:
             await self._finalize_trace(ctx)
-            return await self._run_post_hooks(ctx, fctx, fin_span)
+            ctx = await self._run_post_hooks(ctx, fctx, fin_span)
+        # finalize 只产 DeliveryDraft。Bad-phrase、主动合同变体和主动群合并
+        # 均发生在入口；最终 DeliveryPlan 必须在它们全部完成后再 seal。
+        from core.social.delivery import delivery_draft_from_context
+
+        ctx.delivery_draft = delivery_draft_from_context(ctx)
+        ctx.delivery_plan = {}
+        return ctx
 
     async def _finalize_trace(self, ctx: ChatContext) -> None:
         # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）
@@ -723,6 +735,7 @@ class TurnService:
             # 与 legacy 一致：跳过生成但仍执行 trace 与后置 hooks（split_lines
             # 会产出兜底 lines）。只有 budget 分支写 llm_backend（legacy 原样）。
             ctx = plan.ctx
+            ctx.delivery_source_kind = "trusted-server-fallback"
             if plan.outcome == BUDGET_LIMITED:
                 ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
             return await self.finalize_turn(ctx)

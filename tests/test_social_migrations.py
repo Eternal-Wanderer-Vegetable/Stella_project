@@ -129,6 +129,7 @@ class TestFreshDatabase:
             conn.close()
         for table in (
             "social_schema_meta", "social_events", "social_deliveries", "social_effects",
+            "social_delivery_plans",
             "social_effect_evidence", "social_assets", "social_asset_evidence",
             "social_asset_usage", "social_aggregate_events", "social_jobs",
             "social_migration_map",
@@ -273,11 +274,11 @@ class TestFailureSemantics:
 
 
 class TestSchemaV2:
-    """修复计划 §6.3（M2）：social_deliveries v1→v2 增量迁移。
+    """social schema v1→v3 增量迁移与最终投递摘要持久化。
 
     - v1 库直接打开即补列（conversation/kind/peer/storage/learning_eligible）；
     - 旧行以可信 QQ 群字段回填 eligibility（platform='qq' 且 group_id 非空）；
-      缺 Bot/中立行不捏造 canonical key，保持 0；
+      缺 Bot/中立行不捏造 canonical key，保持 0；v3 digest 列幂等补齐；
     - 重复执行幂等；单事务失败回滚保持 v1。
     """
 
@@ -340,8 +341,17 @@ class TestSchemaV2:
             conn.close()
         assert rows == {"g1": 1, "n1": 0}, "可信 QQ 群行=1，无身份行保持 0"
         for col in ("conversation_key", "conversation_kind", "peer_id",
-                    "storage_session_id", "learning_eligible"):
+                    "storage_session_id", "learning_eligible", "delivery_plan_id",
+                    "delivery_plan_digest", "decision_digest"):
             assert col in cols, col
+        conn = sqlite3.connect(db)
+        try:
+            assert conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='social_delivery_plans'"
+            ).fetchone() == ("social_delivery_plans",)
+        finally:
+            conn.close()
 
     def test_re_run_after_v2_is_noop(self, tmp_path):
         db = tmp_path / "social-v1.db"
@@ -357,6 +367,16 @@ class TestSchemaV2:
         try:
             cols = {r[1] for r in conn.execute(
                 "PRAGMA table_info(social_deliveries)")}
+            plan_table = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='social_delivery_plans'"
+            ).fetchone()
+            empty_plan_count = conn.execute(
+                "SELECT COUNT(*) FROM social_delivery_plans"
+            ).fetchone()[0]
         finally:
             conn.close()
         assert "learning_eligible" in cols
+        assert {"delivery_plan_id", "delivery_plan_digest", "decision_digest"} <= cols
+        assert plan_table == ("social_delivery_plans",)
+        assert empty_plan_count == 0

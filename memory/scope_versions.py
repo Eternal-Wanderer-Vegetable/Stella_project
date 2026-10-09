@@ -40,6 +40,37 @@ def current_version(scope_keys: list[str] | tuple[str, ...]) -> int:
         return 0
 
 
+def current_versions_strict(scope_keys: list[str] | tuple[str, ...]) -> dict[str, int]:
+    """严格读取 owner 版本；数据库不可用时抛错，供授权边界 fail-closed 使用。
+
+    与缓存检索使用的 :func:`current_version` 分开，避免为了投递一致性改变
+    现有检索降级语义。表缺失、数据库不可读或值损坏都代表版本未知，调用方
+    必须停止受保护动作。
+    """
+    keys = list(dict.fromkeys(str(key) for key in scope_keys if key))
+    if not keys:
+        return {}
+    from config import settings
+
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = sqlite3.connect(settings.DB_PATH, timeout=5.0)
+        placeholders = ",".join("?" * len(keys))
+        rows = conn.execute(
+            f"SELECT scope_key, version FROM {_TABLE} "
+            f"WHERE scope_key IN ({placeholders})",
+            tuple(keys),
+        ).fetchall()
+        versions = {str(key): int(version) for key, version in rows}
+        return {key: versions.get(key, 0) for key in keys}
+    except (sqlite3.Error, TypeError, ValueError) as e:
+        raise RuntimeError("Persistent scope versions are unavailable") from e
+    finally:
+        if conn is not None:
+            with contextlib.suppress(sqlite3.Error):
+                conn.close()
+
+
 def bump(scope_key: str, conn: sqlite3.Connection | None = None, *, strict: bool = False) -> None:
     """推进某 owner 的持久版本（幂等 upsert）。传入 conn 时在调用方事务内。
 
@@ -76,4 +107,4 @@ def bump(scope_key: str, conn: sqlite3.Connection | None = None, *, strict: bool
                 conn.close()
 
 
-__all__ = ["POLICY_VERSION", "bump", "current_version"]
+__all__ = ["POLICY_VERSION", "bump", "current_version", "current_versions_strict"]

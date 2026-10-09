@@ -3,7 +3,7 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """逐段发送 + 回执收集（计划 §6.1「发送改造」的公共实现）。
 
-三个发送入口（普通回复 / 主动 @ / 主动群聊）统一走这里：
+QQ 发送入口（群/私聊普通回复、主动 @、主动群聊）统一走这里：
 
 - 逐段 ``send_one(line, part_index)`` → 每段一个 :class:`DeliveryReceipt`；
   平台消息 ID 只有真实拿到才记录（引用归因的锚点）；
@@ -24,7 +24,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
+import json
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -43,6 +47,250 @@ from core.social.contracts import (
 from memory import social_store
 
 SendOne = Callable[[str, int], Awaitable[str | None]]
+PlanGuard = Callable[[dict[str, Any]], bool | Awaitable[bool]]
+
+DELIVERY_PLAN_SCHEMA_VERSION = 1
+_DELIVERABLE_DISPOSITIONS = frozenset({"deliver", "fallback", "direct"})
+_TRUSTED_SOURCE_KINDS = frozenset(
+    {"model", "trusted-server", "trusted-server-fallback", "proactive-contract"}
+)
+
+
+class DeliveryPlanError(ValueError):
+    """计划缺失、来源不可信或封存摘要校验失败。"""
+
+
+def _canonical_json(value: Any) -> bytes:
+    return json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _digest_json(value: Any) -> str:
+    return "sha256:" + hashlib.sha256(_canonical_json(value)).hexdigest()
+
+
+def _digest_text(value: str) -> str:
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def create_delivery_draft(
+    *,
+    trace_id: str,
+    turn_id: str,
+    source_kind: str,
+    protocol_version: str,
+    disposition: str,
+    conversation_key: str,
+    target_user_id: str = "",
+    identity_revision: int = 0,
+    generation_epoch: int = 0,
+    captured_scope_versions: dict[str, int] | None = None,
+    scope_versions_available: bool = True,
+    segments: list[str] | tuple[str, ...] = (),
+    decision: dict[str, Any] | None = None,
+    origin: str = "model",
+    evidence_ids: list[str] | tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """构造可变草稿；最终计划必须在入口完成变体后经 seal 冻结。"""
+    versions = captured_scope_versions or {}
+    clean_versions: dict[str, int] = {}
+    for key, value in versions.items():
+        if not isinstance(key, str) or not key or isinstance(value, bool) or not isinstance(value, int):
+            raise DeliveryPlanError("scope version 格式无效")
+        if value < 0:
+            raise DeliveryPlanError("scope version 不可为负数")
+        clean_versions[key] = value
+    ids = tuple(dict.fromkeys(str(item) for item in evidence_ids if item))
+    return {
+        "schema_version": DELIVERY_PLAN_SCHEMA_VERSION,
+        "trace_id": str(trace_id or ""),
+        "turn_id": str(turn_id or ""),
+        "source_kind": str(source_kind or ""),
+        "protocol_version": str(protocol_version or ""),
+        "disposition": str(disposition or ""),
+        "conversation_key": str(conversation_key or ""),
+        "target_user_id": str(target_user_id or ""),
+        "identity_revision": int(identity_revision or 0),
+        "generation_epoch": int(generation_epoch or 0),
+        "captured_scope_versions": clean_versions,
+        "scope_versions_available": bool(scope_versions_available),
+        "decision_digest": _digest_json(decision or {}),
+        "segments": [
+            {
+                "part_index": index,
+                "text": str(text),
+                "text_digest": _digest_text(str(text)),
+                "origin": str(origin or "unknown"),
+                "evidence_ids": list(ids),
+            }
+            for index, text in enumerate(segments)
+        ],
+    }
+
+
+def delivery_draft_from_context(ctx: Any) -> dict[str, Any]:
+    """从运行期 context 制作 Draft；只捕获安全标量与持久 owner 版本。"""
+    disposition = str(getattr(ctx, "reply_disposition", "") or "deliver")
+    lines = list(getattr(ctx, "lines", ()) or ())
+    if disposition not in _DELIVERABLE_DISPOSITIONS or not lines:
+        return {}
+    captured_versions: dict[str, int] = {}
+    scope_versions_available = True
+    try:
+        from memory.ownership import person_owner_key, space_owner_key
+        from memory.scope_versions import current_versions_strict
+
+        keys: list[str] = []
+        space = str(getattr(ctx, "group_shared_space", "") or "")
+        if space:
+            keys.append(space_owner_key(space))
+        bot_id = str(getattr(ctx, "bot_id", "") or "")
+        user_id = int(getattr(ctx, "user_id", 0) or 0)
+        if bot_id and user_id > 0 and str(getattr(ctx, "conversation_key", "")).startswith("qq:"):
+            keys.append(person_owner_key("qq", bot_id, user_id))
+        captured_versions = current_versions_strict(list(dict.fromkeys(keys)))
+    except Exception:
+        captured_versions = {}
+        scope_versions_available = False
+    source_kind = str(getattr(ctx, "delivery_source_kind", "") or "")
+    if not source_kind:
+        source_kind = "model" if int(getattr(ctx, "llm_call_count", 0) or 0) > 0 else "unknown"
+    typed_reply = getattr(ctx, "typed_reply", None) or {}
+    decision = getattr(ctx, "guard_decision", None) or getattr(ctx, "attribution_decision", None) or {}
+    return create_delivery_draft(
+        trace_id=str(getattr(ctx, "trace_id", "") or ""),
+        turn_id=str(getattr(ctx, "turn_id", "") or ""),
+        source_kind=source_kind,
+        protocol_version=str(typed_reply.get("protocol_version") or "legacy"),
+        disposition=disposition,
+        conversation_key=str(getattr(ctx, "conversation_key", "") or ""),
+        target_user_id=str(
+            getattr(ctx, "reply_recipient_user_id", "")
+            or getattr(ctx, "peer_id", "")
+            or ""
+        ),
+        identity_revision=int(getattr(ctx, "identity_revision", 0) or 0),
+        generation_epoch=int(getattr(ctx, "generation_epoch", 0) or 0),
+        captured_scope_versions=captured_versions,
+        scope_versions_available=scope_versions_available,
+        segments=lines,
+        decision=decision,
+        origin=source_kind,
+        evidence_ids=list(getattr(ctx, "retained_evidence_ids", ()) or ()),
+    )
+
+
+def seal_delivery_plan(
+    draft: dict[str, Any],
+    lines: list[str] | tuple[str, ...] | None = None,
+    *,
+    target_user_id: str | None = None,
+    variant_origin: str = "finalized_variant",
+    evidence_ids: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """按最终物理段封存 DeliveryPlan，并对整个版本图计算摘要。"""
+    if not isinstance(draft, dict) or draft.get("schema_version") != DELIVERY_PLAN_SCHEMA_VERSION:
+        raise DeliveryPlanError("delivery draft 缺失或版本不支持")
+    if draft.get("disposition") not in _DELIVERABLE_DISPOSITIONS:
+        raise DeliveryPlanError("非交付处置不能封存发送计划")
+    if draft.get("source_kind") not in _TRUSTED_SOURCE_KINDS:
+        raise DeliveryPlanError("delivery source 未获准")
+    if draft.get("scope_versions_available") is not True:
+        raise DeliveryPlanError("persistent scope version is unavailable")
+    if not draft.get("trace_id") or not draft.get("turn_id") or not draft.get("conversation_key"):
+        raise DeliveryPlanError("delivery identity 不完整")
+    raw_segments = draft.get("segments")
+    if not isinstance(raw_segments, list):
+        raise DeliveryPlanError("delivery draft segments 无效")
+    final_lines = list(lines) if lines is not None else [item.get("text", "") for item in raw_segments]
+    if not final_lines or any(not isinstance(line, str) or not line.strip() for line in final_lines):
+        raise DeliveryPlanError("delivery plan 不可为空或含空白段")
+    base_ids = list(dict.fromkeys(
+        str(item) for segment in raw_segments if isinstance(segment, dict)
+        for item in (segment.get("evidence_ids") or []) if item
+    ))
+    final_ids = list(dict.fromkeys(str(item) for item in (evidence_ids or base_ids) if item))
+    segments = []
+    for index, line in enumerate(final_lines):
+        source = next(
+            (item for item in raw_segments if isinstance(item, dict) and item.get("text") == line),
+            None,
+        )
+        origin = str(source.get("origin") or "unknown") if source else str(variant_origin or "unknown")
+        ids = list(source.get("evidence_ids") or []) if source else final_ids
+        segments.append({
+            "part_index": index,
+            "text": line,
+            "text_digest": _digest_text(line),
+            "origin": origin,
+            "evidence_ids": list(dict.fromkeys(str(item) for item in ids if item)),
+        })
+    plan: dict[str, Any] = {
+        "schema_version": DELIVERY_PLAN_SCHEMA_VERSION,
+        "plan_id": uuid.uuid4().hex,
+        "trace_id": str(draft["trace_id"]),
+        "turn_id": str(draft["turn_id"]),
+        "source_kind": str(draft["source_kind"]),
+        "protocol_version": str(draft.get("protocol_version") or "legacy"),
+        "disposition": str(draft["disposition"]),
+        "conversation_key": str(draft["conversation_key"]),
+        "target_user_id": str(target_user_id if target_user_id is not None else draft.get("target_user_id") or ""),
+        "identity_revision": int(draft.get("identity_revision") or 0),
+        "generation_epoch": int(draft.get("generation_epoch") or 0),
+        "captured_scope_versions": dict(draft.get("captured_scope_versions") or {}),
+        "scope_versions_available": True,
+        "decision_digest": str(draft.get("decision_digest") or _digest_json({})),
+        "segments": segments,
+    }
+    plan["digest"] = _digest_json(plan)
+    if not verify_delivery_plan(plan):
+        raise DeliveryPlanError("sealed delivery plan 自检失败")
+    return plan
+
+
+def verify_delivery_plan(
+    plan: Any, *, trace_id: str | None = None, turn_id: str | None = None,
+) -> bool:
+    """验证 seal、段摘要、顺序、处置和可持久化身份。"""
+    if not isinstance(plan, dict):
+        return False
+    if plan.get("schema_version") != DELIVERY_PLAN_SCHEMA_VERSION:
+        return False
+    if plan.get("source_kind") not in _TRUSTED_SOURCE_KINDS:
+        return False
+    if plan.get("disposition") not in _DELIVERABLE_DISPOSITIONS:
+        return False
+    if not plan.get("plan_id") or not plan.get("trace_id") or not plan.get("turn_id"):
+        return False
+    if not plan.get("conversation_key"):
+        return False
+    if trace_id is not None and plan.get("trace_id") != trace_id:
+        return False
+    if turn_id is not None and plan.get("turn_id") != turn_id:
+        return False
+    segments = plan.get("segments")
+    if not isinstance(segments, list) or not segments:
+        return False
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, dict) or segment.get("part_index") != index:
+            return False
+        text = segment.get("text")
+        if not isinstance(text, str) or not text.strip() or segment.get("text_digest") != _digest_text(text):
+            return False
+        if not isinstance(segment.get("origin"), str) or not isinstance(segment.get("evidence_ids"), list):
+            return False
+    versions = plan.get("captured_scope_versions")
+    if plan.get("scope_versions_available") is not True:
+        return False
+    if not isinstance(versions, dict) or any(
+        not isinstance(key, str) or isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for key, value in versions.items()
+    ):
+        return False
+    unsigned = {key: value for key, value in plan.items() if key != "digest"}
+    return plan.get("digest") == _digest_json(unsigned)
 
 
 def coerce_platform_message_id(result) -> str | None:
@@ -107,38 +355,71 @@ def _flow_transition(fctx, *, from_node: str, to_node: str, **kw) -> None:
 
 
 async def deliver_lines(
-    lines: list[str],
+    plan: dict[str, Any],
     *,
     scope: ConversationScope | None,
     trace_id: str,
     turn_id: str,
-    epoch: int = 0,
     send_one: SendOne,
     interval_seconds: float = 0.0,
     stop_on_failure: bool = True,
     abort_check: Callable[[], bool] | None = None,
+    plan_guard: PlanGuard | None = None,
     receipt_conversation: Any = None,
 ) -> list[DeliveryReceipt]:
-    """逐段发送并收集回执。scope 为 None 时只发送、不落库（社交总开关关闭）。
+    """只发送已封存计划中的片段，并收集与该计划关联的回执。
+
+    scope 为 None 时不写群学习行；具备明确 ``receipt_conversation`` 的私聊
+    仍会写中立回执。计划决策摘要无论是否启用社交事件记录都先持久化，
+    裸字符串/未封存计划在任何平台 side effect 发生前拒绝。
 
     ``receipt_conversation``（修复计划 §6.3）：可选的规范会话身份
     （:class:`core.conversation.ConversationRef` 或带
     conversation_key/conversation_kind/peer_id/storage_session_id/bot_id
     属性的对象）。``scope=None`` 且身份明确合法时，回执按**会话中立行**
     落库（group_id=''、learning_eligible=0）——私聊发送事实可查，绝不进
-    群学习；scope=None 且无身份的旧调用仍完全跳过持久化（原合同保留）。
+    群学习；scope=None 且无身份的旧调用仍跳过 social_deliveries receipt。
 
     ``abort_check``（计划 §6.9 层 3）：每个片段发送前调用，返回 True 表示
     本轮输出已过期（转题/撤销/静音/新直接请求）——停止后续片段并保留已
     收回执；已 ACK 的片段不可撤销，聚合状态按已尝试片段计算（partial 语义）。
     返回已尝试片段的回执列表（未尝试的片段没有事实，不产生行）。
     """
+    if not verify_delivery_plan(plan, trace_id=trace_id, turn_id=turn_id):
+        raise DeliveryPlanError("拒绝发送无效、未封存或已变更的 DeliveryPlan")
+    # 使用经摘要核验的本地快照。每个片段开始前仍检查调用方持有的原对象，
+    # 因为入口代码不得在 seal 后改写计划。
+    snapshot = json.loads(_canonical_json(plan).decode("utf-8"))
+    lines = [segment["text"] for segment in snapshot["segments"]]
+    plan_id = snapshot["plan_id"]
+    plan_digest = snapshot["digest"]
+    decision_digest = snapshot["decision_digest"]
+    epoch = int(snapshot["generation_epoch"])
+    if not social_store.record_delivery_plan(snapshot):
+        raise RuntimeError("DeliveryPlan decision digest could not be persisted; refusing send")
+
     receipts: list[DeliveryReceipt] = []
     started_at = time.monotonic()
     fctx = _flow(trace_id)
     for i, line in enumerate(lines):
         if i > 0 and interval_seconds > 0:
             await asyncio.sleep(interval_seconds)
+        if not verify_delivery_plan(plan, trace_id=trace_id, turn_id=turn_id):
+            logger.warning(f"[Delivery] sealed plan changed before segment {i}; stopping")
+            _flow_decision(fctx, "send.segment", status="skipped",
+                           reason_code="sealed_plan_changed",
+                           instance_key=f"seg:{i}")
+            break
+        if plan_guard is not None:
+            allowed = plan_guard(snapshot)
+            if inspect.isawaitable(allowed):
+                allowed = await allowed
+            if not allowed:
+                logger.info(f"[Delivery] captured identity/version changed before segment {i}")
+                _flow_decision(fctx, "send.segment", status="skipped",
+                               reason_code="delivery_plan_stale",
+                               instance_key=f"seg:{i}")
+                break
         if abort_check is not None and abort_check():
             logger.info(f"[Delivery] 发送中止（输出已过期）：段 {i}/{len(lines)} 未发送")
             _flow_decision(fctx, "send.segment", status="skipped",
@@ -161,8 +442,22 @@ async def deliver_lines(
                 receipts, scope, trace_id, turn_id, epoch, i,
                 status=DELIVERY_UNKNOWN, text=line, platform_id=None, detail="cancelled",
                 receipt_conversation=receipt_conversation,
+                delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
+                decision_digest=decision_digest,
             )
             raise
+        except asyncio.TimeoutError as e:
+            # 平台请求超时可能已被受理；记 unknown 且禁止该 turn 重发。
+            seg_span.__exit__(type(e), e, e.__traceback__)
+            _append_and_persist(
+                receipts, scope, trace_id, turn_id, epoch, i,
+                status=DELIVERY_UNKNOWN, text=line, platform_id=None,
+                detail="platform_timeout",
+                receipt_conversation=receipt_conversation,
+                delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
+                decision_digest=decision_digest,
+            )
+            break
         except Exception as e:
             seg_span.__exit__(type(e), e, e.__traceback__)
             logger.warning(f"[Delivery] 群 {scope.group_id if scope else '?'} "
@@ -171,6 +466,8 @@ async def deliver_lines(
                 receipts, scope, trace_id, turn_id, epoch, i,
                 status=DELIVERY_FAILED, text=line, platform_id=None, detail=str(e)[:160],
                 receipt_conversation=receipt_conversation,
+                delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
+                decision_digest=decision_digest,
             )
             if stop_on_failure:
                 break
@@ -180,6 +477,8 @@ async def deliver_lines(
             receipts, scope, trace_id, turn_id, epoch, i,
             status=status, text=line, platform_id=platform_id,
             receipt_conversation=receipt_conversation,
+            delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
+            decision_digest=decision_digest,
         )
     _trace_delivery(trace_id, turn_id, scope, receipts, started_at)
     if fctx is not None:
@@ -256,6 +555,9 @@ def _append_and_persist(
     platform_id: str | None,
     detail: str = "",
     receipt_conversation: Any = None,
+    delivery_plan_id: str = "",
+    delivery_plan_digest: str = "",
+    decision_digest: str = "",
 ) -> DeliveryReceipt:
     """落库三分合同（修复计划 §6.3）：见 deliver_lines 文档。
 
@@ -304,6 +606,9 @@ def _append_and_persist(
         storage_session_id=storage_session_id,
         platform=ref_platform,
         bot_id=ref_bot_id,
+        delivery_plan_id=delivery_plan_id,
+        delivery_plan_digest=delivery_plan_digest,
+        decision_digest=decision_digest,
     )
     receipts.append(receipt)
     should_persist = scope is not None or neutral

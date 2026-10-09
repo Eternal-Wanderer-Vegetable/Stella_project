@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE.
-"""运行链接线测试（整改计划 P5，复核 F1）。
+"""运行链接线测试（整改计划 P1/P5）。
 
-覆盖：ChatContext v5 投影、guard hook 三模式与 split_lines 处置、
+覆盖：ChatContext v6 投影、guard hook 三模式与 split_lines 处置、
 typed 检索查询消费、主动合同构建/发送前复核、私聊分享授权入口。
 """
 
@@ -53,7 +53,7 @@ def _evidence():
     return evidence_projection(table)
 
 
-# ── ChatContext v5 投影 ────────────────────────────────────────────────
+# ── ChatContext v6 投影 ────────────────────────────────────────────────
 
 
 def test_projection_v5_fields_json_safe():
@@ -66,10 +66,12 @@ def test_projection_v5_fields_json_safe():
     )
     proj = ctx.to_json_projection()
     assert json.loads(json.dumps(proj, ensure_ascii=False)) == proj
-    assert proj["projection_schema_version"] == 5
+    assert proj["projection_schema_version"] == 6
     for name in ("retrieval_query", "verification_contract",
                  "attribution_evidence", "attribution_decision",
-                 "reply_disposition"):
+                 "reply_disposition", "typed_reply", "retained_evidence_ids",
+                 "attribution_risk_context", "delivery_draft", "delivery_plan",
+                 "guard_decision", "generation_epoch", "runtime_key"):
         assert name in proj, name
 
 
