@@ -130,7 +130,7 @@ def test_summary_update_invalidates_cache(tmp_path, monkeypatch):
     assert "对话摘要: 旧摘要" not in second.short_term
 
 
-def test_session_summary_version_invalidates_cache(tmp_path, monkeypatch):
+def test_session_summary_version_invalidates_cache(tmp_path, monkeypatch, summary_packet_factory):
     """会话压缩产出新摘要（compact_count 递增）→ 重新组装。"""
     db = tmp_path / "ctx.db"
     _make_db(db, [("1", "1000", "你好", "PASSIVE")])
@@ -138,11 +138,51 @@ def test_session_summary_version_invalidates_cache(tmp_path, monkeypatch):
 
     first = _build()
     assert "本场对话较早的内容" not in first.short_term
-    session_context.apply_summary(1, "更早聊过散打", up_to_id=1, message_count=1)
+    session_context.apply_summary(
+        1,
+        summary_packet_factory(
+            "更早聊过散打", source_low_id=1, source_watermark=2
+        ),
+        up_to_id=2,
+        message_count=1,
+    )
 
     second = _build()
     assert "本场对话较早的内容" in second.short_term
     assert "更早聊过散打" in second.short_term
+
+
+def test_invalidated_packet_revision_blocks_warm_cached_summary(
+    tmp_path, monkeypatch, summary_packet_factory
+):
+    """同 compact_count 的旧格式失效后，暖缓存不能继续返回旧 packet 文本。"""
+    db = tmp_path / "ctx.db"
+    _make_db(db, [("1", "1000", "你好", "PASSIVE")])
+    _reset(monkeypatch, db)
+
+    _build()
+    _build()  # state initialization changes the version once
+    session_context.apply_summary(
+        1,
+        summary_packet_factory(
+            "暖缓存旧来源", source_low_id=1, source_watermark=2
+        ),
+        up_to_id=2,
+        message_count=1,
+    )
+    with_packet = _build()
+    assert "暖缓存旧来源" in with_packet.short_term
+    compact_count = session_context.summary_version(1)
+    old_revision = session_context.summary_revision(1)
+
+    session_context._state(1).summary = "旧自由格式"
+    assert session_context.get_summary(1) == ""
+    assert session_context.summary_version(1) == compact_count
+    assert session_context.summary_revision(1) > old_revision
+
+    after = _build()
+    assert "暖缓存旧来源" not in after.short_term
+    assert "旧自由格式" not in after.short_term
 
 
 def test_cache_key_isolates_databases(tmp_path, monkeypatch):

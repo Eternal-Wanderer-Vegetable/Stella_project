@@ -30,8 +30,14 @@ from config import (
     SESSION_COMPACT_THRESHOLD_TOKENS,
     SESSION_CONTEXT_ENABLED,
     SESSION_IDLE_TIMEOUT_SECONDS,
+    SESSION_SUMMARY_MAX_TOKENS,
 )
 from memory.prompt_builder import estimate_tokens
+from memory.summary_packet import (
+    SummaryPacket,
+    render_summary_packet,
+    validate_summary_packet,
+)
 
 
 @dataclass
@@ -50,7 +56,8 @@ class SessionState:
     """
 
     summarized_up_to_id: int = 0
-    summary: str = ""
+    # 进程重启后旧自由摘要自然消失；运行时只接受可验证 packet。
+    summary: SummaryPacket | str | None = None
     last_activity: float = field(default_factory=time.monotonic)
     compact_count: int = 0
     # 已压缩的消息条数（仅用于日志与诊断）
@@ -58,16 +65,30 @@ class SessionState:
     # 会话重置代数（reset 时 +1）与最近观察到的身份版本（CAS 用）
     reset_generation: int = 0
     identity_revision: int = 0
+    summary_revision: int = 0
 
 
 _sessions: dict[int, SessionState] = {}
+_summary_revision_by_group: dict[int, int] = {}
 
 
 def _state(group_id: int) -> SessionState:
     """取（或懒创建）某群的会话状态。"""
     if group_id not in _sessions:
-        _sessions[group_id] = SessionState()
+        revision = _summary_revision_by_group.get(group_id, -1) + 1
+        _summary_revision_by_group[group_id] = revision
+        _sessions[group_id] = SessionState(summary_revision=revision)
     return _sessions[group_id]
+
+
+def _advance_summary_revision(group_id: int, state: SessionState) -> int:
+    revision = max(
+        state.summary_revision,
+        _summary_revision_by_group.get(group_id, -1),
+    ) + 1
+    state.summary_revision = revision
+    _summary_revision_by_group[group_id] = revision
+    return revision
 
 
 def touch(group_id: int) -> None:
@@ -94,11 +115,68 @@ def ensure_initialized(group_id: int, tail_start_id: int) -> None:
         logger.debug(f"[Session] 群 {group_id} 会话初始化，起点对齐到消息 {tail_start_id}")
 
 
-def get_summary(group_id: int) -> str:
-    """取当前会话摘要（覆盖尾巴之前的内容）；无则空串。"""
+def get_summary_snapshot(group_id: int) -> tuple[str, int, str, bool]:
+    """返回已验证摘要文本、单调 revision、格式及有效性。
+
+    每次缓存读取前都走同一验证入口。旧自由文本、格式漂移、digest 错误或超预算
+    packet 会被清除并递增 revision，避免暖缓存继续返回旧摘要。
+    """
     if not SESSION_CONTEXT_ENABLED:
-        return ""
-    return _sessions.get(group_id, SessionState()).summary
+        return "", -1, "disabled", True
+    state = _sessions.get(group_id)
+    if state is None:
+        return "", _summary_revision_by_group.get(group_id, -1), "none", True
+    packet = state.summary
+    if packet is None:
+        return "", state.summary_revision, "none", True
+    if not isinstance(packet, SummaryPacket) or not validate_summary_packet(packet):
+        state.summary = None
+        revision = _advance_summary_revision(group_id, state)
+        logger.warning(
+            f"[Session] 群 {group_id} 清除无效/旧格式压缩摘要（revision={revision}）"
+        )
+        return "", revision, "invalid", False
+    text = render_summary_packet(packet)
+    if not text or estimate_tokens(text) > SESSION_SUMMARY_MAX_TOKENS:
+        state.summary = None
+        revision = _advance_summary_revision(group_id, state)
+        logger.warning(
+            f"[Session] 群 {group_id} 清除超预算压缩摘要（revision={revision}）"
+        )
+        return "", revision, "invalid", False
+    return text, state.summary_revision, packet.format_version, True
+
+
+def get_summary(group_id: int) -> str:
+    """取当前已验证 packet 的服务端渲染文本；无效/无摘要返回空串。"""
+    return get_summary_snapshot(group_id)[0]
+
+
+def get_summary_packet(group_id: int) -> SummaryPacket | None:
+    """取当前合法 packet；旧自由文本或损坏包在读取时失效。"""
+    get_summary_snapshot(group_id)
+    state = _sessions.get(group_id)
+    return state.summary if state and isinstance(state.summary, SummaryPacket) else None
+
+
+def invalidate_summary(group_id: int, reason: str) -> None:
+    """失效会话身份/packet 资格并单调递增 revision。"""
+    state = _sessions.get(group_id)
+    if state is None or state.summary is None:
+        return
+    state.summary = None
+    revision = _advance_summary_revision(group_id, state)
+    logger.warning(
+        f"[Session] 群 {group_id} 丢弃压缩 packet（{reason}; revision={revision}）"
+    )
+
+
+def summary_revision(group_id: int) -> int:
+    """独立于 compact_count 的单调摘要版本，覆盖清空及 end/rebuild。"""
+    state = _sessions.get(group_id)
+    if state is not None:
+        return state.summary_revision
+    return _summary_revision_by_group.get(group_id, -1)
 
 
 def summary_version(group_id: int) -> int:
@@ -145,8 +223,13 @@ def compact_message_limit() -> int:
     return max(1, SESSION_COMPACT_MAX_MESSAGES)
 
 
-def apply_summary(group_id: int, summary: str, up_to_id: int, message_count: int = 0) -> None:
-    """写入新摘要并推进已压缩位置。
+def apply_summary(
+    group_id: int,
+    summary: SummaryPacket | str,
+    up_to_id: int,
+    message_count: int = 0,
+) -> None:
+    """写入已验证 SummaryPacket 并推进已压缩位置。
 
     summary 为空时**不推进** up_to_id：LLM 调用失败时，这批消息应当留待下次重试，
     而不是被静默跳过。模型判定「这段无可摘要内容」的情形请调用
@@ -154,19 +237,35 @@ def apply_summary(group_id: int, summary: str, up_to_id: int, message_count: int
     """
     if not SESSION_CONTEXT_ENABLED:
         return
-    text = (summary or "").strip()
-    if not text:
-        logger.debug(f"[Session] 群 {group_id} 压缩产出为空，保留待压缩区间待下次重试")
+    if not isinstance(summary, SummaryPacket):
+        logger.debug(f"[Session] 群 {group_id} 压缩结果不是 SummaryPacket，保留待压缩区间")
+        return
+    text = render_summary_packet(summary)
+    if (
+        not validate_summary_packet(summary)
+        or not text
+        or estimate_tokens(text) > SESSION_SUMMARY_MAX_TOKENS
+    ):
+        logger.warning(f"[Session] 群 {group_id} SummaryPacket 校验/预算失败，水位不推进")
         return
     state = _state(group_id)
-    state.summary = text
+    if (
+        summary.source_low_id != state.summarized_up_to_id
+        or summary.source_watermark != up_to_id
+        or (message_count > 0 and message_count != summary.source_row_count)
+    ):
+        logger.warning(f"[Session] 群 {group_id} SummaryPacket 区间/计数不匹配，水位不推进")
+        return
+    state.summary = summary
     state.summarized_up_to_id = max(state.summarized_up_to_id, up_to_id)
     state.compact_count += 1
     state.compacted_messages += max(0, message_count)
+    revision = _advance_summary_revision(group_id, state)
     logger.info(
         f"🗜️ [Session] 群 {group_id} 会话压缩完成"
         f"（第 {state.compact_count} 次，累计 {state.compacted_messages} 条，"
-        f"摘要 {estimate_tokens(text)} tokens，已压缩至消息 {state.summarized_up_to_id}）"
+        f"摘要 {estimate_tokens(text)} tokens，revision={revision}，"
+        f"已压缩至消息 {state.summarized_up_to_id}）"
     )
 
 
@@ -211,10 +310,12 @@ def end_session(group_id: int) -> bool:
     仅当该群曾有过压缩或有过摘要时才算「进行中的会话」——
     否则每次空闲检查都会对所有静默的群报告一次结束。
     """
-    state = _sessions.pop(group_id, None)
+    state = _sessions.get(group_id)
     if state is None:
         return False
-    had_content = bool(state.summary) or state.compact_count > 0
+    had_content = bool(get_summary(group_id)) or state.compact_count > 0
+    _advance_summary_revision(group_id, state)
+    _sessions.pop(group_id, None)
     if had_content:
         logger.info(
             f"💤 [Session] 群 {group_id} 会话结束"
@@ -231,8 +332,12 @@ def bump_reset_generation(group_id: int) -> int:
     state = _state(group_id)
     state.reset_generation += 1
     state.summarized_up_to_id = 0
-    state.summary = ""
-    logger.info(f"🔄 [Session] 群 {group_id} 会话重置（generation={state.reset_generation}）")
+    state.summary = None
+    revision = _advance_summary_revision(group_id, state)
+    logger.info(
+        f"🔄 [Session] 群 {group_id} 会话重置（generation={state.reset_generation}, "
+        f"summary_revision={revision}）"
+    )
     return state.reset_generation
 
 
@@ -269,9 +374,16 @@ def session_stats(group_id: int) -> dict:
     return {
         "active": True,
         "summarized_up_to_id": state.summarized_up_to_id,
-        "summary_tokens": estimate_tokens(state.summary),
+        "summary_tokens": estimate_tokens(get_summary(group_id)),
         "compact_count": state.compact_count,
         "compacted_messages": state.compacted_messages,
+        "summary_revision": state.summary_revision,
+        "reset_generation": state.reset_generation,
+        "summary_format": (
+            state.summary.format_version
+            if isinstance(state.summary, SummaryPacket)
+            else "none"
+        ),
         "idle_seconds": round(time.monotonic() - state.last_activity, 1),
     }
 
@@ -279,3 +391,4 @@ def session_stats(group_id: int) -> dict:
 def reset_state() -> None:
     """清空全部会话状态（供测试使用）。"""
     _sessions.clear()
+    _summary_revision_by_group.clear()

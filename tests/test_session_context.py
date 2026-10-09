@@ -45,14 +45,17 @@ def test_pending_bounds_excludes_both_ends():
     assert sc.pending_bounds(1, 150) == (100, 150)
 
 
-def test_apply_summary_advances_position():
+def test_apply_summary_advances_position(summary_packet_factory):
     sc.ensure_initialized(1, 100)
-    sc.apply_summary(1, "聊了显卡选购", up_to_id=140, message_count=30)
+    packet = summary_packet_factory(
+        "聊了显卡选购", source_low_id=100, source_watermark=140, source_row_count=30
+    )
+    sc.apply_summary(1, packet, up_to_id=140, message_count=30)
     stats = sc.session_stats(1)
     assert stats["summarized_up_to_id"] == 140
     assert stats["compact_count"] == 1
     assert stats["compacted_messages"] == 30
-    assert sc.get_summary(1) == "聊了显卡选购"
+    assert "聊了显卡选购" in sc.get_summary(1)
     # 推进后原区间不再待压缩
     assert sc.pending_bounds(1, 140) is None
 
@@ -65,11 +68,15 @@ def test_empty_summary_does_not_advance():
     assert sc.pending_bounds(1, 140) == (100, 140)
 
 
-def test_position_never_goes_backwards():
-    sc.ensure_initialized(1, 100)
-    sc.apply_summary(1, "第一段", up_to_id=200)
-    sc.apply_summary(1, "第二段", up_to_id=150)
+def test_position_never_goes_backwards(summary_packet_factory):
+    first = summary_packet_factory("第一段", source_watermark=200)
+    sc.apply_summary(1, first, up_to_id=200)
+    stale = summary_packet_factory(
+        "第二段", source_low_id=200, source_watermark=201
+    )
+    sc.apply_summary(1, stale, up_to_id=150)
     assert sc.session_stats(1)["summarized_up_to_id"] == 200
+    assert "第一段" in sc.get_summary(1)
 
 
 def test_should_compact_by_token_threshold(monkeypatch):
@@ -86,43 +93,93 @@ def test_idle_detection_and_end():
     assert 1 in sc.idle_groups(timeout=0.0)
 
 
-def test_end_session_reports_only_real_sessions():
+def test_end_session_reports_only_real_sessions(summary_packet_factory):
     """只有压缩过或有摘要的会话才算「进行中」，避免静默群反复报告结束。"""
     sc.touch(1)
     assert sc.end_session(1) is False        # 有状态但无内容
     assert sc.end_session(999) is False      # 无状态
 
     sc.ensure_initialized(2, 100)
-    sc.apply_summary(2, "有内容", up_to_id=140)
+    sc.apply_summary(
+        2,
+        summary_packet_factory("有内容", source_low_id=100, source_watermark=140),
+        up_to_id=140,
+    )
     assert sc.end_session(2) is True
     assert sc.session_stats(2)["active"] is False
 
 
-def test_sessions_are_per_group():
+def test_sessions_are_per_group(summary_packet_factory):
     sc.ensure_initialized(1, 100)
     sc.ensure_initialized(2, 500)
-    sc.apply_summary(1, "群一的摘要", up_to_id=140)
-    assert sc.get_summary(1) == "群一的摘要"
+    sc.apply_summary(
+        1,
+        summary_packet_factory("群一的摘要", source_low_id=100, source_watermark=140),
+        up_to_id=140,
+    )
+    assert "群一的摘要" in sc.get_summary(1)
     assert sc.get_summary(2) == ""
 
 
-def test_skip_range_advances_keeps_summary():
+def test_skip_range_advances_keeps_summary(summary_packet_factory):
     """模型判定无可摘要内容 → 推进位置但保留原摘要。"""
-    sc.ensure_initialized(1, 100)
-    sc.apply_summary(1, "先前的摘要", up_to_id=100)
+    sc.ensure_initialized(1, 1)
+    sc.apply_summary(
+        1,
+        summary_packet_factory("先前的摘要", source_low_id=1, source_watermark=100),
+        up_to_id=100,
+    )
     sc.skip_range(1, up_to_id=140, message_count=30)
-    assert sc.get_summary(1) == "先前的摘要"
+    assert "先前的摘要" in sc.get_summary(1)
     assert sc.session_stats(1)["summarized_up_to_id"] == 140
 
 
-def test_skip_range_does_not_bump_compact_count():
+def test_skip_range_does_not_bump_compact_count(summary_packet_factory):
     """跳过不算一次压缩：compact_count 只在真正产出摘要时递增。"""
     sc.ensure_initialized(1, 100)
-    sc.apply_summary(1, "第一段", up_to_id=140)
+    sc.apply_summary(
+        1,
+        summary_packet_factory("第一段", source_low_id=100, source_watermark=140),
+        up_to_id=140,
+    )
     sc.skip_range(1, up_to_id=200, message_count=20)
     stats = sc.session_stats(1)
     assert stats["compact_count"] == 1
     assert stats["compacted_messages"] == 20
+
+
+def test_summary_revision_is_independent_and_survives_session_rebuild(summary_packet_factory):
+    sc.apply_summary(1, summary_packet_factory("可回溯原文"), up_to_id=1)
+    compact_count = sc.summary_version(1)
+    first_revision = sc.summary_revision(1)
+
+    sc.bump_reset_generation(1)
+    assert sc.summary_version(1) == compact_count
+    reset_revision = sc.summary_revision(1)
+    assert reset_revision > first_revision
+    assert sc.get_summary(1) == ""
+
+    assert sc.end_session(1) is True
+    ended_revision = sc.summary_revision(1)
+    assert ended_revision > reset_revision
+    sc.ensure_initialized(1, 20)
+    assert sc.summary_revision(1) > ended_revision
+    assert sc.summary_version(1) == 0
+
+
+def test_legacy_free_summary_is_invalidated_and_bumps_revision():
+    state = sc._state(1)
+    state.compact_count = 4
+    state.summary = "旧格式自由摘要"
+    previous_revision = sc.summary_revision(1)
+
+    text, revision, packet_format, valid = sc.get_summary_snapshot(1)
+
+    assert text == ""
+    assert not valid
+    assert packet_format == "invalid"
+    assert revision > previous_revision
+    assert sc.summary_version(1) == 4
 
 
 def test_disabled_switch_short_circuits(monkeypatch):

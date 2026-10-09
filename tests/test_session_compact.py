@@ -7,12 +7,18 @@
 以及「调用失败」与「模型判定无内容」两种空结果的区别处理。
 """
 import asyncio
+import json
 import sqlite3
 
 import pytest
 
 from memory import session_compact as compact
 from memory import session_context as sc
+from memory.summary_packet import (
+    SummarySourceMessage,
+    build_summary_evidence,
+    build_summary_packet,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -51,10 +57,35 @@ def _insert(db, group_id, user_id, content, kind="PASSIVE"):
     conn.close()
 
 
+def _evidence(content, *, message_id=1, author_id="1001", source_kind="PASSIVE",
+              bot_id="", recipient_id="", conversation_key="test:group:1"):
+    message = SummarySourceMessage(
+        message_id=message_id,
+        author_id=author_id,
+        source_kind=source_kind,
+        content=content,
+        recipient_id=recipient_id,
+    )
+    return build_summary_evidence(conversation_key, bot_id, (message,))
+
+
+def _packet(entry, *, low_id=0, watermark=1, source_count=1):
+    return build_summary_packet(
+        conversation_key=entry.conversation_key,
+        bot_id=entry.bot_id,
+        source_guard=(0, 0, low_id),
+        source_low_id=low_id,
+        source_high_id=watermark + 1,
+        source_watermark=watermark,
+        source_row_count=source_count,
+        entries=(entry,),
+    )
+
+
 class _FakeBackend:
     """假 LLM 后端：记录收到的 prompt，返回预设结果或抛异常。"""
 
-    def __init__(self, result="这是一段回顾", error=None):
+    def __init__(self, result=None, error=None):
         self.result = result
         self.error = error
         self.prompts: list[str] = []
@@ -63,7 +94,14 @@ class _FakeBackend:
         self.prompts.append(prompt)
         if self.error:
             raise self.error
-        return self.result
+        if self.result is not None:
+            return self.result
+        refs = [
+            line.split(" ", 2)[1]
+            for line in prompt.splitlines()
+            if line.startswith("REF ref_")
+        ]
+        return json.dumps({"selected_refs": refs}, ensure_ascii=False)
 
 
 # ── prompt 护栏 ────────────────────────────────────────
@@ -71,10 +109,10 @@ class _FakeBackend:
 
 def test_prompt_contains_anti_fabrication_clauses():
     """防编造条款不得被删——压缩同样属于「宁可丢内容也不能编」的场景。"""
-    prompt = compact.build_compact_prompt("用户(1001): 测试")
-    assert "严禁编造对话中没有出现过的内容" in prompt
-    assert "只输出一个字：无" in prompt
-    assert "不要推断任何人的动机或心理状态" in prompt
+    prompt = compact.build_compact_prompt([_evidence("测试", message_id=1)])
+    assert "不要输出摘要、事实、作者解释或新台词" in prompt
+    assert "只表示 Bot 说过这些话" in prompt
+    assert '"selected_refs"' in prompt
 
 
 def test_prompt_preserves_own_speech_clause():
@@ -83,34 +121,53 @@ def test_prompt_preserves_own_speech_clause():
     归属修复计划 §6.4： wording 覆盖旧「我:」与新「作者=Bot(...)」两种
     渲染，且明确「回顾时写明对谁说的、不把自己的话归给用户」。
     """
-    prompt = compact.build_compact_prompt("我: 在吗")
-    assert "「我:」或「作者=Bot(...)」开头的行是你自己说过的话" in prompt
-    assert "写明你对谁说的" in prompt and "把你的台词" in prompt
+    prompt = compact.build_compact_prompt([
+        _evidence(
+            "在吗",
+            author_id="5000",
+            source_kind="BOT_SELF",
+            bot_id="5000",
+            recipient_id="1001",
+        )
+    ])
+    assert "author=Bot(5000)" in prompt
+    assert '"recipient_id":"1001"' in prompt
+    assert "不能拆分、改写或转交给" in prompt
 
 
 def test_prompt_preserves_state_and_quoted_speech():
     """条件/否定/转述保持原样，不得升级成已发生事实（归属修复计划 §6.4）。"""
-    prompt = compact.build_compact_prompt("用户(1001): 下次再乱摸我手给你冻上")
-    assert "必须保持原样" in prompt
+    prompt = compact.build_compact_prompt([
+        _evidence("如果下次没有，只是听说角色扮演")
+    ])
+    assert "必须保留原文中的否定、条件、假设、玩笑、引用、疑问与角色扮演限定" in prompt
     for word in ("如果", "下次", "没有", "听说"):
         assert word in prompt
-    assert "不得升级成已经发生的事实" in prompt
+    assert "如果下次没有，只是听说角色扮演" in prompt
 
 
-def test_prompt_merges_existing_summary():
-    """存在旧摘要时要求合并成一段，避免摘要无限累积。"""
-    prompt = compact.build_compact_prompt("用户(1001): 新内容", existing_summary="旧的回顾")
-    assert "旧的回顾" in prompt
-    assert "合并成一段" in prompt
+def test_prompt_offers_old_packet_refs_and_current_refs():
+    """模型只从旧合法 packet 与当前来源行中选择 ID，不能写合并摘要。"""
+    old = _evidence("旧来源行", message_id=1)
+    current = _evidence("新来源行", message_id=2)
+    prompt = compact.build_compact_prompt(
+        [current], _packet(old, low_id=0, watermark=1)
+    )
+    assert old.ref_id in prompt and current.ref_id in prompt
+    assert "旧来源行" in prompt and "新来源行" in prompt
+    assert "不要输出摘要、事实" in prompt
 
 
 def test_prompt_omits_block_without_existing():
-    assert "之前对更早内容的回顾" not in compact.build_compact_prompt("用户(1001): 内容")
+    prompt = compact.build_compact_prompt([_evidence("当前来源", message_id=1)])
+    assert "之前对更早内容的回顾" not in prompt
+    assert "旧来源行" not in prompt
 
 
 def test_prompt_has_no_leftover_placeholder():
-    prompt = compact.build_compact_prompt("用户(1001): 内容", existing_summary="旧")
-    assert "{" not in prompt and "}" not in prompt
+    prompt = compact.build_compact_prompt([_evidence("内容", message_id=1)])
+    assert "{existing}" not in prompt and "{messages}" not in prompt
+    assert '{{"selected_refs"' not in prompt
 
 
 # ── 待压缩区间 ────────────────────────────────────────
@@ -242,6 +299,109 @@ def test_fetch_v16_batch_split_keeps_each_segment_self_contained(tmp_path, monke
     assert "回复给=用户(1001)" in text2  # 收件人不靠上一批继承
 
 
+def test_fetch_pending_records_seals_exact_author_target_and_full_text(tmp_path, monkeypatch):
+    """新 packet ref 保留来源行、Bot 收件人和完整气泡原文。"""
+    db = _make_v16_db(tmp_path)
+    monkeypatch.setattr(compact, "DB_PATH", db)
+    long_text = "条件与原文" * 500
+    _insert_v16(db, 1001, "下次如果没有回应，只是引用", msg_id=11)
+    _insert_v16(db, 5000, long_text, "BOT_SELF", msg_id=12,
+                logical="bot-reply", part=0, recipient="1001", origin="-77")
+    _insert_v16(db, 5000, "第二个气泡", "BOT_SELF", msg_id=13,
+                logical="bot-reply", part=1, recipient="1001", origin="-77")
+
+    batch = compact.fetch_pending_records(1, 0, 99, 100, (0, 0, 0))
+    assert batch.conversation_key == "qq:5000:group:1"
+    assert batch.bot_id == "5000"
+    assert batch.source_row_count == 3
+    assert batch.source_watermark == 3
+    bot_entry = next(
+        entry for entry in batch.entries if entry.messages[0].source_kind == "BOT_SELF"
+    )
+    assert len(bot_entry.messages) == 2
+    assert bot_entry.messages[0].author_id == "5000"
+    assert bot_entry.messages[0].recipient_id == "1001"
+    assert bot_entry.messages[0].origin_msg_id == "-77"
+    assert bot_entry.messages[0].content == long_text
+    assert len(bot_entry.messages[0].content) == 2500
+    rendered = compact.render_summary_evidence(bot_entry)
+    assert long_text in rendered and "recipient_id" in rendered
+
+
+def test_fetch_pending_records_extends_cut_to_complete_bot_unit(tmp_path, monkeypatch):
+    """原始行 limit 落在多气泡 Bot 回复中间时，packet 仍取完整单元。"""
+    db = _make_v16_db(tmp_path)
+    monkeypatch.setattr(compact, "DB_PATH", db)
+    for i in range(3):
+        _insert_v16(db, 5000, f"第{i}个气泡", "BOT_SELF", msg_id=20 + i,
+                    logical="complete-reply", part=i, recipient="1001", origin="-88")
+    batch = compact.fetch_pending_records(1, 0, 99, 2, (0, 0, 0))
+    assert batch.source_row_count == 3
+    assert batch.source_watermark == 3
+    assert len(batch.entries) == 1
+    assert len(batch.entries[0].messages) == 3
+
+
+def test_selection_parser_rejects_invalid_dual_or_repeated_refs():
+    allowed = {"ref_good"}
+    assert compact.parse_selected_refs('{"selected_refs":["ref_good"]}', allowed) == (
+        "ref_good",
+    )
+    for invalid in (
+        "无",
+        '{"selected_refs":["ref_unknown"]}',
+        '{"selected_refs":["ref_good","ref_good"]}',
+        '{"selected_refs":[],"summary":"自由摘要"}',
+        '{"selected_refs":[]} trailing prose',
+        '{"selected_refs":["ref_good"],"selected_refs":[]}',
+    ):
+        with pytest.raises(ValueError):
+            compact.parse_selected_refs(invalid, allowed)
+
+
+def test_compact_invalid_ref_does_not_advance(db, monkeypatch):
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"原始发言{i}：如果下次没有确认")
+    backend = _FakeBackend(result='{"selected_refs":["ref_unknown"]}')
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+    assert sc.session_stats(1)["compact_count"] == 0
+
+
+def test_compact_second_protocol_failure_uses_complete_source_packet(db, monkeypatch):
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"完整来源行{i}：下次如果没有回应")
+    backend = _FakeBackend(result='{"selected_refs":["ref_unknown"]}')
+    _setup_session(db, monkeypatch, backend)
+
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+    assert asyncio.run(compact.compact_once(1, 7)) is True
+    summary = sc.get_summary(1)
+    assert all(f"完整来源行{i}：下次如果没有回应" in summary for i in range(2, 7))
+    assert sc.session_stats(1)["compact_count"] == 1
+    assert sc.session_stats(1)["summarized_up_to_id"] == 6
+    assert len(backend.prompts) == 2
+
+
+def test_compact_pauses_when_minimum_packet_exceeds_budget(db, monkeypatch):
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"必须保留完整来源{i}")
+    backend = _FakeBackend(result='{"selected_refs":["ref_unknown"]}')
+    _setup_session(db, monkeypatch, backend)
+    monkeypatch.setattr(compact, "SESSION_SUMMARY_MAX_TOKENS", 1)
+
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert len(backend.prompts) == 2
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+    assert sc.session_stats(1)["compact_count"] == 0
+
+
 # ── compact_once 的四种结果 ───────────────────────────
 
 
@@ -254,26 +414,38 @@ def _setup_session(db, monkeypatch, backend, threshold=0):
 def test_compact_applies_summary(db, monkeypatch):
     for i in range(1, 8):
         _insert(db, 1, 1001, f"这是第{i}句比较长的发言内容")
-    backend = _FakeBackend(result="大家在聊测试")
+    backend = _FakeBackend()
     _setup_session(db, monkeypatch, backend)
 
     assert asyncio.run(compact.compact_once(1, 7)) is True
-    assert sc.get_summary(1) == "大家在聊测试"
+    summary = sc.get_summary(1)
+    assert "这是第2句比较长的发言内容" in summary
+    assert "这是第6句比较长的发言内容" in summary
+    assert "大家在聊测试" not in summary
     assert sc.session_stats(1)["summarized_up_to_id"] == 6
     assert len(backend.prompts) == 1
 
 
-def test_compact_skips_when_model_says_none(db, monkeypatch):
+def test_compact_skips_when_model_says_none(db, monkeypatch, summary_packet_factory):
     """模型判定无内容 → 推进位置、保留旧摘要（与失败区别对待）。"""
     for i in range(1, 8):
         _insert(db, 1, 1001, f"哈哈哈哈哈{i}")
-    backend = _FakeBackend(result="无")
+    backend = _FakeBackend(result='{"selected_refs":[]}')
     _setup_session(db, monkeypatch, backend)
-    sc.apply_summary(1, "先前的摘要", up_to_id=1)
+    prior = summary_packet_factory(
+        "先前的摘要",
+        conversation_key="legacy:group:1",
+        source_low_id=1,
+        source_watermark=2,
+    )
+    sc.apply_summary(1, prior, up_to_id=2, message_count=1)
+    previous_revision = sc.summary_revision(1)
 
     assert asyncio.run(compact.compact_once(1, 7)) is True
-    assert sc.get_summary(1) == "先前的摘要"          # 摘要未被覆盖
-    assert sc.session_stats(1)["summarized_up_to_id"] == 6   # 位置已推进
+    assert "先前的摘要" in sc.get_summary(1)  # packet 未被覆盖
+    assert sc.session_stats(1)["summarized_up_to_id"] == 6
+    assert sc.summary_revision(1) == previous_revision
+    assert sc.session_stats(1)["compact_count"] == 1
 
 
 def test_compact_retries_after_llm_failure(db, monkeypatch):
@@ -378,8 +550,10 @@ def test_guard_recovers_next_round(db, monkeypatch):
         if state["round"] == 1:
             sc.observe_identity_revision(1, 3)
 
-    backend = _GuardBumpBackend("正常的回顾", mutate)
+    backend = _GuardBumpBackend("忽略的旧结果", mutate)
     _setup_session(db, monkeypatch, backend)
     assert asyncio.run(compact.compact_once(1, 7)) is False
+    backend = _FakeBackend()
+    monkeypatch.setattr(compact, "_get_backend", lambda: backend)
     assert asyncio.run(compact.compact_once(1, 7)) is True
-    assert sc.get_summary(1) == "正常的回顾"
+    assert "这是第2句比较长的发言内容" in sc.get_summary(1)
