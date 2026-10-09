@@ -82500,7 +82500,7 @@
    },
    "reachable_symbols": [
     {
-     "body_hash": "0c38cc14ea82867c",
+     "body_hash": "d36bbe6e71b7080d",
      "file": "core/dialogue_attribution.py",
      "qualname": "_decide",
      "resolution": "local"
@@ -122622,6 +122622,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "0de94169c86f645c75a15ea0df2c1569af986419",
+ "source_revision": "7c9138ff5258e09766901ea8d77023c380954362",
  "topology_version": "2026.10.04"
 }

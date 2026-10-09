@@ -7,7 +7,11 @@ import sqlite3
 
 import pytest
 
-from memory.evidence_contract import assess_candidate, source_digest, verify_source_snapshot
+from memory.evidence_contract import (
+    assess_candidate,
+    source_digest,
+    verify_source_snapshot,
+)
 
 
 def _database(tmp_path, *, source_kind="AT_MENTION", author="111", bot_id="bot-a"):
