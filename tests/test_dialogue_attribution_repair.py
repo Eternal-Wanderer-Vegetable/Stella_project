@@ -731,6 +731,18 @@ class TestAttributionRenderAndGuard:
             raw, self._table(), set(self._table().keys()), "off", 1)
         assert final == raw and decision.decision == "pass"
 
+    def test_untyped_legacy_reply_uses_clarification_in_active_guard_modes(self):
+        raw = "<reply>历史单槽回复</reply>"
+        for mode in ("shadow", "enforce"):
+            final, decision = apply_attribution_guard(
+                raw, self._table(), set(self._table().keys()), mode, 1)
+            assert decision.decision == "fallback"
+            assert decision.rejection_reason == (
+                "legacy_untyped_reply_requires_clarification"
+            )
+            assert decision.semantic_status == "deterministic_clarification"
+            assert "历史单槽回复" not in final
+
     def test_invalid_reference_enforce_strips_quotes(self):
         raw = (
             '<reply_plan version="2026-10-05.2">'

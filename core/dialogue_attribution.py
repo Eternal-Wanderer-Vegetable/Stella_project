@@ -866,6 +866,19 @@ def _decide(
         decision.rejection_reason = f"parse_failed_shadow:{parse_error}"
         return None, decision, ""
 
+    if (
+        envelope is not None
+        and envelope.legacy
+        and envelope.protocol_version == "legacy-reply-v1"
+        and guard_mode in {"shadow", "enforce"}
+    ):
+        # A bare legacy <reply> has no typed intent or evidence provenance. Do
+        # not let its compatibility parse bypass the final attribution gate.
+        decision.decision = "fallback"
+        decision.rejection_reason = "legacy_untyped_reply_requires_clarification"
+        decision.semantic_status = "deterministic_clarification"
+        return reply_plan, decision, _ATTRIBUTION_CLARIFY
+
     if envelope is not None and not legacy:
         risk = risk_context if isinstance(risk_context, dict) else {}
         signals = {str(item) for item in (risk.get("signal_codes") or [])}
