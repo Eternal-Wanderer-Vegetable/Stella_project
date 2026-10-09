@@ -246,6 +246,22 @@ def protocol_instructions(
     return "\n".join(lines)
 
 
+def reply_system_prompt(persona: str) -> str:
+    """保留空间人格，由服务端提供唯一回复协议，消除旧人设格式冲突。"""
+    persona = re.sub(
+        r"(?ms)^##[ \t]+统一输出格式[^\n]*\n.*?(?=^##[ \t]+|\Z)",
+        "",
+        str(persona or ""),
+    ).rstrip()
+    protocol = (
+        "## 服务端回复协议\n\n"
+        "人设仅定义性格、语气和台词习惯；输出结构以本节为唯一标准。\n"
+        "引用证据以本轮用户消息提供的服务端证据表为准。\n"
+        + protocol_instructions({}, set())
+    )
+    return "\n\n".join(part for part in (persona, protocol) if part)
+
+
 def parse_reply_plan(raw_output: str) -> tuple[ReplyPlan | None, str]:
     """解析模型输出中的 versioned reply_plan（复核 F12：真实解析器）。
 
@@ -423,7 +439,20 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
     try:
         root = ET.fromstring(raw)
     except ET.ParseError:
-        return _parse_legacy_envelope(raw)
+        # 只修复完整 typed 三段漏掉 response 外壳的已知模型输出。
+        # 仍复用下面所有槽位校验；不提取 raw，不兼容重复根或块外台词。
+        try:
+            root = ET.fromstring(
+                f'<response version="{REPLY_ENVELOPE_PROTOCOL_VERSION}">{raw}</response>'
+            )
+        except ET.ParseError:
+            return _parse_legacy_envelope(raw)
+        children = list(root)
+        if (
+            [child.tag for child in children] != ["thought", "action", "reply"]
+            or "kind" not in children[-1].attrib
+        ):
+            return _parse_legacy_envelope(raw)
     if root.tag != "response":
         return _parse_legacy_envelope(raw)
     if not _tree_within_protocol_limits(root):

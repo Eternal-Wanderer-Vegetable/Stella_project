@@ -93,6 +93,40 @@ def test_prepare_returns_typed_generate_and_stashes_prompt():
     assert backend.prompts == [ctx.prompt_log]
 
 
+@pytest.mark.parametrize("v2_enabled", [False, True])
+def test_old_persona_protocol_is_replaced_before_budget_and_generation(monkeypatch, v2_enabled):
+    from core.runtime import turn_service
+
+    monkeypatch.setattr(turn_service, "MEMORY_V2_ENABLED", v2_enabled)
+    raw = (
+        '<thought>随口接话</thought><action>NONE</action>'
+        '<reply kind="social"><current>还行吧，刷了会儿群\n你呢</current></reply>'
+    )
+    svc, _ = _service([raw])
+    persona = (
+        "你是 Stella，活泼随和。\n\n"
+        "## 统一输出格式（严格遵守）\n"
+        "必须且只能输出以下 XML：\n"
+        "<thought>心情</thought><action>NONE</action><reply>台词</reply>\n\n"
+        "## 特殊语气\n可以叫用户 Ain。"
+    )
+    svc.system_prompt_resolver = lambda ctx: persona
+    ctx = _ctx("今天过的怎么样？")
+    plan = asyncio.run(svc.prepare_turn(ctx))
+    assert plan.outcome == GENERATE
+    actual_system = turn_service.pending_system_prompt(ctx)
+    assert "你是 Stella，活泼随和。" in actual_system
+    assert "## 特殊语气\n可以叫用户 Ain。" in actual_system
+    assert "<reply>台词</reply>" not in actual_system
+    assert "## 统一输出格式" not in actual_system
+    assert actual_system.count('<response version="2026-10-08.1">') == 1
+    assert ctx.system_prompt_len == len(actual_system)
+    out = asyncio.run(svc.generate_reply(ctx))
+    out = asyncio.run(svc.finalize_turn(out))
+    assert out.typed_reply_error == ""
+    assert out.lines == ["还行吧，刷了会儿群", "你呢"]
+
+
 def test_prepare_direct_when_pre_hook_replies():
     svc, backend = _service([])
 

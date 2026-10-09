@@ -557,3 +557,189 @@ def test_guard_recovers_next_round(db, monkeypatch):
     monkeypatch.setattr(compact, "_get_backend", lambda: backend)
     assert asyncio.run(compact.compact_once(1, 7)) is True
     assert "这是第2句比较长的发言内容" in sc.get_summary(1)
+
+
+# Compact 输入预算：所有完整来源单元均需经过模型，不可裁尾巴凑窗口。
+class _BatchBackend(_FakeBackend):
+    max_tokens = 900
+
+
+def _large_session(db, monkeypatch, backend):
+    for i in range(62):
+        _insert(db, 1, 1001, f"消息{i}: " + "a1b2c3d4" * 45)
+    _setup_session(db, monkeypatch, backend)
+    monkeypatch.setattr(compact, "SESSION_SUMMARY_MAX_TOKENS", 100_000)
+    monkeypatch.setattr(sc, "SESSION_SUMMARY_MAX_TOKENS", 100_000)
+
+
+def test_compact_batches_cover_every_complete_record_under_8192(db, monkeypatch):
+    backend = _BatchBackend()
+    _large_session(db, monkeypatch, backend)
+    batch = compact.fetch_pending_records(1, 1, 62, 60, sc.compact_guard(1))
+
+    assert asyncio.run(compact.compact_once(1, 62)) is True
+    assert len(backend.prompts) > 1
+    for prompt in backend.prompts:
+        assert len(prompt.encode("utf-8")) + backend.max_tokens + 512 <= 8192
+    for entry in batch.entries:
+        containing = [p for p in backend.prompts if entry.ref_id in p]
+        assert len(containing) == 1
+        assert all(message.content in containing[0] for message in entry.messages)
+    assert sc.session_stats(1)["summarized_up_to_id"] == 61
+    assert sc.session_stats(1)["compacted_messages"] == 60
+
+
+def test_compact_batches_include_old_packet_without_rewriting(db, monkeypatch):
+    backend = _BatchBackend()
+    _large_session(db, monkeypatch, backend)
+    old = _evidence("旧记录全文" * 100, conversation_key="legacy:group:1")
+    sc.apply_summary(1, _packet(old, low_id=1, watermark=2), up_to_id=2, message_count=1)
+
+    assert asyncio.run(compact.compact_once(1, 62)) is True
+    assert sum(old.ref_id in p for p in backend.prompts) == 1
+    assert old.messages[0].content in sc.get_summary(1)
+
+
+def test_compact_batch_failure_never_advances_watermark(db, monkeypatch):
+    class FailsSecondBatch(_BatchBackend):
+        async def generate(self, prompt, system_prompt=""):
+            if self.prompts:
+                self.prompts.append(prompt)
+                raise RuntimeError("第二批失败")
+            return await super().generate(prompt, system_prompt)
+
+    backend = FailsSecondBatch()
+    _large_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 62)) is False
+    assert len(backend.prompts) == 2
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+    assert sc.session_stats(1)["compact_count"] == 0
+
+
+def test_compact_batch_guard_change_stops_following_requests(db, monkeypatch):
+    class ResetsFirstBatch(_BatchBackend):
+        async def generate(self, prompt, system_prompt=""):
+            result = await super().generate(prompt, system_prompt)
+            sc.bump_reset_generation(1)
+            return result
+
+    backend = ResetsFirstBatch()
+    _large_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 62)) is False
+    assert len(backend.prompts) == 1
+    assert sc.session_stats(1)["summarized_up_to_id"] == 0
+
+
+def test_compact_oversized_single_record_stays_pending(db, monkeypatch):
+    _insert(db, 1, 1001, "起点")
+    _insert(db, 1, 1001, "不能截断" * 3000)
+    _insert(db, 1, 1001, "尾巴")
+    backend = _BatchBackend()
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 3)) is False
+    assert backend.prompts == []
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+
+
+def test_compact_prompt_removes_redundant_digest_not_source_information():
+    entry = _evidence("如果没有回应，只是转述", bot_id="5000", recipient_id="1002")
+    prompt = compact.build_compact_prompt([entry])
+    assert entry.ref_id in prompt
+    assert "source_sha256=" not in prompt
+    assert entry.conversation_key in prompt and "5000" in prompt
+    assert '"recipient_id":"1002"' in prompt
+    assert entry.messages[0].content in prompt
+
+
+def test_compact_length_finish_never_commits_even_valid_json(db, monkeypatch):
+    class LengthBackend(_BatchBackend):
+        async def generate_detailed(self, prompt, system_prompt=""):
+            return await self.generate(prompt, system_prompt), "length"
+
+    for i in range(1, 8):
+        _insert(db, 1, 1001, f"消息{i}")
+    backend = LengthBackend()
+    _setup_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 7)) is False
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+
+
+@pytest.mark.parametrize("output_tokens", [900, 4096])
+def test_batch_plan_reserves_actual_output_limit(output_tokens):
+    entries = tuple(_evidence("ab12cd34" * 45, message_id=i) for i in range(1, 41))
+    requests = compact._plan_compact_batches(entries, None, output_tokens)
+    assert len(requests) > 1
+    assert set().union(*(refs for _, refs in requests)) == {e.ref_id for e in entries}
+    for prompt, refs in requests:
+        assert len(prompt.encode("utf-8")) + output_tokens + 512 <= 8192
+        assert len(json.dumps({"selected_refs": sorted(refs)}, separators=(",", ":"))) <= output_tokens
+
+
+def test_batch_plan_never_splits_logical_bot_bubbles():
+    entries = [_evidence("abcd1234" * 60, message_id=i, bot_id="5000")
+               for i in range(1, 20)]
+    bubbles = tuple(SummarySourceMessage(
+        message_id=20 + i, author_id="5000", source_kind="BOT_SELF",
+        content=f"第{i}段\n引号\"与 | 分隔符 " + "原文" * 150,
+        part_index=i, recipient_id="1001", origin_msg_id="-88",
+        logical_message_id="complete-bot-reply",
+    ) for i in range(2))
+    bot_entry = build_summary_evidence("test:group:1", "5000", bubbles)
+    requests = compact._plan_compact_batches((*entries, bot_entry), None, 900)
+    containing = [prompt for prompt, refs in requests if bot_entry.ref_id in refs]
+    assert len(containing) == 1
+    line = next(line for line in containing[0].splitlines()
+                if line.startswith(f"REF {bot_entry.ref_id} |"))
+    rendered = json.loads(line.split(" | ", 2)[2])
+    assert [row["text"] for row in rendered] == [bubble.content for bubble in bubbles]
+    assert all(row["recipient_id"] == "1001" for row in rendered)
+    assert all(row["logical_message_id"] == "complete-bot-reply" for row in rendered)
+
+
+def test_compact_prompt_preserves_all_nonempty_source_metadata():
+    message = SummarySourceMessage(
+        message_id=7, author_id="5000", source_kind="BOT_SELF",
+        content="如果下次没有\n只是引用：\"先前说过\" | \\原文😀",
+        timestamp="2026-10-09T21:55:08+08:00", platform_message_id="-11",
+        part_index=0, recipient_id="1001", origin_msg_id="-12",
+        reply_to_msg_id="-13", reply_target_user_id="1002",
+        mentioned_user_ids=("1001", "1002"), mentioned_user_ids_json='["1001", "1002"]',
+        logical_message_id="reply-unit",
+    )
+    evidence = build_summary_evidence("qq:5000:group:1", "5000", (message,))
+    prompt = compact.build_compact_prompt([evidence])
+    line = next(line for line in prompt.splitlines() if line.startswith("REF ref_"))
+    bubble = json.loads(line.split(" | ", 2)[2])[0]
+    canonical = json.loads(compact.render_summary_evidence(evidence).split(" | ", 2)[2])[0]
+    assert all(bubble.get(key) == value for key, value in canonical.items())
+    assert bubble["logical_message_id"] == message.logical_message_id
+    assert evidence.source_digest  # digest remains sealed server-side
+
+
+def test_compact_rejects_ref_selected_from_another_request(db, monkeypatch):
+    class SelectsPreviousBatch(_BatchBackend):
+        async def generate(self, prompt, system_prompt=""):
+            if self.prompts:
+                first = next(line.split(" ", 2)[1] for line in self.prompts[0].splitlines()
+                             if line.startswith("REF ref_"))
+                self.prompts.append(prompt)
+                return json.dumps({"selected_refs": [first]})
+            return await super().generate(prompt, system_prompt)
+
+    backend = SelectsPreviousBatch()
+    _large_session(db, monkeypatch, backend)
+    assert asyncio.run(compact.compact_once(1, 62)) is False
+    assert len(backend.prompts) == 2
+    assert sc.session_stats(1)["summarized_up_to_id"] == 1
+
+
+def test_same_source_batch_failure_count_survives_new_tail(db, monkeypatch):
+    backend = _BatchBackend(result='{"selected_refs":["ref_unknown"]}')
+    _large_session(db, monkeypatch, backend)
+    for i in range(8):
+        _insert(db, 1, 1001, f"新尾巴{i}")
+    assert asyncio.run(compact.compact_once(1, 65)) is False
+    assert asyncio.run(compact.compact_once(1, 69)) is False
+    assert asyncio.run(compact.compact_once(1, 70)) is True
+    assert len(backend.prompts) == 2
+    assert sc.session_stats(1)["summarized_up_to_id"] == 61

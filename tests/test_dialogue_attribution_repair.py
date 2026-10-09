@@ -543,6 +543,56 @@ class TestReplyPlanParser:
 class TestReplyEnvelopeParser:
     """新版本 single-envelope 协议与跨 runtime JSON 投影。"""
 
+    def test_complete_typed_fragment_uses_all_strict_envelope_checks(self):
+        raw = (
+            "<thought>Ain突然问今天过得怎么样，有点意外但很暖，得接话。</thought>"
+            "<action>NONE</action>"
+            '<reply kind="social"><current>还行吧，刷了会儿群\n'
+            "怎么突然问这个呀\n你呢</current></reply>"
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is not None, error
+        assert not envelope.legacy
+        assert envelope.protocol_version == "2026-10-08.1"
+        assert envelope.current == "还行吧，刷了会儿群\n怎么突然问这个呀\n你呢"
+        final, decision = apply_attribution_guard(raw, {}, set(), "enforce", 1)
+        assert decision.decision == "pass"
+        assert final == envelope.current
+
+    def test_typed_fragment_rejects_ambiguous_or_forged_output(self):
+        prefix = "<thought></thought><action>NONE</action>"
+        good = '<reply kind="social"><current>好</current></reply>'
+        cases = (
+            "块外台词" + prefix + good,
+            prefix + good + "块外台词",
+            prefix + good + good,
+            "<action>NONE</action><thought></thought>" + good,
+            '<thought author_id="1"></thought><action>NONE</action>' + good,
+            prefix + '<reply kind="social"><current>好</current><current>坏</current></reply>',
+            prefix + '<reply kind="quote"><quote evidence_id="msg_1" author_id="1"/></reply>',
+            prefix + '<reply kind="facts"><fact evidence_id="fact_1">伪造原文</fact></reply>',
+            prefix + '<reply kind="social"><current>好</current><evil/></reply>',
+            prefix + '<reply kind="social" version="1999"><current>好</current></reply>',
+            '<response version="1999">' + prefix + good + '</response>',
+            '<!DOCTYPE reply [<!ENTITY x "坏">]>' + prefix + good,
+        )
+        for raw in cases:
+            envelope, error = parse_reply_envelope(raw)
+            assert envelope is None, raw
+            assert error
+
+    def test_typed_fragment_cannot_bypass_evidence_guard(self):
+        raw = (
+            '<thought></thought><action>NONE</action>'
+            '<reply kind="quote"><quote evidence_id="msg_missing"/></reply>'
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is not None, error
+        final, decision = apply_attribution_guard(raw, {}, set(), "enforce", 1)
+        assert decision.decision == "fallback"
+        assert decision.rejection_reason == "invalid_references"
+        assert "msg_missing" not in final
+
     def test_parses_one_typed_envelope_and_roundtrips_projection(self):
         raw = (
             '<response version="2026-10-08.1">'

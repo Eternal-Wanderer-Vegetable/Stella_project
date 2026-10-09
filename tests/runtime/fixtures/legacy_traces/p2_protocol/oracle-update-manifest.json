@@ -16,11 +16,14 @@
   "scenarios": {
     "normal_single_call": {
       "m0_sha256": "98a82a0ad86279004041c885105f332c1e1c0615b12356ba8517ac10578bc7fa",
-      "p2_sha256": "a5b2dc70421ba811b0080c3418c76f478e92c58070a9e85548ce1a8c1d527d97",
+      "p2_sha256": "7c7488ff9eebe39a10d81ec337f9c9254ce359c897b53d25f9c5afc0968e1e6d",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
+        "trace.diagnostics.system_prompt_len",
         "trace.lines.0",
         "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt",
         "trace.reply"
       ]
     },
@@ -41,54 +44,146 @@
     },
     "planner_deep_then_reply": {
       "m0_sha256": "28e7891b6b8e8e182ba40b262084ef9f623f35ab88e6f1687bd8346009dd42a2",
-      "p2_sha256": "dd9f30c28da6d9b1c733499a1bdd0d04299d632082b054c209bfe8efd6fd817c",
+      "p2_sha256": "0bd52fe4777cc482f0ffbd9b54deb5140e8879b2607b0237fce925e97a7b01b8",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
-        "trace.llm_calls.0.prompt"
+        "trace.diagnostics.system_prompt_len",
+        "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt"
       ]
     },
     "timeout_fallback": {
       "m0_sha256": "82fa964b4f4f4e7ea1b1d2e6d2e2af05b57a5f88cc2ad700165fb1ca7e813ab6",
-      "p2_sha256": "50d06ab17f44f2de52f625d7b6c63a147bc91438eee221a9afbd0cba1edd6dcc",
+      "p2_sha256": "a1955bce7d79d90dff0a642f6f7ca5e58de40e1cca988c2e2c2fdcd21e83f650",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
-        "trace.llm_calls.0.prompt"
+        "trace.diagnostics.system_prompt_len",
+        "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt"
       ]
     },
     "backend_error_fallback": {
       "m0_sha256": "396f987798f407a686c1f7d8dded9e8cfadd8e2c96581ac97219c5c28624fbf4",
-      "p2_sha256": "283acc59819b7452ac2cca41aa83471f80dd1e619c9e617077a51dea4a64f8d4",
+      "p2_sha256": "df91a1247410f5bc7145d79db7fe2362dd4089cf1105e1ffbb0fddb612810850",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
-        "trace.llm_calls.0.prompt"
+        "trace.diagnostics.system_prompt_len",
+        "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt"
       ]
     },
     "bad_phrase_fallback": {
       "m0_sha256": "dd7d8b7a7ab1897218ac7960c04d7c673fc7ac94b611dda2efdb9b18cbed1f60",
-      "p2_sha256": "805aed6219b8561fae65735c0a7e9d345ea6adbdbfc0a67dd87e152c4fb2f092",
+      "p2_sha256": "5f75d9d92c54f32bfa20bcc72063c727d843d8828a6805bc856883d7b4bc314b",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
-        "trace.llm_calls.0.prompt"
+        "trace.diagnostics.system_prompt_len",
+        "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt"
       ]
     },
     "proactive_at_instruction_first": {
       "m0_sha256": "3282b2a3bd90a7908b6c3b9ae557c8396a5aa9d3fd94c877b7f000b05aadb698",
-      "p2_sha256": "b335617bc7c584eff42256fd726b8bef940656042f917318e467471aa91ced3d",
+      "p2_sha256": "a70e4881ec7a5f6160c6fdf97c05ad6a86c4ed39759f8ec76ed39ec1b62df781",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
-        "trace.llm_calls.0.prompt"
+        "trace.diagnostics.system_prompt_len",
+        "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt"
       ]
     },
     "tool_and_evidence_sections": {
       "m0_sha256": "40b8133b3b03999464e8bd2201728a3cfe6b0314c65786199ee28ade3c3ef8f9",
-      "p2_sha256": "5508c36c1a37fae6f22d95ada28697568c06a5f82f894d360801d77db3b2b0fd",
+      "p2_sha256": "27eeedd4824cdd91ff1565c7d49ac784a514e2c1bd2d4a1954a9e9f0c70b2e57",
       "changed_paths": [
+        "trace.diagnostics.prompt_budget_tokens",
         "trace.diagnostics.prompt_estimated_tokens",
+        "trace.diagnostics.system_prompt_len",
         "trace.lines.0",
         "trace.llm_calls.0.prompt",
+        "trace.llm_calls.0.system_prompt",
         "trace.reply",
         "trace.thought"
       ]
+    }
+  },
+  "protocol_system_revision": {
+    "date": "2026-10-09",
+    "reason": "Server-owned system reply protocol removes persona format conflicts before budget fitting. Reply/action/hooks/input/raw output remain frozen.",
+    "allowed_changed_paths": [
+      "trace.diagnostics.prompt_budget_tokens",
+      "trace.diagnostics.system_prompt_len",
+      "trace.llm_calls.0.system_prompt"
+    ],
+    "scenarios": {
+      "normal_single_call": {
+        "before_sha256": "a5b2dc70421ba811b0080c3418c76f478e92c58070a9e85548ce1a8c1d527d97",
+        "after_sha256": "7c7488ff9eebe39a10d81ec337f9c9254ce359c897b53d25f9c5afc0968e1e6d",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "planner_deep_then_reply": {
+        "before_sha256": "dd9f30c28da6d9b1c733499a1bdd0d04299d632082b054c209bfe8efd6fd817c",
+        "after_sha256": "0bd52fe4777cc482f0ffbd9b54deb5140e8879b2607b0237fce925e97a7b01b8",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "timeout_fallback": {
+        "before_sha256": "50d06ab17f44f2de52f625d7b6c63a147bc91438eee221a9afbd0cba1edd6dcc",
+        "after_sha256": "a1955bce7d79d90dff0a642f6f7ca5e58de40e1cca988c2e2c2fdcd21e83f650",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "backend_error_fallback": {
+        "before_sha256": "283acc59819b7452ac2cca41aa83471f80dd1e619c9e617077a51dea4a64f8d4",
+        "after_sha256": "df91a1247410f5bc7145d79db7fe2362dd4089cf1105e1ffbb0fddb612810850",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "bad_phrase_fallback": {
+        "before_sha256": "805aed6219b8561fae65735c0a7e9d345ea6adbdbfc0a67dd87e152c4fb2f092",
+        "after_sha256": "5f75d9d92c54f32bfa20bcc72063c727d843d8828a6805bc856883d7b4bc314b",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "proactive_at_instruction_first": {
+        "before_sha256": "b335617bc7c584eff42256fd726b8bef940656042f917318e467471aa91ced3d",
+        "after_sha256": "a70e4881ec7a5f6160c6fdf97c05ad6a86c4ed39759f8ec76ed39ec1b62df781",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "tool_and_evidence_sections": {
+        "before_sha256": "5508c36c1a37fae6f22d95ada28697568c06a5f82f894d360801d77db3b2b0fd",
+        "after_sha256": "27eeedd4824cdd91ff1565c7d49ac784a514e2c1bd2d4a1954a9e9f0c70b2e57",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      }
     }
   }
 }
