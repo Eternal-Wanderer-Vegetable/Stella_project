@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""Legacy reference traces 冻结护栏（M0 建立的迁移 oracle）。
+"""Legacy reference traces 护栏（保留 M0，逐字段核对 P2 协议基线）。
 
-每个冻结场景在**当前实现**上重放，并与 ``fixtures/legacy_traces/<场景>.json``
-逐字段比对。任何改动 Pipeline 业务语义的提交都必须让这些 trace 保持不变；
-差异即破坏兼容基线（docs/migration/cortico/baseline-report.md §4）。
+每个场景在当前实现上重放，并与独立的 ``fixtures/legacy_traces/p2_protocol``
+快照逐字段比对。根目录中的 M0 oracle 保持原样，P2 只吸收经审阅的协议、
+预算和格式差异，避免把新输出覆盖成旧基线。
 
-再生成只允许发生在 M0（``python tests/runtime/regen_traces.py``）；
-此后任何「重新生成让测试变绿」的操作都等于覆盖旧 oracle，禁止。
+``regen_traces.py`` 仍只用于 M0 初始化；P2 oracle 需按本阶段审阅清单更新。
 """
 
 from __future__ import annotations
@@ -23,10 +22,12 @@ import pytest
 def test_legacy_reference_trace_unchanged(sc):
     # JSON 往返对齐序列化语义（tuple→list），与冻结文件同构
     result = json.loads(json.dumps(harness.run_scenario(sc)))
-    frozen = harness.load_frozen(sc.name)
+    m0 = harness.load_frozen(sc.name, generation="m0")
+    frozen = harness.load_frozen(sc.name, generation="p2_protocol")
+    assert m0 is not None, f"M0 原始 oracle 缺失：{sc.name}"
     assert frozen is not None, (
-        f"缺少冻结 trace fixtures/legacy_traces/{sc.name}.json；"
-        "仅 M0 允许执行 tests/runtime/regen_traces.py 初始化"
+        f"缺少 P2 review trace fixtures/legacy_traces/p2_protocol/{sc.name}.json；"
+        "不得使用 M0 regen 脚本覆盖原始 oracle"
     )
     assert result == frozen, (
         f"场景 {sc.name} 的可观察行为偏离冻结基线。"

@@ -233,26 +233,19 @@ def _compose_prompt(context_text: str, ctx: ChatContext, social_text: str = "") 
 
 
 def _attribution_section(ctx: ChatContext) -> str:
-    """归属证据 + reply_plan 协议段（复核 F1；guard 模式 off 或无证据时为空）。
-
-    有界（≤16 单元）；只在 guard 模式非 off 且证据表非空时产出。由 prepare
-    并入受保护身份块——可引用 ID 与实际保留输入严格一致。
-    """
+    """ReplyEnvelope 协议与服务端证据；由 prepare 并入受保护 prompt 区。"""
     try:
-        from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
         from core.dialogue_attribution import (
             evidence_table_from_projection,
             protocol_instructions,
         )
 
-        mode = str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
-        if mode not in ("shadow", "enforce"):
-            return ""
         data = getattr(ctx, "attribution_evidence", None) or {}
         table = evidence_table_from_projection(data)
-        if not table:
-            return ""
-        return protocol_instructions(table, set(table.keys()))
+        return protocol_instructions(
+            table, set(table.keys()),
+            risk_context=getattr(ctx, "attribution_risk_context", None),
+        )
     except Exception:
         return ""
 
@@ -416,9 +409,7 @@ class TurnService:
                     identity_capsule=getattr(ctx, "identity_capsule", "") or None,
                 )
                 context_text = "\n\n".join(text for _, text in v2_sections)
-                # 归属证据协议段（复核 F1）：有界（≤16 单元），并入受保护
-                # 身份块——可引用 ID 与实际保留输入严格一致，预算不会把
-                # 协议裁掉却留下引用槽（也不能反过来）。
+                # 唯一 ReplyEnvelope 与预算证据并入受保护身份块。
                 _attr_section = _attribution_section(ctx)
                 if _attr_section:
                     identity_text = next(
@@ -434,6 +425,7 @@ class TurnService:
                                 break
                     else:
                         context_text = _attr_section + "\n\n" + context_text
+                        v2_sections.insert(0, ("identity", _attr_section))
                 user_prompt = _compose_prompt(context_text, ctx)
             else:
                 from memory.prompt_builder import build_prompt_context
@@ -448,6 +440,9 @@ class TurnService:
                     current_user_id=ctx.user_id,
                     preferred_address=getattr(ctx, "preferred_address", None),
                 )
+                _attr_section = _attribution_section(ctx)
+                if _attr_section:
+                    context_text = _attr_section + "\n\n" + context_text
                 user_prompt = _compose_prompt(context_text, ctx)
 
         # 记录 LLM 诊断信息，供 thought 日志追溯该次调用用了哪个后端/模型
@@ -595,6 +590,12 @@ class TurnService:
         except Exception:
             pass
         user_prompt = budgeted.prompt
+        evidence_projection = getattr(ctx, "attribution_evidence", None) or {}
+        ctx.retained_evidence_ids = tuple(
+            str(evidence_id)
+            for evidence_id in evidence_projection
+            if str(evidence_id) and str(evidence_id) in user_prompt
+        )
         ctx.context_window_tokens = budgeted.window_tokens
         ctx.prompt_budget_tokens = budgeted.budget_tokens
         ctx.prompt_estimated_tokens = budgeted.estimated_tokens

@@ -24,12 +24,17 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Literal
 
 # 回复计划协议版本（与 prompt_builder 注入的指令一致）
 REPLY_PLAN_PROTOCOL_VERSION = "2026-10-05.2"
+REPLY_ENVELOPE_PROTOCOL_VERSION = "2026-10-08.1"
+_REPLY_ENVELOPE_SCHEMA_VERSION = 1
+_MAX_REPLY_ENVELOPE_BYTES = 16 * 1024
 
 _REPLY_PLAN_BLOCK = re.compile(
     r"<reply_plan\s+version=\"(?P<version>[\w.\-]+)\">(?P<body>.*?)</reply_plan>",
@@ -91,6 +96,38 @@ class ReplyPlan:
     protocol_version: str = REPLY_PLAN_PROTOCOL_VERSION
 
 
+@dataclass(frozen=True)
+class ReplyEnvelope:
+    """唯一解析后的回复对象；模型不能在 typed slots 中提供作者或原文。"""
+
+    protocol_version: str
+    kind: Literal["social", "quote", "facts", "correction", "clarify", "skip"]
+    current: str = ""
+    quote_evidence_ids: tuple[str, ...] = ()
+    fact_evidence_ids: tuple[str, ...] = ()
+    correction_ack: bool = False
+    target_user_id: str = ""
+    thought: str = ""
+    action: str = "NONE"
+    legacy: bool = False
+
+    def to_projection(self) -> dict:
+        """返回可跨 runtime boundary 的 JSON 值。"""
+        return {
+            "schema_version": _REPLY_ENVELOPE_SCHEMA_VERSION,
+            "protocol_version": self.protocol_version,
+            "kind": self.kind,
+            "current": self.current,
+            "quote_evidence_ids": list(self.quote_evidence_ids),
+            "fact_evidence_ids": list(self.fact_evidence_ids),
+            "correction_ack": self.correction_ack,
+            "target_user_id": self.target_user_id,
+            "thought": self.thought,
+            "action": self.action,
+            "legacy": self.legacy,
+        }
+
+
 @dataclass
 class AttributionDecision:
     """归属决策记录 - 最终放行/拒绝原因。
@@ -116,6 +153,9 @@ class AttributionDecision:
     invalid_references: list[str] = field(default_factory=list)
     identity_revision: int = 0
     generation_epoch: int = 0
+    # Guard 只验证结构、来源引用与显式风险；自由社会回应不因此成为事实认证。
+    semantic_status: str = "semantic_unverified"
+    verified: bool = False
 
 
 def _digest(text: str) -> str:
@@ -156,36 +196,52 @@ def evidence_table_from_projection(data: dict | None) -> dict[str, SourceEvidenc
 def protocol_instructions(
     evidence_table: dict[str, SourceEvidence],
     budget_retained_ids: set[str],
+    *,
+    risk_context: dict | None = None,
 ) -> str:
-    """生成证据表 + reply_plan 协议的 prompt 段（复核 F1）。
-
-    只在 guard 模式非 off 时进入 prompt；模型只能引用这里列出的证据 ID，
-    历史原话的作者/正文由服务端渲染。
-    """
+    """生成唯一 ReplyEnvelope 协议及预算实际保留的证据表。"""
     usable = [
         ev for eid, ev in evidence_table.items() if eid in budget_retained_ids
     ]
-    if not usable:
-        return ""
-    lines = ["可引用证据（引用只能用下列 ID，不得自行改写作者或原话）："]
+    lines = [
+        f"本轮回复协议（只允许一个 response 根元素，禁止块外文本；版本固定为 {REPLY_ENVELOPE_PROTOCOL_VERSION}）：",
+        '<response version="2026-10-08.1">',
+        "<thought>一句简短诊断；不作为回复发送</thought>",
+        "<action>NONE</action>",
+        '<reply kind="social"><current>对当前输入的正常回应</current></reply>',
+        "</response>",
+        "kind 只能为 social、quote、facts、correction、clarify、skip；social.current 只回应当前输入，",
+        "不得声称未在服务端证据中支持的历史事实。quote/fact 只能填写下方证据 ID，作者、原文、对象由服务端渲染。",
+        "correction 只能输出 <ack/>；clarify 和 skip 不带其他槽。不得输出作者名、用户 ID 或引用原文作为伪造槽。",
+    ]
+    if usable:
+        lines.append("可用服务端证据（只可引用此表中预算保留的 ID）：")
     for ev in usable:
         if ev.evidence_type == "message":
             author = ev.author_display or f"用户({ev.author_id})"
-            lines.append(f'- [msg] id={ev.evidence_id} 作者={author}：{ev.original_text}')
+            lines.append(
+                f'- [msg] id={ev.evidence_id} 作者={html.escape(author, quote=False)}：'
+                f'{html.escape(ev.original_text, quote=False)}'
+            )
         elif ev.evidence_type == "verified_fact":
-            lines.append(f"- [fact] id={ev.evidence_id}（已验证）：{ev.original_text}")
+            lines.append(
+                f"- [fact] id={ev.evidence_id}（已验证）："
+                f"{html.escape(ev.original_text, quote=False)}"
+            )
         else:
             author = ev.author_display or f"用户({ev.author_id})"
-            lines.append(f"- [correction] id={ev.evidence_id} 作者={author}：{ev.original_text}")
+            lines.append(
+                f"- [correction] id={ev.evidence_id} "
+                f"作者={html.escape(author, quote=False)}："
+                f"{html.escape(ev.original_text, quote=False)}"
+            )
+    risk = risk_context if isinstance(risk_context, dict) else {}
+    if risk.get("target_resolution") == "exact" and risk.get("target_user_id"):
+        lines.append(f"当前可信引用对象 ID 为 {risk['target_user_id']}；不得改写为其他对象。")
     lines.append(
-        "输出协议（必须遵守）：在正常输出之外给出一个 reply_plan 块，"
-        '格式：\n<reply_plan version="' + REPLY_PLAN_PROTOCOL_VERSION + '">\n'
-        "<now>你对当前输入的自由回应（不要在此复述历史事实，除非有对应证据）</now>\n"
-        '<ref id="要引用的历史原话证据ID"/>\n'
-        '<fact id="要引用的已验证事实证据ID"/>\n'
-        "<ack/>（仅当本轮用户纠正了你时保留，承认内容由系统生成）\n"
-        "</reply_plan>\n"
-        "没有对应证据的引用槽请整行省略；历史里谁说过什么以证据表标注的作者为准。"
+        '引用示例：<reply kind="quote"><quote evidence_id="msg_3"/></reply>；'
+        '事实示例：<reply kind="facts"><fact evidence_id="fact_1"/></reply>。'
+        "协议错误或证据不足时由服务端转为澄清，不要在 XML 外补充说明。"
     )
     return "\n".join(lines)
 
@@ -273,6 +329,280 @@ def parse_reply_plan(raw_output: str) -> tuple[ReplyPlan | None, str]:
     return plan, ""
 
 
+def _tree_within_protocol_limits(root: ET.Element) -> bool:
+    stack: list[tuple[ET.Element, int]] = [(root, 1)]
+    seen = 0
+    while stack:
+        node, depth = stack.pop()
+        seen += 1
+        if depth > 8 or seen > 64:
+            return False
+        stack.extend((child, depth + 1) for child in list(node))
+    return True
+
+
+def _valid_action(value: str) -> bool:
+    return value in {"NONE", "REPLY", "WAIT"} or bool(
+        re.fullmatch(r"QUERY_MEMORY:\s*[^<>\r\n]{1,112}", value)
+    )
+
+
+def _parse_legacy_envelope(raw: str) -> tuple[ReplyEnvelope | None, str]:
+    """解析受限旧 XML 形状；只兼容已知标签，不提取任意块外台词。"""
+    try:
+        wrapper = ET.fromstring(f"<legacy-root>{raw}</legacy-root>")
+    except ET.ParseError:
+        return None, "legacy_malformed_xml"
+    if not _tree_within_protocol_limits(wrapper) or (wrapper.text or "").strip():
+        return None, "legacy_protocol_limits"
+    children = list(wrapper)
+    if any((child.tail or "").strip() for child in children):
+        return None, "legacy_outside_text"
+    names = [child.tag for child in children]
+    if any(name not in {"thought", "action", "reply", "reply_plan"} for name in names):
+        return None, "legacy_unknown_tag"
+    if any(names.count(name) > 1 for name in {"thought", "action", "reply", "reply_plan"}):
+        return None, "legacy_duplicate_slot"
+    if "reply" in names and "reply_plan" in names:
+        return None, "legacy_conflicting_reply_slots"
+    thought_node = next((node for node in children if node.tag == "thought"), None)
+    action_node = next((node for node in children if node.tag == "action"), None)
+    thought = (thought_node.text or "").strip() if thought_node is not None else ""
+    action = (action_node.text or "NONE").strip() if action_node is not None else "NONE"
+    if any(node.attrib or list(node) for node in (thought_node, action_node) if node is not None):
+        return None, "legacy_nested_slot"
+    if not _valid_action(action):
+        return None, "legacy_unknown_action"
+
+    plan_node = next((node for node in children if node.tag == "reply_plan"), None)
+    if plan_node is not None:
+        plan, error = parse_reply_plan(raw)
+        if plan is None:
+            return None, error
+        kind = (
+            "correction" if plan.correction_ack else
+            "quote" if plan.quote_references else
+            "facts" if plan.verified_fact_references else "social"
+        )
+        return ReplyEnvelope(
+            protocol_version=plan.protocol_version,
+            kind=kind,
+            current=plan.current_response,
+            quote_evidence_ids=tuple(plan.quote_references),
+            fact_evidence_ids=tuple(plan.verified_fact_references),
+            correction_ack=plan.correction_ack,
+            thought=thought,
+            action=action,
+            legacy=True,
+        ), ""
+
+    reply_node = next((node for node in children if node.tag == "reply"), None)
+    if reply_node is None or reply_node.attrib or list(reply_node):
+        return None, "legacy_reply_missing_or_invalid"
+    current = (reply_node.text or "").strip()
+    if not current:
+        return None, "legacy_reply_empty"
+    return ReplyEnvelope(
+        protocol_version="legacy-reply-v1", kind="social", current=current,
+        thought=thought, action=action, legacy=True,
+    ), ""
+
+
+def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
+    """解析唯一 versioned ReplyEnvelope，拒绝 DTD、实体、额外台词与未知槽。
+
+    只保留一个有界的旧 XML adapter，便于灰度期间识别历史格式；普通文本、
+    块外内容和畸形回复都返回错误，调用方必须走受限服务器退路，不能回送 raw。
+    """
+    raw = str(raw_output or "")
+    encoded = raw.encode("utf-8")
+    if len(encoded) > _MAX_REPLY_ENVELOPE_BYTES:
+        return None, "output_too_large"
+    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", raw, flags=re.IGNORECASE):
+        return None, "forbidden_xml_declaration"
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        return _parse_legacy_envelope(raw)
+    if root.tag != "response":
+        return _parse_legacy_envelope(raw)
+    if not _tree_within_protocol_limits(root):
+        return None, "protocol_limits_exceeded"
+    if root.attrib != {"version": REPLY_ENVELOPE_PROTOCOL_VERSION}:
+        version = str(root.attrib.get("version") or "")
+        return None, f"unsupported_version:{version}"
+    if (root.text or "").strip():
+        return None, "text_outside_reply_slots"
+    children = list(root)
+    if [child.tag for child in children] != ["thought", "action", "reply"]:
+        return None, "invalid_root_slots"
+    if any((child.tail or "").strip() for child in children):
+        return None, "text_outside_reply_slots"
+
+    thought_node, action_node, reply_node = children
+    if any(node.attrib or list(node) for node in (thought_node, action_node)):
+        return None, "invalid_diagnostic_slot"
+    thought = (thought_node.text or "").strip()
+    action = (action_node.text or "").strip()
+    if len(thought) > 512 or not _valid_action(action):
+        return None, "invalid_diagnostic_value"
+
+    allowed_kinds = {"social", "quote", "facts", "correction", "clarify", "skip"}
+    if set(reply_node.attrib) - {"kind", "target_user_id"}:
+        return None, "unknown_reply_attribute"
+    kind = str(reply_node.attrib.get("kind") or "")
+    target_user_id = str(reply_node.attrib.get("target_user_id") or "")
+    if kind not in allowed_kinds:
+        return None, "unknown_reply_kind"
+    if target_user_id and (not target_user_id.isdigit() or len(target_user_id) > 32):
+        return None, "invalid_target_user_id"
+    if (reply_node.text or "").strip():
+        return None, "text_outside_typed_slots"
+
+    current = ""
+    current_seen = False
+    quote_ids: list[str] = []
+    fact_ids: list[str] = []
+    correction_ack = False
+    for child in list(reply_node):
+        if (
+            (child.tail or "").strip()
+            or (child.tag != "current" and (child.text or "").strip())
+            or list(child)
+        ):
+            return None, "invalid_typed_slot_content"
+        if child.tag == "current":
+            if child.attrib or current_seen:
+                return None, "duplicate_or_attributed_current"
+            current_seen = True
+            current = (child.text or "").strip()
+        elif child.tag in {"quote", "fact"}:
+            if set(child.attrib) != {"evidence_id"}:
+                return None, f"{child.tag}_without_evidence_id"
+            evidence_id = str(child.attrib.get("evidence_id") or "")
+            if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}", evidence_id):
+                return None, f"{child.tag}_invalid_evidence_id"
+            target_ids = quote_ids if child.tag == "quote" else fact_ids
+            if evidence_id in target_ids:
+                return None, "duplicate_evidence_id"
+            target_ids.append(evidence_id)
+        elif child.tag == "ack":
+            if child.attrib or correction_ack or (child.text or "").strip():
+                return None, "invalid_ack_slot"
+            correction_ack = True
+        else:
+            return None, "unknown_typed_slot"
+
+    if kind == "social" and (not current or quote_ids or fact_ids or correction_ack):
+        return None, "invalid_social_slots"
+    if kind == "quote" and (not quote_ids or fact_ids or correction_ack):
+        return None, "invalid_quote_slots"
+    if kind == "facts" and (not fact_ids or quote_ids or correction_ack):
+        return None, "invalid_fact_slots"
+    if kind == "correction" and (not correction_ack or quote_ids or fact_ids):
+        return None, "invalid_correction_slots"
+    if kind in {"clarify", "skip"} and (current or quote_ids or fact_ids or correction_ack):
+        return None, f"invalid_{kind}_slots"
+
+    return ReplyEnvelope(
+        protocol_version=REPLY_ENVELOPE_PROTOCOL_VERSION,
+        kind=kind, current=current, quote_evidence_ids=tuple(quote_ids),
+        fact_evidence_ids=tuple(fact_ids), correction_ack=correction_ack,
+        target_user_id=target_user_id, thought=thought, action=action,
+    ), ""
+
+
+def reply_envelope_from_projection(value: object) -> tuple[ReplyEnvelope | None, str]:
+    """重建并校验 JSON 投影中的 ReplyEnvelope，拒绝未知/篡改槽位。"""
+    fields = {
+        "schema_version", "protocol_version", "kind", "current",
+        "quote_evidence_ids", "fact_evidence_ids", "correction_ack",
+        "target_user_id", "thought", "action", "legacy",
+    }
+    if not isinstance(value, dict):
+        return None, "invalid_envelope_projection"
+    if set(value) != fields:
+        return None, "unknown_envelope_projection_field"
+    if (
+        type(value.get("schema_version")) is not int
+        or value.get("schema_version") != _REPLY_ENVELOPE_SCHEMA_VERSION
+    ):
+        return None, "invalid_envelope_projection"
+    string_fields = ("protocol_version", "kind", "current", "target_user_id", "thought", "action")
+    if any(not isinstance(value.get(name), str) for name in string_fields):
+        return None, "invalid_envelope_projection"
+    kind = value.get("kind")
+    if kind not in {"social", "quote", "facts", "correction", "clarify", "skip"}:
+        return None, "unknown_reply_kind"
+    quote_ids = value.get("quote_evidence_ids")
+    fact_ids = value.get("fact_evidence_ids")
+    if not isinstance(quote_ids, list) or not isinstance(fact_ids, list):
+        return None, "invalid_evidence_projection"
+    if len(quote_ids) + len(fact_ids) > 60:
+        return None, "too_many_evidence_slots"
+    if any(
+        not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}", item)
+        for item in [*quote_ids, *fact_ids]
+    ):
+        return None, "invalid_evidence_projection"
+    if len(set(quote_ids)) != len(quote_ids) or len(set(fact_ids)) != len(fact_ids):
+        return None, "duplicate_evidence_id"
+    if type(value.get("correction_ack")) is not bool:
+        return None, "invalid_correction_projection"
+    if type(value.get("legacy")) is not bool:
+        return None, "invalid_legacy_projection"
+    if (
+        len(value["current"].encode("utf-8")) > _MAX_REPLY_ENVELOPE_BYTES
+        or len(value["thought"]) > 512
+    ):
+        return None, "projection_value_too_large"
+    try:
+        envelope = ReplyEnvelope(
+            protocol_version=str(value.get("protocol_version") or ""),
+            kind=kind,
+            current=str(value.get("current") or ""),
+            quote_evidence_ids=tuple(str(item) for item in quote_ids),
+            fact_evidence_ids=tuple(str(item) for item in fact_ids),
+            correction_ack=value.get("correction_ack") is True,
+            target_user_id=str(value.get("target_user_id") or ""),
+            thought=str(value.get("thought") or ""),
+            action=str(value.get("action") or ""),
+            legacy=value.get("legacy") is True,
+        )
+    except (TypeError, ValueError):
+        return None, "invalid_envelope_projection"
+    if envelope.legacy:
+        if envelope.protocol_version not in {REPLY_PLAN_PROTOCOL_VERSION, "legacy-reply-v1"}:
+            return None, "unsupported_version"
+    elif envelope.protocol_version != REPLY_ENVELOPE_PROTOCOL_VERSION:
+        return None, "unsupported_version"
+    if not _valid_action(envelope.action) or len(envelope.thought) > 512:
+        return None, "invalid_diagnostic_value"
+    if envelope.target_user_id and (
+        not envelope.target_user_id.isdigit() or len(envelope.target_user_id) > 32
+    ):
+        return None, "invalid_target_user_id"
+    if not envelope.legacy:
+        valid_slots = {
+            "social": bool(envelope.current)
+            and not envelope.quote_evidence_ids and not envelope.fact_evidence_ids
+            and not envelope.correction_ack,
+            "quote": bool(envelope.quote_evidence_ids)
+            and not envelope.fact_evidence_ids and not envelope.correction_ack,
+            "facts": bool(envelope.fact_evidence_ids)
+            and not envelope.quote_evidence_ids and not envelope.correction_ack,
+            "correction": envelope.correction_ack
+            and not envelope.quote_evidence_ids and not envelope.fact_evidence_ids,
+            "clarify": not envelope.current and not envelope.quote_evidence_ids
+            and not envelope.fact_evidence_ids and not envelope.correction_ack,
+            "skip": not envelope.current and not envelope.quote_evidence_ids
+            and not envelope.fact_evidence_ids and not envelope.correction_ack,
+        }
+        if not valid_slots.get(envelope.kind, False):
+            return None, "invalid_typed_reply_projection"
+    return envelope, ""
+
+
 def _subtract_spans(total: int, spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """返回 spans 覆盖之外的区间。"""
     spans = sorted(spans)
@@ -352,6 +682,7 @@ def render_evidence(
 
 
 _CORRECTION_ACK_FALLBACK = "抱歉，刚才是我搞混了。"
+_ATTRIBUTION_CLARIFY = "我不确定你指的是哪位或哪句话，可以再发一次原话吗？"
 
 
 def render_correction_ack(evidence_table: dict[str, SourceEvidence]) -> str:
@@ -494,13 +825,14 @@ def build_evidence_table(
 
 
 def _decide(
-    reply_plan: ReplyPlan | None,
+    reply_plan: ReplyPlan | ReplyEnvelope | None,
     parse_error: str,
     evidence_table: dict[str, SourceEvidence],
     budget_retained_ids: set[str],
     guard_mode: Literal["off", "shadow", "enforce"],
     identity_revision: int,
     generation_epoch: int = 0,
+    risk_context: dict | None = None,
 ) -> tuple[ReplyPlan | None, AttributionDecision, str]:
     """guard 共同决策核（legacy/native 两条路径共用，复核 F1 的前提）。
 
@@ -514,6 +846,18 @@ def _decide(
         generation_epoch=generation_epoch,
     )
 
+    envelope = reply_plan if isinstance(reply_plan, ReplyEnvelope) else None
+    legacy = envelope.legacy if envelope is not None else True
+    reply_kind = envelope.kind if envelope is not None else "social"
+    if envelope is not None:
+        reply_plan = ReplyPlan(
+            current_response=envelope.current,
+            quote_references=list(envelope.quote_evidence_ids),
+            verified_fact_references=list(envelope.fact_evidence_ids),
+            correction_ack=envelope.correction_ack,
+            protocol_version=envelope.protocol_version,
+        )
+
     if reply_plan is None:
         if guard_mode == "enforce":
             decision.decision = "fallback"
@@ -521,6 +865,83 @@ def _decide(
             return None, decision, "抱歉，我需要重新理解一下。"
         decision.rejection_reason = f"parse_failed_shadow:{parse_error}"
         return None, decision, ""
+
+    if envelope is not None and not legacy:
+        risk = risk_context if isinstance(risk_context, dict) else {}
+        signals = {str(item) for item in (risk.get("signal_codes") or [])}
+        target_resolution = str(risk.get("target_resolution") or "unknown")
+        trusted_target = str(risk.get("target_user_id") or "")
+        claimed_target = envelope.target_user_id
+        target_mismatch = bool(
+            claimed_target and (not trusted_target or claimed_target != trusted_target)
+        )
+        unresolved_reply_target = (
+            "reply_relation" in signals
+            and target_resolution in {"ambiguous", "unknown"}
+        )
+        current_correction = "current_correction" in signals
+        server_high_risk = signals - {"current_correction", "reply_relation"}
+        if reply_kind == "skip":
+            decision.decision = "reject"
+            decision.rejection_reason = "model_skip"
+            return reply_plan, decision, ""
+        if current_correction:
+            decision.decision = "fallback"
+            decision.rejection_reason = "server_current_correction_template"
+            decision.semantic_status = "deterministic_render"
+            return reply_plan, decision, render_correction_ack(evidence_table)
+        if unresolved_reply_target or target_mismatch:
+            decision.decision = "fallback"
+            decision.rejection_reason = (
+                "reply_target_unresolved" if unresolved_reply_target
+                else "reply_target_mismatch"
+            )
+            decision.semantic_status = "deterministic_clarification"
+            return reply_plan, decision, _ATTRIBUTION_CLARIFY
+        if server_high_risk:
+            decision.decision = "fallback"
+            decision.rejection_reason = "server_attribution_risk:" + ",".join(sorted(server_high_risk))
+            decision.semantic_status = "deterministic_clarification"
+            return reply_plan, decision, _ATTRIBUTION_CLARIFY
+        if reply_kind == "clarify":
+            decision.decision = "fallback"
+            decision.rejection_reason = "typed_clarification"
+            decision.semantic_status = "deterministic_clarification"
+            return reply_plan, decision, _ATTRIBUTION_CLARIFY
+        if reply_kind == "correction":
+            decision.decision = "fallback"
+            decision.rejection_reason = "correction_without_server_evidence"
+            decision.semantic_status = "deterministic_clarification"
+            return reply_plan, decision, _ATTRIBUTION_CLARIFY
+        if reply_kind in {"quote", "facts"}:
+            all_valid, invalid_refs = validate_evidence_references(
+                reply_plan, evidence_table, budget_retained_ids
+            )
+            decision.invalid_references = list(invalid_refs)
+            if not all_valid:
+                decision.decision = "fallback"
+                decision.rejection_reason = "invalid_references"
+                decision.semantic_status = "deterministic_clarification"
+                return reply_plan, decision, _ATTRIBUTION_CLARIFY
+            rendered = []
+            ref_ids = (
+                reply_plan.quote_references if reply_kind == "quote"
+                else reply_plan.verified_fact_references
+            )
+            for ref_id in ref_ids:
+                item = render_evidence(ref_id, evidence_table[ref_id])
+                if item:
+                    rendered.append(item)
+            if not rendered:
+                decision.decision = "fallback"
+                decision.rejection_reason = "empty_verified_render"
+                decision.semantic_status = "deterministic_clarification"
+                return reply_plan, decision, _ATTRIBUTION_CLARIFY
+            decision.decision = "fallback"
+            decision.rejection_reason = "typed_server_render"
+            decision.semantic_status = "deterministic_render"
+            decision.checked_evidence_ids = list(ref_ids)
+            return reply_plan, decision, " ".join(rendered)
 
     parts: list[str] = []
     all_valid, invalid_refs = validate_evidence_references(
@@ -620,12 +1041,14 @@ def render_final_reply(
 
 
 def apply_attribution_guard(
-    raw_output: str,
+    raw_output: str | ReplyEnvelope | dict,
     evidence_table: dict[str, SourceEvidence],
     budget_retained_ids: set[str],
     guard_mode: Literal["off", "shadow", "enforce"],
     identity_revision: int,
     generation_epoch: int = 0,
+    risk_context: dict | None = None,
+    parse_error: str = "",
 ) -> tuple[str, AttributionDecision]:
     """应用归属守护 - 最终发送前检查（复核 F12/F1：完整管线）。
 
@@ -636,23 +1059,31 @@ def apply_attribution_guard(
         (final_output, decision)。guard_mode=off 时原样返回；
         shadow/enforce 下解析失败或危险内容返回受限安全文本。
     """
+    raw_text = raw_output if isinstance(raw_output, str) else repr(raw_output)
     decision = AttributionDecision(
         decision="pass",
         guard_mode=guard_mode,
         identity_revision=identity_revision,
         generation_epoch=generation_epoch,
-        original_output_digest=_digest(raw_output),
+        original_output_digest=_digest(raw_text),
     )
 
-    if guard_mode == "off":
+    if guard_mode == "off" and isinstance(raw_output, str):
         decision.final_output_digest = decision.original_output_digest
         return raw_output, decision
 
-    plan, parse_error = parse_reply_plan(raw_output)
+    if isinstance(raw_output, ReplyEnvelope):
+        plan, error = raw_output, ""
+    elif isinstance(raw_output, str):
+        plan, error = parse_reply_envelope(raw_output)
+    else:
+        plan, error = reply_envelope_from_projection(raw_output)
+    error = parse_error or error
     _, decision, final_output = _decide(
-        plan, parse_error, evidence_table, budget_retained_ids,
+        plan, error, evidence_table, budget_retained_ids,
         guard_mode, identity_revision, generation_epoch,
+        risk_context=risk_context,
     )
-    decision.original_output_digest = _digest(raw_output)
+    decision.original_output_digest = _digest(raw_text)
     decision.final_output_digest = _digest(final_output)
     return final_output, decision

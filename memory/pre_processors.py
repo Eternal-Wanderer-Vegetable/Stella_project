@@ -1066,6 +1066,31 @@ def build_attribution_evidence(ctx: ChatContext) -> dict:
         )
     corrections = _current_corrections(ctx)
     table = build_evidence_table(recent, facts, corrections, max_units=16)
+    signal_codes: list[str] = []
+    correction_ids = [
+        f"correction_{item.get('id')}"
+        for item in corrections if item.get("id")
+    ]
+    if correction_ids:
+        signal_codes.append("current_correction")
+    reply_to = str(getattr(ctx, "reply_to_msg_id", "") or "")
+    target_user_id = str(getattr(ctx, "reply_target_user_id", "") or "")
+    if reply_to:
+        signal_codes.append("reply_relation")
+    ctx.attribution_risk_context = {
+        "schema_version": 1,
+        "signal_codes": signal_codes,
+        "supporting_evidence_ids": [
+            evidence_id for evidence_id in correction_ids if evidence_id in table
+        ],
+        "target_resolution": (
+            "exact" if reply_to and target_user_id
+            else "unknown" if reply_to
+            else "not_applicable"
+        ),
+        "target_user_id": target_user_id if reply_to else "",
+        "identity_revision": int(getattr(ctx, "identity_revision", 0) or 0),
+    }
     return evidence_projection(table)
 
 

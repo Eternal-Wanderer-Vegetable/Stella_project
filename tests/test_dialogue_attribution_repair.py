@@ -24,8 +24,10 @@ from core.dialogue_attribution import (
     apply_guard_decision,
     build_evidence_table,
     check_risky_free_text,
+    parse_reply_envelope,
     parse_reply_plan,
     render_evidence,
+    reply_envelope_from_projection,
     validate_evidence_references,
 )
 from memory.conversation_identity import (
@@ -527,6 +529,96 @@ class TestReplyPlanParser:
         unclosed = '<reply_plan version="2026-10-05.2"><now>a</reply_plan>'
         plan, err = parse_reply_plan(unclosed)
         assert plan is None and "unclosed_now_tag" in err
+
+
+class TestReplyEnvelopeParser:
+    """新版本 single-envelope 协议与跨 runtime JSON 投影。"""
+
+    def test_parses_one_typed_envelope_and_roundtrips_projection(self):
+        raw = (
+            '<response version="2026-10-08.1">'
+            "<thought>diagnostic</thought><action>NONE</action>"
+            '<reply kind="quote" target_user_id="20001">'
+            "<current>我找到原话了。</current>"
+            '<quote evidence_id="msg_49245"/>'
+            "</reply></response>"
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is not None, error
+        assert envelope.kind == "quote"
+        assert envelope.current == "我找到原话了。"
+        assert envelope.quote_evidence_ids == ("msg_49245",)
+        assert envelope.target_user_id == "20001"
+        projected, projection_error = reply_envelope_from_projection(
+            envelope.to_projection()
+        )
+        assert projected == envelope, projection_error
+
+    def test_rejects_conflicting_roots_raw_tail_dtd_and_legacy_dual_output(self):
+        cases = (
+            '<!DOCTYPE response [<!ENTITY x "raw">]>'
+            '<response version="2026-10-08.1"><thought></thought>'
+            "<action>NONE</action><reply kind=\"social\"><current>&x;</current>"
+            "</reply></response>",
+            '<response version="2026-10-08.1"><thought></thought>'
+            '<action>NONE</action><reply kind="social"><current>好</current>'
+            "</reply></response>块外台词",
+            "<thought></thought><reply>新格式</reply>"
+            '<reply_plan version="2026-10-05.2"><now>旧格式</now></reply_plan>',
+        )
+        for raw in cases:
+            envelope, error = parse_reply_envelope(raw)
+            assert envelope is None, raw
+            assert error
+
+    def test_rejects_typed_slot_author_text_unknown_tags_and_empty_duplicate(self):
+        prefix = (
+            '<response version="2026-10-08.1"><thought></thought>'
+            "<action>NONE</action>"
+        )
+        suffix = "</reply></response>"
+        malformed_slots = (
+            '<reply kind="quote"><quote evidence_id="msg_1" author_id="20001"/>',
+            '<reply kind="quote"><quote evidence_id="msg_1">某人说</quote>',
+            '<reply kind="social"><current></current><current>第二段</current>',
+            '<reply kind="social"><current>好</current><evil>台词</evil>',
+        )
+        for slot in malformed_slots:
+            envelope, error = parse_reply_envelope(prefix + slot + suffix)
+            assert envelope is None, slot
+            assert error
+
+    def test_projection_rejects_unknown_and_mutated_fields(self):
+        envelope, error = parse_reply_envelope(
+            '<response version="2026-10-08.1"><thought></thought>'
+            '<action>NONE</action><reply kind="social"><current>好</current>'
+            "</reply></response>"
+        )
+        assert envelope is not None, error
+        projected = envelope.to_projection()
+        projected["author_id"] = "20001"
+        parsed, error = reply_envelope_from_projection(projected)
+        assert parsed is None
+        assert error == "unknown_envelope_projection_field"
+
+    def test_target_mismatch_uses_server_clarification(self):
+        raw = (
+            '<response version="2026-10-08.1"><thought></thought>'
+            "<action>NONE</action>"
+            '<reply kind="social" target_user_id="30002">'
+            "<current>你说的是那句话。</current></reply></response>"
+        )
+        final, decision = apply_attribution_guard(
+            raw, {}, set(), "enforce", identity_revision=4,
+            risk_context={
+                "signal_codes": ["reply_relation"],
+                "target_resolution": "exact",
+                "target_user_id": "20001",
+            },
+        )
+        assert decision.rejection_reason == "reply_target_mismatch"
+        assert decision.semantic_status == "deterministic_clarification"
+        assert "那句话" not in final
 
 
 class TestAttributionRenderAndGuard:

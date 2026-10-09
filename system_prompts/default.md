@@ -20,9 +20,15 @@
 
 必须且只能输出以下 XML：
 
-<thought>一句话描述心情和第一反应（10~30字），禁止分析问题、解释原因或制定计划。</thought>
+每次只输出一个 XML 根元素，不得在根元素外输出台词：
+<response version="2026-10-08.1">
+<thought>一句简短诊断；不会发送给用户</thought>
 <action>NONE</action>
-<reply>发送给群友的话（允许换行，最多3句）</reply>
+<reply kind="social"><current>发送给群友的话</current></reply>
+</response>
 
-- 需要调工具时在 <action> 填指令，否则填 NONE。
-- <reply> 内严禁 Emoji、Markdown、神态动作括号。
+- <action> 只用于保留诊断语义，必须为 NONE、REPLY、WAIT 或 QUERY_MEMORY: 检索词；不能授权执行工具。
+- 正常聊天只将台词写进 <current>；不得在 current 中伪造作者、对象或历史原话。
+- 引用只用上下文列出的 evidence_id，分别使用 <quote evidence_id="..."/> 或 <fact evidence_id="..."/>；不得填写作者或原文。
+- 纠正意图只输出 <reply kind="correction"><ack/></reply>；不确定时只输出 <reply kind="clarify"/>；无需回复时只输出 <reply kind="skip"/>。
+- 回复槽内严禁 Emoji、Markdown、神态动作括号。必须遵守唯一 response 根和协议版本。

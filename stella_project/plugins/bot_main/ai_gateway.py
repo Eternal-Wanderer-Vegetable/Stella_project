@@ -654,56 +654,84 @@ pipeline.register_pre_hook(build_context, priority=50)
 register_capability_hook(pipeline)
 
 async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
-    """归属守护（整改计划 P5，复核 F1；priority=90）。
-
-    parse_output 之后、bad_phrase 之前执行。模式 off 时零开销直通（行为与
-    f752538 逐字节一致）；shadow 记录问题但产出与 enforce 相同的安全文本
-    供比对；enforce 落最终处置：
-    - pass → ctx.reply = 服务端渲染文本，disposition=deliver
-    - fallback（无效引用）→ 保留合格当前回应，disposition=fallback
-    - reject（风险文本/解析失败）→ disposition=suppressed（split_lines 不
-      交付），原始 raw_output 照旧留痕 ctx.raw_output。
-    决策与 digest 记录到 ctx.attribution_decision。
-    """
+    """消费 parse_output 唯一产物；高风险槽只使用服务端 render。"""
+    mode = "off"
     try:
         from config.settings import REPLY_ATTRIBUTION_GUARD_MODE
         from core.dialogue_attribution import (
             apply_attribution_guard,
             evidence_table_from_projection,
+            reply_envelope_from_projection,
         )
 
         mode = str(REPLY_ATTRIBUTION_GUARD_MODE or "off").strip().lower()
         if mode not in ("shadow", "enforce"):
+            mode = "off"
+        typed_reply = getattr(ctx, "typed_reply", None)
+        typed_error = str(getattr(ctx, "typed_reply_error", "") or "")
+        trusted_direct_fallback = (
+            not typed_reply
+            and not typed_error
+            and getattr(ctx, "delivery_source_kind", "")
+            in {"trusted-server", "trusted-server-fallback"}
+            and getattr(ctx, "reply_disposition", "")
+            in {"", "direct", "fallback"}
+        )
+        if trusted_direct_fallback:
+            # A producer-tagged server reply does not require a model envelope.
+            return ctx
+        if mode == "off" and not typed_reply and not typed_error:
+            # DIRECT/empty generations may legitimately bypass parse_output.
+            return ctx
+        envelope, projection_error = reply_envelope_from_projection(
+            typed_reply
+        )
+        parse_error = typed_error or projection_error
+        is_typed_special = bool(
+            envelope is not None and not envelope.legacy and envelope.kind != "social"
+        )
+        # mode=off keeps legacy/social behavior; all non-social typed slots still
+        # require server evidence checks and deterministic rendering.
+        if mode == "off" and not is_typed_special and not parse_error:
             return ctx
         evidence = evidence_table_from_projection(
             getattr(ctx, "attribution_evidence", None)
         )
-        if not evidence and mode != "enforce":
-            # 无证据表 = prepare 侧未构建（off 或旧入口）：shadow 无槽可审
-            return ctx
+        effective_mode = mode if mode in {"shadow", "enforce"} else "enforce"
+        retained_ids = set(getattr(ctx, "retained_evidence_ids", ()) or ())
         final_output, decision = apply_attribution_guard(
-            ctx.raw_output,
+            ctx.typed_reply,
             evidence,
-            set(evidence.keys()),
-            mode,
+            retained_ids,
+            effective_mode,
             identity_revision=int(getattr(ctx, "identity_revision", 0) or 0),
+            generation_epoch=int(getattr(ctx, "generation_epoch", 0) or 0),
+            risk_context=getattr(ctx, "attribution_risk_context", None),
+            parse_error=parse_error,
         )
-        ctx.attribution_decision = {
+        record = {
             "decision": decision.decision,
             "rejection_reason": decision.rejection_reason,
             "invalid_references": decision.invalid_references,
             "original_output_digest": decision.original_output_digest,
             "final_output_digest": decision.final_output_digest,
-            "guard_mode": mode,
+            "guard_mode": effective_mode,
             "identity_revision": decision.identity_revision,
+            "generation_epoch": decision.generation_epoch,
+            "semantic_status": decision.semantic_status,
+            "verified": decision.verified,
+            "checked_evidence_ids": decision.checked_evidence_ids,
         }
-        if mode == "shadow":
-            # 影子：只记录，不改交付（严格隔离重放/观察期语义）
+        ctx.attribution_decision = record
+        ctx.guard_decision = dict(record)
+        if mode == "shadow" and not is_typed_special:
+            # 普通自由 social.current 仅记诊断，不把 shadow 说成 verified。
             return ctx
         if decision.decision == "reject":
             ctx.reply_disposition = "suppressed"
             ctx.reply = ""
             ctx.lines = []
+            ctx.reply_segments = []
             logger.warning(
                 f"🛡️ [Attribution] 拒绝发送（{decision.rejection_reason}）"
                 f" scope={ctx.trace_scope}"
@@ -711,18 +739,31 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
         elif decision.decision == "fallback":
             ctx.reply_disposition = "fallback"
             ctx.reply = final_output
+            ctx.reply_segments = [final_output] if final_output else []
+            ctx.delivery_source_kind = (
+                "trusted-server" if decision.semantic_status == "deterministic_render"
+                else "trusted-server-fallback"
+            )
         else:
-            ctx.reply_disposition = "deliver"
-            ctx.reply = final_output or ctx.reply
+            ctx.reply_disposition = (
+                "fallback"
+                if getattr(ctx, "delivery_source_kind", "") == "trusted-server-fallback"
+                else "deliver"
+            )
+            ctx.reply = final_output
+            ctx.reply_segments = [final_output] if final_output else []
+            if not final_output:
+                ctx.reply_disposition = "suppressed"
         return ctx
     except Exception as e:
         # guard 自身故障不放行错误内容也不阻断链路：enforce 按无合格段处理
         logger.error(f"🛡️ [Attribution] guard 异常（按 suppressed 处理）: {e}")
         try:
-            if str(REPLY_ATTRIBUTION_GUARD_MODE).strip().lower() == "enforce":
+            if mode == "enforce" or getattr(ctx, "typed_reply_error", ""):
                 ctx.reply_disposition = "suppressed"
                 ctx.reply = ""
                 ctx.lines = []
+                ctx.reply_segments = []
         except Exception:
             pass
         return ctx

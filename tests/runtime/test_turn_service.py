@@ -37,12 +37,33 @@ class ScriptedBackend:
         return self.replies.pop(0)
 
 
+class FailingBackend:
+    backend_name = "failing"
+    model = "failing-model"
+
+    def __init__(self):
+        self.prompts: list[str] = []
+
+    async def generate(self, prompt: str, system_prompt: str = "") -> str:
+        self.prompts.append(prompt)
+        raise RuntimeError("provider unavailable")
+
+
 def _service(replies: list[str], **kwargs) -> tuple[TurnService, ScriptedBackend]:
+    import nonebot
+
+    try:
+        nonebot.get_driver()
+    except ValueError:
+        nonebot.init()
+    from stella_project.plugins.bot_main.ai_gateway import attribution_guard_hook
+
     svc = TurnService(timeout=5.0, **kwargs)
     backend = ScriptedBackend(replies)
     svc.set_llm_backend(backend)
-    # 标准后置钩子（与 ai_gateway 装配同序）：解析→过滤→分行
+    # 完整生产后置钩子顺序：解析→归属守护→坏词→分行
     svc.register_post_hook(parse_output, priority=100)
+    svc.register_post_hook(attribution_guard_hook, priority=90)
     svc.register_post_hook(bad_phrase_filter, priority=80)
     svc.register_post_hook(split_lines, priority=60)
     return svc, backend
@@ -53,14 +74,22 @@ def _ctx(message: str = "在吗", **kwargs) -> ChatContext:
 
 
 def test_prepare_returns_typed_generate_and_stashes_prompt():
-    svc, backend = _service(["<reply>好</reply>"])
+    reply = (
+        '<response version="2026-10-08.1"><thought></thought>'
+        "<action>NONE</action><reply kind=\"social\"><current>好</current>"
+        "</reply></response>"
+    )
+    svc, backend = _service([reply])
     ctx = _ctx()
     plan = asyncio.run(svc.prepare_turn(ctx))
     assert plan.outcome == GENERATE
     # 最终 prompt 与预算估算同源（BC-6），暂存在 ctx 上供 generate 消费
     assert ctx._turn_pending_prompt == ctx.prompt_log
     out = asyncio.run(svc.generate_reply(ctx))
-    assert out.raw_output == "<reply>好</reply>"
+    assert out.raw_output == reply
+    out = asyncio.run(svc.finalize_turn(out))
+    assert out.reply == "好"
+    assert out.lines == ["好"]
     assert backend.prompts == [ctx.prompt_log]
 
 
@@ -90,7 +119,10 @@ def test_prepare_silent_on_planner_wait():
     assert plan.outcome == SILENT
 
 
-def test_budget_limited_skips_generation_but_finalizes_fallback():
+def test_budget_limited_skips_generation_but_finalizes_fallback(monkeypatch):
+    from config import settings as settings_mod
+
+    monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "enforce", raising=False)
     svc, backend = _service([])
     ctx = _ctx()
     ctx.llm_call_count = 2  # 达到 PLANNER_MAX_LLM_CALLS_PER_TURN
@@ -99,8 +131,24 @@ def test_budget_limited_skips_generation_but_finalizes_fallback():
     out = asyncio.run(svc.run(ctx))
     # 与 legacy 一致：跳过生成仍产出兜底 lines（不与 silent 混淆）
     assert out.lines == ["......？"]
+    assert out.delivery_source_kind == "trusted-server-fallback"
     assert out.llm_backend == "scripted"
     assert backend.prompts == []
+
+
+def test_provider_error_uses_trusted_fallback_with_full_guard(monkeypatch):
+    from config import settings as settings_mod
+
+    monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "enforce", raising=False)
+    svc, _ = _service([])
+    backend = FailingBackend()
+    svc.set_llm_backend(backend)
+    out = asyncio.run(svc.run(_ctx()))
+    assert len(backend.prompts) == 1
+    assert out.raw_output.endswith("<reply>......？</reply>")
+    assert out.delivery_source_kind == "trusted-server-fallback"
+    assert out.reply_disposition == "fallback"
+    assert out.reply == "......？"
 
 
 def test_no_backend_runs_post_hooks_without_generation():

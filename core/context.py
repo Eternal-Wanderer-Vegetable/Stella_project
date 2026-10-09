@@ -269,6 +269,8 @@ class ChatContext:
     # 新版对话协议与最终交付闭环（计划 §6.2/§6.3）；全部为 JSON 投影，
     # 不携带平台 event/Bot 句柄。delivery_plan 仅在发送入口 seal 后赋值。
     typed_reply: dict = field(default_factory=dict)
+    typed_reply_error: str = ""
+    reply_segments: list[str] = field(default_factory=list)
     retained_evidence_ids: tuple[str, ...] = ()
     attribution_risk_context: dict = field(default_factory=dict)
     delivery_draft: dict = field(default_factory=dict)
@@ -383,7 +385,8 @@ class ChatContext:
         # 归属整改（v5，复核 F1）
         "retrieval_query", "verification_contract", "attribution_evidence",
         "attribution_decision", "reply_disposition",
-        "typed_reply", "retained_evidence_ids", "attribution_risk_context",
+        "typed_reply", "typed_reply_error", "reply_segments",
+        "retained_evidence_ids", "attribution_risk_context",
         "delivery_draft", "delivery_plan", "guard_decision",
         "delivery_source_kind", "generation_epoch", "runtime_key",
         # 诊断
@@ -422,7 +425,7 @@ class ChatContext:
             elif name == "mentioned_user_ids":
                 # tuple → list：投影必须 JSON 安全（v4 信封）
                 value = list(value or [])
-            elif name == "retained_evidence_ids":
+            elif name in {"retained_evidence_ids", "reply_segments"}:
                 value = list(value or [])
             out[name] = value
         return out

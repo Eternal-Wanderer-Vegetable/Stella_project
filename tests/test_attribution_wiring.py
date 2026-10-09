@@ -87,12 +87,25 @@ def _raw_plan(now="哈哈原来如此", ref="msg_501"):
     )
 
 
+def _raw_envelope(kind="social", now="哈哈原来如此", ref=None):
+    slot = f"<current>{now}</current>" if now else ""
+    if ref:
+        slot += f'<quote evidence_id="{ref}"/>'
+        kind = "quote"
+    return (
+        '<response version="2026-10-08.1">'
+        "<thought></thought><action>NONE</action>"
+        f'<reply kind="{kind}">{slot}</reply></response>'
+    )
+
+
 @pytest.mark.asyncio
 async def test_guard_off_is_passthrough(monkeypatch):
     monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "off", raising=False)
-    ctx = _ctx(raw_output="任意旧格式输出", reply="任意旧格式输出")
+    ctx = _ctx(raw_output=_raw_envelope(), reply="")
+    await gateway.parse_output(ctx)
     out = await gateway.attribution_guard_hook(ctx)
-    assert out.reply == "任意旧格式输出"
+    assert out.reply == "哈哈原来如此"
     assert out.reply_disposition == ""
     assert out.attribution_decision == {}
 
@@ -100,12 +113,17 @@ async def test_guard_off_is_passthrough(monkeypatch):
 @pytest.mark.asyncio
 async def test_guard_enforce_renders_author_and_delivers(monkeypatch):
     monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "enforce", raising=False)
-    ctx = _ctx(raw_output=_raw_plan(), attribution_evidence=_evidence())
+    ctx = _ctx(
+        raw_output=_raw_envelope(ref="msg_501"),
+        attribution_evidence=_evidence(), retained_evidence_ids=["msg_501"],
+    )
+    await gateway.parse_output(ctx)
     out = await gateway.attribution_guard_hook(ctx)
-    assert out.reply_disposition == "deliver"
+    assert out.reply_disposition == "fallback"
     # 服务端渲染：作者边界 + 原话；模型没有自行复述历史
     assert "开发者说过：「我开发 Stella」" in out.reply
-    assert out.attribution_decision["decision"] == "pass"
+    assert out.attribution_decision["decision"] == "fallback"
+    assert out.delivery_source_kind == "trusted-server"
     # 分行按处置正常交付
     await gateway.split_lines(out)
     assert out.lines and "我开发 Stella" in out.lines[0]
@@ -114,7 +132,8 @@ async def test_guard_enforce_renders_author_and_delivers(monkeypatch):
 @pytest.mark.asyncio
 async def test_guard_enforce_suppresses_risky_text(monkeypatch):
     monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "enforce", raising=False)
-    ctx = _ctx(raw_output=_raw_plan(now="刚才是谁说我脏手来着？", ref=None))
+    ctx = _ctx(raw_output=_raw_envelope(now="刚才是谁说我脏手来着？"))
+    await gateway.parse_output(ctx)
     out = await gateway.attribution_guard_hook(ctx)
     assert out.reply_disposition == "suppressed"
     assert out.attribution_decision["decision"] == "reject"
@@ -126,9 +145,10 @@ async def test_guard_enforce_suppresses_risky_text(monkeypatch):
 @pytest.mark.asyncio
 async def test_guard_shadow_records_but_keeps_delivery(monkeypatch):
     monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "shadow", raising=False)
-    ctx = _ctx(raw_output=_raw_plan(now="刚才是谁说我脏手来着？", ref=None),
+    ctx = _ctx(raw_output=_raw_envelope(now="刚才是谁说我脏手来着？"),
                reply="刚才是谁说我脏手来着？",
                attribution_evidence=_evidence())
+    await gateway.parse_output(ctx)
     out = await gateway.attribution_guard_hook(ctx)
     assert out.reply == "刚才是谁说我脏手来着？", "shadow 不得改交付"
     assert "risky_pattern" in out.attribution_decision["rejection_reason"]
@@ -137,10 +157,44 @@ async def test_guard_shadow_records_but_keeps_delivery(monkeypatch):
 @pytest.mark.asyncio
 async def test_guard_enforce_fallback_keeps_clean_now_on_bad_reference(monkeypatch):
     monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "enforce", raising=False)
-    ctx = _ctx(raw_output=_raw_plan(ref="msg_missing"))
+    ctx = _ctx(raw_output=_raw_envelope(ref="msg_missing"))
+    await gateway.parse_output(ctx)
     out = await gateway.attribution_guard_hook(ctx)
     assert out.reply_disposition == "fallback"
-    assert out.reply == "哈哈原来如此"
+    assert "哈哈原来如此" not in out.reply
+    assert out.attribution_decision["rejection_reason"] == "invalid_references"
+
+
+@pytest.mark.asyncio
+async def test_current_correction_routes_through_server_ack_template(monkeypatch):
+    monkeypatch.setattr(settings_mod, "REPLY_ATTRIBUTION_GUARD_MODE", "enforce", raising=False)
+    monkeypatch.setattr(pre_processors, "_recent_trusted_messages", lambda _ctx: [])
+    monkeypatch.setattr(
+        pre_processors,
+        "_current_corrections",
+        lambda ctx: [{
+            "id": 7, "author_id": ctx.user_id, "author_display": "当前用户",
+            "text": "我不是在学代码", "conversation_key": ctx.conversation_key,
+            "source_row_id": 7, "polarity": "negative",
+        }],
+    )
+    ctx = _ctx(
+        user_id=20001,
+        raw_output=(
+            '<response version="2026-10-08.1"><thought>不得输出的诊断</thought>'
+            '<action>NONE</action><reply kind="correction"><ack/></reply></response>'
+        ),
+    )
+    ctx.attribution_evidence = pre_processors.build_attribution_evidence(ctx)
+    assert ctx.attribution_risk_context["signal_codes"] == ["current_correction"]
+    assert ctx.attribution_risk_context["supporting_evidence_ids"] == ["correction_7"]
+
+    await gateway.parse_output(ctx)
+    out = await gateway.attribution_guard_hook(ctx)
+    assert out.reply_disposition == "fallback"
+    assert out.attribution_decision["rejection_reason"] == "server_current_correction_template"
+    assert out.reply == "抱歉，刚才是我搞混了，当前用户说得对。"
+    assert "不得输出的诊断" not in out.reply
 
 
 # ── typed 检索查询 ─────────────────────────────────────────────────────
