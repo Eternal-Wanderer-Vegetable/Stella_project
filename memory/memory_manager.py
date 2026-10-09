@@ -366,6 +366,7 @@ class MemoryManager:
             "importance": candidate["importance"],
             "confidence": candidate["confidence"],
             "occurrence": candidate["occurrence_count"],
+            "verification_status": candidate.get("verification_status", "unknown"),
             "at_mention_evidence": MemoryManager._has_at_mention(candidate["source_kinds"]),
             "direct_evidence": MemoryManager._has_direct_evidence(candidate["source_kinds"]),
             "threshold_min_importance": MEMORY_PROMOTE_MIN_IMPORTANCE,
@@ -408,6 +409,75 @@ class MemoryManager:
         promoted = False
         for row in rows:
             candidate = self._candidate_from_row(row)
+            evidence_conn = self._connect()
+            owner_key = str(
+                candidate.get("owner_key")
+                or f"space:{candidate['group_shared_space']}"
+            )
+            audience = str(candidate.get("audience") or "CURRENT_SPACE")
+            fact_key = str(candidate.get("fact_key") or "")
+            claim_evidence = evidence_conn.execute(
+                "SELECT e.id, e.source_row_id, e.source_conversation_key, "
+                "e.source_digest, e.fact_subject_key, e.owner_key, e.audience, "
+                "e.fact_key, e.verification_status, e.provenance_json FROM memory_evidence e "
+                "JOIN memory_claim_links l ON l.evidence_id = e.id "
+                "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+                "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+                "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+                "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+                "WHERE e.candidate_id = ? AND e.owner_key = ? AND e.audience = ? "
+                "AND e.fact_key = ? AND e.verification_status = 'accepted' "
+                "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+                "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+                "AND l.status = 'active' ORDER BY e.id",
+                (candidate["id"], owner_key, audience, fact_key, candidate["id"]),
+            ).fetchall()
+            expected_scope_versions = {
+                key: int(version or 0)
+                for key, version in evidence_conn.execute(
+                    "SELECT scope_key, version FROM memory_scope_versions "
+                    "WHERE scope_key IN (?, ?)",
+                    (owner_key, "global"),
+                ).fetchall()
+            }
+            expected_scope_versions.setdefault(owner_key, 0)
+            expected_scope_versions.setdefault("global", 0)
+            evidence_conn.close()
+            from memory.cas_contract import evidence_set_digest
+
+            evidence_records = [
+                {
+                    "id": str(evidence[0]),
+                    "source_row_id": int(evidence[1]),
+                    "source_conversation_key": str(evidence[2] or ""),
+                    "source_digest": str(evidence[3] or ""),
+                    "fact_subject_key": str(evidence[4] or ""),
+                    "owner_key": str(evidence[5] or ""),
+                    "audience": str(evidence[6] or ""),
+                    "fact_key": str(evidence[7] or ""),
+                    "verification_status": str(evidence[8] or ""),
+                    "assessment_version": str(
+                        (json.loads(evidence[9] or "{}") or {}).get("assessment_version") or ""
+                    ),
+                    "candidate_link_active": True,
+                    "claim_state_active": True,
+                }
+                for evidence in claim_evidence
+            ]
+            evidence_cas_digest = evidence_set_digest(evidence_records) if evidence_records else ""
+            candidate["verification_status"] = "accepted" if evidence_records else "unknown"
+            candidate["expected_evidence_digest"] = evidence_cas_digest
+            from memory.cas_contract import CAS_SCHEMA_VERSION, candidate_digest
+
+            candidate_cas_digest = (
+                candidate_digest(
+                    candidate,
+                    verification_status=str(candidate["verification_status"]),
+                    evidence_digest=evidence_cas_digest,
+                )
+                if evidence_records
+                else ""
+            )
             instance_key = f"cand:{candidate['id']}"
             with _probe_span(ctx, "memory.promotion.gate",
                              instance_key=instance_key) as gate_span:
@@ -462,6 +532,12 @@ class MemoryManager:
                     ),
                     fact_key=str(candidate.get("fact_key") or ""),
                     policy_version=str(candidate.get("policy_version") or ""),
+                    cas_schema_version=CAS_SCHEMA_VERSION,
+                    expected_scope_versions=expected_scope_versions,
+                    expected_evidence_digest=str(
+                        candidate.get("expected_evidence_digest") or ""
+                    ),
+                    expected_candidate_digest=candidate_cas_digest,
                     quota_limit=MEMORY_USER_QUOTA,
                     quota_enforce=MEMORY_QUOTA_ENFORCE,
                     quota_confirmation_cap=MEMORY_QUOTA_CONFIRMATION_CAP,
@@ -536,16 +612,6 @@ class MemoryManager:
 
         if promoted:
             bump_memory_history()
-            # 持久 scope 版本（计划 §6.6）：跨进程热缓存靠 DB 版本失效——
-            # 空间 owner 必 bump；本批有 PERSON 行时对应个人 owner 也 bump。
-            try:
-                from memory import scope_versions
-
-                scope_versions.bump("global")
-                for key in getattr(self, "_last_promoted_owner_keys", []) or []:
-                    scope_versions.bump(key)
-            except Exception:
-                pass
             try:
                 get_compressor().maybe_compress(reason="candidate_processed")
             except Exception as e:
@@ -573,6 +639,76 @@ class MemoryManager:
         conn = self._connect()
         cursor = conn.cursor()
         self._ensure_tables()
+        conn.execute("BEGIN IMMEDIATE")
+
+        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
+
+        def _has_current_accepted_evidence(candidate: dict) -> bool:
+            uid = str(candidate.get("user_id") or "").strip()
+            if not uid.isdecimal():
+                return False
+            owner_key = str(
+                candidate.get("owner_key")
+                or f"space:{candidate['group_shared_space']}"
+            )
+            audience = str(candidate.get("audience") or "CURRENT_SPACE")
+            fact_key = str(candidate.get("fact_key") or "")
+            if not fact_key:
+                return False
+            rows = cursor.execute(
+                "SELECT e.id, e.owner_key, e.audience, e.fact_key, "
+                "e.source_conversation_key, e.source_row_id, e.candidate_id, "
+                "e.fact_subject_key, e.source_digest, e.provenance_json, l.claim_key "
+                "FROM memory_evidence e JOIN memory_claim_links l ON l.evidence_id = e.id "
+                "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+                "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+                "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+                "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+                "WHERE e.candidate_id = ? AND e.owner_key = ? AND e.audience = ? "
+                "AND e.fact_key = ? AND e.fact_subject_key = ? "
+                "AND e.verification_status = 'accepted' "
+                "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+                "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+                "AND l.status = 'active'",
+                (
+                    candidate["id"], owner_key, audience, fact_key,
+                    f"qq:{uid}", candidate["id"],
+                ),
+            ).fetchall()
+            for row in rows:
+                (
+                    _evidence_id, evidence_owner, evidence_audience, evidence_claim,
+                    source_conversation, source_row_id, linked_candidate,
+                    fact_subject, digest, provenance_json, linked_claim,
+                ) = row
+                try:
+                    provenance = json.loads(provenance_json or "{}")
+                except (TypeError, ValueError):
+                    continue
+                snapshot = provenance.get("source_snapshot")
+                if not isinstance(snapshot, dict):
+                    continue
+                if (
+                    provenance.get("assessment_version") != ASSESSMENT_VERSION
+                    or provenance.get("verification_status") != "accepted"
+                    or provenance.get("claim_key") != fact_key
+                    or provenance.get("recording_author_key") != fact_subject
+                    or provenance.get("fact_object_key") != fact_subject
+                    or provenance.get("exact_support_span") != candidate.get("content")
+                    or provenance.get("conversation_key") != source_conversation
+                    or str(provenance.get("source_id")) != str(source_row_id)
+                    or str(snapshot.get("id")) != str(source_row_id)
+                    or str(snapshot.get("conversation_key") or "") != source_conversation
+                    or evidence_owner != owner_key
+                    or evidence_audience != audience
+                    or evidence_claim != fact_key
+                    or linked_candidate != candidate["id"]
+                    or linked_claim != fact_key
+                ):
+                    continue
+                if verify_source_snapshot(snapshot, digest, conn=conn):
+                    return True
+            return False
 
         # 先淘汰超期候选，避免它们参与本轮评估
         stale_rejected = self._reject_stale_candidates(cursor)
@@ -595,7 +731,6 @@ class MemoryManager:
 
         # 本批状态写入都在同一个业务事务里：履历先入缓冲，提交成功后落账
         self._history_buffer = []
-        self._last_promoted_owner_keys = []
         promoted = False
         for row in candidates:
             candidate = {
@@ -626,6 +761,9 @@ class MemoryManager:
                 "policy_version": row[23] if len(row) > 23 else None,
             }
             instance_key = f"cand:{candidate['id']}"
+            candidate["verification_status"] = (
+                "accepted" if _has_current_accepted_evidence(candidate) else "unknown"
+            )
 
             # ── 逐候选实例 span（计划 §6.1 instance 合同）：同节点的多个候选
             # 各自独立成实例，聚合状态不会互相覆盖 ──
@@ -682,10 +820,12 @@ class MemoryManager:
                     with _probe_span(ctx, "memory.promotion.merge",
                                      instance_key=instance_key):
                         self._merge_into_memory(cursor, existing_id, candidate)
+                    memory_id = existing_id
                 else:
                     with _probe_span(ctx, "memory.promotion.create",
                                      instance_key=instance_key):
                         self._create_memory(cursor, candidate)
+                    memory_id = self._find_similar_memory(cursor, candidate)
                     # 新建才可能突破配额；合并不增加条数（计划 §5：quota 在
                     # create 分支，不虚构为每次 merge 都执行）
                     with _probe_span(ctx, "memory.promotion.quota",
@@ -698,6 +838,56 @@ class MemoryManager:
                             metrics={"archived": archived,
                                      "quota_limit": MEMORY_USER_QUOTA,
                                      "enforce": bool(MEMORY_QUOTA_ENFORCE)})
+                if not memory_id:
+                    raise RuntimeError("promoted memory row could not be resolved")
+                linked_evidence = cursor.execute(
+                    "SELECT e.id, e.source_digest FROM memory_evidence e "
+                    "JOIN memory_claim_links l ON l.evidence_id = e.id "
+                    "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+                    "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+                    "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+                    "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+                    "WHERE e.candidate_id = ? AND e.owner_key = ? AND e.audience = ? "
+                    "AND e.fact_key = ? AND e.fact_subject_key = ? "
+                    "AND e.verification_status = 'accepted' "
+                    "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+                    "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+                    "AND l.status = 'active' ORDER BY e.id",
+                    (
+                        candidate["id"],
+                        candidate.get("owner_key") or f"space:{candidate['group_shared_space']}",
+                        candidate.get("audience") or "CURRENT_SPACE",
+                        candidate.get("fact_key") or "",
+                        f"qq:{candidate['user_id']}",
+                        candidate["id"],
+                    ),
+                ).fetchall()
+                if not linked_evidence:
+                    raise RuntimeError("accepted promotion evidence lineage disappeared")
+                for evidence_id, digest in linked_evidence:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO memory_claim_links ("
+                        "id, evidence_id, owner_key, audience, entity_type, entity_id, "
+                        "claim_key, projection_slot, projection_version, slot_digest, status) "
+                        "VALUES (?, ?, ?, ?, 'memory', ?, ?, 'memory', 1, ?, 'active')",
+                        (
+                            uuid.uuid4().hex,
+                            evidence_id,
+                            candidate.get("owner_key") or f"space:{candidate['group_shared_space']}",
+                            candidate.get("audience") or "CURRENT_SPACE",
+                            memory_id,
+                            candidate.get("fact_key") or "",
+                            digest,
+                        ),
+                    )
+                from memory import scope_versions
+
+                scope_versions.bump(
+                    candidate.get("owner_key") or f"space:{candidate['group_shared_space']}",
+                    conn=conn,
+                    strict=True,
+                )
+                scope_versions.bump("global", conn=conn, strict=True)
 
                 logger.info(f"⬆️ [MemoryManager] 候选晋升 {candidate['id']}：{reason}")
 
@@ -717,10 +907,6 @@ class MemoryManager:
                 ))
                 # 只记录有晋升（CONFIRMED）的批次，用于提交后统一触发压缩
                 promoted = True
-                _ok = candidate.get("owner_key") or f"space:{candidate['group_shared_space']}"
-                if _ok not in self._last_promoted_owner_keys:
-                    self._last_promoted_owner_keys.append(_ok)
-
         # ── 事务提交（memory.promotion.commit 事实节点，计划 §6.1 事务诚实）──
         try:
             conn.commit()
@@ -817,6 +1003,9 @@ class MemoryManager:
 
         if imp < MEMORY_PROMOTE_MIN_IMPORTANCE:
             return False, f"重要度不足（imp={imp:.2f} < {MEMORY_PROMOTE_MIN_IMPORTANCE}）"
+
+        if candidate.get("verification_status") != "accepted":
+            return False, "缺少当前可核验的 accepted 来源证据"
 
         if conf >= MEMORY_CONFIRM_HIGH_CONFIDENCE:
             return True, f"高置信直接晋升（conf={conf:.2f}）"

@@ -158,7 +158,10 @@ class TestCanonicalIdentityOnTrace:
         ev = _private_event(user_id=20001, message_id=7, self_id="10001")
         await gateway._flow_ingress_root(ev)
         message_flow.flush()
-        rows = _trace_rows(flow_db)
+        rows = [
+            row for row in _trace_rows(flow_db)
+            if row["source_message_key"] == "qq:10001:private:20001:msg:7"
+        ]
         assert len(rows) == 1
         row = rows[0]
         assert row["conversation_key"] == "qq:10001:private:20001"
@@ -174,7 +177,12 @@ class TestCanonicalIdentityOnTrace:
         ev = _group_event(group_id=30001, message_id=9, self_id="10001")
         await gateway._flow_ingress_root(ev)
         message_flow.flush()
-        row = _trace_rows(flow_db)[0]
+        rows = [
+            row for row in _trace_rows(flow_db)
+            if row["source_message_key"] == "qq:10001:group:30001:msg:9"
+        ]
+        assert len(rows) == 1
+        row = rows[0]
         assert row["conversation_key"] == "qq:10001:group:30001"
         assert row["conversation_kind"] == "group"
 

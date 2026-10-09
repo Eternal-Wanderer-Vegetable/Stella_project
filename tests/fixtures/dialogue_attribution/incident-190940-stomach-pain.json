@@ -1,0 +1,57 @@
+{
+  "fixture_id": "incident-190940-stomach-pain",
+  "matrix_class": "INCIDENT-190940-STOMACH-PAIN",
+  "description": "19:09胃疼归属现场：群聊枚举第三人状态，不能把状态写到枚举作者身上。",
+  "bot_id": "1694717255",
+  "group_id": 1124196924,
+  "participants": {
+    "A": "3813363809",
+    "B": "2150738692"
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": null,
+      "content": "怎么大家都不说话了？",
+      "platform_msg_id": "incident-190940-stomach-pain-0"
+    },
+    {
+      "seq": 1,
+      "kind": "user",
+      "author": "A",
+      "reply_to_seq": null,
+      "content": "补觉的补觉，收菜的收菜，还有胃疼在床上挺尸的（叹气）",
+      "platform_msg_id": "incident-190940-stomach-pain-1"
+    }
+  ],
+  "logical_units": [
+    {
+      "unit": "incident-190940-stomach-pain-u0",
+      "seqs": [
+        0
+      ],
+      "recipient": "A",
+      "origin_msg_id": "incident-190940-stomach-pain-src0"
+    }
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "胃疼的是老板，不是我。我哪来的胃？"
+  },
+  "oracle": {
+    "task": "承认刚才把枚举中的第三人状态归给了当前用户并道歉；主体未知时不要猜老板的稳定身份。",
+    "acceptable": [
+      "承认误把群聊枚举当作A本人胃疼并道歉，不新增主体事实"
+    ],
+    "critical_classes": [
+      "subject_swap",
+      "hypothetical_as_fact"
+    ],
+    "critical_fail": [
+      "再次说A胃疼",
+      "猜出老板的用户ID或把胃疼记到其他已知成员名下"
+    ]
+  }
+}

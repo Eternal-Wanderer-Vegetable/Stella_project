@@ -7,6 +7,7 @@
 之间的边界，避免把自然承接失败变成用户可见的突兀发言。
 """
 
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -221,7 +222,10 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
     create_task = Mock(side_effect=AssertionError("skip 不得启动回应检测"))
 
     monkeypatch.setattr(gateway, "can_speak", lambda group_id, kind: (True, ""))
-    monkeypatch.setattr(gateway, "pick_target", lambda group_id, exclude_user_ids: target)
+    monkeypatch.setattr(
+        gateway, "pick_target",
+        lambda group_id, exclude_user_ids, **_kwargs: target,
+    )
     monkeypatch.setattr(gateway, "_resolve_nickname", AsyncMock(return_value="小明"))
 
     async def fake_run(ctx):
@@ -248,10 +252,20 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
 
 @pytest.mark.asyncio
 async def test_proactive_at_normal_output_still_sends_and_records(
-    ai_gateway_module, monkeypatch
+    ai_gateway_module, monkeypatch, tmp_path
 ):
     """正常生成结果仍沿用原有发送、主动发言统计与 @ 配额记账。"""
     gateway = ai_gateway_module
+    from config import settings
+    from memory import social_store
+    from memory.schema import create_memory_scope_versions_table
+
+    delivery_db = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(settings, "DB_PATH", delivery_db)
+    with sqlite3.connect(delivery_db) as conn:
+        create_memory_scope_versions_table(conn)
+    monkeypatch.setattr(social_store, "_TABLES_READY", False)
+    social_store.ensure_tables()
     bot = _FakeBot()
     proactive = _FakeProactive()
     participation = _FakeParticipation()
@@ -271,11 +285,21 @@ async def test_proactive_at_normal_output_still_sends_and_records(
         return task
 
     monkeypatch.setattr(gateway, "can_speak", lambda group_id, kind: (True, ""))
-    monkeypatch.setattr(gateway, "pick_target", lambda group_id, exclude_user_ids: target)
+    monkeypatch.setattr(gateway, "_proactive_contract_mode", lambda: "off")
+    monkeypatch.setattr(
+        gateway, "pick_target",
+        lambda group_id, exclude_user_ids, **_kwargs: target,
+    )
     monkeypatch.setattr(gateway, "_resolve_nickname", AsyncMock(return_value="小明"))
 
     async def fake_run(ctx):
         ctx.lines = ["你最近在玩什么游戏？"]
+        ctx.turn_id = "test-proactive-at-turn"
+        ctx.delivery_source_kind = "model"
+        ctx.llm_call_count = 1
+        from core.social.delivery import delivery_draft_from_context
+
+        ctx.delivery_draft = delivery_draft_from_context(ctx)
         return ctx
 
     monkeypatch.setattr(gateway, "_run_turn_via_engine", lambda group_id, ctx, **kw: fake_run(ctx))
@@ -285,6 +309,9 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     monkeypatch.setattr(gateway, "_record_bot_lines", record_bot_lines)
     monkeypatch.setattr(gateway.expression_learning, "on_reply_sent", expression_sent)
     monkeypatch.setattr(gateway, "schedule_compact", Mock())
+    monkeypatch.setattr(
+        gateway, "_delivery_plan_is_current", lambda _ctx, _plan, **_kw: True
+    )
     create_task.side_effect = fake_create_task
     monkeypatch.setattr(gateway.asyncio, "create_task", create_task)
 

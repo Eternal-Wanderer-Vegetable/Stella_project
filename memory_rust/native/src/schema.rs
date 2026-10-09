@@ -1,9 +1,9 @@
 use rusqlite::Connection;
 
-pub const BACKEND_API_VERSION: u32 = 2;
-// v18（整改计划 P3，复核 F3/F4/F5/F13）：新列/表不在 native 读写面，
-// 但合同按整库版本精确匹配——Python 侧 memory_rust/backend.py 同步。
-pub const MEMORY_SCHEMA_VERSION: i64 = 18;
+pub const BACKEND_API_VERSION: u32 = 3;
+// v19 promotion 在 native IMMEDIATE 事务内核 accepted lineage、来源 digest 与
+// scope epoch CAS；旧扩展必须因整库版本不匹配而拒绝读写。
+pub const MEMORY_SCHEMA_VERSION: i64 = 19;
 
 pub fn ensure_supported(conn: &Connection) -> Result<(), String> {
     let table_exists = conn

@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import sqlite3
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -70,8 +71,21 @@ class _FakeProactive:
 
 async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkeypatch, tmp_path):
     gateway = ai_gateway_module
+    from config import settings
+    from memory import social_store
+    from memory.schema import create_memory_scope_versions_table
+
+    delivery_db = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(settings, "DB_PATH", delivery_db)
+    with sqlite3.connect(delivery_db) as conn:
+        create_memory_scope_versions_table(conn)
+    monkeypatch.setattr(social_store, "_TABLES_READY", False)
+    social_store.ensure_tables()
     h = harness.RuntimeHarness(tmp_path)
     await h.start()
+    import core.runtime.facade as facade_module
+
+    monkeypatch.setattr(facade_module, "_shared_facade", h.facade)
     _orig_provider = h.facade._provider
 
     async def _spy_provider(key, prompt):
@@ -104,7 +118,11 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
 
     monkeypatch.setattr(gateway, "_run_turn_via_engine", engine)
     monkeypatch.setattr(gateway, "can_speak", lambda group_id, kind: (True, ""))
-    monkeypatch.setattr(gateway, "pick_target", lambda group_id, exclude_user_ids: target)
+    monkeypatch.setattr(gateway, "_proactive_contract_mode", lambda: "off")
+    monkeypatch.setattr(
+        gateway, "pick_target",
+        lambda group_id, exclude_user_ids, **_kwargs: target,
+    )
     monkeypatch.setattr(gateway, "_resolve_nickname", AsyncMock(return_value="小明"))
     monkeypatch.setattr(gateway, "get_proactive", lambda: proactive)
     monkeypatch.setattr(gateway, "get_participation_manager", Mock())
@@ -127,8 +145,21 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
 
 async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monkeypatch, tmp_path):
     gateway = ai_gateway_module
+    from config import settings
+    from memory import social_store
+    from memory.schema import create_memory_scope_versions_table
+
+    delivery_db = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(settings, "DB_PATH", delivery_db)
+    with sqlite3.connect(delivery_db) as conn:
+        create_memory_scope_versions_table(conn)
+    monkeypatch.setattr(social_store, "_TABLES_READY", False)
+    social_store.ensure_tables()
     h = harness.RuntimeHarness(tmp_path)
     await h.start()
+    import core.runtime.facade as facade_module
+
+    monkeypatch.setattr(facade_module, "_shared_facade", h.facade)
     bot = _FakeBot()
     proactive = _FakeProactive()
 
@@ -137,6 +168,11 @@ async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monk
     async def engine(session_key, ctx, **kw):
         seen["key"] = session_key
         seen["intent"] = ctx.intent
+        seen["conversation_kind"] = ctx.conversation_kind
+        seen["conversation_key"] = ctx.conversation_key
+        seen["bot_id"] = ctx.bot_id
+        seen["peer_id"] = ctx.peer_id
+        seen["storage_session_id"] = ctx.storage_session_id
         return await h.facade.submit_turn(session_key, gateway.pipeline, ctx, **kw)
 
     monkeypatch.setattr(gateway, "_run_turn_via_engine", engine)
@@ -148,6 +184,9 @@ async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monk
     gate.finish = Mock()
     monkeypatch.setattr(gateway, "get_reply_gate", lambda: gate)
     monkeypatch.setattr(gateway, "get_proactive", lambda: proactive)
+    consolidator = Mock()
+    consolidator.has_new_messages_to_consolidate.return_value = 0
+    monkeypatch.setattr(gateway, "get_consolidator", lambda: consolidator)
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
     monkeypatch.setattr(gateway, "_check_reply_later", AsyncMock())
     try:
@@ -157,5 +196,10 @@ async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monk
 
     assert seen.get("key") == "qq:1"
     assert seen.get("intent") == "proactive_join"
+    assert seen.get("conversation_kind") == "group"
+    assert seen.get("conversation_key") == "qq:999:group:1"
+    assert seen.get("bot_id") == "999"
+    assert seen.get("peer_id") == "1"
+    assert seen.get("storage_session_id") == 1
     assert len(h.provider_calls) == 1
     bot.send_group_msg.assert_awaited()

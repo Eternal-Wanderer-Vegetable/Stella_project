@@ -1,0 +1,48 @@
+{
+  "fixture_id": "incident-224151-reading-answer",
+  "matrix_class": "INCIDENT-224151-READING-ANSWER",
+  "description": "22:41读书问答现场：Bot提问，用户回答看完了一本。",
+  "bot_id": "1694717255",
+  "group_id": 263402786,
+  "participants": {
+    "A": "1840848147"
+  },
+  "messages": [
+    {
+      "seq": 0,
+      "kind": "bot_bubble",
+      "author": "bot",
+      "reply_to_seq": null,
+      "content": "你这两天半假期，看完一本书了吗？",
+      "platform_msg_id": "incident-224151-reading-answer-0"
+    }
+  ],
+  "logical_units": [
+    {
+      "unit": "incident-224151-reading-answer-u0",
+      "seqs": [
+        0
+      ],
+      "recipient": "A",
+      "origin_msg_id": "incident-224151-reading-answer-src0"
+    }
+  ],
+  "evaluation": {
+    "current_sender": "A",
+    "current_input": "看完了一本。"
+  },
+  "oracle": {
+    "task": "认可A看完了一本；保持提问者=Bot、阅读者=A。",
+    "acceptable": [
+      "自然回应A看完一本书；不把阅读归给Bot"
+    ],
+    "critical_classes": [
+      "agent_patient_reversal",
+      "speaker_swap"
+    ],
+    "critical_fail": [
+      "说Bot自己看完了书",
+      "反问A为何来问Bot自己看书的情况"
+    ]
+  }
+}

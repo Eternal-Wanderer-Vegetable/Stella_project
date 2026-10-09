@@ -3540,10 +3540,12 @@ def _proactive_contract_mode() -> str:
 def _build_proactive_contract(group_id: int, target):
     """从候选行 + 来源行构建主动验证合同（复核 F11，服务端构建）。
 
-    支持的候选：PERSON 归属、事实主体==选定目标、谓词可模板化。其余返回
+    支持的候选：当前共享空间中的 SPACE/CURRENT_SPACE 事实、事实主体等于
+    选定目标、来源/lineage/epoch仍有效且谓词有服务端模板。其余返回
     (None, None, reason)——enforce 下跳过，shadow 下记录原因。
     返回 (contract, selected_variant, error_reason)。
     """
+    import json
     import sqlite3 as _sqlite3
 
     from memory.proactive_contract import (
@@ -3555,46 +3557,125 @@ def _build_proactive_contract(group_id: int, target):
     conn = _sqlite3.connect(DB_PATH)
     try:
         row = conn.execute(
-            "SELECT id, type, content, status, owner_type, owner_key, subject_key, fact_key"
+            "SELECT id, type, content, status, owner_type, owner_key, subject_key, fact_key, "
+            "audience, source_conversation_key, group_shared_space"
             " FROM memory_candidates WHERE id = ?",
             (str(target.candidate_id or ""),),
         ).fetchone()
         if row is None:
             return None, None, "candidate_missing"
-        cid, ctype, content, _status, owner_type, owner_key, subject_key, fact_key = row
-        subject_uid = str(subject_key or "").split(":")[-1]
-        # 复核 F11：事实主体必须就是选定目标——另一个人的背景不能变成
-        # 对当前人的确认问题（14:09 现场形状）
-        if not subject_uid or subject_uid != str(target.user_id):
+        (
+            cid, ctype, content, status, owner_type, owner_key, subject_key,
+            fact_key, audience, candidate_conversation, group_shared_space,
+        ) = row
+        expected_conversation = f"qq:{target.source_bot_id}:group:{group_id}"
+        if str(status or "").upper() != "OBSERVING":
+            return None, None, "candidate_inactive"
+        if (
+            str(owner_type or "") != "SPACE"
+            or str(audience or "") != "CURRENT_SPACE"
+            or str(owner_key or "") != f"space:{group_shared_space}"
+            or str(group_shared_space or "") == ""
+            or str(owner_key or "") != str(target.owner_key or "")
+            or str(target.owner_type or "") != "SPACE"
+            or str(target.audience or "") != "CURRENT_SPACE"
+            or str(subject_key or "") != ""
+        ):
+            return None, None, "owner_not_current_space"
+        if not target.source_bot_id:
+            return None, None, "source_binding_missing"
+        if str(candidate_conversation or "") != expected_conversation:
+            return None, None, "candidate_conversation_mismatch"
+        if str(target.source_conversation_key or "") != expected_conversation:
+            return None, None, "source_conversation_mismatch"
+        subject_key = str(target.fact_subject_key or "")
+        subject_uid = subject_key.removeprefix("qq:")
+        if subject_key != f"qq:{target.user_id}" or not subject_uid.isdecimal():
             return None, None, "subject_not_target"
-        if str(owner_type or "") != "PERSON":
-            return None, None, "owner_not_person"
+        if (
+            str(target.fact_key or "") != str(fact_key or "")
+            or not target.evidence_ids
+            or not target.source_row_ids
+            or len(target.evidence_ids) != len(target.source_row_ids)
+            or len(target.evidence_ids) != len(target.source_digests)
+            or not target.captured_scope_versions
+        ):
+            return None, None, "evidence_binding_missing"
 
-        source_row_ids: list[int] = []
-        recording_author = 0
-        if fact_key and owner_key:
-            for (rid,) in conn.execute(
-                "SELECT source_row_id FROM memory_evidence"
-                " WHERE owner_key = ? AND fact_key = ? AND source_row_id > 0 LIMIT 5",
-                (owner_key, fact_key),
-            ).fetchall():
-                source_row_ids.append(int(rid))
-            if source_row_ids:
-                arow = conn.execute(
-                    "SELECT user_id FROM group_messages WHERE id = ?",
-                    (source_row_ids[0],),
-                ).fetchone()
-                if arow and str(arow[0] or "").isdigit():
-                    recording_author = int(arow[0])
+        placeholders = ",".join("?" for _ in target.evidence_ids)
+        evidence_rows = conn.execute(
+            "SELECT e.id, e.source_row_id, e.source_conversation_key, e.source_digest, "
+            "e.fact_subject_key, e.provenance_json "
+            "FROM memory_evidence e "
+            "JOIN memory_claim_links l ON l.evidence_id = e.id "
+            "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+            "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+            "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+            "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+            "WHERE e.id IN (" + placeholders + ") AND e.candidate_id = ? "
+            "AND e.owner_key = ? AND e.audience = ? AND e.fact_key = ? "
+            "AND e.verification_status = 'accepted' "
+            "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+            "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+            "AND l.status = 'active' ORDER BY e.id",
+            (
+                *target.evidence_ids, str(cid), str(owner_key), str(audience),
+                str(fact_key), str(cid),
+            ),
+        ).fetchall()
+        evidence_by_id = {str(item[0]): item for item in evidence_rows}
+        if set(evidence_by_id) != set(target.evidence_ids):
+            return None, None, "evidence_lineage_changed"
+        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
 
-        predicate = "other"
-        t = str(ctype or "")
-        if "称呼" in t or "alias" in t:
-            predicate = "self_alias"
-        elif "关系" in t or "relation" in t:
-            predicate = "relationship"
-        elif "偏好" in t or "address" in t:
-            predicate = "address_preference"
+        provenance_rows = []
+        for index, evidence_id in enumerate(target.evidence_ids):
+            evidence = evidence_by_id[evidence_id]
+            _, source_row_id, source_conversation, source_digest, fact_subject, raw = evidence
+            try:
+                provenance = json.loads(raw or "{}")
+            except (TypeError, ValueError):
+                return None, None, "evidence_provenance_malformed"
+            snapshot = provenance.get("source_snapshot")
+            if str(fact_subject) != f"qq:{target.user_id}":
+                return None, None, "subject_not_target"
+            if (
+                str(source_row_id) != str(target.source_row_ids[index])
+                or str(source_digest) != target.source_digests[index]
+                or str(source_conversation) != expected_conversation
+                or provenance.get("assessment_version") != ASSESSMENT_VERSION
+                or provenance.get("verification_status") != "accepted"
+                or provenance.get("claim_key") != fact_key
+                or provenance.get("recording_author_key") != subject_key
+                or provenance.get("fact_object_key") != subject_key
+                or provenance.get("exact_support_span") != str(content or "")
+                or provenance.get("conversation_key") != expected_conversation
+                or str(provenance.get("source_id")) != str(source_row_id)
+                or not isinstance(snapshot, dict)
+                or str(snapshot.get("group_id")) != str(group_id)
+                or str(snapshot.get("user_id")) != str(target.user_id)
+                or str(snapshot.get("bot_id")) != str(target.source_bot_id)
+                or str(snapshot.get("conversation_key")) != expected_conversation
+                or str(snapshot.get("source_kind") or "").upper() == "BOT_SELF"
+                or not verify_source_snapshot(snapshot, str(source_digest), conn=conn)
+            ):
+                return None, None, "source_binding_changed"
+            provenance_rows.append(provenance)
+        predicates = {str(item.get("predicate_key") or "") for item in provenance_rows}
+        if len(predicates) != 1:
+            return None, None, "predicate_mismatch"
+        predicate_key = next(iter(predicates))
+        predicate = {
+            "preference.general": "address_preference",
+            "profile.nickname": "self_alias",
+        }.get(predicate_key, "other")
+        if predicate == "other":
+            return None, None, "predicate_unsupported"
+        polarities = {str(item.get("polarity") or "unknown") for item in provenance_rows}
+        if len(polarities) != 1 or next(iter(polarities)) not in {"positive", "negative"}:
+            return None, None, "polarity_unknown"
+        polarity_value = next(iter(polarities))
+        recording_author = int(subject_uid)
 
         variants: list[QuestionVariant] = []
         term = str(content or "").strip()[:32]
@@ -3608,17 +3689,6 @@ def _build_proactive_contract(group_id: int, target):
                 )
             )
 
-        server_recent: dict[int, str] = {}
-        for rid, rcontent in conn.execute(
-            "SELECT id, content FROM group_messages"
-            " WHERE group_id = ? AND user_id = ? AND source_kind != 'BOT_SELF'"
-            " ORDER BY id DESC LIMIT 20",
-            (str(group_id), str(target.user_id)),
-        ).fetchall():
-            server_recent[int(rid)] = compute_candidate_digest(
-                {"type": "message", "content": rcontent}
-            )
-
         contract = VerificationContract(
             candidate_id=str(cid),
             recording_author_id=recording_author,
@@ -3626,14 +3696,24 @@ def _build_proactive_contract(group_id: int, target):
             fact_object_id=None,
             selected_target_user_id=int(target.user_id),
             predicate_type=predicate,
-            polarity="positive",
-            source_conversation_key=f"qq:group:{group_id}",
-            source_row_ids=source_row_ids,
+            polarity=polarity_value,
+            source_conversation_key=expected_conversation,
+            source_row_ids=list(target.source_row_ids),
             candidate_content_digest=compute_candidate_digest(
                 {"type": ctype or "", "content": content or ""}
             ),
             question_variants=variants,
             bridge_event_requirement=False,
+            owner_type=str(owner_type),
+            owner_key=str(owner_key),
+            audience=str(audience),
+            fact_subject_key=subject_key,
+            fact_key=str(fact_key),
+            source_bot_id=str(target.source_bot_id),
+            source_group_id=str(group_id),
+            evidence_ids=list(target.evidence_ids),
+            source_digests=list(target.source_digests),
+            captured_scope_versions=dict(target.captured_scope_versions),
         )
         return contract, variants[0] if variants else None, ""
     finally:
@@ -3657,13 +3737,16 @@ def _validate_proactive_output(
     conn = _sqlite3.connect(DB_PATH)
     try:
         row = conn.execute(
-            "SELECT id, type, content, status FROM memory_candidates WHERE id = ?",
+            "SELECT id, type, content, status, owner_type, owner_key, audience, fact_key, "
+            "source_conversation_key FROM memory_candidates WHERE id = ?",
             (str(contract.candidate_id),),
         ).fetchone()
         if row is None:
             return False, "candidate_missing"
         current = {
             "id": row[0], "type": row[1], "content": row[2], "status": row[3],
+            "owner_type": row[4], "owner_key": row[5], "audience": row[6],
+            "fact_key": row[7], "source_conversation_key": row[8],
         }
         ok, reason = validate_contract_consistency(contract, current, conn=conn)
         if not ok:
@@ -3739,10 +3822,15 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
         # 逐用户/候选事实由 pick_target 的直接调用方按需传递。
         if caller_flow_ctx is not None:
             target = pick_target(group_id, exclude_user_ids={self_id, 0},
+                                 bot_id=str(bot.self_id),
                                  flow_ctx=flow_ctx,
                                  instance_key=f"grp:{group_id}")
         else:
-            target = pick_target(group_id, exclude_user_ids={self_id, 0})
+            target = pick_target(
+                group_id,
+                exclude_user_ids={self_id, 0},
+                bot_id=str(bot.self_id),
+            )
         if target is None:
             # 无候选 = noop 有原因：逐项原因已由 pick_target 落
             # at.preflight/at.select（计划 §6.4）
@@ -4325,6 +4413,11 @@ async def _proactive_speak_impl(
             gate_score=gate.score,
             gate_reasons=gate.reasons,
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+            conversation_kind="group",
+            conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+            bot_id=str(bot.self_id),
+            peer_id=str(group_id),
+            storage_session_id=group_id,
         )
         try:
             from core.observability import message_flow

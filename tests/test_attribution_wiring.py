@@ -232,27 +232,90 @@ def proactive_db(tmp_path, monkeypatch):
     db = tmp_path / "proactive.db"
     monkeypatch.setattr(gateway, "DB_PATH", db)
     conn = sqlite3.connect(db)
+    from memory.evidence_contract import ASSESSMENT_VERSION, source_digest
+    from memory.schema import (
+        MEMORY_CANDIDATES_TABLE_DDL,
+        MEMORY_CLAIM_LINKS_TABLE_DDL,
+        MEMORY_EVIDENCE_TABLE_DDL,
+        create_memory_scope_versions_table,
+    )
+
+    conn.execute(MEMORY_CANDIDATES_TABLE_DDL)
+    conn.execute(MEMORY_EVIDENCE_TABLE_DDL)
+    conn.execute(MEMORY_CLAIM_LINKS_TABLE_DDL)
+    create_memory_scope_versions_table(conn)
     conn.execute(
-        "CREATE TABLE memory_candidates (id TEXT PRIMARY KEY, type TEXT, content TEXT,"
-        " status TEXT, owner_type TEXT, owner_key TEXT, subject_key TEXT, fact_key TEXT)"
+        """CREATE TABLE group_messages (
+            id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT,
+            source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT,
+            bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT,
+            mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER,
+            origin_msg_id TEXT, reply_recipient_user_id TEXT
+        )"""
+    )
+    uid, bot_id, group_id = "3559802578", "10000", "900"
+    content = "我喜欢红中"
+    conv_key = f"qq:{bot_id}:group:{group_id}"
+    owner_key, fact_key, evidence_id, source_id = (
+        "space:900", "claim:v1:cand9", "evidence:cand9", 501
+    )
+    snapshot = {
+        "id": source_id, "group_id": group_id, "user_id": uid,
+        "content": content, "source_kind": "AT_MENTION", "timestamp": "",
+        "msg_id": "platform-501", "conversation_key": conv_key,
+        "bot_id": bot_id, "reply_to_msg_id": "", "reply_target_user_id": "",
+        "mentioned_user_ids_json": "", "logical_message_id": "", "part_index": 0,
+        "origin_msg_id": "", "reply_recipient_user_id": "",
+    }
+    digest = source_digest(snapshot)
+    provenance = {
+        "assessment_version": ASSESSMENT_VERSION,
+        "verification_status": "accepted", "claim_key": fact_key,
+        "recording_author_key": f"qq:{uid}", "fact_object_key": f"qq:{uid}",
+        "predicate_key": "preference.general", "canonical_value": "红中",
+        "polarity": "positive", "statement_kind": "explicit_preference",
+        "exact_support_span": content, "conversation_key": conv_key,
+        "source_id": source_id, "source_snapshot": snapshot,
+    }
+    conn.execute(
+        "INSERT INTO memory_candidates "
+        "(id, group_shared_space, user_id, type, content, confidence, importance, status, "
+        "owner_type, owner_key, subject_key, audience, fact_key, source_conversation_key) "
+        "VALUES ('cand9', '900', ?, 'PREFERENCE', ?, 0.7, 0.8, 'OBSERVING', 'SPACE', ?, '', "
+        "'CURRENT_SPACE', ?, ?)",
+        (uid, content, owner_key, fact_key, conv_key),
     )
     conn.execute(
-        "CREATE TABLE memory_evidence (owner_key TEXT, fact_key TEXT,"
-        " source_row_id INTEGER)"
+        "INSERT INTO group_messages "
+        "(id, group_id, user_id, content, source_kind, timestamp, msg_id, conversation_key, "
+        "bot_id, reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json, "
+        "logical_message_id, part_index, origin_msg_id, reply_recipient_user_id) "
+        "VALUES (?, ?, ?, ?, 'AT_MENTION', '', ?, ?, ?, '', '', '', '', 0, '', '')",
+        (source_id, group_id, uid, content, "platform-501", conv_key, bot_id),
     )
     conn.execute(
-        "CREATE TABLE group_messages (id INTEGER PRIMARY KEY, group_id TEXT,"
-        " user_id TEXT, content TEXT, source_kind TEXT)"
+        "INSERT INTO memory_evidence "
+        "(id, owner_type, owner_key, subject_key, audience, fact_key, source_conversation_key, "
+        "source_row_id, candidate_id, fact_subject_key, source_digest, verification_status, "
+        "provenance_json) VALUES (?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?, 'cand9', ?, ?, "
+        "'accepted', ?)",
+        (evidence_id, owner_key, fact_key, conv_key, source_id, f"qq:{uid}", digest,
+         json.dumps(provenance, ensure_ascii=False, separators=(",", ":"))),
     )
     conn.execute(
-        "INSERT INTO memory_candidates VALUES ('cand9', '称呼', '红中', 'ACTIVE',"
-        " 'PERSON', 'person:qq:10000:3559802578', 'qq:3559802578', 'fk9')"
+        "INSERT INTO memory_claim_links "
+        "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+        "projection_slot, projection_version, slot_digest, status) "
+        "VALUES ('link-candidate', ?, ?, 'CURRENT_SPACE', 'memory_candidate', 'cand9', ?, "
+        "'candidate', 1, ?, 'active')",
+        (evidence_id, owner_key, fact_key, digest),
     )
     conn.execute(
-        "INSERT INTO memory_evidence VALUES ('person:qq:10000:3559802578', 'fk9', 501)"
-    )
-    conn.execute(
-        "INSERT INTO group_messages VALUES (501, '900', '3559802578', '我是Nox', 'AT_MENTION')"
+        "INSERT INTO memory_claim_links "
+        "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+        "projection_slot, projection_version, slot_digest, status) "
+        "VALUES ('link-state', ?, ?, 'CURRENT_SPACE', 'claim_state', ?, ?, 'eligibility', 1, ?, 'active')",
+        (evidence_id, owner_key, fact_key, fact_key, digest),
     )
     conn.commit()
     yield conn
@@ -260,15 +323,35 @@ def proactive_db(tmp_path, monkeypatch):
 
 
 def test_proactive_contract_rejects_cross_subject(proactive_db):
+    digest = proactive_db.execute(
+        "SELECT source_digest FROM memory_evidence WHERE id = 'evidence:cand9'"
+    ).fetchone()[0]
     target = SimpleNamespace(user_id=176403822, nickname="某人", candidate_id="cand9",
-                             candidate_content="红中", skip_subject="candidate:cand9")
+                             candidate_content="我喜欢红中", skip_subject="candidate:cand9",
+                             owner_type="SPACE", owner_key="space:900",
+                             audience="CURRENT_SPACE", fact_key="claim:v1:cand9",
+                             fact_subject_key="qq:176403822",
+                             source_conversation_key="qq:10000:group:900",
+                             source_bot_id="10000", evidence_ids=("evidence:cand9",),
+                             source_row_ids=(501,), source_digests=(digest,),
+                             captured_scope_versions={"space:900": 0, "global": 0})
     contract, _variant, reason = gateway._build_proactive_contract(900, target)
     assert contract is None and reason == "subject_not_target"
 
 
 def test_proactive_contract_accepts_subject_and_gates_output(proactive_db):
+    digest = proactive_db.execute(
+        "SELECT source_digest FROM memory_evidence WHERE id = 'evidence:cand9'"
+    ).fetchone()[0]
     target = SimpleNamespace(user_id=3559802578, nickname="Nox", candidate_id="cand9",
-                             candidate_content="红中", skip_subject="candidate:cand9")
+                             candidate_content="我喜欢红中", skip_subject="candidate:cand9",
+                             owner_type="SPACE", owner_key="space:900",
+                             audience="CURRENT_SPACE", fact_key="claim:v1:cand9",
+                             fact_subject_key="qq:3559802578",
+                             source_conversation_key="qq:10000:group:900",
+                             source_bot_id="10000", evidence_ids=("evidence:cand9",),
+                             source_row_ids=(501,), source_digests=(digest,),
+                             captured_scope_versions={"space:900": 0, "global": 0})
     contract, variant, reason = gateway._build_proactive_contract(900, target)
     assert reason == ""
     assert contract is not None and contract.selected_target_user_id == 3559802578

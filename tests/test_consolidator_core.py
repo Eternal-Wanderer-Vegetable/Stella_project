@@ -189,7 +189,7 @@ def test_write_short_term_upsert(tmp_path, monkeypatch):
     cons._write_short_term(1001, {"active_summary": "摘要B", "pending_topic": "无"})
 
 
-def test_write_user_profiles_new_and_merge(tmp_path, monkeypatch):
+def test_write_user_profiles_ignores_unreviewed_model_proposals(tmp_path, monkeypatch):
     db_path = tmp_path / "agent_memory.db"
     monkeypatch.setattr(consolidator, "DB_PATH", db_path)
     cons = _make_consolidator()
@@ -203,22 +203,46 @@ def test_write_user_profiles_new_and_merge(tmp_path, monkeypatch):
         ],
     )
     conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT personality_traits, interaction_count FROM user_profiles WHERE group_shared_space='1001' AND user_id='111'").fetchone()
-    assert row and "爱运动" in row[0]
-    assert row[1] == 1
-    assert conn.execute("SELECT COUNT(*) FROM user_profiles").fetchone()[0] == 1
+    rows = conn.execute("SELECT user_id FROM user_profiles").fetchall()
+    conn.close()
+    assert rows == []
+
+
+def test_replaying_same_candidate_source_does_not_reinforce(tmp_path, monkeypatch):
+    db_path = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db_path)
+    cons = _make_consolidator()
+    conn = _provision(cons, db_path)
+    conn.execute(
+        "INSERT INTO group_messages (id, group_id, user_id, content) VALUES (1, '1001', '111', '我住在上海')"
+    )
+    conn.commit()
     conn.close()
 
-    cons._write_user_profiles(
-        "1001",
-        [{"user_id": "111", "nickname": "", "personality_traits": "乐观", "agent_attitude": "更友好"}],
-    )
+    candidate = {
+        "user_id": "111",
+        "type": "FACT",
+        "content": "我住在上海",
+        "importance": 0.8,
+        "confidence": 0.9,
+        "source_message_ids": [1],
+    }
+    kwargs = {
+        "sender_ids": ["111"],
+        "origin_group_id": 1001,
+        "source_rows": [(1, "111", "我住在上海", "PASSIVE")],
+    }
+    cons._write_memory_candidates("1001", [candidate], **kwargs)
+    cons._write_memory_candidates("1001", [candidate], **kwargs)
+
     conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT interaction_count, agent_attitude, personality_traits FROM user_profiles WHERE group_shared_space='1001' AND user_id='111'").fetchone()
+    candidate_row = conn.execute(
+        "SELECT occurrence_count, confidence FROM memory_candidates WHERE content = '我住在上海'"
+    ).fetchone()
+    evidence_count = conn.execute("SELECT COUNT(*) FROM memory_evidence").fetchone()[0]
     conn.close()
-    assert row[0] == 2
-    assert "更友好" in row[1]
-    assert row[2].count("爱运动") == 1
+    assert candidate_row == (1, 0.9)
+    assert evidence_count == 1
 
 
 def test_write_memory_candidates_whitelist(tmp_path, monkeypatch):
@@ -246,7 +270,9 @@ def test_write_memory_candidates_whitelist(tmp_path, monkeypatch):
     assert bad == 0
     assert saved is not None
     assert saved[0] == "FACT"
-    assert json.loads(saved[1]) == ["1", "2"]
+    # Model-proposed IDs without matching current-batch SQLite rows are not
+    # persisted as verified source references.
+    assert json.loads(saved[1]) == []
     assert saved[2] == "NEW"
 
 

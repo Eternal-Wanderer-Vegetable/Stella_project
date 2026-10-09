@@ -17,9 +17,9 @@ from memory.memory_manager import MemoryManager
 
 CANDIDATE = {
     "user_id": "1001",
-    "type": "FACT",
-    "content": "使用RTX5080显卡",
-    "confidence": 0.5,
+    "type": "PREFERENCE",
+    "content": "我喜欢RTX5080显卡",
+    "confidence": 0.55,
     "importance": 0.5,
     "evidence": "用户自述",
     "source_message_ids": ["1"],
@@ -33,6 +33,73 @@ def db(tmp_path, monkeypatch):
     monkeypatch.setattr("memory.consolidator.DB_PATH", path)
     monkeypatch.setattr("memory.memory_manager.DB_PATH", path)
     monkeypatch.setattr("memory.compressor.DB_PATH", path)
+    original_write = MemoryConsolidator._write_memory_candidates
+
+    def write_with_sources(
+        self, group_shared_space, candidates, sender_ids=None, at_senders=None,
+        origin_group_id=None, *, flow_ctx=None, conversation=None, source_rows=None,
+    ):
+        conn = sqlite3.connect(path)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS group_messages (
+                id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT,
+                source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT,
+                bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT,
+                mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER,
+                origin_msg_id TEXT, reply_recipient_user_id TEXT
+            )"""
+        )
+        next_id = int(conn.execute(
+            "SELECT COALESCE(MAX(id), 0) + 1 FROM group_messages"
+        ).fetchone()[0])
+        enriched, actual_rows = [], []
+        for candidate in candidates:
+            row = dict(candidate)
+            user_id = str(row.get("user_id") or "")
+            content = str(row.get("content") or "")
+            kind = "AT_MENTION" if user_id in set(at_senders or []) else "PASSIVE"
+            source_id = next_id
+            next_id += 1
+            conn.execute(
+                """INSERT INTO group_messages (
+                    id, group_id, user_id, content, source_kind, msg_id,
+                    conversation_key, bot_id
+                ) VALUES (?, ?, ?, ?, ?, ?, 'test-conversation', 'test-bot')""",
+                (source_id, str(origin_group_id or 1), user_id, content, kind,
+                 f"platform-{source_id}"),
+            )
+            row["source_message_ids"] = [source_id]
+            if content.startswith(("我喜欢", "我不喜欢")):
+                cue = "我不喜欢" if content.startswith("我不喜欢") else "我喜欢"
+                row["verification_contract"] = {
+                    "fact_subject_user_id": user_id,
+                    "predicate_key": "preference.general",
+                    "canonical_value": content[len(cue):],
+                    "polarity": "negative" if cue == "我不喜欢" else "positive",
+                    "statement_kind": "explicit_preference",
+                    "temporal_qualifiers": [],
+                    "context_qualifiers": [],
+                    "supports": [
+                        {"source_message_id": source_id, "exact_support_span": content}
+                    ],
+                }
+            enriched.append(row)
+            actual_rows.append((source_id, user_id, content, kind))
+        conn.commit()
+        conn.close()
+        return original_write(
+            self,
+            group_shared_space,
+            enriched,
+            sender_ids=sender_ids,
+            at_senders=at_senders,
+            origin_group_id=origin_group_id or 1,
+            flow_ctx=flow_ctx,
+            conversation=conversation,
+            source_rows=actual_rows,
+        )
+
+    monkeypatch.setattr(MemoryConsolidator, "_write_memory_candidates", write_with_sources)
     return path
 
 
@@ -60,8 +127,8 @@ def test_same_fact_accumulates_instead_of_duplicating(db):
     assert rows[0][6] == "NEW"                  # 重新参与晋升评估
 
 
-def test_similar_wording_counts_as_same_fact(db):
-    """措辞不同但内容相似 → 视为同一事实（复现），不新增行。"""
+def test_similar_content_with_different_claim_key_stays_separate(db):
+    """相似文本中的新命题不因文本相似而污染原事实的复现计数。"""
     c = MemoryConsolidator()
     c._write_memory_candidates("1", [dict(CANDIDATE)], sender_ids=["1001"])
     c._write_memory_candidates(
@@ -69,10 +136,8 @@ def test_similar_wording_counts_as_same_fact(db):
     )
 
     rows = _rows(db)
-    assert len(rows) == 1
-    assert rows[0][4] == 2
-    # 内容取更完整的一方
-    assert "27B" in rows[0][2]
+    assert len(rows) == 2
+    assert all(row[4] == 1 for row in rows)
 
 
 def test_unrelated_facts_stay_separate(db):
@@ -143,6 +208,7 @@ def _cand(**kw):
         "importance": 0.5,
         "occurrence_count": 1,
         "source_kinds": '["PASSIVE"]',
+        "verification_status": "accepted",
     }
     base.update(kw)
     return base
@@ -151,6 +217,13 @@ def _cand(**kw):
 def test_gate1_high_confidence_promotes_immediately():
     ok, reason = MemoryManager._decide_promotion(_cand(confidence=0.9))
     assert ok and "高置信" in reason
+
+
+def test_gate1_high_confidence_without_accepted_evidence_is_blocked():
+    ok, reason = MemoryManager._decide_promotion(
+        _cand(confidence=0.99, verification_status="unknown")
+    )
+    assert not ok and "accepted" in reason
 
 
 def test_gate1_mid_confidence_passive_single_observation_waits():

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import memory.consolidator as consolidator
 import memory.memory_manager as memory_manager
 import memory.retriever as retriever
 
@@ -27,6 +28,7 @@ def _dummy_compressor() -> object:
 def _prepare_db(tmp_path: Path, monkeypatch, *, fts_enabled: bool = True) -> Path:
     """初始化临时数据库：建表 + 开关（RAG / FTS5）打点 + 返回 db 路径。"""
     db = tmp_path / "agent_memory.db"
+    monkeypatch.setattr(consolidator, "DB_PATH", db)
     # MemoryManager 侧配置
     monkeypatch.setattr(memory_manager, "DB_PATH", db)
     monkeypatch.setattr(memory_manager, "get_compressor", _dummy_compressor)
@@ -60,21 +62,64 @@ def _seed_candidate(
     importance: float = 0.9,
     confidence: float = 0.9,
 ) -> None:
-    """写入一条 NEW 状态候选记忆。"""
+    """通过生产来源验证路径写一条 NEW 候选和 accepted evidence。"""
+    from memory.consolidator import MemoryConsolidator
+
+    source_id = int(cid.removeprefix("c"))
+    conversation_key = "qq:test-bot:group:1"
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, importance, confidence, status) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (cid, group, user, "FACT", content, importance, confidence, "NEW"),
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+        "source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT, "
+        "bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT, "
+        "mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER, "
+        "origin_msg_id TEXT, reply_recipient_user_id TEXT)"
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO group_messages "
+        "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id) "
+        "VALUES (?, ?, ?, ?, 'AT_MENTION', ?, ?, 'test-bot')",
+        (source_id, group, user, content, f"platform-{source_id}", conversation_key),
     )
     conn.commit()
     conn.close()
+
+    proposal = {
+        "user_id": user,
+        "type": "PREFERENCE",
+        "content": content,
+        "importance": importance,
+        "confidence": confidence,
+        "source_message_ids": [source_id],
+        "verification_contract": {
+            "fact_subject_user_id": user,
+            "predicate_key": "preference.general",
+            "canonical_value": content.removeprefix("我喜欢").removeprefix("我不喜欢"),
+            "polarity": "negative" if content.startswith("我不喜欢") else "positive",
+            "statement_kind": "explicit_preference",
+            "temporal_qualifiers": [],
+            "context_qualifiers": [],
+            "supports": [
+                {"source_message_id": source_id, "exact_support_span": content}
+            ],
+        },
+    }
+    writer = MemoryConsolidator.__new__(MemoryConsolidator)
+    writer._write_memory_candidates(
+        group,
+        [proposal],
+        sender_ids=[user],
+        at_senders=[user],
+        origin_group_id=int(group),
+        source_rows=[(source_id, user, content, "AT_MENTION")],
+    )
 
 
 def test_fts_index_stays_in_sync_after_promotion(tmp_path, monkeypatch):
     """晋升后 memories_fts 行数必须与 active 记忆数一致，且可被 RAG 检索到。"""
     db = _prepare_db(tmp_path, monkeypatch)
-    _seed_candidate(db, "c1", "1", "100", "用户100最近喜欢打羽毛球")
+    _seed_candidate(db, "c1", "1", "100", "我喜欢打羽毛球")
 
     memory_manager.MemoryManager().process_new_candidates()
 
@@ -90,12 +135,12 @@ def test_fts_index_sync_after_merge_updates_content(tmp_path, monkeypatch):
     """合并记忆后，FTS 索引应随最新合并内容整体更新（条数不变、内容可检索）。"""
     db = _prepare_db(tmp_path, monkeypatch)
     # 第一条候选晋升为用户 101 的记忆
-    _seed_candidate(db, "c1", "1", "101", "用户101喜欢打羽毛球")
+    _seed_candidate(db, "c1", "1", "101", "我喜欢打羽毛球")
     memory_manager.MemoryManager().process_new_candidates()
     assert _count(db, "SELECT COUNT(*) FROM memories_fts") == 1
 
     # 第二条候选内容高度相似 → 合并进已有记忆，而不是新建
-    _seed_candidate(db, "c2", "1", "101", "用户101喜欢打羽毛球和游泳")
+    _seed_candidate(db, "c2", "1", "101", "我喜欢打羽毛球和游泳")
     memory_manager.MemoryManager().process_new_candidates()
 
     # 仍是同一条记忆、同一索引行
@@ -110,7 +155,7 @@ def test_fts_index_sync_after_merge_updates_content(tmp_path, monkeypatch):
 def test_fts_disabled_means_no_index_and_query_falls_back(tmp_path, monkeypatch):
     """关闭 RAG_SQLITE_FTS_ENABLED 后：不建 FTS 表、不写索引，检索走回退路径。"""
     db = _prepare_db(tmp_path, monkeypatch, fts_enabled=False)
-    _seed_candidate(db, "c3", "2", "200", "用户200喜欢打网球")
+    _seed_candidate(db, "c3", "2", "200", "我喜欢打网球")
     memory_manager.MemoryManager().process_new_candidates()
 
     # 没有 FTS 表

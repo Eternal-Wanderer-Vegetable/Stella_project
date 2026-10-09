@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Literal
@@ -80,6 +81,16 @@ class VerificationContract:
     contract_version: str = "2026-10-05.2"
     question_variants: list[QuestionVariant] = field(default_factory=list)
     bridge_event_requirement: bool = False
+    owner_type: str = ""
+    owner_key: str = ""
+    audience: str = ""
+    fact_subject_key: str = ""
+    fact_key: str = ""
+    source_bot_id: str = ""
+    source_group_id: str = ""
+    evidence_ids: list[str] = field(default_factory=list)
+    source_digests: list[str] = field(default_factory=list)
+    captured_scope_versions: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -124,26 +135,126 @@ def validate_contract_consistency(
         return False, "content_changed"
 
     status = str(current_candidate.get("status") or "").strip().lower()
-    if status in ("deprecated", "revoked", "invalid"):
+    if status != "observing":
         return False, "candidate_inactive"
+    for field_name, expected in (
+        ("owner_type", contract.owner_type),
+        ("owner_key", contract.owner_key),
+        ("audience", contract.audience),
+        ("fact_key", contract.fact_key),
+        ("source_conversation_key", contract.source_conversation_key),
+    ):
+        if str(current_candidate.get(field_name) or "") != str(expected):
+            return False, f"candidate_{field_name}_changed"
 
     if contract.selected_target_user_id <= 0:
         return False, "target_unbound"
 
-    if conn is not None and contract.source_row_ids:
+    if (
+        contract.fact_subject_id != contract.selected_target_user_id
+        or contract.fact_subject_key != f"qq:{contract.selected_target_user_id}"
+    ):
+        return False, "subject_not_target"
+    if (
+        contract.owner_type != "SPACE"
+        or contract.audience != "CURRENT_SPACE"
+        or not contract.owner_key.startswith("space:")
+        or not contract.fact_key
+        or not contract.source_bot_id
+        or not contract.source_group_id
+        or not contract.source_row_ids
+        or len(contract.source_row_ids) != len(contract.evidence_ids)
+        or len(contract.source_digests) != len(contract.evidence_ids)
+        or set(contract.captured_scope_versions)
+        != {contract.owner_key, "global"}
+        or contract.source_conversation_key
+        != f"qq:{contract.source_bot_id}:group:{contract.source_group_id}"
+    ):
+        return False, "evidence_binding_missing"
+
+    if conn is not None:
         try:
-            for row_id in contract.source_row_ids:
-                row = conn.execute(
-                    "SELECT user_id, source_kind FROM group_messages WHERE id = ?",
-                    (int(row_id),),
-                ).fetchone()
-                if row is None:
-                    return False, f"source_row_missing:{row_id}"
-                author, source_kind = str(row[0] or ""), str(row[1] or "")
-                if source_kind == "BOT_SELF":
-                    return False, f"source_is_bot:{row_id}"
-                if author and author != str(contract.recording_author_id):
-                    return False, f"source_author_mismatch:{row_id}"
+            from memory.evidence_contract import (
+                ASSESSMENT_VERSION,
+                verify_source_snapshot,
+            )
+
+            placeholders = ",".join("?" for _ in contract.evidence_ids)
+            rows = conn.execute(
+                "SELECT e.id, e.source_row_id, e.source_conversation_key, e.source_digest, "
+                "e.fact_subject_key, e.provenance_json "
+                "FROM memory_evidence e "
+                "JOIN memory_claim_links l ON l.evidence_id = e.id "
+                "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
+                "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
+                "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
+                "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
+                "WHERE e.id IN (" + placeholders + ") AND e.candidate_id = ? "
+                "AND e.owner_key = ? AND e.audience = ? AND e.fact_key = ? "
+                "AND e.verification_status = 'accepted' "
+                "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
+                "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
+                "AND l.status = 'active' ORDER BY e.id",
+                (
+                    *contract.evidence_ids,
+                    str(contract.candidate_id),
+                    contract.owner_key,
+                    contract.audience,
+                    contract.fact_key,
+                    str(contract.candidate_id),
+                ),
+            ).fetchall()
+            by_id = {str(row[0]): row for row in rows}
+            if set(by_id) != set(contract.evidence_ids):
+                return False, "evidence_lineage_changed"
+            for index, evidence_id in enumerate(contract.evidence_ids):
+                row = by_id[evidence_id]
+                _evidence_id, source_row_id, source_conversation, digest, subject, raw = row
+                if (
+                    int(source_row_id) != int(contract.source_row_ids[index])
+                    or str(digest) != contract.source_digests[index]
+                    or str(source_conversation) != contract.source_conversation_key
+                    or str(subject) != contract.fact_subject_key
+                ):
+                    return False, "evidence_identity_changed"
+                try:
+                    provenance = json.loads(raw or "{}")
+                except (TypeError, ValueError):
+                    return False, "evidence_provenance_malformed"
+                snapshot = provenance.get("source_snapshot")
+                if (
+                    provenance.get("assessment_version") != ASSESSMENT_VERSION
+                    or provenance.get("verification_status") != "accepted"
+                    or provenance.get("claim_key") != contract.fact_key
+                    or provenance.get("recording_author_key") != contract.fact_subject_key
+                    or provenance.get("fact_object_key") != contract.fact_subject_key
+                    or provenance.get("exact_support_span")
+                    != str(current_candidate.get("content") or "")
+                    or provenance.get("conversation_key") != contract.source_conversation_key
+                    or str(provenance.get("source_id")) != str(source_row_id)
+                    or not isinstance(snapshot, dict)
+                    or str(snapshot.get("group_id")) != contract.source_group_id
+                    or str(snapshot.get("user_id")) != str(contract.fact_subject_id)
+                    or str(snapshot.get("bot_id")) != contract.source_bot_id
+                    or str(snapshot.get("conversation_key"))
+                    != contract.source_conversation_key
+                    or str(snapshot.get("source_kind") or "").upper() == "BOT_SELF"
+                    or not verify_source_snapshot(snapshot, str(digest), conn=conn)
+                ):
+                    return False, "source_binding_changed"
+
+            current_versions = {
+                str(key): int(version)
+                for key, version in conn.execute(
+                    "SELECT scope_key, version FROM memory_scope_versions "
+                    "WHERE scope_key IN (?, 'global')",
+                    (contract.owner_key,),
+                ).fetchall()
+            }
+            current_versions.setdefault(contract.owner_key, 0)
+            current_versions.setdefault("global", 0)
+            if current_versions != contract.captured_scope_versions:
+                return False, "scope_versions_changed"
         except sqlite3.OperationalError as e:
             return False, f"source_lookup_failed:{e}"
 

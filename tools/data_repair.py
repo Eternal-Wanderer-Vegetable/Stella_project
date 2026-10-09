@@ -44,17 +44,17 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 内容 digest 的列（修复一致性与 CAS 都锚定它；其余列由期望旧值锚定）
-_DIGEST_COLUMNS = ("type", "content")
-
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def _row_digest(row: dict) -> str:
-    payload = "|".join(str(row.get(c) or "") for c in _DIGEST_COLUMNS)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    # Repairs are row-level CAS operations. Hash every persisted column so a
+    # status/owner/source change during the review window cannot pass merely
+    # because type/content stayed the same.
+    payload = json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -415,6 +415,319 @@ def preview_repairs(conn: sqlite3.Connection | None = None) -> dict:
             conn.close()
 
 
+_LINEAGE_ENTITY_TABLES = {
+    "memory_candidate": "memory_candidates",
+    "memory": "memories",
+    "atomic_fact": "atomic_facts",
+    "profile_fact": "personal_profile_facts",
+    "shared_copy": "memories",
+    "proactive_hypothesis": "proactive_hypotheses",
+}
+
+
+def _dict_rows(conn: sqlite3.Connection, table: str, where: str, params: tuple) -> list[dict]:
+    cur = conn.execute(f"SELECT * FROM {table} WHERE {where}", params)
+    names = [item[0] for item in cur.description or ()]
+    return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
+
+
+def _lineage_snapshot(
+    conn: sqlite3.Connection, owner_key: str, audience: str, fact_key: str
+) -> dict:
+    """Capture exact evidence, claim links, derived rows and epochs for one claim."""
+    evidence = _dict_rows(
+        conn,
+        "memory_evidence",
+        "owner_key = ? AND audience = ? AND fact_key = ?",
+        (owner_key, audience, fact_key),
+    )
+    links = _dict_rows(
+        conn,
+        "memory_claim_links",
+        "owner_key = ? AND audience = ? AND claim_key = ?",
+        (owner_key, audience, fact_key),
+    )
+    entities: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for link in links:
+        table = _LINEAGE_ENTITY_TABLES.get(str(link.get("entity_type") or ""))
+        entity_id = str(link.get("entity_id") or "")
+        if not table or not entity_id or (table, entity_id) in seen:
+            continue
+        seen.add((table, entity_id))
+        try:
+            rows = _dict_rows(conn, table, "id = ?", (entity_id,))
+        except sqlite3.OperationalError:
+            rows = []
+        entities.append({"table": table, "id": entity_id, "row": rows[0] if rows else None})
+    scope_keys = {owner_key, "global"}
+    for entity in entities:
+        row = entity.get("row") or {}
+        group_space = str(row.get("group_shared_space") or "")
+        if group_space:
+            scope_keys.add(f"space:{group_space}")
+    scope_versions = {
+        str(key): int(version)
+        for key, version in conn.execute(
+            "SELECT scope_key, version FROM memory_scope_versions "
+            "WHERE scope_key IN (" + ",".join("?" for _ in scope_keys) + ")",
+            tuple(sorted(scope_keys)),
+        ).fetchall()
+    }
+    for key in scope_keys:
+        scope_versions.setdefault(key, 0)
+    return {
+        "owner_key": owner_key,
+        "audience": audience,
+        "fact_key": fact_key,
+        "evidence": sorted(evidence, key=lambda row: str(row.get("id") or "")),
+        "links": sorted(links, key=lambda row: str(row.get("id") or "")),
+        "entities": sorted(entities, key=lambda row: (row["table"], row["id"])),
+        "scope_versions": dict(sorted(scope_versions.items())),
+    }
+
+
+def _lineage_digest(snapshot: dict) -> str:
+    value = {key: snapshot[key] for key in ("owner_key", "audience", "fact_key", "evidence", "links", "entities")}
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def preview_claim_invalidation(
+    conn: sqlite3.Connection,
+    *,
+    evidence_id: str,
+    invalidation_kind: str,
+    superseded_by_evidence_id: str = "",
+    reason: str = "reviewed_claim_correction",
+) -> RepairRecord:
+    """Build a read-only, exact claim/source invalidation manifest entry.
+
+    The caller must identify the correction evidence; this function never infers a
+    target claim from similar text or from the recording author alone.
+    """
+    if invalidation_kind not in {"source", "claim"}:
+        raise ValueError("invalidation_kind must be 'source' or 'claim'")
+    row = conn.execute(
+        "SELECT owner_key, audience, fact_key, fact_subject_key, verification_status "
+        "FROM memory_evidence WHERE id = ?",
+        (evidence_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("source evidence does not exist")
+    owner_key, audience, fact_key, subject_key, status = map(str, row)
+    if not owner_key or not audience or not fact_key:
+        raise ValueError("source evidence has incomplete claim scope")
+    if status != "accepted":
+        raise ValueError("only currently accepted source evidence can be invalidated")
+    correction_digest = ""
+    if invalidation_kind == "claim":
+        correction_row = _load_row(conn, "memory_evidence", superseded_by_evidence_id)
+        correction = conn.execute(
+            "SELECT owner_key, audience, fact_subject_key, fact_key, verification_status "
+            "FROM memory_evidence WHERE id = ?",
+            (superseded_by_evidence_id,),
+        ).fetchone()
+        if correction is None:
+            raise ValueError("claim invalidation requires existing correction evidence")
+        if (
+            str(correction[0]) != owner_key
+            or str(correction[1]) != audience
+            or str(correction[2]) != subject_key
+            or str(correction[3]) == fact_key
+            or str(correction[4]) != "accepted"
+        ):
+            raise ValueError("correction evidence owner/subject/status does not match")
+        correction_digest = _row_digest(correction_row or {})
+    snapshot = _lineage_snapshot(conn, owner_key, audience, fact_key)
+    if invalidation_kind == "source" and not any(
+        str(item.get("id")) == evidence_id for item in snapshot["evidence"]
+    ):
+        raise ValueError("source evidence is outside the claim snapshot")
+    return RepairRecord(
+        record_id=f"{owner_key}|{audience}|{fact_key}",
+        table_name="memory_evidence",
+        operation="claim_invalidate",
+        issue_class=f"{invalidation_kind}_invalidation",
+        expected_old={
+            "lineage_digest": _lineage_digest(snapshot),
+            "correction_digest": correction_digest,
+        },
+        payload={
+            "owner_key": owner_key,
+            "audience": audience,
+            "fact_key": fact_key,
+            "fact_subject_key": subject_key,
+            "evidence_id": evidence_id,
+            "invalidation_kind": invalidation_kind,
+            "superseded_by_evidence_id": superseded_by_evidence_id,
+            "evidence_status": status,
+        },
+        reason=reason,
+        requires_confirm=True,
+    )
+
+
+def _bump_scope_keys(conn: sqlite3.Connection, keys) -> None:
+    from memory import scope_versions
+
+    for key in sorted({str(item) for item in keys if item}):
+        scope_versions.bump(key, conn=conn, strict=True)
+
+
+def _repair_scope_keys(*rows: dict, extra=()) -> set[str]:
+    keys = {"global", *(str(item) for item in extra if item)}
+    for row in rows:
+        if not row:
+            continue
+        owner = str(row.get("owner_key") or "")
+        group_space = str(row.get("group_shared_space") or "")
+        owner_type = str(row.get("owner_type") or "").upper()
+        if owner:
+            keys.add(owner)
+        elif group_space and owner_type == "SPACE":
+            keys.add(f"space:{group_space}")
+        if group_space and owner_type == "SPACE":
+            keys.add(f"space:{group_space}")
+    return keys
+
+
+def _invalidate_claim(conn: sqlite3.Connection, record: RepairRecord, before: dict) -> dict:
+    payload = record.payload
+    kind = str(payload["invalidation_kind"])
+    evidence_id = str(payload["evidence_id"])
+    correction_id = str(payload.get("superseded_by_evidence_id") or "")
+    target_ids = (
+        {evidence_id}
+        if kind == "source"
+        else {str(row["id"]) for row in before["evidence"]}
+    )
+    if kind == "claim" and correction_id not in {str(row["id"]) for row in before["evidence"]}:
+        # Correction evidence normally asserts the new claim and therefore has a
+        # different fact_key; it must not be folded into the old claim snapshot.
+        correction = conn.execute(
+            "SELECT owner_key, audience, fact_subject_key, fact_key, verification_status "
+            "FROM memory_evidence WHERE id = ?",
+            (correction_id,),
+        ).fetchone()
+        if (
+            correction is None
+            or str(correction[0]) != payload["owner_key"]
+            or str(correction[1]) != payload["audience"]
+            or str(correction[2]) != payload["fact_subject_key"]
+            or str(correction[3]) == payload["fact_key"]
+            or str(correction[4]) != "accepted"
+        ):
+            raise RuntimeError("claim correction evidence changed after preview")
+    for item in before["evidence"]:
+        if str(item.get("id")) not in target_ids:
+            continue
+        try:
+            provenance = json.loads(item.get("provenance_json") or "{}")
+        except (TypeError, ValueError):
+            provenance = {}
+        provenance.update(
+            {
+                "verification_status": "superseded",
+                "invalidation_kind": kind,
+                "superseded_by_evidence_id": correction_id,
+            }
+        )
+        conn.execute(
+            "UPDATE memory_evidence SET verification_status = 'superseded', "
+            "provenance_json = ? WHERE id = ? AND verification_status = ?",
+            (
+                json.dumps(provenance, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                item["id"], item["verification_status"],
+            ),
+        )
+    for link in before["links"]:
+        entity_type = str(link.get("entity_type") or "")
+        link_evidence_id = str(link.get("evidence_id") or "")
+        should_invalidate = (
+            kind == "claim"
+            or (entity_type != "claim_state" and link_evidence_id in target_ids)
+        )
+        if not should_invalidate:
+            continue
+        state = "superseded" if entity_type == "claim_state" and kind == "claim" else "invalidated"
+        conn.execute(
+            "UPDATE memory_claim_links SET status = ?, invalidation_kind = ?, "
+            "invalidated_by_evidence_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (state, kind, correction_id or evidence_id, link["id"]),
+        )
+
+    for entity in before["entities"]:
+        table, entity_id, row = entity["table"], entity["id"], entity.get("row")
+        if not row or "status" not in row:
+            continue
+        entity_types = {
+            str(link.get("entity_type") or "")
+            for link in before["links"]
+            if str(link.get("entity_id") or "") == str(entity_id)
+            and _LINEAGE_ENTITY_TABLES.get(str(link.get("entity_type") or "")) == table
+        }
+        if not entity_types:
+            continue
+        if kind == "source":
+            placeholders = ",".join("?" for _ in entity_types)
+            remains = conn.execute(
+                "SELECT 1 FROM memory_claim_links l JOIN memory_evidence e ON e.id = l.evidence_id "
+                "WHERE l.owner_key = ? AND l.audience = ? AND l.claim_key = ? "
+                f"AND l.entity_type IN ({placeholders}) AND l.entity_id = ? "
+                "AND l.status = 'active' AND e.verification_status = 'accepted' LIMIT 1",
+                (payload["owner_key"], payload["audience"], payload["fact_key"],
+                 *sorted(entity_types), entity_id),
+            ).fetchone()
+            if remains:
+                continue
+        status = "REJECTED" if table == "memory_candidates" else (
+            "superseded" if table == "personal_profile_facts" else "DEPRECATED"
+        )
+        conn.execute(
+            f"UPDATE {table} SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, entity_id),
+        )
+    scope_keys = _repair_scope_keys(
+        *(entity.get("row") or {} for entity in before["entities"]),
+        extra=(payload["owner_key"], "global"),
+    )
+    _bump_scope_keys(conn, scope_keys)
+    return _lineage_snapshot(
+        conn, payload["owner_key"], payload["audience"], payload["fact_key"]
+    )
+
+
+def _restore_lineage_snapshot(conn: sqlite3.Connection, snapshot: dict) -> None:
+    restore_groups = [
+        ("memory_evidence", snapshot["evidence"]),
+        ("memory_claim_links", snapshot["links"]),
+    ]
+    for table, rows in restore_groups:
+        for row in rows:
+            current = _load_row(conn, table, str(row["id"]))
+            if current is None:
+                raise RuntimeError(f"claim lineage row disappeared during revoke: {table}:{row['id']}")
+            assignments = ", ".join(f"{column} = ?" for column in row if column != "id")
+            conn.execute(
+                f"UPDATE {table} SET {assignments} WHERE id = ?",
+                (*(row[column] for column in row if column != "id"), row["id"]),
+            )
+    for item in snapshot["entities"]:
+        row = item.get("row")
+        if not row:
+            continue
+        table = item["table"]
+        current = _load_row(conn, table, str(item["id"]))
+        if current is None:
+            raise RuntimeError(f"claim projection row disappeared during revoke: {table}:{item['id']}")
+        assignments = ", ".join(f"{column} = ?" for column in row if column != "id")
+        conn.execute(
+            f"UPDATE {table} SET {assignments} WHERE id = ?",
+            (*(row[column] for column in row if column != "id"), row["id"]),
+        )
+
+
 # ── apply / revoke（列级 CAS） ─────────────────────────────────────────
 
 
@@ -443,6 +756,9 @@ def _apply_private_owner_repair(
     target_subject = str(payload["target_subject_key"])
     compat_space = f"personal:{target_owner}:PRIVATE_ONLY"
     copy_id = f"{record.record_id}:por"
+
+    if _load_row(conn, record.table_name, copy_id) is not None:
+        raise RuntimeError(f"private repair copy already exists: {copy_id}")
 
     columns = list(row.keys())
     select_cols = ", ".join(c for c in columns if c != "id")
@@ -476,11 +792,11 @@ def _apply_private_owner_repair(
         conn.execute(
             "INSERT OR IGNORE INTO memory_evidence ("
             " id, owner_type, owner_key, subject_key, audience, fact_key,"
-            " source_conversation_key, source_row_id, candidate_id)"
-            " SELECT 'por:' || source_row_id, 'PERSON', ?, ?, 'PRIVATE_ONLY',"
-            " fact_key, source_conversation_key, source_row_id, ?"
+            " source_conversation_key, source_row_id, candidate_id, fact_subject_key)"
+            " SELECT ? || ':' || source_row_id, 'PERSON', ?, ?, 'PRIVATE_ONLY',"
+            " fact_key, source_conversation_key, source_row_id, ?, ?"
             " FROM memory_evidence WHERE owner_key = ? AND fact_key = ?",
-            (target_owner, target_subject, copy_id,
+            (f"por:{copy_id}", target_owner, target_subject, copy_id, target_subject,
              str(record.expected_old.get("owner_key") or ""), fact_key),
         )
     # 失活错误公开行（列级审计）
@@ -491,14 +807,22 @@ def _apply_private_owner_repair(
         " updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (record.record_id,),
     )
+    copied_row = _load_row(conn, record.table_name, copy_id)
+    created_rows = [{"table": record.table_name, "id": copy_id, "row": copied_row}]
+    if fact_key and src_conv:
+        evidence_rows = _dict_rows(
+            conn, "memory_evidence", "candidate_id = ?", (copy_id,)
+        )
+        created_rows.extend(
+            {"table": "memory_evidence", "id": str(item["id"]), "row": item}
+            for item in evidence_rows
+        )
+    new_state = _load_row(conn, record.table_name, record.record_id) or new_state
+    scope_keys = _repair_scope_keys(row, copied_row)
+    new_state["__scope_keys"] = sorted(scope_keys)
+    new_state["__created_rows"] = created_rows
+    _bump_scope_keys(conn, scope_keys)
     audit_rows.append((record, row, new_state))
-    # 规范 scope 版本推进（新 person 可见 + 旧 space 缓存换桶）
-    from memory import scope_versions
-
-    scope_versions.bump(target_owner, conn=conn, strict=True)
-    old_space_key = str(record.expected_old.get("owner_key") or "")
-    if old_space_key.startswith("space:"):
-        scope_versions.bump(old_space_key, conn=conn, strict=True)
 
 
 def apply_repairs(
@@ -506,12 +830,12 @@ def apply_repairs(
     operator: str = "system",
     dry_run: bool = False,
     confirm_source_missing: bool = False,
+    confirm_claim_invalidation: bool = False,
 ) -> RepairBatch | None:
-    """应用修复批次（复核 F8：列级 CAS + 同事务版本推进）。
+    """应用一批经过审核的修复，所有 CAS 和副作用共用一个事务。
 
-    - 逐条重核 expected_old，任何漂移跳过并记入 batch.skipped；
-    - requires_confirm 的条目未显式确认时跳过；
-    - 全程单事务：任一硬失败回滚整批（包括 scope 版本推进）。
+    Manifest 漂移、确认缺失或任一 lineage 成员变化都会拒绝整批；不会
+    部分应用兄弟修复。dry-run 执行同样的预检和写入，再整体回滚。
     """
     if not records:
         logger.info("✅ [DataRepair] No records to repair")
@@ -521,56 +845,104 @@ def apply_repairs(
     conn.isolation_level = None
     try:
         _create_audit_table(conn)
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
         batch_id = f"repair_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         audit_rows: list = []
         skipped: list[str] = []
+        prepared: list[tuple[RepairRecord, dict | None]] = []
 
         for record in records:
-            if record.requires_confirm and not (
-                confirm_source_missing
-                or record.operation in ("private_owner_repair", "duplicate_deprecate")
-            ):
-                skipped.append(f"{record.record_id}:needs_confirm")
-                continue
             if record.operation == "none":
                 skipped.append(f"{record.record_id or 'unknown'}:not_an_operation")
                 continue
+            if record.operation == "identity_claim_recheck":
+                # 声明重检仍由 conversation_identity 的事务 API 执行。
+                skipped.append(f"{record.record_id}:handled_by_identity_module")
+                continue
+            if record.operation not in {
+                "private_owner_repair", "duplicate_deprecate", "orphan_deprecate",
+                "claim_invalidate",
+            }:
+                raise RuntimeError(f"unknown repair operation: {record.operation}")
+            confirmed = (
+                record.operation in ("private_owner_repair", "duplicate_deprecate")
+                or (record.operation == "orphan_deprecate" and confirm_source_missing)
+                or (record.operation == "claim_invalidate" and confirm_claim_invalidation)
+            )
+            if record.requires_confirm and not confirmed:
+                raise RuntimeError(f"{record.record_id}: explicit confirmation required")
+            if record.operation == "claim_invalidate":
+                snapshot = _lineage_snapshot(
+                    conn, str(record.payload["owner_key"]),
+                    str(record.payload["audience"]), str(record.payload["fact_key"]),
+                )
+                if _lineage_digest(snapshot) != str(
+                    record.expected_old.get("lineage_digest") or ""
+                ):
+                    raise RuntimeError(f"{record.record_id}: claim lineage CAS conflict")
+                correction_id = str(record.payload.get("superseded_by_evidence_id") or "")
+                if correction_id:
+                    correction_row = _load_row(conn, "memory_evidence", correction_id)
+                    if correction_row is None or _row_digest(correction_row) != str(
+                        record.expected_old.get("correction_digest") or ""
+                    ):
+                        raise RuntimeError(f"{record.record_id}: correction evidence CAS conflict")
+                prepared.append((record, snapshot))
+                continue
             ok, reason = _verify_expected(conn, record)
             if not ok:
-                skipped.append(f"{record.record_id}:{reason}")
+                raise RuntimeError(f"{record.record_id}: manifest CAS conflict ({reason})")
+            prepared.append((record, _load_row(conn, record.table_name, record.record_id)))
+
+        for record, before in prepared:
+            if record.operation == "claim_invalidate":
+                assert before is not None
+                after = _invalidate_claim(conn, record, before)
+                before_scope_keys = _repair_scope_keys(
+                    *(entity.get("row") or {} for entity in before["entities"]),
+                    extra=(record.payload["owner_key"], "global"),
+                )
+                after_scope_keys = _repair_scope_keys(
+                    *(entity.get("row") or {} for entity in after["entities"]),
+                    extra=(record.payload["owner_key"], "global"),
+                )
+                audit_rows.append((
+                    record,
+                    {"__lineage__": True, "snapshot": before},
+                    {
+                        "__lineage__": True,
+                        "digest": _lineage_digest(after),
+                        "scope_keys": sorted(before_scope_keys | after_scope_keys),
+                    },
+                ))
                 continue
+            assert before is not None
             if record.operation == "private_owner_repair":
                 _apply_private_owner_repair(conn, record, audit_rows)
             elif record.operation == "duplicate_deprecate":
-                row = _load_row(conn, record.table_name, record.record_id)
-                new_state = dict(row)
-                new_state["status"] = "DEPRECATED"
+                row = before
                 conn.execute(
                     f"UPDATE {record.table_name} SET status = 'DEPRECATED',"
                     " updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (record.record_id,),
                 )
+                new_state = _load_row(conn, record.table_name, record.record_id) or {}
+                scope_keys = _repair_scope_keys(row, new_state)
+                new_state["__scope_keys"] = sorted(scope_keys)
+                _bump_scope_keys(conn, scope_keys)
                 audit_rows.append((record, row, new_state))
             elif record.operation == "orphan_deprecate":
-                if not confirm_source_missing:
-                    skipped.append(f"{record.record_id}:needs_confirm")
-                    continue
-                row = _load_row(conn, record.table_name, record.record_id)
-                new_state = dict(row)
-                new_state["status"] = "DEPRECATED"
+                row = before
                 conn.execute(
                     "UPDATE memory_candidates SET status = 'DEPRECATED',"
                     " updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (record.record_id,),
                 )
+                new_state = _load_row(conn, "memory_candidates", record.record_id) or {}
+                scope_keys = _repair_scope_keys(row, new_state)
+                new_state["__scope_keys"] = sorted(scope_keys)
+                _bump_scope_keys(conn, scope_keys)
                 audit_rows.append((record, row, new_state))
-            elif record.operation == "identity_claim_recheck":
-                # 复核类：落库走 conversation_identity 现有事务/审计；
-                # 本工具只登记复核批次，不改声明状态
-                skipped.append(f"{record.record_id}:handled_by_identity_module")
-            else:
-                skipped.append(f"{record.record_id}:unknown_operation")
 
         audit_log_ids = []
         for record, old_state, new_state in audit_rows:
@@ -583,11 +955,10 @@ def apply_repairs(
                     batch_id, record.record_id, record.table_name,
                     record.operation, record.issue_class,
                     json.dumps(old_state, ensure_ascii=False, default=str),
-                    json.dumps(
-                        {k: new_state.get(k) for k in old_state},
-                        ensure_ascii=False, default=str,
-                    ),
-                    str(record.expected_old.get("content_digest") or ""),
+                    json.dumps(new_state, ensure_ascii=False, default=str),
+                    str(record.expected_old.get(
+                        "content_digest", record.expected_old.get("lineage_digest", "")
+                    )),
                     _utcnow(), operator,
                 ),
             )
@@ -627,18 +998,12 @@ def revoke_batch(
     batch_id: str,
     confirm_owner_repair: bool = False,
 ) -> bool:
-    """撤销修复批次（复核 F8：列级还原 + 后置 CAS）。
-
-    - 按审计的 old_state 恢复**全部被改列**（绝不把单值塞错列）；
-    - 前置 CAS：当前行内容 digest == 审计 new_state 的 digest（apply 之后
-      没有新变化），否则该条跳过并告警——保护期间用户的新数据；
-    - 含 private_owner_repair 的批次会恢复公开错误行，必须显式确认。
-    """
+    """原子撤销一批修复；任一行或副作用漂移即回滚整个撤销批次。"""
     conn = sqlite3.connect(DB_PATH)
     conn.isolation_level = None
     try:
         _create_audit_table(conn)
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
         rows = conn.execute(
             "SELECT audit_id, record_id, table_name, operation, old_state, new_state"
             " FROM data_repair_audit WHERE batch_id = ? AND revoked_at IS NULL",
@@ -659,28 +1024,75 @@ def revoke_batch(
             conn.execute("ROLLBACK")
             return False
 
-        restored = 0
-        for audit_id, record_id, table_name, _op, old_json, new_json in rows:
+        # Preflight the entire batch before restoring any sibling. Audit rows
+        # from older versions have no metadata and remain supported.
+        prepared = []
+        for audit_id, record_id, table_name, operation, old_json, new_json in rows:
             old_state = json.loads(old_json)
             new_state = json.loads(new_json)
+            if new_state.get("__lineage__"):
+                before = old_state.get("snapshot") or {}
+                current = _lineage_snapshot(
+                    conn, str(before["owner_key"]),
+                    str(before["audience"]), str(before["fact_key"]),
+                )
+                if _lineage_digest(current) != str(new_state.get("digest") or ""):
+                    raise RuntimeError(
+                        f"claim lineage changed after apply; refusing partial revoke: {record_id}"
+                    )
+                prepared.append((audit_id, record_id, table_name, operation,
+                                 old_state, new_state, current))
+                continue
             row = _load_row(conn, table_name, record_id)
             if row is None:
-                logger.warning(f"⚠️ [DataRepair] 行不存在，跳过撤回: {record_id}")
-                continue
-            if _row_digest(row) != _row_digest(new_state):
-                logger.warning(
-                    f"⚠️ [DataRepair] 行在 apply 后发生了新变化，CAS 拒绝撤回:"
-                    f" {record_id}"
+                raise RuntimeError(f"repair row disappeared; refusing partial revoke: {record_id}")
+            applied_row = {key: value for key, value in new_state.items() if not key.startswith("__")}
+            expected_applied = {key: applied_row.get(key) for key in old_state}
+            if _row_digest(row) != _row_digest(expected_applied):
+                raise RuntimeError(
+                    f"repair row changed after apply; refusing partial revoke: {record_id}"
                 )
-                continue
-            set_sql = ", ".join(f"{c} = ?" for c in old_state)
-            # old_state 含 updated_at 时原样恢复（revoke 后行与 apply 前逐列一致）；
-            # 只有审计行本身没有 updated_at 时才退回触碰时间戳
-            suffix = "" if "updated_at" in old_state else ", updated_at = CURRENT_TIMESTAMP"
-            conn.execute(
-                f"UPDATE {table_name} SET {set_sql}{suffix} WHERE id = ?",
-                (*old_state.values(), record_id),
-            )
+            created_rows = new_state.get("__created_rows") or []
+            for item in created_rows:
+                created = _load_row(conn, str(item["table"]), str(item["id"]))
+                if created is None or _row_digest(created) != _row_digest(item["row"]):
+                    raise RuntimeError(
+                        f"repair side effect changed after apply; refusing partial revoke: "
+                        f"{item['table']}:{item['id']}"
+                    )
+            prepared.append((audit_id, record_id, table_name, operation,
+                             old_state, new_state, row))
+
+        restored = 0
+        for audit_id, record_id, table_name, _operation, old_state, new_state, current in reversed(prepared):
+            if new_state.get("__lineage__"):
+                before = old_state["snapshot"]
+                restore_keys = _repair_scope_keys(
+                    *(entity.get("row") or {} for entity in before["entities"]),
+                    *(entity.get("row") or {} for entity in current["entities"]),
+                    extra=(before["owner_key"], "global"),
+                )
+                _restore_lineage_snapshot(conn, before)
+                _bump_scope_keys(conn, restore_keys)
+            else:
+                created_rows = new_state.get("__created_rows") or []
+                # Delete child evidence before copied projections.
+                for item in sorted(created_rows, key=lambda value: value["table"] != "memory_evidence"):
+                    conn.execute(
+                        f"DELETE FROM {item['table']} WHERE id = ?",
+                        (item["id"],),
+                    )
+                assignments = [key for key in old_state if key != "id"]
+                set_sql = ", ".join(f"{column} = ?" for column in assignments)
+                suffix = "" if "updated_at" in old_state else ", updated_at = CURRENT_TIMESTAMP"
+                conn.execute(
+                    f"UPDATE {table_name} SET {set_sql}{suffix} WHERE id = ?",
+                    (*(old_state[column] for column in assignments), record_id),
+                )
+                restored_row = _load_row(conn, table_name, record_id) or {}
+                scope_keys = set(new_state.get("__scope_keys") or ())
+                scope_keys.update(_repair_scope_keys(current, restored_row))
+                _bump_scope_keys(conn, scope_keys)
             conn.execute(
                 "UPDATE data_repair_audit SET revoked_at = ? WHERE audit_id = ?",
                 (_utcnow(), audit_id),

@@ -78,6 +78,7 @@ def test_nonzero_importance_lets_confidence_decide():
         "importance": 0.5,
         "occurrence_count": 1,
         "source_kinds": '["AT_MENTION"]',
+        "verification_status": "accepted",
     }
     should_promote, _ = MemoryManager._decide_promotion(candidate)
     assert should_promote is True
@@ -103,9 +104,28 @@ def candidate_db(tmp_path, monkeypatch):
     return path
 
 
-def _write_one(importance=0.0, confidence=0.9, content="住在南方，家里种甘蔗"):
+def _write_one(importance=0.0, confidence=0.9, content="我住在南方"):
     """按 LLM 返回的形状写一条候选。importance 默认 0 —— 复现缺陷的输入。"""
-    from memory.consolidator import MemoryConsolidator
+    from memory.consolidator import DB_PATH, MemoryConsolidator
+
+    conversation_key = "qq:test-bot:group:1"
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+        "source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT, "
+        "bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT, "
+        "mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER, "
+        "origin_msg_id TEXT, reply_recipient_user_id TEXT)"
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO group_messages "
+        "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id) "
+        "VALUES (1, '1', '1001', ?, 'AT_MENTION', 'platform-1', ?, 'test-bot')",
+        (content, conversation_key),
+    )
+    conn.commit()
+    conn.close()
 
     MemoryConsolidator()._write_memory_candidates(
         "space_1",
@@ -119,11 +139,25 @@ def _write_one(importance=0.0, confidence=0.9, content="住在南方，家里种
                 "evidence": "用户直接陈述",
                 "usage_tags": ["ANSWER_CONTEXT"],
                 "visibility": "OPEN",
-                "source_message_ids": [],
+                "source_message_ids": [1],
+                "verification_contract": {
+                    "fact_subject_user_id": "1001",
+                    "predicate_key": "profile.residence",
+                    "canonical_value": "南方",
+                    "polarity": "positive",
+                    "statement_kind": "self_report",
+                    "temporal_qualifiers": [],
+                    "context_qualifiers": [],
+                    "supports": [
+                        {"source_message_id": 1, "exact_support_span": content}
+                    ],
+                },
             }
         ],
         sender_ids=["1001"],
         at_senders=["1001"],
+        origin_group_id=1,
+        source_rows=[(1, "1001", content, "AT_MENTION")],
     )
 
 
@@ -177,22 +211,15 @@ def observing_db(tmp_path, monkeypatch):
     monkeypatch.setattr("memory.proactive_target.DB_PATH", path)
     monkeypatch.setattr("memory.schema.DB_PATH", path)
 
-    from memory.schema import create_memory_candidates_table
+    from tests.test_proactive_target import _provision_candidates
 
-    conn = sqlite3.connect(path)
-    create_memory_candidates_table(conn)
-    for cid, content, conf in (
-        ("cand_high", "在放假期间对知识的记忆会衰退", 0.75),
-        ("cand_low", "居住地附近主要种植甘蔗", 0.65),
-    ):
-        conn.execute(
-            "INSERT INTO memory_candidates "
-            "(id, group_shared_space, user_id, type, content, importance, confidence, status) "
-            "VALUES (?, ?, ?, 'FACT', ?, 0.5, ?, 'OBSERVING')",
-            (cid, "space_1", "1001", content, conf),
-        )
-    conn.commit()
-    conn.close()
+    _provision_candidates(
+        path,
+        [
+            ("cand_high", "space_1", "1001", "PREFERENCE", "我喜欢知识", 0.75, "OBSERVING"),
+            ("cand_low", "space_1", "1001", "PREFERENCE", "我喜欢甘蔗", 0.65, "OBSERVING"),
+        ],
+    )
     return path
 
 
@@ -200,9 +227,11 @@ def test_verify_picks_highest_confidence_candidate(observing_db):
     """基线：没有排除项时挑置信度最高的那条（最接近晋升线，收益最大）。"""
     from memory.proactive_target import _fetch_observing_candidate
 
-    found = _fetch_observing_candidate("space_1", 1001)
+    found = _fetch_observing_candidate(
+        "space_1", 1001, group_id=1, bot_id="test-bot"
+    )
     assert found is not None
-    assert found[0] == "cand_high"
+    assert found.candidate_id == "cand_high"
 
 
 def test_verify_skips_last_asked_candidate(observing_db):
@@ -212,9 +241,11 @@ def test_verify_skips_last_asked_candidate(observing_db):
     """
     from memory.proactive_target import _fetch_observing_candidate
 
-    found = _fetch_observing_candidate("space_1", 1001, exclude_id="cand_high")
+    found = _fetch_observing_candidate(
+        "space_1", 1001, exclude_id="cand_high", group_id=1, bot_id="test-bot"
+    )
     assert found is not None, "还有别的候选可问，不该直接放弃"
-    assert found[0] == "cand_low"
+    assert found.candidate_id == "cand_low"
 
 
 def test_verify_returns_none_when_only_candidate_was_just_asked(observing_db):
@@ -226,16 +257,20 @@ def test_verify_returns_none_when_only_candidate_was_just_asked(observing_db):
     conn.commit()
     conn.close()
 
-    assert _fetch_observing_candidate("space_1", 1001, exclude_id="cand_high") is None
+    assert _fetch_observing_candidate(
+        "space_1", 1001, exclude_id="cand_high", group_id=1, bot_id="test-bot"
+    ) is None
 
 
 def test_empty_exclude_id_does_not_filter_anything(observing_db):
     """没问过任何人时（exclude_id 为空串）不得误伤正常候选。"""
     from memory.proactive_target import _fetch_observing_candidate
 
-    found = _fetch_observing_candidate("space_1", 1001, exclude_id="")
+    found = _fetch_observing_candidate(
+        "space_1", 1001, exclude_id="", group_id=1, bot_id="test-bot"
+    )
     assert found is not None
-    assert found[0] == "cand_high"
+    assert found.candidate_id == "cand_high"
 
 
 # ── 5. 迁移侧：存量卡死行必须被回填 ────────────────────────

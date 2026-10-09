@@ -128,13 +128,79 @@ def mem_env(tmp_path, monkeypatch):
 def _insert_candidate(db, cid: str, content: str, *, confidence: float,
                       importance: float = 0.8, status: str = "NEW",
                       occurrence: int = 1, user_id: str = "100", type_: str = "FACT"):
+    """Seed an accepted source packet for promotion-path observation tests."""
+    from memory.evidence_contract import ASSESSMENT_VERSION, source_digest
+
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, "
-        "importance, confidence, status, occurrence_count) "
-        "VALUES (?, '1', ?, ?, ?, ?, ?, ?, ?)",
-        (cid, user_id, type_, content, importance, confidence, status, occurrence),
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+        "source_kind TEXT, conversation_key TEXT, bot_id TEXT)"
     )
+    source_id = int(conn.execute(
+        "SELECT COALESCE(MAX(id), 0) + 1 FROM group_messages"
+    ).fetchone()[0])
+    conversation_key = "qq:test-bot:group:1"
+    owner_key = "space:1"
+    fact_key = f"claim:v1:{cid}"
+    snapshot = {
+        "id": source_id,
+        "group_id": "1",
+        "user_id": str(user_id),
+        "content": content,
+        "source_kind": "AT_MENTION",
+        "conversation_key": conversation_key,
+        "bot_id": "test-bot",
+    }
+    digest = source_digest(snapshot)
+    provenance = {
+        "assessment_version": ASSESSMENT_VERSION,
+        "verification_status": "accepted",
+        "claim_key": fact_key,
+        "recording_author_key": f"qq:{user_id}",
+        "fact_object_key": f"qq:{user_id}",
+        "exact_support_span": content,
+        "conversation_key": conversation_key,
+        "source_id": source_id,
+        "source_snapshot": snapshot,
+    }
+    conn.execute(
+        "INSERT INTO memory_candidates (id, group_shared_space, user_id, type, content, "
+        "importance, confidence, status, occurrence_count, owner_type, owner_key, "
+        "subject_key, audience, fact_key, source_conversation_key, source_message_ids) "
+        "VALUES (?, '1', ?, ?, ?, ?, ?, ?, ?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?)",
+        (cid, user_id, type_, content, importance, confidence, status, occurrence,
+         owner_key, fact_key, conversation_key, json.dumps([str(source_id)])),
+    )
+    conn.execute(
+        "INSERT INTO group_messages "
+        "(id, group_id, user_id, content, source_kind, conversation_key, bot_id) "
+        "VALUES (?, '1', ?, ?, 'AT_MENTION', ?, 'test-bot')",
+        (source_id, str(user_id), content, conversation_key),
+    )
+    evidence_id = f"evidence:{cid}:{source_id}"
+    conn.execute(
+        "INSERT INTO memory_evidence "
+        "(id, owner_type, owner_key, subject_key, audience, fact_key, "
+        "source_conversation_key, source_row_id, candidate_id, fact_subject_key, "
+        "source_digest, verification_status, provenance_json) "
+        "VALUES (?, 'SPACE', ?, '', 'CURRENT_SPACE', ?, ?, ?, ?, ?, ?, 'accepted', ?)",
+        (evidence_id, owner_key, fact_key, conversation_key, source_id, cid,
+         f"qq:{user_id}", digest,
+         json.dumps(provenance, ensure_ascii=False, separators=(",", ":"))),
+    )
+    for entity_type, entity_id, projection_slot in (
+        ("memory_candidate", cid, "candidate"),
+        ("claim_state", fact_key, "eligibility"),
+    ):
+        conn.execute(
+            "INSERT INTO memory_claim_links "
+            "(id, evidence_id, owner_key, audience, entity_type, entity_id, claim_key, "
+            "projection_slot, slot_digest, status) "
+            "VALUES (?, ?, ?, 'CURRENT_SPACE', ?, ?, ?, ?, ?, 'active')",
+            (f"link:{cid}:{source_id}:{projection_slot}", evidence_id, owner_key,
+             entity_type, entity_id, fact_key, projection_slot, digest),
+        )
     conn.commit()
     conn.close()
 
