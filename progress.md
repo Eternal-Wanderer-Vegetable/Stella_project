@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-10-10 (Asia/Shanghai)
-**Active Feature:** CI-001 in_progress; DOC-001 done
+**Active Feature:** none; CI-001 and DOC-001 done
 **Scope:** PR #105 的 CI 修复：源码闭包预算、生成清单、回归与在线 CI；基线 f8b2dce。此前 DOC-001 仅修改文档与门禁。
 
 ## What's Done
@@ -52,4 +52,6 @@
 
 - 2906569 的 Dashboard CI 暴露既有大数据功能用例超时（5.17s > 默认 5s）；原修复提交的主 CI 与 Dashboard 全部通过记录仍有效。
 - 保留 100 页／100000 事件、全部水位断言、性能专项预算；仅该功能用例超时设为 15s。
-- CI-001 reopened：最终 head 的线上验收待本次推送后复核。
+- c7751f6 已修复该超时；本地 Dashboard 100 项测试、类型检查、生产构建通过。
+- [主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792) 通过；CI-001 done，无活动任务。
+- 完成记录提交的最终 SHA／检查结果以 Git 和 PR 最新状态为准。

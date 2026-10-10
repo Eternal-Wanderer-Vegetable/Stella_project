@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-- CI-001：PR #105 CI 修复，status in_progress；修复最新 head 暴露的 Dashboard 大数据用例超时。
+- CI-001：PR #105 CI 修复，status done；无活动任务，DOC-001 已完成。
 - Branch: codex/compact-8192-batching；源码基线 952007e。用户已审核并授权提交上传；最终提交与远端状态以 Git 记录为准。
 
 ## Completed This Session
@@ -55,4 +55,6 @@
 
 - 2906569 的 Dashboard CI 暴露既有大数据功能用例超时（5.17s > 默认 5s）；原修复提交的主 CI 与 Dashboard 全部通过记录仍有效。
 - 保留 100 页／100000 事件、全部水位断言、性能专项预算；仅该功能用例超时设为 15s。
-- CI-001 reopened：最终 head 的线上验收待本次推送后复核。
+- c7751f6 已修复该超时；本地 Dashboard 100 项测试、类型检查、生产构建通过。
+- [主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792) 通过；CI-001 done，无活动任务。
+- 完成记录提交的最终 SHA／检查结果以 Git 和 PR 最新状态为准。

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-10",
-  "active_feature": "CI-001",
+  "active_feature": null,
   "features": [
     {
       "id": "DOC-001",
@@ -53,7 +53,7 @@
       "id": "CI-001",
       "name": "PR #105 CI 修复",
       "description": "修复流程清单漂移与 ingress 源码闭包预算截断，保留原 CI 门禁。",
-      "status": "in_progress",
+      "status": "done",
       "dependencies": [
         "DOC-001"
       ],
@@ -114,6 +114,19 @@
         {
           "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043686859/job/114188817425",
           "result": "Completion record head 2906569 exposed existing Dashboard large-fixture flakiness: 100000-event functional test timed out at 5.17s; all assertions retained, only this case uses 15s timeout; dedicated performance budget unchanged"
+        },
+        {
+          "command": "Dashboard Vitest / vue-tsc / Vite build",
+          "result": "100 tests passed; typecheck and production build passed; 100000-event fixture retained, dedicated performance budget unchanged"
+        },
+        {
+          "commit": "c7751f634b175433c43a081118759fe29efa284e",
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769",
+          "result": "All 11 main CI jobs passed, including Python 3.10/3.11/3.12"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792",
+          "result": "Dashboard CI passed after functional-test timeout adjustment"
         }
       ]
     }
