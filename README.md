@@ -83,7 +83,7 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 - **💬 主动获取信息** —— 群聊被动摄入的信息密度极低，因此 Stella 会主动 @ 活跃用户搭话或确认记忆。有每日配额、用户级冷却与「连续无回应即退避」保护
 
-- **🎭 表达跟着群体进化（默认关）** —— 社交学习闭环：从投递回执与回复效果里沉淀「哪句表达值得复用」与「群体黑话是什么意思」，先影子模式只记录不干预，转正后经预算受控的槽位注入，效果再回流修正。默认关闭，灰度开启（`SOCIAL_ENABLED` / `SOCIAL_MODE`，见[配置文档](docs/configuration.md)）
+- **🎭 表达跟着群体进化（默认关）** —— 社交学习闭环：从投递回执与回复效果里沉淀「哪句表达值得复用」与「群体黑话是什么意思」，先影子模式只记录不干预，转正后经预算受控的槽位注入，效果再回流修正。默认关闭，灰度开启（`SOCIAL_ENABLED` / `SOCIAL_MODE`，见[配置文档](docs/reference/configuration.md)）
 
 - **🏠 多群共享空间** —— 多个 QQ 群可归入同一空间，共享用户画像、长期记忆与人格；而消息尾巴、话题状态、静音开关仍按群隔离，不会在 A 群回应 B 群的对话
 
@@ -101,9 +101,9 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 ## 🚀 快速开始
 
-> 本节面向 **Windows 桌面**部署。Linux / 远程服务器请直接看 [Docker 部署指南](docs/deployment-docker.md)。
+> 本节面向 **Windows 桌面**部署。Linux / 远程服务器请直接看 [Docker 部署指南](docs/guides/deployment-docker.md)。
 >
-> **v2 控制面（现行界面）**：浏览器直接访问 Bot 同端口即是完整管理面板（鉴权/配置/插件/MCP/知识库/定时任务/实时日志，详见 [docs/webui.md](docs/webui.md)）；桌面壳（Tauri 2）内嵌同一套面板。旧版原生界面已淘汰，冻结于 tag `gui-v1-final`。
+> **v2 控制面（现行界面）**：浏览器直接访问 Bot 同端口即是完整管理面板（鉴权/配置/插件/MCP/知识库/定时任务/实时日志，详见 [docs/webui.md](docs/guides/webui.md)）；桌面壳（Tauri 2）内嵌同一套面板。旧版原生界面已淘汰，冻结于 tag `gui-v1-final`。
 
 ### 📦 下载 & 安装（普通用户）
 
@@ -194,7 +194,7 @@ pip install -r requirements.txt
 
 建议使用 `Stella.exe` 中内置的“高级选项”表单来进行修改。**不建议手动修改.env。**
 
-完整配置项及其说明见 **[配置文档](docs/configuration.md)**。
+完整配置项及其说明见 **[配置文档](docs/reference/configuration.md)**。
 
 ### 启动
 
@@ -231,17 +231,17 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 
 启动后看 `logs/boot_debug.log`，里面会写清发现了哪些插件、加载成功还是失败、失败原因。
 
-插件的 `@command` 指令（默认前缀 `/`）装完就能用。插件用 `@llm_tool` 注册的**函数工具**要能在聊天里被自动调用，还需要一份能力声明——按 [插件接入规范](docs/plugin-spec.md) 写的插件**自带** `capability.toml`，这种插件装完就是完整的，你什么都不用配。
+插件的 `@command` 指令（默认前缀 `/`）装完就能用。插件用 `@llm_tool` 注册的**函数工具**要能在聊天里被自动调用，还需要一份能力声明——按 [插件接入规范](docs/reference/plugin-spec.md) 写的插件**自带** `capability.toml`，这种插件装完就是完整的，你什么都不用配。
 
-插件没自带（多数现存的 AstrBot 插件都没有），或者它自带的那份不合你的用法时，就在 `config/capabilities/<域名>.toml` 里补一条 / 覆盖一条——用户目录里的声明优先级最高，同一个工具被它认领后，插件自带的那条整条跳过。仓库里有一份真实样例（`config/capabilities/entertainment.toml`）可以照抄，格式说明见 `config/capabilities/information.toml.example`，怎么写才准见 [插件接入规范 §6.3](docs/plugin-spec.md#63-怎么写-examples)。
+插件没自带（多数现存的 AstrBot 插件都没有），或者它自带的那份不合你的用法时，就在 `config/capabilities/<域名>.toml` 里补一条 / 覆盖一条——用户目录里的声明优先级最高，同一个工具被它认领后，插件自带的那条整条跳过。仓库里有一份真实样例（`config/capabilities/entertainment.toml`）可以照抄，格式说明见 `config/capabilities/information.toml.example`，怎么写才准见 [插件接入规范 §6.3](docs/reference/plugin-spec.md#63-怎么写-examples)。
 
-> 为什么需要这份声明：插件的工具描述是写给「看着全部工具做选择」的决策器的指令句，而 Stella 的路由是拿它和用户的**问句**算语义相似度——两种用途要求的文本形态不同，直接拿来用会让同类工具互相抢。实测数据与取舍见 [能力系统](docs/capability-system.md#声明优先为什么自动派生不参与路由)。
+> 为什么需要这份声明：插件的工具描述是写给「看着全部工具做选择」的决策器的指令句，而 Stella 的路由是拿它和用户的**问句**算语义相似度——两种用途要求的文本形态不同，直接拿来用会让同类工具互相抢。实测数据与取舍见 [能力系统](docs/architecture/capability-system.md#声明优先为什么自动派生不参与路由)。
 
 写插件或想确认一份声明写得对不对，跑 `python -m deploy plugin-check <插件目录>`：16 项检查，零 error 才算达标。不想从零手写 examples，可以先跑 `python -m deploy plugin-scaffold <插件目录>` 生成一份草稿（`capability.toml.draft`），它同时用真实 embedding 打一份量化报告告诉你这份语料准不准；草稿要人审、改名并把 `reviewed` 置为 `true` 才会生效——没审过的语料到不了路由。
 
 装完想知道它到底进没进路由，三个地方看的是同一份清单：在群里 @ 机器人问一句「你能做什么」、跑 `python -m deploy capabilities`、或者打开 `Stella.exe` 的「插件」页点开这个插件（绿点＝该工具已被声明认领、能被聊天自动触发）。列的都是哪些能力能被聊天自动触发、哪些不能，以及不能的原因（没有声明 / 工具名拼错 / 被更高优先层顶掉 / 实现正在退避）。这比翻启动日志直接。
 
-调试插件时可以打开热重载（`ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED=true`，**默认关闭**），改完代码在群里发「@Stella 重载插件 <插件目录名>」就能不重启生效。它**不等于重启**——裸 `asyncio.create_task` 起的任务、插件起的线程与 monkeypatch 都收不回来，所以怀疑状态不干净就重启，细节见 [插件接入规范 §13](docs/plugin-spec.md#13-调试)。
+调试插件时可以打开热重载（`ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED=true`，**默认关闭**），改完代码在群里发「@Stella 重载插件 <插件目录名>」就能不重启生效。它**不等于重启**——裸 `asyncio.create_task` 起的任务、插件起的线程与 monkeypatch 都收不回来，所以怀疑状态不干净就重启，细节见 [插件接入规范 §13](docs/reference/plugin-spec.md#13-调试)。
 
 插件的卡片图由本地 Chromium 渲染，**首次需要出图时会自动后台下载约 270MB 的浏览器内核**，期间插件照常回纯文本，装好后自动生效、不用重启。
 
@@ -258,17 +258,19 @@ Stella 能直接跑 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 生态的�
 
 ## 📖 文档
 
+完整入口见 [文档总览](docs/README.md)，按使用、架构、参考、开发与历史证据选择；编码 Agent 从 [AGENTS.md](AGENTS.md) 开始。当前分支合同见 [源码合同](docs/development/contracts.md)。
+
 | 文档 | 内容 |
 |---|---|
-| [架构说明](docs/architecture.md) | 目录结构、消息处理流程、模块职责、AstrBot 兼容层 |
-| [记忆系统](docs/memory-system.md) | 两层过滤的设计理由、晋升规则、检索策略 |
-| [能力系统](docs/capability-system.md) | Capability Router 与 Comes：工具如何在聊天上下文之外执行 |
-| [插件接入规范](docs/plugin-spec.md) | 写一个 Stella 能完整用起来的插件：声明格式、两条通路、失败契约、自检工具 |
-| [配置参考](docs/configuration.md) | 端点 × 角色两层模型配置、全部配置项与调参建议 |
-| [Docker 部署指南](docs/deployment-docker.md) | 远程服务器容器化部署：构建、配置、从 Windows 迁移、升级与备份 |
-| [开发指南](docs/development.md) | 测试、探针脚本、CI、贡献流程 |
+| [架构说明](docs/architecture/README.md) | 目录结构、消息处理流程、模块职责、AstrBot 兼容层 |
+| [记忆系统](docs/architecture/memory-system.md) | 两层过滤的设计理由、晋升规则、检索策略 |
+| [能力系统](docs/architecture/capability-system.md) | Capability Router 与 Comes：工具如何在聊天上下文之外执行 |
+| [插件接入规范](docs/reference/plugin-spec.md) | 写一个 Stella 能完整用起来的插件：声明格式、两条通路、失败契约、自检工具 |
+| [配置参考](docs/reference/configuration.md) | 端点 × 角色两层模型配置、全部配置项与调参建议 |
+| [Docker 部署指南](docs/guides/deployment-docker.md) | 远程服务器容器化部署：构建、配置、从 Windows 迁移、升级与备份 |
+| [开发指南](docs/development/README.md) | 测试、探针脚本、CI、贡献流程 |
 
-> 设计过程记录（规范草案、检查点、缺陷报告、测试清单）在 [`design_docs/`](design_docs/)。
+> 设计过程记录（规范草案、检查点、缺陷报告、测试清单）在 [`design_docs/`](design_docs)。
 
 ## 🧠 记忆形成流程
 
@@ -300,7 +302,7 @@ graph LR
 
 阶段 2 只在阶段 1 判定有自我披露时唤醒 —— 日常刷屏与寒暄既不消耗 GPU，也不花在线 token。这样拆是因为小模型能总结主题，却在噪音环境下会把候选提取判空（实测：信息明确出现在它自己写的摘要里，但候选返回空数组）。
 
-> 细节见 [记忆系统文档](docs/memory-system.md)。
+> 细节见 [记忆系统文档](docs/architecture/memory-system.md)。
 
 ## 🛠 技术栈
 
@@ -312,7 +314,7 @@ graph LR
 
 **桌面安装器**：`Tauri 2` · `Rust`。v1（`stella-installer/`，原生 HTML/JS，已冻结于 `gui-v1-final`）；v2（`desktop/` 壳 + `dashboard/` 面板，Vue 3 + Vuetify 3，见 `docs/webui.md`）
 
-**容器化部署**：`Docker` · `docker compose`（`Dockerfile` + stella/napcat 双容器编排，另有可选 `llama` profile；Chromium 与中文字体已内置镜像；见 [Docker 部署指南](docs/deployment-docker.md)）
+**容器化部署**：`Docker` · `docker compose`（`Dockerfile` + stella/napcat 双容器编排，另有可选 `llama` profile；Chromium 与中文字体已内置镜像；见 [Docker 部署指南](docs/guides/deployment-docker.md)）
 
 **开发与验证**：`pytest` · `ruff` · `pyright`
 
@@ -352,4 +354,4 @@ graph LR
 - 特别致谢 Freya，这是献给你的作品。我的探索之旅因你的馈赠而起，是时候交出一份并不完美的回礼了。
 
 
-版本化升级工具与安装器默认布局是两回事：当前发布工作流 `VERSIONED_LAYOUT=0`，不会默认开启 launcher 搬移路径；适用条件见 [开发指南](docs/development.md)。
+版本化升级工具与安装器默认布局是两回事：当前发布工作流 `VERSIONED_LAYOUT=0`，不会默认开启 launcher 搬移路径；适用条件见 [开发指南](docs/development/README.md)。

@@ -1,0 +1,238 @@
+# 一次消息的处理流程
+
+中文 | [English](message-lifecycle.en.md) · [文档总览](../README.md)
+
+### 1. 接入与落库
+
+```
+群消息 → group_silent_listener（priority 0, block=False）
+        → pre_processors.record_message() → group_messages 表
+        → proactive.record_message() → 活跃度时间戳（内存）
+        → session_context.touch() → 会话活动时间戳（内存）
+```
+
+静默监听器处理**每一条**群消息，包括不 @ 机器人的。落库时按来源分级打标：
+
+| `source_kind` | 含义 | 在记忆系统中的权重 |
+|---|---|---|
+| `AT_MENTION` | 用户直接对 Bot 说 | 高密度证据，单次即可晋升 |
+| `PASSIVE` | 被动摄入的群聊 | 需复现才能晋升 |
+| `BOT_SELF` | Bot 自己的发言 | **只作上下文，绝不产出候选** |
+
+`BOT_SELF` 是必需的：没有它，用户回答「对」「手机」这类简短回应时，整合模型看不到 Bot 问了什么，只能放弃或自行编造语境。
+
+链路监测由**独立的** `event_preprocessor` 刷新心跳（任何 OneBot 事件都算，包括协议端的心跳元事件），不是 `group_silent_listener` 的职责。
+
+> **落库监听器必须是最高优先级（0）**，且必须排在所有 `block=True` 的处理器之前。
+>
+> NoneBot 中 `block=True` 会阻止事件继续传播给优先级更低的处理器。落库监听器若排在 `chat_handler` 之后，**@ 机器人的消息会被拦截而永不入库**——普通群聊正常记录，唯独最有价值的 @ 对话全部丢失。
+>
+> 2026-08-17 实测：落库监听器为 `priority 99` 时，13 批整合共消费 270 条消息，`AT_MENTION` 计数**全部为 0**。@ 对话是设计上唯一稳定的用户信息源（见 `design_docs/check_point/`），这条回路从未运行过；连带 `MEMORY_PROMOTE_AT_MENTION_SINGLE_SHOT`、`MEMORY_AT_MENTION_CONFIDENCE_BONUS` 与主动 @ 的候选验证模式（`mode=verify`）全部空转。
+>
+> 职责顺序是「先落库，再决定要不要回复」。新增任何 `block=True` 的处理器时，其 priority 必须大于 0。
+>
+> 落库先行的连带影响：当前这条消息会同时出现在自己的上下文尾巴里与「【现在 用户(X) 对你说】」标记中。这个重复是可接受的——同句重复是强化而非混淆，而当前输入的显式标记仍在（2026-08-16 接错话缺陷的修复）。
+
+### 2. 触发路径
+
+| 路径 | 触发条件 | `trigger` | `intent` |
+|---|---|---|---|
+| @ 回复 | 群在白名单 + 被 @ + 有文本¹ | `reply` | `""` |
+| 主动 @ | 定时检查命中，选中活跃用户 | `reply` | `proactive_at` |
+| 主动插话 | 定时检查命中，概率曲线通过 | `proactive` | `proactive_join` |
+| 插件分发 | 群在白名单 + 非自身回显 + 消息非空 | — | — |
+| 运行时开关 | 管理员 @ 机器人 + 命中开关关键词 | — | — |
+| 能力查询 | 群在白名单 + 被 @ + 命中「你能做什么」等说法 | — | — |
+
+三条对话路径共用同一个 Pipeline，靠 `ChatContext` 的字段区分行为。每群一把 `asyncio.Lock`，保证同一群同时只跑一次推理。
+
+> ¹ 绑定了 `VISION` 端点（`LLM_ROLE_VISION_ENDPOINT` 非 `none`）时，「有文本」放宽为「有文本或图片」——纯图片 @ 以 `[图片]` 占位进入流程，转述由 pre hook 补上。未绑定时行为与旧版一致：纯图片消息既不触发也不落库（见 `core/vision.py::vision_available()`）。
+
+插件分发的门槛刻意比 @ 回复宽得多（判定在 `astrbot_compat.pipeline.should_dispatch`）：上游 AstrBot 对每一条消息都跑一遍插件 filter，是否唤醒由 filter 自己决定。门槛是「消息里有段」而**不是**「有纯文本」——手机端分享的小程序卡片只有一个 `json` 段，按纯文本判会把整条消息挡在插件层外，于是 `@event_message_type(ALL)` 这类专为非文本消息存在的 handler 永远收不到事件（2026-08-25 实测）。
+
+主动 @ 与主动插话**互斥**：定时任务先尝试主动 @，命中即跳过插话，同一轮只发一次言。
+
+主动路径（主动 @ / 主动插话）的准入判定统一走 `memory/proactive_gate.py` 的 `can_speak(group_id, kind)`，按顺序检查六项：
+
+```
+总开关 → 分路开关 → 运行时静音 → 睡眠时段 → 醒来缓冲 → 群级冷却 → 新消息门槛
+```
+
+返回值带原因字符串，便于排查「为什么这次没说话」。收敛到单一入口是有原因的：这些条件原先散在 `proactive_speak_job` / `_proactive_at_user` / `should_speak` 三处，每加一个条件都要改三个调用点。
+
+gate 之外还有一道零 token 的**回复必要性门控**（`core/reply_gate.py`）：硬触发（被 @）直通，主动插话路径只增加本地状态与冷却约束。它依赖的按群运行状态在 `core/turn_runtime.py`——不持有聊天内容、不调用 LLM。
+
+话题插话的**概率掷骰不在 gate 内** —— 那是 join 路径独有的，由调用方在 gate 通过后自行掷骰（主动 @ 有配额与用户级冷却约束，不掷骰）。
+
+**@ 回复不经过 gate。** 睡眠或静音期间被 @ 照常回复。
+
+> 五个监听器的优先级关系（数字越小越先执行）：
+>
+> | 监听器 | priority | block | 职责 |
+> |---|---|---|---|
+> | `group_silent_listener` | 0 | 否 | 落库（必须最先，见上文） |
+> | `toggle_handler` | 1 | 是 | 运行时开关命令 |
+> | `capability_handler` | 1 | 是 | 能力查询（「你能做什么」） |
+> | `plugin_handler` | 2 | 否 | AstrBot 插件分发（见[兼容层](integrations.md#astrbot-插件兼容层)） |
+> | `chat_handler` | 3 | 是 | @ 回复主流程 |
+>
+> `toggle_handler` 必须早于 `chat_handler`，否则「安静」这类命令会被当成普通对话交给 LLM。同理 `capability_handler`：不早于 `chat_handler`，「你能做什么」就会被当普通对话交给 LLM，答出来的是它**猜**自己有什么能力，而不是注册表里实际有什么。
+>
+> `toggle_handler` 与 `capability_handler` **同优先级且同为 `block=True`**，而 NoneBot 会把同优先级的 matcher 一起跑，所以两者的 rule 必须**机械互斥**：`is_query_text()` 命中运行时开关词表时一律返回 False，启动期由 `_assert_capability_rule_disjoint()` 穷举两张词表的拼接钉住。不靠「两张词表刚好不重叠」——加词的人不会去查另一张表，而一句「恢复一下，你能做什么」同时命中两者时，其中一个**会改群设置**。
+>
+> `plugin_handler` 用 `block=False`：没命中任何插件时事件要能继续落到 `chat_handler`。命中时它把 `message_id` 记进 `_plugin_handled_msgs`，由 `chat_handler` 自己跳过——用 block 会连带把「插件只是顺手记了点东西、并没有回复」的情况也拦掉。
+
+### 3. 上下文构建（pre hooks）
+
+Pipeline 的 pre hook 按 priority **降序**执行：
+
+```
+describe_images_hook   (60)  → ctx.image_captions：把图转述成「图片内容：……」并入 ctx.message
+                               （仅 VISION 已绑定时注册为有效路径；未绑定直接返回）
+build_context          (50)  → ctx.short_term
+activate_capabilities  (45)  → ctx.route，并行激活 {长期记忆检索, Comes 工具执行}
+```
+
+**`build_context`** 组装三层并存的短期上下文：
+
+- **话题层摘要**：`short_term_context.active_summary` / `pending_topic`，由整合器产出，按设计滞后；超过 `SHORT_TERM_SUMMARY_STALE_MINUTES` 未更新时标题改为「之前的话题」并注明时长
+- **原始尾巴**：最近 `RECENT_TAIL_LIMIT` 条原始消息，含 Bot 自己的发言（渲染为「我」）。超出 `RECENT_TAIL_MAX_AGE_MINUTES` 时间窗的旧消息被过滤（2026-08-15 修复），窗口内部相邻消息间隔超过 `RECENT_TAIL_GAP_MARK_MINUTES` 时插入断层标记「（……中间隔了 X……）」
+- **会话摘要**：本场对话中已滚出尾巴窗口的较早内容，由 `session_compact` 在每次回复后异步压缩产出
+
+三层按消息 id 划分，**绝不重叠**：
+
+```
+会话摘要：summarized_up_to_id → 尾巴起点（较早部分，已压缩）
+原始尾巴：最近 RECENT_TAIL_LIMIT 条（原文）
+话题摘要：整合器产出的跨会话背景
+```
+
+重叠会导致同一段对话出现两个版本，模型以摘要为准从而接错话题（2026-08-13 缺陷的成因）。尾巴起点（`ctx.tail_start_id`）取「第一条真正进入尾巴」的消息 id——被时间窗过滤掉的归入待压缩区间，不会丢失。
+
+三层必须并存。摘要要累积到阈值才更新，只靠它会看不到最近几轮对话——Bot 会把用户的简短回应接到上一个话题上去。
+
+**`activate_capabilities`** 做两件事：先由 Router 判定本次需要哪些能力，再**并行**激活记忆检索与工具执行（详见 [能力系统](capability-system.md)）。
+
+```
+capability.router.route(消息)              ← 三级级联：规则 → Embedding → 模型兜底
+  → ctx.route（判定快照，写进 thought 日志与决策轨迹）
+  ↓
+asyncio.gather(
+    build_user_context(ctx),               ← 长期记忆检索（下方）
+    run_comes(ctx, route),                 ← 工具执行，仅 route.tool 时
+)
+```
+
+`build_user_context` **不再单独注册为钩子**，已被本钩子接管：Memory 与 Comes 必须并行，两个独立钩子只能串行。
+
+`build_context` 保持无条件执行——短期上下文是对话素材，与「要不要检索长期记忆」无关。
+
+**`describe_images_hook`**（`core/vision.py`，详见 [configuration.md · 图片识别](../reference/configuration.md#图片识别视觉转述)）：`VISION` 角色绑了端点时才干活——提取消息里的图片（含被引用消息中的图，受 `VISION_INCLUDE_QUOTED` 控制），每张经 `VISION` 角色闸门调视觉模型产出一句描述，拼接成「图片内容：……」追加到 `ctx.message`，并按 `msg_id` 把已落库的 `[图片]` 占位回写成转述文本。转述失败 / 超时 / 超尺寸的图降级保留 `[图片]` 占位，不阻断回复；转述结果有进程内 LRU 缓存（同一 URL 重发不重复调模型）。
+
+pre hooks 之后、调用模型之前，还有一道**受限 Planner**（`core/planner.py`）的深度路径：绝大多数消息不经过它——本地零 LLM 的 `detect_trigger` 判定命中（历史指代、话题歧义等启动条件）才唤醒，允许发起深度记忆查询补充上下文，并有每轮 LLM 调用硬上限（`PLANNER_MAX_LLM_CALLS_PER_TURN`）。Planner 异常只降级为快速路径（少几条补充记忆），不能吞掉回复；判定为「等信息不够」时（`PLANNER_PROACTIVE_WAIT_ENABLED`）本轮可以不回复，等后续消息重新驱动。
+
+> **记忆门控默认关闭**（`ROUTER_GATE_MEMORY=false`）：Router 照常判定与记录，但记忆检索仍无条件执行。误判 `memory=False` 会让 Stella 当轮悄悄丢失长期记忆——不抛异常、不影响回复，只是「它突然不记得你了」，与 2026-08-17 那次 `AT_MENTION` 全为 0 的缺陷同一类型。要打开先跑 `python -m capability.router.benchmark` 确认记忆假阴为 0。
+
+**`build_user_context`** 走 v2 检索（`MEMORY_V2_ENABLED`）：
+
+画像与记忆按**共享空间**检索（`resolve_space(ctx.group_id)`），而非按 QQ 群。
+
+```
+detect_mode(消息, 触发方式)                     ← 判定行为模式
+  → SQL 可见性预过滤                            ← 先决定什么有资格被找到
+  → FTS5 / 加权回退 取候选池
+  → Usage 层过滤 + Ranking（Policy 优先于相似度）
+  → 同类合并（按用户，不跨归属）
+  → 分离聊天素材 / 行为约束
+  → 分数门槛 + 模式条数上限
+```
+
+### 4. LLM 调用
+
+`core/pipeline.py` 把上下文、工具结果与消息拼成最终 prompt。**拼装顺序取决于 `intent`**：
+
+| intent | 顺序 | 原因 |
+|---|---|---|
+| 普通 | 上下文 → 工具结果 → 用户消息 | 用户输入在最后，模型自然去回应它 |
+| `proactive_at` | **任务指令 → 工具结果 → 上下文** | `ctx.message` 是指令而非用户输入；若放在最后，模型会去接上下文尾部的对话而不是执行指令 |
+
+工具结果段落只吃 `ctx.tool_summaries`（压缩后的一句话），**`Result.data` 全程不进 prompt**——一次搜索能返回几千字，原样拼进来会把记忆与对话上下文一起挤出窗口。它夹在上下文与当前输入之间：工具结果是「回答这句话的证据」，必须离当前输入近，而「请回应这句话」必须留在最后一行。
+
+> 调用经 `core/llm/scheduler.py` 的资源闸门串行。**LM Studio 不限制并发**，多请求同时打到同一模型会并发推理、互相拖慢，因此应用层必须为每个共享模型设一道闸门。
+>
+> **闸门资源名就是端点槽名**：`acquire(gate_of(role))`，并发度取该槽的 `LLM_ENDPOINT_<槽>_CONCURRENCY`。因此「哪些调用会互相排队」由角色绑到哪个槽决定，纯本地默认配置下是：
+>
+> | 闸门（槽） | 并发度 | 使用者 |
+> |---|---|---|
+> | `LOCAL` | 1 | 聊天回复、会话压缩、候选提取、Comes 工具循环、Router Level 2、图片转述（`VISION` 绑定 LOCAL 时）、embedding 编码（`MEMORY_EMBEDDING_GATE=auto`） |
+> | `EXTRA` | 1 | 两阶段整合的阶段 1 |
+>
+> 同一资源内严格 FIFO（`asyncio.Lock` 的等待队列本就是 FIFO），不同资源之间可真正并行。把某个角色改绑到在线槽（例如 `LLM_ROLE_CHAT_ENDPOINT=ONLINE_CHAT`，默认并发度 4）后，它就从 `LOCAL` 那条队里出去了——这是在线化带来的吞吐收益的来源。配置方式见 [configuration.md · 端点与角色](../reference/configuration.md#端点与角色两层配置)。
+>
+> 这也是「Memory 与 Comes 并行」的边界：纯本地时两者的**模型调用**仍在同一把 `LOCAL` 闸门里 FIFO 串行，`gather` 换来的是 Memory 的 SQL/FTS 查询与 Comes 的 HTTP 等待互相重叠。不是假并行，但也不是两块 GPU；把 PLUGIN 角色挪到在线槽后这道串行才真正消失。
+>
+> `scheduler.py` 里的 `RESOURCE_CHAT` / `RESOURCE_CONSOLIDATION` 是旧资源名常量，项目内已无调用点，保留只为不破坏外部 import。用它们 acquire 会建出一把与任何端点都不对应的独立闸门，起不到串行保护作用。
+>
+> **调用方绝不能同时持有两把闸门**：若先持 `EXTRA` 再等 `LOCAL`（或反之），会发生跨端点队头阻塞——一个资源空闲时却在等另一个资源的队头任务释放，把两条队一起堵死。这正是 `consolidate_group` 用独立的群级锁、把阶段 1 与阶段 2 拆成两个互不嵌套的持有窗口的原因。
+>
+> 每次获取都记录等待时长、持有时长与队列深度，超阈值告警；`core.llm.snapshot()` 可导出各资源的累计统计。多群部署下这是判断「延迟来自哪个资源、谁在排队」的唯一手段。
+>
+> 超时与异常都有兜底回复。诊断信息（后端、模型、耗时、完整 prompt）写入 `ctx`，由 `log_thought` 落盘。
+
+### 5. 输出处理（post hooks）
+
+按 priority 降序：
+
+```
+parse_output      (100)  → 解析 thought / action / reply
+bad_phrase_filter  (80)  → 破防语句兜底
+split_lines        (60)  → 拆分为可逐条发送的多行
+log_thought        (40)  → 写 logs/stella_thought_logs.md
+```
+
+发送前先把 Bot 自己的台词写入 `group_messages`（`BOT_SELF`）。**必须在发送前**：最后一行走 `finish()` 会抛 `FinishedException`，之后的代码不执行。
+
+回复发出之后，`memory/expression_learning.py` 在后台异步结算学习（用户是否继续回应、是否复用 Stella 的表达、是否用表情、是否纠正、是否忽略主动发言）：主回复路径只调 `on_reply_sent` 登记并派生任务（微秒级返回），学习零 LLM 调用、坏了只影响学习不影响聊天；样本与统计存独立的 `expression_store`，与记忆系统（「知道什么」）分离。
+
+### 6. 记忆写入与晋升
+
+异步进行，不阻塞回复：
+
+```
+消息积累 → maybe_consolidate()（@ 触发 / 主动发言前 / 定时排空 / 会话结束）
+        → 阶段1（整合模型，CPU）
+        │    输出短期摘要 + 用户画像 + has_self_disclosure 布尔
+        ↓ 仅当 has_self_disclosure 为真
+        → 阶段2（主聊天模型，GPU）
+        │    精确提取 memory_candidates，结果覆盖阶段1（含空数组）
+        → 候选强化：同事实累积证据而非重复插入
+        → MemoryManager.process_new_candidates()
+          ├─ 超期 OBSERVING → REJECTED
+          ├─ Gate 1 三档判定 → 晋升 / 继续观察
+          ├─ 冲突检测 → 旧记忆标 CONFLICT
+          ├─ 相似合并（同空间同用户同类型）或新建
+          └─ 每用户配额淘汰（按空间）
+        → FTS5 索引同步
+        → 轻量压缩（节流触发）
+```
+
+> **整合前有一道本地免费预筛**（`memory/cost_gates.py`，Tier 1）：在线端点按 token 计费而整合是高频后台任务，这一步回答「这批消息值得花钱整合吗」，判据全部跑在本地、零成本、零 I/O。
+>
+> **为什么拆两阶段**：小模型能总结主题，却在噪音环境下系统性地把候选提取判空——2026-08-16 实测 7 批整合全部返回空候选，而信息明确出现在它自己写的 `active_summary` 里，是「读到了但主动弃掉」。候选提取是高精度抽取任务，交给主聊天模型。
+>
+> 阶段 2 由软门槛控制（阶段 1 的布尔判断），只在真有用户自我披露时唤醒，日常刷屏与寒暄不消耗 GPU。阶段 2 成功时其结果**覆盖**阶段 1 的候选，**包括返回空数组的情况**——那是大模型复核认为确实没有，正好纠正小模型的误判；调用或解析失败则回退阶段 1 候选。
+>
+> 两阶段各自持有对应资源的闸门，**绝不同时持有**（见上文）。整合的群级串行由 `consolidator` 内的模块级群锁保证，与模型闸门分离。
+>
+> 整合的四个触发点：@ 触发前（force 小批次）、主动发言前（force）、定时排空（`CONSOLIDATION_SCHEDULE_INTERVAL`）、会话空闲结束。定时排空是必需的——被动摄入速度超过整合速度时会无界积压，超过 `MESSAGE_CLEANUP_KEEP_COUNT` 后未整合消息会被清理丢弃。
+
+### 7. 定时任务
+
+| 任务 | 周期 | 作用 |
+|---|---|---|
+| 主动发言检查 | `PROACTIVE_CHECK_INTERVAL` | 睡眠/苏醒播报 → 尝试主动 @ → 尝试主动插话 |
+| 链路监测 | `LINK_MONITOR_CHECK_INTERVAL` | 事件超时后主动探活，失败则告警（不重启） |
+| 消息表裁剪 | 每日 `MESSAGE_CLEANUP_HOUR` 点 | 每群保留最近 N 条，同时清理过期追踪 |
+| 周度压缩 | 每 7 天 | 全量去重、原子化、归档、衰减 |
+| 定时整合排空 | `CONSOLIDATION_SCHEDULE_INTERVAL` | 逐批消化各群的整合积压 |
+| 会话空闲检查 | `SESSION_IDLE_CHECK_INTERVAL` | 空闲超时的会话清空压缩状态并触发一次完整整合 |

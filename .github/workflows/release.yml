@@ -768,6 +768,11 @@ jobs:
             --exclude '.gitnexus' \
             --exclude 'AGENTS.md' \
             --exclude 'CLAUDE.md' \
+            --exclude 'feature_list.json' \
+            --exclude 'progress.md' \
+            --exclude 'session-handoff.md' \
+            --exclude 'init.sh' \
+            --exclude 'init.ps1' \
             --exclude '.stella-state.json' \
             --exclude 'cli' \
             --exclude 'assets' \

@@ -1,0 +1,2400 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "redirects": {
+    "docs/cometa.md": "docs/guides/cometa.md",
+    "docs/cometa.en.md": "docs/guides/cometa.en.md",
+    "docs/scheduling.md": "docs/guides/scheduling.md",
+    "docs/scheduling.en.md": "docs/guides/scheduling.en.md",
+    "docs/skills.md": "docs/guides/skills.md",
+    "docs/skills.en.md": "docs/guides/skills.en.md",
+    "docs/webui.md": "docs/guides/webui.md",
+    "docs/webui.en.md": "docs/guides/webui.en.md",
+    "docs/deployment-docker.md": "docs/guides/deployment-docker.md",
+    "docs/deployment-docker.en.md": "docs/guides/deployment-docker.en.md",
+    "docs/configuration.md": "docs/reference/configuration.md",
+    "docs/configuration.en.md": "docs/reference/configuration.en.md",
+    "docs/plugin-spec.md": "docs/reference/plugin-spec.md",
+    "docs/plugin-spec.en.md": "docs/reference/plugin-spec.en.md",
+    "docs/migration-report-template.md": "docs/reference/migration-report-template.md",
+    "docs/migration-report-template.en.md": "docs/reference/migration-report-template.en.md",
+    "docs/memory-system.md": "docs/architecture/memory-system.md",
+    "docs/memory-system.en.md": "docs/architecture/memory-system.en.md",
+    "docs/memory-rust-backend.md": "docs/architecture/memory-rust-backend.md",
+    "docs/memory-rust-backend.en.md": "docs/architecture/memory-rust-backend.en.md",
+    "docs/capability-system.md": "docs/architecture/capability-system.md",
+    "docs/capability-system.en.md": "docs/architecture/capability-system.en.md",
+    "docs/knowledge-base.md": "docs/architecture/knowledge-base.md",
+    "docs/knowledge-base.en.md": "docs/architecture/knowledge-base.en.md",
+    "docs/architecture.md": "docs/architecture/README.md",
+    "docs/development.md": "docs/development/README.md",
+    "docs/architecture.en.md": "docs/architecture/README.en.md",
+    "docs/development.en.md": "docs/development/README.en.md"
+  },
+  "anchors": {
+    "docs/cometa.md": {
+      "cometa-外部-agent-任务层安装与认证": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "cometa-外部-agent-任务层安装与认证"
+      },
+      "安装": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "安装"
+      },
+      "认证webui-双路线--旧版迁移": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "认证webui-双路线--旧版迁移"
+      },
+      "1-chatgpt-账号登录设备码推荐": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "1-chatgpt-账号登录设备码推荐"
+      },
+      "2-openai-api-key": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "2-openai-api-key"
+      },
+      "3-自定义端点openai-兼容--中转": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "3-自定义端点openai-兼容--中转"
+      },
+      "旧版迁移": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "旧版迁移"
+      },
+      "认证存在哪里": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "认证存在哪里"
+      },
+      "权限": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "权限"
+      },
+      "故障诊断": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "故障诊断"
+      },
+      "会话回投与运行边界610": {
+        "path": "docs/guides/cometa.md",
+        "fragment": "会话回投与运行边界610"
+      }
+    },
+    "docs/cometa.en.md": {
+      "cometa-external-agent-task-layer-installation--authentication": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "cometa-external-agent-task-layer-installation--authentication"
+      },
+      "installation": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "installation"
+      },
+      "authentication-two-webui-routes--legacy-migration": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "authentication-two-webui-routes--legacy-migration"
+      },
+      "1-chatgpt-account-login-device-code-recommended": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "1-chatgpt-account-login-device-code-recommended"
+      },
+      "2-openai-api-key": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "2-openai-api-key"
+      },
+      "3-custom-endpoint-openai-compatible--relay": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "3-custom-endpoint-openai-compatible--relay"
+      },
+      "legacy-migration": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "legacy-migration"
+      },
+      "where-credentials-live": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "where-credentials-live"
+      },
+      "permissions": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "permissions"
+      },
+      "troubleshooting": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "troubleshooting"
+      },
+      "conversation-delivery-and-runtime-boundaries-in-610": {
+        "path": "docs/guides/cometa.en.md",
+        "fragment": "conversation-delivery-and-runtime-boundaries-in-610"
+      }
+    },
+    "docs/scheduling.md": {
+      "定时任务群级-cron-提醒与有界主动-agent": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "定时任务群级-cron-提醒与有界主动-agent"
+      },
+      "群内指令bot-使用": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "群内指令bot-使用"
+      },
+      "权限矩阵": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "权限矩阵"
+      },
+      "cron-方言五字段严格校验": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "cron-方言五字段严格校验"
+      },
+      "夏令时规则": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "夏令时规则"
+      },
+      "运行语义": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "运行语义"
+      },
+      "agent-任务的边界": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "agent-任务的边界"
+      },
+      "投递状态不承诺-exactly-once": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "投递状态不承诺-exactly-once"
+      },
+      "部署模型与故障恢复": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "部署模型与故障恢复"
+      },
+      "配置项": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "配置项"
+      },
+      "v1-明确不做": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "v1-明确不做"
+      },
+      "webui-管理": {
+        "path": "docs/guides/scheduling.md",
+        "fragment": "webui-管理"
+      }
+    },
+    "docs/scheduling.en.md": {
+      "scheduling-group-cron-reminders-and-bounded-agents": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "scheduling-group-cron-reminders-and-bounded-agents"
+      },
+      "group-commands": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "group-commands"
+      },
+      "permissions-and-quotas": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "permissions-and-quotas"
+      },
+      "cron-dialect": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "cron-dialect"
+      },
+      "execution": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "execution"
+      },
+      "delivery-states": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "delivery-states"
+      },
+      "deployment-and-recovery": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "deployment-and-recovery"
+      },
+      "configuration": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "configuration"
+      },
+      "scope-and-webui": {
+        "path": "docs/guides/scheduling.en.md",
+        "fragment": "scope-and-webui"
+      }
+    },
+    "docs/skills.md": {
+      "anthropic-风格-skills-与受控沙盒": {
+        "path": "docs/guides/skills.md",
+        "fragment": "anthropic-风格-skills-与受控沙盒"
+      },
+      "目录布局与来源优先级": {
+        "path": "docs/guides/skills.md",
+        "fragment": "目录布局与来源优先级"
+      },
+      "skillmd-格式": {
+        "path": "docs/guides/skills.md",
+        "fragment": "skillmd-格式"
+      },
+      "生命周期渐进披露": {
+        "path": "docs/guides/skills.md",
+        "fragment": "生命周期渐进披露"
+      },
+      "沙盒执行": {
+        "path": "docs/guides/skills.md",
+        "fragment": "沙盒执行"
+      },
+      "网络与远程-runner": {
+        "path": "docs/guides/skills.md",
+        "fragment": "网络与远程-runner"
+      },
+      "配置": {
+        "path": "docs/guides/skills.md",
+        "fragment": "配置"
+      },
+      "编写守则": {
+        "path": "docs/guides/skills.md",
+        "fragment": "编写守则"
+      },
+      "状态与排查": {
+        "path": "docs/guides/skills.md",
+        "fragment": "状态与排查"
+      },
+      "webui-管理": {
+        "path": "docs/guides/skills.md",
+        "fragment": "webui-管理"
+      }
+    },
+    "docs/skills.en.md": {
+      "anthropic-style-skills-and-controlled-sandboxes": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "anthropic-style-skills-and-controlled-sandboxes"
+      },
+      "sources-and-precedence": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "sources-and-precedence"
+      },
+      "manifest": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "manifest"
+      },
+      "progressive-disclosure": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "progressive-disclosure"
+      },
+      "sandbox-actions": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "sandbox-actions"
+      },
+      "configuration": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "configuration"
+      },
+      "authoring": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "authoring"
+      },
+      "administration-and-diagnostics": {
+        "path": "docs/guides/skills.en.md",
+        "fragment": "administration-and-diagnostics"
+      }
+    },
+    "docs/webui.md": {
+      "webuiv2-控制面": {
+        "path": "docs/guides/webui.md",
+        "fragment": "webuiv2-控制面"
+      },
+      "快速开始": {
+        "path": "docs/guides/webui.md",
+        "fragment": "快速开始"
+      },
+      "前端开发": {
+        "path": "docs/guides/webui.md",
+        "fragment": "前端开发"
+      },
+      "安全要点方案-9": {
+        "path": "docs/guides/webui.md",
+        "fragment": "安全要点方案-9"
+      },
+      "里程碑对照": {
+        "path": "docs/guides/webui.md",
+        "fragment": "里程碑对照"
+      },
+      "610-增补页面": {
+        "path": "docs/guides/webui.md",
+        "fragment": "610-增补页面"
+      }
+    },
+    "docs/webui.en.md": {
+      "webui-v2-control-plane": {
+        "path": "docs/guides/webui.en.md",
+        "fragment": "webui-v2-control-plane"
+      },
+      "quick-start": {
+        "path": "docs/guides/webui.en.md",
+        "fragment": "quick-start"
+      },
+      "features-added-through-610": {
+        "path": "docs/guides/webui.en.md",
+        "fragment": "features-added-through-610"
+      },
+      "frontend-development": {
+        "path": "docs/guides/webui.en.md",
+        "fragment": "frontend-development"
+      },
+      "authentication-and-exposure": {
+        "path": "docs/guides/webui.en.md",
+        "fragment": "authentication-and-exposure"
+      },
+      "original-milestones": {
+        "path": "docs/guides/webui.en.md",
+        "fragment": "original-milestones"
+      }
+    },
+    "docs/deployment-docker.md": {
+      "docker-部署指南": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "docker-部署指南"
+      },
+      "1-架构与边界": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "1-架构与边界"
+      },
+      "2-前置要求": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "2-前置要求"
+      },
+      "3-快速开始首次部署": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "3-快速开始首次部署"
+      },
+      "4-从现有-windows-安装迁移": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "4-从现有-windows-安装迁移"
+      },
+      "5-日常运维": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "5-日常运维"
+      },
+      "51-runtime-状态与可选-llama": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "51-runtime-状态与可选-llama"
+      },
+      "6-安全清单": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "6-安全清单"
+      },
+      "7-常见问题": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "7-常见问题"
+      },
+      "8-边界与限制": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "8-边界与限制"
+      },
+      "contract-与数据边界": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "contract-与数据边界"
+      },
+      "610-的持久化与升级": {
+        "path": "docs/guides/deployment-docker.md",
+        "fragment": "610-的持久化与升级"
+      }
+    },
+    "docs/deployment-docker.en.md": {
+      "docker-deployment-guide": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "docker-deployment-guide"
+      },
+      "1-architecture-and-boundaries": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "1-architecture-and-boundaries"
+      },
+      "2-prerequisites": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "2-prerequisites"
+      },
+      "3-quick-start-first-deployment": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "3-quick-start-first-deployment"
+      },
+      "4-migrating-from-an-existing-windows-install": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "4-migrating-from-an-existing-windows-install"
+      },
+      "5-day-to-day-operations": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "5-day-to-day-operations"
+      },
+      "51-runtime-status-and-optional-llama": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "51-runtime-status-and-optional-llama"
+      },
+      "6-security-checklist": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "6-security-checklist"
+      },
+      "7-faq": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "7-faq"
+      },
+      "8-boundaries-and-limitations": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "8-boundaries-and-limitations"
+      },
+      "contract-and-data-boundaries": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "contract-and-data-boundaries"
+      },
+      "persistence-and-upgrades-in-610": {
+        "path": "docs/guides/deployment-docker.en.md",
+        "fragment": "persistence-and-upgrades-in-610"
+      }
+    },
+    "docs/configuration.md": {
+      "配置参考": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "配置参考"
+      },
+      "最小可用配置": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "最小可用配置"
+      },
+      "群聊与路径": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "群聊与路径"
+      },
+      "两个根目录程序目录与数据目录": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "两个根目录程序目录与数据目录"
+      },
+      "日志": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "日志"
+      },
+      "群组共享空间": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "群组共享空间"
+      },
+      "两层归属": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "两层归属"
+      },
+      "配置方式": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "配置方式"
+      },
+      "隐式空间": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "隐式空间"
+      },
+      "改名与合并": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "改名与合并"
+      },
+      "冲突处理": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "冲突处理"
+      },
+      "模型服务": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "模型服务"
+      },
+      "端点与角色两层配置": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "端点与角色两层配置"
+      },
+      "端点endpoint": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "端点endpoint"
+      },
+      "角色role": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "角色role"
+      },
+      "三个典型场景": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "三个典型场景"
+      },
+      "为什么必须两把在线-key": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "为什么必须两把在线-key"
+      },
+      "失败回退": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "失败回退"
+      },
+      "成本控制用量记账与每日预算": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "成本控制用量记账与每日预算"
+      },
+      "缓存命中率唯一能验证前缀缓存生效的手段": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "缓存命中率唯一能验证前缀缓存生效的手段"
+      },
+      "embedding-不随-llm-上线": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "embedding-不随-llm-上线"
+      },
+      "主聊天模型": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "主聊天模型"
+      },
+      "记忆整理模型": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "记忆整理模型"
+      },
+      "整合走在线时的另一组批量": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "整合走在线时的另一组批量"
+      },
+      "整合调度": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "整合调度"
+      },
+      "记忆候选提取阶段-2": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "记忆候选提取阶段-2"
+      },
+      "向量语义检索可选": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "向量语义检索可选"
+      },
+      "llm-资源调度": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "llm-资源调度"
+      },
+      "图片识别视觉转述": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "图片识别视觉转述"
+      },
+      "上下文": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "上下文"
+      },
+      "8192-工作窗口的预算切分": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "8192-工作窗口的预算切分"
+      },
+      "会话上下文压缩": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "会话上下文压缩"
+      },
+      "记忆捕获与晋升": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "记忆捕获与晋升"
+      },
+      "来源分级与候选强化": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "来源分级与候选强化"
+      },
+      "gate-1-三档": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "gate-1-三档"
+      },
+      "每用户配额": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "每用户配额"
+      },
+      "记忆检索与排序": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "记忆检索与排序"
+      },
+      "检索后端python--rustmemory_backend": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "检索后端python--rustmemory_backend"
+      },
+      "rag-开关": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "rag-开关"
+      },
+      "排序权重": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "排序权重"
+      },
+      "各模式记忆条数上限": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "各模式记忆条数上限"
+      },
+      "prompt-长度预算": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "prompt-长度预算"
+      },
+      "旧检索memory_v2_enabledfalse-时生效": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "旧检索memory_v2_enabledfalse-时生效"
+      },
+      "主动发言": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "主动发言"
+      },
+      "话题参与概率曲线": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "话题参与概率曲线"
+      },
+      "主动--用户": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "主动--用户"
+      },
+      "睡眠时段": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "睡眠时段"
+      },
+      "运行时开关": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "运行时开关"
+      },
+      "主动插话participation-decision-layer": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "主动插话participation-decision-layer"
+      },
+      "受限-planner深度回复路径": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "受限-planner深度回复路径"
+      },
+      "个性化称呼": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "个性化称呼"
+      },
+      "表达与插话效果学习": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "表达与插话效果学习"
+      },
+      "社交学习闭环social_": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "社交学习闭环social_"
+      },
+      "记忆压缩": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "记忆压缩"
+      },
+      "决策追踪与清理": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "决策追踪与清理"
+      },
+      "astrbot-插件兼容层": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "astrbot-插件兼容层"
+      },
+      "html--图片渲染插件卡片": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "html--图片渲染插件卡片"
+      },
+      "能力路由与工具执行": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "能力路由与工具执行"
+      },
+      "router": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "router"
+      },
+      "无模型运行模式": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "无模型运行模式"
+      },
+      "comes": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "comes"
+      },
+      "能力声明": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "能力声明"
+      },
+      "能力查询": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "能力查询"
+      },
+      "插件热重载调试用": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "插件热重载调试用"
+      },
+      "skills-与沙盒": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "skills-与沙盒"
+      },
+      "skills": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "skills"
+      },
+      "沙盒后端": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "沙盒后端"
+      },
+      "onebot-连接": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "onebot-连接"
+      },
+      "端口占用一览": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "端口占用一览"
+      },
+      "本地状态接口": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "本地状态接口"
+      },
+      "安全实测host0000-时仍仅回环可访问": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "安全实测host0000-时仍仅回环可访问"
+      },
+      "webui-面板v2-控制面": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "webui-面板v2-控制面"
+      },
+      "优雅停止": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "优雅停止"
+      },
+      "链路监测": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "链路监测"
+      },
+      "调参建议": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "调参建议"
+      },
+      "610-补充配置参考": {
+        "path": "docs/reference/configuration.md",
+        "fragment": "610-补充配置参考"
+      }
+    },
+    "docs/configuration.en.md": {
+      "configuration-reference": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "configuration-reference"
+      },
+      "minimal-working-configuration": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "minimal-working-configuration"
+      },
+      "qq-groups-and-paths": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "qq-groups-and-paths"
+      },
+      "two-root-directories-program-and-data": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "two-root-directories-program-and-data"
+      },
+      "logs": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "logs"
+      },
+      "shared-group-spaces": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "shared-group-spaces"
+      },
+      "two-layers-of-ownership": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "two-layers-of-ownership"
+      },
+      "configuration": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "configuration"
+      },
+      "implicit-spaces": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "implicit-spaces"
+      },
+      "renaming-and-merging": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "renaming-and-merging"
+      },
+      "conflict-handling": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "conflict-handling"
+      },
+      "model-services": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "model-services"
+      },
+      "endpoint-and-role-two-layer-configuration": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "endpoint-and-role-two-layer-configuration"
+      },
+      "endpoint": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "endpoint"
+      },
+      "role": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "role"
+      },
+      "three-typical-scenarios": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "three-typical-scenarios"
+      },
+      "why-two-online-keys-are-required": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "why-two-online-keys-are-required"
+      },
+      "failure-fallback": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "failure-fallback"
+      },
+      "cost-control-usage-accounting-and-daily-budget": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "cost-control-usage-accounting-and-daily-budget"
+      },
+      "cache-hit-rate-the-only-way-to-verify-prefix-caching": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "cache-hit-rate-the-only-way-to-verify-prefix-caching"
+      },
+      "embedding-does-not-follow-llm-onlineoffline-selection": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "embedding-does-not-follow-llm-onlineoffline-selection"
+      },
+      "main-chat-model": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "main-chat-model"
+      },
+      "memory-consolidation-model": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "memory-consolidation-model"
+      },
+      "a-different-batch-configuration-for-online-consolidation": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "a-different-batch-configuration-for-online-consolidation"
+      },
+      "consolidation-scheduling": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "consolidation-scheduling"
+      },
+      "memory-candidate-extraction-stage-2": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "memory-candidate-extraction-stage-2"
+      },
+      "vector-semantic-search-optional": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "vector-semantic-search-optional"
+      },
+      "llm-resource-scheduling": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "llm-resource-scheduling"
+      },
+      "image-recognition-vision-captioning": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "image-recognition-vision-captioning"
+      },
+      "context": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "context"
+      },
+      "budget-split-of-the-8192-working-window": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "budget-split-of-the-8192-working-window"
+      },
+      "session-context-compaction": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "session-context-compaction"
+      },
+      "memory-capture-and-promotion": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "memory-capture-and-promotion"
+      },
+      "source-tiers-and-candidate-reinforcement": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "source-tiers-and-candidate-reinforcement"
+      },
+      "gate-1-three-tiers": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "gate-1-three-tiers"
+      },
+      "per-user-quota": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "per-user-quota"
+      },
+      "memory-retrieval-and-ranking": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "memory-retrieval-and-ranking"
+      },
+      "retrieval-backend-python--rust-memory_backend": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "retrieval-backend-python--rust-memory_backend"
+      },
+      "rag-switches": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "rag-switches"
+      },
+      "ranking-weights": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "ranking-weights"
+      },
+      "per-mode-memory-limits": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "per-mode-memory-limits"
+      },
+      "prompt-length-budget": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "prompt-length-budget"
+      },
+      "legacy-retrieval-memory_v2_enabledfalse": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "legacy-retrieval-memory_v2_enabledfalse"
+      },
+      "proactive-speaking": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "proactive-speaking"
+      },
+      "topic-participation-probability-curve": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "topic-participation-probability-curve"
+      },
+      "proactive--mentions": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "proactive--mentions"
+      },
+      "sleep-period": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "sleep-period"
+      },
+      "runtime-toggle": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "runtime-toggle"
+      },
+      "proactive-interjection-participation-decision-layer": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "proactive-interjection-participation-decision-layer"
+      },
+      "restricted-planner-deep-reply-path": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "restricted-planner-deep-reply-path"
+      },
+      "personalized-addressing": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "personalized-addressing"
+      },
+      "expression-and-interjection-outcome-learning": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "expression-and-interjection-outcome-learning"
+      },
+      "social-learning-loop-social_": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "social-learning-loop-social_"
+      },
+      "memory-compression": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "memory-compression"
+      },
+      "decision-tracing-and-cleanup": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "decision-tracing-and-cleanup"
+      },
+      "astrbot-plugin-compatibility-layer": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "astrbot-plugin-compatibility-layer"
+      },
+      "html-to-image-rendering-plugin-cards": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "html-to-image-rendering-plugin-cards"
+      },
+      "capability-routing-and-tool-execution": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "capability-routing-and-tool-execution"
+      },
+      "router": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "router"
+      },
+      "no-model-operation-mode": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "no-model-operation-mode"
+      },
+      "comes": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "comes"
+      },
+      "capability-declarations": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "capability-declarations"
+      },
+      "capability-query": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "capability-query"
+      },
+      "plugin-hot-reload-for-debugging": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "plugin-hot-reload-for-debugging"
+      },
+      "skills-and-sandbox": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "skills-and-sandbox"
+      },
+      "skills": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "skills"
+      },
+      "sandbox-backend": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "sandbox-backend"
+      },
+      "onebot-connection": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "onebot-connection"
+      },
+      "port-usage-overview": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "port-usage-overview"
+      },
+      "local-status-api": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "local-status-api"
+      },
+      "security-verification-loopback-only-access-with-host0000": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "security-verification-loopback-only-access-with-host0000"
+      },
+      "webui-panel-v2-control-plane": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "webui-panel-v2-control-plane"
+      },
+      "graceful-shutdown": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "graceful-shutdown"
+      },
+      "link-monitoring": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "link-monitoring"
+      },
+      "tuning-recommendations": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "tuning-recommendations"
+      },
+      "additional-configuration-reference-for-610": {
+        "path": "docs/reference/configuration.en.md",
+        "fragment": "additional-configuration-reference-for-610"
+      }
+    },
+    "docs/plugin-spec.md": {
+      "插件接入规范-v10": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "插件接入规范-v10"
+      },
+      "0-适用范围与兼容性承诺": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "0-适用范围与兼容性承诺"
+      },
+      "1-最小可跑插件": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "1-最小可跑插件"
+      },
+      "2-目录结构清单": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "2-目录结构清单"
+      },
+      "3-两条接入通路怎么选": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "3-两条接入通路怎么选"
+      },
+      "4-生命周期与加载时机": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "4-生命周期与加载时机"
+      },
+      "5-指令通路规范": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "5-指令通路规范"
+      },
+      "6-工具通路规范核心": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "6-工具通路规范核心"
+      },
+      "61-签名与-docstring-契约": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "61-签名与-docstring-契约"
+      },
+      "62-capabilitytoml-与三层优先级": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "62-capabilitytoml-与三层优先级"
+      },
+      "63-怎么写-examples": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "63-怎么写-examples"
+      },
+      "64-怎么写-keywords": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "64-怎么写-keywords"
+      },
+      "65-返回值契约": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "65-返回值契约"
+      },
+      "66-失败契约最容易写错的一条": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "66-失败契约最容易写错的一条"
+      },
+      "67-超时": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "67-超时"
+      },
+      "68-无参直调": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "68-无参直调"
+      },
+      "69-无聊天模型时的能力边界": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "69-无聊天模型时的能力边界"
+      },
+      "610-一个能力多个实现": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "610-一个能力多个实现"
+      },
+      "7-上下文预算契约8k": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "7-上下文预算契约8k"
+      },
+      "8-渲染契约": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "8-渲染契约"
+      },
+      "9-配置与数据": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "9-配置与数据"
+      },
+      "10-隐私与出网声明": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "10-隐私与出网声明"
+      },
+      "11-兼容性矩阵": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "11-兼容性矩阵"
+      },
+      "12-自检生成与发布": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "12-自检生成与发布"
+      },
+      "13-调试": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "13-调试"
+      },
+      "14-能力查询": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "14-能力查询"
+      },
+      "15-版本与兼容策略": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "15-版本与兼容策略"
+      },
+      "相关文档": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "相关文档"
+      },
+      "610-会话接入注意事项": {
+        "path": "docs/reference/plugin-spec.md",
+        "fragment": "610-会话接入注意事项"
+      }
+    },
+    "docs/plugin-spec.en.md": {
+      "plugin-integration-specification-v10": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "plugin-integration-specification-v10"
+      },
+      "0-scope-and-compatibility-promises": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "0-scope-and-compatibility-promises"
+      },
+      "1-a-minimal-working-plugin": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "1-a-minimal-working-plugin"
+      },
+      "2-directory-layout": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "2-directory-layout"
+      },
+      "3-choosing-between-the-two-paths": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "3-choosing-between-the-two-paths"
+      },
+      "4-lifecycle-and-load-order": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "4-lifecycle-and-load-order"
+      },
+      "5-the-command-path": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "5-the-command-path"
+      },
+      "6-the-tool-path-core": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "6-the-tool-path-core"
+      },
+      "61-signature-and-docstring-contract": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "61-signature-and-docstring-contract"
+      },
+      "62-capabilitytoml-and-the-three-tiers": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "62-capabilitytoml-and-the-three-tiers"
+      },
+      "63-how-to-write-examples": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "63-how-to-write-examples"
+      },
+      "64-how-to-write-keywords": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "64-how-to-write-keywords"
+      },
+      "65-return-value-contract": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "65-return-value-contract"
+      },
+      "66-failure-contract-the-easiest-thing-to-get-wrong": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "66-failure-contract-the-easiest-thing-to-get-wrong"
+      },
+      "67-timeouts": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "67-timeouts"
+      },
+      "68-direct-call-with-no-arguments": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "68-direct-call-with-no-arguments"
+      },
+      "69-capability-boundaries-without-a-chat-model": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "69-capability-boundaries-without-a-chat-model"
+      },
+      "610-one-capability-several-implementations": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "610-one-capability-several-implementations"
+      },
+      "7-the-8k-context-budget-contract": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "7-the-8k-context-budget-contract"
+      },
+      "8-rendering-contract": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "8-rendering-contract"
+      },
+      "9-configuration-and-data": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "9-configuration-and-data"
+      },
+      "10-privacy-and-egress-disclosure": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "10-privacy-and-egress-disclosure"
+      },
+      "11-compatibility-matrix": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "11-compatibility-matrix"
+      },
+      "12-self-check-generation-and-release": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "12-self-check-generation-and-release"
+      },
+      "13-debugging": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "13-debugging"
+      },
+      "14-capability-query": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "14-capability-query"
+      },
+      "15-versioning-and-compatibility-policy": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "15-versioning-and-compatibility-policy"
+      },
+      "related-documents": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "related-documents"
+      },
+      "conversation-integration-in-610": {
+        "path": "docs/reference/plugin-spec.en.md",
+        "fragment": "conversation-integration-in-610"
+      }
+    },
+    "docs/migration-report-template.md": {
+      "stella-配置导入报告模板": {
+        "path": "docs/reference/migration-report-template.md",
+        "fragment": "stella-配置导入报告模板"
+      },
+      "基本信息": {
+        "path": "docs/reference/migration-report-template.md",
+        "fragment": "基本信息"
+      },
+      "文件与数据": {
+        "path": "docs/reference/migration-report-template.md",
+        "fragment": "文件与数据"
+      },
+      "数据库迁移": {
+        "path": "docs/reference/migration-report-template.md",
+        "fragment": "数据库迁移"
+      },
+      "安全与回滚": {
+        "path": "docs/reference/migration-report-template.md",
+        "fragment": "安全与回滚"
+      },
+      "需要用户处理": {
+        "path": "docs/reference/migration-report-template.md",
+        "fragment": "需要用户处理"
+      }
+    },
+    "docs/migration-report-template.en.md": {
+      "stella-migration-report-template": {
+        "path": "docs/reference/migration-report-template.en.md",
+        "fragment": "stella-migration-report-template"
+      },
+      "basic-information": {
+        "path": "docs/reference/migration-report-template.en.md",
+        "fragment": "basic-information"
+      },
+      "files-and-data": {
+        "path": "docs/reference/migration-report-template.en.md",
+        "fragment": "files-and-data"
+      },
+      "database-migration": {
+        "path": "docs/reference/migration-report-template.en.md",
+        "fragment": "database-migration"
+      },
+      "safety-and-rollback": {
+        "path": "docs/reference/migration-report-template.en.md",
+        "fragment": "safety-and-rollback"
+      },
+      "user-action-required": {
+        "path": "docs/reference/migration-report-template.en.md",
+        "fragment": "user-action-required"
+      }
+    },
+    "docs/memory-system.md": {
+      "记忆系统": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "记忆系统"
+      },
+      "610-会话个人记忆与归属保护": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "610-会话个人记忆与归属保护"
+      },
+      "三条设计原则": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "三条设计原则"
+      },
+      "1-捕获宽晋升严": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "1-捕获宽晋升严"
+      },
+      "2-核心思想一个用户有价值的信息不会很多": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "2-核心思想一个用户有价值的信息不会很多"
+      },
+      "3-语义相关--应该使用": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "3-语义相关--应该使用"
+      },
+      "数据流": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "数据流"
+      },
+      "捕获层允许不确定禁止编造": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "捕获层允许不确定禁止编造"
+      },
+      "代码层的兜底": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "代码层的兜底"
+      },
+      "来源分级": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "来源分级"
+      },
+      "候选强化复现才是证据": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "候选强化复现才是证据"
+      },
+      "晋升层gate-1-三档": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "晋升层gate-1-三档"
+      },
+      "importance--0-是一个必须堵死的陷阱": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "importance--0-是一个必须堵死的陷阱"
+      },
+      "冲突解决": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "冲突解决"
+      },
+      "跨用户隔离硬性约束": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "跨用户隔离硬性约束"
+      },
+      "配额呈现层封顶": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "配额呈现层封顶"
+      },
+      "检索policy-优先于相似度": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "检索policy-优先于相似度"
+      },
+      "行为模式mode": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "行为模式mode"
+      },
+      "三层过滤": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "三层过滤"
+      },
+      "排序六维": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "排序六维"
+      },
+      "分区注入": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "分区注入"
+      },
+      "用户画像治理": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "用户画像治理"
+      },
+      "压缩与遗忘": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "压缩与遗忘"
+      },
+      "主动获取为什么必需": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "主动获取为什么必需"
+      },
+      "participation-decision-layer主动插话先判断是否值得打扰": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "participation-decision-layer主动插话先判断是否值得打扰"
+      },
+      "目标选择": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "目标选择"
+      },
+      "保护机制": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "保护机制"
+      },
+      "问答关联": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "问答关联"
+      },
+      "台词生成的两条硬约束": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "台词生成的两条硬约束"
+      },
+      "已知限制": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "已知限制"
+      },
+      "延伸阅读": {
+        "path": "docs/architecture/memory-system.md",
+        "fragment": "延伸阅读"
+      }
+    },
+    "docs/memory-system.en.md": {
+      "memory-system": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "memory-system"
+      },
+      "conversation-personal-memory-and-attribution-in-610": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "conversation-personal-memory-and-attribution-in-610"
+      },
+      "three-design-principles": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "three-design-principles"
+      },
+      "1-capture-broadly-promote-strictly": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "1-capture-broadly-promote-strictly"
+      },
+      "2-core-idea-a-user-has-few-truly-valuable-facts": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "2-core-idea-a-user-has-few-truly-valuable-facts"
+      },
+      "3-semantic-relevance--should-be-used": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "3-semantic-relevance--should-be-used"
+      },
+      "data-flow": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "data-flow"
+      },
+      "capture-layer-uncertainty-allowed-fabrication-forbidden": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "capture-layer-uncertainty-allowed-fabrication-forbidden"
+      },
+      "code-level-safety-nets": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "code-level-safety-nets"
+      },
+      "source-levels": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "source-levels"
+      },
+      "candidate-reinforcement-reproduction-is-evidence": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "candidate-reinforcement-reproduction-is-evidence"
+      },
+      "promotion-layer-gate-1-three-tiers": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "promotion-layer-gate-1-three-tiers"
+      },
+      "importance--0-is-a-trap-that-must-be-sealed": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "importance--0-is-a-trap-that-must-be-sealed"
+      },
+      "conflict-resolution": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "conflict-resolution"
+      },
+      "cross-user-isolation-hard-constraint": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "cross-user-isolation-hard-constraint"
+      },
+      "quotas-cap-the-presentation-layer": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "quotas-cap-the-presentation-layer"
+      },
+      "retrieval-policy-before-similarity": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "retrieval-policy-before-similarity"
+      },
+      "behavioral-modes-mode": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "behavioral-modes-mode"
+      },
+      "three-layers-of-filtering": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "three-layers-of-filtering"
+      },
+      "ranking-six-dimensions": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "ranking-six-dimensions"
+      },
+      "partitioned-injection": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "partitioned-injection"
+      },
+      "user-profile-governance": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "user-profile-governance"
+      },
+      "compression-and-forgetting": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "compression-and-forgetting"
+      },
+      "proactive-acquisition-why-it-is-essential": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "proactive-acquisition-why-it-is-essential"
+      },
+      "participation-decision-layer-decide-whether-an-interjection-is-worth-the-interruption": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "participation-decision-layer-decide-whether-an-interjection-is-worth-the-interruption"
+      },
+      "target-selection": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "target-selection"
+      },
+      "safeguards": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "safeguards"
+      },
+      "question-answer-association": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "question-answer-association"
+      },
+      "two-hard-constraints-for-line-generation": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "two-hard-constraints-for-line-generation"
+      },
+      "known-limitations": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "known-limitations"
+      },
+      "further-reading": {
+        "path": "docs/architecture/memory-system.en.md",
+        "fragment": "further-reading"
+      }
+    },
+    "docs/memory-rust-backend.md": {
+      "rust-记忆后端": {
+        "path": "docs/architecture/memory-rust-backend.md",
+        "fragment": "rust-记忆后端"
+      },
+      "运行模式": {
+        "path": "docs/architecture/memory-rust-backend.md",
+        "fragment": "运行模式"
+      },
+      "兼容矩阵": {
+        "path": "docs/architecture/memory-rust-backend.md",
+        "fragment": "兼容矩阵"
+      },
+      "发布资产": {
+        "path": "docs/architecture/memory-rust-backend.md",
+        "fragment": "发布资产"
+      },
+      "验收边界": {
+        "path": "docs/architecture/memory-rust-backend.md",
+        "fragment": "验收边界"
+      }
+    },
+    "docs/memory-rust-backend.en.md": {
+      "rust-memory-backend": {
+        "path": "docs/architecture/memory-rust-backend.en.md",
+        "fragment": "rust-memory-backend"
+      },
+      "runtime-modes": {
+        "path": "docs/architecture/memory-rust-backend.en.md",
+        "fragment": "runtime-modes"
+      },
+      "compatibility": {
+        "path": "docs/architecture/memory-rust-backend.en.md",
+        "fragment": "compatibility"
+      },
+      "release-assets": {
+        "path": "docs/architecture/memory-rust-backend.en.md",
+        "fragment": "release-assets"
+      },
+      "acceptance-boundaries": {
+        "path": "docs/architecture/memory-rust-backend.en.md",
+        "fragment": "acceptance-boundaries"
+      }
+    },
+    "docs/capability-system.md": {
+      "能力系统capability-router-与-comes": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "能力系统capability-router-与-comes"
+      },
+      "为什么需要它": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "为什么需要它"
+      },
+      "上下文隔离的两个方向": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "上下文隔离的两个方向"
+      },
+      "目录结构": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "目录结构"
+      },
+      "task--result-协议": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "task--result-协议"
+      },
+      "capability-分层": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "capability-分层"
+      },
+      "四层注册通路": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "四层注册通路"
+      },
+      "声明指向的工具不在这条能力就不进候选集": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "声明指向的工具不在这条能力就不进候选集"
+      },
+      "声明优先为什么自动派生不参与路由": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "声明优先为什么自动派生不参与路由"
+      },
+      "router-三级级联": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "router-三级级联"
+      },
+      "level-0-只在能确定需要什么时才短路": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "level-0-只在能确定需要什么时才短路"
+      },
+      "level-1-原型向量": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "level-1-原型向量"
+      },
+      "level-1-的两道筛子": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "level-1-的两道筛子"
+      },
+      "comes-执行": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "comes-执行"
+      },
+      "provider-runtimemcp知识库与确定性执行": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "provider-runtimemcp知识库与确定性执行"
+      },
+      "接入管线": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "接入管线"
+      },
+      "平台句柄": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "平台句柄"
+      },
+      "结果如何回到-stella": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "结果如何回到-stella"
+      },
+      "记忆门控为什么默认关闭": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "记忆门控为什么默认关闭"
+      },
+      "排查": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "排查"
+      },
+      "cometa-长任务委派610": {
+        "path": "docs/architecture/capability-system.md",
+        "fragment": "cometa-长任务委派610"
+      }
+    },
+    "docs/capability-system.en.md": {
+      "capability-system-capability-router-and-comes": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "capability-system-capability-router-and-comes"
+      },
+      "why-it-is-needed": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "why-it-is-needed"
+      },
+      "two-directions-of-context-isolation": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "two-directions-of-context-isolation"
+      },
+      "directory-structure": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "directory-structure"
+      },
+      "task--result-protocol": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "task--result-protocol"
+      },
+      "capability-layers": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "capability-layers"
+      },
+      "four-registration-tiers": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "four-registration-tiers"
+      },
+      "a-declaration-whose-tool-is-absent-does-not-enter-the-candidate-set": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "a-declaration-whose-tool-is-absent-does-not-enter-the-candidate-set"
+      },
+      "declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing"
+      },
+      "router-three-level-cascade": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "router-three-level-cascade"
+      },
+      "level-0-short-circuits-only-when-it-can-determine-what-is-needed": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "level-0-short-circuits-only-when-it-can-determine-what-is-needed"
+      },
+      "level-1-prototype-vectors": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "level-1-prototype-vectors"
+      },
+      "the-two-filters-at-level-1": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "the-two-filters-at-level-1"
+      },
+      "comes-execution": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "comes-execution"
+      },
+      "provider-runtime-mcp-knowledge-and-deterministic-execution": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "provider-runtime-mcp-knowledge-and-deterministic-execution"
+      },
+      "integration-pipeline": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "integration-pipeline"
+      },
+      "platform-handles": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "platform-handles"
+      },
+      "how-results-return-to-stella": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "how-results-return-to-stella"
+      },
+      "memory-gating-why-it-is-disabled-by-default": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "memory-gating-why-it-is-disabled-by-default"
+      },
+      "troubleshooting": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "troubleshooting"
+      },
+      "cometa-long-task-delegation-in-610": {
+        "path": "docs/architecture/capability-system.en.md",
+        "fragment": "cometa-long-task-delegation-in-610"
+      }
+    },
+    "docs/knowledge-base.md": {
+      "独立知识库knowledge-base": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "独立知识库knowledge-base"
+      },
+      "1-这是什么": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "1-这是什么"
+      },
+      "2-三条红线设计约束": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "2-三条红线设计约束"
+      },
+      "3-领域模型": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "3-领域模型"
+      },
+      "4-权限模型": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "4-权限模型"
+      },
+      "5-导入": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "5-导入"
+      },
+      "6-检索与证据注入": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "6-检索与证据注入"
+      },
+      "7-capability-接入": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "7-capability-接入"
+      },
+      "8-配置configsettingspy": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "8-配置configsettingspy"
+      },
+      "9-运维": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "9-运维"
+      },
+      "10-测试": {
+        "path": "docs/architecture/knowledge-base.md",
+        "fragment": "10-测试"
+      }
+    },
+    "docs/knowledge-base.en.md": {
+      "independent-knowledge-base": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "independent-knowledge-base"
+      },
+      "1-purpose": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "1-purpose"
+      },
+      "2-isolation-contracts": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "2-isolation-contracts"
+      },
+      "3-domain-model": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "3-domain-model"
+      },
+      "4-permissions": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "4-permissions"
+      },
+      "5-import": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "5-import"
+      },
+      "6-retrieval-and-evidence": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "6-retrieval-and-evidence"
+      },
+      "7-capability-integration": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "7-capability-integration"
+      },
+      "8-configuration": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "8-configuration"
+      },
+      "9-administration": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "9-administration"
+      },
+      "10-verification": {
+        "path": "docs/architecture/knowledge-base.en.md",
+        "fragment": "10-verification"
+      }
+    },
+    "docs/architecture.md": {
+      "610-当前架构增补": {
+        "path": "docs/architecture/overview.md",
+        "fragment": "610-当前架构增补"
+      },
+      "分层概览": {
+        "path": "docs/architecture/overview.md",
+        "fragment": "分层概览"
+      },
+      "目录结构": {
+        "path": "docs/architecture/code-map.md",
+        "fragment": "目录结构"
+      },
+      "一次消息的处理流程": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "一次消息的处理流程"
+      },
+      "1-接入与落库": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "1-接入与落库"
+      },
+      "2-触发路径": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "2-触发路径"
+      },
+      "3-上下文构建pre-hooks": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "3-上下文构建pre-hooks"
+      },
+      "4-llm-调用": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "4-llm-调用"
+      },
+      "5-输出处理post-hooks": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "5-输出处理post-hooks"
+      },
+      "6-记忆写入与晋升": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "6-记忆写入与晋升"
+      },
+      "7-定时任务": {
+        "path": "docs/architecture/message-lifecycle.md",
+        "fragment": "7-定时任务"
+      },
+      "关键数据结构": {
+        "path": "docs/architecture/data-boundaries.md",
+        "fragment": "关键数据结构"
+      },
+      "chatcontext": {
+        "path": "docs/architecture/data-boundaries.md",
+        "fragment": "chatcontext"
+      },
+      "主要数据表": {
+        "path": "docs/architecture/data-boundaries.md",
+        "fragment": "主要数据表"
+      },
+      "llm-成本控制": {
+        "path": "docs/architecture/llm-budget.md",
+        "fragment": "llm-成本控制"
+      },
+      "记账链路": {
+        "path": "docs/architecture/llm-budget.md",
+        "fragment": "记账链路"
+      },
+      "预算在哪里生效": {
+        "path": "docs/architecture/llm-budget.md",
+        "fragment": "预算在哪里生效"
+      },
+      "前置过滤跳过是攒批不是丢弃": {
+        "path": "docs/architecture/llm-budget.md",
+        "fragment": "前置过滤跳过是攒批不是丢弃"
+      },
+      "400-不降级": {
+        "path": "docs/architecture/llm-budget.md",
+        "fragment": "400-不降级"
+      },
+      "astrbot-插件兼容层": {
+        "path": "docs/architecture/integrations.md",
+        "fragment": "astrbot-插件兼容层"
+      },
+      "加载时机与目录名": {
+        "path": "docs/architecture/integrations.md",
+        "fragment": "加载时机与目录名"
+      },
+      "html--图片渲染": {
+        "path": "docs/architecture/integrations.md",
+        "fragment": "html--图片渲染"
+      },
+      "本地状态接口": {
+        "path": "docs/architecture/integrations.md",
+        "fragment": "本地状态接口"
+      },
+      "扩展机制": {
+        "path": "docs/architecture/integrations.md",
+        "fragment": "扩展机制"
+      },
+      "v2-控制面webui-与桌面壳": {
+        "path": "docs/architecture/integrations.md",
+        "fragment": "v2-控制面webui-与桌面壳"
+      },
+      "时间处理约定": {
+        "path": "docs/architecture/data-boundaries.md",
+        "fragment": "时间处理约定"
+      },
+      "两层归属的分界线": {
+        "path": "docs/architecture/data-boundaries.md",
+        "fragment": "两层归属的分界线"
+      }
+    },
+    "docs/development.md": {
+      "环境准备": {
+        "path": "docs/development/environment.md",
+        "fragment": "环境准备"
+      },
+      "开发机的用户数据放在-stelladata": {
+        "path": "docs/development/environment.md",
+        "fragment": "开发机的用户数据放在-stelladata"
+      },
+      "部署工具": {
+        "path": "docs/development/deployment.md",
+        "fragment": "部署工具"
+      },
+      "停止链路哨兵优先": {
+        "path": "docs/development/deployment.md",
+        "fragment": "停止链路哨兵优先"
+      },
+      "v2-控制面面板与桌面壳开发": {
+        "path": "docs/development/environment.md",
+        "fragment": "v2-控制面面板与桌面壳开发"
+      },
+      "提交前检查": {
+        "path": "docs/development/testing.md",
+        "fragment": "提交前检查"
+      },
+      "测试": {
+        "path": "docs/development/testing.md",
+        "fragment": "测试"
+      },
+      "运行": {
+        "path": "docs/development/testing.md",
+        "fragment": "运行"
+      },
+      "测试清单": {
+        "path": "docs/development/testing.md",
+        "fragment": "测试清单"
+      },
+      "写测试的两个约定": {
+        "path": "docs/development/testing.md",
+        "fragment": "写测试的两个约定"
+      },
+      "探针脚本": {
+        "path": "docs/development/probes.md",
+        "fragment": "探针脚本"
+      },
+      "整合探针": {
+        "path": "docs/development/probes.md",
+        "fragment": "整合探针"
+      },
+      "插件-llm-探针": {
+        "path": "docs/development/probes.md",
+        "fragment": "插件-llm-探针"
+      },
+      "采样真实窗口": {
+        "path": "docs/development/probes.md",
+        "fragment": "采样真实窗口"
+      },
+      "benchmark": {
+        "path": "docs/development/probes.md",
+        "fragment": "benchmark"
+      },
+      "探针的盲区": {
+        "path": "docs/development/probes.md",
+        "fragment": "探针的盲区"
+      },
+      "数据库": {
+        "path": "docs/development/database.md",
+        "fragment": "数据库"
+      },
+      "加字段的正确做法": {
+        "path": "docs/development/database.md",
+        "fragment": "加字段的正确做法"
+      },
+      "改列名主键的做法": {
+        "path": "docs/development/database.md",
+        "fragment": "改列名主键的做法"
+      },
+      "空间合并": {
+        "path": "docs/development/database.md",
+        "fragment": "空间合并"
+      },
+      "时间处理": {
+        "path": "docs/development/database.md",
+        "fragment": "时间处理"
+      },
+      "归档记录": {
+        "path": "docs/development/database.md",
+        "fragment": "归档记录"
+      },
+      "ci": {
+        "path": "docs/development/ci.md",
+        "fragment": "ci"
+      },
+      "发布流程": {
+        "path": "docs/development/release.md",
+        "fragment": "发布流程"
+      },
+      "oneclick-offline-的离线负载": {
+        "path": "docs/development/release.md",
+        "fragment": "oneclick-offline-的离线负载"
+      },
+      "打-tag-前的检查清单": {
+        "path": "docs/development/release.md",
+        "fragment": "打-tag-前的检查清单"
+      },
+      "升级嵌入式-python-时的注意事项": {
+        "path": "docs/development/release.md",
+        "fragment": "升级嵌入式-python-时的注意事项"
+      },
+      "嵌入式-python-的三处必改": {
+        "path": "docs/development/release.md",
+        "fragment": "嵌入式-python-的三处必改"
+      },
+      "代码约定": {
+        "path": "docs/development/conventions.md",
+        "fragment": "代码约定"
+      },
+      "排查问题": {
+        "path": "docs/development/troubleshooting.md",
+        "fragment": "排查问题"
+      },
+      "常用-sql": {
+        "path": "docs/development/troubleshooting.md",
+        "fragment": "常用-sql"
+      },
+      "提交与贡献": {
+        "path": "docs/development/conventions.md",
+        "fragment": "提交与贡献"
+      },
+      "设计记录": {
+        "path": "docs/development/design-records.md",
+        "fragment": "设计记录"
+      },
+      "610-的源码合同与发布门禁": {
+        "path": "docs/development/contracts.md",
+        "fragment": "610-的源码合同与发布门禁"
+      }
+    },
+    "docs/architecture.en.md": {
+      "current-architecture-additions-in-610": {
+        "path": "docs/architecture/overview.en.md",
+        "fragment": "current-architecture-additions-in-610"
+      },
+      "layered-overview": {
+        "path": "docs/architecture/overview.en.md",
+        "fragment": "layered-overview"
+      },
+      "directory-structure": {
+        "path": "docs/architecture/code-map.en.md",
+        "fragment": "directory-structure"
+      },
+      "message-processing-flow": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "message-processing-flow"
+      },
+      "1-ingress-and-persistence": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "1-ingress-and-persistence"
+      },
+      "2-trigger-paths": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "2-trigger-paths"
+      },
+      "3-context-construction-pre-hooks": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "3-context-construction-pre-hooks"
+      },
+      "4-llm-calls": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "4-llm-calls"
+      },
+      "5-output-processing-post-hooks": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "5-output-processing-post-hooks"
+      },
+      "6-memory-writing-and-promotion": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "6-memory-writing-and-promotion"
+      },
+      "7-scheduled-tasks": {
+        "path": "docs/architecture/message-lifecycle.en.md",
+        "fragment": "7-scheduled-tasks"
+      },
+      "key-data-structures": {
+        "path": "docs/architecture/data-boundaries.en.md",
+        "fragment": "key-data-structures"
+      },
+      "chatcontext": {
+        "path": "docs/architecture/data-boundaries.en.md",
+        "fragment": "chatcontext"
+      },
+      "main-data-tables": {
+        "path": "docs/architecture/data-boundaries.en.md",
+        "fragment": "main-data-tables"
+      },
+      "llm-cost-control": {
+        "path": "docs/architecture/llm-budget.en.md",
+        "fragment": "llm-cost-control"
+      },
+      "accounting-pipeline": {
+        "path": "docs/architecture/llm-budget.en.md",
+        "fragment": "accounting-pipeline"
+      },
+      "where-the-budget-takes-effect": {
+        "path": "docs/architecture/llm-budget.en.md",
+        "fragment": "where-the-budget-takes-effect"
+      },
+      "pre-filtering-skipping-accumulates-it-does-not-discard": {
+        "path": "docs/architecture/llm-budget.en.md",
+        "fragment": "pre-filtering-skipping-accumulates-it-does-not-discard"
+      },
+      "no-downgrade-on-400": {
+        "path": "docs/architecture/llm-budget.en.md",
+        "fragment": "no-downgrade-on-400"
+      },
+      "astrbot-plugin-compatibility-layer": {
+        "path": "docs/architecture/integrations.en.md",
+        "fragment": "astrbot-plugin-compatibility-layer"
+      },
+      "load-timing-and-directory-names": {
+        "path": "docs/architecture/integrations.en.md",
+        "fragment": "load-timing-and-directory-names"
+      },
+      "html--image-rendering": {
+        "path": "docs/architecture/integrations.en.md",
+        "fragment": "html--image-rendering"
+      },
+      "local-status-interface": {
+        "path": "docs/architecture/integrations.en.md",
+        "fragment": "local-status-interface"
+      },
+      "extension-mechanism": {
+        "path": "docs/architecture/integrations.en.md",
+        "fragment": "extension-mechanism"
+      },
+      "v2-control-plane-webui-and-desktop-shell": {
+        "path": "docs/architecture/integrations.en.md",
+        "fragment": "v2-control-plane-webui-and-desktop-shell"
+      },
+      "time-handling-conventions": {
+        "path": "docs/architecture/data-boundaries.en.md",
+        "fragment": "time-handling-conventions"
+      },
+      "boundary-between-the-two-ownership-levels": {
+        "path": "docs/architecture/data-boundaries.en.md",
+        "fragment": "boundary-between-the-two-ownership-levels"
+      }
+    },
+    "docs/development.en.md": {
+      "environment-setup": {
+        "path": "docs/development/environment.en.md",
+        "fragment": "environment-setup"
+      },
+      "developer-machine-user-data-lives-in-stelladata": {
+        "path": "docs/development/environment.en.md",
+        "fragment": "developer-machine-user-data-lives-in-stelladata"
+      },
+      "deployment-tools": {
+        "path": "docs/development/deployment.en.md",
+        "fragment": "deployment-tools"
+      },
+      "stop-sequence-sentinel-first": {
+        "path": "docs/development/deployment.en.md",
+        "fragment": "stop-sequence-sentinel-first"
+      },
+      "v2-control-plane-panel-and-desktop-shell-development": {
+        "path": "docs/development/environment.en.md",
+        "fragment": "v2-control-plane-panel-and-desktop-shell-development"
+      },
+      "pre-commit-checks": {
+        "path": "docs/development/testing.en.md",
+        "fragment": "pre-commit-checks"
+      },
+      "testing": {
+        "path": "docs/development/testing.en.md",
+        "fragment": "testing"
+      },
+      "running-tests": {
+        "path": "docs/development/testing.en.md",
+        "fragment": "running-tests"
+      },
+      "test-inventory": {
+        "path": "docs/development/testing.en.md",
+        "fragment": "test-inventory"
+      },
+      "two-testing-conventions": {
+        "path": "docs/development/testing.en.md",
+        "fragment": "two-testing-conventions"
+      },
+      "probe-scripts": {
+        "path": "docs/development/probes.en.md",
+        "fragment": "probe-scripts"
+      },
+      "consolidation-probe": {
+        "path": "docs/development/probes.en.md",
+        "fragment": "consolidation-probe"
+      },
+      "plugin-llm-probe": {
+        "path": "docs/development/probes.en.md",
+        "fragment": "plugin-llm-probe"
+      },
+      "sampling-real-windows": {
+        "path": "docs/development/probes.en.md",
+        "fragment": "sampling-real-windows"
+      },
+      "benchmark": {
+        "path": "docs/development/probes.en.md",
+        "fragment": "benchmark"
+      },
+      "probe-blind-spots": {
+        "path": "docs/development/probes.en.md",
+        "fragment": "probe-blind-spots"
+      },
+      "database": {
+        "path": "docs/development/database.en.md",
+        "fragment": "database"
+      },
+      "correct-way-to-add-a-column": {
+        "path": "docs/development/database.en.md",
+        "fragment": "correct-way-to-add-a-column"
+      },
+      "how-to-change-a-column-name--primary-key": {
+        "path": "docs/development/database.en.md",
+        "fragment": "how-to-change-a-column-name--primary-key"
+      },
+      "space-merging": {
+        "path": "docs/development/database.en.md",
+        "fragment": "space-merging"
+      },
+      "time-handling": {
+        "path": "docs/development/database.en.md",
+        "fragment": "time-handling"
+      },
+      "archived-records": {
+        "path": "docs/development/database.en.md",
+        "fragment": "archived-records"
+      },
+      "ci": {
+        "path": "docs/development/ci.en.md",
+        "fragment": "ci"
+      },
+      "release-process": {
+        "path": "docs/development/release.en.md",
+        "fragment": "release-process"
+      },
+      "the-oneclick-offline-payload": {
+        "path": "docs/development/release.en.md",
+        "fragment": "the-oneclick-offline-payload"
+      },
+      "checklist-before-tagging": {
+        "path": "docs/development/release.en.md",
+        "fragment": "checklist-before-tagging"
+      },
+      "notes-on-upgrading-embedded-python": {
+        "path": "docs/development/release.en.md",
+        "fragment": "notes-on-upgrading-embedded-python"
+      },
+      "three-required-changes-for-embedded-python": {
+        "path": "docs/development/release.en.md",
+        "fragment": "three-required-changes-for-embedded-python"
+      },
+      "code-conventions": {
+        "path": "docs/development/conventions.en.md",
+        "fragment": "code-conventions"
+      },
+      "troubleshooting": {
+        "path": "docs/development/troubleshooting.en.md",
+        "fragment": "troubleshooting"
+      },
+      "common-sql": {
+        "path": "docs/development/troubleshooting.en.md",
+        "fragment": "common-sql"
+      },
+      "commits-and-contributions": {
+        "path": "docs/development/conventions.en.md",
+        "fragment": "commits-and-contributions"
+      },
+      "design-records": {
+        "path": "docs/development/design-records.en.md",
+        "fragment": "design-records"
+      },
+      "source-contracts-and-release-gates-in-610": {
+        "path": "docs/development/contracts.en.md",
+        "fragment": "source-contracts-and-release-gates-in-610"
+      }
+    }
+  }
+}

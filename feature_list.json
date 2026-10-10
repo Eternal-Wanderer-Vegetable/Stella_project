@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-10",
+  "active_feature": null,
+  "features": [
+    {
+      "id": "DOC-001",
+      "name": "按需加载的项目文档结构",
+      "description": "按第四讲与实际代码结构整理文档，保留历史与旧链接，建立 Agent 路由、状态和验证入口。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "项目文档、指令、状态、文档校验工具"
+      ],
+      "done_criteria": [
+        "正文按主题组织且中英文配对",
+        "根指令与专题路由可用",
+        "旧路径与章节锚点可到达新正文",
+        "历史文件哈希一致",
+        "文档门禁及失败路径验证通过，交接记录完整"
+      ],
+      "evidence": [
+        {
+          "command": "python scripts/check_docs.py",
+          "result": "0 errors; maintained links, language pairs and 577 migration anchors pass"
+        },
+        {
+          "command": "python -m unittest discover -s tests/documentation -v",
+          "result": "6 tests passed, including negative paths"
+        },
+        {
+          "command": "python -m ruff check scripts/check_docs.py tests/documentation/test_documentation_contract.py",
+          "result": "passed"
+        },
+        {
+          "command": "historical SHA256 comparison",
+          "result": "246 existing archive files unchanged"
+        },
+        {
+          "command": "GitNexus detect_changes scope=all with isolated review index",
+          "result": "120 files, 859 symbols, low risk; no partial/truncated flag; actual index unchanged"
+        },
+        {
+          "command": "harness-creator validate-harness.mjs",
+          "result": "structural score 28 to 100; not a runtime benchmark"
+        },
+        {
+          "report": "docs/reports/2026-10-10-documentation-restructure.md"
+        }
+      ]
+    }
+  ]
+}
