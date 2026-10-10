@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-10",
-  "active_feature": null,
+  "active_feature": "CI-001",
   "features": [
     {
       "id": "DOC-001",
@@ -53,7 +53,7 @@
       "id": "CI-001",
       "name": "PR #105 CI 修复",
       "description": "修复流程清单漂移与 ingress 源码闭包预算截断，保留原 CI 门禁。",
-      "status": "done",
+      "status": "in_progress",
       "dependencies": [
         "DOC-001"
       ],
@@ -61,7 +61,8 @@
         "scripts/generate_message_flow.py",
         "tests/observability/test_flow_source_closure.py",
         "core/observability/flows",
-        "任务状态与 PR 验证记录"
+        "任务状态与 PR 验证记录",
+        "dashboard/tests/flow-store.spec.ts 的大数据功能用例时间预算"
       ],
       "done_criteria": [
         "大于 256 符号的闭包完整并能检测尾部变化，显式小预算仍报告截断",
@@ -109,6 +110,10 @@
         {
           "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343680",
           "result": "Dashboard CI passed"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043686859/job/114188817425",
+          "result": "Completion record head 2906569 exposed existing Dashboard large-fixture flakiness: 100000-event functional test timed out at 5.17s; all assertions retained, only this case uses 15s timeout; dedicated performance budget unchanged"
         }
       ]
     }
