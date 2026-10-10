@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-- CI-001：PR #105 CI 修复，status in_progress；DOC-001 已完成。
+- CI-001：PR #105 CI 修复，status done；无活动任务，DOC-001 已完成。
 - Branch: codex/compact-8192-batching；源码基线 952007e。用户已审核并授权提交上传；最终提交与远端状态以 Git 记录为准。
 
 ## Completed This Session
@@ -32,19 +32,21 @@
 
 ## Next Session Startup
 
-1. 读 AGENTS.md、feature_list.json、progress.md，核对分支和工作区；继续 CI-001。
+1. 读 AGENTS.md、feature_list.json、progress.md，核对分支和工作区；CI-001 已完成。
 2. 运行 `python scripts/check_docs.py` 或 `./init.ps1 docs`；代码任务追加相应模块门禁。
-3. 核对 PR #105 最新 head 的 CI 结果；仍有失败时查对应日志并修复。
+3. 核对 PR #105 最新 head 的 CI 结果；等待新的授权任务。
 
 ## Recommended Next Step
 
-- 完成 CI-001：本地全量回归、图变更门禁、推送，并核对 PR #105 在线矩阵。
+- CI 修复已验收；后续合并或新工作由用户授权。
 
 ## PR #105 CI Repair — 2026-10-10
 
-- CI-001 in_progress；scope：闭包预算、生成清单、回归与在线 CI。
+- CI-001 done；scope：闭包预算、生成清单、回归与在线 CI。
 - 基线 f8b2dce；本地复现两项合同失败：manifest 漂移、四个 ingress 截断。
 - record_group_chat 实际闭包 257 个辅助符号，旧上限 256；显式 cap=512 完整展开。
 - 修复：默认 cap 256 → 512，保留小预算截断与零核心截断门禁；按仓库惯例替换随包清单。
 - 验证：40 项专项通过；全量 Python 3669 passed / 17 skipped（Windows Python 3.14、隔离 STELLA_HOME）；623 个已跟踪 Python 文件 Ruff 通过；清单漂移、文档门禁通过。
-- 下一步：图变更门禁、提交推送，检查 PR #105 最新 head 的在线 CI；未通过前不标 done。
+- 修复提交：3b31931，已推送 PR #105；[主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343651) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343680) 通过。
+- 提交前 GitNexus：6 文件、11 符号、low，无 partial/truncated；提交后索引刷新到修复提交并保留 PDG。
+- CI-001 验收完成。完成记录的后续提交与 CI 以 Git／PR 最新状态为准；新任务由用户授权。

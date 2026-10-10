@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-10-10 (Asia/Shanghai)
-**Active Feature:** CI-001 in_progress; DOC-001 done
+**Active Feature:** none; CI-001 and DOC-001 done
 **Scope:** PR #105 的 CI 修复：源码闭包预算、生成清单、回归与在线 CI；基线 f8b2dce。此前 DOC-001 仅修改文档与门禁。
 
 ## What's Done
@@ -34,14 +34,16 @@
 
 ## What's Next
 
-1. 完成本地全量回归与提交前图门禁，推送 CI 修复至 PR #105。
-2. 核对最新 head 的在线 CI，直到授权范围内的失败修复并通过。
+1. 新任务从 AGENTS 与主题导航进入，核对 Git／PR 最新状态和工作区。
+2. CI-001 已完成；没有新用户任务时不自动执行历史计划。
 
 ## PR #105 CI Repair — 2026-10-10
 
-- CI-001 in_progress；scope：闭包预算、生成清单、回归与在线 CI。
+- CI-001 done；scope：闭包预算、生成清单、回归与在线 CI。
 - 基线 f8b2dce；本地复现两项合同失败：manifest 漂移、四个 ingress 截断。
 - record_group_chat 实际闭包 257 个辅助符号，旧上限 256；显式 cap=512 完整展开。
 - 修复：默认 cap 256 → 512，保留小预算截断与零核心截断门禁；按仓库惯例替换随包清单。
 - 验证：40 项专项通过；全量 Python 3669 passed / 17 skipped（Windows Python 3.14、隔离 STELLA_HOME）；623 个已跟踪 Python 文件 Ruff 通过；清单漂移、文档门禁通过。
-- 下一步：图变更门禁、提交推送，检查 PR #105 最新 head 的在线 CI；未通过前不标 done。
+- 修复提交：3b31931，已推送 PR #105；[主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343651) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343680) 通过。
+- 提交前 GitNexus：6 文件、11 符号、low，无 partial/truncated；提交后索引刷新到修复提交并保留 PDG。
+- CI-001 验收完成。完成记录的后续提交与 CI 以 Git／PR 最新状态为准；新任务由用户授权。
