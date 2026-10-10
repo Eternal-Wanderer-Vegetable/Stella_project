@@ -50,11 +50,10 @@ DEFAULT_OUT = PROJECT_ROOT / "core" / "observability" / "flows"
 GENERATOR_VERSION = 3
 MANIFEST_SCHEMA_VERSION = 3
 
-# 传递闭包边界：同文件可达符号数上限（超限截断并标 truncated）。
-# schema 3（修复计划 §6.5）：24 → 96，memory consolidator 家族的四个核心
-# 截断（consolidate.extract/preflight/write、memory.consolidate.entry）据实
-# 收口——预算必须覆盖真实同文件方法数，而不是让截断常态化。
-_REACHABLE_CAP = 256
+# 传递闭包边界：跨文件可达辅助符号数上限（超限仍标 truncated）。
+# record_group_chat 的实际闭包为 257 个符号；512 覆盖当前规模并留出余量，
+# 保留显式小预算的截断行为与 CI 的零核心截断门禁。
+_REACHABLE_CAP = 512
 # 单符号闭包条目上限（超大函数的诚实截断）
 _CLOSURE_CAP = 200
 

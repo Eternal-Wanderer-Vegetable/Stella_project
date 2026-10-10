@@ -451,6 +451,9 @@ class TurnService:
         system_prompt = self.system_prompt
         if self.system_prompt_resolver is not None:
             system_prompt = self.system_prompt_resolver(ctx)
+        from core.dialogue_attribution import reply_system_prompt
+
+        system_prompt = reply_system_prompt(system_prompt)
         # ── 社交插槽（计划 §6.5）：先有无学习基线，再按剩余预算放可选片段 ──
         # 可选学习先裁、不靠通用截断碰运气；任何异常退回基线（可选增强纪律）。
         social_text = ""

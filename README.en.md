@@ -85,7 +85,7 @@ See the [documentation index](docs/README.en.md) for bilingual guides, defaults,
 
 - **💬 Proactively gather information** -- Information passively ingested from group chats has very low density, so Stella proactively @mentions active users to start a conversation or confirm a memory. Daily quotas, per-user cooldowns, and protection that backs off after consecutive non-responses are provided.
 
-- **🎭 Expression evolves with the group (off by default)** -- The social learning loop: delivery receipts and reply-effect observations distill "which phrasing is worth reusing" and "what this group's slang means". A shadow mode records without intervening first; promoted entries are injected through a budget-controlled prompt slot, and later observations feed back to refine them. Off by default, enabled gradually (`SOCIAL_ENABLED` / `SOCIAL_MODE` — see the [configuration guide](docs/configuration.en.md)).
+- **🎭 Expression evolves with the group (off by default)** -- The social learning loop: delivery receipts and reply-effect observations distill "which phrasing is worth reusing" and "what this group's slang means". A shadow mode records without intervening first; promoted entries are injected through a budget-controlled prompt slot, and later observations feed back to refine them. Off by default, enabled gradually (`SOCIAL_ENABLED` / `SOCIAL_MODE` — see the [configuration guide](docs/reference/configuration.en.md)).
 
 - **🏠 Shared spaces across groups** -- Multiple QQ groups can belong to one space and share user profiles, long-term memories, and personality. Message tails, topic state, and mute switches remain isolated per group, so Stella will not answer a conversation from group B in group A.
 
@@ -103,9 +103,9 @@ See the [documentation index](docs/README.en.md) for bilingual guides, defaults,
 
 ## 🚀 Quick Start
 
-> This section covers **Windows desktop** deployment. For Linux / remote servers, see the [Docker Deployment Guide](docs/deployment-docker.en.md).
+> This section covers **Windows desktop** deployment. For Linux / remote servers, see the [Docker Deployment Guide](docs/guides/deployment-docker.en.md).
 >
-> **v2 control plane (current UI)**: point a browser at the bot's own port for the full management panel (auth / config / plugins / MCP / knowledge base / cron / live logs — see [docs/webui.en.md](docs/webui.en.md)); the desktop shell (Tauri 2) embeds the same panel. The legacy native UI is retired, frozen at tag `gui-v1-final`.
+> **v2 control plane (current UI)**: point a browser at the bot's own port for the full management panel (auth / config / plugins / MCP / knowledge base / cron / live logs — see [docs/webui.en.md](docs/guides/webui.en.md)); the desktop shell (Tauri 2) embeds the same panel. The legacy native UI is retired, frozen at tag `gui-v1-final`.
 
 ### 📦 Download & Install (regular users)
 
@@ -195,7 +195,7 @@ pip install -r requirements.txt
 
 It is recommended to make changes through the built-in Advanced Options form in `Stella.exe`. **Manually editing .env is not recommended.**
 
-See the **[Configuration Documentation](docs/configuration.en.md)** for all configuration options and their descriptions.
+See the **[Configuration Documentation](docs/reference/configuration.en.md)** for all configuration options and their descriptions.
 
 ### Starting
 
@@ -232,17 +232,17 @@ The directory name does not need to be changed: an `xxx-master` / `xxx-main` suf
 
 After startup, check `logs/boot_debug.log`. It records which plugins were found, whether loading succeeded or failed, and the reason for any failure.
 
-Plugin `@command` commands (default prefix `/`) work immediately after installation. Function tools registered with `@llm_tool` additionally need a capability declaration before chat can trigger them -- and a plugin written to the [Plugin Integration Specification](docs/plugin-spec.en.md) **ships its own** `capability.toml`, so that kind of plugin is complete on arrival and needs no configuration from you.
+Plugin `@command` commands (default prefix `/`) work immediately after installation. Function tools registered with `@llm_tool` additionally need a capability declaration before chat can trigger them -- and a plugin written to the [Plugin Integration Specification](docs/reference/plugin-spec.en.md) **ships its own** `capability.toml`, so that kind of plugin is complete on arrival and needs no configuration from you.
 
-When a plugin ships none (most existing AstrBot plugins do not), or the one it ships does not suit how you use it, add or override an entry in `config/capabilities/<domain>.toml` -- declarations in the user directory have the highest precedence, and once one of them claims a tool the plugin's own entry is skipped entirely. The repository contains a real example (`config/capabilities/entertainment.toml`) that you can copy; see `config/capabilities/information.toml.example` for the format, and [Plugin Integration Specification §6.3](docs/plugin-spec.en.md#63-how-to-write-examples) for how to write one that actually routes.
+When a plugin ships none (most existing AstrBot plugins do not), or the one it ships does not suit how you use it, add or override an entry in `config/capabilities/<domain>.toml` -- declarations in the user directory have the highest precedence, and once one of them claims a tool the plugin's own entry is skipped entirely. The repository contains a real example (`config/capabilities/entertainment.toml`) that you can copy; see `config/capabilities/information.toml.example` for the format, and [Plugin Integration Specification §6.3](docs/reference/plugin-spec.en.md#63-how-to-write-examples) for how to write one that actually routes.
 
-> Why the declaration is needed: a plugin's tool description is an instruction sentence for a decision-maker that chooses while looking at all tools, whereas Stella's router calculates semantic similarity between it and the user's **question**. The two purposes require different text forms, and using the description directly makes similar tools compete with one another. See [Capability System](docs/capability-system.en.md#declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing) for measured data and the trade-offs.
+> Why the declaration is needed: a plugin's tool description is an instruction sentence for a decision-maker that chooses while looking at all tools, whereas Stella's router calculates semantic similarity between it and the user's **question**. The two purposes require different text forms, and using the description directly makes similar tools compete with one another. See [Capability System](docs/architecture/capability-system.en.md#declaration-priority-why-automatically-derived-capabilities-do-not-participate-in-routing) for measured data and the trade-offs.
 
 Writing a plugin, or unsure whether a declaration is right? Run `python -m deploy plugin-check <plugin dir>`: 16 checks, and zero errors is the bar. If you would rather not write `examples` from scratch, run `python -m deploy plugin-scaffold <plugin dir>` first to generate a draft (`capability.toml.draft`); it also computes a quantified report with the real embedding model telling you how well that corpus actually routes. The draft needs a human review, a rename, and `reviewed = true` before it takes effect -- unreviewed corpus never reaches the Router.
 
 To see whether it actually made it into the routing set, three places print the same list: @-mention the bot in a group and ask "what can you do", run `python -m deploy capabilities`, or open the "Plugins" page of `Stella.exe` and click the plugin (a green dot means a declaration has claimed that tool, so chat can trigger it automatically). All of them show which capabilities chat can trigger automatically, which cannot, and why not (no declaration / misspelled tool name / claimed by a higher tier / implementation backing off). Quicker than reading the boot log.
 
-While developing a plugin you can turn on hot reload (`ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED=true`, **off by default**) and pick up code changes without a restart by sending "@Stella 重载插件 &lt;plugin directory&gt;" in a group. It is **not a restart** — tasks started with a bare `asyncio.create_task`, threads a plugin started and monkeypatches are not reclaimed, so restart whenever you suspect the state is unclean. Details in [Plugin Specification §13](docs/plugin-spec.en.md#13-debugging).
+While developing a plugin you can turn on hot reload (`ASTRBOT_PLUGIN_HOT_RELOAD_ENABLED=true`, **off by default**) and pick up code changes without a restart by sending "@Stella 重载插件 &lt;plugin directory&gt;" in a group. It is **not a restart** — tasks started with a bare `asyncio.create_task`, threads a plugin started and monkeypatches are not reclaimed, so restart whenever you suspect the state is unclean. Details in [Plugin Specification §13](docs/reference/plugin-spec.en.md#13-debugging).
 
 Plugin cards are rendered by local Chromium. **The first time an image is needed, it automatically downloads about 270 MB of browser engine in the background**; the plugin continues to return plain text during the download, and takes effect automatically once installation finishes without requiring a restart.
 
@@ -259,17 +259,19 @@ All runtime logs are in `logs/`:
 
 ## 📖 Documentation
 
+Use the [documentation index](docs/README.en.md) for guides, architecture, reference, development and archives. Coding agents start at [AGENTS.md](AGENTS.md). Current branch compatibility is in [Source contracts](docs/development/contracts.en.md).
+
 | Document | Contents |
 |---|---|
-| [Architecture](docs/architecture.en.md) | Directory structure, message-processing flow, module responsibilities, and the AstrBot compatibility layer |
-| [Memory System](docs/memory-system.en.md) | Rationale for two-layer filtering, promotion rules, and search strategy |
-| [Capability System](docs/capability-system.en.md) | Capability Router and Comes: how tools execute outside the chat context |
-| [Plugin Integration Specification](docs/plugin-spec.en.md) | Writing a plugin Stella can use in full: declaration format, the two paths, the failure contract, the self-check tool |
-| [Configuration Reference](docs/configuration.en.md) | Two-layer endpoint x role model configuration, all configuration options, and tuning recommendations |
-| [Docker Deployment Guide](docs/deployment-docker.en.md) | Containerized deployment on a remote server: build or pull the image, configure, migrate from Windows, upgrade and back up |
-| [Development Guide](docs/development.en.md) | Tests, probe scripts, CI, and contribution workflow |
+| [Architecture](docs/architecture/README.en.md) | Directory structure, message-processing flow, module responsibilities, and the AstrBot compatibility layer |
+| [Memory System](docs/architecture/memory-system.en.md) | Rationale for two-layer filtering, promotion rules, and search strategy |
+| [Capability System](docs/architecture/capability-system.en.md) | Capability Router and Comes: how tools execute outside the chat context |
+| [Plugin Integration Specification](docs/reference/plugin-spec.en.md) | Writing a plugin Stella can use in full: declaration format, the two paths, the failure contract, the self-check tool |
+| [Configuration Reference](docs/reference/configuration.en.md) | Two-layer endpoint x role model configuration, all configuration options, and tuning recommendations |
+| [Docker Deployment Guide](docs/guides/deployment-docker.en.md) | Containerized deployment on a remote server: build or pull the image, configure, migrate from Windows, upgrade and back up |
+| [Development Guide](docs/development/README.en.md) | Tests, probe scripts, CI, and contribution workflow |
 
-> Design process records (specification drafts, checkpoints, defect reports, and test checklists) are in [`design_docs/`](design_docs/).
+> Design process records (specification drafts, checkpoints, defect reports, and test checklists) are in [`design_docs/`](design_docs).
 
 ## 🧠 Memory Formation Flow
 
@@ -301,7 +303,7 @@ Both roles can independently point to online endpoints (Stage 2 is especially su
 
 Stage 2 is awakened only when Stage 1 determines that self-disclosure is present. Routine message flooding and small talk therefore consume neither GPU resources nor online tokens. This split exists because a small model can summarize a topic but may return an empty candidate array when extracting candidates in a noisy environment (in testing, information clearly appeared in the summary it had written itself, but the candidate result was empty).
 
-> See the [Memory System Documentation](docs/memory-system.en.md) for details.
+> See the [Memory System Documentation](docs/architecture/memory-system.en.md) for details.
 
 ## 🛠 Technology Stack
 
@@ -313,7 +315,7 @@ Stage 2 is awakened only when Stage 1 determines that self-disclosure is present
 
 **Desktop installer**: `Tauri 2` · `Rust`. v1 (`stella-installer/`, native HTML/JS, frozen at tag `gui-v1-final`); v2 (`desktop/` shell + `dashboard/` panel, Vue 3 + Vuetify 3 — see `docs/webui.en.md`).
 
-**Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with an optional `llama` profile; Chromium and CJK fonts are baked into the image; see the [Docker Deployment Guide](docs/deployment-docker.en.md))
+**Containerized deployment**: `Docker` · `docker compose` (`Dockerfile` + two-container stella/napcat orchestration, with an optional `llama` profile; Chromium and CJK fonts are baked into the image; see the [Docker Deployment Guide](docs/guides/deployment-docker.en.md))
 
 **Development and verification**: `pytest` · `ruff` · `pyright`
 
@@ -353,4 +355,4 @@ This project received encouragement and support from many people and organizatio
 - Special thanks to Freya; this work is dedicated to you. My journey of exploration began with your gift, and it is time to offer an imperfect return gift.
 
 
-The versioned upgrade tool and default installer layout are separate: release CI uses `VERSIONED_LAYOUT=0`, leaving launcher relocation disabled. See [development](docs/development.en.md) for conditions.
+The versioned upgrade tool and default installer layout are separate: release CI uses `VERSIONED_LAYOUT=0`, leaving launcher relocation disabled. See [development](docs/development/README.en.md) for conditions.

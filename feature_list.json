@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-10",
+  "active_feature": null,
+  "features": [
+    {
+      "id": "DOC-001",
+      "name": "按需加载的项目文档结构",
+      "description": "按第四讲与实际代码结构整理文档，保留历史与旧链接，建立 Agent 路由、状态和验证入口。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "项目文档、指令、状态、文档校验工具"
+      ],
+      "done_criteria": [
+        "正文按主题组织且中英文配对",
+        "根指令与专题路由可用",
+        "旧路径与章节锚点可到达新正文",
+        "历史文件哈希一致",
+        "文档门禁及失败路径验证通过，交接记录完整"
+      ],
+      "evidence": [
+        {
+          "command": "python scripts/check_docs.py",
+          "result": "0 errors; maintained links, language pairs and 577 migration anchors pass"
+        },
+        {
+          "command": "python -m unittest discover -s tests/documentation -v",
+          "result": "6 tests passed, including negative paths"
+        },
+        {
+          "command": "python -m ruff check scripts/check_docs.py tests/documentation/test_documentation_contract.py",
+          "result": "passed"
+        },
+        {
+          "command": "historical SHA256 comparison",
+          "result": "246 existing archive files unchanged"
+        },
+        {
+          "command": "GitNexus detect_changes scope=all with isolated review index",
+          "result": "120 files, 859 symbols, low risk; no partial/truncated flag; actual index unchanged"
+        },
+        {
+          "command": "harness-creator validate-harness.mjs",
+          "result": "structural score 28 to 100; not a runtime benchmark"
+        },
+        {
+          "report": "docs/reports/2026-10-10-documentation-restructure.md"
+        }
+      ]
+    },
+    {
+      "id": "CI-001",
+      "name": "PR #105 CI 修复",
+      "description": "修复流程清单漂移与 ingress 源码闭包预算截断，保留原 CI 门禁。",
+      "status": "done",
+      "dependencies": [
+        "DOC-001"
+      ],
+      "scope": [
+        "scripts/generate_message_flow.py",
+        "tests/observability/test_flow_source_closure.py",
+        "core/observability/flows",
+        "任务状态与 PR 验证记录",
+        "dashboard/tests/flow-store.spec.ts 的大数据功能用例时间预算"
+      ],
+      "done_criteria": [
+        "大于 256 符号的闭包完整并能检测尾部变化，显式小预算仍报告截断",
+        "生成清单与当前源码一致，现有合同检查通过",
+        "全量 Python、Ruff、文档检查通过",
+        "修复推送至 PR #105 且在线 CI 全部通过"
+      ],
+      "evidence": [
+        {
+          "command": "pytest large closure regression before fix",
+          "result": "failed with 256 cap; tail helper omitted"
+        },
+        {
+          "command": "python -m pytest tests/observability/test_message_flow_contract.py tests/observability/test_flow_source_closure.py tests/observability/test_internal_flow_inventory.py -q",
+          "result": "40 passed"
+        },
+        {
+          "command": "python -m pytest tests -q -n 4 --dist loadgroup --timeout=120 --timeout-method=thread",
+          "result": "3669 passed, 17 skipped; Windows Python 3.14; isolated STELLA_HOME"
+        },
+        {
+          "command": "python -m ruff check <all 623 tracked Python files>",
+          "result": "passed; original untracked evidence probe excluded"
+        },
+        {
+          "command": "python scripts/generate_message_flow.py --check",
+          "result": "message-flow.0b530b0f7361.json matches; no reachable_truncated_nodes; topology unchanged"
+        },
+        {
+          "command": "python scripts/check_docs.py",
+          "result": "0 errors; 1187 local links; 577 migration anchors"
+        },
+        {
+          "command": "GitNexus detect_changes scope=all before repair commit",
+          "result": "6 files, 11 symbols, low risk; no partial/truncated flags"
+        },
+        {
+          "commit": "3b31931c75060b3e33acd1b6f58f6b19961a3c34",
+          "result": "pushed to PR #105; remote SHA matches"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343651",
+          "result": "All 11 CI jobs passed, including Python 3.10/3.11/3.12, flow-manifest, flow-closure, documentation, lint, security, CLI and Windows reliability"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343680",
+          "result": "Dashboard CI passed"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043686859/job/114188817425",
+          "result": "Completion record head 2906569 exposed existing Dashboard large-fixture flakiness: 100000-event functional test timed out at 5.17s; all assertions retained, only this case uses 15s timeout; dedicated performance budget unchanged"
+        },
+        {
+          "command": "Dashboard Vitest / vue-tsc / Vite build",
+          "result": "100 tests passed; typecheck and production build passed; 100000-event fixture retained, dedicated performance budget unchanged"
+        },
+        {
+          "commit": "c7751f634b175433c43a081118759fe29efa284e",
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769",
+          "result": "All 11 main CI jobs passed, including Python 3.10/3.11/3.12"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792",
+          "result": "Dashboard CI passed after functional-test timeout adjustment"
+        }
+      ]
+    }
+  ]
+}

@@ -561,7 +561,10 @@ describe('flow store M5 contracts', () => {
     expect(store.eventsTruncated).toBe(true);
     await store.loadMoreEvents();
     expect(store.eventsTruncated).toBe(true); // 还有余量，按钮不消失
-  });
+    // 首读需跨 100 页加载 100000 个事件，验证分页软上限与水位单位。
+    // 共享 CI runner 曾用时 5.17s；保留规模与断言，只给本功能用例留余量。
+    // 布局性能预算由 perf-10k-layout.spec.ts 单独验证。
+  }, 15_000);
 
   it('loadSpec uses digest-exact cache for digest traces and version fallback for legacy', async () => {
     const store = useFlowStore();

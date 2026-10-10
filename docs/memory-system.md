@@ -1,388 +1,125 @@
 # 记忆系统
 
-中文 | [English](memory-system.en.md)
+此路径保留以兼容旧链接。当前正文请读[记忆系统](architecture/memory-system.md).
 
-本文说明 Stella 的记忆系统**为什么这样设计**，以及各道闸门的具体规则。目录结构与处理流程见 [架构说明](architecture.md)，配置项见 [配置参考](configuration.md)。
+下方保留原章节锚点并指向新位置；维护时修改目标正文。
 
-## 6.1.0 会话、个人记忆与归属保护
+<a id="610-会话个人记忆与归属保护"></a>
 
-`ConversationRef` 是会话身份；平台稳定 user ID 是人物身份；`group_shared_space`
-是群共享空间。私聊与 WebChat 的旧表 storage_session_id 不是群号，不能据此授予群权限。
-`MemoryAccessScope` 将当前群的 SPACE 范围与当前本人可见的 PERSON 范围分别传入
-Python、SQL/FTS、embedding、缓存和 Rust 后端，内容相似不会扩大授权。
+- [6.1.0 会话、个人记忆与归属保护](architecture/memory-system.md#610-会话个人记忆与归属保护)
 
-| 归属/受众 | 可见范围 |
-| --- | --- |
-| SPACE | 对应群共享空间的既有记忆 |
-| PERSON / PRIVATE_ONLY | 对应 Bot 下本人与 Bot 的私聊 |
-| PERSON / USER_SHARED | 本人明确授权的具体事实；仍须匹配 owner/subject |
+<a id="三条设计原则"></a>
 
-个人写入 `PERSONAL_MEMORY_WRITE_ENABLED=false`，分享
-`PERSONAL_MEMORY_SHARE_ENABLED=false`。旧库迁移只保留原 SPACE 含义，不自动将旧事实
-改成公开的个人共享；回填须使用 `tools/backfill_personal_memory.py` 的审查 manifest。
-分享检测仅是第一道意图识别：服务端还核验原消息作者、会话、Bot 与事实，否定、引用、
-转述和模型猜测不能构成授权；撤回只修改该授权台账中的副本并推进缓存版本。
+- [三条设计原则](architecture/memory-system.md#三条设计原则)
 
-消息投影显式保留谁说、对谁说、回复谁、是否引用/否定，以及 BOT_SELF 收件人。
-分段发送在尾巴中按 logical turn 聚合，原始关系和带符号平台 ID 不丢失；压缩使用
-同一投影，并用 revision/CAS 防止旧结果覆盖新的身份纠正。身份声明只对当前会话生效，
-别名碰撞不会合并平台用户。
+<a id="1-捕获宽晋升严"></a>
 
-`REPLY_ATTRIBUTION_GUARD_MODE` 与 `PROACTIVE_VERIFICATION_CONTRACT_MODE`
-均默认 `off`，支持 `shadow` / `enforce`。启用前按 [QQ 灰度清单](reports/2026-10-05-qq-gray-rollout-checklist.md)
-验证真实模型与发送链路；主动核验缺少候选来源、对象不符或候选已变更时不应发送。
-数据修复使用 `tools/data_repair.py` 的来源驱动 preview/apply/revoke 与列级 CAS，不能把
-整片 space 批量改成某个人。schema 18 与 Rust API 2 见 [后端说明](memory-rust-backend.md)。
+- [1. 捕获宽，晋升严](architecture/memory-system.md#1-捕获宽晋升严)
 
-## 三条设计原则
+<a id="2-核心思想一个用户有价值的信息不会很多"></a>
 
-### 1. 捕获宽，晋升严
+- [2. 核心思想：一个用户有价值的信息不会很多](architecture/memory-system.md#2-核心思想一个用户有价值的信息不会很多)
 
-过滤应当发生在**有数据、可审计、可回滚**的那一层。
+<a id="3-语义相关--应该使用"></a>
 
-早期版本把过滤写在整合 prompt 里（「置信度低于 0.7 不要输出」「以下情况必须返回空数组」）。这带来两个问题：
+- [3. 语义相关 ≠ 应该使用](architecture/memory-system.md#3-语义相关--应该使用)
 
-- 被丢弃的信息**不留任何痕迹**，无法审计，也无法据此改进
-- prompt 里的规则彼此干扰。实测中「讨论第三方事物（新闻、产品、他人）应返回空」这条负例，导致「我的显卡是 RTX5080」被判为「在讨论产品」，10 次运行只有 1 次正确提取
+<a id="数据流"></a>
 
-现在的分工：
+- [数据流](architecture/memory-system.md#数据流)
 
-| 层 | 职责 | 尺度 |
-|---|---|---|
-| **捕获层**（整合 prompt） | 如实记录 + 严禁编造 | 宽 |
-| **晋升层**（MemoryManager） | 置信度分档 + 交叉验证 + 配额 | 严 |
+<a id="捕获层允许不确定禁止编造"></a>
 
-捕获层放宽后，整合 prompt 从 3244 字符降到 2515，正例回归从 0/9 提升到 9/9，编造率保持 0%，真实窗口的空输出率仅从 100% 降到 90%——放宽并没有变成放水。
+- [捕获层：允许不确定，禁止编造](architecture/memory-system.md#捕获层允许不确定禁止编造)
 
-### 2. 核心思想：一个用户有价值的信息不会很多
+<a id="代码层的兜底"></a>
 
-「宁缺毋滥」被实现为硬约束而非态度：单用户的长期记忆有数量上限（`MEMORY_USER_QUOTA`，默认 25），到顶后新记忆必须挤掉现存最弱的一条。
+- [代码层的兜底](architecture/memory-system.md#代码层的兜底)
 
-这使呈现层总量可控，**并且可以节约本地部署模型的上下文空间以及生成时间**，天然对抗捕获层放宽带来的膨胀。
+<a id="来源分级"></a>
 
-### 3. 语义相关 ≠ 应该使用
+- [来源分级](architecture/memory-system.md#来源分级)
 
-检索到的记忆还要经过模式匹配、用途兼容、可见性三层过滤。「用户不喜欢被摸头」与「摸头」高度相关，但它**永远不该作为聊天话题被提起**——只能作为行为约束存在。
+<a id="候选强化复现才是证据"></a>
 
-## 数据流
+- [候选强化：复现才是证据](architecture/memory-system.md#候选强化复现才是证据)
 
-```
-group_messages          原始消息（带来源分级）
-      ↓ 整合（CONSOLIDATION 角色，默认本地小模型，可指到在线端点）
-short_term_context      话题摘要 + 关键发言
-memory_candidates       记忆候选（可累积证据）
-      ↓ Gate 1 三档
-memories                长期记忆
-      ↓ Policy 三层过滤 + 排序
-分区注入 Prompt          聊天素材 / 行为约束
-```
+<a id="晋升层gate-1-三档"></a>
 
-## 捕获层：允许不确定，禁止编造
+- [晋升层：Gate 1 三档](architecture/memory-system.md#晋升层gate-1-三档)
 
-整合 prompt（`memory/consolidation_prompt.py`）不做置信度硬过滤，但保留三条**防编造**条款——它们与松紧无关，任何情况下不得删除：
+<a id="importance--0-是一个必须堵死的陷阱"></a>
 
-- 「只输出这些，**不要补充推断**」
-- 「**需要推测才能得出结论**的（"他可能喜欢…"）→ 返回空数组」
-- 「`user_id` **必须是该消息实际的发送者**，严禁张冠李戴」
+- [`importance = 0` 是一个必须堵死的陷阱](architecture/memory-system.md#importance--0-是一个必须堵死的陷阱)
 
-判断某条信息是否值得记忆，判据是**「这句话在描述谁」**：描述发言者自身的属性（拥有什么设备、能不能吃什么、住哪、做什么工作）即为候选；描述第三方事物才排除。不因句子里出现产品名或地名就当作在讨论第三方。
+<a id="冲突解决"></a>
 
-同时保留「`memory_candidates` 允许为空数组，返回空数组是正确行为」——放宽捕获不等于强行产出。
+- [冲突解决](architecture/memory-system.md#冲突解决)
 
-`tests/test_consolidation_prompt.py` 对以上条款做离线断言，包括反向断言（确认已移除的硬过滤没有被写回来）。
+<a id="跨用户隔离硬性约束"></a>
 
-### 代码层的兜底
+- [跨用户隔离（硬性约束）](architecture/memory-system.md#跨用户隔离硬性约束)
 
-prompt 之外还有两道机械保险：
+<a id="配额呈现层封顶"></a>
 
-- **发送者白名单**：候选的 `user_id` 不在本批消息的实际发送者集合内一律丢弃
-- **`BOT_SELF` 排除**：Bot 自己的发言不进白名单，因此永远无法成为候选归属
+- [配额：呈现层封顶](architecture/memory-system.md#配额呈现层封顶)
 
-### 来源分级
+<a id="检索policy-优先于相似度"></a>
 
-| `source_kind` | 含义 | 在 prompt 中的标注 | 权重 |
-|---|---|---|---|
-| `AT_MENTION` | 用户直接对 Bot 说 | `[对Bot说]` | 高密度证据 |
-| `PASSIVE` | 被动摄入群聊 | 无标注 | 需复现 |
-| `BOT_SELF` | Bot 自己的发言 | `[我说]` | 只作上下文 |
+- [检索：Policy 优先于相似度](architecture/memory-system.md#检索policy-优先于相似度)
 
-`BOT_SELF` 的作用是提供语境。没有它，用户回答「对」「手机」时整合模型看不到 Bot 问了什么，只能放弃或编造。prompt 中明确要求「严禁从标注 `[我说]` 的内容中提取任何关于用户的信息」。
+<a id="行为模式mode"></a>
 
-## 候选强化：复现才是证据
+- [行为模式（Mode）](architecture/memory-system.md#行为模式mode)
 
-同一事实被再次观察到时，**不插入新行**，而是累积证据：
+<a id="三层过滤"></a>
 
-| 字段 | 变化 |
-|---|---|
-| `occurrence_count` | +1 |
-| `confidence` | `min(1.0, max(旧, 新) + MEMORY_CANDIDATE_REOCCURRENCE_BONUS)` |
-| `content` | 取更完整的一方 |
-| `evidence` | 追加（有长度上限） |
-| `source_kinds` | 取并集（历次来源集合） |
-| `source_message_ids` | 取并集 |
-| `status` | 回到 `NEW`，重新参与晋升评估 |
-| `first_seen_at` | **保持不变** |
+- [三层过滤](architecture/memory-system.md#三层过滤)
 
-相似判定要求**同群 + 同用户 + 内容相似**，其中类型条件分两档（2026-09-27 起）：**同类型**相似即命中；**跨类型**只在归一化后逐字相同时才命中（`memory/text_similarity.py` 的 `same_normalized_text`，仅消除引号/标点/空白差异）。内容相似本体仍是 Jaccard ≥ 0.65 或互为子串。合并时若新旧文本归一化后相同，直接保留较长的一条，不再拼接。
+<a id="排序六维"></a>
 
-`first_seen_at` 不刷新是有意的：它是超期淘汰的锚点。超过 TTL 仍未获新证据的 `OBSERVING` 候选标记 `REJECTED`（不删除，保留供审计）。
+- [排序（六维）](architecture/memory-system.md#排序六维)
 
-没有这套机制，`OBSERVING` 会是只进不出的死胡同——同一事实每次以新 uuid 落库、各自卡住，交叉验证永不成立。
+<a id="分区注入"></a>
 
-TTL **按类型分档**（`MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE`）：`EVENT` 3 天、`GROUP_CONTEXT` 7 天、`PLAN` 14 天，未列出的类型沿用全局 `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS`（30 天）。TTL 的含义是「愿意为这条信息等多久第二次证据」，而一条 `EVENT`（「听到地震预警」）三天内没被再提一次，就既没重要到会被反复说起，也已经不是「当下」了。
+- [分区注入](architecture/memory-system.md#分区注入)
 
-> 统一 30 天的代价不只是候选池变大：那条 `EVENT` 会整整一个月都落在主动验证的取数范围内，被反复挑中去追问同一个人。见 [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) 现象 2。
+<a id="用户画像治理"></a>
 
-## 晋升层：Gate 1 三档
+- [用户画像治理](architecture/memory-system.md#用户画像治理)
 
-`memory/memory_manager.py` 的判定：
+<a id="压缩与遗忘"></a>
 
-| 置信度 | 判定 |
-|---|---|
-| ≥ `MEMORY_CONFIRM_HIGH_CONFIDENCE`（0.85） | 直接晋升 |
-| ≥ `MEMORY_OBSERVE_LOW_CONFIDENCE`（0.6） | 看证据充分度：<br>· 历次来源含 `AT_MENTION` 且开关开 → 晋升<br>· `occurrence_count` ≥ `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE` → 晋升<br>· 否则 → `OBSERVING` |
-| < 0.6 | `OBSERVING`，等更多证据 |
+- [压缩与遗忘](architecture/memory-system.md#压缩与遗忘)
 
-另设 `importance` 下限 `MEMORY_PROMOTE_MIN_IMPORTANCE` 淘汰过于琐碎的信息。
+<a id="主动获取为什么必需"></a>
 
-**`importance` 不单独构成晋升依据**：它由 LLM 自评，是所有指标中最不可靠的。早期版本的判定是「置信度与重要度**都**低于阈值才观察」，意味着 `confidence=0.3 / importance=0.6` 的候选会直接成为长期记忆。
+- [主动获取：为什么必需](architecture/memory-system.md#主动获取为什么必需)
 
-### `importance = 0` 是一个必须堵死的陷阱
+<a id="participation-decision-layer主动插话先判断是否值得打扰"></a>
 
-这条下限是 `_decide_promotion` 的**第一道**检查，位置在读 `confidence` 之前。这意味着 `importance = 0` 的候选会被一票否决——满置信、AT_MENTION 来源、复现 99 次都救不回来，它会永远卡在 `OBSERVING`，直到超期 `REJECTED`。
+- [Participation Decision Layer：主动插话先判断是否值得打扰](architecture/memory-system.md#participation-decision-layer主动插话先判断是否值得打扰)
 
-而 2026-08-31 之前，整合 prompt 从未定义 `importance` 是什么（只在 JSON 结构示例里出现过字面量 `0.0`），模型于是照抄 `0.0`。后果是这批候选既晋升不了，又持续被主动验证挑中，对同一个人反复问同一个问题。详见 [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md)。
+<a id="目标选择"></a>
 
-现在有三层防护：
+- [目标选择](architecture/memory-system.md#目标选择)
 
-| 层 | 措施 |
-|---|---|
-| prompt | `importance` 与 `confidence` 一样有完整取值指引，并明确禁止照抄示例里的 `0.0` |
-| 代码 | `consolidator` 落库前把 `<= 0` 兜底为 `MEMORY_CANDIDATE_DEFAULT_IMPORTANCE`（0.5） |
-| 迁移 | schema v12 回填存量的 0 值行——prompt 与兜底只救新候选 |
+<a id="保护机制"></a>
 
-**设计教训**：「某指标不单独构成晋升依据」应当同时意味着「它也不能单独让候选失败」。把最不可靠的指标放在第一道硬门槛，等于给了它一票否决权。
+- [保护机制](architecture/memory-system.md#保护机制)
 
-## 冲突解决
+<a id="问答关联"></a>
 
-新候选与已有记忆矛盾时（同用户同类型、共享关键对象词、情感极性相反）：
+- [问答关联](architecture/memory-system.md#问答关联)
 
-- 新候选置信度更高 → 旧记忆标记 `conflict`（退出检索，不删除）
-- 否则 → 新候选转 `OBSERVING`，等更多证据
+<a id="台词生成的两条硬约束"></a>
 
-## 跨用户隔离（硬性约束）
+- [台词生成的两条硬约束](architecture/memory-system.md#台词生成的两条硬约束)
 
-内容相似**不等于**可以合并。用户 A 与用户 B 说了同一句话是两条独立记忆。
+<a id="已知限制"></a>
 
-三条合并路径都必须按归属过滤：
+- [已知限制](architecture/memory-system.md#已知限制)
 
-| 位置 | 影响 |
-|---|---|
-| `memory_manager._find_similar_memory` | 写库，A 的事实被并入 B 的记忆 |
-| `compressor._merge_duplicate_memories` | 写库且跑在定时任务里，一方被置 `archived`，**不可恢复** |
-| `retrieval_v2._merge_similar` | 不写库，但会让回复张冠李戴（主动发言取全群记忆） |
+<a id="延伸阅读"></a>
 
-`tests/test_cross_user_isolation.py` 对三处各有一条正向用例（不得合并）与一条反向用例（同用户仍要合并）——只测「不合并」的话，把条件写成永假也能通过，去重会静默失效。
-
-## 配额：呈现层封顶
-
-新建记忆后检查该群该用户的 active 记忆数，超过 `MEMORY_USER_QUOTA` 时按竞争分升序淘汰最弱者（置 `archived`，不删除）：
-
-```
-分数 = W_IMPORTANCE × importance
-     + W_CONFIRMATION × min(1, confirmation_count / CONFIRMATION_CAP)
-     + W_RECENCY × exp(-age_days / 30)
-```
-
-用 `last_accessed_at` 而非 `created_at`：一条老但仍被频繁调用的记忆比一条新却从未被用过的更有价值。
-
-这条意图直到检索开始记账才真正成立。此前 `last_accessed_at` 只在候选强化与压缩合并时被写，检索路径一次也不刷新它，于是它实际等于 `last_confirmed_at`，本项与 confirmation 项在重复计同一个信号。现在两个时间戳分工明确：
-
-| 时间戳 | 含义 | 谁写 | 谁读 |
-|---|---|---|---|
-| `last_confirmed_at` | 这条事实最后一次被观察到 | 候选强化、压缩合并 | 排序的新鲜度维、类型衰减、相似记忆归并的取数顺序 |
-| `last_accessed_at` | 这条记忆最后一次真正进了 Prompt | 检索（两个分区都算） | 配额竞争的 recency 项、低价值归档 |
-
-`MEMORY_QUOTA_ENFORCE` **默认关闭**，此时只输出 `[Quota dry-run]` 日志说明「本来会淘汰谁」。建议先观察一段确认合理再开启——25 条这个数在具体库上会淘汰什么，不看日志无从判断。
-
-## 检索：Policy 优先于相似度
-
-`memory/retrieval_v2.py` 的核心区别在于问题本身：旧检索问「哪条记忆文本最相关」，v2 问「当前行为真正需要哪条记忆」。
-
-```
-Mode 检测（规则打分，不调 LLM）
-  → SQL 可见性预过滤        ← 先决定什么有资格被找到
-  → FTS5 / 加权回退取候选池
-  → Usage 层过滤
-  → Ranking（六维加权）
-  → 同类合并（按用户）
-  → 分离聊天素材 / 行为约束
-  → 分数门槛 + 模式条数上限
-```
-
-### 行为模式（Mode）
-
-`CASUAL_REPLY` `ACTIVE_JOIN` `HUMOR` `TECH_HELP` `RECOMMEND` `EMOTIONAL` `CONFLICT_AVOID` `GROUP_EVENT`
-
-用关键词加权打分而非短路 if 链：`命中数 × 权重 × (1 + 最长命中词长/10)`，最高者胜出且需超过 `MODE_DETECT_MIN_SCORE`。这样长词与强信号词能自然压过「哈哈」「累」这类高频弱信号。
-
-### 三层过滤
-
-**Mode → Usage**：每个模式有允许与禁止的用途清单。例如 `CASUAL_REPLY` 禁止 `BOUNDARY_PROTECTION` 与 `CONFLICT_AVOID`；`TECH_HELP` 禁止 `HUMOR`。
-
-**Usage → Type**：每个用途标注「主要来源」类型。不兼容不是硬排除，而是按 `USAGE_TYPE_MISMATCH_PENALTY` 降权——矩阵漏写不应直接决定排序结果。
-
-**Visibility**：
-
-| 等级 | 语义 |
-|---|---|
-| `OPEN` | 可自由使用 |
-| `CONTEXTUAL` | 需主题匹配才激活 |
-| `RESTRICTED` | 仅 `CONFLICT_AVOID` 可见，且只进行为约束 |
-| `INTERNAL` | 仅供系统决策，**禁止进入 Prompt** |
-
-### 排序（六维）
-
-```
-score = W_CONTEXT × 上下文契合
-      + W_USAGE × 用途匹配
-      + W_SEMANTIC × 语义相似
-      + W_RECENCY × 时效衰减（exp，τ=30 天）
-      + W_CONFIDENCE × 置信度
-      + W_IMPORTANCE × 重要度
-```
-
-六维相互独立，避免同一信号被两个权重重复计算。`confidence` / `importance` 权重刻意压低（各 0.05）：它们描述「记忆本身可靠/重要」，与「当前该不该用」关系弱，只适合做 tie-breaker。否则高置信度的诱饵记忆会在「该不该用」上作弊。
-
-未启用 embedding 时词面语义不可靠，此时**丢弃语义维并把剩余权重重新归一化**，而不是让它以 0 分拉低所有候选。
-
-低于 `MEMORY_SCORE_MIN` 的记忆不进 Prompt——动态数量而非固定 Top-K，避免「合法候选足够多就填满上限」的超召回噪音。
-
-### 分区注入
-
-聊天素材与行为约束**严格分离**，各有独立 token 预算：
-
-```
-可参考的聊天背景：
-- 用户喜欢玩合作类游戏
-
-交流注意：
-- 避免主动针对相关成员进行涉及「不喜欢被摸头」的互动。
-```
-
-`RESTRICTED` / `INTERNAL` 可见性，或带 `BOUNDARY_PROTECTION` / `CONFLICT_AVOID` 用途的记忆，只能进入第二区。两区绝不混合。
-
-## 用户画像治理
-
-`user_profiles` 只保存**稳定事实**（语言偏好、技术水平、可观察行为）。人格判断、心理状态、价值判断在写入侧与读取侧都被 `stable_profile_facts()` 过滤。
-
-原因：「性格温柔、幽默、感性」这类描述大量属于推断，把它们当作事实会持续放大早期的误判。
-
-## 压缩与遗忘
-
-| 动作 | 触发 | 说明 |
-|---|---|---|
-| 去重合并 | 轻量 + 周度 | 同群同用户且内容相似 → 合并（同类型相似即合并；跨类型只在归一化后逐字相同时合并），被合并方 `archived` |
-| 原子化 | 轻量 + 周度 | 超过 80 字的记忆拆为原子事实 |
-| 低价值归档 | 周度 | 重要度低于阈值且长期未访问 |
-| 类型衰减 | 周度 | 按 `MEMORY_DECAY_DAYS` 的类型生命周期归档 |
-
-类型生命周期：`FACT` 730 天 → `STYLE` 365 → `PREFERENCE`/`RELATION` 180 → `EVENT`/`PLAN` 60 → `GROUP_CONTEXT` 30。
-
-后两行读的是**两个不同的时钟**，不能互换：
-
-- **类型衰减**问「这条事实还新鲜吗」，看 `last_confirmed_at`。若改看 `last_accessed_at`，一条 `EVENT` 只要每周被取用一次就能无限续命，类型生命周期形同虚设
-- **低价值归档**问「还有人用得上它吗」，看 `last_accessed_at`。一条证据早已不新、但仍被反复引用的记忆，对当下的对话是有用的
-
-所有「删除」都是 `status = 'archived'`，只退出检索，数据保留。
-
-## 主动获取：为什么必需
-
-一次干净库的实测（985 条群消息，整合全部正常执行、无解析失败）：
-
-| 指标 | 结果 |
-|---|---|
-| 产出候选 | **0 条** |
-| 产出长期记忆 | 0 条 |
-
-结论：**被动摄入在闲聊群的期望产出趋近于零，且不是调参能改善的**——不是门槛太高，是信息本身不存在。用户在玩梗与角色扮演中不会陈述自己的稳定属性。
-
-因此主动 @ 不是「记忆系统的补充」，而是**主要的记忆来源**。
-
-> 注：这也是全本地部署值得优先考虑的理由之一——主动替用户画像的过程产生的数据跟隐私强相关。接在线端点时这一步（`CONSOLIDATION` / `EXTRACT` 两个角色）会把群聊原文发给服务商，所以「混合」模式把整合留在本地：出网的只有对话生成那一步。见 [configuration.md · 三个典型场景](configuration.md#三个典型场景)。
-
-### Participation Decision Layer：主动插话先判断是否值得打扰
-
-普通主动插话不再只依赖活跃度概率。`memory/participation/` 从近期群聊提取话题、
-相关性、速度与打断风险等信号，在本地完成评分，输出 `IGNORE` / `OBSERVE` / `CANDIDATE` /
-`ALLOW_LLM` 四级决策，再决定是否生成证据。
-这层是**软决策**：先经过 `memory/proactive_gate.py` 的总开关、静音、睡眠、冷却等硬闸门，
-再由 Participation 判断当前是否有自然承接点；它不调用 LLM，也不改变主动 @ 的配额与回应退避。
-
-打分表放在 `config/participation/*.toml`，每次决策写入结构化日志，并落库到
-`participation_topics` / `participation_log`（Schema v13），便于回放和调参。缺少足够证据时
-默认宁可等待，不把「有消息」直接等同于「现在应该说话」。
-
-### 目标选择
-
-优先级：
-
-1. **验证**：有 `OBSERVING` 候选且置信度最接近晋升线的活跃用户——问一次即可跨过门槛，收益最高
-2. 无候选 → 不发言。主动 @ 的配额极其稀缺，只为把候选推过晋升线而花，不做无记忆锚点的日常话题搭话
-
-排除条件：当日配额已满、处于用户级冷却内、连续无回应超限。
-
-验证池只取**非时效型**候选。配额极稀缺（默认每人每天 2 次），而验证的目的是把候选推过晋升线变成**长期**记忆——对时效信息，等确认下来时它本身已经过期，这笔配额就花错了；语义上「你住在 X 吗」隔一周仍然成立，「你听到地震预警了吗」隔一周就是荒谬的。被排除的只是**追问**这一条路径：这些候选照常落库，也照常可以凭 `AT_MENTION` 单次晋升或靠被动复现晋升。
-
-### 保护机制
-
-| 机制 | 作用 |
-|---|---|
-| 每日配额 | 基础 2 次，高频发言者最多上浮 2 次，硬封顶 |
-| 用户级冷却 | 同一用户两次主动 @ 的最小间隔（默认 2 小时） |
-| 连续无回应退避 | 达到 `PROACTIVE_MAX_NO_REPLY` 后暂停追问该用户；「有回应」只认 @ Bot / 回复 Bot / 昵称呼叫，不认在群里随便说了句话 |
-| 退避自愈 | 该用户任意一次「对 Bot 说话」都把计数归零——判定收紧后，习惯用纯文本接话的人会被误计，而这个计数没有按时间的自然衰减，攒满就再无归零机会 |
-| 发出即计数 | 不论是否获得回应都占配额，否则会对同一人连续搭话 |
-| 候选去重 | 选目标时排除 `last_asked_candidate_id`，同一条候选不会连着问两次 |
-| 时效型不追问 | `PROACTIVE_VERIFY_EXCLUDE_TYPES`（默认 `EVENT` / `PLAN` / `GROUP_CONTEXT`）不进验证池 |
-| 状态落库 | 配额、上次追问的候选、无回应次数都在库里，重启不丢 |
-
-「越活跃越被骚扰」是必须避免的失控模式，因此频率奖励幅度刻意压小。
-
-> **候选去重这一层曾长期缺失。** `last_asked_candidate_id` 从一开始就在写，但没有任何读取方——写得完整、注释和文档都有，唯独没人消费。这类缺陷不报错，只表现为行为不符合文档。现在 `tests/test_memory_promotion_deadlock.py` 有正反两向断言守着（排除项生效，且空排除项不得误伤）。
-
-### 问答关联
-
-采用**隐式方案**：不建立「提问 ↔ 回答」的显式追踪。用户的回答本身是 `AT_MENTION`，经整合会生成或强化同内容候选，`occurrence_count` +1 后跨过门槛。
-
-这复用了已建成的复现强化机制，比一套带超时处理的状态机简单得多。
-
-### 台词生成的两条硬约束
-
-- **不得复述候选原文**。候选是内部笔记，措辞生硬，直接引用会让对话像在核对档案
-- **不得像审问**。一次只问一件事，语气随口，允许对方不回答
-
-此外要求「不要去回应上下文里的任何一句话，包括自己刚说过的」——主动 @ 时上下文只是语气素材，不是待回应的内容。
-
-## 已知限制
-
-- **角色扮演内容可能被当作真人属性**。「我是被放逐的吸血鬼」有出处、归属正确、无推断，能通过所有防编造条款。这是数据的问题而非模型的问题，只能靠晋升层的复现门槛缓解
-- **`MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE = 2` 在被动路径下几乎永不满足**。是否下调需等主动路径积累数据后再评估
-- **主动 @ 时 Mode 检测与检索 query 使用的是任务指令全文**，信噪比不佳。记忆库为空时无可见影响，待有数据后再引入独立的 `retrieval_query`
-
-以下两项由 [`bug_report_2026_8_31#1.md`](../design_docs/bug_report/bug_report_2026_8_31%231.md) 定位，尚未修复（同一报告的 P0/P1/P2 已修：晋升死锁、追问去重、候选按类型分档 TTL、验证时排除时效型、回应判定改为只认「对 Bot 说话」、两个时间戳的语义拆分）：
-
-- **排序层的时效衰减仍不区分类型**。`_recency_factor`（`memory/policy.py`）对所有类型统一取 τ=30 天，入参 `mem_type` 只为兼容旧调用而保留、并未参与计算。因此一条上周的 `EVENT` 与一条上周才录入的稳定 `FACT` 在新鲜度维度上拿到同样的分。候选层与主动验证侧已按类型分档（P1 已修），排序侧尚未
-- **`EVENT` / `PLAN` 的 60 天生命周期偏长**，一次性事件会在检索池里停留两个月
-
-## 延伸阅读
-
-本文描述的是默认的 Python 记忆引擎（`memory/`）。检索层另有可选的 Rust 实现（独立发布、
-`MEMORY_BACKEND` 切换、支持 shadow 旁路对比），见 [Rust 记忆后端](memory-rust-backend.md)。
-
-设计过程与实测记录在 [`design_docs/`](../design_docs/)：
-
-- `Memory Schema / Consolidation / Retrieval / Policy Matrix / Evaluation & Debug Specification v1.0.md` —— 原始规范
-- `Memory Verification Loop.md` —— 主动获取回路的设计
-- `check_point/` —— 关键决策节点与实测数据
-- `bug_report/` —— 缺陷分析
+- [延伸阅读](architecture/memory-system.md#延伸阅读)

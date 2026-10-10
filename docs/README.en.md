@@ -1,38 +1,29 @@
-# Stella 6.1.0 Documentation
+# Documentation
 
 [中文](README.md) | English
 
-Top-level documents are maintained usage and development guides. Synchronization
-date: October 8, 2026. `pyproject.toml` defines the application version; the memory
-contract is schema 18 / backend API 2.
+This index routes by task. Read one entry, then follow the relevant topic. Current branch facts come from source and CI; release notes and acceptance remain dated evidence.
 
-| Guide | Scope |
+| Task | Start here |
 | --- | --- |
-| [Architecture](architecture.en.md) | Ingress, RuntimeFacade, modules, data boundaries |
-| [Configuration](configuration.en.md) | Environment variables, endpoints/roles, optional defaults |
-| [Memory](memory-system.en.md) | Capture, promotion, isolation, personal memory, attribution |
-| [Rust memory backend](memory-rust-backend.en.md) | Modes, contracts, assets, ranking differences |
-| [Capabilities](capability-system.en.md) | Router, Comes, providers, long-task delegation |
-| [Cometa](cometa.en.md) | Agent installation, authentication, authorization, delivery |
-| [Knowledge base](knowledge-base.en.md) | Imports, ACLs, retrieval, WebUI administration |
-| [Scheduling](scheduling.en.md) | Group cron, permissions, bounded agents, delivery |
-| [Skills](skills.en.md) | Progressive disclosure, sources, controlled sandboxes |
-| [WebUI](webui.en.md) | Management pages, message flow, desktop shell |
-| [Docker deployment](deployment-docker.en.md) | Configuration, persistence, upgrades, backups |
-| [Development](development.en.md) | Tests, manifests, evaluations, release workflow |
-| [Plugin specification](plugin-spec.en.md) | Integration, declarations, failure contracts |
-| [Migration report template](migration-report-template.en.md) | Configuration and data import records |
-| [Template plugin](examples/astrbot_plugin_stella_template/README.en.md) | Executable plugin example |
+| Install, deploy, operate WebUI or optional features | [Usage guides](guides/README.en.md) |
+| Understand modules, message flow, memory and identity | [Architecture](architecture/README.en.md) |
+| Look up settings, plugin contracts or migration template | [Reference](reference/README.en.md) |
+| Develop, test, migrate data, troubleshoot or release | [Development](development/README.en.md) |
+| Work as a coding agent, choose gates or resume a session | [Agent workflow](agent/README.md) |
+| Find plans, incident investigations or acceptance evidence | [Archives](history/README.en.md) |
+| Write an AstrBot-compatible plugin | [Example plugin](examples/astrbot_plugin_stella_template/README.en.md) |
 
-Each guide has a Chinese and English counterpart. `plans/`, `reports/`,
-`migration/cortico/`, and `reports/evidence/` preserve dated planning, investigation,
-and acceptance evidence. Their older versions, conclusions, and test counts describe
-the recorded state and are not rewritten as current results. Consult later reports
-for follow-up work; a plan is not evidence of a shipped feature. Earlier designs
-also live in `design_docs/`.
+## Document layout
 
-Release boundaries: real QQ attribution rollout remains incomplete; three Rust
-retrieval ranking benchmark differences remain open. Reply attribution guards,
-proactive verification contracts, and personal-memory writing/sharing retain their
-disabled defaults. See the dated [P8 report](reports/2026-10-05-dialogue-attribution-p8-acceptance.md)
-and [QQ rollout checklist](reports/2026-10-05-qq-gray-rollout-checklist.md).
+`guides/`, `architecture/`, `reference/`, and `development/` contain paired Chinese/English maintained pages. `agent/` contains concise project workflow rules. Old top-level paths remain section navigation only; new links go directly to the maintained text. [The map](documentation-map.json) records redirects and old section anchors.
+
+`plans/`, `reports/`, `reports/evidence/`, `migration/cortico/` and the root `design_docs/` preserve their original dated conclusions. Consult [archive navigation](history/README.en.md) and follow later evidence; a plan is not proof of delivery.
+
+## Current source and acceptance boundaries
+
+The application version comes from `pyproject.toml`; current branch memory/native compatibility is documented in [Source contracts](development/contracts.en.md). The published 6.1.0 snapshot and subsequent branch work must be distinguished. Older schema/API values in reports describe the tested snapshot.
+
+Real QQ attribution rollout, Rust ordering parity, and clean-VM/GUI-first-launch acceptance require their own evidence. Reorganizing documentation does not close those gaps. The dated [P8 report](reports/2026-10-05-dialogue-attribution-p8-acceptance.md) and [QQ checklist](reports/2026-10-05-qq-gray-rollout-checklist.md) retain their conclusions.
+
+Maintenance rules: [Document ownership and link checks](agent/documentation.md).

@@ -1,0 +1,396 @@
+# Memory System
+
+[中文](memory-system.md) | English · [Documentation](../README.en.md)
+
+This document explains **why Stella's memory system is designed this way** and the specific rules for each gate. See the [architecture documentation](README.en.md) for the directory structure and processing flow, and the [configuration reference](../reference/configuration.en.md) for configuration options.
+
+## Conversation, personal memory, and attribution in 6.1.0
+
+`ConversationRef` identifies the conversation; stable platform user IDs identify
+people; `group_shared_space` identifies a shared group space. Private/WebChat
+storage IDs are not group IDs and cannot grant group permissions. `MemoryAccessScope`
+passes SPACE and authorized PERSON scopes through Python, SQL/FTS, embedding,
+caches, and Rust. Similar content never expands authorization.
+
+| Ownership/audience | Visibility |
+| --- | --- |
+| SPACE | Existing memory in the corresponding group space |
+| PERSON / PRIVATE_ONLY | The owner and this bot in private chat |
+| PERSON / USER_SHARED | Specifically authorized facts, still owner/subject bound |
+
+`PERSONAL_MEMORY_WRITE_ENABLED` and `PERSONAL_MEMORY_SHARE_ENABLED` default to
+`false`. Migration preserves old SPACE semantics without automatically sharing
+old facts. Backfill requires a reviewed manifest through
+`tools/backfill_personal_memory.py`. Intent detection is only an initial check:
+authorization verifies the source author, conversation, bot, and fact. Negation,
+quotes, reported speech, and model guesses cannot grant sharing. Revocation changes
+only ledger-bound copies and advances cache revisions.
+
+Projection records author, recipient, reply/quote relation, polarity, and BOT_SELF
+recipients. Segmented sends form one logical tail turn while original relations
+and signed platform IDs survive. Compaction uses the same projection and revision/CAS
+checks so stale results cannot overwrite identity corrections. Identity claims
+remain conversation-local; colliding aliases do not merge platform users.
+
+`REPLY_ATTRIBUTION_GUARD_MODE` and `PROACTIVE_VERIFICATION_CONTRACT_MODE` default
+to `off`, with `shadow` and `enforce` available. Follow the dated
+[QQ rollout checklist](../reports/2026-10-05-qq-gray-rollout-checklist.md) before enabling
+enforcement. Missing proactive evidence, wrong targets, or changed candidates must
+prevent delivery. `tools/data_repair.py` provides source-driven preview/apply/revoke
+with column-level CAS; do not reassign an entire space to one person. See the
+[Rust guide](memory-rust-backend.en.md) for current-branch schema 19/API 3 compatibility.
+
+## Three Design Principles
+
+### 1. Capture Broadly, Promote Strictly
+
+Filtering should happen at the layer where data is **available, auditable, and reversible**.
+
+In early versions, filtering was written into the consolidation prompt ("Do not output anything with confidence below 0.7" and "The following cases must return an empty array"). This caused two problems:
+
+- Discarded information left **no trace**, so it could not be audited or used for improvement
+- Rules in the prompt interfered with one another. In testing, the negative rule "discussion of third-party things (news, products, other people) should return an empty array" caused "My graphics card is an RTX5080" to be classified as "discussing a product"; only 1 out of 10 runs extracted it correctly
+
+The division of responsibilities is now:
+
+| Layer | Responsibility | Scale |
+|---|---|---|
+| **Capture layer** (consolidation prompt) | Record faithfully + strictly prohibit fabrication | Broad |
+| **Promotion layer** (MemoryManager) | Confidence grading + cross-validation + quotas | Strict |
+
+After loosening the capture layer, the consolidation prompt decreased from 3244 characters to 2515, positive-case regression improved from 0/9 to 9/9, the fabrication rate remained 0%, and the empty-output rate on real windows only decreased from 100% to 90%—loosening the rules did not mean letting everything through.
+
+### 2. Core Idea: A User Has Few Truly Valuable Facts
+
+"Better too little than too much" is implemented as a hard constraint rather than an attitude: long-term memory for an individual user has a quantity limit (`MEMORY_USER_QUOTA`, 25 by default), and once it is full, a new memory must displace the weakest existing one.
+
+This keeps the total volume at the presentation layer under control, **and saves context space and generation time for locally deployed models**, naturally counteracting the growth caused by a looser capture layer.
+
+### 3. Semantic Relevance ≠ Should Be Used
+
+Retrieved memories must also pass three layers of filtering: mode matching, usage compatibility, and visibility. "The user does not like having their head patted" is highly related to "patting someone's head," but it **should never be brought up as a chat topic**—it can only exist as a behavioral constraint.
+
+## Data Flow
+
+```
+group_messages          Raw messages (with source levels)
+      ↓ Consolidation (CONSOLIDATION role, local small model by default; can target an online endpoint)
+short_term_context      Topic summary + key messages
+memory_candidates       Memory candidates (evidence can accumulate)
+      ↓ Gate 1: three tiers
+memories                Long-term memories
+      ↓ Three-layer Policy filtering + ranking
+Partitioned Prompt injection          Chat material / behavioral constraints
+```
+
+## Capture Layer: Uncertainty Allowed, Fabrication Forbidden
+
+The consolidation prompt (`memory/consolidation_prompt.py`) does not apply hard confidence filtering, but retains three **anti-fabrication** clauses—which are unrelated to strictness and must not be removed under any circumstances:
+
+- "Output only these items, **do not add inferences**"
+- "Anything that **requires speculation to reach a conclusion** (\"they may like…\") → return an empty array"
+- "`user_id` **must be the actual sender of that message**; misattribution is strictly forbidden"
+
+The criterion for whether a piece of information is worth remembering is **"who is this sentence describing"**: a statement describing the speaker's own attributes (what equipment they own, what they can eat, where they live, what work they do) is a candidate; a statement describing a third-party thing is excluded. The presence of a product name or place name in a sentence does not by itself make it a discussion of a third party.
+
+At the same time, the rule that "`memory_candidates` may be an empty array; returning an empty array is correct behavior" is retained—loosening capture does not mean forcing output.
+
+`tests/test_consolidation_prompt.py` makes offline assertions about the clauses above, including reverse assertions (confirming that removed hard filters have not been written back).
+
+### Code-Level Safety Nets
+
+There are two mechanical safeguards beyond the prompt:
+
+- **Sender allowlist**: candidates whose `user_id` is not in the set of actual senders in the current batch are always discarded
+- **`BOT_SELF` exclusion**: the Bot's own messages do not enter the allowlist, so they can never become candidate owners
+
+### Source Levels
+
+| `source_kind` | Meaning | Marking in the prompt | Weight |
+|---|---|---|---|
+| `AT_MENTION` | User speaks directly to the Bot | `[Said to Bot]` | High-density evidence |
+| `PASSIVE` | Passively ingested from the group chat | No marking | Must be reproduced |
+| `BOT_SELF` | The Bot's own message | `[I said]` | Context only |
+
+`BOT_SELF` provides context. Without it, when a user answers "yes" or "phone," the consolidation model cannot see what the Bot asked and can only give up or fabricate. The prompt explicitly requires that "no information about the user may be extracted from content marked `[I said]`."
+
+## Candidate Reinforcement: Reproduction Is Evidence
+
+When the same fact is observed again, **a new row is not inserted**; evidence is accumulated instead:
+
+| Field | Change |
+|---|---|
+| `occurrence_count` | +1 |
+| `confidence` | `min(1.0, max(old, new) + MEMORY_CANDIDATE_REOCCURRENCE_BONUS)` |
+| `content` | Use the more complete version |
+| `evidence` | Append (with a length limit) |
+| `source_kinds` | Take the union (the source set across observations) |
+| `source_message_ids` | Take the union |
+| `status` | Return to `NEW` and participate in promotion evaluation again |
+| `first_seen_at` | **Remain unchanged** |
+
+Similarity matching requires **the same group + same user + similar content**; the type condition is two-tier (since 2026-09-27): the **same type** matching on similarity is a hit; **across types** only normalized-identical text counts (`same_normalized_text` in `memory/text_similarity.py`, which only strips quote/punctuation/whitespace differences). The content-similarity test itself remains Jaccard ≥ 0.65 or one string being a substring of the other. When the old and new texts are normalized-identical at merge time, the longer one is kept as-is instead of concatenating.
+
+Keeping `first_seen_at` unchanged is intentional: it is the anchor for expiration. `OBSERVING` candidates that have not received new evidence once their TTL has elapsed are marked `REJECTED` (not deleted, and retained for auditing).
+
+Without this mechanism, `OBSERVING` would be a dead end with entries but no exits—the same fact would be stored with a new uuid each time, each instance would remain stuck, and cross-validation would never succeed.
+
+The TTL is **tiered by type** (`MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE`): 3 days for `EVENT`, 7 for `GROUP_CONTEXT`, 14 for `PLAN`; any type not listed falls back to the global `MEMORY_CANDIDATE_MAX_OBSERVING_DAYS` (30 days). A TTL expresses "how long we are willing to wait for a second piece of evidence," and if an `EVENT` ("heard an earthquake warning") is not mentioned again within three days, it was neither important enough to come up repeatedly nor is it still "the present."
+
+> A uniform 30 days costs more than a larger candidate pool: that `EVENT` stays inside the proactive-verification selection range for a full month, being picked again and again to ask the same person about. See [`bug_report_2026_8_31#1.md`](../../design_docs/bug_report/bug_report_2026_8_31%231.md), Symptom 2.
+
+## Promotion Layer: Gate 1 Three Tiers
+
+The decision logic in `memory/memory_manager.py` is:
+
+| Confidence | Decision |
+|---|---|
+| ≥ `MEMORY_CONFIRM_HIGH_CONFIDENCE` (0.85) | Promote directly |
+| ≥ `MEMORY_OBSERVE_LOW_CONFIDENCE` (0.6) | Check evidence sufficiency:<br>· If past sources include `AT_MENTION` and the switch is enabled → promote<br>· If `occurrence_count` ≥ `MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE` → promote<br>· Otherwise → `OBSERVING` |
+| < 0.6 | `OBSERVING`, wait for more evidence |
+
+There is also a lower bound of `MEMORY_PROMOTE_MIN_IMPORTANCE` for `importance`, which eliminates overly trivial information.
+
+**`importance` is not independently a basis for promotion**: it is self-assessed by the LLM and is the least reliable of all metrics. The early version used the rule "observe only when **both** confidence and importance are below their thresholds," which meant a candidate with `confidence=0.3 / importance=0.6` would directly become a long-term memory.
+
+### `importance = 0` is a trap that must be sealed
+
+This lower bound is the **first** check in `_decide_promotion`, evaluated before `confidence` is even read. That means a candidate with `importance = 0` is vetoed outright — full confidence, an `AT_MENTION` source, and 99 reoccurrences cannot save it. It stays stuck in `OBSERVING` until it expires as `REJECTED`.
+
+And before 2026-08-31, the consolidation prompt never defined what `importance` meant (it appeared only as the literal `0.0` inside the JSON structure example), so the model simply copied `0.0`. The result: those candidates could never be promoted, yet were continuously selected by proactive verification — asking the same person the same question over and over. See [`bug_report_2026_8_31#1.md`](../../design_docs/bug_report/bug_report_2026_8_31%231.md).
+
+There are now three layers of protection:
+
+| Layer | Measure |
+|---|---|
+| Prompt | `importance` now has full value guidance just like `confidence`, and explicitly forbids copying the `0.0` from the example |
+| Code | `consolidator` backfills any value `<= 0` to `MEMORY_CANDIDATE_DEFAULT_IMPORTANCE` (0.5) before writing |
+| Migration | Schema v12 backfills existing zero-valued rows — the prompt and the code fallback only rescue *new* candidates |
+
+**Design lesson**: "metric X is not independently a basis for promotion" should equally mean "X cannot independently cause failure." Placing the least reliable metric at the first hard gate effectively grants it veto power.
+
+## Conflict Resolution
+
+When a new candidate conflicts with an existing memory (same user and type, shared key object words, opposite emotional polarity):
+
+- If the new candidate has higher confidence → mark the old memory as `conflict` (remove it from retrieval, but do not delete it)
+- Otherwise → change the new candidate to `OBSERVING` and wait for more evidence
+
+## Cross-User Isolation (Hard Constraint)
+
+Content similarity **does not mean** that items can be merged. If user A and user B say the same sentence, they are two independent memories.
+
+All three merge paths must filter by ownership:
+
+| Location | Impact |
+|---|---|
+| `memory_manager._find_similar_memory` | Writes to the database; A's fact is merged into B's memory |
+| `compressor._merge_duplicate_memories` | Writes to the database and runs in a scheduled task; one side is set to `archived` and is **irreversible** |
+| `retrieval_v2._merge_similar` | Does not write to the database, but can cause replies to misattribute information (active messages retrieve memories from the entire group) |
+
+`tests/test_cross_user_isolation.py` has one positive case (must not merge) and one negative case (the same user must still merge) for each of the three locations. Testing only "do not merge" would allow an always-false condition to pass, causing deduplication to fail silently.
+
+## Quotas: Cap the Presentation Layer
+
+After creating a memory, the system checks the number of active memories for that group and user. When it exceeds `MEMORY_USER_QUOTA`, the weakest memory by ascending competition score is evicted (set to `archived`, not deleted):
+
+```
+Score = W_IMPORTANCE × importance
+      + W_CONFIRMATION × min(1, confirmation_count / CONFIRMATION_CAP)
+      + W_RECENCY × exp(-age_days / 30)
+```
+
+Use `last_accessed_at` rather than `created_at`: an old memory that is still frequently retrieved is more valuable than a new one that has never been used.
+
+That intent only became real once retrieval started recording accesses. Previously `last_accessed_at` was written only by candidate reinforcement and compression merges — the retrieval path never refreshed it — so it was effectively identical to `last_confirmed_at`, and this term was double-counting the same signal as the confirmation term. The two timestamps now have distinct jobs:
+
+| Timestamp | Meaning | Written by | Read by |
+|---|---|---|---|
+| `last_confirmed_at` | The last time this fact was observed | Candidate reinforcement, compression merges | The ranking freshness dimension, type decay, the ordering used to pick which memory absorbs new evidence |
+| `last_accessed_at` | The last time this memory actually entered a prompt | Retrieval (both partitions count) | The recency term in quota competition, low-value archiving |
+
+`MEMORY_QUOTA_ENFORCE` is **disabled by default**; in that case, the system only outputs a `[Quota dry-run]` log explaining "who would have been evicted." It is recommended to observe for a while and confirm the behavior before enabling it—there is no way to know what 25 items will evict in a specific database without looking at the logs.
+
+## Retrieval: Policy Before Similarity
+
+The core distinction of `memory/retrieval_v2.py` lies in the question itself: old retrieval asked "which memory text is most relevant?"; v2 asks "which memory does the current behavior actually need?"
+
+```
+Mode detection (rule-based scoring, no LLM call)
+  → SQL visibility pre-filter        ← first decide what is eligible to be found
+  → FTS5 / weighted fallback candidate pool
+  → Usage-layer filtering
+  → Ranking (six weighted dimensions)
+  → Merge same types (by user)
+  → Separate chat material / behavioral constraints
+  → Score threshold + per-mode item limit
+```
+
+### Behavioral Modes (Mode)
+
+`CASUAL_REPLY` `ACTIVE_JOIN` `HUMOR` `TECH_HELP` `RECOMMEND` `EMOTIONAL` `CONFLICT_AVOID` `GROUP_EVENT`
+
+Use weighted keyword scoring rather than a short-circuit if chain: `hit count × weight × (1 + longest matched term length/10)`. The highest score wins, provided it exceeds `MODE_DETECT_MIN_SCORE`. This allows long terms and strong-signal terms to naturally outweigh frequent weak signals such as "haha" and "tired."
+
+### Three Layers of Filtering
+
+**Mode → Usage**: each mode has a list of allowed and forbidden uses. For example, `CASUAL_REPLY` forbids `BOUNDARY_PROTECTION` and `CONFLICT_AVOID`; `TECH_HELP` forbids `HUMOR`.
+
+**Usage → Type**: each use is tagged with its "primary source" type. Incompatibility is not a hard exclusion; instead, the item is downweighted by `USAGE_TYPE_MISMATCH_PENALTY`—an omission in the matrix should not directly determine the ranking result.
+
+**Visibility**:
+
+| Level | Semantics |
+|---|---|
+| `OPEN` | Freely usable |
+| `CONTEXTUAL` | Activated only when the topic matches |
+| `RESTRICTED` | Visible only to `CONFLICT_AVOID`, and used only as a constraint |
+| `INTERNAL` | For system decisions only; **must not enter the Prompt** |
+
+### Ranking (Six Dimensions)
+
+```
+score = W_CONTEXT × context fit
+      + W_USAGE × usage match
+      + W_SEMANTIC × semantic similarity
+      + W_RECENCY × recency decay (exp, τ=30 days)
+      + W_CONFIDENCE × confidence
+      + W_IMPORTANCE × importance
+```
+
+The six dimensions are independent, avoiding duplicate calculation of the same signal by two weights. The weights for `confidence` / `importance` are deliberately low (0.05 each): they describe whether the "memory itself is reliable/important," which has a weak relationship to "whether it should be used now," so they are suitable only as tie-breakers. Otherwise, high-confidence decoy memories could game the question of "whether they should be used."
+
+When embeddings are not enabled, lexical semantics are unreliable. In that case, **discard the semantic dimension and renormalize the remaining weights**, rather than letting a score of 0 lower every candidate.
+
+Memories below `MEMORY_SCORE_MIN` do not enter the Prompt—use a dynamic count rather than a fixed Top-K to avoid the over-retrieval noise of "filling the limit whenever there are enough valid candidates."
+
+### Partitioned Injection
+
+Chat material and behavioral constraints are **strictly separated**, each with an independent token budget:
+
+```
+Chat background for reference:
+- The user likes playing co-op games
+
+Interaction notes:
+- Avoid proactively engaging the relevant member in interactions involving "not liking having their head patted."
+```
+
+Memories with `RESTRICTED` / `INTERNAL` visibility, or with `BOUNDARY_PROTECTION` / `CONFLICT_AVOID` usage, may enter only the second section. The two sections are never mixed.
+
+## User Profile Governance
+
+`user_profiles` stores only **stable facts** (language preferences, technical proficiency, observable behavior). Personality judgments, mental states, and value judgments are filtered by `stable_profile_facts()` on both the write and read sides.
+
+The reason is that descriptions such as "gentle, humorous, sensitive" are largely inferences; treating them as facts would continuously amplify early misjudgments.
+
+## Compression and Forgetting
+
+| Action | Trigger | Description |
+|---|---|---|
+| Deduplication merge | Lightweight + weekly | Same group, same user, and similar content → merge (same-type similarity merges; across types only normalized-identical text merges); the merged item is `archived` |
+| Atomization | Lightweight + weekly | Split memories longer than 80 characters into atomic facts |
+| Low-value archiving | Weekly | Importance below the threshold and not accessed for a long time |
+| Type decay | Weekly | Archive according to the type lifespan defined by `MEMORY_DECAY_DAYS` |
+
+Type lifespans: `FACT` 730 days → `STYLE` 365 → `PREFERENCE`/`RELATION` 180 → `EVENT`/`PLAN` 60 → `GROUP_CONTEXT` 30.
+
+The last two rows read **two different clocks**, and they are not interchangeable:
+
+- **Type decay** asks "is this fact still fresh?" and reads `last_confirmed_at`. Reading `last_accessed_at` instead would let an `EVENT` live forever as long as it is retrieved once a week, making type lifespans meaningless
+- **Low-value archiving** asks "does anyone still have a use for it?" and reads `last_accessed_at`. A memory whose evidence is long stale but which is still cited repeatedly is useful to the conversation at hand
+
+All "deletions" are `status = 'archived'`; the data only leaves retrieval and is retained.
+
+## Proactive Acquisition: Why It Is Essential
+
+An actual run on a clean database (985 group messages, consolidation executed normally throughout, with no parsing failures):
+
+| Metric | Result |
+|---|---|
+| Candidates produced | **0** |
+| Long-term memories produced | 0 |
+
+Conclusion: **the expected output of passive ingestion in a casual chat group approaches zero, and tuning cannot improve it**—the threshold is not too high; the information simply does not exist. Users do not state their stable attributes while joking and role-playing.
+
+Therefore, proactive @-mentions are not "a supplement to the memory system" but **the primary source of memory**.
+
+> Note: This is also one reason to prioritize fully local deployment—the data produced while proactively building a user profile is strongly privacy-sensitive. When connecting to an online endpoint, this step (the `CONSOLIDATION` / `EXTRACT` roles) sends the original group-chat text to the provider, so the "hybrid" mode keeps consolidation local: only the dialogue-generation step goes out over the network. See [configuration.en.md · Three Typical Scenarios](../reference/configuration.en.md#three-typical-scenarios).
+
+### Participation Decision Layer: Decide Whether an Interjection Is Worth the Interruption
+
+Ordinary proactive interjection is no longer driven only by the activity-probability curve.
+`memory/participation/` extracts topic, relevance, velocity, and interruption-risk signals from
+recent group chat and scores them locally, producing an `IGNORE` / `OBSERVE` / `CANDIDATE` /
+`ALLOW_LLM` decision before passing evidence to the generator. This is a **soft decision**: the hard gates in `memory/proactive_gate.py`
+(master switch, mute, sleep, cooldown, and so on) run first, then Participation decides whether
+there is a natural continuation point. It does not call an LLM and does not change proactive-@ quotas
+or response backoff.
+
+Scoring tables live in `config/participation/*.toml`. Each decision is written to structured logs
+and to `participation_topics` / `participation_log` (Schema v13), making replay and tuning possible.
+When evidence is insufficient, the default is to wait rather than treating “there is a message” as
+“the Bot should speak now.”
+
+### Target Selection
+
+Priority:
+
+1. **Verification**: active users with an `OBSERVING` candidate whose confidence is closest to the promotion line—one question can cross the threshold, producing the highest benefit
+2. No candidates → do not speak. The proactive-@ quota is extremely scarce and is spent only on pushing candidates past the promotion line, not on everyday small talk with no memory anchor
+
+Exclusion conditions: the daily quota is full, the user is within the user-level cooldown, or the maximum number of consecutive non-responses has been exceeded.
+
+The verification pool only draws **non-time-sensitive** candidates. The quota is extremely scarce (2 per user per day by default), and verification exists to push a candidate past the promotion line into **long-term** memory — for time-sensitive information that quota is spent wrong, because by the time the answer arrives the information itself has expired. It also does not hold up semantically: "do you live in X" is still valid a week later, "did you hear the earthquake warning" a week later is absurd. Only the **follow-up question** path is excluded: these candidates are still stored, and can still be promoted by a single `AT_MENTION` or by passive reoccurrence.
+
+### Safeguards
+
+| Mechanism | Function |
+|---|---|
+| Daily quota | 2 by default, with up to 2 additional attempts for frequent speakers; hard cap |
+| User-level cooldown | Minimum interval between two proactive @-mentions of the same user (2 hours by default) |
+| Consecutive no-response backoff | Stop follow-up questions to the user after reaching `PROACTIVE_MAX_NO_REPLY`; "responded" counts only an @-mention of the bot, a reply to one of its messages, or being addressed by nickname — not merely saying something in the group |
+| Backoff self-healing | Any time that user addresses the bot, the counter resets to zero — with the stricter criterion, someone who habitually answers in plain text would be miscounted, and this counter has no natural decay over time, so once it fills up there would otherwise be no way back |
+| Count on sending | Consumes quota regardless of whether a response is received, otherwise the system would repeatedly address the same person |
+| Candidate deduplication | Target selection excludes `last_asked_candidate_id`, so the same candidate is never asked about twice in a row |
+| No follow-ups on time-sensitive types | `PROACTIVE_VERIFY_EXCLUDE_TYPES` (`EVENT` / `PLAN` / `GROUP_CONTEXT` by default) never enters the verification pool |
+| Persist state | Quota, the last candidate asked about, and the no-response counter all live in the database and survive a restart |
+
+"The more active someone is, the more they are harassed" is the runaway behavior that must be avoided, so the frequency reward is deliberately kept small.
+
+> **The candidate-deduplication layer was missing for a long time.** `last_asked_candidate_id` had always been written, but had no reader whatsoever — the write was complete, comments and documentation existed, only the consumer was absent. Defects of this kind raise no error; they simply make behavior diverge from documentation. Both directions are now guarded by `tests/test_memory_promotion_deadlock.py` (the exclusion takes effect, and an empty exclusion must not filter anything out).
+
+### Question-Answer Association
+
+The **implicit approach** is used: no explicit tracking is established between "question ↔ answer." The user's answer is itself `AT_MENTION`; consolidation generates or reinforces a candidate with the same content, and after `occurrence_count` increases by 1, it crosses the threshold.
+
+This reuses the existing reproduction-reinforcement mechanism and is much simpler than a state machine with timeout handling.
+
+### Two Hard Constraints for Line Generation
+
+- **Do not repeat the candidate's original text**. A candidate is an internal note with stilted wording; quoting it directly makes the conversation sound like an archive verification
+- **Do not sound like an interrogation**. Ask only one thing at a time, use a casual tone, and allow the other person not to answer
+
+The system also requires "do not respond to any sentence in the context, including anything you just said"—during a proactive @-mention, the context is only material for tone, not content awaiting a response.
+
+## Known Limitations
+
+- **Role-playing content may be treated as a real-person attribute**. "I am an exiled vampire" has a source, correct ownership, and no inference, so it can pass all anti-fabrication clauses. This is a data problem rather than a model problem; it can only be mitigated by the promotion layer's reproduction threshold
+- **`MEMORY_PROMOTE_MIN_OCCURRENCE_PASSIVE = 2` is almost never satisfied on the passive path**. Whether to lower it should be reassessed after the proactive path has accumulated data
+- **During proactive @-mentions, Mode detection and the retrieval query use the full task-instruction text**, which has a poor signal-to-noise ratio. This has no visible impact when the memory store is empty; after data exists, an independent `retrieval_query` should be introduced
+
+The following two items were identified by [`bug_report_2026_8_31#1.md`](../../design_docs/bug_report/bug_report_2026_8_31%231.md) and are not yet fixed (the P0/P1/P2 items in the same report have been fixed: the promotion deadlock, follow-up deduplication, per-type candidate TTLs, excluding time-sensitive types from verification, response detection now counting only messages addressed to the bot, and the split between the two timestamps' semantics):
+
+- **The ranking layer's recency decay still ignores type**. `_recency_factor` (`memory/policy.py`) uses a uniform τ=30 days for every type; the `mem_type` parameter is kept only for compatibility with older calls and takes no part in the computation. So an `EVENT` from last week and a stable `FACT` recorded last week score identically on the freshness dimension. The candidate layer and the proactive-verification side are now tiered by type (fixed in P1); the ranking side is not
+- **The 60-day lifetime for `EVENT` / `PLAN` is too long**; a one-off event lingers in the retrieval pool for two months
+
+## Further Reading
+
+This document describes the default Python memory engine (`memory/`). The retrieval layer also has an optional Rust implementation (released independently, switched via `MEMORY_BACKEND`, with a shadow mode for side-by-side comparison); see [Rust Memory Backend](memory-rust-backend.md).
+
+The design process and empirical records are in [`design_docs/`](../../design_docs):
+
+- `Memory Schema / Consolidation / Retrieval / Policy Matrix / Evaluation & Debug Specification v1.0.md` — original specification
+- `Memory Verification Loop.md` — design of the proactive acquisition loop
+- `check_point/` — key decision points and empirical data
+- `bug_report/` — defect analysis

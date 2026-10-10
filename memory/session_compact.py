@@ -34,6 +34,7 @@ from config import (
 )
 from core.llm import ROLE_COMPACT, acquire, backend_for, gate_of
 from core.llm.base import LLMBackend
+from core.llm.registry import binding
 from core.llm.usage_store import budget_blocked
 from memory import session_context as sc
 from memory.conversation_projection import (
@@ -64,6 +65,13 @@ _tasks: set[asyncio.Task] = set()
 _protocol_failures: dict[tuple[int, tuple[int, int, int], int, int], int] = {}
 _paused_sessions: dict[int, tuple[int, str]] = {}
 
+# Compact is capped independently of the endpoint's (possibly larger) window.
+# For byte-level BPE, content tokens cannot exceed UTF-8 bytes. Do not use the
+# CJK/word estimator here: minified JSON, hashes and IDs defeat that estimator.
+# The single user message has no tools/system prompt; leave ample framing room.
+COMPACT_CONTEXT_LIMIT = 8192
+COMPACT_FRAMING_RESERVE = 512
+
 
 def pending_tasks() -> set[asyncio.Task]:
     """返回在途压缩任务集合的副本（供优雅停止等待收尾）。"""
@@ -71,7 +79,6 @@ def pending_tasks() -> set[asyncio.Task]:
 
 
 # 前缀缓存约束（2026-08-28 起）：可变的 {existing} / {messages} 必须排在最后。
-# {max_chars} 由 SESSION_SUMMARY_MAX_TOKENS 推导、每次调用相同，属于固定前缀。
 # 数据之后只保留一行输出格式提醒——它不进缓存，但只有十几个 token，
 # 换来「最后一条指令」的位置优势，避免模型在回顾前加「好的，这是回顾：」之类前缀。
 # 理由与守卫详见 memory/consolidation_prompt.py 的同名说明。
@@ -119,11 +126,107 @@ def build_compact_prompt(
     existing_packet: SummaryPacket | None = None,
 ) -> str:
     """仅向模型提供服务端 ref；旧摘要文本不再作为可改写输入。"""
-    existing = render_summary_packet(existing_packet) if existing_packet else ""
-    messages = "\n".join(render_summary_evidence(entry) for entry in entries)
-    if not messages:
+    if not entries:
         raise ValueError("Compact requires at least one validated source ref")
+    if existing_packet and not validate_summary_packet(existing_packet):
+        raise CompactSourceError("Compact existing packet is invalid")
+    all_entries = [*(existing_packet.entries if existing_packet else ()), *entries]
+    scope = (entries[0].conversation_key, entries[0].bot_id)
+    if any((entry.conversation_key, entry.bot_id) != scope for entry in all_entries):
+        raise CompactSourceError("Compact prompt crosses conversation/Bot scope")
+    # Scope is shared, hashes stay in server-side evidence, empty metadata is
+    # omitted. Source text, author, recipient and every nonempty relation survive.
+    existing = f"conversation={scope[0]} bot={scope[1] or 'unknown'}\n"
+    if existing_packet:
+        existing += "\n".join(_render_compact_evidence(e) for e in existing_packet.entries)
+    messages = "\n".join(_render_compact_evidence(entry) for entry in entries)
     return COMPACT_PROMPT.format(existing=existing, messages=messages)
+
+
+def _render_compact_evidence(entry: SummaryEvidence) -> str:
+    rendered = render_summary_evidence(entry)
+    if not rendered:
+        raise CompactSourceError("Compact source ref is invalid")
+    # Reuse the validated canonical representation rather than inventing a
+    # second attribution projection. Only remove empty/repeated transport data.
+    bubbles = json.loads(rendered.split(" | ", 2)[2])
+    for bubble, message in zip(bubbles, entry.messages, strict=True):
+        if message.logical_message_id:
+            bubble["logical_message_id"] = message.logical_message_id
+    bubbles = [{k: v for k, v in bubble.items() if v != "" and v != []}
+               for bubble in bubbles]
+    first = entry.messages[0]
+    role = "Bot" if first.source_kind == "BOT_SELF" else "用户"
+    return (
+        f"REF {entry.ref_id} | author={role}({first.author_id}) | "
+        + json.dumps(bubbles, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+class CompactInputBudgetError(ValueError):
+    """An intact record/output reserve cannot fit; leave all sources pending."""
+
+
+def _compact_output_tokens(backend: LLMBackend) -> int:
+    configured = binding(ROLE_COMPACT)
+    default = configured.max_tokens if configured else SESSION_SUMMARY_MAX_TOKENS * 3
+    # Fallback wrappers can choose either immutable backend during generate().
+    backends = [backend, getattr(backend, "primary", None),
+                getattr(backend, "fallback", None)]
+    limits = [int(b.max_tokens) for b in backends
+              if b is not None and hasattr(b, "max_tokens")]
+    output_tokens = max(limits) if limits else int(default)
+    if output_tokens <= 0 or output_tokens + COMPACT_FRAMING_RESERVE >= COMPACT_CONTEXT_LIMIT:
+        raise CompactInputBudgetError("COMPACT max_tokens leaves no input window")
+    return output_tokens
+
+
+def _plan_compact_batches(
+    entries: tuple[SummaryEvidence, ...],
+    existing: SummaryPacket | None,
+    output_tokens: int,
+) -> list[tuple[str, set[str]]]:
+    """Partition all refs intact, including old refs; never slice source text.
+
+    Plan the complete range before sending anything. A pathological single unit
+    must remain pending rather than being silently cut or skipped. Bound both
+    input+output+framing and the largest legal JSON selection for each request.
+    """
+    combined = [*(existing.entries if existing else ()), *entries]
+    unique = {entry.ref_id: entry for entry in combined}
+
+    def fits(prompt: str, refs: set[str]) -> bool:
+        response = json.dumps({"selected_refs": sorted(refs)}, separators=(",", ":"))
+        return (
+            len(prompt.encode("utf-8")) + output_tokens + COMPACT_FRAMING_RESERVE
+            <= COMPACT_CONTEXT_LIMIT
+            and len(response.encode("utf-8")) <= output_tokens
+        )
+
+    full = build_compact_prompt(entries, existing)
+    if fits(full, set(unique)):
+        return [(full, set(unique))]
+    batches: list[tuple[str, set[str]]] = []
+    current: list[SummaryEvidence] = []
+    for entry in unique.values():
+        candidate = [*current, entry]
+        prompt = build_compact_prompt(candidate)
+        refs = {e.ref_id for e in candidate}
+        if not fits(prompt, refs):
+            if current:
+                batches.append((build_compact_prompt(current), {e.ref_id for e in current}))
+            current = [entry]
+            single = build_compact_prompt(current)
+            if not fits(single, {entry.ref_id}):
+                raise CompactInputBudgetError(
+                    f"intact ref {entry.ref_id} exceeds the 8192-token request budget"
+                )
+        else:
+            current = candidate
+    if current:
+        batches.append((build_compact_prompt(current), {e.ref_id for e in current}))
+    return batches
+
 
 def _get_backend() -> LLMBackend | None:
     """压缩用的后端；角色 ``COMPACT`` 没绑到可用端点时返回 ``None``。
@@ -744,7 +847,8 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             sc.invalidate_summary(group_id, "conversation_or_bot_changed")
             existing = None
 
-        failure_key = (group_id, guard, low_id, high_id)
+        # New tail messages must not reset failures of the same fetched batch.
+        failure_key = (group_id, guard, low_id, batch.source_watermark + 1)
         for key in tuple(_protocol_failures):
             if key[0] == group_id and key != failure_key:
                 _protocol_failures.pop(key, None)
@@ -770,11 +874,6 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             )
             return _commit_packet(group_id, fallback, batch.source_row_count, guard)
 
-        prompt = build_compact_prompt(batch.entries, existing)
-        logger.info(
-            f"🗜️ [Compact] 群 {group_id} 开始验证式压缩 {batch.source_row_count} 条消息"
-            f"（至 id {batch.source_watermark}）"
-        )
         backend = _get_backend()
         if backend is None:
             _flow_decision(fctx, "compact.preflight", status="blocked",
@@ -785,16 +884,58 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
                 "运行 python -m deploy doctor 查看解析结果。"
             )
             return False
+        try:
+            output_tokens = _compact_output_tokens(backend)
+            requests = _plan_compact_batches(batch.entries, existing, output_tokens)
+        except CompactInputBudgetError as exc:
+            _flow_decision(fctx, "compact.preflight", status="blocked",
+                           reason_code="intact_record_over_input_budget")
+            logger.error(f"[Compact] 群 {group_id} 输入预算不足，保留完整来源与水位: {exc}")
+            return False
+        logger.info(
+            f"🗜️ [Compact] 群 {group_id} 开始验证式压缩 {batch.source_row_count} 条消息"
+            f"（至 id {batch.source_watermark}，{len(requests)} 批，窗口上限 8192 tokens）"
+        )
 
-    try:
-        with _flow_span(fctx, "compact.generate"):
-            async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
-                result = await backend.generate(prompt)
-        _flow_decision(fctx, "compact.generate", status="succeeded",
-                       metrics={"messages": batch.source_row_count})
-    except Exception as exc:
-        logger.warning(f"⚠️ [Compact] 群 {group_id} 压缩失败（保留待重试）: {exc}")
-        return False
+    selected_refs: set[str] = set()
+    for index, (prompt, request_refs) in enumerate(requests, 1):
+        if not sc.compact_guard_ok(group_id, guard):
+            _flow_decision(fctx, "compact.commit", status="skipped",
+                           reason_code="stale_guard")
+            return False
+        try:
+            with _flow_span(fctx, "compact.generate"):
+                # Release the shared model gate between batches so chat can run.
+                async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
+                    detailed = getattr(backend, "generate_detailed", None)
+                    if detailed is None:
+                        result, finish = await backend.generate(prompt), ""
+                    else:
+                        result, finish = await detailed(prompt)
+            _flow_decision(fctx, "compact.generate", status="succeeded",
+                           metrics={"batch": index, "batches": len(requests),
+                                    "prompt_token_upper_bound": len(prompt.encode("utf-8")),
+                                    "output_reserve_tokens": output_tokens,
+                                    "window_tokens": COMPACT_CONTEXT_LIMIT})
+        except Exception as exc:
+            logger.warning(
+                f"⚠️ [Compact] 群 {group_id} 第 {index}/{len(requests)} 批失败"
+                f"（保留全部来源待重试）: {exc}"
+            )
+            return False
+        if not sc.compact_guard_ok(group_id, guard):
+            _flow_decision(fctx, "compact.commit", status="skipped",
+                           reason_code="stale_guard")
+            return False
+        try:
+            if finish == "length":
+                raise ValueError("Compact selection output reached max_tokens")
+            selected_refs.update(parse_selected_refs(result, request_refs))
+        except ValueError as exc:
+            _record_protocol_failure(failure_key, str(exc))
+            _flow_decision(fctx, "compact.commit", status="blocked",
+                           reason_code="invalid_selection_protocol")
+            return False
 
     if not sc.compact_guard_ok(group_id, guard):
         _flow_decision(fctx, "compact.commit", status="skipped",
@@ -805,14 +946,6 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
     allowed = {entry.ref_id: entry for entry in batch.entries}
     if existing:
         allowed.update({entry.ref_id: entry for entry in existing.entries})
-    try:
-        selected_refs = parse_selected_refs(result, set(allowed))
-    except ValueError as exc:
-        _record_protocol_failure(failure_key, str(exc))
-        _flow_decision(fctx, "compact.commit", status="blocked",
-                       reason_code="invalid_selection_protocol")
-        return False
-
     if not selected_refs:
         # 明确、合法的空选择保持旧语义：保留旧摘要，只推进本区间水位。
         sc.skip_range(group_id, batch.source_watermark, batch.source_row_count)

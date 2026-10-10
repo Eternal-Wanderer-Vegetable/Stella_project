@@ -16,6 +16,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check maintained documentation and agent state
+        run: python scripts/check_docs.py
+      - name: Verify documentation gate success and failure paths
+        run: python -m unittest discover -s tests/documentation -v
+
   # ============ 代码质量检查 ============
   lint:
     runs-on: ubuntu-latest
@@ -267,7 +279,7 @@ jobs:
 
   # ============ 通知（可选） ============
   notify:
-    needs: [test, lint, security, cli, flow-manifest, flow-closure]
+    needs: [test, lint, security, cli, flow-manifest, flow-closure, documentation]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
     permissions:
@@ -281,7 +293,8 @@ jobs:
              [ "${{ needs.security.result }}" == "success" ] && \
              [ "${{ needs.cli.result }}" == "success" ] && \
              [ "${{ needs.flow-manifest.result }}" == "success" ] && \
-             [ "${{ needs.flow-closure.result }}" == "success" ]; then
+             [ "${{ needs.flow-closure.result }}" == "success" ] && \
+             [ "${{ needs.documentation.result }}" == "success" ]; then
             echo "status=✅ All checks passed!" >> $GITHUB_OUTPUT
           else
             echo "status=❌ Some checks failed. Please check the logs." >> $GITHUB_OUTPUT
