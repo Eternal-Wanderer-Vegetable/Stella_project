@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-10",
-  "active_feature": null,
+  "active_feature": "CI-001",
   "features": [
     {
       "id": "DOC-001",
@@ -46,6 +46,53 @@
         },
         {
           "report": "docs/reports/2026-10-10-documentation-restructure.md"
+        }
+      ]
+    },
+    {
+      "id": "CI-001",
+      "name": "PR #105 CI 修复",
+      "description": "修复流程清单漂移与 ingress 源码闭包预算截断，保留原 CI 门禁。",
+      "status": "in_progress",
+      "dependencies": [
+        "DOC-001"
+      ],
+      "scope": [
+        "scripts/generate_message_flow.py",
+        "tests/observability/test_flow_source_closure.py",
+        "core/observability/flows",
+        "任务状态与 PR 验证记录"
+      ],
+      "done_criteria": [
+        "大于 256 符号的闭包完整并能检测尾部变化，显式小预算仍报告截断",
+        "生成清单与当前源码一致，现有合同检查通过",
+        "全量 Python、Ruff、文档检查通过",
+        "修复推送至 PR #105 且在线 CI 全部通过"
+      ],
+      "evidence": [
+        {
+          "command": "pytest large closure regression before fix",
+          "result": "failed with 256 cap; tail helper omitted"
+        },
+        {
+          "command": "python -m pytest tests/observability/test_message_flow_contract.py tests/observability/test_flow_source_closure.py tests/observability/test_internal_flow_inventory.py -q",
+          "result": "40 passed"
+        },
+        {
+          "command": "python -m pytest tests -q -n 4 --dist loadgroup --timeout=120 --timeout-method=thread",
+          "result": "3669 passed, 17 skipped; Windows Python 3.14; isolated STELLA_HOME"
+        },
+        {
+          "command": "python -m ruff check <all 623 tracked Python files>",
+          "result": "passed; original untracked evidence probe excluded"
+        },
+        {
+          "command": "python scripts/generate_message_flow.py --check",
+          "result": "message-flow.0b530b0f7361.json matches; no reachable_truncated_nodes; topology unchanged"
+        },
+        {
+          "command": "python scripts/check_docs.py",
+          "result": "0 errors; 1187 local links; 577 migration anchors"
         }
       ]
     }

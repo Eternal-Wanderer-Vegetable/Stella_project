@@ -24,8 +24,10 @@ from pathlib import Path
 import pytest
 
 from scripts.generate_message_flow import (
+    ProjectIndex,
     analyze_project_closure,
     discovered_entries_diff,
+    reachable_symbols_cross,
 )
 
 
@@ -78,6 +80,34 @@ def fixture_root(tmp_path) -> Path:
 
 
 class TestCrossFileClosure:
+    def test_default_budget_covers_large_closure_and_hashes_tail(self, fixture_root):
+        """超过旧 256 上限的闭包要完整展开，尾部实现变化必须可见。"""
+        source = "def entry():\n    return helper_0()\n\n"
+        source += "\n".join(
+            f"def helper_{i}():\n    return helper_{i + 1}()\n"
+            for i in range(256)
+        )
+        source += "\ndef helper_256():\n    return 42\n"
+        path = _write(fixture_root / "pkg" / "large.py", source)
+        index = ProjectIndex(fixture_root, package_dirs=["pkg"])
+        limited, _, truncated = reachable_symbols_cross(
+            index, "pkg/large.py", "entry", cap=256)
+        assert truncated is True
+        assert len(limited) == 256
+
+        complete, _, truncated = reachable_symbols_cross(
+            index, "pkg/large.py", "entry")
+        assert truncated is False
+        assert len(complete) == 257
+        tail = next(h for h in complete if h["qualname"] == "helper_256")
+        path.write_text(source.replace("return 42", "return 43"), encoding="utf-8")
+        changed, _, truncated = reachable_symbols_cross(
+            ProjectIndex(fixture_root, package_dirs=["pkg"]),
+            "pkg/large.py", "entry")
+        assert truncated is False
+        changed_tail = next(h for h in changed if h["qualname"] == "helper_256")
+        assert tail["body_hash"] != changed_tail["body_hash"]
+
     def test_local_import_resolves_not_external(self, fixture_root):
         """项目内 import 目标解析为本地闭包，第三方才归 external。"""
         closure = analyze_project_closure(

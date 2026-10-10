@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-- DOC-001：文档结构重整，status done；无活动任务。
+- CI-001：PR #105 CI 修复，status in_progress；DOC-001 已完成。
 - Branch: codex/compact-8192-batching；源码基线 952007e。用户已审核并授权提交上传；最终提交与远端状态以 Git 记录为准。
 
 ## Completed This Session
@@ -32,10 +32,19 @@
 
 ## Next Session Startup
 
-1. 读 AGENTS.md、feature_list.json、progress.md，核对分支和工作区。
+1. 读 AGENTS.md、feature_list.json、progress.md，核对分支和工作区；继续 CI-001。
 2. 运行 `python scripts/check_docs.py` 或 `./init.ps1 docs`；代码任务追加相应模块门禁。
-3. 等待用户的新任务，不从日期计划自行选择业务工作。
+3. 核对 PR #105 最新 head 的 CI 结果；仍有失败时查对应日志并修复。
 
 ## Recommended Next Step
 
-- 用新的任务导航开始后续授权工作；先核对 Git 提交与远端状态，再启动新任务。
+- 完成 CI-001：本地全量回归、图变更门禁、推送，并核对 PR #105 在线矩阵。
+
+## PR #105 CI Repair — 2026-10-10
+
+- CI-001 in_progress；scope：闭包预算、生成清单、回归与在线 CI。
+- 基线 f8b2dce；本地复现两项合同失败：manifest 漂移、四个 ingress 截断。
+- record_group_chat 实际闭包 257 个辅助符号，旧上限 256；显式 cap=512 完整展开。
+- 修复：默认 cap 256 → 512，保留小预算截断与零核心截断门禁；按仓库惯例替换随包清单。
+- 验证：40 项专项通过；全量 Python 3669 passed / 17 skipped（Windows Python 3.14、隔离 STELLA_HOME）；623 个已跟踪 Python 文件 Ruff 通过；清单漂移、文档门禁通过。
+- 下一步：图变更门禁、提交推送，检查 PR #105 最新 head 的在线 CI；未通过前不标 done。
