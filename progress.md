@@ -2,11 +2,18 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-10 (Asia/Shanghai)
-**Active Feature:** none; CI-001 and DOC-001 done
-**Scope:** PR #105 的 CI 修复：源码闭包预算、生成清单、回归与在线 CI；基线 f8b2dce。此前 DOC-001 仅修改文档与门禁。
+**Last Updated:** 2026-10-13 (Asia/Shanghai)
+**Active Feature:** RELEASE-620 awaiting final publication confirmation; CI-001 and DOC-001 done
+**Scope:** 以线上 main@f4d6247 为基线准备 Stella 6.2.0 发布；应用版本同步、发布说明、验收与发布确认。
 
 ## What's Done
+
+- RELEASE-620：线上 main@f4d6247 已包含本地 topic 的所有工作；从该提交创建 `codex/release-6.2.0`。
+- 已将 pyproject、CLI/桌面 Cargo 元数据和 lock、Tauri 配置同步至 6.2.0；更新双语 README、合同说明、迁移模板与发布说明。
+- 发布 notes 明确 schema 18→19、Rust API 2→3、旧 evidence 的 `legacy_unverified` 迁移、native wheel 兼容要求及 QQ/Rust/VM 验收边界。
+- 本地门禁：pytest 3669 passed/17 skipped；跟踪 Python Ruff 通过；Dashboard 100 tests/typecheck/build 通过；CLI fmt/clippy/20 tests 与 desktop cargo check 通过；文档、message-flow、版本一致性通过。
+- 全仓 Ruff 仍被原有未跟踪 `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py` 的 I001 阻挡；未修改该用户文件。GitNexus scope=all：16 文件、33 符号、low，无 partial/truncated；upstream 版本读取路径曾报 HIGH，直接调用与打包消费者已检查。
+- 本地发布准备提交已创建；尚未推送、创建 tag 或 Release。最终远程写操作须再经用户确认；发布 CI 负责 Windows 安装验收、签名、manifest 与发布后回读。
 
 - 58 份双语正文按主题归类；架构和开发长文拆分；28 个原路径和 577 个原章节锚点保留。
 - AGENTS 为 45 行任务入口，CLAUDE 引用共同规则；专题标明来源和复审条件。
@@ -34,8 +41,9 @@
 
 ## What's Next
 
-1. 新任务从 AGENTS 与主题导航进入，核对 Git／PR 最新状态和工作区。
-2. CI-001 已完成；没有新用户任务时不自动执行历史计划。
+1. RELEASE-620：本地版本准备提交已创建；复核 HEAD 与远程基线、tag 状态，并报告精确 SHA 与 notes 摘要。
+2. 等待用户最终确认后，推送 release 分支/tag；观察 tag-triggered 发布 CI、签名与发布后字节回读。
+3. 若 hosted gates 全绿，记录 Release URL 与资产；clean-VM/GUI first launch 和真实 QQ 验收缺口如未完成则保持 NOT READY。
 
 ## PR #105 CI Repair — 2026-10-10
 

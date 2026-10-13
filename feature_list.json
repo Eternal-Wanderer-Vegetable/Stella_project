@@ -1,8 +1,48 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-10",
+  "updated_at": "2026-10-13",
   "active_feature": null,
   "features": [
+    {
+      "id": "RELEASE-620",
+      "name": "6.2.0 发布准备",
+      "description": "以线上 main@f4d6247 为基线同步应用版本、当前文档和发布说明；版本准备与发布分开验收。",
+      "status": "blocked",
+      "dependencies": [],
+      "scope": [
+        "pyproject.toml、CLI/桌面版本元数据及 lockfile",
+        "README、发布合同文档、迁移报告模板、release notes",
+        "progress.md 与 session-handoff.md"
+      ],
+      "done_criteria": [
+        "应用版本元数据、Cargo lock 与 Tauri 配置均为 6.2.0",
+        "README 与发布说明准确反映 schema 19/API 3 迁移及已知验收边界",
+        "发布前本地门禁结果已记录，既有用户未跟踪文件不进入提交",
+        "发布提交与 tag 推送经过用户最终确认，GitHub Release 资产与回读验收完成"
+      ],
+      "evidence": [
+        {
+          "command": "python -m pytest tests -q",
+          "result": "3669 passed, 17 skipped on Windows Python 3.14; 59 warnings"
+        },
+        {
+          "command": "python -m ruff check $(git ls-files '*.py')",
+          "result": "All tracked Python files passed; unscoped python -m ruff check . finds one pre-existing import-order issue in untracked docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py, which was preserved"
+        },
+        {
+          "command": "pnpm --dir dashboard test && pnpm --dir dashboard build",
+          "result": "100 tests passed; vue-tsc and production build passed with existing chunk warnings"
+        },
+        {
+          "command": "cargo fmt --manifest-path cli/Cargo.toml --all --check; cargo clippy --manifest-path cli/Cargo.toml --all-targets -- -D warnings; cargo test --manifest-path cli/Cargo.toml; cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml",
+          "result": "Formatting, clippy, all 20 CLI tests, and desktop cargo check passed"
+        },
+        {
+          "command": "python scripts/check_docs.py; python scripts/generate_message_flow.py --check; version metadata consistency check; GitNexus detect-changes scope=all",
+          "result": "Docs 0 errors; flow manifest current; all application version fields 6.2.0; 16 files/33 symbols/low risk, no partial/truncated flags"
+        }
+      ]
+    },
     {
       "id": "DOC-001",
       "name": "按需加载的项目文档结构",

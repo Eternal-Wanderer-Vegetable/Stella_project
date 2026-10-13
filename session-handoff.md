@@ -2,43 +2,44 @@
 
 ## Current Objective
 
-- CI-001：PR #105 CI 修复，status done；无活动任务，DOC-001 已完成。
-- Branch: codex/compact-8192-batching；源码基线 952007e。用户已审核并授权提交上传；最终提交与远端状态以 Git 记录为准。
+- RELEASE-620：准备并发布 Stella 6.2.0；本地发布准备提交已创建，等待最终确认后推送 tag 并启动发布工作流。
+- Branch: `codex/release-6.2.0`, based on online `main` commit `f4d6247eab0236019133e168f4ab1f68e54340f2` (PR #105 merge). Existing release is v6.1.0; no online v6.2.0 tag/release was found.
 
 ## Completed This Session
 
-- 按使用/架构/参考/开发/Agent/历史导航组织双语文档，旧路径保留章节转向。
-- 建立短 Agent 入口、状态、初始化和文档验证门禁。
+- Synchronized Python, CLI, desktop Cargo/Tauri versions and locks to 6.2.0.
+- Updated bilingual README, source-contract docs, migration templates, and release notes for schema 19 / Rust API 3.
+- Preserved v6.1.0 history and all pre-existing untracked user files.
 
 ## Verification Evidence
 
-- 文档本地链接/锚点、双语配对与状态检查通过；独立测试 6/6，新增文件 Ruff 和 diff 检查通过。
-- 246 个历史文件哈希一致，577 个迁移章节锚点保留。
-- PowerShell 和 Git Bash docs 验证及非法模式失败路径通过。
-- GitNexus 完整结构结果：120 文件、859 符号、low，未置 partial/truncated；独立 review index 纳入新增文件，真实暂存区未改。
-- harness-creator 100/100，仅结构结果；[完整报告](docs/reports/2026-10-10-documentation-restructure.md)。
+- `python -m pytest tests -q`: 3669 passed, 17 skipped, 59 warnings (Windows Python 3.14).
+- `python -m ruff check $(git ls-files '*.py')`: all tracked Python files passed. Unscoped `python -m ruff check .` detects I001 in the pre-existing untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py`; that user file was not edited.
+- `python scripts/check_docs.py`: 0 errors, 1186 local links, 577 migration anchors.
+- `python scripts/generate_message_flow.py --check`: current manifest.
+- Dashboard: 100 tests, vue-tsc, and production build passed; existing Vite chunk warnings only.
+- CLI fmt/clippy/tests passed (20 tests); desktop `cargo check --locked` passed; Cargo metadata and all app version fields agree at 6.2.0.
+- GitNexus index refreshed at f4d6247; impact of `_current_project_version` upstream is HIGH (8 symbols, including profile validation/load and release package builders), while status API version flow is LOW. `detect-changes --scope all`: 16 files/33 symbols, low, no partial/truncated; compare against verified base f4d6247 is identical.
 
-## Files Changed
+## Changed Files
 
-- AGENTS.md、CLAUDE.md、根 README、docs 各分类与兼容入口、documentation-map.json。
-- feature_list.json、progress.md、session-handoff.md、init.ps1/init.sh。
-- scripts/check_docs.py、tests/documentation、.github/workflows/ci.yml 和 release.yml、CONTRIBUTING。
+- Version: `pyproject.toml`, `cli/Cargo.toml`, `cli/Cargo.lock`, `desktop/src-tauri/Cargo.toml`, `desktop/src-tauri/Cargo.lock`, `desktop/src-tauri/tauri.conf.json`.
+- Current documentation: `README.md`, `README.en.md`, `docs/development/contracts.md`, `docs/development/contracts.en.md`, `docs/reference/migration-report-template.md`, `docs/reference/migration-report-template.en.md`.
+- Release notes: `release_assets/RELEASE_NOTES_TEMPLATE.md`.
+- State: `feature_list.json`, `progress.md`, `session-handoff.md`.
 
 ## Blockers / Risks
 
-- 文档整理验收完成。运行、模型、QQ、native 和 VM 旧缺口保留，不由文档检查代替。
-- GitNexus 全图执行流程存在采样预算限制，零受影响流程不能证明运行路径不存在。
-- 工作区有原有未跟踪技能、日志、计划、报告、证据和 native 备份；不要把它们混入本轮提交。
+- The local release-prep commit exists; it has not been pushed, tagged, or published. The user must confirm final remote writes after seeing the exact commit SHA, repository/account, target tag, and release notes summary.
+- Tag push triggers the complete Windows release build, signing gate, manifest/hashes, and published-byte readback. Local CI cannot establish hosted installer acceptance, clean-VM/GUI-first-launch acceptance, or real QQ rollout.
+- Preserve unrelated untracked data. At task start they included `.agents/`, `.bot-restart.log`, `.zcode/plans/`, extra `docs/plans/`, research reports/evidence, `memory_rust/_native.pyd.v15.bak`, and `skills-lock.json`; Docker/GitNexus also surfaced untracked `.claude/settings.local.json`. Do not stage them.
 
 ## Next Session Startup
 
-1. 读 AGENTS.md、feature_list.json、progress.md，核对分支和工作区；CI-001 已完成。
-2. 运行 `python scripts/check_docs.py` 或 `./init.ps1 docs`；代码任务追加相应模块门禁。
-3. 核对 PR #105 最新 head 的 CI 结果；等待新的授权任务。
-
-## Recommended Next Step
-
-- CI 修复已验收；后续合并或新工作由用户授权。
+1. Read `AGENTS.md`, `feature_list.json`, `progress.md`, and this handoff; verify current branch/status.
+2. Run `python scripts/check_docs.py`, diff review, and GitNexus checks after any state-record edits.
+3. The local release-prep commit is complete; verify the exact current `HEAD` before any remote write.
+4. Ask for/await final confirmation before pushing the branch/tag; then monitor the GitHub release workflow and record outcome.
 
 ## PR #105 CI Repair — 2026-10-10
 
