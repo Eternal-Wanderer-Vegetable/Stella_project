@@ -4,10 +4,50 @@
   "active_feature": null,
   "features": [
     {
+      "id": "CI-106",
+      "name": "PR #106 flow-closure GitNexus worker 崩溃修复",
+      "description": "限制 GitNexus analyze 单 worker，固定 workflow 合同并保留独立 runtime inventory 与 discovered-entry 对账门禁。",
+      "status": "blocked",
+      "dependencies": [],
+      "scope": [
+        ".github/workflows/ci.yml 的 flow-closure analyzer 命令",
+        "tests/observability/test_internal_flow_inventory.py 的 CI workflow 合同测试",
+        "PR #106 修复进度与交接证据"
+      ],
+      "done_criteria": [
+        "GitNexus analyze 固定 --workers 1，回归测试锁定命令及两个独立后续门禁",
+        "单 worker pinned npm analyzer 成功，inventory 与 reconciliation 命令分别通过",
+        "定向 observability 测试、跟踪 Python Ruff、文档门禁和 GitNexus 检查通过",
+        "修复提交进入 PR #106 且对应 hosted flow-closure CI 通过"
+      ],
+      "evidence": [
+        {
+          "command": "python -m pytest tests/observability/test_internal_flow_inventory.py tests/observability/test_flow_source_closure.py tests/observability/test_message_flow_contract.py -q",
+          "result": "41 passed, 2 warnings; one initial run printed a Windows Python 3.14 access-violation traceback from the NoneBot fixture, but pytest exited successfully and the focused workflow-contract rerun passed cleanly"
+        },
+        {
+          "command": "python -m ruff check tests/observability/test_internal_flow_inventory.py; python -m ruff check $(git ls-files '*.py')",
+          "result": "Changed Python test and all tracked Python files passed"
+        },
+        {
+          "command": "MSYS_NO_PATHCONV=1 docker exec -w /repo stella-gitnexus npx -y gitnexus@1.6.11 analyze --index-only --workers 1 --default-branch main",
+          "result": "Pinned npm analyzer completed without heap corruption; index covers 1167 files and reports up-to-date. Analyzer emits existing callable-value-flow candidate-cap warnings for astrbot_compat/filters.py"
+        },
+        {
+          "command": "CI-equivalent runtime inventory and discovered-entry reconciliation commands",
+          "result": "49 runtime entries / 9 families; 33 discovered entries, reconciliation clean"
+        },
+        {
+          "command": "python scripts/check_docs.py; GitNexus detect-changes --scope all; GitNexus compare against origin/main@f4d6247",
+          "result": "Docs 0 errors; tracked Python Ruff passed; diff check clean. Final GitNexus scope all: 5 files/12 symbols/low; compare against origin/main@f4d6247: 18 files/35 symbols/low; no partial/truncated. Compare includes pre-existing release and local state-record edits. PR #106 hosted rerun is pending; local change is not pushed."
+        }
+      ]
+    },
+    {
       "id": "RELEASE-620",
       "name": "6.2.0 发布准备",
       "description": "以线上 main@f4d6247 为基线同步应用版本、当前文档和发布说明；版本准备与发布分开验收。",
-      "status": "blocked",
+      "status": "done",
       "dependencies": [],
       "scope": [
         "pyproject.toml、CLI/桌面版本元数据及 lockfile",
@@ -40,6 +80,14 @@
         {
           "command": "python scripts/check_docs.py; python scripts/generate_message_flow.py --check; version metadata consistency check; GitNexus detect-changes scope=all",
           "result": "Docs 0 errors; flow manifest current; all application version fields 6.2.0; 16 files/33 symbols/low risk, no partial/truncated flags"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38332591325",
+          "result": "Release workflow success: all build/package jobs, four Windows OneClick install acceptance jobs, release-manifest creation and published-byte readback passed"
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0",
+          "result": "Published 2026-10-13 as a stable release with 14 uploaded assets. Installers are unsigned under the maintainer-authorized STELLA_ALLOW_UNSIGNED=1 exception; clean-VM/GUI-first-launch and real QQ rollout remain separate acceptance gaps. Final post-release state validation: python scripts/check_docs.py passed (0 errors)."
         }
       ]
     },

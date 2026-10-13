@@ -2,8 +2,9 @@
 
 ## Current Objective
 
-- RELEASE-620：准备并发布 Stella 6.2.0；本地发布准备提交已创建，等待最终确认后推送 tag 并启动发布工作流。
-- Branch: `codex/release-6.2.0`, based on online `main` commit `f4d6247eab0236019133e168f4ab1f68e54340f2` (PR #105 merge). Existing release is v6.1.0; no online v6.2.0 tag/release was found.
+- CI-106：修复 PR #106 的 flow-closure GitNexus native heap corruption；本地单 worker analyzer、inventory gates 和定向测试已通过，修复尚未提交/推送，等待用户授权远端更新及 PR hosted CI 验证。
+- RELEASE-620：Stella 6.2.0 已正式发布，hosted release workflow 与发布后回读全部通过。
+- Branch: `codex/release-6.2.0`; release commit `6c62fdc3f7ae010896f7f308e37f356eb3c20581`, based on online `main` commit `f4d6247eab0236019133e168f4ab1f68e54340f2` (PR #105 merge). Tag `v6.2.0` points to the release commit.
 
 ## Completed This Session
 
@@ -13,6 +14,14 @@
 
 ## Verification Evidence
 
+- PR #106 CI failure: flow-closure GitNexus analyze logged `malloc(): unaligned tcache chunk detected` after npm reported an optional Zig Tree-sitter peer mismatch; job exit code 1 caused the two later inventory steps to skip. No upstream 1.6.12 note claims to fix this crash.
+- Local repair candidate adds `--workers 1` to the pinned 1.6.11 analyzer; a new test asserts that command and preserves the separate Runtime inventory validation and Discovered entry reconciliation workflow gates.
+- Red/green regression: workflow-contract test failed before the command change because `--workers 1` was absent; passed afterward.
+- `python -m pytest tests/observability/test_internal_flow_inventory.py tests/observability/test_flow_source_closure.py tests/observability/test_message_flow_contract.py -q`: 41 passed, 2 warnings. A Python 3.14/NoneBot access-violation traceback appeared once in a parallel run, but pytest completed successfully; standalone contract test reran cleanly and focused suite passed again.
+- CI-equivalent `npx -y gitnexus@1.6.11 analyze --index-only --workers 1 --default-branch main`: passed in the project container; index current for 1167 covered files. Existing callable-value-flow warnings remain at `astrbot_compat/filters.py` (candidate set 33 > cap 32), distinct from crash.
+- CI-equivalent inventory checks: 49 entries / 9 families; 33 discovered entries, reconciliation clean.
+- `python -m ruff check tests/observability/test_internal_flow_inventory.py` and `python -m ruff check $(git ls-files '*.py')`: passed. `python scripts/check_docs.py`: 0 errors. GitNexus scope=all: 5 files/10 symbols/low; compare against verified `origin/main@f4d6247`: 18 files/34 symbols/low, no partial/truncated. Compare includes pre-existing release changes and local release-state edits because PR #106 itself is the release PR.
+- Repair remains local-only; no new hosted PR check has run yet.
 - `python -m pytest tests -q`: 3669 passed, 17 skipped, 59 warnings (Windows Python 3.14).
 - `python -m ruff check $(git ls-files '*.py')`: all tracked Python files passed. Unscoped `python -m ruff check .` detects I001 in the pre-existing untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py`; that user file was not edited.
 - `python scripts/check_docs.py`: 0 errors, 1186 local links, 577 migration anchors.
@@ -20,6 +29,8 @@
 - Dashboard: 100 tests, vue-tsc, and production build passed; existing Vite chunk warnings only.
 - CLI fmt/clippy/tests passed (20 tests); desktop `cargo check --locked` passed; Cargo metadata and all app version fields agree at 6.2.0.
 - GitNexus index refreshed at f4d6247; impact of `_current_project_version` upstream is HIGH (8 symbols, including profile validation/load and release package builders), while status API version flow is LOW. `detect-changes --scope all`: 16 files/33 symbols, low, no partial/truncated; compare against verified base f4d6247 is identical.
+- Hosted release run [38332591325](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38332591325) succeeded across all 17 jobs, including Rust wheel, Dashboard, CLI binaries, CPU backend, offline payload, four signed installer builds, four Windows install acceptance jobs, packaging, manifest/SHA-256 and published-byte readback.
+- Stable Release: https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0; 14 assets uploaded. The release notes disclose that installers are unsigned under the maintainer-authorized `STELLA_ALLOW_UNSIGNED=1` exception.
 
 ## Changed Files
 
@@ -30,16 +41,16 @@
 
 ## Blockers / Risks
 
-- The local release-prep commit exists; it has not been pushed, tagged, or published. The user must confirm final remote writes after seeing the exact commit SHA, repository/account, target tag, and release notes summary.
-- Tag push triggers the complete Windows release build, signing gate, manifest/hashes, and published-byte readback. Local CI cannot establish hosted installer acceptance, clean-VM/GUI-first-launch acceptance, or real QQ rollout.
-- Preserve unrelated untracked data. At task start they included `.agents/`, `.bot-restart.log`, `.zcode/plans/`, extra `docs/plans/`, research reports/evidence, `memory_rust/_native.pyd.v15.bak`, and `skills-lock.json`; Docker/GitNexus also surfaced untracked `.claude/settings.local.json`. Do not stage them.
+- CI-106 fix is not committed/pushed; PR #106 must rerun hosted flow-closure before the failure can be considered cleared.
+- Hosted GitHub installation checks and byte readback are complete. This is not clean-VM/GUI-first-launch or real QQ rollout acceptance; keep those open until separately tested.
+- Installers are unsigned under the maintainer-authorized `STELLA_ALLOW_UNSIGNED=1` exception. Windows may show an unknown-publisher prompt; published `SHA256SUMS.txt` is available for integrity checks.
+- Preserve unrelated untracked data. At task start they included `.agents/`, `.bot-restart.log`, `.zcode/plans/`, extra `docs/plans/`, research reports/evidence, `memory_rust/_native.pyd.v15.bak`, and `skills-lock.json`. They were not staged or modified.
 
 ## Next Session Startup
 
 1. Read `AGENTS.md`, `feature_list.json`, `progress.md`, and this handoff; verify current branch/status.
-2. Run `python scripts/check_docs.py`, diff review, and GitNexus checks after any state-record edits.
-3. The local release-prep commit is complete; verify the exact current `HEAD` before any remote write.
-4. Ask for/await final confirmation before pushing the branch/tag; then monitor the GitHub release workflow and record outcome.
+2. `python scripts/check_docs.py` passed after release preparation. If state records are edited again, rerun the docs gate.
+3. Do not rerun or recreate the release; `v6.2.0` is published. Follow up only on separately scoped clean-VM/GUI or real QQ acceptance.
 
 ## PR #105 CI Repair — 2026-10-10
 

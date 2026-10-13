@@ -3,17 +3,23 @@
 ## Current State
 
 **Last Updated:** 2026-10-13 (Asia/Shanghai)
-**Active Feature:** RELEASE-620 awaiting final publication confirmation; CI-001 and DOC-001 done
-**Scope:** 以线上 main@f4d6247 为基线准备 Stella 6.2.0 发布；应用版本同步、发布说明、验收与发布确认。
+**Active Feature:** none; CI-106 blocked pending PR update/hosted confirmation; RELEASE-620, CI-001, and DOC-001 done
+**Scope:** 修复 PR #106 flow-closure 中 GitNexus analyze 的 native heap corruption；6.2.0 发布状态保持完成。
 
 ## What's Done
+
+- CI-106：PR #106 的 flow-closure 在 `npx -y gitnexus@1.6.11 analyze --index-only` 崩溃（`malloc(): unaligned tcache chunk detected`），后续 inventory 门禁因前序失败被跳过。
+- 修复候选已在本地工作树：CI analyzer 加 `--workers 1`，新静态测试锁定命令与两个独立 inventory/reconciliation 步骤。Pinned npm analyzer 单 worker 在容器中成功；41 个 flow 定向测试通过；两条 CI 等价检查通过；跟踪 Python Ruff、docs 检查通过；`git diff --check` 通过。
+- GitNexus scope=all：最终为 5 文件/12 符号/low；与 PR base `origin/main@f4d6247` 比较 18 文件/35 符号/low，无 partial/truncated。后者包含既有 6.2.0 变更、本地 release 状态记录和本修复。
+- 修复尚未提交或推送，PR #106 hosted CI 还未用此改动重跑。用户要求修复，但远端更新属于外部写操作，待明确授权；原有 RELEASE-620 三个本地状态记录和未跟踪用户资料均予以保留。
 
 - RELEASE-620：线上 main@f4d6247 已包含本地 topic 的所有工作；从该提交创建 `codex/release-6.2.0`。
 - 已将 pyproject、CLI/桌面 Cargo 元数据和 lock、Tauri 配置同步至 6.2.0；更新双语 README、合同说明、迁移模板与发布说明。
 - 发布 notes 明确 schema 18→19、Rust API 2→3、旧 evidence 的 `legacy_unverified` 迁移、native wheel 兼容要求及 QQ/Rust/VM 验收边界。
 - 本地门禁：pytest 3669 passed/17 skipped；跟踪 Python Ruff 通过；Dashboard 100 tests/typecheck/build 通过；CLI fmt/clippy/20 tests 与 desktop cargo check 通过；文档、message-flow、版本一致性通过。
 - 全仓 Ruff 仍被原有未跟踪 `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py` 的 I001 阻挡；未修改该用户文件。GitNexus scope=all：16 文件、33 符号、low，无 partial/truncated；upstream 版本读取路径曾报 HIGH，直接调用与打包消费者已检查。
-- 本地发布准备提交已创建；尚未推送、创建 tag 或 Release。最终远程写操作须再经用户确认；发布 CI 负责 Windows 安装验收、签名、manifest 与发布后回读。
+- 已推送 `v6.2.0`，Release 于 2026-10-13 正式发布：https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0（14 项资产）。GitHub Actions run 38332591325 全部 jobs 成功，含四种 OneClick 安装验收、manifest/SHA-256 和发布后回读。
+- 发布页注明安装器按维护者授权的 `STELLA_ALLOW_UNSIGNED=1` 例外未签名；clean-VM/GUI 首启与真实 QQ 灰度仍未完成，不能由 hosted 安装验收替代。
 
 - 58 份双语正文按主题归类；架构和开发长文拆分；28 个原路径和 577 个原章节锚点保留。
 - AGENTS 为 45 行任务入口，CLAUDE 引用共同规则；专题标明来源和复审条件。
@@ -41,9 +47,9 @@
 
 ## What's Next
 
-1. RELEASE-620：本地版本准备提交已创建；复核 HEAD 与远程基线、tag 状态，并报告精确 SHA 与 notes 摘要。
-2. 等待用户最终确认后，推送 release 分支/tag；观察 tag-triggered 发布 CI、签名与发布后字节回读。
-3. 若 hosted gates 全绿，记录 Release URL 与资产；clean-VM/GUI first launch 和真实 QQ 验收缺口如未完成则保持 NOT READY。
+1. CI-106：本地修复与验证完成；等待用户授权后，提交仅含本修复/状态文件的变更并更新 PR #106，随后检查 hosted flow-closure。
+2. RELEASE-620 已完成；版本提交 `6c62fdc3f7ae010896f7f308e37f356eb3c20581`，tag 与稳定 Release 已发布。
+3. 真实 QQ 灰度、clean-VM/GUI 首启和未签名安装提示仍按各自流程验收；不得将 GitHub-hosted 安装验收扩大为这些结论。
 
 ## PR #105 CI Repair — 2026-10-10
 

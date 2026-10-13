@@ -19,6 +19,28 @@ from scripts.generate_message_flow import build_manifest, semantic_diff
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_flow_closure_workflow_bounds_analysis_and_keeps_inventory_gates():
+    import yaml
+
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    steps = workflow["jobs"]["flow-closure"]["steps"]
+    named_steps = [(step.get("name"), step.get("run")) for step in steps]
+    names = [name for name, _ in named_steps]
+
+    analyze_index = names.index("GitNexus analyze (pinned 1.6.11)")
+    assert named_steps[analyze_index][1] == (
+        "npx -y gitnexus@1.6.11 analyze --index-only --workers 1"
+    )
+    assert names[analyze_index + 1] == "Runtime entry inventory validation"
+    assert names[analyze_index + 2] == "Discovered entry reconciliation gate"
+    assert "validate_inventory()" in named_steps[analyze_index + 1][1]
+    assert "discovered_entries_diff(" in named_steps[analyze_index + 2][1]
+
+
 class TestRuntimeEntryInventory:
     def test_inventory_validates(self):
         """入口自检：流程族存在、源码文件存在、root_kind 已登记。"""
