@@ -36,14 +36,14 @@ You decide where the models come from.
 
 > Note: With the all-local deployment mode, the data truly stays off the network. Networked tools (such as weather and anime lookups) send requests and return actual data themselves, while deciding whether to use a tool, compressing its result into a summary, and rendering plugin cards as images all happen locally.
 
-## Current release: 6.1.0
+## Current release: 6.2.0
 
-- QQ private chat and original-conversation delivery are integrated. Private chat defaults to enabled; use `PRIVATE_CHAT_ALLOWLIST` to restrict friends.
-- Cometa manages external agent tasks, with Codex authentication on WebUI Providers. It defaults to disabled and explicit delegation.
-- Message Flow and personal-memory audit pages are available. Memory uses schema 18/backend API 2.
-- Personal writing/sharing, reply attribution guards, and proactive contracts remain disabled by default. Real QQ rollout and Rust ranking differences still have outstanding acceptance items.
+- Memory-source evidence and claim lineage are now auditable contracts. The database migrates to schema 19; existing evidence is marked `legacy_unverified` and is not promoted to verified facts.
+- Reply attribution uses typed reply envelopes and source-evidence checks. Bounded session compaction preserves verifiable source packets and uses a unified final-reply protocol.
+- The Rust memory contract is API 3 / schema 19. Rust deployments must use the native wheel built with this release.
+- Real QQ rollout, Rust retrieval-order parity, and clean-VM / GUI first-launch checks remain separate acceptance activities.
 
-See the [documentation index](docs/README.en.md) for bilingual guides, defaults, and acceptance boundaries.
+Back up the complete data root before upgrading, and run `python -m deploy migrate --dry-run` against a copy first. See the [documentation index](docs/README.en.md) for bilingual guides, defaults, and acceptance boundaries.
 
 ## 🔌 Three Deployment Modes
 

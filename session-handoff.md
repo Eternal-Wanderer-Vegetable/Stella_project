@@ -2,43 +2,55 @@
 
 ## Current Objective
 
-- CI-001：PR #105 CI 修复，status done；无活动任务，DOC-001 已完成。
-- Branch: codex/compact-8192-batching；源码基线 952007e。用户已审核并授权提交上传；最终提交与远端状态以 Git 记录为准。
+- CI-106：修复 PR #106 的 flow-closure GitNexus native heap corruption；本地单 worker analyzer、inventory gates 和定向测试已通过，修复尚未提交/推送，等待用户授权远端更新及 PR hosted CI 验证。
+- RELEASE-620：Stella 6.2.0 已正式发布，hosted release workflow 与发布后回读全部通过。
+- Branch: `codex/release-6.2.0`; release commit `6c62fdc3f7ae010896f7f308e37f356eb3c20581`, based on online `main` commit `f4d6247eab0236019133e168f4ab1f68e54340f2` (PR #105 merge). Tag `v6.2.0` points to the release commit.
 
 ## Completed This Session
 
-- 按使用/架构/参考/开发/Agent/历史导航组织双语文档，旧路径保留章节转向。
-- 建立短 Agent 入口、状态、初始化和文档验证门禁。
+- Synchronized Python, CLI, desktop Cargo/Tauri versions and locks to 6.2.0.
+- Updated bilingual README, source-contract docs, migration templates, and release notes for schema 19 / Rust API 3.
+- Preserved v6.1.0 history and all pre-existing untracked user files.
 
 ## Verification Evidence
 
-- 文档本地链接/锚点、双语配对与状态检查通过；独立测试 6/6，新增文件 Ruff 和 diff 检查通过。
-- 246 个历史文件哈希一致，577 个迁移章节锚点保留。
-- PowerShell 和 Git Bash docs 验证及非法模式失败路径通过。
-- GitNexus 完整结构结果：120 文件、859 符号、low，未置 partial/truncated；独立 review index 纳入新增文件，真实暂存区未改。
-- harness-creator 100/100，仅结构结果；[完整报告](docs/reports/2026-10-10-documentation-restructure.md)。
+- PR #106 CI failure: flow-closure GitNexus analyze logged `malloc(): unaligned tcache chunk detected` after npm reported an optional Zig Tree-sitter peer mismatch; job exit code 1 caused the two later inventory steps to skip. No upstream 1.6.12 note claims to fix this crash.
+- Local repair candidate adds `--workers 1` to the pinned 1.6.11 analyzer; a new test asserts that command and preserves the separate Runtime inventory validation and Discovered entry reconciliation workflow gates.
+- Red/green regression: workflow-contract test failed before the command change because `--workers 1` was absent; passed afterward.
+- `python -m pytest tests/observability/test_internal_flow_inventory.py tests/observability/test_flow_source_closure.py tests/observability/test_message_flow_contract.py -q`: 41 passed, 2 warnings. A Python 3.14/NoneBot access-violation traceback appeared once in a parallel run, but pytest completed successfully; standalone contract test reran cleanly and focused suite passed again.
+- CI-equivalent `npx -y gitnexus@1.6.11 analyze --index-only --workers 1 --default-branch main`: passed in the project container; index current for 1167 covered files. Existing callable-value-flow warnings remain at `astrbot_compat/filters.py` (candidate set 33 > cap 32), distinct from crash.
+- CI-equivalent inventory checks: 49 entries / 9 families; 33 discovered entries, reconciliation clean.
+- `python -m ruff check tests/observability/test_internal_flow_inventory.py` and `python -m ruff check $(git ls-files '*.py')`: passed. `python scripts/check_docs.py`: 0 errors. GitNexus scope=all: 5 files/10 symbols/low; compare against verified `origin/main@f4d6247`: 18 files/34 symbols/low, no partial/truncated. Compare includes pre-existing release changes and local release-state edits because PR #106 itself is the release PR.
+- Repair remains local-only; no new hosted PR check has run yet.
+- `python -m pytest tests -q`: 3669 passed, 17 skipped, 59 warnings (Windows Python 3.14).
+- `python -m ruff check $(git ls-files '*.py')`: all tracked Python files passed. Unscoped `python -m ruff check .` detects I001 in the pre-existing untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py`; that user file was not edited.
+- `python scripts/check_docs.py`: 0 errors, 1186 local links, 577 migration anchors.
+- `python scripts/generate_message_flow.py --check`: current manifest.
+- Dashboard: 100 tests, vue-tsc, and production build passed; existing Vite chunk warnings only.
+- CLI fmt/clippy/tests passed (20 tests); desktop `cargo check --locked` passed; Cargo metadata and all app version fields agree at 6.2.0.
+- GitNexus index refreshed at f4d6247; impact of `_current_project_version` upstream is HIGH (8 symbols, including profile validation/load and release package builders), while status API version flow is LOW. `detect-changes --scope all`: 16 files/33 symbols, low, no partial/truncated; compare against verified base f4d6247 is identical.
+- Hosted release run [38332591325](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38332591325) succeeded across all 17 jobs, including Rust wheel, Dashboard, CLI binaries, CPU backend, offline payload, four signed installer builds, four Windows install acceptance jobs, packaging, manifest/SHA-256 and published-byte readback.
+- Stable Release: https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0; 14 assets uploaded. The release notes disclose that installers are unsigned under the maintainer-authorized `STELLA_ALLOW_UNSIGNED=1` exception.
 
-## Files Changed
+## Changed Files
 
-- AGENTS.md、CLAUDE.md、根 README、docs 各分类与兼容入口、documentation-map.json。
-- feature_list.json、progress.md、session-handoff.md、init.ps1/init.sh。
-- scripts/check_docs.py、tests/documentation、.github/workflows/ci.yml 和 release.yml、CONTRIBUTING。
+- Version: `pyproject.toml`, `cli/Cargo.toml`, `cli/Cargo.lock`, `desktop/src-tauri/Cargo.toml`, `desktop/src-tauri/Cargo.lock`, `desktop/src-tauri/tauri.conf.json`.
+- Current documentation: `README.md`, `README.en.md`, `docs/development/contracts.md`, `docs/development/contracts.en.md`, `docs/reference/migration-report-template.md`, `docs/reference/migration-report-template.en.md`.
+- Release notes: `release_assets/RELEASE_NOTES_TEMPLATE.md`.
+- State: `feature_list.json`, `progress.md`, `session-handoff.md`.
 
 ## Blockers / Risks
 
-- 文档整理验收完成。运行、模型、QQ、native 和 VM 旧缺口保留，不由文档检查代替。
-- GitNexus 全图执行流程存在采样预算限制，零受影响流程不能证明运行路径不存在。
-- 工作区有原有未跟踪技能、日志、计划、报告、证据和 native 备份；不要把它们混入本轮提交。
+- CI-106 fix is not committed/pushed; PR #106 must rerun hosted flow-closure before the failure can be considered cleared.
+- Hosted GitHub installation checks and byte readback are complete. This is not clean-VM/GUI-first-launch or real QQ rollout acceptance; keep those open until separately tested.
+- Installers are unsigned under the maintainer-authorized `STELLA_ALLOW_UNSIGNED=1` exception. Windows may show an unknown-publisher prompt; published `SHA256SUMS.txt` is available for integrity checks.
+- Preserve unrelated untracked data. At task start they included `.agents/`, `.bot-restart.log`, `.zcode/plans/`, extra `docs/plans/`, research reports/evidence, `memory_rust/_native.pyd.v15.bak`, and `skills-lock.json`. They were not staged or modified.
 
 ## Next Session Startup
 
-1. 读 AGENTS.md、feature_list.json、progress.md，核对分支和工作区；CI-001 已完成。
-2. 运行 `python scripts/check_docs.py` 或 `./init.ps1 docs`；代码任务追加相应模块门禁。
-3. 核对 PR #105 最新 head 的 CI 结果；等待新的授权任务。
-
-## Recommended Next Step
-
-- CI 修复已验收；后续合并或新工作由用户授权。
+1. Read `AGENTS.md`, `feature_list.json`, `progress.md`, and this handoff; verify current branch/status.
+2. `python scripts/check_docs.py` passed after release preparation. If state records are edited again, rerun the docs gate.
+3. Do not rerun or recreate the release; `v6.2.0` is published. Follow up only on separately scoped clean-VM/GUI or real QQ acceptance.
 
 ## PR #105 CI Repair — 2026-10-10
 

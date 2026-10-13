@@ -245,7 +245,7 @@ jobs:
           node-version: "22"
 
       - name: GitNexus analyze (pinned 1.6.11)
-        run: npx -y gitnexus@1.6.11 analyze --index-only
+        run: npx -y gitnexus@1.6.11 analyze --index-only --workers 1
 
       - name: Runtime entry inventory validation
         run: |

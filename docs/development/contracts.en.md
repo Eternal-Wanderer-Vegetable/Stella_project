@@ -4,7 +4,7 @@
 
 <a id="source-contracts-and-release-gates-in-610"></a>
 
-Verified against branch source on 2026-10-10 (baseline 952007e). Application version remains 6.1.0, while current source compatibility is schema 19/API 3. The published 6.1.0/P8 snapshot used schema 18/API 2; do not mix old native assets with the newer branch.
+Verified against the 6.2.0 release baseline on 2026-10-13 (f4d6247). The application version is 6.2.0 and current source compatibility is schema 19/API 3. The published 6.1.0/P8 snapshot used schema 18/API 2; do not mix its native assets with 6.2.0.
 
 | Source | Current constant |
 | --- | --- |
