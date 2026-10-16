@@ -150,6 +150,21 @@ def _skills() -> dict | None:
         return None
 
 
+def _capture_gate() -> dict:
+    """记忆采集就绪门快照（AI-gated memory capture 计划 §6.4）。
+
+    只有脱敏事实：状态/角色/端点槽名/计数/时间/有界错误类别。绝不含
+    URL、API key、探针请求或响应正文、任何消息内容——与上方 usage /
+    capabilities 的泄漏面约束同一纪律。取不到就让面板少一块。
+    """
+    try:
+        from memory.capture_gate import status_snapshot
+
+        return status_snapshot()
+    except Exception:
+        return {}
+
+
 def build_payload(
     link: dict | None,
     sched: dict,
@@ -161,6 +176,7 @@ def build_payload(
     runtime_status: dict | None = None,
     skills: dict | None = None,
     chat_engine: dict | None = None,
+    memory_capture: dict | None = None,
 ) -> dict:
     """组装状态响应。
 
@@ -201,6 +217,11 @@ def build_payload(
         # 对话引擎面（计划修订 v2）：mode/keys/inflight——只有结构化字段，
         # 不含任何会话内容（与上方的泄漏面约束同一纪律）。
         payload["chat_engine"] = chat_engine
+    if memory_capture is not None:
+        # 记忆采集就绪门（AI-gated memory capture §6.4）：脱敏快照，帮
+        # 操作员区分「采集不可用」与「存量积压未排空」——后者不是本段
+        # 的事实，本段只回答「现在还收不收新消息」。
+        payload["memory_capture"] = memory_capture
     return payload
 
 
@@ -262,6 +283,7 @@ def collect_status() -> dict:
         runtime_status=runtime_status,
         skills=_skills(),
         chat_engine=_chat_engine(),
+        memory_capture=_capture_gate(),
     )
 
 

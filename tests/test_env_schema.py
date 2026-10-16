@@ -121,3 +121,18 @@ def test_schema_choice_fields_carry_options():
     assert fields["PARTICIPATION_LOG_LEVEL"]["choices"] == ["full", "summary", "off"]
     # 非枚举键不许莫名带 choices
     assert "choices" not in fields["RAG_ENABLED"]
+
+
+def test_schema_includes_memory_capture_gate_settings():
+    """采集就绪门的两个操作员键：类型/默认值/章节/说明齐全（计划 §6.4）。"""
+    schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    fields = {field["key"]: field for field in schema["fields"]}
+    interval = fields["MEMORY_CAPTURE_PROBE_INTERVAL"]
+    timeout = fields["MEMORY_CAPTURE_PROBE_TIMEOUT"]
+    assert interval["type"] == "int" and interval["default"] == "30"
+    assert timeout["type"] == "float" and timeout["default"] == "5.0"
+    assert interval["section"] == "记忆采集就绪门"
+    assert timeout["section"] == "记忆采集就绪门"
+    assert "探针间隔" in interval["description"]
+    assert "探针超时" in timeout["description"]
+    assert "inherits" not in interval and "inherits" not in timeout
