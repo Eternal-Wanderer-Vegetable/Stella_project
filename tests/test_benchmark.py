@@ -5,6 +5,7 @@
 
 import base64
 import hashlib
+import json
 
 import pytest
 
@@ -99,9 +100,105 @@ def test_benchmark_verbose_scores_present():
 def test_benchmark_embedding_fixture_path():
     """--embedding-fixture 路径：合成 fixture 能跑通，且禁止激活仍为 0（红线不变）。"""
     fixture = _synthetic_fixture()
-    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR, embedding_fixture=fixture)
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR, embedding_fixture=fixture, retrieval_mode="embedding")
     assert metrics["forbidden_activation_rate"] == 0.0
     # synthetic 随机向量语义≈0，行为应接近 rule-only（不崩溃、指标在合理范围）
     assert 0.0 <= metrics["memory_precision"] <= 100.0
     assert isinstance(metrics["separation_margin"], (float, type(None)))
+
+
+# ── M0 报告契约 ──────────────────────────────────────────────
+
+
+def test_load_cases_excludes_underscore_prefixed_directories(tmp_path):
+    """排除规则泛化：任何 `_` 前缀路径段都不是用例（_public/_replay 等同理）。"""
+    (tmp_path / "rank").mkdir()
+    (tmp_path / "_fixtures").mkdir()
+    (tmp_path / "_public").mkdir()
+    _case = {"id": "c1", "input": "q", "expected_memory": []}
+    (tmp_path / "rank" / "a.json").write_text(json.dumps(_case), encoding="utf-8")
+    (tmp_path / "_fixtures" / "b.json").write_text(json.dumps(_case | {"id": "c2"}), encoding="utf-8")
+    (tmp_path / "_public" / "c.json").write_text(json.dumps([_case | {"id": "c3"}]), encoding="utf-8")
+
+    cases = benchmark.load_cases(tmp_path)
+    assert [c["id"] for c in cases] == ["c1"]
+    assert cases[0]["_source_path"] == "rank/a.json"
+
+
+def test_run_fingerprint_stable_and_input_sensitive(tmp_path):
+    """同输入同指纹；数据集或检索模式变化必须改变指纹。"""
+    (tmp_path / "cat").mkdir()
+    case = {"id": "c1", "input": "q", "expected_memory": [], "memories": {}}
+    (tmp_path / "cat" / "a.json").write_text(json.dumps(case), encoding="utf-8")
+    cases = benchmark.load_cases(tmp_path)
+    f1, comp1 = benchmark.build_run_fingerprint(tmp_path, cases, backend="python", retrieval_mode="rule")
+    f2, _ = benchmark.build_run_fingerprint(tmp_path, cases, backend="python", retrieval_mode="rule")
+    assert f1 == f2
+    f3, _ = benchmark.build_run_fingerprint(tmp_path, cases, backend="python", retrieval_mode="fts")
+    assert f3 != f1
+    # 数据集内容变化 → 摘要变化
+    (tmp_path / "cat" / "a.json").write_text(json.dumps(case | {"input": "q2"}), encoding="utf-8")
+    cases2 = benchmark.load_cases(tmp_path)
+    f4, comp4 = benchmark.build_run_fingerprint(tmp_path, cases2, backend="python", retrieval_mode="rule")
+    assert f4 != f1
+    assert comp1["dataset_sha256"] != comp4["dataset_sha256"]
+
+
+def test_category_metrics_split_by_directory():
+    """分类聚合：目录 = 数据集根下第一级路径段，指标口径与全局一致。"""
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)
+    cats = metrics["category_metrics"]
+    assert set(cats)  # 既有数据集已按目录分好类
+    assert sum(c["cases_total"] for c in cats.values()) == metrics["cases_total"]
+    assert sum(c["cases_ok"] for c in cats.values()) == metrics["cases_ok"]
+    for r in metrics["results"]:
+        assert r["category"] in cats
+
+
+def test_report_document_contract(tmp_path):
+    """报告契约 v1：schema/fingerprint/指标定义版本/分类聚合齐备，逐例带 category。"""
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)
+    doc = benchmark.build_report_document(MEMORY_BENCHMARK_DIR, metrics)
+    assert doc["schema"] == benchmark.REPORT_SCHEMA
+    assert doc["metric_definitions_version"] == benchmark.METRIC_DEFINITIONS_VERSION
+    assert set(doc["fingerprint_components"]) == {
+        "code_version", "source_digest", "dataset_sha256", "backend",
+        "retrieval_mode", "clock_anchor", "metric_definitions_version",
+    }
+    assert doc["metrics"]["cases_total"] == metrics["cases_total"]
+    manifest = benchmark.write_evidence_manifest(tmp_path)
+    assert manifest.exists()
+
+
+def test_baseline_compare_drift_detection(tmp_path):
+    """基线对比正反例：同数值通过；指标漂移与硬零违规必须失败；新指标不算漂移。"""
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)
+    baseline_doc = benchmark.build_baseline_document(metrics)
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline_doc), encoding="utf-8")
+
+    ok, drift = benchmark.compare_baseline(metrics, baseline_path)
+    assert ok and all(row["ok"] for row in drift)
+
+    drifted = dict(metrics)
+    drifted["memory_recall"] = metrics["memory_recall"] - 1.0
+    ok2, drift2 = benchmark.compare_baseline(drifted, baseline_path)
+    assert not ok2
+    assert any(row["status"] == "drift" and row["metric"] == "memory_recall" for row in drift2)
+
+    hard = dict(metrics)
+    hard["forbidden_activation_rate"] = 12.5
+    ok3, _ = benchmark.compare_baseline(hard, baseline_path)
+    assert not ok3  # 硬零指标不容差
+
+    with_new_metric = dict(metrics)
+    with_new_metric["dimensions"] = {"temporal": {"temporal_accuracy": 100.0}}
+    ok4, drift4 = benchmark.compare_baseline(with_new_metric, baseline_path)
+    assert ok4  # 新指标缺席基线 → 标记 new，不算漂移
+    assert any(row["status"] == "new" for row in drift4)
+
+    missing = {k: v for k, v in metrics.items() if k != "mode_accuracy"}
+    ok5, drift5 = benchmark.compare_baseline(missing, baseline_path)
+    assert not ok5
+    assert any(row["status"] == "missing" and row["metric"] == "mode_accuracy" for row in drift5)
 

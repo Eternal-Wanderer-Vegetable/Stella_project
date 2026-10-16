@@ -29,14 +29,29 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sqlite3
+import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from config import MEMORY_BENCHMARK_DIR
 from memory.policy import detect_mode, normalize_mode
+
+# ── 报告契约（M0）────────────────────────────────────────────
+# schema 升级即破坏性变更：读方必须按 schema 字段分发，不得假设键集固定。
+REPORT_SCHEMA = "memory-benchmark-report/1"
+BASELINE_SCHEMA = "memory-benchmark-baseline/1"
+# 指标语义版本：新增键不升版；改口径/改分母/改判定规则必须升版并重生成基线。
+METRIC_DEFINITIONS_VERSION = "1"
+# 用例时间的注入时钟锚点：temporal 偏移字段按它换算绝对时间戳（M1），
+# 与用例 DB 的缺省时间戳（见 _write_case_db）同一纪元，保证跨机器可复现。
+CLOCK_ANCHOR = "2026-08-09 12:00:00"
+# 双硬零门禁：任何泄漏/误激活即失败，不允许容差，也不进平均分。
+HARD_ZERO_METRICS = ("forbidden_activation_rate", "cross_scope_leak_rate")
 
 
 def _mem_dict(mid: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -49,18 +64,27 @@ def _mem_dict(mid: str, data: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_cases(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> list[dict[str, Any]]:
-    """递归加载 benchmark 目录下所有 .json 用例。"""
+    """递归加载 benchmark 目录下所有 .json 用例。
+
+    任何以 ``_`` 开头的路径段都不是用例（``_fixtures``/``_public``/``_replay``/
+    ``_baselines`` 等数据与制品目录），一律跳过——否则向量 fixture 会被当成
+    id="?" 的伪用例混进对照表与指标。
+    每条用例附带 ``_source_path``（相对 benchmark_dir 的来源文件路径），
+    供报告按分类目录聚合；运行器与检索路径不读该键。
+    """
     cases: list[dict[str, Any]] = []
     if not benchmark_dir.exists():
         return cases
     for path in sorted(benchmark_dir.rglob("*.json")):
-        # _fixtures 目录放向量/文本数据，不是用例（否则 fixture 会被当成一条
-        # id="?" 的伪用例混进对照表与指标）
-        if "_fixtures" in path.parts:
+        if any(part.startswith("_") for part in path.parts):
             continue
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             items = data if isinstance(data, list) else [data]
+            rel = path.relative_to(benchmark_dir).as_posix()
+            for item in items:
+                if isinstance(item, dict):
+                    item["_source_path"] = rel
             cases.extend(items)
         except (ValueError, OSError) as e:
             print(f"⚠️ 用例解析失败 {path}: {e}")
@@ -241,6 +265,7 @@ def evaluate_retrieval_result(
 
     return {
         "id": case.get("id", "?"),
+        "category": category_of(case),
         "declared_mode": normalize_mode(case.get("mode", "CASUAL_REPLY")),
         "detected_mode": detected_mode,
         "expected": sorted(expected),
@@ -327,30 +352,8 @@ def evaluate_case(
             manager.cleanup()
 
 
-def run_benchmark(
-    benchmark_dir: Path = MEMORY_BENCHMARK_DIR,
-    embedding_fixture: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """运行全部用例，汇总核心指标。
-
-    ``embedding_fixture`` 不为 None 时，用 fixture 里的向量算查询↔记忆余弦分
-    （embedding 路径）；缺省走规则版语义分。
-    """
-    cases = load_cases(benchmark_dir)
-    with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
-        work_dir = Path(tmp)
-        results = [
-            evaluate_case(
-                c,
-                work_dir,
-                i,
-                semantic_scores=(
-                    fixture_semantic_scores(c, embedding_fixture) if embedding_fixture else None
-                ),
-            )
-            for i, c in enumerate(cases)
-        ]
-
+def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """把逐例结果聚合成核心指标（run_benchmark 与分类聚合共用同一口径）。"""
     total = len(results)
     ok_count = sum(1 for r in results if r["ok"])
     cases_with_expected = sum(1 for r in results if r["expected"])
@@ -358,8 +361,6 @@ def run_benchmark(
     total_expected_behavior = sum(len(r["expected_behavior"]) for r in results)
     total_found_expected = sum(len(r["found_expected"]) + len(r["found_behavior"]) for r in results)
     total_found_behavior = sum(len(r["found_behavior"]) for r in results)
-    # 分母 = 会话召回 + 行为约束召回：行为约束里的期望记忆是“正确激活”（Behavior Guard），
-    # 不能只算分子不算分母，否则会把 precision 虚高甚至推到 100% 以上。
     total_retrieved = sum(len(r["final"]) + len(r["behavior"]) for r in results)
     total_behavior_leaked = sum(len(r["behavior_leaked"]) for r in results)
     total_forbidden = sum(len(r["forbidden"]) for r in results)
@@ -371,7 +372,6 @@ def run_benchmark(
 
     # separation_margin：所有带正/噪音对照的用例里，最差的“正最低 − 噪音最高”
     margins = [r["separation_margin"] for r in results if r["separation_margin"] is not None]
-    separation_margin = min(margins) if margins else None
 
     return {
         "cases_total": total,
@@ -394,9 +394,280 @@ def run_benchmark(
         "behavior_leaks": total_behavior_leaked,
         "forbidden_activation_rate": round(total_activated_forbidden / max(1, total_forbidden) * 100, 1),
         "forbidden_activations": total_activated_forbidden,
-        "separation_margin": separation_margin,
-        "results": results,
+        "separation_margin": min(margins) if margins else None,
     }
+
+
+def category_of(case_or_result: dict[str, Any]) -> str:
+    """用例/结果所属分类目录（_source_path 首段；根目录用例归 "root"）。"""
+    source = case_or_result.get("_source_path") or ""
+    parts = source.split("/")
+    return parts[0] if len(parts) > 1 else "root"
+
+
+def run_benchmark(
+    benchmark_dir: Path = MEMORY_BENCHMARK_DIR,
+    embedding_fixture: dict[str, Any] | None = None,
+    *,
+    retrieval_mode: str = "rule",
+) -> dict[str, Any]:
+    """运行全部用例，汇总核心指标。
+
+    ``embedding_fixture`` 不为 None 时，用 fixture 里的向量算查询↔记忆余弦分
+    （embedding 路径）；缺省走规则版语义分。
+    ``retrieval_mode`` 记录本次运行使用的检索形态（M2 起支持 rule/embedding/
+    fts/hybrid 矩阵；rule 为历史缺省形态），只进报告与 fingerprint，不改变
+    返回形状的既有键。
+    """
+    cases = load_cases(benchmark_dir)
+    with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
+        work_dir = Path(tmp)
+        results = [
+            evaluate_case(
+                c,
+                work_dir,
+                i,
+                semantic_scores=(
+                    fixture_semantic_scores(c, embedding_fixture) if embedding_fixture else None
+                ),
+            )
+            for i, c in enumerate(cases)
+        ]
+
+    metrics = _aggregate(results)
+    # 返回形状向后兼容：以下均为新增键（报告契约 v1，只增不改）
+    metrics["results"] = results
+    metrics["retrieval_mode"] = retrieval_mode
+    metrics["metric_definitions_version"] = METRIC_DEFINITIONS_VERSION
+    metrics["dataset_digest"] = dataset_digest(benchmark_dir, cases)
+    metrics["clock_anchor"] = CLOCK_ANCHOR
+    metrics["category_metrics"] = _category_metrics(results)
+    return metrics
+
+
+def _category_metrics(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """按分类目录聚合（目录 = 数据集根下第一级路径段）。"""
+    by_category: dict[str, list[dict[str, Any]]] = {}
+    for r in results:
+        by_category.setdefault(r.get("category") or category_of(r), []).append(r)
+    return {cat: _aggregate(items) for cat, items in sorted(by_category.items())}
+
+
+# ── 报告 / 基线 / 证据 manifest（M0）─────────────────────────
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def dataset_digest(benchmark_dir: Path, cases: list[dict[str, Any]] | None = None) -> str:
+    """数据集内容摘要：排序后的（相对路径, 文件 sha256）规范 JSON 的 sha256。
+
+    同一数据集内容 → 同一摘要；与加载顺序无关。用例不是来自文件（合成用例）
+    时退化为对用例 id + 规范 JSON 的摘要，保证函数总可用。
+    """
+    entries: list[dict[str, str]] = []
+    files = True
+    for c in cases or []:
+        rel = c.get("_source_path")
+        if not rel:
+            files = False
+            break
+        path = benchmark_dir / rel
+        try:
+            entries.append({"path": rel, "sha256": _sha256_bytes(path.read_bytes())})
+        except OSError:
+            files = False
+            break
+    if not files:
+        # 合成用例（tests）：以用例本身的内容为准
+        payload = json.dumps(
+            [{k: v for k, v in c.items() if not k.startswith("_")} for c in cases or []],
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        return _sha256_bytes(payload.encode("utf-8"))
+    canonical = json.dumps(sorted(entries, key=lambda e: e["path"]),
+                           ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return _sha256_bytes(canonical.encode("utf-8"))
+
+
+def _code_version() -> str:
+    """git HEAD 短哈希（不可用时 "unknown"）。仅作指纹成分，不作正确性依据。"""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _source_digest() -> str:
+    """检索路径关键源码的内容摘要：捕获未提交改动对结果的影响。"""
+    root = Path(__file__).resolve().parent
+    files = [root / "benchmark.py", root / "retrieval_v2.py", root / "policy.py", root / "schema.py"]
+    entries = []
+    for f in sorted(files):
+        try:
+            entries.append({"path": f.name, "sha256": _sha256_bytes(f.read_bytes())})
+        except OSError:
+            entries.append({"path": f.name, "sha256": "missing"})
+    canonical = json.dumps(entries, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return _sha256_bytes(canonical.encode("utf-8"))
+
+
+def build_run_fingerprint(
+    benchmark_dir: Path,
+    cases: list[dict[str, Any]],
+    *,
+    backend: str,
+    retrieval_mode: str,
+) -> tuple[str, dict[str, Any]]:
+    """run_fingerprint：代码版本 + 源码摘要 + 数据集摘要 + 后端 + 检索模式 + 时钟锚点。
+
+    同输入（同一代码树 + 同一数据集 + 同一后端/模式）→ 同指纹；
+    墙钟时间等不可复现量一律不进指纹（报告里的 generated_at 单独记录）。
+    """
+    components = {
+        "code_version": _code_version(),
+        "source_digest": _source_digest(),
+        "dataset_sha256": dataset_digest(benchmark_dir, cases),
+        "backend": backend,
+        "retrieval_mode": retrieval_mode,
+        "clock_anchor": CLOCK_ANCHOR,
+        "metric_definitions_version": METRIC_DEFINITIONS_VERSION,
+    }
+    canonical = json.dumps(components, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return _sha256_bytes(canonical.encode("utf-8")), components
+
+
+def build_report_document(
+    benchmark_dir: Path,
+    metrics: dict[str, Any],
+    *,
+    backend: str = "python",
+) -> dict[str, Any]:
+    """把 run_benchmark 返回聚合成报告契约文档（memory-benchmark-report/1）。"""
+    fingerprint, components = build_run_fingerprint(
+        benchmark_dir,
+        metrics["results"],
+        backend=backend,
+        retrieval_mode=metrics.get("retrieval_mode", "rule"),
+    )
+    aggregate = {k: v for k, v in metrics.items() if k != "results"}
+    return {
+        "schema": REPORT_SCHEMA,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "run_fingerprint": fingerprint,
+        "fingerprint_components": components,
+        "metric_definitions_version": metrics.get("metric_definitions_version", METRIC_DEFINITIONS_VERSION),
+        "metrics": aggregate,
+        "results": metrics["results"],
+    }
+
+
+def write_evidence_manifest(report_dir: Path, extra_files: list[Path] | None = None) -> Path:
+    """按证据目录惯例写 manifest.json（path + sha256，不含 manifest 自身）。"""
+    artifacts = []
+    for f in sorted(report_dir.iterdir()):
+        if f.is_file() and f.name != "manifest.json":
+            artifacts.append({"path": f.name, "sha256": _sha256_bytes(f.read_bytes())})
+    manifest = {
+        "captured_local_date": datetime.now().strftime("%Y-%m-%d"),
+        "artifact_kind": "memory-benchmark-report",
+        "metric_definitions_version": METRIC_DEFINITIONS_VERSION,
+        "artifacts": artifacts,
+    }
+    path = report_dir / "manifest.json"
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+# 逐指标缺省容差（绝对百分点/绝对值）。确定性套件默认 0：数值漂移必须显式可见；
+# 个别指标确有环境噪声时由基线文件 tolerances 显式放宽（硬零指标不可放宽）。
+DEFAULT_TOLERANCES: dict[str, float] = {}
+# 基线对比只看聚合指标，不含逐例明细与诊断字段。
+_BASELINE_COMPARE_METRICS = (
+    "cases_total", "cases_ok", "cases_ok_rate", "cases_with_expected",
+    "total_expected", "total_expected_behavior", "total_retrieved", "total_forbidden",
+    "memory_precision", "memory_recall", "memory_pollution_rate", "mode_accuracy",
+    "behavior_guard_hit_rate", "behavior_leaks", "forbidden_activation_rate",
+    "forbidden_activations", "separation_margin",
+)
+
+
+def build_baseline_document(metrics: dict[str, Any], *, note: str = "") -> dict[str, Any]:
+    """从 run_benchmark 返回构造基线快照文档（不含逐例明细，保持可评审体量）。"""
+    aggregate = {k: metrics[k] for k in _BASELINE_COMPARE_METRICS if k in metrics}
+    return {
+        "schema": BASELINE_SCHEMA,
+        "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "note": note,
+        "retrieval_mode": metrics.get("retrieval_mode", "rule"),
+        "metric_definitions_version": metrics.get("metric_definitions_version", METRIC_DEFINITIONS_VERSION),
+        "dataset_digest": metrics.get("dataset_digest", ""),
+        "metrics": aggregate,
+        "dimensions": metrics.get("dimensions", {}),
+        # 允许按指标显式放宽（绝对值）；硬零指标不在此列，填了也不生效
+        "tolerances": {},
+    }
+
+
+def compare_baseline(
+    metrics: dict[str, Any],
+    baseline_path: Path,
+) -> tuple[bool, list[dict[str, Any]]]:
+    """逐指标对比基线，返回 (是否全部在容差内, 漂移表)。
+
+    - 当前运行多出的新指标：报告为 "new"，不算漂移（基线随后补快照即可）；
+    - 基线有而当前缺失：视为漂移（指标被删除/改名必须显式过审）；
+    - 硬零指标（HARD_ZERO_METRICS）：容差强制 0，任何非零即失败。
+    """
+    baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+    if baseline.get("schema") != BASELINE_SCHEMA:
+        raise ValueError(f"未知基线 schema: {baseline.get('schema')!r}（期望 {BASELINE_SCHEMA}）")
+    base_metrics = baseline.get("metrics") or {}
+    tolerances = dict(DEFAULT_TOLERANCES)
+    tolerances.update(baseline.get("tolerances") or {})
+    current = {k: metrics[k] for k in _BASELINE_COMPARE_METRICS if k in metrics}
+
+    drift: list[dict[str, Any]] = []
+    all_ok = True
+    for name in sorted(set(base_metrics) | set(current)):
+        base_v = base_metrics.get(name)
+        cur_v = current.get(name)
+        if cur_v is None:
+            all_ok = False
+            drift.append({"metric": name, "baseline": base_v, "current": None,
+                          "delta": None, "tolerance": 0.0, "ok": False, "status": "missing"})
+            continue
+        if base_v is None:
+            drift.append({"metric": name, "baseline": None, "current": cur_v,
+                          "delta": None, "tolerance": None, "ok": True, "status": "new"})
+            continue
+        tol = 0.0 if name in HARD_ZERO_METRICS else float(tolerances.get(name, 0.0))
+        delta = round(float(cur_v) - float(base_v), 6)
+        ok = abs(delta) <= tol
+        if not ok:
+            all_ok = False
+        drift.append({"metric": name, "baseline": base_v, "current": cur_v,
+                      "delta": delta, "tolerance": tol, "ok": ok,
+                      "status": "ok" if ok else "drift"})
+    return all_ok, drift
+
+
+def print_baseline_drift(drift: list[dict[str, Any]]) -> None:
+    print("────── 基线漂移表（baseline vs current） ──────")
+    for row in drift:
+        mark = "✅" if row["ok"] else "❌"
+        if row["status"] == "new":
+            print(f"  {mark} {row['metric']:<28} 新指标（基线无此键） current={row['current']}")
+        elif row["status"] == "missing":
+            print(f"  {mark} {row['metric']:<28} 当前运行缺失 baseline={row['baseline']}")
+        else:
+            print(f"  {mark} {row['metric']:<28} baseline={row['baseline']:<8} "
+                  f"current={row['current']:<8} delta={row['delta']:+} tol={row['tolerance']}")
 
 
 def _text_digest(text: str) -> str:
@@ -513,14 +784,19 @@ def main() -> None:
                         help="从 fixture 取向量算语义分（embedding 路径，不发 HTTP），缺省 rule-only")
     parser.add_argument("--compare", action="store_true",
                         help="同一套用例跑 rule-only 与 embedding 两遍，输出对照表")
+    parser.add_argument("--report", type=Path, default=None,
+                        help="把报告契约文档（report.json + manifest.json）写入该目录")
+    parser.add_argument("--compare-baseline", type=Path, default=None,
+                        help="对比基线快照（memory-benchmark-baseline/1），漂移超出容差非零退出")
     args = parser.parse_args()
 
     if args.embedding_fixture is not None:
         fixture = load_embedding_fixture(args.embedding_fixture)
-        metrics_emb = run_benchmark(args.dir, embedding_fixture=fixture)
+        metrics_emb = run_benchmark(args.dir, embedding_fixture=fixture, retrieval_mode="embedding")
         _print_summary(metrics_emb, f"[embedding {fixture.get('model', '?')}]")
         if args.verbose:
             _print_verbose(metrics_emb["results"])
+        _emit_report_and_baseline(args, metrics_emb)
         return
 
     if args.compare:
@@ -536,7 +812,7 @@ def main() -> None:
                 _print_verbose(metrics_rule["results"])
             return
         fixture = load_embedding_fixture(default_fixtures[0])
-        metrics_emb = run_benchmark(args.dir, embedding_fixture=fixture)
+        metrics_emb = run_benchmark(args.dir, embedding_fixture=fixture, retrieval_mode="embedding")
         _print_summary(metrics_emb, f"[embedding {fixture.get('model', '?')}]")
         print("\n────── 对照表（rule-only vs embedding） ──────")
         rmap = {r["id"]: r for r in metrics_rule["results"]}
@@ -552,6 +828,27 @@ def main() -> None:
     _print_summary(metrics)
     if args.verbose:
         _print_verbose(metrics["results"])
+    _emit_report_and_baseline(args, metrics)
+
+
+def _emit_report_and_baseline(args: argparse.Namespace, metrics: dict[str, Any]) -> None:
+    """落盘报告契约文档并按需对比基线（--report / --compare-baseline 共用）。"""
+    if args.report is not None:
+        report_dir = args.report
+        report_dir.mkdir(parents=True, exist_ok=True)
+        document = build_report_document(args.dir, metrics)
+        report_path = report_dir / "report.json"
+        report_path.write_text(
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        write_evidence_manifest(report_dir)
+        print(f"📄 报告已写入 {report_path}")
+    if args.compare_baseline is not None:
+        all_ok, drift = compare_baseline(metrics, args.compare_baseline)
+        print_baseline_drift(drift)
+        if not all_ok:
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":
