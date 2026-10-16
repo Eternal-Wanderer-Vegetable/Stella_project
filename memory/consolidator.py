@@ -61,6 +61,7 @@ from core.llm import (
 )
 from core.llm.base import LLMBackend
 from core.llm.usage_store import budget_blocked
+from memory import capture_gate
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
 from memory.cost_gates import (
@@ -237,8 +238,15 @@ class MemoryConsolidator:
             model_tag = getattr(backend, "model", "") or backend_name
             # 只在真正调用模型的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
             # 且绝不与别的闸门同时持有（防止跨资源队头阻塞）。
-            async with acquire(gate_of(ROLE_CONSOLIDATION), tag=f"consolidate:{group_id}"):
-                result, finish = await backend.generate_detailed(prompt)
+            try:
+                async with acquire(gate_of(ROLE_CONSOLIDATION), tag=f"consolidate:{group_id}"):
+                    result, finish = await backend.generate_detailed(prompt)
+            except Exception:
+                # 真实生成/传输失败 = 探针没抓到的瞬时故障：立即关记忆采集门
+                # （epoch 围栏让在途旧探针翻不了案，计划 §6.1）。截断异常在
+                # 调用点之后另抛，不算 provider 故障，不走这里。
+                capture_gate.note_generation_failure()
+                raise
             append_consolidation_log(
                 f"- **🧠 后端**: {backend_name}（{model_tag}，批次 {limit} 条）\n"
                 f"  > 原始输出：\n  > {result.replace(chr(10), chr(10) + '  > ')}\n"

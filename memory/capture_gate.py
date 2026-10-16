@@ -320,6 +320,19 @@ def current_decision() -> CaptureDecision:
     return _gate.decision()
 
 
+def ingress_decision() -> CaptureDecision | None:
+    """生产入站的采集决策；门未安装返回 None（遗留语义）。
+
+    生产 Bot 进程在 on_startup 装门、之后绝不卸载（stop 只关门不置空），
+    因此 None 只出现在单元测试/显式调用方——那时保持既有直接落库行为，
+    存量测试无须感知门的存在。装门失败也会安装一个永不开门的实例，
+    进程生命周期内不存在「以为装了门其实没有」的窗口。
+    """
+    if _gate is None:
+        return None
+    return _gate.decision()
+
+
 def note_generation_failure() -> None:
     """真实整合失败的全局钩子；门未安装时无事可做（本来就关着）。"""
     if _gate is not None:
@@ -345,7 +358,11 @@ def status_snapshot() -> dict:
 
 
 async def start_gate() -> CaptureGate:
-    """按 .env 配置装门并启动（Bot on_startup 调）。重复调用返回现门。"""
+    """按 .env 配置装门并启动（Bot on_startup 调）。重复调用返回现门。
+
+    装门异常时不留空窗：仍把门挂到单例上（worker 缺席 = 永远关门，
+    保持 fail-closed），只让启动日志报错。
+    """
     global _gate
     if _gate is not None:
         return _gate
@@ -355,7 +372,10 @@ async def start_gate() -> CaptureGate:
         probe_interval=float(MEMORY_CAPTURE_PROBE_INTERVAL),
         probe_timeout=float(MEMORY_CAPTURE_PROBE_TIMEOUT),
     )
-    await gate.start()
+    try:
+        await gate.start()
+    except Exception as e:
+        logger.error(f"❌ [CaptureGate] 探针 worker 启动失败，记忆采集保持关门: {e}")
     _gate = gate
     logger.info(
         "🚪 [CaptureGate] 记忆采集就绪门已启动（fail-closed；"
@@ -365,8 +385,8 @@ async def start_gate() -> CaptureGate:
 
 
 async def stop_gate() -> None:
-    global _gate
+    """优雅关闭：关门并取消 worker。**保留单例**（停止态 = 明确的关门
+    事实），避免关闭窗口期入站拿到「门未安装」的遗留语义而照常落库。"""
     if _gate is None:
         return
     await _gate.stop()
-    _gate = None

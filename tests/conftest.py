@@ -88,6 +88,28 @@ def _no_real_browser(monkeypatch):
     monkeypatch.setattr(render, "_load_async_playwright", lambda: None)
 
 
+@pytest.fixture(autouse=True)
+def _inert_capture_gate(monkeypatch):
+    """测试进程里记忆采集门永远不装（遗留语义），探针永不发真请求。
+
+    生产上门由 ai_gateway 的 on_startup 钩子安装且进程内不卸载；而测试
+    进程存在**游荡 lifespan**（import 期遗留的 FastAPI lifespan 协程被
+    pytest-asyncio 的夹具运行器捎带执行），会让 startup 钩子在任意用例里
+    开跑——不废掉它，关门实例会漏进模块单例，让后续所有入站测试按
+    「门关闭」拒绝落库，探针还会往 .env 配的端点发真实请求。
+
+    门专用用例（tests/test_memory_capture_gate.py 等）直接构造
+    ``CaptureGate`` 注入假探针/假时钟，不走 ``start_gate``。
+    """
+    import memory.capture_gate as capture_gate
+
+    async def _no_start_gate():
+        return None
+
+    monkeypatch.setattr(capture_gate, "start_gate", _no_start_gate)
+    monkeypatch.setattr(capture_gate, "_gate", None)
+
+
 # ============================================================
 # cometa 共享夹具（tests/cometa/conftest.py 里有同名细粒度版本；
 # 这里提供跨目录（tests/capability 等）可用的最小形态）

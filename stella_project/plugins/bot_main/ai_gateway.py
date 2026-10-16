@@ -129,7 +129,7 @@ from core.social.delivery import (
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
-from memory import addressing, expression_learning, social_store
+from memory import addressing, capture_gate, expression_learning, social_store
 from memory.addressing_intent import (
     CLEAR_ADDRESS,
     NOT_ADDRESS_REQUEST,
@@ -1130,6 +1130,17 @@ async def record_group_chat(event: GroupMessageEvent):
             return
         text = "[图片]"
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
+    # 采集就绪门（计划 §6.3）：资格过滤之后、落库与一切内容派生副作用之前。
+    # 关闭时本条消息不落库、不排队、不回放——恢复后从下一条新消息开始采集。
+    capture = capture_gate.ingress_decision()
+    if capture is not None and not capture.allowed:
+        _flow_decision(fctx, "ingress.passive.persist", status="skipped",
+                       reason_code="capture_closed")
+        logger.info(
+            "🚪 [CaptureGate] 群消息不落库（采集门关闭，"
+            f"原因 {capture.reason_code or 'closed'}）"
+        )
+        return
     _flow_transition(fctx, from_node="ingress.passive.filter",
                      to_node="ingress.passive.persist")
     # 消息关系提取（多人身份修复计划 §6.2）：无条件执行（不依赖 SOCIAL_ENABLED），
@@ -1176,7 +1187,7 @@ async def record_group_chat(event: GroupMessageEvent):
     except Exception:
         pass
     with _flow_span(fctx, "ingress.passive.persist"):
-        await record_message(ctx)
+        await record_message(ctx, capture=capture)
         # 身份声明 hook（多人身份修复计划 §6.3）：入库拿到 source_row_id 后
         # 解析本人自我介绍/有目标纠正；零命中零写库，异常不拖垮消息链路。
         with contextlib.suppress(Exception):
@@ -2008,37 +2019,51 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                     fctx, storage_session_id=ref.storage_session_id)
             except Exception:
                 pass
-        # 用户消息**先**持久化（source PRIVATE_DIRECT，锁内落库），再组上下文
-        # ——锁覆盖「历史插入 ↔ 压缩」竞态（计划 §6.2）。
-        with _flow_span(fctx, "chat.persist"):
-            await record_message(ctx)
-            # 身份声明 hook（多人身份修复计划 §6.3）：私聊同契约
-            with contextlib.suppress(Exception):
-                from memory.conversation_identity import process_message_identity
+        # 采集就绪门（计划 §6.3）：落库、身份声明、共享授权、整合触发都是
+        # 内容派生副作用，门关闭时全部跳过；回复链路照走——这是记忆采集
+        # 变更，不是全局无 AI 模式（计划 §9）。
+        capture = capture_gate.ingress_decision()
+        capture_open = capture is None or capture.allowed
+        if not capture_open:
+            _flow_decision(fctx, "chat.persist", status="skipped",
+                           reason_code="capture_closed")
+            logger.info(
+                "🚪 [CaptureGate] 私聊消息不落库（采集门关闭，"
+                f"原因 {capture.reason_code or 'closed'}）；回复照常"
+            )
+        if capture_open:
+            # 用户消息**先**持久化（source PRIVATE_DIRECT，锁内落库），再组上下文
+            # ——锁覆盖「历史插入 ↔ 压缩」竞态（计划 §6.2）。
+            with _flow_span(fctx, "chat.persist"):
+                await record_message(ctx, capture=capture)
+                # 身份声明 hook（多人身份修复计划 §6.3）：私聊同契约
+                with contextlib.suppress(Exception):
+                    from memory.conversation_identity import process_message_identity
 
-                process_message_identity(ctx)
-            # 共享授权入口（整改计划 P5，复核 F1/F4）：显式分享/撤回话术
-            with contextlib.suppress(Exception):
-                _maybe_personal_sharing(ctx)
+                    process_message_identity(ctx)
+                # 共享授权入口（整改计划 P5，复核 F1/F4）：显式分享/撤回话术
+                with contextlib.suppress(Exception):
+                    _maybe_personal_sharing(ctx)
         # 整条身份问句直复（多人身份修复计划 §6.3）
         _maybe_identity_direct_reply(ctx)
-        try:
-            with _flow_span(fctx, "chat.consolidate_trigger"):
-                consolidator = get_consolidator()
-                new_count = consolidator.has_new_messages_to_consolidate(
-                    ref.storage_session_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
-                )
-                if new_count > 0:
-                    logger.info(
-                        f"🧠 [Trigger] 私聊 {ref.runtime_key} 触发短期记忆总结（新消息 {new_count} 条）"
+        if capture_open:
+            try:
+                with _flow_span(fctx, "chat.consolidate_trigger"):
+                    consolidator = get_consolidator()
+                    new_count = consolidator.has_new_messages_to_consolidate(
+                        ref.storage_session_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
                     )
-                    # R2修复：私聊使用注册会话整合（计划 §6.2）
-                    maybe_consolidate(
-                        conversation_ref=ref, force=True,
-                        parent_trace_id=fctx.trace_id if fctx is not None else "",
-                    )
-        except Exception as e:
-            logger.warning(f"⚠️ 私聊触发总结异常（跳过）: {e}")
+                    if new_count > 0:
+                        logger.info(
+                            f"🧠 [Trigger] 私聊 {ref.runtime_key} 触发短期记忆总结（新消息 {new_count} 条）"
+                        )
+                        # R2修复：私聊使用注册会话整合（计划 §6.2）
+                        maybe_consolidate(
+                            conversation_ref=ref, force=True,
+                            parent_trace_id=fctx.trace_id if fctx is not None else "",
+                        )
+            except Exception as e:
+                logger.warning(f"⚠️ 私聊触发总结异常（跳过）: {e}")
 
         chat_blocked = budget_blocked(ROLE_CHAT)
         if chat_blocked:
@@ -3437,6 +3462,17 @@ async def _record_bot_lines(
     else:
         segments = [(i, (line or "").strip(), "") for i, line in enumerate(lines)]
 
+    # 采集就绪门（计划 §6.3）：全部 BOT_SELF 写入方共用此入口，一次检查覆盖
+    # 确认回执、运行时开关/重载应答、能力答复、主动发言与睡醒播报——无 AI
+    # 播报不能在采集门关闭时变成新记忆行。门未安装（单测/显式调用方）保持
+    # 旧语义；关闭时整段台词不落库。
+    capture = capture_gate.ingress_decision()
+    if capture is not None and not capture.allowed:
+        logger.debug(
+            f"🚪 [CaptureGate] 采集门关闭，{len(segments)} 段 Bot 台词不落库"
+        )
+        return
+
     logical_id = ""
     turn_id = ""
     origin_msg_id = ""
@@ -3481,7 +3517,8 @@ async def _record_bot_lines(
                     reply_recipient_user_id=recipient,
                     turn_id=turn_id,
                     relation_version=1 if logical_id else 0,
-                )
+                ),
+                capture=capture,
             )
         except Exception as e:
             logger.warning(f"⚠️ 记录 Bot 自身发言失败（跳过）: {e}")
@@ -4828,6 +4865,18 @@ _stop_watcher_task: asyncio.Task | None = None
 
 
 @get_driver().on_startup
+async def _start_capture_gate() -> None:
+    """装记忆采集就绪门（计划 §6.1）：启动即 fail-closed，探针证实
+    CONSOLIDATION 就绪后才开门。装门失败也保持关门，绝不拖垮主进程。"""
+    from memory import capture_gate as _cg
+
+    try:
+        await _cg.start_gate()
+    except Exception as e:
+        logger.error(f"❌ [CaptureGate] 启动异常，记忆采集保持关门: {e}")
+
+
+@get_driver().on_startup
 async def _start_stop_watcher() -> None:
     """启动时清残留哨兵并拉起 watcher。
 
@@ -4966,6 +5015,12 @@ async def _graceful_shutdown() -> None:
     lifecycle = _lifecycle_root("_graceful_shutdown", "shutdown")
     outcome = "stopped"
     stop_errors: list[str] = []
+    # 采集门先行关门（计划 §6.1：优雅关闭时取消探针 worker）：关停窗口期
+    # 迟到的入站消息不再落库，单例保留为明确的「已停止」关门事实。
+    try:
+        await capture_gate.stop_gate()
+    except Exception as e:
+        stop_errors.append(f"capture_gate: {e}")
     try:
         return await _graceful_shutdown_body(lifecycle, stop_errors, outcome)
     except asyncio.CancelledError:
