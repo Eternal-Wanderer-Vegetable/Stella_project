@@ -21,6 +21,8 @@ The silent listener processes **every** group message, including messages that d
 
 `BOT_SELF` is required: without it, when a user gives a short response such as “yes” or “phone,” the consolidation model cannot see what the Bot asked and can only give up or invent the context.
 
+**Capture readiness gate (fail-closed)**: before persistence there is a process-local capture gate — while the `CONSOLIDATION` role has not been proven ready by a bounded probe (one minimal completion request through the real generation path), the gate stays closed. While closed: messages received on QQ group / private / WebChat are **not persisted**, and every content-derived side effect — identity claims, social evidence, expression learning, participation scoring, BOT_SELF lines — is **skipped as well**; replies, plugin shortcuts and usage accounting keep working (this is a memory-capture change, not a global no-AI mode). Messages from that interval are **not queued, replayed, or backfilled** — capture resumes with the next newly received message after recovery; rows persisted before the upgrade still follow the existing drain/cleanup policies. See [Memory Capture Readiness Gate](../reference/configuration.en.md#memory-capture-readiness-gate) for configuration and the sanitized `memory_capture` section of the loopback status endpoint for runtime state.
+
 Link monitoring refreshes the heartbeat through an **independent** `event_preprocessor` (any OneBot event counts, including heartbeat meta-events from the protocol endpoint); this is not the responsibility of `group_silent_listener`.
 
 > **The persistence listener must have the highest priority (0)** and must come before all `block=True` handlers.

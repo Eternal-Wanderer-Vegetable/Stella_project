@@ -104,6 +104,8 @@ There are two mechanical safeguards beyond the prompt:
 - **Sender allowlist**: candidates whose `user_id` is not in the set of actual senders in the current batch are always discarded
 - **`BOT_SELF` exclusion**: the Bot's own messages do not enter the allowlist, so they can never become candidate owners
 
+One master switch sits **upstream** of both mechanical safeguards: the **memory capture readiness gate** (`memory/capture_gate.py`). Until the `CONSOLIDATION` role is proven ready by a bounded probe, no inbound message (QQ group / private / WebChat) is persisted, and every derived side effect — identity, social, expression, participation — is skipped. Messages from that interval are never queued or replayed; capture resumes with the next newly received message after recovery. This gate guarantees that "capture broadly" can never degenerate into "backlog deeply" — when the consolidation model is unavailable the system **does not capture**, instead of capturing what it can never consolidate. See [Memory Capture Readiness Gate](../reference/configuration.en.md#memory-capture-readiness-gate).
+
 ### Source Levels
 
 | `source_kind` | Meaning | Marking in the prompt | Weight |

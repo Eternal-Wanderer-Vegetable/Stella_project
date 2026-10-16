@@ -374,6 +374,21 @@ The `CONSOLIDATION_LOCAL_*` values above are for the **local** endpoint. Local i
 
 **What `CONSOLIDATION_MAX_SKIP_STREAK` protects against**: before consolidation there is a **purely local, zero-cost** pre-filter (image spam, one-character replies, too few @ messages, or high semantic repetition with the previous batch). A match skips the round and saves the messages for the next one. **Skipping does not advance the checkpoint, so it accumulates a batch rather than discarding it.** However, a group with only persistent image spam could remain indefinitely. Once consecutive skips reach this count, one consolidation is forced and the streak is cleared, ensuring the worst case is delay rather than loss.
 
+### Memory Capture Readiness Gate
+
+Memory capture for all inbound messages (QQ group / QQ private / WebChat) fails closed until the `CONSOLIDATION` role is **verified ready**: while the gate is closed, messages received are **not persisted, not queued, and not replayed** — capture resumes with the next newly received message after recovery. This is a deliberate product tradeoff: rather than accumulating unbounded backlog while the consolidation model is unavailable, content is explicitly dropped (replies still work; this is a memory-capture change, not a global no-AI mode).
+
+How readiness is decided: the probe sends one minimal `"ping"` completion through the consolidation role's **real generation path** (including fallback-chain semantics). It does not require `/v1/models` (online providers may omit that endpoint) and sends no conversation data. Once ready the gate opens and holds a 60-second lease, renewed by the next probe before expiry; a real consolidation call failure closes the gate immediately (a late probe success can never override a newer failure). There is no bypass switch — reopening capture without proven readiness would reintroduce unbounded backlog.
+
+| Configuration | Default | Description |
+|---|---|---|
+| `MEMORY_CAPTURE_PROBE_INTERVAL` | `30` | Initial probe interval (seconds) while the gate is unavailable; exponential backoff capped at 300 seconds |
+| `MEMORY_CAPTURE_PROBE_TIMEOUT` | `5.0` | Wait limit (seconds) for a single probe completion request |
+
+> **Local model cold start**: while LM Studio is loading a large model, probes keep timing out and capture stays closed — messages received before the gate opens are not backfilled. If cold starts regularly take minutes, raise `MEMORY_CAPTURE_PROBE_TIMEOUT` or warm the model before starting the bot.
+>
+> **Existing backlog is unaffected**: this feature only prevents *new* backlog from accumulating while the gate is closed. Rows persisted before the upgrade still follow the existing drain (`CONSOLIDATION_SCHEDULE_INTERVAL`) and cleanup (`MESSAGE_CLEANUP_*`) policies. The loopback status endpoint `GET /stella/status` exposes a sanitized readiness snapshot in its `memory_capture` section (state / slot / failure counters / next retry), letting you tell "capture unavailable" apart from "pre-existing backlog not yet drained".
+
 ### Memory Candidate Extraction (Stage 2)
 
 Consolidation runs in two stages:
