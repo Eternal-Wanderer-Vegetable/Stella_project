@@ -1,0 +1,64 @@
+{
+  "id": "temporal-project-001",
+  "scenario": {
+    "group_id": 7,
+    "user_id": 701
+  },
+  "input": "上次说的那个网站项目咋样了",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "R_new": {
+      "content": "网站项目这周就上线了",
+      "type": "EVENT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -60
+    },
+    "R_old": {
+      "content": "网站项目刚起步还在画原型",
+      "type": "EVENT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.6,
+      "importance": 0.4,
+      "last_accessed_at_offset_minutes": -86400
+    },
+    "S1": {
+      "content": "用户咖啡喝得多",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.88,
+      "importance": 0.85,
+      "last_accessed_at_offset_minutes": -1440
+    },
+    "S2": {
+      "content": "用户午休喜欢散步",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.85,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -1440
+    }
+  },
+  "expected_memory": [
+    "R_new"
+  ],
+  "forbidden_memory": [
+    "R_old"
+  ],
+  "max_retrieved": 3,
+  "notes": "temporal 维度：R_new/R_old 词面、usage 相同，仅时间偏移不同（锚点-1h vs -60d）；新事实必须压过过时事实进入 final，过时事实进 forbidden 且被 thresh/limit 挡在外面。S1/S2 是新鲜中性填充，防止 R_old 挤进 mode_limit 前 3。"
+}

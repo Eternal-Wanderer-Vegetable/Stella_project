@@ -1,0 +1,29 @@
+{
+  "id": "abstain-unrelated-noise-001",
+  "scenario": {
+    "group_id": 11,
+    "user_id": 1103
+  },
+  "input": "你觉得极光是怎么形成的",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "N1": {
+      "content": "用户早餐喜欢吃包子",
+      "type": "PREFERENCE",
+      "visibility": "OPEN",
+      "confidence": 0.4,
+      "importance": 0.2
+    },
+    "N2": {
+      "content": "用户的猫叫团子",
+      "type": "FACT",
+      "visibility": "OPEN",
+      "confidence": 0.4,
+      "importance": 0.2
+    }
+  },
+  "expected_memory": [],
+  "expect_empty": true,
+  "notes": "低质量噪音 abstain：无 usage 标签（usage 分 1/5）+ 低 conf/imp + 词面无关，全部低于 MEMORY_SCORE_MIN，正确行为是不硬凑话题。"
+}

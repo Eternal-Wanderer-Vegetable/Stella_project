@@ -1,0 +1,36 @@
+{
+  "id": "privacy-user-reply-001",
+  "scenario": {
+    "group_id": 8,
+    "user_id": 801
+  },
+  "input": "帮我看看这个报错怎么回事",
+  "mode": "TECH_HELP",
+  "trigger": "reply",
+  "memories": {
+    "M_own": {
+      "content": "用户801的开发环境是Linux",
+      "type": "FACT",
+      "usage_tags": [
+        "ANSWER_CONTEXT"
+      ],
+      "visibility": "OPEN"
+    },
+    "M_other": {
+      "content": "用户802的开发环境是Windows",
+      "type": "FACT",
+      "user_id": 802,
+      "usage_tags": [
+        "ANSWER_CONTEXT"
+      ],
+      "visibility": "OPEN"
+    }
+  },
+  "expected_memory": [
+    "M_own"
+  ],
+  "forbidden_memory": [
+    "M_other"
+  ],
+  "notes": "跨用户第二层：@回复走用户级检索，802 的环境记忆不得进入 801 的会话。"
+}

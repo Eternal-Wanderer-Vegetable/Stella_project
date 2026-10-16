@@ -1,0 +1,64 @@
+{
+  "id": "supersede-active-pair-001",
+  "scenario": {
+    "group_id": 9,
+    "user_id": 905
+  },
+  "input": "你最近都跟谁打游戏",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "V_new": {
+      "content": "最近固定和小米打游戏",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -60
+    },
+    "V_old": {
+      "content": "以前总和晓华打游戏",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.6,
+      "importance": 0.4,
+      "last_accessed_at_offset_minutes": -86400
+    },
+    "F1": {
+      "content": "用户打游戏喜欢玩辅助位",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.85,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -1440
+    },
+    "F2": {
+      "content": "用户周末常约语音连麦",
+      "type": "EVENT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.8,
+      "importance": 0.75,
+      "last_accessed_at_offset_minutes": -1440
+    }
+  },
+  "expected_memory": [
+    "V_new"
+  ],
+  "forbidden_memory": [
+    "V_old"
+  ],
+  "max_retrieved": 3,
+  "notes": "B 型（关系对）：搭子从晓华换成小米，两行都 active；查询避开「开黑」等 GROUP_EVENT 关键词保持 CASUAL 检测，新值+填充压住旧值"
+}

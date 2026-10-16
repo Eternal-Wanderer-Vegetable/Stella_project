@@ -1,0 +1,66 @@
+{
+  "id": "lineage-multi-001",
+  "scenario": {
+    "group_id": 12,
+    "user_id": 1201
+  },
+  "input": "给我推荐点音乐和一本书",
+  "mode": "RECOMMEND",
+  "trigger": "reply",
+  "memories": {
+    "M_music": {
+      "content": "用户喜欢的音乐是城市流行",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8,
+      "evidence": [
+        {
+          "fact_key": "favorite_music",
+          "source_row_id": 201
+        }
+      ]
+    },
+    "M_book": {
+      "content": "用户喜欢的书是科幻小说",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.85,
+      "importance": 0.75,
+      "evidence": [
+        {
+          "fact_key": "favorite_book",
+          "source_row_id": 202
+        }
+      ]
+    },
+    "N1": {
+      "content": "用户周末喜欢骑行",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4,
+      "evidence": [
+        {
+          "fact_key": "weekend_hobby",
+          "source_row_id": 203
+        }
+      ]
+    }
+  },
+  "expected_memory": [
+    "M_music",
+    "M_book"
+  ],
+  "expect_evidence": true,
+  "notes": "血缘（多条）：两条被召回的期望记忆各自都有合法证据行，lineage_completeness 计 2/2。"
+}

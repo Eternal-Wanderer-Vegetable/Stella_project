@@ -1,0 +1,52 @@
+{
+  "id": "gen-recommend-002",
+  "scenario": {
+    "group_id": 20,
+    "user_id": 2000
+  },
+  "input": "有什么书籍推荐吗",
+  "mode": "RECOMMEND",
+  "trigger": "reply",
+  "memories": {
+    "PREF": {
+      "content": "用户喜欢的书籍是历史纪实",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8
+    },
+    "N1": {
+      "content": "用户喜欢的电影是科幻大片",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4
+    },
+    "N2": {
+      "content": "用户喜欢的美食是红烧牛肉面",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4
+    }
+  },
+  "expected_memory": [
+    "PREF"
+  ],
+  "max_retrieved": 3,
+  "generator": {
+    "script": "scripts/generate_benchmark_cases.py",
+    "seed": 20261016,
+    "template": "recommend"
+  },
+  "notes": "生成用例：同类偏好（高分）必须被召回，异类偏好允许进但不得顶掉期望。"
+}

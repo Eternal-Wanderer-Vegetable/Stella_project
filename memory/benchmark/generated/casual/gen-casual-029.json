@@ -1,0 +1,52 @@
+{
+  "id": "gen-casual-029",
+  "scenario": {
+    "group_id": 21,
+    "user_id": 2100
+  },
+  "input": "今天想随便聊聊旅行",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "PREF": {
+      "content": "用户喜欢聊古镇漫游相关的话题",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8
+    },
+    "N1": {
+      "content": "用户平时关注宠物",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4
+    },
+    "N2": {
+      "content": "用户平时关注收藏",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4
+    }
+  },
+  "expected_memory": [
+    "PREF"
+  ],
+  "max_retrieved": 3,
+  "generator": {
+    "script": "scripts/generate_benchmark_cases.py",
+    "seed": 20261016,
+    "template": "casual"
+  },
+  "notes": "生成用例：闲聊延续话题时同类偏好必须可召回。"
+}

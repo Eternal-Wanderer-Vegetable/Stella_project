@@ -1,0 +1,35 @@
+{
+  "id": "privacy-internal-both-001",
+  "scenario": {
+    "group_id": 8,
+    "user_id": 806
+  },
+  "input": "随便聊聊最近怎么样",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "M_pub": {
+      "content": "用户806喜欢下班夜跑",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN"
+    },
+    "M_int": {
+      "content": "系统内部调参备忘",
+      "type": "FACT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "INTERNAL"
+    }
+  },
+  "expected_memory": [
+    "M_pub"
+  ],
+  "forbidden_memory": [
+    "M_int"
+  ],
+  "notes": "INTERNAL 是系统内部行：任何行为模式都不可见（比 RESTRICTED 更严一级）。"
+}

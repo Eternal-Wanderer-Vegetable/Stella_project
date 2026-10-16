@@ -1,0 +1,56 @@
+{
+  "id": "supersede-double-001",
+  "scenario": {
+    "group_id": 9,
+    "user_id": 903
+  },
+  "input": "你常用邮箱发我一下",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "V3": {
+      "content": "现在常用邮箱是 stella@example.com",
+      "type": "FACT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.85,
+      "last_accessed_at_offset_minutes": -60
+    },
+    "V2": {
+      "content": "中间换过一次常用邮箱",
+      "type": "FACT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.6,
+      "importance": 0.4,
+      "status": "superseded",
+      "last_accessed_at_offset_minutes": -2880
+    },
+    "V1": {
+      "content": "最早注册用的邮箱已经不用了",
+      "type": "FACT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.3,
+      "status": "archived",
+      "last_accessed_at_offset_minutes": -86400
+    }
+  },
+  "expected_memory": [
+    "V3"
+  ],
+  "forbidden_memory": [
+    "V1",
+    "V2"
+  ],
+  "max_retrieved": 3,
+  "notes": "同一事实两次变更：v1 archived、v2 superseded 都必须被 active 过滤挡住，只有 v3 可见"
+}

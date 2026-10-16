@@ -1,0 +1,31 @@
+{
+  "id": "abstain-wrong-usage-001",
+  "scenario": {
+    "group_id": 11,
+    "user_id": 1101
+  },
+  "input": "今天天气真不错啊",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "M_rec": {
+      "content": "用户喜欢的游戏是塞尔达",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN"
+    },
+    "M_tech": {
+      "content": "用户的主力语言是Python",
+      "type": "FACT",
+      "usage_tags": [
+        "ANSWER_CONTEXT"
+      ],
+      "visibility": "OPEN"
+    }
+  },
+  "expected_memory": [],
+  "expect_empty": true,
+  "notes": "usage 维 abstain：全部记忆的 usage_tags 与 CASUAL_REPLY 不兼容（usage 过滤不放行），天气闲聊不得强行召回推荐/技术记忆。"
+}

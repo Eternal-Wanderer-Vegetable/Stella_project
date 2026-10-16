@@ -1,0 +1,54 @@
+{
+  "id": "supersede-drink-001",
+  "scenario": {
+    "group_id": 9,
+    "user_id": 900
+  },
+  "input": "现在奶茶喝几分糖来着",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "V_new": {
+      "content": "现在奶茶只喝三分糖",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -120
+    },
+    "V_old": {
+      "content": "以前奶茶要喝全糖",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.6,
+      "importance": 0.4,
+      "status": "superseded",
+      "last_accessed_at_offset_minutes": -43200
+    },
+    "F1": {
+      "content": "用户喜欢珍珠加椰果",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.85,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -1440
+    }
+  },
+  "expected_memory": [
+    "V_new"
+  ],
+  "forbidden_memory": [
+    "V_old"
+  ],
+  "max_retrieved": 3,
+  "notes": "旧值已停用（status=superseded）：SQL active 过滤必须把它挡在候选外；forbidden 标注是纵深防御——若 status 过滤失效，激活即双门禁报警。"
+}

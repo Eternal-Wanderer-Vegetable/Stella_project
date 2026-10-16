@@ -1,0 +1,31 @@
+{
+  "id": "abstain-restricted-only-001",
+  "scenario": {
+    "group_id": 11,
+    "user_id": 1102
+  },
+  "input": "最近有什么好玩的吗",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "M_r": {
+      "content": "用户1102的证件号码",
+      "type": "FACT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "RESTRICTED"
+    },
+    "M_i": {
+      "content": "内部调度参数备忘",
+      "type": "FACT",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "INTERNAL"
+    }
+  },
+  "expected_memory": [],
+  "expect_empty": true,
+  "notes": "可见性维 abstain：库中只有 RESTRICTED/INTERNAL 行，闲聊模式全部被预过滤，必须空召回。"
+}

@@ -34,7 +34,7 @@ import json
 import sqlite3
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +51,11 @@ METRIC_DEFINITIONS_VERSION = "1"
 # 与用例 DB 的缺省时间戳（见 _write_case_db）同一纪元，保证跨机器可复现。
 CLOCK_ANCHOR = "2026-08-09 12:00:00"
 # 双硬零门禁：任何泄漏/误激活即失败，不允许容差，也不进平均分。
-HARD_ZERO_METRICS = ("forbidden_activation_rate", "cross_scope_leak_rate")
+# 名称对应基线对比里的扁平键（dimensions.<family>.<key>）。
+HARD_ZERO_METRICS = (
+    "forbidden_activation_rate",
+    "dimensions.scope_privacy.cross_scope_leak_rate",
+)
 
 
 def _mem_dict(mid: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -115,6 +119,20 @@ def _scenario_ids(case: dict[str, Any]) -> tuple[int, int]:
     return group_id, user_id
 
 
+def _resolve_memory_timestamp(mem: dict[str, Any], field: str, default: str) -> str:
+    """解析记忆时间戳：偏移字段优先（更具体的写法），其次绝对值，最后缺省值。
+
+    偏移字段（``last_accessed_at_offset_minutes`` / ``last_confirmed_at_offset_minutes``）
+    让 temporal 用例表达「比锚点新 1 小时 / 旧 60 天」，不依赖写用例时的墙钟。
+    """
+    offset = mem.get(f"{field}_offset_minutes")
+    if offset is not None:
+        base = datetime.strptime(CLOCK_ANCHOR, "%Y-%m-%d %H:%M:%S")
+        return (base + timedelta(minutes=int(offset))).strftime("%Y-%m-%d %H:%M:%S")
+    value = mem.get(field)
+    return value or default
+
+
 def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
     """把用例记忆写进临时 SQLite，返回 (group_id, user_id)。
 
@@ -130,6 +148,13 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
         写入 ``last_confirmed_at``：排序读的是证据新鲜度（policy._mem_timestamp
         优先 last_confirmed_at），而 last_accessed_at 会被检索命中刷新
         （retrieval_v2._touch_accessed），只写它会让同一用例跑第二遍时新鲜度变了。
+      ``last_accessed_at_offset_minutes`` / ``last_confirmed_at_offset_minutes`` →
+        相对 CLOCK_ANCHOR 的偏移（M1 temporal 用例），换算后写入对应列；
+      ``status``                 → 默认 'active'；conflict-supersede 用例用
+        'superseded'/'archived' 写旧值行，验证非 active 行绝不进候选；
+      ``evidence``               → 血缘声明（M1）：列表 [{fact_key, source_row_id, ...}]，
+        loader 同步写入 memory_evidence + memory_claim_links（复用 memory.schema
+        的规范 DDL），供 expect_evidence 用例做确定性 DB 血缘检查。
     """
     db_path.unlink(missing_ok=True)
     group_id, user_id = _scenario_ids(case)
@@ -138,6 +163,8 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
         from memory import schema
 
         schema.create_memories_table(conn)
+        schema.create_memory_evidence_table(conn)
+        schema.create_memory_claim_links_table(conn)
         for mid, data in (case.get("memories") or {}).items():
             mem = _mem_dict(mid, data)
             # trigger_data 在 schema 里是 TEXT(JSON)，用例里写成对象时自动序列化，
@@ -145,27 +172,61 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
             trigger_data = mem.get("trigger_data")
             if isinstance(trigger_data, (dict, list)):
                 trigger_data = json.dumps(trigger_data, ensure_ascii=False)
+            owner_space = str(mem.get("group_shared_space", mem.get("group_id", group_id)))
+            owner_user = str(mem.get("user_id", user_id))
             conn.execute(
                 "INSERT INTO memories (id, group_shared_space, user_id, type, content, importance, "
                 "confidence, status, usage_tags, visibility, trigger_data, behavior_rule, "
                 "last_accessed_at, last_confirmed_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     mid,
-                    str(mem.get("group_shared_space", mem.get("group_id", group_id))),
-                    str(mem.get("user_id", user_id)),
+                    owner_space,
+                    owner_user,
                     mem.get("type") or "FACT",
                     mem.get("content") or "",
                     0.5 if mem.get("importance") is None else mem["importance"],
                     0.7 if mem.get("confidence") is None else mem["confidence"],
+                    mem.get("status") or "active",
                     json.dumps(mem.get("usage_tags") or [], ensure_ascii=False),
                     mem.get("visibility") or "OPEN",
                     trigger_data,
                     mem.get("behavior_rule"),
-                    mem.get("last_accessed_at", "2026-08-09 10:00:00"),
-                    mem.get("last_accessed_at", "2026-08-09 10:00:00"),
+                    _resolve_memory_timestamp(mem, "last_accessed_at", "2026-08-09 10:00:00"),
+                    _resolve_memory_timestamp(mem, "last_confirmed_at", "2026-08-09 10:00:00"),
                 ),
             )
+            for i, ev in enumerate(mem.get("evidence") or []):
+                evidence_id = f"ev_{mid}_{i}"
+                audience = ev.get("audience") or "space"
+                conn.execute(
+                    "INSERT OR REPLACE INTO memory_evidence (id, owner_type, owner_key, subject_key, "
+                    "audience, fact_key, source_conversation_key, source_row_id) "
+                    "VALUES (?, 'space', ?, ?, ?, ?, ?, ?)",
+                    (
+                        evidence_id,
+                        owner_space,
+                        owner_user,
+                        audience,
+                        ev.get("fact_key") or f"fact_{mid}",
+                        ev.get("source_conversation_key") or f"conv_{group_id}",
+                        int(ev.get("source_row_id") or 1),
+                    ),
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO memory_claim_links (id, evidence_id, owner_key, audience, "
+                    "entity_type, entity_id, claim_key, projection_slot, status) "
+                    "VALUES (?, ?, ?, ?, 'memory', ?, ?, ?, 'active')",
+                    (
+                        f"cl_{mid}_{i}",
+                        evidence_id,
+                        owner_space,
+                        audience,
+                        mid,
+                        ev.get("claim_key") or "content",
+                        ev.get("projection_slot") or "content",
+                    ),
+                )
         conn.commit()
     finally:
         conn.close()
@@ -203,6 +264,8 @@ def write_case_db(
 def evaluate_retrieval_result(
     case: dict[str, Any],
     result: Any,
+    *,
+    lineage_missing: list[str] | None = None,
 ) -> dict[str, Any]:
     """Normalize any backend RetrievalResult into the benchmark result shape."""
     query = case.get("input") or ""
@@ -225,8 +288,29 @@ def evaluate_retrieval_result(
     behavior_leaked = final_ids & expected_behavior
     activated_forbidden = final_ids & forbidden
 
+    # 跨空间泄漏（结构化判定，M1）：声明归属 ≠ scenario 空间的记忆一旦被激活
+    # （无论是否标注 forbidden）即泄漏——空间隔离是硬边界，不依赖用例标注自觉。
+    # 跨用户（同空间）不在此列：proactive 路径合法取全空间，由 forbidden 标注覆盖。
+    scenario = case.get("scenario") or {}
+    try:
+        scenario_space = str(int(scenario.get("group_id", 1)))
+    except (TypeError, ValueError):
+        scenario_space = "1"
+    out_of_scope = [
+        mid
+        for mid, mem in (case.get("memories") or {}).items()
+        if mem.get("group_shared_space", mem.get("group_id")) is not None
+        and str(mem.get("group_shared_space", mem.get("group_id"))) != scenario_space
+    ]
+    cross_scope_leak = sorted((final_ids | behavior_ids) & set(out_of_scope))
+
     over_recall = False
-    if expected:
+    if case.get("expect_empty"):
+        # abstain 用例（M1）：正确行为是空召回（或 ≤ max_retrieved 条），显式化
+        # over_recall 判定——不该有记忆的场景召回任何东西都算失败。
+        max_allowed = int(case.get("max_retrieved") or 0)
+        over_recall = len(final_ids) + len(behavior_ids) > max_allowed
+    elif expected:
         max_retrieved = int(case.get("max_retrieved") or (len(expected) * 2))
         over_recall = len(final_ids) > max_retrieved
 
@@ -281,6 +365,11 @@ def evaluate_retrieval_result(
         "found_behavior": sorted(found_behavior),
         "behavior_leaked": sorted(behavior_leaked),
         "activated_forbidden": sorted(activated_forbidden),
+        "expect_empty": bool(case.get("expect_empty")),
+        "cross_scope_opportunities": len(out_of_scope),
+        "cross_scope_leak": cross_scope_leak,
+        "lineage_expected": bool(case.get("expect_evidence")),
+        "lineage_missing": sorted(lineage_missing or []),
         "over_recall": over_recall,
         "ok": bool(
             found_expected == expected
@@ -288,6 +377,8 @@ def evaluate_retrieval_result(
             and not behavior_leaked
             and not activated_forbidden
             and not over_recall
+            and not cross_scope_leak
+            and not (lineage_missing or [])
         ),
     }
 
@@ -346,10 +437,93 @@ def evaluate_case(
             retrieval_v2.MEMORY_V2_ENABLED = old_v2
             retrieval_v2.RAG_ENABLED = old_rag
 
-        return evaluate_retrieval_result(case, result)
+        lineage_missing = _check_lineage(db_path, case, result) if case.get("expect_evidence") else []
+        return evaluate_retrieval_result(case, result, lineage_missing=lineage_missing)
     finally:
         if manager is not None:
             manager.cleanup()
+
+
+def _check_lineage(db_path: Path, case: dict[str, Any], result: Any) -> list[str]:
+    """expect_evidence 用例的血缘检查（M1，确定性 DB 查询，非模型判卷）。
+
+    断言每条被激活（会话或行为）的记忆都有合法来源行：既要有 evidence 声明，
+    声明还要真实落进 memory_claim_links → memory_evidence（active、fact_key 非空）。
+    「被召回却无 provenance」正是血缘缺口——无论缺口在声明侧还是落库侧都算 missing。
+    这同时是血缘表 DDL 的漂移金丝雀：生产 schema 变更破坏表结构时，此检查先行变红。
+    """
+    declared = {
+        mid
+        for mid, mem in (case.get("memories") or {}).items()
+        if mem.get("evidence")
+    }
+    activated = {
+        str(m["id"])
+        for m in list(result.conversation_memories) + list(result.behavior_constraints)
+        if m.get("id")
+    }
+    missing = sorted(activated - declared)
+    conn = sqlite3.connect(db_path)
+    try:
+        for mid in sorted(activated & declared):
+            row = conn.execute(
+                "SELECT l.id FROM memory_claim_links l "
+                "JOIN memory_evidence e ON l.evidence_id = e.id "
+                "WHERE l.entity_type = 'memory' AND l.entity_id = ? "
+                "AND l.status = 'active' AND e.fact_key != ''",
+                (mid,),
+            ).fetchone()
+            if row is None:
+                missing.append(mid)
+    finally:
+        conn.close()
+    return sorted(missing)
+
+
+def _dimension_metrics(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """新维度指标族（M1）。全部确定性判分；与全局指标同源（逐例结果）。
+
+    - temporal/conflict_supersede/abstain：类目内 ok 率（ok 已含新判定规则）；
+    - scope_privacy：跨空间泄漏率，硬零门禁（HARD_ZERO_METRICS）；
+    - lineage：expect_evidence 用例的血缘完整率。
+    """
+
+    def _pct(numerator: int, denominator: int) -> float:
+        return round(numerator / denominator * 100, 1) if denominator else 0.0
+
+    def _family(items: list[dict[str, Any]]) -> tuple[int, int]:
+        return sum(1 for r in items if r["ok"]), len(items)
+
+    dims: dict[str, dict[str, Any]] = {}
+    temporal = [r for r in results if r.get("category") == "temporal"]
+    ok, total = _family(temporal)
+    dims["temporal"] = {
+        "cases_total": total, "cases_ok": ok, "temporal_accuracy": _pct(ok, total),
+    }
+    supersede = [r for r in results if r.get("category") == "conflict-supersede"]
+    ok, total = _family(supersede)
+    dims["conflict_supersede"] = {
+        "cases_total": total, "cases_ok": ok, "supersede_accuracy": _pct(ok, total),
+    }
+    abstain = [r for r in results if r.get("expect_empty")]
+    ok, total = _family(abstain)
+    dims["abstain"] = {
+        "cases_total": total, "cases_ok": ok, "abstain_correct_rate": _pct(ok, total),
+    }
+    opportunities = sum(r.get("cross_scope_opportunities", 0) for r in results)
+    leaks = sum(len(r.get("cross_scope_leak") or []) for r in results)
+    dims["scope_privacy"] = {
+        "out_of_scope_total": opportunities,
+        "leaked": leaks,
+        # 全数据集结构化口径：任何一条跨空间记忆被激活即非零（硬零门禁）
+        "cross_scope_leak_rate": _pct(leaks, opportunities),
+    }
+    lineage = [r for r in results if r.get("lineage_expected")]
+    ok, total = _family(lineage)
+    dims["lineage"] = {
+        "cases_total": total, "cases_ok": ok, "lineage_completeness": _pct(ok, total),
+    }
+    return dims
 
 
 def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -399,7 +573,10 @@ def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def category_of(case_or_result: dict[str, Any]) -> str:
-    """用例/结果所属分类目录（_source_path 首段；根目录用例归 "root"）。"""
+    """用例/结果所属分类目录（显式 category 键优先，否则 _source_path 首段）。"""
+    explicit = case_or_result.get("category")
+    if explicit:
+        return str(explicit)
     source = case_or_result.get("_source_path") or ""
     parts = source.split("/")
     return parts[0] if len(parts) > 1 else "root"
@@ -442,6 +619,7 @@ def run_benchmark(
     metrics["dataset_digest"] = dataset_digest(benchmark_dir, cases)
     metrics["clock_anchor"] = CLOCK_ANCHOR
     metrics["category_metrics"] = _category_metrics(results)
+    metrics["dimensions"] = _dimension_metrics(results)
     return metrics
 
 
@@ -614,6 +792,17 @@ def build_baseline_document(metrics: dict[str, Any], *, note: str = "") -> dict[
     }
 
 
+def comparable_scalars(metrics: dict[str, Any]) -> dict[str, Any]:
+    """基线对比用的标量集合：聚合指标 + dimensions 扁平化（dimensions.<族>.<键>）。"""
+    scalars = {k: metrics[k] for k in _BASELINE_COMPARE_METRICS if k in metrics}
+    for family, values in (metrics.get("dimensions") or {}).items():
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if isinstance(value, (int, float)):
+                    scalars[f"dimensions.{family}.{key}"] = value
+    return scalars
+
+
 def compare_baseline(
     metrics: dict[str, Any],
     baseline_path: Path,
@@ -627,10 +816,15 @@ def compare_baseline(
     baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
     if baseline.get("schema") != BASELINE_SCHEMA:
         raise ValueError(f"未知基线 schema: {baseline.get('schema')!r}（期望 {BASELINE_SCHEMA}）")
-    base_metrics = baseline.get("metrics") or {}
+    base_metrics = dict(baseline.get("metrics") or {})
+    for family, values in (baseline.get("dimensions") or {}).items():
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if isinstance(value, (int, float)):
+                    base_metrics[f"dimensions.{family}.{key}"] = value
     tolerances = dict(DEFAULT_TOLERANCES)
     tolerances.update(baseline.get("tolerances") or {})
-    current = {k: metrics[k] for k in _BASELINE_COMPARE_METRICS if k in metrics}
+    current = comparable_scalars(metrics)
 
     drift: list[dict[str, Any]] = []
     all_ok = True

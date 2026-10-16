@@ -1,0 +1,55 @@
+{
+  "id": "lineage-supersede-001",
+  "scenario": {
+    "group_id": 12,
+    "user_id": 1202
+  },
+  "input": "你最近在追什么剧",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "M_new": {
+      "content": "最近在追刑侦剧",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -60,
+      "evidence": [
+        {
+          "fact_key": "current_show",
+          "source_row_id": 301
+        }
+      ]
+    },
+    "M_old": {
+      "content": "以前在追古装剧",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.6,
+      "importance": 0.4,
+      "status": "superseded",
+      "last_accessed_at_offset_minutes": -86400,
+      "evidence": [
+        {
+          "fact_key": "current_show",
+          "source_row_id": 300
+        }
+      ]
+    }
+  },
+  "expected_memory": [
+    "M_new"
+  ],
+  "forbidden_memory": [
+    "M_old"
+  ],
+  "expect_evidence": true,
+  "notes": "血缘+停用叠加：被召回的新值有证据行；被停用的旧值（同样带旧证据）不得被激活。"
+}

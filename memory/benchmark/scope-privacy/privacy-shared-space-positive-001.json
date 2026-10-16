@@ -1,0 +1,38 @@
+{
+  "id": "privacy-shared-space-positive-001",
+  "scenario": {
+    "group_id": 8,
+    "user_id": 807
+  },
+  "input": "周末要不要一起去爬山",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "M_same_space": {
+      "content": "用户807喜欢户外爬山",
+      "type": "PREFERENCE",
+      "group_shared_space": 8,
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN"
+    },
+    "M_foreign": {
+      "content": "空间99的人喜欢潜水",
+      "type": "PREFERENCE",
+      "group_shared_space": 99,
+      "user_id": 992,
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN"
+    }
+  },
+  "expected_memory": [
+    "M_same_space"
+  ],
+  "forbidden_memory": [
+    "M_foreign"
+  ],
+  "notes": "正向对照：显式声明归属=本空间（group_shared_space=8）的记忆正常可见——证明 privacy-space-* 的排除语义来自空间不匹配而非覆盖写法本身。"
+}

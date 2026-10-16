@@ -16,28 +16,38 @@ np = pytest.importorskip("numpy", reason="embedding fixture 的向量计算依�
 
 
 def _synthetic_fixture():
-    """确定性伪随机向量 fixture：验证 embedding 路径 plumbing，不追求语义正确。"""
+    """确定性合成 fixture：结构保持向量，验证 embedding 路径 plumbing 不破坏红线。
+
+    与查询「语义相关」的记忆（expected/expected_behavior）取与查询向量同向
+    （cos=1，模拟真实 embedding 的相关信号）；其余（噪音/禁止）取正交方向
+    （cos=0，不额外抬分）。这样 embedding 路径的排序相对 rule-only 保序，
+    forbidden_activation_rate==0 红线在两种路径下都必须成立。
+    """
     cases = benchmark.load_cases(MEMORY_BENCHMARK_DIR)
-    texts = set()
+    texts: dict[str, list[float]] = {}
+
+    def unit(idx: int) -> list[float]:
+        vec = [0.0] * 16
+        vec[idx % 16] = 1.0
+        return vec
+
     for c in cases:
-        texts.add(c.get("input") or "")
-        for m in (c.get("memories") or {}).values():
-            texts.add(m.get("content") or "")
-    data = {}
-    for t in texts:
-        t = t.strip()
-        if not t:
+        query = (c.get("input") or "").strip()
+        if not query:
             continue
-        d = hashlib.sha256(("seed:" + t).encode()).digest()
-        rng = int.from_bytes(d[:8], "big")
-        vec = []
-        for _ in range(16):
-            rng = (rng * 6364136223846793005 + 1442695040888963407) & ((1 << 64) - 1)
-            vec.append((rng % 2000) / 1000.0 - 1.0)
-        vec = np.asarray(vec, dtype=np.float32)
-        n = np.linalg.norm(vec)
-        vec = vec / n if n > 0 else vec
-        data[benchmark._text_digest(t)] = base64.b64encode(vec.astype(np.float16).tobytes()).decode()
+        qv = unit(0)
+        texts[query] = qv
+        relevant = set(c.get("expected_memory") or []) | set(c.get("expected_behavior_memory") or [])
+        for mid, m in (c.get("memories") or {}).items():
+            content = (m.get("content") or "").strip()
+            if not content or content in texts:
+                continue
+            texts[content] = qv if mid in relevant else unit(
+                int(hashlib.sha256(mid.encode("utf-8")).hexdigest(), 16) % 15 + 1)
+    data = {
+        benchmark._text_digest(t): base64.b64encode(np.asarray(v, dtype=np.float32).astype(np.float16).tobytes()).decode()
+        for t, v in texts.items()
+    }
     return {"model": "synthetic", "dim": 16, "dtype": "float16", "normalized": True, "keys": sorted(data), "data": data}
 
 
@@ -69,7 +79,7 @@ def test_benchmark_results_expose_ranked_all_and_separation():
 
 def test_benchmark_ok_flag_reflects_expected():
     """每个用例的 ok 标志：期望记忆全命中、期望行为约束被 Behavior Guard 命中且未泄漏、
-    无禁止激活、超召回未超过容忍上限（max_retrieved 或期望数 × 2）。"""
+    无禁止激活、超召回未超过容忍上限、无跨空间泄漏、血缘期望无缺口。"""
     for r in benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)["results"]:
         assert isinstance(r["over_recall"], bool)
         assert r["ok"] == (
@@ -78,6 +88,8 @@ def test_benchmark_ok_flag_reflects_expected():
             and not r["behavior_leaked"]
             and not r["activated_forbidden"]
             and not r["over_recall"]
+            and not r["cross_scope_leak"]
+            and not r["lineage_missing"]
         )
 
 
@@ -173,7 +185,8 @@ def test_report_document_contract(tmp_path):
 def test_baseline_compare_drift_detection(tmp_path):
     """基线对比正反例：同数值通过；指标漂移与硬零违规必须失败；新指标不算漂移。"""
     metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)
-    baseline_doc = benchmark.build_baseline_document(metrics)
+    metrics_no_dims = {k: v for k, v in metrics.items() if k != "dimensions"}
+    baseline_doc = benchmark.build_baseline_document(metrics_no_dims)
     baseline_path = tmp_path / "baseline.json"
     baseline_path.write_text(json.dumps(baseline_doc), encoding="utf-8")
 
@@ -191,7 +204,7 @@ def test_baseline_compare_drift_detection(tmp_path):
     ok3, _ = benchmark.compare_baseline(hard, baseline_path)
     assert not ok3  # 硬零指标不容差
 
-    with_new_metric = dict(metrics)
+    with_new_metric = {k: v for k, v in metrics.items() if k != "dimensions"}
     with_new_metric["dimensions"] = {"temporal": {"temporal_accuracy": 100.0}}
     ok4, drift4 = benchmark.compare_baseline(with_new_metric, baseline_path)
     assert ok4  # 新指标缺席基线 → 标记 new，不算漂移
