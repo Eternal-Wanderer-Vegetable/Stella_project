@@ -168,6 +168,10 @@ class ChatContext:
     origin_msg_id: str = ""  # BOT_SELF 逻辑单元对应的源消息（被回复/被触发那条）
     reply_recipient_user_id: str = ""  # BOT_SELF 逻辑单元的收件人（不是作者）
     recorded_row_id: int = 0  # record_message 写入后的行 id（0=未入库）
+    # 采集结果码（记忆采集就绪门，memory.capture_gate）："" = 调用方未给采集
+    # 决策（遗留/显式调用）；"captured" = 已落库；"not_captured_unavailable" =
+    # 门关闭未落库（不排队不回放）。消费方据此区分「拒绝」与「写失败」。
+    capture_result: str = ""
     relation_version: int = 0  # 信封写入时的关系 schema 版本（0=无关系）
     identity_revision: int = 0  # 会话身份版本快照（M3 写入；缓存/CAS 用）
     # 每轮重新生成的当前用户身份 capsule（多人身份修复计划 §6.3，M3）：

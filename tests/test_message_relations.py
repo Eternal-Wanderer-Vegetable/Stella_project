@@ -404,3 +404,53 @@ def test_projection_v4_carries_envelope_fields():
     env = MessageIdentityEnvelope.from_context(ctx)
     assert env.reply_to_msg_id == "111"
     assert env.mentioned_user_ids == (C,)
+
+
+# ── 记忆采集就绪门：writer 契约（AI-gated memory capture 计划 §6.2） ──
+
+
+def test_capture_denial_writes_nothing(msg_db):
+    """拒绝决策：不建表、不写行；recorded_row_id=0 + 拒绝结果码。"""
+    from memory.capture_gate import CAPTURE_RESULT_DENIED, CaptureDecision
+
+    denied = CaptureDecision(False, "unavailable", "no_backend", 0)
+    out = asyncio.run(record_message(_ctx(), capture=denied))
+    assert out.recorded_row_id == 0
+    assert out.capture_result == CAPTURE_RESULT_DENIED
+    # 拒绝路径连建表都不做：全新库上不应出现 group_messages
+    conn = sqlite3.connect(msg_db)
+    tables = {
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    conn.close()
+    assert "group_messages" not in tables
+
+
+def test_capture_allowed_preserves_envelope_contract(msg_db):
+    """允许决策：信封契约与无决策路径逐字段一致，回填 captured 结果码。"""
+    from memory.capture_gate import CAPTURE_RESULT_OK, CaptureDecision
+
+    allowed = CaptureDecision(True, "ready", "", 3)
+    asyncio.run(
+        record_message(_ctx(user_id=int(A), msg_id=111, message="我叫Allets"), capture=allowed)
+    )
+    ctx = _ctx(user_id=int(B), msg_id=112, reply_to_msg_id="111", relation_version=1)
+    ctx.reply_target_user_id = resolve_reply_target(
+        "111", GROUP, bot_id=BOT, conversation_key=KEY
+    )
+    out = asyncio.run(record_message(ctx, capture=allowed))
+    assert out.capture_result == CAPTURE_RESULT_OK
+    assert out.recorded_row_id > 0
+    rows = _rows(msg_db)
+    assert rows[1]["reply_to_msg_id"] == "111"
+    assert rows[1]["reply_target_user_id"] == A
+
+
+def test_legacy_call_without_decision_persists_unchanged(msg_db):
+    """不传决策（夹具/显式调用）：既有直接落库语义不变，capture_result=captured。"""
+    from memory.capture_gate import CAPTURE_RESULT_OK
+
+    out = asyncio.run(record_message(_ctx(msg_id=900, message="legacy")))
+    assert out.recorded_row_id > 0
+    assert out.capture_result == CAPTURE_RESULT_OK
+    assert len(_rows(msg_db)) == 1

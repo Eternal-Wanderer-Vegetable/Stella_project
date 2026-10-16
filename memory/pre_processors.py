@@ -33,6 +33,11 @@ from config import (
 from config.spaces import resolve_space
 from core.context import ChatContext
 from memory.cache_keys import POLICY_VERSION
+from memory.capture_gate import (
+    CAPTURE_RESULT_DENIED,
+    CAPTURE_RESULT_OK,
+    CaptureDecision,
+)
 from memory.conversation_projection import (
     PROJECTION_FORMAT_VERSION,
     TranscriptBubble,
@@ -118,7 +123,9 @@ def _has_column(cursor: sqlite3.Cursor, table: str, column: str) -> bool:
         return False
 
 
-async def record_message(ctx: ChatContext) -> ChatContext:
+async def record_message(
+    ctx: ChatContext, capture: CaptureDecision | None = None
+) -> ChatContext:
     """把本条消息写入群消息表（group_messages），供后续整合器消费。
 
     source_kind 由调用方（ai_gateway）按 event.is_tome() 决定：
@@ -128,10 +135,26 @@ async def record_message(ctx: ChatContext) -> ChatContext:
     正文在**同一 SQLite 短事务**落库，成功后回填 ``ctx.recorded_row_id``——
     身份声明（M3）以它为来源锚点。信封写入不跨 await/网络。
 
+    采集就绪门（计划 §6.2）：``capture`` 是生产入口在持久化前取得的一次采集
+    决策（``memory.capture_gate.current_decision()``）。给出且不允许时
+    **不建表、不连接、不写任何行**：``recorded_row_id`` 保持 0，回填
+    ``ctx.capture_result = "not_captured_unavailable"``——期间收到的消息不
+    排队、不回放，恢复后从下一条新消息开始采集。省略（None）保持既有直接
+    落库语义，仅供测试夹具、受控迁移与非入站显式调用方使用；生产入站必须
+    传决策。
+
     参数：ctx — 拥有 group_id / user_id / message 及可选信封字段的上下文；
-    副作用：插入一条群消息记录并建表（幂等）；
-    返回：ctx（recorded_row_id 已回填；失败保持 0）。
+    副作用：插入一条群消息记录并建表（幂等）；拒绝时零写库；
+    返回：ctx（recorded_row_id 与 capture_result 已回填；失败行 id 保持 0）。
     """
+    if capture is not None and not capture.allowed:
+        ctx.recorded_row_id = 0
+        ctx.capture_result = CAPTURE_RESULT_DENIED
+        logger.info(
+            "🚪 [CaptureGate] 采集门关闭，消息不落库（不排队不回放）"
+            f" scope={ctx.trace_scope} 原因={capture.reason_code or 'closed'}"
+        )
+        return ctx
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -188,6 +211,7 @@ async def record_message(ctx: ChatContext) -> ChatContext:
             int(getattr(ctx, "relation_version", 0) or 0),
         ))
         ctx.recorded_row_id = int(cursor.lastrowid or 0)
+        ctx.capture_result = CAPTURE_RESULT_OK
         conn.commit()
         conn.close()
     except Exception as e:
