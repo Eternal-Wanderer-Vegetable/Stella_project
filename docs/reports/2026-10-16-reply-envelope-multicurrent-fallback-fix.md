@@ -38,6 +38,10 @@
 - 真实故障样本重放：19:08:16 与 18:17:38 两个现场输出均解析为三段合并 current；带属性 current 样本仍拒绝。
 - 未运行：真实 QQ 灰度观测（需用户重启 bot 后观察兜底率）；全仓 pytest（改动面已由上述定向集覆盖）。
 
+### CI 补录（同日）
+
+首次推送 PR #109 后 CI 两处失败（flow-manifest 漂移门禁 + `tests/observability/test_message_flow_contract.py::TestDriftGate`），同一根因：`core/dialogue_attribution.py` 是被 message-flow 插桩的源码，改动后未重新生成 manifest（语义 diff 为空，仅内容哈希与锚点变化）。已按门禁要求运行 `python scripts/generate_message_flow.py`（6757c542d9db → 3eb7f47d8f7f，141 节点不变），`--check` 通过、契约测试 14 passed。CI 的 test (3.11) 全量 3728 项中唯一失败即该 drift 用例，无其他回归。
+
 ## 6. 残余风险与后续
 
 - 嵌套 `<reply>`（17:17 形态）是畸形 XML，仍走澄清兜底；方案 A 的提示词已明示禁止，发生率待灰度观察。

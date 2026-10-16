@@ -10,7 +10,8 @@
 
 - 回复协议修复（fix/reply-envelope-multicurrent，自 a4aa233 切出）：诊断与修复详情见 [修复报告](docs/reports/2026-10-16-reply-envelope-multicurrent-fallback-fix.md)。`core/dialogue_attribution.py` 两处改动；`tests/test_dialogue_attribution_repair.py` 新增 4 例并改 2 处旧断言；P2 oracle 按 952007e 流程修订 7 个夹具并在 manifest 记录 `current_slot_prompt_revision`。
 - 验收：定向 pytest 59+37+187 passed；引用受影响模块的全部测试文件通过；ruff 通过；`python scripts/check_docs.py` 通过（119 文件/1191 链接）。GitNexus 本机注册表损坏不可用，影响面以 rg 兜底清点并记录于报告 §3。
-- 未做：真实 QQ 灰度观测（需重启 bot 进程加载新解析器与提示词）；全仓 pytest；嵌套 `<reply>` 畸形态仍走澄清兜底（提示词已明示禁止，发生率待观察）。
+- 未做：真实 QQ 灰度观测（需重启 bot 进程加载新解析器与提示词）；嵌套 `<reply>` 畸形态仍走澄清兜底（提示词已明示禁止，发生率待观察）。
+- CI 补录：PR #109 首推两失败（flow-manifest 漂移 + TestDriftGate，同根因=改插桩源码未重生成 manifest），已重生成（6757c542d9db→3eb7f47d8f7f，语义 diff 为空）并推送；CI 全量 3728 项无其他回归。
 
 - CI-106：PR #106 的 flow-closure 在 `npx -y gitnexus@1.6.11 analyze --index-only` 崩溃（`malloc(): unaligned tcache chunk detected`），后续 inventory 门禁因前序失败被跳过。
 - 修复候选已在本地工作树：CI analyzer 加 `--workers 1`，新静态测试锁定命令与两个独立 inventory/reconciliation 步骤。Pinned npm analyzer 单 worker 在容器中成功；41 个 flow 定向测试通过；两条 CI 等价检查通过；跟踪 Python Ruff、docs 检查通过；`git diff --check` 通过。
