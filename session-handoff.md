@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-- CI-106：修复 PR #106 的 flow-closure GitNexus native heap corruption；本地单 worker analyzer、inventory gates 和定向测试已通过，修复尚未提交/推送，等待用户授权远端更新及 PR hosted CI 验证。
+- CI-106：PR #106 flow-closure 的 GitNexus native heap corruption 已修复并推送；提交 `c22dcecdde227564cecd6a7290f246ae43ba3efa`，对应所有 hosted checks 通过。
 - RELEASE-620：Stella 6.2.0 已正式发布，hosted release workflow 与发布后回读全部通过。
 - Branch: `codex/release-6.2.0`; release commit `6c62fdc3f7ae010896f7f308e37f356eb3c20581`, based on online `main` commit `f4d6247eab0236019133e168f4ab1f68e54340f2` (PR #105 merge). Tag `v6.2.0` points to the release commit.
 
@@ -21,7 +21,8 @@
 - CI-equivalent `npx -y gitnexus@1.6.11 analyze --index-only --workers 1 --default-branch main`: passed in the project container; index current for 1167 covered files. Existing callable-value-flow warnings remain at `astrbot_compat/filters.py` (candidate set 33 > cap 32), distinct from crash.
 - CI-equivalent inventory checks: 49 entries / 9 families; 33 discovered entries, reconciliation clean.
 - `python -m ruff check tests/observability/test_internal_flow_inventory.py` and `python -m ruff check $(git ls-files '*.py')`: passed. `python scripts/check_docs.py`: 0 errors. GitNexus scope=all: 5 files/10 symbols/low; compare against verified `origin/main@f4d6247`: 18 files/34 symbols/low, no partial/truncated. Compare includes pre-existing release changes and local release-state edits because PR #106 itself is the release PR.
-- Repair remains local-only; no new hosted PR check has run yet.
+- PR #106 repair commit `c22dcecdde227564cecd6a7290f246ae43ba3efa` is pushed. Hosted CI run [38357443346](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38357443346) passed all 11 jobs, including `flow-closure`, Python 3.10/3.11/3.12, lint, security, CLI, flow-manifest and Windows native reliability. Docker Publish run [38357443338](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38357443338) also passed.
+- Hosted flow-closure confirmed command `npx -y gitnexus@1.6.11 analyze --index-only --workers 1`, then `entries: 49 families: 9` and `discovered entries: 33 - reconciliation clean`; no native heap corruption. npm still emits the optional Zig grammar peer warning; analyzer reports existing candidate-cap warnings, neither failed the job.
 - `python -m pytest tests -q`: 3669 passed, 17 skipped, 59 warnings (Windows Python 3.14).
 - `python -m ruff check $(git ls-files '*.py')`: all tracked Python files passed. Unscoped `python -m ruff check .` detects I001 in the pre-existing untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py`; that user file was not edited.
 - `python scripts/check_docs.py`: 0 errors, 1186 local links, 577 migration anchors.
@@ -70,3 +71,13 @@
 - c7751f6 已修复该超时；本地 Dashboard 100 项测试、类型检查、生产构建通过。
 - [主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792) 通过；CI-001 done，无活动任务。
 - 完成记录提交的最终 SHA／检查结果以 Git 和 PR 最新状态为准。
+
+## Session Handoff — AI-Gated Memory Capture (2026-10-16)
+
+- Branch: `feat/ai-gated-memory-capture`, 6 commits on top of `codex/release-6.2.0` @ `c22dcec`: `3db81e7` (gate module + probe + 23 tests), `8bc6404` (typed writer denial), `574250c` (QQ/WebChat ingress + BOT_SELF gating + lifecycle hooks + consolidator close-on-failure + e2e tests + flow manifest), `0ab17fb` (status snapshot + .env.example), `427825c` (bilingual docs), `502ef7d` (implementation report).
+- Behavior: memory capture fails closed until the CONSOLIDATION role passes a bounded probe (minimal "ping" through the real generation path incl. fallback chain; /v1/models not required). Closed gate: no raw rows, no identity/social/expression/participation/consolidation-trigger side effects, BOT_SELF lines skipped; replies/plugins/usage accounting unaffected. No queue, no replay; recovery captures only newly arriving messages. `backend_for` untouched; no schema migration; no bypass switch.
+- Verification: full suite `python -m pytest tests -q` = 3707 passed / 17 skipped (Windows, Python 3.14, isolated STELLA_HOME); ruff over tracked files clean; `check_docs.py` 0 errors; `generate_message_flow.py --check` ok (body-hash-only manifest change; new lifecycle entry `bot_main.start_capture_gate` registered in internal_flow_catalog).
+- Baseline exceptions (pre-existing, untouched): untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py` fails unscoped `ruff check .` (I001); local GitNexus CLI registry broken — caller inventory done via text search (record_message has 5 production call sites; _record_bot_lines covers all 13 BOT_SELF writers).
+- Test-isolation note: tests/conftest.py now keeps `capture_gate.start_gate` inert and `_gate` unset under pytest — a stray FastAPI lifespan (leftover coroutine executed by pytest-asyncio's fixture runner) fires nonebot startup hooks in arbitrary tests; without this the gate would install closed and fire real probe requests. Gate-specific tests construct CaptureGate instances with injected fakes.
+- NOT READY (external acceptance): live-provider probe smoke, QQ gray rollout, clean-VM install acceptance. Report: docs/reports/2026-10-16-ai-gated-memory-capture-implementation.md.
+- Pre-existing uncommitted worktree files (feature_list.json, progress.md, session-handoff.md, plans/reports/evidence, .agents/, skills-lock.json, memory_rust backup) were left untouched and uncommitted, same as at session start.
