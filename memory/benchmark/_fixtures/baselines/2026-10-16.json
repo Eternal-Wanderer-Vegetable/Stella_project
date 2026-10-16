@@ -1,0 +1,55 @@
+{
+  "schema": "memory-benchmark-baseline/1",
+  "captured_at": "2026-10-16T17:41:40+00:00",
+  "note": "2026-10-16 冻结：memory-benchmark-suite M0-M6 收口。dataset=101 例（手写 53 + 生成 48）。已知既有失败：rank-casual-001（基线如实记录，不粉饰）。硬零：forbidden_activation_rate=0, cross_scope_leak_rate=0。",
+  "retrieval_mode": "rule",
+  "metric_definitions_version": "1",
+  "dataset_digest": "c3e999a492323e22672078d2e049930c57ee4b561542660c02691aec4e232fe6",
+  "metrics": {
+    "cases_total": 101,
+    "cases_ok": 100,
+    "cases_ok_rate": 99.0,
+    "cases_with_expected": 88,
+    "total_expected": 105,
+    "total_expected_behavior": 8,
+    "total_retrieved": 235,
+    "total_forbidden": 44,
+    "memory_precision": 44.3,
+    "memory_recall": 99.0,
+    "memory_pollution_rate": 55.7,
+    "mode_accuracy": 100.0,
+    "behavior_guard_hit_rate": 100.0,
+    "behavior_leaks": 0,
+    "forbidden_activation_rate": 0.0,
+    "forbidden_activations": 0,
+    "separation_margin": -0.0446
+  },
+  "dimensions": {
+    "temporal": {
+      "cases_total": 8,
+      "cases_ok": 8,
+      "temporal_accuracy": 100.0
+    },
+    "conflict_supersede": {
+      "cases_total": 6,
+      "cases_ok": 6,
+      "supersede_accuracy": 100.0
+    },
+    "abstain": {
+      "cases_total": 4,
+      "cases_ok": 4,
+      "abstain_correct_rate": 100.0
+    },
+    "scope_privacy": {
+      "out_of_scope_total": 3,
+      "leaked": 0,
+      "cross_scope_leak_rate": 0.0
+    },
+    "lineage": {
+      "cases_total": 3,
+      "cases_ok": 3,
+      "lineage_completeness": 100.0
+    }
+  },
+  "tolerances": {}
+}

@@ -2035,7 +2035,7 @@
      "memory_rust/native/src/retrieval.rs": "51ff7ac3e163ced41a7089f3359454e9df2b989b0a8259f46ac24adf5e70ef7c",
      "memory_rust/native/src/schema.rs": "709a518db7b0f7cfecb36c36d1883ba0271151941e520c36c5cca9b8ca53be96",
      "memory_rust/native/src/similarity.rs": "6fa636e8e4e8e98192aa6377e1fff172462ed0b832f231811420bf2169f44a79",
-     "memory_rust/python_backend.py": "39effae2c7014f41845cd12efba66860b575c792d0e90fc26e72c292f484f221",
+     "memory_rust/python_backend.py": "bea0043068d94afc76ff984e788abde5fdfe696a5f0c3816308c3ea3646ed8b5",
      "memory_rust/selector.py": "18bb20df033735933bcfd3a40f17c4a1dec46351ea9e4161eab1a9a9dcc179a7"
     },
     "entry_id": "rust.promotion",
@@ -7088,7 +7088,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -8941,7 +8941,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -10794,7 +10794,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -79507,7 +79507,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -84047,7 +84047,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -84908,7 +84908,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -126893,6 +126893,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "93f6cde83dc70d395483e8602401564bf5ba9948",
+ "source_revision": "fdcdb88e343ce7dcb308560ba75c543837f08964",
  "topology_version": "2026.10.04"
 }

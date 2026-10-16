@@ -299,3 +299,25 @@ def test_cost_metrics_present_and_not_gated():
     assert cost["embedding_service"] is None  # 未探测必须诚实记 null
     scalars = benchmark.comparable_scalars(metrics)
     assert not any(k.startswith("cost") for k in scalars)
+
+
+# ── M6 基线逐指标容差门禁 ────────────────────────────────────
+
+FROZEN_BASELINE = MEMORY_BENCHMARK_DIR / "_fixtures" / "baselines" / "2026-10-16.json"
+
+
+def test_baseline_gate_per_metric_zero_tolerance():
+    """基线门禁（M6，替换旧粗阈值断言）：冻结基线逐指标零容差对比。
+
+    数据集/打分任何漂移都会在此变红；有意变更必须重生成基线并过审。
+    硬零指标（forbidden/cross_scope）不容差。基线如实记录既有失败
+    （rank-casual-001），门禁盯的是「不再恶化」。
+    """
+    assert FROZEN_BASELINE.exists(), "冻结基线缺失"
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)
+    all_ok, drift = benchmark.compare_baseline(metrics, FROZEN_BASELINE)
+    bad = [row for row in drift if not row["ok"]]
+    assert all_ok, f"基线漂移: {[(r['metric'], r['baseline'], r['current']) for r in bad]}"
+    # 硬零双门禁在基线对比之外再显式断言一次（防基线本身被改坏）
+    assert metrics["forbidden_activation_rate"] == 0.0
+    assert metrics["dimensions"]["scope_privacy"]["cross_scope_leak_rate"] == 0.0

@@ -95,23 +95,84 @@ python scripts/sample_windows.py     # 产出 windows_raw.json（含真实数据
 
 ### Benchmark
 
-检索层的评估数据集在 `memory/benchmark/`：
+检索层的评估数据集在 `memory/benchmark/`（手写用例按类别分目录；`generated/` 为
+`scripts/generate_benchmark_cases.py` 的确定性产物，同 seed 字节级一致）：
 
 ```bash
-python -m memory.benchmark                        # rule-only
+python -m memory.benchmark                        # rule 模式
 python -m memory.benchmark --verbose              # 每用例明细 + 分数分解
+python -m memory.benchmark --retrieval-mode fts   # 检索模式矩阵：rule/embedding/fts/hybrid
+python -m memory.benchmark --matrix               # 四模式全矩阵（embedding 需 fixture）
 python -m memory.benchmark --embedding-fixture memory/benchmark/_fixtures/embeddings_xxx.json
 python -m memory.benchmark --compare              # rule-only vs embedding 对照
+python -m memory.benchmark --gate                 # 质量门禁：用例失败或硬零违规非零退出
 ```
 
-核心指标：Memory Precision、Recall、Forbidden Activation（目标 ≈ 0）、Pollution Rate、Mode 检测准确率、Behavior Guard Hit。
+核心指标：Memory Precision、Recall、Forbidden Activation（硬零门禁）、Pollution Rate、
+Mode 检测准确率、Behavior Guard Hit；维度族 `dimensions`：temporal_accuracy、
+supersede_accuracy、abstain_correct_rate、**cross_scope_leak_rate（硬零门禁）**、
+lineage_completeness；成本段 `cost`（延迟分位数/库尺寸，机器相关只观测不门禁）。
 
-用例格式见现有 JSON。`_fixtures/` 存放向量数据与整合正例基准，不被当作检索用例加载。
+报告契约与基线（CI 质量门禁的依据）：
+
+```bash
+python -m memory.benchmark --report docs/reports/evidence/<dir>   # 报告 + manifest
+python -m memory.benchmark --compare-baseline memory/benchmark/_fixtures/baselines/2026-10-16.json
+```
+
+- 冻结基线 `memory/benchmark/_fixtures/baselines/`：逐指标零容差对比（硬零指标
+  强制零容差，新指标记 new 不算漂移）。数据集或打分有意变更后必须重生成基线并过审；
+- `tests/test_benchmark.py::test_baseline_gate_per_metric_zero_tolerance` 是 CI 门禁。
+
+用例格式 v2（全可选）：`last_accessed_at_offset_minutes` / `last_confirmed_at_offset_minutes`
+（相对时钟锚点）、memory `status`（superseded/archived）、`evidence`（血缘声明）；
+case 级 `expect_empty`（abstain）、`expect_evidence`（血缘断言）、`topic`（分题型聚合）。
+`_` 前缀路径段（`_fixtures/`、`_public/`、`_replay/`、`_baselines/`）不作为用例加载。
 
 ```bash
 python scripts/build_embedding_fixture.py    # 构建向量 fixture（需 embedding 服务）
 python scripts/probe_embedding.py            # 探测 embedding 服务可用性
+python scripts/generate_benchmark_cases.py --check   # 生成产物冻结校验
 ```
+
+> **检索模式矩阵的两个实证发现**（2026-10-16，`memory/retrieval_v2.py` 零改动测得）：
+> ① FTS 候选路径对自然中文查询恒 0 命中——`_segment_text` 把整条查询串与滑窗片段
+> 全部作为 MATCH token，FTS5 隐式 AND 语义要求文档包含全部 token，实际检索总是
+> 回退新鲜度路径（`retrieval_path.candidate_rows` 可复核）；
+> ② embedding/hybrid 模式只评 fixture 覆盖的用例（按查询向量在场判定），
+> 未覆盖用例显式 skip 记账——用「embedding 权重 + 规则语义回退」跑会产出第三种
+> 语义，指标失真。fixture 只覆盖旧 22 例中文文本，重建 fixture 需 embedding 服务。
+
+### Rust parity 与写路径回放
+
+```bash
+python -m memory_rust.benchmark --compare          # Python vs native 逐例对照
+python -m memory_rust.benchmark --matrix           # 四模式矩阵（fts/hybrid 仅 Python 单边）
+python scripts/eval_memory_replay.py               # 写路径回放（recorded，CI 可跑）
+python scripts/eval_memory_replay.py --live --record recorded/new.json   # 离线真实模型 + 录制
+```
+
+- parity 基线 **101/101 hard matches**（2026-10-16 起，21/24 旧数字作废）：
+  闭环靠两步——harness 保真修复（`semantic_scores=None` 不再折叠成 `{}`，此前
+  双实现跑的是不同打分语义）+ Python 侧补齐与 native 一致的 canonical tie-break
+  （score desc → memory id asc）。`tests/test_memory_rust_benchmark.py::test_parity_gate_full_dataset`
+  是门禁：native 可加载时硬差异必须为 0，不允许 allowed_diffs；native 缺席显式 skip。
+- 写路径回放走生产链路（消息批次 → 录制件驱动生成 → 证据评估 → 候选 → 晋升 →
+  检索 QA），指标：extraction_hit_rate、fabrication_rate（4-gram 原文交集规则）、
+  promotion_correctness、qa_accuracy、memory_delta（有/无记忆差）。门禁要求全绿
+  且 memory_delta > 0。套件在 `memory/benchmark/_replay/daily-life/`。
+
+### PersonaMem 公开测试集（英文域外部参照）
+
+```bash
+python scripts/fetch_personamem.py       # HF revision pin + sha256 manifest + NOTICE
+python scripts/adapt_personamem.py       # 固定 seed 抽样 → 检索层用例（默认 200 行）
+python -m memory.benchmark --dir memory/benchmark/_public/personamem/adapted --gate
+```
+
+数据（CC-BY-4.0，GPT-5 合成）落 `memory/benchmark/_public/`（gitignore 不入库）。
+**结论限定**：英文域外部参照，不得外推中文 QQ 群聊检索质量。CI job
+`memory-benchmark-public` 固定 seed 子集跑门禁；下载失败显式红/跳过，不静默绿。
 
 ### 探针的盲区
 
