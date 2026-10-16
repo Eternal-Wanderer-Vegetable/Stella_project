@@ -783,7 +783,11 @@ def rank_memories(
         mem["_score_parts"] = {k: round(v, 3) for k, v in parts.items()}
         scored.append((score, mem))
 
-    scored.sort(key=lambda item: item[0], reverse=True)
+    # canonical tie-break（score desc → memory id asc）：与 native 检索
+    # （policy.rs ranked.sort_by 的 then_with id 比较）完全一致。同分候选的
+    # 相对次序不能依赖稳定排序对输入顺序的隐式依赖——那会让 Python/Rust 双跑
+    # 在并列分上次序漂移（benchmark parity recommend_001 实证）。
+    scored.sort(key=lambda item: (-item[0], str(item[1].get("id") or "")))
     return [mem for _, mem in scored]
 
 

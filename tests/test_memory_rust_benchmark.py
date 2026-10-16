@@ -282,3 +282,34 @@ def test_compare_embedding_requires_fixture(tmp_path):
         benchmark.run_compare_benchmark(tmp_path, retrieval_mode="embedding")
     with pytest.raises(ValueError, match="fixture"):
         benchmark.run_rust_benchmark(tmp_path, retrieval_mode="embedding")
+
+
+def test_parity_gate_full_dataset():
+    """parity 门禁（M6）：native 可加载时全数据集硬差异必须为 0。
+
+    历史悬案闭环记录：21/24（API2 时代）→ harness 保真修复（semantic_scores
+    None 折叠成 {} 让双实现跑不同打分语义）→ canonical tie-break 统一
+    （policy.py 补齐 policy.rs 已有的 score desc → id asc）→ 101/101。
+    本门禁不允许 allowed_diffs：任何硬差异都是回归。
+    """
+    pytest.importorskip(
+        "memory_rust._native",
+        reason="native 未构建（CI 无 maturin/wheel 作业时跳过，不假绿）",
+    )
+    from memory_rust.selector import get_backend
+
+    try:
+        get_backend("rust")
+    except Exception as exc:
+        pytest.skip(f"native backend unavailable: {exc}")
+
+    from config import MEMORY_BENCHMARK_DIR
+
+    report = benchmark.run_compare_benchmark(MEMORY_BENCHMARK_DIR)
+    assert report["parity"]["comparable"] is True
+    assert report["parity"]["cases_mismatch"] == 0, (
+        f"hard mismatch cases: {report['parity']['hard_mismatch_cases']}"
+    )
+    # 用例质量（如 rank-casual-001 的既有失败）是基线门禁的事；parity 门禁
+    # 只要求双实现判定一致（ok 计数相同、逐例硬差异为 0）
+    assert report["python"]["cases_ok"] == report["rust"]["cases_ok"]
