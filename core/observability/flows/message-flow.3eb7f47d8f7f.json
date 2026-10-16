@@ -85472,7 +85472,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "6480b5432519ff58",
+     "body_hash": "26cdf600dc90fa9d",
      "file": "core/dialogue_attribution.py",
      "qualname": "parse_reply_envelope",
      "resolution": "local"
@@ -85619,7 +85619,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "6480b5432519ff58",
+     "body_hash": "26cdf600dc90fa9d",
      "file": "core/dialogue_attribution.py",
      "qualname": "parse_reply_envelope",
      "resolution": "local"
@@ -86822,7 +86822,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "7bcebbe45979c830",
+     "body_hash": "6faf21627b88662b",
      "file": "core/dialogue_attribution.py",
      "qualname": "protocol_instructions",
      "resolution": "local"
@@ -88058,7 +88058,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "7bcebbe45979c830",
+     "body_hash": "6faf21627b88662b",
      "file": "core/dialogue_attribution.py",
      "qualname": "protocol_instructions",
      "resolution": "local"
@@ -89294,7 +89294,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "7bcebbe45979c830",
+     "body_hash": "6faf21627b88662b",
      "file": "core/dialogue_attribution.py",
      "qualname": "protocol_instructions",
      "resolution": "local"
@@ -90530,7 +90530,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "7bcebbe45979c830",
+     "body_hash": "6faf21627b88662b",
      "file": "core/dialogue_attribution.py",
      "qualname": "protocol_instructions",
      "resolution": "local"
@@ -103179,7 +103179,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "7bcebbe45979c830",
+     "body_hash": "6faf21627b88662b",
      "file": "core/dialogue_attribution.py",
      "qualname": "protocol_instructions",
      "resolution": "local"
@@ -126893,6 +126893,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "8bc640492aa9e17067d7e94066b89ff707aeeeda",
+ "source_revision": "93f6cde83dc70d395483e8602401564bf5ba9948",
  "topology_version": "2026.10.04"
 }
