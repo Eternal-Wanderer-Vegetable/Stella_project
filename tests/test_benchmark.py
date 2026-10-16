@@ -287,3 +287,15 @@ def test_embedding_mode_skips_uncovered_cases_explicitly():
     assert metrics2["results"][0]["id"] == "casual_001"
     assert benchmark.HARD_ZERO_METRICS  # 硬零门禁常量在位
     assert metrics2["forbidden_activation_rate"] == 0.0
+
+
+def test_cost_metrics_present_and_not_gated():
+    """cost 段：延迟分位数/库尺寸在位；不进基线对比标量（机器相关不门禁）。"""
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR)
+    cost = metrics["cost"]
+    assert cost["retrieval_latency_ms"]["samples"] == metrics["cases_total"]
+    assert cost["retrieval_latency_ms"]["p50"] is not None
+    assert cost["db_bytes_total"] > 0
+    assert cost["embedding_service"] is None  # 未探测必须诚实记 null
+    scalars = benchmark.comparable_scalars(metrics)
+    assert not any(k.startswith("cost") for k in scalars)

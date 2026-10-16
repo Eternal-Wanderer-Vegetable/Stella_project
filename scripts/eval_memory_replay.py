@@ -441,10 +441,30 @@ def main(argv: list[str] | None = None) -> int:
 
         evaluation = _evaluate_metrics(db_path, suite)
 
+    report_mode = "live" if args.live else "recorded"
+    # 成本段（M5）：live 记 usage_sink 进程记账差值；recorded 无 LLM 调用，
+    # token 诚实记 0 并注明口径。db_bytes 量级两种模式都记录。
+    try:
+        from core.llm import usage_sink
+
+        usage = usage_sink.snapshot()
+        cost = {
+            "llm_calls": usage.get("calls", usage.get("total_calls", 0)),
+            "tokens_in": usage.get("prompt_tokens", 0),
+            "tokens_out": usage.get("completion_tokens", 0),
+            "accounting": "usage_sink(process)",
+        }
+    except Exception as exc:
+        cost = {"llm_calls": 0, "tokens_in": 0, "tokens_out": 0,
+                "accounting": f"unavailable: {type(exc).__name__}"}
+    if report_mode != "live":
+        cost["note"] = "recorded 模式零 LLM 调用，token=0 是口径事实而非缺席"
+
     report = {
         "schema": REPORT_SCHEMA,
+        "cost": cost,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "mode": "live" if args.live else "recorded",
+        "mode": report_mode,
         "suite": args.suite.name,
         "suite_sha256": _suite_digest(args.suite),
         "recordings_sha256": suite["recordings_sha256"],

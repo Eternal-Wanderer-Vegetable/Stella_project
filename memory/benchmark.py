@@ -29,11 +29,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import sqlite3
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -477,6 +479,7 @@ def evaluate_case(
 
     import memory.retrieval_v2 as retrieval_v2
 
+    _t0 = time.perf_counter()
     manager: Any = None
     if work_dir is None:
         manager = tempfile.TemporaryDirectory(prefix="stella_benchmark_")
@@ -515,7 +518,12 @@ def evaluate_case(
             retrieval_v2.RAG_ENABLED = old_rag
 
         lineage_missing = _check_lineage(db_path, case, result) if case.get("expect_evidence") else []
-        return evaluate_retrieval_result(case, result, lineage_missing=lineage_missing)
+        evaluated = evaluate_retrieval_result(case, result, lineage_missing=lineage_missing)
+        # 成本计量（M5，只进 cost 段，不进指标/基线）：检索墙钟与临时库尺寸
+        evaluated["latency_ms"] = round((time.perf_counter() - _t0) * 1000.0, 3)
+        with contextlib.suppress(OSError):
+            evaluated["db_bytes"] = db_path.stat().st_size
+        return evaluated
     finally:
         if manager is not None:
             manager.cleanup()
@@ -746,7 +754,46 @@ def run_benchmark(
         "skipped_ids": skipped_ids,
     }
     metrics["topic_metrics"] = _topic_metrics(results)
+    metrics["cost"] = _cost_metrics(results)
     return metrics
+
+
+def _percentile(values: list[float], pct: float) -> float | None:
+    """插值百分位（与 memory_rust.benchmark._percentile 同口径）。"""
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return round(ordered[0], 4)
+    pos = (len(ordered) - 1) * pct / 100.0
+    low = int(pos)
+    high = min(low + 1, len(ordered) - 1)
+    frac = pos - low
+    return round(ordered[low] + (ordered[high] - ordered[low]) * frac, 4)
+
+
+def _cost_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """报告契约 cost 段（M5）。
+
+    - retrieval_latency_ms：单趟检索延迟分位数（机器相关，只观测不门禁）；
+    - db_bytes_total：逐例临时库尺寸合计（写路径产物量级）；
+    - embedding_service：默认 null——探针需要本地服务，缺席必须诚实注明，
+      不许把「没测」写成「可用」。
+    """
+    latencies = [r["latency_ms"] for r in results if isinstance(r.get("latency_ms"), (int, float))]
+    db_bytes = [r["db_bytes"] for r in results if isinstance(r.get("db_bytes"), (int, float))]
+    return {
+        "retrieval_latency_ms": {
+            "samples": len(latencies),
+            "p50": _percentile(latencies, 50),
+            "p95": _percentile(latencies, 95),
+            "p99": _percentile(latencies, 99),
+            "mean": round(sum(latencies) / len(latencies), 4) if latencies else None,
+        },
+        "db_bytes_total": sum(db_bytes) if db_bytes else None,
+        "embedding_service": None,
+        "embedding_service_note": "not probed（如需记录请运行 scripts/probe_embedding.py 并回填）",
+    }
 
 
 def _category_metrics(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
