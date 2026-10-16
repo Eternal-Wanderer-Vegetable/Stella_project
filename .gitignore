@@ -123,3 +123,6 @@ vendor/cortico/dist/
 memory_rust/_native.pyd
 memory_rust/_native.pyd.api1.bak
 memory_rust/dist/
+
+# PersonaMem 等公开测试集原始数据与适配用例（CC-BY-4.0，不入库；sha256 清单见 fetch 脚本）
+memory/benchmark/_public/

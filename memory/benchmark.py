@@ -97,7 +97,10 @@ def load_cases(benchmark_dir: Path = MEMORY_BENCHMARK_DIR) -> list[dict[str, Any
     if not benchmark_dir.exists():
         return cases
     for path in sorted(benchmark_dir.rglob("*.json")):
-        if any(part.startswith("_") for part in path.parts):
+        # 排除按相对段判断：显式 --dir 指进 _public/ 等目录时，前缀里的 `_` 段
+        # 不应连坐（只有数据集内部的 `_` 段才不是用例）
+        rel_parts = path.relative_to(benchmark_dir).parts
+        if any(part.startswith("_") for part in rel_parts):
             continue
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -408,6 +411,7 @@ def evaluate_retrieval_result(
     return {
         "id": case.get("id", "?"),
         "category": category_of(case),
+        "topic": case.get("topic"),
         "declared_mode": normalize_mode(case.get("mode", "CASUAL_REPLY")),
         "detected_mode": detected_mode,
         "expected": sorted(expected),
@@ -741,6 +745,7 @@ def run_benchmark(
         "total": len(cases),
         "skipped_ids": skipped_ids,
     }
+    metrics["topic_metrics"] = _topic_metrics(results)
     return metrics
 
 
@@ -750,6 +755,24 @@ def _category_metrics(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]
     for r in results:
         by_category.setdefault(r.get("category") or category_of(r), []).append(r)
     return {cat: _aggregate(items) for cat, items in sorted(by_category.items())}
+
+
+def _topic_metrics(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """按用例 topic 字段聚合（公开数据集分题型口径，如 PersonaMem topic_query）。"""
+    by_topic: dict[str, list[dict[str, Any]]] = {}
+    for r in results:
+        topic = r.get("topic")
+        if topic:
+            by_topic.setdefault(str(topic), []).append(r)
+    metrics: dict[str, dict[str, Any]] = {}
+    for topic, items in sorted(by_topic.items()):
+        agg = _aggregate(items)
+        metrics[topic] = {
+            "cases_total": agg["cases_total"],
+            "cases_ok": agg["cases_ok"],
+            "topic_accuracy": agg["cases_ok_rate"],
+        }
+    return metrics
 
 
 # ── 报告 / 基线 / 证据 manifest（M0）─────────────────────────
@@ -1130,6 +1153,8 @@ def main() -> None:
                         help="把报告契约文档（report.json + manifest.json）写入该目录（仅单模式）")
     parser.add_argument("--compare-baseline", type=Path, default=None,
                         help="对比基线快照（memory-benchmark-baseline/1），漂移超出容差非零退出（仅单模式）")
+    parser.add_argument("--gate", action="store_true",
+                        help="质量门禁：任何用例失败或硬零指标非零即非零退出（CI 用）")
     args = parser.parse_args()
 
     if args.matrix:
@@ -1172,6 +1197,8 @@ def main() -> None:
         if args.verbose:
             _print_verbose(metrics_emb["results"])
         _emit_report_and_baseline(args, metrics_emb)
+        if args.gate:
+            _gate_exit(metrics_emb)
         return
 
     if args.embedding_fixture is not None:
@@ -1181,6 +1208,8 @@ def main() -> None:
         if args.verbose:
             _print_verbose(metrics_emb["results"])
         _emit_report_and_baseline(args, metrics_emb)
+        if args.gate:
+            _gate_exit(metrics_emb)
         return
 
     if args.compare:
@@ -1213,6 +1242,21 @@ def main() -> None:
     if args.verbose:
         _print_verbose(metrics["results"])
     _emit_report_and_baseline(args, metrics)
+    if args.gate:
+        _gate_exit(metrics)
+
+
+def _gate_exit(metrics: dict[str, Any]) -> None:
+    """--gate：用例失败或硬零指标违规即 SystemExit(1)。"""
+    failures = [r["id"] for r in metrics["results"] if not r["ok"]]
+    violations = []
+    if metrics["forbidden_activation_rate"] != 0.0:
+        violations.append("forbidden_activation_rate")
+    if metrics["dimensions"]["scope_privacy"]["cross_scope_leak_rate"] != 0.0:
+        violations.append("cross_scope_leak_rate")
+    if failures or violations:
+        print(f"❌ 门禁失败：{len(failures)} 例失败 {failures[:5]}；硬零违规 {violations}")
+        raise SystemExit(1)
 
 
 def _emit_report_and_baseline(args: argparse.Namespace, metrics: dict[str, Any]) -> None:
