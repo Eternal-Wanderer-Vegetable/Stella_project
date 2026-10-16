@@ -57,6 +57,23 @@ HARD_ZERO_METRICS = (
     "dimensions.scope_privacy.cross_scope_leak_rate",
 )
 
+# ── 检索模式矩阵（M2）───────────────────────────────────────
+# 四种模式对应生产检索的全部形态（消灭 FTS 盲区）：
+#   rule     : RAG off + 无语义分（历史缺省；词面语义不可靠，权重重归一化）
+#   embedding: RAG off + fixture 语义分（embedding 权重）
+#   fts      : RAG on  + 无语义分（生产 FTS5 + bm25 候选；无 embedding 服务形态）
+#   hybrid   : RAG on  + fixture 语义分（生产默认形态：FTS 候选 + embedding 语义）
+# 模式控制沿用 evaluate_case 内 save/patch/restore 的进程内 patch，
+# retrieval_v2.py 与 config/settings.py 零改动（impact HIGH 承诺）。
+RETRIEVAL_MODES = ("rule", "embedding", "fts", "hybrid")
+MODE_FLAGS: dict[str, tuple[bool, bool]] = {
+    # mode: (rag_enabled, requires_semantic_scores)
+    "rule": (False, False),
+    "embedding": (False, True),
+    "fts": (True, False),
+    "hybrid": (True, True),
+}
+
 
 def _mem_dict(mid: str, data: dict[str, Any]) -> dict[str, Any]:
     """把 benchmark 用例里的记忆定义转成 memory dict。"""
@@ -133,7 +150,45 @@ def _resolve_memory_timestamp(mem: dict[str, Any], field: str, default: str) -> 
     return value or default
 
 
-def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
+def _populate_fts_index(conn: sqlite3.Connection, case: dict[str, Any]) -> None:
+    """为用例库填充 memories_fts 索引（fts/hybrid 模式，M2）。
+
+    生产库由 memory_manager 写入时同步维护 FTS（_upsert_fts_record）；benchmark
+    直写 SQLite 绕过 writer，因此 fts/hybrid 模式必须自建索引，否则 _query_fts
+    查空索引 → 静默回退新鲜度路径，测的仍是盲区。分段必须复用
+    ``memory.retriever._segment_text``，保证索引词串与生产一致。
+    只索引 active 行（与生产 _rebuild_fts_index 口径一致；status 过滤在查询侧
+    也会做，这里提前不写是省一层 JOIN）。
+    """
+    from memory.retriever import _ensure_fts_table, _segment_text
+
+    if not _ensure_fts_table(conn.cursor()):
+        raise RuntimeError("SQLite 未编译 FTS5，fts/hybrid 模式不可用")
+    for mid, data in (case.get("memories") or {}).items():
+        mem = _mem_dict(mid, data)
+        if (mem.get("status") or "active") != "active":
+            continue
+        text = _segment_text(mem.get("content") or "")
+        if not text:
+            continue
+        conn.execute(
+            "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                mid,
+                text,
+                str(mem.get("group_shared_space", mem.get("group_id", ""))),
+                str(mem.get("user_id", "")),
+            ),
+        )
+
+
+def _write_case_db(
+    db_path: Path,
+    case: dict[str, Any],
+    *,
+    populate_fts: bool = False,
+) -> tuple[int, int]:
     """把用例记忆写进临时 SQLite，返回 (group_id, user_id)。
 
     背景：evaluate_case 必须走生产路径，即 retrieval_v2._fetch_candidates 内的
@@ -227,6 +282,8 @@ def _write_case_db(db_path: Path, case: dict[str, Any]) -> tuple[int, int]:
                         ev.get("projection_slot") or "content",
                     ),
                 )
+        if populate_fts:
+            _populate_fts_index(conn, case)
         conn.commit()
     finally:
         conn.close()
@@ -238,9 +295,10 @@ def write_case_db(
     case: dict[str, Any],
     *,
     with_schema_meta: bool = False,
+    populate_fts: bool = False,
 ) -> tuple[int, int]:
     """Write a benchmark case and optionally add the native schema marker."""
-    group_id, user_id = _write_case_db(db_path, case)
+    group_id, user_id = _write_case_db(db_path, case, populate_fts=populate_fts)
     if with_schema_meta:
         from memory.schema import SCHEMA_VERSION
 
@@ -388,6 +446,7 @@ def evaluate_case(
     work_dir: Path | None = None,
     seq: int = 0,
     semantic_scores: dict[str, float] | None = None,
+    retrieval_mode: str = "rule",
 ) -> dict[str, Any]:
     """对单个用例跑生产检索路径，返回期望/禁止/实际的命中情况。
 
@@ -397,7 +456,21 @@ def evaluate_case(
     seq 用于保证 temp 库文件名唯一，避免 id 缺失/重名的用例共用同一 db 路径。
     ``semantic_scores`` 为可选外部语义分（如从 embedding fixture 计算的余弦分），
     传给 retrieve_memories 走 embedding 路径；缺省为规则版。
+    ``retrieval_mode`` 控制检索形态（M2 矩阵，见 MODE_FLAGS）：RAG 开关走既有
+    save/patch/restore；fts/hybrid 在写库时同步填充 FTS 索引。
     """
+    if retrieval_mode not in MODE_FLAGS:
+        raise ValueError(
+            f"未知检索模式 {retrieval_mode!r}；可选 {'/'.join(RETRIEVAL_MODES)}"
+        )
+    rag_enabled, requires_semantic = MODE_FLAGS[retrieval_mode]
+    # 语义分按「是否提供」校验而非按内容：真实 fixture 常只覆盖部分用例文本，
+    # 缺向量的用例得空 dict，生产语义同款回退（rank_memories 缺 id → 规则语义）。
+    if requires_semantic and semantic_scores is None:
+        raise ValueError(f"检索模式 {retrieval_mode} 需要 embedding fixture 提供语义分")
+    if not requires_semantic and semantic_scores is not None:
+        raise ValueError(f"检索模式 {retrieval_mode} 不接受语义分（语义分只用于 embedding/hybrid）")
+
     import memory.retrieval_v2 as retrieval_v2
 
     manager: Any = None
@@ -406,7 +479,7 @@ def evaluate_case(
         work_dir = Path(manager.name)
     try:
         db_path = work_dir / f"case_{seq}_{case.get('id', 'case')}.db"
-        group_id, user_id = _write_case_db(db_path, case)
+        group_id, user_id = _write_case_db(db_path, case, populate_fts=rag_enabled)
         query = case.get("input") or ""
         trigger = case.get("trigger", "proactive" if case.get("mode") == "ACTIVE_JOIN" else "reply")
         # 临时把 retrieval_v2 指向本用例的临时库，结束后恢复现场
@@ -418,8 +491,8 @@ def evaluate_case(
         try:
             retrieval_v2.DB_PATH = db_path
             retrieval_v2.MEMORY_V2_ENABLED = True
-            # 故意关掉 RAG/FTS：保证 benchmark 结果可复现（注意 FTS 分支是盲区）
-            retrieval_v2.RAG_ENABLED = False
+            # RAG 开关按模式 patch：fts/hybrid 打开（FTS 候选），rule/embedding 关闭
+            retrieval_v2.RAG_ENABLED = rag_enabled
             # _CACHE 按 (db 路径, 群, 用户, trigger, mode) 全局缓存 5 分钟，
             # 用例之间必须清空，否则同名/缺失 id 的用例会吃到上一用例的缓存。
             retrieval_v2._CACHE.clear()
@@ -597,19 +670,60 @@ def run_benchmark(
     返回形状的既有键。
     """
     cases = load_cases(benchmark_dir)
-    with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
-        work_dir = Path(tmp)
-        results = [
-            evaluate_case(
-                c,
-                work_dir,
-                i,
-                semantic_scores=(
-                    fixture_semantic_scores(c, embedding_fixture) if embedding_fixture else None
-                ),
-            )
-            for i, c in enumerate(cases)
-        ]
+    if retrieval_mode not in MODE_FLAGS:
+        raise ValueError(
+            f"未知检索模式 {retrieval_mode!r}；可选 {'/'.join(RETRIEVAL_MODES)}"
+        )
+    if MODE_FLAGS[retrieval_mode][1] and embedding_fixture is None:
+        raise ValueError(f"检索模式 {retrieval_mode} 需要 --embedding-fixture 提供语义分")
+
+    # FTS 调用计量（fts/hybrid 模式）：量化「FTS 候选是否真的生效」。这是基准
+    # 侧观测，不改检索行为；0 命中意味着全部用例走了新鲜度回退（生产同款语义）。
+    import memory.retrieval_v2 as retrieval_v2
+
+    fts_accounting = {"queries": 0, "candidate_rows": 0}
+    if rag_or_fts := MODE_FLAGS[retrieval_mode][0]:
+        orig_query_fts = retrieval_v2._query_fts
+
+        def _counting_query_fts(*a: Any, **k: Any):
+            rows = orig_query_fts(*a, **k)
+            fts_accounting["queries"] += 1
+            fts_accounting["candidate_rows"] += len(rows)
+            return rows
+
+        retrieval_v2._query_fts = _counting_query_fts
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="stella_benchmark_") as tmp:
+            work_dir = Path(tmp)
+            # fixture 覆盖缺口（embedding/hybrid）：无向量用例不得用「embedding 权重 +
+            # 规则语义回退」的第三种语义跑——那既不是 rule 也不是真 embedding，指标会
+            # 误导。缺向量用例显式 skip 并记账（fixture 重建后自动全覆盖），绝不静默绿。
+            evaluated_cases = cases
+            skipped_ids: list[str] = []
+            if MODE_FLAGS[retrieval_mode][1] and embedding_fixture is not None:
+                covered, skipped = [], []
+                for c in cases:
+                    if case_semantically_covered(c, embedding_fixture):
+                        covered.append(c)
+                    else:
+                        skipped.append(str(c.get("id") or "?"))
+                evaluated_cases, skipped_ids = covered, skipped
+            results = [
+                evaluate_case(
+                    c,
+                    work_dir,
+                    i,
+                    semantic_scores=(
+                        fixture_semantic_scores(c, embedding_fixture) if embedding_fixture else None
+                    ),
+                    retrieval_mode=retrieval_mode,
+                )
+                for i, c in enumerate(evaluated_cases)
+            ]
+    finally:
+        if rag_or_fts:
+            retrieval_v2._query_fts = orig_query_fts
 
     metrics = _aggregate(results)
     # 返回形状向后兼容：以下均为新增键（报告契约 v1，只增不改）
@@ -620,6 +734,13 @@ def run_benchmark(
     metrics["clock_anchor"] = CLOCK_ANCHOR
     metrics["category_metrics"] = _category_metrics(results)
     metrics["dimensions"] = _dimension_metrics(results)
+    metrics["retrieval_path"] = dict(fts_accounting) if rag_or_fts else {"queries": 0, "candidate_rows": 0}
+    metrics["fixture_coverage"] = {
+        "covered": len(results),
+        "skipped": len(skipped_ids),
+        "total": len(cases),
+        "skipped_ids": skipped_ids,
+    }
     return metrics
 
 
@@ -871,12 +992,8 @@ def _text_digest(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
-def fixture_semantic_scores(case: dict[str, Any], fixture: dict[str, Any]) -> dict[str, float]:
-    """从 fixture 查 query 与每条记忆的向量，返回 {mem_id: 余弦分}。
-
-    fixture 结构：{model, dim, dtype, normalized, keys, data: {sha256: base64(float16)}}。
-    缺失向量的记忆跳过（rule-only 兜底）。
-    """
+def _fixture_vectors(fixture: dict[str, Any]) -> dict[str, Any]:
+    """解码 fixture 的 base64 向量缓存（就地缓存到 fixture["_vecs"]）。"""
     import base64
 
     import numpy as np
@@ -888,6 +1005,32 @@ def fixture_semantic_scores(case: dict[str, Any], fixture: dict[str, Any]) -> di
         for key, b64 in raw.items():
             vecs[key] = np.frombuffer(base64.b64decode(b64), dtype=np.float16).astype(np.float32)
         fixture["_vecs"] = vecs
+    return vecs
+
+
+def case_semantically_covered(case: dict[str, Any], fixture: dict[str, Any] | None) -> bool:
+    """用例在 embedding/hybrid 模式下是否可评：查询向量在场即可评。
+
+    记忆向量缺失走生产同款逐条回退（rank_memories 缺 id → 规则语义）；
+    无记忆用例（abstain）天然可评。查询向量缺失 = 无法按 embedding 语义
+    评测该用例 → 调用方必须显式 skip 记账，不得用第三种语义冒充。
+    """
+    if fixture is None:
+        return False
+    vecs = _fixture_vectors(fixture)
+    return vecs.get(_text_digest(case.get("input") or "")) is not None
+
+
+def fixture_semantic_scores(case: dict[str, Any], fixture: dict[str, Any]) -> dict[str, float]:
+    """从 fixture 查 query 与每条记忆的向量，返回 {mem_id: 余弦分}。
+
+    fixture 结构：{model, dim, dtype, normalized, keys, data: {sha256: base64(float16)}}。
+    缺失向量的记忆跳过（rule-only 兜底）；查询向量缺失返回 {}（可评性另见
+    case_semantically_covered）。
+    """
+    import numpy as np
+
+    vecs = _fixture_vectors(fixture)
 
     qv = vecs.get(_text_digest(case.get("input") or ""))
     if qv is None:
@@ -978,11 +1121,58 @@ def main() -> None:
                         help="从 fixture 取向量算语义分（embedding 路径，不发 HTTP），缺省 rule-only")
     parser.add_argument("--compare", action="store_true",
                         help="同一套用例跑 rule-only 与 embedding 两遍，输出对照表")
+    parser.add_argument("--retrieval-mode", choices=RETRIEVAL_MODES, default=None,
+                        help="检索模式矩阵（M2）：rule/embedding/fts/hybrid；缺省 rule"
+                             "（--embedding-fixture 隐含 embedding）")
+    parser.add_argument("--matrix", action="store_true",
+                        help="四模式全矩阵跑一遍（rule/embedding/fts/hybrid），逐模式输出汇总")
     parser.add_argument("--report", type=Path, default=None,
-                        help="把报告契约文档（report.json + manifest.json）写入该目录")
+                        help="把报告契约文档（report.json + manifest.json）写入该目录（仅单模式）")
     parser.add_argument("--compare-baseline", type=Path, default=None,
-                        help="对比基线快照（memory-benchmark-baseline/1），漂移超出容差非零退出")
+                        help="对比基线快照（memory-benchmark-baseline/1），漂移超出容差非零退出（仅单模式）")
     args = parser.parse_args()
+
+    if args.matrix:
+        fixture_path = args.embedding_fixture
+        if fixture_path is None:
+            default_fixtures = sorted(
+                (Path(__file__).resolve().parent / "benchmark" / "_fixtures").glob("embeddings_*.json")
+            )
+            if not default_fixtures:
+                print("⚠️ 未找到 embedding fixture，矩阵退化为 rule/fts 两模式。")
+                modes: list[str] = ["rule", "fts"]
+            else:
+                fixture_path = default_fixtures[0]
+                modes = list(RETRIEVAL_MODES)
+        else:
+            modes = list(RETRIEVAL_MODES)
+        fixture = load_embedding_fixture(fixture_path) if fixture_path else None
+        exit_code = 0
+        for mode in modes:
+            if MODE_FLAGS[mode][1] and fixture is None:
+                continue
+            print(f"\n────── 检索模式 [{mode}] ──────")
+            metrics_m = run_benchmark(
+                args.dir,
+                embedding_fixture=fixture if MODE_FLAGS[mode][1] else None,
+                retrieval_mode=mode,
+            )
+            _print_summary(metrics_m, f"[{mode}]")
+            if metrics_m["forbidden_activation_rate"] != 0.0:
+                exit_code = 1
+            if metrics_m["dimensions"]["scope_privacy"]["cross_scope_leak_rate"] != 0.0:
+                exit_code = 1
+            if args.verbose:
+                _print_verbose(metrics_m["results"])
+        raise SystemExit(exit_code)
+
+    if args.retrieval_mode is not None and args.embedding_fixture is None:
+        metrics_emb = run_benchmark(args.dir, retrieval_mode=args.retrieval_mode)
+        _print_summary(metrics_emb, f"[{args.retrieval_mode}]")
+        if args.verbose:
+            _print_verbose(metrics_emb["results"])
+        _emit_report_and_baseline(args, metrics_emb)
+        return
 
     if args.embedding_fixture is not None:
         fixture = load_embedding_fixture(args.embedding_fixture)

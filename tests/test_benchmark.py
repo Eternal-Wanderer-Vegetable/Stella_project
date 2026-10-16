@@ -6,6 +6,7 @@
 import base64
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -215,3 +216,74 @@ def test_baseline_compare_drift_detection(tmp_path):
     assert not ok5
     assert any(row["status"] == "missing" and row["metric"] == "mode_accuracy" for row in drift5)
 
+
+
+# ── M2 检索模式矩阵（Python 侧）──────────────────────────────
+
+
+def test_evaluate_case_mode_validation(tmp_path):
+    """模式校验：embedding 无语义分 / rule 带语义分 / 未知模式都必须报错。"""
+    case = {"id": "m", "input": "q", "memories": {}, "expected_memory": []}
+    with pytest.raises(ValueError, match="embedding fixture"):
+        benchmark.evaluate_case(case, tmp_path, 0, None, "embedding")
+    with pytest.raises(ValueError, match="不接受语义分"):
+        benchmark.evaluate_case(case, tmp_path, 0, {"x": 0.5}, "rule")
+    with pytest.raises(ValueError, match="未知检索模式"):
+        benchmark.evaluate_case(case, tmp_path, 0, None, "bm25")
+
+
+def test_fts_mode_populates_index_and_accounts(tmp_path):
+    """fts 模式：用例库填充 FTS 索引；run_benchmark 记录 FTS 调用计量。"""
+    case = {
+        "id": "fts-x",
+        "scenario": {"group_id": 40, "user_id": 40},
+        "input": "有什么游戏推荐吗",
+        "mode": "RECOMMEND",
+        "memories": {
+            "M1": {"content": "用户喜欢的游戏是塞尔达传说", "type": "PREFERENCE",
+                   "usage_tags": ["RECOMMEND"], "visibility": "OPEN"},
+        },
+        "expected_memory": ["M1"],
+    }
+    result = benchmark.evaluate_case(case, tmp_path, 0, None, "fts")
+    assert result["final"] == ["M1"]  # FTS 路径（或回退）仍能召回期望
+
+    import sqlite3 as _sq
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as td:
+        db = Path(td) / "c.db"
+        benchmark._write_case_db(db, case, populate_fts=True)
+        conn = _sq.connect(db)
+        rows = conn.execute("SELECT mem_id FROM memories_fts").fetchall()
+        conn.close()
+        assert ("M1",) in rows
+
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR, retrieval_mode="fts")
+    assert set(metrics["retrieval_path"]) == {"queries", "candidate_rows"}
+    assert metrics["retrieval_path"]["queries"] >= len(metrics["results"])
+    metrics_rule = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR, retrieval_mode="rule")
+    assert metrics_rule["retrieval_path"]["queries"] == 0
+
+
+def test_embedding_mode_skips_uncovered_cases_explicitly():
+    """fixture 覆盖缺口：embedding 模式显式 skip 未覆盖用例并记账（不静默绿）。"""
+    fixture = _synthetic_fixture()  # 覆盖全部用例
+    metrics = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR, embedding_fixture=fixture,
+                                      retrieval_mode="embedding")
+    assert metrics["fixture_coverage"]["skipped"] == 0
+    assert metrics["fixture_coverage"]["covered"] == metrics["cases_total"]
+
+    # 按 id 精确构造 partial fixture：只保留 casual_001 一例的向量
+    keep = next(c for c in benchmark.load_cases(MEMORY_BENCHMARK_DIR) if c["id"] == "casual_001")
+    keep_digests = {benchmark._text_digest(keep.get("input") or "")} | {
+        benchmark._text_digest(m.get("content") or "") for m in keep["memories"].values()
+    }
+    partial = {"model": "partial", "dim": 16, "dtype": "float16", "normalized": True,
+               "keys": [], "data": {k: v for k, v in fixture["data"].items() if k in keep_digests}}
+    metrics2 = benchmark.run_benchmark(MEMORY_BENCHMARK_DIR, embedding_fixture=partial,
+                                       retrieval_mode="embedding")
+    assert metrics2["fixture_coverage"]["skipped"] > 0
+    assert metrics2["cases_total"] == metrics2["fixture_coverage"]["covered"] == 1
+    assert metrics2["results"][0]["id"] == "casual_001"
+    assert benchmark.HARD_ZERO_METRICS  # 硬零门禁常量在位
+    assert metrics2["forbidden_activation_rate"] == 0.0

@@ -213,3 +213,72 @@ def test_performance_suite_counts_runtime_errors_and_keeps_successes(tmp_path):
     assert report["samples"] == 1
     assert report["errors"] == 1
     assert report["cases"][0]["errors"] == 1
+
+
+# ── M2 检索模式矩阵 ──────────────────────────────────────────
+
+
+def test_run_backend_case_rejects_fts_for_rust(tmp_path):
+    """native 检索无 FTS：fts/hybrid 模式下 Rust 侧必须显式报错，不得静默跑 rule。"""
+    with pytest.raises(benchmark.RustBenchmarkError, match="FTS"):
+        benchmark._run_backend_case(
+            "rust", _FakeRustBackend(), _case(), tmp_path, 0, None, "fts",
+        )
+
+
+def test_rule_mode_normalizes_semantic_scores(tmp_path):
+    """rule 模式即使拿到 fixture 也必须走 None 语义（模式名不失真）。"""
+    captured: dict = {}
+
+    class _SpyBackend:
+        name = "python"
+
+        def retrieve(self, request):
+            captured["semantic_scores"] = request.semantic_scores
+            return SimpleNamespace(
+                mode=request.mode,
+                conversation_memories=[],
+                behavior_constraints=[],
+                trace={},
+            )
+
+    fixture = {"data": {}, "_vecs": {}}
+    benchmark._run_backend_case(
+        "python", _SpyBackend(), _case(), tmp_path, 0, fixture, "rule",
+    )
+    assert captured["semantic_scores"] is None
+
+    benchmark._run_backend_case(
+        "python", _SpyBackend(), _case(), tmp_path, 1, fixture, "embedding",
+    )
+    assert captured["semantic_scores"] is not None
+
+
+def test_filter_fixture_coverage_keeps_rule_intact():
+    """rule/fts 模式不过滤用例；embedding 模式只保留 fixture 覆盖的用例。"""
+    cases = [_case(), _case() | {"id": "case-b"}]
+    kept, skipped = benchmark._filter_fixture_coverage(cases, None, "rule")
+    assert (kept, skipped) == (cases, [])
+
+    empty_fixture = {"data": {}, "_vecs": {}}
+    kept2, skipped2 = benchmark._filter_fixture_coverage(cases, empty_fixture, "embedding")
+    assert kept2 == [] and len(skipped2) == 2
+
+
+def test_compare_fts_registers_native_not_comparable(tmp_path, monkeypatch):
+    """fts 模式 compare：Python 单边 + parity 显式 comparable=false 与原因。"""
+    monkeypatch.setattr(benchmark, "get_backend", lambda mode: _FakeRustBackend())
+    report = benchmark.run_compare_benchmark(
+        tmp_path, retrieval_mode="fts",
+    )
+    assert report["rust"] is None
+    assert report["parity"]["comparable"] is False
+    assert "FTS" in report["parity"]["reason"]
+    assert report["ok"] is True  # python 单边全 ok 即可
+
+
+def test_compare_embedding_requires_fixture(tmp_path):
+    with pytest.raises(ValueError, match="fixture"):
+        benchmark.run_compare_benchmark(tmp_path, retrieval_mode="embedding")
+    with pytest.raises(ValueError, match="fixture"):
+        benchmark.run_rust_benchmark(tmp_path, retrieval_mode="embedding")
