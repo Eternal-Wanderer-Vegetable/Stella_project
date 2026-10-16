@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-10-13 (Asia/Shanghai)
-**Active Feature:** none; CI-106 blocked pending PR update/hosted confirmation; RELEASE-620, CI-001, and DOC-001 done
+**Active Feature:** none; CI-106, RELEASE-620, CI-001, and DOC-001 done
 **Scope:** 修复 PR #106 flow-closure 中 GitNexus analyze 的 native heap corruption；6.2.0 发布状态保持完成。
 
 ## What's Done
@@ -11,7 +11,8 @@
 - CI-106：PR #106 的 flow-closure 在 `npx -y gitnexus@1.6.11 analyze --index-only` 崩溃（`malloc(): unaligned tcache chunk detected`），后续 inventory 门禁因前序失败被跳过。
 - 修复候选已在本地工作树：CI analyzer 加 `--workers 1`，新静态测试锁定命令与两个独立 inventory/reconciliation 步骤。Pinned npm analyzer 单 worker 在容器中成功；41 个 flow 定向测试通过；两条 CI 等价检查通过；跟踪 Python Ruff、docs 检查通过；`git diff --check` 通过。
 - GitNexus scope=all：最终为 5 文件/12 符号/low；与 PR base `origin/main@f4d6247` 比较 18 文件/35 符号/low，无 partial/truncated。后者包含既有 6.2.0 变更、本地 release 状态记录和本修复。
-- 修复尚未提交或推送，PR #106 hosted CI 还未用此改动重跑。用户要求修复，但远端更新属于外部写操作，待明确授权；原有 RELEASE-620 三个本地状态记录和未跟踪用户资料均予以保留。
+- 修复提交 `c22dcecdde227564cecd6a7290f246ae43ba3efa` 已推送至 PR #106；hosted CI run 38357443346 全部检查通过，flow-closure analyzer、runtime inventory 与 discovered-entry reconciliation 均成功。Docker Publish run 38357443338 也成功。
+- 本修复只增加 GitNexus `--workers 1` 和对应 workflow contract test；`v6.2.0` tag 未移动，仍指向已发布 commit `6c62fdc`。原有未跟踪用户资料未修改、未暂存。
 
 - RELEASE-620：线上 main@f4d6247 已包含本地 topic 的所有工作；从该提交创建 `codex/release-6.2.0`。
 - 已将 pyproject、CLI/桌面 Cargo 元数据和 lock、Tauri 配置同步至 6.2.0；更新双语 README、合同说明、迁移模板与发布说明。
@@ -47,7 +48,8 @@
 
 ## What's Next
 
-1. CI-106：本地修复与验证完成；等待用户授权后，提交仅含本修复/状态文件的变更并更新 PR #106，随后检查 hosted flow-closure。
+1. CI-106 已完成并通过 PR #106 hosted checks；修复提交为 `c22dcecdde227564cecd6a7290f246ae43ba3efa`。
+2. RELEASE-620 已完成；版本提交 `6c62fdc3f7ae010896f7f308e37f356eb3c20581`，tag 与稳定 Release 已发布。
 2. RELEASE-620 已完成；版本提交 `6c62fdc3f7ae010896f7f308e37f356eb3c20581`，tag 与稳定 Release 已发布。
 3. 真实 QQ 灰度、clean-VM/GUI 首启和未签名安装提示仍按各自流程验收；不得将 GitHub-hosted 安装验收扩大为这些结论。
 
@@ -69,3 +71,17 @@
 - c7751f6 已修复该超时；本地 Dashboard 100 项测试、类型检查、生产构建通过。
 - [主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792) 通过；CI-001 done，无活动任务。
 - 完成记录提交的最终 SHA／检查结果以 Git 和 PR 最新状态为准。
+
+## AI-Gated Memory Capture — 2026-10-16
+
+- 分支 `feat/ai-gated-memory-capture`（基于 `codex/release-6.2.0` @ `c22dcec`），6 提交：`3db81e7`（M1+M2 门模块+探针+测试）、`8bc6404`（M3 writer 拒绝契约）、`574250c`（M4+M5 三入口+BOT_SELF 门控+闭门钩子+e2e）、`0ab17fb`（M6 状态快照+.env.example）、`427825c`（M7 双语文档）、`502ef7d`（M8 实施报告）。
+- 语义：`CONSOLIDATION` 角色被有界探针（真实生成路径最小 ping、不要求 /v1/models、含降级链）证实可用前，QQ 群/私聊/WebChat 的记忆采集 fail-closed；关门期消息不落库不排队不回放，恢复后从下一条新消息开始。`backend_for` 零改动；无 schema 迁移；无旁路开关。
+- 验证：全量 `pytest tests -q` **3707 passed / 17 skipped**；ruff（git ls-files 口径）全过；`check_docs` 0 errors；`generate_message_flow --check` 过（manifest 仅 body hash 变化，新入口 `bot_main.start_capture_gate` 已入 inventory）。
+- 基线例外：`ruff check .`（含未跟踪文件）报前会话遗留 `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py` I001（未改动）；GitNexus CLI 本机 registry 损坏，调用方清点用文本检索兜底（record_message 5 处生产调用、_record_bot_lines 13 处，全部覆盖）。
+- NOT READY：真实模型探针冒烟、QQ 真机灰度、clean-VM 验收。详见 [实施报告](docs/reports/2026-10-16-ai-gated-memory-capture-implementation.md)。
+
+### What's Next（AI-Gated Memory Capture）
+
+1. 用户验收合并；合并前可在真实端点做一次探针冒烟（开/关门 + 冷加载观察）。
+2. QQ 灰度观测：关门期消息不落库、`/stella/status` 的 `memory_capture` 段就绪状态。
+3. 存量积压检查/排空是独立运维决策，未在本特性范围内。

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-13",
+  "updated_at": "2026-10-16",
   "active_feature": null,
   "features": [
     {
       "id": "CI-106",
       "name": "PR #106 flow-closure GitNexus worker 崩溃修复",
       "description": "限制 GitNexus analyze 单 worker，固定 workflow 合同并保留独立 runtime inventory 与 discovered-entry 对账门禁。",
-      "status": "blocked",
+      "status": "done",
       "dependencies": [],
       "scope": [
         ".github/workflows/ci.yml 的 flow-closure analyzer 命令",
@@ -31,15 +31,15 @@
         },
         {
           "command": "MSYS_NO_PATHCONV=1 docker exec -w /repo stella-gitnexus npx -y gitnexus@1.6.11 analyze --index-only --workers 1 --default-branch main",
-          "result": "Pinned npm analyzer completed without heap corruption; index covers 1167 files and reports up-to-date. Analyzer emits existing callable-value-flow candidate-cap warnings for astrbot_compat/filters.py"
+          "result": "Pinned npm analyzer completed without heap corruption locally; hosted PR run also passed. Index covers 1167 files. Existing callable-value-flow candidate-cap warnings remain for astrbot_compat/filters.py."
         },
         {
           "command": "CI-equivalent runtime inventory and discovered-entry reconciliation commands",
-          "result": "49 runtime entries / 9 families; 33 discovered entries, reconciliation clean"
+          "result": "49 runtime entries / 9 families; 33 discovered entries, reconciliation clean. Hosted flow-closure passed in run 38357443346 at c22dcecd."
         },
         {
           "command": "python scripts/check_docs.py; GitNexus detect-changes --scope all; GitNexus compare against origin/main@f4d6247",
-          "result": "Docs 0 errors; tracked Python Ruff passed; diff check clean. Final GitNexus scope all: 5 files/12 symbols/low; compare against origin/main@f4d6247: 18 files/35 symbols/low; no partial/truncated. Compare includes pre-existing release and local state-record edits. PR #106 hosted rerun is pending; local change is not pushed."
+          "result": "Docs 0 errors; tracked Python Ruff and diff checks passed. GitNexus final scope all: 5 files/12 symbols/low; compare against origin/main@f4d6247: 18 files/35 symbols/low; no partial/truncated. PR #106 hosted checks all passed on c22dcecd (run 38357443346)."
         }
       ]
     },
@@ -215,6 +215,49 @@
         {
           "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792",
           "result": "Dashboard CI passed after functional-test timeout adjustment"
+        }
+      ]
+    },
+    {
+      "id": "MEMCAP-001",
+      "name": "AI-gated memory capture（记忆采集就绪门）",
+      "description": "CONSOLIDATION 角色经有界探针（真实生成路径最小补全，含降级链，不要求 /v1/models）证实可用之前，QQ 群/私聊/WebChat 的记忆采集 fail-closed；关门期消息不落库、不排队、不回放，恢复后从下一条新消息开始采集。backend_for 零改动，无 schema 迁移，无旁路开关。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "memory/capture_gate.py（新：状态机/探针 worker/ingress_decision/脱敏快照）",
+        "memory/pre_processors.py 的 record_message 采集决策参数与 ctx.capture_result",
+        "stella_project/plugins/bot_main/ai_gateway.py 的群/私聊入口、_record_bot_lines、启动/关闭钩子",
+        "webui/chat_ingress.py 的 run_turn 门控",
+        "memory/consolidator.py 的真实失败立即关门钩子",
+        "stella_project/plugins/bot_main/status_api.py 的 memory_capture 脱敏段",
+        "config/settings.py、.env.example 的 MEMORY_CAPTURE_PROBE_INTERVAL/_TIMEOUT",
+        "core/observability/internal_flow_catalog.py 的 bot_main.start_capture_gate 入口登记与 flow manifest",
+        "docs/reference/configuration*、docs/architecture/message-lifecycle*、docs/architecture/memory-system*"
+      ],
+      "done_criteria": [
+        "QQ 群/私聊/WebChat 在关门期不产生原始行与内容派生副作用（身份/社会/表达/参与/整合触发），回复、插件短路、用量记账照常",
+        "探针开门路径完整：未绑定/离线/超时/空输出关门，正常补全与降级链成功开门；真实整合失败立即关门且迟到探针成功被 epoch 围栏弃用",
+        "恢复后只采新消息，无补录无回放；存量积压与 checkpoint 零改动",
+        "状态快照字段集合封闭且无 URL/key/正文泄漏；env schema 覆盖两个操作员键",
+        "全量 Python、Ruff（git ls-files 口径）、check_docs、message-flow --check 通过"
+      ],
+      "evidence": [
+        {
+          "command": "python -m pytest tests -q -x --timeout=600",
+          "result": "3707 passed, 17 skipped（Windows Python 3.14，隔离 STELLA_HOME），含 41 个新用例"
+        },
+        {
+          "command": "python -m ruff check $(git ls-files '*.py')",
+          "result": "all tracked Python files passed"
+        },
+        {
+          "command": "python scripts/check_docs.py; python scripts/generate_message_flow.py --check",
+          "result": "docs ok（119 files/1190 links）；manifest message-flow.6757c542d9db.json 与源码一致（仅 body hash 变化）"
+        },
+        {
+          "command": "外部验收",
+          "result": "NOT READY：真实模型探针冒烟、QQ 真机灰度、clean-VM 验收；报告 docs/reports/2026-10-16-ai-gated-memory-capture-implementation.md"
         }
       ]
     }
