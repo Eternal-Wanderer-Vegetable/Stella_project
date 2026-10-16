@@ -39,13 +39,20 @@ class PythonMemoryBackend:
                 subject_key=request.scope_subject_key,
                 person_audiences=tuple(request.scope_person_audiences or ()),
             )
+        # None 语义必须保真：semantic_scores=None → 生产 rule-only（权重重归一化）；
+        # 只有确有分数时才传 dict，否则 Python/Rust 双方会跑不同的打分语义。
+        semantic_scores = (
+            dict(request.semantic_scores)
+            if request.semantic_scores is not None
+            else None
+        )
         return retrieve_memories(
             request.group_shared_space,
             request.user_id,
             request.query,
             trigger=request.trigger,
             mode=request.mode,
-            semantic_scores=dict(request.semantic_scores or {}),
+            semantic_scores=semantic_scores,
             _bypass_backend=True,
             **kwargs,
         )

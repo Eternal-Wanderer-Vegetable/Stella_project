@@ -73,7 +73,10 @@ def _case_request(
             LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
             mode_limit(resolved_mode) * 5,
         ),
-        semantic_scores=semantic_scores or {},
+        # None 必须保持 None：rule-only 语义（权重重归一化）依赖它。曾经这里
+        # `or {}` 把 None 变成空 dict，Python 侧走了「embedding 权重+零语义分」
+        # 的降级路径，而 Rust 侧 {} 是 rule-only——双实现跑的不是同一种打分。
+        semantic_scores=semantic_scores,
     )
     return request, group_id, user_id
 
