@@ -743,6 +743,18 @@ PROACTIVE_MAX_LINES = _env_int("PROACTIVE_MAX_LINES", 1)
 # 主动发言前若累计新消息达到该数量，则触发一次短期记忆总结
 CONSOLIDATION_TRIGGER_NEW_MESSAGES = _env_int("CONSOLIDATION_TRIGGER_NEW_MESSAGES", 10)
 
+# ---------- 记忆采集就绪门 ----------
+# 所有入站消息的记忆采集在 CONSOLIDATION 角色被证实可用之前 fail-closed：
+# 门关着时收到的消息不落库、不排队、不回放（恢复后从下一条新消息开始采集）。
+# 探针走 CONSOLIDATION 角色的真实生成路径发一条最小 "ping" 补全（有界超时），
+# 不要求 /v1/models，不发送会话数据。没有旁路开关：绕过验证开门会重新引入
+# 无界积压。其余节奏（就绪租约 60s、退避封顶 300s）是内部常数，不进配置。
+# 就绪状态见本地状态接口 stella/status 的 memory_capture 段（脱敏）。
+# 探针间隔（秒）：不可用期间的起始重试间隔（指数退避封顶 300s）
+MEMORY_CAPTURE_PROBE_INTERVAL = _env_int("MEMORY_CAPTURE_PROBE_INTERVAL", 30)
+# 探针超时（秒）：单次最小补全请求的等待上限；本地模型冷加载期间会一直关门
+MEMORY_CAPTURE_PROBE_TIMEOUT = _env_float("MEMORY_CAPTURE_PROBE_TIMEOUT", 5.0)
+
 # ---------- 主动发言：睡眠时段 ----------
 # 模拟人类作息：睡眠期间关闭一切主动发言（话题插话 + 主动 @），
 # 但**被 @ 时照常回复**——用户主动叫它却不回应看起来像掉线，
