@@ -22,6 +22,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 WEBCHAT_GROUP_ID = -1
 WEBCHAT_SPACE = "webchat"
@@ -88,7 +91,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         new_trace_id,
         utc_now_iso,
     )
-    from memory import conversation_registry, social_store
+    from memory import capture_gate, conversation_registry, social_store
     from memory.pre_processors import record_message
 
     _ensure_webchat_space()
@@ -138,8 +141,19 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         message_flow.attach(ctx, flow_ctx)
     except Exception:
         pass
+    # 采集就绪门（计划 §6.3）：用户输入、BOT_SELF 回复与 social 投递回执
+    # 都是内容派生持久化，门关闭时全部跳过；SSE 回复照常返回（这是记忆
+    # 采集变更，不是停服）。门未安装（独立 dev server / 单测）保持旧语义。
+    capture = capture_gate.ingress_decision()
+    capture_open = capture is None or capture.allowed
+    if not capture_open:
+        logger.debug(
+            "🚪 [CaptureGate] 采集门关闭，本轮 WebChat 消息与回复不落库"
+            f"（原因 {capture.reason_code or 'closed'}）"
+        )
     with _flow_span(flow_ctx, "web.space_context"):
-        await record_message(ctx)
+        if capture_open:
+            await record_message(ctx, capture=capture)
 
     outcome = "delivered"
     pipeline = _resolve_pipeline()
@@ -166,6 +180,8 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         # msg_id 保持未知（不伪造）。
         logical_id = ctx.turn_id or ctx.trace_id
         for i, line in enumerate(lines):
+            if not capture_open:
+                break
             await record_message(
                 ChatContext(
                     user_id=WEBCHAT_USER_ID,
@@ -182,7 +198,8 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
                     reply_recipient_user_id=str(WEBCHAT_USER_ID),
                     turn_id=ctx.turn_id,
                     relation_version=1 if logical_id else 0,
-                )
+                ),
+                capture=capture,
             )
         out_span.finish(status="succeeded" if lines else "skipped",
                         reason_code="" if lines else "empty_lines",
@@ -193,7 +210,8 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
     if lines:
         from config import SOCIAL_ENABLED
 
-        if SOCIAL_ENABLED:
+        # 投递回执带正文摘录，同属采集面：门关闭时不写 social_deliveries
+        if SOCIAL_ENABLED and capture_open:
             scope = ConversationScope(platform="webchat", bot_id="", group_id=str(WEBCHAT_GROUP_ID))
             # 规范身份（修复计划 §6.3）：WebChat 回执带 canonical 字段，
             # learning_eligible=0（非 QQ 群），不进任何群归因

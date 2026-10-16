@@ -343,3 +343,53 @@ def test_skills_section_is_counts_only(monkeypatch):
     assert section["sandbox"]["backend"] == "disabled"
     # 守卫：正文式的自由文本不在这里
     assert "description" not in section
+
+
+def test_build_payload_includes_memory_capture_section():
+    """memory_capture 是可选段：给了就出现，缺省不占位（与 runtime 同法）。"""
+    payload = status_api.build_payload(
+        None, {}, pid=1, started_at=time.time(),
+        memory_capture={"state": "ready", "allowed": True},
+    )
+    assert payload["memory_capture"] == {"state": "ready", "allowed": True}
+    default = status_api.build_payload(None, {}, pid=1, started_at=time.time())
+    assert "memory_capture" not in default
+
+
+def test_capture_gate_snapshot_never_carries_secrets_or_content(monkeypatch):
+    """快照只有脱敏事实：无 URL/key/探针正文/消息内容，字段集合封闭。"""
+    import memory.capture_gate as capture_gate
+
+    allowed_fields = {
+        "state", "role", "endpoint_slot", "allowed", "epoch",
+        "consecutive_failures", "last_probe_at", "last_success_at",
+        "next_retry_in_seconds", "error_category",
+    }
+    # 未安装：明确的未启动事实
+    monkeypatch.setattr(capture_gate, "_gate", None)
+    snapshot = status_api._capture_gate()
+    assert set(snapshot) == allowed_fields
+    assert snapshot["allowed"] is False
+
+    # 已装门（含「敏感」后端属性）：字段集合不变，敏感值不出现
+    class _LeakyBackend:
+        slot = "memory"
+        base_url = "http://127.0.0.1:1234/v1"
+        api_key = "sk-leaky-test-key"
+
+    async def probe():
+        return True, ""
+
+    gate = capture_gate.CaptureGate(probe=probe)
+    gate._started = True
+    gate._state = capture_gate.STATE_READY
+    gate._role_slot = _LeakyBackend.slot
+    gate._ready_until = time.monotonic() + 60.0
+    monkeypatch.setattr(capture_gate, "_gate", gate)
+    snapshot = status_api._capture_gate()
+    assert set(snapshot) == allowed_fields
+    blob = repr(snapshot)
+    assert _LeakyBackend.api_key not in blob
+    assert _LeakyBackend.base_url not in blob
+    assert snapshot["endpoint_slot"] == "memory"
+    assert snapshot["state"] == "ready"
