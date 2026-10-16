@@ -1,0 +1,14 @@
+[
+  {
+    "session_id": "s1-day0",
+    "reply_text": "{\"short_term\": {\"active_summary\": \"在聊居住城市和通勤\", \"pending_topic\": \"\", \"recent_exchanges\": [{\"user_id\": \"101\", \"content\": \"我住在杭州\"}]}, \"user_profiles\": [], \"memory_candidates\": [{\"user_id\": \"101\", \"type\": \"FACT\", \"content\": \"我住在杭州\", \"importance\": 0.8, \"confidence\": 0.9, \"source_message_ids\": [1], \"verification_contract\": {\"fact_subject_user_id\": \"101\", \"predicate_key\": \"profile.residence\", \"canonical_value\": \"杭州\", \"polarity\": \"positive\", \"statement_kind\": \"self_report\", \"temporal_qualifiers\": [], \"context_qualifiers\": [], \"supports\": [{\"source_message_id\": 1, \"exact_support_span\": \"我住在杭州\"}]}}]}"
+  },
+  {
+    "session_id": "s2-day1",
+    "reply_text": "{\"short_term\": {\"active_summary\": \"在聊奶茶口味和周末安排\", \"pending_topic\": \"\", \"recent_exchanges\": [{\"user_id\": \"102\", \"content\": \"我喜欢周末去爬山，每周都去\"}]}, \"user_profiles\": [], \"memory_candidates\": [{\"user_id\": \"101\", \"type\": \"PREFERENCE\", \"content\": \"我喜欢三分糖的奶茶\", \"importance\": 0.8, \"confidence\": 0.9, \"source_message_ids\": [3], \"verification_contract\": {\"fact_subject_user_id\": \"101\", \"predicate_key\": \"preference.general\", \"canonical_value\": \"三分糖的奶茶\", \"polarity\": \"positive\", \"statement_kind\": \"explicit_preference\", \"temporal_qualifiers\": [], \"context_qualifiers\": [], \"supports\": [{\"source_message_id\": 3, \"exact_support_span\": \"我喜欢三分糖的奶茶\"}]}}, {\"user_id\": \"102\", \"type\": \"PREFERENCE\", \"content\": \"我喜欢周末去爬山\", \"importance\": 0.8, \"confidence\": 0.9, \"source_message_ids\": [4], \"verification_contract\": {\"fact_subject_user_id\": \"102\", \"predicate_key\": \"preference.general\", \"canonical_value\": \"周末去爬山\", \"polarity\": \"positive\", \"statement_kind\": \"explicit_preference\", \"temporal_qualifiers\": [], \"context_qualifiers\": [], \"supports\": [{\"source_message_id\": 4, \"exact_support_span\": \"我喜欢周末去爬山\"}]}}]}"
+  },
+  {
+    "session_id": "s3-day2",
+    "reply_text": "{\"short_term\": {\"active_summary\": \"在聊称呼和爬山天气\", \"pending_topic\": \"\", \"recent_exchanges\": [{\"user_id\": \"102\", \"content\": \"这周末爬山天气看起来不错\"}]}, \"user_profiles\": [], \"memory_candidates\": [{\"user_id\": \"101\", \"type\": \"FACT\", \"content\": \"我叫小艾\", \"importance\": 0.8, \"confidence\": 0.9, \"source_message_ids\": [5], \"verification_contract\": {\"fact_subject_user_id\": \"101\", \"predicate_key\": \"profile.nickname\", \"canonical_value\": \"小艾\", \"polarity\": \"positive\", \"statement_kind\": \"self_report\", \"temporal_qualifiers\": [], \"context_qualifiers\": [], \"supports\": [{\"source_message_id\": 5, \"exact_support_span\": \"我叫小艾\"}]}}]}"
+  }
+]
