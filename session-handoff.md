@@ -81,3 +81,12 @@
 - Test-isolation note: tests/conftest.py now keeps `capture_gate.start_gate` inert and `_gate` unset under pytest — a stray FastAPI lifespan (leftover coroutine executed by pytest-asyncio's fixture runner) fires nonebot startup hooks in arbitrary tests; without this the gate would install closed and fire real probe requests. Gate-specific tests construct CaptureGate instances with injected fakes.
 - NOT READY (external acceptance): live-provider probe smoke, QQ gray rollout, clean-VM install acceptance. Report: docs/reports/2026-10-16-ai-gated-memory-capture-implementation.md.
 - Pre-existing uncommitted worktree files (feature_list.json, progress.md, session-handoff.md, plans/reports/evidence, .agents/, skills-lock.json, memory_rust backup) were left untouched and uncommitted, same as at session start.
+
+## Session Handoff — Memory Benchmark Suite (2026-10-17)
+
+- Branch: `feat/memory-benchmark-suite`（从 origin/main @ `4029877` 切出），10 提交（M0→M6+文档收口，见 progress.md「Memory Benchmark 评测体系」节与 git log）。计划文件：docs/plans/2026-10-16-gitnexus-plan-memory-benchmark-suite.md，M0–M6 全部落地。
+- 核心成果：报告契约 `memory-benchmark-report/1` + 冻结基线（零容差 CI 门禁）；数据集 101 例（29 新维度手写 + 48 确定性生成）；四检索模式矩阵（fts/hybrid Python 单边，native 无 FTS 显式登记不可比）；PersonaMem 自动化（fetch pin+sha256+NOTICE / adapt 固定 seed / CI job）；写路径回放 recorded/live 双模式全绿；**Rust parity 101/101**（21/24 作废；根因=harness None→{} 折叠 + Python 缺 canonical tie-break，均修复）。
+- 双硬零门禁：forbidden_activation_rate 与 cross_scope_leak_rate（结构化判定）。
+- 验证：3750 passed / 17 skipped；ruff（tracked）全过；check_docs 0 errors；message-flow --check 过。证据：docs/reports/evidence/memory-benchmark-20261016/。
+- NOT READY / Next：① live 回放真模型验证+录制（需 CONSOLIDATION 端点）；② embedding fixture 重建（覆盖 101 例后 embedding/hybrid 全量可评；本机 1234/8081 均不可达）；③ FTS 恒 0 命中=生产检索真实缺陷候选，建议另立课题；④ 本机 `_native.pyd` 已用 cargo 重建为 API 3（未跟踪文件，仓库只存源码，CI 走 release-memory-rust.yml）。
+- 本机环境备注：huggingface.co 主站 API 不稳定但 resolve 端点可用，fetch 脚本带 HF_ENDPOINT/hf-mirror 回落；GitNexus CLI registry 仍损坏（调用方清点用文本检索兜底，本特性未做上游 impact——计划 §4/§5 已带 GitNexus 证据）。

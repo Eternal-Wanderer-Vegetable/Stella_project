@@ -90,3 +90,21 @@
 1. 用户验收合并；合并前可在真实端点做一次探针冒烟（开/关门 + 冷加载观察）。
 2. QQ 灰度观测：关门期消息不落库、`/stella/status` 的 `memory_capture` 段就绪状态。
 3. 存量积压检查/排空是独立运维决策，未在本特性范围内。
+
+## Memory Benchmark 评测体系 — 2026-10-16/17
+
+- 分支 `feat/memory-benchmark-suite`（基于 origin/main @ `4029877`，PR #109 合并点），9 提交：`933864d`（M0 报告契约+基线对比+排除泛化）、`2b36ed9`（M1 维度扩容+生成器）、`23c00f3`（**parity harness 保真修复**）、`0938c5d`（M2 四模式矩阵）、`b744eec`（M3 PersonaMem）、`157b140`（M4 写路径回放）、`d744d46`（M5 成本计量）、`fdcdb88`（M6 canonical tie-break+parity 门禁）、`a8b317e`（双语文档+冻结基线+manifest）。
+- **Parity 闭环**：21/24（API2 时代旧数字作废）→ 101/101。根因两个：① harness 把 `semantic_scores=None` 折叠成 `{}`，Python 侧跑「embedding 权重+零语义分」而 Rust 侧跑 rule-only——双实现一直在跑不同打分语义；② recommend_001 为 0.939 同分平手，native 早有 canonical tie-break（score desc → id asc）而 Python 稳定排序保留新鲜度序，policy.py 补齐后全数据集硬差异清零，**无需 allowed_diffs**。
+- **四模式矩阵实证**（`memory/retrieval_v2.py` 与 `config/settings.py` 零改动）：① FTS 候选路径对自然中文查询**恒 0 命中**（`_segment_text` 整串+滑窗全为 MATCH token，FTS5 隐式 AND 语义不可能满足；101 例 0 行，检索总是回退新鲜度路径）——生产侧课题，已记账进报告 `retrieval_path`；② embedding/hybrid 只评 fixture 覆盖用例（查询向量在场判定），未覆盖显式 skip——现有 fixture 只覆盖旧 22 例中文文本，重建需 embedding 服务（当前 1234/8081 不可达，NOT READY）。
+- 数据集：手写 53 + 生成 48 = **101 例**；新维度 temporal/conflict-supersede/scope-privacy/abstain/lineage 全部一次判别力测试锁死；`cross_scope_leak_rate` 与 `forbidden_activation_rate` 双硬零（结构化跨空间泄漏判定不依赖标注自觉）。
+- 门禁：冻结基线 `memory/benchmark/_fixtures/baselines/2026-10-16.json` 逐指标零容差（`test_baseline_gate_per_metric_zero_tolerance`）；parity 全数据集门禁（`test_parity_gate_full_dataset`，native 缺席显式 skip）；PersonaMem CI job `memory-benchmark-public`（固定 seed 200 例 4.4s accuracy 100%，下载失败显式红不静默绿）；回放门禁（extraction/promotion/qa 100%、fabrication 0%、memory_delta +100）。
+- 验证：全量 `pytest tests -q` **3750 passed / 17 skipped**；ruff（git ls-files 口径）全过；`check_docs` 0 errors；`generate_message_flow --check` 过（manifest 随 policy.py tie-break 重生成 d950c0561bfc）。证据：docs/reports/evidence/memory-benchmark-20261016/（含 manifest.json，parity/模式矩阵/回放/PersonaMem 报告）。
+- NOT READY：live 回放真实模型验证（需 CONSOLIDATION 端点，离线跑 `--live --record` 一次并存证）；英文 embedding fixture 重建（需 embedding 服务）；QQ 真机灰度与本特性无直接耦合。
+- 陷阱存档：assess_candidate 要求候选带 `source_message_ids` + `verification_contract`（exact_support_span 逐字等于候选内容且为消息原文子串，statement_kind 只认 self_report/explicit_preference 刻板句式）；回放预置消息必须显式写 conversation_key（空串会让快照与证据列 legacy 回填值不一致、晋升 verify 断链）；argparse 收 Path 对象会被当序列展开；`_ensure_common_tables` 不建 group_messages（用 pre_processors._GROUP_MESSAGES_V16_DDL）；批次大小必须与录制件批次对齐。
+
+### What's Next（Memory Benchmark）
+
+1. live 回放真实模型验证一次（`python scripts/eval_memory_replay.py --live --record memory/benchmark/_replay/daily-life/recorded/live.json`）并存证。
+2. embedding 服务可用时重建 fixture（`scripts/build_embedding_fixture.py`），覆盖 101 例后 embedding/hybrid 模式全量可评。
+3. FTS 恒 0 命中是生产检索的真实缺陷候选（RAG 特性疑似死代码），建议另立课题核查 `_query_fts` 的 MATCH 语义与生产收益。
+4. PersonaMem 中文对照集与全量 5000 行离线跑为显式延后项（计划 §12）。
