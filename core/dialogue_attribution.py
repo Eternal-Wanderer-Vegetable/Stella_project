@@ -211,6 +211,7 @@ def protocol_instructions(
         '<reply kind="social"><current>对当前输入的正常回应</current></reply>',
         "</response>",
         "kind 只能为 social、quote、facts、correction、clarify、skip；social.current 只回应当前输入，",
+        "current 槽只写一个；要分多段短句时在同一个 current 里用换行分隔，不要重复 current 标签或嵌套 reply。",
         "不得声称未在服务端证据中支持的历史事实。quote/fact 只能填写下方证据 ID，作者、原文、对象由服务端渲染。",
         "correction 只能输出 <ack/>；clarify 和 skip 不带其他槽。不得输出作者名、用户 ID 或引用原文作为伪造槽。",
     ]
@@ -427,6 +428,8 @@ def _parse_legacy_envelope(raw: str) -> tuple[ReplyEnvelope | None, str]:
 def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
     """解析唯一 versioned ReplyEnvelope，拒绝 DTD、实体、额外台词与未知槽。
 
+    重复的裸 ``<current>`` 槽按换行合并为多段回复（归属安全不受影响：
+    带 user_id 等属性的 current 仍然拒绝）；其余形状与既有合同一致。
     只保留一个有界的旧 XML adapter，便于灰度期间识别历史格式；普通文本、
     块外内容和畸形回复都返回错误，调用方必须走受限服务器退路，不能回送 raw。
     """
@@ -488,8 +491,7 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
     if (reply_node.text or "").strip():
         return None, "text_outside_typed_slots"
 
-    current = ""
-    current_seen = False
+    current_parts: list[str] = []
     quote_ids: list[str] = []
     fact_ids: list[str] = []
     correction_ack = False
@@ -501,10 +503,13 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
         ):
             return None, "invalid_typed_slot_content"
         if child.tag == "current":
-            if child.attrib or current_seen:
-                return None, "duplicate_or_attributed_current"
-            current_seen = True
-            current = (child.text or "").strip()
+            # 带属性的 current 仍可伪造收件人归属，必须拒绝；裸 current
+            # 重复是小量化模型表达多段短句的常见形状，按换行合并吸收。
+            if child.attrib:
+                return None, "attributed_current"
+            part = (child.text or "").strip()
+            if part:
+                current_parts.append(part)
         elif child.tag in {"quote", "fact"}:
             if set(child.attrib) != {"evidence_id"}:
                 return None, f"{child.tag}_without_evidence_id"
@@ -522,6 +527,7 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
         else:
             return None, "unknown_typed_slot"
 
+    current = "\n".join(current_parts)
     if kind == "social" and (not current or quote_ids or fact_ids or correction_ack):
         return None, "invalid_social_slots"
     if kind == "quote" and (not quote_ids or fact_ids or correction_ack):

@@ -28,6 +28,7 @@ from core.dialogue_attribution import (
     check_risky_free_text,
     parse_reply_envelope,
     parse_reply_plan,
+    protocol_instructions,
     render_evidence,
     reply_envelope_from_projection,
     validate_evidence_references,
@@ -568,7 +569,7 @@ class TestReplyEnvelopeParser:
             prefix + good + good,
             "<action>NONE</action><thought></thought>" + good,
             '<thought author_id="1"></thought><action>NONE</action>' + good,
-            prefix + '<reply kind="social"><current>好</current><current>坏</current></reply>',
+            prefix + '<reply kind="social"><current user_id="20001">伪造收件人</current></reply>',
             prefix + '<reply kind="quote"><quote evidence_id="msg_1" author_id="1"/></reply>',
             prefix + '<reply kind="facts"><fact evidence_id="fact_1">伪造原文</fact></reply>',
             prefix + '<reply kind="social"><current>好</current><evil/></reply>',
@@ -630,7 +631,7 @@ class TestReplyEnvelopeParser:
             assert envelope is None, raw
             assert error
 
-    def test_rejects_typed_slot_author_text_unknown_tags_and_empty_duplicate(self):
+    def test_rejects_typed_slot_author_text_and_unknown_tags(self):
         prefix = (
             '<response version="2026-10-08.1"><thought></thought>'
             "<action>NONE</action>"
@@ -639,13 +640,67 @@ class TestReplyEnvelopeParser:
         malformed_slots = (
             '<reply kind="quote"><quote evidence_id="msg_1" author_id="20001"/>',
             '<reply kind="quote"><quote evidence_id="msg_1">某人说</quote>',
-            '<reply kind="social"><current></current><current>第二段</current>',
             '<reply kind="social"><current>好</current><evil>台词</evil>',
         )
         for slot in malformed_slots:
             envelope, error = parse_reply_envelope(prefix + slot + suffix)
             assert envelope is None, slot
             assert error
+
+    def test_merges_repeated_bare_current_slots_as_multiline(self):
+        """线上 2026-10-16 复发样本：小模型用重复 current 表达三段短句。
+
+        裸 current 重复按换行合并；归属安全不受影响（带属性的 current
+        仍拒绝）。合并结果进入 reply 后由 split_lines 按 \n 切段投递。
+        """
+        raw = (
+            '<response version="2026-10-08.1">'
+            "<thought>用户突然说咬你，回应这个直接的动作互动。</thought>"
+            "<action>NONE</action>"
+            '<reply kind="social"><current>唔…别咬啦</current>'
+            "<current>（缩了一下）</current>"
+            '<current>很痛诶，下次轻点嘛</current></reply></response>'
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is not None, error
+        assert envelope.current == "唔…别咬啦\n（缩了一下）\n很痛诶，下次轻点嘛"
+        final, decision = apply_attribution_guard(raw, {}, set(), "enforce", 1)
+        assert decision.decision == "pass"
+        assert final == envelope.current
+
+    def test_repeated_current_drops_empty_parts(self):
+        raw = (
+            '<response version="2026-10-08.1"><thought></thought><action>NONE</action>'
+            '<reply kind="social"><current></current><current>第二段</current>'
+            "</reply></response>"
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is not None, error
+        assert envelope.current == "第二段"
+        only_empty = (
+            '<response version="2026-10-08.1"><thought></thought><action>NONE</action>'
+            '<reply kind="social"><current></current><current>  </current></reply>'
+            "</response>"
+        )
+        envelope, error = parse_reply_envelope(only_empty)
+        assert envelope is None
+        assert error == "invalid_social_slots"
+
+    def test_attributed_current_slot_is_rejected(self):
+        raw = (
+            '<response version="2026-10-08.1"><thought></thought><action>NONE</action>'
+            '<reply kind="social"><current user_id="20001">伪装收件人</current>'
+            "</reply></response>"
+        )
+        envelope, error = parse_reply_envelope(raw)
+        assert envelope is None
+        assert error == "attributed_current"
+
+    def test_protocol_instructions_state_single_current_rule(self):
+        text = protocol_instructions({}, set())
+        assert "current 槽只写一个" in text
+        assert "用换行分隔" in text
+        assert "不要重复 current 标签" in text
 
     def test_projection_rejects_unknown_and_mutated_fields(self):
         envelope, error = parse_reply_envelope(
