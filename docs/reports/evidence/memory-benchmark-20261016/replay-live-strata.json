@@ -6,7 +6,7 @@
     "tokens_out": 0,
     "accounting": "usage_sink(process)"
   },
-  "generated_at": "2026-10-17T10:33:03",
+  "generated_at": "2026-10-17T11:03:10",
   "mode": "live",
   "suite": "daily-life",
   "suite_sha256": "d8d544531a7c68747bc8dd638f1429b0fb284b1cd610d0ee9bbcef06e10a5b93",
@@ -43,22 +43,22 @@
     ],
     "fabrication": [
       {
-        "id": "cdfa3d2f075d404fac63866157ba4a45",
+        "id": "475894466d094a34a2ee3a7ed9da34e8",
         "content": "我住在杭州",
         "fabricated": false
       },
       {
-        "id": "c91d1b6560eb41c983dc3c8f6e83e23b",
+        "id": "1200f62608144ec4ab261acb12215564",
         "content": "我喜欢三分糖的奶茶，比全糖清爽多了",
         "fabricated": false
       },
       {
-        "id": "b871aade500c48c9a6e5779306951db2",
+        "id": "8ffa2cb403fa490891b741a41f71eaf0",
         "content": "我叫小艾，以后多指教",
         "fabricated": false
       },
       {
-        "id": "6ea3d855275345f69749f333cb405de2",
+        "id": "be94ae36cdeb4f61a82a5d03b1e269f8",
         "content": "我喜欢周末去爬山，每周都去",
         "fabricated": false
       }

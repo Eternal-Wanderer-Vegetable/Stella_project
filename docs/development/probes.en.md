@@ -179,14 +179,21 @@ python scripts/eval_memory_replay.py --live --record recorded/new.json   # Offli
   gate requires all green plus memory_delta > 0. Suite: `memory/benchmark/_replay/daily-life/`.
   `--live` uses the real assembly (stage 2 resolved from current config); the live
   recording lives at `recorded/live-20261017.json`. **Findings of the 2026-10-17
-  real-model acceptance**: with `LLM_ROLE_EXTRACT_ENDPOINT=CHAT` and an empty online
-  slot, stage-2 contract extraction falls back to stage 1, so every candidate stays
-  verification=unknown → OBSERVING and never promotes (promotion/qa = 0%). This is a
-  faithful picture of the current configuration; enabling the full promotion chain
-  requires a usable endpoint on the CHAT/MEMORY slot. The fabrication rule (4-gram
-  overlap) conservatively misreports paraphrases (e.g. "我叫小艾" rewritten as
-  "希望被称为小艾" counts as fabricated) — read it as a conservative proxy for
-  "no textual grounding".
+  real-model acceptance (corrected)**: all three production slots (CHAT/MEMORY/
+  VISION) point at Strata :8081 and EXTRACT→CHAT — one model, two roles — is
+  configured correctly and stage 2 does run (the earlier "no EXTRACT endpoint"
+  warning was an artifact of the evaluation runner hardcoding stage-2 off; fixed).
+  The real cause of promotion=0% is a mismatch between stage-2 contract output and
+  the narrow acceptance contract: all 4 qwen3.8-flash candidates came back unknown —
+  (1) spans carry trailing clauses ("我叫小艾，以后多指教" as the whole content
+  fails the rigid-pattern fullmatch), (2) statement_kind/type mismatches (a nickname
+  self-report typed PREFERENCE instead of FACT), (3) some contracts unassessed on
+  shape. acceptance is the precondition of every promotion path, so with the current
+  model ordinary memories never promote; the low-risk fix is prompt-side: require
+  minimal rigid-pattern spans without trailing punctuation and FACT typing for
+  self-reports, with counter-examples. The fabrication rule (4-gram overlap)
+  conservatively misreports paraphrases — read it as a proxy for "no textual
+  grounding".
 
 ### PersonaMem public dataset (English-domain external reference)
 

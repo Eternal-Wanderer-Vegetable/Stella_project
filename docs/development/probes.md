@@ -168,10 +168,16 @@ python scripts/eval_memory_replay.py --live --record recorded/new.json   # 离�
   promotion_correctness、qa_accuracy、memory_delta（有/无记忆差）。门禁要求全绿
   且 memory_delta > 0。套件在 `memory/benchmark/_replay/daily-life/`。
   `--live` 走真实装配（阶段2 按当前配置解析）；live 录制件存
-  `recorded/live-20261017.json`。**2026-10-17 真模型验收发现**：生产配置
-  `LLM_ROLE_EXTRACT_ENDPOINT=CHAT` 而 online 槽 base_url 为空 → 阶段2 契约提取
-  回退阶段1，候选 verification=unknown 全部 OBSERVING 不晋升（promotion/qa=0%）。
-  这是配置现状的如实呈现：要启用完整晋升链路需给 CHAT/MEMORY 槽配置可用端点。
+  `recorded/live-20261017.json`。**2026-10-17 真模型验收发现（勘误后）**：
+  生产三槽（CHAT/MEMORY/VISION）均指向 Strata 8081，EXTRACT→CHAT 一模型两职
+  **配置正常、阶段2 真实启用**（早期「EXTRACT 无可用端点」告警是评测 runner
+  硬编码跳过阶段2 的产物，已修正）。live 回放 promotion=0% 的真因是
+  **阶段2 契约输出与窄合同错配**：qwen3.8-flash 的 4 条候选契约全部 unknown——
+  ① span 带尾巴（「我叫小艾，以后多指教」整段作 content，刻板句式 fullmatch
+  失败）；② statement_kind/type 错配（nickname 自述标 PREFERENCE，self_report
+  要 FACT）；③ 部分契约形状早期 unassessed。accepted 是所有晋升路径的前置，
+  因此当前模型下普通记忆实际不晋升；改进方向：extraction_prompt 强调「最小
+  刻板句、无标点尾巴、self_report 必须FACT」并给反例。
   fabrication 规则（4-gram 交集）对模型改写句式保守误报（如「我叫小艾」被改写为
   「希望被称为小艾」会判编造）——口径是「无原文依据」的保守代理，读报告时须知。
 

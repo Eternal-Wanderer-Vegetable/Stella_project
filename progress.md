@@ -116,3 +116,14 @@
 - **基准抓到并修复一个用例创作缺陷**：M1 temporal/supersede 用例只偏移 `last_accessed_at` 列而排序读 `last_confirmed_at` 列——recency 判别未生效，rule 模式靠 conf/imp 差侥幸通过；真实 embedding 下新旧事实 sem 差（+0.030）抵掉 conf/imp 差（+0.035），7 例旧值激活踩硬零。修复=补 `last_confirmed_at_offset_minutes`（15 个文件），修复后 embedding 101/101。基线随之重生成（变更原因入档）。
 - **live 回放真模型打通**（`--live --record`，3 批整合生成成功，录制件 `recorded/live-20261017.json`）：extraction 100%、fabrication 0%（第二轮）；**promotion/qa = 0% 的根因是生产配置现状**——`LLM_ROLE_EXTRACT_ENDPOINT=CHAT` 而 online 槽 base_url 为空，阶段2 契约提取回退阶段1，候选 verification=unknown 全部 OBSERVING 不晋升。这是配置决策（启用完整晋升链路需给 CHAT/MEMORY 槽配端点），非链路缺陷；已如实写入双语文档。
 - 两轮 live 候选数 7→4、改写句式（「希望被称为小艾」被判 fabrication）第二轮消失——真模型非确定性实录，反证 recorded 确定性回放的价值。
+
+### 两课题根因检查 — 2026-10-17（续）
+
+**课题①「记忆晋升端点」——用户记忆正确，配置早已就绪；昨天结论勘误。**
+- `.env` 自 2026-10-09 起三槽（CHAT/MEMORY/VISION）全部指向 Strata 8081（qwen3.8-flash-next-iq2_xs），`LLM_ROLE_EXTRACT_ENDPOINT=CHAT` → EXTRACT 与 CONSOLIDATION **一模型两职配置正常、阶段2 真实启用**（live 日志 🎯 ×3 批实证）。昨天写进文档的「EXTRACT 无可用端点→回退阶段1」是**错误结论**：告警来自评测 runner 硬编码 `_extract_backend=None`，非配置问题；runner 已改为真实装配，双语文档已勘误。
+- **真实瓶颈（live 实证，4 候选契约全 unknown，0 accepted）**：qwen3.8-flash 阶段2 契约输出与窄合同三类错配——① span 带尾巴（「我叫小艾，以后多指教」整段作 content/exact_support_span，刻板句式 `_PREFERENCE_PATTERN`/`_SELF_REPORT_PATTERNS` fullmatch 失败；value 段不允许逗号）；② statement_kind/type 错配（称呼自述标 PREFERENCE，self_report 要求 FACT）；③ 部分契约形状不符早期 unassessed。accepted 是 Gate1 全部晋升路径的前置 → **当前模型下普通记忆实际不会晋升**（recorded 件手造合格契约 100% 晋升反证链路本身通）。低风险修复方向：extraction_prompt 强调「最小刻板句、无标点尾巴、self_report 必须 FACT」并给反例。
+
+**课题②「FTS 恒 0 命中」——原初设计缺陷（a6431e4，2026-08-08 RAG 引入即如此），非回归。**
+- 根因链：`_segment_text` 的 `re.findall(r"\w+", normalized)` 在 Unicode 语义下把**整段连续中文（即整条查询串）当一个 token**；FTS5 MATCH 空格连接 = 隐式 AND；文档索引只含文档自身整串 token → 查询整串 token 永不命中 → AND 恒假。逐 token 实证：「有什么游戏推荐吗」14 个 token 文档缺 13 个，唯一命中的只有「游戏」；只有 ≤4 字且恰为文档滑窗片段的查询才能命中（「游戏」AND=2 正常）。生产句子查询恒 0。
+- 影响面：`retrieval_v2._fetch_candidates`（生产检索主路，RAG_ENABLED 默认 true）与 `retriever._query_rag_results`（RAG 主路径）两条 FTS 路径全部失效 → BM25 相关性从未生效，检索总是回退新鲜度排序，且每次检索白付一次 FTS 查询。
+- 修复实证（内存 FTS5 模拟）：仅修分词（`\w+` 排除 CJK，滑窗保留）AND 仍 0（13 个滑窗 token 全要命中——**AND 对滑窗分词本质不可用**）；分词修复 + MATCH 改 OR 可真实召回（bm25 排序），但 OR 的 bm25 在短文档上区分度有限（-0.0 平坦），实施时需配 bm25 调权或最小长度过滤。native 检索不实现 FTS → parity 无影响。建议立小课题实施（retriever.py + retrieval_v2.py 两处 MATCH 构造 + 分词函数，附四模式矩阵回归）。
