@@ -1,0 +1,49 @@
+{
+  "id": "lineage-pref-001",
+  "scenario": {
+    "group_id": 12,
+    "user_id": 1200
+  },
+  "input": "晚饭吃什么，求推荐",
+  "mode": "RECOMMEND",
+  "trigger": "reply",
+  "memories": {
+    "M_food": {
+      "content": "用户喜欢的菜是麻婆豆腐",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8,
+      "evidence": [
+        {
+          "fact_key": "favorite_food",
+          "source_row_id": 101
+        }
+      ]
+    },
+    "N1": {
+      "content": "用户喜欢看纪录片",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "RECOMMEND"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4,
+      "evidence": [
+        {
+          "fact_key": "favorite_documentary",
+          "source_row_id": 102
+        }
+      ]
+    }
+  },
+  "expected_memory": [
+    "M_food"
+  ],
+  "expect_evidence": true,
+  "notes": "血缘：召回的 M_food 必须在 memory_claim_links → memory_evidence 有合法来源行（loader 写入的 fact_key=favorite_food 证据链）。"
+}

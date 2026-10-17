@@ -1,0 +1,3 @@
+{"session_id": "s1-day0", "group_id": 1001, "day_offset": 0, "messages": [{"user_id": 101, "name": "小艾", "content": "@Stella 我住在杭州", "at_bot": true}, {"user_id": 102, "name": "阿北", "content": "今天地铁检修，绕了好远一段路"}]}
+{"session_id": "s2-day1", "group_id": 1001, "day_offset": 1, "messages": [{"user_id": 101, "name": "小艾", "content": "我喜欢三分糖的奶茶，比全糖清爽多了"}, {"user_id": 102, "name": "阿北", "content": "我喜欢周末去爬山，每周都去"}]}
+{"session_id": "s3-day2", "group_id": 1001, "day_offset": 2, "messages": [{"user_id": 101, "name": "小艾", "content": "@Stella 我叫小艾，以后多指教", "at_bot": true}, {"user_id": 102, "name": "阿北", "content": "这周末爬山天气看起来不错"}]}

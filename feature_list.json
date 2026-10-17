@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-16",
+  "updated_at": "2026-10-17",
   "active_feature": null,
   "features": [
     {
@@ -260,6 +260,36 @@
           "result": "NOT READY：真实模型探针冒烟、QQ 真机灰度、clean-VM 验收；报告 docs/reports/2026-10-16-ai-gated-memory-capture-implementation.md"
         }
       ]
+    },
+    {
+      "id": "MBENCH-001",
+      "name": "memory benchmark 评测体系（报告契约/维度扩容/模式矩阵/PersonaMem/回放/parity 闭环）",
+      "description": "把检索层单元 benchmark 升级为可比较（报告契约+冻结基线）、可回归（CI 门禁）、含外部公开参照（PersonaMem）的评测体系；写路径回放 recorded/live 双模式；Rust parity 闭环 101/101。不引入新记忆框架，retrieval_v2.py 与 config/settings.py 零改动。",
+      "done_criteria": [
+        "报告契约 v1 冻结：同输入同 run_fingerprint，冻结基线逐指标零容差门禁（CI 测试在册）",
+        "双硬零：forbidden_activation_rate 与 cross_scope_leak_rate 全模式为 0",
+        "四检索模式可评测：rule/embedding 双实现 parity 101/101，fts/hybrid Python 单边显式登记",
+        "PersonaMem：fetch pin+sha256+NOTICE，CI 固定 seed 子集 200 例 --gate 通过；结论限定英文域外部参照",
+        "写路径回放 recorded 门禁全绿（extraction/promotion/qa 100%、fabrication 0%、memory_delta +100）；live 离线验证 NOT READY",
+        "成本段（延迟分位数/db_bytes/usage_sink）进报告，未测项诚实记 null",
+        "全量 pytest 3750 passed / 17 skipped；ruff（tracked）全过；check_docs 0 errors；message-flow --check 过",
+        "零编辑承诺：memory/retrieval_v2.py 与 config/settings.py 无 diff（git 可证）"
+      ],
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "memory/benchmark.py（报告契约 memory-benchmark-report/1、基线对比、模式矩阵、dimensions/cost、topic_metrics、--gate）",
+        "memory/benchmark/{temporal,conflict-supersede,scope-privacy,abstain,lineage,generated}/（29 手写 + 48 生成用例）",
+        "memory/benchmark/_fixtures/baselines/2026-10-16.json（冻结基线）",
+        "scripts/generate_benchmark_cases.py、fetch_personamem.py、adapt_personamem.py、eval_memory_replay.py（均新）",
+        "memory_rust/benchmark.py（--matrix 四模式矩阵、semantic_scores=None 保真）",
+        "memory/policy.py（canonical tie-break 与 native 统一）",
+        ".github/workflows/ci.yml（memory-benchmark-public job）",
+        "docs/development/probes.md / probes.en.md（双语文档）"
+      ],
+      "acceptance": "全量 pytest 3750 passed；parity 101/101；replay 门禁全绿（extraction/promotion/qa 100%、fabrication 0%、delta +100）；PersonaMem CI 子集 200 例 4.4s accuracy 100%；check_docs 0 errors；message-flow --check 过",
+      "evidence": "docs/reports/evidence/memory-benchmark-20261016/",
+      "branch": "feat/memory-benchmark-suite"
     }
   ]
 }

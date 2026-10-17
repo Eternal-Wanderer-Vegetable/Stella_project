@@ -1,0 +1,38 @@
+{
+  "id": "privacy-space-proactive-001",
+  "scenario": {
+    "group_id": 8,
+    "user_id": 0
+  },
+  "input": "（主动找个话题）",
+  "mode": "ACTIVE_JOIN",
+  "trigger": "proactive",
+  "memories": {
+    "M_own": {
+      "content": "用户800最近在看小说",
+      "type": "EVENT",
+      "user_id": 800,
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN"
+    },
+    "M_foreign": {
+      "content": "空间99有人在学吉他",
+      "type": "EVENT",
+      "group_shared_space": 99,
+      "user_id": 991,
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN"
+    }
+  },
+  "expected_memory": [
+    "M_own"
+  ],
+  "forbidden_memory": [
+    "M_foreign"
+  ],
+  "notes": "proactive 不按 user 过滤（全空间可见），但空间隔离必须依然生效：foreign 空间记忆在 user 过滤关闭时也不得泄漏。"
+}

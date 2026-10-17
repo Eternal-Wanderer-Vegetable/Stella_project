@@ -1,0 +1,31 @@
+{
+  "questions": [
+    {
+      "id": "Q1",
+      "query": "我现在住在哪个城市来着",
+      "user_id": 101,
+      "mode": "CASUAL_REPLY",
+      "expect_contains": [
+        "杭州"
+      ]
+    },
+    {
+      "id": "Q2",
+      "query": "奶茶喝几分糖",
+      "user_id": 101,
+      "mode": "CASUAL_REPLY",
+      "expect_contains": [
+        "三分糖"
+      ]
+    },
+    {
+      "id": "Q3",
+      "query": "周末去哪玩比较好",
+      "user_id": 102,
+      "mode": "CASUAL_REPLY",
+      "expect_contains": [
+        "爬山"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "id": "gen-tech-037",
+  "scenario": {
+    "group_id": 22,
+    "user_id": 2200
+  },
+  "input": "conda报错了帮我看看",
+  "mode": "TECH_HELP",
+  "trigger": "reply",
+  "memories": {
+    "ENV": {
+      "content": "用户的conda环境是conda 默认环境",
+      "type": "FACT",
+      "usage_tags": [
+        "ANSWER_CONTEXT"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.8
+    },
+    "N1": {
+      "content": "用户的linux环境是Ubuntu 22.04",
+      "type": "FACT",
+      "usage_tags": [
+        "ANSWER_CONTEXT"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4
+    },
+    "N2": {
+      "content": "用户的pip环境是pip 23",
+      "type": "FACT",
+      "usage_tags": [
+        "ANSWER_CONTEXT"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.5,
+      "importance": 0.4
+    }
+  },
+  "expected_memory": [
+    "ENV"
+  ],
+  "max_retrieved": 3,
+  "generator": {
+    "script": "scripts/generate_benchmark_cases.py",
+    "seed": 20261016,
+    "template": "tech"
+  },
+  "notes": "生成用例：技术求助时用户环境事实必须可召回（词面含关键词命中）。"
+}

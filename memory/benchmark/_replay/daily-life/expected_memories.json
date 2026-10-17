@@ -1,0 +1,36 @@
+{
+  "memories": [
+    {
+      "id": "E1",
+      "user_id": 101,
+      "session": "s1-day0",
+      "content_contains": "杭州",
+      "expect_candidate": true,
+      "expect_promoted": true
+    },
+    {
+      "id": "E2",
+      "user_id": 101,
+      "session": "s2-day1",
+      "content_contains": "三分糖",
+      "expect_candidate": true,
+      "expect_promoted": true
+    },
+    {
+      "id": "E3",
+      "user_id": 102,
+      "session": "s2-day1",
+      "content_contains": "爬山",
+      "expect_candidate": true,
+      "expect_promoted": true
+    },
+    {
+      "id": "E4",
+      "user_id": 101,
+      "session": "s3-day2",
+      "content_contains": "小艾",
+      "expect_candidate": true,
+      "expect_promoted": true
+    }
+  ]
+}

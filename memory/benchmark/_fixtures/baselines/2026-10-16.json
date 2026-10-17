@@ -1,0 +1,55 @@
+{
+  "schema": "memory-benchmark-baseline/1",
+  "captured_at": "2026-10-17T02:29:23+00:00",
+  "note": "2026-10-17 重生成（第一次真模型验收）：M1 temporal/supersede/lineage 用例补齐 last_confirmed_at_offset_minutes（此前只偏移 last_accessed_at 列，而排序读 confirmed 列——recency 判别未生效，rule 模式靠 conf/imp 差侥幸、真实 embedding 下 7 例旧值激活踩硬零）。修复后 embedding 模式 101/101 全绿。dataset=101 例。已知既有失败：rank-casual-001（如实记录）。硬零：forbidden=0, cross_scope=0。",
+  "retrieval_mode": "rule",
+  "metric_definitions_version": "1",
+  "dataset_digest": "15855493db5d305570cbf337c7ac9ffb6c105e734e1a01f065423fa2b17287e7",
+  "metrics": {
+    "cases_total": 101,
+    "cases_ok": 100,
+    "cases_ok_rate": 99.0,
+    "cases_with_expected": 88,
+    "total_expected": 105,
+    "total_expected_behavior": 8,
+    "total_retrieved": 235,
+    "total_forbidden": 44,
+    "memory_precision": 44.3,
+    "memory_recall": 99.0,
+    "memory_pollution_rate": 55.7,
+    "mode_accuracy": 100.0,
+    "behavior_guard_hit_rate": 100.0,
+    "behavior_leaks": 0,
+    "forbidden_activation_rate": 0.0,
+    "forbidden_activations": 0,
+    "separation_margin": -0.0446
+  },
+  "dimensions": {
+    "temporal": {
+      "cases_total": 8,
+      "cases_ok": 8,
+      "temporal_accuracy": 100.0
+    },
+    "conflict_supersede": {
+      "cases_total": 6,
+      "cases_ok": 6,
+      "supersede_accuracy": 100.0
+    },
+    "abstain": {
+      "cases_total": 4,
+      "cases_ok": 4,
+      "abstain_correct_rate": 100.0
+    },
+    "scope_privacy": {
+      "out_of_scope_total": 3,
+      "leaked": 0,
+      "cross_scope_leak_rate": 0.0
+    },
+    "lineage": {
+      "cases_total": 3,
+      "cases_ok": 3,
+      "lineage_completeness": 100.0
+    }
+  },
+  "tolerances": {}
+}

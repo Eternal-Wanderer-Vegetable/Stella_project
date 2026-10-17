@@ -3,7 +3,10 @@ use rusqlite::Connection;
 pub const BACKEND_API_VERSION: u32 = 3;
 // v19 promotion 在 native IMMEDIATE 事务内核 accepted lineage、来源 digest 与
 // scope epoch CAS；旧扩展必须因整库版本不匹配而拒绝读写。
-pub const MEMORY_SCHEMA_VERSION: i64 = 19;
+// v20 是 FTS 分词重灌迁移（Python migrate_v20）：native 不做 FTS，但本门禁按
+// 库的 schema_meta.version 严格相等放行，Python 侧 SQLite schema 升级必须同步
+// 抬本合同号并重编译（见 memory_rust/backend.py MEMORY_SCHEMA_VERSION）。
+pub const MEMORY_SCHEMA_VERSION: i64 = 20;
 
 pub fn ensure_supported(conn: &Connection) -> Result<(), String> {
     let table_exists = conn

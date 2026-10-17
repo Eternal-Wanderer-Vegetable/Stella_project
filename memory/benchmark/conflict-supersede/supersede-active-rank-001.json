@@ -1,0 +1,68 @@
+{
+  "id": "supersede-active-rank-001",
+  "scenario": {
+    "group_id": 9,
+    "user_id": 904
+  },
+  "input": "该怎么称呼你呀",
+  "mode": "CASUAL_REPLY",
+  "trigger": "reply",
+  "memories": {
+    "V_new": {
+      "content": "现在让我叫小赵",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.9,
+      "importance": 0.85,
+      "last_accessed_at_offset_minutes": -60,
+      "last_confirmed_at_offset_minutes": -60
+    },
+    "V_old": {
+      "content": "以前大家叫我老赵",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.6,
+      "importance": 0.4,
+      "last_accessed_at_offset_minutes": -86400,
+      "last_confirmed_at_offset_minutes": -86400
+    },
+    "F1": {
+      "content": "用户喜欢在群里讲冷笑话",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.85,
+      "importance": 0.8,
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
+    },
+    "F2": {
+      "content": "用户发消息喜欢带表情包",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN",
+      "confidence": 0.8,
+      "importance": 0.75,
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
+    }
+  },
+  "expected_memory": [
+    "V_new"
+  ],
+  "forbidden_memory": [
+    "V_old"
+  ],
+  "max_retrieved": 3,
+  "notes": "B 型：旧值行仍是 active（整合未停用），新值+两个新鲜填充（同类型全兼容分）压住旧值，旧值第 4 名被 mode_limit 出局（rank-recency-001 同型）"
+}

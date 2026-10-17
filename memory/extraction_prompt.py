@@ -27,6 +27,13 @@ format 转义规则同 consolidation_prompt：字面花括号写 {{ }}，
 
 前缀缓存约束（2026-08-28 起）：``{messages}`` 必须留在模板最末尾，
 理由与守卫同 consolidation_prompt.py，不再重复。
+
+
+契约硬规则块（2026-10-17 增补）：模板末段枚举服务端闸门
+（memory/evidence_contract.py 的 _SELF_REPORT_PATTERNS / _PATTERN 正则）
+支持的刻板句型与 statement_kind↔type/polarity 绑定——live 回放实证真实模型
+产出的契约全数 unknown、0 accepted，根因是没教契约形状。闸门句型扩缩时须
+同步这段枚举；该块属于固定指令，必须留在分隔线之上。
 """
 
 
@@ -61,12 +68,12 @@ EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认
 
 正例（务必学会这类提取）：
 消息「我时不时会失眠，所以醒得很早」
-→ {{"user_id": "该发言者QQ号", "type": "FACT", "content": "有失眠情况，常常醒得很早",
+→ {{"user_id": "该发言者QQ号", "type": "FACT", "content": "我时不时会失眠",
     "usage_tags": ["ANSWER_CONTEXT"], "visibility": "OPEN",
     "importance": 0.6, "confidence": 0.9, "evidence": "用户直接陈述自己的作息与身体状况",
     "source_message_ids": []}}
 消息「早餐一般只是一个馒头，自己家做的」
-→ {{"user_id": "该发言者QQ号", "type": "FACT", "content": "早餐一般只吃一个自家做的馒头",
+→ {{"user_id": "该发言者QQ号", "type": "FACT", "content": "早餐一般只是一个馒头",
     "usage_tags": ["ANSWER_CONTEXT", "PERSONALIZE"], "visibility": "OPEN",
     "importance": 0.5, "confidence": 0.9, "evidence": "用户直接陈述自己的饮食习惯",
     "source_message_ids": []}}
@@ -128,15 +135,54 @@ EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认
   "source_message_ids": [123],
   "verification_contract": {{
     "fact_subject_user_id": "123",
-    "predicate_key": "sleep_pattern",
-    "canonical_value": "失眠",
+    "predicate_key": "profile.residence",
+    "canonical_value": "杭州",
     "polarity": "positive",
     "statement_kind": "self_report",
     "temporal_qualifiers": [],
     "context_qualifiers": [],
-    "supports": [{{"source_message_id": 123, "exact_support_span": "我时不时会失眠"}}]
+    "supports": [{{"source_message_id": 123, "exact_support_span": "我住在杭州"}}]
   }}
 }}
+
+
+契约硬规则（服务端按固定句型逐字审核 verification_contract，完全命中才可能被判 accepted）：
+
+服务端支持的刻板句型（exact_support_span 必须逐字是其中一种；X 代表值段）：
+- 自我陈述（statement_kind=self_report，type 必须是 FACT，polarity 一律 positive）：
+  - 「我住在X」「我居住在X」「我现在/目前住在X」→ predicate_key=profile.residence
+  - 「我来自X」「我出生于X」→ predicate_key=profile.origin
+  - 「我叫X」（发言者自我介绍）→ predicate_key=profile.nickname
+  - 「我在X工作」→ predicate_key=profile.employer
+  - 「I live in X」→ predicate_key=profile.residence.en
+  - 「I am from X」「I'm from X」→ predicate_key=profile.origin.en
+  - 「My name is X」→ predicate_key=profile.nickname.en
+- 明确偏好（statement_kind=explicit_preference，type 必须是 PREFERENCE，
+  predicate_key 一律 preference.general）：
+  - 「我喜欢X」「我偏好X」→ polarity=positive；「我不喜欢X」「我讨厌X」→ polarity=negative
+  - 「I like X」「I prefer X」→ polarity=positive；「I don't like X」「I dislike X」→ polarity=negative
+
+span 与值段硬规则（违反任何一条契约都不会 accepted，候选本身照常输出）：
+- exact_support_span 只取刻板句本身，遇到逗号/分号/后续分句立即截断：
+  「我叫小艾，以后多指教」→ span=「我叫小艾」
+- 句尾至多保留一个 。或 ！；逗号、分号、问号结尾的 span 不会被接受
+- 值段内不允许任何标点（，。！？!?；；都是截断点）；canonical_value 就是值段本身，
+  不带句式引导词、不带标点，如「小艾」「杭州」「吃辣」
+- span 中不要出现「如果/可能/也许/听说/据说/玩笑」等词或任何引号——含这些词的句子
+  按前面规则照常标注 statement_kind，但契约不会 accepted
+- content 必须与 exact_support_span 逐字相同
+
+反例（真实出现过的失败形态，不要再犯）：
+- ✗ span=「我叫小艾，以后多指教」（整句带尾巴）→ 应截为「我叫小艾」
+- ✗ 自我介绍「我叫小艾」标成 PREFERENCE → 应为 self_report + FACT + profile.nickname
+- ✗ canonical_value=「杭州，西湖区」（值段含逗号）→ 应为「杭州」
+
+与称呼要求的边界：发言者介绍自己「我叫X」按 self_report / FACT / profile.nickname
+输出；发言者要求别人怎么称呼 TA（「以后叫我X」「别再叫我Y」）维持 PREFERENCE
+（保证去重稳定），这类契约当前不会被判 accepted，照常输出即可，不要硬凑刻板句型。
+
+其余非刻板句型（身体状况、习惯、经历、设备等）仍然照常提取，目标是不漏——
+它们的契约不会被 accepted，由服务端按未核验处理，不需要你回避或改写原文。
 
 ===== 以上为固定规则；以下是本次待分析的数据 =====
 

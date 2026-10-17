@@ -1,0 +1,14 @@
+{
+  "id": "abstain-empty-001",
+  "scenario": {
+    "group_id": 11,
+    "user_id": 1100
+  },
+  "input": "帮我推荐一部冷门纪录片",
+  "mode": "RECOMMEND",
+  "trigger": "reply",
+  "memories": {},
+  "expected_memory": [],
+  "expect_empty": true,
+  "notes": "abstain 基线：库中没有任何记忆，正确行为是空召回（宁缺毋滥），召回任何内容即 over_recall。"
+}

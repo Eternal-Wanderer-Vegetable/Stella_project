@@ -14,7 +14,12 @@ from typing import Any, Protocol
 BACKEND_API_VERSION = 3
 # v19 新增 evidence source binding 与 claim lineage，promotion request 携带
 # evidence-set digest/scope epoch CAS；旧 native 必须因 API/schema 不匹配拒绝加载。
-MEMORY_SCHEMA_VERSION = 19
+# v20 是 FTS 分词重灌迁移（memory migrate_v20）：native 自身不做 FTS，但
+# ensure_supported 按**库的 schema_meta.version 严格相等**放行——SQLite schema
+# 升级必须连带本合同号与 .pyd 重编译，否则 native 拒读新库（auto 模式静默回退
+# python、strict rust 直接拒载）。与 memory.schema.SCHEMA_VERSION 数值有意保持
+# 同步，但语义是两套版本号（native 读库打分 vs SQLite 结构），勿互相替代。
+MEMORY_SCHEMA_VERSION = 20
 
 
 class MemoryBackendError(RuntimeError):

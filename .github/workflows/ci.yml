@@ -77,6 +77,49 @@ jobs:
           name: security-report
           path: bandit-report.json
 
+  # ============ 记忆基准：PersonaMem 公开集固定 seed 子集（M3）============
+  # 网络可达性依赖 HF；下载失败必须显式红（fetch exit 3 = 网络不可达），不静默绿
+  memory-benchmark-public:
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt 2>/dev/null || true
+
+      - name: Fetch PersonaMem (pinned revision + sha256 manifest)
+        run: python scripts/fetch_personamem.py
+
+      - name: Adapt fixed-seed CI subset
+        run: python scripts/adapt_personamem.py --sample 200 --seed 20261016
+
+      - name: Run retrieval benchmark gate (rule mode)
+        run: |
+          python -m memory.benchmark \
+            --dir memory/benchmark/_public/personamem/adapted \
+            --report docs/reports/evidence/memory-benchmark-ci/personamem \
+            --gate
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: personamem-benchmark-report
+          path: docs/reports/evidence/memory-benchmark-ci/personamem/
+
   # ============ 单元测试（多版本） ============
   test:
     needs: [lint, security]  # 等待检查通过后再跑测试，节省资源
@@ -279,7 +322,7 @@ jobs:
 
   # ============ 通知（可选） ============
   notify:
-    needs: [test, lint, security, cli, flow-manifest, flow-closure, documentation]
+    needs: [test, lint, security, cli, flow-manifest, flow-closure, documentation, memory-benchmark-public]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'pull_request'
     permissions:
@@ -294,7 +337,7 @@ jobs:
              [ "${{ needs.cli.result }}" == "success" ] && \
              [ "${{ needs.flow-manifest.result }}" == "success" ] && \
              [ "${{ needs.flow-closure.result }}" == "success" ] && \
-             [ "${{ needs.documentation.result }}" == "success" ]; then
+             [ "${{ needs.documentation.result }}" == "success" ] &&              [ "${{ needs.memory-benchmark-public.result }}" == "success" ]; then
             echo "status=✅ All checks passed!" >> $GITHUB_OUTPUT
           else
             echo "status=❌ Some checks failed. Please check the logs." >> $GITHUB_OUTPUT

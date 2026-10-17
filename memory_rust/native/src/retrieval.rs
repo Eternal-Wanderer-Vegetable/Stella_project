@@ -8,6 +8,7 @@ use crate::policy::{
     apply_conversation_limit, merge_similar, normalize_mode, rank_memories,
     split_behavior_constraints, MemoryRecord, MODE_CONFLICT_AVOID,
 };
+use crate::promotion::fts_text;
 use crate::schema::ensure_supported;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -191,17 +192,49 @@ fn load_candidates(
     if !request.query.trim().is_empty() {
         let fts = load_fts_candidates(conn, request)?;
         if !fts.is_empty() {
-            return Ok(fts);
+            // FTS 命中不窄化候选池（与 Python 侧 _fetch_candidates 同语义）：
+            // OR 召回的行排在前，再并入新鲜度头部（按 id 去重）——只保留 FTS 行
+            // 会让池里只剩「恰与查询共享分词片段」的记忆，竞争者变少后旧值/
+            // 干扰项更容易穿过 LIMIT 截断与分数门槛。
+            let fts_ids: std::collections::HashSet<String> =
+                fts.iter().map(|item| item.id.clone()).collect();
+            let mut merged = fts;
+            merged.extend(
+                candidates
+                    .into_iter()
+                    .filter(|item| !fts_ids.contains(&item.id)),
+            );
+            return Ok(merged);
         }
     }
     sql.shrink_to_fit();
     Ok(candidates)
 }
 
+/// 查询侧 MATCH 表达式：与写入侧同一分词（fts_text），token 带引号防 AND/OR/NEAR
+/// 保留字后 OR 连接——任一片段命中即召回，相关性交给 bm25()。与 Python 侧
+/// ``retriever._match_expression`` 同语义。
+/// 历史教训：这里曾直接绑原始查询串——中文整串被 unicode61 当一个 term，与滑窗
+/// 写入的索引几乎永不相等，FTS 通道长期空转、静默回退新鲜度排序（2026-10-17
+/// 与 Python 侧 MATCH 隐式 AND 同批定位）。
+/// 返回空串 = 查询无有效片段，调用方必须跳过 FTS（空表达式会 fts5 syntax error）。
+fn match_expression(query: &str) -> String {
+    fts_text(query)
+        .split(' ')
+        .filter(|token| !token.is_empty())
+        .map(|token| format!("\"{token}\""))
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
 fn load_fts_candidates(
     conn: &Connection,
     request: &RetrievalRequest,
 ) -> Result<Vec<MemoryRecord>, String> {
+    let expression = match_expression(&request.query);
+    if expression.is_empty() {
+        return Ok(Vec::new());
+    }
     let (visibility_sql, visibility_values) = visibility_params(&request.mode);
     let user_clause = if request.trigger.eq_ignore_ascii_case("proactive") {
         String::new()
@@ -224,7 +257,7 @@ fn load_fts_candidates(
         values.push(request.user_id.to_string());
     }
     values.extend(visibility_values.into_iter().map(str::to_string));
-    values.push(request.query.clone());
+    values.push(expression);
     values.push(request.pool_limit.to_string());
     let mut statement = match conn.prepare(&sql) {
         Ok(statement) => statement,
@@ -313,7 +346,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 19);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -348,7 +381,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 19);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -388,5 +421,78 @@ mod tests {
         assert!(ids.contains(&"person-shared"));
         assert!(!ids.contains(&"person-private"));
         assert!(!ids.contains(&"person-other"));
+    }
+
+    #[test]
+    fn match_expression_or_joins_quoted_terms() {
+        let expression = super::match_expression("有什么游戏推荐吗");
+        assert!(expression.contains('"'));
+        assert!(expression.contains(" OR "));
+        assert!(!expression.split(" OR ").any(|term| term.is_empty()));
+        // 保留字被小写化并引号化，不构成语法成分
+        assert_eq!(
+            super::match_expression("OR AND NEAR"),
+            "\"or\" OR \"and\" OR \"near\""
+        );
+        assert_eq!(super::match_expression("！！！???"), "");
+    }
+
+    #[test]
+    fn fts_hits_lead_pool_and_do_not_narrow_it() {
+        // FTS 命中的行领跑候选池（bm25 序）；不匹配的新鲜行仍留在池里
+        // （并集语义，与 Python _fetch_candidates 同步）。修复前查询侧直接绑
+        // 原始查询串：中文整串被 unicode61 当一个 term，FTS 通道空转、恒回退。
+        let file = NamedTempFile::new().expect("temp db");
+        let conn = Connection::open(file.path()).expect("open");
+        conn.execute_batch(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+             CREATE TABLE memories (
+               id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
+               content TEXT, importance REAL, confidence REAL, status TEXT,
+               usage_tags TEXT, visibility TEXT, trigger_data TEXT, behavior_rule TEXT,
+               last_accessed_at TEXT, last_confirmed_at TEXT
+             );
+             CREATE VIRTUAL TABLE memories_fts USING fts5(
+               mem_id UNINDEXED, content, group_shared_space UNINDEXED, user_id UNINDEXED
+             );",
+        )
+        .expect("schema");
+        for (id, content) in [("m1", "推荐几款游戏"), ("m2", "今天天气不错")] {
+            conn.execute(
+                "INSERT INTO memories VALUES (?, 'space-a', '1', 'FACT', ?, .8, .9,
+                 'active', '[\"RECOMMEND\"]', 'OPEN', NULL, NULL,
+                 '2026-09-01 00:00:00', NULL)",
+                rusqlite::params![id, content],
+            )
+            .expect("insert memory");
+            conn.execute(
+                "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id)
+                 VALUES (?, ?, 'space-a', '1')",
+                rusqlite::params![id, super::super::promotion::fts_text(content)],
+            )
+            .expect("insert fts");
+        }
+        drop(conn);
+
+        // 时间戳相同 → 纯新鲜度候选序是 m1, m2（id 升序）。
+        // 查询只与 m1 共享分词片段 → FTS 命中后 m1 必须领跑候选池。
+        let mut request = test_request(&file.path().display().to_string(), "space-a", 1);
+        request.query = "有什么游戏推荐吗".to_string();
+        let output = retrieve(request).expect("retrieve");
+        let candidates: Vec<&str> = output.trace["candidates"]
+            .as_array()
+            .expect("trace candidates")
+            .iter()
+            .map(|v| v.as_str().expect("candidate id"))
+            .collect();
+        assert_eq!(candidates.first(), Some(&"m1"));
+        assert!(candidates.contains(&"m2"), "池不窄化：非匹配行仍留池");
+
+        // 纯标点查询无有效片段 → 不进 MATCH，回退新鲜度候选（两条都在，但不炸）
+        let mut punct = test_request(&file.path().display().to_string(), "space-a", 1);
+        punct.query = "！！！???".to_string();
+        let fallback = retrieve(punct).expect("retrieve");
+        assert_eq!(fallback.conversation_memories.len(), 2);
     }
 }

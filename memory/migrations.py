@@ -960,6 +960,20 @@ def migrate_v19(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v20(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v20：FTS 存量索引全量重灌（中文检索修复，分词去整段 CJK token 后的补课）。
+
+    背景：旧 ``_segment_text`` 用 ``\\w+`` 补词，把整段连续中文当 token 混进索引；
+    a6431e4（2026-08-08）到 3c3b755（2026-08-12）之间写入的行**连滑窗片段都没有**。
+    查询侧改 OR（2026-10-17）只救新分词——存量行必须按新分词一次性重灌才能被召回。
+    重灌沿用 ``rebuild_fts``（v8 既定手法）：索引可随时从主表再生，失败只降级为
+    warning，不拖回滚迁移；行数自愈（数不符自动重建）是它最后的安全网。
+    """
+    result = MigrationResult(version=20)
+    rebuild_fts(conn, result)
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -974,6 +988,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     17: migrate_v17,
     18: migrate_v18,
     19: migrate_v19,
+    20: migrate_v20,
 }
 
 

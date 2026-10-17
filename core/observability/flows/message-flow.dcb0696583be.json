@@ -8,7 +8,7 @@
   "edges": 149,
   "explicit_boundaries": 13,
   "lanes": 14,
-  "reachable_symbols": 11017,
+  "reachable_symbols": 11039,
   "reachable_truncated_nodes": [],
   "source_resolved": 139,
   "total_nodes": 141,
@@ -2029,13 +2029,13 @@
     "contract_digests": {
      "config/settings.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
      "memory_rust/__init__.py": "83eb71c1b1bdaeb74667b9bcbfcb3d5ef76cded78369cb1f6420aaa98cc4af76",
-     "memory_rust/backend.py": "53946399589ee871aa03c7a3313f6cc0a57776e519faf6974677336c93964ee1",
+     "memory_rust/backend.py": "c5643f61616dffb9895b6409ffc4776ddc9fe5d5163ff497449509f8245590a5",
      "memory_rust/native/src/lib.rs": "39030695b7c31ea448d74ebc31098a3a72480f9afc89d199b7b7077303fa6246",
      "memory_rust/native/src/policy.rs": "323c5191b03a766b8dee025bb7255b7d8767b5ac0c0f7f5d994d943f1b296563",
-     "memory_rust/native/src/retrieval.rs": "51ff7ac3e163ced41a7089f3359454e9df2b989b0a8259f46ac24adf5e70ef7c",
-     "memory_rust/native/src/schema.rs": "709a518db7b0f7cfecb36c36d1883ba0271151941e520c36c5cca9b8ca53be96",
+     "memory_rust/native/src/retrieval.rs": "7eb39dd2365c5ffde0c6ec229017c74bf2ae475e614cabe53bbdd94bf1234a74",
+     "memory_rust/native/src/schema.rs": "bb2db8c9c6cfebfa9d1857aee73409f8e77640ca705547d09ae1b632233ac4cd",
      "memory_rust/native/src/similarity.rs": "6fa636e8e4e8e98192aa6377e1fff172462ed0b832f231811420bf2169f44a79",
-     "memory_rust/python_backend.py": "39effae2c7014f41845cd12efba66860b575c792d0e90fc26e72c292f484f221",
+     "memory_rust/python_backend.py": "bea0043068d94afc76ff984e788abde5fdfe696a5f0c3816308c3ea3646ed8b5",
      "memory_rust/selector.py": "18bb20df033735933bcfd3a40f17c4a1dec46351ea9e4161eab1a9a9dcc179a7"
     },
     "entry_id": "rust.promotion",
@@ -2047,7 +2047,7 @@
      "file": "memory_rust/native/src/promotion.rs",
      "symbol": "promote"
     },
-    "source_digest": "88844558c1a1667baaa662e25c2edca61ad4a06bf2150020834a2314ec8bdbfc"
+    "source_digest": "b0340997847c13bfb354122f956d9e1ded10720e15177ddb7753ed0ae08a9373"
    }
   ],
   "families": [
@@ -7088,7 +7088,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -7208,7 +7208,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "37a1887f22ccfad9",
+     "body_hash": "77853e3a0b7fe0c4",
      "file": "memory/retrieval_v2.py",
      "qualname": "_fetch_candidates",
      "resolution": "local"
@@ -7244,7 +7244,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -7316,6 +7316,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "25716bb5a92aa3bc",
+     "file": "memory/retriever.py",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
      "body_hash": "74d2d0c55aa9a556",
      "file": "memory/retriever.py",
      "qualname": "_memories_from_rows",
@@ -7328,7 +7334,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a67975a24fdb89c3",
+     "body_hash": "1daf763ac2ee3afd",
      "file": "memory/retriever.py",
      "qualname": "_query_rag_results",
      "resolution": "local"
@@ -7358,9 +7364,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -8941,7 +8953,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -9061,7 +9073,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "37a1887f22ccfad9",
+     "body_hash": "77853e3a0b7fe0c4",
      "file": "memory/retrieval_v2.py",
      "qualname": "_fetch_candidates",
      "resolution": "local"
@@ -9097,7 +9109,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -9169,6 +9181,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "25716bb5a92aa3bc",
+     "file": "memory/retriever.py",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
      "body_hash": "74d2d0c55aa9a556",
      "file": "memory/retriever.py",
      "qualname": "_memories_from_rows",
@@ -9181,7 +9199,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a67975a24fdb89c3",
+     "body_hash": "1daf763ac2ee3afd",
      "file": "memory/retriever.py",
      "qualname": "_query_rag_results",
      "resolution": "local"
@@ -9211,9 +9229,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -10794,7 +10818,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -10914,7 +10938,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "37a1887f22ccfad9",
+     "body_hash": "77853e3a0b7fe0c4",
      "file": "memory/retrieval_v2.py",
      "qualname": "_fetch_candidates",
      "resolution": "local"
@@ -10950,7 +10974,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -11022,6 +11046,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "25716bb5a92aa3bc",
+     "file": "memory/retriever.py",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
      "body_hash": "74d2d0c55aa9a556",
      "file": "memory/retriever.py",
      "qualname": "_memories_from_rows",
@@ -11034,7 +11064,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a67975a24fdb89c3",
+     "body_hash": "1daf763ac2ee3afd",
      "file": "memory/retriever.py",
      "qualname": "_query_rag_results",
      "resolution": "local"
@@ -11064,9 +11094,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -18078,9 +18114,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -25596,9 +25638,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -46832,9 +46880,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -47872,9 +47926,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -49165,9 +49225,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -65017,9 +65083,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -71951,9 +72023,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -72979,9 +73057,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -75234,9 +75318,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -76253,9 +76343,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -77768,9 +77864,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -78396,9 +78498,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -78693,9 +78801,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -78949,126 +79063,96 @@
      {
       "condition": "not MEMORY_V2_ENABLED or not DB_PATH.exists()",
       "kind": "branch",
-      "line": 569
+      "line": 582
      },
      {
       "condition": "not _bypass_backend",
       "kind": "branch",
-      "line": 572
+      "line": 585
      },
      {
       "condition": "access_scope is not None and access_scope.has_person",
       "kind": "branch",
-      "line": 599
+      "line": 612
      },
      {
       "condition": "cached is not None and time.monotonic() - cached[0] < RETRIEVAL_CACHE_TTL",
       "kind": "branch",
-      "line": 612
+      "line": 625
      },
      {
       "finally": true,
       "handlers": [],
       "kind": "try",
-      "line": 621
+      "line": 634
      },
      {
       "condition": "len(_CACHE) > _CACHE_MAX_ENTRIES",
       "kind": "branch",
-      "line": 709
+      "line": 722
      },
      {
       "kind": "return",
-      "line": 712
+      "line": 725
      },
      {
       "kind": "return",
-      "line": 570
+      "line": 583
      },
      {
       "condition": "configured_mode() != 'python'",
       "kind": "branch",
-      "line": 575
+      "line": 588
      },
      {
       "kind": "call",
-      "line": 586,
+      "line": 599,
       "resolved": "local:memory/policy.py#normalize_mode",
       "target": "normalize_mode"
      },
      {
       "condition": "trigger == 'proactive'",
       "kind": "branch",
-      "line": 596
+      "line": 609
      },
      {
       "condition": "access_scope",
       "kind": "branch",
-      "line": 597
+      "line": 610
      },
      {
       "kind": "call",
-      "line": 611,
+      "line": 624,
       "resolved": "unresolved",
       "target": "_CACHE.get"
      },
      {
       "kind": "return",
-      "line": 614
+      "line": 627
      },
      {
       "kind": "call",
-      "line": 616,
+      "line": 629,
       "resolved": "local:memory/policy.py#mode_limit",
       "target": "mode_limit"
      },
      {
       "kind": "call",
-      "line": 617,
+      "line": 630,
       "resolved": "unresolved",
       "target": "max"
      },
      {
       "kind": "call",
-      "line": 619,
+      "line": 632,
       "resolved": "local:memory/retrieval_v2.py#_connect",
       "target": "_connect"
      },
      {
       "kind": "call",
-      "line": 620,
+      "line": 633,
       "resolved": "unresolved",
       "target": "conn.cursor"
-     },
-     {
-      "kind": "call",
-      "line": 638,
-      "resolved": "unresolved",
-      "target": "len"
-     },
-     {
-      "kind": "call",
-      "line": 641,
-      "resolved": "local:memory/policy.py#rank_memories",
-      "target": "rank_memories"
-     },
-     {
-      "kind": "call",
-      "line": 645,
-      "resolved": "local:memory/retrieval_v2.py#_merge_similar",
-      "target": "_merge_similar"
-     },
-     {
-      "kind": "call",
-      "line": 646,
-      "resolved": "unresolved",
-      "target": "len"
-     },
-     {
-      "kind": "call",
-      "line": 649,
-      "resolved": "local:memory/policy.py#split_behavior_constraints",
-      "target": "split_behavior_constraints"
      },
      {
       "kind": "call",
@@ -79078,117 +79162,129 @@
      },
      {
       "kind": "call",
-      "line": 698,
+      "line": 654,
+      "resolved": "local:memory/policy.py#rank_memories",
+      "target": "rank_memories"
+     },
+     {
+      "kind": "call",
+      "line": 658,
+      "resolved": "local:memory/retrieval_v2.py#_merge_similar",
+      "target": "_merge_similar"
+     },
+     {
+      "kind": "call",
+      "line": 659,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 662,
+      "resolved": "local:memory/policy.py#split_behavior_constraints",
+      "target": "split_behavior_constraints"
+     },
+     {
+      "kind": "call",
+      "line": 664,
+      "resolved": "unresolved",
+      "target": "len"
+     },
+     {
+      "kind": "call",
+      "line": 711,
       "resolved": "local:memory/retrieval_v2.py#_touch_accessed",
       "target": "_touch_accessed"
      },
      {
       "kind": "call",
-      "line": 700,
+      "line": 713,
       "resolved": "unresolved",
       "target": "RetrievalResult"
      },
      {
       "iterate": "list(_CACHE)[:len(_CACHE) - _CACHE_MAX_ENTRIES]",
       "kind": "loop",
-      "line": 710
+      "line": 723
      },
      {
       "kind": "call",
-      "line": 570,
+      "line": 583,
       "resolved": "unresolved",
       "target": "RetrievalResult"
      },
      {
       "kind": "return",
-      "line": 576
+      "line": 589
      },
      {
       "kind": "call",
-      "line": 596,
+      "line": 609,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 597,
+      "line": 610,
       "resolved": "unresolved",
       "target": "access_scope.fingerprint"
      },
      {
       "kind": "call",
-      "line": 600,
+      "line": 613,
       "resolved": "unresolved",
       "target": "scope_keys.append"
      },
      {
       "kind": "call",
-      "line": 602,
+      "line": 615,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 605,
+      "line": 618,
       "resolved": "local:memory/cache_keys.py#topic_hash",
       "target": "topic_hash"
      },
      {
       "kind": "call",
-      "line": 607,
+      "line": 620,
       "resolved": "local:memory/cache_keys.py#memory_history_version",
       "target": "memory_history_version"
      },
      {
       "kind": "call",
-      "line": 609,
+      "line": 622,
       "resolved": "local:memory/scope_versions.py#current_version",
       "target": "scope_versions.current_version"
      },
      {
       "condition": "trigger == 'proactive'",
       "kind": "branch",
-      "line": 622
+      "line": 635
      },
      {
       "kind": "call",
-      "line": 623,
+      "line": 636,
       "resolved": "local:memory/retrieval_v2.py#_fetch_candidates",
       "target": "_fetch_candidates"
      },
      {
       "kind": "call",
-      "line": 628,
+      "line": 641,
       "resolved": "unresolved",
       "target": "conn.close"
      },
      {
       "kind": "call",
-      "line": 632,
+      "line": 645,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 642,
-      "resolved": "unresolved",
-      "target": "m.get"
-     },
-     {
-      "kind": "call",
-      "line": 660,
-      "resolved": "unresolved",
-      "target": "m.get"
-     },
-     {
-      "kind": "call",
-      "line": 669,
-      "resolved": "unresolved",
-      "target": "m.get"
-     },
-     {
-      "kind": "call",
-      "line": 670,
+      "line": 655,
       "resolved": "unresolved",
       "target": "m.get"
      },
@@ -79200,115 +79296,69 @@
      },
      {
       "kind": "call",
-      "line": 674,
+      "line": 682,
       "resolved": "unresolved",
       "target": "m.get"
      },
      {
       "kind": "call",
-      "line": 707,
+      "line": 683,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 686,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 687,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 720,
       "resolved": "external:time",
       "target": "time.monotonic"
      },
      {
       "kind": "call",
-      "line": 709,
+      "line": 722,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 569,
+      "line": 582,
       "resolved": "local:config/__init__.py#DB_PATH.exists",
       "target": "DB_PATH.exists"
      },
      {
       "kind": "call",
-      "line": 575,
+      "line": 588,
       "resolved": "native:memory_rust.selector",
       "target": "configured_mode"
      },
      {
       "kind": "call",
-      "line": 576,
+      "line": 589,
       "resolved": "local:memory/retrieval_v2.py#_retrieve_with_optional_backend",
       "target": "_retrieve_with_optional_backend"
      },
      {
       "kind": "call",
-      "line": 586,
+      "line": 599,
       "resolved": "local:memory/policy.py#detect_mode",
       "target": "detect_mode"
      },
      {
       "kind": "call",
-      "line": 633,
+      "line": 646,
       "resolved": "unresolved",
       "target": "c.get"
-     },
-     {
-      "kind": "call",
-      "line": 677,
-      "resolved": "unresolved",
-      "target": "m.get"
-     },
-     {
-      "kind": "call",
-      "line": 678,
-      "resolved": "unresolved",
-      "target": "round"
-     },
-     {
-      "condition": "m.get('id') in final_id_set",
-      "kind": "branch",
-      "line": 682
-     },
-     {
-      "kind": "call",
-      "line": 698,
-      "resolved": "unresolved",
-      "target": "str"
-     },
-     {
-      "kind": "call",
-      "line": 710,
-      "resolved": "unresolved",
-      "target": "list"
-     },
-     {
-      "kind": "call",
-      "line": 711,
-      "resolved": "unresolved",
-      "target": "_CACHE.pop"
-     },
-     {
-      "kind": "call",
-      "line": 612,
-      "resolved": "external:time",
-      "target": "time.monotonic"
-     },
-     {
-      "kind": "call",
-      "line": 637,
-      "resolved": "local:memory/policy.py#usage_allowed",
-      "target": "usage_allowed"
-     },
-     {
-      "kind": "call",
-      "line": 670,
-      "resolved": "unresolved",
-      "target": "m.get"
-     },
-     {
-      "kind": "call",
-      "line": 678,
-      "resolved": "unresolved",
-      "target": "float"
-     },
-     {
-      "condition": "m.get('id') in behavior_id_set",
-      "kind": "branch",
-      "line": 684
      },
      {
       "kind": "call",
@@ -79318,27 +79368,44 @@
      },
      {
       "kind": "call",
-      "line": 698,
+      "line": 691,
       "resolved": "unresolved",
-      "target": "m.get"
+      "target": "round"
+     },
+     {
+      "condition": "m.get('id') in final_id_set",
+      "kind": "branch",
+      "line": 695
      },
      {
       "kind": "call",
-      "line": 698,
+      "line": 711,
       "resolved": "unresolved",
-      "target": "m.get"
+      "target": "str"
      },
      {
       "kind": "call",
-      "line": 662,
+      "line": 723,
       "resolved": "unresolved",
-      "target": "m.get"
+      "target": "list"
      },
      {
       "kind": "call",
-      "line": 670,
+      "line": 724,
       "resolved": "unresolved",
-      "target": "x.get"
+      "target": "_CACHE.pop"
+     },
+     {
+      "kind": "call",
+      "line": 625,
+      "resolved": "external:time",
+      "target": "time.monotonic"
+     },
+     {
+      "kind": "call",
+      "line": 650,
+      "resolved": "local:memory/policy.py#usage_allowed",
+      "target": "usage_allowed"
      },
      {
       "kind": "call",
@@ -79347,37 +79414,84 @@
       "target": "m.get"
      },
      {
-      "condition": "m.get('id') in threshold_cut_ids",
+      "kind": "call",
+      "line": 691,
+      "resolved": "unresolved",
+      "target": "float"
+     },
+     {
+      "condition": "m.get('id') in behavior_id_set",
       "kind": "branch",
-      "line": 686
+      "line": 697
      },
      {
       "kind": "call",
-      "line": 710,
+      "line": 703,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 711,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 711,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 675,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "kind": "call",
+      "line": 683,
+      "resolved": "unresolved",
+      "target": "x.get"
+     },
+     {
+      "kind": "call",
+      "line": 696,
+      "resolved": "unresolved",
+      "target": "m.get"
+     },
+     {
+      "condition": "m.get('id') in threshold_cut_ids",
+      "kind": "branch",
+      "line": 699
+     },
+     {
+      "kind": "call",
+      "line": 723,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 667,
+      "line": 680,
       "resolved": "unresolved",
       "target": "m.get"
      },
      {
       "kind": "call",
-      "line": 678,
+      "line": 691,
       "resolved": "unresolved",
       "target": "m.get"
      },
      {
       "kind": "call",
-      "line": 685,
+      "line": 698,
       "resolved": "unresolved",
       "target": "m.get"
      },
      {
       "kind": "call",
-      "line": 687,
+      "line": 700,
       "resolved": "unresolved",
       "target": "m.get"
      }
@@ -79507,7 +79621,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -79555,7 +79669,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "37a1887f22ccfad9",
+     "body_hash": "77853e3a0b7fe0c4",
      "file": "memory/retrieval_v2.py",
      "qualname": "_fetch_candidates",
      "resolution": "local"
@@ -79591,7 +79705,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -79633,9 +79747,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "25716bb5a92aa3bc",
      "file": "memory/retriever.py",
-     "qualname": "_segment_text",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -84047,7 +84167,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -84095,7 +84215,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "37a1887f22ccfad9",
+     "body_hash": "77853e3a0b7fe0c4",
      "file": "memory/retrieval_v2.py",
      "qualname": "_fetch_candidates",
      "resolution": "local"
@@ -84131,7 +84251,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -84179,9 +84299,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "25716bb5a92aa3bc",
      "file": "memory/retriever.py",
-     "qualname": "_segment_text",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -84908,7 +85034,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "da80c19126762264",
+     "body_hash": "2e3a9e99fecf5fe0",
      "file": "memory/policy.py",
      "qualname": "rank_memories",
      "resolution": "local"
@@ -84956,7 +85082,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "37a1887f22ccfad9",
+     "body_hash": "77853e3a0b7fe0c4",
      "file": "memory/retrieval_v2.py",
      "qualname": "_fetch_candidates",
      "resolution": "local"
@@ -84992,7 +85118,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -85040,9 +85166,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "25716bb5a92aa3bc",
      "file": "memory/retriever.py",
-     "qualname": "_segment_text",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -126893,6 +127025,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "93f6cde83dc70d395483e8602401564bf5ba9948",
+ "source_revision": "d2e9201333fc264161e763f942c400fd123cd4ef",
  "topology_version": "2026.10.04"
 }

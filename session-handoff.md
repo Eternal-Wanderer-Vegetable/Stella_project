@@ -2,82 +2,33 @@
 
 ## Current Objective
 
-- CI-106：PR #106 flow-closure 的 GitNexus native heap corruption 已修复并推送；提交 `c22dcecdde227564cecd6a7290f246ae43ba3efa`，对应所有 hosted checks 通过。
-- RELEASE-620：Stella 6.2.0 已正式发布，hosted release workflow 与发布后回读全部通过。
-- Branch: `codex/release-6.2.0`; release commit `6c62fdc3f7ae010896f7f308e37f356eb3c20581`, based on online `main` commit `f4d6247eab0236019133e168f4ab1f68e54340f2` (PR #105 merge). Tag `v6.2.0` points to the release commit.
+- EXTRACT 契约对齐（阶段2 提示词修复，计划 `docs/plans/2026-10-17-gitnexus-plan-extract-contract-prompt.md`）已全量实施并验收：分支 `feat/memory-benchmark-suite`，本会话提交 `4a45082`（提示词硬规则块+守卫测试）→ `9a74b9a`（验收证据+报告）→ `af079df`（状态）→ `723ca57`（PR CI 修复）；**已推送，PR #110 CI 13/13 全绿（run 39014161067），待用户合并**。
+- 实施报告：[docs/reports/2026-10-17-extract-contract-prompt-fix.md](docs/reports/2026-10-17-extract-contract-prompt-fix.md)；证据：`docs/reports/evidence/extract-contract-20261017/`（replay-live-strata-postfix + contract-assessment-live + manifest）。
 
 ## Completed This Session
 
-- Synchronized Python, CLI, desktop Cargo/Tauri versions and locks to 6.2.0.
-- Updated bilingual README, source-contract docs, migration templates, and release notes for schema 19 / Rust API 3.
-- Preserved v6.1.0 history and all pre-existing untracked user files.
+- `4a45082`：`EXTRACTION_PROMPT` 增补「契约硬规则」块（分隔线之上，`{messages}` 仍在末尾）：枚举 `evidence_contract` 可审核刻板句型与 predicate_key（含 `.en` 英形）、span 截尾/值段禁标点/canonical_value=纯值段、self_report→FACT+positive 与 explicit_preference→PREFERENCE 绑定、反例三条、非刻板句照常提取（不漏不变）、称呼规则调和（自称「我叫X」=self_report/FACT；「以后叫我X」维持 PREFERENCE 但契约暂不 accepted）。另修正两处与闸门矛盾的既有示例：正例 content 改逐字片段、结构示例契约 `sleep_pattern`/失眠 → `profile.residence`/杭州。新增 `tests/test_extraction_prompt_contract.py` 结构守卫（句型枚举/绑定措辞/块位置）。flow manifest 重生成（body_hash 漂移）。
+- `9a74b9a`：真模型验收证据落盘 + 实施报告。
+- `723ca57`：PR #110 首推 CI 四项失败修复（三种根因）：EXTRACT 计划文件入库（docs 链接门禁）；`digest_dir` 哈希前 CRLF→LF 归一化 + FROZEN_DIGEST 平台无关值（Windows CRLF 检出 vs CI LF 使冻结摘要分叉）；`adapt_personamem` 默认 CSV 改指 fetch 落盘嵌套布局（CI 无本机手工扁平副本）。本地全链路镜像（generator --check / 13 passed / adapt 200 + gate 98.0% 绿）后推送，CI 全绿。
 
 ## Verification Evidence
 
-- PR #106 CI failure: flow-closure GitNexus analyze logged `malloc(): unaligned tcache chunk detected` after npm reported an optional Zig Tree-sitter peer mismatch; job exit code 1 caused the two later inventory steps to skip. No upstream 1.6.12 note claims to fix this crash.
-- Local repair candidate adds `--workers 1` to the pinned 1.6.11 analyzer; a new test asserts that command and preserves the separate Runtime inventory validation and Discovered entry reconciliation workflow gates.
-- Red/green regression: workflow-contract test failed before the command change because `--workers 1` was absent; passed afterward.
-- `python -m pytest tests/observability/test_internal_flow_inventory.py tests/observability/test_flow_source_closure.py tests/observability/test_message_flow_contract.py -q`: 41 passed, 2 warnings. A Python 3.14/NoneBot access-violation traceback appeared once in a parallel run, but pytest completed successfully; standalone contract test reran cleanly and focused suite passed again.
-- CI-equivalent `npx -y gitnexus@1.6.11 analyze --index-only --workers 1 --default-branch main`: passed in the project container; index current for 1167 covered files. Existing callable-value-flow warnings remain at `astrbot_compat/filters.py` (candidate set 33 > cap 32), distinct from crash.
-- CI-equivalent inventory checks: 49 entries / 9 families; 33 discovered entries, reconciliation clean.
-- `python -m ruff check tests/observability/test_internal_flow_inventory.py` and `python -m ruff check $(git ls-files '*.py')`: passed. `python scripts/check_docs.py`: 0 errors. GitNexus scope=all: 5 files/10 symbols/low; compare against verified `origin/main@f4d6247`: 18 files/34 symbols/low, no partial/truncated. Compare includes pre-existing release changes and local release-state edits because PR #106 itself is the release PR.
-- PR #106 repair commit `c22dcecdde227564cecd6a7290f246ae43ba3efa` is pushed. Hosted CI run [38357443346](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38357443346) passed all 11 jobs, including `flow-closure`, Python 3.10/3.11/3.12, lint, security, CLI, flow-manifest and Windows native reliability. Docker Publish run [38357443338](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38357443338) also passed.
-- Hosted flow-closure confirmed command `npx -y gitnexus@1.6.11 analyze --index-only --workers 1`, then `entries: 49 families: 9` and `discovered entries: 33 - reconciliation clean`; no native heap corruption. npm still emits the optional Zig grammar peer warning; analyzer reports existing candidate-cap warnings, neither failed the job.
-- `python -m pytest tests -q`: 3669 passed, 17 skipped, 59 warnings (Windows Python 3.14).
-- `python -m ruff check $(git ls-files '*.py')`: all tracked Python files passed. Unscoped `python -m ruff check .` detects I001 in the pre-existing untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py`; that user file was not edited.
-- `python scripts/check_docs.py`: 0 errors, 1186 local links, 577 migration anchors.
-- `python scripts/generate_message_flow.py --check`: current manifest.
-- Dashboard: 100 tests, vue-tsc, and production build passed; existing Vite chunk warnings only.
-- CLI fmt/clippy/tests passed (20 tests); desktop `cargo check --locked` passed; Cargo metadata and all app version fields agree at 6.2.0.
-- GitNexus index refreshed at f4d6247; impact of `_current_project_version` upstream is HIGH (8 symbols, including profile validation/load and release package builders), while status API version flow is LOW. `detect-changes --scope all`: 16 files/33 symbols, low, no partial/truncated; compare against verified base f4d6247 is identical.
-- Hosted release run [38332591325](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38332591325) succeeded across all 17 jobs, including Rust wheel, Dashboard, CLI binaries, CPU backend, offline payload, four signed installer builds, four Windows install acceptance jobs, packaging, manifest/SHA-256 and published-byte readback.
-- Stable Release: https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0; 14 assets uploaded. The release notes disclose that installers are unsigned under the maintainer-authorized `STELLA_ALLOW_UNSIGNED=1` exception.
+- **决定性验收（live 回放两遍独立实录，Strata qwen3.8-flash-next-iq2_xs @8081，daily-life suite）**：
+  - 第一遍（计划命令，`replay-live-strata-postfix.json`）：候选 6 / 记忆 4；extraction 100%、fabrication 0%、**promotion 100%（此前 0%）**、qa 100%、delta +100。
+  - 第二遍（同管线+逐候选契约盘点，`contract-assessment-live.json`）：**accepted 4（此前 0）、0 rejected**，句型全命中教学枚举（profile.residence / preference.general×2 / profile.nickname），截尾生效（「我叫小艾，以后多指教」→「我叫小艾」）。
+  - 晋升以 accepted 为前置（memory_manager.py:1007 缺 accepted 拒绝晋升），promotion 100% 与 accepted 4 互为印证；关键错误 0。
+- pytest：守卫+前缀缓存 14 passed；子集 `-k "prompt or consolidat or evidence_contract"` 109 passed；ruff（改动文件）、check_docs（119 文件/1195 链接）过。
+- GitNexus：`impact format_extraction_prompt` 上游 CRITICAL（3 直接调用方全透传，与计划 §4 一致）；detect_changes scope=all exit 0、无 partial/truncated。
 
-## Changed Files
+## Blockers / Inherited State
 
-- Version: `pyproject.toml`, `cli/Cargo.toml`, `cli/Cargo.lock`, `desktop/src-tauri/Cargo.toml`, `desktop/src-tauri/Cargo.lock`, `desktop/src-tauri/tauri.conf.json`.
-- Current documentation: `README.md`, `README.en.md`, `docs/development/contracts.md`, `docs/development/contracts.en.md`, `docs/reference/migration-report-template.md`, `docs/reference/migration-report-template.en.md`.
-- Release notes: `release_assets/RELEASE_NOTES_TEMPLATE.md`.
-- State: `feature_list.json`, `progress.md`, `session-handoff.md`.
+- **工作树遗留（非本会话产物，未提交）**：`memory/benchmark/_replay/daily-life/recorded/live-20261017.json`（上上会话 live 重录件）及各 untracked plans/reports/skills-lock.json/.agents/ 等照旧保留，是否提交由用户决定。
+- 闸门 `memory/evidence_contract.py` 本计划零改动（ASSESSMENT_VERSION 2026-10-08.1 未 bump）。
+- dev bot（用户终端直启，与 prod 同用 8080）与回放共用 8081 Strata；**bot 进程需重启才会加载新提示词**（提示词是模块常量，非热载）。
 
-## Blockers / Risks
+## Next Steps
 
-- CI-106 fix is not committed/pushed; PR #106 must rerun hosted flow-closure before the failure can be considered cleared.
-- Hosted GitHub installation checks and byte readback are complete. This is not clean-VM/GUI-first-launch or real QQ rollout acceptance; keep those open until separately tested.
-- Installers are unsigned under the maintainer-authorized `STELLA_ALLOW_UNSIGNED=1` exception. Windows may show an unknown-publisher prompt; published `SHA256SUMS.txt` is available for integrity checks.
-- Preserve unrelated untracked data. At task start they included `.agents/`, `.bot-restart.log`, `.zcode/plans/`, extra `docs/plans/`, research reports/evidence, `memory_rust/_native.pyd.v15.bak`, and `skills-lock.json`. They were not staged or modified.
-
-## Next Session Startup
-
-1. Read `AGENTS.md`, `feature_list.json`, `progress.md`, and this handoff; verify current branch/status.
-2. `python scripts/check_docs.py` passed after release preparation. If state records are edited again, rerun the docs gate.
-3. Do not rerun or recreate the release; `v6.2.0` is published. Follow up only on separately scoped clean-VM/GUI or real QQ acceptance.
-
-## PR #105 CI Repair — 2026-10-10
-
-- CI-001 done；scope：闭包预算、生成清单、回归与在线 CI。
-- 基线 f8b2dce；本地复现两项合同失败：manifest 漂移、四个 ingress 截断。
-- record_group_chat 实际闭包 257 个辅助符号，旧上限 256；显式 cap=512 完整展开。
-- 修复：默认 cap 256 → 512，保留小预算截断与零核心截断门禁；按仓库惯例替换随包清单。
-- 验证：40 项专项通过；全量 Python 3669 passed / 17 skipped（Windows Python 3.14、隔离 STELLA_HOME）；623 个已跟踪 Python 文件 Ruff 通过；清单漂移、文档门禁通过。
-- 修复提交：3b31931，已推送 PR #105；[主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343651) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38043343680) 通过。
-- 提交前 GitNexus：6 文件、11 符号、low，无 partial/truncated；提交后索引刷新到修复提交并保留 PDG。
-- CI-001 验收完成。完成记录的后续提交与 CI 以 Git／PR 最新状态为准；新任务由用户授权。
-
-### Final-head Dashboard follow-up
-
-- 2906569 的 Dashboard CI 暴露既有大数据功能用例超时（5.17s > 默认 5s）；原修复提交的主 CI 与 Dashboard 全部通过记录仍有效。
-- 保留 100 页／100000 事件、全部水位断言、性能专项预算；仅该功能用例超时设为 15s。
-- c7751f6 已修复该超时；本地 Dashboard 100 项测试、类型检查、生产构建通过。
-- [主 CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052769) 全部 11 项通过，[Dashboard CI](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/38044052792) 通过；CI-001 done，无活动任务。
-- 完成记录提交的最终 SHA／检查结果以 Git 和 PR 最新状态为准。
-
-## Session Handoff — AI-Gated Memory Capture (2026-10-16)
-
-- Branch: `feat/ai-gated-memory-capture`, 6 commits on top of `codex/release-6.2.0` @ `c22dcec`: `3db81e7` (gate module + probe + 23 tests), `8bc6404` (typed writer denial), `574250c` (QQ/WebChat ingress + BOT_SELF gating + lifecycle hooks + consolidator close-on-failure + e2e tests + flow manifest), `0ab17fb` (status snapshot + .env.example), `427825c` (bilingual docs), `502ef7d` (implementation report).
-- Behavior: memory capture fails closed until the CONSOLIDATION role passes a bounded probe (minimal "ping" through the real generation path incl. fallback chain; /v1/models not required). Closed gate: no raw rows, no identity/social/expression/participation/consolidation-trigger side effects, BOT_SELF lines skipped; replies/plugins/usage accounting unaffected. No queue, no replay; recovery captures only newly arriving messages. `backend_for` untouched; no schema migration; no bypass switch.
-- Verification: full suite `python -m pytest tests -q` = 3707 passed / 17 skipped (Windows, Python 3.14, isolated STELLA_HOME); ruff over tracked files clean; `check_docs.py` 0 errors; `generate_message_flow.py --check` ok (body-hash-only manifest change; new lifecycle entry `bot_main.start_capture_gate` registered in internal_flow_catalog).
-- Baseline exceptions (pre-existing, untouched): untracked `docs/reports/evidence/dialogue-attribution-20261008/guard_probe.py` fails unscoped `ruff check .` (I001); local GitNexus CLI registry broken — caller inventory done via text search (record_message has 5 production call sites; _record_bot_lines covers all 13 BOT_SELF writers).
-- Test-isolation note: tests/conftest.py now keeps `capture_gate.start_gate` inert and `_gate` unset under pytest — a stray FastAPI lifespan (leftover coroutine executed by pytest-asyncio's fixture runner) fires nonebot startup hooks in arbitrary tests; without this the gate would install closed and fire real probe requests. Gate-specific tests construct CaptureGate instances with injected fakes.
-- NOT READY (external acceptance): live-provider probe smoke, QQ gray rollout, clean-VM install acceptance. Report: docs/reports/2026-10-16-ai-gated-memory-capture-implementation.md.
-- Pre-existing uncommitted worktree files (feature_list.json, progress.md, session-handoff.md, plans/reports/evidence, .agents/, skills-lock.json, memory_rust backup) were left untouched and uncommitted, same as at session start.
+1. 用户合并 PR #110（分支 18 提交全绿）；QQ 真机灰度观察阶段2 晋升（需重启 bot 加载新提示词）。
+2. 开放课题（计划 §12）：称呼要求（「以后叫我X」）闸门无支持句型，扩 gate（evidence_contract 新 pattern + ASSESSMENT_VERSION bump + 提示词同步）另立计划。
+3. 上会话遗留：native `fts_text` 与 Python `_tokenize` 分词分歧对齐小课题；QQ 真机检索命中观察。
+4. 备忘：personamem CI gate 现 98.0%（FTS 修复后的口径），若后续调 gate 阈值需连同 `ci.yml` 一起审。

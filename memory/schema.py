@@ -59,8 +59,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v19：可审核来源证据与 claim lineage，见 migrate_v19）。
-SCHEMA_VERSION = 19
+# 当前 Schema 版本（v20：FTS 存量索引按新分词全量重灌，见 migrate_v20）。
+SCHEMA_VERSION = 20
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 

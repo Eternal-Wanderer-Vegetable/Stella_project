@@ -1,0 +1,37 @@
+{
+  "id": "privacy-user-behavior-001",
+  "scenario": {
+    "group_id": 8,
+    "user_id": 803
+  },
+  "input": "你别乱动我的东西，别这样碰我",
+  "mode": "CONFLICT_AVOID",
+  "trigger": "reply",
+  "memories": {
+    "M_bound": {
+      "content": "用户803不喜欢别人乱动他的桌面",
+      "type": "PREFERENCE",
+      "usage_tags": [
+        "BOUNDARY_PROTECTION"
+      ],
+      "visibility": "RESTRICTED",
+      "behavior_rule": "避免触碰用户803桌面物品相关话题"
+    },
+    "M_other": {
+      "content": "用户802和大家开玩笑没边界",
+      "type": "RELATION",
+      "user_id": 802,
+      "usage_tags": [
+        "HUMOR"
+      ],
+      "visibility": "OPEN"
+    }
+  },
+  "expected_behavior_memory": [
+    "M_bound"
+  ],
+  "forbidden_memory": [
+    "M_other"
+  ],
+  "notes": "跨用户+私享第三层：RESTRICTED 边界记忆进行为约束（Behavior Guard），802 的 OPEN 关系记忆在 803 的冲突模式里被用户级过滤挡住。"
+}

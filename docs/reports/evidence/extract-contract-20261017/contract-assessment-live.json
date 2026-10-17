@@ -1,0 +1,143 @@
+{
+  "artifact_kind": "extract-contract-live-assessment",
+  "captured_local_date": "2026-10-17",
+  "live": {
+    "endpoint": "http://127.0.0.1:8081",
+    "model": "qwen3.8-flash-next-iq2_xs"
+  },
+  "note": "第二遍 live 回放（与 replay-live-strata-postfix.json 各自独立实录，真模型非确定性）；临时库逐候选证据审核状态",
+  "counts": {
+    "candidates_total": 6,
+    "evidence_status_distribution": {
+      "accepted": 4
+    },
+    "candidates_with_accepted_evidence": 4,
+    "memories_total": 4
+  },
+  "candidates": [
+    {
+      "id": "fb7020c8b33140f682b2747ebd107820",
+      "user_id": "101",
+      "type": "FACT",
+      "content": "我住在杭州",
+      "confidence": 0.9,
+      "status": "CONFIRMED",
+      "evidence": [
+        {
+          "id": "8509f3ae0e454d49a5a8d7301913a72c",
+          "candidate_id": "fb7020c8b33140f682b2747ebd107820",
+          "verification_status": "accepted",
+          "fact_subject_key": "qq:101",
+          "assessment_reason": "",
+          "predicate_key": "profile.residence",
+          "statement_kind": "self_report",
+          "source_id": 1
+        }
+      ]
+    },
+    {
+      "id": "d6e524d565ab4bb88d2d1814b2ce161a",
+      "user_id": "101",
+      "type": "FACT",
+      "content": "我住在杭州",
+      "confidence": 0.95,
+      "status": "OBSERVING",
+      "evidence": []
+    },
+    {
+      "id": "f8400c80f3ac4c7ebda772d55d9c94b4",
+      "user_id": "101",
+      "type": "PREFERENCE",
+      "content": "我喜欢三分糖的奶茶",
+      "confidence": 0.9,
+      "status": "CONFIRMED",
+      "evidence": [
+        {
+          "id": "56f1ea8295c04c81a225301d3064e075",
+          "candidate_id": "f8400c80f3ac4c7ebda772d55d9c94b4",
+          "verification_status": "accepted",
+          "fact_subject_key": "qq:101",
+          "assessment_reason": "",
+          "predicate_key": "preference.general",
+          "statement_kind": "explicit_preference",
+          "source_id": 3
+        }
+      ]
+    },
+    {
+      "id": "5dd734bdd4c04dae93e145b3cddda42d",
+      "user_id": "101",
+      "type": "PREFERENCE",
+      "content": "我喜欢三分糖的奶茶",
+      "confidence": 0.9,
+      "status": "OBSERVING",
+      "evidence": []
+    },
+    {
+      "id": "c77eb66b95d841a59447c128fc7be100",
+      "user_id": "102",
+      "type": "PREFERENCE",
+      "content": "我喜欢周末去爬山",
+      "confidence": 0.9,
+      "status": "CONFIRMED",
+      "evidence": [
+        {
+          "id": "ae5e24fa90aa42dd844ebc3df6a21fc8",
+          "candidate_id": "c77eb66b95d841a59447c128fc7be100",
+          "verification_status": "accepted",
+          "fact_subject_key": "qq:102",
+          "assessment_reason": "",
+          "predicate_key": "preference.general",
+          "statement_kind": "explicit_preference",
+          "source_id": 4
+        }
+      ]
+    },
+    {
+      "id": "fb8ba8a50497460a8975978ce0c2b39e",
+      "user_id": "101",
+      "type": "FACT",
+      "content": "我叫小艾",
+      "confidence": 0.95,
+      "status": "CONFIRMED",
+      "evidence": [
+        {
+          "id": "8729dfd6887d447f8065344ed1bd72cd",
+          "candidate_id": "fb8ba8a50497460a8975978ce0c2b39e",
+          "verification_status": "accepted",
+          "fact_subject_key": "qq:101",
+          "assessment_reason": "",
+          "predicate_key": "profile.nickname",
+          "statement_kind": "self_report",
+          "source_id": 5
+        }
+      ]
+    }
+  ],
+  "memories": [
+    {
+      "user_id": "101",
+      "type": "FACT",
+      "content": "我住在杭州",
+      "status": "active"
+    },
+    {
+      "user_id": "101",
+      "type": "PREFERENCE",
+      "content": "我喜欢三分糖的奶茶",
+      "status": "active"
+    },
+    {
+      "user_id": "102",
+      "type": "PREFERENCE",
+      "content": "我喜欢周末去爬山",
+      "status": "active"
+    },
+    {
+      "user_id": "101",
+      "type": "FACT",
+      "content": "我叫小艾",
+      "status": "active"
+    }
+  ]
+}

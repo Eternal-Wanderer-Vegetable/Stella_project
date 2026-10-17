@@ -1,0 +1,11 @@
+{
+  "captured_local_date": "2026-10-17",
+  "artifact_kind": "memory-benchmark-report",
+  "metric_definitions_version": "1",
+  "artifacts": [
+    {
+      "path": "report.json",
+      "sha256": "027c6e977db6871ada370e68bdff358f3d5d4fe2673e19eadb3cd7ac48ef7c81"
+    }
+  ]
+}

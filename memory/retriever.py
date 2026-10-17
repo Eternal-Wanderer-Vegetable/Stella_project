@@ -240,11 +240,18 @@ def _rank_fallback_rows(
     return [memory for _, memory in scored[:limit]]
 
 
-def _segment_text(text: str) -> str:
-    """把原始文本转换成 FTS5 适合匹配的“词串”：中文按滑窗切 3/2 字片段，其余按 \\w+ 分词。
+def _tokenize(text: str) -> list[str]:
+    """核心分词：中文 2~8 字段按滑窗切片段（≤4 字整体保留，>4 字切 3/2 字滑窗），
+    其余按「非 CJK 的 \\w 词」切；dict.fromkeys 保序去重。
 
-    与 _extract_keywords 类似，但结果用于全文索引的 content 列（写入时）和 MATCH 查询词。
-    会去掉重复片段（dict.fromkeys 保序去重），避免同一词在索引里重复膨胀。
+    索引侧（_segment_text）与查询侧（_match_expression）必须共用这一份 token 列表——
+    两侧分词一旦漂移，MATCH 找的词索引里根本没有，检索就报废。
+
+    历史教训：这里曾直接 ``re.findall(r"\\w+", normalized)`` 补词，而 Python 的 \\w
+    含 CJK，会把整段连续中文当成一个 token——整段 token 与滑窗片段一起以空格连进
+    MATCH 后，FTS5 隐式 AND 要求文档含全部 token（含整段）→ 中文句子查询恒 0 命中
+    （a6431e4 起 2026-10-17 才定位）。现在非 CJK 词用 ``[^\\W\\u4e00-\u9fff]+`` 切，
+    中文只走滑窗片段。
     """
     normalized = normalize_text(text)
     segments = re.findall(r"[\u4e00-\u9fff]{2,8}", normalized)
@@ -256,8 +263,26 @@ def _segment_text(text: str) -> str:
             for size in (3, 2):
                 for i in range(len(seg) - size + 1):
                     tokens.append(seg[i : i + size])
-    tokens.extend(re.findall(r"\w+", normalized))
-    return " ".join(dict.fromkeys(tokens))
+    tokens.extend(re.findall(r"[^\W\u4e00-\u9fff]+", normalized))
+    return list(dict.fromkeys(tokens))
+
+
+def _segment_text(text: str) -> str:
+    """原始文本 → FTS5 索引词串（写入侧接口：token 空格连接）。
+
+    结果用于全文索引的 content 列（写入时）；查询侧不要用本函数拼 MATCH——
+    空格连接是隐式 AND，用 _match_expression 的 OR 表达式。
+    """
+    return " ".join(_tokenize(text))
+
+
+def _match_expression(text: str) -> str:
+    """查询文本 → FTS5 MATCH 表达式：token 带引号（防 AND/OR/NEAR 等保留字）
+    后以 OR 连接——任一片段命中即召回，相关性排序交给 bm25()。
+
+    空查询 / 纯标点返回空串，调用方必须据此跳过 MATCH（空表达式会 fts5 syntax error）。
+    """
+    return " OR ".join(f'"{token}"' for token in _tokenize(text) if token)
 
 
 def _ensure_fts_table(cursor: sqlite3.Cursor) -> bool:
@@ -349,8 +374,8 @@ def _query_rag_results(
 
     逻辑：
     1. 前置开关检查（RAG_ENABLED / RAG_SQLITE_FTS_ENABLED）不满足 → 返回空；
-    2. 确保索引存在（_ensure_fts_table 会处理旧版结构重建），并把查询也走一遍
-       _segment_text 得到 MATCH 词串；
+    2. 确保索引存在（_ensure_fts_table 会处理旧版结构重建），并把查询交给
+       _match_expression 生成 OR 连接的 MATCH 表达式；
     3. 若索引空 或 索引行数与 memories active 行数不一致 → 全量重建；
     4. 构造 JOIN 查询：先到 FTS 表（memories_fts f）匹配，再 JOIN 主表取完整字段，
        通过 include_user_id / exclude_user_id 控制是否限定具体用户；
@@ -370,8 +395,8 @@ def _query_rag_results(
     if not _ensure_fts_table(cursor):
         return []
 
-    query_tokens = _segment_text(query)
-    if not query_tokens:
+    query_expression = _match_expression(query)
+    if not query_expression:
         return []
 
     try:
@@ -383,7 +408,7 @@ def _query_rag_results(
             _rebuild_fts_index(cursor)
 
         query_sql = (
-            "SELECT m.content, m.user_id, m.type, "
+            "SELECT m.id, m.content, m.user_id, m.type, "
             "COALESCE(m.last_confirmed_at, m.last_accessed_at), m.importance, m.confidence "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
@@ -398,9 +423,34 @@ def _query_rag_results(
             params.append(exclude_user_id)
         # 注意：bm25() 必须传 FTS 表真实名（不能用别名），否则会报 "no such column"
         query_sql += "AND f.content MATCH ? ORDER BY bm25(memories_fts) LIMIT ?"
-        params.extend([query_tokens, limit])
+        params.extend([query_expression, limit])
 
-        return cursor.execute(query_sql, tuple(params)).fetchall()
+        fts_rows = cursor.execute(query_sql, tuple(params)).fetchall()
+        if not fts_rows:
+            return []
+        # FTS 命中不窄化候选池（2026-10-17）：OR 召回的行排在前（bm25 序），再并
+        # 入同一过滤条件下的新鲜度头部（按 id 去重）——只保留 FTS 行时池里只剩
+        # 「恰与查询共享分词片段」的记忆，竞争者变少会让旧值/干扰项更容易穿过
+        # 下游的 LIMIT 截断；并集 = FTS 未命中路径原本就会走的池，FTS 只增不减。
+        recency_sql = (
+            "SELECT id, content, user_id, type, "
+            "COALESCE(last_confirmed_at, last_accessed_at), importance, confidence "
+            "FROM memories WHERE group_shared_space = ? AND status = 'active' "
+        )
+        recency_params: list[Any] = [group_shared_space]
+        if include_user_id is not None:
+            recency_sql += "AND user_id = ? "
+            recency_params.append(include_user_id)
+        elif exclude_user_id is not None:
+            recency_sql += "AND user_id != ? "
+            recency_params.append(exclude_user_id)
+        recency_sql += "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC LIMIT ?"
+        recency_params.append(limit)
+        recency_rows = cursor.execute(recency_sql, tuple(recency_params)).fetchall()
+        seen_ids = {r[0] for r in fts_rows}
+        merged = list(fts_rows) + [r for r in recency_rows if r[0] not in seen_ids]
+        # 行形状回退到既有契约（content, user_id, type, …）：id 只用于并集去重
+        return [r[1:] for r in merged]
     except sqlite3.OperationalError as e:
         # FTS 查询静默降级成空结果会表现为「检索永远无命中」，必须留痕分级：
         # no such table → 索引未建（正常）；其余（如列名不匹配）→ warning

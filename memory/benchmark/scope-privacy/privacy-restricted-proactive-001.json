@@ -1,0 +1,37 @@
+{
+  "id": "privacy-restricted-proactive-001",
+  "scenario": {
+    "group_id": 8,
+    "user_id": 0
+  },
+  "input": "（主动找话题聊）",
+  "mode": "ACTIVE_JOIN",
+  "trigger": "proactive",
+  "memories": {
+    "M_pub": {
+      "content": "用户805最近在准备考试",
+      "type": "EVENT",
+      "user_id": 805,
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "OPEN"
+    },
+    "M_secret": {
+      "content": "用户805的病史记录",
+      "type": "FACT",
+      "user_id": 805,
+      "usage_tags": [
+        "TOPIC_CONTINUE"
+      ],
+      "visibility": "RESTRICTED"
+    }
+  },
+  "expected_memory": [
+    "M_pub"
+  ],
+  "forbidden_memory": [
+    "M_secret"
+  ],
+  "notes": "proactive 全空间取候选时同样执行 visibility 预过滤：RESTRICTED 病史绝不进话题素材。"
+}
