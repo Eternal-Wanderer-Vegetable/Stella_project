@@ -2,9 +2,9 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-16 (Asia/Shanghai)
-**Active Feature:** none; `fix/reply-envelope-multicurrent` 分支已交付回复协议多 current 兜底修复（A+B），等待用户重启 bot 做 QQ 灰度观测
-**Scope:** 修复「我没看明白这条结构化回复」兜底：模型重复 `<current>` 表达多段被解析器整体拒绝。方案 A 协议提示词补单槽换行规范；方案 B 解析器按换行合并重复裸 current（带属性仍拒）。
+**Last Updated:** 2026-10-17 (Asia/Shanghai)
+**Active Feature:** FTS 中文检索修复已在 `feat/memory-benchmark-suite` 落地 5 提交（80da1b0..88eadeb）并全部验收通过；分支待用户审阅合并（未推送）。
+**Scope:** 计划 [2026-10-17-gitnexus-plan-fts-chinese-or-retrieval.md](docs/plans/2026-10-17-gitnexus-plan-fts-chinese-or-retrieval.md) 全量实施：分词去整段 CJK token、MATCH 改 OR、migrate_v20 存量重灌、native 合同升 20、FTS 命中不窄化候选池。详情见 [实施报告](docs/reports/2026-10-17-fts-chinese-or-retrieval-implementation.md)。
 
 ## What's Done
 
@@ -127,3 +127,11 @@
 - 根因链：`_segment_text` 的 `re.findall(r"\w+", normalized)` 在 Unicode 语义下把**整段连续中文（即整条查询串）当一个 token**；FTS5 MATCH 空格连接 = 隐式 AND；文档索引只含文档自身整串 token → 查询整串 token 永不命中 → AND 恒假。逐 token 实证：「有什么游戏推荐吗」14 个 token 文档缺 13 个，唯一命中的只有「游戏」；只有 ≤4 字且恰为文档滑窗片段的查询才能命中（「游戏」AND=2 正常）。生产句子查询恒 0。
 - 影响面：`retrieval_v2._fetch_candidates`（生产检索主路，RAG_ENABLED 默认 true）与 `retriever._query_rag_results`（RAG 主路径）两条 FTS 路径全部失效 → BM25 相关性从未生效，检索总是回退新鲜度排序，且每次检索白付一次 FTS 查询。
 - 修复实证（内存 FTS5 模拟）：仅修分词（`\w+` 排除 CJK，滑窗保留）AND 仍 0（13 个滑窗 token 全要命中——**AND 对滑窗分词本质不可用**）；分词修复 + MATCH 改 OR 可真实召回（bm25 排序），但 OR 的 bm25 在短文档上区分度有限（-0.0 平坦），实施时需配 bm25 调权或最小长度过滤。native 检索不实现 FTS → parity 无影响。建议立小课题实施（retriever.py + retrieval_v2.py 两处 MATCH 构造 + 分词函数，附四模式矩阵回归）。
+
+### FTS 中文检索修复实施 — 2026-10-17（续二）
+
+- 计划 `2026-10-17-gitnexus-plan-fts-chinese-or-retrieval.md` 全量实施，5 提交于 `feat/memory-benchmark-suite`：`80da1b0`（分词 `_tokenize` 去 `\w+` 整段 CJK token + `_match_expression` OR 表达式 + 两查询点切换 + 11 例新测）、`d042c04`（migrate_v20 重灌存量索引 + SCHEMA_VERSION 20 + native 合同同步升 20 + .pyd 重编译 + 基准 native 标记改打 MEMORY_SCHEMA_VERSION）、`a180636`+`d6d20e1` 内含两次 flow manifest 重生成、`d6d20e1`（FTS 命中不窄化候选池并集语义三处同源 + 基准 FTS 空间暗伤修复）、`88eadeb`（实施报告 + 证据）。
+- **计划偏差四项（全部有实证记录于报告 §1）**：① migrate_v17 编号过时（v17-v19 已存在）→ v20；② 「native 不实现 FTS」不成立——`load_fts_candidates` 直绑原始查询串同样恒 0 行，已改 OR 表达式并连带合同升 20（native 门禁按库 schema_meta 严格相等放行，不升会让 native 拒读新库）；③ 「Selection 兜底」不足——OR 后 forbidden 硬零 0→9.1%，根因是 FTS 池窄化，改为「FTS 命中不窄化候选池」（bm25 头 + 新鲜度头部并集，Python 双路径 + native 三处同源）；④ 基准 `_populate_fts_index` 空间默认空串 vs memories 行默认 group_id 的暗伤（AND 恒假时代被掩盖）。
+- **验收**：fts 模式基准 100/101（唯一失败=基线记录的既有 rank-casual-001）、forbidden 0.0%、`retrieval_path` 65 行/101 查询（修复前恒 0）；四模式矩阵逐位对齐 2026-10-16 旧矩阵，rule/embedding parity 101/101；冻结基线零容差通过；bm25 默认列权经 rank 裁决保留。全量 pytest **3763 passed / 17 skipped**；cargo test 22/22；ruff/check_docs/flow-manifest 门禁过；detect_changes scope=all：代码符号零重叠（唯一非符号差异=上一会话遗留的 live-20261017.json 重录件，未随本批提交）。
+- 本机 `_native.pyd` 已重编译到合同 20（gitignore 产物）；**发布注意事项**：release wheel 须重编，升级过渡期旧 .pyd 遇 schema 20 库会拒绝并回退 python（auto 模式）。
+- NOT READY：QQ 真机灰度（随下次启动迁移自动重灌存量索引，观察检索命中即可）；native `fts_text` 与 Python `_tokenize` 的 ≤4 字段/`{2,8}` 分块既有分歧留后续小课题（报告 §6）。
