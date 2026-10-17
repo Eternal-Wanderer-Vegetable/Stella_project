@@ -1,13 +1,25 @@
 # Session Handoff
 
-## Current Session — LinkMonitor dependency injection fix
+## Completed Session — PR #113 CI repair
 
-用户要求修复开发环境同步提交后出现的 `link_monitor` 加载错误，并开新 PR。当前分支 `codex/link-monitor-event-injection-fix`，从 `origin/main@d136c90` 创建。原因是 NoneBot 注册 `@event_preprocessor` 时按 `Bot` / `Event` 类型做参数解析，`Any` 不受支持；源码签名已改为 `bot: Bot, event: Event`，并增加对 `Dependent.parse(..., EVENT_PCS_PARAMS)` 的回归测试。PR [#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114) 已开放；CI run `39702521767` 对 head `5df7ca5` 的结论为 success，Python 3.10/3.11/3.12 及全部其它 jobs 通过。
+用户要求检查 PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) 的 CI、修复失败，并将提交信息改成英文。任务已完成：分支 `codex/memory-envelope-fallback-followup` 已基于 `main@386b46f` 更新，提交标题为 `fix(memory): simplify invalid reply envelope fallback`。
+
+- Root cause：原 CI run `39699060445` 的 `flow-manifest` 和 Python 3.10/3.11/3.12 均因 `TestDriftGate.test_committed_manifest_matches_source` 失败。语义漂移是 `cometa.claim` 与 `post.parse` 正文指纹变化、拓扑不变；PR 的 `parse_output` 文案更新使 `post.parse` 指纹变化，基线上还存在 `cometa.claim` 漂移。
+- Fix：运行生成器并提交 `core/observability/flows/message-flow.982a65f5aef2.json`。`uv run --python 3.12.14 --no-project -- python scripts/generate_message_flow.py --check` 与 hosted `flow-manifest` 通过。
+- Hosted verification：run `39707392594` 成功。Python 3.10 / 3.11 / 3.12 各为 4,017 passed / 29 skipped；flow-closure、Dashboard build、security、CLI、Windows native reliability、benchmark、documentation 与 lint 均通过。
+- Local verification：Python 3.12.14 全量 4,014 passed / 29 skipped / 2 failed / 5 warnings。失败的 Cometa single-owner 与 WebUI OneBot config 用例各自在独立临时 `STELLA_HOME` 下单跑 1 passed；将本地全量失败保留为未确认的顺序/共享状态稳定性观察。全仓 Ruff、文档门禁（119 files / 1247 links / 577 anchors / 0 errors）、flow `--check`、JSON 和 diff checks 通过。
+- Impact：`parse_output` upstream impact UNKNOWN / 0 edges；已在源码确认 `ai_gateway.py` 的动态 post-hook 注册及 runtime、回放、评估引用。文件级 impact LOW（7 个影响文件 / 3 个直接导入）。GitNexus 索引 sibling-worktree 提示和流程提取预算截断均已记录；manifest JSON 使用 Git 与 flow 门禁核验。
+- Files：`memory/post_processors.py`、legacy trace fixture、generated message-flow archive、`feature_list.json`、`progress.md`、`session-handoff.md`。
+- Blockers：本任务无 PR scoped CI blocker；PR 保持 open 等待 review / merge。真实平台、模型与干净 VM 验收不在本任务范围内。
+
+## Previous Handoff — LinkMonitor dependency injection fix
+
+用户要求修复开发环境同步提交后出现的 `link_monitor` 加载错误，并开新 PR。当前分支 `codex/link-monitor-event-injection-fix`，从 `origin/main@d136c90` 创建。原因是 NoneBot 注册 `@event_preprocessor` 时按 `Bot` / `Event` 类型做参数解析，`Any` 不受支持；源码签名已改为 `bot: Bot, event: Event`，并增加对 `Dependent.parse(..., EVENT_PCS_PARAMS)` 的回归测试。PR [#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114) 已合入 `main@386b46f`；CI run `39702521767` 对 head `5df7ca5` 的结论为 success，Python 3.10/3.11/3.12 及全部其它 jobs 通过。
 
 - Files：`extensions/link_monitor/__init__.py`、`tests/test_link_monitor.py`。
 - GitNexus：索引 commit `f5e6a64` 与当前 `d136c90` tree 内容一致；目标 upstream impact `UNKNOWN / 0`，原因是 NoneBot 装饰器动态注册，已从源码确认注册点。提交前 `all` 与 `compare main` 均为 5 files / 8 symbols / 0 processes / LOW，无 partial/truncated。
 - Verification：`tests/test_link_monitor.py` 12 passed；全仓 Ruff、改动文件 `py_compile`、docs（119 files / 1248 links / 577 anchors / 0 errors）、message-flow `--check`、diff check 均通过。全量 pytest 4014 passed / 29 skipped / 3 failed；失败为一个 memory-flow lifecycle 与两个 WebUI auth 用例，各自隔离重跑均通过，顺序/共享状态根因未确认。测试使用 `/tmp` 隔离 `STELLA_HOME`，未启动真实 Bot、平台或访问用户数据库。
-- Next：PR #114 等待 review/merge。全量 pytest 的三个顺序失败各自单测通过，但其共享状态/顺序根因尚未确认；当前本地全量仍按 4014 passed / 29 skipped / 3 failures 如实记录。
+- Next：PR #114 已合入 `main@386b46f`。全量 pytest 的三个顺序失败各自单测通过，但其共享状态/顺序根因尚未确认；当前本地全量仍按 4014 passed / 29 skipped / 3 failures 如实记录。
 
 ## Previous Session — Gravitas implementation
 

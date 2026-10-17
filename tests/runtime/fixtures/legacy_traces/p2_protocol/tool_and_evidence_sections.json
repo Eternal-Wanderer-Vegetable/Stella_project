@@ -31,9 +31,9 @@
     "raw_output": "<thought>有手册</thought><action>NONE</action><reply>每日全量备份<ref>1</ref></reply>",
     "thought": "",
     "action": "NONE",
-    "reply": "我没看明白这条结构化回复，能换个说法再问一次吗？",
+    "reply": "？",
     "lines": [
-      "我没看明白这条结构化回复，能换个说法再问一次吗？"
+      "？"
     ],
     "pre_hooks_run": [],
     "post_hooks_run": [

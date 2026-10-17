@@ -67,7 +67,7 @@ async def parse_output(ctx: ChatContext) -> ChatContext:
         ctx.typed_reply_error = error or "invalid_reply_envelope"
         ctx.thought = ""
         ctx.action = "NONE"
-        ctx.reply = "我没看明白这条结构化回复，能换个说法再问一次吗？"
+        ctx.reply = "？"
         ctx.reply_segments = [ctx.reply]
         ctx.reply_disposition = "fallback"
         ctx.delivery_source_kind = "trusted-server-fallback"
