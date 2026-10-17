@@ -90,3 +90,11 @@
 - 验证：3750 passed / 17 skipped；ruff（tracked）全过；check_docs 0 errors；message-flow --check 过。证据：docs/reports/evidence/memory-benchmark-20261016/。
 - NOT READY / Next：① live 回放真模型验证+录制（需 CONSOLIDATION 端点）；② embedding fixture 重建（覆盖 101 例后 embedding/hybrid 全量可评；本机 1234/8081 均不可达）；③ FTS 恒 0 命中=生产检索真实缺陷候选，建议另立课题；④ 本机 `_native.pyd` 已用 cargo 重建为 API 3（未跟踪文件，仓库只存源码，CI 走 release-memory-rust.yml）。
 - 本机环境备注：huggingface.co 主站 API 不稳定但 resolve 端点可用，fetch 脚本带 HF_ENDPOINT/hf-mirror 回落；GitNexus CLI registry 仍损坏（调用方清点用文本检索兜底，本特性未做上游 impact——计划 §4/§5 已带 GitNexus 证据）。
+
+## Session Handoff — 真模型验收第一轮 (2026-10-17)
+
+- 生产双模型实测：Strata 8081（qwen3.8-flash-next-iq2_xs，CONSOLIDATION 角色）+ LM Studio 1234（qwen3-embedding-0.6b）。**本机系统代理（7890）劫持 127.0.0.1**（502 假象）——所有直连脚本必须 `NO_PROXY=127.0.0.1,localhost`。
+- 交付：embedding fixture 重建（259 向量 101/101 全覆盖）；真实向量四模式矩阵 parity 全 101/101、硬零保持、embedding/hybrid 101/101；live 回放真模型打通并录制（`recorded/live-20261017.json`）；基线重生成（recency 列修复后）。
+- **用户需知的生产发现**：`LLM_ROLE_EXTRACT_ENDPOINT=CHAT` 而 online 槽 base_url 为空 → 阶段2 契约提取回退，候选 verification=unknown **永不晋升**（live 回放 promotion/qa=0% 的根因）。启用完整晋升链路需给 CHAT 或 MEMORY 槽配可用端点（配置决策在用户，未擅自改 .env）。
+- 修复：M1 用例补 `last_confirmed_at_offset_minutes`（15 文件，recency 判别此前未生效，真实 embedding 下 7 例旧值激活踩硬零）。
+- 提交：真模型验收 commit（fixture/用例修复/基线/live 证据/双语文档/progress）。 NOT READY 余项：无（两大 NOT READY 均已闭环；FTS 恒 0 命中与 EXTRACT 配置为移交给用户的生产课题）。
