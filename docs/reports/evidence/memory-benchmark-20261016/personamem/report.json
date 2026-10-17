@@ -2,13 +2,13 @@
   "fingerprint_components": {
     "backend": "python",
     "clock_anchor": "2026-08-09 12:00:00",
-    "code_version": "fdcdb88",
-    "dataset_sha256": "76baea4add63abce233c94665339b47b9449743a5a6b426dd88c865c2d5ee16d",
+    "code_version": "684d38b",
+    "dataset_sha256": "b94bda1296ad9a3cabaa8e16c0acaf522cf9d4150db0c94265570f9d0c5259c6",
     "metric_definitions_version": "1",
     "retrieval_mode": "rule",
     "source_digest": "77883aeff24cb82a7456e243c1ae0d4669f5988fea0f01d8ee7a22606f90adbf"
   },
-  "generated_at": "2026-10-16T17:45:22+00:00",
+  "generated_at": "2026-10-17T02:34:29+00:00",
   "metric_definitions_version": "1",
   "metrics": {
     "behavior_guard_hit_rate": 0.0,
@@ -44,10 +44,10 @@
       "embedding_service": null,
       "embedding_service_note": "not probed（如需记录请运行 scripts/probe_embedding.py 并回填）",
       "retrieval_latency_ms": {
-        "mean": 20.7665,
-        "p50": 17.431,
-        "p95": 21.7955,
-        "p99": 87.3249,
+        "mean": 18.5187,
+        "p50": 17.032,
+        "p95": 20.6523,
+        "p99": 28.288,
         "samples": 200
       }
     },
@@ -442,7 +442,7 @@
         "PREF"
       ],
       "id": "pm-p10-r1446",
-      "latency_ms": 28.576,
+      "latency_ms": 28.045,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -548,7 +548,7 @@
         "PREF"
       ],
       "id": "pm-p10-r1447",
-      "latency_ms": 18.273,
+      "latency_ms": 16.649,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -654,7 +654,7 @@
         "PREF"
       ],
       "id": "pm-p10-r1458",
-      "latency_ms": 17.471,
+      "latency_ms": 16.115,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -762,7 +762,7 @@
         "PREF"
       ],
       "id": "pm-p107-r1770",
-      "latency_ms": 17.674,
+      "latency_ms": 16.236,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -870,7 +870,7 @@
         "PREF"
       ],
       "id": "pm-p110-r4389",
-      "latency_ms": 17.448,
+      "latency_ms": 17.165,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -976,7 +976,7 @@
         "PREF"
       ],
       "id": "pm-p120-r3456",
-      "latency_ms": 16.635,
+      "latency_ms": 17.354,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1082,7 +1082,7 @@
         "PREF"
       ],
       "id": "pm-p136-r244",
-      "latency_ms": 17.629,
+      "latency_ms": 17.183,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1188,7 +1188,7 @@
         "PREF"
       ],
       "id": "pm-p139-r823",
-      "latency_ms": 17.151,
+      "latency_ms": 16.888,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1294,7 +1294,7 @@
         "PREF"
       ],
       "id": "pm-p158-r3833",
-      "latency_ms": 18.068,
+      "latency_ms": 16.348,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1400,7 +1400,7 @@
         "PREF"
       ],
       "id": "pm-p168-r2737",
-      "latency_ms": 16.917,
+      "latency_ms": 16.404,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1506,7 +1506,7 @@
         "PREF"
       ],
       "id": "pm-p168-r2752",
-      "latency_ms": 17.378,
+      "latency_ms": 16.672,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1612,7 +1612,7 @@
         "PREF"
       ],
       "id": "pm-p174-r571",
-      "latency_ms": 17.171,
+      "latency_ms": 16.473,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1718,7 +1718,7 @@
         "PREF"
       ],
       "id": "pm-p184-r2960",
-      "latency_ms": 18.246,
+      "latency_ms": 16.732,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1824,7 +1824,7 @@
         "PREF"
       ],
       "id": "pm-p184-r2964",
-      "latency_ms": 18.151,
+      "latency_ms": 16.36,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -1932,7 +1932,7 @@
         "PREF"
       ],
       "id": "pm-p198-r920",
-      "latency_ms": 17.979,
+      "latency_ms": 16.465,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2038,7 +2038,7 @@
         "PREF"
       ],
       "id": "pm-p198-r921",
-      "latency_ms": 18.132,
+      "latency_ms": 17.513,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2144,7 +2144,7 @@
         "PREF"
       ],
       "id": "pm-p199-r4878",
-      "latency_ms": 18.473,
+      "latency_ms": 16.862,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2250,7 +2250,7 @@
         "PREF"
       ],
       "id": "pm-p209-r1592",
-      "latency_ms": 18.702,
+      "latency_ms": 16.31,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2356,7 +2356,7 @@
         "PREF"
       ],
       "id": "pm-p210-r637",
-      "latency_ms": 16.51,
+      "latency_ms": 17.738,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2462,7 +2462,7 @@
         "PREF"
       ],
       "id": "pm-p213-r4888",
-      "latency_ms": 17.155,
+      "latency_ms": 16.792,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2570,7 +2570,7 @@
         "PREF"
       ],
       "id": "pm-p213-r4899",
-      "latency_ms": 17.313,
+      "latency_ms": 16.519,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2676,7 +2676,7 @@
         "PREF"
       ],
       "id": "pm-p215-r3481",
-      "latency_ms": 17.411,
+      "latency_ms": 16.856,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2782,7 +2782,7 @@
         "PREF"
       ],
       "id": "pm-p218-r2365",
-      "latency_ms": 17.45,
+      "latency_ms": 17.175,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2888,7 +2888,7 @@
         "PREF"
       ],
       "id": "pm-p221-r1468",
-      "latency_ms": 19.213,
+      "latency_ms": 16.507,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -2994,7 +2994,7 @@
         "PREF"
       ],
       "id": "pm-p235-r662",
-      "latency_ms": 17.487,
+      "latency_ms": 16.525,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3100,7 +3100,7 @@
         "PREF"
       ],
       "id": "pm-p237-r3141",
-      "latency_ms": 17.599,
+      "latency_ms": 16.24,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3208,7 +3208,7 @@
         "PREF"
       ],
       "id": "pm-p237-r3142",
-      "latency_ms": 17.207,
+      "latency_ms": 16.352,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3314,7 +3314,7 @@
         "PREF"
       ],
       "id": "pm-p237-r3147",
-      "latency_ms": 17.083,
+      "latency_ms": 16.471,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3420,7 +3420,7 @@
         "PREF"
       ],
       "id": "pm-p237-r3154",
-      "latency_ms": 17.397,
+      "latency_ms": 15.581,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3528,7 +3528,7 @@
         "PREF"
       ],
       "id": "pm-p247-r3589",
-      "latency_ms": 17.863,
+      "latency_ms": 15.935,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3634,7 +3634,7 @@
         "PREF"
       ],
       "id": "pm-p254-r4487",
-      "latency_ms": 16.844,
+      "latency_ms": 17.338,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3742,7 +3742,7 @@
         "PREF"
       ],
       "id": "pm-p254-r4501",
-      "latency_ms": 16.361,
+      "latency_ms": 16.377,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3848,7 +3848,7 @@
         "PREF"
       ],
       "id": "pm-p265-r3336",
-      "latency_ms": 16.807,
+      "latency_ms": 16.086,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -3956,7 +3956,7 @@
         "PREF"
       ],
       "id": "pm-p275-r2087",
-      "latency_ms": 15.975,
+      "latency_ms": 18.307,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4062,7 +4062,7 @@
         "PREF"
       ],
       "id": "pm-p277-r1149",
-      "latency_ms": 16.132,
+      "latency_ms": 18.255,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4170,7 +4170,7 @@
         "PREF"
       ],
       "id": "pm-p281-r3641",
-      "latency_ms": 16.791,
+      "latency_ms": 16.227,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4276,7 +4276,7 @@
         "PREF"
       ],
       "id": "pm-p296-r1517",
-      "latency_ms": 16.52,
+      "latency_ms": 16.006,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4384,7 +4384,7 @@
         "PREF"
       ],
       "id": "pm-p298-r4241",
-      "latency_ms": 17.068,
+      "latency_ms": 19.238,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4490,7 +4490,7 @@
         "PREF"
       ],
       "id": "pm-p299-r1121",
-      "latency_ms": 17.744,
+      "latency_ms": 19.755,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4598,7 +4598,7 @@
         "PREF"
       ],
       "id": "pm-p309-r3968",
-      "latency_ms": 16.73,
+      "latency_ms": 16.885,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4704,7 +4704,7 @@
         "PREF"
       ],
       "id": "pm-p309-r3973",
-      "latency_ms": 16.681,
+      "latency_ms": 16.367,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4810,7 +4810,7 @@
         "PREF"
       ],
       "id": "pm-p310-r4310",
-      "latency_ms": 16.471,
+      "latency_ms": 19.031,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -4916,7 +4916,7 @@
         "PREF"
       ],
       "id": "pm-p319-r523",
-      "latency_ms": 20.695,
+      "latency_ms": 18.048,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5022,7 +5022,7 @@
         "PREF"
       ],
       "id": "pm-p321-r3780",
-      "latency_ms": 17.939,
+      "latency_ms": 16.567,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5130,7 +5130,7 @@
         "PREF"
       ],
       "id": "pm-p321-r3782",
-      "latency_ms": 21.767,
+      "latency_ms": 17.513,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5236,7 +5236,7 @@
         "PREF"
       ],
       "id": "pm-p327-r2255",
-      "latency_ms": 20.569,
+      "latency_ms": 20.61,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5342,7 +5342,7 @@
         "PREF"
       ],
       "id": "pm-p346-r788",
-      "latency_ms": 18.647,
+      "latency_ms": 18.6,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5450,7 +5450,7 @@
         "PREF"
       ],
       "id": "pm-p351-r2547",
-      "latency_ms": 17.886,
+      "latency_ms": 17.711,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5556,7 +5556,7 @@
         "PREF"
       ],
       "id": "pm-p351-r2548",
-      "latency_ms": 22.45,
+      "latency_ms": 20.342,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5662,7 +5662,7 @@
         "PREF"
       ],
       "id": "pm-p361-r4334",
-      "latency_ms": 20.175,
+      "latency_ms": 20.367,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5770,7 +5770,7 @@
         "PREF"
       ],
       "id": "pm-p370-r883",
-      "latency_ms": 17.015,
+      "latency_ms": 17.784,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5876,7 +5876,7 @@
         "PREF"
       ],
       "id": "pm-p377-r4625",
-      "latency_ms": 16.473,
+      "latency_ms": 18.487,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -5982,7 +5982,7 @@
         "PREF"
       ],
       "id": "pm-p382-r2265",
-      "latency_ms": 18.779,
+      "latency_ms": 20.117,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6088,7 +6088,7 @@
         "PREF"
       ],
       "id": "pm-p382-r2272",
-      "latency_ms": 17.547,
+      "latency_ms": 19.079,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6196,7 +6196,7 @@
         "PREF"
       ],
       "id": "pm-p39-r1934",
-      "latency_ms": 16.68,
+      "latency_ms": 16.634,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6302,7 +6302,7 @@
         "PREF"
       ],
       "id": "pm-p411-r128",
-      "latency_ms": 16.387,
+      "latency_ms": 16.927,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6408,7 +6408,7 @@
         "PREF"
       ],
       "id": "pm-p429-r3867",
-      "latency_ms": 20.566,
+      "latency_ms": 19.273,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6514,7 +6514,7 @@
         "PREF"
       ],
       "id": "pm-p429-r3886",
-      "latency_ms": 17.505,
+      "latency_ms": 18.244,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6622,7 +6622,7 @@
         "PREF"
       ],
       "id": "pm-p432-r2924",
-      "latency_ms": 17.142,
+      "latency_ms": 16.441,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6728,7 +6728,7 @@
         "PREF"
       ],
       "id": "pm-p436-r2403",
-      "latency_ms": 18.719,
+      "latency_ms": 17.092,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6834,7 +6834,7 @@
         "PREF"
       ],
       "id": "pm-p436-r2406",
-      "latency_ms": 19.688,
+      "latency_ms": 22.394,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6940,7 +6940,7 @@
         "PREF"
       ],
       "id": "pm-p439-r1245",
-      "latency_ms": 19.506,
+      "latency_ms": 17.911,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7046,7 +7046,7 @@
         "PREF"
       ],
       "id": "pm-p451-r2294",
-      "latency_ms": 17.222,
+      "latency_ms": 17.308,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7154,7 +7154,7 @@
         "PREF"
       ],
       "id": "pm-p451-r2308",
-      "latency_ms": 23.348,
+      "latency_ms": 18.375,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7262,7 +7262,7 @@
         "PREF"
       ],
       "id": "pm-p479-r4366",
-      "latency_ms": 23.565,
+      "latency_ms": 17.831,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7368,7 +7368,7 @@
         "PREF"
       ],
       "id": "pm-p521-r3",
-      "latency_ms": 20.36,
+      "latency_ms": 17.759,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7474,7 +7474,7 @@
         "PREF"
       ],
       "id": "pm-p528-r2795",
-      "latency_ms": 21.551,
+      "latency_ms": 18.224,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7580,7 +7580,7 @@
         "PREF"
       ],
       "id": "pm-p529-r3373",
-      "latency_ms": 23.904,
+      "latency_ms": 20.732,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7686,7 +7686,7 @@
         "PREF"
       ],
       "id": "pm-p529-r3391",
-      "latency_ms": 20.435,
+      "latency_ms": 19.353,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7794,7 +7794,7 @@
         "PREF"
       ],
       "id": "pm-p54-r1546",
-      "latency_ms": 17.96,
+      "latency_ms": 17.901,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7900,7 +7900,7 @@
         "PREF"
       ],
       "id": "pm-p54-r1548",
-      "latency_ms": 17.611,
+      "latency_ms": 18.432,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8008,7 +8008,7 @@
         "PREF"
       ],
       "id": "pm-p542-r1556",
-      "latency_ms": 16.88,
+      "latency_ms": 185.851,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8114,7 +8114,7 @@
         "PREF"
       ],
       "id": "pm-p543-r1741",
-      "latency_ms": 17.546,
+      "latency_ms": 52.348,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8220,7 +8220,7 @@
         "PREF"
       ],
       "id": "pm-p543-r1747",
-      "latency_ms": 17.436,
+      "latency_ms": 17.834,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8328,7 +8328,7 @@
         "PREF"
       ],
       "id": "pm-p548-r2136",
-      "latency_ms": 18.283,
+      "latency_ms": 17.93,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8434,7 +8434,7 @@
         "PREF"
       ],
       "id": "pm-p548-r2145",
-      "latency_ms": 172.355,
+      "latency_ms": 17.365,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8540,7 +8540,7 @@
         "PREF"
       ],
       "id": "pm-p549-r548",
-      "latency_ms": 67.923,
+      "latency_ms": 18.015,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8648,7 +8648,7 @@
         "PREF"
       ],
       "id": "pm-p55-r3407",
-      "latency_ms": 16.885,
+      "latency_ms": 18.8,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8756,7 +8756,7 @@
         "PREF"
       ],
       "id": "pm-p55-r3410",
-      "latency_ms": 17.875,
+      "latency_ms": 18.437,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8864,7 +8864,7 @@
         "PREF"
       ],
       "id": "pm-p570-r1284",
-      "latency_ms": 17.297,
+      "latency_ms": 16.344,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -8972,7 +8972,7 @@
         "PREF"
       ],
       "id": "pm-p570-r1290",
-      "latency_ms": 16.424,
+      "latency_ms": 16.431,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9078,7 +9078,7 @@
         "PREF"
       ],
       "id": "pm-p583-r3186",
-      "latency_ms": 16.853,
+      "latency_ms": 18.949,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9184,7 +9184,7 @@
         "PREF"
       ],
       "id": "pm-p584-r950",
-      "latency_ms": 17.241,
+      "latency_ms": 17.685,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9292,7 +9292,7 @@
         "PREF"
       ],
       "id": "pm-p589-r1959",
-      "latency_ms": 16.48,
+      "latency_ms": 17.23,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9398,7 +9398,7 @@
         "PREF"
       ],
       "id": "pm-p59-r1006",
-      "latency_ms": 16.566,
+      "latency_ms": 17.876,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9504,7 +9504,7 @@
         "PREF"
       ],
       "id": "pm-p59-r1014",
-      "latency_ms": 17.276,
+      "latency_ms": 16.955,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9612,7 +9612,7 @@
         "PREF"
       ],
       "id": "pm-p595-r4067",
-      "latency_ms": 17.17,
+      "latency_ms": 17.228,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9718,7 +9718,7 @@
         "PREF"
       ],
       "id": "pm-p599-r3284",
-      "latency_ms": 16.332,
+      "latency_ms": 17.567,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9824,7 +9824,7 @@
         "PREF"
       ],
       "id": "pm-p599-r3285",
-      "latency_ms": 16.559,
+      "latency_ms": 15.607,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -9930,7 +9930,7 @@
         "PREF"
       ],
       "id": "pm-p599-r3297",
-      "latency_ms": 17.736,
+      "latency_ms": 16.322,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10038,7 +10038,7 @@
         "PREF"
       ],
       "id": "pm-p601-r1196",
-      "latency_ms": 17.728,
+      "latency_ms": 15.734,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10146,7 +10146,7 @@
         "PREF"
       ],
       "id": "pm-p601-r1206",
-      "latency_ms": 17.383,
+      "latency_ms": 17.206,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10252,7 +10252,7 @@
         "PREF"
       ],
       "id": "pm-p617-r1415",
-      "latency_ms": 17.708,
+      "latency_ms": 16.051,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10358,7 +10358,7 @@
         "PREF"
       ],
       "id": "pm-p617-r1430",
-      "latency_ms": 17.484,
+      "latency_ms": 16.619,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10464,7 +10464,7 @@
         "PREF"
       ],
       "id": "pm-p626-r177",
-      "latency_ms": 16.682,
+      "latency_ms": 16.121,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10572,7 +10572,7 @@
         "PREF"
       ],
       "id": "pm-p63-r2467",
-      "latency_ms": 18.636,
+      "latency_ms": 17.381,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10678,7 +10678,7 @@
         "PREF"
       ],
       "id": "pm-p63-r2481",
-      "latency_ms": 20.956,
+      "latency_ms": 16.68,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10786,7 +10786,7 @@
         "PREF"
       ],
       "id": "pm-p635-r2622",
-      "latency_ms": 17.555,
+      "latency_ms": 16.496,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -10892,7 +10892,7 @@
         "PREF"
       ],
       "id": "pm-p635-r2644",
-      "latency_ms": 16.543,
+      "latency_ms": 16.481,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11000,7 +11000,7 @@
         "PREF"
       ],
       "id": "pm-p636-r336",
-      "latency_ms": 16.839,
+      "latency_ms": 16.655,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11106,7 +11106,7 @@
         "PREF"
       ],
       "id": "pm-p643-r3793",
-      "latency_ms": 17.723,
+      "latency_ms": 16.36,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11214,7 +11214,7 @@
         "PREF"
       ],
       "id": "pm-p650-r4156",
-      "latency_ms": 17.162,
+      "latency_ms": 16.46,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11320,7 +11320,7 @@
         "PREF"
       ],
       "id": "pm-p650-r4166",
-      "latency_ms": 16.311,
+      "latency_ms": 16.879,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11426,7 +11426,7 @@
         "PREF"
       ],
       "id": "pm-p652-r1904",
-      "latency_ms": 17.044,
+      "latency_ms": 17.08,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11534,7 +11534,7 @@
         "PREF"
       ],
       "id": "pm-p656-r4853",
-      "latency_ms": 18.169,
+      "latency_ms": 15.874,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11640,7 +11640,7 @@
         "PREF"
       ],
       "id": "pm-p656-r4854",
-      "latency_ms": 16.566,
+      "latency_ms": 15.953,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11746,7 +11746,7 @@
         "PREF"
       ],
       "id": "pm-p66-r2048",
-      "latency_ms": 16.909,
+      "latency_ms": 17.977,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11852,7 +11852,7 @@
         "PREF"
       ],
       "id": "pm-p66-r2053",
-      "latency_ms": 18.786,
+      "latency_ms": 16.67,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -11958,7 +11958,7 @@
         "PREF"
       ],
       "id": "pm-p660-r86",
-      "latency_ms": 15.416,
+      "latency_ms": 16.595,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12064,7 +12064,7 @@
         "PREF"
       ],
       "id": "pm-p668-r4225",
-      "latency_ms": 16.627,
+      "latency_ms": 16.488,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12170,7 +12170,7 @@
         "PREF"
       ],
       "id": "pm-p668-r4231",
-      "latency_ms": 17.426,
+      "latency_ms": 20.074,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12276,7 +12276,7 @@
         "PREF"
       ],
       "id": "pm-p668-r4235",
-      "latency_ms": 17.543,
+      "latency_ms": 16.678,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12382,7 +12382,7 @@
         "PREF"
       ],
       "id": "pm-p670-r4592",
-      "latency_ms": 16.369,
+      "latency_ms": 16.413,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12490,7 +12490,7 @@
         "PREF"
       ],
       "id": "pm-p677-r4541",
-      "latency_ms": 17.49,
+      "latency_ms": 16.955,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12598,7 +12598,7 @@
         "PREF"
       ],
       "id": "pm-p677-r4544",
-      "latency_ms": 19.337,
+      "latency_ms": 19.769,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12705,7 +12705,7 @@
         "PREF"
       ],
       "id": "pm-p677-r4557",
-      "latency_ms": 16.759,
+      "latency_ms": 16.191,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12789,7 +12789,7 @@
         "PREF"
       ],
       "id": "pm-p677-r4560",
-      "latency_ms": 16.694,
+      "latency_ms": 16.221,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -12895,7 +12895,7 @@
         "PREF"
       ],
       "id": "pm-p687-r926",
-      "latency_ms": 17.972,
+      "latency_ms": 16.979,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13001,7 +13001,7 @@
         "PREF"
       ],
       "id": "pm-p687-r942",
-      "latency_ms": 18.966,
+      "latency_ms": 16.374,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13107,7 +13107,7 @@
         "PREF"
       ],
       "id": "pm-p689-r4274",
-      "latency_ms": 17.251,
+      "latency_ms": 16.645,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13215,7 +13215,7 @@
         "PREF"
       ],
       "id": "pm-p692-r1637",
-      "latency_ms": 16.755,
+      "latency_ms": 17.244,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13321,7 +13321,7 @@
         "PREF"
       ],
       "id": "pm-p692-r1653",
-      "latency_ms": 19.281,
+      "latency_ms": 18.903,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13429,7 +13429,7 @@
         "PREF"
       ],
       "id": "pm-p70-r1711",
-      "latency_ms": 18.679,
+      "latency_ms": 17.093,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13535,7 +13535,7 @@
         "PREF"
       ],
       "id": "pm-p713-r3098",
-      "latency_ms": 16.912,
+      "latency_ms": 16.873,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13643,7 +13643,7 @@
         "PREF"
       ],
       "id": "pm-p714-r2178",
-      "latency_ms": 16.446,
+      "latency_ms": 16.48,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13749,7 +13749,7 @@
         "PREF"
       ],
       "id": "pm-p714-r2195",
-      "latency_ms": 16.55,
+      "latency_ms": 20.391,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13857,7 +13857,7 @@
         "PREF"
       ],
       "id": "pm-p72-r3531",
-      "latency_ms": 16.422,
+      "latency_ms": 16.009,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -13963,7 +13963,7 @@
         "PREF"
       ],
       "id": "pm-p72-r3537",
-      "latency_ms": 16.73,
+      "latency_ms": 16.027,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14069,7 +14069,7 @@
         "PREF"
       ],
       "id": "pm-p721-r3605",
-      "latency_ms": 18.338,
+      "latency_ms": 18.641,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14175,7 +14175,7 @@
         "PREF"
       ],
       "id": "pm-p721-r3610",
-      "latency_ms": 17.895,
+      "latency_ms": 17.58,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14281,7 +14281,7 @@
         "PREF"
       ],
       "id": "pm-p721-r3623",
-      "latency_ms": 16.182,
+      "latency_ms": 15.833,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14387,7 +14387,7 @@
         "PREF"
       ],
       "id": "pm-p721-r3627",
-      "latency_ms": 16.671,
+      "latency_ms": 16.761,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14495,7 +14495,7 @@
         "PREF"
       ],
       "id": "pm-p737-r32",
-      "latency_ms": 19.265,
+      "latency_ms": 18.764,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14603,7 +14603,7 @@
         "PREF"
       ],
       "id": "pm-p737-r52",
-      "latency_ms": 17.607,
+      "latency_ms": 17.453,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14709,7 +14709,7 @@
         "PREF"
       ],
       "id": "pm-p741-r1836",
-      "latency_ms": 17.549,
+      "latency_ms": 15.904,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14817,7 +14817,7 @@
         "PREF"
       ],
       "id": "pm-p753-r2225",
-      "latency_ms": 17.02,
+      "latency_ms": 16.56,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -14923,7 +14923,7 @@
         "PREF"
       ],
       "id": "pm-p764-r2425",
-      "latency_ms": 20.543,
+      "latency_ms": 20.809,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15031,7 +15031,7 @@
         "PREF"
       ],
       "id": "pm-p764-r2437",
-      "latency_ms": 16.973,
+      "latency_ms": 16.883,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15137,7 +15137,7 @@
         "PREF"
       ],
       "id": "pm-p787-r2376",
-      "latency_ms": 16.259,
+      "latency_ms": 16.445,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15243,7 +15243,7 @@
         "PREF"
       ],
       "id": "pm-p787-r2391",
-      "latency_ms": 18.625,
+      "latency_ms": 18.416,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15349,7 +15349,7 @@
         "PREF"
       ],
       "id": "pm-p800-r3263",
-      "latency_ms": 18.663,
+      "latency_ms": 18.381,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15455,7 +15455,7 @@
         "PREF"
       ],
       "id": "pm-p800-r3269",
-      "latency_ms": 17.207,
+      "latency_ms": 16.282,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15563,7 +15563,7 @@
         "PREF"
       ],
       "id": "pm-p800-r3274",
-      "latency_ms": 16.741,
+      "latency_ms": 16.045,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15669,7 +15669,7 @@
         "PREF"
       ],
       "id": "pm-p802-r4538",
-      "latency_ms": 18.225,
+      "latency_ms": 19.653,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15775,7 +15775,7 @@
         "PREF"
       ],
       "id": "pm-p811-r273",
-      "latency_ms": 17.636,
+      "latency_ms": 16.665,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15881,7 +15881,7 @@
         "PREF"
       ],
       "id": "pm-p820-r1506",
-      "latency_ms": 16.318,
+      "latency_ms": 15.964,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -15989,7 +15989,7 @@
         "PREF"
       ],
       "id": "pm-p822-r3745",
-      "latency_ms": 17.38,
+      "latency_ms": 18.197,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16097,7 +16097,7 @@
         "PREF"
       ],
       "id": "pm-p823-r2814",
-      "latency_ms": 17.737,
+      "latency_ms": 18.661,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16203,7 +16203,7 @@
         "PREF"
       ],
       "id": "pm-p823-r2835",
-      "latency_ms": 17.933,
+      "latency_ms": 15.759,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16309,7 +16309,7 @@
         "PREF"
       ],
       "id": "pm-p829-r4835",
-      "latency_ms": 16.812,
+      "latency_ms": 16.373,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16415,7 +16415,7 @@
         "PREF"
       ],
       "id": "pm-p845-r4677",
-      "latency_ms": 16.353,
+      "latency_ms": 18.885,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16521,7 +16521,7 @@
         "PREF"
       ],
       "id": "pm-p849-r3302",
-      "latency_ms": 19.837,
+      "latency_ms": 18.125,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16627,7 +16627,7 @@
         "PREF"
       ],
       "id": "pm-p849-r3321",
-      "latency_ms": 18.408,
+      "latency_ms": 16.345,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16733,7 +16733,7 @@
         "PREF"
       ],
       "id": "pm-p859-r215",
-      "latency_ms": 16.816,
+      "latency_ms": 16.252,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16839,7 +16839,7 @@
         "PREF"
       ],
       "id": "pm-p86-r2903",
-      "latency_ms": 17.36,
+      "latency_ms": 18.904,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -16945,7 +16945,7 @@
         "PREF"
       ],
       "id": "pm-p86-r2912",
-      "latency_ms": 18.402,
+      "latency_ms": 21.747,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17051,7 +17051,7 @@
         "PREF"
       ],
       "id": "pm-p86-r2916",
-      "latency_ms": 16.379,
+      "latency_ms": 20.784,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17157,7 +17157,7 @@
         "PREF"
       ],
       "id": "pm-p865-r4190",
-      "latency_ms": 16.835,
+      "latency_ms": 16.286,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17263,7 +17263,7 @@
         "PREF"
       ],
       "id": "pm-p867-r3235",
-      "latency_ms": 20.063,
+      "latency_ms": 19.022,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17369,7 +17369,7 @@
         "PREF"
       ],
       "id": "pm-p879-r1300",
-      "latency_ms": 22.336,
+      "latency_ms": 16.207,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17475,7 +17475,7 @@
         "PREF"
       ],
       "id": "pm-p88-r2448",
-      "latency_ms": 18.601,
+      "latency_ms": 16.61,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17581,7 +17581,7 @@
         "PREF"
       ],
       "id": "pm-p88-r2450",
-      "latency_ms": 16.327,
+      "latency_ms": 17.516,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17687,7 +17687,7 @@
         "PREF"
       ],
       "id": "pm-p88-r2456",
-      "latency_ms": 19.989,
+      "latency_ms": 17.596,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17793,7 +17793,7 @@
         "PREF"
       ],
       "id": "pm-p88-r2465",
-      "latency_ms": 19.72,
+      "latency_ms": 17.31,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -17899,7 +17899,7 @@
         "PREF"
       ],
       "id": "pm-p883-r456",
-      "latency_ms": 17.908,
+      "latency_ms": 20.652,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18005,7 +18005,7 @@
         "PREF"
       ],
       "id": "pm-p883-r462",
-      "latency_ms": 17.641,
+      "latency_ms": 21.112,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18113,7 +18113,7 @@
         "PREF"
       ],
       "id": "pm-p883-r472",
-      "latency_ms": 17.687,
+      "latency_ms": 19.423,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18221,7 +18221,7 @@
         "PREF"
       ],
       "id": "pm-p883-r475",
-      "latency_ms": 15.585,
+      "latency_ms": 19.428,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18329,7 +18329,7 @@
         "PREF"
       ],
       "id": "pm-p884-r4039",
-      "latency_ms": 16.269,
+      "latency_ms": 18.302,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18435,7 +18435,7 @@
         "PREF"
       ],
       "id": "pm-p892-r3047",
-      "latency_ms": 18.559,
+      "latency_ms": 17.032,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18541,7 +18541,7 @@
         "PREF"
       ],
       "id": "pm-p899-r410",
-      "latency_ms": 17.849,
+      "latency_ms": 16.003,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18647,7 +18647,7 @@
         "PREF"
       ],
       "id": "pm-p899-r421",
-      "latency_ms": 17.584,
+      "latency_ms": 17.333,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18753,7 +18753,7 @@
         "PREF"
       ],
       "id": "pm-p901-r990",
-      "latency_ms": 16.284,
+      "latency_ms": 20.658,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18861,7 +18861,7 @@
         "PREF"
       ],
       "id": "pm-p901-r992",
-      "latency_ms": 20.818,
+      "latency_ms": 18.019,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -18967,7 +18967,7 @@
         "PREF"
       ],
       "id": "pm-p902-r736",
-      "latency_ms": 17.549,
+      "latency_ms": 16.399,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19073,7 +19073,7 @@
         "PREF"
       ],
       "id": "pm-p914-r3678",
-      "latency_ms": 16.742,
+      "latency_ms": 16.149,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19181,7 +19181,7 @@
         "PREF"
       ],
       "id": "pm-p917-r2763",
-      "latency_ms": 16.402,
+      "latency_ms": 19.49,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19287,7 +19287,7 @@
         "PREF"
       ],
       "id": "pm-p917-r2770",
-      "latency_ms": 16.454,
+      "latency_ms": 16.294,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19393,7 +19393,7 @@
         "PREF"
       ],
       "id": "pm-p924-r1159",
-      "latency_ms": 16.426,
+      "latency_ms": 16.648,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19499,7 +19499,7 @@
         "PREF"
       ],
       "id": "pm-p924-r1160",
-      "latency_ms": 17.416,
+      "latency_ms": 17.913,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19605,7 +19605,7 @@
         "PREF"
       ],
       "id": "pm-p936-r2576",
-      "latency_ms": 17.461,
+      "latency_ms": 17.638,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19711,7 +19711,7 @@
         "PREF"
       ],
       "id": "pm-p936-r2585",
-      "latency_ms": 19.595,
+      "latency_ms": 16.52,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19817,7 +19817,7 @@
         "PREF"
       ],
       "id": "pm-p938-r380",
-      "latency_ms": 16.583,
+      "latency_ms": 16.483,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -19923,7 +19923,7 @@
         "PREF"
       ],
       "id": "pm-p941-r3920",
-      "latency_ms": 17.013,
+      "latency_ms": 17.429,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20029,7 +20029,7 @@
         "PREF"
       ],
       "id": "pm-p947-r760",
-      "latency_ms": 18.739,
+      "latency_ms": 17.002,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20135,7 +20135,7 @@
         "PREF"
       ],
       "id": "pm-p959-r2705",
-      "latency_ms": 16.229,
+      "latency_ms": 16.007,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20243,7 +20243,7 @@
         "PREF"
       ],
       "id": "pm-p96-r1051",
-      "latency_ms": 16.834,
+      "latency_ms": 16.864,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20349,7 +20349,7 @@
         "PREF"
       ],
       "id": "pm-p96-r1055",
-      "latency_ms": 19.04,
+      "latency_ms": 19.112,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20455,7 +20455,7 @@
         "PREF"
       ],
       "id": "pm-p96-r1056",
-      "latency_ms": 339.89,
+      "latency_ms": 17.032,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20563,7 +20563,7 @@
         "PREF"
       ],
       "id": "pm-p973-r347",
-      "latency_ms": 86.466,
+      "latency_ms": 16.889,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20671,7 +20671,7 @@
         "PREF"
       ],
       "id": "pm-p974-r1103",
-      "latency_ms": 17.099,
+      "latency_ms": 18.412,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20779,7 +20779,7 @@
         "PREF"
       ],
       "id": "pm-p977-r3858",
-      "latency_ms": 16.671,
+      "latency_ms": 16.829,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20885,7 +20885,7 @@
         "PREF"
       ],
       "id": "pm-p978-r2981",
-      "latency_ms": 16.337,
+      "latency_ms": 16.502,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -20991,7 +20991,7 @@
         "PREF"
       ],
       "id": "pm-p985-r2867",
-      "latency_ms": 17.78,
+      "latency_ms": 18.261,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21099,7 +21099,7 @@
         "PREF"
       ],
       "id": "pm-p986-r705",
-      "latency_ms": 16.93,
+      "latency_ms": 17.658,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21207,7 +21207,7 @@
         "PREF"
       ],
       "id": "pm-p989-r4410",
-      "latency_ms": 16.775,
+      "latency_ms": 17.188,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21313,7 +21313,7 @@
         "PREF"
       ],
       "id": "pm-p989-r4429",
-      "latency_ms": 16.633,
+      "latency_ms": 16.836,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21419,7 +21419,7 @@
         "PREF"
       ],
       "id": "pm-p995-r3351",
-      "latency_ms": 16.851,
+      "latency_ms": 18.587,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21525,7 +21525,7 @@
         "PREF"
       ],
       "id": "pm-p998-r2164",
-      "latency_ms": 17.314,
+      "latency_ms": 16.914,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21631,7 +21631,7 @@
         "PREF"
       ],
       "id": "pm-p998-r2175",
-      "latency_ms": 15.988,
+      "latency_ms": 16.851,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -21712,6 +21712,6 @@
       "topic": "wellbeing"
     }
   ],
-  "run_fingerprint": "96fedc2d2dcdf6424eb374f6f1dc96023203eb440291708b0e620ee244c65929",
+  "run_fingerprint": "190c984eb105ef3d7a0846b9abf0025d93626e7b15be17ad166ca41c1a5f5a00",
   "schema": "memory-benchmark-report/1"
 }

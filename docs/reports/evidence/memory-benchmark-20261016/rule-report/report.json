@@ -2,13 +2,13 @@
   "fingerprint_components": {
     "backend": "python",
     "clock_anchor": "2026-08-09 12:00:00",
-    "code_version": "fdcdb88",
-    "dataset_sha256": "b69983ae71442dbf42626897d88eeff25598e6fa5fbca5a59ec6dd7dbea83418",
+    "code_version": "684d38b",
+    "dataset_sha256": "23674ac575553a28c7b0ebce8678ce17ba2c62529a1fbb45594ecff9c1f704a5",
     "metric_definitions_version": "1",
     "retrieval_mode": "rule",
     "source_digest": "77883aeff24cb82a7456e243c1ae0d4669f5988fea0f01d8ee7a22606f90adbf"
   },
-  "generated_at": "2026-10-16T17:44:38+00:00",
+  "generated_at": "2026-10-17T02:33:27+00:00",
   "metric_definitions_version": "1",
   "metrics": {
     "behavior_guard_hit_rate": 100.0,
@@ -126,7 +126,7 @@
         "memory_precision": 46.2,
         "memory_recall": 100.0,
         "mode_accuracy": 100.0,
-        "separation_margin": 0.0038,
+        "separation_margin": 0.0085,
         "total_expected": 6,
         "total_expected_behavior": 0,
         "total_forbidden": 7,
@@ -335,7 +335,7 @@
         "memory_precision": 33.3,
         "memory_recall": 100.0,
         "mode_accuracy": 100.0,
-        "separation_margin": -0.0023,
+        "separation_margin": 0.0025,
         "total_expected": 8,
         "total_expected_behavior": 0,
         "total_forbidden": 8,
@@ -348,14 +348,14 @@
       "embedding_service": null,
       "embedding_service_note": "not probed（如需记录请运行 scripts/probe_embedding.py 并回填）",
       "retrieval_latency_ms": {
-        "mean": 16.8603,
-        "p50": 15.834,
-        "p95": 18.094,
-        "p99": 19.406,
+        "mean": 15.4339,
+        "p50": 15.174,
+        "p95": 17.789,
+        "p99": 19.727,
         "samples": 101
       }
     },
-    "dataset_digest": "c3e999a492323e22672078d2e049930c57ee4b561542660c02691aec4e232fe6",
+    "dataset_digest": "15855493db5d305570cbf337c7ac9ffb6c105e734e1a01f065423fa2b17287e7",
     "dimensions": {
       "abstain": {
         "abstain_correct_rate": 100.0,
@@ -427,7 +427,7 @@
       "found_behavior": [],
       "found_expected": [],
       "id": "abstain-empty-001",
-      "latency_ms": 14.955,
+      "latency_ms": 16.132,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -456,7 +456,7 @@
       "found_behavior": [],
       "found_expected": [],
       "id": "abstain-restricted-only-001",
-      "latency_ms": 12.667,
+      "latency_ms": 12.172,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -485,7 +485,7 @@
       "found_behavior": [],
       "found_expected": [],
       "id": "abstain-unrelated-noise-001",
-      "latency_ms": 17.801,
+      "latency_ms": 17.442,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -541,7 +541,7 @@
       "found_behavior": [],
       "found_expected": [],
       "id": "abstain-wrong-usage-001",
-      "latency_ms": 14.741,
+      "latency_ms": 13.116,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -582,7 +582,7 @@
         "m_rel_001"
       ],
       "id": "active_join_001",
-      "latency_ms": 15.973,
+      "latency_ms": 14.633,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -666,7 +666,7 @@
       ],
       "found_expected": [],
       "id": "behavior-conflict-002",
-      "latency_ms": 14.68,
+      "latency_ms": 14.527,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -717,7 +717,7 @@
       ],
       "found_expected": [],
       "id": "behavior-conflict-003",
-      "latency_ms": 15.031,
+      "latency_ms": 15.057,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -768,7 +768,7 @@
       ],
       "found_expected": [],
       "id": "behavior-conflict-004",
-      "latency_ms": 19.406,
+      "latency_ms": 15.336,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -819,7 +819,7 @@
       ],
       "found_expected": [],
       "id": "behavior-conflict-005",
-      "latency_ms": 16.078,
+      "latency_ms": 14.222,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -870,7 +870,7 @@
       ],
       "found_expected": [],
       "id": "behavior-conflict-006",
-      "latency_ms": 15.079,
+      "latency_ms": 14.467,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -921,7 +921,7 @@
       ],
       "found_expected": [],
       "id": "behavior-conflict-007",
-      "latency_ms": 15.706,
+      "latency_ms": 14.774,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -973,7 +973,7 @@
         "m_helpful_001"
       ],
       "id": "casual_001",
-      "latency_ms": 17.833,
+      "latency_ms": 14.261,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1035,7 +1035,7 @@
       ],
       "found_expected": [],
       "id": "conflict_001",
-      "latency_ms": 15.681,
+      "latency_ms": 14.224,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1088,7 +1088,7 @@
         "V_new"
       ],
       "id": "supersede-active-pair-001",
-      "latency_ms": 15.328,
+      "latency_ms": 14.715,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1098,7 +1098,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1106,7 +1106,7 @@
           "conf": 0.062,
           "ctx": 0.385,
           "imp": 0.058,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1127,11 +1127,11 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         },
         "F2": {
           "cut": "",
@@ -1140,11 +1140,11 @@
             "conf": 0.062,
             "ctx": 0.385,
             "imp": 0.058,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9654
+          "score": 0.9605
         },
         "V_new": {
           "cut": "",
@@ -1166,19 +1166,19 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         }
       },
       "scores": {
-        "F1": 0.973,
-        "F2": 0.965,
+        "F1": 0.968,
+        "F2": 0.961,
         "V_new": 0.977
       },
-      "separation_margin": 0.0038,
+      "separation_margin": 0.0087,
       "topic": null
     },
     {
@@ -1209,7 +1209,7 @@
         "V_new"
       ],
       "id": "supersede-active-rank-001",
-      "latency_ms": 17.235,
+      "latency_ms": 16.653,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1219,7 +1219,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1227,7 +1227,7 @@
           "conf": 0.062,
           "ctx": 0.385,
           "imp": 0.058,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1248,11 +1248,11 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         },
         "F2": {
           "cut": "",
@@ -1261,11 +1261,11 @@
             "conf": 0.062,
             "ctx": 0.385,
             "imp": 0.058,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9654
+          "score": 0.9605
         },
         "V_new": {
           "cut": "",
@@ -1287,19 +1287,19 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         }
       },
       "scores": {
-        "F1": 0.973,
-        "F2": 0.965,
+        "F1": 0.968,
+        "F2": 0.961,
         "V_new": 0.981
       },
-      "separation_margin": 0.0077,
+      "separation_margin": 0.0126,
       "topic": null
     },
     {
@@ -1329,7 +1329,7 @@
         "V_new"
       ],
       "id": "supersede-address-001",
-      "latency_ms": 17.093,
+      "latency_ms": 14.52,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1339,7 +1339,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1360,11 +1360,11 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9684
         },
         "V_new": {
           "cut": "",
@@ -1381,10 +1381,10 @@
         }
       },
       "scores": {
-        "F1": 0.973,
+        "F1": 0.968,
         "V_new": 0.977
       },
-      "separation_margin": 0.0038,
+      "separation_margin": 0.0085,
       "topic": null
     },
     {
@@ -1414,7 +1414,7 @@
         "V3"
       ],
       "id": "supersede-double-001",
-      "latency_ms": 15.684,
+      "latency_ms": 14.215,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1477,7 +1477,7 @@
         "V_new"
       ],
       "id": "supersede-drink-001",
-      "latency_ms": 15.331,
+      "latency_ms": 14.373,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1487,7 +1487,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1508,11 +1508,11 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9684
         },
         "V_new": {
           "cut": "",
@@ -1529,10 +1529,10 @@
         }
       },
       "scores": {
-        "F1": 0.973,
+        "F1": 0.968,
         "V_new": 0.977
       },
-      "separation_margin": 0.0038,
+      "separation_margin": 0.0085,
       "topic": null
     },
     {
@@ -1562,7 +1562,7 @@
         "V_new"
       ],
       "id": "supersede-weekend-001",
-      "latency_ms": 15.354,
+      "latency_ms": 16.15,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1572,7 +1572,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -1593,11 +1593,11 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9684
         },
         "V_new": {
           "cut": "",
@@ -1614,10 +1614,10 @@
         }
       },
       "scores": {
-        "F1": 0.973,
+        "F1": 0.968,
         "V_new": 0.977
       },
-      "separation_margin": 0.0038,
+      "separation_margin": 0.0085,
       "topic": null
     },
     {
@@ -1647,7 +1647,7 @@
         "m_emotion_001"
       ],
       "id": "emotion_001",
-      "latency_ms": 15.283,
+      "latency_ms": 15.258,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1709,7 +1709,7 @@
         "PREF"
       ],
       "id": "gen-casual-019",
-      "latency_ms": 15.129,
+      "latency_ms": 14.438,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1815,7 +1815,7 @@
         "PREF"
       ],
       "id": "gen-casual-020",
-      "latency_ms": 15.66,
+      "latency_ms": 15.351,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -1921,7 +1921,7 @@
         "PREF"
       ],
       "id": "gen-casual-021",
-      "latency_ms": 17.257,
+      "latency_ms": 15.457,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2027,7 +2027,7 @@
         "PREF"
       ],
       "id": "gen-casual-022",
-      "latency_ms": 15.61,
+      "latency_ms": 14.179,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2133,7 +2133,7 @@
         "PREF"
       ],
       "id": "gen-casual-023",
-      "latency_ms": 15.87,
+      "latency_ms": 14.472,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2239,7 +2239,7 @@
         "PREF"
       ],
       "id": "gen-casual-024",
-      "latency_ms": 15.843,
+      "latency_ms": 15.517,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2345,7 +2345,7 @@
         "PREF"
       ],
       "id": "gen-casual-025",
-      "latency_ms": 16.595,
+      "latency_ms": 15.287,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2451,7 +2451,7 @@
         "PREF"
       ],
       "id": "gen-casual-026",
-      "latency_ms": 15.649,
+      "latency_ms": 14.627,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2557,7 +2557,7 @@
         "PREF"
       ],
       "id": "gen-casual-027",
-      "latency_ms": 15.779,
+      "latency_ms": 14.593,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2663,7 +2663,7 @@
         "PREF"
       ],
       "id": "gen-casual-028",
-      "latency_ms": 17.274,
+      "latency_ms": 14.469,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2769,7 +2769,7 @@
         "PREF"
       ],
       "id": "gen-casual-029",
-      "latency_ms": 16.29,
+      "latency_ms": 14.77,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2875,7 +2875,7 @@
         "PREF"
       ],
       "id": "gen-casual-030",
-      "latency_ms": 15.048,
+      "latency_ms": 15.065,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -2981,7 +2981,7 @@
         "PREF"
       ],
       "id": "gen-casual-031",
-      "latency_ms": 14.879,
+      "latency_ms": 14.693,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3087,7 +3087,7 @@
         "PREF"
       ],
       "id": "gen-casual-032",
-      "latency_ms": 16.525,
+      "latency_ms": 15.509,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3193,7 +3193,7 @@
         "PREF"
       ],
       "id": "gen-casual-033",
-      "latency_ms": 17.197,
+      "latency_ms": 15.359,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3299,7 +3299,7 @@
         "PREF"
       ],
       "id": "gen-casual-034",
-      "latency_ms": 15.213,
+      "latency_ms": 13.948,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3405,7 +3405,7 @@
         "PREF"
       ],
       "id": "gen-casual-035",
-      "latency_ms": 15.416,
+      "latency_ms": 14.216,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3511,7 +3511,7 @@
         "PREF"
       ],
       "id": "gen-casual-036",
-      "latency_ms": 93.536,
+      "latency_ms": 15.804,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3617,7 +3617,7 @@
         "PREF"
       ],
       "id": "gen-recommend-001",
-      "latency_ms": 18.211,
+      "latency_ms": 14.358,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3723,7 +3723,7 @@
         "PREF"
       ],
       "id": "gen-recommend-002",
-      "latency_ms": 17.671,
+      "latency_ms": 14.737,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3829,7 +3829,7 @@
         "PREF"
       ],
       "id": "gen-recommend-003",
-      "latency_ms": 19.238,
+      "latency_ms": 14.565,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -3935,7 +3935,7 @@
         "PREF"
       ],
       "id": "gen-recommend-004",
-      "latency_ms": 18.097,
+      "latency_ms": 14.298,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4041,7 +4041,7 @@
         "PREF"
       ],
       "id": "gen-recommend-005",
-      "latency_ms": 15.621,
+      "latency_ms": 15.284,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4147,7 +4147,7 @@
         "PREF"
       ],
       "id": "gen-recommend-006",
-      "latency_ms": 15.214,
+      "latency_ms": 14.389,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4253,7 +4253,7 @@
         "PREF"
       ],
       "id": "gen-recommend-007",
-      "latency_ms": 17.131,
+      "latency_ms": 16.322,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4359,7 +4359,7 @@
         "PREF"
       ],
       "id": "gen-recommend-008",
-      "latency_ms": 15.648,
+      "latency_ms": 15.38,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4465,7 +4465,7 @@
         "PREF"
       ],
       "id": "gen-recommend-009",
-      "latency_ms": 15.981,
+      "latency_ms": 14.79,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4571,7 +4571,7 @@
         "PREF"
       ],
       "id": "gen-recommend-010",
-      "latency_ms": 15.428,
+      "latency_ms": 15.183,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4677,7 +4677,7 @@
         "PREF"
       ],
       "id": "gen-recommend-011",
-      "latency_ms": 18.094,
+      "latency_ms": 17.457,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4783,7 +4783,7 @@
         "PREF"
       ],
       "id": "gen-recommend-012",
-      "latency_ms": 16.44,
+      "latency_ms": 15.895,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4889,7 +4889,7 @@
         "PREF"
       ],
       "id": "gen-recommend-013",
-      "latency_ms": 15.434,
+      "latency_ms": 15.534,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -4995,7 +4995,7 @@
         "PREF"
       ],
       "id": "gen-recommend-014",
-      "latency_ms": 15.168,
+      "latency_ms": 15.453,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5101,7 +5101,7 @@
         "PREF"
       ],
       "id": "gen-recommend-015",
-      "latency_ms": 17.734,
+      "latency_ms": 20.053,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5207,7 +5207,7 @@
         "PREF"
       ],
       "id": "gen-recommend-016",
-      "latency_ms": 15.21,
+      "latency_ms": 15.035,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5313,7 +5313,7 @@
         "PREF"
       ],
       "id": "gen-recommend-017",
-      "latency_ms": 15.354,
+      "latency_ms": 15.107,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5419,7 +5419,7 @@
         "PREF"
       ],
       "id": "gen-recommend-018",
-      "latency_ms": 16.783,
+      "latency_ms": 17.348,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5525,7 +5525,7 @@
         "ENV"
       ],
       "id": "gen-tech-037",
-      "latency_ms": 16.513,
+      "latency_ms": 16.948,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5631,7 +5631,7 @@
         "ENV"
       ],
       "id": "gen-tech-038",
-      "latency_ms": 15.499,
+      "latency_ms": 14.828,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5737,7 +5737,7 @@
         "ENV"
       ],
       "id": "gen-tech-039",
-      "latency_ms": 15.597,
+      "latency_ms": 15.704,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5843,7 +5843,7 @@
         "ENV"
       ],
       "id": "gen-tech-040",
-      "latency_ms": 17.029,
+      "latency_ms": 17.178,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -5949,7 +5949,7 @@
         "ENV"
       ],
       "id": "gen-tech-041",
-      "latency_ms": 15.834,
+      "latency_ms": 17.047,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6055,7 +6055,7 @@
         "ENV"
       ],
       "id": "gen-tech-042",
-      "latency_ms": 15.436,
+      "latency_ms": 16.2,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6161,7 +6161,7 @@
         "ENV"
       ],
       "id": "gen-tech-043",
-      "latency_ms": 17.414,
+      "latency_ms": 16.248,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6267,7 +6267,7 @@
         "ENV"
       ],
       "id": "gen-tech-044",
-      "latency_ms": 16.277,
+      "latency_ms": 18.938,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6373,7 +6373,7 @@
         "ENV"
       ],
       "id": "gen-tech-045",
-      "latency_ms": 15.749,
+      "latency_ms": 14.716,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6479,7 +6479,7 @@
         "ENV"
       ],
       "id": "gen-tech-046",
-      "latency_ms": 15.437,
+      "latency_ms": 14.635,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6585,7 +6585,7 @@
         "ENV"
       ],
       "id": "gen-tech-047",
-      "latency_ms": 17.783,
+      "latency_ms": 15.13,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6691,7 +6691,7 @@
         "ENV"
       ],
       "id": "gen-tech-048",
-      "latency_ms": 15.869,
+      "latency_ms": 18.476,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -6799,7 +6799,7 @@
         "M_music"
       ],
       "id": "lineage-multi-001",
-      "latency_ms": 16.73,
+      "latency_ms": 16.16,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6904,7 +6904,7 @@
         "M_food"
       ],
       "id": "lineage-pref-001",
-      "latency_ms": 16.521,
+      "latency_ms": 16.432,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -6988,7 +6988,7 @@
         "M_new"
       ],
       "id": "lineage-supersede-001",
-      "latency_ms": 16.42,
+      "latency_ms": 17.66,
       "lineage_expected": true,
       "lineage_missing": [],
       "ok": true,
@@ -7053,7 +7053,7 @@
         "C03"
       ],
       "id": "rank-casual-001",
-      "latency_ms": 15.777,
+      "latency_ms": 17.592,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": false,
@@ -7224,7 +7224,7 @@
         "R_new"
       ],
       "id": "rank-recency-001",
-      "latency_ms": 15.846,
+      "latency_ms": 15.303,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -7388,7 +7388,7 @@
         "M03"
       ],
       "id": "rank-recommend-001",
-      "latency_ms": 15.293,
+      "latency_ms": 14.913,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -7555,7 +7555,7 @@
         "T02"
       ],
       "id": "rank-tech-001",
-      "latency_ms": 17.685,
+      "latency_ms": 17.789,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -7732,7 +7732,7 @@
         "m_pref_001"
       ],
       "id": "recommend_001",
-      "latency_ms": 15.229,
+      "latency_ms": 15.989,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -7817,7 +7817,7 @@
         "M002"
       ],
       "id": "scope-proactive-001",
-      "latency_ms": 15.288,
+      "latency_ms": 14.89,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -7901,7 +7901,7 @@
         "M001"
       ],
       "id": "scope-reply-001",
-      "latency_ms": 16.724,
+      "latency_ms": 14.635,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -7963,7 +7963,7 @@
         "M_pub"
       ],
       "id": "privacy-internal-both-001",
-      "latency_ms": 15.79,
+      "latency_ms": 19.727,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8025,7 +8025,7 @@
         "M_pub"
       ],
       "id": "privacy-restricted-casual-001",
-      "latency_ms": 15.222,
+      "latency_ms": 15.637,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8087,7 +8087,7 @@
         "M_pub"
       ],
       "id": "privacy-restricted-proactive-001",
-      "latency_ms": 15.581,
+      "latency_ms": 14.423,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8149,7 +8149,7 @@
         "M_same_space"
       ],
       "id": "privacy-shared-space-positive-001",
-      "latency_ms": 17.947,
+      "latency_ms": 15.093,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8211,7 +8211,7 @@
         "M_own"
       ],
       "id": "privacy-space-proactive-001",
-      "latency_ms": 16.546,
+      "latency_ms": 14.247,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8273,7 +8273,7 @@
         "M_own"
       ],
       "id": "privacy-space-reply-001",
-      "latency_ms": 15.28,
+      "latency_ms": 14.556,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8335,7 +8335,7 @@
       ],
       "found_expected": [],
       "id": "privacy-user-behavior-001",
-      "latency_ms": 15.484,
+      "latency_ms": 14.902,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8386,7 +8386,7 @@
         "M_own"
       ],
       "id": "privacy-user-reply-001",
-      "latency_ms": 16.118,
+      "latency_ms": 19.182,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8448,7 +8448,7 @@
         "N01"
       ],
       "id": "contextual-lure-001",
-      "latency_ms": 15.228,
+      "latency_ms": 15.464,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8509,7 +8509,7 @@
         "P1"
       ],
       "id": "semantic-only-001",
-      "latency_ms": 15.534,
+      "latency_ms": 14.508,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8593,7 +8593,7 @@
         "M001"
       ],
       "id": "smoke-open-001",
-      "latency_ms": 15.695,
+      "latency_ms": 15.336,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8655,7 +8655,7 @@
         "M001"
       ],
       "id": "smoke-restricted-002",
-      "latency_ms": 17.417,
+      "latency_ms": 15.503,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8709,7 +8709,7 @@
       "found_behavior": [],
       "found_expected": [],
       "id": "smoke-empty-003",
-      "latency_ms": 11.855,
+      "latency_ms": 12.483,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8746,7 +8746,7 @@
         "G01"
       ],
       "id": "open-decoy-004",
-      "latency_ms": 15.934,
+      "latency_ms": 14.364,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8811,7 +8811,7 @@
         "m_history_001"
       ],
       "id": "tech_001",
-      "latency_ms": 16.116,
+      "latency_ms": 15.326,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8897,7 +8897,7 @@
         "R_new"
       ],
       "id": "temporal-city-001",
-      "latency_ms": 16.313,
+      "latency_ms": 16.693,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -8915,7 +8915,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -8923,7 +8923,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -8949,11 +8949,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -8962,11 +8962,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -8975,19 +8975,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9018,7 +9018,7 @@
         "R_new"
       ],
       "id": "temporal-cooking-001",
-      "latency_ms": 15.755,
+      "latency_ms": 15.557,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9036,7 +9036,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9044,7 +9044,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9070,11 +9070,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9083,11 +9083,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9096,19 +9096,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9139,7 +9139,7 @@
         "R_new"
       ],
       "id": "temporal-game-001",
-      "latency_ms": 15.849,
+      "latency_ms": 15.123,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9157,7 +9157,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9165,7 +9165,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9191,11 +9191,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9204,11 +9204,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9217,19 +9217,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9260,7 +9260,7 @@
         "R_new"
       ],
       "id": "temporal-job-001",
-      "latency_ms": 16.39,
+      "latency_ms": 16.174,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9278,7 +9278,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9286,7 +9286,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9312,11 +9312,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9325,11 +9325,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9338,19 +9338,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9381,7 +9381,7 @@
         "R_new"
       ],
       "id": "temporal-pet-001",
-      "latency_ms": 17.042,
+      "latency_ms": 16.449,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9399,7 +9399,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9407,7 +9407,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9433,11 +9433,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9446,11 +9446,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9459,19 +9459,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9502,7 +9502,7 @@
         "R_new"
       ],
       "id": "temporal-phone-001",
-      "latency_ms": 16.132,
+      "latency_ms": 15.174,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9520,7 +9520,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9528,7 +9528,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9554,11 +9554,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9567,11 +9567,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9580,19 +9580,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9623,7 +9623,7 @@
         "R_new"
       ],
       "id": "temporal-project-001",
-      "latency_ms": 15.626,
+      "latency_ms": 14.537,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9641,7 +9641,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9649,7 +9649,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9675,11 +9675,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9688,11 +9688,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9701,19 +9701,19 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     },
     {
@@ -9744,7 +9744,7 @@
         "R_new"
       ],
       "id": "temporal-travel-001",
-      "latency_ms": 17.924,
+      "latency_ms": 15.764,
       "lineage_expected": false,
       "lineage_missing": [],
       "ok": true,
@@ -9762,7 +9762,7 @@
           "conf": 0.068,
           "ctx": 0.385,
           "imp": 0.065,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         },
@@ -9770,7 +9770,7 @@
           "conf": 0.065,
           "ctx": 0.385,
           "imp": 0.062,
-          "rec": 0.154,
+          "rec": 0.149,
           "sem": 0.0,
           "usg": 0.308
         }
@@ -9796,11 +9796,11 @@
             "conf": 0.046,
             "ctx": 0.385,
             "imp": 0.031,
-            "rec": 0.154,
+            "rec": 0.021,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9231
+          "score": 0.7901
         },
         "S1": {
           "cut": "",
@@ -9809,11 +9809,11 @@
             "conf": 0.068,
             "ctx": 0.385,
             "imp": 0.065,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9792
+          "score": 0.9744
         },
         "S2": {
           "cut": "",
@@ -9822,22 +9822,22 @@
             "conf": 0.065,
             "ctx": 0.385,
             "imp": 0.062,
-            "rec": 0.154,
+            "rec": 0.149,
             "sem": 0.0,
             "usg": 0.308
           },
-          "score": 0.9731
+          "score": 0.9682
         }
       },
       "scores": {
         "R_new": 0.977,
-        "S1": 0.979,
-        "S2": 0.973
+        "S1": 0.974,
+        "S2": 0.968
       },
-      "separation_margin": -0.0023,
+      "separation_margin": 0.0025,
       "topic": null
     }
   ],
-  "run_fingerprint": "084d7e581bcba4f079d24f640650f24d67c0c8d1a09b28f1ef24f87af2045202",
+  "run_fingerprint": "8ac577939ee500697c9b400aaa5cd2bdb150dc0c23253deae170805372ba9c89",
   "schema": "memory-benchmark-report/1"
 }

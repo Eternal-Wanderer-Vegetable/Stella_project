@@ -23,7 +23,8 @@
           "fact_key": "current_show",
           "source_row_id": 301
         }
-      ]
+      ],
+      "last_confirmed_at_offset_minutes": -60
     },
     "M_old": {
       "content": "以前在追古装剧",
@@ -41,7 +42,8 @@
           "fact_key": "current_show",
           "source_row_id": 300
         }
-      ]
+      ],
+      "last_confirmed_at_offset_minutes": -86400
     }
   },
   "expected_memory": [

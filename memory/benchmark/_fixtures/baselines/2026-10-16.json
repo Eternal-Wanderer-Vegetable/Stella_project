@@ -1,10 +1,10 @@
 {
   "schema": "memory-benchmark-baseline/1",
-  "captured_at": "2026-10-16T17:41:40+00:00",
-  "note": "2026-10-16 冻结：memory-benchmark-suite M0-M6 收口。dataset=101 例（手写 53 + 生成 48）。已知既有失败：rank-casual-001（基线如实记录，不粉饰）。硬零：forbidden_activation_rate=0, cross_scope_leak_rate=0。",
+  "captured_at": "2026-10-17T02:29:23+00:00",
+  "note": "2026-10-17 重生成（第一次真模型验收）：M1 temporal/supersede/lineage 用例补齐 last_confirmed_at_offset_minutes（此前只偏移 last_accessed_at 列，而排序读 confirmed 列——recency 判别未生效，rule 模式靠 conf/imp 差侥幸、真实 embedding 下 7 例旧值激活踩硬零）。修复后 embedding 模式 101/101 全绿。dataset=101 例。已知既有失败：rank-casual-001（如实记录）。硬零：forbidden=0, cross_scope=0。",
   "retrieval_mode": "rule",
   "metric_definitions_version": "1",
-  "dataset_digest": "c3e999a492323e22672078d2e049930c57ee4b561542660c02691aec4e232fe6",
+  "dataset_digest": "15855493db5d305570cbf337c7ac9ffb6c105e734e1a01f065423fa2b17287e7",
   "metrics": {
     "cases_total": 101,
     "cases_ok": 100,

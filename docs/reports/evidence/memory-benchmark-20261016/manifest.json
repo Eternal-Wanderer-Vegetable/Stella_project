@@ -1,16 +1,19 @@
 {
-  "captured_local_date": "2026-10-16",
+  "captured_local_date": "2026-10-17",
   "artifact_kind": "memory-benchmark-suite-closure",
   "summary": {
-    "parity_rule": "101/101 hard matches（21/24 历史数字作废）",
-    "retrieval_modes": "rule 100/101 / embedding 28/28 / fts·hybrid python 单边（FTS 0 命中实证）",
-    "replay": "extraction 100% / fabrication 0% / promotion 100% / qa 100% / memory_delta +100",
-    "personamem_ci_subset": "200 例 4.4s accuracy 100%（英文域外部参照）"
+    "parity_rule": "101/101 hard matches",
+    "retrieval_modes_real_fixture": "rule 100/101（rank-casual-001 既有失败）/ embedding 101/101（真向量全量）/ fts·hybrid python 单边；parity 全 101/101；硬零全模式保持",
+    "replay_recorded": "extraction 100% / fabrication 0% / promotion 100% / qa 100% / memory_delta +100",
+    "replay_live_strata": "生产 Strata qwen3.8-flash 真模型 3 批整合成功；extraction 100%、fabrication 0%；promotion/qa 0%——EXTRACT 角色（LLM_ROLE_EXTRACT_ENDPOINT=CHAT→online 槽空）未配置，阶段2 契约提取回退，候选 verification=unknown 不晋升（生产配置现状，非链路缺陷）；两轮 live 候选数 7→4 波动=真模型非确定性实录",
+    "personamem_ci_subset": "200 例 accuracy 100%",
+    "fixture": "2026-10-17 重建：259 向量覆盖 101/101 用例（此前仅旧 22 例）",
+    "baseline": "2026-10-17 重生成：M1 用例补 last_confirmed_at_offset_minutes（recency 判别此前未生效）"
   },
   "artifacts": [
     {
       "path": "mode-matrix.json",
-      "sha256": "9b13d234d26885549c38ae8ac26b246dfcaadec4b94f987fdca8af6330eaa3cc"
+      "sha256": "ffa1b6406fcd08df85c95170d10a702ad4bb405fd628d53d15c9ccf8e35f1786"
     },
     {
       "path": "parity-rule-101of101.json",
@@ -18,15 +21,19 @@
     },
     {
       "path": "personamem/report.json",
-      "sha256": "5473b9cc23b1ff3ee2c944f86839161d7eef448eb6d63ab0301e75679e890c85"
+      "sha256": "027c6e977db6871ada370e68bdff358f3d5d4fe2673e19eadb3cd7ac48ef7c81"
     },
     {
       "path": "replay-daily-life.json",
       "sha256": "400b6dbccb2569400ee63ea4b331afa44a546a4d8a4484502488521a74fb7cd3"
     },
     {
+      "path": "replay-live-strata.json",
+      "sha256": "9b4414284f9d3df1f861ce5b8ff5fc7e49260f09dd587820850c3c8f33669818"
+    },
+    {
       "path": "rule-report/report.json",
-      "sha256": "4e7b83995558d4a4afa914110506fae7996487cb499f35f5f7f79ce95068553a"
+      "sha256": "e72169ab05cfe8b311da63db8922cbaf89d2d391662b66aa5bb8f369841e23d6"
     }
   ]
 }

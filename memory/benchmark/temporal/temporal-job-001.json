@@ -17,7 +17,8 @@
       "visibility": "OPEN",
       "confidence": 0.9,
       "importance": 0.8,
-      "last_accessed_at_offset_minutes": -60
+      "last_accessed_at_offset_minutes": -60,
+      "last_confirmed_at_offset_minutes": -60
     },
     "R_old": {
       "content": "之前在老项目组做维护",
@@ -28,7 +29,8 @@
       "visibility": "OPEN",
       "confidence": 0.6,
       "importance": 0.4,
-      "last_accessed_at_offset_minutes": -86400
+      "last_accessed_at_offset_minutes": -86400,
+      "last_confirmed_at_offset_minutes": -86400
     },
     "S1": {
       "content": "用户通勤坐公交",
@@ -39,7 +41,8 @@
       "visibility": "OPEN",
       "confidence": 0.88,
       "importance": 0.85,
-      "last_accessed_at_offset_minutes": -1440
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
     },
     "S2": {
       "content": "用户工位靠窗",
@@ -50,7 +53,8 @@
       "visibility": "OPEN",
       "confidence": 0.85,
       "importance": 0.8,
-      "last_accessed_at_offset_minutes": -1440
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
     }
   },
   "expected_memory": [

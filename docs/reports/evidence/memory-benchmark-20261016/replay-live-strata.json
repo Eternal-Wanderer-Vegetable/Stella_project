@@ -1,0 +1,148 @@
+{
+  "schema": "memory-replay-report/1",
+  "cost": {
+    "llm_calls": 0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "accounting": "usage_sink(process)"
+  },
+  "generated_at": "2026-10-17T10:33:03",
+  "mode": "live",
+  "suite": "daily-life",
+  "suite_sha256": "d8d544531a7c68747bc8dd638f1429b0fb284b1cd610d0ee9bbcef06e10a5b93",
+  "recordings_sha256": "86af3f8ceef4f8febabe57bd7955d1e4d2ef1b47f972ba7cfc821a83f71b5163",
+  "run_fingerprint": "ea640c7561bdaf2842754e6b42610ebe10fd3fff3731e92bbd40acf1fd877c15",
+  "metrics": {
+    "candidates_total": 4,
+    "memories_total": 0,
+    "extraction_hit_rate": 100.0,
+    "fabrication_rate": 0.0,
+    "promotion_correctness": 0.0,
+    "qa_accuracy": 0.0,
+    "qa_accuracy_without_memory": 0.0,
+    "memory_delta": 0.0
+  },
+  "details": {
+    "extraction": [
+      {
+        "id": "E1",
+        "hit": true
+      },
+      {
+        "id": "E2",
+        "hit": true
+      },
+      {
+        "id": "E3",
+        "hit": true
+      },
+      {
+        "id": "E4",
+        "hit": true
+      }
+    ],
+    "fabrication": [
+      {
+        "id": "cdfa3d2f075d404fac63866157ba4a45",
+        "content": "我住在杭州",
+        "fabricated": false
+      },
+      {
+        "id": "c91d1b6560eb41c983dc3c8f6e83e23b",
+        "content": "我喜欢三分糖的奶茶，比全糖清爽多了",
+        "fabricated": false
+      },
+      {
+        "id": "b871aade500c48c9a6e5779306951db2",
+        "content": "我叫小艾，以后多指教",
+        "fabricated": false
+      },
+      {
+        "id": "6ea3d855275345f69749f333cb405de2",
+        "content": "我喜欢周末去爬山，每周都去",
+        "fabricated": false
+      }
+    ],
+    "promotion": [
+      {
+        "id": "E1",
+        "promoted": false
+      },
+      {
+        "id": "E2",
+        "promoted": false
+      },
+      {
+        "id": "E3",
+        "promoted": false
+      },
+      {
+        "id": "E4",
+        "promoted": false
+      }
+    ],
+    "qa_with": [
+      {
+        "id": "Q1",
+        "query": "我现在住在哪个城市来着",
+        "recalled_ids": [],
+        "expect_hits": {
+          "杭州": false
+        },
+        "pass": false
+      },
+      {
+        "id": "Q2",
+        "query": "奶茶喝几分糖",
+        "recalled_ids": [],
+        "expect_hits": {
+          "三分糖": false
+        },
+        "pass": false
+      },
+      {
+        "id": "Q3",
+        "query": "周末去哪玩比较好",
+        "recalled_ids": [],
+        "expect_hits": {
+          "爬山": false
+        },
+        "pass": false
+      }
+    ],
+    "qa_without": [
+      {
+        "id": "Q1",
+        "query": "我现在住在哪个城市来着",
+        "recalled_ids": [],
+        "expect_hits": {
+          "杭州": false
+        },
+        "pass": false
+      },
+      {
+        "id": "Q2",
+        "query": "奶茶喝几分糖",
+        "recalled_ids": [],
+        "expect_hits": {
+          "三分糖": false
+        },
+        "pass": false
+      },
+      {
+        "id": "Q3",
+        "query": "周末去哪玩比较好",
+        "recalled_ids": [],
+        "expect_hits": {
+          "爬山": false
+        },
+        "pass": false
+      }
+    ]
+  },
+  "live": {
+    "endpoint": "http://127.0.0.1:8081",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "temperature": null
+  }
+}

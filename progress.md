@@ -108,3 +108,11 @@
 2. embedding 服务可用时重建 fixture（`scripts/build_embedding_fixture.py`），覆盖 101 例后 embedding/hybrid 模式全量可评。
 3. FTS 恒 0 命中是生产检索的真实缺陷候选（RAG 特性疑似死代码），建议另立课题核查 `_query_fts` 的 MATCH 语义与生产收益。
 4. PersonaMem 中文对照集与全量 5000 行离线跑为显式延后项（计划 §12）。
+
+### 真模型验收（第一次）— 2026-10-17
+
+- 生产双模型：**Strata 8081 = qwen3.8-flash-next-iq2_xs**（CONSOLIDATION 角色经 `LLM_ROLE_CONSOLIDATION_ENDPOINT=MEMORY` 槽）+ **LM Studio 1234 = text-embedding-qwen3-embedding-0.6b**。排查发现本机系统代理（7890）劫持 127.0.0.1 请求（502 假象），脚本一律 `NO_PROXY=127.0.0.1,localhost`。
+- **embedding fixture 重建**：259 向量覆盖 101/101 用例（此前仅旧 22 例）；真实向量下四模式矩阵 parity 全 101/101，硬零全模式保持，embedding/hybrid 提升为 101/101 全绿（重生成后）。
+- **基准抓到并修复一个用例创作缺陷**：M1 temporal/supersede 用例只偏移 `last_accessed_at` 列而排序读 `last_confirmed_at` 列——recency 判别未生效，rule 模式靠 conf/imp 差侥幸通过；真实 embedding 下新旧事实 sem 差（+0.030）抵掉 conf/imp 差（+0.035），7 例旧值激活踩硬零。修复=补 `last_confirmed_at_offset_minutes`（15 个文件），修复后 embedding 101/101。基线随之重生成（变更原因入档）。
+- **live 回放真模型打通**（`--live --record`，3 批整合生成成功，录制件 `recorded/live-20261017.json`）：extraction 100%、fabrication 0%（第二轮）；**promotion/qa = 0% 的根因是生产配置现状**——`LLM_ROLE_EXTRACT_ENDPOINT=CHAT` 而 online 槽 base_url 为空，阶段2 契约提取回退阶段1，候选 verification=unknown 全部 OBSERVING 不晋升。这是配置决策（启用完整晋升链路需给 CHAT/MEMORY 槽配端点），非链路缺陷；已如实写入双语文档。
+- 两轮 live 候选数 7→4、改写句式（「希望被称为小艾」被判 fabrication）第二轮消失——真模型非确定性实录，反证 recorded 确定性回放的价值。

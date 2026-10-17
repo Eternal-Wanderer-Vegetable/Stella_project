@@ -145,8 +145,15 @@ python scripts/generate_benchmark_cases.py --check   # Frozen-output check for g
 > (2) embedding/hybrid modes only evaluate fixture-covered cases (a case counts as
 > covered when its query vector exists); uncovered cases are explicitly skipped and
 > accounted. Running them would produce a third semantics ("embedding weights + rule
-> semantic fallback") that distorts metrics. The fixture only covers the original 22
-> Chinese cases; rebuilding it requires the embedding service.
+> semantic fallback") that distorts metrics. The fixture was rebuilt on 2026-10-17
+> (259 vectors covering 101/101 cases); rebuilding requires the embedding service
+> (`python scripts/build_embedding_fixture.py`; note the local system proxy hijacks
+> 127.0.0.1 — set `NO_PROXY=127.0.0.1,localhost`).
+> (3) Case offset fields must set `last_confirmed_at_offset_minutes` (ranking reads
+> the confirmed column) — offsetting only `last_accessed_at` leaves recency inert;
+> rule mode passes on conf/imp margins alone while real embeddings let the semantic
+> gap cancel them and activate stale facts (observed in the 2026-10-17 first real
+> model acceptance: 7 hard-zero violations, fixed afterwards).
 
 ### Rust parity and write-path replay
 
@@ -170,6 +177,16 @@ python scripts/eval_memory_replay.py --live --record recorded/new.json   # Offli
   metrics extraction_hit_rate, fabrication_rate (4-gram source-overlap rule),
   promotion_correctness, qa_accuracy, and memory_delta (with/without memory). The
   gate requires all green plus memory_delta > 0. Suite: `memory/benchmark/_replay/daily-life/`.
+  `--live` uses the real assembly (stage 2 resolved from current config); the live
+  recording lives at `recorded/live-20261017.json`. **Findings of the 2026-10-17
+  real-model acceptance**: with `LLM_ROLE_EXTRACT_ENDPOINT=CHAT` and an empty online
+  slot, stage-2 contract extraction falls back to stage 1, so every candidate stays
+  verification=unknown → OBSERVING and never promotes (promotion/qa = 0%). This is a
+  faithful picture of the current configuration; enabling the full promotion chain
+  requires a usable endpoint on the CHAT/MEMORY slot. The fabrication rule (4-gram
+  overlap) conservatively misreports paraphrases (e.g. "我叫小艾" rewritten as
+  "希望被称为小艾" counts as fabricated) — read it as a conservative proxy for
+  "no textual grounding".
 
 ### PersonaMem public dataset (English-domain external reference)
 

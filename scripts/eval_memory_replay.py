@@ -419,7 +419,10 @@ def main(argv: list[str] | None = None) -> int:
             }
             transcripts: list[str] = []
             backend = _TranscriptBackend(inner, transcripts) if args.record else inner
-            cons = _make_consolidator(backend)
+            # live 用真实装配：阶段2（EXTRACT）按当前配置解析——可用则两阶段齐全，
+            # 未配置则与生产同款回退阶段1（回退事实进日志与报告，不粉饰）
+            cons = MemoryConsolidator()
+            cons._backends = [("live", backend)]
             db_path = tmp / "replay.db"
             _provision_db(db_path, suite["sessions"])
             _isolate_paths(db_path, tmp, suite["sessions"])

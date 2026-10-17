@@ -17,7 +17,8 @@
       "visibility": "OPEN",
       "confidence": 0.9,
       "importance": 0.8,
-      "last_accessed_at_offset_minutes": -60
+      "last_accessed_at_offset_minutes": -60,
+      "last_confirmed_at_offset_minutes": -60
     },
     "V_old": {
       "content": "以前总和晓华打游戏",
@@ -28,7 +29,8 @@
       "visibility": "OPEN",
       "confidence": 0.6,
       "importance": 0.4,
-      "last_accessed_at_offset_minutes": -86400
+      "last_accessed_at_offset_minutes": -86400,
+      "last_confirmed_at_offset_minutes": -86400
     },
     "F1": {
       "content": "用户打游戏喜欢玩辅助位",
@@ -39,7 +41,8 @@
       "visibility": "OPEN",
       "confidence": 0.85,
       "importance": 0.8,
-      "last_accessed_at_offset_minutes": -1440
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
     },
     "F2": {
       "content": "用户周末常约语音连麦",
@@ -50,7 +53,8 @@
       "visibility": "OPEN",
       "confidence": 0.8,
       "importance": 0.75,
-      "last_accessed_at_offset_minutes": -1440
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
     }
   },
   "expected_memory": [

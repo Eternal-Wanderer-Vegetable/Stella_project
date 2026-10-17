@@ -17,7 +17,8 @@
       "visibility": "OPEN",
       "confidence": 0.9,
       "importance": 0.85,
-      "last_accessed_at_offset_minutes": -60
+      "last_accessed_at_offset_minutes": -60,
+      "last_confirmed_at_offset_minutes": -60
     },
     "V2": {
       "content": "中间换过一次常用邮箱",
@@ -29,7 +30,8 @@
       "confidence": 0.6,
       "importance": 0.4,
       "status": "superseded",
-      "last_accessed_at_offset_minutes": -2880
+      "last_accessed_at_offset_minutes": -2880,
+      "last_confirmed_at_offset_minutes": -2880
     },
     "V1": {
       "content": "最早注册用的邮箱已经不用了",
@@ -41,7 +43,8 @@
       "confidence": 0.5,
       "importance": 0.3,
       "status": "archived",
-      "last_accessed_at_offset_minutes": -86400
+      "last_accessed_at_offset_minutes": -86400,
+      "last_confirmed_at_offset_minutes": -86400
     }
   },
   "expected_memory": [

@@ -141,7 +141,13 @@ python scripts/generate_benchmark_cases.py --check   # 生成产物冻结校验
 > 回退新鲜度路径（`retrieval_path.candidate_rows` 可复核）；
 > ② embedding/hybrid 模式只评 fixture 覆盖的用例（按查询向量在场判定），
 > 未覆盖用例显式 skip 记账——用「embedding 权重 + 规则语义回退」跑会产出第三种
-> 语义，指标失真。fixture 只覆盖旧 22 例中文文本，重建 fixture 需 embedding 服务。
+> 语义，指标失真。fixture 已于 2026-10-17 重建（259 向量覆盖 101/101 用例），
+> 重建需 embedding 服务（`python scripts/build_embedding_fixture.py`，注意本机
+> 系统代理会劫持 127.0.0.1，须 `NO_PROXY=127.0.0.1,localhost`）。
+> ③ 用例偏移字段必须写 `last_confirmed_at_offset_minutes`（排序读 confirmed 列）——
+> 只写 `last_accessed_at_offset_minutes` 时 recency 判别不生效，rule 模式靠 conf/imp
+> 差侥幸通过、真实 embedding 下新旧事实的 sem 差会抵掉 conf/imp 差导致旧值激活
+> （2026-10-17 第一次真模型验收实测，7 例踩硬零后修复）。
 
 ### Rust parity 与写路径回放
 
@@ -161,6 +167,13 @@ python scripts/eval_memory_replay.py --live --record recorded/new.json   # 离�
   检索 QA），指标：extraction_hit_rate、fabrication_rate（4-gram 原文交集规则）、
   promotion_correctness、qa_accuracy、memory_delta（有/无记忆差）。门禁要求全绿
   且 memory_delta > 0。套件在 `memory/benchmark/_replay/daily-life/`。
+  `--live` 走真实装配（阶段2 按当前配置解析）；live 录制件存
+  `recorded/live-20261017.json`。**2026-10-17 真模型验收发现**：生产配置
+  `LLM_ROLE_EXTRACT_ENDPOINT=CHAT` 而 online 槽 base_url 为空 → 阶段2 契约提取
+  回退阶段1，候选 verification=unknown 全部 OBSERVING 不晋升（promotion/qa=0%）。
+  这是配置现状的如实呈现：要启用完整晋升链路需给 CHAT/MEMORY 槽配置可用端点。
+  fabrication 规则（4-gram 交集）对模型改写句式保守误报（如「我叫小艾」被改写为
+  「希望被称为小艾」会判编造）——口径是「无原文依据」的保守代理，读报告时须知。
 
 ### PersonaMem 公开测试集（英文域外部参照）
 

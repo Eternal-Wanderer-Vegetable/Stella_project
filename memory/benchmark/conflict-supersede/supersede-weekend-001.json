@@ -17,7 +17,8 @@
       "visibility": "OPEN",
       "confidence": 0.9,
       "importance": 0.8,
-      "last_accessed_at_offset_minutes": -120
+      "last_accessed_at_offset_minutes": -120,
+      "last_confirmed_at_offset_minutes": -120
     },
     "V_old": {
       "content": "以前周末宅家打游戏",
@@ -29,7 +30,8 @@
       "confidence": 0.6,
       "importance": 0.4,
       "status": "superseded",
-      "last_accessed_at_offset_minutes": -43200
+      "last_accessed_at_offset_minutes": -43200,
+      "last_confirmed_at_offset_minutes": -43200
     },
     "F1": {
       "content": "用户球拍刚换新的",
@@ -40,7 +42,8 @@
       "visibility": "OPEN",
       "confidence": 0.85,
       "importance": 0.8,
-      "last_accessed_at_offset_minutes": -1440
+      "last_accessed_at_offset_minutes": -1440,
+      "last_confirmed_at_offset_minutes": -1440
     }
   },
   "expected_memory": [
