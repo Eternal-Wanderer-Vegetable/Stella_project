@@ -192,7 +192,19 @@ fn load_candidates(
     if !request.query.trim().is_empty() {
         let fts = load_fts_candidates(conn, request)?;
         if !fts.is_empty() {
-            return Ok(fts);
+            // FTS 命中不窄化候选池（与 Python 侧 _fetch_candidates 同语义）：
+            // OR 召回的行排在前，再并入新鲜度头部（按 id 去重）——只保留 FTS 行
+            // 会让池里只剩「恰与查询共享分词片段」的记忆，竞争者变少后旧值/
+            // 干扰项更容易穿过 LIMIT 截断与分数门槛。
+            let fts_ids: std::collections::HashSet<String> =
+                fts.iter().map(|item| item.id.clone()).collect();
+            let mut merged = fts;
+            merged.extend(
+                candidates
+                    .into_iter()
+                    .filter(|item| !fts_ids.contains(&item.id)),
+            );
+            return Ok(merged);
         }
     }
     sql.shrink_to_fit();
@@ -412,10 +424,24 @@ mod tests {
     }
 
     #[test]
-    fn fts_or_expression_recalls_chinese_sentence_query() {
-        // 查询侧曾经直接绑原始查询串：中文整串被 unicode61 当一个 term，与滑窗
-        // 写入的索引永不相等 → FTS 通道空转。此测钉住 OR 表达式让自然中文句子
-        // 查询真实召回（修复前恒回退新鲜度候选）。
+    fn match_expression_or_joins_quoted_terms() {
+        let expression = super::match_expression("有什么游戏推荐吗");
+        assert!(expression.contains('"'));
+        assert!(expression.contains(" OR "));
+        assert!(!expression.split(" OR ").any(|term| term.is_empty()));
+        // 保留字被小写化并引号化，不构成语法成分
+        assert_eq!(
+            super::match_expression("OR AND NEAR"),
+            "\"or\" OR \"and\" OR \"near\""
+        );
+        assert_eq!(super::match_expression("！！！???"), "");
+    }
+
+    #[test]
+    fn fts_hits_lead_pool_and_do_not_narrow_it() {
+        // FTS 命中的行领跑候选池（bm25 序）；不匹配的新鲜行仍留在池里
+        // （并集语义，与 Python _fetch_candidates 同步）。修复前查询侧直接绑
+        // 原始查询串：中文整串被 unicode61 当一个 term，FTS 通道空转、恒回退。
         let file = NamedTempFile::new().expect("temp db");
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
@@ -449,16 +475,19 @@ mod tests {
         }
         drop(conn);
 
+        // 时间戳相同 → 纯新鲜度候选序是 m1, m2（id 升序）。
+        // 查询只与 m1 共享分词片段 → FTS 命中后 m1 必须领跑候选池。
         let mut request = test_request(&file.path().display().to_string(), "space-a", 1);
         request.query = "有什么游戏推荐吗".to_string();
         let output = retrieve(request).expect("retrieve");
-        let ids: Vec<&str> = output
-            .conversation_memories
+        let candidates: Vec<&str> = output.trace["candidates"]
+            .as_array()
+            .expect("trace candidates")
             .iter()
-            .map(|m| m.id.as_str())
+            .map(|v| v.as_str().expect("candidate id"))
             .collect();
-        assert!(ids.contains(&"m1"));
-        assert!(!ids.contains(&"m2"));
+        assert_eq!(candidates.first(), Some(&"m1"));
+        assert!(candidates.contains(&"m2"), "池不窄化：非匹配行仍留池");
 
         // 纯标点查询无有效片段 → 不进 MATCH，回退新鲜度候选（两条都在，但不炸）
         let mut punct = test_request(&file.path().display().to_string(), "space-a", 1);

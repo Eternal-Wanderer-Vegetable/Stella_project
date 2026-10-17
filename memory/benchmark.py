@@ -155,7 +155,7 @@ def _resolve_memory_timestamp(mem: dict[str, Any], field: str, default: str) -> 
     return value or default
 
 
-def _populate_fts_index(conn: sqlite3.Connection, case: dict[str, Any]) -> None:
+def _populate_fts_index(conn: sqlite3.Connection, case: dict[str, Any], group_id: int) -> None:
     """为用例库填充 memories_fts 索引（fts/hybrid 模式，M2）。
 
     生产库由 memory_manager 写入时同步维护 FTS（_upsert_fts_record）；benchmark
@@ -164,6 +164,10 @@ def _populate_fts_index(conn: sqlite3.Connection, case: dict[str, Any]) -> None:
     ``memory.retriever._segment_text``，保证索引词串与生产一致。
     只索引 active 行（与生产 _rebuild_fts_index 口径一致；status 过滤在查询侧
     也会做，这里提前不写是省一层 JOIN）。
+
+    空间默认值必须与 _write_case_db 的 memories 行一致（group_id）——FTS 行
+    写成空串而查询按空间过滤时，全部用例 0 行、静默回退（2026-10-17 起 FTS
+    查询侧修复后此缺陷才显形：此前 MATCH 恒 0 行把它完全掩盖）。
     """
     from memory.retriever import _ensure_fts_table, _segment_text
 
@@ -182,7 +186,7 @@ def _populate_fts_index(conn: sqlite3.Connection, case: dict[str, Any]) -> None:
             (
                 mid,
                 text,
-                str(mem.get("group_shared_space", mem.get("group_id", ""))),
+                str(mem.get("group_shared_space", mem.get("group_id", group_id))),
                 str(mem.get("user_id", "")),
             ),
         )
@@ -288,7 +292,7 @@ def _write_case_db(
                     ),
                 )
         if populate_fts:
-            _populate_fts_index(conn, case)
+            _populate_fts_index(conn, case, group_id)
         conn.commit()
     finally:
         conn.close()

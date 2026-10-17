@@ -112,7 +112,12 @@ def test_rag_disabled_does_not_create_fts_table(tmp_path, monkeypatch):
 
 def test_rag_top_k_sets_candidate_pool_floor(tmp_path, monkeypatch):
     """RAG_TOP_K 作为候选池下限：检索 wrapper 用 max(limit, RAG_TOP_K) 拉取候选，
-    所以 RAG_TOP_K 越大，进入后续精排的候选就越多。"""
+    所以 RAG_TOP_K 越大，进入后续精排的候选就越多。
+
+    2026-10-17 起 FTS 命中不再窄化候选池（与 retrieval_v2._fetch_candidates 并集
+    语义同步）：TOP_K 决定的是 bm25 排序头部的长度，新鲜度尾部仍会并入（按 id
+    去重）——因此 RAG_TOP_K=1 时池总量可超过 1，但 FTS 命中行必须领跑。
+    """
     db = _new_db(tmp_path, monkeypatch)
     monkeypatch.setattr(retriever, "RAG_ENABLED", True)
     monkeypatch.setattr(retriever, "RAG_SQLITE_FTS_ENABLED", True)
@@ -128,9 +133,11 @@ def test_rag_top_k_sets_candidate_pool_floor(tmp_path, monkeypatch):
     pool_big = retriever._query_rag_results(cursor, "4", "篮球", limit=max(1, retriever.RAG_TOP_K))
     assert len(pool_big) == 2
 
-    # RAG_TOP_K=1：候选池被压到 1 条
+    # RAG_TOP_K=1：bm25 头部压到 1 条，但并集语义下新鲜度尾部仍并入。
+    # 两行都含「篮球」，bm25 同分顺序未指定，只钉池总量与成员。
     monkeypatch.setattr(retriever, "RAG_TOP_K", 1)
     pool_small = retriever._query_rag_results(cursor, "4", "篮球", limit=max(1, retriever.RAG_TOP_K))
-    assert len(pool_small) == 1
+    assert len(pool_small) == 2
+    assert {r[0] for r in pool_small} == {"我最近喜欢篮球", "篮球比赛真精彩"}
 
     conn.close()

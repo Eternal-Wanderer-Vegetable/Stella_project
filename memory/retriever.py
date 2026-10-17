@@ -408,7 +408,7 @@ def _query_rag_results(
             _rebuild_fts_index(cursor)
 
         query_sql = (
-            "SELECT m.content, m.user_id, m.type, "
+            "SELECT m.id, m.content, m.user_id, m.type, "
             "COALESCE(m.last_confirmed_at, m.last_accessed_at), m.importance, m.confidence "
             "FROM memories_fts f "
             "JOIN memories m ON f.mem_id = m.id "
@@ -425,7 +425,32 @@ def _query_rag_results(
         query_sql += "AND f.content MATCH ? ORDER BY bm25(memories_fts) LIMIT ?"
         params.extend([query_expression, limit])
 
-        return cursor.execute(query_sql, tuple(params)).fetchall()
+        fts_rows = cursor.execute(query_sql, tuple(params)).fetchall()
+        if not fts_rows:
+            return []
+        # FTS 命中不窄化候选池（2026-10-17）：OR 召回的行排在前（bm25 序），再并
+        # 入同一过滤条件下的新鲜度头部（按 id 去重）——只保留 FTS 行时池里只剩
+        # 「恰与查询共享分词片段」的记忆，竞争者变少会让旧值/干扰项更容易穿过
+        # 下游的 LIMIT 截断；并集 = FTS 未命中路径原本就会走的池，FTS 只增不减。
+        recency_sql = (
+            "SELECT id, content, user_id, type, "
+            "COALESCE(last_confirmed_at, last_accessed_at), importance, confidence "
+            "FROM memories WHERE group_shared_space = ? AND status = 'active' "
+        )
+        recency_params: list[Any] = [group_shared_space]
+        if include_user_id is not None:
+            recency_sql += "AND user_id = ? "
+            recency_params.append(include_user_id)
+        elif exclude_user_id is not None:
+            recency_sql += "AND user_id != ? "
+            recency_params.append(exclude_user_id)
+        recency_sql += "ORDER BY COALESCE(last_confirmed_at, last_accessed_at) DESC LIMIT ?"
+        recency_params.append(limit)
+        recency_rows = cursor.execute(recency_sql, tuple(recency_params)).fetchall()
+        seen_ids = {r[0] for r in fts_rows}
+        merged = list(fts_rows) + [r for r in recency_rows if r[0] not in seen_ids]
+        # 行形状回退到既有契约（content, user_id, type, …）：id 只用于并集去重
+        return [r[1:] for r in merged]
     except sqlite3.OperationalError as e:
         # FTS 查询静默降级成空结果会表现为「检索永远无命中」，必须留痕分级：
         # no such table → 索引未建（正常）；其余（如列名不匹配）→ warning

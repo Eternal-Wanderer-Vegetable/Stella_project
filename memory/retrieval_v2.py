@@ -212,22 +212,35 @@ def _fetch_candidates(
         params.extend([VISIBILITY_RESTRICTED, VISIBILITY_INTERNAL])
 
     # 有关键词时优先走 FTS（语义/关键词混合）
-    rows: list[tuple[Any, ...]] = []
+    fts_rows: list[tuple[Any, ...]] = []
     if query and RAG_ENABLED:
-        rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode, access_scope)
-    if not rows:
-        sql = (
-            f"SELECT {_select_clause(cursor)} FROM memories m WHERE {where} "
-            f"ORDER BY {_FRESHNESS} DESC LIMIT ?"
-        )
-        params.append(pool_limit)
-        try:
-            rows = cursor.execute(sql, tuple(params)).fetchall()
-        except sqlite3.OperationalError as e:
-            # 旧库可能还没有 v2 列：退化为不带新列的查询。表缺失是惰性建表的
-            # 正常情况（debug）；若连旧列都没有/其他原因，则必须告警留痕
-            log_sqlite_error("RetrievalV2._fetch_candidates", e)
-            return _fetch_candidates_legacy(cursor, group_shared_space, user_id, mode, pool_limit)
+        fts_rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode, access_scope)
+
+    # 新鲜度头部查询：FTS 未命中时是唯一候选池；FTS 命中时与 FTS 行并集
+    # （FTS 命中不窄化候选池，2026-10-17）——OR 召回的行排在前（bm25 序），
+    # 再并入新鲜度头部（按 id 去重）。只保留 FTS 行会让池里只剩「恰与查询
+    # 共享分词片段」的记忆——竞争者变少后，旧值/干扰项反而更容易穿过
+    # LIMIT 截断与分数门槛（基准 temporal/conflict 用例 forbidden 硬零被破
+    # 的根因）；并入新鲜度头部 = 修复前生产实际运行的池（严格超集），
+    # FTS 只增不减。
+    sql = (
+        f"SELECT {_select_clause(cursor)} FROM memories m WHERE {where} "
+        f"ORDER BY {_FRESHNESS} DESC LIMIT ?"
+    )
+    params.append(pool_limit)
+    try:
+        recency_rows = cursor.execute(sql, tuple(params)).fetchall()
+    except sqlite3.OperationalError as e:
+        # 旧库可能还没有 v2 列：退化为不带新列的查询。表缺失是惰性建表的
+        # 正常情况（debug）；若连旧列都没有/其他原因，则必须告警留痕
+        log_sqlite_error("RetrievalV2._fetch_candidates", e)
+        return _fetch_candidates_legacy(cursor, group_shared_space, user_id, mode, pool_limit)
+
+    if fts_rows:
+        seen_ids = {r[0] for r in fts_rows}
+        rows = fts_rows + [r for r in recency_rows if r[0] not in seen_ids]
+    else:
+        rows = recency_rows
     return [_row_to_memory(r) for r in rows]
 
 

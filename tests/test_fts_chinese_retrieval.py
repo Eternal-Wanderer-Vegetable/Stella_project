@@ -162,6 +162,44 @@ def test_bm25_orders_multi_term_hits_first(monkeypatch):
     conn.close()
 
 
+def test_fts_hits_do_not_narrow_candidate_pool(monkeypatch):
+    """FTS 命中不窄化候选池：不匹配查询词的记忆仍在候选里（并集语义）。
+
+    只保留 FTS 行时池里只剩「恰与查询共享分词片段」的记忆，竞争者变少后
+    旧值/干扰项更容易穿过下游 LIMIT 截断与分数门槛（基准 temporal/conflict
+    用例 forbidden 硬零被破的根因）。
+    """
+    monkeypatch.setattr(retriever, "RAG_ENABLED", True)
+    monkeypatch.setattr(retriever, "RAG_SQLITE_FTS_ENABLED", True)
+    conn = sqlite3.connect(":memory:")
+    _prepare_mem_db(conn, [("m1", "推荐几款游戏"), ("m2", "今天天气不错")])
+
+    rows = retriever._query_rag_results(conn.cursor(), "space_a", "有什么游戏推荐吗", limit=5)
+    contents = [r[0] for r in rows]
+    assert contents[0] == "推荐几款游戏"  # FTS 命中领跑
+    assert "今天天气不错" in contents  # 池不窄化：新鲜度头部兜底并入
+    conn.close()
+
+
+def test_fetch_candidates_unions_fts_with_recency_pool(monkeypatch):
+    """retrieval_v2._fetch_candidates 同样并集：FTS 行在前、新鲜度头部去重并入。"""
+    import memory.retrieval_v2 as v2
+
+    monkeypatch.setattr(retriever, "RAG_ENABLED", True)
+    monkeypatch.setattr(retriever, "RAG_SQLITE_FTS_ENABLED", True)
+    monkeypatch.setattr(v2, "RAG_ENABLED", True)
+    conn = sqlite3.connect(":memory:")
+    _prepare_mem_db(conn, [("m1", "推荐几款游戏"), ("m2", "今天天气不错")])
+
+    candidates = v2._fetch_candidates(
+        conn.cursor(), "space_a", None, "CASUAL_REPLY", "有什么游戏推荐吗", 20
+    )
+    ids = [m["id"] for m in candidates]
+    assert ids[0] == "m1"
+    assert "m2" in ids
+    conn.close()
+
+
 def test_match_expression_with_keywords_does_not_break_match(monkeypatch):
     """保留字查询（裸 AND/OR/NEAR 词形）经引号化后可安全执行，不再 fts5 syntax error。"""
     monkeypatch.setattr(retriever, "RAG_ENABLED", True)
