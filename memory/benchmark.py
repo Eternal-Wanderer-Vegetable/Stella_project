@@ -305,7 +305,11 @@ def write_case_db(
     """Write a benchmark case and optionally add the native schema marker."""
     group_id, user_id = _write_case_db(db_path, case, populate_fts=populate_fts)
     if with_schema_meta:
-        from memory.schema import SCHEMA_VERSION
+        # native 侧 ensure_supported 按库 schema_meta.version 与其编译合同号
+        # **严格相等**放行，所以打点必须是 native 合同版本（memory_rust.backend
+        # 的 MEMORY_SCHEMA_VERSION），不是 memory.schema.SCHEMA_VERSION——两者
+        # 只是数值碰巧同为 19 时恰好不炸；SQLite schema 升 20 后即分叉。
+        from memory_rust.backend import MEMORY_SCHEMA_VERSION
 
         conn = sqlite3.connect(db_path)
         try:
@@ -316,7 +320,7 @@ def write_case_db(
             conn.execute(
                 "INSERT INTO schema_meta (k, version) VALUES ('version', ?) "
                 "ON CONFLICT(k) DO UPDATE SET version = excluded.version",
-                (SCHEMA_VERSION,),
+                (MEMORY_SCHEMA_VERSION,),
             )
             conn.commit()
         finally:

@@ -309,7 +309,10 @@ fn contradictory(left: &str, right: &str) -> bool {
         && common_terms(left, right)
 }
 
-fn fts_text(value: &str) -> String {
+/// FTS 写入侧分词（晋升同步 memories_fts 用）：中文 3/2 字滑窗、其余 ASCII 词，
+/// 保序去重、空格连接。检索查询侧的 MATCH 表达式（retrieval::match_expression）
+/// 必须与这里同源——两侧分词漂移 = 索引报废。
+pub(crate) fn fts_text(value: &str) -> String {
     let normalized = normalize_text(value);
     let chars: Vec<char> = normalized.chars().collect();
     let mut tokens = Vec::new();
@@ -1653,7 +1656,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open db");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 19);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
              CREATE TABLE memory_candidates (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, content_raw TEXT, importance REAL, confidence REAL,

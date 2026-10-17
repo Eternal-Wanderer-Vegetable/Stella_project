@@ -943,3 +943,72 @@ def test_v18_to_v19_adds_unverified_evidence_and_claim_lineage_idempotently(tmp_
         ).fetchone() == ("legacy_unverified",)
     finally:
         conn.close()
+
+
+def test_v19_to_v20_rebuilds_fts_index_with_new_tokenization(tmp_path):
+    """v19 旧库的 FTS 索引按旧分词写入（整段 CJK token、缺滑窗片段）→ v20 重灌后中文可召回。
+
+    a6431e4（2026-08-08）到 3c3b755（2026-08-12）之间写入的行连滑窗片段都没有；
+    只修查询侧（OR）这些行仍查不到，必须一次性重灌（migrate_v20，v8 的既定手法）。
+    """
+    from memory import retriever
+
+    path = tmp_path / "v19-stale-fts.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(
+            """CREATE TABLE schema_meta (
+                k TEXT PRIMARY KEY,
+                version INTEGER,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 19)")
+        conn.execute(
+            "CREATE TABLE memories (id TEXT PRIMARY KEY, group_shared_space TEXT,"
+            " user_id TEXT, type TEXT, content TEXT, status TEXT)"
+        )
+        conn.execute(
+            "CREATE VIRTUAL TABLE memories_fts USING fts5("
+            "mem_id UNINDEXED, content, group_shared_space UNINDEXED, user_id UNINDEXED)"
+        )
+        content = "推荐几款游戏"
+        conn.execute(
+            "INSERT INTO memories (id, group_shared_space, user_id, type, content, status)"
+            " VALUES ('m1', 'space_a', '100', 'FACT', ?, 'active')",
+            (content,),
+        )
+        # 旧分词夹具：整段中文当一个 token（旧 ``\w+`` 行为的产物）
+        conn.execute(
+            "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id)"
+            " VALUES ('m1', ?, 'space_a', '100')",
+            (content,),
+        )
+        conn.commit()
+
+        steps = migrations.run_migrations(conn, 19, 20, None)
+        assert [step.version for step in steps] == [20]
+        assert conn.execute(
+            "SELECT version FROM schema_meta WHERE k='version'"
+        ).fetchone()[0] == 20
+
+        # 索引已按新分词重灌：滑窗片段在场、整段 token 消失
+        indexed = conn.execute(
+            "SELECT content FROM memories_fts WHERE mem_id = 'm1'"
+        ).fetchone()[0]
+        assert indexed == retriever._segment_text(content)
+        assert "推荐" in indexed.split()
+        assert content not in indexed.split()
+
+        # 迁移后，OR 查询表达式能真实召回存量行（修复前此查询恒 0 行）
+        rows = conn.execute(
+            "SELECT mem_id FROM memories_fts WHERE memories_fts MATCH ?",
+            (retriever._match_expression("有什么游戏推荐吗"),),
+        ).fetchall()
+        assert [r[0] for r in rows] == ["m1"]
+
+        # 幂等：版本已在 20，(20, 20) 区间为空（真实入口 schema._migrate 读 schema_meta
+        # 后传的 from=to=20，不会重复执行 v20）
+        assert migrations.run_migrations(conn, 20, 20, None) == []
+    finally:
+        conn.close()

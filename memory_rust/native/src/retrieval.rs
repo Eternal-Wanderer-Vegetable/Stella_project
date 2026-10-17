@@ -8,6 +8,7 @@ use crate::policy::{
     apply_conversation_limit, merge_similar, normalize_mode, rank_memories,
     split_behavior_constraints, MemoryRecord, MODE_CONFLICT_AVOID,
 };
+use crate::promotion::fts_text;
 use crate::schema::ensure_supported;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -198,10 +199,30 @@ fn load_candidates(
     Ok(candidates)
 }
 
+/// 查询侧 MATCH 表达式：与写入侧同一分词（fts_text），token 带引号防 AND/OR/NEAR
+/// 保留字后 OR 连接——任一片段命中即召回，相关性交给 bm25()。与 Python 侧
+/// ``retriever._match_expression`` 同语义。
+/// 历史教训：这里曾直接绑原始查询串——中文整串被 unicode61 当一个 term，与滑窗
+/// 写入的索引几乎永不相等，FTS 通道长期空转、静默回退新鲜度排序（2026-10-17
+/// 与 Python 侧 MATCH 隐式 AND 同批定位）。
+/// 返回空串 = 查询无有效片段，调用方必须跳过 FTS（空表达式会 fts5 syntax error）。
+fn match_expression(query: &str) -> String {
+    fts_text(query)
+        .split(' ')
+        .filter(|token| !token.is_empty())
+        .map(|token| format!("\"{token}\""))
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
 fn load_fts_candidates(
     conn: &Connection,
     request: &RetrievalRequest,
 ) -> Result<Vec<MemoryRecord>, String> {
+    let expression = match_expression(&request.query);
+    if expression.is_empty() {
+        return Ok(Vec::new());
+    }
     let (visibility_sql, visibility_values) = visibility_params(&request.mode);
     let user_clause = if request.trigger.eq_ignore_ascii_case("proactive") {
         String::new()
@@ -224,7 +245,7 @@ fn load_fts_candidates(
         values.push(request.user_id.to_string());
     }
     values.extend(visibility_values.into_iter().map(str::to_string));
-    values.push(request.query.clone());
+    values.push(expression);
     values.push(request.pool_limit.to_string());
     let mut statement = match conn.prepare(&sql) {
         Ok(statement) => statement,
@@ -313,7 +334,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 19);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -348,7 +369,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 19);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -388,5 +409,61 @@ mod tests {
         assert!(ids.contains(&"person-shared"));
         assert!(!ids.contains(&"person-private"));
         assert!(!ids.contains(&"person-other"));
+    }
+
+    #[test]
+    fn fts_or_expression_recalls_chinese_sentence_query() {
+        // 查询侧曾经直接绑原始查询串：中文整串被 unicode61 当一个 term，与滑窗
+        // 写入的索引永不相等 → FTS 通道空转。此测钉住 OR 表达式让自然中文句子
+        // 查询真实召回（修复前恒回退新鲜度候选）。
+        let file = NamedTempFile::new().expect("temp db");
+        let conn = Connection::open(file.path()).expect("open");
+        conn.execute_batch(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+             CREATE TABLE memories (
+               id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
+               content TEXT, importance REAL, confidence REAL, status TEXT,
+               usage_tags TEXT, visibility TEXT, trigger_data TEXT, behavior_rule TEXT,
+               last_accessed_at TEXT, last_confirmed_at TEXT
+             );
+             CREATE VIRTUAL TABLE memories_fts USING fts5(
+               mem_id UNINDEXED, content, group_shared_space UNINDEXED, user_id UNINDEXED
+             );",
+        )
+        .expect("schema");
+        for (id, content) in [("m1", "推荐几款游戏"), ("m2", "今天天气不错")] {
+            conn.execute(
+                "INSERT INTO memories VALUES (?, 'space-a', '1', 'FACT', ?, .8, .9,
+                 'active', '[\"RECOMMEND\"]', 'OPEN', NULL, NULL,
+                 '2026-09-01 00:00:00', NULL)",
+                rusqlite::params![id, content],
+            )
+            .expect("insert memory");
+            conn.execute(
+                "INSERT INTO memories_fts (mem_id, content, group_shared_space, user_id)
+                 VALUES (?, ?, 'space-a', '1')",
+                rusqlite::params![id, super::super::promotion::fts_text(content)],
+            )
+            .expect("insert fts");
+        }
+        drop(conn);
+
+        let mut request = test_request(&file.path().display().to_string(), "space-a", 1);
+        request.query = "有什么游戏推荐吗".to_string();
+        let output = retrieve(request).expect("retrieve");
+        let ids: Vec<&str> = output
+            .conversation_memories
+            .iter()
+            .map(|m| m.id.as_str())
+            .collect();
+        assert!(ids.contains(&"m1"));
+        assert!(!ids.contains(&"m2"));
+
+        // 纯标点查询无有效片段 → 不进 MATCH，回退新鲜度候选（两条都在，但不炸）
+        let mut punct = test_request(&file.path().display().to_string(), "space-a", 1);
+        punct.query = "！！！???".to_string();
+        let fallback = retrieve(punct).expect("retrieve");
+        assert_eq!(fallback.conversation_memories.len(), 2);
     }
 }
