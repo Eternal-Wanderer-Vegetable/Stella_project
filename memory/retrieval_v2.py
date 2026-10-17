@@ -313,12 +313,12 @@ def _query_fts(
     scope 给定时（计划 §6.6）权限过滤切到 m 侧 owner 谓词——FTS 回退路径与
     SQL 主路径同授权，绝不退回裸 space 过滤。
     """
-    from memory.retriever import _ensure_fts_table, _segment_text
+    from memory.retriever import _ensure_fts_table, _match_expression
 
     if not _ensure_fts_table(cursor):
         return []
-    tokens = _segment_text(query)
-    if not tokens:
+    query_expression = _match_expression(query)
+    if not query_expression:
         return []
     try:
         params: list[Any] = []
@@ -348,7 +348,7 @@ def _query_fts(
         else:
             params.extend([VISIBILITY_RESTRICTED, VISIBILITY_INTERNAL])
         sql += "AND f.content MATCH ? ORDER BY bm25(memories_fts) LIMIT ?"
-        params.extend([tokens, limit])
+        params.extend([query_expression, limit])
         return cursor.execute(sql, tuple(params)).fetchall()
     except sqlite3.OperationalError as e:
         # FTS 查询静默降级成空结果会表现为「检索永远无命中」，必须留痕分级
