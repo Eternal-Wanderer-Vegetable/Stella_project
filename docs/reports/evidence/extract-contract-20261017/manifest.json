@@ -1,0 +1,25 @@
+{
+  "captured_local_date": "2026-10-17",
+  "artifact_kind": "extract-contract-prompt-fix-acceptance",
+  "summary": {
+    "change": "EXTRACTION_PROMPT 增补契约硬规则块（4a45082），仅提示词，闸门 evidence_contract 未动",
+    "before": "20261016 replay-live-strata：候选 4 全 unknown、0 accepted、promotion 0%",
+    "run1_plan_command": "候选 6 / 记忆 4；extraction 100%、fabrication 0%、promotion 100%、qa 100%、delta +100",
+    "run2_contract_assessment": "候选 6 中 4 条契约 accepted（profile.residence / preference.general×2 / profile.nickname），0 rejected；截尾规则生效（我叫小艾，以后多指教→我叫小艾）",
+    "gate_untouched": "ASSESSMENT_VERSION 2026-10-08.1 未 bump；memory/evidence_contract.py 零改动"
+  },
+  "commands": [
+    "NO_PROXY=127.0.0.1,localhost python scripts/eval_memory_replay.py --suite memory/benchmark/_replay/daily-life --live --json docs/reports/evidence/extract-contract-20261017/replay-live-strata-postfix.json",
+    "（第二遍）同管线 + memory_evidence.verification_status 逐候选盘点 → contract-assessment-live.json"
+  ],
+  "artifacts": [
+    {
+      "path": "contract-assessment-live.json",
+      "sha256": "d43bfa799d7dae0516813cd89642dbc5aa031d79f02ec13674bf937bc6ecf4d4"
+    },
+    {
+      "path": "replay-live-strata-postfix.json",
+      "sha256": "1603c3122d4a4e05e0463c8f43ec877ee935dfa57816f6a6f8748753088c3ff1"
+    }
+  ]
+}

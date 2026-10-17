@@ -1,0 +1,168 @@
+{
+  "schema": "memory-replay-report/1",
+  "cost": {
+    "llm_calls": 0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "accounting": "usage_sink(process)"
+  },
+  "generated_at": "2026-10-17T15:08:08",
+  "mode": "live",
+  "suite": "daily-life",
+  "suite_sha256": "d8d544531a7c68747bc8dd638f1429b0fb284b1cd610d0ee9bbcef06e10a5b93",
+  "recordings_sha256": "86af3f8ceef4f8febabe57bd7955d1e4d2ef1b47f972ba7cfc821a83f71b5163",
+  "run_fingerprint": "ea640c7561bdaf2842754e6b42610ebe10fd3fff3731e92bbd40acf1fd877c15",
+  "metrics": {
+    "candidates_total": 6,
+    "memories_total": 4,
+    "extraction_hit_rate": 100.0,
+    "fabrication_rate": 0.0,
+    "promotion_correctness": 100.0,
+    "qa_accuracy": 100.0,
+    "qa_accuracy_without_memory": 0.0,
+    "memory_delta": 100.0
+  },
+  "details": {
+    "extraction": [
+      {
+        "id": "E1",
+        "hit": true
+      },
+      {
+        "id": "E2",
+        "hit": true
+      },
+      {
+        "id": "E3",
+        "hit": true
+      },
+      {
+        "id": "E4",
+        "hit": true
+      }
+    ],
+    "fabrication": [
+      {
+        "id": "b268dcfc6c65436196fd2347c66ec36f",
+        "content": "我住在杭州",
+        "fabricated": false
+      },
+      {
+        "id": "c6bd5e4fbfcb4a638453be2e5600a21a",
+        "content": "我住在杭州",
+        "fabricated": false
+      },
+      {
+        "id": "102624ea6d3f4fe3bf20c0c4a4df2f57",
+        "content": "我喜欢三分糖的奶茶",
+        "fabricated": false
+      },
+      {
+        "id": "ce88fa87b2d74367a68e1619eebfeff1",
+        "content": "我喜欢三分糖的奶茶",
+        "fabricated": false
+      },
+      {
+        "id": "2a2dd4d8b66e40f286a1fae08c4c749a",
+        "content": "我叫小艾",
+        "fabricated": false
+      },
+      {
+        "id": "42ed0484f333410892332fadee5eb70c",
+        "content": "我喜欢周末去爬山",
+        "fabricated": false
+      }
+    ],
+    "promotion": [
+      {
+        "id": "E1",
+        "promoted": true
+      },
+      {
+        "id": "E2",
+        "promoted": true
+      },
+      {
+        "id": "E3",
+        "promoted": true
+      },
+      {
+        "id": "E4",
+        "promoted": true
+      }
+    ],
+    "qa_with": [
+      {
+        "id": "Q1",
+        "query": "我现在住在哪个城市来着",
+        "recalled_ids": [
+          "a7a6ab6886a14195b58ef339ad336dbb",
+          "c82d574d41114c93b2c28306290dc220",
+          "240224bb390f4d25b716f8a707a7cdab"
+        ],
+        "expect_hits": {
+          "杭州": true
+        },
+        "pass": true
+      },
+      {
+        "id": "Q2",
+        "query": "奶茶喝几分糖",
+        "recalled_ids": [
+          "a7a6ab6886a14195b58ef339ad336dbb",
+          "c82d574d41114c93b2c28306290dc220",
+          "240224bb390f4d25b716f8a707a7cdab"
+        ],
+        "expect_hits": {
+          "三分糖": true
+        },
+        "pass": true
+      },
+      {
+        "id": "Q3",
+        "query": "周末去哪玩比较好",
+        "recalled_ids": [
+          "7ec52045eebe4adebc4c38dc85d64c86"
+        ],
+        "expect_hits": {
+          "爬山": true
+        },
+        "pass": true
+      }
+    ],
+    "qa_without": [
+      {
+        "id": "Q1",
+        "query": "我现在住在哪个城市来着",
+        "recalled_ids": [],
+        "expect_hits": {
+          "杭州": false
+        },
+        "pass": false
+      },
+      {
+        "id": "Q2",
+        "query": "奶茶喝几分糖",
+        "recalled_ids": [],
+        "expect_hits": {
+          "三分糖": false
+        },
+        "pass": false
+      },
+      {
+        "id": "Q3",
+        "query": "周末去哪玩比较好",
+        "recalled_ids": [],
+        "expect_hits": {
+          "爬山": false
+        },
+        "pass": false
+      }
+    ]
+  },
+  "live": {
+    "endpoint": "http://127.0.0.1:8081",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "temperature": null
+  }
+}
