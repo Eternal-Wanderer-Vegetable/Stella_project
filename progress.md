@@ -143,3 +143,12 @@
 - 门禁：守卫+前缀缓存 14 passed；子集 `-k "prompt or consolidat or evidence_contract"` 109 passed；ruff/check_docs 过；detect_changes scope=all exit 0 无 partial/truncated（唯一跟踪脏文件仍是上会话遗留 live-20261017.json 重录件，未随本批提交）。
 - 闸门零改动（ASSESSMENT_VERSION 2026-10-08.1 未 bump）；GitNexus impact `format_extraction_prompt` 上游 CRITICAL（3 直接调用方全透传，与计划 §4 一致）。
 - 遗留（计划 §12 开放项）：称呼要求（「以后叫我X」）闸门无支持句型、契约不会 accepted，扩 gate 另立课题；真模型非确定性下两遍候选 6/6、accepted 4/4，修复效果稳定复现。
+
+### PR #110 CI 修复 — 2026-10-17（续四）
+
+- 分支首推触发 PR #110 全量 CI，四项失败三种根因，全部修复（`723ca57`）：
+  ① documentation：progress.md 链接的 EXTRACT 计划文件未入库（本地存在 untracked 件所以本地门禁过）→ 计划文件入库；
+  ② test×3（同一例 `test_frozen_generated_dir_matches`）：`digest_dir` 直接哈希原始字节，Windows 检出 CRLF vs CI LF 使冻结摘要平台相关（本地 62e3b22b / CI 15252fbf）→ 哈希前 CRLF→LF 归一化，FROZEN_DIGEST 同步为平台无关值；
+  ③ memory-benchmark-public：`adapt_personamem` 默认 CSV 是扁平路径而 `fetch_personamem` 落盘嵌套 `benchmark/text/`（扁平件是本机历史手工副本）→ 默认改指 fetch 落盘布局。
+- 本地全链路镜像验证后推送：generator --check / 两测试文件 13 passed / adapt 200 + benchmark gate（**98.0%、forbidden 0**，门禁绿；较上次记录 100% 低 2 点是同分支 FTS 检索语义修复所致）。
+- 推送后 run 39014161067 **13/13 全绿**（含 test 3.10/3.11/3.12、memory-benchmark-public、documentation）。
