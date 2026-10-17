@@ -8,7 +8,7 @@
   "edges": 149,
   "explicit_boundaries": 13,
   "lanes": 14,
-  "reachable_symbols": 11017,
+  "reachable_symbols": 11039,
   "reachable_truncated_nodes": [],
   "source_resolved": 139,
   "total_nodes": 141,
@@ -2029,11 +2029,11 @@
     "contract_digests": {
      "config/settings.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
      "memory_rust/__init__.py": "83eb71c1b1bdaeb74667b9bcbfcb3d5ef76cded78369cb1f6420aaa98cc4af76",
-     "memory_rust/backend.py": "53946399589ee871aa03c7a3313f6cc0a57776e519faf6974677336c93964ee1",
+     "memory_rust/backend.py": "c5643f61616dffb9895b6409ffc4776ddc9fe5d5163ff497449509f8245590a5",
      "memory_rust/native/src/lib.rs": "39030695b7c31ea448d74ebc31098a3a72480f9afc89d199b7b7077303fa6246",
      "memory_rust/native/src/policy.rs": "323c5191b03a766b8dee025bb7255b7d8767b5ac0c0f7f5d994d943f1b296563",
-     "memory_rust/native/src/retrieval.rs": "51ff7ac3e163ced41a7089f3359454e9df2b989b0a8259f46ac24adf5e70ef7c",
-     "memory_rust/native/src/schema.rs": "709a518db7b0f7cfecb36c36d1883ba0271151941e520c36c5cca9b8ca53be96",
+     "memory_rust/native/src/retrieval.rs": "58b669aa682a01e3735ed7604cde40d85b741ec0f0c431d7ddf4653215d0b1da",
+     "memory_rust/native/src/schema.rs": "bb2db8c9c6cfebfa9d1857aee73409f8e77640ca705547d09ae1b632233ac4cd",
      "memory_rust/native/src/similarity.rs": "6fa636e8e4e8e98192aa6377e1fff172462ed0b832f231811420bf2169f44a79",
      "memory_rust/python_backend.py": "bea0043068d94afc76ff984e788abde5fdfe696a5f0c3816308c3ea3646ed8b5",
      "memory_rust/selector.py": "18bb20df033735933bcfd3a40f17c4a1dec46351ea9e4161eab1a9a9dcc179a7"
@@ -2047,7 +2047,7 @@
      "file": "memory_rust/native/src/promotion.rs",
      "symbol": "promote"
     },
-    "source_digest": "88844558c1a1667baaa662e25c2edca61ad4a06bf2150020834a2314ec8bdbfc"
+    "source_digest": "b0340997847c13bfb354122f956d9e1ded10720e15177ddb7753ed0ae08a9373"
    }
   ],
   "families": [
@@ -7244,7 +7244,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -7316,6 +7316,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "25716bb5a92aa3bc",
+     "file": "memory/retriever.py",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
      "body_hash": "74d2d0c55aa9a556",
      "file": "memory/retriever.py",
      "qualname": "_memories_from_rows",
@@ -7328,7 +7334,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a67975a24fdb89c3",
+     "body_hash": "5be70d6cc7c9ea97",
      "file": "memory/retriever.py",
      "qualname": "_query_rag_results",
      "resolution": "local"
@@ -7358,9 +7364,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -9097,7 +9109,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -9169,6 +9181,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "25716bb5a92aa3bc",
+     "file": "memory/retriever.py",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
      "body_hash": "74d2d0c55aa9a556",
      "file": "memory/retriever.py",
      "qualname": "_memories_from_rows",
@@ -9181,7 +9199,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a67975a24fdb89c3",
+     "body_hash": "5be70d6cc7c9ea97",
      "file": "memory/retriever.py",
      "qualname": "_query_rag_results",
      "resolution": "local"
@@ -9211,9 +9229,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -10950,7 +10974,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -11022,6 +11046,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "25716bb5a92aa3bc",
+     "file": "memory/retriever.py",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
      "body_hash": "74d2d0c55aa9a556",
      "file": "memory/retriever.py",
      "qualname": "_memories_from_rows",
@@ -11034,7 +11064,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a67975a24fdb89c3",
+     "body_hash": "5be70d6cc7c9ea97",
      "file": "memory/retriever.py",
      "qualname": "_query_rag_results",
      "resolution": "local"
@@ -11064,9 +11094,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -18078,9 +18114,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -25596,9 +25638,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -46832,9 +46880,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -47872,9 +47926,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -49165,9 +49225,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -65017,9 +65083,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -71951,9 +72023,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -72979,9 +73057,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -75234,9 +75318,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -76253,9 +76343,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -77768,9 +77864,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -78396,9 +78498,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -78693,9 +78801,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "90a01e77c943040b",
      "file": "memory/retriever.py",
      "qualname": "_segment_text",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -79591,7 +79705,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -79633,9 +79747,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "25716bb5a92aa3bc",
      "file": "memory/retriever.py",
-     "qualname": "_segment_text",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -84131,7 +84251,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -84179,9 +84299,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "25716bb5a92aa3bc",
      "file": "memory/retriever.py",
-     "qualname": "_segment_text",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -84992,7 +85118,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a5fb98020da42732",
+     "body_hash": "b43a3e19d10b2ea2",
      "file": "memory/retrieval_v2.py",
      "qualname": "_query_fts",
      "resolution": "local"
@@ -85040,9 +85166,15 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4f4b6413bbe6bc3",
+     "body_hash": "25716bb5a92aa3bc",
      "file": "memory/retriever.py",
-     "qualname": "_segment_text",
+     "qualname": "_match_expression",
+     "resolution": "local"
+    },
+    {
+     "body_hash": "ab8d400f0a533369",
+     "file": "memory/retriever.py",
+     "qualname": "_tokenize",
      "resolution": "local"
     },
     {
@@ -126893,6 +127025,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "fdcdb88e343ce7dcb308560ba75c543837f08964",
+ "source_revision": "d042c0497f7231106fffc0a399a4a87cc22ce760",
  "topology_version": "2026.10.04"
 }
