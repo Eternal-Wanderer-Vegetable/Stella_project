@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-17 (Asia/Shanghai)
-**Active Feature:** FTS 中文检索修复已在 `feat/memory-benchmark-suite` 落地 5 提交（80da1b0..88eadeb）并全部验收通过；分支待用户审阅合并（未推送）。
-**Scope:** 计划 [2026-10-17-gitnexus-plan-fts-chinese-or-retrieval.md](docs/plans/2026-10-17-gitnexus-plan-fts-chinese-or-retrieval.md) 全量实施：分词去整段 CJK token、MATCH 改 OR、migrate_v20 存量重灌、native 合同升 20、FTS 命中不窄化候选池。详情见 [实施报告](docs/reports/2026-10-17-fts-chinese-or-retrieval-implementation.md)。
+**Active Feature:** EXTRACT 契约对齐（阶段2 提示词修复）已在 `feat/memory-benchmark-suite` 落地并验收通过（4a45082 提示词+守卫、9a74b9a 证据报告，另含状态提交）；真模型 live 回放 accepted 0→4、promotion 0%→100%。分支累计待用户审阅合并（未推送）。
+**Scope:** 计划 [2026-10-17-gitnexus-plan-extract-contract-prompt.md](docs/plans/2026-10-17-gitnexus-plan-extract-contract-prompt.md) 全量实施：仅改 `EXTRACTION_PROMPT`（契约硬规则块+示例契约修正），闸门 `evidence_contract.py` 零改动。详情见 [实施报告](docs/reports/2026-10-17-extract-contract-prompt-fix.md)。
 
 ## What's Done
 
@@ -135,3 +135,11 @@
 - **验收**：fts 模式基准 100/101（唯一失败=基线记录的既有 rank-casual-001）、forbidden 0.0%、`retrieval_path` 65 行/101 查询（修复前恒 0）；四模式矩阵逐位对齐 2026-10-16 旧矩阵，rule/embedding parity 101/101；冻结基线零容差通过；bm25 默认列权经 rank 裁决保留。全量 pytest **3763 passed / 17 skipped**；cargo test 22/22；ruff/check_docs/flow-manifest 门禁过；detect_changes scope=all：代码符号零重叠（唯一非符号差异=上一会话遗留的 live-20261017.json 重录件，未随本批提交）。
 - 本机 `_native.pyd` 已重编译到合同 20（gitignore 产物）；**发布注意事项**：release wheel 须重编，升级过渡期旧 .pyd 遇 schema 20 库会拒绝并回退 python（auto 模式）。
 - NOT READY：QQ 真机灰度（随下次启动迁移自动重灌存量索引，观察检索命中即可）；native `fts_text` 与 Python `_tokenize` 的 ≤4 字段/`{2,8}` 分块既有分歧留后续小课题（报告 §6）。
+
+### EXTRACT 契约对齐实施 — 2026-10-17（续三）
+
+- 计划 `2026-10-17-gitnexus-plan-extract-contract-prompt.md` 全量实施，2 提交于 `feat/memory-benchmark-suite`：`4a45082`（EXTRACTION_PROMPT 增补契约硬规则块：枚举 evidence_contract 可审核句型与 predicate_key 含 .en 英形、span 截尾/值段禁标点、self_report→FACT+positive 与 explicit_preference→PREFERENCE 绑定、反例三条、非刻板句照常提取声明、称呼规则调和；并修正正例 content 逐字与结构示例契约 sleep_pattern→profile.residence 两处与闸门矛盾的示例；新增 tests/test_extraction_prompt_contract.py 结构守卫；flow manifest 重生成）、`9a74b9a`（真模型验收证据+实施报告）。
+- **决定性验收（Strata qwen3.8-flash-next-iq2_xs @8081，daily-life suite live 回放两遍独立实录）**：第一遍标准报告候选 6/记忆 4，extraction 100%、fabrication 0%、**promotion 100%（此前 0%）**、qa 100%、delta +100；第二遍逐候选契约盘点 **4 条 accepted（此前 0）、0 rejected**，句型全部命中教学枚举（profile.residence / preference.general×2 / profile.nickname），截尾生效（「我叫小艾，以后多指教」→「我叫小艾」）。晋升以 accepted 为前置（memory_manager.py:1007），两证据互为印证。
+- 门禁：守卫+前缀缓存 14 passed；子集 `-k "prompt or consolidat or evidence_contract"` 109 passed；ruff/check_docs 过；detect_changes scope=all exit 0 无 partial/truncated（唯一跟踪脏文件仍是上会话遗留 live-20261017.json 重录件，未随本批提交）。
+- 闸门零改动（ASSESSMENT_VERSION 2026-10-08.1 未 bump）；GitNexus impact `format_extraction_prompt` 上游 CRITICAL（3 直接调用方全透传，与计划 §4 一致）。
+- 遗留（计划 §12 开放项）：称呼要求（「以后叫我X」）闸门无支持句型、契约不会 accepted，扩 gate 另立课题；真模型非确定性下两遍候选 6/6、accepted 4/4，修复效果稳定复现。

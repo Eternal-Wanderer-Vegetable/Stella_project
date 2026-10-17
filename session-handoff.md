@@ -2,34 +2,31 @@
 
 ## Current Objective
 
-- FTS 中文检索修复（计划 `docs/plans/2026-10-17-gitnexus-plan-fts-chinese-or-retrieval.md`）已全量实施并验收：分支 `feat/memory-benchmark-suite`，HEAD `88eadeb`，本会话 5 提交 `80da1b0`→`88eadeb`（未推送，待用户审阅合并）。
-- 实施报告：[docs/reports/2026-10-17-fts-chinese-or-retrieval-implementation.md](docs/reports/2026-10-17-fts-chinese-or-retrieval-implementation.md)；证据：`docs/reports/evidence/fts-chinese-retrieval-20261017/`（fts-report + mode-matrix）。
+- EXTRACT 契约对齐（阶段2 提示词修复，计划 `docs/plans/2026-10-17-gitnexus-plan-extract-contract-prompt.md`）已全量实施并验收：分支 `feat/memory-benchmark-suite`，本会话 2 提交 `4a45082`（提示词硬规则块+守卫测试）→ `9a74b9a`（验收证据+报告），另有本状态提交；分支未推送，待用户审阅合并。
+- 实施报告：[docs/reports/2026-10-17-extract-contract-prompt-fix.md](docs/reports/2026-10-17-extract-contract-prompt-fix.md)；证据：`docs/reports/evidence/extract-contract-20261017/`（replay-live-strata-postfix + contract-assessment-live + manifest）。
 
 ## Completed This Session
 
-- `80da1b0`：`retriever._tokenize` 核心分词（去 `\w+` 整段 CJK token）+ `_match_expression`（引号化 + OR 连接 + 过滤空段）+ `_query_rag_results`/`retrieval_v2._query_fts` 两查询点切换 + `tests/test_fts_chinese_retrieval.py`。
-- `d042c04`：migrate_v20（调 rebuild_fts 重灌存量索引，v8 既定手法）+ SCHEMA_VERSION 20 + v19→v20 迁移夹具回归；native 合同 `MEMORY_SCHEMA_VERSION` 19→20（backend.py/schema.rs/Rust 夹具）+ native 查询侧 `match_expression`（原直绑原始查询串，FTS 通道同样恒空转）+ 基准 native 标记改打 `MEMORY_SCHEMA_VERSION`。
-- `a180636` / `d6d20e1`：flow manifest 两次重生成（cabac92ea347 → dcb0696583be，检索源码体变化，拓扑不变）。
-- `d6d20e1`：「FTS 命中不窄化候选池」并集语义（`retriever._query_rag_results`、`retrieval_v2._fetch_candidates`、native `load_candidates` 三处同源）+ 基准 `_populate_fts_index` 空间默认修复（原写空串 vs memories 行 group_id）。
-- `88eadeb`：实施报告 + 基准证据落盘。
+- `4a45082`：`EXTRACTION_PROMPT` 增补「契约硬规则」块（分隔线之上，`{messages}` 仍在末尾）：枚举 `evidence_contract` 可审核刻板句型与 predicate_key（含 `.en` 英形）、span 截尾/值段禁标点/canonical_value=纯值段、self_report→FACT+positive 与 explicit_preference→PREFERENCE 绑定、反例三条、非刻板句照常提取（不漏不变）、称呼规则调和（自称「我叫X」=self_report/FACT；「以后叫我X」维持 PREFERENCE 但契约暂不 accepted）。另修正两处与闸门矛盾的既有示例：正例 content 改逐字片段、结构示例契约 `sleep_pattern`/失眠 → `profile.residence`/杭州。新增 `tests/test_extraction_prompt_contract.py` 结构守卫（句型枚举/绑定措辞/块位置）。flow manifest 重生成（body_hash 漂移）。
+- `9a74b9a`：真模型验收证据落盘 + 实施报告。
 
 ## Verification Evidence
 
-- fts 模式基准：100/101（唯一失败 = 基线记录的既有 rank-casual-001）、forbidden 激活 0.0%、`retrieval_path` 65 行/101 查询（修复前恒 0 行）。
-- 四模式矩阵：rule 100/101（同上既有失败）、embedding 101/101、hybrid 101/101；rule/embedding parity 101/101；逐位对齐 2026-10-16 旧矩阵；冻结基线零容差门禁通过；bm25 默认列权保留（rank 裁决通过）。
-- 全量 `python -m pytest tests -q`：**3763 passed / 17 skipped**（Windows Python 3.14）。
-- `cargo test --release`（memory_rust/native）：22 passed。
-- ruff（改动文件）、`check_docs.py`（0 errors）、`generate_message_flow.py --check` 全过。
-- GitNexus：`impact _segment_text` risk MEDIUM（与计划一致）；detect_changes scope=all 代码符号零重叠；`analyze --index-only` 已刷新到 `88eadeb`。
+- **决定性验收（live 回放两遍独立实录，Strata qwen3.8-flash-next-iq2_xs @8081，daily-life suite）**：
+  - 第一遍（计划命令，`replay-live-strata-postfix.json`）：候选 6 / 记忆 4；extraction 100%、fabrication 0%、**promotion 100%（此前 0%）**、qa 100%、delta +100。
+  - 第二遍（同管线+逐候选契约盘点，`contract-assessment-live.json`）：**accepted 4（此前 0）、0 rejected**，句型全命中教学枚举（profile.residence / preference.general×2 / profile.nickname），截尾生效（「我叫小艾，以后多指教」→「我叫小艾」）。
+  - 晋升以 accepted 为前置（memory_manager.py:1007 缺 accepted 拒绝晋升），promotion 100% 与 accepted 4 互为印证；关键错误 0。
+- pytest：守卫+前缀缓存 14 passed；子集 `-k "prompt or consolidat or evidence_contract"` 109 passed；ruff（改动文件）、check_docs（119 文件/1195 链接）过。
+- GitNexus：`impact format_extraction_prompt` 上游 CRITICAL（3 直接调用方全透传，与计划 §4 一致）；detect_changes scope=all exit 0、无 partial/truncated。
 
 ## Blockers / Inherited State
 
-- **工作树遗留（非本会话产物）**：`memory/benchmark/_replay/daily-life/recorded/live-20261017.json` 有未提交修改——上一会话 live 第二轮重录件（progress.md「两轮 live 候选数 7→4」实录），回放门禁测试对其通过（4 passed）；是否提交由用户决定。
-- 本机 `memory_rust/_native.pyd` 已重编译到合同 20（gitignore 产物，不随提交）；`_native.pyd.v19.bak` 为升版前备份。
+- **工作树遗留（非本会话产物，未提交）**：`memory/benchmark/_replay/daily-life/recorded/live-20261017.json`（上上会话 live 重录件）及各 untracked plans/reports/skills-lock.json/.agents/ 等照旧保留，是否提交由用户决定。
+- 闸门 `memory/evidence_contract.py` 本计划零改动（ASSESSMENT_VERSION 2026-10-08.1 未 bump）。
+- dev bot（用户终端直启，与 prod 同用 8080）与回放共用 8081 Strata；**bot 进程需重启才会加载新提示词**（提示词是模块常量，非热载）。
 
 ## Next Steps
 
-1. 用户审阅合并 `feat/memory-benchmark-suite`（本批 5 提交 + 分支既有 9 提交）；推送后 hosted CI 应全绿（flow-manifest 已同步）。
-2. 生产库 StellaData 下次启动自动跑 v20 迁移重灌 FTS 存量索引；**过渡期注意**：旧 .pyd + schema 20 库 → native 拒读回退 python（auto 模式），发布 wheel 重编后恢复——发布说明需带「native wheel 须 ≥ schema 20 合同」。
-3. QQ 真机灰度观察检索命中（中文句子查询应不再恒走新鲜度回退）。
-4. 后续小课题候选：native `fts_text` 与 Python `_tokenize` 的既有分词分歧（≤4 字段整体保留 vs 全滑窗、`{2,8}` 分块）对齐；`knowledge/fts.py::segment_text` 同款旧词法清理（其 OR 查询侧使其无害）。
+1. 用户审阅合并 `feat/memory-benchmark-suite`（本批 2+1 提交 + 分支既有 14 提交）；QQ 真机灰度观察阶段2 晋升（需重启 bot 加载新提示词）。
+2. 开放课题（计划 §12）：称呼要求（「以后叫我X」）闸门无支持句型，扩 gate（evidence_contract 新 pattern + ASSESSMENT_VERSION bump + 提示词同步）另立计划。
+3. 上会话遗留：native `fts_text` 与 Python `_tokenize` 分词分歧对齐小课题；QQ 真机检索命中观察。
