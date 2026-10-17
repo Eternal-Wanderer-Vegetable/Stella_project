@@ -20,8 +20,9 @@ import generate_benchmark_cases as gen
 GENERATED_DIR = benchmark.MEMORY_BENCHMARK_DIR / "generated"
 
 # 冻结集合：默认 seed 的产物 digest 与用例总数。有意变更生成器后必须同步更新。
+# digest 为换行归一化（CRLF→LF）摘要，与检出平台无关（CI fix 2026-10-17）。
 FROZEN_SEED = gen.DEFAULT_SEED
-FROZEN_DIGEST = "62e3b22bbaa96246b76f4b65f86e7c9a50a2108906a5fbee331cc2d65c98d69e"
+FROZEN_DIGEST = "15252fbf428c133436a082723906df93ade73c6cece3037eb03aa38d08288e54"
 FROZEN_CASE_COUNT = 48
 # 自建用例总量目标（手写 + 生成，计划 §6 M1 ≥100）
 TOTAL_CASE_TARGET = 100

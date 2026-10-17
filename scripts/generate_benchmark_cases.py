@@ -170,12 +170,17 @@ def write_cases(out_dir: Path, seed: int) -> str:
 
 
 def digest_dir(out_dir: Path) -> str:
-    """产物目录摘要：排序（相对路径, sha256）规范 JSON 的 sha256（冻结断言用）。"""
+    """产物目录摘要：排序（相对路径, sha256）规范 JSON 的 sha256（冻结断言用）。
+
+    哈希前把 CRLF 归一为 LF：git 文本文件在 Windows 检出为 CRLF、CI 为 LF，
+    直接哈希原始字节会让冻结断言变成平台相关（Windows 本地过、CI 恒挂）。
+    """
     entries = []
     for p in sorted(out_dir.rglob("*.json")):
+        content = p.read_bytes().replace(b"\r\n", b"\n")
         entries.append({
             "path": p.relative_to(out_dir).as_posix(),
-            "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+            "sha256": hashlib.sha256(content).hexdigest(),
         })
     canonical = json.dumps(entries, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

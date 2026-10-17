@@ -37,7 +37,12 @@ from collections import defaultdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CSV = PROJECT_ROOT / "memory" / "benchmark" / "_public" / "personamem" / "benchmark.csv"
+# fetch_personamem 的落盘布局（HF 仓库内嵌套 benchmark/text/），勿改成扁平路径：
+# CI 全新 checkout 只有嵌套这份，扁平 benchmark.csv 只是本机历史手工副本
+DEFAULT_CSV = (
+    PROJECT_ROOT / "memory" / "benchmark" / "_public" / "personamem"
+    / "benchmark" / "text" / "benchmark.csv"
+)
 DEFAULT_OUT = PROJECT_ROOT / "memory" / "benchmark" / "_public" / "personamem" / "adapted"
 DEFAULT_SEED = 20261016
 DEFAULT_SAMPLE = 200
