@@ -1,0 +1,43 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:stella_project/plugins/bot_main/cometa_bridge.py:build_origin",
+    "name": "build_origin",
+    "kind": "Function",
+    "filePath": "stella_project/plugins/bot_main/cometa_bridge.py",
+    "startLine": 32,
+    "endLine": 66
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_bridge.py:TestBuildOrigin.test_from_event_fields#0",
+        "name": "test_from_event_fields",
+        "filePath": "tests/cometa/test_bridge.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_bridge.py:TestBuildOrigin.test_private_event_yields_private_origin#0",
+        "name": "test_private_event_yields_private_origin",
+        "filePath": "tests/cometa/test_bridge.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_bridge.py:TestBuildOrigin.test_requires_instance#0",
+        "name": "test_requires_instance",
+        "filePath": "tests/cometa/test_bridge.py"
+      }
+    ]
+  },
+  "outgoing": {},
+  "processes": []
+}

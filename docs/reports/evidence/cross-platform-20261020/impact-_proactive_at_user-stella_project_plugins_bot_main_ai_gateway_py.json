@@ -1,0 +1,98 @@
+{
+  "target": {
+    "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user",
+    "name": "_proactive_at_user",
+    "type": "Function",
+    "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 1,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 1,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1
+  },
+  "affected_processes": [
+    {
+      "name": "proactive_speak_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Bot_main",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:proactive_speak_job",
+        "name": "proactive_speak_job",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_415_proactive_speak_job",
+            "label": "Proactive_speak_job → Next_seq",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_619_proactive_speak_job",
+            "label": "Proactive_speak_job → _new_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_614_proactive_speak_job",
+            "label": "Proactive_speak_job → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_727_proactive_speak_job",
+            "label": "Proactive_speak_job → _register",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_414_proactive_speak_job",
+            "label": "Proactive_speak_job → Sanitize_text",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_616_proactive_speak_job",
+            "label": "Proactive_speak_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_728_proactive_speak_job",
+            "label": "Proactive_speak_job → Dropped",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

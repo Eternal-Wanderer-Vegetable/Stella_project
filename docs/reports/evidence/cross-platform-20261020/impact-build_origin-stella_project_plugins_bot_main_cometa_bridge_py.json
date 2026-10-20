@@ -1,0 +1,116 @@
+{
+  "target": {
+    "id": "Function:stella_project/plugins/bot_main/cometa_bridge.py:build_origin",
+    "name": "build_origin",
+    "type": "Function",
+    "filePath": "stella_project/plugins/bot_main/cometa_bridge.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 2,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 2,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 2
+  },
+  "affected_processes": [
+    {
+      "name": "handle_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_private_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Bot_main",
+      "hits": 2,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_810_handle_chat",
+            "label": "Handle_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_809_handle_chat",
+            "label": "Handle_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_271_handle_chat",
+            "label": "Handle_chat → Bump_topic_revision",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_270_handle_chat",
+            "label": "Handle_chat → _state_for",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_554_handle_private_chat",
+            "label": "Handle_private_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_815_handle_private_chat",
+            "label": "Handle_private_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_816_handle_private_chat",
+            "label": "Handle_private_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:astrbot_compat/pipeline.py:should_dispatch",
+    "name": "should_dispatch",
+    "kind": "Function",
+    "filePath": "astrbot_compat/pipeline.py",
+    "startLine": 35,
+    "endLine": 75
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_plugin_trigger",
+        "name": "is_plugin_trigger",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_accepts_json_card_without_plaintext",
+        "name": "test_should_dispatch_accepts_json_card_without_plaintext",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_accepts_text",
+        "name": "test_should_dispatch_accepts_text",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_private_gated",
+        "name": "test_should_dispatch_private_gated",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_rejects_empty_message",
+        "name": "test_should_dispatch_rejects_empty_message",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_rejects_self_echo",
+        "name": "test_should_dispatch_rejects_self_echo",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_respects_group_allowlist",
+        "name": "test_should_dispatch_respects_group_allowlist",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_survives_broken_event",
+        "name": "test_should_dispatch_survives_broken_event",
+        "filePath": "tests/astrbot_compat/test_dispatch.py"
+      }
+    ]
+  },
+  "outgoing": {},
+  "processes": []
+}

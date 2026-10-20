@@ -1,0 +1,46 @@
+{
+  "target": {
+    "id": "Function:capability/providers/knowledge.py:_principal_of",
+    "name": "_principal_of",
+    "type": "Function",
+    "filePath": "capability/providers/knowledge.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 1,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Knowledge",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Method:capability/providers/knowledge.py:KnowledgeSearchTool.call",
+        "name": "call",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}

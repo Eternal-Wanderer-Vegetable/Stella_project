@@ -1,0 +1,108 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory_rust/native/src/promotion.rs:promote",
+    "name": "promote",
+    "kind": "Function",
+    "filePath": "memory_rust/native/src/promotion.rs",
+    "startLine": 1327,
+    "endLine": 1350
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "1 call site invoking `promote` was dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 1,
+    "dispatchBoundary": 0,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0
+  },
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory_rust/native/src/lib.rs:promote",
+        "name": "promote",
+        "filePath": "memory_rust/native/src/lib.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.duplicate_invocation_is_a_noop",
+        "name": "duplicate_invocation_is_a_noop",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.high_confidence_without_evidence_is_rejected",
+        "name": "high_confidence_without_evidence_is_rejected",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.lower_confidence_conflict_stays_observing_without_new_memory",
+        "name": "lower_confidence_conflict_stays_observing_without_new_memory",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.malformed_fts_rolls_back_the_entire_transaction",
+        "name": "malformed_fts_rolls_back_the_entire_transaction",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.promotion_commits_memory_and_candidate_atomically",
+        "name": "promotion_commits_memory_and_candidate_atomically",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.quota_archives_the_weakest_memory_and_removes_fts",
+        "name": "quota_archives_the_weakest_memory_and_removes_fts",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.scope_mismatch_is_rejected_before_writing",
+        "name": "scope_mismatch_is_rejected_before_writing",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:tests.similar_candidate_merges_and_refreshes_fts_once",
+        "name": "similar_candidate_merges_and_refreshes_fts_once",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:load_candidate",
+        "name": "load_candidate",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:promote_inner",
+        "name": "promote_inner",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/schema.rs:ensure_supported",
+        "name": "ensure_supported",
+        "filePath": "memory_rust/native/src/schema.rs"
+      },
+      {
+        "uid": "Struct:memory_rust/native/src/promotion.rs:PromotionOutput",
+        "name": "PromotionOutput",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.candidate_id",
+        "name": "candidate_id",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.db_path",
+        "name": "db_path",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      }
+    ]
+  },
+  "processes": []
+}

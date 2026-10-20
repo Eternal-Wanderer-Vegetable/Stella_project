@@ -1,0 +1,188 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:astrbot_compat/events.py:build_event",
+    "name": "build_event",
+    "kind": "Function",
+    "filePath": "astrbot_compat/events.py",
+    "startLine": 810,
+    "endLine": 871
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:astrbot_compat/pipeline.py:dispatch",
+        "name": "dispatch",
+        "filePath": "astrbot_compat/pipeline.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_build_astr_event",
+        "name": "_build_astr_event",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_events.py:test_admin_role_from_group_role",
+        "name": "test_admin_role_from_group_role",
+        "filePath": "tests/astrbot_compat/test_events.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_events.py:test_wake_prefix_is_stripped",
+        "name": "test_wake_prefix_is_stripped",
+        "filePath": "tests/astrbot_compat/test_events.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_events.py:test_wake_resolution",
+        "name": "test_wake_resolution",
+        "filePath": "tests/astrbot_compat/test_events.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_hook_exception_does_not_break_the_chain",
+        "name": "test_hook_exception_does_not_break_the_chain",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_hook_order_without_tools",
+        "name": "test_hook_order_without_tools",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_llm_disabled_tells_the_user",
+        "name": "test_llm_disabled_tells_the_user",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_llm_failure_is_reported_not_swallowed",
+        "name": "test_llm_failure_is_reported_not_swallowed",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_non_async_hook_is_skipped",
+        "name": "test_non_async_hook_is_skipped",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_on_llm_request_can_mutate",
+        "name": "test_on_llm_request_can_mutate",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_on_llm_request_receives_the_request",
+        "name": "test_on_llm_request_receives_the_request",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_on_llm_response_receives_response",
+        "name": "test_on_llm_response_receives_response",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_result_is_marked_as_llm_result",
+        "name": "test_result_is_marked_as_llm_result",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_stop_event_in_hook_aborts",
+        "name": "test_stop_event_in_hook_aborts",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_hooks.py:test_tool_hooks_argument_contract",
+        "name": "test_tool_hooks_argument_contract",
+        "filePath": "tests/astrbot_compat/test_llm_hooks.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_tools.py:test_async_generator_tool",
+        "name": "test_async_generator_tool",
+        "filePath": "tests/astrbot_compat/test_llm_tools.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_tools.py:test_full_tool_loop",
+        "name": "test_full_tool_loop",
+        "filePath": "tests/astrbot_compat/test_llm_tools.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_tools.py:test_no_tools_means_single_call",
+        "name": "test_no_tools_means_single_call",
+        "filePath": "tests/astrbot_compat/test_llm_tools.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_tools.py:test_step_limit_stops_the_loop",
+        "name": "test_step_limit_stops_the_loop",
+        "filePath": "tests/astrbot_compat/test_llm_tools.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_llm_tools.py:test_unknown_tool_reports_to_model",
+        "name": "test_unknown_tool_reports_to_model",
+        "filePath": "tests/astrbot_compat/test_llm_tools.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_request_llm.py:test_contexts_clears_conversation",
+        "name": "test_contexts_clears_conversation",
+        "filePath": "tests/astrbot_compat/test_request_llm.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_request_llm.py:test_func_tool_manager_is_silently_ignored",
+        "name": "test_func_tool_manager_is_silently_ignored",
+        "filePath": "tests/astrbot_compat/test_request_llm.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_request_llm.py:test_list_args_are_independent",
+        "name": "test_list_args_are_independent",
+        "filePath": "tests/astrbot_compat/test_request_llm.py"
+      },
+      {
+        "uid": "Function:tests/astrbot_compat/test_request_llm.py:test_request_llm_returns_a_provider_request",
+        "name": "test_request_llm_returns_a_provider_request",
+        "filePath": "tests/astrbot_compat/test_request_llm.py"
+      },
+      {
+        "uid": "Function:tests/capability/conftest.py:astr_event",
+        "name": "astr_event",
+        "filePath": "tests/capability/conftest.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:astrbot_compat/components.py:from_onebot_message",
+        "name": "from_onebot_message",
+        "filePath": "astrbot_compat/components.py"
+      },
+      {
+        "uid": "Function:astrbot_compat/events.py:_get_admins",
+        "name": "_get_admins",
+        "filePath": "astrbot_compat/events.py"
+      },
+      {
+        "uid": "Function:astrbot_compat/events.py:_resolve_wake",
+        "name": "_resolve_wake",
+        "filePath": "astrbot_compat/events.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:astrbot_compat/events.py:MessageMember.nickname",
+        "name": "nickname",
+        "filePath": "astrbot_compat/events.py"
+      },
+      {
+        "uid": "Property:astrbot_compat/events.py:MessageMember.user_id",
+        "name": "user_id",
+        "filePath": "astrbot_compat/events.py"
+      },
+      {
+        "uid": "Property:astrbot_compat/events.py:MessageMember.user_id",
+        "name": "user_id",
+        "filePath": "astrbot_compat/events.py"
+      },
+      {
+        "uid": "Variable:astrbot_compat/events.py:AstrMessageEvent.get_group.role@696:12",
+        "name": "role",
+        "filePath": "astrbot_compat/events.py"
+      }
+    ]
+  },
+  "processes": []
+}

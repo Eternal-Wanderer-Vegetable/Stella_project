@@ -1,0 +1,76 @@
+{
+  "target": {
+    "id": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+    "name": "RetrievalRequest",
+    "type": "",
+    "filePath": "memory_rust/native/src/retrieval.rs"
+  },
+  "direction": "upstream",
+  "impactedCount": 4,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 3
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Cluster_643",
+      "hits": 4,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/retrieval.rs:tests.test_request",
+        "name": "test_request",
+        "filePath": "memory_rust/native/src/retrieval.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:memory_rust/native/src/retrieval.rs:tests.fts_hits_lead_pool_and_do_not_narrow_it",
+        "name": "fts_hits_lead_pool_and_do_not_narrow_it",
+        "filePath": "memory_rust/native/src/retrieval.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory_rust/native/src/retrieval.rs:tests.retrieval_respects_space_and_user_scope",
+        "name": "retrieval_respects_space_and_user_scope",
+        "filePath": "memory_rust/native/src/retrieval.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory_rust/native/src/retrieval.rs:tests.scope_predicate_returns_space_and_shared_person_rows",
+        "name": "scope_predicate_returns_space_and_shared_person_rows",
+        "filePath": "memory_rust/native/src/retrieval.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}

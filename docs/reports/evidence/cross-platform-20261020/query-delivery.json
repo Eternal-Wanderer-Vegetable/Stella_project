@@ -1,0 +1,213 @@
+{
+  "processes": [
+    {
+      "id": "proc_818_cometa_submit_task",
+      "summary": "Cometa_submit_task → Current_service",
+      "priority": 0.06,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_197_cometa_auth_custom_e",
+      "summary": "Cometa_auth_custom_endpoint → Current_service",
+      "priority": 0.039,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_449_cometa_auth_device_l",
+      "summary": "Cometa_auth_device_login → Current_service",
+      "priority": 0.039,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_561_cometa_auth_device_l",
+      "summary": "Cometa_auth_device_login_status → Current_service",
+      "priority": 0.039,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_647_cometa_auth_test_end",
+      "summary": "Cometa_auth_test_endpoint → Current_service",
+      "priority": 0.039,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/routers/cometa.py:cometa_submit_task",
+      "name": "cometa_submit_task",
+      "filePath": "webui/routers/cometa.py",
+      "startLine": 79,
+      "endLine": 110,
+      "module": "Routers",
+      "process_id": "proc_818_cometa_submit_task",
+      "step_index": 1
+    },
+    {
+      "id": "Function:webui/routers/cometa.py:_cometa_service_or_503",
+      "name": "_cometa_service_or_503",
+      "filePath": "webui/routers/cometa.py",
+      "startLine": 282,
+      "endLine": 286,
+      "module": "Routers",
+      "process_id": "proc_197_cometa_auth_custom_e",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat._send_cometa_ack@1657:8",
+      "name": "_send_cometa_ack",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 1658,
+      "endLine": 1672,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat._send_cometa_ack@2129:8",
+      "name": "_send_cometa_ack",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 2130,
+      "endLine": 2145,
+      "module": "Bot_main"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+      "name": "ai_gateway.py",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/cometa_bridge.py:deliver_ack",
+      "name": "deliver_ack",
+      "filePath": "stella_project/plugins/bot_main/cometa_bridge.py",
+      "startLine": 69,
+      "endLine": 103,
+      "module": "Cometa"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/cometa_bridge.py:notification_sender",
+      "name": "notification_sender",
+      "filePath": "stella_project/plugins/bot_main/cometa_bridge.py",
+      "startLine": 364,
+      "endLine": 419
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/cometa_bridge.py",
+      "name": "cometa_bridge.py",
+      "filePath": "stella_project/plugins/bot_main/cometa_bridge.py"
+    },
+    {
+      "id": "Class:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts",
+      "name": "TestDeliverySegmentFacts",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 187,
+      "endLine": 282
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts.test_delivery_without_root_is_silent#1",
+      "name": "test_delivery_without_root_is_silent",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 257,
+      "endLine": 282,
+      "module": "Observability"
+    },
+    {
+      "id": "File:tests/observability/test_message_flow_runtime.py",
+      "name": "test_message_flow_runtime.py",
+      "filePath": "tests/observability/test_message_flow_runtime.py"
+    },
+    {
+      "id": "Function:core/social/delivery.py:deliver_lines",
+      "name": "deliver_lines",
+      "filePath": "core/social/delivery.py",
+      "startLine": 357,
+      "endLine": 497,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:core/social/delivery.py:_append_and_persist",
+      "name": "_append_and_persist",
+      "filePath": "core/social/delivery.py",
+      "startLine": 545,
+      "endLine": 634,
+      "module": "Social"
+    },
+    {
+      "id": "File:core/social/delivery.py",
+      "name": "delivery.py",
+      "filePath": "core/social/delivery.py"
+    },
+    {
+      "id": "Class:tests/test_social_delivery.py:TestDeliverLines",
+      "name": "TestDeliverLines",
+      "filePath": "tests/test_social_delivery.py",
+      "startLine": 93,
+      "endLine": 239
+    },
+    {
+      "id": "Class:tests/test_social_delivery.py:TestRealConversationRefNeutralReceipt",
+      "name": "TestRealConversationRefNeutralReceipt",
+      "filePath": "tests/test_social_delivery.py",
+      "startLine": 399,
+      "endLine": 454
+    },
+    {
+      "id": "File:tests/test_social_delivery.py",
+      "name": "test_social_delivery.py",
+      "filePath": "tests/test_social_delivery.py"
+    },
+    {
+      "id": "Function:tests/cometa/test_gateway_wiring.py:test_cometa_bridge_bound_at_module_level",
+      "name": "test_cometa_bridge_bound_at_module_level",
+      "filePath": "tests/cometa/test_gateway_wiring.py",
+      "startLine": 38,
+      "endLine": 42
+    },
+    {
+      "id": "Function:tests/cometa/test_gateway_wiring.py:test_handle_chat_cometa_ack_branch_end_to_end",
+      "name": "test_handle_chat_cometa_ack_branch_end_to_end",
+      "filePath": "tests/cometa/test_gateway_wiring.py",
+      "startLine": 46,
+      "endLine": 166,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:tests/cometa/test_gateway_wiring.py",
+      "name": "test_gateway_wiring.py",
+      "filePath": "tests/cometa/test_gateway_wiring.py"
+    },
+    {
+      "id": "Class:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService",
+      "name": "DeliveryService",
+      "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py",
+      "startLine": 76,
+      "endLine": 189
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService.deliver#5",
+      "name": "deliver",
+      "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py",
+      "startLine": 90,
+      "endLine": 165,
+      "module": "Scheduling"
+    }
+  ],
+  "timing": {
+    "vector": 1.5,
+    "bm25": 992.4,
+    "merge": 0.1,
+    "symbol_lookup": 81.1,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1073.7
+  }
+}

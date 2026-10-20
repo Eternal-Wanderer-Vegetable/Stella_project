@@ -1,0 +1,1452 @@
+[
+  {
+    "file": ".env.example",
+    "packages": "WP09",
+    "disposition": "装配/配置/健康",
+    "literal_hits": 9,
+    "graph_dependent": false,
+    "sha256": "05f1933285b3e54518488103be34f7ad419328fc1a7d67c2e6485bd465e79c0e"
+  },
+  {
+    "file": "Dockerfile",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "4cec31dff9e5186477015cb7d43b0ed64599d94f1ba8be93307e711faf26e024"
+  },
+  {
+    "file": "astrbot_compat/base.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "219a11f8e6e843aeeb20d0e1e08cef245026c4ba31672626057017567fc461ab"
+  },
+  {
+    "file": "astrbot_compat/components.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 56,
+    "graph_dependent": false,
+    "sha256": "056a2fc435181e6a3a0ea0646414f3a941637409995ee0b3f16b53ca9b0f22de"
+  },
+  {
+    "file": "astrbot_compat/context.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 10,
+    "graph_dependent": true,
+    "sha256": "f9e2b32a2bb3e2a2ca60fcd5903e51e217bf1948d976812ea2679a43fdaccf29"
+  },
+  {
+    "file": "astrbot_compat/events.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 16,
+    "graph_dependent": true,
+    "sha256": "5df84449d4184fe4797743c8e3f727e5833bf5aa07196c142b1ff756e663bf13"
+  },
+  {
+    "file": "astrbot_compat/filters.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "8a72eb6f8503b779e1d2aae5b163a4b7dd9757d598c1993aa4713d77bdedc9ec"
+  },
+  {
+    "file": "astrbot_compat/llm/__init__.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 8,
+    "graph_dependent": false,
+    "sha256": "ae42590f29a6288c751a6149839ebd13e56a321dd086d9b2dc038743af16840f"
+  },
+  {
+    "file": "astrbot_compat/llm/agent.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "2de7b63a50a516dc5a0d2dcb360b62e2f1f69f7a8e546afbcb442bffa4f40852"
+  },
+  {
+    "file": "astrbot_compat/llm/entities.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "47284a3d7b199d6077d791f2ae68937d71be0961defe020b93f870c030ef324a"
+  },
+  {
+    "file": "astrbot_compat/llm/message.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 8,
+    "graph_dependent": false,
+    "sha256": "50fd4c580e207748502f9085e6ee94cdef7f55d1273d52fc021dbf8c3d4e3e0a"
+  },
+  {
+    "file": "astrbot_compat/pipeline.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "6d69cee8e25b8bf96489b4bb48ae150dfe98277f9d470dc4bd45667bcd82edf0"
+  },
+  {
+    "file": "astrbot_compat/render.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "6f7fa96fb6bac80dc783bffaa116a15bbf0d42bc43ede5d81a5596ac4a334b84"
+  },
+  {
+    "file": "astrbot_compat/shim.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 6,
+    "graph_dependent": false,
+    "sha256": "ab17b51ddf9f22b5d3fc6daf8f333bea5a8c1de3479c17a995ce27bbd91ab1ca"
+  },
+  {
+    "file": "bot.py",
+    "packages": "WP09",
+    "disposition": "装配/配置/健康",
+    "literal_hits": 3,
+    "graph_dependent": true,
+    "sha256": "18d7763a4536a283b23c849261157109f71941e6163dd98e0ed20bb854ac2a88"
+  },
+  {
+    "file": "capability/adapters/knowledge.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "153d4eeb3335e409ed8910d5fe3427a0bbbe097f0a5d5b507f01bbd2c756f5a4"
+  },
+  {
+    "file": "capability/delegation.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "330d97327e38d9440f766ce17863f5ae6636da68e9b1c1bf2c2c290db26596b8"
+  },
+  {
+    "file": "capability/hooks.py",
+    "packages": "WP08",
+    "disposition": "插件兼容/工具事件",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "bab2b1110c89a9a59d0cd57eb8d6951257ce42022c9d6b507c1c1261a6023940"
+  },
+  {
+    "file": "capability/providers/knowledge.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 1,
+    "graph_dependent": true,
+    "sha256": "819a4825b585f196459a4212de1314aae9e1884a82621c4c3d3faa466d4147fb"
+  },
+  {
+    "file": "cli/src/status.rs",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "22d7fe2093fcb2e773fb83248cb66f5aaae2acaf80086aaf83fb1a464c986047"
+  },
+  {
+    "file": "cometa/artifacts.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "e4ee23549f8e2057b8b3a995021c6f57f199e61a898b5ffdc246977a05788c98"
+  },
+  {
+    "file": "cometa/backends/base.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "0bd229053e1ccd0b858bce2fe0bffa5cf3b887861c033788e053831f92024cf3"
+  },
+  {
+    "file": "cometa/backends/codex.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "a1c6641cbf3a2f4370ec9410ac28766c1f64ef11b96c11f0f999252bae114cec"
+  },
+  {
+    "file": "cometa/backends/codex_auth.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "036a8c8b30c40c749739c68729f835afb76ec87c035a610e09b29829f1eb54d3"
+  },
+  {
+    "file": "cometa/backends/codex_events.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "c2aee39dc0a1c79b6319f475e58c171ce90deaf5b6d7646cb39bc1c3a7d298cd"
+  },
+  {
+    "file": "cometa/backends/fake.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "727a55ba791574480eed55055f7093836a4c8e3b75f4499362100c0b2e2e71d7"
+  },
+  {
+    "file": "cometa/backends/registry.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "9115f42e3d4226294307acade33a775467c8b671cc984868ae95f246add8194a"
+  },
+  {
+    "file": "cometa/config.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 3,
+    "graph_dependent": true,
+    "sha256": "6979b24c2afd1c7f9bfac4ec402da7c72303097ddd000398d4180d19bed225f3"
+  },
+  {
+    "file": "cometa/delivery.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "2a4b0a40a3916c14aa40eb62540f8802372c8d3a9c04a7ac5e4d60479aca5e17"
+  },
+  {
+    "file": "cometa/executor.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "23de78138d6edcefe7368d473f60423df413fc50c792a34713ef8bf5538c49d2"
+  },
+  {
+    "file": "cometa/migrations.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "dc918230e58b0cb3daf76e3bfb28b1b273f4b48e24ffc3b02c09c3716eea1ae1"
+  },
+  {
+    "file": "cometa/models.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "681b79f2f92d05d82e07b8915e2857fc178800f32ffd081ab1608d95c1ac9347"
+  },
+  {
+    "file": "cometa/policy.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "32b04e370b403f6d9a14849ff21da34a5c3c9dece952ffe3a05609dfb4299eb2"
+  },
+  {
+    "file": "cometa/presentation.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "5fdfb28bf1c3a4295a6031aa26eb2558f90385d6d3b939dc87e9b6adaf62fe89"
+  },
+  {
+    "file": "cometa/runtime.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "75129c68b0047be06c7bf5d54e729d9eba1b1310c7e9d9cffee04033c6df4988"
+  },
+  {
+    "file": "cometa/service.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "bd51ca625dcde43062308e3676a046ab0f591f285cc24f552eed8bb19b052997"
+  },
+  {
+    "file": "cometa/store.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 6,
+    "graph_dependent": true,
+    "sha256": "caf38b1123f93d189aa33fe5a5d9d7e6d6ba57efa2b1e6c00654bf78207b9bd3"
+  },
+  {
+    "file": "cometa/supervisor.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "5dbe8d12b741d2767e95b25ea77b1851123fe5f3584030b7bcc71af3b01d8b03"
+  },
+  {
+    "file": "cometa/worker.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "46dadc14283c1b415d739556e5eb52b1ec9bb645d7f7f6d186631cecbaa45f9f"
+  },
+  {
+    "file": "cometa/workspace.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "92feb913a49298f29556a09e1e7e28a8e29b57d8ee68abbc9f53a4c4f17588e2"
+  },
+  {
+    "file": "config/settings.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 7,
+    "graph_dependent": false,
+    "sha256": "5c78322044014c56d9a43dd3fcc6302c9b5072c772d2392ad6dec9bcef5a84b3"
+  },
+  {
+    "file": "config/space_map.py",
+    "packages": "WP01",
+    "disposition": "身份/注册/空间",
+    "literal_hits": 6,
+    "graph_dependent": false,
+    "sha256": "bddaed076dfe95f1177d4294489fe7bdef5d5bb554425a9b900d9386b0e5ba25"
+  },
+  {
+    "file": "config/spaces.py",
+    "packages": "WP01",
+    "disposition": "身份/注册/空间",
+    "literal_hits": 9,
+    "graph_dependent": true,
+    "sha256": "47a8ab809acf58ac9eff08f2b63f399a02797f2c0c6b7094d815730e62ccbda8"
+  },
+  {
+    "file": "core/context.py",
+    "packages": "WP02",
+    "disposition": "上下文/身份信封",
+    "literal_hits": 9,
+    "graph_dependent": true,
+    "sha256": "f3b5e02457269fde361ae1660d76a8d6dd2ec9c024d9c72593c4f28cacba0704"
+  },
+  {
+    "file": "core/conversation.py",
+    "packages": "WP01",
+    "disposition": "身份/注册/空间",
+    "literal_hits": 19,
+    "graph_dependent": true,
+    "sha256": "2cf946658f0c45a379378ca4c84ca6ad516768e5f5ec7c5a87c00d1fc62a65e3"
+  },
+  {
+    "file": "core/dialogue_attribution.py",
+    "packages": "WP02",
+    "disposition": "回复协议/SourceEvidence/可信用户标签",
+    "literal_hits": 0,
+    "graph_dependent": false,
+    "graph_target": true,
+    "runtime_or_protocol_anchor": true,
+    "sha256": "a8d21612517ede995dc106f703bf2b7472db7324ea03c4a921d7d0680c4aa289"
+  },
+  {
+    "file": "core/evaluation/dataset.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "b5027730a4d32abea0c3846024b550d742b647b565c66082ce8db7e0676cd79b"
+  },
+  {
+    "file": "core/evaluation/runner.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "ccdbb3ccf09bf3c4be0d8dc047a56489f950fe3c94a3d104b70dde64058fac44"
+  },
+  {
+    "file": "core/observability/flows/message-flow.dcb0696583be.json",
+    "packages": "WP11",
+    "disposition": "重生成/观测合同",
+    "literal_hits": 156,
+    "graph_dependent": false,
+    "sha256": "d33dd9e38e72118e4ebf03dbe1491d68214defe69ae24caf3c54a70d865a4dd7"
+  },
+  {
+    "file": "core/pipeline.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "222ef09dfbc08ace4f69534d961766b19a3182583b30e373eea58ede4ebc7ad7"
+  },
+  {
+    "file": "core/planner.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "5cf4d9b91a6be357b395b3cf0c10b718a78f8e2a54f4ae3ddc1e0b35b7cf4705"
+  },
+  {
+    "file": "core/reply_gate.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "9db936c2dd823f92351bfe0c82730b86a37b3dad71204589ca8d85f2b72bd24e"
+  },
+  {
+    "file": "core/runtime/facade.py",
+    "packages": "WP02",
+    "disposition": "上下文/身份信封",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "502e20e4c5532cc38cbeb9093522da021e690b41b81795dea52296a024127ee3"
+  },
+  {
+    "file": "core/runtime/turn_service.py",
+    "packages": "WP02",
+    "disposition": "上下文/身份信封",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "559e352e15e7fc5f741cf24334f837a384225beea79886b48454b1befcd06817"
+  },
+  {
+    "file": "core/social/contracts.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 2,
+    "graph_dependent": false,
+    "sha256": "df25c8a7d6111819948c3e4a208ff40be5ebb4f11c0ab0ed8fe7061173be01d7"
+  },
+  {
+    "file": "core/social/delivery.py",
+    "packages": "WP06",
+    "disposition": "投递/媒体；vision与WP05联动",
+    "literal_hits": 4,
+    "graph_dependent": true,
+    "sha256": "a012806d231b14301a49f51a1a3181a4423efe6e8a79ad8f797a7693a075a099"
+  },
+  {
+    "file": "core/turn_runtime.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "43d07ceaafd15ef2f6868c67837269d84fb78b3c752cd6b4e0325512bbc3f6f2"
+  },
+  {
+    "file": "core/vision.py",
+    "packages": "WP06",
+    "disposition": "投递/媒体；vision与WP05联动",
+    "literal_hits": 2,
+    "graph_dependent": false,
+    "sha256": "aa6328e15999bca1c9a22dd6d744109966d88b1845094491e1998e9c7f9625e6"
+  },
+  {
+    "file": "dashboard/src/views/BackendOfflinePage.vue",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 6,
+    "graph_dependent": false,
+    "sha256": "18a5bd2acf49b671880b5f5151de6532039c59a5047de307d28c2bcf5f22480f"
+  },
+  {
+    "file": "dashboard/src/views/GroupsPage.vue",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "f631f294bbc6cf2740c744536aa5abd90851b4127d3811b84b0c52a702d0db76"
+  },
+  {
+    "file": "dashboard/src/views/PersonaPage.vue",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "43e9363a8de80be1ccaf83056f1b3dc443e47f8f614809fc15ebcb964319e3ca"
+  },
+  {
+    "file": "dashboard/src/views/PlatformsPage.vue",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "cba6ea947a5c8ea858c5c450ba98b3d342c62fc9199dbf0d931ecad911a1b4dc"
+  },
+  {
+    "file": "dashboard/src/views/SettingsPage.vue",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "be6b1e2aa0136a8ccbaf86fe3a83a6457d103da7821d9c301fbf73589fdb24ed"
+  },
+  {
+    "file": "dashboard/src/views/data/PersonalMemoryPage.vue",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "fcd66a9064eec3ebe3ce9cf3b9f2fd6189c17515a76a6b7ce0390b6a7d6f8042"
+  },
+  {
+    "file": "dashboard/tests/flow-store.spec.ts",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "23e38d06208cf7c5c1028305dc31078e807d0c7146c50300986d28f4b5da3b2a"
+  },
+  {
+    "file": "deploy/__main__.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 8,
+    "graph_dependent": false,
+    "sha256": "ae79aa9a6aeb751739936ccab9297f1be914e9e84ed80362ad89290d01386994"
+  },
+  {
+    "file": "deploy/acquire.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "9f92c5efa5e2a8f3d7a56fdd5d0cfc673d711281a802775e232bb8590a8441b2"
+  },
+  {
+    "file": "deploy/bootstrap.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "01d27b430318148ba42b7dae24263cd9ce8622a97f6323ad2a4b92341905cb6d"
+  },
+  {
+    "file": "deploy/checks.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 18,
+    "graph_dependent": false,
+    "sha256": "0edbb7dd23b87a083a5dc078a3d4f28ec43d9db54e6da73ee7306d5f07b74db3"
+  },
+  {
+    "file": "deploy/env_keys.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 11,
+    "graph_dependent": false,
+    "sha256": "2ac3fa94a0e62c157342ff1de952f3f0efe7ea9b0f87015c3a80deeb835e9619"
+  },
+  {
+    "file": "deploy/init_wizard.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 18,
+    "graph_dependent": false,
+    "sha256": "1654282775e7938bb26f90be9a430308a2b7c62fb1e2bfe838c961e327a7657e"
+  },
+  {
+    "file": "deploy/migrate.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 2,
+    "graph_dependent": false,
+    "sha256": "9a01ffbd252fb23d53be14d29747333657578afd85a5d96a0f41f7b51ef8bd08"
+  },
+  {
+    "file": "deploy/models.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "541863a78427ddfbd2ddcc6efdfd1c38f5cdab343bc71e2fc51ef226999cae16"
+  },
+  {
+    "file": "deploy/napcat.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 38,
+    "graph_dependent": false,
+    "sha256": "13f5895b8eb583652cdece565f481444fd596472f8879cd81d84fd0001dc2fab"
+  },
+  {
+    "file": "deploy/nsis_bootstrap_helper.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "1cd4da3683e1177ba34d2f69fa794961288d8f61925334b9b1eefc8f95a43d8d"
+  },
+  {
+    "file": "deploy/probe.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 9,
+    "graph_dependent": false,
+    "sha256": "fe78922e1a3385fbaa0a00723af7a5cadb02f344336a194ca0b892b62558cf15"
+  },
+  {
+    "file": "desktop/src-tauri/installer-hooks.nsh",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "3ac5202344c3d710ef7fa1cf8e4b985e32df941efe6fa75142df93d172e7ee2b"
+  },
+  {
+    "file": "desktop/src-tauri/src/commands.rs",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 31,
+    "graph_dependent": false,
+    "sha256": "4f67da7f6e11a77a134ae1147ed999f95f2bebba67b011cdbff2b8f73df53648"
+  },
+  {
+    "file": "docker-compose.yml",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 15,
+    "graph_dependent": false,
+    "sha256": "edd8054f3c860edbf2e6797794854476ba6ec35c4ca70284dbf9fd5b3abd5340"
+  },
+  {
+    "file": "entrypoint.sh",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "d4af6a37805bf014233dd1e84565e20ea2e1cdd3dd5b4a543b649749bd1b51e1"
+  },
+  {
+    "file": "extensions/__init__.py",
+    "packages": "WP09",
+    "disposition": "装配/配置/健康",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "eec183d6851067131d5167d534f811f0c6ce96d0bbae4259a50c50540161828a"
+  },
+  {
+    "file": "extensions/link_monitor/__init__.py",
+    "packages": "WP09",
+    "disposition": "装配/配置/健康",
+    "literal_hits": 11,
+    "graph_dependent": true,
+    "sha256": "c4fecb4a9a24143065064153b61be65dffe88c57c0cd8357beaf4f8d8a6c3595"
+  },
+  {
+    "file": "knowledge/acl.py",
+    "packages": "WP04",
+    "disposition": "KB主体、owner/grants及权限谓词",
+    "literal_hits": 0,
+    "graph_dependent": false,
+    "graph_target": true,
+    "runtime_or_protocol_anchor": true,
+    "sha256": "003a79c7212b10c9d77b7cf691125a641ed8580213098745ce250bd1499e5ecc"
+  },
+  {
+    "file": "knowledge/embedding.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "d4ce069a582071b0a67b4171c0db92671d8d9532ecf5d7c9b8c25996b87d816d"
+  },
+  {
+    "file": "knowledge/ingest.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "2157e1f49cb6142204c34daf844e4e039b833ab15aefabf8ad83d29e8c6a7326"
+  },
+  {
+    "file": "knowledge/retrieval.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "33da4e9813c30ed5ebf1ead52d6d090baf6a020c9125bd1707481383f7b96805"
+  },
+  {
+    "file": "knowledge/service.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "ed4d3f3efaa558cf36b8e9bdc8c20b76c5413c96d255bc8d5955791ffde3e2c5"
+  },
+  {
+    "file": "knowledge/store.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "b222269f64558dff447093a4ec8bea7cbe6f34f516ab0a938e26266228b80323"
+  },
+  {
+    "file": "memory/benchmark.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 4,
+    "graph_dependent": true,
+    "sha256": "67da01208b82b839d1939ab403b2d0168591459dc13faf016e54e6c06e70f2a5"
+  },
+  {
+    "file": "memory/compressor.py",
+    "packages": "WP04/07",
+    "disposition": "记忆压缩入口及身份/空间作用域",
+    "literal_hits": 0,
+    "graph_dependent": false,
+    "graph_target": true,
+    "runtime_or_protocol_anchor": true,
+    "sha256": "9653f435986c3a98fb5a8584b37b31df903882a982ab7fc9b486fe149b5ae0d4"
+  },
+  {
+    "file": "memory/consolidator.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 35,
+    "graph_dependent": true,
+    "sha256": "28b53ba45d4a65a8f13dfb9cae1c3b265522bb488d58358b8d5e4fd9e2c7ff8b"
+  },
+  {
+    "file": "memory/conversation_identity.py",
+    "packages": "WP02",
+    "disposition": "上下文/身份信封",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "0ee53fd21c4904454d5b35c3f2d3e159ef8304b8f5a6f2fe3bfe9c2c2ae4206b"
+  },
+  {
+    "file": "memory/conversation_projection.py",
+    "packages": "WP02",
+    "disposition": "不透明消息ID/旧QQcodec/转录格式",
+    "literal_hits": 0,
+    "graph_dependent": false,
+    "graph_target": true,
+    "runtime_or_protocol_anchor": true,
+    "sha256": "b4d82381919bda25c0b853deca73171d5937ad0112e964513df59f8be5ce2ea9"
+  },
+  {
+    "file": "memory/conversation_registry.py",
+    "packages": "WP01",
+    "disposition": "身份/注册/空间",
+    "literal_hits": 8,
+    "graph_dependent": true,
+    "sha256": "9ca2ba1db4f4055354f190412be5ddf0af00052d6a0c873e11f41bdca54f4b2f"
+  },
+  {
+    "file": "memory/db_cleaner.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 2,
+    "graph_dependent": false,
+    "sha256": "43c9e4b9d407ebb69efc1477e6ebeeba68a6a58870955cc90eaeb30dbd0dff8c"
+  },
+  {
+    "file": "memory/evidence_contract.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 6,
+    "graph_dependent": false,
+    "sha256": "3906639a014ce10f08c5961819e077612806af037097b31e6a4d6cbf2e16f6a8"
+  },
+  {
+    "file": "memory/expression_learning.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 8,
+    "graph_dependent": false,
+    "sha256": "6a57f9854c149d23f609cd6ef05c797a27512ef6ab4d1e1d7128dce14cfda623"
+  },
+  {
+    "file": "memory/expression_store.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "1c009f3a35a5c3c26940e13839c37f7feaec0cc8137b973f6e994f5490f426f1"
+  },
+  {
+    "file": "memory/memory_manager.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 2,
+    "graph_dependent": true,
+    "sha256": "90e69b497324adfbbdba6c68935a71a3da1aa287363811b9443c012487bf048e"
+  },
+  {
+    "file": "memory/migrations.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 12,
+    "graph_dependent": false,
+    "sha256": "c810b4022d8923874febe3cfcc8112810507e864a27ba00b5a5442f8779c9ddb"
+  },
+  {
+    "file": "memory/ownership.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 3,
+    "graph_dependent": true,
+    "sha256": "ee9a14280b62023f0d35808386e27deb5317f9864a341feaf0d820107796c347"
+  },
+  {
+    "file": "memory/participation/__init__.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 9,
+    "graph_dependent": false,
+    "sha256": "20fb43056081478d8391943ffb71f6c7ddfd1e95dc6d1b0cadab7154a28fee3d"
+  },
+  {
+    "file": "memory/participation/buffer.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "e5b7fe5e3fce6e75220ce946c76cfa925d5a922d13cd71468ee6de6c53318496"
+  },
+  {
+    "file": "memory/participation/decision.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "ac280e470d8361572263e550ed02854d941dc3878c01d08fc840b793faee2d7e"
+  },
+  {
+    "file": "memory/participation/observability.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "b4fd665a64104b3d10f543c3cb01a024342826649a73758500d398692c4e7479"
+  },
+  {
+    "file": "memory/participation/state.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "1a20efb370264dc086822f627b6784f5ad5c1ed65bb4122df78a5cede51b2f57"
+  },
+  {
+    "file": "memory/personal_sharing.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "56c2d288b25de449e2939813ba10796263ccc0c6231d4d309608ca4c794d9fa7"
+  },
+  {
+    "file": "memory/post_processors.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "5d90e43fcde6ea1b81e7f826ae881ed9b9ef4dac69b337048f4fc0e8bcc042a4"
+  },
+  {
+    "file": "memory/pre_processors.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 7,
+    "graph_dependent": true,
+    "sha256": "27bf4bd3f05c7d68ed40e11b25d1cec1fb7d3d030d184f97b843580b3ac0f3b0"
+  },
+  {
+    "file": "memory/proactive.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 31,
+    "graph_dependent": false,
+    "sha256": "cffe3998072a7c3c583b96211b392e81d31ddd9e9b570dfeee4e519efc3dfd7b"
+  },
+  {
+    "file": "memory/proactive_contract.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 5,
+    "graph_dependent": true,
+    "sha256": "c60970c88083e6e27f4228b37f28bd3d35cf02199d487c612e5afe630302d4e1"
+  },
+  {
+    "file": "memory/proactive_gate.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 6,
+    "graph_dependent": false,
+    "sha256": "ce21e03e72cacd77bd4af790e59573cf87c23afdca7f3d8f570a7cdd377865dd"
+  },
+  {
+    "file": "memory/proactive_state.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 9,
+    "graph_dependent": false,
+    "sha256": "540f94a6ae25359b37395a91211d0425b7dd1f6b9e23446c56f81b92f1022a8b"
+  },
+  {
+    "file": "memory/proactive_target.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 10,
+    "graph_dependent": true,
+    "sha256": "a33b143de7a0a8f923b63a3eef5184679722aaf58e12f213b4bebc728111020c"
+  },
+  {
+    "file": "memory/reply_effect_service.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 2,
+    "graph_dependent": false,
+    "sha256": "9bbd2c4fbf8a33ffc4088c72bcfaa74c83bc235b4b8dc4c2c57f67c7cecd5879"
+  },
+  {
+    "file": "memory/retrieval_v2.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 6,
+    "graph_dependent": true,
+    "sha256": "e846016163e7886cf5f9fcd7ae25e726c92da1577d249d69f230517c5ea9bb86"
+  },
+  {
+    "file": "memory/retriever.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "b5ba9013403e4dcda355a108a13ee0520c68c01f0d27d3134225504b93139505"
+  },
+  {
+    "file": "memory/session_compact.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 10,
+    "graph_dependent": false,
+    "sha256": "10a8158aa30f90eabb60a4afedbcd679f6336888a1e2d746e1e7e8f8a0615749"
+  },
+  {
+    "file": "memory/session_context.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 20,
+    "graph_dependent": false,
+    "sha256": "f7b70c754a3af17dbc433e9c2b5b48e35ce173c473b40ceb7881d73997328077"
+  },
+  {
+    "file": "memory/social_schema.py",
+    "packages": "WP04",
+    "disposition": "记忆/权限/主体；存储入口与WP03联动",
+    "literal_hits": 6,
+    "graph_dependent": false,
+    "sha256": "705cc6b0680d1a75ae272570ed82627b8c9bc2a741276730146acc05d4e8ec88"
+  },
+  {
+    "file": "memory/social_worker.py",
+    "packages": "WP04/07",
+    "disposition": "社会证据与后台任务主体作用域",
+    "literal_hits": 0,
+    "graph_dependent": false,
+    "graph_target": true,
+    "runtime_or_protocol_anchor": true,
+    "sha256": "318bb9933be5533c554a12d2b47897a68fd1c7948ab62941be48bb8be5732685"
+  },
+  {
+    "file": "memory_rust/__init__.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "83eb71c1b1bdaeb74667b9bcbfcb3d5ef76cded78369cb1f6420aaa98cc4af76"
+  },
+  {
+    "file": "memory_rust/backend.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "c5643f61616dffb9895b6409ffc4776ddc9fe5d5163ff497449509f8245590a5"
+  },
+  {
+    "file": "memory_rust/benchmark.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 2,
+    "graph_dependent": true,
+    "sha256": "d38cc123e59e198c6bcbaa654dca9a1642e7e765674daff6f520ed9487ed10ed"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "39030695b7c31ea448d74ebc31098a3a72480f9afc89d199b7b7077303fa6246"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 7,
+    "graph_dependent": true,
+    "sha256": "b0340997847c13bfb354122f956d9e1ded10720e15177ddb7753ed0ae08a9373"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 6,
+    "graph_dependent": true,
+    "sha256": "7eb39dd2365c5ffde0c6ec229017c74bf2ae475e614cabe53bbdd94bf1234a74"
+  },
+  {
+    "file": "memory_rust/python_backend.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "bea0043068d94afc76ff984e788abde5fdfe696a5f0c3816308c3ea3646ed8b5"
+  },
+  {
+    "file": "memory_rust/selector.py",
+    "packages": "WP03",
+    "disposition": "双后端/数据迁移",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "18bb20df033735933bcfd3a40f17c4a1dec46351ea9e4161eab1a9a9dcc179a7"
+  },
+  {
+    "file": "pyproject.toml",
+    "packages": "WP09",
+    "disposition": "装配/配置/健康",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "4889706c5173dd148519362969e51d3c66696429b1d00aa7f921ee30931e90f0"
+  },
+  {
+    "file": "release_assets/README-快速开始.txt",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "cc9bd2a04a89edb50ada246501b68adbb5329b52bbf81f426dda67ce58594d82"
+  },
+  {
+    "file": "runtime-manager/schemas/fixtures/napcat-package.json",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 2,
+    "graph_dependent": false,
+    "sha256": "7c8ff5608493b75824824f98694534b4d8e62c3523b191f0ff781218aa4d4b22"
+  },
+  {
+    "file": "scripts/build_embedding_fixture.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "2155be99ac08e0d039e72419c9ce066ba75b984f56ec95a01154262fb5583778"
+  },
+  {
+    "file": "scripts/build_offline_payload.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "1068e0ebd9bfefcbf15d68b9239efae0cb0abebba9ffa0f22cd14ad91dccdf4c"
+  },
+  {
+    "file": "scripts/build_release_catalog.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 7,
+    "graph_dependent": false,
+    "sha256": "9d67a6d06965c033119542a70011c498a888a7fb82593096ff454a92bf90fcae"
+  },
+  {
+    "file": "scripts/dev_webui.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "63d21fbb2914065913735314193ee304875921ac311d92447fa2b16c1f56cc86"
+  },
+  {
+    "file": "scripts/eval_memory_replay.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 4,
+    "graph_dependent": true,
+    "sha256": "eff4c3f2b584968f0b9bab6932229f967f7eb3d476bda88696bacb89f7d1cb64"
+  },
+  {
+    "file": "scripts/evaluate_dialogue_attribution.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 5,
+    "graph_dependent": true,
+    "sha256": "25f21780b29667b9d5dfc3a28197f6a1298a5283d58fb1f82b428f2b87b55ec1"
+  },
+  {
+    "file": "scripts/generate_message_flow.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "5bb3e191b3acc04b6daa4f9f4d064a840d532e9117c81ae5a2e051b7bf8000c8"
+  },
+  {
+    "file": "scripts/probe_consolidation.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 4,
+    "graph_dependent": true,
+    "sha256": "a0db3936a26a7017cb04e6f9046315475b8e40e1ef12d74ead38f21528e25cef"
+  },
+  {
+    "file": "scripts/probe_embedding.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "ae42d8ed529210aa0d6fa8cce7b5e9912cf865e7abdfda80099dfb42a8a053ca"
+  },
+  {
+    "file": "scripts/smoke_nonebot_entry.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "6479b600ae77b4a999796473c04863978985a5d9da427dfac96487c184c3d7db"
+  },
+  {
+    "file": "scripts/validate_rust_fullchain.py",
+    "packages": "WP11",
+    "disposition": "探针/构建/CI/完整性门禁",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "f7f1fd6717667e51004aa17e1813ba3dd88d854d420fbb2ea5394d4861ed823c"
+  },
+  {
+    "file": "stella-installer/src-tauri/src/commands.rs",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 30,
+    "graph_dependent": false,
+    "sha256": "3ca141fd61d850cee56a89e0c0d00b5aa7d7f2c50e31485f3bcee2b119b291e1"
+  },
+  {
+    "file": "stella-installer/src/mock/doctor-mixed.json",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "f7b22685cf2b14a0034d785a2362edc603d469df3a2c6c6e020e45c910c89d47"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/__init__.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 1,
+    "graph_dependent": true,
+    "sha256": "ce2eac6e2bea8659161ba5957589655f7dede40a6d85b5819627037cbb6405e1"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "packages": "WP05/06/07/09",
+    "disposition": "按入口、投递、后台、装配拆分，禁止整文件机械替换",
+    "literal_hits": 89,
+    "graph_dependent": true,
+    "sha256": "5a408af2ee606ea6c7f28824c4bce3003b99d9944774e89d87ee3a6e3e8e9e4f"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/cometa_bridge.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 30,
+    "graph_dependent": true,
+    "sha256": "5a2075fd91d1ad40668a738299b0b01a92fcc0c5d79f22ab49eeadd693deabae"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/config.py",
+    "packages": "WP02/04",
+    "disposition": "共享消费者复核，按真实调用归属",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "27050feae44aacf0858efcca7271790ac26592eb807dbd11833dabf6adc7f4fb"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/agent.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 7,
+    "graph_dependent": false,
+    "sha256": "3e94794817ada59ff3134458dd9d04db92fb98d7830eeb70a3a66fd15d7c6ae0"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/context.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "05a9442877fa256df2fec4362b7566cd096a994f758e44a1f28d9adac3f6aea6"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/cron.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "fa9b390946865ac423c1355d71936e951b75095e2d448c63a266276cfa10a01f"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/delivery.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 1,
+    "graph_dependent": true,
+    "sha256": "3c3662e45d8fceecea65ad015733f78858c02a7a8b259ef06ebd2adfa602249f"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/models.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 4,
+    "graph_dependent": false,
+    "sha256": "958d73f6dbc437b8f6b9de73c1f922059a662a810f50a6b61fcb7b7ad0bee58b"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/runtime.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 2,
+    "graph_dependent": true,
+    "sha256": "2d075c4b5fa8f51be20806baffbb0d5b1b98ee3b12f66f1d3a9b93cfa68a1be9"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/service.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 11,
+    "graph_dependent": true,
+    "sha256": "566d1c313fdcbe99615da5eca909b249acdbe2663b0c58d0259e592d3395937d"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/store.py",
+    "packages": "WP07",
+    "disposition": "后台/任务/持久目标",
+    "literal_hits": 15,
+    "graph_dependent": true,
+    "sha256": "eceb23e6b66dba590b07ea891694aca8a99da549e1792012e7d83f11a5986137"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/status_api.py",
+    "packages": "WP09",
+    "disposition": "装配/配置/健康",
+    "literal_hits": 4,
+    "graph_dependent": true,
+    "sha256": "6f32d0beb30efd7af0a1a6c0409cb0298ab4167cd4f043d58910597820dbb968"
+  },
+  {
+    "file": "webui/app.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "4a7ee646ebba6c3711b9c68528557f870d142a05a90959a110d26157a5894249"
+  },
+  {
+    "file": "webui/chat_ingress.py",
+    "packages": "WP05",
+    "disposition": "WebChat通用入口回归",
+    "literal_hits": 4,
+    "graph_dependent": true,
+    "sha256": "56c826055eb1e80e6a9c218ef219a86b05579e62ed7b249efd070010d1e0f198"
+  },
+  {
+    "file": "webui/mount.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "ab47ffdd1e9aa8331386a4c97627be213a36ba15cce93123584a657b7d658c7a"
+  },
+  {
+    "file": "webui/routers/chat.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "ad7d4d6de3f2a52a56747d2139f1a0b06396f196e1317e6b95b02e0e82354d1f"
+  },
+  {
+    "file": "webui/routers/cometa.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "d18b4eec266ae3641984d68b1be0a8a1d0babba5c3d4f13ef0bcfedc79dbda37"
+  },
+  {
+    "file": "webui/routers/config.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 3,
+    "graph_dependent": true,
+    "sha256": "b5caa4d6338b9c278fbdc9a63ef6cd16947131395ff3b8b8525936b5aa6b206b"
+  },
+  {
+    "file": "webui/routers/conversations.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "352feaea0d3a9c60794cffeead2e1b98f46dd46ef7eed157a345dbaa694edeba"
+  },
+  {
+    "file": "webui/routers/manage.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "ef9e0869236ed0874868c8a30c8257e10a36776a6028e168203e5a4d0daa1539"
+  },
+  {
+    "file": "webui/routers/platform.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "49f82a47b17f3bf0f98bc254435569f43876c548a2dd97c02506777b6248854b"
+  },
+  {
+    "file": "webui/services/cometa.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "b033e6175523041c150510c31503cbd18d6ff9137315118d98e68c5b3aea0aca"
+  },
+  {
+    "file": "webui/services/cometa_auth.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "716dee1605b51a7af9261a1e6c0d6d9721899d79afa7393ded59c74fc5d75fd4"
+  },
+  {
+    "file": "webui/services/config.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "653bfd129a1798c69313da0a5ccc6fa02adef706e76d68af8d200de5445b2515"
+  },
+  {
+    "file": "webui/services/conversations.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "0b68c3222a87d8ec8fc028e6b1c8989353e6a9db4fd0f37a306253f15756a2ed"
+  },
+  {
+    "file": "webui/services/envfile.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 1,
+    "graph_dependent": false,
+    "sha256": "8d72e08ee29184eb9579f52babc86e23a0c4c512f7ab5185e18ad957b254c3cd"
+  },
+  {
+    "file": "webui/services/flow.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 5,
+    "graph_dependent": false,
+    "sha256": "66fe7969bbaa7379cb900e0751ae27915bc8bdee8b1a76b6c2d97986b6754cbf"
+  },
+  {
+    "file": "webui/services/groups.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 12,
+    "graph_dependent": true,
+    "sha256": "4e241d17536b1148a3a4fb575eb1ea12f05fd2cd7a3109924ec23c2efe2abe37"
+  },
+  {
+    "file": "webui/services/kb.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "98fb72e04ad5278155260455ed11d21a7914757c80c88a0d8a0adb6b292552f4"
+  },
+  {
+    "file": "webui/services/platformcfg.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 7,
+    "graph_dependent": false,
+    "sha256": "58f7c869564b7acffa5e68f4b5d743e69808fc4b55a9a2ca141a77f60595b5f9"
+  },
+  {
+    "file": "webui/services/runtime.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 0,
+    "graph_dependent": true,
+    "sha256": "2090e62e299ef427cc7e84e3bc7483ccba0972cb5bbb5ea2540fa2d193c5ab5d"
+  },
+  {
+    "file": "webui/services/sched.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 13,
+    "graph_dependent": true,
+    "sha256": "2ec17a9a9f7e7b7936f96ca1c10f01b60413640ed47de0ce8cdfc936c6bf8148"
+  },
+  {
+    "file": "webui/services/spaces.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 12,
+    "graph_dependent": false,
+    "sha256": "7ae9c6d4f591958e130434387012e68148133fee048113fab6338cc39d82fdcd"
+  },
+  {
+    "file": "webui/services/system.py",
+    "packages": "WP10",
+    "disposition": "控制面/交付；QQ专属模块可保留",
+    "literal_hits": 3,
+    "graph_dependent": false,
+    "sha256": "abd49988db48434465fde156d69e3e40b5a8f62db3cf795a27b1d6130c42c35e"
+  }
+]

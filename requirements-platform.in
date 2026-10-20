@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+# 跨平台可选运行环境：只在安装平台桥接配置时使用，基础 QQ/WebChat 安装不变。
+-r requirements.txt
+nonebot-plugin-alconna==0.62.1
+nonebot-plugin-uninfo==0.11.2

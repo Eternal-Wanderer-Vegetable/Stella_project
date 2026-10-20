@@ -1,0 +1,83 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/ownership.py:scope_for_chat_context",
+    "name": "scope_for_chat_context",
+    "kind": "Function",
+    "filePath": "memory/ownership.py",
+    "startLine": 134,
+    "endLine": 166
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory/pre_processors.py:_build_user_context_v2",
+        "name": "_build_user_context_v2",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_a_memories_rendered_as_other_member_background",
+        "name": "test_a_memories_rendered_as_other_member_background",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_b_personal_memory_reachable_via_group_ingress",
+        "name": "test_b_personal_memory_reachable_via_group_ingress",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_candidates_carry_owner_columns_for_rendering",
+        "name": "test_candidates_carry_owner_columns_for_rendering",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_group_scope_subject_is_sender_not_group_number",
+        "name": "test_group_scope_subject_is_sender_not_group_number",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_legacy_entrance_stays_scope_free",
+        "name": "test_legacy_entrance_stays_scope_free",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_private_only_never_leaks_into_group_scope",
+        "name": "test_private_only_never_leaks_into_group_scope",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_proactive_at_scope_targets_verified_uid",
+        "name": "test_proactive_at_scope_targets_verified_uid",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_targetless_proactive_has_no_personal_subject",
+        "name": "test_targetless_proactive_has_no_personal_subject",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Method:core/planner.py:RestrictedPlanner._query_memory#2",
+        "name": "_query_memory",
+        "filePath": "core/planner.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory/ownership.py:scope_for_conversation",
+        "name": "scope_for_conversation",
+        "filePath": "memory/ownership.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_149_maybe_plan",
+      "name": "Maybe_plan → Space_owner_key",
+      "step_index": 3,
+      "step_count": 5
+    }
+  ]
+}

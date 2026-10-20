@@ -1,0 +1,200 @@
+{
+  "target": {
+    "id": "Function:memory/ownership.py:scope_for_conversation",
+    "name": "scope_for_conversation",
+    "type": "Function",
+    "filePath": "memory/ownership.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 5,
+  "risk": "HIGH",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 1,
+    "modules_affected": 3
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 2,
+    "3": 2
+  },
+  "affected_processes": [
+    {
+      "name": "maybe_plan",
+      "type": "Function",
+      "filePath": "core/planner.py",
+      "affected_process_count": 9,
+      "total_hits": 15,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Memory",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Cluster_272",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:memory/ownership.py:scope_for_chat_context",
+        "name": "scope_for_chat_context",
+        "filePath": "memory/ownership.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 3
+          }
+        ]
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:memory/pre_processors.py:_build_user_context_v2",
+        "name": "_build_user_context_v2",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Method:core/planner.py:RestrictedPlanner._query_memory#2",
+        "name": "_query_memory",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_419_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_399_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_420_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_418_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:memory/pre_processors.py:build_user_context",
+        "name": "build_user_context",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Method:core/planner.py:RestrictedPlanner.maybe_plan#1",
+        "name": "maybe_plan",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_411_maybe_plan",
+            "label": "Maybe_plan → Estimate_tokens",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_418_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_148_maybe_plan",
+            "label": "Maybe_plan → _limit_for",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_420_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_229_maybe_plan",
+            "label": "Maybe_plan → _describe_holders",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_419_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_332_maybe_plan",
+            "label": "Maybe_plan → Generate",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_399_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

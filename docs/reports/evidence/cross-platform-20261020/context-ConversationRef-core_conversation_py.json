@@ -1,0 +1,118 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:core/conversation.py:ConversationRef",
+    "name": "ConversationRef",
+    "kind": "Class",
+    "filePath": "core/conversation.py",
+    "startLine": 63,
+    "endLine": 98
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:memory/conversation_registry.py",
+        "name": "conversation_registry.py",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "File:tests/test_conversation_identity.py",
+        "name": "test_conversation_identity.py",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "File:tests/test_conversation_registry.py",
+        "name": "test_conversation_registry.py",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "File:tests/test_personal_memory_concurrency.py",
+        "name": "test_personal_memory_concurrency.py",
+        "filePath": "tests/test_personal_memory_concurrency.py"
+      },
+      {
+        "uid": "File:tests/test_personal_memory_scope.py",
+        "name": "test_personal_memory_scope.py",
+        "filePath": "tests/test_personal_memory_scope.py"
+      },
+      {
+        "uid": "File:tests/test_social_delivery.py",
+        "name": "test_social_delivery.py",
+        "filePath": "tests/test_social_delivery.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:core/conversation.py:ConversationRef.conversation_key#0",
+        "name": "conversation_key",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Method:core/conversation.py:ConversationRef.is_group#0",
+        "name": "is_group",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Method:core/conversation.py:ConversationRef.is_private#0",
+        "name": "is_private",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Method:core/conversation.py:ConversationRef.person_owner_key#0",
+        "name": "person_owner_key",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Method:core/conversation.py:ConversationRef.require_group_id#0",
+        "name": "require_group_id",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Method:core/conversation.py:ConversationRef.subject_key#0",
+        "name": "subject_key",
+        "filePath": "core/conversation.py"
+      }
+    ],
+    "has_property": [
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.bot_id",
+        "name": "bot_id",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.kind",
+        "name": "kind",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.memory_space",
+        "name": "memory_space",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.peer_id",
+        "name": "peer_id",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.platform",
+        "name": "platform",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.runtime_key",
+        "name": "runtime_key",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Property:core/conversation.py:ConversationRef.storage_session_id",
+        "name": "storage_session_id",
+        "filePath": "core/conversation.py"
+      }
+    ]
+  },
+  "processes": []
+}

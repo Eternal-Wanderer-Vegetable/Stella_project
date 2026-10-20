@@ -1,0 +1,183 @@
+{
+  "target": {
+    "id": "Function:core/dialogue_attribution.py:parse_reply_envelope",
+    "name": "parse_reply_envelope",
+    "type": "Function",
+    "filePath": "core/dialogue_attribution.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 6,
+  "risk": "HIGH",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 1,
+    "modules_affected": 3
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 3,
+    "3": 1
+  },
+  "affected_processes": [
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/evaluate_dialogue_attribution.py",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Scripts",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Runtime",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:core/dialogue_attribution.py:apply_attribution_guard",
+        "name": "apply_attribution_guard",
+        "filePath": "core/dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/post_processors.py:parse_output",
+        "name": "parse_output",
+        "filePath": "memory/post_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:_guard_stage",
+        "name": "_guard_stage",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:run_production_batch.attribution_guard_hook@892:4",
+        "name": "attribution_guard_hook",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:attribution_guard_hook",
+        "name": "attribution_guard_hook",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:main",
+        "name": "main",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_168_main",
+            "label": "Main → _decode_mentions",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_170_main",
+            "label": "Main → Resolve_fixture_oracle",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_257_main",
+            "label": "Main → Reset_state",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_68_main",
+            "label": "Main → _json_bytes",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_34_main",
+            "label": "Main → _settings",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_69_main",
+            "label": "Main → _message_payload",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_169_main",
+            "label": "Main → _state",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_256_main",
+            "label": "Main → Reset_state",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_259_main",
+            "label": "Main → Describe",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_258_main",
+            "label": "Main → Build_batch_jobs",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_113_main",
+            "label": "Main → _source_signature",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

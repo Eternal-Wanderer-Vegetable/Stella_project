@@ -1,0 +1,61 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService",
+    "name": "DeliveryService",
+    "kind": "Class",
+    "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py",
+    "startLine": 76,
+    "endLine": 189
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+        "name": "runtime.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py"
+      },
+      {
+        "uid": "File:tests/scheduling/test_scheduling_delivery.py",
+        "name": "test_scheduling_delivery.py",
+        "filePath": "tests/scheduling/test_scheduling_delivery.py"
+      },
+      {
+        "uid": "File:tests/scheduling/test_scheduling_runtime.py",
+        "name": "test_scheduling_runtime.py",
+        "filePath": "tests/scheduling/test_scheduling_runtime.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService.__init__#3",
+        "name": "__init__",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+      },
+      {
+        "uid": "Method:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService._fail#2",
+        "name": "_fail",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+      },
+      {
+        "uid": "Method:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService._unknown#2",
+        "name": "_unknown",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+      },
+      {
+        "uid": "Method:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService.deliver#5",
+        "name": "deliver",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+      }
+    ]
+  },
+  "processes": []
+}

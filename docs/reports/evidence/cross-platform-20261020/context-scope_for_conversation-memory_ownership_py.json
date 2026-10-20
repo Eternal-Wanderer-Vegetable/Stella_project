@@ -1,0 +1,108 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/ownership.py:scope_for_conversation",
+    "name": "scope_for_conversation",
+    "kind": "Function",
+    "filePath": "memory/ownership.py",
+    "startLine": 169,
+    "endLine": 203
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory/ownership.py:scope_for_chat_context",
+        "name": "scope_for_chat_context",
+        "filePath": "memory/ownership.py"
+      },
+      {
+        "uid": "Function:tests/test_multi_user_identity.py:test_scope_for_conversation_group_audience",
+        "name": "test_scope_for_conversation_group_audience",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestOwnership.test_fingerprint_changes_with_scope#0",
+        "name": "test_fingerprint_changes_with_scope",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestOwnership.test_scope_group_gets_user_shared_only#0",
+        "name": "test_scope_group_gets_user_shared_only",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestOwnership.test_scope_private_gets_private_and_shared#0",
+        "name": "test_scope_private_gets_private_and_shared",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestOwnership.test_scope_untrusted_subject_is_space_only#0",
+        "name": "test_scope_untrusted_subject_is_space_only",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestScopeSql.test_fragment_against_sqlite#0",
+        "name": "test_fragment_against_sqlite",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestScopeSql.test_person_fragment_filters_by_audience#0",
+        "name": "test_person_fragment_filters_by_audience",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_personal_memory_scope.py:TestAudienceMatrix.test_fts_same_authorization_as_sql#1",
+        "name": "test_fts_same_authorization_as_sql",
+        "filePath": "tests/test_personal_memory_scope.py"
+      },
+      {
+        "uid": "Method:tests/test_personal_memory_scope.py:TestAudienceMatrix.test_group_a_sees_space_and_user_shared_not_private#1",
+        "name": "test_group_a_sees_space_and_user_shared_not_private",
+        "filePath": "tests/test_personal_memory_scope.py"
+      },
+      {
+        "uid": "Method:tests/test_personal_memory_scope.py:TestAudienceMatrix.test_internal_visibility_blocks_person_shared#1",
+        "name": "test_internal_visibility_blocks_person_shared",
+        "filePath": "tests/test_personal_memory_scope.py"
+      },
+      {
+        "uid": "Method:tests/test_personal_memory_scope.py:TestAudienceMatrix.test_private_sees_private_and_shared#1",
+        "name": "test_private_sees_private_and_shared",
+        "filePath": "tests/test_personal_memory_scope.py"
+      },
+      {
+        "uid": "Method:tests/test_personal_memory_scope.py:TestAudienceMatrix.test_untrusted_subject_space_only#1",
+        "name": "test_untrusted_subject_space_only",
+        "filePath": "tests/test_personal_memory_scope.py"
+      },
+      {
+        "uid": "Method:tests/test_personal_memory_scope.py:TestContextScopeDerivation.test_scope_from_chat_context_identity#0",
+        "name": "test_scope_from_chat_context_identity",
+        "filePath": "tests/test_personal_memory_scope.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory/ownership.py:person_owner_key",
+        "name": "person_owner_key",
+        "filePath": "memory/ownership.py"
+      },
+      {
+        "uid": "Function:memory/ownership.py:space_owner_key",
+        "name": "space_owner_key",
+        "filePath": "memory/ownership.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_149_maybe_plan",
+      "name": "Maybe_plan → Space_owner_key",
+      "step_index": 4,
+      "step_count": 5
+    }
+  ]
+}

@@ -1,0 +1,289 @@
+{
+  "processes": [
+    {
+      "id": "proc_149_maybe_plan",
+      "summary": "Maybe_plan → Space_owner_key",
+      "priority": 0.106,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_374_consolidation_drain_",
+      "summary": "Consolidation_drain_job → Alive",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_379_main",
+      "summary": "Main → _row_trace_id",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_389_main",
+      "summary": "Main → _new_id",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_390_main",
+      "summary": "Main → _register",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_391_main",
+      "summary": "Main → Dropped",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_45_main",
+      "summary": "Main → Alive",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_52_consolidation_drain_",
+      "summary": "Consolidation_drain_job → _row_trace_id",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 7
+    },
+    {
+      "id": "proc_539_main",
+      "summary": "Main → Utc_now",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_71_consolidation_drain_",
+      "summary": "Consolidation_drain_job → _new_id",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_72_consolidation_drain_",
+      "summary": "Consolidation_drain_job → _register",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_73_consolidation_drain_",
+      "summary": "Consolidation_drain_job → Dropped",
+      "priority": 0.077,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Method:core/planner.py:RestrictedPlanner._query_memory#2",
+      "name": "_query_memory",
+      "filePath": "core/planner.py",
+      "startLine": 289,
+      "endLine": 316,
+      "module": "Tests",
+      "process_id": "proc_149_maybe_plan",
+      "step_index": 2
+    },
+    {
+      "id": "Function:memory/ownership.py:scope_for_chat_context",
+      "name": "scope_for_chat_context",
+      "filePath": "memory/ownership.py",
+      "startLine": 134,
+      "endLine": 166,
+      "module": "Tests",
+      "process_id": "proc_149_maybe_plan",
+      "step_index": 3
+    },
+    {
+      "id": "Function:memory/ownership.py:scope_for_conversation",
+      "name": "scope_for_conversation",
+      "filePath": "memory/ownership.py",
+      "startLine": 169,
+      "endLine": 203,
+      "module": "Tests",
+      "process_id": "proc_149_maybe_plan",
+      "step_index": 4
+    },
+    {
+      "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+      "name": "_consolidate_with_root",
+      "filePath": "memory/consolidator.py",
+      "startLine": 639,
+      "endLine": 677,
+      "module": "Observability",
+      "process_id": "proc_374_consolidation_drain_",
+      "step_index": 4
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Class:tests/test_personal_memory_scope.py:TestContextScopeDerivation",
+      "name": "TestContextScopeDerivation",
+      "filePath": "tests/test_personal_memory_scope.py",
+      "startLine": 378,
+      "endLine": 401
+    },
+    {
+      "id": "Method:tests/test_personal_memory_scope.py:TestContextScopeDerivation.test_scope_from_chat_context_identity#0",
+      "name": "test_scope_from_chat_context_identity",
+      "filePath": "tests/test_personal_memory_scope.py",
+      "startLine": 379,
+      "endLine": 401,
+      "module": "Memory"
+    },
+    {
+      "id": "File:tests/test_personal_memory_scope.py",
+      "name": "test_personal_memory_scope.py",
+      "filePath": "tests/test_personal_memory_scope.py"
+    },
+    {
+      "id": "Function:tests/test_multi_user_identity.py:test_group_scope_subject_is_sender_not_group_number",
+      "name": "test_group_scope_subject_is_sender_not_group_number",
+      "filePath": "tests/test_multi_user_identity.py",
+      "startLine": 107,
+      "endLine": 116,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_multi_user_identity.py:test_proactive_at_scope_targets_verified_uid",
+      "name": "test_proactive_at_scope_targets_verified_uid",
+      "filePath": "tests/test_multi_user_identity.py",
+      "startLine": 242,
+      "endLine": 248,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_multi_user_identity.py",
+      "name": "test_multi_user_identity.py",
+      "filePath": "tests/test_multi_user_identity.py"
+    },
+    {
+      "id": "Function:memory/conversation_registry.py:lookup",
+      "name": "lookup",
+      "filePath": "memory/conversation_registry.py",
+      "startLine": 95,
+      "endLine": 99,
+      "module": "Memory"
+    },
+    {
+      "id": "Function:memory/conversation_registry.py:lookup_by_identity",
+      "name": "lookup_by_identity",
+      "filePath": "memory/conversation_registry.py",
+      "startLine": 119,
+      "endLine": 122,
+      "module": "Memory"
+    },
+    {
+      "id": "File:memory/conversation_registry.py",
+      "name": "conversation_registry.py",
+      "filePath": "memory/conversation_registry.py"
+    },
+    {
+      "id": "Class:core/conversation.py:ConversationRef",
+      "name": "ConversationRef",
+      "filePath": "core/conversation.py",
+      "startLine": 63,
+      "endLine": 98
+    },
+    {
+      "id": "Function:core/conversation.py:webchat_ref",
+      "name": "webchat_ref",
+      "filePath": "core/conversation.py",
+      "startLine": 178,
+      "endLine": 198,
+      "module": "Tests"
+    },
+    {
+      "id": "File:core/conversation.py",
+      "name": "conversation.py",
+      "filePath": "core/conversation.py"
+    },
+    {
+      "id": "Function:core/social/delivery.py:delivery_draft_from_context",
+      "name": "delivery_draft_from_context",
+      "filePath": "core/social/delivery.py",
+      "startLine": 133,
+      "endLine": 182,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:core/social/delivery.py:_append_and_persist",
+      "name": "_append_and_persist",
+      "filePath": "core/social/delivery.py",
+      "startLine": 545,
+      "endLine": 634,
+      "module": "Social"
+    },
+    {
+      "id": "File:core/social/delivery.py",
+      "name": "delivery.py",
+      "filePath": "core/social/delivery.py"
+    },
+    {
+      "id": "Function:tests/test_private_chat_ingress.py:test_private_chat_end_to_end_once_recorded",
+      "name": "test_private_chat_end_to_end_once_recorded",
+      "filePath": "tests/test_private_chat_ingress.py",
+      "startLine": 124,
+      "endLine": 158,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_private_chat_ingress.py:test_chat_context_storage_key_semantics",
+      "name": "test_chat_context_storage_key_semantics",
+      "filePath": "tests/test_private_chat_ingress.py",
+      "startLine": 218,
+      "endLine": 236,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_private_chat_ingress.py",
+      "name": "test_private_chat_ingress.py",
+      "filePath": "tests/test_private_chat_ingress.py"
+    },
+    {
+      "id": "Class:core/planner.py:RestrictedPlanner",
+      "name": "RestrictedPlanner",
+      "filePath": "core/planner.py",
+      "startLine": 194,
+      "endLine": 316
+    },
+    {
+      "id": "File:core/planner.py",
+      "name": "planner.py",
+      "filePath": "core/planner.py"
+    }
+  ],
+  "timing": {
+    "vector": 1.5,
+    "bm25": 988.6,
+    "merge": 0.3,
+    "symbol_lookup": 77.7,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1066.7
+  }
+}

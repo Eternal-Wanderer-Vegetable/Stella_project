@@ -2,9 +2,26 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-17 (Asia/Shanghai)
-**Active Feature:** EXTRACT 契约对齐（阶段2 提示词修复）已在 `feat/memory-benchmark-suite` 落地并验收通过（4a45082 提示词+守卫、9a74b9a 证据报告，另含状态提交）；真模型 live 回放 accepted 0→4、promotion 0%→100%。分支累计待用户审阅合并（未推送）。
-**Scope:** 计划 [2026-10-17-gitnexus-plan-extract-contract-prompt.md](docs/plans/2026-10-17-gitnexus-plan-extract-contract-prompt.md) 全量实施：仅改 `EXTRACTION_PROMPT`（契约硬规则块+示例契约修正），闸门 `evidence_contract.py` 零改动。详情见 [实施报告](docs/reports/2026-10-17-extract-contract-prompt-fix.md)。
+**Last Updated:** 2026-10-20 (Asia/Shanghai)
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00 已完成，下一步 WP01；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)，平台 live、发布与VM验收单独记录。
+
+## 2026-10-20 — GitNexus / Cross-platform planning
+
+- 基线索引：1,249文件、95,747节点、236,981关系、829推断流程；启用PDG，保留流程预算、动态调用和跨语言缺边限制。
+- 独立入口核验：50声明入口/9流程族，34注册扫描结果，双向差集为空。
+- 工程方案：12依赖工作包；32适配器分母；180候选文件；包含身份、权限、迁移、双后端、投递恢复、插件、控制面、部署与验收。
+- 本轮只交付计划与工具/文档；平台fixture/live、迁移、业务测试与发布均未执行。后续应从WP00开始，不能把计划完成当实施完成。
+- 文档/清单一致性、源代码零修改与影响检查已通过；索引状态和最终刷新记录见本地 `.gitnexus/verification/`，持久证据见报告目录。`detect_changes`仅覆盖3个已跟踪状态文件，新文档/证据另行完整验证。
+
+## 2026-10-20 — Cross-platform implementation (WP00)
+
+- 已从 `ba582a9` 建立 `codex/cross-platform-implementation`；规划阶段已有的计划、证据与状态修改保留在本分支。
+- 数据边界：本机 `STELLA_HOME` 未设置；回归夹具把库与空间配置放进 pytest 临时目录。未启动 Bot、未读取或迁移用户库。
+- 冻结候选组合：NoneBot 2.5.0、Alconna 0.62.1、Uninfo 0.11.2；官方包元数据声明均支持 Python >=3.10，`uv pip compile` 对 3.10/3.11/3.12 解析通过，三个版本运行时 import smoke 通过。
+- 基线：会话身份/注册表/用户隔离 79 passed；QQ/WebChat 入口/上下文 32 passed；采集门/入站限制 31 passed；文档门禁 119 files / 1199 links / 577 anchors / 0 errors。
+- WP00 完成：平台桥接依赖设为显式可选 extra，并生成跨 Python 的锁；现有回归向量作为 QQ/WebChat 冻结基线。锁定依赖解析与 3.10/3.11/3.12 导入烟测通过；定向回归 142 passed；文档/JSON/diff 检查通过。下一步 WP01。
+- 影响基线已按 UID 精确核对：`conversation_key` CRITICAL（14 impacted、6 direct、4 flows、5 modules）；`ConversationRef.conversation_key` UNKNOWN/0 edges；`get_or_register_group` UNKNOWN/0 callers，源码引用仅定义与测试；`scope_for_chat_context` HIGH/5 impacted；`record_message` CRITICAL/18 lower-bound，3 个未解析接收者。
 
 ## What's Done
 

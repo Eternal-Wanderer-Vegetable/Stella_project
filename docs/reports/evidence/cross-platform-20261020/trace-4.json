@@ -1,0 +1,1 @@
+"name: \"Handle_toggle → Parse_platform_message_id\"\ntype: cross_community\nstep_count: 3\n\ntrace:\n  1: handle_toggle (stella_project/plugins/bot_main/ai_gateway.py)\n  2: _record_bot_lines (stella_project/plugins/bot_main/ai_gateway.py)\n  3: parse_platform_message_id (memory/conversation_projection.py)"

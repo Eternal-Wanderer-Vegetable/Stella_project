@@ -1,0 +1,1 @@
+"name: \"Handle_private_chat → Decision\"\ntype: cross_community\nstep_count: 3\n\ntrace:\n  1: handle_private_chat (stella_project/plugins/bot_main/ai_gateway.py)\n  2: ingress_decision (memory/capture_gate.py)\n  3: decision (memory/capture_gate.py)"

@@ -1,0 +1,31 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:capability/providers/knowledge.py:_principal_of",
+    "name": "_principal_of",
+    "kind": "Function",
+    "filePath": "capability/providers/knowledge.py",
+    "startLine": 56,
+    "endLine": 72
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Method:capability/providers/knowledge.py:KnowledgeSearchTool.call",
+        "name": "call",
+        "filePath": "capability/providers/knowledge.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:config/spaces.py:resolve_space",
+        "name": "resolve_space",
+        "filePath": "config/spaces.py"
+      }
+    ]
+  },
+  "processes": []
+}

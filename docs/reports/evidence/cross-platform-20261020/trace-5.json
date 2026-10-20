@@ -1,0 +1,1 @@
+"name: \"Chat_reset → Get_shared_facade\"\ntype: cross_community\nstep_count: 4\n\ntrace:\n  1: chat_reset (webui/routers/chat.py)\n  2: reset_webchat_runtime (webui/chat_ingress.py)\n  3: ensure_shared_facade_started (core/runtime/facade.py)\n  4: get_shared_facade (core/runtime/facade.py)"

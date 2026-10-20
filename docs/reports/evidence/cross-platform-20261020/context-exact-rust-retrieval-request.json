@@ -1,0 +1,85 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+    "name": "RetrievalRequest",
+    "filePath": "memory_rust/native/src/retrieval.rs",
+    "startLine": 15,
+    "endLine": 36
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory_rust/native/src/retrieval.rs:tests.test_request",
+        "name": "test_request",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_property": [
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.db_path",
+        "name": "db_path",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.group_shared_space",
+        "name": "group_shared_space",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.mode",
+        "name": "mode",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.pool_limit",
+        "name": "pool_limit",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.query",
+        "name": "query",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.scope_person_audiences",
+        "name": "scope_person_audiences",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.scope_person_owner_key",
+        "name": "scope_person_owner_key",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.scope_space_key",
+        "name": "scope_space_key",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.scope_subject_key",
+        "name": "scope_subject_key",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.semantic_scores",
+        "name": "semantic_scores",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.trigger",
+        "name": "trigger",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/retrieval.rs:RetrievalRequest.user_id",
+        "name": "user_id",
+        "filePath": "memory_rust/native/src/retrieval.rs"
+      }
+    ]
+  },
+  "processes": []
+}

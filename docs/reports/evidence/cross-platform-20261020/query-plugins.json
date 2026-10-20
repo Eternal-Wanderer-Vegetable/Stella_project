@@ -1,0 +1,300 @@
+{
+  "processes": [
+    {
+      "id": "proc_155_run_provider_request",
+      "summary": "Run_provider_request → To_onebot_message",
+      "priority": 0.099,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_107_run_provider_request",
+      "summary": "Run_provider_request → Get_group_id",
+      "priority": 0.086,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_108_run_provider_request",
+      "summary": "Run_provider_request → Get_sender_id",
+      "priority": 0.086,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_154_run_provider_request",
+      "summary": "Run_provider_request → Split_forward_nodes",
+      "priority": 0.086,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_115_handle_plugin",
+      "summary": "Handle_plugin → Sanitize_text",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_116_handle_plugin",
+      "summary": "Handle_plugin → Next_seq",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_180_handle_plugin",
+      "summary": "Handle_plugin → _flow_conversation_key",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_518_handle_plugin",
+      "summary": "Handle_plugin → Alive",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 7
+    },
+    {
+      "id": "proc_520_handle_plugin",
+      "summary": "Handle_plugin → _row_trace_id",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_524_handle_plugin",
+      "summary": "Handle_plugin → _new_id",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_631_handle_plugin",
+      "summary": "Handle_plugin → Utc_now",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_121_collect_status",
+      "summary": "Collect_status → Redact_value",
+      "priority": 0.066,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Method:astrbot_compat/events.py:AstrMessageEvent._send_components#1",
+      "name": "_send_components",
+      "filePath": "astrbot_compat/events.py",
+      "startLine": 607,
+      "endLine": 621,
+      "module": "Astrbot_compat",
+      "process_id": "proc_155_run_provider_request",
+      "step_index": 3
+    },
+    {
+      "id": "Function:astrbot_compat/components.py:to_onebot_message",
+      "name": "to_onebot_message",
+      "filePath": "astrbot_compat/components.py",
+      "startLine": 744,
+      "endLine": 763,
+      "module": "Astrbot_compat",
+      "process_id": "proc_155_run_provider_request",
+      "step_index": 4
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_plugin",
+      "name": "handle_plugin",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 1435,
+      "endLine": 1456,
+      "module": "Bot_main",
+      "process_id": "proc_115_handle_plugin",
+      "step_index": 1
+    },
+    {
+      "id": "Function:deploy/runtime.py:structured_error",
+      "name": "structured_error",
+      "filePath": "deploy/runtime.py",
+      "startLine": 159,
+      "endLine": 166,
+      "module": "Deploy",
+      "process_id": "proc_121_collect_status",
+      "step_index": 4
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Class:tests/cometa/test_bridge.py:TestBuildOrigin",
+      "name": "TestBuildOrigin",
+      "filePath": "tests/cometa/test_bridge.py",
+      "startLine": 58,
+      "endLine": 102
+    },
+    {
+      "id": "Method:tests/cometa/test_bridge.py:TestBuildOrigin._group_event#4",
+      "name": "_group_event",
+      "filePath": "tests/cometa/test_bridge.py",
+      "startLine": 60,
+      "endLine": 69,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:tests/cometa/test_bridge.py:TestBuildOrigin.test_private_event_yields_private_origin#0",
+      "name": "test_private_event_yields_private_origin",
+      "filePath": "tests/cometa/test_bridge.py",
+      "startLine": 88,
+      "endLine": 102
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_dispatch.py:test_dispatch_is_cheap_without_plugins",
+      "name": "test_dispatch_is_cheap_without_plugins",
+      "filePath": "tests/astrbot_compat/test_dispatch.py",
+      "startLine": 119,
+      "endLine": 120
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_accepts_json_card_without_plaintext",
+      "name": "test_should_dispatch_accepts_json_card_without_plaintext",
+      "filePath": "tests/astrbot_compat/test_dispatch.py",
+      "startLine": 269,
+      "endLine": 275,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_dispatch.py:test_should_dispatch_survives_broken_event",
+      "name": "test_should_dispatch_survives_broken_event",
+      "filePath": "tests/astrbot_compat/test_dispatch.py",
+      "startLine": 306,
+      "endLine": 313
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:_dispatch",
+      "name": "_dispatch",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 22,
+      "endLine": 23,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:test_yielded_request_reaches_the_user",
+      "name": "test_yielded_request_reaches_the_user",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 84,
+      "endLine": 94
+    },
+    {
+      "id": "File:tests/astrbot_compat/test_request_llm.py",
+      "name": "test_request_llm.py",
+      "filePath": "tests/astrbot_compat/test_request_llm.py"
+    },
+    {
+      "id": "Function:capability/hooks.py:_run_comes",
+      "name": "_run_comes",
+      "filePath": "capability/hooks.py",
+      "startLine": 171,
+      "endLine": 210,
+      "module": "Capability"
+    },
+    {
+      "id": "Function:capability/hooks.py:_build_astr_event",
+      "name": "_build_astr_event",
+      "filePath": "capability/hooks.py",
+      "startLine": 317,
+      "endLine": 333,
+      "module": "Capability"
+    },
+    {
+      "id": "File:capability/hooks.py",
+      "name": "hooks.py",
+      "filePath": "capability/hooks.py"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_plugin_trigger",
+      "name": "is_plugin_trigger",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 1413,
+      "endLine": 1426
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_scheduling",
+      "name": "handle_scheduling",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 3107,
+      "endLine": 3139,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Method:astrbot_compat/events.py:AstrMessageEvent.send_typing#0",
+      "name": "send_typing",
+      "filePath": "astrbot_compat/events.py",
+      "startLine": 658,
+      "endLine": 660
+    },
+    {
+      "id": "Function:astrbot_compat/events.py:build_event",
+      "name": "build_event",
+      "filePath": "astrbot_compat/events.py",
+      "startLine": 810,
+      "endLine": 871,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:astrbot_compat/components.py:_build_reply",
+      "name": "_build_reply",
+      "filePath": "astrbot_compat/components.py",
+      "startLine": 685,
+      "endLine": 700,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:astrbot_compat/components.py:from_onebot_message",
+      "name": "from_onebot_message",
+      "filePath": "astrbot_compat/components.py",
+      "startLine": 730,
+      "endLine": 741,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:astrbot_compat/pipeline.py:should_dispatch",
+      "name": "should_dispatch",
+      "filePath": "astrbot_compat/pipeline.py",
+      "startLine": 35,
+      "endLine": 75,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:astrbot_compat/pipeline.py:dispatch",
+      "name": "dispatch",
+      "filePath": "astrbot_compat/pipeline.py",
+      "startLine": 317,
+      "endLine": 383,
+      "module": "Astrbot_compat"
+    }
+  ],
+  "timing": {
+    "vector": 1.4,
+    "bm25": 972.1,
+    "merge": 0.1,
+    "symbol_lookup": 82,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1054.3
+  }
+}

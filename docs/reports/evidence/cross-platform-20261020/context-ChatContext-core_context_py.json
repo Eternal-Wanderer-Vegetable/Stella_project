@@ -1,0 +1,331 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:core/context.py:ChatContext",
+    "name": "ChatContext",
+    "kind": "Class",
+    "filePath": "core/context.py",
+    "startLine": 122,
+    "endLine": 452
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py"
+      },
+      {
+        "uid": "File:capability/hooks.py",
+        "name": "hooks.py",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "File:core/planner.py",
+        "name": "planner.py",
+        "filePath": "core/planner.py"
+      },
+      {
+        "uid": "File:core/runtime/facade.py",
+        "name": "facade.py",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "File:core/runtime/turn_service.py",
+        "name": "turn_service.py",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "File:memory/conversation_identity.py",
+        "name": "conversation_identity.py",
+        "filePath": "memory/conversation_identity.py"
+      },
+      {
+        "uid": "File:memory/post_processors.py",
+        "name": "post_processors.py",
+        "filePath": "memory/post_processors.py"
+      },
+      {
+        "uid": "File:memory/pre_processors.py",
+        "name": "pre_processors.py",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "File:tests/capability/test_capability_hooks.py",
+        "name": "test_capability_hooks.py",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "File:tests/capability/test_delegation.py",
+        "name": "test_delegation.py",
+        "filePath": "tests/capability/test_delegation.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_gateway_wiring.py",
+        "name": "test_gateway_wiring.py",
+        "filePath": "tests/cometa/test_gateway_wiring.py"
+      },
+      {
+        "uid": "File:tests/knowledge/test_isolation.py",
+        "name": "test_isolation.py",
+        "filePath": "tests/knowledge/test_isolation.py"
+      },
+      {
+        "uid": "File:tests/observability/test_message_flow_runtime.py",
+        "name": "test_message_flow_runtime.py",
+        "filePath": "tests/observability/test_message_flow_runtime.py"
+      },
+      {
+        "uid": "File:tests/runtime/legacy_harness.py",
+        "name": "legacy_harness.py",
+        "filePath": "tests/runtime/legacy_harness.py"
+      },
+      {
+        "uid": "File:tests/runtime/runtime_harness.py",
+        "name": "runtime_harness.py",
+        "filePath": "tests/runtime/runtime_harness.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_facade_turns.py",
+        "name": "test_facade_turns.py",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_turn_service.py",
+        "name": "test_turn_service.py",
+        "filePath": "tests/runtime/test_turn_service.py"
+      },
+      {
+        "uid": "File:tests/test_ai_gateway_deterministic_reply.py",
+        "name": "test_ai_gateway_deterministic_reply.py",
+        "filePath": "tests/test_ai_gateway_deterministic_reply.py"
+      },
+      {
+        "uid": "File:tests/test_attribution_wiring.py",
+        "name": "test_attribution_wiring.py",
+        "filePath": "tests/test_attribution_wiring.py"
+      },
+      {
+        "uid": "File:tests/test_bot_self_source.py",
+        "name": "test_bot_self_source.py",
+        "filePath": "tests/test_bot_self_source.py"
+      },
+      {
+        "uid": "File:tests/test_capture_ingress_gating.py",
+        "name": "test_capture_ingress_gating.py",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "File:tests/test_context_tail.py",
+        "name": "test_context_tail.py",
+        "filePath": "tests/test_context_tail.py"
+      },
+      {
+        "uid": "File:tests/test_conversation_identity.py",
+        "name": "test_conversation_identity.py",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "File:tests/test_full_workflow.py",
+        "name": "test_full_workflow.py",
+        "filePath": "tests/test_full_workflow.py"
+      },
+      {
+        "uid": "File:tests/test_jargon_service.py",
+        "name": "test_jargon_service.py",
+        "filePath": "tests/test_jargon_service.py"
+      },
+      {
+        "uid": "File:tests/test_message_relations.py",
+        "name": "test_message_relations.py",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "File:tests/test_multi_user_identity.py",
+        "name": "test_multi_user_identity.py",
+        "filePath": "tests/test_multi_user_identity.py"
+      },
+      {
+        "uid": "File:tests/test_personal_memory_scope.py",
+        "name": "test_personal_memory_scope.py",
+        "filePath": "tests/test_personal_memory_scope.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:core/context.py:ChatContext.__post_init__#0",
+        "name": "__post_init__",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Method:core/context.py:ChatContext.storage_key#0",
+        "name": "storage_key",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Method:core/context.py:ChatContext.to_json_projection#0",
+        "name": "to_json_projection",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Method:core/context.py:ChatContext.trace_scope#0",
+        "name": "trace_scope",
+        "filePath": "core/context.py"
+      }
+    ],
+    "has_property": [
+      {
+        "uid": "Property:core/context.py:ChatContext.action",
+        "name": "action",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.attribution_decision",
+        "name": "attribution_decision",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.attribution_evidence",
+        "name": "attribution_evidence",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.attribution_risk_context",
+        "name": "attribution_risk_context",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.behavior_constraints",
+        "name": "behavior_constraints",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.bot",
+        "name": "bot",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.bot_id",
+        "name": "bot_id",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.capture_result",
+        "name": "capture_result",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.cometa_origin",
+        "name": "cometa_origin",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.cometa_submission",
+        "name": "cometa_submission",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.context_window_tokens",
+        "name": "context_window_tokens",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.conversation_key",
+        "name": "conversation_key",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.conversation_kind",
+        "name": "conversation_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.conversation_memories",
+        "name": "conversation_memories",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.deep_tool_calls",
+        "name": "deep_tool_calls",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_draft",
+        "name": "delivery_draft",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_plan",
+        "name": "delivery_plan",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_source_kind",
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.gate_path",
+        "name": "gate_path",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.gate_reasons",
+        "name": "gate_reasons",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.gate_score",
+        "name": "gate_score",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.generation_epoch",
+        "name": "generation_epoch",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.group_id",
+        "name": "group_id",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.group_shared_space",
+        "name": "group_shared_space",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.guard_decision",
+        "name": "guard_decision",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.identity_capsule",
+        "name": "identity_capsule",
+        "filePath": "core/context.py"
+      }
+    ]
+  },
+  "typed_properties": [
+    {
+      "uid": "Property:core/runtime/turn_service.py:TurnPlan.ctx",
+      "name": "ctx",
+      "filePath": "core/runtime/turn_service.py",
+      "declaredType": "ChatContext"
+    }
+  ],
+  "processes": []
+}

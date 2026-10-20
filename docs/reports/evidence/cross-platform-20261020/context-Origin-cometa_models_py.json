@@ -1,0 +1,251 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:cometa/models.py:Origin",
+    "name": "Origin",
+    "kind": "Class",
+    "filePath": "cometa/models.py",
+    "startLine": 281,
+    "endLine": 373
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py"
+      },
+      {
+        "uid": "File:cometa/artifacts.py",
+        "name": "artifacts.py",
+        "filePath": "cometa/artifacts.py"
+      },
+      {
+        "uid": "File:cometa/backends/base.py",
+        "name": "base.py",
+        "filePath": "cometa/backends/base.py"
+      },
+      {
+        "uid": "File:cometa/backends/codex.py",
+        "name": "codex.py",
+        "filePath": "cometa/backends/codex.py"
+      },
+      {
+        "uid": "File:cometa/backends/codex_events.py",
+        "name": "codex_events.py",
+        "filePath": "cometa/backends/codex_events.py"
+      },
+      {
+        "uid": "File:cometa/backends/fake.py",
+        "name": "fake.py",
+        "filePath": "cometa/backends/fake.py"
+      },
+      {
+        "uid": "File:cometa/config.py",
+        "name": "config.py",
+        "filePath": "cometa/config.py"
+      },
+      {
+        "uid": "File:cometa/delivery.py",
+        "name": "delivery.py",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "File:cometa/executor.py",
+        "name": "executor.py",
+        "filePath": "cometa/executor.py"
+      },
+      {
+        "uid": "File:cometa/policy.py",
+        "name": "policy.py",
+        "filePath": "cometa/policy.py"
+      },
+      {
+        "uid": "File:cometa/presentation.py",
+        "name": "presentation.py",
+        "filePath": "cometa/presentation.py"
+      },
+      {
+        "uid": "File:cometa/service.py",
+        "name": "service.py",
+        "filePath": "cometa/service.py"
+      },
+      {
+        "uid": "File:cometa/store.py",
+        "name": "store.py",
+        "filePath": "cometa/store.py"
+      },
+      {
+        "uid": "File:cometa/supervisor.py",
+        "name": "supervisor.py",
+        "filePath": "cometa/supervisor.py"
+      },
+      {
+        "uid": "File:cometa/worker.py",
+        "name": "worker.py",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "File:cometa/workspace.py",
+        "name": "workspace.py",
+        "filePath": "cometa/workspace.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/cometa_bridge.py",
+        "name": "cometa_bridge.py",
+        "filePath": "stella_project/plugins/bot_main/cometa_bridge.py"
+      },
+      {
+        "uid": "File:tests/capability/test_delegation.py",
+        "name": "test_delegation.py",
+        "filePath": "tests/capability/test_delegation.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_backend_contract.py",
+        "name": "test_backend_contract.py",
+        "filePath": "tests/cometa/test_backend_contract.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_bridge.py",
+        "name": "test_bridge.py",
+        "filePath": "tests/cometa/test_bridge.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_codex_events.py",
+        "name": "test_codex_events.py",
+        "filePath": "tests/cometa/test_codex_events.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_cometa_service.py",
+        "name": "test_cometa_service.py",
+        "filePath": "tests/cometa/test_cometa_service.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_cometa_store.py",
+        "name": "test_cometa_store.py",
+        "filePath": "tests/cometa/test_cometa_store.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_delivery.py",
+        "name": "test_delivery.py",
+        "filePath": "tests/cometa/test_delivery.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_gateway_wiring.py",
+        "name": "test_gateway_wiring.py",
+        "filePath": "tests/cometa/test_gateway_wiring.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_recovery.py",
+        "name": "test_recovery.py",
+        "filePath": "tests/cometa/test_recovery.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_runtime_assembly.py",
+        "name": "test_runtime_assembly.py",
+        "filePath": "tests/cometa/test_runtime_assembly.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_worker.py",
+        "name": "test_worker.py",
+        "filePath": "tests/cometa/test_worker.py"
+      },
+      {
+        "uid": "File:tests/cometa_helpers.py",
+        "name": "cometa_helpers.py",
+        "filePath": "tests/cometa_helpers.py"
+      },
+      {
+        "uid": "File:tests/test_conversation_identity.py",
+        "name": "test_conversation_identity.py",
+        "filePath": "tests/test_conversation_identity.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:cometa/models.py:Origin.__post_init__#0",
+        "name": "__post_init__",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Method:cometa/models.py:Origin.from_dict#1",
+        "name": "from_dict",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Method:cometa/models.py:Origin.to_dict#0",
+        "name": "to_dict",
+        "filePath": "cometa/models.py"
+      }
+    ],
+    "has_property": [
+      {
+        "uid": "Property:cometa/models.py:Origin.bot_id",
+        "name": "bot_id",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.conversation_generation",
+        "name": "conversation_generation",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.conversation_id",
+        "name": "conversation_id",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.conversation_key",
+        "name": "conversation_key",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.conversation_kind",
+        "name": "conversation_kind",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.instance_id",
+        "name": "instance_id",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.peer_id",
+        "name": "peer_id",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.platform",
+        "name": "platform",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.reply_to_message_id",
+        "name": "reply_to_message_id",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.requester_id",
+        "name": "requester_id",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Property:cometa/models.py:Origin.source_request_id",
+        "name": "source_request_id",
+        "filePath": "cometa/models.py"
+      }
+    ]
+  },
+  "typed_properties": [
+    {
+      "uid": "Property:cometa/store.py:TaskRecord.origin",
+      "name": "origin",
+      "filePath": "cometa/store.py",
+      "declaredType": "Origin"
+    }
+  ],
+  "processes": []
+}

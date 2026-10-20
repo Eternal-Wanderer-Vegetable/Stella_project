@@ -1,0 +1,97 @@
+[
+  {
+    "id": "graph-node-types-fixed",
+    "tool": "cypher",
+    "args": {
+      "statement": "MATCH (n) RETURN labels(n) AS label, count(n) AS count ORDER BY count DESC"
+    }
+  },
+  {
+    "id": "graph-processes-all",
+    "tool": "cypher",
+    "args": {
+      "statement": "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS name,p.stepCount AS steps ORDER BY p.id"
+    }
+  },
+  {
+    "id": "trace-2",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/Record_group_chat%20%E2%86%92%20Clear_proactive_skips"
+    }
+  },
+  {
+    "id": "trace-3",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/Handle_private_chat%20%E2%86%92%20Decision"
+    }
+  },
+  {
+    "id": "trace-4",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/Handle_toggle%20%E2%86%92%20Parse_platform_message_id"
+    }
+  },
+  {
+    "id": "trace-5",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/Chat_reset%20%E2%86%92%20Get_shared_facade"
+    }
+  },
+  {
+    "id": "pdg-evidence-slice-depth64",
+    "tool": "impact",
+    "args": {
+      "target": "assess_candidate",
+      "file_path": "memory/evidence_contract.py",
+      "mode": "pdg",
+      "direction": "upstream",
+      "line": 363,
+      "maxDepth": 64,
+      "limit": 10000
+    }
+  },
+  {
+    "id": "context-scheduling-Task",
+    "tool": "context",
+    "args": {
+      "name": "Task",
+      "file_path": "stella_project/plugins/bot_main/scheduling/models.py"
+    }
+  },
+  {
+    "id": "impact-scheduling-Task",
+    "tool": "impact",
+    "args": {
+      "target": "Task",
+      "file_path": "stella_project/plugins/bot_main/scheduling/models.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    }
+  },
+  {
+    "id": "context-knowledge-Principal",
+    "tool": "context",
+    "args": {
+      "name": "Principal",
+      "file_path": "knowledge/domain.py"
+    },
+    "error": "Symbol 'Principal' not found"
+  },
+  {
+    "id": "impact-knowledge-Principal",
+    "tool": "impact",
+    "args": {
+      "target": "Principal",
+      "file_path": "knowledge/domain.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "error": "Target 'Principal' not found"
+  }
+]

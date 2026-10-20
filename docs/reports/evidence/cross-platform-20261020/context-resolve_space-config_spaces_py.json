@@ -1,0 +1,240 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:config/spaces.py:resolve_space",
+    "name": "resolve_space",
+    "kind": "Function",
+    "filePath": "config/spaces.py",
+    "startLine": 161,
+    "endLine": 213
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:capability/providers/knowledge.py:_principal_of",
+        "name": "_principal_of",
+        "filePath": "capability/providers/knowledge.py"
+      },
+      {
+        "uid": "Function:config/spaces.py:list_spaces",
+        "name": "list_spaces",
+        "filePath": "config/spaces.py"
+      },
+      {
+        "uid": "Function:core/conversation.py:qq_group_ref",
+        "name": "qq_group_ref",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:_build_user_context_v2",
+        "name": "_build_user_context_v2",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:build_user_context",
+        "name": "build_user_context",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/proactive_target.py:pick_target",
+        "name": "pick_target",
+        "filePath": "memory/proactive_target.py"
+      },
+      {
+        "uid": "Function:scripts/eval_memory_replay.py:_evaluate_metrics._run_qa@303:4",
+        "name": "_run_qa",
+        "filePath": "scripts/eval_memory_replay.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_space_system_prompt",
+        "name": "_space_system_prompt",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_addressing",
+        "name": "handle_addressing",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_full_workflow.py:test_full_workflow_chat_message_to_reply",
+        "name": "test_full_workflow_chat_message_to_reply",
+        "filePath": "tests/test_full_workflow.py"
+      },
+      {
+        "uid": "Function:tests/test_full_workflow.py:test_full_workflow_rejects_unbound_profile_and_memory_claims",
+        "name": "test_full_workflow_rejects_unbound_profile_and_memory_claims",
+        "filePath": "tests/test_full_workflow.py"
+      },
+      {
+        "uid": "Function:tests/test_proactive_target.py:test_fetch_observing_candidate_window",
+        "name": "test_fetch_observing_candidate_window",
+        "filePath": "tests/test_proactive_target.py"
+      },
+      {
+        "uid": "Function:tests/test_proactive_target.py:test_pick_target_exclude_user_ids",
+        "name": "test_pick_target_exclude_user_ids",
+        "filePath": "tests/test_proactive_target.py"
+      },
+      {
+        "uid": "Function:tests/test_proactive_target.py:test_pick_target_exclude_users_config",
+        "name": "test_pick_target_exclude_users_config",
+        "filePath": "tests/test_proactive_target.py"
+      },
+      {
+        "uid": "Function:tests/test_proactive_target.py:test_pick_target_skip_cooldown_is_candidate_specific",
+        "name": "test_pick_target_skip_cooldown_is_candidate_specific",
+        "filePath": "tests/test_proactive_target.py"
+      },
+      {
+        "uid": "Function:tests/test_proactive_target.py:test_pick_target_verify_mode",
+        "name": "test_pick_target_verify_mode",
+        "filePath": "tests/test_proactive_target.py"
+      },
+      {
+        "uid": "Function:tests/test_proactive_target.py:test_pick_target_verify_prefers_highest_confidence",
+        "name": "test_pick_target_verify_prefers_highest_confidence",
+        "filePath": "tests/test_proactive_target.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_increments_across_restart",
+        "name": "test_auto_space_increments_across_restart",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_increments_across_restart",
+        "name": "test_auto_space_increments_across_restart",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_increments_across_restart",
+        "name": "test_auto_space_increments_across_restart",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_increments_across_restart",
+        "name": "test_auto_space_increments_across_restart",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_increments_across_restart",
+        "name": "test_auto_space_increments_across_restart",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_persisted_across_calls",
+        "name": "test_auto_space_persisted_across_calls",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_auto_space_persisted_across_calls",
+        "name": "test_auto_space_persisted_across_calls",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_explicit_space_resolved",
+        "name": "test_explicit_space_resolved",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_explicit_space_resolved",
+        "name": "test_explicit_space_resolved",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_explicit_vs_ledger_conflict_warns",
+        "name": "test_explicit_vs_ledger_conflict_warns",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_explicit_vs_ledger_conflict_warns",
+        "name": "test_explicit_vs_ledger_conflict_warns",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_ledger_corrupt_falls_back_without_allocating",
+        "name": "test_ledger_corrupt_falls_back_without_allocating",
+        "filePath": "tests/test_spaces.py"
+      },
+      {
+        "uid": "Function:tests/test_spaces.py:test_list_spaces_uses_auto_names",
+        "name": "test_list_spaces_uses_auto_names",
+        "filePath": "tests/test_spaces.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:config/spaces.py:_allocate_new",
+        "name": "_allocate_new",
+        "filePath": "config/spaces.py"
+      },
+      {
+        "uid": "Function:config/spaces.py:_get_auto_ledger",
+        "name": "_get_auto_ledger",
+        "filePath": "config/spaces.py"
+      },
+      {
+        "uid": "Function:config/spaces.py:_load",
+        "name": "_load",
+        "filePath": "config/spaces.py"
+      },
+      {
+        "uid": "Function:config/spaces.py:_save_auto",
+        "name": "_save_auto",
+        "filePath": "config/spaces.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_124_groups_list",
+      "name": "Groups_list → Allocate_space_name",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_125_groups_list",
+      "name": "Groups_list → Load_explicit_spaces",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_126_groups_list",
+      "name": "Groups_list → Save_ledger",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_399_maybe_plan",
+      "name": "Maybe_plan → Load_ledger",
+      "step_index": 3,
+      "step_count": 6
+    },
+    {
+      "id": "proc_418_maybe_plan",
+      "name": "Maybe_plan → Allocate_space_name",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_419_maybe_plan",
+      "name": "Maybe_plan → Load_explicit_spaces",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_420_maybe_plan",
+      "name": "Maybe_plan → Save_ledger",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_85_groups_list",
+      "name": "Groups_list → Load_ledger",
+      "step_index": 3,
+      "step_count": 6
+    }
+  ]
+}

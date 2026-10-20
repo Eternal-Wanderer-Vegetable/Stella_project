@@ -1,0 +1,121 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:webui/chat_ingress.py:run_turn",
+    "name": "run_turn",
+    "kind": "Function",
+    "filePath": "webui/chat_ingress.py",
+    "startLine": 80,
+    "endLine": 240
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/runtime/test_ingress_native.py:test_reset_fences_inflight_and_bumps_epoch",
+        "name": "test_reset_fences_inflight_and_bumps_epoch",
+        "filePath": "tests/runtime/test_ingress_native.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_ingress_native.py:test_reset_fences_inflight_and_bumps_epoch",
+        "name": "test_reset_fences_inflight_and_bumps_epoch",
+        "filePath": "tests/runtime/test_ingress_native.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_ingress_native.py:test_run_turn_native_mode_full_chain",
+        "name": "test_run_turn_native_mode_full_chain",
+        "filePath": "tests/runtime/test_ingress_native.py"
+      },
+      {
+        "uid": "Function:tests/test_capture_ingress_gating.py:test_webchat_closed_gate_skips_rows_returns_lines",
+        "name": "test_webchat_closed_gate_skips_rows_returns_lines",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "Function:tests/test_capture_ingress_gating.py:test_webchat_ready_gate_persists_user_and_bot_self",
+        "name": "test_webchat_ready_gate_persists_user_and_bot_self",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "Function:tests/webui/test_webui_chat.py:test_run_turn_records_and_uses_pipeline",
+        "name": "test_run_turn_records_and_uses_pipeline",
+        "filePath": "tests/webui/test_webui_chat.py"
+      },
+      {
+        "uid": "Function:webui/routers/chat.py:chat.stream@137:4",
+        "name": "stream",
+        "filePath": "webui/routers/chat.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/observability/message_flow.py:attach",
+        "name": "attach",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/observability/message_flow.py:begin_trace",
+        "name": "begin_trace",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:ensure_shared_facade_started",
+        "name": "ensure_shared_facade_started",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:new_trace_id",
+        "name": "new_trace_id",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:utc_now_iso",
+        "name": "utc_now_iso",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:memory/capture_gate.py:ingress_decision",
+        "name": "ingress_decision",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:get_or_register_webchat",
+        "name": "get_or_register_webchat",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:record_message",
+        "name": "record_message",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/social_store.py:record_delivery",
+        "name": "record_delivery",
+        "filePath": "memory/social_store.py"
+      },
+      {
+        "uid": "Function:webui/chat_ingress.py:_end_flow",
+        "name": "_end_flow",
+        "filePath": "webui/chat_ingress.py"
+      },
+      {
+        "uid": "Function:webui/chat_ingress.py:_ensure_webchat_space",
+        "name": "_ensure_webchat_space",
+        "filePath": "webui/chat_ingress.py"
+      },
+      {
+        "uid": "Function:webui/chat_ingress.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "webui/chat_ingress.py"
+      },
+      {
+        "uid": "Function:webui/chat_ingress.py:_resolve_pipeline",
+        "name": "_resolve_pipeline",
+        "filePath": "webui/chat_ingress.py"
+      }
+    ]
+  },
+  "processes": []
+}

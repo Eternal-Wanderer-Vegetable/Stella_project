@@ -2,6 +2,35 @@
 
 ## Current Objective
 
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00 已完成，下一阶段 WP01；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
+
+## Deliverables
+
+- [执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)：版本化合同、12工作包、依赖、迁移/回滚、测试与发布边界。
+- [执行附录](docs/plans/2026-10-20-cross-platform-inventory.md)：50运行入口、32适配器和180候选文件。
+- [证据索引](docs/reports/evidence/cross-platform-20261020/README.md)：原始query/context/impact、PDG、命令参数、补证、哈希。
+- [WP00实施记录](docs/reports/cross-platform-implementation-20261020.md)：依赖冻结、GitNexus风险、QQ/WebChat回归与命令结果。
+- `.gitnexus/lbug`：本地代码图谱；`.gitnexus/gn`：固定1.6.11启动器。工具/索引不入业务提交。
+
+## Verification / Boundaries
+
+基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；GitNexus 1.6.11 索引 current。独立入口验证通过：50 entries、9 families、34 discovered，差集为空。源码合同以目标源码为准，不采用旧文档版本号。WP00锁定环境基线合并运行142 passed；Python 3.10/3.11/3.12的依赖解析和运行时导入烟测通过；文档检查0 errors。
+
+GitNexus流程抽取有预算截断、回调与跨语言缺边；UNKNOWN已补查，不当低风险。精确UID结果：`conversation_key` CRITICAL/14 impacted；`record_message` CRITICAL/18 lower-bound 且有3个未解析调用点；`scope_for_chat_context` HIGH/5 impacted；群注册函数 UNKNOWN/0 调用并已用 rg 确认只有定义/测试引用。平台注册快照SHA-256不变；所有新平台收发 fixture/live 仍未执行。当前尚未迁移生产库、未启动Bot。
+
+## Next Steps
+
+1. WP00 已完成并提交时更新本交接记录。
+2. 开始 WP01 前再次刷新 GitNexus 图，对 `core/conversation.py`、`memory/conversation_registry.py`、`config/spaces.py` 运行 upstream impact；按不透明 ID 与 alias 兼容合同实现 keys/models/注册。
+3. 每个工作包按依赖顺序执行，先跑 upstream impact；阶段验收后记录 SHA 并提交。常用命令：`./.gitnexus/gn status --json`、`./.gitnexus/gn context <symbol> --repo Stella_project`。
+
+---
+
+## Previous Handoff — historical, superseded by the current objective
+
+
+## Current Objective
+
 - EXTRACT 契约对齐（阶段2 提示词修复，计划 `docs/plans/2026-10-17-gitnexus-plan-extract-contract-prompt.md`）已全量实施并验收：分支 `feat/memory-benchmark-suite`，本会话提交 `4a45082`（提示词硬规则块+守卫测试）→ `9a74b9a`（验收证据+报告）→ `af079df`（状态）→ `723ca57`（PR CI 修复）；**已推送，PR #110 CI 13/13 全绿（run 39014161067），待用户合并**。
 - 实施报告：[docs/reports/2026-10-17-extract-contract-prompt-fix.md](docs/reports/2026-10-17-extract-contract-prompt-fix.md)；证据：`docs/reports/evidence/extract-contract-20261017/`（replay-live-strata-postfix + contract-assessment-live + manifest）。
 

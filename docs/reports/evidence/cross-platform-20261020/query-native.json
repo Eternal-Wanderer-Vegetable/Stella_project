@@ -1,0 +1,256 @@
+{
+  "processes": [
+    {
+      "id": "proc_611_main",
+      "summary": "Main → Default",
+      "priority": 0.096,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_612_main",
+      "summary": "Main → Now",
+      "priority": 0.096,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_613_main",
+      "summary": "Main → ComponentState",
+      "priority": 0.096,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_33_main",
+      "summary": "Main → _env_flag",
+      "priority": 0.047,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_44_main",
+      "summary": "Main → _try_rust",
+      "priority": 0.047,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_51_main",
+      "summary": "Main → Python_backend",
+      "priority": 0.047,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 7
+    },
+    {
+      "id": "proc_65_main",
+      "summary": "Main → Detect_mode",
+      "priority": 0.047,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_66_main",
+      "summary": "Main → Normalize_mode",
+      "priority": 0.047,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:runtime-manager/src/lib.rs:RuntimeStore.write_manifest#1",
+      "name": "write_manifest",
+      "filePath": "runtime-manager/src/lib.rs",
+      "startLine": 350,
+      "endLine": 352,
+      "module": "Cluster_649",
+      "process_id": "proc_611_main",
+      "step_index": 2
+    },
+    {
+      "id": "Function:runtime-manager/src/lib.rs:atomic_write",
+      "name": "atomic_write",
+      "filePath": "runtime-manager/src/lib.rs",
+      "startLine": 367,
+      "endLine": 374,
+      "module": "Cluster_649",
+      "process_id": "proc_611_main",
+      "step_index": 3
+    },
+    {
+      "id": "Function:memory/retrieval_v2.py:_retrieve_with_optional_backend",
+      "name": "_retrieve_with_optional_backend",
+      "filePath": "memory/retrieval_v2.py",
+      "startLine": 468,
+      "endLine": 553,
+      "module": "Memory",
+      "process_id": "proc_33_main",
+      "step_index": 5
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:memory_rust/native/src/promotion.rs:promote",
+      "name": "promote",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 1327,
+      "endLine": 1350,
+      "module": "Cluster_640"
+    },
+    {
+      "id": "Function:memory_rust/native/src/promotion.rs:tests.promotion_commits_memory_and_candidate_atomically",
+      "name": "promotion_commits_memory_and_candidate_atomically",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 1743,
+      "endLine": 1768,
+      "module": "Cluster_640"
+    },
+    {
+      "id": "Function:memory_rust/native/src/promotion.rs:tests.scope_mismatch_is_rejected_before_writing",
+      "name": "scope_mismatch_is_rejected_before_writing",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 1929,
+      "endLine": 1944,
+      "module": "Cluster_640"
+    },
+    {
+      "id": "Function:tests/test_memory_promotion_deadlock.py:test_zero_importance_blocks_promotion_regardless_of_confidence",
+      "name": "test_zero_importance_blocks_promotion_regardless_of_confidence",
+      "filePath": "tests/test_memory_promotion_deadlock.py",
+      "startLine": 57,
+      "endLine": 71
+    },
+    {
+      "id": "Function:tests/test_memory_promotion_deadlock.py:test_nonzero_importance_lets_confidence_decide",
+      "name": "test_nonzero_importance_lets_confidence_decide",
+      "filePath": "tests/test_memory_promotion_deadlock.py",
+      "startLine": 74,
+      "endLine": 84
+    },
+    {
+      "id": "Function:tests/test_memory_promotion_deadlock.py:test_zero_importance_candidate_now_promotes",
+      "name": "test_zero_importance_candidate_now_promotes",
+      "filePath": "tests/test_memory_promotion_deadlock.py",
+      "startLine": 191,
+      "endLine": 201,
+      "module": "Tests"
+    },
+    {
+      "id": "Class:memory_rust/backend.py:MemoryBackend",
+      "name": "MemoryBackend",
+      "filePath": "memory_rust/backend.py",
+      "startLine": 102,
+      "endLine": 113
+    },
+    {
+      "id": "Method:memory_rust/backend.py:MemoryBackend.retrieve#1",
+      "name": "retrieve",
+      "filePath": "memory_rust/backend.py",
+      "startLine": 109,
+      "endLine": 110
+    },
+    {
+      "id": "File:memory_rust/backend.py",
+      "name": "backend.py",
+      "filePath": "memory_rust/backend.py"
+    },
+    {
+      "id": "Class:memory/memory_manager.py:MemoryManager",
+      "name": "MemoryManager",
+      "filePath": "memory/memory_manager.py",
+      "startLine": 130,
+      "endLine": 1523,
+      "module": "Tests"
+    },
+    {
+      "id": "Method:memory/memory_manager.py:MemoryManager._gate_metrics#1",
+      "name": "_gate_metrics",
+      "filePath": "memory/memory_manager.py",
+      "startLine": 363,
+      "endLine": 377,
+      "module": "Memory"
+    },
+    {
+      "id": "File:memory/memory_manager.py",
+      "name": "memory_manager.py",
+      "filePath": "memory/memory_manager.py"
+    },
+    {
+      "id": "Class:tests/test_memory_rust_promotion.py:FakeRustBackend",
+      "name": "FakeRustBackend",
+      "filePath": "tests/test_memory_rust_promotion.py",
+      "startLine": 116,
+      "endLine": 128
+    },
+    {
+      "id": "Method:tests/test_memory_rust_promotion.py:FakeRustBackend.promote#1",
+      "name": "promote",
+      "filePath": "tests/test_memory_rust_promotion.py",
+      "startLine": 119,
+      "endLine": 128
+    },
+    {
+      "id": "Function:tests/test_memory_rust_promotion.py:test_rust_promotion_keeps_observing_gate_in_python",
+      "name": "test_rust_promotion_keeps_observing_gate_in_python",
+      "filePath": "tests/test_memory_rust_promotion.py",
+      "startLine": 158,
+      "endLine": 184,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:scripts/validate_rust_fullchain.py:_run_promotion",
+      "name": "_run_promotion",
+      "filePath": "scripts/validate_rust_fullchain.py",
+      "startLine": 71,
+      "endLine": 150,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:scripts/validate_rust_fullchain.py:main",
+      "name": "main",
+      "filePath": "scripts/validate_rust_fullchain.py",
+      "startLine": 191,
+      "endLine": 246,
+      "module": "Scripts"
+    },
+    {
+      "id": "File:scripts/validate_rust_fullchain.py",
+      "name": "validate_rust_fullchain.py",
+      "filePath": "scripts/validate_rust_fullchain.py"
+    },
+    {
+      "id": "Function:memory_rust/native/src/retrieval.rs:load_candidates",
+      "name": "load_candidates",
+      "filePath": "memory_rust/native/src/retrieval.rs",
+      "startLine": 154,
+      "endLine": 212,
+      "module": "Cluster_642"
+    },
+    {
+      "id": "Function:memory_rust/native/src/retrieval.rs:tests.test_request",
+      "name": "test_request",
+      "filePath": "memory_rust/native/src/retrieval.rs",
+      "startLine": 326,
+      "endLine": 341,
+      "module": "Cluster_643"
+    }
+  ],
+  "timing": {
+    "vector": 1.5,
+    "bm25": 937.9,
+    "merge": 0.1,
+    "symbol_lookup": 86,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1024.1
+  }
+}

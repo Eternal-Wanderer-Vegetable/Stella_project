@@ -1,0 +1,193 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+    "name": "handle_chat",
+    "kind": "Function",
+    "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+    "startLine": 1465,
+    "endLine": 1792
+  },
+  "epistemic": "exact",
+  "incoming": {},
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/context.py:normalize_display_name",
+        "name": "normalize_display_name",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Function:core/llm/usage_store.py:budget_blocked",
+        "name": "budget_blocked",
+        "filePath": "core/llm/usage_store.py"
+      },
+      {
+        "uid": "Function:core/observability/message_flow.py:attach",
+        "name": "attach",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/observability/message_flow.py:update_trace_identity",
+        "name": "update_trace_identity",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/reply_gate.py:get_reply_gate",
+        "name": "get_reply_gate",
+        "filePath": "core/reply_gate.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:delivered_texts",
+        "name": "delivered_texts",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:new_trace_id",
+        "name": "new_trace_id",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:deliver_lines",
+        "name": "deliver_lines",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/vision.py:extract_image_sources",
+        "name": "extract_image_sources",
+        "filePath": "core/vision.py"
+      },
+      {
+        "uid": "Function:core/vision.py:vision_available",
+        "name": "vision_available",
+        "filePath": "core/vision.py"
+      },
+      {
+        "uid": "Function:memory/consolidator.py:get_consolidator",
+        "name": "get_consolidator",
+        "filePath": "memory/consolidator.py"
+      },
+      {
+        "uid": "Function:memory/consolidator.py:maybe_consolidate",
+        "name": "maybe_consolidate",
+        "filePath": "memory/consolidator.py"
+      },
+      {
+        "uid": "Function:memory/expression_learning.py:on_reply_sent",
+        "name": "on_reply_sent",
+        "filePath": "memory/expression_learning.py"
+      },
+      {
+        "uid": "Function:memory/expression_selector.py:mark_applied",
+        "name": "mark_applied",
+        "filePath": "memory/expression_selector.py"
+      },
+      {
+        "uid": "Function:memory/participation/__init__.py:get_participation_manager",
+        "name": "get_participation_manager",
+        "filePath": "memory/participation/__init__.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:resolve_reply_target",
+        "name": "resolve_reply_target",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/proactive.py:get_proactive",
+        "name": "get_proactive",
+        "filePath": "memory/proactive.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:schedule_compact",
+        "name": "schedule_compact",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_cometa_enabled",
+        "name": "_cometa_enabled",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_cometa_instance_id",
+        "name": "_cometa_instance_id",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_delivery_plan_is_current",
+        "name": "_delivery_plan_is_current",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_event_key",
+        "name": "_event_key",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_extract_message_relations",
+        "name": "_extract_message_relations",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_checkpoint",
+        "name": "_flow_checkpoint",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_root_or_create",
+        "name": "_flow_root_or_create",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_set_outcome",
+        "name": "_flow_set_outcome",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_transition",
+        "name": "_flow_transition",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_maybe_identity_direct_reply",
+        "name": "_maybe_identity_direct_reply",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_270_handle_chat",
+      "name": "Handle_chat → _state_for",
+      "step_index": 1,
+      "step_count": 3
+    },
+    {
+      "id": "proc_271_handle_chat",
+      "name": "Handle_chat → Bump_topic_revision",
+      "step_index": 1,
+      "step_count": 3
+    },
+    {
+      "id": "proc_809_handle_chat",
+      "name": "Handle_chat → Alive",
+      "step_index": 1,
+      "step_count": 5
+    },
+    {
+      "id": "proc_810_handle_chat",
+      "name": "Handle_chat → _row_trace_id",
+      "step_index": 1,
+      "step_count": 4
+    }
+  ]
+}

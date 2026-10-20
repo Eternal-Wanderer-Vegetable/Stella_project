@@ -1,0 +1,58 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/conversation.py:conversation_key",
+    "name": "conversation_key",
+    "kind": "Function",
+    "filePath": "core/conversation.py",
+    "startLine": 42,
+    "endLine": 50
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:core/conversation.py:qq_private_ref",
+        "name": "qq_private_ref",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:_register_with_allocated_storage",
+        "name": "_register_with_allocated_storage",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:get_or_register_group",
+        "name": "get_or_register_group",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:get_or_register_private",
+        "name": "get_or_register_private",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:get_or_register_webchat",
+        "name": "get_or_register_webchat",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:lookup_by_identity",
+        "name": "lookup_by_identity",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_identity.py:TestConversationRef.test_helpers#0",
+        "name": "test_helpers",
+        "filePath": "tests/test_conversation_identity.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestDrainEnumeration.test_all_registered_covers_private#1",
+        "name": "test_all_registered_covers_private",
+        "filePath": "tests/test_conversation_registry.py"
+      }
+    ]
+  },
+  "outgoing": {},
+  "processes": []
+}

@@ -1,0 +1,776 @@
+{
+  "target": {
+    "id": "Function:config/spaces.py:resolve_space",
+    "name": "resolve_space",
+    "type": "Function",
+    "filePath": "config/spaces.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 28,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 13,
+    "processes_affected": 6,
+    "modules_affected": 10
+  },
+  "byDepthCounts": {
+    "1": 13,
+    "2": 10,
+    "3": 5
+  },
+  "affected_processes": [
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/eval_memory_replay.py",
+      "affected_process_count": 6,
+      "total_hits": 18,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "maybe_plan",
+      "type": "Function",
+      "filePath": "core/planner.py",
+      "affected_process_count": 9,
+      "total_hits": 14,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "consolidation_drain_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 5,
+      "total_hits": 10,
+      "earliest_broken_step": 3
+    },
+    {
+      "name": "groups_list",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 5,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "proactive_speak_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_addressing",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Tests",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Memory",
+      "hits": 6,
+      "impact": "direct"
+    },
+    {
+      "name": "Scripts",
+      "hits": 4,
+      "impact": "direct"
+    },
+    {
+      "name": "Bot_main",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Knowledge",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Services",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Capability",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_198",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Cluster_272",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Observability",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:capability/providers/knowledge.py:_principal_of",
+        "name": "_principal_of",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:config/spaces.py:list_spaces",
+        "name": "list_spaces",
+        "filePath": "config/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:core/conversation.py:qq_group_ref",
+        "name": "qq_group_ref",
+        "filePath": "core/conversation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/pre_processors.py:_build_user_context_v2",
+        "name": "_build_user_context_v2",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/pre_processors.py:build_user_context",
+        "name": "build_user_context",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/proactive_target.py:pick_target",
+        "name": "pick_target",
+        "filePath": "memory/proactive_target.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:scripts/eval_memory_replay.py:_evaluate_metrics._run_qa@303:4",
+        "name": "_run_qa",
+        "filePath": "scripts/eval_memory_replay.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_space_system_prompt",
+        "name": "_space_system_prompt",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_addressing",
+        "name": "handle_addressing",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_179_handle_addressing",
+            "label": "Handle_addressing → Create_user_address_preferences_table",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_267_handle_addressing",
+            "label": "Handle_addressing → _scope",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_269_handle_addressing",
+            "label": "Handle_addressing → Normalize_address_term",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_268_handle_addressing",
+            "label": "Handle_addressing → _from_row",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:webui/services/groups.py:list_groups",
+        "name": "list_groups",
+        "filePath": "webui/services/groups.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_573_groups_list",
+            "label": "Groups_list → _memory_db",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_124_groups_list",
+            "label": "Groups_list → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_126_groups_list",
+            "label": "Groups_list → Save_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_85_groups_list",
+            "label": "Groups_list → Load_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_125_groups_list",
+            "label": "Groups_list → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/context.py:ChatContext.__post_init__#0",
+        "name": "__post_init__",
+        "filePath": "core/context.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/planner.py:RestrictedPlanner._query_memory#2",
+        "name": "_query_memory",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_419_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_399_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_420_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_418_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+        "name": "_consolidate_group_core",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:capability/hooks.py:_retrieve_memory",
+        "name": "_retrieve_memory",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:core/conversation.py:ref_from_conversation_key",
+        "name": "ref_from_conversation_key",
+        "filePath": "core/conversation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/conversation_registry.py:_register_with_allocated_storage",
+        "name": "_register_with_allocated_storage",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/conversation_registry.py:get_or_register_group",
+        "name": "get_or_register_group",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:scripts/eval_memory_replay.py:_evaluate_metrics",
+        "name": "_evaluate_metrics",
+        "filePath": "scripts/eval_memory_replay.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user",
+        "name": "_proactive_at_user",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:webui/routers/config.py:groups_list",
+        "name": "groups_list",
+        "filePath": "webui/routers/config.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_573_groups_list",
+            "label": "Groups_list → _memory_db",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_124_groups_list",
+            "label": "Groups_list → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_125_groups_list",
+            "label": "Groups_list → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_85_groups_list",
+            "label": "Groups_list → Load_ledger",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_126_groups_list",
+            "label": "Groups_list → Save_ledger",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Method:capability/providers/knowledge.py:KnowledgeSearchTool.call",
+        "name": "call",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Method:core/planner.py:RestrictedPlanner.maybe_plan#1",
+        "name": "maybe_plan",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_411_maybe_plan",
+            "label": "Maybe_plan → Estimate_tokens",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_418_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_148_maybe_plan",
+            "label": "Maybe_plan → _limit_for",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_420_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_229_maybe_plan",
+            "label": "Maybe_plan → _describe_holders",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_419_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_332_maybe_plan",
+            "label": "Maybe_plan → Generate",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_399_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_45_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_389_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_72_consolidation_drain_",
+            "label": "Consolidation_drain_job → _register",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_379_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_390_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_71_consolidation_drain_",
+            "label": "Consolidation_drain_job → _new_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_52_consolidation_drain_",
+            "label": "Consolidation_drain_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_539_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_391_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_73_consolidation_drain_",
+            "label": "Consolidation_drain_job → Dropped",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_374_consolidation_drain_",
+            "label": "Consolidation_drain_job → Alive",
+            "processType": "cross_community",
+            "step": 4
+          }
+        ]
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:capability/hooks.py:activate_capabilities",
+        "name": "activate_capabilities",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:scripts/eval_memory_replay.py:main",
+        "name": "main",
+        "filePath": "scripts/eval_memory_replay.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_390_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_379_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_389_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_45_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_391_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_539_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:proactive_speak_job",
+        "name": "proactive_speak_job",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_415_proactive_speak_job",
+            "label": "Proactive_speak_job → Next_seq",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_619_proactive_speak_job",
+            "label": "Proactive_speak_job → _new_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_614_proactive_speak_job",
+            "label": "Proactive_speak_job → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_727_proactive_speak_job",
+            "label": "Proactive_speak_job → _register",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_414_proactive_speak_job",
+            "label": "Proactive_speak_job → Sanitize_text",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_616_proactive_speak_job",
+            "label": "Proactive_speak_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_728_proactive_speak_job",
+            "label": "Proactive_speak_job → Dropped",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator.consolidate_conversation#3",
+        "name": "consolidate_conversation",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator.consolidate_group#3",
+        "name": "consolidate_group",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_390_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_45_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_72_consolidation_drain_",
+            "label": "Consolidation_drain_job → _register",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_379_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_389_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_391_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_374_consolidation_drain_",
+            "label": "Consolidation_drain_job → Alive",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_73_consolidation_drain_",
+            "label": "Consolidation_drain_job → Dropped",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_52_consolidation_drain_",
+            "label": "Consolidation_drain_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_71_consolidation_drain_",
+            "label": "Consolidation_drain_job → _new_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_539_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      }
+    ]
+  }
+}

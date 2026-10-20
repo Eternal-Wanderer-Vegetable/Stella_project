@@ -1,0 +1,9 @@
+{
+  "error": "Target 'promote_candidate_atomic' not found",
+  "target": {
+    "name": "promote_candidate_atomic"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}

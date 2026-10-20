@@ -1,0 +1,164 @@
+{
+  "target": {
+    "id": "Function:memory/evidence_contract.py:assess_candidate",
+    "name": "assess_candidate",
+    "type": "Function",
+    "filePath": "memory/evidence_contract.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 3,
+  "risk": "HIGH",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 2,
+    "modules_affected": 3
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 1,
+    "3": 1
+  },
+  "affected_processes": [
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/eval_memory_replay.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 3
+    },
+    {
+      "name": "consolidation_drain_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 4
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Memory",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Observability",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+        "name": "_write_memory_candidates",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+        "name": "_consolidate_group_core",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_45_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_389_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_72_consolidation_drain_",
+            "label": "Consolidation_drain_job → _register",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_379_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_390_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_71_consolidation_drain_",
+            "label": "Consolidation_drain_job → _new_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_52_consolidation_drain_",
+            "label": "Consolidation_drain_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_539_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_391_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_73_consolidation_drain_",
+            "label": "Consolidation_drain_job → Dropped",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_374_consolidation_drain_",
+            "label": "Consolidation_drain_job → Alive",
+            "processType": "cross_community",
+            "step": 4
+          }
+        ]
+      }
+    ]
+  }
+}

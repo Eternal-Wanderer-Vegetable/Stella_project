@@ -1,0 +1,327 @@
+{
+  "target": {
+    "id": "Function:core/conversation.py:conversation_key",
+    "name": "conversation_key",
+    "type": "Function",
+    "filePath": "core/conversation.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 14,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 6,
+    "processes_affected": 4,
+    "modules_affected": 5
+  },
+  "byDepthCounts": {
+    "1": 6,
+    "2": 4,
+    "3": 4
+  },
+  "affected_processes": [
+    {
+      "name": "chat",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 2
+    },
+    {
+      "name": "stream",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_addressing",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_private_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Memory",
+      "hits": 6,
+      "impact": "direct"
+    },
+    {
+      "name": "Bot_main",
+      "hits": 4,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Routers",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Webui",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:core/conversation.py:qq_private_ref",
+        "name": "qq_private_ref",
+        "filePath": "core/conversation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:_register_with_allocated_storage",
+        "name": "_register_with_allocated_storage",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:get_or_register_group",
+        "name": "get_or_register_group",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:get_or_register_private",
+        "name": "get_or_register_private",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:get_or_register_webchat",
+        "name": "get_or_register_webchat",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:lookup_by_identity",
+        "name": "lookup_by_identity",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:core/conversation.py:ref_from_conversation_key",
+        "name": "ref_from_conversation_key",
+        "filePath": "core/conversation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/conversation_registry.py:_register_private_once",
+        "name": "_register_private_once",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_register_private_conversation",
+        "name": "_register_private_conversation",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:webui/chat_ingress.py:run_turn",
+        "name": "run_turn",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_finish_addressing",
+        "name": "_finish_addressing",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_addressing",
+        "name": "handle_addressing",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_179_handle_addressing",
+            "label": "Handle_addressing → Create_user_address_preferences_table",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_267_handle_addressing",
+            "label": "Handle_addressing → _scope",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_269_handle_addressing",
+            "label": "Handle_addressing → Normalize_address_term",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_268_handle_addressing",
+            "label": "Handle_addressing → _from_row",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_554_handle_private_chat",
+            "label": "Handle_private_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_815_handle_private_chat",
+            "label": "Handle_private_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_816_handle_private_chat",
+            "label": "Handle_private_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:webui/routers/chat.py:chat.stream@137:4",
+        "name": "stream",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_685_chat",
+            "label": "Chat → _new_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_683_chat",
+            "label": "Chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_726_stream",
+            "label": "Stream → _new_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_725_stream",
+            "label": "Stream → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_542_chat",
+            "label": "Chat → Sanitize_text",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_633_stream",
+            "label": "Stream → Next_seq",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_681_chat",
+            "label": "Chat → Alive",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_543_chat",
+            "label": "Chat → Next_seq",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_723_stream",
+            "label": "Stream → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_696_stream",
+            "label": "Stream → Utc_now",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/conversation_registry.py:get_or_register_private",
+    "name": "get_or_register_private",
+    "kind": "Function",
+    "filePath": "memory/conversation_registry.py",
+    "startLine": 216,
+    "endLine": 236
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_register_private_conversation",
+        "name": "_register_private_conversation",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_conversation_registry.py:TestPrivateAllocation.test_concurrent_registration_single_row.worker@100:8#0",
+        "name": "worker",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Function:tests/test_session_idle_finalize.py:_register_private",
+        "name": "_register_private",
+        "filePath": "tests/test_session_idle_finalize.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestDrainEnumeration.test_all_registered_covers_private#1",
+        "name": "test_all_registered_covers_private",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestPrivateAllocation.test_multi_bot_same_user_gets_distinct_sessions#1",
+        "name": "test_multi_bot_same_user_gets_distinct_sessions",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestPrivateAllocation.test_multi_bot_same_user_gets_distinct_sessions#1",
+        "name": "test_multi_bot_same_user_gets_distinct_sessions",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestPrivateAllocation.test_private_allocation_avoids_history_negatives#1",
+        "name": "test_private_allocation_avoids_history_negatives",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestPrivateAllocation.test_private_allocation_is_idempotent_across_restart#1",
+        "name": "test_private_allocation_is_idempotent_across_restart",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestPrivateAllocation.test_private_allocation_is_idempotent_across_restart#1",
+        "name": "test_private_allocation_is_idempotent_across_restart",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestWebchatReservation.test_private_never_takes_webchat_slot#1",
+        "name": "test_private_never_takes_webchat_slot",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestWebchatReservation.test_private_never_takes_webchat_slot#1",
+        "name": "test_private_never_takes_webchat_slot",
+        "filePath": "tests/test_conversation_registry.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/conversation.py:conversation_key",
+        "name": "conversation_key",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:_register_private_once",
+        "name": "_register_private_once",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:ensure_registry",
+        "name": "ensure_registry",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:lookup",
+        "name": "lookup",
+        "filePath": "memory/conversation_registry.py"
+      }
+    ]
+  },
+  "processes": []
+}

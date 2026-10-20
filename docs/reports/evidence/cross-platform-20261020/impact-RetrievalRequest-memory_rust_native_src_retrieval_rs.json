@@ -1,0 +1,67 @@
+{
+  "status": "ambiguous",
+  "message": "Found 2 symbols matching 'RetrievalRequest'. Blast radius differs per candidate (max 4 impacted at risk UNKNOWN; LOW among the candidates that resolved, and at least one could not be walked). Disambiguate with target_uid (or file_path/kind) for a single authoritative result.",
+  "target": {
+    "name": "RetrievalRequest"
+  },
+  "direction": "upstream",
+  "totalCandidates": 2,
+  "impactedCount": null,
+  "risk": "UNKNOWN",
+  "maxImpactedCount": 4,
+  "maxRisk": "UNKNOWN",
+  "knownMaxRisk": "LOW",
+  "candidates": [
+    {
+      "uid": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+      "name": "RetrievalRequest",
+      "kind": "",
+      "filePath": "memory_rust/native/src/retrieval.rs",
+      "line": 15,
+      "score": 0.9,
+      "impactedCount": 4,
+      "risk": "LOW",
+      "riskSharedAxes": "LOW",
+      "riskScale": {
+        "comparableAcrossKinds": false,
+        "unusedAxes": [
+          {
+            "axis": "processes",
+            "reason": "enrichment-skipped"
+          },
+          {
+            "axis": "modules",
+            "reason": "enrichment-skipped"
+          }
+        ]
+      },
+      "direct": 1
+    },
+    {
+      "uid": "Impl:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+      "name": "RetrievalRequest",
+      "kind": "",
+      "filePath": "memory_rust/native/src/retrieval.rs",
+      "line": 38,
+      "score": 0.9,
+      "impactedCount": 0,
+      "risk": "UNKNOWN",
+      "riskSharedAxes": "UNKNOWN",
+      "riskScale": {
+        "comparableAcrossKinds": false,
+        "unusedAxes": [
+          {
+            "axis": "processes",
+            "reason": "enrichment-skipped"
+          },
+          {
+            "axis": "modules",
+            "reason": "enrichment-skipped"
+          }
+        ]
+      },
+      "direct": 0,
+      "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+    }
+  ]
+}

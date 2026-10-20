@@ -1,8 +1,91 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-17",
-  "active_feature": null,
+  "updated_at": "2026-10-20",
+  "active_feature": "XPLAT-IMPL",
   "features": [
+    {
+      "id": "XPLAT-PLAN",
+      "name": "GitNexus代码图谱与跨平台执行方案",
+      "description": "建立当前工作区代码图谱，结合调用、影响和入口补证，交付NoneBot跨平台实施计划；不修改业务代码。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        ".gitnexus 本地索引与固定版本工具",
+        "docs/plans/2026-10-20-gitnexus-cross-platform-plan.md",
+        "docs/plans/2026-10-20-cross-platform-inventory.md",
+        "docs/reports/evidence/cross-platform-20261020/",
+        "任务状态和交接"
+      ],
+      "done_criteria": [
+        "索引绑定ba582a9工作区，可执行query/context/impact，保留图限制",
+        "50个入口、32个注册适配器和工程候选文件均有清单",
+        "12个工作包含合同、依赖、迁移回滚和验收；业务实施未启动",
+        "文档与状态门禁通过，最终图状态和变更检查无partial/truncated",
+        "除文档与状态外无已跟踪业务源码修改"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus 1.6.11 analyze --index-only --workers 1 --pdg --name Stella_project --default-branch main",
+          "result": "Baseline graph built: 1249 files / 95747 nodes / 236981 edges / 829 inferred processes at ba582a9. Query/context/upstream impact/PDG evidence saved; extraction limits retained."
+        },
+        {
+          "command": "runtime inventory validation + discovered entry reconciliation",
+          "result": "50 declared entries / 9 families / 34 discovered registrations; no missing or undeclared entries."
+        },
+        {
+          "command": "plan artifact consistency + python3 scripts/check_docs.py + git diff --check",
+          "result": "12 planned work packages; 32 adapter registry rows; 180 reviewed candidate files; DAG, links, JSON, source fingerprints and evidence checksums passed. Documentation checker: 119 files / 1199 local links / 577 anchors / 0 errors."
+        },
+        {
+          "command": "GitNexus status --json + detect_changes(scope=all)",
+          "result": "Checkpoint status up-to-date, content current; tracked documentation/state diff LOW with no partial/truncated. Final refreshed records under ignored .gitnexus/verification. Untracked plan/evidence validated separately."
+        },
+        {
+          "report": "docs/plans/2026-10-20-gitnexus-cross-platform-plan.md",
+          "result": "Planning complete only; business implementation, migrations, fixture/live platform acceptance, commit and push not performed."
+        }
+      ]
+    },
+    {
+      "id": "XPLAT-IMPL",
+      "name": "NoneBot 跨平台接入实施",
+      "description": "按 GitNexus 方案顺序执行 WP00–WP11，逐阶段提交；平台 live/发布认证仅凭真实验收记录通过。",
+      "status": "in_progress",
+      "dependencies": ["XPLAT-PLAN"],
+      "scope": [
+        "core/transport/ 与会话/上下文合同",
+        "memory 注册、迁移、后端和权限边界",
+        "消息入口、统一发送、后台投递与插件接入",
+        "多适配器装配、控制面、部署及验收矩阵",
+        "tests/、依赖锁、文档、进度和交接"
+      ],
+      "done_criteria": [
+        "WP00–WP10 有对应实现、定向回归、影响证据和分阶段提交",
+        "身份/会话键支持不透明外部 ID、父级/线程和多 Bot 且旧 QQ/WebChat alias 可读",
+        "权限、记忆来源和后台目标均使用可信主体/Target；跨平台泄漏与错投负例为零",
+        "schema 迁移可在临时旧库上 dry-run、回滚、重跑；Python/native 合同一致并显式核验",
+        "官方 32 项矩阵逐行保留状态，L0/L1/L2/L3 与 fixture/live 证据分开；未做 live 的平台不标 certified",
+        "QQ/WebChat 回归、文档、flow、Python、Dashboard、Rust 与打包门禁结果记录；所有外部验收缺口明确"
+      ],
+      "evidence": [
+        {
+          "command": "python3 scripts/check_docs.py",
+          "result": "WP00 documentation gate: 119 files, 1201 local links, 577 migration anchors, 0 errors"
+        },
+        {
+          "command": "GitNexus status --json + upstream impact for WP01 identity/ownership symbols",
+          "result": "Index current at ba582a9; exact UID conversation_key function CRITICAL/14 impacted/6 direct/4 flows/5 modules; ConversationRef property UNKNOWN/0 graph edges; get_or_register_group UNKNOWN/0 static callers; scope_for_chat_context HIGH/5 impacted in maybe_plan; record_message CRITICAL/18 lower-bound/9 flows with 3 unresolved receivers. Textual/entrypoint verification required."
+        },
+        {
+          "command": "uv pip compile --universal --python-version 3.10 requirements-platform.in; runtime import smoke on Python 3.10/3.11/3.12",
+          "result": "Pinned nonebot-plugin-alconna 0.62.1 and nonebot-plugin-uninfo 0.11.2; dependency resolution and imports passed on all three supported CI versions. requirements-platform.lock generated."
+        },
+        {
+          "command": ".venv/bin/python -m pytest tests/test_conversation_identity.py tests/test_conversation_registry.py tests/test_multi_user_identity.py tests/test_private_chat_ingress.py tests/test_context_tail.py tests/test_ai_gateway_deterministic_reply.py tests/test_memory_capture_gate.py tests/test_capture_ingress_gating.py -q",
+          "result": "WP00 locked-environment QQ/WebChat identity, ingress, context, and capture-gate baseline: 142 passed. STELLA_HOME unset; tests use temporary isolated data/config."
+        }
+      ]
+    },
     {
       "id": "CI-106",
       "name": "PR #106 flow-closure GitNexus worker 崩溃修复",

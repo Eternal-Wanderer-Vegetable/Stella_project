@@ -1,0 +1,23 @@
+{
+  "status": "ambiguous",
+  "message": "Found 2 symbols matching 'conversation_key'. Use uid, file_path, or kind to disambiguate.",
+  "totalCandidates": 2,
+  "candidates": [
+    {
+      "uid": "Function:core/conversation.py:conversation_key",
+      "name": "conversation_key",
+      "kind": "Function",
+      "filePath": "core/conversation.py",
+      "line": 42,
+      "score": 0.96
+    },
+    {
+      "uid": "Method:core/conversation.py:ConversationRef.conversation_key#0",
+      "name": "conversation_key",
+      "kind": "Method",
+      "filePath": "core/conversation.py",
+      "line": 75,
+      "score": 0.94
+    }
+  ]
+}
