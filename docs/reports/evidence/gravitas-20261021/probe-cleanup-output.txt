@@ -1,0 +1,14 @@
+10-21 17:18:59 [WARNING] memory.db_cleaner | 🔧 [DBCleaner] 群 fixture checkpoint 越界，已对齐: 0 → 4（消息 id 范围 5~5）
+{
+  "synthetic_rows_before": 5,
+  "checkpoint_before": 0,
+  "protect_unconsolidated": true,
+  "keep_count": 2,
+  "result": {
+    "deleted": 4,
+    "groups": 1
+  },
+  "remaining_ids": [
+    5
+  ]
+}

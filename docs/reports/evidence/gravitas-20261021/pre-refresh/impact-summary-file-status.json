@@ -1,0 +1,38 @@
+{
+  "target": {
+    "id": "File:stella_project/plugins/bot_main/status_api.py",
+    "name": "status_api.py",
+    "type": "File",
+    "filePath": "stella_project/plugins/bot_main/status_api.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 6,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 2,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

@@ -37,6 +37,21 @@ HTTPS_PROXY = "http://127.0.0.1:7890"
 
 改 toml/env 需重启 bot；**认证不需要**（见下）。
 
+### Worker 策略文件与自动恢复（可选）
+
+Cometa worker 默认不启用跨进程策略传递或自动拉起。需要测试 Gravitas 暂停新任务
+认领时，可在 `.env` 显式设置 `COMETA_POLICY_TRANSPORT_ENABLED=true`；Bot 会在
+`STELLA_HOME/state/gravitas/cometa/` 下按实例派生受管目录，每 2 秒原子更新、有效
+期最多 10 秒。worker 仅在策略身份、配置指纹、启动 ID、revision 和期限匹配且
+ACK 写入成功后才允许 claim。信封不包含聊天、任务目标或凭据；同一 OS 用户内的
+恶意进程仍属于信任边界。
+
+`COMETA_AUTO_RESTART_ENABLED=true` 是独立子门禁，默认关闭，且只有策略传递也开启
+时才生效。重启需策略允许，并确认旧 worker 租约到期且无仍有效的在途 attempt；
+重启预算有限。新 worker 先执行原有租约注册和恢复扫描。进程恢复只证明子进程启动，
+不证明任务或平台投递成功；`delivery_unknown` 仍按原合同处理。关闭策略传递后，
+Cometa 保持原有 claim 行为。
+
 ## 认证（WebUI 双路线 + 旧版迁移）
 
 入口：WebUI →「提供商」→「外部 Agent」认证卡片（`/#/providers`）。任务列表与控制仍在「外部 Agent 任务」（`/#/cometa`）。三条路线任选其一，

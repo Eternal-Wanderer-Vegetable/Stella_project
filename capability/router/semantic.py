@@ -103,8 +103,9 @@ def reset_prototype_cache() -> None:
     _cached_complete = False
 
 
-def _get_service():
+def _get_service(work_class=None):
     """构造 EmbeddingService。复用 MEMORY_EMBEDDING_* 配置——同一个本地 embedding 实例。"""
+    from gravitas.contracts import WorkClass
     from memory.embeddings import EmbeddingService
 
     s = _settings()
@@ -112,6 +113,7 @@ def _get_service():
         base_url=s.MEMORY_EMBEDDING_BASE_URL,
         model=s.MEMORY_EMBEDDING_MODEL,
         timeout=s.MEMORY_EMBEDDING_TIMEOUT,
+        work_class=work_class or WorkClass.INTERACTIVE,
     )
 
 
@@ -175,6 +177,10 @@ async def warmup(
     """
     budget = WARMUP_TIMEOUT if timeout is None else timeout
     try:
+        if service is None:
+            from gravitas.contracts import WorkClass
+
+            service = _get_service(WorkClass.BACKGROUND)
         await asyncio.wait_for(build_prototypes(target, service), timeout=budget)
     # 必须写 asyncio.TimeoutError：Python 3.10 下它与内置 TimeoutError 是两个
     # 不相干的类（3.11 起才合并），写内置的会在 3.10 上漏接。

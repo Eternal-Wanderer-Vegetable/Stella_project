@@ -93,6 +93,18 @@ class CapabilityProvider:
 
         清零而不是递减：一次成功说明服务恢复了，没有理由继续记着之前的失败。
         """
+        now = time.time()
+        # A late in-flight success must not cancel a newer provider cooldown.
+        if self.disabled_until > now:
+            return
+        from gravitas.dependency_recovery import (
+            dependency_recovery,
+            provider_scope,
+        )
+
+        scope = provider_scope(self.provider_id, self.capability_id)
+        fence = dependency_recovery.begin_attempt(scope)
+        dependency_recovery.record_attempt_result(fence, success=True)
         self.failures = 0
         self.disabled_until = 0.0
 
@@ -109,6 +121,19 @@ class CapabilityProvider:
         永久关掉一个能力，而这不报错、只表现为「这个功能后来就不好使了」。
         """
         self.failures += 1
+        from gravitas.dependency_recovery import (
+            FailureKind,
+            dependency_recovery,
+            provider_scope,
+        )
+
+        scope = provider_scope(self.provider_id, self.capability_id)
+        fence = dependency_recovery.begin_attempt(scope)
+        dependency_recovery.record_attempt_result(
+            fence,
+            success=False,
+            failure_kind=FailureKind.TRANSIENT,
+        )
         if threshold <= 0 or self.failures < threshold:
             return False
         self.disabled_until = (now if now is not None else time.time()) + max(

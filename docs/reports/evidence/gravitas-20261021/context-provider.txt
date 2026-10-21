@@ -1,0 +1,38 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/runtime/facade.py:_pipeline_provider",
+    "name": "_pipeline_provider",
+    "kind": "Function",
+    "filePath": "core/runtime/facade.py",
+    "startLine": 166,
+    "endLine": 177
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.submit_turn#4",
+        "name": "submit_turn",
+        "filePath": "core/runtime/facade.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/runtime/turn_service.py:pending_system_prompt",
+        "name": "pending_system_prompt",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/llm/base.py:LLMBackend.generate#2",
+        "name": "generate",
+        "filePath": "core/llm/base.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

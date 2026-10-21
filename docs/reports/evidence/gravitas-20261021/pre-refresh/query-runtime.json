@@ -1,0 +1,161 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Const:dashboard/src/views/data/FlowPage.vue:LANE_HUES",
+      "name": "LANE_HUES",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 87,
+      "endLine": 100
+    },
+    {
+      "id": "Variable:core/runtime/turn_service.py:GENERATE",
+      "name": "GENERATE",
+      "filePath": "core/runtime/turn_service.py",
+      "startLine": 48,
+      "endLine": 48
+    },
+    {
+      "id": "Method:core/runtime/turn_service.py:TurnService.generate_reply#1",
+      "name": "generate_reply",
+      "filePath": "core/runtime/turn_service.py",
+      "startLine": 612,
+      "endLine": 651,
+      "module": "Runtime"
+    },
+    {
+      "id": "File:core/runtime/turn_service.py",
+      "name": "turn_service.py",
+      "filePath": "core/runtime/turn_service.py"
+    },
+    {
+      "id": "Method:tests/webui/test_webui_chat.py:_LLM.generate#2",
+      "name": "generate",
+      "filePath": "tests/webui/test_webui_chat.py",
+      "startLine": 62,
+      "endLine": 63
+    },
+    {
+      "id": "Method:tests/webui/test_webui_chat.py:FakePipeline.prepare_turn#1",
+      "name": "prepare_turn",
+      "filePath": "tests/webui/test_webui_chat.py",
+      "startLine": 67,
+      "endLine": 80
+    },
+    {
+      "id": "Method:tests/webui/test_webui_chat.py:FakePipeline.finalize_turn#1",
+      "name": "finalize_turn",
+      "filePath": "tests/webui/test_webui_chat.py",
+      "startLine": 82,
+      "endLine": 84
+    },
+    {
+      "id": "Class:core/runtime/facade.py:RuntimeFacade",
+      "name": "RuntimeFacade",
+      "filePath": "core/runtime/facade.py",
+      "startLine": 180,
+      "endLine": 490
+    },
+    {
+      "id": "Method:core/runtime/facade.py:RuntimeFacade.submit_turn#4",
+      "name": "submit_turn",
+      "filePath": "core/runtime/facade.py",
+      "startLine": 243,
+      "endLine": 450,
+      "module": "Runtime"
+    },
+    {
+      "id": "Method:tests/capability/test_delegation.py:TestHookDelegation.test_explicit_delegate_submits_and_replies_ack#2",
+      "name": "test_explicit_delegate_submits_and_replies_ack",
+      "filePath": "tests/capability/test_delegation.py",
+      "startLine": 157,
+      "endLine": 171,
+      "module": "Capability"
+    },
+    {
+      "id": "Method:tests/capability/test_delegation.py:TestHookDelegation.test_delegate_disabled_leaves_turn_alone#2",
+      "name": "test_delegate_disabled_leaves_turn_alone",
+      "filePath": "tests/capability/test_delegation.py",
+      "startLine": 174,
+      "endLine": 179,
+      "module": "Capability"
+    },
+    {
+      "id": "Method:tests/capability/test_delegation.py:TestHookDelegation.test_status_command_replies_without_backend_call#2",
+      "name": "test_status_command_replies_without_backend_call",
+      "filePath": "tests/capability/test_delegation.py",
+      "startLine": 199,
+      "endLine": 211,
+      "module": "Capability"
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:_Backend.generate#2",
+      "name": "generate",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 58,
+      "endLine": 60
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:TestFacadeTurnFacts.test_generate_turn_full_facts#2",
+      "name": "test_generate_turn_full_facts",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 78,
+      "endLine": 106,
+      "module": "Observability"
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:TestFacadeTurnFacts.test_cancelled_turn_facts#2",
+      "name": "test_cancelled_turn_facts",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 158,
+      "endLine": 184,
+      "module": "Observability"
+    },
+    {
+      "id": "Variable:astrbot_compat/components.py:Reply",
+      "name": "Reply",
+      "filePath": "astrbot_compat/components.py",
+      "startLine": 46,
+      "endLine": 46
+    },
+    {
+      "id": "Class:astrbot_compat/components.py:Reply",
+      "name": "Reply",
+      "filePath": "astrbot_compat/components.py",
+      "startLine": 367,
+      "endLine": 389
+    },
+    {
+      "id": "Function:astrbot_compat/components.py:_build_reply",
+      "name": "_build_reply",
+      "filePath": "astrbot_compat/components.py",
+      "startLine": 686,
+      "endLine": 701,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Variable:cometa/models.py:PREPARING",
+      "name": "PREPARING",
+      "filePath": "cometa/models.py",
+      "startLine": 145,
+      "endLine": 145
+    },
+    {
+      "id": "Method:tests/runtime/test_turn_service.py:ScriptedBackend.generate#2",
+      "name": "generate",
+      "filePath": "tests/runtime/test_turn_service.py",
+      "startLine": 35,
+      "endLine": 37
+    }
+  ],
+  "timing": {
+    "vector": 4.9,
+    "bm25": 806.9,
+    "merge": 0.2,
+    "symbol_lookup": 48.8,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 857.3
+  }
+}

@@ -22,11 +22,10 @@
 2. **缓存**：key 含模型名、维度与文本哈希，避免不同模型/维度互相污染；
 3. **纯向量工具与网络分离**：cosine / 归一化是纯函数，可离线单测；
    EmbeddingService 才持有 httpx 客户端与缓存；
-4. **与本地模型共享闸门**：默认与本地 LLM 同一个 LM Studio 实例，而一次检索要
-   编码 20+ 条文本（query + 每条候选）；LM Studio 不限并发，不串行会出现间歇性
-   变慢且难以定位，因此每次编码经 ``_maybe_gate()`` 走 ``MEMORY_EMBEDDING_GATE``
-   指定的那道闸门（tag="embed"；默认 ``auto`` = 本地 LLM 槽，纯在线部署下等于不排队）。
-   批量编码（``input`` 支持数组，一次请求只抢一次锁）是将来的优化方向。
+4. **按实际端点共享闸门**：相同 URL 的 embedding 与 LLM 调用共用配置资源组；显式
+   ``MEMORY_EMBEDDING_GATE`` 可声明物理资源共享关系。独立或临时 fallback URL 使用
+   哈希资源名并按保守并发 1 排队，不借用原端点的票据。批量编码（``input`` 支持数组，
+   一次请求只抢一次票据）是将来的优化方向。
 """
 
 from __future__ import annotations
@@ -39,6 +38,13 @@ from typing import Any
 
 import httpx
 from nonebot import logger
+
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelAttemptBudgetExceededError,
+    ModelCallDeferred,
+    model_call_scope,
+)
 
 # 文本 → 向量 的进程内缓存（键为 “model:dim:sha256(text)”，值为 float 列表或 None）
 _CACHE: dict[str, list[float] | None] = {}
@@ -78,24 +84,35 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 @asynccontextmanager
-async def _maybe_gate():
-    """embedding 与某个 chat 端点共用同一 LM Studio 实例时，走那个端点的闸门串行化。
+async def _maybe_gate(work_class: WorkClass, base_url: str):
+    """按实际 URL 或显式声明的共享槽对 embedding 请求排队。
 
-    资源名由 ``MEMORY_EMBEDDING_GATE`` 解析（``auto`` = 找地址相同的本地槽、
-    ``<槽名>`` = 指定槽、``none`` = 不排队）；解析结果为空串即不排队，
-    例如独立的 embedding 实例。R2 要求 embedding 恒定本地，因此这里永远
-    不会排到在线端点上。
+    ``auto`` 按 URL 匹配已有槽；显式槽名声明物理资源共享；独立 URL 获得
+    哈希资源名并按并发 1 排队。fallback 不会错误地持有主 URL 的资源票据。
 
     config 与 core.llm 都在函数内延迟 import，保持纯向量工具
     （cosine / normalize）可离线单测。
     """
-    from core.llm import acquire, embedding_gate
+    from config import settings
+    from core.llm import embedding_gate
+    from gravitas.model_calls import (
+        ModelCallContext,
+        model_attempt,
+        resource_group_for_url,
+    )
 
-    resource = embedding_gate()
-    if not resource:
-        yield
-        return
-    async with acquire(resource, tag="embed"):
+    configured = str(getattr(settings, "MEMORY_EMBEDDING_GATE", "auto") or "auto").strip()
+    declared_slot = None
+    if configured and configured.lower() not in {"auto", "none"}:
+        declared_slot = embedding_gate() or None
+    resource = resource_group_for_url(base_url, declared_slot=declared_slot)
+    async with model_attempt(
+        ModelCallContext(
+            resource_group_id=resource,
+            work_class=work_class,
+            tag="memory-embedding",
+        )
+    ):
         yield
 
 
@@ -109,6 +126,7 @@ class EmbeddingService:
         timeout: float = 10.0,
         dim: int = EMBEDDING_DIM,
         cache: dict[str, list[float] | None] | None = None,
+        work_class: WorkClass = WorkClass.BACKGROUND,
     ):
         """参数:
             base_url: LM Studio 服务地址，如 http://127.0.0.1:1234；
@@ -122,6 +140,7 @@ class EmbeddingService:
         self.timeout = timeout
         self.dim = dim
         self._cache = cache if cache is not None else _CACHE
+        self.work_class = WorkClass(work_class)
 
     async def _request_embedding(
         self, base_url: str, model: str, text: str
@@ -130,7 +149,7 @@ class EmbeddingService:
         if model:
             payload["model"] = model
         async with (
-            _maybe_gate(),
+            _maybe_gate(self.work_class, base_url),
             httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout), trust_env=False
             ) as client,
@@ -152,10 +171,18 @@ class EmbeddingService:
         if key in self._cache:
             return self._cache[key]
 
+        async with model_call_scope():
+            return await self._embed_uncached(text, key)
+
+    async def _embed_uncached(self, text: str, key: str) -> list[float] | None:
         last_error: Exception | None = None
         vector: list[float] | None = None
         try:
             vector = await self._request_embedding(self.base_url, self.model, text)
+        except (ModelCallDeferred, ModelAttemptBudgetExceededError):
+            # A full shared queue is backpressure, not a failed model result.
+            # Leave it uncached so a later turn can retry.
+            return None
         except Exception as exc:
             last_error = exc
 
@@ -173,6 +200,8 @@ class EmbeddingService:
                     vector = await self._request_embedding(
                         fallback_url, fallback_model, text
                     )
+            except (ModelCallDeferred, ModelAttemptBudgetExceededError):
+                return None
             except Exception as exc:
                 last_error = exc
 

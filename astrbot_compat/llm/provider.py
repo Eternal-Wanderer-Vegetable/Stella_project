@@ -427,8 +427,10 @@ class StellaChatProvider(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式输出。最后一次 yield 是完整结果（与上游一致）。"""
         _ = (audio_urls, request_max_retries)
-        from core.llm import PRIORITY_INTERACTIVE, ROLE_PLUGIN, acquire, gate_of
+        from core.llm import ROLE_PLUGIN
         from core.llm.openai_client import chat_completion_stream
+        from gravitas.contracts import WorkClass
+        from gravitas.model_calls import execute_model_stream, role_call_context
 
         messages = await self._build_messages(
             prompt=prompt,
@@ -442,24 +444,62 @@ class StellaChatProvider(Provider):
         messages = self._apply_budget(messages, tools)
 
         buffer = ""
-        async with acquire(
-            gate_of(ROLE_PLUGIN),
-            tag=f"plugin-llm-stream:{session_id or '-'}",
-            priority=PRIORITY_INTERACTIVE,
-        ):
-            async for chunk in chat_completion_stream(
+        call_args = _plugin_call_args(model or self.model_name)
+        role_binding = _plugin_binding()
+        fallback_args = (
+            _plugin_call_args(model or role_binding.model, role_binding.fallback)
+            if role_binding and role_binding.fallback
+            else None
+        )
+        context = role_call_context(
+            ROLE_PLUGIN,
+            work_class=WorkClass.INTERACTIVE,
+            tag="plugin-llm-stream",
+            conversation_key=session_id,
+            endpoint_slot=call_args["slot"],
+        )
+        fallback_context = (
+            role_call_context(
+                ROLE_PLUGIN,
+                work_class=WorkClass.INTERACTIVE,
+                tag="plugin-llm-stream",
+                conversation_key=session_id,
+                endpoint_slot=fallback_args["slot"],
+            )
+            if fallback_args
+            else None
+        )
+
+        def primary_stream():
+            return chat_completion_stream(
                 messages,
                 tools=tools,
                 tool_choice=tool_choice,
                 extra_body=kwargs.get("extra_body"),
-                **_plugin_call_args(model or self.model_name),
-            ):
-                delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
-                piece = delta.get("content") or ""
-                if not piece:
-                    continue
-                buffer += piece
-                yield LLMResponse(role="assistant", completion_text=piece, is_chunk=True)
+                **call_args,
+            )
+
+        def fallback_stream():
+            return chat_completion_stream(
+                messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                extra_body=kwargs.get("extra_body"),
+                **fallback_args,
+            )
+
+        async for chunk in execute_model_stream(
+            primary_stream,
+            context=context,
+            fallback_operation=fallback_stream if fallback_args else None,
+            fallback_context=fallback_context,
+        ):
+            delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
+            piece = delta.get("content") or ""
+            if not piece:
+                continue
+            buffer += piece
+            yield LLMResponse(role="assistant", completion_text=piece, is_chunk=True)
         yield LLMResponse(role="assistant", completion_text=buffer, is_chunk=False)
 
     async def _request(
@@ -477,24 +517,66 @@ class StellaChatProvider(Provider):
         记忆压缩 / 插件调用绑同一个端点、必须 FIFO 串行，否则插件一调用就和
         主对话抢显存。把插件绑到独立端点后同一行代码自动变成真并行。
         """
-        from core.llm import PRIORITY_INTERACTIVE, ROLE_PLUGIN, acquire, gate_of
+        from core.llm import ROLE_PLUGIN
         from core.llm.openai_client import chat_completion
+        from gravitas.contracts import WorkClass
+        from gravitas.model_calls import execute_model_operation, role_call_context
 
-        async with acquire(
-            gate_of(ROLE_PLUGIN),
-            tag=f"plugin-llm:{session_id or '-'}",
-            priority=PRIORITY_INTERACTIVE,
-        ):
+        call_args = _plugin_call_args(model or self.model_name)
+        role_binding = _plugin_binding()
+        fallback_args = (
+            _plugin_call_args(model or role_binding.model, role_binding.fallback)
+            if role_binding and role_binding.fallback
+            else None
+        )
+        context = role_call_context(
+            ROLE_PLUGIN,
+            work_class=WorkClass.INTERACTIVE,
+            tag="plugin-llm",
+            conversation_key=session_id,
+            endpoint_slot=call_args["slot"],
+        )
+        fallback_context = (
+            role_call_context(
+                ROLE_PLUGIN,
+                work_class=WorkClass.INTERACTIVE,
+                tag="plugin-llm",
+                conversation_key=session_id,
+                endpoint_slot=fallback_args["slot"],
+            )
+            if fallback_args
+            else None
+        )
+
+        async def primary_request():
             return await chat_completion(
                 messages,
                 tools=tools,
                 tool_choice=tool_choice,
                 extra_body=kwargs.get("extra_body"),
-                **_plugin_call_args(model or self.model_name),
+                max_attempts=1,
+                **call_args,
             )
 
+        async def fallback_request():
+            return await chat_completion(
+                messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                extra_body=kwargs.get("extra_body"),
+                max_attempts=1,
+                **fallback_args,
+            )
 
-def _plugin_call_args(model: str) -> dict:
+        return await execute_model_operation(
+            primary_request,
+            context=context,
+            fallback_operation=fallback_request if fallback_args else None,
+            fallback_context=fallback_context,
+        )
+
+
+def _plugin_call_args(model: str, endpoint=None) -> dict:
     """PLUGIN 角色的端点 + 参数，直接铺进 ``chat_completion(**...)``。
 
     ``ASTRBOT_LLM_BASE_URL`` / ``_API_KEY`` / ``_TEMPERATURE`` / ``_MAX_TOKENS``
@@ -509,11 +591,11 @@ def _plugin_call_args(model: str) -> dict:
         model: 调用方已解析好的模型 ID（插件单次指定 > provider.set_model()
             > 角色配置），空串则交给服务端默认路由。
     """
-    from core.llm import ROLE_PLUGIN, endpoint_of
+    from core.llm import ROLE_PLUGIN
     from core.llm.registry import binding
 
-    ep = endpoint_of(ROLE_PLUGIN)
     b = binding(ROLE_PLUGIN)
+    ep = endpoint or (b.endpoint if b is not None else None)
     if ep is None or b is None:
         raise RuntimeError(
             "PLUGIN 角色没有可用端点（LLM_ROLE_PLUGIN_ENDPOINT 指向的槽未配 BASE_URL）；"
@@ -530,6 +612,13 @@ def _plugin_call_args(model: str) -> dict:
         "temperature": b.temperature,
         "max_tokens": b.max_tokens,
     }
+
+
+def _plugin_binding():
+    from core.llm import ROLE_PLUGIN
+    from core.llm.registry import binding
+
+    return binding(ROLE_PLUGIN)
 
 
 def _plugin_model_default() -> str:

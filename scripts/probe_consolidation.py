@@ -45,6 +45,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.llm import ROLE_CONSOLIDATION, ROLE_EXTRACT
 from core.llm.lm_studio import LMStudioBackend
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import execute_model_call, model_call_scope, role_call_context
 from memory.consolidation_prompt import format_consolidation_prompt
 from memory.consolidator import MemoryConsolidator
 from memory.policy import validate_candidate
@@ -53,6 +55,15 @@ DEFAULT_INPUT = Path("windows_raw.json")
 OUT_MD = Path("consolidation_probe.md")
 OUT_JSON = Path("consolidation_probe.json")
 POSITIVE_FIXTURE = Path("memory/benchmark/_fixtures/consolidation_positive.json")
+
+
+def _model_context(backend: LMStudioBackend, tag: str):
+    return role_call_context(
+        str(getattr(backend, "role", "") or ROLE_CONSOLIDATION),
+        work_class=WorkClass.BACKGROUND,
+        tag=tag,
+        endpoint_slot=str(getattr(backend, "slot", "") or "") or None,
+    )
 
 
 def _probe_backend(role: str, temperature: float | None) -> LMStudioBackend:
@@ -194,7 +205,11 @@ async def run_window(consolidator: MemoryConsolidator, backend: LMStudioBackend,
     senders = window_senders(window)
     prompt = format_consolidation_prompt("（无）", messages)
 
-    raw = await backend.generate(prompt)
+    raw = await execute_model_call(
+        backend,
+        prompt,
+        context=_model_context(backend, "consolidation-probe"),
+    )
     parsed = consolidator._parse_json(raw)
     candidates = []
     if parsed is not None:
@@ -234,27 +249,36 @@ async def run_window_two_stage(
     messages = format_messages(window)
     senders = window_senders(window)
 
-    # 阶段1
-    stage1_prompt = format_consolidation_prompt("（无）", messages)
-    stage1_raw = await stage1_backend.generate(stage1_prompt)
-    stage1_parsed = consolidator._parse_json(stage1_raw)
-    disclosed = bool(stage1_parsed) and consolidator._has_self_disclosure(stage1_parsed)
+    async with model_call_scope():
+        # 阶段1
+        stage1_prompt = format_consolidation_prompt("（无）", messages)
+        stage1_raw = await execute_model_call(
+            stage1_backend,
+            stage1_prompt,
+            context=_model_context(stage1_backend, "consolidation-probe-stage1"),
+        )
+        stage1_parsed = consolidator._parse_json(stage1_raw)
+        disclosed = bool(stage1_parsed) and consolidator._has_self_disclosure(stage1_parsed)
 
-    # 阶段1 的候选（回退用）
-    raw_cands = (stage1_parsed or {}).get("memory_candidates") or []
-    stage2_raw = ""
-    stage2_used = False
+        # 阶段1 的候选（回退用）
+        raw_cands = (stage1_parsed or {}).get("memory_candidates") or []
+        stage2_raw = ""
+        stage2_used = False
 
-    # 阶段2：仅在阶段1 判定有自我披露时
-    if disclosed:
-        stage2_used = True
-        stage2_prompt = format_extraction_prompt(messages)
-        stage2_raw = await extract_backend.generate(stage2_prompt)
-        stage2_parsed = consolidator._parse_json(stage2_raw)
-        if stage2_parsed is not None:
-            extracted = stage2_parsed.get("memory_candidates")
-            if isinstance(extracted, list):
-                raw_cands = extracted
+        # 阶段2：仅在阶段1 判定有自我披露时
+        if disclosed:
+            stage2_used = True
+            stage2_prompt = format_extraction_prompt(messages)
+            stage2_raw = await execute_model_call(
+                extract_backend,
+                stage2_prompt,
+                context=_model_context(extract_backend, "consolidation-probe-stage2"),
+            )
+            stage2_parsed = consolidator._parse_json(stage2_raw)
+            if stage2_parsed is not None:
+                extracted = stage2_parsed.get("memory_candidates")
+                if isinstance(extracted, list):
+                    raw_cands = extracted
 
     candidates = []
     for rc in raw_cands:

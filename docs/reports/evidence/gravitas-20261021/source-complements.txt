@@ -1,0 +1,20 @@
+core/llm/scheduler.py:148:    state.waiting += 1
+core/llm/scheduler.py:149:    if state.waiting > state.peak_waiting:
+core/llm/scheduler.py:150:        state.peak_waiting = state.waiting
+core/llm/scheduler.py:151:    if state.waiting >= LLM_SCHEDULER_QUEUE_WARN_DEPTH:
+core/llm/scheduler.py:153:            f"⚠️ [Scheduler] 资源 {resource} 排队深度 {state.waiting}"
+core/llm/scheduler.py:164:    state.waiting -= 1
+core/llm/scheduler.py:211:            "waiting": state.waiting,
+memory/db_cleaner.py:186:            if checkpoint and checkpoint < cutoff_id:
+cometa/runtime.py:70:                self._watch_worker(), name="cometa-worker-watchdog"
+cometa/runtime.py:77:    async def _watch_worker(self) -> None:
+capability/hooks.py:508:    pipeline.register_pre_hook(activate_capabilities, priority=HOOK_PRIORITY)
+cometa/worker.py:162:            claimed = self.store.claim_next_task(
+cometa/worker.py:292:    worker = CometaWorker(
+core/runtime/facade.py:166:async def _pipeline_provider(
+core/runtime/facade.py:190:        # provider 缺省 = 传入管线自身的 LLM 后端（见 _pipeline_provider）
+core/runtime/facade.py:243:    async def submit_turn(
+core/runtime/facade.py:310:                provider = self._provider or _pipeline_provider
+core/runtime/facade.py:320:                                           else _pipeline_provider(pipeline, key, prompt, ctx))
+webui/chat_ingress.py:192:                ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
+stella_project/plugins/bot_main/ai_gateway.py:898:    return await facade.submit_turn(session_key, pipeline, ctx, deadline=LLM_TIMEOUT)

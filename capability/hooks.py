@@ -44,6 +44,7 @@ from capability.registry import KIND_ASTRBOT_TOOL, CapabilityRegistry
 from capability.registry import registry as _default_registry
 from core.context import ChatContext
 from core.tasks import Result, ResultStatus, Task, TaskType, next_task_id
+from gravitas.errors import DeadlineExceeded
 
 # 本钩子的注册优先级。必须小于 build_context(50)——短期上下文（摘要 + 尾巴）
 # 是对话素材，与「要不要检索长期记忆」无关，永远该先组装好。
@@ -381,10 +382,10 @@ def _flow_decision(ctx_or_fctx, node_id: str, **kw) -> None:
 
 
 async def activate_capabilities(ctx: ChatContext) -> ChatContext:
-    """Router 判定 + 并行激活 Memory / Comes。**绝不抛异常。**
+    """Router 判定 + 并行激活 Memory / Comes。
 
-    这是聊天主链路上的钩子。任何异常都必须被吞掉：能力层是增量功能，
-    它坏掉的后果应该是「这轮没用上工具」，而不是「Stella 不说话了」。
+    一般异常必须被吞掉：能力层是增量功能，它坏掉的后果应该是「这轮没用上工具」，
+    而不是「Stella 不说话了」。total deadline 控制信号向 Facade 传播。
     """
     s = _settings()
 
@@ -392,7 +393,14 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
         try:
             from capability.router import route as route_request
 
-            route = await route_request(ctx.message, intent=ctx.intent, trigger=ctx.trigger)
+            route = await route_request(
+                ctx.message,
+                intent=ctx.intent,
+                trigger=ctx.trigger,
+                deadline=ctx.turn_deadline,
+            )
+        except DeadlineExceeded:
+            raise
         except Exception as e:
             # route() 内部已有全套降级，走到这里说明 import 或更底层出了问题
             from capability.router.types import default_route
@@ -416,6 +424,8 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
             from capability.delegation import handle_delegation_turn
 
             delegation_handled = await handle_delegation_turn(ctx, route)
+        except DeadlineExceeded:
+            raise
         except Exception as e:
             _logger().warning(f"⚠️ [Cometa] 委派分支异常（已跳过）: {e!r}")
         _flow_decision(ctx, "capability.cometa",
@@ -455,6 +465,12 @@ async def activate_capabilities(ctx: ChatContext) -> ChatContext:
     # 记忆挂了这轮就少几条记忆，工具挂了这轮就没有工具结果，两者都不该中断回复。
     with _flow_span(ctx, "capability.fanout") as fan_span:
         outcomes = await asyncio.gather(*jobs, return_exceptions=True)
+        expired = next(
+            (outcome for outcome in outcomes if isinstance(outcome, DeadlineExceeded)),
+            None,
+        )
+        if expired is not None:
+            raise expired
         fan_span.finish(status="succeeded", metrics={"branches": labels})
     failures = sum(1 for o in outcomes if isinstance(o, BaseException))
     # isolation 的语义是「失败分支已被隔离」：只要 gather 正常返回就是成功事实

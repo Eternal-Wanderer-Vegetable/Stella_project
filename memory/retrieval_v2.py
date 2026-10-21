@@ -756,6 +756,7 @@ async def retrieve_memories_emb(
         MEMORY_EMBEDDING_MODEL,
         MEMORY_EMBEDDING_TIMEOUT,
     )
+    from gravitas.contracts import WorkClass
     from memory.embeddings import EmbeddingService
 
     resolved_mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
@@ -764,6 +765,11 @@ async def retrieve_memories_emb(
             MEMORY_EMBEDDING_BASE_URL,
             MEMORY_EMBEDDING_MODEL,
             MEMORY_EMBEDDING_TIMEOUT,
+            work_class=(
+                WorkClass.BACKGROUND
+                if trigger == "proactive"
+                else WorkClass.INTERACTIVE
+            ),
         )
 
     semantic_scores: dict[str, float] = {}

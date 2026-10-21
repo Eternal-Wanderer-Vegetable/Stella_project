@@ -11,6 +11,14 @@
 from abc import ABC, abstractmethod
 
 
+class AdaptiveAttemptRequiredError(RuntimeError):
+    """A single request taught endpoint compatibility and needs another ticket."""
+
+    def __init__(self, reason: str, original: BaseException):
+        super().__init__(reason)
+        self.original = original
+
+
 class LLMBackend(ABC):
     """所有 LLM 后端的抽象基类。
 

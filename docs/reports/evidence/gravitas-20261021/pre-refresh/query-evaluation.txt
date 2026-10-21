@@ -1,0 +1,240 @@
+{
+  "processes": [
+    {
+      "id": "proc_193_handle_reload",
+      "summary": "Handle_reload → Decision",
+      "priority": 0.098,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_455_handle_toggle",
+      "summary": "Handle_toggle → Decision",
+      "priority": 0.098,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_569_handle_private_chat",
+      "summary": "Handle_private_chat → Decision",
+      "priority": 0.098,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_655_record_group_chat",
+      "summary": "Record_group_chat → Decision",
+      "priority": 0.098,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_645_run_now",
+      "summary": "Run_now → Load",
+      "priority": 0.093,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_653_run_now",
+      "summary": "Run_now → Parse_iso_utc",
+      "priority": 0.093,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_654_run_now",
+      "summary": "Run_now → Connect",
+      "priority": 0.093,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 5
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Method:memory/capture_gate.py:CaptureGate.decision#0",
+      "name": "decision",
+      "filePath": "memory/capture_gate.py",
+      "startLine": 130,
+      "endLine": 140,
+      "module": "Tests",
+      "process_id": "proc_193_handle_reload",
+      "step_index": 4
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/service.py:SchedulingService.run_now#8",
+      "name": "run_now",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "startLine": 465,
+      "endLine": 504,
+      "module": "Scheduling",
+      "process_id": "proc_645_run_now",
+      "step_index": 1
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Class:stella_project/plugins/bot_main/scheduling/models.py:Run",
+      "name": "source_digests",
+      "filePath": "memory/proactive_target.py",
+      "startLine": 65,
+      "endLine": 65
+    },
+    {
+      "id": "Const:dashboard/src/views/data/FlowPage.vue:STATUS_COLORS",
+      "name": "sequence",
+      "filePath": "core/evaluation/report.py",
+      "startLine": 50,
+      "endLine": 50
+    },
+    {
+      "id": "Const:dashboard/src/views/CronPage.vue:timezone",
+      "name": "timezone",
+      "filePath": "dashboard/src/views/CronPage.vue",
+      "startLine": 28,
+      "endLine": 28
+    },
+    {
+      "id": "Variable:stella_project/plugins/bot_main/scheduling/models.py:RUNNING",
+      "name": "RUNNING",
+      "filePath": "stella_project/plugins/bot_main/scheduling/models.py",
+      "startLine": 96,
+      "endLine": 96
+    },
+    {
+      "name": "message_flow.py",
+      "type": "File",
+      "filePath": "core/observability/message_flow.py"
+    },
+    {
+      "id": "Variable:webui/services/evaluation.py:__all__",
+      "name": "__all__",
+      "filePath": "webui/services/evaluation.py",
+      "startLine": 34,
+      "endLine": 34
+    },
+    {
+      "id": "Variable:webui/services/evaluation.py:_EVAL_MODES",
+      "name": "_EVAL_MODES",
+      "filePath": "webui/services/evaluation.py",
+      "startLine": 38,
+      "endLine": 38
+    },
+    {
+      "id": "Variable:config/state.py:FIRST_RUN",
+      "name": "FIRST_RUN",
+      "filePath": "config/state.py",
+      "startLine": 35,
+      "endLine": 35
+    },
+    {
+      "id": "Method:cometa/executor.py:AttemptExecutor.run_attempt#2",
+      "name": "run_attempt",
+      "filePath": "cometa/executor.py",
+      "startLine": 112,
+      "endLine": 138,
+      "module": "Observability"
+    },
+    {
+      "id": "Method:cometa/executor.py:AttemptExecutor._run_attempt#3",
+      "name": "_run_attempt",
+      "filePath": "cometa/executor.py",
+      "startLine": 140,
+      "endLine": 289,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:cometa/executor.py:AttemptExecutor._flow_decision",
+      "name": "_flow_decision",
+      "filePath": "cometa/executor.py",
+      "startLine": 307,
+      "endLine": 313,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/store.py:TaskStore.get_run#1",
+      "name": "get_run",
+      "filePath": "stella_project/plugins/bot_main/scheduling/store.py",
+      "startLine": 526,
+      "endLine": 532,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/store.py:TaskStore.list_runs#2",
+      "name": "list_runs",
+      "filePath": "stella_project/plugins/bot_main/scheduling/store.py",
+      "startLine": 534,
+      "endLine": 546,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/store.py:TaskStore.mark_running#2",
+      "name": "mark_running",
+      "filePath": "stella_project/plugins/bot_main/scheduling/store.py",
+      "startLine": 766,
+      "endLine": 769,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Method:tests/cometa/test_cometa_store.py:TestFinish._running#1",
+      "name": "_running",
+      "filePath": "tests/cometa/test_cometa_store.py",
+      "startLine": 332,
+      "endLine": 343,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:tests/cometa/test_cometa_store.py:TestInputs._running#1",
+      "name": "_running",
+      "filePath": "tests/cometa/test_cometa_store.py",
+      "startLine": 496,
+      "endLine": 507,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:tests/cometa/test_cometa_store.py:TestDeadlines.test_expired_running_task_goes_cancelling#1",
+      "name": "test_expired_running_task_goes_cancelling",
+      "filePath": "tests/cometa/test_cometa_store.py",
+      "startLine": 705,
+      "endLine": 736,
+      "module": "Cometa"
+    },
+    {
+      "id": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000plugins/bot_mai�\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "name": "ai_gateway.py",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 56,
+      "endLine": 64
+    },
+    {
+      "id": "Class:capability/delegation.py:Decision",
+      "name": "Decision",
+      "filePath": "capability/delegation.py",
+      "startLine": 59,
+      "endLine": 68
+    },
+    {
+      "id": "File:capability/delegation.py",
+      "name": "delegation.py",
+      "filePath": "capability/delegation.py"
+    }
+  ],
+  "timing": {
+    "vector": 4.4,
+    "bm25": 700.3,
+    "merge": 0.2,
+    "symbol_lookup": 48.8,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 750.2
+  }
+}
+
+  GitNexus Query (1.6.12)

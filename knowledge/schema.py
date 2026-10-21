@@ -33,6 +33,7 @@ from pathlib import Path
 from nonebot import logger
 
 from config import KNOWLEDGE_DB_PATH
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
 
 # 当前 Schema 版本。+1 时必须新增幂等迁移步骤并补旧库回归测试
 # （与 memory/schema.py 的新规矩同源：禁止「本版不做迁移」）。
@@ -203,7 +204,7 @@ def connect(db_path: Path | str = KNOWLEDGE_DB_PATH) -> sqlite3.Connection:
     """
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=15.0)
+    conn = connect_sqlite(StorageDomain.KNOWLEDGE, path, timeout=15.0)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn

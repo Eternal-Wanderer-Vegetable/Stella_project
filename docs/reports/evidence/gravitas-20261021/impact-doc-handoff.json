@@ -1,0 +1,38 @@
+{
+  "target": {
+    "id": "File:session-handoff.md",
+    "name": "session-handoff.md",
+    "type": "File",
+    "filePath": "session-handoff.md"
+  },
+  "direction": "upstream",
+  "impactedCount": 19,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 6,
+    "3": 11
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

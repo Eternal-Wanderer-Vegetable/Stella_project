@@ -102,6 +102,24 @@ def test_build_payload_fields_complete():
     assert isinstance(payload["version"], str) and payload["version"]
 
 
+def test_build_payload_includes_only_injected_gravitas_snapshot():
+    snapshot = {
+        "schema_version": 1,
+        "mode": "shadow",
+        "policy_revision": 3,
+        "enforcement_enabled": False,
+    }
+    payload = status_api.build_payload(
+        None, {}, pid=1, started_at=time.time(), gravitas=snapshot
+    )
+    assert payload["gravitas"] is snapshot
+
+
+def test_gravitas_status_provider_failure_is_omitted(monkeypatch):
+    monkeypatch.setattr(status_api, "_GRAVITAS_STATUS_PROVIDER", lambda: 1 / 0)
+    assert status_api._gravitas_status() is None
+
+
 def test_fallback_version_matches_release_version(monkeypatch):
     """importlib 查不到包（源码直跑）时回退 pyproject.toml 的版本号。
 

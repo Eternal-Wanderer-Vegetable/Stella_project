@@ -21,7 +21,7 @@ import asyncio
 import httpx
 from nonebot import logger
 
-from core.llm.base import LLMBackend
+from core.llm.base import AdaptiveAttemptRequiredError, LLMBackend
 from core.llm.compat import EndpointCompat, compat_for, learn_from_error, shape_payload
 from core.llm.prefix_cache_estimator import estimate_local_prefix
 from core.llm.usage_sink import record as record_usage
@@ -129,6 +129,27 @@ class OpenAICompatibleBackend(LLMBackend):
         return payload
 
     async def generate_detailed(self, prompt: str, system_prompt: str = "") -> tuple[str, str]:
+        """Raw-client compatibility path; retains its historical retry defaults."""
+        return await self._generate_detailed(
+            prompt, system_prompt, max_attempts=_MAX_ATTEMPTS, managed=False
+        )
+
+    async def generate_single_attempt(
+        self, prompt: str, system_prompt: str = ""
+    ) -> tuple[str, str]:
+        """Issue one HTTP request; retries are owned by the shared executor."""
+        return await self._generate_detailed(
+            prompt, system_prompt, max_attempts=1, managed=True
+        )
+
+    async def _generate_detailed(
+        self,
+        prompt: str,
+        system_prompt: str,
+        *,
+        max_attempts: int,
+        managed: bool,
+    ) -> tuple[str, str]:
         """同 :meth:`generate`，但额外返回 ``finish_reason``。
 
         返回 ``(回复文本, finish_reason)``；``finish_reason`` 取自服务端响应，
@@ -148,7 +169,7 @@ class OpenAICompatibleBackend(LLMBackend):
         adaptive_retries = 0
         attempt = 0
         # trust_env=False 忽略系统代理，避免局域网地址被代理拦截
-        while attempt < _MAX_ATTEMPTS:
+        while attempt < max_attempts:
             attempt += 1
             # 每次都按「已学到的形状」重塑请求体，于是上一轮学到的改法自动生效
             payload = shape_payload(base_payload, self._compat)
@@ -217,6 +238,8 @@ class OpenAICompatibleBackend(LLMBackend):
                 last_error = e
                 fix = learn_from_error(self._compat, status, body)
                 if fix and adaptive_retries < 1:
+                    if managed:
+                        raise AdaptiveAttemptRequiredError(str(fix), e) from e
                     # 识别出的是参数形状差异，不是配置错误：改完立刻重试，且**不占用**
                     # 正常重试预算——否则一次学习就吃掉三分之一的容错额度。
                     adaptive_retries += 1
@@ -227,13 +250,13 @@ class OpenAICompatibleBackend(LLMBackend):
                     )
                     continue
                 # 4xx 是请求/配置问题，重试无意义；5xx（如瞬时 502）退避后重试
-                if 400 <= status < 500 or attempt >= _MAX_ATTEMPTS:
+                if 400 <= status < 500 or attempt >= max_attempts:
                     break
                 await asyncio.sleep(1.0 * attempt)
             except Exception as e:
                 last_error = e
                 logger.warning(f"{tag} 第 {attempt} 次尝试异常: {e}")
-                if attempt < _MAX_ATTEMPTS:
+                if attempt < max_attempts:
                     # 网络类异常也按退避重试，把上次失败的有效错误保留到最后抛出
                     await asyncio.sleep(1.0 * attempt)
         # 失败也要记一笔：失败率是「该不该降级到本地」的判断依据

@@ -111,7 +111,7 @@ from core.llm.usage_store import budget_blocked
 from core.pipeline import Pipeline
 from core.planner import RestrictedPlanner
 from core.reply_gate import get_reply_gate
-from core.runtime.facade import E_CANCELLED, RuntimeTurnError
+from core.runtime.facade import E_CANCELLED, RuntimeTurnError, new_turn_deadline
 from core.shutdown import wait_for_tasks
 from core.social.contracts import (
     ConversationScope,
@@ -141,6 +141,7 @@ from core.transport import (
 )
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
+from gravitas.errors import DeadlineExceeded
 from memory import addressing, capture_gate, expression_learning, social_store
 from memory.addressing_intent import (
     CLEAR_ADDRESS,
@@ -894,8 +895,12 @@ async def _run_turn_via_engine(session_key: str, ctx: ChatContext) -> ChatContex
     """
     from core.runtime.facade import ensure_shared_facade_started
 
+    if ctx.turn_deadline is None:
+        ctx.turn_deadline = new_turn_deadline()
     facade = await ensure_shared_facade_started()
-    return await facade.submit_turn(session_key, pipeline, ctx, deadline=LLM_TIMEOUT)
+    return await facade.submit_turn(
+        session_key, pipeline, ctx, deadline=LLM_TIMEOUT, turn_deadline=ctx.turn_deadline
+    )
 
 
 def _social_delivery_enabled() -> bool:
@@ -1545,6 +1550,7 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
+    turn_deadline = new_turn_deadline()
     fctx = _flow_root_or_create(event, "qq_chat")
     normalized = _normalized_onebot_event(event)
     if isinstance(normalized, UnsupportedEvent):
@@ -1637,6 +1643,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 image_sources=extract_image_sources(normalized) if vision_available() else [],
                 # 身份绑定：与流程 root 共用 trace（计划 §6.2 入口绑定）
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+                turn_deadline=turn_deadline,
             )
             try:
                 from core.observability import message_flow
@@ -1704,6 +1711,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
             raise
+        except DeadlineExceeded as e:
+            _flow_decision(fctx, "chat.runtime_result", status="timed_out",
+                           reason_code=f"turn_deadline_{e.phase}")
+            _flow_set_outcome(fctx, "deadline_exceeded")
+            logger.info(f"⏳ [chat] 群 {event.group_id} 总期限耗尽，静默不发送（{e.phase}）")
+            return
         except RuntimeTurnError as e:
             # 取消不是失败（计划 §6.9 层 3）：绝不能落进通用兜底变成「......？」
             if e.code == E_CANCELLED:
@@ -1753,6 +1766,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 _delivery_target_for_event(normalized, event),
                 OutboundMessage(tuple(segments)),
                 bot_handle=bot,
+                deadline=getattr(ctx, "turn_deadline", None),
             )
 
         ack_receipts = []
@@ -1765,6 +1779,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             ack_receipts.extend(await deliver_lines(
                 plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
                 send_one=_send_reply_segment,
+                deadline=getattr(ctx, "turn_deadline", None),
                 plan_guard=lambda current: _delivery_plan_is_current(
                     ctx, current, target_user_id=str(ctx.user_id),
                 ),
@@ -1826,6 +1841,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            deadline=getattr(ctx, "turn_deadline", None),
             plan_guard=lambda plan: _delivery_plan_is_current(
                 ctx, plan, target_user_id=delivery_target,
             ),
@@ -2124,6 +2140,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
     群表达学习（deliver_lines scope=None，§6.8 第一版私聊不进群 social scope）；
     预算、能力路由、取消、回复整形、BOT_SELF、压缩全部照走。
     """
+    turn_deadline = new_turn_deadline()
     fctx = _flow_root_or_create(event, "qq_chat")
     if _event_key(event) in _plugin_handled_msgs:
         _plugin_handled_msgs.pop(_event_key(event), None)
@@ -2194,6 +2211,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 cometa_origin=ctx_origin,
                 image_sources=extract_image_sources(normalized) if vision_available() else [],
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+                turn_deadline=turn_deadline,
             )
             try:
                 from core.observability import message_flow
@@ -2269,6 +2287,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 ctx = await _run_turn_via_engine(ref.runtime_key, ctx)
         except FinishedException:
             raise
+        except DeadlineExceeded as e:
+            _flow_decision(fctx, "chat.runtime_result", status="timed_out",
+                           reason_code=f"turn_deadline_{e.phase}")
+            _flow_set_outcome(fctx, "deadline_exceeded")
+            logger.info(f"⏳ [chat] 私聊 {ref.runtime_key} 总期限耗尽，静默不发送（{e.phase}）")
+            return
         except RuntimeTurnError as e:
             if e.code == E_CANCELLED:
                 _flow_decision(fctx, "chat.runtime_result", status="cancelled",
@@ -2313,6 +2337,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 _delivery_target_for_event(normalized, event),
                 OutboundMessage.text(line),
                 bot_handle=bot,
+                deadline=getattr(ctx, "turn_deadline", None),
             )
 
         ack_receipts = []
@@ -2325,6 +2350,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             ack_receipts.extend(await deliver_lines(
                 plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
                 send_one=_send_reply_segment,
+                deadline=getattr(ctx, "turn_deadline", None),
                 plan_guard=lambda current: _delivery_plan_is_current(
                     ctx, current, target_user_id=str(ctx.peer_id or ref.peer_id),
                 ),
@@ -2377,6 +2403,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            deadline=getattr(ctx, "turn_deadline", None),
             plan_guard=lambda plan: _delivery_plan_is_current(
                 ctx, plan, target_user_id=delivery_target,
             ),
@@ -3549,6 +3576,57 @@ async def _start_cometa() -> None:
         return
     try:
         from cometa import runtime as cometa_runtime
+        from cometa.policy_transport import ClaimDirective
+        from config import STELLA_HOME
+        from gravitas.admission import snapshot_is_current
+        from gravitas.contracts import Operation
+
+        def env_enabled(name: str) -> bool:
+            return os.environ.get(name, "").strip().strip("\"'").lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+
+        policy_transport_enabled = env_enabled("COMETA_POLICY_TRANSPORT_ENABLED")
+        auto_restart_enabled = env_enabled("COMETA_AUTO_RESTART_ENABLED")
+        try:
+            from plugins.bot_main.gravitas_bootstrap import active_gravitas_runtime
+        except ImportError:
+            from stella_project.plugins.bot_main.gravitas_bootstrap import (
+                active_gravitas_runtime,
+            )
+
+        gravitas_runtime = active_gravitas_runtime()
+        controller = gravitas_runtime.controller if gravitas_runtime is not None else None
+
+        def cometa_directive() -> ClaimDirective | None:
+            active_runtime = active_gravitas_runtime()
+            if active_runtime is None:
+                return None
+            active_controller = active_runtime.controller
+            snapshot = active_controller.cached_policy()
+            if snapshot is None or not snapshot_is_current(
+                snapshot,
+                now=active_controller.clock.now(),
+                expected_boot_id=active_controller.controller_boot_id,
+            ):
+                return None
+            allowed = Operation.COMETA_CLAIM.value in snapshot.allowed_operations
+            restart_allowed = (
+                Operation.COMETA_RESTART.value in snapshot.allowed_operations
+            )
+            return ClaimDirective(
+                claim_allowed=allowed,
+                claim_limit=config.max_concurrent if allowed else 0,
+                restart_allowed=restart_allowed,
+                reason_code="gravitas_allowed" if allowed else "claims_paused",
+            )
+
+        def record_cometa_ack(status: dict[str, object]) -> None:
+            active_runtime = active_gravitas_runtime()
+            if active_runtime is not None:
+                active_runtime.record_cometa_policy_ack(status)
 
         config = cometa_runtime.CometaConfig.load()
         if not config.enabled:
@@ -3562,6 +3640,12 @@ async def _start_cometa() -> None:
             ),
             instance_id=_cometa_instance_id(),
             spawn_worker=True,
+            stella_home=STELLA_HOME,
+            controller_boot_id=(controller.controller_boot_id if controller else ""),
+            policy_transport_enabled=policy_transport_enabled,
+            auto_restart_enabled=auto_restart_enabled,
+            directive_provider=cometa_directive,
+            policy_ack_sink=record_cometa_ack,
         )
         await runtime.start(spawn_worker=True)
         cometa_runtime.set_current(runtime)
@@ -4059,6 +4143,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
     root（避免只在生成开始后才有 trace）；定时任务传入其 timer root 时
     复用之开子 span，不另建 root。
     """
+    turn_deadline = new_turn_deadline()
     own_root = flow_ctx is None
     caller_flow_ctx = flow_ctx
     if own_root:
@@ -4194,9 +4279,17 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 ),
                 verification_contract=contract_data,
                 trace_id=new_trace_id(),
+                turn_deadline=turn_deadline,
             )
             try:
                 ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
+            except DeadlineExceeded as e:
+                logger.info(f"⏳ [主动@] 群 {group_id} 总期限耗尽，跳过发送（{e.phase}）")
+                _flow_decision(flow_ctx, "proactive.turn", status="timed_out",
+                               reason_code=f"turn_deadline_{e.phase}",
+                               instance_key=f"grp:{group_id}")
+                outcome = "deadline_exceeded"
+                return False
             except RuntimeTurnError as e:
                 # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
                 if e.code == E_CANCELLED:
@@ -4288,6 +4381,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 ))
                 return await get_outbound_service().send(
                     _delivery_target_for_context(ctx), message, bot_handle=bot,
+                    deadline=getattr(ctx, "turn_deadline", None),
                 )
 
             delivery_target = str(target.user_id)
@@ -4309,6 +4403,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 trace_id=ctx.trace_id,
                 turn_id=ctx.turn_id,
                 send_one=_send_at_segment,
+                deadline=getattr(ctx, "turn_deadline", None),
                 plan_guard=lambda plan: _delivery_plan_is_current(
                     ctx, plan, target_user_id=delivery_target,
                 ),
@@ -4676,6 +4771,48 @@ async def _proactive_speak_impl(
     :param skip_dice: 跳过概率掷骰（评分层已做完决策，再掷骰等于双重门槛）
     :return: None；命中时发送若干条群消息并记录“已发言”
     """
+    from gravitas.controller import active_controller
+
+    pressure_controller = active_controller()
+    if pressure_controller is not None:
+        try:
+            from gravitas.contracts import WorkClass
+            from gravitas.model_calls import role_call_context
+
+            resource_id = role_call_context(
+                ROLE_CHAT,
+                work_class=WorkClass.BACKGROUND,
+                tag="proactive-pressure",
+            ).resource_group_id
+            pressure = pressure_controller.admit_proactive(resource_id)
+            if not pressure.allowed:
+                _flow_decision(
+                    fctx,
+                    "proactive.preflight",
+                    status="blocked",
+                    reason_code=pressure.reason_code,
+                )
+                _log_participation_event(
+                    decision, "generation_skip", pressure.reason_code
+                )
+                return
+        except Exception as exc:
+            if pressure_controller.effective_mode.value == "enforce":
+                logger.warning(
+                    "[Gravitas] 主动任务压力决策不可用，安全跳过: %s", exc
+                )
+                _flow_decision(
+                    fctx,
+                    "proactive.preflight",
+                    status="blocked",
+                    reason_code="pressure_policy_unavailable",
+                )
+                _log_participation_event(
+                    decision, "generation_skip", "pressure_policy_unavailable"
+                )
+                return
+            logger.debug("[Gravitas] shadow pressure observation skipped: %s", exc)
+
     # 先判断该群是否到了“可以主动发言”的时机（统一闸门判定）
     allowed, reason = can_speak(group_id, "join")
     if not allowed:
@@ -4689,6 +4826,7 @@ async def _proactive_speak_impl(
         _flow_decision(fctx, "proactive.preflight", status="skipped",
                        reason_code="dice_skip")
         return
+    turn_deadline = new_turn_deadline()
     # 同样要抢占本群的互斥锁：主动发言不能和 @ 回复并发，避免上下文被互相污染
     lock = _group_locks[group_id]
     async with lock:
@@ -4745,6 +4883,7 @@ async def _proactive_speak_impl(
             gate_score=gate.score,
             gate_reasons=gate.reasons,
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+            turn_deadline=turn_deadline,
             conversation_kind="group",
             conversation_key=conversation_ref.conversation_key,
             bot_ref=BotRef(
@@ -4781,6 +4920,11 @@ async def _proactive_speak_impl(
         try:
             with _flow_span(fctx, "proactive.turn"):
                 ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
+        except DeadlineExceeded as e:
+            _flow_set_outcome(fctx, "deadline_exceeded")
+            _log_participation_event(decision, "generation_skip", f"turn_deadline_{e.phase}")
+            logger.info(f"⏳ [主动发言] 群 {group_id} 总期限耗尽，跳过发送（{e.phase}）")
+            return
         except RuntimeTurnError as e:
             # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
             if e.code == E_CANCELLED:
@@ -4853,6 +4997,7 @@ async def _proactive_speak_impl(
                 _delivery_target_for_context(ctx),
                 OutboundMessage.text(seg_line),
                 bot_handle=bot,
+                deadline=getattr(ctx, "turn_deadline", None),
             )
 
         try:
@@ -4873,6 +5018,7 @@ async def _proactive_speak_impl(
             send_one=_send_proactive_segment,
             interval_seconds=SEND_INTERVAL,
             abort_check=_stale,
+            deadline=getattr(ctx, "turn_deadline", None),
             plan_guard=lambda plan: _delivery_plan_is_current(ctx, plan),
         )
         delivered = delivered_texts(receipts)

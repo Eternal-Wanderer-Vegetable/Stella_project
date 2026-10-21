@@ -1,0 +1,198 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/social/delivery.py:deliver_lines",
+    "name": "deliver_lines",
+    "kind": "Function",
+    "filePath": "core/social/delivery.py",
+    "startLine": 382,
+    "endLine": 548
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user",
+        "name": "_proactive_at_user",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_speak_impl",
+        "name": "_proactive_speak_impl",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat._send_cometa_ack@1759:8",
+        "name": "_send_cometa_ack",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat._send_cometa_ack@2319:8",
+        "name": "_send_cometa_ack",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_social_delivery.py:_run",
+        "name": "_run",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts.test_abort_marks_unattempted_segments#1",
+        "name": "test_abort_marks_unattempted_segments",
+        "filePath": "tests/observability/test_message_flow_runtime.py"
+      },
+      {
+        "uid": "Method:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts.test_delivery_without_root_is_silent#1",
+        "name": "test_delivery_without_root_is_silent",
+        "filePath": "tests/observability/test_message_flow_runtime.py"
+      },
+      {
+        "uid": "Method:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts.test_partial_send_second_segment_fails_stop#1",
+        "name": "test_partial_send_second_segment_fails_stop",
+        "filePath": "tests/observability/test_message_flow_runtime.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestDeliverLines.test_plan_and_receipt_digests_are_durable#1",
+        "name": "test_plan_and_receipt_digests_are_durable",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestDeliverLines.test_plan_guard_stops_before_next_segment#1",
+        "name": "test_plan_guard_stops_before_next_segment",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestDeliverLines.test_receipts_are_idempotent_on_replay#1",
+        "name": "test_receipts_are_idempotent_on_replay",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestDeliverLines.test_rejects_plan_mutated_after_seal#1",
+        "name": "test_rejects_plan_mutated_after_seal",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestDeliverLines.test_rejects_unsealed_payload_before_send#1",
+        "name": "test_rejects_unsealed_payload_before_send",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestDeliverLines.test_timeout_is_unknown_and_same_turn_cannot_retry#1",
+        "name": "test_timeout_is_unknown_and_same_turn_cannot_retry",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestNeutralReceipts.test_incomplete_identity_does_not_persist#1",
+        "name": "test_incomplete_identity_does_not_persist",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestNeutralReceipts.test_neutral_receipt_not_attribution_visible#1",
+        "name": "test_neutral_receipt_not_attribution_visible",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestNeutralReceipts.test_no_scope_without_ref_still_skips#1",
+        "name": "test_no_scope_without_ref_still_skips",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestNeutralReceipts.test_private_ref_persists_neutral_receipt#1",
+        "name": "test_private_ref_persists_neutral_receipt",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestOpaqueDeliveryIds.test_all_ids_are_persisted_and_indexed#1",
+        "name": "test_all_ids_are_persisted_and_indexed",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestRealConversationRefNeutralReceipt.test_real_ref_failed_segment_still_persisted#1",
+        "name": "test_real_ref_failed_segment_still_persisted",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestRealConversationRefNeutralReceipt.test_real_ref_never_attribution_visible#1",
+        "name": "test_real_ref_never_attribution_visible",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestRealConversationRefNeutralReceipt.test_real_ref_persists_neutral_receipt#1",
+        "name": "test_real_ref_persists_neutral_receipt",
+        "filePath": "tests/test_social_delivery.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/social/delivery.py:_aggregate_flow_status",
+        "name": "_aggregate_flow_status",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_append_and_persist",
+        "name": "_append_and_persist",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_canonical_json",
+        "name": "_canonical_json",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_flow",
+        "name": "_flow",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_flow_transition",
+        "name": "_flow_transition",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:_trace_delivery",
+        "name": "_trace_delivery",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:coerce_platform_message_ids",
+        "name": "coerce_platform_message_ids",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:verify_delivery_plan",
+        "name": "verify_delivery_plan",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Function:memory/social_store.py:record_delivery_plan",
+        "name": "record_delivery_plan",
+        "filePath": "memory/social_store.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

@@ -1,0 +1,31 @@
+{
+  "target": {
+    "id": "Class:core/runtime/facade.py:RuntimeFacade",
+    "name": "RuntimeFacade",
+    "type": "Class",
+    "filePath": "core/runtime/facade.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 9,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 3,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 3,
+    "2": 4,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}
+
+  GitNexus Impact (1.6.12)

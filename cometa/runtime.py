@@ -20,11 +20,19 @@ import asyncio
 import contextlib
 import logging
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .artifacts import ArtifactCollector
 from .config import CometaConfig
 from .delivery import NotificationPump, NotificationSender
+from .policy_transport import (
+    ClaimDirective,
+    CometaPolicyPublisher,
+    WorkerRestartBudget,
+    policy_paths,
+)
 from .service import Actor, CometaService
 from .store import CometaStore
 from .supervisor import WorkerSupervisor
@@ -45,6 +53,12 @@ class CometaRuntime:
     artifacts: ArtifactCollector
     supervisor: WorkerSupervisor | None = None
     instance_id: str = ""
+    policy_publisher: CometaPolicyPublisher | None = None
+    policy_ack_sink: Callable[[dict[str, object]], None] | None = None
+    auto_restart_enabled: bool = False
+    restart_budget: WorkerRestartBudget = field(default_factory=WorkerRestartBudget)
+    policy_refresh_seconds: float = 2.0
+    worker_watch_interval_seconds: float = 5.0
     # 运行期句柄必须声明为字段：slots dataclass 不允许事后赋新属性
     # （2026-09-30 实测：装配时 'CometaRuntime' object has no attribute
     # '_pump_stop' → cometa 整体停用，测试的 SimpleNamespace 替身掩盖了它）。
@@ -53,6 +67,8 @@ class CometaRuntime:
     )
     _pump_task: asyncio.Task | None = field(default=None, repr=False, compare=False)
     _watchdog_task: asyncio.Task | None = field(default=None, repr=False, compare=False)
+    _policy_stop: asyncio.Event | None = field(default=None, repr=False, compare=False)
+    _policy_task: asyncio.Task | None = field(default=None, repr=False, compare=False)
 
     @property
     def enabled(self) -> bool:
@@ -60,11 +76,21 @@ class CometaRuntime:
 
     async def start(self, *, spawn_worker: bool = True) -> None:
         """启动投递泵与（可选的）worker 子进程。"""
+        if spawn_worker and self.supervisor is not None and self.policy_publisher is not None:
+            envelope = self.policy_publisher.publish_once()
+            if envelope is None:
+                raise RuntimeError("Cometa policy transport identity is incomplete")
         self._pump_stop = asyncio.Event()
         self._pump_task = asyncio.create_task(
             self.pump.run_forever(self._pump_stop), name="cometa-delivery-pump"
         )
         if spawn_worker and self.supervisor is not None:
+            if self.policy_publisher is not None:
+                self._record_policy_ack()
+                self._policy_stop = asyncio.Event()
+                self._policy_task = asyncio.create_task(
+                    self._publish_policies(), name="cometa-policy-publisher"
+                )
             self.supervisor.start()
             self._watchdog_task = asyncio.create_task(
                 self._watch_worker(), name="cometa-worker-watchdog"
@@ -75,21 +101,133 @@ class CometaRuntime:
         )
 
     async def _watch_worker(self) -> None:
-        """worker 子进程退出看门狗：崩溃必须留痕（worker.log 有详情）。
-        v1 不自动拉起（避免与租约恢复矩阵互相踩），只报错。"""
+        """Report worker exits and optionally restart under a separate policy gate."""
         supervisor = self.supervisor
         if supervisor is None:
             return
-        while not self._pump_stop.is_set():
-            await asyncio.sleep(5.0)
-            if not supervisor.is_running():
-                _LOGGER.error(
-                    "❌ [Cometa] worker 子进程已退出（exit=%s）；任务认领已停摆，"
-                    "详情见 %s。重启 bot 可恢复。",
-                    supervisor._process.poll() if supervisor._process else "?",
-                    supervisor._worker_log_path(),
+        exit_reported = False
+        last_restart_block: str | None = None
+        while self._pump_stop is not None and not self._pump_stop.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._pump_stop.wait(), timeout=self.worker_watch_interval_seconds
                 )
                 return
+            except asyncio.TimeoutError:
+                pass
+            if supervisor.is_running():
+                exit_reported = False
+                last_restart_block = None
+                continue
+            process = supervisor._process
+            if not exit_reported:
+                _LOGGER.error(
+                    "❌ [Cometa] worker 子进程已退出（exit=%s）；任务认领已停摆，"
+                    "详情见 %s。",
+                    process.poll() if process is not None else "?",
+                    supervisor._worker_log_path(),
+                )
+                exit_reported = True
+            if not self.auto_restart_enabled or self.policy_publisher is None:
+                return
+            directive = self.policy_publisher.current_directive()
+            if not directive.restart_allowed:
+                last_restart_block = "restart_policy_disabled"
+                continue
+            safe, reason = self._restart_safe()
+            if not safe:
+                if reason != last_restart_block:
+                    _LOGGER.warning("Cometa worker restart deferred: %s", reason)
+                last_restart_block = reason
+                continue
+            last_restart_block = None
+            delay = self.restart_budget.reserve_delay()
+            if delay is None:
+                _LOGGER.error("Cometa worker restart budget is exhausted")
+                return
+            try:
+                await asyncio.wait_for(self._pump_stop.wait(), timeout=delay)
+                return
+            except asyncio.TimeoutError:
+                pass
+            if (
+                self._pump_stop.is_set()
+                or not self.policy_publisher.current_directive().restart_allowed
+            ):
+                continue
+            safe, reason = self._restart_safe()
+            if not safe:
+                _LOGGER.warning("Cometa worker restart cancelled: %s", reason)
+                continue
+            if supervisor.start():
+                if self.policy_publisher is not None:
+                    try:
+                        self.policy_publisher.publish_once()
+                    except Exception:
+                        _LOGGER.warning(
+                            "Cometa policy refresh after restart failed closed",
+                            exc_info=True,
+                        )
+                    self._record_policy_ack()
+                _LOGGER.warning(
+                    "Cometa worker process restarted; task and delivery success remain unverified"
+                )
+                exit_reported = False
+            else:
+                _LOGGER.error("Cometa worker restart attempt failed; retry is budgeted")
+
+    async def _publish_policies(self) -> None:
+        publisher = self.policy_publisher
+        stop = self._policy_stop
+        if publisher is None or stop is None:
+            return
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(
+                    stop.wait(), timeout=self.policy_refresh_seconds
+                )
+                return
+            except asyncio.TimeoutError:
+                pass
+            try:
+                publisher.publish_once()
+            except Exception:
+                _LOGGER.warning("Cometa policy publication failed closed", exc_info=True)
+            self._record_policy_ack()
+
+    def _record_policy_ack(self) -> dict[str, object] | None:
+        publisher = self.policy_publisher
+        if publisher is None:
+            return None
+        status = publisher.status_snapshot()
+        sink = self.policy_ack_sink
+        if sink is not None:
+            try:
+                sink(status)
+            except Exception:
+                _LOGGER.warning("Cometa policy ACK status sink failed", exc_info=True)
+        return status
+
+    def _restart_safe(self) -> tuple[bool, str]:
+        """Require a dead process, reachable store, expired owner lease and no live attempts."""
+        supervisor = self.supervisor
+        if supervisor is None or supervisor.is_running():
+            return False, "worker_still_running"
+        try:
+            health = supervisor.health(self.store)
+            if health.get("database_reachable") is not True:
+                return False, "store_unavailable"
+            if health.get("lease_present") and health.get("lease_expired") is not True:
+                return False, "worker_lease_active"
+            active = self.store.tasks_in_flight(
+                self.instance_id, worker_id=supervisor.worker_id
+            )
+        except Exception:
+            _LOGGER.warning("Cometa restart safety check failed", exc_info=True)
+            return False, "restart_state_unavailable"
+        if active:
+            return False, "attempts_in_flight"
+        return True, "safe"
 
     def _cancel_inflight_for_shutdown(self) -> int:
         """关闭协议第一步（§6.8「通知在途任务中断和保存」）：bot 侧经任务库
@@ -127,6 +265,41 @@ class CometaRuntime:
         watchdog = getattr(self, "_watchdog_task", None)
         if watchdog is not None:
             watchdog.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watchdog
+        policy_stop = getattr(self, "_policy_stop", None)
+        if policy_stop is not None:
+            policy_stop.set()
+        policy_task = getattr(self, "_policy_task", None)
+        if policy_task is not None:
+            with contextlib.suppress(asyncio.CancelledError):
+                await policy_task
+        if self.policy_publisher is not None and self.supervisor is not None:
+            try:
+                envelope = self.policy_publisher.publish_once(
+                    directive_override=ClaimDirective(
+                        False, 0, reason_code="runtime_shutdown"
+                    )
+                )
+                if envelope is not None and self.supervisor.is_running():
+                    deadline = asyncio.get_running_loop().time() + min(
+                        2.0, max(0.0, grace_seconds)
+                    )
+                    while asyncio.get_running_loop().time() < deadline:
+                        status = self._record_policy_ack()
+                        if (
+                            status is not None
+                            and status.get("policy_revision") == envelope.policy_revision
+                            and status.get("applied") is True
+                            and status.get("claim_allowed") is False
+                        ):
+                            break
+                        await asyncio.sleep(0.05)
+            except Exception:
+                _LOGGER.warning(
+                    "shutdown policy publish/ACK failed; worker lease is the fallback fence",
+                    exc_info=True,
+                )
         if self.supervisor is not None and self.supervisor.is_running():
             # 注入要趁 worker 的执行器还活着：executor 轮询 2s + 确认停止 +
             # 落终态 ≈ 3-5s，宽限给足
@@ -149,6 +322,12 @@ def build_runtime(
     sender: NotificationSender | None = None,
     instance_id: str = "",
     spawn_worker: bool = True,
+    stella_home: str | Path | None = None,
+    controller_boot_id: str = "",
+    policy_transport_enabled: bool = False,
+    auto_restart_enabled: bool = False,
+    directive_provider: Callable[[], ClaimDirective | None] | None = None,
+    policy_ack_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> CometaRuntime:
     """装配 cometa runtime。配置/迁移失败直接抛错（调用方停用功能）。
 
@@ -167,6 +346,27 @@ def build_runtime(
             config=config,
             instance_id=instance_id,
             python_executable=sys.executable,
+            stella_home=stella_home,
+            controller_boot_id=controller_boot_id,
+            policy_transport_enabled=policy_transport_enabled,
+        )
+    publisher = None
+    if policy_transport_enabled and spawn_worker:
+        if not instance_id or not controller_boot_id:
+            raise ValueError("Cometa policy transport requires instance and boot identities")
+        home = (
+            Path(stella_home).expanduser().resolve()
+            if stella_home is not None
+            else Path(config.config_path).expanduser().resolve().parent.parent
+        )
+        publisher = CometaPolicyPublisher(
+            paths=policy_paths(home, instance_id),
+            config=config,
+            instance_id=instance_id,
+            controller_boot_id=controller_boot_id,
+            worker_id=lambda: supervisor.worker_id,
+            process_identity=lambda: supervisor.process_identity,
+            directive=directive_provider or (lambda: None),
         )
     return CometaRuntime(
         config=config,
@@ -177,6 +377,9 @@ def build_runtime(
         artifacts=artifacts,
         supervisor=supervisor,
         instance_id=instance_id,
+        policy_publisher=publisher,
+        policy_ack_sink=policy_ack_sink,
+        auto_restart_enabled=bool(auto_restart_enabled and policy_transport_enabled),
     )
 
 

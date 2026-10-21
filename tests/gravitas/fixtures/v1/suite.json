@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "policy_version": "gravitas-config-schema-v1",
+  "scenarios": [
+    {
+      "id": "S01",
+      "name": "cross-session shared model",
+      "required_invariants": ["I01", "I02"],
+      "tests": [
+        "tests/runtime/test_facade_turns.py::test_default_provider_uses_shared_chat_gate_across_conversations",
+        "tests/gravitas/test_g03_model_calls.py::test_configured_slots_share_the_bounded_resource_group"
+      ]
+    },
+    {
+      "id": "S02",
+      "name": "cancel and grant race",
+      "required_invariants": ["I02", "I03"],
+      "tests": [
+        "tests/test_scheduler_concurrency.py::test_cancelled_waiter_does_not_leak_wait_count_or_permit"
+      ]
+    },
+    {
+      "id": "S03",
+      "name": "deadline at every phase",
+      "required_invariants": ["I02", "I03", "I04"],
+      "tests": [
+        "tests/runtime/test_facade_turns.py::test_session_lock_wait_is_bounded_by_total_deadline",
+        "tests/runtime/test_facade_turns.py::test_prepare_timeout_is_control_signal_and_cancels_hook",
+        "tests/runtime/test_facade_turns.py::test_total_deadline_bounds_generation_below_legacy_phase_cap",
+        "tests/runtime/test_facade_turns.py::test_finalize_timeout_is_control_signal",
+        "tests/gravitas/test_g03_model_calls.py::test_executor_rejects_expired_and_foreign_clock_deadlines",
+        "tests/test_social_delivery.py::TestDeliverLines::test_expired_turn_deadline_does_not_start_send",
+        "tests/test_transport_outbound.py::test_send_deadline_between_physical_parts_returns_partial"
+      ]
+    },
+    {
+      "id": "S04",
+      "name": "burst limits",
+      "required_invariants": ["I02", "I06"],
+      "tests": [
+        "tests/test_scheduler_concurrency.py::test_online_limit_admits_exactly_that_many",
+        "tests/gravitas/test_g03_model_calls.py::test_executor_defers_when_bounded_queue_is_full"
+      ]
+    },
+    {
+      "id": "S05",
+      "name": "background fairness",
+      "required_invariants": ["I02", "I05"],
+      "tests": [
+        "tests/test_scheduler_concurrency.py::test_every_waiter_eventually_gets_in",
+        "tests/gravitas/test_g05_pressure_boundaries.py::test_aged_backend_requires_integrity_and_has_one_per_interval"
+      ]
+    },
+    {
+      "id": "S06",
+      "name": "hysteresis and redisturbance",
+      "required_invariants": ["I02", "I07"],
+      "tests": [
+        "tests/gravitas/test_g02_control_loop.py::test_pressure_policy_hysteresis_and_staged_recovery",
+        "tests/gravitas/test_g05_pressure_boundaries.py::test_recovery_tokens_do_not_accumulate_into_a_burst",
+        "tests/gravitas/test_g05_pressure_boundaries.py::test_capture_backlog_uses_high_low_hysteresis_and_body_free_gap_ledger"
+      ]
+    },
+    {
+      "id": "S07",
+      "name": "actual fallback resource",
+      "required_invariants": ["I02", "I10"],
+      "tests": [
+        "tests/gravitas/test_g03_model_calls.py::test_role_fallback_releases_primary_ticket_before_queueing_fallback",
+        "tests/gravitas/test_g03_model_calls.py::test_executor_bounds_real_attempts_to_three_and_marks_unmanaged_coverage"
+      ]
+    },
+    {
+      "id": "S08",
+      "name": "backlog and cleanup",
+      "required_invariants": ["I05", "I08"],
+      "tests": [
+        "tests/gravitas/test_g05_pressure_boundaries.py::test_pressure_capture_denial_is_explicit_and_writes_no_message",
+        "tests/test_db_cleaner.py::test_trim_preserves_messages_and_checkpoint_when_waterline_is_untrusted",
+        "tests/test_db_cleaner.py::test_trim_protects_unconsolidated_messages"
+      ]
+    },
+    {
+      "id": "S09",
+      "name": "Compact under pressure",
+      "required_invariants": ["I05"],
+      "tests": [
+        "tests/test_session_compact.py::test_compact_skip_also_blocked_by_guard",
+        "tests/test_session_compact.py::test_compact_batch_failure_never_advances_watermark",
+        "tests/test_session_compact.py::test_compact_length_finish_never_commits_even_valid_json",
+        "tests/test_session_compact.py::test_compact_discards_stale_result_on_identity_revision"
+      ]
+    },
+    {
+      "id": "S10",
+      "name": "lost receipt after send",
+      "required_invariants": ["I03", "I04"],
+      "tests": [
+        "tests/test_social_delivery.py::TestDeliverLines::test_send_deadline_after_callback_starts_is_unknown_and_stops",
+        "tests/test_social_delivery.py::TestDeliverLines::test_timeout_is_unknown_and_same_turn_cannot_retry",
+        "tests/test_transport_outbound.py::test_send_splits_to_capability_and_stops_after_unknown_without_retry"
+      ]
+    },
+    {
+      "id": "S11",
+      "name": "controller and telemetry failure",
+      "required_invariants": ["I01", "I06", "I07"],
+      "tests": [
+        "tests/gravitas/test_g02_control_loop.py::test_fact_cache_rejects_replay_after_expiry_and_old_boots",
+        "tests/gravitas/test_g02_control_loop.py::test_shadow_controller_caches_facts_and_never_changes_business_effects",
+        "tests/gravitas/test_g06_status.py::test_standalone_status_explicitly_reports_gravitas_unavailable",
+        "tests/test_release_layout.py::test_release_assets_keep_python_name_and_add_separate_rust_name"
+      ]
+    },
+    {
+      "id": "S12",
+      "name": "shadow equivalence",
+      "required_invariants": ["I08", "I09"],
+      "tests": [
+        "tests/gravitas/test_g02_control_loop.py::test_shadow_controller_caches_facts_and_never_changes_business_effects",
+        "tests/gravitas/test_g05_pressure_boundaries.py::test_capture_pressure_does_not_change_shadow_business_behavior"
+      ]
+    }
+  ],
+  "external_acceptance": [
+    {
+      "id": "live_model_platform",
+      "status": "SKIPPED",
+      "reason": "Requires separately authorized model and platform environment; never run by this offline suite."
+    },
+    {
+      "id": "clean_vm_release",
+      "status": "SKIPPED",
+      "reason": "Requires a clean VM and release assets; package staging/import checks are recorded separately."
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{
+  "markdown": "| s |\n| --- |\n| {\"id\":\"Function:stella-installer/src/api.js:stableSignature\",\"name\":\"stableSignature\",\"filePath\":\"stella-installer/src/api.js\",\"startLine\":18,\"endLine\":30,\"isExported\":true,\"content\":\"export function stableSignature(value) {   const seen = new WeakSet();   const normalize = input => {     if (input === null || typeof input !== \\\"object\\\") return input;     if (seen.has(input)) return \\\"[Circular]\\\";     seen.add(input);     if (Array.isArray(input)) return input.map(normalize);     return Object.fromEntries(       Object.keys(input).sort().map(key => [key, normalize(input[key])]),     );   };   return JSON.stringify(normalize(value)); }\",\"description\":\"JSON 对象的键顺序不应影响页面是否需要重绘。 这些数据来自 Rust/Python 的 JSON 接口，排序后再签名可以避免 后端仅改变序列化顺序时触发无意义的 DOM 更新。\",\"convexEndpointFactory\":null,\"_label\":\"Function\",\"_id\":{\"offset\":0,\"table\":2}} |",
+  "row_count": 1
+}

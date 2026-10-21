@@ -43,6 +43,27 @@ HTTPS_PROXY = "http://127.0.0.1:7890"
 Restart the bot after changing toml/env; **authentication does not need a
 restart** (see below).
 
+### Worker policy file and optional recovery
+
+Cross-process policy transport and automatic worker restart are both off by
+default. To test Gravitas pausing new task claims, explicitly set
+`COMETA_POLICY_TRANSPORT_ENABLED=true` in `.env`. The bot writes an atomic,
+instance-scoped policy under `STELLA_HOME/state/gravitas/cometa/` every two
+seconds; each policy expires within ten seconds. A worker may claim only after
+the identity, configuration fingerprint, controller boot ID, revision, and
+expiry validate and its ACK is written. The envelope contains no chat, task
+target, or credentials. Malicious processes running as the same OS user remain
+inside the trust boundary.
+
+`COMETA_AUTO_RESTART_ENABLED=true` is a separate sub-gate, disabled by default,
+and has effect only when policy transport is enabled. Restart requires policy
+approval, an expired old worker lease, and no live attempt lease; attempts are
+bounded by a restart budget. A new worker first registers its lease and runs the
+existing recovery scan. Process recovery proves only that a child process
+started; it does not prove task or platform delivery success. Existing
+`delivery_unknown` semantics remain in force. Turning off policy transport
+preserves Cometa's existing claim behavior.
+
 ## Authentication (two WebUI routes + legacy migration)
 
 Entry: WebUI → **Providers → External Agent** authentication card (`/#/providers`). Task listing and control remain on External Agent Tasks (`/#/cometa`).

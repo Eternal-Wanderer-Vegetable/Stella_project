@@ -32,10 +32,16 @@ from config import (
     DB_PATH,
     SESSION_SUMMARY_MAX_TOKENS,
 )
-from core.llm import ROLE_COMPACT, acquire, backend_for, gate_of
+from core.llm import ROLE_COMPACT, backend_for
 from core.llm.base import LLMBackend
 from core.llm.registry import binding
 from core.llm.usage_store import budget_blocked
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelCallDeferred,
+    execute_model_call,
+    role_call_context,
+)
 from memory import session_context as sc
 from memory.conversation_projection import (
     TranscriptBubble,
@@ -53,6 +59,7 @@ from memory.summary_packet import (
     render_summary_packet,
     validate_summary_packet,
 )
+from memory.timeutil import seconds_since
 
 # 温度与生成上限现在是端点×角色配置的一部分：
 # LLM_ROLE_COMPACT_TEMPERATURE（默认 0.3，信息提炼而非创作，稳定优先）、
@@ -838,6 +845,36 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
                            reason_code="below_threshold")
             return False
 
+        from gravitas.controller import active_controller
+
+        pressure_controller = active_controller()
+        if pressure_controller is not None:
+            timestamps = [
+                message.timestamp
+                for entry in batch.entries
+                for message in entry.messages
+                if message.timestamp
+            ]
+            oldest_age = seconds_since(min(timestamps)) if timestamps else None
+            resource_id = role_call_context(
+                ROLE_COMPACT,
+                work_class=WorkClass.BACKGROUND,
+                tag="memory-compact-pressure",
+            ).resource_group_id
+            admission = pressure_controller.admit_background(
+                resource_id,
+                oldest_age_seconds=oldest_age,
+                integrity_ok=pressure_controller.integrity_is_trusted(resource_id),
+            )
+            if not admission.allowed:
+                _flow_decision(
+                    fctx,
+                    "compact.preflight",
+                    status="deferred",
+                    reason_code=admission.reason_code,
+                )
+                return False
+
         existing = sc.get_summary_packet(group_id)
         if existing and not validate_summary_packet(
             existing,
@@ -905,18 +942,36 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             return False
         try:
             with _flow_span(fctx, "compact.generate"):
-                # Release the shared model gate between batches so chat can run.
-                async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
-                    detailed = getattr(backend, "generate_detailed", None)
-                    if detailed is None:
-                        result, finish = await backend.generate(prompt), ""
-                    else:
-                        result, finish = await detailed(prompt)
+                # Release the shared model ticket between batches so chat can run.
+                detailed = callable(getattr(backend, "generate_detailed", None))
+                output = await execute_model_call(
+                    backend,
+                    prompt,
+                    context=role_call_context(
+                        ROLE_COMPACT,
+                        work_class=WorkClass.BACKGROUND,
+                        tag="memory-compact",
+                    ),
+                    detailed=detailed,
+                )
+                if detailed:
+                    result, finish = output
+                else:
+                    result, finish = output, ""
             _flow_decision(fctx, "compact.generate", status="succeeded",
                            metrics={"batch": index, "batches": len(requests),
                                     "prompt_token_upper_bound": len(prompt.encode("utf-8")),
                                     "output_reserve_tokens": output_tokens,
                                     "window_tokens": COMPACT_CONTEXT_LIMIT})
+        except ModelCallDeferred as exc:
+            _flow_decision(fctx, "compact.generate", status="deferred",
+                           reason_code=exc.reason_code,
+                           metrics={"batch": index, "batches": len(requests)})
+            logger.info(
+                f"[Compact] 群 {group_id} 第 {index}/{len(requests)} 批因模型队列压力延期；"
+                "保留全部来源待重试"
+            )
+            return False
         except Exception as exc:
             logger.warning(
                 f"⚠️ [Compact] 群 {group_id} 第 {index}/{len(requests)} 批失败"

@@ -154,7 +154,7 @@ def _source_tree(tmp_path: Path) -> Path:
         path.write_text(relative, encoding="utf-8")
     for directory in (
         "astrbot_compat", "capability", "config", "core", "deploy",
-        "extensions", "memory", "system_prompts", "runtime-manager",
+        "extensions", "gravitas", "memory", "system_prompts", "runtime-manager",
         "stella_project", "knowledge", "skills", "assets", "webui",
         "desktop",
     ):

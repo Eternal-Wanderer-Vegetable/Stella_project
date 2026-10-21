@@ -27,6 +27,12 @@ from typing import Any
 from capability.registry import CapabilityRegistry
 from capability.registry import registry as _default_registry
 from capability.router.types import LEVEL_FALLBACK, CapabilityHit, Route
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelCallDeferred,
+    execute_model_call,
+    role_call_context,
+)
 
 # 兜底判定的置信分。模型只回答「是/否 + 选哪个」，没有连续置信度，
 # 给一个固定值表示「由模型拍板」，不与语义相似度同尺度比较。
@@ -135,14 +141,20 @@ async def route_fallback(
 
     prompt = _PROMPT.format(catalog=catalog, message=text)
     try:
-        from core.llm import PRIORITY_INTERACTIVE, ROLE_ROUTER, acquire, gate_of
+        from core.llm import ROLE_ROUTER
 
-        # 与绑同一端点的角色（默认即主聊天 27B）共用闸门，必须排队；
-        # 不可与其它闸门嵌套持有
-        async with acquire(
-            gate_of(ROLE_ROUTER), tag="router-fallback", priority=PRIORITY_INTERACTIVE
-        ):
-            raw = await backend.generate(prompt, "")
+        raw = await execute_model_call(
+            backend,
+            prompt,
+            context=role_call_context(
+                ROLE_ROUTER,
+                work_class=WorkClass.INTERACTIVE,
+                tag="router-fallback",
+            ),
+        )
+    except ModelCallDeferred as e:
+        _logger().info(f"[Router] 模型队列压力，Level 2 判定延期（{e.reason_code}）")
+        return None
     except Exception as e:
         _logger().warning(f"⚠️ [Router] Level 2 兜底调用失败，降级: {e}")
         return None

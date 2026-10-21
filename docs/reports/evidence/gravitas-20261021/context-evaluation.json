@@ -1,0 +1,106 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/evaluation/runner.py:run_experiment",
+    "name": "run_experiment",
+    "kind": "Function",
+    "filePath": "core/evaluation/runner.py",
+    "startLine": 156,
+    "endLine": 182
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:scripts/run_flow_evaluation.py:main",
+        "name": "main",
+        "filePath": "scripts/run_flow_evaluation.py"
+      },
+      {
+        "uid": "Function:tests/evaluation/test_evaluation_isolation.py:_run_decision_recompute",
+        "name": "_run_decision_recompute",
+        "filePath": "tests/evaluation/test_evaluation_isolation.py"
+      },
+      {
+        "uid": "Function:tests/evaluation/test_evaluation_isolation.py:test_experiment_never_writes_outside_workdir",
+        "name": "test_experiment_never_writes_outside_workdir",
+        "filePath": "tests/evaluation/test_evaluation_isolation.py"
+      },
+      {
+        "uid": "Function:tests/evaluation/test_pipeline_replay.py:test_cutoff_prevents_leakage",
+        "name": "test_cutoff_prevents_leakage",
+        "filePath": "tests/evaluation/test_pipeline_replay.py"
+      },
+      {
+        "uid": "Function:tests/evaluation/test_pipeline_replay.py:test_isolated_pipeline_twice_same_semantic_digest",
+        "name": "test_isolated_pipeline_twice_same_semantic_digest",
+        "filePath": "tests/evaluation/test_pipeline_replay.py"
+      },
+      {
+        "uid": "Function:tests/evaluation/test_stability_report.py:test_empty_dataset_via_trace_playback_never_pass",
+        "name": "test_empty_dataset_via_trace_playback_never_pass",
+        "filePath": "tests/evaluation/test_stability_report.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/evaluation/dataset.py:dataset_digest",
+        "name": "dataset_digest",
+        "filePath": "core/evaluation/dataset.py"
+      },
+      {
+        "uid": "Function:core/evaluation/dataset.py:load_dataset",
+        "name": "load_dataset",
+        "filePath": "core/evaluation/dataset.py"
+      },
+      {
+        "uid": "Function:core/evaluation/runner.py:_execute_pipeline",
+        "name": "_execute_pipeline",
+        "filePath": "core/evaluation/runner.py"
+      },
+      {
+        "uid": "Function:core/evaluation/runner.py:_load_snapshot_if_any",
+        "name": "_load_snapshot_if_any",
+        "filePath": "core/evaluation/runner.py"
+      },
+      {
+        "uid": "Function:core/evaluation/runner.py:_run_subprocess",
+        "name": "_run_subprocess",
+        "filePath": "core/evaluation/runner.py"
+      },
+      {
+        "uid": "Function:core/evaluation/runner.py:_run_trace_playback",
+        "name": "_run_trace_playback",
+        "filePath": "core/evaluation/runner.py"
+      },
+      {
+        "uid": "Function:core/evaluation/runner.py:_write_report",
+        "name": "_write_report",
+        "filePath": "core/evaluation/runner.py"
+      },
+      {
+        "uid": "Method:core/evaluation/adapters.py:ExperimentPaths.create#1",
+        "name": "create",
+        "filePath": "core/evaluation/adapters.py"
+      },
+      {
+        "uid": "Method:core/evaluation/adapters.py:ExperimentPaths.validate#0",
+        "name": "validate",
+        "filePath": "core/evaluation/adapters.py"
+      },
+      {
+        "uid": "Method:core/evaluation/report.py:StabilityReport.finalize#0",
+        "name": "finalize",
+        "filePath": "core/evaluation/report.py"
+      },
+      {
+        "uid": "Method:core/evaluation/runner.py:ExperimentConfig.validate#0",
+        "name": "validate",
+        "filePath": "core/evaluation/runner.py"
+      }
+    ]
+  },
+  "processes": []
+}

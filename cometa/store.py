@@ -34,6 +34,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TypeVar
 
+from gravitas.dependency_recovery import StorageDomain, dependency_recovery
+
 from .migrations import connect, default_db_path, migrate
 from .models import (
     ACTIVE_TASK_STATES,
@@ -299,7 +301,11 @@ class CometaStore:
     def _tx(self, fn: Callable[[sqlite3.Connection], _T]) -> _T:
         """BEGIN IMMEDIATE 短事务。繁忙译成 StoreBusyError（不重试——受理
         接口的预算决策在上层，方案 §6.3「返回明确忙碌状态」）。"""
-        conn = self._connect()
+        try:
+            conn = self._connect()
+        except sqlite3.Error as e:
+            dependency_recovery.record_storage_failure(StorageDomain.COMETA, e)
+            raise
         try:
             conn.execute("BEGIN IMMEDIATE")
             result = fn(conn)
@@ -307,9 +313,14 @@ class CometaStore:
             return result
         except sqlite3.OperationalError as e:
             conn.rollback()
+            dependency_recovery.record_storage_failure(StorageDomain.COMETA, e)
             msg = str(e).lower()
             if "locked" in msg or "busy" in msg:
                 raise StoreBusyError(f"cometa 数据库繁忙: {e}") from e
+            raise
+        except sqlite3.Error as e:
+            conn.rollback()
+            dependency_recovery.record_storage_failure(StorageDomain.COMETA, e)
             raise
         except BaseException:
             conn.rollback()
@@ -318,13 +329,21 @@ class CometaStore:
             conn.close()
 
     def _read(self, fn: Callable[[sqlite3.Connection], _T]) -> _T:
-        conn = self._connect()
+        try:
+            conn = self._connect()
+        except sqlite3.Error as e:
+            dependency_recovery.record_storage_failure(StorageDomain.COMETA, e)
+            raise
         try:
             return fn(conn)
         except sqlite3.OperationalError as e:
+            dependency_recovery.record_storage_failure(StorageDomain.COMETA, e)
             msg = str(e).lower()
             if "locked" in msg or "busy" in msg:
                 raise StoreBusyError(f"cometa 数据库繁忙: {e}") from e
+            raise
+        except sqlite3.Error as e:
+            dependency_recovery.record_storage_failure(StorageDomain.COMETA, e)
             raise
         finally:
             conn.close()

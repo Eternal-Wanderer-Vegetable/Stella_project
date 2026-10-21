@@ -1,0 +1,63 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:cometa/worker.py:CometaWorker",
+    "name": "CometaWorker",
+    "kind": "Class",
+    "filePath": "cometa/worker.py",
+    "startLine": 45,
+    "endLine": 257
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:tests/cometa/test_worker.py",
+        "name": "test_worker.py",
+        "filePath": "tests/cometa/test_worker.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker.__init__#6",
+        "name": "__init__",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker._graceful_stop#1",
+        "name": "_graceful_stop",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker._recover_orphans#0",
+        "name": "_recover_orphans",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker._register_with_retry#0",
+        "name": "_register_with_retry",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker._tick#0",
+        "name": "_tick",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker.request_stop#0",
+        "name": "request_stop",
+        "filePath": "cometa/worker.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker.run_forever#1",
+        "name": "run_forever",
+        "filePath": "cometa/worker.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

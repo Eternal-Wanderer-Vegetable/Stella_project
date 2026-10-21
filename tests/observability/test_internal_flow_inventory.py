@@ -47,6 +47,22 @@ class TestRuntimeEntryInventory:
         problems = internal_flow_catalog.validate_inventory()
         assert problems == []
 
+    def test_gravitas_diagnostics_are_catalogued_without_claiming_flow_roots(self):
+        entry_ids = {entry.entry_id for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY}
+        assert {
+            "bot_main.setup_gravitas",
+            "gravitas.controller.run",
+            "status_api.collect",
+        } <= entry_ids
+        assert all(
+            not entry.root_kind
+            for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY
+            if entry.entry_id in {"bot_main.setup_gravitas", "gravitas.controller.run", "status_api.collect"}
+        )
+        assert "gravitas.controller.tick" in flow_catalog.NODES
+        assert "gravitas.status.snapshot" in flow_catalog.NODES
+        assert "status.collect" in flow_catalog.NODES
+
     def test_every_entry_has_family_and_origin(self):
         for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY:
             assert entry.family in internal_flow_catalog.PROCESS_FAMILIES

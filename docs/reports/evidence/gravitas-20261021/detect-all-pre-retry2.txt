@@ -1,0 +1,18 @@
+Changes: 5 files, 11 symbols
+Affected processes: 0
+Risk level: low
+
+Changed symbols:
+  Section Historical archives → docs/history/README.en.md
+  Section Topics → docs/history/README.en.md
+  Section 历史档案导航 → docs/history/README.md
+  Section 按主题查证 → docs/history/README.md
+  Section Session Progress Log → progress.md
+  Section Current State → progress.md
+  Section 2026-10-20 — GitNexus / Cross-platform planning → progress.md
+  Section 2026-10-20 — Cross-platform implementation (WP00) → progress.md
+  Section Session Handoff → session-handoff.md
+  Section Current Objective → session-handoff.md
+  Section Deliverables → session-handoff.md
+
+  GitNexus Detect Changes (1.6.12)

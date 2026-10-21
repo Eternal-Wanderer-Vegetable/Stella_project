@@ -394,7 +394,7 @@ class ProjectIndex:
     规则进入 hash 语义——目录清单变化即 manifest 漂移）。
     """
 
-    PACKAGE_DIRS = ("core", "memory", "capability", "cometa", "knowledge",
+    PACKAGE_DIRS = ("core", "memory", "capability", "cometa", "gravitas", "knowledge",
                     "webui", "config", "stella_project", "scripts",
                     "astrbot_compat")
 

@@ -69,7 +69,7 @@ def private_env(tmp_path, monkeypatch):
         def __init__(self):
             self.calls = []
 
-        async def send(self, target, message, *, bot_handle=None):
+        async def send(self, target, message, *, bot_handle=None, deadline=None):
             self.calls.append((target, message, bot_handle))
             return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("777",))
 
@@ -227,6 +227,7 @@ async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     # runtime 键 = 规范会话键
     assert engine.await_args.args[0] == "qq:10000:private:20001"
     ingress_ctx = engine.await_args.args[1]
+    assert ingress_ctx.turn_deadline is not None
     assert ingress_ctx.user_ref.raw_user_id == "20001"
     assert ingress_ctx.user_ref.identity_domain == "qq:client"
     assert ingress_ctx.scene_ref.kind == "private"
@@ -240,6 +241,21 @@ async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     assert bot_handle.self_id == "10000"
     # BOT_SELF 按确认送达片段落库（存储键参数）
     assert gateway._record_bot_lines.await_args.args[1] == -2
+
+
+@pytest.mark.asyncio
+async def test_private_deadline_exits_without_generic_fallback(private_env, monkeypatch):
+    from gravitas.errors import DeadlineExceeded
+
+    monkeypatch.setattr(
+        gateway,
+        "_run_turn_via_engine",
+        AsyncMock(side_effect=DeadlineExceeded("prepare")),
+    )
+    await gateway.handle_private_chat(Mock(self_id="10000"), _private_event())
+
+    assert private_env.outbound.calls == []
+    assert gateway._record_bot_lines.await_count == 0
 
 
 @pytest.mark.asyncio

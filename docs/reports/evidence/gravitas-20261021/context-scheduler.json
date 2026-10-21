@@ -1,0 +1,177 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/llm/scheduler.py:acquire",
+    "name": "acquire",
+    "kind": "Function",
+    "filePath": "core/llm/scheduler.py",
+    "startLine": 128,
+    "endLine": 190
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "1 call site invoking `acquire` was dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 1,
+    "dispatchBoundary": 0,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0,
+    "callableValueReferences": 0
+  },
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:capability/router/fallback.py:route_fallback",
+        "name": "route_fallback",
+        "filePath": "capability/router/fallback.py"
+      },
+      {
+        "uid": "Function:core/vision.py:_describe_one",
+        "name": "_describe_one",
+        "filePath": "core/vision.py"
+      },
+      {
+        "uid": "Function:memory/embeddings.py:_maybe_gate",
+        "name": "_maybe_gate",
+        "filePath": "memory/embeddings.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:compact_once",
+        "name": "compact_once",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:_peak_concurrent.worker@61:4",
+        "name": "worker",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_averages_are_computed_over_acquisitions.main@268:4",
+        "name": "main",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_every_waiter_eventually_gets_in.main@98:4.worker@99:8",
+        "name": "worker",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_limit_is_fixed_at_first_use.main@197:4",
+        "name": "main",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_reset_state_clears_statistics.main@283:4",
+        "name": "main",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_separate_resources_never_block_each_other.main@119:4.extra_worker@130:8",
+        "name": "extra_worker",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_separate_resources_never_block_each_other.main@119:4.local_holder@123:8",
+        "name": "local_holder",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_snapshot_only_lists_used_resources.main@257:4",
+        "name": "main",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_snapshot_reports_limit_holders_and_waiters.main@220:4.worker@225:8",
+        "name": "worker",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_the_gate_is_released_even_when_the_body_raises.main@148:4",
+        "name": "main",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Function:tests/test_scheduler_concurrency.py:test_the_gate_is_released_even_when_the_body_raises.main@148:4",
+        "name": "main",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "Method:astrbot_compat/llm/provider.py:StellaChatProvider._request#6",
+        "name": "_request",
+        "filePath": "astrbot_compat/llm/provider.py"
+      },
+      {
+        "uid": "Method:astrbot_compat/llm/provider.py:StellaChatProvider.text_chat_stream",
+        "name": "text_chat_stream",
+        "filePath": "astrbot_compat/llm/provider.py"
+      },
+      {
+        "uid": "Method:core/llm/__init__.py:_LockAlias.__aenter__#0",
+        "name": "__aenter__",
+        "filePath": "core/llm/__init__.py"
+      },
+      {
+        "uid": "Method:core/planner.py:RestrictedPlanner._ask#2",
+        "name": "_ask",
+        "filePath": "core/planner.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.generate_reply#1",
+        "name": "generate_reply",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator._extract_candidates#2",
+        "name": "_extract_candidates",
+        "filePath": "memory/consolidator.py"
+      },
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator._generate#3",
+        "name": "_generate",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/llm/scheduler.py:_describe_holders",
+        "name": "_describe_holders",
+        "filePath": "core/llm/scheduler.py"
+      },
+      {
+        "uid": "Function:core/llm/scheduler.py:_get",
+        "name": "_get",
+        "filePath": "core/llm/scheduler.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:core/llm/scheduler.py:_ResourceState.peak_holding",
+        "name": "peak_holding",
+        "filePath": "core/llm/scheduler.py"
+      },
+      {
+        "uid": "Property:core/llm/scheduler.py:_ResourceState.peak_waiting",
+        "name": "peak_waiting",
+        "filePath": "core/llm/scheduler.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_152_maybe_plan",
+      "name": "Maybe_plan → _limit_for",
+      "step_index": 3,
+      "step_count": 5
+    },
+    {
+      "id": "proc_243_maybe_plan",
+      "name": "Maybe_plan → _describe_holders",
+      "step_index": 3,
+      "step_count": 4
+    }
+  ]
+}

@@ -52,7 +52,10 @@ const groups: { header?: string; items: NavItem[] }[] = [
   },
   {
     header: 'Observability',
-    items: [{ icon: 'mdi-database', title: t('core.navigation.data'), to: '/data' }],
+    items: [
+      { icon: 'mdi-heart-pulse', title: t('core.navigation.gravitas'), to: '/gravitas' },
+      { icon: 'mdi-database', title: t('core.navigation.data'), to: '/data' },
+    ],
   },
   {
     items: [{ icon: 'mdi-cog-outline', title: t('core.navigation.settings'), to: '/settings' }],

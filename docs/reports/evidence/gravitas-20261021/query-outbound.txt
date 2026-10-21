@@ -1,0 +1,160 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Function:tests/test_social_delivery.py:_run",
+      "name": "_run",
+      "filePath": "tests/test_social_delivery.py",
+      "startLine": 85,
+      "endLine": 89,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_social_delivery.py:_sealed_plan",
+      "name": "_sealed_plan",
+      "filePath": "tests/test_social_delivery.py",
+      "startLine": 92,
+      "endLine": 98,
+      "module": "Tests"
+    },
+    {
+      "id": "Class:tests/test_social_delivery.py:TestDeliverLines",
+      "name": "TestDeliverLines",
+      "filePath": "tests/test_social_delivery.py",
+      "startLine": 101,
+      "endLine": 247
+    },
+    {
+      "id": "Property:core/transport/outbound.py:_default_service",
+      "name": "_default_service",
+      "filePath": "core/transport/outbound.py",
+      "startLine": 578,
+      "endLine": 578
+    },
+    {
+      "id": "Function:core/transport/outbound.py:get_outbound_service",
+      "name": "get_outbound_service",
+      "filePath": "core/transport/outbound.py",
+      "startLine": 581,
+      "endLine": 585,
+      "module": "Transport"
+    },
+    {
+      "id": "File:core/transport/outbound.py",
+      "name": "outbound.py",
+      "filePath": "core/transport/outbound.py"
+    },
+    {
+      "id": "Class:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts",
+      "name": "TestDeliverySegmentFacts",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 187,
+      "endLine": 282
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts.test_abort_marks_unattempted_segments#1",
+      "name": "test_abort_marks_unattempted_segments",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 231,
+      "endLine": 255,
+      "module": "Social"
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:TestDeliverySegmentFacts.test_delivery_without_root_is_silent#1",
+      "name": "test_delivery_without_root_is_silent",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 257,
+      "endLine": 282,
+      "module": "Observability"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat._send_cometa_ack@1759:8",
+      "name": "_send_cometa_ack",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 1760,
+      "endLine": 1774,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat._send_cometa_ack@2319:8",
+      "name": "_send_cometa_ack",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 2320,
+      "endLine": 2335,
+      "module": "Bot_main"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+      "name": "ai_gateway.py",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    {
+      "id": "Property:dashboard/src/views/data/FlowPage.vue:OUTCOME_LABELS.passive_only",
+      "name": "passive_only",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 55,
+      "endLine": 55
+    },
+    {
+      "id": "Property:dashboard/src/views/data/FlowPage.vue:OUTCOME_LABELS.delivered",
+      "name": "delivered",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 56,
+      "endLine": 56
+    },
+    {
+      "id": "Property:dashboard/src/views/data/FlowPage.vue:OUTCOME_LABELS.partial",
+      "name": "partial",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 57,
+      "endLine": 57
+    },
+    {
+      "id": "Function:tests/test_transport_outbound.py:_service",
+      "name": "_service",
+      "filePath": "tests/test_transport_outbound.py",
+      "startLine": 140,
+      "endLine": 148,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_transport_outbound.py:test_send_refuses_random_or_mismatched_bot_bindings",
+      "name": "test_send_refuses_random_or_mismatched_bot_bindings",
+      "filePath": "tests/test_transport_outbound.py",
+      "startLine": 191,
+      "endLine": 206,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_transport_outbound.py",
+      "name": "test_transport_outbound.py",
+      "filePath": "tests/test_transport_outbound.py"
+    },
+    {
+      "id": "Variable:config/settings.py:PROACTIVE_MAX_LINES",
+      "name": "PROACTIVE_MAX_LINES",
+      "filePath": "config/settings.py",
+      "startLine": 742,
+      "endLine": 742
+    },
+    {
+      "id": "Variable:config/settings.py:MAX_REPLY_LINES",
+      "name": "MAX_REPLY_LINES",
+      "filePath": "config/settings.py",
+      "startLine": 915,
+      "endLine": 915
+    }
+  ],
+  "timing": {
+    "vector": 4.5,
+    "bm25": 542.1,
+    "merge": 0.2,
+    "symbol_lookup": 42.4,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 585.6
+  }
+}
+
+  GitNexus Query (1.6.12)

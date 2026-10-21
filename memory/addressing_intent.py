@@ -161,6 +161,7 @@ def reset_prototype_cache() -> None:
 
 
 def _get_service():
+    from gravitas.contracts import WorkClass
     from memory.embeddings import EmbeddingService
 
     settings = _settings()
@@ -168,6 +169,7 @@ def _get_service():
         base_url=settings.MEMORY_EMBEDDING_BASE_URL,
         model=settings.MEMORY_EMBEDDING_MODEL,
         timeout=settings.MEMORY_EMBEDDING_TIMEOUT,
+        work_class=WorkClass.INTERACTIVE,
     )
 
 

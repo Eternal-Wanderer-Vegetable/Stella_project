@@ -1,0 +1,229 @@
+{
+  "target": {
+    "id": "File:core/social/delivery.py",
+    "name": "delivery.py",
+    "type": "File",
+    "filePath": "core/social/delivery.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 13,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 4,
+    "processes_affected": 0,
+    "modules_affected": 13
+  },
+  "byDepthCounts": {
+    "1": 4,
+    "2": 4,
+    "3": 5
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Tests",
+      "hits": 7,
+      "impact": "indirect"
+    },
+    {
+      "name": "Scheduling",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Scripts",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Webui",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_139",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_140",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_141",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_142",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_200",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cometa",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Memory",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Runtime",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Stores",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:core/runtime/facade.py",
+        "name": "facade.py",
+        "filePath": "core/runtime/facade.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/runtime/turn_service.py",
+        "name": "turn_service.py",
+        "filePath": "core/runtime/turn_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:core/pipeline.py",
+        "name": "pipeline.py",
+        "filePath": "core/pipeline.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/__init__.py",
+        "name": "__init__.py",
+        "filePath": "stella_project/plugins/bot_main/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/status_api.py",
+        "name": "status_api.py",
+        "filePath": "stella_project/plugins/bot_main/status_api.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:bot.py",
+        "name": "bot.py",
+        "filePath": "bot.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:extensions/__init__.py",
+        "name": "__init__.py",
+        "filePath": "extensions/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:extensions/link_monitor/__init__.py",
+        "name": "__init__.py",
+        "filePath": "extensions/link_monitor/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/routers/chat.py",
+        "name": "chat.py",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/services/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}

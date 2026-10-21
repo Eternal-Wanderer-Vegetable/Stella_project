@@ -20,6 +20,8 @@ from pathlib import Path
 
 from nonebot import logger
 
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
+
 # 当前 schema 版本。每 +1 必须新增一个 _apply_vN 并配一个旧库回归测试
 # （与 memory/schema.py 的「本版不做数据迁移禁令」同一纪律；本库暂无历史数据
 # 要搬，v1 是纯建表）。
@@ -46,7 +48,7 @@ def default_db_path() -> Path:
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """打开调度库连接。每次操作短连接（与 memory/proactive_state.py 同款），
     WAL 模式提升并发读；``timeout`` 给写入方留排队余量。"""
-    conn = sqlite3.connect(str(db_path), timeout=10.0)
+    conn = connect_sqlite(StorageDomain.SCHEDULING, str(db_path), timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=10000")
@@ -251,7 +253,7 @@ def migrate(db_path: Path | str) -> None:
         # 刻意只建调度库自己的目录；STELLA_HOME 由 deploy init 负责
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(str(db_path), timeout=10.0)
+    conn = connect_sqlite(StorageDomain.SCHEDULING, str(db_path), timeout=10.0)
     conn.row_factory = sqlite3.Row
     try:
         conn.execute("PRAGMA journal_mode=WAL")

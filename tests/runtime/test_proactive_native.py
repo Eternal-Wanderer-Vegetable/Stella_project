@@ -128,6 +128,7 @@ async def test_proactive_at_goes_through_native_facade(
     async def engine(session_key, ctx, **kw):
         seen["key"] = session_key
         seen["intent"] = ctx.intent
+        seen["turn_deadline"] = ctx.turn_deadline
         out = await h.facade.submit_turn(session_key, gateway.pipeline, ctx, **kw)
         seen["reply"] = out.reply
         seen["wait"] = bool(getattr(out, "planner_wait", False))
@@ -155,6 +156,7 @@ async def test_proactive_at_goes_through_native_facade(
     # 走了 native facade：同会话键、proactive_at 意图、一次 provider 调用
     assert seen.get("key") == "qq:1"
     assert seen.get("intent") == "proactive_at"
+    assert seen.get("turn_deadline") is not None
     assert len(h.provider_calls) == 1, f"seen={seen} store={[r['state'] for r in h.store_lines()]}"
     # 发送：@ + 正文（无引用段），且已记账
     assert len(fake_uniseg_transport) == 1
@@ -193,6 +195,7 @@ async def test_proactive_join_goes_through_native_facade(
     async def engine(session_key, ctx, **kw):
         seen["key"] = session_key
         seen["intent"] = ctx.intent
+        seen["turn_deadline"] = ctx.turn_deadline
         seen["conversation_kind"] = ctx.conversation_kind
         seen["conversation_key"] = ctx.conversation_key
         seen["bot_id"] = ctx.bot_id
@@ -221,6 +224,7 @@ async def test_proactive_join_goes_through_native_facade(
 
     assert seen.get("key") == "qq:1"
     assert seen.get("intent") == "proactive_join"
+    assert seen.get("turn_deadline") is not None
     assert seen.get("conversation_kind") == "group"
     assert seen.get("conversation_key") == "qq:999:group:1"
     assert seen.get("bot_id") == "999"

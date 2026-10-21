@@ -1,0 +1,892 @@
+{
+  "target": {
+    "id": "File:docs/history/README.en.md",
+    "name": "README.en.md",
+    "type": "File",
+    "filePath": "docs/history/README.en.md"
+  },
+  "direction": "upstream",
+  "impactedCount": 94,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 6,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 6,
+    "2": 38,
+    "3": 50
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:docs/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/architecture/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/architecture/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/development/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/development/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/guides/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/guides/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/history/README.md",
+        "name": "README.md",
+        "filePath": "docs/history/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/reference/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/reference/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:README.en.md",
+        "name": "README.en.md",
+        "filePath": "README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/README.md",
+        "name": "README.md",
+        "filePath": "docs/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture.en.md",
+        "name": "architecture.en.md",
+        "filePath": "docs/architecture.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/README.md",
+        "name": "README.md",
+        "filePath": "docs/architecture/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/capability-system.en.md",
+        "name": "capability-system.en.md",
+        "filePath": "docs/architecture/capability-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/code-map.en.md",
+        "name": "code-map.en.md",
+        "filePath": "docs/architecture/code-map.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/data-boundaries.en.md",
+        "name": "data-boundaries.en.md",
+        "filePath": "docs/architecture/data-boundaries.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/integrations.en.md",
+        "name": "integrations.en.md",
+        "filePath": "docs/architecture/integrations.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/knowledge-base.en.md",
+        "name": "knowledge-base.en.md",
+        "filePath": "docs/architecture/knowledge-base.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/llm-budget.en.md",
+        "name": "llm-budget.en.md",
+        "filePath": "docs/architecture/llm-budget.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/memory-rust-backend.en.md",
+        "name": "memory-rust-backend.en.md",
+        "filePath": "docs/architecture/memory-rust-backend.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/memory-system.en.md",
+        "name": "memory-system.en.md",
+        "filePath": "docs/architecture/memory-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/message-lifecycle.en.md",
+        "name": "message-lifecycle.en.md",
+        "filePath": "docs/architecture/message-lifecycle.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/overview.en.md",
+        "name": "overview.en.md",
+        "filePath": "docs/architecture/overview.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development.en.md",
+        "name": "development.en.md",
+        "filePath": "docs/development.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/README.md",
+        "name": "README.md",
+        "filePath": "docs/development/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/ci.en.md",
+        "name": "ci.en.md",
+        "filePath": "docs/development/ci.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/contracts.en.md",
+        "name": "contracts.en.md",
+        "filePath": "docs/development/contracts.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/conventions.en.md",
+        "name": "conventions.en.md",
+        "filePath": "docs/development/conventions.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/database.en.md",
+        "name": "database.en.md",
+        "filePath": "docs/development/database.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/deployment.en.md",
+        "name": "deployment.en.md",
+        "filePath": "docs/development/deployment.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/design-records.en.md",
+        "name": "design-records.en.md",
+        "filePath": "docs/development/design-records.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/environment.en.md",
+        "name": "environment.en.md",
+        "filePath": "docs/development/environment.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/probes.en.md",
+        "name": "probes.en.md",
+        "filePath": "docs/development/probes.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/release.en.md",
+        "name": "release.en.md",
+        "filePath": "docs/development/release.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/testing.en.md",
+        "name": "testing.en.md",
+        "filePath": "docs/development/testing.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/troubleshooting.en.md",
+        "name": "troubleshooting.en.md",
+        "filePath": "docs/development/troubleshooting.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/README.md",
+        "name": "README.md",
+        "filePath": "docs/guides/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/cometa.en.md",
+        "name": "cometa.en.md",
+        "filePath": "docs/guides/cometa.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/deployment-docker.en.md",
+        "name": "deployment-docker.en.md",
+        "filePath": "docs/guides/deployment-docker.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/scheduling.en.md",
+        "name": "scheduling.en.md",
+        "filePath": "docs/guides/scheduling.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/skills.en.md",
+        "name": "skills.en.md",
+        "filePath": "docs/guides/skills.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/webui.en.md",
+        "name": "webui.en.md",
+        "filePath": "docs/guides/webui.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/README.md",
+        "name": "README.md",
+        "filePath": "docs/reference/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/configuration.en.md",
+        "name": "configuration.en.md",
+        "filePath": "docs/reference/configuration.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/migration-report-template.en.md",
+        "name": "migration-report-template.en.md",
+        "filePath": "docs/reference/migration-report-template.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/plugin-spec.en.md",
+        "name": "plugin-spec.en.md",
+        "filePath": "docs/reference/plugin-spec.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reports/2026-10-10-documentation-restructure.md",
+        "name": "2026-10-10-documentation-restructure.md",
+        "filePath": "docs/reports/2026-10-10-documentation-restructure.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:README.md",
+        "name": "README.md",
+        "filePath": "README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/README.md",
+        "name": "README.md",
+        "filePath": "docs/agent/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/boundaries.md",
+        "name": "boundaries.md",
+        "filePath": "docs/agent/boundaries.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/documentation.md",
+        "name": "documentation.md",
+        "filePath": "docs/agent/documentation.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/verification.md",
+        "name": "verification.md",
+        "filePath": "docs/agent/verification.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture.md",
+        "name": "architecture.md",
+        "filePath": "docs/architecture.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/capability-system.md",
+        "name": "capability-system.md",
+        "filePath": "docs/architecture/capability-system.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/code-map.md",
+        "name": "code-map.md",
+        "filePath": "docs/architecture/code-map.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/data-boundaries.md",
+        "name": "data-boundaries.md",
+        "filePath": "docs/architecture/data-boundaries.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/integrations.md",
+        "name": "integrations.md",
+        "filePath": "docs/architecture/integrations.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/knowledge-base.md",
+        "name": "knowledge-base.md",
+        "filePath": "docs/architecture/knowledge-base.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/llm-budget.md",
+        "name": "llm-budget.md",
+        "filePath": "docs/architecture/llm-budget.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/memory-rust-backend.md",
+        "name": "memory-rust-backend.md",
+        "filePath": "docs/architecture/memory-rust-backend.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/memory-system.md",
+        "name": "memory-system.md",
+        "filePath": "docs/architecture/memory-system.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/message-lifecycle.md",
+        "name": "message-lifecycle.md",
+        "filePath": "docs/architecture/message-lifecycle.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/overview.md",
+        "name": "overview.md",
+        "filePath": "docs/architecture/overview.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/capability-system.en.md",
+        "name": "capability-system.en.md",
+        "filePath": "docs/capability-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/cometa.en.md",
+        "name": "cometa.en.md",
+        "filePath": "docs/cometa.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/configuration.en.md",
+        "name": "configuration.en.md",
+        "filePath": "docs/configuration.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/deployment-docker.en.md",
+        "name": "deployment-docker.en.md",
+        "filePath": "docs/deployment-docker.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development.md",
+        "name": "development.md",
+        "filePath": "docs/development.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/ci.md",
+        "name": "ci.md",
+        "filePath": "docs/development/ci.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/contracts.md",
+        "name": "contracts.md",
+        "filePath": "docs/development/contracts.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/conventions.md",
+        "name": "conventions.md",
+        "filePath": "docs/development/conventions.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/database.md",
+        "name": "database.md",
+        "filePath": "docs/development/database.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/deployment.md",
+        "name": "deployment.md",
+        "filePath": "docs/development/deployment.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/design-records.md",
+        "name": "design-records.md",
+        "filePath": "docs/development/design-records.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/environment.md",
+        "name": "environment.md",
+        "filePath": "docs/development/environment.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/probes.md",
+        "name": "probes.md",
+        "filePath": "docs/development/probes.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/release.md",
+        "name": "release.md",
+        "filePath": "docs/development/release.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/testing.md",
+        "name": "testing.md",
+        "filePath": "docs/development/testing.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/troubleshooting.md",
+        "name": "troubleshooting.md",
+        "filePath": "docs/development/troubleshooting.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/cometa.md",
+        "name": "cometa.md",
+        "filePath": "docs/guides/cometa.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/deployment-docker.md",
+        "name": "deployment-docker.md",
+        "filePath": "docs/guides/deployment-docker.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/scheduling.md",
+        "name": "scheduling.md",
+        "filePath": "docs/guides/scheduling.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/skills.md",
+        "name": "skills.md",
+        "filePath": "docs/guides/skills.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/webui.md",
+        "name": "webui.md",
+        "filePath": "docs/guides/webui.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/knowledge-base.en.md",
+        "name": "knowledge-base.en.md",
+        "filePath": "docs/knowledge-base.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/memory-rust-backend.en.md",
+        "name": "memory-rust-backend.en.md",
+        "filePath": "docs/memory-rust-backend.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/memory-system.en.md",
+        "name": "memory-system.en.md",
+        "filePath": "docs/memory-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/migration-report-template.en.md",
+        "name": "migration-report-template.en.md",
+        "filePath": "docs/migration-report-template.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/plugin-spec.en.md",
+        "name": "plugin-spec.en.md",
+        "filePath": "docs/plugin-spec.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/configuration.md",
+        "name": "configuration.md",
+        "filePath": "docs/reference/configuration.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/migration-report-template.md",
+        "name": "migration-report-template.md",
+        "filePath": "docs/reference/migration-report-template.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/plugin-spec.md",
+        "name": "plugin-spec.md",
+        "filePath": "docs/reference/plugin-spec.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/scheduling.en.md",
+        "name": "scheduling.en.md",
+        "filePath": "docs/scheduling.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/skills.en.md",
+        "name": "skills.en.md",
+        "filePath": "docs/skills.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/webui.en.md",
+        "name": "webui.en.md",
+        "filePath": "docs/webui.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:progress.md",
+        "name": "progress.md",
+        "filePath": "progress.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  }
+}

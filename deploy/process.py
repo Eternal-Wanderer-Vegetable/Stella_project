@@ -638,12 +638,13 @@ def status() -> dict:
         "link": (live or {}).get("link"),
         "scheduler": (live or {}).get("scheduler"),
         "usage": (live or {}).get("usage"),
+        "gravitas": (live or {}).get("gravitas"),
         # 能力清单：deploy capabilities 与 GUI 的能力面板都读它。注册表是 Bot
         # 进程内的模块级单例，别的进程拿不到，所以只能经状态接口取
         "capabilities": (live or {}).get("capabilities"),
         "uptime_seconds": (live or {}).get("uptime_seconds"),
         "note": (
-            "link/scheduler/usage/capabilities 来自 Bot 进程内的状态接口，"
+            "link/scheduler/usage/capabilities/gravitas 来自 Bot 进程内的状态接口，"
             "接口不可达时为 null"
         ),
     }

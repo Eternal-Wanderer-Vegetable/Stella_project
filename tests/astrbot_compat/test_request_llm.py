@@ -251,15 +251,15 @@ def test_plugin_llm_still_goes_through_the_scheduler(
     但把插件绑到独立端点后这里应该跟着变——写死常量就测不出那种回归。
     """
     acquired: list[str] = []
-    import core.llm as core_llm
+    import core.llm.scheduler as scheduler
 
-    real_acquire = core_llm.acquire
+    real_acquire = scheduler.acquire
 
-    def spy(resource, tag="", priority=0):
+    def spy(resource, *args, **kwargs):
         acquired.append(resource)
-        return real_acquire(resource, tag=tag, priority=priority)
+        return real_acquire(resource, *args, **kwargs)
 
-    monkeypatch.setattr(core_llm, "acquire", spy)
+    monkeypatch.setattr(scheduler, "acquire", spy)
 
     class Demo(Star):
         @filter.command("q")
@@ -269,6 +269,8 @@ def test_plugin_llm_still_goes_through_the_scheduler(
     register_plugin(Demo)
     fake_llm.push_text("ok")
     _dispatch(make_event("/q"), fake_bot)
+    import core.llm as core_llm
+
     assert acquired == [core_llm.gate_of(core_llm.ROLE_PLUGIN)]
     # 默认（纯本地）配置下它就是主聊天那把闸门
     assert acquired == [core_llm.gate_of(core_llm.ROLE_CHAT)]

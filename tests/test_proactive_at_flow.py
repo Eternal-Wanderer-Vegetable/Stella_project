@@ -7,6 +7,7 @@
 之间的边界，避免把自然承接失败变成用户可见的突兀发言。
 """
 
+import asyncio
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -295,8 +296,11 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     expression_sent = Mock()
     task = _FakeTask()
     create_task = Mock()
+    real_create_task = asyncio.create_task
 
     def fake_create_task(coro):
+        if getattr(getattr(coro, "cr_code", None), "co_name", "") == "_send_before_deadline":
+            return real_create_task(coro)
         coro.close()
         return task
 
@@ -330,7 +334,7 @@ async def test_proactive_at_normal_output_still_sends_and_records(
         "get_outbound_service",
         lambda: SimpleNamespace(
             send=AsyncMock(
-                side_effect=lambda target, message, *, bot_handle: (
+                    side_effect=lambda target, message, *, bot_handle, deadline=None: (
                     outbound_calls.append((target, message, bot_handle))
                     or DeliveryResult(target, DeliveryStatus.ACCEPTED, ("msg-1",))
                 )
@@ -360,7 +364,7 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     )
     record_bot_lines.assert_awaited_once()
     expression_sent.assert_called_once()
-    create_task.assert_called_once()
+    assert create_task.call_count == 2  # send deadline wrapper + delayed reply check
 
 
 @pytest.mark.asyncio

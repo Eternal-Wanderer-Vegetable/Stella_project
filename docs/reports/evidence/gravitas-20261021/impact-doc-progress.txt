@@ -1,0 +1,40 @@
+{
+  "target": {
+    "id": "File:progress.md",
+    "name": "progress.md",
+    "type": "File",
+    "filePath": "progress.md"
+  },
+  "direction": "upstream",
+  "impactedCount": 26,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 3,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 3,
+    "2": 7,
+    "3": 16
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}
+
+  GitNexus Impact (1.6.12)

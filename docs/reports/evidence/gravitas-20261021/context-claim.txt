@@ -1,0 +1,55 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Method:cometa/store.py:CometaStore.claim_next_task#5",
+    "name": "claim_next_task",
+    "kind": "Method",
+    "filePath": "cometa/store.py",
+    "startLine": 783,
+    "endLine": 880
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "has_method": [
+      {
+        "uid": "Class:cometa/store.py:CometaStore",
+        "name": "CometaStore",
+        "filePath": "cometa/store.py"
+      }
+    ],
+    "calls": [
+      {
+        "uid": "Function:tests/cometa/test_cometa_store.py:_claim",
+        "name": "_claim",
+        "filePath": "tests/cometa/test_cometa_store.py"
+      },
+      {
+        "uid": "Function:tests/cometa_helpers.py:claim_task",
+        "name": "claim_task",
+        "filePath": "tests/cometa_helpers.py"
+      },
+      {
+        "uid": "Method:cometa/worker.py:CometaWorker._tick#0",
+        "name": "_tick",
+        "filePath": "cometa/worker.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:cometa/models.py:utc_now",
+        "name": "utc_now",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "Method:cometa/store.py:CometaStore._tx#1",
+        "name": "_tx",
+        "filePath": "cometa/store.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

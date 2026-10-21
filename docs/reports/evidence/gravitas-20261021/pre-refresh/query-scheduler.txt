@@ -1,0 +1,226 @@
+{
+  "processes": [
+    {
+      "id": "proc_106_create_task",
+      "summary": "Create_task → Load",
+      "priority": 0.109,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_154_create_task",
+      "summary": "Create_task → Parse_iso_utc",
+      "priority": 0.109,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_155_create_task",
+      "summary": "Create_task → Connect",
+      "priority": 0.109,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_348_create_task",
+      "summary": "Create_task → Utc_now",
+      "priority": 0.067,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_349_create_task",
+      "summary": "Create_task → _new_id",
+      "priority": 0.067,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_91_mcp_test",
+      "summary": "Mcp_test → _run",
+      "priority": 0.062,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/service.py:SchedulingService.create_task#14",
+      "name": "create_task",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "startLine": 179,
+      "endLine": 280,
+      "module": "Scheduling",
+      "process_id": "proc_106_create_task",
+      "step_index": 1
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/service.py:SchedulingService._refresh_schedule_cache#2",
+      "name": "_refresh_schedule_cache",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "startLine": 513,
+      "endLine": 524,
+      "module": "Scheduling",
+      "process_id": "proc_106_create_task",
+      "step_index": 2
+    },
+    {
+      "id": "Method:capability/providers/mcp/client.py:McpServerClient._schedule_reconnect#1",
+      "name": "_schedule_reconnect",
+      "filePath": "capability/providers/mcp/client.py",
+      "startLine": 252,
+      "endLine": 264,
+      "module": "Mcp",
+      "process_id": "proc_91_mcp_test",
+      "step_index": 5
+    }
+  ],
+  "definitions": [
+    {
+      "name": "limit",
+      "type": "File",
+      "filePath": "dashboard/src/views/ProvidersPage.vue"
+    },
+    {
+      "name": "id",
+      "type": "File",
+      "filePath": "deploy/models.py"
+    },
+    {
+      "id": "File:tests/scheduling/test_scheduling_commands.py",
+      "name": "memory_type",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 19,
+      "endLine": 19
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:test_plugin_llm_still_goes_through_the_scheduler",
+      "name": "test_plugin_llm_still_goes_through_the_scheduler",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 240,
+      "endLine": 274
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:test_plugin_llm_still_goes_through_the_scheduler.spy@257:4",
+      "name": "spy",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 258,
+      "endLine": 260
+    },
+    {
+      "id": "File:tests/scheduling/test_scheduling_store.py",
+      "name": "owner_type",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 31,
+      "endLine": 31
+    },
+    {
+      "id": "Interface:dashboard/src/views/ProvidersPage.vue:GateState",
+      "name": "GateState",
+      "filePath": "dashboard/src/views/ProvidersPage.vue",
+      "startLine": 10,
+      "endLine": 20
+    },
+    {
+      "id": "Variable:config/settings.py:MEMORY_EMBEDDING_GATE",
+      "name": "MEMORY_EMBEDDING_GATE",
+      "filePath": "config/settings.py",
+      "startLine": 529,
+      "endLine": 529
+    },
+    {
+      "id": "Variable:config/settings.py:RENDER_MAX_CONCURRENCY",
+      "name": "RENDER_MAX_CONCURRENCY",
+      "filePath": "config/settings.py",
+      "startLine": 1073,
+      "endLine": 1073
+    },
+    {
+      "id": "Variable:config/settings.py:COMETA_MAX_CONCURRENT",
+      "name": "COMETA_MAX_CONCURRENT",
+      "filePath": "config/settings.py",
+      "startLine": 1715,
+      "endLine": 1715
+    },
+    {
+      "id": "Variable:memory/embeddings.py:EMBEDDING_DIM",
+      "name": "EMBEDDING_DIM",
+      "filePath": "memory/embeddings.py",
+      "startLine": 47,
+      "endLine": 47
+    },
+    {
+      "id": "Const:memory_rust/native/src/policy.rs:EMBEDDING_CONTEXTUAL_MIN",
+      "name": "EMBEDDING_CONTEXTUAL_MIN",
+      "filePath": "memory_rust/native/src/policy.rs",
+      "startLine": 19,
+      "endLine": 19
+    },
+    {
+      "id": "Method:memory/embeddings.py:EmbeddingService._request_embedding#3",
+      "name": "_request_embedding",
+      "filePath": "memory/embeddings.py",
+      "startLine": 126,
+      "endLine": 144,
+      "module": "Tests"
+    },
+    {
+      "id": "File:memory/embeddings.py",
+      "name": "embeddings.py",
+      "filePath": "memory/embeddings.py"
+    },
+    {
+      "id": "File:core/llm/scheduler.py",
+      "name": "scheduler.py",
+      "filePath": "core/llm/scheduler.py"
+    },
+    {
+      "id": "Class:deploy/models.py:CheckResult",
+      "name": "CheckResult",
+      "filePath": "deploy/models.py",
+      "startLine": 16,
+      "endLine": 28
+    },
+    {
+      "name": "timestamp",
+      "type": "File",
+      "filePath": "memory/participation/buffer.py"
+    },
+    {
+      "id": "Method:astrbot_compat/llm/provider.py:EmbeddingProvider.get_embedding#1",
+      "name": "get_embedding",
+      "filePath": "astrbot_compat/llm/provider.py",
+      "startLine": 157,
+      "endLine": 159
+    },
+    {
+      "id": "Method:astrbot_compat/llm/provider.py:EmbeddingProvider.get_embeddings#1",
+      "name": "get_embeddings",
+      "filePath": "astrbot_compat/llm/provider.py",
+      "startLine": 161,
+      "endLine": 163
+    },
+    {
+      "id": "File:astrbot_compat/llm/provider.py",
+      "name": "provider.py",
+      "filePath": "astrbot_compat/llm/provider.py"
+    }
+  ],
+  "timing": {
+    "vector": 4.7,
+    "bm25": 704.4,
+    "merge": 0.2,
+    "symbol_lookup": 48.3,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 754
+  }
+}
+
+  GitNexus Query (1.6.12)

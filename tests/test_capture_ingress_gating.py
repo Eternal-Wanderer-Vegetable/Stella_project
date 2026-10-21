@@ -298,7 +298,8 @@ def webchat_env(tmp_path, monkeypatch):
     monkeypatch.setattr(chat_ingress, "_resolve_pipeline", lambda: object())
 
     class _FakeFacade:
-        async def submit_turn(self, _key, _pipeline, ctx):
+        async def submit_turn(self, _key, _pipeline, ctx, *, turn_deadline=None):
+            assert turn_deadline is ctx.turn_deadline
             ctx.lines = ["回复照常返回"]
             ctx.turn_id = "wc-turn-1"
             return ctx

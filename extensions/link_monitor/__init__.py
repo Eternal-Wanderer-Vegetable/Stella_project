@@ -27,6 +27,11 @@ from config import (
     LINK_MONITOR_ENABLED,
     LINK_MONITOR_TIMEOUT,
 )
+from gravitas.dependency_recovery import (
+    classify_dependency_failure,
+    connection_scope,
+    dependency_recovery,
+)
 from memory.timeutil import humanize_duration
 
 if TYPE_CHECKING:
@@ -127,6 +132,8 @@ async def _refresh_on_any_event(bot: Any, event: Any) -> None:
         record.connected_since = now
     record.connected = True
     record.last_event_time = now
+    fence = dependency_recovery.begin_attempt(connection_scope(record.instance_ref))
+    dependency_recovery.record_attempt_result(fence, success=True)
 
 
 driver = get_driver()
@@ -262,14 +269,34 @@ async def link_monitor_task() -> None:
             )
             continue
 
+        probe_lease = dependency_recovery.claim_probe(
+            connection_scope(record.instance_ref),
+            min_interval_seconds=LINK_MONITOR_CHECK_INTERVAL,
+        )
+        if probe_lease is None:
+            continue
         try:
             await bot.get_status()
         except Exception as exc:
+            accepted = dependency_recovery.finish_probe(
+                probe_lease,
+                success=False,
+                failure_kind=classify_dependency_failure(exc),
+            )
+            if not accepted:
+                continue
             record.last_probe_ok = False
             record.last_probe_time = time.time()
             _alert(record, f"已连接但 API 无响应（{exc}）", time.time() - record.last_event_time)
             continue
 
+        accepted = dependency_recovery.finish_probe(
+            probe_lease,
+            success=True,
+            next_probe_delay=LINK_MONITOR_CHECK_INTERVAL,
+        )
+        if not accepted:
+            continue
         record.last_probe_ok = True
         record.last_probe_time = time.time()
         record.last_event_time = record.last_probe_time

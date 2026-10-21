@@ -1,0 +1,40 @@
+{
+  "target": {
+    "id": "File:core/llm/registry.py",
+    "name": "registry.py",
+    "type": "File",
+    "filePath": "core/llm/registry.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 64,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 13,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 13,
+    "2": 20,
+    "3": 31
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}
+
+  GitNexus Impact (1.6.12)

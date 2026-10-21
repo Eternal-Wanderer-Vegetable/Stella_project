@@ -1,8 +1,34 @@
 # Session Handoff
 
+## Current Session — Gravitas implementation
+
+用户要求新建分支并执行[工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)，阶段提交并创建 PR。GRAVITAS-IMPL G00–G09 已完成，PR [#112](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/112) 已提交且保持开放；当前分支 `codex/gravitas-implementation`，基于合并 PR #111 后的 `main@c662746`，HEAD `2bfb362`。最新 PR checks 全绿。
+
+- Files：方案、[机器工作包清单](docs/plans/2026-10-21-gravitas-inventory.json)、[GitNexus 研究与基线证据](docs/reports/evidence/gravitas-20261021/README.md)。
+- Current package：G00–G09 源码、测试、双语指南与分阶段提交均完成。CI 后续提交：`67f33a1` 为 package smoke 构建 Dashboard 资源，`4d0831c` 修正 Python 3.10 asyncio timeout 断言，`06be191` 消除 3.11 取消测试的 deadline 竞态，`2bfb362` 扩大 shared CHAT gate 回归的调度观察窗口。PR head `2bfb362` 的最终全量 CI 通过。
+- Commits：G00 `709a4b4`、`82f377d`、`88de58c`、`f03eb0f`；G01 `dbcbe41`；G02 `8e87c6c`；G03a `dd8bb72`、G03b `6c625f9`、G03c `351878d`；G04a `c3d4c4d`；G04b `6458764`；G04c `8160289`、`5b87efa`；G05 `e7ee716`；G06 code `21fb77f`；G07 code `bfb1fa2`；G08 code `b78c72e`；G09 code `ddb1c53`；CI fixes `67f33a1`、`4d0831c`、`06be191`、`2bfb362`；status docs `21fe2a0`。
+- Verification：G00 组合回归 78 passed；G01 定向合同/发布/flow 回归 65 passed；G03c 综合定向回归 446 passed；G04a QQ/主动/WebChat/runtime 相关定向回归 77 passed / 1 fixture warning；G04b Facade/TurnService/Planner/Capability/QQ/WebChat 相关定向回归 470 passed / 1 fixture warning；G04c runtime/capability/planner/QQ/private/WebChat/social/outbound/Cometa 回归 **517 passed / 1 fixture warning**。G05 相关定向回归 216 passed / 1 warning；全量 Python suite **3968 passed, 29 skipped, 1 warning**，使用全新 `/tmp/stella-gravitas-g05-full-20261021b`。G06 隔离回归 **97 passed / 1 existing warning**；Dashboard typecheck 通过、Vitest 7 files / **101 passed**、build 成功，localhost fake API 浏览器验收通过。G07 定向守卫 **4 passed**，全量 Python **3976 passed / 29 skipped / 1 existing warning（359.95s）**；10 seeds × 256 状态事件与 S01–S12 两轮离线回放、Standalone/OneClick staged import 均通过，same-seed digest 为 `6d35e75631c1861239cb4ac2cd8555a8e6a5058e`。Ruff、改动 Python 编译、文档门禁、flow archive `message-flow.d2b36de1444a.json`、CI YAML parse 与 diff 检查通过。详见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
+- G03c impacts：RoleBackend MEDIUM；`execute_model_call` CRITICAL（8 direct / 6 processes / 11 modules）；脚本探针 LOW；两个评估脚本文件 UNKNOWN/0 edges，已文本审计。`run_compact_evaluation` LOW（2 impacted/1 direct/1 flow），回放 `main` LOW（1/1）。这些 exact symbol/function impact 有编辑后补查的门禁偏差，细节见实施报告，不构成后续风险豁免。
+- G08 evidence：`b78c72e` 加入 bounded dependency recovery registry、fenced passive outcomes、single-flight active probes、retry budgets/backoff 和 per-domain SQLite failure classification。涉及 endpoint/model calls、CapabilityProvider、CaptureGate、OneBot LinkMonitor、memory/social/Cometa/scheduling/knowledge/observability stores。定向回归 60 passed；最终 full suite 3,989 passed / 29 skipped / 1 existing warning（220.82s）；全仓 Ruff、改动 Python 编译、docs（119/1246/577/0 errors）、flow archive `message-flow.643390a24eac.json` 与 diff check 通过。两个中间 full run 分别遇到 WebUI replay 和 Cometa shutdown 单例失败，各单测重跑通过，之后完整全量通过；根因未确认，保留为间歇性稳定性风险。GitNexus all 13/47/31/CRITICAL；compare/main 503/1076/113/CRITICAL cumulative，扩大上限后 compare 列表仍 capped，统计和风险覆盖全部变更。具体影响、索引截断和 S13/S14 范围见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
+- Hosted verification：最终 PR CI run `39629392684` 在 `2bfb362` 上 Python 3.10 **4016 passed / 29 skipped / 3 warnings**、3.11 **4016 passed / 29 skipped / 4 warnings**、3.12 **4016 passed / 29 skipped / 5 warnings**；3.11 G07 S01–S12 fake evaluation 与 `release_package_layout_and_import` 均 PASS，digest `4a202051d493aaf8a67b8937e9a4003ef70f1ad7`。Dashboard run `39629392742`、Docker run `39629392600` 和 CI 内 lint/docs/security/flow/CLI/Windows native/benchmark 全部 PASS。本机 `tests/runtime/test_facade_turns.py` xdist 4-worker **13 passed**，`tests/observability/test_message_flow_runtime.py` **16 passed**；Ruff、`py_compile` 与 diff check 通过。之前 run `39628116553` 暴露的 1 秒 polling window 已由 `2bfb362` 修正，最终 CI 全绿。
+- Local suite / remaining acceptance：一次完整本地回归为 **3942 passed / 22 skipped / 1 failed / 1 warning**，既有 WebUI Cometa empty-key 用例预期 400、实际 401；hosted 三版本全量已通过，但本地该异常根因未确认，不能声称本地全量绿。所有新验证使用隔离 `/tmp` `STELLA_HOME`；未启动真实模型、Bot 或平台，未读写用户数据库。真实模型/QQ/WebChat 灰度、生产跨进程恢复、clean VM、安装器与发布资产仍未验收，产品保持 **NOT READY**。
+- Next：review 并合并 PR #112；之后在有授权平台账号与干净环境时完成外部验收。恢复命令：`git status --short && git log --oneline -10`。完整验证和 GitNexus 限制见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
+
+## Previous Session — Gravitas planning
+
+本轮用户要求把稳态讨论完善成可落地方案，并深入使用 GitNexus。交付仅限计划、研究证据与状态；业务实施未启动。方案及文档/档案/源码指纹/证据摘要/图变更门禁已完成，结果入口为[证据 README](docs/reports/evidence/gravitas-20261021/README.md)。
+
+- Files：[方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)、[机器工作包/73 源码/50 入口/16 场景清单](docs/plans/2026-10-21-gravitas-inventory.json)、证据目录和双语历史导航。
+- Evidence：基线 `2b69402`；GitNexus 1.6.12 全量重解析后关键 Function 恢复；query/context/impact、823 流程分页、源码与动态接线补证。acquire CRITICAL、Compact 和 deliver_lines HIGH。首次 partial 已重跑；PDG 无第160行语句块，不作语句级证明。
+- Verification：文档、档案/DAG/指纹/证据 SHA256 与 diff 门禁通过；GitNexus all LOW、compare/main 累计 CRITICAL，临时扩大展示清单上限后完整重跑，无 partial/truncated，原始统计/风险一致。临时 STELLA_HOME；定向既有测试 83 passed/2 warnings，清理器 16 passed；三个合成探针确认调度旁路、取消计数、零水位清理问题，未实施修复。无生产库、模型、Bot 或平台连接。
+- Historical status：当时 GRAVITAS-IMPL 为 planned，XPLAT-IMPL 仍为 in_progress。PR #111 合并后，本轮新建 Gravitas 分支并开始实施；XPLAT 的外部验收缺口改记 blocked，不代表验收完成。
+- Historical next step：按方案 §10 从 G00 开始，先重绑 HEAD 和跑 upstream impact，再用三个子提交关闭默认 provider、waiter 回收与清理保护。当前进度见本文件上方的 Gravitas implementation。
+
+## Inherited Cross-platform Handoff
+
 ## Current Objective
 
-XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP10 已完成；WP11 的 32 项状态矩阵、OneBot V11 事件/回投夹具和本地全量 Python 回归已通过。修复提交 `1f5c900`、`54c4d4c`、`7f35347`；整体仍保持 `in_progress / NOT READY`。分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP10 已完成；WP11 的 32 项状态矩阵、OneBot V11 事件/回投夹具和本地全量 Python 回归已通过。修复提交 `1f5c900`、`54c4d4c`、`7f35347`；PR #111 已合并，因平台 live、干净 VM 与发布验收尚缺，状态为 `blocked / NOT READY`。分支 `codex/cross-platform-implementation`，原基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
 
 ## Deliverables
 

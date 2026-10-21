@@ -17,6 +17,7 @@ dependencies = [
     # WebUI（v2 面板，webui/）鉴权与上传：见 requirements.txt 内注释。
     "pyjwt>=2.8",
     "python-multipart>=0.0.9",
+    "tomli>=2.0; python_version < '3.11'",
     # zoneinfo 的 IANA 时区库。Linux 用系统 tzdata 即可；Windows 没有系统级
     # 时区数据库，缺了它 ZoneInfo("Asia/Shanghai") 直接抛错，USER_TIMEZONE
     # 会静默回退服务器本地时间（见 proactive_gate._resolve_zone）。

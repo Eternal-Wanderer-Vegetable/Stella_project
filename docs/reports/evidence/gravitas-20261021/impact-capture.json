@@ -1,0 +1,29 @@
+{
+  "target": {
+    "id": "Class:memory/capture_gate.py:CaptureGate",
+    "name": "CaptureGate",
+    "type": "Class",
+    "filePath": "memory/capture_gate.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 15,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 5,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 5,
+    "2": 8,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

@@ -23,6 +23,8 @@ from pathlib import Path
 
 from nonebot import logger
 
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
+
 # 单条消息进上下文的最大字符：再长的消息对「最近在聊什么」没有增量信息
 _PER_MESSAGE_MAX_CHARS = 80
 # 尾巴条数上限（每条已被截到 80 字符，这是第二道闸）
@@ -106,7 +108,7 @@ def _connect_readonly() -> sqlite3.Connection:
     from config import DB_PATH
 
     uri = Path(DB_PATH).resolve().as_uri() + "?mode=ro"
-    return sqlite3.connect(uri, uri=True, timeout=5.0)
+    return connect_sqlite(StorageDomain.SCHEDULING, uri, uri=True, timeout=5.0)
 
 
 def _read_summary(group_id: int, *, connection_id: str = "") -> str:

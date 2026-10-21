@@ -590,9 +590,9 @@ class RoleBackend(LLMBackend):
     角色直接拿到裸 ``LMStudioBackend``，不引入任何额外间接层（现有测试大量
     monkeypatch 后端实例，多一层包装就会失配）。
 
-    **降级调用跑在主端点的闸门里，不会再去抢第二把闸门**：同时持有两把闸门会造成
-    跨资源队头阻塞（见 ``core.llm.scheduler`` 的铁律）。代价是降级期间在线端点的
-    并发被主端点的上限限住——这个取舍是刻意的：正确性优先于降级时的吞吐。
+    Primary/fallback selection is exposed to the shared Gravitas executor. Each
+    endpoint request acquires its own slot ticket, and the primary ticket is
+    released before a fallback request is queued.
     """
 
     backend_name = "role"
@@ -624,33 +624,31 @@ class RoleBackend(LLMBackend):
         return reply
 
     async def generate_detailed(self, prompt: str, system_prompt: str = "") -> tuple[str, str]:
-        backend, degraded = self._active()
-        try:
-            result = await _detailed(backend, prompt, system_prompt)
-        except Exception as e:
-            if degraded:
-                raise
-            if not fallback_worthy(e):
-                # 配置类错误（400 请求体错、404 模型名错…）**不降级**：
-                # 换端点也一样错，降级只会掩盖它，用户看到的是「有时慢一点」
-                # 而不是「模型名填错了」。原样抛出，让真因冒到日志最上层。
-                logger.error(
-                    f"❌ [LLM] 角色 {self.role} 主端点返回配置类错误（{e}），"
-                    f"按契约**不降级**——请按上面的 HTTP 响应体修正模型名或参数。"
-                )
-                raise
-            # 主端点失败 → 立刻用降级端点重试一次，并进入冷却期，避免每条消息
-            # 都先去撞一次已经挂掉的主端点（那等于给每次回复都加上一整个超时）。
-            self._cool_until = time.monotonic() + self.cooldown
-            logger.warning(
-                f"⚠️ [LLM] 角色 {self.role} 主端点失败（{e}），"
-                f"切到降级端点并冷却 {self.cooldown:.0f}s"
-            )
-            return await _detailed(self.fallback, prompt, system_prompt)
-        if degraded:
-            # 冷却期内成功走的是降级端点，冷却到期后自动回主端点，不需要额外探活。
-            logger.debug(f"[LLM] 角色 {self.role} 正在使用降级端点")
+        from gravitas.model_calls import execute_role_model_call
+
+        result = await execute_role_model_call(self, prompt, system_prompt, detailed=True)
+        assert isinstance(result, tuple)
         return result
+
+    def attempt_plan(self) -> tuple[LLMBackend, bool]:
+        """Return the currently eligible endpoint and whether it is fallback."""
+        return self._active()
+
+    def record_attempt_result(self, endpoint: LLMBackend, error: BaseException) -> bool:
+        """Record a primary failure and authorize one configured fallback attempt."""
+        if endpoint is not self.primary or not fallback_worthy(error):
+            if endpoint is self.primary:
+                logger.error(
+                    f"❌ [LLM] 角色 {self.role} 主端点返回配置类错误（{error}），"
+                    "按契约不降级；请修正模型名或请求参数。"
+                )
+            return False
+        self._cool_until = time.monotonic() + self.cooldown
+        logger.warning(
+            f"⚠️ [LLM] 角色 {self.role} 主端点失败（{error}），"
+            f"切到降级端点并冷却 {self.cooldown:.0f}s"
+        )
+        return True
 
     def runtime_state(self) -> dict:
         """**运行期**降级状态：当前是否降级中、冷却还剩多少秒。
@@ -671,14 +669,6 @@ class RoleBackend(LLMBackend):
             "primary_slot": str(getattr(self.primary, "slot", "") or ""),
             "fallback_slot": str(getattr(self.fallback, "slot", "") or ""),
         }
-
-
-async def _detailed(backend: LLMBackend, prompt: str, system_prompt: str) -> tuple[str, str]:
-    """调后端并拿到 ``(文本, finish_reason)``；后端没有 detailed 方法时补空串。"""
-    fn = getattr(backend, "generate_detailed", None)
-    if fn is not None:
-        return await fn(prompt, system_prompt)
-    return await backend.generate(prompt, system_prompt), ""
 
 
 def _build_backend(ep: Endpoint, b: RoleBinding, role: str) -> LLMBackend:

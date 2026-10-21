@@ -99,6 +99,174 @@ def _sealed_plan(lines, trace="t1", turn="n1", conversation_key="qq:10001:group:
 
 
 class TestDeliverLines:
+    async def test_expired_turn_deadline_does_not_start_send(self, social_db):
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline
+
+        clock = system_control_clock()
+        deadline = Deadline(clock.now() - 1, clock.clock_id)
+        plan = _sealed_plan(["must not send"], "t-expired", "tn-expired")
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+
+        receipts = await deliver_lines(
+            plan, scope=SCOPE, trace_id="t-expired", turn_id="tn-expired",
+            send_one=send, deadline=deadline,
+        )
+
+        assert receipts == []
+        assert attempts == []
+        assert _rows(social_db, "SELECT status FROM social_deliveries") == []
+
+    async def test_send_deadline_after_callback_starts_is_unknown_and_stops(self, social_db):
+        import asyncio
+
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline
+
+        clock = system_control_clock()
+        deadline = Deadline(clock.now() + 0.03, clock.clock_id)
+        plan = _sealed_plan(
+            ["may have arrived", "must not start"], "t-send-deadline", "tn-send-deadline"
+        )
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+            await asyncio.sleep(1)
+            return {"message_id": 123}
+
+        receipts = await deliver_lines(
+            plan, scope=SCOPE, trace_id="t-send-deadline", turn_id="tn-send-deadline",
+            send_one=send, deadline=deadline,
+        )
+
+        assert [receipt.status for receipt in receipts] == ["unknown"]
+        assert attempts == [("may have arrived", 0)]
+        assert _rows(
+            social_db,
+            "SELECT part_index, status, platform_message_id FROM social_deliveries "
+            "WHERE turn_id='tn-send-deadline'",
+        ) == [(0, "unknown", None)]
+
+    async def test_cancelled_send_is_unknown_and_does_not_start_next_segment(self, social_db):
+        import asyncio
+
+        plan = _sealed_plan(
+            ["may have arrived", "must not start"], "t-send-cancel", "tn-send-cancel"
+        )
+        started = asyncio.Event()
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+            started.set()
+            await asyncio.sleep(1)
+
+        task = asyncio.create_task(deliver_lines(
+            plan, scope=SCOPE, trace_id="t-send-cancel", turn_id="tn-send-cancel",
+            send_one=send,
+        ))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert attempts == [("may have arrived", 0)]
+        assert _rows(
+            social_db,
+            "SELECT part_index, status FROM social_deliveries "
+            "WHERE turn_id='tn-send-cancel'",
+        ) == [(0, "unknown")]
+
+    async def test_noncooperative_timeout_quarantines_conversation(self, social_db):
+        import asyncio
+
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline
+
+        clock = system_control_clock()
+        deadline = Deadline(clock.now() + 0.03, clock.clock_id)
+        started = asyncio.Event()
+        release = asyncio.Event()
+        attempts = []
+        first_plan = _sealed_plan(
+            ["may arrive late"], "t-quarantine", "tn-quarantine"
+        )
+
+        async def noncooperative_send(line, part_index):
+            attempts.append((line, part_index))
+            started.set()
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                # Simulate an adapter that suppresses cancellation until its
+                # in-flight platform request finishes.
+                await release.wait()
+            return {"message_id": "late-id"}
+
+        try:
+            first_receipts = await deliver_lines(
+                first_plan, scope=SCOPE, trace_id="t-quarantine", turn_id="tn-quarantine",
+                send_one=noncooperative_send, deadline=deadline,
+            )
+            assert started.is_set()
+            assert [receipt.status for receipt in first_receipts] == ["unknown"]
+
+            second_plan = _sealed_plan(
+                ["do not overlap"], "t-quarantine-next", "tn-quarantine-next"
+            )
+            second_receipts = await deliver_lines(
+                second_plan, scope=SCOPE,
+                trace_id="t-quarantine-next", turn_id="tn-quarantine-next",
+                send_one=noncooperative_send,
+                deadline=Deadline(clock.now() + 5, clock.clock_id),
+            )
+            assert second_receipts == []
+            assert attempts == [("may arrive late", 0)]
+        finally:
+            release.set()
+            await asyncio.sleep(0.01)
+
+    async def test_active_send_capacity_blocks_new_callback(self, social_db, monkeypatch):
+        import asyncio
+
+        import core.social.delivery as delivery_module
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline
+
+        monkeypatch.setattr(delivery_module, "_MAX_ACTIVE_SEND_TASKS", 1)
+        clock = system_control_clock()
+        deadline = Deadline(clock.now() + 5, clock.clock_id)
+        started = asyncio.Event()
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+            started.set()
+            await asyncio.sleep(1)
+
+        first = asyncio.create_task(delivery_module.deliver_lines(
+            _sealed_plan(["first"], "t-cap-first", "tn-cap-first"),
+            scope=SCOPE, trace_id="t-cap-first", turn_id="tn-cap-first",
+            send_one=send, deadline=deadline,
+        ))
+        await started.wait()
+
+        second = await delivery_module.deliver_lines(
+            _sealed_plan(["second"], "t-cap-second", "tn-cap-second"),
+            scope=SCOPE, trace_id="t-cap-second", turn_id="tn-cap-second",
+            send_one=send, deadline=deadline,
+        )
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+
+        assert second == []
+        assert attempts == [("first", 0)]
+
     def test_delivery_draft_refuses_unknown_scope_versions(self, monkeypatch):
         from memory import scope_versions
 

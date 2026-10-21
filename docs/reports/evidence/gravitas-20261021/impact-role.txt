@@ -1,0 +1,42 @@
+{
+  "target": {
+    "id": "Class:core/llm/registry.py:RoleBackend",
+    "name": "RoleBackend",
+    "type": "Class",
+    "filePath": "core/llm/registry.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 64,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "LLMBackend is an interface with 3 implementations; callers that bind via the interface (e.g. a DI container or dynamic dispatch) are not traced to the concrete symbol — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 0,
+    "dispatchBoundary": 3,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0,
+    "callableValueReferences": 0
+  },
+  "summary": {
+    "direct": 13,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 13,
+    "2": 20,
+    "3": 31
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}
+
+  GitNexus Impact (1.6.12)

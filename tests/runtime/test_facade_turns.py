@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 import runtime_harness as harness
@@ -34,6 +35,72 @@ async def test_full_chain_single_turn(tmp_path):
         await h.stop()
 
 
+async def test_default_provider_uses_shared_chat_gate_across_conversations(
+    tmp_path, monkeypatch
+):
+    """默认真实后端必须经过进程共享的 CHAT 资源门。"""
+    import core.llm.scheduler as scheduler
+    from core.llm.registry import ROLE_CHAT, gate_of
+
+    scheduler.reset_state()
+    monkeypatch.setattr(scheduler, "_concurrency_resolver", lambda _resource: 1)
+    h = harness.RuntimeHarness(tmp_path)
+    h.facade._provider = None  # 走生产默认 provider，而不是脚本注入 provider
+
+    active = 0
+    peak = 0
+    release = asyncio.Event()
+    first_started = asyncio.Event()
+
+    async def generate(prompt: str, system_prompt: str = "") -> str:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        first_started.set()
+        try:
+            await release.wait()
+            return "<thought>ok</thought><action>NONE</action><reply>ok</reply>"
+        finally:
+            active -= 1
+
+    h.backend.generate = generate
+    resource = gate_of(ROLE_CHAT)
+    submitted: list[asyncio.Task] = []
+    try:
+        await h.start()
+        submitted.append(asyncio.create_task(
+            h.facade.submit_turn("qq:bot:group:a", h.pipeline, h.ctx("A"))
+        ))
+        await asyncio.wait_for(first_started.wait(), timeout=10.0)
+        assert active == 1
+
+        submitted.append(asyncio.create_task(
+            h.facade.submit_turn("qq:bot:group:b", h.pipeline, h.ctx("B"))
+        ))
+        second = submitted[-1]
+        queued_or_overlapped = False
+        for _ in range(1000):
+            state = scheduler.snapshot().get(resource, {})
+            if peak > 1 or state.get("waiting", 0) > 0:
+                queued_or_overlapped = True
+                break
+            if second.done():
+                break
+            await asyncio.sleep(0.01)
+
+        if not queued_or_overlapped and second.done() and not second.cancelled():
+            second.result()
+        assert queued_or_overlapped, "第二个会话既未进入后端，也未在共享资源门排队"
+        assert peak == 1, "默认 provider 并发绕过共享 CHAT 资源上限"
+        assert scheduler.snapshot()[resource]["limit"] == 1
+    finally:
+        release.set()
+        if submitted:
+            await asyncio.gather(*submitted, return_exceptions=True)
+        await h.stop()
+        scheduler.reset_state()
+
+
 async def test_provider_error_falls_back_like_legacy(tmp_path):
     """provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——兜底而非上抛。"""
 
@@ -47,6 +114,24 @@ async def test_provider_error_falls_back_like_legacy(tmp_path):
         out = await h.facade.submit_turn(KEY, h.pipeline, h.ctx())
         assert out.lines == ["......？"]
         assert [r for r in h.store_lines() if r["state"] == "provider_fallback"]
+    finally:
+        await h.stop()
+
+
+async def test_scheduler_deferral_is_recorded_as_deferred_not_provider_failure(tmp_path):
+    from gravitas.model_calls import ModelCallDeferred
+
+    async def deferred(key: str, prompt: str) -> str:
+        raise ModelCallDeferred("scheduler_queue_full")
+
+    h = harness.RuntimeHarness(tmp_path)
+    h.facade._provider = deferred
+    try:
+        await h.start()
+        out = await h.facade.submit_turn(KEY, h.pipeline, h.ctx())
+        assert out.lines == ["队列繁忙，我稍后再试。"]
+        assert [r for r in h.store_lines() if r["state"] == "deferred_fallback"]
+        assert not [r for r in h.store_lines() if r["state"] == "provider_fallback"]
     finally:
         await h.stop()
 
@@ -79,6 +164,141 @@ async def test_deadline_produces_fallback_not_hang(tmp_path):
         assert out.lines == ["......？"]
     finally:
         await h.stop()
+
+
+async def test_total_deadline_bounds_generation_below_legacy_phase_cap(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    turn_deadline = Deadline(clock.now() + 0.75, clock.clock_id)
+    h.hold_provider(KEY)
+    ctx = h.ctx("总期限短于生成阶段上限")
+    started = time.monotonic()
+    try:
+        await h.start()
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY,
+                h.pipeline,
+                ctx,
+                deadline=3.0,
+                turn_deadline=turn_deadline,
+            )
+        elapsed = time.monotonic() - started
+
+        assert h.provider_calls
+        assert ctx.turn_deadline is turn_deadline
+        assert exc.value.phase == "generate"
+        assert not [r for r in h.store_lines() if r["state"] == "provider_fallback"]
+        assert elapsed < 2.0
+    finally:
+        await h.stop()
+
+
+async def test_session_lock_wait_is_bounded_by_total_deadline(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    await h.start()
+    state = h.facade._key_state(KEY)
+    await state.lock.acquire()
+    try:
+        deadline = Deadline(clock.now() + 0.05, clock.clock_id)
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY, h.pipeline, h.ctx(), turn_deadline=deadline
+            )
+        assert exc.value.phase == "session_lock"
+        assert state.lock.locked(), "timed-out waiter released another turn's lock"
+        assert h.provider_calls == []
+    finally:
+        state.lock.release()
+        await h.stop()
+
+
+async def test_prepare_timeout_is_control_signal_and_cancels_hook(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def slow_hook(ctx):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+        return ctx
+
+    h.pipeline.register_pre_hook(slow_hook, priority=1000)
+    await h.start()
+    try:
+        deadline = Deadline(clock.now() + 0.15, clock.clock_id)
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY, h.pipeline, h.ctx(), turn_deadline=deadline
+            )
+        assert exc.value.phase == "prepare"
+        assert entered.is_set() and cancelled.is_set()
+        assert h.provider_calls == []
+    finally:
+        await h.stop()
+
+
+async def test_finalize_timeout_is_control_signal(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    entered = asyncio.Event()
+
+    async def slow_finalize(ctx):
+        entered.set()
+        await asyncio.Event().wait()
+        return ctx
+
+    h.pipeline.register_post_hook(slow_finalize, priority=200)
+    await h.start()
+    try:
+        deadline = Deadline(clock.now() + 0.4, clock.clock_id)
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY, h.pipeline, h.ctx(), turn_deadline=deadline
+            )
+        assert exc.value.phase == "finalize"
+        assert entered.is_set()
+        assert h.provider_calls
+    finally:
+        await h.stop()
+
+
+def test_model_call_context_uses_clock_that_created_total_deadline():
+    from core.llm.registry import ROLE_CHAT
+    from core.runtime.facade import new_turn_deadline
+    from gravitas.contracts import WorkClass
+    from gravitas.model_calls import role_call_context
+
+    deadline = new_turn_deadline()
+    context = role_call_context(
+        ROLE_CHAT,
+        work_class=WorkClass.INTERACTIVE,
+        tag="deadline-clock-test",
+        deadline=deadline,
+    )
+
+    assert context.clock.clock_id == deadline.clock_id
 
 
 async def test_direct_and_silent_zero_provider(tmp_path):

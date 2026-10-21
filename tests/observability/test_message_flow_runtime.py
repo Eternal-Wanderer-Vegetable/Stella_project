@@ -158,26 +158,28 @@ class TestFacadeTurnFacts:
     async def test_cancelled_turn_facts(self, flow_db, tmp_path):
         root = message_flow.begin_trace(root_kind="qq_chat", trace_id="rf-5")
         p = _pipeline(_Backend())
-        facade = RuntimeFacade(store=None, default_deadline=0.2)
+        facade = RuntimeFacade(store=None, default_deadline=30.0)
 
         import asyncio
 
         gate = asyncio.Event()
+        started = asyncio.Event()
 
         async def slow(key, prompt):
-            await asyncio.wait_for(gate.wait(), timeout=15.0)
+            started.set()
+            await gate.wait()
             return "<reply>慢</reply>"
 
         facade._provider = slow
         task = asyncio.create_task(_submit(
             facade, p, ChatContext(user_id=2, group_id=1, msg_id=4, message="x",
                                    trace_id=root.trace_id)))
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(started.wait(), timeout=2.0)
         await facade.cancel_turn("qq:1:g")
         from core.runtime.facade import RuntimeTurnError
 
         with pytest.raises(RuntimeTurnError):
-            await task
+            await asyncio.wait_for(task, timeout=2.0)
         message_flow.flush()
         nodes = _nodes(flow_db, "rf-5")
         assert ("turn.cancel", "cancelled") in nodes

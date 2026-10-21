@@ -1,0 +1,156 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "name": "lanes",
+      "type": "File",
+      "filePath": "dashboard/src/views/data/flowLayout.ts"
+    },
+    {
+      "id": "Const:dashboard/src/views/CometaPage.vue:ACTIVE_STATES",
+      "name": "ACTIVE_STATES",
+      "filePath": "dashboard/src/views/CometaPage.vue",
+      "startLine": 40,
+      "endLine": 42
+    },
+    {
+      "id": "Method:astrbot_compat/context.py:Context.activate_llm_tool#1",
+      "name": "activate_llm_tool",
+      "filePath": "astrbot_compat/context.py",
+      "startLine": 231,
+      "endLine": 234,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:astrbot_compat/context.py:Context.activate_llm_tool_async#1",
+      "name": "activate_llm_tool_async",
+      "filePath": "astrbot_compat/context.py",
+      "startLine": 241,
+      "endLine": 242
+    },
+    {
+      "id": "Method:astrbot_compat/context.py:Context.tool_loop_agent",
+      "name": "tool_loop_agent",
+      "filePath": "astrbot_compat/context.py",
+      "startLine": 373,
+      "endLine": 410,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:astrbot_compat/llm/tool.py:ToolSet.add_tool#1",
+      "name": "add_tool",
+      "filePath": "astrbot_compat/llm/tool.py",
+      "startLine": 68,
+      "endLine": 77,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:astrbot_compat/llm/tool.py:FunctionToolManager.activate_llm_tool#1",
+      "name": "activate_llm_tool",
+      "filePath": "astrbot_compat/llm/tool.py",
+      "startLine": 187,
+      "endLine": 192,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "File:astrbot_compat/llm/tool.py",
+      "name": "tool.py",
+      "filePath": "astrbot_compat/llm/tool.py"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:test_func_tool_manager_is_silently_ignored",
+      "name": "test_func_tool_manager_is_silently_ignored",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 39,
+      "endLine": 46
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:test_tool_loop_agent_helper",
+      "name": "test_tool_loop_agent_helper",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 124,
+      "endLine": 147
+    },
+    {
+      "id": "Method:tests/astrbot_compat/test_request_llm.py:Demo.run#1",
+      "name": "run",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 129,
+      "endLine": 141,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:capability/router/benchmark.py:Outcome.capability_ok#0",
+      "name": "capability_ok",
+      "filePath": "capability/router/benchmark.py",
+      "startLine": 88,
+      "endLine": 92
+    },
+    {
+      "id": "Method:capability/router/benchmark.py:Report.capability_misses#0",
+      "name": "capability_misses",
+      "filePath": "capability/router/benchmark.py",
+      "startLine": 124,
+      "endLine": 125
+    },
+    {
+      "id": "File:capability/router/benchmark.py",
+      "name": "benchmark.py",
+      "filePath": "capability/router/benchmark.py"
+    },
+    {
+      "id": "Class:tests/astrbot_compat/test_dispatch.py:GroupDemo2",
+      "name": "GroupDemo2",
+      "filePath": "tests/astrbot_compat/test_dispatch.py",
+      "startLine": 147,
+      "endLine": 154,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:tests/astrbot_compat/test_dispatch.py:GroupDemo2.tool_group#0",
+      "name": "tool_group",
+      "filePath": "tests/astrbot_compat/test_dispatch.py",
+      "startLine": 149,
+      "endLine": 150
+    },
+    {
+      "id": "Method:tests/astrbot_compat/test_dispatch.py:GroupDemo2.tool_run#1",
+      "name": "tool_run",
+      "filePath": "tests/astrbot_compat/test_dispatch.py",
+      "startLine": 153,
+      "endLine": 154
+    },
+    {
+      "id": "Method:astrbot_compat/base.py:StarTools.activate_llm_tool#1",
+      "name": "activate_llm_tool",
+      "filePath": "astrbot_compat/base.py",
+      "startLine": 322,
+      "endLine": 325,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:astrbot_compat/base.py:StarTools.activate_llm_tool_async#1",
+      "name": "activate_llm_tool_async",
+      "filePath": "astrbot_compat/base.py",
+      "startLine": 334,
+      "endLine": 335
+    },
+    {
+      "id": "File:astrbot_compat/base.py",
+      "name": "base.py",
+      "filePath": "astrbot_compat/base.py"
+    }
+  ],
+  "timing": {
+    "vector": 4.2,
+    "bm25": 742.3,
+    "merge": 0.2,
+    "symbol_lookup": 51.7,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 795.1
+  }
+}
+
+  GitNexus Query (1.6.12)

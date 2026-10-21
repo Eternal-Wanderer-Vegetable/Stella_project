@@ -376,6 +376,7 @@ def test_status_dict_shape(monkeypatch, tmp_path):
         "link",
         "scheduler",
         "usage",
+        "gravitas",
         "capabilities",
         "uptime_seconds",
         "note",
@@ -401,6 +402,7 @@ def test_status_api_unreachable(monkeypatch, tmp_path):
     assert data["link"] is None
     assert data["scheduler"] is None
     assert data["usage"] is None
+    assert data["gravitas"] is None
     assert data["uptime_seconds"] is None
 
 
@@ -416,6 +418,7 @@ def test_status_api_reachable_without_pid_file(monkeypatch, tmp_path):
                 "instance_id": process.INSTANCE_ID,
                 "link": {"healthy": True},
                 "scheduler": {},
+                "gravitas": {"mode": "shadow", "policy_revision": 7},
                 "uptime_seconds": 12.0,
             }
 
@@ -433,6 +436,7 @@ def test_status_api_reachable_without_pid_file(monkeypatch, tmp_path):
     assert data["pid_file_present"] is False
     assert data["pid"] == 99999
     assert data["link"] == {"healthy": True}
+    assert data["gravitas"] == {"mode": "shadow", "policy_revision": 7}
 
 
 def test_status_pid_file_fallback_when_api_unreachable(monkeypatch, tmp_path):

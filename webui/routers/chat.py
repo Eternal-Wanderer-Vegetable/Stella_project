@@ -136,22 +136,47 @@ async def chat(
         flow_ctx = None
 
     async def stream():
+        from core.runtime.facade import new_turn_deadline
+        from gravitas.deadlines import raise_if_expired, run_with_deadline
+        from gravitas.errors import DeadlineExceeded
         from webui.chat_ingress import run_turn
 
+        turn_deadline = new_turn_deadline(120.0)
         yield f"data: {json.dumps({'type': 'run_started', 'data': _flow_keys(flow_ctx)})}\n\n"
         deadline_span = None
         try:
             deadline_span = _flow_span(flow_ctx, "web.outer_deadline")
             deadline_span.__enter__()
-            result = await asyncio.wait_for(
-                run_turn(message, auth.username, flow_ctx=flow_ctx), timeout=120.0)
+            result = await run_with_deadline(
+                lambda: run_turn(
+                    message, auth.username, flow_ctx=flow_ctx,
+                    turn_deadline=turn_deadline,
+                ),
+                turn_deadline,
+                phase="web.response",
+            )
             payload_out = {
                 "type": "complete",
                 "data": {"lines": result["lines"], "thought": result["thought"],
                          **_flow_keys(flow_ctx)},
             }
+            raise_if_expired(turn_deadline, phase="web.response")
             deadline_span.__exit__(None, None, None)
             yield f"data: {json.dumps(payload_out, ensure_ascii=False)}\n\n"
+        except DeadlineExceeded as e:
+            if deadline_span is not None:
+                deadline_span.__exit__(DeadlineExceeded, e, e.__traceback__)
+            try:
+                from core.observability import message_flow
+
+                message_flow.decision(
+                    flow_ctx, "web.outer_deadline", status="timed_out",
+                    reason_code=f"web_deadline_{e.phase}",
+                )
+                message_flow.end_trace(flow_ctx, outcome="timed_out")
+            except Exception:
+                pass
+            yield f"data: {json.dumps({'type': 'error', 'data': {'message': '回复超时'}})}\n\n"
         except RuntimeError as e:
             if deadline_span is not None:
                 deadline_span.__exit__(RuntimeError, e, e.__traceback__)

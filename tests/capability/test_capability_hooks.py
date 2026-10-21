@@ -504,6 +504,20 @@ def test_router_entry_failure_degrades_to_memory(monkeypatch, spy_memory):
     assert ctx.route.tool is False
 
 
+def test_router_entry_deadline_control_propagates(monkeypatch, spy_memory):
+    import capability.router as router_mod
+    from gravitas.errors import DeadlineExceeded
+
+    async def expired(message, **kwargs):
+        raise DeadlineExceeded("router")
+
+    monkeypatch.setattr(router_mod, "route", expired)
+    with pytest.raises(DeadlineExceeded) as exc:
+        _run(activate_capabilities(_ctx()))
+    assert exc.value.phase == "router"
+    assert spy_memory == []
+
+
 def test_no_jobs_returns_context_unchanged(monkeypatch, stub_route, spy_memory):
     """门控开启 + 无工具：两条分支都不跑，直接返回。"""
     from config import settings

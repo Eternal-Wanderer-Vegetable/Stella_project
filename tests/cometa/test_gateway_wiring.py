@@ -140,7 +140,7 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
         def __init__(self):
             self.calls = []
 
-        async def send(self, target, message, *, bot_handle=None):
+        async def send(self, target, message, *, bot_handle=None, deadline=None):
             self.calls.append((target, message, bot_handle))
             return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("888",))
 

@@ -27,6 +27,7 @@ from core.social.contracts import (
     MessageEvidence,
     utc_now_iso,
 )
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
 from memory.timeutil import log_sqlite_error
 
 _TABLES_READY = False
@@ -37,7 +38,7 @@ def _connect() -> sqlite3.Connection:
     # 测试用 monkeypatch.setattr(config.settings, "DB_PATH", ...) 即可隔离
     from config import settings
 
-    return sqlite3.connect(settings.DB_PATH, timeout=10.0)
+    return connect_sqlite(StorageDomain.SOCIAL, settings.DB_PATH, timeout=10.0)
 
 
 def ensure_tables() -> None:

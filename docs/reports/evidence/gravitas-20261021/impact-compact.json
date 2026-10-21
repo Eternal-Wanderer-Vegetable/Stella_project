@@ -1,0 +1,75 @@
+{
+  "target": {
+    "id": "Function:memory/session_compact.py:compact_once",
+    "name": "compact_once",
+    "type": "Function",
+    "filePath": "memory/session_compact.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 9,
+  "risk": "HIGH",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 3,
+    "modules_affected": 4
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 2,
+    "3": 5
+  },
+  "affected_processes": [
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/evaluate_dialogue_attribution.py",
+      "affected_process_count": 11,
+      "total_hits": 18,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_private_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Bot_main",
+      "hits": 5,
+      "impact": "indirect"
+    },
+    {
+      "name": "Observability",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Scripts",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ]
+}

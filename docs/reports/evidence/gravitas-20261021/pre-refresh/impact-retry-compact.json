@@ -1,0 +1,9 @@
+{
+  "error": "Target 'compact_once' not found",
+  "target": {
+    "name": "compact_once"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}

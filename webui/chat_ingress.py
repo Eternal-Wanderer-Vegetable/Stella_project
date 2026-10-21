@@ -23,8 +23,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 WEBCHAT_GROUP_ID = -1
 WEBCHAT_SPACE = "webchat"
@@ -77,12 +81,23 @@ def _flow_span(flow_ctx, node_id: str, **kw):
         return contextlib.nullcontext()
 
 
-async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
+async def run_turn(
+    message: str,
+    username: str,
+    *,
+    flow_ctx=None,
+    turn_deadline: "Deadline | None" = None,
+) -> dict:
     """跑一轮 WebChat 对话，返回 {lines, thought, ts}。
 
     ``flow_ctx``：router 鉴权后建的流程 root（计划 §6.2）；缺省时这里
     兜底自建（直连调用方仍可观测）。
     """
+    from core.runtime.facade import new_turn_deadline
+    from gravitas.deadlines import lock_with_deadline, raise_if_expired
+
+    turn_deadline = turn_deadline or new_turn_deadline()
+    raise_if_expired(turn_deadline, phase="web.ingress")
     from core.context import ChatContext
     from core.social.contracts import (
         DELIVERY_ACKNOWLEDGED,
@@ -158,6 +173,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         trigger="reply",
         # 身份绑定：root 已有 trace_id 就共用（facade 不再另造，计划 §6.2）
         trace_id=getattr(flow_ctx, "trace_id", "") or new_trace_id(),
+        turn_deadline=turn_deadline,
     )
     try:
         from core.observability import message_flow
@@ -177,19 +193,27 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         )
     with _flow_span(flow_ctx, "web.space_context"):
         if capture_open:
+            raise_if_expired(turn_deadline, phase="web.input_capture")
             await record_message(ctx, capture=capture)
 
     outcome = "delivered"
     pipeline = _resolve_pipeline()
     with _flow_span(flow_ctx, "web.session_lock"):
-        async with _lock:  # 同群串行（等价群级锁语义）
+        async with lock_with_deadline(
+            _lock, turn_deadline, phase="session_lock"
+        ):  # 同群串行（等价群级锁语义）
             # 轮次经 facade（prepare/finalize 留 Python，生成是进程内 provider
             # 调用）；锁语义由 facade per-key owner 接管
             from core.runtime.facade import ensure_shared_facade_started
 
             facade = await ensure_shared_facade_started()
             try:
-                ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
+                ctx = await facade.submit_turn(
+                    WEBCHAT_CONV_KEY,
+                    pipeline,
+                    ctx,
+                    turn_deadline=turn_deadline,
+                )
             except Exception as e:
                 # reset 取消不是失败（计划 §6.9）：root 终态照实区分后原样上抛
                 cancelled = type(e).__name__ == "RuntimeTurnError" and getattr(e, "code", "") == "E_CANCELLED"
@@ -206,6 +230,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         for i, line in enumerate(lines):
             if not capture_open:
                 break
+            raise_if_expired(turn_deadline, phase="web.output_capture")
             await record_message(
                 ChatContext(
                     user_id=WEBCHAT_USER_ID,
@@ -251,6 +276,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
             conv_kind = str(getattr(ctx, "conversation_kind", "") or "webchat")
             conv_peer = str(getattr(ctx, "peer_id", "") or str(WEBCHAT_USER_ID))
             for i, line in enumerate(lines):
+                raise_if_expired(turn_deadline, phase="web.delivery_receipt")
                 social_store.record_delivery(
                     DeliveryReceipt(
                         trace_id=ctx.trace_id,
@@ -268,6 +294,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
                 )
     else:
         outcome = "empty"
+    raise_if_expired(turn_deadline, phase="web.response")
     _end_flow(flow_ctx, outcome)
     return {"lines": lines, "thought": ctx.thought}
 

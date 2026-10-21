@@ -1,0 +1,123 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:core/transport/outbound.py:OutboundService",
+    "name": "OutboundService",
+    "kind": "Class",
+    "filePath": "core/transport/outbound.py",
+    "startLine": 434,
+    "endLine": 533
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:cometa/models.py",
+        "name": "models.py",
+        "filePath": "cometa/models.py"
+      },
+      {
+        "uid": "File:core/social/delivery.py",
+        "name": "delivery.py",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "File:core/transport/__init__.py",
+        "name": "__init__.py",
+        "filePath": "core/transport/__init__.py"
+      },
+      {
+        "uid": "File:core/transport/adapters/onebot_v11.py",
+        "name": "onebot_v11.py",
+        "filePath": "core/transport/adapters/onebot_v11.py"
+      },
+      {
+        "uid": "File:core/transport/capabilities.py",
+        "name": "capabilities.py",
+        "filePath": "core/transport/capabilities.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/cometa_bridge.py",
+        "name": "cometa_bridge.py",
+        "filePath": "stella_project/plugins/bot_main/cometa_bridge.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/delivery.py",
+        "name": "delivery.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/models.py",
+        "name": "models.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/targets.py",
+        "name": "targets.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/targets.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/transport_delivery.py",
+        "name": "transport_delivery.py",
+        "filePath": "stella_project/plugins/bot_main/transport_delivery.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_bridge.py",
+        "name": "test_bridge.py",
+        "filePath": "tests/cometa/test_bridge.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_gateway_wiring.py",
+        "name": "test_gateway_wiring.py",
+        "filePath": "tests/cometa/test_gateway_wiring.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_qq_delivery.py",
+        "name": "test_qq_delivery.py",
+        "filePath": "tests/cometa/test_qq_delivery.py"
+      },
+      {
+        "uid": "File:tests/platforms/test_adapter_matrix.py",
+        "name": "test_adapter_matrix.py",
+        "filePath": "tests/platforms/test_adapter_matrix.py"
+      },
+      {
+        "uid": "File:tests/test_ai_gateway_deterministic_reply.py",
+        "name": "test_ai_gateway_deterministic_reply.py",
+        "filePath": "tests/test_ai_gateway_deterministic_reply.py"
+      },
+      {
+        "uid": "File:tests/test_private_chat_ingress.py",
+        "name": "test_private_chat_ingress.py",
+        "filePath": "tests/test_private_chat_ingress.py"
+      },
+      {
+        "uid": "File:tests/test_proactive_at_flow.py",
+        "name": "test_proactive_at_flow.py",
+        "filePath": "tests/test_proactive_at_flow.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:core/transport/outbound.py:OutboundService.__init__#1",
+        "name": "__init__",
+        "filePath": "core/transport/outbound.py"
+      },
+      {
+        "uid": "Method:core/transport/outbound.py:OutboundService.send#4",
+        "name": "send",
+        "filePath": "core/transport/outbound.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from capability.registry import CapabilityRegistry
 from capability.router.types import (
@@ -44,6 +44,10 @@ from capability.router.types import (
     Route,
     default_route,
 )
+from gravitas.errors import DeadlineExceeded
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 # 主动发言类 intent：ctx.message 是给 Stella 的任务指令，不是用户的请求。
 # 对它做能力路由是错的——「生成一句搭话」里出现「查」字不代表用户想查什么。
@@ -71,8 +75,9 @@ async def route(
     target: CapabilityRegistry | None = None,
     embedding_service=None,
     fallback_backend=None,
+    deadline: Deadline | None = None,
 ) -> Route:
-    """判定一次请求需要哪些能力。**任何情况下都返回 Route，绝不抛异常。**
+    """判定一次请求需要哪些能力；total deadline 是唯一可传播控制信号。
 
     参数:
         message: 用户消息（指令型 intent 下是任务指令，见 _INSTRUCTION_INTENTS）；
@@ -97,15 +102,27 @@ async def route(
         return result
 
     try:
-        result = await asyncio.wait_for(
-            _cascade(
+        def cascade():
+            return _cascade(
                 message,
                 target=target,
                 embedding_service=embedding_service,
                 fallback_backend=fallback_backend,
-            ),
-            timeout=s.ROUTER_TIMEOUT,
-        )
+            )
+
+        if deadline is not None:
+            from gravitas.deadlines import run_with_deadline
+
+            result = await run_with_deadline(
+                cascade,
+                deadline,
+                phase="router",
+                timeout_cap=s.ROUTER_TIMEOUT,
+            )
+        else:
+            result = await asyncio.wait_for(cascade(), timeout=s.ROUTER_TIMEOUT)
+    except DeadlineExceeded:
+        raise
     # 必须写 asyncio.TimeoutError：Python 3.10 下它与内置 TimeoutError 是两个
     # 不相干的类（3.11 起才合并），写内置的会在 3.10 上漏接。
     except asyncio.TimeoutError:

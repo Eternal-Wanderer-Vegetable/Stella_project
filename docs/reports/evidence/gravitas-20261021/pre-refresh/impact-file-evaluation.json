@@ -1,0 +1,88 @@
+{
+  "target": {
+    "id": "File:core/evaluation/runner.py",
+    "name": "runner.py",
+    "type": "File",
+    "filePath": "core/evaluation/runner.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 2,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 1,
+    "modules_affected": 4
+  },
+  "byDepthCounts": {
+    "1": 2
+  },
+  "affected_processes": [
+    {
+      "name": "Setup → _hash_password",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": null
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Cluster_653",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Memory",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Webui",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:core/evaluation/__init__.py",
+        "name": "__init__.py",
+        "filePath": "core/evaluation/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:scripts/run_flow_evaluation.py",
+        "name": "run_flow_evaluation.py",
+        "filePath": "scripts/run_flow_evaluation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}

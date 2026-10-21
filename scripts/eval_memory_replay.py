@@ -101,24 +101,6 @@ class _RecordingBackend:
         return self._queue.pop(0), "stop"
 
 
-class _TranscriptBackend:
-    """包一层真实后端：原样转发生成，同时录制回复文本（live --record）。"""
-
-    def __init__(self, inner: Any, sink: list[str]):
-        self._inner = inner
-        self._sink = sink
-        self.backend_name = getattr(inner, "backend_name", "live")
-        self.model = getattr(inner, "model", "")
-
-    async def generate_detailed(self, prompt: str) -> tuple[str, str]:
-        result, finish = await self._inner.generate_detailed(prompt)
-        self._sink.append(result)
-        return result, finish
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._inner, name)
-
-
 def _schema_conn(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.close()
@@ -418,7 +400,14 @@ def main(argv: list[str] | None = None) -> int:
                 "temperature": getattr(endpoint, "temperature", None),
             }
             transcripts: list[str] = []
-            backend = _TranscriptBackend(inner, transcripts) if args.record else inner
+            if args.record:
+                from gravitas.model_calls import observe_model_backend
+
+                backend = observe_model_backend(
+                    inner, lambda _prompt, reply, _finish: transcripts.append(reply)
+                )
+            else:
+                backend = inner
             # live 用真实装配：阶段2（EXTRACT）按当前配置解析——可用则两阶段齐全，
             # 未配置则与生产同款回退阶段1（回退事实进日志与报告，不粉饰）
             cons = MemoryConsolidator()

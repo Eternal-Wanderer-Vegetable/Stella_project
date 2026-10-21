@@ -1,0 +1,44 @@
+{
+  "target": {
+    "id": "Function:memory/db_cleaner.py:trim_group_messages",
+    "name": "trim_group_messages",
+    "type": "Function",
+    "filePath": "memory/db_cleaner.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 6,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 1,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 2,
+    "3": 2
+  },
+  "affected_processes": [
+    {
+      "name": "trim_messages_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Tests",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ]
+}

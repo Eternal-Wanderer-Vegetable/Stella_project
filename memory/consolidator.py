@@ -54,13 +54,19 @@ from config.spaces import resolve_space
 from core.llm import (
     ROLE_CONSOLIDATION,
     ROLE_EXTRACT,
-    acquire,
     backend_for,
-    gate_of,
     role_is_online,
 )
 from core.llm.base import LLMBackend
 from core.llm.usage_store import budget_blocked
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelAttemptBudgetExceededError,
+    ModelCallDeferred,
+    execute_model_call,
+    model_call_scope,
+    role_call_context,
+)
 from memory import capture_gate
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
@@ -89,6 +95,7 @@ from memory.schema import (
     ensure_v2_schema,
 )
 from memory.text_similarity import is_similar, merge_content, same_normalized_text
+from memory.timeutil import seconds_since
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
@@ -206,6 +213,13 @@ class MemoryConsolidator:
     async def _generate(
         self, group_id: int, last_id: int, force: bool = False
     ) -> tuple[str, int, str, list, list, str, list]:
+        """Share a three-request budget across batch-size truncation retries."""
+        async with model_call_scope():
+            return await self._generate_with_budget(group_id, last_id, force)
+
+    async def _generate_with_budget(
+        self, group_id: int, last_id: int, force: bool = False
+    ) -> tuple[str, int, str, list, list, str, list]:
         """调用本地 LM Studio 后端生成整合输出。
 
         force=True 时走小批次（用于 @触发/主动发言前的轻量总结）。
@@ -236,11 +250,21 @@ class MemoryConsolidator:
             prompt = self._build_prompt(group_id, messages)
             logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
             model_tag = getattr(backend, "model", "") or backend_name
-            # 只在真正调用模型的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
-            # 且绝不与别的闸门同时持有（防止跨资源队头阻塞）。
             try:
-                async with acquire(gate_of(ROLE_CONSOLIDATION), tag=f"consolidate:{group_id}"):
-                    result, finish = await backend.generate_detailed(prompt)
+                result, finish = await execute_model_call(
+                    backend,
+                    prompt,
+                    context=role_call_context(
+                        ROLE_CONSOLIDATION,
+                        work_class=WorkClass.BACKGROUND,
+                        tag="memory-consolidation",
+                    ),
+                    detailed=True,
+                )
+            except (ModelCallDeferred, ModelAttemptBudgetExceededError):
+                # Backpressure is not an endpoint failure; retain source rows and
+                # let the existing consolidator trigger retry this batch later.
+                raise
             except Exception:
                 # 真实生成/传输失败 = 探针没抓到的瞬时故障：立即关记忆采集门
                 # （epoch 围栏让在途旧探针翻不了案，计划 §6.1）。截断异常在
@@ -341,8 +365,22 @@ class MemoryConsolidator:
         prompt = format_extraction_prompt(sliced)
         logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
         try:
-            async with acquire(gate_of(ROLE_EXTRACT), tag=f"extract:{group_id}"):
-                result, finish = await backend.generate_detailed(prompt)
+            result, finish = await execute_model_call(
+                backend,
+                prompt,
+                context=role_call_context(
+                    ROLE_EXTRACT,
+                    work_class=WorkClass.BACKGROUND,
+                    tag="memory-extraction",
+                ),
+                detailed=True,
+            )
+        except ModelCallDeferred as exc:
+            logger.info("[Extractor] 阶段2 因共享模型队列满而延期，回退阶段1 候选")
+            append_consolidation_log(
+                f" > 阶段2（提取）已延期（{exc.reason_code}），回退阶段1 候选\n"
+            )
+            return None
         except Exception:
             logger.exception("❌ [Extractor] 阶段2 提取调用失败，回退阶段1 候选")
             append_consolidation_log(" > ❌ 阶段2（提取）调用失败，回退阶段1 候选\n")
@@ -709,6 +747,32 @@ class MemoryConsolidator:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
+                from gravitas.controller import active_controller
+
+                pressure_controller = active_controller()
+                if pressure_controller is not None and new_count > 0:
+                    oldest_age = self.oldest_pending_age_seconds(group_id)
+                    resource_id = role_call_context(
+                        ROLE_CONSOLIDATION,
+                        work_class=WorkClass.BACKGROUND,
+                        tag="memory-consolidation-pressure",
+                    ).resource_group_id
+                    admission = pressure_controller.admit_background(
+                        resource_id,
+                        oldest_age_seconds=oldest_age,
+                        integrity_ok=pressure_controller.integrity_is_trusted(
+                            resource_id
+                        ),
+                    )
+                    if not admission.allowed:
+                        _flow_decision(
+                            mctx,
+                            "consolidate.preflight",
+                            status="deferred",
+                            reason_code=admission.reason_code,
+                        )
+                        return "deferred_pressure"
+
                 # 积压可观测性：checkpoint 已由 db_cleaner 保证在范围内，
                 # 因此这里的大数是「整合跟不上摄入」而非越界。
                 if new_count > CONSOLIDATION_BACKLOG_WARN:
@@ -1043,6 +1107,28 @@ class MemoryConsolidator:
     def backlog(self, group_id: int) -> int:
         """该群当前积压的未整合消息数。"""
         return self._count_new_messages(group_id, self._get_last_processed_id(group_id))
+
+    def oldest_pending_age_seconds(self, group_id: int) -> float | None:
+        """Age of the oldest unprocessed source row; unknown remains unknown."""
+        try:
+            last_id = self._get_last_processed_id(group_id)
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                cursor = conn.cursor()
+                table = self._get_message_table(cursor)
+                cursor.execute(
+                    f"SELECT MIN(timestamp) FROM {table} WHERE group_id = ? AND id > ?",
+                    (str(group_id), last_id),
+                )
+                row = cursor.fetchone()
+            finally:
+                conn.close()
+        except (sqlite3.Error, ValueError, TypeError):
+            return None
+        if not row or not row[0]:
+            return 0.0
+        age = seconds_since(row[0])
+        return age if age is not None and age >= 0 else None
 
     def _fetch_next_messages(
         self, group_id: int, last_id: int, limit: int

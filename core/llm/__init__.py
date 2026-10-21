@@ -7,9 +7,8 @@
 
 - **构造后端**：``backend_for(ROLE_CHAT)``。全项目只从这一处拿后端实例，
   「换成在线模型」于是变成改 ``.env`` 而不是改六处代码。
-- **排队**：``async with acquire(gate_of(ROLE_CHAT), tag=...)``。闸门资源名就是
-  端点槽名，因此「哪些角色互相串行」完全由端点绑定决定——两个角色绑同一个槽就
-  共用一把闸门，绑不同槽就真正并行。
+- **应用模型尝试**：生产调用经 ``gravitas.model_calls`` 声明资源组、工作类别、
+  会话排队键和单次尝试票据。低层 ``acquire`` 仍保留给调度器适配与兼容代码。
 
 ``chat_llm_lock`` / ``consolidation_llm_lock`` 是旧锁用法的兼容别名，**新代码不要用**：
 它们拿不到调用方的用途标签，日志里分不清是哪个群、哪个任务在持有闸门。
@@ -97,6 +96,6 @@ class _LockAlias:
         return await cm.__aexit__(exc_type, exc, tb)
 
 
-# 兼容别名：旧代码继续 `async with chat_llm_lock:`；新代码直接用 acquire()
+# 兼容别名：旧代码继续 `async with chat_llm_lock:`；生产模型调用使用 model_calls。
 chat_llm_lock = _LockAlias(ROLE_CHAT, "legacy:chat")
 consolidation_llm_lock = _LockAlias(ROLE_CONSOLIDATION, "legacy:consolidation")

@@ -11,6 +11,8 @@ import pytest
 
 from core.context import ChatContext, MessageIdentityEnvelope
 from core.transport.models import BotRef, SceneRef, UserRef
+from gravitas.clock import system_control_clock
+from gravitas.contracts import Deadline
 
 
 def test_v7_projection_roundtrips_refs_and_keeps_row_id_separate():
@@ -54,6 +56,23 @@ def test_v7_projection_roundtrips_refs_and_keeps_row_id_separate():
     envelope = MessageIdentityEnvelope.from_context(restored)
     assert envelope.platform_message_id == "msg:007/猫"
     assert envelope.recorded_row_id == 903
+
+
+def test_runtime_deadline_is_not_part_of_context_projection():
+    clock = system_control_clock()
+    context = ChatContext(
+        user_id=1001,
+        group_id=0,
+        msg_id=1,
+        message="transient control state",
+        turn_deadline=Deadline(clock.now() + 30.0, clock.clock_id),
+    )
+
+    projection = context.to_json_projection()
+    restored = ChatContext.from_json_projection(projection)
+
+    assert "turn_deadline" not in projection
+    assert restored.turn_deadline is None
 
 
 def test_v6_projection_reads_only_confirmed_legacy_fields():

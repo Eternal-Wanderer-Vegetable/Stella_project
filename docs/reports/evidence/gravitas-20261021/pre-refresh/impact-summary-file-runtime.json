@@ -1,0 +1,59 @@
+{
+  "target": {
+    "id": "File:core/runtime/facade.py",
+    "name": "facade.py",
+    "type": "File",
+    "filePath": "core/runtime/facade.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 9,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 3,
+    "processes_affected": 0,
+    "modules_affected": 4
+  },
+  "byDepthCounts": {
+    "1": 3,
+    "2": 4,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Tests",
+      "hits": 6,
+      "impact": "direct"
+    },
+    {
+      "name": "Cometa",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Stores",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Webui",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ]
+}

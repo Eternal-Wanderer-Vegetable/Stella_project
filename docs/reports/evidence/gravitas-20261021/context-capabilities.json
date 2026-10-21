@@ -1,0 +1,198 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:capability/hooks.py:activate_capabilities",
+    "name": "activate_capabilities",
+    "kind": "Function",
+    "filePath": "capability/hooks.py",
+    "startLine": 383,
+    "endLine": 476
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_both_branches_run_concurrently",
+        "name": "test_both_branches_run_concurrently",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_comes_failure_does_not_kill_memory",
+        "name": "test_comes_failure_does_not_kill_memory",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_comes_runs_and_fills_summaries",
+        "name": "test_comes_runs_and_fills_summaries",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_comes_skipped_when_compat_disabled",
+        "name": "test_comes_skipped_when_compat_disabled",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_comes_skipped_when_disabled",
+        "name": "test_comes_skipped_when_disabled",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_comes_skipped_without_platform_handles",
+        "name": "test_comes_skipped_without_platform_handles",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_deterministic_failure_populates_safe_unavailable_reply",
+        "name": "test_deterministic_failure_populates_safe_unavailable_reply",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_deterministic_missing_input_populates_clarification_reply",
+        "name": "test_deterministic_missing_input_populates_clarification_reply",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_deterministic_result_populates_direct_reply",
+        "name": "test_deterministic_result_populates_direct_reply",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_failed_results_do_not_reach_the_prompt",
+        "name": "test_failed_results_do_not_reach_the_prompt",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_intent_and_trigger_are_passed_to_router",
+        "name": "test_intent_and_trigger_are_passed_to_router",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_memory_failure_does_not_kill_comes",
+        "name": "test_memory_failure_does_not_kill_comes",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_memory_runs_when_gate_disabled",
+        "name": "test_memory_runs_when_gate_disabled",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_memory_runs_when_gate_enabled_and_route_wants_it",
+        "name": "test_memory_runs_when_gate_enabled_and_route_wants_it",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_memory_skipped_when_gate_enabled",
+        "name": "test_memory_skipped_when_gate_enabled",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_no_jobs_returns_context_unchanged",
+        "name": "test_no_jobs_returns_context_unchanged",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_route_is_stored_on_context",
+        "name": "test_route_is_stored_on_context",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_router_entry_failure_degrades_to_memory",
+        "name": "test_router_entry_failure_degrades_to_memory",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_skills_branch_failure_does_not_block_memory",
+        "name": "test_skills_branch_failure_does_not_block_memory",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_skills_browse_mode_records_candidates_without_execution",
+        "name": "test_skills_browse_mode_records_candidates_without_execution",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_skills_disabled_by_default",
+        "name": "test_skills_disabled_by_default",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_skills_enabled_without_runtime_noops",
+        "name": "test_skills_enabled_without_runtime_noops",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      },
+      {
+        "uid": "Function:tests/capability/test_capability_hooks.py:test_skills_sandbox_mode_writes_bounded_outputs",
+        "name": "test_skills_sandbox_mode_writes_bounded_outputs",
+        "filePath": "tests/capability/test_capability_hooks.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:capability/delegation.py:handle_delegation_turn",
+        "name": "handle_delegation_turn",
+        "filePath": "capability/delegation.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_check_memory_isolation",
+        "name": "_check_memory_isolation",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_logger",
+        "name": "_logger",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_retrieve_memory",
+        "name": "_retrieve_memory",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_run_comes",
+        "name": "_run_comes",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_run_skills",
+        "name": "_run_skills",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/hooks.py:_settings",
+        "name": "_settings",
+        "filePath": "capability/hooks.py"
+      },
+      {
+        "uid": "Function:capability/router/__init__.py:route",
+        "name": "route",
+        "filePath": "capability/router/__init__.py"
+      },
+      {
+        "uid": "Function:capability/router/types.py:default_route",
+        "name": "default_route",
+        "filePath": "capability/router/types.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:core/context.py:ChatContext.route",
+        "name": "route",
+        "filePath": "core/context.py"
+      }
+    ]
+  },
+  "processes": []
+}

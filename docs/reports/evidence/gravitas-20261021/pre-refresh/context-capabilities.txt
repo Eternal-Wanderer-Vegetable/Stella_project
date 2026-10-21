@@ -1,0 +1,5 @@
+{
+  "error": "Symbol 'activate_capabilities' not found"
+}
+
+  GitNexus Context (1.6.12)

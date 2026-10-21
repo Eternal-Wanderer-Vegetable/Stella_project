@@ -1,0 +1,160 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Function:memory/embeddings.py:_maybe_gate",
+      "name": "_maybe_gate",
+      "filePath": "memory/embeddings.py",
+      "startLine": 81,
+      "endLine": 99,
+      "module": "Tests"
+    },
+    {
+      "id": "Method:memory/embeddings.py:EmbeddingService._request_embedding#3",
+      "name": "_request_embedding",
+      "filePath": "memory/embeddings.py",
+      "startLine": 126,
+      "endLine": 144,
+      "module": "Tests"
+    },
+    {
+      "id": "File:memory/embeddings.py",
+      "name": "embeddings.py",
+      "filePath": "memory/embeddings.py"
+    },
+    {
+      "id": "Function:tests/test_llm_registry.py:test_embedding_shares_the_local_gate_by_default",
+      "name": "test_embedding_shares_the_local_gate_by_default",
+      "filePath": "tests/test_llm_registry.py",
+      "startLine": 163,
+      "endLine": 165
+    },
+    {
+      "id": "Function:tests/test_llm_registry.py:test_the_hot_path_never_accumulates_issues",
+      "name": "test_the_hot_path_never_accumulates_issues",
+      "filePath": "tests/test_llm_registry.py",
+      "startLine": 656,
+      "endLine": 662,
+      "module": "Llm"
+    },
+    {
+      "id": "Function:tests/test_llm_registry.py:test_embedding_gate_is_reported_as_none_not_blank",
+      "name": "test_embedding_gate_is_reported_as_none_not_blank",
+      "filePath": "tests/test_llm_registry.py",
+      "startLine": 1023,
+      "endLine": 1026
+    },
+    {
+      "id": "Function:tests/test_env_merge.py:test_superseded_key_value_is_converted_not_dropped",
+      "name": "test_superseded_key_value_is_converted_not_dropped",
+      "filePath": "tests/test_env_merge.py",
+      "startLine": 133,
+      "endLine": 150,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_env_merge.py:test_explicit_new_key_beats_converted_old_value_in_both_orders",
+      "name": "test_explicit_new_key_beats_converted_old_value_in_both_orders",
+      "filePath": "tests/test_env_merge.py",
+      "startLine": 162,
+      "endLine": 176,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_env_merge.py:test_real_env_example_migrates_the_superseded_gate_key_in_place",
+      "name": "test_real_env_example_migrates_the_superseded_gate_key_in_place",
+      "filePath": "tests/test_env_merge.py",
+      "startLine": 272,
+      "endLine": 283,
+      "module": "Tests"
+    },
+    {
+      "id": "Class:core/llm/__init__.py:_LockAlias",
+      "name": "_LockAlias",
+      "filePath": "core/llm/__init__.py",
+      "startLine": 67,
+      "endLine": 97
+    },
+    {
+      "id": "Method:core/llm/__init__.py:_LockAlias.__aenter__#0",
+      "name": "__aenter__",
+      "filePath": "core/llm/__init__.py",
+      "startLine": 89,
+      "endLine": 93,
+      "module": "Tests"
+    },
+    {
+      "id": "File:core/llm/__init__.py",
+      "name": "__init__.py",
+      "filePath": "core/llm/__init__.py"
+    },
+    {
+      "id": "Function:core/llm/registry.py:embedding_gate",
+      "name": "embedding_gate",
+      "filePath": "core/llm/registry.py",
+      "startLine": 522,
+      "endLine": 554,
+      "module": "Llm"
+    },
+    {
+      "id": "Function:core/llm/registry.py:_embedding_gate_warnings",
+      "name": "_embedding_gate_warnings",
+      "filePath": "core/llm/registry.py",
+      "startLine": 803,
+      "endLine": 814,
+      "module": "Llm"
+    },
+    {
+      "id": "File:core/llm/registry.py",
+      "name": "registry.py",
+      "filePath": "core/llm/registry.py"
+    },
+    {
+      "id": "Function:tests/test_cost_gates.py:test_new_topic_is_not_skipped",
+      "name": "test_new_topic_is_not_skipped",
+      "filePath": "tests/test_cost_gates.py",
+      "startLine": 133,
+      "endLine": 135,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_cost_gates.py:test_vector_decides_when_available",
+      "name": "test_vector_decides_when_available",
+      "filePath": "tests/test_cost_gates.py",
+      "startLine": 145,
+      "endLine": 152,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_cost_gates.py:test_embedding_failure_never_breaks_the_gate",
+      "name": "test_embedding_failure_never_breaks_the_gate",
+      "filePath": "tests/test_cost_gates.py",
+      "startLine": 163,
+      "endLine": 176
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_request_llm.py:test_plugin_llm_still_goes_through_the_scheduler",
+      "name": "test_plugin_llm_still_goes_through_the_scheduler",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 240,
+      "endLine": 274
+    },
+    {
+      "id": "Property:tests/astrbot_compat/test_request_llm.py:test_plugin_llm_still_goes_through_the_scheduler.acquired@252:4",
+      "name": "acquired",
+      "filePath": "tests/astrbot_compat/test_request_llm.py",
+      "startLine": 253,
+      "endLine": 253
+    }
+  ],
+  "timing": {
+    "vector": 4.3,
+    "bm25": 494.9,
+    "merge": 0.2,
+    "symbol_lookup": 38.9,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 535.1
+  }
+}

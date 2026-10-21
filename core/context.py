@@ -11,9 +11,12 @@ thought/action/reply、多行回复）以及供日志与 prompt 构建用的诊�
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.transport.models import BotRef, SceneRef, UserRef
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 # 消息身份信封的边界值（多人身份修复计划 §6.2 字段规格）
 _ENVELOPE_DISPLAY_NAME_MAX = 64
@@ -191,7 +194,8 @@ class ChatContext:
     recorded_row_id: int = 0  # record_message 写入后的行 id（0=未入库）
     # 采集结果码（记忆采集就绪门，memory.capture_gate）："" = 调用方未给采集
     # 决策（遗留/显式调用）；"captured" = 已落库；"not_captured_unavailable" =
-    # 门关闭未落库（不排队不回放）。消费方据此区分「拒绝」与「写失败」。
+    # 可用性门关闭；"not_captured_pressure" = backlog pressure cap 在写入前拒采。
+    # 两种拒绝都不排队不回放。消费方据此区分「拒绝」与「写失败」。
     capture_result: str = ""
     relation_version: int = 0  # 信封写入时的关系 schema 版本（0=无关系）
     identity_revision: int = 0  # 会话身份版本快照（M3 写入；缓存/CAS 用）
@@ -356,6 +360,8 @@ class ChatContext:
     # 上下文为空串。两者都是安全标量，可进投影；raw_event/bot 仍然永不过桥。
     trace_id: str = ""
     turn_id: str = ""
+    # Runtime-only deadline; deliberately excluded from _PROJECTION_FIELDS.
+    turn_deadline: "Deadline | None" = field(default=None, repr=False, compare=False)
     # 本轮 social 插槽的预算快照（选中/注入/裁剪明细，计划 §6.5）：
     # JSON 字符串，由 core.social.context_builder 写入，供追踪与审计。
     social_context_snapshot: str = ""

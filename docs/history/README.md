@@ -21,5 +21,6 @@
 | 私聊与个人记忆 | [计划](../plans/2026-10-03-gitnexus-plan-qq-private-personal-memory.md)、[检查清单](../reports/2026-10-03-qq-private-personal-memory-checklist.md) |
 | Windows 安装可靠性 | [安装计划](../plans/2026-09-28-gitnexus-plan-nsis-installation-reliability.md)、[VM 矩阵](../../release_assets/VM-MATRIX.md) |
 | 文档结构迁移 | [2026-10-10 整理报告](../reports/2026-10-10-documentation-restructure.md) |
+| Gravitas 稳态系统 | [工程方案](../plans/2026-10-21-gravitas-engineering-plan.md)、[工作包与源码清单](../plans/2026-10-21-gravitas-inventory.json)、[GitNexus 证据](../reports/evidence/gravitas-20261021/README.md)；方案完成，实施与运行验收 NOT READY |
 
 不复制或重写历史正文。新增后续结论放日期报告，在此导航中补链接；未入库的本地材料不作为新文档的唯一依赖。

@@ -1,0 +1,14 @@
+
+  Indexed Repositories (1)
+
+  Stella_project
+    Path:    /home/vegetable/repos/Stella
+    Indexed: 10/21/2026, 5:20:48 PM
+    Commit:  2b69402
+    Branch:  codex/cross-platform-implementation
+    Stats:   1423 files, 99449 symbols, 246820 edges
+    Clusters:   1040
+    Processes:  823
+
+
+  GitNexus List (1.6.12)
