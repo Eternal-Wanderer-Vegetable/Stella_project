@@ -162,6 +162,25 @@ jobs:
             --timeout=120 \
             --timeout-method=thread
 
+      - uses: pnpm/action-setup@v4
+        if: matrix.python-version == '3.11'
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        if: matrix.python-version == '3.11'
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Build and sync Dashboard assets for release package smoke
+        if: matrix.python-version == '3.11'
+        run: |
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard build
+          pnpm --dir dashboard sync:webui
+
       - name: Run Gravitas V1 fake acceptance and package import smoke (Python 3.11)
         if: matrix.python-version == '3.11'
         env:
