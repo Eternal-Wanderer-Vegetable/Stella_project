@@ -51,7 +51,9 @@
       "name": "NoneBot 跨平台接入实施",
       "description": "按 GitNexus 方案顺序执行 WP00–WP11，逐阶段提交；平台 live/发布认证仅凭真实验收记录通过。",
       "status": "in_progress",
-      "dependencies": ["XPLAT-PLAN"],
+      "dependencies": [
+        "XPLAT-PLAN"
+      ],
       "scope": [
         "core/transport/ 与会话/上下文合同",
         "memory 注册、迁移、后端和权限边界",
@@ -116,6 +118,11 @@
           "command": "WP07: GitNexus 1.6.11 upstream impact + dynamic-registration/source audit; scheduling/proactive/context/Cometa targeted pytest; changed-file Ruff; generate_message_flow.py + --check; docs gate; GitNexus detect-changes all/compare main",
           "result": "Implemented in 7bea280: exact versioned BotRef/DeliveryTarget binding for scheduling, Cometa, and proactive background sends. Scheduling SQL schema 1→2 binds only verifiable legacy QQ task routes and isolates legacy quota; Cometa Origin v2→v3 validates BotRef/target consistency. Regression: 401 combined scheduling/proactive/context tests, 194 Cometa passed/7 skipped excluding worker, 79 Cometa targeted, 67 identity/outbound. Ruff, 119-file docs check (1223 links/577 anchors/0 errors), regenerated message-flow check, and diff check passed. GitNexus all 31 files/162 symbols/36 flows/CRITICAL; compare main 287 files/908 symbols/102 flows/CRITICAL; no partial/truncated. Broad Cometa suite hung beyond 8 minutes (180 passed/7 skipped at interrupt), NOT READY. STELLA_HOME unset; only temporary test data; no Bot/platform/live/release/clean-VM acceptance.",
           "report": "docs/reports/2026-10-21-wp07-background-recovery.md"
+        },
+        {
+          "command": "WP08: GitNexus 1.6.11 upstream impact + dynamic-filter/source audit; astrbot_compat/capability targeted pytest; Ruff; docs/flow gates; GitNexus detect-changes all/compare main",
+          "result": "Implemented in 8e3466e: AstrBot dispatch/tool event construction requires a verified OneBot v11 Bot; common message-chain conversion is adapter-neutral while QQ API/send stays OneBot-only; platform filters use adapter type names, and Context.send_message fails closed on ambiguous OneBot Bot registries. Targeted tests: 373 passed; Ruff passed; docs 119 files/1223 links/577 anchors/0 errors; message-flow manifest 9b80952673b2 passed check (141 nodes, 139 source-resolved, 8973 closure sites, 11899 reachable symbols). GitNexus all 14 files/60 symbols/5 processes/MEDIUM; compare main 300 files/971 symbols/107 processes/CRITICAL. CLI emitted no partial/truncated status fields. Full Python, non-OneBot live, QQ live, clean VM, and release acceptance remain NOT READY; STELLA_HOME unset and tests used temporary/fixture data.",
+          "report": "docs/reports/2026-10-21-wp08-astrbot-compat.md"
         }
       ]
     },

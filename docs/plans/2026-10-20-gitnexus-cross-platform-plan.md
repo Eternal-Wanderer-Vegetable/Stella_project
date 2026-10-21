@@ -3,7 +3,7 @@
 - 日期：2026-10-20，Asia/Shanghai。
 - 源码基线：`main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`；工作区 `/home/vegetable/repos/Stella`。
 - 规划阶段交付：本地 GitNexus 代码图谱、原始查询证据、改造清单及执行方案；当时未实施业务改造。
-- 实施状态：2026-10-21；WP00–WP07 完成，下一阶段 WP08。计划完成不代表平台支持、数据迁移或发布验收完成。
+- 实施状态：2026-10-21；WP00–WP08 完成，下一阶段 WP09。计划完成不代表平台支持、数据迁移或发布验收完成。
 - 证据目录：[cross-platform-20261020](../reports/evidence/cross-platform-20261020/README.md)。逐文件清单、50 个入口、32 个适配器矩阵见[执行附录](2026-10-20-cross-platform-inventory.md)。
 
 ## 1. 目标与可验收边界
@@ -185,6 +185,7 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | WP05 通用入口与命令 | done | [WP05 实施记录](../reports/2026-10-21-wp05-ingress-admission.md)：OneBot/通用 NoneBot normalizer、共享 admission、WebChat 可信身份、群入口注册、vision 与 AstrBot adapter guard；定向回归 214 passed。线程/频道新 adapter、平台 live 与发布验收仍未完成。 |
 | WP06 消息、媒体及统一发送 | done | [WP06 实施记录](../reports/2026-10-21-wp06-outbound-delivery.md)：新增版本化出站消息/目标、媒体与能力合同、OneBot v11 UniMessage codec、按能力降级/限长拆分/逐物理段结果；群/私聊、Cometa ack、主动发言和能力清单接入统一服务。social schema 4→5 保存不透明 ID 列表；相关回归 138 passed。平台 live、全量 Python 与发布验收仍未完成。 |
 | WP07 后台目标与任务恢复 | done | [WP07 实施记录](../reports/2026-10-21-wp07-background-recovery.md)：后台目标绑定 BotRef/DeliveryTarget，Scheduling SQL 1→2 只为可验证的旧 QQ 任务补目标；旧配额隔离；Cometa Origin JSON 2→3，并保留 CAS、租约和 unknown 不重投。定向回归 401 passed；Cometa 除 worker 挂起用例外 194 passed/7 skipped。worker 用例超 8 分钟无进展后中断，整体和 live/发布验收仍 NOT READY。 |
+| WP08 AstrBot 兼容 | done | [WP08 实施记录](../reports/2026-10-21-wp08-astrbot-compat.md)：分发与工具事件构造均验证 OneBot v11 Bot；通用链转换；平台过滤按 adapter 类型名；Context 对多 OneBot Bot 歧义 fail closed。定向回归 373 passed，Ruff、文档与 flow 门禁通过。非 OneBot live、插件底层 API 仿真和发布验收未完成。 |
 
 其他工作包仍为 planned；本表只在阶段实现、回归与提交后更新状态。
 

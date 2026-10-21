@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP07 已完成，下一步 WP08；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `7bea280`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)与[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP08 已完成，下一步 WP09；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `8e3466e`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)与[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -85,6 +85,14 @@
 - 编辑前 GitNexus upstream impact 与源码补查见 WP07 报告；高风险 Origin 调用链未扩大其 schema 兼容边界。提交前 GitNexus 1.6.11 scope all：31 files / 162 symbols / 36 flows / CRITICAL；compare main：287 files / 908 symbols / 102 flows / CRITICAL；均未标 partial/truncated。累计 compare 风险包含 WP00–WP07。
 - 定向回归：调度/主动与上下文组合 401 passed；Cometa 目录忽略 worker 用例 194 passed / 7 skipped；身份和出站 67 passed。`tests/cometa/test_worker.py` 在全目录命令中运行超过 8 分钟无进展后被中断（此前已记录该用例 30 秒隔离重现挂起），因此全目录/全量 pytest 没有通过声明。改动 Python Ruff、`git diff --check` 与重生成后的 message-flow manifest 检查通过。
 - `STELLA_HOME` 未设置；pytest 使用临时隔离数据，未读写生产库或运行真实 Bot/模型/平台。live、发布、clean VM 及 Cometa worker 挂起缺口保留，整体 NOT READY。下一阶段 WP08。
+
+## 2026-10-21 — Cross-platform implementation (WP08)
+
+- 实现提交 `8e3466e`：AstrBot 分发与 capability 工具入口都验证 OneBot v11 Bot；其他 adapter 不进入 QQ API 插件路径。通用 `type/data` 与文本链转换加入兼容层；发送仍明确走 OneBot codec。
+- `PlatformAdapterTypeFilter` 按 platform/adapter 名称匹配，不把唯一配置实例 ID 当类型。`Context.send_message` 限定 OneBot 群/私聊，并仅在 Bot 注册表中存在唯一 OneBot 实例时投递；多 OneBot 时 fail closed。
+- 编辑前 `build_event` upstream impact 为 HIGH（5 impacted / 2 direct，命中 `handle_plugin` 流程）；其他关键事件、分发、转换与 Context 目标 LOW。filter 图为 UNKNOWN/0 静态调用，已由 pipeline 动态 `.filter()` 调用与装饰器注册源码补证。提交前 GitNexus 1.6.11 all：14 files / 60 symbols / 5 processes / MEDIUM；compare main：300 files / 971 symbols / 107 processes / CRITICAL。固定 `.gitnexus/gn` 启动器通过；仓库 `run.cjs` 指向 1.6.12 且与本地图存储版本不兼容。
+- 定向回归 373 passed；Ruff、`check_docs.py`（119 files / 1,223 links / 577 anchors / 0 errors）、message-flow 检查与 `git diff --check` 通过。新增 `message-flow.9b80952673b2.json`（141 nodes / 139 source-resolved / 8,973 closure sites / 11,899 reachable symbols）。
+- `STELLA_HOME` 未设置；测试使用临时/fixture 数据，未读写生产库或运行 Bot、真实模型和平台。插件底层 API 仿真不在范围内；QQ 灰度、其他平台 live、发布、clean VM 与全量 Python 验收缺口保留，整体 NOT READY。下一阶段 WP09。
 
 ## What's Done
 
