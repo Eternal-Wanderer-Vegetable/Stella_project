@@ -13,8 +13,8 @@ ack 通知做 ``pending → sending`` 的 CAS 竞争，谁先认领谁发送，�
 
 长结果投递（§6.12 附件交付，2026-10-01 依用户决策实现）：final 结果的完整
 文本超过阈值时，**上传 .md 文件为主**（QQ 原生渲染 Markdown），合并转发
-消息兜底，纯文本摘要垫底；任何一级失败自动降级，封面文本始终报告结果并
-如实说明完整内容是否送达。
+消息兜底，纯文本摘要垫底；只有平台明确拒绝时才降级。超时或结果不明会停止
+后续发送，避免重复投递；封面文本如实说明完整内容是否送达。
 """
 
 from __future__ import annotations
@@ -26,18 +26,20 @@ from pathlib import Path
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 
+from core.transport.models import BotRef, SceneRef
+from core.transport.outbound import DeliveryTarget
+
 AckSender = Callable[[str], Awaitable[str | None]]
 
 
 def build_origin(event: MessageEvent, bot, *, instance_id: str) -> dict | None:
-    """从真实消息事件构造可信 Origin dict v2（方案 §6.1，计划 §6.8）。
+    """从真实消息事件构造可信 Origin dict v3（方案 §6.1，计划 §6.8）。
 
     只在用户显式触达路径（群 @ / 私聊消息）调用；被动摄入与主动发言路径不会
     构造 Origin——这是「委派只由用户显式请求触发」的入口保证（§6.4.1）。
 
-    v2 携带完整会话身份：群会话 conversation_id 保持旧口径（群号字符串，
-    旧任务行兼容），私聊会话 conversation_id 用规范会话键；kind/peer/键是
-    持久投递地址的真相源。
+    v3 持久化完整 BotRef 与 DeliveryTarget。conversation_id 保持历史显示/查询
+    口径；后台投递只认版本化 target，不从 conversation_id 或模型文本猜路由。
     """
     if not instance_id:
         return None
@@ -50,20 +52,25 @@ def build_origin(event: MessageEvent, bot, *, instance_id: str) -> dict | None:
         kind = "private"
         conversation_id = f"qq:{bot_id}:private:{peer}"
     conversation_key = f"qq:{bot_id}:{kind}:{peer}"
-    return {
-        "origin_schema_version": 2,
-        "instance_id": instance_id,
-        "platform": "qq",
-        "bot_id": bot_id,
-        "conversation_id": conversation_id,
-        "requester_id": str(event.user_id),
-        "source_request_id": f"msg-{event.message_id}",
-        "reply_to_message_id": str(event.message_id),
-        "conversation_generation": 1,
-        "conversation_kind": kind,
-        "peer_id": peer,
-        "conversation_key": conversation_key,
-    }
+    bot_ref = BotRef(f"legacy-qq:{bot_id}", "onebot-v11", "qq", bot_id)
+    target = DeliveryTarget(bot=bot_ref, scene=SceneRef(kind, peer))
+    from cometa.models import Origin
+
+    return Origin(
+        instance_id=instance_id,
+        platform="qq",
+        bot_id=bot_id,
+        conversation_id=conversation_id,
+        requester_id=str(event.user_id),
+        source_request_id=f"msg-{event.message_id}",
+        reply_to_message_id=str(event.message_id),
+        conversation_generation=1,
+        conversation_kind=kind,
+        peer_id=peer,
+        conversation_key=conversation_key,
+        bot_ref=bot_ref,
+        target=target,
+    ).to_dict()
 
 
 async def deliver_ack(submission: dict, send: AckSender) -> str:
@@ -165,108 +172,148 @@ def make_notification_sender(
     2. **合并转发消息**（兜底）：NapCat 扩展 API，切段器分 node；
     3. **纯文本摘要**（垫底）：现行行为，封面文本注明完整内容未送达。
 
-    每一级先于发送探测 bot 在线（离线 → SenderUnavailable → 泵退避重试，
-    那时尚无任何调用发生）。
+    每一级先于发送探测精确 Bot 在线（离线 → SenderUnavailable → 泵退避重试，
+    那时尚无任何平台调用）。平台明确 ActionFailed 才进入下一级；超时和通用异常
+    作为 delivery_unknown 终态，不再尝试另一条发送路径。
     """
     artifacts_dir = Path(artifacts_dir)
     long_result = getattr(delivery_config, "long_result", "file")
     file_above_chars = int(getattr(delivery_config, "file_above_chars", 500))
 
-    async def send(target: dict, text: str, payload: dict | None = None) -> str | None:
-        from nonebot import get_bot
-        from nonebot.adapters.onebot.v11 import Message, MessageSegment
+    def _target_from_dict(target: dict) -> DeliveryTarget:
+        raw = target.get("delivery_target")
+        if raw is not None:
+            delivery_target = DeliveryTarget.load(raw)
+        else:
+            bot_id = str(target.get("bot_id") or "")
+            group_id = str(target.get("group_id") or "")
+            kind = str(target.get("conversation_kind") or "")
+            peer = str(target.get("peer_id") or "")
+            if not kind and group_id.isdigit() and int(group_id) > 0:
+                # Pre-v3 notification rows only recorded a group destination.
+                kind, peer = "group", group_id
+            if kind == "group":
+                peer = peer or group_id
+                if group_id and peer != group_id:
+                    raise ValueError("Cometa group target fields disagree")
+            if (
+                not bot_id.isdigit()
+                or int(bot_id) <= 0
+                or kind not in {"group", "private"}
+                or not peer.isdigit()
+                or int(peer) <= 0
+            ):
+                raise ValueError("Cometa QQ target is incomplete; refusing to guess")
+            from core.transport.models import BotRef, SceneRef
 
+            delivery_target = DeliveryTarget(
+                bot=BotRef(f"legacy-qq:{bot_id}", "onebot-v11", "qq", bot_id),
+                scene=SceneRef(kind, peer),
+            )
+        if (
+            delivery_target.bot.adapter != "onebot-v11"
+            or delivery_target.bot.platform_scope != "qq"
+            or delivery_target.bot.connection_id
+            != f"legacy-qq:{delivery_target.bot.self_id}"
+            or delivery_target.scene.kind not in {"group", "private"}
+            or not delivery_target.scene.scene_id.isdigit()
+            or int(delivery_target.scene.scene_id) <= 0
+        ):
+            raise ValueError("Cometa DeliveryTarget is not a verifiable QQ route")
+        if str(target.get("bot_id") or "") not in {"", delivery_target.bot.self_id}:
+            raise ValueError("Cometa bot_id does not match DeliveryTarget")
+        if str(target.get("conversation_kind") or "") not in {
+            "", delivery_target.scene.kind
+        }:
+            raise ValueError("Cometa conversation_kind does not match DeliveryTarget")
+        if str(target.get("peer_id") or "") not in {
+            "", delivery_target.scene.scene_id
+        }:
+            raise ValueError("Cometa peer_id does not match DeliveryTarget")
+        if delivery_target.scene.kind == "group" and str(target.get("group_id") or "") not in {
+            "", delivery_target.scene.scene_id
+        }:
+            raise ValueError("Cometa group_id does not match DeliveryTarget")
+        return delivery_target
+
+    async def _send_text(
+        delivery_target: DeliveryTarget,
+        body: str,
+        *,
+        reply_to: str = "",
+        requester: str = "",
+    ) -> str | None:
         from cometa.delivery import SenderUnavailable
+        from core.transport.outbound import (
+            DeliveryStatus,
+            OutboundMessage,
+            OutboundSegment,
+        )
+        from stella_project.plugins.bot_main.transport_delivery import (
+            send_background_message,
+        )
 
+        segments = []
+        if reply_to.isdigit():
+            segments.append(OutboundSegment.reply(reply_to))
+        if requester.isdigit() and delivery_target.scene.kind == "group":
+            segments.append(OutboundSegment.at(requester))
+        segments.append(OutboundSegment.text_segment(body))
+        result = await send_background_message(
+            delivery_target, OutboundMessage(tuple(segments))
+        )
+        if result.status is DeliveryStatus.ACCEPTED:
+            return result.message_ids[0] if result.message_ids else None
+        if (
+            result.status is DeliveryStatus.FAILED
+            and result.error_code == "exact_bot_binding_missing"
+        ):
+            raise SenderUnavailable("exact QQ Bot is not online")
+        raise RuntimeError(
+            f"outbound notification {result.status.value}: {result.error_code or 'no receipt'}"
+        )
+
+    async def send(target: dict, text: str, payload: dict | None = None) -> str | None:
         platform = str(target.get("platform") or "qq")
-        if platform != "qq":
-            # WebChat 没有后台推送通道；结果留在任务中心（WebUI 可查/可订阅）
+        if platform == "webchat":
+            # The WebChat response is delivered by its existing server stream.
             return "server_emitted"
-        group_id = int(target.get("group_id") or 0)
-        bot_id = str(target.get("bot_id") or "")
+        if platform != "qq":
+            raise ValueError(f"unsupported Cometa notification platform: {platform!r}")
+        delivery_target = _target_from_dict(target)
+        task_id = str(target.get("task_id") or "")
         reply_to = str(target.get("reply_to_message_id") or "")
         requester = str(target.get("requester_id") or "")
-        task_id = str(target.get("task_id") or "")
-        try:
-            bot = get_bot(bot_id or None)
-        except Exception as e:
-            raise SenderUnavailable(f"bot {bot_id or '<default>'} 不在线") from e
+        payload = payload or {}
+        full_ref = str(payload.get("full_text_ref") or "")
+        full_chars = int(payload.get("full_text_chars") or 0)
+        body = text
 
-        # ── 私聊投递（计划 §6.8）：持久 target 的 kind 决定 API，绝不用群口 ──
-        conversation_kind = str(target.get("conversation_kind") or "")
-        private_peer = str(target.get("peer_id") or "")
-        if conversation_kind == "private" and private_peer.isdigit():
-            async def send_private_text(body: str) -> str | None:
-                resp = await bot.send_private_msg(
-                    user_id=int(private_peer), message=Message(body)
-                )
-                receipt = ""
-                if isinstance(resp, dict):
-                    receipt = str(resp.get("message_id") or "")
-                elif resp is not None:
-                    receipt = str(getattr(resp, "message_id", "") or "")
-                return receipt or None
-
-            payload = payload or {}
-            full_ref = str(payload.get("full_text_ref") or "")
-            full_chars = int(payload.get("full_text_chars") or 0)
-            body = text
+        if delivery_target.scene.kind == "private":
             if full_ref and 0 < full_chars <= file_above_chars:
-                # 阈值内的短结果：**完整结果直接进私聊**（摘要只是首行截取，
-                # 藏全文违背交付预期——2026-10-03 真机反馈）。私聊不做
-                # 文件/转发（能力未验证），但短文本全量送达没有障碍。
                 full_path = artifacts_dir / task_id / full_ref
                 try:
                     full_text = full_path.read_text(encoding="utf-8").strip()
                 except OSError:
                     full_text = ""
                 if full_text:
-                    head_line = text.split("\n", 1)[0]
-                    body = f"{head_line}\n\n{full_text}"
+                    body = f"{text.split(chr(10), 1)[0]}\n\n{full_text}"
             elif full_chars > file_above_chars:
-                # 真超长：私聊降级（计划 §6.8/§12 假设 4）——不做
-                # upload_private_file 尝试，文本摘要 + WebUI 任务页指针；
-                # 绝不把 user_id 塞进群投递 API。
                 body = (
                     f"{text}\n📄 完整结果约 {full_chars} 字，过长未全文附上；"
                     "可在 WebUI 任务页查看全文。"
                 )
-            receipt = await send_private_text(body)
+            receipt = await _send_text(delivery_target, body, reply_to=reply_to)
             with contextlib.suppress(Exception):
                 logger.info(
-                    f"📤 [Cometa] 通知已投递到私聊 {private_peer}"
+                    f"📤 [Cometa] 通知已投递到私聊 {delivery_target.scene.scene_id}"
                     f"（回执 {receipt or '无'}）"
                 )
             return receipt
 
-        def cover(extra_note: str = "") -> Message:
-            segments: list = []
-            if reply_to.isdigit():
-                segments.append(MessageSegment.reply(int(reply_to)))
-            if requester.isdigit():
-                segments.append(MessageSegment.at(int(requester)))
-            body = text if not extra_note else f"{text}\n{extra_note}"
-            segments.append(MessageSegment.text(body))
-            return Message(segments)
-
-        async def send_cover(extra_note: str = "") -> str | None:
-            resp = await bot.send_group_msg(group_id=group_id, message=cover(extra_note))
-            receipt = ""
-            if isinstance(resp, dict):
-                receipt = str(resp.get("message_id") or "")
-            elif resp is not None:
-                receipt = str(getattr(resp, "message_id", "") or "")
-            return receipt or None
-
-        # ── 长结果投递链（§6.12）─────────────────────────
-        payload = payload or {}
-        full_ref = str(payload.get("full_text_ref") or "")
-        full_chars = int(payload.get("full_text_chars") or 0)
-        is_long = (
-            bool(full_ref)
-            and full_chars >= file_above_chars
-            and long_result != "text"
-        )
+        group_id = int(delivery_target.scene.scene_id)
+        bot_id = delivery_target.bot.self_id
+        is_long = bool(full_ref) and full_chars >= file_above_chars and long_result != "text"
         note = ""
         if is_long:
             path = artifacts_dir / task_id / full_ref
@@ -276,36 +323,46 @@ def make_notification_sender(
                 "⚠️ 完整结果未能送达（文件与转发均失败），"
                 "可在 WebUI 任务页查看或要求重试。"
             )
-            missing_note = (
-                "⚠️ 完整结果文件缺失（内部错误），可在 WebUI 任务页查看。"
-            )
+            missing_note = "⚠️ 完整结果文件缺失（内部错误），可在 WebUI 任务页查看。"
             if path.is_file():
+                from cometa.delivery import SenderUnavailable
+                from stella_project.plugins.bot_main.transport_delivery import (
+                    resolve_background_bot,
+                )
+
+                bot = resolve_background_bot(delivery_target.bot)
+                if bot is None:
+                    raise SenderUnavailable(f"bot {bot_id} 不在线")
+
                 if long_result == "file":
                     try:
                         await bot.call_api(
-                            "upload_group_file",
-                            group_id=group_id,
-                            file=str(path),
-                            name=full_ref,
+                            "upload_group_file", group_id=group_id,
+                            file=str(path), name=full_ref,
                         )
-                        receipt = await send_cover(file_note)
-                        with contextlib.suppress(Exception):
-                            logger.info(
-                                f"📤 [Cometa] 长结果已作为文件投递到群 {group_id}: {full_ref}"
-                            )
-                        return receipt
                     except Exception as upload_err:
-                        with contextlib.suppress(Exception):
-                            logger.warning(
-                                f"⚠️ [Cometa] 群文件上传失败，降级合并转发: {upload_err!r}"
-                            )
+                        if upload_err.__class__.__name__ != "ActionFailed":
+                            raise RuntimeError(
+                                f"upload_group_file result unknown: {type(upload_err).__name__}"
+                            ) from upload_err
+                        logger.warning(
+                            "⚠️ [Cometa] 群文件上传被平台明确拒绝，尝试合并转发"
+                        )
+                    else:
+                        # If the upload succeeded but the cover is ambiguous, do not
+                        # attempt another delivery method and duplicate the result.
+                        return await _send_text(
+                            delivery_target, f"{text}\n{file_note}",
+                            reply_to=reply_to, requester=requester,
+                        )
+
                 try:
                     full_text = path.read_text(encoding="utf-8")
                     nodes = [
                         {
                             "type": "node",
                             "data": {
-                                "uin": bot_id or str(getattr(bot, "self_id", "")),
+                                "uin": bot_id,
                                 "name": "Stella",
                                 "content": [
                                     {"type": "text", "data": {"text": chunk}}
@@ -313,50 +370,39 @@ def make_notification_sender(
                             },
                         }
                         for chunk in split_markdown(full_text)
-                    ][:20]  # 合并转发 node 数上限（QQ 限制约 200，保守 20）
+                    ][:20]
                     await bot.call_api(
                         "send_group_forward_msg", group_id=group_id, messages=nodes
                     )
-                    receipt = await send_cover(forward_note)
-                    with contextlib.suppress(Exception):
-                        logger.info(
-                            f"📤 [Cometa] 长结果已合并转发投递到群 {group_id}（{len(nodes)} 段）"
-                        )
-                    return receipt
                 except Exception as forward_err:
-                    with contextlib.suppress(Exception):
-                        logger.warning(
-                            "⚠️ [Cometa] 合并转发也失败，降级纯文本摘要: "
-                            f"{forward_err!r}"
-                        )
+                    if forward_err.__class__.__name__ != "ActionFailed":
+                        raise RuntimeError(
+                            f"send_group_forward_msg result unknown: {type(forward_err).__name__}"
+                        ) from forward_err
+                    logger.warning(
+                        "⚠️ [Cometa] 合并转发被平台明确拒绝，降级纯文本摘要"
+                    )
                     note = unavailable_note
+                else:
+                    # A sent forward followed by an uncertain cover is still unknown;
+                    # never send a second fallback message.
+                    return await _send_text(
+                        delivery_target, f"{text}\n{forward_note}",
+                        reply_to=reply_to, requester=requester,
+                    )
             else:
-                # §6.12：产物未送达时文本仍报告结果，并如实说明
-                logger.warning(
-                    f"⚠️ [Cometa] 完整文本文件缺失（{path}），按纯文本摘要投递"
-                )
+                logger.warning(f"⚠️ [Cometa] 完整文本文件缺失（{path}），按纯文本摘要投递")
                 note = missing_note
 
-        # ── 纯文本（短结果 / 长结果兜底）──────────────────
-        segments: list = []
-        if reply_to.isdigit():
-            segments.append(MessageSegment.reply(int(reply_to)))
-        if requester.isdigit():
-            segments.append(MessageSegment.at(int(requester)))
         body = f"{text}\n{note}" if note else text
-        segments.append(MessageSegment.text(body))
-        try:
-            resp = await bot.send_group_msg(group_id=group_id, message=Message(segments))
-        except Exception as e:
-            raise RuntimeError(f"send_group_msg failed: {type(e).__name__}") from e
-        receipt = ""
-        if isinstance(resp, dict):
-            receipt = str(resp.get("message_id") or "")
-        elif resp is not None:
-            receipt = str(getattr(resp, "message_id", "") or "")
+        receipt = await _send_text(
+            delivery_target, body, reply_to=reply_to, requester=requester
+        )
         with contextlib.suppress(Exception):
-            logger.info(f"📤 [Cometa] 通知已投递到群 {group_id}（回执 {receipt or '无'}）")
-        return receipt or None
+            logger.info(
+                f"📤 [Cometa] 通知已投递到群 {group_id}（回执 {receipt or '无'}）"
+            )
+        return receipt
 
     return send
 
@@ -364,59 +410,12 @@ def make_notification_sender(
 async def notification_sender(target: dict, text: str, payload: dict | None = None) -> str | None:
     """模块级直连 Sender（旧接线形态）：无产物目录与投递配置，仅纯文本。
 
-    生产接线请用 :func:`make_notification_sender`（runtime 装配使用）。"""
-    from nonebot import get_bot
-    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+    生产接线请用 :func:`make_notification_sender`（runtime 装配使用）；此兼容入口
+    同样拒绝默认 Bot 与不可验证的持久路由。"""
+    from cometa.config import DeliveryConfig
 
-    from cometa.delivery import SenderUnavailable
-
-    platform = str(target.get("platform") or "qq")
-    if platform != "qq":
-        # WebChat 没有后台推送通道；结果留在任务中心（WebUI 可查/可订阅）
-        return "server_emitted"
-    bot_id = str(target.get("bot_id") or "")
-    reply_to = str(target.get("reply_to_message_id") or "")
-    requester = str(target.get("requester_id") or "")
-    try:
-        bot = get_bot(bot_id or None)
-    except Exception as e:
-        raise SenderUnavailable(f"bot {bot_id or '<default>'} 不在线") from e
-    # 私聊 target（计划 §6.8）：纯文本直发，不构造群 @ / 群 API
-    if str(target.get("conversation_kind") or "") == "private":
-        peer = str(target.get("peer_id") or "")
-        if not peer.isdigit():
-            raise RuntimeError("private target 缺少合法 peer_id")
-        try:
-            resp = await bot.send_private_msg(user_id=int(peer), message=Message(text))
-        except Exception as e:
-            raise RuntimeError(f"send_private_msg failed: {type(e).__name__}") from e
-        receipt = ""
-        if isinstance(resp, dict):
-            receipt = str(resp.get("message_id") or "")
-        elif resp is not None:
-            receipt = str(getattr(resp, "message_id", "") or "")
-        with contextlib.suppress(Exception):
-            logger.info(f"📤 [Cometa] 通知已投递到私聊 {peer}（回执 {receipt or '无'}）")
-        return receipt or None
-    group_id = int(target.get("group_id") or 0)
-    segments: list = []
-    if reply_to.isdigit():
-        segments.append(MessageSegment.reply(int(reply_to)))
-    if requester.isdigit():
-        segments.append(MessageSegment.at(int(requester)))
-    segments.append(MessageSegment.text(text))
-    try:
-        resp = await bot.send_group_msg(group_id=group_id, message=Message(segments))
-    except Exception as e:
-        raise RuntimeError(f"send_group_msg failed: {type(e).__name__}") from e
-    receipt = ""
-    if isinstance(resp, dict):
-        receipt = str(resp.get("message_id") or "")
-    elif resp is not None:
-        receipt = str(getattr(resp, "message_id", "") or "")
-    with contextlib.suppress(Exception):
-        logger.info(f"📤 [Cometa] 通知已投递到群 {group_id}（回执 {receipt or '无'}）")
-    return receipt or None
+    sender = make_notification_sender(Path(), DeliveryConfig(long_result="text"))
+    return await sender(target, text, payload)
 
 
 __all__ = [

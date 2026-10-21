@@ -23,7 +23,7 @@ from nonebot import logger
 # 当前 schema 版本。每 +1 必须新增一个 _apply_vN 并配一个旧库回归测试
 # （与 memory/schema.py 的「本版不做数据迁移禁令」同一纪律；本库暂无历史数据
 # 要搬，v1 是纯建表）。
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _META_TABLE = "meta"
 
@@ -173,7 +173,71 @@ def _apply_v1(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_audit_group ON audit_log(group_id, created_at)")
 
 
-_MIGRATIONS = {1: _apply_v1}
+def _apply_v2(conn: sqlite3.Connection) -> None:
+    """v2: bind task/run destinations and split quota/audit scope by identity."""
+    from .targets import dump_target, legacy_qq_target, qq_subject_key, target_scope_key
+
+    conn.execute("ALTER TABLE tasks ADD COLUMN target_json TEXT NOT NULL DEFAULT '{}'")
+    conn.execute("ALTER TABLE tasks ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE tasks ADD COLUMN scope_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE runs ADD COLUMN target_json TEXT NOT NULL DEFAULT '{}'")
+    conn.execute("ALTER TABLE runs ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE runs ADD COLUMN scope_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE audit_log ADD COLUMN actor_subject_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE audit_log ADD COLUMN scope_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE audit_log ADD COLUMN target_json TEXT NOT NULL DEFAULT '{}'")
+
+    # Legacy group-only quotas cannot be assigned to a Bot when several Bot
+    # accounts may share the same group number. Preserve them under an isolated
+    # legacy scope instead of applying them to an arbitrary new connection.
+    conn.execute("ALTER TABLE quotas RENAME TO quotas_v1")
+    conn.execute(
+        "CREATE TABLE quotas ("
+        "group_id INTEGER NOT NULL, scope_key TEXT NOT NULL, "
+        "target_json TEXT NOT NULL DEFAULT '{}', subject_key TEXT NOT NULL DEFAULT '', day TEXT NOT NULL, "
+        "runs_used INTEGER NOT NULL DEFAULT 0, messages_used INTEGER NOT NULL DEFAULT 0, "
+        "PRIMARY KEY (scope_key, day))"
+    )
+    conn.execute(
+        "INSERT INTO quotas (group_id, scope_key, target_json, subject_key, day, runs_used, messages_used) "
+        "SELECT group_id, 'legacy-unscoped:group:' || group_id, '{}', '', day, runs_used, messages_used "
+        "FROM quotas_v1"
+    )
+    conn.execute("DROP TABLE quotas_v1")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_quotas_group_day ON quotas(group_id, day)"
+    )
+
+    # Old tasks have a recoverable QQ route only when the persisted bot and
+    # group IDs are both valid OneBot v11 IDs. Invalid rows stay unbound.
+    tasks = conn.execute("SELECT task_id, bot_id, group_id, owner_id FROM tasks").fetchall()
+    for row in tasks:
+        target = legacy_qq_target(row["bot_id"], row["group_id"])
+        if target is None:
+            continue
+        scope = target_scope_key(target)
+        subject = qq_subject_key(row["owner_id"])
+        target_json = dump_target(target)
+        conn.execute(
+            "UPDATE tasks SET target_json = ?, subject_key = ?, scope_key = ? WHERE task_id = ?",
+            (target_json, subject, scope, row["task_id"]),
+        )
+        conn.execute(
+            "UPDATE runs SET target_json = ?, subject_key = ?, scope_key = ? WHERE task_id = ?",
+            (target_json, subject, scope, row["task_id"]),
+        )
+        conn.execute(
+            "UPDATE audit_log SET scope_key = ?, target_json = ?, actor_subject_key = "
+            "CASE WHEN actor_id = ? THEN ? ELSE actor_subject_key END WHERE task_id = ?",
+            (scope, target_json, row["owner_id"], subject, row["task_id"]),
+        )
+
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_tasks_scope ON tasks(scope_key, group_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_runs_scope ON runs(scope_key, state)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_audit_scope ON audit_log(scope_key, created_at)")
+
+
+_MIGRATIONS = {1: _apply_v1, 2: _apply_v2}
 
 
 def migrate(db_path: Path | str) -> None:

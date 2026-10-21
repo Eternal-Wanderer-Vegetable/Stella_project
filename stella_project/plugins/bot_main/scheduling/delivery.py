@@ -34,6 +34,9 @@ from dataclasses import dataclass
 
 from nonebot import logger
 
+from core.transport.outbound import DeliveryResult as OutboundDeliveryResult
+from core.transport.outbound import DeliveryStatus, DeliveryTarget
+
 from .models import NotificationMode, Run, RunState, Task, iso_utc
 from .store import TaskStore
 
@@ -54,7 +57,7 @@ class DeliveryResult:
 
 # sender：把文本发进群；返回平台回执（如 message_id 字符串），拿不到回执返回
 # None（此时**不**声称 exactly-once，只记 sent 且 receipt 为空）。
-Sender = Callable[[int, str], Awaitable[str | None]]
+Sender = Callable[[DeliveryTarget, str], Awaitable[str | OutboundDeliveryResult | None]]
 
 
 def result_fingerprint(*, task_id: str, revision: int, run_key: str, text: str) -> str:
@@ -120,6 +123,15 @@ class DeliveryService:
                 return DeliveryResult(state=RunState.CANCELLED, error="lease_lost")
             return self._fail(run, "empty_output")
 
+        if (
+            task.target is None
+            or run.target is None
+            or run.target != task.target
+            or not task.scope_key
+            or run.scope_key != task.scope_key
+        ):
+            return self._fail(run, "delivery_target_unbound_or_mismatched")
+
         # 2. running → ready：先落结果与指纹，再进发送段
         run_key = run.scheduled_for_utc.isoformat() if run.scheduled_for_utc else run.request_id
         fingerprint = result_fingerprint(
@@ -142,8 +154,8 @@ class DeliveryService:
         # 4. 发送（超时/异常都按 delivery_unknown：平台调用可能已实际发生）
         send_started = time.monotonic()
         try:
-            receipt = await asyncio.wait_for(
-                self._sender(task.group_id, text), timeout=self._send_timeout
+            send_result = await asyncio.wait_for(
+                self._sender(run.target, text), timeout=self._send_timeout
             )
         except asyncio.TimeoutError:
             return self._unknown(run, f"send_timeout_after_{self._send_timeout:.0f}s")
@@ -151,13 +163,35 @@ class DeliveryService:
             return self._unknown(run, f"send_error: {type(e).__name__}")
         latency = time.monotonic() - send_started
 
+        receipt: str | None
+        if isinstance(send_result, OutboundDeliveryResult):
+            if send_result.status is DeliveryStatus.ACCEPTED:
+                receipt = send_result.message_ids[0] if send_result.message_ids else None
+            elif send_result.status in {
+                DeliveryStatus.FAILED,
+                DeliveryStatus.UNSUPPORTED,
+                DeliveryStatus.EXPIRED,
+            }:
+                return self._rejected(run, send_result.error_code or send_result.status.value)
+            else:
+                return self._unknown(
+                    run, send_result.error_code or send_result.status.value
+                )
+        else:
+            receipt = send_result
+
         if not self.store.transition_run(
             run.run_id, run.lease_owner,
             from_states=(RunState.SENDING,), to_state=RunState.SENT,
             delivery_receipt=str(receipt or ""),
         ):
             return DeliveryResult(state=RunState.CANCELLED, error="lease_lost")
-        self.store.record_delivered_message(task.group_id)
+        self.store.record_delivered_message(
+            task.group_id,
+            scope_key=task.scope_key,
+            target=task.target,
+            subject_key=task.subject_key,
+        )
         logger.info(
             f"📤 [Scheduling] 任务 {task.task_id[:8]} 运行 {run.run_id[:8]} 已投递到群 "
             f"{task.group_id}（{latency:.1f}s，回执 {'有' if receipt else '无'}）"
@@ -170,6 +204,16 @@ class DeliveryService:
             run.run_id, run.lease_owner,
             from_states=(RunState.RUNNING,), to_state=RunState.FAILED,
             error=reason,
+        ):
+            return DeliveryResult(state=RunState.FAILED, error=reason)
+        return DeliveryResult(state=RunState.CANCELLED, error="lease_lost")
+
+    def _rejected(self, run: Run, reason: str) -> DeliveryResult:
+        """The adapter definitively rejected the request; no automatic resend."""
+        if self.store.transition_run(
+            run.run_id, run.lease_owner,
+            from_states=(RunState.SENDING,), to_state=RunState.FAILED,
+            delivery_error=reason[:200], error=reason[:200],
         ):
             return DeliveryResult(state=RunState.FAILED, error=reason)
         return DeliveryResult(state=RunState.CANCELLED, error="lease_lost")

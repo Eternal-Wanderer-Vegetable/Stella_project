@@ -9,10 +9,13 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from stella_project.plugins.bot_main.scheduling import migrations as migration_module
 from stella_project.plugins.bot_main.scheduling.migrations import (
     MigrationError,
     migrate,
@@ -88,6 +91,61 @@ def test_migrate_rejects_downgrade(tmp_path):
     conn.close()
     with pytest.raises(MigrationError, match="降级"):
         migrate(db)
+
+
+def test_v1_migration_binds_only_verifiable_legacy_qq_routes(tmp_path):
+    db = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    migration_module._apply_v1(conn)
+    conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '1')")
+    for task_id, bot_id in (("bound", "10000"), ("unbound", "not-a-bot")):
+        conn.execute(
+            "INSERT INTO tasks (task_id, bot_id, group_id, owner_id, mode, objective, "
+            "cron_expr, timezone, created_at, updated_at) "
+            "VALUES (?, ?, 12345, 777, 'reminder', 'x', '* * * * *', 'UTC', 'now', 'now')",
+            (task_id, bot_id),
+        )
+        conn.execute(
+            "INSERT INTO runs (run_id, task_id, task_revision, group_id, idempotency_key, "
+            "queued_at_utc) VALUES (?, ?, 1, 12345, ?, 'now')",
+            (f"run-{task_id}", task_id, f"idem-{task_id}"),
+        )
+    conn.execute(
+        "INSERT INTO quotas (group_id, day, runs_used, messages_used) "
+        "VALUES (12345, '2026-10-21', 3, 4)"
+    )
+    conn.execute(
+        "INSERT INTO audit_log (created_at, actor_id, group_id, task_id, action, detail) "
+        "VALUES ('now', 777, 12345, 'bound', 'create', '')"
+    )
+    conn.commit()
+    conn.close()
+
+    migrate(db)
+    store = TaskStore(db)
+    bound = store.get_task("bound")
+    unbound = store.get_task("unbound")
+    assert bound is not None and bound.target is not None
+    assert bound.target.bot.self_id == "10000"
+    assert bound.target.scene.scene_id == "12345"
+    assert unbound is not None and unbound.target is None
+    assert store.get_run("run-bound").target == bound.target
+    assert store.get_run("run-unbound").target is None
+
+    conn = sqlite3.connect(db)
+    quota = conn.execute(
+        "SELECT scope_key, target_json, subject_key, runs_used "
+        "FROM quotas WHERE day = '2026-10-21'"
+    ).fetchone()
+    audit = conn.execute(
+        "SELECT scope_key, target_json, actor_subject_key FROM audit_log WHERE task_id = 'bound'"
+    ).fetchone()
+    conn.close()
+    assert quota[0] == "legacy-unscoped:group:12345"
+    assert json.loads(quota[1]) == {} and quota[2] == "" and quota[3] == 3
+    assert audit[0] == bound.scope_key and json.loads(audit[1])["bot"]["self_id"] == "10000"
+    assert audit[2] == bound.subject_key
 
 
 # ── 任务 CRUD 与修订门闩 ─────────────────────────────
@@ -252,6 +310,26 @@ def test_claim_respects_group_serialization(store):
     )
     claimed = store.claim_next_run("w", now=_at(64), lease_seconds=600)
     assert claimed is not None and claimed.run_id == second
+
+
+def test_same_group_number_on_two_bots_has_independent_scope_and_quota(store):
+    task_a = _make_task(store, bot_id="10000")
+    task_b = _make_task(store, bot_id="20000")
+    assert task_a.scope_key != task_b.scope_key
+    assert task_a.target != task_b.target
+    run_a = _insert(store, task_a.task_id, 60)
+    run_b = _insert(store, task_b.task_id, 61)
+
+    claimed_a = store.claim_next_run(
+        "worker", now=_at(61), lease_seconds=600, daily_group_run_cap=1
+    )
+    claimed_b = store.claim_next_run(
+        "worker", now=_at(62), lease_seconds=600, daily_group_run_cap=1
+    )
+    assert {claimed_a.run_id, claimed_b.run_id} == {run_a, run_b}
+    assert claimed_a.scope_key != claimed_b.scope_key
+    assert store.quota_usage(12345, scope_key=task_a.scope_key, now=_at(62))["runs_used"] == 1
+    assert store.quota_usage(12345, scope_key=task_b.scope_key, now=_at(62))["runs_used"] == 1
 
 
 def test_claim_sweeps_stale_revision_then_claims_current(store):

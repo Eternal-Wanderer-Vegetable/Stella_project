@@ -44,6 +44,8 @@ class ScheduledContext:
 def build_scheduled_context(
     group_id: int,
     *,
+    connection_id: str = "",
+    conversation_key: str = "",
     max_chars: int = 1200,
     max_messages: int = _MAX_MESSAGES,
 ) -> ScheduledContext:
@@ -52,9 +54,9 @@ def build_scheduled_context(
     任何读取失败都降级为「无上下文」并告警，绝不抛异常打断调度链路。
     """
     max_chars = max(int(max_chars), 200)
-    summary_text = _read_summary(group_id)
+    summary_text = _read_summary(group_id, connection_id=connection_id)
     message_lines, older_available, clipped_any = _read_recent_messages(
-        group_id, limit=max(1, int(max_messages))
+        group_id, limit=max(1, int(max_messages)), connection_id=connection_id
     )
 
     used_summary = False
@@ -107,15 +109,27 @@ def _connect_readonly() -> sqlite3.Connection:
     return sqlite3.connect(uri, uri=True, timeout=5.0)
 
 
-def _read_summary(group_id: int) -> str:
-    """短期话题摘要（整合器产物）；表不存在/读失败 → 空串。"""
+def _read_summary(group_id: int, *, connection_id: str = "") -> str:
+    """读取摘要；连接作用域不可证实时不把 group_id-only 摘要带给后台任务。"""
     try:
         conn = _connect_readonly()
         try:
-            row = conn.execute(
-                "SELECT active_summary FROM short_term_context WHERE group_id = ?",
-                (str(group_id),),
-            ).fetchone()
+            if connection_id:
+                columns = {str(info[1]) for info in conn.execute(
+                    "PRAGMA table_info(short_term_context)"
+                ).fetchall()}
+                if "connection_id" not in columns:
+                    return ""
+                row = conn.execute(
+                    "SELECT active_summary FROM short_term_context "
+                    "WHERE group_id = ? AND connection_id = ?",
+                    (str(group_id), connection_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT active_summary FROM short_term_context WHERE group_id = ?",
+                    (str(group_id),),
+                ).fetchone()
         finally:
             conn.close()
     except sqlite3.Error as e:
@@ -124,7 +138,9 @@ def _read_summary(group_id: int) -> str:
     return str(row[0]).strip() if row and row[0] else ""
 
 
-def _read_recent_messages(group_id: int, *, limit: int) -> tuple[list[str], int, bool]:
+def _read_recent_messages(
+    group_id: int, *, limit: int, connection_id: str = ""
+) -> tuple[list[str], int, bool]:
     """最近消息行（旧→新排序的格式化文本）；读取失败 → 空 + 无丢弃。
 
     返回 ``(lines, older_available, clipped_any)``：``older_available``=1 表示
@@ -133,11 +149,18 @@ def _read_recent_messages(group_id: int, *, limit: int) -> tuple[list[str], int,
     try:
         conn = _connect_readonly()
         try:
-            rows = conn.execute(
-                "SELECT user_id, content, source_kind FROM group_messages "
-                "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
-                (str(group_id), limit + 1),
-            ).fetchall()
+            if connection_id:
+                rows = conn.execute(
+                    "SELECT user_id, content, source_kind FROM group_messages "
+                    "WHERE group_id = ? AND connection_id = ? ORDER BY id DESC LIMIT ?",
+                    (str(group_id), connection_id, limit + 1),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT user_id, content, source_kind FROM group_messages "
+                    "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                    (str(group_id), limit + 1),
+                ).fetchall()
         finally:
             conn.close()
     except sqlite3.Error as e:

@@ -1265,7 +1265,9 @@ async def record_group_chat(event: GroupMessageEvent):
             # 只要还愿意跟 Bot 说话就不算「不想聊」，顺手解除退避（自愈，见 reset_no_reply）
             reset_no_reply(ctx.group_id, ctx.user_id)
         # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
-        session_touch(ctx.group_id)
+        # The registry key distinguishes same-numbered groups reached through
+        # different Bot connections. Session summaries use this key as well.
+        session_touch(ctx.storage_key())
 
     # 消息证据（计划 §6.1）：关系解析已在入库前完成（ctx 信封），这里只消费
     # 同一份结果。总开关关闭时不碰旁表；两个 matcher 重复处理同一消息由
@@ -1332,8 +1334,13 @@ async def record_group_chat(event: GroupMessageEvent):
             _flow_checkpoint(fctx, "participation.spawn",
                              summary="spawned proactive speak, not awaited",
                              metrics={"trigger_text_chars": len(text)})
-            _spawn_participation_speak(event.group_id, decision, trigger_text=text,
-                                       parent_trace_id=ctx.trace_id)
+            _spawn_participation_speak(
+                event.group_id,
+                decision,
+                bot_ref=normalized.bot_ref,
+                trigger_text=text,
+                parent_trace_id=ctx.trace_id,
+            )
 
 
 def _maybe_identity_direct_reply(ctx) -> None:
@@ -1932,15 +1939,20 @@ def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
         conn.close()
 
 
-def _register_group_conversation(event: GroupMessageEvent):
-    """Register every trusted QQ group ingress before writing its message."""
+def _register_group_ref(bot_id: str, group_id: int):
+    """Register a QQ group by the exact Bot identity that received it."""
     from memory.conversation_registry import get_or_register_group
 
     conn = sqlite3.connect(DB_PATH)
     try:
-        return get_or_register_group(conn, str(event.self_id), int(event.group_id))
+        return get_or_register_group(conn, str(bot_id), int(group_id))
     finally:
         conn.close()
+
+
+def _register_group_conversation(event: GroupMessageEvent):
+    """Register every trusted QQ group ingress before writing its message."""
+    return _register_group_ref(str(event.self_id), int(event.group_id))
 
 
 def _maybe_personal_sharing(ctx) -> None:
@@ -3178,6 +3190,17 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
     service = _scheduling_service
     group_id = event.group_id
     actor_id = event.user_id
+    from stella_project.plugins.bot_main.scheduling.targets import (
+        legacy_qq_target,
+        qq_subject_key,
+        target_scope_key,
+    )
+
+    target = legacy_qq_target(str(event.self_id), group_id)
+    if target is None:
+        return "当前 Bot 或群目标无效，未读取或修改定时任务。"
+    scope_key = target_scope_key(target)
+    actor_subject_key = qq_subject_key(actor_id)
     is_admin = _is_group_admin(event)
     action = cmd.action
 
@@ -3185,7 +3208,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
         return format_help()
 
     if action == "list":
-        tasks = service.list_tasks(group_id=group_id)
+        tasks = service.list_tasks(group_id=group_id, scope_key=scope_key)
         if not tasks:
             return "这个群还没有定时任务。发「定时添加」看看格式。"
         return "\n".join(_format_scheduling_task(t) for t in tasks)
@@ -3201,6 +3224,9 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
             actor_id=actor_id,
             group_id=group_id,
             bot_id=str(event.self_id),
+            target=target,
+            subject_key=actor_subject_key,
+            scope_key=scope_key,
             is_group_admin=is_admin,
             mode="reminder" if action == "add" else "agent",
             objective=cmd.objective,
@@ -3217,7 +3243,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
     if action == "show":
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         detail = _format_scheduling_task(task)
         if task.policy.get("tools"):
@@ -3242,25 +3268,27 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
             return "没有要修改的字段。可用键：cron= tz= text= notify= rev="
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         updated = service.edit_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
             expected_revision=cmd.expected_revision or task.revision,
-            is_group_admin=is_admin, **updates,
+            is_group_admin=is_admin, scope_key=scope_key,
+            actor_subject_key=actor_subject_key, **updates,
         )
         return f"✅ 已更新 {_scheduling_short_id(updated.task_id)}（修订 r{updated.revision}）"
 
     if action in ("pause", "resume", "cancel"):
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         setter = {"pause": service.pause, "resume": service.resume, "cancel": service.cancel}[action]
         updated = setter(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
             expected_revision=cmd.expected_revision or task.revision,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
+            actor_subject_key=actor_subject_key,
         )
         verb = {"pause": "已暂停", "resume": "已恢复", "cancel": "已取消"}[action]
         return f"✅ 任务 {_scheduling_short_id(updated.task_id)} {verb}"
@@ -3268,20 +3296,21 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
     if action == "run_now":
         run = service.run_now(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         return f"✅ 已提交立即运行（{_scheduling_short_id(run.run_id)}），稍后执行。"
 
     if action == "history":
         runs = service.history(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin, limit=8,
+            is_group_admin=is_admin, limit=8, scope_key=scope_key,
+            actor_subject_key=actor_subject_key,
         )
         if not runs:
             return "这个任务还没有运行记录。"
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         return "\n".join(_format_scheduling_run(r, task.timezone) for r in runs)
 
@@ -3306,6 +3335,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
         updated = service.set_policy(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
             expected_revision=task.revision, is_group_admin=is_admin,
+            scope_key=scope_key, actor_subject_key=actor_subject_key,
             policy={"tools": tools, "coalesce": task.policy.get("coalesce")},
         )
         listing = ", ".join(updated.policy.get("tools") or []) or "（空）"
@@ -3383,14 +3413,14 @@ async def _scheduling_tool_resolver(name: str):
     return None
 
 
-async def _scheduling_sender(group_id: int, text: str) -> str | None:
-    """平台发送边界：返回回执（message_id）或 None（拿不到就不声称可靠）。"""
-    from nonebot import get_bot
+async def _scheduling_sender(target, text):
+    """按运行快照中的 DeliveryTarget 发送，不从全局 Bot 列表猜接收账号。"""
+    from core.transport.outbound import OutboundMessage
+    from stella_project.plugins.bot_main.transport_delivery import (
+        send_background_message,
+    )
 
-    bot = get_bot()
-    resp = await bot.send_group_msg(group_id=group_id, message=text)
-    receipt = resp.get("message_id") if isinstance(resp, dict) else getattr(resp, "message_id", None)
-    return str(receipt) if receipt is not None else None
+    return await send_background_message(target, OutboundMessage.text(text))
 
 
 def _build_scheduling_stack():
@@ -4119,6 +4149,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
             except Exception as e:
                 logger.warning(f"⚠️ [主动@] 合同构建异常（按无合同继续）: {e}")
                 contract_error = contract_error or "contract_build_error"
+        conversation_ref = _register_group_ref(str(bot.self_id), group_id)
         async with lock:
             ctx = ChatContext(
                 user_id=target.user_id,
@@ -4144,7 +4175,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 # 会按旧入口处理，目标的 USER_SHARED 个人事实永远进不来
                 # （多人身份修复计划 §6.1/T18）。
                 conversation_kind="group",
-                conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+                conversation_key=conversation_ref.conversation_key,
                 bot_ref=BotRef(
                     f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
                 ),
@@ -4156,7 +4187,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 scene_id=str(group_id),
                 bot_id=str(bot.self_id),
                 peer_id=str(group_id),
-                storage_session_id=group_id,
+                storage_session_id=conversation_ref.storage_session_id,
                 # 复核 F1：typed 检索查询 = 候选主题（不再拿整段指令模板查询）
                 retrieval_query=(
                     str(target.candidate_content or "")[:80] if contract_data else ""
@@ -4165,7 +4196,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 trace_id=new_trace_id(),
             )
             try:
-                ctx = await _run_turn_via_engine(f"qq:{group_id}", ctx)
+                ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
             except RuntimeTurnError as e:
                 # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
                 if e.code == E_CANCELLED:
@@ -4323,12 +4354,15 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
                 await _record_bot_lines(
-                    self_id, group_id, delivered, origin=ctx, receipts=receipts
+                    self_id, conversation_ref.storage_session_id, delivered,
+                    origin=ctx, receipts=receipts,
                 )
 
                 # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
                 if ctx.tail_start_id:
-                    schedule_compact(group_id, ctx.tail_start_id)
+                    schedule_compact(
+                        conversation_ref.storage_session_id, ctx.tail_start_id
+                    )
                     _flow_checkpoint(flow_ctx, "proactive.after",
                                      summary="compact spawned, not awaited")
 
@@ -4379,14 +4413,35 @@ async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
         return
     line = random.choice(pool)
 
+    bot_id = str(getattr(bot, "self_id", "") or "")
+    if not bot_id:
+        logger.warning(f"⚠️ [{kind}] 播报 Bot 身份缺失，跳过")
+        return
+    conversation_ref = _register_group_ref(bot_id, group_id)
+    target = DeliveryTarget(
+        BotRef(f"legacy-qq:{bot_id}", "onebot-v11", "qq", bot_id),
+        SceneRef("group", str(group_id)),
+    )
+    from stella_project.plugins.bot_main.transport_delivery import (
+        send_background_message,
+    )
+
     try:
-        await bot.send_group_msg(group_id=group_id, message=line)
+        result = await send_background_message(target, OutboundMessage.text(line))
     except Exception as e:
-        logger.warning(f"⚠️ [{kind}] 播报发送失败: {e}")
+        logger.warning(f"⚠️ [{kind}] 播报发送结果未知: {e}")
+        return
+    if result.status.value != "accepted":
+        logger.warning(
+            f"⚠️ [{kind}] 播报未确认送达: {result.status.value}/"
+            f"{result.error_code or '-'}"
+        )
         return
 
     mark_announced(group_id, kind, today)
-    await _record_bot_lines(int(bot.self_id), group_id, [line])
+    await _record_bot_lines(
+        int(bot.self_id), conversation_ref.storage_session_id, [line]
+    )
     logger.info(f"{'🌙' if kind == 'sleep' else '☀️'} [{kind}] 群 {group_id}: {line}")
 
 
@@ -4512,6 +4567,7 @@ def _spawn_participation_speak(
     group_id: int,
     decision,
     *,
+    bot_ref: BotRef | None = None,
     trigger_text: str = "",
     parent_trace_id: str = "",
 ) -> None:
@@ -4520,12 +4576,13 @@ def _spawn_participation_speak(
     任务引用必须持有（见 _reply_check_tasks 的说明），否则可能在完成前被 GC。
     """
     async def _runner() -> None:
-        try:
-            from nonebot import get_bot
+        from stella_project.plugins.bot_main.transport_delivery import (
+            resolve_background_bot,
+        )
 
-            bot = get_bot()
-        except Exception as e:
-            logger.debug(f"[参与评分] 群 {group_id} 跳过触发：无可用 Bot（{e}）")
+        bot = resolve_background_bot(bot_ref) if bot_ref is not None else None
+        if bot is None:
+            logger.debug(f"[参与评分] 群 {group_id} 跳过触发：原 Bot 已离线或身份不匹配")
             return
         try:
             manager = get_participation_manager()
@@ -4651,17 +4708,23 @@ async def _proactive_speak_impl(
             )
             return
         get_reply_gate().start(group_id, proactive=True)
+        conversation_ref = _register_group_ref(str(bot.self_id), group_id)
         # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
         try:
             consolidator = get_consolidator()
             new_count = consolidator.has_new_messages_to_consolidate(
-                group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+                conversation_ref.storage_session_id,
+                threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES,
             )
             if new_count > 0:
                 logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
                 _flow_checkpoint(fctx, "proactive.consolidate",
                                  summary="spawned, sleep 1s, not awaiting success")
-                maybe_consolidate(group_id, force=True, parent_trace_id=getattr(fctx, "trace_id", ""))
+                maybe_consolidate(
+                    conversation_ref=conversation_ref,
+                    force=True,
+                    parent_trace_id=getattr(fctx, "trace_id", ""),
+                )
                 await asyncio.sleep(1.0)
         except Exception as e:
             logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
@@ -4683,7 +4746,7 @@ async def _proactive_speak_impl(
             gate_reasons=gate.reasons,
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             conversation_kind="group",
-            conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+            conversation_key=conversation_ref.conversation_key,
             bot_ref=BotRef(
                 f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
             ),
@@ -4695,7 +4758,7 @@ async def _proactive_speak_impl(
             scene_id=str(group_id),
             bot_id=str(bot.self_id),
             peer_id=str(group_id),
-            storage_session_id=group_id,
+            storage_session_id=conversation_ref.storage_session_id,
         )
         try:
             from core.observability import message_flow
@@ -4717,7 +4780,7 @@ async def _proactive_speak_impl(
 
         try:
             with _flow_span(fctx, "proactive.turn"):
-                ctx = await _run_turn_via_engine(f"qq:{group_id}", ctx)
+                ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
         except RuntimeTurnError as e:
             # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
             if e.code == E_CANCELLED:
@@ -4859,13 +4922,14 @@ async def _proactive_speak_impl(
             # 群级主动（user_id=0）：origin 给出但无个人收件人——
             # _record_bot_lines 内部把收件人与源消息留空（unknown），不猜目标
             await _record_bot_lines(
-                int(bot.self_id), group_id, delivered, origin=ctx, receipts=receipts
+                int(bot.self_id), conversation_ref.storage_session_id, delivered,
+                origin=ctx, receipts=receipts,
             )
 
             # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
             if ctx.tail_start_id:
                 schedule_compact(
-                    group_id, ctx.tail_start_id,
+                    conversation_ref.storage_session_id, ctx.tail_start_id,
                     parent_trace_id=fctx.trace_id if fctx is not None else "")
                 _flow_checkpoint(fctx, "proactive.after",
                                  summary="compact spawned, not awaited")
@@ -4877,6 +4941,28 @@ async def _proactive_speak_impl(
 
 # 定时主动发言：每 PROACTIVE_CHECK_INTERVAL 秒检查一次所有启用群
 if scheduler is not None and PROACTIVE_ENABLED:
+    def _sole_timer_qq_bot():
+        """Return the only registered OneBot v11 connection, or its skip reason."""
+        from nonebot import get_bots
+
+        candidates = []
+        for self_id, candidate in get_bots().items():
+            adapter_getter = getattr(getattr(candidate, "adapter", None), "get_name", None)
+            adapter_name = adapter_getter() if callable(adapter_getter) else ""
+            adapter_key = "".join(
+                char.lower() for char in str(adapter_name) if char.isalnum()
+            )
+            if (
+                adapter_key == "onebotv11"
+                and str(getattr(candidate, "self_id", "")) == str(self_id)
+            ):
+                candidates.append(candidate)
+        if not candidates:
+            return None, "no_bot"
+        if len(candidates) != 1:
+            return None, "ambiguous_bots"
+        return candidates[0], ""
+
     @scheduler.scheduled_job("interval", seconds=PROACTIVE_CHECK_INTERVAL, id="proactive_speak")
     async def proactive_speak_job():
         # 计划 §6.4：root 在前置 return 之前创建——feature 开关关/无 Bot 等
@@ -4906,15 +4992,18 @@ if scheduler is not None and PROACTIVE_ENABLED:
                            reason_code="proactive_disabled")
             _timer_end("disabled")
             return
-        # 每个循环重新取 bot，避免 Bot 对象失效
-        try:
-            from nonebot import get_bot
-            bot = get_bot()
-        except Exception as e:
-            logger.debug(f"主动发言跳过：无可用 Bot（{e}）")
+        # Timer has no trusted incoming event to select an account. Run only when
+        # one OneBot connection is registered; multi-Bot routing needs an explicit
+        # group-to-connection configuration and must not fall back to a default Bot.
+        bot, reason = _sole_timer_qq_bot()
+        if bot is None:
+            logger.debug(f"主动发言跳过：QQ Bot 未唯一确定（{reason}）")
             _flow_decision(fctx, "proactive.timer.preflight", status="skipped",
-                           reason_code="no_bot")
-            _timer_end("no_bot")
+                           reason_code=(
+                               "ambiguous_bot_selection" if reason == "ambiguous_bots"
+                               else "no_bot"
+                           ))
+            _timer_end(reason)
             return
         # 逐个群尝试主动发言；单个群失败不拖垮其他群
         for group_id in ALLOWED_GROUPS:

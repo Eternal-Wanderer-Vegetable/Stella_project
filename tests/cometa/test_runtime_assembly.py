@@ -74,9 +74,8 @@ class TestAssembly:
                 if ack.state is not NotificationState.PENDING:
                     break
                 await asyncio.sleep(0.05)
-            # 泵 + sender 返回的 server_emitted 占位回执 → 记 SENT（SSE 路径
-            # 才记 SERVER_EMITTED 状态；投递语义一致：服务端已可查询）
-            assert ack.state is NotificationState.SENT
+            # WebChat server stream 已发出响应；不声称平台消息已送达。
+            assert ack.state is NotificationState.SERVER_EMITTED
             assert ack.receipt == "server_emitted"
             assert sender.sent, "泵真实发送了 ack"
         finally:

@@ -76,10 +76,13 @@ class TestBuildOrigin:
         assert origin["requester_id"] == "777"
         assert origin["conversation_id"] == "12345"
         assert origin["source_request_id"] == "msg-42"
-        # v2 会话身份完整（计划 §6.8）
+        # v3 持久化 BotRef 与完整目标（计划 §6.8）
+        assert origin["origin_schema_version"] == 3
         assert origin["conversation_kind"] == "group"
         assert origin["peer_id"] == "12345"
         assert origin["conversation_key"] == "qq:10000:group:12345"
+        assert origin["bot_ref"]["connection_id"] == "legacy-qq:10000"
+        assert origin["delivery_target"]["scene"]["scene_id"] == "12345"
 
     def test_requires_instance(self):
         event = self._group_event(self_id="1", group_id=1, user_id=1, message_id=1)
@@ -174,10 +177,7 @@ class TestNotificationSender:
 
         from cometa.delivery import SenderUnavailable
 
-        def _no_bot(bot_id=None):
-            raise ValueError("no bot connected")
-
-        monkeypatch.setattr(nonebot, "get_bot", _no_bot)
+        monkeypatch.setattr(nonebot, "get_bots", dict)
         with pytest.raises(SenderUnavailable):
             await cometa_bridge.notification_sender(
                 {"platform": "qq", "group_id": "12345", "bot_id": "10000"}, "hi"
@@ -185,19 +185,17 @@ class TestNotificationSender:
 
     @pytest.mark.asyncio
     async def test_qq_send_returns_receipt(self, monkeypatch):
-        import nonebot
+        from core.transport.outbound import DeliveryResult, DeliveryStatus
+        from stella_project.plugins.bot_main import transport_delivery
 
         captured: dict = {}
 
-        class FakeBot:
-            self_id = "10000"
+        async def fake_send(target, message):
+            captured["target"] = target
+            captured["message"] = message
+            return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("555",))
 
-            async def send_group_msg(self, *, group_id, message):
-                captured["group_id"] = group_id
-                captured["message"] = message
-                return {"message_id": 555}
-
-        monkeypatch.setattr(nonebot, "get_bot", lambda bot_id=None: FakeBot())
+        monkeypatch.setattr(transport_delivery, "send_background_message", fake_send)
         receipt = await cometa_bridge.notification_sender(
             {
                 "platform": "qq",
@@ -209,9 +207,54 @@ class TestNotificationSender:
             "任务完成",
         )
         assert receipt == "555"
-        assert captured["group_id"] == 12345
-        text = str(captured["message"])
+        assert captured["target"].scene.scene_id == "12345"
+        text = "".join(segment.text for segment in captured["message"].segments)
         assert "任务完成" in text
-        # 引用原消息 + @ 请求者是桥接刻意构造的段（§6.11）；Agent 文字本身
-        # 以 MessageSegment.text 附加，不会被二次解释成控制码。
-        assert text.startswith("[CQ:reply,id=42][CQ:at,qq=777]任务完成")
+        assert [segment.kind.value for segment in captured["message"].segments] == [
+            "reply", "at", "text"
+        ]
+        assert captured["message"].segments[0].target_id == "42"
+        assert captured["message"].segments[1].target_id == "777"
+
+    @pytest.mark.asyncio
+    async def test_background_send_resolves_the_target_bot_among_shared_group_bots(
+        self, monkeypatch
+    ):
+        import nonebot
+
+        from core.transport.models import BotRef, SceneRef
+        from core.transport.outbound import (
+            DeliveryResult,
+            DeliveryStatus,
+            DeliveryTarget,
+            OutboundMessage,
+        )
+        from stella_project.plugins.bot_main import transport_delivery
+
+        def bot(self_id):
+            return SimpleNamespace(
+                self_id=self_id,
+                adapter=SimpleNamespace(get_name=lambda: "OneBot V11"),
+            )
+
+        intended, other = bot("10000"), bot("20000")
+        monkeypatch.setattr(
+            nonebot, "get_bots", lambda: {intended.self_id: intended, other.self_id: other}
+        )
+        captured = {}
+
+        class Service:
+            async def send(self, target, message, *, bot_handle):
+                captured["self_id"] = bot_handle.self_id
+                return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("m-1",))
+
+        monkeypatch.setattr(transport_delivery, "get_outbound_service", lambda: Service())
+        target = DeliveryTarget(
+            BotRef("legacy-qq:10000", "onebot-v11", "qq", "10000"),
+            SceneRef("group", "12345"),
+        )
+        result = await transport_delivery.send_background_message(
+            target, OutboundMessage.text("test")
+        )
+        assert result.status is DeliveryStatus.ACCEPTED
+        assert captured["self_id"] == "10000"

@@ -45,10 +45,10 @@ class Clock:
 
 class FakeSender:
     def __init__(self):
-        self.sent: list[tuple[int, str]] = []
+        self.sent: list[tuple[object, str]] = []
 
-    async def __call__(self, group_id: int, text: str) -> str | None:
-        self.sent.append((group_id, text))
+    async def __call__(self, target, text: str) -> str | None:
+        self.sent.append((target, text))
         return f"mid-{len(self.sent)}"
 
 
@@ -142,7 +142,7 @@ async def test_due_reminder_flows_to_delivery(store, sender, clock, gate_allow):
     rt = _make_runtime(store, sender, clock)
     executed = await rt.tick_once()
     assert executed == 1
-    assert sender.sent == [(GROUP, "整点喝水")]
+    assert sender.sent == [(task.target, "整点喝水")]
     runs = store.list_runs(task.task_id)
     assert len(runs) == 1 and runs[0].state is RunState.SENT
     assert runs[0].delivery_receipt == "mid-1"
@@ -187,7 +187,7 @@ async def test_edited_task_fires_missed_slot_under_new_revision(store, sender, c
     store.edit_task(task.task_id, task.revision, updates={"objective": "v2 文案"})
     rt = _make_runtime(store, sender, clock)
     await rt.tick_once()
-    assert sender.sent == [(GROUP, "v2 文案")]
+    assert sender.sent == [(task.target, "v2 文案")]
     run = store.list_runs(task.task_id)[0]
     assert run.task_revision == 2
 
@@ -227,7 +227,7 @@ async def test_agent_run_completes_and_delivers(store, sender, clock, gate_allow
     clock.advance(90)
     rt = _make_runtime(store, sender, clock, agent_runner=runner)
     assert await rt.tick_once() == 1
-    assert sender.sent == [(GROUP, "昨晚大家聊了爬山")]
+    assert sender.sent == [(task.target, "昨晚大家聊了爬山")]
     run = store.list_runs(task.task_id)[0]
     assert run.model_rounds == 2 and run.tool_calls == 1
     # runner 收到了取消检查点与任务参数

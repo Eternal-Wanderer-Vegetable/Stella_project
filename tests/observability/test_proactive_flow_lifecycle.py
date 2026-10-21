@@ -302,10 +302,7 @@ class TestProactiveTimerRoot:
         """无可用 Bot → preflight decision + root outcome=no_bot。"""
         monkeypatch.setattr(gateway, "PROACTIVE_ENABLED", True)
 
-        def _no_bot():
-            raise RuntimeError("测试环境无 Bot")
-
-        monkeypatch.setattr("nonebot.get_bot", _no_bot)
+        monkeypatch.setattr("nonebot.get_bots", dict)
         asyncio.run(gateway.proactive_speak_job())
         message_flow.flush()
         row = _latest_trace(flow_db, "proactive_timer")
@@ -314,6 +311,74 @@ class TestProactiveTimerRoot:
         events = _events(flow_db, row[0], node_id="proactive.timer.preflight",
                          kind="decision")
         assert events and events[0].reason_code == "no_bot"
+
+    def test_multiple_bots_skip_timer_without_route_binding(
+        self, flow_db, gateway, monkeypatch
+    ):
+        """A timer without an event cannot choose among QQ accounts."""
+        monkeypatch.setattr(gateway, "PROACTIVE_ENABLED", True)
+        bots = {
+            self_id: SimpleNamespace(
+                self_id=self_id,
+                adapter=SimpleNamespace(get_name=lambda: "OneBot V11"),
+            )
+            for self_id in ("10000", "20000")
+        }
+        monkeypatch.setattr("nonebot.get_bots", lambda: bots)
+        asyncio.run(gateway.proactive_speak_job())
+        message_flow.flush()
+        row = _latest_trace(flow_db, "proactive_timer")
+        assert row is not None
+        assert row[3] == "ambiguous_bots"
+        events = _events(flow_db, row[0], node_id="proactive.timer.preflight",
+                         kind="decision")
+        assert events and events[0].reason_code == "ambiguous_bot_selection"
+
+    @pytest.mark.asyncio
+    async def test_participation_job_keeps_the_triggering_bot(
+        self, gateway, monkeypatch
+    ):
+        import nonebot
+
+        from core.transport.models import BotRef
+
+        class Bot:
+            def __init__(self, self_id):
+                self.self_id = self_id
+                self.adapter = SimpleNamespace(get_name=lambda: "OneBot V11")
+
+        intended, other = Bot("10000"), Bot("20000")
+        monkeypatch.setattr(
+            nonebot, "get_bots", lambda: {"10000": intended, "20000": other}
+        )
+        captured = {}
+
+        async def fake_speak(bot, group_id, **kwargs):
+            captured["self_id"] = bot.self_id
+            captured["group_id"] = group_id
+
+        monkeypatch.setattr(gateway, "_proactive_speak_for_group", fake_speak)
+        monkeypatch.setattr(
+            gateway,
+            "get_participation_manager",
+            lambda: SimpleNamespace(snapshot=lambda _group_id: {}),
+        )
+        before = set(gateway._reply_check_tasks)
+        gateway._spawn_participation_speak(
+            123,
+            SimpleNamespace(
+                mode="TOPIC_INTEREST",
+                group_id=123,
+                breakdown=None,
+                trigger_msg_id=1,
+                topic_id="topic-1",
+                reason_flags=(),
+            ),
+            bot_ref=BotRef("legacy-qq:10000", "onebot-v11", "qq", "10000"),
+        )
+        spawned = tuple(gateway._reply_check_tasks - before)
+        await asyncio.gather(*spawned)
+        assert captured == {"self_id": "10000", "group_id": 123}
 
 
 # ── (d)/(e) 主动 @ 资格与选择 ────────────────────────────────

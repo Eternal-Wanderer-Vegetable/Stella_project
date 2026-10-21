@@ -42,6 +42,7 @@ from .store import (
     TaskNotFoundError,
     TaskStore,
 )
+from .targets import legacy_qq_target, qq_subject_key, target_scope_key
 
 # objective 的长度上限：它是模型目标（agent）或群消息（reminder），不是文章
 _DEFAULT_OBJECTIVE_MAX_CHARS = 500
@@ -123,11 +124,15 @@ class SchedulingService:
     def _is_admin(self, actor_id: int, *, is_group_admin: bool) -> bool:
         return is_group_admin or actor_id in self.limits.global_admin_ids
 
-    def _load_task_in_group(self, task_id: str, group_id: int) -> Task:
+    def _load_task_in_group(
+        self, task_id: str, group_id: int, scope_key: str | None = None
+    ) -> Task:
         task = self.store.get_task(task_id)
         if task is None:
             raise TaskNotFoundError("任务不存在（或已被删除）")
-        if task.group_id != group_id:
+        if task.group_id != group_id or (
+            scope_key is not None and task.scope_key != scope_key
+        ):
             # 跨群访问：与「不存在」同一句话回应，避免向别的群泄露任务存在性
             logger.info(
                 f"[Scheduling] 跨群操作被拒绝：群 {group_id} 用户试图访问群 "
@@ -136,21 +141,32 @@ class SchedulingService:
             raise PermissionDeniedError("任务不存在（或已被删除）")
         return task
 
-    def _require_owner_or_admin(self, task: Task, actor_id: int, *, is_admin: bool) -> None:
-        if actor_id != task.owner_id and not is_admin:
+    def _require_owner_or_admin(
+        self, task: Task, actor_id: int, *, is_admin: bool, actor_subject_key: str = ""
+    ) -> None:
+        owns_task = (
+            actor_subject_key == task.subject_key
+            if actor_subject_key and task.subject_key
+            else actor_id == task.owner_id
+        )
+        if not owns_task and not is_admin:
             raise PermissionDeniedError("只有任务创建者或管理员可以操作这个任务")
 
     def _require_not_cancelled(self, task: Task) -> None:
         if task.status is TaskStatus.CANCELLED:
             raise InvalidTaskError("任务已取消，无法再操作")
 
-    def _resolve_task_id(self, task_id_prefix: str, group_id: int) -> str:
+    def _resolve_task_id(
+        self, task_id_prefix: str, group_id: int, scope_key: str | None = None
+    ) -> str:
         """任务id 允许写前缀（群内唯一即可）；歧义/不存在在这里报错。"""
         prefix = (task_id_prefix or "").strip()
         if not prefix:
             raise InvalidTaskError("请提供任务id（可用「定时列表」查看）")
         candidates = [
-            t for t in self.store.list_tasks(group_id, include_cancelled=True)
+            t for t in self.store.list_tasks(
+                group_id, scope_key=scope_key, include_cancelled=True
+            )
             if t.task_id.startswith(prefix)
         ]
         if len(candidates) == 1:
@@ -166,6 +182,9 @@ class SchedulingService:
         actor_id: int,
         group_id: int,
         bot_id: str,
+        target=None,
+        subject_key: str = "",
+        scope_key: str = "",
         is_group_admin: bool = False,
         mode: TaskMode | str,
         objective: str,
@@ -202,7 +221,25 @@ class SchedulingService:
             notification_mode = NotificationMode(notification_mode)
         schedule = parse_cron(cron_expr, timezone)  # CronError 直接上抛（用户可读）
 
-        user_tasks = self.store.list_tasks(group_id, owner_id=actor_id, include_cancelled=False)
+        target = target if target is not None else legacy_qq_target(bot_id, group_id)
+        if target is None:
+            raise InvalidTaskError("任务投递目标无效，未创建任务")
+        if (
+            target.bot.self_id != str(bot_id)
+            or target.bot.platform_scope != "qq"
+            or target.scene.kind != "group"
+            or target.scene.scene_id != str(group_id)
+        ):
+            raise InvalidTaskError("任务投递目标与当前 QQ 群不一致")
+        expected_scope = target_scope_key(target)
+        if scope_key and scope_key != expected_scope:
+            raise InvalidTaskError("任务作用域与投递目标不一致")
+        scope_key = expected_scope
+        subject_key = subject_key or qq_subject_key(actor_id)
+
+        user_tasks = self.store.list_tasks(
+            group_id, owner_id=actor_id, scope_key=scope_key, include_cancelled=False
+        )
         if not is_admin and len(user_tasks) >= self.limits.max_tasks_per_user:
             raise GroupTaskLimitError(
                 f"你在这个群已有 {len(user_tasks)} 个任务（上限 {self.limits.max_tasks_per_user}）"
@@ -212,6 +249,9 @@ class SchedulingService:
             bot_id=str(bot_id),
             group_id=group_id,
             owner_id=actor_id,
+            target=target,
+            subject_key=subject_key,
+            scope_key=scope_key,
             mode=mode,
             objective=objective,
             cron_expr=schedule.expr,
@@ -228,6 +268,9 @@ class SchedulingService:
             group_id=group_id,
             task_id=task.task_id,
             detail=f"mode={mode.value} cron={schedule.expr} tz={schedule.tz_name}",
+            actor_subject_key=subject_key,
+            scope_key=scope_key,
+            target=target,
             now=now,
         )
         logger.info(
@@ -237,26 +280,33 @@ class SchedulingService:
         return self.store.get_task(task.task_id)  # type: ignore[return-value]
 
     # ── 查询 ─────────────────────────────────────────────
-    def list_tasks(self, *, group_id: int, include_cancelled: bool = False) -> list[Task]:
+    def list_tasks(
+        self, *, group_id: int, scope_key: str | None = None,
+        include_cancelled: bool = False,
+    ) -> list[Task]:
         """群内任务清单（清单本身群内可见；单任务的管理操作另有权限）。"""
-        return self.store.list_tasks(group_id, include_cancelled=include_cancelled)
+        return self.store.list_tasks(
+            group_id, scope_key=scope_key, include_cancelled=include_cancelled
+        )
 
     def show_task(self, *, actor_id: int, group_id: int, task_id_prefix: str,
-                  is_group_admin: bool = False) -> Task:
+                  is_group_admin: bool = False, scope_key: str | None = None) -> Task:
         task = self._load_task_in_group(
-            self._resolve_task_id(task_id_prefix, group_id), group_id
+            self._resolve_task_id(task_id_prefix, group_id, scope_key), group_id, scope_key
         )
         _ = actor_id, is_group_admin  # 详情全员可看（内容不含凭据）
         return task
 
     def history(self, *, actor_id: int, group_id: int, task_id_prefix: str,
-                is_group_admin: bool = False, limit: int = 10) -> list[Run]:
+                is_group_admin: bool = False, limit: int = 10,
+                scope_key: str | None = None,
+                actor_subject_key: str = "") -> list[Run]:
         task = self._load_task_in_group(
-            self._resolve_task_id(task_id_prefix, group_id), group_id
+            self._resolve_task_id(task_id_prefix, group_id, scope_key), group_id, scope_key
         )
         self._require_owner_or_admin(task, actor_id, is_admin=self._is_admin(
             actor_id, is_group_admin=is_group_admin
-        ))
+        ), actor_subject_key=actor_subject_key)
         return self.store.list_runs(task.task_id, limit=limit)
 
     # ── 编辑 / 状态 ──────────────────────────────────────
@@ -266,6 +316,8 @@ class SchedulingService:
         actor_id: int,
         group_id: int,
         task_id_prefix: str,
+        scope_key: str | None = None,
+        actor_subject_key: str = "",
         expected_revision: int,
         is_group_admin: bool = False,
         cron_expr: str | None = None,
@@ -277,10 +329,12 @@ class SchedulingService:
     ) -> Task:
         now = now or utc_now()
         is_admin = self._is_admin(actor_id, is_group_admin=is_group_admin)
-        task_id = self._resolve_task_id(task_id_prefix, group_id)
-        task = self._load_task_in_group(task_id, group_id)
+        task_id = self._resolve_task_id(task_id_prefix, group_id, scope_key)
+        task = self._load_task_in_group(task_id, group_id, scope_key)
         self._require_not_cancelled(task)
-        self._require_owner_or_admin(task, actor_id, is_admin=is_admin)
+        self._require_owner_or_admin(
+            task, actor_id, is_admin=is_admin, actor_subject_key=actor_subject_key
+        )
         if policy is not None and not is_admin:
             raise PermissionDeniedError("只有群管理员可以修改任务策略（工具允许清单/补跑策略）")
 
@@ -324,6 +378,9 @@ class SchedulingService:
             task_id=task_id,
             detail=f"fields={sorted(updates) or []} policy={'replaced' if effective_policy else 'unchanged'} "
                    f"revision={expected_revision}->{updated.revision}",
+            actor_subject_key=actor_subject_key or qq_subject_key(actor_id),
+            scope_key=task.scope_key,
+            target=task.target,
             now=now,
         )
         return updated
@@ -335,6 +392,8 @@ class SchedulingService:
         group_id: int,
         task_id_prefix: str,
         expected_revision: int,
+        scope_key: str | None = None,
+        actor_subject_key: str = "",
         is_group_admin: bool,
         policy: dict,
         now=None,
@@ -344,6 +403,8 @@ class SchedulingService:
             actor_id=actor_id,
             group_id=group_id,
             task_id_prefix=task_id_prefix,
+            scope_key=scope_key,
+            actor_subject_key=actor_subject_key,
             expected_revision=expected_revision,
             is_group_admin=is_group_admin,
             policy=policy,
@@ -358,15 +419,19 @@ class SchedulingService:
         actor_id: int,
         group_id: int,
         task_id_prefix: str,
+        scope_key: str | None = None,
+        actor_subject_key: str = "",
         expected_revision: int,
         is_group_admin: bool = False,
         now=None,
     ) -> Task:
         now = now or utc_now()
         is_admin = self._is_admin(actor_id, is_group_admin=is_group_admin)
-        task_id = self._resolve_task_id(task_id_prefix, group_id)
-        task = self._load_task_in_group(task_id, group_id)
-        self._require_owner_or_admin(task, actor_id, is_admin=is_admin)
+        task_id = self._resolve_task_id(task_id_prefix, group_id, scope_key)
+        task = self._load_task_in_group(task_id, group_id, scope_key)
+        self._require_owner_or_admin(
+            task, actor_id, is_admin=is_admin, actor_subject_key=actor_subject_key
+        )
         if action != "cancel":
             self._require_not_cancelled(task)
         updated = self.store.set_status(task_id, expected_revision, status, now=now)
@@ -376,6 +441,9 @@ class SchedulingService:
             group_id=group_id,
             task_id=task_id,
             detail=f"revision={expected_revision}->{updated.revision}",
+            actor_subject_key=actor_subject_key or qq_subject_key(actor_id),
+            scope_key=task.scope_key,
+            target=task.target,
             now=now,
         )
         if status is not TaskStatus.ACTIVE:
@@ -400,16 +468,20 @@ class SchedulingService:
         actor_id: int,
         group_id: int,
         task_id_prefix: str,
+        scope_key: str | None = None,
+        actor_subject_key: str = "",
         is_group_admin: bool = False,
         request_id: str | None = None,
         now=None,
     ) -> Run:
         now = now or utc_now()
         is_admin = self._is_admin(actor_id, is_group_admin=is_group_admin)
-        task_id = self._resolve_task_id(task_id_prefix, group_id)
-        task = self._load_task_in_group(task_id, group_id)
+        task_id = self._resolve_task_id(task_id_prefix, group_id, scope_key)
+        task = self._load_task_in_group(task_id, group_id, scope_key)
         self._require_not_cancelled(task)
-        self._require_owner_or_admin(task, actor_id, is_admin=is_admin)
+        self._require_owner_or_admin(
+            task, actor_id, is_admin=is_admin, actor_subject_key=actor_subject_key
+        )
         request_id = request_id or uuid.uuid4().hex
         run_id = self.store.insert_run(task_id, request_id=request_id, now=now)
         if run_id is None:
@@ -424,13 +496,18 @@ class SchedulingService:
             group_id=group_id,
             task_id=task_id,
             detail=f"run_id={run_id} request_id={request_id}",
+            actor_subject_key=actor_subject_key or qq_subject_key(actor_id),
+            scope_key=task.scope_key,
+            target=task.target,
             now=now,
         )
         return run
 
     # ── 审计查询 ─────────────────────────────────────────
-    def audit_log(self, *, group_id: int, limit: int = 20):
-        return self.store.list_audit(group_id, limit=limit)
+    def audit_log(
+        self, *, group_id: int, scope_key: str | None = None, limit: int = 20
+    ):
+        return self.store.list_audit(group_id, scope_key=scope_key, limit=limit)
 
     # ── 内部 ─────────────────────────────────────────────
     def _refresh_schedule_cache(self, task_id: str, *, now) -> None:
