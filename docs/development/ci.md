@@ -8,7 +8,7 @@
 |---|---|
 | `lint` | `ruff check .`（Python 3.11） |
 | `security` | `pip-audit -r requirements.txt`（阻塞）+ `bandit`（非阻塞，报告上传为 artifact） |
-| `test` | 3.10 / 3.11 / 3.12 三版本矩阵，`pytest tests/ --cov=. --cov-branch -n auto`，覆盖率报告上传为 artifact |
+| `test` | 3.10 / 3.11 / 3.12 三版本矩阵，从 `requirements-platform.lock` 安装基础与可选平台桥接依赖，再运行 `pytest tests/ --cov=. --cov-branch -n auto`，覆盖率报告上传为 artifact |
 | `cli` | Rust CLI（`cli/`）：`cargo fmt --check` + `clippy -- -D warnings` + `cargo test`，另对帮助文本做子命令清单冒烟（doctor/init/start/stop/restart/status/logs/upgrade/migrate/plugin/capabilities/manifest/compose），防止重构悄悄丢命令 |
 | `windows-native` | windows-latest 上跑 `pytest tests/windows`——进程树、升级与安装可靠性的原生矩阵（哨兵/PID/激活记录等都依赖真实 Windows 语义） |
 | `documentation` | 标准库链接/锚点、双语配对、迁移映射、状态检查与六个正反例合同测试 |
@@ -21,10 +21,12 @@
 **本地复现 CI 环境**：
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt pytest pytest-cov pytest-xdist
+pip install -r requirements-platform.lock -r requirements-dev.txt pytest pytest-asyncio pytest-cov pytest-xdist pytest-timeout
 ruff check .
 pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 ```
+
+`requirements-platform.lock` 包含基础运行依赖及 `requirements-platform.in` 声明的 Alconna / Uninfo 桥接依赖；默认 QQ/WebChat 安装仍只使用 `requirements.txt`。
 
 `pip-audit` 是阻塞的，某个上游依赖爆出 CVE 时 CI 会红。若判断为不可立即修复的上游问题，可临时在该步骤加 `|| true`，但应记录原因。
 
