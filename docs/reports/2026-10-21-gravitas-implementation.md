@@ -67,8 +67,37 @@ G04b 将把总期限扩展到锁、prepare、路由/工具等待和 finalize；G
 - GitNexus 编辑前 impact 索引落在 `af35e11`；提交后为追平 G04b 提交 `6458764`，用仓库 pinned CLI 1.6.11 全量重建，状态显示 indexed/current commit 均为 `6458764`、覆盖 1,812 files。重建器报告流程候选受预算截断（2,851 candidates 未排序、24 traces depth-capped、801 callees 被 branch cap 跳过、45 walks 超 per-entry budget）；流程路径属于下界，不宣称完整。提交前 `detect-changes --scope all`：11 files / 33 symbols / 34 affected processes / CRITICAL；`compare --base-ref main`：454 / 785 / 70 / CRITICAL（累计）。第一次 all 因 graph query interrupted 返回 PARTIAL，按门禁重跑成功；最终 all/compare 输出未报告 partial/truncated。当前 launcher 1.6.11 与编辑前记录使用的 1.6.12 不同，此差异保留在证据中；CLI 展示列表是样例，计数为报告值。状态文档编辑前的 exact File impact 为 LOW：本报告 11、`progress.md` 26、`session-handoff.md` 19、`feature_list.json` 19 impacted files；File 图未包含过程轴，且已用相对链接与状态引用检查补证。
 - 状态记录提交的 GitNexus 检查：scope all 为 4 files / 7 symbols / 0 processes / LOW；compare/main 为 457 / 796 / 59 / CRITICAL（分支累计）。首次 compare 因图查询中断标记 PARTIAL，重跑后退出码 0 且无 partial/truncated。该轮 `check_docs.py` 为 119 files / 1,240 local links / 577 anchors / 0 errors，`feature_list.json` 可解析，`git diff --check` 通过。
 
+## G04c 副作用与最终发送围栏
+
+代码提交 `8160289` 与补充提交 `5b87efa` 把现有 turn deadline 延伸到用户可见的最终发送和 WebChat HTTP 完成边界：
+
+- `deliver_lines` 新增可选 Deadline。未到期前不启动下一段；段间隔与发送 callback 都受同一 deadline 限制。若 callback 尚未开始即到期，则不产生发送或回执；callback 开始后超时或取消，当前段落一条 `unknown` 回执、停止后续段且不重试。
+- 超时时不等待忽略取消的 callback 收敛：在途任务保留为进程内隔离任务，该 conversation key 的后续发送被围栏；活动或隔离中的 callback 总数最多 16，达到上限时跳过新发送并记录 flow decision。callback 实际结束后释放隔离项。该隔离是单进程状态，进程重启后的在途 adapter 状态仍属于 unknown。
+- QQ 群聊、私聊普通回复、两类 Cometa ACK、主动 @ 和主动群聊六个 `deliver_lines` 调用点都传入 `ctx.turn_deadline`；四个 adapter callback 也向 `OutboundService.send` 传入同一 Deadline。物理消息每个分片调用 exporter 前再次检查，deadline 到期不启动后续分片；已 ACK 的前段与未启动后段返回 partial，逻辑回执仍保守记为 unknown。
+- WebChat router 在 SSE stream 开始时创建 120 秒总期限，并将同一 Deadline 传入 `run_turn`、Facade 与会话锁。用户消息/回复采集、social receipt 和 HTTP complete 帧之前检查期限；超时返回现有 SSE error 事件“回复超时”。
+- 外部取消仍继续传播；如果物理发送 callback 已开始，当前段会先记 `unknown`，之后取消不触发第二段。期限前未开始的发送不虚构为 `failed` 或 `unknown`。
+
+### GitNexus 与调用审计
+
+编辑前索引绑定 `8258736`，内容覆盖 1,812 个文件。主要精确影响：`deliver_lines` HIGH（10 impacted / 6 direct / 3 inferred processes / 2 modules），涉及 `handle_chat`、`handle_private_chat` 与 `proactive_speak_job`；`run_with_deadline` CRITICAL（14 / 6 direct / 4 processes），包含 Planner 与评估路径。`OutboundService.send` 为 MEDIUM（11 / 6 direct）；相同文件内的 `MessageExporter.send` 是 UNKNOWN/0 图边，已按 Protocol 声明和 exporter 实现补查；不修改该 adapter 接口。WebChat `run_turn` 为 LOW（2 个 router flows）；router handler `chat` 图为 UNKNOWN/0，已检查 `/api/v1/chat` 路由注册与 `run_turn` 实际调用。HIGH/CRITICAL 项在编辑前已向用户报告；没有用 shared-axis 风险豁免。
+
+提交 `8160289` 后 GitNexus 全量索引更新至该提交，状态为 up-to-date、覆盖 1,812 个文件。流程推断保留工具自身预算限制：2,853 个候选入口未排名、24 条 trace 达深度上限、813 个 callee 被分支上限跳过、45 条 walk 达单入口预算；827 flows 是下界，不能视为完整流程全集。
+
+### 验证
+
+- 隔离回归：
+  `STELLA_HOME=/tmp/stella-gravitas-g04c-20261021 .venv/bin/pytest tests/runtime tests/capability tests/test_planner.py tests/test_ai_gateway_deterministic_reply.py tests/test_private_chat_ingress.py tests/webui/test_webui_chat.py tests/test_social_delivery.py tests/test_transport_outbound.py tests/test_capture_ingress_gating.py tests/cometa/test_gateway_wiring.py -q -x`
+  **517 passed / 1 warning**。warning 是既有 NoneBot fixture 未发现 adapter。新增回归覆盖期限前不发送、超时/取消后 unknown 且不启动下一段、忽略取消的 callback 隔离与容量拒绝、物理分片围栏，以及 WebChat 超时 SSE error frame。
+- `.venv/bin/ruff check .` 通过；G04c 修改的 Python 文件 `py_compile` 通过；`git diff --check` 通过。
+- `.venv/bin/python scripts/check_docs.py`：119 files / 1,241 local links / 577 anchors / 0 errors。
+- 源码已有 message-flow 节点仅 body hash 变化、拓扑不变；最后归档为 `message-flow.c00e93615f8b.json`（141 nodes / 139 source-resolved / 9,489 closure sites / 14,108 reachable symbols），`.venv/bin/python scripts/generate_message_flow.py --check` 通过。较早提交的 `message-flow.d378d11c527d.json` 保留为不可变历史归档。
+- 两次代码提交前 GitNexus 1.6.11 `detect-changes --scope all`：10 files / 40 symbols / 15 processes / HIGH；`--scope compare --base-ref main`：464 files / 840 symbols / 72 processes / CRITICAL（累计分支风险）。此时 scope=all 也包含未提交的 G04c `progress.md` 与本报告更新；两次命令退出码为 0，无 partial/truncated 标记。流程列表只是 CLI 展示样例，计数按工具摘要记录。
+- 状态记录提交前检查：GitNexus scope all 4 files / 10 symbols / 0 processes / LOW；compare main 465 files / 849 symbols / 72 processes / CRITICAL（累计），无 partial/truncated。文档门禁 119 files / 1,241 local links / 577 anchors / 0 errors；`feature_list.json` JSON parse 与 `git diff --check` 通过。
+
+此阶段只验证离线测试和 fake callback，没有真实 QQ/WebChat、模型、adapter、跨进程或 clean VM 验收。G04 软件包完成不代表 V1 验收完成；整体仍 **NOT READY**。
+
 ## 未完成与验收边界
 
-- G00–G03、G04a、G04b 已完成；G04c、G05–G09 仍须逐包实现、验证和提交。
+- G00–G03、G04a–G04c 已完成；G05–G09 仍须逐包实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。

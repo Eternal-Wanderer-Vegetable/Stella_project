@@ -556,6 +556,16 @@
           "command": "G04b pre-commit: .gitnexus/gn detect-changes --scope all --repo Stella_project --limit 2000; detect-changes --scope compare --base-ref main --repo Stella_project --limit 2000",
           "result": "Pinned GitNexus 1.6.11. All: 11 files / 33 symbols / 34 processes / CRITICAL. Compare main: 454 files / 785 symbols / 70 processes / CRITICAL cumulative. First all graph query interrupted and returned PARTIAL, retry completed with no partial/truncated marker. Compare is cumulative. Commit 6458764.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G04c isolated regression: STELLA_HOME=/tmp/stella-gravitas-g04c-20261021 .venv/bin/pytest tests/runtime tests/capability tests/test_planner.py tests/test_ai_gateway_deterministic_reply.py tests/test_private_chat_ingress.py tests/webui/test_webui_chat.py tests/test_social_delivery.py tests/test_transport_outbound.py tests/test_capture_ingress_gating.py tests/cometa/test_gateway_wiring.py -q -x; .venv/bin/ruff check .; py_compile changed Python; check_docs.py; generate_message_flow.py --check; git diff --check",
+          "result": "517 passed / 1 existing NoneBot fixture warning; full Ruff, changed Python compile, docs (119 files / 1,241 links / 577 anchors / 0 errors), flow check, and diff check passed. Tests cover pre-send expiry, mid-send timeout/unknown, cancellation, non-cooperative callback quarantine and active-send cap, physical chunk fence, six QQ/Cometa/proactive send paths, and WebChat error SSE. Final flow archive message-flow.c00e93615f8b.json: 141 nodes / 139 source-resolved / 9,489 closure sites / 14,108 reachable symbols. No live model, QQ/WebChat, cross-process, clean VM, or release acceptance; overall NOT READY.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G04c pre-commit GitNexus 1.6.11 detect-changes --scope all and --scope compare --base-ref main; upstream impacts for deliver_lines, OutboundService.send, run_with_deadline, WebChat handlers and state files",
+          "result": "Current impact index refreshed to 5b87efa; 1,812 indexed files. deliver_lines HIGH/10 impacted/6 direct/3 processes/2 modules; run_with_deadline CRITICAL/14/6/4; OutboundService.send MEDIUM/11/6 with 4 receiver-typing callers unresolved; MessageExporter.send UNKNOWN/0 source-audited as Protocol plus OneBot exporter. WebChat run_turn LOW/2 flows; router chat UNKNOWN/0 confirmed by route decorator and invocation. Before code follow-up commit: scope all 10 files / 40 symbols / 15 processes / HIGH (included pending state docs); compare main 464 / 840 / 72 / CRITICAL cumulative; no partial/truncated. Commits 8160289 and 5b87efa.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }
