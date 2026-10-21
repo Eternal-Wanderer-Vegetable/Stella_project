@@ -1,0 +1,29 @@
+{
+  "target": {
+    "id": "Class:core/transport/outbound.py:OutboundService",
+    "name": "OutboundService",
+    "type": "Class",
+    "filePath": "core/transport/outbound.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 71,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 11,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 11,
+    "2": 30,
+    "3": 30
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

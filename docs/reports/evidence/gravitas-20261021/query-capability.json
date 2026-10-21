@@ -1,0 +1,203 @@
+{
+  "processes": [
+    {
+      "id": "proc_179_probe_tools",
+      "summary": "Probe_tools → _to_image_data_url",
+      "priority": 0.066,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_275_probe_tools",
+      "summary": "Probe_tools → On_agent_begin",
+      "priority": 0.066,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_276_probe_tools",
+      "summary": "Probe_tools → Get_tool",
+      "priority": 0.066,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_277_probe_tools",
+      "summary": "Probe_tools → Names",
+      "priority": 0.066,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:astrbot_compat/llm/agent.py:run_tool_loop",
+      "name": "run_tool_loop",
+      "filePath": "astrbot_compat/llm/agent.py",
+      "startLine": 217,
+      "endLine": 321,
+      "module": "Scheduling",
+      "process_id": "proc_179_probe_tools",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/astrbot_compat/test_llm_tools.py:_loop",
+      "name": "_loop",
+      "filePath": "tests/astrbot_compat/test_llm_tools.py",
+      "startLine": 198,
+      "endLine": 201,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_llm_tools.py:test_full_tool_loop",
+      "name": "test_full_tool_loop",
+      "filePath": "tests/astrbot_compat/test_llm_tools.py",
+      "startLine": 204,
+      "endLine": 229,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_llm_tools.py:test_step_limit_stops_the_loop",
+      "name": "test_step_limit_stops_the_loop",
+      "filePath": "tests/astrbot_compat/test_llm_tools.py",
+      "startLine": 243,
+      "endLine": 259,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Function:tests/capability/test_capability_hooks.py:test_memory_runs_when_gate_disabled",
+      "name": "test_memory_runs_when_gate_disabled",
+      "filePath": "tests/capability/test_capability_hooks.py",
+      "startLine": 202,
+      "endLine": 207,
+      "module": "Capability"
+    },
+    {
+      "id": "Function:tests/capability/test_capability_hooks.py:test_comes_skipped_without_platform_handles",
+      "name": "test_comes_skipped_without_platform_handles",
+      "filePath": "tests/capability/test_capability_hooks.py",
+      "startLine": 342,
+      "endLine": 347,
+      "module": "Capability"
+    },
+    {
+      "id": "Function:tests/capability/test_capability_hooks.py:test_comes_failure_does_not_kill_memory",
+      "name": "test_comes_failure_does_not_kill_memory",
+      "filePath": "tests/capability/test_capability_hooks.py",
+      "startLine": 477,
+      "endLine": 490,
+      "module": "Capability"
+    },
+    {
+      "id": "Function:capability/comes/executor.py:_collect_outputs",
+      "name": "_collect_outputs",
+      "filePath": "capability/comes/executor.py",
+      "startLine": 184,
+      "endLine": 202
+    },
+    {
+      "id": "Function:capability/comes/executor.py:_agent_call",
+      "name": "_agent_call",
+      "filePath": "capability/comes/executor.py",
+      "startLine": 228,
+      "endLine": 257,
+      "module": "Capability"
+    },
+    {
+      "id": "File:capability/comes/executor.py",
+      "name": "executor.py",
+      "filePath": "capability/comes/executor.py"
+    },
+    {
+      "id": "Method:astrbot_compat/context.py:Context.activate_llm_tool#1",
+      "name": "activate_llm_tool",
+      "filePath": "astrbot_compat/context.py",
+      "startLine": 231,
+      "endLine": 234,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "Method:astrbot_compat/context.py:Context.tool_loop_agent",
+      "name": "tool_loop_agent",
+      "filePath": "astrbot_compat/context.py",
+      "startLine": 373,
+      "endLine": 410,
+      "module": "Astrbot_compat"
+    },
+    {
+      "id": "File:astrbot_compat/context.py",
+      "name": "context.py",
+      "filePath": "astrbot_compat/context.py"
+    },
+    {
+      "id": "Function:tests/capability/test_comes_executor.py:test_resolve_tools_skips_inactive_tools",
+      "name": "test_resolve_tools_skips_inactive_tools",
+      "filePath": "tests/capability/test_comes_executor.py",
+      "startLine": 105,
+      "endLine": 111,
+      "module": "Capability"
+    },
+    {
+      "id": "Function:tests/capability/test_comes_executor.py:test_mcp_tool_flows_through_agent_loop",
+      "name": "test_mcp_tool_flows_through_agent_loop",
+      "filePath": "tests/capability/test_comes_executor.py",
+      "startLine": 718,
+      "endLine": 731,
+      "module": "Capability"
+    },
+    {
+      "id": "File:tests/capability/test_comes_executor.py",
+      "name": "test_comes_executor.py",
+      "filePath": "tests/capability/test_comes_executor.py"
+    },
+    {
+      "id": "Class:stella_project/plugins/bot_main/scheduling/runtime.py:SchedulerRuntime",
+      "name": "SchedulerRuntime",
+      "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+      "startLine": 67,
+      "endLine": 450
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/runtime.py:SchedulerRuntime.snapshot#0",
+      "name": "snapshot",
+      "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+      "startLine": 441,
+      "endLine": 450
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+      "name": "runtime.py",
+      "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py"
+    },
+    {
+      "id": "Function:capability/hooks.py:build_tool_tasks",
+      "name": "build_tool_tasks",
+      "filePath": "capability/hooks.py",
+      "startLine": 78,
+      "endLine": 156,
+      "module": "Capability"
+    },
+    {
+      "id": "Variable:capability/hooks.py:__all__",
+      "name": "__all__",
+      "filePath": "capability/hooks.py",
+      "startLine": 511,
+      "endLine": 516
+    }
+  ],
+  "timing": {
+    "vector": 5,
+    "bm25": 488.1,
+    "merge": 0.2,
+    "symbol_lookup": 41.2,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 530.4
+  }
+}

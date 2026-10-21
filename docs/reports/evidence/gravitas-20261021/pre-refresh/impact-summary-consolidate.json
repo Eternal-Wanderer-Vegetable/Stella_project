@@ -1,0 +1,1571 @@
+{
+  "target": {
+    "id": "Method:memory/consolidator.py:MemoryConsolidator.consolidate_group#3",
+    "name": "consolidate_group",
+    "type": "Method",
+    "filePath": "memory/consolidator.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 433,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "CRITICAL",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 180,
+    "modules_affected": 20
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 245,
+    "3": 186
+  },
+  "affected_processes": [
+    {
+      "name": "maybe_plan",
+      "type": "Function",
+      "filePath": "core/planner.py",
+      "affected_process_count": 17,
+      "total_hits": 22,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "list_plugins",
+      "type": "Function",
+      "filePath": "webui/routers/plugins.py",
+      "affected_process_count": 10,
+      "total_hits": 20,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "create_task",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "affected_process_count": 13,
+      "total_hits": 19,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Consolidation_drain_job → _get_message_table",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 12,
+      "total_hits": 17,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "prepare_turn",
+      "type": "Function",
+      "filePath": "core/runtime/turn_service.py",
+      "affected_process_count": 17,
+      "total_hits": 17,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Probe_conversation → Create_astrbot_conversations_table",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 15,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_test → Catalog",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 14,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "groups_list",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 5,
+      "total_hits": 14,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "platform_adapters_put",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 5,
+      "total_hits": 14,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_grant → _encode",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 12,
+      "total_hits": 12,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _row_trace_id",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 12,
+      "total_hits": 12,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_reload → Get_context",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 12,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_window_two_stage → Shape_payload",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 12,
+      "total_hits": 12,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_api_key → _custom_config_present",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Execute_operation → State_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_add_document → Get_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _source_signature",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_install_upload → _blank_literals",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Status → _validate_checksum",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_retrieve → Normalize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → Current_version",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_install → _blank_literals",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Update_account → _verify_password",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "edit_task",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "affected_process_count": 9,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "run_now",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "affected_process_count": 9,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Collect_status → Redact_value",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_toggle → Create_group_runtime_state_table",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_production_batch → _active_embedding_record",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skill_detail → _index_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "groups_bindings",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "platform_adapters",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_device_login → _gc_device_sessions",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_logout → Clear_managed_auth",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_migrate_legacy → _ensure",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Config_update → _scalar_to_str",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Is_addressing_command → _mean_vector",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_archive → Can_manage_kb",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → Docker_available",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Setup → _hash_password",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skill_delete → From_settings",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skill_save → _scalar_str",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skills_list → Availability",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "text_chat_stream",
+      "type": "Function",
+      "filePath": "astrbot_compat/llm/provider.py",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 3
+    },
+    {
+      "name": "platform_onebot_put",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 4,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Bench_long_run_drain → _register",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Chat → Sanitize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_custom_endpoint → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Config_current → Is_sensitive",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Config_schema → Deprecation_reason",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Desktop_session → _append",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_config → Profile_id",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_config → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_personas → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_personas → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_status → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_status → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_plugin → Sanitize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Login → Auth_file",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _atomic_json",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _register",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Proactive_speak_job → Sanitize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run → Trace",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_doctor → Args",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_doctor → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Start_bot → Args",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "history",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 3
+    },
+    {
+      "name": "Cometa_auth_device_login_status → _account_brief",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_status → Legacy_auth_home",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_message_context → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_addressing → _decode",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_chat → Delivery_target",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_reload → _read_toml",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_detail → Fingerprint_matches",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_endpoints_put → _normalize_slot",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_roles_put → _normalize_slot",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Replay_turn → _current_input_block",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Trim_messages_job → _connect",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "space_delete",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "space_prompt_put",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "spaces_create",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "system_restart",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Bench_prune → _register",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Decorator → Resort",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_entity_history → Log_sqlite_error",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_message_detail → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_messages → _live_status",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_spec → _bundled_spec",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_private_chat → Delivery_target",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_create → _encode",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_list → Role_at_least",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_revoke → _consider",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → Default",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_apply → Register_backend",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_create → Sanitize_name_part",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_update → Sanitize_name_part",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_provider_request → Get_group_id",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Stream → Next_seq",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Usage_today → _date_key",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "group_mute",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "group_unmute",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Build → Log",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_message_events → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_trace_entities → Log_sqlite_error",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_capability_query → Text_segment",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Memory_trace_detail → _loads",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Memory_traces → _loads",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Participation_traces → _loads",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Platform_link → _current_bots",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_config_put → Save_config",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Probe_tools → _to_image_data_url",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_create → Legacy_qq_target",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Usage_daily → _settings",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/build_offline_payload.py",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "platform_onebot",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "space_bindings_put",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "space_prompt",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "spaces_list",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "system_doctor",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Chat_reset → Get_shared_facade",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_test_endpoint → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Enumeration_sorts_newest_first_and_drops_incomplete → Trace",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_spec_version → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_delete → Default_config_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Migrate_v8 → Legacy_space_name",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_config → Load_conf_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_enabled → _registry_meta",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_uninstall → _default_plugins_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_cancel → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_edit → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_list → _all_groups_with_tasks",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_pause → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_resume → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skills_upload → _front_matter_name",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Turn_detail → _init_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Turn_detail_payloads → _init_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Turn_traces → _init_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_artifact_download → Task_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_cancel_task → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_get_task → _iso",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_list_tasks → _iso",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_respond_input → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Conversation_context → _memory_db",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Conversation_groups → _memory_db",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Delete_personal_memory → Bump",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "List_messages → _memory_db",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Logs_history → _parse_line",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Market → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_servers → Default_config_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_readme → _registry_meta",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_endpoints → Cfg",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_roles → Cfg",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_runtime → Snapshot",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Record_group_chat → Clear_proactive_skips",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Save_config → Parse_groups",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_audit → _all_groups_with_tasks",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_detail → _task_dict",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_run_now → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_add → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_delete → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_list → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_update → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_backends → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_health → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_submit_task → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_task_events → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_task_result → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Create_evaluation_run → _utcnow",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Export_personal_memories → _connect",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "List_personal_memories → _connect",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → MessageBoxW",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → MessageBoxW",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_worker → Resolve_under",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "SaveAndStart → Tauri",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Save_config → Parse_groups",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_bots → _active_onebot_bots",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_history → _service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Setup_status → Auth_file",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Status → _project_version",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "result",
+      "type": "Function",
+      "filePath": "cometa/service.py",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 5
+    },
+    {
+      "name": "refreshTraceBundle",
+      "type": "Function",
+      "filePath": "dashboard/src/stores/flow.ts",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 2
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Cometa",
+      "hits": 77,
+      "impact": "direct"
+    },
+    {
+      "name": "Astrbot_compat",
+      "hits": 38,
+      "impact": "direct"
+    },
+    {
+      "name": "Scheduling",
+      "hits": 38,
+      "impact": "direct"
+    },
+    {
+      "name": "Knowledge",
+      "hits": 27,
+      "impact": "direct"
+    },
+    {
+      "name": "Tests",
+      "hits": 15,
+      "impact": "direct"
+    },
+    {
+      "name": "Memory",
+      "hits": 13,
+      "impact": "direct"
+    },
+    {
+      "name": "Mcp",
+      "hits": 11,
+      "impact": "direct"
+    },
+    {
+      "name": "Services",
+      "hits": 11,
+      "impact": "direct"
+    },
+    {
+      "name": "Routers",
+      "hits": 8,
+      "impact": "direct"
+    },
+    {
+      "name": "Capability",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Skills",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Webui",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Runtime",
+      "hits": 5,
+      "impact": "direct"
+    },
+    {
+      "name": "Deploy",
+      "hits": 4,
+      "impact": "direct"
+    },
+    {
+      "name": "Transport",
+      "hits": 4,
+      "impact": "direct"
+    },
+    {
+      "name": "Participation",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Cluster_191",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Config",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Runners",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Sandbox",
+      "hits": 2,
+      "impact": "direct"
+    }
+  ]
+}

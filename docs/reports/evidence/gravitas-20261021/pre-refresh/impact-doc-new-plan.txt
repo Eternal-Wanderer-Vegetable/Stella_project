@@ -1,0 +1,9 @@
+{
+  "error": "Target 'File:docs/plans/2026-10-21-gravitas-engineering-plan.md' not found",
+  "target": {},
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}
+
+  GitNexus Impact (1.6.12)

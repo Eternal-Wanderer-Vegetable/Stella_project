@@ -1,0 +1,213 @@
+{
+  "processes": [
+    {
+      "id": "proc_107_run_provider_request",
+      "summary": "Run_provider_request → Get_group_id",
+      "priority": 0.087,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_108_run_provider_request",
+      "summary": "Run_provider_request → Get_sender_id",
+      "priority": 0.087,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_158_run_provider_request",
+      "summary": "Run_provider_request → Split_forward_nodes",
+      "priority": 0.087,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_159_run_provider_request",
+      "summary": "Run_provider_request → To_onebot_message",
+      "priority": 0.087,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_247_run_provider_request",
+      "summary": "Run_provider_request → _normalize_chain",
+      "priority": 0.087,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:astrbot_compat/pipeline.py:run_provider_request",
+      "name": "run_provider_request",
+      "filePath": "astrbot_compat/pipeline.py",
+      "startLine": 111,
+      "endLine": 159,
+      "module": "Astrbot_compat",
+      "process_id": "proc_107_run_provider_request",
+      "step_index": 1
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/observability/test_message_flow_runtime.py:_submit",
+      "name": "_submit",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 73,
+      "endLine": 74,
+      "module": "Observability"
+    },
+    {
+      "id": "Class:tests/observability/test_message_flow_runtime.py:TestFacadeTurnFacts",
+      "name": "TestFacadeTurnFacts",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 77,
+      "endLine": 184
+    },
+    {
+      "id": "File:tests/observability/test_message_flow_runtime.py",
+      "name": "test_message_flow_runtime.py",
+      "filePath": "tests/observability/test_message_flow_runtime.py"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_provider_error_falls_back_like_legacy",
+      "name": "test_provider_error_falls_back_like_legacy",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "startLine": 37,
+      "endLine": 51,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_cancel_rejects_inflight_provider",
+      "name": "test_cancel_rejects_inflight_provider",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "startLine": 54,
+      "endLine": 69,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_direct_and_silent_zero_provider",
+      "name": "test_direct_and_silent_zero_provider",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "startLine": 84,
+      "endLine": 111,
+      "module": "Runtime"
+    },
+    {
+      "id": "Class:tests/runtime/runtime_harness.py:RuntimeHarness",
+      "name": "RuntimeHarness",
+      "filePath": "tests/runtime/runtime_harness.py",
+      "startLine": 40,
+      "endLine": 93,
+      "module": "Runtime"
+    },
+    {
+      "id": "Method:tests/runtime/runtime_harness.py:RuntimeHarness.__init__#1",
+      "name": "__init__",
+      "filePath": "tests/runtime/runtime_harness.py",
+      "startLine": 43,
+      "endLine": 58,
+      "module": "Runtime"
+    },
+    {
+      "id": "File:tests/runtime/runtime_harness.py",
+      "name": "runtime_harness.py",
+      "filePath": "tests/runtime/runtime_harness.py"
+    },
+    {
+      "id": "Function:tests/runtime/test_session_ownership.py:test_same_key_turns_serialize_single_owner",
+      "name": "test_same_key_turns_serialize_single_owner",
+      "filePath": "tests/runtime/test_session_ownership.py",
+      "startLine": 18,
+      "endLine": 29,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_session_ownership.py:test_different_keys_run_concurrently",
+      "name": "test_different_keys_run_concurrently",
+      "filePath": "tests/runtime/test_session_ownership.py",
+      "startLine": 32,
+      "endLine": 47,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_session_ownership.py:test_reset_cancels_inflight_and_bumps_epoch",
+      "name": "test_reset_cancels_inflight_and_bumps_epoch",
+      "filePath": "tests/runtime/test_session_ownership.py",
+      "startLine": 50,
+      "endLine": 74,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:core/runtime/facade.py:_pipeline_provider",
+      "name": "_pipeline_provider",
+      "filePath": "core/runtime/facade.py",
+      "startLine": 166,
+      "endLine": 177,
+      "module": "Runtime"
+    },
+    {
+      "id": "Class:core/runtime/facade.py:RuntimeFacade",
+      "name": "RuntimeFacade",
+      "filePath": "core/runtime/facade.py",
+      "startLine": 180,
+      "endLine": 490
+    },
+    {
+      "id": "File:core/runtime/facade.py",
+      "name": "facade.py",
+      "filePath": "core/runtime/facade.py"
+    },
+    {
+      "id": "Function:tests/test_capture_ingress_gating.py:webchat_env",
+      "name": "webchat_env",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 286,
+      "endLine": 310
+    },
+    {
+      "id": "Class:tests/test_capture_ingress_gating.py:_FakeFacade",
+      "name": "_FakeFacade",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 300,
+      "endLine": 304
+    },
+    {
+      "id": "Method:tests/test_capture_ingress_gating.py:_FakeFacade.submit_turn#3",
+      "name": "submit_turn",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 301,
+      "endLine": 304
+    },
+    {
+      "id": "Function:tests/runtime/test_ingress_native.py:test_run_turn_native_mode_full_chain",
+      "name": "test_run_turn_native_mode_full_chain",
+      "filePath": "tests/runtime/test_ingress_native.py",
+      "startLine": 21,
+      "endLine": 37,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_ingress_native.py:test_reset_fences_inflight_and_bumps_epoch",
+      "name": "test_reset_fences_inflight_and_bumps_epoch",
+      "filePath": "tests/runtime/test_ingress_native.py",
+      "startLine": 40,
+      "endLine": 62,
+      "module": "Runtime"
+    }
+  ],
+  "timing": {
+    "vector": 4.4,
+    "bm25": 491.9,
+    "merge": 0.2,
+    "symbol_lookup": 39,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 532
+  }
+}

@@ -1,0 +1,255 @@
+{
+  "processes": [
+    {
+      "id": "proc_300_setup",
+      "summary": "Setup → _hash_password",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_459_setup",
+      "summary": "Setup → Auth_file",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_482_update_account",
+      "summary": "Update_account → _hash_password",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_573_update_account",
+      "summary": "Update_account → Auth_file",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_290_record_group_chat",
+      "summary": "Record_group_chat → Clear_proactive_skips",
+      "priority": 0.078,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_141_platform_link",
+      "summary": "Platform_link → _current_bots",
+      "priority": 0.073,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_228_platform_link",
+      "summary": "Platform_link → _current_adapters",
+      "priority": 0.073,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_229_platform_link",
+      "summary": "Platform_link → _is_onebot_v11",
+      "priority": 0.073,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/security.py:setup_admin",
+      "name": "setup_admin",
+      "filePath": "webui/security.py",
+      "startLine": 115,
+      "endLine": 126,
+      "module": "Webui",
+      "process_id": "proc_300_setup",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/security.py:update_credentials",
+      "name": "update_credentials",
+      "filePath": "webui/security.py",
+      "startLine": 141,
+      "endLine": 155,
+      "module": "Webui",
+      "process_id": "proc_482_update_account",
+      "step_index": 2
+    },
+    {
+      "id": "Method:memory/proactive.py:ProactiveController.record_message#2",
+      "name": "record_message",
+      "filePath": "memory/proactive.py",
+      "startLine": 106,
+      "endLine": 120,
+      "module": "Tests",
+      "process_id": "proc_290_record_group_chat",
+      "step_index": 2
+    },
+    {
+      "id": "Function:extensions/link_monitor/__init__.py:link_status",
+      "name": "link_status",
+      "filePath": "extensions/link_monitor/__init__.py",
+      "startLine": 285,
+      "endLine": 413,
+      "module": "Link_monitor",
+      "process_id": "proc_141_platform_link",
+      "step_index": 3
+    }
+  ],
+  "definitions": [
+    {
+      "id": "File:tests/cometa/test_delivery.py",
+      "name": "host",
+      "filePath": "runtime-manager/src/lib.rs",
+      "startLine": 76,
+      "endLine": 76
+    },
+    {
+      "id": "Const:dashboard/src/views/data/LogsPage.vue:MAX_LINES",
+      "name": "MAX_LINES",
+      "filePath": "dashboard/src/views/data/LogsPage.vue",
+      "startLine": 16,
+      "endLine": 16
+    },
+    {
+      "id": "Const:dashboard/src/views/data/LogsPage.vue:lines",
+      "name": "lines",
+      "filePath": "dashboard/src/views/data/LogsPage.vue",
+      "startLine": 17,
+      "endLine": 17
+    },
+    {
+      "name": "_V2_DELIVERY_COLUMNS",
+      "type": "File",
+      "filePath": "memory/social_schema.py"
+    },
+    {
+      "id": "Const:dashboard/src/views/ProvidersPage.vue:testing",
+      "name": "3. Relevant Architecture",
+      "filePath": "dashboard/src/views/ProvidersPage.vue",
+      "startLine": 25,
+      "endLine": 45
+    },
+    {
+      "id": "Const:dashboard/src/views/ProvidersPage.vue:apiKeyInputs",
+      "name": "4. GitNexus Findings",
+      "filePath": "dashboard/src/views/ProvidersPage.vue",
+      "startLine": 46,
+      "endLine": 69
+    },
+    {
+      "id": "Const:dashboard/src/views/data/FlowPage.vue:NODE_W",
+      "name": "GitNexus Engineering Plan — Stella 多人对话身份与归属修复",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 1,
+      "endLine": 1757
+    },
+    {
+      "id": "Const:dashboard/src/views/ConfigPage.vue:rawFields",
+      "name": "0.1 出厂内容 vs 用户数据的边界（实施前调研确认）",
+      "filePath": "dashboard/src/views/ConfigPage.vue",
+      "startLine": 20,
+      "endLine": 33
+    },
+    {
+      "id": "Const:dashboard/src/views/data/FlowPage.vue:panning",
+      "name": "Stella 归属复发修复——复核发现整改计划",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 1,
+      "endLine": 194
+    },
+    {
+      "id": "Const:dashboard/src/views/ConfigPage.vue:values",
+      "name": "1. 目标架构",
+      "filePath": "dashboard/src/views/ConfigPage.vue",
+      "startLine": 34,
+      "endLine": 52
+    },
+    {
+      "id": "Const:dashboard/src/views/data/FlowPage.vue:startLayoutMorph.fn@559:16.s@583:6",
+      "name": "Stella 对话归属复发修复执行计划",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 1,
+      "endLine": 2190
+    },
+    {
+      "id": "Method:cometa/delivery.py:NotificationPump.deliver_one#1",
+      "name": "deliver_one",
+      "filePath": "cometa/delivery.py",
+      "startLine": 133,
+      "endLine": 151,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:cometa/delivery.py:NotificationPump._deliver_one#1",
+      "name": "_deliver_one",
+      "filePath": "cometa/delivery.py",
+      "startLine": 153,
+      "endLine": 198,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:cometa/delivery.py",
+      "name": "delivery.py",
+      "filePath": "cometa/delivery.py"
+    },
+    {
+      "id": "File:docs/reports/evidence/cross-platform-20261020/context-deliver_lines-core_social_delivery_py.json",
+      "name": "context-deliver_lines-core_social_delivery_py.json",
+      "filePath": "docs/reports/evidence/cross-platform-20261020/context-deliver_lines-core_social_delivery_py.json"
+    },
+    {
+      "id": "File:docs/reports/evidence/cross-platform-20261020/impact-deliver_lines-core_social_delivery_py.json",
+      "name": "impact-deliver_lines-core_social_delivery_py.json",
+      "filePath": "docs/reports/evidence/cross-platform-20261020/impact-deliver_lines-core_social_delivery_py.json"
+    },
+    {
+      "id": "Variable:cometa/models.py:DELIVERED",
+      "name": "DELIVERED",
+      "filePath": "cometa/models.py",
+      "startLine": 194,
+      "endLine": 194
+    },
+    {
+      "id": "Variable:cometa/models.py:DELIVERY_UNKNOWN",
+      "name": "DELIVERY_UNKNOWN",
+      "filePath": "cometa/models.py",
+      "startLine": 220,
+      "endLine": 220
+    },
+    {
+      "id": "Variable:core/social/contracts.py:DELIVERY_ACKNOWLEDGED",
+      "name": "DELIVERY_ACKNOWLEDGED",
+      "filePath": "core/social/contracts.py",
+      "startLine": 33,
+      "endLine": 33
+    },
+    {
+      "id": "Variable:core/social/contracts.py:DELIVERY_FAILED",
+      "name": "DELIVERY_FAILED",
+      "filePath": "core/social/contracts.py",
+      "startLine": 34,
+      "endLine": 34
+    }
+  ],
+  "timing": {
+    "vector": 4.6,
+    "bm25": 779.6,
+    "merge": 0.3,
+    "symbol_lookup": 50.1,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 831.1
+  }
+}

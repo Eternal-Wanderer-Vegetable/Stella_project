@@ -1,0 +1,38 @@
+{
+  "target": {
+    "id": "File:docs/reports/evidence/gravitas-20261021/probe_baseline.py",
+    "name": "probe_baseline.py",
+    "type": "File",
+    "filePath": "docs/reports/evidence/gravitas-20261021/probe_baseline.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 19,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 5,
+    "3": 13
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

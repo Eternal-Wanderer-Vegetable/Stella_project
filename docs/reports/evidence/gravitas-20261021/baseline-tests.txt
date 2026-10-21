@@ -1,0 +1,13 @@
+........................................................................ [ 86%]
+...........                                                              [100%]
+=============================== warnings summary ===============================
+tests/test_transport_outbound.py::test_onebot_target_codec_binds_explicit_adapter_platform_and_bot
+  /home/vegetable/repos/Stella/.venv/lib/python3.12/site-packages/pluggy/_execution.py:147: RuntimeWarning: Failed to get nonebot adapters: NoneBot has not been initialized.
+    res = hook_impl.function(*args)
+
+tests/test_transport_outbound.py::test_onebot_target_codec_binds_explicit_adapter_platform_and_bot
+  /home/vegetable/repos/Stella/.venv/lib/python3.12/site-packages/pluggy/_execution.py:147: RuntimeWarning: No adapters found, please make sure you have installed at least one adapter.
+    res = hook_impl.function(*args)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+83 passed, 2 warnings in 12.46s

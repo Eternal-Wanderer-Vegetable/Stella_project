@@ -1,0 +1,38 @@
+{
+  "target": {
+    "id": "Method:cometa/store.py:CometaStore.claim_next_task#5",
+    "name": "claim_next_task",
+    "type": "Method",
+    "filePath": "cometa/store.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 2,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "partial": true,
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 1
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Cometa",
+      "hits": 2,
+      "impact": "direct"
+    }
+  ]
+}
+
+  GitNexus Impact (1.6.12)
+{"level":40,"time":1792574505926,"name":"gitnexus","context":"impact:depth-traversal","err":"Interrupted.","msg":"GitNexus query failed (degraded)"}

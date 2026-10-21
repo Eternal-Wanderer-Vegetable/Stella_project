@@ -1,8 +1,31 @@
 # Session Handoff
 
+## Current Session — Gravitas implementation
+
+用户要求新建分支并执行[工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)，阶段提交，完成后创建 PR。当前分支 `codex/gravitas-implementation` 基于合并 PR #111 后的 `main@c662746`；本轮范围登记为 GRAVITAS-IMPL G00–G09，严格一次推进一个工作包。
+
+- Files：方案、[机器工作包清单](docs/plans/2026-10-21-gravitas-inventory.json)、[GitNexus 研究与基线证据](docs/reports/evidence/gravitas-20261021/README.md)。
+- Current package：G00，分别关闭 Facade 默认 provider 绕过共享资源门、scheduler waiter 取消残留、db_cleaner 零/缺失/非法水位误删。正式回归随每个独立子提交落地。
+- GitNexus：索引刷新到 `c662746`。`acquire` CRITICAL：13 直接调用、7 条流程、12 模块，另有一接收方未解析；`trim_group_messages` LOW / 13 impacted；默认 provider LOW，但 caller graph 不完整，已用 QQ/WebChat 源码入口补证。编辑前源码影响已报告。
+- Verification baseline：规划验证器 10 packages / 73 sources / 50 entries / 16 scenarios / 368 hashes；文档检查 0 errors。隔离研究已有 83+16 定向通过和缺陷探针。后续所有运行均显式设置临时 STELLA_HOME。
+- Blockers：没有已知代码阻塞；真实模型、平台灰度、跨进程 live、干净 VM 和发布仍单独验收，不能用本地测试代替。
+- Next：完成 G00 正式负例和三个子提交；每个 package 开始时重绑 HEAD 并重跑 upstream impact。
+
+## Previous Session — Gravitas planning
+
+本轮用户要求把稳态讨论完善成可落地方案，并深入使用 GitNexus。交付仅限计划、研究证据与状态；业务实施未启动。方案及文档/档案/源码指纹/证据摘要/图变更门禁已完成，结果入口为[证据 README](docs/reports/evidence/gravitas-20261021/README.md)。
+
+- Files：[方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)、[机器工作包/73 源码/50 入口/16 场景清单](docs/plans/2026-10-21-gravitas-inventory.json)、证据目录和双语历史导航。
+- Evidence：基线 `2b69402`；GitNexus 1.6.12 全量重解析后关键 Function 恢复；query/context/impact、823 流程分页、源码与动态接线补证。acquire CRITICAL、Compact 和 deliver_lines HIGH。首次 partial 已重跑；PDG 无第160行语句块，不作语句级证明。
+- Verification：文档、档案/DAG/指纹/证据 SHA256 与 diff 门禁通过；GitNexus all LOW、compare/main 累计 CRITICAL，临时扩大展示清单上限后完整重跑，无 partial/truncated，原始统计/风险一致。临时 STELLA_HOME；定向既有测试 83 passed/2 warnings，清理器 16 passed；三个合成探针确认调度旁路、取消计数、零水位清理问题，未实施修复。无生产库、模型、Bot 或平台连接。
+- Historical status：当时 GRAVITAS-IMPL 为 planned，XPLAT-IMPL 仍为 in_progress。PR #111 合并后，本轮新建 Gravitas 分支并开始实施；XPLAT 的外部验收缺口改记 blocked，不代表验收完成。
+- Historical next step：按方案 §10 从 G00 开始，先重绑 HEAD 和跑 upstream impact，再用三个子提交关闭默认 provider、waiter 回收与清理保护。当前进度见本文件上方的 Gravitas implementation。
+
+## Inherited Cross-platform Handoff
+
 ## Current Objective
 
-XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP10 已完成；WP11 的 32 项状态矩阵、OneBot V11 事件/回投夹具和本地全量 Python 回归已通过。修复提交 `1f5c900`、`54c4d4c`、`7f35347`；整体仍保持 `in_progress / NOT READY`。分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP10 已完成；WP11 的 32 项状态矩阵、OneBot V11 事件/回投夹具和本地全量 Python 回归已通过。修复提交 `1f5c900`、`54c4d4c`、`7f35347`；PR #111 已合并，因平台 live、干净 VM 与发布验收尚缺，状态为 `blocked / NOT READY`。分支 `codex/cross-platform-implementation`，原基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
 
 ## Deliverables
 

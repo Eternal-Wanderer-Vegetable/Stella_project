@@ -1,0 +1,29 @@
+{
+  "target": {
+    "id": "Class:cometa/delivery.py:NotificationPump",
+    "name": "NotificationPump",
+    "type": "Class",
+    "filePath": "cometa/delivery.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 9,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 3,
+    "3": 4
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

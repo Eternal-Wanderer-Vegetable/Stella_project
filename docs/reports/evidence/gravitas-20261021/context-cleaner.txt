@@ -1,0 +1,86 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/db_cleaner.py:trim_group_messages",
+    "name": "trim_group_messages",
+    "kind": "Function",
+    "filePath": "memory/db_cleaner.py",
+    "startLine": 144,
+    "endLine": 210
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:trim_messages_job",
+        "name": "trim_messages_job",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_db_cleaner.py:test_trim_aligns_checkpoint",
+        "name": "test_trim_aligns_checkpoint",
+        "filePath": "tests/test_db_cleaner.py"
+      },
+      {
+        "uid": "Function:tests/test_db_cleaner.py:test_trim_group_messages_keeps_recent",
+        "name": "test_trim_group_messages_keeps_recent",
+        "filePath": "tests/test_db_cleaner.py"
+      },
+      {
+        "uid": "Function:tests/test_db_cleaner.py:test_trim_group_messages_missing_db",
+        "name": "test_trim_group_messages_missing_db",
+        "filePath": "tests/test_db_cleaner.py"
+      },
+      {
+        "uid": "Function:tests/test_db_cleaner.py:test_trim_protection_keeps_boundary_when_no_backlog",
+        "name": "test_trim_protection_keeps_boundary_when_no_backlog",
+        "filePath": "tests/test_db_cleaner.py"
+      },
+      {
+        "uid": "Function:tests/test_db_cleaner.py:test_trim_protects_unconsolidated_messages",
+        "name": "test_trim_protects_unconsolidated_messages",
+        "filePath": "tests/test_db_cleaner.py"
+      },
+      {
+        "uid": "Function:tests/test_db_cleaner.py:test_trim_without_protection_deletes_unconsolidated",
+        "name": "test_trim_without_protection_deletes_unconsolidated",
+        "filePath": "tests/test_db_cleaner.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory/db_cleaner.py:_align_checkpoint",
+        "name": "_align_checkpoint",
+        "filePath": "memory/db_cleaner.py"
+      },
+      {
+        "uid": "Function:memory/db_cleaner.py:_mark_cleanup_done",
+        "name": "_mark_cleanup_done",
+        "filePath": "memory/db_cleaner.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_292_trim_messages_job",
+      "name": "Trim_messages_job → _align_checkpoint",
+      "step_index": 2,
+      "step_count": 3
+    },
+    {
+      "id": "proc_293_trim_messages_job",
+      "name": "Trim_messages_job → _mark_cleanup_done",
+      "step_index": 2,
+      "step_count": 3
+    }
+  ]
+}
+
+  GitNexus Context (1.6.12)

@@ -1,0 +1,265 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Method:core/runtime/facade.py:RuntimeFacade.submit_turn#4",
+    "name": "submit_turn",
+    "kind": "Method",
+    "filePath": "core/runtime/facade.py",
+    "startLine": 243,
+    "endLine": 450
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "has_method": [
+      {
+        "uid": "Class:core/runtime/facade.py:RuntimeFacade",
+        "name": "RuntimeFacade",
+        "filePath": "core/runtime/facade.py"
+      }
+    ],
+    "calls": [
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_cancel_rejects_inflight_provider",
+        "name": "test_cancel_rejects_inflight_provider",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_deadline_produces_fallback_not_hang",
+        "name": "test_deadline_produces_fallback_not_hang",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_direct_and_silent_zero_provider",
+        "name": "test_direct_and_silent_zero_provider",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_direct_and_silent_zero_provider",
+        "name": "test_direct_and_silent_zero_provider",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_full_chain_single_turn",
+        "name": "test_full_chain_single_turn",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_proactive_at_instruction_first_through_facade",
+        "name": "test_proactive_at_instruction_first_through_facade",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_facade_turns.py:test_provider_error_falls_back_like_legacy",
+        "name": "test_provider_error_falls_back_like_legacy",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_proactive_native.py:test_proactive_at_goes_through_native_facade.engine@127:4",
+        "name": "engine",
+        "filePath": "tests/runtime/test_proactive_native.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_proactive_native.py:test_proactive_join_goes_through_native_facade.engine@192:4",
+        "name": "engine",
+        "filePath": "tests/runtime/test_proactive_native.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_different_keys_run_concurrently",
+        "name": "test_different_keys_run_concurrently",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_different_keys_run_concurrently",
+        "name": "test_different_keys_run_concurrently",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_reset_cancels_inflight_and_bumps_epoch",
+        "name": "test_reset_cancels_inflight_and_bumps_epoch",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_reset_cancels_inflight_and_bumps_epoch",
+        "name": "test_reset_cancels_inflight_and_bumps_epoch",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_reset_fence_is_local_to_its_session",
+        "name": "test_reset_fence_is_local_to_its_session",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_reset_fence_is_local_to_its_session",
+        "name": "test_reset_fence_is_local_to_its_session",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_same_key_turns_serialize_single_owner",
+        "name": "test_same_key_turns_serialize_single_owner",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "Function:tests/runtime/test_session_ownership.py:test_turn_records_written_to_independent_store",
+        "name": "test_turn_records_written_to_independent_store",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/runtime/facade.py:_detail_on",
+        "name": "_detail_on",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:_flow_ctx",
+        "name": "_flow_ctx",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:_flow_transition",
+        "name": "_flow_transition",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:_pipeline_provider",
+        "name": "_pipeline_provider",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/runtime/facade.py:_trace",
+        "name": "_trace",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Function:core/social/delivery.py:delivery_draft_from_context",
+        "name": "delivery_draft_from_context",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._ensure_epoch#1",
+        "name": "_ensure_epoch",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._key_state#1",
+        "name": "_key_state",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.finalize_turn#1",
+        "name": "finalize_turn",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.finalize_turn#1",
+        "name": "finalize_turn",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.finalize_turn#1",
+        "name": "finalize_turn",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.finalize_turn#1",
+        "name": "finalize_turn",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.prepare_turn#1",
+        "name": "prepare_turn",
+        "filePath": "core/runtime/turn_service.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_draft",
+        "name": "delivery_draft",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_draft",
+        "name": "delivery_draft",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_plan",
+        "name": "delivery_plan",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_source_kind",
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_source_kind",
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.delivery_source_kind",
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      }
+    ]
+  },
+  "processes": []
+}

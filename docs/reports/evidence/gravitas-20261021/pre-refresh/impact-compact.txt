@@ -1,0 +1,12 @@
+{
+  "error": "LadybugDB unavailable for /home/vegetable/repos/Stella/.gitnexus/lbug. Another process may be rebuilding the index. Retry later. (Interrupted.)",
+  "target": {
+    "name": "compact_once"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN",
+  "suggestion": "The graph query failed — try gitnexus context <symbol> as a fallback"
+}
+
+  GitNexus Impact (1.6.12)

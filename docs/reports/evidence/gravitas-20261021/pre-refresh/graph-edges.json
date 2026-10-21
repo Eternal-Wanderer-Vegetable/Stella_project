@@ -1,0 +1,4 @@
+{
+  "markdown": "| type | count |\n| --- | --- |\n| CFG | 82507 |\n| REACHING_DEF | 67851 |\n| CDG | 40567 |\n| CALLS | 17453 |\n| DEFINES | 12805 |\n| MEMBER_OF | 6572 |\n| CONTAINS | 4701 |\n| STEP_IN_PROCESS | 4139 |\n| IMPORTS | 3072 |\n| HAS_PROPERTY | 2916 |\n| HAS_METHOD | 2882 |\n| ACCESSES | 2111 |\n| ENTRY_POINT_OF | 479 |\n| HANDLES_ROUTE | 268 |\n| CALL_SUMMARY | 163 |\n| EXTENDS | 111 |\n| USES | 96 |\n| METHOD_OVERRIDES | 88 |\n| FETCHES | 5 |\n| IMPLEMENTS | 3 |\n| EMITS_EVENT | 2 |",
+  "row_count": 21
+}

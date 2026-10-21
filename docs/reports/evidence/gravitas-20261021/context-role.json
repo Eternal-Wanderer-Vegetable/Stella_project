@@ -1,0 +1,183 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:core/llm/registry.py:RoleBackend",
+    "name": "RoleBackend",
+    "kind": "Class",
+    "filePath": "core/llm/registry.py",
+    "startLine": 586,
+    "endLine": 673
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "LLMBackend is an interface with 3 implementations; callers that bind via the interface (e.g. a DI container or dynamic dispatch) are not traced to the concrete symbol — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 0,
+    "dispatchBoundary": 3,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0,
+    "callableValueReferences": 0
+  },
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/test_llm_registry.py:_role_backend",
+        "name": "_role_backend",
+        "filePath": "tests/test_llm_registry.py"
+      }
+    ],
+    "imports": [
+      {
+        "uid": "File:astrbot_compat/llm/provider.py",
+        "name": "provider.py",
+        "filePath": "astrbot_compat/llm/provider.py"
+      },
+      {
+        "uid": "File:core/llm/__init__.py",
+        "name": "__init__.py",
+        "filePath": "core/llm/__init__.py"
+      },
+      {
+        "uid": "File:core/llm/usage_store.py",
+        "name": "usage_store.py",
+        "filePath": "core/llm/usage_store.py"
+      },
+      {
+        "uid": "File:core/vision.py",
+        "name": "vision.py",
+        "filePath": "core/vision.py"
+      },
+      {
+        "uid": "File:deploy/plugin_scaffold.py",
+        "name": "plugin_scaffold.py",
+        "filePath": "deploy/plugin_scaffold.py"
+      },
+      {
+        "uid": "File:deploy/probe.py",
+        "name": "probe.py",
+        "filePath": "deploy/probe.py"
+      },
+      {
+        "uid": "File:memory/capture_gate.py",
+        "name": "capture_gate.py",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "File:memory/session_compact.py",
+        "name": "session_compact.py",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "File:scripts/eval_memory_replay.py",
+        "name": "eval_memory_replay.py",
+        "filePath": "scripts/eval_memory_replay.py"
+      },
+      {
+        "uid": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py"
+      },
+      {
+        "uid": "File:scripts/probe_consolidation.py",
+        "name": "probe_consolidation.py",
+        "filePath": "scripts/probe_consolidation.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "File:tests/test_llm_registry.py",
+        "name": "test_llm_registry.py",
+        "filePath": "tests/test_llm_registry.py"
+      },
+      {
+        "uid": "File:tests/test_memory_capture_gate.py",
+        "name": "test_memory_capture_gate.py",
+        "filePath": "tests/test_memory_capture_gate.py"
+      },
+      {
+        "uid": "File:tests/test_memory_replay.py",
+        "name": "test_memory_replay.py",
+        "filePath": "tests/test_memory_replay.py"
+      },
+      {
+        "uid": "File:tests/test_scheduler_concurrency.py",
+        "name": "test_scheduler_concurrency.py",
+        "filePath": "tests/test_scheduler_concurrency.py"
+      },
+      {
+        "uid": "File:tests/test_usage_accounting.py",
+        "name": "test_usage_accounting.py",
+        "filePath": "tests/test_usage_accounting.py"
+      },
+      {
+        "uid": "File:webui/services/providers.py",
+        "name": "providers.py",
+        "filePath": "webui/services/providers.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "extends": [
+      {
+        "uid": "Class:core/llm/base.py:LLMBackend",
+        "name": "LLMBackend",
+        "filePath": "core/llm/base.py"
+      }
+    ],
+    "method_overrides": [
+      {
+        "uid": "Method:core/llm/base.py:LLMBackend.generate#2",
+        "name": "generate",
+        "filePath": "core/llm/base.py"
+      },
+      {
+        "uid": "Method:core/llm/base.py:LLMBackend.generate_detailed#2",
+        "name": "generate_detailed",
+        "filePath": "core/llm/base.py"
+      }
+    ],
+    "has_method": [
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend.__init__#4",
+        "name": "__init__",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend._active#0",
+        "name": "_active",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend.generate#2",
+        "name": "generate",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend.generate_detailed#2",
+        "name": "generate_detailed",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend.is_local#0",
+        "name": "is_local",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend.model#0",
+        "name": "model",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Method:core/llm/registry.py:RoleBackend.runtime_state#0",
+        "name": "runtime_state",
+        "filePath": "core/llm/registry.py"
+      }
+    ]
+  },
+  "processes": []
+}

@@ -1,0 +1,802 @@
+{
+  "target": {
+    "id": "Function:core/llm/scheduler.py:acquire",
+    "name": "acquire",
+    "type": "Function",
+    "filePath": "core/llm/scheduler.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 28,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "1 call site invoking `acquire` was dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 1,
+    "dispatchBoundary": 0,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0,
+    "callableValueReferences": 0
+  },
+  "summary": {
+    "direct": 11,
+    "processes_affected": 6,
+    "modules_affected": 11
+  },
+  "byDepthCounts": {
+    "1": 11,
+    "2": 10,
+    "3": 7
+  },
+  "affected_processes": [
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/evaluate_dialogue_attribution.py",
+      "affected_process_count": 11,
+      "total_hits": 22,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "maybe_plan",
+      "type": "Function",
+      "filePath": "core/planner.py",
+      "affected_process_count": 9,
+      "total_hits": 13,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "text_chat_stream",
+      "type": "Function",
+      "filePath": "astrbot_compat/llm/provider.py",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "run_production_batch",
+      "type": "Function",
+      "filePath": "scripts/evaluate_dialogue_attribution.py",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/eval_memory_replay.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 3
+    },
+    {
+      "name": "consolidation_drain_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 4
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Tests",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Llm",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Runtime",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Scripts",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Bot_main",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Capability",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Cluster_266",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Memory",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Observability",
+      "hits": 2,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_291",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Router",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:capability/router/fallback.py:route_fallback",
+        "name": "route_fallback",
+        "filePath": "capability/router/fallback.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:core/vision.py:_describe_one",
+        "name": "_describe_one",
+        "filePath": "core/vision.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/embeddings.py:_maybe_gate",
+        "name": "_maybe_gate",
+        "filePath": "memory/embeddings.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/session_compact.py:compact_once",
+        "name": "compact_once",
+        "filePath": "memory/session_compact.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:astrbot_compat/llm/provider.py:StellaChatProvider._request#6",
+        "name": "_request",
+        "filePath": "astrbot_compat/llm/provider.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:astrbot_compat/llm/provider.py:StellaChatProvider.text_chat_stream",
+        "name": "text_chat_stream",
+        "filePath": "astrbot_compat/llm/provider.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_375_text_chat_stream",
+            "label": "Text_chat_stream → _settings",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_241_text_chat_stream",
+            "label": "Text_chat_stream → Estimate_tokens",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_344_text_chat_stream",
+            "label": "Text_chat_stream → Empty",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_58_text_chat_stream",
+            "label": "Text_chat_stream → _check_key_sharing",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_452_text_chat_stream",
+            "label": "Text_chat_stream → _to_image_data_url",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_59_text_chat_stream",
+            "label": "Text_chat_stream → All_slots",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_28_text_chat_stream",
+            "label": "Text_chat_stream → _read_valid_manifest",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_343_text_chat_stream",
+            "label": "Text_chat_stream → To_openai_dict",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_27_text_chat_stream",
+            "label": "Text_chat_stream → _manifest_with_installed_embedding",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_242_text_chat_stream",
+            "label": "Text_chat_stream → _settings",
+            "processType": "intra_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/llm/__init__.py:_LockAlias.__aenter__#0",
+        "name": "__aenter__",
+        "filePath": "core/llm/__init__.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/planner.py:RestrictedPlanner._ask#2",
+        "name": "_ask",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_152_maybe_plan",
+            "label": "Maybe_plan → _limit_for",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_345_maybe_plan",
+            "label": "Maybe_plan → Generate",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_243_maybe_plan",
+            "label": "Maybe_plan → _describe_holders",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_423_maybe_plan",
+            "label": "Maybe_plan → Estimate_tokens",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/runtime/turn_service.py:TurnService.generate_reply#1",
+        "name": "generate_reply",
+        "filePath": "core/runtime/turn_service.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._extract_candidates#2",
+        "name": "_extract_candidates",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._generate#3",
+        "name": "_generate",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:capability/router/__init__.py:_cascade",
+        "name": "_cascade",
+        "filePath": "capability/router/__init__.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:core/vision.py:describe_images",
+        "name": "describe_images",
+        "filePath": "core/vision.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/session_compact.py:schedule_compact._run@998:4",
+        "name": "_run",
+        "filePath": "memory/session_compact.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:_execute_batch_job",
+        "name": "_execute_batch_job",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:run_compact_evaluation",
+        "name": "run_compact_evaluation",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_270_main",
+            "label": "Main → Reset_state",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_65_main",
+            "label": "Main → _json_bytes",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_66_main",
+            "label": "Main → _message_payload",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_269_main",
+            "label": "Main → Reset_state",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_176_main",
+            "label": "Main → _state",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_119_main",
+            "label": "Main → _source_signature",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_175_main",
+            "label": "Main → _decode_mentions",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Method:astrbot_compat/llm/provider.py:StellaChatProvider.text_chat",
+        "name": "text_chat",
+        "filePath": "astrbot_compat/llm/provider.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Method:core/planner.py:RestrictedPlanner.maybe_plan#1",
+        "name": "maybe_plan",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_411_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_433_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_152_maybe_plan",
+            "label": "Maybe_plan → _limit_for",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_345_maybe_plan",
+            "label": "Maybe_plan → Generate",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_432_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_423_maybe_plan",
+            "label": "Maybe_plan → Estimate_tokens",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_153_maybe_plan",
+            "label": "Maybe_plan → Person_owner_key",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_243_maybe_plan",
+            "label": "Maybe_plan → _describe_holders",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_434_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Method:core/runtime/turn_service.py:TurnService.run#1",
+        "name": "run",
+        "filePath": "core/runtime/turn_service.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+        "name": "_consolidate_group_core",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Method:memory/embeddings.py:EmbeddingService._request_embedding#3",
+        "name": "_request_embedding",
+        "filePath": "memory/embeddings.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:capability/router/__init__.py:route",
+        "name": "route",
+        "filePath": "capability/router/__init__.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:memory/session_compact.py:schedule_compact",
+        "name": "schedule_compact",
+        "filePath": "memory/session_compact.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:main",
+        "name": "main",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_270_main",
+            "label": "Main → Reset_state",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_269_main",
+            "label": "Main → Reset_state",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_119_main",
+            "label": "Main → _source_signature",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_176_main",
+            "label": "Main → _state",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_66_main",
+            "label": "Main → _message_payload",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_177_main",
+            "label": "Main → Resolve_fixture_oracle",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_32_main",
+            "label": "Main → _settings",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_175_main",
+            "label": "Main → _decode_mentions",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_65_main",
+            "label": "Main → _json_bytes",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_271_main",
+            "label": "Main → Build_batch_jobs",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_272_main",
+            "label": "Main → Describe",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:scripts/evaluate_dialogue_attribution.py:run_production_batch",
+        "name": "run_production_batch",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_177_main",
+            "label": "Main → Resolve_fixture_oracle",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_67_run_production_batch",
+            "label": "Run_production_batch → _normalize_slot",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_272_main",
+            "label": "Main → Describe",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_395_run_production_batch",
+            "label": "Run_production_batch → _check_key_sharing",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_523_run_production_batch",
+            "label": "Run_production_batch → _settings",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_396_run_production_batch",
+            "label": "Run_production_batch → All_slots",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_12_run_production_batch",
+            "label": "Run_production_batch → _read_json",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_271_main",
+            "label": "Main → Build_batch_jobs",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_13_run_production_batch",
+            "label": "Run_production_batch → Manifest_path",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_14_run_production_batch",
+            "label": "Run_production_batch → Validate_manifest",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_32_main",
+            "label": "Main → _settings",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_11_run_production_batch",
+            "label": "Run_production_batch → Default_manifest",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_10_run_production_batch",
+            "label": "Run_production_batch → _active_embedding_record",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:describe_images_hook",
+        "name": "describe_images_hook",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_48_consolidation_drain_",
+            "label": "Consolidation_drain_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_70_consolidation_drain_",
+            "label": "Consolidation_drain_job → _register",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_401_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_402_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_552_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_383_consolidation_drain_",
+            "label": "Consolidation_drain_job → Alive",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_69_consolidation_drain_",
+            "label": "Consolidation_drain_job → _new_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_41_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_71_consolidation_drain_",
+            "label": "Consolidation_drain_job → Dropped",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_388_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_400_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 3
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Method:memory/embeddings.py:EmbeddingService.embed#1",
+        "name": "embed",
+        "filePath": "memory/embeddings.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,323 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/session_compact.py:compact_once",
+    "name": "compact_once",
+    "kind": "Function",
+    "filePath": "memory/session_compact.py",
+    "startLine": 780,
+    "endLine": 979
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory/session_compact.py:schedule_compact._run@998:4",
+        "name": "_run",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:scripts/evaluate_dialogue_attribution.py:run_compact_evaluation",
+        "name": "run_compact_evaluation",
+        "filePath": "scripts/evaluate_dialogue_attribution.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_applies_summary",
+        "name": "test_compact_applies_summary",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_batch_failure_never_advances_watermark",
+        "name": "test_compact_batch_failure_never_advances_watermark",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_batch_guard_change_stops_following_requests",
+        "name": "test_compact_batch_guard_change_stops_following_requests",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_batches_cover_every_complete_record_under_8192",
+        "name": "test_compact_batches_cover_every_complete_record_under_8192",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_batches_include_old_packet_without_rewriting",
+        "name": "test_compact_batches_include_old_packet_without_rewriting",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_discards_stale_result_on_identity_revision",
+        "name": "test_compact_discards_stale_result_on_identity_revision",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_discards_stale_result_on_reset",
+        "name": "test_compact_discards_stale_result_on_reset",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_invalid_ref_does_not_advance",
+        "name": "test_compact_invalid_ref_does_not_advance",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_length_finish_never_commits_even_valid_json",
+        "name": "test_compact_length_finish_never_commits_even_valid_json",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_noop_without_pending_range",
+        "name": "test_compact_noop_without_pending_range",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_oversized_single_record_stays_pending",
+        "name": "test_compact_oversized_single_record_stays_pending",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "name": "test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "name": "test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "name": "test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "name": "test_compact_pauses_when_minimum_packet_exceeds_budget",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_rejects_ref_selected_from_another_request",
+        "name": "test_compact_rejects_ref_selected_from_another_request",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_respects_token_threshold",
+        "name": "test_compact_respects_token_threshold",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_retries_after_llm_failure",
+        "name": "test_compact_retries_after_llm_failure",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_second_protocol_failure_uses_complete_source_packet",
+        "name": "test_compact_second_protocol_failure_uses_complete_source_packet",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_second_protocol_failure_uses_complete_source_packet",
+        "name": "test_compact_second_protocol_failure_uses_complete_source_packet",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_second_protocol_failure_uses_complete_source_packet",
+        "name": "test_compact_second_protocol_failure_uses_complete_source_packet",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_skip_also_blocked_by_guard",
+        "name": "test_compact_skip_also_blocked_by_guard",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_compact_skips_when_model_says_none",
+        "name": "test_compact_skips_when_model_says_none",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_guard_recovers_next_round",
+        "name": "test_guard_recovers_next_round",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_guard_recovers_next_round",
+        "name": "test_guard_recovers_next_round",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_same_source_batch_failure_count_survives_new_tail",
+        "name": "test_same_source_batch_failure_count_survives_new_tail",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_same_source_batch_failure_count_survives_new_tail",
+        "name": "test_same_source_batch_failure_count_survives_new_tail",
+        "filePath": "tests/test_session_compact.py"
+      },
+      {
+        "uid": "Function:tests/test_session_compact.py:test_same_source_batch_failure_count_survives_new_tail",
+        "name": "test_same_source_batch_failure_count_survives_new_tail",
+        "filePath": "tests/test_session_compact.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/llm/registry.py:gate_of",
+        "name": "gate_of",
+        "filePath": "core/llm/registry.py"
+      },
+      {
+        "uid": "Function:core/llm/scheduler.py:acquire",
+        "name": "acquire",
+        "filePath": "core/llm/scheduler.py"
+      },
+      {
+        "uid": "Function:core/llm/usage_store.py:budget_blocked",
+        "name": "budget_blocked",
+        "filePath": "core/llm/usage_store.py"
+      },
+      {
+        "uid": "Function:memory/prompt_builder.py:estimate_tokens",
+        "name": "estimate_tokens",
+        "filePath": "memory/prompt_builder.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_clear_protocol_failures",
+        "name": "_clear_protocol_failures",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_commit_packet",
+        "name": "_commit_packet",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_compact_output_tokens",
+        "name": "_compact_output_tokens",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_deterministic_fallback",
+        "name": "_deterministic_fallback",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_flow_ctx",
+        "name": "_flow_ctx",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_get_backend",
+        "name": "_get_backend",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_packet_for_entries",
+        "name": "_packet_for_entries",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_plan_compact_batches",
+        "name": "_plan_compact_batches",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:_record_protocol_failure",
+        "name": "_record_protocol_failure",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:fetch_pending_records",
+        "name": "fetch_pending_records",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_compact.py:parse_selected_refs",
+        "name": "parse_selected_refs",
+        "filePath": "memory/session_compact.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:compact_guard",
+        "name": "compact_guard",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:compact_guard_ok",
+        "name": "compact_guard_ok",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:compact_guard_ok",
+        "name": "compact_guard_ok",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:compact_guard_ok",
+        "name": "compact_guard_ok",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:compact_guard_ok",
+        "name": "compact_guard_ok",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:compact_message_limit",
+        "name": "compact_message_limit",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:get_summary_packet",
+        "name": "get_summary_packet",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:invalidate_summary",
+        "name": "invalidate_summary",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:pending_bounds",
+        "name": "pending_bounds",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:should_compact",
+        "name": "should_compact",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:skip_range",
+        "name": "skip_range",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:skip_range",
+        "name": "skip_range",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/summary_packet.py:render_summary_packet",
+        "name": "render_summary_packet",
+        "filePath": "memory/summary_packet.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

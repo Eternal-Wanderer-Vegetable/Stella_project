@@ -1,0 +1,1620 @@
+[
+  {
+    "id": "repo-list",
+    "argv": [
+      "list"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.076,
+    "error": null
+  },
+  {
+    "id": "baseline-status",
+    "argv": [
+      "status",
+      "--json"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.4,
+    "error": null
+  },
+  {
+    "id": "query-runtime",
+    "argv": [
+      "query",
+      "RuntimeFacade submit_turn prepare_turn generate_reply",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.451,
+    "error": null
+  },
+  {
+    "id": "query-scheduler",
+    "argv": [
+      "query",
+      "scheduler acquire concurrency gate_of embedding_gate",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.324,
+    "error": null
+  },
+  {
+    "id": "query-memory",
+    "argv": [
+      "query",
+      "CaptureGate consolidate_group compact_once proactive_timer",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.352,
+    "error": null
+  },
+  {
+    "id": "query-capability",
+    "argv": [
+      "query",
+      "activate_capabilities Comes execute run_tool_loop",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.367,
+    "error": null
+  },
+  {
+    "id": "query-cometa",
+    "argv": [
+      "query",
+      "CometaWorker claim_next_task recover_task NotificationPump",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.31,
+    "error": null
+  },
+  {
+    "id": "query-outbound",
+    "argv": [
+      "query",
+      "OutboundService deliver_lines record_delivery",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.415,
+    "error": null
+  },
+  {
+    "id": "query-status",
+    "argv": [
+      "query",
+      "collect_status usage_snapshot link_status",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.381,
+    "error": null
+  },
+  {
+    "id": "query-evaluation",
+    "argv": [
+      "query",
+      "run_experiment decision_recompute VirtualClock",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "8"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.337,
+    "error": null
+  },
+  {
+    "id": "graph-processes",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "2000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.622,
+    "error": null
+  },
+  {
+    "id": "graph-anchors",
+    "argv": [
+      "cypher",
+      "MATCH (s) WHERE s.filePath IN [\"core/llm/scheduler.py\", \"core/llm/registry.py\", \"core/runtime/facade.py\", \"core/runtime/turn_service.py\", \"memory/capture_gate.py\", \"memory/consolidator.py\", \"memory/session_compact.py\", \"cometa/worker.py\", \"cometa/runtime.py\", \"cometa/store.py\", \"cometa/delivery.py\", \"core/transport/outbound.py\", \"core/social/delivery.py\", \"core/evaluation/runner.py\", \"core/evaluation/clock.py\", \"capability/hooks.py\", \"capability/registry.py\", \"feature_list.json\", \"progress.md\", \"session-handoff.md\", \"docs/history/README.md\", \"docs/history/README.en.md\"] AND labels(s)[0] IN [\"Function\",\"Class\",\"Method\",\"File\"] RETURN labels(s)[0] AS kind, s.id AS id, s.name AS name, s.filePath AS file, s.startLine AS line ORDER BY file, line",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "2000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.576,
+    "error": null
+  },
+  {
+    "id": "context-facade",
+    "argv": [
+      "context",
+      "RuntimeFacade",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.844,
+    "error": null
+  },
+  {
+    "id": "impact-facade",
+    "argv": [
+      "impact",
+      "RuntimeFacade",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 2.588,
+    "error": null
+  },
+  {
+    "id": "context-turn",
+    "argv": [
+      "context",
+      "submit_turn",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.733,
+    "error": null
+  },
+  {
+    "id": "impact-turn",
+    "argv": [
+      "impact",
+      "submit_turn",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.753,
+    "error": null
+  },
+  {
+    "id": "context-provider",
+    "argv": [
+      "context",
+      "_pipeline_provider",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.525,
+    "error": "Symbol '_pipeline_provider' not found"
+  },
+  {
+    "id": "impact-provider",
+    "argv": [
+      "impact",
+      "_pipeline_provider",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.509,
+    "error": "Target '_pipeline_provider' not found"
+  },
+  {
+    "id": "context-scheduler",
+    "argv": [
+      "context",
+      "acquire",
+      "--file",
+      "core/llm/scheduler.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.527,
+    "error": "Symbol 'acquire' not found"
+  },
+  {
+    "id": "impact-scheduler",
+    "argv": [
+      "impact",
+      "acquire",
+      "--file",
+      "core/llm/scheduler.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.559,
+    "error": "Target 'acquire' not found"
+  },
+  {
+    "id": "context-capture",
+    "argv": [
+      "context",
+      "CaptureGate",
+      "--file",
+      "memory/capture_gate.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.799,
+    "error": null
+  },
+  {
+    "id": "impact-capture",
+    "argv": [
+      "impact",
+      "CaptureGate",
+      "--file",
+      "memory/capture_gate.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.767,
+    "error": null
+  },
+  {
+    "id": "context-role",
+    "argv": [
+      "context",
+      "RoleBackend",
+      "--file",
+      "core/llm/registry.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.79,
+    "error": null
+  },
+  {
+    "id": "impact-role",
+    "argv": [
+      "impact",
+      "RoleBackend",
+      "--file",
+      "core/llm/registry.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.885,
+    "error": null
+  },
+  {
+    "id": "context-consolidate",
+    "argv": [
+      "context",
+      "consolidate_group",
+      "--file",
+      "memory/consolidator.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.695,
+    "error": null
+  },
+  {
+    "id": "impact-consolidate",
+    "argv": [
+      "impact",
+      "consolidate_group",
+      "--file",
+      "memory/consolidator.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.731,
+    "error": null
+  },
+  {
+    "id": "context-compact",
+    "argv": [
+      "context",
+      "compact_once",
+      "--file",
+      "memory/session_compact.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.517,
+    "error": "Symbol 'compact_once' not found"
+  },
+  {
+    "id": "impact-compact",
+    "argv": [
+      "impact",
+      "compact_once",
+      "--file",
+      "memory/session_compact.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.489,
+    "error": "LadybugDB unavailable for /home/vegetable/repos/Stella/.gitnexus/lbug. Another process may be rebuilding the index. Retry later. (Interrupted.)"
+  },
+  {
+    "id": "context-capabilities",
+    "argv": [
+      "context",
+      "activate_capabilities",
+      "--file",
+      "capability/hooks.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.591,
+    "error": "Symbol 'activate_capabilities' not found"
+  },
+  {
+    "id": "impact-capabilities",
+    "argv": [
+      "impact",
+      "activate_capabilities",
+      "--file",
+      "capability/hooks.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.55,
+    "error": "Target 'activate_capabilities' not found"
+  },
+  {
+    "id": "context-worker",
+    "argv": [
+      "context",
+      "CometaWorker",
+      "--file",
+      "cometa/worker.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.812,
+    "error": null
+  },
+  {
+    "id": "impact-worker",
+    "argv": [
+      "impact",
+      "CometaWorker",
+      "--file",
+      "cometa/worker.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.657,
+    "error": null
+  },
+  {
+    "id": "context-claim",
+    "argv": [
+      "context",
+      "claim_next_task",
+      "--file",
+      "cometa/store.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.671,
+    "error": null
+  },
+  {
+    "id": "impact-claim",
+    "argv": [
+      "impact",
+      "claim_next_task",
+      "--file",
+      "cometa/store.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.734,
+    "error": null
+  },
+  {
+    "id": "context-pump",
+    "argv": [
+      "context",
+      "NotificationPump",
+      "--file",
+      "cometa/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.804,
+    "error": null
+  },
+  {
+    "id": "impact-pump",
+    "argv": [
+      "impact",
+      "NotificationPump",
+      "--file",
+      "cometa/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.761,
+    "error": null
+  },
+  {
+    "id": "context-outbound",
+    "argv": [
+      "context",
+      "OutboundService",
+      "--file",
+      "core/transport/outbound.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.773,
+    "error": null
+  },
+  {
+    "id": "impact-outbound",
+    "argv": [
+      "impact",
+      "OutboundService",
+      "--file",
+      "core/transport/outbound.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.793,
+    "error": null
+  },
+  {
+    "id": "context-delivery",
+    "argv": [
+      "context",
+      "deliver_lines",
+      "--file",
+      "core/social/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.515,
+    "error": "Symbol 'deliver_lines' not found"
+  },
+  {
+    "id": "impact-delivery",
+    "argv": [
+      "impact",
+      "deliver_lines",
+      "--file",
+      "core/social/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.521,
+    "error": "Target 'deliver_lines' not found"
+  },
+  {
+    "id": "context-evaluation",
+    "argv": [
+      "context",
+      "run_experiment",
+      "--file",
+      "core/evaluation/runner.py",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.528,
+    "error": "Symbol 'run_experiment' not found"
+  },
+  {
+    "id": "impact-evaluation",
+    "argv": [
+      "impact",
+      "run_experiment",
+      "--file",
+      "core/evaluation/runner.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.511,
+    "error": "Target 'run_experiment' not found"
+  },
+  {
+    "id": "impact-doc-feature",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:feature_list.json",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.677,
+    "error": null
+  },
+  {
+    "id": "impact-doc-progress",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:progress.md",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.705,
+    "error": null
+  },
+  {
+    "id": "impact-doc-handoff",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:session-handoff.md",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.743,
+    "error": null
+  },
+  {
+    "id": "impact-doc-history",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:docs/history/README.md",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.752,
+    "error": null
+  },
+  {
+    "id": "impact-doc-history-en",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:docs/history/README.en.md",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.748,
+    "error": null
+  },
+  {
+    "id": "impact-doc-new-plan",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:docs/plans/2026-10-21-gravitas-engineering-plan.md",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.516,
+    "error": "Target 'File:docs/plans/2026-10-21-gravitas-engineering-plan.md' not found"
+  },
+  {
+    "id": "graph-functions",
+    "argv": [
+      "cypher",
+      "MATCH (s:Function) WHERE s.filePath = 'core/llm/scheduler.py' RETURN s.id, s.name, s.startLine",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.499,
+    "error": null
+  },
+  {
+    "id": "graph-core-processes",
+    "argv": [
+      "cypher",
+      "MATCH (s)-[r:CodeRelation {type:'STEP_IN_PROCESS'}]->(p:Process) WHERE s.filePath IN ['core/runtime/facade.py','memory/consolidator.py','cometa/worker.py','cometa/delivery.py','core/transport/outbound.py','core/evaluation/runner.py'] RETURN p.id AS process_id,p.heuristicLabel AS process_name,s.id AS symbol_id,s.filePath AS file,r.step AS step ORDER BY process_id,step",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "2000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.6,
+    "error": null
+  },
+  {
+    "id": "impact-retry-facade",
+    "argv": [
+      "impact",
+      "RuntimeFacade",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.748,
+    "error": null
+  },
+  {
+    "id": "impact-retry-compact",
+    "argv": [
+      "impact",
+      "compact_once",
+      "--file",
+      "memory/session_compact.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--depth",
+      "3",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.564,
+    "error": "Target 'compact_once' not found"
+  },
+  {
+    "id": "impact-file-scheduler",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/llm/scheduler.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.71,
+    "error": null
+  },
+  {
+    "id": "impact-file-runtime",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.674,
+    "error": null
+  },
+  {
+    "id": "impact-file-llm",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/llm/registry.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.731,
+    "error": null
+  },
+  {
+    "id": "impact-file-memory",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:memory/consolidator.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.716,
+    "error": null
+  },
+  {
+    "id": "impact-file-compact",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:memory/session_compact.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.685,
+    "error": null
+  },
+  {
+    "id": "impact-file-capability",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:capability/hooks.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.68,
+    "error": null
+  },
+  {
+    "id": "impact-file-evaluation",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/evaluation/runner.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.704,
+    "error": null
+  },
+  {
+    "id": "impact-file-social",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/social/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.706,
+    "error": null
+  },
+  {
+    "id": "impact-file-status",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:stella_project/plugins/bot_main/status_api.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--limit",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.69,
+    "error": null
+  },
+  {
+    "id": "impact-summary-facade",
+    "argv": [
+      "impact",
+      "RuntimeFacade",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.708,
+    "error": null
+  },
+  {
+    "id": "impact-summary-turn",
+    "argv": [
+      "impact",
+      "submit_turn",
+      "--file",
+      "core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.649,
+    "error": null
+  },
+  {
+    "id": "impact-summary-capture",
+    "argv": [
+      "impact",
+      "CaptureGate",
+      "--file",
+      "memory/capture_gate.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 2.691,
+    "error": null
+  },
+  {
+    "id": "impact-summary-role",
+    "argv": [
+      "impact",
+      "RoleBackend",
+      "--file",
+      "core/llm/registry.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.516,
+    "error": null
+  },
+  {
+    "id": "impact-summary-consolidate",
+    "argv": [
+      "impact",
+      "consolidate_group",
+      "--file",
+      "memory/consolidator.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.595,
+    "error": null
+  },
+  {
+    "id": "impact-summary-claim",
+    "argv": [
+      "impact",
+      "claim_next_task",
+      "--file",
+      "cometa/store.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.649,
+    "error": null
+  },
+  {
+    "id": "impact-summary-worker",
+    "argv": [
+      "impact",
+      "CometaWorker",
+      "--file",
+      "cometa/worker.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.632,
+    "error": null
+  },
+  {
+    "id": "impact-summary-pump",
+    "argv": [
+      "impact",
+      "NotificationPump",
+      "--file",
+      "cometa/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.709,
+    "error": null
+  },
+  {
+    "id": "impact-summary-outbound",
+    "argv": [
+      "impact",
+      "OutboundService",
+      "--file",
+      "core/transport/outbound.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.835,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-scheduler",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/llm/scheduler.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.75,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-runtime",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/runtime/facade.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.688,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-llm",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/llm/registry.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.762,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-memory",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:memory/consolidator.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.689,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-compact",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:memory/session_compact.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.695,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-capability",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:capability/hooks.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.688,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-evaluation",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/evaluation/runner.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.69,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-social",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:core/social/delivery.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.693,
+    "error": null
+  },
+  {
+    "id": "impact-summary-file-status",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:stella_project/plugins/bot_main/status_api.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.682,
+    "error": null
+  },
+  {
+    "id": "graph-runtime-callers",
+    "argv": [
+      "cypher",
+      "MATCH (c)-[r:CodeRelation {type:'CALLS'}]->(t:Method) WHERE t.filePath='core/runtime/facade.py' AND t.name='submit_turn' RETURN c.id AS caller,c.filePath AS file,r.confidence AS confidence",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "200"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.6,
+    "error": null
+  },
+  {
+    "id": "graph-scheduler-nodes",
+    "argv": [
+      "cypher",
+      "MATCH (s) WHERE s.filePath='core/llm/scheduler.py' RETURN s.id,s.name LIMIT 30",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "30"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.605,
+    "error": null
+  },
+  {
+    "id": "graph-counts",
+    "argv": [
+      "cypher",
+      "MATCH (n) RETURN labels(n) AS label,count(*) AS count ORDER BY count DESC",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.588,
+    "error": null
+  },
+  {
+    "id": "graph-edges",
+    "argv": [
+      "cypher",
+      "MATCH ()-[r:CodeRelation]->() RETURN r.type AS type,count(*) AS count ORDER BY count DESC",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.733,
+    "error": null
+  },
+  {
+    "id": "impact-summary-capture-retry",
+    "argv": [
+      "impact",
+      "CaptureGate",
+      "--file",
+      "memory/capture_gate.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.551,
+    "error": null
+  },
+  {
+    "id": "graph-functions-inspect",
+    "argv": [
+      "cypher",
+      "MATCH (s:Function) WHERE s.name = 'acquire' RETURN s LIMIT 5",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "20"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.57,
+    "error": null
+  },
+  {
+    "id": "graph-function-inspect",
+    "argv": [
+      "cypher",
+      "MATCH (s:Function) RETURN s LIMIT 1",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "20"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.578,
+    "error": null
+  },
+  {
+    "id": "graph-process-detail",
+    "argv": [
+      "cypher",
+      "MATCH (s)-[r:CodeRelation {type:'STEP_IN_PROCESS'}]->(p:Process) WHERE p.id='proc_184_consolidation_drain_' RETURN s,r.step ORDER BY r.step",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "20"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.613,
+    "error": null
+  },
+  {
+    "id": "graph-runtime-detail",
+    "argv": [
+      "cypher",
+      "MATCH (c)-[r:CodeRelation {type:'CALLS'}]->(t:Method) WHERE t.filePath='core/runtime/facade.py' AND t.name='submit_turn' RETURN c LIMIT 3",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "20"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.61,
+    "error": null
+  },
+  {
+    "id": "process-page-0",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 0 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.596,
+    "error": null
+  },
+  {
+    "id": "process-page-100",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 100 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.603,
+    "error": null
+  },
+  {
+    "id": "process-page-200",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 200 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.599,
+    "error": null
+  },
+  {
+    "id": "process-page-300",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 300 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.601,
+    "error": null
+  },
+  {
+    "id": "process-page-400",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 400 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.594,
+    "error": null
+  },
+  {
+    "id": "process-page-500",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 500 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.591,
+    "error": null
+  },
+  {
+    "id": "process-page-600",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 600 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.587,
+    "error": null
+  },
+  {
+    "id": "process-page-700",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 700 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.609,
+    "error": null
+  },
+  {
+    "id": "process-page-800",
+    "argv": [
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id,p.heuristicLabel AS label,p.entryPointId AS entry,p.stepCount AS steps ORDER BY p.id SKIP 800 LIMIT 100",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.603,
+    "error": null
+  },
+  {
+    "id": "graph-scheduler-pdg",
+    "argv": [
+      "cypher",
+      "MATCH (b:BasicBlock) WHERE b.filePath='core/llm/scheduler.py' AND b.startLine>=125 RETURN b.id,b.startLine,b.endLine,b.text ORDER BY b.startLine LIMIT 35",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.695,
+    "error": null
+  },
+  {
+    "id": "graph-incoming-imports",
+    "argv": [
+      "cypher",
+      "MATCH (c:File)-[r:CodeRelation {type:'IMPORTS'}]->(t:File) WHERE t.filePath IN ['core/llm/scheduler.py','core/runtime/facade.py','memory/capture_gate.py','cometa/worker.py'] RETURN c.filePath AS caller,t.filePath AS target,r.confidence ORDER BY target,caller",
+      "--repo",
+      "Stella_project",
+      "--limit",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.627,
+    "error": null
+  },
+  {
+    "id": "impact-summary-cleaner",
+    "argv": [
+      "impact",
+      "--uid",
+      "File:memory/db_cleaner.py",
+      "--repo",
+      "Stella_project",
+      "--direction",
+      "upstream",
+      "--summary-only"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.744,
+    "error": null
+  }
+]

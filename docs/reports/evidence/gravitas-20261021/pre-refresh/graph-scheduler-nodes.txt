@@ -1,0 +1,6 @@
+{
+  "markdown": "| s.id | s.name |\n| --- | --- |\n| BasicBlock:core/llm/scheduler.py:59:0:0 |  |\n| BasicBlock:core/llm/scheduler.py:59:0:1 |  |\n| BasicBlock:core/llm/scheduler.py:59:0:2 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:0 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:1 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:2 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:3 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:4 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:5 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:6 |  |\n| BasicBlock:core/llm/scheduler.py:69:0:7 |  |\n|  | _concurrency_resolver |\n|  | name |\n|  | limit |\n|  | sem |\n|  | waiting |\n|  | holds |\n|  | total_acquired |\n|  | total_wait_seconds |\n|  | total_hold_seconds |\n|  | peak_waiting |\n|  | peak_holding |\n|  | _resources |\n| File:core/llm/scheduler.py | scheduler.py |\n| Variable:core/llm/scheduler.py:RESOURCE_CHAT | RESOURCE_CHAT |\n| Variable:core/llm/scheduler.py:RESOURCE_CONSOLIDATION | RESOURCE_CONSOLIDATION |\n| Variable:core/llm/scheduler.py:PRIORITY_INTERACTIVE | PRIORITY_INTERACTIVE |\n| Variable:core/llm/scheduler.py:PRIORITY_BACKGROUND | PRIORITY_BACKGROUND |\n| Variable:core/llm/scheduler.py:_hold_tokens | _hold_tokens |\n| Class:core/llm/scheduler.py:_ResourceState | _ResourceState |",
+  "row_count": 30
+}
+
+  GitNexus Cypher (1.6.12)

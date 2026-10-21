@@ -1,0 +1,7 @@
+{
+  "original": "/home/vegetable/.local/share/pnpm/store/v11/links/@/gitnexus/1.6.12/cb103c441b6edaeb304e874a0f8d8d4c4ee5f62195f6bab07b0987ce117383f3/node_modules/gitnexus/dist/mcp/local/local-backend.js",
+  "original_sha256": "c421d9cfd6af419ee3ad210a27f1158385a35f73f22cd2aeafc49ca3cd3ec506",
+  "temporary_sha256": "cdc84d154afab309aa5527336f4fa73cdf1b30cce7a2938854687d38af602d05",
+  "only_semantic_change": "DETECT_CHANGES_MAX_LISTED_SYMBOLS 1000 -> 20000; all other replacements resolve relative imports to original files",
+  "installed_tool_modified": false
+}

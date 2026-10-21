@@ -1,0 +1,5 @@
+{
+  "error": "Symbol '_pipeline_provider' not found"
+}
+
+  GitNexus Context (1.6.12)

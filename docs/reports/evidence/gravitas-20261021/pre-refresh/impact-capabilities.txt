@@ -1,0 +1,11 @@
+{
+  "error": "Target 'activate_capabilities' not found",
+  "target": {
+    "name": "activate_capabilities"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}
+
+  GitNexus Impact (1.6.12)

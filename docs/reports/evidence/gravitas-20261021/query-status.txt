@@ -1,0 +1,215 @@
+{
+  "processes": [
+    {
+      "id": "proc_128_collect_status",
+      "summary": "Collect_status → Redact_value",
+      "priority": 0.089,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_397_collect_status",
+      "summary": "Collect_status → _now",
+      "priority": 0.089,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_426_collect_status",
+      "summary": "Collect_status → State_path",
+      "priority": 0.089,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_76_collect_status",
+      "summary": "Collect_status → Validate_state",
+      "priority": 0.089,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_501_collect_status",
+      "summary": "Collect_status → _package_store",
+      "priority": 0.052,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 9
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:stella_project/plugins/bot_main/status_api.py:collect_status",
+      "name": "collect_status",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 241,
+      "endLine": 287,
+      "module": "Bot_main",
+      "process_id": "proc_128_collect_status",
+      "step_index": 1
+    },
+    {
+      "id": "Function:deploy/runtime.py:sync_onebot_status",
+      "name": "sync_onebot_status",
+      "filePath": "deploy/runtime.py",
+      "startLine": 532,
+      "endLine": 563,
+      "module": "Tests",
+      "process_id": "proc_128_collect_status",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:stella_project/plugins/bot_main/status_api.py:build_payload",
+      "name": "build_payload",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 168,
+      "endLine": 225,
+      "module": "Bot_main"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/status_api.py",
+      "name": "status_api.py",
+      "filePath": "stella_project/plugins/bot_main/status_api.py"
+    },
+    {
+      "id": "Function:tests/test_deploy_cli.py:_fake_status",
+      "name": "_fake_status",
+      "filePath": "tests/test_deploy_cli.py",
+      "startLine": 28,
+      "endLine": 46,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_deploy_cli.py:test_cmd_status_link_disabled",
+      "name": "test_cmd_status_link_disabled",
+      "filePath": "tests/test_deploy_cli.py",
+      "startLine": 100,
+      "endLine": 116,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_deploy_cli.py",
+      "name": "test_deploy_cli.py",
+      "filePath": "tests/test_deploy_cli.py"
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_doctor",
+      "name": "_cmd_doctor",
+      "filePath": "deploy/__main__.py",
+      "startLine": 46,
+      "endLine": 53,
+      "module": "Deploy"
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_status",
+      "name": "_cmd_status",
+      "filePath": "deploy/__main__.py",
+      "startLine": 212,
+      "endLine": 255,
+      "module": "Tests"
+    },
+    {
+      "id": "File:deploy/__main__.py",
+      "name": "__main__.py",
+      "filePath": "deploy/__main__.py"
+    },
+    {
+      "id": "Function:tests/test_status_api.py:test_build_payload_fields_complete",
+      "name": "test_build_payload_fields_complete",
+      "filePath": "tests/test_status_api.py",
+      "startLine": 74,
+      "endLine": 102
+    },
+    {
+      "id": "Function:tests/test_status_api.py:test_usage_snapshot_shape_carries_no_credentials_or_chat_content",
+      "name": "test_usage_snapshot_shape_carries_no_credentials_or_chat_content",
+      "filePath": "tests/test_status_api.py",
+      "startLine": 176,
+      "endLine": 195,
+      "module": "Llm"
+    },
+    {
+      "id": "File:tests/test_status_api.py",
+      "name": "test_status_api.py",
+      "filePath": "tests/test_status_api.py"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_readonly.py:test_readonly_endpoints_require_auth",
+      "name": "test_readonly_endpoints_require_auth",
+      "filePath": "tests/webui/test_webui_readonly.py",
+      "startLine": 30,
+      "endLine": 38
+    },
+    {
+      "id": "Function:tests/webui/test_webui_readonly.py:test_usage_today_shape",
+      "name": "test_usage_today_shape",
+      "filePath": "tests/webui/test_webui_readonly.py",
+      "startLine": 41,
+      "endLine": 49
+    },
+    {
+      "id": "File:tests/webui/test_webui_readonly.py",
+      "name": "test_webui_readonly.py",
+      "filePath": "tests/webui/test_webui_readonly.py"
+    },
+    {
+      "id": "Class:tests/cometa/test_workspace.py:TestArtifacts",
+      "name": "TestArtifacts",
+      "filePath": "tests/cometa/test_workspace.py",
+      "startLine": 23,
+      "endLine": 107
+    },
+    {
+      "id": "Method:tests/cometa/test_workspace.py:TestArtifacts.test_rejects_symlink_escape#3",
+      "name": "test_rejects_symlink_escape",
+      "filePath": "tests/cometa/test_workspace.py",
+      "startLine": 53,
+      "endLine": 62
+    },
+    {
+      "id": "File:tests/cometa/test_workspace.py",
+      "name": "test_workspace.py",
+      "filePath": "tests/cometa/test_workspace.py"
+    },
+    {
+      "id": "Function:tests/test_link_monitor.py:test_non_onebot_adapter_is_not_reported_as_disconnected",
+      "name": "test_non_onebot_adapter_is_not_reported_as_disconnected",
+      "filePath": "tests/test_link_monitor.py",
+      "startLine": 186,
+      "endLine": 207,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_link_monitor.py:test_configured_onebot_without_connected_bot_alerts",
+      "name": "test_configured_onebot_without_connected_bot_alerts",
+      "filePath": "tests/test_link_monitor.py",
+      "startLine": 210,
+      "endLine": 222
+    },
+    {
+      "id": "Function:tests/test_link_monitor.py:test_multi_bot_legacy_id_is_not_misleading",
+      "name": "test_multi_bot_legacy_id_is_not_misleading",
+      "filePath": "tests/test_link_monitor.py",
+      "startLine": 295,
+      "endLine": 308,
+      "module": "Tests"
+    }
+  ],
+  "timing": {
+    "vector": 5.3,
+    "bm25": 507.1,
+    "merge": 0.2,
+    "symbol_lookup": 38.3,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 546.6
+  }
+}
+
+  GitNexus Query (1.6.12)

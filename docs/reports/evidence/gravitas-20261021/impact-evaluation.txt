@@ -1,0 +1,36 @@
+{
+  "target": {
+    "id": "Function:core/evaluation/runner.py:run_experiment",
+    "name": "run_experiment",
+    "type": "Function",
+    "filePath": "core/evaluation/runner.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 2,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 1
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Evaluation",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ]
+}
+
+  GitNexus Impact (1.6.12)

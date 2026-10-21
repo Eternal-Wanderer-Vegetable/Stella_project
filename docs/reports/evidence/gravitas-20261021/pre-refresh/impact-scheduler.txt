@@ -1,0 +1,11 @@
+{
+  "error": "Target 'acquire' not found",
+  "target": {
+    "name": "acquire"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}
+
+  GitNexus Impact (1.6.12)

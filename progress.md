@@ -3,8 +3,26 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP10 已完成；WP11 本地矩阵、代表性夹具和全量 Python 回归已通过，但平台与发布验收仍 NOT READY。工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，WP11 初始提交 `22ce1d0`，本轮修复提交 `1f5c900`、`54c4d4c`、`7f35347`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)、[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)、[WP09记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)、[WP10记录](docs/reports/2026-10-21-wp10-control-plane-delivery.md)与[WP11记录](docs/reports/2026-10-21-wp11-platform-certification.md)。平台 live、发布与 VM 验收单独记录。
+**Active Feature:** GRAVITAS-IMPL，执行 G00–G09 并按工作包分阶段提交。工作分支 `codex/gravitas-implementation`，起点 `origin/main@c662746`；平台 live、干净 VM 和发布验收独立记录，未完成前保持 NOT READY。
+**Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
+**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)和[机器清单](docs/plans/2026-10-21-gravitas-inventory.json)执行 G00–G09。当前只实施 G00；后续包逐一启动，提交需绑定 HEAD、impact、回归和回滚边界。
+
+## 2026-10-21 — Gravitas implementation
+
+- Branch/base：`codex/gravitas-implementation` from `origin/main@c662746`，该基线包含已合并的 PR #111。
+- Scope：G00–G09；当前包 G00，包括默认 provider 准入、scheduler waiter 取消安全、db_cleaner 清理水位保护。每包分阶段提交。
+- Baseline evidence：研究阶段定向测试 83 passed / 2 warnings、清理器测试 16 passed；三个隔离探针确认对应缺口。实现前 GitNexus `acquire` 为 CRITICAL（13 direct callers、7 flows、12 modules、1 unresolved receiver，下界）；`trim_group_messages` 为 LOW（13 impacted）；默认 provider 的图结果为 LOW，但入口经源码补证。
+- Current checks：目标 HEAD 的 GitNexus 索引已刷新至 `c662746`；文档检查 119 files / 1246 links / 577 anchors / 0 errors；规划验证 10 packages / 73 sources / 50 entries / 16 scenarios / 368 evidence hashes；plan artifact 的 all/compare 检查均为 5 files / 10 symbols / LOW，无 partial/truncated。
+- Next：完成 G00 三项正式回归和独立修复提交，再推进 G01。没有真实模型、QQ/WebChat、干净 VM 或发布验收时，不标记整体 READY。
+
+## 2026-10-21 — Gravitas engineering planning
+
+- Files：[工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)、[机器清单](docs/plans/2026-10-21-gravitas-inventory.json)、[证据](docs/reports/evidence/gravitas-20261021/README.md)。V1 G00–G07 闭合资源压力/期限/取消/记忆边界；V2 G08/G09 处理依赖和 Cometa 跨进程恢复。
+- Evidence：GitNexus 1.6.12 索引 Function 身份异常后，单 worker / 无 embedding 全量重解析修复；八类 query、十六组 context/upstream impact、823 流程分页与 50 声明入口补证。候选源码 73 文件/41 调用点；10 工作包/10 不变量/16 场景。acquire CRITICAL，Compact/deliver_lines HIGH；UNKNOWN 保留源码接线补证。
+- Baseline：隔离定向 83 passed/2 warnings；清理器既有测试 16 passed。三个合成探针确认默认 Facade 绕过调度、取消 waiter 计数滞留、checkpoint=0 清理删除未整合行，尚未修复。原始用户库、Bot、模型和平台未访问。
+- Blockers：方案不受 live 缺口阻塞；业务实现、生产阈值、模型/QQ/WebChat/VM/发布仍 NOT READY。原 XPLAT-IMPL 状态与验收缺口保持，不开启第二个 in_progress 实施任务。
+- Gates：check_docs 与档案验证器、指纹/证据 SHA256、diff 检查通过；GitNexus all LOW，compare/main 累计 CRITICAL。compare 的固定 1000-symbol 展示上限经临时只扩展示清单的 harness 完整重跑，原始统计/风险一致且无 partial/truncated。最终记录见证据目录。
+- Next：方案已完成，仅在后续实施任务执行 G00；先重新绑定目标 HEAD 和 upstream impact，再把三项探针转成正式回归并修复。不得直接启用 enforce。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 

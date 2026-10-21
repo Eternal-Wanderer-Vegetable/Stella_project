@@ -1,0 +1,81 @@
+{
+  "target": {
+    "id": "File:memory/db_cleaner.py",
+    "name": "db_cleaner.py",
+    "type": "File",
+    "filePath": "memory/db_cleaner.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 5,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 8
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 2,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Tests",
+      "hits": 5,
+      "impact": "direct"
+    },
+    {
+      "name": "Cluster_139",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Cluster_140",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Cometa",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Memory",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Runtime",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Stores",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Webui",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ]
+}
+
+  GitNexus Impact (1.6.12)

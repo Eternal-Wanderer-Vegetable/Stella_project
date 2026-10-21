@@ -1,0 +1,33 @@
+{
+  "target": {
+    "id": "Function:core/runtime/facade.py:_pipeline_provider",
+    "name": "_pipeline_provider",
+    "type": "Function",
+    "filePath": "core/runtime/facade.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 1,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Runtime",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Method:memory/consolidator.py:MemoryConsolidator.consolidate_group#3",
+    "name": "consolidate_group",
+    "kind": "Method",
+    "filePath": "memory/consolidator.py",
+    "startLine": 607,
+    "endLine": 624
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {},
+      {},
+      {},
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator.drain_group#2",
+        "name": "drain_group",
+        "filePath": "memory/consolidator.py"
+      }
+    ],
+    "has_method": [
+      {
+        "uid": "Class:memory/consolidator.py:MemoryConsolidator",
+        "name": "MemoryConsolidator",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_383_consolidation_drain_",
+      "name": "Consolidation_drain_job → Alive",
+      "step_index": 3,
+      "step_count": 8
+    },
+    {
+      "id": "proc_388_main",
+      "name": "Main → _row_trace_id",
+      "step_index": 2,
+      "step_count": 6
+    },
+    {
+      "id": "proc_400_main",
+      "name": "Main → _new_id",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_401_main",
+      "name": "Main → _register",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_402_main",
+      "name": "Main → Dropped",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_41_main",
+      "name": "Main → Alive",
+      "step_index": 2,
+      "step_count": 8
+    },
+    {
+      "id": "proc_48_consolidation_drain_",
+      "name": "Consolidation_drain_job → _row_trace_id",
+      "step_index": 3,
+      "step_count": 7
+    },
+    {
+      "id": "proc_552_main",
+      "name": "Main → Utc_now",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_69_consolidation_drain_",
+      "name": "Consolidation_drain_job → _new_id",
+      "step_index": 3,
+      "step_count": 6
+    },
+    {
+      "id": "proc_70_consolidation_drain_",
+      "name": "Consolidation_drain_job → _register",
+      "step_index": 3,
+      "step_count": 6
+    },
+    {
+      "id": "proc_71_consolidation_drain_",
+      "name": "Consolidation_drain_job → Dropped",
+      "step_index": 3,
+      "step_count": 6
+    }
+  ]
+}
+
+  GitNexus Context (1.6.12)

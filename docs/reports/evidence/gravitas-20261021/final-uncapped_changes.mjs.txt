@@ -1,0 +1,2 @@
+{"scope":"all","attempt":0,"summary":{"changed_count":10,"affected_count":0,"changed_files":5,"risk_level":"low"},"listed":10}
+{"scope":"compare","attempt":0,"summary":{"changed_count":1201,"affected_count":117,"changed_files":354,"risk_level":"critical"},"listed":1201}

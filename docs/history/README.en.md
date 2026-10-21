@@ -20,4 +20,6 @@ This index preserves the original records. Read the plan, then implementation, a
 - Windows installation: [plan](../plans/2026-09-28-gitnexus-plan-nsis-installation-reliability.md), [VM matrix](../../release_assets/VM-MATRIX.md).
 - Documentation migration: [October 10 report](../reports/2026-10-10-documentation-restructure.md).
 
+- Gravitas homeostasis: [engineering plan (Chinese)](../plans/2026-10-21-gravitas-engineering-plan.md), [work packages and source inventory](../plans/2026-10-21-gravitas-inventory.json), [GitNexus evidence](../reports/evidence/gravitas-20261021/README.md). Planning only; implementation and runtime acceptance remain NOT READY.
+
 Add dated follow-up records instead of rewriting history; update this navigation when useful. Untracked local materials must not be the only dependency of new documentation.

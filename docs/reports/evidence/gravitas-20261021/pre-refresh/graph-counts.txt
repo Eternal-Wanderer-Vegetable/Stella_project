@@ -1,0 +1,6 @@
+{
+  "markdown": "| label | count |\n| --- | --- |\n| BasicBlock | 74164 |\n| Function | 7827 |\n| Property | 4153 |\n| Section | 3160 |\n| Method | 2783 |\n| Variable | 2238 |\n| File | 1423 |\n| Class | 1000 |\n| Community | 985 |\n| Process | 823 |\n| Const | 415 |\n| Folder | 164 |\n| Route | 134 |\n| Interface | 84 |\n| Module | 37 |\n| Struct | 25 |\n| Impl | 10 |\n| Enum | 9 |\n| TypeAlias | 8 |\n| Static | 7 |",
+  "row_count": 20
+}
+
+  GitNexus Cypher (1.6.12)

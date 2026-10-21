@@ -1,0 +1,145 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Method:core/runtime/facade.py:RuntimeFacade.submit_turn#4",
+    "name": "submit_turn",
+    "kind": "Method",
+    "filePath": "core/runtime/facade.py",
+    "startLine": 243,
+    "endLine": 450
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    "has_method": [
+      {
+        "uid": "Class:core/runtime/facade.py:RuntimeFacade",
+        "name": "RuntimeFacade",
+        "filePath": "core/runtime/facade.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "accesses": [
+      {
+        "name": "llm_elapsed",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "last_turn_id",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "name": "inflight",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "name": "inflight",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "name": "cancel_requested",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "name": "turn_id",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "raw_output",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "raw_output",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "llm_backend",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "llm_elapsed",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "llm_elapsed",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "raw_output",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_draft",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_draft",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_plan",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "delivery_source_kind",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "generation_epoch",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "runtime_key",
+        "filePath": "core/context.py"
+      },
+      {
+        "name": "trace_id",
+        "filePath": "core/context.py"
+      }
+    ],
+    "calls": [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

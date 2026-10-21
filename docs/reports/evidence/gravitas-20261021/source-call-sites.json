@@ -1,0 +1,289 @@
+[
+  {
+    "file": "astrbot_compat/llm/provider.py",
+    "line": 445,
+    "callee": "acquire",
+    "source": "async with acquire(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "astrbot_compat/llm/provider.py",
+    "line": 483,
+    "callee": "acquire",
+    "source": "async with acquire(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "capability/hooks.py",
+    "line": 508,
+    "callee": "pipeline.register_pre_hook",
+    "source": "pipeline.register_pre_hook(activate_capabilities, priority=HOOK_PRIORITY)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "capability/router/fallback.py",
+    "line": 142,
+    "callee": "acquire",
+    "source": "async with acquire(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "capability/router/fallback.py",
+    "line": 145,
+    "callee": "backend.generate",
+    "source": "raw = await backend.generate(prompt, \"\")",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "cometa/worker.py",
+    "line": 292,
+    "callee": "CometaWorker",
+    "source": "worker = CometaWorker(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "cometa/worker.py",
+    "line": 162,
+    "callee": "self.store.claim_next_task",
+    "source": "claimed = self.store.claim_next_task(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/evaluation/adapters.py",
+    "line": 140,
+    "callee": "self.generate",
+    "source": "return self.generate(prompt, system=system)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/evaluation/adapters.py",
+    "line": 293,
+    "callee": "self.embed",
+    "source": "return self.embed(text)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/evaluation/adapters.py",
+    "line": 308,
+    "callee": "self._embedder.embed",
+    "source": "return self._embedder.embed(text)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/evaluation/runner.py",
+    "line": 400,
+    "callee": "model.generate",
+    "source": "reply = model.generate(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/llm/__init__.py",
+    "line": 90,
+    "callee": "acquire",
+    "source": "cm = acquire(gate_of(self._role), tag=self._default_tag)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/llm/lm_studio.py",
+    "line": 107,
+    "callee": "self.generate_detailed",
+    "source": "reply, _ = await self.generate_detailed(prompt, system_prompt)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/llm/registry.py",
+    "line": 623,
+    "callee": "self.generate_detailed",
+    "source": "reply, _ = await self.generate_detailed(prompt, system_prompt)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/llm/registry.py",
+    "line": 681,
+    "callee": "backend.generate",
+    "source": "return await backend.generate(prompt, system_prompt), \"\"",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/llm/scheduler.py",
+    "line": 160,
+    "callee": "state.sem.acquire",
+    "source": "await state.sem.acquire()",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/planner.py",
+    "line": 273,
+    "callee": "acquire",
+    "source": "async with acquire(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/planner.py",
+    "line": 279,
+    "callee": "self._backend.generate",
+    "source": "self._backend.generate(budgeted.prompt, PLANNER_SYSTEM_PROMPT),",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/runtime/facade.py",
+    "line": 177,
+    "callee": "pipeline._llm.generate",
+    "source": "return await pipeline._llm.generate(prompt, pending_system_prompt(ctx))  # type: ignore[union-attr]",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/runtime/turn_service.py",
+    "line": 625,
+    "callee": "acquire",
+    "source": "async with acquire(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/runtime/turn_service.py",
+    "line": 633,
+    "callee": "self._llm.generate",
+    "source": "self._llm.generate(user_prompt, system_prompt),",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "core/vision.py",
+    "line": 251,
+    "callee": "acquire",
+    "source": "async with acquire(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "knowledge/embedding.py",
+    "line": 100,
+    "callee": "self._service().embed",
+    "source": "return await self._service().embed(text)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "knowledge/embedding.py",
+    "line": 113,
+    "callee": "service.embed",
+    "source": "vec = await service.embed(text)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "knowledge/embedding.py",
+    "line": 134,
+    "callee": "self.embed_batch",
+    "source": "return asyncio.run(self.embed_batch(texts))",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "knowledge/embedding.py",
+    "line": 136,
+    "callee": "self.embed_batch",
+    "source": "return pool.submit(asyncio.run, self.embed_batch(texts)).result()",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/capture_gate.py",
+    "line": 283,
+    "callee": "backend.generate",
+    "source": "backend.generate(_PROBE_PROMPT, _PROBE_SYSTEM),",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/consolidator.py",
+    "line": 344,
+    "callee": "acquire",
+    "source": "async with acquire(gate_of(ROLE_EXTRACT), tag=f\"extract:{group_id}\"):",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/consolidator.py",
+    "line": 242,
+    "callee": "acquire",
+    "source": "async with acquire(gate_of(ROLE_CONSOLIDATION), tag=f\"consolidate:{group_id}\"):",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/consolidator.py",
+    "line": 345,
+    "callee": "backend.generate_detailed",
+    "source": "result, finish = await backend.generate_detailed(prompt)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/consolidator.py",
+    "line": 243,
+    "callee": "backend.generate_detailed",
+    "source": "result, finish = await backend.generate_detailed(prompt)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/embeddings.py",
+    "line": 98,
+    "callee": "acquire",
+    "source": "async with acquire(resource, tag=\"embed\"):",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/embeddings.py",
+    "line": 189,
+    "callee": "self.embed",
+    "source": "q = await self.embed(query)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/embeddings.py",
+    "line": 190,
+    "callee": "self.embed",
+    "source": "c = await self.embed(content)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/session_compact.py",
+    "line": 909,
+    "callee": "acquire",
+    "source": "async with acquire(gate_of(ROLE_COMPACT), tag=f\"compact:{group_id}\"):",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "memory/session_compact.py",
+    "line": 912,
+    "callee": "backend.generate",
+    "source": "result, finish = await backend.generate(prompt), \"\"",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 690,
+    "callee": "pipeline.register_pre_hook",
+    "source": "pipeline.register_pre_hook(describe_images_hook, priority=60)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 691,
+    "callee": "pipeline.register_pre_hook",
+    "source": "pipeline.register_pre_hook(build_context, priority=50)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 898,
+    "callee": "facade.submit_turn",
+    "source": "return await facade.submit_turn(session_key, pipeline, ctx, deadline=LLM_TIMEOUT)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/scheduling/agent.py",
+    "line": 212,
+    "callee": "provider.text_chat",
+    "source": "resp = await provider.text_chat(",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  },
+  {
+    "file": "webui/chat_ingress.py",
+    "line": 192,
+    "callee": "facade.submit_turn",
+    "source": "ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)",
+    "disposition": "G03 model/resource coverage or G04 ingress; raw client/internal calls require owner classification at implementation"
+  }
+]

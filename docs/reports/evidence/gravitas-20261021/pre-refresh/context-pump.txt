@@ -1,0 +1,96 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:cometa/delivery.py:NotificationPump",
+    "name": "NotificationPump",
+    "kind": "Class",
+    "filePath": "cometa/delivery.py",
+    "startLine": 68,
+    "endLine": 224
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:cometa/runtime.py",
+        "name": "runtime.py",
+        "filePath": "cometa/runtime.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/cometa_bridge.py",
+        "name": "cometa_bridge.py",
+        "filePath": "stella_project/plugins/bot_main/cometa_bridge.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_bridge.py",
+        "name": "test_bridge.py",
+        "filePath": "tests/cometa/test_bridge.py"
+      },
+      {
+        "uid": "File:tests/cometa/test_delivery.py",
+        "name": "test_delivery.py",
+        "filePath": "tests/cometa/test_delivery.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump.__init__#8",
+        "name": "__init__",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump._default_render#1",
+        "name": "_default_render",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump._deliver_one#1",
+        "name": "_deliver_one",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump._flow_span",
+        "name": "_flow_span",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump._retry_later#2",
+        "name": "_retry_later",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump._unknown#2",
+        "name": "_unknown",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump.deliver_one#1",
+        "name": "deliver_one",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump.pump_once#1",
+        "name": "pump_once",
+        "filePath": "cometa/delivery.py"
+      },
+      {
+        "uid": "Method:cometa/delivery.py:NotificationPump.run_forever#1",
+        "name": "run_forever",
+        "filePath": "cometa/delivery.py"
+      }
+    ]
+  },
+  "typed_properties": [
+    {
+      "uid": "Property:cometa/runtime.py:CometaRuntime.pump",
+      "name": "pump",
+      "filePath": "cometa/runtime.py",
+      "declaredType": "NotificationPump"
+    }
+  ],
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

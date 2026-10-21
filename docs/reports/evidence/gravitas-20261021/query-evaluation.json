@@ -1,0 +1,149 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Variable:core/evaluation/runner.py:__all__",
+      "name": "__all__",
+      "filePath": "core/evaluation/runner.py",
+      "startLine": 60,
+      "endLine": 66
+    },
+    {
+      "id": "Function:core/evaluation/runner.py:run_experiment",
+      "name": "run_experiment",
+      "filePath": "core/evaluation/runner.py",
+      "startLine": 156,
+      "endLine": 182,
+      "module": "Evaluation"
+    },
+    {
+      "id": "File:core/evaluation/runner.py",
+      "name": "runner.py",
+      "filePath": "core/evaluation/runner.py"
+    },
+    {
+      "id": "Function:tests/evaluation/test_evaluation_isolation.py:_run_decision_recompute",
+      "name": "_run_decision_recompute",
+      "filePath": "tests/evaluation/test_evaluation_isolation.py",
+      "startLine": 170,
+      "endLine": 175,
+      "module": "Evaluation"
+    },
+    {
+      "id": "Function:tests/evaluation/test_evaluation_isolation.py:test_experiment_never_writes_outside_workdir",
+      "name": "test_experiment_never_writes_outside_workdir",
+      "filePath": "tests/evaluation/test_evaluation_isolation.py",
+      "startLine": 215,
+      "endLine": 227,
+      "module": "Evaluation"
+    },
+    {
+      "id": "File:tests/evaluation/test_evaluation_isolation.py",
+      "name": "test_evaluation_isolation.py",
+      "filePath": "tests/evaluation/test_evaluation_isolation.py"
+    },
+    {
+      "id": "Variable:core/evaluation/__init__.py:__all__",
+      "name": "__all__",
+      "filePath": "core/evaluation/__init__.py",
+      "startLine": 63,
+      "endLine": 88
+    },
+    {
+      "id": "File:core/evaluation/__init__.py",
+      "name": "__init__.py",
+      "filePath": "core/evaluation/__init__.py"
+    },
+    {
+      "id": "Function:tests/evaluation/test_virtual_clock.py:test_virtual_clock_starts_and_advances",
+      "name": "test_virtual_clock_starts_and_advances",
+      "filePath": "tests/evaluation/test_virtual_clock.py",
+      "startLine": 20,
+      "endLine": 25,
+      "module": "Evaluation"
+    },
+    {
+      "id": "Function:tests/evaluation/test_virtual_clock.py:test_rejects_naive_start_and_backward_advance",
+      "name": "test_rejects_naive_start_and_backward_advance",
+      "filePath": "tests/evaluation/test_virtual_clock.py",
+      "startLine": 72,
+      "endLine": 77
+    },
+    {
+      "id": "File:tests/evaluation/test_virtual_clock.py",
+      "name": "test_virtual_clock.py",
+      "filePath": "tests/evaluation/test_virtual_clock.py"
+    },
+    {
+      "id": "Variable:core/evaluation/clock.py:__all__",
+      "name": "__all__",
+      "filePath": "core/evaluation/clock.py",
+      "startLine": 25,
+      "endLine": 25
+    },
+    {
+      "id": "Class:core/evaluation/clock.py:VirtualClock",
+      "name": "VirtualClock",
+      "filePath": "core/evaluation/clock.py",
+      "startLine": 51,
+      "endLine": 97
+    },
+    {
+      "id": "File:core/evaluation/clock.py",
+      "name": "clock.py",
+      "filePath": "core/evaluation/clock.py"
+    },
+    {
+      "id": "Function:tests/evaluation/test_pipeline_replay.py:test_isolated_pipeline_twice_same_semantic_digest",
+      "name": "test_isolated_pipeline_twice_same_semantic_digest",
+      "filePath": "tests/evaluation/test_pipeline_replay.py",
+      "startLine": 74,
+      "endLine": 102,
+      "module": "Evaluation"
+    },
+    {
+      "id": "Function:tests/evaluation/test_pipeline_replay.py:test_cutoff_prevents_leakage",
+      "name": "test_cutoff_prevents_leakage",
+      "filePath": "tests/evaluation/test_pipeline_replay.py",
+      "startLine": 105,
+      "endLine": 124,
+      "module": "Evaluation"
+    },
+    {
+      "id": "File:tests/evaluation/test_pipeline_replay.py",
+      "name": "test_pipeline_replay.py",
+      "filePath": "tests/evaluation/test_pipeline_replay.py"
+    },
+    {
+      "id": "Variable:config/state.py:FIRST_RUN",
+      "name": "FIRST_RUN",
+      "filePath": "config/state.py",
+      "startLine": 35,
+      "endLine": 35
+    },
+    {
+      "id": "Property:config/state.py:StellaState.last_run_version",
+      "name": "last_run_version",
+      "filePath": "config/state.py",
+      "startLine": 48,
+      "endLine": 48
+    },
+    {
+      "id": "Property:config/state.py:StellaState.last_run_at",
+      "name": "last_run_at",
+      "filePath": "config/state.py",
+      "startLine": 49,
+      "endLine": 49
+    }
+  ],
+  "timing": {
+    "vector": 4.9,
+    "bm25": 476.5,
+    "merge": 0.2,
+    "symbol_lookup": 39.1,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 516.5
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "synthetic_rows_before": 5,
+  "checkpoint_before": 0,
+  "protect_unconsolidated": true,
+  "keep_count": 2,
+  "result": {
+    "deleted": 4,
+    "groups": 1
+  },
+  "remaining_ids": [
+    5
+  ]
+}

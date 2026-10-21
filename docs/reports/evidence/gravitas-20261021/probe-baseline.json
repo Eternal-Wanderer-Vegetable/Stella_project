@@ -1,0 +1,13 @@
+{
+  "facade_default_provider": {
+    "synthetic_turns": 2,
+    "configured_scheduler_limit": 1,
+    "backend_peak": 2,
+    "scheduler_snapshot": {}
+  },
+  "cancelled_waiter": {
+    "waiting_before_cancel": 1,
+    "waiting_after_holder_release": 1,
+    "holding": 0
+  }
+}

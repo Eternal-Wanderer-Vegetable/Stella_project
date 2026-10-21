@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-21",
-  "active_feature": "XPLAT-IMPL",
+  "active_feature": "GRAVITAS-IMPL",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -50,7 +50,7 @@
       "id": "XPLAT-IMPL",
       "name": "NoneBot 跨平台接入实施",
       "description": "按 GitNexus 方案顺序执行 WP00–WP11，逐阶段提交；平台 live/发布认证仅凭真实验收记录通过。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [
         "XPLAT-PLAN"
       ],
@@ -468,6 +468,65 @@
       "acceptance": "全量 pytest 3750 passed；parity 101/101；replay 门禁全绿（extraction/promotion/qa 100%、fabrication 0%、delta +100）；PersonaMem CI 子集 200 例 4.4s accuracy 100%；check_docs 0 errors；message-flow --check 过",
       "evidence": "docs/reports/evidence/memory-benchmark-20261016/",
       "branch": "feat/memory-benchmark-suite"
+    },
+    {
+      "id": "GRAVITAS-PLAN",
+      "name": "Gravitas 稳态系统工程化方案",
+      "description": "使用 GitNexus 深入研究现有资源、运行时、采集、投递与恢复边界，交付可逐包实施的方案；不实施业务代码。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "docs/plans/2026-10-21-gravitas-engineering-plan.md",
+        "docs/plans/2026-10-21-gravitas-inventory.json",
+        "docs/reports/evidence/gravitas-20261021/",
+        "双语历史导航与任务状态"
+      ],
+      "done_criteria": [
+        "query/context/upstream impact 和索引限制有可复核原件，异常索引与 partial/truncated 结果已补证或重跑",
+        "V1/V2 边界、10 工作包、合同、73 候选源码文件、50 入口处置、16 故障场景及回滚均明确",
+        "隔离基线和三项前置缺口有可复现证据，不把计划当作运行修复",
+        "文档、档案链接、DAG/指纹/证据哈希与 GitNexus all/compare 门禁完成；无业务源码改动"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus 1.6.12 forced full reparse with PDG; 8 query families; 16 context/upstream impacts; paged processes and source complements",
+          "result": "Rebuilt malformed Function identities without embedding. 823 inferred processes, 50 runtime entries, 73 source fingerprints and 41 callsites recorded. acquire CRITICAL; compact_once/deliver_lines HIGH; UNKNOWN retained with source evidence."
+        },
+        {
+          "command": "isolated targeted pytest (8 files); tests/test_db_cleaner.py; synthetic default-provider/waiter/cleanup probes",
+          "result": "83 passed / 2 warnings and 16 passed. Probes reproduced three baseline prerequisites; no fixes, production data, model, Bot or platform used."
+        },
+        {
+          "command": "python3 scripts/check_docs.py; dated validate_plan.py including archive links/DAG/source/evidence SHA256; git diff --check; GitNexus detect_changes all and compare/main",
+          "result": "Documentation and planning validator passed: 10 work packages, 16 scenarios, 10 invariants, 50 entries, 73 sources, 823 processes. all LOW; compare/main cumulative CRITICAL. Fixed 1000-symbol presentation cap required a temporary expanded-listing harness; complete results match native summary and have no partial/truncated. Final records in evidence directory."
+        }
+      ]
+    },
+    {
+      "id": "GRAVITAS-IMPL",
+      "name": "Gravitas 稳态系统实施",
+      "description": "按方案执行 G00–G09；V1 G00–G07 与 V2 G08/G09 的源码工作分阶段推进，发布验收按证据记录，不提前标 READY。",
+      "status": "in_progress",
+      "dependencies": [
+        "GRAVITAS-PLAN"
+      ],
+      "scope": [
+        "G00 默认模型准入、scheduler waiter 取消安全、db_cleaner 水位保护",
+        "G01–G05 Gravitas 合同/控制器/模型调用/总期限/压力闭环",
+        "G06 控制面、Dashboard、流程目录与脱敏状态",
+        "G07 故障矩阵、确定性评测、CI、发布证据",
+        "G08 依赖隔离、探针与存储分域",
+        "G09 Cometa 策略信封、worker claim 与受控恢复",
+        "tests/、docs/、状态记录、打包清单与运行流程"
+      ],
+      "done_criteria": [
+        "G00 三项已复现基线缺口关闭并进入正式负例回归，三个子提交独立可审查",
+        "G01–G07 逐包通过方案退出条件，S01–S12 与资源/期限/取消/记忆水位/shadow 合同有正式回归",
+        "G08/G09 的软件交付与 S13–S16 分开验收，Cometa 策略默认关闭，不以重启证明业务成功",
+        "目标 Python/Native/Dashboard/打包与文档门禁按实际改动运行，GitNexus all/compare 无 partial/truncated",
+        "离线、真实模型/QQ/WebChat、子进程、干净 VM 与发布验收分层记录；未完成层保持 NOT READY"
+      ],
+      "evidence": []
     }
   ]
 }

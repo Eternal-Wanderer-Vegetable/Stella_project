@@ -1,0 +1,269 @@
+{
+  "processes": [
+    {
+      "id": "proc_307_group_mute",
+      "summary": "Group_mute → _memory_db",
+      "priority": 0.085,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_456_group_mute",
+      "summary": "Group_mute → Create_group_runtime_state_table",
+      "priority": 0.085,
+      "symbol_count": 2,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_484_group_unmute",
+      "summary": "Group_unmute → _memory_db",
+      "priority": 0.085,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_570_group_unmute",
+      "summary": "Group_unmute → Create_group_runtime_state_table",
+      "priority": 0.085,
+      "symbol_count": 2,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_131_groups_list",
+      "summary": "Groups_list → Allocate_space_name",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_132_groups_list",
+      "summary": "Groups_list → Load_explicit_spaces",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_133_groups_list",
+      "summary": "Groups_list → Save_ledger",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_588_groups_list",
+      "summary": "Groups_list → _memory_db",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "intra_community",
+      "step_count": 3
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/services/groups.py:set_mute",
+      "name": "set_mute",
+      "filePath": "webui/services/groups.py",
+      "startLine": 114,
+      "endLine": 137,
+      "module": "Routers",
+      "process_id": "proc_307_group_mute",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/routers/config.py:group_mute",
+      "name": "group_mute",
+      "filePath": "webui/routers/config.py",
+      "startLine": 192,
+      "endLine": 193,
+      "module": "Routers",
+      "process_id": "proc_307_group_mute",
+      "step_index": 1
+    },
+    {
+      "id": "Function:webui/routers/config.py:group_unmute",
+      "name": "group_unmute",
+      "filePath": "webui/routers/config.py",
+      "startLine": 197,
+      "endLine": 198,
+      "module": "Routers",
+      "process_id": "proc_484_group_unmute",
+      "step_index": 1
+    },
+    {
+      "id": "Function:webui/services/groups.py:list_groups",
+      "name": "list_groups",
+      "filePath": "webui/services/groups.py",
+      "startLine": 27,
+      "endLine": 69,
+      "module": "Services",
+      "process_id": "proc_131_groups_list",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/routers/config.py:groups_list",
+      "name": "groups_list",
+      "filePath": "webui/routers/config.py",
+      "startLine": 182,
+      "endLine": 183,
+      "module": "Services",
+      "process_id": "proc_131_groups_list",
+      "step_index": 1
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Const:dashboard/src/views/data/FlowPage.vue:ROOT_KIND_LABELS",
+      "name": "ROOT_KIND_LABELS",
+      "filePath": "dashboard/src/views/data/FlowPage.vue",
+      "startLine": 30,
+      "endLine": 51
+    },
+    {
+      "id": "Const:dashboard/src/views/CronPage.vue:tasks",
+      "name": "tasks",
+      "filePath": "dashboard/src/views/CronPage.vue",
+      "startLine": 18,
+      "endLine": 18
+    },
+    {
+      "id": "Const:dashboard/src/views/CronPage.vue:groups",
+      "name": "groups",
+      "filePath": "dashboard/src/views/CronPage.vue",
+      "startLine": 19,
+      "endLine": 19
+    },
+    {
+      "id": "Class:memory/capture_gate.py:CaptureGate",
+      "name": "线上库实证（`memory/agent_memory.db`，2026-08-31 采样）",
+      "filePath": "memory/capture_gate.py",
+      "startLine": 43,
+      "endLine": 53,
+      "module": "Tests"
+    },
+    {
+      "id": "File:webui/services/groups.py",
+      "name": "groups.py",
+      "filePath": "webui/services/groups.py"
+    },
+    {
+      "id": "Method:memory/consolidator.py:MemoryConsolidator.has_new_messages_to_consolidate#2",
+      "name": "has_new_messages_to_consolidate",
+      "filePath": "memory/consolidator.py",
+      "startLine": 597,
+      "endLine": 604,
+      "module": "Tests"
+    },
+    {
+      "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+      "name": "_consolidate_group_core",
+      "filePath": "memory/consolidator.py",
+      "startLine": 679,
+      "endLine": 955,
+      "module": "Memory"
+    },
+    {
+      "id": "File:memory/consolidator.py",
+      "name": "consolidator.py",
+      "filePath": "memory/consolidator.py"
+    },
+    {
+      "id": "Class:tests/observability/test_proactive_flow_lifecycle.py:TestProactiveTimerRoot",
+      "name": "TestProactiveTimerRoot",
+      "filePath": "tests/observability/test_proactive_flow_lifecycle.py",
+      "startLine": 285,
+      "endLine": 381
+    },
+    {
+      "id": "Method:tests/observability/test_proactive_flow_lifecycle.py:TestProactiveTimerRoot.test_multiple_bots_skip_timer_without_route_binding#3",
+      "name": "test_multiple_bots_skip_timer_without_route_binding",
+      "filePath": "tests/observability/test_proactive_flow_lifecycle.py",
+      "startLine": 315,
+      "endLine": 335,
+      "module": "Observability"
+    },
+    {
+      "id": "File:tests/observability/test_proactive_flow_lifecycle.py",
+      "name": "test_proactive_flow_lifecycle.py",
+      "filePath": "tests/observability/test_proactive_flow_lifecycle.py"
+    },
+    {
+      "id": "Variable:memory/session_compact.py:COMPACT_CONTEXT_LIMIT",
+      "name": "COMPACT_CONTEXT_LIMIT",
+      "filePath": "memory/session_compact.py",
+      "startLine": 72,
+      "endLine": 72
+    },
+    {
+      "id": "Variable:memory/session_compact.py:COMPACT_PROMPT",
+      "name": "COMPACT_PROMPT",
+      "filePath": "memory/session_compact.py",
+      "startLine": 85,
+      "endLine": 102
+    },
+    {
+      "id": "File:memory/session_compact.py",
+      "name": "session_compact.py",
+      "filePath": "memory/session_compact.py"
+    },
+    {
+      "id": "Method:memory/proactive.py:ProactiveController._proactive_skip_key#3",
+      "name": "_proactive_skip_key",
+      "filePath": "memory/proactive.py",
+      "startLine": 190,
+      "endLine": 191,
+      "module": "Memory"
+    },
+    {
+      "id": "File:memory/proactive.py",
+      "name": "proactive.py",
+      "filePath": "memory/proactive.py"
+    },
+    {
+      "id": "Class:core/turn_runtime.py:TurnRuntime",
+      "name": "TurnRuntime",
+      "filePath": "core/turn_runtime.py",
+      "startLine": 18,
+      "endLine": 47
+    },
+    {
+      "id": "Method:core/turn_runtime.py:TurnRuntime.can_start_proactive#3",
+      "name": "can_start_proactive",
+      "filePath": "core/turn_runtime.py",
+      "startLine": 27,
+      "endLine": 34,
+      "module": "Cluster_1028"
+    },
+    {
+      "id": "Interface:dashboard/src/views/GroupsPage.vue:GroupItem",
+      "name": "GroupItem",
+      "filePath": "dashboard/src/views/GroupsPage.vue",
+      "startLine": 9,
+      "endLine": 14
+    },
+    {
+      "id": "Const:dashboard/src/views/GroupsPage.vue:groups",
+      "name": "groups",
+      "filePath": "dashboard/src/views/GroupsPage.vue",
+      "startLine": 19,
+      "endLine": 19
+    }
+  ],
+  "timing": {
+    "vector": 4.3,
+    "bm25": 737,
+    "merge": 0.2,
+    "symbol_lookup": 49.9,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 788
+  }
+}
+
+  GitNexus Query (1.6.12)

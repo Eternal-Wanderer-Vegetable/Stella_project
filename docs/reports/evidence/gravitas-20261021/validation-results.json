@@ -1,0 +1,94 @@
+{
+  "baseline_commit": "2b694026c4e4fc84ad721c26893ad5c68c7accb5",
+  "date": "2026-10-21 Asia/Shanghai",
+  "planning_status": "complete",
+  "implementation_status": "NOT READY / not started",
+  "checks": [
+    {
+      "argv": [
+        "python3",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"ok\": true, \"errors\": 0, \"files\": 119, \"local_links\": 1246, \"migration_anchors\": 577}",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "python3",
+        "docs/reports/evidence/gravitas-20261021/validate_plan.py"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"ok\": true, \"work_packages\": 10, \"sources\": 73, \"runtime_entries\": 50, \"scenarios\": 16, \"invariants\": 10, \"processes\": 823, \"source_call_sites\": 41, \"archive_links\": 25, \"evidence_hashes\": 368}",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        ".venv/bin/ruff",
+        "check",
+        "docs/reports/evidence/gravitas-20261021/validate_plan.py",
+        "docs/reports/evidence/gravitas-20261021/probe_baseline.py",
+        "docs/reports/evidence/gravitas-20261021/probe_cleanup.py"
+      ],
+      "exit_code": 0,
+      "stdout": "All checks passed!",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "existing_test_groups": [
+    {
+      "files": 8,
+      "passed": 83,
+      "warnings": 2,
+      "evidence": "baseline-tests.txt"
+    },
+    {
+      "files": 1,
+      "passed": 16,
+      "warnings": 0,
+      "evidence": "cleaner-tests.txt"
+    }
+  ],
+  "probes": "three baseline prerequisite defects reproduced; no production fix claimed",
+  "validator_negative_cases": "cycle and bad source fingerprint rejected",
+  "gitnexus_complete": {
+    "all": {
+      "changed_count": 10,
+      "affected_count": 0,
+      "changed_files": 5,
+      "risk_level": "low"
+    },
+    "compare": {
+      "changed_count": 1201,
+      "affected_count": 117,
+      "changed_files": 354,
+      "risk_level": "critical"
+    }
+  },
+  "listing_cap": "native compare truncated at 1000; temporary presentation-only cap expansion returned all symbols and identical summary",
+  "tracked_changed_files": [
+    "docs/history/README.en.md",
+    "docs/history/README.md",
+    "feature_list.json",
+    "progress.md",
+    "session-handoff.md"
+  ],
+  "new_business_source_files": [],
+  "not_run": [
+    "full Python suite for this documentation task",
+    "real model/embedding",
+    "Bot/QQ/WebChat live",
+    "clean VM/release",
+    "Gravitas implementation acceptance"
+  ]
+}

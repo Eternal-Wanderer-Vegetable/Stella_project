@@ -1,0 +1,9 @@
+{
+  "error": "Target '_pipeline_provider' not found",
+  "target": {
+    "name": "_pipeline_provider"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}

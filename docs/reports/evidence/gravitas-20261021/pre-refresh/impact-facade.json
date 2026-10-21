@@ -1,0 +1,8 @@
+{
+  "level": 40,
+  "time": 1792574097595,
+  "name": "gitnexus",
+  "context": "impact:process-chunk",
+  "err": "Interrupted.",
+  "msg": "GitNexus query failed (degraded)"
+}

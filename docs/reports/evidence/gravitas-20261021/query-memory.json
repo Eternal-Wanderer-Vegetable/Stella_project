@@ -1,0 +1,217 @@
+{
+  "processes": [
+    {
+      "id": "proc_127_trim_messages_job",
+      "summary": "Trim_messages_job → _connect",
+      "priority": 0.099,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_291_trim_messages_job",
+      "summary": "Trim_messages_job → _kind_key",
+      "priority": 0.099,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_292_trim_messages_job",
+      "summary": "Trim_messages_job → _align_checkpoint",
+      "priority": 0.099,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_293_trim_messages_job",
+      "summary": "Trim_messages_job → _mark_cleanup_done",
+      "priority": 0.099,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_294_trim_messages_job",
+      "summary": "Trim_messages_job → _ensure_table",
+      "priority": 0.099,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:trim_messages_job",
+      "name": "trim_messages_job",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5159,
+      "endLine": 5188,
+      "module": "Tests",
+      "process_id": "proc_127_trim_messages_job",
+      "step_index": 1
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Class:tests/observability/test_message_flow_runtime.py:TestAsyncLoopLinks",
+      "name": "TestAsyncLoopLinks",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 321,
+      "endLine": 370
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_runtime.py:TestAsyncLoopLinks.test_compact_root_linked_to_parent#2",
+      "name": "test_compact_root_linked_to_parent",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 341,
+      "endLine": 370,
+      "module": "Observability"
+    },
+    {
+      "id": "Function:tests/observability/test_message_flow_runtime.py:TestAsyncLoopLinks.test_compact_root_linked_to_parent.fake_compact_once@347:8#2",
+      "name": "fake_compact_once",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 348,
+      "endLine": 349
+    },
+    {
+      "id": "Function:tests/test_db_cleaner.py:test_trim_group_messages_missing_db",
+      "name": "test_trim_group_messages_missing_db",
+      "filePath": "tests/test_db_cleaner.py",
+      "startLine": 84,
+      "endLine": 86
+    },
+    {
+      "id": "Function:tests/test_db_cleaner.py:test_trim_protects_unconsolidated_messages",
+      "name": "test_trim_protects_unconsolidated_messages",
+      "filePath": "tests/test_db_cleaner.py",
+      "startLine": 267,
+      "endLine": 296,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_db_cleaner.py:test_trim_without_protection_deletes_unconsolidated",
+      "name": "test_trim_without_protection_deletes_unconsolidated",
+      "filePath": "tests/test_db_cleaner.py",
+      "startLine": 299,
+      "endLine": 326,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:memory/session_compact.py:_flow_ctx",
+      "name": "_flow_ctx",
+      "filePath": "memory/session_compact.py",
+      "startLine": 669,
+      "endLine": 677,
+      "module": "Observability"
+    },
+    {
+      "id": "Function:memory/session_compact.py:schedule_compact",
+      "name": "schedule_compact",
+      "filePath": "memory/session_compact.py",
+      "startLine": 981,
+      "endLine": 1041,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Function:memory/session_compact.py:schedule_compact._run@998:4",
+      "name": "_run",
+      "filePath": "memory/session_compact.py",
+      "startLine": 999,
+      "endLine": 1037,
+      "module": "Observability"
+    },
+    {
+      "id": "Class:memory/consolidator.py:MemoryConsolidator",
+      "name": "MemoryConsolidator",
+      "filePath": "memory/consolidator.py",
+      "startLine": 165,
+      "endLine": 2019
+    },
+    {
+      "id": "Method:memory/consolidator.py:MemoryConsolidator.has_new_messages_to_consolidate#2",
+      "name": "has_new_messages_to_consolidate",
+      "filePath": "memory/consolidator.py",
+      "startLine": 597,
+      "endLine": 604,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:memory/consolidator.py:_consolidate_with_flow",
+      "name": "_consolidate_with_flow",
+      "filePath": "memory/consolidator.py",
+      "startLine": 2104,
+      "endLine": 2131,
+      "module": "Observability"
+    },
+    {
+      "id": "Property:memory/session_context.py:SessionState.compacted_messages",
+      "name": "compacted_messages",
+      "filePath": "memory/session_context.py",
+      "startLine": 64,
+      "endLine": 64
+    },
+    {
+      "id": "Function:memory/session_context.py:end_session",
+      "name": "end_session",
+      "filePath": "memory/session_context.py",
+      "startLine": 307,
+      "endLine": 324,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:memory/session_context.py:session_stats",
+      "name": "session_stats",
+      "filePath": "memory/session_context.py",
+      "startLine": 369,
+      "endLine": 388,
+      "module": "Tests"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+      "name": "ai_gateway.py",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    {
+      "id": "Function:tests/test_prompt_cache_prefix.py:test_compact_prompt_fixed_part_is_cacheable",
+      "name": "test_compact_prompt_fixed_part_is_cacheable",
+      "filePath": "tests/test_prompt_cache_prefix.py",
+      "startLine": 83,
+      "endLine": 101,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_prompt_cache_prefix.py:test_no_fixed_instructions_after_data_placeholders",
+      "name": "test_no_fixed_instructions_after_data_placeholders",
+      "filePath": "tests/test_prompt_cache_prefix.py",
+      "startLine": 104,
+      "endLine": 107
+    },
+    {
+      "id": "Function:tests/test_prompt_cache_prefix.py:test_volatile_placeholders_sit_after_the_separator",
+      "name": "test_volatile_placeholders_sit_after_the_separator",
+      "filePath": "tests/test_prompt_cache_prefix.py",
+      "startLine": 110,
+      "endLine": 123
+    },
+    {
+      "id": "Function:tests/test_consolidator_core.py:test_fetch_next_messages_and_senders",
+      "name": "test_fetch_next_messages_and_senders",
+      "filePath": "tests/test_consolidator_core.py",
+      "startLine": 89,
+      "endLine": 122,
+      "module": "Tests"
+    }
+  ],
+  "timing": {
+    "vector": 4.5,
+    "bm25": 506.8,
+    "merge": 0.2,
+    "symbol_lookup": 40.5,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 548.5
+  }
+}

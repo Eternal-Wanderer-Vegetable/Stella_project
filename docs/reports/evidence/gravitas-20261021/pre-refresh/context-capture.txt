@@ -1,0 +1,138 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:memory/capture_gate.py:CaptureGate",
+    "name": "CaptureGate",
+    "kind": "Class",
+    "filePath": "memory/capture_gate.py",
+    "startLine": 89,
+    "endLine": 294
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {},
+      {},
+      {}
+    ],
+    "imports": [
+      {
+        "uid": "File:memory/consolidator.py",
+        "name": "consolidator.py",
+        "filePath": "memory/consolidator.py"
+      },
+      {
+        "uid": "File:memory/pre_processors.py",
+        "name": "pre_processors.py",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/status_api.py",
+        "name": "status_api.py",
+        "filePath": "stella_project/plugins/bot_main/status_api.py"
+      },
+      {
+        "uid": "File:tests/conftest.py",
+        "name": "conftest.py",
+        "filePath": "tests/conftest.py"
+      },
+      {
+        "uid": "File:tests/test_capture_ingress_gating.py",
+        "name": "test_capture_ingress_gating.py",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "File:tests/test_memory_capture_gate.py",
+        "name": "test_memory_capture_gate.py",
+        "filePath": "tests/test_memory_capture_gate.py"
+      },
+      {
+        "uid": "File:tests/test_message_relations.py",
+        "name": "test_message_relations.py",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "File:tests/test_status_api.py",
+        "name": "test_status_api.py",
+        "filePath": "tests/test_status_api.py"
+      },
+      {
+        "uid": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.__init__#5",
+        "name": "__init__",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate._apply#3",
+        "name": "_apply",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate._backoff_delay#0",
+        "name": "_backoff_delay",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate._default_probe#0",
+        "name": "_default_probe",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate._run#0",
+        "name": "_run",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.capture_allowed#0",
+        "name": "capture_allowed",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.decision#0",
+        "name": "decision",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.note_generation_failure#0",
+        "name": "note_generation_failure",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.probe_once#0",
+        "name": "probe_once",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.start#0",
+        "name": "start",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.status_snapshot#0",
+        "name": "status_snapshot",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Method:memory/capture_gate.py:CaptureGate.stop#0",
+        "name": "stop",
+        "filePath": "memory/capture_gate.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

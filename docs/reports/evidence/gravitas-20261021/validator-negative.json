@@ -1,0 +1,12 @@
+[
+  {
+    "case": "cycle",
+    "rejected": true,
+    "reason": "dependency cycle: G00"
+  },
+  {
+    "case": "source_drift",
+    "rejected": true,
+    "reason": "source drift: .github/workflows/ci.yml"
+  }
+]

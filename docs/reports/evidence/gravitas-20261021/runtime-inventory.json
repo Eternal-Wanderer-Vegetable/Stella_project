@@ -1,0 +1,746 @@
+{
+  "problems": [],
+  "entries": [
+    {
+      "entry_id": "gateway.record_group_chat",
+      "family": "message",
+      "root_kind": "qq_passive",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "record_group_chat"
+      ],
+      "origin": "message",
+      "notes": "每条群消息最早处理点（pre/postprocessor 链）",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_chat",
+      "family": "message",
+      "root_kind": "qq_chat",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_chat"
+      ],
+      "origin": "message",
+      "notes": "@ 对话主链（root 缺失时兜底）",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_private_chat",
+      "family": "message",
+      "root_kind": "qq_private",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_private_chat"
+      ],
+      "origin": "message",
+      "notes": "私聊主链（注册表存储键 + 中立回执）",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_command",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_chat"
+      ],
+      "origin": "message",
+      "notes": "slash 命令分流",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "webui.chat_ingress",
+      "family": "message",
+      "root_kind": "webchat",
+      "source": [
+        "webui/chat_ingress.py",
+        "run_turn"
+      ],
+      "origin": "message",
+      "notes": "WebChat 轮次",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.group_silent_listener",
+      "family": "message",
+      "root_kind": "qq_passive",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "group_silent_listener"
+      ],
+      "origin": "message",
+      "notes": "静默监听 matcher（落库/观察入口）",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.plugin_handler",
+      "family": "message",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "plugin_handler"
+      ],
+      "origin": "message",
+      "notes": "插件分发 matcher",
+      "boundary": "nonebot matcher 注册点",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.chat_handler",
+      "family": "message",
+      "root_kind": "qq_chat",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "chat_handler"
+      ],
+      "origin": "message",
+      "notes": "@ 对话 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.private_chat_handler",
+      "family": "message",
+      "root_kind": "qq_private",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "private_chat_handler"
+      ],
+      "origin": "message",
+      "notes": "私聊 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.addressing_handler",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "addressing_handler"
+      ],
+      "origin": "message",
+      "notes": "称呼命令 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.toggle_handler",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "toggle_handler"
+      ],
+      "origin": "message",
+      "notes": "开关命令 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.capability_handler",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "capability_handler"
+      ],
+      "origin": "message",
+      "notes": "能力查询命令 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.reload_handler",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "reload_handler"
+      ],
+      "origin": "message",
+      "notes": "重载命令 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.scheduling_handler",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "scheduling_handler"
+      ],
+      "origin": "message",
+      "notes": "定时任务命令 matcher",
+      "boundary": "",
+      "registration": "matcher",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.proactive_speak_job",
+      "family": "proactive",
+      "root_kind": "proactive_timer",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "proactive_speak_job"
+      ],
+      "origin": "timer",
+      "notes": "APScheduler interval；群循环/主动@/群插话",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.proactive_at_user",
+      "family": "proactive",
+      "root_kind": "proactive_at",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_proactive_at_user"
+      ],
+      "origin": "spawn",
+      "notes": "周期任务里的主动 @ 验证路径",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.proactive_speak_for_group",
+      "family": "proactive",
+      "root_kind": "proactive",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_proactive_speak_for_group"
+      ],
+      "origin": "spawn",
+      "notes": "参与度 ALLOW 派生的群插话",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "consolidator.consolidate_group",
+      "family": "memory",
+      "root_kind": "memory_consolidate",
+      "source": [
+        "memory/consolidator.py",
+        "MemoryConsolidator.consolidate_group"
+      ],
+      "origin": "spawn",
+      "notes": "整合批次（按群锁；消费消息窗口）",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "memory.process_new_candidates",
+      "family": "memory",
+      "root_kind": "memory_promotion",
+      "source": [
+        "memory/memory_manager.py",
+        "MemoryManager.process_new_candidates"
+      ],
+      "origin": "spawn",
+      "notes": "晋升批处理（backend/逐候选 gate/事务）",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "compressor.run_weekly",
+      "family": "memory",
+      "root_kind": "memory_maintenance",
+      "source": [
+        "memory/compressor.py",
+        "MemoryCompressor.run_weekly"
+      ],
+      "origin": "timer",
+      "notes": "周度维护（压缩/去重/衰减）",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "social.run_due_jobs",
+      "family": "social",
+      "root_kind": "social_worker",
+      "source": [
+        "memory/social_worker.py",
+        "run_due_jobs"
+      ],
+      "origin": "worker",
+      "notes": "租约→handler→done/retry/dead",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "reply_effect.resolve",
+      "family": "social",
+      "root_kind": "effect",
+      "source": [
+        "memory/reply_effect_service.py",
+        "resolve_effect"
+      ],
+      "origin": "worker",
+      "notes": "回复窗口结算",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "session_compact.compact_once",
+      "family": "maintenance",
+      "root_kind": "compact",
+      "source": [
+        "memory/session_compact.py",
+        "compact_once"
+      ],
+      "origin": "spawn",
+      "notes": "回复后压缩",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.idle_maintenance",
+      "family": "maintenance",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_proactive_speak_impl"
+      ],
+      "origin": "timer",
+      "notes": "idle/backlog/清理 sweep（锚点：gateway 后台任务区）",
+      "boundary": "noop/清理路径尚未逐一接入 flow root",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "scheduling.tick_once",
+      "family": "scheduling",
+      "root_kind": "scheduled_task",
+      "source": [
+        "stella_project/plugins/bot_main/scheduling/runtime.py",
+        "tick_once"
+      ],
+      "origin": "worker",
+      "notes": "租约/恢复/到期/执行/投递",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "knowledge.ingest_content",
+      "family": "knowledge",
+      "root_kind": "knowledge_ingest",
+      "source": [
+        "knowledge/ingest.py",
+        "ingest_content"
+      ],
+      "origin": "api",
+      "notes": "导入→解析→版本→分块→索引",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "cometa.worker.tick",
+      "family": "cometa",
+      "root_kind": "cometa_task",
+      "source": [
+        "cometa/worker.py",
+        "CometaWorker._tick"
+      ],
+      "origin": "worker",
+      "notes": "认领→执行→结果→通知",
+      "boundary": "",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.start_scheduling",
+      "family": "lifecycle",
+      "root_kind": "lifecycle",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_start_scheduling"
+      ],
+      "origin": "startup",
+      "notes": "on_startup：启动预约调度器",
+      "boundary": "",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.start_cometa",
+      "family": "lifecycle",
+      "root_kind": "lifecycle",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_start_cometa"
+      ],
+      "origin": "startup",
+      "notes": "on_startup：启动 Cometa worker",
+      "boundary": "",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.start_stop_watcher",
+      "family": "lifecycle",
+      "root_kind": "lifecycle",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_start_stop_watcher"
+      ],
+      "origin": "startup",
+      "notes": "on_startup：停机监听 watcher",
+      "boundary": "",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.start_capture_gate",
+      "family": "lifecycle",
+      "root_kind": "lifecycle",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_start_capture_gate"
+      ],
+      "origin": "startup",
+      "notes": "on_startup：装记忆采集就绪门（fail-closed 探针 worker）",
+      "boundary": "",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.start_hot_reload_watcher",
+      "family": "lifecycle",
+      "root_kind": "lifecycle",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_start_hot_reload_watcher"
+      ],
+      "origin": "startup",
+      "notes": "on_startup：热重载 watcher",
+      "boundary": "",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.graceful_shutdown",
+      "family": "lifecycle",
+      "root_kind": "lifecycle",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_graceful_shutdown"
+      ],
+      "origin": "shutdown",
+      "notes": "on_shutdown：watchers→Cometa→scheduler→facade drain",
+      "boundary": "",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.flow_ingress",
+      "family": "message",
+      "root_kind": "qq_passive",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_flow_ingress_root"
+      ],
+      "origin": "message",
+      "notes": "流程观测 preprocessor（root 创建，完整事件身份）",
+      "boundary": "nonebot event_preprocessor",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "bot_main.flow_ingress_end",
+      "family": "message",
+      "root_kind": "qq_passive",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "_flow_ingress_end"
+      ],
+      "origin": "message",
+      "notes": "流程观测 postprocessor（compare-and-pop 关闭 root）",
+      "boundary": "nonebot event_postprocessor",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_plugin_fn",
+      "family": "message",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_plugin"
+      ],
+      "origin": "message",
+      "notes": "插件分发 handler 函数",
+      "boundary": "",
+      "registration": "matcher_handler",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_addressing_fn",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_addressing"
+      ],
+      "origin": "message",
+      "notes": "称呼命令 handler 函数",
+      "boundary": "",
+      "registration": "matcher_handler",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_toggle_fn",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_toggle"
+      ],
+      "origin": "message",
+      "notes": "开关命令 handler 函数",
+      "boundary": "",
+      "registration": "matcher_handler",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_capability_query_fn",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_capability_query"
+      ],
+      "origin": "message",
+      "notes": "能力查询命令 handler 函数",
+      "boundary": "",
+      "registration": "matcher_handler",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_reload_fn",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_reload"
+      ],
+      "origin": "message",
+      "notes": "重载命令 handler 函数",
+      "boundary": "",
+      "registration": "matcher_handler",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.handle_scheduling_fn",
+      "family": "message",
+      "root_kind": "qq_command",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "handle_scheduling"
+      ],
+      "origin": "message",
+      "notes": "定时任务命令 handler 函数",
+      "boundary": "",
+      "registration": "matcher_handler",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.participation_tick_job",
+      "family": "proactive",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "participation_tick_job"
+      ],
+      "origin": "timer",
+      "notes": "参与评分周期作业",
+      "boundary": "apscheduler job",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.expression_sweep_job",
+      "family": "maintenance",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "expression_sweep_job"
+      ],
+      "origin": "timer",
+      "notes": "表达学习清扫作业",
+      "boundary": "apscheduler job",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.session_idle_check_job",
+      "family": "maintenance",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "session_idle_check_job"
+      ],
+      "origin": "timer",
+      "notes": "会话空闲检查作业",
+      "boundary": "apscheduler job",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.consolidation_drain_job",
+      "family": "memory",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "consolidation_drain_job"
+      ],
+      "origin": "timer",
+      "notes": "整合排水作业",
+      "boundary": "apscheduler job",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.trim_messages_job",
+      "family": "maintenance",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "trim_messages_job"
+      ],
+      "origin": "timer",
+      "notes": "消息裁剪作业",
+      "boundary": "apscheduler job",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "gateway.weekly_compress",
+      "family": "memory",
+      "root_kind": "memory_maintenance",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "weekly_compress"
+      ],
+      "origin": "timer",
+      "notes": "周度压缩作业（调度器侧入口）",
+      "boundary": "apscheduler job",
+      "registration": "lifecycle_hook",
+      "contract_files": []
+    },
+    {
+      "entry_id": "social_worker.register_resolve_effect",
+      "family": "social",
+      "root_kind": "",
+      "source": [
+        "memory/social_worker.py",
+        "resolve_effect"
+      ],
+      "origin": "worker",
+      "notes": "resolve_effect 作业注册",
+      "boundary": "进程内 worker 注册",
+      "registration": "worker_registration",
+      "contract_files": []
+    },
+    {
+      "entry_id": "nonebot.matcher_dispatch",
+      "family": "message",
+      "root_kind": "",
+      "source": [
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "record_group_chat"
+      ],
+      "origin": "message",
+      "notes": "NoneBot 动态 matcher 派发不可静态展开",
+      "boundary": "nonebot",
+      "registration": "",
+      "contract_files": []
+    },
+    {
+      "entry_id": "rust.promotion",
+      "family": "memory",
+      "root_kind": "",
+      "source": [
+        "memory_rust/native/src/promotion.rs",
+        "promote"
+      ],
+      "origin": "spawn",
+      "notes": "Rust 晋升事务（跨语言边界）",
+      "boundary": "rust",
+      "registration": "",
+      "contract_files": [
+        [
+          "memory_rust/backend.py",
+          null
+        ],
+        [
+          "memory_rust/selector.py",
+          null
+        ],
+        [
+          "memory_rust/python_backend.py",
+          null
+        ],
+        [
+          "memory_rust/__init__.py",
+          null
+        ],
+        [
+          "memory_rust/native/src/schema.rs",
+          null
+        ],
+        [
+          "memory_rust/native/src/similarity.rs",
+          null
+        ],
+        [
+          "memory_rust/native/src/policy.rs",
+          null
+        ],
+        [
+          "memory_rust/native/src/retrieval.rs",
+          null
+        ],
+        [
+          "memory_rust/native/src/lib.rs",
+          null
+        ],
+        [
+          "config/settings.py",
+          "MEMORY_BACKEND|RUST"
+        ]
+      ]
+    }
+  ]
+}

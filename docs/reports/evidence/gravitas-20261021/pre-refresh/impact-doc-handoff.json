@@ -1,0 +1,217 @@
+{
+  "target": {
+    "id": "File:session-handoff.md",
+    "name": "session-handoff.md",
+    "type": "File",
+    "filePath": "session-handoff.md"
+  },
+  "direction": "upstream",
+  "impactedCount": 19,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 6,
+    "3": 11
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:CLAUDE.md",
+        "name": "CLAUDE.md",
+        "filePath": "CLAUDE.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:README.en.md",
+        "name": "README.en.md",
+        "filePath": "README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:README.md",
+        "name": "README.md",
+        "filePath": "README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/agent/README.md",
+        "name": "README.md",
+        "filePath": "docs/agent/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/agent/documentation.md",
+        "name": "documentation.md",
+        "filePath": "docs/agent/documentation.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reports/2026-10-10-documentation-restructure.md",
+        "name": "2026-10-10-documentation-restructure.md",
+        "filePath": "docs/reports/2026-10-10-documentation-restructure.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:design_docs/AstrBot 特性吸收对比报告.md",
+        "name": "AstrBot 特性吸收对比报告.md",
+        "filePath": "design_docs/AstrBot 特性吸收对比报告.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.md",
+        "name": "README.md",
+        "filePath": "docs/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/boundaries.md",
+        "name": "boundaries.md",
+        "filePath": "docs/agent/boundaries.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/gitnexus.md",
+        "name": "gitnexus.md",
+        "filePath": "docs/agent/gitnexus.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/verification.md",
+        "name": "verification.md",
+        "filePath": "docs/agent/verification.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/deployment-docker.en.md",
+        "name": "deployment-docker.en.md",
+        "filePath": "docs/guides/deployment-docker.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/deployment-docker.md",
+        "name": "deployment-docker.md",
+        "filePath": "docs/guides/deployment-docker.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/history/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/history/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/history/README.md",
+        "name": "README.md",
+        "filePath": "docs/history/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:progress.md",
+        "name": "progress.md",
+        "filePath": "progress.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  }
+}

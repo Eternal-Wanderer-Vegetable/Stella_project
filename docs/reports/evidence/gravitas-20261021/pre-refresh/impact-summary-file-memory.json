@@ -1,0 +1,38 @@
+{
+  "target": {
+    "id": "File:memory/consolidator.py",
+    "name": "consolidator.py",
+    "type": "File",
+    "filePath": "memory/consolidator.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 8,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 4,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 4,
+    "2": 2,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": []
+}

@@ -1,0 +1,67 @@
+{
+  "target": {
+    "id": "Function:core/social/delivery.py:deliver_lines",
+    "name": "deliver_lines",
+    "type": "Function",
+    "filePath": "core/social/delivery.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 10,
+  "risk": "HIGH",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 6,
+    "processes_affected": 3,
+    "modules_affected": 2
+  },
+  "byDepthCounts": {
+    "1": 6,
+    "2": 3,
+    "3": 1
+  },
+  "affected_processes": [
+    {
+      "name": "proactive_speak_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "handle_private_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Bot_main",
+      "hits": 9,
+      "impact": "direct"
+    },
+    {
+      "name": "Cometa",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ]
+}
+
+  GitNexus Impact (1.6.12)

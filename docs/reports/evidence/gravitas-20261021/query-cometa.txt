@@ -1,0 +1,158 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Function:tests/scheduling/test_scheduling_store.py:test_recover_expired_lease_requeues_running_run",
+      "name": "test_recover_expired_lease_requeues_running_run",
+      "filePath": "tests/scheduling/test_scheduling_store.py",
+      "startLine": 395,
+      "endLine": 403,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Function:tests/scheduling/test_scheduling_store.py:test_recover_sending_lease_becomes_delivery_unknown",
+      "name": "test_recover_sending_lease_becomes_delivery_unknown",
+      "filePath": "tests/scheduling/test_scheduling_store.py",
+      "startLine": 406,
+      "endLine": 418,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Function:tests/scheduling/test_scheduling_store.py:test_recover_ignores_live_leases",
+      "name": "test_recover_ignores_live_leases",
+      "filePath": "tests/scheduling/test_scheduling_store.py",
+      "startLine": 421,
+      "endLine": 427,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Function:tests/cometa/test_recovery.py:_recover",
+      "name": "_recover",
+      "filePath": "tests/cometa/test_recovery.py",
+      "startLine": 33,
+      "endLine": 38,
+      "module": "Cometa"
+    },
+    {
+      "id": "Class:tests/cometa/test_recovery.py:TestCrashWindows",
+      "name": "TestCrashWindows",
+      "filePath": "tests/cometa/test_recovery.py",
+      "startLine": 41,
+      "endLine": 113
+    },
+    {
+      "id": "File:tests/cometa/test_recovery.py",
+      "name": "test_recovery.py",
+      "filePath": "tests/cometa/test_recovery.py"
+    },
+    {
+      "id": "Function:tests/cometa/test_delivery.py:pump",
+      "name": "pump",
+      "filePath": "tests/cometa/test_delivery.py",
+      "startLine": 42,
+      "endLine": 46
+    },
+    {
+      "id": "Function:tests/cometa/test_delivery.py:pump._make@42:4",
+      "name": "_make",
+      "filePath": "tests/cometa/test_delivery.py",
+      "startLine": 43,
+      "endLine": 44
+    },
+    {
+      "id": "File:tests/cometa/test_delivery.py",
+      "name": "test_delivery.py",
+      "filePath": "tests/cometa/test_delivery.py"
+    },
+    {
+      "id": "Function:tests/scheduling/test_scheduling_delivery.py:test_delivery_unknown_is_never_auto_retried",
+      "name": "test_delivery_unknown_is_never_auto_retried",
+      "filePath": "tests/scheduling/test_scheduling_delivery.py",
+      "startLine": 164,
+      "endLine": 175,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Function:tests/scheduling/test_scheduling_delivery.py:test_lost_lease_aborts_delivery_without_sending",
+      "name": "test_lost_lease_aborts_delivery_without_sending",
+      "filePath": "tests/scheduling/test_scheduling_delivery.py",
+      "startLine": 180,
+      "endLine": 192,
+      "module": "Scheduling"
+    },
+    {
+      "id": "File:tests/scheduling/test_scheduling_delivery.py",
+      "name": "test_scheduling_delivery.py",
+      "filePath": "tests/scheduling/test_scheduling_delivery.py"
+    },
+    {
+      "id": "Class:cometa/delivery.py:NotificationPump",
+      "name": "NotificationPump",
+      "filePath": "cometa/delivery.py",
+      "startLine": 68,
+      "endLine": 224
+    },
+    {
+      "id": "Method:cometa/delivery.py:NotificationPump._deliver_one#1",
+      "name": "_deliver_one",
+      "filePath": "cometa/delivery.py",
+      "startLine": 153,
+      "endLine": 198,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:cometa/delivery.py",
+      "name": "delivery.py",
+      "filePath": "cometa/delivery.py"
+    },
+    {
+      "id": "Method:cometa/worker.py:CometaWorker._tick#0",
+      "name": "_tick",
+      "filePath": "cometa/worker.py",
+      "startLine": 139,
+      "endLine": 203,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:cometa/worker.py:CometaWorker._recover_orphans#0",
+      "name": "_recover_orphans",
+      "filePath": "cometa/worker.py",
+      "startLine": 205,
+      "endLine": 218,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:cometa/worker.py",
+      "name": "worker.py",
+      "filePath": "cometa/worker.py"
+    },
+    {
+      "id": "Function:cometa/store.py:CometaStore.begin_recovery._do@1681:8#1",
+      "name": "_do",
+      "filePath": "cometa/store.py",
+      "startLine": 1682,
+      "endLine": 1690,
+      "module": "Cometa"
+    },
+    {
+      "id": "Function:cometa/store.py:CometaStore.requeue_task._do@1697:8#1",
+      "name": "_do",
+      "filePath": "cometa/store.py",
+      "startLine": 1698,
+      "endLine": 1715,
+      "module": "Cometa"
+    }
+  ],
+  "timing": {
+    "vector": 4.7,
+    "bm25": 500.8,
+    "merge": 0.2,
+    "symbol_lookup": 39.5,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 541.4
+  }
+}
+
+  GitNexus Query (1.6.12)

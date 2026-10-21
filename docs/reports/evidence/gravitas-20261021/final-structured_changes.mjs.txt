@@ -1,0 +1,5 @@
+{"scope":"all","attempt":0,"summary":{"changed_count":10,"affected_count":0,"changed_files":5,"risk_level":"low"}}
+{"scope":"compare","attempt":0,"summary":{"changed_count":1201,"affected_count":117,"changed_files":354,"risk_level":"critical"},"truncated":true}
+{"scope":"compare","attempt":1,"summary":{"changed_count":1201,"affected_count":117,"changed_files":354,"risk_level":"critical"},"truncated":true}
+{"scope":"compare","attempt":2,"summary":{"changed_count":1201,"affected_count":101,"changed_files":354,"risk_level":"unknown"},"partial":true,"truncated":true}
+{"level":40,"time":1792575768245,"name":"gitnexus","context":"detect-changes:process-lookup","err":"Interrupted.","msg":"GitNexus query failed (degraded)"}

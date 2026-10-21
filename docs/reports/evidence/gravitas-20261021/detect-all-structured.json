@@ -1,0 +1,81 @@
+{
+  "summary": {
+    "changed_count": 10,
+    "affected_count": 0,
+    "changed_files": 5,
+    "risk_level": "low"
+  },
+  "changed_symbols": [
+    {
+      "id": "Section:docs/history/README.en.md:L1:Historical archives",
+      "name": "Historical archives",
+      "type": "Section",
+      "filePath": "docs/history/README.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.en.md:L15:Topics",
+      "name": "Topics",
+      "type": "Section",
+      "filePath": "docs/history/README.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.md:L1:历史档案导航",
+      "name": "历史档案导航",
+      "type": "Section",
+      "filePath": "docs/history/README.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.md:L15:按主题查证",
+      "name": "按主题查证",
+      "type": "Section",
+      "filePath": "docs/history/README.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L1:Session Progress Log",
+      "name": "Session Progress Log",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L3:Current State",
+      "name": "Current State",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L10:2026-10-21 — Gravitas engineering planning",
+      "name": "2026-10-21 — Gravitas engineering planning",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L1:Session Handoff",
+      "name": "Session Handoff",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L3:Current Session — Gravitas planning",
+      "name": "Current Session — Gravitas planning",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L13:Inherited Cross-platform Handoff",
+      "name": "Inherited Cross-platform Handoff",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    }
+  ],
+  "affected_processes": []
+}
