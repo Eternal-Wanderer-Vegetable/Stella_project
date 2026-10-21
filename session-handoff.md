@@ -5,12 +5,12 @@
 用户要求新建分支并执行[工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)，阶段提交，完成后创建 PR。当前分支 `codex/gravitas-implementation` 基于合并 PR #111 后的 `main@c662746`；本轮范围登记为 GRAVITAS-IMPL G00–G09，严格一次推进一个工作包。
 
 - Files：方案、[机器工作包清单](docs/plans/2026-10-21-gravitas-inventory.json)、[GitNexus 研究与基线证据](docs/reports/evidence/gravitas-20261021/README.md)。
-- Current package：G00–G03 完成并按包提交；下一步 G04 总期限与结果语义。
-- Commits：G00 `709a4b4`、`82f377d`、`88de58c`、`f03eb0f`；G01 `dbcbe41`；G02 `8e87c6c`；G03a `dd8bb72`、G03b `6c625f9`、G03c 见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
-- Verification：G00 组合回归 78 passed；G01 定向合同/发布/flow 回归 65 passed；G03c 综合定向回归 446 passed，变更文件 Ruff、Python 编译、文档门禁、flow 生成和 `--check` 通过。G01 的 Python 3.10/3.11/3.12 导入及 Standalone/OneClick 包内导入记录仍有效。
+- Current package：G00–G03、G04a 入口总期限已提交；下一步 G04b 域内传播，然后 G04c 副作用/发送围栏。
+- Commits：G00 `709a4b4`、`82f377d`、`88de58c`、`f03eb0f`；G01 `dbcbe41`；G02 `8e87c6c`；G03a `dd8bb72`、G03b `6c625f9`、G03c `351878d`；G04a `c3d4c4d`。
+- Verification：G00 组合回归 78 passed；G01 定向合同/发布/flow 回归 65 passed；G03c 综合定向回归 446 passed；G04a QQ/主动/WebChat/runtime 相关定向回归 77 passed / 1 fixture warning。全仓 Ruff、G04a 编译、文档门禁、flow manifest 生成与 `--check` 通过。G01 的 Python 3.10/3.11/3.12 导入及 Standalone/OneClick 包内导入记录仍有效。
 - G03c impacts：RoleBackend MEDIUM；`execute_model_call` CRITICAL（8 direct / 6 processes / 11 modules）；脚本探针 LOW；两个评估脚本文件 UNKNOWN/0 edges，已文本审计。`run_compact_evaluation` LOW（2 impacted/1 direct/1 flow），回放 `main` LOW（1/1）。这些 exact symbol/function impact 有编辑后补查的门禁偏差，细节见实施报告，不构成后续风险豁免。
-- Data / blockers：pytest 显式使用临时 `STELLA_HOME=/tmp/stella-gravitas-g03c-20261021`；未启动 Bot、模型或平台，未读写用户数据库。真实模型、QQ/WebChat 灰度、跨进程 live、干净 VM 与发布验收缺失，整体保持 NOT READY。
-- Next：以当前目标 HEAD 为基线，对 G04 ingress、Facade/TurnService、planner/hooks 与 outbound 副作用边界跑 query/context/exact impact；按入口总期限、域内传播、逐段副作用围栏拆分提交。恢复命令：`git status --short && git log --oneline -10`。
+- Data / blockers：G03c/G04a pytest 分别显式使用 `/tmp/stella-gravitas-g03c-20261021` 与 `/tmp/stella-gravitas-g04a-20261021`；未启动 Bot、模型或平台，未读写用户数据库。真实模型、QQ/WebChat 灰度、跨进程 live、干净 VM 与发布验收缺失，整体保持 NOT READY。
+- Next：继续 G04b；锁/prepare/route/tools/finalize 纳入同一总 Deadline，并为每阶段保留旧 timeout 上限；之后 G04c 对副作用和物理发送建立截止围栏。G04a impact 与代码说明见实施报告。恢复命令：`git status --short && git log --oneline -10`。
 
 ## Previous Session — Gravitas planning
 

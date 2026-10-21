@@ -42,8 +42,21 @@ GitNexus 1.6.12 索引基于 G03b `6c625f9`，尚未包含本工作树改动。�
 - `scripts/check_docs.py`：119 files / 1,238 local links / 577 migration anchors / 0 errors；`feature_list.json` JSON parse 与 `git diff --check` 通过。
 - GitNexus 1.6.12 `detect-changes --scope all`：21 changed files / 74 symbols / 31 affected processes / CRITICAL；`--scope compare --base-ref main`：441 files / 652 symbols / 59 affected processes / CRITICAL。完整展示上限设为 2,000，CLI 未输出 partial/truncated 标记；CRITICAL 是累计高风险调用路径，不等于本包每个文件都为 CRITICAL。
 
+## G04a 入口总期限
+
+提交 `c3d4c4d` 在可信入口创建单调时钟 `Deadline`，并把同一实例贯穿 ChatContext、Facade 默认 provider 与旧 TurnService 生成入口。QQ 群聊/私聊在预处理前创建；两类主动轮次在锁与整合工作前创建；WebChat 在 `run_turn` 开始、规范化和数据库操作前创建。直接调用 `RuntimeFacade.submit_turn` 的旧调用方仍可不传参数，由 Facade 创建兼容期限。
+
+- `ChatContext.turn_deadline` 是 runtime-only 字段，不进入 projection JSON。进程级 `system_control_clock()` 保证 Deadline 创建者与执行端使用相同 clock identity；未带 deadline 的旧 `role_call_context` 调用保留原时钟行为。
+- Facade 的旧 `deadline` 参数仍表示生成阶段上限；新增 `turn_deadline` 后，生成等待取总剩余时间与旧阶段上限的较小值。默认 pipeline provider 和 TurnService 生成调用也接收同一 Deadline。
+- 编辑前 exact impact：`_run_turn_via_engine` HIGH（4 direct / 3 inferred flows）；`role_call_context` CRITICAL（12 direct / 7 processes / 13 modules）；`ChatContext` MEDIUM（29 impacted / 12 direct imports）；`SystemControlClock` MEDIUM（47 / 4 direct）。已在编辑前向用户提示 HIGH/CRITICAL。`RuntimeFacade.submit_turn` LOW（1 direct edge）、`TurnService.generate_reply` LOW（2 direct / 2 flows）、WebChat `run_turn` LOW（1 direct / 2 flows）、两个 proactive helper LOW；Facade 的生产入口图解析较少，另逐处源码审查。`handle_chat` / `handle_private_chat` 为 UNKNOWN/0 edge，通过 `on_message` 装饰器注册源码确认入口。测试函数 impact 均 UNKNOWN/0，`pyproject.toml` 的 pytest `testpaths = ["tests"]` 与测试收集补证其执行方式。
+- 定向回归：`STELLA_HOME=/tmp/stella-gravitas-g04a-20261021 .venv/bin/python -m pytest tests/runtime/test_facade_turns.py tests/runtime/test_turn_service.py tests/test_context_projection_identity.py tests/gravitas/test_g03_model_calls.py tests/test_ai_gateway_deterministic_reply.py tests/test_private_chat_ingress.py tests/runtime/test_ingress_native.py tests/runtime/test_proactive_native.py tests/webui/test_webui_chat.py tests/test_capture_ingress_gating.py -q -x` 覆盖 Facade、TurnService、上下文 projection、model_calls、QQ 群聊/私聊、proactive、WebChat 与 CaptureGate，共 **77 passed / 1 warning**。一个现有 NoneBot fixture 提示未发现 adapter；不影响结果。
+- `.venv/bin/ruff check .`、改动文件 `py_compile`、`python scripts/check_docs.py`（119 files / 1,238 local links / 577 anchors / 0 errors）通过。源码变化使旧 flow archive body hash 漂移，生成新不可变归档 `message-flow.41882cf74ffa.json`（141 nodes / 139 source-resolved / 9,044 closure sites / 13,873 reachable symbols），随后 `--check` 通过。
+- 提交前 GitNexus：scope all 15 files / 39 symbols / 24 affected processes / CRITICAL；compare main 451 files / 774 symbols / 67 affected processes / CRITICAL。完整统计命令退出 0，未返回 partial/truncated；compare 是累计分支风险。CLI 只展示部分符号/流程样例，不代表计数被截断。
+
+G04b 将把总期限扩展到锁、prepare、路由/工具等待和 finalize；G04c 再对每个副作用和逐段发送设围栏。G04a 完成不代表整轮总期限已闭合。
+
 ## 未完成与验收边界
 
-- 当前仅 G00–G03 完成；G04–G09 仍须逐包实现、验证和提交。
+- G00–G03 与 G04a 已完成；G04b/G04c、G05–G09 仍须逐包实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。

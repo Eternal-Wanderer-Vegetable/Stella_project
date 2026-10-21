@@ -536,6 +536,16 @@
           "command": "GitNexus 1.6.12 detect-changes --scope all --repo Stella_project --limit 2000; detect-changes --scope compare --base-ref main --repo Stella_project --limit 2000",
           "result": "All: 21 files / 74 symbols / 31 affected processes / CRITICAL. Compare main: 441 files / 652 symbols / 59 affected processes / CRITICAL cumulative. CLI emitted no partial/truncated marker; see implementation report for impact deviation, call-site audit, and interpretation.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G04a: isolated pytest across runtime, ingress, projection and model-call paths; full Ruff; py_compile; check_docs; generate_message_flow.py and --check",
+          "result": "77 passed / 1 existing NoneBot fixture warning; full Ruff and changed-file compile passed; docs 119 files / 1,238 links / 577 anchors / 0 errors; generated and verified message-flow.41882cf74ffa.json (141 nodes, 139 source-resolved, 9,044 closure sites, 13,873 reachable symbols). STELLA_HOME was /tmp/stella-gravitas-g04a-20261021.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G04a pre-commit: GitNexus 1.6.12 detect-changes --scope all and --scope compare --base-ref main, --limit 2000",
+          "result": "All: 15 files / 39 symbols / 24 processes / CRITICAL. Compare main: 451 files / 774 symbols / 67 processes / CRITICAL cumulative. No partial/truncated marker; CLI listing is abbreviated while counts are complete. Commit c3d4c4d.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }
