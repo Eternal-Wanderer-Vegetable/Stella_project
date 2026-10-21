@@ -82,6 +82,7 @@ def _row_to_kb(row: sqlite3.Row) -> KnowledgeBase:
         name=row["name"],
         mode=row["mode"],
         owner_user_id=row["owner_user_id"],
+        owner_identity_domain=row["owner_identity_domain"],
         direct_publish=bool(row["direct_publish"]),
         status=row["status"],
         description=row["description"],
@@ -138,6 +139,7 @@ def _row_to_grant(row: sqlite3.Row) -> KBGrant:
         role=row["role"],
         granted_by=row["granted_by"],
         created_at=row["created_at"],
+        principal_identity_domain=row["principal_identity_domain"],
     )
 
 
@@ -162,16 +164,18 @@ class KnowledgeStore:
         with transaction(self.db_path) as conn:
             conn.execute(
                 """
-                INSERT INTO kb (id, name, mode, owner_user_id, direct_publish, status,
+                INSERT INTO kb (id, name, mode, owner_user_id, owner_identity_domain,
+                                direct_publish, status,
                                 description, embed_model, embed_dim, embed_encoder,
                                 index_version, created_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     kb.id,
                     kb.name,
                     kb.mode,
                     kb.owner_user_id,
+                    kb.owner_identity_domain,
                     int(kb.direct_publish),
                     kb.status,
                     kb.description,
@@ -213,7 +217,8 @@ class KnowledgeStore:
         with transaction(self.db_path) as conn:
             conn.execute(
                 """
-                UPDATE kb SET name=?, mode=?, owner_user_id=?, direct_publish=?, status=?,
+                UPDATE kb SET name=?, mode=?, owner_user_id=?, owner_identity_domain=?,
+                              direct_publish=?, status=?,
                               description=?, embed_model=?, embed_dim=?, embed_encoder=?,
                               index_version=?, updated_at=?
                 WHERE id=?
@@ -222,6 +227,7 @@ class KnowledgeStore:
                     kb.name,
                     kb.mode,
                     kb.owner_user_id,
+                    kb.owner_identity_domain,
                     int(kb.direct_publish),
                     kb.status,
                     kb.description,
@@ -242,16 +248,19 @@ class KnowledgeStore:
         with transaction(self.db_path) as conn:
             conn.execute(
                 """
-                INSERT INTO kb_grant (kb_id, principal_kind, principal_id, role, granted_by, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO kb_grant (kb_id, principal_kind, principal_id,
+                                      principal_identity_domain, role, granted_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(kb_id, principal_kind, principal_id)
-                DO UPDATE SET role=excluded.role, granted_by=excluded.granted_by,
+                DO UPDATE SET principal_identity_domain=excluded.principal_identity_domain,
+                              role=excluded.role, granted_by=excluded.granted_by,
                               created_at=excluded.created_at
                 """,
                 (
                     grant.kb_id,
                     grant.principal_kind,
                     grant.principal_id,
+                    grant.principal_identity_domain,
                     grant.role,
                     grant.granted_by,
                     grant.created_at,

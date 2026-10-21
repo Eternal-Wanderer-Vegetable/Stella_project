@@ -14,8 +14,9 @@ import sqlite3
 
 import pytest
 
+from core.transport.models import UserRef
 from memory import schema, scope_versions
-from memory.ownership import person_owner_key
+from memory.ownership import person_owner_key, person_owner_key_for_subject
 from memory.personal_sharing import (
     create_sharing_authorization_table,
     create_sharing_copies_table,
@@ -82,11 +83,14 @@ def sharing_db(sharing_db_path):
 
 def _insert_source_row(conn, row_id: int, *, user_id: str = _U1, conv: str = _CONV,
                        content: str = "以后在群里也记得我们CP的关系",
-                       source_kind: str = "AT_MENTION") -> None:
+                       source_kind: str = "AT_MENTION", subject_key: str = "",
+                       connection_id: str = "") -> None:
     conn.execute(
         "INSERT INTO group_messages (id, group_id, user_id, content, source_kind,"
-        " conversation_key, bot_id) VALUES (?,?,?,?,?,?,?)",
-        (row_id, "-2", user_id, content, source_kind, conv, _BOT),
+        " conversation_key, bot_id, subject_key, connection_id)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        (row_id, "-2", user_id, content, source_kind, conv, _BOT,
+         subject_key, connection_id),
     )
 
 
@@ -344,6 +348,103 @@ def test_revoke_does_not_touch_other_users_copies(sharing_db):
     assert active[0][1] == person_owner_key("qq", _BOT, _U2), "U2 的共享副本必须完好"
     u1_copy = [r for r in rows if r[1] == person_owner_key("qq", _BOT, _U1)]
     assert u1_copy and u1_copy[0][3] == "DEPRECATED"
+
+
+def test_same_raw_id_sharing_grants_are_isolated_by_subject_and_connection(sharing_db):
+    grants = []
+    for row_id, domain, connection_id in (
+        (31, "service:a", "connection-a"),
+        (32, "service:b", "connection-b"),
+    ):
+        user = UserRef(domain, _U1)
+        conversation = f"conversation:{domain}"
+        _insert_source_row(
+            sharing_db,
+            row_id,
+            conv=conversation,
+            subject_key=user.subject_key,
+            connection_id=connection_id,
+        )
+        result = grant_sharing_authorization(
+            sharing_db,
+            domain,
+            _BOT,
+            _U1,
+            _FACT,
+            conversation,
+            row_id,
+            subject_key=user.subject_key,
+            connection_id=connection_id,
+        )
+        assert result == (True, "pending")
+        grants.append((user, connection_id))
+    sharing_db.commit()
+
+    rows = sharing_db.execute(
+        "SELECT owner_key, subject_key, connection_id, status FROM personal_memory_sharing "
+        "WHERE fact_key = ? ORDER BY connection_id",
+        (_FACT,),
+    ).fetchall()
+    assert rows == [
+        (person_owner_key_for_subject("connection-a", grants[0][0].subject_key),
+         grants[0][0].subject_key, "connection-a", "pending"),
+        (person_owner_key_for_subject("connection-b", grants[1][0].subject_key),
+         grants[1][0].subject_key, "connection-b", "pending"),
+    ]
+
+    ok, reason = revoke_sharing_authorization(
+        sharing_db,
+        "service:a",
+        _BOT,
+        _U1,
+        _FACT,
+        subject_key=grants[0][0].subject_key,
+        connection_id=grants[0][1],
+    )
+    sharing_db.commit()
+    assert (ok, reason) == (True, "revoked")
+    states = dict(sharing_db.execute(
+        "SELECT connection_id, status FROM personal_memory_sharing WHERE fact_key = ?",
+        (_FACT,),
+    ))
+    assert states == {"connection-a": "revoked", "connection-b": "pending"}
+
+
+def test_explicit_legacy_qq_connection_can_revoke_legacy_grant(sharing_db):
+    _insert_source_row(sharing_db, 41)
+    _insert_private_fact(sharing_db)
+    ok, reason = _grant(sharing_db, row_id=41)
+    assert (ok, reason) == (True, "granted")
+    sharing_db.commit()
+
+    qq_subject = UserRef("qq:client", _U1).subject_key
+    wrong_connection = revoke_sharing_authorization(
+        sharing_db,
+        "qq",
+        _BOT,
+        _U1,
+        _FACT,
+        subject_key=qq_subject,
+        connection_id="configured-connection",
+    )
+    assert wrong_connection == (False, "not_found")
+    ok, reason = revoke_sharing_authorization(
+        sharing_db,
+        "qq",
+        _BOT,
+        _U1,
+        _FACT,
+        subject_key=qq_subject,
+        connection_id=f"legacy-qq:{_BOT}",
+    )
+    sharing_db.commit()
+    assert (ok, reason) == (True, "revoked")
+    assert sharing_db.execute(
+        "SELECT status, owner_key, subject_key FROM personal_memory_sharing"
+    ).fetchone() == ("revoked", person_owner_key("qq", _BOT, _U1), f"qq:{_U1}")
+    assert all(row[3] == "DEPRECATED" for row in _user_shared_rows(
+        sharing_db, "memory_candidates"
+    ))
 
 
 # ── 重授权（复核 F13） ─────────────────────────────────────────────────

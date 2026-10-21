@@ -7,7 +7,8 @@ pub const BACKEND_API_VERSION: u32 = 4;
 // 库的 schema_meta.version 严格相等放行，Python 侧 SQLite schema 升级必须同步
 // 抬本合同号并重编译（见 memory_rust/backend.py MEMORY_SCHEMA_VERSION）。
 // v21 增加 opaque platform_message_id / subject_key；旧扩展不得读新库。
-pub const MEMORY_SCHEMA_VERSION: i64 = 21;
+// v22 增加可信连接与身份作用域；合同继续严格相等，旧扩展拒载新库。
+pub const MEMORY_SCHEMA_VERSION: i64 = 22;
 
 pub fn ensure_supported(conn: &Connection) -> Result<(), String> {
     let table_exists = conn
@@ -51,10 +52,10 @@ mod tests {
         let conn = Connection::open_in_memory().expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 21);",
+             INSERT INTO schema_meta (k, version) VALUES ('version', 22);",
         )
         .expect("schema");
-        assert_eq!(MEMORY_SCHEMA_VERSION, 21);
+        assert_eq!(MEMORY_SCHEMA_VERSION, 22);
         assert!(ensure_supported(&conn).is_ok());
     }
 
@@ -63,11 +64,11 @@ mod tests {
         let conn = Connection::open_in_memory().expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 20);",
+             INSERT INTO schema_meta (k, version) VALUES ('version', 21);",
         )
         .expect("schema");
         assert!(ensure_supported(&conn)
             .unwrap_err()
-            .contains("expected 21, got 20"));
+            .contains("expected 22, got 21"));
     }
 }

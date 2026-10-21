@@ -641,11 +641,14 @@ class MemoryManager:
         self._ensure_tables()
         conn.execute("BEGIN IMMEDIATE")
 
-        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
+        from memory.evidence_contract import (
+            supports_assessment_version,
+            verify_source_snapshot,
+        )
 
         def _has_current_accepted_evidence(candidate: dict) -> bool:
             uid = str(candidate.get("user_id") or "").strip()
-            if not uid.isdecimal():
+            if not uid:
                 return False
             owner_key = str(
                 candidate.get("owner_key")
@@ -665,14 +668,14 @@ class MemoryManager:
                 "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
                 "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
                 "WHERE e.candidate_id = ? AND e.owner_key = ? AND e.audience = ? "
-                "AND e.fact_key = ? AND e.fact_subject_key = ? "
+                "AND e.fact_key = ? "
                 "AND e.verification_status = 'accepted' "
                 "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
                 "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
                 "AND l.status = 'active'",
                 (
                     candidate["id"], owner_key, audience, fact_key,
-                    f"qq:{uid}", candidate["id"],
+                    candidate["id"],
                 ),
             ).fetchall()
             for row in rows:
@@ -688,8 +691,30 @@ class MemoryManager:
                 snapshot = provenance.get("source_snapshot")
                 if not isinstance(snapshot, dict):
                     continue
+                evidence_subject = str(fact_subject or "")
+                snapshot_subject = str(snapshot.get("subject_key") or "")
+                if snapshot_subject:
+                    if snapshot_subject != evidence_subject:
+                        continue
+                    try:
+                        from core.transport.keys import decode_subject_key_v2
+
+                        _domain, snapshot_user_id = decode_subject_key_v2(snapshot_subject)
+                    except (TypeError, ValueError):
+                        continue
+                    if snapshot_user_id != uid:
+                        continue
+                elif (
+                    not uid.isdecimal()
+                    or not str(snapshot.get("conversation_key") or "").startswith("qq:")
+                    or evidence_subject != f"qq:{uid}"
+                ):
+                    continue
+                candidate_subject = str(candidate.get("subject_key") or "")
+                if candidate_subject and candidate_subject != evidence_subject:
+                    continue
                 if (
-                    provenance.get("assessment_version") != ASSESSMENT_VERSION
+                    not supports_assessment_version(provenance.get("assessment_version"))
                     or provenance.get("verification_status") != "accepted"
                     or provenance.get("claim_key") != fact_key
                     or provenance.get("recording_author_key") != fact_subject
@@ -698,6 +723,7 @@ class MemoryManager:
                     or provenance.get("conversation_key") != source_conversation
                     or str(provenance.get("source_id")) != str(source_row_id)
                     or str(snapshot.get("id")) != str(source_row_id)
+                    or str(snapshot.get("user_id") or "") != uid
                     or str(snapshot.get("conversation_key") or "") != source_conversation
                     or evidence_owner != owner_key
                     or evidence_audience != audience
@@ -706,6 +732,15 @@ class MemoryManager:
                     or linked_claim != fact_key
                 ):
                     continue
+                if int(provenance.get("source_snapshot_version") or 1) >= 2:
+                    connection_id = str(snapshot.get("connection_id") or "")
+                    if not connection_id or not snapshot_subject:
+                        continue
+                    if str(candidate.get("owner_type") or "") == "PERSON":
+                        from memory.ownership import person_owner_key_for_subject
+
+                        if person_owner_key_for_subject(connection_id, snapshot_subject) != owner_key:
+                            continue
                 if verify_source_snapshot(snapshot, digest, conn=conn):
                     return True
             return False
@@ -848,7 +883,7 @@ class MemoryManager:
                     "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
                     "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
                     "WHERE e.candidate_id = ? AND e.owner_key = ? AND e.audience = ? "
-                    "AND e.fact_key = ? AND e.fact_subject_key = ? "
+                    "AND e.fact_key = ? "
                     "AND e.verification_status = 'accepted' "
                     "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
                     "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
@@ -858,7 +893,6 @@ class MemoryManager:
                         candidate.get("owner_key") or f"space:{candidate['group_shared_space']}",
                         candidate.get("audience") or "CURRENT_SPACE",
                         candidate.get("fact_key") or "",
-                        f"qq:{candidate['user_id']}",
                         candidate["id"],
                     ),
                 ).fetchall()

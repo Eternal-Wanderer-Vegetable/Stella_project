@@ -59,8 +59,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v21：跨平台消息 ID 与规范主体键持久化，见 migrate_v21）。
-SCHEMA_VERSION = 21
+# 当前 Schema 版本（v22：连接身份、地址偏好与分享授权作用域，见 migrate_v22）。
+SCHEMA_VERSION = 22
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -178,6 +178,11 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "personal_memory_sharing",
         "subject_key",
         "ALTER TABLE personal_memory_sharing ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "personal_memory_sharing",
+        "connection_id",
+        "ALTER TABLE personal_memory_sharing ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''",
     ),
     # memories（主表）：补上 v2 记忆字段
     (
@@ -355,6 +360,11 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "group_messages",
         "subject_key",
         "ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "group_messages",
+        "connection_id",
+        "ALTER TABLE group_messages ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''",
     ),
 ]
 
@@ -628,6 +638,27 @@ CREATE TABLE IF NOT EXISTS user_address_preferences (
 def create_user_address_preferences_table(conn: sqlite3.Connection) -> None:
     """确保用户个性化称呼表存在（幂等）。"""
     conn.execute(USER_ADDRESS_PREFERENCES_TABLE_DDL)
+
+
+# v22：规范主体地址偏好与旧 QQ 表分开存储。旧表保留原样，来源不充分的旧行
+# 不自动绑定到 QQ 或其他身份域；仅经可信入口验证的 UserRef 使用此表。
+USER_ADDRESS_PREFERENCES_V2_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS user_address_preferences_v2 (
+    group_shared_space TEXT NOT NULL,
+    subject_key TEXT NOT NULL,
+    raw_user_id TEXT NOT NULL DEFAULT '',
+    address_term TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'natural_language',
+    updated_by_user_id TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_shared_space, subject_key)
+)
+"""
+
+
+def create_user_address_preferences_v2_table(conn: sqlite3.Connection) -> None:
+    """Ensure identity-domain scoped address preferences exist."""
+    conn.execute(USER_ADDRESS_PREFERENCES_V2_TABLE_DDL)
 
 
 # 记忆候选表（v8 起）：以 group_shared_space 归属。
@@ -1190,6 +1221,7 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(USER_ADDRESS_PREFERENCES_TABLE_DDL)
+            conn.execute(USER_ADDRESS_PREFERENCES_V2_TABLE_DDL)
     # v7：用户画像表（新表，不属于 additive column 范畴；规范 DDL 与
     # consolidator 建表共用，避免手抄两份造成字段漂移）
     if not dry_run:

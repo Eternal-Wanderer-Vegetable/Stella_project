@@ -96,19 +96,32 @@ class KnowledgeService:
         name: str,
         mode: str,
         owner_user_id: str,
+        owner_identity_domain: str = "",
         description: str = "",
         direct_publish: bool = False,
     ) -> KnowledgeBase:
         if mode not in (KB_MODE_MANAGED, KB_MODE_SHARED):
             raise KnowledgeStateError(f"非法模式: {mode}")
+        owner_subject = str(owner_user_id)
+        if owner_identity_domain:
+            from core.transport.keys import decode_subject_key_v2
+            from core.transport.models import UserRef
+
+            if owner_subject.startswith("u2."):
+                domain, _raw = decode_subject_key_v2(owner_subject)
+                if domain != owner_identity_domain:
+                    raise KnowledgeStateError("库主主体键与身份域不一致")
+            else:
+                owner_subject = UserRef(owner_identity_domain, owner_subject).subject_key
         kb = KnowledgeBase(
             id=uuid.uuid4().hex[:12],
             name=name,
             mode=mode,
-            owner_user_id=owner_user_id,
+            owner_user_id=owner_subject,
+            owner_identity_domain=owner_identity_domain,
             direct_publish=bool(direct_publish) and mode == KB_MODE_SHARED,
             description=description,
-            created_by=owner_user_id,
+            created_by=owner_subject,
         )
         self.store.create_kb(kb)
         logger.info(
@@ -142,21 +155,36 @@ class KnowledgeService:
         principal_id: str,
         role: str,
         actor: Principal,
+        principal_identity_domain: str = "",
     ) -> None:
         from knowledge.domain import KBGrant
 
         kb, actor_role = self._require_kb(kb_id, actor)
         if not can_manage_acl(kb, actor_role):
             raise KnowledgePermissionError("需要维护者以上权限才能管理授权")
-        if principal_kind == "user" and principal_id == kb.owner_user_id:
+        stored_principal_id = str(principal_id)
+        if principal_kind == "user" and principal_identity_domain:
+            from core.transport.keys import decode_subject_key_v2
+            from core.transport.models import UserRef
+
+            if stored_principal_id.startswith("u2."):
+                domain, _raw = decode_subject_key_v2(stored_principal_id)
+                if domain != principal_identity_domain:
+                    raise KnowledgeStateError("授权主体键与身份域不一致")
+            else:
+                stored_principal_id = UserRef(
+                    principal_identity_domain, stored_principal_id
+                ).subject_key
+        if principal_kind == "user" and stored_principal_id == kb.owner_user_id:
             raise KnowledgeStateError("库主无需授权")
         self.store.set_grant(
             KBGrant(
                 kb_id=kb_id,
                 principal_kind=principal_kind,
-                principal_id=principal_id,
+                principal_id=stored_principal_id,
                 role=role,
                 granted_by=actor.user_id,
+                principal_identity_domain=principal_identity_domain,
             )
         )
 

@@ -20,7 +20,7 @@ BACKEND_API_VERSION = 4
 # strict rust 拒载）。v21 新增不透明 platform_message_id / subject_key 存储，且
 # RetrievalRequest 的 raw external user_id 改为字符串。两个版本号数值保持同步，
 # 但语义不同（native 读库兼容 vs SQLite 结构），不可互相替代。
-MEMORY_SCHEMA_VERSION = 21
+MEMORY_SCHEMA_VERSION = 22
 
 
 class MemoryBackendError(RuntimeError):

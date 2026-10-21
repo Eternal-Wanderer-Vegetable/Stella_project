@@ -30,6 +30,7 @@ class FakeEvent:
 
     user_id: int = 101
     group_id: int = 0
+    identity_domain: str = "qq:client"
 
     def get_sender_id(self) -> str:
         return str(self.user_id)
@@ -147,6 +148,14 @@ async def test_tool_search_uses_event_principal(patch_service) -> None:
     )
     payload = json.loads(raw)
     assert payload["evidence"] == []
+
+    # A bare numeric sender with no verified identity domain cannot claim the
+    # legacy owner/grant row for that same raw ID.
+    raw = await tool.call(
+        FakeContext(FakeEvent(user_id=100, group_id=0, identity_domain="")),
+        query="数据库备份",
+    )
+    assert json.loads(raw)["evidence"] == []
 
 
 async def test_tool_cannot_spoof_principal(patch_service) -> None:

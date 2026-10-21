@@ -81,6 +81,8 @@ def open_effect(
     turn_id: str,
     trace_id: str = "",
     intent: str = "",
+    bot_id: str = "",
+    connection_id: str = "",
 ) -> str | None:
     """按本轮已确认的投递回执开一行观察效果 + 一个延迟结算作业。
 
@@ -92,12 +94,16 @@ def open_effect(
         social_store.ensure_tables()
         from config import settings
 
-        scope = ConversationScope.for_qq(group_id)
+        scope = ConversationScope.for_qq(
+            group_id,
+            bot_id=bot_id if connection_id else "",
+            connection_id=connection_id,
+        )
         # 群学习守卫（修复计划 §6.3）：只接纳匹配当前群身份且
         # learning_eligible 的确认回执——中立私聊行/其他群行不进学习分母
         deliveries = social_store.deliveries_for_turn(
             turn_id, platform=scope.platform, group_id=scope.group_id,
-            learning_eligible=True)
+            connection_id=scope.connection_id, learning_eligible=True)
         acked = [d for d in deliveries if d["status"] == "acknowledged" and d["acknowledged_at_utc"]]
         if not acked:
             return None
@@ -110,12 +116,13 @@ def open_effect(
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT INTO social_effects (effect_id, turn_id, trace_id, platform, bot_id, "
-                "group_id, target_user_id, trigger, intent, first_ack_at_utc, last_ack_at_utc, "
+                "group_id, connection_id, target_user_id, trigger, intent, first_ack_at_utc, last_ack_at_utc, "
                 "window_end_utc, status, observation, rule_version, assessable, meta_json, "
-                "created_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "created_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     effect_id, turn_id, trace_id, scope.platform, scope.bot_id,
-                    scope.group_id, str(user_id) if str(user_id) not in ("", "0") else None,
+                    scope.group_id, scope.connection_id,
+                    str(user_id) if str(user_id) not in ("", "0") else None,
                     trigger, intent, first_ack, last_ack, window_end,
                     "observing", "", RULE_VERSION, 1,
                     json.dumps({"delivered_parts": len(acked)}, ensure_ascii=False),
@@ -266,7 +273,7 @@ def _load_effect(effect_id: str) -> dict[str, Any] | None:
     conn = sqlite3.connect(settings.DB_PATH, timeout=10.0)
     try:
         row = conn.execute(
-            "SELECT effect_id, turn_id, trace_id, platform, bot_id, group_id, "
+            "SELECT effect_id, turn_id, trace_id, platform, bot_id, group_id, connection_id, "
             "target_user_id, trigger, intent, first_ack_at_utc, last_ack_at_utc, "
             "window_end_utc, status, rule_version, evaluation_version, meta_json "
             "FROM social_effects WHERE effect_id = ?",
@@ -275,7 +282,7 @@ def _load_effect(effect_id: str) -> dict[str, Any] | None:
         if not row:
             return None
         keys = (
-            "effect_id", "turn_id", "trace_id", "platform", "bot_id", "group_id",
+            "effect_id", "turn_id", "trace_id", "platform", "bot_id", "group_id", "connection_id",
             "target_user_id", "trigger", "intent", "first_ack_at_utc", "last_ack_at_utc",
             "window_end_utc", "status", "rule_version", "evaluation_version", "meta_json",
         )
@@ -298,7 +305,10 @@ def resolve_effect(effect_id: str, *, evaluation_version: str = RULE_VERSION) ->
             return "legacy_unverifiable"
         from config import settings
 
-        scope = ConversationScope(row["platform"], row["bot_id"], row["group_id"])
+        scope = ConversationScope(
+            row["platform"], row["bot_id"], row["group_id"],
+            str(row.get("connection_id") or ""),
+        )
         first_ack = row["first_ack_at_utc"] or ""
         window_end = row["window_end_utc"]
         follow_ups: list[dict[str, Any]] = []

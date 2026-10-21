@@ -25,6 +25,7 @@ import pytest
 
 import memory.retrieval_v2 as retrieval_v2
 from core.context import ChatContext
+from core.transport.models import UserRef
 from memory import prompt_builder
 from memory.ownership import (
     AUDIENCE_USER_SHARED,
@@ -110,8 +111,9 @@ def test_group_scope_subject_is_sender_not_group_number(mem_db):
 
     scope = scope_for_chat_context(_group_ctx(B), memory_space="7777")
     assert scope is not None
-    assert scope.subject_key == f"qq:{B}"
-    assert scope.person_owner_key == f"person:qq:{BOT}:{B}"
+    expected_subject = UserRef("qq:client", str(B)).subject_key
+    assert scope.subject_key == expected_subject
+    assert scope.person_owner_key == f"person:v2:legacy-qq:{BOT}:{expected_subject}"
     assert str(GROUP) not in scope.person_owner_key
     assert str(GROUP) not in scope.subject_key
 
@@ -244,7 +246,7 @@ def test_proactive_at_scope_targets_verified_uid():
     ctx = _group_ctx(B, intent="proactive_at")
     scope = scope_for_chat_context(ctx, memory_space="7777")
     assert scope is not None
-    assert scope.subject_key == f"qq:{B}"
+    assert scope.subject_key == UserRef("qq:client", str(B)).subject_key
     assert str(GROUP) not in scope.person_owner_key
 
 
@@ -252,6 +254,30 @@ def test_legacy_entrance_stays_scope_free():
     """旧入口（kind 空）返回 None，与升级前行为逐字一致。"""
     ctx = ChatContext(user_id=B, group_id=GROUP, msg_id=1, message="hi")
     assert scope_for_chat_context(ctx, memory_space="7777") is None
+
+
+def test_same_raw_id_on_unrelated_connections_has_distinct_person_scope():
+    contexts = [
+        ChatContext(
+            user_id="2001",
+            group_id=0,
+            msg_id=1,
+            message="hi",
+            conversation_kind="private",
+            connection_id=connection,
+            adapter_name="generic",
+            platform_scope="generic",
+            bot_id="same-bot-id",
+            scene_kind="private",
+            scene_id="peer",
+        )
+        for connection in ("connection-a", "connection-b")
+    ]
+    scopes = [scope_for_chat_context(ctx, memory_space="shared") for ctx in contexts]
+    assert all(scope is not None for scope in scopes)
+    assert scopes[0].subject_key != scopes[1].subject_key
+    assert scopes[0].person_owner_key != scopes[1].person_owner_key
+    assert scopes[0].person_aliases == scopes[1].person_aliases == ()
 
 
 # ── T18/M1：Planner 深度查询与主回复同主体 ───────────────────────────
@@ -281,7 +307,7 @@ def test_planner_query_memory_uses_sender_subject(mem_db, monkeypatch):
     planner._query_memory(ctx, "阿呆")
     scope = captured.get("scope")
     assert scope is not None
-    assert scope.subject_key == f"qq:{B}"
+    assert scope.subject_key == UserRef("qq:client", str(B)).subject_key
     assert str(GROUP) not in scope.person_owner_key
 
 

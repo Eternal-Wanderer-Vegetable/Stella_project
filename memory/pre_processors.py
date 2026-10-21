@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS group_messages (
     msg_id INTEGER,
     platform_message_id TEXT,
     subject_key TEXT NOT NULL DEFAULT '',
+    connection_id TEXT NOT NULL DEFAULT '',
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     conversation_key TEXT,
     bot_id TEXT,
@@ -177,6 +178,19 @@ async def record_message(
                 cursor.execute(
                     "ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''"
                 )
+        if not _has_column(cursor, "group_messages", "connection_id"):
+            with contextlib.suppress(sqlite3.OperationalError):
+                cursor.execute(
+                    "ALTER TABLE group_messages ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''"
+                )
+        connection_id = str(getattr(ctx, "connection_id", "") or "").strip()
+        user_ref = getattr(ctx, "user_ref", None)
+        if (
+            not connection_id
+            and getattr(user_ref, "identity_domain", "") == "qq:client"
+            and getattr(ctx, "bot_id", "")
+        ):
+            connection_id = f"legacy-qq:{ctx.bot_id}"
         for column, decl in _ENVELOPE_COLUMNS:
             if not _has_column(cursor, "group_messages", column):
                 with contextlib.suppress(sqlite3.OperationalError):
@@ -208,18 +222,19 @@ async def record_message(
         cursor.execute("""
             INSERT INTO group_messages (
                 group_id, user_id, content, source_kind, msg_id,
-                platform_message_id, subject_key,
+                platform_message_id, subject_key, connection_id,
                 conversation_key, bot_id, sender_display_name,
                 reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json,
                 logical_message_id, part_index, origin_msg_id,
                 reply_recipient_user_id, turn_id, relation_version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            str(ctx.storage_key()), str(ctx.user_id), ctx.message,
+            str(ctx.storage_key()), str(getattr(ctx, "raw_user_id", "") or ctx.user_id), ctx.message,
             normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0),
             str(getattr(ctx, "platform_message_id", "") or "") or None,
             str(getattr(ctx, "subject_key", "") or ""),
+            connection_id,
             str(getattr(ctx, "conversation_key", "") or ""),
             str(getattr(ctx, "bot_id", "") or ""),
             str(getattr(ctx, "sender_display_name", "") or ""),
@@ -1000,7 +1015,21 @@ def _load_preferred_address(ctx: ChatContext, space: str) -> str | None:
     try:
         from memory.addressing import get_preference
 
-        preference = get_preference(space, ctx.user_id)
+        user_ref = getattr(ctx, "user_ref", None)
+        subject_key = str(getattr(user_ref, "subject_key", "") or "")
+        if not subject_key:
+            return None
+        legacy_user_id = (
+            ctx.raw_user_id
+            if getattr(user_ref, "identity_domain", "") == "qq:client"
+            else ""
+        )
+        preference = get_preference(
+            space,
+            ctx.raw_user_id,
+            subject_key=subject_key,
+            legacy_user_id=legacy_user_id,
+        )
         if preference is not None:
             ctx.preferred_address = preference.address_term
             return preference.address_term

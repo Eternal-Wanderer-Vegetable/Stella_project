@@ -48,6 +48,9 @@ class Principal:
     user_id: str
     group_id: str = ""
     space: str = ""
+    user_identity_domain: str = ""
+    legacy_user_ids: tuple[str, ...] = ()
+    legacy_group_ids: tuple[str, ...] = ()
 
     def iter_principals(self, *, in_group: bool = False):
         """按 user → group → space 枚举本主体的授权键。
@@ -57,8 +60,14 @@ class Principal:
         """
         if self.user_id:
             yield PRINCIPAL_USER, self.user_id
+        for legacy_id in self.legacy_user_ids:
+            if legacy_id:
+                yield PRINCIPAL_USER, legacy_id
         if self.group_id:
             yield PRINCIPAL_GROUP, self.group_id
+        for legacy_id in self.legacy_group_ids:
+            if legacy_id:
+                yield PRINCIPAL_GROUP, legacy_id
         if self.space:
             yield PRINCIPAL_SPACE, self.space
 
@@ -106,19 +115,37 @@ def resolve_role(
 
     # 库主恒为 owner（不限场景：群聊里库主也能检索自己的库——若不想公开，
     # 群聊的排除规则见下）
-    if principal.user_id and kb.owner_user_id and principal.user_id == kb.owner_user_id:
+    owner_matches = bool(
+        principal.user_id
+        and kb.owner_user_id
+        and principal.user_id == kb.owner_user_id
+        and (
+            not kb.owner_identity_domain
+            or principal.user_identity_domain == kb.owner_identity_domain
+        )
+    )
+    if (
+        not owner_matches
+        and not kb.owner_identity_domain
+        and kb.owner_user_id
+        and kb.owner_user_id in principal.legacy_user_ids
+    ):
+        owner_matches = True
+    if owner_matches:
         _consider(ROLE_OWNER)
 
-    user_role = (
-        snapshot.role_of(PRINCIPAL_USER, principal.user_id)
-        if principal.user_id
-        else None
-    )
-    group_role = (
-        snapshot.role_of(PRINCIPAL_GROUP, principal.group_id)
-        if principal.group_id
-        else None
-    )
+    user_roles = [
+        snapshot.role_of(PRINCIPAL_USER, user_id)
+        for user_id in (principal.user_id, *principal.legacy_user_ids)
+        if user_id
+    ]
+    user_role = max(user_roles, key=lambda role: ROLE_RANKS.get(role or "", -1), default=None)
+    group_roles = [
+        snapshot.role_of(PRINCIPAL_GROUP, group_id)
+        for group_id in (principal.group_id, *principal.legacy_group_ids)
+        if group_id
+    ]
+    group_role = max(group_roles, key=lambda role: ROLE_RANKS.get(role or "", -1), default=None)
     space_role = (
         snapshot.role_of(PRINCIPAL_SPACE, principal.space) if principal.space else None
     )

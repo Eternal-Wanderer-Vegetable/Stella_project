@@ -8,6 +8,8 @@ from pathlib import Path
 
 import memory.consolidator as consolidator
 import memory.memory_manager as memory_manager
+from core.transport.keys import conversation_key_v2
+from core.transport.models import BotRef, SceneRef, UserRef
 from memory.consolidator import MemoryConsolidator
 from memory.memory_manager import MemoryManager
 
@@ -26,20 +28,29 @@ def _seed_candidate_with_evidence(
     """Write one model proposal through the production source/evidence contract."""
     monkeypatch.setattr(consolidator, "DB_PATH", db_path)
     conn = sqlite3.connect(db_path)
+    connection_id = "memory-manager-test"
+    bot_ref = BotRef(connection_id, "generic", "service:test", "test-bot")
+    user_ref = UserRef("service:test", user_id)
+    conversation_key = conversation_key_v2(
+        bot_ref, SceneRef("group", str(group_id))
+    )
     conn.execute(
         """CREATE TABLE group_messages (
             id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT,
             source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT,
             bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT,
             mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER,
-            origin_msg_id TEXT, reply_recipient_user_id TEXT
+            origin_msg_id TEXT, reply_recipient_user_id TEXT,
+            subject_key TEXT NOT NULL DEFAULT '', connection_id TEXT NOT NULL DEFAULT ''
         )"""
     )
     conn.execute(
         """INSERT INTO group_messages (
-            id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id
-        ) VALUES (1, ?, ?, ?, 'AT_MENTION', 'platform-1', 'test-conversation', 'test-bot')""",
-        (str(group_id), user_id, content),
+            id, group_id, user_id, content, source_kind, msg_id, conversation_key,
+            bot_id, subject_key, connection_id
+        ) VALUES (1, ?, ?, ?, 'AT_MENTION', 'platform-1', ?, 'test-bot', ?, ?)""",
+        (str(group_id), user_id, content, conversation_key,
+         user_ref.subject_key, connection_id),
     )
     conn.commit()
     conn.close()

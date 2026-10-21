@@ -59,7 +59,7 @@ def get_or_create_asset(scope: ConversationScope, term: str) -> str | None:
         try:
             row = conn.execute(
                 "SELECT asset_id FROM social_assets WHERE kind='jargon' AND platform=? "
-                "AND bot_id=? AND group_id=? AND term=? AND sense=''",
+                "AND bot_id=? AND group_id=? AND connection_id=? AND term=? AND sense=''",
                 (*scope.row(), term),
             ).fetchone()
             if row:
@@ -68,9 +68,9 @@ def get_or_create_asset(scope: ConversationScope, term: str) -> str | None:
             from core.social.contracts import utc_now_iso
 
             conn.execute(
-                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, "
+                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, connection_id, "
                 "content, term, sense, status, confidence, meta_json, created_at_utc, "
-                "updated_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "updated_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                  (asset_id, "jargon", *scope.row(), term, term, "", "candidate", 0.0,
                  "{}", utc_now_iso(), utc_now_iso()),
             )
@@ -169,7 +169,7 @@ def add_sense(
         try:
             existing = conn.execute(
                 "SELECT asset_id, definition FROM social_assets WHERE kind='jargon' "
-                "AND platform=? AND bot_id=? AND group_id=? AND term=? "
+                "AND platform=? AND bot_id=? AND group_id=? AND connection_id=? AND term=? "
                 "AND sense != '' ORDER BY sense",
                 (*scope.row(), term),
             ).fetchall()
@@ -186,10 +186,10 @@ def add_sense(
             asset_id = uuid.uuid4().hex
             # social_assets 无独立反例列：正/反例折进 style 与 meta_json
             conn.execute(
-                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, "
+                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, connection_id, "
                 "content, term, sense, definition, situation, style, status, confidence, "
                 "meta_json, created_at_utc, updated_at_utc) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (asset_id, "jargon", *scope.row(), term, term, sense_id, definition,
                  situation, positive_example, "candidate", 0.0,
                  json.dumps({"origin": origin, "negative_example": negative_example},
@@ -251,7 +251,7 @@ def list_terms(scope: ConversationScope, status: str | None = None) -> list[dict
             sql = (
                 "SELECT asset_id, term, sense, definition, situation, status, confidence, "
                 "updated_at_utc FROM social_assets WHERE kind='jargon' AND platform=? "
-                "AND bot_id=? AND group_id=?"
+                "AND bot_id=? AND group_id=? AND connection_id=?"
             )
             params: list[Any] = [*scope.row()]
             if status:
@@ -301,7 +301,7 @@ def match_jargon(
             rows = conn.execute(
                 "SELECT asset_id, term, sense, definition, situation, style, status, "
                 "confidence FROM social_assets WHERE kind='jargon' AND platform=? "
-                "AND bot_id=? AND group_id=? AND sense != '' AND definition != '' "
+                "AND bot_id=? AND group_id=? AND connection_id=? AND sense != '' AND definition != '' "
                 "ORDER BY term, sense",
                 (*scope.row(),),
             ).fetchall()
@@ -348,7 +348,8 @@ def _head_stats(term: str, scope: ConversationScope) -> int:
         try:
             row = conn.execute(
                 "SELECT a.asset_id FROM social_assets a WHERE a.kind='jargon' "
-                "AND a.platform=? AND a.bot_id=? AND a.group_id=? AND a.term=? AND a.sense=''",
+                "AND a.platform=? AND a.bot_id=? AND a.group_id=? AND a.connection_id=? "
+                "AND a.term=? AND a.sense=''",
                 (*scope.row(), term),
             ).fetchone()
             if not row:

@@ -346,7 +346,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 22);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -379,7 +379,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 22);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -415,7 +415,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 22);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -480,7 +480,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 22);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,

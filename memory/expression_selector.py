@@ -114,16 +114,16 @@ def _get_or_create_expression_asset(scope: ConversationScope, text: str, kind: s
         try:
             row = conn.execute(
                 "SELECT asset_id FROM social_assets WHERE kind='expression' AND platform=? "
-                "AND bot_id=? AND group_id=? AND content=?",
+                "AND bot_id=? AND group_id=? AND connection_id=? AND content=?",
                 (*scope.row(), text),
             ).fetchone()
             if row:
                 return row[0]
             asset_id = uuid.uuid4().hex
             conn.execute(
-                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, "
+                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, connection_id, "
                 "content, situation, style, status, confidence, meta_json, created_at_utc, "
-                "updated_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "updated_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (asset_id, "expression", *scope.row(), text, "", kind,
                  "candidate", 0.0,
                  json.dumps({"legacy_kind": kind, "promotable": False}, ensure_ascii=False),
@@ -197,9 +197,9 @@ def add_expression_asset(
         try:
             asset_id = uuid.uuid4().hex
             conn.execute(
-                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, "
+                "INSERT INTO social_assets (asset_id, kind, platform, bot_id, group_id, connection_id, "
                 "content, situation, style, status, confidence, meta_json, created_at_utc, "
-                "updated_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "updated_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (asset_id, "expression", *scope.row(), content, situation, style,
                  "candidate", 0.0, json.dumps({"origin": "manual"}, ensure_ascii=False),
                  _now(), _now()),
@@ -252,7 +252,7 @@ def select(
             rows = conn.execute(
                 "SELECT asset_id, content, situation, style, confidence, meta_json, "
                 "updated_at_utc FROM social_assets WHERE kind='expression' AND platform=? "
-                "AND bot_id=? AND group_id=? AND status='active' ORDER BY updated_at_utc DESC",
+                "AND bot_id=? AND group_id=? AND connection_id=? AND status='active' ORDER BY updated_at_utc DESC",
                 (*scope.row(),),
             ).fetchall()
             scored: list[dict[str, Any]] = []

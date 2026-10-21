@@ -1018,6 +1018,38 @@ def migrate_v21(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v22(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v22: persist trusted connection identity and scoped authorization data.
+
+    Historical connection IDs are deliberately left empty. The legacy addressing
+    table and sharing rows are preserved because their rows do not identify a
+    proven domain. New sharing grants use subject+connection uniqueness.
+    """
+    from memory.personal_sharing import migrate_sharing_authorization_table_v22
+    from memory.schema import create_user_address_preferences_v2_table
+
+    result = MigrationResult(version=22)
+    columns = _columns(conn.cursor(), "group_messages")
+    if columns and "connection_id" not in columns:
+        conn.execute(
+            "ALTER TABLE group_messages ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''"
+        )
+        result.notes.append("group_messages.connection_id added; history remains unknown")
+    else:
+        result.notes.append("group_messages.connection_id already present or table absent")
+    preserved_grants = migrate_sharing_authorization_table_v22(conn)
+    result.changed_rows += preserved_grants
+    result.notes.append(
+        f"personal_memory_sharing rebuilt with subject/connection key; "
+        f"{preserved_grants} grant rows preserved, historical connection IDs remain unknown"
+    )
+    create_user_address_preferences_v2_table(conn)
+    result.notes.append(
+        "user_address_preferences_v2 created; legacy address rows retained without inferred domain"
+    )
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -1034,6 +1066,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     19: migrate_v19,
     20: migrate_v20,
     21: migrate_v21,
+    22: migrate_v22,
 }
 
 

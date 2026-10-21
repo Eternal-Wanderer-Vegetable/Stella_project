@@ -19,6 +19,7 @@ from core.social.contracts import (
     AGGREGATE_PARTIAL,
     ConversationScope,
     DeliveryReceipt,
+    MessageEvidence,
     aggregate_delivery_status,
     delivered_texts,
 )
@@ -394,6 +395,26 @@ class TestNeutralReceipts:
         found = social_store.find_delivery_by_platform_id(
             "900", scope=ConversationScope.for_qq(1, bot_id="10001"))
         assert found is not None and found["turn_id"] == "a"
+
+
+def test_social_message_id_dedupe_and_lookup_include_connection(social_db):
+    scope_a = ConversationScope("qq", "bot", "123", "connection-a")
+    scope_b = ConversationScope("qq", "bot", "123", "connection-b")
+    for scope, event_id in ((scope_a, "event-a"), (scope_b, "event-b")):
+        assert social_store.record_event(
+            MessageEvidence(
+                scope=scope,
+                event_id=event_id,
+                platform_message_id="same-platform-id",
+                text_excerpt="测试消息",
+            )
+        ) == event_id
+    assert [e["event_id"] for e in social_store.events_since(scope_a, "2000-01-01")] == [
+        "event-a"
+    ]
+    assert [e["event_id"] for e in social_store.events_since(scope_b, "2000-01-01")] == [
+        "event-b"
+    ]
 
 
 class TestRealConversationRefNeutralReceipt:

@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from core.transport.models import UserRef
 from memory import addressing
 
 
@@ -44,6 +45,41 @@ def test_clear_preference_is_idempotent(tmp_path):
     assert addressing.clear_preference("space_a", 1001, db_path=db) is True
     assert addressing.clear_preference("space_a", 1001, db_path=db) is False
     assert addressing.get_preference("space_a", 1001, db_path=db) is None
+
+
+def test_namespaced_preferences_do_not_mix_same_raw_id(tmp_path):
+    db = tmp_path / "addressing.db"
+    subject_a = UserRef("connection:a", "1001").subject_key
+    subject_b = UserRef("connection:b", "1001").subject_key
+    addressing.set_preference(
+        "space_a", "1001", "甲", subject_key=subject_a, db_path=db
+    )
+    addressing.set_preference(
+        "space_a", "1001", "乙", subject_key=subject_b, db_path=db
+    )
+
+    assert addressing.get_preference(
+        "space_a", "1001", subject_key=subject_a, db_path=db
+    ).address_term == "甲"
+    assert addressing.get_preference(
+        "space_a", "1001", subject_key=subject_b, db_path=db
+    ).address_term == "乙"
+    assert addressing.get_preference("space_a", "1001", db_path=db) is None
+
+
+def test_namespaced_qq_preference_can_read_and_clear_legacy_qq_row(tmp_path):
+    db = tmp_path / "addressing.db"
+    user = UserRef("qq:client", "1001")
+    addressing.set_preference("space_a", "1001", "旧称呼", db_path=db)
+
+    assert addressing.get_preference(
+        "space_a", "1001", subject_key=user.subject_key,
+        legacy_user_id="1001", db_path=db,
+    ).address_term == "旧称呼"
+    assert addressing.clear_preference(
+        "space_a", "1001", subject_key=user.subject_key,
+        legacy_user_id="1001", db_path=db,
+    )
 
 
 @pytest.mark.parametrize(

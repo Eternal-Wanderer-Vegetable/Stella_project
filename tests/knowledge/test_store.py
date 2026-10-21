@@ -56,6 +56,45 @@ def test_store_creates_isolated_db_at_custom_path(store, tmp_path) -> None:
         conn.close()
 
 
+def test_v1_schema_migration_preserves_unmapped_legacy_principals(tmp_path) -> None:
+    import sqlite3
+
+    from knowledge import schema
+
+    db = tmp_path / "legacy-knowledge.db"
+    old_kb_ddl = schema.KB_TABLE_DDL.replace(
+        "    owner_identity_domain TEXT NOT NULL DEFAULT '',\n", ""
+    )
+    old_grant_ddl = schema.KB_GRANT_TABLE_DDL.replace(
+        "    principal_identity_domain TEXT NOT NULL DEFAULT '',\n", ""
+    )
+    conn = sqlite3.connect(db)
+    conn.execute(old_kb_ddl)
+    conn.execute(old_grant_ddl)
+    conn.execute(
+        "INSERT INTO kb (id, name, owner_user_id) VALUES ('legacy', '旧库', '100')"
+    )
+    conn.execute(
+        "INSERT INTO kb_grant (kb_id, principal_kind, principal_id, role) "
+        "VALUES ('legacy', 'user', '101', 'viewer')"
+    )
+    schema._set_version(conn, 1)
+    conn.commit()
+    conn.close()
+
+    migrated = KnowledgeStore(db)
+    kb = migrated.get_kb("legacy")
+    grant = migrated.list_grants("legacy")[0]
+    assert kb is not None
+    assert kb.owner_user_id == "100" and kb.owner_identity_domain == ""
+    assert grant.principal_id == "101" and grant.principal_identity_domain == ""
+    conn = schema.connect(db)
+    try:
+        assert schema._get_version(conn) == 2
+    finally:
+        conn.close()
+
+
 def test_kb_crud_roundtrip(store) -> None:
     kb = _kb(embed_model="m", embed_dim=4, embed_encoder="v1", index_version=1)
     store.create_kb(kb)

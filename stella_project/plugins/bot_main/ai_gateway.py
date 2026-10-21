@@ -1225,7 +1225,7 @@ async def record_group_chat(event: GroupMessageEvent):
         with contextlib.suppress(Exception), _flow_span(fctx, "ingress.passive.social"):
             social_event_id = social_store.record_event(
                 MessageEvidence(
-                    scope=ConversationScope.for_qq(event.group_id),
+                    scope=ConversationScope.from_context(ctx),
                     platform_message_id=str(event.message_id),
                     user_id=str(event.user_id),
                     source_kind=ctx.source_kind,
@@ -1243,9 +1243,12 @@ async def record_group_chat(event: GroupMessageEvent):
         _flow_transition(fctx, from_node="ingress.passive.social",
                          to_node="ingress.passive.expression")
     with _flow_span(fctx, "ingress.passive.expression"):
+        social_identity = ConversationScope.from_context(ctx)
         expression_learning.note_passive_message(
             ctx.group_shared_space, ctx.user_id, text,
             group_id=event.group_id, event_id=social_event_id,
+            bot_id=social_identity.bot_id,
+            connection_id=social_identity.connection_id,
         )
 
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
@@ -1648,7 +1651,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-        scope = ConversationScope.for_qq(event.group_id) if _social_delivery_enabled() else None
+        scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
         async def _send_reply_segment(line: str, i: int) -> str | None:
             if i == 0:
@@ -1755,6 +1758,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                         turn_id=ctx.turn_id,
                         trace_id=ctx.trace_id,
                         source_msg_id=event.message_id,
+                        bot_id=scope.bot_id if scope else "",
+                        connection_id=scope.connection_id if scope else "",
                     )
 
                 # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
@@ -1862,8 +1867,22 @@ def _maybe_personal_sharing(ctx) -> None:
     key = str(getattr(ctx, "conversation_key", "") or "")
     row_id = int(getattr(ctx, "recorded_row_id", 0) or 0)
     bot_id = str(getattr(ctx, "bot_id", "") or "")
-    user_id = str(getattr(ctx, "user_id", 0) or 0)
-    if not key or not row_id or not bot_id or not user_id:
+    user_id = str(getattr(ctx, "raw_user_id", "") or getattr(ctx, "user_id", 0) or 0)
+    user_ref = getattr(ctx, "user_ref", None)
+    subject_key = str(getattr(user_ref, "subject_key", "") or "")
+    connection_id = str(
+        getattr(getattr(ctx, "bot_ref", None), "connection_id", "")
+        or getattr(ctx, "connection_id", "")
+        or ""
+    )
+    if (
+        not connection_id
+        and getattr(user_ref, "identity_domain", "") == "qq:client"
+        and bot_id
+    ):
+        connection_id = f"legacy-qq:{bot_id}"
+    platform = str(getattr(ctx, "platform_scope", "") or "qq")
+    if not key or not row_id or not bot_id or not user_id or not subject_key or not connection_id:
         return
     revoke_hit, revoke_mark = detect_revoke_intent(text)
     share_hit, share_reason = detect_sharing_intent(text, user_id, key)
@@ -1872,22 +1891,41 @@ def _maybe_personal_sharing(ctx) -> None:
 
     conn = _sqlite3.connect(DB_PATH)
     try:
-        _owner_type, owner_key, _subject_key = canonical_owner("qq", bot_id, user_id)
+        _owner_type, owner_key, _subject_key = canonical_owner(
+            platform,
+            bot_id,
+            user_id,
+            subject_key=subject_key,
+            connection_id=connection_id,
+        )
+        owner_candidates = [(owner_key, subject_key)]
+        if (
+            connection_id == f"legacy-qq:{bot_id}"
+            and getattr(user_ref, "identity_domain", "") == "qq:client"
+        ):
+            from memory.ownership import person_owner_key
+
+            owner_candidates.append(
+                (person_owner_key("qq", bot_id, user_id), f"qq:{user_id}")
+            )
         fact_key = ""
         for table in ("memory_candidates", "memories"):
-            try:
-                row = conn.execute(
-                    f"SELECT fact_key FROM {table}"
-                    " WHERE owner_key = ? AND audience = 'PRIVATE_ONLY'"
-                    " AND fact_key != ''"
-                    " AND (status IS NULL OR status != 'DEPRECATED')"
-                    " ORDER BY updated_at DESC LIMIT 1",
-                    (owner_key,),
-                ).fetchone()
-            except _sqlite3.OperationalError:
-                row = None
-            if row and row[0]:
-                fact_key = str(row[0])
+            for candidate_owner, _candidate_subject in owner_candidates:
+                try:
+                    row = conn.execute(
+                        f"SELECT fact_key FROM {table}"
+                        " WHERE owner_key = ? AND audience = 'PRIVATE_ONLY'"
+                        " AND fact_key != ''"
+                        " AND (status IS NULL OR status != 'DEPRECATED')"
+                        " ORDER BY updated_at DESC LIMIT 1",
+                        (candidate_owner,),
+                    ).fetchone()
+                except _sqlite3.OperationalError:
+                    row = None
+                if row and row[0]:
+                    fact_key = str(row[0])
+                    break
+            if fact_key:
                 break
 
         conn.execute("BEGIN")
@@ -1896,7 +1934,13 @@ def _maybe_personal_sharing(ctx) -> None:
                 conn.execute("ROLLBACK")
                 return
             ok, reason = revoke_sharing_authorization(
-                conn, "qq", bot_id, user_id, fact_key
+                conn,
+                platform,
+                bot_id,
+                user_id,
+                fact_key,
+                subject_key=subject_key,
+                connection_id=connection_id,
             )
             conn.commit() if ok else conn.execute("ROLLBACK")
             logger.info(
@@ -1912,7 +1956,15 @@ def _maybe_personal_sharing(ctx) -> None:
             )
             return
         ok, reason = grant_sharing_authorization(
-            conn, "qq", bot_id, user_id, fact_key, key, row_id
+            conn,
+            platform,
+            bot_id,
+            user_id,
+            fact_key,
+            key,
+            row_id,
+            subject_key=subject_key,
+            connection_id=connection_id,
         )
         conn.commit() if ok else conn.execute("ROLLBACK")
         logger.info(
@@ -2405,6 +2457,9 @@ async def handle_addressing(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         space = ref.memory_space
     else:
         space = resolve_space(event.group_id)
+    from core.transport.models import UserRef
+
+    target_ref = UserRef("qq:client", str(target_user_id))
     try:
         if result.operation in (SET_SELF_ADDRESS, SET_OTHER_ADDRESS):
             preference = addressing.set_preference(
@@ -2413,16 +2468,27 @@ async def handle_addressing(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 result.address_term,
                 source="natural_language",
                 updated_by_user_id=event.user_id,
+                subject_key=target_ref.subject_key,
             )
             if target_user_id == str(event.user_id):
                 reply = f"好，以后我叫你「{preference.address_term}」。"
             else:
                 reply = f"好，以后我称呼用户 {target_user_id} 为「{preference.address_term}」。"
         elif result.operation == CLEAR_ADDRESS:
-            addressing.clear_preference(space, target_user_id)
+            addressing.clear_preference(
+                space,
+                target_user_id,
+                subject_key=target_ref.subject_key,
+                legacy_user_id=target_user_id,
+            )
             reply = "好，我不再使用这个个性化称呼了。"
         elif result.operation == QUERY_ADDRESS:
-            preference = addressing.get_preference(space, target_user_id)
+            preference = addressing.get_preference(
+                space,
+                target_user_id,
+                subject_key=target_ref.subject_key,
+                legacy_user_id=target_user_id,
+            )
             reply = (
                 f"我现在称呼你「{preference.address_term}」。"
                 if preference
@@ -4031,7 +4097,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
 
             # 逐段发送 + 回执收集（计划 §6.1）：发送确认之后才记账。原实现先记账
             # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
-            scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+            scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
             async def _send_at_segment(seg_line: str, _i: int) -> str | None:
                 message = Message([
@@ -4098,6 +4164,8 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                     turn_id=ctx.turn_id,
                     trace_id=ctx.trace_id,
                     intent="proactive_at",
+                    bot_id=scope.bot_id if scope else "",
+                    connection_id=scope.connection_id if scope else "",
                 )
                 logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
@@ -4553,7 +4621,7 @@ async def _proactive_speak_impl(
 
         # 逐段发送 + 回执收集（计划 §6.1）：确认送达后才记账。原实现先记账后
         # 发送，发送失败已被记成「说过」并进入学习——正是计划 §2 优先修复项。
-        scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+        scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
         async def _send_proactive_segment(seg_line: str, _i: int) -> str | None:
             return await bot.send_group_msg(group_id=group_id, message=seg_line)
@@ -4618,6 +4686,8 @@ async def _proactive_speak_impl(
                 turn_id=ctx.turn_id,
                 trace_id=ctx.trace_id,
                 intent=intent,
+                bot_id=scope.bot_id if scope else "",
+                connection_id=scope.connection_id if scope else "",
             )
             logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
             # 群级主动（user_id=0）：origin 给出但无个人收件人——

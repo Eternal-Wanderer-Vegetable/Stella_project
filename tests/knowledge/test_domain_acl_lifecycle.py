@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.transport.models import UserRef
 from knowledge.acl import (
     ACLSnapshot,
     Principal,
@@ -28,6 +29,7 @@ from knowledge.domain import (
     KB_MODE_SHARED,
     ROLE_CONTRIBUTOR,
     ROLE_MAINTAINER,
+    ROLE_OWNER,
     ROLE_VIEWER,
     VERSION_STATE_PENDING,
     VERSION_STATE_READY,
@@ -128,6 +130,41 @@ def test_owner_is_owner_everywhere() -> None:
     assert can_search(kb, role) and can_submit(kb, role)
     assert can_review(kb, role) and can_publish(kb, role)
     assert can_manage_kb(kb, role)
+
+
+def test_namespaced_owner_and_user_grant_do_not_cross_same_raw_id() -> None:
+    user_a = UserRef("service:a", "100")
+    user_b = UserRef("service:b", "100")
+    kb = _kb(owner_user_id=user_a.subject_key, owner_identity_domain="service:a")
+    actor_a = Principal(
+        user_id=user_a.subject_key, user_identity_domain="service:a"
+    )
+    actor_b = Principal(
+        user_id=user_b.subject_key, user_identity_domain="service:b"
+    )
+    assert resolve_role(kb, actor_a, _snapshot()) == ROLE_OWNER
+    assert resolve_role(kb, actor_b, _snapshot()) is None
+
+    snap = _snapshot(_grant("user", user_a.subject_key, ROLE_VIEWER))
+    assert resolve_role(kb, actor_a, snap) == ROLE_OWNER
+    assert resolve_role(_kb(owner_user_id="other"), actor_b, snap) is None
+
+
+def test_legacy_owner_requires_explicit_identity_alias() -> None:
+    user = UserRef("service:a", "100")
+    kb = _kb(owner_user_id="100")
+    assert resolve_role(
+        kb, Principal(user_id=user.subject_key, user_identity_domain="service:a"), _snapshot()
+    ) is None
+    assert resolve_role(
+        kb,
+        Principal(
+            user_id=user.subject_key,
+            user_identity_domain="service:a",
+            legacy_user_ids=("100",),
+        ),
+        _snapshot(),
+    ) == ROLE_OWNER
 
 
 def test_group_and_space_grants_take_max() -> None:

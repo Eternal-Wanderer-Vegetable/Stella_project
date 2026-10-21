@@ -107,18 +107,19 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO social_deliveries (delivery_id, turn_id, part_index, "
-                "trace_id, epoch, platform, bot_id, group_id, status, platform_message_id, "
+                "trace_id, epoch, platform, bot_id, group_id, connection_id, status, platform_message_id, "
                 "acknowledged_at_utc, text, text_hash, delivery_plan_id, "
                 "delivery_plan_digest, decision_digest, created_at_utc, updated_at_utc, "
                 "conversation_key, conversation_kind, peer_id, storage_session_id, "
                 "learning_eligible) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     uuid.uuid4().hex, receipt.turn_id, int(receipt.part_index),
                     receipt.trace_id, int(receipt.epoch),
                     scope.platform if scope else (receipt.platform or ""),
                     scope.bot_id if scope else (receipt.bot_id or ""),
                     scope.group_id if scope else "",
+                    scope.connection_id if scope else "",
                     receipt.status, receipt.platform_message_id,
                     receipt.acknowledged_at_utc or None,
                     receipt.text, receipt.text_hash,
@@ -147,6 +148,7 @@ def deliveries_for_turn(
     *,
     platform: str | None = None,
     group_id: str | None = None,
+    connection_id: str | None = None,
     learning_eligible: bool | None = None,
 ) -> list[dict[str, Any]]:
     """一次逻辑回复的全部片段回执（按片段序）。
@@ -171,6 +173,9 @@ def deliveries_for_turn(
             if group_id is not None:
                 sql += " AND group_id = ?"
                 params.append(group_id)
+            if connection_id is not None:
+                sql += " AND connection_id = ?"
+                params.append(connection_id)
             if learning_eligible is not None:
                 sql += " AND learning_eligible = ?"
                 params.append(1 if learning_eligible else 0)
@@ -210,13 +215,16 @@ def find_delivery_by_platform_id(
         conn = _connect()
         try:
             sql = (
-                "SELECT turn_id, part_index, platform, bot_id, group_id, status, text "
+                "SELECT turn_id, part_index, platform, bot_id, group_id, connection_id, status, text "
                 "FROM social_deliveries WHERE platform_message_id = ?"
             )
             params: list[Any] = [str(platform_message_id)]
             if scope is not None:
-                sql += " AND platform = ? AND bot_id = ? AND group_id = ? AND learning_eligible = 1"
-                params.extend([scope.platform, scope.bot_id, scope.group_id])
+                sql += (
+                    " AND platform = ? AND bot_id = ? AND group_id = ? "
+                    "AND connection_id = ? AND learning_eligible = 1"
+                )
+                params.extend([scope.platform, scope.bot_id, scope.group_id, scope.connection_id])
             else:
                 sql += " AND learning_eligible = 1"
             rows = conn.execute(sql + " LIMIT 2", params).fetchall()
@@ -225,7 +233,8 @@ def find_delivery_by_platform_id(
             row = rows[0]
             return {
                 "turn_id": row[0], "part_index": row[1], "platform": row[2],
-                "bot_id": row[3], "group_id": row[4], "status": row[5], "text": row[6],
+                "bot_id": row[3], "group_id": row[4], "connection_id": row[5],
+                "status": row[6], "text": row[7],
             }
         finally:
             conn.close()
@@ -246,10 +255,10 @@ def record_event(evidence: MessageEvidence) -> str | None:
         conn = _connect()
         try:
             conn.execute(
-                "INSERT OR IGNORE INTO social_events (event_id, platform, bot_id, group_id, "
+                "INSERT OR IGNORE INTO social_events (event_id, platform, bot_id, group_id, connection_id, "
                 "platform_message_id, user_id, source_kind, reply_to_id, mentioned_user_ids, "
                 "text_excerpt, content_hash, received_at_utc, event_at_utc, trace_id, turn_id) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     evidence.event_id, *evidence.scope.row(), evidence.platform_message_id,
                     evidence.user_id, evidence.source_kind, evidence.reply_to_id,
@@ -290,6 +299,7 @@ def events_since(
                 "SELECT event_id, platform_message_id, user_id, source_kind, reply_to_id, "
                 "mentioned_user_ids, text_excerpt, received_at_utc, event_at_utc "
                 "FROM social_events WHERE platform = ? AND bot_id = ? AND group_id = ? "
+                "AND connection_id = ? "
                 "AND received_at_utc >= ?"
             )
             params: list[Any] = [*scope.row(), since_utc]
@@ -346,7 +356,7 @@ def find_event_id(
             if platform_message_id:
                 row = conn.execute(
                     "SELECT event_id FROM social_events WHERE platform=? AND bot_id=? "
-                    "AND group_id=? AND platform_message_id=? LIMIT 1",
+                    "AND group_id=? AND connection_id=? AND platform_message_id=? LIMIT 1",
                     (*scope.row(), str(platform_message_id)),
                 ).fetchone()
                 if row:
@@ -354,9 +364,9 @@ def find_event_id(
             if fallback is not None:
                 conn.execute(
                     "INSERT OR IGNORE INTO social_events (event_id, platform, bot_id, "
-                    "group_id, platform_message_id, user_id, source_kind, reply_to_id, "
+                    "group_id, connection_id, platform_message_id, user_id, source_kind, reply_to_id, "
                     "mentioned_user_ids, text_excerpt, content_hash, received_at_utc, "
-                    "event_at_utc, trace_id, turn_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "event_at_utc, trace_id, turn_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         fallback.event_id, *fallback.scope.row(), fallback.platform_message_id,
                         fallback.user_id, fallback.source_kind, fallback.reply_to_id,
@@ -369,7 +379,7 @@ def find_event_id(
                 conn.commit()
                 row = conn.execute(
                     "SELECT event_id FROM social_events WHERE platform=? AND bot_id=? "
-                    "AND group_id=? AND platform_message_id=? LIMIT 1",
+                    "AND group_id=? AND connection_id=? AND platform_message_id=? LIMIT 1",
                     (*scope.row(), str(platform_message_id or "")),
                 ).fetchone() if platform_message_id else None
                 return row[0] if row else fallback.event_id

@@ -159,7 +159,7 @@ def build_social_block(
         from config import settings as _s2
         from memory import jargon_service
 
-        scope = ConversationScope.for_qq(ctx.group_id)
+        scope = ConversationScope.from_context(ctx)
         inject_allowed = social_mode == "active"
 
         # ── 选择（本地、零 LLM） ──

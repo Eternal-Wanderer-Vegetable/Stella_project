@@ -36,7 +36,7 @@ from config import KNOWLEDGE_DB_PATH
 
 # 当前 Schema 版本。+1 时必须新增幂等迁移步骤并补旧库回归测试
 # （与 memory/schema.py 的新规矩同源：禁止「本版不做迁移」）。
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # 知识库状态/模式/角色的合法值与 knowledge.domain 保持字面一致——schema 层
 # 不 import domain（存储层是领域层的下游），用本地常量镜像并注明出处。
@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS kb (
     name TEXT NOT NULL,
     mode TEXT NOT NULL DEFAULT 'managed',
     owner_user_id TEXT NOT NULL DEFAULT '',
+    owner_identity_domain TEXT NOT NULL DEFAULT '',
     direct_publish INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active',
     description TEXT NOT NULL DEFAULT '',
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS kb_grant (
     kb_id TEXT NOT NULL,
     principal_kind TEXT NOT NULL,
     principal_id TEXT NOT NULL,
+    principal_identity_domain TEXT NOT NULL DEFAULT '',
     role TEXT NOT NULL DEFAULT 'viewer',
     granted_by TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT '',
@@ -234,6 +236,15 @@ def ensure_schema(conn: sqlite3.Connection, *, dry_run: bool = False) -> int:
             changes += 1
         except sqlite3.OperationalError as e:
             logger.warning(f"⚠️ [KnowledgeSchema] 建表失败: {e}")
+    if not dry_run:
+        for table, column, definition in (
+            ("kb", "owner_identity_domain", "TEXT NOT NULL DEFAULT ''"),
+            ("kb_grant", "principal_identity_domain", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            existing = {str(row[1]) for row in cursor.execute(f"PRAGMA table_info({table})")}
+            if existing and column not in existing:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                changes += 1
     if not dry_run and _fts_ok(conn):
         try:
             cursor.execute(KB_CHUNK_FTS_DDL)

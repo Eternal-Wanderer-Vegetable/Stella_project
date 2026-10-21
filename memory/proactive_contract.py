@@ -175,7 +175,7 @@ def validate_contract_consistency(
     if conn is not None:
         try:
             from memory.evidence_contract import (
-                ASSESSMENT_VERSION,
+                supports_assessment_version,
                 verify_source_snapshot,
             )
 
@@ -223,7 +223,7 @@ def validate_contract_consistency(
                     return False, "evidence_provenance_malformed"
                 snapshot = provenance.get("source_snapshot")
                 if (
-                    provenance.get("assessment_version") != ASSESSMENT_VERSION
+                    not supports_assessment_version(provenance.get("assessment_version"))
                     or provenance.get("verification_status") != "accepted"
                     or provenance.get("claim_key") != contract.fact_key
                     or provenance.get("recording_author_key") != contract.fact_subject_key

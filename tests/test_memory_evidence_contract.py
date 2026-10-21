@@ -7,11 +7,14 @@ import sqlite3
 
 import pytest
 
+from core.transport.keys import conversation_key_v2
+from core.transport.models import BotRef, SceneRef, UserRef
 from memory.evidence_contract import (
     assess_candidate,
     source_digest,
     verify_source_snapshot,
 )
+from memory.ownership import person_owner_key_for_subject
 
 
 def _database(tmp_path, *, source_kind="AT_MENTION", author="111", bot_id="bot-a"):
@@ -150,3 +153,67 @@ def test_source_must_be_in_exact_batch_and_current_conversation(tmp_path):
     assert _assess(conn, _candidate(), allowed=())["status"] == "rejected"
     assert _assess(conn, _candidate(), conversation="qq:other:group:1001")["status"] == "rejected"
     conn.close()
+
+
+def test_v2_source_uses_namespaced_subject_and_connection_owner(tmp_path):
+    conn = _database(tmp_path)
+    conn.execute("ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE group_messages ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''")
+    user = UserRef("service:alpha", "111")
+    bot = BotRef("connection-a", "generic", "service", "bot-a")
+    conversation = conversation_key_v2(bot, SceneRef("group", "1001"))
+    conn.execute(
+        "UPDATE group_messages SET subject_key=?, connection_id=?, conversation_key=? WHERE id=1",
+        (user.subject_key, bot.connection_id, conversation),
+    )
+    conn.commit()
+
+    result_a = assess_candidate(
+        conn,
+        _candidate(),
+        group_id=1001,
+        allowed_batch_ids={1},
+        expected_conversation_key=conversation,
+        expected_bot_id="bot-a",
+    )
+    assert result_a["status"] == "accepted"
+    assert result_a["fact_subject_key"] == user.subject_key
+    assert result_a["owner_key"] == person_owner_key_for_subject(
+        "connection-a", user.subject_key
+    )
+    snapshot = result_a["sources"][0]["snapshot"]
+    assert snapshot["connection_id"] == "connection-a"
+    assert verify_source_snapshot(
+        snapshot, result_a["sources"][0]["source_digest"], conn=conn
+    )
+
+    user_b = UserRef("service:beta", "111")
+    bot_b = BotRef("connection-b", "generic", "service", "bot-a")
+    conversation_b = conversation_key_v2(bot_b, SceneRef("group", "1001"))
+    conn.execute(
+        "UPDATE group_messages SET subject_key=?, connection_id=?, conversation_key=? WHERE id=1",
+        (user_b.subject_key, bot_b.connection_id, conversation_b),
+    )
+    conn.commit()
+    result_b = assess_candidate(
+        conn,
+        _candidate(),
+        group_id=1001,
+        allowed_batch_ids={1},
+        expected_conversation_key=conversation_b,
+        expected_bot_id="bot-a",
+    )
+    conn.close()
+    assert result_b["status"] == "accepted"
+    assert result_b["fact_subject_key"] == user_b.subject_key
+    assert result_b["owner_key"] != result_a["owner_key"]
+
+
+def test_empty_added_identity_columns_do_not_change_legacy_snapshot_hash():
+    from memory.evidence_contract import _snapshot
+
+    legacy_row = {"id": 1, "group_id": "1001", "user_id": "111", "content": "x"}
+    before = _snapshot(legacy_row)
+    after = _snapshot({**legacy_row, "subject_key": "", "connection_id": ""})
+    assert after == before
+    assert source_digest(after) == source_digest(before)

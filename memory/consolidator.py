@@ -1523,10 +1523,15 @@ class MemoryConsolidator:
                 )
             )
             if person_mode and uid in direct_rows_by_uid and person_evidence:
+                trusted_owner_key = str(assessment.get("owner_key") or "")
+                trusted_subject_key = str(assessment.get("fact_subject_key") or "")
+                if not trusted_owner_key or not trusted_subject_key:
+                    person_evidence = False
+            if person_mode and uid in direct_rows_by_uid and person_evidence:
                 row_owner_type, row_owner_key, row_subject = (
                     OWNER_TYPE_PERSON,
-                    owner_key,
-                    f"qq:{uid}",
+                    trusted_owner_key,
+                    trusted_subject_key,
                 )
                 row_audience = AUDIENCE_PRIVATE_ONLY
                 candidate_row_space = person_compat_space(row_owner_key, row_audience)

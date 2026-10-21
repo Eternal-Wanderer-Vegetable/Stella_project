@@ -75,6 +75,7 @@ class ConversationScope:
     platform: str
     bot_id: str
     group_id: str
+    connection_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.platform or not self.group_id:
@@ -85,19 +86,52 @@ class ConversationScope:
             )
 
     @staticmethod
-    def for_qq(group_id: int | str, bot_id: int | str = "") -> "ConversationScope":
+    def for_qq(
+        group_id: int | str,
+        bot_id: int | str = "",
+        connection_id: str = "",
+    ) -> "ConversationScope":
         """QQ 群作用域。bot_id 未知时留空（单 bot 部署下不参与区分）。"""
         return ConversationScope(
-            platform="qq", bot_id=str(bot_id or ""), group_id=str(group_id)
+            platform="qq", bot_id=str(bot_id or ""), group_id=str(group_id),
+            connection_id=str(connection_id or ""),
+        )
+
+    @staticmethod
+    def from_context(ctx: object) -> "ConversationScope":
+        """Build a group scope from trusted ChatContext identity fields."""
+        bot_ref = getattr(ctx, "bot_ref", None)
+        connection_id = str(
+            getattr(bot_ref, "connection_id", "")
+            or getattr(ctx, "connection_id", "")
+            or ""
+        )
+        platform = str(
+            getattr(ctx, "platform_scope", "")
+            or getattr(bot_ref, "platform_scope", "")
+            or (str(getattr(ctx, "conversation_key", "")).split(":", 1)[0])
+            or "qq"
+        )
+        return ConversationScope(
+            platform=platform,
+            bot_id=(
+                str(getattr(ctx, "bot_id", "") or getattr(bot_ref, "self_id", "") or "")
+                if connection_id
+                else ""
+            ),
+            group_id=str(getattr(ctx, "group_id", "") or ""),
+            connection_id=connection_id,
         )
 
     @property
     def key(self) -> str:
+        if self.connection_id:
+            return f"{self.platform}:{self.bot_id}:{self.connection_id}:{self.group_id}"
         return f"{self.platform}:{self.bot_id}:{self.group_id}"
 
-    def row(self) -> tuple[str, str, str]:
-        """按存储列序展开 (platform, bot_id, group_id)。"""
-        return (self.platform, self.bot_id, self.group_id)
+    def row(self) -> tuple[str, str, str, str]:
+        """按存储列序展开 (platform, bot_id, group_id, connection_id)。"""
+        return (self.platform, self.bot_id, self.group_id, self.connection_id)
 
 
 @dataclass(frozen=True)

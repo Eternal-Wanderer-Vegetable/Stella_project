@@ -187,6 +187,9 @@ async def test_targeted_context_reads_address_but_group_proactive_context_does_n
         msg_id=0,
         message="说句话",
         trigger="reply",
+        conversation_kind="group",
+        conversation_key="qq:9:group:1",
+        bot_id="9",
     )
     await pre_processors.build_user_context(targeted)
     assert targeted.preferred_address == "哥哥"
@@ -198,6 +201,9 @@ async def test_targeted_context_reads_address_but_group_proactive_context_does_n
         msg_id=0,
         message="随便聊聊",
         trigger="proactive",
+        conversation_kind="group",
+        conversation_key="qq:9:group:1",
+        bot_id="9",
     )
     await pre_processors.build_user_context(group_proactive)
     assert group_proactive.preferred_address is None

@@ -25,7 +25,9 @@ from core.dialogue_attribution import (
     evidence_projection,
     protocol_instructions,
 )
+from core.transport.models import UserRef
 from memory import pre_processors
+from memory.ownership import person_owner_key_for_subject
 from stella_project.plugins.bot_main import ai_gateway as gateway
 
 
@@ -419,17 +421,22 @@ def sharing_env(tmp_path, monkeypatch):
     )
     create_sharing_authorization_table(conn)
     create_sharing_copies_table(conn)
+    qq_subject = UserRef("qq:client", "20001").subject_key
+    qq_connection = "legacy-qq:10000"
+    qq_owner = person_owner_key_for_subject(qq_connection, qq_subject)
     conn.execute(
         "INSERT INTO group_messages (id, user_id, content, source_kind,"
-        " conversation_key, bot_id) VALUES (77, '20001',"
+        " conversation_key, bot_id, subject_key, connection_id)"
+        " VALUES (77, '20001',"
         " '以后在群里也记得我们CP的关系', 'PRIVATE_DIRECT',"
-        " 'qq:10000:private:20001', '10000')"
+        " 'qq:10000:private:20001', '10000', ?, ?)",
+        (qq_subject, qq_connection),
     )
     conn.execute(
         "INSERT INTO memory_candidates (id, owner_key, subject_key, audience,"
-        " fact_key, status, type, content) VALUES ('cf1',"
-        " 'person:qq:10000:20001', 'qq:20001', 'PRIVATE_ONLY',"
-        " 'fk_cp', 'ACTIVE', 'relation', '用户20001与Lumi是CP')"
+        " fact_key, status, type, content) VALUES ('cf1',?,?,?,'fk_cp',"
+        " 'ACTIVE', 'relation', '用户20001与Lumi是CP')",
+        (qq_owner, qq_subject, "PRIVATE_ONLY"),
     )
     conn.commit()
     yield conn
@@ -445,7 +452,9 @@ def test_sharing_ingress_creates_bound_grant(sharing_env):
     assert row is not None
     assert row[0] == "active"
     assert row[1] == 77
-    assert row[2] == "person:qq:10000:20001"
+    assert row[2] == person_owner_key_for_subject(
+        "legacy-qq:10000", UserRef("qq:client", "20001").subject_key
+    )
 
 
 def test_sharing_ingress_disabled_is_noop(sharing_env, monkeypatch):
