@@ -1152,6 +1152,18 @@ Discovery, selection, and controlled execution of Anthropic-style task skills (`
 
 Configuration is validated at startup: negative budgets, an illegal workspace root, and "network on without an allowlist" **refuse startup**, with each violation named individually in the log.
 
+## Multi-Adapter Registration
+
+`STELLA_ADAPTER_MODULES` controls which NoneBot adapter modules the Bot imports and registers at startup. Separate module paths with commas; they register in the order listed:
+
+```env
+STELLA_ADAPTER_MODULES=nonebot.adapters.onebot.v11
+```
+
+Only OneBot V11 is enabled by default. Install each additional adapter package yourself before adding its module path; Stella does not download third-party code. If an enabled package or transitive dependency is missing, or the adapter is incompatible with the selected `DRIVER`, startup fails with the adapter and cause named. It does not silently fall back to QQ. An empty value, `none`, `off`, or `disabled` registers no Bot adapters; non-Bot entry points such as WebChat remain available.
+
+The current event heartbeat and `get_status()` probe apply only to OneBot V11. The status API keeps other adapters' connection state and marks their health as unknown, so they are not reported as disconnected. Each OneBot V11 connection is monitored separately, and aggregate health requires every connection to be healthy.
+
 ## OneBot Connection
 
 The Bot communicates with NapCat through a OneBot V11 WebSocket. **NapCat must be logged in first**: install [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and complete QQ login. The Bot no longer manages the NapCat process; automatic login falls back to QR-code scanning, so a person must be present for login
@@ -1243,13 +1255,13 @@ Shutdown flow: deploy writes the sentinel → the in-Bot watcher detects it and 
 | Configuration | Default | Description |
 |---|---|---|
 | `LINK_MONITOR_ENABLED` | `true` | Whether to enable link monitoring |
-| `LINK_MONITOR_TIMEOUT` | `300` | Perform one active health probe only after more than this many seconds have passed since **any** OneBot event, including heartbeat meta-events |
+| `LINK_MONITOR_TIMEOUT` | `300` | Perform one active probe on each OneBot V11 Bot only after more than this many seconds have passed since **any** OneBot event, including heartbeat meta-events |
 | `LINK_MONITOR_CHECK_INTERVAL` | `60` | Scheduled check interval (seconds) |
 | `LINK_MONITOR_ALERT_INTERVAL` | `300` | Alert throttling (seconds): do not repeat the same error during a disconnection |
 
 **It alerts but does not restart.** Login risk controls make automatic restarts ineffective because automatic login falls back to QR-code scanning. Process management therefore provides no benefit (see `design_docs/deprecated_napcat_manager.md`). The Bot only monitors the link and provides troubleshooting guidance; NapCat startup, shutdown, and login are handled manually in NapCatQQ Desktop.
 
-> **Silence is not a disconnection.** NapCat periodically sends `meta_event.heartbeat` (15s by default), and heartbeats continue when nobody is talking in a group. After a timeout, the Bot actively calls `get_status()` once for confirmation: a successful probe means only “nobody is talking”; a failed probe is a real disconnection. Registering only `on_message` would misclassify a quiet group as a broken link (the cause of the restart loop on 2026-08-14).
+> Each OneBot V11 connection is monitored independently. NapCat periodically sends `meta_event.heartbeat` (15s by default), and heartbeats continue when nobody is talking in a group. After a timeout, the Bot actively calls `get_status()` once for confirmation: a successful probe means only “nobody is talking”; a failed probe is a real disconnection. Registering only `on_message` would misclassify a quiet group as a broken link (the cause of the restart loop on 2026-08-14).
 
 ## Tuning Recommendations
 

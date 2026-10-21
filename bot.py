@@ -21,7 +21,6 @@ if not _os.environ.get("STELLA_LAUNCH_TOKEN"):
     _os.environ["STELLA_LAUNCH_TOKEN"] = _uuid.uuid4().hex
 
 import nonebot
-from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
 
 # 结构化 JSON 日志（供 GUI tail）：必须在任何插件加载/打日志之前注册
 from core.logging_sink import setup_json_sink
@@ -74,7 +73,18 @@ with _contextlib.suppress(Exception):
 nonebot.init()
 
 driver = nonebot.get_driver()
-driver.register_adapter(OneBotV11Adapter)
+from config.settings import STELLA_ADAPTER_MODULES
+from core.transport.adapter_loader import (
+    parse_adapter_modules,
+    register_enabled_adapters,
+)
+
+_adapter_names = register_enabled_adapters(
+    driver, parse_adapter_modules(STELLA_ADAPTER_MODULES)
+)
+nonebot.logger.info(
+    f"[adapters][boot] 已注册适配器: {_adapter_names or '无（WebChat/非 Bot 模式）'}"
+)
 
 nonebot.load_builtin_plugins("echo", "single_session")
 nonebot.load_from_toml("pyproject.toml")

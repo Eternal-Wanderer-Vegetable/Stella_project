@@ -56,13 +56,9 @@ include = ["stella_project*"]
 [tool.nonebot]
 plugin_dirs = ["stella_project/plugins"]
 builtin_plugins = ["echo", "single_session"]
-
-[tool.nonebot.adapters]
-nonebot-adapter-onebot = [
-    { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" },
-    { name = "OneBot V12", module_name = "nonebot.adapters.onebot.v12" }
-]
-"@local" = []
+# bot.py resolves this list from STELLA_ADAPTER_MODULES. Keeping the CLI-side
+# pre-registration list empty ensures disabled adapters are not loaded implicitly.
+adapters = []
 
 [tool.nonebot.plugins]
 "@local" = []

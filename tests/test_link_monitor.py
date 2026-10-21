@@ -1,25 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""OneBot 链路监测（link_monitor）的单元测试。
-
-extensions.link_monitor 在 import 时就会向 nonebot 注册钩子
-（event_preprocessor / driver.on_bot_connect / scheduler.scheduled_job），
-而纯测试环境没有 NoneBot 运行时。因此这里先注入桩模块/桩对象再 import：
-
-- nonebot_plugin_apscheduler 整体替换为带 scheduled_job 的桩模块（真实模块
-  import 即要求 get_driver，会抛「NoneBot has not been initialized」）；
-- nonebot.get_driver / nonebot.get_bot 替换为桩对象，避免「未初始化」异常；
-- nonebot.message.event_preprocessor 换成只登记 handler 的桩装饰器。
-
-这样 link_monitor 的模块级注册全部落到桩上，测试即可直接调用
-link_monitor_task / on_bot_connect 处理器来验证判定逻辑（是否探活、是否告警、
-事件刷新、探活成功后的心跳回拨）。
-
-注意：extensions/ 不在 coverage 范围（pyproject.toml omit），但链路判定逻辑
-值得独立测试——它曾经让 bot 掉线一整夜（2026-08-14 重启循环），本次重构后
-只告警不重启，更要防止它把「安静的群」误判成链路故障。
-"""
+"""Isolated checks for adapter-specific and per-Bot link health."""
 
 from __future__ import annotations
 
@@ -28,7 +10,7 @@ import importlib
 import sys
 import time
 import types
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -36,8 +18,6 @@ from config import LINK_MONITOR_TIMEOUT
 
 
 class _StubScheduler:
-    """带 scheduled_job 装饰器的桩调度器，登记注册的周期性任务。"""
-
     def __init__(self) -> None:
         self.jobs: list = []
 
@@ -50,11 +30,10 @@ class _StubScheduler:
 
 
 class _StubDriver:
-    """桩 driver：on_bot_connect / on_bot_disconnect 只作登记，不触发事件流。"""
-
     def __init__(self) -> None:
         self.on_connect: list = []
         self.on_disconnect: list = []
+        self.config = types.SimpleNamespace(host="127.0.0.1", port=8080)
 
     def on_bot_connect(self, func):
         self.on_connect.append(func)
@@ -65,37 +44,44 @@ class _StubDriver:
         return func
 
 
+class _Adapter:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def get_name(self) -> str:
+        return self.name
+
+
+class _Bot:
+    def __init__(self, adapter: str, self_id: str) -> None:
+        self.adapter = _Adapter(adapter)
+        self.self_id = self_id
+        self.get_status = AsyncMock(return_value={})
+
+
 @pytest.fixture
 def link_monitor(monkeypatch):
-    """注入桩后重新 import link_monitor 模块，返回模块与注册钩子的上下文。"""
     import nonebot
     import nonebot.message
 
-    # 1) 替换 apscheduler 模块：真实模块 import 需要 NoneBot 驱动已初始化
     scheduler = _StubScheduler()
     stub_module = types.ModuleType("nonebot_plugin_apscheduler")
-    stub_module.scheduler = scheduler  # pyright: ignore[reportAttributeAccessIssue]
+    stub_module.scheduler = scheduler
     monkeypatch.setitem(sys.modules, "nonebot_plugin_apscheduler", stub_module)
 
-    # 2) event_preprocessor：桩装饰器，只把 handler 登记下来
-    preprocess_handlers: list = []
+    handlers: list = []
+    monkeypatch.setattr(
+        nonebot.message,
+        "event_preprocessor",
+        lambda func: handlers.append(func) or func,
+    )
 
-    def _event_preprocessor(func):
-        preprocess_handlers.append(func)
-        return func
-
-    monkeypatch.setattr(nonebot.message, "event_preprocessor", _event_preprocessor)
-
-    # 3) get_driver / get_bot 换成桩，避免抛「NoneBot has not been initialized」
     driver = _StubDriver()
-
-    bot = MagicMock()
-    bot.get_status = AsyncMock()
-
+    adapters: dict = {}
+    bots: dict = {}
     monkeypatch.setattr(nonebot, "get_driver", lambda: driver)
-    monkeypatch.setattr(nonebot, "get_bot", lambda: bot)
-
-    # 4) 清掉可能残留的旧 import，重新加载 link_monitor（触发模块级注册）
+    monkeypatch.setattr(nonebot, "get_adapters", lambda: adapters)
+    monkeypatch.setattr(nonebot, "get_bots", lambda: bots)
     monkeypatch.delitem(sys.modules, "extensions.link_monitor", raising=False)
     mod = importlib.import_module("extensions.link_monitor")
 
@@ -103,163 +89,220 @@ def link_monitor(monkeypatch):
         "mod": mod,
         "scheduler": scheduler,
         "driver": driver,
-        "bot": bot,
-        "preprocess_handlers": preprocess_handlers,
+        "adapters": adapters,
+        "bots": bots,
+        "handlers": handlers,
     }
 
 
 def _run(coro) -> None:
-    """在临时事件循环里跑完异步协程（不依赖 pytest-asyncio）。"""
     asyncio.run(coro)
 
 
-def test_any_event_refreshes_last_event_time(link_monitor):
-    """event_preprocessor 注册的处理器：任何事件都刷新 last_event_time。"""
+def _bot(link_monitor, adapter: str = "OneBot V11", self_id: str = "1") -> _Bot:
+    bot = _Bot(adapter, self_id)
+    link_monitor["adapters"][adapter] = object()
+    link_monitor["bots"][self_id] = bot
+    return bot
+
+
+def test_only_onebot_events_refresh_heartbeat(link_monitor):
     mod = link_monitor["mod"]
-    mod.state.last_event_time = time.time() - 100
+    handler = link_monitor["handlers"][0]
+    onebot = _Bot("OneBot V11", "one")
+    telegram = _Bot("Telegram", "tg")
 
-    handlers = link_monitor["preprocess_handlers"]
-    assert handlers, "event_preprocessor 应已注册 _refresh_on_any_event"
-    for handler in handlers:
-        _run(handler())
+    mod.state.bots[("OneBot V11", "one")] = mod._BotState(
+        adapter="OneBot V11", self_id="one", last_event_time=time.time() - 100
+    )
+    mod.state.bots[("Telegram", "tg")] = mod._BotState(
+        adapter="Telegram", self_id="tg", last_event_time=time.time() - 100
+    )
+    _run(handler(bot=onebot, event=object()))
+    _run(handler(bot=telegram, event=object()))
 
-    assert mod.state.last_event_time >= time.time() - 1
+    assert mod.state.bots[("OneBot V11", "one")].last_event_time > time.time() - 1
+    assert mod.state.bots[("Telegram", "tg")].last_event_time < time.time() - 90
 
 
 def test_fresh_event_no_probe(link_monitor):
-    """事件新鲜（距上次收到事件未超时）：不探活。"""
-    bot = link_monitor["bot"]
+    bot = _bot(link_monitor)
     mod = link_monitor["mod"]
-    mod.state.connected = True
-    mod.state.last_event_time = time.time()
+    _run(link_monitor["handlers"][0](bot=bot, event=object()))
 
     _run(mod.link_monitor_task())
 
-    bot.get_status.assert_not_called()
+    bot.get_status.assert_not_awaited()
 
 
-def test_timeout_probe_ok_refreshes_and_no_alert(link_monitor):
-    """事件超时但主动探活成功：判定链路正常，刷新 last_event_time 且不告警。"""
-    bot = link_monitor["bot"]
+def test_stale_bots_are_probed_independently(link_monitor):
+    fresh = _bot(link_monitor, self_id="fresh")
+    stale = _bot(link_monitor, self_id="stale")
     mod = link_monitor["mod"]
-    mod.state.connected = True
-    mod.state.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 10
-    bot.get_status.return_value = {}
-
-    before = time.time()
-    _run(mod.link_monitor_task())
-    after = time.time()
-
-    assert mod.state.last_probe_ok is True
-    assert mod.state.last_probe_time is not None
-    # 探活成功后把 last_event_time 拨回当前时刻，避免每个周期都重复探活
-    assert before <= mod.state.last_event_time <= after
-    assert mod.state.last_alert_time is None
-    bot.get_status.assert_awaited_once()
-
-
-def test_timeout_probe_fail_alerts(link_monitor):
-    """事件超时且探活失败：记录探活失败并告警。"""
-    bot = link_monitor["bot"]
-    mod = link_monitor["mod"]
-    mod.state.connected = True
-    mod.state.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 10
-    bot.get_status.side_effect = RuntimeError("网络不可达")
+    now = time.time()
+    mod.state.bots[("OneBot V11", "fresh")] = mod._BotState(
+        adapter="OneBot V11", self_id="fresh", connected=True,
+        connected_since=now, last_event_time=now,
+    )
+    stale_state = mod._BotState(
+        adapter="OneBot V11", self_id="stale", connected=True,
+        connected_since=now - 200, last_event_time=now - LINK_MONITOR_TIMEOUT - 10,
+    )
+    mod.state.bots[("OneBot V11", "stale")] = stale_state
+    stale.get_status.side_effect = RuntimeError("network unavailable")
 
     _run(mod.link_monitor_task())
+    status = mod.link_status()
 
-    assert mod.state.last_probe_ok is False
-    assert mod.state.last_probe_time is not None
-    assert mod.state.last_alert_time is not None
+    fresh.get_status.assert_not_awaited()
+    stale.get_status.assert_awaited_once()
+    assert stale_state.last_probe_ok is False
+    assert status["healthy"] is False
+    assert len(status["bots"]) == 2
+    assert {item["connected"] for item in status["bots"]} == {True}
+    assert len({item["instance_ref"] for item in status["bots"]}) == 2
+    assert all("self_id" not in item for item in status["bots"])
 
 
-def test_alert_throttled(link_monitor):
-    """告警节流：断线期间连续跑任务只告警一次，不刷屏。"""
-    bot = link_monitor["bot"]
+def test_disconnect_changes_only_that_bot(link_monitor):
+    disconnected = _bot(link_monitor, self_id="a")
+    connected = _bot(link_monitor, self_id="b")
     mod = link_monitor["mod"]
-    bot.get_status.side_effect = RuntimeError("网络不可达")
-    mod.state.connected = True
-    mod.state.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 10
+    _run(mod._on_bot_connect(disconnected))
+    _run(mod._on_bot_connect(connected))
+    link_monitor["bots"].pop("a")
+    _run(mod._on_bot_disconnect(disconnected))
+
+    status = mod.link_status()
+    by_ref = {item["instance_ref"]: item for item in status["bots"]}
+    first = mod.state.bots[("OneBot V11", "a")]
+    second = mod.state.bots[("OneBot V11", "b")]
+    assert by_ref[first.instance_ref]["connected"] is False
+    assert by_ref[second.instance_ref]["connected"] is True
+    assert status["connected"] is True
+    assert status["healthy"] is False
+
+
+def test_non_onebot_adapter_is_not_reported_as_disconnected(link_monitor):
+    telegram = _bot(link_monitor, "Telegram", "tg-1")
+    mod = link_monitor["mod"]
 
     _run(mod.link_monitor_task())
-    first_alert = mod.state.last_alert_time
+    status = mod.link_status()
+
+    telegram.get_status.assert_not_awaited()
+    assert status["enabled"] is False
+    assert status["applicable"] is False
+    assert status["connected"] is None
+    assert status["healthy"] is None
+    assert status["waiting_for_reconnect"] is False
+    assert status["connections"] == [
+        {
+            "adapter": "Telegram",
+            "instance_ref": status["connections"][0]["instance_ref"],
+            "connected": True,
+            "health": None,
+        }
+    ]
+    assert "tg-1" not in repr(status["connections"])
+
+
+def test_configured_onebot_without_connected_bot_alerts(link_monitor):
+    link_monitor["adapters"]["OneBot V11"] = object()
+    mod = link_monitor["mod"]
+
+    _run(mod.link_monitor_task())
+    status = mod.link_status()
+
+    assert mod.state.no_bot_alert_time is not None
+    assert status["applicable"] is True
+    assert status["enabled"] is True
+    assert status["connected"] is False
+    assert status["healthy"] is False
+    assert status["waiting_for_reconnect"] is True
+
+
+def test_connect_without_any_event_alerts_after_timeout(link_monitor):
+    bot = _bot(link_monitor)
+    mod = link_monitor["mod"]
+    _run(mod._on_bot_connect(bot))
+    record = mod.state.bots[("OneBot V11", bot.self_id)]
+    record.connected_since = time.time() - LINK_MONITOR_TIMEOUT - 2
+    record.last_event_time = None
+
+    _run(mod.link_monitor_task())
+
+    assert record.last_alert_time is not None
+    bot.get_status.assert_not_awaited()
+
+
+def test_alerts_are_throttled_per_bot(link_monitor):
+    bot = _bot(link_monitor)
+    mod = link_monitor["mod"]
+    record = mod._state_for(bot)
+    record.connected = True
+    record.connected_since = time.time() - LINK_MONITOR_TIMEOUT - 5
+    record.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 5
+    bot.get_status.side_effect = RuntimeError("network unavailable")
+
+    _run(mod.link_monitor_task())
+    first_alert = record.last_alert_time
+    _run(mod.link_monitor_task())
+
     assert first_alert is not None
-
-    _run(mod.link_monitor_task())
-    assert mod.state.last_alert_time == first_alert
-
-
-def test_not_connected_alerts_without_probe(link_monitor):
-    """协议端未连接：直接告警，不探活。"""
-    bot = link_monitor["bot"]
-    mod = link_monitor["mod"]
-    mod.state.connected = False
-    mod.state.last_event_time = time.time() - 1000
-
-    _run(mod.link_monitor_task())
-
-    assert mod.state.last_alert_time is not None
-    bot.get_status.assert_not_called()
+    assert record.last_alert_time == first_alert
+    assert bot.get_status.await_count == 2
 
 
-def test_disabled_does_nothing(link_monitor, monkeypatch):
-    """监测开关关闭：不探活、不告警。"""
-    bot = link_monitor["bot"]
+def test_disabled_monitor_does_not_probe_or_alert(link_monitor, monkeypatch):
+    bot = _bot(link_monitor)
     mod = link_monitor["mod"]
     monkeypatch.setattr(mod, "LINK_MONITOR_ENABLED", False)
-    mod.state.connected = True
-    mod.state.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 10
+    record = mod._state_for(bot)
+    record.connected = True
+    record.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 10
 
     _run(mod.link_monitor_task())
 
-    bot.get_status.assert_not_called()
-    assert mod.state.last_alert_time is None
+    bot.get_status.assert_not_awaited()
+    assert record.last_alert_time is None
 
 
-def test_link_status_fields_and_healthy(link_monitor):
-    """link_status() 字段完整，且 healthy 在三种状态下的取值正确。"""
+def test_link_status_preserves_legacy_fields_and_adds_multi_adapter_detail(link_monitor):
+    bot = _bot(link_monitor)
     mod = link_monitor["mod"]
-    mod.reset_state()
-    expected_keys = {
-        "enabled",
-        "connected",
-        "bot_self_id",
-        "connected_seconds",
-        "last_event_seconds_ago",
-        "last_probe_ok",
-        "last_probe_seconds_ago",
-        "timeout",
-        "healthy",
-        "mode",
-        "endpoint_configured",
-        "forward_reachable",
-        "reverse_port_in_use",
-        "token_configured",
-        "token_in_url",
-        "token_consistent",
-        "waiting_for_reconnect",
-    }
-
-    # ① 连接 + 事件新鲜 → healthy True
-    mod.state.connected = True
-    mod.state.bot_self_id = "123456"
-    mod.state.connected_since = time.time()
-    mod.state.last_event_time = time.time()
+    _run(mod._on_bot_connect(bot))
     status = mod.link_status()
-    assert set(status) == expected_keys
+
+    legacy_keys = {
+        "enabled", "connected", "bot_self_id", "connected_seconds",
+        "last_event_seconds_ago", "last_probe_ok", "last_probe_seconds_ago",
+        "timeout", "healthy", "mode", "endpoint_configured",
+        "forward_reachable", "reverse_port_in_use", "token_configured",
+        "token_in_url", "token_consistent", "waiting_for_reconnect",
+    }
+    assert legacy_keys <= status.keys()
     assert status["enabled"] is True
+    assert status["applicable"] is True
     assert status["connected"] is True
     assert status["healthy"] is True
-    assert status["connected_seconds"] is not None
-    assert status["last_event_seconds_ago"] is not None
-    assert status["timeout"] == LINK_MONITOR_TIMEOUT
+    assert status["bot_self_id"] == "1"
+    assert len(status["bots"]) == 1
+    assert status["bots"][0]["healthy"] is True
+    assert status["connections"][0]["health"] is True
 
-    # ② 连接 + 事件超时 + 最近探活成功 → healthy True
-    mod.state.last_event_time = time.time() - LINK_MONITOR_TIMEOUT - 10
-    mod.state.last_probe_ok = True
-    mod.state.last_probe_time = time.time()
-    assert mod.link_status()["healthy"] is True
 
-    # ③ 未连接 → healthy False
-    mod.state.connected = False
-    assert mod.link_status()["healthy"] is False
+def test_multi_bot_legacy_id_is_not_misleading(link_monitor):
+    first = _bot(link_monitor, self_id="1")
+    second = _bot(link_monitor, self_id="2")
+    mod = link_monitor["mod"]
+    _run(mod._on_bot_connect(first))
+    _run(mod._on_bot_connect(second))
+
+    status = mod.link_status()
+
+    assert status["bot_self_id"] == ""
+    assert status["connected"] is True
+    assert status["healthy"] is True
+    assert status["last_probe_ok"] is None
+    assert len(status["bots"]) == 2
