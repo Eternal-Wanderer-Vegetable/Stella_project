@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP08 已完成，下一步 WP09；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `8e3466e`。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP09 已完成，下一步 WP10；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `9f75ded`。
 **Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)与[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
@@ -93,6 +93,15 @@
 - 编辑前 `build_event` upstream impact 为 HIGH（5 impacted / 2 direct，命中 `handle_plugin` 流程）；其他关键事件、分发、转换与 Context 目标 LOW。filter 图为 UNKNOWN/0 静态调用，已由 pipeline 动态 `.filter()` 调用与装饰器注册源码补证。提交前 GitNexus 1.6.11 all：14 files / 60 symbols / 5 processes / MEDIUM；compare main：300 files / 971 symbols / 107 processes / CRITICAL。固定 `.gitnexus/gn` 启动器通过；仓库 `run.cjs` 指向 1.6.12 且与本地图存储版本不兼容。
 - 定向回归 373 passed；Ruff、`check_docs.py`（119 files / 1,223 links / 577 anchors / 0 errors）、message-flow 检查与 `git diff --check` 通过。新增 `message-flow.9b80952673b2.json`（141 nodes / 139 source-resolved / 8,973 closure sites / 11,899 reachable symbols）。
 - `STELLA_HOME` 未设置；测试使用临时/fixture 数据，未读写生产库或运行 Bot、真实模型和平台。插件底层 API 仿真不在范围内；QQ 灰度、其他平台 live、发布、clean VM 与全量 Python 验收缺口保留，整体 NOT READY。下一阶段 WP09。
+
+## 2026-10-21 — Cross-platform implementation (WP09)
+
+- 实现提交 `9f75ded`：新增 `STELLA_ADAPTER_MODULES` 与 `adapter_loader`，NoneBot CLI 不再静态预注册适配器；Bot 在 Driver 初始化后、插件加载前按配置顺序注册。默认仍启用 OneBot V11；第三方包需手工安装，缺包、坏模块或 Driver 不兼容时清晰失败。
+- `link_monitor` 现按 adapter type + Bot self ID 隔离连接、心跳、探活和告警。只有 OneBot V11 使用 `get_status()`；状态接口增加 `applicable`、opaque `bots` / `connections`，其他平台连接可见而健康为 unknown。`status_api` 保持原样透传结构。
+- 编辑前 GitNexus：`link_status` LOW（4 impacted / 2 direct / 2 processes）；status aggregator LOW；装饰器入口 UNKNOWN/0 已按 NoneBot/APScheduler 注册源码和扩展 loader 补证。提交前 all 为 13 files / 59 symbols / 4 processes / MEDIUM；compare main 为 314 files / 1,018 symbols / 106 processes / CRITICAL（累计 WP00–WP09）。一次 compare partial 后串行重跑；最终汇总覆盖全部变更，明细展示有上限。
+- 定向回归 73 passed；全仓 Ruff 通过；文档 119 files / 1,224 links / 577 anchors / 0 errors；message-flow `9b80952673b2` 检查通过；真实 NoneBot Driver 的默认注册 smoke 仅初始化 Driver、不运行 Bot，结果为 `OneBot V11`。全量 Python 未跑；WP07 Cometa worker 挂起、真实平台、QQ 灰度、clean VM 与发布验收仍 NOT READY。
+- 测试设 `STELLA_HOME=/tmp/stella-wp09-20261021`；未读取或修改本机生产 `.env`、数据库或配置。下一阶段 WP10。
+- 细节见[WP09 实施记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)。
 
 ## What's Done
 
