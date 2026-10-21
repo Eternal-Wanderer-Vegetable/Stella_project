@@ -111,7 +111,7 @@ from core.llm.usage_store import budget_blocked
 from core.pipeline import Pipeline
 from core.planner import RestrictedPlanner
 from core.reply_gate import get_reply_gate
-from core.runtime.facade import E_CANCELLED, RuntimeTurnError
+from core.runtime.facade import E_CANCELLED, RuntimeTurnError, new_turn_deadline
 from core.shutdown import wait_for_tasks
 from core.social.contracts import (
     ConversationScope,
@@ -894,8 +894,12 @@ async def _run_turn_via_engine(session_key: str, ctx: ChatContext) -> ChatContex
     """
     from core.runtime.facade import ensure_shared_facade_started
 
+    if ctx.turn_deadline is None:
+        ctx.turn_deadline = new_turn_deadline()
     facade = await ensure_shared_facade_started()
-    return await facade.submit_turn(session_key, pipeline, ctx, deadline=LLM_TIMEOUT)
+    return await facade.submit_turn(
+        session_key, pipeline, ctx, deadline=LLM_TIMEOUT, turn_deadline=ctx.turn_deadline
+    )
 
 
 def _social_delivery_enabled() -> bool:
@@ -1545,6 +1549,7 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 @chat_handler.handle()
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
+    turn_deadline = new_turn_deadline()
     fctx = _flow_root_or_create(event, "qq_chat")
     normalized = _normalized_onebot_event(event)
     if isinstance(normalized, UnsupportedEvent):
@@ -1637,6 +1642,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 image_sources=extract_image_sources(normalized) if vision_available() else [],
                 # 身份绑定：与流程 root 共用 trace（计划 §6.2 入口绑定）
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+                turn_deadline=turn_deadline,
             )
             try:
                 from core.observability import message_flow
@@ -2124,6 +2130,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
     群表达学习（deliver_lines scope=None，§6.8 第一版私聊不进群 social scope）；
     预算、能力路由、取消、回复整形、BOT_SELF、压缩全部照走。
     """
+    turn_deadline = new_turn_deadline()
     fctx = _flow_root_or_create(event, "qq_chat")
     if _event_key(event) in _plugin_handled_msgs:
         _plugin_handled_msgs.pop(_event_key(event), None)
@@ -2194,6 +2201,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 cometa_origin=ctx_origin,
                 image_sources=extract_image_sources(normalized) if vision_available() else [],
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+                turn_deadline=turn_deadline,
             )
             try:
                 from core.observability import message_flow
@@ -4059,6 +4067,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
     root（避免只在生成开始后才有 trace）；定时任务传入其 timer root 时
     复用之开子 span，不另建 root。
     """
+    turn_deadline = new_turn_deadline()
     own_root = flow_ctx is None
     caller_flow_ctx = flow_ctx
     if own_root:
@@ -4194,6 +4203,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 ),
                 verification_contract=contract_data,
                 trace_id=new_trace_id(),
+                turn_deadline=turn_deadline,
             )
             try:
                 ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
@@ -4689,6 +4699,7 @@ async def _proactive_speak_impl(
         _flow_decision(fctx, "proactive.preflight", status="skipped",
                        reason_code="dice_skip")
         return
+    turn_deadline = new_turn_deadline()
     # 同样要抢占本群的互斥锁：主动发言不能和 @ 回复并发，避免上下文被互相污染
     lock = _group_locks[group_id]
     async with lock:
@@ -4745,6 +4756,7 @@ async def _proactive_speak_impl(
             gate_score=gate.score,
             gate_reasons=gate.reasons,
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
+            turn_deadline=turn_deadline,
             conversation_kind="group",
             conversation_key=conversation_ref.conversation_key,
             bot_ref=BotRef(

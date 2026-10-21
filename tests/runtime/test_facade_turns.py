@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 import runtime_harness as harness
@@ -159,6 +160,52 @@ async def test_deadline_produces_fallback_not_hang(tmp_path):
         assert out.lines == ["......？"]
     finally:
         await h.stop()
+
+
+async def test_total_deadline_bounds_generation_below_legacy_phase_cap(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    turn_deadline = Deadline(clock.now() + 0.75, clock.clock_id)
+    h.hold_provider(KEY)
+    ctx = h.ctx("总期限短于生成阶段上限")
+    started = time.monotonic()
+    try:
+        await h.start()
+        out = await h.facade.submit_turn(
+            KEY,
+            h.pipeline,
+            ctx,
+            deadline=3.0,
+            turn_deadline=turn_deadline,
+        )
+        elapsed = time.monotonic() - started
+
+        assert h.provider_calls
+        assert ctx.turn_deadline is turn_deadline
+        assert out.lines == ["......？"]
+        assert elapsed < 2.0
+    finally:
+        await h.stop()
+
+
+def test_model_call_context_uses_clock_that_created_total_deadline():
+    from core.llm.registry import ROLE_CHAT
+    from core.runtime.facade import new_turn_deadline
+    from gravitas.contracts import WorkClass
+    from gravitas.model_calls import role_call_context
+
+    deadline = new_turn_deadline()
+    context = role_call_context(
+        ROLE_CHAT,
+        work_class=WorkClass.INTERACTIVE,
+        tag="deadline-clock-test",
+        deadline=deadline,
+    )
+
+    assert context.clock.clock_id == deadline.clock_id
 
 
 async def test_direct_and_silent_zero_provider(tmp_path):

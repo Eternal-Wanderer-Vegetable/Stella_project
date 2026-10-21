@@ -26,7 +26,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.context import ChatContext
 from core.runtime.turn_service import (
@@ -39,7 +39,19 @@ from core.runtime.turn_service import (
     pending_system_prompt,
 )
 
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
+
 DEFAULT_TURN_DEADLINE = 120.0  # 与 WebChat 120s 对齐
+
+
+def new_turn_deadline(timeout: float = DEFAULT_TURN_DEADLINE) -> Deadline:
+    """Start a process-local total turn deadline at a trusted ingress boundary."""
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+
+    clock = system_control_clock()
+    return Deadline(clock.now() + float(timeout), clock.clock_id)
 
 # ---- 错误码（保留原协议错误码语义；不再有线协议） ----
 E_CANCELLED = "E_CANCELLED"
@@ -186,6 +198,7 @@ async def _pipeline_provider(
             work_class=WorkClass.INTERACTIVE,
             tag="facade-turn",
             conversation_key=ctx.conversation_key,
+            deadline=ctx.turn_deadline,
         ),
     )
 
@@ -260,8 +273,20 @@ class RuntimeFacade:
         ctx: ChatContext,
         *,
         deadline: float | None = None,
+        turn_deadline: Deadline | None = None,
     ) -> ChatContext:
         """完整轮次：prepare → 决策分流 → （GENERATE）进程内生成 → finalize。"""
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline as DeadlineContract
+
+        control_clock = system_control_clock()
+        turn_deadline = turn_deadline or ctx.turn_deadline or new_turn_deadline(
+            self._default_deadline
+        )
+        if not isinstance(turn_deadline, DeadlineContract):
+            raise TypeError("turn_deadline must be a Deadline")
+        turn_deadline.remaining(control_clock.now(), clock_id=control_clock.clock_id)
+        ctx.turn_deadline = turn_deadline
         state = self._key_state(key)
         async with state.lock:
             fctx = _flow_ctx(ctx)
@@ -335,8 +360,12 @@ class RuntimeFacade:
                                            else _pipeline_provider(pipeline, key, prompt, ctx))
                 state.inflight = task
                 try:
+                    phase_timeout = deadline or self._default_deadline
+                    turn_timeout = turn_deadline.remaining(
+                        control_clock.now(), clock_id=control_clock.clock_id
+                    )
                     text = await asyncio.wait_for(
-                        task, timeout=deadline or self._default_deadline
+                        task, timeout=min(phase_timeout, turn_timeout)
                     )
                 except asyncio.TimeoutError:
                     # 有界失败：deadline 按 legacy 超时语义兜底（BC-5），不悬挂

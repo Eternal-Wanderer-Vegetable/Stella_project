@@ -11,9 +11,12 @@ thought/action/reply、多行回复）以及供日志与 prompt 构建用的诊�
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.transport.models import BotRef, SceneRef, UserRef
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 # 消息身份信封的边界值（多人身份修复计划 §6.2 字段规格）
 _ENVELOPE_DISPLAY_NAME_MAX = 64
@@ -356,6 +359,8 @@ class ChatContext:
     # 上下文为空串。两者都是安全标量，可进投影；raw_event/bot 仍然永不过桥。
     trace_id: str = ""
     turn_id: str = ""
+    # Runtime-only deadline; deliberately excluded from _PROJECTION_FIELDS.
+    turn_deadline: "Deadline | None" = field(default=None, repr=False, compare=False)
     # 本轮 social 插槽的预算快照（选中/注入/裁剪明细，计划 §6.5）：
     # JSON 字符串，由 core.social.context_builder 写入，供追踪与审计。
     social_context_snapshot: str = ""

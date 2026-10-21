@@ -123,6 +123,7 @@ async def test_handle_chat_sends_deterministic_reply_once(
 
     gateway._run_turn_via_engine.assert_awaited_once()
     ingress_ctx = gateway._run_turn_via_engine.await_args.args[1]
+    assert ingress_ctx.turn_deadline is not None
     assert ingress_ctx.user_ref.raw_user_id == "111"
     assert ingress_ctx.scene_ref.kind == "group"
     assert ingress_ctx.connection_id == "legacy-qq:9"

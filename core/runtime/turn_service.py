@@ -619,6 +619,7 @@ class TurnService:
         import time as _time
 
         from core.llm import ROLE_CHAT
+        from gravitas.clock import system_control_clock
         from gravitas.contracts import WorkClass
         from gravitas.model_calls import (
             ModelCallDeferred,
@@ -627,6 +628,14 @@ class TurnService:
         )
 
         _t0 = _time.monotonic()
+        turn_deadline = ctx.turn_deadline
+        phase_timeout = self._timeout
+        if turn_deadline is not None:
+            clock = system_control_clock()
+            phase_timeout = min(
+                phase_timeout,
+                turn_deadline.remaining(clock.now(), clock_id=clock.clock_id),
+            )
         try:
             ctx.llm_call_count += 1
             raw = await asyncio.wait_for(
@@ -639,9 +648,10 @@ class TurnService:
                         work_class=WorkClass.INTERACTIVE,
                         tag="reply-turn",
                         conversation_key=ctx.conversation_key,
+                        deadline=turn_deadline,
                     ),
                 ),
-                timeout=self._timeout,
+                timeout=phase_timeout,
             )
             ctx.llm_elapsed = _time.monotonic() - _t0
             ctx.raw_output = raw

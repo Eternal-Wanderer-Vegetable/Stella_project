@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
 from core.llm.base import AdaptiveAttemptRequiredError
-from gravitas.clock import ControlClock, SystemControlClock
+from gravitas.clock import ControlClock, SystemControlClock, system_control_clock
 from gravitas.config import ResourceGroupConfig
 from gravitas.contracts import Deadline, WorkClass
 
@@ -375,13 +375,16 @@ def role_call_context(
     from core.llm.registry import gate_of
 
     slot = endpoint_slot or gate_of(role)
+    resolved_clock = clock or (
+        system_control_clock() if deadline is not None else SystemControlClock()
+    )
     return ModelCallContext(
         resource_group_id=resource_group_for(slot),
         work_class=work_class,
         tag=tag,
         conversation_key=opaque_queue_key(conversation_key),
         deadline=deadline,
-        clock=clock or SystemControlClock(),
+        clock=resolved_clock,
         max_attempts=max_attempts,
     )
 

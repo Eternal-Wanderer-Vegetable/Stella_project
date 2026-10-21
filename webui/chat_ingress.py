@@ -83,6 +83,9 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
     ``flow_ctx``：router 鉴权后建的流程 root（计划 §6.2）；缺省时这里
     兜底自建（直连调用方仍可观测）。
     """
+    from core.runtime.facade import new_turn_deadline
+
+    turn_deadline = new_turn_deadline()
     from core.context import ChatContext
     from core.social.contracts import (
         DELIVERY_ACKNOWLEDGED,
@@ -158,6 +161,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         trigger="reply",
         # 身份绑定：root 已有 trace_id 就共用（facade 不再另造，计划 §6.2）
         trace_id=getattr(flow_ctx, "trace_id", "") or new_trace_id(),
+        turn_deadline=turn_deadline,
     )
     try:
         from core.observability import message_flow
@@ -189,7 +193,12 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
 
             facade = await ensure_shared_facade_started()
             try:
-                ctx = await facade.submit_turn(WEBCHAT_CONV_KEY, pipeline, ctx)
+                ctx = await facade.submit_turn(
+                    WEBCHAT_CONV_KEY,
+                    pipeline,
+                    ctx,
+                    turn_deadline=turn_deadline,
+                )
             except Exception as e:
                 # reset 取消不是失败（计划 §6.9）：root 终态照实区分后原样上抛
                 cancelled = type(e).__name__ == "RuntimeTurnError" and getattr(e, "code", "") == "E_CANCELLED"

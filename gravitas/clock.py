@@ -31,6 +31,14 @@ class SystemControlClock:
         return time.monotonic()
 
 
+_SYSTEM_CONTROL_CLOCK = SystemControlClock()
+
+
+def system_control_clock() -> SystemControlClock:
+    """Return the process clock used to compare transient runtime deadlines."""
+    return _SYSTEM_CONTROL_CLOCK
+
+
 @dataclass(frozen=True, slots=True)
 class PerformanceClock:
     """Real duration measurement, unaffected by replayed control time."""

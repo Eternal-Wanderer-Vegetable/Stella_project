@@ -76,6 +76,7 @@ def test_run_turn_records_and_uses_pipeline(
             captured["raw_user_id"] = ctx.user_ref.raw_user_id
             captured["connection_id"] = ctx.connection_id
             captured["scene_kind"] = ctx.scene_kind
+            captured["turn_deadline"] = ctx.turn_deadline
             ctx.prompt_log = ctx.message
             return TurnPlan(ctx, GENERATE)
 
@@ -94,6 +95,7 @@ def test_run_turn_records_and_uses_pipeline(
     assert captured["raw_user_id"] == str(chat_ingress.WEBCHAT_USER_ID)
     assert captured["connection_id"] == "webchat-local"
     assert captured["scene_kind"] == "webchat"
+    assert captured["turn_deadline"] is not None
     # 用户消息与 BOT_SELF 回复都落库
     import sqlite3
 

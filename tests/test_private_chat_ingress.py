@@ -227,6 +227,7 @@ async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     # runtime 键 = 规范会话键
     assert engine.await_args.args[0] == "qq:10000:private:20001"
     ingress_ctx = engine.await_args.args[1]
+    assert ingress_ctx.turn_deadline is not None
     assert ingress_ctx.user_ref.raw_user_id == "20001"
     assert ingress_ctx.user_ref.identity_domain == "qq:client"
     assert ingress_ctx.scene_ref.kind == "private"
