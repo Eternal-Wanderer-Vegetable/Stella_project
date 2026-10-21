@@ -148,6 +148,7 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
     `id > checkpoint` 命中全部剩余消息导致重复整理。
     启用 MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED 时，清理边界不会超过
     checkpoint——积压中的未整合消息不会被删（否则内容永远进不了记忆系统）。
+    checkpoint 缺失、为零、非法或超出当前消息范围时，整群跳过且不对齐水位。
 
     返回 {"deleted": 总删除行数, "groups": 处理的群数}。
     """
@@ -182,8 +183,36 @@ def trim_group_messages(keep_count: int = MESSAGE_CLEANUP_KEEP_COUNT) -> dict[st
                 "SELECT last_processed_id FROM consolidation_state WHERE group_id = ?",
                 (gid,),
             ).fetchone()
-            checkpoint = int(ck_row[0] or 0) if ck_row else 0
-            if checkpoint and checkpoint < cutoff_id:
+            bounds = cur.execute(
+                "SELECT MIN(id), MAX(id) FROM group_messages WHERE group_id = ?",
+                (gid,),
+            ).fetchone()
+            min_id, max_id = bounds or (None, None)
+
+            invalid_reason = ""
+            checkpoint = None
+            if ck_row is None:
+                invalid_reason = "missing"
+            elif type(ck_row[0]) is not int or ck_row[0] <= 0:
+                invalid_reason = "invalid"
+            else:
+                checkpoint = ck_row[0]
+                if (
+                    min_id is None
+                    or max_id is None
+                    or checkpoint < min_id - 1
+                    or checkpoint > max_id
+                ):
+                    invalid_reason = "out_of_range"
+
+            if invalid_reason:
+                logger.warning(
+                    f"⚠️ [DBCleaner] 群 {gid} checkpoint {invalid_reason}，"
+                    "跳过受保护的消息清理且不调整水位"
+                )
+                continue
+
+            if checkpoint < cutoff_id:
                 logger.warning(
                     f"⚠️ [DBCleaner] 群 {gid} 存在未整合积压，清理边界从 {cutoff_id} "
                     f"收紧到 checkpoint {checkpoint}（保留未整合消息）"

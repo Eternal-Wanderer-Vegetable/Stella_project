@@ -11,6 +11,8 @@ import sqlite3
 import time
 from pathlib import Path
 
+import pytest
+
 import memory.db_cleaner as db_cleaner
 
 
@@ -69,6 +71,9 @@ def test_trim_group_messages_keeps_recent(tmp_path, monkeypatch):
             "INSERT INTO messages (group_id, user_id, content) VALUES ('2', '100', ?)",
             ("msg" + str(i),),
         )
+    conn.execute(
+        "INSERT INTO consolidation_state (group_id, last_processed_id) VALUES ('2', 4)"
+    )
     conn.commit()
     conn.close()
 
@@ -294,6 +299,70 @@ def test_trim_protects_unconsolidated_messages(tmp_path, monkeypatch):
     assert min_id == 6
     assert remaining == 15
     assert checkpoint_after == 5
+
+
+@pytest.mark.parametrize(
+    ("checkpoint", "has_checkpoint", "first_message_id"),
+    [
+        pytest.param(None, False, 1, id="missing"),
+        pytest.param(None, True, 1, id="null"),
+        pytest.param(0, True, 1, id="zero"),
+        pytest.param(-1, True, 1, id="negative"),
+        pytest.param("not-a-number", True, 1, id="malformed"),
+        pytest.param(99, True, 1, id="above-current-maximum"),
+        pytest.param(1, True, 6, id="below-current-range"),
+    ],
+)
+def test_trim_preserves_messages_and_checkpoint_when_waterline_is_untrusted(
+    tmp_path, monkeypatch, checkpoint, has_checkpoint, first_message_id
+):
+    """缺失、零、非法或越界水位不能授权删除或被对齐成已处理。"""
+    db_path = tmp_path / "agent_memory.db"
+    _create_full_db(db_path)
+    monkeypatch.setattr(db_cleaner, "DB_PATH", db_path)
+    monkeypatch.setattr(db_cleaner, "_LAST_CLEANUP_FILE", tmp_path / ".last_message_cleanup")
+    monkeypatch.setattr(db_cleaner, "MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED", True)
+
+    conn = sqlite3.connect(db_path)
+    _insert_messages(conn, "untrusted", 10 if first_message_id > 1 else 5)
+    if first_message_id > 1:
+        conn.execute("DELETE FROM group_messages WHERE group_id = 'untrusted' AND id < ?", (first_message_id,))
+        conn.execute("DELETE FROM messages WHERE group_id = 'untrusted' AND id < ?", (first_message_id,))
+    if has_checkpoint:
+        conn.execute(
+            "INSERT INTO consolidation_state (group_id, last_processed_id) VALUES (?, ?)",
+            ("untrusted", checkpoint),
+        )
+    conn.commit()
+    before_group_messages = conn.execute(
+        "SELECT id, content FROM group_messages WHERE group_id = 'untrusted' ORDER BY id"
+    ).fetchall()
+    before_messages = conn.execute(
+        "SELECT id, content FROM messages WHERE group_id = 'untrusted' ORDER BY id"
+    ).fetchall()
+    conn.close()
+
+    result = db_cleaner.trim_group_messages(keep_count=2)
+
+    conn = sqlite3.connect(db_path)
+    after_group_messages = conn.execute(
+        "SELECT id, content FROM group_messages WHERE group_id = 'untrusted' ORDER BY id"
+    ).fetchall()
+    after_messages = conn.execute(
+        "SELECT id, content FROM messages WHERE group_id = 'untrusted' ORDER BY id"
+    ).fetchall()
+    checkpoint_row = conn.execute(
+        "SELECT last_processed_id FROM consolidation_state WHERE group_id = 'untrusted'"
+    ).fetchone()
+    conn.close()
+
+    assert result == {"deleted": 0, "groups": 1}
+    assert after_group_messages == before_group_messages
+    assert after_messages == before_messages
+    if has_checkpoint:
+        assert checkpoint_row == (checkpoint,)
+    else:
+        assert checkpoint_row is None
 
 
 def test_trim_without_protection_deletes_unconsolidated(tmp_path, monkeypatch):
