@@ -546,6 +546,16 @@
           "command": "G04a pre-commit: GitNexus 1.6.12 detect-changes --scope all and --scope compare --base-ref main, --limit 2000",
           "result": "All: 15 files / 39 symbols / 24 processes / CRITICAL. Compare main: 451 files / 774 symbols / 67 processes / CRITICAL cumulative. No partial/truncated marker; CLI listing is abbreviated while counts are complete. Commit c3d4c4d.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G04b: STELLA_HOME=/tmp/stella-gravitas-g04b-20261021 .venv/bin/python -m pytest tests/runtime tests/capability tests/test_planner.py tests/test_ai_gateway_deterministic_reply.py tests/test_private_chat_ingress.py tests/webui/test_webui_chat.py tests/test_capture_ingress_gating.py -q -x; .venv/bin/ruff check .; py_compile changed Python files; python3 scripts/check_docs.py; python3 scripts/generate_message_flow.py --check; git diff --check",
+          "result": "470 passed / 1 existing NoneBot fixture warning. Full Ruff and changed-file compile passed; docs 119 files / 1,238 links / 577 anchors / 0 errors. Flow archive message-flow.c36cccb0c356.json: 141 nodes / 139 source-resolved / 9,394 closure sites / 13,943 reachable symbols; --check passed. First all result was PARTIAL and was rerun successfully. Tests used an isolated /tmp STELLA_HOME; no user database, model, Bot, or platform was used.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G04b pre-commit: .gitnexus/gn detect-changes --scope all --repo Stella_project --limit 2000; detect-changes --scope compare --base-ref main --repo Stella_project --limit 2000",
+          "result": "Pinned GitNexus 1.6.11. All: 11 files / 33 symbols / 34 processes / CRITICAL. Compare main: 454 files / 785 symbols / 70 processes / CRITICAL cumulative. First all graph query interrupted and returned PARTIAL, retry completed with no partial/truncated marker. Compare is cumulative. Commit 6458764.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }

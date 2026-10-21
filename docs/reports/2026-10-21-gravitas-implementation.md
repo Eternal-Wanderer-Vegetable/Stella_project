@@ -55,8 +55,20 @@ GitNexus 1.6.12 索引基于 G03b `6c625f9`，尚未包含本工作树改动。�
 
 G04b 将把总期限扩展到锁、prepare、路由/工具等待和 finalize；G04c 再对每个副作用和逐段发送设围栏。G04a 完成不代表整轮总期限已闭合。
 
+## G04b 域内期限传播
+
+代码提交 `6458764` 把总 Deadline 贯穿 Facade/WebChat 会话锁、整个 `prepare_turn`（包含 Router、Planner、工具与并行分支）、模型队列/生成，以及所有 finalize 分支。新增 `gravitas.errors.DeadlineExceeded` 作为专用控制信号；`gravitas.deadlines.run_with_deadline` 懒启动阶段工作，区分总期限到期与旧阶段 timeout cap，`lock_with_deadline` 超时后只回收本次已取得的锁。
+
+- 旧 `RuntimeFacade.submit_turn(deadline=...)` 继续作为生成阶段上限：只有该 cap 到期且总期限仍有余量时才保留 legacy 兜底；总期限到期则记为 `deadline_exceeded` 并抛出控制信号。Facade 和直接 `TurnService.run` 路径都按总剩余时间限制生成与 finalize；在期限已过时不启动新阶段，也不为未启动的生成虚增调用次数。
+- Planner、Router 和 Capability hook 显式传播 DeadlineExceeded；队列延期仅在总期限仍有效时走原降级语义。QQ 群聊、私聊与 proactive 入口遇到总期限到期时静默结束，不落入通用异常兜底回复。WebChat 独立会话锁也由同一 Deadline 限制；HTTP 层保留错误帧语义。G04c 仍需围住 Facade 返回后的副作用和最终发送边界。
+- 编辑前精确影响绑定 `af35e11`：`TurnService.prepare_turn` HIGH（7 impacted / 3 direct / 3 processes / 4 modules）、`finalize_turn` HIGH（同值）、`generate_reply` HIGH（4 / 2 / 2 / 3）；`RuntimeFacade.submit_turn` LOW（3 / 1 / 1 / 1）。既有 `Deadline` DTO 为 HIGH（83 impacted / 22 direct），没有修改；控制异常放在独立 `gravitas/errors.py`。Planner `maybe_plan`、`activate_capabilities`、QQ handler 图结果为 UNKNOWN/0，已逐项用动态调用、hook 注册和 `on_message` 装饰器源码补证；proactive 与 WebChat 目标有 LOW 边并按直接调用链补查。该组编辑前图分析已向用户提示 HIGH 项。
+- 定向验收命令：`STELLA_HOME=/tmp/stella-gravitas-g04b-20261021 .venv/bin/python -m pytest tests/runtime tests/capability tests/test_planner.py tests/test_ai_gateway_deterministic_reply.py tests/test_private_chat_ingress.py tests/webui/test_webui_chat.py tests/test_capture_ingress_gating.py -q -x`：**470 passed / 1 warning**。warning 是现有 NoneBot fixture 未发现 adapter。最初两次 proactive 测试因临时根目录及其 `memory/` 子目录尚未创建而失败；建立隔离目录后重跑通过。该路径只在 `/tmp`，未访问用户数据。
+- `.venv/bin/ruff check .`、上述改动 Python 文件 `py_compile`、`git diff --check` 通过。`python3 scripts/check_docs.py` 为 119 files / 1,238 local links / 577 migration anchors / 0 errors。源码变化生成不可变归档 `message-flow.c36cccb0c356.json`（141 nodes / 139 source-resolved / 9,394 closure sites / 13,943 reachable symbols），之后 `python3 scripts/generate_message_flow.py --check` 通过；中间草稿 `message-flow.747474cf208a.json` 已移除。
+- GitNexus 编辑前 impact 索引落在 `af35e11`；提交后为追平 G04b 提交 `6458764`，用仓库 pinned CLI 1.6.11 全量重建，状态显示 indexed/current commit 均为 `6458764`、覆盖 1,812 files。重建器报告流程候选受预算截断（2,851 candidates 未排序、24 traces depth-capped、801 callees 被 branch cap 跳过、45 walks 超 per-entry budget）；流程路径属于下界，不宣称完整。提交前 `detect-changes --scope all`：11 files / 33 symbols / 34 affected processes / CRITICAL；`compare --base-ref main`：454 / 785 / 70 / CRITICAL（累计）。第一次 all 因 graph query interrupted 返回 PARTIAL，按门禁重跑成功；最终 all/compare 输出未报告 partial/truncated。当前 launcher 1.6.11 与编辑前记录使用的 1.6.12 不同，此差异保留在证据中；CLI 展示列表是样例，计数为报告值。状态文档编辑前的 exact File impact 为 LOW：本报告 11、`progress.md` 26、`session-handoff.md` 19、`feature_list.json` 19 impacted files；File 图未包含过程轴，且已用相对链接与状态引用检查补证。
+- 状态记录提交的 GitNexus 检查：scope all 为 4 files / 7 symbols / 0 processes / LOW；compare/main 为 457 / 796 / 59 / CRITICAL（分支累计）。首次 compare 因图查询中断标记 PARTIAL，重跑后退出码 0 且无 partial/truncated。该轮 `check_docs.py` 为 119 files / 1,240 local links / 577 anchors / 0 errors，`feature_list.json` 可解析，`git diff --check` 通过。
+
 ## 未完成与验收边界
 
-- G00–G03 与 G04a 已完成；G04b/G04c、G05–G09 仍须逐包实现、验证和提交。
+- G00–G03、G04a、G04b 已完成；G04c、G05–G09 仍须逐包实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。
