@@ -325,7 +325,7 @@ async def _build_astr_event(ctx: ChatContext) -> Any:
     # The compatibility event builder currently converts OneBot v11 segments
     # and tools may call OneBot actions directly. A future adapter must register
     # an equivalent exporter before its event can enter this plugin surface.
-    if ctx.adapter_name and ctx.adapter_name != "onebot-v11":
+    if ctx.adapter_name != "onebot-v11":
         return None
     if not _settings().ASTRBOT_COMPAT_ENABLED:
         return None

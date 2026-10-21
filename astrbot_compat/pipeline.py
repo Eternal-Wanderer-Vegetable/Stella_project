@@ -23,6 +23,7 @@ from .events import (
     MessageEventResult,
     ResultContentType,
     build_event,
+    is_onebot_v11_bot,
 )
 from .exceptions import StellaCompatModelUnavailable, StellaCompatNotSupported
 from .filters import CommandGroupFilter, PermissionTypeFilter
@@ -316,6 +317,9 @@ async def collect_handlers(
 
 async def dispatch(nb_event: Any, bot: Any) -> bool:
     """主入口：OneBot 事件 -> AstrBot 插件分发，返回是否已向用户产出回应。"""
+    if not is_onebot_v11_bot(bot):
+        logger.debug("[pipeline] 非 OneBot v11 Bot 不进入 QQ 插件分发")
+        return False
     total = len(star_handlers_registry.get_handlers_by_event_type(EventType.AdapterMessageEvent))
     logger.info(f"[pipeline_debug] dispatch total_handlers={total} registry_len={len(star_handlers_registry)}")
     if not star_handlers_registry.get_handlers_by_event_type(

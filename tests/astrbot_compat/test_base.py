@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import types
 
 import pytest
 
@@ -80,6 +81,60 @@ def test_star_tools_send_message_routes_to_context(monkeypatch):
     assert asyncio.run(StarTools.send_message("aiocqhttp:GroupMessage:1", "hi")) is True
     assert calls == [("aiocqhttp:GroupMessage:1", "hi")]
     StarTools._context = None
+
+
+def test_context_send_message_uses_platform_and_bound_unique_bot(monkeypatch, fake_bot):
+    context = Context()
+    monkeypatch.setattr(context, "_get_bot", lambda: fake_bot)
+    assert asyncio.run(
+        context.send_message("aiocqhttp:GroupMessage:1", "hello")
+    ) is True
+    assert fake_bot.actions == [("send_group_msg", {"group_id": 1})]
+    assert fake_bot.sent == ["hello"]
+
+
+def test_context_send_message_refuses_other_platform_before_bot_lookup(monkeypatch):
+    context = Context()
+    monkeypatch.setattr(
+        context,
+        "_get_bot",
+        lambda: pytest.fail("unsupported platform must not select a Bot"),
+    )
+    assert asyncio.run(
+        context.send_message("telegram:GroupMessage:1", "hello")
+    ) is False
+
+
+def test_context_does_not_pick_arbitrary_bot_when_get_bot_is_ambiguous(monkeypatch):
+    import nonebot
+
+    onebot = types.SimpleNamespace(
+        adapter=types.SimpleNamespace(get_name=lambda: "OneBot V11")
+    )
+    other_onebot = types.SimpleNamespace(
+        adapter=types.SimpleNamespace(get_name=lambda: "OneBot V11")
+    )
+    monkeypatch.setattr(nonebot, "get_bots", lambda: {"one": onebot, "two": other_onebot})
+    assert Context._get_bot() is None
+
+
+def test_context_selects_the_only_onebot_among_other_adapters(monkeypatch):
+    import nonebot
+
+    onebot = types.SimpleNamespace(
+        adapter=types.SimpleNamespace(get_name=lambda: "OneBot V11")
+    )
+    telegram = types.SimpleNamespace(
+        adapter=types.SimpleNamespace(get_name=lambda: "Telegram")
+    )
+    monkeypatch.setattr(nonebot, "get_bots", lambda: {"qq": onebot, "tg": telegram})
+    assert Context._get_bot() is onebot
+
+
+def test_context_session_parser_preserves_opaque_colons():
+    assert Context._parse_session("aiocqhttp:GroupMessage:opaque:thread") == (
+        "aiocqhttp", "GroupMessage", "opaque:thread"
+    )
 
 
 def test_star_tools_unknown_attr_raises_recognisable_error():

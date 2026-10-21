@@ -10,6 +10,8 @@ import pytest
 import astrbot_compat.filters as f
 from astrbot_compat.filters import (
     GreedyStr,
+    PlatformAdapterType,
+    PlatformAdapterTypeFilter,
     parse_handler_params,
     validate_and_convert_params,
 )
@@ -19,6 +21,43 @@ def _spec(func) -> dict:
     """本文件开了 `from __future__ import annotations`，注解是字符串——
     正好用来验证 parse_handler_params 能把它们还原成真实类型。"""
     return parse_handler_params(func)
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "platform_id", "requested", "expected"),
+    [
+        ("aiocqhttp", "instance-9", PlatformAdapterType.AIOCQHTTP, True),
+        ("telegram", "aiocqhttp", PlatformAdapterType.AIOCQHTTP, False),
+        ("telegram", "account-42", PlatformAdapterType.TELEGRAM, True),
+        (
+            "discord",
+            "some-unique-instance-id",
+            PlatformAdapterType.TELEGRAM | PlatformAdapterType.DISCORD,
+            True,
+        ),
+        ("qq_official", "bot-1", PlatformAdapterType.QQOFFICIAL, True),
+        ("unknown", "telegram", PlatformAdapterType.ALL, False),
+    ],
+)
+def test_platform_adapter_filter_uses_adapter_name_not_instance_id(
+    platform_name, platform_id, requested, expected
+):
+    class Event:
+        def get_platform_name(self):
+            return platform_name
+
+        def get_platform_id(self):
+            return platform_id
+
+    assert PlatformAdapterTypeFilter(requested).filter(Event()) is expected
+
+
+def test_platform_adapter_filter_fails_closed_without_adapter_name():
+    class Event:
+        def get_platform_id(self):
+            return "telegram"
+
+    assert PlatformAdapterTypeFilter(PlatformAdapterType.TELEGRAM).filter(Event()) is False
 
 
 def test_bool_annotation_is_converted():

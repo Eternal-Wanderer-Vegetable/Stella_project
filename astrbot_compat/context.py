@@ -80,12 +80,19 @@ class Context:
     # --- 平台能力 ---
 
     async def send_message(self, session: Any, message_chain: Any) -> bool:
-        """按 `platform:MessageType:id` 主动发消息。"""
+        """按 `platform:MessageType:id` 主动发消息；当前仅实现 OneBot v11。"""
         try:
-            target_type, target_id = self._parse_session(str(session))
+            platform_id, target_type, target_id = self._parse_session(str(session))
+            if platform_id != "aiocqhttp" or target_type not in {
+                "GroupMessage", "FriendMessage"
+            }:
+                logger.debug("[astrbot_compat] Context.send_message 不支持此平台或会话")
+                return False
             lst = self._normalize(message_chain)
             bot = self._get_bot()
-            if bot is None:
+            from .events import is_onebot_v11_bot
+
+            if not is_onebot_v11_bot(bot):
                 logger.error("[astrbot_compat] Context.send_message 无可用 Bot")
                 return False
             return await self._deliver(bot, target_type, target_id, lst)
@@ -94,11 +101,11 @@ class Context:
             return False
 
     @staticmethod
-    def _parse_session(session: str) -> tuple[str, str]:
-        parts = session.split(":")
-        if len(parts) >= 3:
-            return parts[1], parts[-1]
-        return "GroupMessage", session
+    def _parse_session(session: str) -> tuple[str, str, str]:
+        parts = session.split(":", 2)
+        if len(parts) != 3:
+            return "", "", ""
+        return parts[0], parts[1], parts[2]
 
     @staticmethod
     def _normalize(message_chain: Any) -> list:
@@ -117,17 +124,25 @@ class Context:
 
     @staticmethod
     def _get_bot() -> Any:
-        from nonebot import get_bot, get_bots
+        from nonebot import get_bots
+
+        from .events import is_onebot_v11_bot
 
         try:
-            return get_bot()
+            candidates = [
+                bot for bot in get_bots().values() if is_onebot_v11_bot(bot)
+            ]
         except Exception:
-            bots = get_bots()
-            return next(iter(bots.values())) if bots else None
+            return None
+        return candidates[0] if len(candidates) == 1 else None
 
     @staticmethod
     async def _deliver(bot: Any, target_type: str, target_id: str, lst: list) -> bool:
         from .components import split_forward_nodes, to_onebot_message
+        from .events import is_onebot_v11_bot
+
+        if not is_onebot_v11_bot(bot):
+            return False
 
         is_group = target_type != "FriendMessage"
         forwards, rest = split_forward_nodes(lst)

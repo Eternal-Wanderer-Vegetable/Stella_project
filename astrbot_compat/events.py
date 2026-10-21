@@ -22,7 +22,7 @@ from .components import (
     Record,
     Reply,
     Video,
-    from_onebot_message,
+    from_platform_message,
 )
 from .exceptions import StellaCompatNotSupported
 
@@ -304,6 +304,25 @@ _AIOCQHTTP_META = PlatformMetadata(
     description="Stella OneBot V11 bridge",
     id="aiocqhttp",
 )
+_UNKNOWN_PLATFORM_META = PlatformMetadata(
+    name="unknown",
+    description="Unidentified platform; platform-specific APIs are disabled",
+    id="unknown",
+)
+
+
+def is_onebot_v11_bot(bot: Any) -> bool:
+    """Return whether a concrete Bot handle identifies the OneBot v11 adapter."""
+    adapter = getattr(bot, "adapter", None)
+    get_name = getattr(adapter, "get_name", None)
+    if not callable(get_name):
+        return False
+    try:
+        name = get_name()
+    except Exception:
+        return False
+    normalized = "".join(char.lower() for char in str(name) if char.isalnum())
+    return normalized in {"onebotv11", "aiocqhttp"}
 
 
 @dataclass
@@ -380,7 +399,7 @@ class AstrMessageEvent:
         self.bot = bot  # 公开别名，供插件 await event.bot.call_action(...)
         self.message_str = message_str
         self.message_obj = message_obj if message_obj is not None else AstrBotMessage()
-        self.platform_meta = platform_meta or _AIOCQHTTP_META
+        self.platform_meta = platform_meta or _UNKNOWN_PLATFORM_META
         self.platform = self.platform_meta  # 上游 back-compat 别名
         self.session = MessageSession(
             platform_name=self.platform_meta.id,
@@ -809,11 +828,15 @@ def _resolve_wake(
 
 async def build_event(nb_event: Any, bot: Any) -> AstrMessageEvent:
     """OneBot 事件 -> AstrMessageEvent。"""
+    if not is_onebot_v11_bot(bot):
+        raise StellaCompatNotSupported(
+            "AstrBot event construction requires a verified OneBot v11 Bot"
+        )
     chain: list[BaseMessageComponent] = []
     with contextlib.suppress(Exception):
         raw_msg = nb_event.get_message()
         if raw_msg is not None:
-            chain = from_onebot_message(raw_msg)
+            chain = from_platform_message(raw_msg)
 
     message_str = ""
     with contextlib.suppress(Exception):

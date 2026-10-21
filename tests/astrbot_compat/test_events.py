@@ -133,18 +133,24 @@ def test_message_outline():
         ("help", None, None, True),  # 私聊
     ],
 )
-def test_wake_resolution(text, segs, group_id, expected, make_event):
-    ev = asyncio.run(build_event(make_event(text, segs, group_id), None))
+def test_wake_resolution(text, segs, group_id, expected, make_event, fake_bot):
+    ev = asyncio.run(build_event(make_event(text, segs, group_id), fake_bot))
     assert ev.is_at_or_wake_command is expected
 
 
-def test_wake_prefix_is_stripped(make_event):
-    ev = asyncio.run(build_event(make_event("/echo hi", None, 1), None))
+def test_wake_prefix_is_stripped(make_event, fake_bot):
+    ev = asyncio.run(build_event(make_event("/echo hi", None, 1), fake_bot))
     assert ev.message_str == "echo hi"
 
 
-def test_admin_role_from_group_role(make_event):
+def test_admin_role_from_group_role(make_event, fake_bot):
     nb = make_event("hi", None, 1)
     nb.sender.role = "admin"
-    ev = asyncio.run(build_event(nb, None))
+    ev = asyncio.run(build_event(nb, fake_bot))
     assert ev.is_admin() is True
+
+
+def test_build_event_rejects_unverified_adapter(make_event, fake_bot):
+    fake_bot.adapter.get_name = lambda: "Telegram"
+    with pytest.raises(Exception, match="verified OneBot v11 Bot"):
+        asyncio.run(build_event(make_event("hello"), fake_bot))
