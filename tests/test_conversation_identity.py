@@ -669,6 +669,14 @@ def test_resolve_correction_target_priority():
     assert resolve_correction_target(author_user_id="2003") == ""
 
 
+def test_resolve_correction_target_accepts_opaque_user_ids():
+    assert resolve_correction_target(
+        author_user_id="actor:10",
+        mentioned_user_ids=("member:007/猫",),
+        bot_id="bot/01",
+    ) == "member:007/猫"
+
+
 def _bot_bubble_db(conn):
     """Bot 气泡表（v16 形状：带 canonical 会话列）。"""
     conn.execute(

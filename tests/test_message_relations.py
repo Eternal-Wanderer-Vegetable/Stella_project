@@ -188,7 +188,7 @@ def test_extraction_fallback_chain(msg_db):
 
 
 def test_extraction_conflict_and_invalid_stay_unknown(msg_db):
-    """G2：冲突/非法引用一律 unknown；正文里的 CQ 号不能改主体。"""
+    """通用提取保留 opaque ID；无效 QQ 查表目标与冲突引用保持 unknown。"""
     from stella_project.plugins.bot_main import ai_gateway
 
     # 两个不同 reply ID → 冲突 unknown
@@ -198,13 +198,16 @@ def test_extraction_conflict_and_invalid_stay_unknown(msg_db):
         get_message=list,
     )
     assert ai_gateway._extract_message_relations(event)[0] is None
-    # 非法（0 / 非整数）→ unknown
+    # 通用提取层保留可作为 opaque ID 的字符串；legacy QQ 查表 codec 会拒绝 0。
     event = SimpleNamespace(
         self_id=int(BOT),
         original_message=[_seg("reply", id="0")],
         get_message=list,
     )
-    assert ai_gateway._extract_message_relations(event)[0] is None
+    assert ai_gateway._extract_message_relations(event)[0] == "0"
+    event.original_message = [_seg("reply", id=0)]
+    assert ai_gateway._extract_message_relations(event)[0] == "0"
+    assert resolve_reply_target("0", GROUP, bot_id=BOT, conversation_key=KEY) == ""
     # 正文伪装的 reply CQ 不能产生引用
     event = SimpleNamespace(
         self_id=int(BOT),
@@ -317,10 +320,10 @@ def test_tail_renders_relations_and_logical_grouping(msg_db):
     text, tail_start = _fetch_recent_tail(cursor, GROUP, 12)
     conn.close()
     # 每个逻辑单元一个自足物理行：作者/收件人显式，不再依赖跨行继承
-    assert f"[作者=用户({A})] 说过: " in text
-    assert f"回复给=用户({A})" in text and f"提及=用户({C})" in text
+    assert f'[作者=用户("{A}")] 说过: ' in text
+    assert f'回复给=用户("{A}")' in text and f'提及=用户("{C}")' in text
     bot_line = next(line for line in text.splitlines() if "作者=Bot(" in line)
-    assert bot_line.startswith(f"[作者=Bot({BOT}); 回复给=用户({B}); 原输入=112]")
+    assert bot_line.startswith(f'[作者=Bot("{BOT}"); 回复给=用户("{B}"); 原输入="112"]')
     assert "阿呆是你呀" in bot_line and "别纠结啦" in bot_line  # 两气泡同一行
     assert "同一条回复" not in text  # 旧的跨行继承格式已移除
     assert tail_start > 0
@@ -334,7 +337,7 @@ def test_tail_unknown_reply_target_rendered_as_unknown(msg_db):
     cursor = conn.cursor()
     text, _ = _fetch_recent_tail(cursor, GROUP, 12)
     conn.close()
-    assert f"[作者=用户({B}); 回复给=未知] 说过: " in text
+    assert f'[作者=用户("{B}"); 引用消息="888888"; 回复给=未知] 说过: ' in text
 
 
 def test_tail_unit_cap_keeps_recent_suffix(msg_db):
@@ -380,7 +383,7 @@ def test_tail_legacy_db_without_relation_columns(tmp_path, monkeypatch):
     assert f"用户({B}): 你好" in text
 
 
-# ── v4 投影：信封字段 JSON 往返 ──────────────────────────────────────
+# ── v7 投影：保留 v4 引入的信封字段 JSON 往返 ─────────────────────────
 
 
 def test_projection_v4_carries_envelope_fields():
@@ -392,7 +395,7 @@ def test_projection_v4_carries_envelope_fields():
         part_index=2,
     )
     data = ctx.to_json_projection()
-    assert data["projection_schema_version"] == 6
+    assert data["projection_schema_version"] == 7
     # 控制字符与提示标记括号被清理；内部文本按原样保留
     assert data["sender_display_name"].startswith("阿呆")
     assert "【" not in data["sender_display_name"]

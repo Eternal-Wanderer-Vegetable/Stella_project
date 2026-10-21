@@ -18,6 +18,7 @@ from memory.summary_packet import (
     SummarySourceMessage,
     build_summary_evidence,
     build_summary_packet,
+    validate_summary_evidence,
 )
 
 
@@ -271,9 +272,9 @@ def test_fetch_v16_groups_unit_with_recipient(tmp_path, monkeypatch):
     assert count == 3            # 原始非空行数，不因合组变 2
     assert max_id == 3
     unit = next(line for line in text.splitlines() if "作者=Bot(" in line)
-    assert unit.startswith("[作者=Bot(5000); 回复给=用户(1001); 原输入=-1337665775]")
+    assert unit.startswith('[作者=Bot("5000"); 回复给=用户("1001"); 原输入="-1337665775"]')
     assert "诶？怎么啦" in unit and "不许摸我" in unit  # 两气泡一行
-    assert "[作者=用户(1001)] 说过: " in text
+    assert '[作者=用户("1001")] 说过: ' in text
 
 
 def test_fetch_v16_batch_split_keeps_each_segment_self_contained(tmp_path, monkeypatch):
@@ -291,12 +292,12 @@ def test_fetch_v16_batch_split_keeps_each_segment_self_contained(tmp_path, monke
     assert count1 == 2 and max_id1 == 2
     assert "第一句" in text1 and "第三句" not in text1
     # 切在前两泡：这一段仍是带收件人的自足行
-    assert "回复给=用户(1001)" in text1
+    assert '回复给=用户("1001")' in text1
 
     text2, max_id2, count2 = compact.fetch_pending_messages(1, max_id1, 999, limit=2)
     assert count2 == 1 and max_id2 == 3
     assert "第三句" in text2
-    assert "回复给=用户(1001)" in text2  # 收件人不靠上一批继承
+    assert '回复给=用户("1001")' in text2  # 收件人不靠上一批继承
 
 
 def test_fetch_pending_records_seals_exact_author_target_and_full_text(tmp_path, monkeypatch):
@@ -714,6 +715,24 @@ def test_compact_prompt_preserves_all_nonempty_source_metadata():
     assert all(bubble.get(key) == value for key, value in canonical.items())
     assert bubble["logical_message_id"] == message.logical_message_id
     assert evidence.source_digest  # digest remains sealed server-side
+
+
+def test_summary_local_row_watermark_is_separate_from_opaque_platform_id():
+    platform_id = "message:007/channel/猫"
+    message = SummarySourceMessage(
+        message_id=41,
+        author_id="user:007/猫",
+        source_kind="PASSIVE",
+        content="opaque IDs stay opaque",
+        platform_message_id=platform_id,
+        reply_to_msg_id="reply:/abc:猫",
+    )
+    evidence = build_summary_evidence("discord:channel:07", "bot-01", (message,))
+
+    assert validate_summary_evidence(evidence)
+    assert evidence.source_ids == (41,)  # local row ID is the summary watermark
+    assert evidence.messages[0].platform_message_id == platform_id
+    assert evidence.messages[0].reply_to_msg_id == "reply:/abc:猫"
 
 
 def test_compact_rejects_ref_selected_from_another_request(db, monkeypatch):

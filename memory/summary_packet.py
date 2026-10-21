@@ -20,7 +20,11 @@ _EVIDENCE_DOMAIN = b"stella-summary-evidence-v1\0"
 
 @dataclass(frozen=True, slots=True)
 class SummarySourceMessage:
-    """一条未经摘要改写的数据库来源行；content 按原文保存。"""
+    """一条未经摘要改写的来源行。
+
+    ``message_id`` 始终是本地数据库行 ID；``platform_message_id``、引用、
+    收件人与来源消息 ID 都是外部不透明字符串，绝不能代替本地水位。
+    """
 
     message_id: int
     author_id: str
@@ -200,6 +204,11 @@ def validate_summary_evidence(evidence: SummaryEvidence) -> bool:
             or not message.source_kind.strip()
             or not isinstance(message.content, str)
             or not message.content.strip()
+            or not isinstance(message.platform_message_id, str)
+            or not isinstance(message.reply_to_msg_id, str)
+            or not isinstance(message.reply_target_user_id, str)
+            or not isinstance(message.origin_msg_id, str)
+            or not isinstance(message.recipient_id, str)
             or isinstance(message.part_index, bool)
             or not isinstance(message.part_index, int)
             or message.part_index < 0

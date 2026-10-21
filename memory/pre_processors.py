@@ -42,7 +42,7 @@ from memory.conversation_projection import (
     PROJECTION_FORMAT_VERSION,
     TranscriptBubble,
     TranscriptRecord,
-    canonical_message_id_text,
+    parse_qq_message_id,
     render_transcript_record,
 )
 from memory.prompt_builder import build_memory_context, estimate_tokens
@@ -232,16 +232,18 @@ def resolve_reply_target(
     msg_id 缺失或命中多条（跨群重复 ID）一律返回空串 = unknown——禁止猜
     「最近发言的人」。DB 异常同样返回 unknown（历史渲染降级，不拖垮主链路）。
 
-    平台 message ID 允许负数（QQ 回执实测 -558868042）：统一走投影模块的
-    有符号解析；0/非法文本 = unknown（归属修复计划 §6.1）。
+    QQ legacy message ID 允许负数（回执实测 -558868042）：按旧 INTEGER 列的
+    十进制 codec 查找；0、前导零或非数字 opaque ID 在 schema 扩展前均 unknown。
     """
-    target = canonical_message_id_text(reply_to_msg_id)
-    if not target:
+    # group_messages.msg_id is still the legacy QQ INTEGER column. Keep its
+    # decimal codec isolated until the schema migration adds the opaque-ID field.
+    target = parse_qq_message_id(reply_to_msg_id)
+    if target is None:
         return ""
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        params: list = [str(group_key), int(target)]
+        params: list = [str(group_key), target]
         sql = (
             "SELECT DISTINCT user_id FROM group_messages "
             "WHERE group_id = ? AND msg_id = ? AND user_id != ''"
@@ -1018,13 +1020,14 @@ def _recent_trusted_messages(ctx: ChatContext, limit: int = _RECENT_EVIDENCE_MES
         return []
     messages = []
     for row_id, user_id, content, display, ts in reversed(rows):
-        author_id = int(user_id) if str(user_id or "").isdigit() else 0
+        author_id = str(user_id or "")
         messages.append(
             {
                 "id": row_id,
                 "text": str(content or "")[:_EVIDENCE_TEXT_MAX],
                 "author_id": author_id,
-                "author_display": str(display or "") or (f"用户({user_id})" if user_id else ""),
+                # A stable raw ID is an authorization key, not a model-facing name.
+                "author_display": str(display or "").strip() or "用户",
                 "object_id": None,
                 "row_id": row_id,
                 "conversation_key": key,
@@ -1055,8 +1058,8 @@ def _current_corrections(ctx: ChatContext, limit: int = 2) -> list[dict]:
         corrections.append(
             {
                 "id": c.get("source_row_id") or 0,
-                "author_id": int(author) if author.isdigit() else 0,
-                "author_display": f"用户({author})" if author else "",
+                "author_id": author,
+                "author_display": "用户",
                 "text": str(c.get("alias") or ""),
                 "conversation_key": key,
                 "source_row_id": c.get("source_row_id"),
@@ -1074,7 +1077,12 @@ def build_attribution_evidence(ctx: ChatContext) -> dict:
     PERSON 事实（access_scope 决定可见性，不复权）、当前纠正。上限
     16 单元（build_evidence_table 内截断）。
     """
-    from core.dialogue_attribution import build_evidence_table, evidence_projection
+    from core.dialogue_attribution import (
+        build_evidence_table,
+        build_target_ref_map,
+        evidence_projection,
+    )
+    from core.transport.models import UserRef
 
     recent = _recent_trusted_messages(ctx)
     facts = []
@@ -1082,14 +1090,15 @@ def build_attribution_evidence(ctx: ChatContext) -> dict:
         content = str(mem.get("content") or "").strip()
         if not content:
             continue
-        subject_key = str(mem.get("subject_key") or "")
-        subject_uid = subject_key.split(":", 1)[-1] if subject_key else str(mem.get("user_id") or "")
+        subject_uid = str(
+            mem.get("raw_user_id") or mem.get("user_id") or mem.get("subject_key") or ""
+        )
         facts.append(
             {
                 "id": mem.get("id") or mem.get("fact_key") or len(facts),
                 "content": content[:_EVIDENCE_TEXT_MAX],
-                "author_id": int(subject_uid) if subject_uid.isdigit() else 0,
-                "author_display": f"用户({subject_uid})" if subject_uid else "",
+                "author_id": subject_uid,
+                "author_display": str(mem.get("author_display") or ""),
                 "object_id": None,
                 "source_row_id": None,
                 "conversation_key": getattr(ctx, "conversation_key", ""),
@@ -1108,10 +1117,24 @@ def build_attribution_evidence(ctx: ChatContext) -> dict:
         signal_codes.append("current_correction")
     reply_to = str(getattr(ctx, "reply_to_msg_id", "") or "")
     target_user_id = str(getattr(ctx, "reply_target_user_id", "") or "")
+    user_ref = getattr(ctx, "user_ref", None)
+    identity_domain = str(getattr(user_ref, "identity_domain", "") or "")
+    target_ref_map = {}
+    bot_id = str(getattr(ctx, "bot_id", "") or "")
+    if reply_to and target_user_id and target_user_id != bot_id and identity_domain:
+        try:
+            target_ref_map = build_target_ref_map(
+                [UserRef(identity_domain, target_user_id)],
+                turn_id=str(getattr(ctx, "turn_id", "") or ""),
+                identity_revision=int(getattr(ctx, "identity_revision", 0) or 0),
+                generation_epoch=int(getattr(ctx, "generation_epoch", 0) or 0),
+            )
+        except (TypeError, ValueError):
+            target_ref_map = {}
     if reply_to:
         signal_codes.append("reply_relation")
     ctx.attribution_risk_context = {
-        "schema_version": 1,
+        "schema_version": 2,
         "signal_codes": signal_codes,
         "supporting_evidence_ids": [
             evidence_id for evidence_id in correction_ids if evidence_id in table
@@ -1122,7 +1145,12 @@ def build_attribution_evidence(ctx: ChatContext) -> dict:
             else "not_applicable"
         ),
         "target_user_id": target_user_id if reply_to else "",
+        "target_identity_domain": identity_domain if reply_to else "",
+        "target_ref_map": target_ref_map,
+        "allow_legacy_qq_target_id": identity_domain == "qq:client",
+        "turn_id": str(getattr(ctx, "turn_id", "") or ""),
         "identity_revision": int(getattr(ctx, "identity_revision", 0) or 0),
+        "generation_epoch": int(getattr(ctx, "generation_epoch", 0) or 0),
     }
     return evidence_projection(table)
 

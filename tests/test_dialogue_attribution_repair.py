@@ -554,7 +554,7 @@ class TestReplyEnvelopeParser:
         envelope, error = parse_reply_envelope(raw)
         assert envelope is not None, error
         assert not envelope.legacy
-        assert envelope.protocol_version == "2026-10-08.1"
+        assert envelope.protocol_version == "2026-10-21.1"
         assert envelope.current == "还行吧，刷了会儿群\n怎么突然问这个呀\n你呢"
         final, decision = apply_attribution_guard(raw, {}, set(), "enforce", 1)
         assert decision.decision == "pass"
@@ -596,9 +596,9 @@ class TestReplyEnvelopeParser:
 
     def test_parses_one_typed_envelope_and_roundtrips_projection(self):
         raw = (
-            '<response version="2026-10-08.1">'
+            '<response version="2026-10-21.1">'
             "<thought>diagnostic</thought><action>NONE</action>"
-            '<reply kind="quote" target_user_id="20001">'
+            '<reply kind="quote" target_ref="U1">'
             "<current>我找到原话了。</current>"
             '<quote evidence_id="msg_49245"/>'
             "</reply></response>"
@@ -608,7 +608,7 @@ class TestReplyEnvelopeParser:
         assert envelope.kind == "quote"
         assert envelope.current == "我找到原话了。"
         assert envelope.quote_evidence_ids == ("msg_49245",)
-        assert envelope.target_user_id == "20001"
+        assert envelope.target_ref == "U1"
         projected, projection_error = reply_envelope_from_projection(
             envelope.to_projection()
         )
@@ -617,10 +617,10 @@ class TestReplyEnvelopeParser:
     def test_rejects_conflicting_roots_raw_tail_dtd_and_legacy_dual_output(self):
         cases = (
             '<!DOCTYPE response [<!ENTITY x "raw">]>'
-            '<response version="2026-10-08.1"><thought></thought>'
+            '<response version="2026-10-21.1"><thought></thought>'
             "<action>NONE</action><reply kind=\"social\"><current>&x;</current>"
             "</reply></response>",
-            '<response version="2026-10-08.1"><thought></thought>'
+            '<response version="2026-10-21.1"><thought></thought>'
             '<action>NONE</action><reply kind="social"><current>好</current>'
             "</reply></response>块外台词",
             "<thought></thought><reply>新格式</reply>"
@@ -633,7 +633,7 @@ class TestReplyEnvelopeParser:
 
     def test_rejects_typed_slot_author_text_and_unknown_tags(self):
         prefix = (
-            '<response version="2026-10-08.1"><thought></thought>'
+            '<response version="2026-10-21.1"><thought></thought>'
             "<action>NONE</action>"
         )
         suffix = "</reply></response>"
@@ -654,7 +654,7 @@ class TestReplyEnvelopeParser:
         仍拒绝）。合并结果进入 reply 后由 split_lines 按 \n 切段投递。
         """
         raw = (
-            '<response version="2026-10-08.1">'
+            '<response version="2026-10-21.1">'
             "<thought>用户突然说咬你，回应这个直接的动作互动。</thought>"
             "<action>NONE</action>"
             '<reply kind="social"><current>唔…别咬啦</current>'
@@ -670,7 +670,7 @@ class TestReplyEnvelopeParser:
 
     def test_repeated_current_drops_empty_parts(self):
         raw = (
-            '<response version="2026-10-08.1"><thought></thought><action>NONE</action>'
+            '<response version="2026-10-21.1"><thought></thought><action>NONE</action>'
             '<reply kind="social"><current></current><current>第二段</current>'
             "</reply></response>"
         )
@@ -678,7 +678,7 @@ class TestReplyEnvelopeParser:
         assert envelope is not None, error
         assert envelope.current == "第二段"
         only_empty = (
-            '<response version="2026-10-08.1"><thought></thought><action>NONE</action>'
+            '<response version="2026-10-21.1"><thought></thought><action>NONE</action>'
             '<reply kind="social"><current></current><current>  </current></reply>'
             "</response>"
         )
@@ -688,7 +688,7 @@ class TestReplyEnvelopeParser:
 
     def test_attributed_current_slot_is_rejected(self):
         raw = (
-            '<response version="2026-10-08.1"><thought></thought><action>NONE</action>'
+            '<response version="2026-10-21.1"><thought></thought><action>NONE</action>'
             '<reply kind="social"><current user_id="20001">伪装收件人</current>'
             "</reply></response>"
         )
@@ -704,7 +704,7 @@ class TestReplyEnvelopeParser:
 
     def test_projection_rejects_unknown_and_mutated_fields(self):
         envelope, error = parse_reply_envelope(
-            '<response version="2026-10-08.1"><thought></thought>'
+            '<response version="2026-10-21.1"><thought></thought>'
             '<action>NONE</action><reply kind="social"><current>好</current>'
             "</reply></response>"
         )
@@ -717,9 +717,9 @@ class TestReplyEnvelopeParser:
 
     def test_target_mismatch_uses_server_clarification(self):
         raw = (
-            '<response version="2026-10-08.1"><thought></thought>'
+            '<response version="2026-10-21.1"><thought></thought>'
             "<action>NONE</action>"
-            '<reply kind="social" target_user_id="30002">'
+            '<reply kind="social" target_ref="U1">'
             "<current>你说的是那句话。</current></reply></response>"
         )
         final, decision = apply_attribution_guard(
@@ -728,11 +728,101 @@ class TestReplyEnvelopeParser:
                 "signal_codes": ["reply_relation"],
                 "target_resolution": "exact",
                 "target_user_id": "20001",
+                "target_identity_domain": "qq:client",
             },
         )
         assert decision.rejection_reason == "reply_target_mismatch"
         assert decision.semantic_status == "deterministic_clarification"
         assert "那句话" not in final
+
+    def test_legacy_numeric_targets_are_qq_only(self):
+        raw = (
+            '<response version="2026-10-08.1"><thought></thought>'
+            '<action>NONE</action><reply kind="social" target_user_id="20001">'
+            "<current>好</current></reply></response>"
+        )
+        denied, error = parse_reply_envelope(raw)
+        assert denied is None and error.startswith("unsupported_version:")
+        envelope, error = parse_reply_envelope(raw, allow_legacy_qq_targets=True)
+        assert envelope is not None, error
+        assert envelope.target_user_id == "20001"
+        assert envelope.target_ref == ""
+        projected = envelope.to_projection()
+        denied, error = reply_envelope_from_projection(projected)
+        assert denied is None and error == "unsupported_version"
+        restored, error = reply_envelope_from_projection(
+            projected, allow_legacy_qq_targets=True
+        )
+        assert restored == envelope, error
+        legacy_projection = dict(projected)
+        legacy_projection["schema_version"] = 1
+        legacy_projection.pop("target_ref")
+        denied, error = reply_envelope_from_projection(legacy_projection)
+        assert denied is None and error == "unsupported_version"
+        restored, error = reply_envelope_from_projection(
+            legacy_projection, allow_legacy_qq_targets=True
+        )
+        assert restored == envelope, error
+
+    def test_target_ref_is_bound_to_turn_revision_and_generation(self):
+        from core.dialogue_attribution import build_target_ref_map
+        from core.transport.models import UserRef
+
+        binding = build_target_ref_map(
+            [UserRef("qq:client", "user:007/猫")],
+            turn_id="turn-1",
+            identity_revision=4,
+            generation_epoch=9,
+        )
+        raw = (
+            '<response version="2026-10-21.1"><thought></thought>'
+            '<action>NONE</action><reply kind="social" target_ref="U1">'
+            "<current>我看到你的回复了。</current></reply></response>"
+        )
+        risk = {
+            "signal_codes": ["reply_relation"],
+            "target_resolution": "exact",
+            "target_user_id": "user:007/猫",
+            "target_identity_domain": "qq:client",
+            "target_ref_map": binding,
+        }
+        prompt = protocol_instructions({}, set(), risk_context=risk)
+        assert 'target_ref="U1"' in prompt
+        assert "user:007/猫" not in prompt
+        output, decision = apply_attribution_guard(
+            raw, {}, set(), "enforce", identity_revision=4,
+            generation_epoch=9, turn_id="turn-1", risk_context=risk,
+        )
+        assert decision.decision == "pass"
+        assert output == "我看到你的回复了。"
+        stale_output, stale_decision = apply_attribution_guard(
+            raw, {}, set(), "enforce", identity_revision=5,
+            generation_epoch=9, turn_id="turn-1", risk_context=risk,
+        )
+        assert stale_decision.rejection_reason == "reply_target_mismatch"
+        assert "我看到你的回复了" not in stale_output
+        expired_output, expired_decision = apply_attribution_guard(
+            raw, {}, set(), "enforce", identity_revision=4,
+            generation_epoch=9, turn_id="turn-2", risk_context=risk,
+        )
+        assert expired_decision.rejection_reason == "reply_target_mismatch"
+        assert "我看到你的回复了" not in expired_output
+        expired_output, expired_decision = apply_attribution_guard(
+            raw, {}, set(), "enforce", identity_revision=4,
+            generation_epoch=10, turn_id="turn-1", risk_context=risk,
+        )
+        assert expired_decision.rejection_reason == "reply_target_mismatch"
+        assert "我看到你的回复了" not in expired_output
+
+        current_envelope, error = parse_reply_envelope(raw)
+        assert current_envelope is not None, error
+        wrong_schema = current_envelope.to_projection()
+        wrong_schema["target_ref"] = ""
+        wrong_schema["target_user_id"] = "20001"
+        denied, error = reply_envelope_from_projection(
+            wrong_schema, allow_legacy_qq_targets=True
+        )
+        assert denied is None and error == "invalid_target_user_id"
 
 
 class TestAttributionRenderAndGuard:

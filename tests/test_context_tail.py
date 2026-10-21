@@ -446,11 +446,11 @@ def test_logical_unit_is_single_self_sufficient_line(tmp_path):
     lines = text.splitlines()
     # 三气泡一行，收件人 A 显式标注（不依赖跨行继承）
     unit = next(line for line in lines if "作者=Bot(" in line)
-    assert unit.startswith("[作者=Bot(1694717255); 回复给=用户(176403822); 原输入=383945296]")
+    assert unit.startswith('[作者=Bot("1694717255"); 回复给=用户("176403822"); 原输入="383945296"]')
     assert "谁是小孩啦" in unit and "下次再乱摸我手给你冻上" in unit
     # B 与 C 的行各自独立，互不吞并
-    assert "[作者=用户(3675784280)] 说过: " in text
-    assert "[作者=用户(1035720144)] 说过: " in text
+    assert '[作者=用户("3675784280")] 说过: ' in text
+    assert '[作者=用户("1035720144")] 说过: ' in text
     assert len(lines) == 4
 
 
@@ -466,8 +466,8 @@ def test_conflicting_metadata_stay_separate_units(tmp_path):
     conn.close()
     lines = [line for line in text.splitlines() if "作者=Bot(" in line]
     assert len(lines) == 2
-    assert "回复给=用户(176403822)" in lines[0]
-    assert "回复给=用户(3675784280)" in lines[1]
+    assert '回复给=用户("176403822")' in lines[0]
+    assert '回复给=用户("3675784280")' in lines[1]
     assert "对A说的话" in lines[0] and "对B说的话" not in lines[0]
 
 
@@ -479,7 +479,7 @@ def test_body_newline_renders_single_physical_line(tmp_path):
     text, _ = _tail(conn)
     conn.close()
     assert len(text.splitlines()) == 1
-    assert text.startswith("[作者=用户(2002)] 说过: ")
+    assert text.startswith('[作者=用户("2002")] 说过: ')
     payload = text.split("说过: ", 1)[1]
     import json as _json
 

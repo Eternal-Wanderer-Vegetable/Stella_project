@@ -3,7 +3,7 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE.
 """运行链接线测试（整改计划 P1/P5）。
 
-覆盖：ChatContext v6 投影、guard hook 三模式与 split_lines 处置、
+覆盖：ChatContext v7 投影、guard hook 三模式与 split_lines 处置、
 typed 检索查询消费、主动合同构建/发送前复核、私聊分享授权入口。
 """
 
@@ -20,7 +20,11 @@ nonebot.init()
 
 from config import settings as settings_mod
 from core.context import ChatContext
-from core.dialogue_attribution import build_evidence_table, evidence_projection
+from core.dialogue_attribution import (
+    build_evidence_table,
+    evidence_projection,
+    protocol_instructions,
+)
 from memory import pre_processors
 from stella_project.plugins.bot_main import ai_gateway as gateway
 
@@ -53,7 +57,7 @@ def _evidence():
     return evidence_projection(table)
 
 
-# ── ChatContext v6 投影 ────────────────────────────────────────────────
+# ── ChatContext v7 投影 ────────────────────────────────────────────────
 
 
 def test_projection_v5_fields_json_safe():
@@ -66,13 +70,35 @@ def test_projection_v5_fields_json_safe():
     )
     proj = ctx.to_json_projection()
     assert json.loads(json.dumps(proj, ensure_ascii=False)) == proj
-    assert proj["projection_schema_version"] == 6
+    assert proj["projection_schema_version"] == 7
     for name in ("retrieval_query", "verification_contract",
                  "attribution_evidence", "attribution_decision",
                  "reply_disposition", "typed_reply", "retained_evidence_ids",
                  "attribution_risk_context", "delivery_draft", "delivery_plan",
                  "guard_decision", "generation_epoch", "runtime_key"):
         assert name in proj, name
+
+
+def test_attribution_prompt_does_not_expose_raw_author_id(tmp_path, monkeypatch):
+    db = tmp_path / "evidence.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE group_messages ("
+            "id INTEGER, user_id TEXT, content TEXT, sender_display_name TEXT, "
+            "timestamp TEXT, conversation_key TEXT, source_kind TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO group_messages VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (501, "platform:user:007/猫", "原话", "", "", "conv", "AT_MENTION"),
+        )
+    monkeypatch.setattr(pre_processors, "DB_PATH", db)
+    ctx = _ctx(conversation_key="conv")
+    messages = pre_processors._recent_trusted_messages(ctx)
+    table = build_evidence_table(messages, [], [])
+    prompt = protocol_instructions(table, set(table))
+
+    assert "platform:user:007/猫" not in prompt
+    assert "作者=用户" in prompt
 
 
 # ── guard hook 三模式 + split_lines 处置 ───────────────────────────────
@@ -93,7 +119,7 @@ def _raw_envelope(kind="social", now="哈哈原来如此", ref=None):
         slot += f'<quote evidence_id="{ref}"/>'
         kind = "quote"
     return (
-        '<response version="2026-10-08.1">'
+        '<response version="2026-10-21.1">'
         "<thought></thought><action>NONE</action>"
         f'<reply kind="{kind}">{slot}</reply></response>'
     )
@@ -181,7 +207,7 @@ async def test_current_correction_routes_through_server_ack_template(monkeypatch
     ctx = _ctx(
         user_id=20001,
         raw_output=(
-            '<response version="2026-10-08.1"><thought>不得输出的诊断</thought>'
+            '<response version="2026-10-21.1"><thought>不得输出的诊断</thought>'
             '<action>NONE</action><reply kind="correction"><ack/></reply></response>'
         ),
     )

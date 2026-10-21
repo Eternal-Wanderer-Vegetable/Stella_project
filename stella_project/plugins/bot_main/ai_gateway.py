@@ -145,6 +145,7 @@ from memory.consolidator import get_consolidator, maybe_consolidate
 from memory.conversation_projection import (
     canonical_message_id_text,
     parse_platform_message_id,
+    parse_qq_message_id,
 )
 from memory.participation import get_participation_manager
 from memory.post_processors import (
@@ -689,7 +690,10 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
             # DIRECT/empty generations may legitimately bypass parse_output.
             return ctx
         envelope, projection_error = reply_envelope_from_projection(
-            typed_reply
+            typed_reply,
+            allow_legacy_qq_targets=(
+                getattr(getattr(ctx, "user_ref", None), "identity_domain", "") == "qq:client"
+            ),
         )
         parse_error = typed_error or projection_error
         is_typed_special = bool(
@@ -713,6 +717,7 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
             generation_epoch=int(getattr(ctx, "generation_epoch", 0) or 0),
             risk_context=getattr(ctx, "attribution_risk_context", None),
             parse_error=parse_error,
+            turn_id=str(getattr(ctx, "turn_id", "") or ""),
         )
         record = {
             "decision": decision.decision,
@@ -723,6 +728,7 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
             "guard_mode": effective_mode,
             "identity_revision": decision.identity_revision,
             "generation_epoch": decision.generation_epoch,
+            "turn_id": str(getattr(ctx, "turn_id", "") or ""),
             "semantic_status": decision.semantic_status,
             "verified": decision.verified,
             "checked_evidence_ids": decision.checked_evidence_ids,
@@ -1332,15 +1338,19 @@ def _extract_reply_candidate(event) -> str | None:
     主体仍由 resolve_reply_target 按同 canonical conversation+bot 查库
     解析，平台侧信息不绕过入库校验。
     """
+    def _reply_ids(segments) -> list[str]:
+        ids = []
+        for segment in segments:
+            if _message_segment_type(segment) != "reply":
+                continue
+            raw_id = _message_segment_data(segment).get("id")
+            if raw_id is not None:
+                ids.append(str(raw_id))
+        return ids
+
     segments = _relation_segments(event)
     if segments is not None:
-        candidate = _unique_reply_candidate(
-            [
-                str(_message_segment_data(seg).get("id") or "")
-                for seg in segments
-                if _message_segment_type(seg) == "reply"
-            ]
-        )
+        candidate = _unique_reply_candidate(_reply_ids(segments))
         if candidate is not None:
             return candidate
     reply = getattr(event, "reply", None)
@@ -1352,13 +1362,7 @@ def _extract_reply_candidate(event) -> str | None:
         processed = list(event.get_message())
     except Exception:
         return None
-    return _unique_reply_candidate(
-        [
-            str(_message_segment_data(seg).get("id") or "")
-            for seg in processed
-            if _message_segment_type(seg) == "reply"
-        ]
-    )
+    return _unique_reply_candidate(_reply_ids(processed))
 
 
 def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
@@ -3497,15 +3501,17 @@ async def _record_bot_lines(
         # 纯标点/单字兜底行（如 "......？"）无信息量，只会占用上下文尾巴窗口
         if len(text) < 2 or not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
             continue
-        # 平台回执 message ID 可为负数（真实回执 -558868042）：统一走投影
-        # 模块的有符号解析；0/非法 = 平台 ID 缺失，不猜（归属修复计划 §6.1）
-        platform_id_num = parse_platform_message_id(platform_id) or 0
+        # DB 仍使用 legacy QQ INTEGER 列；上下文另存平台原始 ID，避免把
+        # 不透明外部 ID 转成行号或数字哨兵。
+        platform_id_text = parse_platform_message_id(platform_id) or ""
+        platform_id_num = parse_qq_message_id(platform_id) or 0
         try:
             await record_message(
                 ChatContext(
                     user_id=self_id,
                     group_id=group_id,
                     msg_id=platform_id_num,
+                    platform_message_id=platform_id_text,
                     message=text,
                     source_kind="BOT_SELF",
                     conversation_kind=getattr(origin, "conversation_kind", "") or "",
