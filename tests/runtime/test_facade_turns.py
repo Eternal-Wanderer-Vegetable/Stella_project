@@ -50,11 +50,13 @@ async def test_default_provider_uses_shared_chat_gate_across_conversations(
     active = 0
     peak = 0
     release = asyncio.Event()
+    first_started = asyncio.Event()
 
     async def generate(prompt: str, system_prompt: str = "") -> str:
         nonlocal active, peak
         active += 1
         peak = max(peak, active)
+        first_started.set()
         try:
             await release.wait()
             return "<thought>ok</thought><action>NONE</action><reply>ok</reply>"
@@ -69,23 +71,25 @@ async def test_default_provider_uses_shared_chat_gate_across_conversations(
         submitted.append(asyncio.create_task(
             h.facade.submit_turn("qq:bot:group:a", h.pipeline, h.ctx("A"))
         ))
-        for _ in range(200):
-            if active:
-                break
-            await asyncio.sleep(0.005)
+        await asyncio.wait_for(first_started.wait(), timeout=10.0)
         assert active == 1
 
         submitted.append(asyncio.create_task(
             h.facade.submit_turn("qq:bot:group:b", h.pipeline, h.ctx("B"))
         ))
+        second = submitted[-1]
         queued_or_overlapped = False
-        for _ in range(200):
+        for _ in range(1000):
             state = scheduler.snapshot().get(resource, {})
             if peak > 1 or state.get("waiting", 0) > 0:
                 queued_or_overlapped = True
                 break
-            await asyncio.sleep(0.005)
+            if second.done():
+                break
+            await asyncio.sleep(0.01)
 
+        if not queued_or_overlapped and second.done() and not second.cancelled():
+            second.result()
         assert queued_or_overlapped, "第二个会话既未进入后端，也未在共享资源门排队"
         assert peak == 1, "默认 provider 并发绕过共享 CHAT 资源上限"
         assert scheduler.snapshot()[resource]["limit"] == 1
