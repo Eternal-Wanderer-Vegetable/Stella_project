@@ -141,10 +141,28 @@ G04b 将把总期限扩展到锁、prepare、路由/工具等待和 finalize；G
 - 提交前 GitNexus 1.6.11 `detect-changes --scope all`：16 files / 40 symbols / 2 processes / MEDIUM；`--scope compare --base-ref main`：484 files / 938 symbols / 69 processes / CRITICAL（累计分支风险）。两个命令退出 0，未报告 partial/truncated；compare 值不是 G06 局部风险。
 - G06 状态/evidence 文档提交前 GitNexus：scope all 为 4 files / 7 symbols / 0 processes / LOW；compare main 为 489 files / 982 symbols / 78 processes / CRITICAL（累计）。均退出 0 且无 partial/truncated 标记。`scripts/check_docs.py` 为 119 files / 1,244 local links / 577 migration anchors / 0 errors；`feature_list.json` 可解析，`git diff --check` 通过。
 
-G06 仅证明离线状态/API、合成 Dashboard 与本地 flow 目录。生产账号/数据、真实模型、QQ/WebChat、Cometa 跨进程、干净 VM 和发布验收均未执行；整体继续 **NOT READY**。下一步为 G07 故障矩阵、确定性评测与发布证据。
+G06 仅证明离线状态/API、合成 Dashboard 与本地 flow 目录。生产账号/数据、真实模型、QQ/WebChat、Cometa 跨进程、干净 VM 和发布验收均未执行；整体继续 **NOT READY**。G07 离线组合验收记录如下，之后进入 G08。
+
+## G07 V1 组合验收与发布夹具
+
+代码提交 `bfb1fa2` 增加 V1 场景清单、隔离评测 runner 和 Python CI 步骤：
+
+- `tests/gravitas/fixtures/v1/suite.json` 将 S01–S12 按冻结 inventory 顺序映射到现有 runtime、调度、期限、回执、记忆和控制面回归，并逐项核验计划版本、场景与不变量。冻结的 `docs/plans/2026-10-21-gravitas-inventory.json` 未改动。
+- `scripts/run_gravitas_evaluation.py` 要求显式 suite 与空 workdir；每个场景进程使用独立临时 `STELLA_HOME`，清除继承的 Gravitas/模型评估配置和 pytest 附加参数。每次评估两轮执行 S01–S12，保存每条测试日志、源文件指纹、结构化 `ExperimentReport` 和同 seed 语义摘要；失败时输出不变量、seed、策略版本和事件前缀。
+- 状态模型对 off/shadow 各回放 10 个连续固定 seed（20261021–20261030），每个 256 个事件，共 2,560 个合成事件；核验资源/队列上限、身份与 endpoint 拒绝、期限、unknown 不重放、记忆成功水位/清理以及 shadow 效果等价。CI 的 3.11 job 显式运行固定 10 seeds 并上传报告/日志；原 Python 3.10/3.11/3.12 测试矩阵不变。
+- runner 将 Standalone Python 与 OneClick Python resources 分别暂存，并从暂存根导入 `gravitas.controller` 和 `core.runtime.facade`。这是包布局/import smoke，不是 Windows installer 执行、clean VM 或发布验收。
+
+### G07 验证与风险
+
+- 定向守卫：`STELLA_HOME=/tmp/stella-gravitas-g07-unit-final-20261021b .venv/bin/pytest tests/gravitas/test_g07_v1_scenarios.py -q -x`：**4 passed**。全量隔离回归：`STELLA_HOME=/tmp/stella-gravitas-g07-full-final-20261021 .venv/bin/pytest tests -q -x`：**3,976 passed / 29 skipped / 1 existing PytestRemovedIn10Warning，359.95s**；warning 是 `tests/observability/test_internal_flow_inventory.py` 的 class-scoped fixture method deprecation。
+- 离线组合命令：`STELLA_HOME=/tmp/stella-gravitas-g07-cli-home-final2-20261021 .venv/bin/python scripts/run_gravitas_evaluation.py --suite tests/gravitas/fixtures/v1 --workdir /tmp/stella-gravitas-g07-eval-final2-20261021 --seed 20261021 --trace-seeds 10 --steps 256 --repeat 2`。结果 `status=completed`，S01–S12、generated trace、package layout/import 与 same-seed semantic digest 全部 PASS；报告 digest `6d35e75631c1861239cb4ac2cd8555a8e6a5058e`，两个 scenario replay digest 一致。live model/platform 与 clean VM/release 明确为 SKIPPED。完整离线 JSON 位于该临时 workdir 的 `report.json`。
+- `.venv/bin/ruff check .`、runner/test `py_compile`、`scripts/check_docs.py`（119 files / 1,244 local links / 577 anchors / 0 errors）、`scripts/generate_message_flow.py --check`（归档仍为 `message-flow.d2b36de1444a.json`）、CI YAML 解析和 `git diff --check` 均通过。没有生产 runtime/schema 改动；测试与包构建使用隔离 `/tmp` 路径。
+- GitNexus 1.6.11 对新 runner 符号 `_trace_model` / `_evaluate_seeded_traces` 的 impact 查询均为 UNKNOWN（索引中无目标）；`.github/workflows/ci.yml` 文件同为 UNKNOWN。源码引用审计确认 runner 只由 G07 守卫测试导入，workflow 只在 Python 3.11 测试 job 调用它，且仓库 pytest `testpaths` 覆盖 `tests`。提交前 `detect-changes --scope all`：4 个暂存文件、未发现索引符号与 hunks 重叠；这不是“干净”或 LOW 结论，新增文件/CI 以源码审计补证。`compare --base-ref main`：493 files / 984 symbols / 78 processes / CRITICAL（累计分支风险）；两次都未报告 partial/truncated，compare 的累计风险不等于 G07 局部风险。
+
+G07 的离线 V1 组合验收完成，但不会据此启用 enforce 或宣告 release READY。真实模型质量、QQ/WebChat 灰度、Cometa 跨进程恢复、Windows/Linux clean VM、实际 installer 和发布资产仍缺验收。下一步是 G08 依赖与存储分域恢复。
 
 ## 未完成与验收边界
 
-- G00–G06 已完成；G07–G09 仍须逐包实现、验证和提交。
+- G00–G07 已完成；G08–G09 仍须逐包实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。
