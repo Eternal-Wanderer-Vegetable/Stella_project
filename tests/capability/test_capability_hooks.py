@@ -18,6 +18,7 @@ import pytest
 
 from capability.hooks import (
     HOOK_PRIORITY,
+    _build_astr_event,
     activate_capabilities,
     build_tool_tasks,
     register,
@@ -339,6 +340,16 @@ def test_comes_skipped_without_platform_handles(stub_route, spy_memory, spy_come
     ctx = _run(activate_capabilities(_ctx()))
     assert spy_comes == []
     assert ctx.tool_summaries == []
+
+
+def test_astrbot_event_builder_rejects_unadapted_platform_context():
+    """A raw handle alone does not make OneBot AstrBot tools safe on another adapter."""
+    ctx = _ctx(
+        raw_event=object(),
+        bot=object(),
+        adapter_name="satori",
+    )
+    assert _run(_build_astr_event(ctx)) is None
 
 
 def test_comes_skipped_when_disabled(

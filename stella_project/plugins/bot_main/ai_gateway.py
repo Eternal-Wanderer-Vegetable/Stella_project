@@ -127,6 +127,7 @@ from core.social.delivery import (
     seal_delivery_plan,
 )
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
+from core.transport import AdmissionPolicy, UnsupportedEvent, normalize_onebot11
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
 from memory import addressing, capture_gate, expression_learning, social_store
@@ -227,6 +228,12 @@ _reply_check_tasks: set[asyncio.Task] = set()
 # 插件已处理标记：event_key -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
 _plugin_handled_msgs: OrderedDict[str, float] = OrderedDict()
 _addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
+_ingress_admission = AdmissionPolicy()
+
+
+def _normalized_onebot_event(event: Any):
+    """Normalize a trusted OneBot message without interpreting its body as identity."""
+    return normalize_onebot11(event, connection_id=f"legacy-qq:{getattr(event, 'self_id', '')}")
 
 
 # ============================================================
@@ -1113,28 +1120,33 @@ async def record_group_chat(event: GroupMessageEvent):
     # 真实控制边界（修复计划 §6.4）：监听器被调用 = 进入过滤段
     _flow_transition(fctx, from_node="ingress.receive",
                      to_node="ingress.passive.filter")
-    if event.group_id not in ALLOWED_GROUPS:
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
         _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                       reason_code="group_not_allowed")
+                       reason_code=normalized.reason_code)
         return
-    # 防止 OneBot 回显自身消息造成重复入库（自身发言会经 _record_bot_lines 单独落库）
-    if event.user_id == event.self_id:
+    needs_images = not normalized.text.strip() or (
+        PARTICIPATION_ENABLED and not normalized.is_tome
+    )
+    images = (
+        extract_image_sources(normalized)
+        if needs_images and vision_available()
+        else []
+    )
+    admission = _ingress_admission.decide(
+        normalized,
+        purpose="passive",
+        enabled=event.group_id in ALLOWED_GROUPS,
+        vision_enabled=bool(images),
+    )
+    if not admission.allowed:
         _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                       reason_code="self_echo")
+                       reason_code=(
+                           "group_not_allowed" if admission.reason_code == "disabled"
+                           else admission.reason_code
+                       ))
         return
-    text = event.get_plaintext().strip()
-    if text.startswith("/"):
-        _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                       reason_code="slash_command")
-        return
-    if not text:
-        # 纯图片消息：识图功能可用时按 [图片] 占位入库，让尾巴/整合知道
-        # 「刚才有人发过图」；不可用（默认）时照旧不落库，与旧版一致。
-        if not (vision_available() and extract_image_sources(event)):
-            _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                           reason_code="empty_text_no_vision")
-            return
-        text = "[图片]"
+    text = normalized.text.strip() or "[图片]"
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
     # 采集就绪门（计划 §6.3）：资格过滤之后、落库与一切内容派生副作用之前。
     # 关闭时本条消息不落库、不排队、不回放——恢复后从下一条新消息开始采集。
@@ -1147,6 +1159,7 @@ async def record_group_chat(event: GroupMessageEvent):
             f"原因 {capture.reason_code or 'closed'}）"
         )
         return
+    ref = _register_group_conversation(event)
     _flow_transition(fctx, from_node="ingress.passive.filter",
                      to_node="ingress.passive.persist")
     # 消息关系提取（多人身份修复计划 §6.2）：无条件执行（不依赖 SOCIAL_ENABLED），
@@ -1157,7 +1170,7 @@ async def record_group_chat(event: GroupMessageEvent):
         getattr(getattr(event, "sender", None), "card", "")
         or getattr(getattr(event, "sender", None), "nickname", "")
     )
-    conversation_key = f"qq:{event.self_id}:group:{event.group_id}"
+    conversation_key = ref.conversation_key
     reply_target_uid = resolve_reply_target(
         reply_to_id or "",
         event.group_id,
@@ -1178,8 +1191,18 @@ async def record_group_chat(event: GroupMessageEvent):
         conversation_kind="group",
         conversation_key=conversation_key,
         bot_id=str(event.self_id),
-        peer_id=str(event.group_id),
-        storage_session_id=event.group_id,
+        peer_id=ref.peer_id,
+        storage_session_id=ref.storage_session_id,
+        group_shared_space=ref.memory_space,
+        user_ref=normalized.user_ref,
+        bot_ref=normalized.bot_ref,
+        scene_ref=normalized.scene_ref,
+        connection_id=normalized.bot_ref.connection_id,
+        adapter_name=normalized.bot_ref.adapter,
+        platform_scope=normalized.bot_ref.platform_scope,
+        scene_kind=normalized.scene_ref.kind,
+        scene_id=normalized.scene_ref.scene_id,
+        platform_message_id=normalized.platform_message_id,
         sender_display_name=sender_display,
         reply_to_msg_id=str(reply_to_id or ""),
         reply_target_user_id=reply_target_uid,
@@ -1263,7 +1286,7 @@ async def record_group_chat(event: GroupMessageEvent):
                 reply_to=int(reply_to_id) if (reply_to_id or "").isdigit() else None,
                 mentioned_users=tuple(int(m) for m in mentioned_users if m.isdigit()),
                 is_tome=event.is_tome(),
-                has_image=bool(extract_image_sources(event)) if vision_available() else False,
+                has_image=bool(images),
                 has_emoji=bool(expression_learning._EMOJI_RE.search(text)),
                 # 消息链上的 participation 探针显式挂在消息 root（计划 §6.2：
                 # 显式传递优先于环境隐式传播），全等级决策事件随消息 trace 可查
@@ -1402,19 +1425,28 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     带图片」——@ Stella + 纯图也能进对话；功能未配置（默认）时判据与
     旧版逐字一致，纯图消息照旧不触发。
     """
-    _tome = event.is_tome()
-    _txt = event.get_plaintext().strip()
-    _gid_ok = event.group_id in ALLOWED_GROUPS
-    logger.info(f"[chat_debug] is_chat_trigger gid={event.group_id} gid_ok={_gid_ok} is_tome={_tome} text={_txt!r} self_id={event.self_id} raw={event.get_message()!r}")
-    if event.group_id not in ALLOWED_GROUPS:
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
         return False
-    if not event.is_tome():
-        return False
-    if len(event.get_plaintext().strip()) > 0:
-        return True
-    # 识图功能未启用时 extract_image_sources 不取图源、直接判空，
-    # 行为与旧版一致（纯图 @ 不触发）。
-    return vision_available() and bool(extract_image_sources(event))
+    image_enabled = (
+        not normalized.text.strip()
+        and vision_available()
+        and bool(extract_image_sources(normalized))
+    )
+    admission = _ingress_admission.decide(
+        normalized,
+        purpose="group_chat",
+        enabled=event.group_id in ALLOWED_GROUPS,
+        vision_enabled=image_enabled,
+    )
+    logger.info(
+        f"[chat_debug] is_chat_trigger gid={event.group_id} "
+        f"gid_ok={event.group_id in ALLOWED_GROUPS} is_tome={normalized.is_tome} "
+        f"text={normalized.text.strip()!r} self_id={event.self_id} "
+        f"raw={event.get_message()!r} allowed={admission.allowed} "
+        f"reason={admission.reason_code}"
+    )
+    return admission.allowed
 
 
 async def is_plugin_trigger(event: MessageEvent) -> bool:
@@ -1424,6 +1456,11 @@ async def is_plugin_trigger(event: MessageEvent) -> bool:
     ``WakingCheckStage``），而这里只负责把 Stella 侧的两项配置传进去。这样那条规则
     也能被单测覆盖——ai_gateway 在测试里 import 不进来（import 期就 ``get_driver()``）。
     """
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        return False
+    if not _ingress_admission.decide(normalized, purpose="plugin").allowed:
+        return False
     from astrbot_compat.pipeline import should_dispatch
 
     return should_dispatch(
@@ -1472,6 +1509,12 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
     fctx = _flow_root_or_create(event, "qq_chat")
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        _flow_decision(fctx, "ingress.chat.rule", status="skipped",
+                       reason_code=normalized.reason_code)
+        _flow_set_outcome(fctx, "unsupported_event")
+        return
     # matcher 命中即聊天触发规则通过（修复计划 §6.4 真实边界）
     _flow_transition(fctx, from_node="ingress.chat.rule",
                      to_node="chat.plugin_shortcut")
@@ -1497,10 +1540,11 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             get_participation_manager().bump_topic_revision(event.group_id)
         # 纯图片 @（无文字）时给 message 一个占位文本：它是检索查询与 prompt
         # 的当前输入，空串会让整轮对话退化成「没有当前输入」。
-        message_text = event.get_plaintext().strip() or "[图片]"
+        message_text = normalized.text.strip() or "[图片]"
         # cometa 可信 Origin（方案 §6.5/§6.4.1）：只在 @ 触达路径构造；
         # 委派决策在能力钩子里读它——这里不判断要不要委派，只提供身份事实。
         with _flow_span(fctx, "chat.context"):
+            ref = _register_group_conversation(event)
             if _cometa_enabled():
                 ctx_origin = cometa_bridge.build_origin(
                     event, bot, instance_id=_cometa_instance_id()
@@ -1516,10 +1560,20 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 # v3 会话身份（计划 §6.1）：群轮次也带规范键，检索 scope 由
                 # 服务端从这组字段生成
                 conversation_kind="group",
-                conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                conversation_key=ref.conversation_key,
                 bot_id=str(event.self_id),
-                peer_id=str(event.group_id),
-                storage_session_id=event.group_id,
+                peer_id=ref.peer_id,
+                storage_session_id=ref.storage_session_id,
+                group_shared_space=ref.memory_space,
+                user_ref=normalized.user_ref,
+                bot_ref=normalized.bot_ref,
+                scene_ref=normalized.scene_ref,
+                connection_id=normalized.bot_ref.connection_id,
+                adapter_name=normalized.bot_ref.adapter,
+                platform_scope=normalized.bot_ref.platform_scope,
+                scene_kind=normalized.scene_ref.kind,
+                scene_id=normalized.scene_ref.scene_id,
+                platform_message_id=normalized.platform_message_id,
                 # v4 当前输入信封（多人身份修复计划 §6.2）：纠正解析/预算
                 # parts 都从这里读关系，权威来自平台事件
                 sender_display_name=normalize_display_name(
@@ -1531,7 +1585,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                     _reply_to_id or "",
                     event.group_id,
                     bot_id=str(event.self_id),
-                    conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                    conversation_key=ref.conversation_key,
                 ),
                 mentioned_user_ids=tuple(_mentioned),
                 relation_version=1,
@@ -1543,7 +1597,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 cometa_origin=ctx_origin,
                 # 图片来源（本体 + 引用）；识图未启用时保持空列表，describe_images_hook
                 # 会跳过，行为与旧版一致。
-                image_sources=extract_image_sources(event) if vision_available() else [],
+                image_sources=extract_image_sources(normalized) if vision_available() else [],
                 # 身份绑定：与流程 root 共用 trace（计划 §6.2 入口绑定）
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             )
@@ -1810,16 +1864,22 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
 async def is_private_trigger(event: PrivateMessageEvent) -> bool:
     """私聊触发规则：开关开启、非自身回显、（可选）白名单内、非空文本。"""
-    if not PRIVATE_CHAT_ENABLED:
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
         return False
-    if event.user_id == event.self_id:
-        return False
-    if PRIVATE_CHAT_ALLOWLIST and event.user_id not in PRIVATE_CHAT_ALLOWLIST:
-        return False
-    if len(event.get_plaintext().strip()) > 0:
-        return True
-    # 纯图片私聊：与群口径一致——识图可用才算触发
-    return vision_available() and bool(extract_image_sources(event))
+    image_enabled = (
+        not normalized.text.strip()
+        and vision_available()
+        and bool(extract_image_sources(normalized))
+    )
+    admission = _ingress_admission.decide(
+        normalized,
+        purpose="private_chat",
+        enabled=PRIVATE_CHAT_ENABLED,
+        allowed_user_ids={str(user_id) for user_id in PRIVATE_CHAT_ALLOWLIST},
+        vision_enabled=image_enabled,
+    )
+    return admission.allowed
 
 
 private_chat_handler = on_message(
@@ -1834,6 +1894,17 @@ def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
     conn = sqlite3.connect(DB_PATH)
     try:
         return get_or_register_private(conn, str(event.self_id), int(event.user_id))
+    finally:
+        conn.close()
+
+
+def _register_group_conversation(event: GroupMessageEvent):
+    """Register every trusted QQ group ingress before writing its message."""
+    from memory.conversation_registry import get_or_register_group
+
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        return get_or_register_group(conn, str(event.self_id), int(event.group_id))
     finally:
         conn.close()
 
@@ -2015,6 +2086,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         _flow_set_outcome(fctx, "plugin_handled")
         logger.debug(f"[chat] 私聊已由插件处理，跳过 LLM (user {event.user_id})")
         return
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        _flow_decision(fctx, "ingress.chat.rule", status="skipped",
+                       reason_code=normalized.reason_code)
+        _flow_set_outcome(fctx, "unsupported_event")
+        return
     bot_id = str(event.self_id)
     lock = _private_locks[f"qq:{bot_id}:private:{event.user_id}"]
     lock_span = _flow_span(fctx, "chat.conversation_lock")
@@ -2024,7 +2101,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         with _flow_span(fctx, "chat.context"):
             # 会话注册（幂等，负整数存储 ID 在这里分配）
             ref = _register_private_conversation(bot, event)
-            message_text = event.get_plaintext().strip() or "[图片]"
+            message_text = normalized.text.strip() or "[图片]"
             if _cometa_enabled():
                 ctx_origin = cometa_bridge.build_origin(
                     event, bot, instance_id=_cometa_instance_id()
@@ -2045,11 +2122,18 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 bot_id=bot_id,
                 peer_id=ref.peer_id,
                 storage_session_id=ref.storage_session_id,
+                user_ref=normalized.user_ref,
+                bot_ref=normalized.bot_ref,
+                scene_ref=normalized.scene_ref,
+                connection_id=normalized.bot_ref.connection_id,
+                adapter_name=normalized.bot_ref.adapter,
+                platform_scope=normalized.bot_ref.platform_scope,
+                scene_kind=normalized.scene_ref.kind,
+                scene_id=normalized.scene_ref.scene_id,
+                platform_message_id=normalized.platform_message_id,
                 trigger="reply",
                 # v4 当前输入信封（多人身份修复计划 §6.2）
-                sender_display_name=normalize_display_name(
-                    getattr(getattr(event, "sender", None), "nickname", "")
-                ),
+                sender_display_name=normalize_display_name(normalized.sender_display_name),
                 reply_to_msg_id=str(_reply_to_id or ""),
                 reply_target_user_id=resolve_reply_target(
                     _reply_to_id or "",
@@ -2062,7 +2146,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 raw_event=event,
                 bot=bot,
                 cometa_origin=ctx_origin,
-                image_sources=extract_image_sources(event) if vision_available() else [],
+                image_sources=extract_image_sources(normalized) if vision_available() else [],
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             )
             try:

@@ -120,6 +120,70 @@ class TestEventKey:
         assert len(keys) == 3  # 同 msg_id 不同 Bot/会话互不压掉
 
 
+class TestPluginIngress:
+    @pytest.mark.asyncio
+    async def test_segment_only_event_reaches_plugin_filter_but_empty_event_does_not(
+        self, monkeypatch
+    ):
+        import astrbot_compat.pipeline as plugin_pipeline
+
+        monkeypatch.setattr(gateway, "ALLOWED_GROUPS", {123})
+        monkeypatch.setattr(
+            plugin_pipeline, "should_dispatch", lambda *_a, **_kw: True
+        )
+
+        def event(segments):
+            return SimpleNamespace(
+                self_id="10000",
+                user_id=20001,
+                message_type="group",
+                group_id=123,
+                message_id=1,
+                get_plaintext=lambda: "",
+                get_message=lambda: segments,
+            )
+
+        non_text = SimpleNamespace(type="json")
+        assert await gateway.is_plugin_trigger(event([non_text]))
+        assert not await gateway.is_plugin_trigger(event([]))
+
+
+class TestSharedAdmission:
+    @pytest.mark.asyncio
+    async def test_group_pure_image_requires_vision_and_mention(self, monkeypatch):
+        event = SimpleNamespace(
+            self_id="10000",
+            user_id=20001,
+            message_type="group",
+            group_id=123,
+            message_id="image-1",
+            get_plaintext=lambda: "",
+            get_message=lambda: [SimpleNamespace(type="image")],
+            is_tome=lambda: True,
+        )
+        monkeypatch.setattr(gateway, "ALLOWED_GROUPS", {123})
+        monkeypatch.setattr(gateway, "vision_available", lambda: False)
+        monkeypatch.setattr(gateway, "extract_image_sources", lambda _event: ["image"])
+        assert not await gateway.is_chat_trigger(event)
+        monkeypatch.setattr(gateway, "vision_available", lambda: True)
+        assert await gateway.is_chat_trigger(event)
+        event.is_tome = lambda: False
+        assert not await gateway.is_chat_trigger(event)
+
+    def test_listener_priority_and_command_exclusion_contracts(self, monkeypatch):
+        assert gateway._PRIORITY_SILENT < gateway._PRIORITY_TOGGLE
+        assert gateway._PRIORITY_TOGGLE < gateway._PRIORITY_PLUGIN
+        assert gateway._PRIORITY_PLUGIN < gateway._PRIORITY_CHAT
+        errors = []
+        monkeypatch.setattr(gateway.logger, "critical", lambda message, *_a, **_kw: errors.append(message))
+        gateway._assert_listener_priorities()
+        gateway._assert_addressing_rule_disjoint()
+        gateway._assert_capability_rule_disjoint()
+        gateway._assert_reload_rule_disjoint()
+        gateway._assert_scheduling_rule_disjoint()
+        assert errors == []
+
+
 @pytest.mark.asyncio
 async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     """正文不带 @ 的私聊：注册 → 落库一次（PRIVATE_DIRECT/负存储键）→ 回复。"""
@@ -152,6 +216,11 @@ async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     assert msgs == [("-2", "20001", "PRIVATE_DIRECT", "在吗")]
     # runtime 键 = 规范会话键
     assert engine.await_args.args[0] == "qq:10000:private:20001"
+    ingress_ctx = engine.await_args.args[1]
+    assert ingress_ctx.user_ref.raw_user_id == "20001"
+    assert ingress_ctx.user_ref.identity_domain == "qq:client"
+    assert ingress_ctx.scene_ref.kind == "private"
+    assert ingress_ctx.connection_id == "legacy-qq:10000"
     # 回复已发送
     assert env.send.await_count == 1
     # BOT_SELF 按确认送达片段落库（存储键参数）

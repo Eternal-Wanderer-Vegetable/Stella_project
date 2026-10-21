@@ -104,6 +104,10 @@ def group_env(tmp_path, monkeypatch):
     """群链路隔离：临时库 + 社会关闭 + 表达/参与打间谍。"""
     db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(pre, "DB_PATH", db)
+    monkeypatch.setattr(gateway, "DB_PATH", db)
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "resolve_space", lambda _group_id: "test-space")
     monkeypatch.setattr(gateway, "ALLOWED_GROUPS", {GROUP})
     monkeypatch.setattr(gateway, "_social_delivery_enabled", lambda: False)
     monkeypatch.setattr(gateway, "PARTICIPATION_ENABLED", True)
@@ -129,6 +133,10 @@ async def test_group_closed_gate_writes_nothing_derived(group_env, monkeypatch):
     _install_closed(monkeypatch)
     await gateway.record_group_chat(_group_event())
     assert _rows(group_env.db) == []
+    assert _rows(
+        group_env.db,
+        "SELECT conversation_key, storage_session_id FROM conversation_registry",
+    ) == []
     assert group_env.calls == {"expression": 0, "observe": 0}
 
 
@@ -141,6 +149,10 @@ async def test_group_ready_gate_persists_with_side_effects(group_env, monkeypatc
     assert len(rows) == 1
     assert rows[0]["source_kind"] == "PASSIVE"
     assert rows[0]["content"] == "今天天气不错"
+    assert _rows(
+        group_env.db,
+        "SELECT conversation_key, storage_session_id FROM conversation_registry",
+    ) == [{"conversation_key": f"qq:{BOT}:group:{GROUP}", "storage_session_id": GROUP}]
     assert group_env.calls["expression"] == 1
     assert group_env.calls["observe"] == 1
 

@@ -91,6 +91,11 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         new_trace_id,
         utc_now_iso,
     )
+    from core.transport import (
+        AdmissionPolicy,
+        UnsupportedEvent,
+        normalize_trusted_webchat,
+    )
     from memory import capture_gate, conversation_registry, social_store
     from memory.pre_processors import record_message
 
@@ -99,6 +104,17 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
     import sqlite3 as _sqlite3
 
     from config import DB_PATH
+
+    normalized = normalize_trusted_webchat(
+        message.strip(),
+        user_id=str(WEBCHAT_USER_ID),
+        display_name=username,
+    )
+    if isinstance(normalized, UnsupportedEvent):
+        raise ValueError(f"WebChat message rejected: {normalized.reason_code}")
+    admission = AdmissionPolicy().decide(normalized, purpose="webchat")
+    if not admission.allowed:
+        raise ValueError(f"WebChat message rejected: {admission.reason_code}")
 
     ref = None
     if DB_PATH.parent.exists():
@@ -123,7 +139,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         user_id=WEBCHAT_USER_ID,
         group_id=WEBCHAT_GROUP_ID,
         msg_id=0,
-        message=message.strip(),
+        message=normalized.text,
         source_kind="AT_MENTION",
         group_shared_space=WEBCHAT_SPACE,
         # v3 会话身份（计划 §6.1）：WebChat kind 不可被认作 QQ 用户
@@ -131,6 +147,14 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         conversation_key=ref.conversation_key if ref else "",
         peer_id=str(WEBCHAT_USER_ID) if ref else "",
         storage_session_id=ref.storage_session_id if ref else 0,
+        user_ref=normalized.user_ref,
+        bot_ref=normalized.bot_ref,
+        scene_ref=normalized.scene_ref,
+        connection_id=normalized.bot_ref.connection_id,
+        adapter_name=normalized.bot_ref.adapter,
+        platform_scope=normalized.bot_ref.platform_scope,
+        scene_kind=normalized.scene_ref.kind,
+        scene_id=normalized.scene_ref.scene_id,
         trigger="reply",
         # 身份绑定：root 已有 trace_id 就共用（facade 不再另造，计划 §6.2）
         trace_id=getattr(flow_ctx, "trace_id", "") or new_trace_id(),
@@ -193,6 +217,14 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
                     conversation_kind=getattr(ctx, "conversation_kind", "") or "",
                     conversation_key=getattr(ctx, "conversation_key", "") or "",
                     bot_id=str(getattr(ctx, "bot_id", "") or ""),
+                    user_ref=ctx.user_ref,
+                    bot_ref=ctx.bot_ref,
+                    scene_ref=ctx.scene_ref,
+                    connection_id=ctx.connection_id,
+                    adapter_name=ctx.adapter_name,
+                    platform_scope=ctx.platform_scope,
+                    scene_kind=ctx.scene_kind,
+                    scene_id=ctx.scene_id,
                     logical_message_id=logical_id,
                     part_index=i,
                     reply_recipient_user_id=str(WEBCHAT_USER_ID),

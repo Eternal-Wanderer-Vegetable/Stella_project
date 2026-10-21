@@ -63,6 +63,9 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     delivery_db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(settings, "DB_PATH", delivery_db)
     monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "resolve_space", lambda _group_id: "test-space")
     with sqlite3.connect(delivery_db) as conn:
         create_memory_scope_versions_table(conn)
     monkeypatch.setattr(social_store, "_TABLES_READY", False)

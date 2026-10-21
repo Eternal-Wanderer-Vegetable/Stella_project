@@ -50,6 +50,9 @@ async def test_handle_chat_sends_deterministic_reply_once(
     delivery_db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(settings, "DB_PATH", delivery_db)
     monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "resolve_space", lambda _group_id: "test-space")
     with sqlite3.connect(delivery_db) as conn:
         create_memory_scope_versions_table(conn)
     monkeypatch.setattr(social_store, "_TABLES_READY", False)
@@ -109,6 +112,10 @@ async def test_handle_chat_sends_deterministic_reply_once(
         await gateway.handle_chat(bot, event)
 
     gateway._run_turn_via_engine.assert_awaited_once()
+    ingress_ctx = gateway._run_turn_via_engine.await_args.args[1]
+    assert ingress_ctx.user_ref.raw_user_id == "111"
+    assert ingress_ctx.scene_ref.kind == "group"
+    assert ingress_ctx.connection_id == "legacy-qq:9"
     send.assert_awaited_once()
     finish.assert_awaited_once_with()
     # v16 契约：origin（本轮 ctx）+ 确认回执随行（多人身份修复计划 §6.2）
