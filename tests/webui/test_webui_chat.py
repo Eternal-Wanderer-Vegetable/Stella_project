@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -150,6 +151,27 @@ def test_chat_endpoints_sse_and_history(
     resp = client.get("/api/v1/chat/messages", headers=auth_header)
     contents = [i["content"] for i in resp.json()["data"]["items"]]
     assert "在吗" in contents and "面板回复" in contents
+
+    from core.runtime import facade
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+
+    clock = system_control_clock()
+    expired = Deadline(clock.now() - 1, clock.clock_id)
+    monkeypatch.setattr(facade, "new_turn_deadline", lambda _timeout=120.0: expired)
+    deadline_resp = client.post(
+        "/api/v1/chat", json={"message": "不要启动"}, headers=auth_header
+    )
+    frames = [
+        json.loads(frame.removeprefix("data: "))
+        for frame in deadline_resp.text.split("\n\n")
+        if frame.startswith("data: ")
+    ]
+    assert deadline_resp.status_code == 200
+    assert frames[-1]["type"] == "error"
+    assert frames[-1]["data"]["message"] == "回复超时"
+    assert not any(frame["type"] == "complete" for frame in frames)
+
     # 清空
     resp = client.post("/api/v1/chat/reset", headers=auth_header)
     assert resp.json()["data"]["cleared"] >= 2

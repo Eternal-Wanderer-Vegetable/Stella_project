@@ -1778,6 +1778,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             ack_receipts.extend(await deliver_lines(
                 plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
                 send_one=_send_reply_segment,
+                deadline=getattr(ctx, "turn_deadline", None),
                 plan_guard=lambda current: _delivery_plan_is_current(
                     ctx, current, target_user_id=str(ctx.user_id),
                 ),
@@ -1839,6 +1840,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            deadline=getattr(ctx, "turn_deadline", None),
             plan_guard=lambda plan: _delivery_plan_is_current(
                 ctx, plan, target_user_id=delivery_target,
             ),
@@ -2346,6 +2348,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             ack_receipts.extend(await deliver_lines(
                 plan, scope=scope, trace_id=ctx.trace_id, turn_id=ctx.turn_id,
                 send_one=_send_reply_segment,
+                deadline=getattr(ctx, "turn_deadline", None),
                 plan_guard=lambda current: _delivery_plan_is_current(
                     ctx, current, target_user_id=str(ctx.peer_id or ref.peer_id),
                 ),
@@ -2398,6 +2401,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             turn_id=ctx.turn_id,
             send_one=_send_reply_segment,
             interval_seconds=SEND_INTERVAL,
+            deadline=getattr(ctx, "turn_deadline", None),
             plan_guard=lambda plan: _delivery_plan_is_current(
                 ctx, plan, target_user_id=delivery_target,
             ),
@@ -4339,6 +4343,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 trace_id=ctx.trace_id,
                 turn_id=ctx.turn_id,
                 send_one=_send_at_segment,
+                deadline=getattr(ctx, "turn_deadline", None),
                 plan_guard=lambda plan: _delivery_plan_is_current(
                     ctx, plan, target_user_id=delivery_target,
                 ),
@@ -4910,6 +4915,7 @@ async def _proactive_speak_impl(
             send_one=_send_proactive_segment,
             interval_seconds=SEND_INTERVAL,
             abort_check=_stale,
+            deadline=getattr(ctx, "turn_deadline", None),
             plan_guard=lambda plan: _delivery_plan_is_current(ctx, plan),
         )
         delivered = delivered_texts(receipts)

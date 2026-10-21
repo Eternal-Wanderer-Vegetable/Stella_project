@@ -23,8 +23,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 WEBCHAT_GROUP_ID = -1
 WEBCHAT_SPACE = "webchat"
@@ -77,16 +81,23 @@ def _flow_span(flow_ctx, node_id: str, **kw):
         return contextlib.nullcontext()
 
 
-async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
+async def run_turn(
+    message: str,
+    username: str,
+    *,
+    flow_ctx=None,
+    turn_deadline: "Deadline | None" = None,
+) -> dict:
     """跑一轮 WebChat 对话，返回 {lines, thought, ts}。
 
     ``flow_ctx``：router 鉴权后建的流程 root（计划 §6.2）；缺省时这里
     兜底自建（直连调用方仍可观测）。
     """
     from core.runtime.facade import new_turn_deadline
-    from gravitas.deadlines import lock_with_deadline
+    from gravitas.deadlines import lock_with_deadline, raise_if_expired
 
-    turn_deadline = new_turn_deadline()
+    turn_deadline = turn_deadline or new_turn_deadline()
+    raise_if_expired(turn_deadline, phase="web.ingress")
     from core.context import ChatContext
     from core.social.contracts import (
         DELIVERY_ACKNOWLEDGED,
@@ -182,6 +193,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         )
     with _flow_span(flow_ctx, "web.space_context"):
         if capture_open:
+            raise_if_expired(turn_deadline, phase="web.input_capture")
             await record_message(ctx, capture=capture)
 
     outcome = "delivered"
@@ -218,6 +230,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
         for i, line in enumerate(lines):
             if not capture_open:
                 break
+            raise_if_expired(turn_deadline, phase="web.output_capture")
             await record_message(
                 ChatContext(
                     user_id=WEBCHAT_USER_ID,
@@ -263,6 +276,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
             conv_kind = str(getattr(ctx, "conversation_kind", "") or "webchat")
             conv_peer = str(getattr(ctx, "peer_id", "") or str(WEBCHAT_USER_ID))
             for i, line in enumerate(lines):
+                raise_if_expired(turn_deadline, phase="web.delivery_receipt")
                 social_store.record_delivery(
                     DeliveryReceipt(
                         trace_id=ctx.trace_id,
@@ -280,6 +294,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
                 )
     else:
         outcome = "empty"
+    raise_if_expired(turn_deadline, phase="web.response")
     _end_flow(flow_ctx, outcome)
     return {"lines": lines, "thought": ctx.thought}
 

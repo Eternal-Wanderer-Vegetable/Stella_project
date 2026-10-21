@@ -99,6 +99,88 @@ def _sealed_plan(lines, trace="t1", turn="n1", conversation_key="qq:10001:group:
 
 
 class TestDeliverLines:
+    async def test_expired_turn_deadline_does_not_start_send(self, social_db):
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline
+
+        clock = system_control_clock()
+        deadline = Deadline(clock.now() - 1, clock.clock_id)
+        plan = _sealed_plan(["must not send"], "t-expired", "tn-expired")
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+
+        receipts = await deliver_lines(
+            plan, scope=SCOPE, trace_id="t-expired", turn_id="tn-expired",
+            send_one=send, deadline=deadline,
+        )
+
+        assert receipts == []
+        assert attempts == []
+        assert _rows(social_db, "SELECT status FROM social_deliveries") == []
+
+    async def test_send_deadline_after_callback_starts_is_unknown_and_stops(self, social_db):
+        import asyncio
+
+        from gravitas.clock import system_control_clock
+        from gravitas.contracts import Deadline
+
+        clock = system_control_clock()
+        deadline = Deadline(clock.now() + 0.03, clock.clock_id)
+        plan = _sealed_plan(
+            ["may have arrived", "must not start"], "t-send-deadline", "tn-send-deadline"
+        )
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+            await asyncio.sleep(1)
+            return {"message_id": 123}
+
+        receipts = await deliver_lines(
+            plan, scope=SCOPE, trace_id="t-send-deadline", turn_id="tn-send-deadline",
+            send_one=send, deadline=deadline,
+        )
+
+        assert [receipt.status for receipt in receipts] == ["unknown"]
+        assert attempts == [("may have arrived", 0)]
+        assert _rows(
+            social_db,
+            "SELECT part_index, status, platform_message_id FROM social_deliveries "
+            "WHERE turn_id='tn-send-deadline'",
+        ) == [(0, "unknown", None)]
+
+    async def test_cancelled_send_is_unknown_and_does_not_start_next_segment(self, social_db):
+        import asyncio
+
+        plan = _sealed_plan(
+            ["may have arrived", "must not start"], "t-send-cancel", "tn-send-cancel"
+        )
+        started = asyncio.Event()
+        attempts = []
+
+        async def send(line, part_index):
+            attempts.append((line, part_index))
+            started.set()
+            await asyncio.sleep(1)
+
+        task = asyncio.create_task(deliver_lines(
+            plan, scope=SCOPE, trace_id="t-send-cancel", turn_id="tn-send-cancel",
+            send_one=send,
+        ))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert attempts == [("may have arrived", 0)]
+        assert _rows(
+            social_db,
+            "SELECT part_index, status FROM social_deliveries "
+            "WHERE turn_id='tn-send-cancel'",
+        ) == [(0, "unknown")]
+
     def test_delivery_draft_refuses_unknown_scope_versions(self, monkeypatch):
         from memory import scope_versions
 

@@ -32,7 +32,7 @@ import json
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 from nonebot.exception import FinishedException
@@ -47,7 +47,11 @@ from core.social.contracts import (
     utc_now_iso,
 )
 from core.transport.outbound import DeliveryResult, DeliveryStatus
+from gravitas.errors import DeadlineExceeded
 from memory import social_store
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 SendOne = Callable[[str, int], Awaitable[str | DeliveryResult | None]]
 PlanGuard = Callable[[dict[str, Any]], bool | Awaitable[bool]]
@@ -391,6 +395,7 @@ async def deliver_lines(
     abort_check: Callable[[], bool] | None = None,
     plan_guard: PlanGuard | None = None,
     receipt_conversation: Any = None,
+    deadline: "Deadline | None" = None,
 ) -> list[DeliveryReceipt]:
     """只发送已封存计划中的片段，并收集与该计划关联的回执。
 
@@ -420,15 +425,48 @@ async def deliver_lines(
     plan_digest = snapshot["digest"]
     decision_digest = snapshot["decision_digest"]
     epoch = int(snapshot["generation_epoch"])
-    if not social_store.record_delivery_plan(snapshot):
-        raise RuntimeError("DeliveryPlan decision digest could not be persisted; refusing send")
-
     receipts: list[DeliveryReceipt] = []
     started_at = time.monotonic()
     fctx = _flow(trace_id)
+
+    def deadline_expired(phase: str, part_index: int) -> bool:
+        if deadline is None:
+            return False
+        from gravitas.deadlines import raise_if_expired
+
+        try:
+            raise_if_expired(deadline, phase=phase)
+        except DeadlineExceeded:
+            _flow_decision(
+                fctx, "send.segment", status="timed_out",
+                reason_code="turn_deadline", instance_key=f"seg:{part_index}",
+            )
+            return True
+        return False
+
+    if deadline_expired("send.plan", 0):
+        _trace_delivery(trace_id, turn_id, scope, receipts, started_at)
+        return receipts
+    if not social_store.record_delivery_plan(snapshot):
+        raise RuntimeError("DeliveryPlan decision digest could not be persisted; refusing send")
+
     for i, line in enumerate(lines):
+        if deadline_expired("send.interval" if i else "send.segment", i):
+            break
         if i > 0 and interval_seconds > 0:
-            await asyncio.sleep(interval_seconds)
+            if deadline is None:
+                await asyncio.sleep(interval_seconds)
+            else:
+                from gravitas.deadlines import run_with_deadline
+
+                try:
+                    await run_with_deadline(
+                        lambda: asyncio.sleep(interval_seconds), deadline,
+                        phase="send.interval",
+                    )
+                except DeadlineExceeded:
+                    deadline_expired("send.interval", i)
+                    break
         if not verify_delivery_plan(plan, trace_id=trace_id, turn_id=turn_id):
             logger.warning(f"[Delivery] sealed plan changed before segment {i}; stopping")
             _flow_decision(fctx, "send.segment", status="skipped",
@@ -452,10 +490,26 @@ async def deliver_lines(
                            instance_key=f"seg:{i}",
                            summary=f"未尝试段 {i + 1}/{len(lines)}")
             break
+        if deadline_expired("send.segment", i):
+            break
         seg_span = _flow_span(fctx, "send.segment", instance_key=f"seg:{i}")
         seg_span.__enter__()
+        send_started = False
         try:
-            send_result = await send_one(line, i)
+            if deadline is None:
+                send_result = await send_one(line, i)
+            else:
+                from gravitas.deadlines import raise_if_expired, run_with_deadline
+
+                async def _send_before_deadline(_line=line, _index=i):
+                    nonlocal send_started
+                    raise_if_expired(deadline, phase="send.segment")
+                    send_started = True
+                    return await send_one(_line, _index)
+
+                send_result = await run_with_deadline(
+                    _send_before_deadline, deadline, phase="send.segment",
+                )
             platform_ids = coerce_platform_message_ids(send_result)
             platform_id = platform_ids[0] if platform_ids else None
             if isinstance(send_result, DeliveryResult):
@@ -486,6 +540,24 @@ async def deliver_lines(
         except FinishedException:
             seg_span.__exit__(FinishedException, None, None)
             raise
+        except DeadlineExceeded as e:
+            seg_span.__exit__(DeadlineExceeded, e, e.__traceback__)
+            if send_started:
+                # Once the adapter callback began, it may have reached the
+                # platform. Persist uncertainty and never retry this segment.
+                _append_and_persist(
+                    receipts, scope, trace_id, turn_id, epoch, i,
+                    status=DELIVERY_UNKNOWN, text=line, platform_id=None,
+                    detail="turn_deadline",
+                    receipt_conversation=receipt_conversation,
+                    delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
+                    decision_digest=decision_digest,
+                )
+            _flow_decision(
+                fctx, "send.segment", status="timed_out",
+                reason_code="turn_deadline", instance_key=f"seg:{i}",
+            )
+            break
         except asyncio.CancelledError:
             # 取消中断：该段结果不明（平台可能已收到），绝不重发
             seg_span.__exit__(asyncio.CancelledError, None, None)
