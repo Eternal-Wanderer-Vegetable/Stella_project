@@ -8,7 +8,7 @@ python -m memory.schema              # 执行迁移
 python -m memory.schema --backup     # 仅备份
 ```
 
-**迁移原则：Additive Migration** —— 只加字段与索引，绝不删数据。所有 `ALTER` 都经过 `PRAGMA table_info` 探测，幂等可重跑。首次迁移前自动备份为 `stella_memory_backup.db`。
+**迁移原则：新增优先，数据保留。** 普通升级只加字段与索引；确需改唯一约束或主键时，在版本化事务中建新表、复制全部行、再换表。所有 `ALTER` 都经过 `PRAGMA table_info` 探测，幂等可重跑。首次迁移前自动备份为 `stella_memory_backup.db`。
 
 ### 加字段的正确做法
 

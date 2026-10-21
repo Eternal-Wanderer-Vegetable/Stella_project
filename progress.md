@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP03 已完成，下一步 WP04；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `ec5cf65`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)与[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP04 已完成，下一步 WP05；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `eabec23`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)与[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -49,6 +49,15 @@
 - Ruff、文档门禁（119 files / 1206 links / 577 anchors / 0 errors）、flow manifest 与 diff 检查通过。全量 pytest 因 `tests/cometa/test_worker.py::TestSingleOwner::test_second_worker_rejected` 451.87 秒无进展而中止（876 passed / 7 skipped）；单测 30 秒重现，集成门禁 NOT READY。WP02 已报告的其他全量失败也未关闭。
 - `STELLA_HOME` 未设置；仅使用临时 SQLite 和隔离 wheel；未启动 Bot、访问生产库或运行真实模型/平台。
 - 阶段实现提交 `ec5cf65`；具体命令、GitNexus 风险、限制及下一步见 [WP03 实施记录](docs/reports/2026-10-21-wp03-storage-backend.md)。下一阶段 WP04。
+
+## 2026-10-21 — Cross-platform implementation (WP04)
+
+- GitNexus 编辑前 upstream impact 覆盖 owner scope、evidence source、retrieval、sharing、addressing、social schema/store、knowledge ACL/schema、proactive target 与 memory manager。原始风险含 `knowledge.acl.resolve_role` CRITICAL（23 impacted / 3 direct / 7 KB flows）、`ensure_social_schema` CRITICAL（47 / 2）；ownership/retrieval/evidence/sharing/addressing 等多个 HIGH。UNKNOWN 的 `ConversationScope.from_context` 用 `rg` 补查，确认生产调用来自 `core/social/context_builder.py`；类级影响 MEDIUM（21 / 11）。
+- 实施提交 `eabec23`：PERSON owner、检索与证据核验以 `connection_id + subject_key` 隔离；旧 evidence 版本仍可验证；分享 grant/revoke、地址偏好、社交学习与 KB owner/grant ACL 增加显式身份域。memory/native schema 21→22，social schema 4，KB schema 2；旧 sharing 授权行迁移时复制保留，历史 connection 为空不猜映射。重新生成最终 message-flow archive。
+- 回归：记忆/权限组 135 passed；knowledge 与 social 学习/迁移组 203 passed；retrieval/proactive 补充组 45 passed（测试组有重叠，不汇总相加）；Python native selector/promotion/benchmark 29 passed / 1 skipped；Rust cargo 25 passed。Ruff、文档 119 files / 1209 links / 577 anchors / 0 errors、flow check、`git diff --check`、cargo fmt 通过；隔离 native wheel 报告 API 4 / schema 22。
+- GitNexus 提交前摘要：scope all 49 files / 215 symbols / 48 processes / CRITICAL；compare main 241 files / 496 symbols / 71 processes / CRITICAL（包含 WP00–WP03）。CLI 显示的名字列表有省略，摘要统计保留；图谱刷新至 `eabec23` 后继续维护状态文档。
+- 状态文档提交前复查：GitNexus all/compare 均运行成功，原始风险为 CRITICAL；索引把文档章节关联到大量流程，原始风险照录。新报告/JSON 状态文件用 diff、文档链接与 JSON 解析门禁补证。
+- `STELLA_HOME` 未设置；只使用临时测试数据，未读取/迁移生产库，未启动 Bot、真实模型或平台。全量 Python 与 live/发布认证尚未完成，整体 NOT READY；下一阶段 WP05。
 
 ## What's Done
 
