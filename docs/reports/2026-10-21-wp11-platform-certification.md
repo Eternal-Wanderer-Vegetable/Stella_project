@@ -2,8 +2,8 @@
 
 - 日期：2026-10-21（Asia/Shanghai）。
 - 分支：`codex/cross-platform-implementation`；开始时 HEAD 为 `7359c85`。
-- WP11 实现提交：`22ce1d0`（矩阵与真实事件/fake 回投夹具）。
-- 结论：本地矩阵与代表性夹具已交付；官方 32 项仍全部 `NOT CERTIFIED`。平台 live、完整 L2/L3、QQ 灰度、干净 VM 和全量 Python 绿灯均未达成，WP11 与 XPLAT-IMPL 保持 `in_progress / NOT READY`。
+- WP11 实现提交：`22ce1d0`（矩阵与真实事件/fake 回投夹具）；后续本地回归修复提交：`1f5c900`、`54c4d4c`、`7f35347`。
+- 结论：本地矩阵与代表性夹具已交付，后续 CI 同款全量 Python 回归通过；官方 32 项仍全部 `NOT CERTIFIED`。平台 live、完整 L2/L3、QQ 灰度、干净 VM、Python 3.10/3.11 独立运行和发布验收未达成，WP11 与 XPLAT-IMPL 保持 `in_progress / NOT READY`。
 
 ## 范围与矩阵
 
@@ -50,13 +50,20 @@ WP11 实现提交 `22ce1d0` 后，GitNexus 1.6.11 增量刷新成功：99,376 no
   - `tests/test_memory_replay.py::test_replay_gate_all_green`：replay gate 仍报 `promotion_correctness`、`memory_delta` 等三项失败。
   - `tests/webui/test_webui_manage.py::test_scheduling_crud`：旧兼容入口的默认 Bot ID `self` 不能构成有效 QQ target，服务抛 `InvalidTaskError`。
 - 失败文件均未在 WP11 改动；这次运行也不能证明根因属于某个历史工作包。它们作为全仓回归阻塞保留，不能用定向通过覆盖。
+- 后续关闭这 6 个全量回归项：候选晋升/replay gate 夹具改用可验证的 legacy QQ 来源键；WebUI scheduling 改为列出已连接的 OneBot V11 Bot，创建时要求显式选择 Bot 并持久化准确目标，路由回归移至已有调度运行时夹具；Cometa worker 的注册退避现在响应 stop 并退出，worker 测试以只读轮询观察租约且避免跨测试全局 trace 计数。原 6 项未再复现。
+- 最新全量命令：`timeout 600s env STELLA_HOME=/tmp/stella-wp11-final-allgreen-20261021 .venv/bin/python -m pytest tests/ -q --timeout=120 -n auto --dist loadgroup`：**3879 passed / 29 skipped / 5 warnings**，112.76 秒。5 条为既有 pytest fixture/deprecation 和 fake adapter warnings；无失败。
+- 补充定向结果：记忆 replay/candidate 27 passed；调度 service 176 passed，WebUI manage 12 passed + 新 scheduling route 1 passed；Cometa worker 6 passed。全仓 `.venv/bin/ruff check .` 通过。
+- Dashboard 直接运行已安装二进制：Vitest **100 passed**；`vue-tsc --noEmit` 通过；`vite build` 成功，保留既有动态/静态导入与大 chunk 警告。`pnpm` wrapper 曾因忽略的 esbuild/vue-demi 安装脚本阻断，故使用工作区已安装的本地 bin 完成同一检查；未保留其工作区文件副作用。
 - `ruff check --fix` 曾只整理新测试 import 顺序，随后该文件 Ruff 检查通过。消息流程 `generate_message_flow.py --check` 通过，manifest 为 `9b80952673b2`，没有新增 runtime entry。
 - 状态文档检查：`python scripts/check_docs.py` 119 files / 1,235 links / 577 anchors / 0 errors；全仓 Ruff 通过；message-flow 检查通过；feature/matrix JSON parse 与 `git diff --check` 通过。
-- 提交前 GitNexus 检查（固定 1.6.11）：scope all 为 5 tracked files / 15 symbols / 0 processes / LOW。compare 首轮遇到 `process-lookup` interrupted，返回 partial/unknown；按门禁立即串行重跑后完整为 336 files / 1,140 symbols / 106 processes / CRITICAL，无 partial/truncated；符号列表 capped，计数覆盖全部累计范围。新 fixture/matrix 与新报告为未跟踪文件，不会被 GitNexus tracked diff 代替校验；前者有定向 pytest/JSON 对账，报告已执行 file impact。
+- 后续修复提交前 GitNexus（固定 1.6.11）：记忆/调度/worker 各阶段 scope all 分别为当前工作树 9/32/20/CRITICAL、8/29/20/CRITICAL、4/10/0/LOW；worker 单阶段无受影响流程。compare main 随三个实现提交更新为 347/348/349 files、1,186 symbols、126 processes、CRITICAL；默认完整统计和风险成功，符号列表 capped；尝试扩大列表时 query interrupted，已重跑默认命令得到完整统计。逐符号编辑前 upstream impact：记忆、调度和 worker 改动均 LOW，并审查对应调用者/流程；调度创建落在 `Sched_create`，worker 注册被 `run_forever` 调用。
+- 本阶段状态文档编辑前 GitNexus：plan MEDIUM（17 impacted/6 direct），WP11 report LOW（17/3），progress LOW（26/3），handoff LOW（19/2），feature_list LOW（19/2）；无进程节点。新增矩阵/夹具仍以定向 pytest、JSON 对账和当前源码审查补证，不能由 tracked diff 覆盖。
+- 状态文档更新后门禁：`python scripts/check_docs.py` 119 files / 1,234 local links / 577 migration anchors / 0 errors；`.venv/bin/ruff check .` 通过；`STELLA_HOME=/tmp/stella-wp11-final-allgreen-20261021 .venv/bin/python scripts/generate_message_flow.py --check` 与 `message-flow.52dffc73a1aa.json` 一致；feature/matrix JSON parse 和 `git diff --check` 通过。
+- 状态提交前 GitNexus 1.6.11：scope all 5 files / 15 symbols / 0 processes / LOW；compare main 成功统计 349 files / 1,186 symbols / 126 processes / CRITICAL，符号清单 capped 但计数与风险完整。期间几次 query interrupted，重跑后以无 PARTIAL 的完整统计作为门禁结果；compare 覆盖整个分支累计改动，不只包含这次文档阶段。
 
 ## 未验收与下一步
 
 - 未配置或使用任何平台账号、网关、生产 `.env`、生产数据库、真实 Bot、模型服务或 QQ 灰度。
 - 未执行 Windows/Linux 干净 VM 安装、跨进程多账号恢复 live、Python 3.10/3.11 独立 runtime、外部 Release 生成/回读。
 - 不更改 release/version manifest：没有平台达到认证条件，也未进行真实发布。
-- 首先关闭上列全仓回归项；然后按 P0→P1→P2 安装并分别验证适配器与 driver，逐平台维护 fixture、L0–L3 和协议适用性证据；最后分别完成 live、多账号恢复、QQ 灰度和干净 VM 门禁。32 项分母和非聊天事件型语义维持不变。
+- 本地全量 Python 回归已绿；下一步按 P0→P1→P2 安装并分别验证适配器与 driver，逐平台维护 fixture、L0–L3 和协议适用性证据；然后分别完成 live、多账号恢复、QQ 灰度、Python 3.10/3.11 和干净 VM 门禁。32 项分母和非聊天事件型语义维持不变。

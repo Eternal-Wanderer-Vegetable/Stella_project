@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP10 已完成；WP11 的 32 项状态矩阵和 OneBot V11 事件/回投夹具已实现，代码提交 `22ce1d0`，整体保持 `in_progress / NOT READY`。分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP10 已完成；WP11 的 32 项状态矩阵、OneBot V11 事件/回投夹具和本地全量 Python 回归已通过。修复提交 `1f5c900`、`54c4d4c`、`7f35347`；整体仍保持 `in_progress / NOT READY`。分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
 
 ## Deliverables
 
@@ -26,16 +26,15 @@ XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cr
 
 ## Verification / Boundaries
 
-本轮 WP11 定向测试 `tests/platforms/test_adapter_matrix.py`、Normalizer 和 Outbound：18 passed；CI 同款全量 Python：3873 passed / 29 skipped / 6 failed，串行复跑 6 项仍失败（主动投递两项、候选晋升、采集门回复、memory replay gate、调度 CRUD），详见 WP11 报告。失败文件未在 WP11 改动；整体门禁 NOT READY。OneBot V11 L0 隔离 Driver 注册通过、L1 真实事件模型到 fake 回投夹具通过、L3 夹具部分；L2 与 live 未执行。官方 32 项全部 NOT CERTIFIED；仅 OneBot V11/V12 共用发行包在本地安装，另 30 项包未安装。
+WP11 定向平台/Normalizer/Outbound 测试 18 passed；后续记忆 replay/candidate 27 passed，调度 service 176 passed，WebUI manage 12 + scheduling route 1 passed，Cometa worker 6 passed。CI 同款全量 Python 最新为 **3879 passed / 29 skipped / 5 warnings**（112.76 秒），先前记录的 6 项失败均已关闭。Dashboard Vitest 100 passed、typecheck 通过、build 成功；全仓 Ruff 与 message-flow 检查通过。详见 WP11 报告。整体仍 NOT READY：OneBot V11 L0 隔离 Driver 注册通过、L1 真实事件模型到 fake 回投夹具通过、L3 夹具部分；L2 与 live 未执行。官方 32 项全部 NOT CERTIFIED；仅 OneBot V11/V12 共用发行包在本地安装，另 30 项包未安装。
 
-GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。WP11 当前运行使用 `STELLA_HOME=/tmp/stella-wp11-20261021`；未迁移生产库、未启动 Bot、未连接平台或模型。没有 Windows/Linux 干净 VM、QQ 灰度、跨进程 live 恢复和 Python 3.10/3.11 独立验收。
+GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。全量 pytest 使用隔离 `STELLA_HOME=/tmp/stella-wp11-final-allgreen-20261021`；未迁移生产库、未启动 Bot、未连接平台或模型。没有 Windows/Linux 干净 VM、QQ 灰度、跨进程 live 恢复和 Python 3.10/3.11 独立验收。
 
 ## Next Steps
 
-1. 归属并关闭 WP11 报告列出的 6 个全量 Python 失败，尤其是统一投递回归与调度旧 target 校验；不得放宽 target 安全检查以迁就旧断言。
-2. 外部具备平台账户与干净环境后，按 32 行矩阵逐平台补包版本/Python/driver、fixture、live 和维护证据；单独完成多账号恢复、QQ 灰度、Linux/Windows clean VM。
-3. 补齐 OneBot L2/L3 与至少一个代表平台的真实 live 收发；按各协议事件语义评估非聊天 adapter。
-4. 只有全量 Python、release、平台和 VM 验收关闭后才将 XPLAT-IMPL 改为 done；GitNexus 索引预算限制仍须如实保留。
+1. 外部具备平台账户与干净环境后，按 32 行矩阵逐平台补包版本/Python/driver、fixture、live 和维护证据；单独完成多账号恢复、QQ 灰度、Python 3.10/3.11 独立运行及 Linux/Windows clean VM。
+2. 补齐 OneBot L2/L3 与至少一个代表平台的真实 live 收发；按各协议事件语义评估非聊天 adapter。
+3. 只有 release、平台和 VM 验收关闭后才将 XPLAT-IMPL 改为 done；GitNexus 索引预算限制仍须如实保留。
 
 ---
 

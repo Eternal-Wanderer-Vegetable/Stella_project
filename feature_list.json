@@ -153,6 +153,26 @@
           "command": "WP11 state: python scripts/check_docs.py; ruff check .; generate_message_flow.py --check; feature/matrix JSON parse; git diff --check; GitNexus detect-changes all and compare main",
           "result": "Docs: 119 files/1235 links/577 anchors/0 errors; Ruff passed; message-flow 9b80952673b2 passed; JSON and diff checks passed. GitNexus all: 5 tracked files/15 symbols/0 processes/LOW. Compare main first returned partial on process lookup; serial rerun completed at 336 files/1140 symbols/106 processes/CRITICAL with no partial/truncated; symbol listing capped.",
           "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 follow-up: isolated memory source-key, authenticated scheduling Bot-target route, and Cometa worker shutdown fixes; CI xdist pytest tests/ -q --timeout=120 -n auto --dist loadgroup",
+          "result": "Memory replay/candidate 27 passed; scheduling service 176 passed; WebUI manage 12 passed and scheduling route 1 passed; Cometa worker 6 passed. Full Python regression: 3879 passed / 29 skipped / 5 warnings in 112.76s. Initial six failures no longer reproduce. Commits: 1f5c900, 54c4d4c, 7f35347. All tests used isolated STELLA_HOME under /tmp.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 Dashboard: node_modules/.bin/vitest run; node_modules/.bin/vue-tsc --noEmit; node_modules/.bin/vite build",
+          "result": "Vitest 100 passed; vue-tsc passed; Vite build succeeded with existing dynamic/static import and large-chunk warnings. Direct workspace binaries were used after the pnpm wrapper attempted an install blocked by ignored build-script policy.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 final state documentation gate: python scripts/check_docs.py; ruff check .; generate_message_flow.py --check; feature/matrix JSON parse; git diff --check",
+          "result": "Docs: 119 files / 1234 local links / 577 migration anchors / 0 errors; full Ruff passed; message-flow.52dffc73a1aa.json matches current source; JSON and diff checks passed. GitNexus editor impacts: plan MEDIUM (17 impacted/6 direct), report LOW (17/3), progress LOW (26/3), handoff LOW (19/2), feature_list LOW (19/2). Platform/live, QQ gray, clean VM, Python 3.10/3.11 independent runs, and release remain NOT READY.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 pre-commit GitNexus: detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "Current state-doc scope all: 5 files / 15 symbols / 0 processes / LOW. Compare main: 349 files / 1186 symbols / 126 processes / CRITICAL, complete counts with capped symbol listing. Several retries were interrupted; final accepted run had no PARTIAL result. Compare covers cumulative branch changes.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
         }
       ]
     },

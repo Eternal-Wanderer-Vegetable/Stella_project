@@ -3,7 +3,7 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP10 已完成；WP11 本地矩阵与代表性夹具已交付，但最终状态仍 NOT READY。工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，WP11 实现提交 `22ce1d0`。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP10 已完成；WP11 本地矩阵、代表性夹具和全量 Python 回归已通过，但平台与发布验收仍 NOT READY。工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，WP11 初始提交 `22ce1d0`，本轮修复提交 `1f5c900`、`54c4d4c`、`7f35347`。
 **Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)、[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)、[WP09记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)、[WP10记录](docs/reports/2026-10-21-wp10-control-plane-delivery.md)与[WP11记录](docs/reports/2026-10-21-wp11-platform-certification.md)。平台 live、发布与 VM 验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
@@ -120,10 +120,10 @@
 
 - 新增 `tests/platforms/adapter_matrix.json`：固定官方快照 32 项分母，逐项保留包版本/Python 范围、driver、组件、场景、权限、窗口、限流、维护状态和 L0–L3 local/fixture/live 状态。隔离 `.venv` 只观察到 OneBot V11/V12 共用发行包 `nonebot-adapter-onebot 2.4.6`（Requires-Python `>=3.9,<4.0`）；其余 30 个适配器包未安装。未知字段不推断，32 项均未认证。
 - 新增 `tests/platforms/test_adapter_matrix.py`：逐行对照冻结 inventory，并以真实 OneBot `GroupMessageEvent` 构造入站事件，验证同一 Bot/群目标经 fake `UniMessage` transport 回投。定向平台/Normalizer/Outbound 回归 **18 passed**。
-- 全量 Python（CI xdist 模式）为 **3873 passed / 29 skipped / 6 failed**；6 项串行重跑仍失败，见 [WP11 报告](docs/reports/2026-10-21-wp11-platform-certification.md)。涉及主动投递、候选晋升、采集门、replay gate 和调度 CRUD；这些失败阻止整体 READY，未以定向夹具覆盖。
-- 全仓 Ruff 与文档门禁通过（119 files / 1,235 links / 577 anchors / 0 errors）；message-flow manifest `9b80952673b2` 检查通过且未改变；JSON 与 diff 检查通过。实现已提交 `22ce1d0`，状态/报告待本阶段第二个提交。
+- 初始全量运行 3873 passed / 29 skipped / 6 failed；后续修复记忆 evidence source key、WebUI scheduling 的显式 Bot 目标，并修复 Cometa worker 关闭时的注册重试和相关测试隔离。CI xdist 全量复跑现为 **3879 passed / 29 skipped / 5 warnings**（112.76 秒），6 项初始失败均已关闭。记忆定向 27 passed、调度 service 176 passed、WebUI manage 12 + route 1 passed、worker 6 passed。
+- Dashboard direct Vitest 100 passed、`vue-tsc --noEmit` 通过、Vite build 成功（既有导入/大 chunk 警告）；全仓 Ruff 和 message-flow 检查通过。三个修复阶段提交为 `1f5c900`、`54c4d4c`、`7f35347`。本地 Python 回归不替代真实平台、QQ 灰度和发布验收。
 - GitNexus 1.6.11 刷新绑定 `22ce1d0`；提交前 all 为 5 tracked files / 15 symbols / LOW。compare main 首轮 partial 后串行重跑完整：336 files / 1,140 symbols / 106 processes / CRITICAL，无 partial/truncated（符号列表 capped）。
-- 真实平台/QQ灰度、L2完整链、L3完整能力、多账号 live 恢复、Python 3.10/3.11 独立运行与 clean VM 未执行。
+- 真实平台/QQ灰度、L2完整链、L3完整能力、多账号 live 恢复、Python 3.10/3.11 独立运行与 Linux/Windows clean VM 未执行；32 项平台仍均未认证。
 
 ## What's Done
 
