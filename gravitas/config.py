@@ -57,6 +57,11 @@ class PressureConfig:
     recover_stable_seconds: float
     background_token_interval_seconds: float
     normal_stable_seconds: float
+    backlog_session_high_water: int
+    backlog_session_low_water: int
+    backlog_instance_high_water: int
+    backlog_instance_low_water: int
+    backlog_age_high_water_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +174,13 @@ def _parse_document(raw: object) -> GravitasConfig:
             "normal_stable_seconds",
         },
         "pressure",
+        optional={
+            "backlog_session_high_water",
+            "backlog_session_low_water",
+            "backlog_instance_high_water",
+            "backlog_instance_low_water",
+            "backlog_age_high_water_seconds",
+        },
     )
     pressure_config = PressureConfig(
         window_seconds=_positive(pressure.get("window_seconds"), "pressure.window_seconds"),
@@ -217,6 +229,30 @@ def _parse_document(raw: object) -> GravitasConfig:
         normal_stable_seconds=_positive(
             pressure.get("normal_stable_seconds"), "pressure.normal_stable_seconds"
         ),
+        backlog_session_high_water=_integer(
+            pressure.get("backlog_session_high_water", 500),
+            "pressure.backlog_session_high_water",
+            minimum=1,
+        ),
+        backlog_session_low_water=_integer(
+            pressure.get("backlog_session_low_water", 250),
+            "pressure.backlog_session_low_water",
+            minimum=0,
+        ),
+        backlog_instance_high_water=_integer(
+            pressure.get("backlog_instance_high_water", 5000),
+            "pressure.backlog_instance_high_water",
+            minimum=1,
+        ),
+        backlog_instance_low_water=_integer(
+            pressure.get("backlog_instance_low_water", 2500),
+            "pressure.backlog_instance_low_water",
+            minimum=0,
+        ),
+        backlog_age_high_water_seconds=_positive(
+            pressure.get("backlog_age_high_water_seconds", 600.0),
+            "pressure.backlog_age_high_water_seconds",
+        ),
     )
     if pressure_config.max_samples_per_resource > 512:
         raise ConfigError("pressure.max_samples_per_resource cannot exceed 512")
@@ -232,6 +268,10 @@ def _parse_document(raw: object) -> GravitasConfig:
         raise ConfigError(
             "pressure recovery queue threshold must be lower than the entry threshold"
         )
+    if pressure_config.backlog_session_low_water >= pressure_config.backlog_session_high_water:
+        raise ConfigError("session backlog low water must be below high water")
+    if pressure_config.backlog_instance_low_water >= pressure_config.backlog_instance_high_water:
+        raise ConfigError("instance backlog low water must be below high water")
     if pressure_config.window_seconds < controller["fact_ttl_seconds"]:
         raise ConfigError("pressure.window_seconds must cover at least one fact TTL")
 
@@ -320,6 +360,11 @@ recover_queue_depth = 2
 recover_stable_seconds = 15.0
 background_token_interval_seconds = 10.0
 normal_stable_seconds = 30.0
+backlog_session_high_water = 500
+backlog_session_low_water = 250
+backlog_instance_high_water = 5000
+backlog_instance_low_water = 2500
+backlog_age_high_water_seconds = 600.0
 [resources.local_inference]
 slots = ["CHAT", "MEMORY"]
 concurrency = 1
@@ -327,9 +372,15 @@ concurrency = 1
     )
 
 
-def _keys(table: dict[str, Any], required: set[str], name: str) -> None:
+def _keys(
+    table: dict[str, Any],
+    required: set[str],
+    name: str,
+    *,
+    optional: set[str] | None = None,
+) -> None:
     missing = required - table.keys()
-    unknown = table.keys() - required
+    unknown = table.keys() - required - (optional or set())
     if missing:
         raise ConfigError(f"missing {name} keys: {', '.join(sorted(missing))}")
     if unknown:

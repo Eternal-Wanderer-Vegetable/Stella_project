@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from gravitas.config import PressureConfig
@@ -33,6 +34,7 @@ class ResourcePolicyState:
     normal_since: float | None = None
     last_token_at: float | None = None
     background_tokens: int = 0
+    last_aged_backend_at: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +43,167 @@ class PressureStep:
     reason_code: str
     changed: bool
     valid_sample: bool
+
+
+@dataclass(frozen=True, slots=True)
+class BackgroundAdmission:
+    allowed: bool
+    reason_code: str
+    next_state: ResourcePolicyState
+
+
+@dataclass(frozen=True, slots=True)
+class OperationAdmission:
+    allowed: bool
+    would_deny: bool
+    reason_code: str
+
+
+class BacklogState(str, Enum):
+    UNKNOWN = "unknown"
+    NORMAL = "normal"
+    CONSTRAINED = "constrained"
+    RECOVERING = "recovering"
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryBacklogSnapshot:
+    session_pending: int | None
+    instance_pending: int | None
+    oldest_age_seconds: float | None
+    metrics_valid: bool
+    session_oldest_age_seconds: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureAdmission:
+    allowed: bool
+    would_deny: bool
+    reason_code: str
+    state: BacklogState
+
+
+class MemoryBacklogGuard:
+    """Hysteretic capture cap with a body-free, process-local gap ledger."""
+
+    def __init__(self, config) -> None:
+        self._config = config
+        self._state = BacklogState.UNKNOWN
+        self._low_since: float | None = None
+        self._normal_since: float | None = None
+        self._gap_count = 0
+        self._gap_started_at: float | None = None
+        self._gap_ended_at: float | None = None
+        self._gap_reason = ""
+        self._would_deny_count = 0
+        self._gap_open = False
+
+    def evaluate(
+        self,
+        snapshot: MemoryBacklogSnapshot,
+        *,
+        now: float,
+        wall_time: float,
+    ) -> CaptureAdmission:
+        now = _finite(now, "now")
+        wall_time = _finite(wall_time, "wall_time")
+        session = _optional_count(snapshot.session_pending, "session_pending")
+        instance = _optional_count(snapshot.instance_pending, "instance_pending")
+        age = _optional_nonnegative(snapshot.oldest_age_seconds, "oldest_age_seconds")
+        session_age = _optional_nonnegative(
+            snapshot.session_oldest_age_seconds, "session_oldest_age_seconds"
+        )
+        if session_age is None and session == 0:
+            session_age = 0.0
+        elif session_age is None:
+            session_age = age
+        valid = (
+            session is not None
+            and instance is not None
+            and age is not None
+            and session_age is not None
+            and snapshot.metrics_valid is True
+        )
+        if not valid:
+            self._state = BacklogState.CONSTRAINED
+            self._low_since = None
+            self._normal_since = None
+            return self._deny("backlog_integrity_untrusted")
+
+        high_reason = ""
+        if session >= self._config.backlog_session_high_water:
+            high_reason = "session_backlog_high"
+        elif instance >= self._config.backlog_instance_high_water:
+            high_reason = "instance_backlog_high"
+        elif session_age >= self._config.backlog_age_high_water_seconds:
+            high_reason = "session_backlog_age_high"
+        elif age >= self._config.backlog_age_high_water_seconds:
+            high_reason = "backlog_age_high"
+        if high_reason:
+            self._state = BacklogState.CONSTRAINED
+            self._low_since = None
+            self._normal_since = None
+            return self._deny(high_reason)
+
+        low = (
+            session <= self._config.backlog_session_low_water
+            and instance <= self._config.backlog_instance_low_water
+        )
+        if self._state is BacklogState.UNKNOWN:
+            self._state = BacklogState.NORMAL
+        elif self._state is BacklogState.CONSTRAINED:
+            if not low:
+                self._low_since = None
+                return self._deny("backlog_recovery_waiting_for_low_water")
+            self._low_since = self._low_since if self._low_since is not None else now
+            if now - self._low_since < self._config.recover_stable_seconds:
+                return self._deny("backlog_recovery_stabilizing")
+            self._state = BacklogState.RECOVERING
+            self._normal_since = now
+        elif self._state is BacklogState.RECOVERING:
+            if not low:
+                self._state = BacklogState.CONSTRAINED
+                self._low_since = None
+                self._normal_since = None
+                return self._deny("backlog_rebounded")
+            self._normal_since = self._normal_since if self._normal_since is not None else now
+            if now - self._normal_since >= self._config.normal_stable_seconds:
+                self._state = BacklogState.NORMAL
+                self._low_since = None
+                self._normal_since = None
+
+        if self._gap_open:
+            self._gap_ended_at = wall_time
+            self._gap_open = False
+        return CaptureAdmission(True, False, "capture_allowed", self._state)
+
+    def record_gap(self, reason_code: str, *, wall_time: float) -> None:
+        wall_time = _finite(wall_time, "wall_time")
+        if not isinstance(reason_code, str) or not _REASON_CODE.fullmatch(reason_code):
+            raise ValueError("reason_code must be a bounded low-cardinality code")
+        self._gap_count += 1
+        if self._gap_started_at is None:
+            self._gap_started_at = wall_time
+        self._gap_ended_at = wall_time
+        self._gap_reason = reason_code
+        self._gap_open = True
+
+    def status(self) -> dict[str, object]:
+        return {
+            "state": self._state.value,
+            "capture_gap_count": self._gap_count,
+            "capture_gap_started_at": self._gap_started_at,
+            "capture_gap_ended_at": self._gap_ended_at,
+            "capture_gap_reason": self._gap_reason,
+            "would_reject_count": self._would_deny_count,
+        }
+
+    def _deny(self, reason: str) -> CaptureAdmission:
+        self._would_deny_count += 1
+        return CaptureAdmission(False, True, reason, self._state)
+
+
+_REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 def evaluate_pressure(
@@ -95,6 +258,7 @@ def evaluate_pressure(
                 state=PressureState.CONSTRAINED,
                 consecutive_high_windows=count,
                 background_tokens=0,
+                last_aged_backend_at=now,
             )
             return _step(previous, next_state, "pressure_high", valid=True)
         next_state = ResourcePolicyState(
@@ -110,6 +274,7 @@ def evaluate_pressure(
                 state=PressureState.CONSTRAINED,
                 consecutive_high_windows=previous.consecutive_high_windows,
                 background_tokens=0,
+                last_aged_backend_at=previous.last_aged_backend_at,
             )
             return _step(previous, next_state, "pressure_high", valid=True)
         if not low:
@@ -117,6 +282,7 @@ def evaluate_pressure(
                 state=PressureState.CONSTRAINED,
                 consecutive_high_windows=0,
                 background_tokens=0,
+                last_aged_backend_at=previous.last_aged_backend_at,
             )
             return _step(previous, next_state, "recovery_conditions_unproven", valid=True)
         low_since = previous.low_since if previous.low_since is not None else now
@@ -133,6 +299,7 @@ def evaluate_pressure(
             state=PressureState.CONSTRAINED,
             low_since=low_since,
             background_tokens=0,
+            last_aged_backend_at=previous.last_aged_backend_at,
         )
         return _step(previous, next_state, "recovery_stabilizing", valid=True)
 
@@ -142,6 +309,7 @@ def evaluate_pressure(
                 state=PressureState.CONSTRAINED,
                 consecutive_high_windows=1,
                 background_tokens=0,
+                last_aged_backend_at=now,
             )
             return _step(previous, next_state, "pressure_rebounded", valid=True)
         if not low:
@@ -149,6 +317,7 @@ def evaluate_pressure(
                 state=PressureState.RECOVERING,
                 last_token_at=now,
                 background_tokens=previous.background_tokens,
+                last_aged_backend_at=previous.last_aged_backend_at,
             )
             return _step(previous, next_state, "recovery_conditions_unproven", valid=True)
 
@@ -160,7 +329,9 @@ def evaluate_pressure(
             and last_token_at is not None
             and now - last_token_at >= config.background_token_interval_seconds
         ):
-            tokens += 1
+            # Recovery opens one fresh backend start per interval. Unused time
+            # does not accumulate into a burst when a backlog worker wakes.
+            tokens = min(1, tokens + 1)
             last_token_at = now
         if now - normal_since >= config.normal_stable_seconds:
             next_state = ResourcePolicyState(
@@ -179,6 +350,48 @@ def evaluate_pressure(
         return _step(previous, next_state, "recovery_ramping", valid=True)
 
     raise ValueError(f"unsupported pressure state: {current!r}")
+
+
+def admit_background(
+    previous: ResourcePolicyState,
+    *,
+    now: float,
+    oldest_age_seconds: float | None,
+    aged_after_seconds: float,
+    token_interval_seconds: float,
+    integrity_ok: bool,
+) -> BackgroundAdmission:
+    """Consume a recovery token or one constrained aged-work permit.
+
+    Integrity is a hard gate: aging can never turn an unsafe or unknown store
+    into an allowed operation. Calls in NORMAL do not consume recovery credit.
+    """
+    now = _finite(now, "now")
+    aged_after_seconds = _finite(aged_after_seconds, "aged_after_seconds")
+    token_interval_seconds = _finite(token_interval_seconds, "token_interval_seconds")
+    if aged_after_seconds <= 0 or token_interval_seconds <= 0:
+        raise ValueError("background admission intervals must be positive")
+    if not isinstance(integrity_ok, bool):
+        raise ValueError("integrity_ok must be a boolean")
+    age = _optional_nonnegative(oldest_age_seconds, "oldest_age_seconds")
+    if not integrity_ok:
+        return BackgroundAdmission(False, "integrity_untrusted", previous)
+    if previous.state is PressureState.NORMAL:
+        return BackgroundAdmission(True, "within_limit", previous)
+    if previous.state is PressureState.CONSTRAINED:
+        if age is None or age < aged_after_seconds:
+            return BackgroundAdmission(False, "pressure_constrained", previous)
+        last = previous.last_aged_backend_at
+        if last is not None and now - last < token_interval_seconds:
+            return BackgroundAdmission(False, "aged_share_cooling", previous)
+        updated = replace(previous, last_aged_backend_at=now)
+        return BackgroundAdmission(True, "aged_backend_share", updated)
+    if previous.state is PressureState.RECOVERING:
+        if previous.background_tokens <= 0:
+            return BackgroundAdmission(False, "recovery_token_unavailable", previous)
+        updated = replace(previous, background_tokens=previous.background_tokens - 1)
+        return BackgroundAdmission(True, "recovery_token", updated)
+    return BackgroundAdmission(False, "pressure_unknown", previous)
 
 
 def _step(

@@ -4714,6 +4714,48 @@ async def _proactive_speak_impl(
     :param skip_dice: 跳过概率掷骰（评分层已做完决策，再掷骰等于双重门槛）
     :return: None；命中时发送若干条群消息并记录“已发言”
     """
+    from gravitas.controller import active_controller
+
+    pressure_controller = active_controller()
+    if pressure_controller is not None:
+        try:
+            from gravitas.contracts import WorkClass
+            from gravitas.model_calls import role_call_context
+
+            resource_id = role_call_context(
+                ROLE_CHAT,
+                work_class=WorkClass.BACKGROUND,
+                tag="proactive-pressure",
+            ).resource_group_id
+            pressure = pressure_controller.admit_proactive(resource_id)
+            if not pressure.allowed:
+                _flow_decision(
+                    fctx,
+                    "proactive.preflight",
+                    status="blocked",
+                    reason_code=pressure.reason_code,
+                )
+                _log_participation_event(
+                    decision, "generation_skip", pressure.reason_code
+                )
+                return
+        except Exception as exc:
+            if pressure_controller.effective_mode.value == "enforce":
+                logger.warning(
+                    "[Gravitas] 主动任务压力决策不可用，安全跳过: %s", exc
+                )
+                _flow_decision(
+                    fctx,
+                    "proactive.preflight",
+                    status="blocked",
+                    reason_code="pressure_policy_unavailable",
+                )
+                _log_participation_event(
+                    decision, "generation_skip", "pressure_policy_unavailable"
+                )
+                return
+            logger.debug("[Gravitas] shadow pressure observation skipped: %s", exc)
+
     # 先判断该群是否到了“可以主动发言”的时机（统一闸门判定）
     allowed, reason = can_speak(group_id, "join")
     if not allowed:

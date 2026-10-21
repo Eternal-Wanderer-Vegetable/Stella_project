@@ -95,6 +95,7 @@ from memory.schema import (
     ensure_v2_schema,
 )
 from memory.text_similarity import is_similar, merge_content, same_normalized_text
+from memory.timeutil import seconds_since
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
@@ -746,6 +747,32 @@ class MemoryConsolidator:
                 last_id = self._get_last_processed_id(group_id)
                 new_count = self._count_new_messages(group_id, last_id)
 
+                from gravitas.controller import active_controller
+
+                pressure_controller = active_controller()
+                if pressure_controller is not None and new_count > 0:
+                    oldest_age = self.oldest_pending_age_seconds(group_id)
+                    resource_id = role_call_context(
+                        ROLE_CONSOLIDATION,
+                        work_class=WorkClass.BACKGROUND,
+                        tag="memory-consolidation-pressure",
+                    ).resource_group_id
+                    admission = pressure_controller.admit_background(
+                        resource_id,
+                        oldest_age_seconds=oldest_age,
+                        integrity_ok=pressure_controller.integrity_is_trusted(
+                            resource_id
+                        ),
+                    )
+                    if not admission.allowed:
+                        _flow_decision(
+                            mctx,
+                            "consolidate.preflight",
+                            status="deferred",
+                            reason_code=admission.reason_code,
+                        )
+                        return "deferred_pressure"
+
                 # 积压可观测性：checkpoint 已由 db_cleaner 保证在范围内，
                 # 因此这里的大数是「整合跟不上摄入」而非越界。
                 if new_count > CONSOLIDATION_BACKLOG_WARN:
@@ -1080,6 +1107,28 @@ class MemoryConsolidator:
     def backlog(self, group_id: int) -> int:
         """该群当前积压的未整合消息数。"""
         return self._count_new_messages(group_id, self._get_last_processed_id(group_id))
+
+    def oldest_pending_age_seconds(self, group_id: int) -> float | None:
+        """Age of the oldest unprocessed source row; unknown remains unknown."""
+        try:
+            last_id = self._get_last_processed_id(group_id)
+            conn = sqlite3.connect(DB_PATH)
+            try:
+                cursor = conn.cursor()
+                table = self._get_message_table(cursor)
+                cursor.execute(
+                    f"SELECT MIN(timestamp) FROM {table} WHERE group_id = ? AND id > ?",
+                    (str(group_id), last_id),
+                )
+                row = cursor.fetchone()
+            finally:
+                conn.close()
+        except (sqlite3.Error, ValueError, TypeError):
+            return None
+        if not row or not row[0]:
+            return 0.0
+        age = seconds_since(row[0])
+        return age if age is not None and age >= 0 else None
 
     def _fetch_next_messages(
         self, group_id: int, last_id: int, limit: int

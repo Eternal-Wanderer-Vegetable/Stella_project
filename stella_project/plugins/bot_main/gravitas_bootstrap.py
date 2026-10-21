@@ -16,7 +16,11 @@ from gravitas.config import (
     default_config,
     load_config,
 )
-from gravitas.controller import GravitasController
+from gravitas.controller import (
+    GravitasController,
+    active_controller,
+    set_active_controller,
+)
 
 _LOG = logging.getLogger("stella.gravitas")
 
@@ -60,10 +64,14 @@ class GravitasRuntime:
     async def stop(self) -> None:
         task = self._task
         self._task = None
-        if task is None or task.done():
-            return
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        if active_controller() is self.controller:
+            set_active_controller(None)
+            from memory.pre_processors import set_capture_pressure_provider
+
+            set_capture_pressure_provider(None)
 
     def status_snapshot(self) -> dict[str, object]:
         payload = self.controller.status_snapshot()
@@ -112,6 +120,17 @@ def setup_gravitas(driver, *, stella_home: str | Path, status_api) -> GravitasRu
         capture_source=capture_source,
         mode=mode,
     )
+    set_active_controller(controller)
+    from memory.pre_processors import set_capture_pressure_provider
+
+    if controller.effective_mode is GravitasMode.ENFORCE:
+        set_capture_pressure_provider(
+            lambda snapshot, wall_time: controller.admit_memory_capture(
+                snapshot, wall_time=wall_time
+            )
+        )
+    else:
+        set_capture_pressure_provider(None)
     runtime = GravitasRuntime(controller, bootstrap_reason=bootstrap_reason)
     status_api.set_gravitas_status_provider(runtime.status_snapshot)
     driver.on_startup(runtime.start)

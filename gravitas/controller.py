@@ -30,8 +30,14 @@ from gravitas.contracts import (
 from gravitas.events import EventBuffer, EventKind
 from gravitas.metrics import BoundedMetrics, ResourceMetrics
 from gravitas.policy import (
+    CaptureAdmission,
+    MemoryBacklogGuard,
+    MemoryBacklogSnapshot,
+    OperationAdmission,
+    PressureState,
     ResourcePolicyState,
     ResourceSignals,
+    admit_background,
     evaluate_pressure,
 )
 
@@ -255,6 +261,7 @@ class GravitasController:
         )
         self._source_sequences: dict[str, int] = {}
         self._pressure: dict[str, ResourcePolicyState] = {}
+        self._backlog_guard = MemoryBacklogGuard(config.pressure)
         self._slot_to_group = {
             slot: resource.group_id
             for resource in config.resources
@@ -264,7 +271,7 @@ class GravitasController:
             resource.group_id: resource.concurrency for resource in config.resources
         }
         self._policy_revision = 0
-        self._last_signature: tuple[tuple[str, str, int], ...] | None = None
+        self._last_signature: tuple[tuple[str, str, int, float | None], ...] | None = None
         self._policy: PolicySnapshot | None = None
         self._cached_status: dict[str, object] = self._make_status(
             now=self.clock.now(),
@@ -351,6 +358,7 @@ class GravitasController:
                     resource_id,
                     state.state.value,
                     state.background_tokens,
+                    state.last_aged_backend_at,
                 )
                 for resource_id, state in self._pressure.items()
             )
@@ -390,9 +398,95 @@ class GravitasController:
         """Return the current cached snapshot without invoking any collector."""
         return self._policy
 
+    def admit_background(
+        self,
+        resource_id: str,
+        *,
+        oldest_age_seconds: float | None,
+        integrity_ok: bool,
+    ) -> OperationAdmission:
+        """Return a mode-aware admission for consolidation or Compact work."""
+        if not isinstance(resource_id, str) or not resource_id:
+            raise ValueError("resource_id must be a non-empty string")
+        state = self._pressure.get(resource_id, ResourcePolicyState())
+        result = admit_background(
+            state,
+            now=_finite(self.clock.now(), "control_clock"),
+            oldest_age_seconds=oldest_age_seconds,
+            aged_after_seconds=self.config.pressure.backlog_age_high_water_seconds,
+            token_interval_seconds=self.config.pressure.background_token_interval_seconds,
+            integrity_ok=integrity_ok,
+        )
+        enforcing = self.effective_mode is GravitasMode.ENFORCE
+        if enforcing and result.allowed:
+            self._pressure[resource_id] = result.next_state
+        return OperationAdmission(
+            allowed=result.allowed if enforcing else True,
+            would_deny=not result.allowed,
+            reason_code=result.reason_code if enforcing or not result.allowed else "shadow_only",
+        )
+
+    def admit_proactive(self, resource_id: str) -> OperationAdmission:
+        """Proactive opportunities expire during pressure and are never queued."""
+        if not isinstance(resource_id, str) or not resource_id:
+            raise ValueError("resource_id must be a non-empty string")
+        state = self._pressure.get(resource_id, ResourcePolicyState())
+        would_deny = state.state is not PressureState.NORMAL
+        enforcing = self.effective_mode is GravitasMode.ENFORCE
+        return OperationAdmission(
+            allowed=not (enforcing and would_deny),
+            would_deny=would_deny,
+            reason_code=(
+                "proactive_paused_pressure"
+                if would_deny
+                else "within_limit"
+            ) if enforcing or would_deny else "shadow_only",
+        )
+
+    def integrity_is_trusted(self, resource_id: str) -> bool:
+        """Require a fresh, explicit healthy integrity fact for aged-work bypass."""
+        now = _finite(self.clock.now(), "control_clock")
+        return any(
+            fact.scope.kind is ScopeKind.RESOURCE
+            and fact.scope.key == resource_id
+            and fact.dimension is HealthDimension.INTEGRITY
+            and fact.value is HealthValue.HEALTHY
+            and fact.is_fresh(now)
+            and fact.source_boot_id == self.controller_boot_id
+            for fact in self._facts.snapshot(now=now)
+        )
+
+    def admit_memory_capture(
+        self,
+        snapshot: MemoryBacklogSnapshot,
+        *,
+        wall_time: float,
+    ) -> CaptureAdmission:
+        """Intersect the independent pressure cap with CaptureGate readiness."""
+        decision = self._backlog_guard.evaluate(
+            snapshot, now=self.clock.now(), wall_time=wall_time
+        )
+        if self.effective_mode is GravitasMode.ENFORCE:
+            if not decision.allowed:
+                self._backlog_guard.record_gap(
+                    decision.reason_code, wall_time=wall_time
+                )
+            return decision
+        return CaptureAdmission(
+            allowed=True,
+            would_deny=decision.would_deny,
+            reason_code=(
+                f"shadow_{decision.reason_code}"
+                if decision.would_deny
+                else "shadow_only"
+            ),
+            state=decision.state,
+        )
+
     def status_snapshot(self) -> dict[str, object]:
         """Return a copy of cached, low-cardinality diagnostics only."""
         payload = copy.deepcopy(self._cached_status)
+        payload["memory_backpressure"] = self._backlog_guard.status()
         snapshot = self._policy
         now = self.clock.now()
         if snapshot is None:
@@ -626,6 +720,7 @@ class GravitasController:
                     "resource_id": resource_id,
                     "pressure": state.state.value,
                     "background_tokens": state.background_tokens,
+                    "last_aged_backend_at": state.last_aged_backend_at,
                     "waiting": metric.waiting if metric else None,
                     "holding": metric.holding if metric else None,
                     "limit": metric.limit if metric else None,
@@ -662,6 +757,7 @@ class GravitasController:
             "snapshot_valid": snapshot_valid,
             "scheduler_collector_ok": scheduler_ok,
             "capture_collector_ok": capture_ok,
+            "memory_backpressure": self._backlog_guard.status(),
             "facts": {
                 "fresh": facts.fresh,
                 "tracked": facts.tracked,
@@ -698,3 +794,18 @@ def _finite(value: object, name: str) -> float:
     if not math.isfinite(result):
         raise ValueError(f"{name} must be finite")
     return result
+
+
+_ACTIVE_CONTROLLER: GravitasController | None = None
+
+
+def set_active_controller(controller: GravitasController | None) -> None:
+    """Install the Bot-owned controller for synchronous, bounded admission checks."""
+    global _ACTIVE_CONTROLLER
+    if controller is not None and not isinstance(controller, GravitasController):
+        raise TypeError("controller must be a GravitasController or None")
+    _ACTIVE_CONTROLLER = controller
+
+
+def active_controller() -> GravitasController | None:
+    return _ACTIVE_CONTROLLER

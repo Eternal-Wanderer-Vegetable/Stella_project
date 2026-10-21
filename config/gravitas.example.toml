@@ -1,4 +1,5 @@
 # 出厂参考配置。实际运行配置保存在 STELLA_HOME/config/gravitas.toml。
+# backlog_* 当前是 G05 离线夹具起点，不是生产 SLO；正式 enforce 仍被覆盖门禁拒绝。
 schema_version = 1
 
 [controller]
@@ -24,6 +25,11 @@ recover_queue_depth = 2
 recover_stable_seconds = 15.0
 background_token_interval_seconds = 10.0
 normal_stable_seconds = 30.0
+backlog_session_high_water = 500
+backlog_session_low_water = 250
+backlog_instance_high_water = 5000
+backlog_instance_low_water = 2500
+backlog_age_high_water_seconds = 600.0
 
 [resources.local_inference]
 slots = ["CHAT", "MEMORY"]

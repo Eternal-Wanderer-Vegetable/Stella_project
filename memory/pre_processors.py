@@ -17,6 +17,7 @@ import json
 import re
 import sqlite3
 import time
+from collections.abc import Callable
 
 from nonebot import logger
 
@@ -70,6 +71,67 @@ _BOT_SELF_RATIO_WARN = 0.7
 # 估算 token 上限独立兜底（超出时更早的单元整体让位，不切半条）。
 _TAIL_SCAN_ROW_CAP = 48
 _TAIL_UNIT_TOKEN_CAP = 1400
+CAPTURE_RESULT_PRESSURE_DENIED = "not_captured_pressure"
+_capture_pressure_provider: Callable[[object, float], object] | None = None
+
+
+def set_capture_pressure_provider(
+    provider: Callable[[object, float], object] | None,
+) -> None:
+    """Install the optional Gravitas pressure intersection for production capture."""
+    global _capture_pressure_provider
+    if provider is not None and not callable(provider):
+        raise TypeError("capture pressure provider must be callable or None")
+    _capture_pressure_provider = provider
+
+
+def _pending_backlog_snapshot(cursor: sqlite3.Cursor, session_key: str):
+    """Read backlog counts and age only; message bodies never enter the controller."""
+    from gravitas.policy import MemoryBacklogSnapshot
+
+    has_state = cursor.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='consolidation_state'"
+    ).fetchone() is not None
+    if has_state:
+        join = (
+            "LEFT JOIN consolidation_state AS state "
+            "ON state.group_id = messages.group_id"
+        )
+        pending = "messages.id > COALESCE(state.last_processed_id, 0)"
+    else:
+        join = ""
+        pending = "1 = 1"
+    cursor.execute(
+        "SELECT COUNT(*), MIN(messages.timestamp) FROM group_messages AS messages "
+        f"{join} WHERE {pending}"
+    )
+    instance_count, oldest_timestamp = cursor.fetchone()
+    cursor.execute(
+        "SELECT COUNT(*), MIN(messages.timestamp) FROM group_messages AS messages "
+        f"{join} WHERE messages.group_id = ? AND {pending}",
+        (session_key,),
+    )
+    session_count, session_oldest_timestamp = cursor.fetchone()
+    age = seconds_since(oldest_timestamp) if oldest_timestamp else 0.0
+    session_age = (
+        seconds_since(session_oldest_timestamp) if session_oldest_timestamp else 0.0
+    )
+    if (
+        age is None
+        or age < 0
+        or session_age is None
+        or session_age < 0
+    ):
+        return MemoryBacklogSnapshot(
+            int(session_count), int(instance_count), age, False, session_age
+        )
+    return MemoryBacklogSnapshot(
+        int(session_count),
+        int(instance_count),
+        float(age),
+        True,
+        float(session_age),
+    )
 
 
 # group_messages 的完整建表 DDL（新库直建全列；旧库靠自补 ALTER 逐列加）。
@@ -144,7 +206,8 @@ async def record_message(
     ``ctx.capture_result = "not_captured_unavailable"``——期间收到的消息不
     排队、不回放，恢复后从下一条新消息开始采集。省略（None）保持既有直接
     落库语义，仅供测试夹具、受控迁移与非入站显式调用方使用；生产入站必须
-    传决策。
+    传决策。启用 Gravitas pressure 时，在同一写锁内重算 backlog；达到上限
+    回填 ``not_captured_pressure``，只记有界缺口统计，不保存正文或建立补录队列。
 
     参数：ctx — 拥有 group_id / user_id / message 及可选信封字段的上下文；
     副作用：插入一条群消息记录并建表（幂等）；拒绝时零写库；
@@ -219,6 +282,23 @@ async def record_message(
             CREATE INDEX IF NOT EXISTS idx_group_messages_subject
             ON group_messages (conversation_key, subject_key, id)
         """)
+        if _capture_pressure_provider is not None:
+            cursor.execute("BEGIN IMMEDIATE")
+            snapshot = _pending_backlog_snapshot(
+                cursor, str(ctx.storage_key())
+            )
+            pressure_decision = _capture_pressure_provider(snapshot, time.time())
+            if not getattr(pressure_decision, "allowed", False):
+                ctx.recorded_row_id = 0
+                ctx.capture_result = CAPTURE_RESULT_PRESSURE_DENIED
+                conn.rollback()
+                conn.close()
+                logger.info(
+                    "[CapturePressure] 消息未落库；仅记录缺口计数与原因"
+                    f" scope={ctx.trace_scope}"
+                    f" reason={getattr(pressure_decision, 'reason_code', 'pressure_denied')}"
+                )
+                return ctx
         cursor.execute("""
             INSERT INTO group_messages (
                 group_id, user_id, content, source_kind, msg_id,

@@ -59,6 +59,7 @@ from memory.summary_packet import (
     render_summary_packet,
     validate_summary_packet,
 )
+from memory.timeutil import seconds_since
 
 # 温度与生成上限现在是端点×角色配置的一部分：
 # LLM_ROLE_COMPACT_TEMPERATURE（默认 0.3，信息提炼而非创作，稳定优先）、
@@ -843,6 +844,36 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             _flow_decision(fctx, "compact.preflight", status="skipped",
                            reason_code="below_threshold")
             return False
+
+        from gravitas.controller import active_controller
+
+        pressure_controller = active_controller()
+        if pressure_controller is not None:
+            timestamps = [
+                message.timestamp
+                for entry in batch.entries
+                for message in entry.messages
+                if message.timestamp
+            ]
+            oldest_age = seconds_since(min(timestamps)) if timestamps else None
+            resource_id = role_call_context(
+                ROLE_COMPACT,
+                work_class=WorkClass.BACKGROUND,
+                tag="memory-compact-pressure",
+            ).resource_group_id
+            admission = pressure_controller.admit_background(
+                resource_id,
+                oldest_age_seconds=oldest_age,
+                integrity_ok=pressure_controller.integrity_is_trusted(resource_id),
+            )
+            if not admission.allowed:
+                _flow_decision(
+                    fctx,
+                    "compact.preflight",
+                    status="deferred",
+                    reason_code=admission.reason_code,
+                )
+                return False
 
         existing = sc.get_summary_packet(group_id)
         if existing and not validate_summary_packet(
