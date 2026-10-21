@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP09 已完成，下一步 WP10；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `9f75ded`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)与[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP10 已完成，下一步 WP11；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `b0cb052`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)、[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)、[WP09记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)与[WP10记录](docs/reports/2026-10-21-wp10-control-plane-delivery.md)，平台 live、发布与 VM 验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -102,6 +102,19 @@
 - 定向回归 73 passed；全仓 Ruff 通过；文档 119 files / 1,224 links / 577 anchors / 0 errors；message-flow `9b80952673b2` 检查通过；真实 NoneBot Driver 的默认注册 smoke 仅初始化 Driver、不运行 Bot，结果为 `OneBot V11`。全量 Python 未跑；WP07 Cometa worker 挂起、真实平台、QQ 灰度、clean VM 与发布验收仍 NOT READY。
 - 测试设 `STELLA_HOME=/tmp/stella-wp09-20261021`；未读取或修改本机生产 `.env`、数据库或配置。下一阶段 WP10。
 - 细节见[WP09 实施记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)。
+
+## 2026-10-21 — Cross-platform implementation (WP10)
+
+- 实现提交 `a20c3a1`：平台页可配置适配器模块列表并展示配置值、生效值和进程覆盖；保留 OneBot 多正向 WS 地址与 token 不回显；平台配置写入受鉴权、审计和 restart_required 契约保护。Doctor 仅在 OneBot V11 未启用时跳过其五项 NapCat 检查；安装器状态页不再把 `applicable=false` 误报为协议端未连接。路由优先于 SPA 的原实现由既有挂载回归锁定。
+- 包装器问题在实现提交后复核发现；follow-up `b0cb052` 让 standalone 和 OneClick installer resource staging 都从最终发布树生成 `.stella-manifest.json`。这修正了 allowlist 将隐式元数据漏出包的问题。
+- 编辑前 GitNexus：`deploy.probe._probe_onebot` HIGH（10 impacted / 2 direct / 3 processes）；`check_onebot_mode` UNKNOWN/0 通过 `_ALL_CHECKS` 源码注册补证；`platformcfg.onebot` 与 `platformcfg.update` LOW。安装器内嵌 JS 文件影响 UNKNOWN/0，`rg` 确认消费者为本文件 `renderStatus` / `copyDiag`；状态 API 合同已由测试覆盖。包修复前刷新图绑定 `a20c3a1`：`build_standalone` LOW（5 / 2 direct）、`stage_installer_resources` MEDIUM（15 / 12 direct）、`write_manifest` LOW（2）。
+- GitNexus 阶段门禁：实现批次 all 16 files / 47 symbols / 8 processes / HIGH；包 follow-up all 2 files / 4 symbols / 0 processes / LOW。against-main 比较为 WP00–WP10 累计 333 files / 1,122 symbols / 106 processes / CRITICAL，重跑后无 partial；符号列表明确 capped。图已刷新并绑定 `b0cb052`；WP11 开始前会检查状态提交后的索引新鲜度。图分析记录仍包括 20 个大文件跳过、动态/跨语言属性边缺失、entry-point ranking/trace budget/branching 截断。
+- 状态证据提交前：文档门禁 119 files / 1,228 links / 577 anchors / 0 errors，JSON 与 staged diff 检查通过；GitNexus 状态 scope all 为 4 files / 11 symbols / LOW，compare main 为 334 files / 1,128 symbols / 106 processes / CRITICAL（累计；符号列表 capped）。
+- 回归：一组 Deploy/运行时/状态/WebUI 定向回归 **253 passed**；`test_platform_adapters.py` 后续更新后 **4 passed**；产品包测试 **18 passed**。全仓 Ruff 通过；文档门禁 119 files / 1,225 links / 577 anchors / 0 errors；message-flow `9b80952673b2` 检查通过。
+- Dashboard 使用 Codex bundled Node 执行 `vue-tsc --noEmit` 通过、Vitest **100 passed**、Vite production build 通过；产物有 dynamic-import 和 >500 KB chunk 警告。`run.html` 内嵌脚本 `node --check` 通过。pnpm wrapper 因本机 pnpm 11 把旧 `onlyBuiltDependencies` 配置视为 ignored build scripts 而失败；未批准额外脚本，使用已安装包的直接 Node 门禁完成验证，安装意外写入的 workspace 审批提示已还原。
+- 发布验证：standalone Python zip 已由 builder 生成并通过 `check_release_archive.py`；Standalone staging 与 OneClick resource staging 均通过 `check_release_layout.py`，其中含新 manifest、adapter loader、webui/dist 和 desktop/dashboard-dist。`pyproject.toml` 仍不静态预注册 adapter，OneBot 默认依赖仍在 `requirements.txt`。
+- 隔离：测试/构建使用 `STELLA_HOME=/tmp/stella-wp10-20261021` 与临时发布目录；本阶段未运行 Bot、读取生产库、连接模型或平台。非 OneBot live、全量 Python、QQ 灰度、clean VM 和真实 Release 仍 NOT READY。下一步 WP11。
+- 细节见[WP10 实施记录](docs/reports/2026-10-21-wp10-control-plane-delivery.md)。
 
 ## What's Done
 

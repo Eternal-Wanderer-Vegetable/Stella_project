@@ -62,7 +62,7 @@
         "tests/、依赖锁、文档、进度和交接"
       ],
       "done_criteria": [
-        "WP00–WP10 有对应实现、定向回归、影响证据和分阶段提交",
+        "WP00–WP11 有对应实现、定向回归、影响证据和分阶段提交",
         "身份/会话键支持不透明外部 ID、父级/线程和多 Bot 且旧 QQ/WebChat alias 可读",
         "权限、记忆来源和后台目标均使用可信主体/Target；跨平台泄漏与错投负例为零",
         "schema 迁移可在临时旧库上 dry-run、回滚、重跑；Python/native 合同一致并显式核验",
@@ -128,6 +128,16 @@
           "command": "WP09: GitNexus upstream impacts + dynamic-registration/source audit; targeted adapter/link/status/runtime pytest; Ruff; check_docs; generate_message_flow.py --check; pyproject TOML parse; isolated NoneBot Driver registration smoke; GitNexus detect-changes all/compare main",
           "result": "Implemented in 9f75ded: STELLA_ADAPTER_MODULES selects ordered adapter modules, defaulting to OneBot V11; disabled or uninstalled adapters are not loaded, and missing modules/driver incompatibility fail clearly. Per-Bot OneBot V11 heartbeat/probe isolation; non-OneBot connections retain unknown health, exposed with opaque references. 73 targeted tests passed; Ruff passed; docs 119 files/1224 links/577 anchors/0 errors; message-flow 9b80952673b2 check passed; isolated NoneBot Driver registered only OneBot V11 without starting Bot/network. GitNexus all 13 files/59 symbols/4 processes/MEDIUM; compare main 314 files/1018 symbols/106 processes/CRITICAL cumulative. The initial compare was PARTIAL and rerun serially; final counts/risk cover all changes, while displayed symbol list is capped. Non-OneBot live, full Python, QQ gray, clean VM, and release acceptance remain NOT READY; tests used STELLA_HOME=/tmp/stella-wp09-20261021.",
           "report": "docs/reports/2026-10-21-wp09-adapter-assembly-health.md"
+        },
+        {
+          "command": "WP10: GitNexus upstream impact/source audit; deploy/runtime/status/WebUI targeted pytest; adapter and product-profile tests; Ruff/docs/message-flow; Dashboard typecheck/Vitest/build; installer JS syntax; standalone archive and OneClick/Standalone layout checks; GitNexus detect-changes all/compare main",
+          "result": "Implemented in a20c3a1: authenticated/audited platform adapter configuration, OneBot multi-URL/token redaction, Doctor skips NapCat checks when OneBot is disabled, installer distinguishes inapplicable/disabled/disconnected. Follow-up b0cb052 generates editable-file manifest from final standalone and OneClick staging trees. Targeted Python 253 passed, adapter config suite 4 passed, product profile/package tests 18 passed (overlap); Dashboard typecheck and 100 Vitest tests passed; Vite build passed with chunk/dynamic-import warnings; Ruff, docs (119 files/1225 links/577 anchors), flow check and installer JS syntax passed. Standalone archive and both staging layouts passed. GitNexus first batch all 16 files/47 symbols/8 processes/HIGH; package follow-up all 2/4/0/LOW; fresh-index compare main 333 files/1122 symbols/106 processes/CRITICAL cumulative, full counts with symbol listing capped. Live adapters, full Python, QQ gray, clean VM, and full Release CI remain NOT READY; tests/packages used temporary STELLA_HOME/output.",
+          "report": "docs/reports/2026-10-21-wp10-control-plane-delivery.md"
+        },
+        {
+          "command": "WP10 state follow-up: python scripts/check_docs.py; feature_list JSON parse; git diff --check; GitNexus detect-changes scope all and compare main",
+          "result": "Plan, progress, feature state, and WP10 report updated bilingually where applicable. Docs check: 119 files/1228 links/577 anchors/0 errors; feature_list JSON and staged diff passed. State scope all: 4 files/11 symbols/0 processes/LOW; compare main: 334 files/1128 symbols/106 processes/CRITICAL cumulative, successful with symbol listing capped.",
+          "report": "docs/reports/2026-10-21-wp10-control-plane-delivery.md"
         }
       ]
     },

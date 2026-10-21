@@ -187,8 +187,9 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | WP07 后台目标与任务恢复 | done | [WP07 实施记录](../reports/2026-10-21-wp07-background-recovery.md)：后台目标绑定 BotRef/DeliveryTarget，Scheduling SQL 1→2 只为可验证的旧 QQ 任务补目标；旧配额隔离；Cometa Origin JSON 2→3，并保留 CAS、租约和 unknown 不重投。定向回归 401 passed；Cometa 除 worker 挂起用例外 194 passed/7 skipped。worker 用例超 8 分钟无进展后中断，整体和 live/发布验收仍 NOT READY。 |
 | WP08 AstrBot 兼容 | done | [WP08 实施记录](../reports/2026-10-21-wp08-astrbot-compat.md)：分发与工具事件构造均验证 OneBot v11 Bot；通用链转换；平台过滤按 adapter 类型名；Context 对多 OneBot Bot 歧义 fail closed。定向回归 373 passed，Ruff、文档与 flow 门禁通过。非 OneBot live、插件底层 API 仿真和发布验收未完成。 |
 | WP09 多适配器装配与健康 | done | [WP09 实施记录](../reports/2026-10-21-wp09-adapter-assembly-health.md)：按 `STELLA_ADAPTER_MODULES` 在插件加载前注册适配器；缺包/驱动错误明确；逐 Bot OneBot V11 健康与探活，其他适配器健康未知。定向回归 73 passed，Ruff、文档、flow 与默认 Driver smoke 通过。非 OneBot live、全量 Python、QQ 灰度、clean VM 与发布验收未完成。 |
+| WP10 控制面和交付 | done | [WP10 实施记录](../reports/2026-10-21-wp10-control-plane-delivery.md)：平台页可配置多适配器并保留 OneBot 多 WS/token 脱敏；停用 OneBot 时 Doctor 跳过 NapCat 检查；CLI/安装器准确区分不适用与断线；standalone/installer staging 从最终文件生成 manifest。定向 Python 253 passed（另有平台配置 4、产品包 18 passed，组间重叠）；Dashboard 100 passed/build/typecheck、Ruff、docs、flow、archive/layout 检查通过。真实平台、全量 Python、QQ 灰度、clean VM 与发布验收未完成。 |
 
-其他工作包仍为 planned；本表只在阶段实现、回归与提交后更新状态。
+WP11 仍为 planned；本表只在阶段实现、回归与提交后更新状态。
 
 具体补充：WP04 不改变 EXTRACT 的语义句型，只让来源主体具有正确平台域；WP05 保留原有开关默认值；WP07 不允许从模型文本恢复路由；WP09 不做自动下载并执行未知第三方适配器；WP10 保留 QQ/NapCat 产品配置为一种连接 profile，不能把现有 QQ 用户的部署入口直接删除。
 
