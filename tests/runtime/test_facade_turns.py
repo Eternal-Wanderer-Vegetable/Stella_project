@@ -113,6 +113,24 @@ async def test_provider_error_falls_back_like_legacy(tmp_path):
         await h.stop()
 
 
+async def test_scheduler_deferral_is_recorded_as_deferred_not_provider_failure(tmp_path):
+    from gravitas.model_calls import ModelCallDeferred
+
+    async def deferred(key: str, prompt: str) -> str:
+        raise ModelCallDeferred("scheduler_queue_full")
+
+    h = harness.RuntimeHarness(tmp_path)
+    h.facade._provider = deferred
+    try:
+        await h.start()
+        out = await h.facade.submit_turn(KEY, h.pipeline, h.ctx())
+        assert out.lines == ["队列繁忙，我稍后再试。"]
+        assert [r for r in h.store_lines() if r["state"] == "deferred_fallback"]
+        assert not [r for r in h.store_lines() if r["state"] == "provider_fallback"]
+    finally:
+        await h.stop()
+
+
 async def test_cancel_rejects_inflight_provider(tmp_path):
     h = harness.RuntimeHarness(tmp_path)
     try:

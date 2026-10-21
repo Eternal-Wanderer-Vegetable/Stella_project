@@ -52,13 +52,12 @@ class Pipeline(TurnService):
         pipeline.set_llm_backend(backend)
         ctx = await pipeline.run(ctx)
 
-    钩子按优先级（数字越大越先执行）排序；LLM 调用经调度器
-    acquire(gate_of(ROLE_CHAT)) 排队——纯本地时那把闸门并发度 1，即串行访问
-    共享的本地模型后端。
+    钩子按优先级（数字越大越先执行）排序；LLM 调用经 Gravitas 共享模型票据
+    排队——纯本地时那把资源并发度 1，即串行访问共享的本地模型后端。
 
     阶段语义见 :class:`~core.runtime.turn_service.TurnService`：
     ``prepare_turn``（pre hooks/直回短路/Planner/prompt 组装与预算）→
-    ``generate_reply``（闸门 + 单次生成 + 兜底）→ ``finalize_turn``
+    ``generate_reply``（共享票据 + 单次生成 + 兜底）→ ``finalize_turn``
     （trace 与后置 hooks）。Cortico 迁移后新运行时经同一批阶段服务执行
     （turn_service 是唯一实现，本类只是兼容入口）。
     """

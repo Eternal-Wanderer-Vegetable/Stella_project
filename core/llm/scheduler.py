@@ -11,10 +11,9 @@
 - **在线端点 concurrency=N**：厂商侧本来就并发处理，串行只是浪费；这里的上限
   是为了贴合厂商限流（429），而不是为了保护算力。
 
-资源名即端点槽名（``CHAT`` / ``MEMORY`` / ``VISION``），
-由 ``core.llm.registry.gate_of(role)`` 给出。同一资源内按 FIFO 排队；不同资源
-之间互不阻塞——纯本地部署下 ``CHAT``（27B/GPU）与 ``MEMORY``（E4B/CPU）能真正并行，
-这正是改造前 chat / consolidation 两把锁分离的意义。
+资源标识是端点槽名或 Gravitas 配置的共享资源组。一般角色经
+``core.llm.registry.gate_of(role)`` 取得端点槽，``gravitas.model_calls`` 可把多个槽
+映射到同一资源组。同一资源内按票据类别调度；不同资源之间互不阻塞。
 
 **调用方绝不能同时持有两把闸门**：若某个任务先持 A 闸门、再等 B 闸门（或反之），
 就会发生跨资源队头阻塞——资源 A 空闲时却在等资源 B 的队头任务释放，把两条队一起
@@ -27,6 +26,7 @@
 """
 
 import asyncio
+import contextvars
 import itertools
 import math
 import time
@@ -143,11 +143,20 @@ class QueueCapacityError(RuntimeError):
     reason_code = "scheduler_queue_full"
 
 
+class NestedResourceAcquireError(RuntimeError):
+    """A task tried to hold another model gate while already holding one."""
+
+    reason_code = "nested_resource_acquire"
+
+
 # 资源名 → 状态；进程内单份
 _resources: dict[str, _ResourceState] = {}
 # 持有者 token 生成器（进程内唯一即可，不需要跨资源区分）
 _hold_tokens = itertools.count()
 _queued_conversations: dict[str, int] = {}
+_held_resources: contextvars.ContextVar[tuple[tuple[int, str], ...]] = (
+    contextvars.ContextVar("stella_llm_held_resources", default=())
+)
 
 
 def _get(resource: str) -> _ResourceState:
@@ -206,6 +215,20 @@ async def acquire(
         or any(ord(char) < 32 or ord(char) == 127 for char in tag)
     ):
         raise ValueError("tag must be a bounded diagnostic label")
+    task = asyncio.current_task()
+    if task is None:
+        raise RuntimeError("scheduler tickets require an active asyncio task")
+    task_id = id(task)
+    held_by_task = tuple(
+        held_resource
+        for holder_task_id, held_resource in _held_resources.get()
+        if holder_task_id == task_id
+    )
+    if held_by_task:
+        held_list = ",".join(held_by_task)
+        raise NestedResourceAcquireError(
+            f"nested model resource acquisition refused ({held_list} -> {resource})"
+        )
     state = _get(resource)
     normalized_class = _work_class(work_class, priority)
     if deadline is not None:
@@ -264,10 +287,14 @@ async def acquire(
             f"⚠️ [Scheduler] 资源 {resource} 排队等待 {wait_seconds:.1f}s 才获得"
             f"（tag={tag or '-'}，阈值 {LLM_SCHEDULER_WAIT_WARN_SECONDS:.0f}s）"
         )
+    held_token = _held_resources.set((*_held_resources.get(), (task_id, resource)))
     try:
         yield
     finally:
-        _release_waiter(state, waiter)
+        try:
+            _release_waiter(state, waiter)
+        finally:
+            _held_resources.reset(held_token)
 
 
 def _work_class(work_class: WorkClass | str | None, priority: int) -> WorkClass:

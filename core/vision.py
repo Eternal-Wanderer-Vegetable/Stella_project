@@ -39,9 +39,11 @@ from config import (
     VISION_MAX_IMAGE_BYTES,
     VISION_MAX_IMAGES,
 )
-from core.llm import PRIORITY_INTERACTIVE, ROLE_VISION, acquire, backend_for, gate_of
+from core.llm import ROLE_VISION, backend_for, gate_of
 from core.llm.registry import binding, endpoint_of
 from core.llm.usage_store import budget_blocked
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import ModelCallContext, model_attempt, resource_group_for
 
 # 转述提示词：写死一句，不进配置。要求客观、简短——输出会被并到用户输入里，
 # 任何发挥都会污染记忆与回复。
@@ -248,8 +250,13 @@ async def _describe_one(src: str, call_args: dict, *, is_local_endpoint: bool) -
         {"type": "image_url", "image_url": {"url": url}},
     ]
     messages = [{"role": "user", "content": user_content}]
-    async with acquire(
-        gate_of(ROLE_VISION), tag="vision:describe", priority=PRIORITY_INTERACTIVE
+    slot = str(call_args.get("slot") or gate_of(ROLE_VISION))
+    async with model_attempt(
+        ModelCallContext(
+            resource_group_id=resource_group_for(slot),
+            work_class=WorkClass.INTERACTIVE,
+            tag="vision-describe",
+        )
     ):
         data = await asyncio.wait_for(
             chat_completion(messages, **call_args),

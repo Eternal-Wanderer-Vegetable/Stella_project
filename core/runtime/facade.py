@@ -173,16 +173,21 @@ async def _pipeline_provider(
     失效（2026-09-27 缺陷：facade 生成丢系统提示词，回复超长且无结构）。
 
     不经旧 Pipeline 编排，但仍与其他生产调用共享进程级 CHAT 端点闸门。"""
-    from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
+    from core.llm import ROLE_CHAT
+    from gravitas.contracts import WorkClass
+    from gravitas.model_calls import execute_model_call, role_call_context
 
-    async with acquire(
-        gate_of(ROLE_CHAT),
-        tag=f"facade:{ctx.trace_scope}",
-        priority=PRIORITY_INTERACTIVE,
-    ):
-        return await pipeline._llm.generate(  # type: ignore[union-attr]
-            prompt, pending_system_prompt(ctx)
-        )
+    return await execute_model_call(
+        pipeline._llm,  # type: ignore[union-attr]
+        prompt,
+        pending_system_prompt(ctx),
+        context=role_call_context(
+            ROLE_CHAT,
+            work_class=WorkClass.INTERACTIVE,
+            tag="facade-turn",
+            conversation_key=ctx.conversation_key,
+        ),
+    )
 
 
 class RuntimeFacade:
@@ -324,6 +329,8 @@ class RuntimeFacade:
                 gen_started = time.monotonic()
                 gen_span = _flow_span(fctx, "turn.generate")
                 gen_span.__enter__()
+                from gravitas.model_calls import ModelCallDeferred
+
                 task = asyncio.create_task(provider(key, prompt) if self._provider
                                            else _pipeline_provider(pipeline, key, prompt, ctx))
                 state.inflight = task
@@ -377,9 +384,27 @@ class RuntimeFacade:
                                      to_node="turn.cancel", relation_kind="condition",
                                      status="cancelled")
                     raise  # 外部取消（调用方断开等）：原样传播
+                except ModelCallDeferred as e:
+                    gen_span.__exit__(None, None, None)
+                    _flow_decision(fctx, "turn.generate", status="deferred",
+                                   reason_code=e.reason_code)
+                    ctx.llm_elapsed = time.monotonic() - gen_started
+                    ctx.delivery_source_kind = "trusted-server-fallback"
+                    ctx.raw_output = "<thought>稍等一下</thought><action>NONE</action><reply>队列繁忙，我稍后再试。</reply>"
+                    self._record(
+                        turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=state.owner_epoch,
+                        outcome=plan.outcome, state="deferred_fallback",
+                        started_at=started, finished_at=time.time(),
+                    )
+                    _trace(trace_id=ctx.trace_id, turn_id=turn_id,
+                           stage="model_attempt", status="deferred",
+                           reason_code=e.reason_code, attempt=0,
+                           metrics={"elapsed": ctx.llm_elapsed},
+                           scope=ctx.trace_scope, started_at=started)
+                    return await pipeline.finalize_turn(ctx)
                 except Exception as e:
                     # provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——
-                    # 兜底而非上抛，不让异常击穿消息链路
+                    # 兜底而非上抛，不让异常击穿整条消息链路
                     gen_span.__exit__(type(e), e, e.__traceback__)
                     _flow_decision(fctx, "turn.error", status="failed",
                                    reason_code="provider_error")

@@ -52,7 +52,7 @@ from config import (
 )
 from core.context import ChatContext
 from core.context_budget import estimate_tokens, fit_prompt_to_window
-from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
+from core.llm import ROLE_CHAT
 from core.llm.base import LLMBackend
 from core.llm.usage_store import budget_blocked
 
@@ -267,24 +267,42 @@ class RestrictedPlanner:
         return "\n\n".join(p for p in parts if p)
 
     async def _ask(self, ctx: ChatContext, trig: PlannerTrigger) -> str:
-        """一次 Planner LLM 调用：走 CHAT 闸门排队、过 ContextBudget、计名次。"""
+        """一次 Planner LLM 调用：走共享资源票据、过 ContextBudget、计名次。"""
         prompt = self._build_prompt(ctx, trig)
         budgeted = fit_prompt_to_window(prompt, PLANNER_SYSTEM_PROMPT)
-        async with acquire(
-            gate_of(ROLE_CHAT), tag=f"planner:{ctx.group_id}", priority=PRIORITY_INTERACTIVE
-        ):
-            try:
-                ctx.llm_call_count += 1
-                return await asyncio.wait_for(
-                    self._backend.generate(budgeted.prompt, PLANNER_SYSTEM_PROMPT),
-                    timeout=self._timeout,
-                )
-            except asyncio.TimeoutError:
-                logger.warning("⏳ [Planner] 规划超时，按直接回复处理")
-                return "REPLY"
-            except Exception as e:
-                logger.warning(f"⚠️ [Planner] 规划调用失败，按直接回复处理: {e}")
-                return "REPLY"
+        from core.llm import ROLE_CHAT
+        from gravitas.contracts import WorkClass
+        from gravitas.model_calls import (
+            ModelCallDeferred,
+            execute_model_call,
+            role_call_context,
+        )
+
+        try:
+            ctx.llm_call_count += 1
+            return await asyncio.wait_for(
+                execute_model_call(
+                    self._backend,
+                    budgeted.prompt,
+                    PLANNER_SYSTEM_PROMPT,
+                    context=role_call_context(
+                        ROLE_CHAT,
+                        work_class=WorkClass.INTERACTIVE,
+                        tag="planner-turn",
+                        conversation_key=ctx.conversation_key,
+                    ),
+                ),
+                timeout=self._timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("⏳ [Planner] 规划超时，按直接回复处理")
+            return "REPLY"
+        except ModelCallDeferred as e:
+            logger.info(f"[Planner] 模型队列压力，本轮按直接回复处理（{e.reason_code}）")
+            return "REPLY"
+        except Exception as e:
+            logger.warning(f"⚠️ [Planner] 规划调用失败，按直接回复处理: {e}")
+            return "REPLY"
 
     def _query_memory(self, ctx: ChatContext, query: str) -> str:
         """一次深度记忆查询：优先本地检索（retrieval_v2），结果压缩后回填。

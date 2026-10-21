@@ -37,6 +37,13 @@ class GravitasRuntime:
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
             return
+        try:
+            from gravitas.model_calls import configure_resource_groups
+
+            configure_resource_groups(self.controller.config.resources)
+        except Exception:
+            self.bootstrap_reason = "resource_group_config_error"
+            _LOG.error("Gravitas resource groups could not be installed; endpoint gates remain active")
         self._task = asyncio.create_task(
             self._run_guarded(), name="stella-gravitas-controller"
         )

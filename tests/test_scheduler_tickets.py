@@ -93,13 +93,16 @@ def test_queue_and_per_conversation_caps_reject_without_growing_waiters(monkeypa
 
         first = asyncio.create_task(queued())
         await asyncio.sleep(0)
-        with pytest.raises(scheduler.QueueCapacityError):
-            async with scheduler.acquire(
-                "LOCAL",
-                tag="conversation-b",
-                work_class=WorkClass.BACKGROUND,
-            ):
-                pass
+        async def rejected():
+            with pytest.raises(scheduler.QueueCapacityError):
+                async with scheduler.acquire(
+                    "LOCAL",
+                    tag="conversation-b",
+                    work_class=WorkClass.BACKGROUND,
+                ):
+                    pass
+
+        await asyncio.create_task(rejected())
         stats = scheduler.snapshot()["LOCAL"]
         assert stats["waiting"] == 1
         assert stats["rejected_queue_full"] == 1
@@ -121,14 +124,17 @@ def test_second_pending_interactive_for_same_conversation_is_rejected():
             )
         )
         await asyncio.sleep(0)
-        with pytest.raises(scheduler.QueueCapacityError):
-            async with scheduler.acquire(
-                "LOCAL",
-                tag="second",
-                work_class=WorkClass.INTERACTIVE,
-                conversation_key="opaque-conversation-a",
-            ):
-                pass
+        async def rejected():
+            with pytest.raises(scheduler.QueueCapacityError):
+                async with scheduler.acquire(
+                    "LOCAL",
+                    tag="second",
+                    work_class=WorkClass.INTERACTIVE,
+                    conversation_key="opaque-conversation-a",
+                ):
+                    pass
+
+        await asyncio.create_task(rejected())
         assert scheduler.snapshot()["LOCAL"]["waiting"] == 1
         await holder.__aexit__(None, None, None)
         await queued
@@ -145,6 +151,21 @@ def test_scheduler_resource_registry_has_a_fixed_bound(monkeypatch):
         with pytest.raises(scheduler.QueueCapacityError):
             async with scheduler.acquire("MEMORY", tag="second"):
                 pass
+
+    asyncio.run(main())
+
+
+@pytest.mark.parametrize("nested_resource", ["LOCAL", "MEMORY"])
+def test_nested_same_or_cross_resource_acquisition_is_refused(nested_resource):
+    async def main():
+        async with scheduler.acquire("LOCAL", tag="outer"):
+            with pytest.raises(scheduler.NestedResourceAcquireError):
+                async with scheduler.acquire(nested_resource, tag="nested"):
+                    pass
+        snapshot = scheduler.snapshot()
+        assert snapshot["LOCAL"]["holding"] == 0
+        if nested_resource == "MEMORY":
+            assert "MEMORY" not in snapshot
 
     asyncio.run(main())
 

@@ -427,8 +427,10 @@ class StellaChatProvider(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式输出。最后一次 yield 是完整结果（与上游一致）。"""
         _ = (audio_urls, request_max_retries)
-        from core.llm import PRIORITY_INTERACTIVE, ROLE_PLUGIN, acquire, gate_of
+        from core.llm import ROLE_PLUGIN
         from core.llm.openai_client import chat_completion_stream
+        from gravitas.contracts import WorkClass
+        from gravitas.model_calls import model_attempt, role_call_context
 
         messages = await self._build_messages(
             prompt=prompt,
@@ -442,10 +444,13 @@ class StellaChatProvider(Provider):
         messages = self._apply_budget(messages, tools)
 
         buffer = ""
-        async with acquire(
-            gate_of(ROLE_PLUGIN),
-            tag=f"plugin-llm-stream:{session_id or '-'}",
-            priority=PRIORITY_INTERACTIVE,
+        async with model_attempt(
+            role_call_context(
+                ROLE_PLUGIN,
+                work_class=WorkClass.INTERACTIVE,
+                tag="plugin-llm-stream",
+                conversation_key=session_id,
+            )
         ):
             async for chunk in chat_completion_stream(
                 messages,
@@ -477,13 +482,18 @@ class StellaChatProvider(Provider):
         记忆压缩 / 插件调用绑同一个端点、必须 FIFO 串行，否则插件一调用就和
         主对话抢显存。把插件绑到独立端点后同一行代码自动变成真并行。
         """
-        from core.llm import PRIORITY_INTERACTIVE, ROLE_PLUGIN, acquire, gate_of
+        from core.llm import ROLE_PLUGIN
         from core.llm.openai_client import chat_completion
+        from gravitas.contracts import WorkClass
+        from gravitas.model_calls import model_attempt, role_call_context
 
-        async with acquire(
-            gate_of(ROLE_PLUGIN),
-            tag=f"plugin-llm:{session_id or '-'}",
-            priority=PRIORITY_INTERACTIVE,
+        async with model_attempt(
+            role_call_context(
+                ROLE_PLUGIN,
+                work_class=WorkClass.INTERACTIVE,
+                tag="plugin-llm",
+                conversation_key=session_id,
+            )
         ):
             return await chat_completion(
                 messages,

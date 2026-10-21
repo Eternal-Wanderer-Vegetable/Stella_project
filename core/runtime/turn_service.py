@@ -9,7 +9,7 @@
   记忆/工具/知识/技能注入与 prompt 组装 → 预算裁剪。产出 :class:`TurnPlan`，
   ``outcome`` 是有类型的结果（``generate | direct | silent | budget_limited``），
   **绝不**把「没有内容」补成兜底回复（WAIT 语义，PDG 约束）。
-- ``generate_reply``：仅封装 LLM 闸门排队、单次 ``generate`` 与超时/异常兜底。
+- ``generate_reply``：仅封装 LLM 资源票据、单次 ``generate`` 与超时/异常兜底。
   Cortico 的 ResponseClient 经薄桥调用的就是这一层（不含整个 Pipeline）。
 - ``finalize_turn``：记忆决策 trace 与后置 hooks（解析→过滤→分行→日志）。
 
@@ -30,7 +30,6 @@ from nonebot import logger
 from config import MEMORY_V2_ENABLED, PLANNER_MAX_LLM_CALLS_PER_TURN
 from core.context import ChatContext
 from core.context_budget import fit_prompt_to_window
-from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
 from core.llm.base import LLMBackend
 
 PreHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
@@ -273,9 +272,8 @@ class TurnService:
             ctx = await service.generate_reply(plan.ctx)
             ctx = await service.finalize_turn(ctx)
 
-    钩子按优先级（数字越大越先执行）排序；LLM 调用经调度器
-    acquire(gate_of(ROLE_CHAT)) 排队——纯本地时那把闸门并发度 1，即串行访问
-    共享的本地模型后端。
+    钩子按优先级（数字越大越先执行）排序；LLM 调用经 Gravitas 共享模型票据
+    排队——纯本地时那把资源并发度 1，即串行访问共享的本地模型后端。
     """
 
     def __init__(self, timeout: float = 90.0):
@@ -610,7 +608,7 @@ class TurnService:
         return TurnPlan(ctx, GENERATE)
 
     async def generate_reply(self, ctx: ChatContext) -> ChatContext:
-        """阶段二：闸门排队 + 单次 generate + 超时/异常兜底。
+        """阶段二：资源票据 + 单次 generate + 超时/异常兜底。
 
         前置条件：``prepare_turn`` 返回 ``GENERATE``（最终 prompt 已按
         BC-6 与预算估算同源暂存在 ctx 上）。调用次数恰好 +1（含超时/异常路径）。
@@ -618,36 +616,53 @@ class TurnService:
         user_prompt = getattr(ctx, _PENDING_PROMPT_KEY)
         system_prompt = getattr(ctx, _PENDING_SYSTEM_KEY)
 
-        # 闸门资源名 = CHAT 角色绑定的端点槽：纯本地部署下压缩/候选提取绑同一
-        # 个槽，于是与主链路 FIFO 串行共用 27B；把它们分到不同端点后同一行
-        # 代码自动变成并行。交互回复标记为高优先级意图（当前优先级未启用，
-        # 仅按 FIFO 处理）。
-        async with acquire(
-            gate_of(ROLE_CHAT), tag=f"reply:{ctx.trace_scope}", priority=PRIORITY_INTERACTIVE
-        ):
-            import time as _time
-            _t0 = _time.monotonic()
-            try:
-                ctx.llm_call_count += 1
-                raw = await asyncio.wait_for(
-                    self._llm.generate(user_prompt, system_prompt),
-                    timeout=self._timeout,
-                )
-                ctx.llm_elapsed = _time.monotonic() - _t0
-                ctx.raw_output = raw
-                ctx.delivery_source_kind = "model"
-            except asyncio.TimeoutError:
-                # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
-                ctx.llm_elapsed = _time.monotonic() - _t0
-                logger.error("LLM 执行超时")
-                ctx.delivery_source_kind = "trusted-server-fallback"
-                ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
-            except Exception as e:
-                # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
-                ctx.llm_elapsed = _time.monotonic() - _t0
-                logger.error(f"LLM 执行异常: {e}")
-                ctx.delivery_source_kind = "trusted-server-fallback"
-                ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
+        import time as _time
+
+        from core.llm import ROLE_CHAT
+        from gravitas.contracts import WorkClass
+        from gravitas.model_calls import (
+            ModelCallDeferred,
+            execute_model_call,
+            role_call_context,
+        )
+
+        _t0 = _time.monotonic()
+        try:
+            ctx.llm_call_count += 1
+            raw = await asyncio.wait_for(
+                execute_model_call(
+                    self._llm,
+                    user_prompt,
+                    system_prompt,
+                    context=role_call_context(
+                        ROLE_CHAT,
+                        work_class=WorkClass.INTERACTIVE,
+                        tag="reply-turn",
+                        conversation_key=ctx.conversation_key,
+                    ),
+                ),
+                timeout=self._timeout,
+            )
+            ctx.llm_elapsed = _time.monotonic() - _t0
+            ctx.raw_output = raw
+            ctx.delivery_source_kind = "model"
+        except asyncio.TimeoutError:
+            # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
+            ctx.llm_elapsed = _time.monotonic() - _t0
+            logger.error("LLM 执行超时")
+            ctx.delivery_source_kind = "trusted-server-fallback"
+            ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
+        except ModelCallDeferred as e:
+            ctx.llm_elapsed = _time.monotonic() - _t0
+            logger.info(f"模型队列压力导致本轮延期（{e.reason_code}）")
+            ctx.delivery_source_kind = "trusted-server-fallback"
+            ctx.raw_output = "<thought>稍等一下</thought><action>NONE</action><reply>队列繁忙，我稍后再试。</reply>"
+        except Exception as e:
+            # 任何异常都回退到兜底回复，不让异常击穿整条消息链路
+            ctx.llm_elapsed = _time.monotonic() - _t0
+            logger.error(f"LLM 执行异常: {e}")
+            ctx.delivery_source_kind = "trusted-server-fallback"
+            ctx.raw_output = "<thought>系统异常</thought><action>NONE</action><reply>......？</reply>"
         return ctx
 
     async def finalize_turn(self, ctx: ChatContext) -> ChatContext:

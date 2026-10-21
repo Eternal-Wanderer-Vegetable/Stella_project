@@ -197,12 +197,22 @@ class CaptureGate:
             return self.capture_allowed()
         self._probing = True
         start_epoch = self._epoch
+        previous_state = self._state
         renewing = self._state == STATE_READY
         if not renewing:
             self._state = STATE_PROBING
         self._last_probe_at = self._wall()
+        from gravitas.model_calls import ModelCallDeferred
+
         try:
             ok, category = await self._probe_fn()
+        except ModelCallDeferred:
+            # Queue pressure is not an endpoint health signal. Restore the
+            # previous state and retry after a normal interval without advancing
+            # the failure count or epoch.
+            self._state = previous_state
+            self._next_retry_at = self._clock() + self._probe_interval
+            return self.capture_allowed()
         except Exception:
             # 假探针/默认探针的意外异常同样按「探测失败」处理，绝不外溢
             ok, category = False, "request_failed"
@@ -271,6 +281,13 @@ class CaptureGate:
         - 不发会话数据；正文固定 "ping"；响应只判断非空，不落盘。
         """
         from core.llm.registry import ROLE_CONSOLIDATION, backend_for
+        from gravitas.clock import SystemControlClock
+        from gravitas.contracts import Deadline, WorkClass
+        from gravitas.model_calls import (
+            ModelCallDeferred,
+            execute_model_call,
+            role_call_context,
+        )
 
         backend = backend_for(ROLE_CONSOLIDATION)
         if backend is None:
@@ -278,11 +295,26 @@ class CaptureGate:
             return False, "no_backend"
         primary = getattr(backend, "primary", backend)
         self._role_slot = str(getattr(primary, "slot", "") or "")
+        clock = SystemControlClock()
+        context = role_call_context(
+            ROLE_CONSOLIDATION,
+            work_class=WorkClass.MAINTENANCE,
+            tag="capture-gate-probe",
+            deadline=Deadline(clock.now() + self._probe_timeout, clock.clock_id),
+            clock=clock,
+        )
         try:
             text = await asyncio.wait_for(
-                backend.generate(_PROBE_PROMPT, _PROBE_SYSTEM),
+                execute_model_call(
+                    backend,
+                    _PROBE_PROMPT,
+                    _PROBE_SYSTEM,
+                    context=context,
+                ),
                 timeout=self._probe_timeout,
             )
+        except ModelCallDeferred:
+            raise
         except (asyncio.TimeoutError, TimeoutError):
             return False, "timeout"
         except Exception as exc:

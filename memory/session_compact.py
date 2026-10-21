@@ -32,10 +32,16 @@ from config import (
     DB_PATH,
     SESSION_SUMMARY_MAX_TOKENS,
 )
-from core.llm import ROLE_COMPACT, acquire, backend_for, gate_of
+from core.llm import ROLE_COMPACT, backend_for
 from core.llm.base import LLMBackend
 from core.llm.registry import binding
 from core.llm.usage_store import budget_blocked
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelCallDeferred,
+    execute_model_call,
+    role_call_context,
+)
 from memory import session_context as sc
 from memory.conversation_projection import (
     TranscriptBubble,
@@ -905,18 +911,36 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
             return False
         try:
             with _flow_span(fctx, "compact.generate"):
-                # Release the shared model gate between batches so chat can run.
-                async with acquire(gate_of(ROLE_COMPACT), tag=f"compact:{group_id}"):
-                    detailed = getattr(backend, "generate_detailed", None)
-                    if detailed is None:
-                        result, finish = await backend.generate(prompt), ""
-                    else:
-                        result, finish = await detailed(prompt)
+                # Release the shared model ticket between batches so chat can run.
+                detailed = callable(getattr(backend, "generate_detailed", None))
+                output = await execute_model_call(
+                    backend,
+                    prompt,
+                    context=role_call_context(
+                        ROLE_COMPACT,
+                        work_class=WorkClass.BACKGROUND,
+                        tag="memory-compact",
+                    ),
+                    detailed=detailed,
+                )
+                if detailed:
+                    result, finish = output
+                else:
+                    result, finish = output, ""
             _flow_decision(fctx, "compact.generate", status="succeeded",
                            metrics={"batch": index, "batches": len(requests),
                                     "prompt_token_upper_bound": len(prompt.encode("utf-8")),
                                     "output_reserve_tokens": output_tokens,
                                     "window_tokens": COMPACT_CONTEXT_LIMIT})
+        except ModelCallDeferred as exc:
+            _flow_decision(fctx, "compact.generate", status="deferred",
+                           reason_code=exc.reason_code,
+                           metrics={"batch": index, "batches": len(requests)})
+            logger.info(
+                f"[Compact] 群 {group_id} 第 {index}/{len(requests)} 批因模型队列压力延期；"
+                "保留全部来源待重试"
+            )
+            return False
         except Exception as exc:
             logger.warning(
                 f"⚠️ [Compact] 群 {group_id} 第 {index}/{len(requests)} 批失败"

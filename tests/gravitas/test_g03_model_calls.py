@@ -10,8 +10,15 @@ import pytest
 import core.llm.registry as registry
 import core.llm.scheduler as scheduler
 from gravitas.clock import ManualControlClock
+from gravitas.config import ResourceGroupConfig
 from gravitas.contracts import Deadline, WorkClass
-from gravitas.model_calls import ModelCallContext, execute_model_call
+from gravitas.model_calls import (
+    ModelCallContext,
+    ModelCallDeferred,
+    configure_resource_groups,
+    execute_model_call,
+    resource_group_for,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +78,46 @@ def test_executor_supports_detailed_backend_contract():
     )
     assert result == ("system:prompt", "stop")
     assert backend.calls == 1
+
+
+def test_executor_defers_when_bounded_queue_is_full(monkeypatch):
+    backend = _FakeBackend()
+    monkeypatch.setattr(scheduler, "RESOURCE_QUEUE_CAP", 0)
+    context = ModelCallContext("LOCAL", WorkClass.INTERACTIVE, tag="turn")
+
+    with pytest.raises(ModelCallDeferred) as raised:
+        asyncio.run(execute_model_call(backend, "prompt", context=context))
+
+    assert raised.value.reason_code == "scheduler_queue_full"
+    assert backend.calls == 0
+    assert scheduler.snapshot()["LOCAL"]["waiting"] == 0
+
+
+def test_configured_slots_share_the_bounded_resource_group(monkeypatch):
+    monkeypatch.setattr(
+        registry,
+        "concurrency_of",
+        lambda slot: {"CHAT": 3, "MEMORY": 2}.get(slot, 1),
+    )
+    configure_resource_groups(
+        (ResourceGroupConfig("shared_gpu", ("CHAT", "MEMORY"), 4),)
+    )
+    try:
+        assert resource_group_for("CHAT") == "shared_gpu"
+        assert resource_group_for("MEMORY") == "shared_gpu"
+        assert resource_group_for("VISION") == "VISION"
+
+        async def main():
+            async def worker(tag: str):
+                async with scheduler.acquire("shared_gpu", tag=tag):
+                    await asyncio.sleep(0.01)
+
+            await asyncio.gather(worker("first"), worker("second"))
+
+        asyncio.run(main())
+        assert scheduler.snapshot()["shared_gpu"]["peak_holding"] == 2
+    finally:
+        configure_resource_groups(())
 
 
 def test_executor_rejects_expired_and_foreign_clock_deadlines():

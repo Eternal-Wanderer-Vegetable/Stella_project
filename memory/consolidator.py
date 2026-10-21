@@ -54,13 +54,17 @@ from config.spaces import resolve_space
 from core.llm import (
     ROLE_CONSOLIDATION,
     ROLE_EXTRACT,
-    acquire,
     backend_for,
-    gate_of,
     role_is_online,
 )
 from core.llm.base import LLMBackend
 from core.llm.usage_store import budget_blocked
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelCallDeferred,
+    execute_model_call,
+    role_call_context,
+)
 from memory import capture_gate
 from memory.consolidation_log import append_consolidation_log
 from memory.consolidation_prompt import format_consolidation_prompt
@@ -236,11 +240,21 @@ class MemoryConsolidator:
             prompt = self._build_prompt(group_id, messages)
             logger.info(f"🌐 [Consolidator] 尝试 LLM: {backend_name}（{limit} 条）")
             model_tag = getattr(backend, "model", "") or backend_name
-            # 只在真正调用模型的这一刻持闸门：DB 读取与 prompt 拼装不占锁，
-            # 且绝不与别的闸门同时持有（防止跨资源队头阻塞）。
             try:
-                async with acquire(gate_of(ROLE_CONSOLIDATION), tag=f"consolidate:{group_id}"):
-                    result, finish = await backend.generate_detailed(prompt)
+                result, finish = await execute_model_call(
+                    backend,
+                    prompt,
+                    context=role_call_context(
+                        ROLE_CONSOLIDATION,
+                        work_class=WorkClass.BACKGROUND,
+                        tag="memory-consolidation",
+                    ),
+                    detailed=True,
+                )
+            except ModelCallDeferred:
+                # Backpressure is not an endpoint failure; retain source rows and
+                # let the existing consolidator trigger retry this batch later.
+                raise
             except Exception:
                 # 真实生成/传输失败 = 探针没抓到的瞬时故障：立即关记忆采集门
                 # （epoch 围栏让在途旧探针翻不了案，计划 §6.1）。截断异常在
@@ -341,8 +355,22 @@ class MemoryConsolidator:
         prompt = format_extraction_prompt(sliced)
         logger.info(f"🎯 [Extractor] 阶段2 候选提取：{name}（{model_tag}）")
         try:
-            async with acquire(gate_of(ROLE_EXTRACT), tag=f"extract:{group_id}"):
-                result, finish = await backend.generate_detailed(prompt)
+            result, finish = await execute_model_call(
+                backend,
+                prompt,
+                context=role_call_context(
+                    ROLE_EXTRACT,
+                    work_class=WorkClass.BACKGROUND,
+                    tag="memory-extraction",
+                ),
+                detailed=True,
+            )
+        except ModelCallDeferred as exc:
+            logger.info("[Extractor] 阶段2 因共享模型队列满而延期，回退阶段1 候选")
+            append_consolidation_log(
+                f" > 阶段2（提取）已延期（{exc.reason_code}），回退阶段1 候选\n"
+            )
+            return None
         except Exception:
             logger.exception("❌ [Extractor] 阶段2 提取调用失败，回退阶段1 候选")
             append_consolidation_log(" > ❌ 阶段2（提取）调用失败，回退阶段1 候选\n")

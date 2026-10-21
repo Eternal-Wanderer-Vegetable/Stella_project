@@ -11,8 +11,8 @@
 - 本模块服务 AstrBot 插件兼容层，需要透传完整的 messages 数组、tools（function
   calling）、图片内容块与流式输出——这些 ``generate()`` 表达不了。
 
-两者共用同一个本地模型，因此**调用方必须自行经 ``core.llm.scheduler.acquire()``
-排队**；本模块只负责发请求，不涉及闸门。
+两者共用同一个本地模型，因此调用路径必须持有共享模型票据；生产调用经
+``gravitas.model_calls.model_attempt()`` 排队。本模块只负责发请求，不涉及调度。
 """
 
 from __future__ import annotations

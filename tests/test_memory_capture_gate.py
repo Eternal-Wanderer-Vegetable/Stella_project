@@ -96,6 +96,28 @@ async def test_probe_failure_stays_closed_with_category():
     assert decision.result_code == CAPTURE_RESULT_DENIED
 
 
+async def test_probe_queue_pressure_does_not_count_as_endpoint_failure():
+    from gravitas.model_calls import ModelCallDeferred
+
+    clock = _FakeClock()
+
+    async def deferred_probe():
+        raise ModelCallDeferred("scheduler_queue_full")
+
+    gate = CaptureGate(
+        probe=deferred_probe,
+        clock=clock,
+        probe_interval=12.0,
+    )
+    assert await gate.probe_once() is False
+    snapshot = gate.status_snapshot()
+    assert snapshot["state"] == STATE_STARTING
+    assert snapshot["epoch"] == 0
+    assert snapshot["consecutive_failures"] == 0
+    assert snapshot["error_category"] == ""
+    assert snapshot["next_retry_in_seconds"] == 12.0
+
+
 async def test_backoff_doubles_and_caps():
     """连续失败的退避阶梯：interval 起步、翻倍、封顶 300s。"""
     clock = _FakeClock()

@@ -40,6 +40,9 @@ from typing import Any
 import httpx
 from nonebot import logger
 
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import ModelCallDeferred
+
 # 文本 → 向量 的进程内缓存（键为 “model:dim:sha256(text)”，值为 float 列表或 None）
 _CACHE: dict[str, list[float] | None] = {}
 
@@ -78,7 +81,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 @asynccontextmanager
-async def _maybe_gate():
+async def _maybe_gate(work_class: WorkClass):
     """embedding 与某个 chat 端点共用同一 LM Studio 实例时，走那个端点的闸门串行化。
 
     资源名由 ``MEMORY_EMBEDDING_GATE`` 解析（``auto`` = 找地址相同的本地槽、
@@ -89,13 +92,20 @@ async def _maybe_gate():
     config 与 core.llm 都在函数内延迟 import，保持纯向量工具
     （cosine / normalize）可离线单测。
     """
-    from core.llm import acquire, embedding_gate
+    from core.llm import embedding_gate
+    from gravitas.model_calls import ModelCallContext, model_attempt, resource_group_for
 
     resource = embedding_gate()
     if not resource:
         yield
         return
-    async with acquire(resource, tag="embed"):
+    async with model_attempt(
+        ModelCallContext(
+            resource_group_id=resource_group_for(resource),
+            work_class=work_class,
+            tag="memory-embedding",
+        )
+    ):
         yield
 
 
@@ -109,6 +119,7 @@ class EmbeddingService:
         timeout: float = 10.0,
         dim: int = EMBEDDING_DIM,
         cache: dict[str, list[float] | None] | None = None,
+        work_class: WorkClass = WorkClass.BACKGROUND,
     ):
         """参数:
             base_url: LM Studio 服务地址，如 http://127.0.0.1:1234；
@@ -122,6 +133,7 @@ class EmbeddingService:
         self.timeout = timeout
         self.dim = dim
         self._cache = cache if cache is not None else _CACHE
+        self.work_class = WorkClass(work_class)
 
     async def _request_embedding(
         self, base_url: str, model: str, text: str
@@ -130,7 +142,7 @@ class EmbeddingService:
         if model:
             payload["model"] = model
         async with (
-            _maybe_gate(),
+            _maybe_gate(self.work_class),
             httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout), trust_env=False
             ) as client,
@@ -156,6 +168,10 @@ class EmbeddingService:
         vector: list[float] | None = None
         try:
             vector = await self._request_embedding(self.base_url, self.model, text)
+        except ModelCallDeferred:
+            # A full shared queue is backpressure, not a failed model result.
+            # Leave it uncached so a later turn can retry.
+            return None
         except Exception as exc:
             last_error = exc
 
@@ -173,6 +189,8 @@ class EmbeddingService:
                     vector = await self._request_embedding(
                         fallback_url, fallback_model, text
                     )
+            except ModelCallDeferred:
+                return None
             except Exception as exc:
                 last_error = exc
 

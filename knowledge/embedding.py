@@ -23,6 +23,7 @@ from typing import Any
 
 from nonebot import logger
 
+from gravitas.contracts import WorkClass
 from knowledge.store import pack_vector
 
 # 编码约定版本：裸文本编码（与 memory/embeddings 的实测结论一致）。
@@ -84,12 +85,13 @@ class KBEmbedder:
         """模型未配置时 dense 通道整体不可用（BM25 仍可用）。"""
         return bool(self.profile["model"])
 
-    def _service(self):
+    def _service(self, work_class: WorkClass):
         embedding_service = _embedding_service()
         return embedding_service(
             base_url=self.profile["base_url"],
             model=self.profile["model"],
             dim=self.profile["dim"],
+            work_class=work_class,
         )
 
     async def embed_query(self, text: str) -> list[float] | None:
@@ -97,7 +99,7 @@ class KBEmbedder:
         if not self.available:
             return None
         try:
-            return await self._service().embed(text)
+            return await self._service(WorkClass.INTERACTIVE).embed(text)
         except Exception as e:
             logger.warning(f"🧭 [Knowledge] 查询编码失败（dense 降级）: {e}")
             return None
@@ -106,7 +108,7 @@ class KBEmbedder:
         """切块文本批量编码 → BLOB 列表（失败的块为 None，ingest 记数）。"""
         if not self.available:
             return [None] * len(texts)
-        service = self._service()
+        service = self._service(WorkClass.BACKGROUND)
         blobs: list[bytes | None] = []
         for text in texts:
             try:

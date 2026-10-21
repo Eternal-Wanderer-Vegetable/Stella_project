@@ -185,6 +185,24 @@ def test_provider_error_uses_trusted_fallback_with_full_guard(monkeypatch):
     assert out.reply == "......？"
 
 
+def test_scheduler_deferral_uses_non_error_fallback():
+    from gravitas.model_calls import ModelCallDeferred
+
+    class DeferredBackend:
+        backend_name = "deferred"
+        model = "deferred-model"
+
+        async def generate(self, prompt: str, system_prompt: str = "") -> str:
+            raise ModelCallDeferred("scheduler_queue_full")
+
+    svc, _ = _service([])
+    svc.set_llm_backend(DeferredBackend())
+    out = asyncio.run(svc.run(_ctx()))
+    assert out.delivery_source_kind == "trusted-server-fallback"
+    assert out.reply_disposition == "fallback"
+    assert out.reply == "队列繁忙，我稍后再试。"
+
+
 def test_no_backend_runs_post_hooks_without_generation():
     svc = TurnService(timeout=5.0)  # 不装配 backend
     svc.register_post_hook(parse_output, priority=100)
