@@ -172,9 +172,17 @@ async def _pipeline_provider(
     按空间解析过）。生成不传它，人格、长度上限与 XML 输出格式约束就全部
     失效（2026-09-27 缺陷：facade 生成丢系统提示词，回复超长且无结构）。
 
-    不经旧 Pipeline 编排，也不引入额外注册表查询——测试用 stub 管线时,
-    脚本化后端因此自然生效。"""
-    return await pipeline._llm.generate(prompt, pending_system_prompt(ctx))  # type: ignore[union-attr]
+    不经旧 Pipeline 编排，但仍与其他生产调用共享进程级 CHAT 端点闸门。"""
+    from core.llm import PRIORITY_INTERACTIVE, ROLE_CHAT, acquire, gate_of
+
+    async with acquire(
+        gate_of(ROLE_CHAT),
+        tag=f"facade:{ctx.trace_scope}",
+        priority=PRIORITY_INTERACTIVE,
+    ):
+        return await pipeline._llm.generate(  # type: ignore[union-attr]
+            prompt, pending_system_prompt(ctx)
+        )
 
 
 class RuntimeFacade:

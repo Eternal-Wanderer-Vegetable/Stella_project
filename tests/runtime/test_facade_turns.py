@@ -34,6 +34,68 @@ async def test_full_chain_single_turn(tmp_path):
         await h.stop()
 
 
+async def test_default_provider_uses_shared_chat_gate_across_conversations(
+    tmp_path, monkeypatch
+):
+    """默认真实后端必须经过进程共享的 CHAT 资源门。"""
+    import core.llm.scheduler as scheduler
+    from core.llm.registry import ROLE_CHAT, gate_of
+
+    scheduler.reset_state()
+    monkeypatch.setattr(scheduler, "_concurrency_resolver", lambda _resource: 1)
+    h = harness.RuntimeHarness(tmp_path)
+    h.facade._provider = None  # 走生产默认 provider，而不是脚本注入 provider
+
+    active = 0
+    peak = 0
+    release = asyncio.Event()
+
+    async def generate(prompt: str, system_prompt: str = "") -> str:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await release.wait()
+            return "<thought>ok</thought><action>NONE</action><reply>ok</reply>"
+        finally:
+            active -= 1
+
+    h.backend.generate = generate
+    resource = gate_of(ROLE_CHAT)
+    submitted: list[asyncio.Task] = []
+    try:
+        await h.start()
+        submitted.append(asyncio.create_task(
+            h.facade.submit_turn("qq:bot:group:a", h.pipeline, h.ctx("A"))
+        ))
+        for _ in range(200):
+            if active:
+                break
+            await asyncio.sleep(0.005)
+        assert active == 1
+
+        submitted.append(asyncio.create_task(
+            h.facade.submit_turn("qq:bot:group:b", h.pipeline, h.ctx("B"))
+        ))
+        queued_or_overlapped = False
+        for _ in range(200):
+            state = scheduler.snapshot().get(resource, {})
+            if peak > 1 or state.get("waiting", 0) > 0:
+                queued_or_overlapped = True
+                break
+            await asyncio.sleep(0.005)
+
+        assert queued_or_overlapped, "第二个会话既未进入后端，也未在共享资源门排队"
+        assert peak == 1, "默认 provider 并发绕过共享 CHAT 资源上限"
+        assert scheduler.snapshot()[resource]["limit"] == 1
+    finally:
+        release.set()
+        if submitted:
+            await asyncio.gather(*submitted, return_exceptions=True)
+        await h.stop()
+        scheduler.reset_state()
+
+
 async def test_provider_error_falls_back_like_legacy(tmp_path):
     """provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——兜底而非上抛。"""
 
