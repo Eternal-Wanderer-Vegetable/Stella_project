@@ -30,7 +30,8 @@
 - 完成 transport identity/key codecs 与 `conversation_registry_v2`、可歧义 alias 映射；V2 / V1 负数存储号在事务中统一扫描，旧 QQ/WebChat 读写 API 和表布局保持独立。未扩展 QQ-only 的整数空间配置；generic 会话默认 `transport:<canonical_key>` 独占空间，避免隐式共享。
 - 环境边界：`STELLA_HOME` 未设置；pytest 使用临时数据库和空间配置；未启动 Bot、未访问或迁移生产库。
 - 验收：身份/注册表及 QQ/WebChat 相关测试 **160 passed**，message-flow 合同测试 **14 passed**；改动 Python Ruff 通过；文档门禁 119 文件 / 1204 链接 / 577 锚点 / 0 errors；message-flow 清单已重生成，拓扑未变，`--check` 通过。暂存后 GitNexus `scope=all` 为 13 个文件 / 83 symbols / low；compare main 为 156 文件 / 111 symbols / low，无 partial/truncated。
-- 细节与命令见[WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)。下一阶段 WP02。
+- 阶段提交：`ea79171`（`feat(transport): add V2 identity registry (WP01)`）。下一阶段 WP02。
+- 细节与命令见[WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)。
 
 ## What's Done
 

@@ -21,7 +21,7 @@ GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边�
 
 ## Next Steps
 
-1. WP00 已提交；WP01 当前进入阶段提交与状态记录收尾。
+1. WP00 已提交；WP01 实现阶段提交为 `ea79171`，状态记录收尾已完成。
 2. 下一阶段 WP02：先刷新图并对 `core/context.py`、RuntimeFacade、turn/projection 与 message-id/reply-envelope 符号运行 upstream impact；再实现 projection 6→7 与旧协议兼容。
 3. 各阶段继续按依赖顺序验收和提交；常用 GitNexus 命令固定使用 1.6.11：`pnpm --allow-build=@ladybugdb/core --allow-build=gitnexus --allow-build=tree-sitter dlx gitnexus@1.6.11 status --json`、`... context <symbol> --repo Stella_project`。
 
